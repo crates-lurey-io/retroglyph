@@ -10,6 +10,10 @@ version = "0.0.0-reserved"
 [lints.clippy]
 pedantic = "deny"
 
+[dependencies]
+raw-window-handle = "0.6.2"
+softbuffer = "0.4.6"
+
 [workspace]
 members = ["tools/cargo-bin"]
 
