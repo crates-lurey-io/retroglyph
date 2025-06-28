@@ -11,8 +11,11 @@ version = "0.0.0-reserved"
 pedantic = "deny"
 
 [dependencies]
+
+[dev-dependencies]
 raw-window-handle = "0.6.2"
 softbuffer = "0.4.6"
+winit = "0.30.11"
 
 [workspace]
 members = ["tools/cargo-bin"]

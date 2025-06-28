@@ -1,0 +1,124 @@
+use retroglyph::{
+    core::{Cell, Font, Glyph, Grid},
+    grid,
+    render::{self, Buffer},
+};
+use softbuffer::{Context, Surface};
+use std::{num::NonZeroU32, rc::Rc};
+use winit::{
+    application::ApplicationHandler,
+    event::WindowEvent,
+    event_loop::{ActiveEventLoop, EventLoop},
+    window::{Window, WindowAttributes, WindowId},
+};
+
+fn main() {
+    let glyph = Glyph::new([
+        0b1111_1111, //
+        0b1000_0011, //
+        0b1000_0001, //
+        0b1000_0001, //
+        0b1000_0001, //
+        0b1000_0001, //
+        0b1100_0001, //
+        0b1111_1111, //
+    ]);
+    let font = Font::new([glyph; 256]);
+    let mut output = grid!(80, 25);
+    *output.get_mut(0, 0).unwrap() = Cell::new(0x4F); // Set the first cell to 'O' (CP437)
+    let mut app = App::<2000> {
+        display: None,
+        output,
+        font,
+    };
+
+    let event_loop = EventLoop::new().unwrap();
+    event_loop.run_app(&mut app).unwrap();
+}
+
+struct App<const LENGTH: usize> {
+    display: Option<Display>,
+    output: Grid<LENGTH>,
+    font: Font,
+}
+
+struct Display {
+    window: Rc<Window>,
+    surface: Surface<Rc<Window>, Rc<Window>>,
+}
+
+impl Display {
+    fn new(window: &Rc<Window>) -> Self {
+        let context = Context::new(window.clone()).unwrap();
+        let surface = Surface::new(&context, window.clone()).unwrap();
+        Self {
+            window: window.clone(),
+            surface,
+        }
+    }
+}
+
+impl<const LENGTH: usize> ApplicationHandler for App<LENGTH> {
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        let window = make_window(event_loop, |attrs| attrs);
+        window.request_redraw();
+        self.display = Some(Display::new(&Rc::new(window)));
+    }
+
+    fn window_event(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        _window_id: WindowId,
+        event: WindowEvent,
+    ) {
+        match event {
+            WindowEvent::Resized(size) => {
+                let Some(display) = &mut self.display else {
+                    eprintln!("Display not initialized");
+                    return;
+                };
+                if let (Some(width), Some(height)) =
+                    (NonZeroU32::new(size.width), NonZeroU32::new(size.height))
+                {
+                    display.surface.resize(width, height).unwrap();
+                    display.window.request_redraw();
+                }
+            }
+            WindowEvent::CloseRequested => {
+                eprintln!("The close button was pressed; stopping");
+                event_loop.exit();
+            }
+            WindowEvent::RedrawRequested => {
+                let Some(display) = &mut self.display else {
+                    eprintln!("Display not initialized");
+                    return;
+                };
+                let size = display.window.inner_size();
+                if let Some(width) = NonZeroU32::new(size.width) {
+                    let mut frame = display.surface.buffer_mut().unwrap();
+                    frame.fill(0xFF00_0000);
+
+                    // Create a Buffer with the correct dimensions
+                    let mut buffer = Buffer::from_argb(&mut frame, width.get() as usize);
+
+                    // Render the output grid to the buffer
+                    render::render(&self.output, &mut buffer, &self.font);
+                    frame.present().unwrap();
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn make_window(
+    elwt: &ActiveEventLoop,
+    f: impl FnOnce(WindowAttributes) -> WindowAttributes,
+) -> Window {
+    let attributes = f(WindowAttributes::default());
+    let attributes = attributes
+        .with_title("Retroglyph Demo")
+        .with_resizable(false)
+        .with_inner_size(winit::dpi::LogicalSize::new(800.0, 250.0));
+    elwt.create_window(attributes).unwrap()
+}
