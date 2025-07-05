@@ -13,7 +13,7 @@ use winit::{
 };
 
 fn main() {
-    let font = Font::IBM_CLASSIC_8X8;
+    let font = Font::IBM_VGA_8X8;
     let mut output = grid!(80, 25);
 
     // Loop through every glyph and fill the output grid with it

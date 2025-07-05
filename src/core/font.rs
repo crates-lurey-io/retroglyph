@@ -1,5 +1,3 @@
-mod ibm_classic_8x8;
-
 /// A fixed-width `8x8` bitmap font.
 #[derive(Debug, Clone)]
 pub struct Font {
@@ -9,13 +7,29 @@ pub struct Font {
 impl Font {
     /// The classic IBM PC/VGA 8x8 font for [Codepage 437][].
     ///
+    /// See <https://github.com/ivop/8x8-fonts/> for additional fonts.
+    ///
     /// [Codepage 437]: https://en.wikipedia.org/wiki/Code_page_437
-    pub const IBM_CLASSIC_8X8: Font = ibm_classic_8x8::FONT;
+    pub const IBM_VGA_8X8: Font = Font::from_bytes(include_bytes!("fonts/IBM_VGA_8x8.bin"));
 
     /// Creates a new `Font` with the given glyph data.
     #[must_use]
     pub const fn new(glyphs: [Glyph; 256]) -> Self {
         Font { glyphs }
+    }
+
+    /// Creates a new `Font` from the given byte array.
+    #[must_use]
+    pub const fn from_bytes(bytes: &[u8; 2048]) -> Self {
+        // Transmute the byte array into an array of `Glyph`.
+        Font {
+            glyphs: {
+                #[allow(unsafe_code, reason = "Identical layout")]
+                unsafe {
+                    core::mem::transmute::<[u8; 2048], [Glyph; 256]>(*bytes)
+                }
+            },
+        }
     }
 
     /// Returns the glyph for the specified CP437 index.
@@ -39,7 +53,7 @@ impl Font {
 
 impl Default for Font {
     fn default() -> Self {
-        Self::IBM_CLASSIC_8X8
+        Self::IBM_VGA_8X8
     }
 }
 
