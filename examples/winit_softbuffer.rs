@@ -19,7 +19,11 @@ fn main() {
     // Loop through every glyph and fill the output grid with it
     #[allow(clippy::cast_possible_truncation)]
     for (i, cell) in output.iter_mut().enumerate() {
-        *cell = Cell::new(i as u8);
+        // Wrap the index in a `u8` to get the glyph
+        let glyph_index = (i % 256) as u8;
+
+        // Set the cell to the glyph at the index
+        *cell = Cell::new(glyph_index);
     }
 
     let mut app = App::<2000> {
