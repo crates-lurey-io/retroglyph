@@ -5,5 +5,6 @@
 // Prohibit unsafe code.
 #![deny(unsafe_code)]
 
+pub mod backend;
 pub mod core;
 pub mod render;
