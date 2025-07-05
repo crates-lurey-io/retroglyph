@@ -1,3 +1,5 @@
+mod ibm_clasix_8x8;
+
 /// A fixed-width `8x8` bitmap font.
 #[derive(Debug, Clone)]
 pub struct Font {
@@ -5,6 +7,11 @@ pub struct Font {
 }
 
 impl Font {
+    /// The classic IBM PC/VGA 8x8 font for [Codepage 437][].
+    ///
+    /// [Codepage 437]: https://en.wikipedia.org/wiki/Code_page_437
+    pub const IBM_CLASSIC_8X8: Font = ibm_clasix_8x8::FONT;
+
     /// Creates a new `Font` with the given glyph data.
     #[must_use]
     pub const fn new(glyphs: [Glyph; 256]) -> Self {
@@ -15,6 +22,12 @@ impl Font {
     #[must_use]
     pub const fn glyph(&self, index: u8) -> Glyph {
         self.glyphs[index as usize]
+    }
+}
+
+impl Default for Font {
+    fn default() -> Self {
+        Self::IBM_CLASSIC_8X8
     }
 }
 

@@ -76,6 +76,11 @@ impl<const LENGTH: usize> Grid<LENGTH> {
         self.cells.iter()
     }
 
+    /// Returns a mutable iterator over the cells in the grid in row-major order.
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Cell> {
+        self.cells.iter_mut()
+    }
+
     /// Returns each row of the grid as a slice.
     ///
     /// Each row is represented as a slice of `Cell` references.

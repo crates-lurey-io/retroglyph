@@ -1,5 +1,5 @@
 use retroglyph::{
-    core::{Cell, Font, Glyph, Grid},
+    core::{Cell, Font, Grid},
     grid,
     render::{self, Buffer},
 };
@@ -13,19 +13,16 @@ use winit::{
 };
 
 fn main() {
-    let glyph = Glyph::new([
-        0b1111_1111, //
-        0b1000_0011, //
-        0b1000_0001, //
-        0b1000_0001, //
-        0b1000_0001, //
-        0b1000_0001, //
-        0b1100_0001, //
-        0b1111_1111, //
-    ]);
-    let font = Font::new([glyph; 256]);
+    let font = Font::default();
     let mut output = grid!(80, 25);
-    *output.get_mut(0, 0).unwrap() = Cell::new(0x4F); // Set the first cell to 'O' (CP437)
+
+    // Loop through every glyph and fill the output grid with it
+    for (i, cell) in output.iter_mut().enumerate() {
+        #[allow(clippy::cast_possible_truncation)]
+        let glyph_index = (i % 256) as u8; // Wrap around after
+        *cell = Cell::new(glyph_index);
+    }
+
     let mut app = App::<2000> {
         display: None,
         output,
