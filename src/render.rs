@@ -9,12 +9,17 @@ use crate::core::{Font, Grid};
 /// Renders a `Grid` to a `Buffer` using the specified `Font`.
 ///
 /// Clears the `Buffer` before rendering.
-pub fn render<const LENGTH: usize>(from: &Grid<LENGTH>, to: &mut Buffer, font: &Font) {
+pub fn render<const LENGTH: usize>(
+    from: &Grid<LENGTH>,
+    to: &mut Buffer,
+    font: &Font,
+    scale: usize,
+) {
     to.clear();
     for (y, row) in from.rows().enumerate() {
         for (x, cell) in row.iter().enumerate() {
             let glyph = font.glyph(cell.glyph());
-            to.draw_glyph(&glyph, x * 8, y * 8);
+            to.draw_glyph(&glyph, x * 8 * scale, y * 8 * scale, scale);
         }
     }
 }
@@ -42,7 +47,7 @@ mod tests {
         let grid: Grid<1> = grid!(1, 1);
 
         // Render the empty grid to the buffer.
-        render(&grid, &mut buffer, &font);
+        render(&grid, &mut buffer, &font, 1);
 
         // Check that the buffer is now entirely empty (all pixels are black).
         assert!(pixels.iter().all(|&color| color == Color::BLACK.to_argb()));
@@ -72,7 +77,7 @@ mod tests {
         *grid.get_mut(0, 0).unwrap() = Cell::new(0x58);
 
         // Render the grid to the buffer.
-        render(&grid, &mut buffer, &font);
+        render(&grid, &mut buffer, &font, 1);
 
         // Check that the buffer has the expected pixel data for the glyph.
         let expected = vec![

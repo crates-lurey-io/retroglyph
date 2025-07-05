@@ -42,13 +42,19 @@ impl<'a> Buffer<'a> {
     }
 
     /// Draws a glyph at the specified position in the buffer as white pixels.
-    pub fn draw_glyph(&mut self, glyph: &Glyph, x: usize, y: usize) {
+    pub fn draw_glyph(&mut self, glyph: &Glyph, x: usize, y: usize, scale: usize) {
         for (px, py) in glyph.pixels() {
-            let dx = x + px as usize;
-            let dy = y + py as usize;
-            if dx < self.width && dy < self.height() {
-                let index = dy * self.width + dx;
-                self.pixels[index] = Color::WHITE;
+            let dx = x + px as usize * scale;
+            let dy = y + py as usize * scale;
+            for sy in 0..scale {
+                for sx in 0..scale {
+                    let tx = dx + sx;
+                    let ty = dy + sy;
+                    if tx < self.width && ty < self.height() {
+                        let index = ty * self.width + tx;
+                        self.pixels[index] = Color::WHITE;
+                    }
+                }
             }
         }
     }
@@ -139,7 +145,7 @@ pub(crate) mod tests {
             0b0100_0010, //
             0b1000_0001, //
         ]);
-        buffer.draw_glyph(&glyph, 0, 0);
+        buffer.draw_glyph(&glyph, 0, 0, 1);
 
         // Assert that we drew an 'X' glyph at the top-left corner
         let expected = vec![

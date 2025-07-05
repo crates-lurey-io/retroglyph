@@ -12,8 +12,10 @@ use winit::{
     window::{Window, WindowAttributes, WindowId},
 };
 
+const SCALE: usize = 4;
+
 fn main() {
-    let font = Font::default();
+    let font = Font::IBM_CLASSIC_8X8;
     let mut output = grid!(80, 25);
 
     // Loop through every glyph and fill the output grid with it
@@ -99,7 +101,7 @@ impl<const LENGTH: usize> ApplicationHandler for App<LENGTH> {
                     let mut buffer = Buffer::from_argb(&mut frame, width.get() as usize);
 
                     // Render the output grid to the buffer
-                    render::render(&self.output, &mut buffer, &self.font);
+                    render::render(&self.output, &mut buffer, &self.font, SCALE);
                     frame.present().unwrap();
                 }
             }
@@ -116,6 +118,6 @@ fn make_window(
     let attributes = attributes
         .with_title("Retroglyph Demo")
         .with_resizable(false)
-        .with_inner_size(winit::dpi::LogicalSize::new(800.0, 250.0));
+        .with_inner_size(winit::dpi::LogicalSize::new(80.0 * 8.0, 25.0 * 8.0 * 2.0));
     elwt.create_window(attributes).unwrap()
 }
