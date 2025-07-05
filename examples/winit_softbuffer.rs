@@ -12,17 +12,14 @@ use winit::{
     window::{Window, WindowAttributes, WindowId},
 };
 
-const SCALE: usize = 4;
-
 fn main() {
     let font = Font::IBM_CLASSIC_8X8;
     let mut output = grid!(80, 25);
 
     // Loop through every glyph and fill the output grid with it
+    #[allow(clippy::cast_possible_truncation)]
     for (i, cell) in output.iter_mut().enumerate() {
-        #[allow(clippy::cast_possible_truncation)]
-        let glyph_index = (i % 256) as u8; // Wrap around after
-        *cell = Cell::new(glyph_index);
+        *cell = Cell::new(i as u8);
     }
 
     let mut app = App::<2000> {
@@ -100,8 +97,16 @@ impl<const LENGTH: usize> ApplicationHandler for App<LENGTH> {
                     // Create a Buffer with the correct dimensions
                     let mut buffer = Buffer::from_argb(&mut frame, width.get() as usize);
 
+                    // Calculate the largest scale that fits the window
+                    #[allow(clippy::cast_possible_truncation)]
+                    let scale_x = size.width / (self.output.width() as u32 * 8);
+
+                    #[allow(clippy::cast_possible_truncation)]
+                    let scale_y = size.height / (self.output.height() as u32 * 8);
+                    let scale = scale_x.min(scale_y).max(1) as usize;
+
                     // Render the output grid to the buffer
-                    render::render(&self.output, &mut buffer, &self.font, SCALE);
+                    render::render(&self.output, &mut buffer, &self.font, scale);
                     frame.present().unwrap();
                 }
             }
@@ -115,9 +120,11 @@ fn make_window(
     f: impl FnOnce(WindowAttributes) -> WindowAttributes,
 ) -> Window {
     let attributes = f(WindowAttributes::default());
+    let (width, height) = (80.0 * 8.0, 25.0 * 8.0);
     let attributes = attributes
         .with_title("Retroglyph Demo")
-        .with_resizable(false)
-        .with_inner_size(winit::dpi::LogicalSize::new(80.0 * 8.0, 25.0 * 8.0 * 2.0));
+        .with_resizable(true)
+        .with_min_inner_size(winit::dpi::LogicalSize::new(width, height))
+        .with_inner_size(winit::dpi::LogicalSize::new(width * 2.0, height * 2.0));
     elwt.create_window(attributes).unwrap()
 }
