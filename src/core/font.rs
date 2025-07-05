@@ -23,6 +23,18 @@ impl Font {
     pub const fn glyph(&self, index: u8) -> Glyph {
         self.glyphs[index as usize]
     }
+
+    /// Returns the width of the font in pixels.
+    #[must_use]
+    pub const fn width(&self) -> u8 {
+        8
+    }
+
+    /// Returns the height of the font in pixels.
+    #[must_use]
+    pub const fn height(&self) -> u8 {
+        8
+    }
 }
 
 impl Default for Font {

@@ -52,8 +52,7 @@ impl<const LENGTH: usize> Grid<LENGTH> {
     #[must_use]
     pub fn get(&self, x: usize, y: usize) -> Option<&Cell> {
         if x < self.width && y < self.height() {
-            // SAFETY: Bounds are checked above, so this is safe.
-            Some(unsafe { self.cells.get_unchecked(y * self.width + x) })
+            self.cells.get(y * self.width + x)
         } else {
             None
         }
@@ -64,8 +63,7 @@ impl<const LENGTH: usize> Grid<LENGTH> {
     /// Returns `None` if the coordinates are out of bounds.
     pub fn get_mut(&mut self, x: usize, y: usize) -> Option<&mut Cell> {
         if x < self.width && y < self.height() {
-            // SAFETY: Bounds are checked above, so this is safe.
-            Some(unsafe { self.cells.get_unchecked_mut(y * self.width + x) })
+            self.cells.get_mut(y * self.width + x)
         } else {
             None
         }

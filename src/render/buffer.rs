@@ -18,7 +18,10 @@ impl<'a> Buffer<'a> {
     pub const fn from_argb(pixels: &'a mut [u32], width: usize) -> Self {
         assert!(pixels.len() % width == 0);
         Self {
-            // SAFETY: A Color is represented as a u32, so we can safely transmute the slice.
+            #[allow(
+                unsafe_code,
+                reason = "A Color is represented as a repr(transparent) u32"
+            )]
             pixels: unsafe { core::mem::transmute::<&mut [u32], &mut [Color]>(pixels) },
             width,
         }
