@@ -50,7 +50,7 @@ test-all:
     cargo just test --all-features
     cargo just test-doc --all-features
     
-coverage *ARGS:
+coverage:
     cargo tool cargo-llvm-cov --open --lib --no-cfg-coverage
 
 coverage-gen:

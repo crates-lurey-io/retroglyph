@@ -76,7 +76,7 @@ impl Glyph {
 
     /// Returns each offset of set bits in the glyph (pixels that are "on") for each row.
     #[must_use]
-    pub fn pixels(&self) -> Pixels {
+    pub fn pixels(&'_ self) -> Pixels<'_> {
         Pixels {
             glyph: self,
             row: 0,
