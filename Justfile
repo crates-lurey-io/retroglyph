@@ -45,7 +45,6 @@ test *ARGS:
 test-doc *ARGS:
     cargo test {{ARGS}} --doc
 
-
 test-all:
     cargo just test --all-features
     cargo just test-doc --all-features
