@@ -12,10 +12,12 @@ pub mod grid;
 /// Pluggable rendering backends.
 pub mod backend;
 pub mod event;
+pub mod terminal;
 
 pub use color::{AnsiColor, Color};
 pub use style::{CellModifier, Style};
 pub use cell::Cell;
-pub use grid::{Grid, Position, Size};
+pub use grid::{Grid, Position, Size, Rect};
 pub use backend::{Backend, Headless};
+pub use terminal::Terminal;
 pub use event::{Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};

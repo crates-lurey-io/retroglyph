@@ -22,6 +22,19 @@ pub struct Position {
     pub y: u16,
 }
 
+/// Rectangle in the grid.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct Rect {
+    /// X coordinate.
+    pub x: u16,
+    /// Y coordinate.
+    pub y: u16,
+    /// Width.
+    pub width: u16,
+    /// Height.
+    pub height: u16,
+}
+
 /// The main grid container for the terminal.
 ///
 /// Note: This uses `alloc::vec::Vec`, requiring an allocator in `no_std` environments.
@@ -90,6 +103,14 @@ impl Grid {
         Some(&self.buffer[index])
     }
 
+    /// Tries to get a mutable reference to the cell at the given coordinates.
+    ///
+    /// Returns `None` if the coordinates are out of bounds.
+    pub fn checked_get_mut(&mut self, x: usize, y: usize) -> Option<&mut Cell> {
+        let index = self.get_index(x, y).ok()?;
+        Some(&mut self.buffer[index])
+    }
+
     /// Clears the grid to the default cell.
     pub fn clear(&mut self) {
         self.buffer.fill(Cell::default());
@@ -98,7 +119,7 @@ impl Grid {
     /// Yield positions where `self` differs from `other`.
     ///
     /// If dimensions differ, all cells in `self` are considered changed.
-    pub fn diff<'a>(&'a self, other: &'a Self) -> impl Iterator<Item = (usize, usize, &'a Cell)> + 'a {
+    pub fn diff<'a>(&'a self, other: &'a Self) -> impl Iterator<Item = (u16, u16, &'a Cell)> + 'a {
         let iter: DiffIterator<'a, _, _> = if self.width != other.width || self.height != other.height {
             DiffIterator::All(self.buffer.iter().enumerate(), core::marker::PhantomData)
         } else {
@@ -115,8 +136,8 @@ impl Grid {
         };
 
         iter.map(move |(i, cell)| {
-            let y = i / self.width;
-            let x = i % self.width;
+            let y = (i / self.width) as u16;
+            let x = (i % self.width) as u16;
             (x, y, cell)
         })
     }
