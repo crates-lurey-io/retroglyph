@@ -23,20 +23,20 @@ impl Default for Cell {
 impl Cell {
     /// Creates a new cell with the given glyph and style.
     #[must_use]
-    pub fn new(glyph: char, style: Style) -> Self {
+    pub const fn new(glyph: char, style: Style) -> Self {
         Self { glyph, style }
     }
 
     /// Sets the glyph for this cell.
     #[must_use]
-    pub fn with_glyph(mut self, glyph: char) -> Self {
+    pub const fn with_glyph(mut self, glyph: char) -> Self {
         self.glyph = glyph;
         self
     }
 
     /// Sets the style for this cell.
     #[must_use]
-    pub fn with_style(mut self, style: Style) -> Self {
+    pub const fn with_style(mut self, style: Style) -> Self {
         self.style = style;
         self
     }

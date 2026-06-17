@@ -46,7 +46,7 @@ pub enum AnsiColor {
 impl AnsiColor {
     /// Returns the ANSI color code as a `u8` index.
     #[must_use]
-    pub fn to_index(self) -> u8 {
+    pub const fn to_index(self) -> u8 {
         self as u8
     }
 }

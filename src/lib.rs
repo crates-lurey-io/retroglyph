@@ -14,5 +14,5 @@ pub mod backend;
 pub use color::{AnsiColor, Color};
 pub use style::{CellModifier, Style};
 pub use cell::Cell;
-pub use grid::Grid;
+pub use grid::{Grid, Position};
 pub use backend::Renderer;

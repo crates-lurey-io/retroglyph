@@ -43,13 +43,13 @@ impl CellModifier {
 
     /// Returns `true` if all bits in `other` are set in `self`.
     #[must_use]
-    pub fn contains(self, other: Self) -> bool {
+    pub const fn contains(self, other: Self) -> bool {
         (self.0 & other.0) == other.0
     }
 
     /// Returns `true` if no modifiers are set.
     #[must_use]
-    pub fn is_empty(self) -> bool {
+    pub const fn is_empty(self) -> bool {
         self.0 == 0
     }
 }
@@ -117,14 +117,14 @@ impl Style {
 
     /// Sets the foreground color.
     #[must_use]
-    pub fn fg(mut self, color: Color) -> Self {
+    pub const fn fg(mut self, color: Color) -> Self {
         self.fg = color;
         self
     }
 
     /// Sets the background color.
     #[must_use]
-    pub fn bg(mut self, color: Color) -> Self {
+    pub const fn bg(mut self, color: Color) -> Self {
         self.bg = color;
         self
     }
@@ -145,7 +145,7 @@ impl Style {
 
     /// Overlays another style onto this one, only if fields in `other` are non-default.
     #[must_use]
-    pub fn patch(mut self, other: Style) -> Self {
+    pub fn patch(mut self, other: Self) -> Self {
         if other.fg != Color::Default { self.fg = other.fg; }
         if other.bg != Color::Default { self.bg = other.bg; }
         self.modifiers |= other.modifiers;
