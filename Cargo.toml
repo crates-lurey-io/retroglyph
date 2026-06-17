@@ -21,5 +21,4 @@ nursery = { level = "deny", priority = -1 }
 must_use_candidate = "deny"
 missing_errors_doc = "deny"
 missing_panics_doc = "deny"
-must_use_candidate = "deny"
 module_name_repetitions = "allow"

@@ -8,17 +8,17 @@ default:
 # Format markdown, JSON, YAML, JS, TS
 fmt:
     cargo fmt --all
-    cd tools && npm run format
+    npm --prefix tools run format
 
 # Check formatting without changes
 fmt-check:
     cargo fmt --all -- --check
-    cd tools && npm run format:check
+    npm --prefix tools run format:check
 
 # Run linters
 lint:
     cargo clippy --all-targets -- -D warnings
-    cd tools && npm run lint
+    npm --prefix tools run lint
 
 # --- Rust ---
 test:
