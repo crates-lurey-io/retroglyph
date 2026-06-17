@@ -9,6 +9,7 @@ pub mod color;
 pub mod style;
 pub mod cell;
 pub mod grid;
+/// Pluggable rendering backends.
 pub mod backend;
 pub mod event;
 
@@ -16,5 +17,5 @@ pub use color::{AnsiColor, Color};
 pub use style::{CellModifier, Style};
 pub use cell::Cell;
 pub use grid::{Grid, Position, Size};
-pub use backend::Backend;
+pub use backend::{Backend, Headless};
 pub use event::{Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
