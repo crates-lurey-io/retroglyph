@@ -1,0 +1,25 @@
+[package]
+name = "rg"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+description = "A terminal/grid rendering library for roguelikes"
+keywords = ["roguelike", "terminal", "grid", "gamedev"]
+categories = ["game-development", "graphics"]
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+unreachable_pub = "warn"
+unused_qualifications = "warn"
+
+[lints.clippy]
+all = { level = "deny", priority = -1 }
+pedantic = { level = "deny", priority = -1 }
+nursery = { level = "deny", priority = -1 }
+must_use_candidate = "deny"
+missing_errors_doc = "deny"
+missing_panics_doc = "deny"
+must_use_candidate = "deny"
+module_name_repetitions = "allow"
