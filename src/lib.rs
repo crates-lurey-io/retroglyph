@@ -6,7 +6,9 @@
 pub mod color;
 pub mod style;
 pub mod cell;
+pub mod grid;
 
 pub use color::{AnsiColor, Color};
 pub use style::{CellModifier, Style};
 pub use cell::Cell;
+pub use grid::{Backend, Grid, GridError};
