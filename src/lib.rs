@@ -5,3 +5,8 @@
 
 pub mod color;
 pub mod style;
+pub mod cell;
+
+pub use color::{AnsiColor, Color};
+pub use style::{CellModifier, Style};
+pub use cell::Cell;
