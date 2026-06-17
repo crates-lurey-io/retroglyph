@@ -152,3 +152,50 @@ pub enum Event {
     /// Window closed.
     Close,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_key_modifiers() {
+        let mods = KeyModifiers::SHIFT | KeyModifiers::CONTROL;
+        assert!(mods.contains(KeyModifiers::SHIFT));
+        assert!(mods.contains(KeyModifiers::CONTROL));
+        assert!(!mods.contains(KeyModifiers::ALT));
+        assert!(!mods.is_empty());
+
+        let inverse = !mods;
+        assert!(inverse.contains(KeyModifiers::ALT));
+        assert!(!inverse.contains(KeyModifiers::SHIFT));
+        assert!(!inverse.contains(KeyModifiers::CONTROL));
+    }
+
+    #[test]
+    fn test_event_construction() {
+        let key_event = KeyEvent {
+            code: KeyCode::Char('a'),
+            modifiers: KeyModifiers::SHIFT,
+        };
+        let event = Event::Key(key_event);
+
+        if let Event::Key(ke) = event {
+            assert_eq!(ke.code, KeyCode::Char('a'));
+            assert!(ke.modifiers.contains(KeyModifiers::SHIFT));
+        } else {
+            panic!("Expected Event::Key");
+        }
+    }
+
+    #[test]
+    fn test_mouse_event() {
+        let mouse_event = MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            position: Position { x: 10, y: 5 },
+            modifiers: KeyModifiers::NONE,
+        };
+        let event = Event::Mouse(mouse_event);
+
+        assert!(matches!(event, Event::Mouse(_)));
+    }
+}
