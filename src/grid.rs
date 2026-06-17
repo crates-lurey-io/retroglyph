@@ -1,7 +1,6 @@
-//! The grid container and backend abstraction.
+//! The grid container.
 
 use crate::cell::Cell;
-use alloc::vec::Vec;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// Errors encountered during grid operations.
@@ -15,17 +14,11 @@ pub enum GridError {
     },
 }
 
-/// Abstract rendering backend for the grid.
-pub trait Backend {
-    /// Renders the current state of the grid.
-    fn draw(&mut self, grid: &Grid);
-}
-
 /// The main grid container for the terminal.
 pub struct Grid {
     width: usize,
     height: usize,
-    buffer: Vec<Cell>,
+    buffer: alloc::vec::Vec<Cell>,
 }
 
 impl Grid {
@@ -50,6 +43,7 @@ impl Grid {
     /// Sets the cell at the given coordinates.
     ///
     /// # Errors
+    ///
     /// Returns `GridError::OutOfBounds` if the coordinates are invalid.
     pub fn put(&mut self, x: usize, y: usize, cell: Cell) -> Result<(), GridError> {
         let index = self.get_index(x, y)?;
@@ -60,6 +54,7 @@ impl Grid {
     /// Gets the cell at the given coordinates.
     ///
     /// # Errors
+    ///
     /// Returns `GridError::OutOfBounds` if the coordinates are invalid.
     pub fn get(&self, x: usize, y: usize) -> Result<&Cell, GridError> {
         let index = self.get_index(x, y)?;
