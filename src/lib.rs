@@ -2,6 +2,8 @@
 //!
 //! rg provides a grid of character cells with styled output, input handling,
 //! and double-buffered presentation via pluggable backends.
+#![no_std]
+extern crate alloc;
 
 pub mod color;
 pub mod style;

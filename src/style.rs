@@ -1,7 +1,8 @@
 //! Text styling and modifiers.
 
 use crate::color::Color;
-use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
+use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
+// use alloc::vec::Vec;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Default)]
 /// Text attributes applied to a cell (bold, italic, etc.).
@@ -76,9 +77,9 @@ impl Not for CellModifier {
     fn not(self) -> Self { Self(!self.0) }
 }
 
-impl std::fmt::Debug for CellModifier {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut parts = Vec::new();
+impl core::fmt::Debug for CellModifier {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let mut parts = alloc::vec::Vec::new();
         if self.contains(Self::BOLD)          { parts.push("BOLD"); }
         if self.contains(Self::DIM)           { parts.push("DIM"); }
         if self.contains(Self::ITALIC)        { parts.push("ITALIC"); }

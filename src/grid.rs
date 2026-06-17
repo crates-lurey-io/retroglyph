@@ -1,6 +1,7 @@
 //! The grid container and backend abstraction.
 
 use crate::cell::Cell;
+use alloc::vec::Vec;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// Errors encountered during grid operations.
@@ -34,7 +35,7 @@ impl Grid {
         Self {
             width,
             height,
-            buffer: vec![Cell::default(); width * height],
+            buffer: alloc::vec![Cell::default(); width * height],
         }
     }
 
