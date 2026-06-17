@@ -1,6 +1,8 @@
 # Benchmarking and Performance Measurement
 
-Reference guide for benchmarking a Rust terminal/grid rendering library. Covers micro-benchmarks, GPU timing, latency measurement, memory profiling, flame graphs, WASM profiling, CI regression testing, and concrete code examples.
+Reference guide for benchmarking a Rust terminal/grid rendering library. Covers micro-benchmarks,
+GPU timing, latency measurement, memory profiling, flame graphs, WASM profiling, CI regression
+testing, and concrete code examples.
 
 ## Table of Contents
 
@@ -21,13 +23,19 @@ Reference guide for benchmarking a Rust terminal/grid rendering library. Covers 
 
 ### Recommendation
 
-Use **Divan** for new projects. It has a simpler API, built-in allocation profiling, generic benchmarks, multi-threaded contention testing, and better sample size scaling for noisy CI environments. Fall back to Criterion if you need HTML report generation, baseline comparison (Divan doesn't have this yet), or compatibility with existing tooling that parses Criterion output.
+Use **Divan** for new projects. It has a simpler API, built-in allocation profiling, generic
+benchmarks, multi-threaded contention testing, and better sample size scaling for noisy CI
+environments. Fall back to Criterion if you need HTML report generation, baseline comparison (Divan
+doesn't have this yet), or compatibility with existing tooling that parses Criterion output.
 
 ### Criterion
 
-[criterion.rs](https://github.com/bheisler/criterion.rs) (5.5k stars) is the established Rust benchmarking library, ported from Haskell's Criterion. It uses statistical analysis (linear regression, bootstrap confidence intervals) to detect performance changes.
+[criterion.rs](https://github.com/bheisler/criterion.rs) (5.5k stars) is the established Rust
+benchmarking library, ported from Haskell's Criterion. It uses statistical analysis (linear
+regression, bootstrap confidence intervals) to detect performance changes.
 
 Key features:
+
 - Statistical confidence intervals for detecting real changes vs noise
 - HTML report generation with charts (violin plots, PDFs, regression lines)
 - Baseline comparison: saves previous run, compares against it
@@ -37,17 +45,21 @@ Key features:
 - `--profile-time` flag for integration with external profilers
 
 Downsides:
+
 - Verbose API: requires `criterion_group!` / `criterion_main!` macros
 - No built-in allocation tracking
 - No generic type/const parameter benchmarks
 - Slow compile times (depends on plotters/gnuplot)
-- Maintenance has moved to [criterion-rs org](https://github.com/criterion-rs/criterion.rs); the original repo is less active
+- Maintenance has moved to [criterion-rs org](https://github.com/criterion-rs/criterion.rs); the
+  original repo is less active
 
 ### Divan
 
-[Divan](https://github.com/nvzqz/divan) (1000+ stars) is a newer framework focused on simplicity and power.
+[Divan](https://github.com/nvzqz/divan) (1000+ stars) is a newer framework focused on simplicity and
+power.
 
 Key features:
+
 - `#[divan::bench]` attribute, similar to `#[test]` -- register benchmarks anywhere
 - Module tree hierarchy reflected in output formatting
 - Generic benchmarks: `#[divan::bench(types = [Vec<i32>, HashMap<i32, i32>])]`
@@ -61,6 +73,7 @@ Key features:
 - `Bencher` passed by-value (builder pattern prevents misuse)
 
 Downsides:
+
 - No HTML reports or chart generation (terminal-only output)
 - No baseline comparison yet (planned)
 - No machine-readable output (JSON/CSV planned)
@@ -68,26 +81,27 @@ Downsides:
 
 ### Comparison Table
 
-| Feature | Criterion | Divan |
-|---|---|---|
-| API style | Macro-based groups | `#[divan::bench]` attribute |
-| Statistics | Confidence intervals, regression | Min/max/median/mean, sample scaling |
-| HTML reports | Yes | No (planned) |
-| Baseline comparison | Yes | No (planned) |
-| Allocation profiling | No | Yes (`AllocProfiler`) |
-| Generic benchmarks | No | Yes (types + consts) |
-| Multi-threaded | No | Yes (`threads` option) |
-| Throughput counters | `Throughput` enum | `BytesCount`, `ItemsCount`, etc. |
-| Async support | Yes | Planned |
-| CI friendliness | Moderate (noisy) | Good (sample scaling) |
-| Compile time | Slow (plotters) | Fast |
-| Ecosystem integration | Bencher, github-action-benchmark | Bencher |
+| Feature               | Criterion                        | Divan                               |
+| --------------------- | -------------------------------- | ----------------------------------- |
+| API style             | Macro-based groups               | `#[divan::bench]` attribute         |
+| Statistics            | Confidence intervals, regression | Min/max/median/mean, sample scaling |
+| HTML reports          | Yes                              | No (planned)                        |
+| Baseline comparison   | Yes                              | No (planned)                        |
+| Allocation profiling  | No                               | Yes (`AllocProfiler`)               |
+| Generic benchmarks    | No                               | Yes (types + consts)                |
+| Multi-threaded        | No                               | Yes (`threads` option)              |
+| Throughput counters   | `Throughput` enum                | `BytesCount`, `ItemsCount`, etc.    |
+| Async support         | Yes                              | Planned                             |
+| CI friendliness       | Moderate (noisy)                 | Good (sample scaling)               |
+| Compile time          | Slow (plotters)                  | Fast                                |
+| Ecosystem integration | Bencher, github-action-benchmark | Bencher                             |
 
 ---
 
 ## 2. What to Benchmark
 
-For a terminal grid rendering library, benchmark these layers from pure CPU work through GPU submission.
+For a terminal grid rendering library, benchmark these layers from pure CPU work through GPU
+submission.
 
 ### 2.1 Cell Write Throughput
 
@@ -250,9 +264,11 @@ fn serialize_to_ansi(bencher: divan::Bencher, (cols, rows): (usize, usize)) {
 
 ### wgpu Timestamp Queries
 
-wgpu supports GPU-side timestamp queries through the WebGPU `QuerySet` API. This measures actual GPU execution time, not CPU submission time.
+wgpu supports GPU-side timestamp queries through the WebGPU `QuerySet` API. This measures actual GPU
+execution time, not CPU submission time.
 
 **Requirements:**
+
 - Device must have `Features::TIMESTAMP_QUERY` enabled
 - Not all backends/hardware support it (check `adapter.features()`)
 
@@ -309,7 +325,9 @@ let period = queue.get_timestamp_period(); // nanoseconds per tick
 let gpu_time_ns = (timestamps[1] - timestamps[0]) as f64 * period as f64;
 ```
 
-**Note from wgpu docs:** "Since commands within a command recorder may be reordered, there is no strict guarantee that timestamps are taken after all commands recorded so far." Timestamps at pass boundaries (beginning/end) are well-defined.
+**Note from wgpu docs:** "Since commands within a command recorder may be reordered, there is no
+strict guarantee that timestamps are taken after all commands recorded so far." Timestamps at pass
+boundaries (beginning/end) are well-defined.
 
 ### Standalone Timestamp Writes
 
@@ -323,7 +341,10 @@ encoder.write_timestamp(&query_set, 1);
 
 ### OpenGL Timer Queries (via raw backend)
 
-If targeting OpenGL (e.g., for older hardware or Linux without Vulkan), use `GL_TIME_ELAPSED` or `GL_TIMESTAMP` queries. With wgpu, this requires dropping to the HAL layer via `CommandEncoder::as_hal_mut`, which is an advanced escape hatch. Prefer the WebGPU timestamp query API when possible.
+If targeting OpenGL (e.g., for older hardware or Linux without Vulkan), use `GL_TIME_ELAPSED` or
+`GL_TIMESTAMP` queries. With wgpu, this requires dropping to the HAL layer via
+`CommandEncoder::as_hal_mut`, which is an advanced escape hatch. Prefer the WebGPU timestamp query
+API when possible.
 
 ### Frame Time Tracking Pattern
 
@@ -354,16 +375,20 @@ impl FrameTimer {
 
 ## 4. Input-to-Display Latency
 
-End-to-end latency from keypress to pixel change is a key terminal quality metric. This is harder to measure than throughput because it spans the entire pipeline.
+End-to-end latency from keypress to pixel change is a key terminal quality metric. This is harder to
+measure than throughput because it spans the entire pipeline.
 
 ### Approaches
 
 **1. External measurement (ground truth):**
-- [Typometer](https://github.com/pavelfatin/typometer): Java tool that uses screen capture to measure keystroke-to-display latency. Works with any terminal. Records at 1000Hz, detects pixel changes after synthetic keypresses.
-- [Is It Snappy](https://isitsnappy.com/): High-speed camera approach. Requires 240Hz+ camera pointed at the screen while typing.
 
-**2. Software instrumentation:**
-Insert timestamps at pipeline boundaries and report the delta:
+- [Typometer](https://github.com/pavelfatin/typometer): Java tool that uses screen capture to
+  measure keystroke-to-display latency. Works with any terminal. Records at 1000Hz, detects pixel
+  changes after synthetic keypresses.
+- [Is It Snappy](https://isitsnappy.com/): High-speed camera approach. Requires 240Hz+ camera
+  pointed at the screen while typing.
+
+**2. Software instrumentation:** Insert timestamps at pipeline boundaries and report the delta:
 
 ```rust
 struct LatencyTracer {
@@ -387,8 +412,8 @@ impl LatencyTracer {
 }
 ```
 
-**3. Self-echo latency test:**
-Send a character to the PTY, time how long until it appears in the grid buffer:
+**3. Self-echo latency test:** Send a character to the PTY, time how long until it appears in the
+grid buffer:
 
 ```rust
 fn measure_echo_latency(pty: &mut Pty, grid: &Grid) -> Duration {
@@ -407,6 +432,7 @@ fn measure_echo_latency(pty: &mut Pty, grid: &Grid) -> Duration {
 ### Latency Budget
 
 Typical targets for a responsive terminal:
+
 - Total input-to-display: < 16ms (60fps) or < 8ms (120fps)
 - PTY read + parse: < 1ms
 - Grid update: < 1ms
@@ -420,7 +446,8 @@ Typical targets for a responsive terminal:
 
 ### 5.1 DHAT (dhat-rs crate)
 
-[dhat](https://docs.rs/dhat) is a Rust crate for heap profiling that works on all platforms. It wraps the global allocator and records every allocation.
+[dhat](https://docs.rs/dhat) is a Rust crate for heap profiling that works on all platforms. It
+wraps the global allocator and records every allocation.
 
 **Setup:**
 
@@ -473,11 +500,13 @@ fn test_grid_allocation() {
 }
 ```
 
-Important: each heap usage test must be in its own integration test file (separate process), or use `--test-threads=1`, because dhat uses global state.
+Important: each heap usage test must be in its own integration test file (separate process), or use
+`--test-threads=1`, because dhat uses global state.
 
 ### 5.2 Heaptrack
 
-[heaptrack](https://github.com/KDE/heaptrack) is a Linux heap profiler that intercepts malloc/free via LD_PRELOAD. Zero source code changes needed.
+[heaptrack](https://github.com/KDE/heaptrack) is a Linux heap profiler that intercepts malloc/free
+via LD_PRELOAD. Zero source code changes needed.
 
 ```bash
 # Profile
@@ -487,9 +516,11 @@ heaptrack ./target/release/my-terminal
 heaptrack_gui heaptrack.my-terminal.*.zst
 ```
 
-Shows: peak memory, allocation hotspots, memory leaks, allocation frequency over time, flamegraph of allocation call stacks.
+Shows: peak memory, allocation hotspots, memory leaks, allocation frequency over time, flamegraph of
+allocation call stacks.
 
-Not available on macOS. On macOS, use Instruments (Allocations template) or `cargo instruments -t Allocations`.
+Not available on macOS. On macOS, use Instruments (Allocations template) or
+`cargo instruments -t Allocations`.
 
 ### 5.3 Measuring Bytes Per Cell
 
@@ -517,7 +548,8 @@ fn bytes_per_cell_budget() {
 }
 ```
 
-Use `#[repr(C)]` or `#[repr(packed)]` cautiously; prefer `#[repr(Rust)]` and let the compiler optimize layout. Use `std::mem::size_of::<T>()` and `std::mem::align_of::<T>()` to verify.
+Use `#[repr(C)]` or `#[repr(packed)]` cautiously; prefer `#[repr(Rust)]` and let the compiler
+optimize layout. Use `std::mem::size_of::<T>()` and `std::mem::align_of::<T>()` to verify.
 
 ### 5.4 Divan's AllocProfiler
 
@@ -547,19 +579,23 @@ Output shows allocation count and bytes alongside timing, per benchmark.
 
 ### cargo-flamegraph
 
-[cargo-flamegraph](https://github.com/flamegraph-rs/flamegraph) generates flamegraph SVGs from Rust projects. Built on [inferno](https://github.com/jonhoo/inferno).
+[cargo-flamegraph](https://github.com/flamegraph-rs/flamegraph) generates flamegraph SVGs from Rust
+projects. Built on [inferno](https://github.com/jonhoo/inferno).
 
 **Install:**
+
 ```bash
 cargo install flamegraph
 ```
 
 **Platform requirements:**
+
 - Linux: `perf` (install `linux-tools-common linux-tools-generic`)
 - macOS: `xctrace` (comes with Xcode)
 - Windows: works out of the box via [blondie](https://github.com/nico-abram/blondie), or dtrace
 
 **Usage:**
+
 ```bash
 # Profile the default binary
 cargo flamegraph
@@ -594,6 +630,7 @@ rustflags = ["-Clink-arg=-Wl,--no-rosegment"]
 ```
 
 **Reading flamegraphs:**
+
 - Width = proportion of total samples containing that function
 - Y-axis = call stack depth
 - X-axis ordering is alphabetical, NOT time-based
@@ -602,7 +639,9 @@ rustflags = ["-Clink-arg=-Wl,--no-rosegment"]
 
 ### samply (alternative)
 
-[samply](https://github.com/mstange/samply) is another Rust profiler that integrates with Firefox's Profiler web UI. Better macOS support than cargo-flamegraph, and provides an interactive timeline view rather than a static SVG.
+[samply](https://github.com/mstange/samply) is another Rust profiler that integrates with Firefox's
+Profiler web UI. Better macOS support than cargo-flamegraph, and provides an interactive timeline
+view rather than a static SVG.
 
 ```bash
 cargo install samply
@@ -619,6 +658,7 @@ samply record ./target/release/my-binary
 When building for `wasm32-unknown-unknown`, Chrome DevTools can profile WASM execution.
 
 **Build with debug names:**
+
 ```toml
 # Cargo.toml
 [profile.release]
@@ -627,9 +667,12 @@ debug = "line-tables-only"  # or debug = true for full info
 
 Or use `wasm-pack build --profiling` which enables debug symbols without disabling optimizations.
 
-DevTools Performance tab will show Rust function names in the flame chart if the WASM binary includes the "name" custom section. Without debug symbols, you see opaque `wasm-function[123]` labels.
+DevTools Performance tab will show Rust function names in the flame chart if the WASM binary
+includes the "name" custom section. Without debug symbols, you see opaque `wasm-function[123]`
+labels.
 
-Caveat: inlined functions won't appear. Rust/LLVM inline aggressively, so the call tree may look flattened.
+Caveat: inlined functions won't appear. Rust/LLVM inline aggressively, so the call tree may look
+flattened.
 
 ### console.time / console.timeEnd
 
@@ -686,7 +729,10 @@ pub fn measure<F: FnOnce() -> R, R>(label: &str, f: F) -> R {
 
 ### Native Benchmarks for WASM Code
 
-The most effective approach: write `#[bench]` or `#[divan::bench]` functions for your core logic, run them natively. WASM-specific overhead (JS interop, DOM) is a thin layer; the core grid/diff/layout logic is platform-independent. Profile the native build with cargo-flamegraph, then verify the WASM build matches expectations using DevTools.
+The most effective approach: write `#[bench]` or `#[divan::bench]` functions for your core logic,
+run them natively. WASM-specific overhead (JS interop, DOM) is a thin layer; the core
+grid/diff/layout logic is platform-independent. Profile the native build with cargo-flamegraph, then
+verify the WASM build matches expectations using DevTools.
 
 ---
 
@@ -694,11 +740,13 @@ The most effective approach: write `#[bench]` or `#[divan::bench]` functions for
 
 ### vtebench (Alacritty)
 
-[vtebench](https://github.com/alacritty/vtebench) measures terminal PTY read performance. It generates VT escape sequence payloads and measures how fast a terminal can consume them.
+[vtebench](https://github.com/alacritty/vtebench) measures terminal PTY read performance. It
+generates VT escape sequence payloads and measures how fast a terminal can consume them.
 
 **What it measures:** Raw PTY read speed only. NOT frame rate, latency, or rendering performance.
 
 **How it works:**
+
 - Benchmarks are defined as directories with a `benchmark` executable and an optional `setup` script
 - The benchmark's stdout is used as the payload sent to the terminal via PTY
 - Results can be plotted with gnuplot
@@ -711,24 +759,32 @@ cargo run --release -- --dat results.dat  # machine-readable output
 ./gnuplot/summary.sh results.dat output.svg  # plot
 ```
 
-The vtebench README explicitly warns: "This benchmark is not sufficient to get a general understanding of the performance of a terminal emulator." It only tests one dimension.
+The vtebench README explicitly warns: "This benchmark is not sufficient to get a general
+understanding of the performance of a terminal emulator." It only tests one dimension.
 
 ### Alacritty's Internal Benchmarks
 
-Alacritty uses Criterion internally for benchmarking grid operations, VT parsing, and the renderer. Their benchmark files live under `alacritty_terminal/benches/` and cover:
+Alacritty uses Criterion internally for benchmarking grid operations, VT parsing, and the renderer.
+Their benchmark files live under `alacritty_terminal/benches/` and cover:
+
 - VT parser throughput (bytes/second of escape sequence processing)
 - Grid scrolling and line operations
 - Cell iteration patterns
 
 ### termbench
 
-[termbench](https://github.com/gizmo98/termbench) is a simpler terminal benchmark that measures raw text output speed by writing large amounts of text and timing how fast the terminal displays it. Less sophisticated than vtebench but easier to run.
+[termbench](https://github.com/gizmo98/termbench) is a simpler terminal benchmark that measures raw
+text output speed by writing large amounts of text and timing how fast the terminal displays it.
+Less sophisticated than vtebench but easier to run.
 
 ### Key Lessons from Terminal Benchmarks
 
-1. **Separate PTY throughput from render throughput.** A terminal can be fast at reading PTY data but slow at rendering, or vice versa.
-2. **Measure at multiple grid sizes.** 80x24 vs 200x60 can show different bottlenecks (memory bandwidth vs computation).
-3. **Test with realistic workloads:** scrolling, colored output, wide characters, cursor movement, alternate screen buffer.
+1. **Separate PTY throughput from render throughput.** A terminal can be fast at reading PTY data
+   but slow at rendering, or vice versa.
+2. **Measure at multiple grid sizes.** 80x24 vs 200x60 can show different bottlenecks (memory
+   bandwidth vs computation).
+3. **Test with realistic workloads:** scrolling, colored output, wide characters, cursor movement,
+   alternate screen buffer.
 4. **VT parser throughput** is often the first bottleneck. Benchmark it in isolation.
 
 ---
@@ -737,7 +793,9 @@ Alacritty uses Criterion internally for benchmarking grid operations, VT parsing
 
 ### Option A: github-action-benchmark
 
-[github-action-benchmark](https://github.com/benchmark-action/github-action-benchmark) is a GitHub Action that parses benchmark output from `cargo bench` (Criterion format), stores results in `gh-pages` branch, and alerts on regressions.
+[github-action-benchmark](https://github.com/benchmark-action/github-action-benchmark) is a GitHub
+Action that parses benchmark output from `cargo bench` (Criterion format), stores results in
+`gh-pages` branch, and alerts on regressions.
 
 ```yaml
 name: Benchmarks
@@ -773,16 +831,19 @@ jobs:
           comment-on-alert: true
 ```
 
-Default alert threshold is 200% (current is 2x worse than previous). Set `alert-threshold: '120%'` for tighter regression detection.
+Default alert threshold is 200% (current is 2x worse than previous). Set `alert-threshold: '120%'`
+for tighter regression detection.
 
 Caveat: shared CI runners have ~30% variance. Results will be noisy. Consider:
+
 - Running multiple iterations and averaging
 - Using `fail-threshold` separate from `alert-threshold`
 - Using self-hosted runners for stability
 
 ### Option B: Bencher
 
-[Bencher](https://bencher.dev) is a continuous benchmarking platform with optional bare-metal runners for <2% variance. Supports Criterion, Divan, and custom output formats.
+[Bencher](https://bencher.dev) is a continuous benchmarking platform with optional bare-metal
+runners for <2% variance. Supports Criterion, Divan, and custom output formats.
 
 ```yaml
 name: Continuous Benchmarking
@@ -804,6 +865,7 @@ jobs:
 ```
 
 Bencher provides:
+
 - Historical tracking with charts
 - Statistical regression detection (configurable thresholds)
 - PR comments showing benchmark comparisons
@@ -1076,13 +1138,22 @@ cargo test --release --features dhat-heap -- test_grid_allocation
 
 ## Sources
 
-- [Criterion.rs](https://github.com/bheisler/criterion.rs) / [docs](https://docs.rs/criterion) -- statistics-driven benchmarking, HTML reports, baseline comparison
-- [Divan](https://github.com/nvzqz/divan) / [announcement](https://nikolaivazquez.com/blog/divan/) -- simple API, allocation profiling, generic benchmarks, thread contention
+- [Criterion.rs](https://github.com/bheisler/criterion.rs) / [docs](https://docs.rs/criterion) --
+  statistics-driven benchmarking, HTML reports, baseline comparison
+- [Divan](https://github.com/nvzqz/divan) / [announcement](https://nikolaivazquez.com/blog/divan/)
+  -- simple API, allocation profiling, generic benchmarks, thread contention
 - [dhat crate](https://docs.rs/dhat) -- heap profiling and allocation testing for Rust
-- [cargo-flamegraph](https://github.com/flamegraph-rs/flamegraph) -- flamegraph SVG generation, perf/dtrace/xctrace backends
-- [wgpu CommandEncoder::write_timestamp](https://docs.rs/wgpu/latest/wgpu/struct.CommandEncoder.html) -- GPU timestamp queries
-- [wgpu RenderPassTimestampWrites](https://docs.rs/wgpu/latest/wgpu/struct.RenderPassTimestampWrites.html) -- per-pass GPU timing
-- [vtebench](https://github.com/alacritty/vtebench) -- PTY read performance benchmarking for terminals
-- [github-action-benchmark](https://github.com/benchmark-action/github-action-benchmark) -- GitHub Action for CI regression detection
-- [Bencher](https://bencher.dev) / [repo](https://github.com/bencherdev/bencher) -- continuous benchmarking platform with bare-metal runners
-- [Rust WASM Book: Time Profiling](https://rustwasm.github.io/book/reference/time-profiling.html) -- WASM profiling with DevTools, console.time, performance.now
+- [cargo-flamegraph](https://github.com/flamegraph-rs/flamegraph) -- flamegraph SVG generation,
+  perf/dtrace/xctrace backends
+- [wgpu CommandEncoder::write_timestamp](https://docs.rs/wgpu/latest/wgpu/struct.CommandEncoder.html)
+  -- GPU timestamp queries
+- [wgpu RenderPassTimestampWrites](https://docs.rs/wgpu/latest/wgpu/struct.RenderPassTimestampWrites.html)
+  -- per-pass GPU timing
+- [vtebench](https://github.com/alacritty/vtebench) -- PTY read performance benchmarking for
+  terminals
+- [github-action-benchmark](https://github.com/benchmark-action/github-action-benchmark) -- GitHub
+  Action for CI regression detection
+- [Bencher](https://bencher.dev) / [repo](https://github.com/bencherdev/bencher) -- continuous
+  benchmarking platform with bare-metal runners
+- [Rust WASM Book: Time Profiling](https://rustwasm.github.io/book/reference/time-profiling.html) --
+  WASM profiling with DevTools, console.time, performance.now

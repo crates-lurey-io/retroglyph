@@ -1,14 +1,14 @@
 # Tile and Sprite Composition Reference
 
-Research for a Rust terminal/grid rendering library covering tile stacking, alpha
-blending, file formats, codepage mapping, and multi-cell sprites.
+Research for a Rust terminal/grid rendering library covering tile stacking, alpha blending, file
+formats, codepage mapping, and multi-cell sprites.
 
 ---
 
 ## 1. BearLibTerminal's Multi-Tile-Per-Cell Composition Model
 
-BearLibTerminal provides the reference model for grid-based tile composition in
-roguelike rendering. Its API has four key mechanisms:
+BearLibTerminal provides the reference model for grid-based tile composition in roguelike rendering.
+Its API has four key mechanisms:
 
 ### Layers (0-255)
 
@@ -16,17 +16,17 @@ roguelike rendering. Its API has four key mechanisms:
 void terminal_layer(int layer);
 ```
 
-Layers are numbered 0..255. Layer 0 is the base layer and is the **only** layer
-that has a background color. Layers 1+ are transparent overlays. The scene is
-rendered bottom-to-top by layer index, providing strict Z-ordering. Layers can
-be cleared independently with `terminal_clear_area` (affects only the current
-layer), while `terminal_clear` wipes all layers.
+Layers are numbered 0..255. Layer 0 is the base layer and is the **only** layer that has a
+background color. Layers 1+ are transparent overlays. The scene is rendered bottom-to-top by layer
+index, providing strict Z-ordering. Layers can be cleared independently with `terminal_clear_area`
+(affects only the current layer), while `terminal_clear` wipes all layers.
 
 Key use cases:
-- **Large tiles**: tiles bigger than one cell need layers to prevent left-to-right,
-  top-to-bottom draw order from overwriting them.
-- **Logical separation**: keep dungeon terrain on layer 0, items on layer 1,
-  creatures on layer 2, UI on layer 3. Update each independently.
+
+- **Large tiles**: tiles bigger than one cell need layers to prevent left-to-right, top-to-bottom
+  draw order from overwriting them.
+- **Logical separation**: keep dungeon terrain on layer 0, items on layer 1, creatures on layer 2,
+  UI on layer 3. Update each independently.
 
 ### Composition Mode (tile stacking within a cell)
 
@@ -34,14 +34,16 @@ Key use cases:
 void terminal_composition(int mode); // TK_ON or TK_OFF
 ```
 
-When composition is **off** (default), placing a tile replaces the cell contents.
-When composition is **on**, the tile is *pushed onto the cell's tile stack*. There
-is no enforced limit on stack depth. Each stacked tile retains its own:
+When composition is **off** (default), placing a tile replaces the cell contents. When composition
+is **on**, the tile is _pushed onto the cell's tile stack_. There is no enforced limit on stack
+depth. Each stacked tile retains its own:
+
 - Foreground color
 - Pixel offset (dx, dy)
 - Per-corner colors (for gradients)
 
 The `print` function supports inline composition with `[+]` tags:
+
 ```c
 terminal_printf("a[+][color=red]^[/color]"); // 'a' with red '^' overlaid
 ```
@@ -52,19 +54,17 @@ terminal_printf("a[+][color=red]^[/color]"); // 'a' with red '^' overlaid
 void terminal_put_ext(int x, int y, int dx, int dy, int code, color_t* corners);
 ```
 
-- `dx`, `dy`: pixel offset from the tile's natural cell position. Each tile in a
-  composition stack has its own offset. Offsets do **not** change draw order; a
-  tile shifted visually into a neighbor's cell is still drawn in its own cell's
-  turn. Use layers if you need it to render on top.
-- `corners`: array of 4 `color_t` values (top-left, bottom-left, bottom-right,
-  top-right, counter-clockwise). Enables smooth color gradients across tiles.
-  Pass NULL to use the current foreground color uniformly.
+- `dx`, `dy`: pixel offset from the tile's natural cell position. Each tile in a composition stack
+  has its own offset. Offsets do **not** change draw order; a tile shifted visually into a
+  neighbor's cell is still drawn in its own cell's turn. Use layers if you need it to render on top.
+- `corners`: array of 4 `color_t` values (top-left, bottom-left, bottom-right, top-right,
+  counter-clockwise). Enables smooth color gradients across tiles. Pass NULL to use the current
+  foreground color uniformly.
 
 ### Color Model
 
-Colors are 32-bit BGRA (`0xAARRGGBB`). The alpha channel is meaningful:
-semi-transparent foreground tiles blend with whatever is behind them. Background
-color only applies to layer 0.
+Colors are 32-bit BGRA (`0xAARRGGBB`). The alpha channel is meaningful: semi-transparent foreground
+tiles blend with whatever is behind them. Background color only applies to layer 0.
 
 ### Tileset Configuration
 
@@ -82,9 +82,10 @@ terminal_set("italic font: italic.ttf, size=12");
 ```
 
 Important parameters:
+
 - `size`: tile dimensions in the source image (e.g., `16x16`)
-- `spacing`: how many grid cells a single tile occupies (e.g., `2x1` for a
-  tile that spans 2 cells wide, 1 cell tall)
+- `spacing`: how many grid cells a single tile occupies (e.g., `2x1` for a tile that spans 2 cells
+  wide, 1 cell tall)
 - `codepage`: codepage mapping for the tileset (e.g., `437` for CP437 layout)
 - `align`: tile alignment within its cell area (`center`, `top-left`, etc.)
 - `transparent`: background color key for formats without alpha
@@ -105,12 +106,11 @@ Grid renderers use painter's algorithm: draw back-to-front. The standard order i
 3. **Layer 1 tile stack**
 4. ...up through layer N
 
-Within each layer, tiles in the composition stack are drawn in push order
-(first pushed = drawn first = furthest back).
+Within each layer, tiles in the composition stack are drawn in push order (first pushed = drawn
+first = furthest back).
 
-Within a single layer, cells are drawn left-to-right, top-to-bottom. This is why
-large tiles that extend rightward/downward get clipped: subsequent cells overwrite
-them. Layers solve this.
+Within a single layer, cells are drawn left-to-right, top-to-bottom. This is why large tiles that
+extend rightward/downward get clipped: subsequent cells overwrite them. Layers solve this.
 
 ### Standard Alpha Blending (straight alpha)
 
@@ -123,8 +123,8 @@ out.a   = src.a + dst.a * (1 - src.a)
 
 ### Pre-multiplied Alpha
 
-Pre-multiplied alpha stores `(r*a, g*a, b*a, a)` instead of `(r, g, b, a)`.
-The blend formula simplifies to:
+Pre-multiplied alpha stores `(r*a, g*a, b*a, a)` instead of `(r, g, b, a)`. The blend formula
+simplifies to:
 
 ```
 out.rgb = src.rgb + dst.rgb * (1 - src.a)
@@ -132,14 +132,15 @@ out.a   = src.a + dst.a * (1 - src.a)
 ```
 
 Advantages of pre-multiplied alpha:
+
 - Compositing is associative: `A over (B over C) == (A over B) over C`
 - Filtering/mipmapping works correctly (no dark halos at transparent edges)
 - GPU blend mode is simpler: `ONE, ONE_MINUS_SRC_ALPHA`
 - Supports additive blending naturally (set alpha to 0 but keep RGB for glow)
 
-For a tile renderer, pre-multiplied alpha is strongly preferred. Most GPU APIs
-(wgpu, OpenGL) default to or work best with pre-multiplied textures. PNG files
-store straight alpha, so convert on load:
+For a tile renderer, pre-multiplied alpha is strongly preferred. Most GPU APIs (wgpu, OpenGL)
+default to or work best with pre-multiplied textures. PNG files store straight alpha, so convert on
+load:
 
 ```rust
 fn premultiply(r: u8, g: u8, b: u8, a: u8) -> [u8; 4] {
@@ -188,7 +189,7 @@ fn alpha_over(src: Rgba, dst: Rgba) -> Rgba {
 
 ### Oryx Design Lab
 
-- **URL**: https://www.oryxdesignlab.com/
+- **URL**: <https://www.oryxdesignlab.com/>
 - **Style**: Clean 16x16 and 24x24 pixel art, consistent palette
 - **Sets**: "16-bit Fantasy" (1,700+ tiles), "Tiny Dungeon" (legacy free set)
 - **Format**: PNG sprite sheets, grid-aligned, no padding
@@ -196,45 +197,45 @@ fn alpha_over(src: Rgba, dst: Rgba) -> Rgba {
 
 ### Kenney Assets
 
-- **URL**: https://kenney.nl/assets
+- **URL**: <https://kenney.nl/assets>
 - **Style**: Various sizes (16x16, 32x32, 64x64), clean flat style
-- **Sets**: "1-Bit Pack" (over 1,000 monochrome tiles), "Roguelike/RPG Pack",
-  "Micro Roguelike", "Tiny Dungeon"
-- **Format**: Individual PNGs + sprite sheets. Sheets use consistent grid with
-  no padding. Often includes a JSON/XML atlas file.
+- **Sets**: "1-Bit Pack" (over 1,000 monochrome tiles), "Roguelike/RPG Pack", "Micro Roguelike",
+  "Tiny Dungeon"
+- **Format**: Individual PNGs + sprite sheets. Sheets use consistent grid with no padding. Often
+  includes a JSON/XML atlas file.
 - **License**: CC0 (public domain), free for commercial use
 
 ### DawnLike (DragonDePlatino)
 
-- **URL**: https://opengameart.org/content/dawnlike-16x16-universal-rogue-like-tileset-v181
+- **URL**: <https://opengameart.org/content/dawnlike-16x16-universal-rogue-like-tileset-v181>
 - **Style**: 16x16, rich pixel art inspired by NetHack and Dungeon Crawl
 - **Sets**: Complete roguelike tileset: terrain, characters, items, GUI, effects
-- **Format**: Multiple PNG sheets organized by category (Characters, Objects,
-  GUI, etc.). Standard 16x16 grid, no padding.
+- **Format**: Multiple PNG sheets organized by category (Characters, Objects, GUI, etc.). Standard
+  16x16 grid, no padding.
 - **License**: CC-BY 4.0 (credit required)
 
 ### Curses/CP437 Tilesets
 
-Classic roguelike "font" tilesets that map 256 CP437 glyphs to a 16x16 grid of
-tiles. Standard dimensions include 8x8, 10x10, 12x12, 16x16, and 20x20 pixels
-per glyph.
+Classic roguelike "font" tilesets that map 256 CP437 glyphs to a 16x16 grid of tiles. Standard
+dimensions include 8x8, 10x10, 12x12, 16x16, and 20x20 pixels per glyph.
 
 Popular sources:
+
 - **Dwarf Fortress tilesets**: community-maintained collection at
-  https://dwarffortresswiki.org/Tileset_repository
+  <https://dwarffortresswiki.org/Tileset_repository>
 - **REXPaint fonts**: ships with multiple CP437 fonts at various sizes
 - **libtcod/bracket-lib built-in fonts**: terminal8x8, vga8x16, etc.
 
-Layout convention: 16 columns x 16 rows = 256 glyphs. The glyph at position
-`(col, row)` maps to CP437 index `row * 16 + col`. Row-major order, top-left
-is index 0 (NUL/space), reading left-to-right then top-to-bottom.
+Layout convention: 16 columns x 16 rows = 256 glyphs. The glyph at position `(col, row)` maps to
+CP437 index `row * 16 + col`. Row-major order, top-left is index 0 (NUL/space), reading
+left-to-right then top-to-bottom.
 
 ---
 
 ## 4. REXPaint .xp File Format
 
-REXPaint is the standard ASCII art editor for roguelike development. Its `.xp`
-format is compact (gzip-compressed binary) and widely supported.
+REXPaint is the standard ASCII art editor for roguelike development. Its `.xp` format is compact
+(gzip-compressed binary) and widely supported.
 
 ### File Structure
 
@@ -271,17 +272,17 @@ Each `XpCell` is 10 bytes:
 
 ### Important Details
 
-- **Column-major order**: cells are stored column-by-column. For position (x, y),
-  the index is `x * height + y`.
-- **Transparency**: background color `(255, 0, 255)` (hot pink) marks a
-  transparent cell. When rendering, skip these cells on upper layers; convert
-  visible transparent cells on the base layer to black.
-- **No alpha channel**: colors are RGB only (3 bytes each). Transparency is
-  binary via the magic pink background.
-- **Width/height repeated**: each layer redundantly stores width and height
-  (always the same across all layers).
-- **Extended glyphs**: glyph codes can exceed 255 if the tileset has more than
-  16 rows (custom extended fonts in REXPaint).
+- **Column-major order**: cells are stored column-by-column. For position (x, y), the index is
+  `x * height + y`.
+- **Transparency**: background color `(255, 0, 255)` (hot pink) marks a transparent cell. When
+  rendering, skip these cells on upper layers; convert visible transparent cells on the base layer
+  to black.
+- **No alpha channel**: colors are RGB only (3 bytes each). Transparency is binary via the magic
+  pink background.
+- **Width/height repeated**: each layer redundantly stores width and height (always the same across
+  all layers).
+- **Extended glyphs**: glyph codes can exceed 255 if the tileset has more than 16 rows (custom
+  extended fonts in REXPaint).
 
 ### Rust Implementation
 
@@ -320,8 +321,8 @@ for layer in &xp.layers {
 
 ## 5. Tiled .tmx/.tsx Format Basics
 
-Tiled is the most popular 2D map editor. Its XML-based formats are well-supported
-in the Rust ecosystem via the `tiled` crate.
+Tiled is the most popular 2D map editor. Its XML-based formats are well-supported in the Rust
+ecosystem via the `tiled` crate.
 
 ### TMX (Map) Structure
 
@@ -350,6 +351,7 @@ in the Rust ecosystem via the `tiled` crate.
 ```
 
 Key attributes for roguelikes:
+
 - `orientation`: typically `"orthogonal"` for roguelikes
 - `tilewidth`/`tileheight`: grid cell size in pixels
 - `renderorder`: `"right-down"` (default) matches standard roguelike rendering
@@ -370,6 +372,7 @@ Key attributes for roguelikes:
 ```
 
 Relevant features:
+
 - `spacing`: pixels between tiles in the source image
 - `margin`: pixels around the edge of the tileset image
 - `tileoffset`: pixel offset applied when rendering
@@ -379,6 +382,7 @@ Relevant features:
 ### Data Encoding
 
 Tile layer data can be:
+
 - **CSV**: comma-separated Global Tile IDs (simplest to parse)
 - **Base64**: optionally compressed with zlib, gzip, or zstd
 - Global Tile IDs (GIDs) are u32 values. The top 3 bits encode flip flags:
@@ -415,9 +419,8 @@ for layer in map.layers() {
 
 ## 6. LDtk Level Editor Format
 
-LDtk (Level Designer Toolkit) is a modern 2D level editor with strong tileset
-support, auto-tiling, and entity placement. Created by Sebastien Benard
-(creator of Dead Cells).
+LDtk (Level Designer Toolkit) is a modern 2D level editor with strong tileset support, auto-tiling,
+and entity placement. Created by Sebastien Benard (creator of Dead Cells).
 
 ### JSON Structure Overview
 
@@ -451,16 +454,15 @@ Project (.ldtk)
 
 ### Key Features for Roguelikes
 
-- **IntGrid layers**: cells contain integer values (wall type, terrain flags).
-  Directly maps to roguelike tile maps.
-- **Auto-layers**: auto-tile rules generate tiles from IntGrid values. Rules are
-  resolved by the editor; game code just reads the output `gridTiles`.
-- **Entity layers**: positioned entity instances with typed fields (spawn points,
-  doors, NPCs with custom properties).
-- **Enum tags on tiles**: tag tiles with enums in the tileset definition, then
-  query tiles by tag at runtime.
-- **Separate level files**: large projects can store each level in its own
-  `.ldtkl` file.
+- **IntGrid layers**: cells contain integer values (wall type, terrain flags). Directly maps to
+  roguelike tile maps.
+- **Auto-layers**: auto-tile rules generate tiles from IntGrid values. Rules are resolved by the
+  editor; game code just reads the output `gridTiles`.
+- **Entity layers**: positioned entity instances with typed fields (spawn points, doors, NPCs with
+  custom properties).
+- **Enum tags on tiles**: tag tiles with enums in the tileset definition, then query tiles by tag at
+  runtime.
+- **Separate level files**: large projects can store each level in its own `.ldtkl` file.
 
 ### Rust Crate: `ldtk_rust`
 
@@ -518,6 +520,7 @@ Standard sprite sheet layout for roguelike tilesets:
 ```
 
 Tile index to pixel coordinates:
+
 ```rust
 fn tile_rect(index: u32, tile_w: u32, tile_h: u32, columns: u32,
              margin: u32, spacing: u32) -> (u32, u32, u32, u32) {
@@ -533,38 +536,33 @@ fn tile_rect(index: u32, tile_w: u32, tile_h: u32, columns: u32,
 
 - **Margin**: pixels from the image edge to the first tile
 - **Spacing**: pixels between adjacent tiles
-- **Extrusion/bleeding border**: some engines duplicate edge pixels by 1px around
-  each tile to prevent texture filtering artifacts (sub-pixel bleeding). This adds
-  2px per tile dimension.
+- **Extrusion/bleeding border**: some engines duplicate edge pixels by 1px around each tile to
+  prevent texture filtering artifacts (sub-pixel bleeding). This adds 2px per tile dimension.
 
-Common configurations:
-| Convention | Margin | Spacing | Notes |
-|-----------|--------|---------|-------|
-| No padding | 0 | 0 | Simplest; most roguelike tilesets |
-| 1px spacing | 0 | 1 | Prevents bleed with bilinear filtering |
-| 1px extrude | 0 | 2 | Each tile edge pixel duplicated outward |
-| Tiled default | 0 | 0 | But supports arbitrary margin/spacing |
+Common configurations: | Convention | Margin | Spacing | Notes |
+|-----------|--------|---------|-------| | No padding | 0 | 0 | Simplest; most roguelike tilesets |
+| 1px spacing | 0 | 1 | Prevents bleed with bilinear filtering | | 1px extrude | 0 | 2 | Each tile
+edge pixel duplicated outward | | Tiled default | 0 | 0 | But supports arbitrary margin/spacing |
 
 ### Power-of-Two Sizes
 
-GPU textures historically required power-of-two (POT) dimensions for mipmapping
-and some older hardware. Modern GPUs handle NPOT textures, but POT is still
-preferred for:
+GPU textures historically required power-of-two (POT) dimensions for mipmapping and some older
+hardware. Modern GPUs handle NPOT textures, but POT is still preferred for:
+
 - Efficient GPU memory allocation (no wasted padding)
 - Mipmap generation
 - Better cache behavior
 
-Common tileset image sizes: 256x256, 512x512, 1024x1024, 2048x2048.
-Common tile sizes: 8x8, 16x16, 24x24, 32x32.
+Common tileset image sizes: 256x256, 512x512, 1024x1024, 2048x2048. Common tile sizes: 8x8, 16x16,
+24x24, 32x32.
 
-A 256x256 sheet with 16x16 tiles = 16 columns x 16 rows = 256 tiles (exactly
-one CP437 codepage).
+A 256x256 sheet with 16x16 tiles = 16 columns x 16 rows = 256 tiles (exactly one CP437 codepage).
 
 ### Multiple Sheets
 
-Large tilesets split across multiple PNG files (DawnLike, Oryx). Group by
-category: terrain, characters, items, effects. The renderer maintains a texture
-atlas or array of textures, with tile IDs mapping to (sheet_index, local_index).
+Large tilesets split across multiple PNG files (DawnLike, Oryx). Group by category: terrain,
+characters, items, effects. The renderer maintains a texture atlas or array of textures, with tile
+IDs mapping to (sheet_index, local_index).
 
 ---
 
@@ -572,8 +570,9 @@ atlas or array of textures, with tile IDs mapping to (sheet_index, local_index).
 
 ### The CP437 Standard
 
-Code Page 437 is the character set of the original IBM PC. It defines 256 glyphs
-in a 16x16 grid. For roguelike rendering, CP437 provides a complete set of:
+Code Page 437 is the character set of the original IBM PC. It defines 256 glyphs in a 16x16 grid.
+For roguelike rendering, CP437 provides a complete set of:
+
 - ASCII printable characters (0x20-0x7E)
 - Box-drawing characters (0xB0-0xDF): lines, corners, intersections, shading
 - Greek letters and math symbols (0xE0-0xFE): used for monsters/items
@@ -652,12 +651,13 @@ fn unicode_to_cp437(ch: char) -> Option<u8> {
 }
 ```
 
-For production use, the `codepage_437` crate on crates.io provides a complete
-bidirectional mapping. bracket-lib also includes a built-in `to_cp437` function.
+For production use, the `codepage_437` crate on crates.io provides a complete bidirectional mapping.
+bracket-lib also includes a built-in `to_cp437` function.
 
 ### Custom Codepages
 
 For tilesets that don't follow CP437 layout:
+
 - Define a custom mapping file (REXPaint supports this via `_utf8.txt`)
 - Store the mapping as a `HashMap<char, u16>` or a lookup table
 - BearLibTerminal's `codepage` parameter in tileset config accepts custom files
@@ -671,10 +671,9 @@ For tilesets that don't follow CP437 layout:
 
 ### The Problem
 
-In a strict grid renderer, each cell is drawn independently in row-major order
-(left-to-right, top-to-bottom). A 2x2 tile placed at cell (3, 2) needs to cover
-cells (3,2), (4,2), (3,3), and (4,3). But when cell (4,2) is drawn, it overwrites
-the right half of the large tile.
+In a strict grid renderer, each cell is drawn independently in row-major order (left-to-right,
+top-to-bottom). A 2x2 tile placed at cell (3, 2) needs to cover cells (3,2), (4,2), (3,3), and
+(4,3). But when cell (4,2) is drawn, it overwrites the right half of the large tile.
 
 ### Approach 1: BearLibTerminal Layers + Spacing
 
@@ -684,15 +683,14 @@ BearLibTerminal solves this with the `spacing` tileset parameter:
 terminal_set("0xE000: bigmonsters.png, size=32x32, spacing=2x2");
 ```
 
-This tells the renderer that tiles from this set occupy a 2x2 cell area. The tile
-is placed at `put(x, y, 0xE000)` and the renderer knows to reserve that area.
-Combined with layers, the large tile renders on a higher layer so it won't be
-overwritten by adjacent cells on lower layers.
+This tells the renderer that tiles from this set occupy a 2x2 cell area. The tile is placed at
+`put(x, y, 0xE000)` and the renderer knows to reserve that area. Combined with layers, the large
+tile renders on a higher layer so it won't be overwritten by adjacent cells on lower layers.
 
 ### Approach 2: Anchor Cell + Neighbor Markers
 
-The grid stores the large tile only in one "anchor" cell (typically top-left).
-Neighboring cells that the tile overlaps store a marker (e.g., `OccupiedBy(anchor_x, anchor_y)`).
+The grid stores the large tile only in one "anchor" cell (typically top-left). Neighboring cells
+that the tile overlaps store a marker (e.g., `OccupiedBy(anchor_x, anchor_y)`).
 
 ```rust
 enum CellContent {
@@ -704,14 +702,14 @@ enum CellContent {
 ```
 
 During rendering:
+
 1. When encountering an `OccupiedBy` cell, skip drawing its own content
 2. When encountering the anchor cell, draw the full multi-cell tile
 
 ### Approach 3: Separate Sprite Layer
 
-Render multi-cell sprites on a dedicated overlay layer, completely separate from
-the grid. The grid only stores gameplay data; the sprite is drawn at arbitrary
-pixel coordinates on top.
+Render multi-cell sprites on a dedicated overlay layer, completely separate from the grid. The grid
+only stores gameplay data; the sprite is drawn at arbitrary pixel coordinates on top.
 
 ```rust
 struct LargeSprite {
@@ -733,8 +731,8 @@ fn render_large_sprite(sprite: &LargeSprite, cell_w: u32, cell_h: u32) {
 
 ### Approach 4: Multi-Tile Decomposition
 
-Split the large source tile into cell-sized sub-tiles at load time. A 2x2 tile
-becomes 4 separate 1x1 tiles. Each sub-tile is placed in its respective cell.
+Split the large source tile into cell-sized sub-tiles at load time. A 2x2 tile becomes 4 separate
+1x1 tiles. Each sub-tile is placed in its respective cell.
 
 ```rust
 fn decompose_large_tile(
@@ -761,9 +759,8 @@ fn decompose_large_tile(
 }
 ```
 
-This is the simplest approach for a pure grid renderer since it doesn't require
-any special rendering logic. The tradeoff is that the tile can't be animated or
-transformed as a unit.
+This is the simplest approach for a pure grid renderer since it doesn't require any special
+rendering logic. The tradeoff is that the tile can't be animated or transformed as a unit.
 
 ---
 
@@ -1025,16 +1022,23 @@ pub const CP437: [char; 256] = [
 ## Sources
 
 - **Kept**:
-  - [BearLibTerminal Reference](http://foo.wyrd.name/en:bearlibterminal:reference) -- primary source for composition, layers, put_ext API
-  - [BearLibTerminal Configuration](http://foo.wyrd.name/en:bearlibterminal:reference:configuration) -- tileset loading, codepage, spacing parameters
-  - [REXPaint Manual](https://www.gridsagegames.com/rexpaint/) -- definitive .xp format specification (Appendix B)
-  - [TMX Map Format](https://doc.mapeditor.org/en/stable/reference/tmx-map-format/) -- official Tiled format documentation
+  - [BearLibTerminal Reference](http://foo.wyrd.name/en:bearlibterminal:reference) -- primary source
+    for composition, layers, put_ext API
+  - [BearLibTerminal Configuration](http://foo.wyrd.name/en:bearlibterminal:reference:configuration)
+    -- tileset loading, codepage, spacing parameters
+  - [REXPaint Manual](https://www.gridsagegames.com/rexpaint/) -- definitive .xp format
+    specification (Appendix B)
+  - [TMX Map Format](https://doc.mapeditor.org/en/stable/reference/tmx-map-format/) -- official
+    Tiled format documentation
   - [rs-tiled crate](https://github.com/mapeditor/rs-tiled) -- Rust TMX/TSX loader
   - [LDtk JSON Overview](https://ldtk.io/docs/general/json-overview/) -- LDtk format documentation
   - [ldtk_rust crate](https://docs.rs/ldtk_rust/) -- Rust LDtk loader
-  - [Unicode CP437 Mapping](https://www.unicode.org/Public/MAPPINGS/VENDORS/MICSFT/PC/CP437.TXT) -- authoritative codepage mapping
-  - [Wikipedia: Code Page 437](https://en.wikipedia.org/wiki/Code_page_437) -- comprehensive reference with Unicode equivalences
-  - [bracket-lib](https://github.com/amethyst/bracket-lib) -- Rust roguelike toolkit with tile rendering, REXPaint support
+  - [Unicode CP437 Mapping](https://www.unicode.org/Public/MAPPINGS/VENDORS/MICSFT/PC/CP437.TXT) --
+    authoritative codepage mapping
+  - [Wikipedia: Code Page 437](https://en.wikipedia.org/wiki/Code_page_437) -- comprehensive
+    reference with Unicode equivalences
+  - [bracket-lib](https://github.com/amethyst/bracket-lib) -- Rust roguelike toolkit with tile
+    rendering, REXPaint support
   - [rexpaint crate](https://docs.rs/rexpaint/) -- Rust .xp file reader/writer
 
 - **Dropped**:
@@ -1043,15 +1047,12 @@ pub const CP437: [char; 256] = [
 
 ## Gaps
 
-- **GPU-accelerated tile compositing**: this document covers the conceptual model
-  and software rendering. For wgpu/OpenGL vertex-batched rendering with texture
-  atlases, additional research into instanced quad rendering and texture array
-  approaches would be useful.
-- **Animation**: tile animation (frame cycling, duration) is mentioned in Tiled's
-  `<animation>` element but not explored in depth. REXPaint has no animation.
-- **Texture atlas packing**: runtime atlas packing (bin packing algorithms like
-  rectpack) for combining multiple sprite sheets into one GPU texture is not
-  covered.
-- **DawnLike/Oryx exact sheet layouts**: the specific sheet organization of these
-  tilesets (which file contains which category) would need their actual
-  distribution files to document precisely.
+- **GPU-accelerated tile compositing**: this document covers the conceptual model and software
+  rendering. For wgpu/OpenGL vertex-batched rendering with texture atlases, additional research into
+  instanced quad rendering and texture array approaches would be useful.
+- **Animation**: tile animation (frame cycling, duration) is mentioned in Tiled's `<animation>`
+  element but not explored in depth. REXPaint has no animation.
+- **Texture atlas packing**: runtime atlas packing (bin packing algorithms like rectpack) for
+  combining multiple sprite sheets into one GPU texture is not covered.
+- **DawnLike/Oryx exact sheet layouts**: the specific sheet organization of these tilesets (which
+  file contains which category) would need their actual distribution files to document precisely.

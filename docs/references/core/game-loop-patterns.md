@@ -2,28 +2,40 @@
 
 ## Summary
 
-There are six major game loop patterns relevant to a terminal grid library: fixed-timestep accumulator loops, turn-based blocking reads, library-owned callback loops, user-owned poll/render loops, platform event loop integration (winit), and async event-driven loops. The best architecture for a library supporting both roguelikes and action games is a **user-owned loop with library-provided poll + render primitives** (ratatui's approach), optionally bundling convenience wrappers for common patterns (fixed-timestep, turn-based blocking). This gives maximum flexibility without forcing a single loop model on users.
+There are six major game loop patterns relevant to a terminal grid library: fixed-timestep
+accumulator loops, turn-based blocking reads, library-owned callback loops, user-owned poll/render
+loops, platform event loop integration (winit), and async event-driven loops. The best architecture
+for a library supporting both roguelikes and action games is a **user-owned loop with
+library-provided poll + render primitives** (ratatui's approach), optionally bundling convenience
+wrappers for common patterns (fixed-timestep, turn-based blocking). This gives maximum flexibility
+without forcing a single loop model on users.
 
 ---
 
 ## 1. Fixed Timestep ("Fix Your Timestep")
 
-The canonical reference is Glenn Fiedler's "Fix Your Timestep" article. The pattern decouples simulation from rendering using an accumulator.
+The canonical reference is Glenn Fiedler's "Fix Your Timestep" article. The pattern decouples
+simulation from rendering using an accumulator.
 
 ### Problem
 
-Variable delta time makes physics non-deterministic and unstable. Frame-rate-dependent gameplay feels different on different machines.
+Variable delta time makes physics non-deterministic and unstable. Frame-rate-dependent gameplay
+feels different on different machines.
 
 ### Solution
 
-The renderer **produces** time; the simulation **consumes** it in fixed `dt` chunks. Leftover time carries over via an accumulator. Interpolation between the previous and current state smooths rendering.
+The renderer **produces** time; the simulation **consumes** it in fixed `dt` chunks. Leftover time
+carries over via an accumulator. Interpolation between the previous and current state smooths
+rendering.
 
 ### Key concepts
 
 - **Accumulator**: stores unprocessed real time between frames
 - **Fixed dt**: simulation always steps by the same amount (e.g., 1/60s or 1/120s)
-- **Spiral of death**: when simulation can't keep up, accumulator grows unboundedly. Mitigate by clamping `frame_time` to a maximum (e.g., 0.25s).
-- **Interpolation alpha**: `alpha = accumulator / dt`, used to lerp between `previous_state` and `current_state` for rendering
+- **Spiral of death**: when simulation can't keep up, accumulator grows unboundedly. Mitigate by
+  clamping `frame_time` to a maximum (e.g., 0.25s).
+- **Interpolation alpha**: `alpha = accumulator / dt`, used to lerp between `previous_state` and
+  `current_state` for rendering
 
 ### Rust implementation
 
@@ -84,7 +96,8 @@ fn fixed_timestep_loop() {
 
 ### When to use
 
-Real-time games with physics, animation, or smooth movement. Not needed for pure turn-based games where the world only advances on player input.
+Real-time games with physics, animation, or smooth movement. Not needed for pure turn-based games
+where the world only advances on player input.
 
 [Source: Gaffer on Games](https://gafferongames.com/post/fix_your_timestep/)
 [Source: Game Programming Patterns](https://gameprogrammingpatterns.com/game-loop.html)
@@ -93,7 +106,8 @@ Real-time games with physics, animation, or smooth movement. Not needed for pure
 
 ## 2. Turn-Based Polling Model (BearLibTerminal)
 
-BearLibTerminal's API is designed for traditional roguelikes. The game owns the loop and blocks on input.
+BearLibTerminal's API is designed for traditional roguelikes. The game owns the loop and blocks on
+input.
 
 ### API design
 
@@ -148,7 +162,8 @@ fn turn_based_loop(term: &mut Terminal) {
 ### Key properties
 
 - **Blocking read**: `terminal_read()` suspends the thread until input arrives. Zero CPU when idle.
-- **Non-blocking check**: `has_input()` + `peek()` allow hybrid patterns (e.g., animations between turns).
+- **Non-blocking check**: `has_input()` + `peek()` allow hybrid patterns (e.g., animations between
+  turns).
 - **Double buffering**: all output goes to a back buffer; `refresh()` swaps it to screen.
 - **State queries**: `terminal_state(TK_SHIFT)` checks modifier keys after reading an event.
 
@@ -184,7 +199,8 @@ fn turn_based_with_animations(term: &mut Terminal) {
 
 ## 3. Library-Owned Loop (bracket-lib's GameState::tick)
 
-bracket-lib (formerly RLTK) takes ownership of the main loop. The user implements a `GameState` trait with a single `tick()` callback.
+bracket-lib (formerly RLTK) takes ownership of the main loop. The user implements a `GameState`
+trait with a single `tick()` callback.
 
 ### API
 
@@ -242,18 +258,20 @@ impl GameState for MyGameState {
 ### Characteristics
 
 - **Library owns the loop**: `main_loop()` never returns. All game logic lives in `tick()`.
-- **Tick called every frame**: not every turn. For turn-based games, the user must implement their own state machine inside `tick()` to distinguish "waiting for input" from "processing turn."
+- **Tick called every frame**: not every turn. For turn-based games, the user must implement their
+  own state machine inside `tick()` to distinguish "waiting for input" from "processing turn."
 - **Cross-platform**: bracket-lib's `main_loop` wraps winit or wasm event loops internally.
-- **Simple but inflexible**: works well for single-window games. Harder to integrate with external systems, custom threading, or non-game UI.
+- **Simple but inflexible**: works well for single-window games. Harder to integrate with external
+  systems, custom threading, or non-game UI.
 
 ### Trade-offs
 
-| Pro | Con |
-|-----|-----|
-| Minimal boilerplate | No control over frame timing |
+| Pro                            | Con                                           |
+| ------------------------------ | --------------------------------------------- |
+| Minimal boilerplate            | No control over frame timing                  |
 | Cross-platform (native + wasm) | Turn-based games need internal state machines |
-| Handles window management | Can't integrate external event sources easily |
-| Good for tutorials/prototyping | Hard to compose with other libraries |
+| Handles window management      | Can't integrate external event sources easily |
+| Good for tutorials/prototyping | Hard to compose with other libraries          |
 
 [Source: bracket-lib examples](https://github.com/amethyst/bracket-lib)
 
@@ -261,7 +279,8 @@ impl GameState for MyGameState {
 
 ## 4. User-Owned Loop (ratatui's Approach)
 
-ratatui provides rendering primitives and leaves the event loop entirely to the user. Event handling comes from crossterm (or termion/termwiz).
+ratatui provides rendering primitives and leaves the event loop entirely to the user. Event handling
+comes from crossterm (or termion/termwiz).
 
 ### Core pattern
 
@@ -358,13 +377,13 @@ fn handle_event(model: &Model) -> Result<Option<Message>> {
 
 ### Why this is the best library pattern
 
-| Pro | Con |
-|-----|-----|
-| User controls timing completely | More boilerplate than callback model |
+| Pro                                             | Con                                      |
+| ----------------------------------------------- | ---------------------------------------- |
+| User controls timing completely                 | More boilerplate than callback model     |
 | Works for any game type (turn-based, real-time) | User must handle frame timing themselves |
-| Easy to integrate with other systems | No built-in cross-platform loop |
-| Composable with async, threads, etc. | User needs to understand event polling |
-| Library stays simple and focused | |
+| Easy to integrate with other systems            | No built-in cross-platform loop          |
+| Composable with async, threads, etc.            | User needs to understand event polling   |
+| Library stays simple and focused                |                                          |
 
 [Source: ratatui docs](https://ratatui.rs/concepts/event-handling/)
 [Source: ratatui TEA pattern](https://ratatui.rs/concepts/application-patterns/the-elm-architecture/)
@@ -373,7 +392,9 @@ fn handle_event(model: &Model) -> Result<Option<Message>> {
 
 ## 5. Integration with winit's Event Loop
 
-winit (the standard Rust windowing library) owns the event loop and requires you to implement `ApplicationHandler`. This is relevant for a terminal library that renders to a GPU-backed window rather than a real terminal.
+winit (the standard Rust windowing library) owns the event loop and requires you to implement
+`ApplicationHandler`. This is relevant for a terminal library that renders to a GPU-backed window
+rather than a real terminal.
 
 ### ApplicationHandler trait
 
@@ -444,11 +465,11 @@ fn main() {
 
 ### ControlFlow modes
 
-| Mode | Behavior | Use case |
-|------|----------|----------|
-| `ControlFlow::Poll` | Returns immediately from waiting, spins continuously | Real-time games, animations |
-| `ControlFlow::Wait` | Blocks until OS delivers an event | Turn-based games, text editors, low power |
-| `ControlFlow::WaitUntil(instant)` | Blocks until event OR deadline | Turn-based with periodic animation (e.g., cursor blink) |
+| Mode                              | Behavior                                             | Use case                                                |
+| --------------------------------- | ---------------------------------------------------- | ------------------------------------------------------- |
+| `ControlFlow::Poll`               | Returns immediately from waiting, spins continuously | Real-time games, animations                             |
+| `ControlFlow::Wait`               | Blocks until OS delivers an event                    | Turn-based games, text editors, low power               |
+| `ControlFlow::WaitUntil(instant)` | Blocks until event OR deadline                       | Turn-based with periodic animation (e.g., cursor blink) |
 
 ### Key events in sequence
 
@@ -506,7 +527,8 @@ fn user_owned_winit_loop() {
 }
 ```
 
-This is discouraged by winit for portability reasons but can be useful for integrating with existing game loops.
+This is discouraged by winit for portability reasons but can be useful for integrating with existing
+game loops.
 
 [Source: winit docs](https://docs.rs/winit/latest/winit/)
 [Source: winit ApplicationHandler](https://docs.rs/winit/latest/winit/application/trait.ApplicationHandler.html)
@@ -517,7 +539,8 @@ This is discouraged by winit for portability reasons but can be useful for integ
 
 ### crossterm EventStream
 
-crossterm provides `EventStream` (behind the `event-stream` feature) which implements `futures::Stream`, compatible with tokio/async-std:
+crossterm provides `EventStream` (behind the `event-stream` feature) which implements
+`futures::Stream`, compatible with tokio/async-std:
 
 ```rust
 use crossterm::event::EventStream;
@@ -608,12 +631,12 @@ async fn multiplayer_game_loop(
 
 ### Trade-offs
 
-| Pro | Con |
-|-----|-----|
-| Natural composition of multiple event sources | Adds tokio dependency |
-| No manual polling/threading | Async complexity (lifetimes, pinning) |
-| `select!` replaces complex poll logic | Single-threaded by default (use `spawn` for parallelism) |
-| Works well for networked games | Overhead for simple single-player games |
+| Pro                                           | Con                                                      |
+| --------------------------------------------- | -------------------------------------------------------- |
+| Natural composition of multiple event sources | Adds tokio dependency                                    |
+| No manual polling/threading                   | Async complexity (lifetimes, pinning)                    |
+| `select!` replaces complex poll logic         | Single-threaded by default (use `spawn` for parallelism) |
+| Works well for networked games                | Overhead for simple single-player games                  |
 
 [Source: crossterm EventStream](https://docs.rs/crossterm/latest/crossterm/event/struct.EventStream.html)
 
@@ -623,7 +646,9 @@ async fn multiplayer_game_loop(
 
 ### The core insight
 
-Turn-based and real-time games differ only in **when updates happen** and **when rendering happens**, not in *what* the library provides. A well-designed library should provide primitives, not prescribe a loop.
+Turn-based and real-time games differ only in **when updates happen** and **when rendering
+happens**, not in _what_ the library provides. A well-designed library should provide primitives,
+not prescribe a loop.
 
 ### Architecture: building blocks approach
 
@@ -729,10 +754,14 @@ pub struct TickContext<'a> {
 ### Design principles
 
 1. **Primitives first**: `poll_event`, `read_event`, `put`, `present`. These are the foundation.
-2. **Blocking and non-blocking input**: both `read_event()` (blocking) and `poll_event(timeout)` (non-blocking with configurable timeout).
-3. **No forced frame timing**: the library renders when `present()` is called, not on its own schedule.
-4. **Optional convenience layer**: a `run()` function or `GameState` trait for users who want a simple loop.
-5. **Async-compatible**: provide an `event_stream()` method returning a `Stream<Item = Event>` for async users.
+2. **Blocking and non-blocking input**: both `read_event()` (blocking) and `poll_event(timeout)`
+   (non-blocking with configurable timeout).
+3. **No forced frame timing**: the library renders when `present()` is called, not on its own
+   schedule.
+4. **Optional convenience layer**: a `run()` function or `GameState` trait for users who want a
+   simple loop.
+5. **Async-compatible**: provide an `event_stream()` method returning a `Stream<Item = Event>` for
+   async users.
 
 ---
 
@@ -740,7 +769,8 @@ pub struct TickContext<'a> {
 
 ### Terminal backends
 
-For terminal-based rendering (crossterm/termion), there's no GPU vsync. Frame timing is controlled by the application:
+For terminal-based rendering (crossterm/termion), there's no GPU vsync. Frame timing is controlled
+by the application:
 
 ```rust
 // Simple frame limiter
@@ -763,7 +793,8 @@ loop {
 
 ### spin_sleep for precise timing
 
-`std::thread::sleep` has poor granularity on many OSes (Windows: ~15ms, Linux: ~1ms). The `spin_sleep` crate provides sub-millisecond precision:
+`std::thread::sleep` has poor granularity on many OSes (Windows: ~15ms, Linux: ~1ms). The
+`spin_sleep` crate provides sub-millisecond precision:
 
 ```rust
 use spin_sleep::SpinSleeper;
@@ -799,11 +830,11 @@ let config = wgpu::SurfaceConfiguration {
 };
 ```
 
-| Present Mode | Behavior | Use case |
-|-------------|----------|----------|
-| `Fifo` | Wait for vsync, guaranteed no tearing | Default, power-efficient |
-| `Mailbox` | Submit newest frame at vsync, discard old | Low-latency gaming |
-| `Immediate` | Present immediately, may tear | Benchmarking, uncapped FPS |
+| Present Mode | Behavior                                  | Use case                   |
+| ------------ | ----------------------------------------- | -------------------------- |
+| `Fifo`       | Wait for vsync, guaranteed no tearing     | Default, power-efficient   |
+| `Mailbox`    | Submit newest frame at vsync, discard old | Low-latency gaming         |
+| `Immediate`  | Present immediately, may tear             | Benchmarking, uncapped FPS |
 
 ### Frame timing for turn-based games
 
@@ -1072,13 +1103,16 @@ Follow ratatui's approach. The library provides:
 3. **`read_event() -> Event`** for blocking input (turn-based convenience)
 4. **Double-buffered rendering** (user calls `present()` to swap)
 
-The user writes their own loop. This supports every pattern from pure turn-based to fixed-timestep real-time.
+The user writes their own loop. This supports every pattern from pure turn-based to fixed-timestep
+real-time.
 
 ### Optional additions (in order of priority)
 
-1. **Convenience `run()` function** with a `GameState` trait for quick prototyping (bracket-lib pattern, but optional)
+1. **Convenience `run()` function** with a `GameState` trait for quick prototyping (bracket-lib
+   pattern, but optional)
 2. **`EventStream`** returning `impl Stream<Item = Event>` for async/tokio users
-3. **`ControlFlow` hint** on the terminal to signal intent (wait-for-input vs. continuous), which the backend can use to optimize (e.g., `ControlFlow::Wait` for GPU-backed window)
+3. **`ControlFlow` hint** on the terminal to signal intent (wait-for-input vs. continuous), which
+   the backend can use to optimize (e.g., `ControlFlow::Wait` for GPU-backed window)
 
 ### Why not library-owned?
 
@@ -1133,26 +1167,47 @@ pub trait GameState {
 }
 ```
 
-This design lets a roguelike developer write `loop { render; read_event; process_turn }` with zero ceremony, while an action game developer writes a fixed-timestep loop with `poll_event(Duration::ZERO)`, and a networked game uses `tokio::select!` with the event stream. One library, every pattern.
+This design lets a roguelike developer write `loop { render; read_event; process_turn }` with zero
+ceremony, while an action game developer writes a fixed-timestep loop with
+`poll_event(Duration::ZERO)`, and a networked game uses `tokio::select!` with the event stream. One
+library, every pattern.
 
 ---
 
 ## Sources
 
-- **Kept**: [Gaffer on Games: Fix Your Timestep](https://gafferongames.com/post/fix_your_timestep/) - the canonical reference for fixed-timestep game loops with accumulator and interpolation
-- **Kept**: [Game Programming Patterns: Game Loop](https://gameprogrammingpatterns.com/game-loop.html) - comprehensive taxonomy of loop patterns with trade-off analysis
-- **Kept**: [winit docs.rs](https://docs.rs/winit/latest/winit/) - primary docs for ApplicationHandler, ControlFlow, and event loop design
-- **Kept**: [winit ApplicationHandler](https://docs.rs/winit/latest/winit/application/trait.ApplicationHandler.html) - trait API details, lifecycle events
-- **Kept**: [ratatui event handling](https://ratatui.rs/concepts/event-handling/) - user-owned loop patterns
-- **Kept**: [ratatui TEA pattern](https://ratatui.rs/concepts/application-patterns/the-elm-architecture/) - full Model/Update/View example with code
-- **Kept**: [BearLibTerminal reference](http://foo.wyrd.name/en:bearlibterminal:reference) - complete API reference for the blocking turn-based model
-- **Kept**: [bracket-lib hello_minimal.rs](https://github.com/amethyst/bracket-lib) - canonical example of library-owned GameState::tick pattern
-- **Kept**: [crossterm event module](https://docs.rs/crossterm/latest/crossterm/event/index.html) - poll/read API for synchronous input, EventStream for async
-- **Dropped**: Various GitHub page chrome/navigation from bracket-lib repo pages (extracted raw file instead)
+- **Kept**:
+  [Gaffer on Games: Fix Your Timestep](https://gafferongames.com/post/fix_your_timestep/) - the
+  canonical reference for fixed-timestep game loops with accumulator and interpolation
+- **Kept**:
+  [Game Programming Patterns: Game Loop](https://gameprogrammingpatterns.com/game-loop.html) -
+  comprehensive taxonomy of loop patterns with trade-off analysis
+- **Kept**: [winit docs.rs](https://docs.rs/winit/latest/winit/) - primary docs for
+  ApplicationHandler, ControlFlow, and event loop design
+- **Kept**:
+  [winit ApplicationHandler](https://docs.rs/winit/latest/winit/application/trait.ApplicationHandler.html) -
+  trait API details, lifecycle events
+- **Kept**: [ratatui event handling](https://ratatui.rs/concepts/event-handling/) - user-owned loop
+  patterns
+- **Kept**:
+  [ratatui TEA pattern](https://ratatui.rs/concepts/application-patterns/the-elm-architecture/) -
+  full Model/Update/View example with code
+- **Kept**: [BearLibTerminal reference](http://foo.wyrd.name/en:bearlibterminal:reference) -
+  complete API reference for the blocking turn-based model
+- **Kept**: [bracket-lib hello_minimal.rs](https://github.com/amethyst/bracket-lib) - canonical
+  example of library-owned GameState::tick pattern
+- **Kept**: [crossterm event module](https://docs.rs/crossterm/latest/crossterm/event/index.html) -
+  poll/read API for synchronous input, EventStream for async
+- **Dropped**: Various GitHub page chrome/navigation from bracket-lib repo pages (extracted raw file
+  instead)
 
 ## Gaps
 
-- **bracket-lib internals**: Could not fetch `main_loop` source code to see exactly how it wraps winit internally. The public API and examples were sufficient.
-- **spin_sleep benchmarks**: No benchmark data fetched for precise sleep accuracy across OSes. The crate is well-known in the Rust gamedev community.
-- **wgpu present mode latency numbers**: No concrete latency measurements for Fifo vs Mailbox vs Immediate. Would need profiling on target hardware.
-- **Bevy/macroquad loop patterns**: Did not cover these larger engines. They use library-owned loops similar to bracket-lib but with ECS scheduling. Not directly relevant to a terminal grid library.
+- **bracket-lib internals**: Could not fetch `main_loop` source code to see exactly how it wraps
+  winit internally. The public API and examples were sufficient.
+- **spin_sleep benchmarks**: No benchmark data fetched for precise sleep accuracy across OSes. The
+  crate is well-known in the Rust gamedev community.
+- **wgpu present mode latency numbers**: No concrete latency measurements for Fifo vs Mailbox vs
+  Immediate. Would need profiling on target hardware.
+- **Bevy/macroquad loop patterns**: Did not cover these larger engines. They use library-owned loops
+  similar to bracket-lib but with ECS scheduling. Not directly relevant to a terminal grid library.

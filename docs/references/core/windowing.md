@@ -1,6 +1,8 @@
 # Winit Crate Reference
 
-Comprehensive reference for `winit` (latest/v0.30+), the cross-platform window creation and event loop library for Rust. Covers everything needed to build a terminal/grid rendering application on top of winit.
+Comprehensive reference for `winit` (latest/v0.30+), the cross-platform window creation and event
+loop library for Rust. Covers everything needed to build a terminal/grid rendering application on
+top of winit.
 
 **Platforms:** Windows 7+, macOS 10.11+, Linux (X11 + Wayland), Web (WASM), iOS, Android.
 
@@ -10,8 +12,11 @@ Comprehensive reference for `winit` (latest/v0.30+), the cross-platform window c
 
 ### Core types
 
-- `EventLoop` -- created once via `EventLoop::new().unwrap()`. Owns the platform connection (X11/Wayland socket, Win32 message pump, etc.). Not `Send` on most platforms.
-- `ActiveEventLoop` -- a reference passed into every callback. Provides `create_window()`, `create_custom_cursor()`, `available_monitors()`, `primary_monitor()`, `set_control_flow()`, `exit()`, and `display_handle()`.
+- `EventLoop` -- created once via `EventLoop::new().unwrap()`. Owns the platform connection
+  (X11/Wayland socket, Win32 message pump, etc.). Not `Send` on most platforms.
+- `ActiveEventLoop` -- a reference passed into every callback. Provides `create_window()`,
+  `create_custom_cursor()`, `available_monitors()`, `primary_monitor()`, `set_control_flow()`,
+  `exit()`, and `display_handle()`.
 - `ApplicationHandler` -- trait you implement. The event loop calls methods on your struct.
 
 ### ApplicationHandler trait
@@ -34,12 +39,19 @@ pub trait ApplicationHandler<T: 'static = ()> {
 ```
 
 Key callback semantics:
-- **`resumed()`** -- called when the app can create windows and render surfaces. On desktop this fires once after init. On mobile (Android/iOS) it fires each time the app returns to foreground. *Always create windows here, not before `run_app()`.*
-- **`suspended()`** -- render surfaces are invalidated. Drop GPU resources. Only meaningful on Android/iOS/Web.
+
+- **`resumed()`** -- called when the app can create windows and render surfaces. On desktop this
+  fires once after init. On mobile (Android/iOS) it fires each time the app returns to foreground.
+  _Always create windows here, not before `run_app()`._
+- **`suspended()`** -- render surfaces are invalidated. Drop GPU resources. Only meaningful on
+  Android/iOS/Web.
 - **`window_event()`** -- all per-window events (input, resize, redraw, close).
-- **`device_event()`** -- raw hardware events independent of window focus. Useful for raw mouse deltas (e.g., camera control).
-- **`about_to_wait()`** -- fires after all pending events are dispatched. Set `ControlFlow` here. *Not* the right place to render; use `RedrawRequested` instead.
-- **`new_events(cause)`** -- fires before each batch. `cause` is `StartCause::Init`, `Poll`, `WaitCancelled`, or `ResumeTimeReached`.
+- **`device_event()`** -- raw hardware events independent of window focus. Useful for raw mouse
+  deltas (e.g., camera control).
+- **`about_to_wait()`** -- fires after all pending events are dispatched. Set `ControlFlow` here.
+  _Not_ the right place to render; use `RedrawRequested` instead.
+- **`new_events(cause)`** -- fires before each batch. `cause` is `StartCause::Init`, `Poll`,
+  `WaitCancelled`, or `ResumeTimeReached`.
 
 ### Running the loop
 
@@ -50,7 +62,8 @@ let mut app = MyApp::default();
 event_loop.run_app(&mut app).unwrap();
 ```
 
-`run_app()` takes ownership of the current thread and never returns (on most platforms). It calls `exit()` when `ActiveEventLoop::exit()` is invoked.
+`run_app()` takes ownership of the current thread and never returns (on most platforms). It calls
+`exit()` when `ActiveEventLoop::exit()` is invoked.
 
 ### ControlFlow
 
@@ -62,9 +75,11 @@ pub enum ControlFlow {
 }
 ```
 
-Set via `event_loop.set_control_flow()` (before `run_app`) or `active_event_loop.set_control_flow()` (inside callbacks). Default is `Wait`.
+Set via `event_loop.set_control_flow()` (before `run_app`) or `active_event_loop.set_control_flow()`
+(inside callbacks). Default is `Wait`.
 
-For a terminal emulator: use `Wait` normally, switch to `Poll` during active animations (cursor blink, scrolling).
+For a terminal emulator: use `Wait` normally, switch to `Poll` during active animations (cursor
+blink, scrolling).
 
 ### pump_events (external loop integration)
 
@@ -82,8 +97,10 @@ loop {
 ```
 
 **Caveats:**
+
 - Not available on Web or iOS (those platforms own the main thread).
-- On Wayland with `ControlFlow::Wait` and timeout `Duration::ZERO`, it can still block if there are no events. A known issue; use `ControlFlow::Poll` if you need non-blocking behavior.
+- On Wayland with `ControlFlow::Wait` and timeout `Duration::ZERO`, it can still block if there are
+  no events. A known issue; use `ControlFlow::Poll` if you need non-blocking behavior.
 - Discouraged by winit authors for most use cases. Prefer `run_app()`.
 
 ### EventLoopProxy (cross-thread wakeup)
@@ -95,7 +112,8 @@ proxy.send_event(MyEvent::DataReady).unwrap();
 // Received in ApplicationHandler::user_event()
 ```
 
-`EventLoopProxy` is `Send + Sync`. Use it to wake the event loop from background threads (e.g., PTY reader thread in a terminal).
+`EventLoopProxy` is `Send + Sync`. Use it to wake the event loop from background threads (e.g., PTY
+reader thread in a terminal).
 
 ---
 
@@ -118,29 +136,29 @@ fn resumed(&mut self, event_loop: &ActiveEventLoop) {
 
 ### WindowAttributes fields
 
-| Field | Type | Default | Notes |
-|---|---|---|---|
-| `surface_size` | `Option<Size>` | `None` | Initial client area size |
-| `min_surface_size` | `Option<Size>` | `None` | Minimum resize constraint |
-| `max_surface_size` | `Option<Size>` | `None` | Maximum resize constraint |
-| `surface_resize_increments` | `Option<Size>` | `None` | Resize step size. **For terminal emulators**: set to cell size so the window snaps to grid boundaries. |
-| `position` | `Option<Position>` | `None` | Initial position on screen |
-| `resizable` | `bool` | `true` | |
-| `enabled_buttons` | `WindowButtons` | `all()` | Bitmask: minimize, maximize, close |
-| `title` | `String` | `"winit window"` | Title bar text |
-| `maximized` | `bool` | `false` | Start maximized |
-| `visible` | `bool` | `true` | Set `false` to avoid showing garbage before first render |
-| `transparent` | `bool` | `false` | Window transparency support |
-| `blur` | `bool` | `false` | Background blur effect |
-| `decorations` | `bool` | `true` | Title bar and borders |
-| `window_icon` | `Option<Icon>` | `None` | Taskbar/title bar icon |
-| `preferred_theme` | `Option<Theme>` | `None` | `Light`, `Dark`, or system default |
-| `content_protected` | `bool` | `false` | Prevent screen capture |
-| `window_level` | `WindowLevel` | `Normal` | `AlwaysOnBottom`, `Normal`, `AlwaysOnTop` |
-| `active` | `bool` | `true` | Request initial keyboard focus |
-| `cursor` | `Cursor` | `Default` | Initial cursor icon |
-| `fullscreen` | `Option<Fullscreen>` | `None` | Start in fullscreen mode |
-| `parent_window` | `Option<RawWindowHandle>` | `None` | Child window (unsafe) |
+| Field                       | Type                      | Default          | Notes                                                                                                  |
+| --------------------------- | ------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------ |
+| `surface_size`              | `Option<Size>`            | `None`           | Initial client area size                                                                               |
+| `min_surface_size`          | `Option<Size>`            | `None`           | Minimum resize constraint                                                                              |
+| `max_surface_size`          | `Option<Size>`            | `None`           | Maximum resize constraint                                                                              |
+| `surface_resize_increments` | `Option<Size>`            | `None`           | Resize step size. **For terminal emulators**: set to cell size so the window snaps to grid boundaries. |
+| `position`                  | `Option<Position>`        | `None`           | Initial position on screen                                                                             |
+| `resizable`                 | `bool`                    | `true`           |                                                                                                        |
+| `enabled_buttons`           | `WindowButtons`           | `all()`          | Bitmask: minimize, maximize, close                                                                     |
+| `title`                     | `String`                  | `"winit window"` | Title bar text                                                                                         |
+| `maximized`                 | `bool`                    | `false`          | Start maximized                                                                                        |
+| `visible`                   | `bool`                    | `true`           | Set `false` to avoid showing garbage before first render                                               |
+| `transparent`               | `bool`                    | `false`          | Window transparency support                                                                            |
+| `blur`                      | `bool`                    | `false`          | Background blur effect                                                                                 |
+| `decorations`               | `bool`                    | `true`           | Title bar and borders                                                                                  |
+| `window_icon`               | `Option<Icon>`            | `None`           | Taskbar/title bar icon                                                                                 |
+| `preferred_theme`           | `Option<Theme>`           | `None`           | `Light`, `Dark`, or system default                                                                     |
+| `content_protected`         | `bool`                    | `false`          | Prevent screen capture                                                                                 |
+| `window_level`              | `WindowLevel`             | `Normal`         | `AlwaysOnBottom`, `Normal`, `AlwaysOnTop`                                                              |
+| `active`                    | `bool`                    | `true`           | Request initial keyboard focus                                                                         |
+| `cursor`                    | `Cursor`                  | `Default`        | Initial cursor icon                                                                                    |
+| `fullscreen`                | `Option<Fullscreen>`      | `None`           | Start in fullscreen mode                                                                               |
+| `parent_window`             | `Option<RawWindowHandle>` | `None`           | Child window (unsafe)                                                                                  |
 
 ### Key Window methods (post-creation)
 
@@ -189,7 +207,8 @@ pub struct KeyEvent {
 
 Delivered via `WindowEvent::KeyboardInput { device_id, event: KeyEvent, is_synthetic }`.
 
-`is_synthetic` is `true` for fake press/release events generated when a window gains/loses focus (X11, Windows only).
+`is_synthetic` is `true` for fake press/release events generated when a window gains/loses focus
+(X11, Windows only).
 
 ### PhysicalKey (scancode equivalent)
 
@@ -200,11 +219,14 @@ pub enum PhysicalKey {
 }
 ```
 
-`KeyCode` maps to the physical position on the keyboard, independent of layout. `KeyCode::KeyW` is always the key at the W position on QWERTY, even if the user's layout is AZERTY (where that key produces "Z").
+`KeyCode` maps to the physical position on the keyboard, independent of layout. `KeyCode::KeyW` is
+always the key at the W position on QWERTY, even if the user's layout is AZERTY (where that key
+produces "Z").
 
 Use `PhysicalKey` for: game-style bindings, WASD movement, position-dependent shortcuts.
 
 Platform-specific scancode conversion (Windows/macOS/X11/Wayland only):
+
 ```rust
 use winit::platform::scancode::PhysicalKeyExtScancode;
 let scancode: Option<u32> = physical_key.to_scancode();
@@ -222,9 +244,11 @@ pub enum Key<Str = SmolStr> {
 }
 ```
 
-`Key` represents what the keypress *means* in the current layout. Affected by Shift and other modifiers (except Ctrl).
+`Key` represents what the keypress _means_ in the current layout. Affected by Shift and other
+modifiers (except Ctrl).
 
 Matching:
+
 ```rust
 match event.logical_key.as_ref() {
     Key::Character("c") if modifiers.control_key() => { /* Ctrl+C */ },
@@ -234,11 +258,13 @@ match event.logical_key.as_ref() {
 }
 ```
 
-`key.to_text()` converts to text representation: `Key::Named(NamedKey::Enter)` -> `Some("\r")`, `Key::Named(NamedKey::F1)` -> `None`.
+`key.to_text()` converts to text representation: `Key::Named(NamedKey::Enter)` -> `Some("\r")`,
+`Key::Named(NamedKey::F1)` -> `None`.
 
 ### key_without_modifiers (platform extension)
 
 Available on Windows, macOS, X11, Wayland, Orbital:
+
 ```rust
 use winit::platform::modifier_supplement::KeyEventExtModifierSupplement;
 // Ignores all modifiers including Shift, Caps Lock, Ctrl
@@ -250,6 +276,7 @@ let text = event.text_with_all_modifiers();
 ### Text input strategy
 
 For a terminal emulator:
+
 1. Use `event.text` for character input (already accounts for layout + modifiers).
 2. Use `event.logical_key` for named keys (Enter, Escape, arrows, function keys).
 3. Use `event.physical_key` only for configurable keybindings (let users remap).
@@ -258,9 +285,11 @@ For a terminal emulator:
 
 ### IME (Input Method Editor)
 
-Enable with `window.set_ime_allowed(true)`. Position the candidate box with `window.set_ime_cursor_area(position, size)`.
+Enable with `window.set_ime_allowed(true)`. Position the candidate box with
+`window.set_ime_cursor_area(position, size)`.
 
 Events arrive as `WindowEvent::Ime(ime)`:
+
 ```rust
 pub enum Ime {
     Enabled,
@@ -343,7 +372,8 @@ DeviceEvent::Button { button, state }
 DeviceEvent::Key(RawKeyEvent)
 ```
 
-Delivered regardless of window focus. By default, winit ignores these for unfocused windows on Linux. Change with `active_event_loop.listen_device_events(DeviceEvents::Always)`.
+Delivered regardless of window focus. By default, winit ignores these for unfocused windows on
+Linux. Change with `active_event_loop.listen_device_events(DeviceEvents::Always)`.
 
 ---
 
@@ -351,13 +381,14 @@ Delivered regardless of window focus. By default, winit ignores these for unfocu
 
 ### Coordinate systems
 
-| Type | Description |
-|---|---|
-| `PhysicalSize<u32>` / `PhysicalPosition<i32>` | Actual device pixels |
-| `LogicalSize<f64>` / `LogicalPosition<f64>` | DPI-independent units |
-| `Size` / `Position` | Enum wrapping either Physical or Logical variant |
+| Type                                          | Description                                      |
+| --------------------------------------------- | ------------------------------------------------ |
+| `PhysicalSize<u32>` / `PhysicalPosition<i32>` | Actual device pixels                             |
+| `LogicalSize<f64>` / `LogicalPosition<f64>`   | DPI-independent units                            |
+| `Size` / `Position`                           | Enum wrapping either Physical or Logical variant |
 
 Conversion:
+
 ```
 Physical = Logical * scale_factor
 Logical  = Physical / scale_factor
@@ -386,6 +417,7 @@ WindowEvent::ScaleFactorChanged { scale_factor, inner_size_writer } => {
 ```
 
 Triggers when:
+
 - Window moves between monitors with different DPI
 - User changes system DPI settings
 - Display resolution changes
@@ -395,7 +427,8 @@ Triggers when:
 1. Store `scale_factor` and update on `ScaleFactorChanged`.
 2. Compute cell size in physical pixels: `cell_physical = cell_logical * scale_factor`.
 3. Set `surface_resize_increments` to cell size so the window snaps to grid boundaries.
-4. On `Resized(physical_size)`, recompute grid dimensions: `cols = width / cell_width`, `rows = height / cell_height`.
+4. On `Resized(physical_size)`, recompute grid dimensions: `cols = width / cell_width`,
+   `rows = height / cell_height`.
 5. Do NOT cast float positions with `as u32`; use the `.cast()` methods which round properly.
 
 ---
@@ -405,48 +438,74 @@ Triggers when:
 ### macOS
 
 - **Minimum OS**: macOS 10.11 (same as Rust). Regularly tested on 10.14.
-- **Menu bar**: Winit does *not* create a menu bar or set an `NSApplicationDelegate` by default. If you need standard macOS menus (Edit > Copy/Paste, Window > Minimize, etc.), you must create them yourself using `objc2-app-kit`. Winit guarantees it won't register its own app delegate, so you can set a custom one.
-- **Window initialization**: Many operations (creating windows, fetching monitors) require the app to be "ready". Always create windows inside `resumed()`, not in `main()` before `run_app()`.
-- **Option as Alt**: Via `WindowExtMacOS`, configure whether the Option key produces characters or acts as Alt for keybindings. Options: `None`, `OnlyLeft`, `OnlyRight`, `Both`.
+- **Menu bar**: Winit does _not_ create a menu bar or set an `NSApplicationDelegate` by default. If
+  you need standard macOS menus (Edit > Copy/Paste, Window > Minimize, etc.), you must create them
+  yourself using `objc2-app-kit`. Winit guarantees it won't register its own app delegate, so you
+  can set a custom one.
+- **Window initialization**: Many operations (creating windows, fetching monitors) require the app
+  to be "ready". Always create windows inside `resumed()`, not in `main()` before `run_app()`.
+- **Option as Alt**: Via `WindowExtMacOS`, configure whether the Option key produces characters or
+  acts as Alt for keybindings. Options: `None`, `OnlyLeft`, `OnlyRight`, `Both`.
+
   ```rust
   use winit::platform::macos::{WindowExtMacOS, OptionAsAlt};
   window.set_option_as_alt(OptionAsAlt::Both);
   ```
-- **Tabbing**: `WindowAttributesExtMacOS::with_tabbing_identifier()` groups windows into tabs. `ActiveEventLoopExtMacOS::set_allows_automatic_window_tabbing(bool)` controls system tab behavior.
-- **Activation policy**: `EventLoopBuilderExtMacOS::with_activation_policy()` -- `Regular` (dock + menu bar), `Accessory` (no dock icon), `Prohibited` (background only).
-- **Fullscreen**: `Fullscreen::Exclusive` works but has caveats; the system may not allow switching apps without first leaving fullscreen.
+
+- **Tabbing**: `WindowAttributesExtMacOS::with_tabbing_identifier()` groups windows into tabs.
+  `ActiveEventLoopExtMacOS::set_allows_automatic_window_tabbing(bool)` controls system tab behavior.
+- **Activation policy**: `EventLoopBuilderExtMacOS::with_activation_policy()` -- `Regular` (dock +
+  menu bar), `Accessory` (no dock icon), `Prohibited` (background only).
+- **Fullscreen**: `Fullscreen::Exclusive` works but has caveats; the system may not allow switching
+  apps without first leaving fullscreen.
 - **Force Touch / Pressure**: `TouchpadPressure` events report pressure (0.0-1.0) and click stage.
 
 ### Wayland
 
-- **Windows don't appear until you draw**: The Wayland compositor won't display anything until the client has attached a buffer. Start with `visible: false` or render immediately.
-- **Client-side decorations (CSD)**: Winit provides its own title bar and window borders via the `sctk` (smithay-client-toolkit). Controlled by feature flags:
+- **Windows don't appear until you draw**: The Wayland compositor won't display anything until the
+  client has attached a buffer. Start with `visible: false` or render immediately.
+- **Client-side decorations (CSD)**: Winit provides its own title bar and window borders via the
+  `sctk` (smithay-client-toolkit). Controlled by feature flags:
   - `wayland-csd-adwaita` (default) -- GNOME-style decorations
   - `wayland-csd-adwaita-crossfont` -- same, using crossfont for rendering
   - `wayland-csd-adwaita-notitle` -- no title bar text
-- **No primary monitor**: `primary_monitor()` always returns `None` on Wayland (protocol limitation).
-- **No window positioning**: `set_outer_position()` is a no-op (Wayland doesn't let clients choose their position).
-- **Frame callback**: Call `window.pre_present_notify()` before presenting each frame. This integrates with Wayland's frame callback protocol to avoid over-rendering.
-- **`pump_events` quirk**: With `ControlFlow::Wait` and `timeout = Duration::ZERO`, it can still block if there are no events.
-- **dlopen**: By default, Wayland libraries are loaded via `dlopen`. Disable with the `wayland-dlopen` feature flag.
+- **No primary monitor**: `primary_monitor()` always returns `None` on Wayland (protocol
+  limitation).
+- **No window positioning**: `set_outer_position()` is a no-op (Wayland doesn't let clients choose
+  their position).
+- **Frame callback**: Call `window.pre_present_notify()` before presenting each frame. This
+  integrates with Wayland's frame callback protocol to avoid over-rendering.
+- **`pump_events` quirk**: With `ControlFlow::Wait` and `timeout = Duration::ZERO`, it can still
+  block if there are no events.
+- **dlopen**: By default, Wayland libraries are loaded via `dlopen`. Disable with the
+  `wayland-dlopen` feature flag.
 
 ### Windows
 
 - **Minimum OS**: Windows 7.
-- **DPI awareness**: Winit automatically sets per-monitor DPI awareness. The `WindowAttributesExtWindows` trait provides additional control. The window correctly handles `WM_DPICHANGED`.
-- **Shift + NumLock**: Holding Shift overrides NumLock, causing numpad keys to act as arrows. The OS sends fake key events for this that are NOT marked as `is_synthetic`.
-- **Backdrop/Mica**: `WindowAttributesExtWindows::with_backdrop_type()` supports `Auto`, `None`, `MainWindow`, `TransientWindow`, `Mica`, `Acrylic`, `Tabbed` (Windows 11).
-- **Corner rounding**: `WindowAttributesExtWindows::with_corner_preference()` -- `Default`, `DoNotRound`, `Round`, `RoundSmall` (Windows 11).
+- **DPI awareness**: Winit automatically sets per-monitor DPI awareness. The
+  `WindowAttributesExtWindows` trait provides additional control. The window correctly handles
+  `WM_DPICHANGED`.
+- **Shift + NumLock**: Holding Shift overrides NumLock, causing numpad keys to act as arrows. The OS
+  sends fake key events for this that are NOT marked as `is_synthetic`.
+- **Backdrop/Mica**: `WindowAttributesExtWindows::with_backdrop_type()` supports `Auto`, `None`,
+  `MainWindow`, `TransientWindow`, `Mica`, `Acrylic`, `Tabbed` (Windows 11).
+- **Corner rounding**: `WindowAttributesExtWindows::with_corner_preference()` -- `Default`,
+  `DoNotRound`, `Round`, `RoundSmall` (Windows 11).
 - **Taskbar icon**: `WindowExtWindows::set_taskbar_icon()`.
 - **Custom menu**: `WindowAttributesExtWindows::with_menu()` accepts an `HMENU`.
-- **AnyThread wrapper**: `WindowBorrowExtWindows::any_thread()` returns an `AnyThread<&Window>` that implements `HasWindowHandle` without thread restrictions.
+- **AnyThread wrapper**: `WindowBorrowExtWindows::any_thread()` returns an `AnyThread<&Window>` that
+  implements `HasWindowHandle` without thread restrictions.
 - **Dark title bar**: Set `preferred_theme` to `Theme::Dark` or use `WindowExtWindows::set_theme()`.
 
 ### X11
 
-- **Visual selection**: `WindowAttributesExtX11::with_x11_visual(visual_id)` for specific X11 visuals (needed for transparency in some compositors).
-- **Screen selection**: `WindowAttributesExtX11::with_x11_screen(screen_id)` to place windows on specific screens.
-- **Synthetic focus events**: When a window gains/loses focus, synthetic key press/release events are generated for all currently held keys. Marked with `is_synthetic: true`.
+- **Visual selection**: `WindowAttributesExtX11::with_x11_visual(visual_id)` for specific X11
+  visuals (needed for transparency in some compositors).
+- **Screen selection**: `WindowAttributesExtX11::with_x11_screen(screen_id)` to place windows on
+  specific screens.
+- **Synthetic focus events**: When a window gains/loses focus, synthetic key press/release events
+  are generated for all currently held keys. Marked with `is_synthetic: true`.
 
 ---
 
@@ -454,7 +513,8 @@ Triggers when:
 
 ### Trait-based interop
 
-Winit's `Window` implements `HasWindowHandle` and `HasDisplayHandle` from the `raw-window-handle` crate (feature-gated):
+Winit's `Window` implements `HasWindowHandle` and `HasDisplayHandle` from the `raw-window-handle`
+crate (feature-gated):
 
 ```rust
 // Cargo.toml
@@ -472,13 +532,13 @@ let display_handle = event_loop.display_handle().unwrap();
 
 ### Handle types per platform
 
-| Platform | Window Handle | Display Handle |
-|---|---|---|
-| Windows | `Win32WindowHandle` (HWND) | `WindowsDisplayHandle` |
-| macOS | `AppKitWindowHandle` (NSView) | `AppKitDisplayHandle` |
-| X11 | `XlibWindowHandle` (Window + visual_id) | `XlibDisplayHandle` (Display*, screen) |
-| Wayland | `WaylandWindowHandle` (wl_surface) | `WaylandDisplayHandle` (wl_display) |
-| Web | `WebWindowHandle` (canvas id) | `WebDisplayHandle` |
+| Platform | Window Handle                           | Display Handle                          |
+| -------- | --------------------------------------- | --------------------------------------- |
+| Windows  | `Win32WindowHandle` (HWND)              | `WindowsDisplayHandle`                  |
+| macOS    | `AppKitWindowHandle` (NSView)           | `AppKitDisplayHandle`                   |
+| X11      | `XlibWindowHandle` (Window + visual_id) | `XlibDisplayHandle` (Display\*, screen) |
+| Wayland  | `WaylandWindowHandle` (wl_surface)      | `WaylandDisplayHandle` (wl_display)     |
+| Web      | `WebWindowHandle` (canvas id)           | `WebDisplayHandle`                      |
 
 ### Usage with renderers
 
@@ -524,7 +584,8 @@ window.set_fullscreen(Some(Fullscreen::Borderless(Some(monitor))));
 window.set_fullscreen(None);
 ```
 
-Preferred for terminal emulators. No display mode change, fast toggle, other windows remain accessible.
+Preferred for terminal emulators. No display mode change, fast toggle, other windows remain
+accessible.
 
 ### Exclusive fullscreen
 
@@ -534,11 +595,13 @@ let mode = monitor.video_modes().next().unwrap(); // pick desired mode
 window.set_fullscreen(Some(Fullscreen::Exclusive(mode)));
 ```
 
-Changes the actual display resolution. On macOS, switching apps may require exiting fullscreen first. When the window is closed, the video mode is restored automatically.
+Changes the actual display resolution. On macOS, switching apps may require exiting fullscreen
+first. When the window is closed, the video mode is restored automatically.
 
 ### VideoModeHandle
 
 Query available modes:
+
 ```rust
 for monitor in event_loop.available_monitors() {
     for mode in monitor.video_modes() {
@@ -574,7 +637,11 @@ window.set_cursor(CursorIcon::Default.into());  // standard arrow
 window.set_cursor(CursorIcon::Pointer.into());  // hand/link pointer
 ```
 
-36 standard icons defined (W3C CSS cursor spec): `Default`, `Pointer`, `Text`, `VerticalText`, `Crosshair`, `Move`, `Grab`, `Grabbing`, `Wait`, `Progress`, `Help`, `NotAllowed`, `NoDrop`, `Copy`, `Alias`, `Cell`, `ContextMenu`, `ZoomIn`, `ZoomOut`, `ColResize`, `RowResize`, `NResize`, `SResize`, `EResize`, `WResize`, `NeResize`, `NwResize`, `SeResize`, `SwResize`, `EwResize`, `NsResize`, `NeswResize`, `NwseResize`, `AllScroll`, `DndAsk`, `AllResize`.
+36 standard icons defined (W3C CSS cursor spec): `Default`, `Pointer`, `Text`, `VerticalText`,
+`Crosshair`, `Move`, `Grab`, `Grabbing`, `Wait`, `Progress`, `Help`, `NotAllowed`, `NoDrop`, `Copy`,
+`Alias`, `Cell`, `ContextMenu`, `ZoomIn`, `ZoomOut`, `ColResize`, `RowResize`, `NResize`, `SResize`,
+`EResize`, `WResize`, `NeResize`, `NwResize`, `SeResize`, `SwResize`, `EwResize`, `NsResize`,
+`NeswResize`, `NwseResize`, `AllScroll`, `DndAsk`, `AllResize`.
 
 ### Custom cursors
 
@@ -597,7 +664,8 @@ window.set_cursor_grab(CursorGrabMode::Confined);  // keep within window bounds
 window.set_cursor_grab(CursorGrabMode::Locked);    // lock in place, only deltas reported
 ```
 
-`Confined` keeps the cursor within the window. `Locked` hides and locks the cursor, only reporting raw deltas via `DeviceEvent::MouseMotion`. Not all modes are supported on all platforms.
+`Confined` keeps the cursor within the window. `Locked` hides and locks the cursor, only reporting
+raw deltas via `DeviceEvent::MouseMotion`. Not all modes are supported on all platforms.
 
 ### Cursor positioning
 
@@ -611,7 +679,8 @@ window.set_cursor_position(LogicalPosition::new(100.0, 100.0))?;
 
 ### Window identification
 
-Each window gets a unique `WindowId` (a `Copy + Hash + Eq` wrapper around `usize`). All `WindowEvent`s include the originating `WindowId`.
+Each window gets a unique `WindowId` (a `Copy + Hash + Eq` wrapper around `usize`). All
+`WindowEvent`s include the originating `WindowId`.
 
 ### Pattern
 
@@ -658,11 +727,13 @@ let attrs = unsafe { attrs.with_parent_window(Some(parent_handle)) };
 let child = event_loop.create_window(attrs).unwrap();
 ```
 
-Child windows are positioned relative to their parent. Supported on Windows and X11; limited support on other platforms.
+Child windows are positioned relative to their parent. Supported on Windows and X11; limited support
+on other platforms.
 
 ### Creating windows at runtime
 
 New windows can be created at any time inside callbacks that receive `&ActiveEventLoop`:
+
 ```rust
 WindowEvent::KeyboardInput { event, .. } if event.state.is_pressed() => {
     let new_window = event_loop.create_window(Window::default_attributes()).unwrap();
@@ -676,7 +747,8 @@ WindowEvent::KeyboardInput { event, .. } if event.state.is_pressed() => {
 
 ### Overview
 
-On the web platform, a winit `Window` is backed by an `HTMLCanvasElement`. Compiled to `wasm32-unknown-unknown` using `web-sys` bindings.
+On the web platform, a winit `Window` is backed by an `HTMLCanvasElement`. Compiled to
+`wasm32-unknown-unknown` using `web-sys` bindings.
 
 Supported browsers: Chrome, Firefox, Safari 13.1+.
 
@@ -701,21 +773,26 @@ let attrs = Window::default_attributes().with_append(true);
 
 ### CSS considerations
 
-Avoid CSS `transform`, `border`, and `padding` on the canvas element. These cause inaccurate results for:
+Avoid CSS `transform`, `border`, and `padding` on the canvas element. These cause inaccurate results
+for:
+
 - Surface/window size calculations
 - Pointer coordinate mapping
 
 ### Event loop differences
 
-The browser owns the main thread. `run_app()` never returns; it uses `requestAnimationFrame` and event listeners internally. `pump_events` is not available.
+The browser owns the main thread. `run_app()` never returns; it uses `requestAnimationFrame` and
+event listeners internally. `pump_events` is not available.
 
-- `ControlFlow::Poll` -- uses `requestAnimationFrame` or `setTimeout(0)` (configurable via `PollStrategy`)
+- `ControlFlow::Poll` -- uses `requestAnimationFrame` or `setTimeout(0)` (configurable via
+  `PollStrategy`)
 - `ControlFlow::Wait` -- only wakes on events
 - `ControlFlow::WaitUntil` -- uses `setTimeout` (configurable via `WaitUntilStrategy`)
 
 ### Keyboard events on web
 
-`KeyboardEvent.code` maps to `PhysicalKey`, `KeyboardEvent.key` maps to `LogicalKey`. Dead keys may be reported as the actual key depending on browser/OS.
+`KeyboardEvent.code` maps to `PhysicalKey`, `KeyboardEvent.key` maps to `LogicalKey`. Dead keys may
+be reported as the actual key depending on browser/OS.
 
 ### Focus and prevent default
 
@@ -725,15 +802,19 @@ use winit::platform::web::WindowExtWebSys;
 window.set_prevent_default(true);
 ```
 
-Canvas focus: `with_focusable(true)` (default) sets `tabindex` on the canvas so it can receive keyboard events.
+Canvas focus: `with_focusable(true)` (default) sets `tabindex` on the canvas so it can receive
+keyboard events.
 
 ### DPI / scaling on web
 
-Scale factor comes from `window.devicePixelRatio`. The canvas size is controlled via `ResizeObserver` using `device-pixel-content-box` where available, with fallback to `contentRect`.
+Scale factor comes from `window.devicePixelRatio`. The canvas size is controlled via
+`ResizeObserver` using `device-pixel-content-box` where available, with fallback to `contentRect`.
 
 ### Fullscreen on web
 
-Uses the Fullscreen API. `Fullscreen::Borderless(None)` requests fullscreen. Monitor permission may be needed for multi-monitor setups:
+Uses the Fullscreen API. `Fullscreen::Borderless(None)` requests fullscreen. Monitor permission may
+be needed for multi-monitor setups:
+
 ```rust
 use winit::platform::web::ActiveEventLoopExtWebSys;
 let future = event_loop.request_detailed_monitor_permission();
@@ -741,7 +822,8 @@ let future = event_loop.request_detailed_monitor_permission();
 
 ### Main thread safety
 
-`MainThreadMarker` ensures certain operations only run on the main thread. The `Dispatcher` handles cross-thread closure execution.
+`MainThreadMarker` ensures certain operations only run on the main thread. The `Dispatcher` handles
+cross-thread closure execution.
 
 ---
 
@@ -817,6 +899,6 @@ EventLoop::new()
 - [platform::windows](https://docs.rs/winit/latest/winit/platform/windows/index.html)
 - [platform::web](https://docs.rs/winit/latest/winit/platform/web/index.html)
 - [DeepWiki: Window Trait and Lifecycle](https://deepwiki.com/rust-windowing/winit/3.2-window-trait-and-lifecycle)
-- [DeepWiki: Web (WASM) Implementation](https://deepwiki.com/rust-windowing/winit/5.4-web-(webassembly)-implementation)
+- [DeepWiki: Web (WASM) Implementation](<https://deepwiki.com/rust-windowing/winit/5.4-web-(webassembly)-implementation>)
 - [winit changelog v0.30](https://docs.rs/winit/0.30.0/winit/changelog/v0_30/index.html)
 - [winit GitHub: rust-windowing/winit](https://github.com/rust-windowing/winit)

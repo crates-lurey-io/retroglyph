@@ -1,10 +1,17 @@
 # Terminal Graphics Protocols for Pixel-Level Rendering
 
-Research for implementing a Sixel/Kitty/iTerm2 graphics backend in a Rust terminal/grid rendering library, enabling pixel-level graphics within a real terminal emulator.
+Research for implementing a Sixel/Kitty/iTerm2 graphics backend in a Rust terminal/grid rendering
+library, enabling pixel-level graphics within a real terminal emulator.
 
 ## Summary
 
-Three major protocols exist for inline terminal graphics: Sixel (1980s DEC standard, widest support), Kitty Graphics Protocol (modern, feature-rich, growing adoption), and iTerm2 Inline Images (macOS-focused, simple). A practical implementation should support all three with runtime detection and automatic fallback. The Rust ecosystem has several crates for sixel encoding (`icy_sixel` for pure Rust, `sixel-image`/`sixel-tokenizer` from Zellij for manipulation), but Kitty and iTerm2 protocol output is simple enough to implement directly. notcurses provides the best reference implementation for detection and fallback logic.
+Three major protocols exist for inline terminal graphics: Sixel (1980s DEC standard, widest
+support), Kitty Graphics Protocol (modern, feature-rich, growing adoption), and iTerm2 Inline Images
+(macOS-focused, simple). A practical implementation should support all three with runtime detection
+and automatic fallback. The Rust ecosystem has several crates for sixel encoding (`icy_sixel` for
+pure Rust, `sixel-image`/`sixel-tokenizer` from Zellij for manipulation), but Kitty and iTerm2
+protocol output is simple enough to implement directly. notcurses provides the best reference
+implementation for detection and fallback logic.
 
 ---
 
@@ -12,7 +19,9 @@ Three major protocols exist for inline terminal graphics: Sixel (1980s DEC stand
 
 ### How it works
 
-Sixel ("six pixels") is a bitmap format from DEC's VT200/VT300 series (1980s). A "sixel" is a column of 6 vertical pixels encoded as a single printable ASCII character. The protocol embeds graphics data inline in the terminal output stream via a Device Control String (DCS).
+Sixel ("six pixels") is a bitmap format from DEC's VT200/VT300 series (1980s). A "sixel" is a column
+of 6 vertical pixels encoded as a single printable ASCII character. The protocol embeds graphics
+data inline in the terminal output stream via a Device Control String (DCS).
 
 ### Escape sequence structure
 
@@ -21,16 +30,20 @@ DCS P1 ; P2 ; P3 ; q <sixel-data> ST
 ```
 
 Where:
+
 - **DCS** = `ESC P` (7-bit) or `0x90` (8-bit) - introduces the sixel sequence
 - **P1** = macro parameter (pixel aspect ratio, typically 0 for default 2:1)
-- **P2** = background drawing mode: `0`/`2` = fill background with color, `1` = leave pixels at current color
+- **P2** = background drawing mode: `0`/`2` = fill background with color, `1` = leave pixels at
+  current color
 - **P3** = horizontal grid size (ignored by most terminals)
 - **q** = indicates this is a sixel command
 - **ST** = `ESC \` (string terminator)
 
 ### Sixel data encoding
 
-Each sixel character maps to 6 vertical pixels. Characters range from `?` (0x3F, binary 000000) to `~` (0x7E, binary 111111). The character code minus 0x3F gives the 6-bit pixel pattern, with the least significant bit at the top.
+Each sixel character maps to 6 vertical pixels. Characters range from `?` (0x3F, binary 000000) to
+`~` (0x7E, binary 111111). The character code minus 0x3F gives the 6-bit pixel pattern, with the
+least significant bit at the top.
 
 Example: character `t` (0x74) = binary 110101 = pixels on at positions 0, 2, 4 (top, third, fifth).
 
@@ -44,7 +57,8 @@ Colors are defined inline using the `#` (color introducer) command:
 
 - **Pc** = color register number (0-255)
 - **Pu** = coordinate system: `1` = HLS, `2` = RGB
-- **Px/Py/Pz** = color values (RGB: 0-100% for each channel; HLS: 0-360 hue, 0-100 lightness, 0-100 saturation)
+- **Px/Py/Pz** = color values (RGB: 0-100% for each channel; HLS: 0-360 hue, 0-100 lightness, 0-100
+  saturation)
 
 To select a previously defined color: `# Pc` (just the number, no coordinates).
 
@@ -79,6 +93,7 @@ Where Pan:Pad is the pixel aspect ratio, Ph is width in pixels, Pv is height.
 ```
 
 Key design points:
+
 - Colors are drawn one at a time per row using `$` to overprint
 - Run-length encoding (`!`) provides compression
 - Up to 256 color registers (many terminals support fewer)
@@ -92,7 +107,9 @@ Key design points:
 
 ### Overview
 
-Designed by Kovid Goyal for the Kitty terminal emulator, this is the most feature-complete terminal graphics protocol. It uses APC (Application Programming Command) escape sequences and supports modern features like alpha blending, z-ordering, animations, and Unicode placeholders.
+Designed by Kovid Goyal for the Kitty terminal emulator, this is the most feature-complete terminal
+graphics protocol. It uses APC (Application Programming Command) escape sequences and supports
+modern features like alpha blending, z-ordering, animations, and Unicode placeholders.
 
 ### Escape sequence structure
 
@@ -105,22 +122,23 @@ Designed by Kovid Goyal for the Kitty terminal emulator, this is the most featur
 
 ### Image data formats
 
-| `f` value | Format |
-|-----------|--------|
-| `24` | 24-bit RGB (3 bytes/pixel) |
-| `32` | 32-bit RGBA (4 bytes/pixel, default) |
-| `100` | PNG data |
+| `f` value | Format                               |
+| --------- | ------------------------------------ |
+| `24`      | 24-bit RGB (3 bytes/pixel)           |
+| `32`      | 32-bit RGBA (4 bytes/pixel, default) |
+| `100`     | PNG data                             |
 
-Image dimensions are specified with `s` (width) and `v` (height) for raw formats. PNG dimensions are read from the data itself.
+Image dimensions are specified with `s` (width) and `v` (height) for raw formats. PNG dimensions are
+read from the data itself.
 
 ### Transmission methods
 
-| `t` value | Method | Use case |
-|-----------|--------|----------|
-| `d` | Direct (inline in escape code) | Remote/SSH, default |
-| `f` | File path | Local, avoids base64 overhead |
-| `t` | Temporary file (auto-deleted) | Local, one-shot |
-| `s` | Shared memory (POSIX shm) | Local, highest performance |
+| `t` value | Method                         | Use case                      |
+| --------- | ------------------------------ | ----------------------------- |
+| `d`       | Direct (inline in escape code) | Remote/SSH, default           |
+| `f`       | File path                      | Local, avoids base64 overhead |
+| `t`       | Temporary file (auto-deleted)  | Local, one-shot               |
+| `s`       | Shared memory (POSIX shm)      | Local, highest performance    |
 
 ### Chunked transfer (remote/SSH)
 
@@ -132,20 +150,21 @@ Large images are base64-encoded and split into chunks of at most 4096 bytes:
 <ESC>_Gm=0;<final chunk><ESC>\
 ```
 
-Only the first chunk carries the full metadata. `m=1` means more data follows; `m=0` marks the final chunk.
+Only the first chunk carries the full metadata. `m=1` means more data follows; `m=0` marks the final
+chunk.
 
 ### Actions (`a` key)
 
-| Value | Action |
-|-------|--------|
-| `t` | Transmit data (default) |
-| `T` | Transmit and display |
-| `q` | Query support |
-| `p` | Put (display previously transmitted image) |
-| `d` | Delete image(s) |
-| `f` | Transmit animation frame |
-| `a` | Control animation |
-| `c` | Compose animation frames |
+| Value | Action                                     |
+| ----- | ------------------------------------------ |
+| `t`   | Transmit data (default)                    |
+| `T`   | Transmit and display                       |
+| `q`   | Query support                              |
+| `p`   | Put (display previously transmitted image) |
+| `d`   | Delete image(s)                            |
+| `f`   | Transmit animation frame                   |
+| `a`   | Control animation                          |
+| `c`   | Compose animation frames                   |
 
 ### Placement and display
 
@@ -165,7 +184,9 @@ ZLIB deflate compression with `o=z`, applied before base64 encoding.
 
 ### Unicode placeholders
 
-A special Unicode character `U+10EEEE` serves as a placeholder. This enables pixel graphics in applications that know nothing about the protocol (vim, tmux, etc.) by encoding image ID in the foreground color and row/column in diacritics:
+A special Unicode character `U+10EEEE` serves as a placeholder. This enables pixel graphics in
+applications that know nothing about the protocol (vim, tmux, etc.) by encoding image ID in the
+foreground color and row/column in diacritics:
 
 ```
 # Create virtual placement
@@ -191,11 +212,13 @@ Send a query action followed by a primary device attributes request:
 <ESC>_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA<ESC>\<ESC>[c
 ```
 
-If the terminal responds to the graphics query, it supports the protocol. If only the DA response comes back, it doesn't.
+If the terminal responds to the graphics query, it supports the protocol. If only the DA response
+comes back, it doesn't.
 
 ### Terminals supporting Kitty graphics protocol
 
-Ghostty, Konsole, WezTerm, iTerm2, Warp, wayst, st (with patch), xterm.js, and of course Kitty itself.
+Ghostty, Konsole, WezTerm, iTerm2, Warp, wayst, st (with patch), xterm.js, and of course Kitty
+itself.
 
 [Source: Kitty Graphics Protocol Specification](https://sw.kovidgoyal.net/kitty/graphics-protocol/)
 
@@ -213,14 +236,14 @@ Or with ST terminator: `ESC ] 1337 ; File = [args] : <base64-data> ESC \`
 
 Arguments are semicolon-separated `key=value` pairs:
 
-| Key | Description |
-|-----|-------------|
-| `name` | Base64-encoded filename |
-| `size` | File size in bytes (for progress) |
-| `width` | Display width (N, Npx, N%, or "auto") |
-| `height` | Display height (N, Npx, N%, or "auto") |
-| `preserveAspectRatio` | 0 = stretch, 1 = preserve (default) |
-| `inline` | 0 = download to file, 1 = display inline |
+| Key                   | Description                              |
+| --------------------- | ---------------------------------------- |
+| `name`                | Base64-encoded filename                  |
+| `size`                | File size in bytes (for progress)        |
+| `width`               | Display width (N, Npx, N%, or "auto")    |
+| `height`              | Display height (N, Npx, N%, or "auto")   |
+| `preserveAspectRatio` | 0 = stretch, 1 = preserve (default)      |
+| `inline`              | 0 = download to file, 1 = display inline |
 
 ### Width/height units
 
@@ -259,6 +282,7 @@ Chunk size limit: 1,048,576 bytes (newer tmux), 256 bytes (older tmux).
 ### Sixel support
 
 **Supported:**
+
 - xterm (default since patch 359)
 - foot, mlterm, WezTerm, mintty
 - Konsole (since 22.04), iTerm2 (since 3.3.0)
@@ -269,6 +293,7 @@ Chunk size limit: 1,048,576 bytes (newer tmux), 256 bytes (older tmux).
 - Xfce Terminal, Yakuake
 
 **Unsupported:**
+
 - Kitty (deliberately; uses its own protocol)
 - Alacritty (open issue #910)
 - GNOME Terminal / VTE-based terminals (blocked on VTE #253)
@@ -287,17 +312,17 @@ Chunk size limit: 1,048,576 bytes (newer tmux), 256 bytes (older tmux).
 
 ### Multi-protocol terminals
 
-| Terminal | Sixel | Kitty | iTerm2 |
-|----------|-------|-------|--------|
-| WezTerm | Yes | Yes | Partial |
-| iTerm2 | Yes | Yes | Yes |
-| Konsole | Yes | Yes | No |
-| Kitty | No | Yes | No |
-| Ghostty | No | Yes | No |
-| foot | Yes | No | No |
-| xterm | Yes | No | No |
-| Alacritty | No | No | No |
-| GNOME Terminal | No | No | No |
+| Terminal       | Sixel | Kitty | iTerm2  |
+| -------------- | ----- | ----- | ------- |
+| WezTerm        | Yes   | Yes   | Partial |
+| iTerm2         | Yes   | Yes   | Yes     |
+| Konsole        | Yes   | Yes   | No      |
+| Kitty          | No    | Yes   | No      |
+| Ghostty        | No    | Yes   | No      |
+| foot           | Yes   | No    | No      |
+| xterm          | Yes   | No    | No      |
+| Alacritty      | No    | No    | No      |
+| GNOME Terminal | No    | No    | No      |
 
 ---
 
@@ -305,7 +330,8 @@ Chunk size limit: 1,048,576 bytes (newer tmux), 256 bytes (older tmux).
 
 ### Detection mechanism
 
-notcurses probes terminal capabilities at initialization and exposes the result via `notcurses_check_pixel_support()`, which returns an `ncpixelimpl_e` enum:
+notcurses probes terminal capabilities at initialization and exposes the result via
+`notcurses_check_pixel_support()`, which returns an `ncpixelimpl_e` enum:
 
 ```c
 typedef enum {
@@ -339,17 +365,23 @@ NCBLIT_2x1     → Half blocks ▀▄ (2x1 per cell, default)
 NCBLIT_1x1     → Space + background color (1x1, ASCII-safe)
 ```
 
-When `NCBLIT_DEFAULT` is requested, notcurses auto-selects the best available blitter (but never auto-selects `NCBLIT_PIXEL` - that must be explicit). If `NCBLIT_PIXEL` is requested but not available, it degrades to the next best unless `NCVISUAL_OPTION_NODEGRADE` is set.
+When `NCBLIT_DEFAULT` is requested, notcurses auto-selects the best available blitter (but never
+auto-selects `NCBLIT_PIXEL` - that must be explicit). If `NCBLIT_PIXEL` is requested but not
+available, it degrades to the next best unless `NCVISUAL_OPTION_NODEGRADE` is set.
 
 ### Cell integration (sprixels)
 
 notcurses tracks bitmap images as "sprixels" (sprite + pixel). Each sprixel:
+
 - Occupies a rectangular region of cells on an ncplane
 - Has a z-index for layering with text
 - Cells underneath the sprixel are marked as occupied
-- When text needs to overwrite a sprixel cell, notcurses "damages" that cell (making it transparent in the bitmap or rewriting it)
+- When text needs to overwrite a sprixel cell, notcurses "damages" that cell (making it transparent
+  in the bitmap or rewriting it)
 
-For Kitty's `NCPIXEL_KITTY_SELFREF` mode, only transparent cells need rewriting (using self-referential composition `a=c`). For older Kitty or Sixel, the entire image may need to be re-emitted.
+For Kitty's `NCPIXEL_KITTY_SELFREF` mode, only transparent cells need rewriting (using
+self-referential composition `a=c`). For older Kitty or Sixel, the entire image may need to be
+re-emitted.
 
 ### Pixel geometry query
 
@@ -405,7 +437,10 @@ print!("{}", sixel);
 
 ### Recommendation for a rendering library
 
-Use `icy_sixel` for encoding RGBA pixel buffers to sixel output. It's pure Rust, actively maintained, and handles quantization/dithering well. For Kitty and iTerm2 protocols, implement the escape sequences directly (they're simple base64 wrappers around PNG or raw RGBA data; no complex encoding like sixel).
+Use `icy_sixel` for encoding RGBA pixel buffers to sixel output. It's pure Rust, actively
+maintained, and handles quantization/dithering well. For Kitty and iTerm2 protocols, implement the
+escape sequences directly (they're simple base64 wrappers around PNG or raw RGBA data; no complex
+encoding like sixel).
 
 ---
 
@@ -414,10 +449,12 @@ Use `icy_sixel` for encoding RGBA pixel buffers to sixel output. It's pure Rust,
 ### The fundamental challenge
 
 Terminal graphics operate in two coordinate systems simultaneously:
+
 1. **Cell grid** - character positions (columns x rows)
 2. **Pixel grid** - individual pixels within cells
 
-A cell typically spans multiple pixels (e.g., 8x16 pixels for a common font). Graphics must align to cell boundaries to avoid visual artifacts.
+A cell typically spans multiple pixels (e.g., 8x16 pixels for a common font). Graphics must align to
+cell boundaries to avoid visual artifacts.
 
 ### Cell size discovery
 
@@ -440,13 +477,16 @@ Three strategies:
 
 **Strategy 1: Dedicated pixel planes (notcurses approach)**
 
-Reserve specific rectangular regions of the cell grid for pixel content. Text rendering skips these cells. The pixel image is emitted as a single escape sequence occupying N columns x M rows. This is what notcurses "sprixels" do.
+Reserve specific rectangular regions of the cell grid for pixel content. Text rendering skips these
+cells. The pixel image is emitted as a single escape sequence occupying N columns x M rows. This is
+what notcurses "sprixels" do.
 
 Pros: clean separation, no flicker. Cons: pixel regions must be cell-aligned.
 
 **Strategy 2: Z-ordered overlays (Kitty-specific)**
 
-Kitty's z-index support allows placing images behind text (`z` < 0). Text renders normally on top with transparency. This enables pixel backgrounds with text overlays.
+Kitty's z-index support allows placing images behind text (`z` < 0). Text renders normally on top
+with transparency. This enables pixel backgrounds with text overlays.
 
 ```
 <ESC>_Ga=T,f=100,z=-1;<base64 PNG><ESC>\  # Image behind text
@@ -456,17 +496,21 @@ Pros: text and graphics truly overlap. Cons: Kitty-only, not supported by Sixel 
 
 **Strategy 3: Unicode placeholder composition (Kitty)**
 
-Use the `U+10EEEE` placeholder character to mark cells where images should appear. The terminal composites the image data with the placeholder positions. Works through tmux, vim, and other intermediaries.
+Use the `U+10EEEE` placeholder character to mark cells where images should appear. The terminal
+composites the image data with the placeholder positions. Works through tmux, vim, and other
+intermediaries.
 
 ### Damage tracking for sprixels
 
 When text overwrites cells occupied by a bitmap:
+
 - **Kitty (selfref):** Compose a transparent rectangle over the affected cells using `a=c`
 - **Kitty (static/animated):** Re-transmit the entire image with the damaged cells made transparent
 - **Sixel:** Re-emit the entire sixel sequence (sixel has no partial update mechanism)
 - **iTerm2:** Re-emit the entire image
 
-This means the rendering engine must track which cells are "sprixel-occupied" and handle damage propagation.
+This means the rendering engine must track which cells are "sprixel-occupied" and handle damage
+propagation.
 
 ---
 
@@ -474,18 +518,18 @@ This means the rendering engine must track which cells are "sprixel-occupied" an
 
 ### Encoding overhead
 
-| Protocol | Encoding cost | Bandwidth |
-|----------|--------------|-----------|
-| Sixel | **High** - color quantization (256 colors max), dithering, per-color-per-row encoding | Moderate (RLE compression helps) |
-| Kitty (PNG) | Moderate - PNG compression + base64 | Good (PNG is compact) |
-| Kitty (raw) | Low - just base64 | High (uncompressed RGBA + base64 = 1.33x) |
-| Kitty (raw+zlib) | Moderate - zlib + base64 | Good |
-| Kitty (file/shm) | **Minimal** - no encoding | Best (zero-copy for local) |
-| iTerm2 | Depends on image format | Good (sends compressed file) |
+| Protocol         | Encoding cost                                                                         | Bandwidth                                 |
+| ---------------- | ------------------------------------------------------------------------------------- | ----------------------------------------- |
+| Sixel            | **High** - color quantization (256 colors max), dithering, per-color-per-row encoding | Moderate (RLE compression helps)          |
+| Kitty (PNG)      | Moderate - PNG compression + base64                                                   | Good (PNG is compact)                     |
+| Kitty (raw)      | Low - just base64                                                                     | High (uncompressed RGBA + base64 = 1.33x) |
+| Kitty (raw+zlib) | Moderate - zlib + base64                                                              | Good                                      |
+| Kitty (file/shm) | **Minimal** - no encoding                                                             | Best (zero-copy for local)                |
+| iTerm2           | Depends on image format                                                               | Good (sends compressed file)              |
 
 ### Bandwidth analysis (1920x1080 image)
 
-- Raw RGBA: 1920 * 1080 * 4 = ~8.3 MB
+- Raw RGBA: 1920 _1080_ 4 = ~8.3 MB
 - Base64 of raw: ~11.1 MB
 - Base64 of zlib-compressed: ~2-4 MB (varies with content)
 - Base64 of PNG: ~0.5-3 MB (varies with content)
@@ -494,13 +538,18 @@ This means the rendering engine must track which cells are "sprixel-occupied" an
 
 ### Key performance strategies
 
-1. **Use shared memory / temp files when local.** Kitty's `t=s` (shared memory) and `t=t` (temp file) avoid all serialization overhead. The terminal reads pixels directly. This is the single biggest optimization for local rendering.
+1. **Use shared memory / temp files when local.** Kitty's `t=s` (shared memory) and `t=t` (temp
+   file) avoid all serialization overhead. The terminal reads pixels directly. This is the single
+   biggest optimization for local rendering.
 
-2. **Send PNG format when possible.** For Kitty, `f=100` sends PNG data, which is far more compact than raw pixels for most images. The terminal decompresses on its end.
+2. **Send PNG format when possible.** For Kitty, `f=100` sends PNG data, which is far more compact
+   than raw pixels for most images. The terminal decompresses on its end.
 
-3. **Use zlib compression for raw data.** Kitty's `o=z` compresses raw RGBA before base64, reducing bandwidth significantly.
+3. **Use zlib compression for raw data.** Kitty's `o=z` compresses raw RGBA before base64, reducing
+   bandwidth significantly.
 
-4. **Minimize re-transmission.** Kitty's image ID system allows placing the same image multiple times without re-sending data. For animations, send only changed rectangles.
+4. **Minimize re-transmission.** Kitty's image ID system allows placing the same image multiple
+   times without re-sending data. For animations, send only changed rectangles.
 
 5. **Sixel-specific optimizations:**
    - Reduce color count (fewer colors = fewer passes per row)
@@ -508,11 +557,13 @@ This means the rendering engine must track which cells are "sprixel-occupied" an
    - Consider image downscaling before encoding
    - Pre-quantize to the target palette
 
-6. **Chunked transmission.** Both Kitty (4096-byte chunks) and iTerm2 (MultipartFile) support chunked transfer, preventing the terminal from blocking on large images.
+6. **Chunked transmission.** Both Kitty (4096-byte chunks) and iTerm2 (MultipartFile) support
+   chunked transfer, preventing the terminal from blocking on large images.
 
 ### Frame rate considerations
 
 For animated content at 30+ FPS:
+
 - Sixel is generally too slow (full re-encode per frame)
 - Kitty with self-referential composition can update sub-regions efficiently
 - Kitty shared memory + placement updates can achieve real-time video (mpv uses this)
@@ -582,7 +633,10 @@ fn get_cell_pixel_size() -> Option<(u16, u16)> {
 
 ### Checking for tmux/screen
 
-If running inside tmux or screen, graphics protocol support depends on both the multiplexer and the outer terminal. tmux 3.4+ supports sixel passthrough with `--enable-sixel`. Kitty's Unicode placeholder method works through tmux. Direct Kitty protocol does not work through tmux without passthrough support.
+If running inside tmux or screen, graphics protocol support depends on both the multiplexer and the
+outer terminal. tmux 3.4+ supports sixel passthrough with `--enable-sixel`. Kitty's Unicode
+placeholder method works through tmux. Direct Kitty protocol does not work through tmux without
+passthrough support.
 
 ### XTVERSION for terminal identification
 
@@ -597,21 +651,21 @@ Supported by Kitty, foot, WezTerm, and others. Gives precise terminal identity.
 
 ## 10. Trade-offs vs. Windowed GPU Rendering
 
-| Aspect | Terminal Graphics | Windowed GPU (wgpu/OpenGL) |
-|--------|-------------------|---------------------------|
-| **Resolution** | Limited by cell grid alignment; max bitmap sizes vary by terminal | Arbitrary resolution, sub-pixel rendering |
-| **Color depth** | Sixel: 256 colors. Kitty/iTerm2: full 32-bit RGBA | Full 32-bit, HDR possible |
-| **Refresh rate** | Sixel: ~1-5 FPS for full screen. Kitty: up to 30+ FPS with optimization | 60+ FPS trivially |
-| **Compositing** | Kitty z-index only; no shader effects | Arbitrary shaders, blending modes |
-| **Text rendering** | Terminal handles text natively (best quality) | Must implement or use a text rendering library |
-| **Input handling** | Terminal handles input, mouse, resize | Must implement from scratch (winit, etc.) |
-| **Deployment** | Works over SSH, in tmux, on headless servers | Requires display server (X11/Wayland/macOS) |
-| **Dependencies** | Zero (just stdout) | GPU drivers, windowing library, shader compilation |
-| **Portability** | Any terminal with protocol support | Any OS with GPU support |
-| **Startup time** | Instant (already in terminal) | Window creation + GPU init overhead |
-| **UI integration** | Lives within terminal workflow | Separate window, context switch |
-| **Scrollback** | Images scroll with terminal history | No scrollback (or must implement) |
-| **Accessibility** | Terminal screen readers may handle text cells | Must implement accessibility layer |
+| Aspect             | Terminal Graphics                                                       | Windowed GPU (wgpu/OpenGL)                         |
+| ------------------ | ----------------------------------------------------------------------- | -------------------------------------------------- |
+| **Resolution**     | Limited by cell grid alignment; max bitmap sizes vary by terminal       | Arbitrary resolution, sub-pixel rendering          |
+| **Color depth**    | Sixel: 256 colors. Kitty/iTerm2: full 32-bit RGBA                       | Full 32-bit, HDR possible                          |
+| **Refresh rate**   | Sixel: ~1-5 FPS for full screen. Kitty: up to 30+ FPS with optimization | 60+ FPS trivially                                  |
+| **Compositing**    | Kitty z-index only; no shader effects                                   | Arbitrary shaders, blending modes                  |
+| **Text rendering** | Terminal handles text natively (best quality)                           | Must implement or use a text rendering library     |
+| **Input handling** | Terminal handles input, mouse, resize                                   | Must implement from scratch (winit, etc.)          |
+| **Deployment**     | Works over SSH, in tmux, on headless servers                            | Requires display server (X11/Wayland/macOS)        |
+| **Dependencies**   | Zero (just stdout)                                                      | GPU drivers, windowing library, shader compilation |
+| **Portability**    | Any terminal with protocol support                                      | Any OS with GPU support                            |
+| **Startup time**   | Instant (already in terminal)                                           | Window creation + GPU init overhead                |
+| **UI integration** | Lives within terminal workflow                                          | Separate window, context switch                    |
+| **Scrollback**     | Images scroll with terminal history                                     | No scrollback (or must implement)                  |
+| **Accessibility**  | Terminal screen readers may handle text cells                           | Must implement accessibility layer                 |
 
 ### When to use terminal graphics
 
@@ -629,7 +683,10 @@ Supported by Kitty, foot, WezTerm, and others. Gives precise terminal identity.
 
 ### Hybrid approach
 
-The most practical strategy for a grid rendering library: offer both backends. Use terminal graphics as the default (zero dependencies, works everywhere), with an optional GPU backend for applications that need higher performance. The grid/cell abstraction stays the same; only the output backend changes.
+The most practical strategy for a grid rendering library: offer both backends. Use terminal graphics
+as the default (zero dependencies, works everywhere), with an optional GPU backend for applications
+that need higher performance. The grid/cell abstraction stays the same; only the output backend
+changes.
 
 ---
 
@@ -637,13 +694,20 @@ The most practical strategy for a grid rendering library: offer both backends. U
 
 ### Kept
 
-- **VT330/VT340 Programmer Reference Manual, Chapter 14** (vt100.net/docs/vt3xx-gp/chapter14.html) - Original DEC sixel specification; authoritative for the wire format
-- **Kitty Graphics Protocol** (sw.kovidgoyal.net/kitty/graphics-protocol/) - Official specification; comprehensive coverage of all features including animation
-- **iTerm2 Images Documentation** (iterm2.com/documentation-images.html) - Official iTerm2 inline images spec
-- **Are We Sixel Yet?** (arewesixelyet.com) - Comprehensive sixel terminal support matrix with links to patches/issues
-- **notcurses USAGE.md** (github.com/dankamongmen/notcurses) - Reference implementation for detection, fallback, and sprixel management
-- **icy_sixel** (github.com/mkrueger/icy_sixel) - Pure Rust sixel encoder/decoder with SIMD acceleration
-- **sixel-image** (github.com/zellij-org/sixel-image) - Zellij's sixel manipulation library with streaming parser
+- **VT330/VT340 Programmer Reference Manual, Chapter 14** (vt100.net/docs/vt3xx-gp/chapter14.html) -
+  Original DEC sixel specification; authoritative for the wire format
+- **Kitty Graphics Protocol** (sw.kovidgoyal.net/kitty/graphics-protocol/) - Official specification;
+  comprehensive coverage of all features including animation
+- **iTerm2 Images Documentation** (iterm2.com/documentation-images.html) - Official iTerm2 inline
+  images spec
+- **Are We Sixel Yet?** (arewesixelyet.com) - Comprehensive sixel terminal support matrix with links
+  to patches/issues
+- **notcurses USAGE.md** (github.com/dankamongmen/notcurses) - Reference implementation for
+  detection, fallback, and sprixel management
+- **icy_sixel** (github.com/mkrueger/icy_sixel) - Pure Rust sixel encoder/decoder with SIMD
+  acceleration
+- **sixel-image** (github.com/zellij-org/sixel-image) - Zellij's sixel manipulation library with
+  streaming parser
 - **sixel-rs** (github.com/orhun/sixel-rs) - Rust wrapper for libsixel
 
 ### Dropped
@@ -656,14 +720,23 @@ The most practical strategy for a grid rendering library: offer both backends. U
 
 ## Gaps
 
-1. **Ghostty graphics protocol details.** Ghostty supports Kitty protocol but documentation on its specific implementation limits (max image size, number of stored images) was not found in this research. Worth checking Ghostty's docs directly.
+1. **Ghostty graphics protocol details.** Ghostty supports Kitty protocol but documentation on its
+   specific implementation limits (max image size, number of stored images) was not found in this
+   research. Worth checking Ghostty's docs directly.
 
-2. **Alacritty sixel/graphics status.** The PR (#4763) was noted but its current merge status is unclear. Alacritty may have gained support since this research.
+2. **Alacritty sixel/graphics status.** The PR (#4763) was noted but its current merge status is
+   unclear. Alacritty may have gained support since this research.
 
-3. **Benchmark data for sixel encoding.** No concrete benchmarks comparing icy_sixel vs. libsixel encoding speed were found. The SIMD acceleration claim from icy_sixel is for the decoder, not encoder.
+3. **Benchmark data for sixel encoding.** No concrete benchmarks comparing icy_sixel vs. libsixel
+   encoding speed were found. The SIMD acceleration claim from icy_sixel is for the decoder, not
+   encoder.
 
-4. **tmux passthrough for Kitty protocol.** tmux 3.4+ may support Kitty protocol passthrough via `allow-passthrough`, but the exact behavior and limitations need verification.
+4. **tmux passthrough for Kitty protocol.** tmux 3.4+ may support Kitty protocol passthrough via
+   `allow-passthrough`, but the exact behavior and limitations need verification.
 
-5. **Windows Terminal graphics support.** Windows Terminal has an open issue (#448) for sixel but the timeline and any Kitty protocol plans are unclear.
+5. **Windows Terminal graphics support.** Windows Terminal has an open issue (#448) for sixel but
+   the timeline and any Kitty protocol plans are unclear.
 
-6. **Concrete bandwidth measurements.** The bandwidth estimates in section 8 are theoretical calculations, not measured. Real-world performance depends on terminal rendering speed, not just wire bandwidth.
+6. **Concrete bandwidth measurements.** The bandwidth estimates in section 8 are theoretical
+   calculations, not measured. Real-world performance depends on terminal rendering speed, not just
+   wire bandwidth.

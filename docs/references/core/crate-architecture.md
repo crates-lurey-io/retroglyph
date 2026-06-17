@@ -1,7 +1,7 @@
 # Multi-Crate Rust Workspace Architecture
 
-Research for structuring a terminal/grid rendering library (BearLibTerminal-like) as a
-multi-crate workspace. Findings drawn from ratatui v0.30, wgpu v29, and bevy's workspace.
+Research for structuring a terminal/grid rendering library (BearLibTerminal-like) as a multi-crate
+workspace. Findings drawn from ratatui v0.30, wgpu v29, and bevy's workspace.
 
 ---
 
@@ -11,8 +11,9 @@ Three proven patterns from production Rust projects:
 
 ### Ratatui (flat namespace)
 
-Ratatui v0.30 split from a monolithic crate into a flat workspace. All crates live at the
-repo root with a shared `ratatui-` prefix. [Source](https://github.com/ratatui/ratatui/blob/main/ARCHITECTURE.md)
+Ratatui v0.30 split from a monolithic crate into a flat workspace. All crates live at the repo root
+with a shared `ratatui-` prefix.
+[Source](https://github.com/ratatui/ratatui/blob/main/ARCHITECTURE.md)
 
 ```
 ratatui/
@@ -47,9 +48,9 @@ default-members = [
 
 ### wgpu (flat namespace, layered)
 
-wgpu uses a flat layout with 29 workspace members. Crates are layered:
-`wgpu-types` -> `wgpu-hal` -> `wgpu-core` -> `wgpu`. Naga (shader compiler) lives
-alongside as a sibling crate. [Source](https://deepwiki.com/gfx-rs/wgpu/6.4-build-system-and-workspace)
+wgpu uses a flat layout with 29 workspace members. Crates are layered: `wgpu-types` -> `wgpu-hal` ->
+`wgpu-core` -> `wgpu`. Naga (shader compiler) lives alongside as a sibling crate.
+[Source](https://deepwiki.com/gfx-rs/wgpu/6.4-build-system-and-workspace)
 
 ```
 wgpu/
@@ -65,8 +66,8 @@ wgpu/
 
 ### Bevy (crates/ directory)
 
-Bevy puts all crates under `crates/` with a `bevy_` prefix. Uses a two-crate facade
-pattern: `bevy` (root) -> `bevy_internal` (aggregator) -> individual `bevy_*` crates.
+Bevy puts all crates under `crates/` with a `bevy_` prefix. Uses a two-crate facade pattern: `bevy`
+(root) -> `bevy_internal` (aggregator) -> individual `bevy_*` crates.
 [Source](https://deepwiki.com/bevyengine/bevy/1.2-crate-organization)
 
 ```
@@ -84,38 +85,37 @@ bevy/
 └── tools/
 ```
 
-**Recommendation for a grid library**: Use the flat namespace (ratatui pattern). The
-`crates/` directory pattern only pays off at 15+ crates. For a library with 5-8 crates,
-flat is simpler and keeps paths short.
+**Recommendation for a grid library**: Use the flat namespace (ratatui pattern). The `crates/`
+directory pattern only pays off at 15+ crates. For a library with 5-8 crates, flat is simpler and
+keeps paths short.
 
 ---
 
 ## 2. Core Types Crate Design
 
-The core crate should contain only types and traits that downstream crates (widgets,
-backends, algorithm crates) need to compile against. It is the stability anchor of the
-workspace.
+The core crate should contain only types and traits that downstream crates (widgets, backends,
+algorithm crates) need to compile against. It is the stability anchor of the workspace.
 
 ### What belongs in core
 
 Based on ratatui-core and wgpu-types:
 
-| Type | Purpose |
-|------|---------|
-| `Cell` | Single grid cell (glyph + style) |
-| `Buffer` | 2D grid of cells (the render target) |
-| `Color` | Color representation (Named, Rgb, Indexed) |
-| `Style` | Foreground, background, modifiers (bold, italic, etc.) |
-| `Rect` | Position + size rectangle |
-| `Position` | x, y coordinate |
-| `Size` | width, height |
-| `Widget` trait | The core rendering trait |
-| `Backend` trait | Terminal backend abstraction |
-| Text types | `Span`, `Line`, `Text` for styled text |
-| Layout | Constraint solver, Direction, Alignment |
+| Type            | Purpose                                                |
+| --------------- | ------------------------------------------------------ |
+| `Cell`          | Single grid cell (glyph + style)                       |
+| `Buffer`        | 2D grid of cells (the render target)                   |
+| `Color`         | Color representation (Named, Rgb, Indexed)             |
+| `Style`         | Foreground, background, modifiers (bold, italic, etc.) |
+| `Rect`          | Position + size rectangle                              |
+| `Position`      | x, y coordinate                                        |
+| `Size`          | width, height                                          |
+| `Widget` trait  | The core rendering trait                               |
+| `Backend` trait | Terminal backend abstraction                           |
+| Text types      | `Span`, `Line`, `Text` for styled text                 |
+| Layout          | Constraint solver, Direction, Alignment                |
 
-Ratatui-core's actual contents: widget traits, text types, buffer, layout, style, color,
-and symbol collections. [Source](https://github.com/ratatui/ratatui/blob/main/ARCHITECTURE.md)
+Ratatui-core's actual contents: widget traits, text types, buffer, layout, style, color, and symbol
+collections. [Source](https://github.com/ratatui/ratatui/blob/main/ARCHITECTURE.md)
 
 ### What does NOT belong in core
 
@@ -153,6 +153,7 @@ workspace = true
 ```
 
 Key design principles from ratatui-core:
+
 - Default to `no_std` compatible (no `std` feature in defaults)
 - `serde` support is opt-in
 - Use `workspace = true` for all shared dependencies
@@ -162,10 +163,9 @@ Key design principles from ratatui-core:
 
 ## 3. Backend Trait Crate
 
-The backend trait defines the interface all terminal backends implement. In ratatui this
-trait lives inside `ratatui-core`, not in a separate crate. This is the right call for
-most projects: separating the trait into its own crate adds a dependency hop without
-meaningful benefit.
+The backend trait defines the interface all terminal backends implement. In ratatui this trait lives
+inside `ratatui-core`, not in a separate crate. This is the right call for most projects: separating
+the trait into its own crate adds a dependency hop without meaningful benefit.
 
 ### Backend trait location: in core
 
@@ -197,35 +197,34 @@ rg-crossterm  rg-termion   rg-wgpu
 
 ### TestBackend
 
-Include a `TestBackend` in core (behind no feature gate). Every project needs it for
-testing widget rendering without a real terminal.
+Include a `TestBackend` in core (behind no feature gate). Every project needs it for testing widget
+rendering without a real terminal.
 
 ---
 
 ## 4. Individual Backend Crates: Features vs Separate Crates
 
-**Use separate crates, not features.** This is the clear consensus from ratatui, wgpu,
-and bevy.
+**Use separate crates, not features.** This is the clear consensus from ratatui, wgpu, and bevy.
 
 ### Why separate crates win
 
-1. **Compile time**: Users only compile the backend they use. Feature flags cause
-   conditional compilation but still pull in all backend source.
+1. **Compile time**: Users only compile the backend they use. Feature flags cause conditional
+   compilation but still pull in all backend source.
 
-2. **Dependency isolation**: Each backend pulls in a different terminal library
-   (crossterm, termion, etc.). Separate crates prevent unused transitive dependencies.
+2. **Dependency isolation**: Each backend pulls in a different terminal library (crossterm, termion,
+   etc.). Separate crates prevent unused transitive dependencies.
 
-3. **Independent versioning**: Backend crates can release independently when the
-   underlying terminal library updates. Ratatui-crossterm supports both crossterm 0.28
-   and 0.29 via internal feature flags.
-   [Source](https://github.com/ratatui/ratatui/blob/main/ratatui-crossterm/Cargo.toml)
+3. **Independent versioning**: Backend crates can release independently when the underlying terminal
+   library updates. Ratatui-crossterm supports both crossterm 0.28 and 0.29 via internal feature
+   flags. [Source](https://github.com/ratatui/ratatui/blob/main/ratatui-crossterm/Cargo.toml)
 
-4. **Platform exclusion**: termion is Unix-only. With separate crates, it simply isn't
-   a default-member on Windows. With features you need `cfg` guards everywhere.
+4. **Platform exclusion**: termion is Unix-only. With separate crates, it simply isn't a
+   default-member on Windows. With features you need `cfg` guards everywhere.
 
 ### When features make sense inside a backend crate
 
 Within a single backend crate, features are fine for:
+
 - Version selection (`crossterm_0_28` vs `crossterm_0_29`)
 - Optional capabilities (`underline-color`, `scrolling-regions`)
 - Unstable APIs (`unstable-backend-writer`)
@@ -254,8 +253,8 @@ wgpu = { workspace = true }
 
 ## 5. Algorithm Crates (FOV, Pathfinding)
 
-Algorithms should be separate, optional crates. They depend on core types (`Rect`,
-`Position`) but not on backends or widgets.
+Algorithms should be separate, optional crates. They depend on core types (`Rect`, `Position`) but
+not on backends or widgets.
 
 ```
 rg-fov/          # Field of vision algorithms (shadowcasting, etc.)
@@ -301,9 +300,9 @@ pathfinding = ["dep:rg-pathfinding"]
 
 ### workspace.dependencies
 
-All dependency versions are declared once in the root `Cargo.toml`. Member crates
-reference them with `workspace = true`. This is the universal pattern across ratatui,
-wgpu, and bevy. [Source](https://github.com/ratatui/ratatui/commit/a07f5bec)
+All dependency versions are declared once in the root `Cargo.toml`. Member crates reference them
+with `workspace = true`. This is the universal pattern across ratatui, wgpu, and bevy.
+[Source](https://github.com/ratatui/ratatui/commit/a07f5bec)
 
 ```toml
 # Root Cargo.toml
@@ -331,9 +330,9 @@ serde = { workspace = true, optional = true }
 
 ### Version pinning strategy
 
-Ratatui's approach: specify semver-compatible versions (e.g., `"0.29"` not `"0.29.3"`)
-to avoid frequent Cargo.toml churn. The `Cargo.lock` pins exact versions. This
-communicates "we work with any 0.29.x". [Source](https://github.com/ratatui/ratatui/commit/a07f5bec)
+Ratatui's approach: specify semver-compatible versions (e.g., `"0.29"` not `"0.29.3"`) to avoid
+frequent Cargo.toml churn. The `Cargo.lock` pins exact versions. This communicates "we work with any
+0.29.x". [Source](https://github.com/ratatui/ratatui/commit/a07f5bec)
 
 ### workspace.package for shared metadata
 
@@ -367,8 +366,8 @@ workspace = true
 
 ### cargo-deny for license/security auditing
 
-Both ratatui and wgpu use `cargo-deny` in CI. wgpu's `.deny.toml` bans duplicate crate
-versions (with explicit exceptions) and restricts to permissive licenses only.
+Both ratatui and wgpu use `cargo-deny` in CI. wgpu's `.deny.toml` bans duplicate crate versions
+(with explicit exceptions) and restricts to permissive licenses only.
 
 ---
 
@@ -376,10 +375,11 @@ versions (with explicit exceptions) and restricts to permissive licenses only.
 
 ### Additive-only rule
 
-From the Cargo reference: "Features should be additive. Enabling a feature should not
-disable functionality." [Source](https://doc.rust-lang.org/cargo/reference/features.html)
+From the Cargo reference: "Features should be additive. Enabling a feature should not disable
+functionality." [Source](https://doc.rust-lang.org/cargo/reference/features.html)
 
 Concrete implications:
+
 - Use `std` (enables stdlib) not `no_std` (disables stdlib)
 - Use `serde` (enables serialization) not `no-serde`
 - Never use mutually exclusive features; split into separate crates instead
@@ -439,21 +439,20 @@ serde = ["dep:serde", "rg-core/serde", "rg-crossterm?/serde"]
 
 ## 8. Re-export / Facade Crate Pattern
 
-The facade crate is the main crate users `cargo add`. It re-exports everything from
-the sub-crates so users don't need to know about the internal structure.
+The facade crate is the main crate users `cargo add`. It re-exports everything from the sub-crates
+so users don't need to know about the internal structure.
 
 ### Ratatui's approach
 
-The `ratatui` crate depends on all sub-crates and re-exports their public APIs.
-Applications use `use ratatui::*`, while widget library authors depend on
-`ratatui-core` directly for stability.
+The `ratatui` crate depends on all sub-crates and re-exports their public APIs. Applications use
+`use ratatui::*`, while widget library authors depend on `ratatui-core` directly for stability.
 [Source](https://docs.rs/ratatui/latest/x86_64-pc-windows-msvc/ratatui/)
 
 ### Bevy's two-layer approach
 
-`bevy` -> `bevy_internal` -> individual crates. The internal crate does the aggregation
-and aliasing (`pub use bevy_ecs as ecs`). The outer `bevy` crate is a thin wrapper.
-This is overkill for a smaller project.
+`bevy` -> `bevy_internal` -> individual crates. The internal crate does the aggregation and aliasing
+(`pub use bevy_ecs as ecs`). The outer `bevy` crate is a thin wrapper. This is overkill for a
+smaller project.
 
 ### Concrete re-export pattern
 
@@ -508,36 +507,38 @@ rg = { version = "0.1", features = ["crossterm", "fov", "pathfinding"] }
 
 ### Strategies from production projects
 
-| Project | MSRV | Policy |
-|---------|------|--------|
-| ratatui | 1.88.0 | N-2 releases; uniform across all crates |
-| wgpu | 1.87-1.93 | Tiered: public crates at 1.87 (Firefox), internal at 1.93 |
-| bevy | ~latest-2 | Tracks recent stable |
+| Project | MSRV      | Policy                                                    |
+| ------- | --------- | --------------------------------------------------------- |
+| ratatui | 1.88.0    | N-2 releases; uniform across all crates                   |
+| wgpu    | 1.87-1.93 | Tiered: public crates at 1.87 (Firefox), internal at 1.93 |
+| bevy    | ~latest-2 | Tracks recent stable                                      |
 
 ### Recommendations
 
-- **Start with a uniform MSRV** across all workspace crates. Tiered MSRVs (like wgpu)
-  add complexity only justified by downstream consumers with hard constraints (Firefox).
+- **Start with a uniform MSRV** across all workspace crates. Tiered MSRVs (like wgpu) add complexity
+  only justified by downstream consumers with hard constraints (Firefox).
 
 - **Declare in workspace.package**:
+
   ```toml
   [workspace.package]
   rust-version = "1.85.0"
   ```
 
-- **Test MSRV in CI** using `cargo hack --rust-version` or an explicit matrix entry.
-  Ratatui's CI matrix includes both MSRV and stable.
+- **Test MSRV in CI** using `cargo hack --rust-version` or an explicit matrix entry. Ratatui's CI
+  matrix includes both MSRV and stable.
 
 - **Bump MSRV in minor releases**, not patches. Document the policy in README/CONTRIBUTING.
 
-- **N-2 policy**: support current stable minus 2. This balances access to new language
-  features against downstream compatibility.
+- **N-2 policy**: support current stable minus 2. This balances access to new language features
+  against downstream compatibility.
 
 ---
 
 ## 10. CI Configuration for Workspace Testing
 
-Ratatui's CI is the gold standard for workspace testing. [Source](https://github.com/ratatui/ratatui/blob/main/.github/workflows/ci.yml)
+Ratatui's CI is the gold standard for workspace testing.
+[Source](https://github.com/ratatui/ratatui/blob/main/.github/workflows/ci.yml)
 
 ### Job structure
 
@@ -585,7 +586,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        toolchain: ["1.85.0", "stable"]
+        toolchain: ['1.85.0', 'stable']
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -668,13 +669,13 @@ jobs:
 
 ### Key CI tools
 
-| Tool | Purpose |
-|------|---------|
-| `cargo-hack` | Test each feature individually (`--each-feature`) or in combinations (`--feature-powerset --depth 2`) |
-| `cargo-deny` | License compliance, security advisories, duplicate crate bans |
-| `cargo-machete` | Detect unused dependencies |
-| `cargo-llvm-cov` | Coverage reports |
-| `Swatinem/rust-cache` | Cache `target/` between CI runs |
+| Tool                  | Purpose                                                                                               |
+| --------------------- | ----------------------------------------------------------------------------------------------------- |
+| `cargo-hack`          | Test each feature individually (`--each-feature`) or in combinations (`--feature-powerset --depth 2`) |
+| `cargo-deny`          | License compliance, security advisories, duplicate crate bans                                         |
+| `cargo-machete`       | Detect unused dependencies                                                                            |
+| `cargo-llvm-cov`      | Coverage reports                                                                                      |
+| `Swatinem/rust-cache` | Cache `target/` between CI runs                                                                       |
 
 ### cargo-hack usage patterns
 
@@ -754,16 +755,26 @@ lto = true
 ## Sources
 
 - **Kept**:
-  - [ratatui ARCHITECTURE.md](https://github.com/ratatui/ratatui/blob/main/ARCHITECTURE.md) - definitive reference for the workspace split pattern
-  - [ratatui root Cargo.toml](https://github.com/ratatui/ratatui/blob/main/Cargo.toml) - workspace.dependencies, workspace.lints, workspace.package
-  - [ratatui-core Cargo.toml](https://github.com/ratatui/ratatui/blob/main/ratatui-core/Cargo.toml) - core crate feature design, no_std support
-  - [ratatui facade Cargo.toml](https://github.com/ratatui/ratatui/blob/main/ratatui/Cargo.toml) - re-export pattern, feature forwarding with `?` syntax
-  - [ratatui-crossterm Cargo.toml](https://github.com/ratatui/ratatui/blob/main/ratatui-crossterm/Cargo.toml) - backend crate with version selection features
-  - [ratatui CI workflow](https://github.com/ratatui/ratatui/blob/main/.github/workflows/ci.yml) - comprehensive CI with cargo-hack, cargo-deny, MSRV matrix
-  - [wgpu workspace (DeepWiki)](https://deepwiki.com/gfx-rs/wgpu/6.4-build-system-and-workspace) - tiered MSRV, feature flag layering, deny.toml
-  - [bevy crate organization (DeepWiki)](https://deepwiki.com/bevyengine/bevy/1.2-crate-organization) - two-layer facade, feature hierarchy
-  - [Cargo Features reference](https://doc.rust-lang.org/cargo/reference/features.html) - additive-only rule, dep: syntax, ? syntax
-  - [cargo-hack README](https://github.com/taiki-e/cargo-hack) - --each-feature, --feature-powerset, --depth, --rust-version
+  - [ratatui ARCHITECTURE.md](https://github.com/ratatui/ratatui/blob/main/ARCHITECTURE.md) -
+    definitive reference for the workspace split pattern
+  - [ratatui root Cargo.toml](https://github.com/ratatui/ratatui/blob/main/Cargo.toml) -
+    workspace.dependencies, workspace.lints, workspace.package
+  - [ratatui-core Cargo.toml](https://github.com/ratatui/ratatui/blob/main/ratatui-core/Cargo.toml) -
+    core crate feature design, no_std support
+  - [ratatui facade Cargo.toml](https://github.com/ratatui/ratatui/blob/main/ratatui/Cargo.toml) -
+    re-export pattern, feature forwarding with `?` syntax
+  - [ratatui-crossterm Cargo.toml](https://github.com/ratatui/ratatui/blob/main/ratatui-crossterm/Cargo.toml) -
+    backend crate with version selection features
+  - [ratatui CI workflow](https://github.com/ratatui/ratatui/blob/main/.github/workflows/ci.yml) -
+    comprehensive CI with cargo-hack, cargo-deny, MSRV matrix
+  - [wgpu workspace (DeepWiki)](https://deepwiki.com/gfx-rs/wgpu/6.4-build-system-and-workspace) -
+    tiered MSRV, feature flag layering, deny.toml
+  - [bevy crate organization (DeepWiki)](https://deepwiki.com/bevyengine/bevy/1.2-crate-organization) -
+    two-layer facade, feature hierarchy
+  - [Cargo Features reference](https://doc.rust-lang.org/cargo/reference/features.html) -
+    additive-only rule, dep: syntax, ? syntax
+  - [cargo-hack README](https://github.com/taiki-e/cargo-hack) - --each-feature, --feature-powerset,
+    --depth, --rust-version
 
 - **Dropped**:
   - forky workspace (mrchantey) - small/hobby project, no novel patterns beyond what ratatui covers
@@ -772,14 +783,14 @@ lto = true
 
 ## Gaps
 
-- **Publishing order**: When publishing to crates.io, workspace crates must be published
-  in dependency order (core first, facade last). Tools like `cargo-release` or
-  `cargo-workspaces` handle this but weren't researched in depth.
+- **Publishing order**: When publishing to crates.io, workspace crates must be published in
+  dependency order (core first, facade last). Tools like `cargo-release` or `cargo-workspaces`
+  handle this but weren't researched in depth.
 
-- **Independent vs synchronized versioning**: All three studied projects use synchronized
-  versions. Independent versioning (where core is 0.3 while widgets is 0.7) is viable
-  but adds coordination overhead. Worth revisiting once the API stabilizes.
+- **Independent vs synchronized versioning**: All three studied projects use synchronized versions.
+  Independent versioning (where core is 0.3 while widgets is 0.7) is viable but adds coordination
+  overhead. Worth revisiting once the API stabilizes.
 
-- **Benchmarking across crates**: How to structure `criterion` benchmarks that span
-  multiple workspace crates (e.g., benchmarking widget rendering through a backend).
-  Ratatui puts benchmarks in the facade crate.
+- **Benchmarking across crates**: How to structure `criterion` benchmarks that span multiple
+  workspace crates (e.g., benchmarking widget rendering through a backend). Ratatui puts benchmarks
+  in the facade crate.

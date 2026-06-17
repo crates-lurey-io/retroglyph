@@ -19,13 +19,20 @@
 
 ### What is sRGB?
 
-sRGB (standard Red Green Blue) is a non-linear color space designed in 1996 by HP and Microsoft. It encodes brightness values using a transfer function (gamma curve) that allocates more precision to dark values, matching human perception. When you see `rgb(128, 128, 128)` in CSS or a pixel value of 128 in a PNG, that's an sRGB value.
+sRGB (standard Red Green Blue) is a non-linear color space designed in 1996 by HP and Microsoft. It
+encodes brightness values using a transfer function (gamma curve) that allocates more precision to
+dark values, matching human perception. When you see `rgb(128, 128, 128)` in CSS or a pixel value of
+128 in a PNG, that's an sRGB value.
 
-sRGB is the default color space for the web, image files (PNG, JPEG), and terminal emulators. An sRGB value of 128 is **not** 50% of the physical light output; it's roughly 21.4% of linear brightness.
+sRGB is the default color space for the web, image files (PNG, JPEG), and terminal emulators. An
+sRGB value of 128 is **not** 50% of the physical light output; it's roughly 21.4% of linear
+brightness.
 
 ### What is Linear RGB?
 
-Linear RGB maps values proportionally to physical light intensity. A value of 0.5 means exactly half the photons of 1.0. Mathematical operations (addition, multiplication, interpolation) produce physically correct results only in linear space.
+Linear RGB maps values proportionally to physical light intensity. A value of 0.5 means exactly half
+the photons of 1.0. Mathematical operations (addition, multiplication, interpolation) produce
+physically correct results only in linear space.
 
 ### The Transfer Functions
 
@@ -51,7 +58,10 @@ fn linear_to_srgb(l: f64) -> f64 {
 }
 ```
 
-The threshold `0.04045` (and its corresponding linear threshold `0.0031308`) defines where the curve switches from a linear segment (for near-black values) to the power curve. The WCAG spec historically used `0.03928` instead, but `0.04045` is the IEC standard value. For 8-bit color values the difference is negligible.
+The threshold `0.04045` (and its corresponding linear threshold `0.0031308`) defines where the curve
+switches from a linear segment (for near-black values) to the power curve. The WCAG spec
+historically used `0.03928` instead, but `0.04045` is the IEC standard value. For 8-bit color values
+the difference is negligible.
 
 A common approximation uses a simple gamma of 2.2:
 
@@ -60,22 +70,30 @@ fn srgb_to_linear_approx(s: f64) -> f64 { s.powf(2.2) }
 fn linear_to_srgb_approx(l: f64) -> f64 { l.powf(1.0 / 2.2) }
 ```
 
-This approximation is within ~0.4% of the true sRGB curve and can be acceptable for terminal rendering where precision demands are lower than in professional color management.
+This approximation is within ~0.4% of the true sRGB curve and can be acceptable for terminal
+rendering where precision demands are lower than in professional color management.
 
 ### When to Convert
 
 For a terminal rendering library, the sRGB/linear distinction matters in two operations:
 
-- **Color blending/interpolation**: Blending two sRGB values directly produces visually incorrect results. The midpoint of sRGB(0, 0, 0) and sRGB(255, 255, 255) is sRGB(128, 128, 128), but that's perceptually too dark. The correct midpoint is sRGB(188, 188, 188).
+- **Color blending/interpolation**: Blending two sRGB values directly produces visually incorrect
+  results. The midpoint of sRGB(0, 0, 0) and sRGB(255, 255, 255) is sRGB(128, 128, 128), but that's
+  perceptually too dark. The correct midpoint is sRGB(188, 188, 188).
 - **Luminance calculations**: WCAG contrast ratios require converting to linear RGB first.
 
-For a cell-based terminal renderer that primarily sets foreground/background colors without sub-pixel blending, you can often stay entirely in sRGB. The conversion becomes important if you implement color interpolation, gradients, or alpha compositing.
+For a cell-based terminal renderer that primarily sets foreground/background colors without
+sub-pixel blending, you can often stay entirely in sRGB. The conversion becomes important if you
+implement color interpolation, gradients, or alpha compositing.
 
 ### Precision Warning
 
-Converting 8-bit sRGB to 8-bit linear RGB loses significant precision in dark values. The value 13 in sRGB maps to linear ~1, and values 1-12 all map to linear 0. If you need to work in linear space, use at least `f32` or `u16` for intermediate values.
+Converting 8-bit sRGB to 8-bit linear RGB loses significant precision in dark values. The value 13
+in sRGB maps to linear ~1, and values 1-12 all map to linear 0. If you need to work in linear space,
+use at least `f32` or `u16` for intermediate values.
 
 **Sources:**
+
 - [sRGB Wikipedia / IEC 61966-2-1](https://en.wikipedia.org/wiki/SRGB)
 - [Red Blob Games: sRGB WebGL](https://www.redblobgames.com/x/2445-srgb-webgl/)
 - [palette crate: Linear and Non-linear RGB](https://docs.rs/palette/latest/palette/rgb/index.html)
@@ -86,17 +104,21 @@ Converting 8-bit sRGB to 8-bit linear RGB loses significant precision in dark va
 
 ### The Problem
 
-Most software performs alpha blending directly on sRGB values. This is wrong, but widespread. The standard "over" compositing formula is:
+Most software performs alpha blending directly on sRGB values. This is wrong, but widespread. The
+standard "over" compositing formula is:
 
 ```
 result = src_color * src_alpha + dst_color * (1 - src_alpha)
 ```
 
-When `src_color` and `dst_color` are sRGB-encoded, the linear interpolation happens in non-linear space, producing results that don't match physical light mixing.
+When `src_color` and `dst_color` are sRGB-encoded, the linear interpolation happens in non-linear
+space, producing results that don't match physical light mixing.
 
 ### Visual Example
 
-A checkerboard alternating between sRGB values 64 and 192 appears to average to sRGB ~146, not 128. This is because the physical light from 192 contributes disproportionately more than 64. The correct average requires converting to linear, averaging, then converting back:
+A checkerboard alternating between sRGB values 64 and 192 appears to average to sRGB ~146, not 128.
+This is because the physical light from 192 contributes disproportionately more than 64. The correct
+average requires converting to linear, averaging, then converting back:
 
 ```rust
 fn blend_correct(a_srgb: u8, b_srgb: u8) -> u8 {
@@ -128,11 +150,13 @@ fn alpha_blend(
 }
 ```
 
-Alpha values themselves are always linear (50% alpha means 50% coverage). Only the color channels need the sRGB conversion.
+Alpha values themselves are always linear (50% alpha means 50% coverage). Only the color channels
+need the sRGB conversion.
 
 ### Pre-multiplied Alpha
 
-In pre-multiplied alpha, color channels are stored as `color * alpha`. This makes compositing simpler and avoids artifacts at transparent edges:
+In pre-multiplied alpha, color channels are stored as `color * alpha`. This makes compositing
+simpler and avoids artifacts at transparent edges:
 
 ```rust
 // Pre-multiplied alpha compositing (in linear space):
@@ -143,9 +167,15 @@ Pre-multiplied alpha is standard in GPU rendering but rarely used in terminal co
 
 ### Practical Decision for Terminal Libraries
 
-Terminal emulators themselves perform no alpha blending; they receive final RGB values via escape sequences. If your library supports layered cells or translucent overlays, you must composite them before sending to the terminal. Whether to blend in linear or sRGB space depends on your quality requirements. Blending in sRGB is simpler and still common in terminal applications. For a roguelike or TUI, the visual difference is minor. For a pixel-art renderer or color-critical tool, linear blending is worth the extra computation.
+Terminal emulators themselves perform no alpha blending; they receive final RGB values via escape
+sequences. If your library supports layered cells or translucent overlays, you must composite them
+before sending to the terminal. Whether to blend in linear or sRGB space depends on your quality
+requirements. Blending in sRGB is simpler and still common in terminal applications. For a roguelike
+or TUI, the visual difference is minor. For a pixel-art renderer or color-critical tool, linear
+blending is worth the extra computation.
 
 **Sources:**
+
 - [Fractolog: Color Space Correctness in Alpha Blending](https://www.fractolog.com/2024/07/color-space-correctness-in-alpha-blending/)
 - [The Hacks of Life: sRGB, Pre-Multiplied Alpha, and Compression](http://hacksoflife.blogspot.com/2022/06/srgb-pre-multiplied-alpha-and.html)
 - [RenderWonk: Adventures with Gamma-Correct Rendering](https://renderwonk.com/blog/index.php/archive/adventures-with-gamma-correct-rendering/)
@@ -158,30 +188,34 @@ Three generations of terminal color coexist. Every modern terminal emulator supp
 
 ### ANSI 16 Colors (SGR codes 30-37, 40-47, 90-97, 100-107)
 
-The original VT100-era model. 8 base colors + 8 bright variants, accessed through SGR (Select Graphic Rendition) codes:
+The original VT100-era model. 8 base colors + 8 bright variants, accessed through SGR (Select
+Graphic Rendition) codes:
 
-| Index | Name         | FG Code | BG Code | Typical sRGB Value |
-|-------|-------------|---------|---------|-------------------|
-| 0     | Black       | 30      | 40      | #000000           |
-| 1     | Red         | 31      | 41      | #AA0000           |
-| 2     | Green       | 32      | 42      | #00AA00           |
-| 3     | Yellow      | 33      | 43      | #AA5500           |
-| 4     | Blue        | 34      | 44      | #0000AA           |
-| 5     | Magenta     | 35      | 45      | #AA00AA           |
-| 6     | Cyan        | 36      | 46      | #00AAAA           |
-| 7     | White       | 37      | 47      | #AAAAAA           |
-| 8     | Bright Black (Gray) | 90 | 100  | #555555           |
-| 9     | Bright Red  | 91      | 101     | #FF5555           |
-| 10    | Bright Green| 92      | 102     | #55FF55           |
-| 11    | Bright Yellow| 93     | 103     | #FFFF55           |
-| 12    | Bright Blue | 94      | 104     | #5555FF           |
-| 13    | Bright Magenta| 95   | 105     | #FF55FF           |
-| 14    | Bright Cyan | 96      | 106     | #55FFFF           |
-| 15    | Bright White| 97      | 107     | #FFFFFF           |
+| Index | Name                | FG Code | BG Code | Typical sRGB Value |
+| ----- | ------------------- | ------- | ------- | ------------------ |
+| 0     | Black               | 30      | 40      | #000000            |
+| 1     | Red                 | 31      | 41      | #AA0000            |
+| 2     | Green               | 32      | 42      | #00AA00            |
+| 3     | Yellow              | 33      | 43      | #AA5500            |
+| 4     | Blue                | 34      | 44      | #0000AA            |
+| 5     | Magenta             | 35      | 45      | #AA00AA            |
+| 6     | Cyan                | 36      | 46      | #00AAAA            |
+| 7     | White               | 37      | 47      | #AAAAAA            |
+| 8     | Bright Black (Gray) | 90      | 100     | #555555            |
+| 9     | Bright Red          | 91      | 101     | #FF5555            |
+| 10    | Bright Green        | 92      | 102     | #55FF55            |
+| 11    | Bright Yellow       | 93      | 103     | #FFFF55            |
+| 12    | Bright Blue         | 94      | 104     | #5555FF            |
+| 13    | Bright Magenta      | 95      | 105     | #FF55FF            |
+| 14    | Bright Cyan         | 96      | 106     | #55FFFF            |
+| 15    | Bright White        | 97      | 107     | #FFFFFF            |
 
-The actual RGB values are **user-configurable** in every modern terminal. The values above are xterm defaults. Many terminals ship with different schemes (e.g., Solarized, Dracula, Gruvbox remap these indices).
+The actual RGB values are **user-configurable** in every modern terminal. The values above are xterm
+defaults. Many terminals ship with different schemes (e.g., Solarized, Dracula, Gruvbox remap these
+indices).
 
 Escape sequence format:
+
 ```
 ESC[31m        # Set foreground to Red (index 1)
 ESC[42m        # Set background to Green (index 2)
@@ -193,13 +227,14 @@ ESC[0m         # Reset all attributes
 
 The xterm 256-color extension, structured as three regions:
 
-| Range   | Description                | Count |
-|---------|---------------------------|-------|
-| 0-15    | Standard ANSI 16 colors   | 16    |
-| 16-231  | 6x6x6 RGB color cube      | 216   |
-| 232-255 | Grayscale ramp             | 24    |
+| Range   | Description             | Count |
+| ------- | ----------------------- | ----- |
+| 0-15    | Standard ANSI 16 colors | 16    |
+| 16-231  | 6x6x6 RGB color cube    | 216   |
+| 232-255 | Grayscale ramp          | 24    |
 
 **Color cube formula** (indices 16-231):
+
 ```rust
 /// Convert RGB (each 0-5) to 256-color index
 fn rgb_to_cube_index(r: u8, g: u8, b: u8) -> u8 {
@@ -220,6 +255,7 @@ fn cube_index_to_rgb(index: u8) -> (u8, u8, u8) {
 ```
 
 **Grayscale ramp** (indices 232-255):
+
 ```rust
 /// 24 shades of gray, from dark (232) to light (255)
 fn gray_index_to_rgb(index: u8) -> u8 {
@@ -228,9 +264,11 @@ fn gray_index_to_rgb(index: u8) -> u8 {
 }
 ```
 
-Note the grayscale ramp does not include pure black (0) or pure white (255); those are at indices 0/16 and 15/231.
+Note the grayscale ramp does not include pure black (0) or pure white (255); those are at indices
+0/16 and 15/231.
 
 Escape sequence format:
+
 ```
 ESC[38;5;196m   # Foreground: index 196 (bright red from cube)
 ESC[48;5;232m   # Background: index 232 (near-black gray)
@@ -238,17 +276,21 @@ ESC[48;5;232m   # Background: index 232 (near-black gray)
 
 ### 24-bit Truecolor (SGR 38;2;r;g;b / 48;2;r;g;b)
 
-Direct RGB specification, 16.7 million colors. Supported by most modern terminals (iTerm2, Alacritty, Kitty, WezTerm, Windows Terminal, GNOME Terminal, Ghostty).
+Direct RGB specification, 16.7 million colors. Supported by most modern terminals (iTerm2,
+Alacritty, Kitty, WezTerm, Windows Terminal, GNOME Terminal, Ghostty).
 
 Escape sequence format:
+
 ```
 ESC[38;2;255;128;0m    # Foreground: orange
 ESC[48;2;0;0;64m       # Background: dark navy
 ```
 
-There's also a colon-separated variant (`38:2::r:g:b:m`) from the ITU T.416 standard, but semicolons are more widely supported.
+There's also a colon-separated variant (`38:2::r:g:b:m`) from the ITU T.416 standard, but semicolons
+are more widely supported.
 
-**Detection**: Check `$COLORTERM` for `truecolor` or `24bit`. The `TERM` variable is unreliable for this purpose.
+**Detection**: Check `$COLORTERM` for `truecolor` or `24bit`. The `TERM` variable is unreliable for
+this purpose.
 
 ```rust
 fn supports_truecolor() -> bool {
@@ -259,6 +301,7 @@ fn supports_truecolor() -> bool {
 ```
 
 **Sources:**
+
 - [Terminal Color Fundamentals | Terminfo.dev](https://terminfo.dev/fundamentals/color-fundamentals)
 - [24-bit truecolor | Terminfo.dev](https://terminfo.dev/extensions/24-bit-truecolor)
 - [XTerm Control Sequences](https://invisible-island.net/xterm/ctlseqs/ctlseqs.pdf)
@@ -269,41 +312,49 @@ fn supports_truecolor() -> bool {
 
 ### X11 Colors (rgb.txt)
 
-The X11 color name database originated in 1985 with the X Window System. It lives in `/usr/share/X11/rgb.txt` (or is compiled into the X server). It defines ~750 entries (including numbered variants like `"Gray0"` through `"Gray100"` and `"Blue1"` through `"Blue4"`).
+The X11 color name database originated in 1985 with the X Window System. It lives in
+`/usr/share/X11/rgb.txt` (or is compiled into the X server). It defines ~750 entries (including
+numbered variants like `"Gray0"` through `"Gray100"` and `"Blue1"` through `"Blue4"`).
 
 Key characteristics:
+
 - Names are case-insensitive and space-insensitive (`"DarkGreen"` = `"dark green"`)
 - Many colors have numbered brightness variants (1=100%, 2=93.2%, 3=80.4%, 4=54.8%)
 - About 140 unique base color names
 
 ### CSS/W3C Named Colors
 
-CSS adopted the X11 list with modifications. The current CSS Color Level 4 spec defines 148 named colors (147 + `rebeccapurple`). Notable clashes with X11:
+CSS adopted the X11 list with modifications. The current CSS Color Level 4 spec defines 148 named
+colors (147 + `rebeccapurple`). Notable clashes with X11:
 
-| Name    | X11 Value | CSS/W3C Value | Note |
-|---------|-----------|---------------|------|
-| Gray    | #BEBEBE (75%) | #808080 (50%) | Major difference |
-| Green   | #00FF00   | #008000       | X11 green = CSS lime |
-| Maroon  | #B03060   | #800000       | Different hue entirely |
-| Purple  | #A020F0   | #800080       | X11 is violet, CSS is deep purple |
+| Name   | X11 Value     | CSS/W3C Value | Note                              |
+| ------ | ------------- | ------------- | --------------------------------- |
+| Gray   | #BEBEBE (75%) | #808080 (50%) | Major difference                  |
+| Green  | #00FF00       | #008000       | X11 green = CSS lime              |
+| Maroon | #B03060       | #800000       | Different hue entirely            |
+| Purple | #A020F0       | #800080       | X11 is violet, CSS is deep purple |
 
-The 16 original HTML colors (black, silver, gray, white, maroon, red, purple, fuchsia, green, lime, olive, yellow, navy, blue, teal, aqua) date back to HTML 3.2 / VGA.
+The 16 original HTML colors (black, silver, gray, white, maroon, red, purple, fuchsia, green, lime,
+olive, yellow, navy, blue, teal, aqua) date back to HTML 3.2 / VGA.
 
 ### BearLibTerminal Named Colors
 
 BearLibTerminal's `color_from_name()` uses a different scheme, specified as `"[brightness] hue"`:
 
-**Base hues**: grey/gray, red, flame, orange, amber, yellow, lime, chartreuse, green, sea, turquoise, cyan, sky, azure, blue, han, violet, purple, fuchsia, magenta, pink, crimson, transparent
+**Base hues**: grey/gray, red, flame, orange, amber, yellow, lime, chartreuse, green, sea,
+turquoise, cyan, sky, azure, blue, han, violet, purple, fuchsia, magenta, pink, crimson, transparent
 
 **Brightness modifiers**: lightest, lighter, light, dark, darker, darkest
 
 **Format variants**:
+
 - By name: `"red"`, `"light green"`, `"darker cyan"`
 - Hex: `"#RRGGBB"` or `"#AARRGGBB"`
 - Decimal: `"R,G,B"` or `"A,R,G,B"`
 - Custom palette: add names via `terminal_set("palette.octarine = #50FF25")`
 
-This is useful as a design pattern: rather than trying to support hundreds of X11 names, a small set of hue names with brightness modifiers covers most use cases and is easier to implement.
+This is useful as a design pattern: rather than trying to support hundreds of X11 names, a small set
+of hue names with brightness modifiers covers most use cases and is easier to implement.
 
 ### Recommended Approach for a Library
 
@@ -332,6 +383,7 @@ fn color_from_name(name: &str) -> Option<(u8, u8, u8)> {
 ```
 
 **Sources:**
+
 - [X11 color names - Wikipedia](https://en.wikipedia.org/wiki/X11_color_names)
 - [CSS `<named-color>` - MDN](https://developer.mozilla.org/en-US/docs/Web/CSS/named-color)
 - [BearLibTerminal Reference: color_from_name](http://foo.wyrd.name/en:bearlibterminal:reference#color_from_name)
@@ -340,7 +392,8 @@ fn color_from_name(name: &str) -> Option<(u8, u8, u8)> {
 
 ## 5. RGB to ANSI 256 Conversion
 
-When a terminal only supports 256 colors, truecolor RGB values must be mapped to the nearest palette entry. There are several approaches with different accuracy/performance tradeoffs.
+When a terminal only supports 256 colors, truecolor RGB values must be mapped to the nearest palette
+entry. There are several approaches with different accuracy/performance tradeoffs.
 
 ### Simple Euclidean Distance (in sRGB space)
 
@@ -413,7 +466,8 @@ fn color_dist(r1: u8, g1: u8, b1: u8, r2: u8, g2: u8, b2: u8) -> i32 {
 
 ### Perceptually-Weighted Distance
 
-Human eyes are most sensitive to green, then red, then blue. Weighted Euclidean distance improves results:
+Human eyes are most sensitive to green, then red, then blue. Weighted Euclidean distance improves
+results:
 
 ```rust
 fn weighted_color_dist(r1: u8, g1: u8, b1: u8, r2: u8, g2: u8, b2: u8) -> i32 {
@@ -427,17 +481,21 @@ fn weighted_color_dist(r1: u8, g1: u8, b1: u8, r2: u8, g2: u8, b2: u8) -> i32 {
 
 ### CIEDE2000 (Most Accurate)
 
-The `rgbto256` tool by taylordotfish converts via the CIEDE2000 color difference formula in CIELAB space. This is the most perceptually accurate but significantly more expensive. For a terminal library, this is overkill unless color fidelity is critical.
+The `rgbto256` tool by taylordotfish converts via the CIEDE2000 color difference formula in CIELAB
+space. This is the most perceptually accurate but significantly more expensive. For a terminal
+library, this is overkill unless color fidelity is critical.
 
 ### The ansi_colours Approach
 
-The `ansi_colours` crate (by mina86) balances accuracy and performance. It avoids brute-force iteration over all 256 entries by:
+The `ansi_colours` crate (by mina86) balances accuracy and performance. It avoids brute-force
+iteration over all 256 entries by:
 
 1. Computing the nearest cube entry analytically (not by iterating all 216 cube colors)
 2. Computing the nearest grayscale entry analytically
 3. Comparing the two candidates using a perceptually-weighted metric
 
-This is the approach used by the `rgb2ansi256` crate (a pure-Rust port of `ansi_colours`'s C implementation), which also supports `const fn` for compile-time conversion.
+This is the approach used by the `rgb2ansi256` crate (a pure-Rust port of `ansi_colours`'s C
+implementation), which also supports `const fn` for compile-time conversion.
 
 ### Reverse Conversion (256 to RGB)
 
@@ -465,6 +523,7 @@ fn ansi256_to_rgb(index: u8) -> (u8, u8, u8) {
 ```
 
 **Sources:**
+
 - [ansi_colours crate](https://docs.rs/ansi_colours/latest/ansi_colours/)
 - [rgb2ansi256 crate](https://github.com/rhysd/rgb2ansi256)
 - [rgbto256 (CIEDE2000 approach)](https://github.com/taylordotfish/rgbto256)
@@ -473,7 +532,8 @@ fn ansi256_to_rgb(index: u8) -> (u8, u8, u8) {
 
 ## 6. WCAG Contrast Ratio Calculation
 
-The Web Content Accessibility Guidelines define contrast ratio in terms of relative luminance, which requires converting sRGB values to linear light first.
+The Web Content Accessibility Guidelines define contrast ratio in terms of relative luminance, which
+requires converting sRGB values to linear light first.
 
 ### Step 1: Relative Luminance
 
@@ -498,7 +558,8 @@ fn srgb_channel_to_linear(c: f64) -> f64 {
 }
 ```
 
-The coefficients `0.2126, 0.7152, 0.0722` are the ITU-R BT.709 luminance weights (the same standard sRGB is based on). They reflect that green contributes most to perceived brightness.
+The coefficients `0.2126, 0.7152, 0.0722` are the ITU-R BT.709 luminance weights (the same standard
+sRGB is based on). They reflect that green contributes most to perceived brightness.
 
 ### Step 2: Contrast Ratio
 
@@ -523,12 +584,12 @@ The `0.05` offset accounts for ambient light contribution (from IEC-4WD).
 
 ### WCAG Thresholds
 
-| Level | Text Size | Minimum Ratio |
-|-------|-----------|---------------|
-| AA    | Normal text (< 18pt, < 14pt bold) | 4.5:1 |
-| AA    | Large text (>= 18pt, >= 14pt bold) | 3:1 |
-| AAA   | Normal text | 7:1 |
-| AAA   | Large text | 4.5:1 |
+| Level | Text Size                          | Minimum Ratio |
+| ----- | ---------------------------------- | ------------- |
+| AA    | Normal text (< 18pt, < 14pt bold)  | 4.5:1         |
+| AA    | Large text (>= 18pt, >= 14pt bold) | 3:1           |
+| AAA   | Normal text                        | 7:1           |
+| AAA   | Large text                         | 4.5:1         |
 
 ### Practical Use: Auto-Selecting Foreground Color
 
@@ -547,6 +608,7 @@ fn best_foreground(bg_r: u8, bg_g: u8, bg_b: u8) -> (u8, u8, u8) {
 ```
 
 **Sources:**
+
 - [WCAG 2.x: Relative Luminance](https://www.w3.org/WAI/GL/wiki/Relative_luminance)
 - [WCAG Technique G17: 7:1 Contrast Ratio](https://www.w3.org/WAI/WCAG22/Techniques/general/G17)
 - [Understanding SC 1.4.6: Contrast (Enhanced)](https://w3c.github.io/wcag/understanding/contrast-enhanced)
@@ -586,6 +648,7 @@ pub enum Color {
 ```
 
 Key design decisions:
+
 - Named variants for the 16 ANSI colors provide ergonomic usage
 - `Rgb(u8, u8, u8)` for truecolor
 - `Indexed(u8)` for the 256-color palette
@@ -596,7 +659,8 @@ Key design decisions:
 
 ### Crossterm's Color Enum
 
-Crossterm uses a different naming convention (matching the terminal's perspective where base colors are "dark" and bright variants are the default):
+Crossterm uses a different naming convention (matching the terminal's perspective where base colors
+are "dark" and bright variants are the default):
 
 ```rust
 pub enum Color {
@@ -622,11 +686,15 @@ pub enum Color {
 }
 ```
 
-The naming inversion between ratatui and crossterm (ratatui's `Red` = crossterm's `DarkRed`) is a common source of confusion. Ratatui provides `From`/`Into` conversion impls.
+The naming inversion between ratatui and crossterm (ratatui's `Red` = crossterm's `DarkRed`) is a
+common source of confusion. Ratatui provides `From`/`Into` conversion impls.
 
 ### BearLibTerminal's Color Representation
 
-BearLibTerminal uses a raw 32-bit packed format: `color_t` is `u32` in BGRA/0xAARRGGBB layout. It provides alpha because BearLibTerminal renders via OpenGL, not terminal escape sequences. Colors are constructed via:
+BearLibTerminal uses a raw 32-bit packed format: `color_t` is `u32` in BGRA/0xAARRGGBB layout. It
+provides alpha because BearLibTerminal renders via OpenGL, not terminal escape sequences. Colors are
+constructed via:
+
 - `color_from_argb(a, r, g, b)` for components
 - `color_from_name("red")` for named colors
 
@@ -707,6 +775,7 @@ impl Color {
 ```
 
 Design principles:
+
 - Separate `AnsiColor` enum with `repr(u8)` for zero-cost conversion to index
 - `Default` rather than `Reset` (describes what it is, not what escape to emit)
 - `to_rgb()` returns `Option` because `Default` has no fixed RGB value
@@ -714,6 +783,7 @@ Design principles:
 - `Rgba` as a separate type for internal compositing, not in the public `Color` enum
 
 **Sources:**
+
 - [ratatui Color enum source](https://github.com/ratatui/ratatui/blob/main/ratatui-core/src/style/color.rs)
 - [crossterm Color enum](https://docs.rs/crossterm/latest/crossterm/style/enum.Color.html)
 - [BearLibTerminal reference](http://foo.wyrd.name/en:bearlibterminal:reference#color)
@@ -722,7 +792,8 @@ Design principles:
 
 ## 8. HSL/HSV Conversion
 
-HSL (Hue, Saturation, Lightness) and HSV (Hue, Saturation, Value) are cylindrical representations of RGB useful for color manipulation: adjusting brightness, generating harmonies, desaturation.
+HSL (Hue, Saturation, Lightness) and HSV (Hue, Saturation, Value) are cylindrical representations of
+RGB useful for color manipulation: adjusting brightness, generating harmonies, desaturation.
 
 ### RGB to HSL
 
@@ -842,10 +913,15 @@ fn rgb_to_hsv(r: u8, g: u8, b: u8) -> (f64, f64, f64) {
 
 ### HSL vs HSV: When to Use Which
 
-- **HSL** is better for picking lighter/darker variants of a color. `L=0` is always black, `L=1` is always white, `L=0.5` is the "pure" color. The `lighten` and `darken` operations in CSS work in HSL.
-- **HSV** is better for color pickers and understanding "how much color vs. how much white." `V=0` is always black, `S=0` is always white/gray.
-- For **color harmony** operations (complementary, analogous), both work equally well since they share the same hue angle.
-- The `palette` crate uses `Hsl` and `Hsv` types in its own color space system. `colorsys` also provides `Hsl`.
+- **HSL** is better for picking lighter/darker variants of a color. `L=0` is always black, `L=1` is
+  always white, `L=0.5` is the "pure" color. The `lighten` and `darken` operations in CSS work in
+  HSL.
+- **HSV** is better for color pickers and understanding "how much color vs. how much white." `V=0`
+  is always black, `S=0` is always white/gray.
+- For **color harmony** operations (complementary, analogous), both work equally well since they
+  share the same hue angle.
+- The `palette` crate uses `Hsl` and `Hsv` types in its own color space system. `colorsys` also
+  provides `Hsl`.
 
 ### Color Manipulation Examples
 
@@ -878,6 +954,7 @@ fn invert(r: u8, g: u8, b: u8) -> (u8, u8, u8) {
 ```
 
 **Sources:**
+
 - [HSL and HSV - Wikipedia](https://en.wikipedia.org/wiki/HSL_and_HSV)
 - [Color conversion algorithms (JavaScript reference)](https://gist.github.com/mjijackson/5311256)
 
@@ -885,11 +962,13 @@ fn invert(r: u8, g: u8, b: u8) -> (u8, u8, u8) {
 
 ## 9. Palette Generation and Color Harmony
 
-Color harmony rules generate aesthetically pleasing color combinations by rotating around the HSL/HSV hue wheel.
+Color harmony rules generate aesthetically pleasing color combinations by rotating around the
+HSL/HSV hue wheel.
 
 ### Harmony Types
 
-All formulas below operate on hue (0-360 degrees) and preserve the original saturation and lightness:
+All formulas below operate on hue (0-360 degrees) and preserve the original saturation and
+lightness:
 
 ```rust
 /// Generate harmony colors from a base color
@@ -929,7 +1008,8 @@ fn tetradic(h: f64) -> Vec<f64> {
 
 ### Generating Shade Ramps
 
-For terminal UIs, generating a shade ramp from a single base color is useful for borders, highlights, and backgrounds:
+For terminal UIs, generating a shade ramp from a single base color is useful for borders,
+highlights, and backgrounds:
 
 ```rust
 /// Generate N shades from dark to light for a given hue/saturation
@@ -951,7 +1031,9 @@ fn monochromatic(r: u8, g: u8, b: u8, steps: usize) -> Vec<(u8, u8, u8)> {
 
 ### Perceptually Uniform Gradients
 
-For more visually even gradients, interpolate in CIELAB or OKLCH space rather than HSL. The `palette` crate supports this via its `Lab` and `Oklch` types. HSL gradients can produce unexpected bright spots (e.g., the cyan/yellow artifacts when interpolating between red and green).
+For more visually even gradients, interpolate in CIELAB or OKLCH space rather than HSL. The
+`palette` crate supports this via its `Lab` and `Oklch` types. HSL gradients can produce unexpected
+bright spots (e.g., the cyan/yellow artifacts when interpolating between red and green).
 
 ### Practical: Terminal Theme Generation
 
@@ -983,7 +1065,8 @@ fn generate_theme(accent_r: u8, accent_g: u8, accent_b: u8) -> Theme {
 
 ### palette (comprehensive, type-safe)
 
-The `palette` crate is the most complete color library in the Rust ecosystem. It encodes color spaces as type parameters, making it impossible to accidentally blend sRGB values in linear space.
+The `palette` crate is the most complete color library in the Rust ecosystem. It encodes color
+spaces as type parameters, making it impossible to accidentally blend sRGB values in linear space.
 
 ```rust
 use palette::{Srgb, LinSrgb, IntoColor, Hsl};
@@ -1008,8 +1091,8 @@ let hsl: Hsl = srgb.into_color();
 
 Key types: `Srgb`, `Srgba`, `LinSrgb`, `LinSrgba`, `Hsl`, `Hsv`, `Lab`, `Oklch`, `Lch`
 
-Pros: Correct by construction, extensive color space support, no_std compatible.
-Cons: Complex type system, steep learning curve, heavy dependency for simple use cases.
+Pros: Correct by construction, extensive color space support, no_std compatible. Cons: Complex type
+system, steep learning curve, heavy dependency for simple use cases.
 
 ### ansi_colours (256-color conversion)
 
@@ -1022,8 +1105,8 @@ let idx = ansi256_from_rgb((100u8, 200, 150));
 let (r, g, b) = rgb_from_ansi256(idx);
 ```
 
-Pros: Fast, accurate, interop with `rgb`, `ansi_term`, `termcolor` crates.
-Cons: Only does 256-color conversion; no other color operations.
+Pros: Fast, accurate, interop with `rgb`, `ansi_term`, `termcolor` crates. Cons: Only does 256-color
+conversion; no other color operations.
 
 ### rgb2ansi256 (compile-time 256-color conversion)
 
@@ -1036,8 +1119,8 @@ use rgb2ansi256::rgb_to_ansi256;
 const SPRING_GREEN: u8 = rgb_to_ansi256(0, 255, 175);
 ```
 
-Pros: Zero dependencies, const fn, no unsafe code.
-Cons: LGPL-3.0 license (inherited from ansi_colours C library).
+Pros: Zero dependencies, const fn, no unsafe code. Cons: LGPL-3.0 license (inherited from
+ansi_colours C library).
 
 ### colorsys (HSL/RGB/CMYK conversion)
 
@@ -1057,25 +1140,28 @@ let hex = rgb.to_hex_string(); // "#f59835"
 let css = rgb.to_css_string(); // "rgb(245,152,53)"
 ```
 
-Pros: Simple API, `no_std` support, CSS string parsing, includes Ansi256 type.
-Cons: Uses `f64` throughout (heavier than needed for terminal colors).
+Pros: Simple API, `no_std` support, CSS string parsing, includes Ansi256 type. Cons: Uses `f64`
+throughout (heavier than needed for terminal colors).
 
 ### Summary Table
 
-| Crate | Purpose | Size | no_std | Key Feature |
-|-------|---------|------|--------|-------------|
-| `palette` | Full color science | Large | Yes | Type-safe color spaces |
-| `ansi_colours` | RGB <-> 256 | Tiny | Yes | Fast, accurate matching |
-| `rgb2ansi256` | RGB -> 256 | Tiny | Yes | `const fn` support |
-| `colorsys` | Conversion + manipulation | Small | Yes | HSL lighten/darken/saturate |
+| Crate          | Purpose                   | Size  | no_std | Key Feature                 |
+| -------------- | ------------------------- | ----- | ------ | --------------------------- |
+| `palette`      | Full color science        | Large | Yes    | Type-safe color spaces      |
+| `ansi_colours` | RGB <-> 256               | Tiny  | Yes    | Fast, accurate matching     |
+| `rgb2ansi256`  | RGB -> 256                | Tiny  | Yes    | `const fn` support          |
+| `colorsys`     | Conversion + manipulation | Small | Yes    | HSL lighten/darken/saturate |
 
 ### Recommendation
 
 For a terminal/grid rendering library that wants minimal dependencies:
 
-1. **Implement core color math inline** (sRGB<->linear, HSL conversion, contrast ratio). The formulas are short and stable.
-2. **Use `ansi_colours` or `rgb2ansi256`** for 256-color fallback. The algorithm is tricky to get right and these crates are tiny.
-3. **Make `palette` optional** behind a feature flag for users who want perceptually-uniform interpolation, CIELAB, OKLCH, or other advanced features.
+1. **Implement core color math inline** (sRGB<->linear, HSL conversion, contrast ratio). The
+   formulas are short and stable.
+2. **Use `ansi_colours` or `rgb2ansi256`** for 256-color fallback. The algorithm is tricky to get
+   right and these crates are tiny.
+3. **Make `palette` optional** behind a feature flag for users who want perceptually-uniform
+   interpolation, CIELAB, OKLCH, or other advanced features.
 
 ```toml
 [dependencies]
@@ -1153,26 +1239,46 @@ Reset:          ESC[0m
 ## Sources
 
 ### Kept
-- [Red Blob Games: sRGB WebGL](https://www.redblobgames.com/x/2445-srgb-webgl/) - Clear explanation of sRGB/linear with precision analysis
-- [Fractolog: Color Space Correctness in Alpha Blending](https://www.fractolog.com/2024/07/color-space-correctness-in-alpha-blending/) - Empirical testing of alpha blending in different color spaces
-- [palette crate docs](https://docs.rs/palette/latest/palette/) - Authoritative Rust color library documentation
-- [palette::rgb module](https://docs.rs/palette/latest/palette/rgb/index.html) - Explains linear vs non-linear RGB from Rust perspective
-- [Terminfo.dev: Color Fundamentals](https://terminfo.dev/fundamentals/color-fundamentals) - Modern reference for terminal color systems
-- [Terminfo.dev: 24-bit Truecolor](https://terminfo.dev/extensions/24-bit-truecolor) - Truecolor escape sequence spec
-- [W3C: Relative Luminance](https://www.w3.org/WAI/GL/wiki/Relative_luminance) - Official WCAG luminance formula
-- [W3C: Technique G17](https://www.w3.org/WAI/WCAG22/Techniques/general/G17) - Contrast ratio calculation
-- [ratatui Color source](https://github.com/ratatui/ratatui/blob/main/ratatui-core/src/style/color.rs) - Real-world Rust terminal color enum design
-- [crossterm Color docs](https://docs.rs/crossterm/latest/crossterm/style/enum.Color.html) - Another Rust terminal color enum
-- [ansi_colours crate](https://docs.rs/ansi_colours/latest/ansi_colours/) - RGB to 256-color conversion
+
+- [Red Blob Games: sRGB WebGL](https://www.redblobgames.com/x/2445-srgb-webgl/) - Clear explanation
+  of sRGB/linear with precision analysis
+- [Fractolog: Color Space Correctness in Alpha Blending](https://www.fractolog.com/2024/07/color-space-correctness-in-alpha-blending/) -
+  Empirical testing of alpha blending in different color spaces
+- [palette crate docs](https://docs.rs/palette/latest/palette/) - Authoritative Rust color library
+  documentation
+- [palette::rgb module](https://docs.rs/palette/latest/palette/rgb/index.html) - Explains linear vs
+  non-linear RGB from Rust perspective
+- [Terminfo.dev: Color Fundamentals](https://terminfo.dev/fundamentals/color-fundamentals) - Modern
+  reference for terminal color systems
+- [Terminfo.dev: 24-bit Truecolor](https://terminfo.dev/extensions/24-bit-truecolor) - Truecolor
+  escape sequence spec
+- [W3C: Relative Luminance](https://www.w3.org/WAI/GL/wiki/Relative_luminance) - Official WCAG
+  luminance formula
+- [W3C: Technique G17](https://www.w3.org/WAI/WCAG22/Techniques/general/G17) - Contrast ratio
+  calculation
+- [ratatui Color source](https://github.com/ratatui/ratatui/blob/main/ratatui-core/src/style/color.rs) -
+  Real-world Rust terminal color enum design
+- [crossterm Color docs](https://docs.rs/crossterm/latest/crossterm/style/enum.Color.html) - Another
+  Rust terminal color enum
+- [ansi_colours crate](https://docs.rs/ansi_colours/latest/ansi_colours/) - RGB to 256-color
+  conversion
 - [rgb2ansi256](https://github.com/rhysd/rgb2ansi256) - const fn Rust port of ansi_colours
 - [colorsys crate](https://docs.rs/colorsys/latest/colorsys/) - HSL/RGB conversion and manipulation
-- [X11 color names - Wikipedia](https://en.wikipedia.org/wiki/X11_color_names) - Definitive X11 vs W3C color comparison
-- [BearLibTerminal Reference](http://foo.wyrd.name/en:bearlibterminal:reference#color_from_name) - Named color API design reference
-- [XTerm Control Sequences](https://invisible-island.net/xterm/ctlseqs/ctlseqs.pdf) - Canonical xterm escape sequence spec
+- [X11 color names - Wikipedia](https://en.wikipedia.org/wiki/X11_color_names) - Definitive X11 vs
+  W3C color comparison
+- [BearLibTerminal Reference](http://foo.wyrd.name/en:bearlibterminal:reference#color_from_name) -
+  Named color API design reference
+- [XTerm Control Sequences](https://invisible-island.net/xterm/ctlseqs/ctlseqs.pdf) - Canonical
+  xterm escape sequence spec
 
 ### Dropped
-- [RenderWonk: Adventures with Gamma-Correct Rendering](https://renderwonk.com/blog/index.php/archive/adventures-with-gamma-correct-rendering/) - GPU-focused, not terminal-relevant
-- [Real-Time Rendering blog: PNG sRGB](https://www.realtimerendering.com/blog/png-srgb-cutoutdecal-aa-problematic/) - About GPU AA, not applicable
-- [rgbto256 by taylordotfish](https://github.com/taylordotfish/rgbto256) - CIEDE2000 approach, overkill for terminal use
+
+- [RenderWonk: Adventures with Gamma-Correct Rendering](https://renderwonk.com/blog/index.php/archive/adventures-with-gamma-correct-rendering/) -
+  GPU-focused, not terminal-relevant
+- [Real-Time Rendering blog: PNG sRGB](https://www.realtimerendering.com/blog/png-srgb-cutoutdecal-aa-problematic/) -
+  About GPU AA, not applicable
+- [rgbto256 by taylordotfish](https://github.com/taylordotfish/rgbto256) - CIEDE2000 approach,
+  overkill for terminal use
 - Various color converter web tools - No unique information beyond formulas already documented
-- [tutorialpedia: ANSI Color Escape Sequences](https://www.tutorialpedia.org/blog/list-of-ansi-color-escape-sequences/) - SEO content, terminfo.dev is better
+- [tutorialpedia: ANSI Color Escape Sequences](https://www.tutorialpedia.org/blog/list-of-ansi-color-escape-sequences/) -
+  SEO content, terminfo.dev is better

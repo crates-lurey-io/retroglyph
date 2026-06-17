@@ -3,6 +3,7 @@
 ## Development
 
 Prerequisites:
+
 - Rust (latest stable)
 - Node.js (v22.12.0 LTS via `.nvmrc`)
 

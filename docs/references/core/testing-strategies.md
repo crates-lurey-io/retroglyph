@@ -2,7 +2,12 @@
 
 ## Summary
 
-A terminal/grid rendering library benefits from a layered testing strategy: snapshot tests for output correctness, property-based tests for invariants, fuzzing for parser robustness, benchmarks for performance regression detection, and a headless test backend to enable all of the above without a real terminal. The patterns established by ratatui (TestBackend, `assert_buffer_lines`, Buffer-centric widget tests) and the broader Rust ecosystem (insta, proptest, cargo-fuzz, criterion/divan) provide a proven foundation.
+A terminal/grid rendering library benefits from a layered testing strategy: snapshot tests for
+output correctness, property-based tests for invariants, fuzzing for parser robustness, benchmarks
+for performance regression detection, and a headless test backend to enable all of the above without
+a real terminal. The patterns established by ratatui (TestBackend, `assert_buffer_lines`,
+Buffer-centric widget tests) and the broader Rust ecosystem (insta, proptest, cargo-fuzz,
+criterion/divan) provide a proven foundation.
 
 ---
 
@@ -10,7 +15,8 @@ A terminal/grid rendering library benefits from a layered testing strategy: snap
 
 ### Approach
 
-Serialize a `Buffer` or `Cell` grid to a human-readable text representation, then compare against golden `.snap` files managed by the [insta](https://docs.rs/insta/) crate.
+Serialize a `Buffer` or `Cell` grid to a human-readable text representation, then compare against
+golden `.snap` files managed by the [insta](https://docs.rs/insta/) crate.
 
 ### Implementation
 
@@ -52,6 +58,7 @@ impl Grid {
 3. Commit accepted `.snap` files to version control
 
 Key `INSTA_UPDATE` modes:
+
 - `auto` (default): `new` locally, `no` in CI
 - `no`: CI mode, fails on any mismatch without writing files
 - `always`: auto-accept all changes (useful for bulk updates)
@@ -85,7 +92,9 @@ opt-level = 3
 
 ### Approach
 
-Render the grid to an image (PNG) via a headless backend, then compare pixel-by-pixel against reference images. This catches rendering issues that text-based snapshots miss: font metrics, color blending, glyph positioning.
+Render the grid to an image (PNG) via a headless backend, then compare pixel-by-pixel against
+reference images. This catches rendering issues that text-based snapshots miss: font metrics, color
+blending, glyph positioning.
 
 ### Implementation Strategy
 
@@ -119,7 +128,8 @@ fn test_visual_output() {
 
 ### Image Comparison Options
 
-- **Pixel-diff with tolerance**: allow small per-pixel color variance (handles font rendering differences across platforms)
+- **Pixel-diff with tolerance**: allow small per-pixel color variance (handles font rendering
+  differences across platforms)
 - **Perceptual hash**: compare structural similarity rather than exact pixels
 - **Crate options**: `image` for PNG encoding/decoding, `pixelmatch` pattern for diffing
 
@@ -128,7 +138,8 @@ fn test_visual_output() {
 - Pin font and font size in tests to avoid cross-platform variance
 - Store golden images in `tests/golden/` and track in version control (use Git LFS for large sets)
 - Set a pixel tolerance threshold (e.g., 1% RMSE) to handle anti-aliasing differences
-- Run visual tests only on a single reference platform in CI; skip on others via `#[cfg]` or feature flags
+- Run visual tests only on a single reference platform in CI; skip on others via `#[cfg]` or feature
+  flags
 
 ---
 
@@ -136,13 +147,17 @@ fn test_visual_output() {
 
 ### Approach
 
-Use [proptest](https://proptest-rs.github.io/proptest/) to generate random inputs and verify invariants hold for all of them. When a failure is found, proptest automatically shrinks to a minimal failing case.
+Use [proptest](https://proptest-rs.github.io/proptest/) to generate random inputs and verify
+invariants hold for all of them. When a failure is found, proptest automatically shrinks to a
+minimal failing case.
 
 ### Key Invariants for a Grid Library
 
 1. **Grid dimensions**: `grid.width() * grid.height() == grid.cells().len()`
-2. **Cell writes within bounds**: writing to any valid `(x, y)` succeeds; writing outside panics or returns `None`
-3. **Wide character spacers**: every wide (2-cell) character at position `(x, y)` has a spacer/continuation cell at `(x+1, y)`
+2. **Cell writes within bounds**: writing to any valid `(x, y)` succeeds; writing outside panics or
+   returns `None`
+3. **Wide character spacers**: every wide (2-cell) character at position `(x, y)` has a
+   spacer/continuation cell at `(x+1, y)`
 4. **Diff symmetry**: `diff(a, b)` applied to `a` produces `b`
 5. **Merge idempotency**: `a.merge(&b); assert!(a.diff(&b).is_empty())`
 6. **Resize preserves content**: resizing then reading in-bounds cells returns original values
@@ -220,7 +235,8 @@ proptest! {
 proptest = "1"
 ```
 
-Proptest stores failure regressions in `proptest-regressions/` files. Commit these to version control so known failures are replayed on every test run.
+Proptest stores failure regressions in `proptest-regressions/` files. Commit these to version
+control so known failures are replayed on every test run.
 
 [Source: Proptest Book](https://proptest-rs.github.io/proptest/intro.html)
 
@@ -230,7 +246,9 @@ Proptest stores failure regressions in `proptest-regressions/` files. Commit the
 
 ### Why Fuzz a Terminal Library
 
-ANSI escape sequence parsers and configuration string parsers handle untrusted, complex input. Fuzzing finds panics, buffer overflows, infinite loops, and logic errors that hand-written tests miss.
+ANSI escape sequence parsers and configuration string parsers handle untrusted, complex input.
+Fuzzing finds panics, buffer overflows, infinite loops, and logic errors that hand-written tests
+miss.
 
 ### Setup with cargo-fuzz (libFuzzer)
 
@@ -365,7 +383,9 @@ jobs:
 
 ### The Pattern
 
-A test backend is an in-memory implementation of the `Backend` trait that stores rendered output in a `Buffer` rather than writing to a real terminal. This makes tests fast, deterministic, and CI-friendly.
+A test backend is an in-memory implementation of the `Backend` trait that stores rendered output in
+a `Buffer` rather than writing to a real terminal. This makes tests fast, deterministic, and
+CI-friendly.
 
 ### Ratatui's TestBackend (reference implementation)
 
@@ -422,9 +442,11 @@ impl Backend for TestBackend {
 
 1. **Error type is `Infallible`**: test backend operations never fail, simplifying test code
 2. **Buffer is inspectable**: direct access to read cell content after rendering
-3. **Assertion helpers built in**: `assert_buffer_lines`, `assert_cursor_position`, `assert_scrollback_lines` reduce test boilerplate
+3. **Assertion helpers built in**: `assert_buffer_lines`, `assert_cursor_position`,
+   `assert_scrollback_lines` reduce test boilerplate
 4. **Scrollback tracking**: captures lines that scroll off-screen, testing scroll behavior
-5. **Serde support**: `#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]` enables snapshot serialization
+5. **Serde support**: `#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]` enables
+   snapshot serialization
 
 ### Recommended Test Backend API for a New Library
 
@@ -452,7 +474,9 @@ impl TestBackend {
 
 ### The Problem
 
-A terminal library typically supports multiple backends (crossterm, termion, termwiz, etc.). Each backend may have subtle behavioral differences. Testing against all backends ensures correctness is not backend-specific.
+A terminal library typically supports multiple backends (crossterm, termion, termwiz, etc.). Each
+backend may have subtle behavioral differences. Testing against all backends ensures correctness is
+not backend-specific.
 
 ### Ratatui's Approach
 
@@ -469,7 +493,7 @@ test-backends:
       backend: [crossterm, termion, termina, termwiz]
       exclude:
         - os: windows-latest
-          backend: termion  # termion doesn't support Windows
+          backend: termion # termion doesn't support Windows
   steps:
     - uses: actions/checkout@v4
     - uses: dtolnay/rust-toolchain@master
@@ -537,7 +561,8 @@ test-backend = []  # always available
 
 ### Option A: criterion
 
-[criterion](https://docs.rs/criterion/) provides statistical analysis with confidence intervals and detects regressions.
+[criterion](https://docs.rs/criterion/) provides statistical analysis with confidence intervals and
+detects regressions.
 
 ```toml
 [dev-dependencies]
@@ -602,7 +627,8 @@ criterion_main!(benches);
 
 ### Option B: divan
 
-[divan](https://docs.rs/divan/) uses `#[divan::bench]` attributes, producing cleaner code with less boilerplate. It also has built-in allocation profiling.
+[divan](https://docs.rs/divan/) uses `#[divan::bench]` attributes, producing cleaner code with less
+boilerplate. It also has built-in allocation profiling.
 
 ```toml
 [dev-dependencies]
@@ -667,7 +693,9 @@ cargo bench --bench grid_benchmarks -- --baseline main
 
 ### Recommendation
 
-Use **divan** for its simpler API and built-in allocation tracking. Use **criterion** if you need HTML reports, statistical regression detection with configurable confidence levels, or integration with continuous benchmarking services (e.g., codspeed, bencher.dev).
+Use **divan** for its simpler API and built-in allocation tracking. Use **criterion** if you need
+HTML reports, statistical regression detection with configurable confidence levels, or integration
+with continuous benchmarking services (e.g., codspeed, bencher.dev).
 
 [Source: criterion docs](https://docs.rs/criterion/), [divan docs](https://docs.rs/divan/)
 
@@ -677,7 +705,8 @@ Use **divan** for its simpler API and built-in allocation tracking. Use **criter
 
 ### The `assert_buffer_lines` Pattern
 
-Ratatui tests widgets by rendering them into a `Buffer` (not through the full `Terminal` / `Backend` pipeline) and comparing the buffer content line by line:
+Ratatui tests widgets by rendering them into a `Buffer` (not through the full `Terminal` / `Backend`
+pipeline) and comparing the buffer content line by line:
 
 ```rust
 #[test]
@@ -699,7 +728,9 @@ fn test_list_widget() {
 
 ### Buffer::with_lines
 
-The core helper is `Buffer::with_lines`, which constructs an expected buffer from string slices. It handles:
+The core helper is `Buffer::with_lines`, which constructs an expected buffer from string slices. It
+handles:
+
 - Width inference (maximum line width)
 - Height inference (number of lines)
 - Unicode width calculation (wide characters take 2 cells)
@@ -724,6 +755,7 @@ assert_buffer_eq!(&actual_buffer, &expected_buffer);
 ```
 
 The macro compared areas first, then cell-by-cell content, producing output like:
+
 ```
 buffer contents not equal
 diff:
@@ -732,7 +764,8 @@ diff:
   actual:   Cell { symbol: "i", ... }
 ```
 
-The current recommendation is `assert_eq!(&actual, &expected)` since `Buffer` implements `Debug` with a readable format showing content and style changes.
+The current recommendation is `assert_eq!(&actual, &expected)` since `Buffer` implements `Debug`
+with a readable format showing content and style changes.
 
 ### TestBackend-Level Testing
 
@@ -792,15 +825,20 @@ fn scroll_region_up(
 
 ### Overview
 
-Crossterm is a pure-Rust cross-platform terminal manipulation library. Its testing approach differs from ratatui because it operates at the I/O level rather than the buffer level.
+Crossterm is a pure-Rust cross-platform terminal manipulation library. Its testing approach differs
+from ratatui because it operates at the I/O level rather than the buffer level.
 
 ### Testing Strategy
 
-1. **Unit tests for data structures**: `KeyEvent`, `MouseEvent`, `Color` parsing, command serialization are tested with standard unit tests
+1. **Unit tests for data structures**: `KeyEvent`, `MouseEvent`, `Color` parsing, command
+   serialization are tested with standard unit tests
 
-2. **Platform-specific conditional compilation**: tests that interact with the terminal are gated behind `#[cfg(unix)]` or `#[cfg(windows)]`
+2. **Platform-specific conditional compilation**: tests that interact with the terminal are gated
+   behind `#[cfg(unix)]` or `#[cfg(windows)]`
 
-3. **Command serialization tests**: verify that `Command` implementations produce correct ANSI escape sequences:
+3. **Command serialization tests**: verify that `Command` implementations produce correct ANSI
+   escape sequences:
+
    ```rust
    #[test]
    fn test_move_to_command() {
@@ -811,6 +849,7 @@ Crossterm is a pure-Rust cross-platform terminal manipulation library. Its testi
    ```
 
 4. **Event parsing tests**: verify that byte sequences are correctly parsed into events:
+
    ```rust
    #[test]
    fn test_parse_csi_cursor_position() {
@@ -820,7 +859,9 @@ Crossterm is a pure-Rust cross-platform terminal manipulation library. Its testi
    }
    ```
 
-5. **Integration tests with real terminals**: some tests require `--ignored` flag and a real terminal:
+5. **Integration tests with real terminals**: some tests require `--ignored` flag and a real
+   terminal:
+
    ```rust
    #[test]
    #[ignore]  // requires real terminal
@@ -834,6 +875,7 @@ Crossterm is a pure-Rust cross-platform terminal manipulation library. Its testi
 ### Cross-Platform CI Matrix
 
 Crossterm tests on multiple platforms since terminal behavior varies:
+
 - Ubuntu (Linux)
 - macOS (Intel and Apple Silicon)
 - Windows (Console Host and Windows Terminal)
@@ -850,21 +892,21 @@ Platform-specific exclusions (e.g., termion tests excluded on Windows) are handl
 
 Ratatui's CI is one of the most comprehensive in the Rust TUI ecosystem. Key jobs:
 
-| Job | Purpose | Blocking |
-|-----|---------|----------|
-| `lint-formatting` | `cargo fmt --check` (nightly) | Yes |
-| `lint-typos` | typo detection with `crate-ci/typos` | Yes |
-| `cargo-deny` | license/advisory/ban checks | Advisory: continue-on-error |
-| `cargo-machete` | unused dependency detection | Yes |
-| `lint-clippy` | clippy on stable + beta (beta non-blocking) | Stable: yes |
-| `lint-markdown` | markdownlint on all .md files | Yes |
-| `coverage` | `cargo-llvm-cov` with codecov upload | Yes |
-| `check` | `cargo check` on {ubuntu, windows, macos} x {MSRV, stable} | Yes |
-| `build-no-std` | build for `x86_64-unknown-none` target | Yes |
-| `test-docs` | `cargo test --doc` | Yes |
-| `test-libs` | library unit tests on {MSRV, stable} | Yes |
-| `test-backends` | per-backend tests on {ubuntu, windows, macos} x {crossterm, termion, termina, termwiz} | Yes |
-| `required` | aggregation gate checking all jobs passed | Merge gate |
+| Job               | Purpose                                                                                | Blocking                    |
+| ----------------- | -------------------------------------------------------------------------------------- | --------------------------- |
+| `lint-formatting` | `cargo fmt --check` (nightly)                                                          | Yes                         |
+| `lint-typos`      | typo detection with `crate-ci/typos`                                                   | Yes                         |
+| `cargo-deny`      | license/advisory/ban checks                                                            | Advisory: continue-on-error |
+| `cargo-machete`   | unused dependency detection                                                            | Yes                         |
+| `lint-clippy`     | clippy on stable + beta (beta non-blocking)                                            | Stable: yes                 |
+| `lint-markdown`   | markdownlint on all .md files                                                          | Yes                         |
+| `coverage`        | `cargo-llvm-cov` with codecov upload                                                   | Yes                         |
+| `check`           | `cargo check` on {ubuntu, windows, macos} x {MSRV, stable}                             | Yes                         |
+| `build-no-std`    | build for `x86_64-unknown-none` target                                                 | Yes                         |
+| `test-docs`       | `cargo test --doc`                                                                     | Yes                         |
+| `test-libs`       | library unit tests on {MSRV, stable}                                                   | Yes                         |
+| `test-backends`   | per-backend tests on {ubuntu, windows, macos} x {crossterm, termion, termina, termwiz} | Yes                         |
+| `required`        | aggregation gate checking all jobs passed                                              | Merge gate                  |
 
 ### Recommended CI Configuration for a New Library
 
@@ -1003,38 +1045,59 @@ jobs:
 6. **Benchmarks as artifacts**: track but don't gate on benchmark results
 7. **Merge gate job**: single `required` job that checks all others passed
 
-[Source: ratatui CI](https://github.com/ratatui/ratatui/blob/main/.github/workflows/ci.yml), [Rust Fuzz Book CI](https://rust-fuzz.github.io/book/cargo-fuzz/ci.html)
+[Source: ratatui CI](https://github.com/ratatui/ratatui/blob/main/.github/workflows/ci.yml),
+[Rust Fuzz Book CI](https://rust-fuzz.github.io/book/cargo-fuzz/ci.html)
 
 ---
 
 ## Sources
 
 ### Kept
-- **ratatui TestBackend** (https://github.com/ratatui/ratatui/blob/main/ratatui-core/src/backend/test.rs) - primary reference for test backend design, assert_buffer_lines pattern, scrolling region tests
-- **ratatui buffer.rs** (https://github.com/ratatui/ratatui/blob/main/ratatui-core/src/buffer/buffer.rs) - Buffer struct, diff algorithm, with_lines constructor, comprehensive test suite with rstest
-- **ratatui assert.rs** (https://github.com/ratatui/ratatui/blob/main/ratatui-core/src/buffer/assert.rs) - assert_buffer_eq! macro (now deprecated)
-- **ratatui CI** (https://github.com/ratatui/ratatui/blob/main/.github/workflows/ci.yml) - multi-backend, multi-OS CI configuration
-- **insta docs** (https://docs.rs/insta/) - snapshot testing API, workflow, configuration
-- **Proptest Book** (https://proptest-rs.github.io/proptest/) - property-based testing strategies and shrinking
-- **Rust Fuzz Book** (https://rust-fuzz.github.io/book/) - cargo-fuzz setup, structure-aware fuzzing, CI integration
-- **criterion docs** (https://docs.rs/criterion/) - statistical benchmarking framework
-- **divan docs** (https://docs.rs/divan/) - attribute-macro benchmarking with allocation profiling
-- **crossterm** (https://github.com/crossterm-rs/crossterm) - cross-platform terminal library testing context
+
+- **ratatui TestBackend**
+  (<https://github.com/ratatui/ratatui/blob/main/ratatui-core/src/backend/test.rs>) - primary
+  reference for test backend design, assert_buffer_lines pattern, scrolling region tests
+- **ratatui buffer.rs**
+  (<https://github.com/ratatui/ratatui/blob/main/ratatui-core/src/buffer/buffer.rs>) - Buffer struct,
+  diff algorithm, with_lines constructor, comprehensive test suite with rstest
+- **ratatui assert.rs**
+  (<https://github.com/ratatui/ratatui/blob/main/ratatui-core/src/buffer/assert.rs>) -
+  assert_buffer_eq! macro (now deprecated)
+- **ratatui CI** (<https://github.com/ratatui/ratatui/blob/main/.github/workflows/ci.yml>) -
+  multi-backend, multi-OS CI configuration
+- **insta docs** (<https://docs.rs/insta/>) - snapshot testing API, workflow, configuration
+- **Proptest Book** (<https://proptest-rs.github.io/proptest/>) - property-based testing strategies
+  and shrinking
+- **Rust Fuzz Book** (<https://rust-fuzz.github.io/book/>) - cargo-fuzz setup, structure-aware
+  fuzzing, CI integration
+- **criterion docs** (<https://docs.rs/criterion/>) - statistical benchmarking framework
+- **divan docs** (<https://docs.rs/divan/>) - attribute-macro benchmarking with allocation profiling
+- **crossterm** (<https://github.com/crossterm-rs/crossterm>) - cross-platform terminal library
+  testing context
 
 ### Dropped
+
 - Generic Rust testing tutorials - too basic, no terminal-specific content
-- GitHub page chrome/navigation content - not actual source content (GitHub requires auth for rendered views)
+- GitHub page chrome/navigation content - not actual source content (GitHub requires auth for
+  rendered views)
 
 ---
 
 ## Gaps
 
-1. **Crossterm test internals**: could not access crossterm's actual test files (event parsing tests, command serialization tests) due to GitHub rendering issues. The description above is inferred from the codebase structure and API patterns.
+1. **Crossterm test internals**: could not access crossterm's actual test files (event parsing
+   tests, command serialization tests) due to GitHub rendering issues. The description above is
+   inferred from the codebase structure and API patterns.
 
-2. **Visual regression tooling**: no established Rust crate specifically for terminal-to-PNG visual regression testing exists. This would need custom implementation using `image` + a font rasterizer (e.g., `ab_glyph`, `cosmic-text`).
+2. **Visual regression tooling**: no established Rust crate specifically for terminal-to-PNG visual
+   regression testing exists. This would need custom implementation using `image` + a font
+   rasterizer (e.g., `ab_glyph`, `cosmic-text`).
 
-3. **Continuous benchmarking services**: did not research integration with services like codspeed or bencher.dev that track benchmark results over time and can flag regressions in PRs.
+3. **Continuous benchmarking services**: did not research integration with services like codspeed or
+   bencher.dev that track benchmark results over time and can flag regressions in PRs.
 
-4. **Miri for unsafe code**: if the grid library uses `unsafe` (e.g., for performance-critical cell access), running tests under Miri (`cargo +nightly miri test`) should be part of CI.
+4. **Miri for unsafe code**: if the grid library uses `unsafe` (e.g., for performance-critical cell
+   access), running tests under Miri (`cargo +nightly miri test`) should be part of CI.
 
-5. **Mutation testing**: tools like `cargo-mutants` could verify test suite quality by introducing mutations and checking they're caught. Not covered here.
+5. **Mutation testing**: tools like `cargo-mutants` could verify test suite quality by introducing
+   mutations and checking they're caught. Not covered here.

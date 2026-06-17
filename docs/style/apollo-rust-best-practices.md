@@ -1,8 +1,11 @@
 # Apollo GraphQL: Rust Best Practices
 
-> Source: [apollographql/rust-best-practices](https://github.com/apollographql/rust-best-practices) (Apache 2.0)
-> Companion to the [Rust Official API Guidelines](https://rust-lang.github.io/api-guidelines/about.html) and [Rust Analyzer Style Guide](https://rust-analyzer.github.io/book/contributing/style.html).
-> Born from Apollo's experience building the [Apollo Router](https://github.com/apollographql/router), a high-performance Rust graph router.
+> Source: [apollographql/rust-best-practices](https://github.com/apollographql/rust-best-practices)
+> (Apache 2.0) Companion to the
+> [Rust Official API Guidelines](https://rust-lang.github.io/api-guidelines/about.html) and
+> [Rust Analyzer Style Guide](https://rust-analyzer.github.io/book/contributing/style.html). Born
+> from Apollo's experience building the [Apollo Router](https://github.com/apollographql/router), a
+> high-performance Rust graph router.
 
 ---
 
@@ -11,16 +14,18 @@
 ### Core rules
 
 - **Always return `Result<T, E>` for fallible operations.** Never panic in production code.
-- **Never use `unwrap()`/`expect()` outside tests.** Use `let Ok(..) = .. else { return .. }`, `if let`, `unwrap_or`, `unwrap_or_else`, or `unwrap_or_default` instead.
-- Use `panic!` only for unrecoverable conditions. Prefer `todo!`, `unreachable!`, and `unimplemented!` where semantically appropriate.
+- **Never use `unwrap()`/`expect()` outside tests.** Use `let Ok(..) = .. else { return .. }`,
+  `if let`, `unwrap_or`, `unwrap_or_else`, or `unwrap_or_default` instead.
+- Use `panic!` only for unrecoverable conditions. Prefer `todo!`, `unreachable!`, and
+  `unimplemented!` where semantically appropriate.
 
 ### Error crate choices
 
-| Context | Crate | Rationale |
-|---------|-------|-----------|
-| Libraries / crates | `thiserror` | Structured error enums with `#[from]`, `#[error]`, integrates with `?` and `std::error::Error` |
-| Binaries (top-level) | `anyhow` | Ergonomic, context-rich error handling where precise types don't matter |
-| Tests / helpers | `anyhow` | Low friction, acceptable for test code |
+| Context              | Crate       | Rationale                                                                                      |
+| -------------------- | ----------- | ---------------------------------------------------------------------------------------------- |
+| Libraries / crates   | `thiserror` | Structured error enums with `#[from]`, `#[error]`, integrates with `?` and `std::error::Error` |
+| Binaries (top-level) | `anyhow`    | Ergonomic, context-rich error handling where precise types don't matter                        |
+| Tests / helpers      | `anyhow`    | Low friction, acceptable for test code                                                         |
 
 `anyhow::Result` erases context callers might need; never use it in library code.
 
@@ -58,11 +63,13 @@ x.inspect_err(|err| tracing::error!("fn_name: {err}"))
 
 ### Async errors
 
-Ensure errors implement `Send + Sync + 'static` when used across `.await` boundaries or in Tokio tasks. Avoid `Box<dyn std::error::Error>` in libraries.
+Ensure errors implement `Send + Sync + 'static` when used across `.await` boundaries or in Tokio
+tasks. Avoid `Box<dyn std::error::Error>` in libraries.
 
 ### Testing errors
 
-Unit tests should exercise error paths. Use `err.to_string()` for assertions when errors don't implement `PartialEq`:
+Unit tests should exercise error paths. Use `err.to_string()` for assertions when errors don't
+implement `PartialEq`:
 
 ```rust
 let err = divide(10., 0.0).unwrap_err();
@@ -80,33 +87,39 @@ assert_eq!(err.to_string(), "division by zero");
 - If a function needs ownership, make the caller pass it explicitly rather than cloning inside.
 - When you must clone, defer it to the last possible moment.
 
-Valid clone scenarios: `Arc`/`Rc` pointers, immutable snapshots, cross-thread sharing, caching, API requirements.
+Valid clone scenarios: `Arc`/`Rc` pointers, immutable snapshots, cross-thread sharing, caching, API
+requirements.
 
 ### Copy trait
 
-Derive `Copy` on types that are small (up to ~24 bytes), have all `Copy` fields, and represent plain data (no heap allocations). Good candidates: `Point { x: f32, y: f32 }`, tag-like enums. Enum size is based on the largest variant.
+Derive `Copy` on types that are small (up to ~24 bytes), have all `Copy` fields, and represent plain
+data (no heap allocations). Good candidates: `Point { x: f32, y: f32 }`, tag-like enums. Enum size
+is based on the largest variant.
 
 ### Option/Result pattern matching
 
-| Pattern | When to use |
-|---------|-------------|
-| `match` | Need to match inner variants of `T`/`E`, or transform type (e.g., `Result<T,E>` to `Result<Option<U>,E>`) |
-| `let Ok(x) = expr else { return .. }` | Divergent code doesn't need the error value |
-| `if let Ok(x) = expr { .. } else { .. }` | Else branch needs extra computation |
-| `?` | Don't care about `Err` value, just propagate |
+| Pattern                                  | When to use                                                                                               |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `match`                                  | Need to match inner variants of `T`/`E`, or transform type (e.g., `Result<T,E>` to `Result<Option<U>,E>`) |
+| `let Ok(x) = expr else { return .. }`    | Divergent code doesn't need the error value                                                               |
+| `if let Ok(x) = expr { .. } else { .. }` | Else branch needs extra computation                                                                       |
+| `?`                                      | Don't care about `Err` value, just propagate                                                              |
 
-Never use `unwrap`/`expect` outside tests. Use `.ok()`, `.ok_or()`, `.ok_or_else()` for `Result`/`Option` conversions instead of `match`.
+Never use `unwrap`/`expect` outside tests. Use `.ok()`, `.ok_or()`, `.ok_or_else()` for
+`Result`/`Option` conversions instead of `match`.
 
 ### Lazy evaluation
 
-Use `_else` variants (`unwrap_or_else`, `ok_or_else`, `map_or_else`) when the fallback involves allocation or function calls to avoid eager evaluation.
+Use `_else` variants (`unwrap_or_else`, `ok_or_else`, `map_or_else`) when the fallback involves
+allocation or function calls to avoid eager evaluation.
 
 ### Iterators vs. for loops
 
 - Prefer iterators for collection transformations (`.filter`, `.map`, `.collect`).
 - Prefer `for` loops for early exits (`break`, `continue`, `return`) and simple side-effect code.
 - Iterators are lazy and compiled into tight loops (zero-cost abstractions).
-- Prefer `.sum()` over `.fold()` for summing. Prefer `.iter()` over `.into_iter()` unless ownership transfer is needed.
+- Prefer `.sum()` over `.fold()` for summing. Prefer `.iter()` over `.into_iter()` unless ownership
+  transfer is needed.
 - Avoid intermediate `.collect()` calls; pass iterators directly.
 
 ### Import ordering
@@ -137,18 +150,19 @@ group_imports = "StdExternalCrate"
 cargo clippy --all-targets --all-features --locked -- -D warnings
 ```
 
-Add `-W clippy::pedantic` for stricter checks. Run in CI (Apollo uses `cargo xtask lint` in the Router).
+Add `-W clippy::pedantic` for stricter checks. Run in CI (Apollo uses `cargo xtask lint` in the
+Router).
 
 ### Key lints
 
-| Lint | Category |
-|------|----------|
-| `redundant_clone` | perf |
-| `needless_borrow` | style |
-| `large_enum_variant` | perf |
-| `unnecessary_wraps` | pedantic |
-| `clone_on_copy` | complexity |
-| `needless_collect` | nursery |
+| Lint                 | Category   |
+| -------------------- | ---------- |
+| `redundant_clone`    | perf       |
+| `needless_borrow`    | style      |
+| `large_enum_variant` | perf       |
+| `unnecessary_wraps`  | pedantic   |
+| `clone_on_copy`      | complexity |
+| `needless_collect`   | nursery    |
 
 ### Suppression rules
 
@@ -183,7 +197,8 @@ pedantic = { level = "warn", priority = 3 }
 - Keep small types (`Copy`, primitives) on the stack.
 - Avoid passing types >512 bytes by value; pass by reference.
 - Heap-allocate recursive data structures (`Box`).
-- Avoid large stack arrays: use `vec![0; N].into_boxed_slice()` instead of `Box::new([0u8; N])` which temporarily allocates on the stack first.
+- Avoid large stack arrays: use `vec![0; N].into_boxed_slice()` instead of `Box::new([0u8; N])`
+  which temporarily allocates on the stack first.
 - Use `#[inline]` only when benchmarks prove it helps.
 
 ### Cloning discipline
@@ -220,7 +235,8 @@ Test output: `process::returns_error_when_input_is_negative`
 
 ### One behavior per test
 
-Each test should verify one thing. Multiple assertions make failures harder to diagnose. Use `rstest` for parameterized cases with descriptive names:
+Each test should verify one thing. Multiple assertions make failures harder to diagnose. Use
+`rstest` for parameterized cases with descriptive names:
 
 ```rust
 #[rstest]
@@ -245,15 +261,16 @@ fn accepts_strings_with_a(#[case] input: &str) {
 
 ### Test pyramid
 
-| Type | Location | Access | Purpose |
-|------|----------|--------|---------|
-| Unit tests | Same module (`#[cfg(test)]`) | Private + `pub(crate)` | Edge cases, implementation details |
-| Integration tests | `tests/` directory | Public API only | Cross-module correctness |
-| Doc tests | `///` comments | Public API | Usage examples, kept up-to-date by compiler |
+| Type              | Location                     | Access                 | Purpose                                     |
+| ----------------- | ---------------------------- | ---------------------- | ------------------------------------------- |
+| Unit tests        | Same module (`#[cfg(test)]`) | Private + `pub(crate)` | Edge cases, implementation details          |
+| Integration tests | `tests/` directory           | Public API only        | Cross-module correctness                    |
+| Doc tests         | `///` comments               | Public API             | Usage examples, kept up-to-date by compiler |
 
 ### Snapshot testing (cargo insta)
 
 Use `insta` with YAML snapshots for complex/structural output. Rules:
+
 - Name snapshots meaningfully.
 - Keep snapshots small; don't snapshot huge objects.
 - Use redactions for unstable fields (timestamps, UUIDs).
@@ -268,12 +285,12 @@ Use `insta` with YAML snapshots for complex/structural output. Rules:
 
 > Static where you can, dynamic where you must.
 
-| Aspect | Static (`impl Trait` / `<T: Trait>`) | Dynamic (`dyn Trait`) |
-|--------|--------------------------------------|----------------------|
-| Performance | Zero-cost (monomorphized) | vtable indirection |
-| Compile time | Slower | Faster |
-| Binary size | Larger | Smaller |
-| Flexibility | One type at a time | Heterogeneous collections |
+| Aspect       | Static (`impl Trait` / `<T: Trait>`) | Dynamic (`dyn Trait`)     |
+| ------------ | ------------------------------------ | ------------------------- |
+| Performance  | Zero-cost (monomorphized)            | vtable indirection        |
+| Compile time | Slower                               | Faster                    |
+| Binary size  | Larger                               | Smaller                   |
+| Flexibility  | One type at a time                   | Heterogeneous collections |
 
 ### Static dispatch guidelines
 
@@ -288,7 +305,8 @@ Use `insta` with YAML snapshots for complex/structural output. Rules:
 - Use `Arc<dyn Trait + Send + Sync>` for shared access across threads.
 - Box at the API boundary, not internally.
 - Avoid boxing inside structs unless required (recursive types).
-- Traits must be object-safe: no generic methods, no `Self: Sized`, methods use `&self`/`&mut self`/`self`.
+- Traits must be object-safe: no generic methods, no `Self: Sized`, methods use
+  `&self`/`&mut self`/`self`.
 
 ---
 
@@ -316,7 +334,8 @@ impl Client<Connected> {
 
 ### When to use
 
-- Enforcing API constraints at compile time (builders with required fields, protocol state machines).
+- Enforcing API constraints at compile time (builders with required fields, protocol state
+  machines).
 - Replacing runtime booleans/enums with type-safe code paths.
 - Library/crate APIs where correctness is critical.
 
@@ -328,7 +347,8 @@ impl Client<Connected> {
 
 ### Trade-offs
 
-`PhantomData` fields are erased after compilation (zero runtime cost), but the pattern adds verbosity and can require field duplication across state transitions.
+`PhantomData` fields are erased after compilation (zero runtime cost), but the pattern adds
+verbosity and can require field duplication across state transitions.
 
 ---
 
@@ -358,14 +378,14 @@ impl Client<Connected> {
 #![deny(rustdoc::broken_intra_doc_links)]
 ```
 
-| Lint | Purpose |
-|------|---------|
-| `missing_docs` | Warns on undocumented public items |
-| `broken_intra_doc_links` | Catches renamed/broken doc links |
-| `empty_docs` | Prevents bypassing `missing_docs` with empty `///` |
-| `missing_panics_doc` | Requires `# Panics` section if function can panic |
-| `missing_errors_doc` | Requires `# Errors` section if function returns `Result` |
-| `missing_safety_doc` | Requires `# Safety` section for unsafe public functions |
+| Lint                     | Purpose                                                  |
+| ------------------------ | -------------------------------------------------------- |
+| `missing_docs`           | Warns on undocumented public items                       |
+| `broken_intra_doc_links` | Catches renamed/broken doc links                         |
+| `empty_docs`             | Prevents bypassing `missing_docs` with empty `///`       |
+| `missing_panics_doc`     | Requires `# Panics` section if function can panic        |
+| `missing_errors_doc`     | Requires `# Errors` section if function returns `Result` |
+| `missing_safety_doc`     | Requires `# Safety` section for unsafe public functions  |
 
 ---
 
@@ -373,19 +393,19 @@ impl Client<Connected> {
 
 ### Quick reference
 
-| Pointer | Thread-safe? | Use case |
-|---------|-------------|----------|
-| `&T` | Yes | Shared read access |
-| `&mut T` | Not `Send` | Exclusive mutation |
-| `Box<T>` | If `T: Send + Sync` | Single-owner heap allocation |
-| `Rc<T>` | No | Multiple owners, single-threaded |
-| `Arc<T>` | Yes | Multiple owners, multi-threaded |
-| `RefCell<T>` | Not `Sync` | Interior mutability, single-threaded (panics on violation) |
-| `Cell<T>` | Not `Sync` | Interior mutability for `Copy` types, single-threaded |
-| `Mutex<T>` | Yes | Shared mutable access, multi-threaded |
-| `RwLock<T>` | Yes | Many readers OR one writer, multi-threaded |
-| `OnceLock<T>` / `LazyLock<T>` | Yes | Thread-safe one-time / lazy initialization |
-| `*const T` / `*mut T` | No (manual) | FFI, raw memory |
+| Pointer                       | Thread-safe?        | Use case                                                   |
+| ----------------------------- | ------------------- | ---------------------------------------------------------- |
+| `&T`                          | Yes                 | Shared read access                                         |
+| `&mut T`                      | Not `Send`          | Exclusive mutation                                         |
+| `Box<T>`                      | If `T: Send + Sync` | Single-owner heap allocation                               |
+| `Rc<T>`                       | No                  | Multiple owners, single-threaded                           |
+| `Arc<T>`                      | Yes                 | Multiple owners, multi-threaded                            |
+| `RefCell<T>`                  | Not `Sync`          | Interior mutability, single-threaded (panics on violation) |
+| `Cell<T>`                     | Not `Sync`          | Interior mutability for `Copy` types, single-threaded      |
+| `Mutex<T>`                    | Yes                 | Shared mutable access, multi-threaded                      |
+| `RwLock<T>`                   | Yes                 | Many readers OR one writer, multi-threaded                 |
+| `OnceLock<T>` / `LazyLock<T>` | Yes                 | Thread-safe one-time / lazy initialization                 |
+| `*const T` / `*mut T`         | No (manual)         | FFI, raw memory                                            |
 
 ### Guidelines
 
@@ -415,19 +435,20 @@ nonstandard_style = "deny"
 
 ### Cargo.lock
 
-Always pass `--locked` in CI to ensure reproducible builds. The lock file should be committed for binaries (Apollo Router commits theirs).
+Always pass `--locked` in CI to ensure reproducible builds. The lock file should be committed for
+binaries (Apollo Router commits theirs).
 
 ### Key ecosystem crates recommended
 
-| Crate | Purpose |
-|-------|---------|
-| `thiserror` | Structured error types for libraries |
-| `anyhow` | Ergonomic errors for binaries |
-| `insta` | Snapshot testing |
-| `rstest` | Parameterized / fixture-based tests |
-| `pretty_assertions` | Readable test diffs |
-| `testcontainers` | Integration tests with external services |
-| `smallvec` | Stack-allocated small vectors with heap fallback |
+| Crate               | Purpose                                          |
+| ------------------- | ------------------------------------------------ |
+| `thiserror`         | Structured error types for libraries             |
+| `anyhow`            | Ergonomic errors for binaries                    |
+| `insta`             | Snapshot testing                                 |
+| `rstest`            | Parameterized / fixture-based tests              |
+| `pretty_assertions` | Readable test diffs                              |
+| `testcontainers`    | Integration tests with external services         |
+| `smallvec`          | Stack-allocated small vectors with heap fallback |
 
 ### Rustfmt config
 
@@ -445,25 +466,39 @@ Requires nightly as of Rust 1.88: `cargo +nightly fmt`.
 
 These patterns are drawn from Apollo's Router codebase and the handbook's recurring themes:
 
-1. **Error hierarchies per layer.** Each crate/module defines its own error enum with `thiserror`. Cross-layer errors use `#[from]` for automatic conversion. Binary entry points can use `anyhow` for top-level wrapping.
+1. **Error hierarchies per layer.** Each crate/module defines its own error enum with `thiserror`.
+   Cross-layer errors use `#[from]` for automatic conversion. Binary entry points can use `anyhow`
+   for top-level wrapping.
 
-2. **Structured linting via xtask.** Apollo Router uses `cargo xtask lint` to run a standardized linting pipeline. This is more maintainable than Makefile targets for complex workspaces.
+2. **Structured linting via xtask.** Apollo Router uses `cargo xtask lint` to run a standardized
+   linting pipeline. This is more maintainable than Makefile targets for complex workspaces.
 
-3. **Snapshot testing for complex output.** Use `cargo insta` with YAML snapshots for serialized data, generated code, and CLI output. Commit `.snap` files. Use redactions for non-deterministic fields.
+3. **Snapshot testing for complex output.** Use `cargo insta` with YAML snapshots for serialized
+   data, generated code, and CLI output. Commit `.snap` files. Use redactions for non-deterministic
+   fields.
 
-4. **Type state pattern for protocol correctness.** Encode connection states, request validation stages, and builder requirements as types so invalid transitions are compile errors.
+4. **Type state pattern for protocol correctness.** Encode connection states, request validation
+   stages, and builder requirements as types so invalid transitions are compile errors.
 
-5. **Static dispatch by default, dynamic at boundaries.** Keep generics/`impl Trait` in hot paths. Use `dyn Trait` only at plugin interfaces and public API boundaries.
+5. **Static dispatch by default, dynamic at boundaries.** Keep generics/`impl Trait` in hot paths.
+   Use `dyn Trait` only at plugin interfaces and public API boundaries.
 
-6. **Workspace-level configuration.** Centralize lints, dependencies, and rustfmt settings at the workspace level for consistency across dozens of crates.
+6. **Workspace-level configuration.** Centralize lints, dependencies, and rustfmt settings at the
+   workspace level for consistency across dozens of crates.
 
-7. **Design principles (from Router README).** Correctness first, then reliability, then performance. Follow the principle of least surprise. Test and document everything implied by the specification, including failure cases.
+7. **Design principles (from Router README).** Correctness first, then reliability, then
+   performance. Follow the principle of least surprise. Test and document everything implied by the
+   specification, including failure cases.
 
 ---
 
 ## Sources
 
-- [apollographql/rust-best-practices](https://github.com/apollographql/rust-best-practices) - Primary source, 9 chapters + final notes
-- [apollographql/router](https://github.com/apollographql/router) - Apollo Router README, CONTRIBUTING.md, DEVELOPMENT.md for real-world context
-- [Rust Official API Guidelines](https://rust-lang.github.io/api-guidelines/about.html) - Companion reference cited by Apollo
-- [Rust Analyzer Style Guide](https://rust-analyzer.github.io/book/contributing/style.html) - Companion reference cited by Apollo
+- [apollographql/rust-best-practices](https://github.com/apollographql/rust-best-practices) -
+  Primary source, 9 chapters + final notes
+- [apollographql/router](https://github.com/apollographql/router) - Apollo Router README,
+  CONTRIBUTING.md, DEVELOPMENT.md for real-world context
+- [Rust Official API Guidelines](https://rust-lang.github.io/api-guidelines/about.html) - Companion
+  reference cited by Apollo
+- [Rust Analyzer Style Guide](https://rust-analyzer.github.io/book/contributing/style.html) -
+  Companion reference cited by Apollo
