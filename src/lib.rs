@@ -10,9 +10,11 @@ pub mod style;
 pub mod cell;
 pub mod grid;
 pub mod backend;
+pub mod event;
 
 pub use color::{AnsiColor, Color};
 pub use style::{CellModifier, Style};
 pub use cell::Cell;
 pub use grid::{Grid, Position};
 pub use backend::Renderer;
+pub use event::{Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
