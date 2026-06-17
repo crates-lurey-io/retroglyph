@@ -2,18 +2,6 @@
 
 use crate::cell::Cell;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-/// Errors encountered during grid operations.
-pub enum GridError {
-    /// Attempted to access coordinates outside of the grid.
-    OutOfBounds { 
-        /// X coordinate.
-        x: usize, 
-        /// Y coordinate.
-        y: usize 
-    },
-}
-
 /// The main grid container for the terminal.
 pub struct Grid {
     width: usize,
@@ -42,23 +30,39 @@ impl Grid {
 
     /// Sets the cell at the given coordinates.
     ///
-    /// # Errors
+    /// # Panics
     ///
-    /// Returns `GridError::OutOfBounds` if the coordinates are invalid.
-    pub fn put(&mut self, x: usize, y: usize, cell: Cell) -> Result<(), GridError> {
-        let index = self.get_index(x, y)?;
+    /// Panics if the coordinates are out of bounds.
+    pub fn put(&mut self, x: usize, y: usize, cell: Cell) {
+        let index = self.get_index(x, y).expect("coordinates out of bounds");
         self.buffer[index] = cell;
-        Ok(())
     }
 
     /// Gets the cell at the given coordinates.
     ///
-    /// # Errors
+    /// # Panics
     ///
-    /// Returns `GridError::OutOfBounds` if the coordinates are invalid.
-    pub fn get(&self, x: usize, y: usize) -> Result<&Cell, GridError> {
-        let index = self.get_index(x, y)?;
-        Ok(&self.buffer[index])
+    /// Panics if the coordinates are out of bounds.
+    pub fn get(&self, x: usize, y: usize) -> &Cell {
+        let index = self.get_index(x, y).expect("coordinates out of bounds");
+        &self.buffer[index]
+    }
+
+    /// Tries to set the cell at the given coordinates.
+    ///
+    /// Returns `None` if the coordinates are out of bounds.
+    pub fn checked_put(&mut self, x: usize, y: usize, cell: Cell) -> Option<()> {
+        let index = self.get_index(x, y).ok()?;
+        self.buffer[index] = cell;
+        Some(())
+    }
+
+    /// Tries to get the cell at the given coordinates.
+    ///
+    /// Returns `None` if the coordinates are out of bounds.
+    pub fn checked_get(&self, x: usize, y: usize) -> Option<&Cell> {
+        let index = self.get_index(x, y).ok()?;
+        Some(&self.buffer[index])
     }
 
     /// Clears the grid to the default cell.
@@ -66,11 +70,11 @@ impl Grid {
         self.buffer.fill(Cell::default());
     }
 
-    fn get_index(&self, x: usize, y: usize) -> Result<usize, GridError> {
+    fn get_index(&self, x: usize, y: usize) -> Result<usize, ()> {
         if x < self.width && y < self.height {
             Ok(y * self.width + x)
         } else {
-            Err(GridError::OutOfBounds { x, y })
+            Err(())
         }
     }
 }
@@ -91,14 +95,26 @@ mod tests {
         let mut grid = Grid::new(10, 10);
         let cell = Cell::default().with_glyph('X');
         
-        grid.put(5, 5, cell).unwrap();
-        assert_eq!(grid.get(5, 5).unwrap().glyph, 'X');
+        grid.put(5, 5, cell);
+        assert_eq!(grid.get(5, 5).glyph, 'X');
     }
 
     #[test]
-    fn test_grid_out_of_bounds() {
+    fn test_grid_checked_put_get() {
         let mut grid = Grid::new(10, 10);
-        assert!(grid.get(10, 0).is_err());
-        assert!(grid.put(0, 10, Cell::default()).is_err());
+        let cell = Cell::default().with_glyph('Y');
+        
+        assert!(grid.checked_put(5, 5, cell).is_some());
+        assert_eq!(grid.checked_get(5, 5).unwrap().glyph, 'Y');
+        
+        assert!(grid.checked_get(10, 0).is_none());
+        assert!(grid.checked_put(0, 10, Cell::default()).is_none());
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_grid_panic_put() {
+        let mut grid = Grid::new(10, 10);
+        grid.put(10, 0, Cell::default());
     }
 }
