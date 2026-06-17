@@ -15,6 +15,6 @@ pub mod event;
 pub use color::{AnsiColor, Color};
 pub use style::{CellModifier, Style};
 pub use cell::Cell;
-pub use grid::{Grid, Position};
-pub use backend::Renderer;
+pub use grid::{Grid, Position, Size};
+pub use backend::Backend;
 pub use event::{Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};

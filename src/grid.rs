@@ -4,8 +4,17 @@ use crate::cell::Cell;
 use alloc::vec::Vec;
 use core::fmt;
 
+/// Size of the grid.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct Size {
+    /// Width.
+    pub width: u16,
+    /// Height.
+    pub height: u16,
+}
+
 /// Position in the grid.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct Position {
     /// X coordinate.
     pub x: u16,
