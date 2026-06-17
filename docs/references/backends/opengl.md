@@ -344,8 +344,8 @@ the only platform-specific layer.
   (<https://github.com/amethyst/bracket-lib/blob/master/bracket-terminal/src/hal/native/shader_strings.rs>) -
   Complete GLSL 330 shader source for a production terminal renderer. Shows per-vertex approach and
   multi-layer compositing.
-- **Kept**: BearLibTerminal design docs (<http://foo.wyrd.name/en:bearlibterminal:design>) - Detailed
-  tileset/atlas architecture, codepage mapping, tile stacking model.
+- **Kept**: BearLibTerminal design docs (<http://foo.wyrd.name/en:bearlibterminal:design>) -
+  Detailed tileset/atlas architecture, codepage mapping, tile stacking model.
 - **Kept**: Ghostty cell_text.v.glsl
   (<https://github.com/ghostty-org/ghostty/blob/main/src/renderer/shaders/glsl/cell_text.v.glsl>) -
   Production vertex shader for instanced cell rendering.

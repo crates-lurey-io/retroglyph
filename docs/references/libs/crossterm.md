@@ -136,7 +136,9 @@ is not exposed. [GitHub #967](https://github.com/crossterm-rs/crossterm/issues/9
 Crossterm does not handle Unix job control signals. `Ctrl+Z` (SIGTSTP) in raw mode leaves the
 terminal in a broken state because crossterm doesn't restore terminal settings before suspending.
 Users must bring in additional crates (`signal-hook`, `ctrlc`) and wire up their own handlers. Issue
+
 # 494 from dua's maintainer (Byron) documents this well. Issue #554 requested adding signal events to
+
 the event loop. Neither has been resolved.
 [GitHub #494](https://github.com/crossterm-rs/crossterm/issues/494),
 [GitHub #554](https://github.com/crossterm-rs/crossterm/issues/554)
@@ -152,7 +154,9 @@ boilerplate.
 ### 5. Windows WinAPI edge cases can panic
 
 On Windows Terminal, certain mouse event flags could cause panics in `crossterm_winapi` (issue
+
 # 588). While specific bugs get fixed, the WinAPI codepath is less battle-tested than the ANSI
+
 codepath and has historically been the source of crashes rather than graceful error returns.
 [GitHub #588](https://github.com/crossterm-rs/crossterm/issues/588)
 

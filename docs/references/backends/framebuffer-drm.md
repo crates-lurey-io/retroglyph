@@ -336,16 +336,16 @@ A practical backend for a terminal/grid rendering library would:
 ### Kept
 
 - **Linux Kernel Framebuffer Documentation**
-  (<https://www.kernel.org/doc/html/latest/fb/framebuffer.html>) -- Official kernel docs on /dev/fb\*
-  interface, ioctls, pixel format, timing
-- **drm-rs crate** (<https://github.com/Smithay/drm-rs>) -- Primary Rust DRM binding. Examined README,
-  docs, and both example files
+  (<https://www.kernel.org/doc/html/latest/fb/framebuffer.html>) -- Official kernel docs on
+  /dev/fb\* interface, ioctls, pixel format, timing
+- **drm-rs crate** (<https://github.com/Smithay/drm-rs>) -- Primary Rust DRM binding. Examined
+  README, docs, and both example files
 - **drm-rs legacy_modeset.rs example**
   (<https://github.com/Smithay/drm-rs/blob/develop/examples/legacy_modeset.rs>) -- Complete working
   example of DRM dumb buffer rendering
 - **drm-rs atomic_modeset.rs example**
-  (<https://github.com/Smithay/drm-rs/blob/develop/examples/atomic_modeset.rs>) -- Atomic API example
-  with planes and properties
+  (<https://github.com/Smithay/drm-rs/blob/develop/examples/atomic_modeset.rs>) -- Atomic API
+  example with planes and properties
 - **drm::control docs** (<https://docs.rs/drm/latest/drm/control/index.html>) -- KMS resource type
   documentation (Connector, CRTC, Plane, etc.)
 - **rust-framebuffer source (lib.rs)** (<https://github.com/Roysten/rust-framebuffer>) -- Complete

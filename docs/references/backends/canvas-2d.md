@@ -81,8 +81,8 @@ Each unique combination gets its own small HTMLCanvasElement. Blitting is via
 `drawImage(canvas, dx, dy)`. Cache is cleared when options change (font, spacing, etc.).
 
 **Pros**: Simple, easy to implement, each glyph is pixel-perfect. **Cons**: One HTMLCanvasElement
-per unique glyph. For a 16-color terminal with 95 printable ASCII characters, that could be 95 _16
-_ 16 = 24,320 canvases in theory (though in practice far fewer are used). Memory overhead per canvas
+per unique glyph. For a 16-color terminal with 95 printable ASCII characters, that could be 95 _16 _
+16 = 24,320 canvases in theory (though in practice far fewer are used). Memory overhead per canvas
 is non-trivial.
 
 [Source: rot.js rect.ts](https://github.com/ondras/rot.js/blob/master/src/display/rect.ts)

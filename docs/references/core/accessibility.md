@@ -749,12 +749,12 @@ game genres. Common failures:
   (<https://learn.microsoft.com/en-us/windows/apps/design/accessibility/high-contrast-themes>) -
   Detailed guidance on Windows high-contrast theme integration, system color resources, and best
   practices.
-- **palette crate docs** (<https://docs.rs/palette/latest/palette/>) - Type-safe color science library
-  with correct sRGB/linear conversions needed for WCAG compliance.
+- **palette crate docs** (<https://docs.rs/palette/latest/palette/>) - Type-safe color science
+  library with correct sRGB/linear conversions needed for WCAG compliance.
 - **tts-rs** (<https://github.com/ndarilek/tts-rs>) - Cross-platform TTS crate for Rust with screen
   reader integration support.
-- **notcurses GitHub** (<https://github.com/dankamongmen/notcurses>) - Reference for how a modern TUI
-  library handles color capabilities and terminal feature detection.
+- **notcurses GitHub** (<https://github.com/dankamongmen/notcurses>) - Reference for how a modern
+  TUI library handles color capabilities and terminal feature detection.
 
 ### Dropped
 

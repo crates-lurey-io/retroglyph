@@ -478,8 +478,8 @@ model is the same regardless of backend.
 - **wasm-bindgen Guide** (<https://wasm-bindgen.github.io/wasm-bindgen/>) - Canonical docs for
   Rust-WASM interop.
 - **Gloo toolkit** (<https://docs.rs/gloo>) - Ergonomic web-sys wrappers documentation.
-- **Webatui** (<https://github.com/TylerBloom/webatui>) - Alternative Rust WASM TUI approach using Yew
-  virtual DOM.
+- **Webatui** (<https://github.com/TylerBloom/webatui>) - Alternative Rust WASM TUI approach using
+  Yew virtual DOM.
 - **Ratzilla crates.io** (<https://crates.io/crates/ratzilla>) - Project overview, examples,
   deployment.
 

@@ -1,7 +1,8 @@
 //! Stateful terminal management and double-buffering.
 
 use crate::backend::Backend;
-use crate::grid::Grid;
+use crate::cell::Cell;
+use crate::grid::{Grid, Rect};
 use crate::style::{CellModifier, Style};
 use crate::color::Color;
 
@@ -67,6 +68,69 @@ impl<B: Backend> Terminal<B> {
         if let Some(cell) = self.current.checked_get_mut(x as usize, y as usize) {
             cell.glyph = ch;
             cell.style = self.drawing_style;
+        }
+    }
+
+    /// Returns a reference to the current grid.
+    #[must_use]
+    pub fn grid(&self) -> &Grid {
+        &self.current
+    }
+
+    /// Returns a reference to the backend.
+    #[must_use]
+    pub fn backend(&self) -> &B {
+        &self.backend
+    }
+
+    /// Returns a mutable reference to the backend.
+    pub fn backend_mut(&mut self) -> &mut B {
+        &mut self.backend
+    }
+
+    /// Clear the entire grid.
+    pub fn clear(&mut self) {
+        self.current.clear();
+    }
+
+    /// Clear a rectangular region.
+    pub fn clear_region(&mut self, rect: Rect) {
+        for y in rect.y..(rect.y + rect.height) {
+            for x in rect.x..(rect.x + rect.width) {
+                if let Some(cell) = self.current.checked_get_mut(x as usize, y as usize) {
+                    *cell = Cell::default();
+                }
+            }
+        }
+    }
+
+    /// Place a character with an explicit style, ignoring current state.
+    pub fn put_styled(&mut self, x: u16, y: u16, ch: char, style: Style) {
+        if let Some(cell) = self.current.checked_get_mut(x as usize, y as usize) {
+            cell.glyph = ch;
+            cell.style = style;
+        }
+    }
+
+    /// Print a string starting at (x, y) with the current style.
+    /// Characters beyond grid width are clipped. `\n` advances to the
+    /// next row at the original x.
+    pub fn print(&mut self, x: u16, y: u16, text: &str) {
+        let mut cur_x = x;
+        let mut cur_y = y;
+        for c in text.chars() {
+            if c == '\n' {
+                cur_x = x;
+                cur_y += 1;
+            } else {
+                self.put(cur_x, cur_y, c);
+                cur_x += 1;
+                // Simple clipping
+                if cur_x >= self.current.width() as u16 {
+                    cur_x = x;
+                    cur_y += 1;
+                }
+            }
         }
     }
 

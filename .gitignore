@@ -10,3 +10,7 @@
 
 # OS files
 .DS_Store
+# Generated files
+bin/
+llms.txt
+llms-full.txt

@@ -1058,8 +1058,8 @@ jobs:
   (<https://github.com/ratatui/ratatui/blob/main/ratatui-core/src/backend/test.rs>) - primary
   reference for test backend design, assert_buffer_lines pattern, scrolling region tests
 - **ratatui buffer.rs**
-  (<https://github.com/ratatui/ratatui/blob/main/ratatui-core/src/buffer/buffer.rs>) - Buffer struct,
-  diff algorithm, with_lines constructor, comprehensive test suite with rstest
+  (<https://github.com/ratatui/ratatui/blob/main/ratatui-core/src/buffer/buffer.rs>) - Buffer
+  struct, diff algorithm, with_lines constructor, comprehensive test suite with rstest
 - **ratatui assert.rs**
   (<https://github.com/ratatui/ratatui/blob/main/ratatui-core/src/buffer/assert.rs>) -
   assert_buffer_eq! macro (now deprecated)

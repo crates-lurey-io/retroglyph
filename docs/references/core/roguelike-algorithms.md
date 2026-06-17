@@ -563,6 +563,7 @@ single C library.
 
 **Advantages:** One dependency gets you everything. Consistent API. Good for beginners/game jams.
 **Disadvantages:** The maintainers themselves concluded it was unsustainable. From libtcod issue
+
 # 147:
 
 > "Libtcod's size makes it difficult to port, maintain, and document. It has too many things at
@@ -779,8 +780,8 @@ drawing) are provided, while noise and exotic algorithms are left to specialized
 
 ### Kept
 
-- **Albert Ford, Symmetric Shadowcasting** (<https://www.albertford.com/shadowcasting/>) - Definitive
-  reference for symmetric FOV with full pseudocode, CC0 licensed
+- **Albert Ford, Symmetric Shadowcasting** (<https://www.albertford.com/shadowcasting/>) -
+  Definitive reference for symmetric FOV with full pseudocode, CC0 licensed
 - **RogueBasin, FOV Comparative Study**
   (<http://www.roguebasin.com/index.php/Comparative_study_of_field_of_view_algorithms_for_2D_grid_based_worlds>) -
   Only rigorous benchmark comparison of FOV algorithms
@@ -796,11 +797,11 @@ drawing) are provided, while noise and exotic algorithms are left to specialized
 - **RogueBasin, Basic BSP Dungeon Generation**
   (<http://www.roguebasin.com/index.php/Basic_BSP_Dungeon_generation>) - Standard BSP reference with
   clear step-by-step illustrations
-- **bracket-lib GitHub** (<https://github.com/amethyst/bracket-lib>) - Primary Rust roguelike toolkit,
-  workspace architecture reference
+- **bracket-lib GitHub** (<https://github.com/amethyst/bracket-lib>) - Primary Rust roguelike
+  toolkit, workspace architecture reference
 - **bracket-algorithm-traits docs**
-  (<https://docs.rs/bracket-algorithm-traits/latest/bracket_algorithm_traits/>) - BaseMap/Algorithm2D
-  trait design reference
+  (<https://docs.rs/bracket-algorithm-traits/latest/bracket_algorithm_traits/>) -
+  BaseMap/Algorithm2D trait design reference
 - **bracket-pathfinding docs** (<https://crates.io/crates/bracket-pathfinding>) - A\*, Dijkstra, FOV
   implementation details and API patterns
 - **pathfinding crate** (<https://crates.io/crates/pathfinding>) - General-purpose pathfinding with
@@ -813,8 +814,8 @@ drawing) are provided, while noise and exotic algorithms are left to specialized
 - **Adam Milazzo, Roguelike Vision Algorithms**
   (<http://www.adammil.net/blog/v125_Roguelike_Vision_Algorithms.html>) - Comprehensive analysis of
   FOV algorithm properties and desirable characteristics
-- **Ratatui modularization issue** (<https://github.com/ratatui/ratatui/issues/1388>) - Precedent for
-  splitting a Rust TUI library into workspace crates
+- **Ratatui modularization issue** (<https://github.com/ratatui/ratatui/issues/1388>) - Precedent
+  for splitting a Rust TUI library into workspace crates
 
 ### Dropped
 
