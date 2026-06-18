@@ -13,6 +13,7 @@ pub mod event;
 pub mod grid;
 pub mod style;
 pub mod terminal;
+pub mod text;
 
 #[cfg(feature = "crossterm")]
 pub use backend::Crossterm;
@@ -23,3 +24,4 @@ pub use event::{Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent,
 pub use grid::{Grid, Position, Rect, Size};
 pub use style::{CellModifier, Style};
 pub use terminal::Terminal;
+pub use text::{Line, Span};

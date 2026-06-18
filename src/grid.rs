@@ -120,6 +120,25 @@ impl Grid {
         self.buffer.fill(Cell::default());
     }
 
+    /// Resize the grid to `width` × `height` cells.
+    ///
+    /// Content within the overlapping region is preserved. New cells are
+    /// initialised to the default cell. Shrinking discards cells outside the
+    /// new bounds.
+    pub fn resize(&mut self, width: usize, height: usize) {
+        let mut new_buffer = alloc::vec![Cell::default(); width * height];
+        let copy_width = self.width.min(width);
+        let copy_height = self.height.min(height);
+        for y in 0..copy_height {
+            for x in 0..copy_width {
+                new_buffer[y * width + x] = self.buffer[y * self.width + x];
+            }
+        }
+        self.width = width;
+        self.height = height;
+        self.buffer = new_buffer;
+    }
+
     /// Yield positions where `self` differs from `other`.
     ///
     /// If dimensions differ, all cells in `self` are considered changed.
@@ -189,7 +208,11 @@ impl fmt::Display for Grid {
         for y in 0..self.height {
             for x in 0..self.width {
                 let cell = self.get(x, y);
-                let c = if cell.glyph == ' ' { '·' } else { cell.glyph };
+                let c = match cell.glyph {
+                    '\0' => ' ', // second column of a wide char
+                    ' ' => '·',  // empty cell
+                    c => c,
+                };
                 write!(f, "{c}")?;
             }
             writeln!(f)?;
@@ -247,6 +270,37 @@ mod tests {
         let diffs: Vec<_> = g1.diff(&g2).collect();
         assert_eq!(diffs.len(), 1);
         assert_eq!(diffs[0], (0, 0, g1.get(0, 0)));
+    }
+
+    #[test]
+    fn test_grid_resize_expand() {
+        let mut grid = Grid::new(3, 3);
+        grid.put(1, 1, Cell::default().with_glyph('X'));
+        grid.resize(6, 6);
+        assert_eq!(grid.width(), 6);
+        assert_eq!(grid.height(), 6);
+        assert_eq!(grid.get(1, 1).glyph, 'X'); // preserved
+        assert_eq!(grid.get(5, 5).glyph, ' '); // new cells default
+    }
+
+    #[test]
+    fn test_grid_resize_shrink() {
+        let mut grid = Grid::new(10, 10);
+        grid.put(1, 1, Cell::default().with_glyph('A'));
+        grid.resize(5, 5);
+        assert_eq!(grid.width(), 5);
+        assert_eq!(grid.height(), 5);
+        assert_eq!(grid.get(1, 1).glyph, 'A'); // still in bounds, preserved
+    }
+
+    #[test]
+    fn test_grid_resize_preserves_overlap() {
+        let mut grid = Grid::new(4, 4);
+        grid.put(0, 0, Cell::default().with_glyph('@'));
+        grid.put(3, 3, Cell::default().with_glyph('X'));
+        grid.resize(3, 3); // shrink: (3,3) falls outside
+        assert_eq!(grid.get(0, 0).glyph, '@');
+        assert_eq!(grid.get(2, 2).glyph, ' '); // was default, still default
     }
 
     #[test]

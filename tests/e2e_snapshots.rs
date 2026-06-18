@@ -231,8 +231,7 @@ fn test_crossterm_demo_snapshot() {
     assert!(svg.contains("HP:"), "status bar missing from SVG output");
 
     // Write a standalone SVG next to the snap so GitHub renders it in PR diffs.
-    let svg_path =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots/crossterm_demo.svg");
+    let svg_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots/crossterm_demo.svg");
     std::fs::write(&svg_path, &svg).expect("write SVG");
 
     insta::assert_snapshot!(svg);

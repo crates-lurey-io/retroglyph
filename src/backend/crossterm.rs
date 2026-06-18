@@ -144,6 +144,12 @@ impl Backend for Crossterm {
         let mut last_attrs = None;
 
         for (x, y, cell) in content {
+            // Continuation cells are the second column of a wide character.
+            // The wide char itself already drew over this position, so skip it.
+            if cell.glyph == '\0' {
+                continue;
+            }
+
             let fg: crossterm::style::Color = cell.style.fg.into();
             let bg: crossterm::style::Color = cell.style.bg.into();
             let attrs: crossterm::style::Attributes = cell.style.modifiers.into();

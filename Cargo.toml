@@ -24,6 +24,7 @@ missing_panics_doc = "deny"
 module_name_repetitions = "allow"
 
 [dependencies]
+unicode-width = "0.2"
 crossterm = { version = "0.28", optional = true }
 
 [features]

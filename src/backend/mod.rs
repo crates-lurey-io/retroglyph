@@ -31,6 +31,16 @@ pub trait Backend {
     /// Clear the entire display.
     fn clear(&mut self);
 
+    /// Notify the backend of a terminal resize.
+    ///
+    /// Called automatically by [`Terminal::resize`] after both grids are resized.
+    /// Backends that maintain internal state tied to terminal dimensions (such as
+    /// [`Headless`]) should override this to update that state. The default
+    /// implementation is a no-op.
+    fn resize(&mut self, size: Size) {
+        let _ = size;
+    }
+
     /// Poll for an input event, waiting up to `timeout`.
     fn poll_event(&mut self, timeout: Duration) -> Option<Event>;
 

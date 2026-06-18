@@ -52,7 +52,7 @@ cargo run --example crossterm_demo --features crossterm
 
 ## Crate layout
 
-```
+```text
 src/
   backend/
     mod.rs          Backend trait

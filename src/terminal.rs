@@ -4,9 +4,11 @@ use crate::backend::Backend;
 use crate::cell::Cell;
 use crate::color::Color;
 use crate::event::Event;
-use crate::grid::{Grid, Rect};
+use crate::grid::{Grid, Rect, Size};
 use crate::style::{CellModifier, Style};
+use crate::text::Line;
 use core::time::Duration;
+use unicode_width::UnicodeWidthChar;
 
 /// The main entry point for `rg`.
 ///
@@ -67,11 +69,51 @@ impl<B: Backend> Terminal<B> {
         self.drawing_style
     }
 
+    /// Returns the current grid dimensions.
+    #[must_use]
+    pub const fn size(&self) -> Size {
+        Size {
+            #[allow(clippy::cast_possible_truncation)]
+            width: self.current.width() as u16,
+            #[allow(clippy::cast_possible_truncation)]
+            height: self.current.height() as u16,
+        }
+    }
+
+    /// Resize both grids to `width` × `height` cells.
+    ///
+    /// Content within the overlapping region is preserved in the current grid.
+    /// The previous grid is cleared so the next [`present`](Self::present) redraws
+    /// the entire new surface rather than diffing stale data.
+    pub fn resize(&mut self, width: u16, height: u16) {
+        self.current.resize(usize::from(width), usize::from(height));
+        self.previous
+            .resize(usize::from(width), usize::from(height));
+        // Clearing previous forces a full redraw next present(), ensuring no
+        // stale cells bleed into the resized layout.
+        self.previous.clear();
+        self.backend.resize(Size { width, height });
+    }
+
     /// Place a character at (x, y) with the current style.
+    ///
+    /// If `ch` is a wide character (e.g. CJK or emoji) that occupies two columns,
+    /// the adjacent cell at `(x + 1, y)` is set to a zero-width continuation
+    /// marker so it is not rendered independently.
     pub fn put(&mut self, x: u16, y: u16, ch: char) {
-        if let Some(cell) = self.current.checked_get_mut(x as usize, y as usize) {
+        let w = UnicodeWidthChar::width(ch).unwrap_or(1);
+        if let Some(cell) = self.current.checked_get_mut(usize::from(x), usize::from(y)) {
             cell.glyph = ch;
             cell.style = self.drawing_style;
+        }
+        if w == 2 {
+            if let Some(cell) = self
+                .current
+                .checked_get_mut(usize::from(x) + 1, usize::from(y))
+            {
+                cell.glyph = '\0';
+                cell.style = self.drawing_style;
+            }
         }
     }
 
@@ -113,17 +155,31 @@ impl<B: Backend> Terminal<B> {
         }
     }
 
-    /// Place a character with an explicit style, ignoring current state.
+    /// Place a character with an explicit style, ignoring the current drawing state.
+    ///
+    /// Wide characters are handled identically to [`put`](Self::put).
     pub fn put_styled(&mut self, x: u16, y: u16, ch: char, style: Style) {
-        if let Some(cell) = self.current.checked_get_mut(x as usize, y as usize) {
+        let w = UnicodeWidthChar::width(ch).unwrap_or(1);
+        if let Some(cell) = self.current.checked_get_mut(usize::from(x), usize::from(y)) {
             cell.glyph = ch;
             cell.style = style;
+        }
+        if w == 2 {
+            if let Some(cell) = self
+                .current
+                .checked_get_mut(usize::from(x) + 1, usize::from(y))
+            {
+                cell.glyph = '\0';
+                cell.style = style;
+            }
         }
     }
 
     /// Print a string starting at (x, y) with the current style.
-    /// Characters beyond grid width are clipped. `\n` advances to the
-    /// next row at the original x.
+    ///
+    /// `\n` advances to the next row at the original `x`. Wide characters
+    /// (CJK, emoji) advance the cursor by 2 columns. Characters that would
+    /// extend beyond the grid width wrap to the next row.
     pub fn print(&mut self, x: u16, y: u16, text: &str) {
         let mut cur_x = x;
         let mut cur_y = y;
@@ -132,13 +188,54 @@ impl<B: Backend> Terminal<B> {
                 cur_x = x;
                 cur_y += 1;
             } else {
+                // char width is always 1 or 2; u16 is safe.
+                #[allow(clippy::cast_possible_truncation)]
+                let w = UnicodeWidthChar::width(c).unwrap_or(1) as u16;
                 self.put(cur_x, cur_y, c);
-                cur_x += 1;
-                // Simple clipping
+                cur_x += w;
                 if usize::from(cur_x) >= self.current.width() {
                     cur_x = x;
                     cur_y += 1;
                 }
+            }
+        }
+    }
+
+    /// Print a [`Line`] of styled spans starting at `(x, y)`.
+    ///
+    /// Each span's style is applied independently. The terminal's current
+    /// drawing style is not modified. Wide characters advance the cursor by
+    /// 2 columns. Rendering stops at the grid boundary.
+    pub fn print_styled(&mut self, x: u16, y: u16, line: &Line) {
+        let mut cur_x = x;
+        for span in &line.spans {
+            for ch in span.content.chars() {
+                if ch == '\n' {
+                    break;
+                }
+                // char width is always 1 or 2; u16 is safe.
+                #[allow(clippy::cast_possible_truncation)]
+                let w = UnicodeWidthChar::width(ch).unwrap_or(1) as u16;
+                if usize::from(cur_x) >= self.current.width() {
+                    break;
+                }
+                if let Some(cell) = self
+                    .current
+                    .checked_get_mut(usize::from(cur_x), usize::from(y))
+                {
+                    cell.glyph = ch;
+                    cell.style = span.style;
+                }
+                if w == 2 {
+                    if let Some(cell) = self
+                        .current
+                        .checked_get_mut(usize::from(cur_x) + 1, usize::from(y))
+                    {
+                        cell.glyph = '\0';
+                        cell.style = span.style;
+                    }
+                }
+                cur_x += w;
             }
         }
     }
@@ -162,14 +259,21 @@ impl<B: Backend> Terminal<B> {
 
     /// Polls for an input event, waiting up to `timeout`.
     ///
-    /// If an event was previously buffered by `has_input`, it is returned immediately.
-    /// Otherwise, the backend is polled for a new event.
+    /// If an event was previously buffered by [`has_input`](Self::has_input), it is
+    /// returned immediately. Otherwise, the backend is polled for a new event.
+    ///
+    /// [`Event::Resize`] events are automatically applied: both grids are resized
+    /// before the event is returned to the caller, so the game loop can immediately
+    /// redraw at the new size.
     pub fn poll(&mut self, timeout: Duration) -> Option<Event> {
-        if let Some(event) = self.queued_event.take() {
-            Some(event)
-        } else {
-            self.backend.poll_event(timeout)
+        let event = self
+            .queued_event
+            .take()
+            .or_else(|| self.backend.poll_event(timeout))?;
+        if let Event::Resize(w, h) = event {
+            self.resize(w, h);
         }
+        Some(event)
     }
 
     /// Reads an input event, blocking indefinitely until one is available.
@@ -263,5 +367,145 @@ mod tests {
         let backend = Headless::new(10, 10);
         let mut terminal = Terminal::new(backend);
         let _ = terminal.read();
+    }
+
+    // --- resize ---
+
+    #[test]
+    fn test_terminal_size() {
+        let term = Terminal::new(Headless::new(40, 20));
+        assert_eq!(
+            term.size(),
+            Size {
+                width: 40,
+                height: 20
+            }
+        );
+    }
+
+    #[test]
+    fn test_terminal_resize_changes_dimensions() {
+        let mut term = Terminal::new(Headless::new(10, 10));
+        term.resize(30, 15);
+        assert_eq!(
+            term.size(),
+            Size {
+                width: 30,
+                height: 15
+            }
+        );
+        assert_eq!(term.grid().width(), 30);
+        assert_eq!(term.grid().height(), 15);
+    }
+
+    #[test]
+    fn test_terminal_resize_preserves_current_content() {
+        let mut term = Terminal::new(Headless::new(10, 10));
+        term.put(2, 2, 'X');
+        term.resize(20, 20);
+        assert_eq!(term.grid().get(2, 2).glyph, 'X');
+        assert_eq!(term.grid().get(15, 15).glyph, ' ');
+    }
+
+    #[test]
+    fn test_terminal_resize_event_auto_applies() {
+        let mut term = Terminal::new(Headless::new(10, 10));
+        term.backend_mut().push_event(Event::Resize(80, 25));
+        let event = term.poll(Duration::ZERO);
+        assert_eq!(event, Some(Event::Resize(80, 25)));
+        assert_eq!(
+            term.size(),
+            Size {
+                width: 80,
+                height: 25
+            }
+        );
+    }
+
+    #[test]
+    fn test_terminal_resize_new_cells_accessible() {
+        // Resize to a larger area, then draw in the newly created region.
+        let mut term = Terminal::new(Headless::new(3, 3));
+        term.put(0, 0, 'A');
+        term.present();
+
+        term.resize(5, 5);
+
+        // Draw into the expanded region and verify it reaches the backend.
+        term.put(4, 4, 'B');
+        term.present();
+
+        assert_eq!(term.backend().grid().get(4, 4).glyph, 'B');
+        // (0,0) was not redrawn this frame; backend retains 'A' from before resize.
+        assert_eq!(term.backend().grid().get(0, 0).glyph, 'A');
+    }
+
+    // --- unicode width ---
+
+    #[test]
+    fn test_put_wide_char_sets_continuation() {
+        let mut term = Terminal::new(Headless::new(10, 3));
+        term.put(0, 0, '\u{4e2d}'); // '中', width 2
+        assert_eq!(term.grid().get(0, 0).glyph, '\u{4e2d}');
+        assert_eq!(term.grid().get(1, 0).glyph, '\0');
+        assert_eq!(term.grid().get(2, 0).glyph, ' '); // untouched
+    }
+
+    #[test]
+    fn test_print_advances_by_char_width() {
+        let mut term = Terminal::new(Headless::new(10, 3));
+        term.print(0, 0, "\u{4e2d}x"); // '中' (2) then 'x' at col 2
+        assert_eq!(term.grid().get(0, 0).glyph, '\u{4e2d}');
+        assert_eq!(term.grid().get(1, 0).glyph, '\0');
+        assert_eq!(term.grid().get(2, 0).glyph, 'x');
+    }
+
+    #[test]
+    fn test_put_wide_char_at_last_column_does_not_overflow() {
+        // Wide char placed at the last column: continuation would be out of bounds.
+        let mut term = Terminal::new(Headless::new(4, 1));
+        term.put(3, 0, '\u{4e2d}'); // col 3 is last; col 4 doesn't exist
+        assert_eq!(term.grid().get(3, 0).glyph, '\u{4e2d}');
+        // No panic — out-of-bounds continuation is silently ignored.
+    }
+
+    // --- styled spans ---
+
+    #[test]
+    fn test_print_styled_basic() {
+        use crate::text::{Line, Span};
+        let mut term = Terminal::new(Headless::new(20, 3));
+        let line = Line::from(vec![
+            Span::raw("HP: "),
+            Span::styled("100", Style::new().fg(Color::GREEN)),
+        ]);
+        term.print_styled(0, 0, &line);
+        assert_eq!(term.grid().get(0, 0).glyph, 'H');
+        assert_eq!(term.grid().get(3, 0).glyph, ' ');
+        assert_eq!(term.grid().get(4, 0).glyph, '1');
+        assert_eq!(term.grid().get(4, 0).style.fg, Color::GREEN);
+        assert_eq!(term.grid().get(6, 0).glyph, '0');
+    }
+
+    #[test]
+    fn test_print_styled_does_not_modify_drawing_style() {
+        use crate::text::{Line, Span};
+        let mut term = Terminal::new(Headless::new(20, 3));
+        term.fg(Color::RED);
+        let line = Line::from(vec![Span::styled("hi", Style::new().fg(Color::BLUE))]);
+        term.print_styled(0, 0, &line);
+        // Drawing style must be unchanged.
+        assert_eq!(term.style().fg, Color::RED);
+    }
+
+    #[test]
+    fn test_print_styled_wide_chars() {
+        use crate::text::{Line, Span};
+        let mut term = Terminal::new(Headless::new(10, 3));
+        let line = Line::from(vec![Span::raw("\u{4e2d}x")]);
+        term.print_styled(0, 0, &line);
+        assert_eq!(term.grid().get(0, 0).glyph, '\u{4e2d}');
+        assert_eq!(term.grid().get(1, 0).glyph, '\0');
+        assert_eq!(term.grid().get(2, 0).glyph, 'x');
     }
 }

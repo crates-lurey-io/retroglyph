@@ -61,8 +61,12 @@ impl Headless {
         let mut out = String::new();
         for y in 0..self.grid.height() {
             for x in 0..self.grid.width() {
-                let c = self.grid.get(x, y).glyph;
-                out.push(if c == ' ' { '·' } else { c });
+                let c = match self.grid.get(x, y).glyph {
+                    '\0' => ' ', // second column of a wide char
+                    ' ' => '·',  // empty cell
+                    c => c,
+                };
+                out.push(c);
             }
             out.push('\n');
         }
@@ -76,8 +80,12 @@ impl Backend for Headless {
         I: Iterator<Item = (u16, u16, &'a Cell)>,
     {
         for (x, y, cell) in content {
-            self.grid.put(x as usize, y as usize, *cell);
+            self.grid.checked_put(x as usize, y as usize, *cell);
         }
+    }
+
+    fn resize(&mut self, size: Size) {
+        self.grid.resize(size.width as usize, size.height as usize);
     }
 
     fn flush(&mut self) {
