@@ -11,13 +11,13 @@ pub struct KeyModifiers(u8);
 
 impl KeyModifiers {
     /// No modifiers.
-    pub const NONE:    Self = Self(0);
+    pub const NONE: Self = Self(0);
     /// Shift key.
-    pub const SHIFT:   Self = Self(1 << 0);
+    pub const SHIFT: Self = Self(1 << 0);
     /// Control key.
     pub const CONTROL: Self = Self(1 << 1);
     /// Alt key.
-    pub const ALT:     Self = Self(1 << 2);
+    pub const ALT: Self = Self(1 << 2);
 
     /// Returns `true` if all bits in `other` are set in `self`.
     #[must_use]
@@ -34,25 +34,35 @@ impl KeyModifiers {
 
 impl BitOr for KeyModifiers {
     type Output = Self;
-    fn bitor(self, rhs: Self) -> Self { Self(self.0 | rhs.0) }
+    fn bitor(self, rhs: Self) -> Self {
+        Self(self.0 | rhs.0)
+    }
 }
 
 impl BitOrAssign for KeyModifiers {
-    fn bitor_assign(&mut self, rhs: Self) { self.0 |= rhs.0; }
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0;
+    }
 }
 
 impl BitAnd for KeyModifiers {
     type Output = Self;
-    fn bitand(self, rhs: Self) -> Self { Self(self.0 & rhs.0) }
+    fn bitand(self, rhs: Self) -> Self {
+        Self(self.0 & rhs.0)
+    }
 }
 
 impl BitAndAssign for KeyModifiers {
-    fn bitand_assign(&mut self, rhs: Self) { self.0 &= rhs.0; }
+    fn bitand_assign(&mut self, rhs: Self) {
+        self.0 &= rhs.0;
+    }
 }
 
 impl Not for KeyModifiers {
     type Output = Self;
-    fn not(self) -> Self { Self(!self.0) }
+    fn not(self) -> Self {
+        Self(!self.0)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

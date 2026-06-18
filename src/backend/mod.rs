@@ -1,12 +1,12 @@
 //! Pluggable rendering backends.
 
-pub mod headless;
 #[cfg(feature = "crossterm")]
 pub mod crossterm;
+pub mod headless;
 
-pub use headless::Headless;
 #[cfg(feature = "crossterm")]
-pub use crossterm::CrosstermBackend;
+pub use crossterm::Crossterm;
+pub use headless::Headless;
 
 use crate::cell::Cell;
 use crate::event::Event;

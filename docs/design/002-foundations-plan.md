@@ -4,9 +4,11 @@
 
 ## Context
 
-This document breaks the foundational work of the library into fine-grained, independently reviewable milestones with
-acceptance criteria detailed enough for human or agent implementation. Each milestone is reviewed
-before the next starts. No release will be made at this stage; the library will remain unreleased until a real backend is implemented and end-to-end games can be built.
+This document breaks the foundational work of the library into fine-grained, independently
+reviewable milestones with acceptance criteria detailed enough for human or agent implementation.
+Each milestone is reviewed before the next starts. No release will be made at this stage; the
+library will remain unreleased until a real backend is implemented and end-to-end games can be
+built.
 
 ## Decisions made during planning
 
@@ -796,12 +798,12 @@ Same logic, but asserts instead of printing:
 
 4. **Dependency audit** — confirm zero runtime dependencies.
 
-6. **Size audit** — test that prints `size_of::<Cell>()`, `size_of::<Style>()`,
+5. **Size audit** — test that prints `size_of::<Cell>()`, `size_of::<Style>()`,
    `size_of::<Color>()`. Document values.
 
-7. **MSRV verification** — `cargo +1.85 check`.
+6. **MSRV verification** — `cargo +1.85 check`.
 
-8. **Tag** — create v0.1.0 tag.
+7. **Tag** — create v0.1.0 tag.
 
 ### Acceptance criteria
 

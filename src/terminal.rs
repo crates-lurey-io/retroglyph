@@ -2,10 +2,10 @@
 
 use crate::backend::Backend;
 use crate::cell::Cell;
-use crate::grid::{Grid, Rect};
-use crate::style::{CellModifier, Style};
 use crate::color::Color;
 use crate::event::Event;
+use crate::grid::{Grid, Rect};
+use crate::style::{CellModifier, Style};
 use core::time::Duration;
 
 /// The main entry point for `rg`.
@@ -213,10 +213,14 @@ mod tests {
 
         assert_eq!(terminal.grid().get(0, 0).glyph, ' ');
 
-        terminal.grid_mut().put(0, 0, Cell {
-            glyph: 'X',
-            style: Style::default(),
-        });
+        terminal.grid_mut().put(
+            0,
+            0,
+            Cell {
+                glyph: 'X',
+                style: Style::default(),
+            },
+        );
 
         assert_eq!(terminal.grid().get(0, 0).glyph, 'X');
     }

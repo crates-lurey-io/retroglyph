@@ -69,13 +69,13 @@ pub enum Color {
     /// 24-bit RGB color.
     ///
     /// Use this for exact color matching regardless of terminal settings.
-    Rgb { 
+    Rgb {
         /// Red channel.
-        r: u8, 
+        r: u8,
         /// Green channel.
-        g: u8, 
+        g: u8,
         /// Blue channel.
-        b: u8 
+        b: u8,
     },
 }
 

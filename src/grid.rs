@@ -58,11 +58,15 @@ impl Grid {
 
     /// Returns the width of the grid.
     #[must_use]
-    pub const fn width(&self) -> usize { self.width }
+    pub const fn width(&self) -> usize {
+        self.width
+    }
 
     /// Returns the height of the grid.
     #[must_use]
-    pub const fn height(&self) -> usize { self.height }
+    pub const fn height(&self) -> usize {
+        self.height
+    }
 
     /// Sets the cell at the given coordinates.
     ///
@@ -120,20 +124,21 @@ impl Grid {
     ///
     /// If dimensions differ, all cells in `self` are considered changed.
     pub fn diff<'a>(&'a self, other: &'a Self) -> impl Iterator<Item = (u16, u16, &'a Cell)> + 'a {
-        let iter: DiffIterator<'a, _, _> = if self.width != other.width || self.height != other.height {
-            DiffIterator::All(self.buffer.iter().enumerate(), core::marker::PhantomData)
-        } else {
-            DiffIterator::Changed(
-                self.buffer.iter().enumerate().filter_map(move |(i, cell)| {
-                    if cell == &other.buffer[i] {
-                        None
-                    } else {
-                        Some((i, cell))
-                    }
-                }),
-                core::marker::PhantomData,
-            )
-        };
+        let iter: DiffIterator<'a, _, _> =
+            if self.width != other.width || self.height != other.height {
+                DiffIterator::All(self.buffer.iter().enumerate(), core::marker::PhantomData)
+            } else {
+                DiffIterator::Changed(
+                    self.buffer.iter().enumerate().filter_map(move |(i, cell)| {
+                        if cell == &other.buffer[i] {
+                            None
+                        } else {
+                            Some((i, cell))
+                        }
+                    }),
+                    core::marker::PhantomData,
+                )
+            };
 
         iter.map(move |(i, cell)| {
             #[allow(clippy::cast_possible_truncation)]
@@ -208,7 +213,7 @@ mod tests {
     fn test_grid_put_get() {
         let mut grid = Grid::new(10, 10);
         let cell = Cell::default().with_glyph('X');
-        
+
         grid.put(5, 5, cell);
         assert_eq!(grid.get(5, 5).glyph, 'X');
     }
@@ -217,10 +222,10 @@ mod tests {
     fn test_grid_checked_put_get() {
         let mut grid = Grid::new(10, 10);
         let cell = Cell::default().with_glyph('Y');
-        
+
         assert!(grid.checked_put(5, 5, cell).is_some());
         assert_eq!(grid.checked_get(5, 5).unwrap().glyph, 'Y');
-        
+
         assert!(grid.checked_get(10, 0).is_none());
         assert!(grid.checked_put(0, 10, Cell::default()).is_none());
     }
@@ -236,9 +241,9 @@ mod tests {
     fn test_grid_diff() {
         let mut g1 = Grid::new(2, 2);
         let g2 = Grid::new(2, 2);
-        
+
         g1.put(0, 0, Cell::default().with_glyph('A'));
-        
+
         let diffs: Vec<_> = g1.diff(&g2).collect();
         assert_eq!(diffs.len(), 1);
         assert_eq!(diffs[0], (0, 0, g1.get(0, 0)));
@@ -248,7 +253,7 @@ mod tests {
     fn test_grid_display() {
         let mut grid = Grid::new(3, 2);
         grid.put(0, 0, Cell::default().with_glyph('A'));
-        
+
         let s = alloc::format!("{grid}");
         assert_eq!(s, "A··\n···\n");
     }

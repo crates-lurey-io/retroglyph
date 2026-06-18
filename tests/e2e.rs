@@ -1,9 +1,9 @@
 //! E2E tests for the `rg` library.
 
+use rg::Terminal;
 use rg::backend::Headless;
 use rg::color::Color;
 use rg::style::Style;
-use rg::Terminal;
 
 #[test]
 fn test_e2e_movement() {

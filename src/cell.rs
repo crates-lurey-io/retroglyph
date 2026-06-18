@@ -58,10 +58,10 @@ mod tests {
     fn test_cell_builder() {
         let style = Style::new().fg(Color::RED);
         let cell = Cell::new('A', style);
-        
+
         assert_eq!(cell.glyph, 'A');
         assert_eq!(cell.style, style);
-        
+
         let cell = cell.with_glyph('B');
         assert_eq!(cell.glyph, 'B');
     }
