@@ -5,6 +5,8 @@ use crate::cell::Cell;
 use crate::grid::{Grid, Rect};
 use crate::style::{CellModifier, Style};
 use crate::color::Color;
+use crate::event::Event;
+use core::time::Duration;
 
 /// The main entry point for `rg`.
 ///
@@ -15,6 +17,7 @@ pub struct Terminal<B: Backend> {
     previous: Grid,
     backend: B,
     drawing_style: Style,
+    queued_event: Option<Event>,
 }
 
 impl<B: Backend> Terminal<B> {
@@ -30,23 +33,24 @@ impl<B: Backend> Terminal<B> {
             previous,
             backend,
             drawing_style: Style::default(),
+            queued_event: None,
         }
     }
 
     /// Sets the foreground color for the stateful API.
-    pub fn fg(&mut self, color: Color) -> &mut Self {
+    pub const fn fg(&mut self, color: Color) -> &mut Self {
         self.drawing_style.fg = color;
         self
     }
 
     /// Sets the background color for the stateful API.
-    pub fn bg(&mut self, color: Color) -> &mut Self {
+    pub const fn bg(&mut self, color: Color) -> &mut Self {
         self.drawing_style.bg = color;
         self
     }
 
     /// Sets text modifiers for the stateful API.
-    pub fn modifier(&mut self, modifier: CellModifier) -> &mut Self {
+    pub const fn modifier(&mut self, modifier: CellModifier) -> &mut Self {
         self.drawing_style.modifiers = modifier;
         self
     }
@@ -59,7 +63,7 @@ impl<B: Backend> Terminal<B> {
 
     /// Returns the current drawing style.
     #[must_use]
-    pub fn style(&self) -> Style {
+    pub const fn style(&self) -> Style {
         self.drawing_style
     }
 
@@ -73,18 +77,23 @@ impl<B: Backend> Terminal<B> {
 
     /// Returns a reference to the current grid.
     #[must_use]
-    pub fn grid(&self) -> &Grid {
+    pub const fn grid(&self) -> &Grid {
         &self.current
+    }
+
+    /// Returns a mutable reference to the current grid.
+    pub const fn grid_mut(&mut self) -> &mut Grid {
+        &mut self.current
     }
 
     /// Returns a reference to the backend.
     #[must_use]
-    pub fn backend(&self) -> &B {
+    pub const fn backend(&self) -> &B {
         &self.backend
     }
 
     /// Returns a mutable reference to the backend.
-    pub fn backend_mut(&mut self) -> &mut B {
+    pub const fn backend_mut(&mut self) -> &mut B {
         &mut self.backend
     }
 
@@ -126,7 +135,7 @@ impl<B: Backend> Terminal<B> {
                 self.put(cur_x, cur_y, c);
                 cur_x += 1;
                 // Simple clipping
-                if cur_x >= self.current.width() as u16 {
+                if usize::from(cur_x) >= self.current.width() {
                     cur_x = x;
                     cur_y += 1;
                 }
@@ -149,5 +158,106 @@ impl<B: Backend> Terminal<B> {
         // Swap buffers: `previous` now holds the last rendered frame,
         // which will be the diff target for the next frame.
         core::mem::swap(&mut self.current, &mut self.previous);
+    }
+
+    /// Polls for an input event, waiting up to `timeout`.
+    ///
+    /// If an event was previously buffered by `has_input`, it is returned immediately.
+    /// Otherwise, the backend is polled for a new event.
+    pub fn poll(&mut self, timeout: Duration) -> Option<Event> {
+        if let Some(event) = self.queued_event.take() {
+            Some(event)
+        } else {
+            self.backend.poll_event(timeout)
+        }
+    }
+
+    /// Reads an input event, blocking indefinitely until one is available.
+    ///
+    /// # Panics
+    ///
+    /// Panics if no event is available. This matches the expected behavior
+    /// for headless backend tests when the event queue is empty.
+    pub fn read(&mut self) -> Event {
+        self.poll(Duration::MAX)
+            .expect("read() called but no events available")
+    }
+
+    /// Checks if a pending input event is available without blocking.
+    ///
+    /// If an event is already buffered, returns `true`. Otherwise, polls the backend
+    /// with zero timeout. If the backend returns an event, it is stored in the internal
+    /// buffer and `true` is returned; otherwise, returns `false`.
+    pub fn has_input(&mut self) -> bool {
+        if self.queued_event.is_some() {
+            true
+        } else if let Some(event) = self.backend.poll_event(Duration::ZERO) {
+            self.queued_event = Some(event);
+            true
+        } else {
+            false
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::backend::Headless;
+    use crate::cell::Cell;
+
+    #[test]
+    fn test_terminal_grid_mut() {
+        let backend = Headless::new(10, 10);
+        let mut terminal = Terminal::new(backend);
+
+        assert_eq!(terminal.grid().get(0, 0).glyph, ' ');
+
+        terminal.grid_mut().put(0, 0, Cell {
+            glyph: 'X',
+            style: Style::default(),
+        });
+
+        assert_eq!(terminal.grid().get(0, 0).glyph, 'X');
+    }
+
+    #[test]
+    fn test_terminal_poll_and_read() {
+        let backend = Headless::new(10, 10);
+        let mut terminal = Terminal::new(backend);
+
+        assert_eq!(terminal.poll(Duration::ZERO), None);
+
+        terminal.backend_mut().push_event(Event::Close);
+        assert_eq!(terminal.poll(Duration::ZERO), Some(Event::Close));
+
+        terminal.backend_mut().push_event(Event::Resize(80, 25));
+        assert_eq!(terminal.read(), Event::Resize(80, 25));
+    }
+
+    #[test]
+    fn test_terminal_has_input() {
+        let backend = Headless::new(10, 10);
+        let mut terminal = Terminal::new(backend);
+
+        assert!(!terminal.has_input());
+
+        terminal.backend_mut().push_event(Event::Close);
+        assert!(terminal.has_input());
+        assert!(terminal.has_input()); // Repeated calls should still be true
+
+        // Read/Poll should retrieve the buffered event
+        assert_eq!(terminal.poll(Duration::ZERO), Some(Event::Close));
+
+        // After taking, it should be false again
+        assert!(!terminal.has_input());
+    }
+
+    #[test]
+    #[should_panic(expected = "read() called but no events available")]
+    fn test_terminal_read_panic() {
+        let backend = Headless::new(10, 10);
+        let mut terminal = Terminal::new(backend);
+        let _ = terminal.read();
     }
 }

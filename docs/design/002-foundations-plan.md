@@ -1,12 +1,12 @@
-# ADR 002: v0.1.0 Implementation Plan
+# ADR 002: Foundations Implementation Plan
 
 **Status:** Draft **Date:** 2026-06-15 **Parent:** [ADR 001: Architecture](001-architecture.md)
 
 ## Context
 
-This document breaks the v0.1.0 release into fine-grained, independently reviewable milestones with
+This document breaks the foundational work of the library into fine-grained, independently reviewable milestones with
 acceptance criteria detailed enough for human or agent implementation. Each milestone is reviewed
-before the next starts.
+before the next starts. No release will be made at this stage; the library will remain unreleased until a real backend is implemented and end-to-end games can be built.
 
 ## Decisions made during planning
 
@@ -47,7 +47,7 @@ M5: Event types ─────────────────────�
                                         ▼
                                    M8: Terminal
                                         └─► M9: Example + E2E
-                                             └─► M10: Polish + tag
+                                             └─► M10: Polish
 ```
 
 M5 (events) is independent of M1-M4 and can be built in parallel.
@@ -776,9 +776,9 @@ Same logic, but asserts instead of printing:
 
 ---
 
-## M10: Documentation + polish + tag
+## M10: Documentation + polish
 
-**Goal:** Final polish and v0.1.0 release.
+**Goal:** Final polish of the foundational types.
 
 ### Tasks
 
@@ -788,15 +788,13 @@ Same logic, but asserts instead of printing:
 2. **README update** — replace "under construction":
    - What rg is (one paragraph)
    - Usage example (headless)
-   - Status (v0.1.0: headless only, crossterm coming in v0.2)
+   - Status (Unreleased foundation, crossterm backend coming next)
    - API overview
    - License
 
-3. **CHANGELOG.md** — v0.1.0 entry listing all public types and features.
+3. **Lint audit** — final `cargo clippy`, fix all warnings.
 
-4. **Lint audit** — final `cargo clippy`, fix all warnings.
-
-5. **Dependency audit** — confirm zero runtime dependencies.
+4. **Dependency audit** — confirm zero runtime dependencies.
 
 6. **Size audit** — test that prints `size_of::<Cell>()`, `size_of::<Style>()`,
    `size_of::<Color>()`. Document values.
