@@ -61,10 +61,19 @@ impl Headless {
         let mut out = String::new();
         for y in 0..self.grid.height() {
             for x in 0..self.grid.width() {
-                let c = match self.grid.get(x, y).glyph {
-                    '\0' => ' ', // second column of a wide char
-                    ' ' => '·',  // empty cell
-                    c => c,
+                let cell = self.grid.get(x, y);
+                #[cfg(feature = "egc")]
+                let is_spacer = cell
+                    .flags()
+                    .contains(crate::cell::CellFlags::WIDE_CHAR_SPACER);
+                #[cfg(not(feature = "egc"))]
+                let is_spacer = cell.glyph() == '\0';
+                let c = if is_spacer {
+                    ' '
+                } else if cell.glyph() == ' ' {
+                    '·'
+                } else {
+                    cell.glyph()
                 };
                 out.push(c);
             }
@@ -80,7 +89,7 @@ impl Backend for Headless {
         I: Iterator<Item = (Position, &'a Cell)>,
     {
         for (pos, cell) in content {
-            self.grid.checked_put(pos.x, pos.y, *cell);
+            self.grid.checked_put(pos.x, pos.y, cell.clone());
         }
     }
 

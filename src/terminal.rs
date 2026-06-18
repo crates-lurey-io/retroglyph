@@ -8,6 +8,7 @@ use crate::grid::{Grid, Rect, Size};
 use crate::style::{CellModifier, Style};
 use crate::text::Line;
 use core::time::Duration;
+#[cfg(not(feature = "egc"))]
 use unicode_width::UnicodeWidthChar;
 
 /// The main entry point for `rg`.
@@ -154,24 +155,10 @@ impl<B: Backend> Terminal<B> {
     /// extend beyond the grid width wrap to the next row.
     pub fn print(&mut self, x: u16, y: u16, text: &str) {
         let style = self.drawing_style;
-        let mut cur_x = x;
-        let mut cur_y = y;
-        for c in text.chars() {
-            if c == '\n' {
-                cur_x = x;
-                cur_y += 1;
-            } else {
-                // char width is always 1 or 2; u16 is safe.
-                #[allow(clippy::cast_possible_truncation)]
-                let w = UnicodeWidthChar::width(c).unwrap_or(1) as u16;
-                self.put_cell(cur_x, cur_y, c, style);
-                cur_x += w;
-                if usize::from(cur_x) >= usize::from(self.current.width()) {
-                    cur_x = x;
-                    cur_y += 1;
-                }
-            }
-        }
+        #[cfg(feature = "egc")]
+        self.print_str_egc(x, y, text, style);
+        #[cfg(not(feature = "egc"))]
+        self.print_str_chars(x, y, text, style);
     }
 
     /// Print a [`Line`] of styled spans starting at `(x, y)`.
@@ -180,22 +167,72 @@ impl<B: Backend> Terminal<B> {
     /// drawing style is not modified. Wide characters advance the cursor by
     /// 2 columns. Rendering stops at the grid boundary.
     pub fn print_styled(&mut self, x: u16, y: u16, line: &Line) {
-        let mut cur_x = x;
-        for span in &line.spans {
-            for ch in span.content.chars() {
-                if ch == '\n' {
-                    break;
+        #[cfg(feature = "egc")]
+        {
+            use unicode_segmentation::UnicodeSegmentation;
+            use unicode_width::UnicodeWidthStr;
+            let mut cur_x = x;
+            for span in &line.spans {
+                for grapheme in span.content.graphemes(true) {
+                    if grapheme == "\n" {
+                        break;
+                    }
+                    #[allow(clippy::cast_possible_truncation)]
+                    let w = grapheme.width() as u16;
+                    if w == 0 {
+                        continue;
+                    }
+                    if cur_x >= self.current.width() {
+                        break;
+                    }
+                    self.current.write_grapheme(cur_x, y, grapheme, span.style);
+                    cur_x += w;
                 }
-                // char width is always 1 or 2; u16 is safe.
-                #[allow(clippy::cast_possible_truncation)]
-                let w = UnicodeWidthChar::width(ch).unwrap_or(1) as u16;
-                if usize::from(cur_x) >= usize::from(self.current.width()) {
-                    break;
-                }
-                self.put_cell(cur_x, y, ch, span.style);
-                cur_x += w;
             }
         }
+        #[cfg(not(feature = "egc"))]
+        {
+            use unicode_width::UnicodeWidthChar;
+            let mut cur_x = x;
+            for span in &line.spans {
+                for ch in span.content.chars() {
+                    if ch == '\n' {
+                        break;
+                    }
+                    #[allow(clippy::cast_possible_truncation)]
+                    let w = UnicodeWidthChar::width(ch).unwrap_or(1) as u16;
+                    if usize::from(cur_x) >= usize::from(self.current.width()) {
+                        break;
+                    }
+                    self.put_cell(cur_x, y, ch, span.style);
+                    cur_x += w;
+                }
+            }
+        }
+    }
+
+    /// Render a [`Line`] of styled text into a bounded rectangle.
+    ///
+    /// Performs greedy word-wrapping at `rect`'s width, then positions the
+    /// resulting lines according to `h_align` and `v_align`. Lines that
+    /// overflow `rect`'s height are silently clipped.
+    ///
+    /// This is a convenience wrapper around [`TextLayout`](crate::layout::TextLayout).
+    ///
+    /// Only available when the `egc` feature is enabled.
+    #[cfg(feature = "egc")]
+    pub fn print_box(
+        &mut self,
+        rect: Rect,
+        line: &Line,
+        h_align: crate::layout::HAlign,
+        v_align: crate::layout::VAlign,
+    ) {
+        crate::layout::TextLayout::new(line)
+            .rect(rect)
+            .h_align(h_align)
+            .v_align(v_align)
+            .render(self);
     }
 
     /// Present the current frame.
@@ -261,18 +298,79 @@ impl<B: Backend> Terminal<B> {
         }
     }
 
-    /// Places `ch` with `style` at `(x, y)`, writing a `'\0'` continuation
-    /// marker at `(x+1, y)` if `ch` occupies two terminal columns.
+    /// Places `ch` with `style` at `(x, y)`.
+    ///
+    /// When `egc` is enabled, delegates to [`Grid::write_grapheme`] which
+    /// handles wide-char invariants and EGC storage.
+    /// Without `egc`, writes a `'\0'` continuation marker for wide chars.
     fn put_cell(&mut self, x: u16, y: u16, ch: char, style: Style) {
-        let w = UnicodeWidthChar::width(ch).unwrap_or(1);
-        if let Some(cell) = self.current.checked_get_mut(x, y) {
-            cell.glyph = ch;
-            cell.style = style;
+        #[cfg(feature = "egc")]
+        {
+            let mut buf = [0u8; 4];
+            let s = ch.encode_utf8(&mut buf);
+            self.current.write_grapheme(x, y, s, style);
         }
-        if w == 2 {
-            if let Some(cell) = self.current.checked_get_mut(x.saturating_add(1), y) {
-                cell.glyph = '\0';
+        #[cfg(not(feature = "egc"))]
+        {
+            let w = UnicodeWidthChar::width(ch).unwrap_or(1);
+            if let Some(cell) = self.current.checked_get_mut(x, y) {
+                cell.glyph = ch;
                 cell.style = style;
+            }
+            if w == 2 {
+                if let Some(cell) = self.current.checked_get_mut(x.saturating_add(1), y) {
+                    cell.glyph = '\0';
+                    cell.style = style;
+                }
+            }
+        }
+    }
+
+    /// String printing implementation used when `egc` is enabled.
+    #[cfg(feature = "egc")]
+    fn print_str_egc(&mut self, x: u16, y: u16, text: &str, style: Style) {
+        use unicode_segmentation::UnicodeSegmentation;
+        use unicode_width::UnicodeWidthStr;
+        let mut cur_x = x;
+        let mut cur_y = y;
+        for grapheme in text.graphemes(true) {
+            if grapheme == "\n" {
+                cur_x = x;
+                cur_y += 1;
+                continue;
+            }
+            #[allow(clippy::cast_possible_truncation)]
+            let w = grapheme.width() as u16;
+            if w == 0 {
+                continue;
+            }
+            self.current.write_grapheme(cur_x, cur_y, grapheme, style);
+            cur_x += w;
+            if cur_x >= self.current.width() {
+                cur_x = x;
+                cur_y += 1;
+            }
+        }
+    }
+
+    /// String printing implementation used when `egc` is disabled.
+    #[cfg(not(feature = "egc"))]
+    fn print_str_chars(&mut self, x: u16, y: u16, text: &str, style: Style) {
+        let mut cur_x = x;
+        let mut cur_y = y;
+        for c in text.chars() {
+            if c == '\n' {
+                cur_x = x;
+                cur_y += 1;
+            } else {
+                #[allow(clippy::cast_possible_truncation)]
+                let w = UnicodeWidthChar::width(c).unwrap_or(1) as u16;
+                self.put_cell(cur_x, cur_y, c, style);
+                cur_x += w;
+                if usize::from(cur_x) >= usize::from(self.current.width()) {
+                    cur_x = x;
+                    cur_y += 1;
+                }
             }
         }
     }
@@ -289,18 +387,13 @@ mod tests {
         let backend = Headless::new(10, 10);
         let mut terminal = Terminal::new(backend);
 
-        assert_eq!(terminal.grid().get(0, 0).glyph, ' ');
+        assert_eq!(terminal.grid().get(0, 0).glyph(), ' ');
 
-        terminal.grid_mut().put(
-            0,
-            0,
-            Cell {
-                glyph: 'X',
-                style: Style::default(),
-            },
-        );
+        terminal
+            .grid_mut()
+            .put(0, 0, Cell::new('X', Style::default()));
 
-        assert_eq!(terminal.grid().get(0, 0).glyph, 'X');
+        assert_eq!(terminal.grid().get(0, 0).glyph(), 'X');
     }
 
     #[test]
@@ -377,8 +470,8 @@ mod tests {
         let mut term = Terminal::new(Headless::new(10, 10));
         term.put(2, 2, 'X');
         term.resize(20, 20);
-        assert_eq!(term.grid().get(2, 2).glyph, 'X');
-        assert_eq!(term.grid().get(15, 15).glyph, ' ');
+        assert_eq!(term.grid().get(2, 2).glyph(), 'X');
+        assert_eq!(term.grid().get(15, 15).glyph(), ' ');
     }
 
     #[test]
@@ -409,9 +502,9 @@ mod tests {
         term.put(4, 4, 'B');
         term.present();
 
-        assert_eq!(term.backend().grid().get(4, 4).glyph, 'B');
+        assert_eq!(term.backend().grid().get(4, 4).glyph(), 'B');
         // (0,0) was not redrawn this frame; backend retains 'A' from before resize.
-        assert_eq!(term.backend().grid().get(0, 0).glyph, 'A');
+        assert_eq!(term.backend().grid().get(0, 0).glyph(), 'A');
     }
 
     // --- unicode width ---
@@ -420,27 +513,52 @@ mod tests {
     fn test_put_wide_char_sets_continuation() {
         let mut term = Terminal::new(Headless::new(10, 3));
         term.put(0, 0, '\u{4e2d}'); // '中', width 2
-        assert_eq!(term.grid().get(0, 0).glyph, '\u{4e2d}');
-        assert_eq!(term.grid().get(1, 0).glyph, '\0');
-        assert_eq!(term.grid().get(2, 0).glyph, ' '); // untouched
+        assert_eq!(term.grid().get(0, 0).glyph(), '\u{4e2d}');
+        // With egc: spacer uses WIDE_CHAR_SPACER flag, glyph is space.
+        // Without egc: spacer is '\0'.
+        #[cfg(feature = "egc")]
+        {
+            use crate::cell::CellFlags;
+            assert!(
+                term.grid()
+                    .get(1, 0)
+                    .flags()
+                    .contains(CellFlags::WIDE_CHAR_SPACER)
+            );
+            assert_eq!(term.grid().get(1, 0).glyph(), ' ');
+        }
+        #[cfg(not(feature = "egc"))]
+        assert_eq!(term.grid().get(1, 0).glyph(), '\0');
+        assert_eq!(term.grid().get(2, 0).glyph(), ' '); // untouched
     }
 
     #[test]
     fn test_print_advances_by_char_width() {
         let mut term = Terminal::new(Headless::new(10, 3));
         term.print(0, 0, "\u{4e2d}x"); // '中' (2) then 'x' at col 2
-        assert_eq!(term.grid().get(0, 0).glyph, '\u{4e2d}');
-        assert_eq!(term.grid().get(1, 0).glyph, '\0');
-        assert_eq!(term.grid().get(2, 0).glyph, 'x');
+        assert_eq!(term.grid().get(0, 0).glyph(), '\u{4e2d}');
+        #[cfg(feature = "egc")]
+        {
+            use crate::cell::CellFlags;
+            assert!(
+                term.grid()
+                    .get(1, 0)
+                    .flags()
+                    .contains(CellFlags::WIDE_CHAR_SPACER)
+            );
+        }
+        #[cfg(not(feature = "egc"))]
+        assert_eq!(term.grid().get(1, 0).glyph(), '\0');
+        assert_eq!(term.grid().get(2, 0).glyph(), 'x');
     }
 
     #[test]
     fn test_put_wide_char_at_last_column_does_not_overflow() {
-        // Wide char placed at the last column: continuation would be out of bounds.
+        // Wide char placed at the last column: can't place a spacer.
+        // write_grapheme silently refuses rather than leaving an orphan.
         let mut term = Terminal::new(Headless::new(4, 1));
-        term.put(3, 0, '\u{4e2d}'); // col 3 is last; col 4 doesn't exist
-        assert_eq!(term.grid().get(3, 0).glyph, '\u{4e2d}');
-        // No panic — out-of-bounds continuation is silently ignored.
+        term.put(3, 0, '\u{4e2d}'); // col 3 is last; need col 4 for spacer
+        assert_eq!(term.grid().get(3, 0).glyph(), ' '); // nothing written
     }
 
     // --- styled spans ---
@@ -454,11 +572,11 @@ mod tests {
             Span::styled("100", Style::new().fg(Color::GREEN)),
         ]);
         term.print_styled(0, 0, &line);
-        assert_eq!(term.grid().get(0, 0).glyph, 'H');
-        assert_eq!(term.grid().get(3, 0).glyph, ' ');
-        assert_eq!(term.grid().get(4, 0).glyph, '1');
+        assert_eq!(term.grid().get(0, 0).glyph(), 'H');
+        assert_eq!(term.grid().get(3, 0).glyph(), ' ');
+        assert_eq!(term.grid().get(4, 0).glyph(), '1');
         assert_eq!(term.grid().get(4, 0).style.fg, Color::GREEN);
-        assert_eq!(term.grid().get(6, 0).glyph, '0');
+        assert_eq!(term.grid().get(6, 0).glyph(), '0');
     }
 
     #[test]
@@ -478,8 +596,19 @@ mod tests {
         let mut term = Terminal::new(Headless::new(10, 3));
         let line = Line::from(vec![Span::raw("\u{4e2d}x")]);
         term.print_styled(0, 0, &line);
-        assert_eq!(term.grid().get(0, 0).glyph, '\u{4e2d}');
-        assert_eq!(term.grid().get(1, 0).glyph, '\0');
-        assert_eq!(term.grid().get(2, 0).glyph, 'x');
+        assert_eq!(term.grid().get(0, 0).glyph(), '\u{4e2d}');
+        #[cfg(feature = "egc")]
+        {
+            use crate::cell::CellFlags;
+            assert!(
+                term.grid()
+                    .get(1, 0)
+                    .flags()
+                    .contains(CellFlags::WIDE_CHAR_SPACER)
+            );
+        }
+        #[cfg(not(feature = "egc"))]
+        assert_eq!(term.grid().get(1, 0).glyph(), '\0');
+        assert_eq!(term.grid().get(2, 0).glyph(), 'x');
     }
 }

@@ -27,11 +27,14 @@ module_name_repetitions = "allow"
 
 [dependencies]
 unicode-width = "0.2"
+bitflags = "2.4"
+unicode-segmentation = { version = "1.13", default-features = false, optional = true }
 crossterm = { version = "0.28", optional = true }
 
 [features]
-default = ["std"]
+default = ["std", "egc"]
 std = []
+egc = ["dep:unicode-segmentation"]
 crossterm = ["dep:crossterm", "std"]
 
 [[example]]

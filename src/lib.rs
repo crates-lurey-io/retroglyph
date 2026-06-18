@@ -11,6 +11,8 @@ pub mod cell;
 pub mod color;
 pub mod event;
 pub mod grid;
+#[cfg(feature = "egc")]
+pub mod layout;
 pub mod style;
 pub mod terminal;
 pub mod text;
@@ -22,6 +24,8 @@ pub use cell::Cell;
 pub use color::{AnsiColor, Color, InvalidAnsiIndex};
 pub use event::{Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 pub use grid::{Grid, Position, Rect, Size};
+#[cfg(feature = "egc")]
+pub use layout::{HAlign, TextLayout, TextMetrics, VAlign};
 pub use style::{CellModifier, Style};
 pub use terminal::Terminal;
 pub use text::{Line, Span};

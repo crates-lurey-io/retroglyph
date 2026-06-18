@@ -1,6 +1,12 @@
 //! The grid container.
 
 use crate::cell::Cell;
+#[cfg(feature = "egc")]
+use crate::cell::CellFlags;
+#[cfg(feature = "egc")]
+use crate::cell::cap_grapheme;
+#[cfg(feature = "egc")]
+use crate::style::Style;
 use alloc::vec::Vec;
 use core::fmt;
 use core::ops::{Index, IndexMut};
@@ -281,7 +287,7 @@ impl Grid {
         let old_w = usize::from(self.width);
         for y in 0..copy_height {
             for x in 0..copy_width {
-                new_buffer[y * w + x] = self.buffer[y * old_w + x];
+                new_buffer[y * w + x] = self.buffer[y * old_w + x].clone();
             }
         }
         self.width = width;
@@ -292,10 +298,7 @@ impl Grid {
     /// Yield positions where `self` differs from `other`.
     ///
     /// If dimensions differ, all cells in `self` are considered changed.
-    pub fn diff<'a>(
-        &'a self,
-        other: &'a Self,
-    ) -> impl Iterator<Item = (Position, &'a Cell)> + 'a {
+    pub fn diff<'a>(&'a self, other: &'a Self) -> impl Iterator<Item = (Position, &'a Cell)> + 'a {
         let w = usize::from(self.width);
         let iter: DiffIterator<'a, _, _> =
             if self.width != other.width || self.height != other.height {
@@ -320,6 +323,122 @@ impl Grid {
             let y = (i / w) as u16;
             (Position { x, y }, cell)
         })
+    }
+
+    /// Write a grapheme cluster at `(x, y)`, enforcing wide-character invariants.
+    ///
+    /// This is the canonical way to place content into the grid when the `egc`
+    /// feature is enabled. It:
+    ///
+    /// - Clears any wide character whose primary or spacer cell would be
+    ///   overwritten.
+    /// - Sets [`CellFlags::WIDE_CHAR`] on the primary cell and places a
+    ///   [`CellFlags::WIDE_CHAR_SPACER`] in the adjacent cell for 2-column
+    ///   characters.
+    /// - Stores multi-codepoint EGCs (combining marks, ZWJ sequences) in
+    ///   `Cell::extra`, capped at 8 codepoints total.
+    ///
+    /// Does nothing if `(x, y)` is out of bounds, if the grapheme has zero
+    /// display width, or if a 2-column wide character would overflow the grid
+    /// (the last column needs both its own cell and a spacer).
+    ///
+    /// # Panics
+    ///
+    /// Panics if the grapheme's display width exceeds [`u16::MAX`]. In
+    /// practice this cannot happen: the maximum Unicode grapheme width is 2.
+    ///
+    /// Only present when the `egc` feature is enabled.
+    #[cfg(feature = "egc")]
+    pub fn write_grapheme(&mut self, x: u16, y: u16, grapheme: &str, style: Style) {
+        use unicode_width::UnicodeWidthStr;
+
+        let width = u16::try_from(grapheme.width()).expect("grapheme width exceeds u16");
+        if width == 0 {
+            return;
+        }
+
+        // Bounds check.
+        let Some(idx) = self.get_index(x, y) else {
+            return;
+        };
+
+        // A 2-column char needs a spacer at x+1. If that's out of bounds,
+        // silently refuse rather than leaving an orphaned primary cell.
+        if width == 2 && self.get_index(x + 1, y).is_none() {
+            return;
+        }
+
+        // Clear any wide-char cell that would be partially overwritten.
+        self.clear_overlap(x, y, width);
+
+        // Build cell content.
+        let mut chars = grapheme.chars();
+        let first = chars.next().unwrap_or(' ');
+        let has_extra = chars.next().is_some();
+        let extra = if has_extra {
+            Some(alloc::sync::Arc::new(cap_grapheme(grapheme)))
+        } else {
+            None
+        };
+        let flags = if width == 2 {
+            CellFlags::WIDE_CHAR
+        } else {
+            CellFlags::empty()
+        };
+
+        // idx was captured by the bounds check above.
+        self.buffer[idx].glyph = first;
+        self.buffer[idx].style = style;
+        self.buffer[idx].extra = extra;
+        self.buffer[idx].flags = flags;
+
+        // Place spacer for wide characters.
+        if width == 2 {
+            if let Some(idx) = self.get_index(x + 1, y) {
+                let spacer = &mut self.buffer[idx];
+                spacer.glyph = ' ';
+                spacer.style = style;
+                spacer.extra = None;
+                spacer.flags = CellFlags::WIDE_CHAR_SPACER;
+            }
+        }
+    }
+
+    /// Clears wide-character cells that would be partially overwritten by a
+    /// write starting at `(x, y)` spanning `width` columns.
+    ///
+    /// Iterates each column from `x` to `x + width - 1` (inclusive, clamped to
+    /// the grid width). For each column:
+    ///
+    /// - If the cell is a [`WIDE_CHAR_SPACER`](CellFlags::WIDE_CHAR_SPACER),
+    ///   the primary cell to its left is reset (orphan prevention).
+    /// - If the cell is a [`WIDE_CHAR`](CellFlags::WIDE_CHAR) primary, its
+    ///   spacer cell to the right is reset (its right half gets overwritten).
+    ///
+    /// This includes the cell at `x` itself (the one we're about to write),
+    /// ensuring the old spacer is cleared before we place ours.
+    #[cfg(feature = "egc")]
+    fn clear_overlap(&mut self, x: u16, y: u16, width: u16) {
+        for cx in x..x.saturating_add(width) {
+            let Some(idx) = self.get_index(cx, y) else {
+                continue;
+            };
+            let flags = self.buffer[idx].flags;
+
+            // Overwriting a spacer — clear the primary cell to its left.
+            if flags.contains(CellFlags::WIDE_CHAR_SPACER) && cx > 0 {
+                if let Some(pidx) = self.get_index(cx - 1, y) {
+                    self.buffer[pidx].reset();
+                }
+            }
+
+            // Overwriting a primary wide cell — clear the spacer to its right.
+            if flags.contains(CellFlags::WIDE_CHAR) {
+                if let Some(sidx) = self.get_index(cx + 1, y) {
+                    self.buffer[sidx].reset();
+                }
+            }
+        }
     }
 
     fn get_index(&self, x: u16, y: u16) -> Option<usize> {
@@ -379,10 +498,16 @@ impl fmt::Display for Grid {
         for y in 0..self.height {
             for x in 0..self.width {
                 let cell = self.get(x, y);
-                let c = match cell.glyph {
-                    '\0' => ' ', // second column of a wide char
-                    ' ' => '·',  // empty cell
-                    c => c,
+                #[cfg(feature = "egc")]
+                let is_spacer = cell.flags.contains(CellFlags::WIDE_CHAR_SPACER);
+                #[cfg(not(feature = "egc"))]
+                let is_spacer = cell.glyph == '\0';
+                let c = if is_spacer {
+                    ' ' // right half of a wide char — don't print twice
+                } else if cell.glyph == ' ' {
+                    '·' // empty cell marker
+                } else {
+                    cell.glyph
                 };
                 write!(f, "{c}")?;
             }
@@ -409,7 +534,7 @@ mod tests {
         let cell = Cell::default().with_glyph('X');
 
         grid.put(5, 5, cell);
-        assert_eq!(grid.get(5, 5).glyph, 'X');
+        assert_eq!(grid.get(5, 5).glyph(), 'X');
     }
 
     #[test]
@@ -418,7 +543,7 @@ mod tests {
         let cell = Cell::default().with_glyph('Y');
 
         assert!(grid.checked_put(5, 5, cell).is_some());
-        assert_eq!(grid.checked_get(5, 5).unwrap().glyph, 'Y');
+        assert_eq!(grid.checked_get(5, 5).unwrap().glyph(), 'Y');
 
         assert!(grid.checked_get(10, 0).is_none());
         assert!(grid.checked_put(0, 10, Cell::default()).is_none());
@@ -440,10 +565,7 @@ mod tests {
 
         let diffs: Vec<_> = g1.diff(&g2).collect();
         assert_eq!(diffs.len(), 1);
-        assert_eq!(
-            diffs[0],
-            (Position { x: 0, y: 0 }, g1.get(0, 0))
-        );
+        assert_eq!(diffs[0], (Position { x: 0, y: 0 }, g1.get(0, 0)));
     }
 
     #[test]
@@ -453,8 +575,8 @@ mod tests {
         grid.resize(6, 6);
         assert_eq!(grid.width(), 6);
         assert_eq!(grid.height(), 6);
-        assert_eq!(grid.get(1, 1).glyph, 'X'); // preserved
-        assert_eq!(grid.get(5, 5).glyph, ' '); // new cells default
+        assert_eq!(grid.get(1, 1).glyph(), 'X'); // preserved
+        assert_eq!(grid.get(5, 5).glyph(), ' '); // new cells default
     }
 
     #[test]
@@ -464,7 +586,7 @@ mod tests {
         grid.resize(5, 5);
         assert_eq!(grid.width(), 5);
         assert_eq!(grid.height(), 5);
-        assert_eq!(grid.get(1, 1).glyph, 'A'); // still in bounds, preserved
+        assert_eq!(grid.get(1, 1).glyph(), 'A'); // still in bounds, preserved
     }
 
     #[test]
@@ -473,8 +595,8 @@ mod tests {
         grid.put(0, 0, Cell::default().with_glyph('@'));
         grid.put(3, 3, Cell::default().with_glyph('X'));
         grid.resize(3, 3); // shrink: (3,3) falls outside
-        assert_eq!(grid.get(0, 0).glyph, '@');
-        assert_eq!(grid.get(2, 2).glyph, ' '); // was default, still default
+        assert_eq!(grid.get(0, 0).glyph(), '@');
+        assert_eq!(grid.get(2, 2).glyph(), ' '); // was default, still default
     }
 
     #[test]
@@ -500,10 +622,7 @@ mod tests {
         let coords: Vec<(u16, u16)> = grid.cells().map(|(x, y, _)| (x, y)).collect();
         assert_eq!(
             coords,
-            vec![
-                (0, 0), (1, 0), (2, 0),
-                (0, 1), (1, 1), (2, 1),
-            ]
+            vec![(0, 0), (1, 0), (2, 0), (0, 1), (1, 1), (2, 1),]
         );
     }
 
@@ -513,17 +632,22 @@ mod tests {
         for (x, y, cell) in grid.cells_mut() {
             #[allow(clippy::cast_possible_truncation)]
             let idx = (y * 2 + x) as u8;
-            cell.glyph = char::from(b'A' + idx);
+            *cell = Cell::new(char::from(b'A' + idx), Style::default());
         }
-        assert_eq!(grid.get(0, 0).glyph, 'A');
-        assert_eq!(grid.get(1, 0).glyph, 'B');
-        assert_eq!(grid.get(0, 1).glyph, 'C');
-        assert_eq!(grid.get(1, 1).glyph, 'D');
+        assert_eq!(grid.get(0, 0).glyph(), 'A');
+        assert_eq!(grid.get(1, 0).glyph(), 'B');
+        assert_eq!(grid.get(0, 1).glyph(), 'C');
+        assert_eq!(grid.get(1, 1).glyph(), 'D');
     }
 
     #[test]
     fn test_rect_contains() {
-        let r = Rect { x: 2, y: 3, width: 4, height: 5 };
+        let r = Rect {
+            x: 2,
+            y: 3,
+            width: 4,
+            height: 5,
+        };
         assert!(r.contains(Position { x: 2, y: 3 }));
         assert!(r.contains(Position { x: 5, y: 7 }));
         assert!(!r.contains(Position { x: 6, y: 3 })); // x == x+width, exclusive
@@ -533,29 +657,63 @@ mod tests {
 
     #[test]
     fn test_rect_area() {
-        assert_eq!(Rect { x: 0, y: 0, width: 5, height: 3 }.area(), 15);
+        assert_eq!(
+            Rect {
+                x: 0,
+                y: 0,
+                width: 5,
+                height: 3
+            }
+            .area(),
+            15
+        );
         assert_eq!(Rect::default().area(), 0);
     }
 
     #[test]
     fn test_rect_top_left_bottom_right() {
-        let r = Rect { x: 1, y: 2, width: 3, height: 4 };
+        let r = Rect {
+            x: 1,
+            y: 2,
+            width: 3,
+            height: 4,
+        };
         assert_eq!(r.top_left(), Position { x: 1, y: 2 });
         assert_eq!(r.bottom_right(), Position { x: 4, y: 6 });
     }
 
     #[test]
     fn test_rect_intersects() {
-        let a = Rect { x: 0, y: 0, width: 4, height: 4 };
-        let b = Rect { x: 2, y: 2, width: 4, height: 4 };
-        let c = Rect { x: 4, y: 0, width: 4, height: 4 }; // touches edge, no overlap
+        let a = Rect {
+            x: 0,
+            y: 0,
+            width: 4,
+            height: 4,
+        };
+        let b = Rect {
+            x: 2,
+            y: 2,
+            width: 4,
+            height: 4,
+        };
+        let c = Rect {
+            x: 4,
+            y: 0,
+            width: 4,
+            height: 4,
+        }; // touches edge, no overlap
         assert!(a.intersects(b));
         assert!(!a.intersects(c));
     }
 
     #[test]
     fn test_rect_positions() {
-        let r = Rect { x: 1, y: 2, width: 2, height: 2 };
+        let r = Rect {
+            x: 1,
+            y: 2,
+            width: 2,
+            height: 2,
+        };
         let pts: Vec<Position> = r.positions().collect();
         assert_eq!(
             pts,
@@ -573,7 +731,7 @@ mod tests {
         let mut grid = Grid::new(5, 5);
         let pos = Position { x: 2, y: 3 };
         grid[pos] = Cell::default().with_glyph('Z');
-        assert_eq!(grid[pos].glyph, 'Z');
+        assert_eq!(grid[pos].glyph(), 'Z');
     }
 
     #[test]
@@ -587,7 +745,13 @@ mod tests {
     #[test]
     fn test_size_from_tuple() {
         let s: Size = (80u16, 25u16).into();
-        assert_eq!(s, Size { width: 80, height: 25 });
+        assert_eq!(
+            s,
+            Size {
+                width: 80,
+                height: 25
+            }
+        );
         let t: (u16, u16) = s.into();
         assert_eq!(t, (80, 25));
     }
@@ -612,6 +776,14 @@ mod tests {
 
     #[test]
     fn test_size_ord() {
-        assert!(Size { width: 1, height: 2 } < Size { width: 2, height: 1 });
+        assert!(
+            Size {
+                width: 1,
+                height: 2
+            } < Size {
+                width: 2,
+                height: 1
+            }
+        );
     }
 }

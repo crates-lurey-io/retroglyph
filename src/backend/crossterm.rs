@@ -151,9 +151,17 @@ impl Backend for Crossterm {
         let mut last_attrs = None;
 
         for (pos, cell) in content {
-            // Continuation cells are the second column of a wide character.
+            // Spacer cells are the right half of a wide character.
             // The wide char itself already drew over this position, so skip it.
-            if cell.glyph == '\0' {
+            #[cfg(feature = "egc")]
+            if cell
+                .flags()
+                .contains(crate::cell::CellFlags::WIDE_CHAR_SPACER)
+            {
+                continue;
+            }
+            #[cfg(not(feature = "egc"))]
+            if cell.glyph() == '\0' {
                 continue;
             }
 
@@ -178,7 +186,18 @@ impl Backend for Crossterm {
                 last_attrs = Some(attrs);
             }
 
-            let _ = crossterm::queue!(self.writer, crossterm::style::Print(cell.glyph));
+            #[cfg(feature = "egc")]
+            {
+                // Print the full EGC if present; otherwise the primary glyph.
+                let mut buf = [0u8; 4];
+                let s: &str = match &cell.extra {
+                    Some(extra) => extra.as_str(),
+                    None => cell.glyph.encode_utf8(&mut buf),
+                };
+                let _ = crossterm::queue!(self.writer, crossterm::style::Print(s));
+            }
+            #[cfg(not(feature = "egc"))]
+            let _ = crossterm::queue!(self.writer, crossterm::style::Print(cell.glyph()));
         }
     }
 
