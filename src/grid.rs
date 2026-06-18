@@ -136,7 +136,9 @@ impl Grid {
         };
 
         iter.map(move |(i, cell)| {
+            #[allow(clippy::cast_possible_truncation)]
             let y = (i / self.width) as u16;
+            #[allow(clippy::cast_possible_truncation)]
             let x = (i % self.width) as u16;
             (x, y, cell)
         })

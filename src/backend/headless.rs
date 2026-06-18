@@ -31,19 +31,19 @@ impl Headless {
 
     /// Returns a reference to the grid.
     #[must_use]
-    pub fn grid(&self) -> &Grid {
+    pub const fn grid(&self) -> &Grid {
         &self.grid
     }
 
     /// Returns the cursor visibility.
     #[must_use]
-    pub fn cursor_visible(&self) -> bool {
+    pub const fn cursor_visible(&self) -> bool {
         self.cursor_visible
     }
 
     /// Returns the cursor position.
     #[must_use]
-    pub fn cursor_position(&self) -> Position {
+    pub const fn cursor_position(&self) -> Position {
         self.cursor_pos
     }
 
@@ -68,10 +68,11 @@ impl Backend for Headless {
     }
 
     fn size(&self) -> Size {
-        Size {
-            width: self.grid.width() as u16,
-            height: self.grid.height() as u16,
-        }
+        #[allow(clippy::cast_possible_truncation)]
+        let width = self.grid.width() as u16;
+        #[allow(clippy::cast_possible_truncation)]
+        let height = self.grid.height() as u16;
+        Size { width, height }
     }
 
     fn clear(&mut self) {
