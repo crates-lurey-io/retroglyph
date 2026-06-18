@@ -194,21 +194,34 @@ impl Backend for Crossterm {
         let mut remaining = timeout;
 
         loop {
-            if crossterm::event::poll(remaining).ok()? {
-                if let Ok(event) = crossterm::event::read() {
-                    if let Ok(mapped) = Event::try_from(event) {
-                        return Some(mapped);
+            // Cap the polling timeout to 1 hour to prevent system-call overflow of massive durations (like Duration::MAX).
+            let poll_timeout = if remaining > Duration::from_secs(3600) {
+                Duration::from_secs(3600)
+            } else {
+                remaining
+            };
+
+            match crossterm::event::poll(poll_timeout) {
+                Ok(true) => {
+                    if let Ok(event) = crossterm::event::read() {
+                        if let Ok(mapped) = Event::try_from(event) {
+                            return Some(mapped);
+                        }
                     }
                 }
-
-                let elapsed = start.elapsed();
-                if elapsed >= timeout {
+                Ok(false) => {
+                    // Timeout elapsed on this poll chunk.
+                }
+                Err(_) => {
                     return None;
                 }
-                remaining = timeout.checked_sub(elapsed).unwrap_or(Duration::ZERO);
-            } else {
+            }
+
+            let elapsed = start.elapsed();
+            if elapsed >= timeout {
                 return None;
             }
+            remaining = timeout.checked_sub(elapsed).unwrap_or(Duration::ZERO);
         }
     }
 

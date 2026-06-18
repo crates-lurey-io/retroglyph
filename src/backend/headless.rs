@@ -6,6 +6,7 @@ use crate::cell::Cell;
 use crate::event::Event;
 use crate::grid::{Grid, Position, Size};
 use alloc::collections::VecDeque;
+use alloc::string::String;
 use core::time::Duration;
 
 /// In-memory backend for testing. Stores presented content
@@ -50,6 +51,22 @@ impl Headless {
     /// Injects a synthetic event into the queue.
     pub fn push_event(&mut self, event: Event) {
         self.event_queue.push_back(event);
+    }
+
+    /// Converts the current grid state into a readable string for snapshot testing.
+    ///
+    /// Space cells are rendered as `·` so layout is visible in text diffs.
+    #[must_use]
+    pub fn format_view(&self) -> String {
+        let mut out = String::new();
+        for y in 0..self.grid.height() {
+            for x in 0..self.grid.width() {
+                let c = self.grid.get(x, y).glyph;
+                out.push(if c == ' ' { '·' } else { c });
+            }
+            out.push('\n');
+        }
+        out
     }
 }
 
@@ -110,5 +127,21 @@ mod tests {
         backend.push_event(event);
         assert_eq!(backend.poll_event(Duration::ZERO), Some(Event::Close));
         assert_eq!(backend.poll_event(Duration::ZERO), None);
+    }
+
+    #[test]
+    fn test_format_view_snapshot() {
+        use crate::Terminal;
+        let backend = Headless::new(10, 3);
+        let mut term = Terminal::new(backend);
+        term.put(1, 1, 'H');
+        term.put(2, 1, 'i');
+        term.present();
+        let view = term.backend().format_view();
+        insta::assert_snapshot!(view, @r#"
+        ··········
+        ·Hi·······
+        ··········
+        "#);
     }
 }

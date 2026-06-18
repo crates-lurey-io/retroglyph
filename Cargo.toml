@@ -30,3 +30,12 @@ crossterm = { version = "0.28", optional = true }
 default = ["std"]
 std = []
 crossterm = ["dep:crossterm", "std"]
+
+[[example]]
+name = "crossterm_demo"
+required-features = ["crossterm"]
+
+[dev-dependencies]
+insta = { version = "1.34", features = ["yaml"] }
+portable-pty = "0.9.0"
+vt100 = "0.15"
