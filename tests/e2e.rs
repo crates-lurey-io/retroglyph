@@ -14,15 +14,15 @@ fn test_e2e_movement() {
     term.put(5, 5, '@');
     term.present();
 
-    assert_eq!(term.backend().grid().get(5, 5).glyph, '@');
+    assert_eq!(term.backend().grid().get(5, 5).glyph(), '@');
 
     // Move player
     term.clear();
     term.put(6, 5, '@');
     term.present();
 
-    assert_eq!(term.backend().grid().get(5, 5).glyph, ' ');
-    assert_eq!(term.backend().grid().get(6, 5).glyph, '@');
+    assert_eq!(term.backend().grid().get(5, 5).glyph(), ' ');
+    assert_eq!(term.backend().grid().get(6, 5).glyph(), '@');
 }
 
 #[test]
@@ -34,7 +34,7 @@ fn test_e2e_style() {
     term.put_styled(1, 1, 'A', red_style);
     term.present();
 
-    assert_eq!(term.backend().grid().get(1, 1).style, red_style);
+    assert_eq!(term.backend().grid().get(1, 1).style(), red_style);
 }
 
 #[test]

@@ -3,9 +3,10 @@
 use crate::cell::Cell;
 use alloc::vec::Vec;
 use core::fmt;
+use core::ops::{Index, IndexMut};
 
 /// Size of the grid.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, PartialOrd, Ord)]
 pub struct Size {
     /// Width.
     pub width: u16,
@@ -22,6 +23,43 @@ pub struct Position {
     pub y: u16,
 }
 
+// Row-major ordering: y is the primary key.
+impl PartialOrd for Position {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Position {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+        self.y.cmp(&other.y).then(self.x.cmp(&other.x))
+    }
+}
+
+impl From<(u16, u16)> for Position {
+    fn from((x, y): (u16, u16)) -> Self {
+        Self { x, y }
+    }
+}
+
+impl From<Position> for (u16, u16) {
+    fn from(p: Position) -> Self {
+        (p.x, p.y)
+    }
+}
+
+impl From<(u16, u16)> for Size {
+    fn from((width, height): (u16, u16)) -> Self {
+        Self { width, height }
+    }
+}
+
+impl From<Size> for (u16, u16) {
+    fn from(s: Size) -> Self {
+        (s.width, s.height)
+    }
+}
+
 /// Rectangle in the grid.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct Rect {
@@ -35,36 +73,128 @@ pub struct Rect {
     pub height: u16,
 }
 
+impl Rect {
+    /// Returns `true` if `pos` is inside this rectangle.
+    #[must_use]
+    pub const fn contains(self, pos: Position) -> bool {
+        pos.x >= self.x
+            && pos.x < self.x + self.width
+            && pos.y >= self.y
+            && pos.y < self.y + self.height
+    }
+
+    /// Total number of cells in this rectangle.
+    #[must_use]
+    pub const fn area(self) -> u32 {
+        self.width as u32 * self.height as u32
+    }
+
+    /// Top-left corner as a [`Position`].
+    #[must_use]
+    pub const fn top_left(self) -> Position {
+        Position {
+            x: self.x,
+            y: self.y,
+        }
+    }
+
+    /// Exclusive bottom-right corner as a [`Position`].
+    #[must_use]
+    pub const fn bottom_right(self) -> Position {
+        Position {
+            x: self.x + self.width,
+            y: self.y + self.height,
+        }
+    }
+
+    /// Returns `true` if this rectangle overlaps with `other`.
+    #[must_use]
+    pub const fn intersects(self, other: Self) -> bool {
+        self.x < other.x + other.width
+            && self.x + self.width > other.x
+            && self.y < other.y + other.height
+            && self.y + self.height > other.y
+    }
+
+    /// Iterates every [`Position`] inside this rectangle in row-major order.
+    pub fn positions(self) -> impl Iterator<Item = Position> {
+        (self.y..self.y + self.height)
+            .flat_map(move |y| (self.x..self.x + self.width).map(move |x| Position { x, y }))
+    }
+}
+
+/// Iterator over all cells with their `(x, y)` coordinates.
+pub struct Cells<'a> {
+    iter: core::iter::Enumerate<core::slice::Iter<'a, Cell>>,
+    width: usize,
+}
+
+impl<'a> Iterator for Cells<'a> {
+    type Item = (u16, u16, &'a Cell);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next().map(|(i, cell)| {
+            #[allow(clippy::cast_possible_truncation)]
+            let x = (i % self.width) as u16;
+            #[allow(clippy::cast_possible_truncation)]
+            let y = (i / self.width) as u16;
+            (x, y, cell)
+        })
+    }
+}
+
+/// Mutable iterator over all cells with their `(x, y)` coordinates.
+pub struct CellsMut<'a> {
+    iter: core::iter::Enumerate<core::slice::IterMut<'a, Cell>>,
+    width: usize,
+}
+
+impl<'a> Iterator for CellsMut<'a> {
+    type Item = (u16, u16, &'a mut Cell);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next().map(|(i, cell)| {
+            #[allow(clippy::cast_possible_truncation)]
+            let x = (i % self.width) as u16;
+            #[allow(clippy::cast_possible_truncation)]
+            let y = (i / self.width) as u16;
+            (x, y, cell)
+        })
+    }
+}
+
 /// The main grid container for the terminal.
 ///
 /// Note: This uses `alloc::vec::Vec`, requiring an allocator in `no_std` environments.
 /// For strictly static, no-alloc environments, a static-sized grid type may be added in the future.
+#[derive(Debug)]
 pub struct Grid {
-    width: usize,
-    height: usize,
+    width: u16,
+    height: u16,
     buffer: Vec<Cell>,
 }
 
 impl Grid {
     /// Creates a new grid of the given dimensions.
     #[must_use]
-    pub fn new(width: usize, height: usize) -> Self {
+    pub fn new(width: u16, height: u16) -> Self {
+        let capacity = usize::from(width) * usize::from(height);
         Self {
             width,
             height,
-            buffer: alloc::vec![Cell::default(); width * height],
+            buffer: alloc::vec![Cell::default(); capacity],
         }
     }
 
     /// Returns the width of the grid.
     #[must_use]
-    pub const fn width(&self) -> usize {
+    pub const fn width(&self) -> u16 {
         self.width
     }
 
     /// Returns the height of the grid.
     #[must_use]
-    pub const fn height(&self) -> usize {
+    pub const fn height(&self) -> u16 {
         self.height
     }
 
@@ -73,7 +203,7 @@ impl Grid {
     /// # Panics
     ///
     /// Panics if the coordinates are out of bounds.
-    pub fn put(&mut self, x: usize, y: usize, cell: Cell) {
+    pub fn put(&mut self, x: u16, y: u16, cell: Cell) {
         let index = self.get_index(x, y).expect("coordinates out of bounds");
         self.buffer[index] = cell;
     }
@@ -84,7 +214,7 @@ impl Grid {
     ///
     /// Panics if the coordinates are out of bounds.
     #[must_use]
-    pub fn get(&self, x: usize, y: usize) -> &Cell {
+    pub fn get(&self, x: u16, y: u16) -> &Cell {
         let index = self.get_index(x, y).expect("coordinates out of bounds");
         &self.buffer[index]
     }
@@ -92,8 +222,8 @@ impl Grid {
     /// Tries to set the cell at the given coordinates.
     ///
     /// Returns `None` if the coordinates are out of bounds.
-    pub fn checked_put(&mut self, x: usize, y: usize, cell: Cell) -> Option<()> {
-        let index = self.get_index(x, y).ok()?;
+    pub fn checked_put(&mut self, x: u16, y: u16, cell: Cell) -> Option<()> {
+        let index = self.get_index(x, y)?;
         self.buffer[index] = cell;
         Some(())
     }
@@ -102,17 +232,34 @@ impl Grid {
     ///
     /// Returns `None` if the coordinates are out of bounds.
     #[must_use]
-    pub fn checked_get(&self, x: usize, y: usize) -> Option<&Cell> {
-        let index = self.get_index(x, y).ok()?;
+    pub fn checked_get(&self, x: u16, y: u16) -> Option<&Cell> {
+        let index = self.get_index(x, y)?;
         Some(&self.buffer[index])
     }
 
     /// Tries to get a mutable reference to the cell at the given coordinates.
     ///
     /// Returns `None` if the coordinates are out of bounds.
-    pub fn checked_get_mut(&mut self, x: usize, y: usize) -> Option<&mut Cell> {
-        let index = self.get_index(x, y).ok()?;
+    pub fn checked_get_mut(&mut self, x: u16, y: u16) -> Option<&mut Cell> {
+        let index = self.get_index(x, y)?;
         Some(&mut self.buffer[index])
+    }
+
+    /// Iterates all cells with their `(x, y)` coordinates.
+    #[must_use]
+    pub fn cells(&self) -> Cells<'_> {
+        Cells {
+            iter: self.buffer.iter().enumerate(),
+            width: usize::from(self.width),
+        }
+    }
+
+    /// Iterates all cells mutably with their `(x, y)` coordinates.
+    pub fn cells_mut(&mut self) -> CellsMut<'_> {
+        CellsMut {
+            iter: self.buffer.iter_mut().enumerate(),
+            width: usize::from(self.width),
+        }
     }
 
     /// Clears the grid to the default cell.
@@ -125,13 +272,16 @@ impl Grid {
     /// Content within the overlapping region is preserved. New cells are
     /// initialised to the default cell. Shrinking discards cells outside the
     /// new bounds.
-    pub fn resize(&mut self, width: usize, height: usize) {
-        let mut new_buffer = alloc::vec![Cell::default(); width * height];
-        let copy_width = self.width.min(width);
-        let copy_height = self.height.min(height);
+    pub fn resize(&mut self, width: u16, height: u16) {
+        let w = usize::from(width);
+        let h = usize::from(height);
+        let mut new_buffer = alloc::vec![Cell::default(); w * h];
+        let copy_width = usize::from(self.width).min(w);
+        let copy_height = usize::from(self.height).min(h);
+        let old_w = usize::from(self.width);
         for y in 0..copy_height {
             for x in 0..copy_width {
-                new_buffer[y * width + x] = self.buffer[y * self.width + x];
+                new_buffer[y * w + x] = self.buffer[y * old_w + x];
             }
         }
         self.width = width;
@@ -142,7 +292,11 @@ impl Grid {
     /// Yield positions where `self` differs from `other`.
     ///
     /// If dimensions differ, all cells in `self` are considered changed.
-    pub fn diff<'a>(&'a self, other: &'a Self) -> impl Iterator<Item = (u16, u16, &'a Cell)> + 'a {
+    pub fn diff<'a>(
+        &'a self,
+        other: &'a Self,
+    ) -> impl Iterator<Item = (Position, &'a Cell)> + 'a {
+        let w = usize::from(self.width);
         let iter: DiffIterator<'a, _, _> =
             if self.width != other.width || self.height != other.height {
                 DiffIterator::All(self.buffer.iter().enumerate(), core::marker::PhantomData)
@@ -161,19 +315,36 @@ impl Grid {
 
         iter.map(move |(i, cell)| {
             #[allow(clippy::cast_possible_truncation)]
-            let y = (i / self.width) as u16;
+            let x = (i % w) as u16;
             #[allow(clippy::cast_possible_truncation)]
-            let x = (i % self.width) as u16;
-            (x, y, cell)
+            let y = (i / w) as u16;
+            (Position { x, y }, cell)
         })
     }
 
-    const fn get_index(&self, x: usize, y: usize) -> Result<usize, ()> {
+    fn get_index(&self, x: u16, y: u16) -> Option<usize> {
         if x < self.width && y < self.height {
-            Ok(y * self.width + x)
+            Some(usize::from(y) * usize::from(self.width) + usize::from(x))
         } else {
-            Err(())
+            None
         }
+    }
+}
+
+impl Index<Position> for Grid {
+    type Output = Cell;
+
+    fn index(&self, pos: Position) -> &Cell {
+        self.get(pos.x, pos.y)
+    }
+}
+
+impl IndexMut<Position> for Grid {
+    fn index_mut(&mut self, pos: Position) -> &mut Cell {
+        let idx = self
+            .get_index(pos.x, pos.y)
+            .expect("position out of bounds");
+        &mut self.buffer[idx]
     }
 }
 
@@ -269,7 +440,10 @@ mod tests {
 
         let diffs: Vec<_> = g1.diff(&g2).collect();
         assert_eq!(diffs.len(), 1);
-        assert_eq!(diffs[0], (0, 0, g1.get(0, 0)));
+        assert_eq!(
+            diffs[0],
+            (Position { x: 0, y: 0 }, g1.get(0, 0))
+        );
     }
 
     #[test]
@@ -310,5 +484,134 @@ mod tests {
 
         let s = alloc::format!("{grid}");
         assert_eq!(s, "A··\n···\n");
+    }
+
+    // --- items 2, 3, 4, 5, 11 ---
+
+    #[test]
+    fn test_grid_cells_count() {
+        let grid = Grid::new(4, 3);
+        assert_eq!(grid.cells().count(), 12);
+    }
+
+    #[test]
+    fn test_grid_cells_coordinates() {
+        let grid = Grid::new(3, 2);
+        let coords: Vec<(u16, u16)> = grid.cells().map(|(x, y, _)| (x, y)).collect();
+        assert_eq!(
+            coords,
+            vec![
+                (0, 0), (1, 0), (2, 0),
+                (0, 1), (1, 1), (2, 1),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_grid_cells_mut() {
+        let mut grid = Grid::new(2, 2);
+        for (x, y, cell) in grid.cells_mut() {
+            #[allow(clippy::cast_possible_truncation)]
+            let idx = (y * 2 + x) as u8;
+            cell.glyph = char::from(b'A' + idx);
+        }
+        assert_eq!(grid.get(0, 0).glyph, 'A');
+        assert_eq!(grid.get(1, 0).glyph, 'B');
+        assert_eq!(grid.get(0, 1).glyph, 'C');
+        assert_eq!(grid.get(1, 1).glyph, 'D');
+    }
+
+    #[test]
+    fn test_rect_contains() {
+        let r = Rect { x: 2, y: 3, width: 4, height: 5 };
+        assert!(r.contains(Position { x: 2, y: 3 }));
+        assert!(r.contains(Position { x: 5, y: 7 }));
+        assert!(!r.contains(Position { x: 6, y: 3 })); // x == x+width, exclusive
+        assert!(!r.contains(Position { x: 2, y: 8 })); // y == y+height, exclusive
+        assert!(!r.contains(Position { x: 1, y: 3 }));
+    }
+
+    #[test]
+    fn test_rect_area() {
+        assert_eq!(Rect { x: 0, y: 0, width: 5, height: 3 }.area(), 15);
+        assert_eq!(Rect::default().area(), 0);
+    }
+
+    #[test]
+    fn test_rect_top_left_bottom_right() {
+        let r = Rect { x: 1, y: 2, width: 3, height: 4 };
+        assert_eq!(r.top_left(), Position { x: 1, y: 2 });
+        assert_eq!(r.bottom_right(), Position { x: 4, y: 6 });
+    }
+
+    #[test]
+    fn test_rect_intersects() {
+        let a = Rect { x: 0, y: 0, width: 4, height: 4 };
+        let b = Rect { x: 2, y: 2, width: 4, height: 4 };
+        let c = Rect { x: 4, y: 0, width: 4, height: 4 }; // touches edge, no overlap
+        assert!(a.intersects(b));
+        assert!(!a.intersects(c));
+    }
+
+    #[test]
+    fn test_rect_positions() {
+        let r = Rect { x: 1, y: 2, width: 2, height: 2 };
+        let pts: Vec<Position> = r.positions().collect();
+        assert_eq!(
+            pts,
+            vec![
+                Position { x: 1, y: 2 },
+                Position { x: 2, y: 2 },
+                Position { x: 1, y: 3 },
+                Position { x: 2, y: 3 },
+            ]
+        );
+    }
+
+    #[test]
+    fn test_index_position() {
+        let mut grid = Grid::new(5, 5);
+        let pos = Position { x: 2, y: 3 };
+        grid[pos] = Cell::default().with_glyph('Z');
+        assert_eq!(grid[pos].glyph, 'Z');
+    }
+
+    #[test]
+    fn test_position_from_tuple() {
+        let p: Position = (3u16, 7u16).into();
+        assert_eq!(p, Position { x: 3, y: 7 });
+        let t: (u16, u16) = p.into();
+        assert_eq!(t, (3, 7));
+    }
+
+    #[test]
+    fn test_size_from_tuple() {
+        let s: Size = (80u16, 25u16).into();
+        assert_eq!(s, Size { width: 80, height: 25 });
+        let t: (u16, u16) = s.into();
+        assert_eq!(t, (80, 25));
+    }
+
+    #[test]
+    fn test_position_ord_row_major() {
+        let mut positions = vec![
+            Position { x: 5, y: 0 },
+            Position { x: 0, y: 1 },
+            Position { x: 3, y: 0 },
+        ];
+        positions.sort();
+        assert_eq!(
+            positions,
+            vec![
+                Position { x: 3, y: 0 },
+                Position { x: 5, y: 0 },
+                Position { x: 0, y: 1 },
+            ]
+        );
+    }
+
+    #[test]
+    fn test_size_ord() {
+        assert!(Size { width: 1, height: 2 } < Size { width: 2, height: 1 });
     }
 }

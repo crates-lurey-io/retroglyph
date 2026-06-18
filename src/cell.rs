@@ -6,9 +6,9 @@ use crate::style::Style;
 /// A single cell in the terminal grid.
 pub struct Cell {
     /// Character displayed in the cell.
-    pub glyph: char,
+    pub(crate) glyph: char,
     /// Style applied to this cell.
-    pub style: Style,
+    pub(crate) style: Style,
 }
 
 impl Default for Cell {
@@ -32,6 +32,18 @@ impl Cell {
     pub const fn with_glyph(mut self, glyph: char) -> Self {
         self.glyph = glyph;
         self
+    }
+
+    /// Returns the cell's glyph.
+    #[must_use]
+    pub const fn glyph(&self) -> char {
+        self.glyph
+    }
+
+    /// Returns the cell's style.
+    #[must_use]
+    pub const fn style(&self) -> Style {
+        self.style
     }
 
     /// Sets the style for this cell.

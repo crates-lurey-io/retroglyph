@@ -1,7 +1,6 @@
 //! Text styling and modifiers.
 
 use crate::color::Color;
-use alloc::vec::Vec;
 use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -89,37 +88,44 @@ impl Not for CellModifier {
 
 impl core::fmt::Debug for CellModifier {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        let mut parts = Vec::new();
+        if self.0 == 0 {
+            return write!(f, "NONE");
+        }
+        let mut sep = "";
         if self.contains(Self::BOLD) {
-            parts.push("BOLD");
+            write!(f, "{sep}BOLD")?;
+            sep = " | ";
         }
         if self.contains(Self::DIM) {
-            parts.push("DIM");
+            write!(f, "{sep}DIM")?;
+            sep = " | ";
         }
         if self.contains(Self::ITALIC) {
-            parts.push("ITALIC");
+            write!(f, "{sep}ITALIC")?;
+            sep = " | ";
         }
         if self.contains(Self::UNDERLINE) {
-            parts.push("UNDERLINE");
+            write!(f, "{sep}UNDERLINE")?;
+            sep = " | ";
         }
         if self.contains(Self::BLINK) {
-            parts.push("BLINK");
+            write!(f, "{sep}BLINK")?;
+            sep = " | ";
         }
         if self.contains(Self::REVERSE) {
-            parts.push("REVERSE");
+            write!(f, "{sep}REVERSE")?;
+            sep = " | ";
         }
         if self.contains(Self::HIDDEN) {
-            parts.push("HIDDEN");
+            write!(f, "{sep}HIDDEN")?;
+            sep = " | ";
         }
         if self.contains(Self::STRIKETHROUGH) {
-            parts.push("STRIKETHROUGH");
+            write!(f, "{sep}STRIKETHROUGH")?;
+            sep = " | ";
         }
-
-        if parts.is_empty() {
-            write!(f, "NONE")
-        } else {
-            write!(f, "{}", parts.join(" | "))
-        }
+        let _ = sep;
+        Ok(())
     }
 }
 
@@ -127,11 +133,11 @@ impl core::fmt::Debug for CellModifier {
 /// A style consisting of foreground, background, and text modifiers.
 pub struct Style {
     /// Foreground color.
-    pub fg: Color,
+    pub(crate) fg: Color,
     /// Background color.
-    pub bg: Color,
+    pub(crate) bg: Color,
     /// Text modifiers.
-    pub modifiers: CellModifier,
+    pub(crate) modifiers: CellModifier,
 }
 
 impl Style {
@@ -169,6 +175,24 @@ impl Style {
         self
     }
 
+    /// Returns the foreground color.
+    #[must_use]
+    pub const fn foreground(&self) -> Color {
+        self.fg
+    }
+
+    /// Returns the background color.
+    #[must_use]
+    pub const fn background(&self) -> Color {
+        self.bg
+    }
+
+    /// Returns the text modifiers.
+    #[must_use]
+    pub const fn modifiers(&self) -> CellModifier {
+        self.modifiers
+    }
+
     /// Overlays another style onto this one, only if fields in `other` are non-default.
     #[must_use]
     pub fn patch(mut self, other: Self) -> Self {
@@ -196,9 +220,19 @@ mod tests {
     }
 
     #[test]
+    fn test_modifier_debug() {
+        assert_eq!(format!("{:?}", CellModifier::NONE), "NONE");
+        assert_eq!(
+            format!("{:?}", CellModifier::BOLD | CellModifier::ITALIC),
+            "BOLD | ITALIC"
+        );
+        assert_eq!(format!("{:?}", CellModifier::STRIKETHROUGH), "STRIKETHROUGH");
+    }
+
+    #[test]
     fn test_style_builder() {
         let s = Style::new().fg(Color::RED).bold();
-        assert_eq!(s.fg, Color::RED);
-        assert!(s.modifiers.contains(CellModifier::BOLD));
+        assert_eq!(s.foreground(), Color::RED);
+        assert!(s.modifiers().contains(CellModifier::BOLD));
     }
 }

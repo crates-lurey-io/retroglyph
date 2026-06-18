@@ -21,7 +21,7 @@ pub struct Headless {
 impl Headless {
     /// Creates a new headless backend of the given dimensions.
     #[must_use]
-    pub fn new(width: usize, height: usize) -> Self {
+    pub fn new(width: u16, height: u16) -> Self {
         Self {
             grid: Grid::new(width, height),
             cursor_visible: false,
@@ -77,15 +77,15 @@ impl Headless {
 impl Backend for Headless {
     fn draw<'a, I>(&mut self, content: I)
     where
-        I: Iterator<Item = (u16, u16, &'a Cell)>,
+        I: Iterator<Item = (Position, &'a Cell)>,
     {
-        for (x, y, cell) in content {
-            self.grid.checked_put(x as usize, y as usize, *cell);
+        for (pos, cell) in content {
+            self.grid.checked_put(pos.x, pos.y, *cell);
         }
     }
 
     fn resize(&mut self, size: Size) {
-        self.grid.resize(size.width as usize, size.height as usize);
+        self.grid.resize(size.width, size.height);
     }
 
     fn flush(&mut self) {
@@ -93,11 +93,10 @@ impl Backend for Headless {
     }
 
     fn size(&self) -> Size {
-        #[allow(clippy::cast_possible_truncation)]
-        let width = self.grid.width() as u16;
-        #[allow(clippy::cast_possible_truncation)]
-        let height = self.grid.height() as u16;
-        Size { width, height }
+        Size {
+            width: self.grid.width(),
+            height: self.grid.height(),
+        }
     }
 
     fn clear(&mut self) {

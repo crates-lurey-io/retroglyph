@@ -28,8 +28,8 @@ impl<B: Backend> Terminal<B> {
     #[must_use]
     pub fn new(backend: B) -> Self {
         let size = backend.size();
-        let current = Grid::new(size.width as usize, size.height as usize);
-        let previous = Grid::new(size.width as usize, size.height as usize);
+        let current = Grid::new(size.width, size.height);
+        let previous = Grid::new(size.width, size.height);
         Self {
             current,
             previous,
@@ -73,10 +73,8 @@ impl<B: Backend> Terminal<B> {
     #[must_use]
     pub const fn size(&self) -> Size {
         Size {
-            #[allow(clippy::cast_possible_truncation)]
-            width: self.current.width() as u16,
-            #[allow(clippy::cast_possible_truncation)]
-            height: self.current.height() as u16,
+            width: self.current.width(),
+            height: self.current.height(),
         }
     }
 
@@ -86,35 +84,22 @@ impl<B: Backend> Terminal<B> {
     /// The previous grid is cleared so the next [`present`](Self::present) redraws
     /// the entire new surface rather than diffing stale data.
     pub fn resize(&mut self, width: u16, height: u16) {
-        self.current.resize(usize::from(width), usize::from(height));
-        self.previous
-            .resize(usize::from(width), usize::from(height));
+        self.current.resize(width, height);
+        self.previous.resize(width, height);
         // Clearing previous forces a full redraw next present(), ensuring no
         // stale cells bleed into the resized layout.
         self.previous.clear();
         self.backend.resize(Size { width, height });
     }
 
-    /// Place a character at (x, y) with the current style.
+    /// Place a character at `(x, y)` with the current style.
     ///
     /// If `ch` is a wide character (e.g. CJK or emoji) that occupies two columns,
     /// the adjacent cell at `(x + 1, y)` is set to a zero-width continuation
     /// marker so it is not rendered independently.
     pub fn put(&mut self, x: u16, y: u16, ch: char) {
-        let w = UnicodeWidthChar::width(ch).unwrap_or(1);
-        if let Some(cell) = self.current.checked_get_mut(usize::from(x), usize::from(y)) {
-            cell.glyph = ch;
-            cell.style = self.drawing_style;
-        }
-        if w == 2 {
-            if let Some(cell) = self
-                .current
-                .checked_get_mut(usize::from(x) + 1, usize::from(y))
-            {
-                cell.glyph = '\0';
-                cell.style = self.drawing_style;
-            }
-        }
+        let style = self.drawing_style;
+        self.put_cell(x, y, ch, style);
     }
 
     /// Returns a reference to the current grid.
@@ -148,7 +133,7 @@ impl<B: Backend> Terminal<B> {
     pub fn clear_region(&mut self, rect: Rect) {
         for y in rect.y..(rect.y + rect.height) {
             for x in rect.x..(rect.x + rect.width) {
-                if let Some(cell) = self.current.checked_get_mut(x as usize, y as usize) {
+                if let Some(cell) = self.current.checked_get_mut(x, y) {
                     *cell = Cell::default();
                 }
             }
@@ -159,28 +144,16 @@ impl<B: Backend> Terminal<B> {
     ///
     /// Wide characters are handled identically to [`put`](Self::put).
     pub fn put_styled(&mut self, x: u16, y: u16, ch: char, style: Style) {
-        let w = UnicodeWidthChar::width(ch).unwrap_or(1);
-        if let Some(cell) = self.current.checked_get_mut(usize::from(x), usize::from(y)) {
-            cell.glyph = ch;
-            cell.style = style;
-        }
-        if w == 2 {
-            if let Some(cell) = self
-                .current
-                .checked_get_mut(usize::from(x) + 1, usize::from(y))
-            {
-                cell.glyph = '\0';
-                cell.style = style;
-            }
-        }
+        self.put_cell(x, y, ch, style);
     }
 
-    /// Print a string starting at (x, y) with the current style.
+    /// Print a string starting at `(x, y)` with the current style.
     ///
     /// `\n` advances to the next row at the original `x`. Wide characters
     /// (CJK, emoji) advance the cursor by 2 columns. Characters that would
     /// extend beyond the grid width wrap to the next row.
     pub fn print(&mut self, x: u16, y: u16, text: &str) {
+        let style = self.drawing_style;
         let mut cur_x = x;
         let mut cur_y = y;
         for c in text.chars() {
@@ -191,9 +164,9 @@ impl<B: Backend> Terminal<B> {
                 // char width is always 1 or 2; u16 is safe.
                 #[allow(clippy::cast_possible_truncation)]
                 let w = UnicodeWidthChar::width(c).unwrap_or(1) as u16;
-                self.put(cur_x, cur_y, c);
+                self.put_cell(cur_x, cur_y, c, style);
                 cur_x += w;
-                if usize::from(cur_x) >= self.current.width() {
+                if usize::from(cur_x) >= usize::from(self.current.width()) {
                     cur_x = x;
                     cur_y += 1;
                 }
@@ -216,25 +189,10 @@ impl<B: Backend> Terminal<B> {
                 // char width is always 1 or 2; u16 is safe.
                 #[allow(clippy::cast_possible_truncation)]
                 let w = UnicodeWidthChar::width(ch).unwrap_or(1) as u16;
-                if usize::from(cur_x) >= self.current.width() {
+                if usize::from(cur_x) >= usize::from(self.current.width()) {
                     break;
                 }
-                if let Some(cell) = self
-                    .current
-                    .checked_get_mut(usize::from(cur_x), usize::from(y))
-                {
-                    cell.glyph = ch;
-                    cell.style = span.style;
-                }
-                if w == 2 {
-                    if let Some(cell) = self
-                        .current
-                        .checked_get_mut(usize::from(cur_x) + 1, usize::from(y))
-                    {
-                        cell.glyph = '\0';
-                        cell.style = span.style;
-                    }
-                }
+                self.put_cell(cur_x, y, ch, span.style);
                 cur_x += w;
             }
         }
@@ -300,6 +258,22 @@ impl<B: Backend> Terminal<B> {
             true
         } else {
             false
+        }
+    }
+
+    /// Places `ch` with `style` at `(x, y)`, writing a `'\0'` continuation
+    /// marker at `(x+1, y)` if `ch` occupies two terminal columns.
+    fn put_cell(&mut self, x: u16, y: u16, ch: char, style: Style) {
+        let w = UnicodeWidthChar::width(ch).unwrap_or(1);
+        if let Some(cell) = self.current.checked_get_mut(x, y) {
+            cell.glyph = ch;
+            cell.style = style;
+        }
+        if w == 2 {
+            if let Some(cell) = self.current.checked_get_mut(x.saturating_add(1), y) {
+                cell.glyph = '\0';
+                cell.style = style;
+            }
         }
     }
 }

@@ -6,7 +6,9 @@ use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 /// Keyboard modifier flags.
 ///
-/// Implemented as a manual bitflag over `u8`. Combine with `|`.
+/// Implemented as a manual bitflag over `u8` rather than using the
+/// [`bitflags`](https://crates.io/crates/bitflags) crate to keep the
+/// dependency surface minimal for `no_std` environments. Combine with `|`.
 pub struct KeyModifiers(u8);
 
 impl KeyModifiers {

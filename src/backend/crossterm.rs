@@ -1,4 +1,11 @@
 //! Crossterm-based terminal rendering backend.
+//!
+//! I/O errors from crossterm writes are silently discarded. The [`Backend`]
+//! trait methods return `()` (not `Result`), so there is no channel to
+//! propagate write failures to the caller. This is acceptable for the common
+//! case (stdout to a real terminal) but means the library won't detect a
+//! disconnected pipe or closed terminal. Future versions of the trait may add
+//! error-returning variants.
 
 use crate::backend::Backend;
 use crate::cell::Cell;
@@ -137,13 +144,13 @@ impl Backend for Crossterm {
     #[allow(clippy::similar_names)]
     fn draw<'a, I>(&mut self, content: I)
     where
-        I: Iterator<Item = (u16, u16, &'a Cell)>,
+        I: Iterator<Item = (Position, &'a Cell)>,
     {
         let mut last_fg = None;
         let mut last_bg = None;
         let mut last_attrs = None;
 
-        for (x, y, cell) in content {
+        for (pos, cell) in content {
             // Continuation cells are the second column of a wide character.
             // The wide char itself already drew over this position, so skip it.
             if cell.glyph == '\0' {
@@ -154,7 +161,7 @@ impl Backend for Crossterm {
             let bg: crossterm::style::Color = cell.style.bg.into();
             let attrs: crossterm::style::Attributes = cell.style.modifiers.into();
 
-            let _ = crossterm::queue!(self.writer, crossterm::cursor::MoveTo(x, y));
+            let _ = crossterm::queue!(self.writer, crossterm::cursor::MoveTo(pos.x, pos.y));
 
             if last_fg != Some(fg) {
                 let _ = crossterm::queue!(self.writer, crossterm::style::SetForegroundColor(fg));

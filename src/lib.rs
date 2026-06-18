@@ -19,7 +19,7 @@ pub mod text;
 pub use backend::Crossterm;
 pub use backend::{Backend, Headless};
 pub use cell::Cell;
-pub use color::{AnsiColor, Color};
+pub use color::{AnsiColor, Color, InvalidAnsiIndex};
 pub use event::{Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 pub use grid::{Grid, Position, Rect, Size};
 pub use style::{CellModifier, Style};

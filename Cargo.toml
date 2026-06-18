@@ -3,8 +3,10 @@ name = "rg"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
+authors = ["Matan Lurey <matan@lurey.org>"]
 license = "MIT"
 description = "A terminal/grid rendering library for roguelikes"
+repository = "https://github.com/matanlurey/rg"
 keywords = ["roguelike", "terminal", "grid", "gamedev"]
 categories = ["game-development", "graphics"]
 

@@ -19,7 +19,7 @@ pub trait Backend {
     /// Draw changed cells to the output surface.
     fn draw<'a, I>(&mut self, content: I)
     where
-        I: Iterator<Item = (u16, u16, &'a Cell)>;
+        I: Iterator<Item = (Position, &'a Cell)>;
 
     /// Flush buffered output to the display.
     fn flush(&mut self);
