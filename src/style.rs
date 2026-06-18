@@ -2,7 +2,7 @@
 
 use crate::color::Color;
 use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
-// use alloc::vec::Vec;
+use alloc::vec::Vec;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Default)]
 /// Text attributes applied to a cell (bold, italic, etc.).
@@ -79,7 +79,7 @@ impl Not for CellModifier {
 
 impl core::fmt::Debug for CellModifier {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        let mut parts = alloc::vec::Vec::new();
+        let mut parts = Vec::new();
         if self.contains(Self::BOLD)          { parts.push("BOLD"); }
         if self.contains(Self::DIM)           { parts.push("DIM"); }
         if self.contains(Self::ITALIC)        { parts.push("ITALIC"); }

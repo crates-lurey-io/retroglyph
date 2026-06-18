@@ -22,3 +22,11 @@ must_use_candidate = "deny"
 missing_errors_doc = "deny"
 missing_panics_doc = "deny"
 module_name_repetitions = "allow"
+
+[dependencies]
+crossterm = { version = "0.28", optional = true }
+
+[features]
+default = ["std"]
+std = []
+crossterm = ["dep:crossterm", "std"]

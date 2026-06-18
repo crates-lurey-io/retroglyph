@@ -2,7 +2,7 @@
 //!
 //! rg provides a grid of character cells with styled output, input handling,
 //! and double-buffered presentation via pluggable backends.
-#![no_std]
+#![cfg_attr(not(feature = "std"), no_std)]
 extern crate alloc;
 
 pub mod color;
@@ -19,5 +19,7 @@ pub use style::{CellModifier, Style};
 pub use cell::Cell;
 pub use grid::{Grid, Position, Size, Rect};
 pub use backend::{Backend, Headless};
+#[cfg(feature = "crossterm")]
+pub use backend::CrosstermBackend;
 pub use terminal::Terminal;
 pub use event::{Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
