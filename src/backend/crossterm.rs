@@ -189,8 +189,27 @@ impl Backend for Crossterm {
         let _ = self.writer.flush();
     }
 
-    fn poll_event(&mut self, _timeout: Duration) -> Option<Event> {
-        unimplemented!()
+    fn poll_event(&mut self, timeout: Duration) -> Option<Event> {
+        let start = std::time::Instant::now();
+        let mut remaining = timeout;
+
+        loop {
+            if crossterm::event::poll(remaining).ok()? {
+                if let Ok(event) = crossterm::event::read() {
+                    if let Ok(mapped) = Event::try_from(event) {
+                        return Some(mapped);
+                    }
+                }
+
+                let elapsed = start.elapsed();
+                if elapsed >= timeout {
+                    return None;
+                }
+                remaining = timeout.checked_sub(elapsed).unwrap_or(Duration::ZERO);
+            } else {
+                return None;
+            }
+        }
     }
 
     fn set_cursor_visible(&mut self, visible: bool) {
@@ -208,5 +227,114 @@ impl Backend for Crossterm {
             crossterm::cursor::MoveTo(position.x, position.y)
         );
         let _ = self.writer.flush();
+    }
+}
+
+impl TryFrom<crossterm::event::KeyCode> for crate::event::KeyCode {
+    type Error = ();
+
+    fn try_from(code: crossterm::event::KeyCode) -> Result<Self, Self::Error> {
+        use crossterm::event::KeyCode as CK;
+        match code {
+            CK::Char(c) => Ok(Self::Char(c)),
+            CK::F(n) => Ok(Self::F(n)),
+            CK::Backspace => Ok(Self::Backspace),
+            CK::Enter => Ok(Self::Enter),
+            CK::Left => Ok(Self::Left),
+            CK::Right => Ok(Self::Right),
+            CK::Up => Ok(Self::Up),
+            CK::Down => Ok(Self::Down),
+            CK::Home => Ok(Self::Home),
+            CK::End => Ok(Self::End),
+            CK::PageUp => Ok(Self::PageUp),
+            CK::PageDown => Ok(Self::PageDown),
+            CK::Tab => Ok(Self::Tab),
+            CK::BackTab => Ok(Self::BackTab),
+            CK::Delete => Ok(Self::Delete),
+            CK::Insert => Ok(Self::Insert),
+            CK::Esc => Ok(Self::Escape),
+            _ => Err(()),
+        }
+    }
+}
+
+impl From<crossterm::event::KeyModifiers> for crate::event::KeyModifiers {
+    fn from(mods: crossterm::event::KeyModifiers) -> Self {
+        let mut result = Self::NONE;
+        if mods.contains(crossterm::event::KeyModifiers::SHIFT) {
+            result |= Self::SHIFT;
+        }
+        if mods.contains(crossterm::event::KeyModifiers::CONTROL) {
+            result |= Self::CONTROL;
+        }
+        if mods.contains(crossterm::event::KeyModifiers::ALT) {
+            result |= Self::ALT;
+        }
+        result
+    }
+}
+
+impl From<crossterm::event::MouseButton> for crate::event::MouseButton {
+    fn from(btn: crossterm::event::MouseButton) -> Self {
+        use crossterm::event::MouseButton as CB;
+        match btn {
+            CB::Left => Self::Left,
+            CB::Right => Self::Right,
+            CB::Middle => Self::Middle,
+        }
+    }
+}
+
+impl TryFrom<crossterm::event::MouseEventKind> for crate::event::MouseEventKind {
+    type Error = ();
+
+    fn try_from(kind: crossterm::event::MouseEventKind) -> Result<Self, Self::Error> {
+        use crossterm::event::MouseEventKind as CM;
+        match kind {
+            CM::Down(btn) => Ok(Self::Down(btn.into())),
+            CM::Up(btn) => Ok(Self::Up(btn.into())),
+            CM::Moved | CM::Drag(_) => Ok(Self::Moved),
+            CM::ScrollUp => Ok(Self::ScrollUp),
+            CM::ScrollDown => Ok(Self::ScrollDown),
+            _ => Err(()),
+        }
+    }
+}
+
+impl TryFrom<crossterm::event::MouseEvent> for crate::event::MouseEvent {
+    type Error = ();
+
+    fn try_from(m: crossterm::event::MouseEvent) -> Result<Self, Self::Error> {
+        Ok(Self {
+            kind: m.kind.try_into()?,
+            position: Position {
+                x: m.column,
+                y: m.row,
+            },
+            modifiers: m.modifiers.into(),
+        })
+    }
+}
+
+impl TryFrom<crossterm::event::Event> for Event {
+    type Error = ();
+
+    fn try_from(event: crossterm::event::Event) -> Result<Self, Self::Error> {
+        use crossterm::event::Event as CE;
+        match event {
+            CE::Key(k) => {
+                if k.kind == crossterm::event::KeyEventKind::Release {
+                    return Err(());
+                }
+
+                Ok(Self::Key(crate::event::KeyEvent {
+                    code: k.code.try_into()?,
+                    modifiers: k.modifiers.into(),
+                }))
+            }
+            CE::Mouse(m) => Ok(Self::Mouse(m.try_into()?)),
+            CE::Resize(w, h) => Ok(Self::Resize(w, h)),
+            _ => Err(()),
+        }
     }
 }
