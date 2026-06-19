@@ -282,16 +282,14 @@ Builder methods on `Style`: `Style::new()`, `.fg(Color)`, `.bg(Color)`, `.bold()
 pub struct Cell { /* private fields */ }
 ```
 
-Private fields: `ch: char`, `style: Style`.
+Private fields: `glyph: char`, `style: Style` (plus EGC and wide-char flags if enabled).
 
 Methods:
 
-- `Cell::new(ch: char) -> Self` — default style
-- `Cell::styled(ch: char, style: Style) -> Self`
+- `Cell::new(glyph: char, style: Style) -> Self`
 - `Cell::default()` — space, default style
-- Getters: `ch()`, `style()`, `fg()`, `bg()`, `modifiers()`
-- Setters: `set_char()`, `set_style()`, `set_fg()`, `set_bg()`, `add_modifier()`,
-  `remove_modifier()`
+- Getters: `glyph()`, `style()`, `flags()`, `extra()`
+- Setters: `with_glyph()`, `with_style()`
 - `Cell::reset()` — reset to default (space, default style)
 
 ### Tests
@@ -343,18 +341,15 @@ pub struct Grid { /* cells: Vec<Cell>, width: u16, height: u16 */ }
 Methods:
 
 - `Grid::new(width, height)` — all cells default. Zero-size allowed.
-- `Grid::filled(width, height, cell: Cell)`
-- `Grid::size() -> Size`, `width() -> u16`, `height() -> u16`
-- `Grid::cell(x, y) -> Option<&Cell>` — bounds-checked
-- `Grid::cell_mut(x, y) -> Option<&mut Cell>` — bounds-checked
+- `Grid::width() -> u16`, `Grid::height() -> u16`
+- `Grid::get(x, y) -> &Cell` / `Grid::put(x, y, Cell)` — panics on OOB
+- `Grid::checked_get(x, y)`, `Grid::checked_put(x, y, Cell)`, `Grid::checked_get_mut(x, y)` —
+  bounds-checked
 - `Grid::clear()` — all cells to default
-- `Grid::clear_region(rect: Rect)`
-- `Grid::fill(cell: Cell)` — all cells to `cell`
-- `Grid::fill_region(rect: Rect, cell: Cell)`
 - `Grid::resize(width, height)` — preserves content in overlap
-- `Grid::cells() -> &[Cell]` — flat slice
-- `Grid::iter() -> impl Iterator<Item = (u16, u16, &Cell)>` — with positions
-- `Index<(u16, u16)>` — panics on OOB (like Vec)
+- `Grid::cells() -> Cells`, `Grid::cells_mut() -> CellsMut` — iterates over `(x, y, cell)`
+- `Grid::diff(other)` — returns an iterator over changed cells
+- `Index<Position>`, `IndexMut<Position>` — panics on OOB
 
 Test assertions (on Grid, for reuse):
 

@@ -1,0 +1,6 @@
+target/
+node_modules/
+bin/
+.tmp_llms/
+package-lock.json
+Cargo.lock

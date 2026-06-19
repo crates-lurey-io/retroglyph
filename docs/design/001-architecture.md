@@ -55,8 +55,7 @@ The public API has three tiers, all operating on the same underlying `Grid`:
 
 ```rust
 let grid = term.grid_mut();
-grid.cell_mut(5, 3).set_char('@');
-grid.cell_mut(5, 3).set_fg(Color::Rgb { r: 255, g: 0, b: 0 });
+grid.put(5, 3, Cell::new('@', Style::default().fg(Color::Rgb { r: 255, g: 0, b: 0 })));
 ```
 
 **Layer 2 — Stateful convenience (BearLibTerminal-style):**
@@ -86,10 +85,9 @@ term.print_styled(0, 0, Line::from(vec![
 
 ```rust
 pub struct Cell {
-    pub ch: char,
-    pub fg: Color,
-    pub bg: Color,
-    pub modifiers: CellModifier, // bold, italic, underline, strikethrough
+    pub(crate) glyph: char,
+    pub(crate) style: Style,
+    // (internal fields for wide chars and EGCs omitted for brevity)
 }
 ```
 
