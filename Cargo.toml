@@ -30,16 +30,25 @@ unicode-width = "0.2"
 bitflags = "2.4"
 unicode-segmentation = { version = "1.13", default-features = false, optional = true }
 crossterm = { version = "0.28", optional = true }
+winit = { version = "0.30", optional = true }
+softbuffer = { version = "0.4", optional = true }
+
 
 [features]
 default = ["std", "egc"]
 std = []
 egc = ["dep:unicode-segmentation"]
 crossterm = ["dep:crossterm", "std"]
+software = ["dep:winit", "dep:softbuffer", "std"]
+software-default-font = ["software"]
 
 [[example]]
 name = "crossterm_demo"
 required-features = ["crossterm"]
+
+[[example]]
+name = "software_demo"
+required-features = ["software-default-font"]
 
 [dev-dependencies]
 insta = { version = "1.34", features = ["yaml"] }

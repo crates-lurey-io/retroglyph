@@ -3,10 +3,14 @@
 #[cfg(feature = "crossterm")]
 pub mod crossterm;
 pub mod headless;
+#[cfg(feature = "software")]
+pub mod software;
 
 #[cfg(feature = "crossterm")]
 pub use crossterm::Crossterm;
 pub use headless::Headless;
+#[cfg(feature = "software")]
+pub use software::SoftwareBackend;
 
 use crate::cell::Cell;
 use crate::event::Event;

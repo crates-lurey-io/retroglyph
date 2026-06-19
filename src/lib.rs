@@ -19,6 +19,8 @@ pub mod text;
 
 #[cfg(feature = "crossterm")]
 pub use backend::Crossterm;
+#[cfg(feature = "software")]
+pub use backend::SoftwareBackend;
 pub use backend::{Backend, Headless};
 pub use cell::Cell;
 pub use color::{AnsiColor, Color, InvalidAnsiIndex};
