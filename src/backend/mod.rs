@@ -14,7 +14,7 @@ pub use software::SoftwareBackend;
 
 use crate::cell::Cell;
 use crate::event::Event;
-use crate::grid::{Position, Size};
+use crate::grid::{Pos, Size};
 use core::time::Duration;
 
 /// A rendering backend that presents grid content to a display
@@ -23,7 +23,7 @@ pub trait Backend {
     /// Draw changed cells to the output surface.
     fn draw<'a, I>(&mut self, content: I)
     where
-        I: Iterator<Item = (Position, &'a Cell)>;
+        I: Iterator<Item = (Pos, &'a Cell)>;
 
     /// Flush buffered output to the display.
     fn flush(&mut self);
@@ -52,5 +52,5 @@ pub trait Backend {
     fn set_cursor_visible(&mut self, visible: bool);
 
     /// Move the cursor to a position.
-    fn set_cursor_position(&mut self, position: Position);
+    fn set_cursor_position(&mut self, position: Pos);
 }

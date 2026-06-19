@@ -10,6 +10,9 @@ use crate::style::Style;
 use alloc::vec::Vec;
 use core::fmt;
 use core::ops::{Index, IndexMut};
+use grixy::buf::GridBuf;
+use grixy::ops::layout::RowMajor;
+use grixy::ops::{ExactSizeGrid, GridDiff, GridRead, GridWrite};
 
 /// Size of the grid.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, PartialOrd, Ord)]
@@ -20,39 +23,15 @@ pub struct Size {
     pub height: u16,
 }
 
-/// Position in the grid.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub struct Position {
-    /// X coordinate.
-    pub x: u16,
-    /// Y coordinate.
-    pub y: u16,
-}
+/// Pos in the grid, in (x = column, y = row) order.
+///
+/// Implements [`Ord`] in row-major order (y primary, then x), which is the
+/// natural ordering for terminal rendering: top-to-bottom, left-to-right within
+/// each row.
+pub type Pos = ixy::Pos<u16>;
 
-// Row-major ordering: y is the primary key.
-impl PartialOrd for Position {
-    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for Position {
-    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
-        self.y.cmp(&other.y).then(self.x.cmp(&other.x))
-    }
-}
-
-impl From<(u16, u16)> for Position {
-    fn from((x, y): (u16, u16)) -> Self {
-        Self { x, y }
-    }
-}
-
-impl From<Position> for (u16, u16) {
-    fn from(p: Position) -> Self {
-        (p.x, p.y)
-    }
-}
+/// Rectangle in the grid.
+pub type Rect = ixy::Rect<u16>;
 
 impl From<(u16, u16)> for Size {
     fn from((width, height): (u16, u16)) -> Self {
@@ -66,68 +45,23 @@ impl From<Size> for (u16, u16) {
     }
 }
 
-/// Rectangle in the grid.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub struct Rect {
-    /// X coordinate.
-    pub x: u16,
-    /// Y coordinate.
-    pub y: u16,
-    /// Width.
-    pub width: u16,
-    /// Height.
-    pub height: u16,
+// ---------------------------------------------------------------------------
+// Helpers: coordinate conversion between u16 and usize
+// ---------------------------------------------------------------------------
+
+fn to_grixy_pos(pos: Pos) -> grixy::core::Pos {
+    grixy::core::Pos::new(usize::from(pos.x), usize::from(pos.y))
 }
 
-impl Rect {
-    /// Returns `true` if `pos` is inside this rectangle.
-    #[must_use]
-    pub const fn contains(self, pos: Position) -> bool {
-        pos.x >= self.x
-            && pos.x < self.x + self.width
-            && pos.y >= self.y
-            && pos.y < self.y + self.height
-    }
-
-    /// Total number of cells in this rectangle.
-    #[must_use]
-    pub const fn area(self) -> u32 {
-        self.width as u32 * self.height as u32
-    }
-
-    /// Top-left corner as a [`Position`].
-    #[must_use]
-    pub const fn top_left(self) -> Position {
-        Position {
-            x: self.x,
-            y: self.y,
-        }
-    }
-
-    /// Exclusive bottom-right corner as a [`Position`].
-    #[must_use]
-    pub const fn bottom_right(self) -> Position {
-        Position {
-            x: self.x + self.width,
-            y: self.y + self.height,
-        }
-    }
-
-    /// Returns `true` if this rectangle overlaps with `other`.
-    #[must_use]
-    pub const fn intersects(self, other: Self) -> bool {
-        self.x < other.x + other.width
-            && self.x + self.width > other.x
-            && self.y < other.y + other.height
-            && self.y + self.height > other.y
-    }
-
-    /// Iterates every [`Position`] inside this rectangle in row-major order.
-    pub fn positions(self) -> impl Iterator<Item = Position> {
-        (self.y..self.y + self.height)
-            .flat_map(move |y| (self.x..self.x + self.width).map(move |x| Position { x, y }))
-    }
+#[allow(clippy::missing_const_for_fn)]
+fn from_grixy_pos(pos: grixy::core::Pos) -> Pos {
+    #[allow(clippy::cast_possible_truncation)]
+    Pos::new(pos.x as u16, pos.y as u16)
 }
+
+// ---------------------------------------------------------------------------
+// Grid iterators
+// ---------------------------------------------------------------------------
 
 /// Iterator over all cells with their `(x, y)` coordinates.
 pub struct Cells<'a> {
@@ -169,15 +103,16 @@ impl<'a> Iterator for CellsMut<'a> {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Grid
+// ---------------------------------------------------------------------------
+
 /// The main grid container for the terminal.
 ///
 /// Note: This uses `alloc::vec::Vec`, requiring an allocator in `no_std` environments.
 /// For strictly static, no-alloc environments, a static-sized grid type may be added in the future.
-#[derive(Debug)]
 pub struct Grid {
-    width: u16,
-    height: u16,
-    buffer: Vec<Cell>,
+    buf: GridBuf<Cell, Vec<Cell>, RowMajor>,
 }
 
 impl Grid {
@@ -186,22 +121,22 @@ impl Grid {
     pub fn new(width: u16, height: u16) -> Self {
         let capacity = usize::from(width) * usize::from(height);
         Self {
-            width,
-            height,
-            buffer: alloc::vec![Cell::default(); capacity],
+            buf: GridBuf::from_buffer(alloc::vec![Cell::default(); capacity], usize::from(width)),
         }
     }
 
     /// Returns the width of the grid.
     #[must_use]
-    pub const fn width(&self) -> u16 {
-        self.width
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn width(&self) -> u16 {
+        self.buf.width() as u16
     }
 
     /// Returns the height of the grid.
     #[must_use]
-    pub const fn height(&self) -> u16 {
-        self.height
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn height(&self) -> u16 {
+        self.buf.height() as u16
     }
 
     /// Sets the cell at the given coordinates.
@@ -210,8 +145,12 @@ impl Grid {
     ///
     /// Panics if the coordinates are out of bounds.
     pub fn put(&mut self, x: u16, y: u16, cell: Cell) {
-        let index = self.get_index(x, y).expect("coordinates out of bounds");
-        self.buffer[index] = cell;
+        let pos = to_grixy_pos(Pos::new(x, y));
+        assert!(
+            self.buf.contains(pos),
+            "coordinates out of bounds: ({x}, {y})"
+        );
+        self.buf[pos] = cell;
     }
 
     /// Gets the cell at the given coordinates.
@@ -221,17 +160,21 @@ impl Grid {
     /// Panics if the coordinates are out of bounds.
     #[must_use]
     pub fn get(&self, x: u16, y: u16) -> &Cell {
-        let index = self.get_index(x, y).expect("coordinates out of bounds");
-        &self.buffer[index]
+        let pos = to_grixy_pos(Pos::new(x, y));
+        &self.buf[pos]
     }
 
     /// Tries to set the cell at the given coordinates.
     ///
     /// Returns `None` if the coordinates are out of bounds.
     pub fn checked_put(&mut self, x: u16, y: u16, cell: Cell) -> Option<()> {
-        let index = self.get_index(x, y)?;
-        self.buffer[index] = cell;
-        Some(())
+        let pos = to_grixy_pos(Pos::new(x, y));
+        if self.buf.contains(pos) {
+            self.buf[pos] = cell;
+            Some(())
+        } else {
+            None
+        }
     }
 
     /// Tries to get the cell at the given coordinates.
@@ -239,38 +182,39 @@ impl Grid {
     /// Returns `None` if the coordinates are out of bounds.
     #[must_use]
     pub fn checked_get(&self, x: u16, y: u16) -> Option<&Cell> {
-        let index = self.get_index(x, y)?;
-        Some(&self.buffer[index])
+        let pos = to_grixy_pos(Pos::new(x, y));
+        self.buf.get(pos)
     }
 
     /// Tries to get a mutable reference to the cell at the given coordinates.
     ///
     /// Returns `None` if the coordinates are out of bounds.
     pub fn checked_get_mut(&mut self, x: u16, y: u16) -> Option<&mut Cell> {
-        let index = self.get_index(x, y)?;
-        Some(&mut self.buffer[index])
+        let pos = to_grixy_pos(Pos::new(x, y));
+        self.buf.get_mut(pos)
     }
 
     /// Iterates all cells with their `(x, y)` coordinates.
     #[must_use]
     pub fn cells(&self) -> Cells<'_> {
         Cells {
-            iter: self.buffer.iter().enumerate(),
-            width: usize::from(self.width),
+            iter: self.buf.as_ref().iter().enumerate(),
+            width: self.buf.width(),
         }
     }
 
     /// Iterates all cells mutably with their `(x, y)` coordinates.
     pub fn cells_mut(&mut self) -> CellsMut<'_> {
+        let width = self.buf.width();
         CellsMut {
-            iter: self.buffer.iter_mut().enumerate(),
-            width: usize::from(self.width),
+            iter: self.buf.as_mut().iter_mut().enumerate(),
+            width,
         }
     }
 
     /// Clears the grid to the default cell.
     pub fn clear(&mut self) {
-        self.buffer.fill(Cell::default());
+        self.buf.clear();
     }
 
     /// Resize the grid to `width` × `height` cells.
@@ -279,50 +223,16 @@ impl Grid {
     /// initialised to the default cell. Shrinking discards cells outside the
     /// new bounds.
     pub fn resize(&mut self, width: u16, height: u16) {
-        let w = usize::from(width);
-        let h = usize::from(height);
-        let mut new_buffer = alloc::vec![Cell::default(); w * h];
-        let copy_width = usize::from(self.width).min(w);
-        let copy_height = usize::from(self.height).min(h);
-        let old_w = usize::from(self.width);
-        for y in 0..copy_height {
-            for x in 0..copy_width {
-                new_buffer[y * w + x] = self.buffer[y * old_w + x].clone();
-            }
-        }
-        self.width = width;
-        self.height = height;
-        self.buffer = new_buffer;
+        self.buf.resize(usize::from(width), usize::from(height));
     }
 
     /// Yield positions where `self` differs from `other`.
     ///
     /// If dimensions differ, all cells in `self` are considered changed.
-    pub fn diff<'a>(&'a self, other: &'a Self) -> impl Iterator<Item = (Position, &'a Cell)> + 'a {
-        let w = usize::from(self.width);
-        let iter: DiffIterator<'a, _, _> =
-            if self.width != other.width || self.height != other.height {
-                DiffIterator::All(self.buffer.iter().enumerate(), core::marker::PhantomData)
-            } else {
-                DiffIterator::Changed(
-                    self.buffer.iter().enumerate().filter_map(move |(i, cell)| {
-                        if cell == &other.buffer[i] {
-                            None
-                        } else {
-                            Some((i, cell))
-                        }
-                    }),
-                    core::marker::PhantomData,
-                )
-            };
-
-        iter.map(move |(i, cell)| {
-            #[allow(clippy::cast_possible_truncation)]
-            let x = (i % w) as u16;
-            #[allow(clippy::cast_possible_truncation)]
-            let y = (i / w) as u16;
-            (Position { x, y }, cell)
-        })
+    pub fn diff<'a>(&'a self, other: &'a Self) -> impl Iterator<Item = (Pos, &'a Cell)> + 'a {
+        self.buf
+            .diff(&other.buf)
+            .map(|(pos, cell)| (from_grixy_pos(pos), cell))
     }
 
     /// Write a grapheme cluster at `(x, y)`, enforcing wide-character invariants.
@@ -357,14 +267,15 @@ impl Grid {
             return;
         }
 
-        // Bounds check.
-        let Some(idx) = self.get_index(x, y) else {
+        let w = self.buf.width();
+        let idx = usize::from(y) * w + usize::from(x);
+        if idx >= self.buf.as_ref().len() {
             return;
-        };
+        }
 
         // A 2-column char needs a spacer at x+1. If that's out of bounds,
         // silently refuse rather than leaving an orphaned primary cell.
-        if width == 2 && self.get_index(x + 1, y).is_none() {
+        if width == 2 && x.saturating_add(1) as usize >= w {
             return;
         }
 
@@ -386,16 +297,16 @@ impl Grid {
             CellFlags::empty()
         };
 
-        // idx was captured by the bounds check above.
-        self.buffer[idx].glyph = first;
-        self.buffer[idx].style = style;
-        self.buffer[idx].extra = extra;
-        self.buffer[idx].flags = flags;
+        self.buf.as_mut()[idx].glyph = first;
+        self.buf.as_mut()[idx].style = style;
+        self.buf.as_mut()[idx].extra = extra;
+        self.buf.as_mut()[idx].flags = flags;
 
         // Place spacer for wide characters.
         if width == 2 {
-            if let Some(idx) = self.get_index(x + 1, y) {
-                let spacer = &mut self.buffer[idx];
+            let spacer_idx = usize::from(y) * w + usize::from(x + 1);
+            if spacer_idx < self.buf.as_ref().len() {
+                let spacer = &mut self.buf.as_mut()[spacer_idx];
                 spacer.glyph = ' ';
                 spacer.style = style;
                 spacer.extra = None;
@@ -419,84 +330,52 @@ impl Grid {
     /// ensuring the old spacer is cleared before we place ours.
     #[cfg(feature = "egc")]
     fn clear_overlap(&mut self, x: u16, y: u16, width: u16) {
+        let w = self.buf.width();
         for cx in x..x.saturating_add(width) {
-            let Some(idx) = self.get_index(cx, y) else {
+            let idx = usize::from(y) * w + usize::from(cx);
+            if idx >= self.buf.as_ref().len() {
                 continue;
-            };
-            let flags = self.buffer[idx].flags;
+            }
+            let flags = self.buf.as_ref()[idx].flags;
 
             // Overwriting a spacer — clear the primary cell to its left.
             if flags.contains(CellFlags::WIDE_CHAR_SPACER) && cx > 0 {
-                if let Some(pidx) = self.get_index(cx - 1, y) {
-                    self.buffer[pidx].reset();
+                let pidx = usize::from(y) * w + usize::from(cx - 1);
+                if pidx < self.buf.as_ref().len() {
+                    self.buf.as_mut()[pidx].reset();
                 }
             }
 
             // Overwriting a primary wide cell — clear the spacer to its right.
             if flags.contains(CellFlags::WIDE_CHAR) {
-                if let Some(sidx) = self.get_index(cx + 1, y) {
-                    self.buffer[sidx].reset();
+                let sidx = usize::from(y) * w + usize::from(cx + 1);
+                if sidx < self.buf.as_ref().len() {
+                    self.buf.as_mut()[sidx].reset();
                 }
             }
         }
     }
-
-    fn get_index(&self, x: u16, y: u16) -> Option<usize> {
-        if x < self.width && y < self.height {
-            Some(usize::from(y) * usize::from(self.width) + usize::from(x))
-        } else {
-            None
-        }
-    }
 }
 
-impl Index<Position> for Grid {
+impl Index<Pos> for Grid {
     type Output = Cell;
 
-    fn index(&self, pos: Position) -> &Cell {
-        self.get(pos.x, pos.y)
+    fn index(&self, pos: Pos) -> &Cell {
+        &self.buf[to_grixy_pos(pos)]
     }
 }
 
-impl IndexMut<Position> for Grid {
-    fn index_mut(&mut self, pos: Position) -> &mut Cell {
-        let idx = self
-            .get_index(pos.x, pos.y)
-            .expect("position out of bounds");
-        &mut self.buffer[idx]
-    }
-}
-
-/// An iterator that encapsulates the different strategies for diffing grid content.
-///
-/// This is used to unify the types of the full-grid iterator and the selective
-/// diff iterator, allowing `Grid::diff` to return a single type.
-enum DiffIterator<'a, I1, I2> {
-    /// Iterates over all cells.
-    All(I1, core::marker::PhantomData<&'a ()>),
-    /// Iterates only over changed cells.
-    Changed(I2, core::marker::PhantomData<&'a ()>),
-}
-
-impl<'a, I1, I2> Iterator for DiffIterator<'a, I1, I2>
-where
-    I1: Iterator<Item = (usize, &'a Cell)>,
-    I2: Iterator<Item = (usize, &'a Cell)>,
-{
-    type Item = (usize, &'a Cell);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self {
-            DiffIterator::All(iter, _) => iter.next(),
-            DiffIterator::Changed(iter, _) => iter.next(),
-        }
+impl IndexMut<Pos> for Grid {
+    fn index_mut(&mut self, pos: Pos) -> &mut Cell {
+        let pos = to_grixy_pos(pos);
+        &mut self.buf[pos]
     }
 }
 
 impl fmt::Display for Grid {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for y in 0..self.height {
-            for x in 0..self.width {
+        for y in 0..self.height() {
+            for x in 0..self.width() {
                 let cell = self.get(x, y);
                 #[cfg(feature = "egc")]
                 let is_spacer = cell.flags.contains(CellFlags::WIDE_CHAR_SPACER);
@@ -517,10 +396,18 @@ impl fmt::Display for Grid {
     }
 }
 
+impl fmt::Debug for Grid {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Grid")
+            .field("width", &self.buf.width())
+            .field("height", &self.buf.height())
+            .finish_non_exhaustive()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-
     #[test]
     fn test_grid_new() {
         let grid = Grid::new(80, 25);
@@ -565,7 +452,7 @@ mod tests {
 
         let diffs: Vec<_> = g1.diff(&g2).collect();
         assert_eq!(diffs.len(), 1);
-        assert_eq!(diffs[0], (Position { x: 0, y: 0 }, g1.get(0, 0)));
+        assert_eq!(diffs[0], (Pos::new(0, 0), g1.get(0, 0)));
     }
 
     #[test]
@@ -608,8 +495,6 @@ mod tests {
         assert_eq!(s, "A··\n···\n");
     }
 
-    // --- items 2, 3, 4, 5, 11 ---
-
     #[test]
     fn test_grid_cells_count() {
         let grid = Grid::new(4, 3);
@@ -628,6 +513,7 @@ mod tests {
 
     #[test]
     fn test_grid_cells_mut() {
+        use crate::style::Style;
         let mut grid = Grid::new(2, 2);
         for (x, y, cell) in grid.cells_mut() {
             #[allow(clippy::cast_possible_truncation)]
@@ -642,86 +528,47 @@ mod tests {
 
     #[test]
     fn test_rect_contains() {
-        let r = Rect {
-            x: 2,
-            y: 3,
-            width: 4,
-            height: 5,
-        };
-        assert!(r.contains(Position { x: 2, y: 3 }));
-        assert!(r.contains(Position { x: 5, y: 7 }));
-        assert!(!r.contains(Position { x: 6, y: 3 })); // x == x+width, exclusive
-        assert!(!r.contains(Position { x: 2, y: 8 })); // y == y+height, exclusive
-        assert!(!r.contains(Position { x: 1, y: 3 }));
+        let r = Rect::new(2, 3, 4, 5);
+        assert!(r.contains_pos(Pos::new(2, 3)));
+        assert!(r.contains_pos(Pos::new(5, 7)));
+        assert!(!r.contains_pos(Pos::new(6, 3))); // x == x+width, exclusive
+        assert!(!r.contains_pos(Pos::new(2, 8))); // y == y+height, exclusive
+        assert!(!r.contains_pos(Pos::new(1, 3)));
     }
 
     #[test]
     fn test_rect_area() {
-        assert_eq!(
-            Rect {
-                x: 0,
-                y: 0,
-                width: 5,
-                height: 3
-            }
-            .area(),
-            15
-        );
+        assert_eq!(Rect::new(0, 0, 5, 3).area(), 15);
         assert_eq!(Rect::default().area(), 0);
     }
 
     #[test]
     fn test_rect_top_left_bottom_right() {
-        let r = Rect {
-            x: 1,
-            y: 2,
-            width: 3,
-            height: 4,
-        };
-        assert_eq!(r.top_left(), Position { x: 1, y: 2 });
-        assert_eq!(r.bottom_right(), Position { x: 4, y: 6 });
+        let r = Rect::new(1, 2, 3, 4);
+        assert_eq!(r.top_left(), Pos::new(1, 2));
+        assert_eq!(r.bottom_right(), Pos::new(4, 6));
     }
 
     #[test]
     fn test_rect_intersects() {
-        let a = Rect {
-            x: 0,
-            y: 0,
-            width: 4,
-            height: 4,
-        };
-        let b = Rect {
-            x: 2,
-            y: 2,
-            width: 4,
-            height: 4,
-        };
-        let c = Rect {
-            x: 4,
-            y: 0,
-            width: 4,
-            height: 4,
-        }; // touches edge, no overlap
-        assert!(a.intersects(b));
-        assert!(!a.intersects(c));
+        let a = Rect::new(0, 0, 4, 4);
+        let b = Rect::new(2, 2, 4, 4);
+        let c = Rect::new(4, 0, 4, 4); // touches edge, no overlap
+        assert!(!a.intersect(b).is_empty());
+        assert!(a.intersect(c).is_empty());
     }
 
     #[test]
     fn test_rect_positions() {
-        let r = Rect {
-            x: 1,
-            y: 2,
-            width: 2,
-            height: 2,
-        };
-        let pts: Vec<Position> = r.positions().collect();
+        let r = Rect::new(1, 2, 2, 2);
+        let pts: Vec<Pos> = r.pos_iter().collect();
         assert_eq!(
             pts,
             vec![
-                Position { x: 1, y: 2 },
-                Position { x: 2, y: 2 },
-                Position { x: 1, y: 3 },
-                Position { x: 2, y: 3 },
+                Pos::new(1, 2),
+                Pos::new(2, 2),
+                Pos::new(1, 3),
+                Pos::new(2, 3),
             ]
         );
     }
@@ -729,15 +576,15 @@ mod tests {
     #[test]
     fn test_index_position() {
         let mut grid = Grid::new(5, 5);
-        let pos = Position { x: 2, y: 3 };
+        let pos = Pos::new(2, 3);
         grid[pos] = Cell::default().with_glyph('Z');
         assert_eq!(grid[pos].glyph(), 'Z');
     }
 
     #[test]
     fn test_position_from_tuple() {
-        let p: Position = (3u16, 7u16).into();
-        assert_eq!(p, Position { x: 3, y: 7 });
+        let p: Pos = (3u16, 7u16).into();
+        assert_eq!(p, Pos::new(3, 7));
         let t: (u16, u16) = p.into();
         assert_eq!(t, (3, 7));
     }
@@ -758,19 +605,11 @@ mod tests {
 
     #[test]
     fn test_position_ord_row_major() {
-        let mut positions = vec![
-            Position { x: 5, y: 0 },
-            Position { x: 0, y: 1 },
-            Position { x: 3, y: 0 },
-        ];
+        let mut positions = vec![Pos::new(5, 0), Pos::new(0, 1), Pos::new(3, 0)];
         positions.sort();
         assert_eq!(
             positions,
-            vec![
-                Position { x: 3, y: 0 },
-                Position { x: 5, y: 0 },
-                Position { x: 0, y: 1 },
-            ]
+            vec![Pos::new(3, 0), Pos::new(5, 0), Pos::new(0, 1),]
         );
     }
 

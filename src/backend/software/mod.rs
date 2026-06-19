@@ -20,7 +20,7 @@ use crate::backend::Backend;
 use crate::cell::Cell;
 use crate::color::{AnsiColor, Color};
 use crate::event::{Event, KeyCode, KeyEvent, KeyModifiers};
-use crate::grid::{Position, Size};
+use crate::grid::{Pos, Size};
 use bitmap_font::BitmapFont as Font;
 use std::num::NonZeroU32;
 use std::sync::Arc;
@@ -122,11 +122,14 @@ impl SoftwareBackend {
             title: opts.window_title,
             event_tx,
             frame_rx,
+            last_frame: Vec::new(),
             window: None,
             context: None,
             surface: None,
             win_w,
             win_h,
+            cell_w,
+            cell_h,
         };
 
         event_loop
@@ -140,7 +143,7 @@ impl SoftwareBackend {
 impl Backend for SoftwareBackend {
     fn draw<'a, I>(&mut self, content: I)
     where
-        I: Iterator<Item = (Position, &'a Cell)>,
+        I: Iterator<Item = (Pos, &'a Cell)>,
     {
         let font = self
             .options
@@ -189,6 +192,24 @@ impl Backend for SoftwareBackend {
         }
     }
 
+    fn resize(&mut self, size: Size) {
+        self.options.cols = size.width;
+        self.options.rows = size.height;
+        if let Some(inner) = &mut self.inner {
+            let font = self
+                .options
+                .font
+                .as_ref()
+                .expect("font missing despite new() validation");
+            let cell_w = usize::from(font.glyph_width) * usize::from(self.options.scale);
+            let cell_h = usize::from(font.glyph_height) * usize::from(self.options.scale);
+            let new_len =
+                usize::from(size.width) * cell_w * usize::from(size.height) * cell_h;
+            inner.pixel_buf.resize(new_len, 0);
+            inner.pixel_buf.fill(0);
+        }
+    }
+
     fn clear(&mut self) {
         if let Some(inner) = &mut self.inner {
             inner.pixel_buf.fill(0);
@@ -211,7 +232,7 @@ impl Backend for SoftwareBackend {
         // No hardware cursor in software mode.
     }
 
-    fn set_cursor_position(&mut self, _position: Position) {
+    fn set_cursor_position(&mut self, _position: Pos) {
         // No hardware cursor in software mode.
     }
 }
@@ -227,7 +248,7 @@ impl Backend for SoftwareBackend {
 fn blit_cell(
     buffer: &mut [u32],
     buf_w: usize,
-    pos: Position,
+    pos: Pos,
     cell: &Cell,
     font: &Font,
     cell_w: usize,
@@ -410,6 +431,10 @@ struct WindowApp {
     title: String,
     event_tx: mpsc::Sender<Event>,
     frame_rx: mpsc::Receiver<Vec<u32>>,
+    /// Last pixel buffer received from the game thread. Used as fallback when
+    /// `RedrawRequested` fires before a new frame is ready (e.g. right after
+    /// resize), preventing a black flash.
+    last_frame: Vec<u32>,
     window: Option<Arc<Window>>,
     /// Kept alive alongside `surface`; both borrow the same `Arc<Window>`.
     #[allow(dead_code)]
@@ -417,14 +442,15 @@ struct WindowApp {
     surface: Option<softbuffer::Surface<Arc<Window>, Arc<Window>>>,
     win_w: u32,
     win_h: u32,
+    cell_w: u32,
+    cell_h: u32,
 }
 
 impl ApplicationHandler for WindowApp {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let attrs = Window::default_attributes()
             .with_title(&self.title)
-            .with_inner_size(winit::dpi::PhysicalSize::new(self.win_w, self.win_h))
-            .with_resizable(false);
+            .with_inner_size(winit::dpi::PhysicalSize::new(self.win_w, self.win_h));
 
         let window = Arc::new(match event_loop.create_window(attrs) {
             Ok(w) => w,
@@ -474,6 +500,31 @@ impl ApplicationHandler for WindowApp {
                 event_loop.exit();
             }
 
+            WindowEvent::Resized(physical_size) => {
+                let cols = physical_size.width / self.cell_w;
+                let rows = physical_size.height / self.cell_h;
+                self.win_w = cols * self.cell_w;
+                self.win_h = rows * self.cell_h;
+                if let Some(surface) = &mut self.surface {
+                    if let (Some(w), Some(h)) = (
+                        NonZeroU32::new(self.win_w),
+                        NonZeroU32::new(self.win_h),
+                    ) {
+                        let _ = surface.resize(w, h);
+                    }
+                }
+                #[allow(clippy::cast_possible_truncation)]
+                // Clear stale frame data so RedrawRequested doesn't blit
+                // a partially-copied old frame while the game thread is
+                // producing its first frame at the new size.
+                self.last_frame.clear();
+                #[allow(clippy::cast_possible_truncation)]
+                let _ = self.event_tx.send(Event::Resize(
+                    cols.max(1) as u16,
+                    rows.max(1) as u16,
+                ));
+            }
+
             WindowEvent::KeyboardInput { event, .. } => {
                 if let Some(e) = translate_key(event) {
                     let _ = self.event_tx.send(e);
@@ -481,15 +532,21 @@ impl ApplicationHandler for WindowApp {
             }
 
             WindowEvent::RedrawRequested => {
-                // Drain stale frames; only present the latest one.
-                let mut latest: Option<Vec<u32>> = None;
+                // Drain stale frames; keep only the latest one.
                 while let Ok(buf) = self.frame_rx.try_recv() {
-                    latest = Some(buf);
+                    self.last_frame = buf;
                 }
-                if let (Some(buf), Some(surface)) = (latest, self.surface.as_mut()) {
+                if let Some(surface) = self.surface.as_mut() {
                     if let Ok(mut buffer) = surface.buffer_mut() {
-                        let len = buffer.len().min(buf.len());
-                        buffer[..len].copy_from_slice(&buf[..len]);
+                        let src = &self.last_frame;
+                        if src.len() == buffer.len() {
+                            buffer.copy_from_slice(src);
+                        } else {
+                            // Size mismatch: the game thread hasn't produced a
+                            // frame for the current surface dimensions yet.
+                            // Show black rather than a stride-misaligned blit.
+                            buffer.fill(0);
+                        }
                         let _ = buffer.present();
                     }
                 }

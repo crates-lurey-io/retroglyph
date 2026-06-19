@@ -26,6 +26,8 @@ missing_panics_doc = "deny"
 module_name_repetitions = "allow"
 
 [dependencies]
+ixy = "0.6.0-alpha.7"
+grixy = { version = "0.6.0-alpha.7", features = ["alloc", "buffer"] }
 unicode-width = "0.2"
 bitflags = "2.4"
 unicode-segmentation = { version = "1.13", default-features = false, optional = true }

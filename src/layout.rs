@@ -174,7 +174,7 @@ fn wrap_line(line: &Line, max_width: u16) -> Vec<WrappedLine> {
 /// use rg::grid::Rect;
 /// use rg::text::Line;
 ///
-/// let rect = Rect { x: 0, y: 0, width: 20, height: 5 };
+/// let rect = Rect::new(0, 0, 20, 5);
 /// let line = Line::raw("Hello, world!");
 ///
 /// let metrics = TextLayout::new(&line)
@@ -201,12 +201,7 @@ impl<'a> TextLayout<'a> {
     pub const fn new(line: &'a Line) -> Self {
         Self {
             line,
-            rect: Rect {
-                x: 0,
-                y: 0,
-                width: 0,
-                height: 0,
-            },
+            rect: Rect::EMPTY,
             h_align: HAlign::Left,
             v_align: VAlign::Top,
         }
@@ -238,7 +233,7 @@ impl<'a> TextLayout<'a> {
     /// Uses the rect's `width` for word-wrapping; ignores `height`.
     #[must_use]
     pub fn measure(&self) -> TextMetrics {
-        let lines = wrap_line(self.line, self.rect.width);
+        let lines = wrap_line(self.line, self.rect.width());
         let width = lines.iter().map(|l| l.width).max().unwrap_or(0);
         #[allow(clippy::cast_possible_truncation)]
         let height = lines.len().min(u16::MAX as usize) as u16;
@@ -247,31 +242,31 @@ impl<'a> TextLayout<'a> {
 
     /// Renders the text into `terminal`, clipping to the rect's bounds.
     pub fn render<B: Backend>(&self, terminal: &mut Terminal<B>) {
-        let lines = wrap_line(self.line, self.rect.width);
+        let lines = wrap_line(self.line, self.rect.width());
         let rect = self.rect;
 
         #[allow(clippy::cast_possible_truncation)]
-        let total_lines = lines.len().min(rect.height as usize) as u16;
+        let total_lines = lines.len().min(usize::from(rect.height())) as u16;
 
         let y_offset = match self.v_align {
             VAlign::Top => 0,
-            VAlign::Middle => rect.height.saturating_sub(total_lines) / 2,
-            VAlign::Bottom => rect.height.saturating_sub(total_lines),
+            VAlign::Middle => rect.height().saturating_sub(total_lines) / 2,
+            VAlign::Bottom => rect.height().saturating_sub(total_lines),
         };
 
         for (line_idx, wrapped) in lines.into_iter().take(total_lines as usize).enumerate() {
             let x_offset = match self.h_align {
                 HAlign::Left => 0,
-                HAlign::Center => rect.width.saturating_sub(wrapped.width) / 2,
-                HAlign::Right => rect.width.saturating_sub(wrapped.width),
+                HAlign::Center => rect.width().saturating_sub(wrapped.width) / 2,
+                HAlign::Right => rect.width().saturating_sub(wrapped.width),
             };
 
             #[allow(clippy::cast_possible_truncation)]
-            let row = rect.y + y_offset + line_idx as u16;
-            let mut cx = rect.x + x_offset;
+            let row = rect.top() + y_offset + line_idx as u16;
+            let mut cx = rect.left() + x_offset;
 
             for glyph in wrapped.glyphs {
-                if cx >= rect.x + rect.width {
+                if cx >= rect.right() {
                     break;
                 }
                 terminal
@@ -363,12 +358,7 @@ mod tests {
     fn test_measure_single_line() {
         let line = Line::raw("hello");
         let m = TextLayout::new(&line)
-            .rect(Rect {
-                x: 0,
-                y: 0,
-                width: 20,
-                height: 5,
-            })
+            .rect(Rect::new(0, 0, 20, 5))
             .measure();
         assert_eq!(m.width, 5);
         assert_eq!(m.height, 1);
@@ -378,12 +368,7 @@ mod tests {
     fn test_measure_wraps() {
         let line = Line::raw("hello world");
         let m = TextLayout::new(&line)
-            .rect(Rect {
-                x: 0,
-                y: 0,
-                width: 7,
-                height: 10,
-            })
+            .rect(Rect::new(0, 0, 7, 10))
             .measure();
         assert_eq!(m.height, 2);
         assert_eq!(m.width, 5);
@@ -399,12 +384,7 @@ mod tests {
         let mut term = Terminal::new(Headless::new(20, 5));
         let line = Line::raw("hi");
         TextLayout::new(&line)
-            .rect(Rect {
-                x: 2,
-                y: 1,
-                width: 10,
-                height: 3,
-            })
+            .rect(Rect::new(2, 1, 10, 3))
             .render(&mut term);
 
         assert_eq!(term.grid().get(2, 1).glyph(), 'h');
@@ -421,12 +401,7 @@ mod tests {
         let mut term = Terminal::new(Headless::new(20, 5));
         let line = Line::raw("hi");
         TextLayout::new(&line)
-            .rect(Rect {
-                x: 0,
-                y: 0,
-                width: 10,
-                height: 3,
-            })
+            .rect(Rect::new(0, 0, 10, 3))
             .h_align(HAlign::Center)
             .render(&mut term);
 
@@ -443,12 +418,7 @@ mod tests {
         let mut term = Terminal::new(Headless::new(20, 5));
         let line = Line::raw("hi");
         TextLayout::new(&line)
-            .rect(Rect {
-                x: 0,
-                y: 0,
-                width: 10,
-                height: 3,
-            })
+            .rect(Rect::new(0, 0, 10, 3))
             .h_align(HAlign::Right)
             .render(&mut term);
 
@@ -465,12 +435,7 @@ mod tests {
         let mut term = Terminal::new(Headless::new(20, 10));
         let line = Line::raw("hi");
         TextLayout::new(&line)
-            .rect(Rect {
-                x: 0,
-                y: 0,
-                width: 10,
-                height: 5,
-            })
+            .rect(Rect::new(0, 0, 10, 5))
             .v_align(VAlign::Middle)
             .render(&mut term);
 
@@ -486,12 +451,7 @@ mod tests {
         let mut term = Terminal::new(Headless::new(20, 10));
         let line = Line::raw("hi");
         TextLayout::new(&line)
-            .rect(Rect {
-                x: 0,
-                y: 0,
-                width: 10,
-                height: 5,
-            })
+            .rect(Rect::new(0, 0, 10, 5))
             .v_align(VAlign::Bottom)
             .render(&mut term);
 
@@ -507,12 +467,7 @@ mod tests {
         let mut term = Terminal::new(Headless::new(10, 10));
         let line = Line::raw("a b c");
         TextLayout::new(&line)
-            .rect(Rect {
-                x: 0,
-                y: 0,
-                width: 1,
-                height: 2,
-            })
+            .rect(Rect::new(0, 0, 1, 2))
             .render(&mut term);
 
         assert_eq!(term.grid().get(0, 0).glyph(), 'a');

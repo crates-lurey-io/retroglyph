@@ -4,7 +4,7 @@
 use crate::backend::Backend;
 use crate::cell::Cell;
 use crate::event::Event;
-use crate::grid::{Grid, Position, Size};
+use crate::grid::{Grid, Pos, Size};
 use alloc::collections::VecDeque;
 use alloc::string::String;
 use core::time::Duration;
@@ -14,7 +14,7 @@ use core::time::Duration;
 pub struct Headless {
     grid: Grid,
     cursor_visible: bool,
-    cursor_pos: Position,
+    cursor_pos: Pos,
     event_queue: VecDeque<Event>,
 }
 
@@ -25,7 +25,7 @@ impl Headless {
         Self {
             grid: Grid::new(width, height),
             cursor_visible: false,
-            cursor_pos: Position::default(),
+            cursor_pos: Pos::default(),
             event_queue: VecDeque::new(),
         }
     }
@@ -44,7 +44,7 @@ impl Headless {
 
     /// Returns the cursor position.
     #[must_use]
-    pub const fn cursor_position(&self) -> Position {
+    pub const fn cursor_position(&self) -> Pos {
         self.cursor_pos
     }
 
@@ -86,7 +86,7 @@ impl Headless {
 impl Backend for Headless {
     fn draw<'a, I>(&mut self, content: I)
     where
-        I: Iterator<Item = (Position, &'a Cell)>,
+        I: Iterator<Item = (Pos, &'a Cell)>,
     {
         for (pos, cell) in content {
             self.grid.checked_put(pos.x, pos.y, cell.clone());
@@ -120,7 +120,7 @@ impl Backend for Headless {
         self.cursor_visible = visible;
     }
 
-    fn set_cursor_position(&mut self, position: Position) {
+    fn set_cursor_position(&mut self, position: Pos) {
         self.cursor_pos = position;
     }
 }

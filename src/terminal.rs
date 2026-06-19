@@ -72,7 +72,7 @@ impl<B: Backend> Terminal<B> {
 
     /// Returns the current grid dimensions.
     #[must_use]
-    pub const fn size(&self) -> Size {
+    pub fn size(&self) -> Size {
         Size {
             width: self.current.width(),
             height: self.current.height(),
@@ -132,8 +132,8 @@ impl<B: Backend> Terminal<B> {
 
     /// Clear a rectangular region.
     pub fn clear_region(&mut self, rect: Rect) {
-        for y in rect.y..(rect.y + rect.height) {
-            for x in rect.x..(rect.x + rect.width) {
+        for y in rect.top()..rect.bottom() {
+            for x in rect.left()..rect.right() {
                 if let Some(cell) = self.current.checked_get_mut(x, y) {
                     *cell = Cell::default();
                 }

@@ -8,81 +8,91 @@
 </text>
 <text font-family="monospace" font-size="14" y="62.0">
   <tspan fill="#cccccc" x="8.0">  </tspan>
-  <tspan fill="#c0c0c0" x="24.8">┌────────────────────────────┐</tspan>
-  <tspan fill="#cccccc" x="276.8">                            </tspan>
+  <tspan fill="#c0c0c0" x="24.8">┌─────────────────────────────────────┐</tspan>
+  <tspan fill="#cccccc" x="352.4">                   </tspan>
 </text>
 <text font-family="monospace" font-size="14" y="80.0">
   <tspan fill="#cccccc" x="8.0">  </tspan>
   <tspan fill="#c0c0c0" x="24.8">│</tspan>
-  <tspan fill="#cccccc" x="33.2">                            </tspan>
-  <tspan fill="#c0c0c0" x="268.4">│</tspan>
-  <tspan fill="#cccccc" x="276.8">                            </tspan>
+  <tspan fill="#cccccc" x="33.2">                                     </tspan>
+  <tspan fill="#c0c0c0" x="344.0">│</tspan>
+  <tspan fill="#cccccc" x="352.4">                   </tspan>
 </text>
 <text font-family="monospace" font-size="14" y="98.0">
   <tspan fill="#cccccc" x="8.0">  </tspan>
   <tspan fill="#c0c0c0" x="24.8">│</tspan>
-  <tspan fill="#cccccc" x="33.2">                            </tspan>
-  <tspan fill="#c0c0c0" x="268.4">│</tspan>
-  <tspan fill="#cccccc" x="276.8">                            </tspan>
+  <tspan fill="#cccccc" x="33.2">                                     </tspan>
+  <tspan fill="#c0c0c0" x="344.0">│</tspan>
+  <tspan fill="#cccccc" x="352.4">                   </tspan>
 </text>
 <text font-family="monospace" font-size="14" y="116.0">
   <tspan fill="#cccccc" x="8.0">  </tspan>
   <tspan fill="#c0c0c0" x="24.8">│</tspan>
-  <tspan fill="#cccccc" x="33.2">                            </tspan>
-  <tspan fill="#c0c0c0" x="268.4">│</tspan>
-  <tspan fill="#cccccc" x="276.8">                            </tspan>
+  <tspan fill="#cccccc" x="33.2">                                     </tspan>
+  <tspan fill="#c0c0c0" x="344.0">│</tspan>
+  <tspan fill="#cccccc" x="352.4">                   </tspan>
 </text>
 <text font-family="monospace" font-size="14" y="134.0">
   <tspan fill="#cccccc" x="8.0">  </tspan>
   <tspan fill="#c0c0c0" x="24.8">│</tspan>
-  <tspan fill="#cccccc" x="33.2">                            </tspan>
-  <tspan fill="#c0c0c0" x="268.4">│</tspan>
-  <tspan fill="#cccccc" x="276.8">                            </tspan>
+  <tspan fill="#cccccc" x="33.2">                                     </tspan>
+  <tspan fill="#c0c0c0" x="344.0">│</tspan>
+  <tspan fill="#cccccc" x="352.4">                   </tspan>
 </text>
 <text font-family="monospace" font-size="14" y="152.0">
   <tspan fill="#cccccc" x="8.0">  </tspan>
   <tspan fill="#c0c0c0" x="24.8">│</tspan>
   <tspan fill="#cccccc" x="33.2">    </tspan>
   <tspan fill="#008000" x="66.8">@</tspan>
-  <tspan fill="#cccccc" x="75.2">                       </tspan>
-  <tspan fill="#c0c0c0" x="268.4">│</tspan>
-  <tspan fill="#cccccc" x="276.8">                            </tspan>
+  <tspan fill="#cccccc" x="75.2">                                </tspan>
+  <tspan fill="#c0c0c0" x="344.0">│</tspan>
+  <tspan fill="#cccccc" x="352.4">                   </tspan>
 </text>
 <text font-family="monospace" font-size="14" y="170.0">
   <tspan fill="#cccccc" x="8.0">  </tspan>
   <tspan fill="#c0c0c0" x="24.8">│</tspan>
-  <tspan fill="#cccccc" x="33.2">            </tspan>
-  <tspan fill="#800000" x="134.0">D</tspan>
-  <tspan fill="#cccccc" x="142.4">               </tspan>
-  <tspan fill="#c0c0c0" x="268.4">│</tspan>
-  <tspan fill="#cccccc" x="276.8">                            </tspan>
+  <tspan fill="#cccccc" x="33.2">                                     </tspan>
+  <tspan fill="#c0c0c0" x="344.0">│</tspan>
+  <tspan fill="#cccccc" x="352.4">                   </tspan>
 </text>
 <text font-family="monospace" font-size="14" y="188.0">
   <tspan fill="#cccccc" x="8.0">  </tspan>
   <tspan fill="#c0c0c0" x="24.8">│</tspan>
-  <tspan fill="#cccccc" x="33.2">                            </tspan>
-  <tspan fill="#c0c0c0" x="268.4">│</tspan>
-  <tspan fill="#cccccc" x="276.8">                            </tspan>
+  <tspan fill="#cccccc" x="33.2">                                     </tspan>
+  <tspan fill="#c0c0c0" x="344.0">│</tspan>
+  <tspan fill="#cccccc" x="352.4">                   </tspan>
 </text>
 <text font-family="monospace" font-size="14" y="206.0">
   <tspan fill="#cccccc" x="8.0">  </tspan>
   <tspan fill="#c0c0c0" x="24.8">│</tspan>
-  <tspan fill="#cccccc" x="33.2">                            </tspan>
-  <tspan fill="#c0c0c0" x="268.4">│</tspan>
-  <tspan fill="#cccccc" x="276.8">                            </tspan>
+  <tspan fill="#cccccc" x="33.2">                                     </tspan>
+  <tspan fill="#c0c0c0" x="344.0">│</tspan>
+  <tspan fill="#cccccc" x="352.4">                   </tspan>
 </text>
 <text font-family="monospace" font-size="14" y="224.0">
   <tspan fill="#cccccc" x="8.0">  </tspan>
-  <tspan fill="#c0c0c0" x="24.8">└────────────────────────────┘</tspan>
-  <tspan fill="#cccccc" x="276.8">                            </tspan>
+  <tspan fill="#c0c0c0" x="24.8">│</tspan>
+  <tspan fill="#cccccc" x="33.2">                  </tspan>
+  <tspan fill="#800000" x="184.4">D</tspan>
+  <tspan fill="#cccccc" x="192.8">                  </tspan>
+  <tspan fill="#c0c0c0" x="344.0">│</tspan>
+  <tspan fill="#cccccc" x="352.4">                   </tspan>
 </text>
 <text font-family="monospace" font-size="14" y="242.0">
-  <tspan fill="#cccccc" x="8.0">                                                            </tspan>
+  <tspan fill="#cccccc" x="8.0">  </tspan>
+  <tspan fill="#c0c0c0" x="24.8">│</tspan>
+  <tspan fill="#cccccc" x="33.2">                                     </tspan>
+  <tspan fill="#c0c0c0" x="344.0">│</tspan>
+  <tspan fill="#cccccc" x="352.4">                   </tspan>
 </text>
 <text font-family="monospace" font-size="14" y="260.0">
-  <tspan fill="#cccccc" x="8.0">  HP: 100 | Use Arrow Keys to move, Q or ESC to Quit        </tspan>
+  <tspan fill="#cccccc" x="8.0">  </tspan>
+  <tspan fill="#c0c0c0" x="24.8">│</tspan>
+  <tspan fill="#cccccc" x="33.2">                                     </tspan>
+  <tspan fill="#c0c0c0" x="344.0">│</tspan>
+  <tspan fill="#cccccc" x="352.4">                   </tspan>
 </text>
 <text font-family="monospace" font-size="14" y="278.0">
-  <tspan fill="#cccccc" x="8.0">                                                            </tspan>
+  <tspan fill="#cccccc" x="8.0">  HP: 100 | Arrow Keys to move, Q or ESC to Quit            </tspan>
 </text>
 </svg>

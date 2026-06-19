@@ -10,7 +10,7 @@
 use crate::backend::Backend;
 use crate::cell::Cell;
 use crate::event::Event;
-use crate::grid::{Position, Size};
+use crate::grid::{Pos, Size};
 use core::time::Duration;
 use std::io::{BufWriter, Stdout, Write};
 
@@ -144,7 +144,7 @@ impl Backend for Crossterm {
     #[allow(clippy::similar_names)]
     fn draw<'a, I>(&mut self, content: I)
     where
-        I: Iterator<Item = (Position, &'a Cell)>,
+        I: Iterator<Item = (Pos, &'a Cell)>,
     {
         let mut last_fg = None;
         let mut last_bg = None;
@@ -213,6 +213,10 @@ impl Backend for Crossterm {
         Size { width, height }
     }
 
+    fn resize(&mut self, _size: Size) {
+        self.clear();
+    }
+
     fn clear(&mut self) {
         let _ = crossterm::queue!(
             self.writer,
@@ -266,7 +270,7 @@ impl Backend for Crossterm {
         let _ = self.writer.flush();
     }
 
-    fn set_cursor_position(&mut self, position: Position) {
+    fn set_cursor_position(&mut self, position: Pos) {
         let _ = crossterm::queue!(
             self.writer,
             crossterm::cursor::MoveTo(position.x, position.y)
@@ -352,7 +356,7 @@ impl TryFrom<crossterm::event::MouseEvent> for crate::event::MouseEvent {
     fn try_from(m: crossterm::event::MouseEvent) -> Result<Self, Self::Error> {
         Ok(Self {
             kind: m.kind.try_into()?,
-            position: Position {
+            position: Pos {
                 x: m.column,
                 y: m.row,
             },

@@ -1,6 +1,6 @@
 //! Input event system.
 
-use crate::grid::Position;
+use crate::grid::Pos;
 use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -147,7 +147,7 @@ pub struct MouseEvent {
     /// The kind of mouse event.
     pub kind: MouseEventKind,
     /// The position of the mouse.
-    pub position: Position,
+    pub position: Pos,
     /// Modifiers held down during the event.
     pub modifiers: KeyModifiers,
 }
@@ -203,7 +203,7 @@ mod tests {
     fn test_mouse_event() {
         let mouse_event = MouseEvent {
             kind: MouseEventKind::Down(MouseButton::Left),
-            position: Position { x: 10, y: 5 },
+            position: Pos { x: 10, y: 5 },
             modifiers: KeyModifiers::NONE,
         };
         let event = Event::Mouse(mouse_event);

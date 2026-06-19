@@ -25,6 +25,7 @@ fn main() {
             draw(term);
 
             // Poll once; `run` loops calling us on every tick.
+            // Resize events are auto-applied by the terminal.
             if let Some(event) = term.poll(Duration::from_millis(16)) {
                 match event {
                     Event::Key(k) if k.code == KeyCode::Escape => std::process::exit(0),
@@ -37,6 +38,7 @@ fn main() {
 }
 
 fn draw(term: &mut Terminal<impl rg::Backend>) {
+    term.clear();
     let size = term.size();
     let msg = "Hello from rg! Press Esc to quit.";
 

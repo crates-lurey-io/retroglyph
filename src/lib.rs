@@ -25,7 +25,7 @@ pub use backend::{Backend, Headless};
 pub use cell::Cell;
 pub use color::{AnsiColor, Color, InvalidAnsiIndex};
 pub use event::{Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
-pub use grid::{Grid, Position, Rect, Size};
+pub use grid::{Grid, Pos, Rect, Size};
 #[cfg(feature = "egc")]
 pub use layout::{HAlign, TextLayout, TextMetrics, VAlign};
 pub use style::{CellModifier, Style};
