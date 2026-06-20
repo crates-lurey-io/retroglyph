@@ -282,7 +282,7 @@ and produces a usable, playable terminal for roguelike development.
 
 ## Module structure (anticipated)
 
-```rust
+````rust
 src/
 ├── lib.rs              # Public API re-exports
 ├── terminal.rs         # Terminal struct (stateful API, double buffering)
@@ -338,3 +338,4 @@ src/
 - `docs/references/core/error-handling.md` — error type design
 - `docs/references/backends/headless.md` — headless backend patterns
 - `docs/references/backends/ansi-terminal.md` — crossterm backend research
+````

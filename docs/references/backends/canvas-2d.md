@@ -93,7 +93,7 @@ Each unique combination gets its own small HTMLCanvasElement. Blitting is via
 `drawImage(canvas, dx, dy)`. Cache is cleared when options change (font, spacing, etc.).
 
 **Pros**: Simple, easy to implement, each glyph is pixel-perfect. **Cons**: One HTMLCanvasElement
-per unique glyph. For a 16-color terminal with 95 printable ASCII characters, that could be 95 _16 _
+per unique glyph. For a 16-color terminal with 95 printable ASCII characters, that could be 95 _16_
 16 = 24,320 canvases in theory (though in practice far fewer are used). Memory overhead per canvas
 is non-trivial.
 
@@ -161,6 +161,7 @@ open-source implementation of this pattern. Key design details:
    bottom).
 
 9. The cropped ImageData is placed into the atlas page via `putImageData`.
+
 ### Caching
 
 - `FourKeyMap<code, bg, fg, ext>` for single characters.
@@ -518,7 +519,7 @@ this._spacingY = Math.ceil(opts.spacing * opts.fontSize);
 
 #### 7a. rot.js Architecture
 
-```text
+````text
 Backend (abstract)
   └── Canvas (abstract, creates <canvas>, sets font, handles events)
         ├── Rect    -- monospace text grid, per-cell fillText with optional glyph cache
@@ -747,3 +748,4 @@ as needed. Optionally merge pages when count exceeds a threshold.
 
    (4096x4096) source canvas has performance implications compared to smaller source canvases. GPU
    texture size limits and upload costs may matter.
+````

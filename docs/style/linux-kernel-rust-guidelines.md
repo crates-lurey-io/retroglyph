@@ -208,7 +208,7 @@ only), and um. [Source](https://docs.kernel.org/rust/arch-support.html)
 
 The kernel enforces a strict layered architecture for unsafe code:
 
-```text
+````text
 drivers/fs/...          rust/kernel/            rust/bindings/
 (Leaf modules)          (Abstractions)          (Auto-generated bindings)
     |                       |                       |
@@ -293,7 +293,7 @@ impl Drop for RustMinimal {
         pr_info!("Rust minimal sample (exit)\n");
     }
 }
-```
+````
 
 ### 11. Kernel-Specific Rust Patterns
 

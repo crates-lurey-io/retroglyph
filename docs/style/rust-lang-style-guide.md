@@ -415,7 +415,8 @@ The style team follows these principles when deciding rules:
    interfaces, plain-text contexts like error messages and diffs).
 
 1. **Aesthetics** - sense of beauty, consistency with other languages/tools.
-1. **Specifics** - VCS-friendly diffs, preventing rightward drift, minimizing vertical space.3. **Application** - ease of manual application, ease of tool implementation, internal consistency,
+1. **Specifics** - VCS-friendly diffs, preventing rightward drift, minimizing vertical space.3.
+   **Application** - ease of manual application, ease of tool implementation, internal consistency,
 
    simplicity of rules.
 
@@ -462,18 +463,18 @@ The style team follows these principles when deciding rules:
 
 1. **Import merging/splitting is opt-in.** Tools must not merge or split imports by default; the
 
-    programmer controls import granularity.
+   programmer controls import granularity.
 
 1. **`macro_rules!` uses `{}`**, not `()` or `[]`, for the outer definition body.
 
 1. **Version sorting** is the default sort order for imports, keys, and other ordered lists. It
-    handles numeric components naturally (`u8` before `u16`).
+   handles numeric components naturally (`u8` before `u16`).
 
 1. **Extern ABI is always explicit**: write `extern "C"`, never bare `extern`.
 
 1. **Combinable expressions** allow nested multi-line calls to collapse one level of indentation,
-    keeping code compact without sacrificing readability.
+   keeping code compact without sacrificing readability.
 
 1. **Single `derive` attribute.** Multiple `#[derive(...)]` must be merged into one, preserving
 
-    order of derived traits.
+   order of derived traits.

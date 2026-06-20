@@ -144,6 +144,7 @@ The pattern:
    (Chrome-only).
 
 3. Worker instantiates wasm, creates rendering state, and processes messages.
+
 ```js
 // worker.js
 importScripts('./pkg/my_app.js');
@@ -201,10 +202,12 @@ pub fn create_grid_buffer(width: u32, height: u32) -> SharedArrayBuffer {
 
 - Server must send COOP/COEP headers:
 
-  ```text
+  ````text
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Embedder-Policy: require-corp
   ```text
+
+  ````
 
 - Without these headers, `SharedArrayBuffer` is undefined in the browser.
 
@@ -218,7 +221,7 @@ in a browser **cannot call `Atomics.wait`** (it would block the UI). Only worker
 
 For true multi-threaded Wasm, requires nightly Rust with:
 
-```shell
+````shell
 RUSTFLAGS='-C target-feature=+atomics,+bulk-memory,+mutable-globals'
 cargo build --target wasm32-unknown-unknown -Z build-std=panic_abort,std
 ```rust
@@ -309,7 +312,7 @@ cd dist && zip -r ../my-game.zip . && cd ..
 # Upload via butler (itch.io CLI) or web interface
 
 butler push my-game.zip your-username/your-game:html5
-```
+````
 
 ### itch.io-Specific Notes
 
@@ -356,7 +359,6 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
 

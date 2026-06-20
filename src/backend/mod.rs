@@ -30,6 +30,10 @@ pub trait Backend {
     /// The default implementation forwards layer-0 tiles to [`draw`](Self::draw)
     /// and ignores higher layers. Override this to support multi-layer
     /// compositing, sub-cell offsets, or transparency.
+    ///
+    /// When [`needs_full_frame`](Self::needs_full_frame) returns `true`, this
+    /// receives **all** cells from every allocated layer, and the backend
+    /// should clear its output surface before drawing.
     fn draw_layers<'a, I>(&mut self, content: I)
     where
         I: Iterator<Item = (u8, Pos, &'a Tile)>,
@@ -39,6 +43,19 @@ pub trait Backend {
                 if layer == 0 { Some((pos, tile)) } else { None }
             },
         ));
+    }
+
+    /// Returns `true` if the backend needs the **entire** frame (all cells on
+    /// all layers) on every call to [`draw_layers`](Self::draw_layers), rather
+    /// than just the changed cells.
+    ///
+    /// Pixel-based backends (e.g. [`SoftwareRenderer`]) need this because
+    /// sub-cell offsets can spill glyph pixels into adjacent cells — without
+    /// a full redraw, orphaned pixels from the previous frame linger.
+    ///
+    /// The default implementation returns `false`.
+    fn needs_full_frame(&self) -> bool {
+        false
     }
 
     /// Flush buffered output to the display.

@@ -36,7 +36,7 @@ Both libraries write ANSI/VT escape sequences to stdout (or any `Write` target).
 `Command`, which writes escape bytes to a buffer. Commands can be executed immediately or queued for
 batch flushing.
 
-```text
+````text
 // Crossterm command examples (what gets written to the writer):
 \x1b[H         // CUP: move cursor to (1,1)
 \x1b[2J        // ED: erase entire display
@@ -191,7 +191,7 @@ fn emit_fg(color: Rgb, mode: ColorMode) -> String {
         ColorMode::NoColor   => String::new(),
     }
 }
-```
+````
 
 ## 4. Unicode and wide character handling
 
@@ -303,7 +303,7 @@ split across multiple PTY reads.
 
 The synchronized output protocol uses DEC private mode 2026:
 
-```text
+````text
 \x1b[?2026h    // BSU: Begin Synchronized Update
 ... frame content (cursor moves, colors, text) ...
 \x1b[?2026l    // ESU: End Synchronized Update
@@ -344,7 +344,7 @@ fn render_frame(&mut self, diff: impl Iterator<Item = (u16, u16, &Cell)>) {
     self.write(b"\x1b[?2026l"); // ESU
     self.flush();
 }
-```
+````
 
 ## 7. Mouse support
 
@@ -438,7 +438,9 @@ execution, then `flush()` writes everything at once.
      emitted cell.
 
    - Writes the cell's symbol string.
+
 4. Final `io::Write::flush()` pushes all queued bytes to the terminal.
+
 ### Notcurses rendering pipeline
 
 Notcurses separates rendering from rasterizing:
@@ -509,7 +511,9 @@ serialized (one write stream to the terminal at a time).
    the user's preferred terminal emulator.
 
 1. **Small binary size**: Terminal I/O adds minimal code compared to a full rendering engine.
-1. **Accessibility**: Terminal emulators often have built-in screen reader support.1. **Copy/paste for free**: The terminal provides native text selection.
+1. **Accessibility**: Terminal emulators often have built-in screen reader support.1. **Copy/paste
+   for free**: The terminal provides native text selection.
+
 ### Disadvantages
 
 1. **Visual ceiling**: Cannot render anything beyond the character grid. No anti-aliased custom

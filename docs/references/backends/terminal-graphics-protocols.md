@@ -25,7 +25,7 @@ data inline in the terminal output stream via a Device Control String (DCS).
 
 ### Escape sequence structure
 
-```text
+````text
 DCS P1 ; P2 ; P3 ; q <sixel-data> ST
 ```yaml
 
@@ -349,7 +349,7 @@ typedef enum {
   NCPIXEL_KITTY_ANIMATED,  // Kitty 0.20.0-0.21.x (C=1 but no self-ref composition)
   NCPIXEL_KITTY_SELFREF,   // Kitty >= 0.22.0 (a=c for self-referential composition)
 } ncpixelimpl_e;
-```
+````
 
 ### Detection strategy
 
@@ -362,7 +362,7 @@ typedef enum {
 
 notcurses uses `ncblitter_e` to select rendering strategy:
 
-```text
+````text
 NCBLIT_PIXEL   → Sixel/Kitty/iTerm2 bitmaps (best quality)
 NCBLIT_BRAILLE → 4x2 pixels per cell via Braille characters
 NCBLIT_3x2     → Unicode sextants (3x2 per cell)
@@ -397,7 +397,7 @@ void ncplane_pixel_geom(struct ncplane* n,
     unsigned* pxy, unsigned* pxx,        // display region in pixels
     unsigned* celldimy, unsigned* celldimx, // cell size in pixels
     unsigned* maxbmapy, unsigned* maxbmapx); // max bitmap size
-```
+````
 
 [Source: notcurses USAGE.md](https://github.com/dankamongmen/notcurses/blob/master/USAGE.md)
 
@@ -495,7 +495,7 @@ Pros: clean separation, no flicker. Cons: pixel regions must be cell-aligned.
 Kitty's z-index support allows placing images behind text (`z` < 0). Text renders normally on top
 with transparency. This enables pixel backgrounds with text overlays.
 
-```text
+````text
 <ESC>_Ga=T,f=100,z=-1;<base64 PNG><ESC>\  # Image behind text
 ```yaml
 
@@ -623,7 +623,7 @@ fn detect_graphics_protocol() -> GraphicsProtocol {
     // 5. Fallback to character-based rendering
     GraphicsProtocol::None
 }
-```
+````
 
 ### Detecting pixel dimensions
 
@@ -652,7 +652,7 @@ passthrough support.
 
 ### XTVERSION for terminal identification
 
-```yaml
+````yaml
 Send: ESC[>0q
 Response: DCS >|<terminal name and version> ST
 ```rust
@@ -772,3 +772,4 @@ changes.
 
    calculations, not measured. Real-world performance depends on terminal rendering speed, not just
    wire bandwidth.
+````

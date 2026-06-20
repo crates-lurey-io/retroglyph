@@ -183,7 +183,7 @@ functionality is removed.
 - [ ] `Position` sorts in row-major order (existing test `test_position_ord_row_major` still passes)
 - [ ] `Rect` call-sites migrated — no `rect.x`, `rect.y`, `rect.width`, `rect.height` field access
 
-      remains in `src/`
+  remains in `src/`
 
 - [ ] No `struct Position` or `struct Rect` definitions remain in `src/grid.rs`
 - [ ] `rg::Position`, `rg::Rect` still in public API (`src/lib.rs`)
@@ -351,7 +351,7 @@ Both milestones are pre-v1.0 (`rg` is on v0.1.0), so breaking changes are permit
 
 ## Order of operations
 
-```text
+````text
 M-A: ixy geometry
  ├── A1: Position newtype
  ├── A2: Rect alias + call-site sweep
@@ -375,3 +375,4 @@ M-B: grixy Grid (start after M-A is green)
 
 Work on M-B method groups in the order listed — each group is independently testable and the
 existing tests provide a safety net after every step.
+````

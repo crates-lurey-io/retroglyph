@@ -124,7 +124,7 @@ extend rightward/downward get clipped: subsequent cells overwrite them. Layers s
 
 The standard "over" operator for straight (non-premultiplied) alpha:
 
-```text
+````text
 out.rgb = src.rgb * src.a + dst.rgb * (1 - src.a)
 out.a   = src.a + dst.a * (1 - src.a)
 ```text
@@ -160,7 +160,7 @@ fn premultiply(r: u8, g: u8, b: u8, a: u8) -> [u8; 4] {
         a,
     ]
 }
-```
+````
 
 ### Practical Compositing Pipeline
 
@@ -257,7 +257,7 @@ REXPaint is the standard ASCII art editor for roguelike development. Its `.xp` f
 
 The file is a gzip stream. After decompression, the binary layout is:
 
-```text
+````text
 ┌─────────────────────────────────┐
 │ xp_version: i32                 │  Format version (negative to distinguish
 │                                 │  from old files that started with layer count)
@@ -338,7 +338,7 @@ for layer in &xp.layers {
         }
     }
 }
-```
+````
 
 [Source: REXPaint Manual, Appendix B](https://www.gridsagegames.com/rexpaint/)
 
@@ -449,7 +449,7 @@ and entity placement. Created by Sebastien Benard (creator of Dead Cells).
 
 ### JSON Structure Overview
 
-```rust
+````rust
 Project (.ldtk)
 ├── jsonVersion: string
 ├── worldLayout: "Free" | "GridVania" | "LinearHorizontal" | "LinearVertical"
@@ -528,7 +528,7 @@ for level in &project.levels {
         }
     }
 }
-```
+````
 
 [Source: LDtk JSON Overview](https://ldtk.io/docs/general/json-overview/)
 [Source: ldtk_rust crate](https://docs.rs/ldtk_rust/)
@@ -541,7 +541,7 @@ for level in &project.levels {
 
 Standard sprite sheet layout for roguelike tilesets:
 
-```text
+````text
 ┌────┬────┬────┬────┐
 │ 0  │ 1  │ 2  │ 3  │  Row 0
 ├────┼────┼────┼────┤
@@ -563,7 +563,7 @@ fn tile_rect(index: u32, tile_w: u32, tile_h: u32, columns: u32,
     let y = margin + row * (tile_h + spacing);
     (x, y, tile_w, tile_h)
 }
-```
+````
 
 ### Padding and Spacing
 
@@ -619,7 +619,7 @@ The full official mapping is maintained by the Unicode Consortium at
 
 Key ranges for roguelike rendering:
 
-```text
+````text
 CP437  Unicode  Description
 -----  -------  -----------
 0x01   U+263A   ☺ White smiling face
@@ -683,7 +683,7 @@ fn unicode_to_cp437(ch: char) -> Option<u8> {
         .position(|&c| c == ch)
         .map(|i| i as u8)
 }
-```
+````
 
 For production use, the `codepage_437` crate on crates.io provides a complete bidirectional mapping.
 bracket-lib also includes a built-in `to_cp437` function.

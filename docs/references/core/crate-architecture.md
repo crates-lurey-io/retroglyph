@@ -15,7 +15,7 @@ Ratatui v0.30 split from a monolithic crate into a flat workspace. All crates li
 with a shared `ratatui-` prefix.
 [Source](https://github.com/ratatui/ratatui/blob/main/ARCHITECTURE.md)
 
-```rust
+````rust
 ratatui/
 ├── Cargo.toml          # workspace root
 ├── ratatui/            # facade crate (re-exports everything)
@@ -44,7 +44,7 @@ default-members = [
   "ratatui-termwiz",
   "ratatui-widgets",
 ]
-```
+````
 
 ### wgpu (flat namespace, layered)
 
@@ -52,7 +52,7 @@ wgpu uses a flat layout with 29 workspace members. Crates are layered: `wgpu-typ
 `wgpu-core` -> `wgpu`. Naga (shader compiler) lives alongside as a sibling crate.
 [Source](https://deepwiki.com/gfx-rs/wgpu/6.4-build-system-and-workspace)
 
-```text
+````text
 wgpu/
 ├── Cargo.toml       # workspace root
 ├── wgpu/            # public API facade
@@ -150,7 +150,7 @@ pretty_assertions = { workspace = true }
 
 [lints]
 workspace = true
-```
+````
 
 Key design principles from ratatui-core:
 
@@ -188,7 +188,7 @@ pub trait Backend {
 
 Each backend crate depends only on `rg-core` and its terminal library:
 
-```rust
+````rust
 rg-core (defines Backend trait + Cell, Buffer, Style, etc.)
   ^           ^            ^
   |           |            |
@@ -253,7 +253,7 @@ name = "rg-wgpu"
 [dependencies]
 rg-core = { workspace = true }
 wgpu = { workspace = true }
-```
+````
 
 ---
 
@@ -262,7 +262,7 @@ wgpu = { workspace = true }
 Algorithms should be separate, optional crates. They depend on core types (`Rect`, `Position`) but
 not on backends or widgets.
 
-```text
+````text
 rg-fov/          # Field of vision algorithms (shadowcasting, etc.)
 rg-pathfinding/  # A*, Dijkstra, BFS over grids
 rg-noise/        # Noise generation for procedural content
@@ -290,7 +290,7 @@ rg-core = { workspace = true }
 [features]
 default = []
 serde = ["rg-core/serde"]
-```
+````
 
 The facade crate can optionally re-export these:
 
@@ -585,7 +585,6 @@ jobs:
   fmt:
     runs-on: ubuntu-latest
     steps:
-
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@nightly
 
@@ -601,7 +600,6 @@ jobs:
         toolchain: [stable, beta]
     continue-on-error: ${{ matrix.toolchain == 'beta' }}
     steps:
-
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
 
@@ -621,7 +619,6 @@ jobs:
         toolchain: ['1.85.0', 'stable']
     runs-on: ${{ matrix.os }}
     steps:
-
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
 
@@ -636,7 +633,6 @@ jobs:
   test-features:
     runs-on: ubuntu-latest
     steps:
-
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: taiki-e/install-action@cargo-hack
@@ -654,13 +650,11 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
         backend: [crossterm, termion, wgpu]
         exclude:
-
           - os: windows-latest
 
             backend: termion
     runs-on: ${{ matrix.os }}
     steps:
-
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -670,7 +664,6 @@ jobs:
   build-no-std:
     runs-on: ubuntu-latest
     steps:
-
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
 
@@ -684,7 +677,6 @@ jobs:
   test-docs:
     runs-on: ubuntu-latest
     steps:
-
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: taiki-e/install-action@cargo-hack
@@ -694,7 +686,6 @@ jobs:
   cargo-deny:
     runs-on: ubuntu-latest
     steps:
-
       - uses: actions/checkout@v4
       - uses: EmbarkStudios/cargo-deny-action@v2
 
@@ -708,7 +699,6 @@ jobs:
     needs: [fmt, clippy, check, test-features, test-backends, build-no-std, test-docs, cargo-deny]
     if: always()
     steps:
-
       - name: All jobs passed
 
         run: |

@@ -166,7 +166,9 @@ minimal failing case.
 3. **Wide character spacers**: every wide (2-cell) character at position `(x, y)` has a
    spacer/continuation cell at `(x+1, y)`
 
-4. **Diff symmetry**: `diff(a, b)` applied to `a` produces `b`4. **Merge idempotency**: `a.merge(&b); assert!(a.diff(&b).is_empty())`3. **Resize preserves content**: resizing then reading in-bounds cells returns original values
+4. **Diff symmetry**: `diff(a, b)` applied to `a` produces `b`4. **Merge idempotency**:
+   `a.merge(&b); assert!(a.diff(&b).is_empty())`3. **Resize preserves content**: resizing then
+   reading in-bounds cells returns original values
 
 ### Example: Grid Dimension Invariant
 
@@ -369,7 +371,6 @@ jobs:
       matrix:
         target: [parse_ansi, parse_config]
     steps:
-
       - uses: actions/checkout@v4
       - run: rustup toolchain install nightly && rustup default nightly
       - uses: actions/cache@v4
@@ -464,8 +465,9 @@ impl Backend for TestBackend {
 
    `assert_scrollback_lines` reduce test boilerplate
 
-4. **Scrollback tracking**: captures lines that scroll off-screen, testing scroll behavior4. **Serde support**: `#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]` enables
-   snapshot serialization
+4. **Scrollback tracking**: captures lines that scroll off-screen, testing scroll behavior4. **Serde
+   support**: `#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]` enables snapshot
+   serialization
 
 ### Recommended Test Backend API for a New Library
 
@@ -511,19 +513,16 @@ test-backends:
       os: [ubuntu-latest, windows-latest, macos-latest]
       backend: [crossterm, termion, termina, termwiz]
       exclude:
-
         - os: windows-latest
 
           backend: termion # termion doesn't support Windows
   steps:
-
     - uses: actions/checkout@v4
     - uses: dtolnay/rust-toolchain@master
 
       with: { toolchain: stable }
 
     - run: cargo xtask test-backend ${{ matrix.backend }}
-
 ```
 
 ### Pattern: Backend-Agnostic Test Suite
@@ -722,9 +721,9 @@ cargo bench --bench grid_benchmarks -- --baseline main
 
 ### Recommendation
 
-Use **divan**for its simpler API and built-in allocation tracking. Use**criterion** if you need
-HTML reports, statistical regression detection with configurable confidence levels, or integration
-with continuous benchmarking services (e.g., codspeed, bencher.dev).
+Use **divan**for its simpler API and built-in allocation tracking. Use**criterion** if you need HTML
+reports, statistical regression detection with configurable confidence levels, or integration with
+continuous benchmarking services (e.g., codspeed, bencher.dev).
 
 [Source: criterion docs](https://docs.rs/criterion/), [divan docs](https://docs.rs/divan/)
 
@@ -785,7 +784,7 @@ assert_buffer_eq!(&actual_buffer, &expected_buffer);
 
 The macro compared areas first, then cell-by-cell content, producing output like:
 
-```text
+````text
 buffer contents not equal
 diff:
 0: at (2, 1)
@@ -819,7 +818,7 @@ fn test_full_render_pipeline() {
         "                    ",
     ]);
 }
-```
+````
 
 ### rstest for Parameterized Tests
 

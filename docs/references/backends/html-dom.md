@@ -21,7 +21,7 @@ The dominant approach. Each row is a block container (`<div>` or `<pre>`), conta
 `<span>` elements for character runs. Adjacent cells sharing the same attributes (fg, bg, modifiers)
 are merged into a single span.
 
-```text
+````text
 <div class="xterm-rows">
   <div style="height: 20px; line-height: 20px;">
     <span class="xterm-fg-2">hello </span>
@@ -329,7 +329,7 @@ use wasm_bindgen::prelude::*;
 pub fn greet(name: &str) -> String {
     format!("Hello, {}!", name)
 }
-```
+````
 
 Key features:
 

@@ -15,7 +15,7 @@ Winit (v0.30+) provides the richest input model of the three backends.
 
 ### Keyboard
 
-```rust
+````rust
 // winit::event::KeyEvent
 pub struct KeyEvent {
     pub physical_key: PhysicalKey,   // Layout-independent scancode (KeyCode enum)
@@ -242,7 +242,7 @@ pub enum Event {
     /// Gamepad disconnected.
     GamepadDisconnected(GamepadId),
 }
-```
+````
 
 ---
 

@@ -42,7 +42,7 @@ alpha-blend = { version = "0.2", default-features = false, features = ["std"] }
 
 1. **The current `Cell` type becomes `Tile`** with two new fields (`dx`, `dy`). The old `cell.rs`
 
-   is renamed to `tile.rs`. `Tile` is *the* atomic drawable unit — one per cell per layer. No
+   is renamed to `tile.rs`. `Tile` is _the_ atomic drawable unit — one per cell per layer. No
    wrapper enum, no stack.
 
 1. **No per-cell tile stacking.** Each `LayerBuf` is a flat `Vec<Tile>` where `tiles[i]` corresponds
@@ -75,7 +75,7 @@ alpha-blend = { version = "0.2", default-features = false, features = ["std"] }
 1. **Compositing:** `SoftwareRenderer` blits layers 0 → 255. Layer 0 fills the cell background from
 
    `style.bg` (opaque). Layers > 0 are composited over whatever is already in the pixel buffer;
-   their *background* is transparent (no bg fill), only the glyph pixels overwrite the layer below.
+   their _background_ is transparent (no bg fill), only the glyph pixels overwrite the layer below.
 
 ---
 
@@ -135,7 +135,8 @@ needed. Update all references in the codebase:
 
 ### M2: `LayerBuf` and multi-layer `Grid`
 
-**Goal:**Replace `Grid`'s single flat `GridBuf<Tile>` with `Vec<Option<LayerBuf>>`.**File:** `src/grid.rs` (modified)
+**Goal:**Replace `Grid`'s single flat `GridBuf<Tile>` with `Vec<Option<LayerBuf>>`.**File:**
+`src/grid.rs` (modified)
 
 ```rust
 /// Buffer for a single layer: a flat grid of one tile per cell.
@@ -557,8 +558,8 @@ pub trait Backend {
 }
 ```
 
-Key difference from the previous design: no `Tile (no stacking)` to unwrap. The default impl directly passes
-`&Tile` to `draw`, which is exactly what existing backends consume.
+Key difference from the previous design: no `Tile (no stacking)` to unwrap. The default impl
+directly passes `&Tile` to `draw`, which is exactly what existing backends consume.
 
 **`HeadlessBackend`** stores tiles directly — no change in logic, just the type from `Cell` to
 `Tile`. Its `format_view` now reads `.glyph` from `Tile` instead of `Cell`:

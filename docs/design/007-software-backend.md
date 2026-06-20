@@ -20,31 +20,31 @@ architectural changes required for WASM support.
 
 1. **Window & Blitting:**We will use**`winit`** for cross-platform window creation and input
 
-    events, coupled with **`softbuffer`** for pushing CPU-computed `Vec<u32>` pixel arrays to the
-    window surface.
+   events, coupled with **`softbuffer`** for pushing CPU-computed `Vec<u32>` pixel arrays to the
+   window surface.
 
 1. **Thread Architecture:** Because `winit` strictly requires control of the main thread
 
-    (especially on macOS), the `SoftwareBackend` will invert control. It will run the `winit` event
-    loop on the main thread and optionally spawn the user's game loop on a background thread,
-    communicating events and frame buffers via channels.
+   (especially on macOS), the `SoftwareBackend` will invert control. It will run the `winit` event
+   loop on the main thread and optionally spawn the user's game loop on a background thread,
+   communicating events and frame buffers via channels.
 
 1. **Glyph Rasterization:**We will use**`fontdue`** for text rasterization. It is extremely fast
 
-    and lightweight.
+   and lightweight.
 
 1. **Builder Pattern (C-BUILDER):** Complex window configuration (font size, window dimensions,
 
-    title) will be constructed via a `SoftwareBackendBuilder`.
+   title) will be constructed via a `SoftwareBackendBuilder`.
 
 1. **Good Errors (C-GOOD-ERR):** The backend will provide a dedicated `SoftwareBackendError` type
 
-    implementing `std::error::Error` for font loading or window creation failures, rather than
-    panicking.
+   implementing `std::error::Error` for font loading or window creation failures, rather than
+   panicking.
 
 1. **Common Traits (C-COMMON-TRAITS):** All public configuration types will eagerly implement
 
-    `Debug`, `Clone`, `PartialEq`, `Eq`, and `Default`.
+   `Debug`, `Clone`, `PartialEq`, `Eq`, and `Default`.
 
 ---
 
@@ -215,8 +215,8 @@ is deferred to V0.2 of the graphical backend)._
 
 ### M3: Grid Compositing
 
-**Goal:**Translate the `Grid` cells into `softbuffer` pixels.**1. Blitting Algorithm** Inside the backend's draw routine (executed when `Terminal::present()` is
-called):
+**Goal:**Translate the `Grid` cells into `softbuffer` pixels.**1. Blitting Algorithm** Inside the
+backend's draw routine (executed when `Terminal::present()` is called):
 
 ```rust
 fn blit_grid(

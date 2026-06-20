@@ -386,7 +386,7 @@ framework needed. The Config trait pattern (Ch 3) lets you swap entire hardware 
 
 #### Module Layout
 
-```text
+````text
 my_crate/
 ├── src/
 │   ├── lib.rs          # Re-exports and public API
@@ -428,7 +428,7 @@ pub struct LockGuard<'a, T> { /* ... */ }
 
 #[must_use]
 pub fn validate(input: &str) -> Result<ValidInput, ValidationError> { /* ... */ }
-```
+````
 
 #### `#[non_exhaustive]`
 
@@ -439,7 +439,7 @@ use wildcard arm in match, cannot construct with struct literal syntax.
 
 **Decision tree**:
 
-```rust
+````rust
 Do you need ownership of the data inside the function?
 ├── YES → impl Into<T>
 │         "Give me anything that can become a T"
@@ -479,7 +479,7 @@ impl TryFrom<u16> for Port {
 
 // Downstream never re-validates:
 fn start_server(port: Port) { /* Port is guaranteed valid */ }
-```
+````
 
 Implement `FromStr` for types commonly parsed from text (CLI args, config files). Works with
 `.parse()` and `clap`.
@@ -565,7 +565,7 @@ select returns on first completion.
 
 ### Pattern Decision Guide
 
-```text
+````text
 Need type safety for primitives?           → Newtype (Ch3)
 Need compile-time state enforcement?       → Type-state (Ch3)
 Need a "tag" with no runtime data?         → PhantomData (Ch4)
@@ -651,3 +651,4 @@ pub(in path)  → visible within a specific path
 
    PCIe capability headers, sensor readings, BMC commands. The patterns are grounded in real systems
    engineering.
+````

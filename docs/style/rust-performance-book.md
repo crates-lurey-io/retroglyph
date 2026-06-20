@@ -11,7 +11,8 @@ Use real-world workloads where possible. Microbenchmarks and stress tests are us
 
 **Tools:**-**Built-in bench tests** - unstable, nightly-only.
 
-- **[Criterion](https://github.com/bheisler/criterion.rs)**and**[Divan](https://github.com/nvzqz/divan)** - stable, sophisticated alternatives.
+- **[Criterion](https://github.com/bheisler/criterion.rs)**and**[Divan](https://github.com/nvzqz/divan)** -
+  stable, sophisticated alternatives.
 - **[Hyperfine](https://github.com/sharkdp/hyperfine)** - general-purpose CLI benchmarking.
 - **[Bencher](https://github.com/bencherdev/bencher)** - continuous benchmarking on CI.
 - Custom harnesses (e.g. [rustc-perf](https://github.com/rust-lang/rustc-perf/)).
@@ -189,8 +190,9 @@ compatibility.
 Four attributes: none (compiler decides), `#[inline]`, `#[inline(always)]`, `#[inline(never)]`.
 Inlining is non-transitive.
 
-**Best candidates:**Very small functions, single-call-site functions.**Hot/cold splitting:** For large functions with one hot call site, create an `#[inline(always)]`
-variant and an `#[inline(never)]` wrapper:
+**Best candidates:**Very small functions, single-call-site functions.**Hot/cold splitting:** For
+large functions with one hot call site, create an `#[inline(always)]` variant and an
+`#[inline(never)]` wrapper:
 
 ```rust
 #[inline(always)]
@@ -509,7 +511,8 @@ Rust has excellent safe parallelism support. Key resources:
 
 1. **Optimize only hot code.** Optimized code is more complex; spend effort where it matters.
 2. **Algorithm/data structure changes** yield the biggest wins, not low-level tweaks.
-3. **Minimize cache misses and branch mispredictions.**4.**Many small speedups compound.** No single one is noticeable; together they matter.
+3. **Minimize cache misses and branch mispredictions.**4.**Many small speedups compound.** No single
+   one is noticeable; together they matter.
 4. **Use multiple profilers.** Each has different strengths.
 5. **Two ways to speed up a hot function:** make it faster, or call it less.
 6. **Lazy/on-demand computation** is often a win. Don't compute what you don't need.
@@ -517,8 +520,10 @@ Rust has excellent safe parallelism support. Key resources:
 
    dominate.
 
-8. **Compact representations** for common values with a fallback table for rare values.2. **Measure case frequencies** and handle the most common first.
-9. **Small caches** in front of data structures can help with high-locality lookups.4. **Comment non-obvious optimizations** with profiling data that motivated them.
+8. **Compact representations** for common values with a fallback table for rare values.2. **Measure
+   case frequencies** and handle the most common first.
+9. **Small caches** in front of data structures can help with high-locality lookups.4. **Comment
+   non-obvious optimizations** with profiling data that motivated them.
 
 ---
 

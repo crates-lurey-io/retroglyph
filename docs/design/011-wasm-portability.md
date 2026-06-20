@@ -1,6 +1,7 @@
 # ADR 011: WASM Portability Roadmap
 
-**Status:**Draft**Date:**2026-06-20**Parent:** [ADR 007: Software Rendering Backend](007-software-backend.md)
+**Status:**Draft**Date:**2026-06-20**Parent:**
+[ADR 007: Software Rendering Backend](007-software-backend.md)
 
 ## Context
 
@@ -10,8 +11,8 @@ incompatible with WASM in two fundamental ways:
 
 1. **No `std::thread`:** WASM (in the browser) does not support `std::thread::spawn`. The
 
-   `#[cfg(target_arch = "wasm32")]` compilation target replaces threading with
-   `wasm-bindgen`'s async model and `SharedArrayBuffer`-based workers (with `COOP`/`COEP` headers).
+   `#[cfg(target_arch = "wasm32")]` compilation target replaces threading with `wasm-bindgen`'s
+   async model and `SharedArrayBuffer`-based workers (with `COOP`/`COEP` headers).
 
 1. **No blocking main thread:** `event_loop.run_app()` blocks the calling thread, which is not
 
@@ -23,7 +24,7 @@ This document describes what changes would be needed for a WASM-compatible backe
 
 ## Current Architecture (Native)
 
-```text
+````text
 ┌─────────────────────────────────────┐
 │         Main Thread                 │
 │  SoftwareBackend::run()             │
@@ -97,7 +98,7 @@ let mut terminal = Terminal::new(renderer);
 
 // Application owns the event loop:
 event_loop.run_app(&mut MyApp { terminal });
-```
+````
 
 ### 2. Replace softbuffer with canvas rendering on WASM
 
@@ -127,8 +128,8 @@ The pixel buffer format is already `Vec<u32>` in `0x00RRGGBB` layout. On native,
 
 ### 3. Remove `std::thread::spawn`
 
-The background thread is the biggest blocker. Every `app_loop()` iteration must become a single
-step driven by the winit event loop:
+The background thread is the biggest blocker. Every `app_loop()` iteration must become a single step
+driven by the winit event loop:
 
 ```diff
  // Current:
@@ -147,8 +148,8 @@ step driven by the winit event loop:
 
 ### 4. Conditional compilation in mod.rs
 
-The module structure already uses `#[cfg(feature = "software")]`. A WASM feature
-(implied by `target_arch = "wasm32"` or an explicit feature flag) would gate:
+The module structure already uses `#[cfg(feature = "software")]`. A WASM feature (implied by
+`target_arch = "wasm32"` or an explicit feature flag) would gate:
 
 ```diff
  // In src/backend/mod.rs:
@@ -159,9 +160,9 @@ The module structure already uses `#[cfg(feature = "software")]`. A WASM feature
 +pub mod software_wasm;
 ```
 
-The WASM module would use `web-sys` + `wasm-bindgen` instead of `winit` + `softbuffer`.
-`winit` itself does support WASM, so the event loop handling can stay shared — only the
-pixel surface changes.
+The WASM module would use `web-sys` + `wasm-bindgen` instead of `winit` + `softbuffer`. `winit`
+itself does support WASM, so the event loop handling can stay shared — only the pixel surface
+changes.
 
 ### 5. Feature flags in Cargo.toml
 
@@ -217,8 +218,8 @@ No trait changes needed.
 ### Milestone 1: Separate `run()` from the rendering core
 
 **Goal:** Make `SoftwareRenderer` usable without `SoftwareBackend::run()`. This is already true
-(`run_headless()` creates a renderer without a thread or event loop). Add a compile-time check
-that `SoftwareRenderer` is usable on WASM.
+(`run_headless()` creates a renderer without a thread or event loop). Add a compile-time check that
+`SoftwareRenderer` is usable on WASM.
 
 ### Files:**`src/backend/software/mod.rs`**Changes
 
@@ -261,11 +262,11 @@ that `SoftwareRenderer` is usable on WASM.
 
 ## Estimated Effort
 
-| Milestone | Effort | Dependencies |
-|-----------|--------|--------------|
-| M1: Separate core from threading | 1-2 hours | Already largely done |
-| M2: Canvas rendering path | 3-4 hours | `web-sys` familiarity |
-| M3: WASM demo example | 2-3 hours | winit WASM setup |
-| M4: WASM run() convenience | 2-3 hours | `wasm-bindgen-futures` |
+| Milestone                        | Effort    | Dependencies           |
+| -------------------------------- | --------- | ---------------------- |
+| M1: Separate core from threading | 1-2 hours | Already largely done   |
+| M2: Canvas rendering path        | 3-4 hours | `web-sys` familiarity  |
+| M3: WASM demo example            | 2-3 hours | winit WASM setup       |
+| M4: WASM run() convenience       | 2-3 hours | `wasm-bindgen-futures` |
 
 **Total:** ~8-12 hours for a minimal WASM port.

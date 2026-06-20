@@ -30,19 +30,20 @@ alpha-blend = { version = "0.2", default-features = false, features = ["std"] }
 
 1. **Typed configuration (C-BUILDER):** Unlike BearLibTerminal's stringly-typed
 
-   `terminal_set("0xE000: tileset.png, size=16x16")`, tileset configuration uses a typed builder.
-   No string parsing, no runtime format errors.
+   `terminal_set("0xE000: tileset.png, size=16x16")`, tileset configuration uses a typed builder. No
+   string parsing, no runtime format errors.
 
 1. **PNG decoding via the `image` crate:** The `image` crate (with `png` feature only, to minimize
 
-   compile-time cost) decodes PNG files into RGBA8 pixel data. Raw bytes (already decoded, e.g.
-   from `include_bytes!`) are also accepted.
+   compile-time cost) decodes PNG files into RGBA8 pixel data. Raw bytes (already decoded, e.g. from
+   `include_bytes!`) are also accepted.
 
 1. **Sprite cache alongside glyph cache:** Decoded sprites are stored in a `SpriteCache` keyed by
 
-   `char`. When `draw_layers` (ADR 008) encounters a `Tile`, the backend checks `SpriteCache`
-   first, falling back to `BitmapFont` if no sprite is registered for that codepoint. Each
-   layer buffer holds one `Tile` per cell (no stacking), so the dispatch is one `sprite_cache.get(tile.glyph)` check per cell.
+   `char`. When `draw_layers` (ADR 008) encounters a `Tile`, the backend checks `SpriteCache` first,
+   falling back to `BitmapFont` if no sprite is registered for that codepoint. Each layer buffer
+   holds one `Tile` per cell (no stacking), so the dispatch is one `sprite_cache.get(tile.glyph)`
+   check per cell.
 
 1. **CP437 and custom codepage mapping:** A `Codepage` enum maps sprite sheet row/column indices
 
@@ -77,7 +78,8 @@ alpha-blend = { version = "0.2", default-features = false, features = ["std"] }
 
 ### M1: Tileset Configuration API
 
-**Goal:**Define `TilesetOptions`, `Codepage`, and `TilesetError`. No PNG loading yet.**File:** `src/backend/software/tileset.rs` (new)
+**Goal:**Define `TilesetOptions`, `Codepage`, and `TilesetError`. No PNG loading yet.**File:**
+`src/backend/software/tileset.rs` (new)
 
 ```rust
 use std::fmt;
@@ -320,7 +322,8 @@ impl TilesetBuilder {
 
 - `TilesetBuilder::build()` with `tile_width = 0` returns `Err(TilesetError::ZeroTileSize)`.
 - `TilesetBuilder::build()` with `spacing_cells_x = 0` returns `Err(TilesetError::ZeroSpacing)`.
-- `TilesetBuilder::build()` with `Codepage::Custom(vec![])` returns `Err(TilesetError::EmptyCodepage)`.
+- `TilesetBuilder::build()` with `Codepage::Custom(vec![])` returns
+  `Err(TilesetError::EmptyCodepage)`.
 - A valid builder produces `Ok(TilesetOptions)` with all fields set correctly.
 - `Codepage::Cp437.codepoint(32)` returns `Some(' ')`.
 - `Codepage::Cp437.codepoint(64)` returns `Some('@')`.
@@ -526,8 +529,8 @@ impl Default for SpriteCache {
 ### Image pixel format handling
 
 `image::load_from_memory(...).into_rgba8()` converts any supported format (RGB8, indexed PNG,
-grayscale) to RGBA8. This is the canonical `image` crate approach — no format dispatch needed.
-The `UnsupportedPixelFormat` error variant is reserved for future direct-decode paths that bypass
+grayscale) to RGBA8. This is the canonical `image` crate approach — no format dispatch needed. The
+`UnsupportedPixelFormat` error variant is reserved for future direct-decode paths that bypass
 `image`.
 
 **Dimension validation:** Before extracting tiles:
@@ -823,11 +826,11 @@ fn blit_cell(
 - If a multi-cell sprite exceeds `buf_w * buf_h` pixel bounds, pixels are clipped silently.
 
 **`buf_h` plumbing:** The current `blit_cell` receives `buf_w` but not `buf_h`, relying on
-`if idx < buffer.len()` for row-overflow protection. With diagonal out-of-bounds (large `dy`),
-a pixel at row `buf_h + 1` has index `(buf_h + 1) * buf_w + x` which correctly exceeds
-`buffer.len()`. The existing guard is sufficient; no `buf_h` argument is strictly required for
-correctness. However, for the inner loop's row clipping optimization (avoid iterating pixels on
-out-of-bounds rows), `buf_h = buffer.len() / buf_w` is computed once per blit call.
+`if idx < buffer.len()` for row-overflow protection. With diagonal out-of-bounds (large `dy`), a
+pixel at row `buf_h + 1` has index `(buf_h + 1) * buf_w + x` which correctly exceeds `buffer.len()`.
+The existing guard is sufficient; no `buf_h` argument is strictly required for correctness. However,
+for the inner loop's row clipping optimization (avoid iterating pixels on out-of-bounds rows),
+`buf_h = buffer.len() / buf_w` is computed once per blit call.
 
 ### Acceptance criteria (3)
 

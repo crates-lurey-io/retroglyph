@@ -467,6 +467,26 @@ impl Grid {
         self.layer(layer)?.buf.get(pos)
     }
 
+    /// Yield `(layer_id, Pos, &Tile)` for every allocated cell across
+    /// all layers, in layer-major (0 → 255) then row-major order.
+    ///
+    /// Unallocated layers are skipped. This is used by backends that need
+    /// the full frame on every draw (see [`Backend::needs_full_frame`]).
+    pub fn layers(&self) -> impl Iterator<Item = (u8, Pos, &Tile)> + '_ {
+        let mut results = Vec::new();
+        for id in 0u8..=255 {
+            if let Some(lb) = self.layer(id) {
+                #[allow(clippy::cast_possible_truncation)]
+                for (i, tile) in lb.buf.as_ref().iter().enumerate() {
+                    let x = (i % usize::from(self.width)) as u16;
+                    let y = (i / usize::from(self.width)) as u16;
+                    results.push((id, Pos::new(x, y), tile));
+                }
+            }
+        }
+        results.into_iter()
+    }
+
     /// Clear every allocated layer.
     pub fn clear_all(&mut self) {
         for layer in self.layers.iter_mut().flatten() {

@@ -1,23 +1,24 @@
 # ADR 012: Backend Metrics & Instrumentation
 
-**Status:**Draft**Date:**2026-06-20**Parent:** [ADR 007: Software Rendering Backend](007-software-backend.md)
+**Status:**Draft**Date:**2026-06-20**Parent:**
+[ADR 007: Software Rendering Backend](007-software-backend.md)
 
 ## Context
 
-The software, crossterm, and headless backends have no runtime metrics or instrumentation. This makes
-it hard to diagnose performance issues — frame drops, rendering bottlenecks, and diff efficiency.
-Adding metrics would help both library developers (debugging) and end users (choosing backends,
-tuning parameters).
+The software, crossterm, and headless backends have no runtime metrics or instrumentation. This
+makes it hard to diagnose performance issues — frame drops, rendering bottlenecks, and diff
+efficiency. Adding metrics would help both library developers (debugging) and end users (choosing
+backends, tuning parameters).
 
 ## Research Summary
 
 Three dominant patterns exist in the ecosystem (see `docs/references/` for deep dives):
 
-| Pattern | Example | Approach | Pros | Cons |
-|---------|---------|----------|------|------|
-| **Centralized store** | Bevy `DiagnosticsStore` | Named diagnostic paths, deferred collection via system buffer, EMA/SMA smoothing | Rich history, multi-consumer, lazy evaluation | ECS-specific; heavyweight for simple use |
-| **Flat snapshot struct** | notcurses `ncstats` | ~36 cumulative `u64` fields, atomic copy on query | Simple, cheap, thread-safe | No history, no smoothing |
-| **Macro-generated registries** | `metered` crate | `#[measure]` annotations generate per-method counters | Zero-cost if disabled, per-instance | Proc-macro complexity, HdrHistogram allocations |
+| Pattern                        | Example                 | Approach                                                                         | Pros                                          | Cons                                            |
+| ------------------------------ | ----------------------- | -------------------------------------------------------------------------------- | --------------------------------------------- | ----------------------------------------------- |
+| **Centralized store**          | Bevy `DiagnosticsStore` | Named diagnostic paths, deferred collection via system buffer, EMA/SMA smoothing | Rich history, multi-consumer, lazy evaluation | ECS-specific; heavyweight for simple use        |
+| **Flat snapshot struct**       | notcurses `ncstats`     | ~36 cumulative `u64` fields, atomic copy on query                                | Simple, cheap, thread-safe                    | No history, no smoothing                        |
+| **Macro-generated registries** | `metered` crate         | `#[measure]` annotations generate per-method counters                            | Zero-cost if disabled, per-instance           | Proc-macro complexity, HdrHistogram allocations |
 
 ## Proposed Design
 
@@ -86,8 +87,8 @@ impl SoftwareRenderer {
 
 ### Feature flag
 
-Metrics are **always compiled** (zero-cost when not read — single atomic load at snapshot time).
-No feature flag is needed. The `AtomicU64` fields add 24 bytes per metrics struct.
+Metrics are **always compiled** (zero-cost when not read — single atomic load at snapshot time). No
+feature flag is needed. The `AtomicU64` fields add 24 bytes per metrics struct.
 
 ## Files to modify
 
@@ -101,7 +102,8 @@ No feature flag is needed. The `AtomicU64` fields add 24 bytes per metrics struc
 
 - **Frame time measurement** — deferred to a separate frame pacing effort (requires high-res timers)
 - **Per-cell diff tracking** — notcurses tracks ellelisions/emissions; rg can add this later
-- **Histogram-based metrics** — Bevy's SMA/EMA is sufficient; HdrHistogram adds allocation in hot path
+- **Histogram-based metrics** — Bevy's SMA/EMA is sufficient; HdrHistogram adds allocation in hot
+  path
 - **Logging or export** — snapshot structs are pull-based; logging is a consumer concern
 
 ## References

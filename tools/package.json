@@ -3,8 +3,8 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
-    "format": "prettier --write \"../**/*.{md,yml,yaml,json,js,ts}\"",
-    "format:check": "prettier --check \"../**/*.{md,yml,yaml,json,js,ts}\"",
+    "format": "cd .. && prettier --write \"**/*.{md,yml,yaml,json,js,ts}\"",
+    "format:check": "cd .. && prettier --check \"**/*.{md,yml,yaml,json,js,ts}\"",
     "lint": "markdownlint-cli2 \"../**/*.md\" \"#../tools/node_modules\"",
     "lint:fix": "markdownlint-cli2 --fix \"../**/*.md\" \"#../tools/node_modules\""
   },

@@ -404,7 +404,7 @@ Linux. Change with `active_event_loop.listen_device_events(DeviceEvents::Always)
 
 Conversion:
 
-```text
+````text
 Physical = Logical * scale_factor
 Logical  = Physical / scale_factor
 ```text
@@ -416,7 +416,7 @@ All winit output is in physical units. Input methods accept either via the `Size
 ```rust
 let sf: f64 = window.scale_factor();
 // Typical values: 1.0 (96 DPI), 1.25, 1.5, 2.0 (Retina/HiDPI), 3.0 (mobile)
-```
+````
 
 ### ScaleFactorChanged event
 
@@ -447,6 +447,7 @@ Triggers when:
    `rows = height / cell_height`.
 
 5. Do NOT cast float positions with `as u32`; use the `.cast()` methods which round properly.
+
 ---
 
 ## 6. Platform Quirks
@@ -500,6 +501,7 @@ Triggers when:
   - `wayland-csd-adwaita` (default) -- GNOME-style decorations
   - `wayland-csd-adwaita-crossfont` -- same, using crossfont for rendering
   - `wayland-csd-adwaita-notitle` -- no title bar text
+
 - **No primary monitor**: `primary_monitor()` always returns `None` on Wayland (protocol
 
   limitation).
@@ -886,7 +888,7 @@ cross-thread closure execution.
 
 ## Quick Reference: Event Flow for a Terminal Emulator
 
-```text
+````text
 EventLoop::new()
     └─> run_app(&mut app)
         ├─> new_events(Init)
@@ -959,3 +961,4 @@ EventLoop::new()
 - [DeepWiki: Web (WASM) Implementation](<https://deepwiki.com/rust-windowing/winit/5.4-web-(webassembly)-implementation>)
 - [winit changelog v0.30](https://docs.rs/winit/0.30.0/winit/changelog/v0_30/index.html)
 - [winit GitHub: rust-windowing/winit](https://github.com/rust-windowing/winit)
+````

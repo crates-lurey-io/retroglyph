@@ -422,12 +422,13 @@ refresh). A Rust successor should learn from this limitation.
 ### Simplicity vs. Fidelity
 
 | Aspect             | Simple (ratatui-style)                        | Full emulator (xterm.js-style)                        |
-| ------------------ | --------------------------------------------- | ----------------------------------------------------- |
+| ------------------ | --------------------------------------------- | ----------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | **Implementation** | Buffer + cursor, a few hundred lines          | Full VT parser, scrollback, modes, thousands of lines |
 | **Use case**       | Testing rendering code                        | Testing terminal interaction, parsing ANSI input      |
 | **Input handling** | None (caller writes cells directly)           | Parses ANSI/VT escape sequences                       |
 | **Accuracy**       | Matches the library's rendering model exactly | Matches real terminal behavior                        |
-| **Complexity**| Minimal                                       | Substantial                                           |**Recommendation**: Start with the simple model (direct cell writes). If ANSI-input parsing is |
+| **Complexity**     | Minimal                                       | Substantial                                           | **Recommendation**: Start with the simple model (direct cell writes). If ANSI-input parsing is |
+
 needed later, it can be layered on top using `vte` or a similar parser.
 
 ### Error Type: Infallible vs. Boxed

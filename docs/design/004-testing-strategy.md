@@ -57,7 +57,7 @@ the terminal correctly.
 
 ## Dependency Graph
 
-```text
+````text
 [From M15: Interactive End-to-End Game]
  ├─► M16: TestBackend Implementation
  └─► M17: E2E SVG Snapshot Harness
@@ -127,3 +127,4 @@ the terminal correctly.
 - [ ] `insta` captures the SVG, establishing a baseline snapshot for future visual regression
 
       testing.
+````

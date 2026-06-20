@@ -736,7 +736,8 @@ When designing FFI APIs, follow these principles:
    never sees the layout).
 
 1. **Transactional types** are owned by the user and transparent (`#[repr(C)]` structs).
-1. All behavior is functions acting on encapsulated types.3. Behavior is grouped by provenance/lifetime, not structure.
+1. All behavior is functions acting on encapsulated types.3. Behavior is grouped by
+   provenance/lifetime, not structure.
 
 Key insight: consolidate the iterator's lifetime with its parent object. The POSIX DBM API does this
 with `dbm_firstkey(DBM*)` / `dbm_nextkey(DBM*)` instead of exposing a separate iterator type,

@@ -174,7 +174,7 @@ Events carry both pixel and tile coordinates after calling `context.convert_even
 ## Comparison with BearLibTerminal
 
 | Aspect                | python-tcod                                                            | BearLibTerminal                                                |
-| --------------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------- |
+| --------------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | **Scope**             | Full roguelike toolkit (FOV, pathfinding, BSP, noise, console, events) | Pure terminal emulation (console + input only)                 |
 | **Console model**     | NumPy structured arrays, RGBA per tile                                 | Cell-based API with `terminal_put()`, `terminal_print()`       |
 | **Layers**            | No built-in layers; manual blit compositing                            | Built-in layer system for easy UI composition                  |
@@ -186,7 +186,8 @@ Events carry both pixel and tile coordinates after calling `context.convert_even
 | **Window management** | Full SDL integration, resizable windows, HiDPI                         | SDL-based but simpler configuration                            |
 | **Python API**        | Native Python package via cffi                                         | C library with Python ctypes wrapper                           |
 | **Performance**       | NumPy vectorized batch operations                                      | Per-cell function calls (slower for bulk updates in Python)    |
-| **Unicode**| Full Unicode support                                                   | Full Unicode support                                           |**Key difference:** python-tcod is a complete roguelike development framework; BearLibTerminal is a |
+| **Unicode**           | Full Unicode support                                                   | Full Unicode support                                           | **Key difference:** python-tcod is a complete roguelike development framework; BearLibTerminal is a |
+
 focused terminal rendering library. BearLibTerminal is simpler for "just put tiles on screen," but
 python-tcod provides far more out of the box. The critical practical issue is that BearLibTerminal
 is unmaintained, while python-tcod is actively developed.
@@ -196,8 +197,9 @@ is unmaintained, while python-tcod is actively developed.
 The C library libtcod has been used in many notable roguelikes. The Python port is primarily used by
 hobbyist/jam projects and tutorial followers.
 
-**Using libtcod (C/C++):**-**Cogmind** (Grid Sage Games) - commercial sci-fi roguelike. The original 7DRL (2012) used
-  libtcod; the commercial version moved to a custom engine but was deeply influenced by libtcod.
+**Using libtcod (C/C++):**-**Cogmind** (Grid Sage Games) - commercial sci-fi roguelike. The original
+7DRL (2012) used libtcod; the commercial version moved to a custom engine but was deeply influenced
+by libtcod.
 
 - **Incursion** - updated port from Allegro to libtcod to fix longstanding bugs
 - Numerous 7DRL jam entries and r/roguelikedev community projects

@@ -11,8 +11,8 @@
 //! Run with:
 //!   `cargo run --example tileset_demo --features software-tilesets,software-default-font`
 
-use rg::backend::software::tileset::TilesetOptions;
 use rg::backend::software::SoftwareBackendBuilder;
+use rg::backend::software::tileset::TilesetOptions;
 use rg::event::{Event, KeyCode};
 use rg::style::Style;
 use rg::{Color, Terminal};
@@ -25,26 +25,50 @@ use std::time::Duration;
 
 /// A simple sword (diagonal blade pointing up-right).
 const SPRITE_SWORD: [u8; 8] = [
-    0b0000_0011, 0b0000_0110, 0b0000_1100, 0b0001_1000,
-    0b0011_0000, 0b0110_0000, 0b1101_0000, 0b1001_0000,
+    0b0000_0011,
+    0b0000_0110,
+    0b0000_1100,
+    0b0001_1000,
+    0b0011_0000,
+    0b0110_0000,
+    0b1101_0000,
+    0b1001_0000,
 ];
 
 /// A potion bottle.
 const SPRITE_POTION: [u8; 8] = [
-    0b0001_1000, 0b0001_1000, 0b0011_1100, 0b0111_1110,
-    0b0111_1110, 0b0111_1110, 0b0011_1100, 0b0001_1000,
+    0b0001_1000,
+    0b0001_1000,
+    0b0011_1100,
+    0b0111_1110,
+    0b0111_1110,
+    0b0111_1110,
+    0b0011_1100,
+    0b0001_1000,
 ];
 
 /// A skull.
 const SPRITE_SKULL: [u8; 8] = [
-    0b0001_1000, 0b0011_1100, 0b0111_1110, 0b0111_1110,
-    0b0001_1000, 0b0010_0100, 0b0100_0010, 0b0011_1100,
+    0b0001_1000,
+    0b0011_1100,
+    0b0111_1110,
+    0b0111_1110,
+    0b0001_1000,
+    0b0010_0100,
+    0b0100_0010,
+    0b0011_1100,
 ];
 
 /// A gold coin.
 const SPRITE_COIN: [u8; 8] = [
-    0b0011_1100, 0b0100_0010, 0b1001_1001, 0b1010_0101,
-    0b1010_0101, 0b1001_1001, 0b0100_0010, 0b0011_1100,
+    0b0011_1100,
+    0b0100_0010,
+    0b1001_1001,
+    0b1010_0101,
+    0b1010_0101,
+    0b1001_1001,
+    0b0100_0010,
+    0b0011_1100,
 ];
 
 struct SpriteDef {
@@ -54,10 +78,26 @@ struct SpriteDef {
 }
 
 const SPRITES: &[SpriteDef] = &[
-    SpriteDef { name: "sword",  bits: &SPRITE_SWORD,  color: (200, 200, 220) },
-    SpriteDef { name: "potion", bits: &SPRITE_POTION, color: (80,  200, 120) },
-    SpriteDef { name: "skull",  bits: &SPRITE_SKULL,  color: (200, 200, 200) },
-    SpriteDef { name: "coin",   bits: &SPRITE_COIN,   color: (220, 200, 40)  },
+    SpriteDef {
+        name: "sword",
+        bits: &SPRITE_SWORD,
+        color: (200, 200, 220),
+    },
+    SpriteDef {
+        name: "potion",
+        bits: &SPRITE_POTION,
+        color: (80, 200, 120),
+    },
+    SpriteDef {
+        name: "skull",
+        bits: &SPRITE_SKULL,
+        color: (200, 200, 200),
+    },
+    SpriteDef {
+        name: "coin",
+        bits: &SPRITE_COIN,
+        color: (220, 200, 40),
+    },
 ];
 
 /// Generate an RGBA PNG spritesheet from the hard-coded sprites.
@@ -185,7 +225,11 @@ fn draw(term: &mut Terminal<impl rg::Backend>, frame: u64) {
             5,
             ch,
             Style::new()
-                .fg(Color::Rgb { r: fr, g: fg, b: fb })
+                .fg(Color::Rgb {
+                    r: fr,
+                    g: fg,
+                    b: fb,
+                })
                 .bg(Color::Rgb {
                     r: 10,
                     g: 10,
@@ -196,10 +240,14 @@ fn draw(term: &mut Terminal<impl rg::Backend>, frame: u64) {
 
     // Add a static '@' at a fixed position showing bitmap font fallback.
     term.put_styled(
-        35, 10, '@',
-        Style::new()
-            .fg(Color::BRIGHT_GREEN)
-            .bg(Color::Rgb { r: 10, g: 10, b: 20 }),
+        35,
+        10,
+        '@',
+        Style::new().fg(Color::BRIGHT_GREEN).bg(Color::Rgb {
+            r: 10,
+            g: 10,
+            b: 20,
+        }),
     );
 
     term.present();

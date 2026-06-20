@@ -347,6 +347,11 @@ impl Backend for SoftwareRenderer {
     where
         I: Iterator<Item = (u8, Pos, &'a Tile)>,
     {
+        // Clear the entire buffer before redrawing.  Pixel-based backends
+        // get the full frame (see `needs_full_frame`), so this wipes any
+        // orphaned pixels from sub-cell offset spill in the previous frame.
+        self.ctx.pixel_buf.clear();
+
         let font = self.options.font.as_ref().unwrap();
         let scale = usize::from(self.options.scale);
         let cols = self.options.cols;
@@ -405,11 +410,10 @@ impl Backend for SoftwareRenderer {
             Err(mpsc::TrySendError::Disconnected(_)) => {
                 self.ctx.alive.store(false, Ordering::Release);
             }
-            Err(mpsc::TrySendError::Full(_)) => {
+            Err(mpsc::TrySendError::Full(_)) | Ok(()) => {
                 // TODO: Track frame drops via a shared metrics system
                 // once designed (see ADR 012: Backend Metrics).
             }
-            Ok(()) => {}
         }
     }
 
@@ -437,6 +441,10 @@ impl Backend for SoftwareRenderer {
 
     fn clear(&mut self) {
         self.ctx.pixel_buf.clear();
+    }
+
+    fn needs_full_frame(&self) -> bool {
+        true
     }
 
     fn poll_event(&mut self, timeout: Duration) -> Option<Event> {
@@ -996,19 +1004,28 @@ mod tests {
             style: Style::new().bg(Color::Rgb { r: 255, g: 0, b: 0 }),
             ..Tile::default()
         };
-        renderer.draw_layers(vec![(0, Pos::new(0, 0), &bg_tile)].into_iter());
-
-        let before = renderer.pixels().to_vec();
-
         let space_tile = Tile {
             glyph: ' ',
             style: Style::new().fg(Color::Rgb { r: 0, g: 255, b: 0 }),
             ..Tile::default()
         };
-        renderer.draw_layers(vec![(1, Pos::new(0, 0), &space_tile)].into_iter());
+        // draw_layers clears buffer first, so pass all layers in one call.
+        renderer.draw_layers(
+            [
+                (0, Pos::new(0, 0), &bg_tile),
+                (1, Pos::new(0, 0), &space_tile),
+            ]
+            .into_iter(),
+        );
 
-        let after = renderer.pixels();
-        assert_eq!(&before, after);
+        let buf = renderer.pixels();
+        assert_eq!(buf.len(), 8 * 16);
+        // All pixels should be red (layer 0 bg).  Green fg from layer 1's
+        // space tile is ignored because space has no set bits.
+        assert!(
+            buf.iter().all(|&p| p == 0x00FF_0000),
+            "all pixels should be red, not green"
+        );
     }
 
     #[test]
@@ -1024,14 +1041,13 @@ mod tests {
             }),
             ..Tile::default()
         };
-        renderer.draw_layers(vec![(0, Pos::new(0, 0), &bg)].into_iter());
-
         let fg = Tile {
             glyph: '@',
             style: Style::new().fg(Color::Rgb { r: 0, g: 255, b: 0 }),
             ..Tile::default()
         };
-        renderer.draw_layers(vec![(1, Pos::new(0, 0), &fg)].into_iter());
+        // draw_layers clears buffer first, so pass all layers in one call.
+        renderer.draw_layers([(0, Pos::new(0, 0), &bg), (1, Pos::new(0, 0), &fg)].into_iter());
 
         let buf = renderer.pixels();
         assert!(buf.contains(&0x0000_FF00), "some pixels should be green");
@@ -1051,8 +1067,6 @@ mod tests {
             }),
             ..Tile::default()
         };
-        renderer.draw_layers(vec![(0, Pos::new(0, 0), &bg)].into_iter());
-
         let fg = Tile {
             glyph: '@',
             style: Style::new().fg(Color::Rgb { r: 0, g: 255, b: 0 }),
@@ -1060,7 +1074,8 @@ mod tests {
             dy: 0,
             ..Tile::default()
         };
-        renderer.draw_layers(vec![(1, Pos::new(0, 0), &fg)].into_iter());
+        // draw_layers clears buffer first, so pass all layers in one call.
+        renderer.draw_layers([(0, Pos::new(0, 0), &bg), (1, Pos::new(0, 0), &fg)].into_iter());
 
         let buf = renderer.pixels();
         let has_green = |col: usize| {
@@ -1113,9 +1128,6 @@ mod tests {
                 }),
             ..Tile::default()
         };
-        renderer.draw_layers([(0, Pos::new(0, 0), &bg), (0, Pos::new(1, 0), &dot)].into_iter());
-
-        // Layer 1: '@' at (0,0) with sub-cell offset dx=1, bright green.
         let entity = Tile {
             glyph: '@',
             style: Style::new()
@@ -1129,7 +1141,15 @@ mod tests {
             dy: 0,
             ..Tile::default()
         };
-        renderer.draw_layers(core::iter::once((1, Pos::new(0, 0), &entity)));
+        // Single draw_layers call (clears buffer first).
+        renderer.draw_layers(
+            [
+                (0, Pos::new(0, 0), &bg),
+                (0, Pos::new(1, 0), &dot),
+                (1, Pos::new(0, 0), &entity),
+            ]
+            .into_iter(),
+        );
 
         // Snapshot the pixel buffer.
         // The buffer is 2 cells wide (16px) x 2 cells tall (32px) = 512 u32s.
@@ -1150,5 +1170,100 @@ mod tests {
         let snapshot = row_strs.join("\n");
 
         insta::assert_snapshot!("pixel_snapshot_render_scene", snapshot);
+    }
+
+    /// Write a `u32` pixel buffer (0x00RRGGBB) to a PNG file at `path`.
+    fn write_png(path: &str, pixels: &[u32], width: u32, height: u32) {
+        let img = image::RgbaImage::from_fn(width, height, |x, y| {
+            let idx = (y * width + x) as usize;
+            let p = pixels[idx];
+            let r = ((p >> 16) & 0xFF) as u8;
+            let g = ((p >> 8) & 0xFF) as u8;
+            let b = (p & 0xFF) as u8;
+            image::Rgba([r, g, b, 255])
+        });
+        img.save(path).expect("failed to write PNG");
+    }
+
+    #[test]
+    fn sub_cell_offset_does_not_smear() {
+        // Verify that the full-frame clear prevents orphaned pixels from
+        // sub-cell offset spill across adjacent cells.
+        //
+        // We go through the full `Terminal::present()` pipeline so the
+        // backend's `needs_full_frame()` flag triggers the all-cells path.
+        let opts = SoftwareBackendBuilder::new()
+            .grid_size(3, 1)
+            .scale(1)
+            .build()
+            .unwrap();
+        let mut term = crate::Terminal::new(opts.run_headless());
+
+        // ── Frame 1: layer 0 bg (red) + layer 1 @ at dx=+2 ──
+        term.layer(0);
+        term.bg(Color::Rgb { r: 128, g: 0, b: 0 });
+        for x in 0..3 {
+            term.put(x, 0, ' ');
+        }
+
+        term.layer(1);
+        term.fg(Color::Rgb { r: 0, g: 255, b: 0 });
+        term.put_offset(1, 0, 2, 0, '@');
+
+        term.present();
+
+        // ── Frame 2: clear layer 1, put @ at dx=-2 ──
+        // Layer 0 stays the same.
+        term.layer(1);
+        term.clear();
+        term.fg(Color::Rgb { r: 0, g: 255, b: 0 });
+        term.put_offset(1, 0, -2, 0, '@');
+
+        term.present();
+
+        let buf = term.backend().pixels();
+        let cols = 3usize;
+        let cell_w = 8usize;
+        let buf_w = cols * cell_w; // 24
+        assert_eq!(buf.len(), buf_w * 16);
+
+        // Cell (2,0) should have NO green orphaned pixels.
+        let cell2_x_start = 2 * cell_w; // 16
+        let cell2_x_end = 3 * cell_w; // 24
+
+        let mut orphaned_green: Vec<(usize, usize, u32)> = Vec::new();
+        for y in 0..16 {
+            for x in cell2_x_start..cell2_x_end {
+                let idx = y * buf_w + x;
+                if buf[idx] == 0x0000_FF00 {
+                    orphaned_green.push((x, y, buf[idx]));
+                }
+            }
+        }
+
+        // Write a debug PNG regardless so we can inspect visually.
+        let png_path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/snapshots/sub_cell_offset_does_not_smear.png"
+        );
+        #[allow(clippy::cast_possible_truncation)]
+        write_png(png_path, buf, buf_w as u32, 16);
+
+        assert!(
+            orphaned_green.is_empty(),
+            "Cell (2,0) has {} orphaned green pixels from old @ spill — see {}",
+            orphaned_green.len(),
+            png_path
+        );
+
+        // Also check that cell (1,0) has green pixels (the @ at dx=-2).
+        let cell1_x_start = cell_w;
+        let cell1_x_end = 2 * cell_w;
+        let has_green = (0..16)
+            .any(|y| (cell1_x_start..cell1_x_end).any(|x| buf[y * buf_w + x] == 0x0000_FF00));
+        assert!(
+            has_green,
+            "Cell (1,0) should have green pixels from the @ glyph"
+        );
     }
 }

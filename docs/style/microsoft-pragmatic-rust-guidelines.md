@@ -215,15 +215,16 @@ const UPSTREAM_SERVER_TIMEOUT: Duration = Duration::from_secs(60 * 60 * 24);
 Use structured events with named properties following the
 [message templates](https://messagetemplates.org/) spec.
 
-**Key rules:**1.**Avoid string formatting** (allocates at runtime). Use message templates that defer formatting:
+**Key rules:**1.**Avoid string formatting** (allocates at runtime). Use message templates that defer
+formatting:
 
-   ```rust
-   // Bad
-   tracing::info!("file opened: {}", path);
-   // Good
-   event!(name: "file.open.success", Level::INFO, file.path = path.display(),
-       "file opened: {{file.path}}");
-   ```
+```rust
+// Bad
+tracing::info!("file opened: {}", path);
+// Good
+event!(name: "file.open.success", Level::INFO, file.path = path.display(),
+    "file opened: {{file.path}}");
+```
 
 1. **Name your events** with hierarchical dot-notation: `<component>.<operation>.<state>`
 
@@ -714,8 +715,8 @@ For performance/COGS-relevant crates:
 
    [divan](https://crates.io/crates/divan)
 
-3. Regularly run a profiler (CPU and allocation insights)3. Document the most performance-sensitive areas
-Enable debug symbols for benchmarks:
+3. Regularly run a profiler (CPU and allocation insights)3. Document the most performance-sensitive
+   areas Enable debug symbols for benchmarks:
 
 ```toml
 [profile.bench]
@@ -826,8 +827,8 @@ they are external.
 Rust's strong type system counterbalances AI agents' lack of genuine understanding. Making APIs
 easier for humans also makes them easier for AI.
 
-**Key guidelines for AI-friendly code:**1.**Idiomatic patterns**: Follow Rust API Guidelines and Library/UX guidelines so AI can
-   pattern-match against the majority of Rust code.
+**Key guidelines for AI-friendly code:**1.**Idiomatic patterns**: Follow Rust API Guidelines and
+Library/UX guidelines so AI can pattern-match against the majority of Rust code.
 
 1. **Thorough docs**: Include docs for all modules and public items. Assume solid-but-not-expert
 

@@ -109,7 +109,7 @@ use at least `f32` or `u16` for intermediate values.
 Most software performs alpha blending directly on sRGB values. This is wrong, but widespread. The
 standard "over" compositing formula is:
 
-```text
+````text
 result = src_color * src_alpha + dst_color * (1 - src_alpha)
 ```text
 
@@ -130,7 +130,7 @@ fn blend_correct(a_srgb: u8, b_srgb: u8) -> u8 {
     (linear_to_srgb(result_lin) * 255.0).round() as u8
 }
 // blend_correct(64, 192) => ~146, not 128
-```
+````
 
 ### Correct Alpha Blending
 
@@ -218,7 +218,7 @@ indices).
 
 Escape sequence format:
 
-```text
+````text
 ESC[31m        # Set foreground to Red (index 1)
 ESC[42m        # Set background to Green (index 2)
 ESC[1;34m      # Bold + Blue (historically bold = bright)
@@ -254,7 +254,7 @@ fn cube_index_to_rgb(index: u8) -> (u8, u8, u8) {
     (to_srgb(r), to_srgb(g), to_srgb(b))
 }
 // Levels: 0 -> 0, 1 -> 95, 2 -> 135, 3 -> 175, 4 -> 215, 5 -> 255
-```
+````
 
 **Grayscale ramp** (indices 232-255):
 
@@ -271,7 +271,7 @@ Note the grayscale ramp does not include pure black (0) or pure white (255); tho
 
 Escape sequence format:
 
-```text
+````text
 ESC[38;5;196m   # Foreground: index 196 (bright red from cube)
 ESC[48;5;232m   # Background: index 232 (near-black gray)
 ```text
@@ -300,7 +300,7 @@ fn supports_truecolor() -> bool {
         .map(|v| v == "truecolor" || v == "24bit")
         .unwrap_or(false)
 }
-```
+````
 
 ### Sources (3)
 
@@ -1198,7 +1198,7 @@ palette = ["dep:palette"]
 
 ### sRGB to Linear (single channel)
 
-```text
+````text
 if srgb <= 0.04045: linear = srgb / 12.92
 else:               linear = ((srgb + 0.055) / 1.055) ^ 2.4
 ```text
@@ -1330,3 +1330,4 @@ Reset:          ESC[0m
 - [tutorialpedia: ANSI Color Escape Sequences](https://www.tutorialpedia.org/blog/list-of-ansi-color-escape-sequences/) -
 
   SEO content, terminfo.dev is better
+````

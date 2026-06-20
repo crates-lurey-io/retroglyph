@@ -15,29 +15,29 @@ sacrifice the blazing-fast ergonomics of writing a simple `char` to a grid.
 
 1. **The Alacritty Fast-Path:** We will update `Cell` to store a primary `char`, plus an optional
 
-    heap allocation (`Option<Arc<String>>`) for rare complex graphemes. This avoids `enum`
-    allocations for 99% of terminal output.
+   heap allocation (`Option<Arc<String>>`) for rare complex graphemes. This avoids `enum`
+   allocations for 99% of terminal output.
 
 1. **Encapsulation (C-STRUCT-PRIVATE):** `Cell` fields will be strictly private. We solve the
 
-    verbosity problem not by exposing fields, but by providing a clean constructor:
-    `Cell::new(ch, style)` automatically handles the complex `flags` and `extra` internals.
+   verbosity problem not by exposing fields, but by providing a clean constructor:
+   `Cell::new(ch, style)` automatically handles the complex `flags` and `extra` internals.
 
 1. **String Processing:** We will introduce `unicode-segmentation` for string printing and layout,
 
-    iterating over `.graphemes(true)`.
+   iterating over `.graphemes(true)`.
 
 1. **String Measurement:** We will use `UnicodeWidthStr::width` to calculate the display width of
 
-    grapheme strings, correctly identifying 2-width CJK characters and emojis.
+   grapheme strings, correctly identifying 2-width CJK characters and emojis.
 
 1. **Bitflags (C-BITFLAG):** We will use the `bitflags` crate for `CellFlags` instead of enums.
 1. **Custom Types (C-CUSTOM-TYPE):** Bounded layout methods will take a `Rect` struct rather than
-    loose `x, y, w, h` arguments to convey meaning and prevent parameter swapping.
+   loose `x, y, w, h` arguments to convey meaning and prevent parameter swapping.
 
 1. **Common Traits (C-COMMON-TRAITS):** All public types will eagerly implement `Debug`, `Clone`,
 
-    `PartialEq`, `Eq`, `Hash`, and `Default` where possible.
+   `PartialEq`, `Eq`, `Hash`, and `Default` where possible.
 
 1. **Getter Naming (C-GETTER):** Property accessors will omit the `get_` prefix.
 

@@ -434,8 +434,8 @@ rule (`&` XOR `&mut`) is the same mechanism that prevents data races.
 - Tasks have a single top-level future
 - Concurrency within a task by polling multiple child futures
 
-**Pitfalls covered:**-**Blocking the executor**: Don't call blocking I/O or `thread::sleep` in async code. Use
-  `tokio::task::spawn_blocking` for CPU-heavy or blocking work.
+**Pitfalls covered:**-**Blocking the executor**: Don't call blocking I/O or `thread::sleep` in async
+code. Use `tokio::task::spawn_blocking` for CPU-heavy or blocking work.
 
 - **Pin**: Ensures futures aren't moved in memory after being polled, so internal references remain
 

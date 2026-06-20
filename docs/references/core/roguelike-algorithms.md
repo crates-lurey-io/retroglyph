@@ -28,7 +28,7 @@ symmetric.
 
 ### Pseudocode (one octant)
 
-```rust
+````rust
 fn scan(row, start_slope, end_slope, radius, origin, is_opaque, mark_visible):
     if row > radius: return
 
@@ -490,7 +490,7 @@ trait Algorithm2D: BaseMap {
     fn dimensions(&self) -> Point;
     // Default implementations for point2d_to_index, index_to_point2d, in_bounds
 }
-```
+````
 
 **Strengths:** Proven in production (many roguelikes, a published book). Well-documented. Modular
 workspace. **Weaknesses:** Uses `usize` indices throughout (not typed grid positions). `BaseMap`
@@ -573,7 +573,9 @@ Downloads: ~92K all-time. Lighter weight than noise-rs.
 libtcod bundles terminal rendering, FOV, pathfinding, noise, BSP, heightmaps, and GUI tools into a
 single C library.
 
-**Advantages:**One dependency gets you everything. Consistent API. Good for beginners/game jams.**Disadvantages:** The maintainers themselves concluded it was unsustainable. From libtcod issue
+**Advantages:**One dependency gets you everything. Consistent API. Good for beginners/game
+jams.**Disadvantages:** The maintainers themselves concluded it was unsustainable. From libtcod
+issue
 
 ## 147
 
@@ -590,7 +592,9 @@ The library is now being split into `libtcod-fov`, `libtcod-terminal`, `libtcod-
 BearLibTerminal provides only a terminal-like window with grid rendering and input. No algorithms at
 all. Users bring their own FOV, pathfinding, etc.
 
-**Advantages:**Minimal, focused, easy to maintain. Users choose their own algorithms.**Disadvantages:** Higher barrier to entry. Every project reinvents the same FOV/pathfinding code.
+**Advantages:**Minimal, focused, easy to maintain. Users choose their own
+algorithms.**Disadvantages:** Higher barrier to entry. Every project reinvents the same
+FOV/pathfinding code.
 
 ### 7.3 The bracket-lib Model (Workspace Crates)
 
@@ -654,7 +658,8 @@ let path = astar(
 );
 ```
 
-**Advantages:**Zero trait implementations required. Works with any type. Very flexible.**Disadvantages:** No shared abstraction means no code reuse between algorithms. Each call
+**Advantages:**Zero trait implementations required. Works with any type. Very
+flexible.**Disadvantages:** No shared abstraction means no code reuse between algorithms. Each call
 re-specifies the map interface.
 
 ### 8.3 Recommended Approach for rg
@@ -742,7 +747,7 @@ trait PathMap: Grid {
 
 ### Architecture: Layered Workspace with Optional Algorithm Crates
 
-```text
+````text
 rg/                          # workspace root
   rg-core/                   # Grid, Pos, Rect, Color, Cell - zero deps
   rg-terminal/               # Terminal rendering (crossterm backend)
@@ -916,3 +921,4 @@ drawing) are provided, while noise and exotic algorithms are left to specialized
 1. **Real-world usage data:** How many Rust roguelikes use bracket-lib vs rolling their own vs
 
    combining smaller crates is not well documented.
+````

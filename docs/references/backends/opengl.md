@@ -223,6 +223,7 @@ Rasterize glyphs on-demand when first encountered. Use LRU eviction when atlas f
     `swash` + `fontdb` for font discovery.
 
   - `cosmic-text` - Full text layout engine (shaping + rasterization). Overkill for grid rendering.
+
 - **beamterm dynamic atlas**: Uses `swash` + `fontdb` on native, Canvas API on WASM. ASCII Normal
 
   pre-allocated in fixed slots (0-94), all other glyphs in LRU-managed slots. Re-rasterizes at new
@@ -369,7 +370,7 @@ is needed.
 ### 9. Trade-offs: OpenGL vs wgpu/Vulkan/Metal
 
 | Aspect                  | OpenGL 3.3                                                                                 | wgpu                                                                          | Raw Vulkan/Metal               |
-| ----------------------- | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- | ------------------------------ |
+| ----------------------- | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- | ------------------------------ | --------------------------------------------------------------------- |
 | **Platform coverage**   | Windows, Linux, macOS (deprecated), WebGL2                                                 | Windows, Linux, macOS, Web (WebGPU), Android, iOS                             | Per-platform only              |
 | **API complexity**      | Low. ~200 LOC for a working renderer                                                       | Medium. Explicit pipeline setup, bind groups                                  | Very high                      |
 | **Compile times**       | Fast. `glow` is thin                                                                       | Slow. Large dependency tree                                                   | Medium-high                    |
@@ -379,7 +380,7 @@ is needed.
 | **WebGL support**       | WebGL2 via same `glow` code                                                                | WebGPU (still rolling out in browsers) or WebGL2 fallback                     | N/A                            |
 | **Maintenance**         | Stable, no API churn                                                                       | Frequent breaking changes (wgpu 22 was 23% slower than 0.20 in one benchmark) | Stable but verbose             |
 | **Safety**              | All `glow` calls are `unsafe`                                                              | Safe Rust API                                                                 | Unsafe everywhere              |
-| **Multi-threading**| Single-thread only (GL context bound to one thread)                                        | Multi-threaded by design                                                      | Multi-threaded                 |**For a terminal/grid renderer**, OpenGL 3.3 is the pragmatic choice: |
+| **Multi-threading**     | Single-thread only (GL context bound to one thread)                                        | Multi-threaded by design                                                      | Multi-threaded                 | **For a terminal/grid renderer**, OpenGL 3.3 is the pragmatic choice: |
 
 - The workload (a few thousand textured quads) is trivially simple for any GPU. Performance
 

@@ -1,119 +1,109 @@
-//! Software-backend demo showing layers, sub-cell offsets, and compositing.
-//!
-//! Renders a multi-layer scene: a background pattern on layer 0, a bouncing
-//! character on layer 1, and a text overlay on layer 2.
+//! Playable software-backend demo matching the crossterm demo pattern.
 //!
 //! Run with:
 //!   `cargo run --example software_demo --features software-default-font`
 
+use rg::Terminal;
 use rg::backend::software::SoftwareBackendBuilder;
+use rg::color::{AnsiColor, Color};
 use rg::event::{Event, KeyCode};
-use rg::style::Style;
-use rg::{Color, Terminal};
 use std::time::Duration;
+
+// Fixed room size in world space (matches crossterm_demo).
+const ROOM_LEFT: u16 = 2;
+const ROOM_TOP: u16 = 2;
+const ROOM_RIGHT: u16 = 40;
+const ROOM_BOTTOM: u16 = 20;
 
 fn main() {
     let backend = SoftwareBackendBuilder::new()
-        .title("rg layers demo")
-        .grid_size(50, 20)
+        .title("rg software demo")
+        .grid_size(50, 25)
         .scale(2)
         .build()
         .expect("backend init failed (try the `software-default-font` feature)");
 
-    // Frame counter for animation.
-    let mut frame = 0u64;
+    let mut player_x: u16 = 5;
+    let mut player_y: u16 = 5;
 
     backend
         .run(move |term: &mut Terminal<_>| {
-            draw(term, frame);
-            frame = frame.wrapping_add(1);
+            let size = term.size();
 
+            term.clear();
+
+            // 1. Draw room boundary (box-drawing characters)
+            term.fg(Color::Ansi(AnsiColor::White));
+            for x in ROOM_LEFT + 1..ROOM_RIGHT {
+                term.put(x, ROOM_TOP, '─');
+                term.put(x, ROOM_BOTTOM, '─');
+            }
+            for y in ROOM_TOP + 1..ROOM_BOTTOM {
+                term.put(ROOM_LEFT, y, '│');
+                term.put(ROOM_RIGHT, y, '│');
+            }
+            term.put(ROOM_LEFT, ROOM_TOP, '┌');
+            term.put(ROOM_RIGHT, ROOM_TOP, '┐');
+            term.put(ROOM_LEFT, ROOM_BOTTOM, '└');
+            term.put(ROOM_RIGHT, ROOM_BOTTOM, '┘');
+
+            // 2. Draw Enemy (Red D) — fixed center of the room
+            term.fg(Color::Ansi(AnsiColor::Red));
+            term.put(
+                u16::midpoint(ROOM_LEFT, ROOM_RIGHT),
+                u16::midpoint(ROOM_TOP, ROOM_BOTTOM),
+                'D',
+            );
+
+            // 3. Draw Player (@ - Green)
+            term.fg(Color::Ansi(AnsiColor::Green));
+            term.put(player_x, player_y, '@');
+            term.reset_style();
+
+            // 4. Draw UI status line
+            term.print(2, 0, "rg Library — Software Interactive Demo");
+            term.print(
+                2,
+                size.height.saturating_sub(1),
+                "HP: 100 | Arrow Keys to move, Q or ESC to Quit",
+            );
+
+            // Present double-buffered frame
+            term.present();
+
+            // Handle input (non-blocking poll with ~60 FPS timeout)
             if let Some(event) = term.poll(Duration::from_millis(16)) {
                 match event {
-                    Event::Key(k) if k.code == KeyCode::Escape => std::process::exit(0),
+                    Event::Key(key_event) => match key_event.code {
+                        KeyCode::Up | KeyCode::Char('w') => {
+                            if player_y > ROOM_TOP + 1 {
+                                player_y -= 1;
+                            }
+                        }
+                        KeyCode::Down | KeyCode::Char('s') => {
+                            if player_y < ROOM_BOTTOM - 1 {
+                                player_y += 1;
+                            }
+                        }
+                        KeyCode::Left | KeyCode::Char('a') => {
+                            if player_x > ROOM_LEFT + 1 {
+                                player_x -= 1;
+                            }
+                        }
+                        KeyCode::Right | KeyCode::Char('d') => {
+                            if player_x < ROOM_RIGHT - 1 {
+                                player_x += 1;
+                            }
+                        }
+                        KeyCode::Escape | KeyCode::Char('q') => {
+                            std::process::exit(0);
+                        }
+                        _ => {}
+                    },
                     Event::Close => std::process::exit(0),
                     _ => {}
                 }
             }
         })
         .expect("event loop failed");
-}
-
-fn draw(term: &mut Terminal<impl rg::Backend>, frame: u64) {
-    let size = term.size();
-
-    // ── Frame 0: draw the static background pattern on layer 0 ──────────
-    if frame == 0 {
-        term.layer(0);
-        // Fill the grid with a checkerboard-like dot pattern.
-        for y in 0..size.height {
-            for x in 0..size.width {
-                let is_dot = (x + y) % 4 == 0;
-                if is_dot {
-                    term.fg(Color::Rgb {
-                        r: 60,
-                        g: 60,
-                        b: 80,
-                    });
-                    term.put(x, y, ':');
-                } else {
-                    term.fg(Color::Rgb {
-                        r: 20,
-                        g: 20,
-                        b: 30,
-                    });
-                    term.put(x, y, '.');
-                }
-            }
-        }
-    }
-
-    // ── Every frame: draw a bouncing character on layer 1 ───────────────
-    // Clear layer 1 so the old position disappears without affecting layer 0.
-    term.layer(1);
-    term.clear();
-
-    // Bounce: dx oscillates between -2 and +2, dy oscillates between -1 and +1.
-    #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
-    let dx = ((frame as i64 % 20).abs() - 10) as i16;
-    #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
-    let dy = ((frame as i64 % 12).abs() - 6) as i16;
-    let cx = size.width / 2;
-    let cy = size.height / 2;
-
-    term.fg(Color::BRIGHT_GREEN);
-    term.put_offset(cx, cy, dx, dy, '@');
-
-    // ── Frame 0: draw a static text header on layer 2 ───────────────────
-    if frame == 0 {
-        term.layer(2);
-        let header = "rg layers demo [Esc to quit]";
-        let style = Style::new().fg(Color::BRIGHT_WHITE).bg(Color::Rgb {
-            r: 40,
-            g: 40,
-            b: 60,
-        });
-
-        // Center the header at the top.
-        #[allow(clippy::cast_possible_truncation)]
-        let hx = size.width.saturating_sub(header.len() as u16) / 2;
-        for (i, ch) in header.chars().enumerate() {
-            #[allow(clippy::cast_possible_truncation)]
-            term.put_styled(hx + i as u16, 0, ch, style);
-        }
-
-        // Footer on layer 2 at the bottom.
-        let footer = format!("layer 0: dots  |  layer 1: @ (offset {dx},{dy})  |  layer 2: text");
-        #[allow(clippy::cast_possible_truncation)]
-        let fx = size.width.saturating_sub(footer.len() as u16) / 2;
-        term.bg(Color::Rgb {
-            r: 40,
-            g: 40,
-            b: 60,
-        });
-        term.fg(Color::BRIGHT_BLACK);
-        term.print(fx, size.height - 1, &footer);
-    }
-
-    term.present();
 }

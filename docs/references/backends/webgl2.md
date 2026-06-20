@@ -211,7 +211,9 @@ For dynamic/Unicode support:
    with `CanvasRenderingContext2D.fillText()`
 
 1. **Pack glyphs into a texture atlas** (row-major, fixed cell size for monospace)
-1. **Upload via `texSubImage2D`** for incremental updates (only upload new glyph rows)1. **Maintain a `HashMap<char, (u16, u16)>`** mapping characters to atlas coordinates
+1. **Upload via `texSubImage2D`** for incremental updates (only upload new glyph rows)1. **Maintain
+   a `HashMap<char, (u16, u16)>`** mapping characters to atlas coordinates
+
 #### Uploading the Atlas
 
 ```rust
@@ -417,7 +419,7 @@ loss, you must recreate all GL resources (shaders, textures, buffers).
 ### 8. Trade-offs
 
 | Factor                     | Data Textures (doryen-rs style)                      | Instanced Quads (xterm.js style)                       |
-| -------------------------- | ---------------------------------------------------- | ------------------------------------------------------ |
+| -------------------------- | ---------------------------------------------------- | ------------------------------------------------------ | ----------------------------------------------------------- |
 | **Complexity**             | Lower. One quad, 3-4 textures, one shader.           | Higher. Vertex buffer management, instance attributes. |
 | **Draw calls**             | 1                                                    | 1 (when using instancing)                              |
 | **Data upload**            | 3 full texture uploads per frame (~120KB for 200x50) | Vertex buffer update (can be partial)                  |
@@ -427,7 +429,7 @@ loss, you must recreate all GL resources (shaders, textures, buffers).
 | **Unicode/dynamic glyphs** | Need runtime atlas generation + upload               | Same, but atlas management is independent              |
 | **Binary size (WASM)**     | Minimal with glow or web-sys                         | Same                                                   |
 | **Cross-platform**         | Same shaders work native + web (via glow)            | Same                                                   |
-| **Max grid size**| Limited by max texture size (4096x4096 = 16M cells)  | Limited by vertex buffer size (practical: millions)    |**Additional trade-offs for the integration layer choice:** |
+| **Max grid size**          | Limited by max texture size (4096x4096 = 16M cells)  | Limited by vertex buffer size (practical: millions)    | **Additional trade-offs for the integration layer choice:** |
 
 |                      | web-sys        | glow                          | wgpu                       |
 | -------------------- | -------------- | ----------------------------- | -------------------------- |
@@ -450,7 +452,8 @@ For a Rust terminal/grid rendering library targeting WASM with a WebGL2 backend:
 3. **Pre-build the glyph atlas** as an embedded PNG for ASCII/CP437; add runtime atlas generation
    for Unicode support later
 
-4. **Implement Canvas 2D fallback** behind a shared `Backend` trait4. **Handle context loss** by listening for `webglcontextlost`/`webglcontextrestored` events## Sources
+4. **Implement Canvas 2D fallback** behind a shared `Backend` trait4. **Handle context loss** by
+   listening for `webglcontextlost`/`webglcontextrestored` events## Sources
 
 - **Kept**: doryen-rs shaders (doryen_vs.glsl, doryen_fs.glsl, program.rs) - Primary reference for
 

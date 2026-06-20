@@ -129,7 +129,7 @@ allocation or function calls to avoid eager evaluation.
 
 ### Import ordering
 
-```text
+````text
 
 1. std / core / alloc
 2. Enterprise crates (optional)
@@ -145,7 +145,7 @@ Automate with `rustfmt.toml`:
 reorder_imports = true
 imports_granularity = "Crate"
 group_imports = "StdExternalCrate"
-```
+````
 
 ---
 

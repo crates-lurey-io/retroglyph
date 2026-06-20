@@ -147,9 +147,9 @@ opinions. [swash crate](https://crates.io/crates/swash)
    cache is small (ASCII + a few hundred common glyphs).
 
 1. For each cell in the grid, look up the cached bitmap and composite it onto the framebuffer.
-1. Only re-rasterize when font size or DPI changes.
-For a simpler approach (ASCII-only, no ligatures): use **fontdue** directly, cache the
-`(char, size)` -> bitmap mapping, and blit cached bitmaps per cell.
+1. Only re-rasterize when font size or DPI changes. For a simpler approach (ASCII-only, no
+   ligatures): use **fontdue** directly, cache the `(char, size)` -> bitmap mapping, and blit cached
+   bitmaps per cell.
 
 ### 3. Performance Expectations
 
@@ -164,9 +164,9 @@ Yes, easily. The math:
 - softbuffer presentation overhead: ~0.1-0.5ms depending on platform
 - **Total: well under 2ms per frame, leaving 14ms headroom at 60fps**
 
-**Real-world evidence:**-**foot** (Wayland terminal, pure CPU rendering in C): renders single-cell updates in ~0.05ms.
-  Full-screen redraws of a dense grid take 2-5ms. Competitive with GPU terminals for interactive
-  use. [foot Performance wiki](https://codeberg.org/dnkl/foot/wiki/Performance)
+**Real-world evidence:**-**foot** (Wayland terminal, pure CPU rendering in C): renders single-cell
+updates in ~0.05ms. Full-screen redraws of a dense grid take 2-5ms. Competitive with GPU terminals
+for interactive use. [foot Performance wiki](https://codeberg.org/dnkl/foot/wiki/Performance)
 
 - **Rio terminal** (Rust): recently added a CPU rendering backend using softbuffer + swash. Writes
 
@@ -175,8 +175,8 @@ Yes, easily. The math:
   data, skips identical frames).
   [Rio CPU commit](https://github.com/raphamorim/rio/commit/835d0ef72803d38fa98d7e4e302e2d5788bbe4e0)
 
-**Key optimizations:**-**Damage tracking**: only re-render cells that changed. For typical terminal use (typing,
-  scrolling a few lines), this means rendering <100 cells per frame instead of 4000.
+**Key optimizations:**-**Damage tracking**: only re-render cells that changed. For typical terminal
+use (typing, scrolling a few lines), this means rendering <100 cells per frame instead of 4000.
 
 - **Glyph caching**: rasterize each unique glyph once, reuse the bitmap. A monospace terminal with
 
@@ -359,7 +359,7 @@ Uses `CALayer` for presentation:
 ### 7. Trade-offs vs GPU Backends
 
 | Aspect                 | Software (CPU)                                 | GPU (wgpu/OpenGL)                          |
-| ---------------------- | ---------------------------------------------- | ------------------------------------------ |
+| ---------------------- | ---------------------------------------------- | ------------------------------------------ | -------------------------------------- |
 | **Full-screen redraw** | 2-5ms for dense grid                           | <1ms                                       |
 | **Incremental update** | <0.1ms (damage tracking)                       | ~same (still redraws full texture atlas)   |
 | **Startup time**       | Fast (no driver init)                          | Slower (shader compile, context setup)     |
@@ -371,7 +371,7 @@ Uses `CALayer` for presentation:
 | **Ligatures**          | Supported (cosmic-text/harfrust)               | Supported (same shaping, GPU atlas)        |
 | **Code complexity**    | Low (~500 LoC for renderer)                    | High (~2000+ LoC for GPU pipeline)         |
 | **Cross-platform**     | Excellent (softbuffer Tier 1 on Win/Mac/Linux) | Good but driver-dependent                  |
-| **Scaling (4K)**| 8M pixels, ~5-10ms full redraw                 | <1ms regardless of resolution              |**When to choose software rendering:** |
+| **Scaling (4K)**       | 8M pixels, ~5-10ms full redraw                 | <1ms regardless of resolution              | **When to choose software rendering:** |
 
 - Primary target is interactive terminal use (not cat'ing huge files)
 - Need to run on headless servers, VMs, or CI

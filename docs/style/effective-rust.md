@@ -853,4 +853,5 @@ the boundary.
 4. **Smart pointers are not a last resort.** `Rc<RefCell<T>>` and `Arc<Mutex<T>>` are legitimate,
    idiomatic patterns.
 
-5. **Automate everything.** CI, Clippy, `cargo fmt`, `bindgen`, dependency audits.5. **Make invalid states inexpressible.** This is the single most important design principle.
+5. **Automate everything.** CI, Clippy, `cargo fmt`, `bindgen`, dependency audits.5. **Make invalid
+   states inexpressible.** This is the single most important design principle.

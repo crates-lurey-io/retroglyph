@@ -117,7 +117,7 @@ T terminal_get(const C* key, const T& default_ = T());
 
 Semicolon-separated key-value parameters:
 
-```text
+````text
 window.title='foo'; window.size=80x25;
 ```text
 
@@ -211,7 +211,7 @@ tags in `terminal_print`:
 ```c
 terminal_set("italic font: italic.ttf, size=12");
 terminal_print(2, 1, "Its eyes are [font=italic]glowing[/font].");
-```
+````
 
 The active font can also be selected programmatically:
 
@@ -273,7 +273,7 @@ Can be:
 
 #### Removing a Tileset
 
-```yaml
+````yaml
 0xE000: none;
 ```text
 
@@ -304,7 +304,7 @@ Modifying the config file from code:
 ```c
 terminal_set("ini.game.tile-size = 16");  // sets [Game] tile-size=16
 // Empty value removes the property
-```
+````
 
 ---
 
@@ -952,7 +952,7 @@ Built-in codepages: `ascii`, `437`, `866`, `1250`, `1251`.
 Custom codepages: provide a text file path. The file contains a comma-separated list of Unicode code
 points:
 
-```text
+````text
 0xF00C, 0xF062, 0xF001, 0xF0E7, 0xF013, 0xF043
 ```text
 
@@ -970,7 +970,7 @@ load only specific glyphs from the font to consecutive slots).
 
 ```c
 void terminal_delay(int period);
-```
+````
 
 Suspends execution for `period` milliseconds.
 

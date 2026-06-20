@@ -312,21 +312,22 @@ impl<B: Backend> Terminal<B> {
     ///
     /// Computes diff, sends changed cells to the backend, flushes, then swaps buffers.
     ///
-    /// # Note
-    /// The back buffer is **not** cleared automatically after presentation.
-    /// If you want a blank frame, call `clear()` at the start of your loop.
-    /// Present the current frame.
-    ///
-    /// Diffs all layers, sends changed cells to the backend, flushes, then
-    /// swaps buffers. Backends that do not support layers receive only
-    /// layer-0 changes (see [`Backend::draw_layers`]).
+    /// When the backend requires a full frame (see
+    /// [`Backend::needs_full_frame`]), all cells from every allocated layer are
+    /// sent rather than just the diff, so pixel-based backends can clear and
+    /// redraw to avoid orphaned pixels from sub-cell offsets.
     ///
     /// # Note
     /// The back buffer is **not** cleared automatically after presentation.
     /// If you want a blank frame, call `clear()` at the start of your loop.
     pub fn present(&mut self) {
-        let diff = self.current.diff(&self.previous);
-        self.backend.draw_layers(diff);
+        if self.backend.needs_full_frame() {
+            let all = self.current.layers();
+            self.backend.draw_layers(all);
+        } else {
+            let diff = self.current.diff(&self.previous);
+            self.backend.draw_layers(diff);
+        }
         self.backend.flush();
         core::mem::swap(&mut self.current, &mut self.previous);
     }

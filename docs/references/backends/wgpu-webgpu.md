@@ -26,7 +26,7 @@ The wgpu API follows a layered object model derived from the WebGPU specificatio
 
 ### Initialization flow
 
-```text
+````text
 Instance::new()
   -> instance.create_surface(&window)
   -> instance.request_adapter(compatible_surface)
@@ -80,7 +80,7 @@ struct CellInstance {
     uv_size: [f32; 2],    // glyph atlas UV extent
     flags: u32,           // bold, italic, underline, etc.
 }
-```
+````
 
 **Draw pattern:** Two draw calls per frame:
 
@@ -89,8 +89,8 @@ struct CellInstance {
 
    foreground color).
 
-3. Optional: color emoji pass with a separate RGBA atlas.
-A 200x50 terminal = 10,000 instances. Modern GPUs handle millions of instances trivially.
+3. Optional: color emoji pass with a separate RGBA atlas. A 200x50 terminal = 10,000 instances.
+   Modern GPUs handle millions of instances trivially.
 
 **Advantages:** Minimal CPU work per frame; only rebuild the instance buffer when cells change.
 Dirty-row tracking (a 256-bit bitset, one bit per row) means only changed rows need instance data
@@ -254,7 +254,7 @@ Two common layouts:
 glyph cells are the same size. The atlas becomes a simple grid of `glyph_w x glyph_h` slots. Slot
 index maps directly to UV coordinates:
 
-```text
+````text
 u0 = (slot % cols) * glyph_w / atlas_w
 v0 = (slot / cols) * glyph_h / atlas_h
 ```rust
@@ -627,3 +627,4 @@ benefits outweigh the costs.
 
    sharing a `Device`) is less documented. Relevant if the terminal supports detachable panes or
    multiple windows.
+````

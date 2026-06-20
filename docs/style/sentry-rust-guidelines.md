@@ -110,8 +110,8 @@ explicit error.
 
 All struct fields (including tuple-struct fields) should be private by default.
 
-**Only two exceptions:**1.**Newtypes** (1-tuple structs) where direct access to the inner type is desired, to annotate
-   semantics of a type where accessing the inner type is required.
+**Only two exceptions:**1.**Newtypes** (1-tuple structs) where direct access to the inner type is
+desired, to annotate semantics of a type where accessing the inner type is required.
 
 1. **Plain data types with very stable signatures**, such as schema definitions (e.g., Sentry
 
@@ -228,7 +228,7 @@ fail, use a different name (e.g., `from_parts`, `try_new`, `parse`).
 Test function names should contain: **function name + simple condition**. Keep names concise; avoid
 filler words like "should" or "that".
 
-```text
+````text
 tests::parse_empty
 tests::parse_null
 ```text
@@ -247,7 +247,7 @@ mod tests {
     #[test]
     fn foo_works() { .. }
 }
-```
+````
 
 This ensures imports and helper functions for tests are only compiled when testing.
 

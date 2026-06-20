@@ -139,8 +139,8 @@ lack of workspace-level lint configuration (Cargo didn't support `[lints]` at th
 their large repositories had 80+ crates; per-crate copy-paste was error-prone.
 [Source](https://github.com/EmbarkStudios/rust-ecosystem/pull/68)
 
-**Key lint policy decisions:**- `unsafe_code` is**denied** (not just warned), meaning unsafe code requires explicit
-  `#[allow(unsafe_code)]` opt-in.
+**Key lint policy decisions:**- `unsafe_code` is**denied** (not just warned), meaning unsafe code
+requires explicit `#[allow(unsafe_code)]` opt-in.
 
 - `clippy::dbg_macro`, `clippy::todo`, `clippy::unimplemented` are warned against, catching debug
 
@@ -190,7 +190,6 @@ jobs:
   lint:
     runs-on: ubuntu-22.04
     steps:
-
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -203,7 +202,6 @@ jobs:
         os: [ubuntu-24.04, macos-14, windows-2022]
     runs-on: ${{ matrix.os }}
     steps:
-
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --release
@@ -211,7 +209,6 @@ jobs:
   msrv-check:
     runs-on: ubuntu-24.04
     steps:
-
       - uses: dtolnay/rust-toolchain@master
 
         with:
@@ -222,9 +219,7 @@ jobs:
   deny-check:
     runs-on: ubuntu-22.04
     steps:
-
       - uses: EmbarkStudios/cargo-deny-action@v2
-
 ```
 
 **Key CI patterns:**-**Concurrency control**: `cancel-in-progress: true` prevents queue buildup.
@@ -246,9 +241,9 @@ jobs:
 
 Grouped by category:
 
-**GPU & Rendering:**-**rust-gpu** (8.3k+ stars): Compiles Rust to SPIR-V for Vulkan GPU shaders. Used
-  `rustc_codegen_spirv` as a backend. Now transitioned to community ownership at
-  [Rust-GPU org](https://github.com/Rust-GPU/rust-gpu). Their most ambitious project.
+**GPU & Rendering:**-**rust-gpu** (8.3k+ stars): Compiles Rust to SPIR-V for Vulkan GPU shaders.
+Used `rustc_codegen_spirv` as a backend. Now transitioned to community ownership at
+[Rust-GPU org](https://github.com/Rust-GPU/rust-gpu). Their most ambitious project.
 
 - **kajiya** (5k+ stars): Experimental real-time global illumination renderer using Rust + Vulkan.
 
@@ -259,9 +254,9 @@ Grouped by category:
 - **spirv-tools-rs**: Rust wrapper for SPIR-V Tools.
 - **fsr-rs**: Rust bindings for AMD FidelityFX Super Resolution.
 
-**Dependency & License Management:**-**cargo-deny** (~4M total downloads, ~940k in 90 days): Checks dependency graphs for license
-  compliance, security advisories, banned crates, and duplicate versions. Widely adopted beyond
-  Embark. Has a companion GitHub Action (`cargo-deny-action`).
+**Dependency & License Management:**-**cargo-deny** (~4M total downloads, ~940k in 90 days): Checks
+dependency graphs for license compliance, security advisories, banned crates, and duplicate
+versions. Widely adopted beyond Embark. Has a companion GitHub Action (`cargo-deny-action`).
 
 - **cargo-about**: Generates license listings for all dependencies using customizable Handlebars
 
@@ -271,8 +266,8 @@ Grouped by category:
 - **cfg-expr**: Parser/evaluator for Rust `cfg()` expressions.
 - **spdx**: SPDX license expression parser.
 
-**Game Engine Infrastructure:**-**physx-rs** (PhysX bindings): Rust wrapper over NVIDIA PhysX. Described by Tomasz Stachowiak as
-  "an unholy fusion of Rust and C++."
+**Game Engine Infrastructure:**-**physx-rs** (PhysX bindings): Rust wrapper over NVIDIA PhysX.
+Described by Tomasz Stachowiak as "an unholy fusion of Rust and C++."
 
 - **puffin**: Instrumentation-based CPU profiler for Rust. Designed for game loops.
 - **superluminal-perf-rs**: Integration with Superluminal Performance profiler.
@@ -283,8 +278,8 @@ Grouped by category:
 - **tiny-bench**: Minimal benchmarking library.
 - **cervo**: ML inference middleware for games (ONNX-based).
 
-**Cloud & Networking:**-**tame-gcs**, **tame-oauth**, **tame-oidc**: Sans-io approach to Google Cloud Storage, OAuth, and
-  OIDC.
+**Cloud & Networking:**-**tame-gcs**, **tame-oauth**, **tame-oidc**: Sans-io approach to Google
+Cloud Storage, OAuth, and OIDC.
 
 - **discord-sdk**: Open implementation of the Discord Game SDK.
 - **rymder**: Unofficial Agones (game server orchestration) client.
@@ -299,13 +294,14 @@ Grouped by category:
 - **octobors**: GitHub Action for PR automerging.
 - **relnotes**: Automatic GitHub release note generation.
 
-**Crash Handling & Tracing:**-**crash-handling**: Collection of crates for catching/handling crashes.
+**Crash Handling & Tracing:**-**crash-handling**: Collection of crates for catching/handling
+crashes.
 
 - **tracing-logfmt**: logfmt formatter for tracing-subscriber.
 - **tracing-ext-ffi-subscriber**: FFI bridge for passing tracing spans to external profilers.
 
-**Texture & Content:**-**texture-synthesis**: Example-based texture synthesis, one of their earliest open-source
-  projects.
+**Texture & Content:**-**texture-synthesis**: Example-based texture synthesis, one of their earliest
+open-source projects.
 
 [Source: embark.dev](https://embark.dev/),
 [Source: rust-ecosystem README](https://github.com/EmbarkStudios/rust-ecosystem)
@@ -442,7 +438,8 @@ Embark tracked Rust ecosystem gaps via GitHub issues in the rust-ecosystem repo:
    Rust) `[workspace.lints]` in `Cargo.toml` to configure lints once for all crates.
 
 1. **Deny unsafe_code by default.** Require explicit opt-in per module/function.
-1. **Ban debug leftovers.** Warn on `dbg_macro`, `todo`, `unimplemented`.3. **Prefer better ecosystem crates.** parking_lot over std::sync was a real productivity win (no
+1. **Ban debug leftovers.** Warn on `dbg_macro`, `todo`, `unimplemented`.3. **Prefer better
+   ecosystem crates.** parking_lot over std::sync was a real productivity win (no
 
    lock poisoning).
 
@@ -452,6 +449,7 @@ Embark tracked Rust ecosystem gaps via GitHub issues in the rust-ecosystem repo:
 
 1. **Cross-platform CI matrix.** Test on all target platforms; don't assume Linux-only.
 1. **MSRV checking.** Separate CI job with a pinned older toolchain.
+
 ## Sources
 
 - Kept:

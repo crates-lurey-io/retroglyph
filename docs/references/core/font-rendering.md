@@ -145,7 +145,7 @@ font discovery, shaping, fallback, layout, and optional rasterization. Used by g
 
 ### Architecture
 
-```text
+````text
                     cosmic-text
                    /     |       \
            fontdb    harfrust     swash (optional)
@@ -235,7 +235,7 @@ let text_color = Color::rgb(0xFF, 0xFF, 0xFF);
 buffer.draw(&mut swash_cache, text_color, |x, y, w, h, color| {
     // Draw a colored rectangle at (x, y) with size (w, h)
 });
-```
+````
 
 ### CacheKey structure
 
@@ -624,6 +624,7 @@ shaping:
    Color Emoji on Linux)
 
 6. **Last resort**: `.notdef` glyph (tofu box)
+
 ### Manual fallback (without cosmic-text)
 
 ```rust
@@ -716,7 +717,7 @@ vertex data.
 [glyphon](https://github.com/grovesNL/glyphon) is the canonical example of this entire stack
 assembled for wgpu. Architecture:
 
-```text
+````text
 cosmic-text (FontSystem + Buffer)
     ↓ layout_runs() → LayoutGlyph → PhysicalGlyph → CacheKey
 SwashCache
@@ -782,7 +783,7 @@ than 1024x1024 for the mask atlas. Color emoji may need a separate 512x512 atlas
 [dependencies]
 cosmic-text = { version = "0.16", default-features = false, features = ["std", "swash", "monospace_fallback"] }
 etagere = "0.4"
-```
+````
 
 ### Why this stack
 
@@ -795,7 +796,10 @@ etagere = "0.4"
    terminal grid alignment.
 
 1. **swash** (via cosmic-text) handles color emoji properly with COLR/CBDT/sbix support.
-1. **etagere** is the battle-tested atlas allocator, used by glyphon and others.1. This is the same stack as glyphon, iced, and the COSMIC desktop, so it's well-maintained.### Why not fontdue alone- No shaping = no ligatures (Fira Code, JetBrains Mono ligatures won't work)
+1. **etagere** is the battle-tested atlas allocator, used by glyphon and others.1. This is the same
+   stack as glyphon, iced, and the COSMIC desktop, so it's well-maintained.### Why not fontdue
+   alone- No shaping = no ligatures (Fira Code, JetBrains Mono ligatures won't work)
+
 - No fallback = emoji and CJK characters won't render
 - No color emoji support
 - You'd have to build all the infrastructure cosmic-text already provides

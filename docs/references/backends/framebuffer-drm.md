@@ -103,175 +103,173 @@ rasterization via crates like `fontdue` or `ab_glyph`.
 
 1. **Legacy modesetting workflow** (from drm-rs examples):
 
-    ```rust
-    let card = Card::open("/dev/dri/card0");
-    let res = card.resource_handles()?;
-    // Find connected connector
-    let con = res.connectors().iter()
-        .flat_map(|c| card.get_connector(*c, true))
-        .find(|i| i.state() == connector::State::Connected)?;
-    let mode = con.modes().first()?;  // best mode
-    let (w, h) = mode.size();
-    // Create dumb buffer + map + fill
-    let mut db = card.create_dumb_buffer((w.into(), h.into()), DrmFourcc::Xrgb8888, 32)?;
-    { let mut map = card.map_dumb_buffer(&mut db)?;
-      for b in map.as_mut() { *b = 128; } }  // grey fill
-    let fb = card.add_framebuffer(&db, 24, 32)?;
-    // Activate
-    card.set_crtc(crtc.handle(), Some(fb), (0, 0), &[con.handle()], Some(mode))?;
-    ```
+   ```rust
+   let card = Card::open("/dev/dri/card0");
+   let res = card.resource_handles()?;
+   // Find connected connector
+   let con = res.connectors().iter()
+       .flat_map(|c| card.get_connector(*c, true))
+       .find(|i| i.state() == connector::State::Connected)?;
+   let mode = con.modes().first()?;  // best mode
+   let (w, h) = mode.size();
+   // Create dumb buffer + map + fill
+   let mut db = card.create_dumb_buffer((w.into(), h.into()), DrmFourcc::Xrgb8888, 32)?;
+   { let mut map = card.map_dumb_buffer(&mut db)?;
+     for b in map.as_mut() { *b = 128; } }  // grey fill
+   let fb = card.add_framebuffer(&db, 24, 32)?;
+   // Activate
+   card.set_crtc(crtc.handle(), Some(fb), (0, 0), &[con.handle()], Some(mode))?;
+   ```
 
-    [legacy_modeset.rs](https://github.com/Smithay/drm-rs/blob/develop/examples/legacy_modeset.rs)
+   [legacy_modeset.rs](https://github.com/Smithay/drm-rs/blob/develop/examples/legacy_modeset.rs)
 
 1. **Atomic modesetting** -- The modern API. Requires enabling `ClientCapability::Atomic` and
 
-    `ClientCapability::UniversalPlanes`. Properties are set on connectors, CRTCs, and planes via an
-    `AtomicModeReq`, then committed atomically. More complex to set up but enables tear-free page
-    flips, multi-plane compositing, and atomic property changes.
-    [atomic_modeset.rs](https://github.com/Smithay/drm-rs/blob/develop/examples/atomic_modeset.rs)
+   `ClientCapability::UniversalPlanes`. Properties are set on connectors, CRTCs, and planes via an
+   `AtomicModeReq`, then committed atomically. More complex to set up but enables tear-free page
+   flips, multi-plane compositing, and atomic property changes.
+   [atomic_modeset.rs](https://github.com/Smithay/drm-rs/blob/develop/examples/atomic_modeset.rs)
 
 1. **Page flipping (DRM)** -- Use `card.page_flip(crtc, fb, PageFlipFlags::EVENT, None)` to
 
-    schedule a buffer swap at the next vblank. The `PageFlipEvent` is received via
-    `card.receive_events()`. This provides tear-free double buffering without busy-waiting.
+   schedule a buffer swap at the next vblank. The `PageFlipEvent` is received via
+   `card.receive_events()`. This provides tear-free double buffering without busy-waiting.
 
 1. **DRM vs legacy framebuffer** -- DRM/KMS is the modern replacement. The legacy `/dev/fb0`
 
-    interface is considered deprecated in the kernel, though it remains widely available. DRM
-    provides proper mode setting, multi-monitor support, page flip events, and hardware plane
-    compositing. On modern kernels, `/dev/fb0` may actually be a compatibility shim over DRM
-    (`simpledrm` or `efifb`).
+   interface is considered deprecated in the kernel, though it remains widely available. DRM
+   provides proper mode setting, multi-monitor support, page flip events, and hardware plane
+   compositing. On modern kernels, `/dev/fb0` may actually be a compatibility shim over DRM
+   (`simpledrm` or `efifb`).
 
 ### 3. How Notcurses Uses the Linux Framebuffer
 
 1. **Notcurses framebuffer rendering** -- Added in v2.4.0 (Sep 2021). On the Linux console,
 
-    notcurses detects `/dev/fb0` via `is_linux_framebuffer()`, opens it `O_RDWR`, then calls
-    `FBIOGET_VSCREENINFO` to get pixel geometry. The framebuffer is `mmap()`ed with
-    `PROT_READ|PROT_WRITE` and `MAP_SHARED`.
-    [notcurses linux.c](https://github.com/dankamongmen/notcurses/blob/master/src/lib/linux.c)
+   notcurses detects `/dev/fb0` via `is_linux_framebuffer()`, opens it `O_RDWR`, then calls
+   `FBIOGET_VSCREENINFO` to get pixel geometry. The framebuffer is `mmap()`ed with
+   `PROT_READ|PROT_WRITE` and `MAP_SHARED`.
+   [notcurses linux.c](https://github.com/dankamongmen/notcurses/blob/master/src/lib/linux.c)
 
 1. **Pixel blitting in notcurses** -- The `fbcon_draw()` function writes sprite pixel data directly
 
-    into the mmap'd framebuffer. It iterates row by row, computing offsets as
-    `(row * pixx + col) * 4` (assuming 4 bytes per pixel), and copies RGBA data with transparency
-    checks (`rgba_trans_p()`). Transparent pixels are skipped, allowing compositing. Pixel format
-    conversion is done inline: notcurses swaps R and B channels (`src[2]->dst[0]`, `src[0]->dst[2]`)
-    to convert between RGBA and the framebuffer's BGRA/XRGB format.
+   into the mmap'd framebuffer. It iterates row by row, computing offsets as
+   `(row * pixx + col) * 4` (assuming 4 bytes per pixel), and copies RGBA data with transparency
+   checks (`rgba_trans_p()`). Transparent pixels are skipped, allowing compositing. Pixel format
+   conversion is done inline: notcurses swaps R and B channels (`src[2]->dst[0]`, `src[0]->dst[2]`)
+   to convert between RGBA and the framebuffer's BGRA/XRGB format.
 
 1. **Console font reprogramming** -- Notcurses goes further than basic pixel blitting. It reads the
 
-    kernel's console font via `KDFONTOP` ioctl, inspects the glyph table, and injects missing
-    Unicode block-drawing characters (quadrant blocks, eighth blocks, line-drawing characters). It
-    replaces unused font slots with custom bitmap glyphs, enabling higher-fidelity text rendering on
-    the 256/512-glyph limited console font.
-    [notcurses linux.c](https://github.com/dankamongmen/notcurses/blob/master/src/lib/linux.c)
+   kernel's console font via `KDFONTOP` ioctl, inspects the glyph table, and injects missing Unicode
+   block-drawing characters (quadrant blocks, eighth blocks, line-drawing characters). It replaces
+   unused font slots with custom bitmap glyphs, enabling higher-fidelity text rendering on the
+   256/512-glyph limited console font.
+   [notcurses linux.c](https://github.com/dankamongmen/notcurses/blob/master/src/lib/linux.c)
 
 1. **Scrolling** -- `fbcon_scroll()` implements pixel-level scrolling by `memmove()`ing rows upward
 
-    in the framebuffer and `memset()`ing cleared rows to zero. This is a CPU-bound operation over
-    the entire visible pixel area.
+   in the framebuffer and `memset()`ing cleared rows to zero. This is a CPU-bound operation over the
+   entire visible pixel area.
 
 1. **Console limitations noted by notcurses** -- The Linux console has "particularly limited fonts,
 
-    and most characters beyond ASCII are not reliable." Only 256 glyphs (512 with reduced color),
-    max 16 colors natively. The framebuffer pixel blitter bypasses these limitations for
-    image/sprite rendering but text still goes through the console font system.
+   and most characters beyond ASCII are not reliable." Only 256 glyphs (512 with reduced color), max
+   16 colors natively. The framebuffer pixel blitter bypasses these limitations for image/sprite
+   rendering but text still goes through the console font system.
 
 ### 4. Input Handling Without a Display Server
 
 1. **evdev crate** -- Pure Rust reimplementation of libevdev. Opens `/dev/input/event*` devices
 
-    directly. Provides typed event structs (`KeyCode`, `AbsoluteAxisCode`, `RelativeAxisCode`),
-    synchronization handling (`SYN_DROPPED` recovery), and async support via tokio's `EventStream`.
-    Supports keyboard, mouse, touchscreen, and gamepad input. Requires read permissions on
-    `/dev/input/` devices (typically `input` group membership or root).
-    [crates.io/crates/evdev](https://crates.io/crates/evdev), [docs.rs/evdev](https://docs.rs/evdev)
+   directly. Provides typed event structs (`KeyCode`, `AbsoluteAxisCode`, `RelativeAxisCode`),
+   synchronization handling (`SYN_DROPPED` recovery), and async support via tokio's `EventStream`.
+   Supports keyboard, mouse, touchscreen, and gamepad input. Requires read permissions on
+   `/dev/input/` devices (typically `input` group membership or root).
+   [crates.io/crates/evdev](https://crates.io/crates/evdev), [docs.rs/evdev](https://docs.rs/evdev)
 
 1. **evdev usage pattern**:
 
-    ```rust
-    use evdev::{Device, KeyCode, EventSummary};
-    let mut device = Device::open("/dev/input/event0")?;
-    loop {
-        for event in device.fetch_events()? {
-            match event.destructure() {
-                EventSummary::Key(_, KeyCode::KEY_A, 1) => { /* A pressed */ },
-                EventSummary::Key(_, key, 0) => { /* key released */ },
-                EventSummary::AbsoluteAxis(_, axis, val) => { /* touch/joystick */ },
-                _ => {}
-            }
-        }
-    }
-    ```
+   ```rust
+   use evdev::{Device, KeyCode, EventSummary};
+   let mut device = Device::open("/dev/input/event0")?;
+   loop {
+       for event in device.fetch_events()? {
+           match event.destructure() {
+               EventSummary::Key(_, KeyCode::KEY_A, 1) => { /* A pressed */ },
+               EventSummary::Key(_, key, 0) => { /* key released */ },
+               EventSummary::AbsoluteAxis(_, axis, val) => { /* touch/joystick */ },
+               _ => {}
+           }
+       }
+   }
+   ```
 
 1. **input-linux crate** -- Alternative evdev/uinput wrapper. Last updated ~2024, 3.2K SLoC. More
 
-    low-level than `evdev`. [crates.io/crates/input-linux](https://crates.io/crates/input-linux)
+   low-level than `evdev`. [crates.io/crates/input-linux](https://crates.io/crates/input-linux)
 
 1. **Device enumeration** -- The `evdev` crate provides `evdev::enumerate()` to crawl `/dev/input/`
 
-    and discover all input devices. Each device can be queried for supported event types, key codes,
-    and properties. For a framebuffer application, you'd enumerate devices at startup to find
-    keyboards and mice.
+   and discover all input devices. Each device can be queried for supported event types, key codes,
+   and properties. For a framebuffer application, you'd enumerate devices at startup to find
+   keyboards and mice.
 
 1. **Multiplexing input** -- Without a display server, the application must poll/select across
 
-    multiple input device fds. The `evdev` crate exposes `AsRawFd` for integration with `epoll`,
-    `poll`, or async runtimes. This replaces the event dispatching that X11/Wayland would normally
-    handle.
+   multiple input device fds. The `evdev` crate exposes `AsRawFd` for integration with `epoll`,
+   `poll`, or async runtimes. This replaces the event dispatching that X11/Wayland would normally
+   handle.
 
 ### 5. Font Rendering (CPU Rasterization)
 
 1. **fontdue** -- A `no_std` Rust font parser and rasterizer. Parses TrueType/OpenType fonts and
 
-    rasterizes glyphs to coverage bitmaps on the CPU. Includes a layout engine. Very fast for a CPU
-    rasterizer, suitable for embedded use. Returns `(Metrics, Vec<u8>)` per glyph where the
-    `Vec<u8>` is an alpha coverage map. [docs.rs/fontdue](https://docs.rs/fontdue)
+   rasterizes glyphs to coverage bitmaps on the CPU. Includes a layout engine. Very fast for a CPU
+   rasterizer, suitable for embedded use. Returns `(Metrics, Vec<u8>)` per glyph where the `Vec<u8>`
+   is an alpha coverage map. [docs.rs/fontdue](https://docs.rs/fontdue)
 
 1. **ab_glyph** -- Another pure-Rust font rasterizer (successor to `rusttype`). Supports outline
 
-    fonts, provides glyph positioning and rasterization. More widely used than fontdue in the
-    ecosystem.
+   fonts, provides glyph positioning and rasterization. More widely used than fontdue in the
+   ecosystem.
 
-1. **Rendering pipeline for a framebuffer terminal**:
-    2. Parse font file (TTF/OTF) with `fontdue` or `ab_glyph`
-    3. For each character cell in the grid, rasterize the glyph at the target pixel size
-    4. Cache rasterized glyphs in a `HashMap<(char, style), GlyphBitmap>`
-    5. For each dirty cell, composite the glyph bitmap into the framebuffer:
-       - Fill the cell rectangle with the background color
-       - Blend the foreground color using the glyph's alpha coverage
-    1. Write the result to the mmap'd buffer (or dumb buffer) No GPU involvement; all blending is
+1. **Rendering pipeline for a framebuffer terminal**: 2. Parse font file (TTF/OTF) with `fontdue` or
+   `ab_glyph` 3. For each character cell in the grid, rasterize the glyph at the target pixel
+   size 4. Cache rasterized glyphs in a `HashMap<(char, style), GlyphBitmap>` 5. For each dirty
+   cell, composite the glyph bitmap into the framebuffer:
+   - Fill the cell rectangle with the background color
+   - Blend the foreground color using the glyph's alpha coverage
+   1. Write the result to the mmap'd buffer (or dumb buffer) No GPU involvement; all blending is
 
-       done in CPU with direct memory writes.
+      done in CPU with direct memory writes.
 
 1. **Performance considerations for font rendering** -- Glyph caching is essential. A typical
 
-    terminal font at 16px has ~95 printable ASCII glyphs; rasterizing all upfront takes microseconds
-    with fontdue. The bottleneck is compositing into the framebuffer, which at 1920x1080x4bpp is
-    ~8MB per frame. Dirty-rectangle tracking (only updating changed cells) is critical for
-    performance.
+   terminal font at 16px has ~95 printable ASCII glyphs; rasterizing all upfront takes microseconds
+   with fontdue. The bottleneck is compositing into the framebuffer, which at 1920x1080x4bpp is ~8MB
+   per frame. Dirty-rectangle tracking (only updating changed cells) is critical for performance.
 
 ### 6. Resolution and Mode Setting
 
 1. **Framebuffer mode setting** -- Via `FBIOPUT_VSCREENINFO` ioctl. Set `xres`, `yres`,
 
-    `bits_per_pixel`, and timing parameters. The kernel driver may round values to match hardware
-    capabilities. The `fbset` utility does this from userspace. Not all framebuffer drivers support
-    mode changes; many (like `efifb`, `simpledrm`) are fixed at the boot-time resolution set by the
-    bootloader/EFI.
+   `bits_per_pixel`, and timing parameters. The kernel driver may round values to match hardware
+   capabilities. The `fbset` utility does this from userspace. Not all framebuffer drivers support
+   mode changes; many (like `efifb`, `simpledrm`) are fixed at the boot-time resolution set by the
+   bootloader/EFI.
 
 1. **DRM/KMS mode setting** -- Query available modes from the connector: `connector.modes()`
 
-    returns a list of `Mode` structs with resolution, refresh rate, and flags. Each mode includes
-    the full timing specification. Select a mode and apply it via `set_crtc()` (legacy) or atomic
-    commit (modern). DRM supports runtime mode switching, hot-plug detection, and multi-monitor
-    configurations.
+   returns a list of `Mode` structs with resolution, refresh rate, and flags. Each mode includes the
+   full timing specification. Select a mode and apply it via `set_crtc()` (legacy) or atomic commit
+   (modern). DRM supports runtime mode switching, hot-plug detection, and multi-monitor
+   configurations.
 
 1. **Mode information** -- A DRM `Mode` contains: horizontal/vertical resolution, refresh rate,
 
-    clock frequency, hsync/vsync timings, and flags (interlace, double scan, preferred, etc.). The
-    first mode in the list is typically the preferred/native resolution.
+   clock frequency, hsync/vsync timings, and flags (interlace, double scan, preferred, etc.). The
+   first mode in the list is typically the preferred/native resolution.
 
 ### 7. Rust Crate Summary
 
@@ -289,52 +287,52 @@ rasterization via crates like `fontdue` or `ab_glyph`.
 
 1. **Direct memory-mapped writes** -- Writing to a mmap'd framebuffer is essentially a memory
 
-    write. For `/dev/fb0` with `MAP_SHARED`, writes are visible immediately (no syscall per pixel).
-    The kernel/GPU will scan out from this memory at the display refresh rate. Write bandwidth
-    depends on memory bus speed; a full 1080p frame at 32bpp is ~8MB. Modern CPUs can push this at
-    multiple GB/s, so a full-screen redraw takes <2ms in raw memcpy terms.
+   write. For `/dev/fb0` with `MAP_SHARED`, writes are visible immediately (no syscall per pixel).
+   The kernel/GPU will scan out from this memory at the display refresh rate. Write bandwidth
+   depends on memory bus speed; a full 1080p frame at 32bpp is ~8MB. Modern CPUs can push this at
+   multiple GB/s, so a full-screen redraw takes <2ms in raw memcpy terms.
 
 1. **Cache effects** -- The framebuffer memory may be mapped as write-combining (WC) or uncacheable
 
-    depending on the hardware. WC memory has good sequential write performance but poor
-    random-access performance. Write in scanline order when possible. Avoid reading from the
-    framebuffer (reads from WC/UC memory are extremely slow, 10-100x slower than writes).
+   depending on the hardware. WC memory has good sequential write performance but poor random-access
+   performance. Write in scanline order when possible. Avoid reading from the framebuffer (reads
+   from WC/UC memory are extremely slow, 10-100x slower than writes).
 
 1. **DRM dumb buffer performance** -- Dumb buffers are kernel-allocated and CPU-accessible.
 
-    Performance is similar to framebuffer mmap for the CPU side. The `map_dumb_buffer()` call
-    returns a regular mmap'd region. The actual display update happens when the buffer is committed
-    as a framebuffer to a CRTC (via `set_crtc` or `page_flip`).
+   Performance is similar to framebuffer mmap for the CPU side. The `map_dumb_buffer()` call returns
+   a regular mmap'd region. The actual display update happens when the buffer is committed as a
+   framebuffer to a CRTC (via `set_crtc` or `page_flip`).
 
 1. **Vsync and tearing** -- Without page flipping, writes directly to the displayed buffer will
 
-    cause tearing when the scanout overlaps a write. DRM page flipping solves this. The legacy
-    framebuffer's `FBIOPAN_DISPLAY` can also provide vsync'd updates if the driver supports it, but
-    many don't.
+   cause tearing when the scanout overlaps a write. DRM page flipping solves this. The legacy
+   framebuffer's `FBIOPAN_DISPLAY` can also provide vsync'd updates if the driver supports it, but
+   many don't.
 
 ### 9. Use Cases
 
 1. **Embedded systems** -- Framebuffer/DRM backends are standard for embedded Linux (Yocto,
 
-    Buildroot). No display server overhead. Direct pixel control. Common on ARM SoCs with simple
-    display controllers. The `drm-rs` dumb buffer path works well here since these devices rarely
-    need GPU acceleration for 2D.
+   Buildroot). No display server overhead. Direct pixel control. Common on ARM SoCs with simple
+   display controllers. The `drm-rs` dumb buffer path works well here since these devices rarely
+   need GPU acceleration for 2D.
 
 1. **Kiosk mode** -- Single-application display without window management. DRM/KMS is preferred:
 
-    open the DRM device, set mode, render to dumb buffer, page flip. No window decorations, no
-    compositor overhead. Used in digital signage, ATMs, point-of-sale terminals.
+   open the DRM device, set mode, render to dumb buffer, page flip. No window decorations, no
+   compositor overhead. Used in digital signage, ATMs, point-of-sale terminals.
 
 1. **Linux console (no display server)** -- Running on a VT/TTY without X11/Wayland. Notcurses
 
-    demonstrates this works: detect the console, open the framebuffer, render pixels directly.
-    Useful for server administration UIs, boot-time applications, and recovery consoles.
+   demonstrates this works: detect the console, open the framebuffer, render pixels directly. Useful
+   for server administration UIs, boot-time applications, and recovery consoles.
 
 1. **Raspberry Pi** -- The Pi's VideoCore GPU exposes both `/dev/fb0` and DRM (`vc4-drm`). The DRM
 
-    path is preferred on modern Raspberry Pi OS (Bookworm+). The `drm-rs` crate works with the Pi's
-    DRM device. Dumb buffers are sufficient for terminal rendering; the Pi 4/5's memory bandwidth
-    handles 1080p easily.
+   path is preferred on modern Raspberry Pi OS (Bookworm+). The `drm-rs` crate works with the Pi's
+   DRM device. Dumb buffers are sufficient for terminal rendering; the Pi 4/5's memory bandwidth
+   handles 1080p easily.
 
 ### 10. Trade-offs vs X11/Wayland
 

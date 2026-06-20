@@ -1,6 +1,6 @@
 # ADR 005: Animated Cast Recording for Test Documentation
 
-### Status:**Draft**Date:**2026-06-17**Parent
+## Status:**Draft**Date:**2026-06-17**Parent
 
 [ADR 004: E2E and Screenshot Testing Strategy](004-testing-strategy.md)
 
@@ -32,7 +32,7 @@ signal stable enough to assert on. The cast answers "what did it look like and h
 
 asciinema v2 is JSON Lines:
 
-```json
+````json
 {"version": 2, "width": 60, "height": 15, "title": "crossterm_demo"}
 [0.000, "o", "\u001b[?1049h\u001b[2J..."]
 [0.183, "o", "\u001b[5;7H@"]
@@ -62,7 +62,7 @@ fn write_cast(path: &Path, rows: u16, cols: u16, title: &str, chunks: &[(Duratio
     // header
     // one line per chunk: [elapsed.as_secs_f64(), "o", base64-or-escaped bytes]
 }
-```
+````
 
 The test calls this alongside the existing SVG write, depositing
 `tests/snapshots/crossterm_demo.cast` in the same directory.
@@ -103,7 +103,7 @@ play one back locally installs it themselves.
 
 ### 5. `.gitattributes`
 
-```text
+````text
 tests/snapshots/*.cast linguist-generated
 tests/snapshots/*.gif  linguist-generated
 ```rust
@@ -224,3 +224,4 @@ brittle in CI and produce unreadable binary diffs.
 **Record with `script` (BSD/macOS built-in).** `script` produces a timing file + raw bytes in a
 non-standard format. asciinema v2 is better supported, has a wider tooling ecosystem, and the format
 is human-readable.
+````

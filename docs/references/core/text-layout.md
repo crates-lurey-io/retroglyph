@@ -17,7 +17,8 @@ those spans within bounded rectangles.
 
 BearLibTerminal's `print` function processes inline tags within the string being printed. Tags are
 enclosed in square brackets and modify rendering state for subsequent characters. All tag effects
-are **local to a single `print` call**and automatically reset when the call returns.**Supported tags:**
+are **local to a single `print` call**and automatically reset when the call returns.**Supported
+tags:**
 
 - `[color=red]` / `[bkcolor=gray]` — set foreground/background color. Color names are parsed by
 
@@ -150,7 +151,8 @@ ratatui avoids inline markup entirely in favor of a typed hierarchy:
 
   styles), and an optional `alignment: Option<Alignment>`.
 
-- **`Text`**— multiple lines: `Vec<Line>`. Also has a `style` and `alignment`.**Key design properties:**
+- **`Text`**— multiple lines: `Vec<Line>`. Also has a `style` and `alignment`.**Key design
+  properties:**
 
 - `Span::width()` returns the Unicode display width (via `unicode-width` crate).
 - `Line::width()` sums the widths of all contained spans.
@@ -190,7 +192,7 @@ Two primary algorithms are used:
 and all the roguelike libraries above. Places as many words on the current line as possible, then
 wraps to the next line. Pseudocode:
 
-```text
+````text
 SpaceLeft := LineWidth
 for each Word in Text
     if (Width(Word) + SpaceWidth) > SpaceLeft
@@ -301,7 +303,7 @@ struct LineMetrics {
     width: u16,
     span_count: usize,
 }
-```
+````
 
 ### 8. Rich Text Parsing and Tag Tokenization
 
@@ -327,7 +329,7 @@ Tokens fall into categories:
 8. **SetOffset(x, y)** — set pixel offset.
 9. **ResetOffset**— clear pixel offset.**State machine approach:**
 
-```yaml
+````yaml
 NORMAL: read char
   '[' -> check next:
     '[' -> emit Text('[')        // escaped bracket
@@ -503,7 +505,7 @@ fn parse_tag<'a>(content: &'a str) -> Option<Token<'a>> {
 
     None
 }
-```
+````
 
 #### Styled Span (intermediate representation)
 
@@ -800,12 +802,12 @@ pub fn layout(
 
 1. **Consider a builder API** alongside tag parsing for programmatic use:
 
-    ```rust
-    Text::new()
-        .fg(Color::RED).write("Warning: ")
-        .reset().write("this is important")
-        .build()
-    ```
+   ```rust
+   Text::new()
+       .fg(Color::RED).write("Warning: ")
+       .reset().write("this is important")
+       .build()
+   ```
 
 ## Sources
 

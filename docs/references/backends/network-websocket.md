@@ -16,7 +16,7 @@ zstd, and the client applies patches to a mirrored buffer.
 
 The core architecture is a thin-server/thin-client model:
 
-```text
+````text
 Server                          Network              Client (Browser)
 +-----------------------+       WebSocket        +---------------------+
 | Game loop             |                        | Mirror buffer       |
@@ -549,3 +549,4 @@ before sending. On the client, decompress with the JavaScript `zstd-codec` libra
 
    servers were not deeply researched. ttyd's approach (basic auth, origin checking) is a starting
    point.
+````

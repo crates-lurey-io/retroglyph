@@ -654,9 +654,9 @@ async fn multiplayer_game_loop(
 
 ### The core insight
 
-Turn-based and real-time games differ only in **when updates happen**and**when rendering
-happens**, not in _what_ the library provides. A well-designed library should provide primitives,
-not prescribe a loop.
+Turn-based and real-time games differ only in **when updates happen**and**when rendering happens**,
+not in _what_ the library provides. A well-designed library should provide primitives, not prescribe
+a loop.
 
 ### Architecture: building blocks approach
 

@@ -198,7 +198,7 @@ EGC. The key insight from notcurses:
 
 xterm.js packs cell content into a single 32-bit integer (`content` field in `CellData`):
 
-```text
+````text
 Bits 1-21:   Codepoint (UTF-32, max 0x10FFFF)
 Bit 22:      IS_COMBINED flag
 Bits 23-24:  wcwidth value (0, 1, or 2)
@@ -233,7 +233,7 @@ pub struct CellExtra {
     underline_color: Option<Color>,
     hyperlink: Option<Hyperlink>,
 }
-```
+````
 
 Key design choices:
 
@@ -351,7 +351,7 @@ this wrong. ([terminfo.dev](https://terminfo.dev/text/variation-selector-16-emoj
 
 Zero Width Joiner (U+200D) connects multiple emoji into a single glyph:
 
-```text
+````text
 👨‍👩‍👧‍👦 = 👨 + ZWJ + 👩 + ZWJ + 👧 + ZWJ + 👦
 U+1F468 U+200D U+1F469 U+200D U+1F467 U+200D U+1F466
 ```text
@@ -408,7 +408,7 @@ fn layout_string(s: &str) -> Vec<(&str, usize)> {
         .map(|g| (g, grapheme_width(g)))
         .collect()
 }
-```
+````
 
 ### The fundamental problem
 
@@ -504,7 +504,7 @@ the most fundamental layout challenge after basic character placement.
 
 A wide character occupies two adjacent cells in the same row:
 
-```yaml
+````yaml
 Column:  0   1   2   3   4
 Content: [H] [ ] [e] [l] [l]
          ^^^ ^^^
@@ -617,7 +617,7 @@ impl Grid {
         };
     }
 }
-```
+````
 
 ---
 
@@ -1024,12 +1024,15 @@ pub fn truncate_to_width(s: &str, max_width: usize) -> (&str, usize) {
 
    without heap allocation.
 
-3. **Wide chars use primary + spacer cells.** Mark both with flags.3. **Handle the overwrite invariant.** Writing to any cell that is part of a wide character must   clear the other half.
-4. **Normalize to NFC on input.** Reduces storage and simplifies comparison.2. **Use string-level width from unicode-width v0.2.** Character-level width is insufficient for
-   emoji sequences.
+3. **Wide chars use primary + spacer cells.** Mark both with flags.3. **Handle the overwrite
+   invariant.** Writing to any cell that is part of a wide character must clear the other half.
+4. **Normalize to NFC on input.** Reduces storage and simplifies comparison.2. **Use string-level
+   width from unicode-width v0.2.** Character-level width is insufficient for emoji sequences.
 
-5. **Cap EGC length.** Defend against adversarial combining mark stacking.2. **Defer BiDi.** Store logical order; implement BiDi reordering as a display-layer concern.
-6. **Accept width disagreement.** No solution exists for perfect width agreement across all   terminals. Match the most common behavior and offer configuration.## Sources
+5. **Cap EGC length.** Defend against adversarial combining mark stacking.2. **Defer BiDi.** Store
+   logical order; implement BiDi reordering as a display-layer concern.
+6. **Accept width disagreement.** No solution exists for perfect width agreement across all
+   terminals. Match the most common behavior and offer configuration.## Sources
 
 - [unicode-segmentation crate](https://docs.rs/unicode-segmentation) - UAX #29 implementation
 - [unicode-width crate](https://docs.rs/unicode-width) - UAX #11 implementation with emoji sequence

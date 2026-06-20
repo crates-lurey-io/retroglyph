@@ -825,7 +825,6 @@ jobs:
   bench:
     runs-on: ubuntu-latest
     steps:
-
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
 
@@ -880,12 +879,10 @@ jobs:
       BENCHER_PROJECT: my-terminal
       BENCHER_API_TOKEN: ${{ secrets.BENCHER_API_TOKEN }}
     steps:
-
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: bencherdev/bencher@main
       - run: bencher run "cargo bench --bench grid_bench"
-
 ```
 
 Bencher provides:

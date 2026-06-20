@@ -338,8 +338,8 @@ input, unlock when the turn is done.
 
 1. **No UI primitives** - No built-in support for menus, message logs, health bars, or inventory
 
-    screens. Everything beyond the grid display must be built from scratch or done with DOM elements
-    alongside the canvas.
+   screens. Everything beyond the grid display must be built from scratch or done with DOM elements
+   alongside the canvas.
 
 ## API Design Notes
 

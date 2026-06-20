@@ -80,243 +80,244 @@ idiomatic for the Rust ecosystem.
 
 1. **Rendering loop for an 80x50 grid:**
 
-    ```text
-    canvas.clear();
-    for each cell (x, y):
-        // Draw background
-        canvas.set_draw_color(cell.bg);
-        canvas.fill_rect(dst_rect(x, y));
-        // Draw glyph
-        atlas_texture.set_color_mod(cell.fg.r, cell.fg.g, cell.fg.b);
-        canvas.copy(&atlas_texture, glyph_src_rect, dst_rect(x, y));
-    canvas.present();
-    ```rust
+   ````text
+   canvas.clear();
+   for each cell (x, y):
+       // Draw background
+       canvas.set_draw_color(cell.bg);
+       canvas.fill_rect(dst_rect(x, y));
+       // Draw glyph
+       atlas_texture.set_color_mod(cell.fg.r, cell.fg.g, cell.fg.b);
+       canvas.copy(&atlas_texture, glyph_src_rect, dst_rect(x, y));
+   canvas.present();
+   ```rust
 
-    This issues 4000 draw calls for an 80x50 grid. SDL batches these internally (SDL2 added render
-    batching in 2.0.10), so the actual GPU command count is much lower.
+   This issues 4000 draw calls for an 80x50 grid. SDL batches these internally (SDL2 added render
+   batching in 2.0.10), so the actual GPU command count is much lower.
+
+   ````
 
 1. **Color modulation via `texture.set_color_mod(r, g, b)` and `set_alpha_mod(a)`** allows tinting
 
-    a white-on-transparent glyph atlas with arbitrary foreground colors without needing separate
-    textures per color. This is the standard approach for colored text in SDL 2D games.
+   a white-on-transparent glyph atlas with arbitrary foreground colors without needing separate
+   textures per color. This is the standard approach for colored text in SDL 2D games.
 
 1. **Performance considerations:** SDL_Renderer is not a GPU draw-call powerhouse. For an 80x50
 
-    grid (4000 cells), it is more than adequate. For very large grids (200x100+), the per-cell
-    `canvas.copy()` loop may become a bottleneck. Mitigation: render-to-texture caching (only
-    re-render dirty cells to a cached texture), or batch changed cells. SDL_Renderer internally
-    batches sequential copy calls with the same texture, so the atlas approach naturally benefits
-    from batching.
+   grid (4000 cells), it is more than adequate. For very large grids (200x100+), the per-cell
+   `canvas.copy()` loop may become a bottleneck. Mitigation: render-to-texture caching (only
+   re-render dirty cells to a cached texture), or batch changed cells. SDL_Renderer internally
+   batches sequential copy calls with the same texture, so the atlas approach naturally benefits
+   from batching.
 
 ### 4. SDL Event/Input System vs winit
 
 1. **SDL event model is a polled queue.** You call `event_pump.poll_iter()` in your main loop to
 
-    drain events. The `Event` enum has 51 variants covering keyboard, mouse, window, joystick,
-    gamepad, touch, drop, audio device, and custom user events. Events carry a `timestamp` and
-    relevant fields inline (no trait-based dispatch).
-    [docs.rs/sdl2/latest/sdl2/event/enum.Event](https://docs.rs/sdl2/latest/sdl2/event/enum.Event.html)
+   drain events. The `Event` enum has 51 variants covering keyboard, mouse, window, joystick,
+   gamepad, touch, drop, audio device, and custom user events. Events carry a `timestamp` and
+   relevant fields inline (no trait-based dispatch).
+   [docs.rs/sdl2/latest/sdl2/event/enum.Event](https://docs.rs/sdl2/latest/sdl2/event/enum.Event.html)
 
 1. **SDL has built-in gamepad/joystick support** with the GameController API (SDL2) / Gamepad API
 
-    (SDL3). This includes a database of known controller mappings, rumble, LED control, touchpad,
-    and sensor support. winit has no gamepad support at all; you need a separate crate like `gilrs`.
-    SDL3 expanded this with cap-sense, Steam Deck integration, and more.
+   (SDL3). This includes a database of known controller mappings, rumble, LED control, touchpad, and
+   sensor support. winit has no gamepad support at all; you need a separate crate like `gilrs`. SDL3
+   expanded this with cap-sense, Steam Deck integration, and more.
 
 1. **winit uses a callback/closure model** (`event_loop.run(|event, target| { ... })`) rather than
 
-    polling. This is more idiomatic for Rust's ownership model and required on some platforms
-    (macOS, iOS, web). SDL's polling model is simpler to reason about but requires the user to
-    manage the main loop manually.
+   polling. This is more idiomatic for Rust's ownership model and required on some platforms (macOS,
+   iOS, web). SDL's polling model is simpler to reason about but requires the user to manage the
+   main loop manually.
 
 1. **Key differences for a terminal grid library:**
-    - SDL: `Keycode` + `Scancode` + `Mod` in `KeyDown`/`KeyUp`, plus separate `TextInput` events for
+   - SDL: `Keycode` + `Scancode` + `Mod` in `KeyDown`/`KeyUp`, plus separate `TextInput` events for
 
-      Unicode text. Gamepad events are first-class.
+     Unicode text. Gamepad events are first-class.
 
-    - winit: `KeyEvent` with `PhysicalKey`/`LogicalKey`, text via `text` field. No gamepad. Better
+   - winit: `KeyEvent` with `PhysicalKey`/`LogicalKey`, text via `text` field. No gamepad. Better
 
-      IME support in recent versions.
+     IME support in recent versions.
 
-    - SDL handles multiple mice/keyboards (SDL3), which winit does not.
-    - SDL provides its own clipboard, cursor, and text input management.
+   - SDL handles multiple mice/keyboards (SDL3), which winit does not.
+   - SDL provides its own clipboard, cursor, and text input management.
 
 ### 5. Font Rendering: SDL_ttf vs fontdue/cosmic-text + SDL Textures
 
 1. **SDL_ttf wraps FreeType for TrueType rendering.** With the `ttf` feature, the `sdl2` crate
 
-    exposes `Font::render_char()` and `Font::render()` which produce SDL Surfaces. These surfaces
-    are then uploaded as textures via `texture_creator.create_texture_from_surface()`. This is
-    convenient but adds FreeType as another C dependency.
-    [docs.rs/sdl2/latest/sdl2/ttf](https://docs.rs/sdl2/latest/sdl2/ttf/index.html)
+   exposes `Font::render_char()` and `Font::render()` which produce SDL Surfaces. These surfaces are
+   then uploaded as textures via `texture_creator.create_texture_from_surface()`. This is convenient
+   but adds FreeType as another C dependency.
+   [docs.rs/sdl2/latest/sdl2/ttf](https://docs.rs/sdl2/latest/sdl2/ttf/index.html)
 
 1. **Preferred approach: fontdue/cosmic-text for rasterization, SDL texture for upload.** Rasterize
 
-    glyphs in pure Rust with `fontdue` (fast, simple, no C deps) or `cosmic-text` (full shaping,
-    complex scripts). Write the resulting bitmaps into an RGBA pixel buffer, then upload to SDL via
-    `texture_creator.create_texture_streaming()` + `texture.update(None, pixels, pitch)` or by
-    creating an `SDL_Surface` from the pixel data and using `create_texture_from_surface()`.
+   glyphs in pure Rust with `fontdue` (fast, simple, no C deps) or `cosmic-text` (full shaping,
+   complex scripts). Write the resulting bitmaps into an RGBA pixel buffer, then upload to SDL via
+   `texture_creator.create_texture_streaming()` + `texture.update(None, pixels, pitch)` or by
+   creating an `SDL_Surface` from the pixel data and using `create_texture_from_surface()`.
 
 1. **Atlas construction workflow:**
 
-    ```javascript
-    // 1. Rasterize with fontdue
-    let (metrics, bitmap) = font.rasterize('A', 16.0);
-    // 2. Pack into atlas pixel buffer (bin-packing)
-    atlas_pixels[y_offset..][..row_len].copy_from_slice(&bitmap_row);
-    // 3. Upload atlas to SDL texture once
-    let tex = texture_creator.create_texture_static(format, atlas_w, atlas_h)?;
-    tex.update(None, &atlas_pixels, pitch)?;
-    // 4. Store glyph -> Rect mapping for lookup during rendering
-    ```rust
+   ````javascript
+   // 1. Rasterize with fontdue
+   let (metrics, bitmap) = font.rasterize('A', 16.0);
+   // 2. Pack into atlas pixel buffer (bin-packing)
+   atlas_pixels[y_offset..][..row_len].copy_from_slice(&bitmap_row);
+   // 3. Upload atlas to SDL texture once
+   let tex = texture_creator.create_texture_static(format, atlas_w, atlas_h)?;
+   tex.update(None, &atlas_pixels, pitch)?;
+   // 4. Store glyph -> Rect mapping for lookup during rendering
+   ```rust
 
-    This eliminates SDL_ttf/FreeType entirely, keeping the C dependency surface to just SDL itself.
+   This eliminates SDL_ttf/FreeType entirely, keeping the C dependency surface to just SDL itself.
+   ````
 
 ### 6. Advantages of SDL over winit+GPU
 
 1. **Simpler 2D API with no shader code.** SDL_Renderer provides `copy()`, `fill_rect()`, color
 
-    modulation, blend modes, and render-to-texture without writing any GLSL/WGSL. A winit+wgpu
-    backend requires vertex buffers, shader programs, pipeline state, bind groups, etc.
+   modulation, blend modes, and render-to-texture without writing any GLSL/WGSL. A winit+wgpu
+   backend requires vertex buffers, shader programs, pipeline state, bind groups, etc.
 
 1. **Built-in gamepad/joystick/controller support.** For a roguelike-focused library, controller
 
-    input matters. SDL's gamepad database and hotplug support are industry-standard. winit has zero
-    gamepad support.
+   input matters. SDL's gamepad database and hotplug support are industry-standard. winit has zero
+   gamepad support.
 
 1. **Battle-tested in game development.** SDL is used by hundreds of commercial games and has been
 
-    iterated for 25+ years. Edge cases around fullscreen, multi-monitor, resolution changes, and
-    input handling are well-covered. BearLibTerminal itself was originally built on SDL (for
-    windowing, though it used OpenGL for rendering).
+   iterated for 25+ years. Edge cases around fullscreen, multi-monitor, resolution changes, and
+   input handling are well-covered. BearLibTerminal itself was originally built on SDL (for
+   windowing, though it used OpenGL for rendering).
 
 1. **Audio and other multimedia.** If the library or downstream users want sound effects, SDL_mixer
 
-    is right there. This doesn't directly relate to grid rendering but adds value for game-dev
-    users.
+   is right there. This doesn't directly relate to grid rendering but adds value for game-dev users.
 
 1. **`bundled` feature on the sdl2 crate** compiles SDL from source, making deployment a
 
-    `cargo build` with no external dependency hunting. This significantly reduces the "C dependency
-    pain" for end users.
+   `cargo build` with no external dependency hunting. This significantly reduces the "C dependency
+   pain" for end users.
 
 ### 7. Disadvantages of SDL
 
 1. **C dependency and FFI boundary.** Even with `bundled`, SDL is a C library. Texture lifetimes in
 
-    the `sdl2` crate use complex lifetime annotations (or require `unsafe-textures` opt-in). Error
-    handling comes as string messages from C, not structured Rust errors. Debug builds can be harder
-    when stepping across FFI.
+   the `sdl2` crate use complex lifetime annotations (or require `unsafe-textures` opt-in). Error
+   handling comes as string messages from C, not structured Rust errors. Debug builds can be harder
+   when stepping across FFI.
 
 1. **Less idiomatic Rust.** SDL's API was designed for C. The Rust wrappers are good but feel
 
-    different from native Rust libraries. The `Canvas` / `TextureCreator` / `Texture` lifetime dance
-    is a common pain point. State is held in opaque C structs.
+   different from native Rust libraries. The `Canvas` / `TextureCreator` / `Texture` lifetime dance
+   is a common pain point. State is held in opaque C structs.
 
 1. **Duplicate functionality with winit.** If the project already has a winit backend, SDL
 
-    duplicates window management, event handling, and (partially) input. Users can't mix SDL windows
-    with winit windows. Having both backends means maintaining two parallel platform abstraction
-    layers.
+   duplicates window management, event handling, and (partially) input. Users can't mix SDL windows
+   with winit windows. Having both backends means maintaining two parallel platform abstraction
+   layers.
 
 1. **Ecosystem friction.** Most modern Rust game/graphics projects use winit+wgpu (or winit+glow).
 
-    Crates like `egui`, `bevy`, `pixels`, and `softbuffer` all target winit. Using SDL means the
-    library can't trivially interop with these ecosystems (though `raw-window-handle` support
-    helps).
+   Crates like `egui`, `bevy`, `pixels`, and `softbuffer` all target winit. Using SDL means the
+   library can't trivially interop with these ecosystems (though `raw-window-handle` support helps).
 
 1. **Single-threaded rendering constraint.** `SDL_Renderer` is not designed for multi-threaded use.
 
-    All rendering must happen on the main thread. This is also true for most graphics APIs, but SDL
-    makes it explicit and enforced.
+   All rendering must happen on the main thread. This is also true for most graphics APIs, but SDL
+   makes it explicit and enforced.
 
 ### 8. How bracket-lib's SDL Support Worked
 
 1. **bracket-lib never had a direct SDL backend.** Its backends are: OpenGL (via glutin/winit,
 
-    default), WebGL (for wasm32), wgpu (via winit), crossterm (terminal), and curses
-    (ncurses/pdcurses). The HAL module (`bracket-terminal/src/hal/`) selects at compile time via
-    feature flags. There is no SDL feature flag.
-    [github.com/amethyst/bracket-lib](https://github.com/amethyst/bracket-lib)
+   default), WebGL (for wasm32), wgpu (via winit), crossterm (terminal), and curses
+   (ncurses/pdcurses). The HAL module (`bracket-terminal/src/hal/`) selects at compile time via
+   feature flags. There is no SDL feature flag.
+   [github.com/amethyst/bracket-lib](https://github.com/amethyst/bracket-lib)
 
 1. **bracket-lib's OpenGL backend is the closest analog.** It uses winit for windowing + OpenGL
 
-    (via the `gl` crate) for rendering. It creates a texture atlas from tilesets, uploads to GL
-    textures, and draws quads per cell, similar to what an SDL backend would do but with raw GL
-    calls. This is architecturally what an SDL backend would replace: swap winit for SDL's window
-    management and swap raw GL for SDL_Renderer.
+   (via the `gl` crate) for rendering. It creates a texture atlas from tilesets, uploads to GL
+   textures, and draws quads per cell, similar to what an SDL backend would do but with raw GL
+   calls. This is architecturally what an SDL backend would replace: swap winit for SDL's window
+   management and swap raw GL for SDL_Renderer.
 
 1. **The lesson from bracket-lib:** The atlas-based grid rendering pattern is portable across
 
-    backends. The core logic (cell grid state, dirty tracking, atlas packing) stays the same. Only
-    the "upload texture" and "blit rect" primitives change between backends.
+   backends. The core logic (cell grid state, dirty tracking, atlas packing) stays the same. Only
+   the "upload texture" and "blit rect" primitives change between backends.
 
 ### 9. Cross-Platform Story
 
 1. **SDL officially supports:** Windows, macOS, Linux, iOS, Android. Community/vendor ports exist
 
-    for Nintendo Switch, PlayStation, Xbox (via official SDL ports under NDA), Haiku, FreeBSD, and
-    others. This is broader than winit, which supports Windows, macOS, Linux, iOS, Android, and web
-    (via wasm).
+   for Nintendo Switch, PlayStation, Xbox (via official SDL ports under NDA), Haiku, FreeBSD, and
+   others. This is broader than winit, which supports Windows, macOS, Linux, iOS, Android, and web
+   (via wasm).
 
 1. **Console (Nintendo/PlayStation/Xbox) support** is a key differentiator. SDL has official ports
 
-    maintained under platform NDA. winit has no console support. For a roguelike library aiming at
-    indie game release on consoles, SDL is the path.
+   maintained under platform NDA. winit has no console support. For a roguelike library aiming at
+   indie game release on consoles, SDL is the path.
 
 1. **Web support:** SDL3 has Emscripten support for compiling to WebAssembly. The `sdl2` Rust crate
 
-    also supports wasm32 targets via Emscripten. However, winit's native web support (via
-    `web-sys`/`wasm-bindgen` without Emscripten) is more ergonomic for pure-Rust web deployment.
+   also supports wasm32 targets via Emscripten. However, winit's native web support (via
+   `web-sys`/`wasm-bindgen` without Emscripten) is more ergonomic for pure-Rust web deployment.
 
 1. **Mobile:** Both SDL and winit support iOS and Android. SDL's mobile support is more mature and
 
-    battle-tested in shipped games. SDL handles the Android/iOS lifecycle (app background/foreground
-    events) natively.
+   battle-tested in shipped games. SDL handles the Android/iOS lifecycle (app background/foreground
+   events) natively.
 
 ### 10. Trade-offs vs winit+softbuffer and winit+wgpu
 
 1. **SDL vs winit+softbuffer:**
-    - softbuffer is CPU-only rendering to a window surface. Zero GPU acceleration.
-    - SDL_Renderer is GPU-accelerated. For a static 80x50 grid, softbuffer is fine. For animations,
+   - softbuffer is CPU-only rendering to a window surface. Zero GPU acceleration.
+   - SDL_Renderer is GPU-accelerated. For a static 80x50 grid, softbuffer is fine. For animations,
 
-      effects, smooth scrolling, or large grids, SDL wins on performance.
+     effects, smooth scrolling, or large grids, SDL wins on performance.
 
-    - softbuffer is pure Rust, zero C deps, tiny binary impact. SDL adds ~1-3MB.
-    - softbuffer requires you to manage your own pixel buffer and font rasterization. SDL_Renderer
+   - softbuffer is pure Rust, zero C deps, tiny binary impact. SDL adds ~1-3MB.
+   - softbuffer requires you to manage your own pixel buffer and font rasterization. SDL_Renderer
 
-      gives you texture management and blitting primitives.
+     gives you texture management and blitting primitives.
 
-    - Verdict: SDL is strictly more capable for 2D grid rendering. softbuffer is simpler and lighter
+   - Verdict: SDL is strictly more capable for 2D grid rendering. softbuffer is simpler and lighter
 
-      if GPU acceleration isn't needed.
+     if GPU acceleration isn't needed.
 
 1. **SDL vs winit+wgpu:**
-    - wgpu gives full GPU pipeline control. You can do instanced rendering (one draw call for 4000
+   - wgpu gives full GPU pipeline control. You can do instanced rendering (one draw call for 4000
 
-      cells), custom shaders for effects, compute shaders for advanced processing.
+     cells), custom shaders for effects, compute shaders for advanced processing.
 
-    - SDL_Renderer is limited to its fixed-function 2D API. No custom shaders (in SDL2; SDL3 adds a
+   - SDL_Renderer is limited to its fixed-function 2D API. No custom shaders (in SDL2; SDL3 adds a
 
-      GPU API but the Rust bindings don't wrap it yet).
+     GPU API but the Rust bindings don't wrap it yet).
 
-    - wgpu is pure Rust (Rust-native implementation). SDL is C with Rust bindings.
-    - wgpu + winit is the modern Rust ecosystem standard. More community support, more examples,
+   - wgpu is pure Rust (Rust-native implementation). SDL is C with Rust bindings.
+   - wgpu + winit is the modern Rust ecosystem standard. More community support, more examples,
 
-      better tooling integration.
+     better tooling integration.
 
-    - wgpu has a steeper learning curve. SDL_Renderer can be productive in minutes.
-    - Verdict: wgpu is more powerful and more Rust-native. SDL is faster to implement, simpler to
+   - wgpu has a steeper learning curve. SDL_Renderer can be productive in minutes.
+   - Verdict: wgpu is more powerful and more Rust-native. SDL is faster to implement, simpler to
 
-      maintain, and has gamepad support. For a terminal grid library where the rendering is
-      inherently simple (blit rectangles), SDL's simplicity is a genuine advantage.
+     maintain, and has gamepad support. For a terminal grid library where the rendering is
+     inherently simple (blit rectangles), SDL's simplicity is a genuine advantage.
 
 1. **Hybrid approach (SDL for windowing/input, wgpu/GL for rendering):** The `sdl2` crate supports
 
-    `raw-window-handle`, meaning you can use SDL for window creation, event handling, and gamepad
-    input, but render with wgpu or raw OpenGL. This gives you SDL's input advantages without being
-    limited to SDL_Renderer's 2D API. BearLibTerminal itself did something similar: SDL for
-    windowing, OpenGL for rendering.
+   `raw-window-handle`, meaning you can use SDL for window creation, event handling, and gamepad
+   input, but render with wgpu or raw OpenGL. This gives you SDL's input advantages without being
+   limited to SDL_Renderer's 2D API. BearLibTerminal itself did something similar: SDL for
+   windowing, OpenGL for rendering.
 
 ## Sources
 

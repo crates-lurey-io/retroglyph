@@ -16,7 +16,7 @@ criteria so that an implementing agent can follow it mechanically.
 
 ## Dependency graph
 
-```yaml
+````yaml
 M11: Crossterm Skeleton
  └─► M12: Terminal Setup, Teardown & Panic Hook
       └─► M13: Rendering & Color Mapping
@@ -211,3 +211,4 @@ screen without flickering.
 - [ ] The player can move the `@` around seamlessly.
 - [ ] There is no visual flickering (proving double buffering and synchronized output are working).
 - [ ] Exiting the game restores the terminal perfectly.
+````

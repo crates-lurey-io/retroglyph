@@ -442,7 +442,8 @@ preference):
    (e.g., `Ascii` instead of `u8`).
 
 1. **Dynamic enforcement**: validate at runtime, returning `Result`/`Option` or panicking.
-1. **`debug_assert!`**: dynamic checks that can be disabled in release builds.3. **Opt-out** (`_unchecked` variants or `raw` submodules): for performance-critical paths where the
+1. **`debug_assert!`**: dynamic checks that can be disabled in release builds.3. **Opt-out**
+   (`_unchecked` variants or `raw` submodules): for performance-critical paths where the
 
    caller guarantees validity.
 

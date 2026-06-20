@@ -34,7 +34,7 @@ These refine and extend ADR 001:
 
 ## Dependency graph
 
-```rust
+````rust
 M0: Skeleton
  └─► M1: Color, CellModifier, Style
       └─► M2: Cell
@@ -109,7 +109,7 @@ must_use_candidate = "allow"
 module_name_repetitions = "allow"
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
-```
+````
 
 ### src/lib.rs
 
@@ -406,7 +406,7 @@ impl Grid {
 One line per row. Each cell's character printed. Default/space cells shown as `·` (middle dot) for
 visibility.
 
-```text
+````text
 @·········
 ··········
 ··HP: 100·
@@ -478,7 +478,7 @@ pub struct MouseEvent {
 
 pub enum MouseEventKind { Down(MouseButton), Up(MouseButton), Moved, ScrollUp, ScrollDown }
 pub enum MouseButton { Left, Right, Middle }
-```
+````
 
 `KeyModifiers` is a manual bitflag (same pattern as `CellModifier`). Implement `BitOr`,
 `BitOrAssign`, `contains()`, `is_empty()`, `Debug`.
@@ -801,6 +801,7 @@ Same logic, but asserts instead of printing:
 1. **MSRV verification** — `cargo +1.85 check`.
 
 1. **Tag** — create v0.1.0 tag.
+
 ### Acceptance criteria (11)
 
 - [ ] `cargo doc --no-deps` builds with zero warnings
@@ -832,7 +833,8 @@ Same logic, but asserts instead of printing:
 | M9        | Example + E2E tests                           | Medium          |
 | M10       | Polish + tag v0.1.0                           | Low             |
 
-**Critical path:**M0 → M1 → M2 → M3 → M4 → M6 → M7 → M8 → M9 → M10**Parallel opportunity:** M5 can run alongside M1-M4.
+**Critical path:**M0 → M1 → M2 → M3 → M4 → M6 → M7 → M8 → M9 → M10**Parallel opportunity:** M5 can
+run alongside M1-M4.
 
 ## Consequences
 

@@ -44,7 +44,7 @@ with `<div role="listitem">` elements mirroring each visible terminal row. This 
 positioned over the actual canvas renderer but is only visible to assistive technologies. Key
 implementation details from xterm.js `AccessibilityManager.ts`:
 
-```text
+````text
 // Creates accessible row elements mirroring visible terminal content
 _rowContainer.setAttribute('role', 'list');
 element.setAttribute('role', 'listitem');
@@ -107,7 +107,7 @@ for row_idx in 0..rows {
     }
     root.push_child(row_id);
 }
-```
+````
 
 [Source: AccessKit GitHub](https://github.com/AccessKit/accesskit)
 [Source: AccessKit docs.rs](https://docs.rs/accesskit/latest/accesskit/)
@@ -131,7 +131,7 @@ WCAG 2.1 defines two levels of contrast compliance:
 
 The WCAG contrast ratio formula:
 
-```text
+````text
 contrast_ratio = (L1 + 0.05) / (L2 + 0.05)
 ```text
 
@@ -180,7 +180,7 @@ fn meets_aa(fg: Srgb<f32>, bg: Srgb<f32>) -> bool {
 fn meets_aaa(fg: Srgb<f32>, bg: Srgb<f32>) -> bool {
     contrast_ratio(fg, bg) >= 7.0
 }
-```
+````
 
 The `palette` crate also has a (deprecated) `RelativeContrast` trait and `contrast_ratio` function.
 For new code, compute luminance via `LinSrgb` conversion as shown above. The crate's type system
@@ -462,7 +462,8 @@ protanopia (collectively "red-green color blindness") affect ~8% of males.
 
 1. **Safe color palette strategy**: Use colors that remain distinguishable under all three
 
-   deficiency types. The key is varying **luminance**and**blue-yellow**axis rather than only**red-green**.
+   deficiency types. The key is varying **luminance**and**blue-yellow**axis rather than
+   only**red-green**.
 
 1. **Recommended palette foundations** (colorblind-safe):
    - **Okabe-Ito palette**: Specifically designed for color vision deficiency.
@@ -617,6 +618,7 @@ a capability-based approach:
   - Detect terminal background color and choose appropriate foreground colors.
   - Support theme switching.
   - Avoid color combinations that are illegible on both light and dark backgrounds.
+
 - If your library renders to a window (native/web), you are responsible for querying OS
 
   accessibility settings directly.

@@ -58,7 +58,7 @@ from Rust.
 Use a Cargo workspace with separate crates for core logic, C FFI, Python bindings, and WASM
 bindings. This keeps concerns separated and allows independent versioning.
 
-```text
+````text
 rg/
 ├── Cargo.toml                    # Workspace root
 ├── crates/
@@ -109,7 +109,7 @@ repository = "https://github.com/you/rg"
 
 [workspace.dependencies]
 rg-core = { path = "crates/rg-core" }
-```
+````
 
 ---
 
@@ -746,7 +746,8 @@ include = [
 ### Manual GitHub Releases (without cargo-dist)
 
 If cargo-dist does not fit your needs (e.g., you need to distribute shared libraries rather than
-executables), use a custom workflow. See [Section 10](10-cicd-for-multi-platform-releases) for the full CI config.
+executables), use a custom workflow. See [Section 10](10-cicd-for-multi-platform-releases) for the
+full CI config.
 
 [Source: cargo-dist GitHub](https://github.com/axodotdev/cargo-dist)
 
@@ -946,7 +947,6 @@ jobs:
     strategy:
       matrix:
         include:
-
           - os: ubuntu-latest
 
             target: x86_64-unknown-linux-gnu
@@ -988,7 +988,6 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-
       - uses: actions/checkout@v4
 
       - name: Install Rust
@@ -1035,7 +1034,6 @@ jobs:
     strategy:
       matrix:
         include:
-
           - os: ubuntu-latest
 
             target: x86_64
@@ -1061,7 +1059,6 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
@@ -1088,7 +1085,6 @@ jobs:
   build-wasm:
     runs-on: ubuntu-latest
     steps:
-
       - uses: actions/checkout@v4
 
       - name: Install Rust
@@ -1119,7 +1115,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-
       - uses: actions/checkout@v4
 
       - uses: actions/download-artifact@v4
@@ -1198,7 +1193,6 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo test --workspace
@@ -1207,7 +1201,6 @@ jobs:
   check-header:
     runs-on: ubuntu-latest
     steps:
-
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo build -p rg-ffi
@@ -1219,7 +1212,6 @@ jobs:
   test-python:
     runs-on: ubuntu-latest
     steps:
-
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
 
@@ -1238,7 +1230,6 @@ jobs:
   test-wasm:
     runs-on: ubuntu-latest
     steps:
-
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
 
@@ -1252,7 +1243,6 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
 
@@ -1261,7 +1251,6 @@ jobs:
 
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
-
 ```
 
 ---

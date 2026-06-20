@@ -382,7 +382,8 @@ Alacritty uses three logical threads, confirmed by source analysis:
    writes the parsed output into the terminal state. Uses `std::sync::mpsc` channel to receive
    `Msg::Input`, `Msg::Resize`, `Msg::Shutdown` from the main thread.
 
-1. **Config monitor thread:**Watches config files for changes, sends reload events.**Shared state:** The terminal (`Term<T>`) is wrapped in `Arc<FairMutex<Term<T>>>`. Both the main
+1. **Config monitor thread:**Watches config files for changes, sends reload events.**Shared state:**
+   The terminal (`Term<T>`) is wrapped in `Arc<FairMutex<Term<T>>>`. Both the main
 
 thread (for rendering/input) and the PTY reader thread (for writing parsed output) access it through
 this mutex.
@@ -460,7 +461,7 @@ either the lock becomes available or the buffer fills up (1 MB).
 
 ### Communication flow
 
-```text
+````text
 Input events (keyboard/mouse)
     -> main thread handles them
     -> sends Msg::Input(bytes) via mpsc channel to PTY thread
@@ -542,7 +543,7 @@ impl AtomicCell {
         self.flags.store(cell.flags.bits(), Ordering::Release);
     }
 }
-```
+````
 
 ### Problems
 

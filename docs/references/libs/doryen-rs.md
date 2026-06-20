@@ -75,39 +75,39 @@ support. The project has 291 GitHub stars, 7 forks, and its last commit was Octo
 
 1. **WASM support** - Compiles to `wasm32-unknown-unknown` via wasm-pack. The `uni-gl` and
 
-    `uni-app` crates abstract over native OpenGL and WebGL. Each example includes
-    `#[wasm_bindgen(start)]` boilerplate. The author hosts live WASM demos at
-    `jice-nospam.github.io/doryen-rs/docs/`.
-    [README](https://github.com/jice-nospam/doryen-rs/blob/master/README.md)
+   `uni-app` crates abstract over native OpenGL and WebGL. Each example includes
+   `#[wasm_bindgen(start)]` boilerplate. The author hosts live WASM demos at
+   `jice-nospam.github.io/doryen-rs/docs/`.
+   [README](https://github.com/jice-nospam/doryen-rs/blob/master/README.md)
 
 1. **Image blitting** - PNG images can be blitted to console backgrounds at 1:1 or 2x subcell
 
-    resolution. `blit_ex()` supports rotation (radians) and scaling with transparency key color.
-    Image loading is async-compatible (for WASM), requiring explicit `try_load()` checks.
-    [img.rs](https://github.com/jice-nospam/doryen-rs/blob/master/src/img.rs)
+   resolution. `blit_ex()` supports rotation (radians) and scaling with transparency key color.
+   Image loading is async-compatible (for WASM), requiring explicit `try_load()` checks.
+   [img.rs](https://github.com/jice-nospam/doryen-rs/blob/master/src/img.rs)
 
 1. **Companion crate: doryen-fov** - Separate crate for 2D field-of-view algorithms. Used in
 
-    dev-dependencies of the examples. 409 SLoC, 9,480 all-time downloads. Also by jice.
-    [crates.io/doryen-fov](https://crates.io/crates/doryen-fov)
+   dev-dependencies of the examples. 409 SLoC, 9,480 all-time downloads. Also by jice.
+   [crates.io/doryen-fov](https://crates.io/crates/doryen-fov)
 
 1. **Examples and demos** - Ships with 10 examples: basic (walking @), perf test, fonts, unicode,
 
-    console blitting, image blitting, subcell resolution, transparent consoles, text input, and a
-    visual demo with dynamic lighting + real-time movement. The perf test fills every cell with
-    random values each frame (randomized ASCII, fg, bg) to stress the renderer.
-    [examples](https://github.com/jice-nospam/doryen-rs/tree/master/examples)
+   console blitting, image blitting, subcell resolution, transparent consoles, text input, and a
+   visual demo with dynamic lighting + real-time movement. The perf test fills every cell with
+   random values each frame (randomized ASCII, fg, bg) to stress the renderer.
+   [examples](https://github.com/jice-nospam/doryen-rs/tree/master/examples)
 
 1. **No known games shipped with it** - No notable games or tools found built with doryen-rs. The
 
-    demos serve as the primary showcases. The author's own game "Chronicles of Doryen" appears in
-    subcell documentation screenshots but is not publicly released as a doryen-rs project.
-    bracket-lib (by Herbert Wolverson) has absorbed most of the Rust roguelike community instead.
+   demos serve as the primary showcases. The author's own game "Chronicles of Doryen" appears in
+   subcell documentation screenshots but is not publicly released as a doryen-rs project.
+   bracket-lib (by Herbert Wolverson) has absorbed most of the Rust roguelike community instead.
 
 1. **Development activity** - Created June 2018. Latest release: v1.4.0 (unreleased on crates.io;
 
-    v1.3.0 released Oct 2022). Last commit: Oct 2023. 5 open issues. The project is effectively in
-    maintenance/dormant mode. [GitHub API](https://api.github.com/repos/jice-nospam/doryen-rs)
+   v1.3.0 released Oct 2022). Last commit: Oct 2023. 5 open issues. The project is effectively in
+   maintenance/dormant mode. [GitHub API](https://api.github.com/repos/jice-nospam/doryen-rs)
 
 ## Strengths
 

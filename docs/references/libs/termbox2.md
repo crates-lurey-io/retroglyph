@@ -243,7 +243,7 @@ layering, no tile stacking, no offsets.
 offset. Cells exist across multiple layers. Tiles can be larger than one cell. Composition
 (alpha-blending multiple tiles) is a first-class feature.
 
-```yaml
+````yaml
 termbox2:     cell -> (char, fg, bg)
 BearLibTerminal: cell -> [layer0: [tile, tile, ...], layer1: [tile, ...], ...]
 ```text
@@ -380,3 +380,4 @@ tiles." Both are right for their domain.
 - [PR #65: tb_get_cell](https://github.com/termbox/termbox2/pull/65) - front buffer read access for
 
   compositing workarounds
+````
