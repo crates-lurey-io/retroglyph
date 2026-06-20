@@ -64,6 +64,16 @@ pub trait Backend {
     /// Poll for an input event, waiting up to `timeout`.
     fn poll_event(&mut self, timeout: Duration) -> Option<Event>;
 
+    /// Returns `false` if the backend has been disconnected from its
+    /// output (e.g. the window was closed). The game loop should
+    /// terminate when this returns `false`.
+    ///
+    /// The default implementation always returns `true`. Override for
+    /// backends that can detect disconnect.
+    fn is_connected(&self) -> bool {
+        true
+    }
+
     /// Show or hide the cursor.
     fn set_cursor_visible(&mut self, visible: bool);
 

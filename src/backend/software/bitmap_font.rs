@@ -5,6 +5,14 @@
 //! For the standard 8-pixel-wide VGA format one byte covers all 8 pixels of a
 //! row; wider fonts would need two bytes per row, but that is not yet
 //! supported.
+//!
+//! # Future work
+//!
+//! - **Expanded glyph cache:** For wider fonts (>8px), consider pre-computing
+//!   expanded scanlines to avoid per-frame bit extraction. Currently the bit
+//!   extraction loop is not a bottleneck for 8px-wide fonts at typical grid
+//!   sizes, but wider fonts (10px, 16px) would benefit from caching.
+//!   See ADR 012 (metrics) and ADR 011 (future optimization notes).
 
 // ── BitmapFont ─────────────────────────────────────────────────────────────
 

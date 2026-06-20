@@ -10,8 +10,11 @@ while remaining highly portable, we require a graphical backend.
 
 As researched in `docs/references/backends/software-window.md`, a pure software rendering backend
 (CPU-based) provides significant advantages over GPU backends for terminal grids: no complex shader
-dependencies, flawless headless operation (e.g. `Xvfb`), zero GPU driver issues, and trivial
-WebAssembly portability.
+dependencies, flawless headless operation (e.g. `Xvfb`), and zero GPU driver issues.
+
+**WASM Portability:** The current threading model (`std::thread::spawn` + blocking event loop) is
+not WASM-compatible. See [ADR 011](011-wasm-portability.md) for a detailed roadmap and the
+architectural changes required for WASM support.
 
 ## Decisions & Rust API Guidelines
 

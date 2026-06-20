@@ -35,9 +35,10 @@ use grixy::buf::GridBuf;
 use grixy::ops::GridWrite;
 use grixy::ops::layout::RowMajor;
 #[cfg(feature = "software-tilesets")]
-use sprite_cache::{Sprite, SpriteCache, source_over};
+use sprite_cache::{Sprite, SpriteCache};
 use std::num::NonZeroU32;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::time::Duration;
 use winit::application::ApplicationHandler;
@@ -72,6 +73,7 @@ struct RenderContext {
     event_rx: mpsc::Receiver<Event>,
     frame_tx: mpsc::SyncSender<Vec<u32>>,
     pixel_buf: GridBuf<u32, Vec<u32>, RowMajor>,
+    alive: Arc<AtomicBool>,
 }
 
 impl SoftwareRenderer {
@@ -90,6 +92,7 @@ impl SoftwareRenderer {
                 event_rx,
                 frame_tx,
                 pixel_buf: GridBuf::from_buffer(vec![0u32; buf_w * buf_h], buf_w),
+                alive: Arc::new(AtomicBool::new(true)),
             },
             #[cfg(feature = "software-tilesets")]
             sprite_cache,
@@ -201,6 +204,9 @@ impl SoftwareBackend {
             let mut terminal = crate::Terminal::new(renderer);
             loop {
                 app_loop(&mut terminal);
+                if !terminal.backend().is_connected() {
+                    break;
+                }
             }
         });
 
@@ -347,6 +353,7 @@ impl Backend for SoftwareRenderer {
         let cell_w = usize::from(font.glyph_width) * scale;
         let cell_h = usize::from(font.glyph_height) * scale;
         let buf_w = usize::from(cols) * cell_w;
+        #[cfg(feature = "software-tilesets")]
         let buf_h = self.ctx.pixel_buf.as_ref().len() / buf_w;
 
         #[cfg(feature = "software-tilesets")]
@@ -394,7 +401,20 @@ impl Backend for SoftwareRenderer {
 
     fn flush(&mut self) {
         let buf: Vec<u32> = self.ctx.pixel_buf.as_ref().to_vec();
-        let _ = self.ctx.frame_tx.try_send(buf);
+        match self.ctx.frame_tx.try_send(buf) {
+            Err(mpsc::TrySendError::Disconnected(_)) => {
+                self.ctx.alive.store(false, Ordering::Release);
+            }
+            Err(mpsc::TrySendError::Full(_)) => {
+                // TODO: Track frame drops via a shared metrics system
+                // once designed (see ADR 012: Backend Metrics).
+            }
+            Ok(()) => {}
+        }
+    }
+
+    fn is_connected(&self) -> bool {
+        self.ctx.alive.load(Ordering::Acquire)
     }
 
     fn size(&self) -> Size {
@@ -592,8 +612,8 @@ fn blit_glyph(
 ///
 /// Pixels outside `buffer` bounds are silently clipped.
 ///
-/// Uses the `alpha-blend` crate's Porter-Duff `SourceOver` operator via
-/// floating-point conversion for correctness.
+/// Blending uses pure integer `U8x4Rgba::source_over`. Fully opaque pixels
+/// (alpha == 255) skip blending entirely and write directly to the buffer.
 #[cfg(feature = "software-tilesets")]
 #[allow(
     clippy::cast_possible_truncation,
@@ -632,6 +652,34 @@ fn blit_sprite(
                 continue;
             }
 
+            // Fast path: fully opaque pixels write directly, no blending.
+            // Most roguelike sprites are opaque, so this skips U8x4Rgba
+            // construction + source_over for the common case.
+            let rgb = u32::from(src.r) << 16 | u32::from(src.g) << 8 | u32::from(src.b);
+            if src.alpha() == 255 {
+                for dy in 0..scale {
+                    #[allow(clippy::cast_sign_loss)]
+                    let dst_y = origin_y + (src_y * scale + dy) as i64;
+                    if dst_y < 0 || dst_y as usize >= buf_h {
+                        continue;
+                    }
+                    let dst_y = dst_y as usize;
+                    for dx in 0..scale {
+                        #[allow(clippy::cast_sign_loss)]
+                        let dst_x = origin_x + (src_x * scale + dx) as i64;
+                        if dst_x < 0 || dst_x as usize >= buf_w {
+                            continue;
+                        }
+                        let dst_x = dst_x as usize;
+                        let dst_idx = dst_y * buf_w + dst_x;
+                        if dst_idx < buffer.len() {
+                            buffer[dst_idx] = rgb;
+                        }
+                    }
+                }
+                continue;
+            }
+
             // Each source pixel maps to `scale x scale` destination pixels.
             for dy in 0..scale {
                 #[allow(clippy::cast_sign_loss)]
@@ -655,7 +703,7 @@ fn blit_sprite(
                     }
 
                     let dst = U8x4Rgba::from_rgb_u32(buffer[dst_idx]);
-                    let blended = source_over(src, dst);
+                    let blended = src.source_over(dst);
                     buffer[dst_idx] = blended.to_rgb_u32();
                 }
             }
