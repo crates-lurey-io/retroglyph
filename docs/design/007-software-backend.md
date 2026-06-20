@@ -73,14 +73,14 @@ impl fmt::Display for SoftwareBackendError {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SoftwareBackendOptions {
+pub struct SoftwareBackend {
     pub window_title: String,
     pub cell_width: u16,
     pub cell_height: u16,
     pub font_bytes: Vec<u8>,
 }
 
-impl Default for SoftwareBackendOptions {
+impl Default for SoftwareBackend {
     fn default() -> Self {
         Self {
             window_title: String::from("rg application"),
@@ -93,11 +93,11 @@ impl Default for SoftwareBackendOptions {
 
 // C-BUILDER implementation
 pub struct SoftwareBackendBuilder {
-    options: SoftwareBackendOptions,
+    options: SoftwareBackend,
 }
 
 impl SoftwareBackendBuilder {
-    pub fn new() -> Self { Self { options: SoftwareBackendOptions::default() } }
+    pub fn new() -> Self { Self { options: SoftwareBackend::default() } }
     pub fn title(mut self, title: &str) -> Self { self.options.window_title = title.to_string(); self }
     pub fn cell_size(mut self, width: u16, height: u16) -> Self {
         self.options.cell_width = width;
@@ -116,14 +116,14 @@ thread, the backend must execute the loop.
 
 ```rust
 pub struct SoftwareBackend {
-    options: SoftwareBackendOptions,
+    options: SoftwareBackend,
     // Note: We cannot hold the window and surface directly here if we want
     // the user to call `terminal.draw()` on a background thread.
     // Instead, we store the config and initialize the window inside a `run` method.
 }
 
 impl SoftwareBackend {
-    fn new(options: SoftwareBackendOptions) -> Result<Self, SoftwareBackendError> {
+    fn new(options: SoftwareBackend) -> Result<Self, SoftwareBackendError> {
         Ok(Self { options })
     }
 

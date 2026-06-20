@@ -1,4 +1,12 @@
-//! Configuration, error, and builder types for the software rendering backend.
+//! Configuration, builder, and error types for the software rendering backend.
+//!
+//! The main type is [`SoftwareBackend`], which holds window and font
+//! configuration.  Construct it via [`SoftwareBackendBuilder`], then call
+//! [`run`](SoftwareBackend::run) (windowed) or
+//! [`run_headless`](SoftwareBackend::run_headless) (headless).
+//!
+//! Both methods produce a [`SoftwareRenderer`](super::SoftwareRenderer)
+//! that implements [`Backend`](crate::backend::Backend).
 
 use super::bitmap_font::BitmapFont;
 use std::fmt;
@@ -43,9 +51,80 @@ impl std::error::Error for SoftwareBackendError {
     }
 }
 
-/// Configuration for the software rendering backend.
+/// Configuration and entry point for the software rendering backend.
+///
+/// Construct this via [`SoftwareBackendBuilder`], then call either
+/// [`run`](SoftwareBackend::run) to open a window or
+/// [`run_headless`](SoftwareBackend::run_headless) for headless in-memory
+/// rendering.
+///
+/// Both methods return or run a [`SoftwareRenderer`](super::SoftwareRenderer)
+/// that implements [`Backend`](crate::backend::Backend).
+///
+/// # Examples
+///
+/// Windowed mode (requires `software-default-font` feature):
+///
+/// ```ignore
+/// use rg::backend::software::SoftwareBackendBuilder;
+/// use rg::event::{Event, KeyCode};
+/// use std::time::Duration;
+///
+/// let backend = SoftwareBackendBuilder::new()
+///     .title("My Game")
+///     .grid_size(80, 25)
+///     .scale(2)
+///     .build()
+///     .expect("backend init failed");
+///
+/// backend.run(move |term| {
+///     term.clear();
+///     term.print(0, 0, "Hello from rg!");
+///     term.present();
+///
+///     if let Some(event) = term.poll(Duration::from_millis(16)) {
+///         match event {
+///             Event::Key(k) if k.code == KeyCode::Escape => std::process::exit(0),
+///             Event::Close => std::process::exit(0),
+///             _ => {}
+///         }
+///     }
+/// }).expect("event loop failed");
+/// ```
+///
+/// Headless mode (useful for testing):
+///
+/// ```ignore
+/// use rg::backend::software::{SoftwareBackendBuilder, SoftwareRenderer};
+/// use rg::style::Style;
+/// use rg::grid::Pos;
+/// use rg::Color;
+///
+/// let opts = SoftwareBackendBuilder::new()
+///     .grid_size(1, 1)
+///     .scale(1)
+///     .build()
+///     .unwrap();
+///
+/// let mut renderer: SoftwareRenderer = opts.run_headless();
+///
+/// // Draw a red cell on layer 0.
+/// use rg::tile::Tile;
+/// renderer.draw_layers(
+///     [(0, Pos::new(0, 0), &Tile {
+///         glyph: ' ',
+///         style: Style::new().bg(Color::Rgb { r: 255, g: 0, b: 0 }),
+///         ..Tile::default()
+///     })].into_iter(),
+/// );
+///
+/// let pixels = renderer.pixels();
+/// assert!(pixels.iter().all(|&p| p == 0x00FF_0000));
+/// ```
+///
+/// See the `software_demo` example for a complete runnable program.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SoftwareBackendOptions {
+pub struct SoftwareBackend {
     /// Title shown in the window's title bar.
     pub window_title: String,
     /// Bitmap font used to render glyphs.
@@ -64,7 +143,7 @@ pub struct SoftwareBackendOptions {
     pub scale: u8,
 }
 
-impl Default for SoftwareBackendOptions {
+impl Default for SoftwareBackend {
     fn default() -> Self {
         Self {
             window_title: String::from("rg application"),
@@ -79,7 +158,7 @@ impl Default for SoftwareBackendOptions {
     }
 }
 
-/// Builder for [`super::SoftwareBackend`].
+/// Builder for [`SoftwareBackend`].
 ///
 /// # Examples
 ///
@@ -100,7 +179,7 @@ impl Default for SoftwareBackendOptions {
 ///     .expect("backend init failed");
 /// ```
 pub struct SoftwareBackendBuilder {
-    options: SoftwareBackendOptions,
+    options: SoftwareBackend,
 }
 
 impl SoftwareBackendBuilder {
@@ -111,7 +190,7 @@ impl SoftwareBackendBuilder {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            options: SoftwareBackendOptions::default(),
+            options: SoftwareBackend::default(),
         }
     }
 
@@ -153,15 +232,19 @@ impl SoftwareBackendBuilder {
 
     /// Validates options and returns the backend configuration.
     ///
-    /// Call [`SoftwareBackend::run`](super::SoftwareBackend::run) on the
-    /// result to open the window.
+    /// Call [`run`](SoftwareBackend::run) on the result to open the window,
+    /// or [`run_headless`](SoftwareBackend::run_headless) for headless
+    /// rendering.
     ///
     /// # Errors
     ///
     /// Returns [`SoftwareBackendError::NoFont`] if no font was set and the
     /// `software-default-font` feature is not enabled.
-    pub fn build(self) -> Result<super::SoftwareBackend, SoftwareBackendError> {
-        super::SoftwareBackend::new(self.options)
+    pub fn build(self) -> Result<SoftwareBackend, SoftwareBackendError> {
+        if self.options.font.is_none() {
+            return Err(SoftwareBackendError::NoFont);
+        }
+        Ok(self.options)
     }
 }
 

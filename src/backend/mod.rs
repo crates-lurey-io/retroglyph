@@ -10,7 +10,7 @@ pub mod software;
 pub use crossterm::Crossterm;
 pub use headless::Headless;
 #[cfg(feature = "software")]
-pub use software::SoftwareBackend;
+pub use software::{SoftwareBackend, SoftwareRenderer};
 
 use crate::tile::Tile;
 use crate::event::Event;
@@ -51,7 +51,7 @@ pub trait Backend {
 
     /// Notify the backend of a terminal resize.
     ///
-    /// Called automatically by [`Terminal::resize`] after both grids are resized.
+    /// Called automatically by [`crate::Terminal::resize`] after both grids are resized.
     /// Backends that maintain internal state tied to terminal dimensions (such as
     /// [`Headless`]) should override this to update that state. The default
     /// implementation is a no-op.

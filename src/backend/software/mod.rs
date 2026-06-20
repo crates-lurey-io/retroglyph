@@ -1,27 +1,32 @@
 //! Software rendering backend: winit window + softbuffer pixel blitting.
 //!
-//! # Threading model
+//! # Architecture
 //!
-//! `winit` requires the main thread on macOS.  [`SoftwareBackend::run`] takes
-//! over the main thread to drive the `winit` event loop and spawns the
-//! caller's game loop on a background thread.
+//! [`SoftwareBackend`] is a pure-config type (font, grid size, scale). It does
+//! **not** implement [`Backend`] directly.  Call [`run`](SoftwareBackend::run)
+//! to open a window and spawn the game loop on a background thread, or
+//! [`run_headless`](SoftwareBackend::run_headless) to obtain a
+//! [`SoftwareRenderer`] that renders into memory without a window.
 //!
-//! Two `std::sync::mpsc` channels bridge the threads:
-//! - **event channel** (main → game): translated [`Event`]s.
-//! - **frame channel** (game → main): rendered `Vec<u32>` pixel buffers.
+//! [`SoftwareRenderer`] implements [`Backend`] and always has an active
+//! rendering context — no `Option`, no runtime panics from missing state.
 
 pub mod bitmap_font;
 pub mod config;
 
 pub use bitmap_font::BitmapFont;
-pub use config::{SoftwareBackendBuilder, SoftwareBackendError, SoftwareBackendOptions};
+pub use config::{SoftwareBackend, SoftwareBackendBuilder, SoftwareBackendError};
 
 use crate::backend::Backend;
-use crate::tile::Tile;
 use crate::color::{AnsiColor, Color};
 use crate::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use crate::grid::{Pos, Size};
+use crate::tile::Tile;
+use crate::style::CellModifier;
 use bitmap_font::BitmapFont as Font;
+use grixy::buf::GridBuf;
+use grixy::ops::layout::RowMajor;
+use grixy::ops::GridWrite;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 use std::sync::mpsc;
@@ -31,52 +36,109 @@ use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::{Window, WindowId};
 
-// ── Public backend type ────────────────────────────────────────────────────────
+// ── Public types ──────────────────────────────────────────────────────────────
 
-/// Software rendering backend.
+/// The running half of the software backend.
 ///
-/// Create via [`SoftwareBackendBuilder`], then call [`run`](Self::run) to open
-/// a window.  The closure you pass to `run` receives a `Terminal<SoftwareBackend>`
-/// on a background thread.
-pub struct SoftwareBackend {
-    options: SoftwareBackendOptions,
-    /// Populated only after the game thread is spawned inside `run()`.
-    inner: Option<GameInner>,
+/// A running software renderer, produced by [`SoftwareBackend::run`] or
+/// [`SoftwareBackend::run_headless`].
+///
+/// Unlike [`SoftwareBackend`] (which is just configuration), this type
+/// always has an active rendering context — its pixel buffer is always
+/// available.  The `ctx` field is never `None`, so [`Backend`] methods never
+/// panic for missing initialisation.
+///
+/// Call [`pixels`](Self::pixels) to inspect the rendered output, or use
+/// [`Backend::draw`] and
+/// [`Backend::draw_layers`] to render
+/// into it.
+pub struct SoftwareRenderer {
+    options: SoftwareBackend,
+    ctx: RenderContext,
 }
 
-struct GameInner {
+struct RenderContext {
     event_rx: mpsc::Receiver<Event>,
     frame_tx: mpsc::SyncSender<Vec<u32>>,
-    /// Pixel buffer (0x00RRGGBB), updated by `draw()` and sent on `flush()`.
-    pixel_buf: Vec<u32>,
+    pixel_buf: GridBuf<u32, Vec<u32>, RowMajor>,
 }
 
-impl SoftwareBackend {
-    /// Validates `options` and returns a configuration-mode backend.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`SoftwareBackendError::NoFont`] when no font is set.
-    pub(crate) fn new(options: SoftwareBackendOptions) -> Result<Self, SoftwareBackendError> {
-        if options.font.is_none() {
-            return Err(SoftwareBackendError::NoFont);
-        }
-        Ok(Self {
+impl SoftwareRenderer {
+    /// Creates a new renderer with the given channels and buffer dimensions.
+    pub(crate) fn create(
+        options: SoftwareBackend,
+        event_rx: mpsc::Receiver<Event>,
+        frame_tx: mpsc::SyncSender<Vec<u32>>,
+        buf_w: usize,
+        buf_h: usize,
+    ) -> Self {
+        Self {
             options,
-            inner: None,
-        })
+            ctx: RenderContext {
+                event_rx,
+                frame_tx,
+                pixel_buf: GridBuf::from_buffer(vec![0u32; buf_w * buf_h], buf_w),
+            },
+        }
     }
 
-    /// Consumes the backend configuration and takes over the main thread.
+    /// Returns a slice of the rendered pixel buffer (`0x00RRGGBB` format).
     ///
-    /// Spawns `app_loop` on a background thread with a `Terminal<SoftwareBackend>`.
-    /// Blocks the calling (main) thread inside the `winit` event loop until the
+    /// The buffer length is `cols * (glyph_width * scale) * rows * (glyph_height * scale)`.
+    /// Each `u32` is a packed RGB pixel with the top byte unused.
+    ///
+    /// This is always available — there is no `Option` wrapper because
+    /// `SoftwareRenderer` is guaranteed to have an active rendering context.
+    #[must_use]
+    pub fn pixels(&self) -> &[u32] {
+        self.ctx.pixel_buf.as_ref()
+    }
+}
+
+// ── Run (windowed) ────────────────────────────────────────────────────────────
+
+impl SoftwareBackend {
+    /// Opens a window and runs the game loop.
+    ///
+    /// Consumes this config; spawns `app_loop` on a background thread with a
+    /// [`Terminal`](crate::Terminal) wrapping a [`SoftwareRenderer`].  Blocks
+    /// the calling (main) thread inside the `winit` event loop until the
     /// window is closed.
+    ///
+    /// The closure receives `&mut Terminal<SoftwareRenderer>` and is called
+    /// on every tick.  Return from the closure to continue; the loop only
+    /// stops when the window is closed.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use rg::backend::software::SoftwareBackendBuilder;
+    /// use rg::event::{Event, KeyCode};
+    /// use std::time::Duration;
+    ///
+    /// SoftwareBackendBuilder::new()
+    ///     .title("Demo")
+    ///     .grid_size(80, 25)
+    ///     .scale(2)
+    ///     .build()
+    ///     .unwrap()
+    ///     .run(|term| {
+    ///         term.clear();
+    ///         term.print(0, 0, "Hello");
+    ///         term.present();
+    ///
+    ///         if let Some(event) = term.poll(Duration::from_millis(16)) {
+    ///             if let Event::Key(k) = event {
+    ///                 if k.code == KeyCode::Escape { std::process::exit(0); }
+    ///             }
+    ///         }
+    ///     })
+    ///     .expect("event loop failed");
+    /// ```
     ///
     /// # Panics
     ///
-    /// Panics if the font was not set (this is checked during construction via
-    /// [`SoftwareBackendBuilder::build`]).
+    /// Panics if `font` is `None`.
     ///
     /// # Errors
     ///
@@ -84,34 +146,31 @@ impl SoftwareBackend {
     /// start.
     pub fn run<F>(self, app_loop: F) -> Result<(), SoftwareBackendError>
     where
-        F: FnMut(&mut crate::Terminal<Self>) + Send + 'static,
+        F: FnMut(&mut crate::Terminal<SoftwareRenderer>) + Send + 'static,
     {
-        let opts = self.options;
-        // Validated by new().
-        let font = opts.font.expect("font was None despite new() validation");
+        let font = self.font.as_ref().expect(
+            "run() requires a font; supply one via SoftwareBackendBuilder::font()",
+        );
 
-        let cell_w = u32::from(font.glyph_width) * u32::from(opts.scale);
-        let cell_h = u32::from(font.glyph_height) * u32::from(opts.scale);
-        let win_w = u32::from(opts.cols) * cell_w;
-        let win_h = u32::from(opts.rows) * cell_h;
+        let cell_w = u32::from(font.glyph_width) * u32::from(self.scale);
+        let cell_h = u32::from(font.glyph_height) * u32::from(self.scale);
+        let win_w = u32::from(self.cols) * cell_w;
+        let win_h = u32::from(self.rows) * cell_h;
 
         let (event_tx, event_rx) = mpsc::channel::<Event>();
-        // Capacity 1: if the window thread hasn't consumed the last frame yet
-        // we skip the new one rather than accumulating unbounded memory.
         let (frame_tx, frame_rx) = mpsc::sync_channel::<Vec<u32>>(1);
 
-        let game_backend = Self {
-            options: opts.clone(),
-            inner: Some(GameInner {
-                event_rx,
-                frame_tx,
-                pixel_buf: vec![0u32; win_w as usize * win_h as usize],
-            }),
-        };
+        let renderer = SoftwareRenderer::create(
+            self.clone(),
+            event_rx,
+            frame_tx,
+            win_w as usize,
+            win_h as usize,
+        );
 
         let mut app_loop = app_loop;
         std::thread::spawn(move || {
-            let mut terminal = crate::Terminal::new(game_backend);
+            let mut terminal = crate::Terminal::new(renderer);
             loop {
                 app_loop(&mut terminal);
             }
@@ -119,7 +178,7 @@ impl SoftwareBackend {
 
         let event_loop = EventLoop::new().map_err(SoftwareBackendError::EventLoop)?;
         let mut window_app = WindowApp {
-            title: opts.window_title,
+            title: self.window_title,
             event_tx,
             frame_rx,
             last_frame: Vec::new(),
@@ -136,34 +195,83 @@ impl SoftwareBackend {
             .run_app(&mut window_app)
             .map_err(SoftwareBackendError::EventLoop)
     }
+
+    /// Creates a headless renderer that renders into an internal buffer
+    /// without opening a window.
+    ///
+    /// Unlike [`run`](Self::run), this does not block — it returns a
+    /// [`SoftwareRenderer`] immediately.  The renderer's pixel buffer can be
+    /// inspected via [`SoftwareRenderer::pixels`].  Flushing is a no-op
+    /// (the buffer stays in memory).
+    ///
+    /// This is primarily useful for testing pixel-level output without
+    /// needing a window or event loop.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use rg::backend::software::SoftwareBackendBuilder;
+    /// use rg::tile::Tile;
+    /// use rg::style::Style;
+    /// use rg::grid::Pos;
+    /// use rg::Color;
+    ///
+    /// let mut renderer = SoftwareBackendBuilder::new()
+    ///     .grid_size(1, 1)
+    ///     .scale(1)
+    ///     .build()
+    ///     .unwrap()
+    ///     .run_headless();
+    ///
+    /// // Render a red cell on layer 0.
+    /// let tile = Tile {
+    ///     glyph: ' ',
+    ///     style: Style::new().bg(Color::Rgb { r: 255, g: 0, b: 0 }),
+    ///     ..Tile::default()
+    /// };
+    /// renderer.draw_layers([(0, Pos::new(0, 0), &tile)].into_iter());
+    ///
+    /// assert!(renderer.pixels().iter().all(|&p| p == 0x00FF_0000));
+    /// ```
+    ///
+    /// # Panics
+    ///
+    /// Panics if `font` is `None`.
+    #[must_use]
+    pub fn run_headless(self) -> SoftwareRenderer {
+        let font = self.font.as_ref().expect(
+            "run_headless() requires a font; supply one via SoftwareBackendBuilder::font()",
+        );
+
+        let cell_w = usize::from(font.glyph_width) * usize::from(self.scale);
+        let cell_h = usize::from(font.glyph_height) * usize::from(self.scale);
+        let buf_w = usize::from(self.cols) * cell_w;
+        let buf_h = usize::from(self.rows) * cell_h;
+
+        let (_event_tx, event_rx) = mpsc::channel();
+        let (frame_tx, _frame_rx) = mpsc::sync_channel(1);
+
+        SoftwareRenderer::create(self, event_rx, frame_tx, buf_w, buf_h)
+    }
 }
 
-// ── Backend impl (game thread) ─────────────────────────────────────────────────
+// ── Backend impl (game / headless thread) ─────────────────────────────────────
 
-impl Backend for SoftwareBackend {
+impl Backend for SoftwareRenderer {
     fn draw<'a, I>(&mut self, content: I)
     where
         I: Iterator<Item = (Pos, &'a Tile)>,
     {
-        let font = self
-            .options
-            .font
-            .as_ref()
-            .expect("draw called outside game thread");
+        let font = self.options.font.as_ref().unwrap();
         let scale = usize::from(self.options.scale);
         let cols = self.options.cols;
         let glyph_w = usize::from(font.glyph_width) * scale;
         let glyph_h = usize::from(font.glyph_height) * scale;
         let buf_w = usize::from(cols) * glyph_w;
 
-        let inner = self
-            .inner
-            .as_mut()
-            .expect("draw called outside game thread");
-
         for (pos, cell) in content {
             blit_cell(
-                &mut inner.pixel_buf,
+                self.ctx.pixel_buf.as_mut(),
                 buf_w,
                 pos,
                 cell,
@@ -175,14 +283,44 @@ impl Backend for SoftwareBackend {
         }
     }
 
+    fn draw_layers<'a, I>(&mut self, content: I)
+    where
+        I: Iterator<Item = (u8, Pos, &'a Tile)>,
+    {
+        let font = self.options.font.as_ref().unwrap();
+        let scale = usize::from(self.options.scale);
+        let cols = self.options.cols;
+        let cell_w = usize::from(font.glyph_width) * scale;
+        let cell_h = usize::from(font.glyph_height) * scale;
+        let buf_w = usize::from(cols) * cell_w;
+
+        for (layer_id, pos, tile) in content {
+            let px_x = usize::from(pos.x) * cell_w;
+            let px_y = usize::from(pos.y) * cell_h;
+
+            if layer_id == 0 {
+                let bg = resolve_bg_color(tile.style.bg);
+                let rect = ixy::Rect::new(px_x, px_y, cell_w, cell_h);
+                self.ctx.pixel_buf.fill_rect_solid(rect, bg);
+            }
+
+            blit_glyph(
+                self.ctx.pixel_buf.as_mut(),
+                buf_w,
+                px_x,
+                px_y,
+                tile,
+                font,
+                cell_w,
+                cell_h,
+                scale,
+            );
+        }
+    }
+
     fn flush(&mut self) {
-        let inner = self
-            .inner
-            .as_ref()
-            .expect("flush called outside game thread");
-        // Drop the frame silently if the window thread hasn't consumed the
-        // previous one yet.
-        let _ = inner.frame_tx.try_send(inner.pixel_buf.clone());
+        let buf: Vec<u32> = self.ctx.pixel_buf.as_ref().to_vec();
+        let _ = self.ctx.frame_tx.try_send(buf);
     }
 
     fn size(&self) -> Size {
@@ -195,36 +333,23 @@ impl Backend for SoftwareBackend {
     fn resize(&mut self, size: Size) {
         self.options.cols = size.width;
         self.options.rows = size.height;
-        if let Some(inner) = &mut self.inner {
-            let font = self
-                .options
-                .font
-                .as_ref()
-                .expect("font missing despite new() validation");
-            let cell_w = usize::from(font.glyph_width) * usize::from(self.options.scale);
-            let cell_h = usize::from(font.glyph_height) * usize::from(self.options.scale);
-            let new_len =
-                usize::from(size.width) * cell_w * usize::from(size.height) * cell_h;
-            inner.pixel_buf.resize(new_len, 0);
-            inner.pixel_buf.fill(0);
-        }
+        let font = self.options.font.as_ref().unwrap();
+        let cell_w = usize::from(font.glyph_width) * usize::from(self.options.scale);
+        let cell_h = usize::from(font.glyph_height) * usize::from(self.options.scale);
+        let new_w = usize::from(size.width) * cell_w;
+        let new_h = usize::from(size.height) * cell_h;
+        self.ctx.pixel_buf.resize(new_w, new_h);
     }
 
     fn clear(&mut self) {
-        if let Some(inner) = &mut self.inner {
-            inner.pixel_buf.fill(0);
-        }
+        self.ctx.pixel_buf.clear();
     }
 
     fn poll_event(&mut self, timeout: Duration) -> Option<Event> {
-        let inner = self
-            .inner
-            .as_ref()
-            .expect("poll_event called outside game thread");
         if timeout == Duration::ZERO {
-            inner.event_rx.try_recv().ok()
+            self.ctx.event_rx.try_recv().ok()
         } else {
-            inner.event_rx.recv_timeout(timeout).ok()
+            self.ctx.event_rx.recv_timeout(timeout).ok()
         }
     }
 
@@ -264,7 +389,7 @@ fn blit_cell(
     if cell
         .style()
         .modifiers()
-        .contains(crate::style::CellModifier::REVERSE)
+        .contains(CellModifier::REVERSE)
     {
         core::mem::swap(&mut fg, &mut bg);
     }
@@ -278,7 +403,6 @@ fn blit_cell(
             let bit = (mask >> (src_w - 1 - src_x)) & 1;
             let pixel = if bit != 0 { fg } else { bg };
 
-            // Render each source pixel as a scale×scale block.
             for dy in 0..scale {
                 let y = px_y + src_y * scale + dy;
                 if y >= px_y + cell_h {
@@ -298,7 +422,7 @@ fn blit_cell(
         }
     }
 
-    // Fill remaining horizontal strip below the glyph rows with background.
+    // Fill remaining strip below the glyph rows with background.
     let glyph_used_h = rows.len() * scale;
     for y_off in glyph_used_h..cell_h {
         let y = px_y + y_off;
@@ -306,6 +430,74 @@ fn blit_cell(
             let idx = y * buf_w + px_x + x;
             if idx < buffer.len() {
                 buffer[idx] = bg;
+            }
+        }
+    }
+}
+
+/// Blit a glyph's set bits into `buffer` at `(px_x, px_y)` plus sub-cell
+/// offset from `tile.dx`/`tile.dy`.  Only the foreground (glyph) pixels are
+/// painted — background is left untouched.
+#[allow(clippy::cast_possible_truncation, clippy::too_many_arguments)]
+fn blit_glyph(
+    buffer: &mut [u32],
+    buf_w: usize,
+    px_x: usize,
+    px_y: usize,
+    tile: &Tile,
+    font: &Font,
+    _cell_w: usize,
+    _cell_h: usize,
+    scale: usize,
+) {
+    if tile.glyph == ' ' {
+        return;
+    }
+
+    #[allow(clippy::cast_possible_wrap)]
+    let fg = if tile.style.modifiers().contains(CellModifier::REVERSE) {
+        resolve_bg_color(tile.style.bg)
+    } else {
+        resolve_fg_color(tile.style.fg)
+    };
+
+    #[allow(clippy::cast_possible_wrap)]
+    let origin_x = px_x as i64 + i64::from(tile.dx) * scale as i64;
+    #[allow(clippy::cast_possible_wrap)]
+    let origin_y = px_y as i64 + i64::from(tile.dy) * scale as i64;
+
+    let glyph_index = font.char_to_index(tile.glyph);
+    let rows = font.rows(glyph_index);
+    let src_w = usize::from(font.glyph_width);
+    let buf_h = buffer.len() / buf_w;
+
+    #[allow(
+        clippy::cast_possible_wrap,
+        clippy::cast_sign_loss,
+        clippy::similar_names
+    )]
+    for (src_y, &mask) in rows.iter().enumerate() {
+        for src_x in 0..src_w {
+            if (mask >> (src_w - 1 - src_x)) & 1 == 0 {
+                continue;
+            }
+            for sdy in 0..scale {
+                let y = origin_y + (src_y * scale + sdy) as i64;
+                if y < 0 || y as usize >= buf_h {
+                    continue;
+                }
+                let y = y as usize;
+                for sdx in 0..scale {
+                    let x = origin_x + (src_x * scale + sdx) as i64;
+                    if x < 0 || x as usize >= buf_w {
+                        continue;
+                    }
+                    let x = x as usize;
+                    let idx = y * buf_w + x;
+                    if idx < buffer.len() {
+                        buffer[idx] = fg;
+                    }
+                }
             }
         }
     }
@@ -357,7 +549,6 @@ fn indexed_to_rgb(idx: u8) -> u32 {
     if let Ok(ansi) = AnsiColor::try_from(idx) {
         return ansi_to_rgb(ansi);
     }
-    // Indices 16–231: 6×6×6 colour cube.
     if idx < 232 {
         let i = idx - 16;
         let b = i % 6;
@@ -366,7 +557,6 @@ fn indexed_to_rgb(idx: u8) -> u32 {
         let scale = |v: u8| if v == 0 { 0u32 } else { u32::from(v) * 40 + 55 };
         return (scale(r) << 16) | (scale(g) << 8) | scale(b);
     }
-    // Indices 232–255: greyscale ramp.
     let grey = u32::from(idx - 232) * 10 + 8;
     (grey << 16) | (grey << 8) | grey
 }
@@ -426,17 +616,12 @@ fn translate_key(input: winit::event::KeyEvent) -> Option<Event> {
 
 // ── winit ApplicationHandler (main thread) ────────────────────────────────────
 
-/// Main-thread state for the winit event loop.
 struct WindowApp {
     title: String,
     event_tx: mpsc::Sender<Event>,
     frame_rx: mpsc::Receiver<Vec<u32>>,
-    /// Last pixel buffer received from the game thread. Used as fallback when
-    /// `RedrawRequested` fires before a new frame is ready (e.g. right after
-    /// resize), preventing a black flash.
     last_frame: Vec<u32>,
     window: Option<Arc<Window>>,
-    /// Kept alive alongside `surface`; both borrow the same `Arc<Window>`.
     #[allow(dead_code)]
     context: Option<softbuffer::Context<Arc<Window>>>,
     surface: Option<softbuffer::Surface<Arc<Window>, Arc<Window>>>,
@@ -513,10 +698,6 @@ impl ApplicationHandler for WindowApp {
                         let _ = surface.resize(w, h);
                     }
                 }
-                #[allow(clippy::cast_possible_truncation)]
-                // Clear stale frame data so RedrawRequested doesn't blit
-                // a partially-copied old frame while the game thread is
-                // producing its first frame at the new size.
                 self.last_frame.clear();
                 #[allow(clippy::cast_possible_truncation)]
                 let _ = self.event_tx.send(Event::Resize(
@@ -532,7 +713,6 @@ impl ApplicationHandler for WindowApp {
             }
 
             WindowEvent::RedrawRequested => {
-                // Drain stale frames; keep only the latest one.
                 while let Ok(buf) = self.frame_rx.try_recv() {
                     self.last_frame = buf;
                 }
@@ -542,9 +722,6 @@ impl ApplicationHandler for WindowApp {
                         if src.len() == buffer.len() {
                             buffer.copy_from_slice(src);
                         } else {
-                            // Size mismatch: the game thread hasn't produced a
-                            // frame for the current surface dimensions yet.
-                            // Show black rather than a stride-misaligned blit.
                             buffer.fill(0);
                         }
                         let _ = buffer.present();
@@ -560,5 +737,209 @@ impl ApplicationHandler for WindowApp {
         if let Some(window) = &self.window {
             window.request_redraw();
         }
+    }
+}
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::color::Color;
+    use crate::grid::Pos;
+    use crate::style::Style;
+
+    fn test_renderer() -> SoftwareRenderer {
+        let opts = SoftwareBackend {
+            window_title: String::new(),
+            font: Some(bitmap_font::vga8x16::FONT),
+            cols: 1,
+            rows: 1,
+            scale: 1,
+        };
+        opts.run_headless()
+    }
+
+    #[test]
+    fn layer0_paints_background() {
+        let mut renderer = test_renderer();
+        let tile = Tile {
+            glyph: ' ',
+            style: Style::new().bg(Color::Rgb {
+                r: 255,
+                g: 0,
+                b: 0,
+            }),
+            ..Tile::default()
+        };
+        let diff: Vec<(u8, Pos, &Tile)> = vec![(0, Pos::new(0, 0), &tile)];
+        renderer.draw_layers(diff.into_iter());
+
+        let buf = renderer.pixels();
+        assert_eq!(buf.len(), 8 * 16);
+        assert!(buf.iter().all(|&p| p == 0x00FF_0000), "all pixels should be red");
+    }
+
+    #[test]
+    fn layer1_does_not_paint_background() {
+        let mut renderer = test_renderer();
+
+        let bg_tile = Tile {
+            glyph: ' ',
+            style: Style::new().bg(Color::Rgb {
+                r: 255,
+                g: 0,
+                b: 0,
+            }),
+            ..Tile::default()
+        };
+        renderer.draw_layers(vec![(0, Pos::new(0, 0), &bg_tile)].into_iter());
+
+        let before = renderer.pixels().to_vec();
+
+        let space_tile = Tile {
+            glyph: ' ',
+            style: Style::new().fg(Color::Rgb {
+                r: 0,
+                g: 255,
+                b: 0,
+            }),
+            ..Tile::default()
+        };
+        renderer.draw_layers(vec![(1, Pos::new(0, 0), &space_tile)].into_iter());
+
+        let after = renderer.pixels();
+        assert_eq!(&before, after);
+    }
+
+    #[test]
+    fn layer1_glyph_overwrites_layer0() {
+        let mut renderer = test_renderer();
+
+        let bg = Tile {
+            glyph: ' ',
+            style: Style::new().bg(Color::Rgb {
+                r: 10,
+                g: 10,
+                b: 10,
+            }),
+            ..Tile::default()
+        };
+        renderer.draw_layers(vec![(0, Pos::new(0, 0), &bg)].into_iter());
+
+        let fg = Tile {
+            glyph: '@',
+            style: Style::new().fg(Color::Rgb {
+                r: 0,
+                g: 255,
+                b: 0,
+            }),
+            ..Tile::default()
+        };
+        renderer.draw_layers(vec![(1, Pos::new(0, 0), &fg)].into_iter());
+
+        let buf = renderer.pixels();
+        assert!(buf.contains(&0x0000_FF00), "some pixels should be green");
+        assert!(buf.iter().all(|&p| p == 0x0000_FF00 || p == 0x000A_0A0A));
+    }
+
+    #[test]
+    fn sub_cell_offset_shifts_glyph() {
+        let mut renderer = test_renderer();
+
+        let bg = Tile {
+            glyph: ' ',
+            style: Style::new().bg(Color::Rgb {
+                r: 10,
+                g: 10,
+                b: 10,
+            }),
+            ..Tile::default()
+        };
+        renderer.draw_layers(vec![(0, Pos::new(0, 0), &bg)].into_iter());
+
+        let fg = Tile {
+            glyph: '@',
+            style: Style::new().fg(Color::Rgb {
+                r: 0,
+                g: 255,
+                b: 0,
+            }),
+            dx: 1,
+            dy: 0,
+            ..Tile::default()
+        };
+        renderer.draw_layers(vec![(1, Pos::new(0, 0), &fg)].into_iter());
+
+        let buf = renderer.pixels();
+        let has_green = |col: usize| buf.iter().enumerate().any(|(i, &p)| i % 8 == col && p == 0x0000_FF00);
+        assert!(!has_green(0), "x=0 should have no green pixels with dx=1");
+        assert!(has_green(1), "x=1 should have green pixels with dx=1");
+    }
+
+    #[test]
+    fn pixel_snapshot_render_scene() {
+        // Render a small multi-layer scene and snapshot the pixel output.
+        let opts = SoftwareBackendBuilder::new()
+            .grid_size(2, 2)
+            .scale(1)
+            .build()
+            .unwrap();
+        let mut renderer = opts.run_headless();
+
+        // Layer 0: dark background, ':' at (0,0) in dim blue, '.' at (1,0) in dim gray.
+        let bg = Tile {
+            glyph: ':',
+            style: Style::new()
+                .fg(Color::Rgb { r: 60, g: 60, b: 80 })
+                .bg(Color::Rgb { r: 20, g: 20, b: 30 }),
+            ..Tile::default()
+        };
+        let dot = Tile {
+            glyph: '.',
+            style: Style::new()
+                .fg(Color::Rgb { r: 40, g: 40, b: 50 })
+                .bg(Color::Rgb { r: 20, g: 20, b: 30 }),
+            ..Tile::default()
+        };
+        renderer.draw_layers(
+            [
+                (0, Pos::new(0, 0), &bg),
+                (0, Pos::new(1, 0), &dot),
+            ]
+            .into_iter(),
+        );
+
+        // Layer 1: '@' at (0,0) with sub-cell offset dx=1, bright green.
+        let entity = Tile {
+            glyph: '@',
+            style: Style::new()
+                .fg(Color::Rgb { r: 0, g: 255, b: 0 })
+                .bg(Color::Rgb { r: 10, g: 10, b: 10 }),
+            dx: 1,
+            dy: 0,
+            ..Tile::default()
+        };
+        renderer.draw_layers(core::iter::once((1, Pos::new(0, 0), &entity)));
+
+        // Snapshot the pixel buffer.
+        // The buffer is 2 cells wide (16px) x 2 cells tall (32px) = 512 u32s.
+        let pixels = renderer.pixels();
+        assert_eq!(pixels.len(), 2 * 8 * 2 * 16); // cols * glyph_w * rows * glyph_h
+
+        // Snapshot a debug representation: groups of 16 pixels per row (one pixel row across 2 cells).
+        let row_strs: Vec<String> = pixels
+            .chunks(16)
+            .take(32)
+            .map(|row| {
+                row.iter()
+                    .map(|p| format!("{p:08x}"))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            })
+            .collect();
+        let snapshot = row_strs.join("\n");
+
+        insta::assert_snapshot!("pixel_snapshot_render_scene", snapshot);
     }
 }

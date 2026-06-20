@@ -558,7 +558,7 @@ impl SoftwareBackendBuilder {
 }
 ```
 
-`SoftwareBackendOptions` gains a `tilesets: Vec<TilesetOptions>` field (empty by default). During
+`SoftwareBackend` gains a `tilesets: Vec<TilesetOptions>` field (empty by default). During
 `SoftwareBackend::new`, each tileset is loaded into an `Arc<SpriteCache>` shared between the game
 thread and (if needed) the window thread.
 
@@ -689,7 +689,7 @@ fn sprite_cache_custom_codepage_stops_at_table_end() {
 **Goal:** During `draw_layers`, check `SpriteCache` before falling back to `BitmapFont`. Draw
 multi-cell sprites correctly, blending each RGBA8 pixel into the buffer.
 
-**Integration point:** `SoftwareBackend` gains an `Arc<SpriteCache>` field. `GameInner` holds a
+**Integration point:** `SoftwareBackend` gains an `Arc<SpriteCache>` field. `RenderContext` holds a
 clone. During `draw_layers`, each `(layer_id, pos, &Tile)` pair is dispatched to `blit_cell` with
 `Option<&SpriteCache>`.
 
@@ -929,10 +929,10 @@ fn sprite_blit_clips_at_buffer_boundary() {
 
 ---
 
-## `SoftwareBackendOptions` Changes
+## `SoftwareBackend` Changes
 
 ```rust
-pub struct SoftwareBackendOptions {
+pub struct SoftwareBackend {
     pub window_title: String,
     pub font: Option<BitmapFont>,
     pub cols: u16,
