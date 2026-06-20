@@ -21,6 +21,8 @@ pub struct Terminal<B: Backend> {
     backend: B,
     drawing_style: Style,
     queued_event: Option<Event>,
+    /// The layer that `put`, `put_styled`, and `put_offset` write to.
+    active_layer: u8,
 }
 
 impl<B: Backend> Terminal<B> {
@@ -37,7 +39,19 @@ impl<B: Backend> Terminal<B> {
             backend,
             drawing_style: Style::default(),
             queued_event: None,
+            active_layer: 0,
         }
+    }
+
+    /// Sets the active drawing layer (0-255). Returns `&mut Self` for chaining.
+    ///
+    /// All subsequent `put`, `put_styled`, and `put_offset` calls write to this
+    /// layer until `layer()` is called again.
+    ///
+    /// `print` and `print_styled` currently target layer 0 only.
+    pub const fn layer(&mut self, layer: u8) -> &mut Self {
+        self.active_layer = layer;
+        self
     }
 
     /// Sets the foreground color for the stateful API.
@@ -93,14 +107,29 @@ impl<B: Backend> Terminal<B> {
         self.backend.resize(Size { width, height });
     }
 
-    /// Place a character at `(x, y)` with the current style.
+    /// Place a character at `(x, y)` on the active layer with the current style.
     ///
     /// If `ch` is a wide character (e.g. CJK or emoji) that occupies two columns,
     /// the adjacent cell at `(x + 1, y)` is set to a zero-width continuation
     /// marker so it is not rendered independently.
+    ///
+    /// Wide-character handling and grapheme clusters are supported on layer 0.
+    /// On layers > 0, wide characters are stored as a single tile (no spacer).
+    /// Sub-cell offsets are always visual only — use [`put_offset`](Self::put_offset)
+    /// for offset writes.
     pub fn put(&mut self, x: u16, y: u16, ch: char) {
         let style = self.drawing_style;
-        self.put_cell(x, y, ch, style);
+        #[cfg(feature = "egc")]
+        {
+            if self.active_layer == 0 {
+                let mut buf = [0u8; 4];
+                let s = ch.encode_utf8(&mut buf);
+                self.current.write_grapheme(x, y, s, style);
+                return;
+            }
+        }
+        let tile = Tile { glyph: ch, style, ..Tile::default() };
+        self.current.put_tile(self.active_layer, x, y, tile);
     }
 
     /// Returns a reference to the current grid.
@@ -125,11 +154,14 @@ impl<B: Backend> Terminal<B> {
         &mut self.backend
     }
 
-    /// Clear the entire grid (layer 0 only).
-    ///
-    /// TODO(M3): also clear layers > 0, or add `clear_layer` / `clear_all` to `Terminal`.
+    /// Clear the active layer.
     pub fn clear(&mut self) {
-        self.current.clear(0);
+        self.current.clear(self.active_layer);
+    }
+
+    /// Clear every allocated layer.
+    pub fn clear_all(&mut self) {
+        self.current.clear_all();
     }
 
     /// Clear a rectangular region.
@@ -143,11 +175,37 @@ impl<B: Backend> Terminal<B> {
         }
     }
 
-    /// Place a character with an explicit style, ignoring the current drawing state.
+    /// Place a character on the active layer with an explicit style.
     ///
     /// Wide characters are handled identically to [`put`](Self::put).
     pub fn put_styled(&mut self, x: u16, y: u16, ch: char, style: Style) {
-        self.put_cell(x, y, ch, style);
+        #[cfg(feature = "egc")]
+        {
+            if self.active_layer == 0 {
+                let mut buf = [0u8; 4];
+                let s = ch.encode_utf8(&mut buf);
+                self.current.write_grapheme(x, y, s, style);
+                return;
+            }
+        }
+        let tile = Tile { glyph: ch, style, ..Tile::default() };
+        self.current.put_tile(self.active_layer, x, y, tile);
+    }
+
+    /// Place a character at `(x, y)` with a sub-cell pixel offset `(dx, dy)`.
+    ///
+    /// Uses the current style and active layer. Sub-cell offsets are visual
+    /// only — they do not affect grid logic or hit-testing. Backends that
+    /// cannot represent pixel offsets (e.g. `CrosstermBackend`) ignore them.
+    pub fn put_offset(&mut self, x: u16, y: u16, dx: i16, dy: i16, ch: char) {
+        let tile = Tile {
+            glyph: ch,
+            style: self.drawing_style,
+            dx,
+            dy,
+            ..Tile::default()
+        };
+        self.current.put_tile(self.active_layer, x, y, tile);
     }
 
     /// Print a string starting at `(x, y)` with the current style.
@@ -206,7 +264,8 @@ impl<B: Backend> Terminal<B> {
                     if usize::from(cur_x) >= usize::from(self.current.width()) {
                         break;
                     }
-                    self.put_cell(cur_x, y, ch, span.style);
+                    let tile = Tile { glyph: ch, style: span.style, ..Tile::default() };
+                    self.current.put_tile(self.active_layer, cur_x, y, tile);
                     cur_x += w;
                 }
             }
@@ -244,17 +303,19 @@ impl<B: Backend> Terminal<B> {
     /// # Note
     /// The back buffer is **not** cleared automatically after presentation.
     /// If you want a blank frame, call `clear()` at the start of your loop.
+    /// Present the current frame.
+    ///
+    /// Diffs all layers, sends changed cells to the backend, flushes, then
+    /// swaps buffers. Backends that do not support layers receive only
+    /// layer-0 changes (see [`Backend::draw_layers`]).
+    ///
+    /// # Note
+    /// The back buffer is **not** cleared automatically after presentation.
+    /// If you want a blank frame, call `clear()` at the start of your loop.
     pub fn present(&mut self) {
         let diff = self.current.diff(&self.previous);
-        // TODO(M3): use draw_layers once it's available.
-        let filtered = diff.filter_map(|(layer, pos, tile)| {
-            if layer == 0 { Some((pos, tile)) } else { None }
-        });
-        self.backend.draw(filtered);
+        self.backend.draw_layers(diff);
         self.backend.flush();
-
-        // Swap buffers: `previous` now holds the last rendered frame,
-        // which will be the diff target for the next frame.
         core::mem::swap(&mut self.current, &mut self.previous);
     }
 
@@ -304,33 +365,7 @@ impl<B: Backend> Terminal<B> {
         }
     }
 
-    /// Places `ch` with `style` at `(x, y)`.
-    ///
-    /// When `egc` is enabled, delegates to [`Grid::write_grapheme`] which
-    /// handles wide-char invariants and EGC storage.
-    /// Without `egc`, writes a `'\0'` continuation marker for wide chars.
-    fn put_cell(&mut self, x: u16, y: u16, ch: char, style: Style) {
-        #[cfg(feature = "egc")]
-        {
-            let mut buf = [0u8; 4];
-            let s = ch.encode_utf8(&mut buf);
-            self.current.write_grapheme(x, y, s, style);
-        }
-        #[cfg(not(feature = "egc"))]
-        {
-            let w = UnicodeWidthChar::width(ch).unwrap_or(1);
-            if let Some(cell) = self.current.checked_get_mut(x, y) {
-                cell.glyph = ch;
-                cell.style = style;
-            }
-            if w == 2 {
-                if let Some(cell) = self.current.checked_get_mut(x.saturating_add(1), y) {
-                    cell.glyph = '\0';
-                    cell.style = style;
-                }
-            }
-        }
-    }
+
 
     /// String printing implementation used when `egc` is enabled.
     #[cfg(feature = "egc")]
@@ -371,7 +406,8 @@ impl<B: Backend> Terminal<B> {
             } else {
                 #[allow(clippy::cast_possible_truncation)]
                 let w = UnicodeWidthChar::width(c).unwrap_or(1) as u16;
-                self.put_cell(cur_x, cur_y, c, style);
+                let tile = Tile { glyph: c, style, ..Tile::default() };
+                self.current.put_tile(self.active_layer, cur_x, cur_y, tile);
                 cur_x += w;
                 if usize::from(cur_x) >= usize::from(self.current.width()) {
                     cur_x = x;

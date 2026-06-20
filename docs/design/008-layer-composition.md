@@ -51,7 +51,7 @@ alpha-blend = { version = "0.2", default-features = false, features = ["std"] }
    (one `Option<LayerBuf>` is `Some`, the rest are `None`). Identical to the previous design.
 
 4. **`Terminal` gains `active_layer: u8`** (default 0). No `composition` field. Existing `put`,
-   `print`, and `put_styled` write to `self.active_layer`. The new `put_ext(x, y, dx, dy, ch)`
+   `print`, and `put_styled` write to `self.active_layer`. The new `put_offset(x, y, dx, dy, ch)`
    writes to the active layer with pixel offsets.
 
 5. **`Backend::draw`** is renamed to receive `&Tile` instead of `&Cell`. A new `draw_layers` method
@@ -378,7 +378,7 @@ unchanged, exercising the layer-0 path.
 
 ### M3: Terminal stateful API
 
-**Goal:** Add `layer()`, `put_ext()` to `Terminal`. No `composition` field.
+**Goal:** Add `layer()`, `put_offset()` to `Terminal`. No `composition` field.
 
 **New field:**
 
@@ -405,7 +405,7 @@ impl<B: Backend> Terminal<B> {
 
     /// Places `ch` at `(x, y)` with pixel offset `(dx, dy)`, using the current
     /// style and active layer.
-    pub fn put_ext(&mut self, x: u16, y: u16, dx: i16, dy: i16, ch: char) {
+    pub fn put_offset(&mut self, x: u16, y: u16, dx: i16, dy: i16, ch: char) {
         let tile = Tile {
             glyph: ch,
             style: self.drawing_style,
@@ -418,7 +418,7 @@ impl<B: Backend> Terminal<B> {
 }
 ```
 
-**`put` and `print`** call `put_ext(x, y, 0, 0, ch)` internally.
+**`put` and `print`** call `put_offset(x, y, 0, 0, ch)` internally.
 
 **`clear()`** clears layer 0 only:
 
@@ -459,7 +459,7 @@ impl<B: Backend> Terminal<B> {
 **Acceptance criteria:**
 
 - `term.layer(2).put(0, 0, '@')` writes to layer 2; layer 0 at `(0,0)` is unchanged.
-- `term.put_ext(1, 1, -4, 2, 'X')` stores a tile with `dx = -4, dy = 2`.
+- `term.put_offset(1, 1, -4, 2, 'X')` stores a tile with `dx = -4, dy = 2`.
 - `clear()` resets layer 0 only; a tile on layer 1 survives.
 - After `present()`, `active_layer` is unchanged.
 
@@ -475,9 +475,9 @@ fn terminal_layer_routes_to_correct_layer() {
 }
 
 #[test]
-fn terminal_put_ext_stores_offset() {
+fn terminal_put_offset_stores_offset() {
     let mut term = Terminal::new(Headless::new(5, 5));
-    term.put_ext(1, 1, -4, 2, 'X');
+    term.put_offset(1, 1, -4, 2, 'X');
     let tile = term.grid().get_tile(0, 1, 1).unwrap();
     assert_eq!(tile.glyph, 'X');
     assert_eq!(tile.dx, -4);
@@ -654,5 +654,5 @@ fn layer_zero_fills_background_higher_layers_do_not() {
   `extra`).
 - `Backend::draw_layers` is additive with a default impl; existing backends compile without changes.
 - `Terminal::put` / `print` / `put_styled` are behaviourally identical for callers that never call
-  `layer()` or `put_ext()`.
+  `layer()` or `put_offset()`.
 - `Grid::cells()` iterates layer 0; `Grid::cells_on(layer)` for explicit layer access.

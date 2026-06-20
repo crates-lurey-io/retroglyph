@@ -25,6 +25,20 @@ pub trait Backend {
     where
         I: Iterator<Item = (Pos, &'a Tile)>;
 
+    /// Draw changed cells across all layers.
+    ///
+    /// The default implementation forwards layer-0 tiles to [`draw`](Self::draw)
+    /// and ignores higher layers. Override this to support multi-layer
+    /// compositing, sub-cell offsets, or transparency.
+    fn draw_layers<'a, I>(&mut self, content: I)
+    where
+        I: Iterator<Item = (u8, Pos, &'a Tile)>,
+    {
+        self.draw(content.filter_map(|(layer, pos, tile)| {
+            if layer == 0 { Some((pos, tile)) } else { None }
+        }));
+    }
+
     /// Flush buffered output to the display.
     fn flush(&mut self);
 
