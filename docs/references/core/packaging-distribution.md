@@ -11,13 +11,13 @@ C, Python, Ruby, WASM, and more.
 1. [How BearLibTerminal Did It](#1-how-bearlibterminal-did-it)
 2. [Repo Structure for Rust Core + FFI Bindings](#2-repo-structure)
 3. [cdylib vs staticlib Targets](#3-cdylib-vs-staticlib)
-4. [C FFI from Rust (cbindgen)](#4-c-ffi-from-rust)
-5. [Python Bindings via PyO3/maturin](#5-python-bindings)
+4. [C FFI from Rust (cbindgen)](4-c-ffi-from-rust-cbindgen)
+5. [Python Bindings via PyO3/maturin](5-python-bindings-via-pyo3maturin)
 6. [WASM/npm Packaging](#6-wasmnpm-packaging)
 7. [Prebuilt Binary Distribution](#7-prebuilt-binary-distribution)
-8. [pkg-config and System Package Integration](#8-pkg-config-integration)
-9. [Cross-Compilation Strategies](#9-cross-compilation)
-10. [CI/CD for Multi-Platform Releases](#10-cicd)
+8. [pkg-config and System Package Integration](8-pkg-config-and-system-package-integration)
+9. [Cross-Compilation Strategies](9-cross-compilation-strategies)
+10. [CI/CD for Multi-Platform Releases](10-cicd-for-multi-platform-releases)
 
 ---
 
@@ -26,14 +26,21 @@ C, Python, Ruby, WASM, and more.
 BearLibTerminal used a "single shared library + language-specific header/wrapper" model:
 
 - **Core**: One C++ dynamic library (`BearLibTerminal.dll` / `libBearLibTerminal.so` / `.dylib`)
+
   built with CMake, exposing a flat C API.
+
 - **Bindings**: Thin header files or wrapper modules for C/C++, C#, Go, Lua, Pascal, Python, Ruby.
+
   Each wrapper called into the same shared library via its C API.
+
 - **Distribution**: Platform-specific archives (`.zip` for Windows, `.tar.bz2` for Linux, `.zip` for
+
   macOS) containing 32-bit and 64-bit binaries, a showcase app, and all header files. Python also
   had a PyPI package (`pip install bearlibterminal`) bundling the native binary + Python wrapper.
+
 - **Lua**: Built-in wrapper; the `.so`/`.dll` was loadable directly via `require "BearLibTerminal"`.
 - **Key insight**: The flat C API (`terminal_open()`, `terminal_print()`, `terminal_read()`, etc.)
+
   was the universal interface. Every language binding was a thin FFI wrapper around these ~20
   functions.
 
@@ -51,7 +58,7 @@ from Rust.
 Use a Cargo workspace with separate crates for core logic, C FFI, Python bindings, and WASM
 bindings. This keeps concerns separated and allows independent versioning.
 
-```
+```text
 rg/
 ├── Cargo.toml                    # Workspace root
 ├── crates/
@@ -80,7 +87,7 @@ rg/
 └── .github/workflows/
     ├── ci.yml                    # Test on all platforms
     └── release.yml               # Build + publish on tag
-```
+```text
 
 ### Root Cargo.toml
 
@@ -118,21 +125,26 @@ From the [Rust Reference on Linkage](https://doc.rust-lang.org/reference/linkage
 | `cdylib`    | Dynamic system library       | Loading from other languages (C, Python, etc.) |
 | `staticlib` | Static system library (`.a`) | Linking into non-Rust applications             |
 
-**For multi-language bindings, use both `cdylib` and `staticlib`:**
+### For multi-language bindings, use both `cdylib` and `staticlib`
 
 ```toml
 # crates/rg-ffi/Cargo.toml
+
 [lib]
 name = "rg"
 crate-type = ["cdylib", "staticlib"]
 ```
 
 - **`cdylib`** produces `.so` / `.dylib` / `.dll` with no Rust-specific metadata. This is what
+
   Python's ctypes, Ruby's FFI, Lua's `require`, and any C/C++ program will load. It strips unused
   Rust standard library code and does not export Rust internal symbols.
+
 - **`staticlib`** produces `.a` / `.lib` containing all Rust code and upstream dependencies baked
+
   in. Used when someone wants to statically link rg into their C/C++ application. Note: any dynamic
   system dependencies (OpenGL, etc.) must be specified manually when linking.
+
 - **You can specify both** in the same crate. Cargo will produce both artifacts in a single build.
 
 The `rg-python` and `rg-wasm` crates each need only `cdylib` since PyO3 and wasm-bindgen both
@@ -243,6 +255,7 @@ exclude = []
 
 [fn]
 # Function-level settings
+
 args = "Vertical"
 
 [struct]
@@ -384,6 +397,7 @@ classifiers = [
 
 [tool.maturin]
 # Build for the crate in the current directory
+
 features = ["pyo3/extension-module"]
 ```
 
@@ -437,19 +451,24 @@ fn rg(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
 ```bash
 # Development (installs into current virtualenv)
+
 cd crates/rg-python
 maturin develop
 
 # Build wheels for current platform
+
 maturin build --release
 
 # Build manylinux wheels (for PyPI)
+
 docker run --rm -v $(pwd):/io ghcr.io/pyo3/maturin build --release --manylinux 2014
 
 # Publish to PyPI
+
 maturin publish
 
 # Generate CI workflow
+
 maturin generate-ci github > ../../.github/workflows/python-release.yml
 ```
 
@@ -459,6 +478,7 @@ For users who prefer a pure-Python wrapper that loads the prebuilt `.so`/`.dll`:
 
 ```python
 # bindings/python/rg/__init__.py
+
 import ctypes
 import os
 import platform
@@ -485,6 +505,7 @@ def _load_library():
 _lib = _load_library()
 
 # Define function signatures
+
 _lib.rg_terminal_create.argtypes = [ctypes.c_uint32, ctypes.c_uint32]
 _lib.rg_terminal_create.restype = ctypes.c_void_p
 
@@ -583,29 +604,36 @@ impl WasmTerminal {
 }
 ```
 
-### Building and Publishing
+### Building and Publishing (2)
 
 ```bash
 # Install wasm-pack
+
 cargo install wasm-pack
 
 # Build for npm (browser target)
+
 cd crates/rg-wasm
 wasm-pack build --target web --release
 
 # Build for Node.js
+
 wasm-pack build --target nodejs --release
 
 # Build for bundlers (webpack, vite, etc.) - this is the default
+
 wasm-pack build --release
 
 # Pack into a tarball
+
 wasm-pack pack
 
 # Publish to npm
+
 wasm-pack publish
 
 # Publish with a tag
+
 wasm-pack publish --tag next
 ```
 
@@ -650,18 +678,23 @@ tagged release.
 
 ```bash
 # Install
+
 cargo install cargo-dist
 
 # Initialize in your project (interactive)
+
 cargo dist init
 
 # Generate the CI workflow
+
 cargo dist generate
 
 # Plan a release (dry run)
+
 cargo dist plan
 
 # Build locally
+
 cargo dist build
 ```
 
@@ -680,12 +713,15 @@ The generated `release.yml` workflow does the full pipeline on `git push --tags`
 
 [workspace.metadata.dist]
 # CI backends
+
 ci = "github"
 
 # The installers to generate
+
 installers = ["shell", "powershell", "homebrew"]
 
 # Target platforms
+
 targets = [
     "aarch64-apple-darwin",
     "x86_64-apple-darwin",
@@ -696,7 +732,9 @@ targets = [
 ]
 
 # For a library, distribute the shared library + headers
+
 # instead of (or in addition to) binaries
+
 include = [
     "include/rg.h",
     "include/rg.hpp",
@@ -708,7 +746,7 @@ include = [
 ### Manual GitHub Releases (without cargo-dist)
 
 If cargo-dist does not fit your needs (e.g., you need to distribute shared libraries rather than
-executables), use a custom workflow. See [Section 10](#10-cicd) for the full CI config.
+executables), use a custom workflow. See [Section 10](10-cicd-for-multi-platform-releases) for the full CI config.
 
 [Source: cargo-dist GitHub](https://github.com/axodotdev/cargo-dist)
 
@@ -722,6 +760,7 @@ For C/C++ consumers who use `pkg-config` to discover libraries:
 
 ```bash
 # install.sh or build.rs
+
 cat > rg.pc << EOF
 prefix=/usr/local
 exec_prefix=\${prefix}
@@ -740,6 +779,7 @@ EOF
 
 ```makefile
 # Makefile (for system packagers)
+
 PREFIX ?= /usr/local
 LIBDIR ?= $(PREFIX)/lib
 INCLUDEDIR ?= $(PREFIX)/include
@@ -762,9 +802,11 @@ install: build
 
 ```bash
 # Compile
+
 gcc $(pkg-config --cflags rg) -o myapp myapp.c $(pkg-config --libs rg)
 
 # CMake
+
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(RG REQUIRED rg)
 target_link_libraries(myapp ${RG_LIBRARIES})
@@ -782,16 +824,20 @@ It is a drop-in replacement for `cargo` that uses pre-built Docker images with t
 toolchain, sysroot, and QEMU for testing.
 
 ```bash
-# Install
+# Install (2)
+
 cargo install cross --git https://github.com/cross-rs/cross
 
 # Build for ARM Linux
+
 cross build --target aarch64-unknown-linux-gnu --release
 
 # Test on emulated architecture (uses QEMU)
+
 cross test --target aarch64-unknown-linux-gnu
 
 # Build the FFI crate specifically
+
 cross build -p rg-ffi --target aarch64-unknown-linux-gnu --release
 ```
 
@@ -806,14 +852,18 @@ it an excellent cross-compilation linker for Rust. Unlike cross-rs, it does not 
 
 ```bash
 # Install zig
+
 brew install zig  # or download from ziglang.org
 
 # Configure Rust to use zig as the C compiler/linker
+
 # .cargo/config.toml
+
 ```
 
 ```toml
-# .cargo/config.toml
+# .cargo/config.toml (2)
+
 [target.aarch64-unknown-linux-gnu]
 linker = "zig-cc-aarch64-linux-gnu"
 
@@ -826,6 +876,7 @@ Create wrapper scripts (zig does not accept rustc's linker flag format directly)
 ```bash
 #!/bin/sh
 # zig-cc-aarch64-linux-gnu
+
 zig cc -target aarch64-linux-gnu "$@"
 ```
 
@@ -836,9 +887,11 @@ automatically:
 cargo install cargo-zigbuild
 
 # Build for Linux aarch64 from macOS
+
 cargo zigbuild --target aarch64-unknown-linux-gnu --release
 
 # Build for specific glibc version
+
 cargo zigbuild --target aarch64-unknown-linux-gnu.2.17 --release
 ```
 
@@ -874,6 +927,7 @@ publishes Python wheels and npm packages.
 
 ```yaml
 # .github/workflows/release.yml
+
 name: Release
 
 on:
@@ -892,29 +946,41 @@ jobs:
     strategy:
       matrix:
         include:
+
           - os: ubuntu-latest
+
             target: x86_64-unknown-linux-gnu
             artifact_name: librg.so
             static_name: librg.a
+
           - os: ubuntu-latest
+
             target: aarch64-unknown-linux-gnu
             artifact_name: librg.so
             static_name: librg.a
             use_cross: true
+
           - os: ubuntu-latest
+
             target: x86_64-unknown-linux-musl
             artifact_name: librg.so
             static_name: librg.a
             use_cross: true
+
           - os: macos-latest
+
             target: x86_64-apple-darwin
             artifact_name: librg.dylib
             static_name: librg.a
+
           - os: macos-latest
+
             target: aarch64-apple-darwin
             artifact_name: librg.dylib
             static_name: librg.a
+
           - os: windows-latest
+
             target: x86_64-pc-windows-msvc
             artifact_name: rg.dll
             static_name: rg.lib
@@ -922,18 +988,22 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
+
       - uses: actions/checkout@v4
 
       - name: Install Rust
+
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
       - name: Install cross
+
         if: matrix.use_cross
         run: cargo install cross --git https://github.com/cross-rs/cross
 
       - name: Build FFI crate
+
         run: |
           if [ "${{ matrix.use_cross }}" = "true" ]; then
             cross build -p rg-ffi --target ${{ matrix.target }} --release
@@ -943,6 +1013,7 @@ jobs:
         shell: bash
 
       - name: Package artifacts
+
         shell: bash
         run: |
           mkdir -p dist
@@ -954,6 +1025,7 @@ jobs:
           tar czf rg-${{ matrix.target }}.tar.gz -C dist .
 
       - uses: actions/upload-artifact@v4
+
         with:
           name: rg-${{ matrix.target }}
           path: rg-${{ matrix.target }}.tar.gz
@@ -963,29 +1035,42 @@ jobs:
     strategy:
       matrix:
         include:
+
           - os: ubuntu-latest
+
             target: x86_64
             manylinux: '2014'
+
           - os: ubuntu-latest
+
             target: aarch64
             manylinux: '2014'
+
           - os: macos-latest
+
             target: x86_64
+
           - os: macos-latest
+
             target: aarch64
+
           - os: windows-latest
+
             target: x64
 
     runs-on: ${{ matrix.os }}
 
     steps:
+
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
+
         with:
           python-version: '3.12'
 
       - name: Build wheels
+
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
@@ -994,6 +1079,7 @@ jobs:
             --release --manifest-path crates/rg-python/Cargo.toml --out dist
 
       - uses: actions/upload-artifact@v4
+
         with:
           name: wheels-${{ matrix.os }}-${{ matrix.target }}
           path: dist/*.whl
@@ -1002,22 +1088,27 @@ jobs:
   build-wasm:
     runs-on: ubuntu-latest
     steps:
+
       - uses: actions/checkout@v4
 
       - name: Install Rust
+
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
 
       - name: Install wasm-pack
+
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
       - name: Build WASM package
+
         run: |
           cd crates/rg-wasm
           wasm-pack build --release --target web --scope rg
 
       - uses: actions/upload-artifact@v4
+
         with:
           name: wasm-package
           path: crates/rg-wasm/pkg/
@@ -1028,21 +1119,27 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+
       - uses: actions/checkout@v4
 
       - uses: actions/download-artifact@v4
+
         with:
           path: artifacts
 
       # Publish to GitHub Releases
+
       - name: Create GitHub Release
+
         uses: softprops/action-gh-release@v2
         with:
           files: artifacts/rg-*/*.tar.gz
           generate_release_notes: true
 
       # Publish Python wheels to PyPI
+
       - name: Publish to PyPI
+
         uses: PyO3/maturin-action@v1
         env:
           MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
@@ -1051,13 +1148,16 @@ jobs:
           args: --non-interactive artifacts/wheels-*/*.whl
 
       # Publish WASM to npm
+
       - name: Setup Node
+
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
 
       - name: Publish to npm
+
         run: |
           cd artifacts/wasm-package
           npm publish --access public
@@ -1065,7 +1165,9 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       # Publish Rust crate to crates.io
+
       - name: Publish to crates.io
+
         run: |
           cargo publish -p rg-core --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
           sleep 30  # Wait for crates.io to index
@@ -1078,6 +1180,7 @@ jobs:
 
 ```yaml
 # .github/workflows/ci.yml
+
 name: CI
 
 on:
@@ -1095,6 +1198,7 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
+
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo test --workspace
@@ -1103,34 +1207,44 @@ jobs:
   check-header:
     runs-on: ubuntu-latest
     steps:
+
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo build -p rg-ffi
       - name: Check header is up to date
+
         run: git diff --exit-code include/rg.h
 
   # Test Python bindings
   test-python:
     runs-on: ubuntu-latest
     steps:
+
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
+
         with:
           python-version: '3.12'
+
       - uses: PyO3/maturin-action@v1
+
         with:
           command: develop
           args: --manifest-path crates/rg-python/Cargo.toml
+
       - run: python -c "import rg; t = rg.PyTerminal(80, 24); print(f'{t.width}x{t.height}')"
 
   # Test WASM build
   test-wasm:
     runs-on: ubuntu-latest
     steps:
+
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+
         with:
           targets: wasm32-unknown-unknown
+
       - run: cargo install wasm-pack
       - run: cd crates/rg-wasm && wasm-pack test --headless --chrome
 
@@ -1138,12 +1252,16 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
+
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+
         with:
           components: clippy, rustfmt
+
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
+
 ```
 
 ---
@@ -1161,38 +1279,65 @@ jobs:
 ## Sources
 
 - **Kept**: [Rust Reference: Linkage](https://doc.rust-lang.org/reference/linkage.html) -
+
   authoritative source for crate-type semantics
+
 - **Kept**: [mozilla/cbindgen](https://github.com/mozilla/cbindgen) - primary tool for C header
+
   generation
+
 - **Kept**: [PyO3 user guide](https://pyo3.rs/v0.22.0/getting-started) - getting started with
+
   Rust-Python bindings
+
 - **Kept**: [maturin distribution](https://maturin.rs/distribution) - wheel building, manylinux,
+
   cross-compilation
+
 - **Kept**: [wasm-pack docs](https://rustwasm.github.io/docs/wasm-pack/) - WASM packaging and npm
+
   publishing
+
 - **Kept**: [cargo-dist](https://github.com/axodotdev/cargo-dist) - automated binary distribution
 - **Kept**: [cross-rs](https://github.com/cross-rs/cross) - Docker-based cross compilation for 50+
+
   targets
+
 - **Kept**:
+
   [zig cc blog post](https://andrewkelley.me/post/zig-cc-powerful-drop-in-replacement-gcc-clang.html) -
   deep dive on zig as a cross-compilation linker
+
 - **Kept**: [BearLibTerminal](http://foo.wyrd.name/en:bearlibterminal) - reference for single-DLL
+
   multi-language distribution
+
 - **Kept**: [metatensor](https://github.com/metatensor/metatensor) - real-world Rust workspace using
+
   cbindgen + C/C++/Python bindings
+
 - **Dropped**: nickel-org/rust-mustache - not relevant (no FFI, no multi-language distribution)
 - **Dropped**: aspect-build/rules_py, rules_js - Bazel-specific, not applicable
 
 ## Gaps
 
 1. **Homebrew formula creation**: cargo-dist can auto-generate Homebrew taps, but the details of
+
    creating a standalone formula for a C library (with headers) vs a binary application need more
    research.
-2. **Linux distro packaging** (deb, rpm, AUR): Not covered in depth. Tools like `cargo-deb` and
+
+1. **Linux distro packaging** (deb, rpm, AUR): Not covered in depth. Tools like `cargo-deb` and
+
    `cargo-rpm` exist but may need customization for shared library packaging.
-3. **iOS/Android mobile targets**: cross-rs supports Android but iOS cross-compilation from Linux is
+
+1. **iOS/Android mobile targets**: cross-rs supports Android but iOS cross-compilation from Linux is
+
    not well supported. Would need Xcode for iOS.
-4. **Swift/Kotlin bindings**: If mobile targets matter, generating Swift bindings (via UniFFI or
+
+1. **Swift/Kotlin bindings**: If mobile targets matter, generating Swift bindings (via UniFFI or
+
    similar) and Kotlin/JNI bindings would be another distribution vector.
-5. **Version synchronization**: Keeping versions aligned across crates.io, PyPI, npm, and GitHub
+
+1. **Version synchronization**: Keeping versions aligned across crates.io, PyPI, npm, and GitHub
+
    Releases requires tooling (cargo-release, release-plz, or custom scripts).

@@ -8,14 +8,21 @@ the game loop; `rg` handles drawing efficiently and feeding you input events.
 ## Features
 
 - **Grid API** — place styled characters with foreground/background colors and text modifiers (bold,
+
   italic, underline, …).
+
 - **Double buffering** — `Terminal::present()` diffs the current and previous frames and sends only
+
   changed cells to the backend.
+
 - **Pluggable backends** — swap rendering targets without touching game logic:
   - `Headless` — in-memory, no I/O. Used in unit and integration tests.
   - `Crossterm` (feature `crossterm`) — full terminal with raw mode, alternate screen, and mouse
+
     capture.
+
 - **`no_std` compatible** — the core crate compiles without `std` when the `std` feature is disabled
+
   (requires an allocator).
 
 ## Quick start
@@ -113,7 +120,8 @@ test means visible output changed — review the diff before accepting.
 with `insta`.
 
 ```sh
-# The crossterm_demo binary must be built first:
+# The crossterm_demo binary must be built first
+
 cargo build --example crossterm_demo --features crossterm
 
 cargo test --test e2e_snapshots --all-features

@@ -52,7 +52,7 @@ fn main() {
 }
 ```
 
-**Tradeoffs:**
+### Tradeoffs
 
 - Pro: No synchronization, no Send/Sync requirements, simplest mental model.
 - Pro: Works identically on native and WASM.
@@ -115,7 +115,7 @@ impl ApplicationHandler for RenderApp {
 }
 ```
 
-**Tradeoffs:**
+### Tradeoffs (2)
 
 - Pro: Game logic doesn't block rendering (if lock hold times are short).
 - Con: Lock contention if game thread holds the lock for a full tick.
@@ -205,12 +205,14 @@ fn main() {
 }
 ```
 
-**Tradeoffs:**
+### Tradeoffs (3)
 
 - Pro: Zero contention. Producer and consumer never block each other.
 - Pro: Consumer always reads the latest complete frame.
 - Con: 3x memory for the buffer. For an 80x24 grid of ~20-byte cells, that's ~115 KB (trivial). For
+
   300x100 it's ~1.8 MB (still fine).
+
 - Con: Single producer, single consumer only. Multiple writers need a different pattern.
 - Con: The `triple_buffer` crate requires `T: Send`. Your `Buffer`/`Cell` types must be `Send`.
 
@@ -241,7 +243,7 @@ pub struct Buffer {
 // Buffer is automatically Send + Sync.
 ```
 
-**What breaks Send/Sync:**
+### What breaks Send/Sync
 
 - `Rc<T>` (not Send, not Sync) - use `Arc<T>` instead.
 - `Cell<T>` / `RefCell<T>` (not Sync) - use `AtomicXxx` or `Mutex<T>` instead.
@@ -339,12 +341,14 @@ fn get_latest_frame(rx: &Receiver<Buffer>) -> Option<Buffer> {
 }
 ```
 
-**Tradeoffs:**
+### Tradeoffs (4)
 
 - Pro: Clean separation. No shared mutable state. Easy to reason about.
 - Pro: Backpressure with bounded channels.
 - Con: Cloning the buffer each frame. For an 80x24 grid (~3840 cells), this is ~77 KB per clone,
+
   trivially fast. For larger grids, use `Arc<Buffer>` to share immutable snapshots.
+
 - Con: Latency: one frame of delay between game state and display.
 
 ### Avoiding clones with Arc snapshots
@@ -368,17 +372,18 @@ renderer.draw(&frame);
 Alacritty uses three logical threads, confirmed by source analysis:
 
 1. **Main thread (event loop):** Runs `winit::EventLoop::run_app()`. Handles window events, input,
+
    and triggers rendering. Implements `ApplicationHandler`. The `Processor` struct owns all
    `WindowContext` instances.
 
-2. **PTY reader thread:** Spawned per terminal via `EventLoop::spawn()` (named "PTY reader"). Reads
+1. **PTY reader thread:** Spawned per terminal via `EventLoop::spawn()` (named "PTY reader"). Reads
+
    bytes from the PTY using `polling::Poller`, parses VT sequences via `vte::ansi::Processor`, and
    writes the parsed output into the terminal state. Uses `std::sync::mpsc` channel to receive
    `Msg::Input`, `Msg::Resize`, `Msg::Shutdown` from the main thread.
 
-3. **Config monitor thread:** Watches config files for changes, sends reload events.
+1. **Config monitor thread:**Watches config files for changes, sends reload events.**Shared state:** The terminal (`Term<T>`) is wrapped in `Arc<FairMutex<Term<T>>>`. Both the main
 
-**Shared state:** The terminal (`Term<T>`) is wrapped in `Arc<FairMutex<Term<T>>>`. Both the main
 thread (for rendering/input) and the PTY reader thread (for writing parsed output) access it through
 this mutex.
 
@@ -453,9 +458,9 @@ This is a key optimization: the PTY reader accumulates bytes without holding the
 it to flush parsed data in batch. If the lock is contended, it keeps reading into the buffer until
 either the lock becomes available or the buffer fills up (1 MB).
 
-**Communication flow:**
+### Communication flow
 
-```
+```text
 Input events (keyboard/mouse)
     -> main thread handles them
     -> sends Msg::Input(bytes) via mpsc channel to PTY thread
@@ -468,7 +473,7 @@ PTY output:
     -> sends Event::Wakeup via EventLoopProxy to main thread
     -> main thread requests redraw
     -> acquires FairMutex<Term>, reads grid, renders
-```
+```rust
 
 ### Rio's Architecture
 
@@ -476,9 +481,12 @@ Rio follows a very similar pattern to Alacritty:
 
 - **Main thread:** winit event loop, rendering via `Sugarloaf`.
 - **PTY reader thread ("Machine"):** Spawned per terminal context. Same
+
   `Arc<FairMutex<Crosswords<T>>>` pattern for sharing terminal state (Rio uses the same `FairMutex`
   implementation).
+
 - **Communication:** `corcovado::channel` (mio-based channel) for sending messages to the PTY
+
   thread. `EventListener` trait + event proxy for PTY -> main thread notifications.
 
 Both Alacritty and Rio converge on the same architecture because the constraints are identical:
@@ -503,8 +511,11 @@ Start with `Arc<Mutex<Buffer>>` (or a FairMutex variant). The grid sizes involve
 200x100 = 20,000 cells) make lock contention negligible at 60fps. If profiling shows contention:
 
 1. First try `ArcSwap<Buffer>`: game thread builds a new `Arc<Buffer>`, stores it atomically. Render
+
    thread loads the latest with near-zero overhead.
-2. If allocation pressure from creating new `Arc<Buffer>` each frame matters, move to
+
+1. If allocation pressure from creating new `Arc<Buffer>` each frame matters, move to
+
    `triple_buffer`.
 
 ## 8. Lock-Free Approaches for Cell Grid Updates
@@ -533,10 +544,12 @@ impl AtomicCell {
 }
 ```
 
-**Problems:**
+### Problems
 
 - No atomicity across multiple fields. Reader can see ch from frame N and fg from frame N+1
+
   (tearing).
+
 - 128-bit atomics (`AtomicU128`) exist on some platforms but aren't portable.
 - Complexity explodes. Not worth it for a grid.
 
@@ -613,17 +626,22 @@ increment in most cases via hazard pointers/epoch-based reclamation).
 
 ## 9. WASM Single-Threaded Constraints
 
-**Key constraints:**
+### Key constraints
 
 - `wasm32-unknown-unknown`: No `std::thread::spawn`. No `Mutex` blocking (it would deadlock the
+
   single thread). No `mpsc::channel` (single thread, receiver would block forever).
+
 - `wasm32-unknown-unknown` with `atomics` + `SharedArrayBuffer`: Threads via `web_sys::Worker`, but
+
   setup is complex and requires specific HTTP headers (`Cross-Origin-Opener-Policy`,
   `Cross-Origin-Embedder-Policy`).
+
 - wgpu on WASM: Works, but the device is `!Send` on WASM (it wraps a JS object). All GPU operations
+
   must happen on the main thread.
 
-**Practical approach: single-threaded on WASM, multi-threaded on native.**
+### Practical approach: single-threaded on WASM, multi-threaded on native
 
 ```rust
 #[cfg(not(target_arch = "wasm32"))]
@@ -673,7 +691,7 @@ mod threading {
 }
 ```
 
-**Abstraction pattern:**
+### Abstraction pattern
 
 ```rust
 /// Trait that abstracts over single-threaded and multi-threaded buffer access.
@@ -962,42 +980,65 @@ fn main() {
 
 - **Kept:**
   - [Alacritty main.rs](https://github.com/alacritty/alacritty/blob/master/alacritty/src/main.rs) -
+
     Entry point showing winit event loop setup
+
   - [Alacritty event.rs](https://github.com/alacritty/alacritty/blob/master/alacritty/src/event.rs) -
+
     Event processor with ApplicationHandler, shows main thread architecture
+
   - [Alacritty event_loop.rs](https://github.com/alacritty/alacritty/blob/master/alacritty_terminal/src/event_loop.rs) -
+
     PTY reader thread with FairMutex locking strategy, channel communication
+
   - [Alacritty sync.rs](https://github.com/alacritty/alacritty/blob/master/alacritty_terminal/src/sync.rs) -
+
     FairMutex implementation
+
   - [Alacritty grid/mod.rs](https://github.com/alacritty/alacritty/blob/master/alacritty_terminal/src/grid/mod.rs) -
+
     Grid<T> data structure design
+
   - [Rio context/mod.rs](https://github.com/raphamorim/rio/blob/main/frontends/rioterm/src/context/mod.rs) -
+
     Confirms same Arc<FairMutex> pattern
+
   - [winit docs](https://docs.rs/winit/latest/winit/) - Event loop API, macOS main thread
+
     requirement
+
   - [triple_buffer docs](https://docs.rs/triple_buffer/latest/triple_buffer/) - Lock-free
+
     single-producer/single-consumer buffer
+
   - [arc_swap docs](https://docs.rs/arc_swap/latest/arc_swap/) - Atomic Arc swapping for read-heavy
+
     scenarios
 
 - **Dropped:**
   - wgpu docs - Fetched but contained mostly API surface, not threading guidance. WASM constraints
+
     are well-documented elsewhere.
+
   - Rio application.rs - 88K chars, mostly UI event handling, not threading-relevant.
 
 ## Gaps
 
 1. **Benchmarks of contention under load.** No empirical data on FairMutex vs ArcSwap vs
+
    triple_buffer at different grid sizes and frame rates. Would require building a harness with
    criterion.
 
-2. **wgpu-specific threading constraints.** wgpu's `Device` and `Queue` are `Send` on native but
+1. **wgpu-specific threading constraints.** wgpu's `Device` and `Queue` are `Send` on native but
+
    `!Send` on WASM. The exact implications for buffer upload parallelism aren't fully explored here.
 
-3. **Resize handling across threads.** When the window resizes, both the render thread and game
+1. **Resize handling across threads.** When the window resizes, both the render thread and game
+
    thread need to know the new dimensions. The exact synchronization protocol (who reallocates the
    buffer, how to avoid rendering a partially-resized grid) deserves its own design doc.
 
-4. **Input latency measurement.** Alacritty's approach (PTY reader batches bytes, renderer acquires
+1. **Input latency measurement.** Alacritty's approach (PTY reader batches bytes, renderer acquires
+
    lock) is optimized for throughput. Whether this tradeoff is right for a game (where input latency
    matters more than throughput) is an open question.

@@ -7,7 +7,9 @@
 - **Documentation**: <https://libtcod.readthedocs.io/en/latest/>
 - **Legacy docs (more complete)**: <https://libtcod.github.io/docs/>
 - **Language**: C and C++ (core library), with official Python bindings via
+
   [python-tcod](https://github.com/libtcod/python-tcod)
+
 - **Dependencies**: SDL3 (as of v2.0.0; SDL2 before that), utf8proc, zlib, lodepng
 - **License**: BSD
 - **First release**: 2008-01-05 (v1.0)
@@ -68,33 +70,55 @@ Historical bindings existed for Lua and C#, but these are no longer maintained.
 ### Console System
 
 - **True color console**: Each cell has independent 24-bit foreground and background colors (16
+
   million colors). No palette limitations.
+
 - **Off-screen consoles**: Create multiple console buffers, blit between them with alpha blending
+
   (both foreground and background alpha).
+
 - **Background blend modes**: SET, NONE, LIGHTEN, DARKEN, SCREEN, COLOR_DODGE, COLOR_BURN, ADD,
+
   BURN, OVERLAY, ALPHA(n), ADDALPHA(n), and more.
+
 - **Sub-cell resolution**: `blit2x` renders using Unicode block elements for pseudo-doubled
+
   resolution.
+
 - **Print functions**: Printf-style text rendering with alignment (left/right/center), word wrapping
+
   within rectangles, height calculation without rendering.
+
 - **Color control codes**: Inline foreground/background color switching within printed strings.
 - **REXPaint integration**: Native load/save of `.xp` files (REXPaint's format). Magic pink
+
   background for transparency.
 
 ### Tileset / Font Handling
 
 - **Bitmap fonts**: Load from PNG images with configurable character layouts (ASCII in columns,
+
   ASCII in rows, CP437, or libtcod's custom TCOD layout).
+
 - **BDF font support**: Added in v1.16.0-alpha.6 (2020).
 - **Greyscale/colored tiles**: Greyscale fonts are tinted by the cell's foreground color. Colored
+
   tiles are rendered as-is.
+
 - **Dynamic character mapping**: `mapAsciiCodeToFont` lets you assign any Unicode code point to any
+
   position in the font bitmap at runtime.
+
 - **Dynamic font updates**: `TCODSystem::updateChar` can modify font tile content at runtime from an
+
   image.
+
 - **Tileset objects** (v1.19+): `tcod::Tileset` and `tcod::load_tilesheet` provide a modern,
+
   RAII-based tileset API.
+
 - **No layer system**: Unlike BearLibTerminal, libtcod does not natively support multiple tile
+
   layers per cell. You achieve layering through off-screen console blitting with alpha.
 
 ### Rendering Backend
@@ -125,14 +149,22 @@ terminal-based rendering.
 libtcod's input handling has been through multiple generations:
 
 1. **v1.0-1.5**: Custom keyboard/mouse API via `TCOD_console_check_for_keypress` /
+
    `TCOD_console_wait_for_keypress` / `TCOD_mouse_get_status`
-2. **v1.6.0**: Adapted to SDL2's text input model (`TCODK_TEXT` event for `SDL_TEXTINPUT`). Combined
+
+1. **v1.6.0**: Adapted to SDL2's text input model (`TCODK_TEXT` event for `SDL_TEXTINPUT`). Combined
+
    into `TCOD_sys_check_for_event` / `TCOD_sys_wait_for_event`.
-3. **v1.17.0 (2021)**: All libtcod event handling deprecated. Users directed to use SDL2 events
+
+1. **v1.17.0 (2021)**: All libtcod event handling deprecated. Users directed to use SDL2 events
+
    directly.
-4. **v1.19.0 (2021)**: Added `TCOD_Context::convert_event_coordinates` for pixel-to-tile coordinate
+
+1. **v1.19.0 (2021)**: Added `TCOD_Context::convert_event_coordinates` for pixel-to-tile coordinate
+
    conversion of SDL events.
-5. **v2.0.0 (2025)**: SDL3 events.
+
+1. **v2.0.0 (2025)**: SDL3 events.
 
 The recommended modern approach is a raw SDL event loop with
 `context->convert_event_coordinates(event)` for mouse tile mapping. Helper functions like
@@ -148,20 +180,34 @@ in the opposite direction, exposing SDL directly and deprecating its own abstrac
 This is where libtcod stands apart from BearLibTerminal (which has zero algorithmic tools):
 
 - **Field of View**: 7 algorithms: Basic (ray casting), Diamond, Shadow casting, Permissive (9
+
   levels), Restrictive (MRPAS), and Symmetric Shadowcast. The FOV module has been extracted to a
   standalone library `libtcod-fov`.
+
 - **Pathfinding**: A\* and Dijkstra, with custom cost callbacks or map-based. Supports diagonal
+
   movement with configurable cost.
+
 - **BSP (Binary Space Partition)**: Recursive splitting of rectangles for dungeon generation.
+
   Supports traversal callbacks.
+
 - **Noise generation**: Perlin, Simplex, and Wavelet noise in 1-4 dimensions. FBM and turbulence
+
   functions. Vectorized variants added later.
+
 - **Heightmap toolkit**: Full heightmap generation and manipulation (rain erosion, kernel
+
   transforms, midpoint displacement, noise-based generation).
+
 - **Name generator**: Syllable-based name generation with 20+ predefined syllable sets and custom
+
   definition support.
+
 - **RNG**: Mersenne Twister and Complementary Multiply With Carry (CMWC). Gaussian distribution
+
   support.
+
 - **Line drawing**: Bresenham line algorithm (both callback-based and iterator-based in C++).
 - **Image toolkit**: PNG load/save, rotation, scaling, sub-cell resolution blitting.
 - **File parser**: Custom config file format parser (largely historical).
@@ -191,7 +237,9 @@ these tutorials.
 
 - **The Chronicles of Doryen**: The original game libtcod was built for (by Jice)
 - **Pyromancer**: A 2009 7DRL game by HexDecimal (current maintainer), notable for impressive
+
   lighting/visual effects
+
 - **Umbra**: A libtcod-based game engine used by several older projects (by Mingos/others)
 - Countless 7DRL competition entries and r/roguelikedev projects
 
@@ -201,70 +249,87 @@ rendering.
 ## Strengths
 
 1. **Batteries included**: No other roguelike library comes close to the breadth of built-in
+
    algorithms. FOV, pathfinding, BSP, noise, heightmaps, and name generation, all in one package.
 
-2. **Tutorial ecosystem**: The python+libtcod tutorial series is the on-ramp for a huge portion of
+1. **Tutorial ecosystem**: The python+libtcod tutorial series is the on-ramp for a huge portion of
+
    the roguelike development community. No other library has this level of beginner documentation.
 
-3. **True color from day one**: 24-bit color per cell was novel when libtcod launched in 2008. The
+1. **True color from day one**: 24-bit color per cell was novel when libtcod launched in 2008. The
+
    extensive background blend modes (overlay, screen, dodge, burn, etc.) enable sophisticated visual
    effects.
 
-4. **Active maintenance**: Despite being 18+ years old, libtcod is actively maintained. The
+1. **Active maintenance**: Despite being 18+ years old, libtcod is actively maintained. The
+
    migration to SDL3 in 2025, ongoing API modernization, and splitting into standalone libraries
    show continued investment.
 
-5. **REXPaint integration**: Native `.xp` file support makes it trivial to use REXPaint for
+1. **REXPaint integration**: Native `.xp` file support makes it trivial to use REXPaint for
+
    designing UI layouts, map prefabs, and ASCII art that load directly into libtcod consoles.
 
-6. **Cross-platform**: Windows, Linux, macOS, and even experimental browser support. Available via
+1. **Cross-platform**: Windows, Linux, macOS, and even experimental browser support. Available via
+
    Vcpkg, CMake FetchContent, and as a submodule.
 
-7. **FOV algorithm collection**: 7 different FOV algorithms with different trade-offs is unmatched.
+1. **FOV algorithm collection**: 7 different FOV algorithms with different trade-offs is unmatched.
+
    The standalone `libtcod-fov` library is useful even outside libtcod.
 
-8. **Off-screen console blitting**: The ability to compose multiple consoles with alpha blending is
+1. **Off-screen console blitting**: The ability to compose multiple consoles with alpha blending is
+
    a powerful UI building tool, even without explicit layer support.
 
 ## Weaknesses and Criticisms
 
 1. **Monolithic design**: The maintainer (HexDecimal) explicitly acknowledges this in
+
    [issue #147](https://github.com/libtcod/libtcod/issues/147): "Libtcod's size makes it difficult
    to port, maintain, and document. It has too many things at once." Plans to split into
    `libtcod-fov`, `libtcod-terminal`, `libtcod-pathfinding`, `libtcod-noise` are in progress but
    incomplete.
 
-2. **Documentation gap**: The latest docs (v2.2.2) are self-described as "incomplete." Most users
+1. **Documentation gap**: The latest docs (v2.2.2) are self-described as "incomplete." Most users
+
    are directed to the 1.6.4 docs from 2017. This creates confusion about which API to use: the old
    deprecated API that's well-documented, or the new modern API that isn't.
 
-3. **API churn and deprecation waves**: The library has gone through massive API changes: v1.5 to
+1. **API churn and deprecation waves**: The library has gone through massive API changes: v1.5 to
+
    v1.6 (SDL2 migration, input model change), v1.19 (context objects, new C++ API, deprecated root
    console), v2.0 (SDL3, removed libtcodpy). Each transition left a trail of deprecated functions
    and confused users. The v2.1.0 changelog deprecates 15+ console functions at once.
 
-4. **No native layer system**: Each cell has one foreground character, one fg color, one bg color.
+1. **No native layer system**: Each cell has one foreground character, one fg color, one bg color.
+
    Compositing multiple tiles per cell requires manual off-screen console blitting.
    BearLibTerminal's native layer system is significantly more convenient for this.
 
-5. **Input system instability**: Three complete rewrites of the input system, ultimately punting to
+1. **Input system instability**: Three complete rewrites of the input system, ultimately punting to
+
    "just use SDL directly." This is pragmatic but means libtcod no longer abstracts input at all,
    unlike BearLibTerminal's clean `terminal_read()` API.
 
-6. **Renderer history of instability**: Years of OpenGL renderer bugs (atlas bleeding, shader
+1. **Renderer history of instability**: Years of OpenGL renderer bugs (atlas bleeding, shader
+
    failures, alpha inconsistencies) before the maintainer gave up and forced everything to SDL2. The
    v1.23.1 changelog explicitly states: "Forced all renderers to RENDERER_SDL2 to fix rare graphical
    artifacts with OpenGL."
 
-7. **C++ build complexity**: As a C++ library, it requires matching runtime versions. The README
+1. **C++ build complexity**: As a C++ library, it requires matching runtime versions. The README
+
    warns about distributing Visual Studio runtimes. SDL3 as a dependency adds build complexity.
    Contrast with BearLibTerminal's single-DLL distribution model.
 
-8. **No tile layers or composition**: For games that want character + floor tile + item tile per
+1. **No tile layers or composition**: For games that want character + floor tile + item tile per
+
    cell, libtcod requires manual console blitting workflows. BearLibTerminal handles this with its
    layer system natively.
 
-9. **Font handling limitations**: Fonts must be loaded from specially arranged sprite sheets. No
+1. **Font handling limitations**: Fonts must be loaded from specially arranged sprite sheets. No
+
    built-in TrueType/vector font rendering (BDF support was added in 2020). BearLibTerminal supports
    TrueType fonts natively.
 
@@ -309,9 +374,12 @@ rendering.
 ### Key Architectural Differences
 
 - **libtcod** treats the console as one layer of a larger roguelike toolkit. It owns the window, the
+
   event loop, and provides algorithms. The trend is toward exposing SDL directly rather than
   abstracting it.
+
 - **BearLibTerminal** treats the console as its sole concern and does it thoroughly: layers,
+
   composition, Unicode, TrueType, and a clean abstraction over the platform. It deliberately
   excludes algorithms, leaving those to the developer.
 
@@ -324,13 +392,21 @@ is working toward with the split).
 
 - [GitHub: libtcod/libtcod](https://github.com/libtcod/libtcod) - Repository, README, CHANGELOG
 - [libtcod docs v2.2.2](https://libtcod.readthedocs.io/en/latest/) - Console, Context, Upgrading
+
   guides
+
 - [libtcod docs v1.6.4](https://libtcod.github.io/docs/) - Complete legacy documentation
 - [RogueBasin: Doryen library](https://www.roguebasin.com/index.php?title=Libtcod) - Feature list,
+
   project info
+
 - [Issue #147: Split libtcod](https://github.com/libtcod/libtcod/issues/147) - Maintainer's critique
+
   of monolithic design
+
 - [PR #137: Remove OpenGL renderers](https://github.com/libtcod/libtcod/pull/137) - Renderer
+
   consolidation
+
 - [Grid Sage Games blog](https://www.gridsagegames.com/blog/) - Cogmind's engine architecture posts
 - [RogueBasin output libraries comparison](https://github.com/Chizaruu/roguebasin/blob/main/wiki/output_libraries.md)

@@ -1,6 +1,6 @@
 # ADR 006: Extended Grapheme Clusters & Text Layout
 
-**Status:** Draft **Date:** 2026-06-18 **Parent:** [ADR 001: Architecture](001-architecture.md)
+**Status:**Draft**Date:**2026-06-18**Parent:** [ADR 001: Architecture](001-architecture.md)
 
 ## Context
 
@@ -13,22 +13,33 @@ sacrifice the blazing-fast ergonomics of writing a simple `char` to a grid.
 
 ## Decisions & Rust API Guidelines
 
-1.  **The Alacritty Fast-Path:** We will update `Cell` to store a primary `char`, plus an optional
+1. **The Alacritty Fast-Path:** We will update `Cell` to store a primary `char`, plus an optional
+
     heap allocation (`Option<Arc<String>>`) for rare complex graphemes. This avoids `enum`
     allocations for 99% of terminal output.
-2.  **Encapsulation (C-STRUCT-PRIVATE):** `Cell` fields will be strictly private. We solve the
+
+1. **Encapsulation (C-STRUCT-PRIVATE):** `Cell` fields will be strictly private. We solve the
+
     verbosity problem not by exposing fields, but by providing a clean constructor:
     `Cell::new(ch, style)` automatically handles the complex `flags` and `extra` internals.
-3.  **String Processing:** We will introduce `unicode-segmentation` for string printing and layout,
+
+1. **String Processing:** We will introduce `unicode-segmentation` for string printing and layout,
+
     iterating over `.graphemes(true)`.
-4.  **String Measurement:** We will use `UnicodeWidthStr::width` to calculate the display width of
+
+1. **String Measurement:** We will use `UnicodeWidthStr::width` to calculate the display width of
+
     grapheme strings, correctly identifying 2-width CJK characters and emojis.
-5.  **Bitflags (C-BITFLAG):** We will use the `bitflags` crate for `CellFlags` instead of enums.
-6.  **Custom Types (C-CUSTOM-TYPE):** Bounded layout methods will take a `Rect` struct rather than
+
+1. **Bitflags (C-BITFLAG):** We will use the `bitflags` crate for `CellFlags` instead of enums.
+1. **Custom Types (C-CUSTOM-TYPE):** Bounded layout methods will take a `Rect` struct rather than
     loose `x, y, w, h` arguments to convey meaning and prevent parameter swapping.
-7.  **Common Traits (C-COMMON-TRAITS):** All public types will eagerly implement `Debug`, `Clone`,
+
+1. **Common Traits (C-COMMON-TRAITS):** All public types will eagerly implement `Debug`, `Clone`,
+
     `PartialEq`, `Eq`, `Hash`, and `Default` where possible.
-8.  **Getter Naming (C-GETTER):** Property accessors will omit the `get_` prefix.
+
+1. **Getter Naming (C-GETTER):** Property accessors will omit the `get_` prefix.
 
 ---
 
@@ -39,7 +50,7 @@ sacrifice the blazing-fast ergonomics of writing a simple `char` to a grid.
 **Goal:** Upgrade the fundamental grid unit to support grapheme clusters via the fast-path model,
 strictly enforcing invariants.
 
-**1. Add Dependencies (`Cargo.toml`)**
+### 1. Add Dependencies (`Cargo.toml`)
 
 ```toml
 unicode-segmentation = "1.13.0"
@@ -158,7 +169,7 @@ pub fn put_grapheme(&mut self, col: u16, row: u16, grapheme: &str, style: Style)
 }
 ```
 
-**4. Update `Terminal::print_styled`**
+### 4. Update `Terminal::print_styled`
 
 ```rust
 use unicode_segmentation::UnicodeSegmentation;

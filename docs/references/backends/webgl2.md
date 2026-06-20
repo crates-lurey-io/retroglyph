@@ -17,7 +17,7 @@ cross-platform support (native OpenGL + WebGL2 via `web-sys`).
 Two architectures dominate GPU grid rendering. Both aim to batch everything into one or two draw
 calls per frame.
 
-**Approach A: Data Textures + Full-Screen Quad (doryen-rs, libtcod)**
+### Approach A: Data Textures + Full-Screen Quad (doryen-rs, libtcod)
 
 The CPU maintains three flat arrays matching the grid dimensions:
 
@@ -40,7 +40,7 @@ management per cell. Cons: Uploads entire grid data every frame (even unchanged 
 grid = 10,000 cells, that is 3 textures x 40KB = 120KB per frame, which is negligible on modern
 hardware.
 
-**Approach B: Instanced Quads + Vertex Attributes (xterm.js, bracket-lib)**
+### Approach B: Instanced Quads + Vertex Attributes (xterm.js, bracket-lib)
 
 Build a `Float32Array` containing per-cell data (position, texture atlas coordinates, fg/bg colors).
 Upload it as a vertex buffer. Use `drawElementsInstanced` (WebGL2) to draw all quads in one call.
@@ -120,7 +120,9 @@ void main() {
     vec4 font_color = texture(uFont, tchar * uFontCoef + pixPos);
     // Composite: glyph alpha blends foreground over background
     FragColor = font_color.a * foreground * vec4(font_color.rgb, 1.0)
+
               + (1.0 - font_color.a) * background;
+
 }
 ```
 
@@ -195,19 +197,21 @@ packed row by row. An LRU cache manages eviction.
 For a Rust/WASM implementation with a fixed glyph set, the simplest path is:
 
 1. **At build time**: embed a pre-rendered atlas PNG (e.g., CP437 in a 16x16 grid) as
+
    `include_bytes!`
-2. **At init**: decode the PNG, upload to a `TEXTURE_2D` with `NEAREST` filtering
-3. **At render**: the fragment shader indexes into the atlas using `glyph_index % columns` and
+
+1. **At init**: decode the PNG, upload to a `TEXTURE_2D` with `NEAREST` filtering
+1. **At render**: the fragment shader indexes into the atlas using `glyph_index % columns` and
    `glyph_index / columns`
 
 For dynamic/Unicode support:
 
 1. **At runtime**: use an offscreen `<canvas>` (via `web-sys` `HtmlCanvasElement`) to render glyphs
-   with `CanvasRenderingContext2D.fillText()`
-2. **Pack glyphs into a texture atlas** (row-major, fixed cell size for monospace)
-3. **Upload via `texSubImage2D`** for incremental updates (only upload new glyph rows)
-4. **Maintain a `HashMap<char, (u16, u16)>`** mapping characters to atlas coordinates
 
+   with `CanvasRenderingContext2D.fillText()`
+
+1. **Pack glyphs into a texture atlas** (row-major, fixed cell size for monospace)
+1. **Upload via `texSubImage2D`** for incremental updates (only upload new glyph rows)1. **Maintain a `HashMap<char, (u16, u16)>`** mapping characters to atlas coordinates
 #### Uploading the Atlas
 
 ```rust
@@ -341,13 +345,20 @@ frame render times:
 Key performance drivers:
 
 - **Batching**: Canvas 2D issues one `drawImage` per cell. WebGL batches everything into a single
+
   `drawElementsInstanced` call.
+
 - **GPU parallelism**: Fragment shader runs across GPU cores. Canvas 2D is CPU-bound and
+
   synchronous.
+
 - **Data transfer**: Canvas 2D for a 4K terminal transfers ~32MB/frame from CPU to GPU in small
+
   chunks. WebGL uploads compact buffers in bulk.
   [xterm.js issue #4175](https://github.com/xtermjs/xterm.js/issues/4175)
+
 - **CJK/Emoji gap narrows**: The bottleneck shifts to glyph rasterization (rendering complex glyphs
+
   to the texture atlas), which is CPU-bound regardless.
 
 VS Code switched to the WebGL renderer as the default terminal backend.
@@ -375,7 +386,7 @@ main failure cases are:
 - Headless/server-side rendering contexts
 - `getContext("webgl2")` returning `null`
 
-**Recommended fallback strategy:**
+### Recommended fallback strategy
 
 ```rust
 // Try WebGL2 first
@@ -416,9 +427,7 @@ loss, you must recreate all GL resources (shaders, textures, buffers).
 | **Unicode/dynamic glyphs** | Need runtime atlas generation + upload               | Same, but atlas management is independent              |
 | **Binary size (WASM)**     | Minimal with glow or web-sys                         | Same                                                   |
 | **Cross-platform**         | Same shaders work native + web (via glow)            | Same                                                   |
-| **Max grid size**          | Limited by max texture size (4096x4096 = 16M cells)  | Limited by vertex buffer size (practical: millions)    |
-
-**Additional trade-offs for the integration layer choice:**
+| **Max grid size**| Limited by max texture size (4096x4096 = 16M cells)  | Limited by vertex buffer size (practical: millions)    |**Additional trade-offs for the integration layer choice:** |
 
 |                      | web-sys        | glow                          | wgpu                       |
 | -------------------- | -------------- | ----------------------------- | -------------------------- |
@@ -440,53 +449,82 @@ For a Rust terminal/grid rendering library targeting WASM with a WebGL2 backend:
    - 1 full-screen quad with a fragment shader that does all the work
 3. **Pre-build the glyph atlas** as an embedded PNG for ASCII/CP437; add runtime atlas generation
    for Unicode support later
-4. **Implement Canvas 2D fallback** behind a shared `Backend` trait
-5. **Handle context loss** by listening for `webglcontextlost`/`webglcontextrestored` events
 
-## Sources
+4. **Implement Canvas 2D fallback** behind a shared `Backend` trait4. **Handle context loss** by listening for `webglcontextlost`/`webglcontextrestored` events## Sources
 
 - **Kept**: doryen-rs shaders (doryen_vs.glsl, doryen_fs.glsl, program.rs) - Primary reference for
+
   the data-texture grid rendering approach in Rust.
   [GitHub](https://github.com/jice-nospam/doryen-rs)
+
 - **Kept**: xterm.js WebGL Renderer PR #1790 - Definitive benchmarks (Canvas 2D vs WebGL),
+
   architecture description, and practical implementation details.
   [GitHub PR](https://github.com/xtermjs/xterm.js/pull/1790)
+
 - **Kept**: xterm.js texture atlas PRs (#4244, #4170, #4061) - Multi-page atlas strategy, LRU cache,
+
   incremental upload. [GitHub](https://github.com/xtermjs/xterm.js/pull/4244)
+
 - **Kept**: libtcod renderer_gl2.c - Clean C implementation of the same data-texture approach with
+
   detailed shader code.
   [GitHub](https://github.com/libtcod/libtcod/blob/e9660659/src/libtcod/renderer_gl2.c)
+
 - **Kept**: bracket-lib shader_strings.rs - Multiple shader approaches in Rust (with-bg, no-bg,
+
   fancy, sprites).
   [GitHub](https://github.com/amethyst/bracket-lib/blob/e2488ea/bracket-terminal/src/hal/native/shader_strings.rs)
+
 - **Kept**: TojiCode: Sprite tile maps on the GPU - Foundational technique for GPU tilemap
+
   rendering. [Blog](https://blog.tojicode.com/2012/07/sprite-tile-maps-on-gpu.html)
+
 - **Kept**: rot.js tile-gl.ts - Simple WebGL2 grid renderer with colorization support.
+
   [GitHub](https://github.com/ondras/rot.js/blob/394b3e4/src/display/tile-gl.ts)
+
 - **Kept**: glow crate source (web_sys.rs) - How glow wraps web-sys WebGL2 behind the HasContext
+
   trait. [GitHub](https://github.com/grovesNL/glow/blob/main/src/web_sys.rs)
+
 - **Kept**: wasm-bindgen WebGL example - Minimal Rust/WASM WebGL2 setup.
+
   [GitHub](https://github.com/rustwasm/wasm-bindgen/blob/master/examples/webgl/src/lib.rs)
+
 - **Kept**: VS Code WebGL terminal PR #84440 - Confirms production viability; GPU timeline analysis.
+
   [GitHub](https://github.com/microsoft/vscode/pull/84440)
+
 - **Dropped**: webglue, minwebgl, webgl2 crates - Niche, small ecosystem, insufficient adoption for
+
   recommendation
+
 - **Dropped**: web-graphics-comparison (luciopaiva) - SVG/Canvas/WebGL comparison for generic
+
   shapes, not terminal-specific
+
 - **Dropped**: rot-gl.js (uzudil) - Abandoned 2014 fork, not relevant
 
 ## Gaps
 
 - **Runtime Unicode atlas generation in Rust/WASM**: How to call browser
+
   `CanvasRenderingContext2D.fillText()` from Rust to rasterize arbitrary Unicode glyphs into an
   atlas. This requires `web-sys` Canvas2D APIs and is well-documented but not covered in depth here.
   xterm.js's approach (render to offscreen canvas, upload as texture) is the proven pattern.
+
 - **SDF (Signed Distance Field) fonts**: For resolution-independent glyph rendering. Not used by any
+
   of the surveyed projects for terminal rendering, but could improve quality at arbitrary zoom
   levels. Worth investigating if zoom/DPI flexibility is a requirement.
+
 - **WebGPU path**: wgpu can target WebGPU natively on supporting browsers (Chrome 113+, Firefox
+
   141+). If WebGPU becomes a target, the shader language would switch from GLSL to WGSL, and the
   rendering API would change significantly. This is a future consideration, not a blocker.
+
 - **Benchmarks for Rust/WASM specifically**: The xterm.js benchmarks are JavaScript. Rust/WASM may
+
   show different overhead characteristics for the buffer-building step (likely faster due to direct
   memory manipulation). No Rust-specific benchmarks were found.

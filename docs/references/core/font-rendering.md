@@ -59,9 +59,13 @@ for glyph in layout.glyphs() {
 ### Key characteristics
 
 - **Performance**: Fastest pure-Rust rasterizer. Benchmarks show it outperforming ab_glyph at all
+
   sizes for both glyf and CFF outlines.
+
 - **No shaping**: Layout is naive (character-by-character with basic kerning). No OpenType
+
   GSUB/GPOS. This means no ligatures, no complex script support.
+
 - **No font discovery**: You must load font bytes yourself.
 - **No color emoji**: No support for COLR, CBDT, or sbix tables.
 - **No fallback**: Single font only per rasterization call.
@@ -76,14 +80,14 @@ fonts.
 
 ## 2. ab_glyph
 
-### What it is
+### What it is (2)
 
 OpenType glyph loading, scaling, positioning, and rasterization. Successor to `rusttype`. Used by
 `glyph_brush` and previously by egui.
 
 **Crate:** [`ab_glyph`](https://crates.io/crates/ab_glyph) (0.2.x)
 
-### API
+### API (2)
 
 ```rust
 use ab_glyph::{Font, FontRef, Glyph, point};
@@ -131,7 +135,7 @@ buffer.
 
 ## 3. cosmic-text (Full Stack)
 
-### What it is
+### What it is (3)
 
 The text rendering stack for the COSMIC desktop (System76/Pop!\_OS). Provides the full pipeline:
 font discovery, shaping, fallback, layout, and optional rasterization. Used by glyphon, iced, Bevy
@@ -141,19 +145,24 @@ font discovery, shaping, fallback, layout, and optional rasterization. Used by g
 
 ### Architecture
 
-```
+```text
                     cosmic-text
                    /     |       \
            fontdb    harfrust     swash (optional)
         (discovery)  (shaping)   (rasterization)
-```
+```rust
 
 - **fontdb**: Font database and discovery. Scans system font directories, supports `fontconfig` on
+
   Linux. Matches fonts by family, weight, stretch, style (CSS Fonts Level 3 rules).
+
 - **harfrust**: Pure Rust port of HarfBuzz for OpenType text shaping (GSUB/GPOS). Handles ligatures,
+
   complex scripts (Arabic, Devanagari, etc.), kerning. Earlier versions used `rustybuzz`; current
   versions use `harfrust`.
+
 - **swash**: Glyph rasterization with color emoji support (COLR/CPAL, CBDT/CBLC, sbix). Optional
+
   dependency (feature-gated).
 
 ### API Walkthrough
@@ -271,7 +280,7 @@ rendering of non-Latin scripts.
 
 ## 4. swash (Standalone Usage)
 
-### What it is
+### What it is (4)
 
 Pure Rust font introspection, complex text shaping, and glyph rendering. Authored by the same
 developer who created the `parley` layout engine for the Linebender project. Supports TrueType, CFF,
@@ -344,7 +353,7 @@ shaper.shape_with(|cluster| {
 });
 ```
 
-### Key characteristics
+### Key characteristics (2)
 
 - **Zero transient heap allocations**: All scratch buffers maintained in contexts
 - **Thread-friendly**: ScaleContext and ShapeContext are separate from font data
@@ -382,8 +391,11 @@ Glyphs are placed left-to-right on horizontal "shelves." When a glyph doesn't fi
 a new shelf is started. Two allocators:
 
 - **`AtlasAllocator`**: Tracks individual allocations. Supports deallocation and shelf coalescing
+
   (merging adjacent empty shelves). Better fragmentation handling.
+
 - **`BucketedAtlasAllocator`**: Groups items into buckets. Faster allocation/deallocation but only
+
   reclaims space when all items in a bucket are freed. Better for large numbers of small,
   similarly-sized items (i.e., glyphs).
 
@@ -476,14 +488,17 @@ subpixel bins. The 4-bin quantization (Zero/One/Two/Three representing 0.0..0.25
 Three approaches used in practice:
 
 1. **LRU eviction (glyphon)**: Track which glyphs are used each frame via a
+
    `glyphs_in_use: HashSet`. On atlas full, evict least-recently-used entries that aren't in the
    current frame's set. Uses `lru::LruCache`.
 
-2. **Frame-based eviction (macroquad example)**: Track `used_this_frame: HashSet<CacheKey>`. At end
+1. **Frame-based eviction (macroquad example)**: Track `used_this_frame: HashSet<CacheKey>`. At end
+
    of frame, deallocate any glyph not used. Simple but aggressive; glyphs that appear every other
    frame get thrashed.
 
-3. **Recreate on overflow (WezTerm/Alacritty)**: When atlas is full, create a new atlas with 2x
+1. **Recreate on overflow (WezTerm/Alacritty)**: When atlas is full, create a new atlas with 2x
+
    dimensions and re-rasterize all cached glyphs. No eviction tracking needed. Works well for
    terminals where the glyph set is bounded.
 
@@ -596,15 +611,19 @@ shaping:
 
 1. **Primary font**: User-specified family (e.g., "JetBrains Mono")
 2. **Attribute match**: If the glyph is missing, search fontdb for fonts matching the requested
+
    weight/style/stretch
+
 3. **Script-based fallback**: Identify the Unicode script of the missing codepoint and search for
    fonts known to cover that script
+
 4. **Monospace fallback**: When the `monospace_fallback` feature is enabled, prefer monospace fonts
    in fallback (critical for terminals)
+
 5. **Emoji fallback**: Platform-specific emoji font detection (Apple Color Emoji on macOS, Noto
    Color Emoji on Linux)
-6. **Last resort**: `.notdef` glyph (tofu box)
 
+6. **Last resort**: `.notdef` glyph (tofu box)
 ### Manual fallback (without cosmic-text)
 
 ```rust
@@ -629,10 +648,15 @@ impl FontStack {
 ### Terminal-specific considerations
 
 - **Monospace constraint**: Fallback fonts may be proportional. You need to scale/clip glyphs to fit
+
   the cell grid. WezTerm does this with sophisticated scaling logic based on glyph aspect ratio.
+
 - **Double-width characters**: CJK characters occupy two cells. The renderer must detect
+
   `East_Asian_Width` property and allocate two cells.
+
 - **Nerd Fonts / Powerline**: Many terminal users install patched fonts. These should be the primary
+
   font, not a fallback.
 
 ## 7. Color Emoji Handling
@@ -664,10 +688,14 @@ strike for the requested size and scales it.
 ### Known issues
 
 - **swash CBDT panics**: There are known issues with swash panicking on some CBDT fonts (swash#48).
+
   The `bevy_emoji` crate works around this by using `ttf-parser` to extract CBDT bitmaps directly,
   bypassing swash.
+
 - **COLRv1 support**: Partial. Complex gradient fills and compositing modes may not render
+
   correctly.
+
 - **SVG emoji**: Not supported by swash. Would require integrating `resvg` or similar.
 
 ### Atlas implications for color emoji
@@ -676,6 +704,7 @@ Color emoji require an RGBA texture, not an alpha-only texture. This means you n
 
 - **Two atlas textures**: One R8 for monochrome glyphs, one RGBA8 for color (glyphon's approach)
 - **Single RGBA atlas**: Store monochrome glyphs as (255, 255, 255, alpha), color glyphs as-is.
+
   Wastes 3x memory for monochrome glyphs but simplifies the pipeline.
 
 glyphon uses two separate `InnerAtlas` instances (mask and color) with separate
@@ -687,7 +716,7 @@ vertex data.
 [glyphon](https://github.com/grovesNL/glyphon) is the canonical example of this entire stack
 assembled for wgpu. Architecture:
 
-```
+```text
 cosmic-text (FontSystem + Buffer)
     ↓ layout_runs() → LayoutGlyph → PhysicalGlyph → CacheKey
 SwashCache
@@ -698,7 +727,7 @@ wgpu Texture (R8Unorm for mask, Rgba8Unorm for color)
     ↓ write_texture()
 Vertex buffer (screen_rect, atlas_rect, color, content_type)
     ↓ render pass with instanced quads
-```
+```rust
 
 Key implementation details from glyphon's `text_atlas.rs`:
 
@@ -758,16 +787,15 @@ etagere = "0.4"
 ### Why this stack
 
 1. **cosmic-text** provides everything needed out of the box: font discovery, shaping (for ligature
+
    fonts), per-glyph fallback (for emoji and CJK), and rasterization.
-2. **`monospace_fallback` feature** ensures fallback fonts prefer monospace variants, critical for
+
+1. **`monospace_fallback` feature** ensures fallback fonts prefer monospace variants, critical for
+
    terminal grid alignment.
-3. **swash** (via cosmic-text) handles color emoji properly with COLR/CBDT/sbix support.
-4. **etagere** is the battle-tested atlas allocator, used by glyphon and others.
-5. This is the same stack as glyphon, iced, and the COSMIC desktop, so it's well-maintained.
 
-### Why not fontdue alone
-
-- No shaping = no ligatures (Fira Code, JetBrains Mono ligatures won't work)
+1. **swash** (via cosmic-text) handles color emoji properly with COLR/CBDT/sbix support.
+1. **etagere** is the battle-tested atlas allocator, used by glyphon and others.1. This is the same stack as glyphon, iced, and the COSMIC desktop, so it's well-maintained.### Why not fontdue alone- No shaping = no ligatures (Fira Code, JetBrains Mono ligatures won't work)
 - No fallback = emoji and CJK characters won't render
 - No color emoji support
 - You'd have to build all the infrastructure cosmic-text already provides
@@ -803,56 +831,82 @@ swash.
 ## Sources
 
 - Kept: [fontdue docs](https://docs.rs/fontdue) and [GitHub](https://github.com/mooman219/fontdue) -
+
   primary API docs and benchmarks
+
 - Kept: [ab_glyph docs](https://docs.rs/ab_glyph/latest/ab_glyph/) - API reference for Font trait
 - Kept: [cosmic-text docs](https://docs.rs/cosmic-text/latest/cosmic_text/) - full API reference,
+
   CacheKey/SubpixelBin/Buffer/FontSystem
+
 - Kept: [swash docs](https://docs.rs/swash/latest/swash/scale/index.html) and
+
   [GitHub](https://github.com/dfrg/swash) - scale module walkthrough, Render builder, Source enum
+
 - Kept: [etagere docs](https://docs.rs/etagere/latest/etagere/) - AtlasAllocator and
+
   BucketedAtlasAllocator API
+
 - Kept: [guillotiere GitHub](https://github.com/nical/guillotiere) - guillotine algorithm
+
   implementation
+
 - Kept:
+
   [glyphon source (text_atlas.rs)](https://docs.rs/glyphon/latest/x86_64-pc-windows-msvc/src/glyphon/text_atlas.rs.html) -
   production atlas implementation with LRU eviction
+
 - Kept:
+
   [cosmic-text macroquad gist](https://gist.github.com/caspark/b88108696d0e7678b2e6768da32f1be2) -
   complete working example of cosmic-text + guillotiere atlas
+
 - Kept:
+
   [WezTerm DeepWiki - Glyph Cache](https://deepwiki.com/wezterm/wezterm/3.2.1-glyph-cache-and-texture-atlas) -
   production terminal glyph cache architecture
+
 - Kept:
+
   [Mozilla Gfx Blog - Atlas Allocation](https://mozillagfx.wordpress.com/2021/02/04/improving-texture-atlas-allocation-in-webrender/) -
   original rationale for etagere vs guillotiere
+
 - Kept: [bevy_emoji](https://crates.io/crates/bevy_emoji) - documents swash CBDT panic issue
 - Kept: [resvg color fonts issue](https://github.com/RazrFalcon/resvg/issues/487) - comprehensive
+
   breakdown of emoji font table formats
+
 - Dropped: fontcore crate - too early-stage, not relevant
 - Dropped: typf-render-color - niche, low downloads
 - Dropped: text-typeset - undocumented, low maturity
 - Dropped: Alacritty renderer PRs - interesting but Alacritty's approach (crossfont + FreeType)
+
   isn't pure Rust
 
 ## Gaps
 
 1. **Exact benchmark numbers**: fontdue's README shows graphs but not raw numbers. The Exa rate
+
    limit prevented finding independent benchmark comparisons. The relative performance claims are
    directionally correct based on fontdue's benchmark graphs and design (no hinting, no color, no
    variable font overhead).
 
-2. **harfrust maturity**: cosmic-text recently switched from rustybuzz to harfrust. harfrust is a
+1. **harfrust maturity**: cosmic-text recently switched from rustybuzz to harfrust. harfrust is a
+
    full Rust port of HarfBuzz rather than a C-to-Rust translation. Could not find independent
    benchmarks comparing the two. Both are believed to pass the HarfBuzz test suite.
 
-3. **COLRv1 completeness in swash**: The exact coverage of COLRv1 features (gradients, compositing
+1. **COLRv1 completeness in swash**: The exact coverage of COLRv1 features (gradients, compositing
+
    operators, sweep gradients) is unclear from docs alone. For terminal use, COLRv0 support (flat
    color layers) is sufficient for most emoji.
 
-4. **Subpixel rendering on macOS**: macOS deprecated subpixel antialiasing in Mojave. For a
+1. **Subpixel rendering on macOS**: macOS deprecated subpixel antialiasing in Mojave. For a
+
    cross-platform terminal, you likely want to support both alpha-only and subpixel modes, but macOS
    should default to grayscale AA.
 
-5. **Multi-threaded rasterization**: swash's `ScaleContext` is designed for per-thread use. For
+1. **Multi-threaded rasterization**: swash's `ScaleContext` is designed for per-thread use. For
+
    initial atlas population with hundreds of glyphs, parallel rasterization could help. No
    benchmarks found on the actual speedup.

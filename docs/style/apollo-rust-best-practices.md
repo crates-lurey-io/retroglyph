@@ -15,8 +15,11 @@
 
 - **Always return `Result<T, E>` for fallible operations.** Never panic in production code.
 - **Never use `unwrap()`/`expect()` outside tests.** Use `let Ok(..) = .. else { return .. }`,
+
   `if let`, `unwrap_or`, `unwrap_or_else`, or `unwrap_or_default` instead.
+
 - Use `panic!` only for unrecoverable conditions. Prefer `todo!`, `unreachable!`, and
+
   `unimplemented!` where semantically appropriate.
 
 ### Error crate choices
@@ -119,18 +122,22 @@ allocation or function calls to avoid eager evaluation.
 - Prefer `for` loops for early exits (`break`, `continue`, `return`) and simple side-effect code.
 - Iterators are lazy and compiled into tight loops (zero-cost abstractions).
 - Prefer `.sum()` over `.fold()` for summing. Prefer `.iter()` over `.into_iter()` unless ownership
+
   transfer is needed.
+
 - Avoid intermediate `.collect()` calls; pass iterators directly.
 
 ### Import ordering
 
-```
+```text
+
 1. std / core / alloc
 2. Enterprise crates (optional)
 3. External crates
 4. Workspace crates
 5. super:: / crate::
-```
+
+```text
 
 Automate with `rustfmt.toml`:
 
@@ -198,7 +205,9 @@ pedantic = { level = "warn", priority = 3 }
 - Avoid passing types >512 bytes by value; pass by reference.
 - Heap-allocate recursive data structures (`Box`).
 - Avoid large stack arrays: use `vec![0; N].into_boxed_slice()` instead of `Box::new([0u8; N])`
+
   which temporarily allocates on the stack first.
+
 - Use `#[inline]` only when benchmarks prove it helps.
 
 ### Cloning discipline
@@ -306,6 +315,7 @@ Use `insta` with YAML snapshots for complex/structural output. Rules:
 - Box at the API boundary, not internally.
 - Avoid boxing inside structs unless required (recursive types).
 - Traits must be object-safe: no generic methods, no `Self: Sized`, methods use
+
   `&self`/`&mut self`/`self`.
 
 ---
@@ -335,7 +345,9 @@ impl Client<Connected> {
 ### When to use
 
 - Enforcing API constraints at compile time (builders with required fields, protocol state
+
   machines).
+
 - Replacing runtime booleans/enums with type-safe code paths.
 - Library/crate APIs where correctness is critical.
 
@@ -467,26 +479,33 @@ Requires nightly as of Rust 1.88: `cargo +nightly fmt`.
 These patterns are drawn from Apollo's Router codebase and the handbook's recurring themes:
 
 1. **Error hierarchies per layer.** Each crate/module defines its own error enum with `thiserror`.
+
    Cross-layer errors use `#[from]` for automatic conversion. Binary entry points can use `anyhow`
    for top-level wrapping.
 
-2. **Structured linting via xtask.** Apollo Router uses `cargo xtask lint` to run a standardized
+1. **Structured linting via xtask.** Apollo Router uses `cargo xtask lint` to run a standardized
+
    linting pipeline. This is more maintainable than Makefile targets for complex workspaces.
 
-3. **Snapshot testing for complex output.** Use `cargo insta` with YAML snapshots for serialized
+1. **Snapshot testing for complex output.** Use `cargo insta` with YAML snapshots for serialized
+
    data, generated code, and CLI output. Commit `.snap` files. Use redactions for non-deterministic
    fields.
 
-4. **Type state pattern for protocol correctness.** Encode connection states, request validation
+1. **Type state pattern for protocol correctness.** Encode connection states, request validation
+
    stages, and builder requirements as types so invalid transitions are compile errors.
 
-5. **Static dispatch by default, dynamic at boundaries.** Keep generics/`impl Trait` in hot paths.
+1. **Static dispatch by default, dynamic at boundaries.** Keep generics/`impl Trait` in hot paths.
+
    Use `dyn Trait` only at plugin interfaces and public API boundaries.
 
-6. **Workspace-level configuration.** Centralize lints, dependencies, and rustfmt settings at the
+1. **Workspace-level configuration.** Centralize lints, dependencies, and rustfmt settings at the
+
    workspace level for consistency across dozens of crates.
 
-7. **Design principles (from Router README).** Correctness first, then reliability, then
+1. **Design principles (from Router README).** Correctness first, then reliability, then
+
    performance. Follow the principle of least surprise. Test and document everything implied by the
    specification, including failure cases.
 
@@ -495,10 +514,17 @@ These patterns are drawn from Apollo's Router codebase and the handbook's recurr
 ## Sources
 
 - [apollographql/rust-best-practices](https://github.com/apollographql/rust-best-practices) -
+
   Primary source, 9 chapters + final notes
+
 - [apollographql/router](https://github.com/apollographql/router) - Apollo Router README,
+
   CONTRIBUTING.md, DEVELOPMENT.md for real-world context
+
 - [Rust Official API Guidelines](https://rust-lang.github.io/api-guidelines/about.html) - Companion
+
   reference cited by Apollo
+
 - [Rust Analyzer Style Guide](https://rust-analyzer.github.io/book/contributing/style.html) -
+
   Companion reference cited by Apollo

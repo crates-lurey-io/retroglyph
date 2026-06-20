@@ -8,9 +8,13 @@ the X/Open Curses API entirely and builds something more capable from scratch. A
 - **Repo**: <https://github.com/dankamongmen/notcurses>
 - **Author**: Nick Black (dankamongmen)
 - **Docs**: <https://notcurses.com> (man pages),
+
   [dankwiki](https://nick-black.com/dankwiki/index.php?title=Notcurses)
+
 - **Book**: [Hacking the Planet! with Notcurses](https://nick-black.com/htp-notcurses.pdf) (free
+
   PDF)
+
 - **Current version**: 3.0.17
 
 ## Language and Bindings
@@ -78,15 +82,20 @@ There is no separate "pad" or "panel" type. The z-buffer is built-in.
 Rendering is a two-phase process:
 
 1. **Render (compositing)**: Flattens a pile's z-ordered planes into a single matrix of cells. For
+
    each screen coordinate, the algorithm walks from the topmost intersecting plane downward,
    resolving:
+
    - The first non-empty EGC encountered becomes the glyph.
    - Foreground/background colors are resolved per alpha: opaque locks the color, transparent skips
+
      to the next plane, blend averages colors across planes, high-contrast auto-selects a
      contrasting fg color against the computed bg.
+
    - The walk stops when both EGC and colors are resolved, or all planes are exhausted.
 
-2. **Rasterize (output)**: Takes the composited matrix, diffs it against the last-rendered state,
+1. **Rasterize (output)**: Takes the composited matrix, diffs it against the last-rendered state,
+
    and produces an optimized stream of UTF-8 characters and escape sequences. Only changed cells
    emit output. This is the "damage map" approach, introduced in v0.9.0.
 
@@ -120,16 +129,21 @@ Supported pixel protocols:
 - **Kitty graphics protocol**: Kitty, WezTerm
 - **Linux framebuffer**: Direct memory-mapped writes (not via terminal I/O)
 - iTerm2 protocol was **removed** (iTerm2 doesn't support cells + graphics sharing a cell, breaking
+
   notcurses' transparency model)
 
 ### Unicode and Emoji
 
 - UTF-8 only (or ASCII). No other encodings.
 - Full EGC support via `libunistring`. Wide characters tracked correctly; splitting a wide glyph
+
   destroys it.
+
 - Right-to-left text: not handled specially by notcurses (terminals apply their own heuristics).
 - Drawing characters (box drawing, block elements, Braille) are critical for blitters; many
+
   terminals draw these directly rather than from fonts.
+
 - `notcurses-info` lets you visually inspect your terminal's Unicode rendering.
 
 ### Input
@@ -167,7 +181,9 @@ playback, witherworm, xray effects, yield patterns, and zoo animations.
 ## Projects Built With Notcurses
 
 - **Selkie** (Raku): High-level retained-mode TUI framework built on Notcurses::Native, with widget
+
   tree, reactive store, theming
+
 - **PubSub** (C++17): RSS/Atom/Meshtastic reader/publisher with notcurses TUI
 - **tick_trader**: Financial trading terminal with notcurses backend option
 - **Memory Arena Visualizer**: Interactive memory allocator visualization tool
@@ -177,63 +193,79 @@ playback, witherworm, xray effects, yield patterns, and zoo animations.
 ## What It Does Well
 
 1. **Performance**: Damage-map diffing means only changed cells produce output. The internal source
+
    comments describe it as "depth buffer blit of updated cells". Benchmarks show Kitty at ~680 FPS
    for rendering, substantially ahead of other terminals. The library is described (by its author)
    as "fast as shit."
 
-2. **Pixel graphics integration**: Unlike most TUI libraries, notcurses treats pixel blitting
+1. **Pixel graphics integration**: Unlike most TUI libraries, notcurses treats pixel blitting
+
    (Sixel, Kitty) as a first-class feature integrated into the plane compositing model. Transparency
    works across pixel and text layers (sprites). Auto-detection and graceful degradation across
    blitter levels.
 
-3. **True transparency and alpha blending**: Three-channel transparency (glyph, fg, bg) with four
+1. **True transparency and alpha blending**: Three-channel transparency (glyph, fg, bg) with four
+
    alpha modes (opaque, blend, transparent, high-contrast). High-contrast mode auto-selects readable
    foreground colors against computed backgrounds. This is unique among terminal libraries.
 
-4. **Thread safety by design**: Concurrent mutation of different planes is always safe. Piles
+1. **Thread safety by design**: Concurrent mutation of different planes is always safe. Piles
+
    provide independent rendering contexts for true parallel rendering.
 
-5. **Unicode-first cell model**: EGC-based cells with inline storage for common cases. No fixed-size
+1. **Unicode-first cell model**: EGC-based cells with inline storage for common cases. No fixed-size
+
    character arrays. Width tracking handles CJK and emoji correctly.
 
-6. **Multimedia**: First-class image and video rendering via FFmpeg/OIIO, with automatic blitter
+1. **Multimedia**: First-class image and video rendering via FFmpeg/OIIO, with automatic blitter
+
    selection based on terminal capabilities.
 
-7. **Terminal capability detection**: Aggressive runtime probing (XTGETTCAP, DA sequences) combined
+1. **Terminal capability detection**: Aggressive runtime probing (XTGETTCAP, DA sequences) combined
+
    with terminfo. Assumes maximum capabilities and degrades, rather than assuming minimum and
    building up.
 
-8. **Widgets**: Menus, selectors, multiselectors, tabs, progress bars, plots, readers, reels
+1. **Widgets**: Menus, selectors, multiselectors, tabs, progress bars, plots, readers, reels
+
    (panelreel), tree selectors, subproc widgets, and more.
 
 ## Where It Falls Short
 
 1. **Terminal compatibility**: Hangs on startup if the terminal doesn't respond to interrogation
+
    queries (reported in VSCode terminals over SSH, WSL2). macOS Terminal.app leaks query responses
    as user input. `screen` doesn't work well. `mosh` looks bad. iTerm2 support was entirely removed
    due to incompatible graphics model.
 
-2. **Complexity and learning curve**: The API is large and C-level. No higher-level declarative
+1. **Complexity and learning curve**: The API is large and C-level. No higher-level declarative
+
    layout system (Selkie exists as a third-party attempt). The guidebook helps but the library
    demands understanding of planes, cells, channels, piles, and rendering phases.
 
-3. **Static linking issues**: Reported problems with static linking (`pkg-config --static` needed,
+1. **Static linking issues**: Reported problems with static linking (`pkg-config --static` needed,
+
    dependency resolution is fragile).
 
-4. **Limited ecosystem**: Despite many language bindings, adoption is modest. Few large third-party
+1. **Limited ecosystem**: Despite many language bindings, adoption is modest. Few large third-party
+
    applications compared to ncurses, crossterm, or even tcell. Most examples are the bundled demos.
 
-5. **Not a drop-in replacement**: Porting from ncurses requires understanding architectural
+1. **Not a drop-in replacement**: Porting from ncurses requires understanding architectural
+
    differences (no color pairs, no pads, no panels, different input model, different error handling
    at screen edges).
 
-6. **Screen multiplexer issues**: Looks bad in `mosh`, messy in `screen`, `tmux` consumes bitmaps.
+1. **Screen multiplexer issues**: Looks bad in `mosh`, messy in `screen`, `tmux` consumes bitmaps.
+
    This limits usability in many real-world SSH workflows.
 
-7. **Platform gaps**: Windows support exists but requires ConPTY and UTF-8 beta settings. WSL2 has
+1. **Platform gaps**: Windows support exists but requires ConPTY and UTF-8 beta settings. WSL2 has
+
    known issues. The library is most at home on Linux with a modern terminal.
 
-8. **Maintenance pace**: Some open bugs (incorrect `O_CLOEXEC` usage, Kitty keyboard cleanup on
+1. **Maintenance pace**: Some open bugs (incorrect `O_CLOEXEC` usage, Kitty keyboard cleanup on
+
    stop) suggest maintenance is a one-person effort with limited bandwidth.
 
 ## Comparison with BearLibTerminal
@@ -268,14 +300,22 @@ simpler.
 
 - [GitHub README](https://github.com/dankamongmen/notcurses)
 - [dankwiki: Notcurses](https://nick-black.com/dankwiki/index.php?title=Notcurses) - rendering
+
   algorithm, blitter table, benchmarks
+
 - [notcurses_cell(3)](https://man.archlinux.org/man/notcurses_cell.3.en) - cell struct and EGC
+
   encoding
+
 - [notcurses_render(3)](https://notcurses.com/notcurses_render.3.html) - render/rasterize pipeline
 - [notcurses_plane(3)](https://www.notcurses.com/notcurses_plane.3.html) - plane model
 - [doc/CURSES.md](https://github.com/dankamongmen/notcurses/blob/master/doc/CURSES.md) - differences
+
   from ncurses
+
 - [TERMINALS.md](https://github.com/dankamongmen/notcurses/blob/master/TERMINALS.md) - terminal
+
   compatibility matrix
+
 - [FOSDEM 2021 slides](https://archive.fosdem.org/2021/schedule/event/notcurses/attachments/slides/4479/export/events/attachments/notcurses/slides/4479/notcurses_fosdem_2021.pdf)
 - [BearLibTerminal](https://github.com/cfyzium/bearlibterminal) - for comparison

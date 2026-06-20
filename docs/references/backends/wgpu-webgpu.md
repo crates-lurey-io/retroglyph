@@ -24,9 +24,9 @@ The wgpu API follows a layered object model derived from the WebGPU specificatio
 | `BindGroup`      | Groups of resources (textures, samplers, uniform buffers) bound to shader slots.                                                             |
 | `CommandEncoder` | Records GPU commands (render passes, copies). Produces a `CommandBuffer`.                                                                    |
 
-**Initialization flow:**
+### Initialization flow
 
-```
+```text
 Instance::new()
   -> instance.create_surface(&window)
   -> instance.request_adapter(compatible_surface)
@@ -42,12 +42,12 @@ Instance::new()
        queue.submit()
        surface_texture.present()
      }
-```
+```text
 
 The `Surface` is configured with size, format, and present mode (`Fifo` for vsync, `Mailbox` for
 low-latency). On resize, call `surface.configure()` again.
 
-**Key design properties:**
+### Key design properties
 
 - All resource creation is validated at the API level (safe Rust, no `unsafe` for users).
 - Pipeline state is immutable and pre-compiled, unlike OpenGL's mutable global state.
@@ -67,7 +67,7 @@ practice.
 Each cell is one instanced draw of a unit quad. Per-instance data carries position,
 foreground/background color, and glyph atlas UV coordinates.
 
-**Instance data per cell (~32-48 bytes):**
+### Instance data per cell (~32-48 bytes)
 
 ```rust
 #[repr(C)]
@@ -86,16 +86,17 @@ struct CellInstance {
 
 1. Background pass: draw all cell backgrounds (solid color, no texture).
 2. Text pass: draw all cells with glyphs (sample from atlas texture, use glyph alpha as mask, apply
-   foreground color).
-3. Optional: color emoji pass with a separate RGBA atlas.
 
+   foreground color).
+
+3. Optional: color emoji pass with a separate RGBA atlas.
 A 200x50 terminal = 10,000 instances. Modern GPUs handle millions of instances trivially.
 
 **Advantages:** Minimal CPU work per frame; only rebuild the instance buffer when cells change.
 Dirty-row tracking (a 256-bit bitset, one bit per row) means only changed rows need instance data
 updates. GPU cost is nearly constant regardless of cell count.
 
-**wgpu instancing API:**
+### wgpu instancing API
 
 ```rust
 render_pass.set_vertex_buffer(0, quad_vertex_buffer.slice(..));  // unit quad (4 verts)
@@ -137,7 +138,8 @@ workloads (10K-50K cells), the difference is negligible.
 Use a compute shader to read a cell buffer (stored as a storage buffer) and write directly to a
 render target or generate vertices. This is the most GPU-driven approach.
 
-**Advantages:** Minimal CPU involvement; the grid state lives in a GPU buffer. **Disadvantages:**
+### Advantages:**Minimal CPU involvement; the grid state lives in a GPU buffer.**Disadvantages
+
 Requires compute shader support (not available on WebGL2). More complex synchronization. Overkill
 for typical terminal grid sizes.
 
@@ -228,16 +230,20 @@ uses one.
 ### Architecture
 
 1. **Rasterize on demand:** The first time a (codepoint, font_id, size, style) combination is
+
    needed, rasterize it to a CPU bitmap using the platform text engine (Core Text on macOS, FreeType
    on Linux, DirectWrite on Windows, or cross-platform via `cosmic-text`/`rustybuzz`).
 
-2. **Pack into atlas texture:** Use a rectangle packing algorithm (e.g., `etagere` shelf packer) to
+1. **Pack into atlas texture:** Use a rectangle packing algorithm (e.g., `etagere` shelf packer) to
+
    find a free slot in the GPU texture. Upload the bitmap to that slot via `queue.write_texture()`.
 
-3. **Record UV coordinates:** Store a mapping from (codepoint, font_id, size, style) to
+1. **Record UV coordinates:** Store a mapping from (codepoint, font_id, size, style) to
+
    (atlas_texture_index, uv_rect) in a hash table.
 
-4. **Sample in fragment shader:** The fragment shader samples the atlas at the UV coordinates and
+1. **Sample in fragment shader:** The fragment shader samples the atlas at the UV coordinates and
+
    uses the result as alpha (for grayscale glyphs) or as direct color (for emoji).
 
 ### Atlas layout
@@ -248,10 +254,10 @@ Two common layouts:
 glyph cells are the same size. The atlas becomes a simple grid of `glyph_w x glyph_h` slots. Slot
 index maps directly to UV coordinates:
 
-```
+```text
 u0 = (slot % cols) * glyph_w / atlas_w
 v0 = (slot / cols) * glyph_h / atlas_h
-```
+```rust
 
 This is what Attyx does. Simple, fast lookup, but wastes space for proportional or variable-width
 glyphs.
@@ -265,17 +271,25 @@ More flexible, handles mixed font sizes and emoji.
 Most implementations use two textures:
 
 - **Grayscale atlas** (`R8Unorm`): For regular text. Each pixel stores glyph coverage (0.0 =
+
   transparent, 1.0 = opaque). Fragment shader multiplies by foreground color.
+
 - **Color atlas** (`Rgba8Unorm`): For color emoji and COLR/CBDT font glyphs. Fragment shader uses
+
   the texture color directly.
 
 ### Eviction and growth
 
 - **Growth:** When the atlas fills up, either double its size (reallocate and re-upload) or allocate
+
   a second atlas texture. Most terminals never fill a 2048x2048 or 4096x4096 atlas in normal use.
+
 - **LRU eviction:** For long-running sessions with many unique glyphs, use LRU to evict stale
+
   entries. ratatui-wgpu uses `evictor` for this.
+
 - **Platform limits:** Some GPUs (notably mobile/WebGL2) limit textures to 2048x2048. Rio handles
+
   this by capping atlas size to `min(4096, device.max_texture_dimension_2d)`.
 
 ### Key crates for glyph atlas
@@ -311,21 +325,27 @@ wgpu's backend matrix:
 | OpenGL  | GL 3.3+ (best effort) | GL ES 3.0+ (best effort) | Via ANGLE    | N/A          | GL ES 3.0+ | WebGL2 (best effort) |
 | WebGPU  | N/A                   | N/A                      | N/A          | N/A          | N/A        | 1st class            |
 
-**Key points:**
-
-- On **macOS/iOS**, Metal is the native and preferred backend. Vulkan works via MoltenVK but adds a
+**Key points:**- On**macOS/iOS**, Metal is the native and preferred backend. Vulkan works via MoltenVK but adds a
   translation layer.
+
 - On **Linux**, Vulkan is preferred. Mesa provides Vulkan drivers for AMD, Intel, and (via lavapipe)
+
   CPU fallback. OpenGL (GL ES 3.0+) is the fallback.
+
 - On **Windows**, both Vulkan and DX12 are first-class. DX12 is often preferred for broader hardware
+
   coverage.
+
 - On **Android**, Vulkan is preferred (Android 7.0+). GL ES 3.0+ is the fallback.
 - On **Web/WASM**, WebGPU is the preferred backend (Chrome 113+, Firefox nightly, Safari TP). WebGL2
+
   is the fallback for older browsers.
+
 - Backend selection is automatic at runtime. wgpu picks the best available backend unless overridden
+
   via `WGPU_BACKEND` env var.
 
-**Browser WebGPU status (as of mid-2025):**
+### Browser WebGPU status (as of mid-2025)
 
 - Chrome/Edge: Shipped and stable since Chrome 113
 - Firefox: Behind a flag, progressing (wgpu-core powers Firefox's WebGPU)
@@ -346,7 +366,9 @@ The most mature wgpu-based terminal emulator in Rust. Uses its own rendering eng
 
 - Built on wgpu with WGSL shaders
 - Sugarloaf handles font loading (custom loader, previously cosmic-text), glyph atlas management,
+
   and cell grid rendering
+
 - Atlas sizes capped at `min(4096, max_texture_dimension_2d)` for portability
 - Supports both desktop (native) and web (WASM/WebGPU)
 - Uses VTE parser from Alacritty
@@ -448,7 +470,9 @@ is the most detailed public writeup of terminal GPU rendering architecture.
 ### Frame time
 
 - **ratatui-wgpu**: ~800 FPS at 1080p updating every cell every frame (with CRT post-processing
+
   shader), so ~1.25ms per frame.
+
 - **Attyx**: Sub-millisecond frame times for typical terminal output at 120 FPS.
 - **bracket-lib wgpu**: Users report better frame rates than OpenGL backend.
 - **Basilisk**: Claims sub-millisecond render times with thousands of lines via wgpu.
@@ -535,23 +559,36 @@ benefits outweigh the costs.
 ### Kept
 
 - [wgpu repository](https://github.com/gfx-rs/wgpu) - primary source for architecture, platform
+
   matrix, API design
+
 - [Learn Wgpu tutorial](https://sotrh.github.io/learn-wgpu/) - best tutorial for wgpu fundamentals,
+
   instancing chapter directly relevant
+
 - [Attyx GPU rendering blog](https://semos.sh/blog/attyx-gpu-rendering/) - the most detailed public
+
   writeup of terminal GPU rendering; covers vertex layout, glyph atlas, shaders, dirty tracking,
   threading
+
 - [Warp glyph atlas blog](https://www.warp.dev/blog/adventures-text-rendering-kerning-glyph-atlases) -
+
   deep dive on glyph atlas design, sub-pixel positioning, caching tradeoffs
+
 - [ratatui-wgpu](https://github.com/jesterhearts/ratatui-wgpu) - production wgpu terminal backend
+
   with performance numbers and dependency rationale
+
 - [Rio terminal / sugarloaf](https://rioterm.com/) - most mature wgpu terminal emulator in Rust, 7K
+
   stars
+
 - [glyphon](https://github.com/grovesNL/glyphon) - standard library for wgpu 2D text rendering
 - [naga README](https://github.com/gfx-rs/wgpu/tree/trunk/naga) - shader translation matrix
 - [bracket-lib](https://github.com/thebracket/bracket-lib) - roguelike toolkit with wgpu backend
 - [par-term-render](https://crates.io/crates/par-term-render) - wgpu terminal renderer crate
 - [tchayen WebGPU text rendering](https://tchayen.com/drawing-text-in-webgpu-using-just-the-font-file) -
+
   WebGPU text from raw font data
 
 ### Dropped
@@ -560,26 +597,33 @@ benefits outweigh the costs.
 - Various wgpu-zoo/quickgpu/tribufu examples - small demos, no terminal-specific insight
 - Medium/Scribe Rio articles - early-stage (v0.0.8), superseded by current Rio docs
 - basilisk/yetty/ori-term - very early stage / AI-generated projects, no real implementation to
+
   learn from
+
 - WebGPU vs Vulkan Medium article - interesting but not directly relevant to implementation
 
 ## Gaps
 
 1. **Compute shader grid rendering:** No production terminal uses compute shaders for cell rendering
+
    yet. The approach is theoretically interesting (store grid in a storage buffer, let compute
    shader generate vertices or write directly to a render target) but untested for this use case.
 
-2. **SDF (Signed Distance Field) text rendering:** Some game engines use SDF for
+1. **SDF (Signed Distance Field) text rendering:** Some game engines use SDF for
+
    resolution-independent text. Could reduce atlas memory and enable smooth scaling. No terminal
    emulator uses this approach. Worth investigating for zoom/DPI-independent rendering.
 
-3. **WebGPU browser performance benchmarks:** No direct comparisons of wgpu-on-WebGPU vs WebGL2 for
+1. **WebGPU browser performance benchmarks:** No direct comparisons of wgpu-on-WebGPU vs WebGL2 for
+
    terminal rendering in browsers. Rio supports both but doesn't publish comparative benchmarks.
 
-4. **wgpu overhead measurements:** The exact CPU overhead of wgpu's validation layer vs raw
+1. **wgpu overhead measurements:** The exact CPU overhead of wgpu's validation layer vs raw
+
    Vulkan/Metal/OpenGL is not well-documented. egui's transition suggests it's measurable but not a
    problem for terminal workloads.
 
-5. **Multi-window / multi-surface:** How wgpu handles multiple windows (multiple `Surface` objects
+1. **Multi-window / multi-surface:** How wgpu handles multiple windows (multiple `Surface` objects
+
    sharing a `Device`) is less documented. Relevant if the terminal supports detachable panes or
    multiple windows.

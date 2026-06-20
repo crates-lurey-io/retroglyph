@@ -17,24 +17,36 @@ changed cells. From Rust/WASM, the `web-sys` crate provides full access to
 The Canvas 2D API provides two text-drawing methods and one measurement method:
 
 - **`fillText(text, x, y [, maxWidth])`** -- draws filled text using the current `font`,
+
   `fillStyle`, `textAlign`, and `textBaseline` properties. This is the workhorse for glyph
   rendering.
+
 - **`strokeText(text, x, y [, maxWidth])`** -- draws text outlines. Occasionally used for underline
+
   stroke effects around glyphs (xterm.js uses it to create an outline between text descenders and
   underlines).
+
 - **`measureText(text)`** -- returns a `TextMetrics` object with `width`, `actualBoundingBoxAscent`,
+
   `actualBoundingBoxDescent`, `actualBoundingBoxLeft`, `actualBoundingBoxRight`. These metrics are
   essential for computing cell sizes and positioning glyphs.
 
 Key state properties for text rendering:
 
 - `ctx.font` -- CSS font shorthand string, e.g. `"italic bold 16px 'Fira Code'"`. Must be set before
+
   `measureText` and `fillText`.
+
 - `ctx.textBaseline` -- controls vertical alignment. `"middle"` is used by rot.js for centering;
+
   xterm.js uses a configured baseline constant.
+
 - `ctx.textAlign` -- `"center"` for grid-cell centering (rot.js), `"left"` for monospace
+
   positioning.
+
 - `ctx.textRendering` -- newer property (`"optimizeSpeed"`, `"optimizeLegibility"`,
+
   `"geometricPrecision"`). Limited browser support as of 2026.
 
 **Performance note**: Setting `ctx.font` is expensive because the browser must parse the CSS font
@@ -119,17 +131,21 @@ fg color, `destination-over` for bg color) to recolor tiles at draw time.
 xterm.js's `TextureAtlas` (shared between canvas and WebGL renderers) is the most sophisticated
 open-source implementation of this pattern. Key design details:
 
-**Atlas structure:**
+### Atlas structure
 
 - Multiple atlas pages, each an HTMLCanvasElement (starting at 512x512, up to 4096x4096).
 - Glyphs are packed left-to-right, top-to-bottom in rows.
 - When a row's height is too large for the next glyph, the row becomes "fixed" and a new row starts
+
   below.
+
 - When pages fill up, the 4 most-used same-sized pages are merged into one page at 2x size
+
   (quad-merge).
+
 - A maximum page count triggers merging to avoid unbounded GPU memory.
 
-**Glyph rendering pipeline:**
+### Glyph rendering pipeline
 
 1. A temporary canvas (`_tmpCanvas`) is used to render each glyph in isolation.
 2. Background color is drawn first with `globalCompositeOperation = 'copy'`.
@@ -138,23 +154,25 @@ open-source implementation of this pattern. Key design details:
 5. `fillText(chars, padding, padding + deviceCharHeight)` draws the glyph.
 6. Underline, overline, and strikethrough decorations are drawn.
 7. Background color pixels are cleared to transparent (via `clearColor` which scans ImageData and
+
    sets matching pixels' alpha to 0).
+
 8. Tight bounding box is found by scanning ImageData for non-transparent pixels (top, left, right,
    bottom).
-9. The cropped ImageData is placed into the atlas page via `putImageData`.
 
-**Caching:**
+9. The cropped ImageData is placed into the atlas page via `putImageData`.
+### Caching
 
 - `FourKeyMap<code, bg, fg, ext>` for single characters.
 - Separate `FourKeyMap<string, bg, fg, ext>` for combined/multi-codepoint characters.
 - Cache lookup is O(1) via the multi-key map.
 
-**Warm-up:**
+### Warm-up
 
 - ASCII 33-126 are pre-rendered during idle time via `IdleTaskQueue` (uses `requestIdleCallback`).
 - This eliminates jank from rendering common glyphs on first appearance.
 
-**Color handling:**
+### Color handling
 
 - Supports 256-color palette, true color (RGB), default colors, inverse video, dim.
 - Minimum contrast ratio enforcement: adjusts foreground color to meet WCAG contrast requirements.
@@ -164,7 +182,7 @@ open-source implementation of this pattern. Key design details:
 
 ### 3. Performance Characteristics and Limits
 
-**Canvas 2D rendering performance profile:**
+### Canvas 2D rendering performance profile
 
 | Operation                      | Relative Cost | Notes                                                                                        |
 | ------------------------------ | ------------- | -------------------------------------------------------------------------------------------- |
@@ -176,22 +194,30 @@ open-source implementation of this pattern. Key design details:
 | Setting `ctx.font`             | Medium        | CSS font string parsing. Avoid per-cell.                                                     |
 | `measureText`                  | Low-Medium    | Fast after font is resolved. ~1-5us.                                                         |
 
-**Throughput for terminal rendering:**
+### Throughput for terminal rendering
 
 - A typical 80x24 terminal = 1,920 cells per frame.
 - With glyph caching, each cell is a `drawImage` blit: ~1920 \* 3us = ~6ms. Well within 16ms budget.
 - A large 200x50 terminal = 10,000 cells. With dirty tracking, typically <20% cells change per frame
+
   = 2,000 blits = ~6ms.
+
 - Without caching (raw `fillText` per cell): 10,000 \* 50us = 500ms. Completely unacceptable.
 
-**Canvas 2D limits:**
+### Canvas 2D limits
 
 - Maximum canvas size: browser-dependent. Chrome caps at 16384x16384 (268M pixels) or 256MB. Safari
+
   has lower limits.
+
 - Canvas 2D is typically GPU-accelerated for draws but `getImageData`/`putImageData` force CPU-GPU
+
   synchronization.
+
 - No instanced drawing; each `drawImage` is a separate draw call. This is the main bottleneck vs
+
   WebGL.
+
 - Anti-aliasing of text is controlled by the browser; cannot be disabled or tuned precisely.
 - Subpixel rendering behavior varies across browsers and OSes.
 
@@ -221,7 +247,7 @@ web-sys = { version = "0.3", features = [
 js-sys = "0.3"
 ```
 
-**Key API mappings (Rust):**
+### Key API mappings (Rust)
 
 ```rust
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, OffscreenCanvas};
@@ -269,17 +295,26 @@ ctx.draw_image_with_offscreen_canvas_and_sw_and_sh_and_dx_and_dy_and_dw_and_dh(
 ).unwrap();
 ```
 
-**Important notes for Rust/WASM:**
+### Important notes for Rust/WASM
 
 - Every Canvas API call crosses the WASM-JS boundary. Each call has ~50-200ns overhead from
+
   `wasm-bindgen`.
+
 - Batching is important: minimize the number of `drawImage` calls. Consider drawing multiple cells
+
   in a single JS call via a thin JS shim if profiling shows call overhead is dominant.
+
 - `OffscreenCanvas` is preferred over `document.createElement("canvas")` for atlas pages since it
+
   avoids DOM interaction and can theoretically be used in Web Workers.
+
 - `OffscreenCanvasRenderingContext2d` has the same API as `CanvasRenderingContext2d` but some
+
   features (like `fillText` font rendering) may behave differently across browsers.
+
 - Canvas state changes (font, fillStyle) should be batched; avoid alternating between different
+
   fonts/colors per cell.
 
 #### 4b. OffscreenCanvas
@@ -295,8 +330,11 @@ let ctx = offscreen.get_context("2d").unwrap().unwrap()
 Two usage patterns:
 
 1. **Synchronous** (same thread): Create OffscreenCanvas, render glyphs to it, blit to visible
+
    canvas via `drawImage`. Use `transferToImageBitmap()` for zero-copy transfer.
-2. **Async** (Web Worker): Transfer control of visible canvas to worker via
+
+1. **Async** (Web Worker): Transfer control of visible canvas to worker via
+
    `transferControlToOffscreen()`. Render entirely in worker thread. Frees main thread for input
    handling.
 
@@ -480,19 +518,23 @@ this._spacingY = Math.ceil(opts.spacing * opts.fontSize);
 
 #### 7a. rot.js Architecture
 
-```
+```text
 Backend (abstract)
   └── Canvas (abstract, creates <canvas>, sets font, handles events)
         ├── Rect    -- monospace text grid, per-cell fillText with optional glyph cache
         ├── Hex     -- hexagonal grid layout
         └── Tile    -- spritesheet-based, drawImage from tileset
-```
+```text
 
 - **Rect backend** has a static `cache` boolean flag. When enabled, creates one HTMLCanvasElement
+
   per unique `(char, fg, bg)` triple.
+
 - Cell size computed from `measureText("W")` and `fontSize * spacing`.
 - `draw(data, clearBefore)` is called per-cell. No frame batching; the Display class calls draw for
+
   each dirty cell individually.
+
 - Font is set once in `setOptions()`, not per-draw.
 - Uses `textAlign: "center"` and `textBaseline: "middle"` to center glyphs in cells.
 
@@ -500,7 +542,7 @@ Backend (abstract)
 
 xterm.js separates the texture atlas (glyph rendering) from the renderer (composition):
 
-```
+```text
 TextureAtlas (shared)
   ├── Multi-page atlas with row packing
   ├── FourKeyMap cache: (code, bg, fg, ext) -> IRasterizedGlyph
@@ -515,7 +557,7 @@ IRenderer interface
   ├── handleResize() -- terminal size change
   ├── handleSelectionChanged() -- selection overlay
   └── clearTextureAtlas() -- invalidate all cached glyphs
-```
+```rust
 
 The WebGL renderer uses the atlas as GPU textures and draws quads. A Canvas 2D renderer (which
 existed in older versions as `addon-canvas`, now removed from mainline) would use `drawImage` to
@@ -542,26 +584,26 @@ background, then those pixels are set to alpha=0.
 | **HiDPI**                  | Manual. Must scale canvas by devicePixelRatio.                     | Manual. Same scaling needed.                             | Automatic via CSS.                                 |
 | **Fallback**               | Good fallback for WebGL.                                           | Primary choice for performance.                          | Good fallback for accessibility.                   |
 | **Rust/WASM overhead**     | Each drawImage = 1 FFI call (~100ns).                              | Fewer FFI calls (batch uploads).                         | Each DOM mutation = 1+ FFI calls.                  |
-| **Custom glyphs**          | Easy. Draw anything on the atlas canvas.                           | Easy. Same atlas approach.                               | Hard. Limited to CSS/SVG.                          |
-
-**When to choose Canvas 2D:**
+| **Custom glyphs**| Easy. Draw anything on the atlas canvas.                           | Easy. Same atlas approach.                               | Hard. Limited to CSS/SVG.                          |**When to choose Canvas 2D:** |
 
 - As a fallback when WebGL context creation fails.
 - When targeting environments with WebGL restrictions.
 - When implementation simplicity is prioritized over peak performance.
 - For roguelike/tile-based games where cell counts are modest (<10K).
 - When you want the same atlas infrastructure to serve both Canvas 2D and WebGL renderers (xterm.js
+
   pattern).
 
-**When to prefer WebGL:**
+### When to prefer WebGL
 
 - Large terminal grids (100+ columns, 50+ rows).
 - High refresh rate requirements.
 - When custom shader effects (glow, CRT simulation) are desired.
 - When the atlas is already built (Canvas 2D fillText generates glyphs; WebGL just uploads
+
   textures).
 
-**When to prefer DOM:**
+### When to prefer DOM
 
 - Accessibility is critical.
 - Small grids where performance is not a concern.
@@ -572,7 +614,7 @@ background, then those pixels are set to alpha=0.
 
 Based on this research, the recommended approach:
 
-```
+```text
 ┌─────────────────────────────────────────────┐
 │                 GlyphAtlas                  │
 │  - OffscreenCanvas pages (512x512 initial)  │
@@ -591,7 +633,7 @@ Based on this research, the recommended approach:
 │  - Scroll optimization via canvas self-copy │
 │  - requestAnimationFrame loop               │
 └─────────────────────────────────────────────┘
-```
+```text
 
 **GlyphKey** should be: `(char_or_code: u32, fg: u32, bg: u32, flags: u16)` where flags encode
 bold/italic/underline/strikethrough.
@@ -605,68 +647,103 @@ as needed. Optionally merge pages when count exceeds a threshold.
 2. Diff current grid state against previous frame (or consume dirty events from the grid model).
 3. For each dirty cell: look up glyph in atlas (render if missing), blit via `drawImage`.
 4. Batch state changes: set `fillStyle` for background rectangles, then set for foreground text, to
+
    minimize context state switches.
 
 ## Sources
 
 - **Kept**:
+
   [MDN Drawing text](https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API/Tutorial/Drawing_text)
   -- canonical reference for fillText/strokeText/measureText
+
 - **Kept**: [MDN TextMetrics](https://developer.mozilla.org/en-US/docs/Web/API/TextMetrics) --
+
   detailed metrics API documentation
+
 - **Kept**: [MDN OffscreenCanvas](https://developer.mozilla.org/en-US/docs/Web/API/OffscreenCanvas)
+
   -- OffscreenCanvas API and usage patterns
+
 - **Kept**: [MDN FontFace](https://developer.mozilla.org/en-US/docs/Web/API/FontFace) --
+
   programmatic font loading API
+
 - **Kept**: [rot.js canvas.ts](https://github.com/ondras/rot.js/blob/master/src/display/canvas.ts)
+
   -- base canvas backend, font setup, event handling
+
 - **Kept**: [rot.js rect.ts](https://github.com/ondras/rot.js/blob/master/src/display/rect.ts) --
+
   glyph cache implementation, cell sizing from measureText
+
 - **Kept**: [rot.js tile.ts](https://github.com/ondras/rot.js/blob/master/src/display/tile.ts) --
+
   tileset blitting, colorization via composite operations
+
 - **Kept**:
+
   [xterm.js TextureAtlas.ts](https://github.com/xtermjs/xterm.js/blob/master/addons/addon-webgl/src/TextureAtlas.ts)
   -- production-grade multi-page atlas, glyph rendering pipeline, cache warm-up, background clearing
+
 - **Kept**:
+
   [xterm.js renderer Types.ts](https://github.com/xtermjs/xterm.js/blob/master/src/browser/renderer/shared/Types.ts)
   -- IRenderer interface with renderRows dirty-row API
+
 - **Kept**:
+
   [web-sys OffscreenCanvas](https://docs.rs/web-sys/latest/web_sys/struct.OffscreenCanvas.html) --
   Rust bindings for OffscreenCanvas
+
 - **Kept**:
+
   [web-sys CanvasRenderingContext2d](https://docs.rs/web-sys/latest/web_sys/struct.CanvasRenderingContext2d.html)
   -- Rust bindings for Canvas 2D context
+
 - **Dropped**: [canvas-styled-text](https://github.com/loganzartman/canvas-styled-text) --
+
   multi-font text layout library, not relevant to monospace grid rendering
+
 - **Dropped**: [canvas-hypertxt](https://github.com/glideapps/canvas-hypertxt) -- text wrapping
+
   library, not relevant
+
 - **Dropped**: [Ben Nadel cross-browser text positioning](https://www.bennadel.com/blog/4320) --
+
   deals with cross-browser offset issues, marginal relevance
+
 - **Dropped**: [TheLinuxCode Canvas guides](https://thelinuxcode.com/) -- SEO-heavy tutorial
+
   content, no novel information beyond MDN
 
 ## Gaps
 
 1. **Canvas 2D renderer removal from xterm.js**: The `addon-canvas` was removed from xterm.js's
+
    mainline in favor of the WebGL-only addon. Could not access the historical canvas renderer source
    code to examine how it consumed the TextureAtlas for 2D blitting specifically. The WebGL addon's
    atlas is designed for GPU texture upload, but the same atlas can serve Canvas 2D via `drawImage`.
 
-2. **WASM FFI call overhead benchmarks**: No concrete benchmarks found for the overhead of calling
+1. **WASM FFI call overhead benchmarks**: No concrete benchmarks found for the overhead of calling
+
    `drawImage` from Rust/WASM via wasm-bindgen at high frequency. The theoretical overhead is
    ~100-200ns per call, but real-world numbers with 10K+ calls/frame need profiling. A JS shim that
    batches draw commands into a typed array could reduce this.
 
-3. **OffscreenCanvas font rendering caveats**: Some reports suggest that `fillText` on
+1. **OffscreenCanvas font rendering caveats**: Some reports suggest that `fillText` on
+
    OffscreenCanvas may have different anti-aliasing behavior than on HTMLCanvasElement in some
    browsers. This needs testing, especially in Web Worker contexts where font loading APIs may
    behave differently.
 
-4. **Web Worker rendering path**: While OffscreenCanvas supports Web Worker usage, the interaction
+1. **Web Worker rendering path**: While OffscreenCanvas supports Web Worker usage, the interaction
+
    between WASM running in a worker, canvas rendering, and input handling on the main thread needs
    architectural design work. SharedArrayBuffer or message passing for grid state synchronization
    would be needed.
 
-5. **Canvas 2D performance with large atlases**: No data on whether `drawImage` from a very large
+1. **Canvas 2D performance with large atlases**: No data on whether `drawImage` from a very large
+
    (4096x4096) source canvas has performance implications compared to smaller source canvases. GPU
    texture size limits and upload costs may matter.

@@ -13,10 +13,14 @@ top of winit.
 ### Core types
 
 - `EventLoop` -- created once via `EventLoop::new().unwrap()`. Owns the platform connection
+
   (X11/Wayland socket, Win32 message pump, etc.). Not `Send` on most platforms.
+
 - `ActiveEventLoop` -- a reference passed into every callback. Provides `create_window()`,
+
   `create_custom_cursor()`, `available_monitors()`, `primary_monitor()`, `set_control_flow()`,
   `exit()`, and `display_handle()`.
+
 - `ApplicationHandler` -- trait you implement. The event loop calls methods on your struct.
 
 ### ApplicationHandler trait
@@ -41,16 +45,25 @@ pub trait ApplicationHandler<T: 'static = ()> {
 Key callback semantics:
 
 - **`resumed()`** -- called when the app can create windows and render surfaces. On desktop this
+
   fires once after init. On mobile (Android/iOS) it fires each time the app returns to foreground.
   _Always create windows here, not before `run_app()`._
+
 - **`suspended()`** -- render surfaces are invalidated. Drop GPU resources. Only meaningful on
+
   Android/iOS/Web.
+
 - **`window_event()`** -- all per-window events (input, resize, redraw, close).
 - **`device_event()`** -- raw hardware events independent of window focus. Useful for raw mouse
+
   deltas (e.g., camera control).
+
 - **`about_to_wait()`** -- fires after all pending events are dispatched. Set `ControlFlow` here.
+
   _Not_ the right place to render; use `RedrawRequested` instead.
+
 - **`new_events(cause)`** -- fires before each batch. `cause` is `StartCause::Init`, `Poll`,
+
   `WaitCancelled`, or `ResumeTimeReached`.
 
 ### Running the loop
@@ -96,11 +109,13 @@ loop {
 }
 ```
 
-**Caveats:**
+### Caveats
 
 - Not available on Web or iOS (those platforms own the main thread).
 - On Wayland with `ControlFlow::Wait` and timeout `Duration::ZERO`, it can still block if there are
+
   no events. A known issue; use `ControlFlow::Poll` if you need non-blocking behavior.
+
 - Discouraged by winit authors for most use cases. Prefer `run_app()`.
 
 ### EventLoopProxy (cross-thread wakeup)
@@ -389,10 +404,10 @@ Linux. Change with `active_event_loop.listen_device_events(DeviceEvents::Always)
 
 Conversion:
 
-```
+```text
 Physical = Logical * scale_factor
 Logical  = Physical / scale_factor
-```
+```text
 
 All winit output is in physical units. Input methods accept either via the `Size`/`Position` enums.
 
@@ -428,9 +443,10 @@ Triggers when:
 2. Compute cell size in physical pixels: `cell_physical = cell_logical * scale_factor`.
 3. Set `surface_resize_increments` to cell size so the window snaps to grid boundaries.
 4. On `Resized(physical_size)`, recompute grid dimensions: `cols = width / cell_width`,
-   `rows = height / cell_height`.
-5. Do NOT cast float positions with `as u32`; use the `.cast()` methods which round properly.
 
+   `rows = height / cell_height`.
+
+5. Do NOT cast float positions with `as u32`; use the `.cast()` methods which round properly.
 ---
 
 ## 6. Platform Quirks
@@ -439,12 +455,17 @@ Triggers when:
 
 - **Minimum OS**: macOS 10.11 (same as Rust). Regularly tested on 10.14.
 - **Menu bar**: Winit does _not_ create a menu bar or set an `NSApplicationDelegate` by default. If
+
   you need standard macOS menus (Edit > Copy/Paste, Window > Minimize, etc.), you must create them
   yourself using `objc2-app-kit`. Winit guarantees it won't register its own app delegate, so you
   can set a custom one.
+
 - **Window initialization**: Many operations (creating windows, fetching monitors) require the app
+
   to be "ready". Always create windows inside `resumed()`, not in `main()` before `run_app()`.
+
 - **Option as Alt**: Via `WindowExtMacOS`, configure whether the Option key produces characters or
+
   acts as Alt for keybindings. Options: `None`, `OnlyLeft`, `OnlyRight`, `Both`.
 
   ```rust
@@ -453,58 +474,92 @@ Triggers when:
   ```
 
 - **Tabbing**: `WindowAttributesExtMacOS::with_tabbing_identifier()` groups windows into tabs.
+
   `ActiveEventLoopExtMacOS::set_allows_automatic_window_tabbing(bool)` controls system tab behavior.
+
 - **Activation policy**: `EventLoopBuilderExtMacOS::with_activation_policy()` -- `Regular` (dock +
+
   menu bar), `Accessory` (no dock icon), `Prohibited` (background only).
+
 - **Fullscreen**: `Fullscreen::Exclusive` works but has caveats; the system may not allow switching
+
   apps without first leaving fullscreen.
+
 - **Force Touch / Pressure**: `TouchpadPressure` events report pressure (0.0-1.0) and click stage.
 
 ### Wayland
 
 - **Windows don't appear until you draw**: The Wayland compositor won't display anything until the
+
   client has attached a buffer. Start with `visible: false` or render immediately.
+
 - **Client-side decorations (CSD)**: Winit provides its own title bar and window borders via the
+
   `sctk` (smithay-client-toolkit). Controlled by feature flags:
+
   - `wayland-csd-adwaita` (default) -- GNOME-style decorations
   - `wayland-csd-adwaita-crossfont` -- same, using crossfont for rendering
   - `wayland-csd-adwaita-notitle` -- no title bar text
 - **No primary monitor**: `primary_monitor()` always returns `None` on Wayland (protocol
+
   limitation).
+
 - **No window positioning**: `set_outer_position()` is a no-op (Wayland doesn't let clients choose
+
   their position).
+
 - **Frame callback**: Call `window.pre_present_notify()` before presenting each frame. This
+
   integrates with Wayland's frame callback protocol to avoid over-rendering.
+
 - **`pump_events` quirk**: With `ControlFlow::Wait` and `timeout = Duration::ZERO`, it can still
+
   block if there are no events.
+
 - **dlopen**: By default, Wayland libraries are loaded via `dlopen`. Disable with the
+
   `wayland-dlopen` feature flag.
 
 ### Windows
 
 - **Minimum OS**: Windows 7.
 - **DPI awareness**: Winit automatically sets per-monitor DPI awareness. The
+
   `WindowAttributesExtWindows` trait provides additional control. The window correctly handles
   `WM_DPICHANGED`.
+
 - **Shift + NumLock**: Holding Shift overrides NumLock, causing numpad keys to act as arrows. The OS
+
   sends fake key events for this that are NOT marked as `is_synthetic`.
+
 - **Backdrop/Mica**: `WindowAttributesExtWindows::with_backdrop_type()` supports `Auto`, `None`,
+
   `MainWindow`, `TransientWindow`, `Mica`, `Acrylic`, `Tabbed` (Windows 11).
+
 - **Corner rounding**: `WindowAttributesExtWindows::with_corner_preference()` -- `Default`,
+
   `DoNotRound`, `Round`, `RoundSmall` (Windows 11).
+
 - **Taskbar icon**: `WindowExtWindows::set_taskbar_icon()`.
 - **Custom menu**: `WindowAttributesExtWindows::with_menu()` accepts an `HMENU`.
 - **AnyThread wrapper**: `WindowBorrowExtWindows::any_thread()` returns an `AnyThread<&Window>` that
+
   implements `HasWindowHandle` without thread restrictions.
+
 - **Dark title bar**: Set `preferred_theme` to `Theme::Dark` or use `WindowExtWindows::set_theme()`.
 
 ### X11
 
 - **Visual selection**: `WindowAttributesExtX11::with_x11_visual(visual_id)` for specific X11
+
   visuals (needed for transparency in some compositors).
+
 - **Screen selection**: `WindowAttributesExtX11::with_x11_screen(screen_id)` to place windows on
+
   specific screens.
+
 - **Synthetic focus events**: When a window gains/loses focus, synthetic key press/release events
+
   are generated for all currently held keys. Marked with `is_synthetic: true`.
 
 ---
@@ -785,7 +840,9 @@ The browser owns the main thread. `run_app()` never returns; it uses `requestAni
 event listeners internally. `pump_events` is not available.
 
 - `ControlFlow::Poll` -- uses `requestAnimationFrame` or `setTimeout(0)` (configurable via
+
   `PollStrategy`)
+
 - `ControlFlow::Wait` -- only wakes on events
 - `ControlFlow::WaitUntil` -- uses `setTimeout` (configurable via `WaitUntilStrategy`)
 
@@ -829,7 +886,7 @@ cross-thread closure execution.
 
 ## Quick Reference: Event Flow for a Terminal Emulator
 
-```
+```text
 EventLoop::new()
     └─> run_app(&mut app)
         ├─> new_events(Init)
@@ -878,7 +935,7 @@ EventLoop::new()
         │   └─> set_control_flow()         │
         │                                  │
         └───────────────────────────────────┘
-```
+```rust
 
 ---
 

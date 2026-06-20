@@ -20,7 +20,7 @@ The primary crate for this purpose. Part of the `rust-windowing` org (same as wi
 2025), 13M+ downloads, 96 reverse dependencies. Designed specifically for CPU-rendered pixel
 buffers.
 
-**API surface:**
+### API surface
 
 ```rust
 // Create context + surface from any raw-window-handle window
@@ -139,18 +139,21 @@ opinions. [swash crate](https://crates.io/crates/swash)
 #### Recommended approach for a terminal grid
 
 1. Use **cosmic-text** for text shaping and layout (handles the hard Unicode/BiDi/ligature
-   problems).
-2. Cache rasterized glyphs in a `HashMap<CacheKey, GlyphBitmap>`. For monospace terminal grids, the
-   cache is small (ASCII + a few hundred common glyphs).
-3. For each cell in the grid, look up the cached bitmap and composite it onto the framebuffer.
-4. Only re-rasterize when font size or DPI changes.
 
+   problems).
+
+1. Cache rasterized glyphs in a `HashMap<CacheKey, GlyphBitmap>`. For monospace terminal grids, the
+
+   cache is small (ASCII + a few hundred common glyphs).
+
+1. For each cell in the grid, look up the cached bitmap and composite it onto the framebuffer.
+1. Only re-rasterize when font size or DPI changes.
 For a simpler approach (ASCII-only, no ligatures): use **fontdue** directly, cache the
 `(char, size)` -> bitmap mapping, and blit cached bitmaps per cell.
 
 ### 3. Performance Expectations
 
-**Can CPU rendering handle 60fps for an 80x50 grid?**
+### Can CPU rendering handle 60fps for an 80x50 grid?
 
 Yes, easily. The math:
 
@@ -161,56 +164,68 @@ Yes, easily. The math:
 - softbuffer presentation overhead: ~0.1-0.5ms depending on platform
 - **Total: well under 2ms per frame, leaving 14ms headroom at 60fps**
 
-**Real-world evidence:**
-
-- **foot** (Wayland terminal, pure CPU rendering in C): renders single-cell updates in ~0.05ms.
+**Real-world evidence:**-**foot** (Wayland terminal, pure CPU rendering in C): renders single-cell updates in ~0.05ms.
   Full-screen redraws of a dense grid take 2-5ms. Competitive with GPU terminals for interactive
   use. [foot Performance wiki](https://codeberg.org/dnkl/foot/wiki/Performance)
 
 - **Rio terminal** (Rust): recently added a CPU rendering backend using softbuffer + swash. Writes
+
   `0x00RRGGBB` u32 values directly into softbuffer's buffer with no intermediate pixmap. Uses SIMD
   (`wide` crate, u32x4/u32x8) for alpha blending. Includes frame-skip optimization (hashes vertex
   data, skips identical frames).
   [Rio CPU commit](https://github.com/raphamorim/rio/commit/835d0ef72803d38fa98d7e4e302e2d5788bbe4e0)
 
-**Key optimizations:**
-
-- **Damage tracking**: only re-render cells that changed. For typical terminal use (typing,
+**Key optimizations:**-**Damage tracking**: only re-render cells that changed. For typical terminal use (typing,
   scrolling a few lines), this means rendering <100 cells per frame instead of 4000.
+
 - **Glyph caching**: rasterize each unique glyph once, reuse the bitmap. A monospace terminal with
+
   ASCII text has ~95 unique glyphs.
+
 - **Scroll optimization**: `memmove` the pixel buffer on scroll rather than re-rendering all cells.
+
   foot uses a memory-mapping trick on 64-bit platforms to make this even faster.
+
 - **SIMD blending**: use `wide` or manual SIMD for alpha compositing when blending glyphs onto
+
   backgrounds.
+
 - **Direct buffer writes**: write directly into softbuffer's `&mut [u32]` without intermediate
+
   pixmaps or format conversion.
 
 ### 4. Advantages of Software Rendering
 
 1. **No GPU dependency**: works on headless servers, CI environments, VMs without GPU passthrough,
+
    containers, and SSH-forwarded X11 sessions. No OpenGL/Vulkan/Metal driver required.
 
-2. **Simpler code**: no shader compilation, no GPU state machines, no texture atlases, no GPU memory
+1. **Simpler code**: no shader compilation, no GPU state machines, no texture atlases, no GPU memory
+
    management, no sync fences. The rendering code is straightforward Rust: iterate cells, blit
    cached bitmaps into a `&mut [u32]`.
 
-3. **Virtual framebuffer compatibility**: works with Xvfb, headless Wayland compositors
+1. **Virtual framebuffer compatibility**: works with Xvfb, headless Wayland compositors
+
    (wlheadless), or any virtual display. Useful for automated testing and screenshot capture.
 
-4. **Deterministic rendering**: no GPU driver differences, no vendor-specific rendering quirks.
+1. **Deterministic rendering**: no GPU driver differences, no vendor-specific rendering quirks.
+
    Pixel-perfect output across platforms (minus font rendering differences from the OS).
 
-5. **Lower memory overhead**: no GPU texture memory, no vertex buffers, no uniform buffers. Just a
+1. **Lower memory overhead**: no GPU texture memory, no vertex buffers, no uniform buffers. Just a
+
    single `Vec<u32>` framebuffer.
 
-6. **Simpler dependency tree**: softbuffer has minimal dependencies (platform windowing libs). No
+1. **Simpler dependency tree**: softbuffer has minimal dependencies (platform windowing libs). No
+
    wgpu, no gpu-allocator, no naga shader compiler.
 
-7. **Better debuggability**: the framebuffer is a plain array in CPU memory. You can inspect it in a
+1. **Better debuggability**: the framebuffer is a plain array in CPU memory. You can inspect it in a
+
    debugger, dump it to a PNG, or printf-debug individual pixels.
 
-8. **Faster startup**: no GPU context initialization, no shader compilation, no driver negotiation.
+1. **Faster startup**: no GPU context initialization, no shader compilation, no driver negotiation.
 
 ### 5. Prior Art
 
@@ -271,10 +286,13 @@ softbuffer abstracts platform-specific pixel presentation behind three types: `C
 Two paths depending on whether the MIT-SHM extension is available:
 
 - **SHM path** (preferred): allocates a shared memory segment (`shmget`/`shmat`). The X server reads
+
   pixels directly from shared memory without copying over the socket. Uses `XShmPutImage` to
   present. Synchronizes via `GetInputFocus` request ordering to ensure the server has finished
   reading before the client writes again.
+
 - **Wire path** (fallback): converts the pixel buffer into an `XImage` and sends it over the X
+
   protocol socket. Slower due to data copying over the connection.
 
 Validates visual compatibility (depth, red/green/blue masks) to ensure the pixel format matches.
@@ -290,7 +308,9 @@ Uses shared memory (`wl_shm`) with double buffering:
 - Compositor reads the front buffer for display.
 - Blocks on `wl_buffer.release` events before reusing a buffer.
 - Supports both legacy surface damage (`wl_surface.damage`) and buffer damage
+
   (`wl_surface.damage_buffer`).
+
 - Tracks buffer age for incremental updates.
 
 [wayland/mod.rs source](https://github.com/rust-windowing/softbuffer/blob/ba60228f/src/backends/wayland/mod.rs)
@@ -303,6 +323,7 @@ Uses Device-Independent Bitmaps (DIBs):
 - Presents via `BitBlt` (bit block transfer) from the DIB to the window's device context.
 - Supports damage-aware presentation (only blits changed rectangles).
 - Manages device contexts on a dedicated thread (DCs must be allocated and freed on their
+
   originating thread).
 
 [win32.rs source](https://github.com/rust-windowing/softbuffer/blob/ba60228f/src/backends/win32.rs)
@@ -313,10 +334,13 @@ Uses `CALayer` for presentation:
 
 - Creates a `CGImage` from the pixel buffer and sets it as the layer's contents.
 - Uses KVO (Key-Value Observing) to automatically sync layer properties with the root layer (handles
+
   scale factor changes, bounds updates).
+
 - Disables Core Animation transitions during presentation for immediate display.
 - Requires main thread access for NSView/UIView operations.
 - Issue #83 tracks using `IOSurface` for zero-copy presentation (allocating front/back IOSurfaces
+
   and writing directly via `IOSurfaceGetBaseAddress`).
 
 [cg.rs source](https://github.com/rust-windowing/softbuffer/blob/ba60228f/src/backends/cg.rs) |
@@ -347,9 +371,7 @@ Uses `CALayer` for presentation:
 | **Ligatures**          | Supported (cosmic-text/harfrust)               | Supported (same shaping, GPU atlas)        |
 | **Code complexity**    | Low (~500 LoC for renderer)                    | High (~2000+ LoC for GPU pipeline)         |
 | **Cross-platform**     | Excellent (softbuffer Tier 1 on Win/Mac/Linux) | Good but driver-dependent                  |
-| **Scaling (4K)**       | 8M pixels, ~5-10ms full redraw                 | <1ms regardless of resolution              |
-
-**When to choose software rendering:**
+| **Scaling (4K)**| 8M pixels, ~5-10ms full redraw                 | <1ms regardless of resolution              |**When to choose software rendering:** |
 
 - Primary target is interactive terminal use (not cat'ing huge files)
 - Need to run on headless servers, VMs, or CI
@@ -357,7 +379,7 @@ Uses `CALayer` for presentation:
 - Don't need >60fps or instant full-screen redraws
 - Want a fallback path when GPU is unavailable
 
-**When to prefer GPU:**
+### When to prefer GPU
 
 - High-resolution displays (4K+) with frequent full-screen updates
 - Heavy animation or visual effects
@@ -367,57 +389,90 @@ Uses `CALayer` for presentation:
 ## Sources
 
 - Kept: [softbuffer GitHub](https://github.com/rust-windowing/softbuffer) - Primary crate for CPU
+
   pixel presentation, authoritative source
+
 - Kept:
+
   [softbuffer DeepWiki - Desktop Platforms](https://deepwiki.com/rust-windowing/softbuffer/4.2-desktop-platforms) -
   Detailed platform backend analysis
+
 - Kept: [fontdue GitHub](https://github.com/mooman219/fontdue) - Fastest pure-Rust glyph rasterizer,
+
   benchmarks
+
 - Kept: [cosmic-text docs](https://docs.rs/cosmic-text/latest/cosmic_text/) - Full text handling
+
   stack, API reference
+
 - Kept: [cosmic-text context7 LLM docs](https://context7.com/pop-os/cosmic-text/llms.txt) -
+
   Comprehensive API examples with SwashCache usage
+
 - Kept: [foot Performance wiki](https://codeberg.org/dnkl/foot/wiki/Performance) - Real-world CPU
+
   terminal rendering performance analysis
+
 - Kept:
+
   [Rio CPU rendering commit](https://github.com/raphamorim/rio/commit/835d0ef72803d38fa98d7e4e302e2d5788bbe4e0) -
   Production Rust terminal using softbuffer
+
 - Kept: [Alacritty issue #8600](https://github.com/alacritty/alacritty/issues/8600) - Confirms
+
   GPU-only stance, context on software rendering limitations
+
 - Kept: [State of Text Rendering 2024](https://behdad.org/text2024/) - Survey of font rasterization
+
   approaches
+
 - Kept: [tiny-skia](https://crates.io/crates/tiny-skia) - CPU-only 2D rendering library
+
   (complementary for decorations/borders)
+
 - Kept: [pixels README](https://github.com/parasyte/pixels/blob/main/README.md) - Comparison with
+
   minifb, explains GPU-backed pixel buffer approach
+
 - Kept:
+
   [softbuffer forum announcement](https://users.rust-lang.org/t/new-library-for-gpu-less-2d-display-in-winit-looking-for-contributors-to-add-more-platforms/70441) -
   Motivation and design rationale
+
 - Dropped: termplot-rs, flywheel, cdtk-cpu-pixel-shader - Toy/niche projects with no relevant
+
   technical depth
+
 - Dropped: notcurses render.c source - Too low-level C implementation details, not relevant to Rust
+
   approach
+
 - Dropped: Alacritty GLES2 fallback PR - About GPU fallback, not software rendering
 
 ## Gaps
 
 1. **Concrete benchmark numbers for softbuffer presentation latency** per platform. The DeepWiki
+
    analysis describes mechanisms but not measured latencies. Would need to write a benchmark or find
    existing measurements.
 
-2. **cosmic-text performance at terminal scale**. cosmic-text is designed for general text layout.
+1. **cosmic-text performance at terminal scale**. cosmic-text is designed for general text layout.
+
    For a monospace grid, it may be overkill. Need to benchmark whether using cosmic-text's full
    shaping pipeline per-frame is fast enough, or if a simpler "cache glyph images, blit from cache"
    approach using fontdue/swash directly is better.
 
-3. **macOS IOSurface zero-copy path**. softbuffer issue #83 discusses this but it's not yet
+1. **macOS IOSurface zero-copy path**. softbuffer issue #83 discusses this but it's not yet
+
    implemented. The current macOS path copies into a CGImage, which adds overhead. Worth tracking
    for future performance improvements.
 
-4. **Damage tracking integration**. softbuffer itself doesn't track damage; it presents the whole
+1. **Damage tracking integration**. softbuffer itself doesn't track damage; it presents the whole
+
    buffer. Wayland's `damage_buffer` and Windows' damage-aware `BitBlt` are available but the caller
    must supply damage rects. Need to design the damage tracking at the grid/renderer level.
 
-5. **HiDPI scaling details**. How to handle fractional scaling (e.g., 1.5x) with CPU rendering.
+1. **HiDPI scaling details**. How to handle fractional scaling (e.g., 1.5x) with CPU rendering.
+
    Glyph rasterization at non-integer scale factors and how softbuffer handles the resulting pixel
    dimensions.

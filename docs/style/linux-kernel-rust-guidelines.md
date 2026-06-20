@@ -67,10 +67,13 @@ Rust kernel code uses `rustdoc` (Markdown), not `kernel-doc`. The conventions ar
 
 - **First paragraph**: a single sentence summarizing what the item does.
 - **`# Safety` section**: mandatory for all `unsafe fn`. Documents the preconditions that callers
+
   must uphold.
+
 - **`# Panics` section**: required if a function can panic, documenting the conditions.
 - **`# Examples` section**: encouraged; examples are compiled and run as KUnit tests.
 - **Cross-references**: Rust items must be linked with rustdoc's `[backtick]` syntax. The kernel
+
   also supports `srctree/` links for references to C headers:
 
 ```rust
@@ -156,6 +159,7 @@ accumulating. [Source](https://docs.kernel.org/rust/coding-guidelines.html)
 1. **Conditional compilation**: the lint fires for some `CONFIG_*` values but not others.
 2. **Macros**: different invocations may or may not trigger the lint.
 3. **Architecture-dependent code**: e.g., an `as` cast to a C FFI type that changes size across
+
    architectures.
 
 For complex conditional cases, `cfg_attr(not(CONFIG_X), expect(dead_code))` is possible but usually
@@ -181,15 +185,20 @@ Rust integrates into the kernel's existing Kbuild system:
 - **`CONFIG_RUST`** enables Rust support (visible only when a valid Rust toolchain is detected).
 - **`make LLVM=1 rustavailable`** checks if all requirements are met and explains why if not.
 - The build system **cross-compiles `core`** from the Rust standard library source (`rust-src`
+
   component).
+
 - **`bindgen`** auto-generates Rust bindings from C headers listed in
+
   `rust/bindings/bindings_helper.h`. For inline C functions or non-trivial macros, small wrapper
   functions go in `rust/helpers/`.
+
 - **`make LLVM=1 rustdoc`** generates HTML documentation.
 - **`make LLVM=1 rust-analyzer`** generates `rust-project.json` for IDE integration.
 - **`make LLVM=1 rustfmt`** formats all Rust sources.
 - **Clippy** runs with `CLIPPY=1` added to the make invocation.
 - **Conditional compilation** uses `#[cfg(CONFIG_X)]`, `#[cfg(CONFIG_X="y")]`,
+
   `#[cfg(CONFIG_X="m")]`.
 
 Supported architectures (as of 6.17+): x86_64, arm64 (LE), arm (ARMv7 LE), loongarch, riscv64 (LLVM
@@ -199,26 +208,33 @@ only), and um. [Source](https://docs.kernel.org/rust/arch-support.html)
 
 The kernel enforces a strict layered architecture for unsafe code:
 
-```
+```text
 drivers/fs/...          rust/kernel/            rust/bindings/
 (Leaf modules)          (Abstractions)          (Auto-generated bindings)
     |                       |                       |
     +--- Safe calls --->    +--- Unsafe calls --->  +--- bindgen from C headers
-```
+```rust
 
-**Key rules:**
-
-- **Leaf modules (drivers, filesystems) must never use C bindings directly.** They call safe
+**Key rules:**-**Leaf modules (drivers, filesystems) must never use C bindings directly.** They call safe
   abstractions provided by `rust/kernel/`.
+
 - **Abstractions** in `rust/kernel/` encapsulate all `unsafe` C FFI calls, exposing safe, idiomatic
+
   Rust APIs.
+
 - **Soundness contract**: if abstractions are correct ("sound") and all `unsafe` blocks/impls
+
   respect their documented safety contracts, then safe Rust code cannot introduce undefined
   behavior.
+
 - **One `unsafe` operation per `unsafe` block** is best practice, making each SAFETY comment
+
   unambiguous.
+
 - **Every `unsafe` block requires a `// SAFETY:` comment** at the call site that justifies why the
+
   safety contract is satisfied.
+
 - **Every `unsafe fn` requires a `# Safety` doc section** that specifies its preconditions.
 
 Abstractions also convert C patterns to Rust idioms: C resource acquire/release becomes
@@ -227,7 +243,7 @@ constructors/`Drop`, C integer error codes become `Result<T, Error>`, etc.
 
 ### 10. Examples of Rust Kernel Modules/Drivers
 
-**Merged in mainline:**
+### Merged in mainline
 
 | Driver/Module        | Kernel Version | Description                                                                                                                                                               |
 | -------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -235,7 +251,7 @@ constructors/`Drop`, C integer error codes become `Result<T, Error>`, etc.
 | Nova Core (skeleton) | 6.15           | Rust-based NVIDIA GPU driver skeleton in `drivers/gpu/nova-core/`. Intended successor to Nouveau for GSP-based GPUs. [Source](https://rust-for-linux.com/nova-gpu-driver) |
 | Nova Core (expanded) | 6.17           | Additional abstractions: aux bus, devres, PCI, DRM infrastructure. [Source](https://www.phoronix.com/news/Linux-6.17-NOVA-Driver)                                         |
 
-**Sample modules in `samples/rust/`:**
+### Sample modules in `samples/rust/`
 
 | Sample                    | Description                                                                                             |
 | ------------------------- | ------------------------------------------------------------------------------------------------------- |
@@ -319,30 +335,55 @@ conditions (e.g., numerical comparisons), define a new Kconfig `def_bool` symbol
 
 - **Kept:**
   - [Coding Guidelines, kernel.org](https://docs.kernel.org/rust/coding-guidelines.html) - primary
+
     source for all formatting, documentation, naming, lint, and FFI rules
+
   - [General Information, kernel.org](https://docs.kernel.org/rust/general-information.html) -
+
     abstractions vs bindings architecture, conditional compilation, no_std
+
   - [Quick Start, kernel.org](https://docs.kernel.org/rust/quick-start.html) - toolchain
+
     requirements, build system integration
+
   - [Testing, kernel.org](https://docs.kernel.org/rust/testing.html) - KUnit integration, doctest
+
     compilation, #[test] mapping
+
   - [Architecture Support, kernel.org](https://docs.kernel.org/rust/arch-support.html) - supported
+
     architectures table
+
   - [kernel crate rustdoc](https://rust.docs.kernel.org/kernel/index.html) - full API surface of the
+
     kernel crate
+
   - [kernel::error module](https://kernel.org/doc/rustdoc/latest/kernel/error/index.html) - Error
+
     type, Result alias, errno codes
+
   - [rust_minimal.rs (GitHub raw)](https://raw.githubusercontent.com/Rust-for-Linux/linux/refs/heads/rust-next/samples/rust/rust_minimal.rs) -
+
     minimal module sample
+
   - [rust_driver_pci.rs (GitHub raw)](https://raw.githubusercontent.com/Rust-for-Linux/linux/refs/heads/rust-next/samples/rust/rust_driver_pci.rs) -
+
     PCI driver sample with register abstractions
+
   - [ASIX PHY Driver, rust-for-linux.com](https://rust-for-linux.com/asix-phy-driver) - first merged
+
     Rust driver
+
   - [Nova GPU Driver, rust-for-linux.com](https://rust-for-linux.com/nova-gpu-driver) - NVIDIA GPU
+
     driver project status
+
   - [Safety standard RFC, LKML](https://lkml.indiana.edu/hypermail/linux/kernel/2407.2/02426.html) -
+
     proposed safety documentation standard
+
   - [Phoronix: Linux 6.17 NOVA](https://www.phoronix.com/news/Linux-6.17-NOVA-Driver) - Nova driver
+
     expansion timeline
 
 - **Dropped:**
@@ -353,15 +394,24 @@ conditions (e.g., numerical comparisons), define a new Kconfig `def_bool` symbol
 ## Gaps
 
 1. **Formal safety standard**: the RFC patches for a formal `Documentation/rust/safety-standard/`
+
    have not been merged as of this research. The current rules are documented in the coding
    guidelines but not as a standalone standard document.
-2. **Macro hygiene details**: the `module!` macro's internal implementation and soundness fixes
+
+1. **Macro hygiene details**: the `module!` macro's internal implementation and soundness fixes
+
    (e.g., the `__init`/`__exit` visibility issue) are in flux. Specific macro rules for writing new
    proc macros are not well-documented publicly.
-3. **Performance benchmarks**: no published benchmarks comparing Rust kernel modules to their C
+
+1. **Performance benchmarks**: no published benchmarks comparing Rust kernel modules to their C
+
    equivalents were found in official kernel documentation.
-4. **Clippy configuration**: the specific Clippy lints enabled/disabled for kernel builds are
+
+1. **Clippy configuration**: the specific Clippy lints enabled/disabled for kernel builds are
+
    configured in the build system but not documented in the coding guidelines page.
-5. **Alloc crate status**: the kernel previously used a vendored `alloc` crate, but recent versions
+
+1. **Alloc crate status**: the kernel previously used a vendored `alloc` crate, but recent versions
+
    appear to have moved away from it. The current state of collection types and allocator
    integration is evolving.

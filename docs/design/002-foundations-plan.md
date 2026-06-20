@@ -1,6 +1,6 @@
 # ADR 002: Foundations Implementation Plan
 
-**Status:** Draft **Date:** 2026-06-15 **Parent:** [ADR 001: Architecture](001-architecture.md)
+**Status:**Draft**Date:**2026-06-15**Parent:** [ADR 001: Architecture](001-architecture.md)
 
 ## Context
 
@@ -34,7 +34,7 @@ These refine and extend ADR 001:
 
 ## Dependency graph
 
-```
+```rust
 M0: Skeleton
  └─► M1: Color, CellModifier, Style
       └─► M2: Cell
@@ -50,7 +50,7 @@ M5: Event types ─────────────────────�
                                    M8: Terminal
                                         └─► M9: Example + E2E
                                              └─► M10: Polish
-```
+```text
 
 M5 (events) is independent of M1-M4 and can be built in parallel.
 
@@ -62,7 +62,7 @@ M5 (events) is independent of M1-M4 and can be built in parallel.
 
 ### Files
 
-```
+```text
 rg/
 ├── .editorconfig
 ├── .gitignore
@@ -80,7 +80,7 @@ rg/
 │   ├── 001-architecture.md
 │   └── 002-v0.1.0-plan.md
 └── src/lib.rs
-```
+```text
 
 ### Cargo.toml
 
@@ -171,7 +171,7 @@ clean:
 
 **Goal:** Core styling types with full test coverage. Zero runtime dependencies.
 
-### Files
+### Files (2)
 
 - `src/color.rs` — `Color`, `AnsiColor`
 - `src/style.rs` — `Style`, `CellModifier`
@@ -252,7 +252,7 @@ Builder methods on `Style`: `Style::new()`, `.fg(Color)`, `.bg(Color)`, `.bold()
 - `Style::patch` overlay behavior
 - `Color` constants: `Color::RED == Color::Ansi(AnsiColor::Red)`
 
-### Acceptance criteria
+### Acceptance criteria (2)
 
 - [ ] `Color`, `AnsiColor`, `CellModifier`, `Style` are public
 - [ ] All types derive `Debug, Clone, Copy, PartialEq, Eq, Hash, Default`
@@ -269,7 +269,7 @@ Builder methods on `Style`: `Style::new()`, `.fg(Color)`, `.bg(Color)`, `.bold()
 
 **Goal:** The `Cell` type representing one character position in the grid.
 
-### Files
+### Files (3)
 
 - `src/cell.rs`
 - Update `src/lib.rs`
@@ -292,7 +292,7 @@ Methods:
 - Setters: `with_glyph()`, `with_style()`
 - `Cell::reset()` — reset to default (space, default style)
 
-### Tests
+### Tests (2)
 
 - `Cell::default()` is space with default style
 - `Cell::new('A')` round-trips character
@@ -300,7 +300,7 @@ Methods:
 - `Cell::reset()` returns to default
 - Document `size_of::<Cell>()` in a test (not a hard cap, just visible)
 
-### Acceptance criteria
+### Acceptance criteria (3)
 
 - [ ] `Cell` has private fields, public accessor API
 - [ ] Derives `Debug, Clone, PartialEq, Eq, Hash`, implements `Default`
@@ -314,12 +314,12 @@ Methods:
 
 **Goal:** 2D cell buffer with bounds-checked access and bulk operations.
 
-### Files
+### Files (4)
 
 - `src/grid.rs` — `Grid`, `Position`, `Size`, `Rect`
 - Update `src/lib.rs`
 
-### Types
+### Types (2)
 
 ```rust
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -344,7 +344,9 @@ Methods:
 - `Grid::width() -> u16`, `Grid::height() -> u16`
 - `Grid::get(x, y) -> &Cell` / `Grid::put(x, y, Cell)` — panics on OOB
 - `Grid::checked_get(x, y)`, `Grid::checked_put(x, y, Cell)`, `Grid::checked_get_mut(x, y)` —
+
   bounds-checked
+
 - `Grid::clear()` — all cells to default
 - `Grid::resize(width, height)` — preserves content in overlap
 - `Grid::cells() -> Cells`, `Grid::cells_mut() -> CellsMut` — iterates over `(x, y, cell)`
@@ -356,7 +358,7 @@ Test assertions (on Grid, for reuse):
 - `Grid::assert_cell(&self, x, y, expected_char)` — panics with clear message on mismatch
 - `Grid::assert_cell_style(&self, x, y, expected_char, expected_style)`
 
-### Tests
+### Tests (3)
 
 - `Grid::new(80, 24)` has 1920 cells, all default
 - `Grid::new(0, 0)` produces empty grid, all ops are no-ops
@@ -369,7 +371,7 @@ Test assertions (on Grid, for reuse):
 - Grid 1x1 works
 - `assert_cell` passes on correct content, panics on mismatch
 
-### Acceptance criteria
+### Acceptance criteria (4)
 
 - [ ] `Grid`, `Position`, `Size`, `Rect` are public
 - [ ] Bounds-checked access via `cell()` / `cell_mut()`
@@ -385,7 +387,7 @@ Test assertions (on Grid, for reuse):
 
 **Goal:** Compute changed cells between two grids. Display impl for debug output.
 
-### Files
+### Files (5)
 
 - Add to `src/grid.rs`
 
@@ -404,13 +406,13 @@ impl Grid {
 One line per row. Each cell's character printed. Default/space cells shown as `·` (middle dot) for
 visibility.
 
-```
+```text
 @·········
 ··········
 ··HP: 100·
-```
+```text
 
-### Tests
+### Tests (4)
 
 - Identical grids: diff yields nothing
 - One cell changed: yields exactly that cell
@@ -420,7 +422,7 @@ visibility.
 - Display on empty grid (0x0): empty string
 - Display with Unicode characters
 
-### Acceptance criteria
+### Acceptance criteria (5)
 
 - [ ] `Grid::diff()` returns correct changed cells
 - [ ] `Display` produces readable ASCII output
@@ -433,12 +435,12 @@ visibility.
 
 **Goal:** Input event data types. Independent of M1-M4; can be built in parallel.
 
-### Files
+### Files (6)
 
 - `src/event.rs`
 - Update `src/lib.rs`
 
-### Types
+### Types (3)
 
 ```rust
 pub enum Event {
@@ -483,13 +485,13 @@ pub enum MouseButton { Left, Right, Middle }
 
 Note: `MouseEvent` uses `Position` struct for its coordinates (data, not operation).
 
-### Tests
+### Tests (5)
 
 - All variants constructible
 - `KeyModifiers` bitflags operations
 - All types are `Clone + PartialEq + Debug`
 
-### Acceptance criteria
+### Acceptance criteria (6)
 
 - [ ] All event types are public
 - [ ] All derive `Debug, Clone, PartialEq, Eq, Hash`
@@ -503,7 +505,7 @@ Note: `MouseEvent` uses `Position` struct for its coordinates (data, not operati
 
 **Goal:** The rendering backend interface.
 
-### Files
+### Files (7)
 
 - `src/backend/mod.rs`
 - Update `src/lib.rs`
@@ -539,11 +541,11 @@ pub trait Backend {
 }
 ```
 
-### Tests
+### Tests (6)
 
 - `Backend` is object-safe: `let _: Box<dyn Backend>;` compiles
 
-### Acceptance criteria
+### Acceptance criteria (7)
 
 - [ ] `Backend` trait is public and object-safe
 - [ ] Doc comments on trait and every method
@@ -555,7 +557,7 @@ pub trait Backend {
 
 **Goal:** In-memory backend for testing.
 
-### Files
+### Files (8)
 
 - `src/backend/headless.rs`
 - Update `src/backend/mod.rs`
@@ -586,7 +588,7 @@ Backend impl:
 - `poll_event()` pops from queue; returns `None` if empty (ignores timeout)
 - `set_cursor_visible()` / `set_cursor_position()` store state
 
-### Tests
+### Tests (7)
 
 - Create, draw cells, inspect via `grid()`
 - `push_event` + `poll_event` round-trips
@@ -594,7 +596,7 @@ Backend impl:
 - `clear()` resets grid
 - Multiple `draw()` calls: only changed cells overwrite
 
-### Acceptance criteria
+### Acceptance criteria (8)
 
 - [ ] `HeadlessBackend` implements `Backend`
 - [ ] Event injection and retrieval work
@@ -609,7 +611,7 @@ Backend impl:
 **Goal:** Main `Terminal` struct: stateful API, double buffering, diff-based presentation, input
 forwarding.
 
-### Files
+### Files (9)
 
 - `src/terminal.rs`
 - Update `src/lib.rs`
@@ -696,7 +698,7 @@ pub fn has_input(&mut self) -> bool;
 `read()` implementation: calls `poll(Duration::MAX)` and
 `.expect("read() called but no events available")`.
 
-### Tests
+### Tests (8)
 
 - Create `Terminal<HeadlessBackend>`, put a char, present, inspect backend grid
 - Stateful fg/bg: put verifies cell has the set colors
@@ -715,7 +717,7 @@ pub fn has_input(&mut self) -> bool;
 - `grid()` / `grid_mut()` provide direct buffer access
 - `put_styled` overrides current drawing state
 
-### Acceptance criteria
+### Acceptance criteria (9)
 
 - [ ] `Terminal<B: Backend>` compiles with all methods
 - [ ] Stateful drawing API works
@@ -734,7 +736,7 @@ pub fn has_input(&mut self) -> bool;
 
 **Goal:** Runnable example exercising the full API, doubling as an E2E test.
 
-### Files
+### Files (10)
 
 - `examples/headless_demo.rs`
 - `tests/e2e.rs`
@@ -763,7 +765,7 @@ Same logic, but asserts instead of printing:
 - Status line text correct
 - After move: old position cleared, new position has `@`
 
-### Acceptance criteria
+### Acceptance criteria (10)
 
 - [ ] `cargo run --example headless_demo` runs and prints two frames
 - [ ] `cargo test --test e2e` passes
@@ -780,27 +782,26 @@ Same logic, but asserts instead of printing:
 ### Tasks
 
 1. **Doc review** — every public item has a doc comment. Module-level docs explain purpose. Key
+
    types have `# Examples` sections in their doc comments.
 
-2. **README update** — replace "under construction":
+1. **README update** — replace "under construction":
    - What rg is (one paragraph)
    - Usage example (headless)
    - Status (Unreleased foundation, crossterm backend coming next)
    - API overview
    - License
 
-3. **Lint audit** — final `cargo clippy`, fix all warnings.
+1. **Lint audit** — final `cargo clippy`, fix all warnings.
 
-4. **Dependency audit** — confirm zero runtime dependencies.
-
-5. **Size audit** — test that prints `size_of::<Cell>()`, `size_of::<Style>()`,
+1. **Dependency audit** — confirm zero runtime dependencies.
+1. **Size audit** — test that prints `size_of::<Cell>()`, `size_of::<Style>()`,
    `size_of::<Color>()`. Document values.
 
-6. **MSRV verification** — `cargo +1.85 check`.
+1. **MSRV verification** — `cargo +1.85 check`.
 
-7. **Tag** — create v0.1.0 tag.
-
-### Acceptance criteria
+1. **Tag** — create v0.1.0 tag.
+### Acceptance criteria (11)
 
 - [ ] `cargo doc --no-deps` builds with zero warnings
 - [ ] Every public item has a doc comment
@@ -831,19 +832,26 @@ Same logic, but asserts instead of printing:
 | M9        | Example + E2E tests                           | Medium          |
 | M10       | Polish + tag v0.1.0                           | Low             |
 
-**Critical path:** M0 → M1 → M2 → M3 → M4 → M6 → M7 → M8 → M9 → M10
-
-**Parallel opportunity:** M5 can run alongside M1-M4.
+**Critical path:**M0 → M1 → M2 → M3 → M4 → M6 → M7 → M8 → M9 → M10**Parallel opportunity:** M5 can run alongside M1-M4.
 
 ## Consequences
 
 - Zero runtime dependencies means ~80 lines of manual bitflag code instead of `bitflags` macro
+
   invocations.
+
 - `CellModifier` naming is non-standard (ratatui uses `Modifier`, crossterm uses `Attribute`) but
+
   unambiguous in context.
+
 - `read()` panicking on empty headless queue means tests must always inject events before calling
+
   `read()`. This catches bugs early but requires slightly more test setup.
+
 - Bare `(x, y)` coordinates mean parameter names are the only signal for coordinate order. Doc
+
   comments must be clear about x=column, y=row.
+
 - `print()` interpreting `\n` adds a small amount of complexity but significantly improves usability
+
   for multi-line text.

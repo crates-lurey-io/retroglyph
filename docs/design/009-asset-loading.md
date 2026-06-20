@@ -1,6 +1,6 @@
 # ADR 009: Tilesets, Sprite Sheets, and Asset Loading
 
-**Status:** Draft  **Date:** 2026-06-19  **Parent:** [ADR 001: Architecture](001-architecture.md)
+**Status:**Draft**Date:**2026-06-19**Parent:** [ADR 001: Architecture](001-architecture.md)
 
 ## Context
 
@@ -29,38 +29,46 @@ alpha-blend = { version = "0.2", default-features = false, features = ["std"] }
 ## Decisions & Rust API Guidelines
 
 1. **Typed configuration (C-BUILDER):** Unlike BearLibTerminal's stringly-typed
+
    `terminal_set("0xE000: tileset.png, size=16x16")`, tileset configuration uses a typed builder.
    No string parsing, no runtime format errors.
 
-2. **PNG decoding via the `image` crate:** The `image` crate (with `png` feature only, to minimize
+1. **PNG decoding via the `image` crate:** The `image` crate (with `png` feature only, to minimize
+
    compile-time cost) decodes PNG files into RGBA8 pixel data. Raw bytes (already decoded, e.g.
    from `include_bytes!`) are also accepted.
 
-3. **Sprite cache alongside glyph cache:** Decoded sprites are stored in a `SpriteCache` keyed by
+1. **Sprite cache alongside glyph cache:** Decoded sprites are stored in a `SpriteCache` keyed by
+
    `char`. When `draw_layers` (ADR 008) encounters a `Tile`, the backend checks `SpriteCache`
    first, falling back to `BitmapFont` if no sprite is registered for that codepoint. Each
    layer buffer holds one `Tile` per cell (no stacking), so the dispatch is one `sprite_cache.get(tile.glyph)` check per cell.
 
-4. **CP437 and custom codepage mapping:** A `Codepage` enum maps sprite sheet row/column indices
+1. **CP437 and custom codepage mapping:** A `Codepage` enum maps sprite sheet row/column indices
+
    to Unicode codepoints. `Codepage::Cp437` follows the standard IBM CP437 → Unicode table.
    `Codepage::Unicode` treats row-major tile index as a direct Unicode scalar value starting at
    `start_codepoint`. `Codepage::Custom(&'static [char])` provides a caller-supplied mapping table.
 
-5. **Multi-cell spacing:** A tileset can declare `spacing_cells_x` and `spacing_cells_y > 1` to
+1. **Multi-cell spacing:** A tileset can declare `spacing_cells_x` and `spacing_cells_y > 1` to
+
    indicate that each sprite occupies multiple grid cells. The anchor cell holds the tile; during
    blit, the sprite's pixels are drawn extending into adjacent cells. Adjacent cell entries in the
    sprite sheet define separate sprites, not the right half of the anchor. The anchor relationship
    is a rendering concept only — the grid still stores one `Tile` per cell.
 
-6. **Codepoint collision handling:** If two tilesets map the same codepoint, the last-registered
+1. **Codepoint collision handling:** If two tilesets map the same codepoint, the last-registered
+
    tileset wins. A `warn` log (via `log` crate, which has no runtime cost when the logger is a
    no-op) is emitted on collision.
 
-7. **Error handling (C-GOOD-ERR):** A `TilesetError` type covers all failure modes: PNG decode
+1. **Error handling (C-GOOD-ERR):** A `TilesetError` type covers all failure modes: PNG decode
+
    failure, sprite-sheet dimensions that don't evenly divide by tile size, empty codepoint tables,
    unsupported pixel formats (only RGBA8 and RGB8 are accepted).
 
-8. **Feature flag:** Everything in this ADR lives behind a `software-tilesets` feature flag that
+1. **Feature flag:** Everything in this ADR lives behind a `software-tilesets` feature flag that
+
    implies `software`. The `image` crate dependency is gated on this flag.
 
 ---
@@ -69,9 +77,7 @@ alpha-blend = { version = "0.2", default-features = false, features = ["std"] }
 
 ### M1: Tileset Configuration API
 
-**Goal:** Define `TilesetOptions`, `Codepage`, and `TilesetError`. No PNG loading yet.
-
-**File:** `src/backend/software/tileset.rs` (new)
+**Goal:**Define `TilesetOptions`, `Codepage`, and `TilesetError`. No PNG loading yet.**File:** `src/backend/software/tileset.rs` (new)
 
 ```rust
 use std::fmt;
@@ -310,7 +316,7 @@ impl TilesetBuilder {
 }
 ```
 
-**Acceptance criteria:**
+### Acceptance criteria
 
 - `TilesetBuilder::build()` with `tile_width = 0` returns `Err(TilesetError::ZeroTileSize)`.
 - `TilesetBuilder::build()` with `spacing_cells_x = 0` returns `Err(TilesetError::ZeroSpacing)`.
@@ -517,7 +523,7 @@ impl Default for SpriteCache {
 }
 ```
 
-**Image pixel format handling:**
+### Image pixel format handling
 
 `image::load_from_memory(...).into_rgba8()` converts any supported format (RGB8, indexed PNG,
 grayscale) to RGBA8. This is the canonical `image` crate approach — no format dispatch needed.
@@ -528,9 +534,10 @@ The `UnsupportedPixelFormat` error variant is reserved for future direct-decode 
 
 - `img_w % tile_w == 0 && img_h % tile_h == 0` — if not, return `InvalidDimensions`.
 - If `opts.columns` is `Some(n)` and `n * tile_w > img_w`, log a warning and clamp to
+
   `img_w / tile_w`.
 
-**`Cargo.toml` additions:**
+### `Cargo.toml` additions
 
 ```toml
 [features]
@@ -541,7 +548,7 @@ image = { version = "0.25", optional = true, default-features = false, features 
 log  = { version = "0.4", optional = true }
 ```
 
-**Registration on `SoftwareBackendBuilder`:**
+### Registration on `SoftwareBackendBuilder`
 
 ```rust
 impl SoftwareBackendBuilder {
@@ -562,16 +569,21 @@ impl SoftwareBackendBuilder {
 `SoftwareBackend::new`, each tileset is loaded into an `Arc<SpriteCache>` shared between the game
 thread and (if needed) the window thread.
 
-**Acceptance criteria:**
+### Acceptance criteria (2)
 
 - Loading a valid 16×16 sprite sheet PNG with `Codepage::Cp437` populates the cache with up to 256
+
   entries. After loading, `cache.get('@')` returns `Some(sprite)` with
   `sprite.pixel_width == 16 && sprite.pixel_height == 16`.
+
 - Loading a PNG where `img_width % tile_width != 0` returns `Err(TilesetError::InvalidDimensions)`.
 - Loading an empty `bytes` vec returns `Err(TilesetError::PngDecode(...))`.
 - Registering two tilesets that both map `'@'` results in the second sprite being returned by
+
   `cache.get('@')` (last-wins).
+
 - `SpriteCache::load` with `Codepage::Custom` stops inserting sprites once the table is exhausted,
+
   even if more tiles remain in the sheet.
 
 **Tests:**
@@ -693,7 +705,7 @@ multi-cell sprites correctly, blending each RGBA8 pixel into the buffer.
 clone. During `draw_layers`, each `(layer_id, pos, &Tile)` pair is dispatched to `blit_cell` with
 `Option<&SpriteCache>`.
 
-**Sprite blitting function:**
+### Sprite blitting function
 
 ```rust
 use alpha_blend::rgba::U8x4Rgba;
@@ -759,7 +771,7 @@ fn blit_sprite(
 }
 ```
 
-**Per-cell dispatch (called once per `(layer, pos, &Tile)` from `draw_layers`):**
+### Per-cell dispatch (called once per `(layer, pos, &Tile)` from `draw_layers`)
 
 ```rust
 fn blit_cell(
@@ -792,16 +804,22 @@ fn blit_cell(
 }
 ```
 
-**Multi-cell sprite invariants:**
+### Multi-cell sprite invariants
 
 - The game places a single `Tile` in the anchor cell `(x, y)`. The sprite's pixel data covers
+
   `spacing_cells_x * cell_w` × `spacing_cells_y * cell_h` pixels.
+
 - The blit writes into the pixel buffer starting at `(px_x, px_y)` and extending right/down as
+
   needed. No other cells in the grid are modified; the pixel-buffer extension is a pure rendering
   side-effect.
+
 - Cells adjacent to the anchor (right and below) should be set to a transparent/placeholder tile
+
   by the game code so they don't overwrite the sprite's pixels. This is application-level
   responsibility, not enforced by the library (same behavior as BearLibTerminal).
+
 - If a multi-cell sprite exceeds `buf_w * buf_h` pixel bounds, pixels are clipped silently.
 
 **`buf_h` plumbing:** The current `blit_cell` receives `buf_w` but not `buf_h`, relying on
@@ -811,17 +829,25 @@ a pixel at row `buf_h + 1` has index `(buf_h + 1) * buf_w + x` which correctly e
 correctness. However, for the inner loop's row clipping optimization (avoid iterating pixels on
 out-of-bounds rows), `buf_h = buffer.len() / buf_w` is computed once per blit call.
 
-**Acceptance criteria:**
+### Acceptance criteria (3)
 
 - A cell containing `Tile { glyph: '@', .. }` where `'@'` is in `SpriteCache` uses sprite pixels,
+
   not bitmap font pixels, in the output buffer.
+
 - A cell containing `Tile { glyph: 'A', .. }` where `'A'` is not in `SpriteCache` uses the
+
   `BitmapFont` glyph.
+
 - A sprite with `spacing_cells_x = 2, spacing_cells_y = 2` (32×32 pixels on a 16×16 cell grid)
+
   placed at cell (1, 1) writes pixels into the buffer region covering cells (1,1), (2,1), (1,2),
   (2,2).
+
 - A sprite at the last column of the grid with `spacing_cells_x = 2` does not panic; overflow
+
   pixels are clipped.
+
 - A sprite pixel with `alpha = 0` does not modify the destination buffer pixel.
 - A sprite pixel with `alpha = 255` replaces the destination buffer pixel (opaque).
 - A sprite pixel with `alpha = 128` blends 50/50 with the existing pixel.
@@ -968,10 +994,17 @@ Tileset(TilesetError),
 ## Migration Notes
 
 - Games using only `BitmapFont` with no PNG sprites require no changes. The `software-tilesets`
+
   feature is off by default.
+
 - `SoftwareBackendBuilder::tileset()` is available only when `software-tilesets` is enabled; gating
+
   it behind `#[cfg(feature = "software-tilesets")]` prevents accidental use.
+
 - The `Codepage` enum is `non_exhaustive` to allow adding new variants (e.g., `Cp1252`) without
+
   a semver break. Match arms must include a `_` catch-all.
+
 - `CP437_TO_UNICODE` is `pub` so game code can independently map CP437 indices to codepoints
+
   without loading a tileset (e.g., for map loading from CP437-encoded `.ron` files).

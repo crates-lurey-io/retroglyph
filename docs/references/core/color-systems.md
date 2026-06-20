@@ -78,8 +78,10 @@ rendering where precision demands are lower than in professional color managemen
 For a terminal rendering library, the sRGB/linear distinction matters in two operations:
 
 - **Color blending/interpolation**: Blending two sRGB values directly produces visually incorrect
+
   results. The midpoint of sRGB(0, 0, 0) and sRGB(255, 255, 255) is sRGB(128, 128, 128), but that's
   perceptually too dark. The correct midpoint is sRGB(188, 188, 188).
+
 - **Luminance calculations**: WCAG contrast ratios require converting to linear RGB first.
 
 For a cell-based terminal renderer that primarily sets foreground/background colors without
@@ -92,7 +94,7 @@ Converting 8-bit sRGB to 8-bit linear RGB loses significant precision in dark va
 in sRGB maps to linear ~1, and values 1-12 all map to linear 0. If you need to work in linear space,
 use at least `f32` or `u16` for intermediate values.
 
-**Sources:**
+### Sources
 
 - [sRGB Wikipedia / IEC 61966-2-1](https://en.wikipedia.org/wiki/SRGB)
 - [Red Blob Games: sRGB WebGL](https://www.redblobgames.com/x/2445-srgb-webgl/)
@@ -107,9 +109,9 @@ use at least `f32` or `u16` for intermediate values.
 Most software performs alpha blending directly on sRGB values. This is wrong, but widespread. The
 standard "over" compositing formula is:
 
-```
+```text
 result = src_color * src_alpha + dst_color * (1 - src_alpha)
-```
+```text
 
 When `src_color` and `dst_color` are sRGB-encoded, the linear interpolation happens in non-linear
 space, producing results that don't match physical light mixing.
@@ -174,7 +176,7 @@ requirements. Blending in sRGB is simpler and still common in terminal applicati
 or TUI, the visual difference is minor. For a pixel-art renderer or color-critical tool, linear
 blending is worth the extra computation.
 
-**Sources:**
+### Sources (2)
 
 - [Fractolog: Color Space Correctness in Alpha Blending](https://www.fractolog.com/2024/07/color-space-correctness-in-alpha-blending/)
 - [The Hacks of Life: sRGB, Pre-Multiplied Alpha, and Compression](http://hacksoflife.blogspot.com/2022/06/srgb-pre-multiplied-alpha-and.html)
@@ -216,12 +218,12 @@ indices).
 
 Escape sequence format:
 
-```
+```text
 ESC[31m        # Set foreground to Red (index 1)
 ESC[42m        # Set background to Green (index 2)
 ESC[1;34m      # Bold + Blue (historically bold = bright)
 ESC[0m         # Reset all attributes
-```
+```text
 
 ### 256-Color Palette (SGR 38;5;n / 48;5;n)
 
@@ -269,10 +271,10 @@ Note the grayscale ramp does not include pure black (0) or pure white (255); tho
 
 Escape sequence format:
 
-```
+```text
 ESC[38;5;196m   # Foreground: index 196 (bright red from cube)
 ESC[48;5;232m   # Background: index 232 (near-black gray)
-```
+```text
 
 ### 24-bit Truecolor (SGR 38;2;r;g;b / 48;2;r;g;b)
 
@@ -281,10 +283,10 @@ Alacritty, Kitty, WezTerm, Windows Terminal, GNOME Terminal, Ghostty).
 
 Escape sequence format:
 
-```
+```text
 ESC[38;2;255;128;0m    # Foreground: orange
 ESC[48;2;0;0;64m       # Background: dark navy
-```
+```text
 
 There's also a colon-separated variant (`38:2::r:g:b:m`) from the ITU T.416 standard, but semicolons
 are more widely supported.
@@ -300,7 +302,7 @@ fn supports_truecolor() -> bool {
 }
 ```
 
-**Sources:**
+### Sources (3)
 
 - [Terminal Color Fundamentals | Terminfo.dev](https://terminfo.dev/fundamentals/color-fundamentals)
 - [24-bit truecolor | Terminfo.dev](https://terminfo.dev/extensions/24-bit-truecolor)
@@ -382,7 +384,7 @@ fn color_from_name(name: &str) -> Option<(u8, u8, u8)> {
 }
 ```
 
-**Sources:**
+### Sources (4)
 
 - [X11 color names - Wikipedia](https://en.wikipedia.org/wiki/X11_color_names)
 - [CSS `<named-color>` - MDN](https://developer.mozilla.org/en-US/docs/Web/CSS/named-color)
@@ -522,7 +524,7 @@ fn ansi256_to_rgb(index: u8) -> (u8, u8, u8) {
 }
 ```
 
-**Sources:**
+### Sources (5)
 
 - [ansi_colours crate](https://docs.rs/ansi_colours/latest/ansi_colours/)
 - [rgb2ansi256 crate](https://github.com/rhysd/rgb2ansi256)
@@ -607,7 +609,7 @@ fn best_foreground(bg_r: u8, bg_g: u8, bg_b: u8) -> (u8, u8, u8) {
 }
 ```
 
-**Sources:**
+### Sources (6)
 
 - [WCAG 2.x: Relative Luminance](https://www.w3.org/WAI/GL/wiki/Relative_luminance)
 - [WCAG Technique G17: 7:1 Contrast Ratio](https://www.w3.org/WAI/WCAG22/Techniques/general/G17)
@@ -782,7 +784,7 @@ Design principles:
 - `to_indexed()` for automatic fallback on 256-color terminals
 - `Rgba` as a separate type for internal compositing, not in the public `Color` enum
 
-**Sources:**
+### Sources (7)
 
 - [ratatui Color enum source](https://github.com/ratatui/ratatui/blob/main/ratatui-core/src/style/color.rs)
 - [crossterm Color enum](https://docs.rs/crossterm/latest/crossterm/style/enum.Color.html)
@@ -914,13 +916,20 @@ fn rgb_to_hsv(r: u8, g: u8, b: u8) -> (f64, f64, f64) {
 ### HSL vs HSV: When to Use Which
 
 - **HSL** is better for picking lighter/darker variants of a color. `L=0` is always black, `L=1` is
+
   always white, `L=0.5` is the "pure" color. The `lighten` and `darken` operations in CSS work in
   HSL.
+
 - **HSV** is better for color pickers and understanding "how much color vs. how much white." `V=0`
+
   is always black, `S=0` is always white/gray.
+
 - For **color harmony** operations (complementary, analogous), both work equally well since they
+
   share the same hue angle.
+
 - The `palette` crate uses `Hsl` and `Hsv` types in its own color space system. `colorsys` also
+
   provides `Hsl`.
 
 ### Color Manipulation Examples
@@ -953,7 +962,7 @@ fn invert(r: u8, g: u8, b: u8) -> (u8, u8, u8) {
 }
 ```
 
-**Sources:**
+### Sources (8)
 
 - [HSL and HSV - Wikipedia](https://en.wikipedia.org/wiki/HSL_and_HSV)
 - [Color conversion algorithms (JavaScript reference)](https://gist.github.com/mjijackson/5311256)
@@ -1157,10 +1166,15 @@ throughout (heavier than needed for terminal colors).
 For a terminal/grid rendering library that wants minimal dependencies:
 
 1. **Implement core color math inline** (sRGB<->linear, HSL conversion, contrast ratio). The
+
    formulas are short and stable.
-2. **Use `ansi_colours` or `rgb2ansi256`** for 256-color fallback. The algorithm is tricky to get
+
+1. **Use `ansi_colours` or `rgb2ansi256`** for 256-color fallback. The algorithm is tricky to get
+
    right and these crates are tiny.
-3. **Make `palette` optional** behind a feature flag for users who want perceptually-uniform
+
+1. **Make `palette` optional** behind a feature flag for users who want perceptually-uniform
+
    interpolation, CIELAB, OKLCH, or other advanced features.
 
 ```toml
@@ -1184,47 +1198,47 @@ palette = ["dep:palette"]
 
 ### sRGB to Linear (single channel)
 
-```
+```text
 if srgb <= 0.04045: linear = srgb / 12.92
 else:               linear = ((srgb + 0.055) / 1.055) ^ 2.4
-```
+```text
 
 ### Linear to sRGB (single channel)
 
-```
+```text
 if linear <= 0.0031308: srgb = linear * 12.92
 else:                    srgb = 1.055 * linear ^ (1/2.4) - 0.055
-```
+```text
 
 ### Relative Luminance
 
-```
+```text
 L = 0.2126 * R_linear + 0.7152 * G_linear + 0.0722 * B_linear
-```
+```text
 
 ### Contrast Ratio
 
-```
+```text
 CR = (L_lighter + 0.05) / (L_darker + 0.05)
-```
+```text
 
 ### 256-Color Cube Levels
 
-```
+```yaml
 Index:  0    1    2    3    4    5
 Value:  0   95  135  175  215  255
-```
+```text
 
 ### 256-Color Grayscale Ramp
 
-```
+```text
 Index 232-255 -> value = 8 + 10 * (index - 232)
 Range: 8, 18, 28, ..., 238
-```
+```text
 
 ### Terminal Escape Sequences
 
-```
+```text
 ANSI 16 FG:     ESC[30m .. ESC[37m, ESC[90m .. ESC[97m
 ANSI 16 BG:     ESC[40m .. ESC[47m, ESC[100m .. ESC[107m
 256-color FG:   ESC[38;5;{n}m
@@ -1232,53 +1246,87 @@ ANSI 16 BG:     ESC[40m .. ESC[47m, ESC[100m .. ESC[107m
 Truecolor FG:   ESC[38;2;{r};{g};{b}m
 Truecolor BG:   ESC[48;2;{r};{g};{b}m
 Reset:          ESC[0m
-```
+```rust
 
 ---
 
-## Sources
+## Sources (9)
 
 ### Kept
 
 - [Red Blob Games: sRGB WebGL](https://www.redblobgames.com/x/2445-srgb-webgl/) - Clear explanation
+
   of sRGB/linear with precision analysis
+
 - [Fractolog: Color Space Correctness in Alpha Blending](https://www.fractolog.com/2024/07/color-space-correctness-in-alpha-blending/) -
+
   Empirical testing of alpha blending in different color spaces
+
 - [palette crate docs](https://docs.rs/palette/latest/palette/) - Authoritative Rust color library
+
   documentation
+
 - [palette::rgb module](https://docs.rs/palette/latest/palette/rgb/index.html) - Explains linear vs
+
   non-linear RGB from Rust perspective
+
 - [Terminfo.dev: Color Fundamentals](https://terminfo.dev/fundamentals/color-fundamentals) - Modern
+
   reference for terminal color systems
+
 - [Terminfo.dev: 24-bit Truecolor](https://terminfo.dev/extensions/24-bit-truecolor) - Truecolor
+
   escape sequence spec
+
 - [W3C: Relative Luminance](https://www.w3.org/WAI/GL/wiki/Relative_luminance) - Official WCAG
+
   luminance formula
+
 - [W3C: Technique G17](https://www.w3.org/WAI/WCAG22/Techniques/general/G17) - Contrast ratio
+
   calculation
+
 - [ratatui Color source](https://github.com/ratatui/ratatui/blob/main/ratatui-core/src/style/color.rs) -
+
   Real-world Rust terminal color enum design
+
 - [crossterm Color docs](https://docs.rs/crossterm/latest/crossterm/style/enum.Color.html) - Another
+
   Rust terminal color enum
+
 - [ansi_colours crate](https://docs.rs/ansi_colours/latest/ansi_colours/) - RGB to 256-color
+
   conversion
+
 - [rgb2ansi256](https://github.com/rhysd/rgb2ansi256) - const fn Rust port of ansi_colours
 - [colorsys crate](https://docs.rs/colorsys/latest/colorsys/) - HSL/RGB conversion and manipulation
 - [X11 color names - Wikipedia](https://en.wikipedia.org/wiki/X11_color_names) - Definitive X11 vs
+
   W3C color comparison
+
 - [BearLibTerminal Reference](http://foo.wyrd.name/en:bearlibterminal:reference#color_from_name) -
+
   Named color API design reference
+
 - [XTerm Control Sequences](https://invisible-island.net/xterm/ctlseqs/ctlseqs.pdf) - Canonical
+
   xterm escape sequence spec
 
 ### Dropped
 
 - [RenderWonk: Adventures with Gamma-Correct Rendering](https://renderwonk.com/blog/index.php/archive/adventures-with-gamma-correct-rendering/) -
+
   GPU-focused, not terminal-relevant
+
 - [Real-Time Rendering blog: PNG sRGB](https://www.realtimerendering.com/blog/png-srgb-cutoutdecal-aa-problematic/) -
+
   About GPU AA, not applicable
+
 - [rgbto256 by taylordotfish](https://github.com/taylordotfish/rgbto256) - CIEDE2000 approach,
+
   overkill for terminal use
+
 - Various color converter web tools - No unique information beyond formulas already documented
 - [tutorialpedia: ANSI Color Escape Sequences](https://www.tutorialpedia.org/blog/list-of-ansi-color-escape-sequences/) -
+
   SEO content, terminfo.dev is better

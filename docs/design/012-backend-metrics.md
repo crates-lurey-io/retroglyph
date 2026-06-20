@@ -1,6 +1,6 @@
 # ADR 012: Backend Metrics & Instrumentation
 
-**Status:** Draft **Date:** 2026-06-20 **Parent:** [ADR 007: Software Rendering Backend](007-software-backend.md)
+**Status:**Draft**Date:**2026-06-20**Parent:** [ADR 007: Software Rendering Backend](007-software-backend.md)
 
 ## Context
 

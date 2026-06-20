@@ -13,11 +13,14 @@ We use a local `Justfile` in the `tools/` directory to manage tooling.
 
 ```bash
 # Run all formatters (cargo fmt + prettier)
+
 just fmt
 
 # Run linters (clippy + markdownlint)
+
 just lint
 
 # Run tests
+
 just test
 ```

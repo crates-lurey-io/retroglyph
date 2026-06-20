@@ -4,8 +4,11 @@
 - **Repository:** <https://github.com/crossterm-rs/crossterm>
 - **License:** MIT
 - **Latest stable:** 0.28.1 (mid-2024); 0.29 exists but versioning on crates.io shows ~1 year since
+
   last publish
+
 - **Operates on:** Real terminal emulators (not pseudo-terminal windows). Writes ANSI escape
+
   sequences (or WinAPI calls on older Windows) to stdout/stderr.
 
 ## What it is
@@ -23,14 +26,17 @@ applications use it directly or indirectly.
 Crossterm is foundational infrastructure. Hundreds of Rust TUI applications depend on it, either
 directly or through Ratatui.
 
-**Frameworks using crossterm as a backend:**
+### Frameworks using crossterm as a backend
 
 - [Ratatui](https://github.com/ratatui/ratatui) -- the primary Rust TUI framework (fork of tui-rs).
+
   Crossterm is its default backend.
+
 - [Cursive](https://github.com/gyscos/Cursive) -- ncurses-style TUI framework with a crossterm
+
   backend option.
 
-**Tools (direct or via Ratatui):**
+### Tools (direct or via Ratatui)
 
 - [Broot](https://dystroy.org/broot/) -- file manager/navigator
 - [gitui](https://github.com/extrawurst/gitui) -- Git TUI
@@ -44,7 +50,7 @@ directly or through Ratatui.
 - [serie](https://github.com/lusingander/serie) -- Git commit graph visualizer
 - [termscp](https://github.com/veeso/termscp) -- SCP/SFTP/FTP terminal file transfer
 
-**Games (direct or via Ratatui):**
+### Games (direct or via Ratatui)
 
 - [Rusty-rain](https://github.com/cowboy8625/rusty-rain) -- Matrix rain effect
 - [Chess-tui](https://github.com/thomas-mauran/chess-tui) -- terminal chess
@@ -208,6 +214,7 @@ This is crossterm's core value proposition. The same Rust code runs on:
 - **Windows 7-8.1**: WinAPI calls (Console Host API)
 - **Linux/macOS/BSD**: Standard ANSI escape codes via termios
 - **Tested on**: Windows Terminal, Console Host, Ubuntu Terminal, Konsole, Kitty, Alacritty, macOS
+
   Terminal, iTerm2 (implied by issue reports)
 
 Platform differences are abstracted behind the `Command` trait. The trade-off: some features (e.g.,
@@ -247,23 +254,41 @@ primitives and leaves screen management to the application or framework layer.
 ## Sources
 
 - [GitHub README](https://github.com/crossterm-rs/crossterm) -- feature list, tested terminals,
+
   dependency justification, "used by" section
+
 - [docs.rs API documentation](https://docs.rs/crossterm/latest/crossterm/) -- command API, event
+
   module, feature flags
+
 - [GitHub Issues #685](https://github.com/crossterm-rs/crossterm/issues/685) -- modifier key
+
   tracking issue, documents terminal fragmentation
+
 - [GitHub Issues #967](https://github.com/crossterm-rs/crossterm/issues/967) -- event filtering
+
   limitations
+
 - [GitHub Issues #494](https://github.com/crossterm-rs/crossterm/issues/494) -- SIGTSTP/job control
+
   signal handling gap
+
 - [GitHub Issues #554](https://github.com/crossterm-rs/crossterm/issues/554) -- signal event request
 - [GitHub Issues #588](https://github.com/crossterm-rs/crossterm/issues/588) -- Windows Terminal
+
   mouse event panic
+
 - [GitHub Issues #766](https://github.com/crossterm-rs/crossterm/issues/766) -- Windows dependency
+
   leaking into Linux builds
+
 - [GitHub Releases](https://github.com/crossterm-rs/crossterm/releases) -- changelog, synchronized
+
   output, Kitty protocol additions
+
 - [crates.io versions](https://crates.io/crates/crossterm/versions) -- release cadence data
 - [awesome-ratatui](https://github.com/ratatui/awesome-ratatui) -- ecosystem catalog of projects
+
   using crossterm via Ratatui
+
 - [Ratatui README](https://github.com/ratatui/ratatui) -- confirms crossterm as default backend

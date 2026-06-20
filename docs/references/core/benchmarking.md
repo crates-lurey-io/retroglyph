@@ -51,6 +51,7 @@ Downsides:
 - No generic type/const parameter benchmarks
 - Slow compile times (depends on plotters/gnuplot)
 - Maintenance has moved to [criterion-rs org](https://github.com/criterion-rs/criterion.rs); the
+
   original repo is less active
 
 ### Divan
@@ -267,7 +268,7 @@ fn serialize_to_ansi(bencher: divan::Bencher, (cols, rows): (usize, usize)) {
 wgpu supports GPU-side timestamp queries through the WebGPU `QuerySet` API. This measures actual GPU
 execution time, not CPU submission time.
 
-**Requirements:**
+### Requirements
 
 - Device must have `Features::TIMESTAMP_QUERY` enabled
 - Not all backends/hardware support it (check `adapter.features()`)
@@ -284,7 +285,7 @@ let query_set = device.create_query_set(&wgpu::QuerySetDescriptor {
 });
 ```
 
-2. Attach to render pass via `RenderPassTimestampWrites`:
+1. Attach to render pass via `RenderPassTimestampWrites`:
 
 ```rust
 let mut encoder = device.create_command_encoder(&Default::default());
@@ -304,7 +305,7 @@ let mut encoder = device.create_command_encoder(&Default::default());
 }
 ```
 
-3. Resolve queries to a buffer:
+1. Resolve queries to a buffer:
 
 ```rust
 let resolve_buf = device.create_buffer(&wgpu::BufferDescriptor {
@@ -316,7 +317,7 @@ let resolve_buf = device.create_buffer(&wgpu::BufferDescriptor {
 encoder.resolve_query_set(&query_set, 0..2, &resolve_buf, 0);
 ```
 
-4. Read back and convert to nanoseconds:
+1. Read back and convert to nanoseconds:
 
 ```rust
 // After mapping the resolve buffer:
@@ -380,12 +381,15 @@ measure than throughput because it spans the entire pipeline.
 
 ### Approaches
 
-**1. External measurement (ground truth):**
+### 1. External measurement (ground truth)
 
 - [Typometer](https://github.com/pavelfatin/typometer): Java tool that uses screen capture to
+
   measure keystroke-to-display latency. Works with any terminal. Records at 1000Hz, detects pixel
   changes after synthetic keypresses.
+
 - [Is It Snappy](https://isitsnappy.com/): High-speed camera approach. Requires 240Hz+ camera
+
   pointed at the screen while typing.
 
 **2. Software instrumentation:** Insert timestamps at pipeline boundaries and report the delta:
@@ -479,7 +483,7 @@ fn main() {
 
 Run: `cargo run --release --features dhat-heap`
 
-**Heap usage testing (for CI):**
+### Heap usage testing (for CI)
 
 ```rust
 #[global_allocator]
@@ -510,9 +514,11 @@ via LD_PRELOAD. Zero source code changes needed.
 
 ```bash
 # Profile
+
 heaptrack ./target/release/my-terminal
 
 # Analyze
+
 heaptrack_gui heaptrack.my-terminal.*.zst
 ```
 
@@ -582,13 +588,13 @@ Output shows allocation count and bytes alongside timing, per benchmark.
 [cargo-flamegraph](https://github.com/flamegraph-rs/flamegraph) generates flamegraph SVGs from Rust
 projects. Built on [inferno](https://github.com/jonhoo/inferno).
 
-**Install:**
+### Install
 
 ```bash
 cargo install flamegraph
 ```
 
-**Platform requirements:**
+### Platform requirements
 
 - Linux: `perf` (install `linux-tools-common linux-tools-generic`)
 - macOS: `xctrace` (comes with Xcode)
@@ -598,22 +604,27 @@ cargo install flamegraph
 
 ```bash
 # Profile the default binary
+
 cargo flamegraph
 
 # Profile a specific benchmark
+
 cargo flamegraph --bench grid_bench -- --bench
 
 # Profile with custom perf events
+
 cargo flamegraph -c "record -e cache-misses -c 100 --call-graph lbr -g"
 
 # Profile an example
+
 cargo flamegraph --example render_demo
 ```
 
-**Important config for readable output:**
+### Important config for readable output
 
 ```toml
 # Cargo.toml
+
 [profile.release]
 debug = true  # keep symbols
 
@@ -625,11 +636,12 @@ debug = true
 
 ```toml
 # .cargo/config.toml
+
 [target.x86_64-unknown-linux-gnu]
 rustflags = ["-Clink-arg=-Wl,--no-rosegment"]
 ```
 
-**Reading flamegraphs:**
+### Reading flamegraphs
 
 - Width = proportion of total samples containing that function
 - Y-axis = call stack depth
@@ -647,6 +659,7 @@ view rather than a static SVG.
 cargo install samply
 samply record ./target/release/my-binary
 # Opens Firefox Profiler automatically
+
 ```
 
 ---
@@ -657,10 +670,11 @@ samply record ./target/release/my-binary
 
 When building for `wasm32-unknown-unknown`, Chrome DevTools can profile WASM execution.
 
-**Build with debug names:**
+### Build with debug names
 
 ```toml
-# Cargo.toml
+# Cargo.toml (2)
+
 [profile.release]
 debug = "line-tables-only"  # or debug = true for full info
 ```
@@ -743,9 +757,7 @@ verify the WASM build matches expectations using DevTools.
 [vtebench](https://github.com/alacritty/vtebench) measures terminal PTY read performance. It
 generates VT escape sequence payloads and measures how fast a terminal can consume them.
 
-**What it measures:** Raw PTY read speed only. NOT frame rate, latency, or rendering performance.
-
-**How it works:**
+### What it measures:**Raw PTY read speed only. NOT frame rate, latency, or rendering performance.**How it works
 
 - Benchmarks are defined as directories with a `benchmark` executable and an optional `setup` script
 - The benchmark's stdout is used as the payload sent to the terminal via PTY
@@ -780,12 +792,18 @@ Less sophisticated than vtebench but easier to run.
 ### Key Lessons from Terminal Benchmarks
 
 1. **Separate PTY throughput from render throughput.** A terminal can be fast at reading PTY data
+
    but slow at rendering, or vice versa.
-2. **Measure at multiple grid sizes.** 80x24 vs 200x60 can show different bottlenecks (memory
+
+1. **Measure at multiple grid sizes.** 80x24 vs 200x60 can show different bottlenecks (memory
+
    bandwidth vs computation).
-3. **Test with realistic workloads:** scrolling, colored output, wide characters, cursor movement,
+
+1. **Test with realistic workloads:** scrolling, colored output, wide characters, cursor movement,
+
    alternate screen buffer.
-4. **VT parser throughput** is often the first bottleneck. Benchmark it in isolation.
+
+1. **VT parser throughput** is often the first bottleneck. Benchmark it in isolation.
 
 ---
 
@@ -807,19 +825,23 @@ jobs:
   bench:
     runs-on: ubuntu-latest
     steps:
+
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Run benchmarks
+
         run: cargo bench --bench grid_bench -- --output-format bencher | tee output.txt
 
       - name: Download previous benchmark data
+
         uses: actions/cache@v4
         with:
           path: ./cache
           key: ${{ runner.os }}-benchmark
 
       - name: Store benchmark result
+
         uses: benchmark-action/github-action-benchmark@v1
         with:
           tool: 'cargo'
@@ -858,10 +880,12 @@ jobs:
       BENCHER_PROJECT: my-terminal
       BENCHER_API_TOKEN: ${{ secrets.BENCHER_API_TOKEN }}
     steps:
+
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: bencherdev/bencher@main
       - run: bencher run "cargo bench --bench grid_bench"
+
 ```
 
 Bencher provides:
@@ -877,12 +901,15 @@ For simpler setups, use `critcmp` with Criterion:
 
 ```bash
 # Save baseline
+
 cargo bench --bench grid_bench -- --save-baseline main
 
 # On the branch
+
 cargo bench --bench grid_bench -- --save-baseline pr
 
 # Compare
+
 cargo install critcmp
 critcmp main pr
 ```
@@ -891,12 +918,15 @@ Or with Divan, capture output and diff:
 
 ```bash
 # baseline
+
 cargo bench --bench grid_bench > baseline.txt
 
 # PR
+
 cargo bench --bench grid_bench > pr.txt
 
 # manual diff (Divan doesn't have critcmp equivalent yet)
+
 diff baseline.txt pr.txt
 ```
 
@@ -904,7 +934,7 @@ diff baseline.txt pr.txt
 
 ## 10. Concrete Setup and Code Examples
 
-### Cargo.toml
+### Cargo.toml (3)
 
 ```toml
 [package]
@@ -913,7 +943,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-# ... your dependencies ...
+# ... your dependencies .
 
 [dev-dependencies]
 divan = "0.1"
@@ -927,6 +957,7 @@ version = "0.3"
 optional = true
 
 # Benchmark binary (one per file in benches/)
+
 [[bench]]
 name = "grid"
 harness = false
@@ -940,6 +971,7 @@ name = "renderer"
 harness = false
 
 # Keep symbols in release builds for flamegraphs and DHAT
+
 [profile.release]
 debug = 1
 
@@ -1113,24 +1145,31 @@ fn atlas_lookup_ascii(bencher: divan::Bencher) {
 
 ```bash
 # Run all benchmarks
+
 cargo bench
 
 # Run specific benchmark file
+
 cargo bench --bench grid
 
 # Filter to specific benchmark function
+
 cargo bench --bench grid -- 'diff'
 
 # With allocation profiling (requires AllocProfiler in harness)
+
 cargo bench --bench grid
 
 # Generate flamegraph for a benchmark
+
 cargo flamegraph --bench grid -- --bench 'write_cells'
 
 # Memory profiling with DHAT
+
 cargo run --release --features dhat-heap
 
 # DHAT in tests
+
 cargo test --release --features dhat-heap -- test_grid_allocation
 ```
 
@@ -1139,21 +1178,38 @@ cargo test --release --features dhat-heap -- test_grid_allocation
 ## Sources
 
 - [Criterion.rs](https://github.com/bheisler/criterion.rs) / [docs](https://docs.rs/criterion) --
+
   statistics-driven benchmarking, HTML reports, baseline comparison
+
 - [Divan](https://github.com/nvzqz/divan) / [announcement](https://nikolaivazquez.com/blog/divan/)
+
   -- simple API, allocation profiling, generic benchmarks, thread contention
+
 - [dhat crate](https://docs.rs/dhat) -- heap profiling and allocation testing for Rust
 - [cargo-flamegraph](https://github.com/flamegraph-rs/flamegraph) -- flamegraph SVG generation,
+
   perf/dtrace/xctrace backends
+
 - [wgpu CommandEncoder::write_timestamp](https://docs.rs/wgpu/latest/wgpu/struct.CommandEncoder.html)
+
   -- GPU timestamp queries
+
 - [wgpu RenderPassTimestampWrites](https://docs.rs/wgpu/latest/wgpu/struct.RenderPassTimestampWrites.html)
+
   -- per-pass GPU timing
+
 - [vtebench](https://github.com/alacritty/vtebench) -- PTY read performance benchmarking for
+
   terminals
+
 - [github-action-benchmark](https://github.com/benchmark-action/github-action-benchmark) -- GitHub
+
   Action for CI regression detection
+
 - [Bencher](https://bencher.dev) / [repo](https://github.com/bencherdev/bencher) -- continuous
+
   benchmarking platform with bare-metal runners
+
 - [Rust WASM Book: Time Profiling](https://rustwasm.github.io/book/reference/time-profiling.html) --
+
   WASM profiling with DevTools, console.time, performance.now

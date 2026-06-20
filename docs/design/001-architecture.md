@@ -1,6 +1,6 @@
 # ADR 001: Architecture
 
-**Status:** Draft **Date:** 2026-06-15
+**Status:**Draft**Date:** 2026-06-15
 
 ## Context
 
@@ -39,7 +39,8 @@ Backend selection is via feature flags:
 [features]
 default = []
 crossterm = ["dep:crossterm"]
-# future: wgpu, web, sdl, etc.
+# future: wgpu, web, sdl, etc
+
 ```
 
 **Rationale:** Premature workspace splits create friction (publishing order, version coordination,
@@ -51,14 +52,14 @@ when the time comes.
 
 The public API has three tiers, all operating on the same underlying `Grid`:
 
-**Layer 1 — Direct buffer access (lowest level):**
+### Layer 1 — Direct buffer access (lowest level)
 
 ```rust
 let grid = term.grid_mut();
 grid.put(5, 3, Cell::new('@', Style::default().fg(Color::Rgb { r: 255, g: 0, b: 0 })));
 ```
 
-**Layer 2 — Stateful convenience (BearLibTerminal-style):**
+### Layer 2 — Stateful convenience (BearLibTerminal-style)
 
 ```rust
 term.fg(Color::Rgb { r: 255, g: 0, b: 0 });
@@ -69,7 +70,7 @@ term.print(0, 0, "Hello");
 Layer 2 is sugar over Layer 1. `term.put(x, y, ch)` writes the character with the current
 foreground/background/layer state into the grid buffer.
 
-**Layer 3 — High-level helpers (future, not in v0.1):**
+### Layer 3 — High-level helpers (future, not in v0.1)
 
 ```rust
 term.print_styled(0, 0, Line::from(vec![
@@ -281,7 +282,7 @@ and produces a usable, playable terminal for roguelike development.
 
 ## Module structure (anticipated)
 
-```
+```rust
 src/
 ├── lib.rs              # Public API re-exports
 ├── terminal.rs         # Terminal struct (stateful API, double buffering)
@@ -300,21 +301,31 @@ src/
     │   └── web.rs
     ├── text.rs          # Span, Line, Text types
     └── layout.rs        # Word wrapping, alignment
-```
+```rust
 
 ## Consequences
 
 - Games built against v0.1 use only the headless backend; no visual output until v0.2.
 - The simple cell model means no tile stacking or layers initially. Games needing these will wait or
+
   work around by manual compositing.
+
 - The user-owned loop means no built-in frame timing or vsync. Users manage their own sleep/poll
+
   timing.
+
 - Starting as a monolith means all code is in one crate. Compile times will grow but are manageable
+
   at this scale.
+
 - The full `Color` enum (with Ansi/Indexed) adds a few match arms to each backend but gives terminal
+
   users theme-aware colors from day one.
+
 - Bare `(x, y)` coordinates for cell operations; `Position` struct for structured data (cursor,
+
   mouse events).
+
 - `CellModifier` (not `Modifier`) avoids naming collision with `KeyModifiers`.
 - Zero runtime dependencies. Manual bitflag newtypes instead of `bitflags` crate.
 

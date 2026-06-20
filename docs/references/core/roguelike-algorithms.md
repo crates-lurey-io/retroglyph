@@ -26,9 +26,9 @@ scans only the visible portion.
 **Properties:** Fast (especially indoors), simple to implement, good pillar shadows. Not perfectly
 symmetric.
 
-**Pseudocode (one octant):**
+### Pseudocode (one octant)
 
-```
+```rust
 fn scan(row, start_slope, end_slope, radius, origin, is_opaque, mark_visible):
     if row > radius: return
 
@@ -51,7 +51,7 @@ fn scan(row, start_slope, end_slope, radius, origin, is_opaque, mark_visible):
     // if last tile was open, continue scanning next row
     if not is_opaque(prev_tile):
         scan(row + 1, start_slope, end_slope, ...)
-```
+```text
 
 For each of 8 octants, call `scan(1, -1.0, 1.0, radius, ...)`. Slopes are calculated as `col / row`
 (or fractional equivalents).
@@ -66,11 +66,12 @@ floor A can see floor B, then B can always see A. Achieves this by:
 - Modeling walls as diamonds inscribed in tiles (not squares)
 - Using exact rational arithmetic (fractions) instead of floats
 - Adding an `is_symmetric` check: a floor tile is revealed only if its center point falls within the
+
   scan sector
 
-**Pseudocode (complete, CC0-licensed):**
+### Pseudocode (complete, CC0-licensed)
 
-```
+```rust
 fn compute_fov(origin, is_blocking, mark_visible):
     mark_visible(origin)
     for quadrant in [North, East, South, West]:
@@ -100,7 +101,7 @@ fn slope(tile):
 
 // Row.tiles(): min_col = round_ties_up(depth * start_slope)
 //              max_col = round_ties_down(depth * end_slope)
-```
+```rust
 
 An iterative (non-recursive) version replaces the recursion with a stack/queue of rows.
 
@@ -165,17 +166,21 @@ The standard shortest-path algorithm for single-source, single-target pathfindin
 priority queue (binary heap) to explore nodes ordered by `f(n) = g(n) + h(n)` where `g` is
 cost-so-far and `h` is a heuristic estimate to the goal.
 
-**Key considerations:**
+### Key considerations
 
 - Heuristic choice matters: Manhattan for 4-directional, Chebyshev/octile for 8-directional,
+
   Euclidean works but is slightly less efficient
+
 - Binary heap is standard; more exotic structures (pairing heap, bucket queue) rarely help for
+
   typical roguelike map sizes
+
 - bracket-pathfinding defaults to 65,536 iteration limit
 
-**Pseudocode:**
+### Pseudocode
 
-```
+```rust
 fn a_star(start, goal, map):
     open = BinaryHeap::new()
     open.push(start, h(start, goal))
@@ -195,7 +200,7 @@ fn a_star(start, goal, map):
                 open.push(neighbor, f)
 
     return None  // no path
-```
+```text
 
 ### 2.2 Dijkstra Maps (Influence Maps / Distance Fields)
 
@@ -203,17 +208,19 @@ Not just pathfinding, but a general-purpose AI tool. A Dijkstra map is a grid wh
 the distance to the nearest goal. Computed via floodfill: set goals to 0, iterate until stable (each
 cell = min(neighbors) + 1).
 
-**Uses (from Brogue's Brian Walker):**
+**Uses (from Brogue's Brian Walker):**1.**Pathfinding:** Roll downhill toward any goal from any position
 
-1. **Pathfinding:** Roll downhill toward any goal from any position
-2. **Fleeing AI:** Multiply map by -1.2, re-scan. Monsters flee intelligently toward doors, not into
+1. **Fleeing AI:** Multiply map by -1.2, re-scan. Monsters flee intelligently toward doors, not into
+
    corners
-3. **Autoexplore:** Set unexplored tiles as goals, roll downhill
-4. **Desire-driven AI:** Combine multiple Dijkstra maps (player distance, food, allies, items) with
-   per-monster weight coefficients. Nine weighted sums produce complex behavior cheaply
-5. **Dynamic routing:** Track distance-to-safety for terrain effects
 
-**Properties:** O(n) to compute (n = number of cells). Can be reused across all entities. Only
+1. **Autoexplore:** Set unexplored tiles as goals, roll downhill
+2. **Desire-driven AI:** Combine multiple Dijkstra maps (player distance, food, allies, items) with
+
+   per-monster weight coefficients. Nine weighted sums produce complex behavior cheaply
+
+1. **Dynamic routing:**Track distance-to-safety for terrain effects**Properties:** O(n) to compute (n = number of cells). Can be reused across all entities. Only
+
 recompute when goals change.
 
 [Source: Brian Walker, The Incredible Power of Dijkstra Maps](http://www.roguebasin.com/index.php/The_Incredible_Power_of_Dijkstra_Maps)
@@ -224,7 +231,7 @@ An optimization of A\* for uniform-cost grids. Skips "uninteresting" nodes by ju
 lines until hitting a wall or a "forced neighbor" (a tile that could not be reached more efficiently
 from another direction). Reduces the number of nodes expanded by 10-30x on open maps.
 
-**Constraints:**
+### Constraints
 
 - Only works on uniform-cost grids (all floor tiles cost 1)
 - Requires 8-directional movement (standard JPS; variants exist for 4-dir)
@@ -253,11 +260,13 @@ The most common room-and-corridor dungeon generator:
 
 1. Start with the full map rectangle
 2. Recursively split into two sub-rectangles (alternating horizontal/vertical, random split
+
    position)
-3. Stop when leaves are approximately room-sized
-4. Place a randomly-sized room in each leaf
-5. Connect sibling leaves with corridors (straight or Z-shaped)
-6. Walk up the tree connecting parent regions
+
+1. Stop when leaves are approximately room-sized
+2. Place a randomly-sized room in each leaf
+3. Connect sibling leaves with corridors (straight or Z-shaped)
+4. Walk up the tree connecting parent regions
 
 **Properties:** Guaranteed no overlapping rooms. Clean, traditional dungeon layouts. Controllable
 room size distribution (homogeneous vs heterogeneous splits). Easy to add variation by allowing some
@@ -273,11 +282,11 @@ Generates natural cave-like levels:
 2. Iterate the 4-5 rule: a tile becomes a wall if >= 5 of its 8 neighbors are walls
 3. Repeat 4-5 iterations
 
-**Improved rule (prevents large open areas):**
+### Improved rule (prevents large open areas)
 
-```
+```text
 W'(p) = R1(p) >= 5 || R2(p) <= 2
-```
+```text
 
 Where R1 = neighbor count in 3x3 area, R2 = neighbor count in 5x5 area. Run 4 iterations with this
 rule, then 3 iterations with just `R1(p) >= 5` for smoothing.
@@ -300,7 +309,7 @@ Simple algorithm for organic cave generation:
 4. Mark the new position as floor
 5. Repeat until a target percentage of the map is open (typically 40-50%)
 
-**Variants:**
+### Variants
 
 - Multiple drunks starting from different positions
 - Weighted directions (bias toward center, away from edges)
@@ -356,8 +365,11 @@ to the creation of OpenSimplex alternatives.
 Patent-free alternatives to simplex noise:
 
 - **OpenSimplex** (2014, Kurt Spencer): Uses a different lattice structure to avoid the simplex
+
   patent. Slightly different visual character.
+
 - **OpenSimplex2** (2019): Improved version with better performance and visual quality. Two
+
   variants: OpenSimplex2 (standard) and OpenSimplex2S (smoother).
 
 ### 4.4 Noise in Roguelikes
@@ -382,9 +394,9 @@ open-world generation.
 The classic integer-only line drawing algorithm. Determines which cells a line from (x0,y0) to
 (x1,y1) passes through on a grid. Uses only integer addition, subtraction, and bit shifting.
 
-**Pseudocode:**
+### Pseudocode (2)
 
-```
+```rust
 fn bresenham(x0, y0, x1, y1) -> Vec<(i32, i32)>:
     points = []
     dx = abs(x1 - x0)
@@ -405,7 +417,7 @@ fn bresenham(x0, y0, x1, y1) -> Vec<(i32, i32)>:
             y0 += sy
 
     return points
-```
+```text
 
 **Properties:** Integer-only, fast, deterministic. The standard for line-of-sight checks and
 projectile paths. Symmetric shadowcasting (Albert Ford) maps exactly to Bresenham line-of-sight.
@@ -415,9 +427,9 @@ projectile paths. Symmetric shadowcasting (Albert Ford) maps exactly to Bresenha
 A floating-point line algorithm that steps through the grid one cell at a time, tracking where the
 line crosses cell boundaries.
 
-**Pseudocode:**
+### Pseudocode (3)
 
-```
+```rust
 fn dda(x0, y0, x1, y1) -> Vec<(i32, i32)>:
     dx = x1 - x0
     dy = y1 - y0
@@ -433,7 +445,7 @@ fn dda(x0, y0, x1, y1) -> Vec<(i32, i32)>:
         y += y_inc
 
     return points
-```
+```rust
 
 **Properties:** Simpler to understand, uses floating point. Commonly used in raycasting
 (Wolfenstein-style). For grid-based roguelikes, Bresenham is preferred due to integer-only math and
@@ -463,7 +475,7 @@ workspace crates:
 | `bracket-terminal`         | Terminal rendering (OpenGL, WebGL, crossterm, curses)     |
 | `bracket-lib`              | Meta-crate re-exporting everything                        |
 
-**Trait design:**
+### Trait design
 
 ```rust
 // BaseMap: the minimum interface for pathfinding/FOV
@@ -494,7 +506,7 @@ Downloads: bracket-pathfinding ~180K all-time. Last release v0.8.7.
 
 A general-purpose pathfinding library, not roguelike-specific:
 
-**Algorithms included:**
+### Algorithms included
 
 - A*, Dijkstra, BFS, DFS, IDA*, Fringe search
 - Yen's K-shortest paths
@@ -561,10 +573,9 @@ Downloads: ~92K all-time. Lighter weight than noise-rs.
 libtcod bundles terminal rendering, FOV, pathfinding, noise, BSP, heightmaps, and GUI tools into a
 single C library.
 
-**Advantages:** One dependency gets you everything. Consistent API. Good for beginners/game jams.
-**Disadvantages:** The maintainers themselves concluded it was unsustainable. From libtcod issue
+**Advantages:**One dependency gets you everything. Consistent API. Good for beginners/game jams.**Disadvantages:** The maintainers themselves concluded it was unsustainable. From libtcod issue
 
-# 147:
+## 147
 
 > "Libtcod's size makes it difficult to port, maintain, and document. It has too many things at
 > once."
@@ -579,8 +590,7 @@ The library is now being split into `libtcod-fov`, `libtcod-terminal`, `libtcod-
 BearLibTerminal provides only a terminal-like window with grid rendering and input. No algorithms at
 all. Users bring their own FOV, pathfinding, etc.
 
-**Advantages:** Minimal, focused, easy to maintain. Users choose their own algorithms.
-**Disadvantages:** Higher barrier to entry. Every project reinvents the same FOV/pathfinding code.
+**Advantages:**Minimal, focused, easy to maintain. Users choose their own algorithms.**Disadvantages:** Higher barrier to entry. Every project reinvents the same FOV/pathfinding code.
 
 ### 7.3 The bracket-lib Model (Workspace Crates)
 
@@ -620,12 +630,16 @@ trait Algorithm2D: BaseMap {
 }
 ```
 
-**Critique:**
+### Critique
 
 - `BaseMap` mixes FOV concerns (`is_opaque`) with pathfinding concerns (`get_available_exits`,
+
   `get_pathing_distance`). These should be separate traits.
+
 - `SmallVec<[(usize, f32); 10]>` in a public trait is opinionated. An iterator or generic collection
+
   would be better.
+
 - `usize` indices lose type safety. A `Point` or `GridPos` type is more ergonomic.
 - The trait requires implementing all methods even if you only want FOV.
 
@@ -640,8 +654,7 @@ let path = astar(
 );
 ```
 
-**Advantages:** Zero trait implementations required. Works with any type. Very flexible.
-**Disadvantages:** No shared abstraction means no code reuse between algorithms. Each call
+**Advantages:**Zero trait implementations required. Works with any type. Very flexible.**Disadvantages:** No shared abstraction means no code reuse between algorithms. Each call
 re-specifies the map interface.
 
 ### 8.3 Recommended Approach for rg
@@ -668,7 +681,7 @@ trait PathMap: Grid {
 }
 ```
 
-**Principles:**
+### Principles
 
 - Use `Pos` (a typed `(i32, i32)` or similar) instead of `usize` indices
 - Separate FOV from pathfinding traits
@@ -684,9 +697,13 @@ trait PathMap: Grid {
 
 - Shadowcasting is O(n) where n is the number of visible tiles. It naturally skips shadowed areas.
 - For typical roguelike visible areas (20x20 to 40x40), all algorithms except Digital FOV complete
+
   in under 100 microseconds.
+
 - The iterative variant of symmetric shadowcasting avoids recursion overhead (important if the stack
+
   is constrained, e.g., WASM).
+
 - Use exact integer/fraction arithmetic for slopes to avoid floating-point drift artifacts.
 
 ### 9.2 Pathfinding Performance
@@ -696,6 +713,7 @@ trait PathMap: Grid {
 - Dijkstra maps are O(n) to compute and reusable across all entities per turn.
 - JPS provides 10-30x speedup over A\* on large uniform grids but adds implementation complexity.
 - bracket-pathfinding uses `SmallVec` for exit lists to avoid heap allocation for the common case
+
   (<=10 exits).
 
 ### 9.3 Map Generation Performance
@@ -707,9 +725,13 @@ trait PathMap: Grid {
 ### 9.4 General Rust Performance Tips
 
 - Represent grids as flat `Vec<T>` with row-major indexing (`y * width + x`). This is
+
   cache-friendly.
+
 - Avoid `HashMap` for visited sets in pathfinding; use a flat `Vec<bool>` or bitset indexed by
+
   position.
+
 - Use `#[inline]` on small hot functions (is_opaque, index conversion).
 - Consider SIMD for noise generation (fastnoise-lite is already optimized for this).
 - The `threaded` feature in bracket-pathfinding uses Rayon for parallel Dijkstra map computation.
@@ -720,7 +742,7 @@ trait PathMap: Grid {
 
 ### Architecture: Layered Workspace with Optional Algorithm Crates
 
-```
+```text
 rg/                          # workspace root
   rg-core/                   # Grid, Pos, Rect, Color, Cell - zero deps
   rg-terminal/               # Terminal rendering (crossterm backend)
@@ -729,7 +751,7 @@ rg/                          # workspace root
     rg-fov/                  # FOV only (symmetric shadowcasting)
     rg-pathfinding/          # A*, Dijkstra maps
   rg-mapgen/                 # Optional: BSP, cellular automata, drunkard walk
-```
+```rust
 
 ### What to include in core
 
@@ -740,29 +762,41 @@ rg/                          # workspace root
 ### What to offer as optional crates
 
 - **FOV:** Symmetric shadowcasting (Albert Ford's algorithm). Small, self-contained, high value.
+
   Depends only on `rg-core` for `Pos`/`Grid`.
+
 - **Pathfinding:** A*and Dijkstra maps. Moderate value-add since the `pathfinding` crate exists and
+
   is excellent for A*, but roguelike-style Dijkstra maps are not available elsewhere as a ready-made
   solution.
+
 - **Map generation:** BSP, cellular automata, drunkard walk. These are simple enough that many users
+
   will want to customize heavily. Provide reference implementations or an `rg-mapgen` examples crate
   rather than a hard dependency.
 
 ### What NOT to include
 
 - **Noise:** Defer to `noise-rs` or `fastnoise-lite`. These are mature, well-maintained crates.
+
   Including noise would be scope creep.
+
 - **WFC:** Too complex, too specialized. Defer to the `wfc` crate.
 - **JPS/Flow fields:** Niche optimizations. The `pathfinding` crate covers exotic algorithms.
 - **A full terminal emulator:** rg should focus on the grid abstraction. Rendering is a backend
+
   concern.
 
 ### API Design
 
 - Define `FovMap` and `PathMap` as separate traits in `rg-core` (trait definitions only, no
+
   algorithms)
+
 - Algorithm crates provide free functions:
+
   `fov::compute(map: &impl FovMap, origin: Pos, radius: u32) -> HashSet<Pos>`
+
 - Also provide closure-based variants for users who don't want to implement traits
 - Use `Pos` everywhere (not usize indices)
 - Return iterators or allocated collections (let the user choose via `.collect()`)
@@ -781,62 +815,104 @@ drawing) are provided, while noise and exotic algorithms are left to specialized
 ### Kept
 
 - **Albert Ford, Symmetric Shadowcasting** (<https://www.albertford.com/shadowcasting/>) -
+
   Definitive reference for symmetric FOV with full pseudocode, CC0 licensed
+
 - **RogueBasin, FOV Comparative Study**
+
   (<http://www.roguebasin.com/index.php/Comparative_study_of_field_of_view_algorithms_for_2D_grid_based_worlds>) -
   Only rigorous benchmark comparison of FOV algorithms
+
 - **RogueBasin, FOV using Recursive Shadowcasting**
+
   (<http://www.roguebasin.com/index.php/FOV_using_recursive_shadowcasting>) - Original recursive
   shadowcasting reference by Bjorn Bergstrom
+
 - **RogueBasin, The Incredible Power of Dijkstra Maps**
+
   (<http://www.roguebasin.com/index.php/The_Incredible_Power_of_Dijkstra_Maps>) - Brian Walker's
   seminal article on Dijkstra map applications in Brogue
+
 - **RogueBasin, Cellular Automata Cave Generation**
+
   (<http://www.roguebasin.com/index.php/Cellular_Automata_Method_for_Generating_Random_Cave-Like_Levels>) -
   Comprehensive reference with rule tweaking and isolated cave solutions
+
 - **RogueBasin, Basic BSP Dungeon Generation**
+
   (<http://www.roguebasin.com/index.php/Basic_BSP_Dungeon_generation>) - Standard BSP reference with
   clear step-by-step illustrations
+
 - **bracket-lib GitHub** (<https://github.com/amethyst/bracket-lib>) - Primary Rust roguelike
+
   toolkit, workspace architecture reference
+
 - **bracket-algorithm-traits docs**
+
   (<https://docs.rs/bracket-algorithm-traits/latest/bracket_algorithm_traits/>) -
   BaseMap/Algorithm2D trait design reference
+
 - **bracket-pathfinding docs** (<https://crates.io/crates/bracket-pathfinding>) - A\*, Dijkstra, FOV
+
   implementation details and API patterns
+
 - **pathfinding crate** (<https://crates.io/crates/pathfinding>) - General-purpose pathfinding with
+
   closure-based API, 4.6M downloads
+
 - **noise-rs** (<https://crates.io/crates/noise>) - Primary Rust noise library, 2M downloads
 - **fastnoise-lite** (<https://crates.io/crates/fastnoise-lite>) - Lightweight noise with no_std
+
   support
+
 - **libtcod issue #147** (<https://github.com/libtcod/libtcod/issues/147>) - Maintainer's rationale
+
   for splitting the monolith
+
 - **Adam Milazzo, Roguelike Vision Algorithms**
+
   (<http://www.adammil.net/blog/v125_Roguelike_Vision_Algorithms.html>) - Comprehensive analysis of
   FOV algorithm properties and desirable characteristics
+
 - **Ratatui modularization issue** (<https://github.com/ratatui/ratatui/issues/1388>) - Precedent
+
   for splitting a Rust TUI library into workspace crates
 
 ### Dropped
 
 - **RogueBasin output_libraries.md** (roguebasin GitHub mirror) - General comparison, no algorithm
+
   depth
+
 - **BearLibTerminal design docs** (foo.wyrd.name) - Describes BearLib's rendering design, not
+
   algorithmic
+
 - **Generic Rust module/workspace docs** (doc.rust-lang.org, stackoverflow) - General language
+
   reference, not project-specific
+
 - **libtcod xterm renderer issue #78** - Rendering concern, not algorithm-related
 
 ## Gaps
 
 1. **Benchmarks in Rust specifically:** The FOV benchmarks are from 2009 C++ implementations
+
    (libtcod). Rust-specific benchmarks with modern CPUs would be useful, particularly for comparing
    recursive vs iterative symmetric shadowcasting.
-2. **JPS implementation quality in Rust:** No well-maintained standalone JPS crate was found. The
+
+1. **JPS implementation quality in Rust:** No well-maintained standalone JPS crate was found. The
+
    `pathfinding` crate does not include JPS.
-3. **WFC for roguelike dungeons:** Most WFC discussion focuses on image synthesis. Practical
+
+1. **WFC for roguelike dungeons:** Most WFC discussion focuses on image synthesis. Practical
+
    roguelike dungeon WFC examples with adjacency rule design are sparse.
-4. **Drunkard's walk variants:** No single canonical reference. The algorithm is simple enough that
+
+1. **Drunkard's walk variants:** No single canonical reference. The algorithm is simple enough that
+
    it's usually described inline in tutorials.
-5. **Real-world usage data:** How many Rust roguelikes use bracket-lib vs rolling their own vs
+
+1. **Real-world usage data:** How many Rust roguelikes use bracket-lib vs rolling their own vs
+
    combining smaller crates is not well documented.

@@ -1,6 +1,7 @@
 # ADR 005: Animated Cast Recording for Test Documentation
 
-**Status:** Draft **Date:** 2026-06-17 **Parent:**
+### Status:**Draft**Date:**2026-06-17**Parent
+
 [ADR 004: E2E and Screenshot Testing Strategy](004-testing-strategy.md)
 
 ## Context
@@ -31,12 +32,12 @@ signal stable enough to assert on. The cast answers "what did it look like and h
 
 asciinema v2 is JSON Lines:
 
-```
+```json
 {"version": 2, "width": 60, "height": 15, "title": "crossterm_demo"}
 [0.000, "o", "\u001b[?1049h\u001b[2J..."]
 [0.183, "o", "\u001b[5;7H@"]
 [0.312, "o", "\u001b[?1049l"]
-```
+```javascript
 
 Line 1 is a header object. Each subsequent line is a three-element array:
 `[elapsed_seconds, event_type, data]`. For output capture, `event_type` is always `"o"`.
@@ -69,13 +70,17 @@ The test calls this alongside the existing SVG write, depositing
 ### 3. Justfile recipes
 
 ```just
-# Convert all committed casts to animated GIFs.
+# Convert all committed casts to animated GIFs
+
 # Requires: cargo install agg --root bin/
+
 casts-to-gif:
     bin/bin/agg tests/snapshots/crossterm_demo.cast tests/snapshots/crossterm_demo.gif
 
-# Record a fresh cast by running the demo interactively.
+# Record a fresh cast by running the demo interactively
+
 # Requires: brew install asciinema
+
 record name="crossterm_demo":
     cargo build --example {{name}} --features crossterm
     asciinema rec --command target/debug/examples/{{name}} \
@@ -98,10 +103,10 @@ play one back locally installs it themselves.
 
 ### 5. `.gitattributes`
 
-```
+```text
 tests/snapshots/*.cast linguist-generated
 tests/snapshots/*.gif  linguist-generated
-```
+```rust
 
 ### 6. Committed snapshot artifacts (full set)
 

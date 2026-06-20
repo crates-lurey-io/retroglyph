@@ -18,14 +18,22 @@ Most of the art of clean Rust is de-nesting.
 ### 1.1 Basics of De-nesting
 
 - **Use `?`** to flatten error handling. Avoid converting errors into a single top-level enum unless
+
   those errors genuinely belong together. Keep separate concerns in separate error types.
+
 - **Split long combinator chains.** When a chain grows beyond one line, assign intermediate steps to
+
   named variables. Multi-line combinator chains can often be rewritten as for-loops for readability.
+
 - **Pattern match on the full type** instead of nesting match statements. If your outer match just
+
   destructures to feed an inner match, combine them.
+
 - **Use `if let`** when you only care about one arm. Replace a match with a single interesting
+
   pattern + wildcard with `if let Pattern(thing) = value { ... }`, optionally adding `else` for the
   wildcard case.
+
 - **Run `cargo clippy`.** It catches many of these issues automatically.
 
 ### 1.2 Tuple Matching
@@ -226,10 +234,15 @@ enum Never {}
 Use cases:
 
 - **Represent impossibility.** Where a type is structurally required but should never exist at
+
   runtime.
+
 - **Infallible `Result`.** When a function returns `Result<T, Never>`, the `Err` case is statically
+
   impossible. The caller can safely unwrap without runtime cost.
+
 - **Embedded main.** Functions that never return (infinite loops, `process::exit`) can return `!`
+
   (the never type). Empty enums are the stable equivalent for use in type parameters.
 
 The `!` never type is being stabilized in std. `!` is the type of expressions like `return`,
@@ -443,16 +456,27 @@ Use editor plugins that jump to compiler errors directly:
 
 - **Kept:**
   - [Ferrous Systems: Elements of Rust](https://github.com/ferrous-systems/elements-of-rust) -
+
     primary source, the full repository README
+
   - [Niko Matsakis: Precise closure capture clauses](http://smallcultfollowing.com/babysteps/blog/2018/04/24/rust-pattern-precise-closure-capture-clauses/) -
+
     detailed explanation of the block-for-closure pattern, referenced directly by the repo
+
   - [std::iter::Iterator::collect docs](https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.collect) -
+
     explains `FromIterator` for `Result`
+
   - [std::primitive::never docs](https://doc.rust-lang.org/std/primitive.never.html) - never type
+
     stabilization status
+
   - [salsa cancellation test](https://github.com/salsa-rs/salsa/blob/3dc4539c7c34cb12b5d4d1bb0706324cfcaaa7ae/tests/parallel/cancellation.rs#L42-L53) -
+
     real-world usage of the closure block pattern
+
   - [rustc HTML formatter](https://github.com/rust-lang/rust/blob/6b5f9b2e973e438fc1726a2d164d046acd80b170/src/librustdoc/html/format.rs#L1061) -
+
     origin of the Cell::take display trick
 
 - **Dropped:**

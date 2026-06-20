@@ -5,7 +5,9 @@
 - **License**: MIT
 - **Current version**: 0.30.1 (June 2026)
 - **Stats**: ~20k GitHub stars, 32M+ crates.io downloads, 4,300+ reverse dependencies, 260+
+
   contributors
+
 - **Forked from**: tui-rs (2023), after original maintainer stepped away
 
 Ratatui is the dominant Rust TUI framework. It is a widget-based, immediate-mode rendering library
@@ -56,8 +58,10 @@ testing.
 Since v0.30.0, Ratatui is split into a Cargo workspace:
 
 - **ratatui-core**: Widget traits (`Widget`, `StatefulWidget`), text types (`Span`, `Line`, `Text`),
+
   `Buffer`, layout, style, symbols. Designed for maximum API stability; widget library authors
   depend on this.
+
 - **ratatui-widgets**: Built-in widgets (Block, Paragraph, List, Table, Chart, etc.).
 - **Backend crates**: One per backend.
 - **ratatui** (main crate): Re-exports everything for convenience.
@@ -127,7 +131,7 @@ hundreds of entries. Selected notable ones:
 ### Music and media
 
 - **spotify-player** - Full-featured Spotify player
-- **spotify-tui** / **spotatui** - Spotify TUI client
+- **spotify-tui**/**spotatui** - Spotify TUI client
 - **manga-tui** - Terminal manga reader with image support
 
 ### Productivity
@@ -169,65 +173,80 @@ design.
 ## What it does well
 
 1. **Immediate-mode simplicity**. UI is a function of state. No widget tree synchronization, no
+
    observer pattern, no callback spaghetti. This is the same mental model as React or SwiftUI
    (describe what it should look like, let the library handle updates) but with full control over
    the render loop.
 
-2. **Efficient rendering via diffing**. Despite redrawing everything each frame, only changed cells
+1. **Efficient rendering via diffing**. Despite redrawing everything each frame, only changed cells
+
    are sent to the terminal. This makes it practical for high-frequency updates (system monitors,
    real-time dashboards) without flicker.
 
-3. **Backend abstraction**. Swapping terminal backends is a one-line change. Mock backends enable
+1. **Backend abstraction**. Swapping terminal backends is a one-line change. Mock backends enable
+
    headless testing of UI code.
 
-4. **Modular, composable widget system**. The `Widget` trait is minimal (one method). Complex UIs
+1. **Modular, composable widget system**. The `Widget` trait is minimal (one method). Complex UIs
+
    are built by composing simple widgets. The constraint-based layout system handles terminal
    resizing gracefully.
 
-5. **Rust-native ergonomics**. Chainable builder APIs for styles, layouts, and widgets. Zero-cost
+1. **Rust-native ergonomics**. Chainable builder APIs for styles, layouts, and widgets. Zero-cost
+
    abstractions. No unsafe code in the core. Ownership model prevents common TUI bugs (dangling
    widget references, stale state).
 
-6. **Ecosystem size**. 4,300+ reverse dependencies on crates.io. Hundreds of apps. 40+ third-party
+1. **Ecosystem size**. 4,300+ reverse dependencies on crates.io. Hundreds of apps. 40+ third-party
+
    widget crates. Active community (Discord, Matrix, forum, 260+ contributors). This is by far the
    largest Rust TUI ecosystem.
 
-7. **Documentation quality**. Dedicated website (ratatui.rs) with concepts, tutorials, and cookbook.
+1. **Documentation quality**. Dedicated website (ratatui.rs) with concepts, tutorials, and cookbook.
+
    Extensive API docs. Templates for getting started. EuroRust 2024 talk.
 
-8. **Modular workspace architecture** (v0.30+). Widget library authors depend only on `ratatui-core`
+1. **Modular workspace architecture** (v0.30+). Widget library authors depend only on `ratatui-core`
+
    for stability. Backends compile independently. Parallel compilation.
 
 ## Where it falls short
 
 1. **No built-in state management**. You must manually track all UI state: cursor positions, scroll
+
    offsets, selection indices, focus order. `StatefulWidget` helps but is minimal compared to
    retained-mode frameworks like Cursive that handle focus, mouse input, and event routing
    automatically.
 
-2. **No built-in event/input handling**. You must integrate crossterm (or similar) yourself and wire
+1. **No built-in event/input handling**. You must integrate crossterm (or similar) yourself and wire
+
    up the event loop. This is intentional (flexibility) but adds boilerplate, especially for
    beginners. Every Ratatui app needs ~20-50 lines of event loop setup.
 
-3. **No application architecture guidance**. Out of the box, there is no help organizing large
+1. **No application architecture guidance**. Out of the box, there is no help organizing large
+
    applications. No built-in component model, routing, or state machine. The community has responded
    with third-party frameworks (tui-realm, rat-salsa, widgetui) but there is no standard approach.
 
-4. **Cross-terminal inconsistency**. Different terminals handle colors, Unicode, and mouse events
+1. **Cross-terminal inconsistency**. Different terminals handle colors, Unicode, and mouse events
+
    differently. Ratatui cannot fully abstract these differences. Users report color rendering
    glitches and layout issues on specific terminals (especially Windows Terminal, macOS Terminal.app
    vs iTerm2).
 
-5. **Text-only rendering constraint**. Fundamentally limited to terminal cell grids. No true
+1. **Text-only rendering constraint**. Fundamentally limited to terminal cell grids. No true
+
    graphics (though ratatui-image provides sixel/halfblock workarounds). Limited animation
    capabilities. The Canvas widget provides basic shape drawing but it is still character-cell
    based.
 
-6. **More boilerplate than alternatives**. Compared to Cursive (retained-mode, handles events) or
+1. **More boilerplate than alternatives**. Compared to Cursive (retained-mode, handles events) or
+
    iocraft (declarative, React-like), Ratatui requires more code for the same functionality. The
    tradeoff is more control.
 
-7. **Widget trait consumes self**. The original `Widget::render(self, ...)` consumes the widget.
+1. **Widget trait consumes self**. The original `Widget::render(self, ...)` consumes the widget.
+
    While v0.26.0 added implementations for `&Widget`, the experimental `WidgetRef` trait remains
    unstable, and the ergonomics of borrowed vs owned widgets can be confusing.
 
@@ -236,16 +255,27 @@ design.
 For a roguelike/TUI game library in Rust, Ratatui's design offers several lessons:
 
 - **Immediate-mode rendering + double-buffered diffing** is the proven approach for terminal UIs. It
+
   works well for game loops too, where you redraw each frame based on game state.
+
 - **Backend abstraction via traits** is the right pattern. It enables testing, alternative rendering
+
   targets (web, GPU), and future-proofing.
+
 - **Constraint-based layout** is valuable for panel/HUD arrangement in games, though a roguelike
+
   also needs direct cell-level access for map rendering.
+
 - **The `Widget` trait pattern** (render to a buffer region) is composable and extensible. A game
+
   library could use a similar pattern for UI overlays.
+
 - **The modular workspace split** is a good model for separating core types (that downstream
+
   libraries depend on) from implementations.
+
 - **The ecosystem proves demand**. Hundreds of apps show the market for Rust TUI tooling. The gap is
+
   that Ratatui is not designed for games; a roguelike-focused library would fill a different niche.
 
 ## Sources
@@ -255,7 +285,11 @@ For a roguelike/TUI game library in Rust, Ratatui's design offers several lesson
 - [docs.rs/ratatui](https://docs.rs/ratatui/latest/ratatui/) - API documentation
 - [awesome-ratatui](https://github.com/ratatui/awesome-ratatui) - Curated app/library list
 - [Starlog: Ratatui deep-dive](https://starlog.is/articles/developer-tools/ratatui-ratatui/) -
+
   Architecture analysis, strengths/weaknesses
+
 - [Cursive vs Ratatui](https://github.com/gyscos/cursive/wiki/Cursive-vs-ratatui) - Comparison from
+
   Cursive's perspective
+
 - [crates.io/crates/ratatui](https://crates.io/crates/ratatui) - Download statistics

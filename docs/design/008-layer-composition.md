@@ -1,14 +1,17 @@
 # ADR 008: Layers and Sub-cell Offsets
 
-**Status:** Draft  **Date:** 2026-06-20  **Parent:** [ADR 001: Architecture](001-architecture.md)
+**Status:**Draft**Date:**2026-06-20**Parent:** [ADR 001: Architecture](001-architecture.md)
 
 ## Context
 
 The grid model must evolve beyond a single flat plane of characters. We need:
 
 1. **Layers (0–255):** Strict Z-ordering for distinct scene elements (background terrain on layer 0,
+
    entities on layer 1, UI on layer 2).
-2. **Sub-cell offsets:** Pixel-level translation (`dx`, `dy`) for smooth animations without
+
+1. **Sub-cell offsets:** Pixel-level translation (`dx`, `dy`) for smooth animations without
+
    affecting grid logic.
 
 This ADR does **not** add per-cell tile stacking (putting multiple characters in the same cell
@@ -38,32 +41,39 @@ alpha-blend = { version = "0.2", default-features = false, features = ["std"] }
 ## Decisions & Rust API Guidelines
 
 1. **The current `Cell` type becomes `Tile`** with two new fields (`dx`, `dy`). The old `cell.rs`
+
    is renamed to `tile.rs`. `Tile` is *the* atomic drawable unit — one per cell per layer. No
    wrapper enum, no stack.
 
-2. **No per-cell tile stacking.** Each `LayerBuf` is a flat `Vec<Tile>` where `tiles[i]` corresponds
+1. **No per-cell tile stacking.** Each `LayerBuf` is a flat `Vec<Tile>` where `tiles[i]` corresponds
+
    to cell `i`. Composition happens at the layer level: write the floor to layer 0, the item to
    layer 1, and the compositor blits layer 1 over layer 0's pixels. Entity tiles are cleared from
    their layer when they move.
 
-3. **Sparse layer allocation.** `Grid` holds `Vec<Option<LayerBuf>>` of length 256. Layer 0 is
+1. **Sparse layer allocation.** `Grid` holds `Vec<Option<LayerBuf>>` of length 256. Layer 0 is
+
    always allocated. Layers 1–255 are allocated on first write. Single-layer games pay zero overhead
    (one `Option<LayerBuf>` is `Some`, the rest are `None`). Identical to the previous design.
 
-4. **`Terminal` gains `active_layer: u8`** (default 0). No `composition` field. Existing `put`,
+1. **`Terminal` gains `active_layer: u8`** (default 0). No `composition` field. Existing `put`,
+
    `print`, and `put_styled` write to `self.active_layer`. The new `put_offset(x, y, dx, dy, ch)`
    writes to the active layer with pixel offsets.
 
-5. **`Backend::draw`** is renamed to receive `&Tile` instead of `&Cell`. A new `draw_layers` method
+1. **`Backend::draw`** is renamed to receive `&Tile` instead of `&Cell`. A new `draw_layers` method
+
    is added with a default impl that extracts layer 0 items, ignores higher layers, and calls
    `draw`. `CrosstermBackend` and `HeadlessBackend` need no modifications.
 
-6. **Diff algorithm:** `Grid::diff` iterates allocated layers 0 → 255, then cells in
+1. **Diff algorithm:** `Grid::diff` iterates allocated layers 0 → 255, then cells in
+
    row-major order. A cell is yielded if: (a) the layer is new (no previous entry) — all cells
    yielded, or (b) both frames have the layer and the `Tile` differs. Semantics identical to the
    previous design, but yields `&Tile` directly instead of `&Tile (no stacking)`.
 
-7. **Compositing:** `SoftwareRenderer` blits layers 0 → 255. Layer 0 fills the cell background from
+1. **Compositing:** `SoftwareRenderer` blits layers 0 → 255. Layer 0 fills the cell background from
+
    `style.bg` (opaque). Layers > 0 are composited over whatever is already in the pixel buffer;
    their *background* is transparent (no bg fill), only the glyph pixels overwrite the layer below.
 
@@ -79,15 +89,19 @@ or terminal changes yet — just a rename that compiles.
 **File:** `src/tile.rs`
 
 ```diff
+
 - // src/cell.rs (deleted)
 + // src/tile.rs
 
 - pub struct Cell {
 + pub struct Tile {
+
       pub(crate) glyph: char,
       pub(crate) style: Style,
-+     pub(crate) dx: i16,    // new
-+     pub(crate) dy: i16,    // new
+
++ pub(crate) dx: i16,    // new
++ pub(crate) dy: i16,    // new
+
       #[cfg(feature = "egc")]
       pub(crate) flags: CellFlags,
       #[cfg(feature = "egc")]
@@ -99,14 +113,18 @@ The public API changes from `Cell` to `Tile`. Since rg is not published, no back
 needed. Update all references in the codebase:
 
 ```diff
+
 - pub use cell::Cell;
 + pub use tile::Tile;
+
 ```
 
-**Acceptance criteria:**
+### Acceptance criteria
 
 - Every reference to `Cell` becomes `Tile` across all files (`src/cell.rs`, `src/grid.rs`,
+
   `src/terminal.rs`, `src/backend/*.rs`).
+
 - All existing tests pass with zero semantic changes (the new fields are always 0 by default).
 - `size_of::<Tile>()` is `size_of::<Cell>() + 4` (two `i16` fields).
 
@@ -117,9 +135,7 @@ needed. Update all references in the codebase:
 
 ### M2: `LayerBuf` and multi-layer `Grid`
 
-**Goal:** Replace `Grid`'s single flat `GridBuf<Tile>` with `Vec<Option<LayerBuf>>`.
-
-**File:** `src/grid.rs` (modified)
+**Goal:**Replace `Grid`'s single flat `GridBuf<Tile>` with `Vec<Option<LayerBuf>>`.**File:** `src/grid.rs` (modified)
 
 ```rust
 /// Buffer for a single layer: a flat grid of one tile per cell.
@@ -153,7 +169,7 @@ impl Grid {
 }
 ```
 
-**Layer access:**
+### Layer access
 
 ```rust
 impl Grid {
@@ -173,7 +189,7 @@ impl Grid {
 }
 ```
 
-**Existing `put` and `get` — unchanged signatures, now write to layer 0:**
+### Existing `put` and `get` — unchanged signatures, now write to layer 0
 
 ```rust
 impl Grid {
@@ -192,7 +208,7 @@ impl Grid {
 
 (`checked_put`, `checked_get`, `checked_get_mut` follow the same pattern — all forward to layer 0.)
 
-**New multi-layer methods:**
+### New multi-layer methods
 
 ```rust
 impl Grid {
@@ -243,12 +259,14 @@ impl Grid {
 
 ```diff
   pub fn clear(&mut self) {
--     self.buf.clear();
-+     self.clear(0);
+
+- self.buf.clear();
++ self.clear(0);
+
   }
 ```
 
-**Multi-layer diff:**
+### Multi-layer diff
 
 ```rust
 impl Grid {
@@ -287,9 +305,11 @@ impl Grid {
   pub fn resize(&mut self, width: u16, height: u16) {
       self.width = width;
       self.height = height;
-+     for lb in self.layers.iter_mut().flatten() {
-+         lb.buf.resize(usize::from(width), usize::from(height));
-+     }
+
++ for lb in self.layers.iter_mut().flatten() {
++ lb.buf.resize(usize::from(width), usize::from(height));
++ }
+
   }
 ```
 
@@ -303,7 +323,7 @@ impl Grid {
 - Tuples are ordered layer-major: all layer-0 changes before all layer-1 changes.
 - `resize` preserves cell content on all allocated layers.
 
-**Tests (replacing prior composition/stack tests with multi-layer tests):**
+### Tests (replacing prior composition/stack tests with multi-layer tests)
 
 ```rust
 #[test]
@@ -378,9 +398,7 @@ unchanged, exercising the layer-0 path.
 
 ### M3: Terminal stateful API
 
-**Goal:** Add `layer()`, `put_offset()` to `Terminal`. No `composition` field.
-
-**New field:**
+### Goal:**Add `layer()`, `put_offset()` to `Terminal`. No `composition` field.**New field
 
 ```diff
   pub struct Terminal<B: Backend> {
@@ -389,11 +407,13 @@ unchanged, exercising the layer-0 path.
       backend: B,
       drawing_style: Style,
       queued_event: Option<Event>,
-+     active_layer: u8,   // default 0
+
++ active_layer: u8,   // default 0
+
   }
 ```
 
-**New methods:**
+### New methods
 
 ```rust
 impl<B: Backend> Terminal<B> {
@@ -418,18 +438,18 @@ impl<B: Backend> Terminal<B> {
 }
 ```
 
-**`put` and `print`** call `put_offset(x, y, 0, 0, ch)` internally.
-
-**`clear()`** clears layer 0 only:
+**`put` and `print`**call `put_offset(x, y, 0, 0, ch)` internally.**`clear()`** clears layer 0 only:
 
 ```diff
   pub fn clear(&mut self) {
--     self.current.clear();
-+     self.current.clear(0);
+
+- self.current.clear();
++ self.current.clear(0);
+
   }
 ```
 
-**New layer-aware `clear` methods:**
+### New layer-aware `clear` methods
 
 ```rust
 impl<B: Backend> Terminal<B> {
@@ -443,20 +463,22 @@ impl<B: Backend> Terminal<B> {
 }
 ```
 
-**Updated `present()`:**
+### Updated `present()`
 
 ```diff
   pub fn present(&mut self) {
--     let diff = self.current.diff(&self.previous);
--     self.backend.draw(diff);
-+     let diff = self.current.diff(&self.previous);
-+     self.backend.draw_layers(diff);
+
+- let diff = self.current.diff(&self.previous);
+- self.backend.draw(diff);
++ let diff = self.current.diff(&self.previous);
++ self.backend.draw_layers(diff);
+
       self.backend.flush();
       core::mem::swap(&mut self.current, &mut self.previous);
   }
 ```
 
-**Acceptance criteria:**
+### Acceptance criteria (2)
 
 - `term.layer(2).put(0, 0, '@')` writes to layer 2; layer 0 at `(0,0)` is unchanged.
 - `term.put_offset(1, 1, -4, 2, 'X')` stores a tile with `dx = -4, dy = 2`.
@@ -507,9 +529,7 @@ fn terminal_active_layer_unchanged_after_present() {
 
 ### M4: Backend trait evolution and SoftwareBackend compositing
 
-**Goal:** Update `Backend` trait and `SoftwareBackend` to handle multiple layers.
-
-**Updated `Backend` trait (`src/backend/mod.rs`):**
+### Goal:**Update `Backend` trait and `SoftwareBackend` to handle multiple layers.**Updated `Backend` trait (`src/backend/mod.rs`)
 
 ```rust
 pub trait Backend {
@@ -547,8 +567,10 @@ Key difference from the previous design: no `Tile (no stacking)` to unwrap. The 
   impl Backend for Headless {
       fn draw<'a, I>(&mut self, content: I)
       where
--         I: Iterator<Item = (Pos, &'a Cell)>,
-+         I: Iterator<Item = (Pos, &'a Tile)>,
+
+- I: Iterator<Item = (Pos, &'a Cell)>,
++ I: Iterator<Item = (Pos, &'a Tile)>,
+
       {
           for (pos, cell) in content {
               self.grid.checked_put(pos.x, pos.y, cell.clone());
@@ -562,8 +584,10 @@ Key difference from the previous design: no `Tile (no stacking)` to unwrap. The 
 ```diff
       fn draw<'a, I>(&mut self, content: I)
       where
--         I: Iterator<Item = (Pos, &'a Cell)>,
-+         I: Iterator<Item = (Pos, &'a Tile)>,
+
+- I: Iterator<Item = (Pos, &'a Cell)>,
++ I: Iterator<Item = (Pos, &'a Tile)>,
+
       {
           for (pos, cell) in content {
               // ... cell.style.fg, cell.style.bg, cell.glyph, cell.flags ...
@@ -614,11 +638,13 @@ The `blit_tile` function is unchanged from the current code except it uses `tile
 for sub-cell offset (previously ignored). Portable across all layers — glyph pixels overwrite
 whatever is in the buffer, whether background (layer 0) or a lower layer's glyph (layers > 0).
 
-**Acceptance criteria:**
+### Acceptance criteria (3)
 
 - A tile on layer 0 with no other layers: pixel output identical to current `blit_cell`.
 - A tile on layer 1 placed over a layer-0 tile: layer-1 glyph pixels overwrite layer-0 pixels
+
   in the buffer.
+
 - A tile with `dx = -2` at cell (1,0): glyph pixels shifted 2px left, no panic.
 - `CrosstermBackend` and `HeadlessBackend` compile without modification.
 
@@ -648,11 +674,17 @@ fn layer_zero_fills_background_higher_layers_do_not() {
 ## Migration notes
 
 - `Cell` is removed; all uses become `Tile`. Since rg is not published and has no downstream
+
   dependents, no backward compat is needed.
+
 - `Backend::draw` signature changes from `&Cell` to `&Tile`. Existing backend implementations need
+
   a one-character type change; the field accessors inside are identical (`glyph`, `style`, `flags`,
   `extra`).
+
 - `Backend::draw_layers` is additive with a default impl; existing backends compile without changes.
 - `Terminal::put` / `print` / `put_styled` are behaviourally identical for callers that never call
+
   `layer()` or `put_offset()`.
+
 - `Grid::cells()` iterates layer 0; `Grid::cells(layer)` for explicit layer access.

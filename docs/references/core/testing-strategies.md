@@ -74,10 +74,12 @@ Key `INSTA_UPDATE` modes:
 
 ```toml
 # Cargo.toml
+
 [dev-dependencies]
 insta = { version = "1", features = ["yaml", "redactions"] }
 
 # Faster test runs
+
 [profile.dev.package.insta]
 opt-level = 3
 [profile.dev.package.similar]
@@ -90,7 +92,7 @@ opt-level = 3
 
 ## 2. Visual Regression Testing
 
-### Approach
+### Approach (2)
 
 Render the grid to an image (PNG) via a headless backend, then compare pixel-by-pixel against
 reference images. This catches rendering issues that text-based snapshots miss: font metrics, color
@@ -129,7 +131,9 @@ fn test_visual_output() {
 ### Image Comparison Options
 
 - **Pixel-diff with tolerance**: allow small per-pixel color variance (handles font rendering
+
   differences across platforms)
+
 - **Perceptual hash**: compare structural similarity rather than exact pixels
 - **Crate options**: `image` for PNG encoding/decoding, `pixelmatch` pattern for diffing
 
@@ -139,13 +143,14 @@ fn test_visual_output() {
 - Store golden images in `tests/golden/` and track in version control (use Git LFS for large sets)
 - Set a pixel tolerance threshold (e.g., 1% RMSE) to handle anti-aliasing differences
 - Run visual tests only on a single reference platform in CI; skip on others via `#[cfg]` or feature
+
   flags
 
 ---
 
 ## 3. Property-Based Testing with proptest
 
-### Approach
+### Approach (3)
 
 Use [proptest](https://proptest-rs.github.io/proptest/) to generate random inputs and verify
 invariants hold for all of them. When a failure is found, proptest automatically shrinks to a
@@ -155,12 +160,13 @@ minimal failing case.
 
 1. **Grid dimensions**: `grid.width() * grid.height() == grid.cells().len()`
 2. **Cell writes within bounds**: writing to any valid `(x, y)` succeeds; writing outside panics or
+
    returns `None`
+
 3. **Wide character spacers**: every wide (2-cell) character at position `(x, y)` has a
    spacer/continuation cell at `(x+1, y)`
-4. **Diff symmetry**: `diff(a, b)` applied to `a` produces `b`
-5. **Merge idempotency**: `a.merge(&b); assert!(a.diff(&b).is_empty())`
-6. **Resize preserves content**: resizing then reading in-bounds cells returns original values
+
+4. **Diff symmetry**: `diff(a, b)` applied to `a` produces `b`4. **Merge idempotency**: `a.merge(&b); assert!(a.diff(&b).is_empty())`3. **Resize preserves content**: resizing then reading in-bounds cells returns original values
 
 ### Example: Grid Dimension Invariant
 
@@ -254,6 +260,7 @@ miss.
 
 ```bash
 # Requires nightly Rust
+
 rustup default nightly
 cargo install cargo-fuzz
 cargo fuzz init
@@ -322,12 +329,15 @@ fuzz_target!(|data: &[u8]| {
 
 ```bash
 # Run indefinitely until crash found
+
 cargo fuzz run parse_ansi
 
 # Run for 5 minutes (CI smoke test)
+
 cargo fuzz run parse_ansi -- -max_total_time=300
 
 # Check coverage
+
 cargo fuzz coverage parse_ansi
 ```
 
@@ -336,6 +346,7 @@ cargo fuzz coverage parse_ansi
 ```bash
 cargo install afl
 # AFL uses different instrumentation, can find different bugs
+
 cargo afl build
 cargo afl fuzz -i seeds/ -o out/ target/debug/fuzz_parse_ansi
 ```
@@ -346,6 +357,7 @@ Run fuzz targets as smoke tests (5-minute runs) on pushes to main:
 
 ```yaml
 # .github/workflows/fuzz.yml
+
 name: Fuzz
 on:
   push:
@@ -357,18 +369,24 @@ jobs:
       matrix:
         target: [parse_ansi, parse_config]
     steps:
+
       - uses: actions/checkout@v4
       - run: rustup toolchain install nightly && rustup default nightly
       - uses: actions/cache@v4
+
         with:
           path: ${{ runner.tool_cache }}/cargo-fuzz
           key: cargo-fuzz-0.12.0
+
       - run: |
+
           echo "${{ runner.tool_cache }}/cargo-fuzz/bin" >> $GITHUB_PATH
           cargo install --root "${{ runner.tool_cache }}/cargo-fuzz" --version 0.12.0 cargo-fuzz --locked
+
       - run: cargo fuzz build ${{ matrix.target }}
       - run: cargo fuzz run ${{ matrix.target }} -- -max_total_time=300
       - uses: actions/upload-artifact@v4
+
         if: failure()
         with:
           name: fuzz-artifacts-${{ matrix.target }}
@@ -443,9 +461,10 @@ impl Backend for TestBackend {
 1. **Error type is `Infallible`**: test backend operations never fail, simplifying test code
 2. **Buffer is inspectable**: direct access to read cell content after rendering
 3. **Assertion helpers built in**: `assert_buffer_lines`, `assert_cursor_position`,
+
    `assert_scrollback_lines` reduce test boilerplate
-4. **Scrollback tracking**: captures lines that scroll off-screen, testing scroll behavior
-5. **Serde support**: `#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]` enables
+
+4. **Scrollback tracking**: captures lines that scroll off-screen, testing scroll behavior4. **Serde support**: `#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]` enables
    snapshot serialization
 
 ### Recommended Test Backend API for a New Library
@@ -492,13 +511,19 @@ test-backends:
       os: [ubuntu-latest, windows-latest, macos-latest]
       backend: [crossterm, termion, termina, termwiz]
       exclude:
+
         - os: windows-latest
+
           backend: termion # termion doesn't support Windows
   steps:
+
     - uses: actions/checkout@v4
     - uses: dtolnay/rust-toolchain@master
+
       with: { toolchain: stable }
+
     - run: cargo xtask test-backend ${{ matrix.backend }}
+
 ```
 
 ### Pattern: Backend-Agnostic Test Suite
@@ -678,22 +703,26 @@ fn diff_80x24() {
 
 ```bash
 # criterion
+
 cargo bench --bench grid_benchmarks
 # Results in target/criterion/ with HTML reports
 
 # divan
+
 cargo bench --bench grid_benchmarks
 # Table output in terminal
 
 # Compare against baseline (criterion)
+
 cargo bench --bench grid_benchmarks -- --save-baseline main
-# After changes:
+# After changes
+
 cargo bench --bench grid_benchmarks -- --baseline main
 ```
 
 ### Recommendation
 
-Use **divan** for its simpler API and built-in allocation tracking. Use **criterion** if you need
+Use **divan**for its simpler API and built-in allocation tracking. Use**criterion** if you need
 HTML reports, statistical regression detection with configurable confidence levels, or integration
 with continuous benchmarking services (e.g., codspeed, bencher.dev).
 
@@ -756,13 +785,13 @@ assert_buffer_eq!(&actual_buffer, &expected_buffer);
 
 The macro compared areas first, then cell-by-cell content, producing output like:
 
-```
+```text
 buffer contents not equal
 diff:
 0: at (2, 1)
   expected: Cell { symbol: "I", ... }
   actual:   Cell { symbol: "i", ... }
-```
+```text
 
 The current recommendation is `assert_eq!(&actual, &expected)` since `Buffer` implements `Debug`
 with a readable format showing content and style changes.
@@ -831,12 +860,15 @@ from ratatui because it operates at the I/O level rather than the buffer level.
 ### Testing Strategy
 
 1. **Unit tests for data structures**: `KeyEvent`, `MouseEvent`, `Color` parsing, command
+
    serialization are tested with standard unit tests
 
-2. **Platform-specific conditional compilation**: tests that interact with the terminal are gated
+1. **Platform-specific conditional compilation**: tests that interact with the terminal are gated
+
    behind `#[cfg(unix)]` or `#[cfg(windows)]`
 
-3. **Command serialization tests**: verify that `Command` implementations produce correct ANSI
+1. **Command serialization tests**: verify that `Command` implementations produce correct ANSI
+
    escape sequences:
 
    ```rust
@@ -848,7 +880,7 @@ from ratatui because it operates at the I/O level rather than the buffer level.
    }
    ```
 
-4. **Event parsing tests**: verify that byte sequences are correctly parsed into events:
+1. **Event parsing tests**: verify that byte sequences are correctly parsed into events:
 
    ```rust
    #[test]
@@ -859,7 +891,8 @@ from ratatui because it operates at the I/O level rather than the buffer level.
    }
    ```
 
-5. **Integration tests with real terminals**: some tests require `--ignored` flag and a real
+1. **Integration tests with real terminals**: some tests require `--ignored` flag and a real
+
    terminal:
 
    ```rust
@@ -927,9 +960,12 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
+
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@nightly
+
         with: { components: rustfmt, clippy }
+
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all --check
       - run: cargo clippy --all-targets --all-features -- -D warnings
@@ -943,9 +979,12 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
         rust: [stable, "1.80.0"]  # MSRV
     steps:
+
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
+
         with: { toolchain: ${{ matrix.rust }} }
+
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --all-features
 
@@ -955,6 +994,7 @@ jobs:
     env:
       INSTA_UPDATE: no  # fail on mismatch, don't write .snap.new
     steps:
+
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -966,6 +1006,7 @@ jobs:
     env:
       PROPTEST_CASES: 10000  # more cases than default 256
     steps:
+
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -979,17 +1020,23 @@ jobs:
       matrix:
         target: [parse_ansi, parse_config]
     steps:
+
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@nightly
       - uses: actions/cache@v4
+
         with:
           path: ${{ runner.tool_cache }}/cargo-fuzz
           key: cargo-fuzz-0.12.0
+
       - run: |
+
           echo "${{ runner.tool_cache }}/cargo-fuzz/bin" >> $GITHUB_PATH
           cargo install --root "${{ runner.tool_cache }}/cargo-fuzz" --version 0.12.0 cargo-fuzz --locked
+
       - run: cargo fuzz run ${{ matrix.target }} -- -max_total_time=300
       - uses: actions/upload-artifact@v4
+
         if: failure()
         with:
           name: fuzz-${{ matrix.target }}
@@ -999,11 +1046,13 @@ jobs:
   bench:
     runs-on: ubuntu-latest
     steps:
+
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo bench --all-features -- --output-format=bencher | tee bench-results.txt
       - uses: actions/upload-artifact@v4
+
         with:
           name: bench-results
           path: bench-results.txt
@@ -1012,14 +1061,20 @@ jobs:
   coverage:
     runs-on: ubuntu-latest
     steps:
+
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+
         with: { components: llvm-tools }
+
       - uses: taiki-e/install-action@v2
+
         with: { tool: cargo-llvm-cov }
+
       - uses: Swatinem/rust-cache@v2
       - run: cargo llvm-cov --all-features --lcov --output-path lcov.info
       - uses: codecov/codecov-action@v5
+
         with:
           files: lcov.info
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -1030,7 +1085,9 @@ jobs:
     needs: [lint, test, snapshots, coverage]
     if: always()
     steps:
+
       - run: |
+
           echo '${{ toJson(needs) }}'
           test '${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}' = 'false'
 ```
@@ -1055,30 +1112,44 @@ jobs:
 ### Kept
 
 - **ratatui TestBackend**
+
   (<https://github.com/ratatui/ratatui/blob/main/ratatui-core/src/backend/test.rs>) - primary
   reference for test backend design, assert_buffer_lines pattern, scrolling region tests
+
 - **ratatui buffer.rs**
+
   (<https://github.com/ratatui/ratatui/blob/main/ratatui-core/src/buffer/buffer.rs>) - Buffer
   struct, diff algorithm, with_lines constructor, comprehensive test suite with rstest
+
 - **ratatui assert.rs**
+
   (<https://github.com/ratatui/ratatui/blob/main/ratatui-core/src/buffer/assert.rs>) -
   assert_buffer_eq! macro (now deprecated)
+
 - **ratatui CI** (<https://github.com/ratatui/ratatui/blob/main/.github/workflows/ci.yml>) -
+
   multi-backend, multi-OS CI configuration
+
 - **insta docs** (<https://docs.rs/insta/>) - snapshot testing API, workflow, configuration
 - **Proptest Book** (<https://proptest-rs.github.io/proptest/>) - property-based testing strategies
+
   and shrinking
+
 - **Rust Fuzz Book** (<https://rust-fuzz.github.io/book/>) - cargo-fuzz setup, structure-aware
+
   fuzzing, CI integration
+
 - **criterion docs** (<https://docs.rs/criterion/>) - statistical benchmarking framework
 - **divan docs** (<https://docs.rs/divan/>) - attribute-macro benchmarking with allocation profiling
 - **crossterm** (<https://github.com/crossterm-rs/crossterm>) - cross-platform terminal library
+
   testing context
 
 ### Dropped
 
 - Generic Rust testing tutorials - too basic, no terminal-specific content
 - GitHub page chrome/navigation content - not actual source content (GitHub requires auth for
+
   rendered views)
 
 ---
@@ -1086,18 +1157,23 @@ jobs:
 ## Gaps
 
 1. **Crossterm test internals**: could not access crossterm's actual test files (event parsing
+
    tests, command serialization tests) due to GitHub rendering issues. The description above is
    inferred from the codebase structure and API patterns.
 
-2. **Visual regression tooling**: no established Rust crate specifically for terminal-to-PNG visual
+1. **Visual regression tooling**: no established Rust crate specifically for terminal-to-PNG visual
+
    regression testing exists. This would need custom implementation using `image` + a font
    rasterizer (e.g., `ab_glyph`, `cosmic-text`).
 
-3. **Continuous benchmarking services**: did not research integration with services like codspeed or
+1. **Continuous benchmarking services**: did not research integration with services like codspeed or
+
    bencher.dev that track benchmark results over time and can flag regressions in PRs.
 
-4. **Miri for unsafe code**: if the grid library uses `unsafe` (e.g., for performance-critical cell
+1. **Miri for unsafe code**: if the grid library uses `unsafe` (e.g., for performance-critical cell
+
    access), running tests under Miri (`cargo +nightly miri test`) should be part of CI.
 
-5. **Mutation testing**: tools like `cargo-mutants` could verify test suite quality by introducing
+1. **Mutation testing**: tools like `cargo-mutants` could verify test suite quality by introducing
+
    mutations and checking they're caught. Not covered here.

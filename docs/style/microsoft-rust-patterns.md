@@ -40,8 +40,11 @@ verified when you define the function, so errors are caught early with clear mes
 **Code bloat mitigation**:
 
 1. **Outline pattern**: extract the non-generic core into a separate function that exists only once
+
    in the binary.
-2. **Use `dyn Trait` for cold paths** (error handling, logging, configuration) where vtable cost is
+
+1. **Use `dyn Trait` for cold paths** (error handling, logging, configuration) where vtable cost is
+
    negligible.
 
 **Decision framework** -- generics vs enums vs trait objects:
@@ -103,7 +106,9 @@ parameter-swapping bugs at compile time.
 
 - If the newtype exists to _add type safety_ or _restrict the API_: don't implement `Deref`.
 - If it exists to _add capabilities_ while keeping the inner type's full surface (smart pointer):
+
   `Deref` is appropriate.
+
 - `DerefMut` doubles the risk by allowing callers to bypass validation.
 - Prefer explicit delegation (`as_str()`, `len()`) over blanket `Deref`.
 
@@ -381,7 +386,7 @@ framework needed. The Config trait pattern (Ch 3) lets you swap entire hardware 
 
 #### Module Layout
 
-```
+```text
 my_crate/
 ├── src/
 │   ├── lib.rs          # Re-exports and public API
@@ -395,7 +400,7 @@ my_crate/
 ├── tests/
 ├── benches/
 └── examples/
-```
+```rust
 
 Re-export what users need at the crate root. Users write `use my_crate::Config`, not
 `use my_crate::config::Config`.
@@ -434,7 +439,7 @@ use wildcard arm in match, cannot construct with struct literal syntax.
 
 **Decision tree**:
 
-```
+```rust
 Do you need ownership of the data inside the function?
 ├── YES → impl Into<T>
 │         "Give me anything that can become a T"
@@ -444,7 +449,7 @@ Do you need ownership of the data inside the function?
      └── MAYBE (might need to modify sometimes?)
           └── Cow<'_, T>
               "Borrow if possible, clone only when you must"
-```
+```rust
 
 | Pattern             | Ownership | Allocation       | When to use                            |
 | ------------------- | --------- | ---------------- | -------------------------------------- |
@@ -560,7 +565,7 @@ select returns on first completion.
 
 ### Pattern Decision Guide
 
-```
+```text
 Need type safety for primitives?           → Newtype (Ch3)
 Need compile-time state enforcement?       → Type-state (Ch3)
 Need a "tag" with no runtime data?         → PhantomData (Ch4)
@@ -578,7 +583,7 @@ Need shared state across threads?
 Need error handling?
   ├─ Library                               → thiserror
   └─ Application                           → anyhow
-```
+```text
 
 ### Trait Bounds Cheat Sheet
 
@@ -605,37 +610,44 @@ Need error handling?
 
 ### Visibility Quick Reference
 
-```
+```rust
 pub           → visible everywhere
 pub(crate)    → visible within the crate
 pub(super)    → visible to parent module
 pub(in path)  → visible within a specific path
 (nothing)     → private to current module + children
-```
+```rust
 
 ---
 
 ## Key Themes Across the Book
 
 1. **Make invalid states unrepresentable**: newtypes, type-state, `TryFrom`, `#[non_exhaustive]`,
+
    sealed traits. The type system is your first line of defense.
 
-2. **Parse at the boundary, use validated types inside**: raw data enters, gets parsed via
+1. **Parse at the boundary, use validated types inside**: raw data enters, gets parsed via
+
    `TryFrom`/`FromStr` into validated newtypes. From that point the type system guarantees validity.
    No re-validation downstream.
 
-3. **Accept the most general type, return the most specific**: `impl Into<String>` for owned params,
+1. **Accept the most general type, return the most specific**: `impl Into<String>` for owned params,
+
    `impl AsRef<str>` for borrowed, `Cow` for maybe-modified. Return concrete types.
 
-4. **Zero-cost abstractions are real**: iterator chains compile to the same machine code as loops.
+1. **Zero-cost abstractions are real**: iterator chains compile to the same machine code as loops.
+
    Newtypes and PhantomData are zero-sized. Type-state markers vanish at runtime.
 
-5. **Config traits tame complexity**: one generic parameter on a struct, regardless of how many
+1. **Config traits tame complexity**: one generic parameter on a struct, regardless of how many
+
    component types it manages. Adding a component means one associated type, one field.
 
-6. **Prefer proven crates over hand-rolled**: `crossbeam` over custom channels, `parking_lot` over
+1. **Prefer proven crates over hand-rolled**: `crossbeam` over custom channels, `parking_lot` over
+
    custom locks, `pin-project` over manual pin projections, `bumpalo` over custom arenas.
 
-7. **Firmware/hardware domain examples throughout**: IPMI addresses, GPIO pins, SPI/I2C/I3C buses,
+1. **Firmware/hardware domain examples throughout**: IPMI addresses, GPIO pins, SPI/I2C/I3C buses,
+
    PCIe capability headers, sensor readings, BMC commands. The patterns are grounded in real systems
    engineering.

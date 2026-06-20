@@ -1,6 +1,6 @@
 # ADR 010: Migrate `rg` to `ixy` and `grixy`
 
-**Status:** Draft **Date:** 2026-06-19
+**Status:**Draft**Date:** 2026-06-19
 
 ## Context
 
@@ -26,10 +26,14 @@ Migrating ixy first (M-A) validates the geometry surface before touching the hea
 ## Non-goals
 
 - Migrating `grid::Size` — `ixy::Size` stores `usize` dimensions; `rg` uses `u16` throughout the
+
   backend interface. The mismatch would ripple into every backend and is not worth the churn.
   Revisit when `ixy::Size` becomes generic.
+
 - Exposing `grixy` traits (`GridRead`, `GridWrite`, etc.) as part of `rg`'s public API — the newtype
+
   wrapper deliberately hides them.
+
 - Changing the `Backend::draw()` iterator item type — it stays `(Position, &Cell)`.
 
 ---
@@ -38,6 +42,7 @@ Migrating ixy first (M-A) validates the geometry surface before touching the hea
 
 ```toml
 # rg/Cargo.toml
+
 [dependencies]
 ixy  = "0.6.0-alpha.5"
 grixy = { version = "0.6.0-alpha.5", features = ["alloc", "buffer"] }
@@ -177,7 +182,9 @@ functionality is removed.
 - [ ] All existing `rg` tests pass
 - [ ] `Position` sorts in row-major order (existing test `test_position_ord_row_major` still passes)
 - [ ] `Rect` call-sites migrated — no `rect.x`, `rect.y`, `rect.width`, `rect.height` field access
+
       remains in `src/`
+
 - [ ] No `struct Position` or `struct Rect` definitions remain in `src/grid.rs`
 - [ ] `rg::Position`, `rg::Rect` still in public API (`src/lib.rs`)
 
@@ -344,7 +351,7 @@ Both milestones are pre-v1.0 (`rg` is on v0.1.0), so breaking changes are permit
 
 ## Order of operations
 
-```
+```text
 M-A: ixy geometry
  ├── A1: Position newtype
  ├── A2: Rect alias + call-site sweep
@@ -364,7 +371,7 @@ M-B: grixy Grid (start after M-A is green)
  │    └── write_grapheme / clear_overlap (egc)
  ├── B4: Delete dead code
  └── B5: just check + run all tests
-```
+```text
 
 Work on M-B method groups in the order listed — each group is independently testable and the
 existing tests provide a safety net after every step.

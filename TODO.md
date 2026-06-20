@@ -17,12 +17,17 @@ entries as the diff iterator, feeding them straight into the existing `Backend::
 iterator-driven. A sparse layer would implement the same diff interface without touching `Terminal`
 or any backend. Layering could be as simple as chaining two iterators.
 
-**Considerations:**
+### Considerations
 
 - Decide whether `SparseGrid` owns a `HashMap<Position, Cell>` (fast lookup, heap) or a sorted
+
   `Vec<(Position, Cell)>` (cache-friendly scan, no hash).
+
 - Wide-char continuation markers (`'\0'`) still need to be emitted for 2-wide glyphs placed in the
+
   sparse layer.
+
 - Consider a `DrawLayer` trait so both `Grid` and `SparseGrid` can be composed uniformly.
 - Compositing order and z-ordering are out of scope for the initial implementation; a simple "sparse
+
   over dense" model is enough for the common entity-on-map case.

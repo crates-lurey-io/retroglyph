@@ -36,14 +36,14 @@ Both libraries write ANSI/VT escape sequences to stdout (or any `Write` target).
 `Command`, which writes escape bytes to a buffer. Commands can be executed immediately or queued for
 batch flushing.
 
-```
+```text
 // Crossterm command examples (what gets written to the writer):
 \x1b[H         // CUP: move cursor to (1,1)
 \x1b[2J        // ED: erase entire display
 \x1b[38;2;R;G;Bm  // SGR: set foreground to RGB
 \x1b[?1049h    // DECSET: switch to alternate screen
 \x1b[?25l      // DECTCEM: hide cursor
-```
+```rust
 
 Termion takes a different approach using Rust's `Display` trait: terminal operations are types that
 implement `fmt::Display`, so you write them inline with `write!()` macros.
@@ -54,8 +54,11 @@ implement `fmt::Display`, so you write them inline with `write!()` macros.
 Crossterm provides two Unix event source strategies (selected by feature flags):
 
 1. **MIO-based (default)**: Uses the `mio` crate for async I/O polling. Registers three tokens: TTY
+
    input, SIGWINCH (resize), and a wake pipe for async cancellation.
-2. **TTY-based (`use-dev-tty`)**: Uses direct `poll()` on file descriptors. Opens `/dev/tty` if
+
+1. **TTY-based (`use-dev-tty`)**: Uses direct `poll()` on file descriptors. Opens `/dev/tty` if
+
    stdin is not a TTY (for piped scenarios).
 
 Both feed raw bytes into a `Parser` that accumulates bytes in a 256-byte buffer, attempts to parse
@@ -99,22 +102,27 @@ Ratatui's `BufferDiff` is a zero-allocation iterator that walks both buffers in 
 `(x, y, &Cell)` for each cell that differs. Key behaviors:
 
 - **Skip identical cells**: If `current == previous`, no output is emitted. This is the primary
+
   optimization: for a mostly-static UI, only a handful of cells change per frame.
+
 - **Multi-width character handling**: When a cell has width > 1 (CJK, some emoji), the iterator
+
   skips the trailing placeholder cells. For VS16 emoji (containing U+FE0F), it explicitly clears
   trailing cells since some terminals don't handle this correctly.
+
 - **CellDiffOption directives**: Cells can be marked `Skip` (never emit), `ForcedWidth` (override
+
   width calculation), or `None` (normal diff).
 
 The backend then converts diff output to escape sequences:
 
-```
+```text
 // For each changed cell (x, y, cell):
 \x1b[{y+1};{x+1}H    // Move cursor to position (1-indexed)
 \x1b[38;2;R;G;Bm      // Set foreground color
 \x1b[48;2;R;G;Bm      // Set background color
 {cell.symbol}          // Write the grapheme
-```
+```rust
 
 The backend optimizes cursor movement: if the next changed cell is adjacent to the current cursor
 position, no CUP sequence is emitted (the cursor naturally advances after printing a character).
@@ -146,12 +154,18 @@ Terminals support four color tiers:
 ### Detection strategies
 
 1. **Environment variables**: `$COLORTERM` (`truecolor`/`24bit`), `$TERM` (contains `256color`),
+
    `$NO_COLOR` (disable all color).
-2. **DECRQSS query** (`\x1bP$qm\x1b\\`): Some terminals respond with their current SGR state,
+
+1. **DECRQSS query** (`\x1bP$qm\x1b\\`): Some terminals respond with their current SGR state,
+
    revealing truecolor support. The `termprofile` crate implements this.
-3. **Terminal identification**: `$TERM_PROGRAM` identifies specific emulators with known
+
+1. **Terminal identification**: `$TERM_PROGRAM` identifies specific emulators with known
+
    capabilities.
-4. **Conservative fallback**: Default to 256-color, degrade to 16 if the terminal is unrecognized.
+
+1. **Conservative fallback**: Default to 256-color, degrade to 16 if the terminal is unrecognized.
 
 ### Graceful degradation
 
@@ -211,12 +225,17 @@ terminal auto-advances the cursor past it when printing the wide character).
 The tricky cases:
 
 - **Overwriting a wide char with narrow chars**: Must explicitly clear both cells. If you write a
+
   single-width "a" at position 0 where a 2-wide "東" was, position 1 still shows the right half of
   the old character unless cleared.
+
 - **VS16 emoji (e.g., ⌨️)**: Some emoji are made wide by a Variation Selector 16 (U+FE0F). Terminals
+
   inconsistently handle the trailing cell, so ratatui's diff explicitly clears trailing cells for
   VS16 sequences.
+
 - **Terminal disagreement**: Terminals may disagree on the width of certain characters (emoji,
+
   ambiguous-width). There is no universal solution; the best approach is to use `unicode-width` and
   accept some terminals will render incorrectly.
 
@@ -228,11 +247,15 @@ In a windowed/GUI backend, input arrives as structured key events with modifiers
 input arrives as raw bytes that must be parsed:
 
 - **Bare ESC vs. sequence start**: `\x1b` alone is the Escape key, but it's also the prefix for all
+
   escape sequences (`\x1b[A` = Up arrow). Parsers use timeouts (typically 50-100ms): if no bytes
   follow ESC within the timeout, treat it as a standalone Escape keypress. This is inherently
   fragile over high-latency connections (SSH).
+
 - **Ctrl key collisions**: `Ctrl+I` = `\t` (Tab), `Ctrl+M` = `\r` (Enter), `Ctrl+H` = `\x08`
+
   (Backspace). These are indistinguishable in legacy mode.
+
 - **No key-release events**: Traditional terminals only report key press, not release.
 - **No modifier disambiguation**: `Ctrl+Shift+A` often sends the same bytes as `Ctrl+A`.
 
@@ -261,7 +284,7 @@ An older alternative: `CSI > 4 ; 2 m` (mode 2) makes xterm send modified keys as
 `CSI 27 ; modifier ; keycode ~`. Mode 3 (xterm patch 398, April 2025) extends this to ALL
 keypresses. tmux supports modifyOtherKeys but strips Kitty keyboard sequences.
 
-### Implementation recommendation
+### Implementation recommendation (2)
 
 1. On startup, attempt to enable Kitty keyboard protocol (push flags).
 2. Fall back to xterm modifyOtherKeys mode 2 if Kitty isn't supported.
@@ -280,11 +303,11 @@ split across multiple PTY reads.
 
 The synchronized output protocol uses DEC private mode 2026:
 
-```
+```text
 \x1b[?2026h    // BSU: Begin Synchronized Update
 ... frame content (cursor moves, colors, text) ...
 \x1b[?2026l    // ESU: End Synchronized Update
-```
+```text
 
 Between BSU and ESU, the terminal buffers all output and renders it as a single atomic frame.
 Originally proposed by iTerm2 using DCS sequences, the community converged on the simpler `SM ?` /
@@ -354,7 +377,7 @@ from release ('m'), and is supported by all modern terminals.
 DECSET `?1016` provides pixel-level coordinates instead of cell coordinates. Useful if you need
 sub-cell precision. Not widely supported yet.
 
-### Implementation
+### Implementation (2)
 
 ```rust
 fn enable_mouse(&mut self) {
@@ -411,18 +434,22 @@ execution, then `flush()` writes everything at once.
 3. For each changed cell, the CrosstermBackend:
    - Emits `MoveTo(x, y)` if cursor isn't already there.
    - Emits `SetForegroundColor`, `SetBackgroundColor`, style modifiers if they changed from the last
+
      emitted cell.
+
    - Writes the cell's symbol string.
 4. Final `io::Write::flush()` pushes all queued bytes to the terminal.
-
 ### Notcurses rendering pipeline
 
 Notcurses separates rendering from rasterizing:
 
 1. **Render phase** (`ncpile_render`): Flattens the z-ordered ncplane stack using a depth-buffer
+
    algorithm. At each (x, y), walks planes top-to-bottom to determine the visible EGC, foreground,
    background, and style. Handles alpha blending between layers.
-2. **Rasterize phase** (`ncpile_rasterize`): Compares the rendered matrix against the "lastframe"
+
+1. **Rasterize phase** (`ncpile_rasterize`): Compares the rendered matrix against the "lastframe"
+
    damage map. Generates an optimized escape sequence stream: skips unchanged cells, batches
    adjacent changes, minimizes cursor movement, and coalesces SGR state changes. Writes the stream
    and updates the lastframe.
@@ -449,13 +476,20 @@ serialized (one write stream to the terminal at a time).
 ### Terminal inconsistencies to watch for
 
 - **Wide character width disagreement**: Terminal measures "🤷" as 2 cells, but some older terminals
+
   render it as 1, causing misalignment.
+
 - **Emoji variation selectors**: VS16 (U+FE0F) can change a character from narrow to wide, but not
+
   all terminals respect this.
+
 - **Undercurl/underline styles**: `SGR 4:3` (curly underline) is supported by Kitty, WezTerm,
+
   Ghostty, but not all terminals.
+
 - **Bracketed paste**: Terminal may or may not support it; must be detected and handled.
 - **Alternate screen buffer**: `\x1b[?1049h` is widely supported but behavior with scrollback
+
   varies.
 
 ## 10. Trade-offs
@@ -463,30 +497,45 @@ serialized (one write stream to the terminal at a time).
 ### Advantages of ANSI terminal backend
 
 1. **Works everywhere**: SSH, tmux, screen, Docker containers, CI environments, serial consoles. No
-   GPU, no display server, no windowing system required.
-2. **Zero dependencies on graphics stack**: No OpenGL/Vulkan/Metal, no font rasterizer, no window
-   manager integration.
-3. **Users choose their terminal**: Font, color scheme, opacity, tabs, splits are all controlled by
-   the user's preferred terminal emulator.
-4. **Small binary size**: Terminal I/O adds minimal code compared to a full rendering engine.
-5. **Accessibility**: Terminal emulators often have built-in screen reader support.
-6. **Copy/paste for free**: The terminal provides native text selection.
 
+   GPU, no display server, no windowing system required.
+
+1. **Zero dependencies on graphics stack**: No OpenGL/Vulkan/Metal, no font rasterizer, no window
+
+   manager integration.
+
+1. **Users choose their terminal**: Font, color scheme, opacity, tabs, splits are all controlled by
+
+   the user's preferred terminal emulator.
+
+1. **Small binary size**: Terminal I/O adds minimal code compared to a full rendering engine.
+1. **Accessibility**: Terminal emulators often have built-in screen reader support.1. **Copy/paste for free**: The terminal provides native text selection.
 ### Disadvantages
 
 1. **Visual ceiling**: Cannot render anything beyond the character grid. No anti-aliased custom
+
    fonts, no sub-cell positioning, no tile-based game graphics (without Sixel/Kitty image protocol
    hacks).
-2. **Inconsistent rendering**: The same escape sequences look different across terminals, especially
+
+1. **Inconsistent rendering**: The same escape sequences look different across terminals, especially
+
    regarding color, Unicode width, and underline styles.
-3. **Input limitations**: Legacy keyboard handling loses modifier information. Even with Kitty
+
+1. **Input limitations**: Legacy keyboard handling loses modifier information. Even with Kitty
+
    protocol, tmux strips it. ESC ambiguity over SSH is unavoidable in legacy mode.
-4. **tmux/multiplexer tax**: Features like synchronized output, Kitty keyboard, graphics protocols
+
+1. **tmux/multiplexer tax**: Features like synchronized output, Kitty keyboard, graphics protocols
+
    may be stripped or mangled by the multiplexer layer. Applications must detect and degrade.
-5. **No reliable capability detection**: Unlike a GPU backend where you query OpenGL extensions,
+
+1. **No reliable capability detection**: Unlike a GPU backend where you query OpenGL extensions,
+
    terminal capabilities are discovered through fragile heuristics ($TERM, $COLORTERM, DECRQSS
    queries, $TERM_PROGRAM).
-6. **Performance ceiling**: For very large/complex UIs, the escape sequence stream can become a
+
+1. **Performance ceiling**: For very large/complex UIs, the escape sequence stream can become a
+
    bottleneck, especially over SSH. Cell diffing mitigates this but doesn't eliminate it.
 
 ### When to use which
@@ -505,39 +554,72 @@ serialized (one write stream to the terminal at a time).
 ### Kept
 
 - [crossterm docs](https://docs.rs/crossterm/) - Primary Rust terminal library docs, command
+
   pattern, raw mode API
+
 - [crossterm Unix implementation (DeepWiki)](https://deepwiki.com/crossterm-rs/crossterm/6.1-unix-implementation) -
+
   Detailed architecture: TTY/mio event sources, file descriptor handling, parser
+
 - [crossterm raw mode (DeepWiki)](https://deepwiki.com/crossterm-rs/crossterm/3.1-raw-mode) - Raw
+
   mode internals, termios manipulation
+
 - [termion source](https://github.com/redox-os/termion) - Alternative Rust terminal library, simpler
+
   architecture
+
 - [ratatui rendering docs](https://ratatui.rs/concepts/rendering/under-the-hood/) - Double-buffer,
+
   widget rendering, flush/diff cycle
+
 - [ratatui buffer/diff.rs](https://github.com/ratatui/ratatui/blob/1ce29d66/ratatui-core/src/buffer/diff.rs) -
+
   Zero-allocation diff iterator implementation
+
 - [ratatui Backend trait](https://docs.rs/ratatui/latest/ratatui/backend/trait.Backend.html) -
+
   Backend abstraction interface
+
 - [notcurses_render(3)](https://notcurses.com/notcurses_render.3.html) - Render/rasterize pipeline,
+
   cell algorithm, damage map
+
 - [Kitty keyboard protocol](https://sw.kovidgoyal.net/kitty/keyboard-protocol/) - Primary spec for
+
   progressive keyboard enhancement
+
 - [terminfo.dev Kitty keyboard](https://terminfo.dev/extensions/kitty-keyboard-protocol) -
+
   Compatibility matrix, testing methodology
+
 - [terminfo.dev synchronized output](https://terminfo.dev/modes/decset-2026-synchronized-output) -
+
   DECSET 2026 spec, terminal support matrix
+
 - [contour-terminal synchronized output spec](https://github.com/contour-terminal/vt-extensions/blob/master/synchronized-output.md) -
+
   Detailed spec document
+
 - [terminfo.dev SGR mouse](https://terminfo.dev/modes/decset-1006-sgr-mouse) - SGR mouse mode spec,
+
   terminal support
+
 - [terminfo.dev multiplexers](https://terminfo.dev/multiplexers) - tmux/screen pass-through problem,
+
   feature casualties
+
 - [unicode-width crate](https://docs.rs/unicode-width/latest/unicode_width/) - UAX #11 width
+
   calculation for Rust
+
 - [ansi_colours crate](https://crates.io/crates/ansi_colours) - RGB to ANSI 256 color mapping
 - [termcolor (BurntSushi)](https://github.com/BurntSushi/termcolor) - Color output abstraction with
+
   NoColor/Ansi implementations
+
 - [termprofile crate](https://docs.rs/termprofile/latest/termprofile/) - Terminal color capability
+
   detection via DECRQSS
 
 ### Dropped
@@ -551,16 +633,27 @@ serialized (one write stream to the terminal at a time).
 ## Gaps
 
 1. **Sixel and Kitty graphics protocol integration**: Not covered in depth. Relevant if the backend
+
    wants to support inline images or tile rendering. Would need a separate research pass.
-2. **terminfo/termcap database usage**: Crossterm mostly hardcodes ANSI sequences rather than
+
+1. **terminfo/termcap database usage**: Crossterm mostly hardcodes ANSI sequences rather than
+
    querying terminfo. Whether to use terminfo for capability-dependent sequence selection (like
    notcurses does) is an architectural decision not fully explored.
-3. **Benchmarks**: No concrete performance numbers for cell-diffing overhead or escape sequence
+
+1. **Benchmarks**: No concrete performance numbers for cell-diffing overhead or escape sequence
+
    throughput over SSH. Would need empirical testing.
-4. **Windows Console API**: Crossterm's Windows backend uses the Console API instead of ANSI
+
+1. **Windows Console API**: Crossterm's Windows backend uses the Console API instead of ANSI
+
    sequences on older Windows. Not relevant for a Unix-focused ANSI backend but worth noting for
    portability.
-5. **Bracketed paste mode**: Not covered. `\x1b[?2004h` enables it; pasted text is wrapped in
+
+1. **Bracketed paste mode**: Not covered. `\x1b[?2004h` enables it; pasted text is wrapped in
+
    `\x1b[200~`...`\x1b[201~`. Important for text input fields.
-6. **Focus events**: `\x1b[?1004h` enables focus in/out reporting. Useful for pausing rendering when
+
+1. **Focus events**: `\x1b[?1004h` enables focus in/out reporting. Useful for pausing rendering when
+
    unfocused.

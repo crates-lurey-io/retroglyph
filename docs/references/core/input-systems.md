@@ -15,7 +15,7 @@ Winit (v0.30+) provides the richest input model of the three backends.
 
 ### Keyboard
 
-```
+```rust
 // winit::event::KeyEvent
 pub struct KeyEvent {
     pub physical_key: PhysicalKey,   // Layout-independent scancode (KeyCode enum)
@@ -27,16 +27,20 @@ pub struct KeyEvent {
     pub text_with_all_modifiers: Option<SmolStr>,
     pub key_without_modifiers: Key,  // Logical key ignoring modifiers
 }
-```
+```rust
 
 Key design points:
 
 - **PhysicalKey** maps to scancodes (e.g. `KeyCode::KeyW`). Use for WASD-style positional bindings.
 - **LogicalKey** (`Key` enum) respects keyboard layout. `Key::Named(NamedKey::Enter)` or
+
   `Key::Character("a")`. Use for shortcuts like Ctrl+C.
+
 - **Modifiers** arrive separately via `WindowEvent::ModifiersChanged(Modifiers)`. The `Modifiers`
+
   struct has a `ModifiersState` bitflags (SHIFT, CONTROL, ALT, SUPER) and physical key tracking for
   left/right disambiguation.
+
 - **Location** distinguishes Left/Right modifier keys and Numpad keys.
 
 ### Mouse/Pointer
@@ -44,25 +48,27 @@ Key design points:
 Winit unifies mouse, touch, and pen through pointer events:
 
 - `WindowEvent::PointerButton { device_id, state, position, button: ButtonSource }` where
+
   `ButtonSource::Mouse(MouseButton)`.
+
 - `WindowEvent::PointerMoved { device_id, position: PhysicalPosition<f64> }` -- pixel coordinates.
 - `WindowEvent::MouseWheel { delta: MouseScrollDelta }` with `LineDelta(x,y)` or `PixelDelta(pos)`.
 - `WindowEvent::Focused(bool)` for focus/blur.
 
 ### IME
 
-```
+```rust
 pub enum Ime {
     Enabled,
     Preedit(String, Option<(usize, usize)>),  // preedit text + cursor range
     Commit(String),                             // finalized text
     Disabled,
 }
-```
+```yaml
 
 Flow: Enabled -> Preedit\* -> Commit -> (back to keys or Disabled).
 
-**Sources:**
+### Sources
 
 - [winit KeyEvent docs](https://rust-windowing.github.io/winit/winit/event/struct.KeyEvent.html)
 - [winit WindowEvent docs](https://docs.rs/winit/latest/winit/event/enum.WindowEvent.html)
@@ -77,7 +83,7 @@ Crossterm provides a simpler, terminal-centric model. Events are read from stdin
 
 ### Top-level Event
 
-```
+```rust
 pub enum Event {
     FocusGained,
     FocusLost,
@@ -86,44 +92,44 @@ pub enum Event {
     Paste(String),          // Bracketed paste (must be enabled)
     Resize(u16, u16),       // (columns, rows)
 }
-```
+```text
 
 ### KeyEvent
 
-```
+```rust
 pub struct KeyEvent {
     pub code: KeyCode,
     pub modifiers: KeyModifiers,
     pub kind: KeyEventKind,      // Press/Release/Repeat
     pub state: KeyEventState,    // Extra state flags
 }
-```
+```rust
 
 **KeyCode** is a flat enum with no physical/logical distinction:
 
 - Named keys: `Backspace`, `Enter`, `Left`, `Right`, `Up`, `Down`, `Home`, `End`, `PageUp`,
+
   `PageDown`, `Tab`, `BackTab`, `Delete`, `Insert`, `Esc`
+
 - Character: `Char(char)` -- already reflects layout
 - Function: `F(u8)` -- F1-F24
 - Lock keys: `CapsLock`, `ScrollLock`, `NumLock`
 - Modifiers as keys: `Modifier(ModifierKeyCode)` (with kitty protocol)
 - Media keys: `Media(MediaKeyCode)`
 
-**KeyModifiers** is a bitflags struct: `SHIFT`, `CONTROL`, `ALT`, `SUPER`, `HYPER`, `META`, `NONE`.
-
-**KeyEventKind**: `Press`, `Release`, `Repeat`. Release/Repeat require the kitty keyboard protocol
+**KeyModifiers**is a bitflags struct: `SHIFT`, `CONTROL`, `ALT`, `SUPER`, `HYPER`, `META`, `NONE`.**KeyEventKind**: `Press`, `Release`, `Repeat`. Release/Repeat require the kitty keyboard protocol
 (`PushKeyboardEnhancementFlags`).
 
 ### MouseEvent
 
-```
+```rust
 pub struct MouseEvent {
     pub kind: MouseEventKind,
     pub column: u16,         // Cell column (0-indexed)
     pub row: u16,            // Cell row (0-indexed)
     pub modifiers: KeyModifiers,
 }
-```
+```rust
 
 **MouseEventKind**: `Down(MouseButton)`, `Up(MouseButton)`, `Drag(MouseButton)`, `Moved`,
 `ScrollDown`, `ScrollUp`, `ScrollLeft`, `ScrollRight`.
@@ -140,7 +146,7 @@ Coordinates are already in cell units. No pixel-to-cell conversion needed.
 - Focus events require explicit `EnableFocusChange`.
 - No IME support -- terminals handle composition before delivering characters.
 
-**Sources:**
+### Sources (2)
 
 - [crossterm Event docs](https://docs.rs/crossterm/latest/crossterm/event/enum.Event.html)
 - [crossterm KeyEvent docs](https://docs.rs/crossterm/latest/crossterm/event/struct.KeyEvent.html)
@@ -170,7 +176,7 @@ DOM keyboard events use string properties rather than enums:
 
 Events: `keydown`, `keyup`. (`keypress` is deprecated.)
 
-### MouseEvent
+### MouseEvent (2)
 
 - `button`: 0=primary, 1=middle, 2=secondary, 3=back, 4=forward.
 - `buttons`: bitmask of all pressed buttons.
@@ -197,7 +203,7 @@ Events: `mousedown`, `mouseup`, `mousemove`, `click`, `dblclick`, `wheel`, `cont
 - `focus`/`blur` events on the element or window.
 - `document.hasFocus()` for polling.
 
-**Sources:**
+### Sources (3)
 
 - [MDN KeyboardEvent](https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent)
 - [MDN MouseEvent](https://developer.mozilla.org/en-US/docs/Web/API/MouseEvent)
@@ -434,16 +440,25 @@ impl Modifiers {
 ### Normalization rules
 
 1. **macOS Ctrl+Click**: Some terminals/macOS report Ctrl+LeftClick as right-click. The crossterm
+
    backend should pass through as-is; the application layer decides.
-2. **SUPER vs META**: winit calls it SUPER. DOM calls it Meta. Crossterm has both SUPER and META.
+
+1. **SUPER vs META**: winit calls it SUPER. DOM calls it Meta. Crossterm has both SUPER and META.
+
    The unified model maps winit SUPER and DOM `metaKey` to `Modifiers::SUPER`. Crossterm's META maps
    to `Modifiers::META` (rare, mostly for legacy terminals).
-3. **Crossterm BackTab**: `KeyCode::BackTab` should be converted to `Key::Named(Tab)` with
+
+1. **Crossterm BackTab**: `KeyCode::BackTab` should be converted to `Key::Named(Tab)` with
+
    `Modifiers::SHIFT` set.
-4. **winit ModifiersChanged**: winit delivers modifiers as a separate event. The backend converter
+
+1. **winit ModifiersChanged**: winit delivers modifiers as a separate event. The backend converter
+
    should cache the latest `ModifiersState` and attach it to each `KeyEvent` it produces. Do NOT
    emit a separate unified event for modifier changes; they're embedded in key events.
-5. **DOM per-event booleans**: DOM events carry `ctrlKey`, `shiftKey`, `altKey`, `metaKey` on every
+
+1. **DOM per-event booleans**: DOM events carry `ctrlKey`, `shiftKey`, `altKey`, `metaKey` on every
+
    event. Convert directly to `Modifiers` bitflags.
 
 ---
@@ -481,12 +496,16 @@ pub enum ImeEvent {
 ### Handling rules
 
 1. **Crossterm**: Terminals handle IME composition themselves. By the time crossterm delivers a
+
    `KeyEvent`, the composed character is already resolved. Crossterm's `KeyCode::Char(c)` may
    contain multi-byte characters. No `ImeEvent` is emitted from this backend.
-2. **Winit**: Forward `WindowEvent::Ime` variants directly.
-3. **DOM**: Listen for `compositionstart`, `compositionupdate`, `compositionend`. During composition
+
+1. **Winit**: Forward `WindowEvent::Ime` variants directly.
+1. **DOM**: Listen for `compositionstart`, `compositionupdate`, `compositionend`. During composition
    (`isComposing == true`), suppress `keydown`/`keyup` handling to avoid double-processing.
-4. **Application rule**: When receiving `ImeEvent::Preedit`, display inline preview. On
+
+1. **Application rule**: When receiving `ImeEvent::Preedit`, display inline preview. On
+
    `ImeEvent::Commit`, insert text. Between `Enabled` and `Disabled`, ignore raw `KeyEvent` text.
 
 ---
@@ -569,7 +588,7 @@ impl GridMetrics {
 }
 ```
 
-### Backend mapping
+### Backend mapping (2)
 
 | Backend   | Native coordinates                | Conversion                                          |
 | --------- | --------------------------------- | --------------------------------------------------- |
@@ -580,11 +599,17 @@ impl GridMetrics {
 ### Scroll normalization
 
 - Winit `LineDelta(x, y)`: map `y > 0` to `ScrollUp`, `y < 0` to `ScrollDown`, `x` to
+
   `ScrollLeft`/`ScrollRight`.
+
 - Winit `PixelDelta(pos)`: divide by cell height to get line-equivalent scrolls, or emit fractional
+
   scroll amounts as repeated line scrolls.
+
 - DOM `WheelEvent`: check `deltaMode`. 0=pixels (divide by cell height), 1=lines (use directly),
+
   2=pages (multiply by visible rows).
+
 - Crossterm: `ScrollUp`, `ScrollDown`, `ScrollLeft`, `ScrollRight` are already discrete line events.
 
 ---
@@ -680,9 +705,13 @@ pub enum GamepadAxis {
 - Gilrs is optional; gate behind a `gamepad` feature flag.
 - Gilrs works on wasm via the Gamepad API, so it covers all three target platforms.
 - The `Connected`/`Disconnected` events map to top-level
+
   `Event::GamepadConnected`/`GamepadDisconnected`.
+
 - `Dropped` and `ForceFeedbackEffectCompleted` are internal to gilrs; don't surface in the unified
+
   API.
+
 - Gilrs requires polling (`gilrs.next_event()`) on the same thread as the event loop.
 
 ---
@@ -1126,83 +1155,124 @@ pub trait InputBackend {
 ## Design Decisions and Trade-offs
 
 1. **Physical key as Option**: Crossterm can't provide physical key info. Rather than inventing a
+
    mapping from logical keys back to physical (which would be wrong on non-QWERTY layouts), we use
    `Option<PhysicalKey>`. Applications that need physical keys for WASD controls should use winit or
    web backends.
 
-2. **Cell coordinates as primary**: Since this is a grid/terminal library, cell coordinates are the
+1. **Cell coordinates as primary**: Since this is a grid/terminal library, cell coordinates are the
+
    natural unit. Pixel-based backends (winit, web) convert to cells using `GridMetrics`. Sub-cell
    precision is available via `sub_cell` for smooth mouse tracking.
 
-3. **No separate ModifiersChanged event**: Winit emits `ModifiersChanged` as a standalone event. The
+1. **No separate ModifiersChanged event**: Winit emits `ModifiersChanged` as a standalone event. The
+
    unified API folds modifiers into every `KeyEvent` and `MouseEvent` instead. The backend caches
    the latest modifier state.
 
-4. **Gamepad behind feature flag**: Not all applications need gamepad input. The `gilrs` dependency
+1. **Gamepad behind feature flag**: Not all applications need gamepad input. The `gilrs` dependency
+
    is heavy. Gate behind `#[cfg(feature = "gamepad")]`.
 
-5. **IME events separate from key events**: During IME composition, key events should be suppressed.
+1. **IME events separate from key events**: During IME composition, key events should be suppressed.
+
    Having `ImeEvent` as a separate variant makes it easy for applications to handle text input
    correctly: when you see `ImeEvent::Enabled`, stop processing `KeyEvent.text` until
    `ImeEvent::Disabled`.
 
-6. **Scroll events as discrete variants**: Rather than a continuous `Scroll { dx, dy }`, we use
+1. **Scroll events as discrete variants**: Rather than a continuous `Scroll { dx, dy }`, we use
+
    `ScrollUp`/`ScrollDown`/`ScrollLeft`/`ScrollRight` to match the terminal model. For pixel-precise
    scrolling (touchpad), the backend should accumulate pixel deltas and emit discrete scroll events
    when they cross a line threshold.
 
 ---
 
-## Sources
+## Sources (4)
 
 - Kept:
+
   [winit KeyEvent docs](https://rust-windowing.github.io/winit/winit/event/struct.KeyEvent.html) -
   primary source for winit keyboard model
+
 - Kept: [winit WindowEvent docs](https://docs.rs/winit/latest/winit/event/enum.WindowEvent.html) -
+
   full event enum reference
+
 - Kept: [winit Ime docs](https://docs.rs/winit/latest/winit/event/enum.Ime.html) - IME event model
+
   with examples
+
 - Kept:
+
   [DeepWiki winit patterns](https://deepwiki.com/rust-windowing/winit/7.2-event-handling-patterns) -
   practical patterns for keyboard/mouse/IME
+
 - Kept: [crossterm Event docs](https://docs.rs/crossterm/latest/crossterm/event/enum.Event.html) -
+
   crossterm event model
+
 - Kept:
+
   [crossterm KeyCode docs](https://docs.rs/crossterm/latest/crossterm/event/enum.KeyCode.html) -
   full key code enum
+
 - Kept:
+
   [crossterm MouseEvent docs](https://docs.rs/crossterm/latest/crossterm/event/struct.MouseEvent.html) -
   mouse event with cell coords
+
 - Kept: [MDN KeyboardEvent](https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent) - DOM
+
   keyboard model, key vs code
+
 - Kept: [MDN MouseEvent](https://developer.mozilla.org/en-US/docs/Web/API/MouseEvent) - DOM mouse
+
   model with coordinate systems
+
 - Kept:
+
   [MDN compositionstart](https://developer.mozilla.org/en-US/docs/Web/API/Element/compositionstart_event) -
   DOM IME events
+
 - Kept: [gilrs docs](https://docs.rs/gilrs/latest/gilrs/) - gamepad input crate overview
 - Kept: [gilrs EventType docs](https://docs.rs/gilrs/latest/gilrs/ev/enum.EventType.html) - gamepad
+
   event types
+
 - Kept: [gilrs Button docs](https://docs.rs/gilrs/latest/gilrs/ev/enum.Button.html) - standard
+
   button layout
+
 - Kept: [gilrs Axis docs](https://docs.rs/gilrs/latest/gilrs/ev/enum.Axis.html) - axis types
 - Dropped: winit issue #4233 (raw input on Windows) - platform-specific bug, not relevant to
+
   abstraction design
+
 - Dropped: winit RawKeyEvent docs - raw device events are lower-level than what the grid library
+
   needs
 
 ## Gaps
 
 1. **Touch input**: Not covered. Winit provides touch/pen via PointerSource, web has TouchEvent.
+
    Could be added as `Event::Touch(TouchEvent)` with cell coordinates later.
-2. **Drag-and-drop**: Winit has DragEntered/DragDropped; not modeled here since it's file-level, not
+
+1. **Drag-and-drop**: Winit has DragEntered/DragDropped; not modeled here since it's file-level, not
+
    cell-level input.
-3. **Dead key composition**: Winit's `Key::Dead(Option<char>)` is more nuanced than crossterm or
+
+1. **Dead key composition**: Winit's `Key::Dead(Option<char>)` is more nuanced than crossterm or
+
    DOM. The unified `Key::Unidentified` may lose dead-key identity. Could add `Key::Dead(char)` if
    needed.
-4. **Gamepad rumble/force-feedback output**: gilrs supports it, but this is an output concern, not
+
+1. **Gamepad rumble/force-feedback output**: gilrs supports it, but this is an output concern, not
+
    input. Separate API.
-5. **Key repeat rate**: Varies by OS/terminal. No way to configure from the abstraction layer.
-6. **Crossterm kitty protocol detection**: Whether `KeyEventKind::Release`/`Repeat` work depends on
+
+1. **Key repeat rate**: Varies by OS/terminal. No way to configure from the abstraction layer.
+1. **Crossterm kitty protocol detection**: Whether `KeyEventKind::Release`/`Repeat` work depends on
    terminal support. The backend should detect this and potentially only emit `Pressed` events on
    unsupported terminals.

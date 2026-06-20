@@ -13,14 +13,15 @@ Sources: [Official Reference](http://foo.wyrd.name/en:bearlibterminal:reference)
 BearLibTerminal provides a pseudoterminal window with a grid of character cells. It is NOT a
 stream-based console; it is a scene-based rendering system.
 
-**Core model:**
+**Core model:**- A**scene**is composed of multiple**layers** (0-255), each a full grid of cells.
 
-- A **scene** is composed of multiple **layers** (0-255), each a full grid of cells.
-- Each **cell** can hold a stack of **tiles** (when composition is on).
+- Each **cell**can hold a stack of**tiles** (when composition is on).
 - Each tile in a stack has its own foreground color and pixel offset.
 - Only layer 0 has a background color per cell. Layers 1+ are transparent.
 - The scene is double-buffered: `put`/`print` modify the back buffer; `refresh` commits it to
+
   screen.
+
 - Drawing order is fixed: left-to-right, top-to-bottom, layer 0 first, then layer 1, etc.
 - All tile codes are Unicode code points in the Basic Multilingual Plane (~65k slots).
 - Colors are 32-bit BGRA in 0xAARRGGBB format.
@@ -77,9 +78,7 @@ int terminal_set(const char* s);
 The primary configuration function. Handles library options, font/tileset management, and
 configuration file access.
 
-**Returns:** boolean. On failure, no changes are applied (transaction semantics).
-
-**Variants:**
+### Returns:**boolean. On failure, no changes are applied (transaction semantics).**Variants
 
 - `terminal_setf(const char* s, ...)` -- printf-style formatting
 - `terminal_wset(const wchar_t* s)` -- wide string
@@ -118,22 +117,24 @@ T terminal_get(const C* key, const T& default_ = T());
 
 Semicolon-separated key-value parameters:
 
-```
+```text
 window.title='foo'; window.size=80x25;
-```
+```text
 
 Related parameters can be grouped:
 
-```
+```yaml
 window: title='foo', size=80x25;
-```
+```yaml
 
 Rules:
 
 - Extra spaces, commas, and semicolons are ignored.
 - Newlines are currently ignored (even in quoted values), but this may change.
 - Quoting (single or double) is required only if value contains delimiters or to preserve
+
   whitespace.
+
 - Escape: Pascal-style double-quote (`'I''m feeling lucky!'`).
 - No backslash escaping.
 
@@ -187,10 +188,10 @@ Rules:
 
 Custom named colors can be added:
 
-```
+```text
 palette.octarine = #50FF25;
 palette.lush = dark 80,255,37;
-```
+```text
 
 These become usable in `color_from_name()` and `[color=octarine]` print tags.
 
@@ -198,9 +199,9 @@ These become usable in `color_from_name()` and `[color=octarine]` print tags.
 
 Format:
 
-```
+```text
 [name ](font|offset): resource, param=value, ...;
-```
+```text
 
 #### Name (optional)
 
@@ -239,6 +240,7 @@ Can be:
 - **File path:** `UbuntuMono-R.ttf`, `tileset.png`
 - **Memory buffer:** `address:size` format via `terminal_setf("font: %p:%d, ...", buffer, size)`
 - **Raw BGRA pixels:** requires `raw-size` parameter:
+
   `terminal_setf("0xE000: %p:%d, raw-size=%dx%d", pixels, W*H*4, W, H)`
 
 #### Bitmap Tileset Parameters
@@ -271,9 +273,9 @@ Can be:
 
 #### Removing a Tileset
 
-```
+```yaml
 0xE000: none;
-```
+```text
 
 All relevant options for a tileset must be specified in a single `terminal_set` call; they are
 replaced wholesale.
@@ -359,9 +361,13 @@ void terminal_put(int x, int y, int code);
 Places a tile associated with the Unicode code point `code` into cell (x, y) on the current layer.
 
 - If `code` is not associated with any tile, a "not-a-character" placeholder (thin rectangle) is
+
   shown.
+
 - The code must be a Unicode code point. Even bitmap fonts have their tiles mapped to proper Unicode
+
   points internally.
+
 - Respects the current foreground color, layer, and composition mode.
 
 ### terminal_put_ext
@@ -373,9 +379,12 @@ void terminal_put_ext(int x, int y, int dx, int dy, int code, color_t* corners);
 Extended version of `terminal_put` with pixel offset and per-corner coloring.
 
 - `dx`, `dy`: Pixel offset relative to the tile's normal position in the cell. Each tile in a
+
   composition stack has independent offsets. Offset does NOT change draw order; use layers for
   proper Z-ordering.
+
 - `corners`: Array of 4 `color_t` values for the tile corners: top-left, bottom-left, bottom-right,
+
   top-right (counter-clockwise from top-left). Enables smooth color gradients across tiles. Pass
   `NULL` to use the current foreground color uniformly.
 
@@ -409,14 +418,13 @@ Prints a string starting at (x, y). Each character is placed as if by
 
 Combine with `|`: e.g. `TK_ALIGN_CENTER | TK_ALIGN_MIDDLE` for full centering.
 
-**Returns:** `dimensions_t` with the width and height (in cells) of the printed area.
-
-**Variants:**
+### Returns:**`dimensions_t` with the width and height (in cells) of the printed area.**Variants
 
 - `terminal_printf(int x, int y, const char* s, ...)` -- printf formatting
 - `terminal_wprint(int x, int y, const wchar_t* s)` -- wide string
 - `terminal_wprintf(int x, int y, const wchar_t* s, ...)` -- wide printf
 - `terminal_printf_ext(...)`, `terminal_wprint_ext(...)`, `terminal_wprintf_ext(...)` -- extended
+
   variants
 
 #### Print Tags (Inline Formatting)
@@ -521,6 +529,7 @@ Selects the active layer (0-255). Layer 0 is the default, lowest layer.
 - `terminal_clear_area` affects only the current layer.
 - `terminal_clear` wipes ALL layers.
 - Layers provide strict Z-ordering for oversized tiles and logical scene separation (e.g., animated
+
   dungeon on layer 0, static UI on layer 1).
 
 Current value readable via `terminal_state(TK_LAYER)`.
@@ -641,7 +650,7 @@ int terminal_read_wstr(int x, int y, wchar_t* buffer, int max);
 Simple blocking string input. Displays user input at (x, y) with length limit `max`. Uses the
 current layer. Restores the scene before returning.
 
-**Returns:**
+### Returns
 
 - String length (>= 0) on Enter confirmation.
 - `TK_INPUT_CANCELLED` (-1) on Escape or window close.
@@ -661,7 +670,9 @@ Filter names:
 
 - **Groups:** `keyboard`, `mouse`, `keypad`, `arrows`
 - **Single events:** Any `TK_*` name without the prefix, case-insensitive (e.g. `close`, `a`,
+
   `mouse-move`)
+
 - **Character sets:** e.g. `wasd`, `0123456789` (must not match a group name)
 - **`+` suffix:** enables both press AND release events (e.g. `mouse+`)
 - **Default:** `keyboard` only
@@ -862,14 +873,19 @@ dimensions as the terminal window.
 - **Layer 0** is the only layer with per-cell background colors.
 - Layers are drawn in ascending order (0 first, then 1, 2, ...), providing strict Z-ordering.
 - Each layer can be independently cleared (`terminal_clear_area`), cropped (`terminal_crop`), and
+
   written to.
+
 - `terminal_clear()` wipes ALL layers and resets all crop rectangles.
 
-**Use cases:**
+### Use cases
 
 1. Oversized tiles: A 2x2 tile on layer 0 would be partially overwritten by adjacent cells drawn
+
    later. Place it on layer 1 to draw on top.
-2. Logical separation: Static UI on one layer, animated game world on another. Update each
+
+1. Logical separation: Static UI on one layer, animated game world on another. Update each
+
    independently.
 
 ### Tile Composition
@@ -936,9 +952,9 @@ Built-in codepages: `ascii`, `437`, `866`, `1250`, `1251`.
 Custom codepages: provide a text file path. The file contains a comma-separated list of Unicode code
 points:
 
-```
+```text
 0xF00C, 0xF062, 0xF001, 0xF0E7, 0xF013, 0xF043
-```
+```text
 
 For bitmap tilesets, the codepage maps tile index to Unicode (forward mapping: index N goes to code
 point C).
@@ -969,13 +985,13 @@ Parses a color name string and returns the 0xAARRGGBB value.
 
 Name format: `[brightness] hue`
 
-**Brightness modifiers:** `lightest`, `lighter`, `light`, `dark`, `darker`, `darkest`
-
-**Hue formats:**
+### Brightness modifiers:**`lightest`, `lighter`, `light`, `dark`, `darker`, `darkest`**Hue formats
 
 - Named: `grey`/`gray`, `red`, `flame`, `orange`, `amber`, `yellow`, `lime`, `chartreuse`, `green`,
+
   `sea`, `turquoise`, `cyan`, `sky`, `azure`, `blue`, `han`, `violet`, `purple`, `fuchsia`,
   `magenta`, `pink`, `crimson`, `transparent`
+
 - Hex: `#RRGGBB` or `#AARRGGBB` (e.g. `#80905025`)
 - Decimal: `R,G,B` or `A,R,G,B` (e.g. `128,200,150,75`)
 - Plain integer: numeric string (e.g. `16744448`)
@@ -1083,6 +1099,8 @@ Non-extended `terminal_print` is an inline wrapper that calls `terminal_print_ex
 - **Linux/macOS:** Link against `libBearLibTerminal.so` / `.dylib`.
 - **Python:** `pip install bearlibterminal` includes the wrapper and native binary.
 - **Lua:** Built-in wrapper. Place the `.so`/`.dll` alongside the script (Linux: drop the `lib`
+
   prefix).
+
 - **Building:** Requires CMake and GCC 4.6.3+ (Linux) or MinGW with Posix thread model (Windows).
 - **License:** MIT (main library), with a few parts under other permissive licenses.

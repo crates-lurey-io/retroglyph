@@ -5,10 +5,14 @@
 - **Docs:** <https://python-tcod.readthedocs.io>
 - **License:** BSD-2-Clause
 - **Language:** Python (97.6%) wrapping C via cffi. The underlying C library is
+
   [libtcod](https://github.com/libtcod/libtcod).
+
 - **Maintained by:** Kyle Benesch (HexDecimal), who also maintains libtcod itself
-- **Stars:** ~471 | **Python:** 3.10+ | **Platforms:** Windows, macOS 10.9+, Linux (requires
+- **Stars:**~471 |**Python:**3.10+ |**Platforms:** Windows, macOS 10.9+, Linux (requires
+
   libsdl3)
+
 - **Latest version:** 21.2.1 (as of mid-2025). Now on SDL3.
 
 ## Summary
@@ -61,7 +65,9 @@ background RGBA. Console data is exposed as NumPy structured arrays (`Console.rg
 Tileset loading supports:
 
 - **Tilesheet PNGs** via `load_tilesheet()` with character maps (CP437, custom TCOD layout, or
+
   arbitrary)
+
 - **TrueType fonts** via `load_truetype_font()`
 - **BDF bitmap fonts** via `load_bdf()`
 - **Procedural block elements** via `procedural_block_elements()` for box-drawing glyphs
@@ -86,69 +92,82 @@ Events carry both pixel and tile coordinates after calling `context.convert_even
 ## Strengths / notable features
 
 1. **Batteries-included for roguelikes.** FOV, pathfinding, BSP, noise, and line-of-sight are built
+
    in. You do not need separate libraries for the core algorithms of a traditional roguelike.
 
-2. **NumPy integration is a major performance win.** Console data is exposed as NumPy structured
+1. **NumPy integration is a major performance win.** Console data is exposed as NumPy structured
+
    arrays. Rendering an 80x60 map can be done with a single array assignment
    (`console.rgb[:] = tile_graphics[map_data]`) instead of nested Python loops. The tutorial author
    explicitly states: "if you want to write a Python roguelike, you **must** use NumPy" for
    performance.
 
-3. **Mature and actively maintained.** First released in 2009, now at v21+. The maintainer
+1. **Mature and actively maintained.** First released in 2009, now at v21+. The maintainer
+
    (HexDecimal) is responsive, ships regular releases, and has modernized the API through many
    iterations. Recently ported from SDL2 to SDL3.
 
-4. **Free-threaded Python support.** As of recent releases, deploys cp314t wheels for Python 3.14+
+1. **Free-threaded Python support.** As of recent releases, deploys cp314t wheels for Python 3.14+
+
    free-threaded builds.
 
-5. **Comprehensive tutorial ecosystem.** The r/roguelikedev Python tutorial (rogueliketutorials.com)
+1. **Comprehensive tutorial ecosystem.** The r/roguelikedev Python tutorial (rogueliketutorials.com)
+
    uses python-tcod and is the most widely-followed roguelike tutorial. A newer tutorial is
    integrated into the official docs.
 
-6. **REXPaint compatibility.** Can load and save REXPaint `.xp` files for map/UI design.
+1. **REXPaint compatibility.** Can load and save REXPaint `.xp` files for map/UI design.
 
-7. **Backward compatibility.** The `libtcodpy` module provides a drop-in replacement for legacy
+1. **Backward compatibility.** The `libtcodpy` module provides a drop-in replacement for legacy
    projects, easing migration to the modern API.
 
-8. **Cross-platform.** Prebuilt wheels for Windows, macOS, and Linux. PyPy support.
+1. **Cross-platform.** Prebuilt wheels for Windows, macOS, and Linux. PyPy support.
 
 ## Weaknesses / where it falls short
 
 1. **Steep learning curve, especially with NumPy.** The modern API requires understanding NumPy
+
    structured arrays, dtypes, and vectorized operations. Community feedback (the r/roguelikedev
    subreddit) notes the tutorial is intimidating for beginners. The tutorial author acknowledged:
    "the older tutorials are simpler and easier, and the newer one loses some of that."
 
-2. **API churn and deprecation burden.** The API has evolved significantly over 15+ years. Many
+1. **API churn and deprecation burden.** The API has evolved significantly over 15+ years. Many
+
    functions from the old `libtcodpy` style are deprecated, and the changelog shows frequent
    breaking changes (parameter reordering, renamed methods, dtype changes). The print methods alone
    have three generations of signatures. This creates confusion when following older guides or Stack
    Overflow answers.
 
-3. **Tutorial quality issues.** The official tutorial (rogueliketutorials.com v2) has acknowledged
+1. **Tutorial quality issues.** The official tutorial (rogueliketutorials.com v2) has acknowledged
+
    problems: rushed refactoring sections that confuse readers, lack of explanations for design
    decisions, no animation coverage, and missing "extras" sections. The tutorial author admitted he
    had "never actually written a roguelike" when writing it.
 
-4. **Coupled to SDL window management.** python-tcod owns the window and rendering pipeline. You
+1. **Coupled to SDL window management.** python-tcod owns the window and rendering pipeline. You
+
    cannot easily use it as a headless grid-computation library separate from its SDL context. If you
    want to render to a different surface (e.g., integrate with PyGame, Pyglet, or a web frontend),
    you are working against the grain.
 
-5. **No built-in layer/composition system.** Unlike BearLibTerminal, there is no concept of layers.
+1. **No built-in layer/composition system.** Unlike BearLibTerminal, there is no concept of layers.
+
    Compositing UI elements (menus, HUD, tooltips) over the game map requires manual console
    blitting. The `Console.blit()` method supports alpha but the workflow is more manual.
 
-6. **Tile/font limitations.** All tiles in a tileset must be the same size (monospaced grid).
+1. **Tile/font limitations.** All tiles in a tileset must be the same size (monospaced grid).
+
    Variable-width fonts or mixed tile sizes (e.g., a 16x16 character grid with 32x32 sprites
    overlaid) are not natively supported. Custom tiles must be mapped to Unicode codepoints.
 
-7. **Python performance ceiling.** Despite NumPy, game logic (AI, simulation, entity processing) is
+1. **Python performance ceiling.** Despite NumPy, game logic (AI, simulation, entity processing) is
+
    still Python. For large-scale games with hundreds of entities, Python itself becomes the
    bottleneck, not tcod. Compared to a Rust or C++ roguelike library, there is an inherent speed
    cap.
 
-8. **SDL3 migration breaking changes.** The recent port to SDL3 changed key constants (lowercase to
+1. **SDL3 migration breaking changes.** The recent port to SDL3 changed key constants (lowercase to
+
    uppercase), mouse events (int to float coordinates), and audio APIs. Projects pinned to older
    versions face a painful upgrade.
 
@@ -167,9 +186,7 @@ Events carry both pixel and tile coordinates after calling `context.convert_even
 | **Window management** | Full SDL integration, resizable windows, HiDPI                         | SDL-based but simpler configuration                            |
 | **Python API**        | Native Python package via cffi                                         | C library with Python ctypes wrapper                           |
 | **Performance**       | NumPy vectorized batch operations                                      | Per-cell function calls (slower for bulk updates in Python)    |
-| **Unicode**           | Full Unicode support                                                   | Full Unicode support                                           |
-
-**Key difference:** python-tcod is a complete roguelike development framework; BearLibTerminal is a
+| **Unicode**| Full Unicode support                                                   | Full Unicode support                                           |**Key difference:** python-tcod is a complete roguelike development framework; BearLibTerminal is a |
 focused terminal rendering library. BearLibTerminal is simpler for "just put tiles on screen," but
 python-tcod provides far more out of the box. The critical practical issue is that BearLibTerminal
 is unmaintained, while python-tcod is actively developed.
@@ -179,16 +196,14 @@ is unmaintained, while python-tcod is actively developed.
 The C library libtcod has been used in many notable roguelikes. The Python port is primarily used by
 hobbyist/jam projects and tutorial followers.
 
-**Using libtcod (C/C++):**
-
-- **Cogmind** (Grid Sage Games) - commercial sci-fi roguelike. The original 7DRL (2012) used
+**Using libtcod (C/C++):**-**Cogmind** (Grid Sage Games) - commercial sci-fi roguelike. The original 7DRL (2012) used
   libtcod; the commercial version moved to a custom engine but was deeply influenced by libtcod.
+
 - **Incursion** - updated port from Allegro to libtcod to fix longstanding bugs
 - Numerous 7DRL jam entries and r/roguelikedev community projects
 
-**Using python-tcod:**
+**Using python-tcod:**-**YARC** (Yet Another Rogue Clone) - faithful Rogue clone
 
-- **YARC** (Yet Another Rogue Clone) - faithful Rogue clone
 - **Castle of the Eternal Night (COTEN)** - classic roguelike
 - **The Lost Mind** - dungeon roguelike with strategic combat
 - **PyRoPy** - roguelike being restored from Python 2/libtcodpy to Python 3/tcod
@@ -201,16 +216,25 @@ Note: Caves of Qud, often mentioned alongside libtcod roguelikes, is built in Un
 ## Sources
 
 - Kept: [GitHub repo](https://github.com/libtcod/python-tcod) - primary source for language stats,
+
   status, README
+
 - Kept: [ReadTheDocs](https://python-tcod.readthedocs.io/en/stable/) - API documentation, module
+
   listing, getting started examples
+
 - Kept: [RogueBasin Doryen library page](https://roguebasin.com/index.php?title=Doryen_library) -
+
   history, feature list, port details
+
 - Kept:
+
   [Tyler Standridge tutorial critique](https://tylerstandridge.com/posts/issues-with-the-roguelike-tutorial/) -
   first-hand account of tutorial problems, NumPy learning curve, community feedback
+
 - Kept: [PyPI tcod](https://pypi.org/project/tcod/) - version, metadata
 - Kept: [BearLibTerminal docs](http://foo.wyrd.name/en:bearlibterminal) - comparison reference
 - Dropped: Generic roguelike tutorial pages on RogueBasin - duplicative of official docs
 - Dropped: Individual small GitHub projects (COTEN, Mogru, etc.) - only used for examples list, not
+
   deep analysis

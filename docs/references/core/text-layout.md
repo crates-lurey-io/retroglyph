@@ -17,21 +17,27 @@ those spans within bounded rectangles.
 
 BearLibTerminal's `print` function processes inline tags within the string being printed. Tags are
 enclosed in square brackets and modify rendering state for subsequent characters. All tag effects
-are **local to a single `print` call** and automatically reset when the call returns.
-
-**Supported tags:**
+are **local to a single `print` call**and automatically reset when the call returns.**Supported tags:**
 
 - `[color=red]` / `[bkcolor=gray]` — set foreground/background color. Color names are parsed by
+
   `color_from_name()` which supports named colors (red, lime, azure, etc.), brightness modifiers
   (light, dark, lighter, darker, lightest, darkest), hex (`#RRGGBB`, `#AARRGGBB`), comma-separated
   decimal (`R,G,B` or `A,R,G,B`), and custom palette entries.
+
 - `[U+E001]` or `[0xE001]` — insert an arbitrary Unicode code point by hex value.
 - `[+]` — composition marker. `a[+]^` composites two glyphs in the same cell, like `â`. Internally
+
   uses the composition mode (tile stacking).
+
 - `[offset=4,8]` — pixel-level offset for subsequent characters, as if placed via `put_ext`. Useful
+
   for sub-cell positioning.
+
 - `[/color]`, `[/bkcolor]`, `[/offset]` — reset tags to pre-call defaults. These are simple
+
   set/reset pairs, not a stack, so nesting does not truly nest.
+
 - `[[` and `]]` — escape sequences to print literal bracket characters.
 
 **`print_ext`** adds bounded rectangle printing with alignment:
@@ -54,10 +60,12 @@ libtcod takes a fundamentally different approach: instead of text-parseable tags
 **special byte values** directly in the string. This works because the control characters occupy
 code points below the printable range.
 
-**Control code constants:**
+### Control code constants
 
 - `TCOD_COLCTRL_1` through `TCOD_COLCTRL_5` — preset color slots. Each slot stores both a foreground
+
   and background color, pre-registered via `TCOD_console_set_color_control(slot, fore, back)`.
+
 - `TCOD_COLCTRL_FORE_RGB` — followed by 3 bytes (R, G, B) inline. Sets foreground directly.
 - `TCOD_COLCTRL_BACK_RGB` — followed by 3 bytes (R, G, B) inline. Sets background directly.
 - `TCOD_COLCTRL_STOP` — resets foreground and background to the colors active before the print call.
@@ -95,8 +103,11 @@ rot.js uses printf-inspired format specifiers embedded in text strings:
 **Tokenization** is a two-pass process defined in `text.ts`:
 
 1. **First pass** — regex-based split using `/%([bc]){([^}]*)}/g`. Produces an interleaved stream of
+
    `TYPE_TEXT`, `TYPE_FG`, and `TYPE_BG` tokens.
-2. **Second pass** (`breakLines`) — processes the text tokens for word wrapping within `maxWidth`.
+
+1. **Second pass** (`breakLines`) — processes the text tokens for word wrapping within `maxWidth`.
+
    Inserts `TYPE_NEWLINE` tokens at appropriate break points.
 
 **Word wrapping logic** in `breakLines`:
@@ -104,8 +115,10 @@ rot.js uses printf-inspired format specifiers embedded in text strings:
 - Removes leading spaces at the start of each line.
 - Handles explicit `\n` characters by splitting tokens.
 - When a line would exceed `maxWidth`, searches for a space within the current token to break at. If
+
   none found in the current token, looks backward to the most recent token containing a space. As a
   last resort, force-breaks mid-word.
+
 - Trailing spaces before newlines are stripped.
 
 **Measurement** (`Text.measure`) processes the token stream and counts `TYPE_TEXT` character lengths
@@ -130,21 +143,29 @@ const TYPE_BG = 3;
 ratatui avoids inline markup entirely in favor of a typed hierarchy:
 
 - **`Span`** — the smallest unit. A contiguous string where all characters share one `Style`.
-  Fields: `content: Cow<'a, str>`, `style: Style`.
-- **`Line`** — a single line composed of `Vec<Span>`. Has its own `style` (applied before span
-  styles), and an optional `alignment: Option<Alignment>`.
-- **`Text`** — multiple lines: `Vec<Line>`. Also has a `style` and `alignment`.
 
-**Key design properties:**
+  Fields: `content: Cow<'a, str>`, `style: Style`.
+
+- **`Line`** — a single line composed of `Vec<Span>`. Has its own `style` (applied before span
+
+  styles), and an optional `alignment: Option<Alignment>`.
+
+- **`Text`**— multiple lines: `Vec<Line>`. Also has a `style` and `alignment`.**Key design properties:**
 
 - `Span::width()` returns the Unicode display width (via `unicode-width` crate).
 - `Line::width()` sums the widths of all contained spans.
 - `Span::styled_graphemes(base_style)` yields `StyledGrapheme` items for rendering, patching the
+
   base style with the span's style.
+
 - Styles compose via `patch_style`: the span's style overlays the line's style, which overlays the
+
   text's style. Missing fields inherit from the parent.
+
 - The `Paragraph` widget handles word wrapping and alignment for `Text`, with `Wrap { trim: bool }`
+
   config.
+
 - `Line` supports `left_aligned()`, `centered()`, `right_aligned()` convenience methods.
 
 This model is entirely programmatic; styled text is constructed in code:
@@ -169,7 +190,7 @@ Two primary algorithms are used:
 and all the roguelike libraries above. Places as many words on the current line as possible, then
 wraps to the next line. Pseudocode:
 
-```
+```text
 SpaceLeft := LineWidth
 for each Word in Text
     if (Width(Word) + SpaceWidth) > SpaceLeft
@@ -177,10 +198,11 @@ for each Word in Text
         SpaceLeft := LineWidth - Width(Word)
     else
         SpaceLeft := SpaceLeft - (Width(Word) + SpaceWidth)
-```
+```javascript
 
 - Advantages: O(n) time, simple, predictable, operates in a single pass.
 - Disadvantage: can produce lines of wildly varying lengths (one line near-full, the next with a
+
   single long word).
 
 **Knuth-Plass (optimal) algorithm:** Used by TeX. Minimizes the sum of squared space at line ends
@@ -189,11 +211,14 @@ simultaneously.
 
 - Advantages: more aesthetically pleasing, even line lengths.
 - Disadvantage: O(n^2) worst case (O(n) typical), needs the full paragraph text upfront, more
+
   complex to implement.
+
 - For monospace grids, the visual improvement over greedy is marginal because there is no inter-word
+
   space stretching. **Greedy is the right default for terminal grids.**
 
-**For monospace grids specifically:**
+### For monospace grids specifically
 
 - Each character is exactly 1 cell wide (except CJK double-width characters, which are 2).
 - Word width = character count (simple `len()` or `unicode_width`).
@@ -230,7 +255,7 @@ BearLibTerminal supports both axes via combinable flags (`TK_ALIGN_CENTER | TK_A
 libtcod supports only horizontal alignment. rot.js does not support alignment at all (always
 top-left).
 
-**Implementation approach:**
+### Implementation approach
 
 1. First pass: perform word wrapping to determine all line breaks and line widths.
 2. Compute `total_height` (number of lines).
@@ -248,10 +273,15 @@ All three libraries provide measurement APIs that compute the bounding box of te
 it:
 
 - **BearLibTerminal**: `terminal_measure(s)` returns `{width, height}` for unwrapped text.
+
   `terminal_measure_ext(w, h, s)` returns dimensions with word wrapping within the given bbox.
+
 - **libtcod**: `TCOD_console_get_height_rect(con, x, y, w, h, fmt, ...)` returns the number of
+
   lines. It calls the same `print_internal` with `count_only=true`.
+
 - **rot.js**: `Text.measure(str, maxWidth)` tokenizes the string, processes word wrapping, then sums
+
   character widths per line to find `{width, height}`.
 
 **Design pattern**: measurement should share the same code path as rendering, with a flag to skip
@@ -277,7 +307,7 @@ struct LineMetrics {
 
 The tag parsing problem is straightforward for bracket-style tags. Key considerations:
 
-**Escaping:**
+### Escaping
 
 - BearLibTerminal: `[[` produces a literal `[`, `]]` produces `]`.
 - rot.js: no escaping mechanism (relies on `%` being rare in game text).
@@ -295,11 +325,9 @@ Tokens fall into categories:
 6. **Codepoint(u32)** — insert a Unicode code point.
 7. **Compose** — begin composition (next glyph overlays previous cell).
 8. **SetOffset(x, y)** — set pixel offset.
-9. **ResetOffset** — clear pixel offset.
+9. **ResetOffset**— clear pixel offset.**State machine approach:**
 
-**State machine approach:**
-
-```
+```yaml
 NORMAL: read char
   '[' -> check next:
     '[' -> emit Text('[')        // escaped bracket
@@ -310,9 +338,9 @@ READING_TAG: read chars until ']'
   parse tag name and value
   emit appropriate command token
   -> NORMAL
-```
+```text
 
-**Tag value parsing:**
+### Tag value parsing
 
 - `color=red` -> SetColor, parse "red" via color name resolution
 - `bkcolor=#FF0000` -> SetBgColor, parse hex
@@ -725,42 +753,52 @@ pub fn layout(
 ### 10. Design Recommendations
 
 1. **Two-layer architecture.** Separate the tag parser from the layout engine. The parser converts
+
    `&str` with tags into `Vec<StyledSpan>`. The layout engine takes `&[StyledSpan]` (or a
    ratatui-like `Line`/`Span` tree) and produces positioned glyphs. This allows:
+
    - Programmatic construction without parsing (like ratatui).
    - Data-driven markup for dialog/descriptions (like BearLibTerminal).
    - Caching parsed spans across frames.
 
-2. **Use BearLibTerminal-style bracket tags**, not libtcod's byte-embedding. Bracket tags are
+1. **Use BearLibTerminal-style bracket tags**, not libtcod's byte-embedding. Bracket tags are
+
    human-readable, debuggable, and work naturally with Rust's `&str`. libtcod's approach was born
    from C-era constraints. rot.js's `%c{}` syntax is fine but less extensible.
 
-3. **Greedy word wrapping is sufficient.** Knuth-Plass is overkill for monospace grids where
+1. **Greedy word wrapping is sufficient.** Knuth-Plass is overkill for monospace grids where
+
    character widths are uniform. The visual difference is negligible and the complexity cost is not
    justified.
 
-4. **Measure and render should share code.** Use a single layout pass that produces
+1. **Measure and render should share code.** Use a single layout pass that produces
+
    `Vec<PlacedGlyph>`, then measure reads dimensions from that result and render writes glyphs to
    the grid. Alternatively, use a `count_only` flag like libtcod, but the separate-output approach
    is more Rust-idiomatic and avoids mutable state.
 
-5. **Support both horizontal and vertical alignment.** BearLibTerminal's combinable alignment flags
+1. **Support both horizontal and vertical alignment.** BearLibTerminal's combinable alignment flags
+
    are the best API here. Use bitflags or two separate enums (HAlign + VAlign).
 
-6. **Tag effects should be call-scoped.** Like BearLibTerminal, all color/offset changes within a
+1. **Tag effects should be call-scoped.** Like BearLibTerminal, all color/offset changes within a
+
    `print` call should automatically reset when the call returns. No leaked state.
 
-7. **Support `unicode-width`** for CJK double-width characters from the start. All modern roguelike
+1. **Support `unicode-width`** for CJK double-width characters from the start. All modern roguelike
+
    libraries have had to retrofit this.
 
-8. **Keep tag syntax minimal.** Start with `[color=X]`, `[bkcolor=X]`, `[/color]`, `[/bkcolor]`,
+1. **Keep tag syntax minimal.** Start with `[color=X]`, `[bkcolor=X]`, `[/color]`, `[/bkcolor]`,
+
    `[U+XXXX]`. Add `[+]` and `[offset=x,y]` only if composition and sub-cell positioning are needed.
    Don't overdesign the tag set.
 
-9. **Provide a `measure` function** that returns `TextMetrics { width, height }` for pre-layout
+1. **Provide a `measure` function** that returns `TextMetrics { width, height }` for pre-layout
+
    sizing. This is critical for UI layout (sizing panels to fit content, centering dialogs, etc.).
 
-10. **Consider a builder API** alongside tag parsing for programmatic use:
+1. **Consider a builder API** alongside tag parsing for programmatic use:
 
     ```rust
     Text::new()
@@ -772,39 +810,63 @@ pub fn layout(
 ## Sources
 
 - **Kept**: [BearLibTerminal Reference](http://foo.wyrd.name/en:bearlibterminal:reference) — primary
+
   documentation for print/measure/tags, comprehensive coverage of the tag system and alignment API
+
 - **Kept**:
+
   [libtcod console_printing.c](https://github.com/libtcod/libtcod/blob/main/src/libtcod/console_printing.c)
   — full source code showing color control implementation, word wrapping, alignment, and measurement
   via count_only
+
 - **Kept**: [rot.js text.ts](https://github.com/ondras/rot.js/blob/master/src/text.ts) — complete
+
   tokenizer and word-wrapping implementation in ~160 lines
+
 - **Kept**: [rot.js display.ts](https://github.com/ondras/rot.js/blob/master/src/display/display.ts)
+
   — drawText rendering loop showing token interpretation
+
 - **Kept**: [ratatui text module docs](https://docs.rs/ratatui/latest/ratatui/text/index.html) —
+
   Span/Line/Text hierarchy documentation
+
 - **Kept**: [ratatui Span docs](https://docs.rs/ratatui/latest/ratatui/text/struct.Span.html) —
+
   detailed API including width(), styled_graphemes(), style patching
+
 - **Kept**: [ratatui Line docs](https://docs.rs/ratatui/latest/ratatui/text/struct.Line.html) —
+
   alignment support, width calculation, span composition
+
 - **Kept**:
+
   [Wikipedia: Line wrap and word wrap](https://en.wikipedia.org/wiki/Line_wrap_and_word_wrap) —
   greedy and Knuth-Plass algorithm descriptions, pseudocode
+
 - **Dropped**: libtcod readthedocs main page — just an index with no content about color controls
 - **Dropped**: libtcod 1.6.4 docs index — table of contents only, actual content in
+
   JavaScript-rendered frames that couldn't be fetched
 
 ## Gaps
 
 - **BearLibTerminal `[font=X]` tag**: the reference docs do not document a `font` tag in the `print`
+
   function. Font switching may be handled at a different level (via `terminal_set`), or this tag may
   be undocumented. The source code (C++) could confirm, but was not accessible via the available
   URLs.
+
 - **Knuth-Plass implementation details for monospace**: while the greedy algorithm is recommended,
+
   if Knuth-Plass were desired, no Rust crate was found that specifically targets monospace grids.
   The `textwrap` crate implements Knuth-Plass for proportional text.
+
 - **libtcod newer C++ printing API**: the newer `tcod::print` C++ API may use a different approach
+
   to color formatting (possibly ANSI-like or tag-based). The C source analyzed here covers the
   legacy but still-active C API.
+
 - **ratatui Paragraph wrapping implementation**: the actual word-wrapping code in ratatui's
+
   `Paragraph` widget was not examined. It would be worth reviewing for Rust-specific patterns.

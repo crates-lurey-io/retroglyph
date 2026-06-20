@@ -63,12 +63,17 @@ struct tb_cell {
 Key properties:
 
 - **Double-buffered**: a back buffer (written to by the caller) and a front buffer (what was last
+
   sent to the terminal). `tb_present()` diffs the two and emits only changed cells.
+
 - **One character per cell**: optimized for `wcwidth==1` codepoints. Wide characters (CJK) are
+
   handled by zeroing the following W-1 cells. Grapheme cluster support (combining marks) is opt-in
   via `TB_OPT_EGC`.
+
 - **No layers**: one cell, one character, one fg/bg pair. No tile stacking.
 - **Contiguous memory**: cells are indexable via `(y * width) + x`, accessible through
+
   `tb_cell_buffer()` (deprecated) or `tb_get_cell()`.
 
 ## Input Handling
@@ -124,60 +129,72 @@ termbox2 uses `#define` options rather than runtime config:
 ## Strengths
 
 1. **Extreme simplicity**: the entire library is one header file. The API surface is ~12-15
+
    functions. A complete program can be written in 20 lines. No build system complexity, no
    dependency management.
 
-2. **No dependencies beyond libc**: unlike ncurses, there's no terminfo database requirement.
+1. **No dependencies beyond libc**: unlike ncurses, there's no terminfo database requirement.
+
    Built-in escape sequences for xterm, linux console, rxvt, screen, etc. are generated via codegen.
 
-3. **Predictable cell model**: the screen is a simple 2D array. You set cells, call present, done.
+1. **Predictable cell model**: the screen is a simple 2D array. You set cells, call present, done.
+
    No cursor movement state, no window/pad abstraction, no scrolling regions, no overlapping panels.
    What you write is what appears.
 
-4. **Good error reporting**: every function returns an error code. Fine-grained error constants
+1. **Good error reporting**: every function returns an error code. Fine-grained error constants
+
    (`TB_ERR_INIT_OPEN`, `TB_ERR_TCGETATTR`, etc.) make debugging straightforward compared to
    ncurses's opaque failures.
 
-5. **Wide language binding support**: FFI-friendly C ABI with demos in D, Go, Nim, PHP, Python,
+1. **Wide language binding support**: FFI-friendly C ABI with demos in D, Go, Nim, PHP, Python,
+
    Ruby, Rust, Zig, plus community wrappers for Haskell, Crystal, Perl, Odin, JavaScript, Common
    Lisp, Chez Scheme.
 
-6. **Double buffering with diffing**: `tb_present()` only emits cells that changed, keeping I/O
+1. **Double buffering with diffing**: `tb_present()` only emits cells that changed, keeping I/O
+
    minimal.
 
 ## Limitations
 
 1. **No inline/partial-screen mode**: `tb_init` always switches to the alternate screen buffer and
+
    clears it. You cannot render a TUI inline within existing shell output (like fzf does).
    [Issue #74](https://github.com/termbox/termbox2/issues/74)
 
-2. **Limited style attributes in default build**: with the default 16-bit attribute width, only 8
+1. **Limited style attributes in default build**: with the default 16-bit attribute width, only 8
+
    style bits are available and the bit-field is nearly full. Strikeout, double underline, and
    overline require 64-bit attributes. [Issue #56](https://github.com/termbox/termbox2/issues/56)
 
-3. **No widgets, no layout**: termbox2 deliberately excludes widgets (text inputs, scroll bars,
+1. **No widgets, no layout**: termbox2 deliberately excludes widgets (text inputs, scroll bars,
+
    checkboxes) and layout engines. You get raw cells and nothing else. The
    [termbox-widgets](https://github.com/git-bruh/termbox-widgets) library and
    [Clay](https://github.com/nicbarker/clay) layout engine exist as external options, but the
    ecosystem is thin.
 
-4. **No layers or compositing**: one character per cell, period. Overlapping UI elements (dialogs on
+1. **No layers or compositing**: one character per cell, period. Overlapping UI elements (dialogs on
+
    top of content) require manually saving/restoring the underlying cells. The `tb_get_cell`
    function was added specifically to address this.
    [PR #65](https://github.com/termbox/termbox2/pull/65)
 
-5. **Terminal compatibility edge cases**: mouse event parsing can leak partial escape sequences on
+1. **Terminal compatibility edge cases**: mouse event parsing can leak partial escape sequences on
+
    some terminals (macOS Terminal.app).
    [Issue #108](https://github.com/termbox/termbox2/issues/108). Truecolor mode has had issues with
    background color after output mode changes.
    [Issue #51](https://github.com/termbox/termbox2/issues/51)
 
-6. **No image/bitmap rendering**: strictly character cells. No sixel, no kitty graphics protocol, no
+1. **No image/bitmap rendering**: strictly character cells. No sixel, no kitty graphics protocol, no
+
    pixel-level output.
 
-7. **No scrollback/scrolling**: the library operates on the visible screen only.
+1. **No scrollback/scrolling**: the library operates on the visible screen only.
 
-8. **No Windows support** (yet): relies on POSIX termios. A Windows PR exists but is not merged as
+1. **No Windows support** (yet): relies on POSIX termios. A Windows PR exists but is not merged as
    of writing.
 
 ## Projects Built With termbox2
@@ -217,7 +234,7 @@ This is the core philosophical split: termbox2 runs inside your terminal. BearLi
 its own window that looks like a terminal. termbox2 is constrained by what the terminal emulator
 supports. BearLibTerminal has full pixel-level control.
 
-### Cell Model
+### Cell Model (2)
 
 **termbox2**: one cell = one Unicode codepoint + fg + bg. That's it. Opt-in grapheme clusters. No
 layering, no tile stacking, no offsets.
@@ -226,10 +243,10 @@ layering, no tile stacking, no offsets.
 offset. Cells exist across multiple layers. Tiles can be larger than one cell. Composition
 (alpha-blending multiple tiles) is a first-class feature.
 
-```
+```yaml
 termbox2:     cell -> (char, fg, bg)
 BearLibTerminal: cell -> [layer0: [tile, tile, ...], layer1: [tile, ...], ...]
-```
+```text
 
 For a roguelike that wants a character walking over terrain with items, BearLibTerminal's model
 handles this natively (terrain on layer 0, items on layer 1, character on layer 2). termbox2
@@ -239,27 +256,27 @@ requires the application to manually composite everything into a single characte
 
 **termbox2** (~15 functions):
 
-```
+```text
 init, shutdown, width, height, clear, present,
 set_cursor, hide_cursor, set_cell, poll_event, peek_event,
 print, printf, set_input_mode, set_output_mode
-```
+```text
 
 **BearLibTerminal** (~30+ functions):
 
-```
+```text
 open, close, set, refresh, clear, clear_area,
 layer, color, bkcolor, composition, crop,
 put, put_ext, print, measure,
 pick, pick_color, pick_bkcolor,
 has_input, read, peek, state, delay
-```
+```text
 
 BearLibTerminal has roughly 2x the API surface. The added functions reflect its richer model: layer
 management, tile picking (reading back what's in a cell), per-tile offsets (`put_ext`), text
 measurement, state queries.
 
-### Input Handling
+### Input Handling (2)
 
 | Feature           | termbox2                                    | BearLibTerminal                   |
 | ----------------- | ------------------------------------------- | --------------------------------- |
@@ -332,19 +349,34 @@ tiles." Both are right for their domain.
 ## Sources
 
 - [termbox2 GitHub repository](https://github.com/termbox/termbox2) - README, header file, issue
+
   tracker
+
 - [termbox2.h raw header](https://raw.githubusercontent.com/termbox/termbox2/master/termbox2.h) -
+
   full API documentation in comments
+
 - [BearLibTerminal GitHub](https://github.com/tommyettinger/BearLibTerminal) - feature list, API
 - [BearLibTerminal design overview](http://foo.wyrd.name/en:bearlibterminal:design) - cell model,
+
   layers, tiles, tilesets
+
 - [Issue #74: inline TUIs](https://github.com/termbox/termbox2/issues/74) - alternate screen
+
   limitation
+
 - [Issue #56: additional styles](https://github.com/termbox/termbox2/issues/56) - attribute
+
   bit-field constraints
+
 - [Issue #108: mouse escape sequences](https://github.com/termbox/termbox2/issues/108) - terminal
+
   compatibility
+
 - [Issue #51: truecolor background](https://github.com/termbox/termbox2/issues/51) - output mode
+
   state bugs
+
 - [PR #65: tb_get_cell](https://github.com/termbox/termbox2/pull/65) - front buffer read access for
+
   compositing workarounds

@@ -24,7 +24,7 @@ feels different on different machines.
 
 ### Solution
 
-The renderer **produces** time; the simulation **consumes** it in fixed `dt` chunks. Leftover time
+The renderer **produces**time; the simulation**consumes** it in fixed `dt` chunks. Leftover time
 carries over via an accumulator. Interpolation between the previous and current state smooths
 rendering.
 
@@ -33,8 +33,11 @@ rendering.
 - **Accumulator**: stores unprocessed real time between frames
 - **Fixed dt**: simulation always steps by the same amount (e.g., 1/60s or 1/120s)
 - **Spiral of death**: when simulation can't keep up, accumulator grows unboundedly. Mitigate by
+
   clamping `frame_time` to a maximum (e.g., 0.25s).
+
 - **Interpolation alpha**: `alpha = accumulator / dt`, used to lerp between `previous_state` and
+
   `current_state` for rendering
 
 ### Rust implementation
@@ -163,7 +166,9 @@ fn turn_based_loop(term: &mut Terminal) {
 
 - **Blocking read**: `terminal_read()` suspends the thread until input arrives. Zero CPU when idle.
 - **Non-blocking check**: `has_input()` + `peek()` allow hybrid patterns (e.g., animations between
+
   turns).
+
 - **Double buffering**: all output goes to a back buffer; `refresh()` swaps it to screen.
 - **State queries**: `terminal_state(TK_SHIFT)` checks modifier keys after reading an event.
 
@@ -259,9 +264,12 @@ impl GameState for MyGameState {
 
 - **Library owns the loop**: `main_loop()` never returns. All game logic lives in `tick()`.
 - **Tick called every frame**: not every turn. For turn-based games, the user must implement their
+
   own state machine inside `tick()` to distinguish "waiting for input" from "processing turn."
+
 - **Cross-platform**: bracket-lib's `main_loop` wraps winit or wasm event loops internally.
 - **Simple but inflexible**: works well for single-window games. Harder to integrate with external
+
   systems, custom threading, or non-game UI.
 
 ### Trade-offs
@@ -629,7 +637,7 @@ async fn multiplayer_game_loop(
 }
 ```
 
-### Trade-offs
+### Trade-offs (2)
 
 | Pro                                           | Con                                                      |
 | --------------------------------------------- | -------------------------------------------------------- |
@@ -646,7 +654,7 @@ async fn multiplayer_game_loop(
 
 ### The core insight
 
-Turn-based and real-time games differ only in **when updates happen** and **when rendering
+Turn-based and real-time games differ only in **when updates happen**and**when rendering
 happens**, not in _what_ the library provides. A well-designed library should provide primitives,
 not prescribe a loop.
 
@@ -755,11 +763,15 @@ pub struct TickContext<'a> {
 
 1. **Primitives first**: `poll_event`, `read_event`, `put`, `present`. These are the foundation.
 2. **Blocking and non-blocking input**: both `read_event()` (blocking) and `poll_event(timeout)`
+
    (non-blocking with configurable timeout).
+
 3. **No forced frame timing**: the library renders when `present()` is called, not on its own
    schedule.
+
 4. **Optional convenience layer**: a `run()` function or `GameState` trait for users who want a
    simple loop.
+
 5. **Async-compatible**: provide an `event_stream()` method returning a `Stream<Item = Event>` for
    async users.
 
@@ -1109,9 +1121,11 @@ real-time.
 ### Optional additions (in order of priority)
 
 1. **Convenience `run()` function** with a `GameState` trait for quick prototyping (bracket-lib
+
    pattern, but optional)
-2. **`EventStream`** returning `impl Stream<Item = Event>` for async/tokio users
-3. **`ControlFlow` hint** on the terminal to signal intent (wait-for-input vs. continuous), which
+
+1. **`EventStream`** returning `impl Stream<Item = Event>` for async/tokio users
+1. **`ControlFlow` hint** on the terminal to signal intent (wait-for-input vs. continuous), which
    the backend can use to optimize (e.g., `ControlFlow::Wait` for GPU-backed window)
 
 ### Why not library-owned?
@@ -1177,37 +1191,63 @@ library, every pattern.
 ## Sources
 
 - **Kept**:
+
   [Gaffer on Games: Fix Your Timestep](https://gafferongames.com/post/fix_your_timestep/) - the
   canonical reference for fixed-timestep game loops with accumulator and interpolation
+
 - **Kept**:
+
   [Game Programming Patterns: Game Loop](https://gameprogrammingpatterns.com/game-loop.html) -
   comprehensive taxonomy of loop patterns with trade-off analysis
+
 - **Kept**: [winit docs.rs](https://docs.rs/winit/latest/winit/) - primary docs for
+
   ApplicationHandler, ControlFlow, and event loop design
+
 - **Kept**:
+
   [winit ApplicationHandler](https://docs.rs/winit/latest/winit/application/trait.ApplicationHandler.html) -
   trait API details, lifecycle events
+
 - **Kept**: [ratatui event handling](https://ratatui.rs/concepts/event-handling/) - user-owned loop
+
   patterns
+
 - **Kept**:
+
   [ratatui TEA pattern](https://ratatui.rs/concepts/application-patterns/the-elm-architecture/) -
   full Model/Update/View example with code
+
 - **Kept**: [BearLibTerminal reference](http://foo.wyrd.name/en:bearlibterminal:reference) -
+
   complete API reference for the blocking turn-based model
+
 - **Kept**: [bracket-lib hello_minimal.rs](https://github.com/amethyst/bracket-lib) - canonical
+
   example of library-owned GameState::tick pattern
+
 - **Kept**: [crossterm event module](https://docs.rs/crossterm/latest/crossterm/event/index.html) -
+
   poll/read API for synchronous input, EventStream for async
+
 - **Dropped**: Various GitHub page chrome/navigation from bracket-lib repo pages (extracted raw file
+
   instead)
 
 ## Gaps
 
 - **bracket-lib internals**: Could not fetch `main_loop` source code to see exactly how it wraps
+
   winit internally. The public API and examples were sufficient.
+
 - **spin_sleep benchmarks**: No benchmark data fetched for precise sleep accuracy across OSes. The
+
   crate is well-known in the Rust gamedev community.
+
 - **wgpu present mode latency numbers**: No concrete latency measurements for Fifo vs Mailbox vs
+
   Immediate. Would need profiling on target hardware.
+
 - **Bevy/macroquad loop patterns**: Did not cover these larger engines. They use library-owned loops
+
   similar to bracket-lib but with ECS scheduling. Not directly relevant to a terminal grid library.

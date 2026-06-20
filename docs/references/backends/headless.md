@@ -20,7 +20,9 @@ TTY; a headless backend lets tests run anywhere.
 - **Unit tests**: Assert that a widget renders specific characters/colors at specific positions.
 - **Integration tests**: Render a full UI frame, then compare the buffer against expected output.
 - **Snapshot testing**: Serialize the buffer to a stable text format and compare against golden
+
   files.
+
 - **Regression tests**: Detect unintended visual changes in CI.
 
 ### AI Agents and Automation
@@ -107,7 +109,7 @@ pub struct Cell {
 The most directly relevant prior art. ratatui defines a `Backend` trait and provides `TestBackend`
 as a concrete implementation.
 
-**Key design points:**
+### Key design points
 
 - Implements the full `Backend` trait with `type Error = Infallible` (operations never fail).
 - Internal state: `buffer: Buffer`, `scrollback: Buffer`, `cursor: bool`, `pos: (u16, u16)`.
@@ -115,24 +117,33 @@ as a concrete implementation.
 - `flush()` is a no-op.
 - `clear()` calls `buffer.reset()`.
 - `clear_region()` handles all `ClearType` variants (All, AfterCursor, BeforeCursor, CurrentLine,
+
   UntilNewLine) by resetting slices of the content vector.
+
 - `append_lines()` implements real scroll behavior, moving lines from the main buffer into the
+
   scrollback buffer.
+
 - `scroll_region_up/down` implement ANSI-style scrolling regions (behind a feature flag).
 - Provides assertion helpers: `assert_buffer_lines()`, `assert_scrollback_lines()`,
+
   `assert_cursor_position()`.
+
 - Implements `Display` for human-readable buffer visualization.
 - Supports `Serialize`/`Deserialize` via serde (behind feature flag).
 - Implements `Clone`, `Eq`, `Hash`.
 
-**What ratatui gets right:**
+### What ratatui gets right
 
 - The test backend is a _full_ backend, not a subset. Any code that works with the test backend
+
   works identically with a real backend.
+
 - Assertion helpers make tests concise.
 - Serde support enables snapshot testing.
 
-**Source:**
+### Source
+
 [ratatui-core/src/backend/test.rs](https://github.com/ratatui/ratatui/blob/main/ratatui-core/src/backend/test.rs),
 [docs.rs/ratatui](https://docs.rs/ratatui/latest/ratatui/backend/struct.TestBackend.html)
 
@@ -141,25 +152,36 @@ as a concrete implementation.
 xterm.js provides a separate `@xterm/headless` npm package that exposes the same `Terminal` API
 without any DOM dependency.
 
-**Key design points:**
+### Key design points (2)
 
 - The headless terminal is a full terminal emulator (parses ANSI/VT sequences, manages a buffer grid
+
   with scrollback) but has no renderer.
+
 - The public API is identical to the browser terminal: `write()`, `resize()`, `buffer` namespace,
+
   `parser`, event handlers (`onData`, `onLineFeed`, `onResize`, etc.).
+
 - The `buffer` property exposes the same `IBufferNamespace` interface, letting callers read cell
+
   content, cursor position, and scrollback.
+
 - Uses the same internal `TerminalCore` class as the browser version; the only difference is the
+
   absence of a DOM renderer.
+
 - Supports addons (with a caveat: addons that call renderer APIs will break).
 
-**What xterm.js gets right:**
+### What xterm.js gets right
 
 - Single core, multiple surfaces. The headless package is not a reimplementation; it shares code
+
   with the visual terminal.
+
 - The API contract is identical, so code tested against headless works in the browser.
 
-**Source:**
+### Source (2)
+
 [xterm.js/src/headless/public/Terminal.ts](https://github.com/xtermjs/xterm.js/blob/master/src/headless/public/Terminal.ts)
 
 ### termwiz Surface (Rust, from wezterm)
@@ -168,17 +190,20 @@ termwiz's `Surface` type is conceptually a headless terminal buffer:
 
 - It represents screen contents as a grid of cells, not connected to any terminal device.
 - It maintains a change log; you can call `get_changes()` to get an optimized diff since the last
+
   render.
+
 - Surfaces can be composited together (layering/widget composition).
 - `draw_from_screen()` computes minimal diffs between two surfaces.
 - The Surface is used both as the internal screen model and for testing.
 
-**What termwiz gets right:**
+### What termwiz gets right
 
 - The change-log/diff model is interesting for incremental rendering.
 - Surface composition supports widget layering without a terminal.
 
-**Source:**
+### Source (3)
+
 [docs.rs/termwiz/surface](https://docs.rs/termwiz/latest/termwiz/surface/struct.Surface.html)
 
 ### Playwright Headless Mode (Browser Automation)
@@ -189,7 +214,7 @@ Playwright launches real browsers in headless mode (no visible window) for testi
 - Screenshots and page content are accessible via API.
 - The headless mode is the _default_; headed mode is opt-in.
 
-**What Playwright gets right:**
+### What Playwright gets right
 
 - Making headless the default normalizes it. Tests are headless first, visual second.
 - Screenshot capture is a first-class API, not an afterthought.
@@ -335,12 +360,16 @@ fn to_png(&self, font: &Font, cell_size: (u32, u32)) -> Vec<u8> {
 }
 ```
 
-**Crate options for software rasterization:**
+### Crate options for software rasterization
 
 - `tiny-skia` - Pure Rust, Skia subset, good for 2D rendering.
+
   [docs.rs/tiny-skia](https://docs.rs/tiny-skia/latest/tiny_skia/)
+
 - `ab_glyph` - Font parsing and glyph rasterization.
+
   [docs.rs/ab_glyph](https://docs.rs/ab_glyph/latest/ab_glyph/)
+
 - `fontdue` - Lightweight font rasterizer, faster than ab_glyph for simple cases.
 - `resvg` - SVG renderer built on tiny-skia, if SVG export is desired.
 
@@ -398,9 +427,7 @@ refresh). A Rust successor should learn from this limitation.
 | **Use case**       | Testing rendering code                        | Testing terminal interaction, parsing ANSI input      |
 | **Input handling** | None (caller writes cells directly)           | Parses ANSI/VT escape sequences                       |
 | **Accuracy**       | Matches the library's rendering model exactly | Matches real terminal behavior                        |
-| **Complexity**     | Minimal                                       | Substantial                                           |
-
-**Recommendation**: Start with the simple model (direct cell writes). If ANSI-input parsing is
+| **Complexity**| Minimal                                       | Substantial                                           |**Recommendation**: Start with the simple model (direct cell writes). If ANSI-input parsing is |
 needed later, it can be layered on top using `vte` or a similar parser.
 
 ### Error Type: Infallible vs. Boxed
@@ -452,25 +479,40 @@ This keeps the dependency tree small for users who only need the buffer for test
 
 - **Kept:**
   - ratatui TestBackend source
+
     ([test.rs](https://github.com/ratatui/ratatui/blob/main/ratatui-core/src/backend/test.rs)) -
     Primary implementation reference, full source reviewed
+
   - ratatui Backend trait
+
     ([backend.rs](https://github.com/ratatui/ratatui/blob/main/ratatui-core/src/backend.rs)) - Trait
     definition with all required methods
+
   - ratatui Buffer docs
+
     ([docs.rs](https://docs.rs/ratatui-core/latest/ratatui_core/buffer/struct.Buffer.html)) -
     Buffer/Cell data model
+
   - xterm.js headless Terminal
+
     ([Terminal.ts](https://github.com/xtermjs/xterm.js/blob/master/src/headless/public/Terminal.ts)) -
     Headless terminal with identical API
+
   - termwiz Surface
+
     ([docs.rs](https://docs.rs/termwiz/latest/termwiz/surface/struct.Surface.html)) - Change-log
     based surface model
+
   - tiny-skia ([docs.rs](https://docs.rs/tiny-skia/latest/tiny_skia/)) - Pure Rust software
+
     rasterizer for PNG export
+
   - ab_glyph ([docs.rs](https://docs.rs/ab_glyph/latest/ab_glyph/)) - Font/glyph rasterization for
+
     PNG export
+
   - alacritty/vte ([GitHub](https://github.com/alacritty/vte)) - VT parser if ANSI input parsing
+
     needed
 
 - **Dropped:**
@@ -481,15 +523,24 @@ This keeps the dependency tree small for users who only need the buffer for test
 ## Gaps
 
 1. **Real-world benchmarks** of headless backends under load (e.g., rendering thousands of frames
+
    for recording) could not be found. Performance of the simple buffer approach at scale is assumed
    good but unverified.
-2. **AI agent integration patterns** for reading headless terminal buffers are not well-documented
+
+1. **AI agent integration patterns** for reading headless terminal buffers are not well-documented
+
    in the Rust ecosystem. This is a novel use case.
-3. **SVG export implementations** in the terminal space were not found; this would need to be built
+
+1. **SVG export implementations** in the terminal space were not found; this would need to be built
+
    from scratch.
-4. **Animated recording formats** (asciicast, etc.) and their integration with headless backends
+
+1. **Animated recording formats** (asciicast, etc.) and their integration with headless backends
+
    were not deeply researched. The `asciinema` format is documented but no Rust library was found
    that produces it from a headless buffer.
-5. **Input simulation** (sending keystrokes to the headless backend for full round-trip testing) is
+
+1. **Input simulation** (sending keystrokes to the headless backend for full round-trip testing) is
+
    a separate concern not covered here. ratatui's TestBackend does not handle input; that would
    require an event source abstraction.

@@ -42,7 +42,7 @@ is 4 bytes wide. Many user-perceived characters are multiple codepoints:
 A grapheme cluster is what a human considers "one character." This is what occupies one cell
 position (or two, for wide characters) in a terminal grid. Defined by UAX #29.
 
-**The unit of storage in a terminal cell must be the grapheme cluster, not the codepoint.**
+### The unit of storage in a terminal cell must be the grapheme cluster, not the codepoint
 
 ### The `unicode-segmentation` crate
 
@@ -69,10 +69,15 @@ let next_boundary = cursor.next_boundary(s, 0);
 Key points:
 
 - Always pass `true` to get _extended_ grapheme clusters (EGC). Legacy grapheme clusters are a
+
   historical artifact.
+
 - `GraphemeCursor` is useful when processing input byte-by-byte from a PTY, since you can feed
+
   partial chunks.
+
 - There is no upper bound on grapheme cluster size in bytes. A single EGC can be arbitrarily long
+
   (e.g., many combining marks stacked). Set a reasonable cap for adversarial input (notcurses caps
   at ~64 codepoints per EGC).
 
@@ -97,7 +102,7 @@ cells wide. In a Western context, they render as 1 cell. The `unicode-width` cra
 `width()` (treats Ambiguous as narrow) and `width_cjk()` (treats Ambiguous as wide) behind the
 `"cjk"` feature flag.
 
-**Important caveat from UAX #11 itself:**
+### Important caveat from UAX #11 itself
 
 > The East_Asian_Width property is not intended for use by modern terminal emulators without
 > appropriate tailoring on a case-by-case basis.
@@ -139,7 +144,7 @@ The `unicode-width` v0.2 rules, in order of precedence:
    - Text presentation sequences (base + VS15) have width 1 (when base has `Emoji_Presentation`)
    - Script-specific ligatures (Arabic Lam-Alef = width 1, etc.)
 
-2. **Character-level widths** (when no sequence rule applies):
+1. **Character-level widths** (when no sequence rule applies):
    - `Default_Ignorable_Code_Point` = width 0
    - `Grapheme_Extend` = width 0
    - `East_Asian_Width` of `Fullwidth` or `Wide` = width 2
@@ -172,31 +177,41 @@ EGC. The key insight from notcurses:
 
 - Each cell in the grid stores one EGC (an arbitrary-length UTF-8 string).
 - For common single-codepoint characters, the EGC can be inlined directly into the cell struct
+
   (small-string optimization). Notcurses inlines up to 4 bytes (one UTF-8 codepoint) directly in the
   cell's `gcluster` field (a `uint32_t`).
+
 - Longer EGCs (multi-codepoint grapheme clusters) are stored in a separate string pool, and the cell
+
   holds an index/offset into that pool. The high bit of `gcluster` distinguishes inline vs. pool
   storage.
+
 - Wide characters (width 2) occupy their primary cell plus a "continuation" marker in the next cell.
+
   The continuation cell has no EGC of its own.
+
 - During rendering, notcurses determines the EGC, foreground color, background color, and style for
+
   each physical terminal cell by descending through the plane stack.
 
 ### How xterm.js stores cell content
 
 xterm.js packs cell content into a single 32-bit integer (`content` field in `CellData`):
 
-```
+```text
 Bits 1-21:   Codepoint (UTF-32, max 0x10FFFF)
 Bit 22:      IS_COMBINED flag
 Bits 23-24:  wcwidth value (0, 1, or 2)
-```
+```rust
 
 - **Single codepoint**: stored directly in bits 1-21. Width in bits 23-24.
 - **Combined content** (multi-codepoint EGC): the `IS_COMBINED` flag is set, and the full string is
+
   stored in a separate `combinedData` string field. The codepoint bits are cleared. Width is still
   packed in bits 23-24.
+
 - This is a similar small-string-optimization pattern to notcurses: the common case (single BMP or
+
   supplementary codepoint) is stored inline without allocation, while the rare case (combining
   marks, ZWJ sequences) spills to a heap string.
 
@@ -224,10 +239,14 @@ Key design choices:
 
 - The primary character is a single `char`. This handles the common case (one codepoint).
 - Combining/zero-width characters are stored in `CellExtra.zerowidth`, which is only allocated when
+
   needed (wrapped in `Arc` for cheap cloning).
+
 - Wide characters use flag bits: `WIDE_CHAR` on the primary cell, `WIDE_CHAR_SPACER` on the
+
   continuation cell. There is also `LEADING_WIDE_CHAR_SPACER` for when a wide char would land at the
   last column (the spacer goes in the last column, the char wraps to the next line).
+
 - Cell size is kept to 24 bytes on 64-bit (verified by a test).
 
 ---
@@ -282,13 +301,20 @@ fn handle_codepoint(&mut self, cp: char) {
 ### Edge cases
 
 - **Combining marks at the start of a line**: No base character to attach to. Typical behavior:
+
   treat the combining mark as its own cell (display as dotted circle + combining mark), or ignore
   it, or store it as a standalone EGC.
+
 - **Multiple combining marks**: Stack them all onto the same base cell. `e` + U+0301 + U+0327 = `ḗ`
+
   (e with acute and cedilla). All part of one EGC.
+
 - **Combining marks after wide characters**: Attach to the wide character's primary cell (the left
+
   cell), not the continuation cell.
+
 - **Maximum stacking depth**: Set a limit. An adversarial input can send thousands of combining
+
   marks on one base. Notcurses limits to ~64 codepoints per EGC. Beyond the limit, drop or ignore
   additional combiners.
 
@@ -325,10 +351,10 @@ this wrong. ([terminfo.dev](https://terminfo.dev/text/variation-selector-16-emoj
 
 Zero Width Joiner (U+200D) connects multiple emoji into a single glyph:
 
-```
+```text
 👨‍👩‍👧‍👦 = 👨 + ZWJ + 👩 + ZWJ + 👧 + ZWJ + 👦
 U+1F468 U+200D U+1F469 U+200D U+1F467 U+200D U+1F466
-```
+```text
 
 The entire sequence is one EGC and should occupy 2 cells. But the _character-level_ sum would be 8 +
 0 + 0 + 0 = 8 (four emoji at width 2 each, three ZWJs at width 0). This is why `unicode-width` v0.2
@@ -339,17 +365,17 @@ whole thing.
 
 A base emoji + Fitzpatrick skin tone modifier = one EGC, width 2:
 
-```
+```text
 👋🏽 = 👋 (U+1F44B) + 🏽 (U+1F3FD)
-```
+```text
 
 ### Keycap sequences
 
 Digit/symbol + VS16 + U+20E3 (combining enclosing keycap):
 
-```
+```text
 1️⃣ = 1 + U+FE0F + U+20E3
-```
+```yaml
 
 Width: 2 cells.
 
@@ -357,9 +383,9 @@ Width: 2 cells.
 
 Two Regional Indicator symbols form a flag:
 
-```
+```text
 🇺🇸 = 🇺 (U+1F1FA) + 🇸 (U+1F1F8)
-```
+```yaml
 
 Width: 2 cells. But individual Regional Indicators should have width 1 (they are
 `Grapheme_Extend=Prepend` in new versions).
@@ -413,16 +439,20 @@ Key concepts:
 Terminals have fundamental BiDi challenges that graphical applications don't face:
 
 1. **Split responsibility**: The terminal emulator sees only the displayed portion; the application
+
    running inside knows the full text. Neither alone has enough information for correct BiDi.
 
-2. **No paragraph awareness**: Terminal output is a byte stream. The terminal doesn't know where
+1. **No paragraph awareness**: Terminal output is a byte stream. The terminal doesn't know where
+
    paragraphs begin/end, or whether adjacent lines belong to the same logical paragraph.
 
-3. **Cropping**: Applications must crop text to fit the terminal width. The BiDi algorithm must run
+1. **Cropping**: Applications must crop text to fit the terminal width. The BiDi algorithm must run
+
    on the _full_ paragraph before cropping, but only the application knows the full paragraph.
    Running BiDi on already-cropped text produces incorrect results.
 
-4. **Cell-grid model**: Terminal cells are addressed by (column, row). BiDi reordering changes which
+1. **Cell-grid model**: Terminal cells are addressed by (column, row). BiDi reordering changes which
+
    column a character appears in, but cursor positioning and cell addressing remain LTR.
 
 ### The terminal-wg BiDi recommendation
@@ -451,11 +481,15 @@ For a grid/buffer library (as opposed to a full terminal emulator):
 
 1. **Store text in logical order** in the cell grid. Each cell holds its EGC.
 2. **BiDi is a display-layer concern.** The grid stores logical content; a rendering pass applies
+
    the BiDi algorithm to produce visual order.
+
 3. **Don't implement BiDi initially.** Most terminal applications today operate in explicit LTR
    mode. BiDi support is a later enhancement.
+
 4. If you do implement it, use an existing UBA implementation. In Rust,
    [unicode-bidi](https://docs.rs/unicode-bidi) implements UAX #9.
+
 5. notcurses explicitly does not handle BiDi itself: "notcurses does not currently handle
    right-to-left text in any special way, but terminals often apply their own heuristics."
 
@@ -470,12 +504,12 @@ the most fundamental layout challenge after basic character placement.
 
 A wide character occupies two adjacent cells in the same row:
 
-```
+```yaml
 Column:  0   1   2   3   4
 Content: [H] [ ] [e] [l] [l]
          ^^^ ^^^
          漢 (continuation)
-```
+```c
 
 - Column 0: Contains the character `漢`, marked as `WIDE_CHAR`, width=2
 - Column 1: Empty spacer cell, marked as `WIDE_CHAR_SPACER` (or continuation)
@@ -487,7 +521,9 @@ Content: [H] [ ] [e] [l] [l]
 won't fit. Two options:
 
 - **Wrap**: Place a spacer at the last column (Alacritty calls this `LEADING_WIDE_CHAR_SPACER`),
+
   then place the wide char at columns 0-1 of the next row.
+
 - **Truncate**: Ignore the wide character or replace with a space.
 
 Most terminals choose wrap. Alacritty uses `LEADING_WIDE_CHAR_SPACER` to mark the dangling
@@ -496,12 +532,12 @@ last-column cell.
 **2. Overwriting half of a wide character:** If a narrow character is written at the position of a
 wide char's spacer (column 1 in the example), the entire wide character must be destroyed:
 
-```
+```text
 // Before: columns 0-1 contain 漢
 // Write 'x' at column 1:
 // Column 0 must be cleared (it's now an orphaned half)
 // Column 1 now contains 'x'
-```
+```c
 
 Similarly, writing _anything_ at column 0 (the primary cell) destroys the spacer at column 1.
 
@@ -610,8 +646,11 @@ combining accent in NFD is one grapheme cluster, same as the precomposed `é` in
 **Cell storage:** You have two choices:
 
 1. **Normalize to NFC on input**: Fewer codepoints per cell, more compact. This is what most
+
    terminals do implicitly.
-2. **Store as-is**: Preserve the original encoding. This means NFD sequences take more storage per
+
+1. **Store as-is**: Preserve the original encoding. This means NFD sequences take more storage per
+
    cell (multiple chars instead of one) but avoids lossy transformation.
 
 ### Recommendation
@@ -649,25 +688,31 @@ different widths for the same character or sequence.**
 ### Sources of disagreement
 
 1. **Unicode version mismatch**: The terminal uses one Unicode version's width tables, your library
+
    uses another. New emoji added in Unicode 15 might be width 2 in your library but width 1 (or
    unknown) in an older terminal.
 
-2. **Ambiguous width**: East Asian Width "Ambiguous" characters are 1 cell in Western locales, 2
+1. **Ambiguous width**: East Asian Width "Ambiguous" characters are 1 cell in Western locales, 2
+
    cells in CJK locales. Your library has to guess which context the terminal is using. There is no
    reliable way to query this.
 
-3. **Emoji presentation**: VS16 (U+FE0F) should promote certain characters from width 1 to width 2.
+1. **Emoji presentation**: VS16 (U+FE0F) should promote certain characters from width 1 to width 2.
+
    As of 2026, only 25% of tested terminals handle this correctly. Most TUI libraries (including
    Rich/Python) also get this wrong.
 
-4. **ZWJ sequences**: Some terminals render `👨‍👩‍👧‍👦` as width 2 (correct), others as width 8 (sum of
+1. **ZWJ sequences**: Some terminals render `👨‍👩‍👧‍👦` as width 2 (correct), others as width 8 (sum of
+
    components), others fall back to individual emoji. The library returns 2, but the terminal may
    display it differently based on font support.
 
-5. **New emoji**: Every Unicode version adds new emoji. A terminal using Unicode 13 tables won't
+1. **New emoji**: Every Unicode version adds new emoji. A terminal using Unicode 13 tables won't
+
    know that a Unicode 15 emoji should be width 2; it'll likely default to width 1.
 
-6. **wcwidth() vs. unicode-width**: The C `wcwidth()` function (from libc) operates on single
+1. **wcwidth() vs. unicode-width**: The C `wcwidth()` function (from libc) operates on single
+
    codepoints and has no concept of sequences. It often uses outdated tables. `unicode-width` v0.2
    is string-aware and current, but it may disagree with the terminal (which might use its own
    `wcwidth()` or custom tables).
@@ -681,22 +726,28 @@ VS16/emoji sequences properly, but adoption is incomplete.
 ### Practical mitigation strategies
 
 1. **Match your target**: If you control the terminal (e.g., building an integrated terminal), use
+
    the same width tables everywhere.
 
-2. **Probe the terminal**: At startup, print a known character sequence and query the cursor
+1. **Probe the terminal**: At startup, print a known character sequence and query the cursor
+
    position to determine the terminal's actual width calculation. This is fragile but sometimes
    necessary.
 
-3. **Offer width configuration**: Let users configure "ambiguous width = 1 or 2" and "emoji width
+1. **Offer width configuration**: Let users configure "ambiguous width = 1 or 2" and "emoji width
+
    strategy."
 
-4. **Use unicode-width for best-effort**: It tracks modern Unicode and handles emoji sequences. It
+1. **Use unicode-width for best-effort**: It tracks modern Unicode and handles emoji sequences. It
+
    will match most modern terminals (Ghostty, iTerm2) for common cases.
 
-5. **Accept imperfection**: For adversarial inputs or obscure sequences, alignment will break. This
+1. **Accept imperfection**: For adversarial inputs or obscure sequences, alignment will break. This
+
    is a known, unsolved problem across the terminal ecosystem.
 
-6. **Version awareness**: Log which Unicode version your width tables use. If users report
+1. **Version awareness**: Log which Unicode version your width tables use. If users report
+
    misalignment, this helps diagnose version mismatches.
 
 ---
@@ -710,8 +761,10 @@ VS16/emoji sequences properly, but adoption is incomplete.
 unicode-segmentation = "1.13"
 unicode-width = "0.2"
 unicode-normalization = "0.1"
-# Optional, for BiDi support:
+# Optional, for BiDi support
+
 # unicode-bidi = "0.3"
+
 ```
 
 ### Core cell type
@@ -968,39 +1021,52 @@ pub fn truncate_to_width(s: &str, max_width: usize) -> (&str, usize) {
 
 1. **Store EGCs, not codepoints.** Each cell holds one grapheme cluster.
 2. **Use small-string optimization.** Single codepoints (the 99% case) should be stored inline
-   without heap allocation.
-3. **Wide chars use primary + spacer cells.** Mark both with flags.
-4. **Handle the overwrite invariant.** Writing to any cell that is part of a wide character must
-   clear the other half.
-5. **Normalize to NFC on input.** Reduces storage and simplifies comparison.
-6. **Use string-level width from unicode-width v0.2.** Character-level width is insufficient for
-   emoji sequences.
-7. **Cap EGC length.** Defend against adversarial combining mark stacking.
-8. **Defer BiDi.** Store logical order; implement BiDi reordering as a display-layer concern.
-9. **Accept width disagreement.** No solution exists for perfect width agreement across all
-   terminals. Match the most common behavior and offer configuration.
 
-## Sources
+   without heap allocation.
+
+3. **Wide chars use primary + spacer cells.** Mark both with flags.3. **Handle the overwrite invariant.** Writing to any cell that is part of a wide character must   clear the other half.
+4. **Normalize to NFC on input.** Reduces storage and simplifies comparison.2. **Use string-level width from unicode-width v0.2.** Character-level width is insufficient for
+   emoji sequences.
+
+5. **Cap EGC length.** Defend against adversarial combining mark stacking.2. **Defer BiDi.** Store logical order; implement BiDi reordering as a display-layer concern.
+6. **Accept width disagreement.** No solution exists for perfect width agreement across all   terminals. Match the most common behavior and offer configuration.## Sources
 
 - [unicode-segmentation crate](https://docs.rs/unicode-segmentation) - UAX #29 implementation
 - [unicode-width crate](https://docs.rs/unicode-width) - UAX #11 implementation with emoji sequence
+
   support
+
 - [unicode-normalization crate](https://docs.rs/unicode-normalization) - UAX #15 implementation
 - [UAX #11: East Asian Width](https://www.unicode.org/reports/tr11/) - Unicode Standard Annex
 - [UAX #29: Unicode Text Segmentation](https://www.unicode.org/reports/tr29/) - Grapheme cluster
+
   boundaries
+
 - [terminfo.dev](https://terminfo.dev/text/variation-selector-16-emoji) - Terminal emoji support
+
   testing
+
 - [Notcurses wiki](https://nick-black.com/dankwiki/index.php/Notcurses) - EGC handling and wide char
+
   semantics
+
 - [Alacritty cell.rs](https://github.com/alacritty/alacritty/blob/master/alacritty_terminal/src/term/cell.rs) -
+
   Cell structure with wide char flags
+
 - [xterm.js CellData.ts](https://github.com/xtermjs/xterm.js/blob/master/src/common/buffer/CellData.ts) -
+
   Packed cell content representation
+
 - [BiDi in Terminal Emulators](https://terminal-wg.pages.freedesktop.org/bidi/) - freedesktop.org
+
   BiDi spec draft
+
 - [Rich issue #3897](https://github.com/Textualize/rich/issues/3897) - VS16 width bug
+
   (representative of ecosystem-wide problem)
+
 - [WezTerm issue #6912](https://github.com/wezterm/wezterm/issues/6912) - VS16 width handling
 - [wcwidth PR #97](https://github.com/jquast/wcwidth/pull/97) - Adding VS16 support to Python
+
   wcwidth

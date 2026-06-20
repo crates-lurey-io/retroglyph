@@ -1,6 +1,6 @@
 # ADR 007: Software Rendering Backend
 
-**Status:** Draft **Date:** 2026-06-19 **Parent:** [ADR 001: Architecture](001-architecture.md)
+**Status:**Draft**Date:**2026-06-19**Parent:** [ADR 001: Architecture](001-architecture.md)
 
 ## Context
 
@@ -18,21 +18,32 @@ architectural changes required for WASM support.
 
 ## Decisions & Rust API Guidelines
 
-1.  **Window & Blitting:** We will use **`winit`** for cross-platform window creation and input
+1. **Window & Blitting:**We will use**`winit`** for cross-platform window creation and input
+
     events, coupled with **`softbuffer`** for pushing CPU-computed `Vec<u32>` pixel arrays to the
     window surface.
-2.  **Thread Architecture:** Because `winit` strictly requires control of the main thread
+
+1. **Thread Architecture:** Because `winit` strictly requires control of the main thread
+
     (especially on macOS), the `SoftwareBackend` will invert control. It will run the `winit` event
     loop on the main thread and optionally spawn the user's game loop on a background thread,
     communicating events and frame buffers via channels.
-3.  **Glyph Rasterization:** We will use **`fontdue`** for text rasterization. It is extremely fast
+
+1. **Glyph Rasterization:**We will use**`fontdue`** for text rasterization. It is extremely fast
+
     and lightweight.
-4.  **Builder Pattern (C-BUILDER):** Complex window configuration (font size, window dimensions,
+
+1. **Builder Pattern (C-BUILDER):** Complex window configuration (font size, window dimensions,
+
     title) will be constructed via a `SoftwareBackendBuilder`.
-5.  **Good Errors (C-GOOD-ERR):** The backend will provide a dedicated `SoftwareBackendError` type
+
+1. **Good Errors (C-GOOD-ERR):** The backend will provide a dedicated `SoftwareBackendError` type
+
     implementing `std::error::Error` for font loading or window creation failures, rather than
     panicking.
-6.  **Common Traits (C-COMMON-TRAITS):** All public configuration types will eagerly implement
+
+1. **Common Traits (C-COMMON-TRAITS):** All public configuration types will eagerly implement
+
     `Debug`, `Clone`, `PartialEq`, `Eq`, and `Default`.
 
 ---
@@ -41,9 +52,7 @@ architectural changes required for WASM support.
 
 ### M1: Winit + Softbuffer Skeleton & Threading Model
 
-**Goal:** Establish the `winit` loop and handle the main-thread constraint.
-
-**1. Add Dependencies (`Cargo.toml`)**
+### Goal:**Establish the `winit` loop and handle the main-thread constraint.**1. Add Dependencies (`Cargo.toml`)
 
 ```toml
 [features]
@@ -56,7 +65,7 @@ softbuffer = { version = "0.4", optional = true }
 fontdue = { version = "0.8", optional = true }
 ```
 
-**2. Define Configuration & Errors (`src/backend/software/config.rs`)**
+### 2. Define Configuration & Errors (`src/backend/software/config.rs`)
 
 ```rust
 use std::fmt;
@@ -157,7 +166,7 @@ without resorting to `unsafe` hacks.
 **Goal:** Parse TTF fonts and cache rasterized alpha masks to prevent re-rasterizing the same
 character.
 
-**1. The Glyph Cache (`src/backend/software/font.rs`)**
+### 1. The Glyph Cache (`src/backend/software/font.rs`)
 
 ```rust
 use std::collections::HashMap;
@@ -206,9 +215,7 @@ is deferred to V0.2 of the graphical backend)._
 
 ### M3: Grid Compositing
 
-**Goal:** Translate the `Grid` cells into `softbuffer` pixels.
-
-**1. Blitting Algorithm** Inside the backend's draw routine (executed when `Terminal::present()` is
+**Goal:**Translate the `Grid` cells into `softbuffer` pixels.**1. Blitting Algorithm** Inside the backend's draw routine (executed when `Terminal::present()` is
 called):
 
 ```rust

@@ -15,7 +15,7 @@ Ratatui v0.30 split from a monolithic crate into a flat workspace. All crates li
 with a shared `ratatui-` prefix.
 [Source](https://github.com/ratatui/ratatui/blob/main/ARCHITECTURE.md)
 
-```
+```rust
 ratatui/
 ├── Cargo.toml          # workspace root
 ├── ratatui/            # facade crate (re-exports everything)
@@ -27,7 +27,7 @@ ratatui/
 ├── ratatui-termwiz/    # termwiz backend
 ├── ratatui-macros/     # declarative macros
 └── xtask/              # build automation
-```
+```text
 
 Root `Cargo.toml`:
 
@@ -52,7 +52,7 @@ wgpu uses a flat layout with 29 workspace members. Crates are layered: `wgpu-typ
 `wgpu-core` -> `wgpu`. Naga (shader compiler) lives alongside as a sibling crate.
 [Source](https://deepwiki.com/gfx-rs/wgpu/6.4-build-system-and-workspace)
 
-```
+```text
 wgpu/
 ├── Cargo.toml       # workspace root
 ├── wgpu/            # public API facade
@@ -62,7 +62,7 @@ wgpu/
 ├── naga/            # shader compiler (its own sub-ecosystem)
 ├── naga-cli/
 └── xtask/
-```
+```rust
 
 ### Bevy (crates/ directory)
 
@@ -70,7 +70,7 @@ Bevy puts all crates under `crates/` with a `bevy_` prefix. Uses a two-crate fac
 (root) -> `bevy_internal` (aggregator) -> individual `bevy_*` crates.
 [Source](https://deepwiki.com/bevyengine/bevy/1.2-crate-organization)
 
-```
+```text
 bevy/
 ├── Cargo.toml              # workspace root + facade
 ├── crates/
@@ -83,7 +83,7 @@ bevy/
 ├── examples/
 ├── benches/
 └── tools/
-```
+```rust
 
 **Recommendation for a grid library**: Use the flat namespace (ratatui pattern). The `crates/`
 directory pattern only pays off at 15+ crates. For a library with 5-8 crates, flat is simpler and
@@ -188,12 +188,12 @@ pub trait Backend {
 
 Each backend crate depends only on `rg-core` and its terminal library:
 
-```
+```rust
 rg-core (defines Backend trait + Cell, Buffer, Style, etc.)
   ^           ^            ^
   |           |            |
 rg-crossterm  rg-termion   rg-wgpu
-```
+```text
 
 ### TestBackend
 
@@ -209,16 +209,20 @@ rendering without a real terminal.
 ### Why separate crates win
 
 1. **Compile time**: Users only compile the backend they use. Feature flags cause conditional
+
    compilation but still pull in all backend source.
 
-2. **Dependency isolation**: Each backend pulls in a different terminal library (crossterm, termion,
+1. **Dependency isolation**: Each backend pulls in a different terminal library (crossterm, termion,
+
    etc.). Separate crates prevent unused transitive dependencies.
 
-3. **Independent versioning**: Backend crates can release independently when the underlying terminal
+1. **Independent versioning**: Backend crates can release independently when the underlying terminal
+
    library updates. Ratatui-crossterm supports both crossterm 0.28 and 0.29 via internal feature
    flags. [Source](https://github.com/ratatui/ratatui/blob/main/ratatui-crossterm/Cargo.toml)
 
-4. **Platform exclusion**: termion is Unix-only. With separate crates, it simply isn't a
+1. **Platform exclusion**: termion is Unix-only. With separate crates, it simply isn't a
+
    default-member on Windows. With features you need `cfg` guards everywhere.
 
 ### When features make sense inside a backend crate
@@ -233,6 +237,7 @@ Within a single backend crate, features are fine for:
 
 ```toml
 # rg-crossterm/Cargo.toml
+
 [package]
 name = "rg-crossterm"
 
@@ -241,6 +246,7 @@ rg-core = { workspace = true }
 crossterm = { workspace = true }
 
 # rg-wgpu/Cargo.toml (GPU-rendered backend)
+
 [package]
 name = "rg-wgpu"
 
@@ -256,11 +262,11 @@ wgpu = { workspace = true }
 Algorithms should be separate, optional crates. They depend on core types (`Rect`, `Position`) but
 not on backends or widgets.
 
-```
+```text
 rg-fov/          # Field of vision algorithms (shadowcasting, etc.)
 rg-pathfinding/  # A*, Dijkstra, BFS over grids
 rg-noise/        # Noise generation for procedural content
-```
+```rust
 
 ### Why separate crates, not features
 
@@ -273,6 +279,7 @@ rg-noise/        # Noise generation for procedural content
 
 ```toml
 # rg-fov/Cargo.toml
+
 [package]
 name = "rg-fov"
 version = "0.1.0"
@@ -289,6 +296,7 @@ The facade crate can optionally re-export these:
 
 ```toml
 # rg/Cargo.toml (facade)
+
 [features]
 fov = ["dep:rg-fov"]
 pathfinding = ["dep:rg-pathfinding"]
@@ -306,14 +314,17 @@ with `workspace = true`. This is the universal pattern across ratatui, wgpu, and
 
 ```toml
 # Root Cargo.toml
+
 [workspace.dependencies]
 # Internal crates (with path + version for publishing)
+
 rg-core = { path = "rg-core", version = "0.1.0" }
 rg-crossterm = { path = "rg-crossterm", version = "0.1.0", optional = true }
 rg-widgets = { path = "rg-widgets", version = "0.1.0" }
 rg-fov = { path = "rg-fov", version = "0.1.0", optional = true }
 
 # External dependencies
+
 bitflags = "2.12"
 crossterm = "0.29"
 serde = { version = "1", default-features = false, features = ["derive"] }
@@ -322,6 +333,7 @@ pretty_assertions = "1"
 
 ```toml
 # In any member crate
+
 [dependencies]
 rg-core = { workspace = true }
 bitflags = { workspace = true }
@@ -391,26 +403,32 @@ For a grid rendering library:
 ```toml
 [features]
 # Defaults: the most common setup
+
 default = ["std", "crossterm", "widgets", "macros"]
 
 # Capability features (additive)
+
 std = ["rg-core/std", "rg-widgets?/std"]
 serde = ["dep:serde", "rg-core/serde", "rg-widgets?/serde"]
 macros = ["dep:rg-macros"]
 
 # Backend selection (each is an optional dep)
+
 crossterm = ["dep:rg-crossterm", "std"]
 termion = ["dep:rg-termion", "std"]
 
 # Widget groups
+
 widgets = ["dep:rg-widgets"]
 widget-calendar = ["rg-widgets?/calendar"]
 
 # Algorithm modules
+
 fov = ["dep:rg-fov"]
 pathfinding = ["dep:rg-pathfinding"]
 
 # Unstable (prefixed for clarity)
+
 unstable = ["unstable-widget-ref"]
 unstable-widget-ref = []
 ```
@@ -423,6 +441,7 @@ rg-crossterm = { workspace = true, optional = true }
 
 [features]
 # Using dep: prevents an implicit "rg-crossterm" feature from leaking
+
 crossterm = ["dep:rg-crossterm"]
 ```
 
@@ -433,6 +452,7 @@ Forward features to optional dependencies only when they're already enabled:
 ```toml
 serde = ["dep:serde", "rg-core/serde", "rg-crossterm?/serde"]
 #                                       ^ only if crossterm is enabled
+
 ```
 
 ---
@@ -489,14 +509,17 @@ pub use rg_macros::*;
 
 ```toml
 # Application developer: just use the facade
+
 [dependencies]
 rg = { version = "0.1", features = ["crossterm"] }
 
 # Widget library author: depend on core for stability
+
 [dependencies]
 rg-core = "0.1"
 
 # Game developer wanting algorithms
+
 [dependencies]
 rg = { version = "0.1", features = ["crossterm", "fov", "pathfinding"] }
 ```
@@ -516,6 +539,7 @@ rg = { version = "0.1", features = ["crossterm", "fov", "pathfinding"] }
 ### Recommendations
 
 - **Start with a uniform MSRV** across all workspace crates. Tiered MSRVs (like wgpu) add complexity
+
   only justified by downstream consumers with hard constraints (Firefox).
 
 - **Declare in workspace.package**:
@@ -526,11 +550,13 @@ rg = { version = "0.1", features = ["crossterm", "fov", "pathfinding"] }
   ```
 
 - **Test MSRV in CI** using `cargo hack --rust-version` or an explicit matrix entry. Ratatui's CI
+
   matrix includes both MSRV and stable.
 
 - **Bump MSRV in minor releases**, not patches. Document the policy in README/CONTRIBUTING.
 
 - **N-2 policy**: support current stable minus 2. This balances access to new language features
+
   against downstream compatibility.
 
 ---
@@ -559,10 +585,13 @@ jobs:
   fmt:
     runs-on: ubuntu-latest
     steps:
+
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@nightly
+
         with:
           components: rustfmt
+
       - run: cargo fmt --all --check
 
   clippy:
@@ -572,11 +601,14 @@ jobs:
         toolchain: [stable, beta]
     continue-on-error: ${{ matrix.toolchain == 'beta' }}
     steps:
+
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
+
         with:
           toolchain: ${{ matrix.toolchain }}
           components: clippy
+
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
@@ -589,10 +621,13 @@ jobs:
         toolchain: ['1.85.0', 'stable']
     runs-on: ${{ matrix.os }}
     steps:
+
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
+
         with:
           toolchain: ${{ matrix.toolchain }}
+
       - uses: taiki-e/install-action@cargo-hack
       - uses: Swatinem/rust-cache@v2
       - run: cargo hack check --workspace --each-feature --no-dev-deps
@@ -601,11 +636,14 @@ jobs:
   test-features:
     runs-on: ubuntu-latest
     steps:
+
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: taiki-e/install-action@cargo-hack
       - uses: Swatinem/rust-cache@v2
+
       # depth=2 limits powerset explosion while catching pairwise conflicts
+
       - run: cargo hack test --workspace --feature-powerset --depth 2
 
   # Test each backend on each platform
@@ -616,10 +654,13 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
         backend: [crossterm, termion, wgpu]
         exclude:
+
           - os: windows-latest
+
             backend: termion
     runs-on: ${{ matrix.os }}
     steps:
+
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -629,10 +670,13 @@ jobs:
   build-no-std:
     runs-on: ubuntu-latest
     steps:
+
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+
         with:
           targets: x86_64-unknown-none
+
       - run: cargo build --target x86_64-unknown-none -p rg-core
       - run: cargo build --target x86_64-unknown-none -p rg-widgets
 
@@ -640,6 +684,7 @@ jobs:
   test-docs:
     runs-on: ubuntu-latest
     steps:
+
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: taiki-e/install-action@cargo-hack
@@ -649,8 +694,10 @@ jobs:
   cargo-deny:
     runs-on: ubuntu-latest
     steps:
+
       - uses: actions/checkout@v4
       - uses: EmbarkStudios/cargo-deny-action@v2
+
         with:
           arguments: --all-features --exclude-unpublished
           command: check advisories bans licenses sources
@@ -661,7 +708,9 @@ jobs:
     needs: [fmt, clippy, check, test-features, test-backends, build-no-std, test-docs, cargo-deny]
     if: always()
     steps:
+
       - name: All jobs passed
+
         run: |
           echo '${{ toJson(needs) }}'
           test "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" = "false"
@@ -681,12 +730,15 @@ jobs:
 
 ```bash
 # Check that each feature compiles alone (catches missing dep declarations)
+
 cargo hack check --workspace --each-feature --no-dev-deps
 
 # Test pairwise feature combinations (catches conflicts without exponential blowup)
+
 cargo hack test --workspace --feature-powerset --depth 2
 
 # Verify MSRV compiles
+
 cargo hack check --workspace --rust-version
 ```
 
@@ -716,6 +768,7 @@ categories = ["command-line-interface", "game-development"]
 
 [workspace.dependencies]
 # Internal
+
 rg = { path = "rg", version = "0.1.0" }
 rg-core = { path = "rg-core", version = "0.1.0" }
 rg-widgets = { path = "rg-widgets", version = "0.1.0", default-features = false }
@@ -726,12 +779,14 @@ rg-pathfinding = { path = "rg-pathfinding", version = "0.1.0", optional = true }
 rg-macros = { path = "rg-macros", version = "0.1.0", optional = true }
 
 # External
+
 bitflags = "2.12"
 crossterm = "0.29"
 serde = { version = "1", default-features = false, features = ["derive"] }
 termion = "4"
 
 # Dev/test
+
 pretty_assertions = "1"
 criterion = { version = "0.5", features = ["html_reports"] }
 rstest = "0.26"
@@ -756,24 +811,43 @@ lto = true
 
 - **Kept**:
   - [ratatui ARCHITECTURE.md](https://github.com/ratatui/ratatui/blob/main/ARCHITECTURE.md) -
+
     definitive reference for the workspace split pattern
+
   - [ratatui root Cargo.toml](https://github.com/ratatui/ratatui/blob/main/Cargo.toml) -
+
     workspace.dependencies, workspace.lints, workspace.package
+
   - [ratatui-core Cargo.toml](https://github.com/ratatui/ratatui/blob/main/ratatui-core/Cargo.toml) -
+
     core crate feature design, no_std support
+
   - [ratatui facade Cargo.toml](https://github.com/ratatui/ratatui/blob/main/ratatui/Cargo.toml) -
+
     re-export pattern, feature forwarding with `?` syntax
+
   - [ratatui-crossterm Cargo.toml](https://github.com/ratatui/ratatui/blob/main/ratatui-crossterm/Cargo.toml) -
+
     backend crate with version selection features
+
   - [ratatui CI workflow](https://github.com/ratatui/ratatui/blob/main/.github/workflows/ci.yml) -
+
     comprehensive CI with cargo-hack, cargo-deny, MSRV matrix
+
   - [wgpu workspace (DeepWiki)](https://deepwiki.com/gfx-rs/wgpu/6.4-build-system-and-workspace) -
+
     tiered MSRV, feature flag layering, deny.toml
+
   - [bevy crate organization (DeepWiki)](https://deepwiki.com/bevyengine/bevy/1.2-crate-organization) -
+
     two-layer facade, feature hierarchy
+
   - [Cargo Features reference](https://doc.rust-lang.org/cargo/reference/features.html) -
+
     additive-only rule, dep: syntax, ? syntax
+
   - [cargo-hack README](https://github.com/taiki-e/cargo-hack) - --each-feature, --feature-powerset,
+
     --depth, --rust-version
 
 - **Dropped**:
@@ -784,13 +858,16 @@ lto = true
 ## Gaps
 
 - **Publishing order**: When publishing to crates.io, workspace crates must be published in
+
   dependency order (core first, facade last). Tools like `cargo-release` or `cargo-workspaces`
   handle this but weren't researched in depth.
 
 - **Independent vs synchronized versioning**: All three studied projects use synchronized versions.
+
   Independent versioning (where core is 0.3 while widgets is 0.7) is viable but adds coordination
   overhead. Worth revisiting once the API stabilizes.
 
 - **Benchmarking across crates**: How to structure `criterion` benchmarks that span multiple
+
   workspace crates (e.g., benchmarking widget rendering through a backend). Ratatui puts benchmarks
   in the facade crate.

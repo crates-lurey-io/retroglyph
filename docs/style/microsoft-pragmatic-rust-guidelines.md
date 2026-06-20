@@ -22,10 +22,10 @@ evolving.
 ## Table of Contents
 
 1. [Universal](#1-universal)
-2. [Library / Interoperability](#2-library--interoperability)
-3. [Library / UX](#3-library--ux)
-4. [Library / Resilience](#4-library--resilience)
-5. [Library / Building](#5-library--building)
+2. [Library / Interoperability](2-library-interoperability)
+3. [Library / UX](3-library-ux)
+4. [Library / Resilience](4-library-resilience)
+5. [Library / Building](5-library-building)
 6. [Applications](#6-applications)
 7. [FFI](#7-ffi)
 8. [Safety](#8-safety)
@@ -53,9 +53,13 @@ Frequently forgotten upstream items to pay special attention to:
 - **C-CONV**: Ad-hoc conversions follow `as_`, `to_`, `into_` conventions.
 - **C-GETTER**: Getter names follow Rust convention (no `get_` prefix).
 - **C-COMMON-TRAITS**: Types eagerly implement `Copy`, `Clone`, `Eq`, `PartialEq`, `Ord`,
+
   `PartialOrd`, `Hash`, `Default`, `Debug`, `Display`.
+
 - **C-CTOR**: Constructors are static, inherent methods. Have `Foo::new()` even if you have
+
   `Foo::default()`.
+
 - **C-FEATURE**: Feature names are free of placeholder words.
 
 ### M-STATIC-VERIFICATION: Use Static Verification (v1.0)
@@ -211,9 +215,7 @@ const UPSTREAM_SERVER_TIMEOUT: Duration = Duration::from_secs(60 * 60 * 24);
 Use structured events with named properties following the
 [message templates](https://messagetemplates.org/) spec.
 
-**Key rules:**
-
-1. **Avoid string formatting** (allocates at runtime). Use message templates that defer formatting:
+**Key rules:**1.**Avoid string formatting** (allocates at runtime). Use message templates that defer formatting:
 
    ```rust
    // Bad
@@ -223,15 +225,15 @@ Use structured events with named properties following the
        "file opened: {{file.path}}");
    ```
 
-2. **Name your events** with hierarchical dot-notation: `<component>.<operation>.<state>`
+1. **Name your events** with hierarchical dot-notation: `<component>.<operation>.<state>`
 
-3. **Follow OpenTelemetry semantic conventions** for common attributes:
+2. **Follow OpenTelemetry semantic conventions** for common attributes:
    - HTTP: `http.request.method`, `http.response.status_code`, `url.path`
    - File: `file.path`, `file.size`, `file.directory`
    - Database: `db.system.name`, `db.namespace`, `db.operation.name`
    - Errors: `error.type`, `error.message`
 
-4. **Redact sensitive data**: emails, file paths revealing identity, tokens, PII. Consider the
+3. **Redact sensitive data**: emails, file paths revealing identity, tokens, PII. Consider the
    [`data_privacy`](https://crates.io/crates/data_privacy) crate.
 
 ---
@@ -343,7 +345,7 @@ pub struct ConfigurationError {
 }
 ```
 
-**Error design rules:**
+### Error design rules
 
 - Prefer separate error types per operation domain (`DownloadError`, `VmError`) over a global enum
 - If using an inner `ErrorKind` enum, keep it `pub(crate)` and expose `is_xxx()` methods
@@ -355,7 +357,7 @@ pub struct ConfigurationError {
 Types with 4+ optional initialization permutations should provide builders. Up to 2 optional
 parameters can use inherent `with_*` methods.
 
-**Builder conventions:**
+### Builder conventions
 
 - Builder for `Foo` is named `FooBuilder`
 - Methods are chainable, final method is `.build()`
@@ -615,7 +617,7 @@ Each DLL is a separate compilation artifact with its own:
 - Type layouts for `#[repr(Rust)]` types
 - Unique type IDs
 
-**Dangerous to share across DLLs:**
+### Dangerous to share across DLLs
 
 - Any allocated instance (`String`, `Vec<u8>`, `Box<Foo>`)
 - Any library relying on statics (`tokio`, `log`)
@@ -637,13 +639,13 @@ The only valid reasons for `unsafe`:
 2. **Performance**: e.g., `.get_unchecked()` after benchmarking
 3. **FFI and platform calls**: calling into C or the kernel
 
-**Never use ad-hoc `unsafe` to:**
+### Never use ad-hoc `unsafe` to
 
 - Shorten a safe program (e.g., `transmute` for enum casts)
 - Bypass `Send` bounds (`unsafe impl Send`)
 - Bypass lifetime requirements via `transmute`
 
-**Requirements by category:**
+### Requirements by category
 
 | Category           | Must verify no alternative | Must be minimal/testable | Must handle adversarial code | Must have safety comment | Must pass Miri | Must follow unsafe code guidelines |
 | ------------------ | :------------------------: | :----------------------: | :--------------------------: | :----------------------: | :------------: | :--------------------------------: |
@@ -709,10 +711,10 @@ For performance/COGS-relevant crates:
 
 1. Identify hot paths early
 2. Create benchmarks with [criterion](https://crates.io/crates/criterion) or
-   [divan](https://crates.io/crates/divan)
-3. Regularly run a profiler (CPU and allocation insights)
-4. Document the most performance-sensitive areas
 
+   [divan](https://crates.io/crates/divan)
+
+3. Regularly run a profiler (CPU and allocation insights)3. Document the most performance-sensitive areas
 Enable debug symbols for benchmarks:
 
 ```toml
@@ -720,7 +722,7 @@ Enable debug symbols for benchmarks:
 debug = 1
 ```
 
-**Common perf issues seen (~15-50% gains when fixed):**
+### Common perf issues seen (~15-50% gains when fixed)
 
 - Frequent re-allocations (cloned, growing, `format!`-assembled strings)
 - Short-lived allocations (use bump allocators)
@@ -824,19 +826,27 @@ they are external.
 Rust's strong type system counterbalances AI agents' lack of genuine understanding. Making APIs
 easier for humans also makes them easier for AI.
 
-**Key guidelines for AI-friendly code:**
-
-1. **Idiomatic patterns**: Follow Rust API Guidelines and Library/UX guidelines so AI can
+**Key guidelines for AI-friendly code:**1.**Idiomatic patterns**: Follow Rust API Guidelines and Library/UX guidelines so AI can
    pattern-match against the majority of Rust code.
-2. **Thorough docs**: Include docs for all modules and public items. Assume solid-but-not-expert
+
+1. **Thorough docs**: Include docs for all modules and public items. Assume solid-but-not-expert
+
    Rust knowledge.
-3. **Thorough examples**: Documentation should have directly usable examples; the repository should
+
+1. **Thorough examples**: Documentation should have directly usable examples; the repository should
+
    have more elaborate ones.
-4. **Strong types**: Avoid primitive obsession. Use strong types with strict, well-documented
+
+1. **Strong types**: Avoid primitive obsession. Use strong types with strict, well-documented
+
    semantics (C-NEWTYPE).
-5. **Testable APIs**: Design APIs that allow customers to test their usage in unit tests. Introduce
+
+1. **Testable APIs**: Design APIs that allow customers to test their usage in unit tests. Introduce
+
    mocks, fakes, or cargo features as needed.
-6. **Test coverage**: Good coverage over observable behavior enables agents to refactor in a mostly
+
+1. **Test coverage**: Good coverage over observable behavior enables agents to refactor in a mostly
+
    hands-off mode.
 
 ---
@@ -861,6 +871,7 @@ unused_lifetimes = "warn"
 ```toml
 [lints.clippy]
 # Enable all major lint categories
+
 cargo = { level = "warn", priority = -1 }
 complexity = { level = "warn", priority = -1 }
 correctness = { level = "warn", priority = -1 }
@@ -871,6 +882,7 @@ suspicious = { level = "warn", priority = -1 }
 # nursery = { level = "warn", priority = -1 }  # optional, more false positives
 
 # Restriction lints for consistency, quality, and brevity
+
 allow_attributes_without_reason = "warn"
 as_pointer_underscore = "warn"
 assertions_on_result_states = "warn"
@@ -894,9 +906,11 @@ unneeded_field_pattern = "warn"
 unused_result_ok = "warn"
 
 # Prevent issues with structured logging
+
 literal_string_with_formatting_args = "allow"
 
 # Define custom opt-outs below as needed
+
 ```
 
 ---

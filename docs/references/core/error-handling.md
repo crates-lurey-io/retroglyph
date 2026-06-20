@@ -72,7 +72,9 @@ Key features that matter for a multi-backend library:
 - `#[from]` generates `From` impls for backend-specific error types
 - `#[source]` properly chains error sources for `Error::source()`
 - `#[error(transparent)]` delegates Display and source to an inner error, useful for opaque wrapper
+
   types
+
 - `#[error("...")]` with field interpolation for human-readable messages
 
 The only reason to avoid thiserror would be `no_std` without `alloc`, but even that is supported
@@ -163,7 +165,9 @@ Recovery hierarchy:
 2. **Suboptimal**: Use the texture this frame, but reconfigure before next frame.
 3. **Outdated**: Call `surface.configure()` with current window size, then retry immediately.
 4. **Lost**: Recreate the surface via `instance.create_surface()`, then configure, then retry. If
+
    this also fails, the GPU device itself may be lost.
+
 5. **Device Lost**: Detected via `Device::set_device_lost_callback()`. Must recreate the entire
    device, all GPU resources (buffers, textures, pipelines), and surface.
 
@@ -180,7 +184,7 @@ happen on driver crashes or GPU resets.
 
 ### 5. Terminal resize race conditions
 
-**Terminal resize is inherently racy. Query size at frame start, not per-operation.**
+### Terminal resize is inherently racy. Query size at frame start, not per-operation
 
 The SIGWINCH signal (Unix) or console event (Windows) notifies that the terminal has been resized,
 but the actual new size may not be available until after the signal handler returns. Multiple resize
@@ -473,51 +477,78 @@ Design rationale:
 ## Sources
 
 - **Kept**: [wgpu surface.rs](https://github.com/gfx-rs/wgpu/blob/trunk/wgpu/src/api/surface.rs) -
+
   Primary source for GPU error handling patterns, CreateSurfaceError design
+
 - **Kept**:
+
   [wgpu surface_texture.rs](https://github.com/gfx-rs/wgpu/blob/trunk/wgpu/src/api/surface_texture.rs) -
   CurrentSurfaceTexture status enum pattern
+
 - **Kept**: [wgpu device.rs](https://github.com/gfx-rs/wgpu/blob/trunk/wgpu/src/api/device.rs) -
+
   RequestDeviceError, device lost callback, error scopes
+
 - **Kept**:
+
   [ratatui Backend trait](https://github.com/ratatui/ratatui/blob/main/ratatui-core/src/backend.rs) -
   Associated error type pattern, all-Result API design
+
 - **Kept**: [winit error types](https://docs.rs/winit/0.30.13/winit/error/index.html) -
+
   EventLoopError, OsError, NotSupportedError hierarchy
+
 - **Kept**: [thiserror docs](https://docs.rs/thiserror/latest/thiserror/) - Derive macro
+
   documentation, #[from]/#[source]/#[error] attributes
+
 - **Kept**: [BearLibTerminal reference](http://foo.wyrd.name/en:bearlibterminal:reference) -
+
   Infallible API design precedent
+
 - **Kept**:
+
   [Rust Book ch9.3](https://doc.rust-lang.org/book/ch09-03-to-panic-or-not-to-panic.html) - Panic vs
   Result guidelines
+
 - **Kept**:
+
   [Rust API Guidelines: Dependability](https://rust-lang.github.io/api-guidelines/dependability.html) -
   C-VALIDATE, C-DTOR-FAIL
+
 - **Kept**:
+
   [MDN webglcontextlost](https://developer.mozilla.org/en-US/docs/Web/API/HTMLCanvasElement/webglcontextlost_event) -
   WebGL context loss handling
+
 - **Kept**:
+
   [MDN WebGL best practices](https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/WebGL_best_practices) -
   Context loss recovery guidance
+
 - **Dropped**: crossterm main docs page - Only showed API usage examples, error types are just
+
   `std::io::Error` re-exports, no custom error design to study
 
 ## Gaps
 
 1. **M-PANIC-IS-STOP**: The task referenced "Microsoft guidelines M-PANIC-IS-STOP" but web search
+
    was unavailable. Based on the name, this likely refers to treating panics as process-stopping
    events (not recoverable), consistent with the Rust panic policy described above. The Rust API
    Guidelines and Rust Book coverage should be equivalent.
 
-2. **OpenGL `GL_CONTEXT_LOST` specifics**: Could not fetch ARB_robustness spec details due to search
+1. **OpenGL `GL_CONTEXT_LOST` specifics**: Could not fetch ARB_robustness spec details due to search
+
    provider unavailability. The general pattern is known: call `glGetGraphicsResetStatus()` and
    check for `GL_GUILTY_CONTEXT_RESET` / `GL_INNOCENT_CONTEXT_RESET` / `GL_UNKNOWN_CONTEXT_RESET`.
    Desktop GL context loss is rare compared to WebGL/mobile.
 
-3. **Real-world terminal resize race condition data**: No empirical data on how often resize races
+1. **Real-world terminal resize race condition data**: No empirical data on how often resize races
+
    cause issues in practice. The mitigation (query once per frame, use that size throughout) is
    well-established wisdom but hard to find formal analysis of.
 
-4. **thiserror 2.x no_std support details**: thiserror 2.x claims no_std support, but the exact
+1. **thiserror 2.x no_std support details**: thiserror 2.x claims no_std support, but the exact
+
    feature flag configuration for `no_std + alloc` was not verified in source.

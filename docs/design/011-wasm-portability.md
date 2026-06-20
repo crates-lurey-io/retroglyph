@@ -1,6 +1,6 @@
 # ADR 011: WASM Portability Roadmap
 
-**Status:** Draft **Date:** 2026-06-20 **Parent:** [ADR 007: Software Rendering Backend](007-software-backend.md)
+**Status:**Draft**Date:**2026-06-20**Parent:** [ADR 007: Software Rendering Backend](007-software-backend.md)
 
 ## Context
 
@@ -9,9 +9,12 @@ with the game loop on a background thread communicating via `mpsc` channels. Thi
 incompatible with WASM in two fundamental ways:
 
 1. **No `std::thread`:** WASM (in the browser) does not support `std::thread::spawn`. The
+
    `#[cfg(target_arch = "wasm32")]` compilation target replaces threading with
    `wasm-bindgen`'s async model and `SharedArrayBuffer`-based workers (with `COOP`/`COEP` headers).
-2. **No blocking main thread:** `event_loop.run_app()` blocks the calling thread, which is not
+
+1. **No blocking main thread:** `event_loop.run_app()` blocks the calling thread, which is not
+
    allowed in browser WASM. Control must yield back to the browser event loop.
 
 This document describes what changes would be needed for a WASM-compatible backend.
@@ -20,7 +23,7 @@ This document describes what changes would be needed for a WASM-compatible backe
 
 ## Current Architecture (Native)
 
-```
+```text
 ┌─────────────────────────────────────┐
 │         Main Thread                 │
 │  SoftwareBackend::run()             │
@@ -43,11 +46,11 @@ This document describes what changes would be needed for a WASM-compatible backe
 │  │  → try_send(frame)          │  │
 │  └───────────────────────────────┘  │
 └─────────────────────────────────────┘
-```
+```text
 
 ## Required WASM Architecture
 
-```
+```text
 ┌─────────────────────────────────────────┐
 │           Main Thread (Browser)         │
 │  winit EventLoop (non-blocking)         │
@@ -67,7 +70,7 @@ This document describes what changes would be needed for a WASM-compatible backe
 
 Browser rendering: canvas.getContext("2d").putImageData()
 Instead of:        softbuffer::Surface::buffer_mut()
-```
+```text
 
 ## What Changes Are Needed
 
@@ -111,12 +114,14 @@ The pixel buffer format is already `Vec<u32>` in `0x00RRGGBB` layout. On native,
 
 +// WASM (behind cfg(target_arch = "wasm32")):
 +if let Some(canvas) = &self.canvas {
-+    let ctx = canvas.get_context("2d")?;
-+    let image_data = ImageData::new_with_u8_clamped_array(
-+        rgba_bytes(&self.last_frame), // convert 0x00RRGGBB → RGBA
-+        self.win_w, self.win_h,
-+    );
-+    ctx.put_image_data(image_data, 0.0, 0.0);
+
++ let ctx = canvas.get_context("2d")?;
++ let image_data = ImageData::new_with_u8_clamped_array(
++ rgba_bytes(&self.last_frame), // convert 0x00RRGGBB → RGBA
++ self.win_w, self.win_h,
++ );
++ ctx.put_image_data(image_data, 0.0, 0.0);
+
 +}
 ```
 
@@ -130,7 +135,9 @@ step driven by the winit event loop:
 -pub fn run<F>(self, app_loop: F) -> Result<()>
 -where F: FnMut(&mut Terminal<SoftwareRenderer>) + Send + 'static
 -{
--    // ... create channels, spawn thread, block on event loop
+
+- // ... create channels, spawn thread, block on event loop
+
 -}
 
  // WASM-compatible:
@@ -213,48 +220,43 @@ No trait changes needed.
 (`run_headless()` creates a renderer without a thread or event loop). Add a compile-time check
 that `SoftwareRenderer` is usable on WASM.
 
-**Files:** `src/backend/software/mod.rs`
+### Files:**`src/backend/software/mod.rs`**Changes
 
-**Changes:**
 - Verify `SoftwareRenderer` has no `std::thread` or blocking dependencies
 - Move `SoftwareBackend::run()` logic into a helper that requires `std` (already behind `#[cfg]`)
 
 ### Milestone 2: Create a canvas rendering path
 
-**Goal:** Replace softbuffer with canvas `ImageData` on WASM.
+### Goal:**Replace softbuffer with canvas `ImageData` on WASM.**Files:**New file `src/backend/software/wasm_canvas.rs`**Changes
 
-**Files:** New file `src/backend/software/wasm_canvas.rs`
-
-**Changes:**
 - Implement a `CanvasRenderer` that wraps a `<canvas>` element
 - Implement `Backend` for `CanvasRenderer` using `web-sys` APIs
 - Pixel format conversion: `0x00RRGGBB` → RGBA bytes for `ImageData`
 
 ### Milestone 3: Add winit WASM event loop example
 
-**Goal:** Show how to use `SoftwareRenderer` in a browser context.
+### Goal:**Show how to use `SoftwareRenderer` in a browser context.**Files:**New file `examples/wasm_demo.rs`**Changes
 
-**Files:** New file `examples/wasm_demo.rs`
-
-**Changes:**
 - Example that creates a `SoftwareRenderer`, sets up a `<canvas>`, and drives the loop
 - Uses `winit`'s WASM-compatible `EventLoop` API
 - No `std::thread::spawn`
 
 ### Milestone 4: `SoftwareBackend::run()` on WASM (optional convenience)
 
-**Goal:** Provide the same ergonomic `run()` API on WASM (behind a `wasm-bindgen-futures` bridge).
+### Goal:**Provide the same ergonomic `run()` API on WASM (behind a `wasm-bindgen-futures` bridge).**Changes
 
-**Changes:**
 - Wrap the winit event loop in an async `run()` that returns a `Future`
 - Use `wasm-bindgen-futures::spawn_local` to drive the loop
 
 ### Non-goals
 
 - **Threaded WASM** (`SharedArrayBuffer` + `Atomics`): Not targeted. Single-threaded event-driven
+
   rendering is simpler and sufficient for roguelike workloads.
+
 - **`wasm-pack` integration**: Out of scope for this ADR.
 - **Pixel performance optimization**: Canvas `putImageData` is already fast enough for terminal
+
   grid resolutions (< 1920×1080).
 
 ## Estimated Effort

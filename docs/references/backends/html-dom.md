@@ -21,7 +21,7 @@ The dominant approach. Each row is a block container (`<div>` or `<pre>`), conta
 `<span>` elements for character runs. Adjacent cells sharing the same attributes (fg, bg, modifiers)
 are merged into a single span.
 
-```
+```text
 <div class="xterm-rows">
   <div style="height: 20px; line-height: 20px;">
     <span class="xterm-fg-2">hello </span>
@@ -29,7 +29,7 @@ are merged into a single span.
   </div>
   ...
 </div>
-```
+```yaml
 
 Pros:
 
@@ -48,12 +48,12 @@ Cons:
 
 Use `display: grid` with `grid-template-columns: repeat(cols, 1ch)` to position cells.
 
-```
+```text
 <div style="display: grid; grid-template-columns: repeat(80, 1ch);">
   <span style="grid-column: 1; grid-row: 1;">h</span>
   ...
 </div>
-```
+```yaml
 
 Pros:
 
@@ -65,7 +65,9 @@ Cons:
 
 - One DOM element per cell (no merging adjacent cells of the same style without spanning)
 - Browser layout engine must solve the grid constraints, which is expensive for 80x24 = 1920+
+
   elements
+
 - Text selection order may not follow visual reading order
 - No real-world terminal emulator uses this approach for good reason
 
@@ -73,13 +75,13 @@ Cons:
 
 Each cell is `position: absolute` with computed `left`/`top` pixel offsets.
 
-```
+```text
 <div style="position: relative;">
   <span style="position: absolute; left: 0px; top: 0px;">h</span>
   <span style="position: absolute; left: 10px; top: 0px;">e</span>
   ...
 </div>
-```
+```yaml
 
 Pros:
 
@@ -107,12 +109,14 @@ MIT license).
 The xterm.js DomRenderer has two main classes:
 
 1. **`DomRenderer`**: Manages the overall DOM structure, CSS injection, selection overlays, and row
+
    element lifecycle.
-2. **`DomRendererRowFactory`**: Generates `HTMLSpanElement[]` arrays for individual buffer lines.
+
+1. **`DomRendererRowFactory`**: Generates `HTMLSpanElement[]` arrays for individual buffer lines.
 
 ### DOM structure
 
-```
+```text
 <div class="xterm-dom-renderer-owner-{id}">
   <div class="xterm-screen">
     <div class="xterm-rows" aria-hidden="true">
@@ -131,29 +135,44 @@ The xterm.js DomRenderer has two main classes:
     <style>  <!-- dimension CSS -->
   </div>
 </div>
-```
+```rust
 
 ### Key implementation details
 
 - **Row elements are `<div>`s**, pre-created for all visible rows. Row content is replaced via
+
   `element.replaceChildren(...spans)` on each render.
+
 - **Cell merging**: `DomRendererRowFactory.createRow()` iterates cells left to right. If the next
+
   cell has identical `bg`, `fg`, `ext` attributes, same hover state, same letter-spacing, is not a
   cursor cell, and is not part of a ligature, its text is appended to the current `<span>` instead
   of creating a new one. This reduces DOM node count significantly.
+
 - **CSS classes for palette colors**: `xterm-fg-{0-255}` and `xterm-bg-{0-255}` classes are injected
+
   via a `<style>` element. RGB colors use inline `style` attributes.
+
 - **Font metrics**: Uses `display: inline-block` on spans with computed `letter-spacing` corrections
+
   from a `WidthCache` that measures actual glyph widths. The comment in the source explicitly notes
   inline-block creates "~20% render penalty" but no workaround has been found.
+
 - **Selection rendering**: Handled via absolutely positioned `<div>`s in a separate container
+
   overlaid on the text, not via altering span styles.
+
 - **Cursor**: Rendered via CSS classes (`xterm-cursor-block`, `xterm-cursor-bar`,
+
   `xterm-cursor-underline`) with CSS animations for blinking.
+
 - **Character joiners / ligatures**: Supported via `JoinedCellData` which merges adjacent cells into
+
   a single span for ligature rendering, with special handling when the cursor is inside a ligature
   range.
+
 - **Minimum contrast**: Adjusts foreground color to ensure WCAG contrast ratios against the resolved
+
   background, computed per-cell.
 
 ### Why xterm.js moved away from DOM rendering
@@ -165,16 +184,25 @@ as custom glyphs."
 Key reasons for the move to canvas (then WebGL):
 
 1. **Performance ceiling**: Each `renderRows()` call replaces innerHTML of affected rows. For a
+
    terminal with rapid output (e.g., `cat` of a large file), this means thousands of DOM mutations
    per second, each triggering layout/paint. Canvas can batch-draw an entire screen in a single
    frame.
-2. **DOM node count**: Even with cell merging, a typical 80x24 terminal can have 500-2000 span
+
+1. **DOM node count**: Even with cell merging, a typical 80x24 terminal can have 500-2000 span
+
    nodes. At 200x50, this could be 5000+ nodes. Canvas has zero DOM overhead.
-3. **Inline-block penalty**: The ~20% overhead from `display: inline-block` compounds with reflow
+
+1. **Inline-block penalty**: The ~20% overhead from `display: inline-block` compounds with reflow
+
    costs.
-4. **Custom glyphs**: Box-drawing characters, powerline symbols, and other special glyphs are drawn
+
+1. **Custom glyphs**: Box-drawing characters, powerline symbols, and other special glyphs are drawn
+
    pixel-perfect on canvas; DOM relies on font rendering which varies across browsers.
-5. **GPU acceleration**: WebGL renders text via texture atlases on the GPU. The glyph atlas approach
+
+1. **GPU acceleration**: WebGL renders text via texture atlases on the GPU. The glyph atlas approach
+
    means each character is drawn once, then blitted from cache, which is orders of magnitude faster.
 
 The DOM renderer remains as a **fallback** for environments where WebGL/canvas is unavailable or
@@ -194,13 +222,20 @@ performs poorly. It is still maintained and tested.
 ### Why DOM is slow
 
 1. **Layout thrashing**: Setting `innerHTML`, `textContent`, `className`, and `style` attributes
+
    triggers the browser's layout engine. If reads (e.g., `getBoundingClientRect`) are interleaved
    with writes, this causes forced synchronous layouts.
-2. **Garbage collection**: Creating new `<span>` elements every frame generates GC pressure.
+
+1. **Garbage collection**: Creating new `<span>` elements every frame generates GC pressure.
+
    xterm.js mitigates this by reusing row `<div>` containers and only replacing their children.
-3. **Style recalculation**: Each unique combination of inline styles creates a unique computed
+
+1. **Style recalculation**: Each unique combination of inline styles creates a unique computed
+
    style. With 256 palette colors x modifiers, the style engine does significant work.
-4. **Paint complexity**: The browser must composite potentially thousands of overlapping inline
+
+1. **Paint complexity**: The browser must composite potentially thousands of overlapping inline
+
    elements, each with their own background colors.
 
 ### When DOM performance is acceptable
@@ -213,16 +248,27 @@ performs poorly. It is still maintained and tested.
 ### Optimization techniques for DOM rendering
 
 - **Dirty tracking**: Only re-render rows that changed (xterm.js does this via
+
   `renderRows(start, end)`)
+
 - **Cell merging**: Combine adjacent same-attribute cells into single spans (both xterm.js and
+
   ratzilla do this)
+
 - **CSS class reuse**: Use CSS classes for the 256 ANSI colors rather than inline `rgb()` styles
+
   (xterm.js approach)
+
 - **Document fragment batching**: Build row content in a DocumentFragment before appending to the
+
   live DOM
+
 - **`requestAnimationFrame` throttling**: Batch multiple buffer updates into a single DOM update per
+
   frame
+
 - **Avoid `innerHTML`**: Use `textContent` for text-only updates, `replaceChildren()` for structural
+
   changes
 
 ## 4. Advantages of DOM Rendering
@@ -338,7 +384,9 @@ let listener = EventListener::new(&element, "click", move |_event| {
 ### 5d. Build tooling
 
 - **trunk**: Build tool for Rust WASM apps. Handles compilation, asset bundling, dev server with hot
+
   reload. Ratzilla uses trunk as its primary build tool.
+
 - **wasm-pack**: Alternative that produces NPM-publishable packages.
 - Target: `wasm32-unknown-unknown` (added via `rustup target add wasm32-unknown-unknown`)
 
@@ -364,10 +412,15 @@ then removing it.
 
 - **Status**: Maintained as fallback renderer, not the default
 - **Architecture**: Row-based `<div>` containers with merged `<span>` children. CSS classes for
+
   palette colors, inline styles for RGB. Selection via overlay divs.
+
 - **Strengths**: Mature, battle-tested, handles edge cases (ligatures, BiDi, minimum contrast,
+
   decorations)
+
 - **Weaknesses**: Performance-limited for large terminals, ~20% inline-block penalty, cannot do
+
   custom glyphs
 
 [Source: xtermjs/xterm.js DomRenderer.ts](https://github.com/xtermjs/xterm.js/blob/master/src/browser/renderer/dom/DomRenderer.ts)
@@ -376,18 +429,28 @@ then removing it.
 
 - **Status**: Active development (under ratatui org). The most mature Rust WASM TUI framework.
 - **Architecture**: `DomBackend` creates a grid of `<span>` elements inside `<pre>` row elements
+
   inside a `<div>` grid. Each cell maps 1:1 to a span. Uses `display: inline-block; width: Nch;` for
   sizing.
+
 - **Backends**: DomBackend (DOM), CanvasBackend (Canvas 2D), WebGL2Backend (WebGL2 via beamterm).
+
   DomBackend is the most compatible but slowest.
+
 - **Cell styling**: Inline CSS computed per cell:
+
   `color: rgb(r,g,b); background-color: rgb(r,g,b); display: inline-block; width: 1ch;` plus
   modifier-specific styles (bold, italic, underline, etc.)
+
 - **Key difference from xterm.js**: Ratzilla does NOT merge adjacent same-attribute cells. Each cell
+
   is always its own `<span>`. This simplifies updates (direct index into flat cell array) but
   produces more DOM nodes.
+
 - **Resize handling**: On window resize, the entire grid is torn down and rebuilt. Cell size is
+
   re-measured via a probe element.
+
 - **Dependencies**: `web-sys`, `wasm-bindgen`, `ratatui`, `unicode-width`
 
 [Source: ratzilla DomBackend](https://docs.rs/ratzilla/latest/ratzilla/backend/dom/struct.DomBackend.html)
@@ -396,10 +459,15 @@ then removing it.
 
 - **Status**: Active development
 - **Architecture**: Integration between Yew (Rust web framework) and Ratatui. Renders ratatui output
+
   as HTML, using Yew's virtual DOM for diffing.
+
 - **Approach**: Yew handles the DOM diffing/patching, so only changed elements are updated. This is
+
   potentially more efficient than raw DOM manipulation for incremental updates.
+
 - **Features**: Index colors via base16-palettes, hyperlinks, mouse events, automatic screen
+
   resizing, scrolling
 
 [Source: TylerBloom/webatui](https://github.com/TylerBloom/webatui)
@@ -408,8 +476,11 @@ then removing it.
 
 - **Status**: Unmaintained (last commit 2017)
 - **Architecture**: Terminal UI library for Node.js. Had an experimental browser mode that rendered
+
   to DOM elements. Used absolutely positioned elements with computed pixel offsets.
+
 - **Relevance**: Demonstrated that a TUI abstraction layer can target both real terminals and
+
   browser DOM, but the browser rendering was never production-quality.
 
 ### 6e. hterm (Google)
@@ -429,9 +500,12 @@ then removing it.
 - **Updates are infrequent**: Dashboards, static content, form-like UIs
 - **CSS theming is important**: Users or themes need to override styles via CSS
 - **Maximum browser compatibility**: DOM works everywhere, including older browsers and restricted
+
   environments
+
 - **Implementation speed**: DOM is the simplest backend to build
 - **The UI is web-native, not a terminal emulator**: TUI-themed web apps (personal sites,
+
   interactive demos) where terminal faithfulness is secondary to web integration
 
 ### Choose Canvas/WebGL when
@@ -441,6 +515,7 @@ then removing it.
 - **Frame budget is tight**: Canvas renders an entire screen in <1ms (WebGL) vs 5-50ms (DOM)
 - **Building a real terminal emulator**: Latency-sensitive, high-throughput use case
 - **Memory efficiency matters**: Canvas/WebGL use fixed-size buffers, DOM node counts grow with
+
   content
 
 ### Hybrid approach
@@ -451,6 +526,7 @@ interface. A practical strategy:
 1. **Start with DOM** for initial development and correctness testing
 2. **Add Canvas/WebGL** when performance profiling shows DOM is the bottleneck
 3. **Keep DOM as fallback** for accessibility, testing, and environments where GPU rendering is
+
    unavailable
 
 The backend abstraction should be a trait/interface that takes a cell grid (2D array of cells with
@@ -463,56 +539,79 @@ model is the same regardless of backend.
 ### Kept
 
 - **xterm.js DomRenderer.ts**
+
   (<https://github.com/xtermjs/xterm.js/blob/master/src/browser/renderer/dom/DomRenderer.ts>) -
   Primary reference for mature DOM terminal rendering. Full source analyzed.
+
 - **xterm.js DomRendererRowFactory.ts**
+
   (<https://github.com/xtermjs/xterm.js/blob/master/src/browser/renderer/dom/DomRendererRowFactory.ts>) -
   Cell merging logic, per-cell span generation. Full source analyzed.
+
 - **Ratzilla DomBackend**
+
   (<https://docs.rs/ratzilla/latest/ratzilla/backend/dom/struct.DomBackend.html>) - Rust WASM DOM
   backend reference implementation. Full source analyzed via docs.rs.
+
 - **Ratzilla backend comparison** (<https://docs.rs/ratzilla/latest/ratzilla/backend/index.html>) -
+
   Official comparison table of DOM vs Canvas vs WebGL2 backends.
+
 - **Ratzilla utils.rs** (<https://docs.rs/ratzilla/latest/src/ratzilla/backend/utils.rs.html>) -
+
   Cell-to-CSS conversion, span creation utilities.
+
 - **wasm-bindgen Guide** (<https://wasm-bindgen.github.io/wasm-bindgen/>) - Canonical docs for
+
   Rust-WASM interop.
+
 - **Gloo toolkit** (<https://docs.rs/gloo>) - Ergonomic web-sys wrappers documentation.
 - **Webatui** (<https://github.com/TylerBloom/webatui>) - Alternative Rust WASM TUI approach using
+
   Yew virtual DOM.
+
 - **Ratzilla crates.io** (<https://crates.io/crates/ratzilla>) - Project overview, examples,
+
   deployment.
 
 ### Dropped
 
 - GitHub issue #2267 on xterm.js - was about a user question on adding click events, not about DOM
+
   rendering architecture
+
 - GitHub wiki pages for xterm.js - required authentication, couldn't fetch content
 
 ## Gaps
 
 1. **Quantitative benchmarks**: No hard numbers comparing DOM vs Canvas frame times at specific grid
+
    sizes (e.g., "80x24 DOM renders in Xms vs Canvas Yms"). Ratzilla's comparison table says DOM
    can't hit 60fps on large terminals but doesn't define "large" with numbers. Would need to build a
    benchmark harness.
 
-2. **Virtual DOM diffing**: Webatui uses Yew's virtual DOM, which should reduce DOM mutations. No
+1. **Virtual DOM diffing**: Webatui uses Yew's virtual DOM, which should reduce DOM mutations. No
+
    performance comparison exists between raw DOM manipulation (ratzilla-style) and vdom-diffed
    updates. This could be a meaningful optimization path.
 
-3. **`DocumentFragment` batching**: Neither xterm.js nor ratzilla use `DocumentFragment` for
+1. **`DocumentFragment` batching**: Neither xterm.js nor ratzilla use `DocumentFragment` for
+
    batching row-level updates (xterm.js uses `replaceChildren(...spans)`, ratzilla sets innerHTML
    per-cell). Testing whether fragment batching helps would require benchmarking.
 
-4. **CSS containment**: Using `contain: content` or `content-visibility: auto` on row elements could
+1. **CSS containment**: Using `contain: content` or `content-visibility: auto` on row elements could
+
    help browsers skip layout/paint for off-screen rows. No terminal renderer appears to use this
    yet.
 
-5. **Web Components / Shadow DOM**: Encapsulating the terminal renderer in a Shadow DOM could
+1. **Web Components / Shadow DOM**: Encapsulating the terminal renderer in a Shadow DOM could
+
    prevent style leakage and improve encapsulation. No prior art found for this in terminal
    emulators.
 
-6. **WASM DOM manipulation overhead**: Each `web_sys` call crosses the WASM-JS boundary. For
+1. **WASM DOM manipulation overhead**: Each `web_sys` call crosses the WASM-JS boundary. For
+
    high-frequency updates, this overhead may be significant. Batching DOM operations into a single
    JS call (via `js_sys::Function` or a thin JS shim) could help. No benchmarks found for this
    specific concern.

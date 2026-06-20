@@ -51,7 +51,9 @@ Additional rules:
 - Acronyms count as one word in `UpperCamelCase`: `Uuid` not `UUID`, `Stdin` not `StdIn`.
 - In `snake_case`, acronyms are lowered: `is_xid_start`.
 - A "word" in snake_case should never be a single letter unless it is the last word: `btree_map` not
+
   `b_tree_map`, but `PI_2` is fine.
+
 - Crate names should not use `-rs` or `-rust` as suffix or prefix.
 
 ### C-CONV: Ad-hoc conversions follow `as_`/`to_`/`into_` conventions
@@ -66,6 +68,7 @@ Additional rules:
 - `to_` typically stays at the same abstraction level but does work.
 - Wrappers should expose the inner value via `into_inner()`.
 - If `mut` is part of the return type, place it as it appears in the type: `as_mut_slice()` not
+
   `as_slice_mut()`.
 
 **Examples:** `str::as_bytes()` (free borrow), `str::to_lowercase()` (allocating),
@@ -288,8 +291,10 @@ distinct from the repo and docs).
 
 - Include release notes in crate-level docs or link to them.
 - Breaking changes (per
+
   [RFC 1105](https://github.com/rust-lang/rfcs/blob/master/text/1105-api-evolution.md)) must be
   clearly identified.
+
 - Tag every published release in version control. Prefer annotated tags.
 
 ### C-HIDDEN: Rustdoc does not show unhelpful implementation details
@@ -340,9 +345,13 @@ only. Standard examples: `Box<T>`, `String` (deref to `str`), `Rc<T>`, `Arc<T>`,
 - Primary constructor: `new()` (may or may not take arguments).
 - I/O types may use domain names: `File::open()`, `TcpStream::connect()`.
 - Secondary constructors: suffix `_with_foo` (e.g., `open_with_offset()`). For many options, use the
+
   builder pattern (C-BUILDER).
+
 - Conversion constructors: `from_*` prefix. Use `from_` (not `From` trait) when the conversion is
+
   unsafe, needs extra args, or the source type alone is insufficient to determine encoding.
+
 - `Default` and `new()` should have the same behavior when both exist.
 
 ---
@@ -429,10 +438,12 @@ Rust does **not** follow the robustness principle. Enforce input validity via (i
 preference):
 
 1. **Static enforcement**: use newtypes/wrapper types that rule out bad inputs at compile time
+
    (e.g., `Ascii` instead of `u8`).
-2. **Dynamic enforcement**: validate at runtime, returning `Result`/`Option` or panicking.
-3. **`debug_assert!`**: dynamic checks that can be disabled in release builds.
-4. **Opt-out** (`_unchecked` variants or `raw` submodules): for performance-critical paths where the
+
+1. **Dynamic enforcement**: validate at runtime, returning `Result`/`Option` or panicking.
+1. **`debug_assert!`**: dynamic checks that can be disabled in release builds.3. **Opt-out** (`_unchecked` variants or `raw` submodules): for performance-critical paths where the
+
    caller guarantees validity.
 
 ### C-DTOR-FAIL: Destructors never fail

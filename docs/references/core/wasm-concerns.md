@@ -34,14 +34,21 @@ Both `wasm-pack` and `trunk` can run `wasm-opt` automatically.
 ### Tree Shaking / Dead Code Elimination
 
 - **web-sys cargo features**: `web-sys` is entirely feature-gated. Only enable the exact API
+
   features you need (e.g., `Window`, `Document`, `HtmlCanvasElement`, `WebGl2RenderingContext`).
   Each unused feature adds zero code.
+
 - **wasm-bindgen CLI**: strips all unexported functions and unused imports from the final `.wasm`.
+
   The raw compiler output (`target/wasm32-unknown-unknown/release/foo.wasm`) is intentionally
   oversized; never measure that file.
+
 - **wasm-snip**: replaces function bodies with `unreachable` instructions. Useful for removing panic
+
   infrastructure. Follow with `wasm-opt --dce` to cascade dead code removal.
+
 - **twiggy**: size profiler for `.wasm` binaries. Use `twiggy top` and `twiggy dominators` to find
+
   what's pulling in code.
 
 ### Code-Level Techniques
@@ -114,9 +121,13 @@ await appInit(); // Async app initialization (fonts, assets)
 ### Key Considerations
 
 - Wasm instantiation itself should use `WebAssembly.instantiateStreaming` (wasm-bindgen's
+
   `--target web` does this automatically).
+
 - Font loading can use the browser's `FontFace` API via `web-sys` or fetch raw bytes for a custom
+
   atlas.
+
 - Show a loading indicator from JS while `init()` runs.
 
 ## 3. Web Worker Rendering
@@ -129,9 +140,10 @@ The pattern:
 
 1. Main thread creates a `Worker` and sends initial config via `postMessage`.
 2. Worker loads wasm via `importScripts` (for `--target no-modules`) or ES module import
-   (Chrome-only).
-3. Worker instantiates wasm, creates rendering state, and processes messages.
 
+   (Chrome-only).
+
+3. Worker instantiates wasm, creates rendering state, and processes messages.
 ```js
 // worker.js
 importScripts('./pkg/my_app.js');
@@ -185,14 +197,14 @@ pub fn create_grid_buffer(width: u32, height: u32) -> SharedArrayBuffer {
 }
 ```
 
-**Requirements for SharedArrayBuffer:**
+### Requirements for SharedArrayBuffer
 
 - Server must send COOP/COEP headers:
 
-  ```
+  ```text
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Embedder-Policy: require-corp
-  ```
+  ```text
 
 - Without these headers, `SharedArrayBuffer` is undefined in the browser.
 
@@ -206,10 +218,10 @@ in a browser **cannot call `Atomics.wait`** (it would block the UI). Only worker
 
 For true multi-threaded Wasm, requires nightly Rust with:
 
-```
+```shell
 RUSTFLAGS='-C target-feature=+atomics,+bulk-memory,+mutable-globals'
 cargo build --target wasm32-unknown-unknown -Z build-std=panic_abort,std
-```
+```rust
 
 Caveats from the wasm-bindgen parallel raytracing example:
 
@@ -235,14 +247,23 @@ Data from CanIUse as of June 2025:
 ### Practical Implications
 
 - **WebGL2 is the safe rendering target.** Universal support across all modern browsers since ~2021.
+
   Use as the default backend.
+
 - **WebGPU is not ready as sole backend.** Firefox has it behind a flag with no firm timeline for
+
   default-on. Safari support is partial (26+). Plan WebGPU as an opt-in enhancement over WebGL2.
+
 - **OffscreenCanvas is viable for worker rendering.** All modern browsers support it. Safari 16.x
+
   had partial support but 17+ is full.
+
 - **SharedArrayBuffer works everywhere but needs headers.** The COOP/COEP requirement is the main
+
   deployment friction, not browser support.
+
 - **Worker module support is inconsistent.** Firefox does not support ES modules in workers, so use
+
   `--target no-modules` with `importScripts` for cross-browser worker compatibility, or
   `--target web` with a thin wrapper.
 
@@ -273,16 +294,20 @@ itch.io embeds HTML5 games in an iframe. Requirements:
 
 ```sh
 # Build with trunk (generates dist/ directory)
+
 trunk build --release
 
 # Or with wasm-pack + manual HTML
+
 wasm-pack build --target web --release
 # Copy pkg/, index.html, assets/ into a staging directory
 
 # Package
+
 cd dist && zip -r ../my-game.zip . && cd ..
 
 # Upload via butler (itch.io CLI) or web interface
+
 butler push my-game.zip your-username/your-game:html5
 ```
 
@@ -290,11 +315,16 @@ butler push my-game.zip your-username/your-game:html5
 
 - itch.io's CDN auto-compresses `.wasm` files with gzip.
 - Pre-compressed `.br` (Brotli) files are detected by extension and served with correct
+
   `content-encoding`.
+
 - Use relative paths only (absolute paths break because the game is served from a subdirectory).
 - itch.io does NOT set COOP/COEP headers, so **SharedArrayBuffer will not work** on itch.io unless
+
   they add support. Plan for a single-threaded fallback.
+
 - "Mobile Friendly" option available in embed settings; your renderer should handle dynamic viewport
+
   sizes.
 
 ## 6. Deploying to GitHub Pages
@@ -306,6 +336,7 @@ full pipeline: compile to wasm, run wasm-bindgen, run wasm-opt, bundle assets, a
 
 ```toml
 # Trunk.toml (optional config)
+
 [build]
 target = "index.html"
 release = true
@@ -325,15 +356,23 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+
         with:
           targets: wasm32-unknown-unknown
+
       - name: Install trunk
+
         run: cargo install trunk
+
       - name: Build
+
         run: trunk build --release --public-url "/${{ github.event.repository.name }}/"
+
       - name: Deploy
+
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -367,7 +406,9 @@ GitHub Pages does **not** allow custom HTTP headers. This means SharedArrayBuffe
 wasm will not work on GitHub Pages directly. Workarounds:
 
 - Use [coi-serviceworker](https://github.com/nickelqd/nickelqd.github.io) to inject headers via a
+
   service worker.
+
 - Deploy to a platform that supports custom headers (Cloudflare Pages, Netlify, Vercel).
 
 ## 7. Integrating with JavaScript Frameworks
@@ -440,13 +481,20 @@ export function Terminal({ cols, rows }: { cols: number; rows: number }) {
 ### Key Integration Concerns
 
 - **Memory management**: Rust objects allocated via `#[wasm_bindgen]` must be freed by calling
+
   `.free()` on the JS side. React's `useEffect` cleanup and Svelte's `onDestroy` are the right
   places.
+
 - **TypeScript types**: wasm-bindgen generates `.d.ts` files automatically. These integrate with
+
   framework tooling.
+
 - **npm packaging**: Use `wasm-pack build --target bundler` to produce an npm-compatible package.
+
   Framework bundlers (Vite, Webpack) can import it directly.
+
 - **Vite plugin**: `vite-plugin-wasm` handles wasm imports. For Vite 5+, top-level await + `wasm`
+
   target usually works natively.
 
 ## 8. Build Tools: wasm-bindgen vs wasm-pack vs trunk
@@ -465,7 +513,9 @@ output targets:
 - `--target bundler`: ES module output for Webpack/Vite (default).
 - `--target web`: Standalone ES module, no bundler needed.
 - `--target no-modules`: Global script, uses `importScripts`, required for cross-browser worker
+
   compatibility.
+
 - `--target nodejs`: CommonJS for Node.
 
 ### wasm-pack
@@ -578,9 +628,12 @@ pub fn observe_visibility() {
 ### Closure Memory Management
 
 - `Closure::forget()` leaks memory. Acceptable for app-lifetime callbacks (rAF loop, resize
+
   observer).
+
 - For short-lived callbacks, store the `Closure` in a struct and drop it when no longer needed.
 - Each `Closure` that crosses the JS boundary allocates. Minimize the number of closures; batch
+
   event handling where possible.
 
 ### Alternative: Handle Events in JS, Call Wasm
@@ -632,9 +685,11 @@ The Rust WASM book's Game of Life tutorial demonstrates the core principle:
 Concrete techniques:
 
 1. **Batch operations**: Instead of calling wasm per-cell, call `tick()` once per frame to process
+
    the entire grid.
 
-2. **Direct memory access**: Instead of copying grid data through function returns, expose a pointer
+1. **Direct memory access**: Instead of copying grid data through function returns, expose a pointer
+
    to wasm linear memory and read it from JS as a `Uint8Array`:
 
    ```js
@@ -642,13 +697,16 @@ Concrete techniques:
    const cells = new Uint8Array(wasm.memory.buffer, cellsPtr, width * height);
    ```
 
-3. **Batch input events**: Accumulate keyboard/mouse events in a JS buffer, pass the batch to wasm
+1. **Batch input events**: Accumulate keyboard/mouse events in a JS buffer, pass the batch to wasm
+
    once per frame.
 
-4. **Minimize string passing**: Strings require allocation + copy in both directions. Use numeric
+1. **Minimize string passing**: Strings require allocation + copy in both directions. Use numeric
+
    IDs or pre-allocated buffers instead.
 
-5. **Use typed arrays for bulk data**: When you must transfer data, use `Float32Array` /
+1. **Use typed arrays for bulk data**: When you must transfer data, use `Float32Array` /
+
    `Uint8Array` views into shared memory rather than serializing to JSON.
 
 ### Rendering Pipeline Optimization
@@ -675,26 +733,46 @@ for character ID, foreground/background color.
 
 - **Kept:**
   - [Rust WASM Book: Shrinking .wasm Size](https://rustwasm.github.io/docs/book/reference/code-size.html) -
+
     authoritative guide on all size optimization techniques
+
   - [wasm-bindgen Guide: Promises and Futures](https://rustwasm.github.io/docs/wasm-bindgen/reference/js-promises-and-rust-futures.html) -
+
     official async integration docs
+
   - [wasm-bindgen Guide: requestAnimationFrame](https://rustwasm.github.io/docs/wasm-bindgen/examples/request-animation-frame.html) -
+
     canonical rAF loop pattern
+
   - [wasm-bindgen Guide: Wasm in Web Worker](https://rustwasm.github.io/docs/wasm-bindgen/examples/wasm-in-web-worker.html) -
+
     official worker example
+
   - [wasm-bindgen Guide: Parallel Raytracing](https://rustwasm.github.io/docs/wasm-bindgen/examples/raytrace.html) -
+
     SharedArrayBuffer + threading caveats
+
   - [wasm-bindgen Guide: Deployment](https://rustwasm.github.io/docs/wasm-bindgen/reference/deployment.html) -
+
     all target modes documented
+
   - [wasm-bindgen Guide: Optimizing for Size](https://rustwasm.github.io/docs/wasm-bindgen/reference/optimize-size.html) -
+
     wasm-bindgen-specific size advice
+
   - [Rust WASM Book: Implementing Life](https://rustwasm.github.io/docs/book/game-of-life/implementing.html) -
+
     JS-WASM interface design principles
+
   - [itch.io HTML5 Games Documentation](https://itch.io/docs/creators/html5) - upload requirements,
+
     compression, pitfalls
+
   - [CanIUse: OffscreenCanvas](https://caniuse.com/offscreencanvas) - browser support data
   - [CanIUse: SharedArrayBuffer](https://caniuse.com/sharedarraybuffer) - browser support +
+
     COOP/COEP requirements
+
   - [CanIUse: WebGL 2.0](https://caniuse.com/webgl2) - universal modern browser support confirmed
   - [CanIUse: WebGPU](https://caniuse.com/webgpu) - still limited (Firefox disabled by default)
 
@@ -705,22 +783,27 @@ for character ID, foreground/background color.
 ## Gaps
 
 1. **Trunk documentation details**: trunkrs.dev blocked the fetch. The GitHub Actions workflow and
+
    configuration shown above are based on known trunk CLI behavior, but specific `Trunk.toml`
    options may have changed. Verify against the
    [trunk GitHub repo](https://github.com/trunk-rs/trunk).
 
-2. **WebGPU from Rust (wgpu)**: The `wgpu` crate supports wasm32 and translates to WebGPU/WebGL2
+1. **WebGPU from Rust (wgpu)**: The `wgpu` crate supports wasm32 and translates to WebGPU/WebGL2
+
    automatically. A deeper dive into wgpu's wasm-specific configuration (feature flags, adapter
    selection, limits) would be valuable as a follow-up.
 
-3. **Specific performance benchmarks**: The 70-95% native speed estimate is a commonly cited range.
+1. **Specific performance benchmarks**: The 70-95% native speed estimate is a commonly cited range.
+
    Project-specific benchmarks (grid rendering throughput, draw call overhead via web-sys WebGL
    bindings) should be measured once a prototype exists.
 
-4. **itch.io COOP/COEP headers**: Could not confirm whether itch.io supports or plans to support
+1. **itch.io COOP/COEP headers**: Could not confirm whether itch.io supports or plans to support
+
    COOP/COEP for SharedArrayBuffer. The single-threaded fallback recommendation stands, but this
    should be verified.
 
-5. **coi-serviceworker reliability**: Using a service worker to inject COOP/COEP headers on GitHub
+1. **coi-serviceworker reliability**: Using a service worker to inject COOP/COEP headers on GitHub
+
    Pages is a known workaround, but it adds a second page load on first visit and may have edge
    cases. Test thoroughly if multi-threaded wasm on GitHub Pages is required.

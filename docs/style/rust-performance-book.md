@@ -9,11 +9,9 @@
 
 Use real-world workloads where possible. Microbenchmarks and stress tests are useful in moderation.
 
-**Tools:**
+**Tools:**-**Built-in bench tests** - unstable, nightly-only.
 
-- **Built-in bench tests** - unstable, nightly-only.
-- **[Criterion](https://github.com/bheisler/criterion.rs)** and
-  **[Divan](https://github.com/nvzqz/divan)** - stable, sophisticated alternatives.
+- **[Criterion](https://github.com/bheisler/criterion.rs)**and**[Divan](https://github.com/nvzqz/divan)** - stable, sophisticated alternatives.
 - **[Hyperfine](https://github.com/sharkdp/hyperfine)** - general-purpose CLI benchmarking.
 - **[Bencher](https://github.com/bencherdev/bencher)** - continuous benchmarking on CI.
 - Custom harnesses (e.g. [rustc-perf](https://github.com/rust-lang/rustc-perf/)).
@@ -44,7 +42,7 @@ Always use `--release` for performance work. Dev builds are 10-100x slower. The 
 codegen-units = 1
 ```
 
-**Link-Time Optimization (LTO):**
+### Link-Time Optimization (LTO)
 
 - `lto = false` - thin local LTO (default for release)
 - `lto = "thin"` - more aggressive, likely improves speed + reduces binary size
@@ -80,7 +78,7 @@ mimalloc = "0.1"
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 ```
 
-**CPU-specific instructions:**
+### CPU-specific instructions
 
 ```sh
 RUSTFLAGS="-C target-cpu=native" cargo build --release
@@ -102,10 +100,14 @@ simplify.
 
 ### Minimizing Compile Times
 
-- Use a faster linker: **lld** (default on Linux since Rust 1.90), **mold**, or **wild**. On Mac,
+- Use a faster linker: **lld**(default on Linux since Rust 1.90),**mold**, or **wild**. On Mac,
+
   the system linker is already fast.
+
 - Disable debug info: `debug = false` in `[profile.dev]` (20-40% dev build speedup). Use
+
   `debug = "line-tables-only"` to keep line info.
+
 - Nightly: `-Zthreads=8` for the experimental parallel front-end.
 - Nightly: Cranelift codegen backend for faster dev builds with lower-quality code.
 
@@ -187,9 +189,7 @@ compatibility.
 Four attributes: none (compiler decides), `#[inline]`, `#[inline(always)]`, `#[inline(never)]`.
 Inlining is non-transitive.
 
-**Best candidates:** Very small functions, single-call-site functions.
-
-**Hot/cold splitting:** For large functions with one hot call site, create an `#[inline(always)]`
+**Best candidates:**Very small functions, single-call-site functions.**Hot/cold splitting:** For large functions with one hot call site, create an `#[inline(always)]`
 variant and an `#[inline(never)]` wrapper:
 
 ```rust
@@ -257,10 +257,12 @@ only increments the refcount (no allocation).
 **Growth:** Empty Vec starts at capacity 0, grows to 4, 8, 16, 32, 64... Use `eprintln!` + `counts`
 to understand length distributions at hot sites.
 
-**Short Vecs:**
+### Short Vecs
 
 - `SmallVec<[T; N]>` - inline storage for N elements, heap fallback. Slightly slower per-operation
+
   due to the inline/heap check.
+
 - `ArrayVec` - no heap fallback, faster than SmallVec when max length is known.
 
 **Longer Vecs:** Use `Vec::with_capacity`, `Vec::reserve`, or `Vec::reserve_exact` when size is
@@ -272,6 +274,7 @@ Same optimization strategies as Vec. Alternatives:
 
 - `smartstring` - avoids heap for strings <= 23 ASCII chars (on 64-bit). Drop-in replacement.
 - Avoid `format!` when a string literal suffices. Use `format_args!` or `lazy_format` for deferred
+
   formatting.
 
 ### `clone` and `clone_from`
@@ -373,7 +376,7 @@ Prefer lazy variants to avoid unnecessary computation:
 - `map_or_else` over `map_or`
 - `unwrap_or_else` over `unwrap_or`
 
-### `Rc`/`Arc`
+### `Rc`/`Arc` (2)
 
 `Rc::make_mut` / `Arc::make_mut` provide clone-on-write: clones only when refcount > 1.
 
@@ -388,14 +391,20 @@ consistency.
 ## 10. Iterators
 
 - Avoid unnecessary `collect()`. Return `impl Iterator<Item=T>` instead of `Vec<T>` when the caller
+
   just iterates.
+
 - Use `extend` to append an iterator to an existing collection instead of `collect` + `append`.
 - Implement `size_hint` / `ExactSizeIterator::len` on custom iterators for fewer allocations during
+
   `collect`/`extend`.
+
 - `chain` can be slower than a single iterator on hot paths.
 - Prefer `filter_map` over `filter` + `map`.
 - Use `chunks_exact` over `chunks` when the chunk size divides evenly (same for `rchunks_exact`,
+
   mutable variants).
+
 - `iter().copied()` can generate better LLVM code than `iter()` for small types like integers.
 
 ---
@@ -486,9 +495,12 @@ Rust has excellent safe parallelism support. Key resources:
 
 - **[rayon](https://crates.io/crates/rayon)** - data parallelism (parallel iterators).
 - **[crossbeam](https://crates.io/crates/crossbeam)** - scoped threads, channels, concurrent data
+
   structures.
+
 - **[Rust Atomics and Locks](https://marabos.nl/atomics/)** - book on low-level concurrency.
 - For SIMD/data parallelism, see
+
   [the state of SIMD in Rust in 2025](https://shnatsel.medium.com/the-state-of-simd-in-rust-in-2025-32c263e5f53d).
 
 ---
@@ -497,17 +509,16 @@ Rust has excellent safe parallelism support. Key resources:
 
 1. **Optimize only hot code.** Optimized code is more complex; spend effort where it matters.
 2. **Algorithm/data structure changes** yield the biggest wins, not low-level tweaks.
-3. **Minimize cache misses and branch mispredictions.**
-4. **Many small speedups compound.** No single one is noticeable; together they matter.
-5. **Use multiple profilers.** Each has different strengths.
-6. **Two ways to speed up a hot function:** make it faster, or call it less.
-7. **Lazy/on-demand computation** is often a win. Don't compute what you don't need.
-8. **Special-case common cases.** Handle 0, 1, or 2-element collections separately when small sizes
+3. **Minimize cache misses and branch mispredictions.**4.**Many small speedups compound.** No single one is noticeable; together they matter.
+4. **Use multiple profilers.** Each has different strengths.
+5. **Two ways to speed up a hot function:** make it faster, or call it less.
+6. **Lazy/on-demand computation** is often a win. Don't compute what you don't need.
+7. **Special-case common cases.** Handle 0, 1, or 2-element collections separately when small sizes
+
    dominate.
-9. **Compact representations** for common values with a fallback table for rare values.
-10. **Measure case frequencies** and handle the most common first.
-11. **Small caches** in front of data structures can help with high-locality lookups.
-12. **Comment non-obvious optimizations** with profiling data that motivated them.
+
+8. **Compact representations** for common values with a fallback table for rare values.2. **Measure case frequencies** and handle the most common first.
+9. **Small caches** in front of data structures can help with high-locality lookups.4. **Comment non-obvious optimizations** with profiling data that motivated them.
 
 ---
 

@@ -21,14 +21,22 @@ For web-based rendering (e.g., canvas or DOM-based terminal), the W3C ARIA grid 
 required roles and structure:
 
 - **Container**: `role="grid"` on the outer element, with `aria-labelledby` or `aria-label` for
+
   identification.
+
 - **Rows**: `role="row"` for each row, nested inside the grid or a `role="rowgroup"`.
 - **Cells**: `role="gridcell"` for data cells, `role="columnheader"` / `role="rowheader"` for
+
   headers.
+
 - **Live regions**: Use `aria-live="assertive"` for streaming output that screen readers should
+
   announce immediately (xterm.js does exactly this).
+
 - **Position tracking**: `aria-posinset` and `aria-setsize` on list items so the screen reader knows
+
   position within the scrollback buffer.
+
 - **Selection**: `aria-selected="true"` on selected cells/rows.
 
 xterm.js uses a shadow DOM overlay approach: it maintains a parallel `<div role="list">` container
@@ -36,7 +44,7 @@ with `<div role="listitem">` elements mirroring each visible terminal row. This 
 positioned over the actual canvas renderer but is only visible to assistive technologies. Key
 implementation details from xterm.js `AccessibilityManager.ts`:
 
-```
+```text
 // Creates accessible row elements mirroring visible terminal content
 _rowContainer.setAttribute('role', 'list');
 element.setAttribute('role', 'listitem');
@@ -48,7 +56,7 @@ _liveRegion.setAttribute('aria-live', 'assertive');
 // Each row tracks its position in the full buffer
 element.setAttribute('aria-posinset', posInSet);
 element.setAttribute('aria-setsize', setSize);
-```
+```rust
 
 The `_charsToConsume` queue prevents double-announcing: when a user types a character, it is
 announced by the textarea's native accessibility; if the same character arrives as terminal output,
@@ -81,6 +89,7 @@ Key AccessKit concepts for a grid library:
 - The tree structure mirrors the visual hierarchy: grid -> rows -> cells.
 - Actions like `Action::Focus`, `Action::ScrollIntoView` are handled via the `ActionHandler` trait.
 - The `ActivationHandler` / `DeactivationHandler` traits manage lazy initialization, so
+
   accessibility overhead is zero when no screen reader is active.
 
 ```rust
@@ -122,20 +131,20 @@ WCAG 2.1 defines two levels of contrast compliance:
 
 The WCAG contrast ratio formula:
 
-```
+```text
 contrast_ratio = (L1 + 0.05) / (L2 + 0.05)
-```
+```text
 
 Where `L1` is the relative luminance of the lighter color and `L2` is the darker. Relative luminance
 is computed from linear RGB:
 
-```
+```text
 L = 0.2126 * R_lin + 0.7152 * G_lin + 0.0722 * B_lin
-```
+```text
 
 To convert sRGB (0-255) to linear:
 
-```
+```text
 // For each channel C in {R, G, B}:
 c_srgb = C / 255.0
 if c_srgb <= 0.04045 {
@@ -143,7 +152,7 @@ if c_srgb <= 0.04045 {
 } else {
     c_lin = ((c_srgb + 0.055) / 1.055).powf(2.4)
 }
-```
+```rust
 
 ### Programmatic Enforcement in Rust
 
@@ -198,21 +207,26 @@ xterm.js (used by VS Code's terminal, many web IDEs) maintains a parallel access
 alongside the canvas renderer:
 
 1. **Row mirroring**: A `<div role="list">` contains one `<div role="listitem">` per visible row.
+
    Each row's `textContent` is updated on every render to match the terminal buffer content.
 
-2. **Live region**: A `<div aria-live="assertive">` announces new output. Characters are debounced
+1. **Live region**: A `<div aria-live="assertive">` announces new output. Characters are debounced
+
    and batched. A cap of 20 lines prevents overwhelming the screen reader with large output dumps
    (announces "Too much output to announce" instead).
 
-3. **Scroll boundary focus**: When a screen reader user focuses the top or bottom boundary row,
+1. **Scroll boundary focus**: When a screen reader user focuses the top or bottom boundary row,
+
    xterm.js scrolls the terminal buffer and shifts focus to maintain navigation flow. This simulates
    virtual scrolling through the full scrollback buffer.
 
-4. **Selection bridging**: The `_handleSelectionChange` method translates browser selection events
+1. **Selection bridging**: The `_handleSelectionChange` method translates browser selection events
+
    on the accessibility DOM back to terminal buffer coordinates, enabling native text selection to
    work with screen readers.
 
-5. **Input deduplication**: Typed characters are tracked in `_charsToConsume[]`. When a character
+1. **Input deduplication**: Typed characters are tracked in `_charsToConsume[]`. When a character
+
    appears as terminal output matching what was just typed, it is not re-announced (since the
    textarea already announced it).
 
@@ -223,12 +237,19 @@ alongside the canvas renderer:
 Windows Terminal uses the Windows UI Automation (UIA) API for Narrator and other screen readers:
 
 - **UIA providers**: The terminal buffer is exposed as a UIA text pattern, allowing Narrator to read
+
   lines, words, and characters.
+
 - **Cursor tracking**: The UIA implementation tracks the cursor position and announces the current
+
   line.
+
 - **High contrast**: Windows Terminal respects the system high-contrast theme via the Windows
+
   contrast theme infrastructure (see section 5).
+
 - **Font scaling**: Ctrl+scroll zooms text. The terminal respects per-profile `fontSize` settings
+
   and system DPI scaling.
 
 Windows Terminal does not have a separate "screen reader mode" toggle; accessibility is always
@@ -243,7 +264,9 @@ A terminal/grid library should:
 - Maintain a parallel text representation of the grid (even if rendering to a canvas/GPU).
 - Expose this text representation through the platform's accessibility API.
 - Announce dynamic changes via live regions (web) or UIA text-changed events (Windows) or AT-SPI
+
   events (Linux).
+
 - Track and announce cursor/focus position changes.
 - Support text selection that maps back to grid coordinates.
 
@@ -286,9 +309,10 @@ Layout grids may optionally wrap focus:
 
 When a cell contains editable content or sub-widgets:
 
-- **Enter** or **F2**: Enters cell editing mode (disables grid navigation within the cell).
+- **Enter**or**F2**: Enters cell editing mode (disables grid navigation within the cell).
 - **Escape**: Exits cell editing mode and restores grid navigation.
 - While in editing mode, arrow keys operate within the cell's content rather than moving between
+
   cells.
 
 ### Implementation Pattern
@@ -427,25 +451,29 @@ protanopia (collectively "red-green color blindness") affect ~8% of males.
 ### Design Principles
 
 1. **Never rely on color alone** to convey information. Always combine color with at least one other
+
    visual channel:
+
    - Shape/icon differences (circle vs. triangle vs. square)
    - Text labels
    - Patterns/textures (hatching, dots, stripes)
    - Position or size
    - Unicode symbols (checkmark, X, warning triangle)
 
-2. **Safe color palette strategy**: Use colors that remain distinguishable under all three
-   deficiency types. The key is varying **luminance** and **blue-yellow** axis rather than only
-   **red-green**.
+1. **Safe color palette strategy**: Use colors that remain distinguishable under all three
 
-3. **Recommended palette foundations** (colorblind-safe):
+   deficiency types. The key is varying **luminance**and**blue-yellow**axis rather than only**red-green**.
+
+1. **Recommended palette foundations** (colorblind-safe):
    - **Okabe-Ito palette**: Specifically designed for color vision deficiency.
      - Orange (#E69F00), Sky Blue (#56B4E9), Bluish Green (#009E73), Yellow (#F0E442), Blue
+
        (#0072B2), Vermillion (#D55E00), Reddish Purple (#CC79A7), Black (#000000)
+
    - **IBM Design palette** (colorblind-safe subset)
    - **ColorBrewer** palettes (many are CVD-safe, marked in the tool)
 
-4. **Avoid these combinations**:
+1. **Avoid these combinations**:
    - Red vs. green (most common failure)
    - Red vs. brown
    - Blue vs. purple (for deuteranopia)
@@ -493,6 +521,7 @@ When defining the 16 ANSI colors or extended palettes:
 - Use brighter red (#FF6B6B) and darker green (#2D8B2D) to maintain luminance contrast.
 - Provide an alternate "colorblind" theme that substitutes orange for red and blue for green.
 - For status indicators (pass/fail, health bars), always pair color with a symbol: `[✓ Pass]` vs.
+
   `[✗ Fail]` rather than just green vs. red.
 
 ---
@@ -508,6 +537,7 @@ When defining the 16 ANSI colors or extended palettes:
 ### Implementation for Grid Libraries
 
 1. **Dynamic grid dimensions**: The grid's row/column count should be recalculated when font size
+
    changes. A fixed 80x24 grid that clips at large font sizes is a failure.
 
 ```rust
@@ -523,20 +553,25 @@ pub fn calculate_grid_dimensions(
 }
 ```
 
-2. **Respond to system DPI/scale changes**: On Windows, handle `WM_DPICHANGED`. On macOS, observe
+1. **Respond to system DPI/scale changes**: On Windows, handle `WM_DPICHANGED`. On macOS, observe
+
    `NSScreen.backingScaleFactor` changes. xterm.js tracks `dprChange` (device pixel ratio) and
    rescales the accessibility overlay accordingly.
 
-3. **Cell size must scale with font**: If the user's system font size is 2x default, each cell
+1. **Cell size must scale with font**: If the user's system font size is 2x default, each cell
+
    should be 2x the base size. Do not use fixed-pixel cell sizes.
 
-4. **Minimum touch target**: For interactive cells, ensure at least 44x44 CSS pixels (per WCAG
+1. **Minimum touch target**: For interactive cells, ensure at least 44x44 CSS pixels (per WCAG
+
    2.5.5) or 24x24 pixels (per WCAG 2.5.8, the AA target).
 
-5. **Scrollable viewport**: When the grid is too large for the viewport at the current font size,
+1. **Scrollable viewport**: When the grid is too large for the viewport at the current font size,
+
    provide scrolling rather than clipping. Announce viewport changes to screen readers.
 
-6. **CJK and wide characters**: Some characters (CJK ideographs, emoji) occupy two cell widths. The
+1. **CJK and wide characters**: Some characters (CJK ideographs, emoji) occupy two cell widths. The
+
    library must account for `wcwidth` / Unicode East Asian Width property. xterm.js handles this by
    scaling row widths based on column mappings (`_alignRowWidth`).
 
@@ -548,34 +583,42 @@ Notcurses does not have a dedicated "high contrast mode" in the traditional sens
 a capability-based approach:
 
 1. **24-bit color with quantization**: Notcurses natively supports 24-bit RGB color and
+
    automatically quantizes down for terminals with fewer color capabilities. It queries terminal
    capabilities at startup and adapts.
 
-2. **High-contrast text**: The notcurses README explicitly lists "high-contrast text" as a visual
+1. **High-contrast text**: The notcurses README explicitly lists "high-contrast text" as a visual
+
    feature. This refers to its ability to automatically select high-contrast foreground colors when
    rendering text over complex backgrounds (e.g., images). The library analyzes the background and
    picks a foreground that maintains readability.
 
-3. **Theme detection**: Notcurses queries the terminal's background color using `\e]11;?\a` (OSC 11)
+1. **Theme detection**: Notcurses queries the terminal's background color using `\e]11;?\a` (OSC 11)
+
    and adjusts rendering accordingly. This helps it determine whether the terminal uses a light or
    dark theme and adapt colors.
 
-4. **No OS high-contrast integration**: Notcurses operates within the terminal abstraction layer. It
+1. **No OS high-contrast integration**: Notcurses operates within the terminal abstraction layer. It
+
    does not directly query Windows high-contrast settings or macOS accessibility preferences, since
    it targets the terminal emulator rather than native windowing. The terminal emulator itself is
    responsible for respecting OS high-contrast settings.
 
-5. **`NCOPTION_NO_ALTERNATE_SCREEN`** and similar options provide control over rendering behavior,
+1. **`NCOPTION_NO_ALTERNATE_SCREEN`** and similar options provide control over rendering behavior,
+
    allowing apps to degrade gracefully.
 
 ### Lessons for a Grid Library
 
 - If your library renders to a terminal (not a window), you inherit the terminal's accessibility
+
   support. You should still:
+
   - Detect terminal background color and choose appropriate foreground colors.
   - Support theme switching.
   - Avoid color combinations that are illegible on both light and dark backgrounds.
 - If your library renders to a window (native/web), you are responsible for querying OS
+
   accessibility settings directly.
 
 [Source: notcurses GitHub](https://github.com/dankamongmen/notcurses)
@@ -669,14 +712,18 @@ game genres. Common failures:
 - Enemy types distinguished only by color (red 'D' vs. green 'D').
 - Terrain types using only background color with identical foreground characters.
 - **Fix**: Always pair color with distinct glyphs, characters, or text labels. A red dragon and
+
   green dragon should use different characters or have a text description available.
 
 ### 2. No Screen Reader Integration Whatsoever
 
 - BearLibTerminal renders to its own OpenGL window with no OS accessibility API integration. It
+
   provides zero information to screen readers.
+
 - The grid is a visual-only construct, invisible to assistive technology.
 - **Fix**: Expose the grid content through AccessKit or similar. Maintain a text representation that
+
   a screen reader can query.
 
 ### 3. Hardcoded, Small Font Size
@@ -684,6 +731,7 @@ game genres. Common failures:
 - BearLibTerminal uses a fixed bitmap font (often 8x8 or similar) with limited scaling options.
 - No support for system font size preferences or DPI scaling.
 - **Fix**: Support vector fonts. Scale cell size with system DPI. Allow user-configurable font sizes
+
   up to at least 200% of default.
 
 ### 4. No Keyboard Remapping
@@ -691,6 +739,7 @@ game genres. Common failures:
 - Roguelikes often use vi-keys (hjkl) or numpad for movement with no alternative.
 - No way to rebind keys for one-handed play or alternative input devices.
 - **Fix**: Provide a full key remapping system. Support arrow keys as a default alternative to
+
   vi-keys. Allow mouse/gamepad input as movement alternatives.
 
 ### 5. Information Density Requires Vision
@@ -699,12 +748,14 @@ game genres. Common failures:
 - No way to query "what is at position X,Y?" via keyboard.
 - No audio cues for spatial relationships.
 - **Fix**: Implement a "look" mode where the player can arrow-key through the map and hear/read
+
   descriptions of each cell. Provide audio cues for important events (combat, items, hazards).
 
 ### 6. No Pause or Turn Control
 
 - Even turn-based games may have animations or timed events.
 - **Fix**: All animations should be skippable. Ensure the game is fully playable in a step-by-step
+
   mode.
 
 ### 7. Contrast and Color Scheme Rigidity
@@ -712,12 +763,14 @@ game genres. Common failures:
 - Many roguelikes use a single dark-background theme with no alternatives.
 - Background/foreground combinations chosen for aesthetics over readability.
 - **Fix**: Provide at least dark, light, and high-contrast themes. Validate all color combinations
+
   against WCAG AA minimums. Offer a colorblind-friendly palette option.
 
 ### 8. No Audio Alternative
 
 - Spatial relationships are conveyed only visually.
 - **Fix**: Consider sonification (audio representation of grid position), directional audio cues, or
+
   a text-based "narrator" mode that describes the player's surroundings.
 
 ### 9. Unstructured Output
@@ -725,6 +778,7 @@ game genres. Common failures:
 - Game messages scroll past in a log with no way to review them.
 - No message categorization or filtering.
 - **Fix**: Provide a searchable, scrollable message log. Categorize messages (combat, items,
+
   environment). Allow screen readers to access the log.
 
 ---
@@ -734,60 +788,85 @@ game genres. Common failures:
 ### Kept
 
 - **xterm.js AccessibilityManager.ts**
+
   (<https://github.com/xtermjs/xterm.js/blob/master/src/browser/AccessibilityManager.ts>) - Primary
   source for how a production terminal handles screen reader integration in a web context. Shows the
   shadow DOM approach, live regions, scroll boundary handling, and input deduplication.
+
 - **AccessKit GitHub** (<https://github.com/AccessKit/accesskit>) - The only comprehensive
+
   cross-platform accessibility crate for Rust. Covers the data schema, platform adapters, and
   architecture.
+
 - **W3C ARIA Grid Pattern** (<https://www.w3.org/WAI/ARIA/apg/patterns/grid/>) - Authoritative
+
   specification for keyboard navigation and ARIA roles in grid widgets. Defines both data grid and
   layout grid patterns.
+
 - **WCAG 2.1 Specification** (<https://www.w3.org/TR/WCAG21/>) - Defines contrast ratio requirements
+
   and calculations.
+
 - **Microsoft Contrast Themes docs**
+
   (<https://learn.microsoft.com/en-us/windows/apps/design/accessibility/high-contrast-themes>) -
   Detailed guidance on Windows high-contrast theme integration, system color resources, and best
   practices.
+
 - **palette crate docs** (<https://docs.rs/palette/latest/palette/>) - Type-safe color science
+
   library with correct sRGB/linear conversions needed for WCAG compliance.
+
 - **tts-rs** (<https://github.com/ndarilek/tts-rs>) - Cross-platform TTS crate for Rust with screen
+
   reader integration support.
+
 - **notcurses GitHub** (<https://github.com/dankamongmen/notcurses>) - Reference for how a modern
+
   TUI library handles color capabilities and terminal feature detection.
 
 ### Dropped
 
 - WebAIM Contrast Checker (<https://webaim.org/resources/contrastchecker/>) - Only an interactive
+
   tool, not useful for implementation reference.
+
 - Windows Terminal rendering settings
+
   (<https://learn.microsoft.com/en-us/windows/terminal/customize-settings/rendering>) - Only covers
   GPU rendering options, not accessibility.
+
 - notcurses visual man page - Covers image/video rendering, not accessibility.
 
 ## Gaps
 
 1. **Exact notcurses high-contrast implementation**: The notcurses codebase is large and the
+
    high-contrast text feature is not well-documented. Would require reading the C source
    (`ncplane_set_fg_*` and related functions) to understand the exact algorithm for auto-selecting
    high-contrast foreground colors.
 
-2. **AT-SPI protocol details for Linux**: The AccessKit Unix adapter handles this, but the specific
+1. **AT-SPI protocol details for Linux**: The AccessKit Unix adapter handles this, but the specific
+
    AT-SPI properties needed for grid navigation on Linux (Orca screen reader) are not
    well-documented outside of GNOME accessibility developer guides.
 
-3. **BearLibTerminal specific issues**: BearLibTerminal is largely unmaintained and has no
+1. **BearLibTerminal specific issues**: BearLibTerminal is largely unmaintained and has no
+
    accessibility documentation. The failures listed are based on the architecture and common
    roguelike patterns rather than BearLibTerminal-specific analysis.
 
-4. **WCAG 3.0 / APCA**: The upcoming WCAG 3.0 standard proposes APCA (Advanced Perceptual Contrast
+1. **WCAG 3.0 / APCA**: The upcoming WCAG 3.0 standard proposes APCA (Advanced Perceptual Contrast
+
    Algorithm) as a replacement for the current luminance-based contrast formula. This may change
    contrast requirements. Currently in draft; not yet adopted.
 
-5. **Color vision deficiency simulation matrices**: The Machado 2009 matrices shown are approximate.
+1. **Color vision deficiency simulation matrices**: The Machado 2009 matrices shown are approximate.
+
    For production use, consider using a validated CVD simulation library or the full Brettel 1997
    algorithm with proper half-plane projection.
 
-6. **Console/TTY accessibility on Linux without a GUI**: When there is no desktop environment (pure
+1. **Console/TTY accessibility on Linux without a GUI**: When there is no desktop environment (pure
+
    TTY), accessibility support is extremely limited. The `speakup` kernel module provides basic
    screen reading for the Linux console, but it is not commonly used and has limited capabilities.

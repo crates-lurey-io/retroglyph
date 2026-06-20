@@ -195,10 +195,14 @@ works but requires a heap allocation.
 Three strategies for exposing Rust errors through FFI:
 
 1. **Flat enums** - convert to integer codes directly
+
    (`enum DatabaseError { IsReadOnly = 1, IOError = 2, ... }`).
-2. **Structured enums** - convert to integer code plus a string error message accessible via a
+
+1. **Structured enums** - convert to integer code plus a string error message accessible via a
+
    separate C function.
-3. **Custom error types** - create `#[repr(C)]` mirror structs that are transparent to C callers.
+
+1. **Custom error types** - create `#[repr(C)]` mirror structs that are transparent to C callers.
 
 [Source](https://rust-unofficial.github.io/patterns/idioms/ffi/errors.html)
 
@@ -728,10 +732,11 @@ _Added 2025-12-14._
 When designing FFI APIs, follow these principles:
 
 1. **Encapsulated types** are owned by Rust, managed by the user, and opaque (user gets a pointer,
+
    never sees the layout).
-2. **Transactional types** are owned by the user and transparent (`#[repr(C)]` structs).
-3. All behavior is functions acting on encapsulated types.
-4. Behavior is grouped by provenance/lifetime, not structure.
+
+1. **Transactional types** are owned by the user and transparent (`#[repr(C)]` structs).
+1. All behavior is functions acting on encapsulated types.3. Behavior is grouped by provenance/lifetime, not structure.
 
 Key insight: consolidate the iterator's lifetime with its parent object. The POSIX DBM API does this
 with `dbm_firstkey(DBM*)` / `dbm_nextkey(DBM*)` instead of exposing a separate iterator type,
@@ -813,6 +818,7 @@ removed.
 
 1. **CI-only**: `RUSTFLAGS="-D warnings" cargo build` in CI, not in source code.
 2. **Named lints**: `#![deny(dead_code, unused, ...)]` with specific lint names instead of the
+
    blanket `warnings`. Avoid including `deprecated` in the list.
 
 [Source](https://rust-unofficial.github.io/patterns/anti_patterns/deny-warnings.html)
@@ -919,7 +925,9 @@ serialization formats with multiple data types. This is what Serde achieves:
 
 1. Types implement `Serialize`/`Deserialize` (the "top layer").
 2. A `Visitor` bridges between the data model and the type's structure (usually derive-macro
+
    generated).
+
 3. Format-specific `Serializer`/`Deserializer` implementations handle the "bottom layer" (JSON,
    CBOR, etc.).
 

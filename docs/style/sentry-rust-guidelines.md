@@ -110,11 +110,11 @@ explicit error.
 
 All struct fields (including tuple-struct fields) should be private by default.
 
-**Only two exceptions:**
-
-1. **Newtypes** (1-tuple structs) where direct access to the inner type is desired, to annotate
+**Only two exceptions:**1.**Newtypes** (1-tuple structs) where direct access to the inner type is desired, to annotate
    semantics of a type where accessing the inner type is required.
-2. **Plain data types with very stable signatures**, such as schema definitions (e.g., Sentry
+
+1. **Plain data types with very stable signatures**, such as schema definitions (e.g., Sentry
+
    `Event` protocol).
 
 ### No Mixed Visibility
@@ -138,6 +138,7 @@ Sentry follows Rust naming conventions strictly:
 - Setters: `set_foo()`
 - Mutable access: `foo_mut()`
 - Conversions: `as_foo()` (cheap ref), `to_foo()` (expensive copy), `into_foo()` (ownership
+
   transfer)
 
 ## 6. Import Ordering and File Component Ordering
@@ -158,7 +159,7 @@ imports_granularity = "Module"
 group_imports = "StdExternalCrate"  # nightly only
 ```
 
-**Example:**
+### Example
 
 ```rust
 use std::borrow::Cow;
@@ -227,10 +228,10 @@ fail, use a different name (e.g., `from_parts`, `try_new`, `parse`).
 Test function names should contain: **function name + simple condition**. Keep names concise; avoid
 filler words like "should" or "that".
 
-```
+```text
 tests::parse_empty
 tests::parse_null
-```
+```text
 
 ### Unit Test Placement
 
@@ -265,10 +266,13 @@ For libraries, provide examples in `examples/`.
 Follow RFC 505 and RFC 1574. Key rules:
 
 - **Single-line short summary**: written in American English, third-person voice ("Returns the user"
+
   not "Return the user")
+
 - **Default headers** where applicable; avoid custom sections outside module-level docs
 - **Cross-link** between types and methods where possible, especially within the crate
 - **Write doc tests**: for crate-public utilities and SDKs, at least one doctest for the critical
+
   path; doctests take precedence over equivalent unit tests since they both test and document the
   API
 
@@ -299,15 +303,19 @@ commands:
 
 ```bash
 # Install/upgrade cargo-insta
+
 cargo install cargo-insta
 
 # Review snapshot diffs interactively
+
 cargo insta review --all
 
 # Run all tests, skipping failures (for batch review)
+
 cargo insta test --review
 
 # Reject all pending diffs
+
 cargo insta reject --all
 ```
 
@@ -400,7 +408,9 @@ Sentry strictly follows
 Sentry points developers to these references:
 
 - [A half-hour to learn Rust](https://fasterthanli.me/articles/a-half-hour-to-learn-rust) (syntax
+
   intro)
+
 - [The Rust Programming Language](https://doc.rust-lang.org/book/) (comprehensive)
 - [The Async Book](https://rust-lang.github.io/async-book/) (async/await)
 - [The Little Book of Rust Macros](https://danielkeep.github.io/tlborm/book/index.html) (macros)

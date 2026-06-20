@@ -22,24 +22,28 @@ The guidelines live at
 and are deliberately minimal: three numbered rules plus editor setup.
 
 1. **Guideline 001: Run rustfmt on save.** All repos include `.vscode/settings.json` with
+
    `"editor.formatOnSave": true`. CI verifies formatting with `cargo fmt -- --check --color always`.
    The motivation: "We want to keep a consistent code base where we don't have to argue about
    style." No custom rustfmt configuration is mentioned; they use the default style.
    [Source](https://github.com/EmbarkStudios/rust-ecosystem/blob/main/guidelines.md)
 
-2. **Guideline 002: Prefer `parking_lot` over `std::sync`.** They mandate
+1. **Guideline 002: Prefer `parking_lot` over `std::sync`.** They mandate
+
    `parking_lot::{Mutex, RwLock}` instead of `std::sync::{Mutex, RwLock}`. Rationale: smaller,
    faster, and avoids poisoning errors (no `.unwrap()` on `.lock()`). They noted a wish for
    parking_lot primitives to eventually land in std.
    [Source](https://github.com/EmbarkStudios/rust-ecosystem/blob/main/guidelines.md)
 
-3. **Guideline 003: Opt-in for Clippy and Rust 2018 style warnings.** Every crate must have
+1. **Guideline 003: Opt-in for Clippy and Rust 2018 style warnings.** Every crate must have
+
    `#![warn(clippy::all)]` and `#![warn(rust_2018_idioms)]` at the top of `lib.rs` or `main.rs`. CI
    verifies clippy produces no warnings. They tracked a desire for workspace-level lint
    configuration in [issue #22](https://github.com/EmbarkStudios/rust-ecosystem/issues/22).
    [Source](https://github.com/EmbarkStudios/rust-ecosystem/blob/main/guidelines.md)
 
-4. **VS Code as primary IDE.** Recommended extensions: rust-analyzer (sponsored by Embark), Crates
+1. **VS Code as primary IDE.** Recommended extensions: rust-analyzer (sponsored by Embark), Crates
+
    (for Cargo.toml dependency management), C/C++ (Windows debugging), Native Debug (Linux/Mac via
    GDB/LLDB), plus GitLens, Better TOML, shader language support, and TODO Highlight.
    [Source](https://github.com/EmbarkStudios/rust-ecosystem/blob/main/guidelines.md)
@@ -135,21 +139,26 @@ lack of workspace-level lint configuration (Cargo didn't support `[lints]` at th
 their large repositories had 80+ crates; per-crate copy-paste was error-prone.
 [Source](https://github.com/EmbarkStudios/rust-ecosystem/pull/68)
 
-**Key lint policy decisions:**
-
-- `unsafe_code` is **denied** (not just warned), meaning unsafe code requires explicit
+**Key lint policy decisions:**- `unsafe_code` is**denied** (not just warned), meaning unsafe code requires explicit
   `#[allow(unsafe_code)]` opt-in.
+
 - `clippy::dbg_macro`, `clippy::todo`, `clippy::unimplemented` are warned against, catching debug
+
   leftovers.
+
 - `clippy::exit` is warned, preventing unclean process exits.
 - `clippy::mem_forget` is warned, important for game engines with manual resource management.
 - String manipulation lints (`string_add`, `string_add_assign`, `string_to_string`,
+
   `string_lit_as_bytes`) push toward idiomatic Rust string handling.
+
 - Match-related lints (`match_same_arms`, `match_wildcard_for_single_variants`, etc.) enforce
+
   exhaustive pattern matching.
+
 - Individual crates can override with `#![allow(...)]` after the standard block.
 
-**Lints they wanted but couldn't use (blocked on Clippy bugs):**
+### Lints they wanted but couldn't use (blocked on Clippy bugs)
 
 - `clippy::use_self` (too many false positives)
 - `clippy::unnecessary_wraps`
@@ -181,6 +190,7 @@ jobs:
   lint:
     runs-on: ubuntu-22.04
     steps:
+
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -193,6 +203,7 @@ jobs:
         os: [ubuntu-24.04, macos-14, windows-2022]
     runs-on: ${{ matrix.os }}
     steps:
+
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --release
@@ -200,20 +211,24 @@ jobs:
   msrv-check:
     runs-on: ubuntu-24.04
     steps:
+
       - uses: dtolnay/rust-toolchain@master
+
         with:
           toolchain: '1.88.0' # pinned MSRV
+
       - run: cargo check --all-targets
 
   deny-check:
     runs-on: ubuntu-22.04
     steps:
+
       - uses: EmbarkStudios/cargo-deny-action@v2
+
 ```
 
-**Key CI patterns:**
+**Key CI patterns:**-**Concurrency control**: `cancel-in-progress: true` prevents queue buildup.
 
-- **Concurrency control**: `cancel-in-progress: true` prevents queue buildup.
 - **dtolnay/rust-toolchain** over the deprecated actions-rs/toolchain.
 - **Swatinem/rust-cache** for build caching across runs.
 - **cargo-deny-action**: Their own GitHub Action for license/advisory/ban checking.
@@ -222,6 +237,7 @@ jobs:
 - **Release builds for tests**: `cargo test --release` catches release-only issues.
 - **Separate lint and test jobs**: Linting is fast on a single OS; tests fan out across platforms.
 - **Tag-triggered releases**: Build matrix producing binaries for x86_64/aarch64 on Linux (musl),
+
   Windows, and macOS, packaged via shell script and published as GitHub Releases.
 
 [Source](https://github.com/EmbarkStudios/cargo-about/blob/master/.github/workflows/rust-ci.yml)
@@ -230,33 +246,34 @@ jobs:
 
 Grouped by category:
 
-**GPU & Rendering:**
-
-- **rust-gpu** (8.3k+ stars): Compiles Rust to SPIR-V for Vulkan GPU shaders. Used
+**GPU & Rendering:**-**rust-gpu** (8.3k+ stars): Compiles Rust to SPIR-V for Vulkan GPU shaders. Used
   `rustc_codegen_spirv` as a backend. Now transitioned to community ownership at
   [Rust-GPU org](https://github.com/Rust-GPU/rust-gpu). Their most ambitious project.
+
 - **kajiya** (5k+ stars): Experimental real-time global illumination renderer using Rust + Vulkan.
+
   ReSTIR-based, fully dynamic GI without precomputed light transport. Personal project of Tomasz
   Stachowiak that became part of Embark's production pipeline.
+
 - **ash-molten**: Statically linked MoltenVK for Vulkan on macOS via the `ash` crate.
 - **spirv-tools-rs**: Rust wrapper for SPIR-V Tools.
 - **fsr-rs**: Rust bindings for AMD FidelityFX Super Resolution.
 
-**Dependency & License Management:**
-
-- **cargo-deny** (~4M total downloads, ~940k in 90 days): Checks dependency graphs for license
+**Dependency & License Management:**-**cargo-deny** (~4M total downloads, ~940k in 90 days): Checks dependency graphs for license
   compliance, security advisories, banned crates, and duplicate versions. Widely adopted beyond
   Embark. Has a companion GitHub Action (`cargo-deny-action`).
+
 - **cargo-about**: Generates license listings for all dependencies using customizable Handlebars
+
   templates.
+
 - **krates**: Builds crate dependency graphs from cargo metadata.
 - **cfg-expr**: Parser/evaluator for Rust `cfg()` expressions.
 - **spdx**: SPDX license expression parser.
 
-**Game Engine Infrastructure:**
-
-- **physx-rs** (PhysX bindings): Rust wrapper over NVIDIA PhysX. Described by Tomasz Stachowiak as
+**Game Engine Infrastructure:**-**physx-rs** (PhysX bindings): Rust wrapper over NVIDIA PhysX. Described by Tomasz Stachowiak as
   "an unholy fusion of Rust and C++."
+
 - **puffin**: Instrumentation-based CPU profiler for Rust. Designed for game loops.
 - **superluminal-perf-rs**: Integration with Superluminal Performance profiler.
 - **poll-promise**: Promise type for games and immediate-mode GUIs (no async runtime needed).
@@ -266,33 +283,28 @@ Grouped by category:
 - **tiny-bench**: Minimal benchmarking library.
 - **cervo**: ML inference middleware for games (ONNX-based).
 
-**Cloud & Networking:**
-
-- **tame-gcs**, **tame-oauth**, **tame-oidc**: Sans-io approach to Google Cloud Storage, OAuth, and
+**Cloud & Networking:**-**tame-gcs**, **tame-oauth**, **tame-oidc**: Sans-io approach to Google Cloud Storage, OAuth, and
   OIDC.
+
 - **discord-sdk**: Open implementation of the Discord Game SDK.
 - **rymder**: Unofficial Agones (game server orchestration) client.
 - **cloud-dns**: Google Cloud DNS client.
 - **tryhard**: Retry library for futures.
 - **gsutil**: Partial gsutil replacement.
 
-**Build & CI:**
+**Build & CI:**-**cargo-fetcher**: `cargo fetch` alternative optimized for CI/clean environments.
 
-- **cargo-fetcher**: `cargo fetch` alternative optimized for CI/clean environments.
 - **cargo-deny-action**: GitHub Action wrapping cargo-deny.
 - **buildkite-jobify**: Kubekite replacement in Rust.
 - **octobors**: GitHub Action for PR automerging.
 - **relnotes**: Automatic GitHub release note generation.
 
-**Crash Handling & Tracing:**
+**Crash Handling & Tracing:**-**crash-handling**: Collection of crates for catching/handling crashes.
 
-- **crash-handling**: Collection of crates for catching/handling crashes.
 - **tracing-logfmt**: logfmt formatter for tracing-subscriber.
 - **tracing-ext-ffi-subscriber**: FFI bridge for passing tracing spans to external profilers.
 
-**Texture & Content:**
-
-- **texture-synthesis**: Example-based texture synthesis, one of their earliest open-source
+**Texture & Content:**-**texture-synthesis**: Example-based texture synthesis, one of their earliest open-source
   projects.
 
 [Source: embark.dev](https://embark.dev/),
@@ -303,30 +315,40 @@ Grouped by category:
 Key insights from blog posts and talks (2019-2022):
 
 - **Rust as primary language from founding.** "Embark has used Rust as our primary programming
+
   language since the day we started the studio." (2019). They shipped THE FINALS (a major
   free-to-play shooter, 14M+ copies) using Rust on a custom engine.
 
 - **Benefits they highlighted:**
   - "Fearlessly refactor and change the code, without common lifetime/ownership, memory safety, or
+
     race condition problems."
+
   - "Teamwork is much better when you can trust other people not to introduce subtle threading and
+
     ownership issues." (Tomasz Stachowiak)
+
   - "It just made me enjoy programming again" (Jake Shadle).
   - "Rust fixes all of [C++'s limitations] and even takes over many cases where I previously would
+
     have used Python." (Tomasz Stachowiak)
 
 - **Production renderer built in Rust.** Their creative platform renderer used Rust on both CPU and
+
   GPU (via rust-gpu). They ran with "vertex colors and blob shadows for almost two years" before
   building proper rendering tech, demonstrating Rust's viability for rapid engine prototyping.
 
 - **Shader unit testing.** Because rust-gpu shaders are regular Rust code, they could unit-test GPU
+
   shaders on the CPU as part of standard CI. This was a unique advantage over HLSL/GLSL workflows.
 
 - **Code sharing between CPU and GPU.** Functions and structs shared in a type-safe manner between
+
   CPU and GPU code via regular Rust modules. Expensive shader computations that turned out to be
   constant could be moved to CPU without rewriting.
 
 - **Daily tooling:** cargo, rustfmt, clippy, VS Code with rust-analyzer (which Embark sponsored
+
   financially).
 
 - **Pain points acknowledged:**
@@ -341,33 +363,55 @@ Key insights from blog posts and talks (2019-2022):
 ### 6. Blog Posts and Talks
 
 - **"Inside Rust at Embark"** (Dec 2019, Medium/dev.to): Interview with Jake Shadle and Tomasz
+
   Stachowiak about daily Rust workflows, favorite crates, and vision for Rust in game dev.
+
 - **"Homegrown Rendering with Rust"** (2022, Medium): Technical deep-dive into their Rust+Vulkan
+
   rendering pipeline, kajiya, production renderer, and rust-gpu shader usage.
+
 - **"Texture Synthesis and Remixing from a Single Example"** (Medium): Anastasia Opara on their
+
   texture-synthesis crate.
+
 - **Stockholm Rust Meetup** (Nov 2019): Jake Shadle on "Rust, Open Source, Game Dev" and Tomasz
+
   Stachowiak on "An unholy fusion of Rust and C++ in physx-rs" (available on
   [YouTube](https://www.youtube.com/c/EmbarkStudiosAB)).
+
 - **RustFest 2019 interview** (Rustacean Station podcast): Jake Shadle on "Rust for AAA Game
+
   Development."
+
 - **Rust GPU announcement** (2020): Blog post introducing the rust-gpu project and their vision for
+
   Rust as a GPU programming language.
+
 - **80.lv feature**: "Embark Studios' Open-Source Tools Make Game Development Easier" covering their
+
   tool ecosystem.
 
 ### 7. Studio Status and Legacy
 
 - **Founded** November 2018 by ex-DICE/EA veterans (Patrick Soderlund, Johan Andersson, Magnus
+
   Nordin, Rob Runesson, Stefan Strandberg, Jenny Huldschiner).
+
 - **Acquired by Nexon** (Japanese gaming conglomerate). THE FINALS shipped December 2023, reaching
+
   14M+ players.
+
 - **Still operating** as of 2024 with ~287 employees (not shut down, contrary to some reports). ARC
+
   Raiders is in continued development with ~360 staff.
+
 - **Open-source wind-down:** Rust-gpu transitioned to community ownership in 2024. The
+
   rust-ecosystem repo's last push was January 2025. Most open-source crates are in maintenance mode.
   cargo-deny and cargo-about remain actively maintained by Jake Shadle.
+
 - **Key contributors:** Jake Shadle (cargo-deny, cargo-about, cfg-expr, krates, spdx,
+
   crash-handling), Tomasz Stachowiak (kajiya, physx-rs, rendering), Ashley Hauck and eddyb (rust-gpu
   compiler), Maik Klein (ash Vulkan bindings), Emil Ernerfeldt (puffin, egui contributor), Gray
   Olson (presser, spirv-tools), Johan Andersson (CTO, overall direction).
@@ -390,68 +434,109 @@ Embark tracked Rust ecosystem gaps via GitHub issues in the rust-ecosystem repo:
 ## Key Takeaways for Rust Style Guides
 
 1. **Keep guidelines minimal and actionable.** Three numbered rules is better than a 50-page style
-   guide. Link to the Rust Book for everything else.
-2. **Standardize lints across the workspace.** Use `.cargo/config.toml` rustflags or (now in modern
-   Rust) `[workspace.lints]` in `Cargo.toml` to configure lints once for all crates.
-3. **Deny unsafe_code by default.** Require explicit opt-in per module/function.
-4. **Ban debug leftovers.** Warn on `dbg_macro`, `todo`, `unimplemented`.
-5. **Prefer better ecosystem crates.** parking_lot over std::sync was a real productivity win (no
-   lock poisoning).
-6. **Enforce in CI, not just docs.** rustfmt check, Clippy with `-D warnings`, cargo-deny for
-   dependencies.
-7. **Cross-platform CI matrix.** Test on all target platforms; don't assume Linux-only.
-8. **MSRV checking.** Separate CI job with a pinned older toolchain.
 
+   guide. Link to the Rust Book for everything else.
+
+1. **Standardize lints across the workspace.** Use `.cargo/config.toml` rustflags or (now in modern
+
+   Rust) `[workspace.lints]` in `Cargo.toml` to configure lints once for all crates.
+
+1. **Deny unsafe_code by default.** Require explicit opt-in per module/function.
+1. **Ban debug leftovers.** Warn on `dbg_macro`, `todo`, `unimplemented`.3. **Prefer better ecosystem crates.** parking_lot over std::sync was a real productivity win (no
+
+   lock poisoning).
+
+1. **Enforce in CI, not just docs.** rustfmt check, Clippy with `-D warnings`, cargo-deny for
+
+   dependencies.
+
+1. **Cross-platform CI matrix.** Test on all target platforms; don't assume Linux-only.
+1. **MSRV checking.** Separate CI job with a pinned older toolchain.
 ## Sources
 
 - Kept:
+
   [rust-ecosystem/guidelines.md](https://github.com/EmbarkStudios/rust-ecosystem/blob/main/guidelines.md)
   -- primary source for the three guidelines
+
 - Kept:
+
   [rust-ecosystem/lints.rs](https://github.com/EmbarkStudios/rust-ecosystem/blob/main/lints.rs) --
   complete standard lint set (v6)
+
 - Kept:
+
   [rust-ecosystem/lints.toml](https://github.com/EmbarkStudios/rust-ecosystem/blob/main/lints.toml)
   -- workspace-level lint config via rustflags
+
 - Kept:
+
   [Issue #59: Embark's standard lints](https://github.com/EmbarkStudios/rust-ecosystem/issues/59) --
   lint policy discussion, blocked lints, rationale
+
 - Kept:
+
   [PR #68: Add lints as .cargo/config.toml](https://github.com/EmbarkStudios/rust-ecosystem/pull/68)
   -- workspace-level lint workaround
+
 - Kept: [Issue #79: Clippy wants](https://github.com/EmbarkStudios/rust-ecosystem/issues/79) --
+
   wishlist for Clippy improvements
+
 - Kept:
+
   [cargo-about rust-ci.yml](https://github.com/EmbarkStudios/cargo-about/blob/master/.github/workflows/rust-ci.yml)
   -- canonical CI configuration
+
 - Kept: [Inside Rust at Embark (dev.to)](https://dev.to/embark/inside-rust-at-embark-230o) --
+
   first-hand developer experience
+
 - Kept:
+
   [Homegrown Rendering with Rust (Medium)](https://medium.com/@h3r2tic/homegrown-rendering-with-rust-1e39068e56a7)
   -- rendering + rust-gpu production use
+
 - Kept: [embark.dev](https://embark.dev/) -- complete project listing
 - Kept: [Rust GPU Transition Announcement](https://rust-gpu.github.io/blog/transition-announcement/)
+
   -- community ownership context
+
 - Kept: [rust-ecosystem README](https://github.com/EmbarkStudios/rust-ecosystem) -- full crate
+
   listing, areas of interest
+
 - Dropped: Allabolag/Merinfo financial records -- Swedish corporate data, not relevant to Rust
+
   practices
+
 - Dropped: Revelio Labs employee count -- workforce analytics, tangential
 - Dropped: Nexon press releases about THE FINALS -- game marketing, not Rust-specific
 
 ## Gaps
 
 1. **Internal Cargo.toml structure.** Embark's internal repos are not public, so workspace
+
    Cargo.toml configuration (features, profiles, workspace dependencies) is unknown beyond what
    cargo-deny and cargo-about show.
-2. **rustfmt.toml customizations.** The guidelines say "use rustfmt" but never mention any custom
+
+1. **rustfmt.toml customizations.** The guidelines say "use rustfmt" but never mention any custom
+
    rustfmt.toml settings. It's unclear whether they used pure defaults or had internal overrides.
-3. **Post-2022 guideline evolution.** The guidelines.md hasn't been updated since the v6 lint set.
+
+1. **Post-2022 guideline evolution.** The guidelines.md hasn't been updated since the v6 lint set.
+
    Modern Rust features (workspace lints in Cargo.toml, edition 2024) may have been adopted
    internally without public documentation.
-4. **Build performance optimizations.** Tomasz mentioned using "artisanal hand-crafted RUSTFLAGS in
+
+1. **Build performance optimizations.** Tomasz mentioned using "artisanal hand-crafted RUSTFLAGS in
+
    conjunction with LLD" for build speed, but the specific configuration isn't public.
-5. **Console platform (PlayStation, Xbox) Rust specifics.** Tracked as an interest area but no
+
+1. **Console platform (PlayStation, Xbox) Rust specifics.** Tracked as an interest area but no
+
    public details about cross-compilation or platform-specific patterns.
-6. **Error handling conventions.** The guidelines don't specify an error handling strategy (anyhow
+
+1. **Error handling conventions.** The guidelines don't specify an error handling strategy (anyhow
+
    vs thiserror, custom error types, etc.).
