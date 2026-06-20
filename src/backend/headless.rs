@@ -2,7 +2,7 @@
 //! and allows injecting synthetic events.
 
 use crate::backend::Backend;
-use crate::cell::Cell;
+use crate::tile::Tile;
 use crate::event::Event;
 use crate::grid::{Grid, Pos, Size};
 use alloc::collections::VecDeque;
@@ -65,7 +65,7 @@ impl Headless {
                 #[cfg(feature = "egc")]
                 let is_spacer = cell
                     .flags()
-                    .contains(crate::cell::CellFlags::WIDE_CHAR_SPACER);
+                    .contains(crate::tile::TileFlags::WIDE_CHAR_SPACER);
                 #[cfg(not(feature = "egc"))]
                 let is_spacer = cell.glyph() == '\0';
                 let c = if is_spacer {
@@ -86,7 +86,7 @@ impl Headless {
 impl Backend for Headless {
     fn draw<'a, I>(&mut self, content: I)
     where
-        I: Iterator<Item = (Pos, &'a Cell)>,
+        I: Iterator<Item = (Pos, &'a Tile)>,
     {
         for (pos, cell) in content {
             self.grid.checked_put(pos.x, pos.y, cell.clone());
@@ -109,7 +109,7 @@ impl Backend for Headless {
     }
 
     fn clear(&mut self) {
-        self.grid.clear();
+        self.grid.clear_all();
     }
 
     fn poll_event(&mut self, _timeout: Duration) -> Option<Event> {

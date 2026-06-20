@@ -8,7 +8,7 @@
 //! error-returning variants.
 
 use crate::backend::Backend;
-use crate::cell::Cell;
+use crate::tile::Tile;
 use crate::event::Event;
 use crate::grid::{Pos, Size};
 use core::time::Duration;
@@ -144,7 +144,7 @@ impl Backend for Crossterm {
     #[allow(clippy::similar_names)]
     fn draw<'a, I>(&mut self, content: I)
     where
-        I: Iterator<Item = (Pos, &'a Cell)>,
+        I: Iterator<Item = (Pos, &'a Tile)>,
     {
         let mut last_fg = None;
         let mut last_bg = None;
@@ -156,7 +156,7 @@ impl Backend for Crossterm {
             #[cfg(feature = "egc")]
             if cell
                 .flags()
-                .contains(crate::cell::CellFlags::WIDE_CHAR_SPACER)
+                .contains(crate::tile::TileFlags::WIDE_CHAR_SPACER)
             {
                 continue;
             }

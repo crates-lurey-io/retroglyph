@@ -1,7 +1,7 @@
 //! Stateful terminal management and double-buffering.
 
 use crate::backend::Backend;
-use crate::cell::Cell;
+use crate::tile::Tile;
 use crate::color::Color;
 use crate::event::Event;
 use crate::grid::{Grid, Rect, Size};
@@ -72,7 +72,7 @@ impl<B: Backend> Terminal<B> {
 
     /// Returns the current grid dimensions.
     #[must_use]
-    pub fn size(&self) -> Size {
+    pub const fn size(&self) -> Size {
         Size {
             width: self.current.width(),
             height: self.current.height(),
@@ -89,7 +89,7 @@ impl<B: Backend> Terminal<B> {
         self.previous.resize(width, height);
         // Clearing previous forces a full redraw next present(), ensuring no
         // stale cells bleed into the resized layout.
-        self.previous.clear();
+        self.previous.clear_all();
         self.backend.resize(Size { width, height });
     }
 
@@ -125,9 +125,11 @@ impl<B: Backend> Terminal<B> {
         &mut self.backend
     }
 
-    /// Clear the entire grid.
+    /// Clear the entire grid (layer 0 only).
+    ///
+    /// TODO(M3): also clear layers > 0, or add `clear_layer` / `clear_all` to `Terminal`.
     pub fn clear(&mut self) {
-        self.current.clear();
+        self.current.clear(0);
     }
 
     /// Clear a rectangular region.
@@ -135,7 +137,7 @@ impl<B: Backend> Terminal<B> {
         for y in rect.top()..rect.bottom() {
             for x in rect.left()..rect.right() {
                 if let Some(cell) = self.current.checked_get_mut(x, y) {
-                    *cell = Cell::default();
+                    *cell = Tile::default();
                 }
             }
         }
@@ -244,7 +246,11 @@ impl<B: Backend> Terminal<B> {
     /// If you want a blank frame, call `clear()` at the start of your loop.
     pub fn present(&mut self) {
         let diff = self.current.diff(&self.previous);
-        self.backend.draw(diff);
+        // TODO(M3): use draw_layers once it's available.
+        let filtered = diff.filter_map(|(layer, pos, tile)| {
+            if layer == 0 { Some((pos, tile)) } else { None }
+        });
+        self.backend.draw(filtered);
         self.backend.flush();
 
         // Swap buffers: `previous` now holds the last rendered frame,
@@ -380,7 +386,7 @@ impl<B: Backend> Terminal<B> {
 mod tests {
     use super::*;
     use crate::backend::Headless;
-    use crate::cell::Cell;
+    use crate::tile::Tile;
 
     #[test]
     fn test_terminal_grid_mut() {
@@ -391,7 +397,7 @@ mod tests {
 
         terminal
             .grid_mut()
-            .put(0, 0, Cell::new('X', Style::default()));
+            .put(0, 0, Tile::new('X', Style::default()));
 
         assert_eq!(terminal.grid().get(0, 0).glyph(), 'X');
     }
@@ -518,12 +524,12 @@ mod tests {
         // Without egc: spacer is '\0'.
         #[cfg(feature = "egc")]
         {
-            use crate::cell::CellFlags;
+            use crate::tile::TileFlags;
             assert!(
                 term.grid()
                     .get(1, 0)
                     .flags()
-                    .contains(CellFlags::WIDE_CHAR_SPACER)
+                    .contains(TileFlags::WIDE_CHAR_SPACER)
             );
             assert_eq!(term.grid().get(1, 0).glyph(), ' ');
         }
@@ -539,12 +545,12 @@ mod tests {
         assert_eq!(term.grid().get(0, 0).glyph(), '\u{4e2d}');
         #[cfg(feature = "egc")]
         {
-            use crate::cell::CellFlags;
+            use crate::tile::TileFlags;
             assert!(
                 term.grid()
                     .get(1, 0)
                     .flags()
-                    .contains(CellFlags::WIDE_CHAR_SPACER)
+                    .contains(TileFlags::WIDE_CHAR_SPACER)
             );
         }
         #[cfg(not(feature = "egc"))]
@@ -599,12 +605,12 @@ mod tests {
         assert_eq!(term.grid().get(0, 0).glyph(), '\u{4e2d}');
         #[cfg(feature = "egc")]
         {
-            use crate::cell::CellFlags;
+            use crate::tile::TileFlags;
             assert!(
                 term.grid()
                     .get(1, 0)
                     .flags()
-                    .contains(CellFlags::WIDE_CHAR_SPACER)
+                    .contains(TileFlags::WIDE_CHAR_SPACER)
             );
         }
         #[cfg(not(feature = "egc"))]

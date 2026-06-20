@@ -12,7 +12,7 @@ pub use headless::Headless;
 #[cfg(feature = "software")]
 pub use software::SoftwareBackend;
 
-use crate::cell::Cell;
+use crate::tile::Tile;
 use crate::event::Event;
 use crate::grid::{Pos, Size};
 use core::time::Duration;
@@ -23,7 +23,7 @@ pub trait Backend {
     /// Draw changed cells to the output surface.
     fn draw<'a, I>(&mut self, content: I)
     where
-        I: Iterator<Item = (Pos, &'a Cell)>;
+        I: Iterator<Item = (Pos, &'a Tile)>;
 
     /// Flush buffered output to the display.
     fn flush(&mut self);

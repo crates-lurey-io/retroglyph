@@ -1,32 +1,45 @@
-//! Fundamental unit of the grid.
+//! Fundamental unit of the grid: a single drawable tile.
 
 use crate::style::Style;
 #[cfg(feature = "egc")]
 use alloc::sync::Arc;
 
 bitflags::bitflags! {
-    /// Bit-flags tracking wide-character cell roles.
+    /// Bit-flags tracking wide-character tile roles.
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
-    pub struct CellFlags: u8 {
-        /// This cell is the left half of a 2-column wide character.
+    pub struct TileFlags: u8 {
+        /// This tile is the left half of a 2-column wide character.
         const WIDE_CHAR        = 0b0000_0001;
-        /// This cell is the invisible right-half spacer of a wide character.
+        /// This tile is the invisible right-half spacer of a wide character.
         const WIDE_CHAR_SPACER = 0b0000_0010;
     }
 }
 
-/// A single cell in the terminal grid.
+/// A single drawable tile in the terminal grid.
+///
+/// Each tile occupies one cell on a single layer (see ADR 008 for the layer
+/// model). Sub-cell pixel offsets (`dx`, `dy`) are visual only — they do not
+/// affect grid logic or hit-testing. Backends that cannot represent pixel
+/// offsets (e.g. `CrosstermBackend`) ignore them.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Cell {
+pub struct Tile {
     /// Primary codepoint. For ASCII and most Unicode this is the whole story.
     pub(crate) glyph: char,
-    /// Style applied to this cell.
+    /// Style applied to this tile.
     pub(crate) style: Style,
-    /// Wide-character role flags (e.g. [`CellFlags::WIDE_CHAR`]).
+    /// Pixel offset from the cell's left edge. Negative shifts left.
+    ///
+    /// Only meaningful for graphical backends (e.g. `SoftwareBackend`).
+    pub(crate) dx: i16,
+    /// Pixel offset from the cell's top edge. Negative shifts up.
+    ///
+    /// Only meaningful for graphical backends (e.g. `SoftwareBackend`).
+    pub(crate) dy: i16,
+    /// Wide-character role flags (e.g. [`TileFlags::WIDE_CHAR`]).
     ///
     /// Only present when the `egc` feature is enabled.
     #[cfg(feature = "egc")]
-    pub(crate) flags: CellFlags,
+    pub(crate) flags: TileFlags,
     /// Allocated only when the grapheme cluster has more than one codepoint
     /// (combining marks, ZWJ emoji sequences, etc.).
     ///
@@ -38,55 +51,61 @@ pub struct Cell {
     pub(crate) extra: Option<Arc<String>>,
 }
 
-impl Default for Cell {
+impl Default for Tile {
     fn default() -> Self {
         Self {
             glyph: ' ',
             style: Style::default(),
+            dx: 0,
+            dy: 0,
             #[cfg(feature = "egc")]
-            flags: CellFlags::empty(),
+            flags: TileFlags::empty(),
             #[cfg(feature = "egc")]
             extra: None,
         }
     }
 }
 
-impl Cell {
-    /// Creates a new cell with the given glyph and style.
+impl Tile {
+    /// Creates a new tile with the given glyph and style.
+    ///
+    /// `dx` and `dy` default to 0 (no sub-cell offset).
     #[must_use]
     pub const fn new(glyph: char, style: Style) -> Self {
         Self {
             glyph,
             style,
+            dx: 0,
+            dy: 0,
             #[cfg(feature = "egc")]
-            flags: CellFlags::empty(),
+            flags: TileFlags::empty(),
             #[cfg(feature = "egc")]
             extra: None,
         }
     }
 
-    /// Returns the cell's glyph (primary codepoint).
+    /// Returns the tile's glyph (primary codepoint).
     #[must_use]
     pub const fn glyph(&self) -> char {
         self.glyph
     }
 
-    /// Returns the cell's style.
+    /// Returns the tile's style.
     #[must_use]
     pub const fn style(&self) -> Style {
         self.style
     }
 
-    /// Returns the wide-character flags for this cell.
+    /// Returns the wide-character flags for this tile.
     ///
     /// Only present when the `egc` feature is enabled.
     #[cfg(feature = "egc")]
     #[must_use]
-    pub const fn flags(&self) -> CellFlags {
+    pub const fn flags(&self) -> TileFlags {
         self.flags
     }
 
-    /// Returns the extra EGC data for this cell, if any.
+    /// Returns the extra EGC data for this tile, if any.
     ///
     /// `Some` only for multi-codepoint grapheme clusters (combining marks,
     /// ZWJ sequences, etc.). `None` for the common single-codepoint case.
@@ -98,9 +117,9 @@ impl Cell {
         self.extra.as_deref().map(String::as_str)
     }
 
-    /// Returns the full grapheme cluster for this cell.
+    /// Returns the full grapheme cluster for this tile.
     ///
-    /// When the cell contains a multi-codepoint EGC (combining marks, ZWJ
+    /// When the tile contains a multi-codepoint EGC (combining marks, ZWJ
     /// sequences, etc.) this returns the stored string. For the common
     /// single-codepoint case it returns `None`; use [`glyph`](Self::glyph)
     /// and [`encode_utf8`](char::encode_utf8) to reconstruct the string.
@@ -112,26 +131,36 @@ impl Cell {
         self.extra.as_deref().map(String::as_str)
     }
 
-    /// Sets the glyph for this cell (builder style).
+    /// Sets the glyph for this tile (builder style).
     #[must_use]
     pub const fn with_glyph(mut self, glyph: char) -> Self {
         self.glyph = glyph;
         self
     }
 
-    /// Sets the style for this cell (builder style).
+    /// Sets the style for this tile (builder style).
     #[must_use]
     pub const fn with_style(mut self, style: Style) -> Self {
         self.style = style;
         self
     }
 
-    /// Resets this cell to the default (space, default style).
+    /// Sets the sub-cell pixel offset for this tile (builder style).
+    #[must_use]
+    pub const fn with_offset(mut self, dx: i16, dy: i16) -> Self {
+        self.dx = dx;
+        self.dy = dy;
+        self
+    }
+
+    /// Resets this tile to the default (space, default style, no offset).
     #[cfg(feature = "egc")]
     pub(crate) fn reset(&mut self) {
         self.glyph = ' ';
         self.style = Style::default();
-        self.flags = CellFlags::empty();
+        self.dx = 0;
+        self.dy = 0;
+        self.flags = TileFlags::empty();
         self.extra = None;
     }
 }
@@ -156,64 +185,77 @@ mod tests {
     use crate::color::Color;
 
     #[test]
-    fn test_cell_defaults() {
-        let cell = Cell::default();
-        assert_eq!(cell.glyph(), ' ');
-        assert_eq!(cell.style(), Style::default());
+    fn test_tile_defaults() {
+        let tile = Tile::default();
+        assert_eq!(tile.glyph(), ' ');
+        assert_eq!(tile.style(), Style::default());
+        assert_eq!(tile.dx, 0);
+        assert_eq!(tile.dy, 0);
         #[cfg(feature = "egc")]
         {
-            assert_eq!(cell.flags(), CellFlags::empty());
-            assert!(cell.extra().is_none());
+            assert_eq!(tile.flags(), TileFlags::empty());
+            assert!(tile.extra().is_none());
         }
     }
 
     #[test]
-    fn test_cell_builder() {
+    fn test_tile_builder() {
         let style = Style::new().fg(Color::RED);
-        let cell = Cell::new('A', style);
-        assert_eq!(cell.glyph(), 'A');
-        assert_eq!(cell.style(), style);
+        let tile = Tile::new('A', style);
+        assert_eq!(tile.glyph(), 'A');
+        assert_eq!(tile.style(), style);
 
-        let cell = cell.with_glyph('B');
-        assert_eq!(cell.glyph(), 'B');
+        let tile = tile.with_glyph('B');
+        assert_eq!(tile.glyph(), 'B');
     }
 
     #[test]
-    fn test_cell_reset() {
+    fn test_tile_with_offset() {
+        let tile = Tile::new('X', Style::default()).with_offset(-3, 5);
+        assert_eq!(tile.dx, -3);
+        assert_eq!(tile.dy, 5);
+    }
+
+    #[test]
+    fn test_tile_reset() {
         let style = Style::new().fg(Color::RED);
-        let mut cell = Cell::new('X', style);
-        cell.reset();
-        assert_eq!(cell.glyph(), ' ');
-        assert_eq!(cell.style(), Style::default());
+        let mut tile = Tile::new('X', style);
+        tile.reset();
+        assert_eq!(tile.glyph(), ' ');
+        assert_eq!(tile.style(), Style::default());
+        assert_eq!(tile.dx, 0);
+        assert_eq!(tile.dy, 0);
     }
 
     #[cfg(feature = "egc")]
     #[test]
-    fn test_cell_grapheme_single() {
-        let cell = Cell::new('A', Style::default());
-        assert_eq!(cell.grapheme(), None); // single-char, no extra
+    fn test_tile_grapheme_single() {
+        let tile = Tile::new('A', Style::default());
+        assert_eq!(tile.grapheme(), None); // single-char, no extra
     }
 
     #[cfg(feature = "egc")]
     #[test]
-    fn test_cell_grapheme_multi() {
+    fn test_tile_grapheme_multi() {
         // Multi-codepoint EGC: e + combining acute
         let extra_str = Arc::new(String::from("e\u{0301}"));
-        let cell = Cell {
+        let tile = Tile {
             glyph: 'e',
             style: Style::default(),
-            flags: CellFlags::empty(),
+            dx: 0,
+            dy: 0,
+            flags: TileFlags::empty(),
             extra: Some(extra_str),
         };
-        assert_eq!(cell.grapheme(), Some("e\u{0301}"));
+        assert_eq!(tile.grapheme(), Some("e\u{0301}"));
     }
 
     #[cfg(feature = "egc")]
     #[test]
-    fn test_cell_wide_flag() {
-        let mut cell = Cell::new('漢', Style::default());
-        cell.flags = CellFlags::WIDE_CHAR;
-        assert!(cell.flags().contains(CellFlags::WIDE_CHAR));
-        assert!(!cell.flags().contains(CellFlags::WIDE_CHAR_SPACER));
+    fn test_tile_wide_flag() {
+        let mut tile = Tile::new('漢', Style::default());
+        tile.flags = TileFlags::WIDE_CHAR;
+        assert!(tile.flags().contains(TileFlags::WIDE_CHAR));
+        assert!(!tile.flags().contains(TileFlags::WIDE_CHAR_SPACER));
     }
 }

@@ -7,7 +7,8 @@ extern crate alloc;
 
 /// Pluggable rendering backends.
 pub mod backend;
-pub mod cell;
+/// The atomic drawable unit (glyph, style, sub-cell offsets).
+pub mod tile;
 pub mod color;
 pub mod event;
 pub mod grid;
@@ -22,7 +23,7 @@ pub use backend::Crossterm;
 #[cfg(feature = "software")]
 pub use backend::SoftwareBackend;
 pub use backend::{Backend, Headless};
-pub use cell::Cell;
+pub use tile::Tile;
 pub use color::{AnsiColor, Color, InvalidAnsiIndex};
 pub use event::{Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 pub use grid::{Grid, Pos, Rect, Size};

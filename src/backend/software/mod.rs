@@ -17,7 +17,7 @@ pub use bitmap_font::BitmapFont;
 pub use config::{SoftwareBackendBuilder, SoftwareBackendError, SoftwareBackendOptions};
 
 use crate::backend::Backend;
-use crate::cell::Cell;
+use crate::tile::Tile;
 use crate::color::{AnsiColor, Color};
 use crate::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use crate::grid::{Pos, Size};
@@ -143,7 +143,7 @@ impl SoftwareBackend {
 impl Backend for SoftwareBackend {
     fn draw<'a, I>(&mut self, content: I)
     where
-        I: Iterator<Item = (Pos, &'a Cell)>,
+        I: Iterator<Item = (Pos, &'a Tile)>,
     {
         let font = self
             .options
@@ -249,7 +249,7 @@ fn blit_cell(
     buffer: &mut [u32],
     buf_w: usize,
     pos: Pos,
-    cell: &Cell,
+    cell: &Tile,
     font: &Font,
     cell_w: usize,
     cell_h: usize,

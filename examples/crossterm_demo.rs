@@ -54,7 +54,11 @@ fn main() -> Result<(), std::io::Error> {
 
         // 4. Draw UI status line
         term.print(2, 0, "rg Library — Crossterm Interactive Demo");
-        term.print(2, size.height.saturating_sub(1), "HP: 100 | Arrow Keys to move, Q or ESC to Quit");
+        term.print(
+            2,
+            size.height.saturating_sub(1),
+            "HP: 100 | Arrow Keys to move, Q or ESC to Quit",
+        );
 
         // Present double-buffered frame
         term.present();
