@@ -8,9 +8,9 @@
 //! error-returning variants.
 
 use crate::backend::Backend;
-use crate::tile::Tile;
 use crate::event::Event;
 use crate::grid::{Pos, Size};
+use crate::tile::Tile;
 use core::time::Duration;
 use std::io::{BufWriter, Stdout, Write};
 

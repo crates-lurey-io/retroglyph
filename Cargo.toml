@@ -34,6 +34,9 @@ unicode-segmentation = { version = "1.13", default-features = false, optional = 
 crossterm = { version = "0.28", optional = true }
 winit = { version = "0.30", optional = true }
 softbuffer = { version = "0.4", optional = true }
+image = { version = "0.25", optional = true, default-features = false, features = ["png"] }
+alpha-blend = { version = "0.2", optional = true, default-features = false, features = ["std"] }
+log = { version = "0.4", optional = true }
 
 
 [features]
@@ -42,6 +45,7 @@ std = []
 egc = ["dep:unicode-segmentation"]
 crossterm = ["dep:crossterm", "std"]
 software = ["dep:winit", "dep:softbuffer", "std"]
+software-tilesets = ["software", "dep:image", "dep:alpha-blend", "dep:log"]
 software-default-font = ["software"]
 
 [[example]]
@@ -51,6 +55,10 @@ required-features = ["crossterm"]
 [[example]]
 name = "software_demo"
 required-features = ["software-default-font"]
+
+[[example]]
+name = "tileset_demo"
+required-features = ["software-tilesets", "software-default-font"]
 
 [dev-dependencies]
 insta = { version = "1.34", features = ["yaml"] }

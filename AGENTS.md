@@ -29,6 +29,25 @@ Always use the [`Justfile`](Justfile) via `just` to automate development tasks.
 - **Run tests with verbose output:** `just test-v`
 - **Run specific E2E test:** `cargo test --test e2e <test_name>`
 
+### Feature Flags
+
+- **`software-tilesets`** (implies `software`): Enables PNG sprite sheet tilesets and sprite
+  caching for the software backend. Pulls in `image` (PNG decoding), `alpha-blend` (RGBA blending),
+  and `log` (collision warnings) as optional dependencies.
+
+### Logging
+
+- Use the `log` crate (feature-gated) for non-critical warnings that should not force a hard error
+  (e.g., codepoint collision in tilesets). Do NOT use `eprintln!` for warning-level output inside
+  the library — `log` lets applications control where warnings go.
+
+### Alpha Blending
+
+- Use `alpha-blend` (Apache 2.0/MIT) for RGBA compositing types like `U8x4Rgba`. See
+  `.matan/alpha-blend.md` for the full audit.
+- **Note:** `U8x4Rgba::source_over` had an alpha computation bug in `0.2.0` (`a*a` in place of
+  `a*255`). This was fixed in `0.2.1`. Always depend on `>=0.2.1`.
+
 ### Documentation & Summaries
 
 - **Generate private rustdocs:** `just doc`

@@ -88,13 +88,11 @@ fn draw(term: &mut Terminal<impl rg::Backend>, frame: u64) {
     if frame == 0 {
         term.layer(2);
         let header = "rg layers demo [Esc to quit]";
-        let style = Style::new()
-            .fg(Color::BRIGHT_WHITE)
-            .bg(Color::Rgb {
-                r: 40,
-                g: 40,
-                b: 60,
-            });
+        let style = Style::new().fg(Color::BRIGHT_WHITE).bg(Color::Rgb {
+            r: 40,
+            g: 40,
+            b: 60,
+        });
 
         // Center the header at the top.
         #[allow(clippy::cast_possible_truncation)]
@@ -105,9 +103,7 @@ fn draw(term: &mut Terminal<impl rg::Backend>, frame: u64) {
         }
 
         // Footer on layer 2 at the bottom.
-        let footer = format!(
-            "layer 0: dots  |  layer 1: @ (offset {dx},{dy})  |  layer 2: text"
-        );
+        let footer = format!("layer 0: dots  |  layer 1: @ (offset {dx},{dy})  |  layer 2: text");
         #[allow(clippy::cast_possible_truncation)]
         let fx = size.width.saturating_sub(footer.len() as u16) / 2;
         term.bg(Color::Rgb {

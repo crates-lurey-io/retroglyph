@@ -9,6 +9,8 @@
 //! that implements [`Backend`](crate::backend::Backend).
 
 use super::bitmap_font::BitmapFont;
+#[cfg(feature = "software-tilesets")]
+use super::tileset::TilesetOptions;
 use std::fmt;
 
 /// Errors that can occur when initializing or running the software backend.
@@ -22,6 +24,9 @@ pub enum SoftwareBackendError {
     Softbuffer(softbuffer::SoftBufferError),
     /// No font was provided and the `software-default-font` feature is not enabled.
     NoFont,
+    /// Tileset loading failed.
+    #[cfg(feature = "software-tilesets")]
+    Tileset(super::tileset::TilesetError),
 }
 
 impl fmt::Display for SoftwareBackendError {
@@ -36,6 +41,8 @@ impl fmt::Display for SoftwareBackendError {
                  SoftwareBackendBuilder::font() or enable the \
                  `software-default-font` feature"
             ),
+            #[cfg(feature = "software-tilesets")]
+            Self::Tileset(e) => write!(f, "tileset error: {e}"),
         }
     }
 }
@@ -47,6 +54,8 @@ impl std::error::Error for SoftwareBackendError {
             Self::EventLoop(e) => Some(e),
             Self::Softbuffer(e) => Some(e),
             Self::NoFont => None,
+            #[cfg(feature = "software-tilesets")]
+            Self::Tileset(e) => Some(e),
         }
     }
 }
@@ -141,6 +150,9 @@ pub struct SoftwareBackend {
     /// A scale of 2 renders each 1-bit font pixel as a 2×2 block, making
     /// the VGA 8×16 font display at 16×32 pixels per cell. Default is 1.
     pub scale: u8,
+    /// Registered tileset options, loaded at [`run`](SoftwareBackend::run) time.
+    #[cfg(feature = "software-tilesets")]
+    pub tilesets: Vec<TilesetOptions>,
 }
 
 impl Default for SoftwareBackend {
@@ -154,6 +166,8 @@ impl Default for SoftwareBackend {
             cols: 80,
             rows: 25,
             scale: 1,
+            #[cfg(feature = "software-tilesets")]
+            tilesets: Vec::new(),
         }
     }
 }
@@ -227,6 +241,20 @@ impl SoftwareBackendBuilder {
     #[must_use]
     pub const fn font(mut self, font: BitmapFont) -> Self {
         self.options.font = Some(font);
+        self
+    }
+
+    /// Registers a tileset for loading when the backend starts.
+    ///
+    /// Multiple tilesets can be registered; they are all loaded when
+    /// [`run`](SoftwareBackend::run) or [`run_headless`](SoftwareBackend::run_headless)
+    /// is called. Later registrations win on codepoint collision.
+    ///
+    /// Available only when the `software-tilesets` feature is enabled.
+    #[cfg(feature = "software-tilesets")]
+    #[must_use]
+    pub fn tileset(mut self, opts: TilesetOptions) -> Self {
+        self.options.tilesets.push(opts);
         self
     }
 

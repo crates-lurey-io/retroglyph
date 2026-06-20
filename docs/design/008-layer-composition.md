@@ -58,12 +58,12 @@ alpha-blend = { version = "0.2", default-features = false, features = ["std"] }
    is added with a default impl that extracts layer 0 items, ignores higher layers, and calls
    `draw`. `CrosstermBackend` and `HeadlessBackend` need no modifications.
 
-6. **Diff algorithm:** `Grid::diff_layers` iterates allocated layers 0 → 255, then cells in
+6. **Diff algorithm:** `Grid::diff` iterates allocated layers 0 → 255, then cells in
    row-major order. A cell is yielded if: (a) the layer is new (no previous entry) — all cells
    yielded, or (b) both frames have the layer and the `Tile` differs. Semantics identical to the
-   previous design, but yields `&Tile` directly instead of `&CellStack`.
+   previous design, but yields `&Tile` directly instead of `&Tile (no stacking)`.
 
-7. **Compositing:** `SoftwareBackend` blits layers 0 → 255. Layer 0 fills the cell background from
+7. **Compositing:** `SoftwareRenderer` blits layers 0 → 255. Layer 0 fills the cell background from
    `style.bg` (opaque). Layers > 0 are composited over whatever is already in the pixel buffer;
    their *background* is transparent (no bg fill), only the glyph pixels overwrite the layer below.
 
@@ -215,7 +215,7 @@ impl Grid {
     }
 
     /// Clear a specific layer (resets all tiles to default).
-    pub fn clear_layer(&mut self, layer: u8) {
+    pub fn clear(&mut self, layer: u8) {
         if let Some(lb) = self.layers[usize::from(layer)].as_mut() {
             lb.buf.clear();
         }
@@ -229,7 +229,7 @@ impl Grid {
     }
 
     /// Iterate cells on a specific layer.
-    pub fn cells_on(&self, layer: u8) -> Option<Cells<'_>> {
+    pub fn cells(&self, layer: u8) -> Option<Cells<'_>> {
         let lb = self.layer(layer)?;
         Some(Cells {
             iter: lb.buf.as_ref().iter().enumerate(),
@@ -244,7 +244,7 @@ impl Grid {
 ```diff
   pub fn clear(&mut self) {
 -     self.buf.clear();
-+     self.clear_layer(0);
++     self.clear(0);
   }
 ```
 
@@ -255,7 +255,7 @@ impl Grid {
     /// Yield (layer_id, Pos, &Tile) for every changed cell across all layers.
     ///
     /// Order: layer-major (0 → 255), then row-major within each layer.
-    pub fn diff_layers<'a>(&'a self, other: &'a Self)
+    pub fn diff<'a>(&'a self, other: &'a Self)
         -> impl Iterator<Item = (u8, Pos, &'a Tile)> + 'a
     {
         (0u8..=255).flat_map(move |id| {
@@ -297,7 +297,7 @@ impl Grid {
 
 - Freshly created `Grid`: layer 0 is `Some`, layers 1–255 are `None`.
 - `put_tile(5, 0, 0, tile)` allocates layer 5; layer 6 remains `None`.
-- `diff_layers` against an identical grid yields zero items.
+- `diff` against an identical grid yields zero items.
 - Changing one tile on layer 0 yields exactly 1 tuple with `layer_id == 0`.
 - A newly allocated layer 3 against a previous grid without it yields `width * height` tuples.
 - Tuples are ordered layer-major: all layer-0 changes before all layer-1 changes.
@@ -322,18 +322,18 @@ fn grid_put_tile_allocates_layer() {
 }
 
 #[test]
-fn grid_diff_layers_empty_when_identical() {
+fn grid_diff_empty_when_identical() {
     let g = Grid::new(5, 5);
     let prev = Grid::new(5, 5);
-    assert_eq!(g.diff_layers(&prev).count(), 0);
+    assert_eq!(g.diff(&prev).count(), 0);
 }
 
 #[test]
-fn grid_diff_layers_reports_changed_cell() {
+fn grid_diff_reports_changed_cell() {
     let mut cur = Grid::new(5, 5);
     let prev = Grid::new(5, 5);
     cur.put_tile(0, 2, 3, Tile::new('X', Style::default()));
-    let diffs: Vec<_> = cur.diff_layers(&prev).collect();
+    let diffs: Vec<_> = cur.diff(&prev).collect();
     assert_eq!(diffs.len(), 1);
     assert_eq!(diffs[0].0, 0);
     assert_eq!(diffs[0].1, Pos::new(2, 3));
@@ -341,22 +341,22 @@ fn grid_diff_layers_reports_changed_cell() {
 }
 
 #[test]
-fn grid_diff_layers_new_layer_yields_all_cells() {
+fn grid_diff_new_layer_yields_all_cells() {
     let mut cur = Grid::new(3, 4);
     let prev = Grid::new(3, 4);
     cur.put_tile(1, 0, 0, Tile::new('A', Style::default()));
-    let diffs: Vec<_> = cur.diff_layers(&prev).collect();
+    let diffs: Vec<_> = cur.diff(&prev).collect();
     assert_eq!(diffs.len(), 12);
     assert!(diffs.iter().all(|(l, _, _)| *l == 1));
 }
 
 #[test]
-fn grid_diff_layers_layer_major_order() {
+fn grid_diff_layer_major_order() {
     let mut cur = Grid::new(3, 3);
     let prev = Grid::new(3, 3);
     cur.put_tile(2, 0, 0, Tile::new('B', Style::default()));
     cur.put_tile(0, 1, 0, Tile::new('A', Style::default()));
-    let layers: Vec<u8> = cur.diff_layers(&prev).map(|(l, _, _)| l).collect();
+    let layers: Vec<u8> = cur.diff(&prev).map(|(l, _, _)| l).collect();
     assert_eq!(layers[0], 0);
     assert!(layers[1..].iter().all(|&l| l == 2));
 }
@@ -425,7 +425,7 @@ impl<B: Backend> Terminal<B> {
 ```diff
   pub fn clear(&mut self) {
 -     self.current.clear();
-+     self.current.clear_layer(0);
++     self.current.clear(0);
   }
 ```
 
@@ -433,8 +433,8 @@ impl<B: Backend> Terminal<B> {
 
 ```rust
 impl<B: Backend> Terminal<B> {
-    pub fn clear_layer(&mut self, layer: u8) {
-        self.current.clear_layer(layer);
+    pub fn clear(&mut self, layer: u8) {
+        self.current.clear(layer);
     }
 
     pub fn clear_all(&mut self) {
@@ -449,7 +449,7 @@ impl<B: Backend> Terminal<B> {
   pub fn present(&mut self) {
 -     let diff = self.current.diff(&self.previous);
 -     self.backend.draw(diff);
-+     let diff = self.current.diff_layers(&self.previous);
++     let diff = self.current.diff(&self.previous);
 +     self.backend.draw_layers(diff);
       self.backend.flush();
       core::mem::swap(&mut self.current, &mut self.previous);
@@ -537,7 +537,7 @@ pub trait Backend {
 }
 ```
 
-Key difference from the previous design: no `CellStack` to unwrap. The default impl directly passes
+Key difference from the previous design: no `Tile (no stacking)` to unwrap. The default impl directly passes
 `&Tile` to `draw`, which is exactly what existing backends consume.
 
 **`HeadlessBackend`** stores tiles directly — no change in logic, just the type from `Cell` to
@@ -575,7 +575,7 @@ No code changes inside the method body — the field names are identical. The de
 impl routes layer 0 through `draw`, so `CrosstermBackend` never sees layers > 0. This is correct
 behaviour for an ANSI terminal.
 
-**`SoftwareBackend::draw_layers`** — the only backend that overrides:
+**`SoftwareRenderer::draw_layers`** — the only backend that overrides:
 
 ```rust
 #[cfg(feature = "software")]
@@ -655,4 +655,4 @@ fn layer_zero_fills_background_higher_layers_do_not() {
 - `Backend::draw_layers` is additive with a default impl; existing backends compile without changes.
 - `Terminal::put` / `print` / `put_styled` are behaviourally identical for callers that never call
   `layer()` or `put_offset()`.
-- `Grid::cells()` iterates layer 0; `Grid::cells_on(layer)` for explicit layer access.
+- `Grid::cells()` iterates layer 0; `Grid::cells(layer)` for explicit layer access.

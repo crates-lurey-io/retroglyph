@@ -1,12 +1,12 @@
 //! Stateful terminal management and double-buffering.
 
 use crate::backend::Backend;
-use crate::tile::Tile;
 use crate::color::Color;
 use crate::event::Event;
 use crate::grid::{Grid, Rect, Size};
 use crate::style::{CellModifier, Style};
 use crate::text::Line;
+use crate::tile::Tile;
 use core::time::Duration;
 #[cfg(not(feature = "egc"))]
 use unicode_width::UnicodeWidthChar;
@@ -128,7 +128,11 @@ impl<B: Backend> Terminal<B> {
                 return;
             }
         }
-        let tile = Tile { glyph: ch, style, ..Tile::default() };
+        let tile = Tile {
+            glyph: ch,
+            style,
+            ..Tile::default()
+        };
         self.current.put_tile(self.active_layer, x, y, tile);
     }
 
@@ -188,7 +192,11 @@ impl<B: Backend> Terminal<B> {
                 return;
             }
         }
-        let tile = Tile { glyph: ch, style, ..Tile::default() };
+        let tile = Tile {
+            glyph: ch,
+            style,
+            ..Tile::default()
+        };
         self.current.put_tile(self.active_layer, x, y, tile);
     }
 
@@ -264,7 +272,11 @@ impl<B: Backend> Terminal<B> {
                     if usize::from(cur_x) >= usize::from(self.current.width()) {
                         break;
                     }
-                    let tile = Tile { glyph: ch, style: span.style, ..Tile::default() };
+                    let tile = Tile {
+                        glyph: ch,
+                        style: span.style,
+                        ..Tile::default()
+                    };
                     self.current.put_tile(self.active_layer, cur_x, y, tile);
                     cur_x += w;
                 }
@@ -365,8 +377,6 @@ impl<B: Backend> Terminal<B> {
         }
     }
 
-
-
     /// String printing implementation used when `egc` is enabled.
     #[cfg(feature = "egc")]
     fn print_str_egc(&mut self, x: u16, y: u16, text: &str, style: Style) {
@@ -406,7 +416,11 @@ impl<B: Backend> Terminal<B> {
             } else {
                 #[allow(clippy::cast_possible_truncation)]
                 let w = UnicodeWidthChar::width(c).unwrap_or(1) as u16;
-                let tile = Tile { glyph: c, style, ..Tile::default() };
+                let tile = Tile {
+                    glyph: c,
+                    style,
+                    ..Tile::default()
+                };
                 self.current.put_tile(self.active_layer, cur_x, cur_y, tile);
                 cur_x += w;
                 if usize::from(cur_x) >= usize::from(self.current.width()) {

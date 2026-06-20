@@ -14,6 +14,11 @@
 pub mod bitmap_font;
 pub mod config;
 
+#[cfg(feature = "software-tilesets")]
+pub mod sprite_cache;
+#[cfg(feature = "software-tilesets")]
+pub mod tileset;
+
 pub use bitmap_font::BitmapFont;
 pub use config::{SoftwareBackend, SoftwareBackendBuilder, SoftwareBackendError};
 
@@ -21,12 +26,16 @@ use crate::backend::Backend;
 use crate::color::{AnsiColor, Color};
 use crate::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use crate::grid::{Pos, Size};
-use crate::tile::Tile;
 use crate::style::CellModifier;
+use crate::tile::Tile;
+#[cfg(feature = "software-tilesets")]
+use alpha_blend::rgba::U8x4Rgba;
 use bitmap_font::BitmapFont as Font;
 use grixy::buf::GridBuf;
-use grixy::ops::layout::RowMajor;
 use grixy::ops::GridWrite;
+use grixy::ops::layout::RowMajor;
+#[cfg(feature = "software-tilesets")]
+use sprite_cache::{Sprite, SpriteCache, source_over};
 use std::num::NonZeroU32;
 use std::sync::Arc;
 use std::sync::mpsc;
@@ -55,6 +64,8 @@ use winit::window::{Window, WindowId};
 pub struct SoftwareRenderer {
     options: SoftwareBackend,
     ctx: RenderContext,
+    #[cfg(feature = "software-tilesets")]
+    sprite_cache: Arc<SpriteCache>,
 }
 
 struct RenderContext {
@@ -71,6 +82,7 @@ impl SoftwareRenderer {
         frame_tx: mpsc::SyncSender<Vec<u32>>,
         buf_w: usize,
         buf_h: usize,
+        #[cfg(feature = "software-tilesets")] sprite_cache: Arc<SpriteCache>,
     ) -> Self {
         Self {
             options,
@@ -79,6 +91,8 @@ impl SoftwareRenderer {
                 frame_tx,
                 pixel_buf: GridBuf::from_buffer(vec![0u32; buf_w * buf_h], buf_w),
             },
+            #[cfg(feature = "software-tilesets")]
+            sprite_cache,
         }
     }
 
@@ -148,14 +162,26 @@ impl SoftwareBackend {
     where
         F: FnMut(&mut crate::Terminal<SoftwareRenderer>) + Send + 'static,
     {
-        let font = self.font.as_ref().expect(
-            "run() requires a font; supply one via SoftwareBackendBuilder::font()",
-        );
+        let font = self
+            .font
+            .as_ref()
+            .expect("run() requires a font; supply one via SoftwareBackendBuilder::font()");
 
         let cell_w = u32::from(font.glyph_width) * u32::from(self.scale);
         let cell_h = u32::from(font.glyph_height) * u32::from(self.scale);
         let win_w = u32::from(self.cols) * cell_w;
         let win_h = u32::from(self.rows) * cell_h;
+
+        #[cfg(feature = "software-tilesets")]
+        let sprite_cache = if self.tilesets.is_empty() {
+            Arc::new(SpriteCache::new())
+        } else {
+            let mut cache = SpriteCache::new();
+            for opts in &self.tilesets {
+                cache.load(opts).map_err(SoftwareBackendError::Tileset)?;
+            }
+            Arc::new(cache)
+        };
 
         let (event_tx, event_rx) = mpsc::channel::<Event>();
         let (frame_tx, frame_rx) = mpsc::sync_channel::<Vec<u32>>(1);
@@ -166,6 +192,8 @@ impl SoftwareBackend {
             frame_tx,
             win_w as usize,
             win_h as usize,
+            #[cfg(feature = "software-tilesets")]
+            sprite_cache,
         );
 
         let mut app_loop = app_loop;
@@ -248,10 +276,31 @@ impl SoftwareBackend {
         let buf_w = usize::from(self.cols) * cell_w;
         let buf_h = usize::from(self.rows) * cell_h;
 
+        #[cfg(feature = "software-tilesets")]
+        let sprite_cache = if self.tilesets.is_empty() {
+            Arc::new(SpriteCache::new())
+        } else {
+            let mut cache = SpriteCache::new();
+            for opts in &self.tilesets {
+                cache
+                    .load(opts)
+                    .unwrap_or_else(|e| panic!("tileset loading failed in run_headless: {e}"));
+            }
+            Arc::new(cache)
+        };
+
         let (_event_tx, event_rx) = mpsc::channel();
         let (frame_tx, _frame_rx) = mpsc::sync_channel(1);
 
-        SoftwareRenderer::create(self, event_rx, frame_tx, buf_w, buf_h)
+        SoftwareRenderer::create(
+            self,
+            event_rx,
+            frame_tx,
+            buf_w,
+            buf_h,
+            #[cfg(feature = "software-tilesets")]
+            sprite_cache,
+        )
     }
 }
 
@@ -269,6 +318,9 @@ impl Backend for SoftwareRenderer {
         let glyph_h = usize::from(font.glyph_height) * scale;
         let buf_w = usize::from(cols) * glyph_w;
 
+        #[cfg(feature = "software-tilesets")]
+        let sprite_cache = Some(&*self.sprite_cache);
+
         for (pos, cell) in content {
             blit_cell(
                 self.ctx.pixel_buf.as_mut(),
@@ -279,6 +331,8 @@ impl Backend for SoftwareRenderer {
                 glyph_w,
                 glyph_h,
                 scale,
+                #[cfg(feature = "software-tilesets")]
+                sprite_cache,
             );
         }
     }
@@ -293,6 +347,10 @@ impl Backend for SoftwareRenderer {
         let cell_w = usize::from(font.glyph_width) * scale;
         let cell_h = usize::from(font.glyph_height) * scale;
         let buf_w = usize::from(cols) * cell_w;
+        let buf_h = self.ctx.pixel_buf.as_ref().len() / buf_w;
+
+        #[cfg(feature = "software-tilesets")]
+        let sprite_cache = Some(&*self.sprite_cache);
 
         for (layer_id, pos, tile) in content {
             let px_x = usize::from(pos.x) * cell_w;
@@ -302,6 +360,22 @@ impl Backend for SoftwareRenderer {
                 let bg = resolve_bg_color(tile.style.bg);
                 let rect = ixy::Rect::new(px_x, px_y, cell_w, cell_h);
                 self.ctx.pixel_buf.fill_rect_solid(rect, bg);
+            }
+
+            // Sprite cache dispatch: sprite wins over bitmap font.
+            #[cfg(feature = "software-tilesets")]
+            if let Some(sprite) = sprite_cache.and_then(|c| c.get(tile.glyph)) {
+                blit_sprite(
+                    self.ctx.pixel_buf.as_mut(),
+                    buf_w,
+                    buf_h,
+                    px_x,
+                    px_y,
+                    tile,
+                    sprite,
+                    scale,
+                );
+                continue;
             }
 
             blit_glyph(
@@ -369,6 +443,9 @@ impl Backend for SoftwareRenderer {
 /// Each set bit in the font row maps to `fg`; each clear bit maps to `bg`.
 /// No alpha blending is needed — bitmap fonts are 1-bit.
 /// When `scale > 1` each source pixel becomes a `scale×scale` block.
+///
+/// If `sprite_cache` contains a sprite for the cell's glyph, the bitmap font
+/// path is skipped in favor of [`blit_sprite`].
 #[allow(clippy::cast_possible_truncation, clippy::too_many_arguments)]
 fn blit_cell(
     buffer: &mut [u32],
@@ -379,18 +456,22 @@ fn blit_cell(
     cell_w: usize,
     cell_h: usize,
     scale: usize,
+    #[cfg(feature = "software-tilesets")] sprite_cache: Option<&SpriteCache>,
 ) {
     let px_x = pos.x as usize * cell_w;
     let px_y = pos.y as usize * cell_h;
 
+    #[cfg(feature = "software-tilesets")]
+    if let Some(sprite) = sprite_cache.and_then(|c| c.get(cell.glyph())) {
+        let buf_h = buffer.len() / buf_w;
+        blit_sprite(buffer, buf_w, buf_h, px_x, px_y, cell, sprite, scale);
+        return;
+    }
+
     let mut fg = resolve_fg_color(cell.style().fg);
     let mut bg = resolve_bg_color(cell.style().bg);
 
-    if cell
-        .style()
-        .modifiers()
-        .contains(CellModifier::REVERSE)
-    {
+    if cell.style().modifiers().contains(CellModifier::REVERSE) {
         core::mem::swap(&mut fg, &mut bg);
     }
 
@@ -497,6 +578,85 @@ fn blit_glyph(
                     if idx < buffer.len() {
                         buffer[idx] = fg;
                     }
+                }
+            }
+        }
+    }
+}
+
+/// Blit a decoded RGBA8 sprite into `buffer` with alpha blending.
+///
+/// The sprite's top-left corner is at pixel `(cell_px_x + tile.dx * scale,
+/// cell_px_y + tile.dy * scale)`. If `spacing_cells > 1`, the sprite's pixels
+/// extend beyond the anchor cell into adjacent cells.
+///
+/// Pixels outside `buffer` bounds are silently clipped.
+///
+/// Uses the `alpha-blend` crate's Porter-Duff `SourceOver` operator via
+/// floating-point conversion for correctness.
+#[cfg(feature = "software-tilesets")]
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::similar_names,
+    clippy::too_many_arguments
+)]
+fn blit_sprite(
+    buffer: &mut [u32],
+    buf_w: usize,
+    buf_h: usize,
+    cell_px_x: usize,
+    cell_px_y: usize,
+    tile: &Tile,
+    sprite: &Sprite,
+    scale: usize,
+) {
+    let origin_x = cell_px_x as i64 + i64::from(tile.dx) * scale as i64;
+    let origin_y = cell_px_y as i64 + i64::from(tile.dy) * scale as i64;
+
+    let src_w = sprite.pixel_width as usize;
+    let src_h = sprite.pixel_height as usize;
+
+    for src_y in 0..src_h {
+        for src_x in 0..src_w {
+            let src_idx = (src_y * src_w + src_x) * 4;
+            let src = U8x4Rgba::new(
+                sprite.pixels[src_idx],
+                sprite.pixels[src_idx + 1],
+                sprite.pixels[src_idx + 2],
+                sprite.pixels[src_idx + 3],
+            );
+
+            if src.is_transparent() {
+                continue;
+            }
+
+            // Each source pixel maps to `scale x scale` destination pixels.
+            for dy in 0..scale {
+                #[allow(clippy::cast_sign_loss)]
+                let dst_y = origin_y + (src_y * scale + dy) as i64;
+                if dst_y < 0 || dst_y as usize >= buf_h {
+                    continue;
+                }
+                let dst_y = dst_y as usize;
+
+                for dx in 0..scale {
+                    #[allow(clippy::cast_sign_loss)]
+                    let dst_x = origin_x + (src_x * scale + dx) as i64;
+                    if dst_x < 0 || dst_x as usize >= buf_w {
+                        continue;
+                    }
+                    let dst_x = dst_x as usize;
+
+                    let dst_idx = dst_y * buf_w + dst_x;
+                    if dst_idx >= buffer.len() {
+                        continue;
+                    }
+
+                    let dst = U8x4Rgba::from_rgb_u32(buffer[dst_idx]);
+                    let blended = source_over(src, dst);
+                    buffer[dst_idx] = blended.to_rgb_u32();
                 }
             }
         }
@@ -691,19 +851,17 @@ impl ApplicationHandler for WindowApp {
                 self.win_w = cols * self.cell_w;
                 self.win_h = rows * self.cell_h;
                 if let Some(surface) = &mut self.surface {
-                    if let (Some(w), Some(h)) = (
-                        NonZeroU32::new(self.win_w),
-                        NonZeroU32::new(self.win_h),
-                    ) {
+                    if let (Some(w), Some(h)) =
+                        (NonZeroU32::new(self.win_w), NonZeroU32::new(self.win_h))
+                    {
                         let _ = surface.resize(w, h);
                     }
                 }
                 self.last_frame.clear();
                 #[allow(clippy::cast_possible_truncation)]
-                let _ = self.event_tx.send(Event::Resize(
-                    cols.max(1) as u16,
-                    rows.max(1) as u16,
-                ));
+                let _ = self
+                    .event_tx
+                    .send(Event::Resize(cols.max(1) as u16, rows.max(1) as u16));
             }
 
             WindowEvent::KeyboardInput { event, .. } => {
@@ -756,6 +914,8 @@ mod tests {
             cols: 1,
             rows: 1,
             scale: 1,
+            #[cfg(feature = "software-tilesets")]
+            tilesets: Vec::new(),
         };
         opts.run_headless()
     }
@@ -765,11 +925,7 @@ mod tests {
         let mut renderer = test_renderer();
         let tile = Tile {
             glyph: ' ',
-            style: Style::new().bg(Color::Rgb {
-                r: 255,
-                g: 0,
-                b: 0,
-            }),
+            style: Style::new().bg(Color::Rgb { r: 255, g: 0, b: 0 }),
             ..Tile::default()
         };
         let diff: Vec<(u8, Pos, &Tile)> = vec![(0, Pos::new(0, 0), &tile)];
@@ -777,7 +933,10 @@ mod tests {
 
         let buf = renderer.pixels();
         assert_eq!(buf.len(), 8 * 16);
-        assert!(buf.iter().all(|&p| p == 0x00FF_0000), "all pixels should be red");
+        assert!(
+            buf.iter().all(|&p| p == 0x00FF_0000),
+            "all pixels should be red"
+        );
     }
 
     #[test]
@@ -786,11 +945,7 @@ mod tests {
 
         let bg_tile = Tile {
             glyph: ' ',
-            style: Style::new().bg(Color::Rgb {
-                r: 255,
-                g: 0,
-                b: 0,
-            }),
+            style: Style::new().bg(Color::Rgb { r: 255, g: 0, b: 0 }),
             ..Tile::default()
         };
         renderer.draw_layers(vec![(0, Pos::new(0, 0), &bg_tile)].into_iter());
@@ -799,11 +954,7 @@ mod tests {
 
         let space_tile = Tile {
             glyph: ' ',
-            style: Style::new().fg(Color::Rgb {
-                r: 0,
-                g: 255,
-                b: 0,
-            }),
+            style: Style::new().fg(Color::Rgb { r: 0, g: 255, b: 0 }),
             ..Tile::default()
         };
         renderer.draw_layers(vec![(1, Pos::new(0, 0), &space_tile)].into_iter());
@@ -829,11 +980,7 @@ mod tests {
 
         let fg = Tile {
             glyph: '@',
-            style: Style::new().fg(Color::Rgb {
-                r: 0,
-                g: 255,
-                b: 0,
-            }),
+            style: Style::new().fg(Color::Rgb { r: 0, g: 255, b: 0 }),
             ..Tile::default()
         };
         renderer.draw_layers(vec![(1, Pos::new(0, 0), &fg)].into_iter());
@@ -860,11 +1007,7 @@ mod tests {
 
         let fg = Tile {
             glyph: '@',
-            style: Style::new().fg(Color::Rgb {
-                r: 0,
-                g: 255,
-                b: 0,
-            }),
+            style: Style::new().fg(Color::Rgb { r: 0, g: 255, b: 0 }),
             dx: 1,
             dy: 0,
             ..Tile::default()
@@ -872,7 +1015,11 @@ mod tests {
         renderer.draw_layers(vec![(1, Pos::new(0, 0), &fg)].into_iter());
 
         let buf = renderer.pixels();
-        let has_green = |col: usize| buf.iter().enumerate().any(|(i, &p)| i % 8 == col && p == 0x0000_FF00);
+        let has_green = |col: usize| {
+            buf.iter()
+                .enumerate()
+                .any(|(i, &p)| i % 8 == col && p == 0x0000_FF00)
+        };
         assert!(!has_green(0), "x=0 should have no green pixels with dx=1");
         assert!(has_green(1), "x=1 should have green pixels with dx=1");
     }
@@ -891,31 +1038,45 @@ mod tests {
         let bg = Tile {
             glyph: ':',
             style: Style::new()
-                .fg(Color::Rgb { r: 60, g: 60, b: 80 })
-                .bg(Color::Rgb { r: 20, g: 20, b: 30 }),
+                .fg(Color::Rgb {
+                    r: 60,
+                    g: 60,
+                    b: 80,
+                })
+                .bg(Color::Rgb {
+                    r: 20,
+                    g: 20,
+                    b: 30,
+                }),
             ..Tile::default()
         };
         let dot = Tile {
             glyph: '.',
             style: Style::new()
-                .fg(Color::Rgb { r: 40, g: 40, b: 50 })
-                .bg(Color::Rgb { r: 20, g: 20, b: 30 }),
+                .fg(Color::Rgb {
+                    r: 40,
+                    g: 40,
+                    b: 50,
+                })
+                .bg(Color::Rgb {
+                    r: 20,
+                    g: 20,
+                    b: 30,
+                }),
             ..Tile::default()
         };
-        renderer.draw_layers(
-            [
-                (0, Pos::new(0, 0), &bg),
-                (0, Pos::new(1, 0), &dot),
-            ]
-            .into_iter(),
-        );
+        renderer.draw_layers([(0, Pos::new(0, 0), &bg), (0, Pos::new(1, 0), &dot)].into_iter());
 
         // Layer 1: '@' at (0,0) with sub-cell offset dx=1, bright green.
         let entity = Tile {
             glyph: '@',
             style: Style::new()
                 .fg(Color::Rgb { r: 0, g: 255, b: 0 })
-                .bg(Color::Rgb { r: 10, g: 10, b: 10 }),
+                .bg(Color::Rgb {
+                    r: 10,
+                    g: 10,
+                    b: 10,
+                }),
             dx: 1,
             dy: 0,
             ..Tile::default()

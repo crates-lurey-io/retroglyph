@@ -2,9 +2,9 @@
 //! and allows injecting synthetic events.
 
 use crate::backend::Backend;
-use crate::tile::Tile;
 use crate::event::Event;
 use crate::grid::{Grid, Pos, Size};
+use crate::tile::Tile;
 use alloc::collections::VecDeque;
 use alloc::string::String;
 use core::time::Duration;

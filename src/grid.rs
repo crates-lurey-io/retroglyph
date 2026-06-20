@@ -1,12 +1,12 @@
 //! The grid container.
 
+#[cfg(feature = "egc")]
+use crate::style::Style;
 use crate::tile::Tile;
 #[cfg(feature = "egc")]
 use crate::tile::TileFlags;
 #[cfg(feature = "egc")]
 use crate::tile::cap_grapheme;
-#[cfg(feature = "egc")]
-use crate::style::Style;
 use alloc::vec::Vec;
 use core::fmt;
 use core::ops::{Index, IndexMut};
@@ -482,10 +482,7 @@ impl Grid {
     /// - Layer in `self`, absent in `other` (newly allocated): all
     ///   `width × height` tiles yielded.
     /// - Layer in both: only positions where the `Tile` differs are yielded.
-    pub fn diff<'a>(
-        &'a self,
-        other: &'a Self,
-    ) -> impl Iterator<Item = (u8, Pos, &'a Tile)> + 'a {
+    pub fn diff<'a>(&'a self, other: &'a Self) -> impl Iterator<Item = (u8, Pos, &'a Tile)> + 'a {
         let mut results = Vec::new();
         for id in 0u8..=255 {
             match (self.layer(id), other.layer(id)) {

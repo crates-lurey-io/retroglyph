@@ -12,9 +12,9 @@ pub use headless::Headless;
 #[cfg(feature = "software")]
 pub use software::{SoftwareBackend, SoftwareRenderer};
 
-use crate::tile::Tile;
 use crate::event::Event;
 use crate::grid::{Pos, Size};
+use crate::tile::Tile;
 use core::time::Duration;
 
 /// A rendering backend that presents grid content to a display
@@ -34,9 +34,11 @@ pub trait Backend {
     where
         I: Iterator<Item = (u8, Pos, &'a Tile)>,
     {
-        self.draw(content.filter_map(|(layer, pos, tile)| {
-            if layer == 0 { Some((pos, tile)) } else { None }
-        }));
+        self.draw(content.filter_map(
+            |(layer, pos, tile)| {
+                if layer == 0 { Some((pos, tile)) } else { None }
+            },
+        ));
     }
 
     /// Flush buffered output to the display.
