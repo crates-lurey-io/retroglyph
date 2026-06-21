@@ -1,11 +1,12 @@
 ---
 source: tests/e2e_snapshots.rs
+assertion_line: 237
 expression: svg
 ---
 <svg xmlns="http://www.w3.org/2000/svg" width="520" height="286">
 <rect width="100%" height="100%" fill="#111111"/>
 <text font-family="monospace" font-size="14" y="26.0">
-  <tspan fill="#cccccc" x="8.0">  rg Library — Crossterm Interactive Demo                   </tspan>
+  <tspan fill="#cccccc" x="8.0">  rg Library — Interactive Demo                             </tspan>
 </text>
 <text font-family="monospace" font-size="14" y="44.0">
   <tspan fill="#cccccc" x="8.0">                                                            </tspan>

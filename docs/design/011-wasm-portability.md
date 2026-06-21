@@ -133,7 +133,7 @@ driven by the winit event loop:
 
 ```diff
  // Current:
--pub fn run<F>(self, app_loop: F) -> Result<()>
+-pub fn run_windowed<F>(self, app_loop: F) -> Result<()>
 -where F: FnMut(&mut Terminal<SoftwareRenderer>) + Send + 'static
 -{
 

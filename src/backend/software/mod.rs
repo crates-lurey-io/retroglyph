@@ -19,11 +19,15 @@ pub mod sprite_cache;
 #[cfg(feature = "software-tilesets")]
 pub mod tileset;
 
-pub use bitmap_font::BitmapFont;
-pub use config::{SoftwareBackend, SoftwareBackendBuilder, SoftwareBackendError};
-
 use crate::backend::Backend;
 use crate::color::{AnsiColor, Color};
+
+pub use bitmap_font::BitmapFont;
+pub use config::{SoftwareBackend, SoftwareBackendBuilder, SoftwareBackendError};
+pub mod windowed;
+pub use windowed::WindowedBackend;
+
+
 use crate::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use crate::grid::{Pos, Size};
 use crate::style::CellModifier;
@@ -36,10 +40,9 @@ use grixy::ops::GridWrite;
 use grixy::ops::layout::RowMajor;
 #[cfg(feature = "software-tilesets")]
 use sprite_cache::{Sprite, SpriteCache};
+use std::collections::VecDeque;
 use std::num::NonZeroU32;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc;
 use std::time::Duration;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
@@ -69,30 +72,67 @@ pub struct SoftwareRenderer {
     sprite_cache: Arc<SpriteCache>,
 }
 
+/// Softbuffer window surface.
+///
+/// Holds both the `Context` and `Surface`. The `_context` must outlive
+/// `surface` (softbuffer requires it), but is only stored, not read.
+struct WindowSurface {
+    _context: softbuffer::Context<Arc<Window>>,
+    surface: softbuffer::Surface<Arc<Window>, Arc<Window>>,
+}
+
+/// Errors that can occur when initializing a window surface.
+#[derive(Debug)]
+pub enum SurfaceError {
+    /// Failed to create the softbuffer context from the window.
+    Context(softbuffer::SoftBufferError),
+    /// Failed to create the softbuffer surface from the window.
+    Surface(softbuffer::SoftBufferError),
+}
+
+impl core::fmt::Display for SurfaceError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Context(e) => write!(f, "softbuffer context: {e}"),
+            Self::Surface(e) => write!(f, "softbuffer surface: {e}"),
+        }
+    }
+}
+
+impl std::error::Error for SurfaceError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Context(e) | Self::Surface(e) => Some(e),
+        }
+    }
+}
+
 struct RenderContext {
-    event_rx: mpsc::Receiver<Event>,
-    frame_tx: mpsc::SyncSender<Vec<u32>>,
+    event_buffer: VecDeque<Event>,
     pixel_buf: GridBuf<u32, Vec<u32>, RowMajor>,
-    alive: Arc<AtomicBool>,
+    window_surface: Option<WindowSurface>,
+    cell_w: u32,
+    cell_h: u32,
 }
 
 impl SoftwareRenderer {
-    /// Creates a new renderer with the given channels and buffer dimensions.
+    /// Creates a new renderer with the given buffer and cell dimensions.
     pub(crate) fn create(
         options: SoftwareBackend,
-        event_rx: mpsc::Receiver<Event>,
-        frame_tx: mpsc::SyncSender<Vec<u32>>,
         buf_w: usize,
         buf_h: usize,
+        cell_w: u32,
+        cell_h: u32,
         #[cfg(feature = "software-tilesets")] sprite_cache: Arc<SpriteCache>,
     ) -> Self {
         Self {
             options,
             ctx: RenderContext {
-                event_rx,
-                frame_tx,
+                event_buffer: VecDeque::new(),
                 pixel_buf: GridBuf::from_buffer(vec![0u32; buf_w * buf_h], buf_w),
-                alive: Arc::new(AtomicBool::new(true)),
+                window_surface: None,
+                cell_w,
+                cell_h,
             },
             #[cfg(feature = "software-tilesets")]
             sprite_cache,
@@ -110,6 +150,47 @@ impl SoftwareRenderer {
     pub fn pixels(&self) -> &[u32] {
         self.ctx.pixel_buf.as_ref()
     }
+
+    /// Push an event into the internal buffer.
+    pub fn push_event(&mut self, event: Event) {
+        self.ctx.event_buffer.push_back(event);
+    }
+
+    /// Initialize the window surface from a winit window.
+    pub fn init_surface(&mut self, window: &Arc<Window>) -> Result<(), SurfaceError> {
+        let context = softbuffer::Context::new(window.clone()).map_err(SurfaceError::Context)?;
+        let surface = softbuffer::Surface::new(&context, window.clone()).map_err(SurfaceError::Surface)?;
+        self.ctx.window_surface = Some(WindowSurface { _context: context, surface });
+        Ok(())
+    }
+
+    /// Resize the window surface.
+    pub fn resize_surface(&mut self, width: u32, height: u32) {
+        if let Some(surf) = &mut self.ctx.window_surface {
+            if let (Some(w), Some(h)) = (NonZeroU32::new(width), NonZeroU32::new(height)) {
+                let _ = surf.surface.resize(w, h);
+            }
+        }
+    }
+
+    /// Present the pixel buffer to the window surface.
+    ///
+    /// Returns `Ok(())` on success.  Returns `Err(SurfaceError::Surface(...))`
+    /// if the softbuffer buffer can't be acquired or presented (e.g.,
+    /// context lost on WASM or DRI/KMS page flip pending).
+    pub fn present(&mut self) -> Result<(), SurfaceError> {
+        let Some(surface) = self.ctx.window_surface.as_mut() else {
+            return Ok(()); // headless mode, nothing to present
+        };
+        let mut buffer = surface.surface.buffer_mut().map_err(SurfaceError::Surface)?;
+        let pixels = self.ctx.pixel_buf.as_ref();
+        if pixels.len() == buffer.len() {
+            buffer.copy_from_slice(pixels);
+        } else {
+            buffer.fill(0);
+        }
+        buffer.present().map_err(SurfaceError::Surface)
+    }
 }
 
 // ── Run (windowed) ────────────────────────────────────────────────────────────
@@ -117,10 +198,9 @@ impl SoftwareRenderer {
 impl SoftwareBackend {
     /// Opens a window and runs the game loop.
     ///
-    /// Consumes this config; spawns `app_loop` on a background thread with a
-    /// [`Terminal`](crate::Terminal) wrapping a [`SoftwareRenderer`].  Blocks
-    /// the calling (main) thread inside the `winit` event loop until the
-    /// window is closed.
+    /// Consumes this config; runs `app_loop` on every frame tick, driven by
+    /// the winit event loop.  On native this blocks the calling thread; on
+    /// WASM it returns immediately (the event loop continues in the browser).
     ///
     /// The closure receives `&mut Terminal<SoftwareRenderer>` and is called
     /// on every tick.  Return from the closure to continue; the loop only
@@ -139,7 +219,7 @@ impl SoftwareBackend {
     ///     .scale(2)
     ///     .build()
     ///     .unwrap()
-    ///     .run(|term| {
+    ///     .run_windowed(|term| {
     ///         term.clear();
     ///         term.print(0, 0, "Hello");
     ///         term.present();
@@ -161,73 +241,55 @@ impl SoftwareBackend {
     ///
     /// Returns [`SoftwareBackendError::EventLoop`] if the event loop fails to
     /// start.
-    pub fn run<F>(self, app_loop: F) -> Result<(), SoftwareBackendError>
+    /// Creates the renderer via [`run_headless`](Self::run_headless) and
+    /// wraps it in a windowed event loop.
+    ///
+    /// See [`run_headless`](Self::run_headless) for renderer creation; this
+    /// method adds winit window + event loop setup on top.
+    pub fn run_windowed<F>(self, app_loop: F) -> Result<(), SoftwareBackendError>
     where
-        F: FnMut(&mut crate::Terminal<SoftwareRenderer>) + Send + 'static,
+        F: FnMut(&mut crate::Terminal<SoftwareRenderer>) + 'static,
     {
-        let font = self
-            .font
-            .as_ref()
-            .expect("run() requires a font; supply one via SoftwareBackendBuilder::font()");
-
-        let cell_w = u32::from(font.glyph_width) * u32::from(self.scale);
-        let cell_h = u32::from(font.glyph_height) * u32::from(self.scale);
+        // Compute window size before consuming `self` in run_headless().
+        let glyph = self.font.as_ref().unwrap_or_else(|| {
+            unreachable!("SoftwareBackendBuilder::build() returns Err(NoFont) if no font")
+        });
+        let cell_w = u32::from(glyph.glyph_width) * u32::from(self.scale);
+        let cell_h = u32::from(glyph.glyph_height) * u32::from(self.scale);
         let win_w = u32::from(self.cols) * cell_w;
         let win_h = u32::from(self.rows) * cell_h;
+        let title = self.window_title.clone();
 
-        #[cfg(feature = "software-tilesets")]
-        let sprite_cache = if self.tilesets.is_empty() {
-            Arc::new(SpriteCache::new())
-        } else {
-            let mut cache = SpriteCache::new();
-            for opts in &self.tilesets {
-                cache.load(opts).map_err(SoftwareBackendError::Tileset)?;
-            }
-            Arc::new(cache)
-        };
-
-        let (event_tx, event_rx) = mpsc::channel::<Event>();
-        let (frame_tx, frame_rx) = mpsc::sync_channel::<Vec<u32>>(1);
-
-        let renderer = SoftwareRenderer::create(
-            self.clone(),
-            event_rx,
-            frame_tx,
-            win_w as usize,
-            win_h as usize,
-            #[cfg(feature = "software-tilesets")]
-            sprite_cache,
-        );
-
-        let mut app_loop = app_loop;
-        std::thread::spawn(move || {
-            let mut terminal = crate::Terminal::new(renderer);
-            loop {
-                app_loop(&mut terminal);
-                if !terminal.backend().is_connected() {
-                    break;
-                }
-            }
-        });
-
+        let renderer = self.run_headless();
+        let terminal = crate::Terminal::new(renderer);
         let event_loop = EventLoop::new().map_err(SoftwareBackendError::EventLoop)?;
-        let mut window_app = WindowApp {
-            title: self.window_title,
-            event_tx,
-            frame_rx,
-            last_frame: Vec::new(),
+
+        let build_app = |terminal, app_loop| WindowApp {
+            terminal: Some(terminal),
+            app_loop,
             window: None,
-            context: None,
-            surface: None,
-            win_w,
-            win_h,
-            cell_w,
-            cell_h,
+            title: title.clone(),
+            init_size: InitWindowSize {
+                width: win_w,
+                height: win_h,
+            },
         };
 
-        event_loop
-            .run_app(&mut window_app)
-            .map_err(SoftwareBackendError::EventLoop)
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let mut app = build_app(terminal, app_loop);
+            event_loop
+                .run_app(&mut app)
+                .map_err(SoftwareBackendError::EventLoop)
+        }
+
+        #[cfg(target_arch = "wasm32")]
+        {
+            use winit::platform::web::EventLoopExtWebSys;
+            let app = build_app(terminal, app_loop);
+            event_loop.spawn_app(app);
+            Ok(())
+        }
     }
 
     /// Creates a headless renderer that renders into an internal buffer
@@ -277,10 +339,11 @@ impl SoftwareBackend {
             "run_headless() requires a font; supply one via SoftwareBackendBuilder::font()",
         );
 
-        let cell_w = usize::from(font.glyph_width) * usize::from(self.scale);
-        let cell_h = usize::from(font.glyph_height) * usize::from(self.scale);
-        let buf_w = usize::from(self.cols) * cell_w;
-        let buf_h = usize::from(self.rows) * cell_h;
+        let cell_w = u32::from(font.glyph_width) * u32::from(self.scale);
+        let cell_h = u32::from(font.glyph_height) * u32::from(self.scale);
+        // u32 always fits in usize (all targets: 32- and 64-bit).
+        let buf_w = usize::from(self.cols) * usize::try_from(cell_w).unwrap();
+        let buf_h = usize::from(self.rows) * usize::try_from(cell_h).unwrap();
 
         #[cfg(feature = "software-tilesets")]
         let sprite_cache = if self.tilesets.is_empty() {
@@ -288,31 +351,32 @@ impl SoftwareBackend {
         } else {
             let mut cache = SpriteCache::new();
             for opts in &self.tilesets {
-                cache
-                    .load(opts)
-                    .unwrap_or_else(|e| panic!("tileset loading failed in run_headless: {e}"));
+                cache.load(opts).expect(
+                    "tileset loading failed; check tileset file path and format",
+                );
             }
             Arc::new(cache)
         };
 
-        let (_event_tx, event_rx) = mpsc::channel();
-        let (frame_tx, _frame_rx) = mpsc::sync_channel(1);
-
         SoftwareRenderer::create(
             self,
-            event_rx,
-            frame_tx,
             buf_w,
             buf_h,
+            cell_w,
+            cell_h,
             #[cfg(feature = "software-tilesets")]
             sprite_cache,
         )
     }
 }
 
-// ── Backend impl (game / headless thread) ─────────────────────────────────────
+// ── Backend impl ────────────────────────────────────────────────────────────────
 
 impl Backend for SoftwareRenderer {
+    fn push_event(&mut self, event: Event) {
+        SoftwareRenderer::push_event(self, event);
+    }
+
     fn draw<'a, I>(&mut self, content: I)
     where
         I: Iterator<Item = (Pos, &'a Tile)>,
@@ -405,20 +469,8 @@ impl Backend for SoftwareRenderer {
     }
 
     fn flush(&mut self) {
-        let buf: Vec<u32> = self.ctx.pixel_buf.as_ref().to_vec();
-        match self.ctx.frame_tx.try_send(buf) {
-            Err(mpsc::TrySendError::Disconnected(_)) => {
-                self.ctx.alive.store(false, Ordering::Release);
-            }
-            Err(mpsc::TrySendError::Full(_)) | Ok(()) => {
-                // TODO: Track frame drops via a shared metrics system
-                // once designed (see ADR 012: Backend Metrics).
-            }
-        }
-    }
-
-    fn is_connected(&self) -> bool {
-        self.ctx.alive.load(Ordering::Acquire)
+        // No-op. Frame is presented via WindowedBackend::present() in windowed
+        // mode, or accessed directly via pixels() in headless/testing mode.
     }
 
     fn size(&self) -> Size {
@@ -447,12 +499,11 @@ impl Backend for SoftwareRenderer {
         true
     }
 
-    fn poll_event(&mut self, timeout: Duration) -> Option<Event> {
-        if timeout == Duration::ZERO {
-            self.ctx.event_rx.try_recv().ok()
-        } else {
-            self.ctx.event_rx.recv_timeout(timeout).ok()
-        }
+    fn poll_event(&mut self, _timeout: Duration) -> Option<Event> {
+        // Non-blocking: the game loop is driven by `about_to_wait` →
+        // `request_redraw`, so there is no background thread to sleep on.
+        // All backends return immediately regardless of platform.
+        self.ctx.event_buffer.pop_front()
     }
 
     fn set_cursor_visible(&mut self, _visible: bool) {
@@ -461,6 +512,30 @@ impl Backend for SoftwareRenderer {
 
     fn set_cursor_position(&mut self, _position: Pos) {
         // No hardware cursor in software mode.
+    }
+}
+
+// ── WindowedBackend impl ─────────────────────────────────────────────────────────
+
+impl WindowedBackend for SoftwareRenderer {
+    fn present(&mut self) -> Result<(), SurfaceError> {
+        SoftwareRenderer::present(self)
+    }
+
+    fn init_surface(&mut self, window: &Arc<Window>) -> Result<(), SurfaceError> {
+        SoftwareRenderer::init_surface(self, window)
+    }
+
+    fn resize_surface(&mut self, width: u32, height: u32) {
+        SoftwareRenderer::resize_surface(self, width, height);
+    }
+
+    fn cell_size(&self) -> (u32, u32) {
+        (self.ctx.cell_w, self.ctx.cell_h)
+    }
+
+    fn push_window_event(&mut self, event: Event) {
+        SoftwareRenderer::push_event(self, event);
     }
 }
 
@@ -830,63 +905,79 @@ fn translate_key(input: winit::event::KeyEvent) -> Option<Event> {
     }))
 }
 
+/// Translate a winit `RawKeyEvent` (from `DeviceEvent::Key`) into our `Event`.
+///
+/// This is the primary input path on WASM, where keyboard events fire as
+/// `DeviceEvent::Key` from a document-level listener (no canvas focus needed)
+/// rather than `WindowEvent::KeyboardInput` (which requires canvas focus).
+/// On native this is a secondary path behind `WindowEvent::KeyboardInput`.
 // ── winit ApplicationHandler (main thread) ────────────────────────────────────
 
-struct WindowApp {
-    title: String,
-    event_tx: mpsc::Sender<Event>,
-    frame_rx: mpsc::Receiver<Vec<u32>>,
-    last_frame: Vec<u32>,
-    window: Option<Arc<Window>>,
-    #[allow(dead_code)]
-    context: Option<softbuffer::Context<Arc<Window>>>,
-    surface: Option<softbuffer::Surface<Arc<Window>, Arc<Window>>>,
-    win_w: u32,
-    win_h: u32,
-    cell_w: u32,
-    cell_h: u32,
+/// Initial window dimensions used before the first Resized event.
+struct InitWindowSize {
+    width: u32,
+    height: u32,
 }
 
-impl ApplicationHandler for WindowApp {
-    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+struct WindowApp<B: WindowedBackend, F> {
+    terminal: Option<crate::Terminal<B>>,
+    app_loop: F,
+    window: Option<Arc<Window>>,
+    title: String,
+    init_size: InitWindowSize,
+}
+
+impl<B: WindowedBackend, F> WindowApp<B, F> {
+    /// Create the window and initialize the surface.
+    ///
+    /// Returns `Some(window)` on success, logs and returns `None` on failure.
+    fn create_window_and_surface(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+    ) -> Option<Arc<Window>> {
         let attrs = Window::default_attributes()
             .with_title(&self.title)
-            .with_inner_size(winit::dpi::PhysicalSize::new(self.win_w, self.win_h));
+            .with_inner_size(winit::dpi::PhysicalSize::new(
+                self.init_size.width,
+                self.init_size.height,
+            ));
+
+        #[cfg(target_family = "wasm")]
+        let attrs = {
+            use winit::platform::web::WindowAttributesExtWebSys;
+            attrs.with_append(true)
+        };
 
         let window = Arc::new(match event_loop.create_window(attrs) {
             Ok(w) => w,
             Err(e) => {
-                eprintln!("rg software backend: window creation failed: {e}");
+                log::error!("window creation failed: {e}");
                 event_loop.exit();
-                return;
+                return None;
             }
         });
 
-        let context = match softbuffer::Context::new(window.clone()) {
-            Ok(c) => c,
-            Err(e) => {
-                eprintln!("rg software backend: softbuffer context failed: {e}");
+        if let Some(term) = self.terminal.as_mut() {
+            if let Err(e) = term.backend_mut().init_surface(&window) {
+                log::error!("surface init failed: {e}");
                 event_loop.exit();
-                return;
+                return None;
             }
-        };
-
-        let mut surface = match softbuffer::Surface::new(&context, window.clone()) {
-            Ok(s) => s,
-            Err(e) => {
-                eprintln!("rg software backend: softbuffer surface failed: {e}");
-                event_loop.exit();
-                return;
-            }
-        };
-
-        if let (Some(w), Some(h)) = (NonZeroU32::new(self.win_w), NonZeroU32::new(self.win_h)) {
-            let _ = surface.resize(w, h);
+            // Set the initial surface size (required on WASM before first present).
+            term.backend_mut().resize_surface(self.init_size.width, self.init_size.height);
         }
 
-        self.context = Some(context);
-        self.surface = Some(surface);
-        self.window = Some(window);
+        Some(window)
+    }
+}
+
+impl<B: WindowedBackend, F: FnMut(&mut crate::Terminal<B>) + 'static> ApplicationHandler
+    for WindowApp<B, F>
+{
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        if let Some(window) = self.create_window_and_surface(event_loop) {
+            self.window = Some(window);
+        }
     }
 
     fn window_event(
@@ -897,49 +988,39 @@ impl ApplicationHandler for WindowApp {
     ) {
         match event {
             WindowEvent::CloseRequested => {
-                let _ = self.event_tx.send(Event::Close);
+                if let Some(term) = self.terminal.as_mut() {
+                    term.backend_mut().push_event(Event::Close);
+                }
                 event_loop.exit();
             }
 
             WindowEvent::Resized(physical_size) => {
-                let cols = physical_size.width / self.cell_w;
-                let rows = physical_size.height / self.cell_h;
-                self.win_w = cols * self.cell_w;
-                self.win_h = rows * self.cell_h;
-                if let Some(surface) = &mut self.surface {
-                    if let (Some(w), Some(h)) =
-                        (NonZeroU32::new(self.win_w), NonZeroU32::new(self.win_h))
-                    {
-                        let _ = surface.resize(w, h);
-                    }
+                if let Some(term) = self.terminal.as_mut() {
+                    let (cell_w, cell_h) = term.backend().cell_size();
+                    let cols = physical_size.width / cell_w;
+                    let rows = physical_size.height / cell_h;
+                    let new_w = cols * cell_w;
+                    let new_h = rows * cell_h;
+                    term.backend_mut().resize_surface(new_w, new_h);
+                    #[allow(clippy::cast_possible_truncation)]
+                    term.backend_mut()
+                        .push_event(Event::Resize(cols.max(1) as u16, rows.max(1) as u16));
                 }
-                self.last_frame.clear();
-                #[allow(clippy::cast_possible_truncation)]
-                let _ = self
-                    .event_tx
-                    .send(Event::Resize(cols.max(1) as u16, rows.max(1) as u16));
             }
 
             WindowEvent::KeyboardInput { event, .. } => {
-                if let Some(e) = translate_key(event) {
-                    let _ = self.event_tx.send(e);
+                if let Some(term) = self.terminal.as_mut() {
+                    if let Some(e) = translate_key(event) {
+                        term.backend_mut().push_event(e);
+                    }
                 }
             }
 
             WindowEvent::RedrawRequested => {
-                while let Ok(buf) = self.frame_rx.try_recv() {
-                    self.last_frame = buf;
-                }
-                if let Some(surface) = self.surface.as_mut() {
-                    if let Ok(mut buffer) = surface.buffer_mut() {
-                        let src = &self.last_frame;
-                        if src.len() == buffer.len() {
-                            buffer.copy_from_slice(src);
-                        } else {
-                            buffer.fill(0);
-                        }
-                        let _ = buffer.present();
-                    }
+                let Some(term) = self.terminal.as_mut() else { return };
+                (self.app_loop)(term);
+                if let Err(e) = term.backend_mut().present() {
+                    log::error!("frame present failed: {e}");
                 }
             }
 

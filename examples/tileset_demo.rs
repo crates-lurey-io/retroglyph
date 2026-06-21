@@ -273,7 +273,7 @@ fn main() {
     let mut frame = 0u64;
 
     backend
-        .run(move |term: &mut Terminal<_>| {
+        .run_windowed(move |term: &mut Terminal<_>| {
             draw(term, frame);
             frame = frame.wrapping_add(1);
 

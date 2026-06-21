@@ -10,7 +10,7 @@ pub mod software;
 pub use crossterm::Crossterm;
 pub use headless::Headless;
 #[cfg(feature = "software")]
-pub use software::{SoftwareBackend, SoftwareRenderer};
+pub use software::{SoftwareBackend, SoftwareRenderer, WindowedBackend};
 
 use crate::event::Event;
 use crate::grid::{Pos, Size};
@@ -96,4 +96,15 @@ pub trait Backend {
 
     /// Move the cursor to a position.
     fn set_cursor_position(&mut self, position: Pos);
+
+    /// Push an event into the backend's event buffer.
+    ///
+    /// Backends that receive events externally (e.g., from a window event
+    /// loop or a test harness) override this to queue events for
+    /// [`poll_event`](Self::poll_event).  The default is a no-op.
+    ///
+    /// - Windowed backends: called by `ApplicationHandler` on each event.
+    /// - Headless: called by tests to inject synthetic events.
+    /// - Crossterm: reads from its own event stream; no-op here.
+    fn push_event(&mut self, _event: Event) {}
 }

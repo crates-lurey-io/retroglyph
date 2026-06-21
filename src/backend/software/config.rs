@@ -86,7 +86,7 @@ impl std::error::Error for SoftwareBackendError {
 ///     .build()
 ///     .expect("backend init failed");
 ///
-/// backend.run(move |term| {
+/// backend.run_windowed(move |term| {
 ///     term.clear();
 ///     term.print(0, 0, "Hello from rg!");
 ///     term.present();

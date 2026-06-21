@@ -116,6 +116,10 @@ impl Backend for Headless {
         self.event_queue.pop_front()
     }
 
+    fn push_event(&mut self, event: Event) {
+        Headless::push_event(self, event);
+    }
+
     fn set_cursor_visible(&mut self, visible: bool) {
         self.cursor_visible = visible;
     }

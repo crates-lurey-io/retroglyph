@@ -44,7 +44,7 @@ default = ["std", "egc"]
 std = []
 egc = ["dep:unicode-segmentation"]
 crossterm = ["dep:crossterm", "std"]
-software = ["dep:winit", "dep:softbuffer", "std"]
+software = ["dep:winit", "dep:softbuffer", "dep:log", "std"]
 software-tilesets = ["software", "dep:image", "dep:alpha-blend", "dep:log"]
 software-default-font = ["software"]
 
@@ -64,8 +64,28 @@ required-features = ["software-tilesets", "software-default-font"]
 name = "software_subpixel_demo"
 required-features = ["software-default-font"]
 
-[dev-dependencies]
-image = { version = "0.25", default-features = false, features = ["png"] }
-insta = { version = "1.34", features = ["yaml"] }
+[[example]]
+name = "wasm_demo"
+required-features = ["software-default-font"]
+
+[[example]]
+name = "headless_demo"
+required-features = []
+
+[[example]]
+name = "runner"
+required-features = []
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen = "=0.2.106"
+console_error_panic_hook = "0.1"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 portable-pty = "0.9.0"
 vt100 = "0.15"
+
+[dev-dependencies]
+toml = "0.8"
+serde = { version = "1", features = ["derive"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
+insta = { version = "1.34", features = ["yaml"] }

@@ -225,6 +225,10 @@ impl Backend for Crossterm {
         let _ = self.writer.flush();
     }
 
+    fn push_event(&mut self, _event: Event) {
+        // Crossterm reads events from its own event stream, not from push.
+    }
+
     fn poll_event(&mut self, timeout: Duration) -> Option<Event> {
         let start = std::time::Instant::now();
         let mut remaining = timeout;

@@ -39,10 +39,11 @@ Always use the [`Justfile`](Justfile) via `just` to automate development tasks.
 
 ### Logging
 
-- Use the `log` crate (feature-gated) for non-critical warnings that should not force a hard error
-
-  (e.g., codepoint collision in tilesets). Do NOT use `eprintln!` for warning-level output inside
-  the library — `log` lets applications control where warnings go.
+- Use the `log` crate (feature-gated) for non-critical warnings (e.g., codepoint collision in
+  tilesets) AND for fatal-but-actionable errors (e.g., window/surface init failures).  Do NOT use
+  `eprintln!` anywhere inside the library — `log` lets applications control where output goes.
+- Fatal init errors that prevent the backend from starting should use `log::error!` + graceful
+  shutdown (`event_loop.exit()`), not `panic!` or `eprintln!`.
 
 ### Alpha Blending
 

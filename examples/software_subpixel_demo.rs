@@ -55,7 +55,7 @@ fn main() {
     };
 
     backend
-        .run(move |term: &mut Terminal<_>| {
+        .run_windowed(move |term: &mut Terminal<_>| {
             tick(term, &mut s);
             s.frame = s.frame.wrapping_add(1);
 

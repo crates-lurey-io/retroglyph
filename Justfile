@@ -31,6 +31,14 @@ test-v:
 setup-tools:
     cargo install cargo-llms-txt --root bin/
 
+# Install wasm-server-runner (pinned) to local bin/ for running WASM examples in browser
+setup-wasm:
+    cargo install wasm-server-runner --version 1.0.1 --locked --root bin/
+
+# Run the WASM demo in browser (requires `just setup-wasm` first)
+run-wasm:
+    cargo run --target wasm32-unknown-unknown --example wasm_demo --features software-default-font
+
 # Generate llms.txt summary
 llms:
     @if [ ! -f bin/bin/cargo-llms-txt ]; then \
