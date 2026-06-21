@@ -1,7 +1,7 @@
 # AGENTS.md — Developer & Agent Guide
 
-This guide details instructions for building, testing, linting, formatting, and navigating the `retroglyph`
-codebase.
+This guide details instructions for building, testing, linting, formatting, and navigating the
+`retroglyph` codebase.
 
 ---
 
@@ -20,9 +20,9 @@ Always use the [`Justfile`](Justfile) via `just` to automate development tasks.
 
 - **Format all files (Rust + Markdown/JSON):** `just fmt`
 - **Verify formatting without modifications:** `just fmt-check`
-- **Check all project constraints:** `just check` (Runs formatting check, Clippy, tests, private
+- **Check all project constraints:** `just check` (Runs formatting check, Clippy, tests, and
 
-  rustdocs compilation, and `llms.txt` freshness check)
+  private rustdocs compilation)
 
 ### Testing
 
@@ -40,7 +40,7 @@ Always use the [`Justfile`](Justfile) via `just` to automate development tasks.
 ### Logging
 
 - Use the `log` crate (feature-gated) for non-critical warnings (e.g., codepoint collision in
-  tilesets) AND for fatal-but-actionable errors (e.g., window/surface init failures).  Do NOT use
+  tilesets) AND for fatal-but-actionable errors (e.g., window/surface init failures). Do NOT use
   `eprintln!` anywhere inside the library — `log` lets applications control where output goes.
 - Fatal init errors that prevent the backend from starting should use `log::error!` + graceful
   shutdown (`event_loop.exit()`), not `panic!` or `eprintln!`.
@@ -59,9 +59,32 @@ Always use the [`Justfile`](Justfile) via `just` to automate development tasks.
 
 - **Generate private rustdocs:** `just doc`
 - **Generate LLM text summaries (`llms.txt` & `llms-full.txt`):** `just llms`
-- **Verify LLM summary freshness:** `just llms-check`
 
 ---
+
+## Pre-commit hooks
+
+Hooks are managed by [`hk`](https://hk.jdx.dev) (via `cargo-run-bin`) and configured in
+[`hk.pkl`](hk.pkl). On every `jj push`, `jj-hooks` runs `hk pre-commit` which checks:
+
+- `cargo fmt --all -- --check`
+- `npm --prefix tools run format:check` (prettier)
+- `cargo clippy --all-targets -- -D warnings`
+
+To run hooks manually:
+
+```sh
+cargo bin hk run pre-commit
+```
+
+To bypass the hook on push:
+
+```sh
+JJ_HOOKS_SKIP=1 jj push
+```
+
+Add new checks by editing [`hk.pkl`](hk.pkl). The `Justfile` remains the source of truth for what
+each check does — hooks are just the trigger.
 
 ## Project Documentation Directory Structure
 

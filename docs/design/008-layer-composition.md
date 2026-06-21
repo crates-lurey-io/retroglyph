@@ -109,8 +109,8 @@ or terminal changes yet — just a rename that compiles.
   }
 ```
 
-The public API changes from `Cell` to `Tile`. Since retroglyph is not published, no backward compat is
-needed. Update all references in the codebase:
+The public API changes from `Cell` to `Tile`. Since retroglyph is not published, no backward compat
+is needed. Update all references in the codebase:
 
 ```diff
 

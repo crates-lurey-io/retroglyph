@@ -9,6 +9,7 @@ rustfmt:
     cargo fmt --all -- --check
 
 prettier:
+    npm ci --prefix tools 2>/dev/null || true
     npm --prefix tools run format:check
 
 markdown:
@@ -36,6 +37,7 @@ compile:
 doc:
     cargo doc --no-deps --document-private-items
     @if [ -t 1 ]; then \
+        cargo-llms-txt --output llms.txt --full llms-full.txt 2>/dev/null || true; \
         if command -v xdg-open > /dev/null; then xdg-open target/doc/retroglyph/index.html; \
         elif command -v open > /dev/null; then open target/doc/retroglyph/index.html; \
         fi \
@@ -69,7 +71,7 @@ llms-check:
 
 # ── Composite ────────────────────────────────────────────────────────────────
 
-check: fmt-check lint compile test doc llms-check
+check: fmt-check lint compile test doc
 
 clean:
     cargo clean

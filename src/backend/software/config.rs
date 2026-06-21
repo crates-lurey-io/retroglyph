@@ -5,7 +5,7 @@
 //! [`run`](SoftwareBackend::run) (windowed) or
 //! [`run_headless`](SoftwareBackend::run_headless) (headless).
 //!
-//! Both methods produce a [`SoftwareRenderer`](super::SoftwareRenderer)
+//! Both methods produce a [`SoftwareRenderer`](crate::backend::software::SoftwareRenderer)
 //! that implements [`Backend`](crate::backend::Backend).
 
 use super::bitmap_font::BitmapFont;
@@ -67,7 +67,7 @@ impl std::error::Error for SoftwareBackendError {
 /// [`run_headless`](SoftwareBackend::run_headless) for headless in-memory
 /// rendering.
 ///
-/// Both methods return or run a [`SoftwareRenderer`](super::SoftwareRenderer)
+/// Both methods return or run a [`SoftwareRenderer`](crate::backend::software::SoftwareRenderer)
 /// that implements [`Backend`](crate::backend::Backend).
 ///
 /// # Examples

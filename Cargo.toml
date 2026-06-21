@@ -4,12 +4,13 @@ resolver = "2"
 
 [workspace.metadata.bin]
 wasm-server-runner = { version = "1.0.1" }
+hk = { version = "1.48.0" }
 
 [package]
 name = "retroglyph"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.88"
 authors = ["Matan Lurey <matan@lurey.org>"]
 license = "MIT"
 description = "A terminal/grid rendering library for roguelikes"

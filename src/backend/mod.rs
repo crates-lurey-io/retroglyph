@@ -49,7 +49,7 @@ pub trait Backend {
     /// all layers) on every call to [`draw_layers`](Self::draw_layers), rather
     /// than just the changed cells.
     ///
-    /// Pixel-based backends (e.g. [`SoftwareRenderer`]) need this because
+    /// Pixel-based backends (e.g. `SoftwareRenderer`) need this because
     /// sub-cell offsets can spill glyph pixels into adjacent cells — without
     /// a full redraw, orphaned pixels from the previous frame linger.
     ///

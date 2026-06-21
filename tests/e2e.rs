@@ -111,10 +111,10 @@ fn test_e2e_headless_demo_scenario() {
     let event = term.read();
     let mut player_x = 5;
     let player_y = 5;
-    if let Event::Key(key_event) = event {
-        if key_event.code == KeyCode::Right {
-            player_x += 1;
-        }
+    if let Event::Key(key_event) = event
+        && key_event.code == KeyCode::Right
+    {
+        player_x += 1;
     }
 
     // Render Second Frame

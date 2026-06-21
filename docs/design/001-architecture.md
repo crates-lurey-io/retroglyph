@@ -4,13 +4,14 @@
 
 ## Context
 
-retroglyph is a Rust rewrite of [BearLibTerminal](https://github.com/tommyettinger/BearLibTerminal), a
-pseudo-terminal window library for roguelike games. BearLibTerminal provides a grid of character
+retroglyph is a Rust rewrite of [BearLibTerminal](https://github.com/tommyettinger/BearLibTerminal),
+a pseudo-terminal window library for roguelike games. BearLibTerminal provides a grid of character
 cells with Unicode support, tile/font handling, OpenGL rendering, and keyboard/mouse input. It is
 unmaintained (last release ~2017).
 
-retroglyph aims to provide the same core abstraction (a cell grid you draw to, with pluggable rendering
-backends) while being idiomatic Rust, multi-backend from the start, and incrementally extensible.
+retroglyph aims to provide the same core abstraction (a cell grid you draw to, with pluggable
+rendering backends) while being idiomatic Rust, multi-backend from the start, and incrementally
+extensible.
 
 This ADR captures the foundational architecture decisions.
 
@@ -19,8 +20,8 @@ This ADR captures the foundational architecture decisions.
 ### What retroglyph is
 
 A Rust library that gives you a **grid of character cells** with styled output, input handling, and
-double-buffered presentation. You render to an in-memory grid; retroglyph presents it via a pluggable
-backend.
+double-buffered presentation. You render to an in-memory grid; retroglyph presents it via a
+pluggable backend.
 
 ### What retroglyph is not
 
@@ -30,8 +31,9 @@ A game engine, a widget toolkit, or a terminal emulator. It sits below those.
 
 ### 1. Crate structure: single crate, split later
 
-Start as a single `retroglyph` crate. Split into workspace crates (`retroglyph-core`, `retroglyph-crossterm`, etc.) when the
-API stabilizes and compile times or dependency isolation warrant it.
+Start as a single `retroglyph` crate. Split into workspace crates (`retroglyph-core`,
+`retroglyph-crossterm`, etc.) when the API stabilizes and compile times or dependency isolation
+warrant it.
 
 Backend selection is via feature flags:
 

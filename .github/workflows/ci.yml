@@ -3,7 +3,7 @@ name: CI
 on:
   workflow_dispatch:
   push:
-    branches: [main, init]
+    branches: [main]
   pull_request:
 
 concurrency:
@@ -14,86 +14,49 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  rustfmt:
+  format:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@nightly
         with:
           components: rustfmt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: tools/package-lock.json
       - uses: taiki-e/install-action@v2
         with:
           tool: just
+      - run: npm ci --prefix tools
       - run: just rustfmt
+      - run: just prettier
 
-  clippy:
+  lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: tools/package-lock.json
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@v2
         with:
+          tool: cargo-deny
+      - uses: taiki-e/install-action@v2
+        with:
           tool: just
+      - run: npm ci --prefix tools
       - run: just clippy
-
-  prettier:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: "npm"
-          cache-dependency-path: tools/package-lock.json
-      - run: npm ci --prefix tools
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: just
-      - run: just prettier
-
-  markdown:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: "npm"
-          cache-dependency-path: tools/package-lock.json
-      - run: npm ci --prefix tools
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: just
       - run: just markdown
-
-  deny-advisories:
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-deny
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: just
       - run: just deny-advisories
-
-  deny-licenses:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-deny
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: just
+        continue-on-error: true
       - run: just deny-licenses
 
   docs:
@@ -109,25 +72,13 @@ jobs:
           tool: just
       - run: just doc
 
-  llms:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo install cargo-llms-txt --version 0.1.1
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: just
-      - run: just llms-check
-
   compile:
-    name: compile (${{ matrix.toolchain }})
+    name: compile ${{ matrix.toolchain }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        toolchain: [stable, 1.85]
+        toolchain: [stable, 1.88]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
@@ -153,14 +104,9 @@ jobs:
   required:
     runs-on: ubuntu-latest
     needs:
-      - rustfmt
-      - clippy
-      - prettier
-      - markdown
-      - deny-advisories
-      - deny-licenses
+      - format
+      - lint
       - docs
-      - llms
       - compile
       - test
     if: ${{ always() }}

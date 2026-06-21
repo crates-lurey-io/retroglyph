@@ -4,8 +4,8 @@
 
 ## Context
 
-To build and play real games, the `retroglyph` library needs a visual backend capable of drawing to the
-terminal and reading real user input. As decided in ADR 001, we will implement this using the
+To build and play real games, the `retroglyph` library needs a visual backend capable of drawing to
+the terminal and reading real user input. As decided in ADR 001, we will implement this using the
 `crossterm` crate.
 
 This document breaks the Crossterm Backend into fine-grained, independently reviewable milestones,

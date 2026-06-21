@@ -306,10 +306,10 @@ crossterm backends:
 
   [shader_strings.rs](https://github.com/amethyst/bracket-lib/blob/master/bracket-terminal/src/hal/native/shader_strings.rs)
 
-**Key takeaway for retroglyph**: bracket-lib is functional but not performance-optimized. The per-vertex
-approach rebuilds all geometry each frame. For a new implementation, instanced rendering would be
-strictly better. The multi-layer framebuffer compositing pattern is worth adopting if layer support
-is needed.
+**Key takeaway for retroglyph**: bracket-lib is functional but not performance-optimized. The
+per-vertex approach rebuilds all geometry each frame. For a new implementation, instanced rendering
+would be strictly better. The multi-layer framebuffer compositing pattern is worth adopting if layer
+support is needed.
 
 ### 8. Performance Considerations
 

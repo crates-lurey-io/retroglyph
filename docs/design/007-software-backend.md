@@ -4,9 +4,9 @@
 
 ## Context
 
-`retroglyph` currently ships with a `HeadlessBackend` (for testing) and a `CrosstermBackend` (for TTY
-usage). To provide rich visual capabilities (custom fonts, pixel-perfect layouts, sub-cell offsets)
-while remaining highly portable, we require a graphical backend.
+`retroglyph` currently ships with a `HeadlessBackend` (for testing) and a `CrosstermBackend` (for
+TTY usage). To provide rich visual capabilities (custom fonts, pixel-perfect layouts, sub-cell
+offsets) while remaining highly portable, we require a graphical backend.
 
 As researched in `docs/references/backends/software-window.md`, a pure software rendering backend
 (CPU-based) provides significant advantages over GPU backends for terminal grids: no complex shader

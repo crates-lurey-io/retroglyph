@@ -1,0 +1,16 @@
+amends "package://github.com/jdx/hk/releases/download/v1.48.0/hk@1.48.0#/Config.pkl"
+
+hooks {
+    ["pre-commit"] {
+        fix = false
+        stash = false
+        steps {
+            ["rustfmt"] {
+                check = "cargo fmt --all -- --check"
+            }
+            ["clippy"] {
+                check = "cargo clippy --all-targets -- -D warnings"
+            }
+        }
+    }
+}
