@@ -18,11 +18,11 @@ platforms. No canvas rendering rewrite is needed.
 
 This refactor is the foundation for a tiered WASM rendering stack:
 
-| Tier | Backend | Mechanism | Binary Size | Relative Speed |
-|------|---------|-----------|-------------|----------------|
-| 3 (current) | softbuffer | Canvas 2D `putImageData` | ~80 KB | 1x (baseline) |
-| 2 (future) | glow | WebGL2 data-texture quad | ~80 KB | 4-10x |
-| 1 (future) | wgpu | WebGPU instanced quads | ~500 KB | 10x+ |
+| Tier        | Backend    | Mechanism                | Binary Size | Relative Speed |
+| ----------- | ---------- | ------------------------ | ----------- | -------------- |
+| 3 (current) | softbuffer | Canvas 2D `putImageData` | ~80 KB      | 1x (baseline)  |
+| 2 (future)  | glow       | WebGL2 data-texture quad | ~80 KB      | 4-10x          |
+| 1 (future)  | wgpu       | WebGPU instanced quads   | ~500 KB     | 10x+           |
 
 All three tiers share the same winit event loop architecture proposed here. The unified,
 single-threaded model is permanent across all backends. Where they differ is in how the rendered
@@ -137,8 +137,8 @@ trait Backend {
 }
 ```
 
-The `ApplicationHandler` no longer holds a `softbuffer::Surface` directly. Instead, the backend
-owns its surface (or equivalent) internally. `WindowApp` becomes fully backend-agnostic:
+The `ApplicationHandler` no longer holds a `softbuffer::Surface` directly. Instead, the backend owns
+its surface (or equivalent) internally. `WindowApp` becomes fully backend-agnostic:
 
 ```rust
 struct WindowApp<B: Backend, F> {
@@ -644,17 +644,17 @@ fn main() {
 
 ## Files Changed
 
-| File                             | Changes                                                                                                      |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| File                             | Changes                                                                                                                                           |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `src/backend/mod.rs`             | Define `WindowedBackend: Backend` subtrait with `present()`, `init_surface()`, `resize_surface()`, `cell_size()`. Add `push_event()` to `Backend` |
-| `src/backend/headless.rs`        | Add `push_event()` implementation (already exists — wire to trait). No window stubs                            |
-| `src/backend/crossterm.rs`       | Add `push_event()` implementation. No window stubs                                                             |
-| `src/backend/software/mod.rs`    | **Major refactor** — remove channels, add event_buffer + window_surface, implement new trait methods,         |
-|                                 | refactor WindowApp to be generic, split run() for native/WASM                                                |
-| `src/backend/software/config.rs` | Maybe remove `Softbuffer` error variant (no longer used?) or keep for surface errors                          |
-| `Cargo.toml`                     | Minimal — no new deps, `softbuffer` stays                                                                    |
-| `examples/software_demo.rs`      | No changes needed                                                                                             |
-| `examples/wasm_demo.rs`          | **New file** — same game loop, `#[wasm_bindgen(start)]` entry point                                           |
+| `src/backend/headless.rs`        | Add `push_event()` implementation (already exists — wire to trait). No window stubs                                                               |
+| `src/backend/crossterm.rs`       | Add `push_event()` implementation. No window stubs                                                                                                |
+| `src/backend/software/mod.rs`    | **Major refactor** — remove channels, add event_buffer + window_surface, implement new trait methods,                                             |
+|                                  | refactor WindowApp to be generic, split run() for native/WASM                                                                                     |
+| `src/backend/software/config.rs` | Maybe remove `Softbuffer` error variant (no longer used?) or keep for surface errors                                                              |
+| `Cargo.toml`                     | Minimal — no new deps, `softbuffer` stays                                                                                                         |
+| `examples/software_demo.rs`      | No changes needed                                                                                                                                 |
+| `examples/wasm_demo.rs`          | **New file** — same game loop, `#[wasm_bindgen(start)]` entry point                                                                               |
 
 ## What Stays the Same
 
@@ -704,8 +704,8 @@ A `WgpuRenderer` implementing `WindowedBackend` would:
 - **`init_surface()`**: Create a `wgpu::Surface` from winit's `Window`, create `wgpu::Device` and
   `wgpu::Queue`, compile WGSL shaders, create render pipeline and instance buffer.
 - **`present()`**: Map the instance buffer with dirty-row tracking, write per-cell instance data
-  (position, UV, fg/bg colors), submit the render pass for instanced quads, present the swap
-  chain texture.
+  (position, UV, fg/bg colors), submit the render pass for instanced quads, present the swap chain
+  texture.
 - **`poll_event()`**: Same `VecDeque<Event>` pattern.
 - **`resize_surface()`**: Call `surface.configure()` with new dimensions.
 

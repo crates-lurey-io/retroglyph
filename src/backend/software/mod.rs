@@ -6,7 +6,7 @@
 //! **not** implement [`Backend`] directly.  Call [`run`](SoftwareBackend::run)
 //! to open a window and spawn the game loop on a background thread, or
 //! [`run_headless`](SoftwareBackend::run_headless) to obtain a
-//! [`SoftwareRenderer`] that renders into memory without a window.
+//! [`SoftwareRenderer`](crate::backend::software::SoftwareRenderer) that renders into memory without a window.
 //!
 //! [`SoftwareRenderer`] implements [`Backend`] and always has an active
 //! rendering context — no `Option`, no runtime panics from missing state.
@@ -918,7 +918,6 @@ fn translate_key(input: winit::event::KeyEvent) -> Option<Event> {
 // rather than `WindowEvent::KeyboardInput` (which requires canvas focus).
 // On native this is a secondary path behind `WindowEvent::KeyboardInput`.
 // ── winit ApplicationHandler (main thread) ────────────────────────────────────
-
 
 /// Initial window dimensions used before the first Resized event.
 struct InitWindowSize {

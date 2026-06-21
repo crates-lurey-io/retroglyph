@@ -1,8 +1,8 @@
 # Packaging & Distribution Strategies for a Rust Terminal/Grid Library
 
-A comprehensive reference for distributing a Rust library (`retroglyph`) with multi-language bindings,
-modeled after the approach BearLibTerminal pioneered: a single native library with thin wrappers for
-C, Python, Ruby, WASM, and more.
+A comprehensive reference for distributing a Rust library (`retroglyph`) with multi-language
+bindings, modeled after the approach BearLibTerminal pioneered: a single native library with thin
+wrappers for C, Python, Ruby, WASM, and more.
 
 ---
 
@@ -44,9 +44,9 @@ BearLibTerminal used a "single shared library + language-specific header/wrapper
   was the universal interface. Every language binding was a thin FFI wrapper around these ~20
   functions.
 
-**Takeaway for retroglyph**: Follow the same pattern. The Rust core library exposes a flat `extern "C"` API.
-Language-specific bindings are thin wrappers. This is exactly what `cdylib` + `cbindgen` gives you
-from Rust.
+**Takeaway for retroglyph**: Follow the same pattern. The Rust core library exposes a flat
+`extern "C"` API. Language-specific bindings are thin wrappers. This is exactly what `cdylib` +
+`cbindgen` gives you from Rust.
 
 [Source: BearLibTerminal website](http://foo.wyrd.name/en:bearlibterminal) |
 [Source: BearLibTerminal GitHub](https://github.com/cfyzium/bearlibterminal)
@@ -142,13 +142,14 @@ crate-type = ["cdylib", "staticlib"]
 
 - **`staticlib`** produces `.a` / `.lib` containing all Rust code and upstream dependencies baked
 
-  in. Used when someone wants to statically link retroglyph into their C/C++ application. Note: any dynamic
-  system dependencies (OpenGL, etc.) must be specified manually when linking.
+  in. Used when someone wants to statically link retroglyph into their C/C++ application. Note: any
+  dynamic system dependencies (OpenGL, etc.) must be specified manually when linking.
 
 - **You can specify both** in the same crate. Cargo will produce both artifacts in a single build.
 
-The `retroglyph-python` and `retroglyph-wasm` crates each need only `cdylib` since PyO3 and wasm-bindgen both
-produce dynamic libraries (`.so` for Python extension modules, `.wasm` for WebAssembly).
+The `retroglyph-python` and `retroglyph-wasm` crates each need only `cdylib` since PyO3 and
+wasm-bindgen both produce dynamic libraries (`.so` for Python extension modules, `.wasm` for
+WebAssembly).
 
 ---
 
@@ -1224,7 +1225,9 @@ jobs:
           command: develop
           args: --manifest-path crates/retroglyph-python/Cargo.toml
 
-      - run: python -c "import retroglyph; t = retroglyph.PyTerminal(80, 24); print(f'{t.width}x{t.height}')"
+      - run:
+          python -c "import retroglyph; t = retroglyph.PyTerminal(80, 24);
+          print(f'{t.width}x{t.height}')"
 
   # Test WASM build
   test-wasm:
@@ -1259,7 +1262,7 @@ jobs:
 
 | Channel         | Tool                   | Artifact                                    | Consumer                           |
 | --------------- | ---------------------- | ------------------------------------------- | ---------------------------------- |
-| crates.io       | `cargo publish`        | Rust crate (`retroglyph-core`)                      | Rust developers                    |
+| crates.io       | `cargo publish`        | Rust crate (`retroglyph-core`)              | Rust developers                    |
 | GitHub Releases | cargo-dist / custom CI | `.tar.gz` with `.so`/`.dll`/`.dylib` + `.h` | C/C++ developers, system packagers |
 | PyPI            | maturin                | Python wheel (`.whl`)                       | Python developers                  |
 | npm             | wasm-pack              | WASM + JS glue + `.d.ts`                    | Web/Node.js developers             |

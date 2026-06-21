@@ -471,7 +471,7 @@ impl Grid {
     /// all layers, in layer-major (0 → 255) then row-major order.
     ///
     /// Unallocated layers are skipped. This is used by backends that need
-    /// the full frame on every draw (see [`Backend::needs_full_frame`]).
+    /// the full frame on every draw (see [`crate::Backend::needs_full_frame`]).
     pub fn layers(&self) -> impl Iterator<Item = (u8, Pos, &Tile)> + '_ {
         let mut results = Vec::new();
         for id in 0u8..=255 {

@@ -4,8 +4,8 @@ A terminal/grid rendering library for roguelikes, written in Rust.
 
 ![crossterm demo](tests/snapshots/crossterm_demo.svg)
 
-`retroglyph` provides a styled character grid, double-buffered rendering, and pluggable backends. You drive
-the game loop; `retroglyph` handles drawing efficiently and feeding you input events.
+`retroglyph` provides a styled character grid, double-buffered rendering, and pluggable backends.
+You drive the game loop; `retroglyph` handles drawing efficiently and feeding you input events.
 
 ## Features
 

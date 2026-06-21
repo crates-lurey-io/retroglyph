@@ -196,11 +196,13 @@ fn tick(term: &mut Terminal<impl retroglyph::Backend>, s: &mut BounceState) {
         );
     }
     let header = "rg DVD screensaver [Esc to quit]";
-    let header_style = retroglyph::Style::new().fg(Color::BRIGHT_WHITE).bg(Color::Rgb {
-        r: 30,
-        g: 30,
-        b: 45,
-    });
+    let header_style = retroglyph::Style::new()
+        .fg(Color::BRIGHT_WHITE)
+        .bg(Color::Rgb {
+            r: 30,
+            g: 30,
+            b: 45,
+        });
     #[allow(clippy::cast_possible_truncation)]
     let hx = size.width.saturating_sub(header.len() as u16) / 2;
     for (i, ch) in header.chars().enumerate() {
@@ -216,7 +218,12 @@ fn tick(term: &mut Terminal<impl retroglyph::Backend>, s: &mut BounceState) {
         b: 45,
     };
     for x in 0..size.width {
-        term.put_styled(x, size.height - 1, ' ', retroglyph::Style::new().bg(footer_bg));
+        term.put_styled(
+            x,
+            size.height - 1,
+            ' ',
+            retroglyph::Style::new().bg(footer_bg),
+        );
     }
     let footer = format!(
         "pos ({},{})  off ({off_x},{off_y})  frame {}",

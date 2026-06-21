@@ -313,7 +313,7 @@ impl<B: Backend> Terminal<B> {
     /// Computes diff, sends changed cells to the backend, flushes, then swaps buffers.
     ///
     /// When the backend requires a full frame (see
-    /// [`Backend::needs_full_frame`]), all cells from every allocated layer are
+    /// [`crate::Backend::needs_full_frame`]), all cells from every allocated layer are
     /// sent rather than just the diff, so pixel-based backends can clear and
     /// redraw to avoid orphaned pixels from sub-cell offsets.
     ///

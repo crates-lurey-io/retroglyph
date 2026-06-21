@@ -2,9 +2,9 @@
 
 ## Summary
 
-The recommended approach for `retroglyph` is a **single-threaded event loop on the main thread** (required
-by winit on macOS) with game logic running on a separate thread, connected via channels. The
-terminal grid buffer is shared using `Arc<FairMutex<Buffer>>` (following Alacritty's proven
+The recommended approach for `retroglyph` is a **single-threaded event loop on the main thread**
+(required by winit on macOS) with game logic running on a separate thread, connected via channels.
+The terminal grid buffer is shared using `Arc<FairMutex<Buffer>>` (following Alacritty's proven
 pattern), with the option to evolve toward double/triple buffering if profiling reveals contention.
 For WASM, all logic collapses to a single thread with `requestAnimationFrame`-driven rendering.
 

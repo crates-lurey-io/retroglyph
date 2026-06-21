@@ -59,10 +59,10 @@ fn main() {
 
     // Event Processing
     let event = term.read();
-    if let Event::Key(key_event) = event {
-        if key_event.code == KeyCode::Right {
-            player_x += 1;
-        }
+    if let Event::Key(key_event) = event
+        && key_event.code == KeyCode::Right
+    {
+        player_x += 1;
     }
 
     // Render with updated state
