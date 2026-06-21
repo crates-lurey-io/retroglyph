@@ -1,81 +1,38 @@
 # Justfile for rg
 
-# Default target
 default:
     @just --list
 
-# --- Tools (Node/npm) ---
-# Format markdown, JSON, YAML, JS, TS
+# ── Formatting ────────────────────────────────────────────────────────────────
+
+rustfmt:
+    cargo fmt --all -- --check
+
+prettier:
+    npm --prefix tools run format:check
+
+markdown:
+    npm --prefix tools run lint
+
 fmt:
     cargo fmt --all
     npm --prefix tools run format
 
-# Check formatting without changes
-fmt-check:
-    cargo fmt --all -- --check
-    npm --prefix tools run format:check
+# Local: check everything (rustfmt + prettier)
+fmt-check: rustfmt prettier
 
-# Run linters
-lint:
+# ── Linting ──────────────────────────────────────────────────────────────────
+
+clippy:
     cargo clippy --all-targets -- -D warnings
-    npm --prefix tools run lint
 
-# --- Rust ---
-test:
-    cargo test --all-features
+lint: clippy markdown
 
-test-v:
-    cargo test --all-features -- --nocapture
+# ── Build ────────────────────────────────────────────────────────────────────
 
-# Install all project tools (pinned via [workspace.metadata.bin] in Cargo.toml)
-setup-tools:
-    cargo bin --install
-    # cargo-llms-txt has no prebuilt binaries, so install to bin/ directly
-    @if [ ! -f bin/bin/cargo-llms-txt ]; then \
-        echo "Installing cargo-llms-txt 0.1.1 to bin/..."; \
-        cargo install cargo-llms-txt --version 0.1.1 --root bin/; \
-    fi
+compile:
+    cargo check --all-features
 
-# Install wasm-server-runner (pinned) to local bin/ for WASM examples in browser.
-# Needs a known path for .cargo/config.toml's runner, so kept separate from cargo-run-bin.
-setup-wasm:
-    @if [ ! -f bin/bin/wasm-server-runner ]; then \
-        echo "Installing wasm-server-runner 1.0.1 to bin/..."; \
-        cargo binstall wasm-server-runner@1.0.1 --no-confirm --root bin/ 2>/dev/null || \
-            cargo install wasm-server-runner --version 1.0.1 --locked --root bin/; \
-    fi
-
-# Run the WASM demo in browser (requires `just setup-wasm` first)
-run-wasm:
-    cargo run --target wasm32-unknown-unknown --example wasm_demo --features software-default-font
-
-# Generate llms.txt summary
-llms:
-    @LLMS="bin/bin/cargo-llms-txt"; \
-    if [ ! -f "$$LLMS" ]; then \
-        echo "Tool not found. Running setup-tools first..."; \
-        just setup-tools; \
-    fi; \
-    "$$LLMS" --output llms.txt --full llms-full.txt
-
-# Check if llms.txt files are up-to-date
-llms-check:
-    @LLMS="bin/bin/cargo-llms-txt"; \
-    if [ ! -f "$$LLMS" ]; then \
-        echo "Tool not found. Running setup-tools first..."; \
-        just setup-tools; \
-    fi; \
-    mkdir -p .tmp_llms; \
-    "$$LLMS" --output .tmp_llms/llms.txt --full .tmp_llms/llms-full.txt; \
-    if ! diff -q llms.txt .tmp_llms/llms.txt >/dev/null || ! diff -q llms-full.txt .tmp_llms/llms-full.txt >/dev/null; then \
-        echo "Error: llms.txt files are out of date. Run 'just llms' to update."; \
-        rm -rf .tmp_llms; \
-        exit 1; \
-    fi; \
-    rm -rf .tmp_llms; \
-    echo "llms.txt files are up-to-date."
-
-# Generate rustdoc and open in browser if TTY
 doc:
     cargo doc --no-deps --document-private-items
     @if [ -t 1 ]; then \
@@ -84,13 +41,59 @@ doc:
         fi \
     fi
 
-# Check everything
-check: fmt-check lint test doc llms-check
+# ── Test ─────────────────────────────────────────────────────────────────────
 
-# Pinned version of act (not on crates.io, downloaded from GitHub releases)
+test:
+    cargo test --all-features
+
+test-v:
+    cargo test --all-features -- --nocapture
+
+# ── Dependencies ─────────────────────────────────────────────────────────────
+
+deny-advisories:
+    cargo deny check advisories
+
+deny-licenses:
+    cargo deny check bans licenses sources
+
+# ── Generated files ──────────────────────────────────────────────────────────
+
+llms:
+    cargo-llms-txt --output llms.txt --full llms-full.txt
+
+llms-check:
+    cargo-llms-txt --output .llms-check.txt --full .llms-check-full.txt
+    diff -q llms.txt .llms-check.txt && diff -q llms-full.txt .llms-check-full.txt
+    rm -f .llms-check.txt .llms-check-full.txt
+
+# ── Composite ────────────────────────────────────────────────────────────────
+
+check: fmt-check lint compile test doc llms-check
+
+clean:
+    cargo clean
+
+# ── Setup ────────────────────────────────────────────────────────────────────
+
+setup-tools:
+    cargo bin --install
+    cargo install cargo-llms-txt --version 0.1.1 --root bin/ 2>/dev/null || true
+
+setup-wasm:
+    @if [ ! -f bin/bin/wasm-server-runner ]; then \
+        echo "Installing wasm-server-runner 1.0.1 to bin/..."; \
+        cargo binstall wasm-server-runner@1.0.1 --no-confirm --root bin/ 2>/dev/null || \
+            cargo install wasm-server-runner --version 1.0.1 --locked --root bin/; \
+    fi
+
+run-wasm:
+    cargo run --target wasm32-unknown-unknown --example wasm_demo --features software-default-font
+
+# ── act (local CI runner) ────────────────────────────────────────────────────
+
 act-version := "v0.2.89"
 
-# Run GitHub Actions workflows locally via act
 act *args:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -111,6 +114,3 @@ act *args:
     chmod +x "$ACT"
     echo "Installed act {{act-version}} to bin/act"
     exec "$ACT" -P ubuntu-latest=catthehacker/ubuntu:act-latest {{args}}
-
-clean:
-    cargo clean

@@ -5,8 +5,8 @@
 
 mod util;
 
-use rg::backend::software::SoftwareBackendBuilder;
 use rg::Pos;
+use rg::backend::software::SoftwareBackendBuilder;
 
 fn main() {
     let mut player = Pos::new(5, 5);

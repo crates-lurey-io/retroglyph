@@ -27,7 +27,6 @@ pub use config::{SoftwareBackend, SoftwareBackendBuilder, SoftwareBackendError};
 pub mod windowed;
 pub use windowed::WindowedBackend;
 
-
 use crate::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use crate::grid::{Pos, Size};
 use crate::style::CellModifier;
@@ -159,8 +158,12 @@ impl SoftwareRenderer {
     /// Initialize the window surface from a winit window.
     pub fn init_surface(&mut self, window: &Arc<Window>) -> Result<(), SurfaceError> {
         let context = softbuffer::Context::new(window.clone()).map_err(SurfaceError::Context)?;
-        let surface = softbuffer::Surface::new(&context, window.clone()).map_err(SurfaceError::Surface)?;
-        self.ctx.window_surface = Some(WindowSurface { _context: context, surface });
+        let surface =
+            softbuffer::Surface::new(&context, window.clone()).map_err(SurfaceError::Surface)?;
+        self.ctx.window_surface = Some(WindowSurface {
+            _context: context,
+            surface,
+        });
         Ok(())
     }
 
@@ -182,7 +185,10 @@ impl SoftwareRenderer {
         let Some(surface) = self.ctx.window_surface.as_mut() else {
             return Ok(()); // headless mode, nothing to present
         };
-        let mut buffer = surface.surface.buffer_mut().map_err(SurfaceError::Surface)?;
+        let mut buffer = surface
+            .surface
+            .buffer_mut()
+            .map_err(SurfaceError::Surface)?;
         let pixels = self.ctx.pixel_buf.as_ref();
         if pixels.len() == buffer.len() {
             buffer.copy_from_slice(pixels);
@@ -351,9 +357,9 @@ impl SoftwareBackend {
         } else {
             let mut cache = SpriteCache::new();
             for opts in &self.tilesets {
-                cache.load(opts).expect(
-                    "tileset loading failed; check tileset file path and format",
-                );
+                cache
+                    .load(opts)
+                    .expect("tileset loading failed; check tileset file path and format");
             }
             Arc::new(cache)
         };
@@ -907,11 +913,12 @@ fn translate_key(input: winit::event::KeyEvent) -> Option<Event> {
 
 /// Translate a winit `RawKeyEvent` (from `DeviceEvent::Key`) into our `Event`.
 ///
-/// This is the primary input path on WASM, where keyboard events fire as
-/// `DeviceEvent::Key` from a document-level listener (no canvas focus needed)
-/// rather than `WindowEvent::KeyboardInput` (which requires canvas focus).
-/// On native this is a secondary path behind `WindowEvent::KeyboardInput`.
+// This is the primary input path on WASM, where keyboard events fire as
+// `DeviceEvent::Key` from a document-level listener (no canvas focus needed)
+// rather than `WindowEvent::KeyboardInput` (which requires canvas focus).
+// On native this is a secondary path behind `WindowEvent::KeyboardInput`.
 // ── winit ApplicationHandler (main thread) ────────────────────────────────────
+
 
 /// Initial window dimensions used before the first Resized event.
 struct InitWindowSize {
@@ -931,10 +938,7 @@ impl<B: WindowedBackend, F> WindowApp<B, F> {
     /// Create the window and initialize the surface.
     ///
     /// Returns `Some(window)` on success, logs and returns `None` on failure.
-    fn create_window_and_surface(
-        &mut self,
-        event_loop: &ActiveEventLoop,
-    ) -> Option<Arc<Window>> {
+    fn create_window_and_surface(&mut self, event_loop: &ActiveEventLoop) -> Option<Arc<Window>> {
         let attrs = Window::default_attributes()
             .with_title(&self.title)
             .with_inner_size(winit::dpi::PhysicalSize::new(
@@ -964,7 +968,8 @@ impl<B: WindowedBackend, F> WindowApp<B, F> {
                 return None;
             }
             // Set the initial surface size (required on WASM before first present).
-            term.backend_mut().resize_surface(self.init_size.width, self.init_size.height);
+            term.backend_mut()
+                .resize_surface(self.init_size.width, self.init_size.height);
         }
 
         Some(window)
@@ -1017,7 +1022,9 @@ impl<B: WindowedBackend, F: FnMut(&mut crate::Terminal<B>) + 'static> Applicatio
             }
 
             WindowEvent::RedrawRequested => {
-                let Some(term) = self.terminal.as_mut() else { return };
+                let Some(term) = self.terminal.as_mut() else {
+                    return;
+                };
                 (self.app_loop)(term);
                 if let Err(e) = term.backend_mut().present() {
                     log::error!("frame present failed: {e}");
@@ -1252,6 +1259,4 @@ mod tests {
 
         insta::assert_snapshot!("pixel_snapshot_render_scene", snapshot);
     }
-
-
 }

@@ -184,11 +184,16 @@ fn tick(term: &mut Terminal<impl rg::Backend>, s: &mut BounceState) {
     // ── Layer 2 header (redrawn every frame) ───────────────────────────
     term.layer(2);
     for x in 0..size.width {
-        term.put_styled(x, 0, ' ', rg::Style::new().bg(Color::Rgb {
-            r: 30,
-            g: 30,
-            b: 45,
-        }));
+        term.put_styled(
+            x,
+            0,
+            ' ',
+            rg::Style::new().bg(Color::Rgb {
+                r: 30,
+                g: 30,
+                b: 45,
+            }),
+        );
     }
     let header = "rg DVD screensaver [Esc to quit]";
     let header_style = rg::Style::new().fg(Color::BRIGHT_WHITE).bg(Color::Rgb {

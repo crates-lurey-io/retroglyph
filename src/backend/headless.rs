@@ -117,7 +117,7 @@ impl Backend for Headless {
     }
 
     fn push_event(&mut self, event: Event) {
-        Headless::push_event(self, event);
+        Self::push_event(self, event);
     }
 
     fn set_cursor_visible(&mut self, visible: bool) {

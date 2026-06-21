@@ -27,13 +27,10 @@ struct Example {
 
 fn main() {
     // Read and parse Cargo.toml
-    let manifest = std::env::var("CARGO_MANIFEST_DIR")
-        .unwrap_or_else(|_| String::from("."));
+    let manifest = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| String::from("."));
     let cargo_toml_path = format!("{manifest}/Cargo.toml");
-    let text = std::fs::read_to_string(&cargo_toml_path)
-        .expect("failed to read Cargo.toml");
-    let parsed: CargoToml = toml::from_str(&text)
-        .expect("failed to parse Cargo.toml");
+    let text = std::fs::read_to_string(&cargo_toml_path).expect("failed to read Cargo.toml");
+    let parsed: CargoToml = toml::from_str(&text).expect("failed to parse Cargo.toml");
 
     // Show examples (skip the runner itself)
     let examples: Vec<&Example> = parsed

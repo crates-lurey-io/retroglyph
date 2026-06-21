@@ -10,8 +10,8 @@ use wasm_bindgen::prelude::*;
 
 mod util;
 
-use rg::backend::software::SoftwareBackendBuilder;
 use rg::Pos;
+use rg::backend::software::SoftwareBackendBuilder;
 
 /// WASM entry point called by the browser.
 #[cfg(target_arch = "wasm32")]

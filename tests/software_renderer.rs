@@ -160,7 +160,12 @@ fn assert_png_snapshot(renderer: &SoftwareRenderer, name: &str) {
          actual: {}\n\
          diff:   {}\n\
          set RG_SNAPSHOT_UPDATE=overwrite to accept new output",
-        exp[0], exp[1], exp[2], act[0], act[1], act[2],
+        exp[0],
+        exp[1],
+        exp[2],
+        act[0],
+        act[1],
+        act[2],
         actual_path.display(),
         diff_path.display(),
     );
@@ -233,32 +238,20 @@ fn sub_cell_offset_does_not_smear() {
 
     // ── Frame 1: layer 0 bg (red) + layer 1 @ at dx=+2 ──
     term.layer(0);
-    term.bg(Color::Rgb {
-        r: 128,
-        g: 0,
-        b: 0,
-    });
+    term.bg(Color::Rgb { r: 128, g: 0, b: 0 });
     for x in 0..3 {
         term.put(x, 0, ' ');
     }
 
     term.layer(1);
-    term.fg(Color::Rgb {
-        r: 0,
-        g: 255,
-        b: 0,
-    });
+    term.fg(Color::Rgb { r: 0, g: 255, b: 0 });
     term.put_offset(1, 0, 2, 0, '@');
     term.present();
 
     // ── Frame 2: clear layer 1, put @ at dx=-2 ──
     term.layer(1);
     term.clear();
-    term.fg(Color::Rgb {
-        r: 0,
-        g: 255,
-        b: 0,
-    });
+    term.fg(Color::Rgb { r: 0, g: 255, b: 0 });
     term.put_offset(1, 0, -2, 0, '@');
     term.present();
 
