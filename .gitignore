@@ -1,0 +1,12 @@
+/target
+/Cargo.lock
+
+# Node tools
+/tools/node_modules/
+
+# IDEs
+/.idea/
+/.vscode/
+
+# OS files
+.DS_Store

@@ -1,0 +1,13 @@
+{
+  "config": {
+    "line-length": false,
+    "no-duplicate-heading": { "siblings_only": true },
+    "no-inline-html": false
+  },
+  "ignores": [
+    "**/node_modules/**",
+    "target/**",
+    ".git/**",
+    ".jj/**"
+  ]
+}

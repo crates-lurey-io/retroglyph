@@ -1,0 +1,2 @@
+# Mark generated files so they are collapsed by default in pull requests and diffs
+tools/package-lock.json linguist-generated
