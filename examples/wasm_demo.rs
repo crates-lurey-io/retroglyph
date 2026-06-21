@@ -11,6 +11,7 @@ use wasm_bindgen::prelude::*;
 mod util;
 
 use rg::backend::software::SoftwareBackendBuilder;
+use rg::Pos;
 
 /// WASM entry point called by the browser.
 #[cfg(target_arch = "wasm32")]
@@ -22,7 +23,7 @@ pub fn wasm_main() -> Result<(), JsValue> {
 }
 
 fn main() {
-    let mut player = (5u16, 5u16);
+    let mut player = Pos::new(5, 5);
 
     let backend = SoftwareBackendBuilder::new()
         .title("rg WASM demo")

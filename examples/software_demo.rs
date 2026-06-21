@@ -6,9 +6,10 @@
 mod util;
 
 use rg::backend::software::SoftwareBackendBuilder;
+use rg::Pos;
 
 fn main() {
-    let mut player = (5u16, 5u16);
+    let mut player = Pos::new(5, 5);
 
     let backend = SoftwareBackendBuilder::new()
         .title("rg software demo")

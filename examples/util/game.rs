@@ -2,7 +2,7 @@
 
 use rg::color::{AnsiColor, Color};
 use rg::event::{Event, KeyCode};
-use rg::{Backend, Terminal};
+use rg::{Backend, Pos, Terminal};
 use std::time::Duration;
 
 // Fixed room size in world space. The terminal clips on small windows rather
@@ -20,7 +20,7 @@ const ROOM_BOTTOM: u16 = 20;
 /// Returns `false` when the user quits (ESC or Q). The caller should stop
 /// the game loop on `false` rather than calling `process::exit`, so that
 /// backends like `Crossterm` get their `Drop` • which restores the terminal.
-pub fn tick(term: &mut Terminal<impl Backend>, player: &mut (u16, u16)) -> bool {
+pub fn tick(term: &mut Terminal<impl Backend>, player: &mut Pos) -> bool {
     let size = term.size();
 
     term.clear();
@@ -50,7 +50,7 @@ pub fn tick(term: &mut Terminal<impl Backend>, player: &mut (u16, u16)) -> bool 
 
     // 3. Draw Player (@ - Green)
     term.fg(Color::Ansi(AnsiColor::Green));
-    term.put(player.0, player.1, '@');
+    term.put(player.x, player.y, '@');
     term.reset_style();
 
     // 4. Draw UI status line
@@ -69,23 +69,23 @@ pub fn tick(term: &mut Terminal<impl Backend>, player: &mut (u16, u16)) -> bool 
         match event {
             Event::Key(key_event) => match key_event.code {
                 KeyCode::Up | KeyCode::Char('w') => {
-                    if player.1 > ROOM_TOP + 1 {
-                        player.1 -= 1;
+                    if player.y > ROOM_TOP + 1 {
+                        player.y -= 1;
                     }
                 }
                 KeyCode::Down | KeyCode::Char('s') => {
-                    if player.1 < ROOM_BOTTOM - 1 {
-                        player.1 += 1;
+                    if player.y < ROOM_BOTTOM - 1 {
+                        player.y += 1;
                     }
                 }
                 KeyCode::Left | KeyCode::Char('a') => {
-                    if player.0 > ROOM_LEFT + 1 {
-                        player.0 -= 1;
+                    if player.x > ROOM_LEFT + 1 {
+                        player.x -= 1;
                     }
                 }
                 KeyCode::Right | KeyCode::Char('d') => {
-                    if player.0 < ROOM_RIGHT - 1 {
-                        player.0 += 1;
+                    if player.x < ROOM_RIGHT - 1 {
+                        player.x += 1;
                     }
                 }
                 KeyCode::Escape | KeyCode::Char('q') => {
