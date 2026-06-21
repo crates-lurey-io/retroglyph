@@ -36,8 +36,8 @@ compile:
 
 doc:
     cargo doc --no-deps --document-private-items
+    cargo-llms-txt --output llms.txt --full llms-full.txt 2>/dev/null || true
     @if [ -t 1 ]; then \
-        cargo-llms-txt --output llms.txt --full llms-full.txt 2>/dev/null || true; \
         if command -v xdg-open > /dev/null; then xdg-open target/doc/retroglyph/index.html; \
         elif command -v open > /dev/null; then open target/doc/retroglyph/index.html; \
         fi \
@@ -58,16 +58,6 @@ deny-advisories:
 
 deny-licenses:
     cargo deny check bans licenses sources
-
-# ── Generated files ──────────────────────────────────────────────────────────
-
-llms:
-    cargo-llms-txt --output llms.txt --full llms-full.txt
-
-llms-check:
-    cargo-llms-txt --output .llms-check.txt --full .llms-check-full.txt
-    diff -q llms.txt .llms-check.txt && diff -q llms-full.txt .llms-check-full.txt
-    rm -f .llms-check.txt .llms-check-full.txt
 
 # ── Composite ────────────────────────────────────────────────────────────────
 

@@ -5,27 +5,96 @@ A terminal/grid rendering library for roguelikes, written in Rust.
 ![crossterm demo](tests/snapshots/crossterm_demo.svg)
 
 `retroglyph` provides a styled character grid, double-buffered rendering, and pluggable backends.
+
 You drive the game loop; `retroglyph` handles drawing efficiently and feeding you input events.
 
 ## Features
 
-- **Grid API** — place styled characters with foreground/background colors and text modifiers (bold,
+<details open>
+<summary><strong>Grid API</strong> — place styled characters on a multi-layer grid with full color support</summary>
 
-  italic, underline, …).
+Up to 256 layers. Each cell carries a glyph, foreground/background color, text modifiers (bold,
+italic, underline, blink, reverse, dim, hidden, strikethrough), and sub-cell pixel offsets. Layer 0
+is always allocated; layers 1+ are allocated on first write — single-layer games pay zero overhead.
 
-- **Double buffering** — `Terminal::present()` diffs the current and previous frames and sends only
+Colors cover the full spectrum: the terminal's default foreground/background, the 16 standard ANSI
+colors, the 256-color palette, and 24-bit RGB.
 
-  changed cells to the backend.
+</details>
 
-- **Pluggable backends** — swap rendering targets without touching game logic:
-  - `Headless` — in-memory, no I/O. Used in unit and integration tests.
-  - `Crossterm` (feature `crossterm`) — full terminal with raw mode, alternate screen, and mouse
+<details>
+<summary><strong>Double buffering</strong> — diff-based presentation sends only changed cells</summary>
 
-    capture.
+`Terminal::present()` compares the current frame against the previous one and forwards only the
+changed cells to the backend. Pixel-based backends (software renderer) request full frames because
+sub-cell offsets can leave orphaned pixels from the previous frame.
 
-- **`no_std` compatible** — the core crate compiles without `std` when the `std` feature is disabled
+</details>
 
-  (requires an allocator).
+<details>
+<summary><strong>Stateful drawing API</strong> — chainable builder for everyday rendering</summary>
+
+Set the active style with `fg()`, `bg()`, `modifier()`, then place characters with `put()`. Print
+strings with `print()` (handles newlines and wide characters), render styled spans with
+`print_styled()`, or lay out text in a bounded rectangle with `print_box()`. Clear the active layer,
+all layers, or a rectangular region. Switch layers with `layer(id)`. Or bypass the builder and
+access the grid directly via `grid_mut()`.
+
+</details>
+
+<details>
+<summary><strong>Text layout and word wrapping</strong> — styled spans with configurable alignment</summary>
+
+`Span` and `Line` provide styled text primitives. `TextLayout` is a builder that word-wraps a `Line`
+to a bounded rectangle, then positions it with independent horizontal and vertical alignment
+(left/center/right, top/middle/bottom). Measure the result before rendering with
+`TextLayout::measure()`.
+
+</details>
+
+<details>
+<summary><strong>Extended grapheme cluster support</strong> — combining marks, emoji, and CJK wide chars</summary>
+
+With the `egc` feature (enabled by default), the library handles full Unicode grapheme clusters:
+combining marks, ZWJ emoji sequences, and multi-codepoint characters. CJK characters and emoji
+automatically occupy two grid columns with a transparent spacer in the adjacent cell.
+Multi-codepoint graphemes are capped at 8 codepoints to prevent combining-mark bombs.
+
+</details>
+
+<details>
+<summary><strong>Pluggable backends</strong> — swap rendering targets without touching game logic</summary>
+
+The `Backend` trait has a small surface: draw cells, flush, poll events, resize, cursor control.
+
+- **Headless** — in-memory with no I/O. The workhorse for unit and integration tests. Provides
+  `format_view()` for snapshot testing with insta and `push_event()` for synthetic input.
+- **Crossterm** (feature `crossterm`) — full terminal with raw mode, alternate screen, and mouse
+  capture. Registers a panic hook to safely restore the terminal on crashes.
+- **Software** (feature `software`) — pixel-based rendering via winit + softbuffer. Uses a 1-bit
+  bitmap font (embedded VGA 8x16 with `software-default-font`), with sub-cell pixel offsets,
+  multi-layer compositing, configurable scale factor, and a headless mode for pixel-level testing.
+- **Sprite tilesets** (feature `software-tilesets`) — PNG sprite sheets mapped to a codepage (CP437,
+  Unicode range, or custom), rendered with RGBA alpha blending over bitmap font glyphs.
+
+</details>
+
+<details>
+<summary><strong>Input handling</strong> — keyboard, mouse, resize, and close events</summary>
+
+`Terminal::poll(timeout)` returns `Option<Event>` with support for keyboard (all standard keys +
+modifier flags), mouse (buttons, movement, scroll), window resize, and close events. `has_input()`
+checks for events without blocking. Resize events are automatically applied to the grid before the
+event reaches your code.
+
+</details>
+
+<details>
+<summary><strong><code>no_std</code> compatible</strong> — core crate compiles without <code>std</code></summary>
+
+Disable the `std` feature (requires an allocator). Useful for embedded or kernel-space roguelikes.
+
+</details>
 
 ## Quick start
 
@@ -58,108 +127,3 @@ Run the interactive demo:
 ```sh
 cargo run --example crossterm_demo --features crossterm
 ```
-
-## Crate layout
-
-```text
-src/
-  backend/
-    mod.rs          Backend trait
-    headless.rs     In-memory backend (testing)
-    crossterm.rs    Crossterm backend (feature-gated)
-  cell.rs           Cell — a glyph + Style
-  color.rs          Color enum (Default / ANSI / Indexed / RGB)
-  grid.rs           Grid — 2-D cell buffer, diff iterator
-  style.rs          Style, CellModifier
-  event.rs          Event, KeyEvent, MouseEvent
-  terminal.rs       Terminal<B> — stateful drawing API, double buffering
-```
-
-## Testing
-
-### Unit and integration tests
-
-```sh
-just test          # run everything
-just test-v        # with stdout (useful for snapshot review)
-cargo test --lib   # unit tests only
-```
-
-Unit tests live alongside their modules. The integration suite in `tests/e2e.rs` drives
-`Terminal<Headless>` through game-logic scenarios and asserts on the grid state directly.
-
-### Snapshot tests (`insta`)
-
-`Headless::format_view()` converts the in-memory grid to a text string where spaces are rendered as
-`·`. Pair it with `insta::assert_snapshot!` for deterministic layout assertions:
-
-```rust
-use retroglyph::{Terminal, backend::Headless};
-
-let backend = Headless::new(20, 5);
-let mut term = Terminal::new(backend);
-term.put(2, 2, 'X');
-term.present();
-insta::assert_snapshot!(term.backend().format_view());
-```
-
-To review and accept new or changed snapshots:
-
-```sh
-cargo install cargo-insta   # one-time
-cargo insta test            # run tests and open the review UI
-cargo insta accept          # accept all pending snapshots
-```
-
-Snapshot files live in `tests/snapshots/` and are committed to version control. A failing snapshot
-test means visible output changed — review the diff before accepting.
-
-### E2E visual snapshots (crossterm backend)
-
-`tests/e2e_snapshots.rs` spawns the compiled `crossterm_demo` binary in a real pseudo-terminal using
-`portable-pty`, feeds it key input, then parses the raw ANSI byte stream with a VT100 emulator
-(`vt100` crate) to reconstruct the final screen state. The screen is rendered to SVG and snapshotted
-with `insta`.
-
-```sh
-# The crossterm_demo binary must be built first
-
-cargo build --example crossterm_demo --features crossterm
-
-cargo test --test e2e_snapshots --all-features
-```
-
-Two files are written to `tests/snapshots/` on each run:
-
-| File                                          | Purpose                                                 |
-| --------------------------------------------- | ------------------------------------------------------- |
-| `e2e_snapshots__crossterm_demo_snapshot.snap` | Insta snapshot (authoritative, diffed by CI)            |
-| `crossterm_demo.svg`                          | Rendered SVG — open directly in a browser or Quick Look |
-
-GitHub renders `.svg` files, so PR diffs show a visual before/after when the snapshot changes.
-
-To view the current snapshot locally:
-
-```sh
-open tests/snapshots/crossterm_demo.svg
-```
-
-## Development workflow
-
-```sh
-just fmt        # format Rust + Markdown/JSON/YAML
-just lint       # cargo clippy + markdownlint
-just check      # fmt-check, lint, test, rustdoc, llms.txt freshness
-just doc        # generate and open private rustdocs
-just llms       # regenerate llms.txt / llms-full.txt
-```
-
-`just check` is the gate before every commit. All clippy lints (including `pedantic` and `nursery`)
-are treated as errors.
-
-## Feature flags
-
-| Flag        | Default | Description                                                     |
-| ----------- | ------- | --------------------------------------------------------------- |
-| `std`       | on      | Enable `std`-dependent code. Disable for `no_std` builds.       |
-| `crossterm` | off     | Enable the `Crossterm` backend. Pulls in the `crossterm` crate. |
