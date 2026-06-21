@@ -2,8 +2,8 @@
 
 mod util;
 
-use rg::backend::Crossterm;
-use rg::{Pos, Terminal};
+use retroglyph::backend::Crossterm;
+use retroglyph::{Pos, Terminal};
 
 fn main() -> Result<(), std::io::Error> {
     let backend = Crossterm::new()?;

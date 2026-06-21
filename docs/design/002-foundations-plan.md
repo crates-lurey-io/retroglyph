@@ -63,7 +63,7 @@ M5 (events) is independent of M1-M4 and can be built in parallel.
 ### Files
 
 ```text
-rg/
+retroglyph/
 ├── .editorconfig
 ├── .gitignore
 ├── .markdownlint-cli2.jsonc
@@ -86,7 +86,7 @@ rg/
 
 ```toml
 [package]
-name = "rg"
+name = "retroglyph"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
@@ -114,9 +114,9 @@ missing_panics_doc = "allow"
 ### src/lib.rs
 
 ```rust
-//! rg: a terminal/grid rendering library for roguelikes.
+//! retroglyph: a terminal/grid rendering library for roguelikes.
 //!
-//! rg provides a grid of character cells with styled output, input handling,
+//! retroglyph provides a grid of character cells with styled output, input handling,
 //! and double-buffered presentation via pluggable backends.
 ```
 
@@ -619,7 +619,7 @@ forwarding.
 ### Terminal
 
 ```rust
-/// The main entry point for rg.
+/// The main entry point for retroglyph.
 ///
 /// Generic over the backend. Owns a double-buffered grid and provides
 /// a stateful drawing API.
@@ -786,7 +786,7 @@ Same logic, but asserts instead of printing:
    types have `# Examples` sections in their doc comments.
 
 1. **README update** — replace "under construction":
-   - What rg is (one paragraph)
+   - What retroglyph is (one paragraph)
    - Usage example (headless)
    - Status (Unreleased foundation, crossterm backend coming next)
    - API overview

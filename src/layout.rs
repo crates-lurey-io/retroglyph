@@ -170,9 +170,9 @@ fn wrap_line(line: &Line, max_width: u16) -> Vec<WrappedLine> {
 /// # Example
 ///
 /// ```
-/// use rg::layout::{TextLayout, HAlign, VAlign};
-/// use rg::grid::Rect;
-/// use rg::text::Line;
+/// use retroglyph::layout::{TextLayout, HAlign, VAlign};
+/// use retroglyph::grid::Rect;
+/// use retroglyph::text::Line;
 ///
 /// let rect = Rect::new(0, 0, 20, 5);
 /// let line = Line::raw("Hello, world!");

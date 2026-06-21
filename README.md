@@ -1,9 +1,11 @@
-# rg
+# retroglyph
 
 A terminal/grid rendering library for roguelikes, written in Rust.
 
-`rg` provides a styled character grid, double-buffered rendering, and pluggable backends. You drive
-the game loop; `rg` handles drawing efficiently and feeding you input events.
+![crossterm demo](tests/snapshots/crossterm_demo.svg)
+
+`retroglyph` provides a styled character grid, double-buffered rendering, and pluggable backends. You drive
+the game loop; `retroglyph` handles drawing efficiently and feeding you input events.
 
 ## Features
 
@@ -29,11 +31,11 @@ the game loop; `rg` handles drawing efficiently and feeding you input events.
 
 ```toml
 [dependencies]
-rg = { version = "0.1", features = ["crossterm"] }
+retroglyph = { version = "0.1", features = ["crossterm"] }
 ```
 
 ```rust
-use rg::{Terminal, backend::Crossterm, color::Color, event::{Event, KeyCode}};
+use retroglyph::{Terminal, backend::Crossterm, color::Color, event::{Event, KeyCode}};
 
 fn main() -> std::io::Result<()> {
     let mut term = Terminal::new(Crossterm::new()?);
@@ -92,7 +94,7 @@ Unit tests live alongside their modules. The integration suite in `tests/e2e.rs`
 `·`. Pair it with `insta::assert_snapshot!` for deterministic layout assertions:
 
 ```rust
-use rg::{Terminal, backend::Headless};
+use retroglyph::{Terminal, backend::Headless};
 
 let backend = Headless::new(20, 5);
 let mut term = Terminal::new(backend);

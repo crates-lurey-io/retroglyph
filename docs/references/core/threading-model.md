@@ -2,7 +2,7 @@
 
 ## Summary
 
-The recommended approach for `rg` is a **single-threaded event loop on the main thread** (required
+The recommended approach for `retroglyph` is a **single-threaded event loop on the main thread** (required
 by winit on macOS) with game logic running on a separate thread, connected via channels. The
 terminal grid buffer is shared using `Arc<FairMutex<Buffer>>` (following Alacritty's proven
 pattern), with the option to evolve toward double/triple buffering if profiling reveals contention.
@@ -506,7 +506,7 @@ terminal grid must be shared between reader and renderer.
 | Triple buffer             | None (lock-free)                    | 3x buffer                    | Medium     | Latest available     | Real-time, no tolerance for jitter     |
 | `ArcSwap<Buffer>`         | Near-zero (atomic pointer swap)     | 2x buffer (old + new)        | Low        | Latest available     | Read-heavy, infrequent updates         |
 
-### Recommendation for `rg`
+### Recommendation for `retroglyph`
 
 Start with `Arc<Mutex<Buffer>>` (or a FairMutex variant). The grid sizes involved (typically <
 200x100 = 20,000 cells) make lock contention negligible at 60fps. If profiling shows contention:

@@ -1,6 +1,6 @@
 # AGENTS.md — Developer & Agent Guide
 
-This guide details instructions for building, testing, linting, formatting, and navigating the `rg`
+This guide details instructions for building, testing, linting, formatting, and navigating the `retroglyph`
 codebase.
 
 ---

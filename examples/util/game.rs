@@ -1,8 +1,8 @@
 //! Shared game loop for rg examples.
 
-use rg::color::{AnsiColor, Color};
-use rg::event::{Event, KeyCode};
-use rg::{Backend, Pos, Terminal};
+use retroglyph::color::{AnsiColor, Color};
+use retroglyph::event::{Event, KeyCode};
+use retroglyph::{Backend, Pos, Terminal};
 use std::time::Duration;
 
 // Fixed room size in world space. The terminal clips on small windows rather

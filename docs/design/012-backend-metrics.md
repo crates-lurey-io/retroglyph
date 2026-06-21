@@ -101,7 +101,7 @@ feature flag is needed. The `AtomicU64` fields add 24 bytes per metrics struct.
 ## Non-goals
 
 - **Frame time measurement** — deferred to a separate frame pacing effort (requires high-res timers)
-- **Per-cell diff tracking** — notcurses tracks ellelisions/emissions; rg can add this later
+- **Per-cell diff tracking** — notcurses tracks ellelisions/emissions; retroglyph can add this later
 - **Histogram-based metrics** — Bevy's SMA/EMA is sufficient; HdrHistogram adds allocation in hot
   path
 - **Logging or export** — snapshot structs are pull-based; logging is a consumer concern

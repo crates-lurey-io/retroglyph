@@ -4,12 +4,12 @@
 
 ## Context
 
-To ensure the `rg` library remains robust and its visual output does not regress, we need a rigorous
+To ensure the `retroglyph` library remains robust and its visual output does not regress, we need a rigorous
 testing strategy. While traditional end-to-end (E2E) UI testing relies on pixel-based screenshots
 (PNGs via Xvfb or Docker), this is highly discouraged for terminal applications due to flakiness,
 system dependencies (fonts, GPU rendering), and unreviewable binary diffs.
 
-This ADR defines the standard testing approach for `rg` using Snapshot Testing via `insta`. We will
+This ADR defines the standard testing approach for `retroglyph` using Snapshot Testing via `insta`. We will
 utilize a dual strategy: a `TestBackend` for fast logic validation, and a PTY-based SVG generator
 for true visual regression testing.
 
@@ -74,7 +74,7 @@ the terminal correctly.
 1. **File Creation:**
    - Create `src/backend/test.rs` and expose it.
 1. **Struct Definition:**
-   - Define a `TestBackend` struct that holds a width, a height, and a linear buffer of `rg::Cell`
+   - Define a `TestBackend` struct that holds a width, a height, and a linear buffer of `retroglyph::Cell`
 
      elements to represent the screen.
 

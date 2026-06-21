@@ -128,9 +128,9 @@ collections. [Source](https://github.com/ratatui/ratatui/blob/main/ARCHITECTURE.
 
 ```toml
 [package]
-name = "rg-core"
+name = "retroglyph-core"
 version = "0.1.0"
-description = "Core types and traits for the rg terminal grid library."
+description = "Core types and traits for the retroglyph terminal grid library."
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -170,7 +170,7 @@ the trait into its own crate adds a dependency hop without meaningful benefit.
 ### Backend trait location: in core
 
 ```rust
-// In rg-core/src/backend.rs
+// In retroglyph-core/src/backend.rs
 pub trait Backend {
     fn draw<'a, I>(&mut self, content: I) -> io::Result<()>
     where
@@ -186,13 +186,13 @@ pub trait Backend {
 }
 ```
 
-Each backend crate depends only on `rg-core` and its terminal library:
+Each backend crate depends only on `retroglyph-core` and its terminal library:
 
 ````rust
-rg-core (defines Backend trait + Cell, Buffer, Style, etc.)
+retroglyph-core (defines Backend trait + Cell, Buffer, Style, etc.)
   ^           ^            ^
   |           |            |
-rg-crossterm  rg-termion   rg-wgpu
+retroglyph-crossterm  retroglyph-termion   retroglyph-wgpu
 ```text
 
 ### TestBackend
@@ -236,22 +236,22 @@ Within a single backend crate, features are fine for:
 ### Concrete structure
 
 ```toml
-# rg-crossterm/Cargo.toml
+# retroglyph-crossterm/Cargo.toml
 
 [package]
-name = "rg-crossterm"
+name = "retroglyph-crossterm"
 
 [dependencies]
-rg-core = { workspace = true }
+retroglyph-core = { workspace = true }
 crossterm = { workspace = true }
 
-# rg-wgpu/Cargo.toml (GPU-rendered backend)
+# retroglyph-wgpu/Cargo.toml (GPU-rendered backend)
 
 [package]
-name = "rg-wgpu"
+name = "retroglyph-wgpu"
 
 [dependencies]
-rg-core = { workspace = true }
+retroglyph-core = { workspace = true }
 wgpu = { workspace = true }
 ````
 
@@ -263,9 +263,9 @@ Algorithms should be separate, optional crates. They depend on core types (`Rect
 not on backends or widgets.
 
 ````text
-rg-fov/          # Field of vision algorithms (shadowcasting, etc.)
-rg-pathfinding/  # A*, Dijkstra, BFS over grids
-rg-noise/        # Noise generation for procedural content
+retroglyph-fov/          # Field of vision algorithms (shadowcasting, etc.)
+retroglyph-pathfinding/  # A*, Dijkstra, BFS over grids
+retroglyph-noise/        # Noise generation for procedural content
 ```rust
 
 ### Why separate crates, not features
@@ -273,33 +273,33 @@ rg-noise/        # Noise generation for procedural content
 - Algorithms have their own dependency trees (potentially `num-traits`, etc.)
 - Users building a roguelike want FOV; users building a dashboard don't
 - Independent release cadence; algorithm improvements don't force core bumps
-- Each algorithm crate depends only on `rg-core` for grid types
+- Each algorithm crate depends only on `retroglyph-core` for grid types
 
 ### Example
 
 ```toml
-# rg-fov/Cargo.toml
+# retroglyph-fov/Cargo.toml
 
 [package]
-name = "rg-fov"
+name = "retroglyph-fov"
 version = "0.1.0"
 
 [dependencies]
-rg-core = { workspace = true }
+retroglyph-core = { workspace = true }
 
 [features]
 default = []
-serde = ["rg-core/serde"]
+serde = ["retroglyph-core/serde"]
 ````
 
 The facade crate can optionally re-export these:
 
 ```toml
-# rg/Cargo.toml (facade)
+# retroglyph/Cargo.toml (facade)
 
 [features]
-fov = ["dep:rg-fov"]
-pathfinding = ["dep:rg-pathfinding"]
+fov = ["dep:retroglyph-fov"]
+pathfinding = ["dep:retroglyph-pathfinding"]
 ```
 
 ---
@@ -318,10 +318,10 @@ with `workspace = true`. This is the universal pattern across ratatui, wgpu, and
 [workspace.dependencies]
 # Internal crates (with path + version for publishing)
 
-rg-core = { path = "rg-core", version = "0.1.0" }
-rg-crossterm = { path = "rg-crossterm", version = "0.1.0", optional = true }
-rg-widgets = { path = "rg-widgets", version = "0.1.0" }
-rg-fov = { path = "rg-fov", version = "0.1.0", optional = true }
+retroglyph-core = { path = "retroglyph-core", version = "0.1.0" }
+retroglyph-crossterm = { path = "retroglyph-crossterm", version = "0.1.0", optional = true }
+retroglyph-widgets = { path = "retroglyph-widgets", version = "0.1.0" }
+retroglyph-fov = { path = "retroglyph-fov", version = "0.1.0", optional = true }
 
 # External dependencies
 
@@ -335,7 +335,7 @@ pretty_assertions = "1"
 # In any member crate
 
 [dependencies]
-rg-core = { workspace = true }
+retroglyph-core = { workspace = true }
 bitflags = { workspace = true }
 serde = { workspace = true, optional = true }
 ```
@@ -353,7 +353,7 @@ frequent Cargo.toml churn. The `Cargo.lock` pins exact versions. This communicat
 edition = "2024"
 rust-version = "1.85.0"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/you/rg"
+repository = "https://github.com/you/retroglyph"
 ```
 
 ### workspace.lints
@@ -408,24 +408,24 @@ default = ["std", "crossterm", "widgets", "macros"]
 
 # Capability features (additive)
 
-std = ["rg-core/std", "rg-widgets?/std"]
-serde = ["dep:serde", "rg-core/serde", "rg-widgets?/serde"]
-macros = ["dep:rg-macros"]
+std = ["retroglyph-core/std", "retroglyph-widgets?/std"]
+serde = ["dep:serde", "retroglyph-core/serde", "retroglyph-widgets?/serde"]
+macros = ["dep:retroglyph-macros"]
 
 # Backend selection (each is an optional dep)
 
-crossterm = ["dep:rg-crossterm", "std"]
-termion = ["dep:rg-termion", "std"]
+crossterm = ["dep:retroglyph-crossterm", "std"]
+termion = ["dep:retroglyph-termion", "std"]
 
 # Widget groups
 
-widgets = ["dep:rg-widgets"]
-widget-calendar = ["rg-widgets?/calendar"]
+widgets = ["dep:retroglyph-widgets"]
+widget-calendar = ["retroglyph-widgets?/calendar"]
 
 # Algorithm modules
 
-fov = ["dep:rg-fov"]
-pathfinding = ["dep:rg-pathfinding"]
+fov = ["dep:retroglyph-fov"]
+pathfinding = ["dep:retroglyph-pathfinding"]
 
 # Unstable (prefixed for clarity)
 
@@ -437,12 +437,12 @@ unstable-widget-ref = []
 
 ```toml
 [dependencies]
-rg-crossterm = { workspace = true, optional = true }
+retroglyph-crossterm = { workspace = true, optional = true }
 
 [features]
-# Using dep: prevents an implicit "rg-crossterm" feature from leaking
+# Using dep: prevents an implicit "retroglyph-crossterm" feature from leaking
 
-crossterm = ["dep:rg-crossterm"]
+crossterm = ["dep:retroglyph-crossterm"]
 ```
 
 ### Feature forwarding with `?` syntax
@@ -450,7 +450,7 @@ crossterm = ["dep:rg-crossterm"]
 Forward features to optional dependencies only when they're already enabled:
 
 ```toml
-serde = ["dep:serde", "rg-core/serde", "rg-crossterm?/serde"]
+serde = ["dep:serde", "retroglyph-core/serde", "retroglyph-crossterm?/serde"]
 #                                       ^ only if crossterm is enabled
 
 ```
@@ -477,7 +477,7 @@ smaller project.
 ### Concrete re-export pattern
 
 ```rust
-// rg/src/lib.rs (facade crate)
+// retroglyph/src/lib.rs (facade crate)
 
 // Always available
 pub use rg_core::*;
@@ -511,17 +511,17 @@ pub use rg_macros::*;
 # Application developer: just use the facade
 
 [dependencies]
-rg = { version = "0.1", features = ["crossterm"] }
+retroglyph = { version = "0.1", features = ["crossterm"] }
 
 # Widget library author: depend on core for stability
 
 [dependencies]
-rg-core = "0.1"
+retroglyph-core = "0.1"
 
 # Game developer wanting algorithms
 
 [dependencies]
-rg = { version = "0.1", features = ["crossterm", "fov", "pathfinding"] }
+retroglyph = { version = "0.1", features = ["crossterm", "fov", "pathfinding"] }
 ```
 
 ---
@@ -658,7 +658,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo test -p rg-${{ matrix.backend }}
+      - run: cargo test -p retroglyph-${{ matrix.backend }}
 
   # no_std build verification
   build-no-std:
@@ -670,8 +670,8 @@ jobs:
         with:
           targets: x86_64-unknown-none
 
-      - run: cargo build --target x86_64-unknown-none -p rg-core
-      - run: cargo build --target x86_64-unknown-none -p rg-widgets
+      - run: cargo build --target x86_64-unknown-none -p retroglyph-core
+      - run: cargo build --target x86_64-unknown-none -p retroglyph-widgets
 
   # Doc tests
   test-docs:
@@ -739,34 +739,34 @@ cargo hack check --workspace --rust-version
 ```toml
 [workspace]
 resolver = "2"
-members = ["rg", "rg-*", "xtask"]
+members = ["retroglyph", "retroglyph-*", "xtask"]
 default-members = [
-  "rg",
-  "rg-core",
-  "rg-widgets",
-  "rg-crossterm",
-  "rg-macros",
+  "retroglyph",
+  "retroglyph-core",
+  "retroglyph-widgets",
+  "retroglyph-crossterm",
+  "retroglyph-macros",
 ]
 
 [workspace.package]
 edition = "2024"
 rust-version = "1.85.0"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/you/rg"
+repository = "https://github.com/you/retroglyph"
 keywords = ["terminal", "grid", "roguelike", "tui"]
 categories = ["command-line-interface", "game-development"]
 
 [workspace.dependencies]
 # Internal
 
-rg = { path = "rg", version = "0.1.0" }
-rg-core = { path = "rg-core", version = "0.1.0" }
-rg-widgets = { path = "rg-widgets", version = "0.1.0", default-features = false }
-rg-crossterm = { path = "rg-crossterm", version = "0.1.0", optional = true }
-rg-termion = { path = "rg-termion", version = "0.1.0", optional = true }
-rg-fov = { path = "rg-fov", version = "0.1.0", optional = true }
-rg-pathfinding = { path = "rg-pathfinding", version = "0.1.0", optional = true }
-rg-macros = { path = "rg-macros", version = "0.1.0", optional = true }
+retroglyph = { path = "retroglyph", version = "0.1.0" }
+retroglyph-core = { path = "retroglyph-core", version = "0.1.0" }
+retroglyph-widgets = { path = "retroglyph-widgets", version = "0.1.0", default-features = false }
+retroglyph-crossterm = { path = "retroglyph-crossterm", version = "0.1.0", optional = true }
+retroglyph-termion = { path = "retroglyph-termion", version = "0.1.0", optional = true }
+retroglyph-fov = { path = "retroglyph-fov", version = "0.1.0", optional = true }
+retroglyph-pathfinding = { path = "retroglyph-pathfinding", version = "0.1.0", optional = true }
+retroglyph-macros = { path = "retroglyph-macros", version = "0.1.0", optional = true }
 
 # External
 

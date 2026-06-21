@@ -64,7 +64,7 @@ This document describes what changes would be needed for a WASM-compatible backe
 │  │   3. copy to canvas ImageData     │  │  ◄── instead of softbuffer
 │  │                                   │  │
 │  │ on WindowEvent::KeyboardInput:    │  │
-│  │   translate to rg::Event          │  │
+│  │   translate to retroglyph::Event          │  │
 │  │   deliver to game.handle_input()  │  │
 │  └───────────────────────────────────┘  │
 └─────────────────────────────────────────┘

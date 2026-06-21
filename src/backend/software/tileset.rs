@@ -189,7 +189,7 @@ impl TilesetOptions {
 /// # Example
 ///
 /// ```ignore
-/// use rg::backend::software::tileset::{
+/// use retroglyph::backend::software::tileset::{
 ///     Codepage, TilesetOptions,
 /// };
 ///

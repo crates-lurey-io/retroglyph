@@ -215,8 +215,8 @@ impl SoftwareBackend {
     /// # Examples
     ///
     /// ```ignore
-    /// use rg::backend::software::SoftwareBackendBuilder;
-    /// use rg::event::{Event, KeyCode};
+    /// use retroglyph::backend::software::SoftwareBackendBuilder;
+    /// use retroglyph::event::{Event, KeyCode};
     /// use std::time::Duration;
     ///
     /// SoftwareBackendBuilder::new()
@@ -312,11 +312,11 @@ impl SoftwareBackend {
     /// # Examples
     ///
     /// ```ignore
-    /// use rg::backend::software::SoftwareBackendBuilder;
-    /// use rg::tile::Tile;
-    /// use rg::style::Style;
-    /// use rg::grid::Pos;
-    /// use rg::Color;
+    /// use retroglyph::backend::software::SoftwareBackendBuilder;
+    /// use retroglyph::tile::Tile;
+    /// use retroglyph::style::Style;
+    /// use retroglyph::grid::Pos;
+    /// use retroglyph::Color;
     ///
     /// let mut renderer = SoftwareBackendBuilder::new()
     ///     .grid_size(1, 1)

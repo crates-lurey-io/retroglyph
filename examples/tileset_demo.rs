@@ -11,11 +11,11 @@
 //! Run with:
 //!   `cargo run --example tileset_demo --features software-tilesets,software-default-font`
 
-use rg::backend::software::SoftwareBackendBuilder;
-use rg::backend::software::tileset::TilesetOptions;
-use rg::event::{Event, KeyCode};
-use rg::style::Style;
-use rg::{Color, Terminal};
+use retroglyph::backend::software::SoftwareBackendBuilder;
+use retroglyph::backend::software::tileset::TilesetOptions;
+use retroglyph::event::{Event, KeyCode};
+use retroglyph::style::Style;
+use retroglyph::{Color, Terminal};
 use std::time::Duration;
 
 // ── Sprite data: four 8×8 pixel-art sprites ──────────────────────────────
@@ -143,7 +143,7 @@ fn make_sprite_sheet() -> Vec<u8> {
 // ── Draw ────────────────────────────────────────────────────────────────
 
 #[allow(clippy::cast_possible_truncation)]
-fn draw(term: &mut Terminal<impl rg::Backend>, frame: u64) {
+fn draw(term: &mut Terminal<impl retroglyph::Backend>, frame: u64) {
     let size = term.size();
 
     term.layer(0);

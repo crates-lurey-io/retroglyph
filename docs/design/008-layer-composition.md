@@ -109,7 +109,7 @@ or terminal changes yet — just a rename that compiles.
   }
 ```
 
-The public API changes from `Cell` to `Tile`. Since rg is not published, no backward compat is
+The public API changes from `Cell` to `Tile`. Since retroglyph is not published, no backward compat is
 needed. Update all references in the codebase:
 
 ```diff
@@ -674,7 +674,7 @@ fn layer_zero_fills_background_higher_layers_do_not() {
 
 ## Migration notes
 
-- `Cell` is removed; all uses become `Tile`. Since rg is not published and has no downstream
+- `Cell` is removed; all uses become `Tile`. Since retroglyph is not published and has no downstream
 
   dependents, no backward compat is needed.
 

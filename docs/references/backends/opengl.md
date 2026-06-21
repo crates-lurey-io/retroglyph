@@ -267,7 +267,7 @@ composition:
 
   [BearLibTerminal Source](https://github.com/cfyzium/bearlibterminal)
 
-**Key takeaway for rg**: BearLibTerminal's tile-stacking model (multiple tiles per cell with
+**Key takeaway for retroglyph**: BearLibTerminal's tile-stacking model (multiple tiles per cell with
 individual offsets/colors) is more flexible than most terminal renderers need. Its codepage/Unicode
 mapping system is well-designed for CP437 roguelike fonts. The renderer itself is straightforward
 GL2-era textured quads, not optimized with instancing.
@@ -306,7 +306,7 @@ crossterm backends:
 
   [shader_strings.rs](https://github.com/amethyst/bracket-lib/blob/master/bracket-terminal/src/hal/native/shader_strings.rs)
 
-**Key takeaway for rg**: bracket-lib is functional but not performance-optimized. The per-vertex
+**Key takeaway for retroglyph**: bracket-lib is functional but not performance-optimized. The per-vertex
 approach rebuilds all geometry each frame. For a new implementation, instanced rendering would be
 strictly better. The multi-layer framebuffer compositing pattern is worth adopting if layer support
 is needed.

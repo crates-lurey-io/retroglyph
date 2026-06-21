@@ -1,4 +1,4 @@
-# rg
+# retroglyph
 
 > A terminal/grid rendering library for roguelikes
 
@@ -107,7 +107,7 @@ Created by: [cargo-llms-txt](https://github.com/masinc/cargo-llms-txt)
 
 ## README.md
 
-### rg
+### retroglyph
 
 A terminal/grid rendering library for roguelikes.
 
@@ -119,7 +119,7 @@ This project is currently being scaffolded.
 
 ```toml
 [package]
-name = "rg"
+name = "retroglyph"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"

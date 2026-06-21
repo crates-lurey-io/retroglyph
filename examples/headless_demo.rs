@@ -1,9 +1,9 @@
 //! Example headless demo.
 
-use rg::Terminal;
-use rg::backend::Headless;
-use rg::color::{AnsiColor, Color};
-use rg::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+use retroglyph::Terminal;
+use retroglyph::backend::Headless;
+use retroglyph::color::{AnsiColor, Color};
+use retroglyph::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 
 fn draw_scene(term: &mut Terminal<Headless>, player_x: u16, player_y: u16) {
     term.clear();

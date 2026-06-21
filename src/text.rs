@@ -13,9 +13,9 @@ use unicode_width::UnicodeWidthStr;
 /// # Examples
 ///
 /// ```
-/// use rg::text::Span;
-/// use rg::style::Style;
-/// use rg::color::Color;
+/// use retroglyph::text::Span;
+/// use retroglyph::style::Style;
+/// use retroglyph::color::Color;
 ///
 /// let plain = Span::raw("hello");
 /// let colored = Span::styled("world", Style::new().fg(Color::GREEN));
@@ -65,9 +65,9 @@ impl<S: Into<String>> From<S> for Span {
 /// # Examples
 ///
 /// ```
-/// use rg::text::{Line, Span};
-/// use rg::style::Style;
-/// use rg::color::Color;
+/// use retroglyph::text::{Line, Span};
+/// use retroglyph::style::Style;
+/// use retroglyph::color::Color;
 ///
 /// let line = Line::from(vec![
 ///     Span::raw("HP: "),

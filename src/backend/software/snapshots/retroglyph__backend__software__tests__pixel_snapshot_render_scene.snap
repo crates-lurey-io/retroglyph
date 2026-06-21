@@ -1,6 +1,6 @@
 ---
 source: src/backend/software/mod.rs
-assertion_line: 948
+assertion_line: 1260
 expression: snapshot
 ---
 0014141e 0014141e 0014141e 0014141e 0014141e 0014141e 0014141e 0014141e 0014141e 0014141e 0014141e 0014141e 0014141e 0014141e 0014141e 0014141e

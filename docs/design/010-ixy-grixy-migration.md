@@ -1,16 +1,16 @@
-# ADR 010: Migrate `rg` to `ixy` and `grixy`
+# ADR 010: Migrate `retroglyph` to `ixy` and `grixy`
 
 **Status:**Draft**Date:** 2026-06-19
 
 ## Context
 
 `ixy` v0.6.0-alpha.5 and `grixy` v0.6.0-alpha.5 have been published. Both are owned crates in the
-same family. The overhaul work tracked in `rg/.matan/overhaul-ixy.md` (ixy) and
+same family. The overhaul work tracked in `retroglyph/.matan/overhaul-ixy.md` (ixy) and
 `grixy/.matan/plan.md` (grixy) is done.
 
-`rg` currently hand-rolls four types that these crates own:
+`retroglyph` currently hand-rolls four types that these crates own:
 
-| `rg` type        | Lines | Replaces with            |
+| `retroglyph` type        | Lines | Replaces with            |
 | ---------------- | ----- | ------------------------ |
 | `grid::Position` | ~25   | `ixy::Pos<u16>` newtype  |
 | `grid::Rect`     | ~60   | `ixy::Rect<u16>` alias   |
@@ -25,12 +25,12 @@ Migrating ixy first (M-A) validates the geometry surface before touching the hea
 
 ## Non-goals
 
-- Migrating `grid::Size` — `ixy::Size` stores `usize` dimensions; `rg` uses `u16` throughout the
+- Migrating `grid::Size` — `ixy::Size` stores `usize` dimensions; `retroglyph` uses `u16` throughout the
 
   backend interface. The mismatch would ripple into every backend and is not worth the churn.
   Revisit when `ixy::Size` becomes generic.
 
-- Exposing `grixy` traits (`GridRead`, `GridWrite`, etc.) as part of `rg`'s public API — the newtype
+- Exposing `grixy` traits (`GridRead`, `GridWrite`, etc.) as part of `retroglyph`'s public API — the newtype
 
   wrapper deliberately hides them.
 
@@ -41,7 +41,7 @@ Migrating ixy first (M-A) validates the geometry surface before touching the hea
 ## Dependency versions
 
 ```toml
-# rg/Cargo.toml
+# retroglyph/Cargo.toml
 
 [dependencies]
 ixy  = "0.6.0-alpha.5"
@@ -54,7 +54,7 @@ grixy = { version = "0.6.0-alpha.5", features = ["alloc", "buffer"] }
 
 ### A1. `grid::Position` → newtype over `ixy::Pos<u16>`
 
-`ixy::Pos<u16>` is lexicographic by default (x-primary). `rg` requires row-major (y-primary) for
+`ixy::Pos<u16>` is lexicographic by default (x-primary). `retroglyph` requires row-major (y-primary) for
 `Ord`, so a newtype is necessary — a plain re-export would silently break sorting.
 
 ```rust
@@ -100,7 +100,7 @@ impl From<Position> for (u16, u16) {
 }
 ```
 
-**Call-site changes in `rg`** — `Position` was a plain struct with public fields; the newtype wraps
+**Call-site changes in `retroglyph`** — `Position` was a plain struct with public fields; the newtype wraps
 the same data but fields become methods:
 
 | Before                                | After                            |
@@ -117,8 +117,8 @@ Files touched: `src/grid.rs`, `src/terminal.rs`, `src/backend/mod.rs`, `src/back
 
 ### A2. `grid::Rect` → type alias for `ixy::Rect<u16>`
 
-`ixy::Rect<u16>` stores `(x, y, w, h)` as private fields. All of rg's `Rect` methods have direct
-equivalents. Since there are no rg-specific invariants beyond what ixy already enforces, a type
+`ixy::Rect<u16>` stores `(x, y, w, h)` as private fields. All of retroglyph's `Rect` methods have direct
+equivalents. Since there are no retroglyph-specific invariants beyond what ixy already enforces, a type
 alias is sufficient — no newtype overhead.
 
 ```rust
@@ -126,7 +126,7 @@ alias is sufficient — no newtype overhead.
 pub type Rect = ixy::Rect<u16>;
 ```
 
-**Call-site changes in `rg`**:
+**Call-site changes in `retroglyph`**:
 
 | Before                                    | After                                                      |
 | ----------------------------------------- | ---------------------------------------------------------- |
@@ -172,21 +172,21 @@ pub use ixy::{Pos, Rect};           // Rect is now the ixy alias
 pub use grid::{Grid, Position, Size};  // Position is our newtype; Size unchanged
 ```
 
-Downstream users who imported `rg::Rect` directly now get `ixy::Rect<u16>` — they gain methods, no
+Downstream users who imported `retroglyph::Rect` directly now get `ixy::Rect<u16>` — they gain methods, no
 functionality is removed.
 
 ### Acceptance criteria — M-A
 
 - [ ] `cargo check --all-targets --all-features` passes
 - [ ] `just check` passes (fmt + clippy + doc)
-- [ ] All existing `rg` tests pass
+- [ ] All existing `retroglyph` tests pass
 - [ ] `Position` sorts in row-major order (existing test `test_position_ord_row_major` still passes)
 - [ ] `Rect` call-sites migrated — no `rect.x`, `rect.y`, `rect.width`, `rect.height` field access
 
   remains in `src/`
 
 - [ ] No `struct Position` or `struct Rect` definitions remain in `src/grid.rs`
-- [ ] `rg::Position`, `rg::Rect` still in public API (`src/lib.rs`)
+- [ ] `retroglyph::Position`, `retroglyph::Rect` still in public API (`src/lib.rs`)
 
 ---
 
@@ -194,7 +194,7 @@ functionality is removed.
 
 ### B1. Coordinate bridge: u16 ↔ usize
 
-`grixy` uses `ixy::Pos<usize>` internally. `rg` uses `Position(ixy::Pos<u16>)`. The bridge is two
+`grixy` uses `ixy::Pos<usize>` internally. `retroglyph` uses `Position(ixy::Pos<u16>)`. The bridge is two
 small helpers in `src/grid.rs`, not exported:
 
 ```rust
@@ -210,7 +210,7 @@ fn from_grixy(pos: grixy::core::Pos) -> Position {
 }
 ```
 
-These only appear at the Grid newtype boundary. No other code in `rg` sees `usize` coordinates.
+These only appear at the Grid newtype boundary. No other code in `retroglyph` sees `usize` coordinates.
 
 ### B2. The `Grid` newtype
 
@@ -225,13 +225,13 @@ use grixy::ops::layout::RowMajor;
 pub struct Grid(GridBuf<Cell, alloc::vec::Vec<Cell>, RowMajor>);
 ```
 
-The newtype hides `grixy` from rg's public API. All existing `Grid` methods are re-implemented as
+The newtype hides `grixy` from retroglyph's public API. All existing `Grid` methods are re-implemented as
 thin forwarding wrappers. The `egc` feature methods (`write_grapheme`, `clear_overlap`) remain as
 inherent methods on the newtype — they don't belong in `grixy`.
 
 ### B3. Method mapping
 
-| `rg::Grid` method         | Delegates to                                                  |
+| `retroglyph::Grid` method         | Delegates to                                                  |
 | ------------------------- | ------------------------------------------------------------- | ------ | ------------------------------------------- |
 | `Grid::new(w, h)`         | `GridBuf::new(usize::from(w), usize::from(h))`                |
 | `width() -> u16`          | `self.0.width() as u16`                                       |
@@ -312,7 +312,7 @@ pub use grid::{Grid, Position, Size};
 
 - [ ] `cargo check --all-targets --all-features` passes
 - [ ] `just check` passes
-- [ ] All existing `rg` tests pass including EGC tests (`cfg(feature = "egc")`)
+- [ ] All existing `retroglyph` tests pass including EGC tests (`cfg(feature = "egc")`)
 - [ ] `insta` snapshot tests still match
 - [ ] No `struct Grid { width, height, buffer }` definition remains in `src/`
 - [ ] No `DiffIterator` enum remains in `src/`
@@ -323,7 +323,7 @@ pub use grid::{Grid, Position, Size};
 
 ## Breaking surface exposed to downstream
 
-Both milestones are pre-v1.0 (`rg` is on v0.1.0), so breaking changes are permitted. Document in
+Both milestones are pre-v1.0 (`retroglyph` is on v0.1.0), so breaking changes are permitted. Document in
 `CHANGELOG.md`:
 
 | Changed             | Before                                 | After                                        | Notes                                     |

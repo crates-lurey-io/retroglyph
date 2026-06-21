@@ -4,7 +4,7 @@
 
 ## Context
 
-To build and play real games, the `rg` library needs a visual backend capable of drawing to the
+To build and play real games, the `retroglyph` library needs a visual backend capable of drawing to the
 terminal and reading real user input. As decided in ADR 001, we will implement this using the
 `crossterm` crate.
 
@@ -110,12 +110,12 @@ screen without flickering.
 
 1. **Color & Modifier Mapping:**
    - Create private helper functions mapping our types to crossterm types:
-     - `map_color(c: rg::Color) -> crossterm::style::Color`
+     - `map_color(c: retroglyph::Color) -> crossterm::style::Color`
        - `Default` -> `Reset`
        - `Ansi(c)` -> map standard ANSI values (`Black`, `Red`, etc.)
        - `Indexed(i)` -> `AnsiValue(i)`
        - `Rgb { r, g, b }` -> `Rgb { r, g, b }`
-     - `map_modifier(m: rg::style::CellModifier) -> crossterm::style::Attributes`
+     - `map_modifier(m: retroglyph::style::CellModifier) -> crossterm::style::Attributes`
 
 1. **`Backend::draw` Implementation:**
    - The method takes an iterator of `(x, y, &Cell)`.
@@ -150,7 +150,7 @@ screen without flickering.
 
 ## M14: Input Handling
 
-**Goal:** Read crossterm events and translate them into our unified `rg::Event` system.
+**Goal:** Read crossterm events and translate them into our unified `retroglyph::Event` system.
 
 ### Instructions (4)
 
@@ -158,22 +158,22 @@ screen without flickering.
    - Call `crossterm::event::poll(timeout)`.
    - If it returns `true`, call `crossterm::event::read()`.
    - Match the returned `crossterm::event::Event`:
-     - `Event::Key(k)`: Map crossterm's `KeyCode` and `KeyModifiers` exactly to `rg::KeyCode` and
+     - `Event::Key(k)`: Map crossterm's `KeyCode` and `KeyModifiers` exactly to `retroglyph::KeyCode` and
 
-       `rg::KeyModifiers`. Return `rg::Event::Key(KeyEvent { ... })`.
+       `retroglyph::KeyModifiers`. Return `retroglyph::Event::Key(KeyEvent { ... })`.
 
      - `Event::Mouse(m)`: Map crossterm's `MouseButton`, `MouseEventKind`, and cell coordinates to
 
-       `rg::MouseEvent`. Return `rg::Event::Mouse`.
+       `retroglyph::MouseEvent`. Return `retroglyph::Event::Mouse`.
 
-     - `Event::Resize(w, h)`: Return `rg::Event::Resize(w, h)`.
+     - `Event::Resize(w, h)`: Return `retroglyph::Event::Resize(w, h)`.
      - Ignore `FocusGained`, `FocusLost`, and `Paste` for now (return `None` or loop to read the
 
        next event until the timeout expires).
 
 ### Acceptance Criteria (4)
 
-- [ ] `poll_event` returns `Some(rg::Event)` correctly populated.
+- [ ] `poll_event` returns `Some(retroglyph::Event)` correctly populated.
 - [ ] `poll_event` respects the given timeout.
 - [ ] Key modifiers (Shift, Ctrl, Alt) are correctly passed through.
 

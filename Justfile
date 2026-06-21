@@ -36,8 +36,8 @@ compile:
 doc:
     cargo doc --no-deps --document-private-items
     @if [ -t 1 ]; then \
-        if command -v xdg-open > /dev/null; then xdg-open target/doc/rg/index.html; \
-        elif command -v open > /dev/null; then open target/doc/rg/index.html; \
+        if command -v xdg-open > /dev/null; then xdg-open target/doc/retroglyph/index.html; \
+        elif command -v open > /dev/null; then open target/doc/retroglyph/index.html; \
         fi \
     fi
 

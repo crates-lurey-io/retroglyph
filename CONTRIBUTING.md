@@ -1,4 +1,4 @@
-# Contributing to rg
+# Contributing to retroglyph
 
 ## Development
 

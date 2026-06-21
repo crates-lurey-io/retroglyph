@@ -10,7 +10,7 @@ bitflags::bitflags! {
     /// # Examples
     ///
     /// ```
-    /// use rg::style::CellModifier;
+    /// use retroglyph::style::CellModifier;
     ///
     /// let attrs = CellModifier::BOLD | CellModifier::ITALIC;
     /// assert!(attrs.contains(CellModifier::BOLD));

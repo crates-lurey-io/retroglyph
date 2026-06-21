@@ -278,7 +278,7 @@ use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|data: &[u8]| {
     // Parser should handle arbitrary byte sequences without panicking
-    let mut parser = rg::AnsiParser::new();
+    let mut parser = retroglyph::AnsiParser::new();
     for &byte in data {
         let _ = parser.advance(byte);
     }
@@ -305,7 +305,7 @@ enum AnsiSequence {
 
 fuzz_target!(|sequences: Vec<AnsiSequence>| {
     let bytes = sequences_to_bytes(&sequences);
-    let mut parser = rg::AnsiParser::new();
+    let mut parser = retroglyph::AnsiParser::new();
     for &byte in &bytes {
         let _ = parser.advance(byte);
     }
@@ -322,7 +322,7 @@ use libfuzzer_sys::fuzz_target;
 fuzz_target!(|data: &[u8]| {
     if let Ok(s) = std::str::from_utf8(data) {
         // Should not panic on any input
-        let _ = rg::Config::parse(s);
+        let _ = retroglyph::Config::parse(s);
     }
 });
 ```

@@ -935,7 +935,7 @@ diff baseline.txt pr.txt
 
 ```toml
 [package]
-name = "rg"
+name = "retroglyph"
 version = "0.1.0"
 edition = "2021"
 
@@ -979,7 +979,7 @@ debug = 1
 ### benches/grid.rs
 
 ```rust
-use rg::{Grid, Cell, Style};
+use retroglyph::{Grid, Cell, Style};
 
 fn main() {
     divan::main();
@@ -1034,20 +1034,20 @@ mod diff {
                 Cell::new('X', Style::bold()),
             );
         }
-        bencher.bench(|| rg::diff(&old, &new));
+        bencher.bench(|| retroglyph::diff(&old, &new));
     }
 
     #[divan::bench]
     fn full_repaint(bencher: divan::Bencher) {
         let old = Grid::filled(50, 200, Cell::default());
         let new = Grid::filled(50, 200, Cell::new('X', Style::bold()));
-        bencher.bench(|| rg::diff(&old, &new));
+        bencher.bench(|| retroglyph::diff(&old, &new));
     }
 
     #[divan::bench]
     fn no_changes(bencher: divan::Bencher) {
         let grid = Grid::filled(50, 200, Cell::default());
-        bencher.bench(|| rg::diff(&grid, &grid));
+        bencher.bench(|| retroglyph::diff(&grid, &grid));
     }
 }
 ```
@@ -1069,7 +1069,7 @@ fn parse_ascii_stream(bencher: divan::Bencher) {
     bencher
         .counter(divan::counter::BytesCount::new(data.len()))
         .bench(|| {
-            let mut parser = rg::Parser::new();
+            let mut parser = retroglyph::Parser::new();
             parser.advance(&data);
         });
 }
@@ -1085,7 +1085,7 @@ fn parse_sgr_colors(bencher: divan::Bencher) {
     bencher
         .counter(divan::counter::BytesCount::new(data.len()))
         .bench(|| {
-            let mut parser = rg::Parser::new();
+            let mut parser = retroglyph::Parser::new();
             parser.advance(&data);
         });
 }
@@ -1098,7 +1098,7 @@ fn parse_unicode_mixed(bencher: divan::Bencher) {
     bencher
         .counter(divan::counter::BytesCount::new(data.len()))
         .bench(|| {
-            let mut parser = rg::Parser::new();
+            let mut parser = retroglyph::Parser::new();
             parser.advance(data);
         });
 }
@@ -1116,20 +1116,20 @@ fn main() {
 
 #[divan::bench(args = [(80, 24), (200, 60)])]
 fn build_instance_buffer(bencher: divan::Bencher, (cols, rows): (usize, usize)) {
-    let grid = rg::test_helpers::make_grid(rows, cols);
+    let grid = retroglyph::test_helpers::make_grid(rows, cols);
     let mut instances = Vec::with_capacity(rows * cols);
 
     bencher
         .counter(divan::counter::ItemsCount::new(rows * cols))
         .bench(|| {
             instances.clear();
-            rg::renderer::build_instances(&grid, &mut instances);
+            retroglyph::renderer::build_instances(&grid, &mut instances);
         });
 }
 
 #[divan::bench]
 fn atlas_lookup_ascii(bencher: divan::Bencher) {
-    let atlas = rg::test_helpers::make_warmed_atlas();
+    let atlas = retroglyph::test_helpers::make_warmed_atlas();
     bencher.bench(|| {
         for c in 0x20u8..0x7F {
             divan::black_box(atlas.get_glyph(c as char, 14.0));

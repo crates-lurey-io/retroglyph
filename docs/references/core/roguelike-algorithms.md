@@ -149,7 +149,7 @@ main differentiator for gameplay.
 
 [Source: RogueBasin Comparative Study](http://www.roguebasin.com/index.php/Comparative_study_of_field_of_view_algorithms_for_2D_grid_based_worlds)
 
-### 1.6 FOV Recommendation for rg
+### 1.6 FOV Recommendation for retroglyph
 
 Implement **symmetric shadowcasting** (Albert Ford's variant) as the default. It has the best
 overall properties: perfect symmetry, good performance, correct Bresenham correspondence, and clean
@@ -662,7 +662,7 @@ let path = astar(
 flexible.**Disadvantages:** No shared abstraction means no code reuse between algorithms. Each call
 re-specifies the map interface.
 
-### 8.3 Recommended Approach for rg
+### 8.3 Recommended Approach for retroglyph
 
 Split concerns into focused traits with minimal requirements:
 
@@ -743,19 +743,19 @@ trait PathMap: Grid {
 
 ---
 
-## 10. Recommendation for rg
+## 10. Recommendation for retroglyph
 
 ### Architecture: Layered Workspace with Optional Algorithm Crates
 
 ````text
-rg/                          # workspace root
-  rg-core/                   # Grid, Pos, Rect, Color, Cell - zero deps
-  rg-terminal/               # Terminal rendering (crossterm backend)
-  rg-algorithms/             # Optional: FOV, pathfinding, line drawing
+retroglyph/                          # workspace root
+  retroglyph-core/                   # Grid, Pos, Rect, Color, Cell - zero deps
+  retroglyph-terminal/               # Terminal rendering (crossterm backend)
+  retroglyph-algorithms/             # Optional: FOV, pathfinding, line drawing
     (or split further:)
-    rg-fov/                  # FOV only (symmetric shadowcasting)
-    rg-pathfinding/          # A*, Dijkstra maps
-  rg-mapgen/                 # Optional: BSP, cellular automata, drunkard walk
+    retroglyph-fov/                  # FOV only (symmetric shadowcasting)
+    retroglyph-pathfinding/          # A*, Dijkstra maps
+  retroglyph-mapgen/                 # Optional: BSP, cellular automata, drunkard walk
 ```rust
 
 ### What to include in core
@@ -768,7 +768,7 @@ rg/                          # workspace root
 
 - **FOV:** Symmetric shadowcasting (Albert Ford's algorithm). Small, self-contained, high value.
 
-  Depends only on `rg-core` for `Pos`/`Grid`.
+  Depends only on `retroglyph-core` for `Pos`/`Grid`.
 
 - **Pathfinding:** A*and Dijkstra maps. Moderate value-add since the `pathfinding` crate exists and
 
@@ -777,7 +777,7 @@ rg/                          # workspace root
 
 - **Map generation:** BSP, cellular automata, drunkard walk. These are simple enough that many users
 
-  will want to customize heavily. Provide reference implementations or an `rg-mapgen` examples crate
+  will want to customize heavily. Provide reference implementations or an `retroglyph-mapgen` examples crate
   rather than a hard dependency.
 
 ### What NOT to include
@@ -788,13 +788,13 @@ rg/                          # workspace root
 
 - **WFC:** Too complex, too specialized. Defer to the `wfc` crate.
 - **JPS/Flow fields:** Niche optimizations. The `pathfinding` crate covers exotic algorithms.
-- **A full terminal emulator:** rg should focus on the grid abstraction. Rendering is a backend
+- **A full terminal emulator:** retroglyph should focus on the grid abstraction. Rendering is a backend
 
   concern.
 
 ### API Design
 
-- Define `FovMap` and `PathMap` as separate traits in `rg-core` (trait definitions only, no
+- Define `FovMap` and `PathMap` as separate traits in `retroglyph-core` (trait definitions only, no
 
   algorithms)
 

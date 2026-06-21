@@ -4,7 +4,7 @@
 
 ## Context
 
-`rg` currently ships with a `HeadlessBackend` (for testing) and a `CrosstermBackend` (for TTY
+`retroglyph` currently ships with a `HeadlessBackend` (for testing) and a `CrosstermBackend` (for TTY
 usage). To provide rich visual capabilities (custom fonts, pixel-perfect layouts, sub-cell offsets)
 while remaining highly portable, we require a graphical backend.
 
@@ -95,7 +95,7 @@ pub struct SoftwareBackend {
 impl Default for SoftwareBackend {
     fn default() -> Self {
         Self {
-            window_title: String::from("rg application"),
+            window_title: String::from("retroglyph application"),
             cell_width: 10,
             cell_height: 20,
             font_bytes: Vec::new(), // In M2, this will default to an embedded font
@@ -285,7 +285,7 @@ fn blend_colors(bg: u32, fg: u32, alpha: u32) -> u32 {
 
 ### M4: Input Translation
 
-**Goal:** Map `winit` events to `rg::Event`.
+**Goal:** Map `winit` events to `retroglyph::Event`.
 
 When the `winit` event loop receives `WindowEvent::KeyboardInput`, it translates and sends it over
 the channel to the game thread:

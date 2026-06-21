@@ -5,8 +5,8 @@
 
 mod util;
 
-use rg::Pos;
-use rg::backend::software::SoftwareBackendBuilder;
+use retroglyph::Pos;
+use retroglyph::backend::software::SoftwareBackendBuilder;
 
 fn main() {
     let mut player = Pos::new(5, 5);

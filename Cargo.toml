@@ -6,14 +6,14 @@ resolver = "2"
 wasm-server-runner = { version = "1.0.1" }
 
 [package]
-name = "rg"
+name = "retroglyph"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
 authors = ["Matan Lurey <matan@lurey.org>"]
 license = "MIT"
 description = "A terminal/grid rendering library for roguelikes"
-repository = "https://github.com/matanlurey/rg"
+repository = "https://github.com/crates-lurey-io/retroglyph"
 keywords = ["roguelike", "terminal", "grid", "gamedev"]
 categories = ["game-development", "graphics"]
 

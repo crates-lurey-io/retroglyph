@@ -1,6 +1,6 @@
 # Packaging & Distribution Strategies for a Rust Terminal/Grid Library
 
-A comprehensive reference for distributing a Rust library (`rg`) with multi-language bindings,
+A comprehensive reference for distributing a Rust library (`retroglyph`) with multi-language bindings,
 modeled after the approach BearLibTerminal pioneered: a single native library with thin wrappers for
 C, Python, Ruby, WASM, and more.
 
@@ -44,7 +44,7 @@ BearLibTerminal used a "single shared library + language-specific header/wrapper
   was the universal interface. Every language binding was a thin FFI wrapper around these ~20
   functions.
 
-**Takeaway for rg**: Follow the same pattern. The Rust core library exposes a flat `extern "C"` API.
+**Takeaway for retroglyph**: Follow the same pattern. The Rust core library exposes a flat `extern "C"` API.
 Language-specific bindings are thin wrappers. This is exactly what `cdylib` + `cbindgen` gives you
 from Rust.
 
@@ -59,26 +59,26 @@ Use a Cargo workspace with separate crates for core logic, C FFI, Python binding
 bindings. This keeps concerns separated and allows independent versioning.
 
 ````text
-rg/
+retroglyph/
 ├── Cargo.toml                    # Workspace root
 ├── crates/
-│   ├── rg-core/                  # Pure Rust library (lib crate)
+│   ├── retroglyph-core/                  # Pure Rust library (lib crate)
 │   │   ├── Cargo.toml            # crate-type = ["lib"]
 │   │   └── src/lib.rs
-│   ├── rg-ffi/                   # C FFI layer (cdylib + staticlib)
+│   ├── retroglyph-ffi/                   # C FFI layer (cdylib + staticlib)
 │   │   ├── Cargo.toml            # crate-type = ["cdylib", "staticlib"]
 │   │   ├── cbindgen.toml
-│   │   ├── build.rs              # Runs cbindgen to generate rg.h
+│   │   ├── build.rs              # Runs cbindgen to generate retroglyph.h
 │   │   └── src/lib.rs            # #[no_mangle] extern "C" functions
-│   ├── rg-python/                # PyO3 Python bindings
+│   ├── retroglyph-python/                # PyO3 Python bindings
 │   │   ├── Cargo.toml            # crate-type = ["cdylib"], depends on pyo3
 │   │   ├── pyproject.toml
-│   │   └── src/lib.rs            # #[pymodule] wrapping rg-core
-│   └── rg-wasm/                  # WASM bindings
+│   │   └── src/lib.rs            # #[pymodule] wrapping retroglyph-core
+│   └── retroglyph-wasm/                  # WASM bindings
 │       ├── Cargo.toml            # crate-type = ["cdylib"], depends on wasm-bindgen
-│       └── src/lib.rs            # #[wasm_bindgen] wrapping rg-core
+│       └── src/lib.rs            # #[wasm_bindgen] wrapping retroglyph-core
 ├── include/                      # Generated headers (committed or CI-generated)
-│   └── rg.h
+│   └── retroglyph.h
 ├── bindings/
 │   ├── python/                   # Pure Python wrapper (if needed beyond PyO3)
 │   ├── lua/                      # Lua FFI wrapper
@@ -95,20 +95,20 @@ rg/
 [workspace]
 resolver = "2"
 members = [
-    "crates/rg-core",
-    "crates/rg-ffi",
-    "crates/rg-python",
-    "crates/rg-wasm",
+    "crates/retroglyph-core",
+    "crates/retroglyph-ffi",
+    "crates/retroglyph-python",
+    "crates/retroglyph-wasm",
 ]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
-repository = "https://github.com/you/rg"
+repository = "https://github.com/you/retroglyph"
 
 [workspace.dependencies]
-rg-core = { path = "crates/rg-core" }
+retroglyph-core = { path = "crates/retroglyph-core" }
 ````
 
 ---
@@ -128,10 +128,10 @@ From the [Rust Reference on Linkage](https://doc.rust-lang.org/reference/linkage
 ### For multi-language bindings, use both `cdylib` and `staticlib`
 
 ```toml
-# crates/rg-ffi/Cargo.toml
+# crates/retroglyph-ffi/Cargo.toml
 
 [lib]
-name = "rg"
+name = "retroglyph"
 crate-type = ["cdylib", "staticlib"]
 ```
 
@@ -142,12 +142,12 @@ crate-type = ["cdylib", "staticlib"]
 
 - **`staticlib`** produces `.a` / `.lib` containing all Rust code and upstream dependencies baked
 
-  in. Used when someone wants to statically link rg into their C/C++ application. Note: any dynamic
+  in. Used when someone wants to statically link retroglyph into their C/C++ application. Note: any dynamic
   system dependencies (OpenGL, etc.) must be specified manually when linking.
 
 - **You can specify both** in the same crate. Cargo will produce both artifacts in a single build.
 
-The `rg-python` and `rg-wasm` crates each need only `cdylib` since PyO3 and wasm-bindgen both
+The `retroglyph-python` and `retroglyph-wasm` crates each need only `cdylib` since PyO3 and wasm-bindgen both
 produce dynamic libraries (`.so` for Python extension modules, `.wasm` for WebAssembly).
 
 ---
@@ -158,9 +158,9 @@ produce dynamic libraries (`.so` for Python extension modules, `.wasm` for WebAs
 
 1. Write `#[no_mangle] pub extern "C" fn` functions in the FFI crate.
 2. Use `#[repr(C)]` on any structs that cross the FFI boundary.
-3. Use `cbindgen` to auto-generate `rg.h` from the Rust source.
+3. Use `cbindgen` to auto-generate `retroglyph.h` from the Rust source.
 
-### rg-ffi/src/lib.rs
+### retroglyph-ffi/src/lib.rs
 
 ```rust
 use rg_core::{Terminal, Cell};
@@ -280,7 +280,7 @@ fn main() {
         .with_config(config)
         .generate()
         .expect("Failed to generate C bindings")
-        .write_to_file("../../include/rg.h");
+        .write_to_file("../../include/retroglyph.h");
 
     // Also generate a C++ header
     let cpp_config = {
@@ -294,30 +294,30 @@ fn main() {
         .with_config(cpp_config)
         .generate()
         .expect("Failed to generate C++ bindings")
-        .write_to_file("../../include/rg.hpp");
+        .write_to_file("../../include/retroglyph.hpp");
 }
 ```
 
-### rg-ffi/Cargo.toml
+### retroglyph-ffi/Cargo.toml
 
 ```toml
 [package]
-name = "rg-ffi"
+name = "retroglyph-ffi"
 version.workspace = true
 edition.workspace = true
 
 [lib]
-name = "rg"
+name = "retroglyph"
 crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
-rg-core.workspace = true
+retroglyph-core.workspace = true
 
 [build-dependencies]
 cbindgen = "0.28"
 ```
 
-### Generated rg.h (example output)
+### Generated retroglyph.h (example output)
 
 ```c
 /* Generated by cbindgen - do not edit */
@@ -360,24 +360,24 @@ Two approaches exist; use both for different audiences:
 
 Gives Pythonic API with type hints, proper exceptions, and zero-copy where possible.
 
-#### rg-python/Cargo.toml
+#### retroglyph-python/Cargo.toml
 
 ```toml
 [package]
-name = "rg-python"
+name = "retroglyph-python"
 version.workspace = true
 edition.workspace = true
 
 [lib]
-name = "rg"
+name = "retroglyph"
 crate-type = ["cdylib"]
 
 [dependencies]
-rg-core.workspace = true
+retroglyph-core.workspace = true
 pyo3 = { version = "0.23", features = ["extension-module"] }
 ```
 
-#### rg-python/pyproject.toml
+#### retroglyph-python/pyproject.toml
 
 ```toml
 [build-system]
@@ -385,7 +385,7 @@ requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "rg-terminal"
+name = "retroglyph-terminal"
 requires-python = ">=3.8"
 description = "A terminal/grid library for roguelikes and TUI applications"
 classifiers = [
@@ -401,7 +401,7 @@ classifiers = [
 features = ["pyo3/extension-module"]
 ```
 
-#### rg-python/src/lib.rs
+#### retroglyph-python/src/lib.rs
 
 ```rust
 use pyo3::prelude::*;
@@ -441,7 +441,7 @@ impl PyTerminal {
 }
 
 #[pymodule]
-fn rg(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn retroglyph(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyTerminal>()?;
     Ok(())
 }
@@ -452,7 +452,7 @@ fn rg(m: &Bound<'_, PyModule>) -> PyResult<()> {
 ```bash
 # Development (installs into current virtualenv)
 
-cd crates/rg-python
+cd crates/retroglyph-python
 maturin develop
 
 # Build wheels for current platform
@@ -477,17 +477,17 @@ maturin generate-ci github > ../../.github/workflows/python-release.yml
 For users who prefer a pure-Python wrapper that loads the prebuilt `.so`/`.dll`:
 
 ```python
-# bindings/python/rg/__init__.py
+# bindings/python/retroglyph/__init__.py
 
 import ctypes
 import os
 import platform
 
 def _load_library():
-    """Load the rg shared library."""
+    """Load the retroglyph shared library."""
     system = platform.system()
     if system == "Windows":
-        name = "rg.dll"
+        name = "retroglyph.dll"
     elif system == "Darwin":
         name = "librg.dylib"
     else:
@@ -533,20 +533,20 @@ class Terminal:
 
 ## 6. WASM/npm Packaging
 
-### rg-wasm/Cargo.toml
+### retroglyph-wasm/Cargo.toml
 
 ```toml
 [package]
-name = "rg-wasm"
+name = "retroglyph-wasm"
 version.workspace = true
 edition.workspace = true
-description = "WASM bindings for the rg terminal/grid library"
+description = "WASM bindings for the retroglyph terminal/grid library"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-rg-core.workspace = true
+retroglyph-core.workspace = true
 wasm-bindgen = "0.2"
 js-sys = "0.3"
 
@@ -558,7 +558,7 @@ opt-level = "s"       # Optimize for size in WASM
 lto = true
 ```
 
-### rg-wasm/src/lib.rs
+### retroglyph-wasm/src/lib.rs
 
 ```rust
 use wasm_bindgen::prelude::*;
@@ -613,7 +613,7 @@ cargo install wasm-pack
 
 # Build for npm (browser target)
 
-cd crates/rg-wasm
+cd crates/retroglyph-wasm
 wasm-pack build --target web --release
 
 # Build for Node.js
@@ -650,7 +650,7 @@ Add a `package.json` template in the crate root or edit the generated one:
 
 ```json
 {
-  "name": "@rg/wasm",
+  "name": "@retroglyph/wasm",
   "version": "0.1.0",
   "description": "Terminal/grid library for roguelikes - WebAssembly build",
   "main": "rg_wasm.js",
@@ -658,7 +658,7 @@ Add a `package.json` template in the crate root or edit the generated one:
   "files": ["rg_wasm_bg.wasm", "rg_wasm.js", "rg_wasm.d.ts"],
   "repository": {
     "type": "git",
-    "url": "https://github.com/you/rg"
+    "url": "https://github.com/you/retroglyph"
   },
   "license": "MIT"
 }
@@ -736,8 +736,8 @@ targets = [
 # instead of (or in addition to) binaries
 
 include = [
-    "include/rg.h",
-    "include/rg.hpp",
+    "include/retroglyph.h",
+    "include/retroglyph.hpp",
     "LICENSE",
     "README.md",
 ]
@@ -762,13 +762,13 @@ For C/C++ consumers who use `pkg-config` to discover libraries:
 ```bash
 # install.sh or build.rs
 
-cat > rg.pc << EOF
+cat > retroglyph.pc << EOF
 prefix=/usr/local
 exec_prefix=\${prefix}
 libdir=\${exec_prefix}/lib
 includedir=\${prefix}/include
 
-Name: rg
+Name: retroglyph
 Description: Terminal/grid library for roguelikes
 Version: 0.1.0
 Libs: -L\${libdir} -lrg
@@ -794,9 +794,9 @@ install: build
  ln -sf librg.so.0.1.0 $(DESTDIR)$(LIBDIR)/librg.so.0
  ln -sf librg.so.0.1.0 $(DESTDIR)$(LIBDIR)/librg.so
  install -m 644 target/release/librg.a $(DESTDIR)$(LIBDIR)/
- install -m 644 include/rg.h $(DESTDIR)$(INCLUDEDIR)/
- install -m 644 include/rg.hpp $(DESTDIR)$(INCLUDEDIR)/
- sed 's|@PREFIX@|$(PREFIX)|g' rg.pc.in > $(DESTDIR)$(PKGCONFIGDIR)/rg.pc
+ install -m 644 include/retroglyph.h $(DESTDIR)$(INCLUDEDIR)/
+ install -m 644 include/retroglyph.hpp $(DESTDIR)$(INCLUDEDIR)/
+ sed 's|@PREFIX@|$(PREFIX)|g' retroglyph.pc.in > $(DESTDIR)$(PKGCONFIGDIR)/retroglyph.pc
 ```
 
 ### Usage by downstream C projects
@@ -804,12 +804,12 @@ install: build
 ```bash
 # Compile
 
-gcc $(pkg-config --cflags rg) -o myapp myapp.c $(pkg-config --libs rg)
+gcc $(pkg-config --cflags retroglyph) -o myapp myapp.c $(pkg-config --libs retroglyph)
 
 # CMake
 
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(RG REQUIRED rg)
+pkg_check_modules(RG REQUIRED retroglyph)
 target_link_libraries(myapp ${RG_LIBRARIES})
 target_include_directories(myapp PRIVATE ${RG_INCLUDE_DIRS})
 ```
@@ -839,7 +839,7 @@ cross test --target aarch64-unknown-linux-gnu
 
 # Build the FFI crate specifically
 
-cross build -p rg-ffi --target aarch64-unknown-linux-gnu --release
+cross build -p retroglyph-ffi --target aarch64-unknown-linux-gnu --release
 ```
 
 Supports 50+ targets including Linux (glibc/musl), Windows (MinGW), Android, FreeBSD, and bare-metal
@@ -982,8 +982,8 @@ jobs:
           - os: windows-latest
 
             target: x86_64-pc-windows-msvc
-            artifact_name: rg.dll
-            static_name: rg.lib
+            artifact_name: retroglyph.dll
+            static_name: retroglyph.lib
 
     runs-on: ${{ matrix.os }}
 
@@ -1005,9 +1005,9 @@ jobs:
 
         run: |
           if [ "${{ matrix.use_cross }}" = "true" ]; then
-            cross build -p rg-ffi --target ${{ matrix.target }} --release
+            cross build -p retroglyph-ffi --target ${{ matrix.target }} --release
           else
-            cargo build -p rg-ffi --target ${{ matrix.target }} --release
+            cargo build -p retroglyph-ffi --target ${{ matrix.target }} --release
           fi
         shell: bash
 
@@ -1018,16 +1018,16 @@ jobs:
           mkdir -p dist
           cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} dist/ || true
           cp target/${{ matrix.target }}/release/${{ matrix.static_name }} dist/ || true
-          cp include/rg.h dist/
-          cp include/rg.hpp dist/ || true
+          cp include/retroglyph.h dist/
+          cp include/retroglyph.hpp dist/ || true
           cp LICENSE dist/
-          tar czf rg-${{ matrix.target }}.tar.gz -C dist .
+          tar czf retroglyph-${{ matrix.target }}.tar.gz -C dist .
 
       - uses: actions/upload-artifact@v4
 
         with:
-          name: rg-${{ matrix.target }}
-          path: rg-${{ matrix.target }}.tar.gz
+          name: retroglyph-${{ matrix.target }}
+          path: retroglyph-${{ matrix.target }}.tar.gz
 
   # ─── Build Python wheels ───
   build-python:
@@ -1073,7 +1073,7 @@ jobs:
           target: ${{ matrix.target }}
           manylinux: ${{ matrix.manylinux || 'auto' }}
           args: >
-            --release --manifest-path crates/rg-python/Cargo.toml --out dist
+            --release --manifest-path crates/retroglyph-python/Cargo.toml --out dist
 
       - uses: actions/upload-artifact@v4
 
@@ -1100,14 +1100,14 @@ jobs:
       - name: Build WASM package
 
         run: |
-          cd crates/rg-wasm
-          wasm-pack build --release --target web --scope rg
+          cd crates/retroglyph-wasm
+          wasm-pack build --release --target web --scope retroglyph
 
       - uses: actions/upload-artifact@v4
 
         with:
           name: wasm-package
-          path: crates/rg-wasm/pkg/
+          path: crates/retroglyph-wasm/pkg/
 
   # ─── Publish everything ───
   publish:
@@ -1128,7 +1128,7 @@ jobs:
 
         uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/rg-*/*.tar.gz
+          files: artifacts/retroglyph-*/*.tar.gz
           generate_release_notes: true
 
       # Publish Python wheels to PyPI
@@ -1164,9 +1164,9 @@ jobs:
       - name: Publish to crates.io
 
         run: |
-          cargo publish -p rg-core --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          cargo publish -p retroglyph-core --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
           sleep 30  # Wait for crates.io to index
-          cargo publish -p rg-ffi --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          cargo publish -p retroglyph-ffi --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 ```
@@ -1203,10 +1203,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo build -p rg-ffi
+      - run: cargo build -p retroglyph-ffi
       - name: Check header is up to date
 
-        run: git diff --exit-code include/rg.h
+        run: git diff --exit-code include/retroglyph.h
 
   # Test Python bindings
   test-python:
@@ -1222,9 +1222,9 @@ jobs:
 
         with:
           command: develop
-          args: --manifest-path crates/rg-python/Cargo.toml
+          args: --manifest-path crates/retroglyph-python/Cargo.toml
 
-      - run: python -c "import rg; t = rg.PyTerminal(80, 24); print(f'{t.width}x{t.height}')"
+      - run: python -c "import retroglyph; t = retroglyph.PyTerminal(80, 24); print(f'{t.width}x{t.height}')"
 
   # Test WASM build
   test-wasm:
@@ -1237,7 +1237,7 @@ jobs:
           targets: wasm32-unknown-unknown
 
       - run: cargo install wasm-pack
-      - run: cd crates/rg-wasm && wasm-pack test --headless --chrome
+      - run: cd crates/retroglyph-wasm && wasm-pack test --headless --chrome
 
   # Lint
   lint:
@@ -1259,7 +1259,7 @@ jobs:
 
 | Channel         | Tool                   | Artifact                                    | Consumer                           |
 | --------------- | ---------------------- | ------------------------------------------- | ---------------------------------- |
-| crates.io       | `cargo publish`        | Rust crate (`rg-core`)                      | Rust developers                    |
+| crates.io       | `cargo publish`        | Rust crate (`retroglyph-core`)                      | Rust developers                    |
 | GitHub Releases | cargo-dist / custom CI | `.tar.gz` with `.so`/`.dll`/`.dylib` + `.h` | C/C++ developers, system packagers |
 | PyPI            | maturin                | Python wheel (`.whl`)                       | Python developers                  |
 | npm             | wasm-pack              | WASM + JS glue + `.d.ts`                    | Web/Node.js developers             |

@@ -13,9 +13,9 @@
 #![cfg(feature = "software-default-font")]
 
 use image::ImageEncoder;
-use rg::backend::software::{SoftwareBackendBuilder, SoftwareRenderer};
-use rg::color::AnsiColor;
-use rg::{Backend, Color, Terminal};
+use retroglyph::backend::software::{SoftwareBackendBuilder, SoftwareRenderer};
+use retroglyph::color::AnsiColor;
+use retroglyph::{Backend, Color, Terminal};
 
 // VGA bitmap font: 8×16 pixels per glyph cell.
 const GLYPH_W: u32 = 8;

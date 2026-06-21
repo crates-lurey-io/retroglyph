@@ -621,7 +621,7 @@ pub fn wasm_main() {
 fn main() {
     // identical to software_demo.rs
     SoftwareBackendBuilder::new()
-        .title("rg WASM demo")
+        .title("retroglyph WASM demo")
         .grid_size(50, 20)
         .scale(2)
         .build()

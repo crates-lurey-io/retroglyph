@@ -75,8 +75,8 @@ impl std::error::Error for SoftwareBackendError {
 /// Windowed mode (requires `software-default-font` feature):
 ///
 /// ```ignore
-/// use rg::backend::software::SoftwareBackendBuilder;
-/// use rg::event::{Event, KeyCode};
+/// use retroglyph::backend::software::SoftwareBackendBuilder;
+/// use retroglyph::event::{Event, KeyCode};
 /// use std::time::Duration;
 ///
 /// let backend = SoftwareBackendBuilder::new()
@@ -104,10 +104,10 @@ impl std::error::Error for SoftwareBackendError {
 /// Headless mode (useful for testing):
 ///
 /// ```ignore
-/// use rg::backend::software::{SoftwareBackendBuilder, SoftwareRenderer};
-/// use rg::style::Style;
-/// use rg::grid::Pos;
-/// use rg::Color;
+/// use retroglyph::backend::software::{SoftwareBackendBuilder, SoftwareRenderer};
+/// use retroglyph::style::Style;
+/// use retroglyph::grid::Pos;
+/// use retroglyph::Color;
 ///
 /// let opts = SoftwareBackendBuilder::new()
 ///     .grid_size(1, 1)
@@ -118,7 +118,7 @@ impl std::error::Error for SoftwareBackendError {
 /// let mut renderer: SoftwareRenderer = opts.run_headless();
 ///
 /// // Draw a red cell on layer 0.
-/// use rg::tile::Tile;
+/// use retroglyph::tile::Tile;
 /// renderer.draw_layers(
 ///     [(0, Pos::new(0, 0), &Tile {
 ///         glyph: ' ',
@@ -177,12 +177,12 @@ impl Default for SoftwareBackend {
 /// # Examples
 ///
 /// ```ignore
-/// use rg::backend::software::SoftwareBackendBuilder;
+/// use retroglyph::backend::software::SoftwareBackendBuilder;
 ///
 /// // With the `software-default-font` feature the embedded VGA 8×16 font is
 /// // used automatically.  To supply your own 8×16 bitmap font:
 /// //
-/// //   use rg::backend::software::bitmap_font::BitmapFont;
+/// //   use retroglyph::backend::software::bitmap_font::BitmapFont;
 /// //   let my_font = BitmapFont::new(include_bytes!("my_font.bin"), 8, 16, 256);
 /// //   SoftwareBackendBuilder::new().font(my_font)...
 ///
