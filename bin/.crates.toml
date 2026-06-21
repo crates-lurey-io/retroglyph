@@ -1,3 +1,0 @@
-[v1]
-"cargo-llms-txt 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)" = ["cargo-llms-txt"]
-"wasm-server-runner 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)" = ["wasm-server-runner"]

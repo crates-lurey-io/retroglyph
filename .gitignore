@@ -12,5 +12,6 @@
 .DS_Store
 # Generated files
 bin/
+.bin/
 llms.txt
 llms-full.txt

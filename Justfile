@@ -27,13 +27,23 @@ test:
 test-v:
     cargo test --all-features -- --nocapture
 
-# Install cargo tools locally to bin/
+# Install all project tools (pinned via [workspace.metadata.bin] in Cargo.toml)
 setup-tools:
-    cargo install cargo-llms-txt --root bin/
+    cargo bin --install
+    # cargo-llms-txt has no prebuilt binaries, so install to bin/ directly
+    @if [ ! -f bin/bin/cargo-llms-txt ]; then \
+        echo "Installing cargo-llms-txt 0.1.1 to bin/..."; \
+        cargo install cargo-llms-txt --version 0.1.1 --root bin/; \
+    fi
 
-# Install wasm-server-runner (pinned) to local bin/ for running WASM examples in browser
+# Install wasm-server-runner (pinned) to local bin/ for WASM examples in browser.
+# Needs a known path for .cargo/config.toml's runner, so kept separate from cargo-run-bin.
 setup-wasm:
-    cargo install wasm-server-runner --version 1.0.1 --locked --root bin/
+    @if [ ! -f bin/bin/wasm-server-runner ]; then \
+        echo "Installing wasm-server-runner 1.0.1 to bin/..."; \
+        cargo binstall wasm-server-runner@1.0.1 --no-confirm --root bin/ 2>/dev/null || \
+            cargo install wasm-server-runner --version 1.0.1 --locked --root bin/; \
+    fi
 
 # Run the WASM demo in browser (requires `just setup-wasm` first)
 run-wasm:
@@ -41,27 +51,29 @@ run-wasm:
 
 # Generate llms.txt summary
 llms:
-    @if [ ! -f bin/bin/cargo-llms-txt ]; then \
+    @LLMS="bin/bin/cargo-llms-txt"; \
+    if [ ! -f "$$LLMS" ]; then \
         echo "Tool not found. Running setup-tools first..."; \
         just setup-tools; \
-    fi
-    bin/bin/cargo-llms-txt --output llms.txt --full llms-full.txt
+    fi; \
+    "$$LLMS" --output llms.txt --full llms-full.txt
 
 # Check if llms.txt files are up-to-date
 llms-check:
-    @if [ ! -f bin/bin/cargo-llms-txt ]; then \
+    @LLMS="bin/bin/cargo-llms-txt"; \
+    if [ ! -f "$$LLMS" ]; then \
         echo "Tool not found. Running setup-tools first..."; \
         just setup-tools; \
-    fi
-    @mkdir -p .tmp_llms
-    @bin/bin/cargo-llms-txt --output .tmp_llms/llms.txt --full .tmp_llms/llms-full.txt
-    @if ! diff -q llms.txt .tmp_llms/llms.txt >/dev/null || ! diff -q llms-full.txt .tmp_llms/llms-full.txt >/dev/null; then \
+    fi; \
+    mkdir -p .tmp_llms; \
+    "$$LLMS" --output .tmp_llms/llms.txt --full .tmp_llms/llms-full.txt; \
+    if ! diff -q llms.txt .tmp_llms/llms.txt >/dev/null || ! diff -q llms-full.txt .tmp_llms/llms-full.txt >/dev/null; then \
         echo "Error: llms.txt files are out of date. Run 'just llms' to update."; \
         rm -rf .tmp_llms; \
         exit 1; \
-    fi
-    @rm -rf .tmp_llms
-    @echo "llms.txt files are up-to-date."
+    fi; \
+    rm -rf .tmp_llms; \
+    echo "llms.txt files are up-to-date."
 
 # Generate rustdoc and open in browser if TTY
 doc:
@@ -74,6 +86,31 @@ doc:
 
 # Check everything
 check: fmt-check lint test doc llms-check
+
+# Pinned version of act (not on crates.io, downloaded from GitHub releases)
+act-version := "v0.2.89"
+
+# Run GitHub Actions workflows locally via act
+act *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    BIN="$PWD/bin"
+    ACT="$BIN/act"
+    if [ -f "$ACT" ]; then
+        INSTALLED="$($ACT --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || true)"
+        if [ "v$INSTALLED" = "{{act-version}}" ]; then
+            exec "$ACT" -P ubuntu-latest=catthehacker/ubuntu:act-latest {{args}}
+        fi
+    fi
+    echo "Installing act {{act-version}} to bin/..."
+    mkdir -p "$BIN"
+    OS="$(uname -s)"
+    ARCH="$(uname -m | sed 's/aarch64/arm64/')"
+    URL="https://github.com/nektos/act/releases/download/{{act-version}}/act_${OS}_${ARCH}.tar.gz"
+    curl -sL "$URL" | tar xz -C "$BIN" act
+    chmod +x "$ACT"
+    echo "Installed act {{act-version}} to bin/act"
+    exec "$ACT" -P ubuntu-latest=catthehacker/ubuntu:act-latest {{args}}
 
 clean:
     cargo clean

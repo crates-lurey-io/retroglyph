@@ -1,0 +1,12 @@
+[package]
+name = "cargo-bin"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+cargo-run-bin = "1.7"
+
+[[bin]]
+name = "cargo-bin"
+path = "src/main.rs"

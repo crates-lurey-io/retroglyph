@@ -1,3 +1,10 @@
+[workspace]
+members = ["tools/cargo-bin"]
+resolver = "2"
+
+[workspace.metadata.bin]
+wasm-server-runner = { version = "1.0.1" }
+
 [package]
 name = "rg"
 version = "0.1.0"

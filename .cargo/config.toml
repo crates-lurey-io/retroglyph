@@ -1,2 +1,5 @@
+[alias]
+bin = ["run", "--package", "cargo-bin", "--"]
+
 [target.'cfg(target_family = "wasm")']
 runner = "./bin/bin/wasm-server-runner"
