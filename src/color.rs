@@ -115,6 +115,7 @@ pub enum Color {
     },
 }
 
+// TODO: adopt a real Color library for lerp, blend, HSL/HSV, and named colors.
 impl Color {
     /// Standard Black (ANSI).
     pub const BLACK: Self = Self::Ansi(AnsiColor::Black);

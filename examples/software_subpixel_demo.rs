@@ -139,9 +139,8 @@ fn tick(term: &mut Terminal<impl retroglyph::Backend>, s: &mut BounceState) {
     // ── Background tile grid on layer 0 (redrawn every frame) ──────────
     draw_background(term);
 
-    // ── Every frame: clear layer 1 and redraw the @ ────────────────────
+    // ── Every frame: redraw the @ on layer 1 ───────────────────────────
     term.layer(1);
-    term.clear();
 
     let right = i64::from(size.width) - 1;
     let bottom = i64::from(size.height) - 1;
@@ -238,7 +237,7 @@ fn tick(term: &mut Terminal<impl retroglyph::Backend>, s: &mut BounceState) {
     term.bg(footer_bg);
     term.print(fx, size.height - 1, &footer);
 
-    term.present();
+    term.present().expect("present failed");
 }
 
 #[allow(clippy::missing_const_for_fn)]

@@ -1,5 +1,6 @@
 //! The grid container.
 
+use crate::color::Color;
 #[cfg(feature = "egc")]
 use crate::style::Style;
 use crate::tile::Tile;
@@ -142,6 +143,8 @@ pub struct Grid {
     /// Indexed by layer ID (0–255). Index 0 is always `Some`.
     /// Unwritten layers are `None` — no allocation until first write.
     layers: Vec<Option<LayerBuf>>,
+    /// Highest layer ID that has been allocated. Always at least 0.
+    max_layer: u8,
 }
 
 // ---------------------------------------------------------------------------
@@ -159,6 +162,9 @@ impl Grid {
         let idx = usize::from(id);
         if self.layers[idx].is_none() {
             self.layers[idx] = Some(LayerBuf::new(self.width, self.height));
+        }
+        if id > self.max_layer {
+            self.max_layer = id;
         }
         self.layers[idx].as_mut().unwrap()
     }
@@ -193,6 +199,7 @@ impl Grid {
             width,
             height,
             layers,
+            max_layer: 0,
         }
     }
 
@@ -340,7 +347,7 @@ impl Grid {
     ///
     /// Only present when the `egc` feature is enabled.
     #[cfg(feature = "egc")]
-    pub fn write_grapheme(&mut self, x: u16, y: u16, grapheme: &str, style: Style) {
+    pub fn write_grapheme(&mut self, layer: u8, x: u16, y: u16, grapheme: &str, style: Style) {
         use unicode_width::UnicodeWidthStr;
 
         let width = u16::try_from(grapheme.width()).expect("grapheme width exceeds u16");
@@ -363,14 +370,13 @@ impl Grid {
         }
 
         // Clear any wide-char cell that would be partially overwritten.
-        // clear_overlap only needs dimensions as values (captured above).
-        self.clear_overlap(x, y, width);
+        self.clear_overlap(layer, x, y, width);
 
         // Capture width before borrowing self mutably.
         let grid_w = usize::from(self.width);
         let idx = usize::from(y) * grid_w + usize::from(x);
 
-        let lb = self.layer0_mut();
+        let lb = self.layer_or_alloc(layer);
         // Build cell content.
         let mut chars = grapheme.chars();
         let first = chars.next().unwrap_or(' ');
@@ -406,13 +412,11 @@ impl Grid {
 
     /// Clears wide-character cells that would be partially overwritten by a
     /// write starting at `(x, y)` spanning `width` columns.
-    ///
-    /// Operates on layer 0.
     #[cfg(feature = "egc")]
-    fn clear_overlap(&mut self, x: u16, y: u16, width: u16) {
+    fn clear_overlap(&mut self, layer: u8, x: u16, y: u16, width: u16) {
         let w = usize::from(self.width);
         let cap = w * usize::from(self.height);
-        let lb = self.layer0_mut();
+        let lb = self.layer_or_alloc(layer);
         for cx in x..x.saturating_add(width) {
             let idx = usize::from(y) * w + usize::from(cx);
             if idx >= cap {
@@ -467,24 +471,85 @@ impl Grid {
         self.layer(layer)?.buf.get(pos)
     }
 
-    /// Yield `(layer_id, Pos, &Tile)` for every allocated cell across
-    /// all layers, in layer-major (0 → 255) then row-major order.
-    ///
-    /// Unallocated layers are skipped. This is used by backends that need
-    /// the full frame on every draw (see [`crate::Backend::needs_full_frame`]).
-    pub fn layers(&self) -> impl Iterator<Item = (u8, Pos, &Tile)> + '_ {
-        let mut results = Vec::new();
-        for id in 0u8..=255 {
-            if let Some(lb) = self.layer(id) {
-                #[allow(clippy::cast_possible_truncation)]
-                for (i, tile) in lb.buf.as_ref().iter().enumerate() {
-                    let x = (i % usize::from(self.width)) as u16;
-                    let y = (i / usize::from(self.width)) as u16;
-                    results.push((id, Pos::new(x, y), tile));
+    /// Copy tiles from `src` within `src_rect` to `self` at `(dst_x, dst_y)`
+    /// on `layer`. Tiles whose glyph is a space (the default) are treated as
+    /// transparent and skipped.
+    pub fn blit(&mut self, layer: u8, src: &Self, src_rect: Rect, dst_x: u16, dst_y: u16) {
+        for sy in src_rect.top()..src_rect.bottom() {
+            for sx in src_rect.left()..src_rect.right() {
+                let Some(tile) = src.get_tile(layer, sx, sy) else {
+                    continue;
+                };
+                if tile.glyph != ' ' {
+                    let dx = dst_x + sx.saturating_sub(src_rect.left());
+                    let dy = dst_y + sy.saturating_sub(src_rect.top());
+                    self.put_tile(layer, dx, dy, tile.clone());
                 }
             }
         }
-        results.into_iter()
+    }
+
+    /// Same as [`blit`](Self::blit) but blends foreground and background
+    /// colors with the given alpha factors. `fg_alpha` and `bg_alpha` are in
+    /// 0.0-1.0 range where 0.0 = keep destination, 1.0 = replace with src.
+    ///
+    /// Blending operates on packed RGB values; [`Color::Default`] preserves
+    /// the destination. Non-RGB color variants (Ansi/Indexed) are passed
+    /// through unblended.
+    #[allow(clippy::too_many_arguments, clippy::float_cmp)]
+    pub fn blit_alpha(
+        &mut self,
+        layer: u8,
+        src: &Self,
+        src_rect: Rect,
+        dst_x: u16,
+        dst_y: u16,
+        fg_alpha: f32,
+        bg_alpha: f32,
+    ) {
+        for sy in src_rect.top()..src_rect.bottom() {
+            for sx in src_rect.left()..src_rect.right() {
+                let Some(tile) = src.get_tile(layer, sx, sy) else {
+                    continue;
+                };
+                if tile.glyph != ' ' {
+                    let dx = dst_x + sx.saturating_sub(src_rect.left());
+                    let dy = dst_y + sy.saturating_sub(src_rect.top());
+                    let mut blended = tile.clone();
+                    if let Some(dst) = self.get_tile(layer, dx, dy) {
+                        if fg_alpha != 1.0 {
+                            blended.style.fg = blend_fg(tile.style.fg, dst.style.fg, fg_alpha);
+                        }
+                        if bg_alpha != 1.0 {
+                            blended.style.bg = blend_bg(tile.style.bg, dst.style.bg, bg_alpha);
+                        }
+                    }
+                    self.put_tile(layer, dx, dy, blended);
+                }
+            }
+        }
+    }
+
+    /// Yield `(layer_id, Pos, &Tile)` for every allocated cell across
+    /// all layers, in layer-major (0 → `max_layer`) then row-major order.
+    ///
+    /// Unallocated layers are skipped. This is used by backends that need
+    /// the full frame on every draw (see [`crate::Backend::needs_full_frame`]).
+    ///
+    /// This iterator is zero-allocation: it walks the layer buffers inline.
+    pub fn layers(&self) -> impl Iterator<Item = (u8, Pos, &Tile)> + '_ {
+        let width = usize::from(self.width);
+        (0..=self.max_layer)
+            .filter_map(move |id| self.layer(id).map(|lb| (id, lb)))
+            .flat_map(move |(id, lb)| {
+                lb.buf.as_ref().iter().enumerate().map(move |(i, tile)| {
+                    #[allow(clippy::cast_possible_truncation)]
+                    let x = (i % width) as u16;
+                    #[allow(clippy::cast_possible_truncation)]
+                    let y = (i / width) as u16;
+                    (id, Pos::new(x, y), tile)
+                })
+            })
     }
 
     /// Clear every allocated layer.
@@ -495,37 +560,89 @@ impl Grid {
     }
 
     /// Yield `(layer_id, Pos, &Tile)` for every changed position across all
-    /// layers, in layer-major (0 → 255) then row-major order.
+    /// layers, in layer-major (0 → `max_layer`) then row-major order.
     ///
     /// Three cases per layer:
     /// - Layer absent in `self`: nothing yielded.
     /// - Layer in `self`, absent in `other` (newly allocated): all
     ///   `width × height` tiles yielded.
     /// - Layer in both: only positions where the `Tile` differs are yielded.
+    ///
+    /// This iterator is zero-allocation: it walks the layer buffers inline.
     pub fn diff<'a>(&'a self, other: &'a Self) -> impl Iterator<Item = (u8, Pos, &'a Tile)> + 'a {
-        let mut results = Vec::new();
-        for id in 0u8..=255 {
-            match (self.layer(id), other.layer(id)) {
-                (None, _) => {}
-                (Some(cur), None) => {
+        let width = usize::from(self.width);
+        let max = self.max_layer;
+        (0..=max).flat_map(move |id| {
+            let cur = self.layer(id);
+            let prev = other.layer(id);
+            let layer_iter: Box<dyn Iterator<Item = (u8, Pos, &'a Tile)> + 'a> = match (cur, prev) {
+                (None, _) => Box::new(core::iter::empty()),
+                (Some(cur_lb), None) => {
                     // Newly allocated layer: all cells are "changed".
-                    // TODO(M3): avoid Vec allocation, use Either-style iterator.
-                    #[allow(clippy::cast_possible_truncation)]
-                    for (i, tile) in cur.buf.as_ref().iter().enumerate() {
-                        let x = (i % usize::from(self.width)) as u16;
-                        let y = (i / usize::from(self.width)) as u16;
-                        results.push((id, Pos::new(x, y), tile));
-                    }
+                    Box::new(
+                        cur_lb
+                            .buf
+                            .as_ref()
+                            .iter()
+                            .enumerate()
+                            .map(move |(i, tile)| {
+                                #[allow(clippy::cast_possible_truncation)]
+                                let x = (i % width) as u16;
+                                #[allow(clippy::cast_possible_truncation)]
+                                let y = (i / width) as u16;
+                                (id, Pos::new(x, y), tile)
+                            }),
+                    )
                 }
-                (Some(cur), Some(prev)) => {
-                    for (pos, tile) in cur.buf.diff(&prev.buf) {
-                        results.push((id, from_grixy_pos(pos), tile));
-                    }
-                }
-            }
-        }
-        results.into_iter()
+                (Some(cur_lb), Some(prev_lb)) => Box::new(
+                    cur_lb
+                        .buf
+                        .diff(&prev_lb.buf)
+                        .map(move |(pos, tile)| (id, from_grixy_pos(pos), tile)),
+                ),
+            };
+            layer_iter
+        })
     }
+}
+
+/// Per-channel linear blend: `a + (b - a) * t`, rounded to u8.
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+fn lerp_u8(a: u8, b: u8, t: f32) -> u8 {
+    let diff = f32::from(b) - f32::from(a);
+    let result = diff.mul_add(t, f32::from(a));
+    result.round() as u8
+}
+
+/// Blend two [`Color`] values by interpolating RGB components.
+/// [`Color::Default`] preserves the destination. Non-RGB source colors are
+/// returned as-is (no resolution).
+#[allow(clippy::float_cmp)]
+fn blend_color(src: Color, dst: Color, t: f32) -> Color {
+    match (src, dst) {
+        (Color::Default, _) => Color::Default,
+        (
+            Color::Rgb {
+                r: sr,
+                g: sg,
+                b: sb,
+            },
+            Color::Rgb { r, g, b },
+        ) if t != 1.0 => Color::Rgb {
+            r: lerp_u8(sr, r, t),
+            g: lerp_u8(sg, g, t),
+            b: lerp_u8(sb, b, t),
+        },
+        (src, _) => src,
+    }
+}
+
+fn blend_fg(src: Color, dst: Color, t: f32) -> Color {
+    blend_color(src, dst, t)
+}
+
+fn blend_bg(src: Color, dst: Color, t: f32) -> Color {
+    blend_color(src, dst, t)
 }
 
 // ---------------------------------------------------------------------------

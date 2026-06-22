@@ -147,8 +147,6 @@ fn draw(term: &mut Terminal<impl retroglyph::Backend>, frame: u64) {
     let size = term.size();
 
     term.layer(0);
-    term.clear();
-
     // Checkerboard background so transparency is visible.
     for y in 0..size.height {
         for x in 0..size.width {
@@ -192,7 +190,6 @@ fn draw(term: &mut Terminal<impl retroglyph::Backend>, frame: u64) {
 
     // Layer 1: sprite tiles.
     term.layer(1);
-    term.clear();
 
     // Draw each sprite with its label above it.
     for (i, def) in SPRITES.iter().enumerate() {
@@ -250,7 +247,7 @@ fn draw(term: &mut Terminal<impl retroglyph::Backend>, frame: u64) {
         }),
     );
 
-    term.present();
+    term.present().expect("present failed");
 }
 
 fn main() {

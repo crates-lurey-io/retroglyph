@@ -8,6 +8,7 @@
     "**/node_modules/**",
     "target/**",
     ".git/**",
-    ".jj/**"
+    ".jj/**",
+    ".matan/**"
   ]
 }

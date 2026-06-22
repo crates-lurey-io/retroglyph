@@ -6,8 +6,6 @@ use retroglyph::color::{AnsiColor, Color};
 use retroglyph::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 
 fn draw_scene(term: &mut Terminal<Headless>, player_x: u16, player_y: u16) {
-    term.clear();
-
     // Draw room
     term.fg(Color::Ansi(AnsiColor::White));
     for x in 0..40 {
@@ -46,7 +44,7 @@ fn main() {
 
     // Initial render
     draw_scene(&mut term, player_x, player_y);
-    term.present();
+    term.present().expect("present failed");
 
     println!("--- Frame 1 ---");
     println!("{}", term.backend().grid());
@@ -67,7 +65,7 @@ fn main() {
 
     // Render with updated state
     draw_scene(&mut term, player_x, player_y);
-    term.present();
+    term.present().expect("present failed");
 
     println!("--- Frame 2 (After player moved right) ---");
     println!("{}", term.backend().grid());

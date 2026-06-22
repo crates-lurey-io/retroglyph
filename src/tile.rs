@@ -1,5 +1,8 @@
 //! Fundamental unit of the grid: a single drawable tile.
 
+// TODO: measure `sizeof::<Tile>()` and consider struct-of-arrays or
+// splitting `dx`/`dy` out of layer 0 if > 32 bytes.
+
 use crate::style::Style;
 #[cfg(feature = "egc")]
 use alloc::sync::Arc;
@@ -94,6 +97,18 @@ impl Tile {
     #[must_use]
     pub const fn style(&self) -> Style {
         self.style
+    }
+
+    /// Returns the sub-cell pixel X offset.
+    #[must_use]
+    pub const fn dx(&self) -> i16 {
+        self.dx
+    }
+
+    /// Returns the sub-cell pixel Y offset.
+    #[must_use]
+    pub const fn dy(&self) -> i16 {
+        self.dy
     }
 
     /// Returns the wide-character flags for this tile.
