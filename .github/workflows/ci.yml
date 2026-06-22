@@ -70,6 +70,8 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: just
+      - uses: cargo-bins/cargo-binstall@v1.13.0
+      - run: cargo binstall cargo-llms-txt --no-confirm -q
       - run: just doc
 
   compile:
