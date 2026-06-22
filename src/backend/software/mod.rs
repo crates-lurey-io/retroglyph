@@ -66,6 +66,10 @@ use winit::window::{Window, WindowId};
 /// into it.
 pub struct SoftwareRenderer {
     options: SoftwareBackend,
+    /// The bitmap font, extracted from `options.font` at construction time.
+    /// Always present; the `Option` wrapper in `SoftwareBackend` is only for
+    /// the builder validation step.
+    font: BitmapFont,
     ctx: RenderContext,
     #[cfg(feature = "software-tilesets")]
     sprite_cache: Arc<SpriteCache>,
@@ -118,6 +122,7 @@ impl SoftwareRenderer {
     /// Creates a new renderer with the given buffer and cell dimensions.
     pub(crate) fn create(
         options: SoftwareBackend,
+        font: BitmapFont,
         buf_w: usize,
         buf_h: usize,
         cell_w: u32,
@@ -126,6 +131,7 @@ impl SoftwareRenderer {
     ) -> Self {
         Self {
             options,
+            font,
             ctx: RenderContext {
                 event_buffer: VecDeque::new(),
                 pixel_buf: GridBuf::from_buffer(vec![0u32; buf_w * buf_h], buf_w),
@@ -263,9 +269,10 @@ impl SoftwareBackend {
         F: FnMut(&mut crate::Terminal<SoftwareRenderer>) + 'static,
     {
         // Compute window size before consuming `self` in run_headless().
-        let glyph = self.font.as_ref().unwrap_or_else(|| {
-            unreachable!("SoftwareBackendBuilder::build() returns Err(NoFont) if no font")
-        });
+        let glyph = self
+            .font
+            .as_ref()
+            .expect("SoftwareBackendBuilder::build() returns Err(NoFont) if no font");
         let cell_w = u32::from(glyph.glyph_width) * u32::from(self.scale);
         let cell_h = u32::from(glyph.glyph_height) * u32::from(self.scale);
         let win_w = u32::from(self.cols) * cell_w;
@@ -348,7 +355,7 @@ impl SoftwareBackend {
     /// Panics if `font` is `None`.
     #[must_use]
     pub fn run_headless(self) -> SoftwareRenderer {
-        let font = self.font.as_ref().expect(
+        let font = self.font.expect(
             "run_headless() requires a font; supply one via SoftwareBackendBuilder::font()",
         );
 
@@ -373,6 +380,7 @@ impl SoftwareBackend {
 
         SoftwareRenderer::create(
             self,
+            font,
             buf_w,
             buf_h,
             cell_w,
@@ -394,7 +402,7 @@ impl Backend for SoftwareRenderer {
     where
         I: Iterator<Item = (Pos, &'a Tile)>,
     {
-        let font = self.options.font.as_ref().unwrap();
+        let font = &self.font;
         let scale = usize::from(self.options.scale);
         let cols = self.options.cols;
         let glyph_w = usize::from(font.glyph_width) * scale;
@@ -429,7 +437,7 @@ impl Backend for SoftwareRenderer {
         // orphaned pixels from sub-cell offset spill in the previous frame.
         self.ctx.pixel_buf.clear();
 
-        let font = self.options.font.as_ref().unwrap();
+        let font = &self.font;
         let scale = usize::from(self.options.scale);
         let cols = self.options.cols;
         let cell_w = usize::from(font.glyph_width) * scale;
@@ -446,7 +454,7 @@ impl Backend for SoftwareRenderer {
             let px_y = usize::from(pos.y) * cell_h;
 
             if layer_id == 0 {
-                let bg = resolve_bg_color(tile.style.bg);
+                let bg = resolve_color(tile.style.bg, DEFAULT_BG);
                 let rect = ixy::Rect::new(px_x, px_y, cell_w, cell_h);
                 self.ctx.pixel_buf.fill_rect_solid(rect, bg);
             }
@@ -496,7 +504,7 @@ impl Backend for SoftwareRenderer {
     fn resize(&mut self, size: Size) {
         self.options.cols = size.width;
         self.options.rows = size.height;
-        let font = self.options.font.as_ref().unwrap();
+        let font = &self.font;
         let cell_w = usize::from(font.glyph_width) * usize::from(self.options.scale);
         let cell_h = usize::from(font.glyph_height) * usize::from(self.options.scale);
         let new_w = usize::from(size.width) * cell_w;
@@ -589,8 +597,8 @@ fn blit_cell(
         return;
     }
 
-    let mut fg = resolve_fg_color(cell.style().fg);
-    let mut bg = resolve_bg_color(cell.style().bg);
+    let mut fg = resolve_color(cell.style().fg, DEFAULT_FG);
+    let mut bg = resolve_color(cell.style().bg, DEFAULT_BG);
 
     if cell.style().modifiers().contains(CellModifier::REVERSE) {
         core::mem::swap(&mut fg, &mut bg);
@@ -658,9 +666,9 @@ fn blit_glyph(
 
     #[allow(clippy::cast_possible_wrap)]
     let fg = if tile.style.modifiers().contains(CellModifier::REVERSE) {
-        resolve_bg_color(tile.style.bg)
+        resolve_color(tile.style.bg, DEFAULT_BG)
     } else {
-        resolve_fg_color(tile.style.fg)
+        resolve_color(tile.style.fg, DEFAULT_FG)
     };
 
     #[allow(clippy::cast_possible_wrap)]
@@ -812,18 +820,16 @@ fn blit_sprite(
     }
 }
 
-fn resolve_fg_color(color: Color) -> u32 {
-    match color {
-        Color::Default => 0x00d4_d4d4,
-        Color::Rgb { r, g, b } => (u32::from(r) << 16) | (u32::from(g) << 8) | u32::from(b),
-        Color::Ansi(a) => ansi_to_rgb(a),
-        Color::Indexed(idx) => indexed_to_rgb(idx),
-    }
-}
+/// Default foreground when [`Color::Default`] is used.
+const DEFAULT_FG: u32 = 0x00d4_d4d4;
+/// Default background when [`Color::Default`] is used.
+const DEFAULT_BG: u32 = 0x0000_0000;
 
-fn resolve_bg_color(color: Color) -> u32 {
+/// Resolve a [`Color`] to a packed `0x00RRGGBB` value, substituting
+/// `default_rgb` for [`Color::Default`].
+fn resolve_color(color: Color, default_rgb: u32) -> u32 {
     match color {
-        Color::Default => 0x0000_0000,
+        Color::Default => default_rgb,
         Color::Rgb { r, g, b } => (u32::from(r) << 16) | (u32::from(g) << 8) | u32::from(b),
         Color::Ansi(a) => ansi_to_rgb(a),
         Color::Indexed(idx) => indexed_to_rgb(idx),

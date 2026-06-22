@@ -148,10 +148,7 @@ impl Backend for Crossterm {
     {
         // Begin synchronized update so the terminal holds rendering until
         // flush() sends the matching End marker.
-        let _ = crossterm::queue!(
-            self.writer,
-            crossterm::terminal::BeginSynchronizedUpdate
-        );
+        let _ = crossterm::queue!(self.writer, crossterm::terminal::BeginSynchronizedUpdate);
 
         let mut last_fg = None;
         let mut last_bg = None;
@@ -221,8 +218,8 @@ impl Backend for Crossterm {
             {
                 #[allow(clippy::cast_possible_truncation)]
                 {
-                    cell_width = unicode_width::UnicodeWidthChar::width(cell.glyph())
-                        .unwrap_or(1) as u16;
+                    cell_width =
+                        unicode_width::UnicodeWidthChar::width(cell.glyph()).unwrap_or(1) as u16;
                 }
                 let _ = crossterm::queue!(self.writer, crossterm::style::Print(cell.glyph()));
             }
@@ -235,10 +232,7 @@ impl Backend for Crossterm {
     }
 
     fn flush(&mut self) {
-        let _ = crossterm::queue!(
-            self.writer,
-            crossterm::terminal::EndSynchronizedUpdate
-        );
+        let _ = crossterm::queue!(self.writer, crossterm::terminal::EndSynchronizedUpdate);
         let _ = self.writer.flush();
     }
 
