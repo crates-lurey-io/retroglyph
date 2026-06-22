@@ -285,6 +285,7 @@ impl SoftwareBackend {
                 width: win_w,
                 height: win_h,
             },
+            current_modifiers: KeyModifiers::NONE,
         };
 
         #[cfg(not(target_arch = "wasm32"))]
@@ -501,6 +502,11 @@ impl Backend for SoftwareRenderer {
         let new_w = usize::from(size.width) * cell_w;
         let new_h = usize::from(size.height) * cell_h;
         self.ctx.pixel_buf.resize(new_w, new_h);
+        #[allow(clippy::cast_possible_truncation)]
+        {
+            self.ctx.cell_w = cell_w as u32;
+            self.ctx.cell_h = cell_h as u32;
+        }
     }
 
     fn clear(&mut self) {
@@ -870,7 +876,7 @@ fn indexed_to_rgb(idx: u8) -> u32 {
 ///
 /// Returns `None` for key releases or unhandled keys.
 #[allow(clippy::needless_pass_by_value)]
-fn translate_key(input: winit::event::KeyEvent) -> Option<Event> {
+fn translate_key(input: winit::event::KeyEvent, modifiers: KeyModifiers) -> Option<Event> {
     use winit::keyboard::{Key, NamedKey};
 
     if !input.state.is_pressed() {
@@ -911,10 +917,22 @@ fn translate_key(input: winit::event::KeyEvent) -> Option<Event> {
         _ => return None,
     };
 
-    Some(Event::Key(KeyEvent {
-        code,
-        modifiers: KeyModifiers::NONE,
-    }))
+    Some(Event::Key(KeyEvent { code, modifiers }))
+}
+
+/// Translates winit modifier state into our [`KeyModifiers`].
+fn translate_modifiers(state: winit::keyboard::ModifiersState) -> KeyModifiers {
+    let mut m = KeyModifiers::NONE;
+    if state.shift_key() {
+        m |= KeyModifiers::SHIFT;
+    }
+    if state.control_key() {
+        m |= KeyModifiers::CONTROL;
+    }
+    if state.alt_key() {
+        m |= KeyModifiers::ALT;
+    }
+    m
 }
 
 // Translate a winit `RawKeyEvent` (from `DeviceEvent::Key`) into our `Event`.
@@ -937,6 +955,8 @@ struct WindowApp<B: WindowedBackend, F> {
     window: Option<Arc<Window>>,
     title: String,
     init_size: InitWindowSize,
+    /// Current modifier key state, updated by `ModifiersChanged` events.
+    current_modifiers: KeyModifiers,
 }
 
 impl<B: WindowedBackend, F> WindowApp<B, F> {
@@ -992,16 +1012,18 @@ impl<B: WindowedBackend, F: FnMut(&mut crate::Terminal<B>) + 'static> Applicatio
 
     fn window_event(
         &mut self,
-        event_loop: &ActiveEventLoop,
+        _event_loop: &ActiveEventLoop,
         _window_id: WindowId,
         event: WindowEvent,
     ) {
         match event {
             WindowEvent::CloseRequested => {
+                // Push the event so the game loop can process it (save game,
+                // confirm dialog, etc.).  Do not call event_loop.exit() here;
+                // the game decides when to terminate.
                 if let Some(term) = self.terminal.as_mut() {
                     term.backend_mut().push_event(Event::Close);
                 }
-                event_loop.exit();
             }
 
             WindowEvent::Resized(physical_size) => {
@@ -1018,9 +1040,13 @@ impl<B: WindowedBackend, F: FnMut(&mut crate::Terminal<B>) + 'static> Applicatio
                 }
             }
 
+            WindowEvent::ModifiersChanged(mods) => {
+                self.current_modifiers = translate_modifiers(mods.state());
+            }
+
             WindowEvent::KeyboardInput { event, .. } => {
                 if let Some(term) = self.terminal.as_mut()
-                    && let Some(e) = translate_key(event)
+                    && let Some(e) = translate_key(event, self.current_modifiers)
                 {
                     term.backend_mut().push_event(e);
                 }
