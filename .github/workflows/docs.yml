@@ -27,6 +27,9 @@ jobs:
 
       - uses: cargo-bins/cargo-binstall@v1.13.0
 
+      - name: Install cargo-llms-txt
+        run: cargo binstall cargo-llms-txt --no-confirm -q
+
       - name: Build docs
         run: just doc
 
