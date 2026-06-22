@@ -1,4 +1,4 @@
-//! rg: a terminal/grid rendering library for roguelikes.
+//! rg: a 2D pseudographic terminal library.
 //!
 //! rg provides a grid of character cells with styled output, input handling,
 //! and double-buffered presentation via pluggable backends.
