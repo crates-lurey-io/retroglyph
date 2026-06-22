@@ -1,125 +1,106 @@
-# AGENTS.md — Developer & Agent Guide
+# AGENTS.md
 
-This guide details instructions for building, testing, linting, formatting, and navigating the
-`retroglyph` codebase.
+`retroglyph` is a terminal/grid rendering library for roguelikes. It provides a double-buffered
+`Terminal<B>` generic over a pluggable `Backend`, with styled cells, input events, and optional
+software/crossterm/WASM backends.
 
----
+## Correctness gate
 
-## Iterative Development Commands
+**Run `just check` before every commit.** It runs fmt-check, clippy, compile, tests, doc, and
+llms-check in one shot. All clippy lints (including `pedantic` and `nursery`) are errors; so is
+`missing_docs`.
 
-Always use the [`Justfile`](Justfile) via `just` to automate development tasks.
+```sh
+just check          # full gate — must pass before committing
+just fmt            # auto-fix Rust + Markdown/JSON formatting
+just test           # cargo test --all-features
+just test-v         # same but with stdout (useful for snapshot review)
+just clippy         # clippy only
+just compile        # cargo check --all-features
+just doc            # private rustdocs (opens in browser)
+just llms           # regenerate llms.txt / llms-full.txt
+```
 
-### Build & Run
+For a quick iterative loop: `just compile` to catch type errors fast, then `just check` before
+committing.
 
-- **Check Compilation:** `cargo check --all-targets --all-features`
-  - _Feature-gated check:_ `cargo check --features crossterm`
-- **Clippy Lints:** `cargo clippy --all-targets --all-features` (Warnings are treated as errors)
-- **Run Example:** `cargo run --example headless_demo`
+## Crate layout
 
-### Formatting & Linting
+```text
+src/
+  backend/
+    mod.rs           Backend trait + re-exports
+    headless.rs      In-memory backend (testing)
+    crossterm.rs     Crossterm backend (feature-gated)
+    software/        Pixel backend: winit + softbuffer, tilesets, bitmap fonts
+  color.rs           Color (Default / ANSI / Indexed / RGB)
+  event.rs           Event, KeyEvent, MouseEvent
+  grid.rs            Grid, Pos, Rect, Size
+  layout.rs          TextLayout, HAlign, VAlign (feature = "egc")
+  style.rs           Style, CellModifier
+  terminal.rs        Terminal<B> — stateful drawing API, double buffering
+  text.rs            Line, Span
+  tile.rs            Tile — glyph + Style + sub-cell offsets
+```
 
-- **Format all files (Rust + Markdown/JSON):** `just fmt`
-- **Verify formatting without modifications:** `just fmt-check`
-- **Check all project constraints:** `just check` (Runs formatting check, Clippy, tests, and
+## Feature flags
 
-  private rustdocs compilation)
+| Flag                    | Description                                                     |
+| ----------------------- | --------------------------------------------------------------- |
+| `std` (default)         | Enable std-dependent code; disable for `no_std`.                |
+| `egc` (default)         | Extended grapheme cluster support via `unicode-segmentation`.   |
+| `crossterm`             | Crossterm terminal backend.                                     |
+| `software`              | Pixel backend (winit + softbuffer).                             |
+| `software-tilesets`     | PNG sprite sheet tilesets + alpha blending. Implies `software`. |
+| `software-default-font` | Embedded VGA 8×16 bitmap font. Implies `software`.              |
 
-### Testing
+## Testing
 
-- **Run all tests:** `just test` (Runs all unit and E2E tests with `--all-features`)
-- **Run tests with verbose output:** `just test-v`
-- **Run specific E2E test:** `cargo test --test e2e <test_name>`
+Unit tests live alongside their modules. `tests/e2e.rs` drives `Terminal<Headless>` through
+game-logic scenarios and asserts on grid state.
 
-### Feature Flags
+### Snapshot tests (insta)
 
-- **`software-tilesets`** (implies `software`): Enables PNG sprite sheet tilesets and sprite
+`Headless::format_view()` renders the grid to text (spaces → `·`). Use it with
+`insta::assert_snapshot!` for layout assertions. Snapshot files live in `tests/snapshots/` and are
+committed.
 
-  caching for the software backend. Pulls in `image` (PNG decoding), `alpha-blend` (RGBA blending),
-  and `log` (collision warnings) as optional dependencies.
+```sh
+cargo insta test    # run and open review UI
+cargo insta accept  # accept pending snapshots
+```
 
-### Logging
+### E2E visual snapshots (crossterm)
 
-- Use the `log` crate (feature-gated) for non-critical warnings (e.g., codepoint collision in
-  tilesets) AND for fatal-but-actionable errors (e.g., window/surface init failures). Do NOT use
-  `eprintln!` anywhere inside the library — `log` lets applications control where output goes.
-- Fatal init errors that prevent the backend from starting should use `log::error!` + graceful
-  shutdown (`event_loop.exit()`), not `panic!` or `eprintln!`.
+`tests/e2e_snapshots.rs` spawns `crossterm_demo` in a pseudo-terminal, feeds key input, parses ANSI
+via the `vt100` crate, and snapshots the result as SVG.
 
-### Alpha Blending
+```sh
+cargo build --example crossterm_demo --features crossterm
+cargo test --test e2e_snapshots --all-features
+open tests/snapshots/crossterm_demo.svg   # visual diff
+```
 
-- Use `alpha-blend` (Apache 2.0/MIT) for RGBA compositing types like `U8x4Rgba`. See
+## Key rules
 
-  `.matan/alpha-blend.md` for the full audit.
-
-- **Note:** `U8x4Rgba::source_over` had an alpha computation bug in `0.2.0` (`a*a` in place of
-
-  `a*255`). This was fixed in `0.2.1`. Always depend on `>=0.2.1`.
-
-### Documentation & Summaries
-
-- **Generate private rustdocs:** `just doc`
-- **Generate LLM text summaries (`llms.txt` & `llms-full.txt`):** `just llms`
-
----
+- **No `eprintln!` in library code.** Use the `log` crate (feature-gated). Fatal backend init
+  errors: `log::error!` + `event_loop.exit()`, not `panic!`.
+- **`unsafe_code` is forbidden** (`Cargo.toml` lint).
 
 ## Pre-commit hooks
 
-Hooks are managed by [`hk`](https://hk.jdx.dev) (via `cargo-run-bin`) and configured in
-[`hk.pkl`](hk.pkl). On every `jj push`, `jj-hooks` runs `hk pre-commit` which checks:
+`hk` (configured in `hk.pkl`) runs on every `jj push` via `jj-hooks`:
 
 - `cargo fmt --all -- --check`
-- `npm --prefix tools run format:check` (prettier)
 - `cargo clippy --all-targets -- -D warnings`
 
-To run hooks manually:
-
 ```sh
-cargo bin hk run pre-commit
+cargo bin hk run pre-commit   # run manually
+JJ_HOOKS_SKIP=1 jj push       # bypass (use sparingly)
 ```
 
-To bypass the hook on push:
+## Docs
 
-```sh
-JJ_HOOKS_SKIP=1 jj push
-```
-
-Add new checks by editing [`hk.pkl`](hk.pkl). The `Justfile` remains the source of truth for what
-each check does — hooks are just the trigger.
-
-## Project Documentation Directory Structure
-
-All domain references, architectural designs, and coding standards are stored in the
-[`docs/`](docs/) directory:
-
-- **[`docs/design/`](docs/design/) (ADRs and Implementation Plans):**
-  - Contains Architectural Decision Records specifying the layout and boundaries of the crate.
-  - Contains step-by-step milestone tracking documents (e.g.,
-
-    [`002-foundations-plan.md`](docs/design/002-foundations-plan.md) and
-    [`003-crossterm-backend.md`](docs/design/003-crossterm-backend.md)).
-
-  - **Rule:** Before starting a new feature or milestone, consult the corresponding plan in this
-
-    directory to match the specified design, structures, and behavior exactly.
-
-- **[`docs/references/`](docs/references/) (Deep-Dive Domain Knowledge):**
-  - `backends/`: Technical specifications for other visual/non-visual backends (Canvas, DRM, SDL,
-
-    OpenGL, WebGL, etc.).
-
-  - `core/`: Deep-dives into roguelike game development systems, Unicode/text handling, font
-
-    rendering, testing strategies, and the crate's threading/concurrency model.
-
-  - `libs/`: Analytical references comparing other libraries (Bracket-lib, Ratatui, Rot-js, Libtcod,
-
-    etc.) to inform our design choices.
-
-- **[`docs/style/`](docs/style/) (Development Guidelines):**
-  - Guides on Rust API design guidelines, performance books, and best practices from various leading
-
-    Rust teams.
-
-  - **Rule:** Any new module or feature added to the crate must adhere to the core guidelines
-
-    defined in the `docs/style/` reference documents.
+- `docs/design/` — ADRs and milestone plans. Read the relevant plan before starting a feature.
+- `docs/references/` — deep-dives on backends, Unicode, font rendering, and library comparisons.
+- `docs/style/` — Rust API and code style guidelines. New modules must follow these.
