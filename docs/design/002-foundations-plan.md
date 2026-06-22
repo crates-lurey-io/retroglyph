@@ -91,7 +91,7 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
 license = "MIT OR Apache-2.0"
-description = "A terminal/grid rendering library for roguelikes"
+description = "A 2D pseudographic terminal library"
 keywords = ["roguelike", "terminal", "grid", "gamedev"]
 categories = ["game-development", "graphics"]
 
@@ -114,7 +114,7 @@ missing_panics_doc = "allow"
 ### src/lib.rs
 
 ```rust
-//! retroglyph: a terminal/grid rendering library for roguelikes.
+//! retroglyph: a 2D pseudographic terminal library.
 //!
 //! retroglyph provides a grid of character cells with styled output, input handling,
 //! and double-buffered presentation via pluggable backends.

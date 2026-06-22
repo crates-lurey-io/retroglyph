@@ -38,13 +38,15 @@ doc:
     cargo doc --no-deps --document-private-items
     @./bin/bin/cargo-llms-txt 2>/dev/null || true
     @cp llms.txt llms-full.txt target/doc/ 2>/dev/null || true
+    @cp -r docs/public/. target/doc/ 2>/dev/null || true
+    @sed -i.bak "s/__GIT_SHA__/$(git rev-parse --short HEAD 2>/dev/null || echo unknown)/g" target/doc/index.html && rm -f target/doc/index.html.bak || true
 
 llms:
     @./bin/bin/cargo-llms-txt 2>/dev/null || true
 
 docs-preview: doc
-    @if command -v xdg-open > /dev/null; then xdg-open target/doc/retroglyph/index.html; \
-    elif command -v open > /dev/null; then open target/doc/retroglyph/index.html; \
+    @if command -v xdg-open > /dev/null; then xdg-open target/doc/index.html; \
+    elif command -v open > /dev/null; then open target/doc/index.html; \
     fi
 
 # ── Test ─────────────────────────────────────────────────────────────────────

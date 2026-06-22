@@ -1,7 +1,7 @@
 # AGENTS.md
 
-`retroglyph` is a terminal/grid rendering library for roguelikes. It provides a double-buffered
-`Terminal<B>` generic over a pluggable `Backend`, with styled cells, input events, and optional
+`retroglyph` is a 2D pseudographic terminal library. It provides a double-buffered `Terminal<B>`
+generic over a pluggable `Backend`, with styled cells, input events, and optional
 software/crossterm/WASM backends.
 
 ## Correctness gate

@@ -1,6 +1,6 @@
 # retroglyph
 
-A terminal/grid rendering library for roguelikes, written in Rust.
+A 2D pseudographic terminal library for Rust.
 
 ![crossterm demo](tests/snapshots/crossterm_demo.svg)
 
