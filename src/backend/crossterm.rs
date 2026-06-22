@@ -146,9 +146,20 @@ impl Backend for Crossterm {
     where
         I: Iterator<Item = (Pos, &'a Tile)>,
     {
+        // Begin synchronized update so the terminal holds rendering until
+        // flush() sends the matching End marker.
+        let _ = crossterm::queue!(
+            self.writer,
+            crossterm::terminal::BeginSynchronizedUpdate
+        );
+
         let mut last_fg = None;
         let mut last_bg = None;
         let mut last_attrs = None;
+        // Track the cursor position so we can skip redundant MoveTo
+        // commands when cells are adjacent.
+        let mut cursor_x: Option<u16> = None;
+        let mut cursor_y: Option<u16> = None;
 
         for (pos, cell) in content {
             // Spacer cells are the right half of a wide character.
@@ -169,7 +180,11 @@ impl Backend for Crossterm {
             let bg: crossterm::style::Color = cell.style.bg.into();
             let attrs: crossterm::style::Attributes = cell.style.modifiers.into();
 
-            let _ = crossterm::queue!(self.writer, crossterm::cursor::MoveTo(pos.x, pos.y));
+            // Only emit MoveTo when the cursor isn't already at the right position.
+            let needs_move = cursor_y != Some(pos.y) || cursor_x != Some(pos.x);
+            if needs_move {
+                let _ = crossterm::queue!(self.writer, crossterm::cursor::MoveTo(pos.x, pos.y));
+            }
 
             if last_fg != Some(fg) {
                 let _ = crossterm::queue!(self.writer, crossterm::style::SetForegroundColor(fg));
@@ -186,6 +201,8 @@ impl Backend for Crossterm {
                 last_attrs = Some(attrs);
             }
 
+            #[allow(unused_assignments)]
+            let mut cell_width: u16 = 1;
             #[cfg(feature = "egc")]
             {
                 // Print the full EGC if present; otherwise the primary glyph.
@@ -194,17 +211,34 @@ impl Backend for Crossterm {
                     Some(extra) => extra.as_str(),
                     None => cell.glyph.encode_utf8(&mut buf),
                 };
+                #[allow(clippy::cast_possible_truncation)]
+                {
+                    cell_width = unicode_width::UnicodeWidthStr::width(s).max(1) as u16;
+                }
                 let _ = crossterm::queue!(self.writer, crossterm::style::Print(s));
             }
             #[cfg(not(feature = "egc"))]
-            let _ = crossterm::queue!(self.writer, crossterm::style::Print(cell.glyph()));
+            {
+                #[allow(clippy::cast_possible_truncation)]
+                {
+                    cell_width = unicode_width::UnicodeWidthChar::width(cell.glyph())
+                        .unwrap_or(1) as u16;
+                }
+                let _ = crossterm::queue!(self.writer, crossterm::style::Print(cell.glyph()));
+            }
+
+            // After printing, the terminal cursor advances by the cell's
+            // display width. Track that so the next cell can skip MoveTo.
+            cursor_x = Some(pos.x + cell_width);
+            cursor_y = Some(pos.y);
         }
     }
 
     fn flush(&mut self) {
-        let _ = crossterm::queue!(self.writer, crossterm::terminal::BeginSynchronizedUpdate);
-        let _ = self.writer.flush();
-        let _ = crossterm::queue!(self.writer, crossterm::terminal::EndSynchronizedUpdate);
+        let _ = crossterm::queue!(
+            self.writer,
+            crossterm::terminal::EndSynchronizedUpdate
+        );
         let _ = self.writer.flush();
     }
 
