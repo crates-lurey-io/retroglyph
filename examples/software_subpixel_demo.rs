@@ -22,8 +22,7 @@ fn main() {
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let seed: u64 = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_nanos() as u64)
-        .unwrap_or(42);
+        .map_or(42, |d| d.as_nanos() as u64);
 
     let backend = SoftwareBackendBuilder::new()
         .title("rg sub-pixel DVD screensaver")
@@ -40,8 +39,8 @@ fn main() {
     #[allow(clippy::cast_possible_truncation)]
     let start_y = (rng.next() % 9 + 3) as u16;
 
-    let dir_x: i16 = if rng.next() % 2 == 0 { 1 } else { -1 };
-    let dir_y: i16 = if rng.next() % 2 == 0 { 1 } else { -1 };
+    let dir_x: i16 = if rng.next().is_multiple_of(2) { 1 } else { -1 };
+    let dir_y: i16 = if rng.next().is_multiple_of(2) { 1 } else { -1 };
 
     let color = pick_color(&mut rng);
 
@@ -99,11 +98,8 @@ struct BounceState {
     frame: u64,
 }
 
-fn tick(term: &mut Terminal<impl retroglyph::Backend>, s: &mut BounceState) {
+fn draw_background(term: &mut Terminal<impl retroglyph::Backend>) {
     let size = term.size();
-
-    // ── Background tile grid on layer 0 (redrawn every frame) ──────────
-    // A visible checkerboard of `#` and `.` that the @ glides over.
     term.layer(0);
     for y in 0..size.height {
         for x in 0..size.width {
@@ -135,6 +131,13 @@ fn tick(term: &mut Terminal<impl retroglyph::Backend>, s: &mut BounceState) {
             term.put(x, y, ch);
         }
     }
+}
+
+fn tick(term: &mut Terminal<impl retroglyph::Backend>, s: &mut BounceState) {
+    let size = term.size();
+
+    // ── Background tile grid on layer 0 (redrawn every frame) ──────────
+    draw_background(term);
 
     // ── Every frame: clear layer 1 and redraw the @ ────────────────────
     term.layer(1);

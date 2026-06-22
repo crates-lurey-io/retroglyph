@@ -1,6 +1,6 @@
 //! Decoded sprite cache: PNG decoding, tile extraction, and runtime lookup.
 //!
-//! The [`SpriteCache`] is built from [`TilesetOptions`](super::tileset::TilesetOptions)
+//! The [`SpriteCache`] is built from [`TilesetOptions`]
 //! and provides O(1) lookup of decoded RGBA8 sprites by codepoint.
 
 use super::tileset::{TilesetError, TilesetOptions};
@@ -121,7 +121,7 @@ impl SpriteCache {
             if self.sprites.insert(codepoint, sprite).is_some() {
                 #[allow(clippy::cast_lossless)]
                 let cp = codepoint as u32;
-                log::warn!("tileset codepoint collision: U+{cp:04X} '{codepoint}' overwritten",);
+                log::warn!("tileset codepoint collision: U+{cp:04X} '{codepoint}' overwritten");
             }
         }
         Ok(())

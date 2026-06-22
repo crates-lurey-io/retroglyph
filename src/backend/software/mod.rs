@@ -3,10 +3,10 @@
 //! # Architecture
 //!
 //! [`SoftwareBackend`] is a pure-config type (font, grid size, scale). It does
-//! **not** implement [`Backend`] directly.  Call [`run`](SoftwareBackend::run)
-//! to open a window and spawn the game loop on a background thread, or
+//! **not** implement [`Backend`] directly.  Call [`run_windowed`](SoftwareBackend::run_windowed)
+//! to open a window and run the game loop, or
 //! [`run_headless`](SoftwareBackend::run_headless) to obtain a
-//! [`SoftwareRenderer`](crate::backend::software::SoftwareRenderer) that renders into memory without a window.
+//! [`SoftwareRenderer`] that renders into memory without a window.
 //!
 //! [`SoftwareRenderer`] implements [`Backend`] and always has an active
 //! rendering context — no `Option`, no runtime panics from missing state.
@@ -52,7 +52,7 @@ use winit::window::{Window, WindowId};
 
 /// The running half of the software backend.
 ///
-/// A running software renderer, produced by [`SoftwareBackend::run`] or
+/// A running software renderer, produced by [`SoftwareBackend::run_windowed`] or
 /// [`SoftwareBackend::run_headless`].
 ///
 /// Unlike [`SoftwareBackend`] (which is just configuration), this type
@@ -156,6 +156,10 @@ impl SoftwareRenderer {
     }
 
     /// Initialize the window surface from a winit window.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SurfaceError`] if the softbuffer context or surface cannot be created.
     pub fn init_surface(&mut self, window: &Arc<Window>) -> Result<(), SurfaceError> {
         let context = softbuffer::Context::new(window.clone()).map_err(SurfaceError::Context)?;
         let surface =
@@ -169,18 +173,20 @@ impl SoftwareRenderer {
 
     /// Resize the window surface.
     pub fn resize_surface(&mut self, width: u32, height: u32) {
-        if let Some(surf) = &mut self.ctx.window_surface {
-            if let (Some(w), Some(h)) = (NonZeroU32::new(width), NonZeroU32::new(height)) {
-                let _ = surf.surface.resize(w, h);
-            }
+        if let Some(surf) = &mut self.ctx.window_surface
+            && let (Some(w), Some(h)) = (NonZeroU32::new(width), NonZeroU32::new(height))
+        {
+            let _ = surf.surface.resize(w, h);
         }
     }
 
     /// Present the pixel buffer to the window surface.
     ///
-    /// Returns `Ok(())` on success.  Returns `Err(SurfaceError::Surface(...))`
-    /// if the softbuffer buffer can't be acquired or presented (e.g.,
-    /// context lost on WASM or DRI/KMS page flip pending).
+    /// # Errors
+    ///
+    /// Returns `Err(SurfaceError::Surface(...))` if the softbuffer buffer
+    /// can't be acquired or presented (e.g., context lost on WASM or DRI/KMS
+    /// page flip pending).
     pub fn present(&mut self) -> Result<(), SurfaceError> {
         let Some(surface) = self.ctx.window_surface.as_mut() else {
             return Ok(()); // headless mode, nothing to present
@@ -301,7 +307,7 @@ impl SoftwareBackend {
     /// Creates a headless renderer that renders into an internal buffer
     /// without opening a window.
     ///
-    /// Unlike [`run`](Self::run), this does not block — it returns a
+    /// Unlike [`run_windowed`](Self::run_windowed), this does not block — it returns a
     /// [`SoftwareRenderer`] immediately.  The renderer's pixel buffer can be
     /// inspected via [`SoftwareRenderer::pixels`].  Flushing is a no-op
     /// (the buffer stays in memory).
@@ -380,7 +386,7 @@ impl SoftwareBackend {
 
 impl Backend for SoftwareRenderer {
     fn push_event(&mut self, event: Event) {
-        SoftwareRenderer::push_event(self, event);
+        Self::push_event(self, event);
     }
 
     fn draw<'a, I>(&mut self, content: I)
@@ -525,15 +531,15 @@ impl Backend for SoftwareRenderer {
 
 impl WindowedBackend for SoftwareRenderer {
     fn present(&mut self) -> Result<(), SurfaceError> {
-        SoftwareRenderer::present(self)
+        Self::present(self)
     }
 
     fn init_surface(&mut self, window: &Arc<Window>) -> Result<(), SurfaceError> {
-        SoftwareRenderer::init_surface(self, window)
+        Self::init_surface(self, window)
     }
 
     fn resize_surface(&mut self, width: u32, height: u32) {
-        SoftwareRenderer::resize_surface(self, width, height);
+        Self::resize_surface(self, width, height);
     }
 
     fn cell_size(&self) -> (u32, u32) {
@@ -541,7 +547,7 @@ impl WindowedBackend for SoftwareRenderer {
     }
 
     fn push_window_event(&mut self, event: Event) {
-        SoftwareRenderer::push_event(self, event);
+        Self::push_event(self, event);
     }
 }
 
@@ -911,8 +917,8 @@ fn translate_key(input: winit::event::KeyEvent) -> Option<Event> {
     }))
 }
 
-/// Translate a winit `RawKeyEvent` (from `DeviceEvent::Key`) into our `Event`.
-///
+// Translate a winit `RawKeyEvent` (from `DeviceEvent::Key`) into our `Event`.
+//
 // This is the primary input path on WASM, where keyboard events fire as
 // `DeviceEvent::Key` from a document-level listener (no canvas focus needed)
 // rather than `WindowEvent::KeyboardInput` (which requires canvas focus).
@@ -1013,10 +1019,10 @@ impl<B: WindowedBackend, F: FnMut(&mut crate::Terminal<B>) + 'static> Applicatio
             }
 
             WindowEvent::KeyboardInput { event, .. } => {
-                if let Some(term) = self.terminal.as_mut() {
-                    if let Some(e) = translate_key(event) {
-                        term.backend_mut().push_event(e);
-                    }
+                if let Some(term) = self.terminal.as_mut()
+                    && let Some(e) = translate_key(event)
+                {
+                    term.backend_mut().push_event(e);
                 }
             }
 

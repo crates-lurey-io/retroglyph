@@ -92,7 +92,7 @@ impl Codepage {
 
     /// Number of tiles this codepage defines, or `None` for `Unicode` (unbounded).
     #[must_use]
-    pub fn len(&self) -> Option<usize> {
+    pub const fn len(&self) -> Option<usize> {
         match self {
             Self::Cp437 => Some(256),
             Self::Unicode { .. } => None,
@@ -280,10 +280,10 @@ impl TilesetBuilder {
         if self.spacing_cells_x == 0 || self.spacing_cells_y == 0 {
             return Err(TilesetError::ZeroSpacing);
         }
-        if let Codepage::Custom(ref t) = self.codepage {
-            if t.is_empty() {
-                return Err(TilesetError::EmptyCodepage);
-            }
+        if let Codepage::Custom(ref t) = self.codepage
+            && t.is_empty()
+        {
+            return Err(TilesetError::EmptyCodepage);
         }
         Ok(TilesetOptions {
             bytes: self.bytes,

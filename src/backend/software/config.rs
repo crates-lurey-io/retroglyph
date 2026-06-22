@@ -2,8 +2,8 @@
 //!
 //! The main type is [`SoftwareBackend`], which holds window and font
 //! configuration.  Construct it via [`SoftwareBackendBuilder`], then call
-//! [`run`](SoftwareBackend::run) (windowed) or
-//! [`run_headless`](SoftwareBackend::run_headless) (headless).
+//! [`run_windowed`](SoftwareBackend::run_windowed) or
+//! [`run_headless`](SoftwareBackend::run_headless).
 //!
 //! Both methods produce a [`SoftwareRenderer`](crate::backend::software::SoftwareRenderer)
 //! that implements [`Backend`](crate::backend::Backend).
@@ -63,7 +63,7 @@ impl std::error::Error for SoftwareBackendError {
 /// Configuration and entry point for the software rendering backend.
 ///
 /// Construct this via [`SoftwareBackendBuilder`], then call either
-/// [`run`](SoftwareBackend::run) to open a window or
+/// [`run_windowed`](SoftwareBackend::run_windowed) to open a window or
 /// [`run_headless`](SoftwareBackend::run_headless) for headless in-memory
 /// rendering.
 ///
@@ -150,7 +150,7 @@ pub struct SoftwareBackend {
     /// A scale of 2 renders each 1-bit font pixel as a 2×2 block, making
     /// the VGA 8×16 font display at 16×32 pixels per cell. Default is 1.
     pub scale: u8,
-    /// Registered tileset options, loaded at [`run`](SoftwareBackend::run) time.
+    /// Registered tileset options, loaded at [`run_windowed`](SoftwareBackend::run_windowed) time.
     #[cfg(feature = "software-tilesets")]
     pub tilesets: Vec<TilesetOptions>,
 }
@@ -247,7 +247,7 @@ impl SoftwareBackendBuilder {
     /// Registers a tileset for loading when the backend starts.
     ///
     /// Multiple tilesets can be registered; they are all loaded when
-    /// [`run`](SoftwareBackend::run) or [`run_headless`](SoftwareBackend::run_headless)
+    /// [`run_windowed`](SoftwareBackend::run_windowed) or [`run_headless`](SoftwareBackend::run_headless)
     /// is called. Later registrations win on codepoint collision.
     ///
     /// Available only when the `software-tilesets` feature is enabled.
@@ -260,7 +260,7 @@ impl SoftwareBackendBuilder {
 
     /// Validates options and returns the backend configuration.
     ///
-    /// Call [`run`](SoftwareBackend::run) on the result to open the window,
+    /// Call [`run_windowed`](SoftwareBackend::run_windowed) on the result to open the window,
     /// or [`run_headless`](SoftwareBackend::run_headless) for headless
     /// rendering.
     ///

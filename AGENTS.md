@@ -4,6 +4,10 @@
 generic over a pluggable `Backend`, with styled cells, input events, and optional
 software/crossterm/WASM backends.
 
+A workspace split into `retroglyph-core`, `retroglyph-crossterm`, `retroglyph-software`, and a
+`retroglyph` facade crate is planned (ADR 014). The current single-crate structure with feature
+flags will be preserved at the user-facing level.
+
 ## Correctness gate
 
 **Run `just check` before every commit.** It runs fmt-check, clippy, compile, tests, doc, and
@@ -17,31 +21,53 @@ just test           # cargo test --all-features
 just test-v         # same but with stdout (useful for snapshot review)
 just clippy         # clippy only
 just compile        # cargo check --all-features
-just doc            # private rustdocs (opens in browser)
+just doc            # private rustdocs + llms.txt
+just docs-preview   # build docs and open in browser
 just llms           # regenerate llms.txt / llms-full.txt
 ```
 
 For a quick iterative loop: `just compile` to catch type errors fast, then `just check` before
 committing.
 
+**Known Justfile gaps:** `clippy` does not pass `--all-features`, so backend code is only linted in
+CI. The `doc` recipe swallows `cargo doc` failures due to `|| true` chaining. See
+`.matan/improve-justfile.md` for the full list.
+
 ## Crate layout
 
 ```text
 src/
-  backend/
-    mod.rs           Backend trait + re-exports
-    headless.rs      In-memory backend (testing)
-    crossterm.rs     Crossterm backend (feature-gated)
-    software/        Pixel backend: winit + softbuffer, tilesets, bitmap fonts
+  lib.rs             Root: module declarations, feature-gated re-exports
   color.rs           Color (Default / ANSI / Indexed / RGB)
-  event.rs           Event, KeyEvent, MouseEvent
-  grid.rs            Grid, Pos, Rect, Size
-  layout.rs          TextLayout, HAlign, VAlign (feature = "egc")
-  style.rs           Style, CellModifier
-  terminal.rs        Terminal<B> — stateful drawing API, double buffering
-  text.rs            Line, Span
-  tile.rs            Tile — glyph + Style + sub-cell offsets
+  style.rs           Style, CellModifier (depends on: color)
+  tile.rs            Tile — glyph + Style + sub-cell offsets (depends on: style)
+  grid.rs            Grid, Pos, Rect, Size (depends on: tile, style; uses grixy)
+  event.rs           Event, KeyEvent, MouseEvent (depends on: grid::Pos)
+  text.rs            Line, Span (depends on: style)
+  layout.rs          TextLayout, HAlign, VAlign (depends on: text, terminal; feature = "egc")
+  terminal.rs        Terminal<B> — stateful drawing API, double buffering (depends on: all above)
+  backend/
+    mod.rs           Backend trait (depends on: event, grid, tile)
+    headless.rs      In-memory backend for testing (no external deps)
+    crossterm.rs     Crossterm backend (feature = "crossterm")
+    software/
+      mod.rs         SoftwareRenderer, winit event loop (feature = "software")
+      config.rs      SoftwareBackend, SoftwareBackendBuilder
+      bitmap_font.rs BitmapFont, embedded VGA 8x16
+      windowed.rs    WindowedBackend trait
+      tileset.rs     Codepage, TilesetBuilder (feature = "software-tilesets")
+      sprite_cache.rs  SpriteCache, alpha blending (feature = "software-tilesets")
+examples/            Runnable demos (crossterm, software, tileset, headless, WASM)
+tests/
+  e2e.rs             Terminal<Headless> integration tests
+  e2e_snapshots.rs   PTY + vt100 SVG snapshots of crossterm_demo
+  software_renderer.rs  Pixel-level software backend tests
+  snapshots/         insta snapshot files (committed)
 ```
+
+The internal dependency flow is: `color -> style -> tile -> grid`, with `event` depending only on
+`grid::Pos`, and `terminal` pulling everything together. Each backend depends on the core types but
+not on other backends. This is the natural crate boundary for the planned workspace split (ADR 014).
 
 ## Feature flags
 
@@ -86,21 +112,32 @@ open tests/snapshots/crossterm_demo.svg   # visual diff
 - **No `eprintln!` in library code.** Use the `log` crate (feature-gated). Fatal backend init
   errors: `log::error!` + `event_loop.exit()`, not `panic!`.
 - **`unsafe_code` is forbidden** (`Cargo.toml` lint).
+- **No interactive jj/git commands.** Always pass `-m` to avoid opening `$EDITOR`. Use
+  `jj split [FILESETS...]` by path, never interactively.
+- **Read the relevant ADR before starting a feature.** ADRs in `docs/design/` capture constraints
+  and non-goals that aren't obvious from the code alone.
 
-## Pre-commit hooks
+## Pre-push hooks
 
 `hk` (configured in `hk.pkl`) runs on every `jj push` via `jj-hooks`:
 
-- `cargo fmt --all -- --check`
-- `cargo clippy --all-targets -- -D warnings`
+- `just fmt-check` (rustfmt + prettier)
+- `just lint` (clippy + markdown lint)
 
 ```sh
-cargo bin hk run pre-commit   # run manually
+cargo bin hk run pre-push     # run manually
 JJ_HOOKS_SKIP=1 jj push       # bypass (use sparingly)
 ```
 
 ## Docs
 
-- `docs/design/` — ADRs and milestone plans. Read the relevant plan before starting a feature.
-- `docs/references/` — deep-dives on backends, Unicode, font rendering, and library comparisons.
+- `docs/design/` — ADRs and milestone plans. Read the relevant ADR before starting a feature.
+  - Key ADRs: 001 (architecture), 004 (testing strategy), 008 (layer composition), 013 (codecov),
+    014 (workspace split).
+- `docs/references/` — deep-dives organized by topic:
+  - `backends/` — terminal, software rendering, WebGL, WASM, etc.
+  - `core/` — color systems, font rendering, Unicode, game loops, threading, error handling.
+  - `libs/` — comparisons with ratatui, bracket-lib, notcurses, libtcod, etc.
 - `docs/style/` — Rust API and code style guidelines. New modules must follow these.
+- `llms.txt` / `llms-full.txt` — machine-readable API docs generated by `just llms`. The full
+  version includes all public type signatures and doc comments.

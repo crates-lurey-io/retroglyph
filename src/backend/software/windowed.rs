@@ -3,14 +3,7 @@
 //!
 //! Only windowed backends ([`SoftwareRenderer`](super::SoftwareRenderer), and
 //! future `GlowRenderer`/`WgpuRenderer`) implement this.  `Headless` and
-//! `Crossterm` implement only [`Backend`](crate::backend::Backend).
-
-//! `WindowedBackend` subtrait — window-surface operations for backends that
-//! render to a winit window.
-//!
-//! Only windowed backends ([`SoftwareRenderer`](super::SoftwareRenderer), and
-//! future `GlowRenderer`/`WgpuRenderer`) implement this.  `Headless` and
-//! `Crossterm` implement only [`Backend`](crate::backend::Backend).
+//! `Crossterm` implement only [`Backend`].
 //!
 //! TODO: If backends are moved outside this monorepo, consider moving
 //! `WindowedBackend` to `crate::backend` so it lives alongside `Backend`.

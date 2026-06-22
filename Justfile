@@ -9,14 +9,16 @@ rustfmt:
     cargo fmt --all -- --check
 
 prettier:
-    npm ci --prefix tools 2>/dev/null || true
+    @[ -d tools/node_modules ] || npm ci --prefix tools
     npm --prefix tools run format:check
 
 markdown:
+    @[ -d tools/node_modules ] || npm ci --prefix tools
     npm --prefix tools run lint
 
 fmt:
     cargo fmt --all
+    @[ -d tools/node_modules ] || npm ci --prefix tools
     npm --prefix tools run format
 
 # Local: check everything (rustfmt + prettier)
@@ -25,7 +27,7 @@ fmt-check: rustfmt prettier
 # ── Linting ──────────────────────────────────────────────────────────────────
 
 clippy:
-    cargo clippy --all-targets -- -D warnings
+    cargo clippy --all-targets --all-features -- -D warnings
 
 lint: clippy markdown
 
@@ -34,15 +36,16 @@ lint: clippy markdown
 compile:
     cargo check --all-features
 
-doc:
-    cargo doc --no-deps --document-private-items
-    @cargo llms-txt 2>/dev/null || ./bin/bin/cargo-llms-txt 2>/dev/null || true
+doc: _llms-txt
+    cargo doc --no-deps --document-private-items --all-features
     @cp llms.txt llms-full.txt target/doc/ 2>/dev/null || true
     @cp -r docs/public/. target/doc/ 2>/dev/null || true
     @sed -i.bak "s/__GIT_SHA__/$(git rev-parse --short HEAD 2>/dev/null || echo unknown)/g" target/doc/index.html && rm -f target/doc/index.html.bak || true
 
-llms:
-    @cargo llms-txt 2>/dev/null || ./bin/bin/cargo-llms-txt 2>/dev/null || true
+llms: _llms-txt
+
+_llms-txt:
+    @./bin/bin/cargo-llms-txt 2>/dev/null || cargo llms-txt 2>/dev/null || true
 
 docs-preview: doc
     @if command -v xdg-open > /dev/null; then xdg-open target/doc/index.html; \
@@ -71,6 +74,16 @@ check: fmt-check lint compile test doc
 
 clean:
     cargo clean
+
+# ── Convenience ──────────────────────────────────────────────────────────────
+
+insta:
+    cargo insta test --all-features && cargo insta accept
+
+deny: deny-advisories deny-licenses
+
+coverage:
+    cargo llvm-cov --all-features --html --open
 
 # ── Setup ────────────────────────────────────────────────────────────────────
 
