@@ -271,7 +271,7 @@ impl<'a> TextLayout<'a> {
                 }
                 terminal
                     .grid_mut()
-                    .write_grapheme(cx, row, &glyph.grapheme, glyph.style);
+                    .write_grapheme(0, cx, row, &glyph.grapheme, glyph.style);
                 cx += glyph.width;
             }
         }

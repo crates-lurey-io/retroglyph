@@ -206,7 +206,7 @@ fn render_demo_scene() {
     term.put(5, 5, '@');
     term.reset_style();
 
-    term.present();
+    term.present().expect("present failed");
     assert_png_snapshot(term.backend(), "render_demo_scene");
 }
 
@@ -243,14 +243,14 @@ fn sub_cell_offset_does_not_smear() {
     term.layer(1);
     term.fg(Color::Rgb { r: 0, g: 255, b: 0 });
     term.put_offset(1, 0, 2, 0, '@');
-    term.present();
+    term.present().expect("present failed");
 
     // ── Frame 2: clear layer 1, put @ at dx=-2 ──
     term.layer(1);
     term.clear();
     term.fg(Color::Rgb { r: 0, g: 255, b: 0 });
     term.put_offset(1, 0, -2, 0, '@');
-    term.present();
+    term.present().expect("present failed");
 
     assert_png_snapshot(term.backend(), "sub_cell_offset_does_not_smear");
 }

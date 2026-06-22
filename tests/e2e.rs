@@ -12,14 +12,14 @@ fn test_e2e_movement() {
 
     // Initial draw
     term.put(5, 5, '@');
-    term.present();
+    term.present().expect("present failed");
 
     assert_eq!(term.backend().grid().get(5, 5).glyph(), '@');
 
     // Move player
     term.clear();
     term.put(6, 5, '@');
-    term.present();
+    term.present().expect("present failed");
 
     assert_eq!(term.backend().grid().get(5, 5).glyph(), ' ');
     assert_eq!(term.backend().grid().get(6, 5).glyph(), '@');
@@ -32,7 +32,7 @@ fn test_e2e_style() {
 
     let red_style = Style::new().fg(Color::RED);
     term.put_styled(1, 1, 'A', red_style);
-    term.present();
+    term.present().expect("present failed");
 
     assert_eq!(term.backend().grid().get(1, 1).style(), red_style);
 }
@@ -80,7 +80,7 @@ fn test_e2e_headless_demo_scenario() {
 
     // Render Initial Frame
     draw_scene(&mut term, 5, 5);
-    term.present();
+    term.present().expect("present failed");
 
     // 1. Snapshot assertion for Frame 1
     let expected_frame_1 = "\
@@ -119,7 +119,7 @@ fn test_e2e_headless_demo_scenario() {
 
     // Render Second Frame
     draw_scene(&mut term, player_x, player_y);
-    term.present();
+    term.present().expect("present failed");
 
     // 3. Snapshot assertion for Frame 2
     let expected_frame_2 = "\

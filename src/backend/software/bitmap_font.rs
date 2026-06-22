@@ -13,6 +13,11 @@
 //!   extraction loop is not a bottleneck for 8px-wide fonts at typical grid
 //!   sizes, but wider fonts (10px, 16px) would benefit from caching.
 //!   See ADR 012 (metrics) and ADR 011 (future optimization notes).
+//!
+//! - **Wider glyphs:** To support glyphs wider than 8px, change `rows()` to
+//!   return `ceil(glyph_width / 8)` bytes per row and update the bit
+//!   extraction in `blit_cell`/`blit_glyph` to index across bytes. PNG
+//!   sprite tilesets via `SpriteCache` already support arbitrary tile sizes.
 
 // ── BitmapFont ─────────────────────────────────────────────────────────────
 

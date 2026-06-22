@@ -394,11 +394,13 @@ impl SoftwareBackend {
 // ── Backend impl ────────────────────────────────────────────────────────────────
 
 impl Backend for SoftwareRenderer {
+    type Error = core::convert::Infallible;
+
     fn push_event(&mut self, event: Event) {
         Self::push_event(self, event);
     }
 
-    fn draw<'a, I>(&mut self, content: I)
+    fn draw<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
         I: Iterator<Item = (Pos, &'a Tile)>,
     {
@@ -426,9 +428,10 @@ impl Backend for SoftwareRenderer {
                 sprite_cache,
             );
         }
+        Ok(())
     }
 
-    fn draw_layers<'a, I>(&mut self, content: I)
+    fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
         I: Iterator<Item = (u8, Pos, &'a Tile)>,
     {
@@ -487,11 +490,13 @@ impl Backend for SoftwareRenderer {
                 scale,
             );
         }
+        Ok(())
     }
 
-    fn flush(&mut self) {
+    fn flush(&mut self) -> Result<(), Self::Error> {
         // No-op. Frame is presented via WindowedBackend::present() in windowed
         // mode, or accessed directly via pixels() in headless/testing mode.
+        Ok(())
     }
 
     fn size(&self) -> Size {
@@ -517,8 +522,9 @@ impl Backend for SoftwareRenderer {
         }
     }
 
-    fn clear(&mut self) {
+    fn clear(&mut self) -> Result<(), Self::Error> {
         self.ctx.pixel_buf.clear();
+        Ok(())
     }
 
     fn needs_full_frame(&self) -> bool {
@@ -1046,6 +1052,8 @@ impl<B: WindowedBackend, F: FnMut(&mut crate::Terminal<B>) + 'static> Applicatio
                 }
             }
 
+            // TODO: handle CursorMoved and MouseInput for
+            // mouse-to-grid-coordinate conversion (Event::Mouse).
             WindowEvent::ModifiersChanged(mods) => {
                 self.current_modifiers = translate_modifiers(mods.state());
             }

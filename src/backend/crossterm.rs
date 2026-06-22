@@ -12,7 +12,7 @@ use crate::event::Event;
 use crate::grid::{Pos, Size};
 use crate::tile::Tile;
 use core::time::Duration;
-use std::io::{BufWriter, Stdout, Write};
+use std::io::{BufWriter, Stdout};
 
 /// Helper function to restore the terminal to its normal state.
 /// This is called during drops and emergency panic hooks.
@@ -141,14 +141,16 @@ impl Drop for Crossterm {
 }
 
 impl Backend for Crossterm {
+    type Error = std::io::Error;
+
     #[allow(clippy::similar_names)]
-    fn draw<'a, I>(&mut self, content: I)
+    fn draw<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
         I: Iterator<Item = (Pos, &'a Tile)>,
     {
         // Begin synchronized update so the terminal holds rendering until
         // flush() sends the matching End marker.
-        let _ = crossterm::queue!(self.writer, crossterm::terminal::BeginSynchronizedUpdate);
+        crossterm::queue!(self.writer, crossterm::terminal::BeginSynchronizedUpdate)?;
 
         let mut last_fg = None;
         let mut last_bg = None;
@@ -180,21 +182,21 @@ impl Backend for Crossterm {
             // Only emit MoveTo when the cursor isn't already at the right position.
             let needs_move = cursor_y != Some(pos.y) || cursor_x != Some(pos.x);
             if needs_move {
-                let _ = crossterm::queue!(self.writer, crossterm::cursor::MoveTo(pos.x, pos.y));
+                crossterm::queue!(self.writer, crossterm::cursor::MoveTo(pos.x, pos.y))?;
             }
 
             if last_fg != Some(fg) {
-                let _ = crossterm::queue!(self.writer, crossterm::style::SetForegroundColor(fg));
+                crossterm::queue!(self.writer, crossterm::style::SetForegroundColor(fg))?;
                 last_fg = Some(fg);
             }
 
             if last_bg != Some(bg) {
-                let _ = crossterm::queue!(self.writer, crossterm::style::SetBackgroundColor(bg));
+                crossterm::queue!(self.writer, crossterm::style::SetBackgroundColor(bg))?;
                 last_bg = Some(bg);
             }
 
             if last_attrs != Some(attrs) {
-                let _ = crossterm::queue!(self.writer, crossterm::style::SetAttributes(attrs));
+                crossterm::queue!(self.writer, crossterm::style::SetAttributes(attrs))?;
                 last_attrs = Some(attrs);
             }
 
@@ -212,7 +214,7 @@ impl Backend for Crossterm {
                 {
                     cell_width = unicode_width::UnicodeWidthStr::width(s).max(1) as u16;
                 }
-                let _ = crossterm::queue!(self.writer, crossterm::style::Print(s));
+                crossterm::queue!(self.writer, crossterm::style::Print(s))?;
             }
             #[cfg(not(feature = "egc"))]
             {
@@ -221,7 +223,7 @@ impl Backend for Crossterm {
                     cell_width =
                         unicode_width::UnicodeWidthChar::width(cell.glyph()).unwrap_or(1) as u16;
                 }
-                let _ = crossterm::queue!(self.writer, crossterm::style::Print(cell.glyph()));
+                crossterm::queue!(self.writer, crossterm::style::Print(cell.glyph()))?;
             }
 
             // After printing, the terminal cursor advances by the cell's
@@ -229,11 +231,14 @@ impl Backend for Crossterm {
             cursor_x = Some(pos.x + cell_width);
             cursor_y = Some(pos.y);
         }
+        Ok(())
     }
 
-    fn flush(&mut self) {
-        let _ = crossterm::queue!(self.writer, crossterm::terminal::EndSynchronizedUpdate);
-        let _ = self.writer.flush();
+    fn flush(&mut self) -> Result<(), Self::Error> {
+        use std::io::Write;
+        crossterm::queue!(self.writer, crossterm::terminal::EndSynchronizedUpdate)?;
+        self.writer.flush()?;
+        Ok(())
     }
 
     fn size(&self) -> Size {
@@ -242,15 +247,17 @@ impl Backend for Crossterm {
     }
 
     fn resize(&mut self, _size: Size) {
-        self.clear();
+        let _ = self.clear();
     }
 
-    fn clear(&mut self) {
-        let _ = crossterm::queue!(
+    fn clear(&mut self) -> Result<(), Self::Error> {
+        use std::io::Write;
+        crossterm::queue!(
             self.writer,
             crossterm::terminal::Clear(crossterm::terminal::ClearType::All)
-        );
-        let _ = self.writer.flush();
+        )?;
+        self.writer.flush()?;
+        Ok(())
     }
 
     fn push_event(&mut self, _event: Event) {
@@ -294,6 +301,7 @@ impl Backend for Crossterm {
     }
 
     fn set_cursor_visible(&mut self, visible: bool) {
+        use std::io::Write;
         if visible {
             let _ = crossterm::queue!(self.writer, crossterm::cursor::Show);
         } else {
@@ -303,6 +311,7 @@ impl Backend for Crossterm {
     }
 
     fn set_cursor_position(&mut self, position: Pos) {
+        use std::io::Write;
         let _ = crossterm::queue!(
             self.writer,
             crossterm::cursor::MoveTo(position.x, position.y)

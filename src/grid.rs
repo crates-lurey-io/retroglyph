@@ -1,5 +1,6 @@
 //! The grid container.
 
+use crate::color::Color;
 #[cfg(feature = "egc")]
 use crate::style::Style;
 use crate::tile::Tile;
@@ -346,7 +347,7 @@ impl Grid {
     ///
     /// Only present when the `egc` feature is enabled.
     #[cfg(feature = "egc")]
-    pub fn write_grapheme(&mut self, x: u16, y: u16, grapheme: &str, style: Style) {
+    pub fn write_grapheme(&mut self, layer: u8, x: u16, y: u16, grapheme: &str, style: Style) {
         use unicode_width::UnicodeWidthStr;
 
         let width = u16::try_from(grapheme.width()).expect("grapheme width exceeds u16");
@@ -369,14 +370,13 @@ impl Grid {
         }
 
         // Clear any wide-char cell that would be partially overwritten.
-        // clear_overlap only needs dimensions as values (captured above).
-        self.clear_overlap(x, y, width);
+        self.clear_overlap(layer, x, y, width);
 
         // Capture width before borrowing self mutably.
         let grid_w = usize::from(self.width);
         let idx = usize::from(y) * grid_w + usize::from(x);
 
-        let lb = self.layer0_mut();
+        let lb = self.layer_or_alloc(layer);
         // Build cell content.
         let mut chars = grapheme.chars();
         let first = chars.next().unwrap_or(' ');
@@ -412,13 +412,11 @@ impl Grid {
 
     /// Clears wide-character cells that would be partially overwritten by a
     /// write starting at `(x, y)` spanning `width` columns.
-    ///
-    /// Operates on layer 0.
     #[cfg(feature = "egc")]
-    fn clear_overlap(&mut self, x: u16, y: u16, width: u16) {
+    fn clear_overlap(&mut self, layer: u8, x: u16, y: u16, width: u16) {
         let w = usize::from(self.width);
         let cap = w * usize::from(self.height);
-        let lb = self.layer0_mut();
+        let lb = self.layer_or_alloc(layer);
         for cx in x..x.saturating_add(width) {
             let idx = usize::from(y) * w + usize::from(cx);
             if idx >= cap {
@@ -471,6 +469,65 @@ impl Grid {
     pub fn get_tile(&self, layer: u8, x: u16, y: u16) -> Option<&Tile> {
         let pos = to_grixy_pos(Pos::new(x, y));
         self.layer(layer)?.buf.get(pos)
+    }
+
+    /// Copy tiles from `src` within `src_rect` to `self` at `(dst_x, dst_y)`
+    /// on `layer`. Tiles whose glyph is a space (the default) are treated as
+    /// transparent and skipped.
+    pub fn blit(&mut self, layer: u8, src: &Self, src_rect: Rect, dst_x: u16, dst_y: u16) {
+        for sy in src_rect.top()..src_rect.bottom() {
+            for sx in src_rect.left()..src_rect.right() {
+                let Some(tile) = src.get_tile(layer, sx, sy) else {
+                    continue;
+                };
+                if tile.glyph != ' ' {
+                    let dx = dst_x + sx.saturating_sub(src_rect.left());
+                    let dy = dst_y + sy.saturating_sub(src_rect.top());
+                    self.put_tile(layer, dx, dy, tile.clone());
+                }
+            }
+        }
+    }
+
+    /// Same as [`blit`](Self::blit) but blends foreground and background
+    /// colors with the given alpha factors. `fg_alpha` and `bg_alpha` are in
+    /// 0.0-1.0 range where 0.0 = keep destination, 1.0 = replace with src.
+    ///
+    /// Blending operates on packed RGB values; [`Color::Default`] preserves
+    /// the destination. Non-RGB color variants (Ansi/Indexed) are passed
+    /// through unblended.
+    #[allow(clippy::too_many_arguments, clippy::float_cmp)]
+    pub fn blit_alpha(
+        &mut self,
+        layer: u8,
+        src: &Self,
+        src_rect: Rect,
+        dst_x: u16,
+        dst_y: u16,
+        fg_alpha: f32,
+        bg_alpha: f32,
+    ) {
+        for sy in src_rect.top()..src_rect.bottom() {
+            for sx in src_rect.left()..src_rect.right() {
+                let Some(tile) = src.get_tile(layer, sx, sy) else {
+                    continue;
+                };
+                if tile.glyph != ' ' {
+                    let dx = dst_x + sx.saturating_sub(src_rect.left());
+                    let dy = dst_y + sy.saturating_sub(src_rect.top());
+                    let mut blended = tile.clone();
+                    if let Some(dst) = self.get_tile(layer, dx, dy) {
+                        if fg_alpha != 1.0 {
+                            blended.style.fg = blend_fg(tile.style.fg, dst.style.fg, fg_alpha);
+                        }
+                        if bg_alpha != 1.0 {
+                            blended.style.bg = blend_bg(tile.style.bg, dst.style.bg, bg_alpha);
+                        }
+                    }
+                    self.put_tile(layer, dx, dy, blended);
+                }
+            }
+        }
     }
 
     /// Yield `(layer_id, Pos, &Tile)` for every allocated cell across
@@ -547,6 +604,45 @@ impl Grid {
             layer_iter
         })
     }
+}
+
+/// Per-channel linear blend: `a + (b - a) * t`, rounded to u8.
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+fn lerp_u8(a: u8, b: u8, t: f32) -> u8 {
+    let diff = f32::from(b) - f32::from(a);
+    let result = diff.mul_add(t, f32::from(a));
+    result.round() as u8
+}
+
+/// Blend two [`Color`] values by interpolating RGB components.
+/// [`Color::Default`] preserves the destination. Non-RGB source colors are
+/// returned as-is (no resolution).
+#[allow(clippy::float_cmp)]
+fn blend_color(src: Color, dst: Color, t: f32) -> Color {
+    match (src, dst) {
+        (Color::Default, _) => Color::Default,
+        (
+            Color::Rgb {
+                r: sr,
+                g: sg,
+                b: sb,
+            },
+            Color::Rgb { r, g, b },
+        ) if t != 1.0 => Color::Rgb {
+            r: lerp_u8(sr, r, t),
+            g: lerp_u8(sg, g, t),
+            b: lerp_u8(sb, b, t),
+        },
+        (src, _) => src,
+    }
+}
+
+fn blend_fg(src: Color, dst: Color, t: f32) -> Color {
+    blend_color(src, dst, t)
+}
+
+fn blend_bg(src: Color, dst: Color, t: f32) -> Color {
+    blend_color(src, dst, t)
 }
 
 // ---------------------------------------------------------------------------

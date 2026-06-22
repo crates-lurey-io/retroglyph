@@ -84,21 +84,24 @@ impl Headless {
 }
 
 impl Backend for Headless {
-    fn draw<'a, I>(&mut self, content: I)
+    type Error = core::convert::Infallible;
+
+    fn draw<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
         I: Iterator<Item = (Pos, &'a Tile)>,
     {
         for (pos, cell) in content {
             self.grid.checked_put(pos.x, pos.y, cell.clone());
         }
+        Ok(())
     }
 
     fn resize(&mut self, size: Size) {
         self.grid.resize(size.width, size.height);
     }
 
-    fn flush(&mut self) {
-        // Headless backend is already in memory.
+    fn flush(&mut self) -> Result<(), Self::Error> {
+        Ok(())
     }
 
     fn size(&self) -> Size {
@@ -108,8 +111,9 @@ impl Backend for Headless {
         }
     }
 
-    fn clear(&mut self) {
+    fn clear(&mut self) -> Result<(), Self::Error> {
         self.grid.clear_all();
+        Ok(())
     }
 
     fn poll_event(&mut self, _timeout: Duration) -> Option<Event> {

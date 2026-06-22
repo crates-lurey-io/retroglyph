@@ -23,8 +23,6 @@ const ROOM_BOTTOM: u16 = 20;
 pub fn tick(term: &mut Terminal<impl Backend>, player: &mut Pos) -> bool {
     let size = term.size();
 
-    term.clear();
-
     // 1. Draw room boundary (box-drawing characters)
     term.fg(Color::Ansi(AnsiColor::White));
     for x in ROOM_LEFT + 1..ROOM_RIGHT {
@@ -62,7 +60,7 @@ pub fn tick(term: &mut Terminal<impl Backend>, player: &mut Pos) -> bool {
     );
 
     // Present double-buffered frame
-    term.present();
+    term.present().expect("present failed");
 
     // Handle input (non-blocking poll with ~60 FPS timeout)
     if let Some(event) = term.poll(Duration::from_millis(16)) {

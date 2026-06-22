@@ -17,11 +17,29 @@ use crate::grid::{Pos, Size};
 use crate::tile::Tile;
 use core::time::Duration;
 
+/// Associated error type used by all fallible backend methods.
+///
+/// Backends that are infallible (e.g. `Headless`, `SoftwareRenderer`) use
+/// [`core::convert::Infallible`].  Fallible backends (e.g. `Crossterm`) use
+/// [`std::io::Error`].
+pub trait BackendError: core::fmt::Display + core::fmt::Debug {}
+
+impl BackendError for core::convert::Infallible {}
+impl BackendError for std::io::Error {}
+
 /// A rendering backend that presents grid content to a display
 /// and provides input events.
 pub trait Backend {
+    /// Error type returned by fallible operations.
+    type Error: BackendError;
+
     /// Draw changed cells to the output surface.
-    fn draw<'a, I>(&mut self, content: I)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the backend cannot write to the output surface
+    /// (e.g., a broken pipe or closed terminal).
+    fn draw<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
         I: Iterator<Item = (Pos, &'a Tile)>;
 
@@ -34,7 +52,11 @@ pub trait Backend {
     /// When [`needs_full_frame`](Self::needs_full_frame) returns `true`, this
     /// receives **all** cells from every allocated layer, and the backend
     /// should clear its output surface before drawing.
-    fn draw_layers<'a, I>(&mut self, content: I)
+    ///
+    /// # Errors
+    ///
+    /// See [`draw`](Self::draw).
+    fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
         I: Iterator<Item = (u8, Pos, &'a Tile)>,
     {
@@ -42,7 +64,7 @@ pub trait Backend {
             |(layer, pos, tile)| {
                 if layer == 0 { Some((pos, tile)) } else { None }
             },
-        ));
+        ))
     }
 
     /// Returns `true` if the backend needs the **entire** frame (all cells on
@@ -59,14 +81,22 @@ pub trait Backend {
     }
 
     /// Flush buffered output to the display.
-    fn flush(&mut self);
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the backend cannot flush (e.g., a broken pipe).
+    fn flush(&mut self) -> Result<(), Self::Error>;
 
     /// Return current display dimensions.
     #[must_use]
     fn size(&self) -> Size;
 
     /// Clear the entire display.
-    fn clear(&mut self);
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the backend cannot clear the display.
+    fn clear(&mut self) -> Result<(), Self::Error>;
 
     /// Notify the backend of a terminal resize.
     ///
@@ -80,16 +110,6 @@ pub trait Backend {
 
     /// Poll for an input event, waiting up to `timeout`.
     fn poll_event(&mut self, timeout: Duration) -> Option<Event>;
-
-    /// Returns `false` if the backend has been disconnected from its
-    /// output (e.g. the window was closed). The game loop should
-    /// terminate when this returns `false`.
-    ///
-    /// The default implementation always returns `true`. Override for
-    /// backends that can detect disconnect.
-    fn is_connected(&self) -> bool {
-        true
-    }
 
     /// Show or hide the cursor.
     fn set_cursor_visible(&mut self, visible: bool);
