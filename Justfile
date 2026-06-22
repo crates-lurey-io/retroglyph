@@ -36,11 +36,15 @@ compile:
 
 doc:
     cargo doc --no-deps --document-private-items
-    cargo-llms-txt --output llms.txt --full llms-full.txt 2>/dev/null || true
-    @if [ -t 1 ]; then \
-        if command -v xdg-open > /dev/null; then xdg-open target/doc/retroglyph/index.html; \
-        elif command -v open > /dev/null; then open target/doc/retroglyph/index.html; \
-        fi \
+    @./bin/bin/cargo-llms-txt 2>/dev/null || true
+    @cp llms.txt llms-full.txt target/doc/ 2>/dev/null || true
+
+llms:
+    @./bin/bin/cargo-llms-txt 2>/dev/null || true
+
+docs-preview: doc
+    @if command -v xdg-open > /dev/null; then xdg-open target/doc/retroglyph/index.html; \
+    elif command -v open > /dev/null; then open target/doc/retroglyph/index.html; \
     fi
 
 # ── Test ─────────────────────────────────────────────────────────────────────
