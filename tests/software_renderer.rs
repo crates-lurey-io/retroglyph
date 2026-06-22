@@ -105,16 +105,13 @@ fn assert_png_snapshot(renderer: &SoftwareRenderer, name: &str) {
         return;
     }
 
-    let baseline = match std::fs::read(&expected) {
-        Ok(d) => d,
-        Err(_) => {
-            std::fs::write(&actual_path, &actual_png).expect("write actual PNG");
-            panic!(
-                "no baseline at {};\n  wrote actual to {}\n  set RG_SNAPSHOT_UPDATE=overwrite to accept",
-                expected.display(),
-                actual_path.display(),
-            );
-        }
+    let Ok(baseline) = std::fs::read(&expected) else {
+        std::fs::write(&actual_path, &actual_png).expect("write actual PNG");
+        panic!(
+            "no baseline at {};\n  wrote actual to {}\n  set RG_SNAPSHOT_UPDATE=overwrite to accept",
+            expected.display(),
+            actual_path.display(),
+        );
     };
 
     // Fast-path: byte-identical PNG.

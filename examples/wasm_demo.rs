@@ -1,9 +1,9 @@
 //! WASM-compatible software backend demo.
 //!
 //! Run with:
-//!   `cargo run --target wasm32-unknown-unknown --example wasm_demo --features software-default-font`
+//!   cargo run --target wasm32-unknown-unknown --example `wasm_demo` --features software-default-font
 //!
-//! (Requires `wasm-server-runner` and a browser. Opens http://127.0.0.1:1334.)
+//! (Requires `wasm-server-runner` and a browser. Opens <http://127.0.0.1:1334>.)
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;

@@ -243,10 +243,10 @@ impl Backend for Crossterm {
 
             match crossterm::event::poll(poll_timeout) {
                 Ok(true) => {
-                    if let Ok(event) = crossterm::event::read() {
-                        if let Ok(mapped) = Event::try_from(event) {
-                            return Some(mapped);
-                        }
+                    if let Ok(event) = crossterm::event::read()
+                        && let Ok(mapped) = Event::try_from(event)
+                    {
+                        return Some(mapped);
                     }
                 }
                 Ok(false) => {
