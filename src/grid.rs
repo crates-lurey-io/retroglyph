@@ -142,6 +142,8 @@ pub struct Grid {
     /// Indexed by layer ID (0–255). Index 0 is always `Some`.
     /// Unwritten layers are `None` — no allocation until first write.
     layers: Vec<Option<LayerBuf>>,
+    /// Highest layer ID that has been allocated. Always at least 0.
+    max_layer: u8,
 }
 
 // ---------------------------------------------------------------------------
@@ -159,6 +161,9 @@ impl Grid {
         let idx = usize::from(id);
         if self.layers[idx].is_none() {
             self.layers[idx] = Some(LayerBuf::new(self.width, self.height));
+        }
+        if id > self.max_layer {
+            self.max_layer = id;
         }
         self.layers[idx].as_mut().unwrap()
     }
@@ -193,6 +198,7 @@ impl Grid {
             width,
             height,
             layers,
+            max_layer: 0,
         }
     }
 
@@ -468,23 +474,25 @@ impl Grid {
     }
 
     /// Yield `(layer_id, Pos, &Tile)` for every allocated cell across
-    /// all layers, in layer-major (0 → 255) then row-major order.
+    /// all layers, in layer-major (0 → `max_layer`) then row-major order.
     ///
     /// Unallocated layers are skipped. This is used by backends that need
     /// the full frame on every draw (see [`crate::Backend::needs_full_frame`]).
+    ///
+    /// This iterator is zero-allocation: it walks the layer buffers inline.
     pub fn layers(&self) -> impl Iterator<Item = (u8, Pos, &Tile)> + '_ {
-        let mut results = Vec::new();
-        for id in 0u8..=255 {
-            if let Some(lb) = self.layer(id) {
-                #[allow(clippy::cast_possible_truncation)]
-                for (i, tile) in lb.buf.as_ref().iter().enumerate() {
-                    let x = (i % usize::from(self.width)) as u16;
-                    let y = (i / usize::from(self.width)) as u16;
-                    results.push((id, Pos::new(x, y), tile));
-                }
-            }
-        }
-        results.into_iter()
+        let width = usize::from(self.width);
+        (0..=self.max_layer)
+            .filter_map(move |id| self.layer(id).map(|lb| (id, lb)))
+            .flat_map(move |(id, lb)| {
+                lb.buf.as_ref().iter().enumerate().map(move |(i, tile)| {
+                    #[allow(clippy::cast_possible_truncation)]
+                    let x = (i % width) as u16;
+                    #[allow(clippy::cast_possible_truncation)]
+                    let y = (i / width) as u16;
+                    (id, Pos::new(x, y), tile)
+                })
+            })
     }
 
     /// Clear every allocated layer.
@@ -495,36 +503,49 @@ impl Grid {
     }
 
     /// Yield `(layer_id, Pos, &Tile)` for every changed position across all
-    /// layers, in layer-major (0 → 255) then row-major order.
+    /// layers, in layer-major (0 → `max_layer`) then row-major order.
     ///
     /// Three cases per layer:
     /// - Layer absent in `self`: nothing yielded.
     /// - Layer in `self`, absent in `other` (newly allocated): all
     ///   `width × height` tiles yielded.
     /// - Layer in both: only positions where the `Tile` differs are yielded.
+    ///
+    /// This iterator is zero-allocation: it walks the layer buffers inline.
     pub fn diff<'a>(&'a self, other: &'a Self) -> impl Iterator<Item = (u8, Pos, &'a Tile)> + 'a {
-        let mut results = Vec::new();
-        for id in 0u8..=255 {
-            match (self.layer(id), other.layer(id)) {
-                (None, _) => {}
-                (Some(cur), None) => {
+        let width = usize::from(self.width);
+        let max = self.max_layer;
+        (0..=max).flat_map(move |id| {
+            let cur = self.layer(id);
+            let prev = other.layer(id);
+            let layer_iter: Box<dyn Iterator<Item = (u8, Pos, &'a Tile)> + 'a> = match (cur, prev) {
+                (None, _) => Box::new(core::iter::empty()),
+                (Some(cur_lb), None) => {
                     // Newly allocated layer: all cells are "changed".
-                    // TODO(M3): avoid Vec allocation, use Either-style iterator.
-                    #[allow(clippy::cast_possible_truncation)]
-                    for (i, tile) in cur.buf.as_ref().iter().enumerate() {
-                        let x = (i % usize::from(self.width)) as u16;
-                        let y = (i / usize::from(self.width)) as u16;
-                        results.push((id, Pos::new(x, y), tile));
-                    }
+                    Box::new(
+                        cur_lb
+                            .buf
+                            .as_ref()
+                            .iter()
+                            .enumerate()
+                            .map(move |(i, tile)| {
+                                #[allow(clippy::cast_possible_truncation)]
+                                let x = (i % width) as u16;
+                                #[allow(clippy::cast_possible_truncation)]
+                                let y = (i / width) as u16;
+                                (id, Pos::new(x, y), tile)
+                            }),
+                    )
                 }
-                (Some(cur), Some(prev)) => {
-                    for (pos, tile) in cur.buf.diff(&prev.buf) {
-                        results.push((id, from_grixy_pos(pos), tile));
-                    }
-                }
-            }
-        }
-        results.into_iter()
+                (Some(cur_lb), Some(prev_lb)) => Box::new(
+                    cur_lb
+                        .buf
+                        .diff(&prev_lb.buf)
+                        .map(move |(pos, tile)| (id, from_grixy_pos(pos), tile)),
+                ),
+            };
+            layer_iter
+        })
     }
 }
 
