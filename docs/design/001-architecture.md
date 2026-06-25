@@ -1,6 +1,7 @@
 # ADR 001: Architecture
 
-**Status:**Draft**Date:** 2026-06-15
+**Status:** Superseded **Date:** 2026-06-15 **Superseded by:**
+[ADR 014: Workspace Split](014-workspace-split.md)
 
 ## Context
 

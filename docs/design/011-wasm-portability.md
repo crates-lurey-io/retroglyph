@@ -1,6 +1,7 @@
 # ADR 011: WASM Portability Roadmap
 
-**Status:**Draft**Date:**2026-06-20**Parent:**
+**Status:** Superseded **Date:** 2026-06-20 **Superseded by:**
+[ADR 011: WASM Portability (Revised)](011-wasm-portability-revised.md) **Parent:**
 [ADR 007: Software Rendering Backend](007-software-backend.md)
 
 ## Context

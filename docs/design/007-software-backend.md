@@ -1,6 +1,6 @@
 # ADR 007: Software Rendering Backend
 
-**Status:**Draft**Date:**2026-06-19**Parent:** [ADR 001: Architecture](001-architecture.md)
+**Status:** Accepted **Date:** 2026-06-19 **Parent:** [ADR 001: Architecture](001-architecture.md)
 
 ## Context
 

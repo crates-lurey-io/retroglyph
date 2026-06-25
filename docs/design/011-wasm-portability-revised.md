@@ -1,6 +1,6 @@
 # ADR 011: WASM Portability Roadmap (Revised)
 
-**Status:** Draft **Date:** 2026-06-20 **Deps:**
+**Status:** Accepted **Date:** 2026-06-20 **Deps:**
 [ADR 007: Software Rendering Backend](007-software-backend.md) **Replaces:**
 `011-wasm-portability.md`
 

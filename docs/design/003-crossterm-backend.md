@@ -1,6 +1,6 @@
 # ADR 003: Crossterm Backend Implementation Plan
 
-**Status:**Draft**Date:**2026-06-17**Parent:** [ADR 001: Architecture](001-architecture.md)
+**Status:** Accepted **Date:** 2026-06-17 **Parent:** [ADR 001: Architecture](001-architecture.md)
 
 ## Context
 

@@ -1,6 +1,6 @@
 # ADR 005: Animated Cast Recording for Test Documentation
 
-## Status:**Draft**Date:**2026-06-17**Parent
+## Status:**Deferred**Date:**2026-06-17**Parent
 
 [ADR 004: E2E and Screenshot Testing Strategy](004-testing-strategy.md)
 

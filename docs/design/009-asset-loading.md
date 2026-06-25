@@ -1,6 +1,6 @@
 # ADR 009: Tilesets, Sprite Sheets, and Asset Loading
 
-**Status:**Draft**Date:**2026-06-19**Parent:** [ADR 001: Architecture](001-architecture.md)
+**Status:** Accepted **Date:** 2026-06-19 **Parent:** [ADR 001: Architecture](001-architecture.md)
 
 ## Context
 
