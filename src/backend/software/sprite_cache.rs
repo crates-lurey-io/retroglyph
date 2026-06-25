@@ -256,6 +256,23 @@ mod tests {
     }
 
     #[test]
+    fn sprite_cache_load_identity_codepage() {
+        let png = make_test_png(16, 16, 4, 1); // 4 tiles: index 0..3
+        let opts = TilesetOptions::from_bytes(png)
+            .tile_size(16, 16)
+            .codepage(Codepage::Identity)
+            .build()
+            .unwrap();
+        let mut cache = SpriteCache::new();
+        cache.load(&opts).unwrap();
+        // Tile 0 -> char '\0', tile 1 -> '\x01', etc.
+        assert!(cache.get('\0').is_some());
+        assert!(cache.get('\x01').is_some());
+        assert!(cache.get('\x03').is_some());
+        assert!(cache.get('\x04').is_none()); // only 4 tiles
+    }
+
+    #[test]
     fn sprite_cache_custom_codepage_stops_at_table_end() {
         let png = make_test_png(16, 16, 4, 1); // 4 tiles
         let opts = TilesetOptions::from_bytes(png)
