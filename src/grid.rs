@@ -112,6 +112,8 @@ impl<'a> Iterator for CellsMut<'a> {
 ///
 /// Layer 0 is always allocated. Layers 1–255 are allocated on first write
 /// (see [`Grid::put_tile`]).
+// TODO: derive Clone once ixy's RowMajor (a ZST layout marker) implements Clone/Copy.
+// Blocked on upstream: https://github.com/crates-lurey-io/ixy
 pub(crate) struct LayerBuf {
     pub(crate) buf: GridBuf<Tile, Vec<Tile>, RowMajor>,
 }
