@@ -55,9 +55,12 @@ docs-preview: doc
 # ── Test ─────────────────────────────────────────────────────────────────────
 
 test:
+    # Build examples first so e2e_snapshot tests can find them.
+    cargo build --examples --all-features
     cargo test --all-features
 
 test-v:
+    cargo build --examples --all-features
     cargo test --all-features -- --nocapture
 
 # ── Dependencies ─────────────────────────────────────────────────────────────
@@ -83,7 +86,12 @@ insta:
 deny: deny-advisories deny-licenses
 
 coverage:
-    cargo llvm-cov --all-features --html --open
+    @which cargo-llvm-cov 2>/dev/null || cargo install cargo-llvm-cov
+    cargo llvm-cov --lib --all-features --html --open
+
+coverage-ci:
+    @which cargo-llvm-cov 2>/dev/null || cargo install cargo-llvm-cov
+    cargo llvm-cov --lib --all-features --lcov --output-path lcov.info
 
 # ── Setup ────────────────────────────────────────────────────────────────────
 

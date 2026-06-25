@@ -1,6 +1,6 @@
 # ADR 013: Code Coverage with Codecov
 
-**Status:** Draft  
+**Status:** Accepted  
 **Date:** 2026-06-21  
 **Parent:** [ADR 004: Testing Strategy](004-testing-strategy.md)
 
