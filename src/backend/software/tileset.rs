@@ -68,6 +68,16 @@ pub enum Codepage {
         /// Codepoint of the first tile; subsequent tiles increment by 1.
         start: char,
     },
+    /// Positional mapping: tile index `i` maps to `char::from_u32(i)`.
+    ///
+    /// This is the simplest option when you don't care about Unicode semantics
+    /// and just want to reference tiles by a zero-based index. Use
+    /// [`Tile::glyph`](crate::Tile::glyph) values 0, 1, 2, … to address
+    /// individual sprites in sheet order.
+    ///
+    /// Tiles whose index falls in the surrogate range (0xD800–0xDFFF) are
+    /// skipped; all others are valid.
+    Identity,
     /// Explicit mapping: tile `i` maps to `table[i]`.
     ///
     /// Tiles beyond `table.len()` are ignored.
@@ -86,16 +96,17 @@ impl Codepage {
                 let scalar = (*start as u32).checked_add(i as u32)?;
                 char::from_u32(scalar)
             }
+            Self::Identity => char::from_u32(i as u32),
             Self::Custom(table) => table.get(i).copied(),
         }
     }
 
-    /// Number of tiles this codepage defines, or `None` for `Unicode` (unbounded).
+    /// Number of tiles this codepage defines, or `None` for unbounded variants.
     #[must_use]
     pub const fn len(&self) -> Option<usize> {
         match self {
             Self::Cp437 => Some(256),
-            Self::Unicode { .. } => None,
+            Self::Unicode { .. } | Self::Identity => None,
             Self::Custom(t) => Some(t.len()),
         }
     }
@@ -167,6 +178,9 @@ pub struct TilesetOptions {
 
 impl TilesetOptions {
     /// Starts building a tileset from raw PNG bytes.
+    ///
+    /// Pass `include_bytes!("...").to_vec()` to embed the asset at compile
+    /// time, or `std::fs::read(path)?` to load it at runtime.
     #[must_use]
     pub const fn from_bytes(bytes: Vec<u8>) -> TilesetBuilder {
         TilesetBuilder {
@@ -186,18 +200,47 @@ impl TilesetOptions {
 ///
 /// Construct via [`TilesetOptions::from_bytes`].
 ///
-/// # Example
+/// [`columns`](TilesetBuilder::columns) defaults to `image_width / tile_width`,
+/// so you usually don't need to set it explicitly. [`codepage`](TilesetBuilder::codepage)
+/// defaults to [`Codepage::Cp437`].
+///
+/// # Examples
+///
+/// Standard CP437 tileset:
 ///
 /// ```ignore
-/// use retroglyph::backend::software::tileset::{
-///     Codepage, TilesetOptions,
-/// };
+/// use retroglyph::backend::software::tileset::TilesetOptions;
 ///
-/// let png_data: Vec<u8> = vec![]; // real PNG data
-/// let opts = TilesetOptions::from_bytes(png_data)
+/// let png: Vec<u8> = std::fs::read("assets/cp437_16x16.png").unwrap();
+/// let opts = TilesetOptions::from_bytes(png)
+///     .tile_size(16, 16) // codepage defaults to Cp437
+///     .build()
+///     .unwrap();
+/// ```
+///
+/// Private-use sprite sheet addressed by index:
+///
+/// ```ignore
+/// use retroglyph::backend::software::tileset::{Codepage, TilesetOptions};
+///
+/// let png: Vec<u8> = std::fs::read("assets/sprites.png").unwrap();
+/// let opts = TilesetOptions::from_bytes(png)
+///     .tile_size(32, 32)
+///     .codepage(Codepage::Identity) // tile 0 = '\0', tile 1 = '\x01', …
+///     .spacing(2, 2)                // each sprite occupies 2×2 grid cells
+///     .build()
+///     .unwrap();
+/// ```
+///
+/// Unicode private-use area sprite sheet:
+///
+/// ```ignore
+/// use retroglyph::backend::software::tileset::TilesetOptions;
+///
+/// let png: Vec<u8> = std::fs::read("assets/monsters.png").unwrap();
+/// let opts = TilesetOptions::from_bytes(png)
 ///     .tile_size(16, 16)
-///     .start_codepoint('\u{E000}')
-///     .spacing(2, 2)
+///     .start_codepoint('\u{E000}') // maps to Unicode PUA starting at U+E000
 ///     .build()
 ///     .unwrap();
 /// ```
@@ -350,6 +393,17 @@ mod tests {
         assert_eq!(Codepage::Cp437.codepoint(64), Some('@'));
         assert_eq!(Codepage::Cp437.codepoint(176), Some('\u{2591}'));
         assert_eq!(Codepage::Cp437.codepoint(256), None);
+    }
+
+    #[test]
+    fn identity_codepage_positional() {
+        assert_eq!(Codepage::Identity.codepoint(0), Some('\0'));
+        assert_eq!(Codepage::Identity.codepoint(65), Some('A'));
+        // Surrogate range must be skipped.
+        assert_eq!(Codepage::Identity.codepoint(0xD800), None);
+        assert_eq!(Codepage::Identity.codepoint(0xDFFF), None);
+        // Above surrogates is fine.
+        assert_eq!(Codepage::Identity.codepoint(0xE000), Some('\u{E000}'));
     }
 
     #[test]
