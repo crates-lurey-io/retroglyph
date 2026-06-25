@@ -1,6 +1,6 @@
 # ADR 002: Foundations Implementation Plan
 
-**Status:**Draft**Date:**2026-06-15**Parent:** [ADR 001: Architecture](001-architecture.md)
+**Status:** Accepted **Date:** 2026-06-15 **Parent:** [ADR 001: Architecture](001-architecture.md)
 
 ## Context
 

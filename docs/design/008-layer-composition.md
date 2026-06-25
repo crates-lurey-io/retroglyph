@@ -1,6 +1,6 @@
 # ADR 008: Layers and Sub-cell Offsets
 
-**Status:**Draft**Date:**2026-06-20**Parent:** [ADR 001: Architecture](001-architecture.md)
+**Status:** Accepted **Date:** 2026-06-20 **Parent:** [ADR 001: Architecture](001-architecture.md)
 
 ## Context
 

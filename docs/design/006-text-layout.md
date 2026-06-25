@@ -1,6 +1,6 @@
 # ADR 006: Extended Grapheme Clusters & Text Layout
 
-**Status:**Draft**Date:**2026-06-18**Parent:** [ADR 001: Architecture](001-architecture.md)
+**Status:** Accepted **Date:** 2026-06-18 **Parent:** [ADR 001: Architecture](001-architecture.md)
 
 ## Context
 

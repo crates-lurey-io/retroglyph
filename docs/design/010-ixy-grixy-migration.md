@@ -1,6 +1,6 @@
 # ADR 010: Migrate `retroglyph` to `ixy` and `grixy`
 
-**Status:**Draft**Date:** 2026-06-19
+**Status:** Accepted **Date:** 2026-06-19
 
 ## Context
 
