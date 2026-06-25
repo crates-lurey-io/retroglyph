@@ -1,5 +1,7 @@
 # retroglyph
 
+[![codecov](https://codecov.io/gh/crates-lurey-io/retroglyph/graph/badge.svg?token=z8BBUp8fiY)](https://codecov.io/gh/crates-lurey-io/retroglyph)
+
 A 2D pseudographic terminal library for Rust.
 
 ![crossterm demo](tests/snapshots/crossterm_demo.svg)
