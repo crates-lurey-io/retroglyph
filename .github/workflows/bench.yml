@@ -1,0 +1,77 @@
+name: Benchmarks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [labeled]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  bench:
+    if:
+      github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'benchmark')
+    runs-on: ubuntu-latest
+    permissions:
+      checks: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: bencherdev/bencher@main
+      - uses: cargo-bins/cargo-binstall@v1.13.0
+      - name: Install cargo-criterion
+        run: cargo binstall cargo-criterion --no-confirm -q
+
+      # Remove the label first so it's always cleaned up, even if the bench step fails.
+      - name: Remove benchmark label
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh pr edit ${{ github.event.pull_request.number }} --remove-label benchmark
+
+      # On main: track data points for historical comparison.
+      - name: Benchmark (track)
+        if: github.event_name == 'push'
+        env:
+          BENCHER_PROJECT: retroglyph
+          BENCHER_TESTBED: ubuntu-latest
+          BENCHER_ADAPTER: rust_criterion
+          BENCHER_API_KEY: ${{ secrets.BENCHER_API_TOKEN }}
+        run: |
+          bencher run \
+            --branch main \
+            --threshold-measure latency \
+            --threshold-test t_test \
+            --threshold-max-sample-size 64 \
+            --threshold-upper-boundary 0.99 \
+            --thresholds-reset \
+            --error-on-alert \
+            --github-actions '${{ secrets.GITHUB_TOKEN }}' \
+            "cargo criterion --bench retroglyph --features software-default-font --message-format json"
+
+      # On labeled PRs: run the PR branch, compare against main's historical data.
+      - name: Benchmark (check PR)
+        if: github.event_name == 'pull_request'
+        env:
+          BENCHER_PROJECT: retroglyph
+          BENCHER_TESTBED: ubuntu-latest
+          BENCHER_ADAPTER: rust_criterion
+          BENCHER_API_KEY: ${{ secrets.BENCHER_API_TOKEN }}
+        run: |
+          bencher run \
+            --branch "$GITHUB_HEAD_REF" \
+            --start-point "$GITHUB_BASE_REF" \
+            --start-point-hash '${{ github.event.pull_request.base.sha }}' \
+            --start-point-clone-thresholds \
+            --start-point-reset \
+            --error-on-alert \
+            --github-actions '${{ secrets.GITHUB_TOKEN }}' \
+            "cargo criterion --bench retroglyph --features software-default-font --message-format json"

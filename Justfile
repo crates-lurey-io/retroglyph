@@ -63,6 +63,12 @@ test-v:
     cargo build --examples --all-features
     cargo test --all-features -- --nocapture
 
+# Run benchmarks locally. Install cargo-criterion first: cargo install cargo-criterion
+# To save a baseline: just bench -- --save-baseline main
+# To compare:        just bench -- --baseline main
+bench *args:
+    cargo bin cargo-criterion --bench retroglyph --features software-default-font {{ args }}
+
 # ── Dependencies ─────────────────────────────────────────────────────────────
 
 deny-advisories:
