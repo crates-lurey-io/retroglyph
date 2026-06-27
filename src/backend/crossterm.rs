@@ -283,6 +283,12 @@ impl Backend for Crossterm {
                     {
                         return Some(mapped);
                     }
+                    // An unmappable event was consumed. In non-blocking mode
+                    // (timeout zero, used by drain_events), retry immediately
+                    // so we don't stop draining with events still buffered.
+                    if timeout.is_zero() {
+                        continue;
+                    }
                 }
                 Ok(false) => {
                     // Timeout elapsed on this poll chunk.

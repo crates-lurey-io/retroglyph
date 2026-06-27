@@ -366,6 +366,37 @@ impl<B: Backend> Terminal<B> {
             .expect("read() called but no events available")
     }
 
+    /// Drains all available events without blocking.
+    ///
+    /// Returns an iterator that yields every pending event — the internal queued event
+    /// followed by all events buffered in the backend. The iterator polls the backend
+    /// with zero timeout repeatedly until `None` is returned.
+    ///
+    /// This is needed for frame-based game loops (e.g. software backend + WASM, where
+    /// frames are gated by `requestAnimationFrame`). Multiple keypresses can arrive
+    /// between frames; draining all of them ensures accumulated input doesn't replay in
+    /// slow motion.
+    ///
+    /// Crossterm and headless backends can also use this, but the single-event `poll`
+    /// pattern works for them because their loops aren't frame-capped.
+    pub fn drain_events(&mut self) -> impl Iterator<Item = Event> + use<'_, B> {
+        struct DrainEvents<'a, B: Backend> {
+            terminal: &'a mut Terminal<B>,
+        }
+
+        impl<B: Backend> Iterator for DrainEvents<'_, B> {
+            type Item = Event;
+
+            fn next(&mut self) -> Option<Event> {
+                self.terminal.poll(Duration::ZERO)
+            }
+        }
+
+        impl<B: Backend> core::iter::FusedIterator for DrainEvents<'_, B> {}
+
+        DrainEvents { terminal: self }
+    }
+
     /// Checks if a pending input event is available without blocking.
     ///
     /// If an event is already buffered, returns `true`. Otherwise, polls the backend

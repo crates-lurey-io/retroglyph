@@ -8,7 +8,6 @@
 use retroglyph::color::{AnsiColor, Color};
 use retroglyph::event::{Event, KeyCode};
 use retroglyph::{Backend, Pos, Terminal};
-use std::time::Duration;
 
 // Fixed room size in world space. The terminal clips on small windows rather
 // than resizing the room, so positions are stable across resize events.
@@ -43,11 +42,13 @@ impl GameState {
 /// caller to stop the loop rather than calling `process::exit` directly —
 /// backends like `Crossterm` restore the terminal on `Drop`.
 pub fn tick(term: &mut Terminal<impl Backend>, state: &mut GameState) -> bool {
-    // 1. Poll for input and update state before drawing.
-    //    This way the result is visible in the same frame that produced it,
-    //    which also makes headless tests straightforward: push an event, call
-    //    tick, inspect the grid — no extra frame needed.
-    if let Some(event) = term.poll(Duration::from_millis(16)) {
+    // Poll for input and update state before drawing.
+    //
+    // drain_events pulls *all* buffered events. This is required for the software
+    // backend on WASM, where requestAnimationFrame gates frame delivery to ~60 fps.
+    // If we only poll one event per frame, rapid keypresses replay in slow motion.
+    // On crossterm the loop is uncapped, so drain vs poll makes no visible difference.
+    for event in term.drain_events() {
         match event {
             Event::Key(key_event) => match key_event.code {
                 KeyCode::Up | KeyCode::Char('w') => {

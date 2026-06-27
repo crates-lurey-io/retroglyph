@@ -3,6 +3,7 @@
 use retroglyph::Terminal;
 use retroglyph::backend::Headless;
 use retroglyph::color::Color;
+use retroglyph::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use retroglyph::style::Style;
 
 #[test]
@@ -140,4 +141,40 @@ fn test_e2e_headless_demo_scenario() {
 └──────────────────────────────────────┘
 ";
     assert_eq!(term.backend().grid().to_string(), expected_frame_2);
+}
+
+// ── drain_events tests ────────────────────────────────────────────────────
+
+const fn key(c: char) -> Event {
+    Event::Key(KeyEvent {
+        code: KeyCode::Char(c),
+        modifiers: KeyModifiers::NONE,
+    })
+}
+
+#[test]
+fn drain_events_returns_all_buffered() {
+    let mut term = Terminal::new(Headless::new(80, 24));
+    term.backend_mut().push_event(key('a'));
+    term.backend_mut().push_event(key('b'));
+    term.backend_mut().push_event(key('c'));
+
+    let count = term.drain_events().count();
+    assert_eq!(count, 3);
+}
+
+#[test]
+fn drain_events_empty() {
+    let mut term = Terminal::new(Headless::new(80, 24));
+    assert!(term.drain_events().next().is_none());
+}
+
+#[test]
+fn drain_events_includes_queued_from_has_input() {
+    let mut term = Terminal::new(Headless::new(80, 24));
+    term.backend_mut().push_event(key('x'));
+    term.backend_mut().push_event(key('y'));
+    assert!(term.has_input()); // moves first event into queued_event
+
+    assert_eq!(term.drain_events().count(), 2); // queued + buffered
 }

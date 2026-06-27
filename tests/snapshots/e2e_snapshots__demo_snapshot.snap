@@ -1,6 +1,5 @@
 ---
 source: tests/e2e_snapshots.rs
-assertion_line: 237
 expression: svg
 ---
 <svg xmlns="http://www.w3.org/2000/svg" width="520" height="286">
