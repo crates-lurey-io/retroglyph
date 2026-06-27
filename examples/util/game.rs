@@ -1,4 +1,9 @@
 //! Shared game loop for rg examples.
+#![allow(dead_code)] // not every example uses every item in this module
+//!
+//! The [`GameState`] struct and [`tick`] function are used by both the
+//! interactive demos and the headless demo, which injects events and
+//! inspects the grid directly — the same technique used in unit tests.
 
 use retroglyph::color::{AnsiColor, Color};
 use retroglyph::event::{Event, KeyCode};
@@ -12,18 +17,70 @@ const ROOM_TOP: u16 = 2;
 const ROOM_RIGHT: u16 = 40;
 const ROOM_BOTTOM: u16 = 20;
 
+/// State for the shared interactive demo.
+///
+/// Create with [`GameState::new`] and drive one frame at a time with [`tick`].
+pub struct GameState {
+    /// Player position in grid coordinates.
+    pub player: Pos,
+}
+
+impl GameState {
+    /// Create a new game state with the player at the default starting position.
+    pub const fn new<B: Backend>(_term: &mut Terminal<B>) -> Self {
+        Self {
+            player: Pos::new(5, 5),
+        }
+    }
+}
+
 /// Run one tick of the demo game loop.
 ///
-/// Call this from your backend's frame closure or loop body.
-/// Updates `player` position based on input events.
+/// Polls for input first, updates state, then draws and presents the frame.
+/// Input is therefore visible in the same frame it arrives — no one-frame lag.
 ///
-/// Returns `false` when the user quits (ESC or Q). The caller should stop
-/// the game loop on `false` rather than calling `process::exit`, so that
-/// backends like `Crossterm` get their `Drop` • which restores the terminal.
-pub fn tick(term: &mut Terminal<impl Backend>, player: &mut Pos) -> bool {
+/// Returns `false` when the user requests quit (Esc or Q), signalling the
+/// caller to stop the loop rather than calling `process::exit` directly —
+/// backends like `Crossterm` restore the terminal on `Drop`.
+pub fn tick(term: &mut Terminal<impl Backend>, state: &mut GameState) -> bool {
+    // 1. Poll for input and update state before drawing.
+    //    This way the result is visible in the same frame that produced it,
+    //    which also makes headless tests straightforward: push an event, call
+    //    tick, inspect the grid — no extra frame needed.
+    if let Some(event) = term.poll(Duration::from_millis(16)) {
+        match event {
+            Event::Key(key_event) => match key_event.code {
+                KeyCode::Up | KeyCode::Char('w') => {
+                    if state.player.y > ROOM_TOP + 1 {
+                        state.player.y -= 1;
+                    }
+                }
+                KeyCode::Down | KeyCode::Char('s') => {
+                    if state.player.y < ROOM_BOTTOM - 1 {
+                        state.player.y += 1;
+                    }
+                }
+                KeyCode::Left | KeyCode::Char('a') => {
+                    if state.player.x > ROOM_LEFT + 1 {
+                        state.player.x -= 1;
+                    }
+                }
+                KeyCode::Right | KeyCode::Char('d') => {
+                    if state.player.x < ROOM_RIGHT - 1 {
+                        state.player.x += 1;
+                    }
+                }
+                KeyCode::Escape | KeyCode::Char('q') => return false,
+                _ => {}
+            },
+            Event::Close => return false,
+            _ => {}
+        }
+    }
+
     let size = term.size();
 
-    // 1. Draw room boundary (box-drawing characters)
+    // 2. Draw room boundary (box-drawing characters)
     term.fg(Color::Ansi(AnsiColor::White));
     for x in ROOM_LEFT + 1..ROOM_RIGHT {
         term.put(x, ROOM_TOP, '─');
@@ -38,7 +95,7 @@ pub fn tick(term: &mut Terminal<impl Backend>, player: &mut Pos) -> bool {
     term.put(ROOM_LEFT, ROOM_BOTTOM, '└');
     term.put(ROOM_RIGHT, ROOM_BOTTOM, '┘');
 
-    // 2. Draw Enemy (Red D) — fixed center of the room
+    // 3. Draw enemy (red D) at room center
     term.fg(Color::Ansi(AnsiColor::Red));
     term.put(
         u16::midpoint(ROOM_LEFT, ROOM_RIGHT),
@@ -46,12 +103,12 @@ pub fn tick(term: &mut Terminal<impl Backend>, player: &mut Pos) -> bool {
         'D',
     );
 
-    // 3. Draw Player (@ - Green)
+    // 4. Draw player at the (possibly just-updated) position
     term.fg(Color::Ansi(AnsiColor::Green));
-    term.put(player.x, player.y, '@');
+    term.put(state.player.x, state.player.y, '@');
     term.reset_style();
 
-    // 4. Draw UI status line
+    // 5. Status lines
     term.print(2, 0, "rg Library — Interactive Demo");
     term.print(
         2,
@@ -59,42 +116,7 @@ pub fn tick(term: &mut Terminal<impl Backend>, player: &mut Pos) -> bool {
         "HP: 100 | Arrow Keys to move, Q or ESC to Quit",
     );
 
-    // Present double-buffered frame
     term.present().expect("present failed");
-
-    // Handle input (non-blocking poll with ~60 FPS timeout)
-    if let Some(event) = term.poll(Duration::from_millis(16)) {
-        match event {
-            Event::Key(key_event) => match key_event.code {
-                KeyCode::Up | KeyCode::Char('w') => {
-                    if player.y > ROOM_TOP + 1 {
-                        player.y -= 1;
-                    }
-                }
-                KeyCode::Down | KeyCode::Char('s') => {
-                    if player.y < ROOM_BOTTOM - 1 {
-                        player.y += 1;
-                    }
-                }
-                KeyCode::Left | KeyCode::Char('a') => {
-                    if player.x > ROOM_LEFT + 1 {
-                        player.x -= 1;
-                    }
-                }
-                KeyCode::Right | KeyCode::Char('d') => {
-                    if player.x < ROOM_RIGHT - 1 {
-                        player.x += 1;
-                    }
-                }
-                KeyCode::Escape | KeyCode::Char('q') => {
-                    return false;
-                }
-                _ => {}
-            },
-            Event::Close => return false,
-            _ => {}
-        }
-    }
 
     true
 }

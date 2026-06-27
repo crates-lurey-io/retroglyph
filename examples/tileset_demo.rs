@@ -1,9 +1,9 @@
 //! Tileset demo: custom PNG sprite sheets with alpha transparency.
 //!
-//! Generates a small 6-tile sprite sheet at runtime with actual pixel-art
-//! sprites (sword, potion, chest, skull, shield, coin) on a transparent
-//! background, registers it as a tileset with `Codepage::Unicode`, and
-//! draws them overlaying the bitmap-font background.
+//! Generates a small 4-tile sprite sheet at runtime with actual pixel-art
+//! sprites (sword, potion, skull, coin) on a transparent background,
+//! registers it as a tileset with `Codepage::Unicode`, and draws them
+//! overlaying the bitmap-font background.
 //!
 //! The transparent background lets the underlying layer-0 pattern show
 //! through around the sprite pixels.
@@ -18,12 +18,11 @@ use retroglyph::style::Style;
 use retroglyph::{Color, Terminal};
 use std::time::Duration;
 
-// ── Sprite data: four 8×8 pixel-art sprites ──────────────────────────────
+// ── Sprite data ───────────────────────────────────────────────────────────────
 //
 // Each sprite is 8×8 pixels, 1-bit (0 = transparent, 1 = foreground colour).
 // Stored as 8 bytes, MSB = leftmost pixel.
 
-/// A simple sword (diagonal blade pointing up-right).
 const SPRITE_SWORD: [u8; 8] = [
     0b0000_0011,
     0b0000_0110,
@@ -35,7 +34,6 @@ const SPRITE_SWORD: [u8; 8] = [
     0b1001_0000,
 ];
 
-/// A potion bottle.
 const SPRITE_POTION: [u8; 8] = [
     0b0001_1000,
     0b0001_1000,
@@ -47,7 +45,6 @@ const SPRITE_POTION: [u8; 8] = [
     0b0001_1000,
 ];
 
-/// A skull.
 const SPRITE_SKULL: [u8; 8] = [
     0b0001_1000,
     0b0011_1100,
@@ -59,7 +56,6 @@ const SPRITE_SKULL: [u8; 8] = [
     0b0011_1100,
 ];
 
-/// A gold coin.
 const SPRITE_COIN: [u8; 8] = [
     0b0011_1100,
     0b0100_0010,
@@ -100,7 +96,8 @@ const SPRITES: &[SpriteDef] = &[
     },
 ];
 
-/// Generate an RGBA PNG spritesheet from the hard-coded sprites.
+// ── Sprite sheet generation ───────────────────────────────────────────────────
+
 fn make_sprite_sheet() -> Vec<u8> {
     use image::ImageEncoder;
 
@@ -119,31 +116,42 @@ fn make_sprite_sheet() -> Vec<u8> {
             let row_bits = def.bits[py as usize];
             for px in 0..tile_w {
                 let idx = ((py * img_w) + i * tile_w + px) as usize * 4;
-                let bit_set = (row_bits >> (7 - px)) & 1 != 0;
-                if bit_set {
+                if (row_bits >> (7 - px)) & 1 != 0 {
                     pixels[idx] = fr;
                     pixels[idx + 1] = fg;
                     pixels[idx + 2] = fb;
                     pixels[idx + 3] = 255;
-                } else {
-                    pixels[idx + 3] = 0;
                 }
+                // transparent pixels remain zeroed
             }
         }
     }
 
     let mut out = std::io::Cursor::new(Vec::new());
-    let encoder = image::codecs::png::PngEncoder::new(&mut out);
-    encoder
+    image::codecs::png::PngEncoder::new(&mut out)
         .write_image(&pixels, img_w, img_h, image::ExtendedColorType::Rgba8)
         .unwrap();
     out.into_inner()
 }
 
-// ── Draw ────────────────────────────────────────────────────────────────
+// ── State ─────────────────────────────────────────────────────────────────────
 
+/// Demo state — just a frame counter for future animation.
+struct TilesetState {
+    frame: u64,
+}
+
+impl TilesetState {
+    const fn new() -> Self {
+        Self { frame: 0 }
+    }
+}
+
+// ── Rendering ─────────────────────────────────────────────────────────────────
+
+/// Draw one frame. Returns `false` when the user quits.
 #[allow(clippy::cast_possible_truncation)]
-fn draw(term: &mut Terminal<impl retroglyph::Backend>, frame: u64) {
+fn tick(term: &mut Terminal<impl retroglyph::Backend>, state: &mut TilesetState) -> bool {
     let size = term.size();
 
     term.layer(0);
@@ -164,8 +172,8 @@ fn draw(term: &mut Terminal<impl retroglyph::Backend>, frame: u64) {
         }
     }
 
-    // Header (frame 0 only).
-    if frame == 0 {
+    // Header and legend (only on the first frame; double-buffering keeps them).
+    if state.frame == 0 {
         let header = "rg tileset demo: custom sprites with alpha [Esc to quit]";
         let hx = size.width.saturating_sub(header.len() as u16) / 2;
         term.fg(Color::BRIGHT_WHITE);
@@ -188,17 +196,15 @@ fn draw(term: &mut Terminal<impl retroglyph::Backend>, frame: u64) {
         term.reset_style();
     }
 
-    // Layer 1: sprite tiles.
+    // Layer 1: sprite tiles
     term.layer(1);
-
-    // Draw each sprite with its label above it.
     for (i, def) in SPRITES.iter().enumerate() {
         let i = i as u16;
         let x = 2 + i * 9;
         let ch = char::from_u32(0xE000 + u32::from(i)).unwrap();
         let (fr, fg, fb) = def.color;
 
-        // Label (first char of name).
+        // Label (first char of name)
         term.put_styled(
             x,
             3,
@@ -216,7 +222,7 @@ fn draw(term: &mut Terminal<impl retroglyph::Backend>, frame: u64) {
                 }),
         );
 
-        // Sprite tile.
+        // Sprite tile
         term.put_styled(
             x,
             5,
@@ -235,7 +241,7 @@ fn draw(term: &mut Terminal<impl retroglyph::Backend>, frame: u64) {
         );
     }
 
-    // Add a static '@' at a fixed position showing bitmap font fallback.
+    // Bitmap font fallback reference glyph
     term.put_styled(
         35,
         10,
@@ -248,9 +254,33 @@ fn draw(term: &mut Terminal<impl retroglyph::Backend>, frame: u64) {
     );
 
     term.present().expect("present failed");
+    state.frame = state.frame.wrapping_add(1);
+
+    if let Some(event) = term.poll(Duration::from_millis(16)) {
+        match event {
+            Event::Key(k) if k.code == KeyCode::Escape => return false,
+            Event::Close => return false,
+            _ => {}
+        }
+    }
+
+    true
+}
+
+// ── Entry point ───────────────────────────────────────────────────────────────
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen(start)]
+pub fn wasm_main() -> Result<(), wasm_bindgen::JsValue> {
+    console_error_panic_hook::set_once();
+    main();
+    Ok(())
 }
 
 fn main() {
+    #[cfg(target_arch = "wasm32")]
+    console_error_panic_hook::set_once();
+
     let png_bytes = make_sprite_sheet();
 
     let tileset = TilesetOptions::from_bytes(png_bytes)
@@ -260,26 +290,25 @@ fn main() {
         .expect("tileset options are valid");
 
     let backend = SoftwareBackendBuilder::new()
-        .title("rg tileset demo [Esc to quit]")
+        .title(env!("CARGO_BIN_NAME"))
         .grid_size(40, 16)
         .scale(4)
         .tileset(tileset)
         .build()
         .expect("backend init failed");
 
-    let mut frame = 0u64;
-
+    let mut state: Option<TilesetState> = None;
+    let mut quit = false;
     backend
         .run_windowed(move |term: &mut Terminal<_>| {
-            draw(term, frame);
-            frame = frame.wrapping_add(1);
-
-            if let Some(event) = term.poll(Duration::from_millis(16)) {
-                match event {
-                    Event::Key(k) if k.code == KeyCode::Escape => std::process::exit(0),
-                    Event::Close => std::process::exit(0),
-                    _ => {}
-                }
+            if quit {
+                return;
+            }
+            let s = state.get_or_insert_with(TilesetState::new);
+            if !tick(term, s) {
+                quit = true;
+                #[cfg(not(target_arch = "wasm32"))]
+                std::process::exit(0);
             }
         })
         .expect("event loop failed");

@@ -60,7 +60,7 @@ src/
 examples/            Runnable demos (crossterm, software, tileset, headless, WASM)
 tests/
   e2e.rs             Terminal<Headless> integration tests
-  e2e_snapshots.rs   PTY + vt100 SVG snapshots of crossterm_demo
+  e2e_snapshots.rs   PTY + vt100 SVG snapshots of the demo example (crossterm backend)
   software_renderer.rs  Pixel-level software backend tests
   snapshots/         insta snapshot files (committed)
 ```
@@ -98,13 +98,14 @@ cargo insta accept  # accept pending snapshots
 
 ### E2E visual snapshots (crossterm)
 
-`tests/e2e_snapshots.rs` spawns `crossterm_demo` in a pseudo-terminal, feeds key input, parses ANSI
-via the `vt100` crate, and snapshots the result as SVG.
+`tests/e2e_snapshots.rs` spawns the `demo` binary (built with `--features crossterm`) in a
+pseudo-terminal, feeds key input, parses ANSI via the `vt100` crate, and snapshots the result as
+SVG.
 
 ```sh
-cargo build --example crossterm_demo --features crossterm
+cargo build --example demo --features crossterm
 cargo test --test e2e_snapshots --all-features
-open tests/snapshots/crossterm_demo.svg   # visual diff
+open tests/snapshots/demo.svg   # visual diff
 ```
 
 ## Key rules
