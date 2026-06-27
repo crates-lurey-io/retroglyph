@@ -7,87 +7,16 @@
 //! Run with:
 //!   `cargo run --example software_subpixel_demo --features software-default-font`
 
+mod util;
+
 use retroglyph::Terminal;
 use retroglyph::backend::software::SoftwareBackendBuilder;
 use retroglyph::color::Color;
 use retroglyph::event::{Event, KeyCode};
 use std::time::Duration;
+use util::lcg::Lcg;
 
-#[allow(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    clippy::cast_possible_wrap
-)]
-fn main() {
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    let seed: u64 = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(42, |d| d.as_nanos() as u64);
-
-    let backend = SoftwareBackendBuilder::new()
-        .title("rg sub-pixel DVD screensaver")
-        .grid_size(40, 15)
-        .scale(4)
-        .build()
-        .expect("backend init failed (try the `software-default-font` feature)");
-
-    #[allow(clippy::cast_possible_truncation)]
-    let mut rng = Lcg::new(seed);
-
-    #[allow(clippy::cast_possible_truncation)]
-    let start_x = (rng.next() % 26 + 7) as u16;
-    #[allow(clippy::cast_possible_truncation)]
-    let start_y = (rng.next() % 9 + 3) as u16;
-
-    let dir_x: i16 = if rng.next().is_multiple_of(2) { 1 } else { -1 };
-    let dir_y: i16 = if rng.next().is_multiple_of(2) { 1 } else { -1 };
-
-    let color = pick_color(&mut rng);
-
-    let mut s = BounceState {
-        x: start_x,
-        y: start_y,
-        dx: dir_x,
-        dy: dir_y,
-        color,
-        frame: 0,
-    };
-
-    backend
-        .run_windowed(move |term: &mut Terminal<_>| {
-            tick(term, &mut s);
-            s.frame = s.frame.wrapping_add(1);
-
-            if let Some(event) = term.poll(Duration::from_millis(16)) {
-                match event {
-                    Event::Key(k) if k.code == KeyCode::Escape => std::process::exit(0),
-                    Event::Close => std::process::exit(0),
-                    _ => {}
-                }
-            }
-        })
-        .expect("event loop failed");
-}
-
-struct Lcg {
-    state: u64,
-}
-
-impl Lcg {
-    const fn new(seed: u64) -> Self {
-        Self {
-            state: if seed == 0 { 1 } else { seed },
-        }
-    }
-
-    const fn next(&mut self) -> u64 {
-        self.state = self
-            .state
-            .wrapping_mul(6_364_136_223_846_793_005)
-            .wrapping_add(1_442_695_040_888_963_407);
-        self.state >> 33
-    }
-}
+// ── State ────────────────────────────────────────────────────────────────────
 
 struct BounceState {
     x: u16,
@@ -97,6 +26,65 @@ struct BounceState {
     color: Color,
     frame: u64,
 }
+
+impl BounceState {
+    fn new() -> Self {
+        #[cfg(not(target_arch = "wasm32"))]
+        let mut rng = Lcg::from_time();
+        #[cfg(target_arch = "wasm32")]
+        let mut rng = Lcg::new(42);
+
+        #[allow(clippy::cast_possible_truncation)]
+        let start_x = (rng.next() % 26 + 7) as u16;
+        #[allow(clippy::cast_possible_truncation)]
+        let start_y = (rng.next() % 9 + 3) as u16;
+        let dir_x: i16 = if rng.next().is_multiple_of(2) { 1 } else { -1 };
+        let dir_y: i16 = if rng.next().is_multiple_of(2) { 1 } else { -1 };
+        let color = pick_color(&mut rng);
+
+        Self {
+            x: start_x,
+            y: start_y,
+            dx: dir_x,
+            dy: dir_y,
+            color,
+            frame: 0,
+        }
+    }
+}
+
+// ── Color helpers ─────────────────────────────────────────────────────────────
+
+fn pick_color(rng: &mut Lcg) -> Color {
+    const COLORS: &[Color] = &[
+        Color::BRIGHT_RED,
+        Color::BRIGHT_GREEN,
+        Color::BRIGHT_YELLOW,
+        Color::BRIGHT_BLUE,
+        Color::BRIGHT_MAGENTA,
+        Color::BRIGHT_CYAN,
+        Color::BRIGHT_WHITE,
+        Color::Rgb {
+            r: 255,
+            g: 128,
+            b: 0,
+        },
+        Color::Rgb {
+            r: 128,
+            g: 0,
+            b: 255,
+        },
+        Color::Rgb {
+            r: 0,
+            g: 255,
+            b: 128,
+        },
+    ];
+    #[allow(clippy::cast_possible_truncation)]
+    COLORS[(rng.next() as usize) % COLORS.len()]
+}
+
+// ── Rendering ─────────────────────────────────────────────────────────────────
 
 fn draw_background(term: &mut Terminal<impl retroglyph::Backend>) {
     let size = term.size();
@@ -133,48 +121,40 @@ fn draw_background(term: &mut Terminal<impl retroglyph::Backend>) {
     }
 }
 
-fn tick(term: &mut Terminal<impl retroglyph::Backend>, s: &mut BounceState) {
+/// Run one frame. Returns `false` when the user quits.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss
+)]
+fn tick(term: &mut Terminal<impl retroglyph::Backend>, s: &mut BounceState) -> bool {
     let size = term.size();
 
-    // ── Background tile grid on layer 0 (redrawn every frame) ──────────
     draw_background(term);
 
-    // ── Every frame: redraw the @ on layer 1 ───────────────────────────
     term.layer(1);
 
     let right = i64::from(size.width) - 1;
     let bottom = i64::from(size.height) - 1;
 
-    #[allow(clippy::cast_possible_wrap)]
     let pos_x = i64::from(s.x) + i64::from(s.dx);
-    #[allow(clippy::cast_possible_wrap)]
     let pos_y = i64::from(s.y) + i64::from(s.dy);
 
     if pos_x <= 0 || pos_x >= right {
         s.dx = -s.dx;
-        s.color = pick_color_lcg(&mut Lcg::new(s.frame));
+        s.color = pick_color(&mut Lcg::new(s.frame));
     }
     if pos_y <= 0 || pos_y >= bottom {
         s.dy = -s.dy;
-        s.color = pick_color_lcg(&mut Lcg::new(s.frame.wrapping_add(1)));
+        s.color = pick_color(&mut Lcg::new(s.frame.wrapping_add(1)));
     }
 
-    #[allow(
-        clippy::cast_possible_truncation,
-        clippy::cast_possible_wrap,
-        clippy::cast_sign_loss
-    )]
-    {
-        s.x = (i64::from(s.x) + i64::from(s.dx)).clamp(1, right - 1) as u16;
-        s.y = (i64::from(s.y) + i64::from(s.dy)).clamp(1, bottom - 1) as u16;
-    }
+    s.x = (i64::from(s.x) + i64::from(s.dx)).clamp(1, right - 1) as u16;
+    s.y = (i64::from(s.y) + i64::from(s.dy)).clamp(1, bottom - 1) as u16;
 
-    // Sub-pixel offset: sawtooth -3 .. +3.
-    #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+    // Sub-pixel offset: sawtooth -6 .. +6.
     let sub_cycle = (s.frame as i64) % 14;
-    #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
     let off_x = ((sub_cycle - 6).abs()) as i16;
-    #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
     let off_y = {
         let c = (s.frame.wrapping_add(7) as i64) % 14;
         ((c - 6).abs()) as i16
@@ -183,28 +163,20 @@ fn tick(term: &mut Terminal<impl retroglyph::Backend>, s: &mut BounceState) {
     term.fg(s.color);
     term.put_offset(s.x, s.y, off_x, off_y, '@');
 
-    // ── Layer 2 header (redrawn every frame) ───────────────────────────
+    // Layer 2: header bar
     term.layer(2);
+    let header_bg = Color::Rgb {
+        r: 30,
+        g: 30,
+        b: 45,
+    };
     for x in 0..size.width {
-        term.put_styled(
-            x,
-            0,
-            ' ',
-            retroglyph::Style::new().bg(Color::Rgb {
-                r: 30,
-                g: 30,
-                b: 45,
-            }),
-        );
+        term.put_styled(x, 0, ' ', retroglyph::Style::new().bg(header_bg));
     }
     let header = "rg DVD screensaver [Esc to quit]";
     let header_style = retroglyph::Style::new()
         .fg(Color::BRIGHT_WHITE)
-        .bg(Color::Rgb {
-            r: 30,
-            g: 30,
-            b: 45,
-        });
+        .bg(header_bg);
     #[allow(clippy::cast_possible_truncation)]
     let hx = size.width.saturating_sub(header.len() as u16) / 2;
     for (i, ch) in header.chars().enumerate() {
@@ -212,8 +184,7 @@ fn tick(term: &mut Terminal<impl retroglyph::Backend>, s: &mut BounceState) {
         term.put_styled(hx + i as u16, 0, ch, header_style);
     }
 
-    // ── Every frame: layer 2 status footer ─────────────────────────────
-    term.layer(2);
+    // Layer 2: footer status
     let footer_bg = Color::Rgb {
         r: 30,
         g: 30,
@@ -238,39 +209,53 @@ fn tick(term: &mut Terminal<impl retroglyph::Backend>, s: &mut BounceState) {
     term.print(fx, size.height - 1, &footer);
 
     term.present().expect("present failed");
+    s.frame = s.frame.wrapping_add(1);
+
+    if let Some(event) = term.poll(Duration::from_millis(16)) {
+        match event {
+            Event::Key(k) if k.code == KeyCode::Escape => return false,
+            Event::Close => return false,
+            _ => {}
+        }
+    }
+
+    true
 }
 
-#[allow(clippy::missing_const_for_fn)]
-fn pick_color_lcg(rng: &mut Lcg) -> Color {
-    const COLORS: &[Color] = &[
-        Color::BRIGHT_RED,
-        Color::BRIGHT_GREEN,
-        Color::BRIGHT_YELLOW,
-        Color::BRIGHT_BLUE,
-        Color::BRIGHT_MAGENTA,
-        Color::BRIGHT_CYAN,
-        Color::BRIGHT_WHITE,
-        Color::Rgb {
-            r: 255,
-            g: 128,
-            b: 0,
-        },
-        Color::Rgb {
-            r: 128,
-            g: 0,
-            b: 255,
-        },
-        Color::Rgb {
-            r: 0,
-            g: 255,
-            b: 128,
-        },
-    ];
-    #[allow(clippy::cast_possible_truncation)]
-    COLORS[(rng.next() as usize) % COLORS.len()]
+// ── Entry point ───────────────────────────────────────────────────────────────
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen(start)]
+pub fn wasm_main() -> Result<(), wasm_bindgen::JsValue> {
+    console_error_panic_hook::set_once();
+    main();
+    Ok(())
 }
 
-#[allow(clippy::missing_const_for_fn)]
-fn pick_color(rng: &mut Lcg) -> Color {
-    pick_color_lcg(rng)
+fn main() {
+    #[cfg(target_arch = "wasm32")]
+    console_error_panic_hook::set_once();
+
+    let backend = SoftwareBackendBuilder::new()
+        .title(env!("CARGO_BIN_NAME"))
+        .grid_size(40, 15)
+        .scale(4)
+        .build()
+        .expect("backend init failed (try the `software-default-font` feature)");
+
+    let mut state: Option<BounceState> = None;
+    let mut quit = false;
+    backend
+        .run_windowed(move |term: &mut Terminal<_>| {
+            if quit {
+                return;
+            }
+            let s = state.get_or_insert_with(BounceState::new);
+            if !tick(term, s) {
+                quit = true;
+                #[cfg(not(target_arch = "wasm32"))]
+                std::process::exit(0);
+            }
+        })
+        .expect("event loop failed");
 }

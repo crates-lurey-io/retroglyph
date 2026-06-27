@@ -113,7 +113,7 @@ setup-wasm:
     fi
 
 run-wasm:
-    cargo run --target wasm32-unknown-unknown --example wasm_demo --features software-default-font
+    cargo run --target wasm32-unknown-unknown --example demo --features software-default-font
 
 # ── act (local CI runner) ────────────────────────────────────────────────────
 

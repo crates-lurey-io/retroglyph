@@ -83,32 +83,32 @@ test means visible output changed — review the diff before accepting.
 
 ### E2E visual snapshots (crossterm backend)
 
-`tests/e2e_snapshots.rs` spawns the compiled `crossterm_demo` binary in a real pseudo-terminal using
-`portable-pty`, feeds it key input, then parses the raw ANSI byte stream with a VT100 emulator
-(`vt100` crate) to reconstruct the final screen state. The screen is rendered to SVG and snapshotted
-with `insta`.
+`tests/e2e_snapshots.rs` spawns the compiled `demo` binary (built with `--features crossterm`) in a
+real pseudo-terminal using `portable-pty`, feeds it key input, then parses the raw ANSI byte stream
+with a VT100 emulator (`vt100` crate) to reconstruct the final screen state. The screen is rendered
+to SVG and snapshotted with `insta`.
 
 ```sh
-# The crossterm_demo binary must be built first
+# The demo binary must be built first
 
-cargo build --example crossterm_demo --features crossterm
+cargo build --example demo --features crossterm
 
 cargo test --test e2e_snapshots --all-features
 ```
 
 Two files are written to `tests/snapshots/` on each run:
 
-| File                                          | Purpose                                                 |
-| --------------------------------------------- | ------------------------------------------------------- |
-| `e2e_snapshots__crossterm_demo_snapshot.snap` | Insta snapshot (authoritative, diffed by CI)            |
-| `crossterm_demo.svg`                          | Rendered SVG — open directly in a browser or Quick Look |
+| File                                | Purpose                                                 |
+| ----------------------------------- | ------------------------------------------------------- |
+| `e2e_snapshots__demo_snapshot.snap` | Insta snapshot (authoritative, diffed by CI)            |
+| `demo.svg`                          | Rendered SVG — open directly in a browser or Quick Look |
 
 GitHub renders `.svg` files, so PR diffs show a visual before/after when the snapshot changes.
 
 To view the current snapshot locally:
 
 ```sh
-open tests/snapshots/crossterm_demo.svg
+open tests/snapshots/demo.svg
 ```
 
 ## Feature flags

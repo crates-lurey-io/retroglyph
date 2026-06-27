@@ -1,8 +1,9 @@
 //! E2E snapshot tests for the crossterm backend.
 //!
-//! Spawns `crossterm_demo` in a real PTY, feeds it input, parses the
-//! resulting ANSI output with a proper VT100 emulator, and renders the
-//! final screen state to SVG for visual regression testing.
+//! Spawns the `demo` binary (built with `--features crossterm`) in a real
+//! PTY, feeds it input, parses the resulting ANSI output with a proper VT100
+//! emulator, and renders the final screen state to SVG for visual regression
+//! testing.
 
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use std::fmt::Write as _;
@@ -22,6 +23,33 @@ fn example_bin(name: &str) -> PathBuf {
     path.push("examples");
     path.push(name);
     path
+}
+
+/// Build the `demo` example with `--features crossterm` and return the path.
+///
+/// `cargo test --all-features` recompiles examples with software features,
+/// which produces a GUI binary that hangs in a PTY. This ensures the crossterm
+/// (terminal) binary is present when the e2e snapshot test runs.
+fn build_crossterm_demo() -> PathBuf {
+    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
+    let manifest = env!("CARGO_MANIFEST_DIR");
+    let status = std::process::Command::new(&cargo)
+        .args([
+            "build",
+            "--manifest-path",
+            &format!("{manifest}/Cargo.toml"),
+            "--example",
+            "demo",
+            "--features",
+            "crossterm",
+        ])
+        .status()
+        .expect("failed to run cargo build");
+    assert!(
+        status.success(),
+        "cargo build --example demo --features crossterm failed"
+    );
+    example_bin("demo")
 }
 
 /// Spawn `bin` in a PTY, send `setup` input to navigate to the desired state,
@@ -198,9 +226,9 @@ fn render_svg(screen: &vt100::Screen, rows: u16, cols: u16) -> String {
 // --- Tests ------------------------------------------------------------------
 
 #[test]
-fn test_crossterm_demo_snapshot() {
-    let bin = example_bin("crossterm_demo");
-    assert!(bin.exists(), "crossterm_demo binary not found at {bin:?}");
+fn test_demo_snapshot() {
+    let bin = build_crossterm_demo();
+    assert!(bin.exists(), "demo binary not found at {bin:?}");
 
     // Move right twice, down twice, then quit.
     let raw = capture_pty(&bin, b"ddss", b"q", ROWS, COLS);
@@ -231,7 +259,7 @@ fn test_crossterm_demo_snapshot() {
     assert!(svg.contains("HP:"), "status bar missing from SVG output");
 
     // Write a standalone SVG next to the snap so GitHub renders it in PR diffs.
-    let svg_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots/crossterm_demo.svg");
+    let svg_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots/demo.svg");
     std::fs::write(&svg_path, &svg).expect("write SVG");
 
     insta::assert_snapshot!(svg);

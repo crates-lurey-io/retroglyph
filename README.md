@@ -4,7 +4,7 @@
 
 A 2D pseudographic terminal library for Rust.
 
-![crossterm demo](tests/snapshots/crossterm_demo.svg)
+![crossterm demo](tests/snapshots/demo.svg)
 
 `retroglyph` provides a styled character grid, double-buffered rendering, and pluggable backends.
 
@@ -127,5 +127,5 @@ fn main() -> std::io::Result<()> {
 Run the interactive demo:
 
 ```sh
-cargo run --example crossterm_demo --features crossterm
+cargo run --example demo --features crossterm
 ```

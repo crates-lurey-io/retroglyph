@@ -131,7 +131,7 @@ impl std::error::Error for SoftwareBackendError {
 /// assert!(pixels.iter().all(|&p| p == 0x00FF_0000));
 /// ```
 ///
-/// See the `software_demo` example for a complete runnable program.
+/// See the `demo` example for a complete runnable program.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SoftwareBackend {
     /// Title shown in the window's title bar.
