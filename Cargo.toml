@@ -60,12 +60,9 @@ software-tilesets = ["software", "dep:image", "dep:alpha-blend", "dep:log"]
 software-default-font = ["software"]
 
 [[example]]
-name = "crossterm_demo"
-required-features = ["crossterm"]
-
-[[example]]
-name = "software_demo"
-required-features = ["software-default-font"]
+name = "demo"
+# Supports crossterm (terminal) and software-default-font (desktop/WASM).
+# At least one must be enabled; software takes priority when both are present.
 
 [[example]]
 name = "tileset_demo"
@@ -73,10 +70,6 @@ required-features = ["software-tilesets", "software-default-font"]
 
 [[example]]
 name = "software_subpixel_demo"
-required-features = ["software-default-font"]
-
-[[example]]
-name = "wasm_demo"
 required-features = ["software-default-font"]
 
 [[bench]]
@@ -98,10 +91,6 @@ console_error_panic_hook = "0.1"
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 portable-pty = "0.9.0"
 vt100 = "0.15"
-
-[dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
-toml = "0.8"
-serde = { version = "1", features = ["derive"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
 insta = { version = "1.34", features = ["yaml"] }
