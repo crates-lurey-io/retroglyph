@@ -35,6 +35,7 @@ missing_panics_doc = "deny"
 module_name_repetitions = "allow"
 
 [dependencies]
+gem = { version = "0.1.0-alpha.5", optional = true, default-features = false, features = ["std"] }
 ixy = "0.6.0-alpha.7"
 grixy = { version = "0.6.0-alpha.7", features = ["alloc", "buffer"] }
 unicode-width = "0.2"
@@ -49,8 +50,9 @@ log = { version = "0.4", optional = true }
 
 
 [features]
-default = ["std", "egc"]
+default = ["std", "egc", "gem"]
 std = []
+gem = ["dep:gem"]
 egc = ["dep:unicode-segmentation"]
 crossterm = ["dep:crossterm", "std"]
 software = ["dep:winit", "dep:softbuffer", "dep:log", "std"]
