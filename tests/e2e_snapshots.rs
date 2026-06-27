@@ -52,9 +52,24 @@ fn build_crossterm_demo() -> PathBuf {
     example_bin("demo")
 }
 
-/// Spawn `bin` in a PTY, send `setup` input to navigate to the desired state,
-/// wait for the screen to settle, capture output, then send `quit` to terminate.
-fn capture_pty(bin: &Path, setup: &[u8], quit: &[u8], rows: u16, cols: u16) -> Vec<u8> {
+/// Spawn `bin` in a PTY, write `setup` input to navigate to the desired state,
+/// poll the output until the screen contains `expected_marker`, then write
+/// `quit` and capture all remaining output.
+///
+/// A reader thread drains the PTY into a shared buffer; the main thread polls
+/// that buffer until the expected screen content appears, then sends quit.
+/// No fixed-time sleeps or unsafe code.
+fn capture_pty(
+    bin: &Path,
+    setup: &[u8],
+    quit: &[u8],
+    rows: u16,
+    cols: u16,
+    expected_marker: &str,
+) -> Vec<u8> {
+    use std::sync::{Arc, Mutex};
+    use std::time::{Duration, Instant};
+
     let pty = native_pty_system();
     let pair = pty
         .openpty(PtySize {
@@ -73,18 +88,61 @@ fn capture_pty(bin: &Path, setup: &[u8], quit: &[u8], rows: u16, cols: u16) -> V
     let mut reader = pair.master.try_clone_reader().expect("reader");
     let mut writer = pair.master.take_writer().expect("writer");
 
-    // Let the process start and draw its first frame.
-    std::thread::sleep(std::time::Duration::from_millis(200));
+    // Spawn a reader thread that drains output into a shared buffer.
+    // The reader thread sets `reader_done` when it exits so the main
+    // thread knows to stop polling.
+    let output = Arc::new(Mutex::new(Vec::new()));
+    let output_clone = Arc::clone(&output);
+    let reader_done = Arc::new(Mutex::new(false));
+    let reader_done_clone = Arc::clone(&reader_done);
+    std::thread::spawn(move || {
+        let mut buf = [0u8; 4096];
+        loop {
+            match reader.read(&mut buf) {
+                Ok(0) | Err(_) => break,
+                Ok(n) => output_clone.lock().unwrap().extend_from_slice(&buf[..n]),
+            }
+        }
+        *reader_done_clone.lock().unwrap() = true;
+        // Drop the reader so the PTY master knows we're done.
+        drop(reader);
+    });
+
+    // Write setup input (navigation keys).
     writer.write_all(setup).expect("write setup");
-    // Let it process the navigation input and redraw.
-    std::thread::sleep(std::time::Duration::from_millis(150));
+
+    // Poll the shared buffer until the expected screen content appears.
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        {
+            if String::from_utf8_lossy(&output.lock().unwrap()).contains(expected_marker) {
+                break;
+            }
+        }
+        assert!(
+            Instant::now() <= deadline,
+            "timed out waiting for '{expected_marker}' in PTY output"
+        );
+        std::thread::sleep(Duration::from_millis(50));
+    }
+
+    // Send quit and close the writer (sends EOF to the child).
     writer.write_all(quit).expect("write quit");
     drop(writer);
 
-    let mut buf = Vec::new();
-    reader.read_to_end(&mut buf).expect("read to end");
     let _ = child.wait();
-    buf
+
+    // Wait briefly for the reader thread to drain trailing output.
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        if *reader_done.lock().unwrap() {
+            break;
+        }
+        assert!(Instant::now() <= deadline);
+        std::thread::sleep(Duration::from_millis(50));
+    }
+
+    Arc::try_unwrap(output).unwrap().into_inner().unwrap()
 }
 
 // --- SVG rendering ----------------------------------------------------------
@@ -230,8 +288,8 @@ fn test_demo_snapshot() {
     let bin = build_crossterm_demo();
     assert!(bin.exists(), "demo binary not found at {bin:?}");
 
-    // Move right twice, down twice, then quit.
-    let raw = capture_pty(&bin, b"ddss", b"q", ROWS, COLS);
+    // Move right twice, down twice, poll for the updated screen, then quit.
+    let raw = capture_pty(&bin, b"ddss", b"q", ROWS, COLS, "HP:");
 
     let mut parser = vt100::Parser::new(ROWS, COLS, 0);
 
