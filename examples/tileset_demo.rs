@@ -16,7 +16,6 @@ use retroglyph::backend::software::tileset::TilesetOptions;
 use retroglyph::event::{Event, KeyCode};
 use retroglyph::style::Style;
 use retroglyph::{Color, Terminal};
-use std::time::Duration;
 
 // ── Sprite data ───────────────────────────────────────────────────────────────
 //
@@ -256,7 +255,8 @@ fn tick(term: &mut Terminal<impl retroglyph::Backend>, state: &mut TilesetState)
     term.present().expect("present failed");
     state.frame = state.frame.wrapping_add(1);
 
-    if let Some(event) = term.poll(Duration::from_millis(16)) {
+    // Drain all available events without blocking (avoid WASM slow-motion replay).
+    for event in term.drain_events() {
         match event {
             Event::Key(k) if k.code == KeyCode::Escape => return false,
             Event::Close => return false,

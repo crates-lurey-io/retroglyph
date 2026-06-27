@@ -13,7 +13,6 @@ use retroglyph::Terminal;
 use retroglyph::backend::software::SoftwareBackendBuilder;
 use retroglyph::color::Color;
 use retroglyph::event::{Event, KeyCode};
-use std::time::Duration;
 use util::lcg::Lcg;
 
 // ── State ────────────────────────────────────────────────────────────────────
@@ -211,7 +210,8 @@ fn tick(term: &mut Terminal<impl retroglyph::Backend>, s: &mut BounceState) -> b
     term.present().expect("present failed");
     s.frame = s.frame.wrapping_add(1);
 
-    if let Some(event) = term.poll(Duration::from_millis(16)) {
+    // Drain all available events without blocking (avoid WASM slow-motion replay).
+    for event in term.drain_events() {
         match event {
             Event::Key(k) if k.code == KeyCode::Escape => return false,
             Event::Close => return false,
