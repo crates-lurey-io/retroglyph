@@ -1,11 +1,11 @@
 //! DVD-style bouncing `@` screensaver with sub-pixel offsets and layers.
 //!
-//! Demonstrates the software backend's multi-layer compositing and sub-cell
-//! pixel offset features: a large `@` ping-pongs diagonally across the grid,
-//! bouncing off the walls like a classic TV screensaver.
+//! Demonstrates sub-cell pixel offsets and multi-layer compositing:
+//! a large `@` ping-pongs diagonally across the grid, bouncing off the
+//! walls like a classic TV screensaver.
 //!
 //! Run with:
-//!   `cargo run --example software_subpixel_demo --features software-default-font`
+//!   `cargo run --example subpixel --features software-default-font`
 
 mod util;
 

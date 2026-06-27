@@ -9,7 +9,7 @@
 //! through around the sprite pixels.
 //!
 //! Run with:
-//!   `cargo run --example tileset_demo --features software-tilesets,software-default-font`
+//!   `cargo run --example tileset --features software-tilesets,software-default-font`
 
 mod util;
 

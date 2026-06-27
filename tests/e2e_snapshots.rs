@@ -25,7 +25,7 @@ fn example_bin(name: &str) -> PathBuf {
     path
 }
 
-/// Build the `demo` example with `--features crossterm` and return the path.
+/// Build the `dungeon_room` example with `--features crossterm` and return the path.
 ///
 /// `cargo test --all-features` recompiles examples with software features,
 /// which produces a GUI binary that hangs in a PTY. This ensures the crossterm
@@ -39,7 +39,7 @@ fn build_crossterm_demo() -> PathBuf {
             "--manifest-path",
             &format!("{manifest}/Cargo.toml"),
             "--example",
-            "demo",
+            "dungeon_room",
             "--features",
             "crossterm",
         ])
@@ -47,9 +47,9 @@ fn build_crossterm_demo() -> PathBuf {
         .expect("failed to run cargo build");
     assert!(
         status.success(),
-        "cargo build --example demo --features crossterm failed"
+        "cargo build --example dungeon_room --features crossterm failed"
     );
-    example_bin("demo")
+    example_bin("dungeon_room")
 }
 
 /// Spawn `bin` in a PTY, write `setup` input to navigate to the desired state,

@@ -3,6 +3,8 @@
 //! Shows how to drive the shared game loop against the [`Headless`] backend
 //! by injecting events and inspecting the rendered grid — the same technique
 //! used in unit and integration tests. No terminal or window is required.
+//!
+//! Run with: `cargo run --example headless`
 
 mod util;
 
