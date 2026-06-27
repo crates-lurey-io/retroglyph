@@ -118,6 +118,12 @@ fn combined_features(backend: Backend, ex: &Example) -> Vec<&'static str> {
 
 // ── Launch ────────────────────────────────────────────────────────────────────
 
+fn wasm_runner_path() -> std::path::PathBuf {
+    // Path mirrors the runner entry in .cargo/config.toml.
+    let manifest = env!("CARGO_MANIFEST_DIR");
+    std::path::PathBuf::from(manifest).join("bin/bin/wasm-server-runner")
+}
+
 fn launch(ex: &Example, backend: Option<Backend>) -> ! {
     let features: Vec<&str> = backend
         .map(|b| combined_features(b, ex))
@@ -130,6 +136,16 @@ fn launch(ex: &Example, backend: Option<Backend>) -> ! {
     if let Some(target) = backend.and_then(Backend::target) {
         println!("  Target:    {target}");
     }
+
+    if backend == Some(Backend::Wasm) {
+        let runner = wasm_runner_path();
+        if !runner.exists() {
+            eprintln!("\n  wasm-server-runner not found at {}", runner.display());
+            eprintln!("  Run `just setup-wasm` to install it, then try again.");
+            std::process::exit(1);
+        }
+    }
+
     println!();
 
     let mut cmd = Command::new("cargo");

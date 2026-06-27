@@ -68,6 +68,7 @@ macro_rules! rg_run {
 
         // WASM entry point called by the browser JS glue before the event loop.
         #[cfg(all(feature = "software", target_arch = "wasm32"))]
+        #[allow(missing_docs)]
         #[::wasm_bindgen::prelude::wasm_bindgen(start)]
         pub fn wasm_main() -> ::std::result::Result<(), ::wasm_bindgen::JsValue> {
             main();
