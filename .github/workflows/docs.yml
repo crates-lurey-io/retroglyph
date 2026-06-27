@@ -39,7 +39,7 @@ jobs:
 
       - name: Install wasm-bindgen-cli
         # Version must match the wasm-bindgen dev-dependency in Cargo.toml.
-        run: cargo binstall wasm-bindgen-cli --version 0.2.106 --no-confirm -q
+        run: cargo install wasm-bindgen-cli --version 0.2.106
 
       - name: Build WASM examples (demo, software_subpixel_demo)
         run: |
