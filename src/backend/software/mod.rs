@@ -27,7 +27,9 @@ pub use config::{SoftwareBackend, SoftwareBackendBuilder, SoftwareBackendError};
 pub mod windowed;
 pub use windowed::WindowedBackend;
 
-use crate::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+use crate::event::{
+    Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+};
 use crate::grid::{Pos, Size};
 use crate::style::CellModifier;
 use crate::tile::Tile;
@@ -293,6 +295,7 @@ impl SoftwareBackend {
                 height: win_h,
             },
             current_modifiers: KeyModifiers::NONE,
+            cursor_px: (0.0, 0.0),
         };
 
         #[cfg(not(target_arch = "wasm32"))]
@@ -932,6 +935,36 @@ fn translate_key(input: winit::event::KeyEvent, modifiers: KeyModifiers) -> Opti
     Some(Event::Key(KeyEvent { code, modifiers }))
 }
 
+/// Converts physical pixel coordinates to a grid cell [`Pos`].
+///
+/// Clamps to `u16::MAX` so out-of-bounds cursor positions (negative or
+/// extremely large) don't panic — the game loop is responsible for
+/// bounds-checking against the terminal size.
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+fn pixel_to_cell(px_x: f64, px_y: f64, cell_w: u32, cell_h: u32) -> Pos {
+    // .max(0.0) guards against negatives before the f64→u32 cast.
+    // .min(u16::MAX as u32) guarantees the u32→u16 cast never truncates.
+    let col =
+        u32::checked_div(px_x.max(0.0) as u32, cell_w).map_or(0, |v| v.min(u32::from(u16::MAX)));
+    let col = u16::try_from(col).unwrap_or(u16::MAX);
+    let row =
+        u32::checked_div(px_y.max(0.0) as u32, cell_h).map_or(0, |v| v.min(u32::from(u16::MAX)));
+    let row = u16::try_from(row).unwrap_or(u16::MAX);
+    Pos { x: col, y: row }
+}
+
+/// Translates a winit [`winit::event::MouseButton`] into our [`MouseButton`].
+///
+/// Returns `None` for side buttons and other unrecognized buttons.
+const fn translate_mouse_button(button: winit::event::MouseButton) -> Option<MouseButton> {
+    match button {
+        winit::event::MouseButton::Left => Some(MouseButton::Left),
+        winit::event::MouseButton::Right => Some(MouseButton::Right),
+        winit::event::MouseButton::Middle => Some(MouseButton::Middle),
+        _ => None,
+    }
+}
+
 /// Translates winit modifier state into our [`KeyModifiers`].
 fn translate_modifiers(state: winit::keyboard::ModifiersState) -> KeyModifiers {
     let mut m = KeyModifiers::NONE;
@@ -969,6 +1002,8 @@ struct WindowApp<B: WindowedBackend, F> {
     init_size: InitWindowSize,
     /// Current modifier key state, updated by `ModifiersChanged` events.
     current_modifiers: KeyModifiers,
+    /// Last known cursor position in physical pixels.
+    cursor_px: (f64, f64),
 }
 
 impl<B: WindowedBackend, F> WindowApp<B, F> {
@@ -1028,6 +1063,23 @@ impl<B: WindowedBackend, F: FnMut(&mut crate::Terminal<B>) + 'static> Applicatio
         _window_id: WindowId,
         event: WindowEvent,
     ) {
+        self.handle_window_event(event);
+    }
+
+    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+        if let Some(window) = &self.window {
+            window.request_redraw();
+        }
+    }
+}
+
+impl<B: WindowedBackend, F: FnMut(&mut crate::Terminal<B>) + 'static> WindowApp<B, F> {
+    /// Dispatch a [`WindowEvent`] without requiring an [`ActiveEventLoop`].
+    ///
+    /// Extracted from the `ApplicationHandler` impl so the translation and
+    /// event-buffer logic can be called directly in unit tests, where
+    /// [`ActiveEventLoop`] is not constructable.
+    fn handle_window_event(&mut self, event: WindowEvent) {
         match event {
             WindowEvent::CloseRequested => {
                 // Push the event so the game loop can process it (save game,
@@ -1052,8 +1104,62 @@ impl<B: WindowedBackend, F: FnMut(&mut crate::Terminal<B>) + 'static> Applicatio
                 }
             }
 
-            // TODO: handle CursorMoved and MouseInput for
-            // mouse-to-grid-coordinate conversion (Event::Mouse).
+            WindowEvent::CursorMoved { position, .. } => {
+                self.cursor_px = (position.x, position.y);
+                if let Some(term) = self.terminal.as_mut() {
+                    let (cell_w, cell_h) = term.backend().cell_size();
+                    let pos = pixel_to_cell(position.x, position.y, cell_w, cell_h);
+                    term.backend_mut()
+                        .push_window_event(Event::Mouse(MouseEvent {
+                            kind: MouseEventKind::Moved,
+                            position: pos,
+                            modifiers: self.current_modifiers,
+                        }));
+                }
+            }
+
+            WindowEvent::MouseInput { state, button, .. } => {
+                if let Some(term) = self.terminal.as_mut() {
+                    let (cell_w, cell_h) = term.backend().cell_size();
+                    let pos = pixel_to_cell(self.cursor_px.0, self.cursor_px.1, cell_w, cell_h);
+                    if let Some(btn) = translate_mouse_button(button) {
+                        let kind = if state.is_pressed() {
+                            MouseEventKind::Down(btn)
+                        } else {
+                            MouseEventKind::Up(btn)
+                        };
+                        term.backend_mut()
+                            .push_window_event(Event::Mouse(MouseEvent {
+                                kind,
+                                position: pos,
+                                modifiers: self.current_modifiers,
+                            }));
+                    }
+                }
+            }
+
+            WindowEvent::MouseWheel { delta, .. } => {
+                if let Some(term) = self.terminal.as_mut() {
+                    let (cell_w, cell_h) = term.backend().cell_size();
+                    let pos = pixel_to_cell(self.cursor_px.0, self.cursor_px.1, cell_w, cell_h);
+                    let y = match delta {
+                        winit::event::MouseScrollDelta::LineDelta(_, y) => f64::from(y),
+                        winit::event::MouseScrollDelta::PixelDelta(p) => p.y,
+                    };
+                    let kind = if y > 0.0 {
+                        MouseEventKind::ScrollUp
+                    } else {
+                        MouseEventKind::ScrollDown
+                    };
+                    term.backend_mut()
+                        .push_window_event(Event::Mouse(MouseEvent {
+                            kind,
+                            position: pos,
+                            modifiers: self.current_modifiers,
+                        }));
+                }
+            }
+
             WindowEvent::ModifiersChanged(mods) => {
                 self.current_modifiers = translate_modifiers(mods.state());
             }
@@ -1079,12 +1185,6 @@ impl<B: WindowedBackend, F: FnMut(&mut crate::Terminal<B>) + 'static> Applicatio
             _ => {}
         }
     }
-
-    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
-        if let Some(window) = &self.window {
-            window.request_redraw();
-        }
-    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -1093,8 +1193,322 @@ impl<B: WindowedBackend, F: FnMut(&mut crate::Terminal<B>) + 'static> Applicatio
 mod tests {
     use super::*;
     use crate::color::Color;
+    use crate::event::{MouseButton, MouseEvent, MouseEventKind};
     use crate::grid::Pos;
     use crate::style::Style;
+    use std::time::Duration;
+
+    // ── pixel_to_cell ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn pixel_to_cell_basic() {
+        // 8×16 cells: pixel (20, 48) → col 2, row 3
+        let pos = pixel_to_cell(20.0, 48.0, 8, 16);
+        assert_eq!(pos, Pos { x: 2, y: 3 });
+    }
+
+    #[test]
+    fn pixel_to_cell_origin() {
+        let pos = pixel_to_cell(0.0, 0.0, 8, 16);
+        assert_eq!(pos, Pos { x: 0, y: 0 });
+    }
+
+    #[test]
+    fn pixel_to_cell_negative_coords_clamp_to_zero() {
+        // Cursor briefly outside the window can produce negative physical coords.
+        let pos = pixel_to_cell(-5.0, -10.0, 8, 16);
+        assert_eq!(pos, Pos { x: 0, y: 0 });
+    }
+
+    #[test]
+    fn pixel_to_cell_zero_cell_size_returns_origin() {
+        // Degenerate case: backend not yet initialised with a valid cell size.
+        let pos = pixel_to_cell(100.0, 200.0, 0, 0);
+        assert_eq!(pos, Pos { x: 0, y: 0 });
+    }
+
+    #[test]
+    fn pixel_to_cell_clamps_to_u16_max() {
+        // A huge pixel coordinate must not overflow u16.
+        let pos = pixel_to_cell(f64::from(u32::MAX), f64::from(u32::MAX), 1, 1);
+        assert_eq!(
+            pos,
+            Pos {
+                x: u16::MAX,
+                y: u16::MAX
+            }
+        );
+    }
+
+    // ── translate_mouse_button ────────────────────────────────────────────────
+
+    #[test]
+    fn translate_mouse_button_left() {
+        assert_eq!(
+            translate_mouse_button(winit::event::MouseButton::Left),
+            Some(MouseButton::Left)
+        );
+    }
+
+    #[test]
+    fn translate_mouse_button_right() {
+        assert_eq!(
+            translate_mouse_button(winit::event::MouseButton::Right),
+            Some(MouseButton::Right)
+        );
+    }
+
+    #[test]
+    fn translate_mouse_button_middle() {
+        assert_eq!(
+            translate_mouse_button(winit::event::MouseButton::Middle),
+            Some(MouseButton::Middle)
+        );
+    }
+
+    #[test]
+    fn translate_mouse_button_other_is_none() {
+        assert_eq!(
+            translate_mouse_button(winit::event::MouseButton::Back),
+            None
+        );
+        assert_eq!(
+            translate_mouse_button(winit::event::MouseButton::Forward),
+            None
+        );
+        assert_eq!(
+            translate_mouse_button(winit::event::MouseButton::Other(7)),
+            None
+        );
+    }
+
+    // ── push_event / poll round-trip ──────────────────────────────────────────
+
+    #[test]
+    fn mouse_event_round_trips_through_event_buffer() {
+        let mut renderer = test_renderer();
+        let ev = Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            position: Pos { x: 3, y: 1 },
+            modifiers: KeyModifiers::NONE,
+        });
+        renderer.push_event(ev);
+        assert_eq!(renderer.poll_event(Duration::ZERO), Some(ev));
+        assert_eq!(renderer.poll_event(Duration::ZERO), None);
+    }
+
+    #[test]
+    fn multiple_mouse_events_preserve_fifo_order() {
+        let mut renderer = test_renderer();
+        let moved = Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Moved,
+            position: Pos { x: 1, y: 2 },
+            modifiers: KeyModifiers::NONE,
+        });
+        let clicked = Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            position: Pos { x: 1, y: 2 },
+            modifiers: KeyModifiers::NONE,
+        });
+        renderer.push_event(moved);
+        renderer.push_event(clicked);
+        assert_eq!(renderer.poll_event(Duration::ZERO), Some(moved));
+        assert_eq!(renderer.poll_event(Duration::ZERO), Some(clicked));
+    }
+
+    // ── handle_window_event ──────────────────────────────────────────────────
+
+    // Build a minimal WindowApp backed by a headless SoftwareRenderer.
+    // We can call handle_window_event() directly since ActiveEventLoop is not
+    // needed for any mouse path.
+    fn test_window_app(
+        cols: u16,
+        rows: u16,
+    ) -> WindowApp<SoftwareRenderer, impl FnMut(&mut crate::Terminal<SoftwareRenderer>)> {
+        let opts = SoftwareBackend {
+            window_title: String::new(),
+            font: Some(bitmap_font::vga8x16::FONT),
+            cols,
+            rows,
+            scale: 1,
+            #[cfg(feature = "software-tilesets")]
+            tilesets: Vec::new(),
+        };
+        let terminal = crate::Terminal::new(opts.run_headless());
+        WindowApp {
+            terminal: Some(terminal),
+            app_loop: |_: &mut crate::Terminal<SoftwareRenderer>| {},
+            window: None,
+            title: String::new(),
+            init_size: InitWindowSize {
+                width: 80,
+                height: 25,
+            },
+            current_modifiers: KeyModifiers::NONE,
+            cursor_px: (0.0, 0.0),
+        }
+    }
+
+    fn poll(
+        app: &mut WindowApp<SoftwareRenderer, impl FnMut(&mut crate::Terminal<SoftwareRenderer>)>,
+    ) -> Option<Event> {
+        app.terminal
+            .as_mut()
+            .unwrap()
+            .backend_mut()
+            .poll_event(Duration::ZERO)
+    }
+
+    #[test]
+    fn cursor_moved_pushes_moved_event_at_correct_cell() {
+        // 8-wide × 16-tall cells; cursor at pixel (20, 32) → col 2, row 2.
+        let mut app = test_window_app(10, 5);
+        app.handle_window_event(WindowEvent::CursorMoved {
+            device_id: winit::event::DeviceId::dummy(),
+            position: winit::dpi::PhysicalPosition::new(20.0_f64, 32.0_f64),
+        });
+        assert_eq!(
+            poll(&mut app),
+            Some(Event::Mouse(MouseEvent {
+                kind: MouseEventKind::Moved,
+                position: Pos { x: 2, y: 2 },
+                modifiers: KeyModifiers::NONE,
+            }))
+        );
+    }
+
+    #[test]
+    fn cursor_moved_caches_position_for_subsequent_click() {
+        // Move to pixel (16, 16) = col 2, row 1, then click — button event
+        // must reuse the cached position.
+        let mut app = test_window_app(10, 5);
+        app.handle_window_event(WindowEvent::CursorMoved {
+            device_id: winit::event::DeviceId::dummy(),
+            position: winit::dpi::PhysicalPosition::new(16.0_f64, 16.0_f64),
+        });
+        let _ = poll(&mut app); // discard the Moved event
+        app.handle_window_event(WindowEvent::MouseInput {
+            device_id: winit::event::DeviceId::dummy(),
+            state: winit::event::ElementState::Pressed,
+            button: winit::event::MouseButton::Left,
+        });
+        assert_eq!(
+            poll(&mut app),
+            Some(Event::Mouse(MouseEvent {
+                kind: MouseEventKind::Down(MouseButton::Left),
+                position: Pos { x: 2, y: 1 },
+                modifiers: KeyModifiers::NONE,
+            }))
+        );
+    }
+
+    #[test]
+    fn mouse_button_release_produces_up_event() {
+        let mut app = test_window_app(10, 5);
+        app.handle_window_event(WindowEvent::MouseInput {
+            device_id: winit::event::DeviceId::dummy(),
+            state: winit::event::ElementState::Released,
+            button: winit::event::MouseButton::Right,
+        });
+        assert_eq!(
+            poll(&mut app),
+            Some(Event::Mouse(MouseEvent {
+                kind: MouseEventKind::Up(MouseButton::Right),
+                position: Pos { x: 0, y: 0 },
+                modifiers: KeyModifiers::NONE,
+            }))
+        );
+    }
+
+    #[test]
+    fn unknown_mouse_button_produces_no_event() {
+        let mut app = test_window_app(10, 5);
+        app.handle_window_event(WindowEvent::MouseInput {
+            device_id: winit::event::DeviceId::dummy(),
+            state: winit::event::ElementState::Pressed,
+            button: winit::event::MouseButton::Other(99),
+        });
+        assert_eq!(poll(&mut app), None);
+    }
+
+    #[test]
+    fn scroll_up_line_delta() {
+        let mut app = test_window_app(10, 5);
+        app.handle_window_event(WindowEvent::MouseWheel {
+            device_id: winit::event::DeviceId::dummy(),
+            delta: winit::event::MouseScrollDelta::LineDelta(0.0, 1.0),
+            phase: winit::event::TouchPhase::Moved,
+        });
+        let ev = poll(&mut app).unwrap();
+        assert!(matches!(
+            ev,
+            Event::Mouse(MouseEvent {
+                kind: MouseEventKind::ScrollUp,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn scroll_down_line_delta() {
+        let mut app = test_window_app(10, 5);
+        app.handle_window_event(WindowEvent::MouseWheel {
+            device_id: winit::event::DeviceId::dummy(),
+            delta: winit::event::MouseScrollDelta::LineDelta(0.0, -1.0),
+            phase: winit::event::TouchPhase::Moved,
+        });
+        let ev = poll(&mut app).unwrap();
+        assert!(matches!(
+            ev,
+            Event::Mouse(MouseEvent {
+                kind: MouseEventKind::ScrollDown,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn scroll_up_pixel_delta() {
+        let mut app = test_window_app(10, 5);
+        app.handle_window_event(WindowEvent::MouseWheel {
+            device_id: winit::event::DeviceId::dummy(),
+            delta: winit::event::MouseScrollDelta::PixelDelta(winit::dpi::PhysicalPosition::new(
+                0.0_f64, 15.0_f64,
+            )),
+            phase: winit::event::TouchPhase::Moved,
+        });
+        let ev = poll(&mut app).unwrap();
+        assert!(matches!(
+            ev,
+            Event::Mouse(MouseEvent {
+                kind: MouseEventKind::ScrollUp,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn modifiers_propagate_to_mouse_event() {
+        let mut app = test_window_app(10, 5);
+        // Simulate a ModifiersChanged before the click.
+        app.handle_window_event(WindowEvent::ModifiersChanged(
+            winit::event::Modifiers::from(winit::keyboard::ModifiersState::SHIFT),
+        ));
+        let _ = poll(&mut app); // no event emitted for modifiers
+        app.handle_window_event(WindowEvent::MouseInput {
+            device_id: winit::event::DeviceId::dummy(),
+            state: winit::event::ElementState::Pressed,
+            button: winit::event::MouseButton::Left,
+        });
+        let ev = poll(&mut app).unwrap();
+        assert!(matches!(
+            ev,
+            Event::Mouse(MouseEvent {
+                modifiers,
+                ..
+            }) if modifiers.contains(KeyModifiers::SHIFT)
+        ));
+    }
 
     fn test_renderer() -> SoftwareRenderer {
         let opts = SoftwareBackend {
