@@ -10,7 +10,6 @@
 mod util;
 
 use retroglyph::Terminal;
-use retroglyph::backend::software::SoftwareBackendBuilder;
 use retroglyph::color::Color;
 use retroglyph::event::{Event, KeyCode};
 use util::lcg::Lcg;
@@ -224,38 +223,16 @@ fn tick(term: &mut Terminal<impl retroglyph::Backend>, s: &mut BounceState) -> b
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
-#[cfg(target_arch = "wasm32")]
-#[wasm_bindgen::prelude::wasm_bindgen(start)]
-pub fn wasm_main() -> Result<(), wasm_bindgen::JsValue> {
-    console_error_panic_hook::set_once();
-    main();
-    Ok(())
-}
+use retroglyph::backend::software::SoftwareBackendBuilder;
 
-fn main() {
-    #[cfg(target_arch = "wasm32")]
-    console_error_panic_hook::set_once();
-
-    let backend = SoftwareBackendBuilder::new()
-        .title(env!("CARGO_BIN_NAME"))
-        .grid_size(40, 15)
-        .scale(4)
-        .build()
-        .expect("backend init failed (try the `software-default-font` feature)");
-
-    let mut state: Option<BounceState> = None;
-    let mut quit = false;
-    backend
-        .run_windowed(move |term: &mut Terminal<_>| {
-            if quit {
-                return;
-            }
-            let s = state.get_or_insert_with(BounceState::new);
-            if !tick(term, s) {
-                quit = true;
-                #[cfg(not(target_arch = "wasm32"))]
-                std::process::exit(0);
-            }
-        })
-        .expect("event loop failed");
-}
+rg_run_software!(
+    BounceState,
+    |_term| BounceState::new(),
+    tick,
+    builder = {
+        SoftwareBackendBuilder::new()
+            .title(env!("CARGO_BIN_NAME"))
+            .grid_size(40, 15)
+            .scale(4)
+    }
+);
