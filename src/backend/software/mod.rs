@@ -28,7 +28,7 @@ pub mod windowed;
 pub use windowed::WindowedBackend;
 
 use crate::event::{
-    Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+    Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind, PhysicalPos,
 };
 use crate::grid::{Pos, Size};
 use crate::style::CellModifier;
@@ -286,6 +286,7 @@ impl SoftwareBackend {
         let terminal = crate::Terminal::new(renderer);
         let event_loop = EventLoop::new().map_err(SoftwareBackendError::EventLoop)?;
 
+        #[cfg(not(target_arch = "wasm32"))]
         let frame_interval = target_fps.map(|fps| Duration::from_secs_f64(1.0 / f64::from(fps)));
 
         let build_app = |terminal, app_loop| WindowApp {
@@ -942,6 +943,19 @@ fn translate_key(input: winit::event::KeyEvent, modifiers: KeyModifiers) -> Opti
     Some(Event::Key(KeyEvent { code, modifiers }))
 }
 
+/// Converts a raw f64 cursor position to a [`PhysicalPos`].
+///
+/// `f64.max(0.0) as u32`: the `.max(0.0)` clamp makes sign loss intentional.
+/// Truncation of the fractional part is also intentional — pixel coordinates
+/// are always integers.
+#[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+const fn physical_pos_from(x: f64, y: f64) -> PhysicalPos {
+    PhysicalPos {
+        x: x.max(0.0) as u32,
+        y: y.max(0.0) as u32,
+    }
+}
+
 /// Converts physical pixel coordinates to a grid cell [`Pos`].
 ///
 /// Clamps to `u16::MAX` so out-of-bounds cursor positions (negative or
@@ -1079,7 +1093,10 @@ impl<B: WindowedBackend, F: FnMut(&mut crate::Terminal<B>) + 'static> Applicatio
         self.handle_window_event(event);
     }
 
-    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+    fn about_to_wait(
+        &mut self,
+        #[cfg_attr(target_arch = "wasm32", allow(unused_variables))] event_loop: &ActiveEventLoop,
+    ) {
         #[cfg(not(target_arch = "wasm32"))]
         if let Some(interval) = self.frame_interval {
             // Throttled: sleep until the next frame deadline, then render.
@@ -1115,81 +1132,13 @@ impl<B: WindowedBackend, F: FnMut(&mut crate::Terminal<B>) + 'static> WindowApp<
                     term.backend_mut().push_event(Event::Close);
                 }
             }
-
-            WindowEvent::Resized(physical_size) => {
-                if let Some(term) = self.terminal.as_mut() {
-                    let (cell_w, cell_h) = term.backend().cell_size();
-                    let cols = physical_size.width / cell_w;
-                    let rows = physical_size.height / cell_h;
-                    let new_w = cols * cell_w;
-                    let new_h = rows * cell_h;
-                    term.backend_mut().resize_surface(new_w, new_h);
-                    #[allow(clippy::cast_possible_truncation)]
-                    term.backend_mut()
-                        .push_event(Event::Resize(cols.max(1) as u16, rows.max(1) as u16));
-                }
-            }
-
-            WindowEvent::CursorMoved { position, .. } => {
-                self.cursor_px = (position.x, position.y);
-                if let Some(term) = self.terminal.as_mut() {
-                    let (cell_w, cell_h) = term.backend().cell_size();
-                    let pos = pixel_to_cell(position.x, position.y, cell_w, cell_h);
-                    term.backend_mut()
-                        .push_window_event(Event::Mouse(MouseEvent {
-                            kind: MouseEventKind::Moved,
-                            position: pos,
-                            modifiers: self.current_modifiers,
-                        }));
-                }
-            }
-
-            WindowEvent::MouseInput { state, button, .. } => {
-                if let Some(term) = self.terminal.as_mut() {
-                    let (cell_w, cell_h) = term.backend().cell_size();
-                    let pos = pixel_to_cell(self.cursor_px.0, self.cursor_px.1, cell_w, cell_h);
-                    if let Some(btn) = translate_mouse_button(button) {
-                        let kind = if state.is_pressed() {
-                            MouseEventKind::Down(btn)
-                        } else {
-                            MouseEventKind::Up(btn)
-                        };
-                        term.backend_mut()
-                            .push_window_event(Event::Mouse(MouseEvent {
-                                kind,
-                                position: pos,
-                                modifiers: self.current_modifiers,
-                            }));
-                    }
-                }
-            }
-
-            WindowEvent::MouseWheel { delta, .. } => {
-                if let Some(term) = self.terminal.as_mut() {
-                    let (cell_w, cell_h) = term.backend().cell_size();
-                    let pos = pixel_to_cell(self.cursor_px.0, self.cursor_px.1, cell_w, cell_h);
-                    let y = match delta {
-                        winit::event::MouseScrollDelta::LineDelta(_, y) => f64::from(y),
-                        winit::event::MouseScrollDelta::PixelDelta(p) => p.y,
-                    };
-                    let kind = if y > 0.0 {
-                        MouseEventKind::ScrollUp
-                    } else {
-                        MouseEventKind::ScrollDown
-                    };
-                    term.backend_mut()
-                        .push_window_event(Event::Mouse(MouseEvent {
-                            kind,
-                            position: pos,
-                            modifiers: self.current_modifiers,
-                        }));
-                }
-            }
-
+            WindowEvent::Resized(size) => self.on_resized(size),
+            WindowEvent::CursorMoved { position, .. } => self.on_cursor_moved(position),
+            WindowEvent::MouseInput { state, button, .. } => self.on_mouse_input(state, button),
+            WindowEvent::MouseWheel { delta, .. } => self.on_mouse_wheel(delta),
             WindowEvent::ModifiersChanged(mods) => {
                 self.current_modifiers = translate_modifiers(mods.state());
             }
-
             WindowEvent::KeyboardInput { event, .. } => {
                 if let Some(term) = self.terminal.as_mut()
                     && let Some(e) = translate_key(event, self.current_modifiers)
@@ -1210,6 +1159,95 @@ impl<B: WindowedBackend, F: FnMut(&mut crate::Terminal<B>) + 'static> WindowApp<
 
             _ => {}
         }
+    }
+
+    fn on_resized(&mut self, size: winit::dpi::PhysicalSize<u32>) {
+        let Some(term) = self.terminal.as_mut() else {
+            return;
+        };
+        let (cell_w, cell_h) = term.backend().cell_size();
+        let cols = size.width / cell_w;
+        let rows = size.height / cell_h;
+        term.backend_mut()
+            .resize_surface(cols * cell_w, rows * cell_h);
+        #[allow(clippy::cast_possible_truncation)]
+        term.backend_mut()
+            .push_event(Event::Resize(cols.max(1) as u16, rows.max(1) as u16));
+    }
+
+    fn on_cursor_moved(&mut self, position: winit::dpi::PhysicalPosition<f64>) {
+        self.cursor_px = (position.x, position.y);
+        let px = physical_pos_from(position.x, position.y);
+        let Some(term) = self.terminal.as_mut() else {
+            return;
+        };
+        let (cell_w, cell_h) = term.backend().cell_size();
+        let pos = pixel_to_cell(position.x, position.y, cell_w, cell_h);
+        term.backend_mut()
+            .push_window_event(Event::Mouse(MouseEvent {
+                kind: MouseEventKind::Moved,
+                position: pos,
+                pixel_position: Some(px),
+                modifiers: self.current_modifiers,
+            }));
+    }
+
+    fn on_mouse_input(
+        &mut self,
+        state: winit::event::ElementState,
+        button: winit::event::MouseButton,
+    ) {
+        let Some(btn) = translate_mouse_button(button) else {
+            return;
+        };
+        let px = self.cursor_physical_pos();
+        let Some(term) = self.terminal.as_mut() else {
+            return;
+        };
+        let (cell_w, cell_h) = term.backend().cell_size();
+        let pos = pixel_to_cell(self.cursor_px.0, self.cursor_px.1, cell_w, cell_h);
+        let kind = if state.is_pressed() {
+            MouseEventKind::Down(btn)
+        } else {
+            MouseEventKind::Up(btn)
+        };
+        term.backend_mut()
+            .push_window_event(Event::Mouse(MouseEvent {
+                kind,
+                position: pos,
+                pixel_position: Some(px),
+                modifiers: self.current_modifiers,
+            }));
+    }
+
+    fn on_mouse_wheel(&mut self, delta: winit::event::MouseScrollDelta) {
+        let px = self.cursor_physical_pos();
+        let Some(term) = self.terminal.as_mut() else {
+            return;
+        };
+        let (cell_w, cell_h) = term.backend().cell_size();
+        let pos = pixel_to_cell(self.cursor_px.0, self.cursor_px.1, cell_w, cell_h);
+        let scroll_y = match delta {
+            winit::event::MouseScrollDelta::LineDelta(_, y) => f64::from(y),
+            winit::event::MouseScrollDelta::PixelDelta(p) => p.y,
+        };
+        let kind = if scroll_y > 0.0 {
+            MouseEventKind::ScrollUp
+        } else {
+            MouseEventKind::ScrollDown
+        };
+        term.backend_mut()
+            .push_window_event(Event::Mouse(MouseEvent {
+                kind,
+                position: pos,
+                pixel_position: Some(px),
+                modifiers: self.current_modifiers,
+            }));
+    }
+
+    /// Convert the cached cursor pixel position to [`PhysicalPos`].
+    const fn cursor_physical_pos(&self) -> PhysicalPos {
+        physical_pos_from(self.cursor_px.0, self.cursor_px.1)
     }
 }
 
@@ -1316,6 +1354,7 @@ mod tests {
         let ev = Event::Mouse(MouseEvent {
             kind: MouseEventKind::Down(MouseButton::Left),
             position: Pos { x: 3, y: 1 },
+            pixel_position: None,
             modifiers: KeyModifiers::NONE,
         });
         renderer.push_event(ev);
@@ -1329,11 +1368,13 @@ mod tests {
         let moved = Event::Mouse(MouseEvent {
             kind: MouseEventKind::Moved,
             position: Pos { x: 1, y: 2 },
+            pixel_position: None,
             modifiers: KeyModifiers::NONE,
         });
         let clicked = Event::Mouse(MouseEvent {
             kind: MouseEventKind::Down(MouseButton::Left),
             position: Pos { x: 1, y: 2 },
+            pixel_position: None,
             modifiers: KeyModifiers::NONE,
         });
         renderer.push_event(moved);
@@ -1403,6 +1444,7 @@ mod tests {
             Some(Event::Mouse(MouseEvent {
                 kind: MouseEventKind::Moved,
                 position: Pos { x: 2, y: 2 },
+                pixel_position: Some(PhysicalPos { x: 20, y: 32 }),
                 modifiers: KeyModifiers::NONE,
             }))
         );
@@ -1428,6 +1470,7 @@ mod tests {
             Some(Event::Mouse(MouseEvent {
                 kind: MouseEventKind::Down(MouseButton::Left),
                 position: Pos { x: 2, y: 1 },
+                pixel_position: Some(PhysicalPos { x: 16, y: 16 }),
                 modifiers: KeyModifiers::NONE,
             }))
         );
@@ -1446,6 +1489,7 @@ mod tests {
             Some(Event::Mouse(MouseEvent {
                 kind: MouseEventKind::Up(MouseButton::Right),
                 position: Pos { x: 0, y: 0 },
+                pixel_position: Some(PhysicalPos { x: 0, y: 0 }),
                 modifiers: KeyModifiers::NONE,
             }))
         );

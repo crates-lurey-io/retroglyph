@@ -131,6 +131,35 @@ impl From<Vec<Span>> for Line {
     }
 }
 
+/// Build a [`Line`] from a list of `(Style, text)` pairs.
+///
+/// Each pair becomes a [`Span`] with the given style. The resulting `Line`
+/// is equivalent to calling `Line::from(vec![Span::styled(t, s), ...])` but
+/// with less boilerplate for multi-segment event-log text.
+///
+/// # Examples
+///
+/// ```
+/// # extern crate alloc;
+/// use retroglyph::spans;
+/// use retroglyph::style::Style;
+/// use retroglyph::color::Color;
+///
+/// let line = spans![
+///     (Style::new().fg(Color::CYAN), "snowtroop "),
+///     (Style::default(), "→ 1 hit"),
+/// ];
+/// assert_eq!(line.width(), 17);
+/// ```
+#[macro_export]
+macro_rules! spans {
+    ($(($style:expr, $text:expr)),* $(,)?) => {
+        $crate::text::Line::from(alloc::vec![
+            $($crate::text::Span::styled($text, $style)),*
+        ])
+    };
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

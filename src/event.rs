@@ -3,6 +3,13 @@
 use crate::grid::Pos;
 use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
 
+/// Physical (pixel) position relative to the window's top-left corner.
+///
+/// Using `ixy::Pos<u32>` rather than the cell-grid [`Pos`] (`ixy::Pos<u16>`)
+/// makes the distinction type-safe: you cannot accidentally pass a pixel
+/// coordinate where a cell coordinate is expected.
+pub type PhysicalPos = ixy::Pos<u32>;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 /// Keyboard modifier flags.
 ///
@@ -146,8 +153,13 @@ pub enum MouseEventKind {
 pub struct MouseEvent {
     /// The kind of mouse event.
     pub kind: MouseEventKind,
-    /// The position of the mouse.
+    /// Cell-grid position of the mouse cursor.
     pub position: Pos,
+    /// Physical pixel position of the mouse cursor, relative to the window's top-left.
+    ///
+    /// Populated by backends that support sub-cell precision (e.g. the software
+    /// renderer). `None` on character-mode backends such as crossterm.
+    pub pixel_position: Option<PhysicalPos>,
     /// Modifiers held down during the event.
     pub modifiers: KeyModifiers,
 }
@@ -200,14 +212,36 @@ mod tests {
     }
 
     #[test]
-    fn test_mouse_event() {
+    fn test_mouse_event_no_pixel_position() {
         let mouse_event = MouseEvent {
             kind: MouseEventKind::Down(MouseButton::Left),
             position: Pos { x: 10, y: 5 },
+            pixel_position: None,
             modifiers: KeyModifiers::NONE,
         };
-        let event = Event::Mouse(mouse_event);
+        assert!(mouse_event.pixel_position.is_none());
+        assert!(matches!(Event::Mouse(mouse_event), Event::Mouse(_)));
+    }
 
-        assert!(matches!(event, Event::Mouse(_)));
+    #[test]
+    fn test_mouse_event_with_pixel_position() {
+        let mouse_event = MouseEvent {
+            kind: MouseEventKind::Moved,
+            position: Pos { x: 3, y: 2 },
+            pixel_position: Some(PhysicalPos { x: 55, y: 38 }),
+            modifiers: KeyModifiers::NONE,
+        };
+        let px = mouse_event.pixel_position.unwrap();
+        assert_eq!(px.x, 55);
+        assert_eq!(px.y, 38);
+        // Cell and pixel positions are distinct coordinate spaces.
+        assert_ne!(px.x, u32::from(mouse_event.position.x));
+    }
+
+    #[test]
+    fn test_physical_pos_is_copy() {
+        let p = PhysicalPos { x: 10, y: 20 };
+        let q = p; // Copy
+        assert_eq!(p, q);
     }
 }
