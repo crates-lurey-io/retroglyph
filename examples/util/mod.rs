@@ -2,8 +2,11 @@
 
 #![allow(unreachable_pub)]
 
+pub mod action;
 pub mod game;
 pub mod lcg;
+pub mod perf;
+pub mod timestep;
 
 /// Emit a `main` function wired to the enabled backend.
 ///
@@ -56,8 +59,11 @@ macro_rules! rg_run {
                     if quit {
                         return;
                     }
-                    let s = state.get_or_insert_with(|| $init(term));
-                    if !$tick(term, s) {
+                    if state.is_none() {
+                        state = ::std::option::Option::Some($init(&mut *term));
+                    }
+                    let s = state.as_mut().unwrap();
+                    if !$tick(&mut *term, s) {
                         quit = true;
                         #[cfg(not(target_arch = "wasm32"))]
                         ::std::process::exit(0);
@@ -85,6 +91,79 @@ macro_rules! rg_run {
             let mut term = Terminal::new(backend);
             let mut state = $init(&mut term);
             while $tick(&mut term, &mut state) {}
+            ::std::result::Result::Ok(())
+        }
+    };
+}
+
+/// Emit a software-only `main` function using a caller-supplied
+/// [`SoftwareBackendBuilder`] expression.
+///
+/// Use this for examples that need custom grid dimensions, scale, tilesets,
+/// or any other builder option that differs from `rg_run!`'s defaults.
+/// Unlike `rg_run!`, no crossterm branch is emitted — these examples only run
+/// on the desktop or WASM software renderer.
+///
+/// # Arguments
+///
+/// - `$State`   — the game state type.
+/// - `$init`    — callable as `$init(&mut Terminal<B>) -> $State`; called once.
+/// - `$tick`    — callable as `$tick(&mut Terminal<B>, &mut $State) -> bool`;
+///   return `false` to quit.
+/// - `builder = $expr` — a block or expression that evaluates to a
+///   *configured* [`SoftwareBackendBuilder`] (without the final `.build()`).
+///
+/// # Example
+///
+/// ```ignore
+/// mod util;
+/// struct State { ... }
+/// fn init<B: retroglyph::Backend>(t: &mut retroglyph::Terminal<B>) -> State { ... }
+/// fn tick<B: retroglyph::Backend>(t: &mut retroglyph::Terminal<B>, s: &mut State) -> bool { ... }
+/// rg_run_software!(State, init, tick, builder = {
+///     retroglyph::backend::software::SoftwareBackendBuilder::new()
+///         .title(env!("CARGO_BIN_NAME"))
+///         .grid_size(40, 15)
+///         .scale(4)
+/// });
+/// ```
+#[macro_export]
+macro_rules! rg_run_software {
+    ($State:ty, $init:expr, $tick:expr, builder = $builder:expr) => {
+        #[cfg(feature = "software")]
+        fn main() {
+            #[cfg(target_arch = "wasm32")]
+            ::console_error_panic_hook::set_once();
+
+            let backend = { $builder }
+                .build()
+                .expect("failed to initialize software backend");
+
+            let mut state: ::std::option::Option<$State> = ::std::option::Option::None;
+            let mut quit = false;
+            backend
+                .run_windowed(move |term| {
+                    if quit {
+                        return;
+                    }
+                    if state.is_none() {
+                        state = ::std::option::Option::Some($init(&mut *term));
+                    }
+                    let s = state.as_mut().unwrap();
+                    if !$tick(&mut *term, s) {
+                        quit = true;
+                        #[cfg(not(target_arch = "wasm32"))]
+                        ::std::process::exit(0);
+                    }
+                })
+                .expect("event loop failed");
+        }
+
+        #[cfg(all(feature = "software", target_arch = "wasm32"))]
+        #[allow(missing_docs)]
+        #[::wasm_bindgen::prelude::wasm_bindgen(start)]
+        pub fn wasm_main() -> ::std::result::Result<(), ::wasm_bindgen::JsValue> {
+            main();
             ::std::result::Result::Ok(())
         }
     };

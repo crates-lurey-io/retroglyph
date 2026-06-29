@@ -60,16 +60,16 @@ software-tilesets = ["software", "dep:image", "dep:alpha-blend", "dep:log"]
 software-default-font = ["software"]
 
 [[example]]
-name = "demo"
+name = "dungeon_room"
 # Supports crossterm (terminal) and software-default-font (desktop/WASM).
 # At least one must be enabled; software takes priority when both are present.
 
 [[example]]
-name = "tileset_demo"
+name = "tileset"
 required-features = ["software-tilesets", "software-default-font"]
 
 [[example]]
-name = "software_subpixel_demo"
+name = "subpixel"
 required-features = ["software-default-font"]
 
 [[bench]]
@@ -77,7 +77,7 @@ name = "retroglyph"
 harness = false
 
 [[example]]
-name = "headless_demo"
+name = "headless"
 required-features = []
 
 [[example]]

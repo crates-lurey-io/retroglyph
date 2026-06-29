@@ -71,25 +71,49 @@ struct Example {
 
 static EXAMPLES: &[Example] = &[
     Example {
-        name: "demo",
+        name: "dungeon_room",
         description: "interactive room — player, enemy, movement",
         backends: &[Backend::Terminal, Backend::Desktop, Backend::Wasm],
         extra_features: &[],
     },
     Example {
-        name: "software_subpixel_demo",
+        name: "sokoban",
+        description: "Sokoban puzzle — push all boxes onto goals",
+        backends: &[Backend::Terminal, Backend::Desktop, Backend::Wasm],
+        extra_features: &[],
+    },
+    Example {
+        name: "roguelike_dungeon",
+        description: "single-level roguelike — FoV, BFS pathfinding, layers",
+        backends: &[Backend::Terminal, Backend::Desktop, Backend::Wasm],
+        extra_features: &[],
+    },
+    Example {
+        name: "subpixel",
         description: "DVD-style bouncing @ with sub-pixel offsets",
         backends: &[Backend::Desktop, Backend::Wasm],
         extra_features: &[],
     },
     Example {
-        name: "tileset_demo",
+        name: "tileset",
         description: "custom PNG sprite sheets with alpha blending",
         backends: &[Backend::Desktop, Backend::Wasm],
         extra_features: &["software-tilesets"],
     },
     Example {
-        name: "headless_demo",
+        name: "sprite_stress",
+        description: "alpha-blended sprite throughput benchmark",
+        backends: &[Backend::Desktop, Backend::Wasm],
+        extra_features: &["software-tilesets"],
+    },
+    Example {
+        name: "dirty_viz",
+        description: "visualize which cells are redrawn each frame",
+        backends: &[Backend::Desktop, Backend::Wasm],
+        extra_features: &[],
+    },
+    Example {
+        name: "headless",
         description: "headless backend — no terminal or window needed",
         backends: &[],
         extra_features: &[],
@@ -187,7 +211,7 @@ fn main() {
             continue;
         };
 
-        // No backend needed (e.g. headless_demo) — launch immediately.
+        // No backend needed (e.g. headless) — launch immediately.
         if ex.backends.is_empty() {
             launch(ex, None);
         }

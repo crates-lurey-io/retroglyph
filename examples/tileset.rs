@@ -9,10 +9,10 @@
 //! through around the sprite pixels.
 //!
 //! Run with:
-//!   `cargo run --example tileset_demo --features software-tilesets,software-default-font`
+//!   `cargo run --example tileset --features software-tilesets,software-default-font`
 
-use retroglyph::backend::software::SoftwareBackendBuilder;
-use retroglyph::backend::software::tileset::TilesetOptions;
+mod util;
+
 use retroglyph::event::{Event, KeyCode};
 use retroglyph::style::Style;
 use retroglyph::{Color, Terminal};
@@ -269,47 +269,24 @@ fn tick(term: &mut Terminal<impl retroglyph::Backend>, state: &mut TilesetState)
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
-#[cfg(target_arch = "wasm32")]
-#[wasm_bindgen::prelude::wasm_bindgen(start)]
-pub fn wasm_main() -> Result<(), wasm_bindgen::JsValue> {
-    console_error_panic_hook::set_once();
-    main();
-    Ok(())
-}
+use retroglyph::backend::software::SoftwareBackendBuilder;
+use retroglyph::backend::software::tileset::TilesetOptions;
 
-fn main() {
-    #[cfg(target_arch = "wasm32")]
-    console_error_panic_hook::set_once();
-
-    let png_bytes = make_sprite_sheet();
-
-    let tileset = TilesetOptions::from_bytes(png_bytes)
-        .tile_size(8, 8)
-        .start_codepoint('\u{E000}')
-        .build()
-        .expect("tileset options are valid");
-
-    let backend = SoftwareBackendBuilder::new()
-        .title(env!("CARGO_BIN_NAME"))
-        .grid_size(40, 16)
-        .scale(4)
-        .tileset(tileset)
-        .build()
-        .expect("backend init failed");
-
-    let mut state: Option<TilesetState> = None;
-    let mut quit = false;
-    backend
-        .run_windowed(move |term: &mut Terminal<_>| {
-            if quit {
-                return;
-            }
-            let s = state.get_or_insert_with(TilesetState::new);
-            if !tick(term, s) {
-                quit = true;
-                #[cfg(not(target_arch = "wasm32"))]
-                std::process::exit(0);
-            }
-        })
-        .expect("event loop failed");
-}
+rg_run_software!(
+    TilesetState,
+    |_term| TilesetState::new(),
+    tick,
+    builder = {
+        let png_bytes = make_sprite_sheet();
+        let tileset = TilesetOptions::from_bytes(png_bytes)
+            .tile_size(8, 8)
+            .start_codepoint('\u{E000}')
+            .build()
+            .expect("tileset options are valid");
+        SoftwareBackendBuilder::new()
+            .title(env!("CARGO_BIN_NAME"))
+            .grid_size(40, 16)
+            .scale(4)
+            .tileset(tileset)
+    }
+);
