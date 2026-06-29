@@ -41,26 +41,30 @@ jobs:
         # Version must match the wasm-bindgen dev-dependency in Cargo.toml.
         run: cargo install wasm-bindgen-cli --version 0.2.106
 
-      - name: Build WASM examples (demo, software_subpixel_demo)
+      - name: Build WASM examples (software-default-font)
         run: |
           cargo build --release \
             --target wasm32-unknown-unknown \
             --features software-default-font \
-            --example demo \
-            --example software_subpixel_demo
+            --example dungeon_room \
+            --example sokoban \
+            --example roguelike_dungeon \
+            --example subpixel \
+            --example dirty_viz
         continue-on-error: true
 
-      - name: Build WASM examples (tileset_demo)
+      - name: Build WASM examples (software-tilesets)
         run: |
           cargo build --release \
             --target wasm32-unknown-unknown \
             --features software-tilesets,software-default-font \
-            --example tileset_demo
+            --example tileset \
+            --example sprite_stress
         continue-on-error: true
 
       - name: Package WASM examples
         run: |
-          EXAMPLES=(demo software_subpixel_demo tileset_demo)
+          EXAMPLES=(dungeon_room sokoban roguelike_dungeon subpixel dirty_viz tileset sprite_stress)
           for ex in "${EXAMPLES[@]}"; do
             wasm="${PWD}/target/wasm32-unknown-unknown/release/examples/${ex}.wasm"
             if [ ! -f "$wasm" ]; then
@@ -97,7 +101,7 @@ jobs:
           mkdir -p target/doc/examples
           # Only list examples that were actually built.
           entries=""
-          for ex in demo software_subpixel_demo tileset_demo; do
+          for ex in dungeon_room sokoban roguelike_dungeon subpixel dirty_viz tileset sprite_stress; do
             if [ -f "target/doc/examples/${ex}/index.html" ]; then
               entries="${entries}<li><a href=\"${ex}/\">${ex}</a></li>"$'\n'
             fi
