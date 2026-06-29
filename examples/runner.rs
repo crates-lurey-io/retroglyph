@@ -174,6 +174,10 @@ fn launch(ex: &Example, backend: Option<Backend>) -> ! {
 
     let mut cmd = Command::new("cargo");
     cmd.args(["run", "--example", ex.name]);
+    // Propagate --release when the runner itself was built in release mode.
+    if !cfg!(debug_assertions) {
+        cmd.arg("--release");
+    }
     if !features.is_empty() {
         cmd.args(["--features", &features.join(",")]);
     }

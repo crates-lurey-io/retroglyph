@@ -2,7 +2,6 @@
 //!
 //! [`PerfOverlay`] maintains a rolling ring buffer of recent frame durations.
 //! Call [`PerfOverlay::begin_frame`] at the top of your tick function and
-//! [`PerfOverlay::end_frame`] just before `term.present()`. Then optionally
 //! call [`PerfOverlay::draw`] to render a compact stats bar into the terminal.
 //!
 //! The raw frame-time data is also accessible via [`PerfOverlay::samples`]
@@ -16,18 +15,28 @@ use retroglyph::{Backend, Terminal};
 #[cfg(not(target_arch = "wasm32"))]
 use std::time::Instant;
 
-// On WASM `std::time::Instant` is unavailable; use a stub that always returns
-// zero so the rest of the API compiles without conditional code in callers.
+// On WASM `std::time::Instant` is unavailable; delegate to `performance.now()`
+// (sub-millisecond precision) so frame times are real measurements.
 #[cfg(target_arch = "wasm32")]
 mod wasm_time {
+    use wasm_bindgen::prelude::wasm_bindgen;
+
+    #[wasm_bindgen(inline_js = "export function perf_now() { return performance.now(); }")]
+    extern "C" {
+        fn perf_now() -> f64;
+    }
+
     #[derive(Clone, Copy)]
-    pub struct Instant;
+    pub struct Instant {
+        ms: f64,
+    }
     impl Instant {
         pub fn now() -> Self {
-            Self
+            Self { ms: perf_now() }
         }
         pub fn elapsed(self) -> std::time::Duration {
-            std::time::Duration::ZERO
+            let delta_ms = (perf_now() - self.ms).max(0.0);
+            std::time::Duration::from_secs_f64(delta_ms / 1_000.0)
         }
     }
 }
@@ -62,7 +71,6 @@ pub struct FrameStats {
 /// fn tick(term: &mut Terminal<impl Backend>, state: &mut State) -> bool {
 ///     perf.begin_frame();
 ///     // ... game update and draw ...
-///     perf.end_frame();
 ///     perf.draw(term);   // optional
 ///     term.present().unwrap();
 ///     true
@@ -97,23 +105,23 @@ impl PerfOverlay {
     }
 
     /// Record the start of a frame. Call at the very top of your tick fn.
+    ///
+    /// On the first call this just records a baseline timestamp. On every
+    /// subsequent call it records the elapsed time since the *previous*
+    /// `begin_frame` — the true inter-frame wall time, including vsync waits
+    /// that happen outside the tick function.
     pub fn begin_frame(&mut self) {
+        if self.started {
+            // Elapsed since last begin_frame = true inter-frame interval.
+            let us = u64::try_from(self.frame_start.elapsed().as_micros()).unwrap_or(u64::MAX);
+            self.samples[self.head] = us;
+            self.head = (self.head + 1) % WINDOW;
+            if self.count < WINDOW {
+                self.count += 1;
+            }
+        }
         self.frame_start = Instant::now();
         self.started = true;
-    }
-
-    /// Record the end of a frame. Call after all game logic and drawing,
-    /// just before `term.present()`.
-    pub fn end_frame(&mut self) {
-        if !self.started {
-            return;
-        }
-        let us = u64::try_from(self.frame_start.elapsed().as_micros()).unwrap_or(u64::MAX);
-        self.samples[self.head] = us;
-        self.head = (self.head + 1) % WINDOW;
-        if self.count < WINDOW {
-            self.count += 1;
-        }
     }
 
     /// Compute stats over the current window. Returns `None` if no samples

@@ -153,6 +153,14 @@ pub struct SoftwareBackend {
     /// Registered tileset options, loaded at [`run_windowed`](SoftwareBackend::run_windowed) time.
     #[cfg(feature = "software-tilesets")]
     pub tilesets: Vec<TilesetOptions>,
+    /// Target frame rate cap in frames per second.
+    ///
+    /// `None` (the default) runs unbounded: the event loop re-renders as fast
+    /// as the backend allows. Set to e.g. `Some(60)` to cap at 60 fps by
+    /// sleeping in `about_to_wait` until the next frame deadline. On WASM
+    /// this has no effect; `requestAnimationFrame` drives the loop at the
+    /// display refresh rate regardless.
+    pub target_fps: Option<u32>,
 }
 
 impl Default for SoftwareBackend {
@@ -168,6 +176,7 @@ impl Default for SoftwareBackend {
             scale: 1,
             #[cfg(feature = "software-tilesets")]
             tilesets: Vec::new(),
+            target_fps: None,
         }
     }
 }
@@ -255,6 +264,18 @@ impl SoftwareBackendBuilder {
     #[must_use]
     pub fn tileset(mut self, opts: TilesetOptions) -> Self {
         self.options.tilesets.push(opts);
+        self
+    }
+
+    /// Sets a target frame rate cap in frames per second.
+    ///
+    /// When set, `about_to_wait` sleeps until the next frame deadline instead
+    /// of rendering as fast as possible. Useful for CPU-friendly demos that
+    /// don't need maximum throughput. Pass `0` to disable the cap (same as
+    /// not calling this method). On WASM this has no effect.
+    #[must_use]
+    pub const fn target_fps(mut self, fps: u32) -> Self {
+        self.options.target_fps = if fps == 0 { None } else { Some(fps) };
         self
     }
 

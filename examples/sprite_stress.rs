@@ -290,10 +290,9 @@ fn tick<B: Backend>(term: &mut Terminal<B>, state: &mut StressState) -> bool {
     let w_f = f32::from(w);
     let h_f = f32::from(h);
 
-    // Layer 0: static checkerboard (drawn once, kept by double-buffer).
-    if state.frame == 0 {
-        draw_background(term);
-    }
+    // Layer 0: checkerboard background — must be redrawn every frame because
+    // Terminal::present() clears the grid after each swap; nothing persists.
+    draw_background(term);
 
     // Layer 1: clear previous sprite positions, then draw active sprites.
     term.layer(1);
@@ -323,8 +322,7 @@ fn tick<B: Backend>(term: &mut Terminal<B>, state: &mut StressState) -> bool {
 
     // Layer 2: perf overlay and sprite-count HUD.
     term.layer(2);
-    state.perf.end_frame();
-    state.perf.draw(term, 0, 0);
+    state.perf.draw(term, 0, 0); // stats from previous frame; always 1 frame stale
 
     let hud = format!(
         " sprites: {:>4}  [+/-] adjust  [d] dump CSV  [Q] quit ",
@@ -394,5 +392,6 @@ rg_run_software!(
             .grid_size(80, 40)
             .scale(2)
             .tileset(tileset)
+            .target_fps(60)
     }
 );

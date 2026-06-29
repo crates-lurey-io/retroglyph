@@ -159,25 +159,6 @@ fn put_left<B: Backend>(
 
 // ── Draw calls ────────────────────────────────────────────────────────────────
 
-/// Fill the entire left-half background (called once on frame 0).
-fn draw_background<B: Backend>(term: &mut Terminal<B>, state: &mut VizState) {
-    term.layer(0);
-    for row in 0..ANIM_H {
-        for col in 0..HALF_W {
-            let (ch, style) = bg_at(col, row);
-            put_left(
-                term,
-                &mut state.dirty_map,
-                &mut state.dirty_count,
-                col,
-                row,
-                ch,
-                style,
-            );
-        }
-    }
-}
-
 /// Restore the background glyph at the ball's previous position.
 fn restore_prev<B: Backend>(term: &mut Terminal<B>, state: &mut VizState) {
     let (ch, style) = bg_at(state.prev_col, state.prev_row);
@@ -390,11 +371,25 @@ fn tick<B: Backend>(term: &mut Terminal<B>, state: &mut VizState) -> bool {
     state.prev_dirty_count = state.dirty_count;
     state.dirty_count = 0;
 
+    // Background must be redrawn every frame: Terminal::present() clears the
+    // grid after each swap so nothing persists across frames. Draw it directly
+    // (bypassing put_left) so the background fill doesn't inflate dirty_count.
+    term.layer(0);
+    for row in 0..ANIM_H {
+        for col in 0..HALF_W {
+            let (ch, style) = bg_at(col, row);
+            term.put_styled(col, row, ch, style);
+        }
+    }
+
+    // On frame 0 the entire left half is genuinely new, so mark it all dirty.
+    // On later frames only the ball move touches new cells.
     if state.frame == 0 {
-        // Frame 0: full background fill — every left-half cell is dirty.
-        draw_background(term, state);
+        for flag in &mut state.dirty_map {
+            *flag = true;
+        }
+        state.dirty_count = u32::from(HALF_W) * u32::from(ANIM_H);
     } else {
-        // Later frames: only restore the old ball cell.
         restore_prev(term, state);
     }
     // Ball is drawn on top every frame (including frame 0).
@@ -406,7 +401,6 @@ fn tick<B: Backend>(term: &mut Terminal<B>, state: &mut VizState) -> bool {
     // Footer: dirty stats + perf HUD.
     draw_footer(term, state);
 
-    state.perf.end_frame();
     term.present().expect("present failed");
 
     update_ball(state);
@@ -431,5 +425,6 @@ rg_run_software!(
             .title(env!("CARGO_BIN_NAME"))
             .grid_size(GRID_W, GRID_H)
             .scale(2)
+            .target_fps(60)
     }
 );

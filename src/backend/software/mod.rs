@@ -280,10 +280,13 @@ impl SoftwareBackend {
         let win_w = u32::from(self.cols) * cell_w;
         let win_h = u32::from(self.rows) * cell_h;
         let title = self.window_title.clone();
+        let target_fps = self.target_fps;
 
         let renderer = self.run_headless();
         let terminal = crate::Terminal::new(renderer);
         let event_loop = EventLoop::new().map_err(SoftwareBackendError::EventLoop)?;
+
+        let frame_interval = target_fps.map(|fps| Duration::from_secs_f64(1.0 / f64::from(fps)));
 
         let build_app = |terminal, app_loop| WindowApp {
             terminal: Some(terminal),
@@ -296,6 +299,10 @@ impl SoftwareBackend {
             },
             current_modifiers: KeyModifiers::NONE,
             cursor_px: (0.0, 0.0),
+            #[cfg(not(target_arch = "wasm32"))]
+            frame_interval,
+            #[cfg(not(target_arch = "wasm32"))]
+            next_frame: std::time::Instant::now(),
         };
 
         #[cfg(not(target_arch = "wasm32"))]
@@ -1004,6 +1011,12 @@ struct WindowApp<B: WindowedBackend, F> {
     current_modifiers: KeyModifiers,
     /// Last known cursor position in physical pixels.
     cursor_px: (f64, f64),
+    /// Optional frame interval for `WaitUntil` throttling. `None` = unbounded.
+    #[cfg(not(target_arch = "wasm32"))]
+    frame_interval: Option<Duration>,
+    /// Deadline for the next frame when `frame_interval` is set.
+    #[cfg(not(target_arch = "wasm32"))]
+    next_frame: std::time::Instant,
 }
 
 impl<B: WindowedBackend, F> WindowApp<B, F> {
@@ -1066,7 +1079,20 @@ impl<B: WindowedBackend, F: FnMut(&mut crate::Terminal<B>) + 'static> Applicatio
         self.handle_window_event(event);
     }
 
-    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(interval) = self.frame_interval {
+            // Throttled: sleep until the next frame deadline, then render.
+            let now = std::time::Instant::now();
+            if self.next_frame > now {
+                event_loop
+                    .set_control_flow(winit::event_loop::ControlFlow::WaitUntil(self.next_frame));
+                return;
+            }
+            // Advance the deadline by one interval, clamping to now so a
+            // slow frame doesn't cause a burst of catch-up renders.
+            self.next_frame = (self.next_frame + interval).max(now);
+        }
         if let Some(window) = &self.window {
             window.request_redraw();
         }
@@ -1333,6 +1359,7 @@ mod tests {
             scale: 1,
             #[cfg(feature = "software-tilesets")]
             tilesets: Vec::new(),
+            target_fps: None,
         };
         let terminal = crate::Terminal::new(opts.run_headless());
         WindowApp {
@@ -1346,6 +1373,10 @@ mod tests {
             },
             current_modifiers: KeyModifiers::NONE,
             cursor_px: (0.0, 0.0),
+            #[cfg(not(target_arch = "wasm32"))]
+            frame_interval: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            next_frame: std::time::Instant::now(),
         }
     }
 
@@ -1519,6 +1550,7 @@ mod tests {
             scale: 1,
             #[cfg(feature = "software-tilesets")]
             tilesets: Vec::new(),
+            target_fps: None,
         };
         opts.run_headless()
     }
