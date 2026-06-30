@@ -93,6 +93,7 @@ pub struct PerfOverlay {
 
 impl PerfOverlay {
     /// Create a new overlay with an empty window. Visible by default.
+    #[allow(clippy::missing_const_for_fn)]
     pub fn new() -> Self {
         Self {
             samples: [0; WINDOW],

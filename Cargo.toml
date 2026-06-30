@@ -103,6 +103,7 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 insta = { version = "1.34", features = ["yaml"] }
 
 [dev-dependencies]
+framepace = "0.1.0-alpha.0"
 hexal = { version = "0.1.0-alpha.2", features = ["ixy"] }
 unicode-width = "0.2"
 
