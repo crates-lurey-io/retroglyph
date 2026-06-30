@@ -407,6 +407,8 @@ impl TryFrom<crossterm::event::MouseEvent> for crate::event::MouseEvent {
                 x: m.column,
                 y: m.row,
             },
+            // Crossterm is a character-mode backend; it has no sub-cell resolution.
+            pixel_position: None,
             modifiers: m.modifiers.into(),
         })
     }

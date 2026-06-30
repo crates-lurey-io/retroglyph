@@ -67,6 +67,10 @@ struct Example {
     backends: &'static [Backend],
     /// Feature flags required in addition to the backend's base features.
     extra_features: &'static [&'static str],
+    /// Per-backend overrides: if a backend appears here, use these features
+    /// instead of `extra_features` (still combined with the backend's base).
+    /// Leave empty for the common case where all backends share the same extras.
+    backend_features: &'static [(Backend, &'static [&'static str])],
 }
 
 static EXAMPLES: &[Example] = &[
@@ -75,48 +79,67 @@ static EXAMPLES: &[Example] = &[
         description: "interactive room — player, enemy, movement",
         backends: &[Backend::Terminal, Backend::Desktop, Backend::Wasm],
         extra_features: &[],
+        backend_features: &[],
     },
     Example {
         name: "sokoban",
         description: "Sokoban puzzle — push all boxes onto goals",
         backends: &[Backend::Terminal, Backend::Desktop, Backend::Wasm],
         extra_features: &[],
+        backend_features: &[],
     },
     Example {
         name: "roguelike_dungeon",
         description: "single-level roguelike — FoV, BFS pathfinding, layers",
         backends: &[Backend::Terminal, Backend::Desktop, Backend::Wasm],
         extra_features: &[],
+        backend_features: &[],
     },
     Example {
         name: "subpixel",
         description: "DVD-style bouncing @ with sub-pixel offsets",
         backends: &[Backend::Desktop, Backend::Wasm],
         extra_features: &[],
+        backend_features: &[],
+    },
+    Example {
+        name: "hex_battle",
+        description: "Battle for Hoth replay — hex grid, units, sidebar, playback",
+        backends: &[Backend::Terminal, Backend::Desktop, Backend::Wasm],
+        // Terminal: crossterm only. Desktop/Wasm: also needs software-tilesets.
+        extra_features: &[],
+        backend_features: &[
+            (Backend::Desktop, &["software-tilesets"]),
+            (Backend::Wasm, &["software-tilesets"]),
+        ],
     },
     Example {
         name: "tileset",
         description: "custom PNG sprite sheets with alpha blending",
         backends: &[Backend::Desktop, Backend::Wasm],
         extra_features: &["software-tilesets"],
+        backend_features: &[],
     },
     Example {
         name: "sprite_stress",
         description: "alpha-blended sprite throughput benchmark",
         backends: &[Backend::Desktop, Backend::Wasm],
         extra_features: &["software-tilesets"],
+        backend_features: &[],
     },
     Example {
         name: "dirty_viz",
         description: "visualize which cells are redrawn each frame",
         backends: &[Backend::Desktop, Backend::Wasm],
         extra_features: &[],
+        backend_features: &[],
     },
     Example {
         name: "headless",
         description: "headless backend — no terminal or window needed",
         backends: &[],
         extra_features: &[],
+        backend_features: &[],
     },
 ];
 
@@ -132,7 +155,13 @@ fn prompt(msg: &str) -> String {
 
 fn combined_features(backend: Backend, ex: &Example) -> Vec<&'static str> {
     let mut features: Vec<&'static str> = backend.base_features().to_vec();
-    for &f in ex.extra_features {
+    // Per-backend overrides take priority over the shared extra_features list.
+    let extras = ex
+        .backend_features
+        .iter()
+        .find(|(b, _)| *b == backend)
+        .map_or(ex.extra_features, |(_, f)| f);
+    for &f in extras {
         if !features.contains(&f) {
             features.push(f);
         }

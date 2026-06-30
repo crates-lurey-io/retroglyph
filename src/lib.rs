@@ -26,7 +26,9 @@ pub use backend::software::SoftwareBackend;
 pub use backend::software::tileset::{Codepage, TilesetBuilder, TilesetError, TilesetOptions};
 pub use backend::{Backend, Headless};
 pub use color::{AnsiColor, Color, InvalidAnsiIndex};
-pub use event::{Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+pub use event::{
+    Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind, PhysicalPos,
+};
 pub use grid::{Grid, Pos, Rect, Size};
 #[cfg(feature = "egc")]
 pub use layout::{HAlign, TextLayout, TextMetrics, VAlign};

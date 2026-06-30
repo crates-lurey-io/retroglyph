@@ -3,6 +3,7 @@
 #![allow(unreachable_pub)]
 
 pub mod action;
+pub mod draw;
 pub mod game;
 pub mod lcg;
 pub mod perf;
