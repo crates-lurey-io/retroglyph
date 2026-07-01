@@ -9,16 +9,18 @@ pub use hexal::HexI;
 
 // ── Layout constants ──────────────────────────────────────────────────────────
 
-/// How many terminal columns wide one hex sprite is.
-pub const HEX_CELL_COLS: u16 = 3;
-/// How many terminal rows tall one hex sprite is.
+/// How many terminal columns wide one hex cell is.
 ///
-/// With the VGA 8×16 font at scale=2 (cell = 16×32 px) and a 64×64 sprite:
-/// ceil(64 / 32) = 2 rows. We use 2 rows but draw with `spacing_cells_y = 2`.
+/// At scale=2 with VGA 8×16: each cell = 16px wide, so 4 cells = 64px,
+/// matching the 64×64 sprite exactly.  Prevents horizontal overlap.
+pub const HEX_CELL_COLS: u16 = 4;
+/// How many terminal rows tall one hex cell is.
+///
+/// At scale=2 with VGA 8×16: each cell = 32px tall, so 2 cells = 64px,
+/// matching the 64×64 sprite exactly.
 pub const HEX_CELL_ROWS: u16 = 2;
 
 /// Horizontal advance in cells between adjacent hexes in the same row.
-/// For pointy-top hexes this is the full column width.
 pub const HEX_COL_STRIDE: u16 = HEX_CELL_COLS;
 /// Vertical advance in cells between adjacent hex rows.
 pub const HEX_ROW_STRIDE: u16 = HEX_CELL_ROWS;
@@ -34,8 +36,8 @@ pub const MAP_ORIGIN_Y: u16 = 1;
 
 pub const SPRITE_EMPTY: char = '\x00';
 pub const SPRITE_SELECTED: char = '\x01';
-pub const SPRITE_REBEL: char = '\x02';
-pub const SPRITE_EMPIRE: char = '\x03';
+pub const SPRITE_BLUE: char = '\x02';
+pub const SPRITE_RED: char = '\x03';
 pub const SPRITE_MOVE: char = '\x04';
 pub const SPRITE_ATTACK: char = '\x05';
 
@@ -94,7 +96,7 @@ pub fn pixel_to_axial(px: u32, py: u32, cell_w: u32, cell_h: u32) -> Option<(i32
 
 // ── Board bounds ──────────────────────────────────────────────────────────────
 
-pub const BOARD_COLS: i32 = 9;
+pub const BOARD_COLS: i32 = 12;
 pub const BOARD_ROWS: i32 = 7;
 
 /// Returns `true` if axial (q, r) is on the visible board.
@@ -106,7 +108,6 @@ pub const fn on_board(q: i32, r: i32) -> bool {
 // ── Hex distance ──────────────────────────────────────────────────────────────
 
 pub fn hex_distance(a: (i32, i32), b: (i32, i32)) -> u32 {
-    // distance() returns i32 (always >= 0 for hex distance); unsigned_abs is exact.
     HexI::new(a.0, a.1)
         .distance(HexI::new(b.0, b.1))
         .unsigned_abs()
