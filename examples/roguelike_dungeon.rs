@@ -411,12 +411,12 @@ fn draw<B: Backend>(term: &mut Terminal<B>, state: &GameState) {
     let mh = state.map.height;
     let cell_at = |x: u16, y: u16| y as usize * mw as usize + x as usize;
 
-    // On the software backend we use multiple layers for clean compositing.
-    // On crossterm only layer 0 is forwarded, so flatten everything there.
-    let layer = |n: u8| if cfg!(feature = "software") { n } else { 0 };
+    // Author on separate layers (terrain / entities / UI). Terminal::present
+    // composites them for cell backends, so this renders identically on
+    // crossterm and software (ADR 015 Decision 1).
 
     // Layer 0: terrain.
-    term.layer(layer(0));
+    term.layer(0);
     for y in 0..mh {
         for x in 0..mw {
             let idx = cell_at(x, y);
@@ -472,7 +472,7 @@ fn draw<B: Backend>(term: &mut Terminal<B>, state: &GameState) {
     }
 
     // Layer 1: entities.
-    term.layer(layer(1));
+    term.layer(1);
     // Player.
     if state.visible[cell_at(state.player.pos.x, state.player.pos.y)] {
         term.put_styled(
@@ -508,7 +508,7 @@ fn draw<B: Backend>(term: &mut Terminal<B>, state: &GameState) {
     }
 
     // Layer 2: UI.
-    term.layer(layer(2));
+    term.layer(2);
     // Top bar.
     let top_bg = Color::Rgb {
         r: 25,

@@ -323,6 +323,56 @@ impl SoftwareBackend {
         }
     }
 
+    /// Drive an [`App`](crate::App) from the windowed event loop (ADR 015
+    /// Decision 2).
+    ///
+    /// This is the inverted driver: winit owns the loop, so it cannot be the
+    /// generic [`run_blocking`](crate::run_blocking). Each frame it builds a
+    /// [`Frame`](crate::Frame) (with a wall-clock `dt` on native, `ZERO` on
+    /// wasm where there is no `std::time::Instant`) and calls
+    /// [`step`](crate::step). The app draws and calls
+    /// [`Terminal::present`](crate::Terminal::present); the driver then blits
+    /// the pixel buffer to the window.
+    ///
+    /// On [`Flow::Exit`](crate::Flow) the process exits on native (the window is
+    /// torn down); on wasm the request-animation-frame loop cannot be stopped,
+    /// so exit is a no-op. Cleanly unwinding the winit loop on exit is deferred
+    /// to the `retroglyph-window` extraction (see ADR 014).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SoftwareBackendError::EventLoop`] if the event loop fails to
+    /// start.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the builder was constructed without a font.
+    pub fn run_app<A>(self, mut app: A) -> Result<(), SoftwareBackendError>
+    where
+        A: crate::App<SoftwareRenderer> + 'static,
+    {
+        let mut number = 0u64;
+        #[cfg(not(target_arch = "wasm32"))]
+        let mut last = std::time::Instant::now();
+        self.run_windowed(move |term| {
+            #[cfg(not(target_arch = "wasm32"))]
+            let dt = {
+                let now = std::time::Instant::now();
+                let elapsed = now.duration_since(last);
+                last = now;
+                elapsed
+            };
+            #[cfg(target_arch = "wasm32")]
+            let dt = Duration::ZERO;
+            let frame = crate::Frame { dt, number };
+            number = number.wrapping_add(1);
+            if crate::step(term, &mut app, &frame) == crate::Flow::Exit {
+                #[cfg(not(target_arch = "wasm32"))]
+                std::process::exit(0);
+            }
+        })
+    }
+
     /// Creates a headless renderer that renders into an internal buffer
     /// without opening a window.
     ///
@@ -539,6 +589,10 @@ impl Backend for SoftwareRenderer {
     }
 
     fn needs_full_frame(&self) -> bool {
+        true
+    }
+
+    fn composites_layers(&self) -> bool {
         true
     }
 

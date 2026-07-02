@@ -4,7 +4,6 @@ use crate::color::Color;
 #[cfg(feature = "egc")]
 use crate::style::Style;
 use crate::tile::Tile;
-#[cfg(feature = "egc")]
 use crate::tile::TileFlags;
 #[cfg(feature = "egc")]
 use crate::tile::cap_grapheme;
@@ -561,6 +560,48 @@ impl Grid {
         }
     }
 
+    /// Composite every allocated layer into `dst`'s layer 0, one tile per cell.
+    ///
+    /// Used by [`crate::Terminal::present`] for backends that do not composite
+    /// layers themselves (see [`crate::Backend::composites_layers`]). The rule
+    /// matches the software renderer's pixel semantics and the [`blit`](Self::blit)
+    /// transparency convention:
+    ///
+    /// - Start from layer 0's tile (its `bg` fills the cell).
+    /// - For each higher allocated layer, in ascending order: if the cell is
+    ///   non-empty (glyph is not a space, or it is a wide-char spacer) replace
+    ///   the glyph, foreground, modifiers, offsets, flags, and extra; if its
+    ///   background is not [`Color::Default`], replace the background.
+    ///
+    /// `dst` must have the same dimensions as `self`.
+    pub(crate) fn flatten_into(&self, dst: &mut Self) {
+        for y in 0..self.height {
+            for x in 0..self.width {
+                let mut out = self.get(x, y).clone();
+                for id in 1..=self.max_layer {
+                    let Some(tile) = self.get_tile(id, x, y) else {
+                        continue;
+                    };
+                    let contributes_glyph =
+                        tile.glyph != ' ' || tile.flags.contains(TileFlags::WIDE_CHAR_SPACER);
+                    if contributes_glyph {
+                        out.glyph = tile.glyph;
+                        out.style.fg = tile.style.fg;
+                        out.style.modifiers = tile.style.modifiers;
+                        out.dx = tile.dx;
+                        out.dy = tile.dy;
+                        out.flags = tile.flags;
+                        out.extra.clone_from(&tile.extra);
+                    }
+                    if tile.style.bg != Color::Default {
+                        out.style.bg = tile.style.bg;
+                    }
+                }
+                dst.put(x, y, out);
+            }
+        }
+    }
+
     /// Yield `(layer_id, Pos, &Tile)` for every changed position across all
     /// layers, in layer-major (0 → `max_layer`) then row-major order.
     ///
@@ -575,36 +616,57 @@ impl Grid {
         let width = usize::from(self.width);
         let max = self.max_layer;
         (0..=max).flat_map(move |id| {
-            let cur = self.layer(id);
-            let prev = other.layer(id);
-            let layer_iter: Box<dyn Iterator<Item = (u8, Pos, &'a Tile)> + 'a> = match (cur, prev) {
-                (None, _) => Box::new(core::iter::empty()),
-                (Some(cur_lb), None) => {
-                    // Newly allocated layer: all cells are "changed".
-                    Box::new(
-                        cur_lb
-                            .buf
-                            .as_ref()
-                            .iter()
-                            .enumerate()
-                            .map(move |(i, tile)| {
-                                #[allow(clippy::cast_possible_truncation)]
-                                let x = (i % width) as u16;
-                                #[allow(clippy::cast_possible_truncation)]
-                                let y = (i / width) as u16;
-                                (id, Pos::new(x, y), tile)
-                            }),
-                    )
-                }
-                (Some(cur_lb), Some(prev_lb)) => Box::new(
+            match (self.layer(id), other.layer(id)) {
+                // Layer absent in `self`: nothing changed.
+                (None, _) => LayerDiff::Empty,
+                // Newly allocated layer: all cells are "changed".
+                (Some(cur_lb), None) => LayerDiff::Full(
+                    cur_lb
+                        .buf
+                        .as_ref()
+                        .iter()
+                        .enumerate()
+                        .map(move |(i, tile)| {
+                            #[allow(clippy::cast_possible_truncation)]
+                            let x = (i % width) as u16;
+                            #[allow(clippy::cast_possible_truncation)]
+                            let y = (i / width) as u16;
+                            (id, Pos::new(x, y), tile)
+                        }),
+                ),
+                // Layer in both: only the differing cells.
+                (Some(cur_lb), Some(prev_lb)) => LayerDiff::Diff(
                     cur_lb
                         .buf
                         .diff(&prev_lb.buf)
                         .map(move |(pos, tile)| (id, from_grixy_pos(pos), tile)),
                 ),
-            };
-            layer_iter
+            }
         })
+    }
+}
+
+/// Per-layer diff iterator, replacing a boxed trait object so `diff` performs
+/// no per-layer heap allocation (ADR 015 Decision 1).
+enum LayerDiff<F, D> {
+    Empty,
+    Full(F),
+    Diff(D),
+}
+
+impl<'a, F, D> Iterator for LayerDiff<F, D>
+where
+    F: Iterator<Item = (u8, Pos, &'a Tile)>,
+    D: Iterator<Item = (u8, Pos, &'a Tile)>,
+{
+    type Item = (u8, Pos, &'a Tile);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Self::Empty => None,
+            Self::Full(iter) => iter.next(),
+            Self::Diff(iter) => iter.next(),
+        }
     }
 }
 
