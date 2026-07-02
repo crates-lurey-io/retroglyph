@@ -49,6 +49,7 @@ jobs:
             --example dungeon_room \
             --example sokoban \
             --example roguelike_dungeon \
+            --example scrolling_roguelike \
             --example subpixel \
             --example dirty_viz
         continue-on-error: true
@@ -64,7 +65,7 @@ jobs:
 
       - name: Package WASM examples
         run: |
-          EXAMPLES=(dungeon_room sokoban roguelike_dungeon subpixel dirty_viz tileset sprite_stress)
+          EXAMPLES=(dungeon_room sokoban roguelike_dungeon scrolling_roguelike subpixel dirty_viz tileset sprite_stress)
           for ex in "${EXAMPLES[@]}"; do
             wasm="${PWD}/target/wasm32-unknown-unknown/release/examples/${ex}.wasm"
             if [ ! -f "$wasm" ]; then
@@ -101,7 +102,7 @@ jobs:
           mkdir -p target/doc/examples
           # Only list examples that were actually built.
           entries=""
-          for ex in dungeon_room sokoban roguelike_dungeon subpixel dirty_viz tileset sprite_stress; do
+          for ex in dungeon_room sokoban roguelike_dungeon scrolling_roguelike subpixel dirty_viz tileset sprite_stress; do
             if [ -f "target/doc/examples/${ex}/index.html" ]; then
               entries="${entries}<li><a href=\"${ex}/\">${ex}</a></li>"$'\n'
             fi

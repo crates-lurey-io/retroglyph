@@ -96,6 +96,13 @@ static EXAMPLES: &[Example] = &[
         backend_features: &[],
     },
     Example {
+        name: "scrolling_roguelike",
+        description: "scrolling roguelike — camera follow, charmap, shadowcast FoV",
+        backends: &[Backend::Terminal, Backend::Desktop, Backend::Wasm],
+        extra_features: &[],
+        backend_features: &[],
+    },
+    Example {
         name: "subpixel",
         description: "DVD-style bouncing @ with sub-pixel offsets",
         backends: &[Backend::Desktop, Backend::Wasm],

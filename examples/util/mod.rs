@@ -4,6 +4,7 @@
 
 pub mod action;
 pub mod draw;
+pub mod fov;
 pub mod game;
 pub mod lcg;
 pub mod perf;
@@ -92,11 +93,11 @@ macro_rules! rg_run {
         // higher-ranked over the `&mut Terminal<B>` lifetime, whereas a bare
         // closure that ignores its argument (e.g. `|_t| State::new()`) fails
         // HRTB inference when stored in the App adapter.
-        #[allow(clippy::missing_const_for_fn)]
+        #[allow(clippy::missing_const_for_fn, clippy::needless_pass_by_ref_mut)]
         fn __rg_init<B: ::retroglyph::Backend>(term: &mut ::retroglyph::Terminal<B>) -> $State {
             ($init)(term)
         }
-        #[allow(clippy::missing_const_for_fn)]
+        #[allow(clippy::missing_const_for_fn, clippy::needless_pass_by_ref_mut)]
         fn __rg_tick<B: ::retroglyph::Backend>(
             term: &mut ::retroglyph::Terminal<B>,
             state: &mut $State,
@@ -175,11 +176,11 @@ macro_rules! rg_run {
 #[macro_export]
 macro_rules! rg_run_software {
     ($State:ty, $init:expr, $tick:expr, builder = $builder:expr) => {
-        #[allow(clippy::missing_const_for_fn)]
+        #[allow(clippy::missing_const_for_fn, clippy::needless_pass_by_ref_mut)]
         fn __rg_init<B: ::retroglyph::Backend>(term: &mut ::retroglyph::Terminal<B>) -> $State {
             ($init)(term)
         }
-        #[allow(clippy::missing_const_for_fn)]
+        #[allow(clippy::missing_const_for_fn, clippy::needless_pass_by_ref_mut)]
         fn __rg_tick<B: ::retroglyph::Backend>(
             term: &mut ::retroglyph::Terminal<B>,
             state: &mut $State,
