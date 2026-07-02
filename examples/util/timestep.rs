@@ -49,6 +49,50 @@ mod wasm_time {
 #[cfg(target_arch = "wasm32")]
 use wasm_time::{Duration, Instant};
 
+/// Measures wall-clock time between frames for feeding a [`FrameClock`].
+///
+/// Wraps the platform split the demos need: real elapsed time via [`Instant`]
+/// on native targets, a fixed 16 ms assumption on `wasm32` (where there is no
+/// `SystemTime`/`Instant`). This is the tiny helper referenced by the dashboard
+/// demo plan; it exists because `rg_run!`'s `tick` signature hides `Frame.dt`.
+///
+/// [`FrameClock`]: retroglyph::FrameClock
+pub struct Stopwatch {
+    last: Instant,
+}
+
+impl Default for Stopwatch {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Stopwatch {
+    /// Start the stopwatch at the current instant.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            last: Instant::now(),
+        }
+    }
+
+    /// Return the elapsed time since the previous `lap` (or construction) and
+    /// reset the mark. On `wasm32` this always returns a fixed 16 ms tick.
+    pub fn lap(&mut self) -> Duration {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let now = Instant::now();
+            let dt = now.duration_since(self.last);
+            self.last = now;
+            dt
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            Duration::from_millis(16)
+        }
+    }
+}
+
 /// Fixed-timestep accumulator.
 ///
 /// Each call to [`FixedStep::update`] advances the internal clock by the
