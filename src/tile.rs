@@ -4,7 +4,6 @@
 // splitting `dx`/`dy` out of layer 0 if > 32 bytes.
 
 use crate::style::Style;
-#[cfg(feature = "egc")]
 use alloc::sync::Arc;
 
 bitflags::bitflags! {
@@ -40,8 +39,8 @@ pub struct Tile {
     pub(crate) dy: i16,
     /// Wide-character role flags (e.g. [`TileFlags::WIDE_CHAR`]).
     ///
-    /// Only present when the `egc` feature is enabled.
-    #[cfg(feature = "egc")]
+    /// Always present so `Tile`'s layout is stable across the `egc` feature
+    /// (see ADR 015). Without `egc` it is never set to anything but empty.
     pub(crate) flags: TileFlags,
     /// Allocated only when the grapheme cluster has more than one codepoint
     /// (combining marks, ZWJ emoji sequences, etc.).
@@ -49,8 +48,8 @@ pub struct Tile {
     /// When `Some`, the full EGC string is stored here. The `glyph` field
     /// still holds the first codepoint for fast single-char paths.
     ///
-    /// Only present when the `egc` feature is enabled.
-    #[cfg(feature = "egc")]
+    /// Always present for a stable layout across `egc`; without `egc` it is
+    /// always `None` (nothing writes it, so it never allocates).
     pub(crate) extra: Option<Arc<String>>,
 }
 
@@ -61,9 +60,7 @@ impl Default for Tile {
             style: Style::default(),
             dx: 0,
             dy: 0,
-            #[cfg(feature = "egc")]
             flags: TileFlags::empty(),
-            #[cfg(feature = "egc")]
             extra: None,
         }
     }
@@ -80,9 +77,7 @@ impl Tile {
             style,
             dx: 0,
             dy: 0,
-            #[cfg(feature = "egc")]
             flags: TileFlags::empty(),
-            #[cfg(feature = "egc")]
             extra: None,
         }
     }
@@ -112,9 +107,6 @@ impl Tile {
     }
 
     /// Returns the wide-character flags for this tile.
-    ///
-    /// Only present when the `egc` feature is enabled.
-    #[cfg(feature = "egc")]
     #[must_use]
     pub const fn flags(&self) -> TileFlags {
         self.flags
@@ -123,10 +115,8 @@ impl Tile {
     /// Returns the extra EGC data for this tile, if any.
     ///
     /// `Some` only for multi-codepoint grapheme clusters (combining marks,
-    /// ZWJ sequences, etc.). `None` for the common single-codepoint case.
-    ///
-    /// Only present when the `egc` feature is enabled.
-    #[cfg(feature = "egc")]
+    /// ZWJ sequences, etc.). `None` for the common single-codepoint case, and
+    /// always `None` without the `egc` feature.
     #[must_use]
     pub fn extra(&self) -> Option<&str> {
         self.extra.as_deref().map(String::as_str)
@@ -139,8 +129,7 @@ impl Tile {
     /// single-codepoint case it returns `None`; use [`glyph`](Self::glyph)
     /// and [`encode_utf8`](char::encode_utf8) to reconstruct the string.
     ///
-    /// Only present when the `egc` feature is enabled.
-    #[cfg(feature = "egc")]
+    /// Always `None` without the `egc` feature.
     #[must_use]
     pub fn grapheme(&self) -> Option<&str> {
         self.extra.as_deref().map(String::as_str)
