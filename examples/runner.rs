@@ -103,6 +103,13 @@ static EXAMPLES: &[Example] = &[
         backend_features: &[],
     },
     Example {
+        name: "dashboard",
+        description: "bashtop-style system monitor — gauges, sparklines, table",
+        backends: &[Backend::Terminal, Backend::Desktop, Backend::Wasm],
+        extra_features: &[],
+        backend_features: &[],
+    },
+    Example {
         name: "subpixel",
         description: "DVD-style bouncing @ with sub-pixel offsets",
         backends: &[Backend::Desktop, Backend::Wasm],
