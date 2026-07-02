@@ -80,6 +80,18 @@ pub trait Backend {
         false
     }
 
+    /// Whether this backend composites layers itself (per pixel or quad),
+    /// receiving the raw layered stream from [`draw_layers`](Self::draw_layers).
+    ///
+    /// Backends that render one glyph per cell return `false` (the default) and
+    /// receive a pre-flattened, single-layer stream: [`crate::Terminal::present`]
+    /// composites all allocated layers into one frame first. This makes layers
+    /// 1+ appear on every backend, not only pixel backends. Pixel/GPU backends
+    /// return `true` and composite the layers themselves. See ADR 015.
+    fn composites_layers(&self) -> bool {
+        false
+    }
+
     /// Flush buffered output to the display.
     ///
     /// # Errors

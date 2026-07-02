@@ -5,10 +5,14 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 extern crate alloc;
 
+/// The `App`-driven game loop.
+pub mod app;
 /// Pluggable rendering backends.
 pub mod backend;
 pub mod color;
 pub mod event;
+/// Fixed-timestep accumulator for game loops.
+pub mod frame_clock;
 pub mod grid;
 #[cfg(feature = "egc")]
 pub mod layout;
@@ -18,6 +22,9 @@ pub mod text;
 /// The atomic drawable unit (glyph, style, sub-cell offsets).
 pub mod tile;
 
+#[cfg(feature = "std")]
+pub use app::run_blocking;
+pub use app::{App, Flow, Frame, step};
 #[cfg(feature = "crossterm")]
 pub use backend::Crossterm;
 #[cfg(feature = "software")]
@@ -29,6 +36,7 @@ pub use color::{AnsiColor, Color, InvalidAnsiIndex};
 pub use event::{
     Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind, PhysicalPos,
 };
+pub use frame_clock::FrameClock;
 pub use grid::{Grid, Pos, Rect, Size};
 #[cfg(feature = "egc")]
 pub use layout::{HAlign, TextLayout, TextMetrics, VAlign};

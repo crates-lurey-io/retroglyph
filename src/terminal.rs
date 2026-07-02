@@ -18,6 +18,12 @@ use unicode_width::UnicodeWidthChar;
 pub struct Terminal<B: Backend> {
     current: Grid,
     previous: Grid,
+    /// Single-layer scratch buffers used only when the backend does not
+    /// composite layers itself. `present` flattens `current` into
+    /// `flattened_current`, diffs it against `flattened_previous`, and sends the
+    /// result. Unused (but allocated) for compositing backends. See ADR 015.
+    flattened_current: Grid,
+    flattened_previous: Grid,
     backend: B,
     drawing_style: Style,
     queued_event: Option<Event>,
@@ -33,9 +39,13 @@ impl<B: Backend> Terminal<B> {
         let size = backend.size();
         let current = Grid::new(size.width, size.height);
         let previous = Grid::new(size.width, size.height);
+        let flattened_current = Grid::new(size.width, size.height);
+        let flattened_previous = Grid::new(size.width, size.height);
         Self {
             current,
             previous,
+            flattened_current,
+            flattened_previous,
             backend,
             drawing_style: Style::default(),
             queued_event: None,
@@ -99,9 +109,12 @@ impl<B: Backend> Terminal<B> {
     pub fn resize(&mut self, width: u16, height: u16) {
         self.current.resize(width, height);
         self.previous.resize(width, height);
+        self.flattened_current.resize(width, height);
+        self.flattened_previous.resize(width, height);
         // Clearing previous forces a full redraw next present(), ensuring no
         // stale cells bleed into the resized layout.
         self.previous.clear_all();
+        self.flattened_previous.clear_all();
         self.backend.resize(Size { width, height });
     }
 
@@ -323,12 +336,22 @@ impl<B: Backend> Terminal<B> {
     /// [`draw_layers`](crate::Backend::draw_layers) or
     /// [`flush`](crate::Backend::flush) operations.
     pub fn present(&mut self) -> Result<(), <B as Backend>::Error> {
-        if self.backend.needs_full_frame() {
-            let all = self.current.layers();
-            self.backend.draw_layers(all)?;
+        if self.backend.composites_layers() {
+            // Pixel/GPU backends composite the raw layered stream themselves.
+            if self.backend.needs_full_frame() {
+                let all = self.current.layers();
+                self.backend.draw_layers(all)?;
+            } else {
+                let diff = self.current.diff(&self.previous);
+                self.backend.draw_layers(diff)?;
+            }
         } else {
-            let diff = self.current.diff(&self.previous);
+            // Cell backends receive a pre-flattened, single-layer diff so layers
+            // 1+ appear everywhere, not just on pixel backends.
+            self.current.flatten_into(&mut self.flattened_current);
+            let diff = self.flattened_current.diff(&self.flattened_previous);
             self.backend.draw_layers(diff)?;
+            core::mem::swap(&mut self.flattened_current, &mut self.flattened_previous);
         }
         self.backend.flush()?;
         core::mem::swap(&mut self.current, &mut self.previous);
@@ -531,6 +554,34 @@ mod tests {
     }
 
     // --- resize ---
+
+    #[test]
+    fn test_present_composites_layers_for_cell_backend() {
+        // ADR 015 Decision 1: a cell backend (Headless) must see layers 1+
+        // composited, not dropped. Terrain on layer 0, entity on layer 1.
+        let mut term = Terminal::new(Headless::new(3, 1));
+        term.layer(0).put(0, 0, '.');
+        term.layer(0).put(1, 0, '.');
+        term.layer(1).put(1, 0, '@');
+        term.present().expect("present failed");
+        assert_eq!(term.backend().grid().get(0, 0).glyph(), '.');
+        // Layer 1's glyph wins at (1, 0).
+        assert_eq!(term.backend().grid().get(1, 0).glyph(), '@');
+    }
+
+    #[test]
+    fn test_present_composites_background_from_higher_layer() {
+        // A higher layer with only a background contributes bg but keeps the
+        // lower layer's glyph.
+        let mut term = Terminal::new(Headless::new(2, 1));
+        term.layer(0).put(0, 0, 'x');
+        term.layer(1)
+            .put_styled(0, 0, ' ', Style::new().bg(Color::RED));
+        term.present().expect("present failed");
+        let cell = term.backend().grid().get(0, 0);
+        assert_eq!(cell.glyph(), 'x');
+        assert_eq!(cell.style().background(), Color::RED);
+    }
 
     #[test]
     fn test_terminal_size() {

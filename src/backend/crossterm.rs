@@ -132,6 +132,25 @@ impl Crossterm {
             writer: BufWriter::new(stdout),
         })
     }
+
+    /// Create a crossterm terminal and drive `app` with the blocking loop until
+    /// it returns [`Flow::Exit`](crate::Flow) (ADR 015 Decision 2).
+    ///
+    /// This is a thin wrapper over the generic
+    /// [`run_blocking`](crate::run_blocking); the terminal is restored on the
+    /// way out via `Drop`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an `std::io::Error` if the terminal fails to initialize.
+    pub fn run<A>(app: A) -> Result<(), std::io::Error>
+    where
+        A: crate::App<Self>,
+    {
+        let term = crate::Terminal::new(Self::new()?);
+        crate::run_blocking(term, app);
+        Ok(())
+    }
 }
 
 impl Drop for Crossterm {
