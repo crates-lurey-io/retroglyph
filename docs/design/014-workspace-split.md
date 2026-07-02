@@ -67,7 +67,10 @@ other backends. This is the natural crate boundary.
 
 ## Decision
 
-Split into a Cargo workspace with four published crates and one internal tools crate.
+Split into a Cargo workspace with five published crates (`retroglyph-core`, `retroglyph-crossterm`,
+`retroglyph-software`, `retroglyph-widgets`, and the `retroglyph` facade) and one internal tools
+crate. Further backend crates (`retroglyph-window`, `retroglyph-wgpu`, `retroglyph-gl`) join later;
+see the windowed-family note below.
 
 ### Workspace layout
 
@@ -88,6 +91,8 @@ crates/
       text.rs
       layout.rs
       terminal.rs
+      app.rs            App/Flow/Frame, step, run_blocking (std) -- ADR 015
+      frame_clock.rs    FrameClock accumulator (no_std)
       backend/
         mod.rs          Backend trait + Headless
         headless.rs
@@ -97,11 +102,17 @@ crates/
   software/             retroglyph-software
     src/
       lib.rs
+      window.rs         winit loop + event translation + inverted run (liftable)
       bitmap_font.rs
       config.rs
       windowed.rs
       sprite_cache.rs
       tileset.rs
+  widgets/             retroglyph-widgets
+    src/
+      lib.rs           Widget trait; panel, gauge, list, tabs, sparkline; camera/viewport
+  (future) window/     retroglyph-window  -- shared winit/window layer, extracted
+                       from software when the 2nd windowed backend (wgpu/gl) lands
 tools/
   cargo-bin/            (existing, stays)
 examples/               (workspace root, depends on retroglyph facade)
@@ -121,9 +132,15 @@ The `no_std`-compatible foundation. Contains:
 - `Span`, `Line`, `TextLayout`, `HAlign`, `VAlign`, `TextMetrics`
 - `Terminal<B>`
 - `Backend` trait + `Headless` backend
+- `App`, `Flow`, `Frame` loop contract; `step` + `run_blocking` generic driver (`std`); `FrameClock`
+  accumulator (see ADR 015 Decision 2)
 
 Dependencies: `ixy`, `grixy`, `unicode-width`, `bitflags`, and optionally `unicode-segmentation`
 (behind `egc` feature). No platform-specific deps.
+
+The loop _contract_ lives here because `App` is the dual of `Backend` (update contract vs output
+contract), and the generic blocking driver is dep-free. The _inverted_ driver does not live here; it
+belongs to the windowing layer.
 
 Feature flags:
 
@@ -151,6 +168,19 @@ Feature flags:
 - `tilesets` -- PNG sprite sheet support (adds `image`, `alpha-blend`)
 - `default-font` -- embedded VGA 8x16 bitmap font
 
+The winit event loop, winit-event → `retroglyph::Event` translation, and the inverted `run(app)`
+driver (ADR 015 Decision 2, piece 3) live in a self-contained `window.rs` module, kept liftable so
+it can be extracted to `retroglyph-window` when the first GPU backend lands (see the windowed-family
+note below).
+
+#### `retroglyph-widgets`
+
+Immediate-mode drawing helpers over a `Rect`. Depends on `retroglyph-core` only. Contains the
+`Widget` trait plus panel/border, gauge/progress bar, list/menu, tabs, sparkline, and a
+camera/viewport for rendering a world `Grid` larger than the screen. Graduates
+`examples/util/draw.rs`. Optional: games that draw manually pay nothing. Separated because it
+imposes a rendering model and churns as widgets are added.
+
 #### `retroglyph` (facade)
 
 The user-facing crate. Re-exports everything from `retroglyph-core` unconditionally, and from
@@ -170,6 +200,17 @@ pub use retroglyph_crossterm::Crossterm;
 pub use retroglyph_software as software_backend;
 #[cfg(feature = "software")]
 pub use retroglyph_software::{SoftwareBackend, SoftwareBackendBuilder, SoftwareRenderer};
+
+#[cfg(feature = "widgets")]
+pub use retroglyph_widgets as widgets;
+
+// Feature-selected loop entry, replacing the old `rg_run!` macro (ADR 015).
+// Terminal backends resolve to core's generic driver; windowed backends resolve
+// to the windowing layer's inverted driver.
+#[cfg(all(feature = "crossterm", not(feature = "software")))]
+pub use retroglyph_crossterm::run;
+#[cfg(feature = "software")]
+pub use retroglyph_software::run;
 ```
 
 Feature flags on the facade map to optional dependencies:
@@ -183,6 +224,7 @@ crossterm = ["dep:retroglyph-crossterm"]
 software = ["dep:retroglyph-software"]
 software-tilesets = ["software", "retroglyph-software/tilesets"]
 software-default-font = ["software", "retroglyph-software/default-font"]
+widgets = ["dep:retroglyph-widgets"]
 ```
 
 This preserves the existing user-facing API. `use retroglyph::Terminal` and
@@ -214,7 +256,11 @@ adding a dev-dependency.
 
 ## Migration plan
 
-The split is mechanical. No public API changes, no new abstractions.
+**Gated on [ADR 015](015-cross-backend-consistency.md).** ADR 015 lands first: it is the
+API-stabilizing work ADR 001 §1 named as the precondition for this split. Once `Tile`'s public
+shape, the `Backend::composites_layers` capability, and core's loop surface
+(`App`/`Flow`/`Frame`/`run_blocking`/`FrameClock`) are settled and the examples are ported off
+`rg_run!`, the split below is mechanical: no public API changes, no new abstractions.
 
 ### Step 1: Create workspace skeleton
 
@@ -328,6 +374,67 @@ cycle.
 **MSRV alignment.** All crates share the same MSRV (1.88) via `workspace.package`. A backend crate
 cannot independently raise its MSRV without raising the workspace MSRV.
 
+## Deferred: `retroglyph-app`
+
+An earlier sketch put the game-loop scaffolding in a dedicated `retroglyph-app` crate. After
+decomposing the loop (ADR 015 Decision 2), almost nothing is left for it to own: the
+`App`/`Flow`/`Frame` contract and the generic `run_blocking` driver live in `retroglyph-core`, and
+the inverted driver lives in the windowing layer. The only genuinely app-level utilities that remain
+are small and dep-free (for example `InputMap`, a rebindable key→action map graduating from
+`examples/util/action.rs`). Those go in the facade behind features rather than a separate published
+crate.
+
+Promote to `retroglyph-app` later only if a retained-mode layer materializes: a screen/state stack,
+focus and event routing over a retained widget tree, or an ECS bridge. Because the utilities already
+sit behind a facade feature, moving them into a crate the facade re-exports keeps the public path
+(for example `retroglyph::InputMap`) stable. Same "split when it warrants it" logic as ADR 001.
+
+## Future: the windowed backend family and `retroglyph-window`
+
+Planned GPU backends (`wgpu`, `opengl`, `webgl2`) join `retroglyph-software` as a **windowed
+family** sharing a large, backend-agnostic surface:
+
+- winit window + event loop (and the wasm `requestAnimationFrame` variant),
+- winit-event → `retroglyph::Event` translation (keys, mouse, modifiers, resize, scale factor,
+  close),
+- the inverted `run(app)` driver (ADR 015 Decision 2, piece 3),
+- cursor, DPI, and resize handling.
+
+What differs per backend is only rasterization: softbuffer CPU blit vs a GPU glyph atlas with
+instanced quads. `Backend::composites_layers()` (ADR 015 Decision 1) returns `true` for the entire
+family; only character-cell crossterm returns `false`.
+
+Rather than reimplement windowing in each GPU crate, extract the shared surface into
+`retroglyph-window` (depends on `retroglyph-core` + `winit`) exposing a renderer seam (a
+`Presenter`/surface trait) that each renderer implements:
+
+```text
+retroglyph-core
+  └── retroglyph-window     winit loop, event translation, inverted run, Presenter trait
+        ├── retroglyph-software   Presenter via softbuffer
+        ├── retroglyph-wgpu       Presenter via wgpu
+        └── retroglyph-gl         Presenter via glutin/glow (opengl, webgl2)
+```
+
+`retroglyph-crossterm` stays entirely outside this family: no winit, no `Presenter`, driven by
+core's `run_blocking`.
+
+Timing and open questions:
+
+- **Do not extract now.** With one windowed backend the seam has a single consumer. wgpu (async
+  device/queue init), GL (context-current-on-thread), and softbuffer (neither) have materially
+  different surface lifecycles; the `Presenter` trait must be designed against at least two of them
+  or it fits none. Keep the windowing code as a liftable `window.rs` inside `retroglyph-software`
+  until then.
+- **Trait-fusion caveat.** Today's `Backend` fuses input (`poll_event`, `push_event`) with output
+  (`draw_layers`, `flush`, `size`, `resize`, cursor). In the windowed family, input is owned by the
+  shared window and output by the per-renderer `Presenter`. Separating those halves is best designed
+  when `retroglyph-window` is extracted, not now.
+- **Shared atlas.** A glyph/tile atlas _layout_ (glyph → sprite cell) is common to
+  `software-tilesets` and every GPU backend; only upload and sampling are backend-specific. Whether
+  that becomes a shared `retroglyph-atlas` module is a smaller, separate question to revisit with
+  the first GPU backend.
+
 ## Non-goals
 
 - **Splitting grid/terminal into separate crates.** The internal dependency graph between color,
@@ -342,7 +449,12 @@ cannot independently raise its MSRV without raising the workspace MSRV.
 ## References
 
 - [ADR 001 §1: "single crate, split later"](001-architecture.md)
+- [ADR 007: Software Backend](007-software-backend.md) -- winit-owned loop, source of the windowing
+  layer
+- [ADR 011: WASM Portability](011-wasm-portability-revised.md) -- rAF frame gating
 - [ADR 013: Codecov](013-codecov.md) -- flag-per-crate model designed for this split
+- [ADR 015: Cross-Backend Rendering and Loop Consistency](015-cross-backend-consistency.md) -- loop
+  decomposition, `composites_layers`, windowed family
 - [Cargo workspaces](https://doc.rust-lang.org/cargo/reference/workspaces.html)
 - [cargo-release](https://github.com/crate-ci/cargo-release) -- multi-crate publish ordering
 - [release-plz](https://github.com/MarcoIeni/release-plz) -- alternative with changelog generation
