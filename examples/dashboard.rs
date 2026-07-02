@@ -397,10 +397,8 @@ fn draw_bar<B: Backend>(term: &mut Terminal<B>, area: Rect, text: &str) {
 }
 
 fn label<B: Backend>(term: &mut Terminal<B>, x: u16, y: u16, text: &str) {
-    let mut cx = x;
-    for ch in text.chars() {
+    for (cx, ch) in (x..).zip(text.chars()) {
         term.put_styled(cx, y, ch, Style::new().fg(FG).bg(PANEL_BG));
-        cx += 1;
     }
 }
 
