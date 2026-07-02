@@ -6,6 +6,7 @@ pub mod action;
 pub mod draw;
 pub mod fov;
 pub mod game;
+pub mod layout;
 pub mod lcg;
 pub mod perf;
 pub mod timestep;
