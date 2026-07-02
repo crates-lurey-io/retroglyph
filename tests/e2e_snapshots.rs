@@ -283,6 +283,62 @@ fn render_svg(screen: &vt100::Screen, rows: u16, cols: u16) -> String {
 
 // --- Tests ------------------------------------------------------------------
 
+fn build_crossterm_hex_battle() -> PathBuf {
+    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
+    let manifest = env!("CARGO_MANIFEST_DIR");
+    let status = std::process::Command::new(&cargo)
+        .args([
+            "build",
+            "--manifest-path",
+            &format!("{manifest}/Cargo.toml"),
+            "--example",
+            "hex_battle",
+            "--features",
+            "crossterm",
+        ])
+        .status()
+        .expect("failed to run cargo build");
+    assert!(
+        status.success(),
+        "cargo build --example hex_battle --features crossterm failed"
+    );
+    example_bin("hex_battle")
+}
+
+#[test]
+fn test_hex_battle_snapshot() {
+    let bin = build_crossterm_hex_battle();
+    assert!(bin.exists(), "hex_battle binary not found at {bin:?}");
+
+    let rows = 24u16;
+    let cols = 100u16;
+    let raw = capture_pty(&bin, b"", b"q", rows, cols, "Prev");
+
+    let mut last_alternate_end = 0usize;
+    let mut pos = 0usize;
+    let mut parser = vt100::Parser::new(rows, cols, 0);
+    while pos < raw.len() {
+        let end = (pos + 64).min(raw.len());
+        parser.process(&raw[pos..end]);
+        if parser.screen().alternate_screen() {
+            last_alternate_end = end;
+        }
+        pos = end;
+    }
+
+    let mut snap_parser = vt100::Parser::new(rows, cols, 0);
+    snap_parser.process(&raw[..last_alternate_end]);
+
+    let svg = render_svg(snap_parser.screen(), rows, cols);
+
+    assert!(svg.contains("Prev"), "footer missing from SVG output");
+
+    let svg_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots/hex_battle.svg");
+    std::fs::write(&svg_path, &svg).expect("write SVG");
+
+    insta::assert_snapshot!(svg);
+}
+
 #[test]
 fn test_demo_snapshot() {
     let bin = build_crossterm_demo();

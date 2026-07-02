@@ -104,9 +104,10 @@ static EXAMPLES: &[Example] = &[
     },
     Example {
         name: "hex_battle",
-        description: "Battle for Hoth replay — hex grid, units, sidebar, playback",
+        description: "hex battle replay — hex grid, units, sidebar, playback",
         backends: &[Backend::Terminal, Backend::Desktop, Backend::Wasm],
-        // Terminal: crossterm only. Desktop/Wasm: also needs software-tilesets.
+        // Terminal uses crossterm (ASCII art hexes).
+        // Desktop/Wasm use software-tilesets for PNG hex sprites.
         extra_features: &[],
         backend_features: &[
             (Backend::Desktop, &["software-tilesets"]),

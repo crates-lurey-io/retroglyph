@@ -1,29 +1,30 @@
 #![allow(dead_code, unreachable_pub)]
-//! Battle for Hoth-style hex board game replay demo.
+//! Hex board game replay demo.
 //!
-//! Visualises a pre-baked scenario with a hex grid map, unit markers, a
+//! Visualises a scripted scenario with a hex grid map, unit markers, a
 //! styled event-log sidebar, faction card hands, and step-by-step playback
 //! controls.
 //!
-//! Run (software renderer, required):
+//! Run (software renderer, required for sprite tiles):
 //!   `cargo run --example hex_battle --features software-tilesets,software-default-font`
 //!
-//! The crossterm fallback uses ASCII art hexes instead of PNG sprites.
+//! The crossterm fallback uses colored-block hex cells instead of PNG sprites.
 //!
 //! Controls:
-//!   ← / H       – previous step
+//!   ← / H         – previous step
 //!   → / L / Space – advance one step
-//!   Q / Esc      – quit
+//!   Q / Esc       – quit
 
 mod hexmap;
 mod render;
 mod sim;
 
-// Brings rg_run!, rg_run_software!, and draw utilities into scope.
 #[path = "../util/mod.rs"]
 mod util;
 
-use render::{MAP_COLS, MAP_ROWS, RenderState, render_frame};
+#[cfg(feature = "software-tilesets")]
+use render::{MAP_COLS, MAP_ROWS};
+use render::{RenderState, render_frame};
 use retroglyph::Terminal;
 use retroglyph::backend::Backend;
 use retroglyph::event::{Event, KeyCode, MouseButton, MouseEventKind};
@@ -80,19 +81,14 @@ fn tick<B: Backend>(term: &mut Terminal<B>, state: &mut State) -> bool {
                 _ => {}
             },
             Event::Mouse(m) => {
-                // Both paths ultimately map to cell coordinates. The
-                // pixel_position (software backend) gives sub-cell precision;
-                // for crossterm we fall back to the already-converted cell pos.
-                // Cell-based lookup is accurate enough for a 3×2-cell-per-hex grid.
                 let hovered = hexmap::cell_to_axial(m.position.x, m.position.y);
                 state.render.hovered = hovered;
 
-                if m.kind == MouseEventKind::Down(MouseButton::Left) {
-                    // Click: advance replay.
-                    if state.current + 1 < state.steps.len() {
-                        state.current += 1;
-                        state.render.step = state.current;
-                    }
+                if m.kind == MouseEventKind::Down(MouseButton::Left)
+                    && state.current + 1 < state.steps.len()
+                {
+                    state.current += 1;
+                    state.render.step = state.current;
                 }
             }
             Event::Close => return false,
@@ -107,9 +103,6 @@ fn tick<B: Backend>(term: &mut Terminal<B>, state: &mut State) -> bool {
 }
 
 // ── Entry points ──────────────────────────────────────────────────────────────
-//
-// Software path: custom builder (tileset registration) via rg_run_software!.
-// Crossterm path: standard rg_run! crossterm arm.
 
 #[cfg(feature = "software-tilesets")]
 crate::rg_run_software!(
@@ -120,14 +113,14 @@ crate::rg_run_software!(
         use retroglyph::backend::software::SoftwareBackendBuilder;
         use retroglyph::backend::software::tileset::{Codepage, TilesetOptions};
         let hex_tileset = TilesetOptions::from_bytes(HEX_SPRITE_BYTES.to_vec())
-            .tile_size(64, 64)
+            .tile_size(32, 32)
             .codepage(Codepage::Identity)
             .spacing(hexmap::HEX_CELL_COLS, hexmap::HEX_CELL_ROWS)
             .build()
             .expect("hex tileset build failed");
         SoftwareBackendBuilder::new()
-            .title("Battle for Hoth — Simulator Replay")
-            .grid_size(MAP_COLS + 36, MAP_ROWS + 4)
+            .title("Hex Battle — Replay")
+            .grid_size(MAP_COLS + 50, MAP_ROWS + 4)
             .scale(2)
             .target_fps(30)
             .tileset(hex_tileset)

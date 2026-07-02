@@ -8,19 +8,21 @@
 )]
 //! Build script: generates `hex_sprites.png` for the `hex_battle` example.
 //!
-//! Produces a sprite sheet with 6 tiles (each 64×64 RGBA pixels):
+//! Produces a sprite sheet with 6 tiles (each 32×32 RGBA pixels):
 //!   0 – empty hex (dark outline, transparent fill)
 //!   1 – selected hex (bright outline + tinted fill)
-//!   2 – rebel unit marker  (blue circle with letter area)
-//!   3 – empire unit marker (red circle with letter area)
+//!   2 – blue unit marker  (blue circle)
+//!   3 – red unit marker   (red circle)
 //!   4 – movement highlight (lighter hex tint)
 //!   5 – attack flash       (orange/yellow hex tint)
 //!
-//! Tile size: 64×64 px. Sheet: 384×64 px (6 tiles wide, 1 row).
+//! Tile size: 32×32 px. Sheet: 192×32 px (6 tiles wide, 1 row).
 //!
-//! The sprites use pointy-top hexagons. Each tile's hex is drawn centered in
-//! the 64×64 square with a circumradius of 30px, leaving a 2px transparent
-//! margin on all sides to prevent adjacent tiles from bleeding into each other.
+//! The `SoftwareRenderer::blit_sprite` scales each source pixel by the
+//! backend's `scale` factor, so these 32×32 tiles render as 64×64 pixels
+//! at scale=2, fitting exactly within the 4×2 cell hex stride (4×16=64,
+//! 2×32=64).  A circumradius of 13px in a 32×32 tile leaves a ~3px
+//! transparent margin, giving visible gaps between adjacent hexes.
 
 use image::{ImageBuffer, Rgba, RgbaImage};
 use std::f64::consts::PI;
@@ -28,14 +30,14 @@ use std::path::PathBuf;
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const TILE_W: u32 = 64;
-const TILE_H: u32 = 64;
+const TILE_W: u32 = 32;
+const TILE_H: u32 = 32;
 const TILE_COUNT: u32 = 6;
 const SHEET_W: u32 = TILE_W * TILE_COUNT;
 const SHEET_H: u32 = TILE_H;
 
 /// Circumradius of each hexagon in pixels.
-const HEX_R: f64 = 28.0;
+const HEX_R: f64 = 13.0;
 
 // Tile indices
 const IDX_EMPTY: u32 = 0;
@@ -56,8 +58,8 @@ fn main() {
 
     draw_hex_tile(&mut sheet, IDX_EMPTY, &HexStyle::Empty);
     draw_hex_tile(&mut sheet, IDX_SELECTED, &HexStyle::Selected);
-    draw_hex_tile(&mut sheet, IDX_REBEL, &HexStyle::Unit(UnitFaction::Rebel));
-    draw_hex_tile(&mut sheet, IDX_EMPIRE, &HexStyle::Unit(UnitFaction::Empire));
+    draw_hex_tile(&mut sheet, IDX_REBEL, &HexStyle::Unit(UnitFaction::Blue));
+    draw_hex_tile(&mut sheet, IDX_EMPIRE, &HexStyle::Unit(UnitFaction::Red));
     draw_hex_tile(&mut sheet, IDX_MOVE, &HexStyle::MoveHighlight);
     draw_hex_tile(&mut sheet, IDX_ATTACK, &HexStyle::AttackFlash);
 
@@ -75,8 +77,8 @@ enum HexStyle {
 }
 
 enum UnitFaction {
-    Rebel,
-    Empire,
+    Blue,
+    Red,
 }
 
 // ── Hex tile renderer ─────────────────────────────────────────────────────────
@@ -159,39 +161,36 @@ fn style_pixel(style: &HexStyle, fx: f64, fy: f64, cx: f64, cy: f64, sdf: f64) -
         return Rgba([0, 0, 0, 0]); // fully transparent
     }
 
+    // At 32×32 tiles, thresholds are roughly half the 64×64 originals.
     match style {
         HexStyle::Empty => {
-            // Dark blue-grey fill with a brighter outline.
-            let outline = smooth_step(1.5, -0.5, sdf - 2.5); // outline band ≈2px
-            let fill_col = [28u8, 42, 68]; // dark navy
-            let line_col = [70u8, 95, 140]; // lighter blue-grey edge
+            let outline = smooth_step(1.0, -0.5, sdf - 1.2);
+            let fill_col = [28u8, 42, 68];
+            let line_col = [70u8, 95, 140];
             let col = lerp_rgb(fill_col, line_col, outline);
             Rgba([col[0], col[1], col[2], (edge_alpha * 255.0) as u8])
         }
 
         HexStyle::Selected => {
-            // Bright ice-blue tint with a strong outline.
-            let outline = smooth_step(1.5, -0.5, sdf - 2.5);
-            let fill_col = [120u8, 180, 230]; // light blue fill
-            let line_col = [200u8, 230, 255]; // bright outline
+            let outline = smooth_step(1.0, -0.5, sdf - 1.2);
+            let fill_col = [120u8, 180, 230];
+            let line_col = [200u8, 230, 255];
             let col = lerp_rgb(fill_col, line_col, outline);
-            let a = (edge_alpha * 200.0) as u8; // slightly transparent fill
+            let a = (edge_alpha * 200.0) as u8;
             Rgba([col[0], col[1], col[2], a])
         }
 
         HexStyle::Unit(faction) => {
-            // Solid filled hex + a circle in the faction colour.
-            let outline = smooth_step(1.5, -0.5, sdf - 2.0);
+            let outline = smooth_step(1.0, -0.5, sdf - 1.0);
             let (fill_base, circle_col, line_col): ([u8; 3], [u8; 3], [u8; 3]) = match faction {
-                UnitFaction::Rebel => ([20, 50, 100], [70, 120, 200], [120, 160, 240]),
-                UnitFaction::Empire => ([100, 20, 20], [200, 60, 60], [240, 120, 120]),
+                UnitFaction::Blue => ([20, 50, 100], [70, 120, 200], [120, 160, 240]),
+                UnitFaction::Red => ([100, 20, 20], [200, 60, 60], [240, 120, 120]),
             };
 
-            // Circle in the centre.
             let r_circle = HEX_R * 0.55;
             let circle_sdf = ((fx - cx).powi(2) + (fy - cy).powi(2)).sqrt() - r_circle;
-            let circle_alpha = smooth_step(1.5, -0.5, circle_sdf);
-            let circle_outline = smooth_step(1.5, -0.5, circle_sdf - 2.0);
+            let circle_alpha = smooth_step(1.0, -0.5, circle_sdf);
+            let circle_outline = smooth_step(1.0, -0.5, circle_sdf - 1.0);
 
             let col = if circle_alpha > 0.01 {
                 lerp_rgb(circle_col, [255, 255, 255], circle_outline * 0.4)
@@ -204,17 +203,17 @@ fn style_pixel(style: &HexStyle, fx: f64, fy: f64, cx: f64, cy: f64, sdf: f64) -
         }
 
         HexStyle::MoveHighlight => {
-            let fill_col = [50u8, 130, 80]; // green tint
+            let fill_col = [50u8, 130, 80];
             let line_col = [100u8, 200, 130];
-            let outline = smooth_step(1.5, -0.5, sdf - 2.0);
+            let outline = smooth_step(1.0, -0.5, sdf - 1.0);
             let col = lerp_rgb(fill_col, line_col, outline);
             Rgba([col[0], col[1], col[2], (edge_alpha * 160.0) as u8])
         }
 
         HexStyle::AttackFlash => {
-            let fill_col = [180u8, 80, 10]; // orange
-            let line_col = [255u8, 180, 50]; // yellow outline
-            let outline = smooth_step(1.5, -0.5, sdf - 2.0);
+            let fill_col = [180u8, 80, 10];
+            let line_col = [255u8, 180, 50];
+            let outline = smooth_step(1.0, -0.5, sdf - 1.0);
             let col = lerp_rgb(fill_col, line_col, outline);
             Rgba([col[0], col[1], col[2], (edge_alpha * 200.0) as u8])
         }
