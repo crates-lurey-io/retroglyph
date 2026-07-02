@@ -9,6 +9,8 @@ extern crate alloc;
 pub mod app;
 /// Pluggable rendering backends.
 pub mod backend;
+/// A scrolling viewport into a world larger than the screen.
+pub mod camera;
 pub mod color;
 pub mod event;
 /// Fixed-timestep accumulator for game loops.
@@ -32,6 +34,7 @@ pub use backend::software::SoftwareBackend;
 #[cfg(feature = "software-tilesets")]
 pub use backend::software::tileset::{Codepage, TilesetBuilder, TilesetError, TilesetOptions};
 pub use backend::{Backend, Headless};
+pub use camera::Camera;
 pub use color::{AnsiColor, Color, InvalidAnsiIndex};
 pub use event::{
     Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind, PhysicalPos,

@@ -204,6 +204,55 @@ impl Grid {
         }
     }
 
+    /// Build a grid from a rectangular character map, one [`Tile`] per cell.
+    ///
+    /// `map` is split on `\n`; the grid width is the longest line's character
+    /// count and the height is the number of lines. Lines shorter than the
+    /// widest are padded with the default tile. `f` maps each character to its
+    /// tile, called once per character in reading order.
+    ///
+    /// Characters are counted as Unicode scalar values (one column each), which
+    /// matches ASCII / CP437 maps and level/prefab strings. Wide characters are
+    /// not width-adjusted.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use retroglyph::{Grid, Style, Tile};
+    ///
+    /// let grid = Grid::from_charmap("##\n#.", |c| match c {
+    ///     '#' => Tile::new('#', Style::default()),
+    ///     _ => Tile::default(),
+    /// });
+    /// assert_eq!((grid.width(), grid.height()), (2, 2));
+    /// assert_eq!(grid.get(0, 0).glyph(), '#');
+    /// assert_eq!(grid.get(1, 1).glyph(), ' ');
+    /// ```
+    #[must_use]
+    pub fn from_charmap<F>(map: &str, mut f: F) -> Self
+    where
+        F: FnMut(char) -> Tile,
+    {
+        let mut width: u16 = 0;
+        let mut height: u16 = 0;
+        for line in map.lines() {
+            let len = u16::try_from(line.chars().count()).unwrap_or(u16::MAX);
+            width = width.max(len);
+            height = height.saturating_add(1);
+        }
+        let mut grid = Self::new(width, height);
+        for (y, line) in map.lines().enumerate() {
+            #[allow(clippy::cast_possible_truncation)]
+            let y = y as u16;
+            for (x, ch) in line.chars().enumerate() {
+                #[allow(clippy::cast_possible_truncation)]
+                let x = x as u16;
+                grid.put_tile(0, x, y, f(ch));
+            }
+        }
+        grid
+    }
+
     /// Returns the width of the grid.
     #[must_use]
     pub const fn width(&self) -> u16 {

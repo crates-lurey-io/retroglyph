@@ -55,6 +55,28 @@ to a bounded rectangle, then positions it with independent horizontal and vertic
 </details>
 
 <details>
+<summary><strong>Game loop</strong> — implement <code>App</code> once, run on every backend</summary>
+
+Implement the `App` trait (the update-side dual of `Backend`) and run it with a single
+feature-selected entry point. Terminal backends use the generic `run_blocking` driver; the
+software/winit backend uses its inverted driver; both share the same `App`, `Frame`, and `Flow`
+types. `FrameClock` is a pure fixed-timestep accumulator (fed elapsed `dt`, so it is
+`no_std`-clean). The low-level `poll`/`present` API remains for turn-based games and headless tests.
+
+</details>
+
+<details>
+<summary><strong>Scrolling camera and map loading</strong> — worlds larger than the screen</summary>
+
+`Camera` is a viewport onto a larger world: it converts between world and screen coordinates, clamps
+to the map edges while following a target, and iterates the visible cells as `(world, screen)`
+pairs. `Grid::from_charmap` builds a styled grid from an ASCII map or level string, one tile per
+character. Combined with multi-layer compositing, this drives scrolling roguelikes (see the
+`scrolling_roguelike` example).
+
+</details>
+
+<details>
 <summary><strong>Extended grapheme cluster support</strong> — combining marks, emoji, and CJK wide chars</summary>
 
 With the `egc` feature (enabled by default), the library handles full Unicode grapheme clusters:
