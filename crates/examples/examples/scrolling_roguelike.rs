@@ -1,7 +1,7 @@
 //! Scrolling roguelike demo.
 //!
 //! A world larger than the screen, viewed through a [`Camera`] that follows the
-//! player. Exercises the features that landed with ADR 015 and after:
+//! player. Exercises:
 //!
 //! - [`Grid::from_charmap`] to build the terrain from a generated map
 //! - [`Camera`] world/screen conversion with edge clamping

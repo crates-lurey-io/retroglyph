@@ -12,7 +12,6 @@
 //!   expanded scanlines to avoid per-frame bit extraction. Currently the bit
 //!   extraction loop is not a bottleneck for 8px-wide fonts at typical grid
 //!   sizes, but wider fonts (10px, 16px) would benefit from caching.
-//!   See ADR 012 (metrics) and ADR 011 (future optimization notes).
 //!
 //! - **Wider glyphs:** To support glyphs wider than 8px, change `rows()` to
 //!   return `ceil(glyph_width / 8)` bytes per row and update the bit
@@ -376,7 +375,7 @@ pub mod vga8x16 {
 
 // ── Unicode → CP437 mapping ────────────────────────────────────────────────
 
-/// Solid block — the fallback for any unmapped character.
+/// Solid block, the fallback for any unmapped character.
 const FALLBACK: u8 = 0xDB;
 
 /// Maps a Unicode scalar to its CP437 glyph index.

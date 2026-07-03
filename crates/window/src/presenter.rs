@@ -47,10 +47,11 @@ impl<T: HasWindowHandle + HasDisplayHandle + ?Sized> WindowHandle for T {}
 /// `resize_surface`, `present`, `cell_size`) that the winit loop drives.
 ///
 /// The `needs_full_frame` and `composites_layers` defaults are `true`: every
-/// windowed presenter is a pixel-family backend that composites layers itself
-/// (ADR 015 Decision 1); only character-cell terminal backends return `false`,
-/// and those implement [`Backend`](retroglyph_core::Backend) directly instead
-/// of this trait.
+/// windowed presenter is a pixel-family backend that composites layers
+/// itself, receiving the raw per-layer stream instead of a pre-flattened
+/// single layer. Only character-cell terminal backends return `false`, and
+/// those implement [`Backend`](retroglyph_core::Backend) directly instead of
+/// this trait.
 pub trait Presenter {
     /// Rasterization error (mirrors `Backend::Error`).
     ///
@@ -118,7 +119,8 @@ pub trait Presenter {
         true
     }
 
-    /// Whether this presenter composites layers itself (ADR 015 Decision 1).
+    /// Whether this presenter composites layers itself, receiving the raw
+    /// `(layer, Pos, Tile)` stream instead of a pre-flattened single layer.
     ///
     /// Defaults to `true` for the windowed family.
     #[must_use]

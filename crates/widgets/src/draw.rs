@@ -397,8 +397,9 @@ pub fn print_line<B: Backend>(term: &mut Terminal<B>, pos: Pos, line: &Line, max
 
 /// Truncate `s` so its display width is at most `max_cols` terminal columns.
 ///
-/// This is a simple byte-boundary truncation — good enough for ASCII/CP437
-/// content in the demo. For production use, reach for `unicode-width`.
+/// Truncates on a whole-character boundary using each character's
+/// `unicode-width`; a character that would push the total over `max_cols` is
+/// dropped along with the rest of the string.
 fn truncate_to_cols(s: &str, max_cols: usize) -> String {
     use unicode_width::UnicodeWidthChar;
     let mut cols = 0usize;

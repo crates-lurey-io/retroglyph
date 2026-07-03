@@ -1,11 +1,13 @@
 //! Crossterm-based terminal rendering backend.
 //!
-//! I/O errors from crossterm writes are silently discarded. The [`Backend`]
-//! trait methods return `()` (not `Result`), so there is no channel to
-//! propagate write failures to the caller. This is acceptable for the common
-//! case (stdout to a real terminal) but means the library won't detect a
-//! disconnected pipe or closed terminal. Future versions of the trait may add
-//! error-returning variants.
+//! [`draw`](Backend::draw), [`flush`](Backend::flush), and
+//! [`clear`](Backend::clear) propagate `std::io::Error` through this
+//! backend's [`Backend::Error`] type. The [`Backend`] methods that the trait
+//! defines as infallible (`resize`, `set_cursor_visible`,
+//! `set_cursor_position`) have no error channel, so this backend discards
+//! their I/O failures silently. This is acceptable for the common case
+//! (stdout to a real terminal) but means a resize or cursor move against a
+//! disconnected pipe or closed terminal fails without notice.
 
 // Compile the code blocks in the project README as doctests so the quick-start
 // example is type-checked on every test run and cannot silently rot. The
@@ -119,10 +121,13 @@ pub struct Crossterm {
 }
 
 impl Crossterm {
-    /// Creates a new `Crossterm` rendering to standard output.
+    /// Creates a new `Crossterm` backend rendering to standard output.
     ///
-    /// This sets up raw mode, mouse capture, alternative screen, hides the cursor,
-    /// and registers a process-wide panic hook to safely restore the terminal on crashes.
+    /// Enables raw mode, enters the alternate screen, hides the cursor, and
+    /// enables mouse capture. Registers a process-wide panic hook (once, across
+    /// all instances) that restores the terminal before the default panic
+    /// handler runs, so a panic mid-render doesn't leave the user's shell in
+    /// raw mode or the alternate screen.
     ///
     /// # Errors
     ///
@@ -167,12 +172,13 @@ impl Crossterm {
         })
     }
 
-    /// Create a crossterm terminal and drive `app` with the blocking loop until
-    /// it returns [`Flow::Exit`](retroglyph_core::Flow) (ADR 015 Decision 2).
+    /// Creates a crossterm terminal and drives `app` with the blocking loop until
+    /// it returns [`Flow::Exit`](retroglyph_core::Flow).
     ///
     /// This is a thin wrapper over the generic
     /// [`run_blocking`](retroglyph_core::run_blocking); the terminal is restored on the
-    /// way out via `Drop`.
+    /// way out via `Drop`, so raw mode and the alternate screen are left intact
+    /// until the loop actually returns.
     ///
     /// # Errors
     ///

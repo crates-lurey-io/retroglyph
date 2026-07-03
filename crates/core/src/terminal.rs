@@ -11,17 +11,19 @@ use core::time::Duration;
 #[cfg(not(feature = "egc"))]
 use unicode_width::UnicodeWidthChar;
 
-/// The main entry point for `rg`.
+/// A double-buffered terminal generic over a [`Backend`].
 ///
-/// Generic over the backend. Owns a double-buffered grid and provides
-/// a stateful drawing API.
+/// Owns the current and previous frame grids and exposes a stateful drawing
+/// API (`put`, `print`, `layer`, ...). Call [`present`](Self::present) once
+/// per frame to diff against the previous frame and send only the changed
+/// cells to the backend.
 pub struct Terminal<B: Backend> {
     current: Grid,
     previous: Grid,
     /// Single-layer scratch buffers used only when the backend does not
     /// composite layers itself. `present` flattens `current` into
     /// `flattened_current`, diffs it against `flattened_previous`, and sends the
-    /// result. Unused (but allocated) for compositing backends. See ADR 015.
+    /// result. Unused (but allocated) for compositing backends.
     flattened_current: Grid,
     flattened_previous: Grid,
     backend: B,
@@ -325,7 +327,7 @@ impl<B: Backend> Terminal<B> {
     /// redraw to avoid orphaned pixels from sub-cell offsets.
     ///
     /// After swap the new current buffer is cleared so the next frame starts
-    /// empty.  Callers should not call `clear()` before drawing the next frame.
+    /// empty. Callers should not call `clear()` before drawing the next frame.
     ///
     /// # Immediate mode
     ///
@@ -406,8 +408,11 @@ impl<B: Backend> Terminal<B> {
     ///
     /// # Panics
     ///
-    /// Panics if no event is available. This matches the expected behavior
-    /// for headless backend tests when the event queue is empty.
+    /// Panics if the backend's [`poll_event`](crate::Backend::poll_event) returns
+    /// `None` even with an unbounded timeout. Backends that never block (e.g.
+    /// [`Headless`](crate::backend::Headless), which returns immediately
+    /// regardless of timeout) will panic here once their event queue is empty;
+    /// use [`poll`](Self::poll) instead if that is a possibility.
     pub fn read(&mut self) -> Event {
         self.poll(Duration::MAX)
             .expect("read() called but no events available")
@@ -577,8 +582,8 @@ mod tests {
 
     #[test]
     fn test_present_composites_layers_for_cell_backend() {
-        // ADR 015 Decision 1: a cell backend (Headless) must see layers 1+
-        // composited, not dropped. Terrain on layer 0, entity on layer 1.
+        // A cell backend (Headless) must see layers 1+ composited, not
+        // dropped. Terrain on layer 0, entity on layer 1.
         let mut term = Terminal::new(Headless::new(3, 1));
         term.layer(0).put(0, 0, '.');
         term.layer(0).put(1, 0, '.');

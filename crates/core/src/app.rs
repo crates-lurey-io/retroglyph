@@ -1,4 +1,4 @@
-//! The `App`-driven game loop (ADR 015 Decision 2).
+//! The `App`-driven game loop.
 //!
 //! `App` is the update-side dual of [`Backend`](crate::Backend): where a
 //! backend is the output contract, an [`App`] is the per-frame update contract.
@@ -10,7 +10,8 @@
 //! - the generic blocking driver ([`run_blocking`], `std` only), which covers
 //!   `Crossterm` (in `retroglyph-crossterm`) and [`Headless`](crate::backend::Headless);
 //! - the inverted driver in the windowing layer (the software backend's
-//!   `run_app`), which cannot be generic because winit owns the loop.
+//!   `run_app`), which cannot be generic because winit owns the loop instead of
+//!   handing control back to a shared driver function.
 //!
 //! Both drivers share [`step`] as the per-frame body. The low-level
 //! [`poll`](crate::Terminal::poll) / [`present`](crate::Terminal::present) API

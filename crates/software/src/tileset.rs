@@ -2,8 +2,9 @@
 //!
 //! This module defines the public API for configuring PNG sprite sheet tilesets
 //! that overlay or replace [`BitmapFont`](super::bitmap_font::BitmapFont) glyphs.
-//!
-//! See ADR 009 for the full design.
+//! A tileset is a sprite sheet PNG sliced into equally sized tiles, each
+//! mapped to a Unicode codepoint via a [`Codepage`]; [`SpriteCache`](super::sprite_cache::SpriteCache)
+//! decodes and indexes those tiles for lookup by glyph at draw time.
 
 use core::fmt;
 

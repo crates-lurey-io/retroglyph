@@ -1,7 +1,7 @@
 //! retroglyph-window: the shared winit windowing layer for retroglyph's
 //! windowed backend family (software today; wgpu/GL planned).
 //!
-//! # Architecture (ADR 014, ADR 015)
+//! # Architecture
 //!
 //! The [`Backend`](retroglyph_core::Backend) trait fuses input
 //! (`poll_event`/`push_event`) and output (`draw_layers`/`flush`/...). That is

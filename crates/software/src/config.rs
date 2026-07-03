@@ -226,8 +226,8 @@ impl SoftwareBackendBuilder {
 
     /// Pixel-scale factor for the font.
     ///
-    /// Each 1-bit font pixel becomes a `scale`×`scale` block.  For the VGA
-    /// 8×16 font a scale of 2 gives 16×32 pixel cells — much more readable
+    /// Each 1-bit font pixel becomes a `scale`×`scale` block. For the VGA
+    /// 8×16 font a scale of 2 gives 16×32 pixel cells, more readable
     /// on modern displays.
     #[must_use]
     pub const fn scale(mut self, scale: u8) -> Self {

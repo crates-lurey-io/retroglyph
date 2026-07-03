@@ -50,8 +50,10 @@ impl SpriteCache {
     ///
     /// # Errors
     ///
-    /// Returns `TilesetError` on PNG decode failure, unsupported pixel format,
-    /// or dimension mismatch.
+    /// Returns [`TilesetError::PngDecode`] if the bytes are not a valid PNG,
+    /// [`TilesetError::ZeroTileSize`] if `opts.tile_width` or `opts.tile_height`
+    /// is 0, or [`TilesetError::InvalidDimensions`] if the decoded image
+    /// dimensions are not evenly divisible by the tile size.
     #[allow(clippy::cast_possible_truncation, clippy::cast_lossless)]
     pub fn load(&mut self, opts: &TilesetOptions) -> Result<(), TilesetError> {
         let img = image::load_from_memory(&opts.bytes)
@@ -134,13 +136,12 @@ impl Default for SpriteCache {
     }
 }
 
-/// Per-pixel source-over blending with correct integer math.
+/// Blends `src` over `dst` using the Porter-Duff `SRC_OVER` operator for
+/// straight-alpha pixels: `out = src + dst * (1 - src.a)` for each channel,
+/// including alpha.
 ///
-/// This is the Porter-Duff `SRC_OVER` operator for straight-alpha pixels:
-/// `out = src + dst * (1 - src.a)` for each channel, including alpha.
-///
-/// Uses the `alpha-blend` crate's `BlendMode::SourceOver.apply` via f32
-/// conversion as the reference implementation.
+/// Delegates to the `alpha-blend` crate's `BlendMode::SourceOver`, converting
+/// through `F32x4Rgba` for the blend math.
 #[inline]
 #[must_use]
 pub fn source_over(src: U8x4Rgba, dst: U8x4Rgba) -> U8x4Rgba {
