@@ -19,26 +19,26 @@ pub mod sprite_cache;
 #[cfg(feature = "software-tilesets")]
 pub mod tileset;
 
-use crate::backend::Backend;
-use crate::color::{AnsiColor, Color};
+use retroglyph_core::backend::Backend;
+use retroglyph_core::color::{AnsiColor, Color};
 
 pub use bitmap_font::BitmapFont;
 pub use config::{SoftwareBackend, SoftwareBackendBuilder, SoftwareBackendError};
 pub mod windowed;
 pub use windowed::WindowedBackend;
 
-use crate::event::{
-    Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind, PhysicalPos,
-};
-use crate::grid::{Pos, Size};
-use crate::style::CellModifier;
-use crate::tile::Tile;
 #[cfg(feature = "software-tilesets")]
 use alpha_blend::rgba::U8x4Rgba;
 use bitmap_font::BitmapFont as Font;
 use grixy::buf::GridBuf;
 use grixy::ops::GridWrite;
 use grixy::ops::layout::RowMajor;
+use retroglyph_core::event::{
+    Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind, PhysicalPos,
+};
+use retroglyph_core::grid::{Pos, Size};
+use retroglyph_core::style::CellModifier;
+use retroglyph_core::tile::Tile;
 #[cfg(feature = "software-tilesets")]
 use sprite_cache::{Sprite, SpriteCache};
 use std::collections::VecDeque;
@@ -229,8 +229,8 @@ impl SoftwareBackend {
     /// # Examples
     ///
     /// ```ignore
-    /// use retroglyph::backend::software::SoftwareBackendBuilder;
-    /// use retroglyph::event::{Event, KeyCode};
+    /// use retroglyph_software::SoftwareBackendBuilder;
+    /// use retroglyph_core::event::{Event, KeyCode};
     /// use std::time::Duration;
     ///
     /// SoftwareBackendBuilder::new()
@@ -268,7 +268,7 @@ impl SoftwareBackend {
     /// method adds winit window + event loop setup on top.
     pub fn run_windowed<F>(self, app_loop: F) -> Result<(), SoftwareBackendError>
     where
-        F: FnMut(&mut crate::Terminal<SoftwareRenderer>) + 'static,
+        F: FnMut(&mut retroglyph_core::Terminal<SoftwareRenderer>) + 'static,
     {
         // Compute window size before consuming `self` in run_headless().
         let glyph = self
@@ -283,7 +283,7 @@ impl SoftwareBackend {
         let target_fps = self.target_fps;
 
         let renderer = self.run_headless();
-        let terminal = crate::Terminal::new(renderer);
+        let terminal = retroglyph_core::Terminal::new(renderer);
         let event_loop = EventLoop::new().map_err(SoftwareBackendError::EventLoop)?;
 
         #[cfg(not(target_arch = "wasm32"))]
@@ -323,18 +323,18 @@ impl SoftwareBackend {
         }
     }
 
-    /// Drive an [`App`](crate::App) from the windowed event loop (ADR 015
+    /// Drive an [`App`](retroglyph_core::App) from the windowed event loop (ADR 015
     /// Decision 2).
     ///
     /// This is the inverted driver: winit owns the loop, so it cannot be the
-    /// generic [`run_blocking`](crate::run_blocking). Each frame it builds a
-    /// [`Frame`](crate::Frame) (with a wall-clock `dt` on native, `ZERO` on
+    /// generic [`run_blocking`](retroglyph_core::run_blocking). Each frame it builds a
+    /// [`Frame`](retroglyph_core::Frame) (with a wall-clock `dt` on native, `ZERO` on
     /// wasm where there is no `std::time::Instant`) and calls
-    /// [`step`](crate::step). The app draws and calls
-    /// [`Terminal::present`](crate::Terminal::present); the driver then blits
+    /// [`step`](retroglyph_core::step). The app draws and calls
+    /// [`Terminal::present`](retroglyph_core::Terminal::present); the driver then blits
     /// the pixel buffer to the window.
     ///
-    /// On [`Flow::Exit`](crate::Flow) the process exits on native (the window is
+    /// On [`Flow::Exit`](retroglyph_core::Flow) the process exits on native (the window is
     /// torn down); on wasm the request-animation-frame loop cannot be stopped,
     /// so exit is a no-op. Cleanly unwinding the winit loop on exit is deferred
     /// to the `retroglyph-window` extraction (see ADR 014).
@@ -349,7 +349,7 @@ impl SoftwareBackend {
     /// Panics if the builder was constructed without a font.
     pub fn run_app<A>(self, mut app: A) -> Result<(), SoftwareBackendError>
     where
-        A: crate::App<SoftwareRenderer> + 'static,
+        A: retroglyph_core::App<SoftwareRenderer> + 'static,
     {
         let mut number = 0u64;
         #[cfg(not(target_arch = "wasm32"))]
@@ -364,9 +364,9 @@ impl SoftwareBackend {
             };
             #[cfg(target_arch = "wasm32")]
             let dt = Duration::ZERO;
-            let frame = crate::Frame { dt, number };
+            let frame = retroglyph_core::Frame { dt, number };
             number = number.wrapping_add(1);
-            if crate::step(term, &mut app, &frame) == crate::Flow::Exit {
+            if retroglyph_core::step(term, &mut app, &frame) == retroglyph_core::Flow::Exit {
                 #[cfg(not(target_arch = "wasm32"))]
                 std::process::exit(0);
             }
@@ -387,11 +387,11 @@ impl SoftwareBackend {
     /// # Examples
     ///
     /// ```ignore
-    /// use retroglyph::backend::software::SoftwareBackendBuilder;
-    /// use retroglyph::tile::Tile;
-    /// use retroglyph::style::Style;
-    /// use retroglyph::grid::Pos;
-    /// use retroglyph::Color;
+    /// use retroglyph_software::SoftwareBackendBuilder;
+    /// use retroglyph_core::tile::Tile;
+    /// use retroglyph_core::style::Style;
+    /// use retroglyph_core::grid::Pos;
+    /// use retroglyph_core::Color;
     ///
     /// let mut renderer = SoftwareBackendBuilder::new()
     ///     .grid_size(1, 1)
@@ -518,14 +518,14 @@ impl Backend for SoftwareRenderer {
             let px_y = usize::from(pos.y) * cell_h;
 
             if layer_id == 0 {
-                let bg = resolve_color(tile.style.bg, DEFAULT_BG);
+                let bg = resolve_color(tile.style().background(), DEFAULT_BG);
                 let rect = ixy::Rect::new(px_x, px_y, cell_w, cell_h);
                 self.ctx.pixel_buf.fill_rect_solid(rect, bg);
             }
 
             // Sprite cache dispatch: sprite wins over bitmap font.
             #[cfg(feature = "software-tilesets")]
-            if let Some(sprite) = sprite_cache.and_then(|c| c.get(tile.glyph)) {
+            if let Some(sprite) = sprite_cache.and_then(|c| c.get(tile.glyph())) {
                 blit_sprite(
                     self.ctx.pixel_buf.as_mut(),
                     buf_w,
@@ -668,8 +668,8 @@ fn blit_cell(
         return;
     }
 
-    let mut fg = resolve_color(cell.style().fg, DEFAULT_FG);
-    let mut bg = resolve_color(cell.style().bg, DEFAULT_BG);
+    let mut fg = resolve_color(cell.style().foreground(), DEFAULT_FG);
+    let mut bg = resolve_color(cell.style().background(), DEFAULT_BG);
 
     if cell.style().modifiers().contains(CellModifier::REVERSE) {
         core::mem::swap(&mut fg, &mut bg);
@@ -731,23 +731,23 @@ fn blit_glyph(
     _cell_h: usize,
     scale: usize,
 ) {
-    if tile.glyph == ' ' {
+    if tile.glyph() == ' ' {
         return;
     }
 
     #[allow(clippy::cast_possible_wrap)]
-    let fg = if tile.style.modifiers().contains(CellModifier::REVERSE) {
-        resolve_color(tile.style.bg, DEFAULT_BG)
+    let fg = if tile.style().modifiers().contains(CellModifier::REVERSE) {
+        resolve_color(tile.style().background(), DEFAULT_BG)
     } else {
-        resolve_color(tile.style.fg, DEFAULT_FG)
+        resolve_color(tile.style().foreground(), DEFAULT_FG)
     };
 
     #[allow(clippy::cast_possible_wrap)]
-    let origin_x = px_x as i64 + i64::from(tile.dx) * scale as i64;
+    let origin_x = px_x as i64 + i64::from(tile.dx()) * scale as i64;
     #[allow(clippy::cast_possible_wrap)]
-    let origin_y = px_y as i64 + i64::from(tile.dy) * scale as i64;
+    let origin_y = px_y as i64 + i64::from(tile.dy()) * scale as i64;
 
-    let glyph_index = font.char_to_index(tile.glyph);
+    let glyph_index = font.char_to_index(tile.glyph());
     let rows = font.rows(glyph_index);
     let src_w = usize::from(font.glyph_width);
     let buf_h = buffer.len() / buf_w;
@@ -812,8 +812,8 @@ fn blit_sprite(
     sprite: &Sprite,
     scale: usize,
 ) {
-    let origin_x = cell_px_x as i64 + i64::from(tile.dx) * scale as i64;
-    let origin_y = cell_px_y as i64 + i64::from(tile.dy) * scale as i64;
+    let origin_x = cell_px_x as i64 + i64::from(tile.dx()) * scale as i64;
+    let origin_y = cell_px_y as i64 + i64::from(tile.dy()) * scale as i64;
 
     let src_w = sprite.pixel_width as usize;
     let src_h = sprite.pixel_height as usize;
@@ -1070,7 +1070,7 @@ struct InitWindowSize {
 }
 
 struct WindowApp<B: WindowedBackend, F> {
-    terminal: Option<crate::Terminal<B>>,
+    terminal: Option<retroglyph_core::Terminal<B>>,
     app_loop: F,
     window: Option<Arc<Window>>,
     title: String,
@@ -1129,7 +1129,7 @@ impl<B: WindowedBackend, F> WindowApp<B, F> {
     }
 }
 
-impl<B: WindowedBackend, F: FnMut(&mut crate::Terminal<B>) + 'static> ApplicationHandler
+impl<B: WindowedBackend, F: FnMut(&mut retroglyph_core::Terminal<B>) + 'static> ApplicationHandler
     for WindowApp<B, F>
 {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
@@ -1170,7 +1170,7 @@ impl<B: WindowedBackend, F: FnMut(&mut crate::Terminal<B>) + 'static> Applicatio
     }
 }
 
-impl<B: WindowedBackend, F: FnMut(&mut crate::Terminal<B>) + 'static> WindowApp<B, F> {
+impl<B: WindowedBackend, F: FnMut(&mut retroglyph_core::Terminal<B>) + 'static> WindowApp<B, F> {
     /// Dispatch a [`WindowEvent`] without requiring an [`ActiveEventLoop`].
     ///
     /// Extracted from the `ApplicationHandler` impl so the translation and
@@ -1310,10 +1310,10 @@ impl<B: WindowedBackend, F: FnMut(&mut crate::Terminal<B>) + 'static> WindowApp<
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::color::Color;
-    use crate::event::{MouseButton, MouseEvent, MouseEventKind};
-    use crate::grid::Pos;
-    use crate::style::Style;
+    use retroglyph_core::color::Color;
+    use retroglyph_core::event::{MouseButton, MouseEvent, MouseEventKind};
+    use retroglyph_core::grid::Pos;
+    use retroglyph_core::style::Style;
     use std::time::Duration;
 
     // ── pixel_to_cell ─────────────────────────────────────────────────────────
@@ -1445,7 +1445,8 @@ mod tests {
     fn test_window_app(
         cols: u16,
         rows: u16,
-    ) -> WindowApp<SoftwareRenderer, impl FnMut(&mut crate::Terminal<SoftwareRenderer>)> {
+    ) -> WindowApp<SoftwareRenderer, impl FnMut(&mut retroglyph_core::Terminal<SoftwareRenderer>)>
+    {
         let opts = SoftwareBackend {
             window_title: String::new(),
             font: Some(bitmap_font::vga8x16::FONT),
@@ -1456,10 +1457,10 @@ mod tests {
             tilesets: Vec::new(),
             target_fps: None,
         };
-        let terminal = crate::Terminal::new(opts.run_headless());
+        let terminal = retroglyph_core::Terminal::new(opts.run_headless());
         WindowApp {
             terminal: Some(terminal),
-            app_loop: |_: &mut crate::Terminal<SoftwareRenderer>| {},
+            app_loop: |_: &mut retroglyph_core::Terminal<SoftwareRenderer>| {},
             window: None,
             title: String::new(),
             init_size: InitWindowSize {
@@ -1476,7 +1477,10 @@ mod tests {
     }
 
     fn poll(
-        app: &mut WindowApp<SoftwareRenderer, impl FnMut(&mut crate::Terminal<SoftwareRenderer>)>,
+        app: &mut WindowApp<
+            SoftwareRenderer,
+            impl FnMut(&mut retroglyph_core::Terminal<SoftwareRenderer>),
+        >,
     ) -> Option<Event> {
         app.terminal
             .as_mut()
@@ -1656,11 +1660,7 @@ mod tests {
     #[test]
     fn layer0_paints_background() {
         let mut renderer = test_renderer();
-        let tile = Tile {
-            glyph: ' ',
-            style: Style::new().bg(Color::Rgb { r: 255, g: 0, b: 0 }),
-            ..Tile::default()
-        };
+        let tile = Tile::new(' ', Style::new().bg(Color::Rgb { r: 255, g: 0, b: 0 }));
         let diff: Vec<(u8, Pos, &Tile)> = vec![(0, Pos::new(0, 0), &tile)];
         renderer.draw_layers(diff.into_iter());
 
@@ -1676,16 +1676,8 @@ mod tests {
     fn layer1_does_not_paint_background() {
         let mut renderer = test_renderer();
 
-        let bg_tile = Tile {
-            glyph: ' ',
-            style: Style::new().bg(Color::Rgb { r: 255, g: 0, b: 0 }),
-            ..Tile::default()
-        };
-        let space_tile = Tile {
-            glyph: ' ',
-            style: Style::new().fg(Color::Rgb { r: 0, g: 255, b: 0 }),
-            ..Tile::default()
-        };
+        let bg_tile = Tile::new(' ', Style::new().bg(Color::Rgb { r: 255, g: 0, b: 0 }));
+        let space_tile = Tile::new(' ', Style::new().fg(Color::Rgb { r: 0, g: 255, b: 0 }));
         // draw_layers clears buffer first, so pass all layers in one call.
         renderer.draw_layers(
             [
@@ -1709,20 +1701,15 @@ mod tests {
     fn layer1_glyph_overwrites_layer0() {
         let mut renderer = test_renderer();
 
-        let bg = Tile {
-            glyph: ' ',
-            style: Style::new().bg(Color::Rgb {
+        let bg = Tile::new(
+            ' ',
+            Style::new().bg(Color::Rgb {
                 r: 10,
                 g: 10,
                 b: 10,
             }),
-            ..Tile::default()
-        };
-        let fg = Tile {
-            glyph: '@',
-            style: Style::new().fg(Color::Rgb { r: 0, g: 255, b: 0 }),
-            ..Tile::default()
-        };
+        );
+        let fg = Tile::new('@', Style::new().fg(Color::Rgb { r: 0, g: 255, b: 0 }));
         // draw_layers clears buffer first, so pass all layers in one call.
         renderer.draw_layers([(0, Pos::new(0, 0), &bg), (1, Pos::new(0, 0), &fg)].into_iter());
 
@@ -1735,22 +1722,16 @@ mod tests {
     fn sub_cell_offset_shifts_glyph() {
         let mut renderer = test_renderer();
 
-        let bg = Tile {
-            glyph: ' ',
-            style: Style::new().bg(Color::Rgb {
+        let bg = Tile::new(
+            ' ',
+            Style::new().bg(Color::Rgb {
                 r: 10,
                 g: 10,
                 b: 10,
             }),
-            ..Tile::default()
-        };
-        let fg = Tile {
-            glyph: '@',
-            style: Style::new().fg(Color::Rgb { r: 0, g: 255, b: 0 }),
-            dx: 1,
-            dy: 0,
-            ..Tile::default()
-        };
+        );
+        let fg =
+            Tile::new('@', Style::new().fg(Color::Rgb { r: 0, g: 255, b: 0 })).with_offset(1, 0);
         // draw_layers clears buffer first, so pass all layers in one call.
         renderer.draw_layers([(0, Pos::new(0, 0), &bg), (1, Pos::new(0, 0), &fg)].into_iter());
 
@@ -1775,9 +1756,9 @@ mod tests {
         let mut renderer = opts.run_headless();
 
         // Layer 0: dark background, ':' at (0,0) in dim blue, '.' at (1,0) in dim gray.
-        let bg = Tile {
-            glyph: ':',
-            style: Style::new()
+        let bg = Tile::new(
+            ':',
+            Style::new()
                 .fg(Color::Rgb {
                     r: 60,
                     g: 60,
@@ -1788,11 +1769,10 @@ mod tests {
                     g: 20,
                     b: 30,
                 }),
-            ..Tile::default()
-        };
-        let dot = Tile {
-            glyph: '.',
-            style: Style::new()
+        );
+        let dot = Tile::new(
+            '.',
+            Style::new()
                 .fg(Color::Rgb {
                     r: 40,
                     g: 40,
@@ -1803,21 +1783,18 @@ mod tests {
                     g: 20,
                     b: 30,
                 }),
-            ..Tile::default()
-        };
-        let entity = Tile {
-            glyph: '@',
-            style: Style::new()
+        );
+        let entity = Tile::new(
+            '@',
+            Style::new()
                 .fg(Color::Rgb { r: 0, g: 255, b: 0 })
                 .bg(Color::Rgb {
                     r: 10,
                     g: 10,
                     b: 10,
                 }),
-            dx: 1,
-            dy: 0,
-            ..Tile::default()
-        };
+        )
+        .with_offset(1, 0);
         // Single draw_layers call (clears buffer first).
         renderer.draw_layers(
             [

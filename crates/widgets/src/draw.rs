@@ -1,22 +1,14 @@
-#![allow(
-    dead_code,
-    clippy::cast_possible_truncation,
-    clippy::cast_lossless,
-    clippy::cast_precision_loss,
-    clippy::cast_sign_loss,
-    clippy::items_after_statements
-)]
-// Drawing helpers: box borders, filled rects, and panels.
-//
-// Generic over `Backend`; works with crossterm and the software renderer.
-// Lives in examples/util/ until the Widget trait pattern stabilizes
-// (see ADR-014 for the eventual retroglyph-widgets home).
-use retroglyph::Terminal;
-use retroglyph::backend::Backend;
-use retroglyph::color::Color;
-use retroglyph::grid::{Pos, Rect};
-use retroglyph::style::Style;
-use retroglyph::text::Line;
+//! Drawing helpers: box borders, filled rects, panels, gauges, lists, tabs,
+//! and sparklines.
+//!
+//! Generic over [`Backend`](retroglyph_core::Backend); works with any backend
+//! crate (crossterm, software).
+use retroglyph_core::Backend;
+use retroglyph_core::Color;
+use retroglyph_core::Line;
+use retroglyph_core::Style;
+use retroglyph_core::Terminal;
+use retroglyph_core::{Pos, Rect};
 
 // ── Box-drawing codepoints (single-line) ─────────────────────────────────────
 

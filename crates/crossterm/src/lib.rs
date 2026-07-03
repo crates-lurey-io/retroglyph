@@ -7,12 +7,17 @@
 //! disconnected pipe or closed terminal. Future versions of the trait may add
 //! error-returning variants.
 
-use crate::backend::Backend;
-use crate::event::Event;
-use crate::grid::{Pos, Size};
-use crate::tile::Tile;
 use core::time::Duration;
+use retroglyph_core::backend::Backend;
+use retroglyph_core::event::Event;
+use retroglyph_core::grid::{Pos, Size};
+use retroglyph_core::tile::Tile;
 use std::io::{BufWriter, Stdout};
+
+// Orphan-rule note: `retroglyph_core` types and `crossterm` types are both
+// foreign to this crate now that the workspace is split, so `From`/`TryFrom`
+// impls between them are no longer legal (neither type is local). These are
+// plain conversion functions instead.
 
 /// Helper function to restore the terminal to its normal state.
 /// This is called during drops and emergency panic hooks.
@@ -27,68 +32,66 @@ fn restore_terminal() {
     let _ = crossterm::terminal::disable_raw_mode();
 }
 
-impl From<crate::color::Color> for crossterm::style::Color {
-    fn from(color: crate::color::Color) -> Self {
-        use crate::color::AnsiColor;
+const fn to_crossterm_color(color: retroglyph_core::color::Color) -> crossterm::style::Color {
+    use retroglyph_core::color::AnsiColor;
 
-        match color {
-            crate::color::Color::Default => Self::Reset,
-            crate::color::Color::Ansi(ansi) => match ansi {
-                AnsiColor::Black => Self::Black,
-                AnsiColor::Red => Self::DarkRed,
-                AnsiColor::Green => Self::DarkGreen,
-                AnsiColor::Yellow => Self::DarkYellow,
-                AnsiColor::Blue => Self::DarkBlue,
-                AnsiColor::Magenta => Self::DarkMagenta,
-                AnsiColor::Cyan => Self::DarkCyan,
-                AnsiColor::White => Self::Grey,
-                AnsiColor::BrightBlack => Self::DarkGrey,
-                AnsiColor::BrightRed => Self::Red,
-                AnsiColor::BrightGreen => Self::Green,
-                AnsiColor::BrightYellow => Self::Yellow,
-                AnsiColor::BrightBlue => Self::Blue,
-                AnsiColor::BrightMagenta => Self::Magenta,
-                AnsiColor::BrightCyan => Self::Cyan,
-                AnsiColor::BrightWhite => Self::White,
-            },
-            crate::color::Color::Indexed(index) => Self::AnsiValue(index),
-            crate::color::Color::Rgb { r, g, b } => Self::Rgb { r, g, b },
-        }
+    match color {
+        retroglyph_core::color::Color::Default => crossterm::style::Color::Reset,
+        retroglyph_core::color::Color::Ansi(ansi) => match ansi {
+            AnsiColor::Black => crossterm::style::Color::Black,
+            AnsiColor::Red => crossterm::style::Color::DarkRed,
+            AnsiColor::Green => crossterm::style::Color::DarkGreen,
+            AnsiColor::Yellow => crossterm::style::Color::DarkYellow,
+            AnsiColor::Blue => crossterm::style::Color::DarkBlue,
+            AnsiColor::Magenta => crossterm::style::Color::DarkMagenta,
+            AnsiColor::Cyan => crossterm::style::Color::DarkCyan,
+            AnsiColor::White => crossterm::style::Color::Grey,
+            AnsiColor::BrightBlack => crossterm::style::Color::DarkGrey,
+            AnsiColor::BrightRed => crossterm::style::Color::Red,
+            AnsiColor::BrightGreen => crossterm::style::Color::Green,
+            AnsiColor::BrightYellow => crossterm::style::Color::Yellow,
+            AnsiColor::BrightBlue => crossterm::style::Color::Blue,
+            AnsiColor::BrightMagenta => crossterm::style::Color::Magenta,
+            AnsiColor::BrightCyan => crossterm::style::Color::Cyan,
+            AnsiColor::BrightWhite => crossterm::style::Color::White,
+        },
+        retroglyph_core::color::Color::Indexed(index) => crossterm::style::Color::AnsiValue(index),
+        retroglyph_core::color::Color::Rgb { r, g, b } => crossterm::style::Color::Rgb { r, g, b },
     }
 }
 
-impl From<crate::style::CellModifier> for crossterm::style::Attributes {
-    fn from(modifier: crate::style::CellModifier) -> Self {
-        use crate::style::CellModifier;
-        use crossterm::style::Attribute;
+const fn to_crossterm_attributes(
+    modifier: retroglyph_core::style::CellModifier,
+) -> crossterm::style::Attributes {
+    use crossterm::style::Attribute;
+    use retroglyph_core::style::CellModifier;
 
-        let mut attrs = Self::none();
-        if modifier.contains(CellModifier::BOLD) {
-            attrs = attrs.with(Attribute::Bold);
-        }
-        if modifier.contains(CellModifier::DIM) {
-            attrs = attrs.with(Attribute::Dim);
-        }
-        if modifier.contains(CellModifier::ITALIC) {
-            attrs = attrs.with(Attribute::Italic);
-        }
-        if modifier.contains(CellModifier::UNDERLINE) {
-            attrs = attrs.with(Attribute::Underlined);
-        }
-        if modifier.contains(CellModifier::BLINK) {
-            attrs = attrs.with(Attribute::SlowBlink);
-        }
-        if modifier.contains(CellModifier::REVERSE) {
-            attrs = attrs.with(Attribute::Reverse);
-        }
-        if modifier.contains(CellModifier::HIDDEN) {
-            attrs = attrs.with(Attribute::Hidden);
-        }
-        if modifier.contains(CellModifier::STRIKETHROUGH) {
-            attrs = attrs.with(Attribute::CrossedOut);
-        }
-        attrs
+    let mut attrs = crossterm::style::Attributes::none();
+    if modifier.contains(CellModifier::BOLD) {
+        attrs = attrs.with(Attribute::Bold);
     }
+    if modifier.contains(CellModifier::DIM) {
+        attrs = attrs.with(Attribute::Dim);
+    }
+    if modifier.contains(CellModifier::ITALIC) {
+        attrs = attrs.with(Attribute::Italic);
+    }
+    if modifier.contains(CellModifier::UNDERLINE) {
+        attrs = attrs.with(Attribute::Underlined);
+    }
+    if modifier.contains(CellModifier::BLINK) {
+        attrs = attrs.with(Attribute::SlowBlink);
+    }
+    if modifier.contains(CellModifier::REVERSE) {
+        attrs = attrs.with(Attribute::Reverse);
+    }
+    if modifier.contains(CellModifier::HIDDEN) {
+        attrs = attrs.with(Attribute::Hidden);
+    }
+    if modifier.contains(CellModifier::STRIKETHROUGH) {
+        attrs = attrs.with(Attribute::CrossedOut);
+    }
+    attrs
 }
 
 /// A terminal rendering backend powered by `crossterm`.
@@ -134,10 +137,10 @@ impl Crossterm {
     }
 
     /// Create a crossterm terminal and drive `app` with the blocking loop until
-    /// it returns [`Flow::Exit`](crate::Flow) (ADR 015 Decision 2).
+    /// it returns [`Flow::Exit`](retroglyph_core::Flow) (ADR 015 Decision 2).
     ///
     /// This is a thin wrapper over the generic
-    /// [`run_blocking`](crate::run_blocking); the terminal is restored on the
+    /// [`run_blocking`](retroglyph_core::run_blocking); the terminal is restored on the
     /// way out via `Drop`.
     ///
     /// # Errors
@@ -145,10 +148,10 @@ impl Crossterm {
     /// Returns an `std::io::Error` if the terminal fails to initialize.
     pub fn run<A>(app: A) -> Result<(), std::io::Error>
     where
-        A: crate::App<Self>,
+        A: retroglyph_core::App<Self>,
     {
-        let term = crate::Terminal::new(Self::new()?);
-        crate::run_blocking(term, app);
+        let term = retroglyph_core::Terminal::new(Self::new()?);
+        retroglyph_core::run_blocking(term, app);
         Ok(())
     }
 }
@@ -185,7 +188,7 @@ impl Backend for Crossterm {
             #[cfg(feature = "egc")]
             if cell
                 .flags()
-                .contains(crate::tile::TileFlags::WIDE_CHAR_SPACER)
+                .contains(retroglyph_core::tile::TileFlags::WIDE_CHAR_SPACER)
             {
                 continue;
             }
@@ -194,9 +197,10 @@ impl Backend for Crossterm {
                 continue;
             }
 
-            let fg: crossterm::style::Color = cell.style.fg.into();
-            let bg: crossterm::style::Color = cell.style.bg.into();
-            let attrs: crossterm::style::Attributes = cell.style.modifiers.into();
+            let fg: crossterm::style::Color = to_crossterm_color(cell.style().foreground());
+            let bg: crossterm::style::Color = to_crossterm_color(cell.style().background());
+            let attrs: crossterm::style::Attributes =
+                to_crossterm_attributes(cell.style().modifiers());
 
             // Only emit MoveTo when the cursor isn't already at the right position.
             let needs_move = cursor_y != Some(pos.y) || cursor_x != Some(pos.x);
@@ -224,10 +228,10 @@ impl Backend for Crossterm {
             #[cfg(feature = "egc")]
             {
                 // Print the full EGC if present; otherwise the primary glyph.
-                let mut buf = [0u8; 4];
-                let s: &str = match &cell.extra {
-                    Some(extra) => extra.as_str(),
-                    None => cell.glyph.encode_utf8(&mut buf),
+                let mut glyph_buf = [0u8; 4];
+                let s: &str = match cell.extra() {
+                    Some(extra) => extra,
+                    None => cell.glyph().encode_utf8(&mut glyph_buf),
                 };
                 #[allow(clippy::cast_possible_truncation)]
                 {
@@ -298,7 +302,7 @@ impl Backend for Crossterm {
             match crossterm::event::poll(poll_timeout) {
                 Ok(true) => {
                     if let Ok(event) = crossterm::event::read()
-                        && let Ok(mapped) = Event::try_from(event)
+                        && let Ok(mapped) = from_crossterm_event(event)
                     {
                         return Some(mapped);
                     }
@@ -345,113 +349,111 @@ impl Backend for Crossterm {
     }
 }
 
-impl TryFrom<crossterm::event::KeyCode> for crate::event::KeyCode {
-    type Error = ();
-
-    fn try_from(code: crossterm::event::KeyCode) -> Result<Self, Self::Error> {
-        use crossterm::event::KeyCode as CK;
-        match code {
-            CK::Char(c) => Ok(Self::Char(c)),
-            CK::F(n) => Ok(Self::F(n)),
-            CK::Backspace => Ok(Self::Backspace),
-            CK::Enter => Ok(Self::Enter),
-            CK::Left => Ok(Self::Left),
-            CK::Right => Ok(Self::Right),
-            CK::Up => Ok(Self::Up),
-            CK::Down => Ok(Self::Down),
-            CK::Home => Ok(Self::Home),
-            CK::End => Ok(Self::End),
-            CK::PageUp => Ok(Self::PageUp),
-            CK::PageDown => Ok(Self::PageDown),
-            CK::Tab => Ok(Self::Tab),
-            CK::BackTab => Ok(Self::BackTab),
-            CK::Delete => Ok(Self::Delete),
-            CK::Insert => Ok(Self::Insert),
-            CK::Esc => Ok(Self::Escape),
-            _ => Err(()),
-        }
+const fn from_crossterm_key_code(
+    code: crossterm::event::KeyCode,
+) -> Result<retroglyph_core::event::KeyCode, ()> {
+    use crossterm::event::KeyCode as CK;
+    use retroglyph_core::event::KeyCode as K;
+    match code {
+        CK::Char(c) => Ok(K::Char(c)),
+        CK::F(n) => Ok(K::F(n)),
+        CK::Backspace => Ok(K::Backspace),
+        CK::Enter => Ok(K::Enter),
+        CK::Left => Ok(K::Left),
+        CK::Right => Ok(K::Right),
+        CK::Up => Ok(K::Up),
+        CK::Down => Ok(K::Down),
+        CK::Home => Ok(K::Home),
+        CK::End => Ok(K::End),
+        CK::PageUp => Ok(K::PageUp),
+        CK::PageDown => Ok(K::PageDown),
+        CK::Tab => Ok(K::Tab),
+        CK::BackTab => Ok(K::BackTab),
+        CK::Delete => Ok(K::Delete),
+        CK::Insert => Ok(K::Insert),
+        CK::Esc => Ok(K::Escape),
+        _ => Err(()),
     }
 }
 
-impl From<crossterm::event::KeyModifiers> for crate::event::KeyModifiers {
-    fn from(mods: crossterm::event::KeyModifiers) -> Self {
-        let mut result = Self::NONE;
-        if mods.contains(crossterm::event::KeyModifiers::SHIFT) {
-            result |= Self::SHIFT;
-        }
-        if mods.contains(crossterm::event::KeyModifiers::CONTROL) {
-            result |= Self::CONTROL;
-        }
-        if mods.contains(crossterm::event::KeyModifiers::ALT) {
-            result |= Self::ALT;
-        }
-        result
+fn from_crossterm_key_modifiers(
+    mods: crossterm::event::KeyModifiers,
+) -> retroglyph_core::event::KeyModifiers {
+    use retroglyph_core::event::KeyModifiers as M;
+
+    let mut result = M::NONE;
+    if mods.contains(crossterm::event::KeyModifiers::SHIFT) {
+        result |= M::SHIFT;
+    }
+    if mods.contains(crossterm::event::KeyModifiers::CONTROL) {
+        result |= M::CONTROL;
+    }
+    if mods.contains(crossterm::event::KeyModifiers::ALT) {
+        result |= M::ALT;
+    }
+    result
+}
+
+const fn from_crossterm_mouse_button(
+    btn: crossterm::event::MouseButton,
+) -> retroglyph_core::event::MouseButton {
+    use crossterm::event::MouseButton as CB;
+    use retroglyph_core::event::MouseButton as B;
+    match btn {
+        CB::Left => B::Left,
+        CB::Right => B::Right,
+        CB::Middle => B::Middle,
     }
 }
 
-impl From<crossterm::event::MouseButton> for crate::event::MouseButton {
-    fn from(btn: crossterm::event::MouseButton) -> Self {
-        use crossterm::event::MouseButton as CB;
-        match btn {
-            CB::Left => Self::Left,
-            CB::Right => Self::Right,
-            CB::Middle => Self::Middle,
-        }
+const fn from_crossterm_mouse_event_kind(
+    kind: crossterm::event::MouseEventKind,
+) -> Result<retroglyph_core::event::MouseEventKind, ()> {
+    use crossterm::event::MouseEventKind as CM;
+    use retroglyph_core::event::MouseEventKind as K;
+    match kind {
+        CM::Down(btn) => Ok(K::Down(from_crossterm_mouse_button(btn))),
+        CM::Up(btn) => Ok(K::Up(from_crossterm_mouse_button(btn))),
+        CM::Moved | CM::Drag(_) => Ok(K::Moved),
+        CM::ScrollUp => Ok(K::ScrollUp),
+        CM::ScrollDown => Ok(K::ScrollDown),
+        _ => Err(()),
     }
 }
 
-impl TryFrom<crossterm::event::MouseEventKind> for crate::event::MouseEventKind {
-    type Error = ();
-
-    fn try_from(kind: crossterm::event::MouseEventKind) -> Result<Self, Self::Error> {
-        use crossterm::event::MouseEventKind as CM;
-        match kind {
-            CM::Down(btn) => Ok(Self::Down(btn.into())),
-            CM::Up(btn) => Ok(Self::Up(btn.into())),
-            CM::Moved | CM::Drag(_) => Ok(Self::Moved),
-            CM::ScrollUp => Ok(Self::ScrollUp),
-            CM::ScrollDown => Ok(Self::ScrollDown),
-            _ => Err(()),
-        }
-    }
+fn from_crossterm_mouse_event(
+    m: crossterm::event::MouseEvent,
+) -> Result<retroglyph_core::event::MouseEvent, ()> {
+    Ok(retroglyph_core::event::MouseEvent {
+        kind: from_crossterm_mouse_event_kind(m.kind)?,
+        position: Pos {
+            x: m.column,
+            y: m.row,
+        },
+        // Crossterm is a character-mode backend; it has no sub-cell resolution.
+        pixel_position: None,
+        modifiers: from_crossterm_key_modifiers(m.modifiers),
+    })
 }
 
-impl TryFrom<crossterm::event::MouseEvent> for crate::event::MouseEvent {
-    type Error = ();
-
-    fn try_from(m: crossterm::event::MouseEvent) -> Result<Self, Self::Error> {
-        Ok(Self {
-            kind: m.kind.try_into()?,
-            position: Pos {
-                x: m.column,
-                y: m.row,
-            },
-            // Crossterm is a character-mode backend; it has no sub-cell resolution.
-            pixel_position: None,
-            modifiers: m.modifiers.into(),
-        })
-    }
-}
-
-impl TryFrom<crossterm::event::Event> for Event {
-    type Error = ();
-
-    fn try_from(event: crossterm::event::Event) -> Result<Self, Self::Error> {
-        use crossterm::event::Event as CE;
-        match event {
-            CE::Key(k) => {
-                if k.kind == crossterm::event::KeyEventKind::Release {
-                    return Err(());
-                }
-
-                Ok(Self::Key(crate::event::KeyEvent {
-                    code: k.code.try_into()?,
-                    modifiers: k.modifiers.into(),
-                }))
+// Taking ownership matches the call site: `crossterm::event::read()` hands us
+// a freshly-owned `Event` with nothing else holding a reference to it.
+#[allow(clippy::needless_pass_by_value)]
+fn from_crossterm_event(event: crossterm::event::Event) -> Result<Event, ()> {
+    use crossterm::event::Event as CE;
+    match event {
+        CE::Key(k) => {
+            if k.kind == crossterm::event::KeyEventKind::Release {
+                return Err(());
             }
-            CE::Mouse(m) => Ok(Self::Mouse(m.try_into()?)),
-            CE::Resize(w, h) => Ok(Self::Resize(w, h)),
-            _ => Err(()),
+
+            Ok(Event::Key(retroglyph_core::event::KeyEvent {
+                code: from_crossterm_key_code(k.code)?,
+                modifiers: from_crossterm_key_modifiers(k.modifiers),
+            }))
         }
+        CE::Mouse(m) => Ok(Event::Mouse(from_crossterm_mouse_event(m)?)),
+        CE::Resize(w, h) => Ok(Event::Resize(w, h)),
+        _ => Err(()),
     }
 }

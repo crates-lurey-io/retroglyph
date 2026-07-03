@@ -4,8 +4,8 @@
 //! and provides O(1) lookup of decoded RGBA8 sprites by codepoint.
 
 use super::tileset::{TilesetError, TilesetOptions};
-use alloc::collections::BTreeMap;
 use alpha_blend::rgba::U8x4Rgba;
+use std::collections::BTreeMap;
 
 /// A decoded, ready-to-blit sprite.
 #[derive(Debug, Clone)]
@@ -92,7 +92,7 @@ impl SpriteCache {
             // Extract RGBA8 sub-image for this tile.
             let px_x = tile_col * tile_w;
             let px_y = tile_row * tile_h;
-            let mut pixels = alloc::vec![0u8; (tile_w * tile_h * 4) as usize];
+            let mut pixels = vec![0u8; (tile_w * tile_h * 4) as usize];
 
             for row in 0..tile_h {
                 let src_start = ((px_y + row) * img_w + px_x) as usize * 4;
@@ -156,7 +156,7 @@ pub fn source_over(src: U8x4Rgba, dst: U8x4Rgba) -> U8x4Rgba {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::software::tileset::{Codepage, TilesetOptions};
+    use crate::tileset::{Codepage, TilesetOptions};
     use image::ImageEncoder;
 
     /// Build a programmatic RGBA8 PNG for testing.

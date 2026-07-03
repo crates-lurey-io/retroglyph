@@ -5,8 +5,8 @@
 //! [`run_windowed`](SoftwareBackend::run_windowed) or
 //! [`run_headless`](SoftwareBackend::run_headless).
 //!
-//! Both methods produce a [`SoftwareRenderer`](crate::backend::software::SoftwareRenderer)
-//! that implements [`Backend`](crate::backend::Backend).
+//! Both methods produce a [`SoftwareRenderer`](crate::SoftwareRenderer)
+//! that implements [`Backend`](retroglyph_core::backend::Backend).
 
 use super::bitmap_font::BitmapFont;
 #[cfg(feature = "software-tilesets")]
@@ -67,16 +67,16 @@ impl std::error::Error for SoftwareBackendError {
 /// [`run_headless`](SoftwareBackend::run_headless) for headless in-memory
 /// rendering.
 ///
-/// Both methods return or run a [`SoftwareRenderer`](crate::backend::software::SoftwareRenderer)
-/// that implements [`Backend`](crate::backend::Backend).
+/// Both methods return or run a [`SoftwareRenderer`](crate::SoftwareRenderer)
+/// that implements [`Backend`](retroglyph_core::backend::Backend).
 ///
 /// # Examples
 ///
 /// Windowed mode (requires `software-default-font` feature):
 ///
 /// ```ignore
-/// use retroglyph::backend::software::SoftwareBackendBuilder;
-/// use retroglyph::event::{Event, KeyCode};
+/// use retroglyph_software::SoftwareBackendBuilder;
+/// use retroglyph_core::event::{Event, KeyCode};
 /// use std::time::Duration;
 ///
 /// let backend = SoftwareBackendBuilder::new()
@@ -104,10 +104,10 @@ impl std::error::Error for SoftwareBackendError {
 /// Headless mode (useful for testing):
 ///
 /// ```ignore
-/// use retroglyph::backend::software::{SoftwareBackendBuilder, SoftwareRenderer};
-/// use retroglyph::style::Style;
-/// use retroglyph::grid::Pos;
-/// use retroglyph::Color;
+/// use retroglyph_software::{SoftwareBackendBuilder, SoftwareRenderer};
+/// use retroglyph_core::style::Style;
+/// use retroglyph_core::grid::Pos;
+/// use retroglyph_core::Color;
 ///
 /// let opts = SoftwareBackendBuilder::new()
 ///     .grid_size(1, 1)
@@ -118,7 +118,7 @@ impl std::error::Error for SoftwareBackendError {
 /// let mut renderer: SoftwareRenderer = opts.run_headless();
 ///
 /// // Draw a red cell on layer 0.
-/// use retroglyph::tile::Tile;
+/// use retroglyph_core::tile::Tile;
 /// renderer.draw_layers(
 ///     [(0, Pos::new(0, 0), &Tile {
 ///         glyph: ' ',
@@ -186,12 +186,12 @@ impl Default for SoftwareBackend {
 /// # Examples
 ///
 /// ```ignore
-/// use retroglyph::backend::software::SoftwareBackendBuilder;
+/// use retroglyph_software::SoftwareBackendBuilder;
 ///
 /// // With the `software-default-font` feature the embedded VGA 8×16 font is
 /// // used automatically.  To supply your own 8×16 bitmap font:
 /// //
-/// //   use retroglyph::backend::software::bitmap_font::BitmapFont;
+/// //   use retroglyph_software::bitmap_font::BitmapFont;
 /// //   let my_font = BitmapFont::new(include_bytes!("my_font.bin"), 8, 16, 256);
 /// //   SoftwareBackendBuilder::new().font(my_font)...
 ///

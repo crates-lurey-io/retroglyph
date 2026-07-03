@@ -88,7 +88,7 @@ this pass** — see "No facade, for now" below.
 ```text
 Cargo.toml              (workspace root, no [package])
 crates/
-  retroglyph-core/       retroglyph-core
+  core/                  retroglyph-core
     src/
       lib.rs
       color.rs
@@ -324,9 +324,9 @@ testing support without adding a dev-dependency.
 
 ### Step 1: Create workspace skeleton
 
-- Move `[package]` out of the root `Cargo.toml` into `crates/retroglyph-core/Cargo.toml`.
+- Move `[package]` out of the root `Cargo.toml` into `crates/core/Cargo.toml`.
 - Root `Cargo.toml` becomes workspace-only with a `[workspace]` members list.
-- Create `crates/retroglyph-core/`, `crates/crossterm/`, `crates/window/`, `crates/software/`,
+- Create `crates/core/`, `crates/crossterm/`, `crates/window/`, `crates/software/`,
   `crates/widgets/`.
 - Move source files per the table above, including `camera.rs` and the widget helpers.
 - Replace `use crate::` with `use retroglyph_core::` in backend crates.

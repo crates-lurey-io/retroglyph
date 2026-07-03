@@ -1,0 +1,35 @@
+[package]
+name = "retroglyph-software"
+version = "0.2.0"
+description = "Software (winit + softbuffer) pixel rendering backend for retroglyph"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+retroglyph-core = { path = "../core", version = "0.2.0", default-features = false, features = ["std"] }
+ixy = "0.6.0-alpha.7"
+grixy = { version = "0.6.0-alpha.7", features = ["alloc", "buffer"] }
+winit = "0.30"
+softbuffer = "0.4"
+log = "0.4"
+image = { version = "0.25", optional = true, default-features = false, features = ["png"] }
+alpha-blend = { version = "0.2", optional = true, default-features = false, features = ["std"] }
+
+[features]
+# Kept as `software-*` (not the shorter `tilesets`/`default-font` ADR 014
+# sketched) to match the `#[cfg(feature = "...")]` strings already embedded
+# throughout this crate's source -- renaming those is a follow-up, not part
+# of the mechanical crate split.
+software-tilesets = ["dep:image", "dep:alpha-blend"]
+software-default-font = []
+
+[dev-dependencies]
+insta = { version = "1.34", features = ["yaml"] }

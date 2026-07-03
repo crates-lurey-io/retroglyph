@@ -1,7 +1,10 @@
-//! rg: a 2D pseudographic terminal library.
+//! retroglyph-core: the `no_std`-compatible foundation of retroglyph.
 //!
-//! rg provides a grid of character cells with styled output, input handling,
-//! and double-buffered presentation via pluggable backends.
+//! Grid, tile, style, color, text, terminal, and event types, plus the
+//! [`Backend`] trait and the dependency-free [`Headless`] test backend, and
+//! the `App`/`Flow`/`Frame` game loop contract. Platform backends
+//! (`retroglyph-crossterm`, `retroglyph-software`) and drawing helpers
+//! (`retroglyph-widgets`) are separate crates that depend on this one.
 #![cfg_attr(not(feature = "std"), no_std)]
 extern crate alloc;
 
@@ -27,12 +30,6 @@ pub mod tile;
 #[cfg(feature = "std")]
 pub use app::run_blocking;
 pub use app::{App, Flow, Frame, step};
-#[cfg(feature = "crossterm")]
-pub use backend::Crossterm;
-#[cfg(feature = "software")]
-pub use backend::software::SoftwareBackend;
-#[cfg(feature = "software-tilesets")]
-pub use backend::software::tileset::{Codepage, TilesetBuilder, TilesetError, TilesetOptions};
 pub use backend::{Backend, Headless};
 pub use camera::Camera;
 pub use color::{AnsiColor, Color, InvalidAnsiIndex};

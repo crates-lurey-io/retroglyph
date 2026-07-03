@@ -218,7 +218,7 @@ impl Grid {
     /// # Example
     ///
     /// ```
-    /// use retroglyph::{Grid, Style, Tile};
+    /// use retroglyph_core::{Grid, Style, Tile};
     ///
     /// let grid = Grid::from_charmap("##\n#.", |c| match c {
     ///     '#' => Tile::new('#', Style::default()),

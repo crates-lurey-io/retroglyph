@@ -1,8 +1,8 @@
 //! Minimal constraint-based `Rect` splitter for multi-panel example UIs.
 //!
 //! This is the deliberately small seed of a future layout module (ADR 014 names
-//! `retroglyph-widgets` as the eventual home). It splits a [`Rect`] into stacked
-//! rows ([`split_v`]) or side-by-side columns ([`split_h`]) according to a slice
+//! `retroglyph-widgets` as the eventual home). It splits a [`Rect`](retroglyph_core::Rect)
+//! into stacked rows ([`split_v`]) or side-by-side columns ([`split_h`]) according to a slice
 //! of [`Constraint`]s.
 //!
 //! The solver is intentionally simple: sum the [`Fixed`](Constraint::Fixed) and
@@ -10,9 +10,7 @@
 //! equally across the [`Fill`](Constraint::Fill) panes. Sizes are clamped so the
 //! panes never spill past `area`. There is no min/max, spacing, or flex weight
 //! yet — add those only when a demo actually needs them.
-#![allow(dead_code)] // not every example uses the splitter
-
-use retroglyph::grid::Rect;
+use retroglyph_core::Rect;
 
 /// How a single pane claims space along the split axis.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

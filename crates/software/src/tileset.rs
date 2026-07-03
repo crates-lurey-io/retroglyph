@@ -72,7 +72,7 @@ pub enum Codepage {
     ///
     /// This is the simplest option when you don't care about Unicode semantics
     /// and just want to reference tiles by a zero-based index. Use
-    /// [`Tile::glyph`](crate::Tile::glyph) values 0, 1, 2, … to address
+    /// [`Tile::glyph`](retroglyph_core::Tile::glyph) values 0, 1, 2, … to address
     /// individual sprites in sheet order.
     ///
     /// Tiles whose index falls in the surrogate range (0xD800–0xDFFF) are
@@ -209,7 +209,7 @@ impl TilesetOptions {
 /// Standard CP437 tileset:
 ///
 /// ```ignore
-/// use retroglyph::backend::software::tileset::TilesetOptions;
+/// use retroglyph_software::tileset::TilesetOptions;
 ///
 /// let png: Vec<u8> = std::fs::read("assets/cp437_16x16.png").unwrap();
 /// let opts = TilesetOptions::from_bytes(png)
@@ -221,7 +221,7 @@ impl TilesetOptions {
 /// Private-use sprite sheet addressed by index:
 ///
 /// ```ignore
-/// use retroglyph::backend::software::tileset::{Codepage, TilesetOptions};
+/// use retroglyph_software::tileset::{Codepage, TilesetOptions};
 ///
 /// let png: Vec<u8> = std::fs::read("assets/sprites.png").unwrap();
 /// let opts = TilesetOptions::from_bytes(png)
@@ -235,7 +235,7 @@ impl TilesetOptions {
 /// Unicode private-use area sprite sheet:
 ///
 /// ```ignore
-/// use retroglyph::backend::software::tileset::TilesetOptions;
+/// use retroglyph_software::tileset::TilesetOptions;
 ///
 /// let png: Vec<u8> = std::fs::read("assets/monsters.png").unwrap();
 /// let opts = TilesetOptions::from_bytes(png)

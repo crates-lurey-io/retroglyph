@@ -10,7 +10,7 @@
 //!
 //! ```
 //! use core::time::Duration;
-//! use retroglyph::FrameClock;
+//! use retroglyph_core::FrameClock;
 //!
 //! let mut clock = FrameClock::new(100); // 100 logic updates per second (10 ms)
 //!
@@ -83,7 +83,7 @@ impl FrameClock {
     ///
     /// ```
     /// # use core::time::Duration;
-    /// # use retroglyph::FrameClock;
+    /// # use retroglyph_core::FrameClock;
     /// # let mut clock = FrameClock::new(60);
     /// clock.advance(Duration::from_millis(16));
     /// while clock.tick() {
