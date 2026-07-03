@@ -6,10 +6,10 @@
 //! `Crossterm` implement only [`Backend`].
 //!
 //! TODO: If backends are moved outside this monorepo, consider moving
-//! `WindowedBackend` to `crate::backend` so it lives alongside `Backend`.
+//! `WindowedBackend` to `retroglyph_core::backend` so it lives alongside `Backend`.
 
-use crate::backend::Backend;
-use crate::event::Event;
+use retroglyph_core::backend::Backend;
+use retroglyph_core::event::Event;
 use std::sync::Arc;
 use winit::window::Window;
 
@@ -56,7 +56,7 @@ pub trait WindowedBackend: Backend {
     /// Return the cell size in pixels `(width, height)`.
     ///
     /// Returns pixel dimensions as `(u32, u32)` rather than
-    /// [`Size`](crate::grid::Size) because grid coordinates are `u16` but
+    /// [`Size`](retroglyph_core::grid::Size) because grid coordinates are `u16` but
     /// pixel arithmetic uses `u32` (from winit `PhysicalSize`).
     fn cell_size(&self) -> (u32, u32);
 

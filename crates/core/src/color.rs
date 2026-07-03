@@ -333,7 +333,7 @@ impl Color {
     /// ## Examples
     ///
     /// ```rust
-    /// use retroglyph::Color;
+    /// use retroglyph_core::Color;
     ///
     /// let gold = Color::from_named("gold");
     /// assert_eq!(gold, Some(Color::Rgb { r: 255, g: 215, b: 0 }));
@@ -500,7 +500,7 @@ impl Color {
     /// ## Examples
     ///
     /// ```rust
-    /// use retroglyph::Color;
+    /// use retroglyph_core::Color;
     ///
     /// let c = Color::from_hex("#ff8000").unwrap();
     /// assert_eq!(c, Color::Rgb { r: 255, g: 128, b: 0 });

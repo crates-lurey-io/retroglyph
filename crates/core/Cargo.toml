@@ -1,0 +1,32 @@
+[package]
+name = "retroglyph-core"
+version = "0.2.0"
+description = "A 2D pseudographic terminal library -- core types, no backend"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+gem = { version = "0.1.0-alpha.5", optional = true, default-features = false, features = ["std"] }
+ixy = "0.6.0-alpha.7"
+grixy = { version = "0.6.0-alpha.7", features = ["alloc", "buffer"] }
+unicode-width = "0.2"
+bitflags = "2.4"
+unicode-segmentation = { version = "1.13", default-features = false, optional = true }
+
+[features]
+default = ["std", "egc", "gem"]
+std = []
+gem = ["dep:gem"]
+egc = ["dep:unicode-segmentation"]
+
+[dev-dependencies]
+unicode-width = "0.2"
+insta = { version = "1.34", features = ["yaml"] }

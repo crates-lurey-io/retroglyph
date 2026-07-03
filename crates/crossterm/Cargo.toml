@@ -1,0 +1,24 @@
+[package]
+name = "retroglyph-crossterm"
+version = "0.2.0"
+description = "Crossterm terminal backend for retroglyph"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+retroglyph-core = { path = "../core", version = "0.2.0", default-features = false, features = ["std"] }
+crossterm = "0.28"
+unicode-width = "0.2"
+
+[features]
+# Forwards to retroglyph-core's egc feature; this crate has EGC-aware and
+# non-EGC-aware code paths gated on the same flag name.
+egc = ["retroglyph-core/egc"]

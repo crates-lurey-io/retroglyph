@@ -1,0 +1,18 @@
+[package]
+name = "retroglyph-widgets"
+version = "0.2.0"
+description = "Immediate-mode drawing helpers for retroglyph (panels, gauges, lists, sparklines)"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+retroglyph-core = { path = "../core", version = "0.2.0", default-features = false, features = ["std"] }
+unicode-width = "0.2"

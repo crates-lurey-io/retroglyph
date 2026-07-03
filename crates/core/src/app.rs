@@ -8,8 +8,7 @@
 //!
 //! - the contract ([`App`], [`Flow`], [`Frame`]), here in the core;
 //! - the generic blocking driver ([`run_blocking`], `std` only), which covers
-//!   [`Crossterm`](crate::backend::Crossterm) and
-//!   [`Headless`](crate::backend::Headless);
+//!   `Crossterm` (in `retroglyph-crossterm`) and [`Headless`](crate::backend::Headless);
 //! - the inverted driver in the windowing layer (the software backend's
 //!   `run_app`), which cannot be generic because winit owns the loop.
 //!
@@ -45,7 +44,7 @@ pub struct Frame {
 /// Implement this once, generically over the backend, to run everywhere:
 ///
 /// ```
-/// use retroglyph::{App, Backend, Flow, Frame, Terminal};
+/// use retroglyph_core::{App, Backend, Flow, Frame, Terminal};
 ///
 /// struct MyGame;
 /// impl<B: Backend> App<B> for MyGame {
@@ -77,8 +76,8 @@ pub fn step<B: Backend, A: App<B>>(term: &mut Terminal<B>, app: &mut A, frame: &
 /// Drive an [`App`] with a blocking loop until it returns [`Flow::Exit`].
 ///
 /// Generic over the backend, so it powers every non-inverted backend
-/// ([`Crossterm`](crate::backend::Crossterm),
-/// [`Headless`](crate::backend::Headless)) with no per-backend loop code.
+/// (`Crossterm` in `retroglyph-crossterm`, [`Headless`](crate::backend::Headless))
+/// with no per-backend loop code.
 /// Inverted backends (software/winit) provide their own driver.
 ///
 /// The terminal is owned and dropped when the loop exits, so backend teardown

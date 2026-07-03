@@ -14,7 +14,7 @@
 //! # Example
 //!
 //! ```
-//! use retroglyph::{Camera, Pos, Rect, Size};
+//! use retroglyph_core::{Camera, Pos, Rect, Size};
 //!
 //! // A 10x10 viewport onto a 100x100 world.
 //! let mut cam = Camera::new(Rect::new(0, 0, 10, 10), Size { width: 100, height: 100 });
