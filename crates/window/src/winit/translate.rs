@@ -3,20 +3,22 @@
 //! Pure functions, unit-testable without a window (same role as
 //! `bevy_winit::converters` or `egui-winit`'s event translation).
 
-use retroglyph_core::event::{Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, PhysicalPos};
+use retroglyph_core::event::{
+    Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, PhysicalPos,
+};
 use retroglyph_core::grid::Pos;
 
 /// Translates a winit key event into an [`Event`].
 ///
-/// Returns `None` for key releases or unhandled keys.
+/// Reports [`KeyEventKind::Press`], [`KeyEventKind::Repeat`] (winit's `repeat`
+/// flag), and [`KeyEventKind::Release`]. Returns `None` only for keys we don't
+/// map.
 #[must_use]
 #[allow(clippy::needless_pass_by_value)]
 pub fn translate_key(input: winit::event::KeyEvent, modifiers: KeyModifiers) -> Option<Event> {
     use winit::keyboard::{Key, NamedKey};
 
-    if !input.state.is_pressed() {
-        return None;
-    }
+    let kind = key_event_kind(input.state, input.repeat);
 
     let code = match input.logical_key {
         Key::Named(NamedKey::Enter) => KeyCode::Enter,
@@ -52,7 +54,7 @@ pub fn translate_key(input: winit::event::KeyEvent, modifiers: KeyModifiers) -> 
         _ => return None,
     };
 
-    Some(Event::Key(KeyEvent::new(code, modifiers)))
+    Some(Event::Key(KeyEvent::with_kind(code, modifiers, kind)))
 }
 
 /// Converts a raw f64 cursor position to a [`PhysicalPos`].
@@ -98,6 +100,17 @@ pub const fn translate_mouse_button(button: winit::event::MouseButton) -> Option
         winit::event::MouseButton::Right => Some(MouseButton::Right),
         winit::event::MouseButton::Middle => Some(MouseButton::Middle),
         _ => None,
+    }
+}
+
+/// Maps a winit key `state`/`repeat` pair to a [`KeyEventKind`].
+#[must_use]
+pub const fn key_event_kind(state: winit::event::ElementState, repeat: bool) -> KeyEventKind {
+    use winit::event::ElementState;
+    match (state, repeat) {
+        (ElementState::Pressed, false) => KeyEventKind::Press,
+        (ElementState::Pressed, true) => KeyEventKind::Repeat,
+        (ElementState::Released, _) => KeyEventKind::Release,
     }
 }
 
@@ -160,6 +173,30 @@ mod tests {
                 x: u16::MAX,
                 y: u16::MAX
             }
+        );
+    }
+
+    // ── key_event_kind ────────────────────────────────────────────────────────
+
+    #[test]
+    fn key_event_kind_press_repeat_release() {
+        use winit::event::ElementState;
+        assert_eq!(
+            key_event_kind(ElementState::Pressed, false),
+            KeyEventKind::Press
+        );
+        assert_eq!(
+            key_event_kind(ElementState::Pressed, true),
+            KeyEventKind::Repeat
+        );
+        assert_eq!(
+            key_event_kind(ElementState::Released, false),
+            KeyEventKind::Release
+        );
+        // A release is a release regardless of the repeat flag.
+        assert_eq!(
+            key_event_kind(ElementState::Released, true),
+            KeyEventKind::Release
         );
     }
 

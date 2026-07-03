@@ -63,7 +63,7 @@ fn tick<B: Backend>(term: &mut Terminal<B>, state: &mut State) -> bool {
     let timeout = Duration::from_millis(50);
     while let Some(event) = term.poll(timeout) {
         match event {
-            Event::Key(k) => match k.code {
+            Event::Key(k) if k.is_down() => match k.code {
                 KeyCode::Char('q') | KeyCode::Escape => return false,
                 KeyCode::Right | KeyCode::Char('l' | ' ') => {
                     if state.current + 1 < state.steps.len() {
@@ -89,7 +89,7 @@ fn tick<B: Backend>(term: &mut Terminal<B>, state: &mut State) -> bool {
                 }
             }
             Event::Close => return false,
-            Event::Resize(..) => {}
+            Event::Key(_) | Event::Resize(..) => {}
         }
     }
 
