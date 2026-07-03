@@ -15,6 +15,13 @@ bitflags::bitflags! {
         const WIDE_CHAR        = 0b0000_0001;
         /// This tile is the invisible right-half spacer of a wide character.
         const WIDE_CHAR_SPACER = 0b0000_0010;
+        /// No content has been written to this tile: it is fully transparent.
+        ///
+        /// Set on [`Tile::default`] and cleared by every write. Compositing
+        /// ([`Grid::blit`](crate::grid::Grid::blit), layer flattening) skips
+        /// empty tiles, so an *explicit* space (which is not empty) is opaque
+        /// and overwrites lower layers, while an untouched cell is not.
+        const EMPTY            = 0b0000_0100;
     }
 }
 
@@ -61,7 +68,7 @@ impl Default for Tile {
             style: Style::default(),
             dx: 0,
             dy: 0,
-            flags: TileFlags::empty(),
+            flags: TileFlags::EMPTY,
             extra: None,
         }
     }
@@ -113,6 +120,15 @@ impl Tile {
         self.flags
     }
 
+    /// Returns `true` if nothing has been written to this tile.
+    ///
+    /// Empty tiles are transparent when compositing layers. An explicit
+    /// space (e.g. `Tile::new(' ', style)`) is **not** empty.
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.flags.contains(TileFlags::EMPTY)
+    }
+
     /// Returns the extra EGC data for this tile, if any.
     ///
     /// `Some` only for multi-codepoint grapheme clusters (combining marks,
@@ -137,35 +153,44 @@ impl Tile {
     }
 
     /// Sets the glyph for this tile (builder style).
+    ///
+    /// Writing content marks the tile non-empty (see [`is_empty`](Self::is_empty)).
     #[must_use]
     pub const fn with_glyph(mut self, glyph: char) -> Self {
         self.glyph = glyph;
+        self.flags = self.flags.difference(TileFlags::EMPTY);
         self
     }
 
     /// Sets the style for this tile (builder style).
+    ///
+    /// Writing content marks the tile non-empty (see [`is_empty`](Self::is_empty)).
     #[must_use]
     pub const fn with_style(mut self, style: Style) -> Self {
         self.style = style;
+        self.flags = self.flags.difference(TileFlags::EMPTY);
         self
     }
 
     /// Sets the sub-cell pixel offset for this tile (builder style).
+    ///
+    /// Writing content marks the tile non-empty (see [`is_empty`](Self::is_empty)).
     #[must_use]
     pub const fn with_offset(mut self, dx: i16, dy: i16) -> Self {
         self.dx = dx;
         self.dy = dy;
+        self.flags = self.flags.difference(TileFlags::EMPTY);
         self
     }
 
-    /// Resets this tile to the default (space, default style, no offset).
+    /// Resets this tile to the default (empty, space, default style, no offset).
     #[cfg(feature = "egc")]
     pub(crate) fn reset(&mut self) {
         self.glyph = ' ';
         self.style = Style::default();
         self.dx = 0;
         self.dy = 0;
-        self.flags = TileFlags::empty();
+        self.flags = TileFlags::EMPTY;
         self.extra = None;
     }
 }
@@ -196,11 +221,21 @@ mod tests {
         assert_eq!(tile.style(), Style::default());
         assert_eq!(tile.dx, 0);
         assert_eq!(tile.dy, 0);
+        // The default tile is empty (transparent when composited).
+        assert!(tile.is_empty());
+        assert_eq!(tile.flags(), TileFlags::EMPTY);
         #[cfg(feature = "egc")]
-        {
-            assert_eq!(tile.flags(), TileFlags::empty());
-            assert!(tile.extra().is_none());
-        }
+        assert!(tile.extra().is_none());
+    }
+
+    #[test]
+    fn test_tile_empty_semantics() {
+        // An explicit space is not empty; a default tile is.
+        assert!(Tile::default().is_empty());
+        assert!(!Tile::new(' ', Style::default()).is_empty());
+        assert!(!Tile::default().with_glyph(' ').is_empty());
+        assert!(!Tile::default().with_style(Style::default()).is_empty());
+        assert!(!Tile::default().with_offset(1, 1).is_empty());
     }
 
     #[test]
@@ -225,11 +260,13 @@ mod tests {
     fn test_tile_reset() {
         let style = Style::new().fg(Color::RED);
         let mut tile = Tile::new('X', style);
+        assert!(!tile.is_empty());
         tile.reset();
         assert_eq!(tile.glyph(), ' ');
         assert_eq!(tile.style(), Style::default());
         assert_eq!(tile.dx, 0);
         assert_eq!(tile.dy, 0);
+        assert!(tile.is_empty());
     }
 
     #[cfg(feature = "egc")]

@@ -522,15 +522,16 @@ impl Grid {
     }
 
     /// Copy tiles from `src` within `src_rect` to `self` at `(dst_x, dst_y)`
-    /// on `layer`. Tiles whose glyph is a space (the default) are treated as
-    /// transparent and skipped.
+    /// on `layer`. Empty tiles (nothing written; see [`Tile::is_empty`]) are
+    /// treated as transparent and skipped. An explicit space is copied and
+    /// overwrites the destination.
     pub fn blit(&mut self, layer: u8, src: &Self, src_rect: Rect, dst_x: u16, dst_y: u16) {
         for sy in src_rect.top()..src_rect.bottom() {
             for sx in src_rect.left()..src_rect.right() {
                 let Some(tile) = src.get_tile(layer, sx, sy) else {
                     continue;
                 };
-                if tile.glyph != ' ' {
+                if !tile.flags.contains(TileFlags::EMPTY) {
                     let dx = dst_x + sx.saturating_sub(src_rect.left());
                     let dy = dst_y + sy.saturating_sub(src_rect.top());
                     self.put_tile(layer, dx, dy, tile.clone());
@@ -566,7 +567,7 @@ impl Grid {
                 let Some(tile) = src.get_tile(layer, sx, sy) else {
                     continue;
                 };
-                if tile.glyph != ' ' {
+                if !tile.flags.contains(TileFlags::EMPTY) {
                     let dx = dst_x + sx.saturating_sub(src_rect.left());
                     let dy = dst_y + sy.saturating_sub(src_rect.top());
                     let mut blended = tile.clone();
@@ -621,10 +622,13 @@ impl Grid {
     /// transparency convention:
     ///
     /// - Start from layer 0's tile (its `bg` fills the cell).
-    /// - For each higher allocated layer, in ascending order: if the cell is
-    ///   non-empty (glyph is not a space, or it is a wide-char spacer) replace
-    ///   the glyph, foreground, modifiers, offsets, flags, and extra; if its
-    ///   background is not [`Color::Default`], replace the background.
+    /// - For each higher allocated layer, in ascending order: if the tile is
+    ///   not empty (see [`Tile::is_empty`]) replace the glyph, foreground,
+    ///   modifiers, offsets, flags, and extra; if its background is not
+    ///   [`Color::Default`], replace the background.
+    ///
+    /// Because an explicit space is not empty, drawing one on a higher layer
+    /// overwrites (erases) the glyph beneath it.
     ///
     /// `dst` must have the same dimensions as `self`.
     pub(crate) fn flatten_into(&self, dst: &mut Self) {
@@ -635,8 +639,7 @@ impl Grid {
                     let Some(tile) = self.get_tile(id, x, y) else {
                         continue;
                     };
-                    let contributes_glyph =
-                        tile.glyph != ' ' || tile.flags.contains(TileFlags::WIDE_CHAR_SPACER);
+                    let contributes_glyph = !tile.flags.contains(TileFlags::EMPTY);
                     if contributes_glyph {
                         out.glyph = tile.glyph;
                         out.style.fg = tile.style.fg;

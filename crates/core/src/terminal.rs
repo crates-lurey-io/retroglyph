@@ -137,11 +137,7 @@ impl<B: Backend> Terminal<B> {
         }
         #[cfg(not(feature = "egc"))]
         {
-            let tile = Tile {
-                glyph: ch,
-                style,
-                ..Tile::default()
-            };
+            let tile = Tile::new(ch, style);
             self.current.put_tile(self.active_layer, x, y, tile);
         }
     }
@@ -200,11 +196,7 @@ impl<B: Backend> Terminal<B> {
         }
         #[cfg(not(feature = "egc"))]
         {
-            let tile = Tile {
-                glyph: ch,
-                style,
-                ..Tile::default()
-            };
+            let tile = Tile::new(ch, style);
             self.current.put_tile(self.active_layer, x, y, tile);
         }
     }
@@ -215,13 +207,7 @@ impl<B: Backend> Terminal<B> {
     /// only — they do not affect grid logic or hit-testing. Backends that
     /// cannot represent pixel offsets (e.g. `CrosstermBackend`) ignore them.
     pub fn put_offset(&mut self, x: u16, y: u16, dx: i16, dy: i16, ch: char) {
-        let tile = Tile {
-            glyph: ch,
-            style: self.drawing_style,
-            dx,
-            dy,
-            ..Tile::default()
-        };
+        let tile = Tile::new(ch, self.drawing_style).with_offset(dx, dy);
         self.current.put_tile(self.active_layer, x, y, tile);
     }
 
@@ -282,11 +268,7 @@ impl<B: Backend> Terminal<B> {
                     if usize::from(cur_x) >= usize::from(self.current.width()) {
                         break;
                     }
-                    let tile = Tile {
-                        glyph: ch,
-                        style: span.style,
-                        ..Tile::default()
-                    };
+                    let tile = Tile::new(ch, span.style);
                     self.current.put_tile(self.active_layer, cur_x, y, tile);
                     cur_x += w;
                 }
@@ -477,11 +459,7 @@ impl<B: Backend> Terminal<B> {
             } else {
                 #[allow(clippy::cast_possible_truncation)]
                 let w = UnicodeWidthChar::width(c).unwrap_or(1) as u16;
-                let tile = Tile {
-                    glyph: c,
-                    style,
-                    ..Tile::default()
-                };
+                let tile = Tile::new(c, style);
                 self.current.put_tile(self.active_layer, cur_x, cur_y, tile);
                 cur_x += w;
                 if usize::from(cur_x) >= usize::from(self.current.width()) {
@@ -570,17 +548,30 @@ mod tests {
     }
 
     #[test]
-    fn test_present_composites_background_from_higher_layer() {
-        // A higher layer with only a background contributes bg but keeps the
-        // lower layer's glyph.
+    fn test_present_explicit_space_on_higher_layer_erases_and_sets_bg() {
+        // An explicit space on a higher layer is opaque: it overwrites the
+        // glyph beneath (erase) and applies its background. This is the
+        // deliberate consequence of the explicit-EMPTY transparency model.
         let mut term = Terminal::new(Headless::new(2, 1));
         term.layer(0).put(0, 0, 'x');
         term.layer(1)
             .put_styled(0, 0, ' ', Style::new().bg(Color::RED));
         term.present().expect("present failed");
         let cell = term.backend().grid().get(0, 0);
-        assert_eq!(cell.glyph(), 'x');
+        assert_eq!(cell.glyph(), ' ');
         assert_eq!(cell.style().background(), Color::RED);
+    }
+
+    #[test]
+    fn test_present_untouched_higher_layer_is_transparent() {
+        // A higher layer that was allocated but not written at this cell must
+        // not disturb the lower layer's glyph or background.
+        let mut term = Terminal::new(Headless::new(2, 1));
+        term.layer(0).put(0, 0, 'x');
+        // Allocate layer 1 by writing elsewhere, leaving (0, 0) empty.
+        term.layer(1).put(1, 0, 'y');
+        term.present().expect("present failed");
+        assert_eq!(term.backend().grid().get(0, 0).glyph(), 'x');
     }
 
     #[test]
