@@ -19,8 +19,8 @@ workspace = true
 # when both are present. So std builds use std's float intrinsics and no_std
 # builds fall back to libm, with no code change in retroglyph-core.
 gem = { version = "0.1.0-alpha.6", optional = true, default-features = false }
-ixy = "0.6.0-alpha.7"
-grixy = { version = "0.6.0-alpha.7", features = ["alloc", "buffer"] }
+ixy = "0.6.0-alpha.9"
+grixy = { version = "0.6.0-alpha.8", features = ["alloc", "buffer"] }
 unicode-width = "0.2"
 bitflags = "2.4"
 unicode-segmentation = { version = "1.13", default-features = false, optional = true }

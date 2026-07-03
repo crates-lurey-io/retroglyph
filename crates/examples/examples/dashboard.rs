@@ -232,7 +232,7 @@ fn push_capped(buf: &mut VecDeque<f32>, v: f32) {
 
 fn draw<B: Backend>(term: &mut Terminal<B>, state: &Dashboard) {
     let size = term.size();
-    let screen = Rect::new(0, 0, size.width.into(), size.height.into());
+    let screen = Rect::new(0, 0, size.width, size.height);
 
     // Background wash so panel gaps use the app background, not the terminal's.
     for y in 0..size.height {
@@ -276,21 +276,11 @@ fn draw_left<B: Backend>(term: &mut Terminal<B>, area: Rect, state: &Dashboard) 
     panel_bg(term, cpu_area, "CPU");
     let inner = inset(cpu_area);
     for (i, &load) in state.cpu.iter().enumerate() {
-        let row = Rect::new(
-            inner.left(),
-            inner.top() + i as u16,
-            inner.width().into(),
-            1,
-        );
+        let row = Rect::new(inner.left(), inner.top() + i as u16, inner.width(), 1);
         let label = format!("c{i}");
         gauge(term, row, &label, load);
     }
-    let spark_row = Rect::new(
-        inner.left(),
-        inner.top() + CORES as u16,
-        inner.width().into(),
-        1,
-    );
+    let spark_row = Rect::new(inner.left(), inner.top() + CORES as u16, inner.width(), 1);
     let hist: Vec<f32> = state.cpu_history.iter().copied().collect();
     sparkline(term, spark_row, &hist);
 
@@ -299,7 +289,7 @@ fn draw_left<B: Backend>(term: &mut Terminal<B>, area: Rect, state: &Dashboard) 
     let minner = inset(mem_area);
     gauge(
         term,
-        Rect::new(minner.left(), minner.top(), minner.width().into(), 1),
+        Rect::new(minner.left(), minner.top(), minner.width(), 1),
         "used",
         state.mem_used,
     );
@@ -316,7 +306,7 @@ fn draw_left<B: Backend>(term: &mut Terminal<B>, area: Rect, state: &Dashboard) 
             Rect::new(
                 ninner.left() + 3,
                 ninner.top(),
-                ninner.width().saturating_sub(3).into(),
+                ninner.width().saturating_sub(3),
                 1,
             ),
             &rx,
@@ -327,7 +317,7 @@ fn draw_left<B: Backend>(term: &mut Terminal<B>, area: Rect, state: &Dashboard) 
             Rect::new(
                 ninner.left() + 3,
                 ninner.top() + 1,
-                ninner.width().saturating_sub(3).into(),
+                ninner.width().saturating_sub(3),
                 1,
             ),
             &tx,
@@ -372,12 +362,12 @@ fn panel_bg<B: Backend>(term: &mut Terminal<B>, area: Rect, title: &str) {
 }
 
 /// The interior of a panel (inside its one-cell border).
-fn inset(area: Rect) -> Rect {
+const fn inset(area: Rect) -> Rect {
     Rect::new(
         area.left() + 1,
         area.top() + 1,
-        area.width().saturating_sub(2).into(),
-        area.height().saturating_sub(2).into(),
+        area.width().saturating_sub(2),
+        area.height().saturating_sub(2),
     )
 }
 

@@ -242,7 +242,7 @@ fn in_bounds(x: i32, y: i32) -> bool {
 /// The map viewport: the full screen minus a top status bar and bottom hint bar.
 fn viewport(size: Size) -> Rect {
     let h = size.height.saturating_sub(2).max(1);
-    Rect::new(0, 1, size.width.into(), h.into())
+    Rect::new(0, 1, size.width, h)
 }
 
 const fn room_center(r: Rect) -> Pos {
@@ -260,7 +260,7 @@ fn generate(rng: &mut Lcg) -> (Vec<bool>, Vec<Rect>) {
         let rh = 3 + rng_range(rng, 5);
         let rx = 1 + rng_range(rng, WORLD_W - rw - 2);
         let ry = 1 + rng_range(rng, WORLD_H - rh - 2);
-        let room = Rect::new(rx, ry, rw.into(), rh.into());
+        let room = Rect::new(rx, ry, rw, rh);
 
         for y in room.top()..room.bottom() {
             for x in room.left()..room.right() {

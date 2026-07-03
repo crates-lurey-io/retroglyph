@@ -95,8 +95,8 @@ pub fn panel<B: Backend>(
     let inner = Rect::new(
         rect.left() + 1,
         rect.top() + 1,
-        rect.width().saturating_sub(2).into(),
-        rect.height().saturating_sub(2).into(),
+        rect.width().saturating_sub(2),
+        rect.height().saturating_sub(2),
     );
     fill_rect(term, inner, ' ', fill_style);
 
