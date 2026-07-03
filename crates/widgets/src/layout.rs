@@ -87,7 +87,7 @@ pub fn split_v(area: Rect, constraints: &[Constraint]) -> Vec<Rect> {
     sizes
         .into_iter()
         .map(|h| {
-            let rect = Rect::new(area.left(), y, area.width().into(), h.into());
+            let rect = Rect::new(area.left(), y, area.width(), h);
             y = y.saturating_add(h);
             rect
         })
@@ -105,7 +105,7 @@ pub fn split_h(area: Rect, constraints: &[Constraint]) -> Vec<Rect> {
     sizes
         .into_iter()
         .map(|w| {
-            let rect = Rect::new(x, area.top(), w.into(), area.height().into());
+            let rect = Rect::new(x, area.top(), w, area.height());
             x = x.saturating_add(w);
             rect
         })

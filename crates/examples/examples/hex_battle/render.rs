@@ -532,7 +532,7 @@ fn draw_footer<B: Backend>(term: &mut Terminal<B>, render: &RenderState, w: u16,
         let empty = Style::new().fg(COL_DIM).bg(COL_BG);
         progress_bar(
             term,
-            Rect::new(bar_x, y, bar_w.into(), 1usize),
+            Rect::new(bar_x, y, bar_w, 1),
             u32::try_from(render.step).unwrap_or(u32::MAX),
             u32::try_from(render.total_steps.saturating_sub(1)).unwrap_or(u32::MAX),
             filled,
