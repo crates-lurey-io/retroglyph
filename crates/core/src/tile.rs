@@ -4,6 +4,7 @@
 // splitting `dx`/`dy` out of layer 0 if > 32 bytes.
 
 use crate::style::Style;
+use alloc::string::String;
 use alloc::sync::Arc;
 
 bitflags::bitflags! {
