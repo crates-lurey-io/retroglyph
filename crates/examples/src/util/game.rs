@@ -5,9 +5,9 @@
 //! interactive demos and the headless demo, which injects events and
 //! inspects the grid directly — the same technique used in unit tests.
 
-use retroglyph::color::{AnsiColor, Color};
-use retroglyph::event::{Event, KeyCode};
-use retroglyph::{Backend, Pos, Terminal};
+use retroglyph_core::color::{AnsiColor, Color};
+use retroglyph_core::event::{Event, KeyCode};
+use retroglyph_core::{Backend, Pos, Terminal};
 
 // Fixed room size in world space. The terminal clips on small windows rather
 // than resizing the room, so positions are stable across resize events.

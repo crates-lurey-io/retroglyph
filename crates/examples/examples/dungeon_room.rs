@@ -6,8 +6,6 @@
 //! - Desktop:   `cargo run --example dungeon_room --features software-default-font`
 //! - WASM:      `cargo build --example dungeon_room --target wasm32-unknown-unknown --features software-default-font`
 
-mod util;
+use retroglyph_examples::util::game::{GameState, tick};
 
-use util::game::{GameState, tick};
-
-rg_run!(GameState, GameState::new, tick);
+retroglyph_examples::rg_run!(GameState, GameState::new, tick);

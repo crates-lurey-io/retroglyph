@@ -7,12 +7,10 @@
 //! Run with:
 //!   `cargo run --example subpixel --features software-default-font`
 
-mod util;
-
-use retroglyph::Terminal;
-use retroglyph::color::Color;
-use retroglyph::event::{Event, KeyCode};
-use util::lcg::Lcg;
+use retroglyph_core::Terminal;
+use retroglyph_core::color::Color;
+use retroglyph_core::event::{Event, KeyCode};
+use retroglyph_examples::util::lcg::Lcg;
 
 // ── State ────────────────────────────────────────────────────────────────────
 
@@ -84,7 +82,7 @@ fn pick_color(rng: &mut Lcg) -> Color {
 
 // ── Rendering ─────────────────────────────────────────────────────────────────
 
-fn draw_background(term: &mut Terminal<impl retroglyph::Backend>) {
+fn draw_background(term: &mut Terminal<impl retroglyph_core::Backend>) {
     let size = term.size();
     term.layer(0);
     for y in 0..size.height {
@@ -125,7 +123,7 @@ fn draw_background(term: &mut Terminal<impl retroglyph::Backend>) {
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss
 )]
-fn tick(term: &mut Terminal<impl retroglyph::Backend>, s: &mut BounceState) -> bool {
+fn tick(term: &mut Terminal<impl retroglyph_core::Backend>, s: &mut BounceState) -> bool {
     let size = term.size();
 
     draw_background(term);
@@ -169,10 +167,10 @@ fn tick(term: &mut Terminal<impl retroglyph::Backend>, s: &mut BounceState) -> b
         b: 45,
     };
     for x in 0..size.width {
-        term.put_styled(x, 0, ' ', retroglyph::Style::new().bg(header_bg));
+        term.put_styled(x, 0, ' ', retroglyph_core::Style::new().bg(header_bg));
     }
     let header = "rg DVD screensaver [Esc to quit]";
-    let header_style = retroglyph::Style::new()
+    let header_style = retroglyph_core::Style::new()
         .fg(Color::BRIGHT_WHITE)
         .bg(header_bg);
     #[allow(clippy::cast_possible_truncation)]
@@ -193,7 +191,7 @@ fn tick(term: &mut Terminal<impl retroglyph::Backend>, s: &mut BounceState) -> b
             x,
             size.height - 1,
             ' ',
-            retroglyph::Style::new().bg(footer_bg),
+            retroglyph_core::Style::new().bg(footer_bg),
         );
     }
     let footer = format!(
@@ -224,9 +222,9 @@ fn tick(term: &mut Terminal<impl retroglyph::Backend>, s: &mut BounceState) -> b
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 #[cfg(feature = "software")]
-use retroglyph::backend::software::SoftwareBackendBuilder;
+use retroglyph_software::SoftwareBackendBuilder;
 
-rg_run_software!(
+retroglyph_examples::rg_run_software!(
     BounceState,
     |_term| BounceState::new(),
     tick,

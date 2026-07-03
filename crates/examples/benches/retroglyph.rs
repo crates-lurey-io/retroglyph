@@ -7,11 +7,11 @@
 #![allow(missing_docs)] // benches don't need doc comments
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
-use retroglyph::Grid;
-use retroglyph::Terminal;
-use retroglyph::Tile;
-use retroglyph::backend::Headless;
-use retroglyph::style::Style;
+use retroglyph_core::Grid;
+use retroglyph_core::Headless;
+use retroglyph_core::Terminal;
+use retroglyph_core::Tile;
+use retroglyph_core::style::Style;
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -143,9 +143,9 @@ fn bench_terminal_present(c: &mut Criterion) {
 
 #[cfg(feature = "crossterm")]
 fn bench_crossterm_draw(c: &mut Criterion) {
-    use retroglyph::backend::Backend;
-    use retroglyph::backend::Crossterm;
-    use retroglyph::style::Style;
+    use retroglyph_core::Backend;
+    use retroglyph_core::style::Style;
+    use retroglyph_crossterm::Crossterm;
 
     let mut group = c.benchmark_group("CrosstermBackend::draw");
 
@@ -182,11 +182,11 @@ fn bench_crossterm_draw(_c: &mut Criterion) {}
 
 // ── SoftwareRenderer::draw_layers ────────────────────────────────────────────
 
-#[cfg(feature = "software-default-font")]
+#[cfg(feature = "default-font")]
 fn bench_software_renderer(c: &mut Criterion) {
-    use retroglyph::backend::Backend;
-    use retroglyph::backend::software::{SoftwareBackendBuilder, bitmap_font::vga8x16};
-    use retroglyph::style::Style;
+    use retroglyph_core::Backend;
+    use retroglyph_core::style::Style;
+    use retroglyph_software::{SoftwareBackendBuilder, bitmap_font::vga8x16};
 
     let mut group = c.benchmark_group("SoftwareRenderer::draw_layers");
 
@@ -221,7 +221,7 @@ fn bench_software_renderer(c: &mut Criterion) {
     group.finish();
 }
 
-#[cfg(not(feature = "software-default-font"))]
+#[cfg(not(feature = "default-font"))]
 fn bench_software_renderer(_c: &mut Criterion) {}
 
 // ── criterion wiring ─────────────────────────────────────────────────────────

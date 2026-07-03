@@ -11,8 +11,8 @@
 //! new [`split_v`]/[`split_h`] layout splitter, [`FrameClock`] as the first
 //! genuinely wall-clock-driven demo, and cell-diff cost under a full redraw.
 //!
-//! [`split_v`]: util::layout::split_v
-//! [`split_h`]: util::layout::split_h
+//! [`split_v`]: retroglyph_widgets::split_v
+//! [`split_h`]: retroglyph_widgets::split_h
 //!
 //! # Controls
 //!
@@ -32,16 +32,14 @@
     clippy::cast_sign_loss
 )]
 
-mod util;
-
 use std::collections::VecDeque;
 
-use retroglyph::{Backend, Color, FrameClock, Rect, Style, Terminal};
-use util::action::{Action, event_to_action};
-use util::draw::{gauge, panel, print_line, sparkline, table};
-use util::layout::{Constraint, split_h, split_v};
-use util::lcg::Lcg;
-use util::timestep::Stopwatch;
+use retroglyph_core::{Backend, Color, FrameClock, Rect, Style, Terminal};
+use retroglyph_examples::util::action::{Action, event_to_action};
+use retroglyph_examples::util::lcg::Lcg;
+use retroglyph_examples::util::timestep::Stopwatch;
+use retroglyph_widgets::{Constraint, split_h, split_v};
+use retroglyph_widgets::{gauge, panel, print_line, sparkline, table};
 
 // ── Tuning ────────────────────────────────────────────────────────────────────
 
@@ -389,7 +387,7 @@ fn draw_bar<B: Backend>(term: &mut Terminal<B>, area: Rect, text: &str) {
     for x in area.left()..area.right() {
         term.put_styled(x, y, ' ', Style::new().bg(TITLE_BG));
     }
-    let line = retroglyph::text::Line::from(retroglyph::text::Span::styled(
+    let line = retroglyph_core::text::Line::from(retroglyph_core::text::Span::styled(
         text,
         Style::new().fg(FG).bg(TITLE_BG),
     ));
@@ -446,7 +444,7 @@ fn tick<B: Backend>(term: &mut Terminal<B>, state: &mut Dashboard) -> bool {
 }
 
 /// Apply one input event. Returns `false` to quit.
-fn handle(state: &mut Dashboard, event: &retroglyph::event::Event) -> bool {
+fn handle(state: &mut Dashboard, event: &retroglyph_core::event::Event) -> bool {
     match event_to_action(event) {
         Action::MoveUp => state.move_selection(false),
         Action::MoveDown => state.move_selection(true),
@@ -456,12 +454,12 @@ fn handle(state: &mut Dashboard, event: &retroglyph::event::Event) -> bool {
     true
 }
 
-rg_run!(Dashboard, Dashboard::new, tick);
+retroglyph_examples::rg_run!(Dashboard, Dashboard::new, tick);
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use retroglyph::backend::Headless;
+    use retroglyph_core::Headless;
 
     /// Render one frame headlessly and assert the panels and title landed where
     /// the layout splitter should place them. Doubles as a smoke test that the

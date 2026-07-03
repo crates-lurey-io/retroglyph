@@ -20,14 +20,12 @@
 //! cargo run --example roguelike_dungeon --features software-default-font
 //! ```
 
-mod util;
-
 use std::collections::VecDeque;
 
-use retroglyph::color::Color;
-use retroglyph::style::Style;
-use retroglyph::{Backend, Pos, Terminal};
-use util::action::{Action, next_action};
+use retroglyph_core::color::Color;
+use retroglyph_core::style::Style;
+use retroglyph_core::{Backend, Pos, Terminal};
+use retroglyph_examples::util::action::{Action, next_action};
 
 // ── Map ───────────────────────────────────────────────────────────────────────
 
@@ -646,13 +644,15 @@ fn tick<B: Backend>(term: &mut Terminal<B>, state: &mut GameState) -> bool {
 
         // Also check raw KeyCode for R (restart on death).
         for event in term.drain_events() {
-            if let retroglyph::event::Event::Key(k) = event {
-                if state.dead && matches!(k.code, retroglyph::event::KeyCode::Char('r' | 'R')) {
+            if let retroglyph_core::event::Event::Key(k) = event {
+                if state.dead && matches!(k.code, retroglyph_core::event::KeyCode::Char('r' | 'R'))
+                {
                     state.restart();
                     handled = true;
                     break;
                 }
-                if !state.dead && matches!(k.code, retroglyph::event::KeyCode::Char('r' | 'R')) {
+                if !state.dead && matches!(k.code, retroglyph_core::event::KeyCode::Char('r' | 'R'))
+                {
                     state.restart();
                     handled = true;
                     break;
@@ -667,4 +667,4 @@ fn tick<B: Backend>(term: &mut Terminal<B>, state: &mut GameState) -> bool {
     true
 }
 
-rg_run!(GameState, init, tick);
+retroglyph_examples::rg_run!(GameState, init, tick);

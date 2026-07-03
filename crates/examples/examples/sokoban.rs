@@ -17,13 +17,11 @@
 //! cargo run --example sokoban --features software-default-font
 //! ```
 
-mod util;
+use retroglyph_examples::util::action::{Action, next_action};
 
-use util::action::{Action, next_action};
-
-use retroglyph::color::Color;
-use retroglyph::style::Style;
-use retroglyph::{Backend, Pos, Terminal};
+use retroglyph_core::color::Color;
+use retroglyph_core::style::Style;
+use retroglyph_core::{Backend, Pos, Terminal};
 
 // ── Level data ────────────────────────────────────────────────────────────────
 
@@ -394,4 +392,4 @@ fn tick<B: Backend>(term: &mut Terminal<B>, state: &mut GameState) -> bool {
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
-rg_run!(GameState, init, tick);
+retroglyph_examples::rg_run!(GameState, init, tick);

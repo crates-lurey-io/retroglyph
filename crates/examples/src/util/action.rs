@@ -5,7 +5,7 @@
 //! narrow — don't handle events that no demo uses.
 #![allow(dead_code)]
 
-use retroglyph::event::{Event, KeyCode, MouseButton, MouseEventKind};
+use retroglyph_core::event::{Event, KeyCode, MouseButton, MouseEventKind};
 
 /// High-level game intent derived from a raw input event.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -53,7 +53,7 @@ pub fn event_to_action(event: &Event) -> Action {
 ///
 /// Crossterm and software backends buffer events; this flushes the whole
 /// queue each frame so no input is silently dropped.
-pub fn next_action<B: retroglyph::Backend>(term: &mut retroglyph::Terminal<B>) -> Action {
+pub fn next_action<B: retroglyph_core::Backend>(term: &mut retroglyph_core::Terminal<B>) -> Action {
     for event in term.drain_events() {
         let action = event_to_action(&event);
         if action != Action::None {

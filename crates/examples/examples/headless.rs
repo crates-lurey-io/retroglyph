@@ -6,12 +6,10 @@
 //!
 //! Run with: `cargo run --example headless`
 
-mod util;
-
-use retroglyph::Terminal;
-use retroglyph::backend::Headless;
-use retroglyph::event::{Event, KeyCode, KeyEvent, KeyModifiers};
-use util::game::{GameState, tick};
+use retroglyph_core::Headless;
+use retroglyph_core::Terminal;
+use retroglyph_core::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+use retroglyph_examples::util::game::{GameState, tick};
 
 fn main() {
     let backend = Headless::new(50, 25);

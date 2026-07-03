@@ -3,10 +3,8 @@
 #![allow(unreachable_pub, dead_code)]
 
 pub mod action;
-pub mod draw;
 pub mod fov;
 pub mod game;
-pub mod layout;
 pub mod lcg;
 pub mod perf;
 pub mod timestep;
@@ -27,11 +25,11 @@ pub mod timestep;
 /// requiring each one to opt in individually. Frame count defaults to 3 and
 /// can be overridden with the `RG_HEADLESS_FRAMES` environment variable.
 ///
-/// [`Headless`]: retroglyph::backend::Headless
+/// [`Headless`]: retroglyph_core::Headless
 #[doc(hidden)]
 pub fn run_headless<S>(
-    mut init: impl FnMut(&mut retroglyph::Terminal<retroglyph::backend::Headless>) -> S,
-    mut tick: impl FnMut(&mut retroglyph::Terminal<retroglyph::backend::Headless>, &mut S) -> bool,
+    mut init: impl FnMut(&mut retroglyph_core::Terminal<retroglyph_core::Headless>) -> S,
+    mut tick: impl FnMut(&mut retroglyph_core::Terminal<retroglyph_core::Headless>, &mut S) -> bool,
 ) {
     let frames: u32 = std::env::var("RG_HEADLESS_FRAMES")
         .ok()
@@ -39,8 +37,8 @@ pub fn run_headless<S>(
         .filter(|&n| n > 0)
         .unwrap_or(3);
 
-    let backend = retroglyph::backend::Headless::new(50, 25);
-    let mut term = retroglyph::Terminal::new(backend);
+    let backend = retroglyph_core::Headless::new(50, 25);
+    let mut term = retroglyph_core::Terminal::new(backend);
     let mut state = init(&mut term);
 
     for frame in 1..=frames {
@@ -61,7 +59,7 @@ pub fn run_headless<S>(
 /// both the blocking (crossterm) driver and the inverted (software) driver
 /// without an `Option<State>` dance or `process::exit` in game code.
 ///
-/// [`App`]: retroglyph::App
+/// [`App`]: retroglyph_core::App
 #[doc(hidden)]
 pub struct ClosureApp<S, I, T> {
     state: Option<S>,
@@ -79,25 +77,25 @@ impl<S, I, T> ClosureApp<S, I, T> {
     }
 }
 
-impl<B, S, I, T> retroglyph::App<B> for ClosureApp<S, I, T>
+impl<B, S, I, T> retroglyph_core::App<B> for ClosureApp<S, I, T>
 where
-    B: retroglyph::Backend,
-    I: FnMut(&mut retroglyph::Terminal<B>) -> S,
-    T: FnMut(&mut retroglyph::Terminal<B>, &mut S) -> bool,
+    B: retroglyph_core::Backend,
+    I: FnMut(&mut retroglyph_core::Terminal<B>) -> S,
+    T: FnMut(&mut retroglyph_core::Terminal<B>, &mut S) -> bool,
 {
     fn update(
         &mut self,
-        term: &mut retroglyph::Terminal<B>,
-        _frame: &retroglyph::Frame,
-    ) -> retroglyph::Flow {
+        term: &mut retroglyph_core::Terminal<B>,
+        _frame: &retroglyph_core::Frame,
+    ) -> retroglyph_core::Flow {
         if self.state.is_none() {
             self.state = Some((self.init)(term));
         }
         let state = self.state.as_mut().expect("state initialized above");
         if (self.tick)(term, state) {
-            retroglyph::Flow::Continue
+            retroglyph_core::Flow::Continue
         } else {
-            retroglyph::Flow::Exit
+            retroglyph_core::Flow::Exit
         }
     }
 }
@@ -105,15 +103,15 @@ where
 /// Emit a `main` function wired to the enabled backend, driving an [`App`]
 /// built from `init` + `tick` closures (ADR 015 Decision 2).
 ///
-/// - When `software` is enabled (takes priority): runs the software renderer's
+/// - When `software` is enabled (takes priority): builds a `SoftwareRenderer`,
+///   sizes a window with `WindowConfig::fit`, and runs `retroglyph-window`'s
 ///   inverted driver. On `wasm32`, also emits a `wasm_bindgen(start)` entry.
 /// - When only `crossterm` is enabled: runs the generic blocking driver.
 /// - When neither is enabled: falls back to [`run_headless`], ticking a few
-///   frames against a [`Headless`] backend and printing them to stdout. This
-///   keeps every example buildable with the crate's default features and
-///   backs `examples/runner.rs`'s "Headless" backend option.
-///
-/// [`Headless`]: retroglyph::backend::Headless
+///   frames against a [`Headless`](retroglyph_core::Headless) backend and
+///   printing them to stdout. This keeps every example buildable with the
+///   crate's default features and backs `examples/runner.rs`'s "Headless"
+///   backend option.
 ///
 /// # Arguments
 ///
@@ -125,11 +123,10 @@ where
 /// # Example
 ///
 /// ```ignore
-/// mod util;
 /// struct State { /* ... */ }
-/// fn init<B: retroglyph::Backend>(term: &mut retroglyph::Terminal<B>) -> State { todo!() }
-/// fn tick<B: retroglyph::Backend>(term: &mut retroglyph::Terminal<B>, s: &mut State) -> bool { todo!() }
-/// util::rg_run!(State, init, tick);
+/// fn init<B: retroglyph_core::Backend>(t: &mut retroglyph_core::Terminal<B>) -> State { todo!() }
+/// fn tick<B: retroglyph_core::Backend>(t: &mut retroglyph_core::Terminal<B>, s: &mut State) -> bool { todo!() }
+/// retroglyph_examples::rg_run!(State, init, tick);
 /// ```
 #[macro_export]
 macro_rules! rg_run {
@@ -139,12 +136,14 @@ macro_rules! rg_run {
         // closure that ignores its argument (e.g. `|_t| State::new()`) fails
         // HRTB inference when stored in the App adapter.
         #[allow(clippy::missing_const_for_fn, clippy::needless_pass_by_ref_mut)]
-        fn __rg_init<B: ::retroglyph::Backend>(term: &mut ::retroglyph::Terminal<B>) -> $State {
+        fn __rg_init<B: ::retroglyph_core::Backend>(
+            term: &mut ::retroglyph_core::Terminal<B>,
+        ) -> $State {
             ($init)(term)
         }
         #[allow(clippy::missing_const_for_fn, clippy::needless_pass_by_ref_mut)]
-        fn __rg_tick<B: ::retroglyph::Backend>(
-            term: &mut ::retroglyph::Terminal<B>,
+        fn __rg_tick<B: ::retroglyph_core::Backend>(
+            term: &mut ::retroglyph_core::Terminal<B>,
             state: &mut $State,
         ) -> bool {
             ($tick)(term, state)
@@ -153,20 +152,22 @@ macro_rules! rg_run {
         // ── Software backend (desktop + WASM) ─────────────────────────────
         #[cfg(feature = "software")]
         fn main() {
-            use ::retroglyph::backend::software::SoftwareBackendBuilder;
-
             #[cfg(target_arch = "wasm32")]
             ::console_error_panic_hook::set_once();
 
-            let backend = SoftwareBackendBuilder::new()
-                .title(env!("CARGO_BIN_NAME"))
+            let renderer = ::retroglyph_software::SoftwareBackendBuilder::new()
                 .grid_size(50, 25)
                 .scale(2)
                 .build()
-                .expect("failed to initialize software backend");
-
+                .expect("failed to initialize software backend")
+                .run_headless();
+            let config = ::retroglyph_window::winit::WindowConfig::fit(
+                &renderer,
+                env!("CARGO_BIN_NAME"),
+                None,
+            );
             let app = $crate::util::ClosureApp::new(__rg_init, __rg_tick);
-            backend.run_app(app).expect("event loop failed");
+            ::retroglyph_window::winit::run_app(config, renderer, app).expect("event loop failed");
         }
 
         // WASM entry point called by the browser JS glue before the event loop.
@@ -182,7 +183,7 @@ macro_rules! rg_run {
         #[cfg(all(feature = "crossterm", not(feature = "software")))]
         fn main() -> ::std::result::Result<(), ::std::io::Error> {
             let app = $crate::util::ClosureApp::new(__rg_init, __rg_tick);
-            ::retroglyph::backend::Crossterm::run(app)
+            ::retroglyph_crossterm::Crossterm::run(app)
         }
 
         // ── Headless fallback (no backend feature enabled) ────────────────
@@ -203,6 +204,9 @@ macro_rules! rg_run {
 /// falls back to [`run_headless`] like `rg_run!` does, so the example still
 /// builds by default and supports `examples/runner.rs`'s "Headless" backend.
 ///
+/// The builder's `.title(...)` (if any) is ignored for windowing; the window
+/// title comes from `CARGO_BIN_NAME` via `WindowConfig::fit`.
+///
 /// [`run_headless`]: crate::util::run_headless
 ///
 /// # Arguments
@@ -217,13 +221,11 @@ macro_rules! rg_run {
 /// # Example
 ///
 /// ```ignore
-/// mod util;
-/// struct State { ... }
-/// fn init<B: retroglyph::Backend>(t: &mut retroglyph::Terminal<B>) -> State { ... }
-/// fn tick<B: retroglyph::Backend>(t: &mut retroglyph::Terminal<B>, s: &mut State) -> bool { ... }
-/// rg_run_software!(State, init, tick, builder = {
-///     retroglyph::backend::software::SoftwareBackendBuilder::new()
-///         .title(env!("CARGO_BIN_NAME"))
+/// struct State { /* ... */ }
+/// fn init<B: retroglyph_core::Backend>(t: &mut retroglyph_core::Terminal<B>) -> State { todo!() }
+/// fn tick<B: retroglyph_core::Backend>(t: &mut retroglyph_core::Terminal<B>, s: &mut State) -> bool { todo!() }
+/// retroglyph_examples::rg_run_software!(State, init, tick, builder = {
+///     retroglyph_software::SoftwareBackendBuilder::new()
 ///         .grid_size(40, 15)
 ///         .scale(4)
 /// });
@@ -232,12 +234,14 @@ macro_rules! rg_run {
 macro_rules! rg_run_software {
     ($State:ty, $init:expr, $tick:expr, builder = $builder:expr) => {
         #[allow(clippy::missing_const_for_fn, clippy::needless_pass_by_ref_mut)]
-        fn __rg_init<B: ::retroglyph::Backend>(term: &mut ::retroglyph::Terminal<B>) -> $State {
+        fn __rg_init<B: ::retroglyph_core::Backend>(
+            term: &mut ::retroglyph_core::Terminal<B>,
+        ) -> $State {
             ($init)(term)
         }
         #[allow(clippy::missing_const_for_fn, clippy::needless_pass_by_ref_mut)]
-        fn __rg_tick<B: ::retroglyph::Backend>(
-            term: &mut ::retroglyph::Terminal<B>,
+        fn __rg_tick<B: ::retroglyph_core::Backend>(
+            term: &mut ::retroglyph_core::Terminal<B>,
             state: &mut $State,
         ) -> bool {
             ($tick)(term, state)
@@ -248,12 +252,17 @@ macro_rules! rg_run_software {
             #[cfg(target_arch = "wasm32")]
             ::console_error_panic_hook::set_once();
 
-            let backend = { $builder }
+            let renderer = { $builder }
                 .build()
-                .expect("failed to initialize software backend");
-
+                .expect("failed to initialize software backend")
+                .run_headless();
+            let config = ::retroglyph_window::winit::WindowConfig::fit(
+                &renderer,
+                env!("CARGO_BIN_NAME"),
+                None,
+            );
             let app = $crate::util::ClosureApp::new(__rg_init, __rg_tick);
-            backend.run_app(app).expect("event loop failed");
+            ::retroglyph_window::winit::run_app(config, renderer, app).expect("event loop failed");
         }
 
         #[cfg(all(feature = "software", target_arch = "wasm32"))]

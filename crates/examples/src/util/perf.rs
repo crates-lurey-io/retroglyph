@@ -8,9 +8,9 @@
 //! for external analysis (CSV export, benchmark assertions, etc.).
 #![allow(dead_code)]
 
-use retroglyph::color::Color;
-use retroglyph::style::Style;
-use retroglyph::{Backend, Terminal};
+use retroglyph_core::color::Color;
+use retroglyph_core::style::Style;
+use retroglyph_core::{Backend, Terminal};
 
 #[cfg(not(target_arch = "wasm32"))]
 use std::time::Instant;

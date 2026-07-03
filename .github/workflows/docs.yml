@@ -41,11 +41,11 @@ jobs:
         # Version must match the wasm-bindgen dev-dependency in Cargo.toml.
         run: cargo install wasm-bindgen-cli --version 0.2.106
 
-      - name: Build WASM examples (software-default-font)
+      - name: Build WASM examples (default-font)
         run: |
-          cargo build --release \
+          cargo build --release -p retroglyph-examples \
             --target wasm32-unknown-unknown \
-            --features software-default-font \
+            --features default-font \
             --example dungeon_room \
             --example sokoban \
             --example roguelike_dungeon \
@@ -55,11 +55,11 @@ jobs:
             --example dirty_viz
         continue-on-error: true
 
-      - name: Build WASM examples (software-tilesets)
+      - name: Build WASM examples (tilesets)
         run: |
-          cargo build --release \
+          cargo build --release -p retroglyph-examples \
             --target wasm32-unknown-unknown \
-            --features software-tilesets,software-default-font \
+            --features tilesets,default-font \
             --example tileset \
             --example sprite_stress \
             --example hex_battle

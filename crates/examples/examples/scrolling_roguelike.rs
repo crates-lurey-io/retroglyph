@@ -23,14 +23,12 @@
 //! cargo run --example scrolling_roguelike --features software-default-font
 //! ```
 
-mod util;
-
 use std::collections::VecDeque;
 
-use retroglyph::{Backend, Camera, Color, Grid, Pos, Rect, Size, Style, Terminal, Tile};
-use util::action::{Action, next_action};
-use util::fov;
-use util::lcg::Lcg;
+use retroglyph_core::{Backend, Camera, Color, Grid, Pos, Rect, Size, Style, Terminal, Tile};
+use retroglyph_examples::util::action::{Action, next_action};
+use retroglyph_examples::util::fov;
+use retroglyph_examples::util::lcg::Lcg;
 
 // ── World ───────────────────────────────────────────────────────────────────
 
@@ -517,4 +515,4 @@ fn tick<B: Backend>(term: &mut Terminal<B>, state: &mut GameState) -> bool {
     true
 }
 
-rg_run!(GameState, GameState::new, tick);
+retroglyph_examples::rg_run!(GameState, GameState::new, tick);
