@@ -31,7 +31,11 @@ bitflags::bitflags! {
 /// model). Sub-cell pixel offsets (`dx`, `dy`) are visual only — they do not
 /// affect grid logic or hit-testing. Backends that cannot represent pixel
 /// offsets (e.g. `CrosstermBackend`) ignore them.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+// The manual `PartialEq` below only adds an `Arc::ptr_eq` fast path in front of
+// the same field-by-field comparison the derive would generate, so it stays
+// consistent with the derived `Hash` (equal tiles have equal grapheme content).
+#[allow(clippy::derived_hash_with_manual_eq)]
+#[derive(Clone, Debug, Eq, Hash)]
 pub struct Tile {
     /// Primary codepoint. For ASCII and most Unicode this is the whole story.
     pub(crate) glyph: char,
@@ -59,6 +63,23 @@ pub struct Tile {
     /// Always present for a stable layout across `egc`; without `egc` it is
     /// always `None` (nothing writes it, so it never allocates).
     pub(crate) extra: Option<Arc<String>>,
+}
+
+impl PartialEq for Tile {
+    fn eq(&self, other: &Self) -> bool {
+        self.glyph == other.glyph
+            && self.style == other.style
+            && self.dx == other.dx
+            && self.dy == other.dy
+            && self.flags == other.flags
+            && match (&self.extra, &other.extra) {
+                // Fast path: the common single-codepoint case, and shared Arcs
+                // (e.g. cloned tiles) settle without touching the heap string.
+                (None, None) => true,
+                (Some(a), Some(b)) => Arc::ptr_eq(a, b) || a == b,
+                _ => false,
+            }
+    }
 }
 
 impl Default for Tile {
@@ -290,6 +311,42 @@ mod tests {
             extra: Some(extra_str),
         };
         assert_eq!(tile.grapheme(), Some("e\u{0301}"));
+    }
+
+    #[cfg(feature = "egc")]
+    #[test]
+    fn test_tile_eq_arc_fast_path_and_value_fallback() {
+        let tile_with = |s: &str| Tile {
+            glyph: 'e',
+            style: Style::default(),
+            dx: 0,
+            dy: 0,
+            flags: TileFlags::empty(),
+            extra: Some(Arc::new(String::from(s))),
+        };
+
+        // Cloned tiles share the same Arc: equal via the pointer fast path.
+        let a = tile_with("e\u{0301}");
+        let cloned = a.clone();
+        assert!(Arc::ptr_eq(
+            a.extra.as_ref().unwrap(),
+            cloned.extra.as_ref().unwrap()
+        ));
+        assert_eq!(a, cloned);
+
+        // Distinct Arcs with equal contents fall back to a value compare.
+        let b = tile_with("e\u{0301}");
+        assert!(!Arc::ptr_eq(
+            a.extra.as_ref().unwrap(),
+            b.extra.as_ref().unwrap()
+        ));
+        assert_eq!(a, b);
+
+        // Different contents are unequal.
+        assert_ne!(a, tile_with("a\u{0301}"));
+
+        // None vs Some are unequal.
+        assert_ne!(a, Tile::new('e', Style::default()));
     }
 
     #[cfg(feature = "egc")]
