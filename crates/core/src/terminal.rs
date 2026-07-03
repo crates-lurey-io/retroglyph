@@ -107,6 +107,15 @@ impl<B: Backend> Terminal<B> {
         }
     }
 
+    /// Returns the full drawing surface as a [`Rect`] at the origin.
+    ///
+    /// Equivalent to `Rect::new(0, 0, width, height)`. Handy for passing the
+    /// whole terminal to layout helpers or region-based drawing.
+    #[must_use]
+    pub const fn area(&self) -> Rect {
+        Rect::new(0, 0, self.current.width(), self.current.height())
+    }
+
     /// Resize both grids to `width` × `height` cells.
     ///
     /// Content within the overlapping region is preserved in the current grid.
@@ -645,6 +654,12 @@ mod tests {
                 height: 20
             }
         );
+    }
+
+    #[test]
+    fn test_terminal_area() {
+        let term = Terminal::new(Headless::new(40, 20));
+        assert_eq!(term.area(), Rect::new(0, 0, 40, 20));
     }
 
     #[test]

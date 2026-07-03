@@ -1159,3 +1159,75 @@ mod tests {
         assert_eq!(g.get_tile(1, 0, 0).unwrap().glyph, ' ');
     }
 }
+
+/// Property tests for the wide-character (EGC) grid invariants.
+///
+/// These exercise the trickiest code in the crate — `write_grapheme` and its
+/// `clear_overlap` helper — by hammering a small grid with random sequences of
+/// narrow, wide, combining, and emoji graphemes and checking that the
+/// wide-character bookkeeping never desyncs.
+#[cfg(all(test, feature = "egc"))]
+mod egc_proptests {
+    use super::*;
+    use crate::style::Style;
+    use proptest::prelude::*;
+
+    const W: u16 = 8;
+    const H: u16 = 4;
+
+    /// Narrow, wide (CJK), combining-mark, and wide-emoji graphemes.
+    const GRAPHEMES: &[&str] = &["a", "\u{4e2d}", "e\u{0301}", "\u{1f600}"];
+
+    /// Every `WIDE_CHAR` has its spacer to the right, every `WIDE_CHAR_SPACER`
+    /// has its lead to the left, and no cell is both.
+    fn assert_wide_invariants(grid: &Grid) {
+        for y in 0..grid.height() {
+            for x in 0..grid.width() {
+                let flags = grid.get(x, y).flags();
+                let lead = flags.contains(TileFlags::WIDE_CHAR);
+                let spacer = flags.contains(TileFlags::WIDE_CHAR_SPACER);
+
+                assert!(
+                    !(lead && spacer),
+                    "cell ({x}, {y}) is both wide lead and spacer"
+                );
+
+                if lead {
+                    assert!(x + 1 < grid.width(), "wide lead at ({x}, {y}) has no room");
+                    assert!(
+                        grid.get(x + 1, y)
+                            .flags()
+                            .contains(TileFlags::WIDE_CHAR_SPACER),
+                        "wide lead at ({x}, {y}) is missing its spacer"
+                    );
+                }
+
+                if spacer {
+                    assert!(x > 0, "orphan spacer at ({x}, {y}) (no cell to the left)");
+                    assert!(
+                        grid.get(x - 1, y).flags().contains(TileFlags::WIDE_CHAR),
+                        "orphan spacer at ({x}, {y}) (left cell is not a wide lead)"
+                    );
+                }
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn wide_char_bookkeeping_never_desyncs(
+            ops in prop::collection::vec(
+                (0u16..W, 0u16..H, 0usize..GRAPHEMES.len()),
+                0..64,
+            ),
+        ) {
+            let mut grid = Grid::new(W, H);
+            for (x, y, gi) in ops {
+                grid.write_grapheme(0, x, y, GRAPHEMES[gi], Style::default());
+                // The invariant must hold after every single write, not just
+                // at the end — an intermediate orphan would be a real bug.
+                assert_wide_invariants(&grid);
+            }
+        }
+    }
+}
