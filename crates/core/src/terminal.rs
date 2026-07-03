@@ -327,6 +327,20 @@ impl<B: Backend> Terminal<B> {
     /// After swap the new current buffer is cleared so the next frame starts
     /// empty.  Callers should not call `clear()` before drawing the next frame.
     ///
+    /// # Immediate mode
+    ///
+    /// This is an immediate-mode API (the same trade [ratatui] makes): the
+    /// current buffer is wiped after every present, so each frame must redraw
+    /// its entire scene from scratch. Cells are **not** retained between
+    /// frames. The diff only bounds what is sent to the backend (terminal or
+    /// pixel I/O); it does not bound the CPU cost of your redraw.
+    ///
+    /// Turn-based games that render only when state changes should gate their
+    /// calls to `present` on an actual state change rather than presenting on a
+    /// fixed clock and expecting the previous frame's cells to persist.
+    ///
+    /// [ratatui]: https://docs.rs/ratatui
+    ///
     /// # Errors
     ///
     /// Propagates errors from the backend's
