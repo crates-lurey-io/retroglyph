@@ -30,7 +30,10 @@ pub enum Action {
 /// and quits, Q also quits. Mouse left-click maps to [`Action::Click`].
 pub fn event_to_action(event: &Event) -> Action {
     match event {
-        Event::Key(k) => match k.code {
+        // Only act on key-down (press or auto-repeat); ignore releases so a
+        // single physical keypress maps to a single action on backends that
+        // report releases (winit, kitty keyboard protocol).
+        Event::Key(k) if k.is_down() => match k.code {
             KeyCode::Up | KeyCode::Char('w' | 'W') => Action::MoveUp,
             KeyCode::Down | KeyCode::Char('s' | 'S') => Action::MoveDown,
             KeyCode::Left | KeyCode::Char('a' | 'A') => Action::MoveLeft,

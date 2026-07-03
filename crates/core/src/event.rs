@@ -1,6 +1,7 @@
 //! Input event system.
 
 use crate::grid::Pos;
+use alloc::vec::Vec;
 use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
 
 /// Physical (pixel) position relative to the window's top-left corner.
@@ -113,13 +114,68 @@ pub enum KeyCode {
     Escape,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+/// Whether a key event is a press, an auto-repeat, or a release.
+///
+/// Not every backend can distinguish these. Plain terminals only ever emit
+/// [`Press`](Self::Press). Backends with richer input report the full set:
+///
+/// - The winit/software backend emits `Press`, `Repeat` (winit's `repeat`
+///   flag), and `Release`.
+/// - The crossterm backend emits the full set only when the terminal supports
+///   the kitty keyboard protocol (kitty, `WezTerm`, foot, Ghostty, recent
+///   Alacritty); otherwise it degrades to `Press`-only.
+pub enum KeyEventKind {
+    /// The key was pressed.
+    #[default]
+    Press,
+    /// The key is held and auto-repeating.
+    Repeat,
+    /// The key was released.
+    Release,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 /// Keyboard input event.
 pub struct KeyEvent {
     /// The key code.
     pub code: KeyCode,
-    /// Modifiers held down when the key was pressed.
+    /// Modifiers held down during the event.
     pub modifiers: KeyModifiers,
+    /// Whether this is a press, auto-repeat, or release.
+    ///
+    /// Backends that cannot distinguish these always report
+    /// [`KeyEventKind::Press`]. See [`KeyEventKind`] for per-backend behavior.
+    pub kind: KeyEventKind,
+}
+
+impl KeyEvent {
+    /// Creates a key press event with the given code and modifiers.
+    #[must_use]
+    pub const fn new(code: KeyCode, modifiers: KeyModifiers) -> Self {
+        Self {
+            code,
+            modifiers,
+            kind: KeyEventKind::Press,
+        }
+    }
+
+    /// Creates a key event with an explicit [`KeyEventKind`].
+    #[must_use]
+    pub const fn with_kind(code: KeyCode, modifiers: KeyModifiers, kind: KeyEventKind) -> Self {
+        Self {
+            code,
+            modifiers,
+            kind,
+        }
+    }
+
+    /// Returns `true` if this event is a press or auto-repeat (i.e. the key is
+    /// down), and `false` for a release.
+    #[must_use]
+    pub const fn is_down(self) -> bool {
+        matches!(self.kind, KeyEventKind::Press | KeyEventKind::Repeat)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -177,6 +233,70 @@ pub enum Event {
     Close,
 }
 
+/// Tracks which keys are currently held down.
+///
+/// Feed it every [`KeyEvent`] (or [`Event`]) you receive and query
+/// [`is_held`](Self::is_held) each frame for held-key movement. A key is
+/// considered held from its first [`KeyEventKind::Press`] until a matching
+/// [`KeyEventKind::Release`].
+///
+/// This is only useful on backends that emit release events (winit, or a
+/// terminal with the kitty keyboard protocol). On press-only backends a key
+/// never leaves the held set on its own, so call [`clear`](Self::clear) at a
+/// suitable boundary (e.g. once per turn) if you rely on it there.
+#[derive(Debug, Clone, Default)]
+pub struct KeyState {
+    held: Vec<KeyCode>,
+}
+
+impl KeyState {
+    /// Creates an empty key-state tracker.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self { held: Vec::new() }
+    }
+
+    /// Updates the held set from a key event.
+    ///
+    /// [`Press`](KeyEventKind::Press) and [`Repeat`](KeyEventKind::Repeat) add
+    /// the key; [`Release`](KeyEventKind::Release) removes it.
+    pub fn apply(&mut self, event: KeyEvent) {
+        match event.kind {
+            KeyEventKind::Press | KeyEventKind::Repeat => {
+                if !self.held.contains(&event.code) {
+                    self.held.push(event.code);
+                }
+            }
+            KeyEventKind::Release => {
+                self.held.retain(|&c| c != event.code);
+            }
+        }
+    }
+
+    /// Updates the held set from an [`Event`], ignoring non-key events.
+    pub fn apply_event(&mut self, event: &Event) {
+        if let Event::Key(key) = event {
+            self.apply(*key);
+        }
+    }
+
+    /// Returns `true` if `code` is currently held.
+    #[must_use]
+    pub fn is_held(&self, code: KeyCode) -> bool {
+        self.held.contains(&code)
+    }
+
+    /// Iterates the currently held keys, in first-pressed order.
+    pub fn held(&self) -> impl Iterator<Item = KeyCode> + '_ {
+        self.held.iter().copied()
+    }
+
+    /// Clears all held keys.
+    pub fn clear(&mut self) {
+        self.held.clear();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -197,18 +317,67 @@ mod tests {
 
     #[test]
     fn test_event_construction() {
-        let key_event = KeyEvent {
-            code: KeyCode::Char('a'),
-            modifiers: KeyModifiers::SHIFT,
-        };
+        let key_event = KeyEvent::new(KeyCode::Char('a'), KeyModifiers::SHIFT);
         let event = Event::Key(key_event);
 
         if let Event::Key(ke) = event {
             assert_eq!(ke.code, KeyCode::Char('a'));
             assert!(ke.modifiers.contains(KeyModifiers::SHIFT));
+            assert_eq!(ke.kind, KeyEventKind::Press);
         } else {
             panic!("Expected Event::Key");
         }
+    }
+
+    #[test]
+    fn test_key_event_kind_helpers() {
+        let press = KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE);
+        assert_eq!(press.kind, KeyEventKind::Press);
+        assert!(press.is_down());
+
+        let repeat =
+            KeyEvent::with_kind(KeyCode::Char('x'), KeyModifiers::NONE, KeyEventKind::Repeat);
+        assert!(repeat.is_down());
+
+        let release = KeyEvent::with_kind(
+            KeyCode::Char('x'),
+            KeyModifiers::NONE,
+            KeyEventKind::Release,
+        );
+        assert!(!release.is_down());
+    }
+
+    #[test]
+    fn test_key_state_tracks_held_keys() {
+        let mut state = KeyState::new();
+        assert!(!state.is_held(KeyCode::Left));
+
+        state.apply(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE));
+        assert!(state.is_held(KeyCode::Left));
+
+        // Repeat keeps it held.
+        state.apply(KeyEvent::with_kind(
+            KeyCode::Left,
+            KeyModifiers::NONE,
+            KeyEventKind::Repeat,
+        ));
+        assert!(state.is_held(KeyCode::Left));
+
+        state.apply(KeyEvent::with_kind(
+            KeyCode::Left,
+            KeyModifiers::NONE,
+            KeyEventKind::Release,
+        ));
+        assert!(!state.is_held(KeyCode::Left));
+    }
+
+    #[test]
+    fn test_key_state_apply_event_ignores_non_key() {
+        let mut state = KeyState::new();
+        state.apply_event(&Event::Resize(1, 1));
+        assert!(state.held().next().is_none());
+        state.apply_event(&Event::Key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE)));
+        assert!(state.is_held(KeyCode::Up));
     }
 
     #[test]

@@ -130,10 +130,10 @@ mod tests {
     #[test]
     fn run_blocking_exits_on_flow_exit() {
         let mut backend = Headless::new(4, 1);
-        backend.push_event(Event::Key(KeyEvent {
-            code: KeyCode::Char('q'),
-            modifiers: KeyModifiers::NONE,
-        }));
+        backend.push_event(Event::Key(KeyEvent::new(
+            KeyCode::Char('q'),
+            KeyModifiers::NONE,
+        )));
         let term = Terminal::new(backend);
         let app = Counter { frames: 0 };
         // Runs until the queued key is observed. Reaching the next line proves

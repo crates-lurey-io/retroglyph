@@ -363,7 +363,7 @@ fn tick<B: Backend>(term: &mut Terminal<B>, state: &mut StressState) -> bool {
 
     for event in term.drain_events() {
         match event {
-            Event::Key(k) => match k.code {
+            Event::Key(k) if k.is_down() => match k.code {
                 KeyCode::Escape | KeyCode::Char('q' | 'Q') => return false,
                 KeyCode::Char('+' | '=') => {
                     state.count = (state.count + 50).min(MAX_SPRITES);

@@ -50,7 +50,7 @@ pub fn tick(term: &mut Terminal<impl Backend>, state: &mut GameState) -> bool {
     // On crossterm the loop is uncapped, so drain vs poll makes no visible difference.
     for event in term.drain_events() {
         match event {
-            Event::Key(key_event) => match key_event.code {
+            Event::Key(key_event) if key_event.is_down() => match key_event.code {
                 KeyCode::Up | KeyCode::Char('w') => {
                     if state.player.y > ROOM_TOP + 1 {
                         state.player.y -= 1;

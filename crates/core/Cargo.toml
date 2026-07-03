@@ -35,3 +35,4 @@ gem = ["dep:gem", "gem/libm"]
 [dev-dependencies]
 unicode-width = "0.2"
 insta = { version = "1.34", features = ["yaml"] }
+proptest = "1"

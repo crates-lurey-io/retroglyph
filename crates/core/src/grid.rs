@@ -265,6 +265,16 @@ impl Grid {
         self.height
     }
 
+    /// Returns the highest layer id that has ever been allocated.
+    ///
+    /// Always at least 0 (layer 0 is always allocated). This only grows:
+    /// clearing a layer does not deallocate it, so the value does not shrink
+    /// once a higher layer has been written.
+    #[must_use]
+    pub const fn max_layer(&self) -> u8 {
+        self.max_layer
+    }
+
     /// Sets the tile at the given coordinates on layer 0.
     ///
     /// # Panics
@@ -522,15 +532,16 @@ impl Grid {
     }
 
     /// Copy tiles from `src` within `src_rect` to `self` at `(dst_x, dst_y)`
-    /// on `layer`. Tiles whose glyph is a space (the default) are treated as
-    /// transparent and skipped.
+    /// on `layer`. Empty tiles (nothing written; see [`Tile::is_empty`]) are
+    /// treated as transparent and skipped. An explicit space is copied and
+    /// overwrites the destination.
     pub fn blit(&mut self, layer: u8, src: &Self, src_rect: Rect, dst_x: u16, dst_y: u16) {
         for sy in src_rect.top()..src_rect.bottom() {
             for sx in src_rect.left()..src_rect.right() {
                 let Some(tile) = src.get_tile(layer, sx, sy) else {
                     continue;
                 };
-                if tile.glyph != ' ' {
+                if !tile.flags.contains(TileFlags::EMPTY) {
                     let dx = dst_x + sx.saturating_sub(src_rect.left());
                     let dy = dst_y + sy.saturating_sub(src_rect.top());
                     self.put_tile(layer, dx, dy, tile.clone());
@@ -566,7 +577,7 @@ impl Grid {
                 let Some(tile) = src.get_tile(layer, sx, sy) else {
                     continue;
                 };
-                if tile.glyph != ' ' {
+                if !tile.flags.contains(TileFlags::EMPTY) {
                     let dx = dst_x + sx.saturating_sub(src_rect.left());
                     let dy = dst_y + sy.saturating_sub(src_rect.top());
                     let mut blended = tile.clone();
@@ -621,10 +632,13 @@ impl Grid {
     /// transparency convention:
     ///
     /// - Start from layer 0's tile (its `bg` fills the cell).
-    /// - For each higher allocated layer, in ascending order: if the cell is
-    ///   non-empty (glyph is not a space, or it is a wide-char spacer) replace
-    ///   the glyph, foreground, modifiers, offsets, flags, and extra; if its
-    ///   background is not [`Color::Default`], replace the background.
+    /// - For each higher allocated layer, in ascending order: if the tile is
+    ///   not empty (see [`Tile::is_empty`]) replace the glyph, foreground,
+    ///   modifiers, offsets, flags, and extra; if its background is not
+    ///   [`Color::Default`], replace the background.
+    ///
+    /// Because an explicit space is not empty, drawing one on a higher layer
+    /// overwrites (erases) the glyph beneath it.
     ///
     /// `dst` must have the same dimensions as `self`.
     pub(crate) fn flatten_into(&self, dst: &mut Self) {
@@ -635,8 +649,7 @@ impl Grid {
                     let Some(tile) = self.get_tile(id, x, y) else {
                         continue;
                     };
-                    let contributes_glyph =
-                        tile.glyph != ' ' || tile.flags.contains(TileFlags::WIDE_CHAR_SPACER);
+                    let contributes_glyph = !tile.flags.contains(TileFlags::EMPTY);
                     if contributes_glyph {
                         out.glyph = tile.glyph;
                         out.style.fg = tile.style.fg;
@@ -1144,5 +1157,77 @@ mod tests {
         // Both layers reset to default (space).
         assert_eq!(g.get(0, 0).glyph, ' ');
         assert_eq!(g.get_tile(1, 0, 0).unwrap().glyph, ' ');
+    }
+}
+
+/// Property tests for the wide-character (EGC) grid invariants.
+///
+/// These exercise the trickiest code in the crate — `write_grapheme` and its
+/// `clear_overlap` helper — by hammering a small grid with random sequences of
+/// narrow, wide, combining, and emoji graphemes and checking that the
+/// wide-character bookkeeping never desyncs.
+#[cfg(all(test, feature = "egc"))]
+mod egc_proptests {
+    use super::*;
+    use crate::style::Style;
+    use proptest::prelude::*;
+
+    const W: u16 = 8;
+    const H: u16 = 4;
+
+    /// Narrow, wide (CJK), combining-mark, and wide-emoji graphemes.
+    const GRAPHEMES: &[&str] = &["a", "\u{4e2d}", "e\u{0301}", "\u{1f600}"];
+
+    /// Every `WIDE_CHAR` has its spacer to the right, every `WIDE_CHAR_SPACER`
+    /// has its lead to the left, and no cell is both.
+    fn assert_wide_invariants(grid: &Grid) {
+        for y in 0..grid.height() {
+            for x in 0..grid.width() {
+                let flags = grid.get(x, y).flags();
+                let lead = flags.contains(TileFlags::WIDE_CHAR);
+                let spacer = flags.contains(TileFlags::WIDE_CHAR_SPACER);
+
+                assert!(
+                    !(lead && spacer),
+                    "cell ({x}, {y}) is both wide lead and spacer"
+                );
+
+                if lead {
+                    assert!(x + 1 < grid.width(), "wide lead at ({x}, {y}) has no room");
+                    assert!(
+                        grid.get(x + 1, y)
+                            .flags()
+                            .contains(TileFlags::WIDE_CHAR_SPACER),
+                        "wide lead at ({x}, {y}) is missing its spacer"
+                    );
+                }
+
+                if spacer {
+                    assert!(x > 0, "orphan spacer at ({x}, {y}) (no cell to the left)");
+                    assert!(
+                        grid.get(x - 1, y).flags().contains(TileFlags::WIDE_CHAR),
+                        "orphan spacer at ({x}, {y}) (left cell is not a wide lead)"
+                    );
+                }
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn wide_char_bookkeeping_never_desyncs(
+            ops in prop::collection::vec(
+                (0u16..W, 0u16..H, 0usize..GRAPHEMES.len()),
+                0..64,
+            ),
+        ) {
+            let mut grid = Grid::new(W, H);
+            for (x, y, gi) in ops {
+                grid.write_grapheme(0, x, y, GRAPHEMES[gi], Style::default());
+                // The invariant must hold after every single write, not just
+                // at the end — an intermediate orphan would be a real bug.
+                assert_wide_invariants(&grid);
+            }
+        }
     }
 }

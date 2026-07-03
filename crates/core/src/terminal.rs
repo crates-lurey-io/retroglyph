@@ -29,6 +29,11 @@ pub struct Terminal<B: Backend> {
     queued_event: Option<Event>,
     /// The layer that `put`, `put_styled`, and `put_offset` write to.
     active_layer: u8,
+    /// `true` when the flatten buffers no longer reflect the last frame sent to
+    /// the backend (because the single-layer fast path bypassed them). The next
+    /// multi-layer present clears `flattened_previous` first so it does a full
+    /// redraw instead of diffing against stale data.
+    flattened_stale: bool,
 }
 
 impl<B: Backend> Terminal<B> {
@@ -50,6 +55,7 @@ impl<B: Backend> Terminal<B> {
             drawing_style: Style::default(),
             queued_event: None,
             active_layer: 0,
+            flattened_stale: false,
         }
     }
 
@@ -101,6 +107,15 @@ impl<B: Backend> Terminal<B> {
         }
     }
 
+    /// Returns the full drawing surface as a [`Rect`] at the origin.
+    ///
+    /// Equivalent to `Rect::new(0, 0, width, height)`. Handy for passing the
+    /// whole terminal to layout helpers or region-based drawing.
+    #[must_use]
+    pub const fn area(&self) -> Rect {
+        Rect::new(0, 0, self.current.width(), self.current.height())
+    }
+
     /// Resize both grids to `width` × `height` cells.
     ///
     /// Content within the overlapping region is preserved in the current grid.
@@ -137,11 +152,7 @@ impl<B: Backend> Terminal<B> {
         }
         #[cfg(not(feature = "egc"))]
         {
-            let tile = Tile {
-                glyph: ch,
-                style,
-                ..Tile::default()
-            };
+            let tile = Tile::new(ch, style);
             self.current.put_tile(self.active_layer, x, y, tile);
         }
     }
@@ -200,11 +211,7 @@ impl<B: Backend> Terminal<B> {
         }
         #[cfg(not(feature = "egc"))]
         {
-            let tile = Tile {
-                glyph: ch,
-                style,
-                ..Tile::default()
-            };
+            let tile = Tile::new(ch, style);
             self.current.put_tile(self.active_layer, x, y, tile);
         }
     }
@@ -215,13 +222,7 @@ impl<B: Backend> Terminal<B> {
     /// only — they do not affect grid logic or hit-testing. Backends that
     /// cannot represent pixel offsets (e.g. `CrosstermBackend`) ignore them.
     pub fn put_offset(&mut self, x: u16, y: u16, dx: i16, dy: i16, ch: char) {
-        let tile = Tile {
-            glyph: ch,
-            style: self.drawing_style,
-            dx,
-            dy,
-            ..Tile::default()
-        };
+        let tile = Tile::new(ch, self.drawing_style).with_offset(dx, dy);
         self.current.put_tile(self.active_layer, x, y, tile);
     }
 
@@ -282,11 +283,7 @@ impl<B: Backend> Terminal<B> {
                     if usize::from(cur_x) >= usize::from(self.current.width()) {
                         break;
                     }
-                    let tile = Tile {
-                        glyph: ch,
-                        style: span.style,
-                        ..Tile::default()
-                    };
+                    let tile = Tile::new(ch, span.style);
                     self.current.put_tile(self.active_layer, cur_x, y, tile);
                     cur_x += w;
                 }
@@ -330,6 +327,20 @@ impl<B: Backend> Terminal<B> {
     /// After swap the new current buffer is cleared so the next frame starts
     /// empty.  Callers should not call `clear()` before drawing the next frame.
     ///
+    /// # Immediate mode
+    ///
+    /// This is an immediate-mode API (the same trade [ratatui] makes): the
+    /// current buffer is wiped after every present, so each frame must redraw
+    /// its entire scene from scratch. Cells are **not** retained between
+    /// frames. The diff only bounds what is sent to the backend (terminal or
+    /// pixel I/O); it does not bound the CPU cost of your redraw.
+    ///
+    /// Turn-based games that render only when state changes should gate their
+    /// calls to `present` on an actual state change rather than presenting on a
+    /// fixed clock and expecting the previous frame's cells to persist.
+    ///
+    /// [ratatui]: https://docs.rs/ratatui
+    ///
     /// # Errors
     ///
     /// Propagates errors from the backend's
@@ -345,9 +356,22 @@ impl<B: Backend> Terminal<B> {
                 let diff = self.current.diff(&self.previous);
                 self.backend.draw_layers(diff)?;
             }
+        } else if self.current.max_layer() == 0 && self.previous.max_layer() == 0 {
+            // Fast path: only layer 0 is in play, so flattening would be an exact
+            // copy of `current`. Diff the real grids directly and skip the
+            // flatten buffers entirely.
+            let diff = self.current.diff(&self.previous);
+            self.backend.draw_layers(diff)?;
+            self.flattened_stale = true;
         } else {
             // Cell backends receive a pre-flattened, single-layer diff so layers
             // 1+ appear everywhere, not just on pixel backends.
+            if self.flattened_stale {
+                // The previous frame used the fast path, so `flattened_previous`
+                // is stale. Clear it to force a full redraw this frame.
+                self.flattened_previous.clear_all();
+                self.flattened_stale = false;
+            }
             self.current.flatten_into(&mut self.flattened_current);
             let diff = self.flattened_current.diff(&self.flattened_previous);
             self.backend.draw_layers(diff)?;
@@ -477,11 +501,7 @@ impl<B: Backend> Terminal<B> {
             } else {
                 #[allow(clippy::cast_possible_truncation)]
                 let w = UnicodeWidthChar::width(c).unwrap_or(1) as u16;
-                let tile = Tile {
-                    glyph: c,
-                    style,
-                    ..Tile::default()
-                };
+                let tile = Tile::new(c, style);
                 self.current.put_tile(self.active_layer, cur_x, cur_y, tile);
                 cur_x += w;
                 if usize::from(cur_x) >= usize::from(self.current.width()) {
@@ -570,17 +590,72 @@ mod tests {
     }
 
     #[test]
-    fn test_present_composites_background_from_higher_layer() {
-        // A higher layer with only a background contributes bg but keeps the
-        // lower layer's glyph.
+    fn test_present_explicit_space_on_higher_layer_erases_and_sets_bg() {
+        // An explicit space on a higher layer is opaque: it overwrites the
+        // glyph beneath (erase) and applies its background. This is the
+        // deliberate consequence of the explicit-EMPTY transparency model.
         let mut term = Terminal::new(Headless::new(2, 1));
         term.layer(0).put(0, 0, 'x');
         term.layer(1)
             .put_styled(0, 0, ' ', Style::new().bg(Color::RED));
         term.present().expect("present failed");
         let cell = term.backend().grid().get(0, 0);
-        assert_eq!(cell.glyph(), 'x');
+        assert_eq!(cell.glyph(), ' ');
         assert_eq!(cell.style().background(), Color::RED);
+    }
+
+    #[test]
+    fn test_present_single_layer_fast_path_matches_backend() {
+        // Only layer 0 is ever touched: the fast path must still deliver the
+        // correct cells to a cell backend across multiple frames.
+        let mut term = Terminal::new(Headless::new(3, 1));
+        term.put(0, 0, 'a');
+        term.present().expect("present failed");
+        assert_eq!(term.backend().grid().get(0, 0).glyph(), 'a');
+
+        // Immediate mode: redraw 'a' and add 'c'. The diff updates the new
+        // cell while 'a' stays put.
+        term.put(0, 0, 'a');
+        term.put(2, 0, 'c');
+        term.present().expect("present failed");
+        assert_eq!(term.backend().grid().get(0, 0).glyph(), 'a');
+        assert_eq!(term.backend().grid().get(2, 0).glyph(), 'c');
+
+        // A cell that is not redrawn is erased (immediate mode).
+        term.put(0, 0, 'a');
+        term.present().expect("present failed");
+        assert_eq!(term.backend().grid().get(0, 0).glyph(), 'a');
+        assert_eq!(term.backend().grid().get(2, 0).glyph(), ' ');
+    }
+
+    #[test]
+    fn test_present_transition_single_to_multi_layer() {
+        // Start single-layer (fast path), then introduce layer 1. The frame
+        // that adds the layer must composite correctly despite the fast path
+        // having bypassed the flatten buffers.
+        let mut term = Terminal::new(Headless::new(2, 1));
+        term.layer(0).put(0, 0, '.');
+        term.layer(0).put(1, 0, '.');
+        term.present().expect("present failed");
+
+        term.layer(0).put(0, 0, '.');
+        term.layer(0).put(1, 0, '.');
+        term.layer(1).put(1, 0, '@');
+        term.present().expect("present failed");
+        assert_eq!(term.backend().grid().get(0, 0).glyph(), '.');
+        assert_eq!(term.backend().grid().get(1, 0).glyph(), '@');
+    }
+
+    #[test]
+    fn test_present_untouched_higher_layer_is_transparent() {
+        // A higher layer that was allocated but not written at this cell must
+        // not disturb the lower layer's glyph or background.
+        let mut term = Terminal::new(Headless::new(2, 1));
+        term.layer(0).put(0, 0, 'x');
+        // Allocate layer 1 by writing elsewhere, leaving (0, 0) empty.
+        term.layer(1).put(1, 0, 'y');
+        term.present().expect("present failed");
+        assert_eq!(term.backend().grid().get(0, 0).glyph(), 'x');
     }
 
     #[test]
@@ -593,6 +668,12 @@ mod tests {
                 height: 20
             }
         );
+    }
+
+    #[test]
+    fn test_terminal_area() {
+        let term = Terminal::new(Headless::new(40, 20));
+        assert_eq!(term.area(), Rect::new(0, 0, 40, 20));
     }
 
     #[test]

@@ -7,6 +7,13 @@
 //! disconnected pipe or closed terminal. Future versions of the trait may add
 //! error-returning variants.
 
+// Compile the code blocks in the project README as doctests so the quick-start
+// example is type-checked on every test run and cannot silently rot. The
+// `cfg(doctest)` gate keeps this out of the rendered crate documentation.
+#[cfg(doctest)]
+#[doc = include_str!("../../../README.md")]
+struct ReadmeDoctests;
+
 use core::time::Duration;
 use retroglyph_core::backend::Backend;
 use retroglyph_core::event::Event;
@@ -19,10 +26,22 @@ use std::io::{BufWriter, Stdout};
 // impls between them are no longer legal (neither type is local). These are
 // plain conversion functions instead.
 
+/// Keyboard enhancement flags requested when the terminal supports the kitty
+/// keyboard protocol. `REPORT_EVENT_TYPES` is what upgrades us from press-only
+/// to press/repeat/release; `DISAMBIGUATE_ESCAPE_CODES` makes modified keys
+/// unambiguous.
+fn keyboard_enhancement_flags() -> crossterm::event::KeyboardEnhancementFlags {
+    crossterm::event::KeyboardEnhancementFlags::REPORT_EVENT_TYPES
+        | crossterm::event::KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
+}
+
 /// Helper function to restore the terminal to its normal state.
 /// This is called during drops and emergency panic hooks.
 fn restore_terminal() {
     let mut stdout = std::io::stdout();
+    // Pop the keyboard enhancement flags pushed in `Crossterm::new`. Terminals
+    // that never understood the push ignore the pop just the same.
+    let _ = crossterm::execute!(stdout, crossterm::event::PopKeyboardEnhancementFlags);
     let _ = crossterm::execute!(
         stdout,
         crossterm::event::DisableMouseCapture,
@@ -129,6 +148,18 @@ impl Crossterm {
             crossterm::terminal::EnterAlternateScreen,
             crossterm::cursor::Hide,
             crossterm::event::EnableMouseCapture
+        )?;
+
+        // Opt into the kitty keyboard protocol so we receive key repeat and
+        // release events. We push optimistically rather than gating on
+        // `supports_keyboard_enhancement()`: that query blocks for the
+        // terminal's response (seconds on terminals that never answer, e.g.
+        // pipes and CI), stalling startup. Terminals that don't implement the
+        // protocol silently ignore the CSI sequence, and we map whatever key
+        // events they do send. The matching pop happens on restore.
+        crossterm::execute!(
+            stdout,
+            crossterm::event::PushKeyboardEnhancementFlags(keyboard_enhancement_flags())
         )?;
 
         Ok(Self {
@@ -376,6 +407,18 @@ const fn from_crossterm_key_code(
     }
 }
 
+const fn from_crossterm_key_kind(
+    kind: crossterm::event::KeyEventKind,
+) -> retroglyph_core::event::KeyEventKind {
+    use crossterm::event::KeyEventKind as CK;
+    use retroglyph_core::event::KeyEventKind as K;
+    match kind {
+        CK::Press => K::Press,
+        CK::Repeat => K::Repeat,
+        CK::Release => K::Release,
+    }
+}
+
 fn from_crossterm_key_modifiers(
     mods: crossterm::event::KeyModifiers,
 ) -> retroglyph_core::event::KeyModifiers {
@@ -442,16 +485,11 @@ fn from_crossterm_mouse_event(
 fn from_crossterm_event(event: crossterm::event::Event) -> Result<Event, ()> {
     use crossterm::event::Event as CE;
     match event {
-        CE::Key(k) => {
-            if k.kind == crossterm::event::KeyEventKind::Release {
-                return Err(());
-            }
-
-            Ok(Event::Key(retroglyph_core::event::KeyEvent {
-                code: from_crossterm_key_code(k.code)?,
-                modifiers: from_crossterm_key_modifiers(k.modifiers),
-            }))
-        }
+        CE::Key(k) => Ok(Event::Key(retroglyph_core::event::KeyEvent::with_kind(
+            from_crossterm_key_code(k.code)?,
+            from_crossterm_key_modifiers(k.modifiers),
+            from_crossterm_key_kind(k.kind),
+        ))),
         CE::Mouse(m) => Ok(Event::Mouse(from_crossterm_mouse_event(m)?)),
         CE::Resize(w, h) => Ok(Event::Resize(w, h)),
         _ => Err(()),

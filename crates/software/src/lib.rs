@@ -342,6 +342,21 @@ impl Backend for SoftwareRenderer {
         Ok(())
     }
 
+    /// Composite the raw layer stream into the pixel buffer.
+    ///
+    /// Layers arrive layer-major (0 first), so painting them in order gives the
+    /// correct z-order. Layer 0 always fills its cell background; a higher layer
+    /// fills the background only when its tile is non-empty and its background is
+    /// not [`Color::Default`], mirroring the layer-flattening rule so cell and
+    /// pixel backends agree. The `is_empty` guard matters because this
+    /// receives the full frame (see [`needs_full_frame`](Backend::needs_full_frame)),
+    /// including empty higher-layer cells that must not overwrite layer 0.
+    ///
+    /// Known divergence from cell backends: an occupied space with a
+    /// [`Color::Default`] background on a higher layer erases the glyph beneath
+    /// it when flattened, but here it leaves the lower glyph's pixels intact —
+    /// repainting the lower background per pixel would require composited
+    /// per-cell state this renderer intentionally avoids.
     fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
         I: Iterator<Item = (u8, Pos, &'a Tile)>,
@@ -367,7 +382,12 @@ impl Backend for SoftwareRenderer {
             let px_x = usize::from(pos.x) * cell_w;
             let px_y = usize::from(pos.y) * cell_h;
 
-            if layer_id == 0 {
+            // Layer 0 always paints its background. Higher layers paint theirs
+            // only when the tile actually contributes an opaque background,
+            // matching `Grid::flatten_into`.
+            let paints_bg =
+                layer_id == 0 || (!tile.is_empty() && tile.style().background() != Color::Default);
+            if paints_bg {
                 let bg = resolve_color(tile.style().background(), DEFAULT_BG);
                 let rect = ixy::Rect::new(px_x, px_y, cell_w, cell_h);
                 self.ctx.pixel_buf.fill_rect_solid(rect, bg);
@@ -1021,5 +1041,48 @@ mod tests {
         let snapshot = row_strs.join("\n");
 
         insta::assert_snapshot!("pixel_snapshot_render_scene", snapshot);
+    }
+
+    #[test]
+    fn higher_layer_opaque_background_paints_but_empty_cell_does_not() {
+        // 2x1 grid. Layer 0 is a plain dark background across both cells.
+        // Layer 1 puts a colored background only at cell (0, 0); cell (1, 0)
+        // on layer 1 is left empty and must not disturb layer 0.
+        let opts = SoftwareBackendBuilder::new()
+            .grid_size(2, 1)
+            .scale(1)
+            .build()
+            .unwrap();
+        let mut renderer = opts.run_headless();
+
+        let base = Tile::new(
+            ' ',
+            Style::new().bg(Color::Rgb {
+                r: 20,
+                g: 20,
+                b: 20,
+            }),
+        );
+        // Layer 1 overlay: an opaque space (non-empty) with a red background.
+        let overlay = Tile::new(' ', Style::new().bg(Color::Rgb { r: 200, g: 0, b: 0 }));
+        // Layer 1 empty cell (default tile) must be skipped.
+        let empty = Tile::default();
+
+        renderer.draw_layers(
+            [
+                (0, Pos::new(0, 0), &base),
+                (0, Pos::new(1, 0), &base),
+                (1, Pos::new(0, 0), &overlay),
+                (1, Pos::new(1, 0), &empty),
+            ]
+            .into_iter(),
+        );
+
+        let pixels = renderer.pixels();
+        let cell_w = 8usize; // glyph width at scale 1
+        // Top-left pixel of cell (0, 0): the layer-1 red overlay wins.
+        assert_eq!(pixels[0] & 0x00ff_ffff, 0x00c8_0000);
+        // Top-left pixel of cell (1, 0): layer-1 cell was empty, so layer 0 shows.
+        assert_eq!(pixels[cell_w] & 0x00ff_ffff, 0x0014_1414);
     }
 }
