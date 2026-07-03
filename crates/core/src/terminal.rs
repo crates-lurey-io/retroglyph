@@ -29,6 +29,11 @@ pub struct Terminal<B: Backend> {
     queued_event: Option<Event>,
     /// The layer that `put`, `put_styled`, and `put_offset` write to.
     active_layer: u8,
+    /// `true` when the flatten buffers no longer reflect the last frame sent to
+    /// the backend (because the single-layer fast path bypassed them). The next
+    /// multi-layer present clears `flattened_previous` first so it does a full
+    /// redraw instead of diffing against stale data.
+    flattened_stale: bool,
 }
 
 impl<B: Backend> Terminal<B> {
@@ -50,6 +55,7 @@ impl<B: Backend> Terminal<B> {
             drawing_style: Style::default(),
             queued_event: None,
             active_layer: 0,
+            flattened_stale: false,
         }
     }
 
@@ -327,9 +333,22 @@ impl<B: Backend> Terminal<B> {
                 let diff = self.current.diff(&self.previous);
                 self.backend.draw_layers(diff)?;
             }
+        } else if self.current.max_layer() == 0 && self.previous.max_layer() == 0 {
+            // Fast path: only layer 0 is in play, so flattening would be an exact
+            // copy of `current`. Diff the real grids directly and skip the
+            // flatten buffers entirely.
+            let diff = self.current.diff(&self.previous);
+            self.backend.draw_layers(diff)?;
+            self.flattened_stale = true;
         } else {
             // Cell backends receive a pre-flattened, single-layer diff so layers
             // 1+ appear everywhere, not just on pixel backends.
+            if self.flattened_stale {
+                // The previous frame used the fast path, so `flattened_previous`
+                // is stale. Clear it to force a full redraw this frame.
+                self.flattened_previous.clear_all();
+                self.flattened_stale = false;
+            }
             self.current.flatten_into(&mut self.flattened_current);
             let diff = self.flattened_current.diff(&self.flattened_previous);
             self.backend.draw_layers(diff)?;
@@ -560,6 +579,48 @@ mod tests {
         let cell = term.backend().grid().get(0, 0);
         assert_eq!(cell.glyph(), ' ');
         assert_eq!(cell.style().background(), Color::RED);
+    }
+
+    #[test]
+    fn test_present_single_layer_fast_path_matches_backend() {
+        // Only layer 0 is ever touched: the fast path must still deliver the
+        // correct cells to a cell backend across multiple frames.
+        let mut term = Terminal::new(Headless::new(3, 1));
+        term.put(0, 0, 'a');
+        term.present().expect("present failed");
+        assert_eq!(term.backend().grid().get(0, 0).glyph(), 'a');
+
+        // Immediate mode: redraw 'a' and add 'c'. The diff updates the new
+        // cell while 'a' stays put.
+        term.put(0, 0, 'a');
+        term.put(2, 0, 'c');
+        term.present().expect("present failed");
+        assert_eq!(term.backend().grid().get(0, 0).glyph(), 'a');
+        assert_eq!(term.backend().grid().get(2, 0).glyph(), 'c');
+
+        // A cell that is not redrawn is erased (immediate mode).
+        term.put(0, 0, 'a');
+        term.present().expect("present failed");
+        assert_eq!(term.backend().grid().get(0, 0).glyph(), 'a');
+        assert_eq!(term.backend().grid().get(2, 0).glyph(), ' ');
+    }
+
+    #[test]
+    fn test_present_transition_single_to_multi_layer() {
+        // Start single-layer (fast path), then introduce layer 1. The frame
+        // that adds the layer must composite correctly despite the fast path
+        // having bypassed the flatten buffers.
+        let mut term = Terminal::new(Headless::new(2, 1));
+        term.layer(0).put(0, 0, '.');
+        term.layer(0).put(1, 0, '.');
+        term.present().expect("present failed");
+
+        term.layer(0).put(0, 0, '.');
+        term.layer(0).put(1, 0, '.');
+        term.layer(1).put(1, 0, '@');
+        term.present().expect("present failed");
+        assert_eq!(term.backend().grid().get(0, 0).glyph(), '.');
+        assert_eq!(term.backend().grid().get(1, 0).glyph(), '@');
     }
 
     #[test]

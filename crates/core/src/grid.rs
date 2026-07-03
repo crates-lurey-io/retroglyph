@@ -265,6 +265,16 @@ impl Grid {
         self.height
     }
 
+    /// Returns the highest layer id that has ever been allocated.
+    ///
+    /// Always at least 0 (layer 0 is always allocated). This only grows:
+    /// clearing a layer does not deallocate it, so the value does not shrink
+    /// once a higher layer has been written.
+    #[must_use]
+    pub const fn max_layer(&self) -> u8 {
+        self.max_layer
+    }
+
     /// Sets the tile at the given coordinates on layer 0.
     ///
     /// # Panics
