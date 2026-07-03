@@ -1,27 +1,24 @@
 //! Configuration, builder, and error types for the software rendering backend.
 //!
-//! The main type is [`SoftwareBackend`], which holds window and font
+//! The main type is [`SoftwareBackend`], which holds grid and font
 //! configuration.  Construct it via [`SoftwareBackendBuilder`], then call
-//! [`run_windowed`](SoftwareBackend::run_windowed) or
-//! [`run_headless`](SoftwareBackend::run_headless).
-//!
-//! Both methods produce a [`SoftwareRenderer`](crate::SoftwareRenderer)
-//! that implements [`Backend`](retroglyph_core::backend::Backend).
+//! [`run_headless`](SoftwareBackend::run_headless) to produce a
+//! [`SoftwareRenderer`](crate::SoftwareRenderer). Hand that renderer to
+//! `retroglyph_window::winit::run_windowed` to open a window, or use it
+//! directly for in-memory rendering.
 
 use super::bitmap_font::BitmapFont;
 #[cfg(feature = "software-tilesets")]
 use super::tileset::TilesetOptions;
 use std::fmt;
 
-/// Errors that can occur when initializing or running the software backend.
+/// Errors that can occur when configuring the software backend.
+///
+/// Windowing errors (window creation, event loop) are not represented here:
+/// this crate builds renderers, and the loop -- `retroglyph-window` or
+/// another windowing integration -- reports its own errors.
 #[derive(Debug)]
 pub enum SoftwareBackendError {
-    /// Failed to create the OS window.
-    WindowCreation(winit::error::OsError),
-    /// The winit event loop failed.
-    EventLoop(winit::error::EventLoopError),
-    /// The softbuffer surface returned an error.
-    Softbuffer(softbuffer::SoftBufferError),
     /// No font was provided and the `software-default-font` feature is not enabled.
     NoFont,
     /// Tileset loading failed.
@@ -32,9 +29,6 @@ pub enum SoftwareBackendError {
 impl fmt::Display for SoftwareBackendError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::WindowCreation(e) => write!(f, "window creation failed: {e}"),
-            Self::EventLoop(e) => write!(f, "event loop error: {e}"),
-            Self::Softbuffer(e) => write!(f, "softbuffer error: {e}"),
             Self::NoFont => write!(
                 f,
                 "no bitmap font provided; supply one via \
@@ -50,9 +44,6 @@ impl fmt::Display for SoftwareBackendError {
 impl std::error::Error for SoftwareBackendError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Self::WindowCreation(e) => Some(e),
-            Self::EventLoop(e) => Some(e),
-            Self::Softbuffer(e) => Some(e),
             Self::NoFont => None,
             #[cfg(feature = "software-tilesets")]
             Self::Tileset(e) => Some(e),
@@ -62,31 +53,32 @@ impl std::error::Error for SoftwareBackendError {
 
 /// Configuration and entry point for the software rendering backend.
 ///
-/// Construct this via [`SoftwareBackendBuilder`], then call either
-/// [`run_windowed`](SoftwareBackend::run_windowed) to open a window or
-/// [`run_headless`](SoftwareBackend::run_headless) for headless in-memory
-/// rendering.
-///
-/// Both methods return or run a [`SoftwareRenderer`](crate::SoftwareRenderer)
-/// that implements [`Backend`](retroglyph_core::backend::Backend).
+/// Construct this via [`SoftwareBackendBuilder`], then call
+/// [`run_headless`](SoftwareBackend::run_headless) to obtain a
+/// [`SoftwareRenderer`](crate::SoftwareRenderer) (which implements
+/// [`Backend`](retroglyph_core::backend::Backend) for in-memory use, and
+/// `retroglyph_window::Presenter` for windowed use).
 ///
 /// # Examples
 ///
-/// Windowed mode (requires `software-default-font` feature):
+/// Windowed mode (requires `software-default-font` feature; the loop comes
+/// from `retroglyph-window`):
 ///
 /// ```ignore
 /// use retroglyph_software::SoftwareBackendBuilder;
+/// use retroglyph_window::winit::{WindowConfig, run_windowed};
 /// use retroglyph_core::event::{Event, KeyCode};
 /// use std::time::Duration;
 ///
-/// let backend = SoftwareBackendBuilder::new()
-///     .title("My Game")
+/// let renderer = SoftwareBackendBuilder::new()
 ///     .grid_size(80, 25)
 ///     .scale(2)
 ///     .build()
-///     .expect("backend init failed");
+///     .expect("backend init failed")
+///     .run_headless();
 ///
-/// backend.run_windowed(move |term| {
+/// let config = WindowConfig::fit(&renderer, "My Game", None);
+/// run_windowed(config, renderer, move |term| {
 ///     term.clear();
 ///     term.print(0, 0, "Hello from rg!");
 ///     term.present();
@@ -150,7 +142,7 @@ pub struct SoftwareBackend {
     /// A scale of 2 renders each 1-bit font pixel as a 2×2 block, making
     /// the VGA 8×16 font display at 16×32 pixels per cell. Default is 1.
     pub scale: u8,
-    /// Registered tileset options, loaded at [`run_windowed`](SoftwareBackend::run_windowed) time.
+    /// Registered tileset options, loaded at [`run_headless`](SoftwareBackend::run_headless) time.
     #[cfg(feature = "software-tilesets")]
     pub tilesets: Vec<TilesetOptions>,
     /// Target frame rate cap in frames per second.
@@ -256,8 +248,8 @@ impl SoftwareBackendBuilder {
     /// Registers a tileset for loading when the backend starts.
     ///
     /// Multiple tilesets can be registered; they are all loaded when
-    /// [`run_windowed`](SoftwareBackend::run_windowed) or [`run_headless`](SoftwareBackend::run_headless)
-    /// is called. Later registrations win on codepoint collision.
+    /// [`run_headless`](SoftwareBackend::run_headless) is called. Later
+    /// registrations win on codepoint collision.
     ///
     /// Available only when the `software-tilesets` feature is enabled.
     #[cfg(feature = "software-tilesets")]
@@ -281,9 +273,9 @@ impl SoftwareBackendBuilder {
 
     /// Validates options and returns the backend configuration.
     ///
-    /// Call [`run_windowed`](SoftwareBackend::run_windowed) on the result to open the window,
-    /// or [`run_headless`](SoftwareBackend::run_headless) for headless
-    /// rendering.
+    /// Call [`run_headless`](SoftwareBackend::run_headless) on the result to
+    /// obtain the renderer (hand it to `retroglyph_window::winit::run_windowed`
+    /// to open a window).
     ///
     /// # Errors
     ///
