@@ -22,16 +22,18 @@ enum Backend {
     Terminal,
     Desktop,
     Wasm,
+    Headless,
 }
 
 impl Backend {
-    const ALL: &'static [Self] = &[Self::Terminal, Self::Desktop, Self::Wasm];
+    const ALL: &'static [Self] = &[Self::Terminal, Self::Desktop, Self::Wasm, Self::Headless];
 
     const fn label(self) -> &'static str {
         match self {
             Self::Terminal => "Terminal",
             Self::Desktop => "Desktop",
             Self::Wasm => "WASM",
+            Self::Headless => "Headless",
         }
     }
 
@@ -40,6 +42,7 @@ impl Backend {
             Self::Terminal => "runs in this shell",
             Self::Desktop => "native window",
             Self::Wasm => "browser tab (via wasm-server-runner)",
+            Self::Headless => "no display — prints a few frames to stdout",
         }
     }
 
@@ -47,13 +50,17 @@ impl Backend {
         match self {
             Self::Terminal => &["crossterm"],
             Self::Desktop | Self::Wasm => &["software-default-font"],
+            // Deliberately no backend feature: rg_run!/rg_run_software! fall
+            // back to a Headless-backend main() when neither crossterm nor
+            // software is enabled. See examples/util/mod.rs::run_headless.
+            Self::Headless => &[],
         }
     }
 
     const fn target(self) -> Option<&'static str> {
         match self {
             Self::Wasm => Some("wasm32-unknown-unknown"),
-            Self::Terminal | Self::Desktop => None,
+            Self::Terminal | Self::Desktop | Self::Headless => None,
         }
     }
 }
@@ -77,28 +84,48 @@ static EXAMPLES: &[Example] = &[
     Example {
         name: "dungeon_room",
         description: "interactive room — player, enemy, movement",
-        backends: &[Backend::Terminal, Backend::Desktop, Backend::Wasm],
+        backends: &[
+            Backend::Terminal,
+            Backend::Desktop,
+            Backend::Wasm,
+            Backend::Headless,
+        ],
         extra_features: &[],
         backend_features: &[],
     },
     Example {
         name: "sokoban",
         description: "Sokoban puzzle — push all boxes onto goals",
-        backends: &[Backend::Terminal, Backend::Desktop, Backend::Wasm],
+        backends: &[
+            Backend::Terminal,
+            Backend::Desktop,
+            Backend::Wasm,
+            Backend::Headless,
+        ],
         extra_features: &[],
         backend_features: &[],
     },
     Example {
         name: "roguelike_dungeon",
         description: "single-level roguelike — FoV, BFS pathfinding, layers",
-        backends: &[Backend::Terminal, Backend::Desktop, Backend::Wasm],
+        backends: &[
+            Backend::Terminal,
+            Backend::Desktop,
+            Backend::Wasm,
+            Backend::Headless,
+        ],
         extra_features: &[],
         backend_features: &[],
     },
     Example {
         name: "scrolling_roguelike",
         description: "scrolling roguelike — camera follow, charmap, shadowcast FoV",
-        backends: &[Backend::Terminal, Backend::Desktop, Backend::Wasm],
+        backends: &[
+            Backend::Terminal,
+            Backend::Desktop,
+            Backend::Wasm,
+            Backend::Headless,
+        ],
         extra_features: &[],
         backend_features: &[],
     },
@@ -112,16 +139,22 @@ static EXAMPLES: &[Example] = &[
     Example {
         name: "subpixel",
         description: "DVD-style bouncing @ with sub-pixel offsets",
-        backends: &[Backend::Desktop, Backend::Wasm],
+        backends: &[Backend::Desktop, Backend::Wasm, Backend::Headless],
         extra_features: &[],
         backend_features: &[],
     },
     Example {
         name: "hex_battle",
         description: "hex battle replay — hex grid, units, sidebar, playback",
-        backends: &[Backend::Terminal, Backend::Desktop, Backend::Wasm],
+        backends: &[
+            Backend::Terminal,
+            Backend::Desktop,
+            Backend::Wasm,
+            Backend::Headless,
+        ],
         // Terminal uses crossterm (ASCII art hexes).
         // Desktop/Wasm use software-tilesets for PNG hex sprites.
+        // Headless uses neither (see Backend::base_features).
         extra_features: &[],
         backend_features: &[
             (Backend::Desktop, &["software-tilesets"]),
@@ -131,21 +164,21 @@ static EXAMPLES: &[Example] = &[
     Example {
         name: "tileset",
         description: "custom PNG sprite sheets with alpha blending",
-        backends: &[Backend::Desktop, Backend::Wasm],
+        backends: &[Backend::Desktop, Backend::Wasm, Backend::Headless],
         extra_features: &["software-tilesets"],
         backend_features: &[],
     },
     Example {
         name: "sprite_stress",
         description: "alpha-blended sprite throughput benchmark",
-        backends: &[Backend::Desktop, Backend::Wasm],
+        backends: &[Backend::Desktop, Backend::Wasm, Backend::Headless],
         extra_features: &["software-tilesets"],
         backend_features: &[],
     },
     Example {
         name: "dirty_viz",
         description: "visualize which cells are redrawn each frame",
-        backends: &[Backend::Desktop, Backend::Wasm],
+        backends: &[Backend::Desktop, Backend::Wasm, Backend::Headless],
         extra_features: &[],
         backend_features: &[],
     },
@@ -169,6 +202,15 @@ fn prompt(msg: &str) -> String {
 }
 
 fn combined_features(backend: Backend, ex: &Example) -> Vec<&'static str> {
+    // Headless always runs with zero features: examples fall back to the
+    // Headless backend precisely when neither `crossterm` nor `software` is
+    // enabled (see rg_run!/rg_run_software! in examples/util/mod.rs). Mixing
+    // in an example's usual extras (e.g. software-tilesets) would enable
+    // `software` and route it to the normal windowed backend instead.
+    if backend == Backend::Headless {
+        return Vec::new();
+    }
+
     let mut features: Vec<&'static str> = backend.base_features().to_vec();
     // Per-backend overrides take priority over the shared extra_features list.
     let extras = ex

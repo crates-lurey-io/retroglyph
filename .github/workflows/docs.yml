@@ -61,12 +61,13 @@ jobs:
             --target wasm32-unknown-unknown \
             --features software-tilesets,software-default-font \
             --example tileset \
-            --example sprite_stress
+            --example sprite_stress \
+            --example hex_battle
         continue-on-error: true
 
       - name: Package WASM examples
         run: |
-          EXAMPLES=(dungeon_room sokoban roguelike_dungeon scrolling_roguelike dashboard subpixel dirty_viz tileset sprite_stress)
+          EXAMPLES=(dungeon_room sokoban roguelike_dungeon scrolling_roguelike dashboard subpixel dirty_viz tileset sprite_stress hex_battle)
           for ex in "${EXAMPLES[@]}"; do
             wasm="${PWD}/target/wasm32-unknown-unknown/release/examples/${ex}.wasm"
             if [ ! -f "$wasm" ]; then
@@ -103,7 +104,7 @@ jobs:
           mkdir -p target/doc/examples
           # Only list examples that were actually built.
           entries=""
-          for ex in dungeon_room sokoban roguelike_dungeon scrolling_roguelike dashboard subpixel dirty_viz tileset sprite_stress; do
+          for ex in dungeon_room sokoban roguelike_dungeon scrolling_roguelike dashboard subpixel dirty_viz tileset sprite_stress hex_battle; do
             if [ -f "target/doc/examples/${ex}/index.html" ]; then
               entries="${entries}<li><a href=\"${ex}/\">${ex}</a></li>"$'\n'
             fi

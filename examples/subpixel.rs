@@ -223,6 +223,7 @@ fn tick(term: &mut Terminal<impl retroglyph::Backend>, s: &mut BounceState) -> b
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
+#[cfg(feature = "software")]
 use retroglyph::backend::software::SoftwareBackendBuilder;
 
 rg_run_software!(

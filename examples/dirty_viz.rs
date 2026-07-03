@@ -27,6 +27,7 @@
 
 mod util;
 
+#[cfg(feature = "software")]
 use retroglyph::backend::software::SoftwareBackendBuilder;
 use retroglyph::color::Color;
 use retroglyph::style::Style;

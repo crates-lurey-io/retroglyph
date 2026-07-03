@@ -66,11 +66,13 @@ name = "dungeon_room"
 
 [[example]]
 name = "tileset"
-required-features = ["software-tilesets", "software-default-font"]
+# Needs software-tilesets,software-default-font to actually render.
+# Falls back to a headless smoke run when neither is enabled (see rg_run_software!).
 
 [[example]]
 name = "subpixel"
-required-features = ["software-default-font"]
+# Needs software-default-font to actually render.
+# Falls back to a headless smoke run when disabled (see rg_run_software!).
 
 [[example]]
 name = "hex_battle"
