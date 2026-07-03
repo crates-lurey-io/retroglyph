@@ -16,7 +16,9 @@
 
 mod util;
 
+#[cfg(feature = "software")]
 use retroglyph::backend::software::SoftwareBackendBuilder;
+#[cfg(feature = "software-tilesets")]
 use retroglyph::backend::software::tileset::TilesetOptions;
 use retroglyph::event::{Event, KeyCode};
 use retroglyph::style::Style;
@@ -29,6 +31,7 @@ use util::perf::PerfOverlay;
 // Four 8×8 one-bit sprites packed into a single RGBA PNG.  Copied from
 // `tileset.rs` so each example remains self-contained.
 
+#[cfg(feature = "software-tilesets")]
 const SPRITE_SWORD: [u8; 8] = [
     0b0000_0011,
     0b0000_0110,
@@ -40,6 +43,7 @@ const SPRITE_SWORD: [u8; 8] = [
     0b1001_0000,
 ];
 
+#[cfg(feature = "software-tilesets")]
 const SPRITE_POTION: [u8; 8] = [
     0b0001_1000,
     0b0001_1000,
@@ -51,6 +55,7 @@ const SPRITE_POTION: [u8; 8] = [
     0b0001_1000,
 ];
 
+#[cfg(feature = "software-tilesets")]
 const SPRITE_SKULL: [u8; 8] = [
     0b0001_1000,
     0b0011_1100,
@@ -62,6 +67,7 @@ const SPRITE_SKULL: [u8; 8] = [
     0b0011_1100,
 ];
 
+#[cfg(feature = "software-tilesets")]
 const SPRITE_COIN: [u8; 8] = [
     0b0011_1100,
     0b0100_0010,
@@ -73,11 +79,17 @@ const SPRITE_COIN: [u8; 8] = [
     0b0011_1100,
 ];
 
+/// Number of distinct sprite tiles in the generated sheet (kept in sync
+/// with `SPRITE_DEFS` below, which only exists under software-tilesets).
+const SPRITE_COUNT: u32 = 4;
+
+#[cfg(feature = "software-tilesets")]
 struct SpriteDef {
     bits: &'static [u8; 8],
     color: (u8, u8, u8),
 }
 
+#[cfg(feature = "software-tilesets")]
 const SPRITE_DEFS: &[SpriteDef] = &[
     SpriteDef {
         bits: &SPRITE_SWORD,
@@ -98,13 +110,13 @@ const SPRITE_DEFS: &[SpriteDef] = &[
 ];
 
 /// Build a 4-tile RGBA PNG sprite sheet from the bit-pattern definitions above.
+#[cfg(feature = "software-tilesets")]
 fn make_sprite_sheet() -> Vec<u8> {
     use image::ImageEncoder;
 
     let tile_w = 8u32;
     let tile_h = 8u32;
-    #[allow(clippy::cast_possible_truncation)]
-    let cols = SPRITE_DEFS.len() as u32;
+    let cols = SPRITE_COUNT;
     let (img_w, img_h) = (tile_w * cols, tile_h);
     let mut pixels = vec![0u8; (img_w * img_h * 4) as usize];
 
@@ -228,7 +240,7 @@ impl StressState {
             };
 
             #[allow(clippy::cast_possible_truncation)]
-            let tile = (rng.next() % u64::try_from(SPRITE_DEFS.len()).unwrap()) as u32;
+            let tile = (rng.next() % u64::from(SPRITE_COUNT)) as u32;
             let color = PALETTE
                 [usize::try_from(rng.next() % u64::try_from(PALETTE.len()).unwrap()).unwrap()];
 

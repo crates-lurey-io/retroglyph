@@ -11,6 +11,48 @@ pub mod lcg;
 pub mod perf;
 pub mod timestep;
 
+/// Fallback `main` body for `rg_run!`/`rg_run_software!` when neither the
+/// `crossterm` nor `software` feature is enabled.
+///
+/// Runs `init` once against a fresh [`Headless`] backend, then ticks a small
+/// fixed number of frames, printing each frame's grid to stdout. No terminal
+/// or window is involved, and no input is ever injected — `tick` only ever
+/// sees an empty event queue, so purely time-driven demos (e.g. `subpixel`,
+/// `dirty_viz`) show motion across frames while input-driven demos just
+/// repeat their initial state.
+///
+/// This exists so every example keeps a `main` (and stays `cargo build`-able)
+/// with the crate's default feature set, and so `examples/runner.rs` can
+/// offer a "Headless" backend option uniformly across examples instead of
+/// requiring each one to opt in individually. Frame count defaults to 3 and
+/// can be overridden with the `RG_HEADLESS_FRAMES` environment variable.
+///
+/// [`Headless`]: retroglyph::backend::Headless
+#[doc(hidden)]
+pub fn run_headless<S>(
+    mut init: impl FnMut(&mut retroglyph::Terminal<retroglyph::backend::Headless>) -> S,
+    mut tick: impl FnMut(&mut retroglyph::Terminal<retroglyph::backend::Headless>, &mut S) -> bool,
+) {
+    let frames: u32 = std::env::var("RG_HEADLESS_FRAMES")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .filter(|&n| n > 0)
+        .unwrap_or(3);
+
+    let backend = retroglyph::backend::Headless::new(50, 25);
+    let mut term = retroglyph::Terminal::new(backend);
+    let mut state = init(&mut term);
+
+    for frame in 1..=frames {
+        if !tick(&mut term, &mut state) {
+            println!("--- Frame {frame}: quit requested ---");
+            break;
+        }
+        println!("--- Frame {frame} ---");
+        println!("{}", term.backend().grid());
+    }
+}
+
 /// Adapter turning an `init` + `tick` closure pair into an [`App`].
 ///
 /// `tick` keeps its `(&mut Terminal, &mut State) -> bool` shape (return `false`
@@ -66,10 +108,12 @@ where
 /// - When `software` is enabled (takes priority): runs the software renderer's
 ///   inverted driver. On `wasm32`, also emits a `wasm_bindgen(start)` entry.
 /// - When only `crossterm` is enabled: runs the generic blocking driver.
+/// - When neither is enabled: falls back to [`run_headless`], ticking a few
+///   frames against a [`Headless`] backend and printing them to stdout. This
+///   keeps every example buildable with the crate's default features and
+///   backs `examples/runner.rs`'s "Headless" backend option.
 ///
-/// If neither backend feature is enabled the crate fails to compile with a
-/// missing entry point error — add `--features crossterm` or
-/// `--features software-default-font`.
+/// [`Headless`]: retroglyph::backend::Headless
 ///
 /// # Arguments
 ///
@@ -140,6 +184,12 @@ macro_rules! rg_run {
             let app = $crate::util::ClosureApp::new(__rg_init, __rg_tick);
             ::retroglyph::backend::Crossterm::run(app)
         }
+
+        // ── Headless fallback (no backend feature enabled) ────────────────
+        #[cfg(not(any(feature = "crossterm", feature = "software")))]
+        fn main() {
+            $crate::util::run_headless(__rg_init, __rg_tick);
+        }
     };
 }
 
@@ -149,7 +199,11 @@ macro_rules! rg_run {
 /// Use this for examples that need custom grid dimensions, scale, tilesets,
 /// or any other builder option that differs from `rg_run!`'s defaults.
 /// Unlike `rg_run!`, no crossterm branch is emitted — these examples only run
-/// on the desktop or WASM software renderer.
+/// on the desktop or WASM software renderer. When `software` is disabled,
+/// falls back to [`run_headless`] like `rg_run!` does, so the example still
+/// builds by default and supports `examples/runner.rs`'s "Headless" backend.
+///
+/// [`run_headless`]: crate::util::run_headless
 ///
 /// # Arguments
 ///
@@ -208,6 +262,12 @@ macro_rules! rg_run_software {
         pub fn wasm_main() -> ::std::result::Result<(), ::wasm_bindgen::JsValue> {
             main();
             ::std::result::Result::Ok(())
+        }
+
+        // ── Headless fallback (software feature disabled) ───────────────────
+        #[cfg(not(feature = "software"))]
+        fn main() {
+            $crate::util::run_headless(__rg_init, __rg_tick);
         }
     };
 }

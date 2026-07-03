@@ -130,8 +130,9 @@ crate::rg_run_software!(
 #[cfg(all(feature = "crossterm", not(feature = "software-tilesets")))]
 crate::rg_run!(State, init, tick);
 
+// Neither pixel-rendered sprites nor an ASCII-art terminal are available;
+// fall back to a headless smoke run (see `examples/runner.rs`'s Headless option).
 #[cfg(not(any(feature = "software-tilesets", feature = "crossterm")))]
-compile_error!(
-    "hex_battle requires `software-tilesets` (preferred) or `crossterm`.\n\
-     Run with: --features software-tilesets,software-default-font"
-);
+fn main() {
+    util::run_headless(init, tick);
+}
