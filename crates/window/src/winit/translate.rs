@@ -52,7 +52,7 @@ pub fn translate_key(input: winit::event::KeyEvent, modifiers: KeyModifiers) -> 
         _ => return None,
     };
 
-    Some(Event::Key(KeyEvent { code, modifiers }))
+    Some(Event::Key(KeyEvent::new(code, modifiers)))
 }
 
 /// Converts a raw f64 cursor position to a [`PhysicalPos`].

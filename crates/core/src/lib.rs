@@ -34,7 +34,8 @@ pub use backend::{Backend, Headless};
 pub use camera::Camera;
 pub use color::{AnsiColor, Color, InvalidAnsiIndex};
 pub use event::{
-    Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind, PhysicalPos,
+    Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, KeyState, MouseButton, MouseEvent,
+    MouseEventKind, PhysicalPos,
 };
 pub use frame_clock::FrameClock;
 pub use grid::{Grid, Pos, Rect, Size};

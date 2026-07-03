@@ -104,10 +104,10 @@ fn test_e2e_headless_demo_scenario() {
     assert_eq!(term.backend().grid().to_string(), expected_frame_1);
 
     // 2. Inject movement input and consume it
-    term.backend_mut().push_event(Event::Key(KeyEvent {
-        code: KeyCode::Right,
-        modifiers: KeyModifiers::NONE,
-    }));
+    term.backend_mut().push_event(Event::Key(KeyEvent::new(
+        KeyCode::Right,
+        KeyModifiers::NONE,
+    )));
 
     let event = term.read();
     let mut player_x = 5;
@@ -146,10 +146,7 @@ fn test_e2e_headless_demo_scenario() {
 // ── drain_events tests ────────────────────────────────────────────────────
 
 const fn key(c: char) -> Event {
-    Event::Key(KeyEvent {
-        code: KeyCode::Char(c),
-        modifiers: KeyModifiers::NONE,
-    })
+    Event::Key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE))
 }
 
 #[test]

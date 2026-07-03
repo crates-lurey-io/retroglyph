@@ -22,10 +22,10 @@ fn main() {
     println!("{}", term.backend().grid());
 
     // Inject a move-right event, then let tick consume it
-    term.backend_mut().push_event(Event::Key(KeyEvent {
-        code: KeyCode::Right,
-        modifiers: KeyModifiers::NONE,
-    }));
+    term.backend_mut().push_event(Event::Key(KeyEvent::new(
+        KeyCode::Right,
+        KeyModifiers::NONE,
+    )));
 
     tick(&mut term, &mut state);
     println!("--- Frame 2 (after move right) ---");

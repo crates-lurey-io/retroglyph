@@ -447,10 +447,10 @@ fn from_crossterm_event(event: crossterm::event::Event) -> Result<Event, ()> {
                 return Err(());
             }
 
-            Ok(Event::Key(retroglyph_core::event::KeyEvent {
-                code: from_crossterm_key_code(k.code)?,
-                modifiers: from_crossterm_key_modifiers(k.modifiers),
-            }))
+            Ok(Event::Key(retroglyph_core::event::KeyEvent::new(
+                from_crossterm_key_code(k.code)?,
+                from_crossterm_key_modifiers(k.modifiers),
+            )))
         }
         CE::Mouse(m) => Ok(Event::Mouse(from_crossterm_mouse_event(m)?)),
         CE::Resize(w, h) => Ok(Event::Resize(w, h)),
