@@ -7,6 +7,13 @@
 //! disconnected pipe or closed terminal. Future versions of the trait may add
 //! error-returning variants.
 
+// Compile the code blocks in the project README as doctests so the quick-start
+// example is type-checked on every test run and cannot silently rot. The
+// `cfg(doctest)` gate keeps this out of the rendered crate documentation.
+#[cfg(doctest)]
+#[doc = include_str!("../../../README.md")]
+struct ReadmeDoctests;
+
 use core::time::Duration;
 use retroglyph_core::backend::Backend;
 use retroglyph_core::event::Event;

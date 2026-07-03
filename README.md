@@ -4,7 +4,7 @@
 
 A 2D pseudographic terminal library for Rust.
 
-![crossterm demo](tests/snapshots/demo.svg)
+![crossterm demo](crates/examples/tests/snapshots/demo.svg)
 
 `retroglyph` provides a styled character grid, double-buffered rendering, and pluggable backends.
 
@@ -122,24 +122,30 @@ Disable the `std` feature (requires an allocator). Useful for embedded or kernel
 
 ## Quick start
 
+The library is split into a `no_std` core plus per-backend crates. For a terminal app you need the
+core and the crossterm backend:
+
 ```toml
 [dependencies]
-retroglyph = { version = "0.1", features = ["crossterm"] }
+retroglyph-core = "0.2"
+retroglyph-crossterm = "0.2"
 ```
 
-```rust
-use retroglyph::{Terminal, backend::Crossterm, color::Color, event::{Event, KeyCode}};
+```rust,no_run
+use retroglyph_core::{Terminal, Color, event::{Event, KeyCode}};
+use retroglyph_crossterm::Crossterm;
 
 fn main() -> std::io::Result<()> {
     let mut term = Terminal::new(Crossterm::new()?);
     loop {
-        term.clear();
         term.fg(Color::GREEN);
         term.put(5, 5, '@');
-        term.present();
+        term.present()?;
 
         if let Some(Event::Key(k)) = term.poll(std::time::Duration::from_secs(1)) {
-            if k.code == KeyCode::Char('q') { break; }
+            if k.code == KeyCode::Char('q') {
+                break;
+            }
         }
     }
     Ok(())
@@ -149,5 +155,5 @@ fn main() -> std::io::Result<()> {
 Run the interactive demo:
 
 ```sh
-cargo run --example demo --features crossterm
+cargo run --example dungeon_room --features crossterm
 ```
