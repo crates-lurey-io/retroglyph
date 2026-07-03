@@ -1,0 +1,728 @@
+//! The winit event loop and the windowed app drivers.
+//!
+//! [`run_windowed`] drives a raw `FnMut(&mut Terminal<..>)` closure;
+//! [`run_app`] drives an [`App`](retroglyph_core::App) (the inverted driver
+//! from ADR 015 Decision 2 — winit owns the loop, so this cannot be core's
+//! generic [`run_blocking`](retroglyph_core::run_blocking)).
+
+use super::translate::{
+    physical_pos_from, pixel_to_cell, translate_key, translate_modifiers, translate_mouse_button,
+};
+use crate::backend::WindowBackend;
+use crate::presenter::Presenter;
+use retroglyph_core::Terminal;
+use retroglyph_core::backend::Backend;
+use retroglyph_core::event::{Event, KeyModifiers, MouseEvent, MouseEventKind, PhysicalPos};
+use std::sync::Arc;
+#[cfg(not(target_arch = "wasm32"))]
+use std::time::Duration;
+use winit::application::ApplicationHandler;
+use winit::event::WindowEvent;
+use winit::event_loop::{ActiveEventLoop, EventLoop};
+use winit::window::{Window, WindowId};
+
+/// Window configuration for [`run_windowed`] / [`run_app`].
+///
+/// Deliberately renderer-agnostic: pixel dimensions, not grid/font/scale.
+/// Use [`fit`](Self::fit) to derive the pixel size from a presenter's own
+/// cell geometry.
+pub struct WindowConfig {
+    /// Window title.
+    pub title: String,
+    /// Initial inner width in physical pixels.
+    pub width: u32,
+    /// Initial inner height in physical pixels.
+    pub height: u32,
+    /// Optional frame-rate cap. `None` = uncapped (native) / display refresh
+    /// (wasm, which is always rAF-driven).
+    pub target_fps: Option<u32>,
+}
+
+impl WindowConfig {
+    /// Size the window to exactly fit `presenter`'s grid:
+    /// `cols x cell_w` by `rows x cell_h` physical pixels.
+    ///
+    /// This is why renderer crates don't need their own windowing code: the
+    /// grid/cell geometry already lives behind [`Presenter::size`] and
+    /// [`Presenter::cell_size`].
+    #[must_use]
+    pub fn fit<P: Presenter>(
+        presenter: &P,
+        title: impl Into<String>,
+        target_fps: Option<u32>,
+    ) -> Self {
+        let grid = presenter.size();
+        let (cell_w, cell_h) = presenter.cell_size();
+        Self {
+            title: title.into(),
+            width: u32::from(grid.width) * cell_w,
+            height: u32::from(grid.height) * cell_h,
+            target_fps,
+        }
+    }
+}
+
+/// Open a window and drive `app_loop` from the winit event loop.
+///
+/// On native this blocks the calling thread until the loop exits; on wasm it
+/// returns immediately and the loop continues on `requestAnimationFrame`.
+///
+/// The closure receives `&mut Terminal<WindowBackend<P>>` and is called on
+/// every frame tick. Window close pushes [`Event::Close`] into the event
+/// queue rather than exiting: the game decides when to terminate.
+///
+/// # Errors
+///
+/// Returns [`winit::error::EventLoopError`] if the event loop cannot be
+/// created or fails while running.
+pub fn run_windowed<P, F>(
+    config: WindowConfig,
+    presenter: P,
+    app_loop: F,
+) -> Result<(), winit::error::EventLoopError>
+where
+    P: Presenter + 'static,
+    F: FnMut(&mut Terminal<WindowBackend<P>>) + 'static,
+{
+    let terminal = Terminal::new(WindowBackend::new(presenter));
+    let event_loop = EventLoop::new()?;
+
+    #[cfg(not(target_arch = "wasm32"))]
+    let frame_interval = config
+        .target_fps
+        .map(|fps| Duration::from_secs_f64(1.0 / f64::from(fps)));
+
+    let app = WindowApp {
+        terminal: Some(terminal),
+        app_loop,
+        window: None,
+        title: config.title,
+        init_size: InitWindowSize {
+            width: config.width,
+            height: config.height,
+        },
+        current_modifiers: KeyModifiers::NONE,
+        cursor_px: (0.0, 0.0),
+        #[cfg(not(target_arch = "wasm32"))]
+        frame_interval,
+        #[cfg(not(target_arch = "wasm32"))]
+        next_frame: std::time::Instant::now(),
+    };
+
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let mut app = app;
+        event_loop.run_app(&mut app)
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    {
+        use winit::platform::web::EventLoopExtWebSys;
+        event_loop.spawn_app(app);
+        Ok(())
+    }
+}
+
+/// Drive an [`App`](retroglyph_core::App) from the windowed event loop (the
+/// inverted driver, ADR 015 Decision 2 piece 3).
+///
+/// Each frame builds a [`Frame`](retroglyph_core::Frame) (wall-clock `dt` on
+/// native, `ZERO` on wasm where `std::time::Instant` is unavailable) and
+/// calls [`step`](retroglyph_core::step).
+///
+/// On [`Flow::Exit`](retroglyph_core::Flow) the process exits on native (the
+/// window is torn down); on wasm the requestAnimationFrame loop cannot be
+/// stopped, so exit is a no-op.
+///
+/// # Errors
+///
+/// Returns [`winit::error::EventLoopError`] if the event loop cannot be
+/// created or fails while running.
+pub fn run_app<P, A>(
+    config: WindowConfig,
+    presenter: P,
+    mut app: A,
+) -> Result<(), winit::error::EventLoopError>
+where
+    P: Presenter + 'static,
+    A: retroglyph_core::App<WindowBackend<P>> + 'static,
+{
+    let mut number = 0u64;
+    #[cfg(not(target_arch = "wasm32"))]
+    let mut last = std::time::Instant::now();
+    run_windowed(config, presenter, move |term| {
+        #[cfg(not(target_arch = "wasm32"))]
+        let dt = {
+            let now = std::time::Instant::now();
+            let elapsed = now.duration_since(last);
+            last = now;
+            elapsed
+        };
+        #[cfg(target_arch = "wasm32")]
+        let dt = core::time::Duration::ZERO;
+        let frame = retroglyph_core::Frame { dt, number };
+        number = number.wrapping_add(1);
+        if retroglyph_core::step(term, &mut app, &frame) == retroglyph_core::Flow::Exit {
+            #[cfg(not(target_arch = "wasm32"))]
+            std::process::exit(0);
+        }
+    })
+}
+
+/// Initial window dimensions used before the first Resized event.
+struct InitWindowSize {
+    width: u32,
+    height: u32,
+}
+
+/// The winit `ApplicationHandler`: owns the window, the terminal, and the
+/// per-frame closure.
+struct WindowApp<P: Presenter, F> {
+    terminal: Option<Terminal<WindowBackend<P>>>,
+    app_loop: F,
+    window: Option<Arc<Window>>,
+    title: String,
+    init_size: InitWindowSize,
+    /// Current modifier key state, updated by `ModifiersChanged` events.
+    current_modifiers: KeyModifiers,
+    /// Last known cursor position in physical pixels.
+    cursor_px: (f64, f64),
+    /// Optional frame interval for `WaitUntil` throttling. `None` = unbounded.
+    #[cfg(not(target_arch = "wasm32"))]
+    frame_interval: Option<Duration>,
+    /// Deadline for the next frame when `frame_interval` is set.
+    #[cfg(not(target_arch = "wasm32"))]
+    next_frame: std::time::Instant,
+}
+
+impl<P: Presenter, F> WindowApp<P, F> {
+    /// Create the window and initialize the surface.
+    ///
+    /// Returns `Some(window)` on success, logs and returns `None` on failure.
+    fn create_window_and_surface(&mut self, event_loop: &ActiveEventLoop) -> Option<Arc<Window>> {
+        let attrs = Window::default_attributes()
+            .with_title(&self.title)
+            .with_inner_size(winit::dpi::PhysicalSize::new(
+                self.init_size.width,
+                self.init_size.height,
+            ));
+
+        #[cfg(target_family = "wasm")]
+        let attrs = {
+            use winit::platform::web::WindowAttributesExtWebSys;
+            attrs.with_append(true)
+        };
+
+        let window = Arc::new(match event_loop.create_window(attrs) {
+            Ok(w) => w,
+            Err(e) => {
+                log::error!("window creation failed: {e}");
+                event_loop.exit();
+                return None;
+            }
+        });
+
+        if let Some(term) = self.terminal.as_mut() {
+            // Hand the presenter a windowing-library-agnostic handle (see
+            // `Presenter::init_surface`); the winit window stays owned here.
+            let handle: Arc<dyn crate::presenter::WindowHandle> = window.clone();
+            if let Err(e) = term.backend_mut().presenter_mut().init_surface(handle) {
+                log::error!("surface init failed: {e}");
+                event_loop.exit();
+                return None;
+            }
+            // Set the initial surface size (required on WASM before first present).
+            term.backend_mut()
+                .presenter_mut()
+                .resize_surface(self.init_size.width, self.init_size.height);
+        }
+
+        Some(window)
+    }
+}
+
+impl<P, F> ApplicationHandler for WindowApp<P, F>
+where
+    P: Presenter,
+    F: FnMut(&mut Terminal<WindowBackend<P>>) + 'static,
+{
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        if let Some(window) = self.create_window_and_surface(event_loop) {
+            self.window = Some(window);
+        }
+    }
+
+    fn window_event(
+        &mut self,
+        _event_loop: &ActiveEventLoop,
+        _window_id: WindowId,
+        event: WindowEvent,
+    ) {
+        self.handle_window_event(event);
+    }
+
+    fn about_to_wait(
+        &mut self,
+        #[cfg_attr(target_arch = "wasm32", allow(unused_variables))] event_loop: &ActiveEventLoop,
+    ) {
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(interval) = self.frame_interval {
+            // Throttled: sleep until the next frame deadline, then render.
+            let now = std::time::Instant::now();
+            if self.next_frame > now {
+                event_loop
+                    .set_control_flow(winit::event_loop::ControlFlow::WaitUntil(self.next_frame));
+                return;
+            }
+            // Advance the deadline by one interval, clamping to now so a
+            // slow frame doesn't cause a burst of catch-up renders.
+            self.next_frame = (self.next_frame + interval).max(now);
+        }
+        if let Some(window) = &self.window {
+            window.request_redraw();
+        }
+    }
+}
+
+impl<P, F> WindowApp<P, F>
+where
+    P: Presenter,
+    F: FnMut(&mut Terminal<WindowBackend<P>>) + 'static,
+{
+    /// Dispatch a [`WindowEvent`] without requiring an [`ActiveEventLoop`].
+    ///
+    /// Extracted from the `ApplicationHandler` impl so the translation and
+    /// event-buffer logic can be called directly in unit tests, where
+    /// [`ActiveEventLoop`] is not constructable.
+    fn handle_window_event(&mut self, event: WindowEvent) {
+        match event {
+            WindowEvent::CloseRequested => {
+                // Push the event so the game loop can process it (save game,
+                // confirm dialog, etc.).  Do not call event_loop.exit() here;
+                // the game decides when to terminate.
+                if let Some(term) = self.terminal.as_mut() {
+                    term.backend_mut().push_event(Event::Close);
+                }
+            }
+            WindowEvent::Resized(size) => self.on_resized(size),
+            WindowEvent::CursorMoved { position, .. } => self.on_cursor_moved(position),
+            WindowEvent::MouseInput { state, button, .. } => self.on_mouse_input(state, button),
+            WindowEvent::MouseWheel { delta, .. } => self.on_mouse_wheel(delta),
+            WindowEvent::ModifiersChanged(mods) => {
+                self.current_modifiers = translate_modifiers(mods.state());
+            }
+            WindowEvent::KeyboardInput { event, .. } => {
+                if let Some(term) = self.terminal.as_mut()
+                    && let Some(e) = translate_key(event, self.current_modifiers)
+                {
+                    term.backend_mut().push_event(e);
+                }
+            }
+
+            WindowEvent::RedrawRequested => {
+                let Some(term) = self.terminal.as_mut() else {
+                    return;
+                };
+                (self.app_loop)(term);
+                if let Err(e) = term.backend_mut().presenter_mut().present() {
+                    log::error!("frame present failed: {e}");
+                }
+            }
+
+            _ => {}
+        }
+    }
+
+    fn on_resized(&mut self, size: winit::dpi::PhysicalSize<u32>) {
+        let Some(term) = self.terminal.as_mut() else {
+            return;
+        };
+        let (cell_w, cell_h) = term.backend().presenter().cell_size();
+        let cols = size.width / cell_w;
+        let rows = size.height / cell_h;
+        term.backend_mut()
+            .presenter_mut()
+            .resize_surface(cols * cell_w, rows * cell_h);
+        #[allow(clippy::cast_possible_truncation)]
+        term.backend_mut()
+            .push_event(Event::Resize(cols.max(1) as u16, rows.max(1) as u16));
+    }
+
+    fn on_cursor_moved(&mut self, position: winit::dpi::PhysicalPosition<f64>) {
+        self.cursor_px = (position.x, position.y);
+        let px = physical_pos_from(position.x, position.y);
+        let Some(term) = self.terminal.as_mut() else {
+            return;
+        };
+        let (cell_w, cell_h) = term.backend().presenter().cell_size();
+        let pos = pixel_to_cell(position.x, position.y, cell_w, cell_h);
+        term.backend_mut().push_event(Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Moved,
+            position: pos,
+            pixel_position: Some(px),
+            modifiers: self.current_modifiers,
+        }));
+    }
+
+    fn on_mouse_input(
+        &mut self,
+        state: winit::event::ElementState,
+        button: winit::event::MouseButton,
+    ) {
+        let Some(btn) = translate_mouse_button(button) else {
+            return;
+        };
+        let px = self.cursor_physical_pos();
+        let Some(term) = self.terminal.as_mut() else {
+            return;
+        };
+        let (cell_w, cell_h) = term.backend().presenter().cell_size();
+        let pos = pixel_to_cell(self.cursor_px.0, self.cursor_px.1, cell_w, cell_h);
+        let kind = if state.is_pressed() {
+            MouseEventKind::Down(btn)
+        } else {
+            MouseEventKind::Up(btn)
+        };
+        term.backend_mut().push_event(Event::Mouse(MouseEvent {
+            kind,
+            position: pos,
+            pixel_position: Some(px),
+            modifiers: self.current_modifiers,
+        }));
+    }
+
+    fn on_mouse_wheel(&mut self, delta: winit::event::MouseScrollDelta) {
+        let px = self.cursor_physical_pos();
+        let Some(term) = self.terminal.as_mut() else {
+            return;
+        };
+        let (cell_w, cell_h) = term.backend().presenter().cell_size();
+        let pos = pixel_to_cell(self.cursor_px.0, self.cursor_px.1, cell_w, cell_h);
+        let scroll_y = match delta {
+            winit::event::MouseScrollDelta::LineDelta(_, y) => f64::from(y),
+            winit::event::MouseScrollDelta::PixelDelta(p) => p.y,
+        };
+        let kind = if scroll_y > 0.0 {
+            MouseEventKind::ScrollUp
+        } else {
+            MouseEventKind::ScrollDown
+        };
+        term.backend_mut().push_event(Event::Mouse(MouseEvent {
+            kind,
+            position: pos,
+            pixel_position: Some(px),
+            modifiers: self.current_modifiers,
+        }));
+    }
+
+    /// Convert the cached cursor pixel position to [`PhysicalPos`].
+    const fn cursor_physical_pos(&self) -> PhysicalPos {
+        physical_pos_from(self.cursor_px.0, self.cursor_px.1)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use retroglyph_core::event::{MouseButton, MouseEvent, MouseEventKind};
+    use retroglyph_core::grid::{Pos, Size};
+    use retroglyph_core::tile::Tile;
+    use std::time::Duration;
+
+    /// A dependency-free [`Presenter`] with fixed 8x16 cells.
+    ///
+    /// The `WindowApp` tests only exercise event translation, cell math, and
+    /// the `WindowBackend` queue — no rasterization or surface is needed.
+    struct MockPresenter;
+
+    impl Presenter for MockPresenter {
+        type Error = core::convert::Infallible;
+        type SurfaceError = core::convert::Infallible;
+
+        fn draw<'a, I>(&mut self, _content: I) -> Result<(), Self::Error>
+        where
+            I: Iterator<Item = (Pos, &'a Tile)>,
+        {
+            Ok(())
+        }
+
+        fn draw_layers<'a, I>(&mut self, _content: I) -> Result<(), Self::Error>
+        where
+            I: Iterator<Item = (u8, Pos, &'a Tile)>,
+        {
+            Ok(())
+        }
+
+        fn flush(&mut self) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        fn size(&self) -> Size {
+            Size {
+                width: 10,
+                height: 5,
+            }
+        }
+
+        fn clear(&mut self) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        fn resize(&mut self, _size: Size) {}
+
+        fn init_surface(
+            &mut self,
+            _window: Arc<dyn crate::presenter::WindowHandle>,
+        ) -> Result<(), Self::SurfaceError> {
+            Ok(())
+        }
+
+        fn resize_surface(&mut self, _width: u32, _height: u32) {}
+
+        fn present(&mut self) -> Result<(), Self::SurfaceError> {
+            Ok(())
+        }
+
+        fn cell_size(&self) -> (u32, u32) {
+            (8, 16)
+        }
+    }
+
+    type MockApp = WindowApp<MockPresenter, fn(&mut Terminal<WindowBackend<MockPresenter>>)>;
+
+    fn test_window_app() -> MockApp {
+        let terminal = Terminal::new(WindowBackend::new(MockPresenter));
+        WindowApp {
+            terminal: Some(terminal),
+            app_loop: |_| {},
+            window: None,
+            title: String::new(),
+            init_size: InitWindowSize {
+                width: 80,
+                height: 80,
+            },
+            current_modifiers: KeyModifiers::NONE,
+            cursor_px: (0.0, 0.0),
+            #[cfg(not(target_arch = "wasm32"))]
+            frame_interval: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            next_frame: std::time::Instant::now(),
+        }
+    }
+
+    fn poll(app: &mut MockApp) -> Option<Event> {
+        app.terminal
+            .as_mut()
+            .unwrap()
+            .backend_mut()
+            .poll_event(Duration::ZERO)
+    }
+
+    // ── WindowBackend queue ───────────────────────────────────────────────────
+
+    #[test]
+    fn mouse_event_round_trips_through_event_buffer() {
+        let mut backend = WindowBackend::new(MockPresenter);
+        let ev = Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            position: Pos { x: 3, y: 1 },
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        });
+        backend.push_event(ev);
+        assert_eq!(backend.poll_event(Duration::ZERO), Some(ev));
+        assert_eq!(backend.poll_event(Duration::ZERO), None);
+    }
+
+    #[test]
+    fn multiple_mouse_events_preserve_fifo_order() {
+        let mut backend = WindowBackend::new(MockPresenter);
+        let moved = Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Moved,
+            position: Pos { x: 1, y: 2 },
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        });
+        let clicked = Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            position: Pos { x: 1, y: 2 },
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        });
+        backend.push_event(moved);
+        backend.push_event(clicked);
+        assert_eq!(backend.poll_event(Duration::ZERO), Some(moved));
+        assert_eq!(backend.poll_event(Duration::ZERO), Some(clicked));
+    }
+
+    // ── handle_window_event ──────────────────────────────────────────────────
+
+    #[test]
+    fn cursor_moved_pushes_moved_event_at_correct_cell() {
+        // 8-wide × 16-tall cells; cursor at pixel (20, 32) → col 2, row 2.
+        let mut app = test_window_app();
+        app.handle_window_event(WindowEvent::CursorMoved {
+            device_id: winit::event::DeviceId::dummy(),
+            position: winit::dpi::PhysicalPosition::new(20.0_f64, 32.0_f64),
+        });
+        assert_eq!(
+            poll(&mut app),
+            Some(Event::Mouse(MouseEvent {
+                kind: MouseEventKind::Moved,
+                position: Pos { x: 2, y: 2 },
+                pixel_position: Some(PhysicalPos { x: 20, y: 32 }),
+                modifiers: KeyModifiers::NONE,
+            }))
+        );
+    }
+
+    #[test]
+    fn cursor_moved_caches_position_for_subsequent_click() {
+        // Move to pixel (16, 16) = col 2, row 1, then click — button event
+        // must reuse the cached position.
+        let mut app = test_window_app();
+        app.handle_window_event(WindowEvent::CursorMoved {
+            device_id: winit::event::DeviceId::dummy(),
+            position: winit::dpi::PhysicalPosition::new(16.0_f64, 16.0_f64),
+        });
+        let _ = poll(&mut app); // discard the Moved event
+        app.handle_window_event(WindowEvent::MouseInput {
+            device_id: winit::event::DeviceId::dummy(),
+            state: winit::event::ElementState::Pressed,
+            button: winit::event::MouseButton::Left,
+        });
+        assert_eq!(
+            poll(&mut app),
+            Some(Event::Mouse(MouseEvent {
+                kind: MouseEventKind::Down(MouseButton::Left),
+                position: Pos { x: 2, y: 1 },
+                pixel_position: Some(PhysicalPos { x: 16, y: 16 }),
+                modifiers: KeyModifiers::NONE,
+            }))
+        );
+    }
+
+    #[test]
+    fn mouse_button_release_produces_up_event() {
+        let mut app = test_window_app();
+        app.handle_window_event(WindowEvent::MouseInput {
+            device_id: winit::event::DeviceId::dummy(),
+            state: winit::event::ElementState::Released,
+            button: winit::event::MouseButton::Right,
+        });
+        assert_eq!(
+            poll(&mut app),
+            Some(Event::Mouse(MouseEvent {
+                kind: MouseEventKind::Up(MouseButton::Right),
+                position: Pos { x: 0, y: 0 },
+                pixel_position: Some(PhysicalPos { x: 0, y: 0 }),
+                modifiers: KeyModifiers::NONE,
+            }))
+        );
+    }
+
+    #[test]
+    fn unknown_mouse_button_produces_no_event() {
+        let mut app = test_window_app();
+        app.handle_window_event(WindowEvent::MouseInput {
+            device_id: winit::event::DeviceId::dummy(),
+            state: winit::event::ElementState::Pressed,
+            button: winit::event::MouseButton::Other(99),
+        });
+        assert_eq!(poll(&mut app), None);
+    }
+
+    #[test]
+    fn scroll_up_line_delta() {
+        let mut app = test_window_app();
+        app.handle_window_event(WindowEvent::MouseWheel {
+            device_id: winit::event::DeviceId::dummy(),
+            delta: winit::event::MouseScrollDelta::LineDelta(0.0, 1.0),
+            phase: winit::event::TouchPhase::Moved,
+        });
+        let ev = poll(&mut app).unwrap();
+        assert!(matches!(
+            ev,
+            Event::Mouse(MouseEvent {
+                kind: MouseEventKind::ScrollUp,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn scroll_down_line_delta() {
+        let mut app = test_window_app();
+        app.handle_window_event(WindowEvent::MouseWheel {
+            device_id: winit::event::DeviceId::dummy(),
+            delta: winit::event::MouseScrollDelta::LineDelta(0.0, -1.0),
+            phase: winit::event::TouchPhase::Moved,
+        });
+        let ev = poll(&mut app).unwrap();
+        assert!(matches!(
+            ev,
+            Event::Mouse(MouseEvent {
+                kind: MouseEventKind::ScrollDown,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn scroll_up_pixel_delta() {
+        let mut app = test_window_app();
+        app.handle_window_event(WindowEvent::MouseWheel {
+            device_id: winit::event::DeviceId::dummy(),
+            delta: winit::event::MouseScrollDelta::PixelDelta(winit::dpi::PhysicalPosition::new(
+                0.0_f64, 15.0_f64,
+            )),
+            phase: winit::event::TouchPhase::Moved,
+        });
+        let ev = poll(&mut app).unwrap();
+        assert!(matches!(
+            ev,
+            Event::Mouse(MouseEvent {
+                kind: MouseEventKind::ScrollUp,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn modifiers_propagate_to_mouse_event() {
+        let mut app = test_window_app();
+        // Simulate a ModifiersChanged before the click.
+        app.handle_window_event(WindowEvent::ModifiersChanged(
+            winit::event::Modifiers::from(winit::keyboard::ModifiersState::SHIFT),
+        ));
+        let _ = poll(&mut app); // no event emitted for modifiers
+        app.handle_window_event(WindowEvent::MouseInput {
+            device_id: winit::event::DeviceId::dummy(),
+            state: winit::event::ElementState::Pressed,
+            button: winit::event::MouseButton::Left,
+        });
+        let ev = poll(&mut app).unwrap();
+        assert!(matches!(
+            ev,
+            Event::Mouse(MouseEvent {
+                modifiers,
+                ..
+            }) if modifiers.contains(KeyModifiers::SHIFT)
+        ));
+    }
+
+    #[test]
+    fn close_requested_pushes_close_event() {
+        let mut app = test_window_app();
+        app.handle_window_event(WindowEvent::CloseRequested);
+        assert_eq!(poll(&mut app), Some(Event::Close));
+    }
+
+    #[test]
+    fn resized_pushes_resize_event_in_cells() {
+        // 8x16 cells: 88x80 px -> 11 cols, 5 rows.
+        let mut app = test_window_app();
+        app.handle_window_event(WindowEvent::Resized(winit::dpi::PhysicalSize::new(88, 80)));
+        assert_eq!(poll(&mut app), Some(Event::Resize(11, 5)));
+    }
+}

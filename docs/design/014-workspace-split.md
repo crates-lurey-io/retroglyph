@@ -111,16 +111,20 @@ crates/
   window/                  retroglyph-window  (new, extracted now, not deferred)
     src/
       lib.rs
-      loop_.rs             winit event loop + wasm requestAnimationFrame variant
-      translate.rs         winit-event -> retroglyph::Event translation
-      run.rs               inverted run(app) driver (ADR 015 Decision 2, piece 3)
-      presenter.rs         Presenter trait (rasterization seam)
+      presenter.rs         Presenter trait (rasterization + surface seam) and the
+                            WindowHandle alias trait (raw-window-handle based --
+                            the seam has no winit types in it)
       backend.rs           WindowBackend<P: Presenter>: implements Backend by
-                            owning input + delegating output to P
-  software/                retroglyph-software
-    src/
-      lib.rs
-      renderer.rs          SoftwareRenderer: implements Presenter via softbuffer
+                            owning the input queue + delegating output to P
+      winit/               everything winit-specific, behind the default-on
+        mod.rs              `winit` feature; a future SDL2/tao integration
+        run.rs              would be a sibling module. run.rs: event loop,
+        translate.rs        WindowConfig (+ ::fit), run_windowed, inverted
+                            run_app driver (ADR 015 Decision 2, piece 3);
+                            translate.rs: winit-event -> retroglyph::Event
+  software/                retroglyph-software  (NO winit dependency: pure
+    src/                    Presenter implementor against raw window handles)
+      lib.rs               SoftwareRenderer: rasterizer + Presenter via softbuffer
       bitmap_font.rs
       config.rs
       sprite_cache.rs
@@ -200,44 +204,68 @@ its own.
 
 #### `retroglyph-window` (new, extracted now)
 
-The shared surface for every windowed backend (software today; wgpu and GL prototypes soon). Depends
-on `retroglyph-core` and `winit`. Owns:
+The shared surface for every windowed backend (software today; wgpu and GL prototypes soon). Two
+layers with different dependency footprints:
+
+**The seam** (always available; depends only on `retroglyph-core` +
+[`raw-window-handle`](https://docs.rs/raw-window-handle)):
+
+- the `Presenter` trait: the output half of `Backend` (`draw`/`draw_layers`/`flush`/`size`/
+  `clear`/`resize`) plus the surface lifecycle (`init_surface`/`resize_surface`/`present`/
+  `cell_size`). `init_surface` takes `Arc<dyn WindowHandle>` (a combined
+  `HasWindowHandle + HasDisplayHandle` trait), **not** a winit type -- softbuffer, wgpu, and glutin
+  all accept raw handles directly, so presenters are windowing-library-agnostic and winit's frequent
+  major bumps never touch a renderer crate's API. Same seam convention as `pixels` and softbuffer
+  itself.
+- `WindowBackend<P: Presenter>`, a generic `Backend` impl that owns the input event queue and
+  delegates output to `P`. This is the concrete answer to the trait-fusion problem: `Backend` itself
+  is unchanged and stays fused for terminal-family backends (crossterm, headless), but windowed
+  backends get their `Backend` impl "for free" from `WindowBackend`.
+
+**The winit integration** (the `winit` module, behind the default-on `winit` feature; adds the
+`winit` + `log` deps):
 
 - the winit window + event loop, and the wasm `requestAnimationFrame` variant,
 - winit-event -> `retroglyph::Event` translation (keys, mouse, modifiers, resize, scale factor,
   close),
-- the inverted `run(app)` driver (ADR 015 Decision 2, piece 3),
-- cursor, DPI, and resize handling,
-- the `Presenter` trait (the rasterization seam), and
-- `WindowBackend<P: Presenter>`, a generic `Backend` impl that owns input and delegates output to
-  `P`. This is the concrete answer to the trait-fusion problem: `Backend` itself is unchanged and
-  stays fused for terminal-family backends (crossterm, headless), but windowed backends get their
-  `Backend` impl "for free" from `WindowBackend`, and only need to implement the smaller `Presenter`
-  trait (`draw_layers`, `flush`, `size`, `resize`, cursor-shape-if-supported).
+- `WindowConfig` (+ `WindowConfig::fit`, which sizes a window from any presenter's
+  `size()`/`cell_size()` geometry) and the `run_windowed`/`run_app` drivers (`run_app` is the
+  inverted driver, ADR 015 Decision 2, piece 3),
+- cursor, DPI, and resize handling.
+
+A future SDL2/tao integration would be a sibling module driving the same seam; renderer crates that
+only _implement_ `Presenter` depend on this crate with `default-features = false` and stay entirely
+winit-free.
 
 ```rust
-// retroglyph-window/src/backend.rs (sketch)
+// retroglyph-window (as built)
+pub trait WindowHandle: HasWindowHandle + HasDisplayHandle {}
+
 pub trait Presenter {
-    fn draw_layers(&mut self, layers: &[&Grid]);
-    fn flush(&mut self);
-    fn size(&self) -> Size;
-    fn resize(&mut self, size: Size);
+    type Error: BackendError;         // rasterization (Infallible for software)
+    type SurfaceError: Debug + Display; // surface lifecycle (softbuffer/wgpu/GL errors)
+    // output half of Backend: draw, draw_layers, flush, size, clear, resize,
+    // needs_full_frame (default true), composites_layers (default true)
+    fn init_surface(&mut self, window: Arc<dyn WindowHandle>) -> Result<(), Self::SurfaceError>;
+    fn resize_surface(&mut self, width: u32, height: u32);
+    fn present(&mut self) -> Result<(), Self::SurfaceError>;
+    fn cell_size(&self) -> (u32, u32);
 }
 
 pub struct WindowBackend<P: Presenter> {
-    window: winit::window::Window,
-    events: VecDeque<Event>, // filled by the winit loop, drained by poll_event
     presenter: P,
+    events: VecDeque<Event>, // filled by the loop, drained by poll_event
 }
-
-impl<P: Presenter> Backend for WindowBackend<P> {
-    // poll_event/push_event: shared, from the winit loop
-    // draw_layers/flush/size/resize: delegate to self.presenter
-}
+// impl<P: Presenter> Backend for WindowBackend<P>: input from the queue,
+// output delegated to the presenter, cursor methods no-ops (no hardware
+// text cursor in a pixel window). The winit Window itself stays owned by
+// the loop, not the backend.
 ```
 
-`retroglyph-software` becomes a `Presenter` implementation (via softbuffer), not a `Backend`
-implementation. `retroglyph-wgpu` and `retroglyph-gl`, when built, do the same.
+`retroglyph-software` becomes a `Presenter` implementation (via softbuffer). It keeps a direct
+`Backend` impl too, for the headless path (`Terminal<SoftwareRenderer>` in pixel tests needs no
+window, no queue, no loop). `retroglyph-wgpu` and `retroglyph-gl`, when built, implement `Presenter`
+the same way.
 
 **Accepted risk:** the ADR's earlier draft argued against extracting this now, on the grounds that a
 single consumer (softbuffer) can't validate a seam that also needs to fit wgpu's async device/queue
@@ -249,18 +277,29 @@ here.
 
 #### `retroglyph-software`
 
-Software rendering backend, now a thin `Presenter` implementation. Depends on `retroglyph-core`,
-`retroglyph-window`, `softbuffer`, `log`. Always requires `std`. No longer depends on `winit`
-directly (that's `retroglyph-window`'s job).
+Software rendering backend: a CPU rasterizer that implements `Presenter`. Depends on
+`retroglyph-core`, `retroglyph-window` (**`default-features = false`** -- seam only), `softbuffer`,
+`log`. Always requires `std`. **No winit dependency at all**, direct or effective: the crate builds
+renderers; the loop is the caller's business. It has no `run_windowed`-style wrappers either --
+consumers build a renderer with `run_headless()`, size a window with
+`WindowConfig::fit(&renderer, ...)`, and hand both to `retroglyph_window::winit::run_windowed`.
 
-Exposes `SoftwareRenderer` (implements `Presenter`), `BitmapFont`, and the sprite/tileset types. A
-type alias `pub type SoftwareBackend = WindowBackend<SoftwareRenderer>;` preserves the
-`SoftwareBackend` name users already know.
+Exposes `SoftwareRenderer`, `BitmapFont`, and the sprite/tileset types. `SoftwareRenderer`
+implements `Presenter` (windowed use, wrapped by `WindowBackend`) and also `Backend` directly
+(headless pixel-testing use). `SoftwareBackend` remains the _config_ type produced by the builder
+(the earlier draft's `type SoftwareBackend = WindowBackend<SoftwareRenderer>` alias was dropped: the
+name was already taken by the config struct, and renaming it bought nothing).
+
+`SoftwareBackendError` shrank to configuration errors only (`NoFont`, `Tileset`); windowing errors
+belong to the loop crate.
 
 Feature flags:
 
-- `tilesets` -- PNG sprite sheet support (adds `image`, `alpha-blend`)
-- `default-font` -- embedded VGA 8x16 bitmap font
+- `software-tilesets` -- PNG sprite sheet support (adds `image`, `alpha-blend`)
+- `software-default-font` -- embedded VGA 8x16 bitmap font
+
+(Kept with the `software-` prefix from the monolith rather than the shorter names an earlier draft
+sketched, to avoid a rename across ~1,850 lines of `#[cfg]` strings during the split.)
 
 #### `retroglyph-widgets` (shipped now, amends ADR 016)
 

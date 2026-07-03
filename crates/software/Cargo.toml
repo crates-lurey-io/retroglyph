@@ -15,9 +15,12 @@ workspace = true
 
 [dependencies]
 retroglyph-core = { path = "../core", version = "0.2.0", default-features = false, features = ["std"] }
+# Seam only (Presenter/WindowBackend/WindowHandle): no winit. The loop is the
+# caller's business -- games depend on retroglyph-window with its default
+# `winit` feature; this crate just implements the renderer side.
+retroglyph-window = { path = "../window", version = "0.2.0", default-features = false }
 ixy = "0.6.0-alpha.7"
 grixy = { version = "0.6.0-alpha.7", features = ["alloc", "buffer"] }
-winit = "0.30"
 softbuffer = "0.4"
 log = "0.4"
 image = { version = "0.25", optional = true, default-features = false, features = ["png"] }
