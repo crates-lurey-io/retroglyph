@@ -1,7 +1,10 @@
 # ADR 016: Widget-Trait Verdict (Immediate-Mode Widgets Stay Functions)
 
-**Status:** Accepted **Date:** 2026-07-01 **Related:**
-[ADR 014: Workspace Split](014-workspace-split.md) (names `retroglyph-widgets`),
+**Status:** Accepted, partially amended **Date:** 2026-07-01 **Amended by:**
+[ADR 014: Workspace Split](014-workspace-split.md) (2026-07-02) -- `retroglyph-widgets` ships as
+part of the workspace split regardless of a second consumer, overriding the "wait for a second
+consumer" call below. The _design_ verdict (free functions, no `Widget` trait, no retained widget
+tree) still stands; only the _timing_ of publishing a crate for it changed. **Related:**
 [ADR 008: Layer Composition](008-layer-composition.md)
 
 ## Context

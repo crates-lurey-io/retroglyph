@@ -1,36 +1,45 @@
 # ADR 014: Workspace Split
 
-**Status:** Draft  
-**Date:** 2026-06-21  
-**Supersedes:** [ADR 001 §1: "single crate, split later"](001-architecture.md)
+**Status:** Draft **Date:** 2026-07-02 **Supersedes:**
+[ADR 001 §1: "single crate, split later"](001-architecture.md) **Amends:**
+[ADR 016: Widget-Trait Verdict](016-widget-trait-verdict.md) (revives `retroglyph-widgets` as a
+published crate ahead of the "second consumer" bar ADR 016 set) **Relates to:**
+[ADR 015: Cross-Backend Rendering and Loop Consistency](015-cross-backend-consistency.md) (Accepted,
+landed first as planned)
 
 ## Context
 
 ADR 001 chose a single-crate structure with the expectation that it would split "when the API
-stabilizes and compile times or dependency isolation warrant it." That time is approaching:
+stabilizes and compile times or dependency isolation warrant it." ADR 015 has landed (`Tile`'s
+public shape, `Backend::composites_layers`, and the `App`/`Flow`/`Frame`/`run_blocking`/`FrameClock`
+loop surface are settled), which was the explicit precondition. The split is unblocked.
 
-1. **Dependency bloat.** Enabling `software-tilesets` pulls in winit, softbuffer, image, and
-   alpha-blend. A user who only wants crossterm pays for none of that today (feature-gated), but
-   downstream crates that depend on `retroglyph` with default features still download and compile
-   the optional dep metadata. Separate crates make the dependency tree explicit at the Cargo.toml
-   level.
+Reasons to split, unchanged from the original draft:
+
+1. **Dependency bloat.** `software-tilesets` pulls in winit, softbuffer, image, and alpha-blend.
+   Separate crates make the dependency tree explicit at the Cargo.toml level instead of hiding
+   behind feature-gated optional deps in one crate.
 
 2. **Compile-time isolation.** The software backend is 2,863 lines across 6 files, nearly as large
-   as the rest of the library combined (3,799 lines). Touching `grid.rs` recompiles everything. In a
+   as the rest of the library combined. Touching `grid.rs` recompiles everything today. In a
    workspace, `retroglyph-software` only recompiles when its own sources or `retroglyph-core`
    change.
 
-3. **Independent versioning.** Backend crates can release breaking changes (e.g., upgrading winit
-   0.30 to 0.31) without bumping the core crate. Users on crossterm are unaffected.
+3. **Independent versioning.** Backend crates can release breaking changes (e.g. winit 0.30 -> 0.31)
+   without bumping the core crate.
 
-4. **Clearer ownership boundaries.** The `Backend` trait, core types, and each backend have distinct
-   stability profiles. Core types are nearly stable; the software backend is still evolving
-   (tilesets, sprite cache, windowed trait). Separate crates make this visible.
+4. **Clearer ownership boundaries.** Core types are nearly stable; the software backend is still
+   evolving. Separate crates make this visible.
 
-The module structure already anticipates the split (ADR 001's stated goal). The internal dependency
-graph is clean enough that the split is mechanical.
+A fifth reason emerged during ADR 015 and the dashboard/roguelike examples: the `Backend` trait
+fuses input (`poll_event`/`push_event`) and output (`draw_layers`/`flush`/`size`/`resize`/cursor)
+into one contract. That's fine for terminal backends, where a single process owns both. It's wrong
+for windowed backends, where a shared winit event loop owns input and a per-renderer surface
+(softbuffer today, wgpu/GL soon) owns output. This ADR resolves that now rather than deferring it,
+because a GL backend prototype is imminent and two real consumers are the right number to validate
+the seam against (see "Windowed backend family" below).
 
-## Internal dependency graph (current)
+## Internal dependency graph (current, single crate)
 
 ```text
 color ─────────────┐
@@ -42,6 +51,8 @@ tile ◄──── style   │
   │                │
   ▼                ▼
 grid ◄──── tile, style, (egc: TileFlags, cap_grapheme)
+  │
+  ├──► camera ◄──── grid::{Pos, Rect, Size}   (pure geometry, no rendering opinion)
   │
   ▼
 event ◄──── grid::Pos
@@ -62,61 +73,68 @@ terminal ◄──── Backend, color, event, grid, style, text, tile
                             + winit, softbuffer, image, alpha-blend, log)
 ```
 
-Everything above the `backend::` line forms the core. Each backend depends on the core but not on
-other backends. This is the natural crate boundary.
+Everything above the `backend::` line, plus `camera`, forms the core. Each backend depends on the
+core but not on other backends. This is the natural crate boundary.
 
 ## Decision
 
-Split into a Cargo workspace with five published crates (`retroglyph-core`, `retroglyph-crossterm`,
-`retroglyph-software`, `retroglyph-widgets`, and the `retroglyph` facade) and one internal tools
-crate. Further backend crates (`retroglyph-window`, `retroglyph-wgpu`, `retroglyph-gl`) join later;
-see the windowed-family note below.
+Split into a Cargo workspace with **five published crates**: `retroglyph-core`,
+`retroglyph-crossterm`, `retroglyph-window`, `retroglyph-software`, and `retroglyph-widgets`. One
+internal, unpublished tools crate (`cargo-bin`) stays as-is. **No facade crate (`retroglyph`) in
+this pass** — see "No facade, for now" below.
 
 ### Workspace layout
 
 ```text
 Cargo.toml              (workspace root, no [package])
 crates/
-  core/                 retroglyph           (the facade crate)
-    src/
-      lib.rs            re-exports from retroglyph-core + backends
-  retroglyph-core/      retroglyph-core
+  retroglyph-core/       retroglyph-core
     src/
       lib.rs
       color.rs
       style.rs
       tile.rs
       grid.rs
+      camera.rs          Camera: world/screen viewport geometry, no rendering opinion
       event.rs
       text.rs
       layout.rs
       terminal.rs
-      app.rs            App/Flow/Frame, step, run_blocking (std) -- ADR 015
-      frame_clock.rs    FrameClock accumulator (no_std)
+      app.rs              App/Flow/Frame, step, run_blocking (std) -- ADR 015
+      frame_clock.rs      FrameClock accumulator (no_std)
       backend/
-        mod.rs          Backend trait + Headless
+        mod.rs            Backend trait + Headless
         headless.rs
-  crossterm/            retroglyph-crossterm
+  crossterm/               retroglyph-crossterm
     src/
-      lib.rs            Crossterm backend
-  software/             retroglyph-software
+      lib.rs               Crossterm backend
+  window/                  retroglyph-window  (new, extracted now, not deferred)
     src/
       lib.rs
-      window.rs         winit loop + event translation + inverted run (liftable)
+      loop_.rs             winit event loop + wasm requestAnimationFrame variant
+      translate.rs         winit-event -> retroglyph::Event translation
+      run.rs               inverted run(app) driver (ADR 015 Decision 2, piece 3)
+      presenter.rs         Presenter trait (rasterization seam)
+      backend.rs           WindowBackend<P: Presenter>: implements Backend by
+                            owning input + delegating output to P
+  software/                retroglyph-software
+    src/
+      lib.rs
+      renderer.rs          SoftwareRenderer: implements Presenter via softbuffer
       bitmap_font.rs
       config.rs
-      windowed.rs
       sprite_cache.rs
       tileset.rs
-  widgets/             retroglyph-widgets
+  widgets/                 retroglyph-widgets
     src/
-      lib.rs           Widget trait; panel, gauge, list, tabs, sparkline; camera/viewport
-  (future) window/     retroglyph-window  -- shared winit/window layer, extracted
-                       from software when the 2nd windowed backend (wgpu/gl) lands
+      lib.rs               Widget helpers: panel, gauge, list, tabs, sparkline;
+                            layout splitter (split_v/split_h + Constraint)
+  (future)                 retroglyph-wgpu, retroglyph-gl -- Presenter impls, not yet built
 tools/
-  cargo-bin/            (existing, stays)
-examples/               (workspace root, depends on retroglyph facade)
-tests/                  (workspace root integration tests)
+  cargo-bin/               (existing, stays)
+examples/                  workspace root; depend directly on retroglyph-core +
+                            retroglyph-crossterm / retroglyph-window+software as needed
+tests/                     workspace root integration tests
 ```
 
 ### Crate responsibilities
@@ -128,160 +146,204 @@ The `no_std`-compatible foundation. Contains:
 - `Color`, `AnsiColor`, `Style`, `CellModifier`
 - `Tile`, `TileFlags`
 - `Grid`, `Pos`, `Rect`, `Size`
+- `Camera` (see "Where Camera lives" below)
 - `Event`, `KeyEvent`, `MouseEvent`, `KeyCode`, `KeyModifiers`
 - `Span`, `Line`, `TextLayout`, `HAlign`, `VAlign`, `TextMetrics`
 - `Terminal<B>`
 - `Backend` trait + `Headless` backend
 - `App`, `Flow`, `Frame` loop contract; `step` + `run_blocking` generic driver (`std`); `FrameClock`
-  accumulator (see ADR 015 Decision 2)
+  accumulator
 
 Dependencies: `ixy`, `grixy`, `unicode-width`, `bitflags`, and optionally `unicode-segmentation`
 (behind `egc` feature). No platform-specific deps.
-
-The loop _contract_ lives here because `App` is the dual of `Backend` (update contract vs output
-contract), and the generic blocking driver is dep-free. The _inverted_ driver does not live here; it
-belongs to the windowing layer.
 
 Feature flags:
 
 - `std` (default) -- enables std-dependent code
 - `egc` (default) -- extended grapheme cluster support
 
+#### Where Camera lives
+
+`Camera` converts world coordinates to screen coordinates for a viewport smaller than the world it
+scrolls over. It has no rendering opinion, no allocation, and depends only on `Pos`/`Rect`/`Size`,
+which are already in core. Three prior-art patterns exist for this kind of thing:
+
+- **bracket-lib (RLTK)** ships no Camera at all. Its own roguelike tutorial has readers hand-write
+  one _in the game_, tracking `left_x`/`right_x`/`top_y`/`bottom_y` by hand. Treated as
+  game-specific, not a library concern.
+- **python-tcod-camera** is a standalone, optional package, explicitly decoupled: it works with or
+  without tcod and has no rendering opinion, by design, so non-tcod users can use it too.
+- **ratatui**'s `Viewport` (a different but related concept: which region of the terminal ratatui
+  draws into) lives in `ratatui-core`. The signal from ratatui's split is that surface-mapping math
+  belongs in core, not in a widgets/extras crate.
+
+Options considered:
+
+| Option                                   | Verdict                                                                                                                                                                                        |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Stay in `retroglyph-core` (current)      | **Chosen.** Zero new deps, no breaking change to the existing `retroglyph::Camera` path, matches ratatui's precedent that surface-mapping math is core, not extras.                            |
+| Move to `retroglyph-widgets`             | Rejected: shape mismatch (Camera does no drawing, unlike gauge/panel/list which all take `&mut Terminal<B>, Rect`); would force Camera-only users to depend on widgets and its future deps.    |
+| New standalone `retroglyph-camera` crate | Rejected: this ADR's own non-goals section already rejects splitting tightly related, small, dependency-free things into many tiny crates. A ~200-line dep-free struct doesn't clear that bar. |
+| Core, but feature-gated                  | Rejected: zero deps means zero compile-time cost to gate; feature-gating adds config surface for no benefit.                                                                                   |
+
+`camera.rs` moves into `retroglyph-core` alongside `grid.rs`, unchanged, in the "what moves where"
+table below.
+
 #### `retroglyph-crossterm`
 
-Crossterm backend. Depends on `retroglyph-core` and `crossterm`. Always requires `std`.
+Crossterm backend. Depends on `retroglyph-core` and `crossterm`. Always requires `std`. Implements
+`Backend` directly (not `WindowBackend`/`Presenter` -- crossterm has no window, no winit, and is
+entirely outside the windowed family).
 
-Exposes `Crossterm` and the `From`/`TryFrom` conversions for events and colors.
+Exposes `Crossterm` and the `From`/`TryFrom` conversions for events and colors. No feature flags of
+its own.
 
-No feature flags of its own (crossterm's features are re-exported if needed).
+#### `retroglyph-window` (new, extracted now)
+
+The shared surface for every windowed backend (software today; wgpu and GL prototypes soon). Depends
+on `retroglyph-core` and `winit`. Owns:
+
+- the winit window + event loop, and the wasm `requestAnimationFrame` variant,
+- winit-event -> `retroglyph::Event` translation (keys, mouse, modifiers, resize, scale factor,
+  close),
+- the inverted `run(app)` driver (ADR 015 Decision 2, piece 3),
+- cursor, DPI, and resize handling,
+- the `Presenter` trait (the rasterization seam), and
+- `WindowBackend<P: Presenter>`, a generic `Backend` impl that owns input and delegates output to
+  `P`. This is the concrete answer to the trait-fusion problem: `Backend` itself is unchanged and
+  stays fused for terminal-family backends (crossterm, headless), but windowed backends get their
+  `Backend` impl "for free" from `WindowBackend`, and only need to implement the smaller `Presenter`
+  trait (`draw_layers`, `flush`, `size`, `resize`, cursor-shape-if-supported).
+
+```rust
+// retroglyph-window/src/backend.rs (sketch)
+pub trait Presenter {
+    fn draw_layers(&mut self, layers: &[&Grid]);
+    fn flush(&mut self);
+    fn size(&self) -> Size;
+    fn resize(&mut self, size: Size);
+}
+
+pub struct WindowBackend<P: Presenter> {
+    window: winit::window::Window,
+    events: VecDeque<Event>, // filled by the winit loop, drained by poll_event
+    presenter: P,
+}
+
+impl<P: Presenter> Backend for WindowBackend<P> {
+    // poll_event/push_event: shared, from the winit loop
+    // draw_layers/flush/size/resize: delegate to self.presenter
+}
+```
+
+`retroglyph-software` becomes a `Presenter` implementation (via softbuffer), not a `Backend`
+implementation. `retroglyph-wgpu` and `retroglyph-gl`, when built, do the same.
+
+**Accepted risk:** the ADR's earlier draft argued against extracting this now, on the grounds that a
+single consumer (softbuffer) can't validate a seam that also needs to fit wgpu's async device/queue
+init and GL's context-current-on-thread requirement. We're proceeding anyway because a GL prototype
+is coming soon and will exercise the seam quickly. If the GL prototype reveals `Presenter` doesn't
+fit, `retroglyph-window` is young enough (0.x, low adoption) to take a breaking change without the
+coordination cost it would have after a wider release. Tracked as a risk below, not re-litigated
+here.
 
 #### `retroglyph-software`
 
-Software rendering backend. Depends on `retroglyph-core`, `winit`, `softbuffer`, `log`. Always
-requires `std`.
+Software rendering backend, now a thin `Presenter` implementation. Depends on `retroglyph-core`,
+`retroglyph-window`, `softbuffer`, `log`. Always requires `std`. No longer depends on `winit`
+directly (that's `retroglyph-window`'s job).
 
-Exposes `SoftwareBackend`, `SoftwareBackendBuilder`, `SoftwareRenderer`, `WindowedBackend`,
-`BitmapFont`, and the sprite/tileset types.
+Exposes `SoftwareRenderer` (implements `Presenter`), `BitmapFont`, and the sprite/tileset types. A
+type alias `pub type SoftwareBackend = WindowBackend<SoftwareRenderer>;` preserves the
+`SoftwareBackend` name users already know.
 
 Feature flags:
 
 - `tilesets` -- PNG sprite sheet support (adds `image`, `alpha-blend`)
 - `default-font` -- embedded VGA 8x16 bitmap font
 
-The winit event loop, winit-event → `retroglyph::Event` translation, and the inverted `run(app)`
-driver (ADR 015 Decision 2, piece 3) live in a self-contained `window.rs` module, kept liftable so
-it can be extracted to `retroglyph-window` when the first GPU backend lands (see the windowed-family
-note below).
+#### `retroglyph-widgets` (shipped now, amends ADR 016)
 
-#### `retroglyph-widgets`
+ADR 016 concluded free functions in `examples/util/draw.rs` were sufficient and declined to extract
+a crate, absent a second consumer. That verdict is **overridden here**: `retroglyph-widgets` ships
+as part of this split regardless of a second consumer showing up. Depends on `retroglyph-core` only.
 
-Immediate-mode drawing helpers over a `Rect`. Depends on `retroglyph-core` only. Contains the
-`Widget` trait plus panel/border, gauge/progress bar, list/menu, tabs, sparkline, and a
-camera/viewport for rendering a world `Grid` larger than the screen. Graduates
-`examples/util/draw.rs`. Optional: games that draw manually pay nothing. Separated because it
-imposes a rendering model and churns as widgets are added.
+Contains the `Widget` helpers (panel/border, gauge, list, tabs, sparkline) and the layout splitter
+(`split_v`/`split_h` + `Constraint::{Fixed, Percent, Fill}`) that graduate from
+`examples/util/draw.rs` and `examples/util/layout.rs`. `Camera` does **not** move here (see above).
+Games that draw manually pay nothing -- this is an optional, separately-versioned crate.
 
-#### `retroglyph` (facade)
+No feature flags of its own initially.
 
-The user-facing crate. Re-exports everything from `retroglyph-core` unconditionally, and from
-backend crates behind feature flags. Users write `retroglyph = { features = ["crossterm"] }` in
-their Cargo.toml, same as today.
+### No facade, for now
 
-```rust
-// retroglyph/src/lib.rs
-pub use retroglyph_core::*;
+The original draft of this ADR planned a `retroglyph` facade crate re-exporting core plus
+feature-gated backends, matching the pre-split single-crate API (`use retroglyph::Terminal`,
+`use retroglyph::Crossterm`). **That's deferred out of this pass.**
 
-#[cfg(feature = "crossterm")]
-pub use retroglyph_crossterm as crossterm_backend;
-#[cfg(feature = "crossterm")]
-pub use retroglyph_crossterm::Crossterm;
+Rationale: with no external consumers yet, the facade's only job today would be internal -- letting
+`examples/` depend on one crate instead of several. That's not worth the re-export-churn cost (new
+public types in a backend crate need a matching feature-gated re-export in the facade, and it's easy
+for that to go stale silently) before there's a real external user who benefits from it. Instead:
 
-#[cfg(feature = "software")]
-pub use retroglyph_software as software_backend;
-#[cfg(feature = "software")]
-pub use retroglyph_software::{SoftwareBackend, SoftwareBackendBuilder, SoftwareRenderer};
-
-#[cfg(feature = "widgets")]
-pub use retroglyph_widgets as widgets;
-
-// Feature-selected loop entry, replacing the old `rg_run!` macro (ADR 015).
-// Terminal backends resolve to core's generic driver; windowed backends resolve
-// to the windowing layer's inverted driver.
-#[cfg(all(feature = "crossterm", not(feature = "software")))]
-pub use retroglyph_crossterm::run;
-#[cfg(feature = "software")]
-pub use retroglyph_software::run;
-```
-
-Feature flags on the facade map to optional dependencies:
-
-```toml
-[features]
-default = ["std", "egc"]
-std = ["retroglyph-core/std"]
-egc = ["retroglyph-core/egc"]
-crossterm = ["dep:retroglyph-crossterm"]
-software = ["dep:retroglyph-software"]
-software-tilesets = ["software", "retroglyph-software/tilesets"]
-software-default-font = ["software", "retroglyph-software/default-font"]
-widgets = ["dep:retroglyph-widgets"]
-```
-
-This preserves the existing user-facing API. `use retroglyph::Terminal` and
-`use retroglyph::Crossterm` work exactly as before.
+- `examples/` and `tests/` depend directly on `retroglyph-core`, `retroglyph-crossterm`,
+  `retroglyph-window` + `retroglyph-software`, and `retroglyph-widgets`, per-example, as needed.
+- The `retroglyph` name stays reserved on crates.io (unpublished) for a future facade.
+- Revisit as its own ADR once there's a concrete external-user reason to want a single re-export
+  crate again (same "split/unify when it warrants it" logic as ADR 001 and the deferred
+  `retroglyph-app`).
 
 ### What moves where
 
-| Current path                | Destination crate      | Notes                                |
-| --------------------------- | ---------------------- | ------------------------------------ |
-| `src/color.rs`              | `retroglyph-core`      |                                      |
-| `src/style.rs`              | `retroglyph-core`      |                                      |
-| `src/tile.rs`               | `retroglyph-core`      |                                      |
-| `src/grid.rs`               | `retroglyph-core`      |                                      |
-| `src/event.rs`              | `retroglyph-core`      |                                      |
-| `src/text.rs`               | `retroglyph-core`      |                                      |
-| `src/layout.rs`             | `retroglyph-core`      | Depends on `Terminal`, stays with it |
-| `src/terminal.rs`           | `retroglyph-core`      |                                      |
-| `src/backend/mod.rs`        | `retroglyph-core`      | `Backend` trait only                 |
-| `src/backend/headless.rs`   | `retroglyph-core`      | Zero external deps, used in tests    |
-| `src/backend/crossterm.rs`  | `retroglyph-crossterm` |                                      |
-| `src/backend/software/*.rs` | `retroglyph-software`  |                                      |
+| Current path                       | Destination crate      | Notes                                            |
+| ---------------------------------- | ---------------------- | ------------------------------------------------ |
+| `src/color.rs`                     | `retroglyph-core`      |                                                  |
+| `src/style.rs`                     | `retroglyph-core`      |                                                  |
+| `src/tile.rs`                      | `retroglyph-core`      |                                                  |
+| `src/grid.rs`                      | `retroglyph-core`      |                                                  |
+| `src/camera.rs`                    | `retroglyph-core`      | Pure geometry, depends only on grid types        |
+| `src/event.rs`                     | `retroglyph-core`      |                                                  |
+| `src/text.rs`                      | `retroglyph-core`      |                                                  |
+| `src/layout.rs`                    | `retroglyph-core`      | Depends on `Terminal`, stays with it             |
+| `src/terminal.rs`                  | `retroglyph-core`      |                                                  |
+| `src/backend/mod.rs`               | `retroglyph-core`      | `Backend` trait only                             |
+| `src/backend/headless.rs`          | `retroglyph-core`      | Zero external deps, used in tests                |
+| `src/backend/crossterm.rs`         | `retroglyph-crossterm` |                                                  |
+| `src/backend/software/window.rs`   | `retroglyph-window`    | winit loop, event translation, inverted `run`    |
+| `src/backend/software/*.rs` (rest) | `retroglyph-software`  | Becomes a `Presenter` impl, not a `Backend` impl |
+| `examples/util/draw.rs`            | `retroglyph-widgets`   |                                                  |
+| `examples/util/layout.rs`          | `retroglyph-widgets`   |                                                  |
 
 ### Headless stays in core
 
 `Headless` has no external dependencies and is the primary testing backend. Every crate that tests
-`Terminal<B>` needs it. Putting it in core avoids a circular dependency (backend crate -> core for
-types, core -> backend crate for test backend) and means users get snapshot testing support without
-adding a dev-dependency.
+`Terminal<B>` needs it. Putting it in core avoids a circular dependency and means users get snapshot
+testing support without adding a dev-dependency.
 
 ## Migration plan
 
-**Gated on [ADR 015](015-cross-backend-consistency.md).** ADR 015 lands first: it is the
-API-stabilizing work ADR 001 §1 named as the precondition for this split. Once `Tile`'s public
-shape, the `Backend::composites_layers` capability, and core's loop surface
-(`App`/`Flow`/`Frame`/`run_blocking`/`FrameClock`) are settled and the examples are ported off
-`rg_run!`, the split below is mechanical: no public API changes, no new abstractions.
-
 ### Step 1: Create workspace skeleton
 
-- Move `[package]` out of the root `Cargo.toml` into `crates/core/Cargo.toml`.
-- Root `Cargo.toml` becomes workspace-only with `[workspace]` members list.
-- Create `crates/retroglyph-core/`, `crates/crossterm/`, `crates/software/`, `crates/core/`.
-- Move source files per the table above.
+- Move `[package]` out of the root `Cargo.toml` into `crates/retroglyph-core/Cargo.toml`.
+- Root `Cargo.toml` becomes workspace-only with a `[workspace]` members list.
+- Create `crates/retroglyph-core/`, `crates/crossterm/`, `crates/window/`, `crates/software/`,
+  `crates/widgets/`.
+- Move source files per the table above, including `camera.rs` and the widget helpers.
 - Replace `use crate::` with `use retroglyph_core::` in backend crates.
 
-### Step 2: Wire up the facade
+### Step 2: Extract the Presenter seam
 
-- `crates/core/Cargo.toml` depends on `retroglyph-core` unconditionally and backend crates as
-  optional deps behind feature flags.
-- `crates/core/src/lib.rs` re-exports everything.
-- Verify `cargo build --all-features` and `cargo build` (default features only) both compile.
+- Define `Presenter` and `WindowBackend<P: Presenter>` in `retroglyph-window`.
+- Port `retroglyph-software`'s existing `Backend` impl to a `Presenter` impl (`SoftwareRenderer`).
+- Add the `SoftwareBackend = WindowBackend<SoftwareRenderer>` type alias to keep the public name
+  stable.
+- Verify `tests/software_renderer.rs` and `tests/e2e_snapshots.rs` still pass unchanged in behavior.
 
 ### Step 3: Move examples and tests
 
-- Examples stay at workspace root, depend on the `retroglyph` facade crate.
-- Integration tests (`tests/e2e.rs`, `tests/software_renderer.rs`) depend on specific backend crates
-  as dev-dependencies.
+- Examples stay at workspace root, depend directly on the backend crate(s) each example needs (no
+  facade).
+- Integration tests depend on specific backend crates as dev-dependencies.
 - Unit tests within each module move with their source files.
 
 ### Step 4: Update CI and tooling
@@ -289,41 +351,41 @@ shape, the `Backend::composites_layers` capability, and core's loop surface
 - `just check` runs `cargo check --workspace --all-features`.
 - `just test` runs `cargo test --workspace --all-features`.
 - `just clippy` runs against the workspace.
-- Codecov flags (ADR 013) map one flag per crate.
+- Add `cargo-hack` for feature-powerset checking (`--each-feature` at minimum), wired into **both**
+  a local `just` recipe and CI -- not CI-only. The local recipe must be fast enough to run before
+  every push, not just in CI, per the "don't abandon the local dev story" principle.
+- Codecov flags (ADR 013) map one flag per crate; update `codecov.yml` path filters as part of the
+  PR that adds each new crate (checklist item, not automated yet).
 - `cargo-llvm-cov --workspace` generates a single report; `codecov.yml` path filters split it.
 
 ### Step 5: Publish
 
-Publishing order matters because crates.io resolves dependencies at publish time:
+Deferred. See [ADR 017: Release Process and Workspace Tooling](017-release-and-workspace-tooling.md)
+(stub). Publishing is **not** part of this split; the workspace can exist, build, and be tested
+entirely from git without ever being pushed to crates.io. When it does happen, order is
+dependency-driven:
 
 1. `retroglyph-core` (no in-workspace deps)
-2. `retroglyph-crossterm` (depends on `retroglyph-core`)
-3. `retroglyph-software` (depends on `retroglyph-core`)
-4. `retroglyph` facade (depends on all three)
+2. `retroglyph-window` (depends on `retroglyph-core`)
+3. `retroglyph-crossterm` (depends on `retroglyph-core`)
+4. `retroglyph-widgets` (depends on `retroglyph-core`)
+5. `retroglyph-software` (depends on `retroglyph-core`, `retroglyph-window`)
 
-Use `cargo-release` or `release-plz` to automate this sequence.
+(2)-(4) can publish in any order relative to each other; (5) must come after (2).
 
 ## Versioning strategy
 
-All four crates start at `0.2.0` (the split itself is the breaking change from the single-crate
-`0.1.x`).
+All five crates start at `0.2.0` (the split itself is the breaking change from the single-crate
+`0.1.x`), whenever the first publish happens (see ADR 017).
 
-After the initial release, crates version independently:
+After that, crates version independently:
 
 - `retroglyph-core` bumps affect all downstream crates (they depend on it).
-- `retroglyph-crossterm` can bump for crossterm upgrades without touching core or software.
-- `retroglyph-software` can bump for winit/softbuffer upgrades independently.
-- The `retroglyph` facade bumps when it changes its re-export surface or when a backend crate has a
-  major version bump that changes the facade's feature flag behavior.
-
-The facade's Cargo.toml uses version ranges to stay compatible:
-
-```toml
-[dependencies]
-retroglyph-core = "0.2"
-retroglyph-crossterm = { version = "0.2", optional = true }
-retroglyph-software = { version = "0.2", optional = true }
-```
+- `retroglyph-crossterm` can bump for crossterm upgrades without touching anything else.
+- `retroglyph-window` can bump for winit upgrades; ripples to `retroglyph-software` and any future
+  wgpu/GL crate, but not to `retroglyph-crossterm`.
+- `retroglyph-software` can bump for softbuffer upgrades independently.
+- `retroglyph-widgets` can bump on its own release cadence as widgets are added.
 
 ## Workspace-level configuration
 
@@ -360,91 +422,70 @@ Each crate inherits with `[lints] workspace = true` and `edition.workspace = tru
 
 ## Risks
 
-**Re-export churn.** If `retroglyph-core` adds a public type, the facade must re-export it. Glob
-re-exports (`pub use retroglyph_core::*`) handle this automatically for the core crate. Backend
-crates need explicit re-exports since they are behind feature flags.
+**Presenter designed against effectively one consumer.** Accepted and discussed above under
+`retroglyph-window`. Mitigated by an imminent GL prototype, not eliminated. If the seam is wrong,
+expect an early breaking `retroglyph-window` release, not a silent workaround.
 
-**Cross-crate doc links.** Rustdoc `[`Type`]` links that cross crate boundaries need full paths
-(`retroglyph_core::Grid` instead of `crate::Grid`). This is a one-time fixup during migration.
+**No facade means multi-crate Cargo.toml entries for every consumer**, including our own examples.
+This is a real UX regression versus the single-crate `retroglyph = { features = [...] }` story users
+have today, deferred deliberately (see "No facade, for now"). Track how much friction this actually
+causes in `examples/` and `tests/` as a signal for when to revisit.
 
-**Dev-dependency cycles.** If `retroglyph-crossterm` wants to use `Headless` in its tests, it adds
-`retroglyph-core` as a regular dependency (which it already has) and uses `Headless` from there. No
-cycle.
+**Cross-crate doc links.** Rustdoc `[Type]` links that cross crate boundaries need full paths
+(`retroglyph_core::Grid` instead of `crate::Grid`). One-time fixup during migration, ongoing
+discipline afterward.
 
-**MSRV alignment.** All crates share the same MSRV (1.88) via `workspace.package`. A backend crate
-cannot independently raise its MSRV without raising the workspace MSRV.
+**MSRV alignment.** All crates share the same MSRV (1.88) via `workspace.package`. No crate can
+independently raise its MSRV without raising the workspace MSRV. Accepted: simplicity over
+flexibility.
+
+**Dev-dependency cycles.** If `retroglyph-crossterm` wants `Headless` in its tests, it already
+depends on `retroglyph-core`. No cycle.
+
+**Feature flag matrix growth.** Even without a facade, `retroglyph-software`'s `tilesets` /
+`default-font` flags and `retroglyph-window`'s wasm variant stack up. `cargo-hack` (Step 4) is the
+mitigation; keep the local recipe, not just CI, current.
 
 ## Deferred: `retroglyph-app`
 
-An earlier sketch put the game-loop scaffolding in a dedicated `retroglyph-app` crate. After
-decomposing the loop (ADR 015 Decision 2), almost nothing is left for it to own: the
-`App`/`Flow`/`Frame` contract and the generic `run_blocking` driver live in `retroglyph-core`, and
-the inverted driver lives in the windowing layer. The only genuinely app-level utilities that remain
-are small and dep-free (for example `InputMap`, a rebindable key→action map graduating from
-`examples/util/action.rs`). Those go in the facade behind features rather than a separate published
-crate.
+Unchanged from the original draft: the `App`/`Flow`/`Frame` contract and the generic `run_blocking`
+driver live in `retroglyph-core`; the inverted driver lives in `retroglyph-window`. Small, dep-free
+app-level utilities (e.g. `InputMap`) stay as loose modules graduating from `examples/util/`,
+promoted to a published `retroglyph-app` only if a retained-mode layer materializes later.
 
-Promote to `retroglyph-app` later only if a retained-mode layer materializes: a screen/state stack,
-focus and event routing over a retained widget tree, or an ECS bridge. Because the utilities already
-sit behind a facade feature, moving them into a crate the facade re-exports keeps the public path
-(for example `retroglyph::InputMap`) stable. Same "split when it warrants it" logic as ADR 001.
+## Windowed backend family and `retroglyph-window`
 
-## Future: the windowed backend family and `retroglyph-window`
-
-Planned GPU backends (`wgpu`, `opengl`, `webgl2`) join `retroglyph-software` as a **windowed
-family** sharing a large, backend-agnostic surface:
-
-- winit window + event loop (and the wasm `requestAnimationFrame` variant),
-- winit-event → `retroglyph::Event` translation (keys, mouse, modifiers, resize, scale factor,
-  close),
-- the inverted `run(app)` driver (ADR 015 Decision 2, piece 3),
-- cursor, DPI, and resize handling.
-
-What differs per backend is only rasterization: softbuffer CPU blit vs a GPU glyph atlas with
-instanced quads. `Backend::composites_layers()` (ADR 015 Decision 1) returns `true` for the entire
-family; only character-cell crossterm returns `false`.
-
-Rather than reimplement windowing in each GPU crate, extract the shared surface into
-`retroglyph-window` (depends on `retroglyph-core` + `winit`) exposing a renderer seam (a
-`Presenter`/surface trait) that each renderer implements:
+This is now a **decision**, not a future note: `retroglyph-window` is extracted as part of this
+split (see above), ahead of the second windowed backend actually landing, because a GL prototype is
+imminent enough to validate the seam quickly rather than guess at it in the abstract.
 
 ```text
 retroglyph-core
-  └── retroglyph-window     winit loop, event translation, inverted run, Presenter trait
+  └── retroglyph-window     winit loop, event translation, inverted run, Presenter trait,
+        │                   WindowBackend<P: Presenter>
         ├── retroglyph-software   Presenter via softbuffer
-        ├── retroglyph-wgpu       Presenter via wgpu
-        └── retroglyph-gl         Presenter via glutin/glow (opengl, webgl2)
+        ├── retroglyph-wgpu       Presenter via wgpu           (not yet built)
+        └── retroglyph-gl         Presenter via glutin/glow    (prototype imminent)
 ```
 
-`retroglyph-crossterm` stays entirely outside this family: no winit, no `Presenter`, driven by
-core's `run_blocking`.
+`retroglyph-crossterm` stays entirely outside this family: no winit, no `Presenter`, implements
+`Backend` directly, driven by core's `run_blocking`.
 
-Timing and open questions:
-
-- **Do not extract now.** With one windowed backend the seam has a single consumer. wgpu (async
-  device/queue init), GL (context-current-on-thread), and softbuffer (neither) have materially
-  different surface lifecycles; the `Presenter` trait must be designed against at least two of them
-  or it fits none. Keep the windowing code as a liftable `window.rs` inside `retroglyph-software`
-  until then.
-- **Trait-fusion caveat.** Today's `Backend` fuses input (`poll_event`, `push_event`) with output
-  (`draw_layers`, `flush`, `size`, `resize`, cursor). In the windowed family, input is owned by the
-  shared window and output by the per-renderer `Presenter`. Separating those halves is best designed
-  when `retroglyph-window` is extracted, not now.
-- **Shared atlas.** A glyph/tile atlas _layout_ (glyph → sprite cell) is common to
-  `software-tilesets` and every GPU backend; only upload and sampling are backend-specific. Whether
-  that becomes a shared `retroglyph-atlas` module is a smaller, separate question to revisit with
-  the first GPU backend.
+Open question carried forward: a glyph/tile atlas _layout_ (glyph -> sprite cell) is common to
+`software-tilesets` and every GPU backend; only upload and sampling are backend-specific. Whether
+that becomes a shared `retroglyph-atlas` module is a smaller question to revisit once the GL
+prototype's needs are concrete, not now.
 
 ## Non-goals
 
 - **Splitting grid/terminal into separate crates.** The internal dependency graph between color,
   style, tile, grid, event, text, layout, and terminal is dense. Splitting these would create 5+
   tiny crates with tight coupling. Not worth the friction.
-- **Plugin/dynamic backend loading.** Backends are compile-time selections. Dynamic dispatch adds
-  complexity for no clear user benefit in this domain.
-- **Workspace-level feature unification beyond the facade.** Each backend crate declares its own
-  features. The facade maps them, but there is no workspace-wide feature resolver beyond what Cargo
-  provides.
+- **A facade crate in this pass.** Deferred; see "No facade, for now" above.
+- **Plugin/dynamic backend loading.** Backends are compile-time selections.
+- **Workspace-level feature unification beyond each crate's own Cargo.toml.** No workspace-wide
+  feature resolver beyond what Cargo provides.
+- **Publishing to crates.io.** Deferred to ADR 017.
 
 ## References
 
@@ -454,7 +495,9 @@ Timing and open questions:
 - [ADR 011: WASM Portability](011-wasm-portability-revised.md) -- rAF frame gating
 - [ADR 013: Codecov](013-codecov.md) -- flag-per-crate model designed for this split
 - [ADR 015: Cross-Backend Rendering and Loop Consistency](015-cross-backend-consistency.md) -- loop
-  decomposition, `composites_layers`, windowed family
+  decomposition, `composites_layers`, windowed family (Accepted, landed first as planned)
+- [ADR 016: Widget-Trait Verdict](016-widget-trait-verdict.md) -- amended by this ADR;
+  `retroglyph-widgets` ships now rather than waiting for a second consumer
+- [ADR 017: Release Process and Workspace Tooling](017-release-and-workspace-tooling.md) -- stub,
+  publishing/changelog/release tooling deferred here
 - [Cargo workspaces](https://doc.rust-lang.org/cargo/reference/workspaces.html)
-- [cargo-release](https://github.com/crate-ci/cargo-release) -- multi-crate publish ordering
-- [release-plz](https://github.com/MarcoIeni/release-plz) -- alternative with changelog generation
