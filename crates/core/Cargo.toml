@@ -14,7 +14,11 @@ categories.workspace = true
 workspace = true
 
 [dependencies]
-gem = { version = "0.1.0-alpha.5", optional = true, default-features = false, features = ["std"] }
+# gem gets `libm` as its no_std float-math floor (see the `gem` feature); the
+# `std` feature additionally turns on `gem/std`, which gem prefers over libm
+# when both are present. So std builds use std's float intrinsics and no_std
+# builds fall back to libm, with no code change in retroglyph-core.
+gem = { version = "0.1.0-alpha.6", optional = true, default-features = false }
 ixy = "0.6.0-alpha.7"
 grixy = { version = "0.6.0-alpha.7", features = ["alloc", "buffer"] }
 unicode-width = "0.2"
@@ -23,9 +27,10 @@ unicode-segmentation = { version = "1.13", default-features = false, optional = 
 
 [features]
 default = ["std", "egc", "gem"]
-std = []
-gem = ["dep:gem"]
+# `gem?/std`: only when gem is also enabled, prefer std float math over libm.
+std = ["gem?/std"]
 egc = ["dep:unicode-segmentation"]
+gem = ["dep:gem", "gem/libm"]
 
 [dev-dependencies]
 unicode-width = "0.2"

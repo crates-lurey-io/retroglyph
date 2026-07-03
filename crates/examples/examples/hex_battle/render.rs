@@ -21,15 +21,15 @@
 //! └────────────────────────────────────────────────────────────────────────┘
 //! ```
 
-use retroglyph::Terminal;
-use retroglyph::backend::Backend;
-use retroglyph::color::Color;
-use retroglyph::grid::Rect;
+use retroglyph_core::Backend;
+use retroglyph_core::Terminal;
+use retroglyph_core::color::Color;
+use retroglyph_core::grid::Rect;
 
 use super::hexmap::{
     BOARD_COLS, BOARD_ROWS, HEX_CELL_COLS, HEX_CELL_ROWS, MAP_ORIGIN_X, MAP_ORIGIN_Y, axial_to_cell,
 };
-#[cfg(feature = "software-tilesets")]
+#[cfg(feature = "tilesets")]
 use super::hexmap::{SPRITE_ATTACK, SPRITE_BLUE, SPRITE_EMPTY, SPRITE_RED, SPRITE_SELECTED};
 use super::sim::{Faction, GameEvent, ReplayStep, Unit};
 
@@ -228,7 +228,7 @@ fn draw_map<B: Backend>(term: &mut Terminal<B>, step: &ReplayStep, render: &Rend
         })
     };
 
-    #[cfg(feature = "software-tilesets")]
+    #[cfg(feature = "tilesets")]
     {
         term.layer(1);
         for (q, r) in board_hexes() {
@@ -265,7 +265,7 @@ fn draw_map<B: Backend>(term: &mut Terminal<B>, step: &ReplayStep, render: &Rend
         term.layer(0);
     }
 
-    #[cfg(not(feature = "software-tilesets"))]
+    #[cfg(not(feature = "tilesets"))]
     {
         term.layer(0);
         for (q, r) in board_hexes() {
@@ -315,7 +315,7 @@ fn is_attack_target(q: i32, r: i32, step: &ReplayStep) -> bool {
 /// All 8 cells (4×2) share the same fill background. The outline characters
 /// (`/`, `\`, `─`) define the hex shape visually. Adjacent hexes share
 /// borders (`\/` and `/\`), forming a honeycomb.
-#[cfg(not(feature = "software-tilesets"))]
+#[cfg(not(feature = "tilesets"))]
 fn draw_ascii_hex<B: Backend>(
     term: &mut Terminal<B>,
     cx: u16,
@@ -343,7 +343,7 @@ fn draw_ascii_hex<B: Backend>(
 }
 
 /// Draw a unit label inside an ASCII hex, centered in the interior.
-#[cfg(not(feature = "software-tilesets"))]
+#[cfg(not(feature = "tilesets"))]
 fn draw_unit_ascii<B: Backend>(term: &mut Terminal<B>, cx: u16, cy: u16, unit: &Unit) {
     let fg = match unit.faction {
         Faction::Blue => COL_BLUE,
@@ -364,7 +364,7 @@ fn draw_unit_ascii<B: Backend>(term: &mut Terminal<B>, cx: u16, cy: u16, unit: &
 /// `SoftwareRenderer` alpha-blends it on top of the hex tile beneath.
 /// No text labels are overlaid — the sprite itself contains the circle
 /// and letter area from build.rs.
-#[cfg(feature = "software-tilesets")]
+#[cfg(feature = "tilesets")]
 fn draw_unit_sprite<B: Backend>(term: &mut Terminal<B>, cx: u16, cy: u16, unit: &Unit) {
     let sprite = match unit.faction {
         Faction::Blue => SPRITE_BLUE,
@@ -526,8 +526,8 @@ fn draw_footer<B: Backend>(term: &mut Terminal<B>, render: &RenderState, w: u16,
     let bar_x = 27u16;
     let bar_w = cx.saturating_sub(bar_x + 2);
     if bar_w > 0 {
-        use crate::util::draw::progress_bar;
-        use retroglyph::style::Style;
+        use retroglyph_core::style::Style;
+        use retroglyph_widgets::progress_bar;
         let filled = Style::new().fg(COL_SELECTED).bg(COL_BG);
         let empty = Style::new().fg(COL_DIM).bg(COL_BG);
         progress_bar(
@@ -623,7 +623,7 @@ fn truncate(s: &str, max_chars: usize) -> &str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use retroglyph::Headless;
+    use retroglyph_core::Headless;
 
     fn make_step0() -> (ReplayStep, Vec<ReplayStep>) {
         let (_, steps) = crate::sim::build_scenario();
@@ -634,7 +634,7 @@ mod tests {
     // The headless backend records raw codepoints. With tilesets active the
     // cells contain sprite indices (\x00, \x02 …) — format_view is meaningless
     // for that path. Only run against the colored-block path.
-    #[cfg(not(feature = "software-tilesets"))]
+    #[cfg(not(feature = "tilesets"))]
     #[test]
     fn hex_battle_initial_layout() {
         let backend = Headless::new(80, 24);
@@ -660,7 +660,7 @@ mod tests {
         insta::assert_snapshot!(view);
     }
 
-    #[cfg(not(feature = "software-tilesets"))]
+    #[cfg(not(feature = "tilesets"))]
     #[test]
     fn hex_battle_attack_step() {
         let backend = Headless::new(80, 24);
@@ -696,11 +696,11 @@ mod tests {
     /// `assert_png_snapshot` takes an explicit `scale` so pixel dimensions
     /// match the `SoftwareBackendBuilder::scale()` value used in each test.
     /// Pixel buffer size = `cols × GLYPH_W × scale` × `rows × GLYPH_H × scale`.
-    #[cfg(all(feature = "software-default-font", not(target_arch = "wasm32")))]
+    #[cfg(all(feature = "default-font", not(target_arch = "wasm32")))]
     mod software {
         use super::super::*;
-        use retroglyph::Terminal;
-        use retroglyph::backend::software::{SoftwareBackendBuilder, SoftwareRenderer};
+        use retroglyph_core::Terminal;
+        use retroglyph_software::{SoftwareBackendBuilder, SoftwareRenderer};
 
         const GLYPH_W: u32 = 8;
         const GLYPH_H: u32 = 16;
@@ -832,7 +832,7 @@ mod tests {
 
         /// Software renderer, no tilesets: exercises the colored-block rendering
         /// path through the actual pixel pipeline (VGA font, scale=1, 80×24).
-        #[cfg(not(feature = "software-tilesets"))]
+        #[cfg(not(feature = "tilesets"))]
         #[test]
         fn software_colored_blocks() {
             let renderer = SoftwareBackendBuilder::new()
@@ -861,10 +861,10 @@ mod tests {
         /// Uses `scale(2)` — the production setting — so each hex cell renders
         /// at 48×64 px (close to the native 64×64 sprite) and text labels are
         /// readable.  Image: (MAP_COLS+36)×16 × (MAP_ROWS+4)×32 pixels.
-        #[cfg(feature = "software-tilesets")]
+        #[cfg(feature = "tilesets")]
         #[test]
         fn software_sprites() {
-            use retroglyph::backend::software::tileset::{Codepage, TilesetOptions};
+            use retroglyph_software::tileset::{Codepage, TilesetOptions};
 
             static HEX_SPRITE_BYTES: &[u8] =
                 include_bytes!(concat!(env!("OUT_DIR"), "/hex_sprites.png"));

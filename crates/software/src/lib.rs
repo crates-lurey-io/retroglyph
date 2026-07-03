@@ -25,9 +25,9 @@
 pub mod bitmap_font;
 pub mod config;
 
-#[cfg(feature = "software-tilesets")]
+#[cfg(feature = "tilesets")]
 pub mod sprite_cache;
-#[cfg(feature = "software-tilesets")]
+#[cfg(feature = "tilesets")]
 pub mod tileset;
 
 use retroglyph_core::backend::Backend;
@@ -36,7 +36,7 @@ use retroglyph_core::color::{AnsiColor, Color};
 pub use bitmap_font::BitmapFont;
 pub use config::{SoftwareBackend, SoftwareBackendBuilder, SoftwareBackendError};
 
-#[cfg(feature = "software-tilesets")]
+#[cfg(feature = "tilesets")]
 use alpha_blend::rgba::U8x4Rgba;
 use bitmap_font::BitmapFont as Font;
 use grixy::buf::GridBuf;
@@ -47,7 +47,7 @@ use retroglyph_core::grid::{Pos, Size};
 use retroglyph_core::style::CellModifier;
 use retroglyph_core::tile::Tile;
 use retroglyph_window::WindowHandle;
-#[cfg(feature = "software-tilesets")]
+#[cfg(feature = "tilesets")]
 use sprite_cache::{Sprite, SpriteCache};
 use std::collections::VecDeque;
 use std::num::NonZeroU32;
@@ -76,7 +76,7 @@ pub struct SoftwareRenderer {
     /// the builder validation step.
     font: BitmapFont,
     ctx: RenderContext,
-    #[cfg(feature = "software-tilesets")]
+    #[cfg(feature = "tilesets")]
     sprite_cache: Arc<SpriteCache>,
 }
 
@@ -136,7 +136,7 @@ impl SoftwareRenderer {
         buf_h: usize,
         cell_w: u32,
         cell_h: u32,
-        #[cfg(feature = "software-tilesets")] sprite_cache: Arc<SpriteCache>,
+        #[cfg(feature = "tilesets")] sprite_cache: Arc<SpriteCache>,
     ) -> Self {
         Self {
             options,
@@ -148,7 +148,7 @@ impl SoftwareRenderer {
                 cell_w,
                 cell_h,
             },
-            #[cfg(feature = "software-tilesets")]
+            #[cfg(feature = "tilesets")]
             sprite_cache,
         }
     }
@@ -276,7 +276,7 @@ impl SoftwareBackend {
         let buf_w = usize::from(self.cols) * usize::try_from(cell_w).unwrap();
         let buf_h = usize::from(self.rows) * usize::try_from(cell_h).unwrap();
 
-        #[cfg(feature = "software-tilesets")]
+        #[cfg(feature = "tilesets")]
         let sprite_cache = if self.tilesets.is_empty() {
             Arc::new(SpriteCache::new())
         } else {
@@ -296,7 +296,7 @@ impl SoftwareBackend {
             buf_h,
             cell_w,
             cell_h,
-            #[cfg(feature = "software-tilesets")]
+            #[cfg(feature = "tilesets")]
             sprite_cache,
         )
     }
@@ -322,7 +322,7 @@ impl Backend for SoftwareRenderer {
         let glyph_h = usize::from(font.glyph_height) * scale;
         let buf_w = usize::from(cols) * glyph_w;
 
-        #[cfg(feature = "software-tilesets")]
+        #[cfg(feature = "tilesets")]
         let sprite_cache = Some(&*self.sprite_cache);
 
         for (pos, cell) in content {
@@ -335,7 +335,7 @@ impl Backend for SoftwareRenderer {
                 glyph_w,
                 glyph_h,
                 scale,
-                #[cfg(feature = "software-tilesets")]
+                #[cfg(feature = "tilesets")]
                 sprite_cache,
             );
         }
@@ -357,10 +357,10 @@ impl Backend for SoftwareRenderer {
         let cell_w = usize::from(font.glyph_width) * scale;
         let cell_h = usize::from(font.glyph_height) * scale;
         let buf_w = usize::from(cols) * cell_w;
-        #[cfg(feature = "software-tilesets")]
+        #[cfg(feature = "tilesets")]
         let buf_h = self.ctx.pixel_buf.as_ref().len() / buf_w;
 
-        #[cfg(feature = "software-tilesets")]
+        #[cfg(feature = "tilesets")]
         let sprite_cache = Some(&*self.sprite_cache);
 
         for (layer_id, pos, tile) in content {
@@ -374,7 +374,7 @@ impl Backend for SoftwareRenderer {
             }
 
             // Sprite cache dispatch: sprite wins over bitmap font.
-            #[cfg(feature = "software-tilesets")]
+            #[cfg(feature = "tilesets")]
             if let Some(sprite) = sprite_cache.and_then(|c| c.get(tile.glyph())) {
                 blit_sprite(
                     self.ctx.pixel_buf.as_mut(),
@@ -540,12 +540,12 @@ fn blit_cell(
     cell_w: usize,
     cell_h: usize,
     scale: usize,
-    #[cfg(feature = "software-tilesets")] sprite_cache: Option<&SpriteCache>,
+    #[cfg(feature = "tilesets")] sprite_cache: Option<&SpriteCache>,
 ) {
     let px_x = pos.x as usize * cell_w;
     let px_y = pos.y as usize * cell_h;
 
-    #[cfg(feature = "software-tilesets")]
+    #[cfg(feature = "tilesets")]
     if let Some(sprite) = sprite_cache.and_then(|c| c.get(cell.glyph())) {
         let buf_h = buffer.len() / buf_w;
         blit_sprite(buffer, buf_w, buf_h, px_x, px_y, cell, sprite, scale);
@@ -678,7 +678,7 @@ fn blit_glyph(
 ///
 /// Blending uses pure integer `U8x4Rgba::source_over`. Fully opaque pixels
 /// (alpha == 255) skip blending entirely and write directly to the buffer.
-#[cfg(feature = "software-tilesets")]
+#[cfg(feature = "tilesets")]
 #[allow(
     clippy::cast_possible_truncation,
     clippy::cast_possible_wrap,
@@ -847,7 +847,7 @@ mod tests {
             cols: 1,
             rows: 1,
             scale: 1,
-            #[cfg(feature = "software-tilesets")]
+            #[cfg(feature = "tilesets")]
             tilesets: Vec::new(),
             target_fps: None,
         };

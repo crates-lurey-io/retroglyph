@@ -49,7 +49,7 @@ impl Backend {
     const fn base_features(self) -> &'static [&'static str] {
         match self {
             Self::Terminal => &["crossterm"],
-            Self::Desktop | Self::Wasm => &["software-default-font"],
+            Self::Desktop | Self::Wasm => &["default-font"],
             // Deliberately no backend feature: rg_run!/rg_run_software! fall
             // back to a Headless-backend main() when neither crossterm nor
             // software is enabled. See examples/util/mod.rs::run_headless.
@@ -153,26 +153,26 @@ static EXAMPLES: &[Example] = &[
             Backend::Headless,
         ],
         // Terminal uses crossterm (ASCII art hexes).
-        // Desktop/Wasm use software-tilesets for PNG hex sprites.
+        // Desktop/Wasm use tilesets for PNG hex sprites.
         // Headless uses neither (see Backend::base_features).
         extra_features: &[],
         backend_features: &[
-            (Backend::Desktop, &["software-tilesets"]),
-            (Backend::Wasm, &["software-tilesets"]),
+            (Backend::Desktop, &["tilesets"]),
+            (Backend::Wasm, &["tilesets"]),
         ],
     },
     Example {
         name: "tileset",
         description: "custom PNG sprite sheets with alpha blending",
         backends: &[Backend::Desktop, Backend::Wasm, Backend::Headless],
-        extra_features: &["software-tilesets"],
+        extra_features: &["tilesets"],
         backend_features: &[],
     },
     Example {
         name: "sprite_stress",
         description: "alpha-blended sprite throughput benchmark",
         backends: &[Backend::Desktop, Backend::Wasm, Backend::Headless],
-        extra_features: &["software-tilesets"],
+        extra_features: &["tilesets"],
         backend_features: &[],
     },
     Example {
@@ -205,7 +205,7 @@ fn combined_features(backend: Backend, ex: &Example) -> Vec<&'static str> {
     // Headless always runs with zero features: examples fall back to the
     // Headless backend precisely when neither `crossterm` nor `software` is
     // enabled (see rg_run!/rg_run_software! in examples/util/mod.rs). Mixing
-    // in an example's usual extras (e.g. software-tilesets) would enable
+    // in an example's usual extras (e.g. tilesets) would enable
     // `software` and route it to the normal windowed backend instead.
     if backend == Backend::Headless {
         return Vec::new();

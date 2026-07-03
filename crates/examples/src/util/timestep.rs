@@ -56,7 +56,7 @@ use wasm_time::{Duration, Instant};
 /// `SystemTime`/`Instant`). This is the tiny helper referenced by the dashboard
 /// demo plan; it exists because `rg_run!`'s `tick` signature hides `Frame.dt`.
 ///
-/// [`FrameClock`]: retroglyph::FrameClock
+/// [`FrameClock`]: retroglyph_core::FrameClock
 pub struct Stopwatch {
     last: Instant,
 }

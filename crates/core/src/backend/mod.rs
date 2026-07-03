@@ -22,6 +22,7 @@ use core::time::Duration;
 pub trait BackendError: core::fmt::Display + core::fmt::Debug {}
 
 impl BackendError for core::convert::Infallible {}
+#[cfg(feature = "std")]
 impl BackendError for std::io::Error {}
 
 /// A rendering backend that presents grid content to a display

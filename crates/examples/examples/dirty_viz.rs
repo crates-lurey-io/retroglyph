@@ -25,15 +25,13 @@
 //! drawing (which it does). When `present_stats()` is added to the library,
 //! replace the manual tracking with the library-reported count.
 
-mod util;
-
+use retroglyph_core::color::Color;
+use retroglyph_core::style::Style;
+use retroglyph_core::{Backend, Terminal};
+use retroglyph_examples::util::action::{Action, event_to_action};
+use retroglyph_examples::util::perf::PerfOverlay;
 #[cfg(feature = "software")]
-use retroglyph::backend::software::SoftwareBackendBuilder;
-use retroglyph::color::Color;
-use retroglyph::style::Style;
-use retroglyph::{Backend, Terminal};
-use util::action::{Action, event_to_action};
-use util::perf::PerfOverlay;
+use retroglyph_software::SoftwareBackendBuilder;
 
 // ── Layout constants ──────────────────────────────────────────────────────────
 
@@ -417,7 +415,7 @@ fn tick<B: Backend>(term: &mut Terminal<B>, state: &mut VizState) -> bool {
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
-rg_run_software!(
+retroglyph_examples::rg_run_software!(
     VizState,
     init,
     tick,

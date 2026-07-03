@@ -27,12 +27,11 @@ image = { version = "0.25", optional = true, default-features = false, features 
 alpha-blend = { version = "0.2", optional = true, default-features = false, features = ["std"] }
 
 [features]
-# Kept as `software-*` (not the shorter `tilesets`/`default-font` ADR 014
-# sketched) to match the `#[cfg(feature = "...")]` strings already embedded
-# throughout this crate's source -- renaming those is a follow-up, not part
-# of the mechanical crate split.
-software-tilesets = ["dep:image", "dep:alpha-blend"]
-software-default-font = []
+# The `software-` prefix from the pre-split monolith is redundant now that
+# these live inside `retroglyph-software` (ADR 014): `retroglyph-software/tilesets`
+# reads better than `.../software-tilesets`.
+tilesets = ["dep:image", "dep:alpha-blend"]
+default-font = []
 
 [dev-dependencies]
 insta = { version = "1.34", features = ["yaml"] }

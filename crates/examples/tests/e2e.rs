@@ -1,10 +1,10 @@
 //! E2E tests for the `rg` library.
 
-use retroglyph::Terminal;
-use retroglyph::backend::Headless;
-use retroglyph::color::Color;
-use retroglyph::event::{Event, KeyCode, KeyEvent, KeyModifiers};
-use retroglyph::style::Style;
+use retroglyph_core::Headless;
+use retroglyph_core::Terminal;
+use retroglyph_core::color::Color;
+use retroglyph_core::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+use retroglyph_core::style::Style;
 
 #[test]
 fn test_e2e_movement() {
@@ -40,8 +40,8 @@ fn test_e2e_style() {
 
 #[test]
 fn test_e2e_headless_demo_scenario() {
-    use retroglyph::color::AnsiColor;
-    use retroglyph::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+    use retroglyph_core::color::AnsiColor;
+    use retroglyph_core::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 
     let backend = Headless::new(40, 15);
     let mut term = Terminal::new(backend);

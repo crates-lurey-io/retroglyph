@@ -12,7 +12,7 @@
 //! ```
 #![allow(dead_code)]
 
-use retroglyph::Pos;
+use retroglyph_core::Pos;
 
 /// A slope as an integer rational `num / den`, with `den > 0`.
 #[derive(Clone, Copy)]

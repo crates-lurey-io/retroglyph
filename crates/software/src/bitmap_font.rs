@@ -98,12 +98,12 @@ impl Eq for BitmapFont {}
 
 // ── Default embedded font ──────────────────────────────────────────────────
 
-/// The IBM VGA 8×16 font, embedded when the `software-default-font` feature
+/// The IBM VGA 8×16 font, embedded when the `default-font` feature
 /// is enabled.
 ///
 /// 256 CP437 glyphs, each 16 bytes (1 bit per pixel, MSB = leftmost).
 /// Source: Linux kernel `lib/fonts/font_8x16.c`.
-#[cfg(feature = "software-default-font")]
+#[cfg(feature = "default-font")]
 pub mod vga8x16 {
     use super::BitmapFont;
 

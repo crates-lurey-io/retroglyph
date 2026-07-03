@@ -546,6 +546,10 @@ impl Grid {
     /// Blending operates on packed RGB values; [`Color::Default`] preserves
     /// the destination. Non-RGB color variants (Ansi/Indexed) are passed
     /// through unblended.
+    ///
+    /// Requires the `gem` feature (default on): the per-channel color lerp is
+    /// delegated to [`gem::rgb::Lerp`].
+    #[cfg(feature = "gem")]
     #[allow(clippy::too_many_arguments, clippy::float_cmp)]
     pub fn blit_alpha(
         &mut self,
@@ -719,19 +723,19 @@ where
     }
 }
 
-/// Per-channel linear blend: `a + (b - a) * t`, rounded to u8.
-#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-fn lerp_u8(a: u8, b: u8, t: f32) -> u8 {
-    let diff = f32::from(b) - f32::from(a);
-    let result = diff.mul_add(t, f32::from(a));
-    result.round() as u8
-}
-
 /// Blend two [`Color`] values by interpolating RGB components.
 /// [`Color::Default`] preserves the destination. Non-RGB source colors are
 /// returned as-is (no resolution).
+///
+/// Per-channel sRGB-domain lerp (src -> dst by `t`) delegated to
+/// [`gem::rgb::Lerp`], which is `no_std`-safe (round-half-away via
+/// `floor(x + 0.5)`, no `std`/`libm` float intrinsics). This is the same math
+/// as the previous hand-rolled `lerp_u8`, now sourced from the color crate
+/// instead of reimplemented here.
+#[cfg(feature = "gem")]
 #[allow(clippy::float_cmp)]
 fn blend_color(src: Color, dst: Color, t: f32) -> Color {
+    use gem::rgb::{HasBlue as _, HasGreen as _, HasRed as _, Lerp as _, Rgb888};
     match (src, dst) {
         (Color::Default, _) => Color::Default,
         (
@@ -741,19 +745,24 @@ fn blend_color(src: Color, dst: Color, t: f32) -> Color {
                 b: sb,
             },
             Color::Rgb { r, g, b },
-        ) if t != 1.0 => Color::Rgb {
-            r: lerp_u8(sr, r, t),
-            g: lerp_u8(sg, g, t),
-            b: lerp_u8(sb, b, t),
-        },
+        ) if t != 1.0 => {
+            let out = Rgb888::from_rgb(sr, sg, sb).lerp(Rgb888::from_rgb(r, g, b), t);
+            Color::Rgb {
+                r: out.red(),
+                g: out.green(),
+                b: out.blue(),
+            }
+        }
         (src, _) => src,
     }
 }
 
+#[cfg(feature = "gem")]
 fn blend_fg(src: Color, dst: Color, t: f32) -> Color {
     blend_color(src, dst, t)
 }
 
+#[cfg(feature = "gem")]
 fn blend_bg(src: Color, dst: Color, t: f32) -> Color {
     blend_color(src, dst, t)
 }

@@ -2,8 +2,8 @@
 //! `.github/workflows/docs.yml` drifting apart.
 //!
 //! `runner.rs`'s `EXAMPLES` table is the source of truth for which examples
-//! support the WASM backend and which feature group (`software-default-font`
-//! vs `software-tilesets`) they need. `docs.yml` hand-maintains its own bash
+//! support the WASM backend and which feature group (`default-font`
+//! vs `tilesets`) they need. `docs.yml` hand-maintains its own bash
 //! arrays that must match, since it builds and publishes the WASM demos to
 //! GitHub Pages. Nothing enforced that agreement, and it already drifted
 //! (see PR history) — this test parses both files with light regexes and
@@ -12,10 +12,10 @@
 
 use std::collections::BTreeSet;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Examples declared in `runner.rs`, split by whether they need
-/// `software-tilesets` on top of `software-default-font` for the WASM backend.
+/// `tilesets` on top of `default-font` for the WASM backend.
 struct RunnerWasmExamples {
     default_font: BTreeSet<String>,
     tilesets: BTreeSet<String>,
@@ -25,9 +25,15 @@ fn manifest_dir() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR"))
 }
 
+/// Repo root: this crate lives at `crates/examples/`, so the workspace root
+/// (which holds `.github/`) is two levels up from the manifest dir.
+fn repo_root() -> PathBuf {
+    manifest_dir().join("../..")
+}
+
 /// Extracts each `Example { ... }` block's `name`, `backends`, and
 /// `backend_features` from `examples/runner.rs` well enough to answer
-/// "does this example run on Wasm, and does it need software-tilesets".
+/// "does this example run on Wasm, and does it need tilesets".
 ///
 /// This is a purpose-built scanner, not a Rust parser: it walks brace-matched
 /// `Example { ... }` blocks and inspects their text with substring checks.
@@ -44,13 +50,13 @@ fn parse_runner_wasm_examples() -> RunnerWasmExamples {
         }
         let name = extract_name(block);
 
-        // An example needs software-tilesets on Wasm if either its shared
+        // An example needs tilesets on Wasm if either its shared
         // `extra_features` or its Wasm-specific `backend_features` override
-        // mentions "software-tilesets".
+        // mentions "tilesets".
         let wasm_override = extract_backend_override(block, "Backend::Wasm");
         let needs_tilesets = wasm_override
             .unwrap_or_else(|| extract_field(block, "extra_features"))
-            .contains("software-tilesets");
+            .contains("tilesets");
 
         if needs_tilesets {
             tilesets.insert(name);
@@ -99,7 +105,7 @@ fn extract_name(block: &str) -> String {
 }
 
 /// Returns the raw source text of a top-level `field:` value up to the next
-/// top-level field, e.g. `&[]` or `&["software-tilesets"]`.
+/// top-level field, e.g. `&[]` or `&["tilesets"]`.
 fn extract_field<'a>(block: &'a str, field: &str) -> &'a str {
     let marker = format!("{field}:");
     let Some(after) = block.split_once(&marker).map(|(_, rest)| rest) else {
@@ -132,17 +138,17 @@ fn extract_backend_override<'a>(block: &'a str, backend_variant: &str) -> Option
 /// `docs.yml`'s "Generate examples index" step, which is the canonical list
 /// of every WASM example the workflow expects to have built successfully.
 fn parse_docs_yml_example_groups() -> (BTreeSet<String>, BTreeSet<String>) {
-    let src = fs::read_to_string(manifest_dir().join(".github/workflows/docs.yml"))
+    let src = fs::read_to_string(repo_root().join(".github/workflows/docs.yml"))
         .expect("failed to read .github/workflows/docs.yml");
 
     let default_font = extract_yaml_example_flags(
         &src,
-        "Build WASM examples (software-default-font)",
-        "Build WASM examples (software-tilesets)",
+        "Build WASM examples (default-font)",
+        "Build WASM examples (tilesets)",
     );
     let tilesets = extract_yaml_example_flags(
         &src,
-        "Build WASM examples (software-tilesets)",
+        "Build WASM examples (tilesets)",
         "Package WASM examples",
     );
 
@@ -173,16 +179,16 @@ fn docs_yml_wasm_examples_match_runner_rs() {
 
     assert_eq!(
         runner.default_font, docs_default_font,
-        "\n\n.github/workflows/docs.yml's software-default-font WASM build list is out of \
+        "\n\n.github/workflows/docs.yml's default-font WASM build list is out of \
          sync with examples/runner.rs. Update the `--example` list in the \
-         \"Build WASM examples (software-default-font)\" step, the \"Package WASM examples\" \
+         \"Build WASM examples (default-font)\" step, the \"Package WASM examples\" \
          EXAMPLES array, and the \"Generate examples index\" for-loop to match."
     );
     assert_eq!(
         runner.tilesets, docs_tilesets,
-        "\n\n.github/workflows/docs.yml's software-tilesets WASM build list is out of sync \
+        "\n\n.github/workflows/docs.yml's tilesets WASM build list is out of sync \
          with examples/runner.rs. Update the `--example` list in the \
-         \"Build WASM examples (software-tilesets)\" step, the \"Package WASM examples\" \
+         \"Build WASM examples (tilesets)\" step, the \"Package WASM examples\" \
          EXAMPLES array, and the \"Generate examples index\" for-loop to match."
     );
 }

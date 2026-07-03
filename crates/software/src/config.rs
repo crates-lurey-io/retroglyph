@@ -8,7 +8,7 @@
 //! directly for in-memory rendering.
 
 use super::bitmap_font::BitmapFont;
-#[cfg(feature = "software-tilesets")]
+#[cfg(feature = "tilesets")]
 use super::tileset::TilesetOptions;
 use std::fmt;
 
@@ -19,10 +19,10 @@ use std::fmt;
 /// another windowing integration -- reports its own errors.
 #[derive(Debug)]
 pub enum SoftwareBackendError {
-    /// No font was provided and the `software-default-font` feature is not enabled.
+    /// No font was provided and the `default-font` feature is not enabled.
     NoFont,
     /// Tileset loading failed.
-    #[cfg(feature = "software-tilesets")]
+    #[cfg(feature = "tilesets")]
     Tileset(super::tileset::TilesetError),
 }
 
@@ -33,9 +33,9 @@ impl fmt::Display for SoftwareBackendError {
                 f,
                 "no bitmap font provided; supply one via \
                  SoftwareBackendBuilder::font() or enable the \
-                 `software-default-font` feature"
+                 `default-font` feature"
             ),
-            #[cfg(feature = "software-tilesets")]
+            #[cfg(feature = "tilesets")]
             Self::Tileset(e) => write!(f, "tileset error: {e}"),
         }
     }
@@ -45,7 +45,7 @@ impl std::error::Error for SoftwareBackendError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::NoFont => None,
-            #[cfg(feature = "software-tilesets")]
+            #[cfg(feature = "tilesets")]
             Self::Tileset(e) => Some(e),
         }
     }
@@ -61,7 +61,7 @@ impl std::error::Error for SoftwareBackendError {
 ///
 /// # Examples
 ///
-/// Windowed mode (requires `software-default-font` feature; the loop comes
+/// Windowed mode (requires `default-font` feature; the loop comes
 /// from `retroglyph-window`):
 ///
 /// ```ignore
@@ -130,7 +130,7 @@ pub struct SoftwareBackend {
     pub window_title: String,
     /// Bitmap font used to render glyphs.
     ///
-    /// `None` only when `software-default-font` is disabled and no font has
+    /// `None` only when `default-font` is disabled and no font has
     /// been supplied via [`SoftwareBackendBuilder::font`].
     pub font: Option<BitmapFont>,
     /// Grid width in cells.
@@ -143,7 +143,7 @@ pub struct SoftwareBackend {
     /// the VGA 8×16 font display at 16×32 pixels per cell. Default is 1.
     pub scale: u8,
     /// Registered tileset options, loaded at [`run_headless`](SoftwareBackend::run_headless) time.
-    #[cfg(feature = "software-tilesets")]
+    #[cfg(feature = "tilesets")]
     pub tilesets: Vec<TilesetOptions>,
     /// Target frame rate cap in frames per second.
     ///
@@ -159,14 +159,14 @@ impl Default for SoftwareBackend {
     fn default() -> Self {
         Self {
             window_title: String::from("rg application"),
-            #[cfg(feature = "software-default-font")]
+            #[cfg(feature = "default-font")]
             font: Some(super::bitmap_font::vga8x16::FONT),
-            #[cfg(not(feature = "software-default-font"))]
+            #[cfg(not(feature = "default-font"))]
             font: None,
             cols: 80,
             rows: 25,
             scale: 1,
-            #[cfg(feature = "software-tilesets")]
+            #[cfg(feature = "tilesets")]
             tilesets: Vec::new(),
             target_fps: None,
         }
@@ -180,7 +180,7 @@ impl Default for SoftwareBackend {
 /// ```ignore
 /// use retroglyph_software::SoftwareBackendBuilder;
 ///
-/// // With the `software-default-font` feature the embedded VGA 8×16 font is
+/// // With the `default-font` feature the embedded VGA 8×16 font is
 /// // used automatically.  To supply your own 8×16 bitmap font:
 /// //
 /// //   use retroglyph_software::bitmap_font::BitmapFont;
@@ -200,7 +200,7 @@ pub struct SoftwareBackendBuilder {
 impl SoftwareBackendBuilder {
     /// Creates a builder with default options.
     ///
-    /// When the `software-default-font` feature is enabled the IBM VGA 8×16
+    /// When the `default-font` feature is enabled the IBM VGA 8×16
     /// font is pre-selected; otherwise you must call [`font`](Self::font).
     #[must_use]
     pub fn new() -> Self {
@@ -251,8 +251,8 @@ impl SoftwareBackendBuilder {
     /// [`run_headless`](SoftwareBackend::run_headless) is called. Later
     /// registrations win on codepoint collision.
     ///
-    /// Available only when the `software-tilesets` feature is enabled.
-    #[cfg(feature = "software-tilesets")]
+    /// Available only when the `tilesets` feature is enabled.
+    #[cfg(feature = "tilesets")]
     #[must_use]
     pub fn tileset(mut self, opts: TilesetOptions) -> Self {
         self.options.tilesets.push(opts);
@@ -280,7 +280,7 @@ impl SoftwareBackendBuilder {
     /// # Errors
     ///
     /// Returns [`SoftwareBackendError::NoFont`] if no font was set and the
-    /// `software-default-font` feature is not enabled.
+    /// `default-font` feature is not enabled.
     pub fn build(self) -> Result<SoftwareBackend, SoftwareBackendError> {
         if self.options.font.is_none() {
             return Err(SoftwareBackendError::NoFont);

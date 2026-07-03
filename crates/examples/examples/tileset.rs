@@ -11,18 +11,16 @@
 //! Run with:
 //!   `cargo run --example tileset --features software-tilesets,software-default-font`
 
-mod util;
-
-use retroglyph::event::{Event, KeyCode};
-use retroglyph::style::Style;
-use retroglyph::{Color, Terminal};
+use retroglyph_core::event::{Event, KeyCode};
+use retroglyph_core::style::Style;
+use retroglyph_core::{Color, Terminal};
 
 // ── Sprite data ───────────────────────────────────────────────────────────────
 //
 // Each sprite is 8×8 pixels, 1-bit (0 = transparent, 1 = foreground colour).
 // Stored as 8 bytes, MSB = leftmost pixel.
 
-#[cfg(feature = "software-tilesets")]
+#[cfg(feature = "tilesets")]
 const SPRITE_SWORD: [u8; 8] = [
     0b0000_0011,
     0b0000_0110,
@@ -34,7 +32,7 @@ const SPRITE_SWORD: [u8; 8] = [
     0b1001_0000,
 ];
 
-#[cfg(feature = "software-tilesets")]
+#[cfg(feature = "tilesets")]
 const SPRITE_POTION: [u8; 8] = [
     0b0001_1000,
     0b0001_1000,
@@ -46,7 +44,7 @@ const SPRITE_POTION: [u8; 8] = [
     0b0001_1000,
 ];
 
-#[cfg(feature = "software-tilesets")]
+#[cfg(feature = "tilesets")]
 const SPRITE_SKULL: [u8; 8] = [
     0b0001_1000,
     0b0011_1100,
@@ -58,7 +56,7 @@ const SPRITE_SKULL: [u8; 8] = [
     0b0011_1100,
 ];
 
-#[cfg(feature = "software-tilesets")]
+#[cfg(feature = "tilesets")]
 const SPRITE_COIN: [u8; 8] = [
     0b0011_1100,
     0b0100_0010,
@@ -72,7 +70,7 @@ const SPRITE_COIN: [u8; 8] = [
 
 struct SpriteDef {
     name: &'static str,
-    #[cfg(feature = "software-tilesets")]
+    #[cfg(feature = "tilesets")]
     bits: &'static [u8; 8],
     color: (u8, u8, u8),
 }
@@ -80,25 +78,25 @@ struct SpriteDef {
 const SPRITES: &[SpriteDef] = &[
     SpriteDef {
         name: "sword",
-        #[cfg(feature = "software-tilesets")]
+        #[cfg(feature = "tilesets")]
         bits: &SPRITE_SWORD,
         color: (200, 200, 220),
     },
     SpriteDef {
         name: "potion",
-        #[cfg(feature = "software-tilesets")]
+        #[cfg(feature = "tilesets")]
         bits: &SPRITE_POTION,
         color: (80, 200, 120),
     },
     SpriteDef {
         name: "skull",
-        #[cfg(feature = "software-tilesets")]
+        #[cfg(feature = "tilesets")]
         bits: &SPRITE_SKULL,
         color: (200, 200, 200),
     },
     SpriteDef {
         name: "coin",
-        #[cfg(feature = "software-tilesets")]
+        #[cfg(feature = "tilesets")]
         bits: &SPRITE_COIN,
         color: (220, 200, 40),
     },
@@ -106,7 +104,7 @@ const SPRITES: &[SpriteDef] = &[
 
 // ── Sprite sheet generation ───────────────────────────────────────────────────
 
-#[cfg(feature = "software-tilesets")]
+#[cfg(feature = "tilesets")]
 fn make_sprite_sheet() -> Vec<u8> {
     use image::ImageEncoder;
 
@@ -160,7 +158,7 @@ impl TilesetState {
 
 /// Draw one frame. Returns `false` when the user quits.
 #[allow(clippy::cast_possible_truncation)]
-fn tick(term: &mut Terminal<impl retroglyph::Backend>, state: &mut TilesetState) -> bool {
+fn tick(term: &mut Terminal<impl retroglyph_core::Backend>, state: &mut TilesetState) -> bool {
     let size = term.size();
 
     term.layer(0);
@@ -280,11 +278,11 @@ fn tick(term: &mut Terminal<impl retroglyph::Backend>, state: &mut TilesetState)
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 #[cfg(feature = "software")]
-use retroglyph::backend::software::SoftwareBackendBuilder;
-#[cfg(feature = "software-tilesets")]
-use retroglyph::backend::software::tileset::TilesetOptions;
+use retroglyph_software::SoftwareBackendBuilder;
+#[cfg(feature = "tilesets")]
+use retroglyph_software::tileset::TilesetOptions;
 
-rg_run_software!(
+retroglyph_examples::rg_run_software!(
     TilesetState,
     |_term| TilesetState::new(),
     tick,
