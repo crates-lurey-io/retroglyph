@@ -146,8 +146,10 @@ __ROWS__
         <strong>Headless</strong> renders as plain text (a fixed-size character grid, no canvas) —
         the same <code>Headless</code> backend used in tests, driven here by a browser
         <code>requestAnimationFrame</code> loop and an on-screen button toolbar.
-        <strong>Terminal</strong> (via <a href="https://xtermjs.org/">xterm.js</a>) is planned but
-        not wired up yet — greyed out until a future pass adds it.
+        <strong>Terminal</strong> (via <a href="https://xtermjs.org/">xterm.js</a>) renders real
+        ANSI/SGR escape codes — the same terminal-family renderer the native
+        <code>crossterm</code> backend uses. Only wired up for one example so far; more are
+        greyed out until a future pass extends it.
         <strong>Software</strong> is the CPU-rasterized pixel backend, rendered to a
         <code>&lt;canvas&gt;</code>. Greyed-out cells mean that backend isn't available for that
         example, not that it failed to build.

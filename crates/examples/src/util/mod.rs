@@ -278,6 +278,35 @@ macro_rules! __rg_wasm_headless_arm {
     };
 }
 
+/// Emit the `#[cfg]`-gated wasm-terminal entry-point arm shared by
+/// [`rg_run!`] and any example that hand-rolls its own backend dispatch
+/// instead of using it.
+///
+/// Mirrors [`__rg_wasm_headless_arm!`] exactly, one backend over: expands to
+/// the single `wasm_terminal_entry!` call gated on `wasm-terminal` being
+/// enabled, both `software` and `wasm-headless` being disabled (in `rg_run!`,
+/// `software` takes priority over `wasm-headless`, which in turn takes
+/// priority over this arm — see the feature doc comment on `wasm-terminal` in
+/// Cargo.toml), and the target being `wasm32`. Callers still need their own
+/// fallback `main` guarded with a matching `not(...)` of this same condition.
+///
+/// Not yet wired into [`rg_run_software!`] or any hand-rolled dispatch (e.g.
+/// `hex_battle`) — only [`rg_run!`] uses this arm today. Add call sites the
+/// same way [`__rg_wasm_headless_arm!`] was added to those spots, when a
+/// `rg_run_software!`-based example needs a Terminal demo.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __rg_wasm_terminal_arm {
+    ($State:ty, $init:path, $tick:path) => {
+        #[cfg(all(
+            feature = "wasm-terminal",
+            not(any(feature = "software", feature = "wasm-headless")),
+            target_arch = "wasm32"
+        ))]
+        ::retroglyph_examples::wasm_terminal_entry!($State, $init, $tick);
+    };
+}
+
 /// Emit a `main` function wired to the enabled backend, driving an [`App`]
 /// built from `init` + `tick` closures.
 ///
@@ -289,6 +318,12 @@ macro_rules! __rg_wasm_headless_arm {
 ///   drives a [`Terminal<Headless>`](retroglyph_core::Terminal) from browser
 ///   `#[wasm_bindgen]` calls instead of a canvas/window — see
 ///   [`wasm_headless_entry!`](crate::wasm_headless_entry).
+/// - When `wasm-terminal` is enabled (and neither `software` nor
+///   `wasm-headless` is) on `wasm32`: drives a
+///   [`Terminal<TerminalWasm>`](retroglyph_core::Terminal) from browser
+///   `#[wasm_bindgen]` calls instead of a canvas/window or a plain `<pre>`,
+///   for a browser terminal emulator (e.g. xterm.js) — see
+///   [`wasm_terminal_entry!`](crate::wasm_terminal_entry).
 /// - When none of the above are enabled: falls back to [`run_headless`],
 ///   ticking a few frames against a [`Headless`](retroglyph_core::Headless)
 ///   backend and printing them to stdout. This keeps every example
@@ -375,11 +410,20 @@ macro_rules! rg_run {
         // at once (see the Cargo.toml doc comment on `wasm-headless`).
         ::retroglyph_examples::__rg_wasm_headless_arm!($State, __rg_init, __rg_tick);
 
+        // ── WASM Terminal backend (xterm.js, no canvas/window) ──────────
+        //
+        // Takes priority over the stdout-printing Headless fallback below,
+        // but yields to `software` and `wasm-headless` if either of those
+        // feature flags is somehow enabled at once (see the Cargo.toml doc
+        // comment on `wasm-terminal`).
+        ::retroglyph_examples::__rg_wasm_terminal_arm!($State, __rg_init, __rg_tick);
+
         // ── Headless fallback (no backend feature enabled, or non-wasm) ───
         #[cfg(not(any(
             feature = "crossterm",
             feature = "software",
             all(feature = "wasm-headless", target_arch = "wasm32"),
+            all(feature = "wasm-terminal", target_arch = "wasm32"),
         )))]
         fn main() {
             $crate::util::run_headless(__rg_init, __rg_tick);
@@ -480,6 +524,154 @@ macro_rules! wasm_headless_entry {
         // functions above. No `#[wasm_bindgen(start)]` here: unlike the
         // software backend, there is no event loop to kick off at module-load
         // time, so we deliberately leave it unmarked.
+        fn main() {}
+    };
+}
+
+/// Emit the `#[wasm_bindgen]` entry points for the `wasm-terminal` branch of
+/// [`rg_run!`].
+///
+/// Mirrors [`wasm_headless_entry!`] one backend over, with two differences
+/// forced by [`TerminalWasm`](retroglyph_terminal_wasm::TerminalWasm)'s
+/// shape:
+///
+/// - Size isn't fixed at 50x25 like the Headless entry — `TerminalWasm` never
+///   queries a size on its own (see its doc comment), so the generated
+///   `_init`/`_resize` functions take `(width, height)` from JS, which reads
+///   them from xterm.js's `fit` addon (`term.cols`/`term.rows` after
+///   `fitAddon.fit()`).
+/// - Key decoding goes through
+///   [`retroglyph_terminal_wasm::decode_key_event`], not
+///   [`wasm_headless::decode_key`] — the two crates independently define a
+///   near-identical `(code, mods)` FFI encoding (both happen to use the same
+///   `0x0011_0000`-based scheme for named keys), but this macro must call the
+///   one that ships with `retroglyph-terminal-wasm` since that's the crate
+///   whose `KeyEvent` type this feeds into (`retroglyph_core::event::KeyEvent`
+///   either way, but keeping each backend's decoder next to its own FFI
+///   surface avoids a cross-crate dependency neither otherwise needs).
+///
+/// Exposes four `#[wasm_bindgen]` functions to JS:
+///
+/// - `wasm_terminal_example_init(width: u16, height: u16)` — builds the
+///   `Terminal<TerminalWasm>` at the given size and calls `$init` once. Call
+///   this before the first tick, after sizing the terminal emulator (e.g.
+///   `fitAddon.fit()`).
+/// - `wasm_terminal_example_resize(width: u16, height: u16)` — forwards to
+///   [`Backend::resize`](retroglyph_core::backend::Backend::resize). Call
+///   this again whenever the host re-fits the terminal (e.g. on browser
+///   window resize).
+/// - `wasm_terminal_example_push_key(code: u32, mods: u8)` — decodes and
+///   queues a key event via
+///   [`retroglyph_terminal_wasm::decode_key_event`]. Silently drops
+///   undecodable codes.
+/// - `wasm_terminal_example_tick() -> String` — calls `$tick` once (draining
+///   any queued key events first) and returns
+///   [`TerminalWasm::take_output`](retroglyph_terminal_wasm::TerminalWasm::take_output),
+///   the ANSI bytes rendered since the last call. The browser side calls this
+///   once per `requestAnimationFrame` tick and writes the returned string
+///   into the terminal emulator (e.g. xterm.js's `term.write(...)`).
+///
+/// Named `wasm_terminal_example_*` rather than `wasm_terminal_*` to avoid
+/// colliding with `retroglyph-terminal-wasm`'s own generic, handle-keyed
+/// `wasm_terminal_*` FFI exports (`wasm_terminal_new`, `wasm_terminal_resize`,
+/// etc.) — both modules are compiled into the same wasm binary when this
+/// macro is used, since it calls into `retroglyph_terminal_wasm` directly
+/// rather than through that module's opaque-handle registry (this macro's
+/// generated state already owns exactly one `TerminalWasm` in its own
+/// `thread_local!`, so the handle indirection would be redundant here).
+#[macro_export]
+macro_rules! wasm_terminal_entry {
+    ($State:ty, $init:path, $tick:path) => {
+        struct __WasmTerminalState {
+            term: ::retroglyph_core::Terminal<::retroglyph_terminal_wasm::TerminalWasm>,
+            state: $State,
+        }
+
+        ::std::thread_local! {
+            static __WASM_TERMINAL: ::std::cell::RefCell<::std::option::Option<__WasmTerminalState>> =
+                ::std::cell::RefCell::new(::std::option::Option::None);
+        }
+
+        /// Build the `Terminal<TerminalWasm>` at the given size (in cells)
+        /// and run `$init` once. Call before the first
+        /// `wasm_terminal_example_tick`, after sizing the host terminal
+        /// emulator (e.g. xterm.js's `fitAddon.fit()`).
+        #[::wasm_bindgen::prelude::wasm_bindgen]
+        #[allow(missing_docs)]
+        pub fn wasm_terminal_example_init(width: u16, height: u16) {
+            ::console_error_panic_hook::set_once();
+            let mut backend = ::retroglyph_terminal_wasm::TerminalWasm::new(width, height);
+            // Mirror `Crossterm::new()`'s unconditional `cursor::Hide` at
+            // startup: xterm.js otherwise shows its own blinking block
+            // cursor by default, which games don't expect to see (none of
+            // them manage cursor visibility themselves -- that's a terminal
+            // setup concern, not game logic).
+            ::retroglyph_core::backend::Backend::set_cursor_visible(&mut backend, false);
+            let mut term = ::retroglyph_core::Terminal::new(backend);
+            let state = $init(&mut term);
+            __WASM_TERMINAL.with(|cell| {
+                *cell.borrow_mut() = ::std::option::Option::Some(__WasmTerminalState { term, state });
+            });
+        }
+
+        /// Report a new size (in cells) to the `Terminal<TerminalWasm>`, e.g.
+        /// after the host terminal emulator re-fits on a window resize.
+        /// No-op if called before `wasm_terminal_example_init`.
+        #[::wasm_bindgen::prelude::wasm_bindgen]
+        #[allow(missing_docs)]
+        pub fn wasm_terminal_example_resize(width: u16, height: u16) {
+            __WASM_TERMINAL.with(|cell| {
+                if let ::std::option::Option::Some(s) = cell.borrow_mut().as_mut() {
+                    ::retroglyph_core::backend::Backend::resize(
+                        s.term.backend_mut(),
+                        ::retroglyph_core::grid::Size { width, height },
+                    );
+                }
+            });
+        }
+
+        /// Decode and queue a key event. `code`/`mods` are the FFI encoding
+        /// documented on `retroglyph_terminal_wasm::decode_key_event`. Codes
+        /// that don't decode to a known key are silently dropped.
+        #[::wasm_bindgen::prelude::wasm_bindgen]
+        #[allow(missing_docs)]
+        pub fn wasm_terminal_example_push_key(code: u32, mods: u8) {
+            let Some(event) = ::retroglyph_terminal_wasm::decode_key_event(code, mods) else {
+                return;
+            };
+            __WASM_TERMINAL.with(|cell| {
+                if let ::std::option::Option::Some(s) = cell.borrow_mut().as_mut() {
+                    s.term.backend_mut().push_event(::retroglyph_core::event::Event::Key(event));
+                }
+            });
+        }
+
+        /// Run one tick of the game loop and return the ANSI bytes rendered
+        /// since the last call, as a `String`, suitable for writing directly
+        /// into a browser terminal emulator (e.g. xterm.js's
+        /// `term.write(...)`).
+        ///
+        /// Returns an empty string if called before
+        /// `wasm_terminal_example_init`.
+        #[::wasm_bindgen::prelude::wasm_bindgen]
+        #[allow(missing_docs)]
+        pub fn wasm_terminal_example_tick() -> ::std::string::String {
+            __WASM_TERMINAL.with(|cell| {
+                let mut guard = cell.borrow_mut();
+                let Some(s) = guard.as_mut() else {
+                    return ::std::string::String::new();
+                };
+                $tick(&mut s.term, &mut s.state);
+                s.term.backend_mut().take_output()
+            })
+        }
+
+        // `cargo build --target wasm32-unknown-unknown --example ...` still
+        // requires a `main` symbol to exist even though JS never calls it for
+        // this entry mode — it only calls the four `#[wasm_bindgen]`
+        // functions above. No `#[wasm_bindgen(start)]` here, matching
+        // `wasm_headless_entry!`: there is no event loop to kick off at
+        // module-load time.
         fn main() {}
     };
 }

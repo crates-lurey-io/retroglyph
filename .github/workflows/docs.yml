@@ -73,14 +73,15 @@ jobs:
             --example hex_battle
         continue-on-error: true
 
-      # Software must be packaged (wasm-bindgen'd into target/doc/) before the
-      # Headless build below runs: both the software and wasm-headless builds
-      # of the same example produce the same output path
-      # (target/wasm32-unknown-unknown/release/examples/<name>.wasm — Cargo
-      # feature flags don't affect the artifact filename), so building
-      # Headless first would silently clobber the Software .wasm before it's
-      # packaged. Keep build+package interleaved per backend rather than
-      # batching all builds before all packaging.
+      # Each of Software/Headless/Terminal must be packaged (wasm-bindgen'd
+      # into target/doc/) immediately after its own build, before the next
+      # variant's build runs: all three build the *same* example name to the
+      # *same* output path (target/wasm32-unknown-unknown/release/examples/
+      # <name>.wasm — Cargo feature flags don't affect the artifact filename),
+      # so building, say, Terminal before Headless is packaged would silently
+      # clobber Headless's .wasm before it's ever wasm-bindgen'd. Keep
+      # build+package interleaved per backend (Software, then Headless, then
+      # Terminal) rather than batching all builds before all packaging.
       - name: Package WASM examples (Software)
         run: |
           EXAMPLES=(dungeon_room sokoban roguelike_dungeon scrolling_roguelike dashboard subpixel dirty_viz tileset sprite_stress hex_battle)
@@ -139,12 +140,55 @@ jobs:
           done
         continue-on-error: true
 
+      - name: Build WASM Terminal examples
+        # Browser "Terminal" demos (xterm.js, no canvas/window): a
+        # Terminal<TerminalWasm> driven by pushed key events, rendered as
+        # real ANSI/SGR escape codes into an xterm.js instance. See
+        # retroglyph-examples' `wasm-terminal` feature and
+        # `util::wasm_terminal_entry!`. Only examples with `docs_terminal:
+        # true` in examples/runner.rs's EXAMPLES table are built here —
+        # `--manifest` is this workflow's single source of truth for that
+        # list (also consumed below in "Generate examples index"), so
+        # runner.rs stays the one place that list is edited. Runs after
+        # Headless is packaged; see the ordering note above.
+        run: |
+          TERMINAL_EXAMPLES=$(cargo run -q -p retroglyph-examples --example runner -- --manifest | awk -F'\t' '$4 == 1 { print $1 }')
+          if [ -z "$TERMINAL_EXAMPLES" ]; then
+            echo "No examples with docs_terminal: true; skipping."
+            exit 0
+          fi
+          ARGS=()
+          for ex in $TERMINAL_EXAMPLES; do
+            ARGS+=(--example "$ex")
+          done
+          cargo build --release -p retroglyph-examples \
+            --target wasm32-unknown-unknown \
+            --features wasm-terminal \
+            "${ARGS[@]}"
+        continue-on-error: true
+
+      - name: Package WASM examples (Terminal)
+        run: |
+          TERMINAL_EXAMPLES=$(cargo run -q -p retroglyph-examples --example runner -- --manifest | awk -F'\t' '$4 == 1 { print $1 }')
+          for ex in $TERMINAL_EXAMPLES; do
+            wasm="${PWD}/target/wasm32-unknown-unknown/release/examples/${ex}.wasm"
+            if [ ! -f "$wasm" ]; then
+              echo "Skipping $ex — terminal wasm not built"
+              continue
+            fi
+            outdir="target/doc/examples/${ex}/terminal"
+            mkdir -p "$outdir"
+            "$CARGO_HOME/bin/wasm-bindgen" --target web --out-dir "$outdir" "$wasm"
+            sed -e "s/__EXAMPLE__/${ex}/g" docs/templates/examples/terminal-template.html > "$outdir/index.html"
+          done
+        continue-on-error: true
+
       - name: Generate examples index
         run: |
           mkdir -p target/doc/examples
           MANIFEST=$(cargo run -q -p retroglyph-examples --example runner -- --manifest)
           rows=""
-          while IFS=$'\t' read -r ex wasm_software docs_headless; do
+          while IFS=$'\t' read -r ex wasm_software docs_headless docs_terminal; do
             [ -z "$ex" ] && continue
 
             if [ "$docs_headless" = "1" ] && [ -f "target/doc/examples/${ex}/headless/index.html" ]; then
@@ -153,9 +197,11 @@ jobs:
               headless_cell="<td><span class=\"unavailable\">Headless</span></td>"
             fi
 
-            # Terminal (xterm.js) wiring is not built for any example yet;
-            # always greyed out until a future pass adds retroglyph-terminal-wasm.
-            terminal_cell="<td><span class=\"unavailable\">Terminal</span></td>"
+            if [ "$docs_terminal" = "1" ] && [ -f "target/doc/examples/${ex}/terminal/index.html" ]; then
+              terminal_cell="<td><a href=\"${ex}/terminal/\">Terminal</a></td>"
+            else
+              terminal_cell="<td><span class=\"unavailable\">Terminal</span></td>"
+            fi
 
             if [ "$wasm_software" = "1" ] && [ -f "target/doc/examples/${ex}/software/index.html" ]; then
               software_cell="<td><a href=\"${ex}/software/\">Software</a></td>"
