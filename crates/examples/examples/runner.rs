@@ -87,6 +87,12 @@ struct Example {
     /// get a live "Headless" cell in the docs table instead of a greyed-out
     /// one. Keep this in sync as more examples get wasm-headless support.
     docs_headless: bool,
+    /// Whether this example has a working browser "Terminal" (xterm.js) demo
+    /// wired up on the docs site (`--features wasm-terminal`, see
+    /// `util::wasm_terminal_entry!`). Same role as `docs_headless` but for
+    /// the Terminal column -- read by `.github/workflows/docs.yml` via this
+    /// binary's `--manifest` flag.
+    docs_terminal: bool,
 }
 
 static EXAMPLES: &[Example] = &[
@@ -102,6 +108,7 @@ static EXAMPLES: &[Example] = &[
         extra_features: &[],
         backend_features: &[],
         docs_headless: true,
+        docs_terminal: true,
     },
     Example {
         name: "sokoban",
@@ -115,6 +122,7 @@ static EXAMPLES: &[Example] = &[
         extra_features: &[],
         backend_features: &[],
         docs_headless: true,
+        docs_terminal: false,
     },
     Example {
         name: "roguelike_dungeon",
@@ -128,6 +136,7 @@ static EXAMPLES: &[Example] = &[
         extra_features: &[],
         backend_features: &[],
         docs_headless: true,
+        docs_terminal: false,
     },
     Example {
         name: "scrolling_roguelike",
@@ -141,6 +150,7 @@ static EXAMPLES: &[Example] = &[
         extra_features: &[],
         backend_features: &[],
         docs_headless: true,
+        docs_terminal: false,
     },
     Example {
         name: "dashboard",
@@ -149,6 +159,7 @@ static EXAMPLES: &[Example] = &[
         extra_features: &[],
         backend_features: &[],
         docs_headless: true,
+        docs_terminal: false,
     },
     Example {
         name: "subpixel",
@@ -157,6 +168,7 @@ static EXAMPLES: &[Example] = &[
         extra_features: &[],
         backend_features: &[],
         docs_headless: true,
+        docs_terminal: false,
     },
     Example {
         name: "hex_battle",
@@ -176,6 +188,7 @@ static EXAMPLES: &[Example] = &[
             (Backend::Wasm, &["tilesets"]),
         ],
         docs_headless: true,
+        docs_terminal: false,
     },
     Example {
         name: "tileset",
@@ -192,6 +205,7 @@ static EXAMPLES: &[Example] = &[
         // there is no working wasm build of any kind to attach a Headless
         // demo to. Fixing this is a separate, pre-existing issue.
         docs_headless: false,
+        docs_terminal: false,
     },
     Example {
         name: "sprite_stress",
@@ -201,6 +215,7 @@ static EXAMPLES: &[Example] = &[
         backend_features: &[],
         // Same pre-existing `image`-on-wasm build failure as `tileset` above.
         docs_headless: false,
+        docs_terminal: false,
     },
     Example {
         name: "dirty_viz",
@@ -209,6 +224,7 @@ static EXAMPLES: &[Example] = &[
         extra_features: &[],
         backend_features: &[],
         docs_headless: true,
+        docs_terminal: false,
     },
     Example {
         name: "headless",
@@ -217,6 +233,7 @@ static EXAMPLES: &[Example] = &[
         extra_features: &[],
         backend_features: &[],
         docs_headless: false,
+        docs_terminal: false,
     },
 ];
 
@@ -314,17 +331,22 @@ fn launch(ex: &Example, backend: Option<Backend>) -> ! {
 // docs.yml's bash heredocs, the docs workflow shells out to
 // `cargo run --example runner -- --manifest` and parses this instead.
 //
-// Tab-separated, one example per line: `name\twasm_software\tdocs_headless`
-// where the two flag columns are `1`/`0`. `wasm_software` is `1` when the
-// example builds for the existing canvas/software wasm backend
-// (`Backend::Wasm` in the matrix above); `docs_headless` mirrors
-// `Example::docs_headless`. No header row, so the shell side can loop over
-// lines directly.
+// Tab-separated, one example per line:
+// `name\twasm_software\tdocs_headless\tdocs_terminal` where the three flag
+// columns are `1`/`0`. `wasm_software` is `1` when the example builds for the
+// existing canvas/software wasm backend (`Backend::Wasm` in the matrix
+// above); `docs_headless`/`docs_terminal` mirror
+// `Example::docs_headless`/`Example::docs_terminal`. No header row, so the
+// shell side can loop over lines directly.
 fn print_manifest() {
     for ex in EXAMPLES {
         let wasm_software = u8::from(ex.backends.contains(&Backend::Wasm));
         let docs_headless = u8::from(ex.docs_headless);
-        println!("{}\t{wasm_software}\t{docs_headless}", ex.name);
+        let docs_terminal = u8::from(ex.docs_terminal);
+        println!(
+            "{}\t{wasm_software}\t{docs_headless}\t{docs_terminal}",
+            ex.name
+        );
     }
 }
 
