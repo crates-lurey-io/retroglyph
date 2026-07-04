@@ -2,4 +2,4 @@
 bin = ["run", "--package", "cargo-bin", "--"]
 
 [target.'cfg(target_family = "wasm")']
-runner = "./bin/bin/wasm-server-runner"
+runner = "./.bin/.shims/wasm-server-runner"
