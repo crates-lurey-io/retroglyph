@@ -18,6 +18,13 @@ retroglyph-crossterm = { path = "../crossterm", version = "0.2.0", optional = tr
 retroglyph-software = { path = "../software", version = "0.2.0", optional = true }
 retroglyph-window = { path = "../window", version = "0.2.0", optional = true }
 retroglyph-widgets = { path = "../widgets", version = "0.2.0" }
+# Optional, wasm32-only in practice: see the `wasm-terminal` feature below.
+# Declared as a plain (non-target-gated) optional dependency because Cargo
+# features can't be restricted to a target; `wasm-terminal` is documented as
+# wasm32-only and the crate itself is a no-op off that target (its `Backend`
+# impl still compiles portably -- only its `#[wasm_bindgen]` FFI module is
+# `cfg(target_arch = "wasm32")`-gated).
+retroglyph-terminal-wasm = { path = "../terminal-wasm", version = "0.2.0", optional = true }
 
 [features]
 # A game selects a backend by enabling one of these. With none enabled every
@@ -32,6 +39,13 @@ tilesets = ["software", "retroglyph-software/tilesets"]
 # branch. Mutually exclusive with `software` in practice (whichever the example
 # binary is built with wins; `rg_run!` prefers `software` if both are enabled).
 wasm-headless = []
+# WASM-only: drives a Terminal<TerminalWasm> from a browser terminal emulator
+# (e.g. xterm.js -- see docs/templates/examples/terminal-template.html)
+# instead of a canvas/window or a plain <pre>. See util/mod.rs's `rg_run!`
+# wasm-terminal branch. Mutually exclusive with `software`/`wasm-headless` in
+# practice (whichever the example binary is built with wins; `rg_run!`
+# prefers `software`, then `wasm-headless`, then this).
+wasm-terminal = ["dep:retroglyph-terminal-wasm"]
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "=0.2.106"
