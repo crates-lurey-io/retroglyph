@@ -36,15 +36,15 @@ lint: clippy markdown
 compile:
     cargo check --workspace --all-features
 
-doc: _llms-txt
+doc:
     cargo doc --workspace --no-deps --document-private-items --all-features
-    @cp llms.txt llms-full.txt target/doc/ 2>/dev/null || true
+    @./tools/gen-llms-txt.sh target/doc
     @cp -r docs/public/. target/doc/ 2>/dev/null || true
     @sed -i.bak "s/__GIT_SHA__/$(git rev-parse --short HEAD 2>/dev/null || echo unknown)/g" target/doc/index.html && rm -f target/doc/index.html.bak || true
 
-llms: _llms-txt
-
-_llms-txt:
+# Regenerate the workspace-level llms.txt / llms-full.txt (root only); `just doc`
+# also generates per-crate copies under target/doc/<crate>/.
+llms:
     @./bin/bin/cargo-llms-txt 2>/dev/null || cargo llms-txt 2>/dev/null || true
 
 docs-preview: doc

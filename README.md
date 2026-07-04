@@ -1,6 +1,9 @@
 # retroglyph
 
+[![CI](https://github.com/crates-lurey-io/retroglyph/actions/workflows/ci.yml/badge.svg)](https://github.com/crates-lurey-io/retroglyph/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/crates-lurey-io/retroglyph/graph/badge.svg?token=z8BBUp8fiY)](https://codecov.io/gh/crates-lurey-io/retroglyph)
+[![docs](https://github.com/crates-lurey-io/retroglyph/actions/workflows/docs.yml/badge.svg)](https://crates-lurey-io.github.io/retroglyph/)
+[![Benchmarks](https://img.shields.io/badge/benchmarks-bencher.dev-blue)](https://bencher.dev/perf/retroglyph)
 
 A 2D pseudographic terminal library for Rust.
 

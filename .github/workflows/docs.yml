@@ -127,7 +127,7 @@ jobs:
             <ul>
           ${entries}
             </ul>
-            <p><a href="../retroglyph_core/">API documentation</a></p>
+            <p><a href="../retroglyph_core/">API documentation</a> &middot; <a href="https://bencher.dev/perf/retroglyph">Benchmarks</a></p>
           </body>
           </html>
           HTML
