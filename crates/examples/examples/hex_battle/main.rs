@@ -127,9 +127,29 @@ retroglyph_examples::rg_run_software!(
 #[cfg(all(feature = "crossterm", not(feature = "tilesets")))]
 retroglyph_examples::rg_run!(State, init, tick);
 
-// Neither pixel-rendered sprites nor an ASCII-art terminal are available;
-// fall back to a headless smoke run (see `examples/runner.rs`'s Headless option).
-#[cfg(not(any(feature = "tilesets", feature = "crossterm")))]
+// WASM Headless backend (browser rAF loop, no canvas/window): same shared
+// arm `rg_run!`/`rg_run_software!` use internally, called directly here
+// since hex_battle hand-rolls its own four-way dispatch instead of going
+// through either macro. Takes priority over the stdout fallback below, but
+// yields to `tilesets` (software) if both are somehow enabled at once.
+//
+// Note this arm keys on `tilesets` rather than `software` (unlike the
+// shared macros' internal gate, which keys on `software`) because
+// hex_battle's own `rg_run_software!` call site above is itself gated on
+// `tilesets`, not `software` directly -- keeping the two in lockstep here
+// avoids a "no main found" gap for a `software`-without-`tilesets` build,
+// which isn't a combination hex_battle otherwise supports.
+#[cfg(not(feature = "tilesets"))]
+retroglyph_examples::__rg_wasm_headless_arm!(State, init, tick);
+
+// Neither pixel-rendered sprites, an ASCII-art terminal, nor the wasm
+// Headless backend are available; fall back to a headless smoke run (see
+// `examples/runner.rs`'s Headless option).
+#[cfg(not(any(
+    feature = "tilesets",
+    feature = "crossterm",
+    all(feature = "wasm-headless", target_arch = "wasm32"),
+)))]
 fn main() {
     retroglyph_examples::util::run_headless(init, tick);
 }
