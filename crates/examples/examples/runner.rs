@@ -228,16 +228,13 @@ static EXAMPLES: &[Example] = &[
         docs_headless: true,
         docs_terminal: true,
     },
-    Example {
-        name: "headless",
-        description: "headless backend — no terminal or window needed",
-        backends: &[],
-        extra_features: &[],
-        backend_features: &[],
-        docs_headless: false,
-        docs_terminal: false,
-    },
 ];
+
+// The standalone `headless` backend demo lives at
+// `crates/core/examples/headless.rs` now (it only depends on
+// `retroglyph-core`, not this crate's shared game state), so it's no longer
+// part of this picker. Run it with `cargo run -p retroglyph-core --example
+// headless`.
 
 // ── I/O helpers ───────────────────────────────────────────────────────────────
 

@@ -97,7 +97,4 @@ name = "hex_battle"
 path = "examples/hex_battle/main.rs"
 
 [[example]]
-name = "headless"
-
-[[example]]
 name = "runner"
