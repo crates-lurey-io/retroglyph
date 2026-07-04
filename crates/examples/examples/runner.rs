@@ -114,7 +114,7 @@ static EXAMPLES: &[Example] = &[
         ],
         extra_features: &[],
         backend_features: &[],
-        docs_headless: false,
+        docs_headless: true,
     },
     Example {
         name: "roguelike_dungeon",
@@ -127,7 +127,7 @@ static EXAMPLES: &[Example] = &[
         ],
         extra_features: &[],
         backend_features: &[],
-        docs_headless: false,
+        docs_headless: true,
     },
     Example {
         name: "scrolling_roguelike",
@@ -140,7 +140,7 @@ static EXAMPLES: &[Example] = &[
         ],
         extra_features: &[],
         backend_features: &[],
-        docs_headless: false,
+        docs_headless: true,
     },
     Example {
         name: "dashboard",
@@ -148,7 +148,7 @@ static EXAMPLES: &[Example] = &[
         backends: &[Backend::Terminal, Backend::Desktop, Backend::Wasm],
         extra_features: &[],
         backend_features: &[],
-        docs_headless: false,
+        docs_headless: true,
     },
     Example {
         name: "subpixel",
@@ -156,7 +156,7 @@ static EXAMPLES: &[Example] = &[
         backends: &[Backend::Desktop, Backend::Wasm, Backend::Headless],
         extra_features: &[],
         backend_features: &[],
-        docs_headless: false,
+        docs_headless: true,
     },
     Example {
         name: "hex_battle",
@@ -175,7 +175,7 @@ static EXAMPLES: &[Example] = &[
             (Backend::Desktop, &["tilesets"]),
             (Backend::Wasm, &["tilesets"]),
         ],
-        docs_headless: false,
+        docs_headless: true,
     },
     Example {
         name: "tileset",
@@ -183,6 +183,14 @@ static EXAMPLES: &[Example] = &[
         backends: &[Backend::Desktop, Backend::Wasm, Backend::Headless],
         extra_features: &["tilesets"],
         backend_features: &[],
+        // Not a wasm-headless capability gap: `make_sprite_sheet()` calls
+        // `image::codecs::png::PngEncoder` unconditionally whenever
+        // `tilesets` is enabled, and `image` is only a dev-dependency for
+        // `not(target_arch = "wasm32")` (see Cargo.toml). This example
+        // already fails a plain `cargo build --target wasm32-unknown-unknown
+        // --features tilesets` with no wasm-headless involved at all, so
+        // there is no working wasm build of any kind to attach a Headless
+        // demo to. Fixing this is a separate, pre-existing issue.
         docs_headless: false,
     },
     Example {
@@ -191,6 +199,7 @@ static EXAMPLES: &[Example] = &[
         backends: &[Backend::Desktop, Backend::Wasm, Backend::Headless],
         extra_features: &["tilesets"],
         backend_features: &[],
+        // Same pre-existing `image`-on-wasm build failure as `tileset` above.
         docs_headless: false,
     },
     Example {
@@ -199,7 +208,7 @@ static EXAMPLES: &[Example] = &[
         backends: &[Backend::Desktop, Backend::Wasm, Backend::Headless],
         extra_features: &[],
         backend_features: &[],
-        docs_headless: false,
+        docs_headless: true,
     },
     Example {
         name: "headless",
