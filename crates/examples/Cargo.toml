@@ -27,6 +27,11 @@ crossterm = ["dep:retroglyph-crossterm"]
 software = ["dep:retroglyph-software", "dep:retroglyph-window"]
 default-font = ["software", "retroglyph-software/default-font"]
 tilesets = ["software", "retroglyph-software/tilesets"]
+# WASM-only: drives a Terminal<Headless> from a browser requestAnimationFrame
+# loop instead of a canvas/window. See util/mod.rs's `rg_run!` wasm-headless
+# branch. Mutually exclusive with `software` in practice (whichever the example
+# binary is built with wins; `rg_run!` prefers `software` if both are enabled).
+wasm-headless = []
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "=0.2.106"
