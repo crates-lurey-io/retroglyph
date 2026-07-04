@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
+    />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="theme-color" content="#0d1117" />
+    <title>retroglyph — __EXAMPLE__ (Headless)</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        background: #0d1117;
+        color: #e6edf3;
+        overscroll-behavior: none;
+        height: 100%;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
+          sans-serif;
+      }
+      body {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.75rem;
+        min-height: 100%;
+      }
+      #screen {
+        width: 100%;
+        max-width: 46rem;
+        aspect-ratio: 50 / 25;
+        background: #000;
+        color: #c9d1d9;
+        border: 1px solid #30363d;
+        border-radius: 6px;
+        font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+        font-size: clamp(0.5rem, 1.6vw, 0.95rem);
+        line-height: 1.15;
+        white-space: pre;
+        overflow: hidden;
+        padding: 0.5rem;
+        touch-action: none;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+      #toolbar {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(3rem, 4rem));
+        grid-template-rows: repeat(2, minmax(3rem, 3.5rem));
+        gap: 0.4rem;
+        justify-content: center;
+      }
+      #toolbar button {
+        font-size: 1.3rem;
+        font-family: inherit;
+        border: 1px solid #30363d;
+        border-radius: 6px;
+        background: #161b22;
+        color: #e6edf3;
+        touch-action: manipulation;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+      #toolbar button:active {
+        background: #21262d;
+      }
+      #toolbar .up {
+        grid-column: 2;
+        grid-row: 1;
+      }
+      #toolbar .left {
+        grid-column: 1;
+        grid-row: 2;
+      }
+      #toolbar .down {
+        grid-column: 2;
+        grid-row: 2;
+      }
+      #toolbar .right {
+        grid-column: 3;
+        grid-row: 2;
+      }
+      #toolbar .quit {
+        grid-column: 1 / span 3;
+        grid-row: 3;
+        font-size: 0.85rem;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      p.hint {
+        color: #8b949e;
+        font-size: 0.75rem;
+        text-align: center;
+        max-width: 30rem;
+      }
+      a.back {
+        color: #58a6ff;
+        text-decoration: none;
+        font-size: 0.8rem;
+      }
+    </style>
+  </head>
+  <body>
+    <pre id="screen">loading…</pre>
+
+    <div id="toolbar">
+      <button class="up" data-key="up" aria-label="Up">&uarr;</button>
+      <button class="left" data-key="left" aria-label="Left">&larr;</button>
+      <button class="down" data-key="down" aria-label="Down">&darr;</button>
+      <button class="right" data-key="right" aria-label="Right">&rarr;</button>
+      <button class="quit" data-key="quit" aria-label="Quit">Q / Esc</button>
+    </div>
+
+    <p class="hint">
+      Arrow keys (or WASD) also work with a physical keyboard. This demo renders as plain text —
+      no canvas, no WebGL — via the same <code>Headless</code> backend used in tests.
+    </p>
+    <a class="back" href="../../">&larr; Back to all examples</a>
+
+    <script type="module">
+      import init, {
+        wasm_headless_init,
+        wasm_headless_push_key,
+        wasm_headless_tick,
+      } from './__EXAMPLE__.js';
+
+      // Mirrors the FFI encoding documented on
+      // retroglyph_examples::util::wasm_headless::decode_key: printable
+      // characters pass through as their Unicode codepoint; special keys use
+      // codepoints above the valid `char` range (0x110000+).
+      const SPECIAL_BASE = 0x00110000;
+      const SPECIAL = {
+        left: SPECIAL_BASE + 2,
+        right: SPECIAL_BASE + 3,
+        up: SPECIAL_BASE + 4,
+        down: SPECIAL_BASE + 5,
+        escape: SPECIAL_BASE + 14,
+      };
+      const MOD_SHIFT = 0b001;
+      const MOD_CONTROL = 0b010;
+      const MOD_ALT = 0b100;
+
+      const screen = document.getElementById('screen');
+
+      function pushKey(code, mods = 0) {
+        wasm_headless_push_key(code >>> 0, mods & 0xff);
+      }
+
+      function pushButtonKey(name) {
+        switch (name) {
+          case 'up':
+            pushKey(SPECIAL.up);
+            break;
+          case 'down':
+            pushKey(SPECIAL.down);
+            break;
+          case 'left':
+            pushKey(SPECIAL.left);
+            break;
+          case 'right':
+            pushKey(SPECIAL.right);
+            break;
+          case 'quit':
+            pushKey(SPECIAL.escape);
+            break;
+        }
+      }
+
+      // Keyboard input (desktop). `event.key` is already a single codepoint
+      // for printable keys; special keys are matched by name.
+      window.addEventListener('keydown', (event) => {
+        let code;
+        switch (event.key) {
+          case 'ArrowUp':
+            code = SPECIAL.up;
+            break;
+          case 'ArrowDown':
+            code = SPECIAL.down;
+            break;
+          case 'ArrowLeft':
+            code = SPECIAL.left;
+            break;
+          case 'ArrowRight':
+            code = SPECIAL.right;
+            break;
+          case 'Escape':
+            code = SPECIAL.escape;
+            break;
+          default:
+            if (event.key.length === 1) {
+              code = event.key.codePointAt(0);
+            }
+        }
+        if (code === undefined) {
+          return;
+        }
+        let mods = 0;
+        if (event.shiftKey) mods |= MOD_SHIFT;
+        if (event.ctrlKey) mods |= MOD_CONTROL;
+        if (event.altKey) mods |= MOD_ALT;
+        pushKey(code, mods);
+        event.preventDefault();
+      });
+
+      // Touch/click toolbar. `pointerdown` (not `click`) keeps repeat-tap
+      // latency low on mobile and avoids the ~300ms tap-delay some mobile
+      // browsers still apply to `click`.
+      for (const button of document.querySelectorAll('#toolbar button')) {
+        button.addEventListener('pointerdown', (event) => {
+          event.preventDefault();
+          pushButtonKey(button.dataset.key);
+        });
+      }
+
+      async function main() {
+        await init();
+        wasm_headless_init();
+
+        function frame() {
+          screen.textContent = wasm_headless_tick();
+          requestAnimationFrame(frame);
+        }
+        requestAnimationFrame(frame);
+      }
+
+      main();
+    </script>
+  </body>
+</html>
