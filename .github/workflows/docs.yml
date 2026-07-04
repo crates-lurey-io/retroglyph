@@ -14,8 +14,16 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
     steps:
       - uses: actions/checkout@v4
+
+      # Ensures the repo's Pages site exists (source = GitHub Actions) before
+      # we try to deploy to it. Without this, a Pages site that gets disabled
+      # (e.g. after a repo transfer/settings reset) silently 404s forever even
+      # though the workflow itself keeps reporting success.
+      - uses: actions/configure-pages@v5
 
       - uses: dtolnay/rust-toolchain@stable
         with:
