@@ -134,7 +134,8 @@ JJ_HOOKS_SKIP=1 jj push       # bypass (use sparingly)
 
 - `docs/design/` — ADRs and milestone plans. Read the relevant ADR before starting a feature.
   - Key ADRs: 001 (architecture), 004 (testing strategy), 008 (layer composition), 013 (codecov),
-    014 (workspace split).
+    014 (workspace split), 018 (terminal family split: retroglyph-terminal seam +
+    retroglyph-crossterm/retroglyph-terminal-wasm implementors).
 - `docs/references/` — deep-dives organized by topic:
   - `backends/` — terminal, software rendering, WebGL, WASM, etc.
   - `core/` — color systems, font rendering, Unicode, game loops, threading, error handling.
