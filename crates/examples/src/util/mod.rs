@@ -51,6 +51,153 @@ pub fn run_headless<S>(
     }
 }
 
+/// WASM-only support for driving a [`Terminal<Headless>`](retroglyph_core::Terminal)
+/// from a browser `requestAnimationFrame` loop instead of a canvas/window.
+///
+/// See the `wasm-headless` branch of [`rg_run!`] for the generated
+/// `#[wasm_bindgen]` entry points. This module only holds the pieces that
+/// don't need to be generated per-example: the FFI key decoder and the
+/// shared state container the generated code stores in a `thread_local`.
+///
+/// Gated on the `wasm-headless` feature only (not also `target_arch =
+/// "wasm32"`): [`decode_key`] itself has no wasm-only dependencies, so it
+/// stays testable on the host target. Only the generated `#[wasm_bindgen]`
+/// entry points in [`wasm_headless_entry!`](crate::wasm_headless_entry) are
+/// wasm32-only.
+#[cfg(feature = "wasm-headless")]
+pub mod wasm_headless {
+    /// Decode an FFI-friendly `(code, mods)` pair into a
+    /// [`KeyEvent`](retroglyph_core::event::KeyEvent).
+    ///
+    /// `retroglyph_core::event` types are not `wasm_bindgen`-friendly (no
+    /// `#[wasm_bindgen]` on the enum, no stable C-like repr contract), so the
+    /// browser side calls in with two plain integers instead of a rich event
+    /// type crossing the FFI boundary directly:
+    ///
+    /// - `code`: for printable characters, the Unicode scalar value (as you'd
+    ///   get from JS `event.key.codePointAt(0)` for a single-codepoint key).
+    ///   Special keys use codepoints above `0x0010_FFFF` (outside the valid
+    ///   `char` range), one per [`KeyCode`](retroglyph_core::event::KeyCode)
+    ///   variant that isn't `Char`/`F`. Function keys `F1..=F24` use
+    ///   `SPECIAL_F0 + n`.
+    /// - `mods`: a bitmask matching
+    ///   [`KeyModifiers`](retroglyph_core::event::KeyModifiers)'s internal
+    ///   layout: bit 0 = shift, bit 1 = control, bit 2 = alt.
+    ///
+    /// Returns `None` for codes that don't map to a known key (the caller
+    /// should silently drop the event rather than panic — a malformed or
+    /// future JS build shouldn't be able to crash the wasm module).
+    #[must_use]
+    pub fn decode_key(code: u32, mods: u8) -> Option<retroglyph_core::event::KeyEvent> {
+        use retroglyph_core::event::{KeyCode, KeyEvent, KeyModifiers};
+
+        // Special keys live just above the valid `char` range (0x0 ..=
+        // 0x10_FFFF, minus the surrogate gap) so they can never collide with
+        // a real codepoint coming from `codePointAt`.
+        const SPECIAL_BASE: u32 = 0x0011_0000;
+        const BACKSPACE: u32 = SPECIAL_BASE;
+        const ENTER: u32 = SPECIAL_BASE + 1;
+        const LEFT: u32 = SPECIAL_BASE + 2;
+        const RIGHT: u32 = SPECIAL_BASE + 3;
+        const UP: u32 = SPECIAL_BASE + 4;
+        const DOWN: u32 = SPECIAL_BASE + 5;
+        const HOME: u32 = SPECIAL_BASE + 6;
+        const END: u32 = SPECIAL_BASE + 7;
+        const PAGE_UP: u32 = SPECIAL_BASE + 8;
+        const PAGE_DOWN: u32 = SPECIAL_BASE + 9;
+        const TAB: u32 = SPECIAL_BASE + 10;
+        const BACK_TAB: u32 = SPECIAL_BASE + 11;
+        const DELETE: u32 = SPECIAL_BASE + 12;
+        const INSERT: u32 = SPECIAL_BASE + 13;
+        const ESCAPE: u32 = SPECIAL_BASE + 14;
+        const SPECIAL_F0: u32 = SPECIAL_BASE + 100;
+
+        let key_code = match code {
+            BACKSPACE => KeyCode::Backspace,
+            ENTER => KeyCode::Enter,
+            LEFT => KeyCode::Left,
+            RIGHT => KeyCode::Right,
+            UP => KeyCode::Up,
+            DOWN => KeyCode::Down,
+            HOME => KeyCode::Home,
+            END => KeyCode::End,
+            PAGE_UP => KeyCode::PageUp,
+            PAGE_DOWN => KeyCode::PageDown,
+            TAB => KeyCode::Tab,
+            BACK_TAB => KeyCode::BackTab,
+            DELETE => KeyCode::Delete,
+            INSERT => KeyCode::Insert,
+            ESCAPE => KeyCode::Escape,
+            SPECIAL_F0..=0xFFFF_FFFF if u8::try_from(code - SPECIAL_F0).is_ok() =>
+            {
+                #[allow(clippy::cast_possible_truncation)]
+                KeyCode::F((code - SPECIAL_F0) as u8)
+            }
+            c => KeyCode::Char(char::from_u32(c)?),
+        };
+
+        let mut modifiers = KeyModifiers::NONE;
+        if mods & 0b001 != 0 {
+            modifiers |= KeyModifiers::SHIFT;
+        }
+        if mods & 0b010 != 0 {
+            modifiers |= KeyModifiers::CONTROL;
+        }
+        if mods & 0b100 != 0 {
+            modifiers |= KeyModifiers::ALT;
+        }
+
+        Some(KeyEvent::new(key_code, modifiers))
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::decode_key;
+        use retroglyph_core::event::{KeyCode, KeyModifiers};
+
+        #[test]
+        fn decodes_plain_char() {
+            let ev = decode_key(u32::from('a'), 0).unwrap();
+            assert_eq!(ev.code, KeyCode::Char('a'));
+            assert_eq!(ev.modifiers, KeyModifiers::NONE);
+        }
+
+        #[test]
+        fn decodes_arrow_keys() {
+            assert_eq!(decode_key(0x0011_0002, 0).unwrap().code, KeyCode::Left);
+            assert_eq!(decode_key(0x0011_0003, 0).unwrap().code, KeyCode::Right);
+            assert_eq!(decode_key(0x0011_0004, 0).unwrap().code, KeyCode::Up);
+            assert_eq!(decode_key(0x0011_0005, 0).unwrap().code, KeyCode::Down);
+        }
+
+        #[test]
+        fn decodes_escape() {
+            assert_eq!(decode_key(0x0011_000e, 0).unwrap().code, KeyCode::Escape);
+        }
+
+        #[test]
+        fn decodes_modifiers() {
+            let ev = decode_key(u32::from('c'), 0b011).unwrap();
+            assert!(ev.modifiers.contains(KeyModifiers::SHIFT));
+            assert!(ev.modifiers.contains(KeyModifiers::CONTROL));
+            assert!(!ev.modifiers.contains(KeyModifiers::ALT));
+        }
+
+        #[test]
+        fn decodes_function_keys() {
+            assert_eq!(decode_key(0x0011_0064, 0).unwrap().code, KeyCode::F(0));
+            assert_eq!(decode_key(0x0011_006e, 0).unwrap().code, KeyCode::F(10));
+        }
+
+        #[test]
+        fn rejects_surrogate_codepoint() {
+            // 0xD800 is a lone surrogate half; not a valid `char`, and below
+            // SPECIAL_BASE, so it should fail to decode rather than panic.
+            assert!(decode_key(0xD800, 0).is_none());
+        }
+    }
+}
+
 /// Adapter turning an `init` + `tick` closure pair into an [`App`].
 ///
 /// `tick` keeps its `(&mut Terminal, &mut State) -> bool` shape (return `false`
@@ -186,11 +333,124 @@ macro_rules! rg_run {
             ::retroglyph_crossterm::Crossterm::run(app)
         }
 
-        // ── Headless fallback (no backend feature enabled) ────────────────
-        #[cfg(not(any(feature = "crossterm", feature = "software")))]
+        // ── WASM Headless backend (browser rAF loop, no canvas/window) ────
+        //
+        // Takes priority over the stdout-printing Headless fallback below,
+        // but yields to `software` if both feature flags are somehow enabled
+        // at once (see the Cargo.toml doc comment on `wasm-headless`).
+        #[cfg(all(
+            feature = "wasm-headless",
+            not(feature = "software"),
+            target_arch = "wasm32"
+        ))]
+        ::retroglyph_examples::wasm_headless_entry!($State, __rg_init, __rg_tick);
+
+        // ── Headless fallback (no backend feature enabled, or non-wasm) ───
+        #[cfg(not(any(
+            feature = "crossterm",
+            feature = "software",
+            all(feature = "wasm-headless", target_arch = "wasm32"),
+        )))]
         fn main() {
             $crate::util::run_headless(__rg_init, __rg_tick);
         }
+    };
+}
+
+/// Emit the `#[wasm_bindgen]` entry points for the `wasm-headless` branch of
+/// [`rg_run!`].
+///
+/// Broken out into its own macro (rather than inlined in `rg_run!`) because it
+/// needs a `thread_local!` to stash the `Terminal<Headless>` + state between
+/// calls from JS — there is no `main`-owned stack frame to hold it in, unlike
+/// the blocking crossterm driver or the winit-owned software driver. wasm32 is
+/// single-threaded (no shared-memory threads without extra toolchain setup),
+/// so a `thread_local!` behaves like a plain global here without `unsafe`.
+///
+/// Exposes three `#[wasm_bindgen]` functions to JS:
+///
+/// - `wasm_headless_init()` — builds the `Terminal<Headless>` and calls
+///   `$init` once. Call this before the first tick.
+/// - `wasm_headless_push_key(code: u32, mods: u8)` — decodes and queues a key
+///   event via [`wasm_headless::decode_key`]. Silently drops undecodable
+///   codes.
+/// - `wasm_headless_tick() -> String` — calls `$tick` once (draining any
+///   queued key events first) and returns
+///   [`Headless::format_view`](retroglyph_core::Headless::format_view) of the
+///   freshly rendered frame. The browser side calls this once per
+///   `requestAnimationFrame` (or `setInterval`) tick and writes the returned
+///   string into a `<pre>`/`<textarea>`.
+///
+/// Grid size is fixed at 50x25 to match [`run_headless`] and the plain
+/// `headless` example.
+#[macro_export]
+macro_rules! wasm_headless_entry {
+    ($State:ty, $init:path, $tick:path) => {
+        struct __WasmHeadlessState {
+            term: ::retroglyph_core::Terminal<::retroglyph_core::Headless>,
+            state: $State,
+        }
+
+        ::std::thread_local! {
+            static __WASM_HEADLESS: ::std::cell::RefCell<::std::option::Option<__WasmHeadlessState>> =
+                ::std::cell::RefCell::new(::std::option::Option::None);
+        }
+
+        /// Build the `Terminal<Headless>` and run `$init` once. Call before
+        /// the first `wasm_headless_tick`.
+        #[::wasm_bindgen::prelude::wasm_bindgen]
+        #[allow(missing_docs)]
+        pub fn wasm_headless_init() {
+            ::console_error_panic_hook::set_once();
+            let backend = ::retroglyph_core::Headless::new(50, 25);
+            let mut term = ::retroglyph_core::Terminal::new(backend);
+            let state = $init(&mut term);
+            __WASM_HEADLESS.with(|cell| {
+                *cell.borrow_mut() = ::std::option::Option::Some(__WasmHeadlessState { term, state });
+            });
+        }
+
+        /// Decode and queue a key event. `code`/`mods` are the FFI encoding
+        /// documented on `wasm_headless::decode_key`. Codes that don't decode
+        /// to a known key are silently dropped.
+        #[::wasm_bindgen::prelude::wasm_bindgen]
+        #[allow(missing_docs)]
+        pub fn wasm_headless_push_key(code: u32, mods: u8) {
+            let Some(event) = $crate::util::wasm_headless::decode_key(code, mods) else {
+                return;
+            };
+            __WASM_HEADLESS.with(|cell| {
+                if let ::std::option::Option::Some(s) = cell.borrow_mut().as_mut() {
+                    s.term.backend_mut().push_event(::retroglyph_core::event::Event::Key(event));
+                }
+            });
+        }
+
+        /// Run one tick of the game loop and return the rendered frame as a
+        /// plain string (space cells shown as `·`), suitable for direct
+        /// assignment into a `<pre>`/`<textarea>`'s content.
+        ///
+        /// Returns an empty string if called before `wasm_headless_init`.
+        #[::wasm_bindgen::prelude::wasm_bindgen]
+        #[allow(missing_docs)]
+        pub fn wasm_headless_tick() -> ::std::string::String {
+            __WASM_HEADLESS.with(|cell| {
+                let mut guard = cell.borrow_mut();
+                let Some(s) = guard.as_mut() else {
+                    return ::std::string::String::new();
+                };
+                $tick(&mut s.term, &mut s.state);
+                s.term.backend().format_view()
+            })
+        }
+
+        // `cargo build --target wasm32-unknown-unknown --example ...` still
+        // requires a `main` symbol to exist even though JS never calls it for
+        // this entry mode — it only calls the three `#[wasm_bindgen]`
+        // functions above. No `#[wasm_bindgen(start)]` here: unlike the
+        // software backend, there is no event loop to kick off at module-load
+        // time, so we deliberately leave it unmarked.
+        fn main() {}
     };
 }
 

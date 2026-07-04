@@ -78,6 +78,15 @@ struct Example {
     /// instead of `extra_features` (still combined with the backend's base).
     /// Leave empty for the common case where all backends share the same extras.
     backend_features: &'static [(Backend, &'static [&'static str])],
+    /// Whether this example has a working browser "Headless" demo wired up
+    /// on the docs site (`--features wasm-headless`, see
+    /// `util::wasm_headless_entry!`). Distinct from `Backend::Headless` above
+    /// (that is the *local* stdout-printing CLI backend, always supported).
+    /// Read by `.github/workflows/docs.yml` via this binary's `--manifest`
+    /// flag -- this field is the single source of truth for which examples
+    /// get a live "Headless" cell in the docs table instead of a greyed-out
+    /// one. Keep this in sync as more examples get wasm-headless support.
+    docs_headless: bool,
 }
 
 static EXAMPLES: &[Example] = &[
@@ -92,6 +101,7 @@ static EXAMPLES: &[Example] = &[
         ],
         extra_features: &[],
         backend_features: &[],
+        docs_headless: true,
     },
     Example {
         name: "sokoban",
@@ -104,6 +114,7 @@ static EXAMPLES: &[Example] = &[
         ],
         extra_features: &[],
         backend_features: &[],
+        docs_headless: false,
     },
     Example {
         name: "roguelike_dungeon",
@@ -116,6 +127,7 @@ static EXAMPLES: &[Example] = &[
         ],
         extra_features: &[],
         backend_features: &[],
+        docs_headless: false,
     },
     Example {
         name: "scrolling_roguelike",
@@ -128,6 +140,7 @@ static EXAMPLES: &[Example] = &[
         ],
         extra_features: &[],
         backend_features: &[],
+        docs_headless: false,
     },
     Example {
         name: "dashboard",
@@ -135,6 +148,7 @@ static EXAMPLES: &[Example] = &[
         backends: &[Backend::Terminal, Backend::Desktop, Backend::Wasm],
         extra_features: &[],
         backend_features: &[],
+        docs_headless: false,
     },
     Example {
         name: "subpixel",
@@ -142,6 +156,7 @@ static EXAMPLES: &[Example] = &[
         backends: &[Backend::Desktop, Backend::Wasm, Backend::Headless],
         extra_features: &[],
         backend_features: &[],
+        docs_headless: false,
     },
     Example {
         name: "hex_battle",
@@ -160,6 +175,7 @@ static EXAMPLES: &[Example] = &[
             (Backend::Desktop, &["tilesets"]),
             (Backend::Wasm, &["tilesets"]),
         ],
+        docs_headless: false,
     },
     Example {
         name: "tileset",
@@ -167,6 +183,7 @@ static EXAMPLES: &[Example] = &[
         backends: &[Backend::Desktop, Backend::Wasm, Backend::Headless],
         extra_features: &["tilesets"],
         backend_features: &[],
+        docs_headless: false,
     },
     Example {
         name: "sprite_stress",
@@ -174,6 +191,7 @@ static EXAMPLES: &[Example] = &[
         backends: &[Backend::Desktop, Backend::Wasm, Backend::Headless],
         extra_features: &["tilesets"],
         backend_features: &[],
+        docs_headless: false,
     },
     Example {
         name: "dirty_viz",
@@ -181,6 +199,7 @@ static EXAMPLES: &[Example] = &[
         backends: &[Backend::Desktop, Backend::Wasm, Backend::Headless],
         extra_features: &[],
         backend_features: &[],
+        docs_headless: false,
     },
     Example {
         name: "headless",
@@ -188,6 +207,7 @@ static EXAMPLES: &[Example] = &[
         backends: &[],
         extra_features: &[],
         backend_features: &[],
+        docs_headless: false,
     },
 ];
 
@@ -278,7 +298,33 @@ fn launch(ex: &Example, backend: Option<Backend>) -> ! {
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
+// ── Manifest (machine-readable, consumed by .github/workflows/docs.yml) ─────
+//
+// `EXAMPLES` above is the single source of truth for which examples support
+// which backends. Rather than hand-duplicating that matrix a second time in
+// docs.yml's bash heredocs, the docs workflow shells out to
+// `cargo run --example runner -- --manifest` and parses this instead.
+//
+// Tab-separated, one example per line: `name\twasm_software\tdocs_headless`
+// where the two flag columns are `1`/`0`. `wasm_software` is `1` when the
+// example builds for the existing canvas/software wasm backend
+// (`Backend::Wasm` in the matrix above); `docs_headless` mirrors
+// `Example::docs_headless`. No header row, so the shell side can loop over
+// lines directly.
+fn print_manifest() {
+    for ex in EXAMPLES {
+        let wasm_software = u8::from(ex.backends.contains(&Backend::Wasm));
+        let docs_headless = u8::from(ex.docs_headless);
+        println!("{}\t{wasm_software}\t{docs_headless}", ex.name);
+    }
+}
+
 fn main() {
+    if std::env::args().nth(1).as_deref() == Some("--manifest") {
+        print_manifest();
+        return;
+    }
+
     'outer: loop {
         // ── Step 1: pick an example ──────────────────────────────────────
         println!("\n  rg example runner — pick an example:\n");

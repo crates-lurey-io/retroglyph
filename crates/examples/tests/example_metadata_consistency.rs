@@ -3,12 +3,16 @@
 //!
 //! `runner.rs`'s `EXAMPLES` table is the source of truth for which examples
 //! support the WASM backend and which feature group (`default-font`
-//! vs `tilesets`) they need. `docs.yml` hand-maintains its own bash
-//! arrays that must match, since it builds and publishes the WASM demos to
-//! GitHub Pages. Nothing enforced that agreement, and it already drifted
-//! (see PR history) — this test parses both files with light regexes and
-//! diffs the example sets so future drift fails locally / in CI instead of
-//! silently shipping a demos page missing an example.
+//! vs `tilesets`) they need. `docs.yml`'s "Build WASM examples
+//! (default-font)"/"(tilesets)" steps still hand-maintain their own bash
+//! `--example` flag lists that must match (the Headless-demo build list,
+//! Software packaging step, and examples-index generation all instead read
+//! `runner.rs`'s data live at CI time via `cargo run --example runner --
+//! --manifest`, so only these two build steps still risk drifting). Nothing
+//! enforced that agreement, and it already drifted (see PR history) — this
+//! test parses both files with light regexes and diffs the example sets so
+//! future drift fails locally / in CI instead of silently shipping a demos
+//! page missing an example.
 
 use std::collections::BTreeSet;
 use std::fs;
@@ -149,7 +153,7 @@ fn parse_docs_yml_example_groups() -> (BTreeSet<String>, BTreeSet<String>) {
     let tilesets = extract_yaml_example_flags(
         &src,
         "Build WASM examples (tilesets)",
-        "Package WASM examples",
+        "Build WASM Headless examples",
     );
 
     (default_font, tilesets)
@@ -181,14 +185,14 @@ fn docs_yml_wasm_examples_match_runner_rs() {
         runner.default_font, docs_default_font,
         "\n\n.github/workflows/docs.yml's default-font WASM build list is out of \
          sync with examples/runner.rs. Update the `--example` list in the \
-         \"Build WASM examples (default-font)\" step, the \"Package WASM examples\" \
-         EXAMPLES array, and the \"Generate examples index\" for-loop to match."
+         \"Build WASM examples (default-font)\" step and the \"Package WASM \
+         examples (Software)\" EXAMPLES array to match."
     );
     assert_eq!(
         runner.tilesets, docs_tilesets,
         "\n\n.github/workflows/docs.yml's tilesets WASM build list is out of sync \
          with examples/runner.rs. Update the `--example` list in the \
-         \"Build WASM examples (tilesets)\" step, the \"Package WASM examples\" \
-         EXAMPLES array, and the \"Generate examples index\" for-loop to match."
+         \"Build WASM examples (tilesets)\" step and the \"Package WASM examples \
+         (Software)\" EXAMPLES array to match."
     );
 }
