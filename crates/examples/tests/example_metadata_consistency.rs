@@ -150,10 +150,19 @@ fn parse_docs_yml_example_groups() -> (BTreeSet<String>, BTreeSet<String>) {
         "Build WASM examples (default-font)",
         "Build WASM examples (tilesets)",
     );
+    // Ends at "Package WASM examples (Software)", not the next *build* step
+    // ("Build WASM Headless examples"): that Headless build step's own body
+    // contains `cargo run ... --example runner -- --manifest` (to read the
+    // Headless example list), and a naive `--example` scan would pick up
+    // "runner" as a phantom tilesets example. The Software packaging step
+    // in between is manifest-driven too (see Task 1 of this file's history)
+    // and has no hardcoded `--example` list to compare against, so ending
+    // the window right before it excludes both `cargo run --example runner`
+    // invocations cleanly.
     let tilesets = extract_yaml_example_flags(
         &src,
         "Build WASM examples (tilesets)",
-        "Build WASM Headless examples",
+        "Package WASM examples (Software)",
     );
 
     (default_font, tilesets)

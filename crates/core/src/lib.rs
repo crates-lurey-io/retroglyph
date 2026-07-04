@@ -5,6 +5,10 @@
 //! the `App`/`Flow`/`Frame` game loop contract. Platform backends
 //! (`retroglyph-crossterm`, `retroglyph-software`) and drawing helpers
 //! (`retroglyph-widgets`) are separate crates that depend on this one.
+//!
+//! See `examples/headless.rs` (`cargo run -p retroglyph-core --example
+//! headless`) for the smallest possible use of [`Headless`], depending on
+//! nothing but this crate.
 #![cfg_attr(not(feature = "std"), no_std)]
 extern crate alloc;
 
