@@ -1,5 +1,13 @@
 //! Crossterm-based terminal rendering backend.
 //!
+//! Owns exactly the OS/TTY-specific bits of driving a real terminal: raw
+//! mode, the alternate screen, the kitty keyboard protocol, and
+//! `crossterm::event` polling. The actual cell-diffing/ANSI-writing work is
+//! delegated to [`retroglyph_terminal::TerminalRenderer`], the shared seam
+//! also used by the WASM/browser terminal implementor
+//! (`retroglyph-terminal-wasm`). See
+//! `docs/design/018-terminal-family-split.md` for the split rationale.
+//!
 //! [`draw`](Backend::draw), [`flush`](Backend::flush), and
 //! [`clear`](Backend::clear) propagate `std::io::Error` through this
 //! backend's [`Backend::Error`] type. The [`Backend`] methods that the trait
@@ -21,6 +29,7 @@ use retroglyph_core::backend::Backend;
 use retroglyph_core::event::Event;
 use retroglyph_core::grid::{Pos, Size};
 use retroglyph_core::tile::Tile;
+use retroglyph_terminal::TerminalRenderer;
 use std::io::{BufWriter, Stdout};
 
 // Orphan-rule note: `retroglyph_core` types and `crossterm` types are both
@@ -53,71 +62,9 @@ fn restore_terminal() {
     let _ = crossterm::terminal::disable_raw_mode();
 }
 
-const fn to_crossterm_color(color: retroglyph_core::color::Color) -> crossterm::style::Color {
-    use retroglyph_core::color::AnsiColor;
-
-    match color {
-        retroglyph_core::color::Color::Default => crossterm::style::Color::Reset,
-        retroglyph_core::color::Color::Ansi(ansi) => match ansi {
-            AnsiColor::Black => crossterm::style::Color::Black,
-            AnsiColor::Red => crossterm::style::Color::DarkRed,
-            AnsiColor::Green => crossterm::style::Color::DarkGreen,
-            AnsiColor::Yellow => crossterm::style::Color::DarkYellow,
-            AnsiColor::Blue => crossterm::style::Color::DarkBlue,
-            AnsiColor::Magenta => crossterm::style::Color::DarkMagenta,
-            AnsiColor::Cyan => crossterm::style::Color::DarkCyan,
-            AnsiColor::White => crossterm::style::Color::Grey,
-            AnsiColor::BrightBlack => crossterm::style::Color::DarkGrey,
-            AnsiColor::BrightRed => crossterm::style::Color::Red,
-            AnsiColor::BrightGreen => crossterm::style::Color::Green,
-            AnsiColor::BrightYellow => crossterm::style::Color::Yellow,
-            AnsiColor::BrightBlue => crossterm::style::Color::Blue,
-            AnsiColor::BrightMagenta => crossterm::style::Color::Magenta,
-            AnsiColor::BrightCyan => crossterm::style::Color::Cyan,
-            AnsiColor::BrightWhite => crossterm::style::Color::White,
-        },
-        retroglyph_core::color::Color::Indexed(index) => crossterm::style::Color::AnsiValue(index),
-        retroglyph_core::color::Color::Rgb { r, g, b } => crossterm::style::Color::Rgb { r, g, b },
-    }
-}
-
-const fn to_crossterm_attributes(
-    modifier: retroglyph_core::style::CellModifier,
-) -> crossterm::style::Attributes {
-    use crossterm::style::Attribute;
-    use retroglyph_core::style::CellModifier;
-
-    let mut attrs = crossterm::style::Attributes::none();
-    if modifier.contains(CellModifier::BOLD) {
-        attrs = attrs.with(Attribute::Bold);
-    }
-    if modifier.contains(CellModifier::DIM) {
-        attrs = attrs.with(Attribute::Dim);
-    }
-    if modifier.contains(CellModifier::ITALIC) {
-        attrs = attrs.with(Attribute::Italic);
-    }
-    if modifier.contains(CellModifier::UNDERLINE) {
-        attrs = attrs.with(Attribute::Underlined);
-    }
-    if modifier.contains(CellModifier::BLINK) {
-        attrs = attrs.with(Attribute::SlowBlink);
-    }
-    if modifier.contains(CellModifier::REVERSE) {
-        attrs = attrs.with(Attribute::Reverse);
-    }
-    if modifier.contains(CellModifier::HIDDEN) {
-        attrs = attrs.with(Attribute::Hidden);
-    }
-    if modifier.contains(CellModifier::STRIKETHROUGH) {
-        attrs = attrs.with(Attribute::CrossedOut);
-    }
-    attrs
-}
-
 /// A terminal rendering backend powered by `crossterm`.
 pub struct Crossterm {
-    writer: BufWriter<Stdout>,
+    renderer: TerminalRenderer<BufWriter<Stdout>>,
 }
 
 impl Crossterm {
@@ -168,7 +115,7 @@ impl Crossterm {
         )?;
 
         Ok(Self {
-            writer: BufWriter::new(stdout),
+            renderer: TerminalRenderer::new(BufWriter::new(stdout)),
         })
     }
 
@@ -202,102 +149,20 @@ impl Drop for Crossterm {
 impl Backend for Crossterm {
     type Error = std::io::Error;
 
-    #[allow(clippy::similar_names)]
     fn draw<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
         I: Iterator<Item = (Pos, &'a Tile)>,
     {
         // Begin synchronized update so the terminal holds rendering until
         // flush() sends the matching End marker.
-        crossterm::queue!(self.writer, crossterm::terminal::BeginSynchronizedUpdate)?;
-
-        let mut last_fg = None;
-        let mut last_bg = None;
-        let mut last_attrs = None;
-        // Track the cursor position so we can skip redundant MoveTo
-        // commands when cells are adjacent.
-        let mut cursor_x: Option<u16> = None;
-        let mut cursor_y: Option<u16> = None;
-
-        for (pos, cell) in content {
-            // Spacer cells are the right half of a wide character.
-            // The wide char itself already drew over this position, so skip it.
-            #[cfg(feature = "egc")]
-            if cell
-                .flags()
-                .contains(retroglyph_core::tile::TileFlags::WIDE_CHAR_SPACER)
-            {
-                continue;
-            }
-            #[cfg(not(feature = "egc"))]
-            if cell.glyph() == '\0' {
-                continue;
-            }
-
-            let fg: crossterm::style::Color = to_crossterm_color(cell.style().foreground());
-            let bg: crossterm::style::Color = to_crossterm_color(cell.style().background());
-            let attrs: crossterm::style::Attributes =
-                to_crossterm_attributes(cell.style().modifiers());
-
-            // Only emit MoveTo when the cursor isn't already at the right position.
-            let needs_move = cursor_y != Some(pos.y) || cursor_x != Some(pos.x);
-            if needs_move {
-                crossterm::queue!(self.writer, crossterm::cursor::MoveTo(pos.x, pos.y))?;
-            }
-
-            if last_fg != Some(fg) {
-                crossterm::queue!(self.writer, crossterm::style::SetForegroundColor(fg))?;
-                last_fg = Some(fg);
-            }
-
-            if last_bg != Some(bg) {
-                crossterm::queue!(self.writer, crossterm::style::SetBackgroundColor(bg))?;
-                last_bg = Some(bg);
-            }
-
-            if last_attrs != Some(attrs) {
-                crossterm::queue!(self.writer, crossterm::style::SetAttributes(attrs))?;
-                last_attrs = Some(attrs);
-            }
-
-            #[allow(unused_assignments)]
-            let mut cell_width: u16 = 1;
-            #[cfg(feature = "egc")]
-            {
-                // Print the full EGC if present; otherwise the primary glyph.
-                let mut glyph_buf = [0u8; 4];
-                let s: &str = match cell.extra() {
-                    Some(extra) => extra,
-                    None => cell.glyph().encode_utf8(&mut glyph_buf),
-                };
-                #[allow(clippy::cast_possible_truncation)]
-                {
-                    cell_width = unicode_width::UnicodeWidthStr::width(s).max(1) as u16;
-                }
-                crossterm::queue!(self.writer, crossterm::style::Print(s))?;
-            }
-            #[cfg(not(feature = "egc"))]
-            {
-                #[allow(clippy::cast_possible_truncation)]
-                {
-                    cell_width =
-                        unicode_width::UnicodeWidthChar::width(cell.glyph()).unwrap_or(1) as u16;
-                }
-                crossterm::queue!(self.writer, crossterm::style::Print(cell.glyph()))?;
-            }
-
-            // After printing, the terminal cursor advances by the cell's
-            // display width. Track that so the next cell can skip MoveTo.
-            cursor_x = Some(pos.x + cell_width);
-            cursor_y = Some(pos.y);
-        }
+        self.renderer.begin_synchronized_update()?;
+        self.renderer.draw(content)?;
         Ok(())
     }
 
     fn flush(&mut self) -> Result<(), Self::Error> {
-        use std::io::Write;
-        crossterm::queue!(self.writer, crossterm::terminal::EndSynchronizedUpdate)?;
-        self.writer.flush()?;
+        self.renderer.end_synchronized_update()?;
+        self.renderer.flush()?;
         Ok(())
     }
 
@@ -313,10 +178,14 @@ impl Backend for Crossterm {
     fn clear(&mut self) -> Result<(), Self::Error> {
         use std::io::Write;
         crossterm::queue!(
-            self.writer,
+            self.renderer.writer_mut(),
             crossterm::terminal::Clear(crossterm::terminal::ClearType::All)
         )?;
-        self.writer.flush()?;
+        self.renderer.writer_mut().flush()?;
+        // The terminal-side state (cursor position, last color/attrs) is now
+        // stale versus what's actually on screen; forget it so the next
+        // draw() re-emits full escape sequences instead of skipping them.
+        self.renderer.reset_state();
         Ok(())
     }
 
@@ -368,21 +237,20 @@ impl Backend for Crossterm {
 
     fn set_cursor_visible(&mut self, visible: bool) {
         use std::io::Write;
+        let writer = self.renderer.writer_mut();
         if visible {
-            let _ = crossterm::queue!(self.writer, crossterm::cursor::Show);
+            let _ = crossterm::queue!(writer, crossterm::cursor::Show);
         } else {
-            let _ = crossterm::queue!(self.writer, crossterm::cursor::Hide);
+            let _ = crossterm::queue!(writer, crossterm::cursor::Hide);
         }
-        let _ = self.writer.flush();
+        let _ = writer.flush();
     }
 
     fn set_cursor_position(&mut self, position: Pos) {
         use std::io::Write;
-        let _ = crossterm::queue!(
-            self.writer,
-            crossterm::cursor::MoveTo(position.x, position.y)
-        );
-        let _ = self.writer.flush();
+        let writer = self.renderer.writer_mut();
+        let _ = crossterm::queue!(writer, crossterm::cursor::MoveTo(position.x, position.y));
+        let _ = writer.flush();
     }
 }
 

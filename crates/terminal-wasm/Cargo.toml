@@ -1,7 +1,7 @@
 [package]
-name = "retroglyph-crossterm"
+name = "retroglyph-terminal-wasm"
 version = "0.2.0"
-description = "Crossterm terminal backend for retroglyph"
+description = "WASM/browser terminal backend for retroglyph, driven by pushed events and pulled ANSI output"
 edition.workspace = true
 rust-version.workspace = true
 authors.workspace = true
@@ -16,12 +16,12 @@ workspace = true
 [dependencies]
 retroglyph-core = { path = "../core", version = "0.2.0", default-features = false, features = ["std"] }
 retroglyph-terminal = { path = "../terminal", version = "0.2.0" }
-crossterm = "0.28"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+# Version pinned to match the wasm-bindgen dev-dependency in
+# crates/examples/Cargo.toml -- the CLI and the crate version must agree.
+wasm-bindgen = "=0.2.106"
 
 [features]
-# Forwards to retroglyph-terminal's egc feature (which forwards to
-# retroglyph-core's). All the EGC-aware/non-EGC-aware cell-diffing code now
-# lives in retroglyph-terminal; this crate has no code of its own gated on
-# this flag, but still exposes it so callers don't need to know which crate
-# in the terminal family actually implements it.
+# Forwards to retroglyph-terminal's egc feature.
 egc = ["retroglyph-terminal/egc", "retroglyph-core/egc"]

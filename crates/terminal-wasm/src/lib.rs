@@ -1,0 +1,470 @@
+//! WASM/browser terminal backend: renders ANSI bytes into an in-memory
+//! buffer for JS to pull each frame, and receives input pushed in from JS.
+//!
+//! [`TerminalWasm`] implements [`Backend`] directly (like
+//! [`Headless`](retroglyph_core::backend::Headless)) rather than through any
+//! shared runtime driver: there is no event loop here at all. A browser
+//! terminal emulator (e.g. xterm.js, referenced only in docs/comments -- this
+//! crate has no dependency on it and no opinion about which one is used) is
+//! driven from JS, which calls into this crate once per animation frame (or
+//! on demand) to pull freshly rendered ANSI bytes and push back any input it
+//! collected. See `docs/design/018-terminal-family-split.md` for why this is
+//! a separate implementor crate from `retroglyph-crossterm` rather than a
+//! feature of it.
+//!
+//! # Usage from Rust
+//!
+//! ```
+//! use retroglyph_core::Terminal;
+//! use retroglyph_terminal_wasm::TerminalWasm;
+//!
+//! let backend = TerminalWasm::new(80, 24);
+//! let mut term = Terminal::new(backend);
+//! term.put(0, 0, '@');
+//! term.present().unwrap();
+//! let ansi = term.backend_mut().take_output();
+//! assert!(ansi.contains('@'));
+//! ```
+//!
+//! # Usage from JS (via `wasm-bindgen`)
+//!
+//! The `wasm32` build additionally exposes free functions
+//! (`wasm_terminal_new`, `wasm_terminal_resize`, `wasm_terminal_push_key`,
+//! `wasm_terminal_take_output`, in this crate's `wasm` module -- only
+//! compiled for `target_arch = "wasm32"`, so it won't appear in docs built
+//! natively) that operate on an opaque handle, since
+//! `retroglyph_core::event::Event` is not itself `wasm-bindgen`-compatible.
+//! A minimal JS driver looks like:
+//!
+//! ```js
+//! import init, { wasm_terminal_new, wasm_terminal_push_key, wasm_terminal_take_output } from './pkg.js';
+//! await init();
+//! const handle = wasm_terminal_new(80, 24);
+//! term.onData(data => { /* forward decoded key to wasm_terminal_push_key(handle, code, mods) */ });
+//! function frame() {
+//!   const ansi = wasm_terminal_take_output(handle);
+//!   if (ansi) term.write(ansi);
+//!   requestAnimationFrame(frame);
+//! }
+//! requestAnimationFrame(frame);
+//! ```
+
+use retroglyph_core::backend::Backend;
+use retroglyph_core::event::Event;
+use retroglyph_core::grid::{Pos, Size};
+use retroglyph_core::tile::Tile;
+use retroglyph_terminal::TerminalRenderer;
+use std::collections::VecDeque;
+use std::time::Duration;
+
+/// A [`Backend`] that renders into an in-memory ANSI byte buffer and accepts
+/// pushed input, for driving a browser terminal emulator from WASM.
+///
+/// Unlike [`retroglyph_crossterm::Crossterm`](https://docs.rs/retroglyph-crossterm),
+/// this backend:
+///
+/// - never queries a TTY for its size -- call [`resize`](Backend::resize) (or
+///   [`Terminal::resize`](retroglyph_core::Terminal::resize)) whenever the
+///   host reports a new size (e.g. from xterm.js's `fit` addon);
+/// - never polls for input -- input only ever arrives via
+///   [`push_event`](Backend::push_event), called from a `wasm-bindgen`
+///   entry point in response to a JS event;
+/// - buffers rendered ANSI bytes in memory rather than writing to a
+///   descriptor; call [`take_output`](Self::take_output) once per animation
+///   frame to drain them.
+pub struct TerminalWasm {
+    renderer: TerminalRenderer<Vec<u8>>,
+    size: Size,
+    event_queue: VecDeque<Event>,
+}
+
+impl TerminalWasm {
+    /// Creates a new backend with the given initial size in cells.
+    #[must_use]
+    pub const fn new(width: u16, height: u16) -> Self {
+        Self {
+            renderer: TerminalRenderer::new(Vec::new()),
+            size: Size { width, height },
+            event_queue: VecDeque::new(),
+        }
+    }
+
+    /// Injects a synthetic input event into the queue, to be returned by the
+    /// next [`poll_event`](Backend::poll_event) call.
+    ///
+    /// Called from JS (via the `wasm-bindgen` entry points below) or from
+    /// tests; not part of [`Backend`] itself beyond the no-op default.
+    pub fn push_event(&mut self, event: Event) {
+        self.event_queue.push_back(event);
+    }
+
+    /// Drains and returns the ANSI bytes rendered since the last call, as a
+    /// UTF-8 string.
+    ///
+    /// Returns an empty string if nothing has been drawn since the last
+    /// call. Call this once per animation frame from JS and write the result
+    /// into the terminal emulator.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the buffered output is not valid UTF-8. This can't happen in
+    /// practice: [`TerminalRenderer`] only ever writes ASCII escape codes and
+    /// glyphs encoded via `char`/`&str` (both always valid UTF-8).
+    #[must_use]
+    pub fn take_output(&mut self) -> String {
+        let bytes = std::mem::take(self.renderer.writer_mut());
+        String::from_utf8(bytes).expect("TerminalRenderer only ever writes valid UTF-8")
+    }
+}
+
+impl Backend for TerminalWasm {
+    type Error = std::io::Error;
+
+    fn draw<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
+    where
+        I: Iterator<Item = (Pos, &'a Tile)>,
+    {
+        self.renderer.begin_synchronized_update()?;
+        self.renderer.draw(content)
+    }
+
+    fn flush(&mut self) -> Result<(), Self::Error> {
+        self.renderer.end_synchronized_update()?;
+        self.renderer.flush()
+    }
+
+    fn size(&self) -> Size {
+        self.size
+    }
+
+    fn resize(&mut self, size: Size) {
+        self.size = size;
+        // The host's terminal emulator clears/reflows on its own resize;
+        // forget our tracked cursor/color state so the next draw() re-emits
+        // full escape sequences instead of (incorrectly) skipping them.
+        self.renderer.reset_state();
+    }
+
+    fn clear(&mut self) -> Result<(), Self::Error> {
+        // Standard "clear screen, cursor home" CSI sequence: this backend has
+        // no direct handle to the emulator, so clearing is just more ANSI
+        // bytes for JS to forward, same as every other draw call.
+        use std::io::Write as _;
+        write!(self.renderer.writer_mut(), "\x1b[2J\x1b[H")?;
+        self.renderer.reset_state();
+        Ok(())
+    }
+
+    fn push_event(&mut self, event: Event) {
+        Self::push_event(self, event);
+    }
+
+    fn poll_event(&mut self, _timeout: Duration) -> Option<Event> {
+        // Never blocks: there is no runtime loop to block in. `_timeout` is
+        // ignored, matching Headless's push-driven, non-blocking contract.
+        self.event_queue.pop_front()
+    }
+
+    fn set_cursor_visible(&mut self, visible: bool) {
+        let _ = write_cursor_visibility(&mut self.renderer, visible);
+    }
+
+    fn set_cursor_position(&mut self, position: Pos) {
+        let _ = write_cursor_position(&mut self.renderer, position);
+    }
+}
+
+fn write_cursor_visibility(
+    renderer: &mut TerminalRenderer<Vec<u8>>,
+    visible: bool,
+) -> std::io::Result<()> {
+    use std::io::Write as _;
+    if visible {
+        write!(renderer.writer_mut(), "\x1b[?25h")
+    } else {
+        write!(renderer.writer_mut(), "\x1b[?25l")
+    }
+}
+
+fn write_cursor_position(
+    renderer: &mut TerminalRenderer<Vec<u8>>,
+    position: Pos,
+) -> std::io::Result<()> {
+    use std::io::Write as _;
+    // CSI row;col H is 1-indexed.
+    write!(
+        renderer.writer_mut(),
+        "\x1b[{};{}H",
+        position.y + 1,
+        position.x + 1
+    )
+}
+
+/// Decodes a `(code, mods)` pair from JS into a [`retroglyph_core::event::KeyEvent`].
+///
+/// `retroglyph_core::event::KeyCode`/`KeyModifiers` are not `wasm-bindgen`
+/// FFI-safe types, so JS crosses the boundary with plain integers instead:
+///
+/// - `code`: for printable characters, the Unicode scalar value (as from
+///   `event.key.codePointAt(0)` for a single-character key); for named keys,
+///   one of this module's `NAMED_KEY_*` constants (e.g. [`NAMED_KEY_LEFT`]).
+/// - `mods`: a bitmask matching [`retroglyph_core::event::KeyModifiers`]'s
+///   layout (`SHIFT = 1`, `CONTROL = 2`, `ALT = 4`).
+#[must_use]
+pub fn decode_key_event(code: u32, mods: u8) -> Option<retroglyph_core::event::KeyEvent> {
+    use retroglyph_core::event::{KeyCode, KeyModifiers};
+
+    let key_code = match code {
+        NAMED_KEY_BACKSPACE => KeyCode::Backspace,
+        NAMED_KEY_ENTER => KeyCode::Enter,
+        NAMED_KEY_LEFT => KeyCode::Left,
+        NAMED_KEY_RIGHT => KeyCode::Right,
+        NAMED_KEY_UP => KeyCode::Up,
+        NAMED_KEY_DOWN => KeyCode::Down,
+        NAMED_KEY_HOME => KeyCode::Home,
+        NAMED_KEY_END => KeyCode::End,
+        NAMED_KEY_PAGE_UP => KeyCode::PageUp,
+        NAMED_KEY_PAGE_DOWN => KeyCode::PageDown,
+        NAMED_KEY_TAB => KeyCode::Tab,
+        NAMED_KEY_BACKTAB => KeyCode::BackTab,
+        NAMED_KEY_DELETE => KeyCode::Delete,
+        NAMED_KEY_INSERT => KeyCode::Insert,
+        NAMED_KEY_ESCAPE => KeyCode::Escape,
+        NAMED_KEY_F1..=NAMED_KEY_F24 =>
+        {
+            #[allow(clippy::cast_possible_truncation)]
+            KeyCode::F((code - NAMED_KEY_F1 + 1) as u8)
+        }
+        _ => KeyCode::Char(char::from_u32(code)?),
+    };
+
+    let mut modifiers = KeyModifiers::NONE;
+    if mods & 0b001 != 0 {
+        modifiers |= KeyModifiers::SHIFT;
+    }
+    if mods & 0b010 != 0 {
+        modifiers |= KeyModifiers::CONTROL;
+    }
+    if mods & 0b100 != 0 {
+        modifiers |= KeyModifiers::ALT;
+    }
+
+    Some(retroglyph_core::event::KeyEvent::new(key_code, modifiers))
+}
+
+// Named-key codes for `decode_key_event`'s `code` parameter, chosen from a
+// range (0x0010_0000 and up) well above the Unicode scalar value space
+// (0x0..=0x10FFFF) so a single `u32` can carry either a codepoint or a named
+// key without ambiguity.
+const NAMED_KEY_BASE: u32 = 0x0011_0000;
+/// `code` value for the Backspace key. See [`decode_key_event`].
+pub const NAMED_KEY_BACKSPACE: u32 = NAMED_KEY_BASE;
+/// `code` value for the Enter key. See [`decode_key_event`].
+pub const NAMED_KEY_ENTER: u32 = NAMED_KEY_BASE + 1;
+/// `code` value for the Left arrow key. See [`decode_key_event`].
+pub const NAMED_KEY_LEFT: u32 = NAMED_KEY_BASE + 2;
+/// `code` value for the Right arrow key. See [`decode_key_event`].
+pub const NAMED_KEY_RIGHT: u32 = NAMED_KEY_BASE + 3;
+/// `code` value for the Up arrow key. See [`decode_key_event`].
+pub const NAMED_KEY_UP: u32 = NAMED_KEY_BASE + 4;
+/// `code` value for the Down arrow key. See [`decode_key_event`].
+pub const NAMED_KEY_DOWN: u32 = NAMED_KEY_BASE + 5;
+/// `code` value for the Home key. See [`decode_key_event`].
+pub const NAMED_KEY_HOME: u32 = NAMED_KEY_BASE + 6;
+/// `code` value for the End key. See [`decode_key_event`].
+pub const NAMED_KEY_END: u32 = NAMED_KEY_BASE + 7;
+/// `code` value for the Page Up key. See [`decode_key_event`].
+pub const NAMED_KEY_PAGE_UP: u32 = NAMED_KEY_BASE + 8;
+/// `code` value for the Page Down key. See [`decode_key_event`].
+pub const NAMED_KEY_PAGE_DOWN: u32 = NAMED_KEY_BASE + 9;
+/// `code` value for the Tab key. See [`decode_key_event`].
+pub const NAMED_KEY_TAB: u32 = NAMED_KEY_BASE + 10;
+/// `code` value for the Backtab (Shift+Tab) key. See [`decode_key_event`].
+pub const NAMED_KEY_BACKTAB: u32 = NAMED_KEY_BASE + 11;
+/// `code` value for the Delete key. See [`decode_key_event`].
+pub const NAMED_KEY_DELETE: u32 = NAMED_KEY_BASE + 12;
+/// `code` value for the Insert key. See [`decode_key_event`].
+pub const NAMED_KEY_INSERT: u32 = NAMED_KEY_BASE + 13;
+/// `code` value for the Escape key. See [`decode_key_event`].
+pub const NAMED_KEY_ESCAPE: u32 = NAMED_KEY_BASE + 14;
+/// `code` value for the F1 key. F2-F24 follow contiguously. See
+/// [`decode_key_event`].
+pub const NAMED_KEY_F1: u32 = NAMED_KEY_BASE + 100;
+/// `code` value for the F24 key (the last of the contiguous F1-F24 range).
+pub const NAMED_KEY_F24: u32 = NAMED_KEY_F1 + 23;
+
+/// The `wasm-bindgen`-exported FFI surface, compiled only for `wasm32`.
+///
+/// A thin, stateful wrapper around [`TerminalWasm`] keyed by opaque handles,
+/// since `wasm-bindgen` cannot export a type generic enough to hand a
+/// `TerminalWasm` (or a `Terminal<TerminalWasm>`) directly to arbitrary game
+/// code the way `retroglyph_examples::rg_run!` does for the software
+/// backend. Each example that wants a WASM/xterm.js demo drives its own
+/// per-example `#[wasm_bindgen]` entry point (see
+/// `crates/examples/src/util/mod.rs`'s `rg_run!` for the software
+/// equivalent); this module only owns the terminal instance registry and
+/// event decoding that every such entry point would otherwise duplicate.
+#[cfg(target_arch = "wasm32")]
+pub mod wasm {
+    use super::{TerminalWasm, decode_key_event};
+    use std::cell::RefCell;
+    use std::collections::HashMap;
+    use wasm_bindgen::prelude::wasm_bindgen;
+
+    thread_local! {
+        static INSTANCES: RefCell<HashMap<u32, TerminalWasm>> = RefCell::new(HashMap::new());
+        static NEXT_HANDLE: RefCell<u32> = const { RefCell::new(1) };
+    }
+
+    /// Creates a new [`TerminalWasm`] of the given size and returns an opaque
+    /// handle for use with the other `wasm_terminal_*` functions.
+    #[wasm_bindgen]
+    #[must_use]
+    pub fn wasm_terminal_new(width: u16, height: u16) -> u32 {
+        let handle = NEXT_HANDLE.with_borrow_mut(|next| {
+            let handle = *next;
+            *next += 1;
+            handle
+        });
+        INSTANCES.with_borrow_mut(|instances| {
+            instances.insert(handle, TerminalWasm::new(width, height));
+        });
+        handle
+    }
+
+    /// Destroys the [`TerminalWasm`] identified by `handle`, freeing its
+    /// memory. Further calls with `handle` are no-ops.
+    #[wasm_bindgen]
+    pub fn wasm_terminal_free(handle: u32) {
+        INSTANCES.with_borrow_mut(|instances| {
+            instances.remove(&handle);
+        });
+    }
+
+    /// Reports a new size (in cells) for the terminal identified by
+    /// `handle`, e.g. after xterm.js's `fit` addon recomputes `cols`/`rows`.
+    #[wasm_bindgen]
+    pub fn wasm_terminal_resize(handle: u32, width: u16, height: u16) {
+        use retroglyph_core::backend::Backend;
+        use retroglyph_core::grid::Size;
+        INSTANCES.with_borrow_mut(|instances| {
+            if let Some(term) = instances.get_mut(&handle) {
+                term.resize(Size { width, height });
+            }
+        });
+    }
+
+    /// Pushes a key event into the terminal identified by `handle`. See
+    /// [`decode_key_event`] for the `code`/`mods` encoding.
+    ///
+    /// Silently ignores codes that don't decode to a known key (e.g. a lone
+    /// Unicode combining mark with no assigned scalar meaning here).
+    #[wasm_bindgen]
+    pub fn wasm_terminal_push_key(handle: u32, code: u32, mods: u8) {
+        use retroglyph_core::event::Event;
+        let Some(key_event) = decode_key_event(code, mods) else {
+            return;
+        };
+        INSTANCES.with_borrow_mut(|instances| {
+            if let Some(term) = instances.get_mut(&handle) {
+                term.push_event(Event::Key(key_event));
+            }
+        });
+    }
+
+    /// Drains and returns the ANSI bytes rendered since the last call for the
+    /// terminal identified by `handle`. Returns an empty string if `handle`
+    /// is unknown or nothing has been drawn since the last call.
+    #[wasm_bindgen]
+    #[must_use]
+    pub fn wasm_terminal_take_output(handle: u32) -> String {
+        INSTANCES.with_borrow_mut(|instances| {
+            instances
+                .get_mut(&handle)
+                .map(TerminalWasm::take_output)
+                .unwrap_or_default()
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use retroglyph_core::Terminal;
+    use retroglyph_core::event::{Event, KeyCode, KeyModifiers};
+
+    #[test]
+    fn renders_into_pullable_buffer() {
+        let backend = TerminalWasm::new(10, 3);
+        let mut term = Terminal::new(backend);
+        term.put(1, 1, 'H');
+        term.present().unwrap();
+        let out = term.backend_mut().take_output();
+        assert!(out.contains('H'), "output: {out:?}");
+        // Draining again returns nothing new until the next present().
+        assert_eq!(term.backend_mut().take_output(), "");
+    }
+
+    #[test]
+    fn push_event_then_poll_roundtrips() {
+        let mut backend = TerminalWasm::new(10, 3);
+        backend.push_event(Event::Key(retroglyph_core::event::KeyEvent::new(
+            KeyCode::Left,
+            KeyModifiers::NONE,
+        )));
+        assert_eq!(
+            Backend::poll_event(&mut backend, Duration::ZERO),
+            Some(Event::Key(retroglyph_core::event::KeyEvent::new(
+                KeyCode::Left,
+                KeyModifiers::NONE
+            )))
+        );
+        assert_eq!(Backend::poll_event(&mut backend, Duration::ZERO), None);
+    }
+
+    #[test]
+    fn size_is_set_externally_not_queried() {
+        let mut backend = TerminalWasm::new(80, 24);
+        assert_eq!(
+            backend.size(),
+            Size {
+                width: 80,
+                height: 24
+            }
+        );
+        backend.resize(Size {
+            width: 40,
+            height: 12,
+        });
+        assert_eq!(
+            backend.size(),
+            Size {
+                width: 40,
+                height: 12
+            }
+        );
+    }
+
+    #[test]
+    fn decode_key_event_maps_printable_char() {
+        let key = decode_key_event(u32::from('a'), 0).unwrap();
+        assert_eq!(key.code, KeyCode::Char('a'));
+        assert!(key.modifiers.is_empty());
+    }
+
+    #[test]
+    fn decode_key_event_maps_named_keys() {
+        let key = decode_key_event(NAMED_KEY_LEFT, 0b010).unwrap();
+        assert_eq!(key.code, KeyCode::Left);
+        assert!(key.modifiers.contains(KeyModifiers::CONTROL));
+    }
+
+    #[test]
+    fn decode_key_event_maps_function_keys() {
+        let key = decode_key_event(NAMED_KEY_F1, 0).unwrap();
+        assert_eq!(key.code, KeyCode::F(1));
+
+        let key = decode_key_event(NAMED_KEY_F1 + 11, 0).unwrap();
+        assert_eq!(key.code, KeyCode::F(12));
+    }
+}
