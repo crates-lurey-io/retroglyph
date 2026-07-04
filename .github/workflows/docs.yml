@@ -94,8 +94,8 @@ jobs:
       # instead of shipping a broken but index-linked demo.
       - name: Package WASM examples (Software)
         run: |
-          EXAMPLES=(dungeon_room sokoban roguelike_dungeon scrolling_roguelike dashboard subpixel dirty_viz tileset sprite_stress hex_battle)
-          for ex in "${EXAMPLES[@]}"; do
+          EXAMPLES=$(cargo run -q -p retroglyph-examples --example runner -- --manifest | awk -F'\t' '$2 == 1 { print $1 }')
+          for ex in $EXAMPLES; do
             wasm="${PWD}/target/wasm32-unknown-unknown/release/examples/${ex}.wasm"
             if [ ! -f "$wasm" ]; then
               echo "Skipping $ex — wasm not built"
