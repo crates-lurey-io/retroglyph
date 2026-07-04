@@ -600,7 +600,13 @@ macro_rules! wasm_terminal_entry {
         #[allow(missing_docs)]
         pub fn wasm_terminal_example_init(width: u16, height: u16) {
             ::console_error_panic_hook::set_once();
-            let backend = ::retroglyph_terminal_wasm::TerminalWasm::new(width, height);
+            let mut backend = ::retroglyph_terminal_wasm::TerminalWasm::new(width, height);
+            // Mirror `Crossterm::new()`'s unconditional `cursor::Hide` at
+            // startup: xterm.js otherwise shows its own blinking block
+            // cursor by default, which games don't expect to see (none of
+            // them manage cursor visibility themselves -- that's a terminal
+            // setup concern, not game logic).
+            ::retroglyph_core::backend::Backend::set_cursor_visible(&mut backend, false);
             let mut term = ::retroglyph_core::Terminal::new(backend);
             let state = $init(&mut term);
             __WASM_TERMINAL.with(|cell| {
