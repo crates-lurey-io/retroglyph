@@ -17,7 +17,7 @@ use core::time::Duration;
 /// Associated error type used by all fallible backend methods.
 ///
 /// Backends that are infallible (e.g. `Headless`, `SoftwareRenderer`) use
-/// [`core::convert::Infallible`].  Fallible backends (e.g. `Crossterm`) use
+/// [`core::convert::Infallible`]. Fallible backends (e.g. `Crossterm`) use
 /// [`std::io::Error`].
 pub trait BackendError: core::fmt::Display + core::fmt::Debug {}
 
@@ -85,7 +85,7 @@ pub trait Backend {
     /// receive a pre-flattened, single-layer stream: [`crate::Terminal::present`]
     /// composites all allocated layers into one frame first. This makes layers
     /// 1+ appear on every backend, not only pixel backends. Pixel/GPU backends
-    /// return `true` and composite the layers themselves. See ADR 015.
+    /// return `true` and composite the layers themselves.
     fn composites_layers(&self) -> bool {
         false
     }
@@ -131,7 +131,7 @@ pub trait Backend {
     ///
     /// Backends that receive events externally (e.g., from a window event
     /// loop or a test harness) override this to queue events for
-    /// [`poll_event`](Self::poll_event).  The default is a no-op.
+    /// [`poll_event`](Self::poll_event). The default is a no-op.
     ///
     /// - Windowed backends: called by `ApplicationHandler` on each event.
     /// - Headless: called by tests to inject synthetic events.

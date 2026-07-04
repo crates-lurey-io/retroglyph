@@ -1,9 +1,10 @@
-//! retroglyph-widgets: immediate-mode drawing helpers over a [`Rect`](retroglyph_core::Rect).
+//! Immediate-mode drawing helpers over a [`Rect`](retroglyph_core::Rect).
 //!
-//! Free functions, not a `Widget` trait (see ADR 016): box borders, filled
-//! panels, gauges, lists, tabs, sparklines, and a small constraint-based
-//! [`Rect`](retroglyph_core::Rect) splitter ([`layout`]). Optional -- games
-//! that draw manually depend only on `retroglyph-core`.
+//! Box borders, filled panels, gauges, lists, tabs, sparklines, and a small
+//! constraint-based [`Rect`](retroglyph_core::Rect) splitter ([`layout`]).
+//! Each widget is a free function that draws directly to a [`Terminal`](retroglyph_core::Terminal)
+//! and retains no state, so there is no `Widget` trait to implement or store.
+//! This crate is optional: games that draw manually depend only on `retroglyph-core`.
 
 #![allow(
     clippy::cast_possible_truncation,

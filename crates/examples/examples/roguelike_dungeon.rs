@@ -411,7 +411,7 @@ fn draw<B: Backend>(term: &mut Terminal<B>, state: &GameState) {
 
     // Author on separate layers (terrain / entities / UI). Terminal::present
     // composites them for cell backends, so this renders identically on
-    // crossterm and software (ADR 015 Decision 1).
+    // crossterm and software.
 
     // Layer 0: terrain.
     term.layer(0);

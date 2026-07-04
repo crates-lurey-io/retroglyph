@@ -101,7 +101,7 @@ where
 }
 
 /// Emit a `main` function wired to the enabled backend, driving an [`App`]
-/// built from `init` + `tick` closures (ADR 015 Decision 2).
+/// built from `init` + `tick` closures.
 ///
 /// - When `software` is enabled (takes priority): builds a `SoftwareRenderer`,
 ///   sizes a window with `WindowConfig::fit`, and runs `retroglyph-window`'s

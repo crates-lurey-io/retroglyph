@@ -1,4 +1,4 @@
-//! Fixed-timestep accumulator (ADR 015 Decision 2).
+//! Fixed-timestep accumulator.
 //!
 //! `FrameClock` decouples logic updates (a stable, fixed rate) from rendering
 //! (as fast as the display allows). It is a *pure accumulator*: it never reads a

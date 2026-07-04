@@ -330,7 +330,7 @@ impl Color {
     /// Supports all 147 CSS Color Module Level 4 named colors.
     /// Returns `None` for unrecognized names.
     ///
-    /// ## Examples
+    /// # Examples
     ///
     /// ```rust
     /// use retroglyph_core::Color;
@@ -497,7 +497,7 @@ impl Color {
     /// Accepts `#rgb` and `#rrggbb` formats (case-insensitive).
     /// Returns `None` for invalid input.
     ///
-    /// ## Examples
+    /// # Examples
     ///
     /// ```rust
     /// use retroglyph_core::Color;

@@ -11,11 +11,11 @@ use std::time::Duration;
 
 /// A [`Backend`] built from a [`Presenter`] plus a window-owned input queue.
 ///
-/// This resolves the trait-fusion problem (ADR 014): `Backend` fuses input
-/// and output, which is wrong for windowed backends where the shared winit
-/// loop owns input and the per-renderer surface owns output. Renderer crates
-/// implement only [`Presenter`]; wrapping it in `WindowBackend` yields the
-/// full `Backend` that [`Terminal`](retroglyph_core::Terminal) needs.
+/// `Backend` fuses input and output, which does not fit windowed backends:
+/// the shared winit loop owns input, while the per-renderer surface owns
+/// output. Renderer crates implement only [`Presenter`]; wrapping it in
+/// `WindowBackend` yields the full `Backend` that
+/// [`Terminal`](retroglyph_core::Terminal) needs.
 ///
 /// The winit loop pushes translated events via
 /// [`push_event`](Backend::push_event); the app drains them with

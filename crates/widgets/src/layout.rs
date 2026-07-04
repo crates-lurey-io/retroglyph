@@ -1,15 +1,12 @@
-//! Minimal constraint-based `Rect` splitter for multi-panel example UIs.
+//! Constraint-based `Rect` splitter for multi-panel UIs.
 //!
-//! This is the deliberately small seed of a future layout module (ADR 014 names
-//! `retroglyph-widgets` as the eventual home). It splits a [`Rect`](retroglyph_core::Rect)
-//! into stacked rows ([`split_v`]) or side-by-side columns ([`split_h`]) according to a slice
-//! of [`Constraint`]s.
+//! Splits a [`Rect`](retroglyph_core::Rect) into stacked rows ([`split_v`]) or
+//! side-by-side columns ([`split_h`]) according to a slice of [`Constraint`]s.
 //!
-//! The solver is intentionally simple: sum the [`Fixed`](Constraint::Fixed) and
-//! [`Percent`](Constraint::Percent) amounts, then distribute whatever remains
-//! equally across the [`Fill`](Constraint::Fill) panes. Sizes are clamped so the
-//! panes never spill past `area`. There is no min/max, spacing, or flex weight
-//! yet — add those only when a demo actually needs them.
+//! The solver sums the [`Fixed`](Constraint::Fixed) and [`Percent`](Constraint::Percent)
+//! amounts, then distributes whatever remains equally across the
+//! [`Fill`](Constraint::Fill) panes. Sizes are clamped so the panes never spill
+//! past `area`. There is no min/max, spacing, or flex weight.
 use retroglyph_core::Rect;
 
 /// How a single pane claims space along the split axis.
@@ -80,6 +77,17 @@ fn solve(total: u16, constraints: &[Constraint]) -> Vec<u16> {
 ///
 /// Returns one [`Rect`] per constraint; empty panes (zero height) are still
 /// returned so indices line up with `constraints`.
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::Rect;
+/// use retroglyph_widgets::{Constraint, split_v};
+///
+/// let area = Rect::new(0, 0, 20, 10);
+/// let panes = split_v(area, &[Constraint::Fixed(1), Constraint::Fill, Constraint::Fixed(1)]);
+/// assert_eq!(panes.iter().map(Rect::height).collect::<Vec<_>>(), vec![1, 8, 1]);
+/// ```
 #[must_use]
 pub fn split_v(area: Rect, constraints: &[Constraint]) -> Vec<Rect> {
     let sizes = solve(area.height(), constraints);
@@ -98,6 +106,17 @@ pub fn split_v(area: Rect, constraints: &[Constraint]) -> Vec<Rect> {
 ///
 /// Returns one [`Rect`] per constraint; empty panes (zero width) are still
 /// returned so indices line up with `constraints`.
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::Rect;
+/// use retroglyph_widgets::{Constraint, split_h};
+///
+/// let area = Rect::new(0, 0, 100, 5);
+/// let panes = split_h(area, &[Constraint::Percent(30), Constraint::Fill]);
+/// assert_eq!(panes.iter().map(Rect::width).collect::<Vec<_>>(), vec![30, 70]);
+/// ```
 #[must_use]
 pub fn split_h(area: Rect, constraints: &[Constraint]) -> Vec<Rect> {
     let sizes = solve(area.width(), constraints);

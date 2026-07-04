@@ -1,9 +1,11 @@
 //! The winit event loop and the windowed app drivers.
 //!
 //! [`run_windowed`] drives a raw `FnMut(&mut Terminal<..>)` closure;
-//! [`run_app`] drives an [`App`](retroglyph_core::App) (the inverted driver
-//! from ADR 015 Decision 2 — winit owns the loop, so this cannot be core's
-//! generic [`run_blocking`](retroglyph_core::run_blocking)).
+//! [`run_app`] drives an [`App`](retroglyph_core::App). This is the inverted
+//! driver: winit owns the loop and calls back into the app on each redraw,
+//! so it cannot be core's generic
+//! [`run_blocking`](retroglyph_core::run_blocking), which owns its own
+//! `while` loop.
 
 use super::translate::{
     physical_pos_from, pixel_to_cell, translate_key, translate_modifiers, translate_mouse_button,
@@ -123,8 +125,10 @@ where
     }
 }
 
-/// Drive an [`App`](retroglyph_core::App) from the windowed event loop (the
-/// inverted driver, ADR 015 Decision 2 piece 3).
+/// Drive an [`App`](retroglyph_core::App) from the windowed event loop.
+///
+/// This is the inverted driver: winit owns the event loop and calls back
+/// into the app on each redraw, rather than the app owning a `while` loop.
 ///
 /// Each frame builds a [`Frame`](retroglyph_core::Frame) (wall-clock `dt` on
 /// native, `ZERO` on wasm where `std::time::Instant` is unavailable) and

@@ -27,9 +27,10 @@ bitflags::bitflags! {
 
 /// A single drawable tile in the terminal grid.
 ///
-/// Each tile occupies one cell on a single layer (see ADR 008 for the layer
-/// model). Sub-cell pixel offsets (`dx`, `dy`) are visual only — they do not
-/// affect grid logic or hit-testing. Backends that cannot represent pixel
+/// Each tile occupies one cell on a single layer; a [`Grid`](crate::grid::Grid)
+/// holds up to 256 independent layers of tiles per cell, composited
+/// bottom-to-top. Sub-cell pixel offsets (`dx`, `dy`) are visual only, they do
+/// not affect grid logic or hit-testing. Backends that cannot represent pixel
 /// offsets (e.g. `CrosstermBackend`) ignore them.
 // The manual `PartialEq` below only adds an `Arc::ptr_eq` fast path in front of
 // the same field-by-field comparison the derive would generate, so it stays
@@ -51,8 +52,8 @@ pub struct Tile {
     pub(crate) dy: i16,
     /// Wide-character role flags (e.g. [`TileFlags::WIDE_CHAR`]).
     ///
-    /// Always present so `Tile`'s layout is stable across the `egc` feature
-    /// (see ADR 015). Without `egc` it is never set to anything but empty.
+    /// Always present so `Tile`'s layout is stable whether or not the `egc`
+    /// feature is enabled. Without `egc` it is never set to anything but empty.
     pub(crate) flags: TileFlags,
     /// Allocated only when the grapheme cluster has more than one codepoint
     /// (combining marks, ZWJ emoji sequences, etc.).

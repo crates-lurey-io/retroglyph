@@ -1,4 +1,5 @@
-//! The grid container.
+//! The layered tile grid: [`Grid`], plus the [`Size`], [`Pos`], and [`Rect`]
+//! coordinate types used throughout the crate.
 
 use crate::color::Color;
 #[cfg(feature = "egc")]
@@ -130,14 +131,13 @@ impl LayerBuf {
 // Grid
 // ---------------------------------------------------------------------------
 
-/// The main grid container for the terminal.
+/// A 2D buffer of [`Tile`]s, addressable across up to 256 stacked layers.
 ///
-/// Holds up to 256 layers (0–255). Layer 0 is always allocated; higher layers
-/// are allocated on first write. Single-layer games pay no overhead — layers
-/// 1+ remain `None` until used.
+/// Layer 0 is always allocated; higher layers are allocated on first write.
+/// Single-layer use pays no overhead: layers 1+ stay unallocated until used.
 ///
-/// Note: This uses `alloc::vec::Vec`, requiring an allocator in `no_std` environments.
-/// For strictly static, no-alloc environments, a static-sized grid type may be added in the future.
+/// Requires an allocator (backed by `alloc::vec::Vec`), so it is unavailable
+/// in strictly static, no-alloc environments.
 pub struct Grid {
     width: u16,
     height: u16,
@@ -713,7 +713,7 @@ impl Grid {
 }
 
 /// Per-layer diff iterator, replacing a boxed trait object so `diff` performs
-/// no per-layer heap allocation (ADR 015 Decision 1).
+/// no per-layer heap allocation.
 enum LayerDiff<F, D> {
     Empty,
     Full(F),
@@ -742,9 +742,7 @@ where
 ///
 /// Per-channel sRGB-domain lerp (src -> dst by `t`) delegated to
 /// [`gem::rgb::Lerp`], which is `no_std`-safe (round-half-away via
-/// `floor(x + 0.5)`, no `std`/`libm` float intrinsics). This is the same math
-/// as the previous hand-rolled `lerp_u8`, now sourced from the color crate
-/// instead of reimplemented here.
+/// `floor(x + 0.5)`, no `std`/`libm` float intrinsics).
 #[cfg(feature = "gem")]
 #[allow(clippy::float_cmp)]
 fn blend_color(src: Color, dst: Color, t: f32) -> Color {

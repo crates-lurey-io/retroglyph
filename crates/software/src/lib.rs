@@ -1,6 +1,6 @@
 //! Software rendering backend: CPU rasterization + softbuffer pixel blitting.
 //!
-//! # Architecture (ADR 014)
+//! # Architecture
 //!
 //! [`SoftwareBackend`] is a pure-config type (font, grid size, scale). It does
 //! **not** implement [`Backend`] directly.  Call
@@ -56,19 +56,15 @@ use std::time::Duration;
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
-/// The running half of the software backend.
-///
 /// A running software renderer, produced by [`SoftwareBackend::run_headless`].
 ///
 /// Unlike [`SoftwareBackend`] (which is just configuration), this type
-/// always has an active rendering context — its pixel buffer is always
-/// available.  The `ctx` field is never `None`, so [`Backend`] methods never
-/// panic for missing initialisation.
+/// always has an active rendering context: its pixel buffer is always
+/// available, and the `ctx` field is never `None`, so [`Backend`] methods
+/// never panic for missing initialisation.
 ///
 /// Call [`pixels`](Self::pixels) to inspect the rendered output, or use
-/// [`Backend::draw`] and
-/// [`Backend::draw_layers`] to render
-/// into it.
+/// [`Backend::draw`] and [`Backend::draw_layers`] to render into it.
 pub struct SoftwareRenderer {
     options: SoftwareBackend,
     /// The bitmap font, extracted from `options.font` at construction time.
@@ -158,19 +154,20 @@ impl SoftwareRenderer {
     /// The buffer length is `cols * (glyph_width * scale) * rows * (glyph_height * scale)`.
     /// Each `u32` is a packed RGB pixel with the top byte unused.
     ///
-    /// This is always available — there is no `Option` wrapper because
+    /// This is always available: there is no `Option` wrapper because
     /// `SoftwareRenderer` is guaranteed to have an active rendering context.
     #[must_use]
     pub fn pixels(&self) -> &[u32] {
         self.ctx.pixel_buf.as_ref()
     }
 
-    /// Push an event into the internal buffer.
+    /// Pushes an event into the internal buffer, to be drained by
+    /// [`Backend::poll_event`].
     pub fn push_event(&mut self, event: Event) {
         self.ctx.event_buffer.push_back(event);
     }
 
-    /// Initialize the window surface from a raw window/display handle.
+    /// Initializes the window surface from a raw window/display handle.
     ///
     /// # Errors
     ///
@@ -185,7 +182,8 @@ impl SoftwareRenderer {
         Ok(())
     }
 
-    /// Resize the window surface.
+    /// Resizes the window surface to `width` x `height` pixels. No-op if the
+    /// surface has not been initialized via [`init_surface`](Self::init_surface).
     pub fn resize_surface(&mut self, width: u32, height: u32) {
         if let Some(surf) = &mut self.ctx.window_surface
             && let (Some(w), Some(h)) = (NonZeroU32::new(width), NonZeroU32::new(height))
@@ -194,7 +192,8 @@ impl SoftwareRenderer {
         }
     }
 
-    /// Present the pixel buffer to the window surface.
+    /// Presents the pixel buffer to the window surface. No-op in headless
+    /// mode (no surface initialized).
     ///
     /// # Errors
     ///
@@ -225,7 +224,7 @@ impl SoftwareBackend {
     /// Creates a headless renderer that renders into an internal buffer
     /// without opening a window.
     ///
-    /// This does not block — it returns a [`SoftwareRenderer`] immediately.
+    /// This does not block: it returns a [`SoftwareRenderer`] immediately.
     /// The renderer's pixel buffer can be inspected via
     /// [`SoftwareRenderer::pixels`], or the renderer can be handed to
     /// `retroglyph_window::winit::run_windowed` to drive a window.  Flushing
@@ -354,8 +353,8 @@ impl Backend for SoftwareRenderer {
     ///
     /// Known divergence from cell backends: an occupied space with a
     /// [`Color::Default`] background on a higher layer erases the glyph beneath
-    /// it when flattened, but here it leaves the lower glyph's pixels intact —
-    /// repainting the lower background per pixel would require composited
+    /// it when flattened, but here it leaves the lower glyph's pixels intact.
+    /// Repainting the lower background per pixel would require composited
     /// per-cell state this renderer intentionally avoids.
     fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
@@ -542,10 +541,10 @@ impl retroglyph_window::Presenter for SoftwareRenderer {
 
 // ── Grid compositing ──────────────────────────────────────────────────────────
 
-/// Render one grid cell into `buffer` using 1-bit bitmap glyph data.
+/// Renders one grid cell into `buffer` using 1-bit bitmap glyph data.
 ///
 /// Each set bit in the font row maps to `fg`; each clear bit maps to `bg`.
-/// No alpha blending is needed — bitmap fonts are 1-bit.
+/// No alpha blending is needed: bitmap fonts are 1-bit.
 /// When `scale > 1` each source pixel becomes a `scale×scale` block.
 ///
 /// If `sprite_cache` contains a sprite for the cell's glyph, the bitmap font
@@ -620,9 +619,9 @@ fn blit_cell(
     }
 }
 
-/// Blit a glyph's set bits into `buffer` at `(px_x, px_y)` plus sub-cell
-/// offset from `tile.dx`/`tile.dy`.  Only the foreground (glyph) pixels are
-/// painted — background is left untouched.
+/// Blits a glyph's set bits into `buffer` at `(px_x, px_y)` plus sub-cell
+/// offset from `tile.dx`/`tile.dy`. Only the foreground (glyph) pixels are
+/// painted; background is left untouched.
 #[allow(clippy::cast_possible_truncation, clippy::too_many_arguments)]
 fn blit_glyph(
     buffer: &mut [u32],
