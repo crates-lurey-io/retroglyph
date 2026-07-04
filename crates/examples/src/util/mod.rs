@@ -247,6 +247,37 @@ where
     }
 }
 
+/// Emit the `#[cfg]`-gated wasm-headless entry-point arm shared by
+/// [`rg_run!`], [`rg_run_software!`], and any example (e.g. `hex_battle`)
+/// that hand-rolls its own backend dispatch instead of using either macro.
+///
+/// Broken out so the wasm-headless branch is written once instead of
+/// copy-pasted into every entry-point macro/manual dispatch: it only ever
+/// expands to the single `wasm_headless_entry!` call gated on `wasm-headless`
+/// being enabled, `software` being disabled (software takes priority when
+/// both are on), and the target being `wasm32`. Callers still need their own
+/// fallback `main` guarded with a matching `not(...)` of this same condition
+/// — see [`rg_run!`]'s and [`rg_run_software!`]'s headless-fallback arms for
+/// the pattern.
+///
+/// `#[macro_export]` (required: `rg_run!`/`rg_run_software!` are themselves
+/// `#[macro_export]`, so their call sites resolve from the *caller's* crate
+/// root, where a private/`pub(crate)` macro isn't reachable). `#[doc(hidden)]`
+/// keeps it out of the public example-authoring API surface despite being
+/// technically exported.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __rg_wasm_headless_arm {
+    ($State:ty, $init:path, $tick:path) => {
+        #[cfg(all(
+            feature = "wasm-headless",
+            not(feature = "software"),
+            target_arch = "wasm32"
+        ))]
+        ::retroglyph_examples::wasm_headless_entry!($State, $init, $tick);
+    };
+}
+
 /// Emit a `main` function wired to the enabled backend, driving an [`App`]
 /// built from `init` + `tick` closures.
 ///
@@ -254,11 +285,15 @@ where
 ///   sizes a window with `WindowConfig::fit`, and runs `retroglyph-window`'s
 ///   inverted driver. On `wasm32`, also emits a `wasm_bindgen(start)` entry.
 /// - When only `crossterm` is enabled: runs the generic blocking driver.
-/// - When neither is enabled: falls back to [`run_headless`], ticking a few
-///   frames against a [`Headless`](retroglyph_core::Headless) backend and
-///   printing them to stdout. This keeps every example buildable with the
-///   crate's default features and backs `examples/runner.rs`'s "Headless"
-///   backend option.
+/// - When `wasm-headless` is enabled (and `software` isn't) on `wasm32`:
+///   drives a [`Terminal<Headless>`](retroglyph_core::Terminal) from browser
+///   `#[wasm_bindgen]` calls instead of a canvas/window — see
+///   [`wasm_headless_entry!`](crate::wasm_headless_entry).
+/// - When none of the above are enabled: falls back to [`run_headless`],
+///   ticking a few frames against a [`Headless`](retroglyph_core::Headless)
+///   backend and printing them to stdout. This keeps every example
+///   buildable with the crate's default features and backs
+///   `examples/runner.rs`'s "Headless" backend option.
 ///
 /// # Arguments
 ///
@@ -338,12 +373,7 @@ macro_rules! rg_run {
         // Takes priority over the stdout-printing Headless fallback below,
         // but yields to `software` if both feature flags are somehow enabled
         // at once (see the Cargo.toml doc comment on `wasm-headless`).
-        #[cfg(all(
-            feature = "wasm-headless",
-            not(feature = "software"),
-            target_arch = "wasm32"
-        ))]
-        ::retroglyph_examples::wasm_headless_entry!($State, __rg_init, __rg_tick);
+        ::retroglyph_examples::__rg_wasm_headless_arm!($State, __rg_init, __rg_tick);
 
         // ── Headless fallback (no backend feature enabled, or non-wasm) ───
         #[cfg(not(any(
@@ -533,8 +563,18 @@ macro_rules! rg_run_software {
             ::std::result::Result::Ok(())
         }
 
-        // ── Headless fallback (software feature disabled) ───────────────────
-        #[cfg(not(feature = "software"))]
+        // ── WASM Headless backend (browser rAF loop, no canvas/window) ────
+        //
+        // Takes priority over the stdout-printing Headless fallback below,
+        // but yields to `software` if both feature flags are somehow enabled
+        // at once (see the Cargo.toml doc comment on `wasm-headless`).
+        ::retroglyph_examples::__rg_wasm_headless_arm!($State, __rg_init, __rg_tick);
+
+        // ── Headless fallback (no backend feature enabled, or non-wasm) ───
+        #[cfg(not(any(
+            feature = "software",
+            all(feature = "wasm-headless", target_arch = "wasm32"),
+        )))]
         fn main() {
             $crate::util::run_headless(__rg_init, __rg_tick);
         }
