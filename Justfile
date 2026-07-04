@@ -45,7 +45,7 @@ doc:
 # Regenerate the workspace-level llms.txt / llms-full.txt (root only); `just doc`
 # also generates per-crate copies under target/doc/<crate>/.
 llms:
-    @./bin/bin/cargo-llms-txt 2>/dev/null || cargo llms-txt 2>/dev/null || true
+    @./.bin/manual/bin/cargo-llms-txt 2>/dev/null || cargo llms-txt 2>/dev/null || true
 
 docs-preview: doc
     @if command -v xdg-open > /dev/null; then xdg-open target/doc/index.html; \
@@ -107,14 +107,9 @@ coverage-ci:
 
 setup-tools:
     cargo bin --install
-    cargo install cargo-llms-txt --version 0.1.1 --root bin/ 2>/dev/null || true
+    cargo install cargo-llms-txt --version 0.1.1 --root .bin/manual/ 2>/dev/null || true
 
-setup-wasm:
-    @if [ ! -f bin/bin/wasm-server-runner ]; then \
-        echo "Installing wasm-server-runner 1.0.1 to bin/..."; \
-        cargo binstall wasm-server-runner@1.0.1 --no-confirm --root bin/ 2>/dev/null || \
-            cargo install wasm-server-runner --version 1.0.1 --locked --root bin/; \
-    fi
+setup-wasm: setup-tools
 
 run-wasm:
     cargo run -p retroglyph-examples --target wasm32-unknown-unknown --example dungeon_room --features default-font
@@ -126,7 +121,7 @@ act-version := "v0.2.89"
 act *args:
     #!/usr/bin/env bash
     set -euo pipefail
-    BIN="$PWD/bin"
+    BIN="$PWD/.bin/manual"
     ACT="$BIN/act"
     if [ -f "$ACT" ]; then
         INSTALLED="$($ACT --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || true)"
@@ -134,12 +129,12 @@ act *args:
             exec "$ACT" -P ubuntu-latest=catthehacker/ubuntu:act-latest {{args}}
         fi
     fi
-    echo "Installing act {{act-version}} to bin/..."
+    echo "Installing act {{act-version}} to .bin/manual/..."
     mkdir -p "$BIN"
     OS="$(uname -s)"
     ARCH="$(uname -m | sed 's/aarch64/arm64/')"
     URL="https://github.com/nektos/act/releases/download/{{act-version}}/act_${OS}_${ARCH}.tar.gz"
     curl -sL "$URL" | tar xz -C "$BIN" act
     chmod +x "$ACT"
-    echo "Installed act {{act-version}} to bin/act"
+    echo "Installed act {{act-version}} to .bin/manual/act"
     exec "$ACT" -P ubuntu-latest=catthehacker/ubuntu:act-latest {{args}}

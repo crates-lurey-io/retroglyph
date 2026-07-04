@@ -6,6 +6,10 @@ resolver = "2"
 wasm-server-runner = { version = "1.0.1" }
 hk = { version = "1.48.0" }
 cargo-criterion = { version = "1.1.0" }
+# cargo-llms-txt is intentionally not managed here: it has no prebuilt
+# binstall/quickinstall binaries, and cargo-run-bin's source-install fallback
+# is broken (https://github.com/dustinblackman/cargo-run-bin/issues/39).
+# It's installed to .bin/manual/ instead; see `setup-tools` in the Justfile.
 
 [workspace.package]
 edition = "2024"
