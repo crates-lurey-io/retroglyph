@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
+    />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="theme-color" content="#0d1117" />
+    <title>retroglyph — __EXAMPLE__ (Terminal)</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/css/xterm.css" />
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        background: #0d1117;
+        color: #e6edf3;
+        overscroll-behavior: none;
+        height: 100%;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
+          sans-serif;
+      }
+      body {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.75rem;
+        min-height: 100%;
+      }
+      #screen {
+        width: 100%;
+        max-width: 46rem;
+        aspect-ratio: 50 / 25;
+        background: #000;
+        border: 1px solid #30363d;
+        border-radius: 6px;
+        padding: 0.4rem;
+        touch-action: none;
+      }
+      /* xterm.js sizes its internal canvas/DOM renderer to fill this. */
+      #screen .terminal {
+        height: 100%;
+      }
+      p.hint {
+        color: #8b949e;
+        font-size: 0.75rem;
+        text-align: center;
+        max-width: 30rem;
+      }
+      a.back {
+        color: #58a6ff;
+        text-decoration: none;
+        font-size: 0.8rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="screen"></div>
+
+    <p class="hint">
+      Tap the terminal to focus it, then use arrow keys, Enter, Backspace, Escape, or printable
+      characters — this demo renders real ANSI/SGR escape codes via
+      <a href="https://xtermjs.org/">xterm.js</a>, the same terminal-family renderer used by the
+      native <code>crossterm</code> backend.
+    </p>
+    <a class="back" href="../../">&larr; Back to all examples</a>
+
+    <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/lib/xterm.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.11.0/lib/addon-fit.js"></script>
+    <script type="module">
+      import init, {
+        wasm_terminal_example_init,
+        wasm_terminal_example_resize,
+        wasm_terminal_example_push_key,
+        wasm_terminal_example_tick,
+      } from './__EXAMPLE__.js';
+
+      // Mirrors the FFI encoding documented on
+      // retroglyph_terminal_wasm::decode_key_event: printable characters
+      // pass through as their Unicode codepoint; named keys use codepoints
+      // above the valid `char` range (0x110000+). Only a first-pass subset of
+      // named keys is wired up here (arrows, Enter, Backspace, Escape,
+      // Tab) — xterm.js's `onData` already hands us the *decoded* key as a
+      // short string (not a raw keyboard event), so extending this to the
+      // rest of decode_key_event's named keys (Home/End/PageUp/PageDown/
+      // Insert/Delete/BackTab/F1-F24) means matching more of xterm.js's
+      // documented key-sequence strings below — left for a follow-up since
+      // this covers what dungeon_room and similar keyboard-driven demos need.
+      const NAMED_KEY_BASE = 0x00110000;
+      const NAMED_KEY = {
+        backspace: NAMED_KEY_BASE,
+        enter: NAMED_KEY_BASE + 1,
+        left: NAMED_KEY_BASE + 2,
+        right: NAMED_KEY_BASE + 3,
+        up: NAMED_KEY_BASE + 4,
+        down: NAMED_KEY_BASE + 5,
+        tab: NAMED_KEY_BASE + 10,
+        escape: NAMED_KEY_BASE + 14,
+      };
+      const MOD_SHIFT = 0b001;
+      const MOD_CONTROL = 0b010;
+      const MOD_ALT = 0b100;
+
+      // xterm.js's `onData` reports keys as the literal bytes/escape
+      // sequences a real terminal would receive on stdin (not structured key
+      // events), since that's what a terminal emulator's data model is.
+      // These are the standard xterm/VT100 sequences for the keys covered
+      // above; `Terminal` is configured in application-cursor-keys-off mode
+      // (the default), so arrows send the ANSI (not SS3) form.
+      const SEQUENCE_TO_KEY = {
+        '\r': { code: NAMED_KEY.enter, mods: 0 },
+        '\x7f': { code: NAMED_KEY.backspace, mods: 0 },
+        '\x1b': { code: NAMED_KEY.escape, mods: 0 },
+        '\t': { code: NAMED_KEY.tab, mods: 0 },
+        '\x1b[A': { code: NAMED_KEY.up, mods: 0 },
+        '\x1b[B': { code: NAMED_KEY.down, mods: 0 },
+        '\x1b[C': { code: NAMED_KEY.right, mods: 0 },
+        '\x1b[D': { code: NAMED_KEY.left, mods: 0 },
+        // Common WASD fallback some demos also accept — passed through as
+        // plain printable characters below, not special-cased here.
+      };
+
+      function pushKey(code, mods = 0) {
+        wasm_terminal_example_push_key(code >>> 0, mods & 0xff);
+      }
+
+      function handleTerminalData(data) {
+        const mapped = SEQUENCE_TO_KEY[data];
+        if (mapped) {
+          pushKey(mapped.code, mapped.mods);
+          return;
+        }
+        // A single printable character (including Ctrl/Shift combos xterm.js
+        // already resolved to a codepoint) is forwarded as-is; anything else
+        // (unrecognized multi-byte escape sequences, e.g. function keys not
+        // covered above) is silently dropped rather than mis-decoded.
+        if (data.length === 1) {
+          const code = data.codePointAt(0);
+          // xterm.js sends Ctrl+<letter> as the corresponding C0 control
+          // code (0x01-0x1a); surface that as the plain letter + CONTROL
+          // modifier instead of an unmapped control character.
+          if (code >= 0x01 && code <= 0x1a && code !== 0x09 && code !== 0x0d) {
+            pushKey(code - 0x01 + 'a'.codePointAt(0), MOD_CONTROL);
+            return;
+          }
+          // No modifier bits to set here: Shift is already baked into the
+          // codepoint xterm.js hands us (e.g. 'A' vs 'a').
+          pushKey(code);
+        }
+      }
+
+      async function main() {
+        await init();
+
+        const term = new Terminal({
+          cursorBlink: true,
+          fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
+          fontSize: 14,
+          theme: {
+            background: '#000000',
+            foreground: '#c9d1d9',
+          },
+        });
+        const fitAddon = new FitAddon.FitAddon();
+        term.loadAddon(fitAddon);
+        term.open(document.getElementById('screen'));
+        fitAddon.fit();
+
+        wasm_terminal_example_init(term.cols, term.rows);
+
+        term.onData(handleTerminalData);
+
+        let resizeTimer = null;
+        window.addEventListener('resize', () => {
+          // Debounce: a fit + resize on every resize event during a drag is
+          // wasted work, and mobile browsers fire resize repeatedly while
+          // the on-screen keyboard animates in/out.
+          clearTimeout(resizeTimer);
+          resizeTimer = setTimeout(() => {
+            fitAddon.fit();
+            wasm_terminal_example_resize(term.cols, term.rows);
+          }, 100);
+        });
+
+        function frame() {
+          const ansi = wasm_terminal_example_tick();
+          if (ansi) term.write(ansi);
+          requestAnimationFrame(frame);
+        }
+        requestAnimationFrame(frame);
+
+        term.focus();
+      }
+
+      main();
+    </script>
+  </body>
+</html>
