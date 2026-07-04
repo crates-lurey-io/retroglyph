@@ -73,7 +73,15 @@ jobs:
             --example hex_battle
         continue-on-error: true
 
-      - name: Package WASM examples
+      # Software must be packaged (wasm-bindgen'd into target/doc/) before the
+      # Headless build below runs: both the software and wasm-headless builds
+      # of the same example produce the same output path
+      # (target/wasm32-unknown-unknown/release/examples/<name>.wasm — Cargo
+      # feature flags don't affect the artifact filename), so building
+      # Headless first would silently clobber the Software .wasm before it's
+      # packaged. Keep build+package interleaved per backend rather than
+      # batching all builds before all packaging.
+      - name: Package WASM examples (Software)
         run: |
           EXAMPLES=(dungeon_room sokoban roguelike_dungeon scrolling_roguelike dashboard subpixel dirty_viz tileset sprite_stress hex_battle)
           for ex in "${EXAMPLES[@]}"; do
@@ -82,63 +90,90 @@ jobs:
               echo "Skipping $ex — wasm not built"
               continue
             fi
-            outdir="target/doc/examples/${ex}"
+            outdir="target/doc/examples/${ex}/software"
             mkdir -p "$outdir"
             "$CARGO_HOME/bin/wasm-bindgen" --target web --out-dir "$outdir" "$wasm"
-            cat > "$outdir/index.html" <<HTML
-          <!DOCTYPE html>
-          <html lang="en">
-          <head>
-            <meta charset="utf-8">
-            <title>retroglyph — ${ex}</title>
-            <style>
-              html, body { margin: 0; padding: 0; background: #000; overflow: hidden; }
-              canvas { display: block; }
-            </style>
-          </head>
-          <body>
-            <script type="module">
-              import init from './${ex}.js';
-              init();
-            </script>
-          </body>
-          </html>
-          HTML
+            sed -e "s/__EXAMPLE__/${ex}/g" docs/templates/examples/software-template.html > "$outdir/index.html"
+          done
+        continue-on-error: true
+
+      - name: Build WASM Headless examples
+        # Browser "Headless" demos (no canvas/window): a Terminal<Headless>
+        # driven by requestAnimationFrame + button/keyboard input, rendered
+        # as text into a <pre>. See retroglyph-examples' `wasm-headless`
+        # feature and `util::wasm_headless_entry!`. Only examples with
+        # `docs_headless: true` in examples/runner.rs's EXAMPLES table are
+        # built here — `--manifest` is this workflow's single source of
+        # truth for that list (also consumed below in "Generate examples
+        # index"), so runner.rs stays the one place that list is edited.
+        # Runs after Software is packaged; see the ordering note above.
+        run: |
+          HEADLESS_EXAMPLES=$(cargo run -q -p retroglyph-examples --example runner -- --manifest | awk -F'\t' '$3 == 1 { print $1 }')
+          if [ -z "$HEADLESS_EXAMPLES" ]; then
+            echo "No examples with docs_headless: true; skipping."
+            exit 0
+          fi
+          ARGS=()
+          for ex in $HEADLESS_EXAMPLES; do
+            ARGS+=(--example "$ex")
+          done
+          cargo build --release -p retroglyph-examples \
+            --target wasm32-unknown-unknown \
+            --features wasm-headless \
+            "${ARGS[@]}"
+        continue-on-error: true
+
+      - name: Package WASM examples (Headless)
+        run: |
+          HEADLESS_EXAMPLES=$(cargo run -q -p retroglyph-examples --example runner -- --manifest | awk -F'\t' '$3 == 1 { print $1 }')
+          for ex in $HEADLESS_EXAMPLES; do
+            wasm="${PWD}/target/wasm32-unknown-unknown/release/examples/${ex}.wasm"
+            if [ ! -f "$wasm" ]; then
+              echo "Skipping $ex — headless wasm not built"
+              continue
+            fi
+            outdir="target/doc/examples/${ex}/headless"
+            mkdir -p "$outdir"
+            "$CARGO_HOME/bin/wasm-bindgen" --target web --out-dir "$outdir" "$wasm"
+            sed -e "s/__EXAMPLE__/${ex}/g" docs/templates/examples/headless-template.html > "$outdir/index.html"
           done
         continue-on-error: true
 
       - name: Generate examples index
         run: |
           mkdir -p target/doc/examples
-          # Only list examples that were actually built.
-          entries=""
-          for ex in dungeon_room sokoban roguelike_dungeon scrolling_roguelike dashboard subpixel dirty_viz tileset sprite_stress hex_battle; do
-            if [ -f "target/doc/examples/${ex}/index.html" ]; then
-              entries="${entries}<li><a href=\"${ex}/\">${ex}</a></li>"$'\n'
+          MANIFEST=$(cargo run -q -p retroglyph-examples --example runner -- --manifest)
+          rows=""
+          while IFS=$'\t' read -r ex wasm_software docs_headless; do
+            [ -z "$ex" ] && continue
+
+            if [ "$docs_headless" = "1" ] && [ -f "target/doc/examples/${ex}/headless/index.html" ]; then
+              headless_cell="<td><a href=\"${ex}/headless/\">Headless</a></td>"
+            else
+              headless_cell="<td><span class=\"unavailable\">Headless</span></td>"
             fi
-          done
-          cat > target/doc/examples/index.html <<HTML
-          <!DOCTYPE html>
-          <html lang="en">
-          <head>
-            <meta charset="utf-8">
-            <title>retroglyph — interactive examples</title>
-            <style>
-              body { font-family: monospace; background: #111; color: #ccc; padding: 2rem; }
-              a { color: #7af; }
-              h1 { color: #fff; }
-            </style>
-          </head>
-          <body>
-            <h1>retroglyph — interactive examples</h1>
-            <p>These run entirely in the browser via WebAssembly.</p>
-            <ul>
-          ${entries}
-            </ul>
-            <p><a href="../retroglyph_core/">API documentation</a> &middot; <a href="https://bencher.dev/perf/retroglyph">Benchmarks</a></p>
-          </body>
-          </html>
-          HTML
+
+            # Terminal (xterm.js) wiring is not built for any example yet;
+            # always greyed out until a future pass adds retroglyph-terminal-wasm.
+            terminal_cell="<td><span class=\"unavailable\">Terminal</span></td>"
+
+            if [ "$wasm_software" = "1" ] && [ -f "target/doc/examples/${ex}/software/index.html" ]; then
+              software_cell="<td><a href=\"${ex}/software/\">Software</a></td>"
+            else
+              software_cell="<td><span class=\"unavailable\">Software</span></td>"
+            fi
+
+            rows="${rows}<tr><td class=\"example\">${ex}</td>${headless_cell}${terminal_cell}${software_cell}</tr>"$'\n'
+          done <<< "$MANIFEST"
+
+          python3 - "$rows" <<'PYEOF'
+          import sys
+          rows = sys.argv[1]
+          with open("docs/templates/examples/index-template.html", encoding="utf-8") as f:
+              template = f.read()
+          with open("target/doc/examples/index.html", "w", encoding="utf-8") as f:
+              f.write(template.replace("__ROWS__", rows))
+          PYEOF
         continue-on-error: true
 
       - name: Upload artifact
