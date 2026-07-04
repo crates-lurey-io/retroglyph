@@ -51,6 +51,16 @@ wasm-terminal = ["dep:retroglyph-terminal-wasm"]
 wasm-bindgen = "=0.2.106"
 console_error_panic_hook = "0.1"
 
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+# Needed by the `tileset`/`sprite_stress` examples' build-time sprite-sheet
+# PNG encoding (`make_sprite_sheet()`, behind the `tilesets` feature). Same
+# spec as the non-wasm32 section below; `retroglyph-software`'s own `image`
+# dependency for its `tilesets` feature is already unconditional and builds
+# fine on wasm32 (see `hex_battle --features tilesets` for proof), so this
+# was purely a missing dev-dependency edge, not a real wasm32/image
+# incompatibility.
+image = { version = "0.25", default-features = false, features = ["png"] }
+
 [dev-dependencies]
 framepace = "0.1.0-alpha.0"
 hexal = { version = "0.1.0-alpha.2", features = ["ixy"] }
