@@ -38,7 +38,7 @@ headless_exports=(wasm_headless_init wasm_headless_push_key wasm_headless_tick)
 terminal_exports=(wasm_terminal_example_init wasm_terminal_example_resize wasm_terminal_example_push_key wasm_terminal_example_tick)
 
 has_export() {
-  grep -q "$1" "$js_file"
+  grep -qF "$1" "$js_file"
 }
 
 require_exports() {
