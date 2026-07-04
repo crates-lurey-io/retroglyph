@@ -762,10 +762,19 @@ macro_rules! rg_run_software {
         // at once (see the Cargo.toml doc comment on `wasm-headless`).
         ::retroglyph_examples::__rg_wasm_headless_arm!($State, __rg_init, __rg_tick);
 
+        // ── WASM Terminal backend (xterm.js, no canvas/window) ──────────
+        //
+        // Takes priority over the stdout-printing Headless fallback below,
+        // but yields to `software` and `wasm-headless` if either of those
+        // feature flags is somehow enabled at once (see the Cargo.toml doc
+        // comment on `wasm-terminal`).
+        ::retroglyph_examples::__rg_wasm_terminal_arm!($State, __rg_init, __rg_tick);
+
         // ── Headless fallback (no backend feature enabled, or non-wasm) ───
         #[cfg(not(any(
             feature = "software",
             all(feature = "wasm-headless", target_arch = "wasm32"),
+            all(feature = "wasm-terminal", target_arch = "wasm32"),
         )))]
         fn main() {
             $crate::util::run_headless(__rg_init, __rg_tick);

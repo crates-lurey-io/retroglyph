@@ -82,6 +82,16 @@ jobs:
       # clobber Headless's .wasm before it's ever wasm-bindgen'd. Keep
       # build+package interleaved per backend (Software, then Headless, then
       # Terminal) rather than batching all builds before all packaging.
+      #
+      # Every build step above is also `continue-on-error: true`, so a
+      # *later* build can still fail after an *earlier* one succeeded,
+      # leaving a stale earlier-variant .wasm at the shared path when a later
+      # package step runs. `.github/scripts/verify-wasm-exports.sh` guards
+      # each package step below against exactly that: it checks the
+      # wasm-bindgen'd .js has the exports its own variant's template needs
+      # (and, for Software, that no Headless/Terminal export leaked in from a
+      # stale build) before writing the template, skipping with a warning
+      # instead of shipping a broken but index-linked demo.
       - name: Package WASM examples (Software)
         run: |
           EXAMPLES=(dungeon_room sokoban roguelike_dungeon scrolling_roguelike dashboard subpixel dirty_viz tileset sprite_stress hex_battle)
@@ -94,6 +104,11 @@ jobs:
             outdir="target/doc/examples/${ex}/software"
             mkdir -p "$outdir"
             "$CARGO_HOME/bin/wasm-bindgen" --target web --out-dir "$outdir" "$wasm"
+            if ! .github/scripts/verify-wasm-exports.sh "$outdir/${ex}.js" software; then
+              echo "Skipping $ex (software) — export verification failed, see above"
+              rm -rf "$outdir"
+              continue
+            fi
             sed -e "s/__EXAMPLE__/${ex}/g" docs/templates/examples/software-template.html > "$outdir/index.html"
           done
         continue-on-error: true
@@ -136,6 +151,11 @@ jobs:
             outdir="target/doc/examples/${ex}/headless"
             mkdir -p "$outdir"
             "$CARGO_HOME/bin/wasm-bindgen" --target web --out-dir "$outdir" "$wasm"
+            if ! .github/scripts/verify-wasm-exports.sh "$outdir/${ex}.js" headless; then
+              echo "Skipping $ex (headless) — export verification failed, see above"
+              rm -rf "$outdir"
+              continue
+            fi
             sed -e "s/__EXAMPLE__/${ex}/g" docs/templates/examples/headless-template.html > "$outdir/index.html"
           done
         continue-on-error: true
@@ -179,6 +199,11 @@ jobs:
             outdir="target/doc/examples/${ex}/terminal"
             mkdir -p "$outdir"
             "$CARGO_HOME/bin/wasm-bindgen" --target web --out-dir "$outdir" "$wasm"
+            if ! .github/scripts/verify-wasm-exports.sh "$outdir/${ex}.js" terminal; then
+              echo "Skipping $ex (terminal) — export verification failed, see above"
+              rm -rf "$outdir"
+              continue
+            fi
             sed -e "s/__EXAMPLE__/${ex}/g" docs/templates/examples/terminal-template.html > "$outdir/index.html"
           done
         continue-on-error: true

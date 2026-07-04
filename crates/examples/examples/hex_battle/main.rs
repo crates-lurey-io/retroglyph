@@ -142,13 +142,24 @@ retroglyph_examples::rg_run!(State, init, tick);
 #[cfg(not(feature = "tilesets"))]
 retroglyph_examples::__rg_wasm_headless_arm!(State, init, tick);
 
+// WASM Terminal backend (xterm.js, no canvas/window): same shared arm as
+// above, mirroring the wasm-headless arm's rationale -- keyed on `tilesets`
+// (not `software`) to stay in lockstep with the `rg_run_software!` call site
+// above. The macro's own internal `not(any(software, wasm-headless))` guard
+// (see `__rg_wasm_terminal_arm!`'s doc comment) handles yielding to those two
+// if either is somehow enabled at once, same as the wasm-headless arm above
+// relies on `__rg_wasm_headless_arm!`'s internal `not(feature = "software")`.
+#[cfg(not(feature = "tilesets"))]
+retroglyph_examples::__rg_wasm_terminal_arm!(State, init, tick);
+
 // Neither pixel-rendered sprites, an ASCII-art terminal, nor the wasm
-// Headless backend are available; fall back to a headless smoke run (see
-// `examples/runner.rs`'s Headless option).
+// Headless/Terminal backends are available; fall back to a headless smoke
+// run (see `examples/runner.rs`'s Headless option).
 #[cfg(not(any(
     feature = "tilesets",
     feature = "crossterm",
     all(feature = "wasm-headless", target_arch = "wasm32"),
+    all(feature = "wasm-terminal", target_arch = "wasm32"),
 )))]
 fn main() {
     retroglyph_examples::util::run_headless(init, tick);
