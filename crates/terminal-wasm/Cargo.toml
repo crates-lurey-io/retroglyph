@@ -1,0 +1,27 @@
+[package]
+name = "retroglyph-terminal-wasm"
+version = "0.2.0"
+description = "WASM/browser terminal backend for retroglyph, driven by pushed events and pulled ANSI output"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+retroglyph-core = { path = "../core", version = "0.2.0", default-features = false, features = ["std"] }
+retroglyph-terminal = { path = "../terminal", version = "0.2.0" }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+# Version pinned to match the wasm-bindgen dev-dependency in
+# crates/examples/Cargo.toml -- the CLI and the crate version must agree.
+wasm-bindgen = "=0.2.106"
+
+[features]
+# Forwards to retroglyph-terminal's egc feature.
+egc = ["retroglyph-terminal/egc", "retroglyph-core/egc"]
