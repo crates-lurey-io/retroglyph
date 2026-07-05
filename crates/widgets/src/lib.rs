@@ -18,6 +18,9 @@
 pub mod draw;
 /// A small constraint-based [`Rect`](retroglyph_core::Rect) splitter.
 pub mod layout;
+/// Reusable, headless widget state (selection, scroll offset).
+pub mod state;
 
 pub use draw::*;
-pub use layout::{Constraint, split_h, split_v};
+pub use layout::{Constraint, Flex, split_h, split_h_flex, split_v, split_v_flex};
+pub use state::ListState;
