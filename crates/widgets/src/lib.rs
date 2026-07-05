@@ -2,9 +2,12 @@
 //!
 //! Box borders, filled panels, gauges, lists, tabs, sparklines, and a small
 //! constraint-based [`Rect`](retroglyph_core::Rect) splitter ([`layout`]).
-//! Each widget is a free function that draws directly to a [`Terminal`](retroglyph_core::Terminal)
-//! and retains no state, so there is no `Widget` trait to implement or store.
-//! This crate is optional: games that draw manually depend only on `retroglyph-core`.
+//! Every widget is primarily a free function that draws directly to a
+//! [`Terminal`](retroglyph_core::Terminal) and retains no state; the
+//! [`Widget`]/[`StatefulWidget`] traits in [`widget`] are optional sugar over
+//! those functions for callers who want to box or store widgets, not a
+//! replacement for them. This crate is optional: games that draw manually
+//! depend only on `retroglyph-core`.
 
 #![allow(
     clippy::cast_possible_truncation,
@@ -20,7 +23,10 @@ pub mod draw;
 pub mod layout;
 /// Reusable, headless widget state (selection, scroll offset).
 pub mod state;
+/// Optional `Widget`/`StatefulWidget` traits, as a thin adapter over `draw`.
+pub mod widget;
 
 pub use draw::*;
 pub use layout::{Constraint, Flex, split_h, split_h_flex, split_v, split_v_flex};
 pub use state::ListState;
+pub use widget::{Panel, StatefulWidget, Table, Widget};
