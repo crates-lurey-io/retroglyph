@@ -6,6 +6,11 @@ use crate::ListState;
 
 /// A fixed-column table with a [`ListState`]-driven highlighted row — the
 /// [`StatefulWidget`] form of [`crate::draw::table`].
+///
+/// `state.offset()` is currently ignored: [`crate::draw::table`] has no
+/// scrolling support of its own, so rows past the bottom of `area` simply
+/// aren't drawn, selected or not. Only `state.selected()` is read. Follow-up:
+/// teach `draw::table` to scroll before this can honor `offset`.
 #[derive(Clone, Copy, Debug)]
 pub struct Table<'a> {
     headers: &'a [&'a str],

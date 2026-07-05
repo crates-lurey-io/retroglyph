@@ -14,3 +14,5 @@
 .bin/
 llms.txt
 llms-full.txt
+# Agent scratch (pi-subagents artifacts/transcripts)
+.pi-subagents/

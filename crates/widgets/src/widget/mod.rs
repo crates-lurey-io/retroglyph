@@ -5,15 +5,21 @@
 //! helper (`panel`, `gauge`, `table`, ...) works exactly as before without
 //! them. They exist for callers who want to box/store heterogeneous widgets
 //! (e.g. a `Vec<Box<dyn Widget<B>>>` of panes to render each frame) instead
-//! of calling free functions directly. Each concrete widget below (one file
-//! per widget) is a thin adapter that calls straight through to its
-//! corresponding [`crate::draw`] function; it adds no drawing logic of its own.
+//! of calling free functions directly. Most concrete widgets below (one file
+//! per widget) are thin adapters that call straight through to their
+//! corresponding [`crate::draw`] function and add no drawing logic of their
+//! own -- [`Panel`] and [`Table`] are both like this. [`Paragraph`] is the
+//! exception: there is no `draw::paragraph` free function, because
+//! `Paragraph` owns real wrapping/drawing logic in order to also implement
+//! [`Measure`], which free functions have no way to model.
 use retroglyph_core::{Backend, Rect, Terminal};
 
 mod panel;
+mod paragraph;
 mod table;
 
 pub use panel::Panel;
+pub use paragraph::Paragraph;
 pub use table::Table;
 
 /// A type that draws itself into a terminal area, without retaining any
@@ -33,4 +39,16 @@ pub trait StatefulWidget<B: Backend> {
 
     /// Draw this widget into `area`, using and/or updating `state`.
     fn render(self, area: Rect, term: &mut Terminal<B>, state: &mut Self::State);
+}
+
+/// A widget that can report the height it needs for a given width, before
+/// ever being rendered.
+///
+/// Lets a caller size a pane to fit content (e.g. a wrapped [`Paragraph`])
+/// instead of guessing a fixed height up front. Independent of any
+/// [`Backend`]: sizing is pure content math, not drawing.
+pub trait Measure {
+    /// The number of rows this widget would need to render at `width`
+    /// columns.
+    fn height_for(&self, width: u16) -> u16;
 }

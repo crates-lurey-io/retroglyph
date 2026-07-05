@@ -247,7 +247,7 @@ pub fn split_v_flex(area: Rect, constraints: &[Constraint], flex: Flex) -> Vec<R
     offsets
         .into_iter()
         .zip(sizes)
-        .map(|(y, h)| Rect::new(area.left(), area.top() + y, area.width(), h))
+        .map(|(y, h)| Rect::new(area.left(), area.top().saturating_add(y), area.width(), h))
         .collect()
 }
 
@@ -260,7 +260,7 @@ pub fn split_h_flex(area: Rect, constraints: &[Constraint], flex: Flex) -> Vec<R
     offsets
         .into_iter()
         .zip(sizes)
-        .map(|(x, w)| Rect::new(area.left() + x, area.top(), w, area.height()))
+        .map(|(x, w)| Rect::new(area.left().saturating_add(x), area.top(), w, area.height()))
         .collect()
 }
 

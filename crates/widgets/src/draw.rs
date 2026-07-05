@@ -10,6 +10,8 @@ use retroglyph_core::Style;
 use retroglyph_core::Terminal;
 use retroglyph_core::{Pos, Rect};
 
+use crate::text::truncate as truncate_to_cols;
+
 // ── Box-drawing codepoints (single-line) ─────────────────────────────────────
 
 const TL: char = '┌'; // top-left corner
@@ -393,24 +395,4 @@ pub fn print_line<B: Backend>(term: &mut Terminal<B>, pos: Pos, line: &Line, max
         x += text.len() as u16;
     }
     term.reset_style();
-}
-
-/// Truncate `s` so its display width is at most `max_cols` terminal columns.
-///
-/// Truncates on a whole-character boundary using each character's
-/// `unicode-width`; a character that would push the total over `max_cols` is
-/// dropped along with the rest of the string.
-fn truncate_to_cols(s: &str, max_cols: usize) -> String {
-    use unicode_width::UnicodeWidthChar;
-    let mut cols = 0usize;
-    let mut end = 0usize;
-    for ch in s.chars() {
-        let w = ch.width().unwrap_or(0);
-        if cols + w > max_cols {
-            break;
-        }
-        cols += w;
-        end += ch.len_utf8();
-    }
-    s[..end].to_owned()
 }
