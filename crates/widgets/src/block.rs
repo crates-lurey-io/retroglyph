@@ -1,13 +1,10 @@
-//! [`join_h`]/[`join_v`]: compose several [`Grid`](retroglyph_core::Grid)s
-//! into one, side-by-side or stacked, before drawing them.
+//! Compose [`Grid`] values before drawing them.
 //!
-//! `Grid` is `retroglyph-core`'s own freestanding, layered tile buffer --
-//! constructible without a [`Backend`](retroglyph_core::Backend)/
-//! [`Terminal`](retroglyph_core::Terminal), and already supports exactly the
-//! "stamp a smaller buffer onto a bigger one" operation these functions need
-//! via [`Grid::blit`](retroglyph_core::Grid::blit). There is no separate
-//! cell/buffer type here: composing widget output before it touches a real
-//! terminal means composing `Grid`s.
+//! [`join_h`] and [`join_v`] concatenate several `Grid`s into one,
+//! side-by-side or stacked, via [`Grid::blit`]. `Grid` is constructible
+//! without a [`Backend`]/[`Terminal`], so composing widget output ahead of
+//! drawing it means composing `Grid`s directly, with no separate
+//! cell/buffer type.
 use retroglyph_core::{Backend, Grid, Rect, Terminal};
 
 /// Concatenate `grids` left-to-right into one [`Grid`] (layer 0 only).

@@ -1,6 +1,6 @@
 [package]
 name = "retroglyph-software"
-version = "0.2.0"
+version = "0.1.0-alpha"
 description = "Software (winit + softbuffer) pixel rendering backend for retroglyph"
 edition.workspace = true
 rust-version.workspace = true
@@ -14,11 +14,11 @@ categories.workspace = true
 workspace = true
 
 [dependencies]
-retroglyph-core = { path = "../core", version = "0.2.0", default-features = false, features = ["std"] }
+retroglyph-core = { path = "../core", version = "0.1.0-alpha", default-features = false, features = ["std"] }
 # Seam only (Presenter/WindowBackend/WindowHandle): no winit. The loop is the
 # caller's business -- games depend on retroglyph-window with its default
 # `winit` feature; this crate just implements the renderer side.
-retroglyph-window = { path = "../window", version = "0.2.0", default-features = false }
+retroglyph-window = { path = "../window", version = "0.1.0-alpha", default-features = false }
 ixy = "0.6.0-alpha.9"
 grixy = { version = "0.6.0-alpha.8", features = ["alloc", "buffer"] }
 softbuffer = "0.4"

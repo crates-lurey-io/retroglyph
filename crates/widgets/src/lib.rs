@@ -30,19 +30,12 @@
     clippy::items_after_statements
 )]
 
-/// `join_h`/`join_v`: compose `Grid`s before drawing them.
 pub mod block;
-/// Box borders, filled panels, gauges, lists, tabs, and sparklines.
 pub mod draw;
-/// A small constraint-based [`Rect`](retroglyph_core::Rect) splitter.
 pub mod layout;
-/// Reusable, headless widget state (selection, scroll offset).
 pub mod state;
-/// A Lip-Gloss-style box model (padding/border/margin) over a `Grid`.
 pub mod style;
-/// Single-line column-clipping, unicode-width aware.
 pub mod text;
-/// Optional `Widget`/`StatefulWidget` traits, as a thin adapter over `draw`.
 pub mod widget;
 
 pub use block::{blit_into, join_h, join_v};

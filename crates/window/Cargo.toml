@@ -1,6 +1,6 @@
 [package]
 name = "retroglyph-window"
-version = "0.2.0"
+version = "0.1.0-alpha"
 description = "Shared winit windowing layer for retroglyph's windowed backends"
 edition.workspace = true
 rust-version.workspace = true
@@ -14,7 +14,7 @@ categories.workspace = true
 workspace = true
 
 [dependencies]
-retroglyph-core = { path = "../core", version = "0.2.0", default-features = false, features = ["std"] }
+retroglyph-core = { path = "../core", version = "0.1.0-alpha", default-features = false, features = ["std"] }
 raw-window-handle = "0.6"
 winit = { version = "0.30", optional = true }
 log = { version = "0.4", optional = true }
@@ -22,7 +22,7 @@ log = { version = "0.4", optional = true }
 [features]
 default = ["winit"]
 # The winit event loop and event translation (`run`, `translate`). Renderer
-# crates that only *implement* the `Presenter` seam can disable this and
-# depend solely on raw-window-handle; loops other than winit (SDL2, tao,
-# custom) bring their own driver against `Presenter` + `WindowBackend`.
+# crates that only implement `Presenter` can disable this and depend solely
+# on raw-window-handle; loops other than winit (SDL2, tao, custom) bring
+# their own driver against `Presenter` + `WindowBackend`.
 winit = ["dep:winit", "dep:log"]

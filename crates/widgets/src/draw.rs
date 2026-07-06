@@ -1,8 +1,8 @@
 //! Drawing helpers: box borders, filled rects, panels, gauges, lists, tabs,
 //! and sparklines.
 //!
-//! Generic over [`Backend`](retroglyph_core::Backend); works with any backend
-//! crate (crossterm, software).
+//! Generic over [`Backend`]; works with any backend crate (crossterm,
+//! software).
 use retroglyph_core::Backend;
 use retroglyph_core::Color;
 use retroglyph_core::Line;

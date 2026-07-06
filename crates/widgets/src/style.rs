@@ -1,8 +1,7 @@
 //! [`BoxStyle`]: a Lip-Gloss-style box model (padding, border, margin).
 //!
-//! Renders content into a standalone [`Grid`](retroglyph_core::Grid),
-//! independent of any [`Backend`](retroglyph_core::Backend)/
-//! [`Terminal`](retroglyph_core::Terminal).
+//! Renders content into a standalone [`Grid`], independent of any
+//! [`Backend`]/[`Terminal`].
 //!
 //! `BoxStyle` does not word-wrap: it lays out already-broken lines (only
 //! `'\n'` is treated specially).

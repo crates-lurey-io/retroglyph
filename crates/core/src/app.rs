@@ -67,8 +67,9 @@ pub trait App<B: Backend> {
 
 /// Run one frame: the per-frame body shared by every driver.
 ///
-/// Currently this just invokes [`App::update`]; it exists as the single seam so
-/// the blocking and inverted drivers stay in lock-step as the loop evolves.
+/// Calls [`App::update`]. Both [`run_blocking`] and the windowing layer's
+/// inverted driver call this function instead of `update` directly, so the
+/// two drivers cannot drift apart as the per-frame body grows.
 #[must_use]
 pub fn step<B: Backend, A: App<B>>(term: &mut Terminal<B>, app: &mut A, frame: &Frame) -> Flow {
     app.update(term, frame)

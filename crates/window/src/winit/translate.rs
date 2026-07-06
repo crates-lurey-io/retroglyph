@@ -1,7 +1,6 @@
 //! winit-event -> retroglyph-event converters.
 //!
-//! Pure functions, unit-testable without a window (same role as
-//! `bevy_winit::converters` or `egui-winit`'s event translation).
+//! Pure functions, unit-testable without a window.
 
 use retroglyph_core::event::{
     Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, PhysicalPos,

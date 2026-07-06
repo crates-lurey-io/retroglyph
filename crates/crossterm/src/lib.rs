@@ -1,21 +1,17 @@
-//! Crossterm-based terminal rendering backend.
+//! A [`Backend`] implementation that renders to a real terminal via
+//! `crossterm`.
 //!
-//! Owns exactly the OS/TTY-specific bits of driving a real terminal: raw
-//! mode, the alternate screen, the kitty keyboard protocol, and
-//! `crossterm::event` polling. The actual cell-diffing/ANSI-writing work is
-//! delegated to [`retroglyph_terminal::TerminalRenderer`], the shared seam
-//! also used by the WASM/browser terminal implementor
-//! (`retroglyph-terminal-wasm`). See
-//! `docs/design/018-terminal-family-split.md` for the split rationale.
+//! This crate owns the OS/TTY-specific parts: raw mode, the alternate
+//! screen, the kitty keyboard protocol, and `crossterm::event` polling.
+//! Cell-diffing and ANSI/SGR output are delegated to
+//! [`retroglyph_terminal::TerminalRenderer`].
 //!
 //! [`draw`](Backend::draw), [`flush`](Backend::flush), and
 //! [`clear`](Backend::clear) propagate `std::io::Error` through this
-//! backend's [`Backend::Error`] type. The [`Backend`] methods that the trait
-//! defines as infallible (`resize`, `set_cursor_visible`,
-//! `set_cursor_position`) have no error channel, so this backend discards
-//! their I/O failures silently. This is acceptable for the common case
-//! (stdout to a real terminal) but means a resize or cursor move against a
-//! disconnected pipe or closed terminal fails without notice.
+//! backend's [`Backend::Error`] type. `resize`, `set_cursor_visible`, and
+//! `set_cursor_position` are infallible on [`Backend`], so I/O failures in
+//! those methods (e.g. a closed terminal or disconnected pipe) are discarded
+//! silently rather than surfaced.
 
 // Compile the code blocks in the project README as doctests so the quick-start
 // example is type-checked on every test run and cannot silently rot. The

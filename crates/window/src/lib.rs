@@ -1,44 +1,58 @@
-//! retroglyph-window: the shared winit windowing layer for retroglyph's
-//! windowed backend family (software today; wgpu/GL planned).
+//! A shared layer for window-based backends (software, GL, wgpu).
 //!
 //! # Architecture
 //!
-//! The [`Backend`](retroglyph_core::Backend) trait fuses input
-//! (`poll_event`/`push_event`) and output (`draw_layers`/`flush`/...). That is
-//! right for terminal backends, where one process owns both. In a windowed
-//! backend the winit event loop owns input and a per-renderer surface owns
-//! output, so this crate splits them:
+//! [`Backend`](retroglyph_core::Backend) fuses input (`poll_event`/
+//! `push_event`) and output (`draw_layers`/`flush`/...), which fits a
+//! terminal process but not a window: there, an event loop owns input and a
+//! renderer owns output. This crate splits the two apart and reassembles
+//! them into one `Backend`:
 //!
-//! - [`Presenter`] is the output half plus the surface seam
-//!   (`init_surface`/`resize_surface`/`present`/`cell_size`). Renderer crates
-//!   (`retroglyph-software`, future `retroglyph-wgpu`/`retroglyph-gl`)
-//!   implement only this.
-//! - <code>[WindowBackend]&lt;P: Presenter&gt;</code> implements `Backend` generically: it
-//!   owns the input event queue (filled by the winit loop, drained by
-//!   `poll_event`) and delegates output to `P`.
-//! - [`winit::run_windowed`] / [`winit::run_app`] own the winit `EventLoop`
-//!   (native) or the `requestAnimationFrame`-driven loop (wasm), translate
-//!   winit events via [`winit::translate`], and drive the app.
+//! ```text
+//!               ┌─────────────────────────────┐
+//!               │     event loop (winit or     │
+//!               │      a custom driver)        │
+//!               └──────────────┬───────────────┘
+//!                    translated events
+//!                              │
+//!                              v
+//! ┌────────────────────────────────────────────────────┐
+//! │            WindowBackend<P: Presenter>              │
+//! │   (implements Backend: owns the input event queue,  │
+//! │              delegates output to P)                 │
+//! └───────────────────────┬──────────────────────────────┘
+//!                         │ draw / flush / resize / present
+//!                         v
+//!         ┌───────────────────────────────┐
+//!         │      P: Presenter              │
+//!         │  (retroglyph-software today;   │
+//!         │   wgpu/GL renderers planned)   │
+//!         └───────────────────────────────┘
+//! ```
 //!
-//! This is the same crate shape as egui's `egui-winit` (event translation +
-//! window glue) with the painter seam (`egui_glow`/`egui-wgpu`) folded into
-//! one [`Presenter`] trait, sized for retroglyph's single-window scope.
+//! - [`Presenter`] is the output half: rasterization plus the surface
+//!   lifecycle (`init_surface`/`resize_surface`/`present`/`cell_size`).
+//!   Renderer crates implement only this trait.
+//! - <code>[WindowBackend]&lt;P: Presenter&gt;</code> implements `Backend`
+//!   generically, holding the input event queue and delegating output to
+//!   `P`.
+//! - The `winit` module (feature-gated, see below) drives the event loop
+//!   that fills that queue and calls `Presenter::present` each frame.
 //!
 //! # Feature flags
 //!
-//! - `winit` (default) -- the [`winit`] module: event loop, event
-//!   translation, and the `run_windowed`/`run_app` drivers. The seam itself
-//!   ([`Presenter`], [`WindowBackend`], [`WindowHandle`]) is always available
-//!   and depends only on [`raw-window-handle`](raw_window_handle): renderer
-//!   crates that *implement* the seam can disable this feature and stay
-//!   winit-free, and non-winit loops (SDL2, tao, custom) can drive the same
-//!   presenters.
+//! [`Presenter`], [`WindowBackend`], and [`WindowHandle`] depend only on
+//! [`raw-window-handle`](raw_window_handle) and are always available. The
+//! `winit` feature (default on) additionally provides the `winit` module:
+//! the event loop, event translation, and the `run_windowed`/`run_app`
+//! drivers. Disable it to implement or drive `Presenter` with a different
+//! windowing library (SDL2, tao, a custom loop) without pulling in winit.
 
-/// `WindowBackend<P>`: the generic `Backend` for windowed presenters.
+/// The generic [`Backend`](retroglyph_core::Backend) for windowed presenters.
 pub mod backend;
-/// The `Presenter` trait: rasterization + surface seam for renderer crates.
+/// The [`Presenter`] trait and [`WindowHandle`](presenter::WindowHandle).
 pub mod presenter;
-/// The winit integration: event loop, event translation, and app drivers.
+/// The winit event loop, event translation, and app drivers.
 #[cfg(feature = "winit")]
 pub mod winit;
 
