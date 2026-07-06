@@ -28,6 +28,8 @@ pub mod draw;
 pub mod layout;
 /// Reusable, headless widget state (selection, scroll offset).
 pub mod state;
+/// A Lip-Gloss-style box model (padding/border/margin) over a `Grid`.
+pub mod style;
 /// Single-line column-clipping, unicode-width aware.
 pub mod text;
 /// Optional `Widget`/`StatefulWidget` traits, as a thin adapter over `draw`.
@@ -37,6 +39,7 @@ pub use block::{blit_into, join_h, join_v};
 pub use draw::*;
 pub use layout::{Constraint, Flex, split_h, split_h_flex, split_v, split_v_flex};
 pub use state::ListState;
+pub use style::{BoxStyle, Sides};
 pub use text::truncate;
 #[cfg(feature = "egc")]
 pub use widget::Paragraph;

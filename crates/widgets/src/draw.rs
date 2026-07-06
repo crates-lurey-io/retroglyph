@@ -14,12 +14,12 @@ use crate::text::truncate as truncate_to_cols;
 
 // ── Box-drawing codepoints (single-line) ─────────────────────────────────────
 
-const TL: char = '┌'; // top-left corner
-const TR: char = '┐'; // top-right corner
-const BL: char = '└'; // bottom-left corner
-const BR: char = '┘'; // bottom-right corner
-const H: char = '─'; // horizontal bar
-const V: char = '│'; // vertical bar
+pub(crate) const TL: char = '┌'; // top-left corner
+pub(crate) const TR: char = '┐'; // top-right corner
+pub(crate) const BL: char = '└'; // bottom-left corner
+pub(crate) const BR: char = '┘'; // bottom-right corner
+pub(crate) const H: char = '─'; // horizontal bar
+pub(crate) const V: char = '│'; // vertical bar
 
 /// Draw a single-line box border around `rect` using the given `style`.
 ///
