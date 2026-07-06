@@ -264,6 +264,23 @@ pub fn split_h_flex(area: Rect, constraints: &[Constraint], flex: Flex) -> Vec<R
         .collect()
 }
 
+/// Compute a `width`×`height` [`Rect`] centered within `screen`.
+///
+/// `width`/`height` are clamped down to `screen`'s own dimensions if larger,
+/// so the result never extends past `screen`'s edges -- a modal, dialog, or
+/// tooltip box built from this is always fully on-screen, even on a
+/// terminal too small to fit the box's requested size. Pure layout math: no
+/// drawing, no `Terminal`. Pairs with `panel`/`modal` in `retroglyph-widgets`
+/// (the `draw` module) for a centered, bordered box.
+#[must_use]
+pub fn centered_rect(screen: Rect, width: u16, height: u16) -> Rect {
+    let width = width.min(screen.width());
+    let height = height.min(screen.height());
+    let x = screen.left() + (screen.width() - width) / 2;
+    let y = screen.top() + (screen.height() - height) / 2;
+    Rect::new(x, y, width, height)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -434,5 +451,26 @@ mod tests {
         // 6 cells of slack split into 2 gaps (before and after) of 3 each.
         assert_eq!(panes[0].left(), 3);
         assert_eq!(panes[0].right(), 6);
+    }
+
+    #[test]
+    fn centered_rect_centers_within_the_screen() {
+        let screen = Rect::new(0, 0, 20, 10);
+        let r = centered_rect(screen, 10, 4);
+        assert_eq!(r, Rect::new(5, 3, 10, 4));
+    }
+
+    #[test]
+    fn centered_rect_clamps_to_the_screen_size_when_larger() {
+        let screen = Rect::new(0, 0, 20, 10);
+        let r = centered_rect(screen, 100, 100);
+        assert_eq!(r, Rect::new(0, 0, 20, 10));
+    }
+
+    #[test]
+    fn centered_rect_respects_a_non_origin_screen() {
+        let screen = Rect::new(5, 5, 20, 10);
+        let r = centered_rect(screen, 10, 4);
+        assert_eq!(r, Rect::new(10, 8, 10, 4));
     }
 }

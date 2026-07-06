@@ -11,6 +11,7 @@ use retroglyph_core::Style;
 use retroglyph_core::Terminal;
 use retroglyph_core::{Pos, Rect};
 
+use crate::layout::centered_rect;
 use crate::text::truncate as truncate_to_cols;
 
 // ── Box-drawing codepoints (single-line) ─────────────────────────────────────
@@ -135,6 +136,35 @@ pub fn panel<B: Backend>(
         term.put(title_x + 1 + t.len() as u16, title_y, ' ');
         term.reset_style();
     }
+}
+
+/// Draw a bordered, filled box centered in `screen`.
+///
+/// Shorthand for [`panel`] at [`centered_rect(screen, width,
+/// height)`](centered_rect). Returns the inner content [`Rect`] (inside the
+/// border), the same implicit one-cell inset [`panel`] uses for its own
+/// interior -- ready to hand to [`print_line`]/[`log`]/etc.
+///
+/// Draws only the box itself; everything outside it is left untouched (no
+/// dimming or backdrop fill -- that would need to read and blend existing
+/// cells, a separate feature from this thin layout convenience).
+pub fn modal<B: Backend>(
+    term: &mut Terminal<B>,
+    screen: Rect,
+    width: u16,
+    height: u16,
+    title: Option<&str>,
+    border_style: Style,
+    fill_style: Style,
+) -> Rect {
+    let rect = centered_rect(screen, width, height);
+    panel(term, rect, title, border_style, fill_style);
+    Rect::new(
+        rect.left() + 1,
+        rect.top() + 1,
+        rect.width().saturating_sub(2),
+        rect.height().saturating_sub(2),
+    )
 }
 
 /// Draw a horizontal progress bar that fills `value / max` of `rect`.
@@ -296,5 +326,29 @@ mod tests {
 
         // "a much longer..." clipped to 5 columns is "a muc".
         assert_eq!(term.grid().get(4, 0).glyph(), 'c');
+    }
+
+    #[test]
+    fn modal_centers_the_box_and_returns_the_inner_content_rect() {
+        let screen = Rect::new(0, 0, 20, 10);
+        let mut term = Terminal::new(Headless::new(20, 10));
+        let inner = modal(&mut term, screen, 10, 4, None, Style::new(), Style::new());
+
+        // Box is centered_rect(screen, 10, 4) = Rect::new(5, 3, 10, 4);
+        // the inner content rect is inset by the one-cell border.
+        assert_eq!(inner, Rect::new(6, 4, 8, 2));
+        // The border was actually drawn at the box's corners.
+        assert_eq!(term.grid().get(5, 3).glyph(), TL);
+        assert_eq!(term.grid().get(14, 3).glyph(), TR);
+    }
+
+    #[test]
+    fn modal_draws_only_the_box_leaving_the_rest_of_the_screen_untouched() {
+        let screen = Rect::new(0, 0, 20, 10);
+        let mut term = Terminal::new(Headless::new(20, 10));
+        modal(&mut term, screen, 10, 4, None, Style::new(), Style::new());
+
+        // A corner of the screen far from the centered box is untouched.
+        assert_eq!(term.grid().get(0, 0).glyph(), ' ');
     }
 }
