@@ -37,7 +37,10 @@ compile:
     cargo check --workspace --all-features
 
 doc:
-    cargo doc --workspace --no-deps --all-features
+    # --exclude: neither is part of the published API surface (cargo-bin is a
+    # dev tool, retroglyph-examples is unpublished demo/test code), so their
+    # rustdoc has no business showing up on the docs site.
+    cargo doc --workspace --no-deps --all-features --exclude retroglyph-examples --exclude cargo-bin
     @./tools/gen-llms-txt.sh target/doc
     @cp -r docs/public/. target/doc/ 2>/dev/null || true
     @sed -i.bak "s/__GIT_SHA__/$(git rev-parse --short HEAD 2>/dev/null || echo unknown)/g" target/doc/index.html && rm -f target/doc/index.html.bak || true
