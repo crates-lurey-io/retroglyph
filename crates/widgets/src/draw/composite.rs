@@ -18,31 +18,32 @@ use crate::text::truncate as truncate_to_cols;
 /// Map a load `ratio` in `0.0..=1.0` to a green→yellow→red color ramp.
 ///
 /// Low load is green, mid load yellow, high load red. Values outside the range
-/// are clamped. Uses plain RGB lerp so it needs no cargo features.
+/// are clamped. Delegates to [`Color::lerp`] (backed by `gem`) rather than
+/// hand-rolling RGB interpolation.
 #[must_use]
 pub fn meter_ramp(ratio: f32) -> Color {
-    const GREEN: (u8, u8, u8) = (80, 200, 120);
-    const YELLOW: (u8, u8, u8) = (220, 200, 90);
-    const RED: (u8, u8, u8) = (220, 90, 90);
+    const GREEN: Color = Color::Rgb {
+        r: 80,
+        g: 200,
+        b: 120,
+    };
+    const YELLOW: Color = Color::Rgb {
+        r: 220,
+        g: 200,
+        b: 90,
+    };
+    const RED: Color = Color::Rgb {
+        r: 220,
+        g: 90,
+        b: 90,
+    };
 
     let t = ratio.clamp(0.0, 1.0);
-    let (r, g, b) = if t < 0.5 {
-        lerp_rgb(GREEN, YELLOW, t * 2.0)
+    if t < 0.5 {
+        Color::lerp(GREEN, YELLOW, t * 2.0)
     } else {
-        lerp_rgb(YELLOW, RED, (t - 0.5) * 2.0)
-    };
-    Color::Rgb { r, g, b }
-}
-
-fn lerp_rgb(a: (u8, u8, u8), b: (u8, u8, u8), t: f32) -> (u8, u8, u8) {
-    let lerp = |x: u8, y: u8| {
-        let v = (f32::from(y) - f32::from(x)).mul_add(t, f32::from(x));
-        #[allow(clippy::cast_sign_loss)]
-        {
-            v.round().clamp(0.0, 255.0) as u8
-        }
-    };
-    (lerp(a.0, b.0), lerp(a.1, b.1), lerp(a.2, b.2))
+        Color::lerp(YELLOW, RED, (t - 0.5) * 2.0)
+    }
 }
 
 /// Draw a labeled gauge: a `label`, then a bar filling `ratio` (0.0–1.0) of the
