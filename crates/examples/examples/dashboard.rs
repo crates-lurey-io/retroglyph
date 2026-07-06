@@ -7,12 +7,23 @@
 //!
 //! This is the second UI-heavy demo (after the scrolling roguelike). Its real
 //! job is to answer a design question — do immediate-mode draw functions carry a
-//! multi-panel UI, or does a `Widget` trait earn its keep? It also exercises the
-//! new [`split_v`]/[`split_h`] layout splitter, [`FrameClock`] as the first
-//! genuinely wall-clock-driven demo, and cell-diff cost under a full redraw.
+//! multi-panel UI, or does a `Widget` trait earn its keep? It exercises both:
+//! the process table uses [`Table`]/[`StatefulWidget`] against a [`ListState`]
+//! (no more hand-rolled selection wraparound), the title/footer bars use
+//! [`BoxStyle`] (a styled background plus text is exactly a borderless box),
+//! and everything else stays a plain free-function call into the [`split_v`]/
+//! [`split_h`] layout splitter. It's also the first genuinely wall-clock-driven
+//! demo via [`FrameClock`], and exercises cell-diff cost under a full redraw.
+//! The NET panel uses [`Constraint::Min`] instead of `Fixed` -- it wants at
+//! least 4 rows but will take more if the terminal is tall.
 //!
 //! [`split_v`]: retroglyph_widgets::split_v
 //! [`split_h`]: retroglyph_widgets::split_h
+//! [`Table`]: retroglyph_widgets::Table
+//! [`StatefulWidget`]: retroglyph_widgets::StatefulWidget
+//! [`ListState`]: retroglyph_widgets::ListState
+//! [`BoxStyle`]: retroglyph_widgets::BoxStyle
+//! [`Constraint::Min`]: retroglyph_widgets::Constraint::Min
 //!
 //! # Controls
 //!
@@ -38,8 +49,10 @@ use retroglyph_core::{Backend, Color, FrameClock, Rect, Style, Terminal};
 use retroglyph_examples::util::action::{Action, event_to_action};
 use retroglyph_examples::util::lcg::Lcg;
 use retroglyph_examples::util::timestep::Stopwatch;
-use retroglyph_widgets::{Constraint, split_h, split_v};
-use retroglyph_widgets::{gauge, panel, print_line, sparkline, table};
+use retroglyph_widgets::{
+    BoxStyle, Constraint, ListState, StatefulWidget, Table, Widget, split_h, split_v,
+};
+use retroglyph_widgets::{gauge, panel, sparkline};
 
 // ── Tuning ────────────────────────────────────────────────────────────────────
 
@@ -112,7 +125,7 @@ struct Dashboard {
     net_rx: VecDeque<f32>,
     net_tx: VecDeque<f32>,
     procs: Vec<Proc>,
-    selected: usize,
+    list_state: ListState,
     rng: Lcg,
 }
 
@@ -123,7 +136,7 @@ impl Dashboard {
         #[cfg(target_arch = "wasm32")]
         let mut rng = Lcg::new(0x00C0_FFEE);
 
-        let procs = PROC_NAMES
+        let procs: Vec<Proc> = PROC_NAMES
             .iter()
             .enumerate()
             .map(|(i, &name)| Proc {
@@ -135,6 +148,9 @@ impl Dashboard {
             })
             .collect();
 
+        let mut list_state = ListState::new();
+        list_state.select_first(procs.len());
+
         let mut d = Self {
             clock: FrameClock::new(SIM_HZ),
             watch: Stopwatch::new(),
@@ -144,7 +160,7 @@ impl Dashboard {
             net_rx: VecDeque::with_capacity(HISTORY),
             net_tx: VecDeque::with_capacity(HISTORY),
             procs,
-            selected: 0,
+            list_state,
             rng,
         };
         // Pre-fill history so the sparklines aren't empty on the first frame.
@@ -180,20 +196,18 @@ impl Dashboard {
                 .partial_cmp(&a.cpu)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
-        // Keep the selection within the (stable-length) list.
-        self.selected = self.selected.min(self.procs.len().saturating_sub(1));
+        // `procs` never changes length after construction, so unlike a real
+        // menu/list the selection can never need re-clamping here -- but
+        // ListState::select_next/select_previous always take the current
+        // length anyway, so it would stay correct even if it did.
     }
 
-    const fn move_selection(&mut self, down: bool) {
-        let n = self.procs.len();
-        if n == 0 {
-            return;
-        }
-        self.selected = if down {
-            (self.selected + 1) % n
+    fn move_selection(&mut self, down: bool) {
+        if down {
+            self.list_state.select_next(self.procs.len());
         } else {
-            (self.selected + n - 1) % n
-        };
+            self.list_state.select_previous(self.procs.len());
+        }
     }
 }
 
@@ -230,7 +244,7 @@ fn push_capped(buf: &mut VecDeque<f32>, v: f32) {
 
 // ── Rendering ─────────────────────────────────────────────────────────────────
 
-fn draw<B: Backend>(term: &mut Terminal<B>, state: &Dashboard) {
+fn draw<B: Backend>(term: &mut Terminal<B>, state: &mut Dashboard) {
     let size = term.size();
     let screen = Rect::new(0, 0, size.width, size.height);
 
@@ -259,6 +273,16 @@ fn draw<B: Backend>(term: &mut Terminal<B>, state: &Dashboard) {
     draw_table(term, right, state);
 }
 
+/// Fills a one-row bar with `text`, via [`BoxStyle`] instead of a manual
+/// background-fill-then-print-line: a title/footer bar is exactly a
+/// borderless box with a background style and some text.
+fn draw_bar<B: Backend>(term: &mut Terminal<B>, area: Rect, text: &str) {
+    BoxStyle::new(Style::new().fg(FG).bg(TITLE_BG))
+        .width(area.width())
+        .text(text)
+        .render(area, term);
+}
+
 fn draw_left<B: Backend>(term: &mut Terminal<B>, area: Rect, state: &Dashboard) {
     // A trailing Fill pane soaks up leftover height as background wash, so the
     // single-row sparklines don't leave a cavernous empty NET box.
@@ -267,7 +291,10 @@ fn draw_left<B: Backend>(term: &mut Terminal<B>, area: Rect, state: &Dashboard) 
         &[
             Constraint::Fixed(CORES as u16 + 3), // cores + aggregate + borders
             Constraint::Fixed(3),
-            Constraint::Fixed(4), // rx + tx sparklines + borders
+            // rx + tx sparklines + borders need at least 4 rows, but NET can
+            // take more if the terminal is tall rather than always claiming
+            // exactly 4 and leaving the rest to `_rest`.
+            Constraint::Min(4),
             Constraint::Fill,
         ],
     ));
@@ -325,7 +352,7 @@ fn draw_left<B: Backend>(term: &mut Terminal<B>, area: Rect, state: &Dashboard) 
     }
 }
 
-fn draw_table<B: Backend>(term: &mut Terminal<B>, area: Rect, state: &Dashboard) {
+fn draw_table<B: Backend>(term: &mut Terminal<B>, area: Rect, state: &mut Dashboard) {
     panel_bg(term, area, "PROCESSES");
     let inner = inset(area);
     let headers = ["PID", "NAME", "CPU%", "MEM%"];
@@ -342,7 +369,7 @@ fn draw_table<B: Backend>(term: &mut Terminal<B>, area: Rect, state: &Dashboard)
             ]
         })
         .collect();
-    table(term, inner, &headers, &widths, &rows, state.selected);
+    Table::new(&headers, &widths, &rows).render(inner, term, &mut state.list_state);
 }
 
 // ── Small drawing helpers ─────────────────────────────────────────────────────
@@ -369,19 +396,6 @@ const fn inset(area: Rect) -> Rect {
         area.width().saturating_sub(2),
         area.height().saturating_sub(2),
     )
-}
-
-/// Fill a one-row bar with `text` on the title-bar background.
-fn draw_bar<B: Backend>(term: &mut Terminal<B>, area: Rect, text: &str) {
-    let y = area.top();
-    for x in area.left()..area.right() {
-        term.put_styled(x, y, ' ', Style::new().bg(TITLE_BG));
-    }
-    let line = retroglyph_core::text::Line::from(retroglyph_core::text::Span::styled(
-        text,
-        Style::new().fg(FG).bg(TITLE_BG),
-    ));
-    print_line(term, area.top_left(), &line, area.width());
 }
 
 fn label<B: Backend>(term: &mut Terminal<B>, x: u16, y: u16, text: &str) {
@@ -458,7 +472,7 @@ mod tests {
     fn renders_panels_headless() {
         let mut term = Terminal::new(Headless::new(80, 30));
         let mut d = Dashboard::new(&mut term);
-        draw(&mut term, &d);
+        draw(&mut term, &mut d);
         term.present().unwrap();
         let view = term.backend().format_view();
         let lines: Vec<&str> = view.lines().collect();
@@ -476,6 +490,6 @@ mod tests {
         for _ in 0..HISTORY {
             d.simulate();
         }
-        assert!(d.selected < d.procs.len());
+        assert!(d.list_state.selected().is_some_and(|i| i < d.procs.len()));
     }
 }
