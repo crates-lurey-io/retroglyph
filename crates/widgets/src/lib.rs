@@ -28,7 +28,7 @@ pub mod draw;
 pub mod layout;
 /// Reusable, headless widget state (selection, scroll offset).
 pub mod state;
-/// Column-clipping and greedy word-wrap, unicode-width aware.
+/// Single-line column-clipping, unicode-width aware.
 pub mod text;
 /// Optional `Widget`/`StatefulWidget` traits, as a thin adapter over `draw`.
 pub mod widget;
@@ -37,5 +37,7 @@ pub use block::{blit_into, join_h, join_v};
 pub use draw::*;
 pub use layout::{Constraint, Flex, split_h, split_h_flex, split_v, split_v_flex};
 pub use state::ListState;
-pub use text::{truncate, wrap};
-pub use widget::{Measure, Panel, Paragraph, StatefulWidget, Table, Widget};
+pub use text::truncate;
+#[cfg(feature = "egc")]
+pub use widget::Paragraph;
+pub use widget::{Measure, Panel, StatefulWidget, Table, Widget};

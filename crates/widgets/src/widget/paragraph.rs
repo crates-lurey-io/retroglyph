@@ -1,9 +1,16 @@
 //! [`Paragraph`]: word-wrapped text, implementing both [`Widget`] and
 //! [`Measure`] so a caller can size a pane to fit before rendering.
+//!
+//! Requires the `egc` feature: wrapping is delegated entirely to
+//! [`retroglyph_core::layout::TextLayout`], which handles grapheme clusters
+//! and hard newlines correctly. This module adds no wrapping logic of its
+//! own -- see `crates/widgets/src/text.rs` for why that duplication was
+//! removed.
+use retroglyph_core::layout::TextLayout;
+use retroglyph_core::text::{Line, Span};
 use retroglyph_core::{Backend, Rect, Style, Terminal};
 
 use super::{Measure, Widget};
-use crate::text::{truncate, wrap};
 
 /// Word-wrapped text in a single [`Style`].
 ///
@@ -23,37 +30,26 @@ impl<'a> Paragraph<'a> {
     pub const fn new(text: &'a str, style: Style) -> Self {
         Self { text, style }
     }
+
+    fn line(&self) -> Line {
+        Line::from(Span::styled(self.text, self.style))
+    }
 }
 
 impl Measure for Paragraph<'_> {
     fn height_for(&self, width: u16) -> u16 {
-        let lines = wrap(self.text, usize::from(width));
-        u16::try_from(lines.len()).unwrap_or(u16::MAX)
+        let line = self.line();
+        TextLayout::new(&line)
+            .rect(Rect::new(0, 0, width, u16::MAX))
+            .measure()
+            .height
     }
 }
 
 impl<B: Backend> Widget<B> for Paragraph<'_> {
     fn render(self, area: Rect, term: &mut Terminal<B>) {
-        let width = usize::from(area.width());
-        let lines = wrap(self.text, width);
-        term.reset_style()
-            .fg(self.style.foreground())
-            .bg(self.style.background())
-            .modifier(self.style.modifiers());
-        for (i, line) in lines.iter().enumerate() {
-            let Ok(dy) = u16::try_from(i) else { break };
-            let Some(y) = area.top().checked_add(dy) else {
-                break;
-            };
-            if y >= area.bottom() {
-                break;
-            }
-            // A single word wider than `width` (see `wrap`'s doc) can still
-            // overflow the pane; clip defensively so it never draws past it.
-            let clipped = truncate(line, width);
-            term.print(area.left(), y, &clipped);
-        }
-        term.reset_style();
+        let line = self.line();
+        TextLayout::new(&line).rect(area).render(term);
     }
 }
 
@@ -68,6 +64,14 @@ mod tests {
         let p = Paragraph::new("the quick brown fox jumps", Style::new());
         assert_eq!(p.height_for(10), 3); // "the quick" / "brown fox" / "jumps"
         assert_eq!(p.height_for(100), 1);
+    }
+
+    #[test]
+    fn height_for_respects_hard_newlines() {
+        // A naive whitespace-based wrap would flatten this to one paragraph;
+        // TextLayout treats "\n" as a hard break regardless of width.
+        let p = Paragraph::new("first\nsecond\nthird", Style::new());
+        assert_eq!(p.height_for(100), 3);
     }
 
     #[test]

@@ -8,17 +8,20 @@
 //! of calling free functions directly. Most concrete widgets below (one file
 //! per widget) are thin adapters that call straight through to their
 //! corresponding [`crate::draw`] function and add no drawing logic of their
-//! own -- [`Panel`] and [`Table`] are both like this. [`Paragraph`] is the
-//! exception: there is no `draw::paragraph` free function, because
-//! `Paragraph` owns real wrapping/drawing logic in order to also implement
-//! [`Measure`], which free functions have no way to model.
+//! own -- [`Panel`] and [`Table`] are both like this. `Paragraph` (behind the
+//! `egc` feature) is the exception: there is no `draw::paragraph` free
+//! function, because it needs `retroglyph_core::layout::TextLayout`'s
+//! grapheme-aware word-wrap in order to also implement [`Measure`], which
+//! free functions have no way to model.
 use retroglyph_core::{Backend, Rect, Terminal};
 
 mod panel;
+#[cfg(feature = "egc")]
 mod paragraph;
 mod table;
 
 pub use panel::Panel;
+#[cfg(feature = "egc")]
 pub use paragraph::Paragraph;
 pub use table::Table;
 
@@ -44,9 +47,9 @@ pub trait StatefulWidget<B: Backend> {
 /// A widget that can report the height it needs for a given width, before
 /// ever being rendered.
 ///
-/// Lets a caller size a pane to fit content (e.g. a wrapped [`Paragraph`])
-/// instead of guessing a fixed height up front. Independent of any
-/// [`Backend`]: sizing is pure content math, not drawing.
+/// Lets a caller size a pane to fit content (e.g. a wrapped `Paragraph`,
+/// behind the `egc` feature) instead of guessing a fixed height up front.
+/// Independent of any [`Backend`]: sizing is pure content math, not drawing.
 pub trait Measure {
     /// The number of rows this widget would need to render at `width`
     /// columns.
