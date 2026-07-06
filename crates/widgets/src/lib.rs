@@ -1,16 +1,26 @@
 //! Immediate-mode drawing helpers over a [`Rect`](retroglyph_core::Rect).
 //!
 //! Box borders, filled panels, gauges, lists, tabs, sparklines, and a small
-//! constraint-based [`Rect`](retroglyph_core::Rect) splitter ([`layout`]).
+//! constraint-based [`Rect`](retroglyph_core::Rect) splitter with
+//! ratatui-style `Fixed`/`Percent`/`Fill`/`Min`/`Max` constraints and `Flex`
+//! alignment ([`layout`]).
 //!
 //! Every widget is primarily a free function that draws directly to a
-//! [`Terminal`](retroglyph_core::Terminal) and retains no state; the
-//! [`Widget`]/[`StatefulWidget`] traits in [`widget`] are optional sugar over
-//! those functions for callers who want to box or store widgets, not a
-//! replacement for them.
+//! [`Terminal`](retroglyph_core::Terminal) and retains no state. Three
+//! optional layers build on top of that free-function core, each usable
+//! independently:
 //!
-//! This crate is optional: games that draw manually depend only on
-//! `retroglyph-core`.
+//! - [`Widget`]/[`StatefulWidget`] ([`widget`]) for callers who want to box
+//!   or store heterogeneous widgets, backed by [`ListState`] for selection
+//!   and scroll position.
+//! - [`BoxStyle`] ([`style`]) for a Lip-Gloss-style box model (padding,
+//!   border, margin) rendered into a standalone `Grid`.
+//! - [`join_h`]/[`join_v`] ([`block`]) to compose several `Grid`s -- e.g.
+//!   `BoxStyle::render` output -- into one before drawing it.
+//!
+//! None of this is a replacement for calling the free functions directly;
+//! this crate is itself optional, since games that draw manually depend
+//! only on `retroglyph-core`.
 
 #![allow(
     clippy::cast_possible_truncation,
