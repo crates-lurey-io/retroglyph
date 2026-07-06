@@ -1,7 +1,7 @@
 //! Constraint-based `Rect` splitter for multi-panel UIs.
 //!
-//! Splits a [`Rect`](retroglyph_core::Rect) into stacked rows ([`split_v`]) or
-//! side-by-side columns ([`split_h`]) according to a slice of [`Constraint`]s.
+//! Splits a [`Rect`] into stacked rows ([`split_v`]) or side-by-side columns
+//! ([`split_h`]) according to a slice of [`Constraint`]s.
 //!
 //! The solver sums the [`Fixed`](Constraint::Fixed) and [`Percent`](Constraint::Percent)
 //! amounts, then distributes whatever remains equally across the
