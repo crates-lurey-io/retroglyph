@@ -47,13 +47,25 @@ pub fn meter_ramp(ratio: f32) -> Color {
     }
 }
 
-/// Draw a labeled gauge: a `label`, then a bar filling `ratio` (0.0–1.0) of the
-/// remaining width, colored by [`meter_ramp`], with a trailing percentage.
+/// Shared core of [`gauge`] and [`stat_bar`]: `label`, then a bar filling
+/// `ratio` (clamped here to `0.0..=1.0` for the fill width and color, so an
+/// out-of-range `ratio` just caps the bar rather than under/overflowing it)
+/// of the remaining width colored by [`meter_ramp`], then a caller-formatted
+/// trailing `readout` string.
 ///
-/// Only the first row of `area` is used. Generalizes
-/// [`progress_bar`](crate::progress_bar) with a load-colored fill and inline
-/// label/readout.
-pub fn gauge<B: Backend>(term: &mut Terminal<B>, area: Rect, label: &str, ratio: f32) {
+/// Only the first row of `area` is used. The two callers differ only in how
+/// they compute `ratio` and format `readout` (a `"87%"` percentage for
+/// [`gauge`], a `"45/100"` current/max readout for [`stat_bar`], with
+/// `readout` free to reflect an unclamped value even though the bar itself
+/// is always clamped); this function owns the shared label/bar/readout
+/// layout and coloring.
+fn bar_core<B: Backend>(
+    term: &mut Terminal<B>,
+    area: Rect,
+    label: &str,
+    ratio: f32,
+    readout: &str,
+) {
     if area.width() < 4 {
         return;
     }
@@ -61,10 +73,9 @@ pub fn gauge<B: Backend>(term: &mut Terminal<B>, area: Rect, label: &str, ratio:
     let ratio = ratio.clamp(0.0, 1.0);
     let color = meter_ramp(ratio);
 
-    // Layout: "<label> [########----]  87%"
-    let pct = format!("{:>3}%", (ratio * 100.0).round() as i32);
+    // Layout: "<label> [########----]  <readout>"
     let label_w = label.len().min(area.width_usize());
-    let reserved = label_w + 1 + pct.len() + 1; // label + space + gap + pct
+    let reserved = label_w + 1 + readout.len() + 1; // label + space + gap + readout
     let bar_w = area.width_usize().saturating_sub(reserved);
 
     let label_style = Style::new().fg(Color::Rgb {
@@ -97,8 +108,8 @@ pub fn gauge<B: Backend>(term: &mut Terminal<B>, area: Rect, label: &str, ratio:
         x += 1;
     }
 
-    x += 1; // gap before percentage
-    for ch in pct.chars() {
+    x += 1; // gap before readout
+    for ch in readout.chars() {
         if x >= area.right() {
             break;
         }
@@ -106,6 +117,49 @@ pub fn gauge<B: Backend>(term: &mut Terminal<B>, area: Rect, label: &str, ratio:
         x += 1;
     }
     term.reset_style();
+}
+
+/// Draw a labeled gauge: a `label`, then a bar filling `ratio` (0.0–1.0) of the
+/// remaining width, colored by [`meter_ramp`], with a trailing percentage.
+///
+/// Only the first row of `area` is used. Generalizes
+/// [`progress_bar`](crate::progress_bar) with a load-colored fill and inline
+/// label/readout. For a `current`/`max` integer stat (health, mana) rather
+/// than a `0.0..=1.0` load ratio, see [`stat_bar`].
+pub fn gauge<B: Backend>(term: &mut Terminal<B>, area: Rect, label: &str, ratio: f32) {
+    let ratio = ratio.clamp(0.0, 1.0);
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let pct = format!("{:>3}%", (ratio * 100.0).round() as i32);
+    bar_core(term, area, label, ratio, &pct);
+}
+
+/// Draw a labeled stat bar: `label`, a bar filling `current / max` of the
+/// remaining width colored by [`meter_ramp`], and a trailing `"current/max"`
+/// readout.
+///
+/// Only the first row of `area` is used. Same layout and coloring as
+/// [`gauge`], but for integer `current`/`max` pairs (health, mana, stamina)
+/// with a literal readout instead of a percentage -- `"45/100"` reads as a
+/// stat, not a load. `max == 0` renders as an empty, unfilled bar with a
+/// `"0/0"` readout rather than a special-cased blank output. If `current`
+/// exceeds `max` (e.g. a temporarily buffed stat), the bar fill still caps
+/// at 100%, but the readout shows the true, uncapped numbers (`"120/100"`)
+/// so the overflow stays visible in text.
+pub fn stat_bar<B: Backend>(
+    term: &mut Terminal<B>,
+    area: Rect,
+    label: &str,
+    current: u32,
+    max: u32,
+) {
+    #[allow(clippy::cast_precision_loss)]
+    let ratio = if max == 0 {
+        0.0
+    } else {
+        current as f32 / max as f32
+    };
+    let readout = format!("{current}/{max}");
+    bar_core(term, area, label, ratio, &readout);
 }
 
 /// Vertical block glyphs from empty to full, indexed 0..=8.
@@ -257,4 +311,57 @@ fn draw_row<B: Backend>(
         x = x.saturating_add(w + 1); // one-column gap between columns
     }
     term.reset_style();
+}
+
+#[cfg(test)]
+mod tests {
+    use retroglyph_core::Headless;
+
+    use super::*;
+
+    #[test]
+    fn stat_bar_zero_max_renders_an_empty_bar_and_zero_zero_readout() {
+        // 1-char label "H" makes the bar's starting column predictable: it
+        // begins right after "H" plus a one-column gap, i.e. at column 2.
+        let area = Rect::new(0, 0, 20, 1);
+        let mut term = Terminal::new(Headless::new(20, 1));
+        stat_bar(&mut term, area, "H", 0, 0);
+
+        assert_eq!(term.grid().get(2, 0).glyph(), '░'); // empty bar cell
+        assert_eq!(term.grid().get(19, 0).glyph(), '0'); // last char of "0/0"
+    }
+
+    #[test]
+    fn stat_bar_normal_case_fills_proportionally_and_shows_current_over_max() {
+        let area = Rect::new(0, 0, 20, 1);
+        let mut term = Terminal::new(Headless::new(20, 1));
+        stat_bar(&mut term, area, "H", 45, 100);
+
+        assert_eq!(term.grid().get(2, 0).glyph(), '█'); // bar starts filled
+        assert_eq!(term.grid().get(19, 0).glyph(), '0'); // last char of "45/100"
+    }
+
+    #[test]
+    fn stat_bar_over_max_caps_the_bar_but_shows_true_numbers_in_the_readout() {
+        let area = Rect::new(0, 0, 20, 1);
+        let mut term = Terminal::new(Headless::new(20, 1));
+        stat_bar(&mut term, area, "H", 150, 100);
+
+        // Bar's last cell before the gap+readout is fully filled (clamped
+        // to 100%), but the readout still reads the true "150/100".
+        assert_eq!(term.grid().get(11, 0).glyph(), '█');
+        assert_eq!(term.grid().get(19, 0).glyph(), '0'); // last char of "150/100"
+    }
+
+    #[test]
+    fn gauge_and_stat_bar_share_the_same_bar_core_layout() {
+        // Sanity check that factoring out bar_core didn't change gauge()'s
+        // existing output shape: label, bar, then a right-side readout.
+        let area = Rect::new(0, 0, 20, 1);
+        let mut term = Terminal::new(Headless::new(20, 1));
+        gauge(&mut term, area, "H", 0.5);
+
+        assert_eq!(term.grid().get(2, 0).glyph(), '█'); // bar starts filled
+        assert_eq!(term.grid().get(19, 0).glyph(), '%'); // "XX%"-style readout
+    }
 }
