@@ -9,7 +9,8 @@
 //! job is to answer a design question — do immediate-mode draw functions carry a
 //! multi-panel UI, or does a `Widget` trait earn its keep? It exercises both:
 //! the process table uses [`Table`]/[`StatefulWidget`] against a [`ListState`]
-//! (no more hand-rolled selection wraparound), the title/footer bars use
+//! (no more hand-rolled selection wraparound or scroll-offset math -- see
+//! [`ListState::ensure_visible`] in `draw_table`), the title/footer bars use
 //! [`BoxStyle`] (a styled background plus text is exactly a borderless box),
 //! and everything else stays a plain free-function call into the [`split_v`]/
 //! [`split_h`] layout splitter. It's also the first genuinely wall-clock-driven
@@ -22,6 +23,7 @@
 //! [`Table`]: retroglyph_widgets::Table
 //! [`StatefulWidget`]: retroglyph_widgets::StatefulWidget
 //! [`ListState`]: retroglyph_widgets::ListState
+//! [`ListState::ensure_visible`]: retroglyph_widgets::ListState::ensure_visible
 //! [`BoxStyle`]: retroglyph_widgets::BoxStyle
 //! [`Constraint::Min`]: retroglyph_widgets::Constraint::Min
 //!
@@ -101,6 +103,9 @@ struct Proc {
     mem: f32,
 }
 
+// More entries than fit in most terminal heights, so the process table
+// actually demonstrates ListState::ensure_visible-driven scrolling (see
+// draw_table) rather than always showing every row.
 const PROC_NAMES: &[&str] = &[
     "kernel_task",
     "WindowServer",
@@ -114,6 +119,24 @@ const PROC_NAMES: &[&str] = &[
     "node",
     "docker",
     "postgres",
+    "sshd",
+    "launchd",
+    "mds_stores",
+    "bash",
+    "chrome",
+    "slack",
+    "code",
+    "nginx",
+    "redis-server",
+    "systemd",
+    "containerd",
+    "dockerd",
+    "pi",
+    "jj",
+    "tmux",
+    "gpg-agent",
+    "cron",
+    "syslogd",
 ];
 
 struct Dashboard {
@@ -369,6 +392,10 @@ fn draw_table<B: Backend>(term: &mut Terminal<B>, area: Rect, state: &mut Dashbo
             ]
         })
         .collect();
+    // Header row excluded: that's what's actually available for data rows.
+    state
+        .list_state
+        .ensure_visible(inner.height().saturating_sub(1) as usize);
     Table::new(&headers, &widths, &rows).render(inner, term, &mut state.list_state);
 }
 

@@ -63,6 +63,29 @@ impl ListState {
         self.offset = 0;
     }
 
+    /// Nudge the scroll offset by the minimum amount needed to bring
+    /// `selected` into the `visible_height`-row window starting at `offset`.
+    ///
+    /// A no-op if nothing is selected, `visible_height` is zero, or the
+    /// selection is already visible. Call this once per frame before
+    /// rendering (with the actual, current viewport height, since that can
+    /// change on terminal resize) rather than only after moving the
+    /// selection -- it's cheap and idempotent, so redoing it every frame
+    /// costs nothing and needs no special-casing for resize.
+    pub const fn ensure_visible(&mut self, visible_height: usize) {
+        let Some(selected) = self.selected else {
+            return;
+        };
+        if visible_height == 0 {
+            return;
+        }
+        if selected < self.offset {
+            self.offset = selected;
+        } else if selected >= self.offset + visible_height {
+            self.offset = selected + 1 - visible_height;
+        }
+    }
+
     /// Move the scroll offset by `delta`, clamped at zero. There is no upper
     /// clamp here: only the caller knows the content length and viewport
     /// height needed to bound it from above.
@@ -173,6 +196,46 @@ mod tests {
         assert_eq!(s.selected(), Some(0));
         s.select_first(0);
         assert_eq!(s.selected(), None);
+    }
+
+    #[test]
+    fn ensure_visible_is_a_no_op_when_already_in_view() {
+        let mut s = ListState::new();
+        s.select(Some(3));
+        s.set_offset(2);
+        s.ensure_visible(5); // window is [2, 7); 3 is inside it
+        assert_eq!(s.offset(), 2);
+    }
+
+    #[test]
+    fn ensure_visible_scrolls_down_to_reveal_a_later_selection() {
+        let mut s = ListState::new();
+        s.select(Some(10));
+        s.set_offset(0);
+        s.ensure_visible(4); // window is [0, 4); 10 is below it
+        assert_eq!(s.offset(), 7); // [7, 11) puts 10 as the last visible row
+        assert!(s.offset() <= 10 && 10 < s.offset() + 4);
+    }
+
+    #[test]
+    fn ensure_visible_scrolls_up_to_reveal_an_earlier_selection() {
+        let mut s = ListState::new();
+        s.select(Some(1));
+        s.set_offset(5);
+        s.ensure_visible(3); // window is [5, 8); 1 is above it
+        assert_eq!(s.offset(), 1);
+    }
+
+    #[test]
+    fn ensure_visible_is_a_no_op_with_nothing_selected_or_zero_height() {
+        let mut s = ListState::new();
+        s.set_offset(5);
+        s.ensure_visible(10); // nothing selected
+        assert_eq!(s.offset(), 5);
+
+        s.select(Some(20));
+        s.ensure_visible(0); // zero-height viewport
+        assert_eq!(s.offset(), 5);
     }
 
     #[test]

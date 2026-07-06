@@ -13,6 +13,7 @@ use retroglyph_core::Rect;
 use retroglyph_core::Style;
 use retroglyph_core::Terminal;
 
+use crate::ListState;
 use crate::text::truncate as truncate_to_cols;
 
 /// Map a load `ratio` in `0.0..=1.0` to a green→yellow→red color ramp.
@@ -148,19 +149,28 @@ pub fn sparkline<B: Backend>(term: &mut Terminal<B>, area: Rect, samples: &[f32]
     term.reset_style();
 }
 
-/// Draw a fixed-column table with a highlighted `selected` row.
+/// Draw a fixed-column table with a highlighted, scrollable selection.
 ///
 /// `headers` render on the first row of `area`; `rows` follow, one per line,
 /// clipped to `area`. `widths` gives each column's cell width; columns are
-/// space-separated and truncated to fit. The `selected` row (if within view)
-/// is drawn with an inverted highlight background.
+/// space-separated and truncated to fit.
+///
+/// `state.offset()` is the index of the first row drawn below the header --
+/// this function renders whatever window `offset` names and does not clamp
+/// or auto-scroll it, matching [`ListState`]'s existing "only the caller
+/// knows the viewport height" design. Call
+/// [`state.ensure_visible(visible_row_count)`](ListState::ensure_visible)
+/// before rendering to keep `state.selected()` on-screen. If `selected()` is
+/// `Some` and its row falls within the visible window, that row is drawn
+/// with an inverted highlight background; if it has scrolled out of view,
+/// no row is highlighted.
 pub fn table<B: Backend>(
     term: &mut Terminal<B>,
     area: Rect,
     headers: &[&str],
     widths: &[u16],
     rows: &[Vec<String>],
-    selected: usize,
+    state: &ListState,
 ) {
     if area.width() == 0 || area.height() == 0 {
         return;
@@ -185,9 +195,10 @@ pub fn table<B: Backend>(
         b: 190,
     };
     let visible_rows = area.height_usize().saturating_sub(1);
-    for (i, row) in rows.iter().take(visible_rows).enumerate() {
-        let y = area.top() + 1 + i as u16;
-        let (style, bg) = if i == selected {
+    let selected = state.selected();
+    for (row_index, row) in visible_window(rows, state.offset(), visible_rows) {
+        let y = area.top() + 1 + (row_index - state.offset()) as u16;
+        let (style, bg) = if Some(row_index) == selected {
             (
                 Style::new().fg(Color::BRIGHT_WHITE).bg(sel_bg),
                 Some(sel_bg),
@@ -199,6 +210,20 @@ pub fn table<B: Backend>(
         draw_row(term, area, y, &cells, widths, style, bg);
     }
     term.reset_style();
+}
+
+/// The `(original_index, item)` pairs of `items` visible in a `visible_len`-
+/// item window starting at `offset` -- shared windowing math for any
+/// scrollable, offset-driven listing (currently [`table`]; a future `log`
+/// widget reuses this too). Out-of-range `offset` simply yields nothing, the
+/// same "no upper clamp, caller's responsibility" contract as
+/// [`ListState::scroll_by`].
+fn visible_window<T>(
+    items: &[T],
+    offset: usize,
+    visible_len: usize,
+) -> impl Iterator<Item = (usize, &T)> {
+    items.iter().enumerate().skip(offset).take(visible_len)
 }
 
 /// Draw one table row of space-separated, per-column-clipped cells at row `y`.
