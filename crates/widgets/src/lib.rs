@@ -40,7 +40,7 @@ pub mod widget;
 
 pub use block::{blit_into, join_h, join_v};
 pub use draw::{
-    draw_box, fill_rect, gauge, meter_ramp, panel, print_line, progress_bar, sparkline, table,
+    draw_box, fill_rect, gauge, log, meter_ramp, panel, print_line, progress_bar, sparkline, table,
 };
 pub use layout::{Constraint, Flex, split_h, split_h_flex, split_v, split_v_flex};
 pub use state::ListState;
