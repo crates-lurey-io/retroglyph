@@ -37,7 +37,7 @@ compile:
     cargo check --workspace --all-features
 
 doc:
-    cargo doc --workspace --no-deps --document-private-items --all-features
+    cargo doc --workspace --no-deps --all-features
     @./tools/gen-llms-txt.sh target/doc
     @cp -r docs/public/. target/doc/ 2>/dev/null || true
     @sed -i.bak "s/__GIT_SHA__/$(git rev-parse --short HEAD 2>/dev/null || echo unknown)/g" target/doc/index.html && rm -f target/doc/index.html.bak || true
