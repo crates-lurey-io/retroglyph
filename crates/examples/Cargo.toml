@@ -1,6 +1,6 @@
 [package]
 name = "retroglyph-examples"
-version = "0.2.0"
+version = "0.1.0-alpha"
 description = "Runnable examples, integration tests, and benchmarks for retroglyph (not published)"
 edition.workspace = true
 rust-version.workspace = true
@@ -13,18 +13,18 @@ publish = false
 workspace = true
 
 [dependencies]
-retroglyph-core = { path = "../core", version = "0.2.0" }
-retroglyph-crossterm = { path = "../crossterm", version = "0.2.0", optional = true }
-retroglyph-software = { path = "../software", version = "0.2.0", optional = true }
-retroglyph-window = { path = "../window", version = "0.2.0", optional = true }
-retroglyph-widgets = { path = "../widgets", version = "0.2.0" }
+retroglyph-core = { path = "../core", version = "0.1.0-alpha" }
+retroglyph-crossterm = { path = "../crossterm", version = "0.1.0-alpha", optional = true }
+retroglyph-software = { path = "../software", version = "0.1.0-alpha", optional = true }
+retroglyph-window = { path = "../window", version = "0.1.0-alpha", optional = true }
+retroglyph-widgets = { path = "../widgets", version = "0.1.0-alpha" }
 # Optional, wasm32-only in practice: see the `wasm-terminal` feature below.
 # Declared as a plain (non-target-gated) optional dependency because Cargo
 # features can't be restricted to a target; `wasm-terminal` is documented as
 # wasm32-only and the crate itself is a no-op off that target (its `Backend`
 # impl still compiles portably -- only its `#[wasm_bindgen]` FFI module is
 # `cfg(target_arch = "wasm32")`-gated).
-retroglyph-terminal-wasm = { path = "../terminal-wasm", version = "0.2.0", optional = true }
+retroglyph-terminal-wasm = { path = "../terminal-wasm", version = "0.1.0-alpha", optional = true }
 
 [features]
 # A game selects a backend by enabling one of these. With none enabled every

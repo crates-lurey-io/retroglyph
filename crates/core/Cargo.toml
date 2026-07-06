@@ -1,6 +1,6 @@
 [package]
 name = "retroglyph-core"
-version = "0.2.0"
+version = "0.1.0-alpha"
 description = "A 2D pseudographic terminal library -- core types, no backend"
 edition.workspace = true
 rust-version.workspace = true

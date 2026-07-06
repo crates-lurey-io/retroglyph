@@ -1,6 +1,6 @@
 [package]
 name = "retroglyph-widgets"
-version = "0.2.0"
+version = "0.1.0-alpha"
 description = "Immediate-mode drawing helpers for retroglyph (panels, gauges, lists, sparklines)"
 edition.workspace = true
 rust-version.workspace = true
@@ -19,5 +19,5 @@ workspace = true
 egc = ["retroglyph-core/egc"]
 
 [dependencies]
-retroglyph-core = { path = "../core", version = "0.2.0", default-features = false, features = ["std"] }
+retroglyph-core = { path = "../core", version = "0.1.0-alpha", default-features = false, features = ["std"] }
 unicode-width = "0.2"
