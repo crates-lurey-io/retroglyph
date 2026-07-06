@@ -1,165 +1,19 @@
-//! Drawing helpers: box borders, filled rects, panels, gauges, lists, tabs,
-//! and sparklines.
+//! Opinionated, color-baked widgets for the system-monitor dashboard demo:
+//! gauges, sparklines, and tables.
 //!
-//! Generic over [`Backend`]; works with any backend crate (crossterm,
-//! software).
+//! Unlike [`primitives`](super::primitives), these hardcode a specific
+//! dark-theme RGB palette (see [`meter_ramp`]) rather than taking every color
+//! as a parameter. They stay free functions on purpose -- the dashboard demo
+//! exists to decide whether a `Widget` trait earns its keep (see
+//! `.matan/dashboard-demo.md`).
+
 use retroglyph_core::Backend;
 use retroglyph_core::Color;
-use retroglyph_core::Line;
+use retroglyph_core::Rect;
 use retroglyph_core::Style;
 use retroglyph_core::Terminal;
-use retroglyph_core::{Pos, Rect};
 
 use crate::text::truncate as truncate_to_cols;
-
-// ── Box-drawing codepoints (single-line) ─────────────────────────────────────
-
-pub(crate) const TL: char = '┌'; // top-left corner
-pub(crate) const TR: char = '┐'; // top-right corner
-pub(crate) const BL: char = '└'; // bottom-left corner
-pub(crate) const BR: char = '┘'; // bottom-right corner
-pub(crate) const H: char = '─'; // horizontal bar
-pub(crate) const V: char = '│'; // vertical bar
-
-/// Draw a single-line box border around `rect` using the given `style`.
-///
-/// The interior of the rectangle is not touched. `rect` must be at least 2×2.
-pub fn draw_box<B: Backend>(term: &mut Terminal<B>, rect: Rect, style: Style) {
-    if rect.width() < 2 || rect.height() < 2 {
-        return;
-    }
-
-    let x0 = rect.left();
-    let y0 = rect.top();
-    let x1 = rect.right().saturating_sub(1);
-    let y1 = rect.bottom().saturating_sub(1);
-
-    term.reset_style()
-        .fg(style.foreground())
-        .bg(style.background())
-        .modifier(style.modifiers());
-
-    // Corners
-    term.put(x0, y0, TL);
-    term.put(x1, y0, TR);
-    term.put(x0, y1, BL);
-    term.put(x1, y1, BR);
-
-    // Horizontal edges
-    for x in (x0 + 1)..x1 {
-        term.put(x, y0, H);
-        term.put(x, y1, H);
-    }
-
-    // Vertical edges
-    for y in (y0 + 1)..y1 {
-        term.put(x0, y, V);
-        term.put(x1, y, V);
-    }
-
-    term.reset_style();
-}
-
-/// Fill `rect` with `ch` in the given `style`.
-///
-/// The entire rectangle including corners is overwritten.
-pub fn fill_rect<B: Backend>(term: &mut Terminal<B>, rect: Rect, ch: char, style: Style) {
-    term.reset_style()
-        .fg(style.foreground())
-        .bg(style.background())
-        .modifier(style.modifiers());
-    for y in rect.top()..rect.bottom() {
-        for x in rect.left()..rect.right() {
-            term.put(x, y, ch);
-        }
-    }
-    term.reset_style();
-}
-
-/// Draw a bordered panel: a filled background with a box border and an
-/// optional title centred in the top edge.
-///
-/// - `border_style` applies to the box outline and title.
-/// - `fill_style` applies to the interior background.
-/// - `title` is truncated if it doesn't fit within the top border.
-pub fn panel<B: Backend>(
-    term: &mut Terminal<B>,
-    rect: Rect,
-    title: Option<&str>,
-    border_style: Style,
-    fill_style: Style,
-) {
-    if rect.width() < 2 || rect.height() < 2 {
-        return;
-    }
-
-    // Fill interior (inside the border).
-    let inner = Rect::new(
-        rect.left() + 1,
-        rect.top() + 1,
-        rect.width().saturating_sub(2),
-        rect.height().saturating_sub(2),
-    );
-    fill_rect(term, inner, ' ', fill_style);
-
-    draw_box(term, rect, border_style);
-
-    // Render the title into the top border if one was provided.
-    if let Some(t) = title {
-        let max_title_w = rect.width().saturating_sub(4) as usize; // 2 border + 2 spaces
-        if max_title_w == 0 {
-            return;
-        }
-        // Truncate to fit.
-        let t = truncate_to_cols(t, max_title_w);
-        let title_x = rect.left() + (rect.width() - t.len() as u16 - 2) / 2;
-        let title_y = rect.top();
-        term.reset_style()
-            .fg(border_style.foreground())
-            .bg(border_style.background())
-            .modifier(border_style.modifiers());
-        term.put(title_x, title_y, ' ');
-        term.print(title_x + 1, title_y, &t);
-        term.put(title_x + 1 + t.len() as u16, title_y, ' ');
-        term.reset_style();
-    }
-}
-
-/// Draw a horizontal progress bar that fills `value / max` of `rect`.
-///
-/// The filled portion uses `filled_style`, the empty portion `empty_style`.
-/// `rect.height()` is ignored; only the first row is drawn.
-pub fn progress_bar<B: Backend>(
-    term: &mut Terminal<B>,
-    rect: Rect,
-    value: u32,
-    max: u32,
-    filled_style: Style,
-    empty_style: Style,
-) {
-    if rect.width() == 0 || max == 0 {
-        return;
-    }
-    let filled_cells = ((value.min(max) as u64 * u64::from(rect.width())) / u64::from(max)) as u16;
-    let y = rect.top();
-    for x in rect.left()..rect.right() {
-        let is_filled = x < rect.left() + filled_cells;
-        let style = if is_filled { filled_style } else { empty_style };
-        term.reset_style()
-            .fg(style.foreground())
-            .bg(style.background())
-            .modifier(style.modifiers());
-        term.put(x, y, if is_filled { '█' } else { '░' });
-    }
-    term.reset_style();
-}
-
-// ── Dashboard widgets ─────────────────────────────────────────────────────
-//
-// Immediate-mode helpers for the system-monitor demo. Each takes
-// `(&mut Terminal<B>, area: Rect, …)` and draws directly; none retain state.
-// They stay free functions on purpose — the dashboard demo exists to decide
-// whether a `Widget` trait earns its keep (see .matan/dashboard-demo.md).
 
 /// Map a load `ratio` in `0.0..=1.0` to a green→yellow→red color ramp.
 ///
@@ -194,8 +48,9 @@ fn lerp_rgb(a: (u8, u8, u8), b: (u8, u8, u8), t: f32) -> (u8, u8, u8) {
 /// Draw a labeled gauge: a `label`, then a bar filling `ratio` (0.0–1.0) of the
 /// remaining width, colored by [`meter_ramp`], with a trailing percentage.
 ///
-/// Only the first row of `area` is used. Generalizes [`progress_bar`] with a
-/// load-colored fill and inline label/readout.
+/// Only the first row of `area` is used. Generalizes
+/// [`progress_bar`](crate::progress_bar) with a load-colored fill and inline
+/// label/readout.
 pub fn gauge<B: Backend>(term: &mut Terminal<B>, area: Rect, label: &str, ratio: f32) {
     if area.width() < 4 {
         return;
@@ -374,25 +229,6 @@ fn draw_row<B: Backend>(
             .modifier(style.modifiers());
         term.print(x, y, &text);
         x = x.saturating_add(w + 1); // one-column gap between columns
-    }
-    term.reset_style();
-}
-
-/// Print a [`Line`] at `pos`, clipping to `max_width` columns.
-pub fn print_line<B: Backend>(term: &mut Terminal<B>, pos: Pos, line: &Line, max_width: u16) {
-    let mut x = pos.x;
-    for span in &line.spans {
-        if x >= pos.x + max_width {
-            break;
-        }
-        let remaining = (pos.x + max_width - x) as usize;
-        let text = truncate_to_cols(&span.content, remaining);
-        term.reset_style()
-            .fg(span.style.foreground())
-            .bg(span.style.background())
-            .modifier(span.style.modifiers());
-        term.print(x, pos.y, &text);
-        x += text.len() as u16;
     }
     term.reset_style();
 }
