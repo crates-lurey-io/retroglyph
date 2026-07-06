@@ -1,11 +1,10 @@
-//! The rasterization seam between the shared windowing layer and renderer
-//! crates.
+//! The [`Presenter`] trait: what a renderer crate implements to rasterize a
+//! grid and present it to a window surface.
 //!
-//! A [`Presenter`] is the *output* half of
-//! [`Backend`](retroglyph_core::Backend) plus window-surface operations. It
-//! deliberately has no input methods: the winit loop owns input, and
-//! [`WindowBackend`](crate::WindowBackend) forwards translated events into its
-//! own queue.
+//! `Presenter` is the output half of [`Backend`](retroglyph_core::Backend)
+//! plus window-surface operations, with no input methods: the event loop
+//! owns input, and [`WindowBackend`](crate::WindowBackend) forwards
+//! translated events into its own queue instead.
 //!
 //! | Presenter | `present()` | `init_surface()` |
 //! |---|---|---|
@@ -21,12 +20,10 @@ use std::sync::Arc;
 
 /// A window/display handle pair, as one trait.
 ///
-/// The seam speaks [`raw-window-handle`](raw_window_handle), not
-/// `winit::window::Window`, so presenters are windowing-library-agnostic:
-/// softbuffer, wgpu, and glutin all accept these handles directly, and a
-/// non-winit loop (SDL2, tao) can drive the same presenters later. It also
-/// keeps winit's frequent major bumps out of every renderer crate's public
-/// API; only `retroglyph-window` tracks winit.
+/// Presenters receive [`raw-window-handle`](raw_window_handle) types, not a
+/// concrete `winit::window::Window`: softbuffer, wgpu, and glutin all accept
+/// these handles directly, so any windowing library that produces them can
+/// drive the same presenter, and only this crate depends on winit itself.
 ///
 /// `raw-window-handle` has no combined trait, and surface libraries need to
 /// *own* the handle (softbuffer stores it for the surface's lifetime), so
@@ -37,14 +34,14 @@ pub trait WindowHandle: HasWindowHandle + HasDisplayHandle {}
 
 impl<T: HasWindowHandle + HasDisplayHandle + ?Sized> WindowHandle for T {}
 
-/// A renderer that rasterizes grid content and presents it to a winit window
+/// A renderer that rasterizes grid content and presents it to a window
 /// surface.
 ///
 /// Mirrors the output half of [`Backend`](retroglyph_core::Backend) (`draw`,
 /// `draw_layers`, `flush`, `size`, `clear`, `resize`) so
 /// [`WindowBackend`](crate::WindowBackend) can delegate those methods
 /// wholesale, and adds the surface lifecycle (`init_surface`,
-/// `resize_surface`, `present`, `cell_size`) that the winit loop drives.
+/// `resize_surface`, `present`, `cell_size`) that the event loop drives.
 ///
 /// The `needs_full_frame` and `composites_layers` defaults are `true`: every
 /// windowed presenter is a pixel-family backend that composites layers
@@ -141,13 +138,13 @@ pub trait Presenter {
 
     /// Resize the window surface to a new physical pixel size.
     ///
-    /// Called from the winit loop on `WindowEvent::Resized`.
+    /// Called on every window resize event.
     fn resize_surface(&mut self, width: u32, height: u32);
 
     /// Present the rasterized frame to the window surface.
     ///
-    /// Called by the winit loop after each app tick. A lost frame is not
-    /// fatal; the loop logs the error and continues.
+    /// Called after each app tick. A lost frame is not fatal; the caller
+    /// logs the error and continues.
     ///
     /// # Errors
     ///

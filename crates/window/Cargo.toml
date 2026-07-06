@@ -22,7 +22,7 @@ log = { version = "0.4", optional = true }
 [features]
 default = ["winit"]
 # The winit event loop and event translation (`run`, `translate`). Renderer
-# crates that only *implement* the `Presenter` seam can disable this and
-# depend solely on raw-window-handle; loops other than winit (SDL2, tao,
-# custom) bring their own driver against `Presenter` + `WindowBackend`.
+# crates that only implement `Presenter` can disable this and depend solely
+# on raw-window-handle; loops other than winit (SDL2, tao, custom) bring
+# their own driver against `Presenter` + `WindowBackend`.
 winit = ["dep:winit", "dep:log"]

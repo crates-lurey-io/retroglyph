@@ -1,16 +1,11 @@
-//! WASM/browser terminal backend: renders ANSI bytes into an in-memory
-//! buffer for JS to pull each frame, and receives input pushed in from JS.
+//! A WASM/browser terminal backend, driven by pushed input and pulled ANSI output.
 //!
 //! [`TerminalWasm`] implements [`Backend`] directly (like
-//! [`Headless`](retroglyph_core::backend::Headless)) rather than through any
-//! shared runtime driver: there is no event loop here at all. A browser
-//! terminal emulator (e.g. xterm.js, referenced only in docs/comments -- this
-//! crate has no dependency on it and no opinion about which one is used) is
-//! driven from JS, which calls into this crate once per animation frame (or
-//! on demand) to pull freshly rendered ANSI bytes and push back any input it
-//! collected. See `docs/design/018-terminal-family-split.md` for why this is
-//! a separate implementor crate from `retroglyph-crossterm` rather than a
-//! feature of it.
+//! [`Headless`](retroglyph_core::backend::Headless)): there is no event loop
+//! here. A browser terminal emulator (e.g. xterm.js -- this crate has no
+//! dependency on it and no opinion about which one is used) is driven from
+//! JS, which calls into this crate once per animation frame (or on demand)
+//! to pull freshly rendered ANSI bytes and push back any input it collected.
 //!
 //! # Usage from Rust
 //!
@@ -207,33 +202,34 @@ fn write_cursor_position(
 ///
 /// - `code`: for printable characters, the Unicode scalar value (as from
 ///   `event.key.codePointAt(0)` for a single-character key); for named keys,
-///   one of this module's `NAMED_KEY_*` constants (e.g. [`NAMED_KEY_LEFT`]).
+///   one of [`key_codes`]'s constants (e.g. [`key_codes::LEFT`]).
 /// - `mods`: a bitmask matching [`retroglyph_core::event::KeyModifiers`]'s
 ///   layout (`SHIFT = 1`, `CONTROL = 2`, `ALT = 4`).
 #[must_use]
 pub fn decode_key_event(code: u32, mods: u8) -> Option<retroglyph_core::event::KeyEvent> {
+    use key_codes as kc;
     use retroglyph_core::event::{KeyCode, KeyModifiers};
 
     let key_code = match code {
-        NAMED_KEY_BACKSPACE => KeyCode::Backspace,
-        NAMED_KEY_ENTER => KeyCode::Enter,
-        NAMED_KEY_LEFT => KeyCode::Left,
-        NAMED_KEY_RIGHT => KeyCode::Right,
-        NAMED_KEY_UP => KeyCode::Up,
-        NAMED_KEY_DOWN => KeyCode::Down,
-        NAMED_KEY_HOME => KeyCode::Home,
-        NAMED_KEY_END => KeyCode::End,
-        NAMED_KEY_PAGE_UP => KeyCode::PageUp,
-        NAMED_KEY_PAGE_DOWN => KeyCode::PageDown,
-        NAMED_KEY_TAB => KeyCode::Tab,
-        NAMED_KEY_BACKTAB => KeyCode::BackTab,
-        NAMED_KEY_DELETE => KeyCode::Delete,
-        NAMED_KEY_INSERT => KeyCode::Insert,
-        NAMED_KEY_ESCAPE => KeyCode::Escape,
-        NAMED_KEY_F1..=NAMED_KEY_F24 =>
+        kc::BACKSPACE => KeyCode::Backspace,
+        kc::ENTER => KeyCode::Enter,
+        kc::LEFT => KeyCode::Left,
+        kc::RIGHT => KeyCode::Right,
+        kc::UP => KeyCode::Up,
+        kc::DOWN => KeyCode::Down,
+        kc::HOME => KeyCode::Home,
+        kc::END => KeyCode::End,
+        kc::PAGE_UP => KeyCode::PageUp,
+        kc::PAGE_DOWN => KeyCode::PageDown,
+        kc::TAB => KeyCode::Tab,
+        kc::BACKTAB => KeyCode::BackTab,
+        kc::DELETE => KeyCode::Delete,
+        kc::INSERT => KeyCode::Insert,
+        kc::ESCAPE => KeyCode::Escape,
+        kc::F1..=kc::F24 =>
         {
             #[allow(clippy::cast_possible_truncation)]
-            KeyCode::F((code - NAMED_KEY_F1 + 1) as u8)
+            KeyCode::F((code - kc::F1 + 1) as u8)
         }
         _ => KeyCode::Char(char::from_u32(code)?),
     };
@@ -252,46 +248,49 @@ pub fn decode_key_event(code: u32, mods: u8) -> Option<retroglyph_core::event::K
     Some(retroglyph_core::event::KeyEvent::new(key_code, modifiers))
 }
 
-// Named-key codes for `decode_key_event`'s `code` parameter, chosen from a
-// range (0x0010_0000 and up) well above the Unicode scalar value space
-// (0x0..=0x10FFFF) so a single `u32` can carry either a codepoint or a named
-// key without ambiguity.
-const NAMED_KEY_BASE: u32 = 0x0011_0000;
-/// `code` value for the Backspace key. See [`decode_key_event`].
-pub const NAMED_KEY_BACKSPACE: u32 = NAMED_KEY_BASE;
-/// `code` value for the Enter key. See [`decode_key_event`].
-pub const NAMED_KEY_ENTER: u32 = NAMED_KEY_BASE + 1;
-/// `code` value for the Left arrow key. See [`decode_key_event`].
-pub const NAMED_KEY_LEFT: u32 = NAMED_KEY_BASE + 2;
-/// `code` value for the Right arrow key. See [`decode_key_event`].
-pub const NAMED_KEY_RIGHT: u32 = NAMED_KEY_BASE + 3;
-/// `code` value for the Up arrow key. See [`decode_key_event`].
-pub const NAMED_KEY_UP: u32 = NAMED_KEY_BASE + 4;
-/// `code` value for the Down arrow key. See [`decode_key_event`].
-pub const NAMED_KEY_DOWN: u32 = NAMED_KEY_BASE + 5;
-/// `code` value for the Home key. See [`decode_key_event`].
-pub const NAMED_KEY_HOME: u32 = NAMED_KEY_BASE + 6;
-/// `code` value for the End key. See [`decode_key_event`].
-pub const NAMED_KEY_END: u32 = NAMED_KEY_BASE + 7;
-/// `code` value for the Page Up key. See [`decode_key_event`].
-pub const NAMED_KEY_PAGE_UP: u32 = NAMED_KEY_BASE + 8;
-/// `code` value for the Page Down key. See [`decode_key_event`].
-pub const NAMED_KEY_PAGE_DOWN: u32 = NAMED_KEY_BASE + 9;
-/// `code` value for the Tab key. See [`decode_key_event`].
-pub const NAMED_KEY_TAB: u32 = NAMED_KEY_BASE + 10;
-/// `code` value for the Backtab (Shift+Tab) key. See [`decode_key_event`].
-pub const NAMED_KEY_BACKTAB: u32 = NAMED_KEY_BASE + 11;
-/// `code` value for the Delete key. See [`decode_key_event`].
-pub const NAMED_KEY_DELETE: u32 = NAMED_KEY_BASE + 12;
-/// `code` value for the Insert key. See [`decode_key_event`].
-pub const NAMED_KEY_INSERT: u32 = NAMED_KEY_BASE + 13;
-/// `code` value for the Escape key. See [`decode_key_event`].
-pub const NAMED_KEY_ESCAPE: u32 = NAMED_KEY_BASE + 14;
-/// `code` value for the F1 key. F2-F24 follow contiguously. See
-/// [`decode_key_event`].
-pub const NAMED_KEY_F1: u32 = NAMED_KEY_BASE + 100;
-/// `code` value for the F24 key (the last of the contiguous F1-F24 range).
-pub const NAMED_KEY_F24: u32 = NAMED_KEY_F1 + 23;
+/// `code` values for [`decode_key_event`]'s named (non-printable) keys.
+///
+/// Values start at `0x0011_0000`, above the Unicode scalar value space
+/// (`0x0..=0x10FFFF`), so a single `u32` can carry either a codepoint or a
+/// named key without ambiguity.
+pub mod key_codes {
+    const BASE: u32 = 0x0011_0000;
+
+    /// Backspace.
+    pub const BACKSPACE: u32 = BASE;
+    /// Enter.
+    pub const ENTER: u32 = BASE + 1;
+    /// Left arrow.
+    pub const LEFT: u32 = BASE + 2;
+    /// Right arrow.
+    pub const RIGHT: u32 = BASE + 3;
+    /// Up arrow.
+    pub const UP: u32 = BASE + 4;
+    /// Down arrow.
+    pub const DOWN: u32 = BASE + 5;
+    /// Home.
+    pub const HOME: u32 = BASE + 6;
+    /// End.
+    pub const END: u32 = BASE + 7;
+    /// Page Up.
+    pub const PAGE_UP: u32 = BASE + 8;
+    /// Page Down.
+    pub const PAGE_DOWN: u32 = BASE + 9;
+    /// Tab.
+    pub const TAB: u32 = BASE + 10;
+    /// Backtab (Shift+Tab).
+    pub const BACKTAB: u32 = BASE + 11;
+    /// Delete.
+    pub const DELETE: u32 = BASE + 12;
+    /// Insert.
+    pub const INSERT: u32 = BASE + 13;
+    /// Escape.
+    pub const ESCAPE: u32 = BASE + 14;
+    /// F1. F2-F24 follow contiguously up to [`F24`].
+    pub const F1: u32 = BASE + 100;
+    /// F24, the last of the contiguous F1-F24 range.
+    pub const F24: u32 = F1 + 23;
+}
 
 /// The `wasm-bindgen`-exported FFI surface, compiled only for `wasm32`.
 ///
@@ -454,17 +453,17 @@ mod tests {
 
     #[test]
     fn decode_key_event_maps_named_keys() {
-        let key = decode_key_event(NAMED_KEY_LEFT, 0b010).unwrap();
+        let key = decode_key_event(key_codes::LEFT, 0b010).unwrap();
         assert_eq!(key.code, KeyCode::Left);
         assert!(key.modifiers.contains(KeyModifiers::CONTROL));
     }
 
     #[test]
     fn decode_key_event_maps_function_keys() {
-        let key = decode_key_event(NAMED_KEY_F1, 0).unwrap();
+        let key = decode_key_event(key_codes::F1, 0).unwrap();
         assert_eq!(key.code, KeyCode::F(1));
 
-        let key = decode_key_event(NAMED_KEY_F1 + 11, 0).unwrap();
+        let key = decode_key_event(key_codes::F1 + 11, 0).unwrap();
         assert_eq!(key.code, KeyCode::F(12));
     }
 }

@@ -1,33 +1,53 @@
-//! Shared rendering seam for retroglyph's terminal-family backends.
+//! ANSI/SGR cell-diff renderer shared by retroglyph's terminal-family
+//! backends.
 //!
-//! [`TerminalRenderer`] is a generic ANSI/SGR cell-diff renderer: it converts
-//! [`Tile`] content into standard ANSI/CSI escape sequences (cursor movement,
+//! [`TerminalRenderer`] converts [`Tile`] content into standard ANSI/CSI
+//! escape sequences (cursor movement,
 //! `SetForegroundColor`/`SetBackgroundColor`/SGR attributes, synchronized
 //! update markers) and writes them to any [`std::io::Write`] sink. It has no
-//! opinion about *where* those bytes end up or *how* input arrives; that is
-//! the job of the implementor crates:
+//! opinion about where those bytes end up or how input arrives; two crates
+//! plug it into a concrete environment:
+//!
+//! ```text
+//!                     +-----------------------+
+//!                     |     TerminalRenderer   |
+//!                     |  (this crate: Tile ->  |
+//!                     |   ANSI/SGR escape      |
+//!                     |   sequences)           |
+//!                     +-----------------------+
+//!                        ^                 ^
+//!                        |                 |
+//!            std::io::Write          std::io::Write
+//!               (String buffer)         (stdout)
+//!                        |                 |
+//!  +-----------------------------+   +-----------------------------+
+//!  | retroglyph-terminal-wasm    |   | retroglyph-crossterm        |
+//!  | pushed JS key/resize events |   | raw mode, alternate screen, |
+//!  | -> String pulled by JS each |   | kitty keyboard protocol,    |
+//!  | frame (xterm.js renders it) |   | crossterm::event polling    |
+//!  +-----------------------------+   +-----------------------------+
+//! ```
 //!
 //! - [`retroglyph-crossterm`](https://docs.rs/retroglyph-crossterm) drives a
 //!   real TTY: raw mode, alternate screen, the kitty keyboard protocol, and
 //!   `crossterm::event` polling. It writes this renderer's output straight to
 //!   `stdout`.
-//! - `retroglyph-terminal-wasm` drives a browser terminal emulator (e.g.
-//!   xterm.js) from WASM: no TTY, no polling, output collected into a
-//!   `String` for JS to pull each frame, input pushed in from JS callbacks.
+//! - [`retroglyph-terminal-wasm`](https://docs.rs/retroglyph-terminal-wasm)
+//!   drives a browser terminal emulator (e.g. xterm.js) from WASM: no TTY, no
+//!   polling, output collected into a `String` for JS to pull each frame,
+//!   input pushed in from JS callbacks.
 //!
-//! # Why a separate crate from `retroglyph-window`'s `Presenter` seam
+//! # Why not part of `retroglyph-window`
 //!
-//! `retroglyph-window`'s `Presenter` seam exists because every windowed
-//! backend (software, future wgpu/GL) shares one runtime driver: the winit
-//! event loop. Splitting the seam out of the driver lets each renderer avoid
-//! depending on winit's frequent major bumps.
+//! `retroglyph-window` splits input (winit event loop) from output
+//! (`Presenter`) because every windowed backend shares one runtime driver:
+//! the winit event loop. That split lets renderer crates avoid depending on
+//! winit's frequent major-version bumps.
 //!
 //! Crossterm and the wasm/xterm.js driver share no such runtime: crossterm
-//! owns a blocking poll loop against a real TTY, the wasm driver is pushed
-//! into by JS with no polling loop at all. There is nothing to factor out of
-//! *that*. What genuinely is shared between them is the ANSI/SGR cell-diff
-//! renderer, so that -- and only that -- is what lives in this crate. See
-//! `docs/design/018-terminal-family-split.md` for the full rationale.
+//! owns a blocking poll loop against a real TTY, and the wasm driver is
+//! pushed into by JS with no polling loop at all. What they do share is the
+//! ANSI/SGR cell-diff renderer, so that is what lives in this crate.
 //!
 //! # `no_std`
 //!
@@ -109,9 +129,7 @@ fn write_sgr_attributes<W: Write>(out: &mut W, modifiers: CellModifier) -> io::R
 /// writes them to a caller-supplied [`std::io::Write`] sink `W`. Tracks
 /// cursor position and the last-emitted foreground/background/attribute
 /// state across calls to [`draw`](Self::draw) so it only emits the escape
-/// codes needed to move to changed cells and change state, the same
-/// cell-diffing strategy `crossterm`-based rendering used before the
-/// workspace split (see `docs/design/018-terminal-family-split.md`).
+/// codes needed to move to changed cells and change state.
 ///
 /// This type has no knowledge of *how* its output bytes reach a display
 /// (stdout, a `String` buffer for JS, a test harness) or *how* input

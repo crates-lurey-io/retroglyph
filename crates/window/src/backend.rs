@@ -9,19 +9,38 @@ use retroglyph_core::tile::Tile;
 use std::collections::VecDeque;
 use std::time::Duration;
 
-/// A [`Backend`] built from a [`Presenter`] plus a window-owned input queue.
+/// A [`Backend`] built from a [`Presenter`] plus an input event queue.
 ///
-/// `Backend` fuses input and output, which does not fit windowed backends:
-/// the shared winit loop owns input, while the per-renderer surface owns
-/// output. Renderer crates implement only [`Presenter`]; wrapping it in
-/// `WindowBackend` yields the full `Backend` that
-/// [`Terminal`](retroglyph_core::Terminal) needs.
+/// `Backend` fuses input and output, which does not fit a window: some event
+/// loop owns input, while a per-renderer surface owns output. `WindowBackend`
+/// reunites the two so [`Terminal`](retroglyph_core::Terminal) gets the full
+/// `Backend` it needs, while renderer crates implement only [`Presenter`]:
 ///
-/// The winit loop pushes translated events via
-/// [`push_event`](Backend::push_event); the app drains them with
-/// [`poll_event`](Backend::poll_event). Polling never blocks: frame timing is
-/// owned by the loop (`about_to_wait` -> `request_redraw`), not by input
-/// waits.
+/// ```text
+/// event loop.push_event(e) ──> VecDeque<Event> ──> app.poll_event()
+///                                                        │
+///                                                        v
+///                                             Terminal<WindowBackend<P>>
+///                                                        │
+///                              draw / flush / resize     v
+///                              ◄────────────────────  WindowBackend
+///                                                        │
+///                                                        v
+///                                                 P: Presenter (output)
+/// ```
+///
+/// With the `winit` feature enabled, `winit::run_windowed` and
+/// `winit::run_app` own the event loop, call `push_event` as winit events
+/// are translated, and call [`Presenter::present`] once per frame; callers
+/// never touch `WindowBackend` directly. With `winit` disabled,
+/// `retroglyph-window` exports no event loop at all: a caller driving its
+/// own loop (SDL2, tao, a custom driver) constructs
+/// `WindowBackend::new(presenter)` itself, calls `push_event` for each
+/// translated input event, and calls `Terminal::present` (which drives
+/// `Presenter::flush`) plus `presenter_mut().present()` once per frame.
+///
+/// [`poll_event`](Backend::poll_event) never blocks: frame timing is owned by
+/// the event loop, not by input waits.
 pub struct WindowBackend<P: Presenter> {
     presenter: P,
     events: VecDeque<Event>,
@@ -97,8 +116,8 @@ impl<P: Presenter> Backend for WindowBackend<P> {
     }
 
     fn poll_event(&mut self, _timeout: Duration) -> Option<Event> {
-        // Non-blocking by design: the winit loop drives frame timing, so
-        // there is nothing to sleep on here.
+        // Non-blocking by design: the caller's event loop drives frame
+        // timing, so there is nothing to sleep on here.
         self.events.pop_front()
     }
 

@@ -117,6 +117,11 @@ open tests/snapshots/demo.svg   # visual diff
   `jj split [FILESETS...]` by path, never interactively.
 - **Read the relevant ADR before starting a feature.** ADRs in `docs/design/` capture constraints
   and non-goals that aren't obvious from the code alone.
+- **`docs/design/` is internal, not public API surface.** It's for contributors reading the repo,
+  not for crate consumers. Never reference `docs/design/*.md` paths, ADR numbers, or ADR titles from
+  doc comments, rustdoc, README snippets, or anything else that ends up in published API docs --
+  those readers have no access to the file and the reference is dead weight. If a doc comment needs
+  the rationale, restate the relevant part of it inline instead of pointing there.
 
 ## Pre-push hooks
 
@@ -132,9 +137,11 @@ JJ_HOOKS_SKIP=1 jj push       # bypass (use sparingly)
 
 ## Docs
 
-- `docs/design/` — ADRs and milestone plans. Read the relevant ADR before starting a feature.
+- `docs/design/` — ADRs and milestone plans. Internal only: read the relevant ADR before starting a
+  feature, but never cite it (path, number, or title) from doc comments or anything published to
+  rustdoc/docs.rs.
   - Key ADRs: 001 (architecture), 004 (testing strategy), 008 (layer composition), 013 (codecov),
-    014 (workspace split), 018 (terminal family split: retroglyph-terminal seam +
+    014 (workspace split), 018 (terminal family split: retroglyph-terminal +
     retroglyph-crossterm/retroglyph-terminal-wasm implementors).
 - `docs/references/` — deep-dives organized by topic:
   - `backends/` — terminal, software rendering, WebGL, WASM, etc.

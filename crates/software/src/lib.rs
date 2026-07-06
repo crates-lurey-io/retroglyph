@@ -1,26 +1,45 @@
-//! Software rendering backend: CPU rasterization + softbuffer pixel blitting.
+//! CPU rasterization backend: renders grid cells into a pixel buffer and
+//! blits it to a window surface via `softbuffer`.
 //!
 //! # Architecture
 //!
-//! [`SoftwareBackend`] is a pure-config type (font, grid size, scale). It does
-//! **not** implement [`Backend`] directly.  Call
-//! [`run_headless`](SoftwareBackend::run_headless) to obtain a
-//! [`SoftwareRenderer`]; hand that to `retroglyph-window`'s
-//! `winit::run_windowed` (with a `WindowConfig::fit`-derived size) to open a
-//! window, or use it directly for in-memory rendering and pixel tests.
+//! [`SoftwareBackend`] holds configuration only (font, grid size, scale); it
+//! does not implement [`Backend`]. Call
+//! [`run_headless`](SoftwareBackend::run_headless) to build a
+//! [`SoftwareRenderer`], which does the actual rendering work:
 //!
-//! This crate has **no winit dependency**: it implements the
-//! [`Presenter`](retroglyph_window::Presenter) seam against raw window
-//! handles, and any loop that yields those (winit via `retroglyph-window`,
-//! SDL2, tao, custom) can drive it.
+//! ```text
+//! SoftwareBackend (config: font, grid size, scale)
+//!   |  .run_headless()
+//!   v
+//! SoftwareRenderer
+//!   implements retroglyph_core::Backend
+//!   implements retroglyph_window::Presenter
+//!   |                                |
+//!   |                                v
+//!   |                     wrapped in retroglyph_window::WindowBackend,
+//!   |                     driven by a windowing loop (retroglyph-window's
+//!   |                     winit integration, or any other source of
+//!   |                     raw window handles)
+//!   v                                |
+//! Terminal<SoftwareRenderer>          v
+//! (headless / pixel tests,   softbuffer::Surface -> OS window
+//!  inspect via .pixels())
+//! ```
 //!
-//! [`SoftwareRenderer`] is a [`Presenter`](retroglyph_window::Presenter): it
-//! rasterizes tiles into a pixel buffer and presents it via softbuffer. The
-//! winit loop, event translation, and the input queue live in
-//! `retroglyph-window` ([`WindowBackend`](retroglyph_window::WindowBackend)
-//! wraps the renderer for windowed use). For headless/pixel-testing use the
-//! renderer also implements [`Backend`] directly, so
-//! `Terminal<SoftwareRenderer>` works without a window.
+//! This crate does not depend on winit. [`SoftwareRenderer`] implements
+//! [`Presenter`](retroglyph_window::Presenter) against raw window handles
+//! ([`WindowHandle`]), so anything that produces those (winit via
+//! `retroglyph-window`, or another windowing library) can drive it.
+//! `retroglyph-window`'s [`WindowBackend`](retroglyph_window::WindowBackend)
+//! wraps a `Presenter` to provide the full [`Backend`] for windowed use,
+//! owning the input event queue that this crate does not.
+//!
+//! For headless use (in-memory rendering, pixel-level tests) skip windowing
+//! entirely: [`SoftwareRenderer`] implements [`Backend`] directly, so
+//! `Terminal<SoftwareRenderer>` works without a window, and
+//! [`pixels`](SoftwareRenderer::pixels) gives direct access to the rendered
+//! buffer.
 
 pub mod bitmap_font;
 pub mod config;
