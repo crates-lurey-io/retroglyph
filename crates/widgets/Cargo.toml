@@ -13,6 +13,11 @@ categories.workspace = true
 [lints]
 workspace = true
 
+[features]
+# Forwards to retroglyph-core's egc feature. Paragraph (word-wrap) needs
+# grapheme-cluster-aware TextLayout, which only exists when egc is on.
+egc = ["retroglyph-core/egc"]
+
 [dependencies]
 retroglyph-core = { path = "../core", version = "0.2.0", default-features = false, features = ["std"] }
 unicode-width = "0.2"

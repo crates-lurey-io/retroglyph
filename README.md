@@ -123,6 +123,30 @@ Disable the `std` feature (requires an allocator). Useful for embedded or kernel
 
 </details>
 
+<details>
+<summary><strong>Widgets</strong> (crate <code>retroglyph-widgets</code>) — panels, gauges, tables, and a
+layout splitter, built on <code>retroglyph-core</code></summary>
+
+An optional crate: games that draw manually depend only on `retroglyph-core`. Every widget is
+primarily a free function (`panel`, `gauge`, `table`, `sparkline`, `draw_box`, ...) that draws
+directly to a `Terminal` and retains no state, plus a constraint-based `Rect` splitter
+(`split_h`/`split_v`) with `Fixed`/`Percent`/`Fill`/`Min`/`Max` constraints and `Flex` alignment
+(`Start`/`End`/`Center`/`SpaceBetween`/`SpaceAround`).
+
+Three optional layers build on that free-function core:
+
+- `Widget`/`StatefulWidget` traits for callers who want to box or store heterogeneous widgets,
+  backed by `ListState` for selection and scroll position.
+- `BoxStyle`, a Lip-Gloss-style box model (padding, border, margin) rendered into a standalone
+  `Grid`. `Paragraph` (behind the `egc` feature) word-wraps text via `retroglyph-core`'s
+  `TextLayout` and implements a `Measure` trait so a caller can size a pane to fit before rendering.
+- `join_h`/`join_v` to compose several `Grid`s -- e.g. `BoxStyle::render` output -- into one before
+  drawing it.
+
+See the `dashboard` example for all of the above wired together in one UI.
+
+</details>
+
 ## Quick start
 
 The library is split into a `no_std` core plus per-backend crates. For a terminal app you need the
