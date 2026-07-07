@@ -19,6 +19,15 @@ raw-window-handle = "0.6"
 winit = { version = "0.30", optional = true }
 log = { version = "0.4", optional = true }
 
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+# Version pinned to match the wasm-bindgen dev-dependency in
+# crates/examples/Cargo.toml -- the CLI and the crate version must agree.
+# Only exercised behind the `winit` feature (see winit/run.rs), but kept as
+# a plain target dependency rather than threading an extra optional-feature
+# combination through for a target-gated, always-small pair of crates.
+wasm-bindgen = "=0.2.106"
+web-sys = { version = "0.3", features = ["Window", "EventTarget"] }
+
 [features]
 default = ["winit"]
 # The winit event loop and event translation (`run`, `translate`). Renderer

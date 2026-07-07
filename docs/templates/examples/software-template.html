@@ -1,10 +1,10 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
     />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -21,14 +21,25 @@
       body {
         background: #000;
         overflow: hidden;
+        width: 100%;
         height: 100%;
         overscroll-behavior: none;
       }
       canvas {
         display: block;
         touch-action: none;
-        max-width: 100vw;
-        max-height: 100vh;
+        /* retroglyph-window sets the canvas's inline size to the browser
+           viewport at startup and on every `resize` event (winit's web
+           backend doesn't derive canvas size from page CSS -- see
+           crates/window/src/winit/run.rs), so this is mostly a fallback for
+           the first paint before that JS runs. `dvw`/`dvh` (dynamic
+           viewport units) come after the `vw`/`vh` fallback so mobile
+           browsers that account for retracting address bars don't leave a
+           sliver of the page scrollable underneath. */
+        width: 100vw;
+        height: 100vh;
+        width: 100dvw;
+        height: 100dvh;
       }
     </style>
   </head>

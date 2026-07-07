@@ -113,6 +113,12 @@ setup-tools:
     cargo install cargo-llms-txt --version 0.1.1 --root .bin/manual/ 2>/dev/null || true
 
 setup-wasm: setup-tools
+    # `cargo bin --install` (setup-tools) only builds/caches the binaries; it
+    # never populates .bin/.shims (cargo-run-bin only syncs shims when a
+    # binary is run via `cargo bin <name>`, not via `--install`). The wasm
+    # target runner in .cargo/config.toml points at that shim, so force it
+    # to be created here.
+    cargo bin wasm-server-runner --version >/dev/null 2>&1 || true
 
 run-wasm:
     cargo run -p retroglyph-examples --target wasm32-unknown-unknown --example dungeon_room --features default-font

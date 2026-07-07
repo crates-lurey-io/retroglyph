@@ -287,10 +287,13 @@ fn combined_features(backend: Backend, ex: &Example) -> Vec<&'static str> {
 
 // ── Launch ────────────────────────────────────────────────────────────────────
 
-fn wasm_runner_path() -> std::path::PathBuf {
-    // Path mirrors the runner entry in .cargo/config.toml.
-    let manifest = env!("CARGO_MANIFEST_DIR");
-    std::path::PathBuf::from(manifest).join("bin/bin/wasm-server-runner")
+fn workspace_root() -> std::path::PathBuf {
+    let manifest = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    manifest
+        .parent() // crates/
+        .and_then(std::path::Path::parent) // workspace root
+        .expect("crates/examples should be nested two levels under the workspace root")
+        .to_path_buf()
 }
 
 fn launch(ex: &Example, backend: Option<Backend>) -> ! {
@@ -305,17 +308,11 @@ fn launch(ex: &Example, backend: Option<Backend>) -> ! {
     if let Some(target) = backend.and_then(Backend::target) {
         println!("  Target:    {target}");
     }
+    println!();
 
     if backend == Some(Backend::Wasm) {
-        let runner = wasm_runner_path();
-        if !runner.exists() {
-            eprintln!("\n  wasm-server-runner not found at {}", runner.display());
-            eprintln!("  Run `just setup-wasm` to install it, then try again.");
-            std::process::exit(1);
-        }
+        launch_wasm(ex, &features);
     }
-
-    println!();
 
     let mut cmd = Command::new("cargo");
     cmd.args(["run", "--example", ex.name]);
@@ -333,6 +330,132 @@ fn launch(ex: &Example, backend: Option<Backend>) -> ! {
     let err = cmd.exec();
     eprintln!("  Failed to exec: {err}");
     std::process::exit(1);
+}
+
+fn run_checked(mut cmd: Command, label: &str) {
+    match cmd.status() {
+        Ok(status) if status.success() => {}
+        Ok(status) => {
+            eprintln!("  {label} failed: {status}");
+            std::process::exit(status.code().unwrap_or(1));
+        }
+        Err(e) => {
+            eprintln!("  Failed to run {label}: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn open_browser(url: &str) {
+    #[cfg(target_os = "macos")]
+    let opener = "open";
+    #[cfg(not(target_os = "macos"))]
+    let opener = "xdg-open";
+    let _ = Command::new(opener).arg(url).status();
+}
+
+/// Builds `ex` for `wasm32-unknown-unknown`, runs the artifact through
+/// `wasm-bindgen --target web` (same invocation the docs site's CI uses),
+/// and serves it wrapped in
+/// `docs/templates/examples/software-template.html` — the exact template
+/// GitHub Pages ships. This makes the local WASM preview match the deployed
+/// demo pixel-for-pixel (full-screen canvas, mobile-web-app meta tags,
+/// etc.), rather than diverging through wasm-server-runner's own
+/// dev-only HTML shell (see `.cargo/config.toml`'s `runner`, still used by
+/// plain `cargo run --target wasm32-unknown-unknown` for a quicker,
+/// non-conforming smoke test).
+fn launch_wasm(ex: &Example, features: &[&str]) -> ! {
+    let root = workspace_root();
+    let release = !cfg!(debug_assertions);
+    let profile_dir = if release { "release" } else { "debug" };
+
+    let mut build = Command::new("cargo");
+    build.current_dir(&root);
+    build.args([
+        "build",
+        "--example",
+        ex.name,
+        "--target",
+        "wasm32-unknown-unknown",
+    ]);
+    if release {
+        build.arg("--release");
+    }
+    if !features.is_empty() {
+        build.args(["--features", &features.join(",")]);
+    }
+    run_checked(build, "cargo build");
+
+    let wasm_path = root
+        .join("target/wasm32-unknown-unknown")
+        .join(profile_dir)
+        .join("examples")
+        .join(format!("{}.wasm", ex.name));
+
+    let out_dir = root.join("target/wasm-preview").join(ex.name);
+    if let Err(e) = std::fs::create_dir_all(&out_dir) {
+        eprintln!("  Failed to create {}: {e}", out_dir.display());
+        std::process::exit(1);
+    }
+
+    let mut bindgen = Command::new("cargo");
+    bindgen.current_dir(&root);
+    bindgen.args(["bin", "wasm-bindgen", "--target", "web", "--out-dir"]);
+    bindgen.arg(&out_dir);
+    bindgen.arg(&wasm_path);
+    run_checked(bindgen, "wasm-bindgen");
+
+    let template_path = root.join("docs/templates/examples/software-template.html");
+    let template = match std::fs::read_to_string(&template_path) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("  Failed to read {}: {e}", template_path.display());
+            std::process::exit(1);
+        }
+    };
+    if let Err(e) = std::fs::write(
+        out_dir.join("index.html"),
+        template.replace("__EXAMPLE__", ex.name),
+    ) {
+        eprintln!("  Failed to write index.html: {e}");
+        std::process::exit(1);
+    }
+
+    // Bind an ephemeral port ourselves so the URL is known before the
+    // server starts; the gap between dropping this listener and python
+    // rebinding the same port is negligible for a local dev tool.
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .and_then(|l| l.local_addr())
+        .map_or(8000, |a| a.port());
+    let url = format!("http://127.0.0.1:{port}/");
+
+    let mut server = match Command::new("python3")
+        .current_dir(&out_dir)
+        .args(["-m", "http.server", &port.to_string()])
+        .spawn()
+    {
+        Ok(child) => child,
+        Err(e) => {
+            eprintln!("  Built and packaged like the docs site at:");
+            eprintln!("    {}", out_dir.display());
+            eprintln!("  Failed to launch python3 to serve it ({e}) — serve it yourself, e.g.:");
+            eprintln!("    npx serve {}", out_dir.display());
+            std::process::exit(1);
+        }
+    };
+
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    println!("  Serving:   {url}");
+    open_browser(&url);
+
+    let status = server.wait();
+    std::process::exit(match status {
+        Ok(s) => s.code().unwrap_or(0),
+        Err(e) => {
+            eprintln!("  Server error: {e}");
+            1
+        }
+    });
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
