@@ -220,6 +220,20 @@ static EXAMPLES: &[Example] = &[
         docs_terminal: true,
     },
     Example {
+        name: "responsive_game_ui",
+        description: "mobile-strategy kingdom map -- responsive layout, mouse/tap, transitions",
+        backends: &[
+            Backend::Terminal,
+            Backend::Desktop,
+            Backend::Wasm,
+            Backend::Headless,
+        ],
+        extra_features: &[],
+        backend_features: &[],
+        docs_headless: true,
+        docs_terminal: true,
+    },
+    Example {
         name: "dirty_viz",
         description: "visualize which cells are redrawn each frame",
         backends: &[Backend::Desktop, Backend::Wasm, Backend::Headless],

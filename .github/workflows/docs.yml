@@ -60,7 +60,8 @@ jobs:
             --example scrolling_roguelike \
             --example dashboard \
             --example subpixel \
-            --example dirty_viz
+            --example dirty_viz \
+            --example responsive_game_ui
         continue-on-error: true
 
       - name: Build WASM examples (tilesets)
