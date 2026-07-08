@@ -5,8 +5,8 @@
   "scripts": {
     "format": "cd .. && prettier --write \"**/*.{md,yml,yaml,json,js,ts}\"",
     "format:check": "cd .. && prettier --check \"**/*.{md,yml,yaml,json,js,ts}\"",
-    "lint": "markdownlint-cli2 \"../**/*.md\" \"#../tools/node_modules\"",
-    "lint:fix": "markdownlint-cli2 --fix \"../**/*.md\" \"#../tools/node_modules\""
+    "lint": "markdownlint-cli2 \"../**/*.md\" \"#../tools/node_modules\" \"#../.pi-subagents\"",
+    "lint:fix": "markdownlint-cli2 --fix \"../**/*.md\" \"#../tools/node_modules\" \"#../.pi-subagents\""
   },
   "devDependencies": {
     "markdownlint-cli2": "^0.17.0",

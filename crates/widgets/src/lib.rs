@@ -56,7 +56,7 @@ pub use interact::{
     Shortcuts,
 };
 pub use layout::{Constraint, Flex, centered_rect, split_h, split_h_flex, split_v, split_v_flex};
-pub use state::ListState;
+pub use state::{ListState, ScrollPhysics, ScrollState};
 pub use style::{BoxStyle, Sides};
 pub use text::truncate;
 pub use theme::Theme;
