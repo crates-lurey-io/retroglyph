@@ -937,7 +937,15 @@ impl State {
     fn push_float(&mut self, at: Pos, text: impl Into<String>, color: Color) {
         self.floating.push(FloatingText {
             x: f32::from(at.x),
-            y: f32::from(at.y),
+            // One row above the tap, not on it: `at` is the tapped cell,
+            // which is almost always inside the button/label that triggered
+            // this (e.g. TRAIN's own "TRAIN +10" caption). Spawning on that
+            // exact row let the new text visually fuse with the label's
+            // glyphs for the ~167ms it takes to drift up one row at the -6.0
+            // cells/sec rise rate ("TRAIN +10" + "+10" reading as garbled
+            // "TRAI+1010"), before finally separating. Starting a row higher
+            // means it's already clear of the label from frame one.
+            y: f32::from(at.y) - 1.0,
             text: text.into(),
             color,
             born: self.time,
