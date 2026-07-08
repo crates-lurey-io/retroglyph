@@ -19,6 +19,14 @@ use retroglyph_core::text::Line;
 use retroglyph_core::{App, Backend, Flow, Frame, Terminal};
 use retroglyph_gallery::{any_key_pressed_or_window_closed, rg_gallery_run};
 
+/// One alignment-demo box: a labeled `Rect` plus the `HAlign`/`VAlign` to render its label with.
+struct AlignBox {
+    rect: Rect,
+    label: &'static str,
+    h: HAlign,
+    v: VAlign,
+}
+
 struct TextLayoutAndWrap;
 
 impl<B: Backend> App<B> for TextLayoutAndWrap {
@@ -30,38 +38,38 @@ impl<B: Backend> App<B> for TextLayoutAndWrap {
         // idea. Each box's border makes its Rect's bounds visible; alignment is meaningless to
         // look at without a boundary to align against.
         let boxes = [
-            (
-                Rect::new(0, 2, 19, 6),
-                "Left+Top",
-                HAlign::Left,
-                VAlign::Top,
-            ),
-            (
-                Rect::new(20, 2, 19, 6),
-                "Right+Top",
-                HAlign::Right,
-                VAlign::Top,
-            ),
-            (
-                Rect::new(40, 2, 19, 6),
-                "Left+Bottom",
-                HAlign::Left,
-                VAlign::Bottom,
-            ),
-            (
-                Rect::new(0, 9, 19, 6),
-                "Right+Bottom",
-                HAlign::Right,
-                VAlign::Bottom,
-            ),
-            (
-                Rect::new(20, 9, 19, 6),
-                "Center+Middle",
-                HAlign::Center,
-                VAlign::Middle,
-            ),
+            AlignBox {
+                rect: Rect::new(0, 2, 19, 6),
+                label: "Left+Top",
+                h: HAlign::Left,
+                v: VAlign::Top,
+            },
+            AlignBox {
+                rect: Rect::new(20, 2, 19, 6),
+                label: "Right+Top",
+                h: HAlign::Right,
+                v: VAlign::Top,
+            },
+            AlignBox {
+                rect: Rect::new(40, 2, 19, 6),
+                label: "Left+Bottom",
+                h: HAlign::Left,
+                v: VAlign::Bottom,
+            },
+            AlignBox {
+                rect: Rect::new(0, 9, 19, 6),
+                label: "Right+Bottom",
+                h: HAlign::Right,
+                v: VAlign::Bottom,
+            },
+            AlignBox {
+                rect: Rect::new(20, 9, 19, 6),
+                label: "Center+Middle",
+                h: HAlign::Center,
+                v: VAlign::Middle,
+            },
         ];
-        for (rect, label, h, v) in boxes {
+        for AlignBox { rect, label, h, v } in boxes {
             draw_border(term, rect);
             let line = Line::raw(label);
             TextLayout::new(&line)

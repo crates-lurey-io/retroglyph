@@ -20,6 +20,11 @@ workspace = true
 # builds fall back to libm, with no code change in retroglyph-core.
 gem = { version = "0.1.0-alpha.6", optional = true, default-features = false }
 ixy = "0.6.0-alpha.9"
+# Pure-Rust sin/cos/pow for `animate`'s trig-based easing curves and its oscillator -- unlike
+# `gem`'s libm usage (internal to its own color-space math, not reusable here), this is a plain,
+# always-on dependency: no_std-compatible on its own, so no std/libm feature split is needed the
+# way `gem` needs one.
+libm = "0.2"
 grixy = { version = "0.6.0-alpha.8", features = ["alloc", "buffer"] }
 unicode-width = "0.2"
 bitflags = "2.4"

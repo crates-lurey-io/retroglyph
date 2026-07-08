@@ -355,13 +355,90 @@ fn from_crossterm_mouse_event(
 fn from_crossterm_event(event: crossterm::event::Event) -> Result<Event, ()> {
     use crossterm::event::Event as CE;
     match event {
-        CE::Key(k) => Ok(Event::Key(retroglyph_core::event::KeyEvent::with_kind(
-            from_crossterm_key_code(k.code)?,
-            from_crossterm_key_modifiers(k.modifiers),
-            from_crossterm_key_kind(k.kind),
-        ))),
+        CE::Key(k) => {
+            // With `DISAMBIGUATE_ESCAPE_CODES` enabled (see `keyboard_enhancement_flags`),
+            // terminals that support the kitty keyboard protocol report Shift+Tab as `Tab` plus
+            // a shift modifier (CSI-u always encodes Tab's base codepoint, never a separate
+            // "backtab" one) rather than the legacy `ESC[Z` -> `KeyCode::BackTab` escape. Without
+            // this, Shift+Tab is silently indistinguishable from plain Tab on any terminal that
+            // negotiated the enhanced protocol (kitty, WezTerm, foot, Ghostty, recent Alacritty).
+            let is_shift_tab = matches!(k.code, crossterm::event::KeyCode::Tab)
+                && k.modifiers.contains(crossterm::event::KeyModifiers::SHIFT);
+            let code = if is_shift_tab {
+                retroglyph_core::event::KeyCode::BackTab
+            } else {
+                from_crossterm_key_code(k.code)?
+            };
+            Ok(Event::Key(retroglyph_core::event::KeyEvent::with_kind(
+                code,
+                from_crossterm_key_modifiers(k.modifiers),
+                from_crossterm_key_kind(k.kind),
+            )))
+        }
         CE::Mouse(m) => Ok(Event::Mouse(from_crossterm_mouse_event(m)?)),
         CE::Resize(w, h) => Ok(Event::Resize(w, h)),
         _ => Err(()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn key_code_of(ct_event: crossterm::event::Event) -> retroglyph_core::event::KeyCode {
+        match from_crossterm_event(ct_event) {
+            Ok(Event::Key(key)) => key.code,
+            other => panic!("expected Ok(Event::Key(_)), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn legacy_backtab_maps_straight_through() {
+        // Terminals without the kitty protocol send the legacy `ESC[Z` escape, which crossterm
+        // already decodes as `KeyCode::BackTab` with no shift modifier attached.
+        let ct_event = crossterm::event::Event::Key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::BackTab,
+            crossterm::event::KeyModifiers::NONE,
+        ));
+        assert_eq!(
+            key_code_of(ct_event),
+            retroglyph_core::event::KeyCode::BackTab
+        );
+    }
+
+    #[test]
+    fn kitty_protocol_shift_tab_normalizes_to_backtab() {
+        // Under DISAMBIGUATE_ESCAPE_CODES, kitty-protocol terminals report Shift+Tab as plain
+        // `Tab` plus a shift modifier rather than a distinct backtab code -- this is the case
+        // `from_crossterm_event` has to normalize.
+        let ct_event = crossterm::event::Event::Key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Tab,
+            crossterm::event::KeyModifiers::SHIFT,
+        ));
+        assert_eq!(
+            key_code_of(ct_event),
+            retroglyph_core::event::KeyCode::BackTab
+        );
+    }
+
+    #[test]
+    fn plain_tab_is_unaffected() {
+        let ct_event = crossterm::event::Event::Key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Tab,
+            crossterm::event::KeyModifiers::NONE,
+        ));
+        assert_eq!(key_code_of(ct_event), retroglyph_core::event::KeyCode::Tab);
+    }
+
+    #[test]
+    fn shift_modifier_on_non_tab_keys_is_unaffected() {
+        let ct_event = crossterm::event::Event::Key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char('a'),
+            crossterm::event::KeyModifiers::SHIFT,
+        ));
+        assert_eq!(
+            key_code_of(ct_event),
+            retroglyph_core::event::KeyCode::Char('a')
+        );
     }
 }

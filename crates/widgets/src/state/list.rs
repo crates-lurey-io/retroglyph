@@ -1,18 +1,36 @@
+/// How [`ListState::select_next`]/[`select_previous`](ListState::select_previous) behave when the
+/// selection is already at the first/last item.
+///
+/// Defaults to [`Clamp`](Self::Clamp), matching ratatui's `ListState` (`select_next`/
+/// `select_previous` `saturating_add`/clamp at the ends; wraparound is left to the caller, e.g.
+/// via `(selected + 1) % len`). Older `tui-rs`-style wraparound is available via [`Wrap`](Self::Wrap)
+/// for callers that want circular menu navigation instead.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum SelectionWrap {
+    /// Stop at the first/last item: `select_next` past the last item stays on the last item, and
+    /// `select_previous` before the first item stays on the first.
+    #[default]
+    Clamp,
+    /// Wrap around: `select_next` past the last item lands on the first, and `select_previous`
+    /// before the first item lands on the last.
+    Wrap,
+}
+
 /// Selection index and scroll offset for a selectable, scrollable list.
 ///
 /// Holds no reference to the list's actual items: `len` is passed in to each
 /// mutating method, so the same `ListState` can be reused across lists that
 /// change size (menus, reward pools, deck views, ...) without going stale.
 ///
-/// Selection movement wraps around `len` (pressing "next" past the last item
-/// lands on the first, and vice versa), matching the cursor behavior common
-/// to menu-driven TUIs. Scrolling is a separate, unbounded-above counter
-/// (clamped only at zero) since only the caller knows the content length and
-/// viewport height needed to clamp it from above.
+/// Selection movement clamps at `len`'s ends by default; see [`SelectionWrap`] (set via
+/// [`ListState::set_wrap`]) to switch to wraparound instead. Scrolling is a separate,
+/// unbounded-above counter (clamped only at zero) since only the caller knows the content length
+/// and viewport height needed to clamp it from above.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ListState {
     selected: Option<usize>,
     offset: usize,
+    wrap: SelectionWrap,
 }
 
 impl ListState {
@@ -22,6 +40,7 @@ impl ListState {
         Self {
             selected: None,
             offset: 0,
+            wrap: SelectionWrap::Clamp,
         }
     }
 
@@ -35,6 +54,18 @@ impl ListState {
     #[must_use]
     pub const fn offset(&self) -> usize {
         self.offset
+    }
+
+    /// How `select_next`/`select_previous` behave at the ends of the list. Defaults to
+    /// [`SelectionWrap::Clamp`].
+    #[must_use]
+    pub const fn wrap(&self) -> SelectionWrap {
+        self.wrap
+    }
+
+    /// Sets how `select_next`/`select_previous` behave at the ends of the list.
+    pub const fn set_wrap(&mut self, wrap: SelectionWrap) {
+        self.wrap = wrap;
     }
 
     /// Select an explicit index (or clear the selection with `None`).
@@ -85,18 +116,18 @@ impl ListState {
         self.offset = next.max(0).try_into().unwrap_or(usize::MAX);
     }
 
-    /// Select the next item, wrapping past the end back to the first.
-    /// Selects index 0 if nothing was selected yet. No-op (clears the
-    /// selection) if `len` is zero.
+    /// Select the next item. Past the last item, clamps (stays on the last item) or wraps to the
+    /// first, per [`wrap()`](Self::wrap). Selects index 0 if nothing was selected yet. No-op
+    /// (clears the selection) if `len` is zero.
     pub fn select_next(&mut self, len: usize) {
-        self.selected = Self::wrapped(self.selected, 1, len);
+        self.selected = Self::stepped(self.selected, 1, len, self.wrap);
     }
 
-    /// Select the previous item, wrapping past the start back to the last.
-    /// Selects the last item if nothing was selected yet. No-op (clears the
-    /// selection) if `len` is zero.
+    /// Select the previous item. Before the first item, clamps (stays on the first item) or
+    /// wraps to the last, per [`wrap()`](Self::wrap). Selects the last item if nothing was
+    /// selected yet. No-op (clears the selection) if `len` is zero.
     pub fn select_previous(&mut self, len: usize) {
-        self.selected = Self::wrapped(self.selected, -1, len);
+        self.selected = Self::stepped(self.selected, -1, len, self.wrap);
     }
 
     /// Select the first item, or clear the selection if `len` is zero.
@@ -109,20 +140,31 @@ impl ListState {
         self.selected = (len > 0).then(|| len - 1);
     }
 
-    /// Shared wraparound math for `select_next`/`select_previous`. `delta`
-    /// is `1` or `-1`; a missing selection starts from the end opposite the
-    /// direction of travel so the first press lands somewhere sensible.
-    fn wrapped(current: Option<usize>, delta: i32, len: usize) -> Option<usize> {
+    /// Shared step math for `select_next`/`select_previous`. `delta` is `1` or `-1`; a missing
+    /// selection picks the end opposite the direction of travel (so the first press lands
+    /// somewhere sensible) independent of `mode`, since there's no prior index to clamp or wrap
+    /// from yet.
+    fn stepped(
+        current: Option<usize>,
+        delta: i32,
+        len: usize,
+        mode: SelectionWrap,
+    ) -> Option<usize> {
         if len == 0 {
             return None;
         }
+        let Some(i) = current else {
+            return Some(if delta > 0 { 0 } else { len - 1 });
+        };
         let Ok(len) = i32::try_from(len) else {
             return current; // absurdly large len; leave selection alone
         };
-        let base = current.map_or(if delta > 0 { -1 } else { 0 }, |i| {
-            i32::try_from(i).unwrap_or(0)
-        });
-        Some(usize::try_from((base + delta).rem_euclid(len)).unwrap_or(0))
+        let next = i32::try_from(i).unwrap_or(0) + delta;
+        let idx = match mode {
+            SelectionWrap::Wrap => next.rem_euclid(len),
+            SelectionWrap::Clamp => next.clamp(0, len - 1),
+        };
+        usize::try_from(idx).ok()
     }
 }
 
@@ -152,16 +194,35 @@ mod tests {
     }
 
     #[test]
-    fn next_wraps_past_the_end() {
+    fn next_clamps_at_the_end_by_default() {
         let mut s = ListState::new();
+        assert_eq!(s.wrap(), SelectionWrap::Clamp);
+        s.select(Some(2));
+        s.select_next(3);
+        assert_eq!(s.selected(), Some(2)); // stays on the last item, does not wrap to 0
+    }
+
+    #[test]
+    fn previous_clamps_at_the_start_by_default() {
+        let mut s = ListState::new();
+        s.select(Some(0));
+        s.select_previous(3);
+        assert_eq!(s.selected(), Some(0)); // stays on the first item, does not wrap to 2
+    }
+
+    #[test]
+    fn next_wraps_past_the_end_when_wrap_is_set() {
+        let mut s = ListState::new();
+        s.set_wrap(SelectionWrap::Wrap);
         s.select(Some(2));
         s.select_next(3);
         assert_eq!(s.selected(), Some(0));
     }
 
     #[test]
-    fn previous_wraps_past_the_start() {
+    fn previous_wraps_past_the_start_when_wrap_is_set() {
         let mut s = ListState::new();
+        s.set_wrap(SelectionWrap::Wrap);
         s.select(Some(0));
         s.select_previous(3);
         assert_eq!(s.selected(), Some(2));

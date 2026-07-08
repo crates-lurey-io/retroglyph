@@ -85,6 +85,16 @@ struct Example {
     description: String,
 }
 
+impl Example {
+    /// `name` without its `NN_` ordering prefix, for display -- the menu's own index already
+    /// conveys the number, so showing it twice (`1) 01_hello_world`) is pure noise.
+    fn display_name(&self) -> &str {
+        // `is_example_filename` (the only way an `Example` gets constructed) guarantees `name`
+        // starts with two ASCII digits and an underscore.
+        &self.name[3..]
+    }
+}
+
 /// A file name counts as an example if it's `NN_*.rs` -- two ASCII digits, an underscore, then
 /// anything. This excludes `runner.rs` (and any other non-numbered helper file) without an
 /// explicit exclude list to maintain.
@@ -151,6 +161,40 @@ fn prompt(msg: &str) -> String {
     buf.trim().to_owned()
 }
 
+/// Prints `items` as a numbered `  N) primary -- secondary` menu -- column-aligned, so every
+/// `--` lines up regardless of how long each `primary` is -- then reprompts until the user picks
+/// a valid `1..=items.len()`. Shared between the example and backend pickers below, which were
+/// previously two separately hand-rolled copies of the same print-then-reprompt loop.
+fn pick<T>(
+    prompt_label: &str,
+    items: &[T],
+    primary: impl Fn(&T) -> &str,
+    secondary: impl Fn(&T) -> &str,
+) -> usize {
+    let index_width = items.len().to_string().len();
+    let name_width = items
+        .iter()
+        .map(|item| primary(item).len())
+        .max()
+        .unwrap_or(0);
+    for (i, item) in items.iter().enumerate() {
+        println!(
+            "  {:>index_width$}) {:<name_width$} -- {}",
+            i + 1,
+            primary(item),
+            secondary(item)
+        );
+    }
+
+    loop {
+        let input = prompt(&format!("\n{prompt_label} [1-{}]: ", items.len()));
+        match input.parse::<usize>() {
+            Ok(n) if n >= 1 && n <= items.len() => return n - 1,
+            _ => println!("  Invalid choice."),
+        }
+    }
+}
+
 // ── Launch ──────────────────────────────────────────────────────────────────
 
 fn launch(ex: &Example, backend: Backend) -> ! {
@@ -189,31 +233,18 @@ fn main() {
     assert!(!examples.is_empty(), "no NN_*.rs examples found");
 
     println!("retroglyph gallery\n");
-    for (i, ex) in examples.iter().enumerate() {
-        println!("  {}) {} -- {}", i + 1, ex.name, ex.description);
-    }
-
-    let choice: usize = loop {
-        let input = prompt(&format!("\nPick an example [1-{}]: ", examples.len()));
-        match input.parse::<usize>() {
-            Ok(n) if n >= 1 && n <= examples.len() => break n - 1,
-            _ => println!("  Invalid choice."),
-        }
-    };
+    let choice = pick("Pick an example", &examples, Example::display_name, |ex| {
+        ex.description.as_str()
+    });
     let ex = &examples[choice];
 
     println!();
-    for (i, backend) in Backend::ALL.iter().enumerate() {
-        println!("  {}) {} -- {}", i + 1, backend.label(), backend.summary());
-    }
-
-    let backend = loop {
-        let input = prompt(&format!("\nPick a backend [1-{}]: ", Backend::ALL.len()));
-        match input.parse::<usize>() {
-            Ok(n) if n >= 1 && n <= Backend::ALL.len() => break Backend::ALL[n - 1],
-            _ => println!("  Invalid choice."),
-        }
-    };
+    let backend = Backend::ALL[pick(
+        "Pick a backend",
+        Backend::ALL,
+        |b| b.label(),
+        |b| b.summary(),
+    )];
 
     launch(ex, backend);
 }

@@ -59,7 +59,7 @@ pub use layout::{
     Constraint, Flex, centered_rect, split_h, split_h_flex, split_h_spaced, split_v, split_v_flex,
     split_v_spaced,
 };
-pub use state::{ListState, ScrollPhysics, ScrollState};
+pub use state::{ListState, ScrollPhysics, ScrollState, SelectionWrap};
 pub use style::{BoxStyle, Sides};
 pub use text::truncate;
 pub use theme::Theme;

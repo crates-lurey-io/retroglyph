@@ -66,7 +66,7 @@ impl<B: Backend> App<B> for LayersAndOffsets {
         term.print(0, SMOOTH_ROW, "offset:");
         term.print(0, 11, "cell-stepped vs. sub-cell smooth, same speed");
 
-        self.elapsed += frame.dt.as_secs_f64();
+        self.elapsed += frame.delta.as_secs_f64();
 
         // Triangle wave between 0 and PATH_LEN cells, so both sprites bounce back and forth
         // along their row instead of running off the edge.
