@@ -62,8 +62,8 @@
 //!   and the track list
 //! - Enter / Space — activate the focused button/toggle
 //! - Up / Down — move the track selection, while the list is focused
-//! - PageUp / PageDown / Home / End — jump the track selection, while the
-//!   list is focused
+//! - `PageUp` / `PageDown` / Home / End — jump the track selection, while
+//!   the list is focused
 //! - Left / Right — nudge the volume, while the slider is focused
 //! - Mouse: click buttons/rows, drag the volume bar, scroll the track list,
 //!   right-click a track to favorite it
@@ -88,7 +88,8 @@ use std::time::Duration;
 use retroglyph_core::event::{Event, KeyCode};
 use retroglyph_core::{Backend, Color, Line, Rect, Size, Span, Style, Terminal};
 use retroglyph_widgets::{
-    Constraint, Interaction, ListState, Response, Sense, gauge, log, panel, split_h, split_v,
+    Constraint, Interaction, ListState, Response, Sense, gauge, log, offset_for_pos, panel,
+    scrollbar, split_h, split_v,
 };
 
 // ── Colors ──────────────────────────────────────────────────────────────────
@@ -344,7 +345,10 @@ const TRACK_SEED: &[TrackSeed] = &[
     },
 ];
 
-const LOG_CAPACITY: usize = 8;
+// Comfortably more than LOG_HEIGHT's visible rows, so the log panel's
+// scrollbar/wheel-scroll actually has history to scroll through instead of
+// always showing everything at once.
+const LOG_CAPACITY: usize = 60;
 const CONTROLS_WIDTH: u16 = 30;
 const LOG_HEIGHT: u16 = 10;
 const POLL_MS: u64 = 60;
@@ -367,6 +371,9 @@ enum Id {
     Volume,
     TrackList,
     Track(usize),
+    TrackScrollbar,
+    EventLog,
+    EventLogScrollbar,
 }
 
 fn id_label(id: Id) -> String {
@@ -386,6 +393,9 @@ fn id_label(id: Id) -> String {
         Id::Track(i) => TRACK_SEED
             .get(i)
             .map_or_else(|| "Track".to_owned(), |t| format!("Track \"{}\"", t.name)),
+        Id::TrackScrollbar => "Track Scrollbar".to_owned(),
+        Id::EventLog => "Event Log".to_owned(),
+        Id::EventLogScrollbar => "Event Log Scrollbar".to_owned(),
     }
 }
 
@@ -401,6 +411,13 @@ struct AppState {
     tracks: Vec<Track>,
     list_state: ListState,
     log: VecDeque<Line>,
+    /// Scroll position into `log`, in [`log`](retroglyph_widgets::log)'s own
+    /// tail-anchored convention: `0` shows the newest messages, larger
+    /// values scroll back through history. Deliberately the opposite
+    /// direction from `list_state.offset()` -- see `draw_event_log`'s doc
+    /// comment for how the two get reconciled for the scrollbar's shared,
+    /// forward-only geometry math.
+    log_scroll: usize,
 }
 
 fn init<B: Backend>(_term: &mut Terminal<B>) -> AppState {
@@ -432,6 +449,7 @@ fn init<B: Backend>(_term: &mut Terminal<B>) -> AppState {
         tracks,
         list_state,
         log: VecDeque::with_capacity(LOG_CAPACITY),
+        log_scroll: 0,
     }
 }
 
@@ -665,9 +683,10 @@ fn draw_track_list<B: Backend>(term: &mut Terminal<B>, area: Rect, state: &mut A
     let focused = state.interaction.focus().is_focused(Id::TrackList);
     panel_bg(term, area, "TRACKS", focused);
     let inner = inset(area);
-    if inner.width() == 0 || inner.height() == 0 {
+    if inner.width() < 2 || inner.height() == 0 {
         return;
     }
+    let (list_area, bar_area) = split_right(inner, 1);
 
     // Sensing the container with FOCUSABLE (Tab-reachable) but each row
     // below with only HOVER | CLICK (not FOCUSABLE): a container can hold
@@ -676,8 +695,8 @@ fn draw_track_list<B: Backend>(term: &mut Terminal<B>, area: Rect, state: &mut A
     let list_response =
         state
             .interaction
-            .interact(inner, Id::TrackList, Sense::scroll() | Sense::FOCUSABLE);
-    let visible_rows = inner.height() as usize;
+            .interact(list_area, Id::TrackList, Sense::scroll() | Sense::FOCUSABLE);
+    let visible_rows = list_area.height() as usize;
     if list_response.scroll_delta() == 0 {
         // Only auto-follow the selection (e.g. after Up/Down or a row
         // click) on frames where the wheel didn't just move the view --
@@ -688,12 +707,25 @@ fn draw_track_list<B: Backend>(term: &mut Terminal<B>, area: Rect, state: &mut A
     } else {
         state.list_state.scroll_by(list_response.scroll_delta());
     }
-    let offset = state.list_state.offset();
 
     let track_count = state.tracks.len();
+    let current_offset = state.list_state.offset();
+    if let Some(new_offset) = draw_scrollbar_column(
+        term,
+        bar_area,
+        Id::TrackScrollbar,
+        &mut state.interaction,
+        track_count,
+        visible_rows,
+        current_offset,
+    ) {
+        state.list_state.set_offset(new_offset);
+    }
+    let offset = state.list_state.offset();
+
     for i in offset..(offset + visible_rows).min(track_count) {
-        let y = inner.top() + (i - offset) as u16;
-        let row = Rect::new(inner.left(), y, inner.width(), 1);
+        let y = list_area.top() + (i - offset) as u16;
+        let row = Rect::new(list_area.left(), y, list_area.width(), 1);
         let response = state.interaction.interact(
             row,
             Id::Track(i),
@@ -744,11 +776,73 @@ fn draw_track_list<B: Backend>(term: &mut Terminal<B>, area: Rect, state: &mut A
     }
 }
 
-fn draw_event_log<B: Backend>(term: &mut Terminal<B>, area: Rect, state: &AppState) {
-    panel_bg(term, area, "EVENTS", false);
+/// `log`'s `offset` counts backward from the tail (`0` = newest message),
+/// the opposite direction from [`ListState`]'s forward, start-anchored
+/// `offset()` -- both are the *correct* convention for what they each
+/// model (a log defaults to "pinned to the newest line"; a list defaults to
+/// "pinned to the first item"), so this isn't a bug to unify, just two
+/// scroll positions that mean opposite things. [`thumb_geometry`]/[`offset_for_pos`]
+/// only know the forward convention, so this function converts at the
+/// boundary (`forward = max_scroll - log_scroll` going in,
+/// `log_scroll = max_scroll - forward` coming back from a click/drag)
+/// rather than teaching the scrollbar geometry a second direction.
+fn draw_event_log<B: Backend>(term: &mut Terminal<B>, area: Rect, state: &mut AppState) {
+    let focused = state.interaction.focus().is_focused(Id::EventLog);
+    panel_bg(term, area, "EVENTS", focused);
     let inner = inset(area);
+    if inner.width() < 2 || inner.height() == 0 {
+        return;
+    }
+    let (log_area, bar_area) = split_right(inner, 1);
+
+    let visible_len = log_area.height() as usize;
+    let total_len = state.log.len();
+    let max_scroll = total_len.saturating_sub(visible_len);
+
+    let response =
+        state
+            .interaction
+            .interact(log_area, Id::EventLog, Sense::scroll() | Sense::FOCUSABLE);
+    if response.scroll_delta() != 0 {
+        state.log_scroll = apply_signed(state.log_scroll, -response.scroll_delta(), max_scroll);
+    }
+
+    let forward = max_scroll.saturating_sub(state.log_scroll.min(max_scroll));
+    if let Some(new_forward) = draw_scrollbar_column(
+        term,
+        bar_area,
+        Id::EventLogScrollbar,
+        &mut state.interaction,
+        total_len,
+        visible_len,
+        forward,
+    ) {
+        state.log_scroll = max_scroll.saturating_sub(new_forward.min(max_scroll));
+    }
+
     let lines: Vec<Line> = state.log.iter().cloned().collect();
-    log(term, inner, &lines, 0);
+    log(term, log_area, &lines, state.log_scroll);
+}
+
+/// Add a signed `delta` to `current`, clamped to `0..=max`. Small enough
+/// (and used in exactly one spot, `log_scroll`'s wheel handling) that it's
+/// not worth pulling in as a `ListState`-style shared helper -- but written
+/// with the same `try_from`/`clamp` idiom `ListState`'s own arithmetic uses
+/// rather than an `as` cast, so it can't silently wrap on pathological
+/// inputs either.
+/// A generous upper bound for `log_scroll` usable outside `draw` (which
+/// doesn't know the log panel's actual viewport height until layout runs).
+/// See `draw_event_log`'s doc comment for the tighter, viewport-aware bound
+/// `max_scroll` it re-clamps to on the next frame regardless.
+fn log_scroll_max(state: &AppState) -> usize {
+    state.log.len().saturating_sub(1)
+}
+
+fn apply_signed(current: usize, delta: i32, max: usize) -> usize {
+    let current = i64::try_from(current).unwrap_or(i64::MAX);
+    let max = i64::try_from(max).unwrap_or(i64::MAX);
+    let next = (current + i64::from(delta)).clamp(0, max);
+    usize::try_from(next).unwrap_or(0)
 }
 
 // ── Small drawing helpers ─────────────────────────────────────────────────────
@@ -824,6 +918,74 @@ fn take2(v: &[Rect]) -> [Rect; 2] {
 
 fn take3(v: &[Rect]) -> [Rect; 3] {
     [v[0], v[1], v[2]]
+}
+
+/// Splits `cols` columns off the right edge of `area`, returning
+/// `(remaining, split_off)`.
+fn split_right(area: Rect, cols: u16) -> (Rect, Rect) {
+    let cols = cols.min(area.width());
+    let main_w = area.width() - cols;
+    (
+        Rect::new(area.left(), area.top(), main_w, area.height()),
+        Rect::new(area.left() + main_w, area.top(), cols, area.height()),
+    )
+}
+
+/// Draws a one-column vertical scrollbar at `bar_area` for a `total_len`-item
+/// scrollable region with a `visible_len`-row viewport, and reports the
+/// forward (`ListState`-style: `0` = start, larger = scrolled further in)
+/// offset the user clicked/dragged it to this frame, if any.
+///
+/// Deliberately thin: [`retroglyph_widgets::thumb_geometry`]/[`offset_for_pos`]
+/// already do the geometry, and [`scrollbar`] already does the drawing --
+/// this just wires both into one [`Interaction::interact`] call with
+/// [`Sense::DRAG`] (without [`Sense::FOCUSABLE`], so the thumb stays
+/// mouse-only and doesn't clutter the Tab order, the same reasoning as
+/// track rows). Callers own converting the returned forward offset into
+/// whatever their content's actual offset convention is -- see
+/// `draw_event_log` for a convention that isn't already forward (tail-
+/// anchored, like `log`'s own `offset` parameter).
+fn draw_scrollbar_column<B: Backend>(
+    term: &mut Terminal<B>,
+    bar_area: Rect,
+    id: Id,
+    interaction: &mut Interaction<Id>,
+    total_len: usize,
+    visible_len: usize,
+    forward_offset: usize,
+) -> Option<usize> {
+    // No Sense::CLICK: that would also trigger interact()'s auto-focus-
+    // request-on-click side effect, stealing keyboard focus away from
+    // whatever container this scrollbar belongs to. pressed()/dragging()
+    // don't need CLICK -- they're driven by `active`, which HOVER alone
+    // already makes eligible.
+    let response = interaction.interact(bar_area, id, Sense::HOVER | Sense::DRAG);
+
+    let jumped_to = if (response.pressed() || response.dragging())
+        && let Some(pos) = interaction.pointer().pos()
+    {
+        offset_for_pos(bar_area, total_len, visible_len, pos)
+    } else {
+        None
+    };
+
+    let track_style = Style::new().bg(PANEL_BG);
+    let thumb_style = if response.hovered() || response.dragging() {
+        Style::new().bg(ACCENT)
+    } else {
+        Style::new().bg(BORDER)
+    };
+    scrollbar(
+        term,
+        bar_area,
+        total_len,
+        visible_len,
+        forward_offset,
+        track_style,
+        thumb_style,
+    );
+
+    jumped_to
 }
 
 // ── Loop ────────────────────────────────────────────────────────────────────
@@ -910,6 +1072,41 @@ fn handle(state: &mut AppState, event: &Event) -> bool {
             }
             KeyCode::Right if state.interaction.focus().is_focused(Id::Volume) => {
                 state.volume = (state.volume + 5).min(100);
+            }
+            // log_scroll counts backward from the tail (see draw_event_log's
+            // doc comment), so Up (toward older messages) *increases* it --
+            // the opposite of the track list's Up, which decreases its
+            // (forward-counted) offset. Bounded against `log.len() - 1`
+            // rather than the exact viewport-aware max_scroll (unknown here
+            // -- that's a layout concern computed only in `draw`, same
+            // reasoning as `PAGE_SIZE`); draw_event_log's own wheel handling
+            // re-clamps to the tighter, viewport-aware bound on the next
+            // frame regardless.
+            KeyCode::Up if state.interaction.focus().is_focused(Id::EventLog) => {
+                state.log_scroll = apply_signed(state.log_scroll, 1, log_scroll_max(state));
+            }
+            KeyCode::Down if state.interaction.focus().is_focused(Id::EventLog) => {
+                state.log_scroll = apply_signed(state.log_scroll, -1, log_scroll_max(state));
+            }
+            KeyCode::PageUp if state.interaction.focus().is_focused(Id::EventLog) => {
+                state.log_scroll = apply_signed(
+                    state.log_scroll,
+                    i32::try_from(PAGE_SIZE).unwrap_or(i32::MAX),
+                    log_scroll_max(state),
+                );
+            }
+            KeyCode::PageDown if state.interaction.focus().is_focused(Id::EventLog) => {
+                state.log_scroll = apply_signed(
+                    state.log_scroll,
+                    -i32::try_from(PAGE_SIZE).unwrap_or(i32::MAX),
+                    log_scroll_max(state),
+                );
+            }
+            KeyCode::Home if state.interaction.focus().is_focused(Id::EventLog) => {
+                state.log_scroll = log_scroll_max(state); // oldest
+            }
+            KeyCode::End if state.interaction.focus().is_focused(Id::EventLog) => {
+                state.log_scroll = 0; // newest
             }
             _ => {}
         }
@@ -1016,13 +1213,14 @@ mod tests {
     }
 
     #[test]
-    fn tab_cycles_focus_new_save_delete_mute_volume_list() {
+    fn tab_cycles_focus_new_save_delete_mute_volume_list_log() {
         let mut state = init_state();
         assert_eq!(state.interaction.focus().focused(), Some(Id::TrackList));
 
         frame(&mut state, &[]); // establishes the focus order from this frame's draw
 
         let expect = [
+            Id::EventLog,
             Id::New,
             Id::Save,
             Id::Delete,
@@ -1040,7 +1238,7 @@ mod tests {
     fn enter_activates_the_focused_button_without_any_pointer_input() {
         let mut state = init_state();
         frame(&mut state, &[]); // establishes focus order
-        frame(&mut state, &[key(KeyCode::Tab)]); // -> New
+        frame(&mut state, &[key(KeyCode::Tab), key(KeyCode::Tab)]); // TrackList -> EventLog -> New
         assert_eq!(state.interaction.focus().focused(), Some(Id::New));
 
         frame(&mut state, &[key(KeyCode::Enter)]);
@@ -1054,10 +1252,10 @@ mod tests {
         frame(&mut state, &[key(KeyCode::Down)]);
         assert_eq!(state.list_state.selected(), Some(1));
 
-        // Move focus elsewhere (one Tab: TrackList -> New); Down should no
-        // longer move the selection.
+        // Move focus elsewhere (one Tab: TrackList -> EventLog); Down should
+        // no longer move the selection.
         frame(&mut state, &[key(KeyCode::Tab)]);
-        assert_eq!(state.interaction.focus().focused(), Some(Id::New));
+        assert_eq!(state.interaction.focus().focused(), Some(Id::EventLog));
         frame(&mut state, &[key(KeyCode::Down)]);
         assert_eq!(state.list_state.selected(), Some(1)); // unchanged
     }
@@ -1070,8 +1268,8 @@ mod tests {
         assert_eq!(state.volume, starting);
 
         frame(&mut state, &[]);
-        for _ in 0..5 {
-            frame(&mut state, &[key(KeyCode::Tab)]); // New, Save, Delete, Mute, Volume
+        for _ in 0..6 {
+            frame(&mut state, &[key(KeyCode::Tab)]); // EventLog, New, Save, Delete, Mute, Volume
         }
         assert_eq!(state.interaction.focus().focused(), Some(Id::Volume));
 
@@ -1225,5 +1423,57 @@ mod tests {
 
         frame(&mut state, &[]); // frame 3: resolves the scroll
         assert!(state.list_state.offset() > 0);
+    }
+
+    #[test]
+    fn scrolling_the_event_log_moves_log_scroll_backward_through_history() {
+        let mut state = init_state();
+        // Build up more log history than fits in the viewport (the log
+        // starts empty, and max_scroll is 0 -- and any scroll a no-op --
+        // until there's more than a screenful of lines); each Tab logs a
+        // "focus -> ..." line.
+        for _ in 0..12 {
+            frame(&mut state, &[key(KeyCode::Tab)]);
+        }
+
+        let l = layout(SIZE);
+        let inner = inset(l.log);
+        let mid = Pos::new(inner.left(), inner.top());
+
+        // Scrolling *up* (toward older messages) should *increase*
+        // log_scroll -- the opposite sign relationship a list has, since
+        // `log` counts backward from the tail (see draw_event_log's doc
+        // comment).
+        frame(&mut state, &[mouse_at(MouseEventKind::ScrollUp, mid)]); // not yet resolved
+        assert_eq!(state.log_scroll, 0);
+
+        frame(&mut state, &[]); // frame 3: resolves the scroll
+        assert!(state.log_scroll > 0);
+    }
+
+    #[test]
+    fn home_and_end_jump_the_log_to_the_oldest_and_newest_message() {
+        let mut state = init_state();
+        frame(&mut state, &[]); // establishes the focus order
+
+        // A handful of Tabs each log a "focus -> ..." line (see `handle`),
+        // building up enough log history for Home/End to mean something.
+        // The focus ring has 7 stops, so 8 tabs lands back on EventLog
+        // (the first stop from TrackList) with a full cycle of history
+        // logged.
+        for _ in 0..8 {
+            frame(&mut state, &[key(KeyCode::Tab)]);
+        }
+        assert_eq!(state.interaction.focus().focused(), Some(Id::EventLog));
+
+        frame(&mut state, &[key(KeyCode::Home)]);
+        assert_eq!(state.log_scroll, log_scroll_max(&state));
+        assert!(
+            log_scroll_max(&state) > 0,
+            "log needs history for this test to mean anything"
+        );
+
+        frame(&mut state, &[key(KeyCode::End)]);
+        assert_eq!(state.log_scroll, 0);
     }
 }
