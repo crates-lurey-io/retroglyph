@@ -238,13 +238,31 @@ impl<P: Presenter, F> WindowApp<P, F> {
         // mobile-web-app feel. winit sets an inline `width`/`height` style
         // on the canvas matching whatever size we request here; it does not
         // derive that size from page CSS, so this has to happen in Rust.
+        //
+        // Crucially, this *must* be the viewport size at the real (uncapped)
+        // device pixel ratio, not the DPR-capped size used for the software
+        // backing store below. winit's wasm backend converts whatever
+        // `PhysicalSize` we pass here back to a logical (CSS pixel) size
+        // using `window.devicePixelRatio()` -- the actual, uncapped ratio --
+        // to set the canvas's inline `style.width`/`style.height`. Handing it
+        // a DPR-capped physical size makes it divide by a *larger* real DPR
+        // than the one used to compute that size, so the resulting CSS size
+        // comes out smaller than the viewport (the higher the real DPR above
+        // the cap, the more the canvas visibly shrinks -- on a phone with
+        // DPR 3 and our 1.5 cap, that's 50% of the screen). See
+        // `web_viewport_surface_physical_size` for the separate, capped size
+        // used for the raster backing store.
         #[cfg(not(target_arch = "wasm32"))]
         let physical_size =
             winit::dpi::PhysicalSize::new(self.init_size.width, self.init_size.height);
         #[cfg(target_arch = "wasm32")]
-        let physical_size = web_viewport_physical_size().unwrap_or_else(|| {
+        let physical_size = web_viewport_layout_physical_size().unwrap_or_else(|| {
             winit::dpi::PhysicalSize::new(self.init_size.width, self.init_size.height)
         });
+        #[cfg(target_arch = "wasm32")]
+        let surface_physical_size = web_viewport_surface_physical_size().unwrap_or(physical_size);
+        #[cfg(not(target_arch = "wasm32"))]
+        let surface_physical_size = physical_size;
 
         let attrs = Window::default_attributes()
             .with_title(&self.title)
@@ -275,9 +293,13 @@ impl<P: Presenter, F> WindowApp<P, F> {
                 return None;
             }
             // Set the initial surface size (required on WASM before first present).
+            // Deliberately `surface_physical_size`, not `physical_size`: the
+            // raster backing store stays DPR-capped for present() cost even
+            // though the canvas's CSS size (driven by `physical_size` via
+            // winit above) matches the full, uncapped viewport.
             term.backend_mut()
                 .presenter_mut()
-                .resize_surface(physical_size.width, physical_size.height);
+                .resize_surface(surface_physical_size.width, surface_physical_size.height);
         }
 
         // Keep the canvas matching the browser viewport as it changes
@@ -300,15 +322,53 @@ impl<P: Presenter, F> WindowApp<P, F> {
 #[cfg(target_arch = "wasm32")]
 const MAX_DEVICE_PIXEL_RATIO: f64 = 1.5;
 
-/// The browser viewport size in physical (device) pixels, or `None` if
-/// running outside a browser `window` context.
+/// The browser viewport's CSS width/height, or `None` if running outside a
+/// browser `window` context. Shared by the two physical-size helpers below.
 #[cfg(target_arch = "wasm32")]
-#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-fn web_viewport_physical_size() -> Option<winit::dpi::PhysicalSize<u32>> {
+fn web_viewport_css_size() -> Option<(f64, f64)> {
     let window = web_sys::window()?;
     let width = window.inner_width().ok()?.as_f64()?;
     let height = window.inner_height().ok()?.as_f64()?;
-    let dpr = window.device_pixel_ratio().min(MAX_DEVICE_PIXEL_RATIO);
+    Some((width, height))
+}
+
+/// The browser viewport size in true physical (device) pixels -- i.e. at the
+/// real, uncapped `devicePixelRatio`.
+///
+/// Pass this to winit's `with_inner_size`/`request_inner_size` (and *only*
+/// this -- never [`web_viewport_surface_physical_size`]). winit's wasm
+/// backend always converts the `PhysicalSize` it's given back to a logical
+/// (CSS pixel) size by dividing by the real `devicePixelRatio` to set the
+/// canvas's inline style; handing it anything scaled by a different ratio
+/// (like our DPR-capped surface size) makes the canvas's CSS size come out
+/// smaller than the viewport.
+#[cfg(target_arch = "wasm32")]
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+fn web_viewport_layout_physical_size() -> Option<winit::dpi::PhysicalSize<u32>> {
+    let (width, height) = web_viewport_css_size()?;
+    let dpr = web_sys::window()?.device_pixel_ratio();
+    Some(winit::dpi::PhysicalSize::new(
+        (width * dpr).round() as u32,
+        (height * dpr).round() as u32,
+    ))
+}
+
+/// The physical pixel size of the software renderer's raster backing store,
+/// capped at [`MAX_DEVICE_PIXEL_RATIO`] for `present()` cost.
+///
+/// Deliberately *not* the size passed to winit (see
+/// [`web_viewport_layout_physical_size`]): winit's `Resized` event always
+/// reports back whatever physical size we last requested, so if this capped
+/// size were also used for `request_inner_size`, the canvas's CSS size would
+/// shrink below the viewport on any device whose real DPR exceeds the cap
+/// (i.e. almost every phone).
+#[cfg(target_arch = "wasm32")]
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+fn web_viewport_surface_physical_size() -> Option<winit::dpi::PhysicalSize<u32>> {
+    let (width, height) = web_viewport_css_size()?;
+    let dpr = web_sys::window()?
+        .device_pixel_ratio()
+        .min(MAX_DEVICE_PIXEL_RATIO);
     Some(winit::dpi::PhysicalSize::new(
         (width * dpr).round() as u32,
         (height * dpr).round() as u32,
@@ -328,7 +388,10 @@ fn install_viewport_resize_listener(window: &Arc<Window>) {
     };
     let window = window.clone();
     let closure = Closure::<dyn FnMut()>::new(move || {
-        if let Some(size) = web_viewport_physical_size() {
+        // Only the uncapped layout size goes to winit; `on_resized` (fired
+        // by the `Resized` event this triggers) independently recomputes
+        // the DPR-capped surface size for the backing store.
+        if let Some(size) = web_viewport_layout_physical_size() {
             let _ = window.request_inner_size(size);
         }
     });
@@ -440,6 +503,12 @@ where
         let Some(term) = self.terminal.as_mut() else {
             return;
         };
+        // On wasm, `size` is whatever (uncapped) physical size we last
+        // handed winit for CSS layout purposes -- not the backing store
+        // size. Recompute the DPR-capped surface size independently so the
+        // raster buffer doesn't silently lose its cap on every resize.
+        #[cfg(target_arch = "wasm32")]
+        let size = web_viewport_surface_physical_size().unwrap_or(size);
         let (cell_w, cell_h) = term.backend().presenter().cell_size();
         let cols = size.width / cell_w;
         let rows = size.height / cell_h;

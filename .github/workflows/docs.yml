@@ -111,6 +111,7 @@ jobs:
               continue
             fi
             sed -e "s/__EXAMPLE__/${ex}/g" docs/templates/examples/software-template.html > "$outdir/index.html"
+            sed -e "s/__EXAMPLE__/${ex}/g" docs/templates/examples/software-template.manifest.webmanifest > "$outdir/manifest.webmanifest"
           done
         continue-on-error: true
 

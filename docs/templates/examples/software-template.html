@@ -9,7 +9,19 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="apple-mobile-web-app-title" content="__EXAMPLE__" />
     <meta name="theme-color" content="#0d1117" />
+    <meta name="color-scheme" content="dark" />
+    <!-- Enables "Add to Home Screen" -> standalone display (no browser
+         chrome) on Android/Chrome; iOS Safari ignores the manifest for this
+         and instead relies on the apple-mobile-web-app-* meta tags above.
+         No icons are declared here -- see docs/templates/examples/README
+         (or the sibling .webmanifest file) for why: without real icon
+         assets in the repo, a fabricated icons array would 404. Add
+         192x192 and 512x512 PNG icons (plus an apple-touch-icon link, which
+         iOS requires separately and does not read from the manifest) to
+         make this genuinely installable with a home-screen icon. -->
+    <link rel="manifest" href="./manifest.webmanifest" />
     <title>retroglyph — __EXAMPLE__ (Software)</title>
     <style>
       * {

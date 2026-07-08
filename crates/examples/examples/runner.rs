@@ -421,6 +421,25 @@ fn launch_wasm(ex: &Example, features: &[&str]) -> ! {
         std::process::exit(1);
     }
 
+    // Same substitution for the manifest the template's `<link
+    // rel="manifest">` points at, so the local preview matches the deployed
+    // demo here too (see the doc comment above `launch_wasm`).
+    let manifest_path = root.join("docs/templates/examples/software-template.manifest.webmanifest");
+    let manifest = match std::fs::read_to_string(&manifest_path) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("  Failed to read {}: {e}", manifest_path.display());
+            std::process::exit(1);
+        }
+    };
+    if let Err(e) = std::fs::write(
+        out_dir.join("manifest.webmanifest"),
+        manifest.replace("__EXAMPLE__", ex.name),
+    ) {
+        eprintln!("  Failed to write manifest.webmanifest: {e}");
+        std::process::exit(1);
+    }
+
     // Bind an ephemeral port ourselves so the URL is known before the
     // server starts; the gap between dropping this listener and python
     // rebinding the same port is negligible for a local dev tool.

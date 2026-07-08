@@ -1,0 +1,10 @@
+{
+  "name": "retroglyph — __EXAMPLE__",
+  "short_name": "__EXAMPLE__",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0d1117",
+  "theme_color": "#0d1117"
+}
