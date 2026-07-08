@@ -79,7 +79,7 @@ pub use camera::Camera;
 pub use color::{AnsiColor, Color, InvalidAnsiIndex};
 pub use event::{
     Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, KeyState, MouseButton, MouseEvent,
-    MouseEventKind, PhysicalPos,
+    MouseEventKind, PhysicalPos, SystemTheme,
 };
 pub use frame_clock::FrameClock;
 pub use grid::{Grid, Pos, Rect, Size};
