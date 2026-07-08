@@ -1,14 +1,14 @@
-//! 04: Layout & wrap -- `TextLayout`, `HAlign`/`VAlign`, word wrap
+//! 04: Text layout & wrap -- `TextLayout`, `HAlign`/`VAlign`, word wrap
 //!
 //! Shows off [`TextLayout`], which wraps and aligns a [`Line`] within a bounded [`Rect`]. 03
 //! taught a single unbounded `Line`; 04's new concept is *bounding* one: word-wrapping to fit a
 //! width, and aligning the result within a rectangle on both axes.
 //!
 //! ```sh
-//! cargo run --example 04_layout_and_wrap                          # Headless (prints a few frames)
-//! cargo run --example 04_layout_and_wrap --features crossterm     # Terminal
-//! cargo run --example 04_layout_and_wrap --features default-font  # Desktop window
-//! cargo run --example 04_layout_and_wrap --features default-font --target wasm32-unknown-unknown  # WASM
+//! cargo run --example 04_text_layout_and_wrap                          # Headless (prints a few frames)
+//! cargo run --example 04_text_layout_and_wrap --features crossterm     # Terminal
+//! cargo run --example 04_text_layout_and_wrap --features default-font  # Desktop window
+//! cargo run --example 04_text_layout_and_wrap --features default-font --target wasm32-unknown-unknown  # WASM
 //! ```
 //!
 //! Press any key (Terminal/Desktop) to quit.
@@ -19,11 +19,11 @@ use retroglyph_core::text::Line;
 use retroglyph_core::{App, Backend, Flow, Frame, Terminal};
 use retroglyph_gallery::{any_key_pressed_or_window_closed, rg_gallery_run};
 
-struct LayoutAndWrap;
+struct TextLayoutAndWrap;
 
-impl<B: Backend> App<B> for LayoutAndWrap {
+impl<B: Backend> App<B> for TextLayoutAndWrap {
     fn update(&mut self, term: &mut Terminal<B>, _frame: &Frame) -> Flow {
-        term.print(0, 0, "04: Layout & Wrap");
+        term.print(0, 0, "04: Text Layout & Wrap");
 
         // Five representative HAlign/VAlign combinations -- the four corners plus dead center --
         // rather than the full 3x3 cartesian product, which is mostly repetition of the same
@@ -65,7 +65,7 @@ impl<B: Backend> App<B> for LayoutAndWrap {
             draw_border(term, rect);
             let line = Line::raw(label);
             TextLayout::new(&line)
-                .rect(inner(rect))
+                .rect(rect.shrink(1, 1))
                 .h_align(h)
                 .v_align(v)
                 .render(term);
@@ -77,7 +77,7 @@ impl<B: Backend> App<B> for LayoutAndWrap {
         let wrap_rect = Rect::new(40, 9, 19, 6);
         draw_border(term, wrap_rect);
         let wrap_line = Line::raw("Word wrap breaks on spaces, and force-breaks overlong words.");
-        let wrap_inner = inner(wrap_rect);
+        let wrap_inner = wrap_rect.shrink(1, 1);
         TextLayout::new(&wrap_line)
             .rect(wrap_inner)
             .h_align(HAlign::Left)
@@ -106,16 +106,6 @@ impl<B: Backend> App<B> for LayoutAndWrap {
     }
 }
 
-/// The content area inside a bordered `Rect` -- one cell smaller on every side.
-const fn inner(rect: Rect) -> Rect {
-    Rect::new(
-        rect.left() + 1,
-        rect.top() + 1,
-        rect.width() - 2,
-        rect.height() - 2,
-    )
-}
-
 /// Hand-drawn box border, just so each `Rect`'s bounds are visible. Not the `crates/widgets`
 /// `BoxBorder` widget -- the gallery deliberately stays on `retroglyph-core` alone this early in
 /// the ladder.
@@ -137,4 +127,4 @@ fn draw_border<B: Backend>(term: &mut Terminal<B>, rect: Rect) {
     }
 }
 
-rg_gallery_run!(LayoutAndWrap, "04: Layout & Wrap", 60, 18);
+rg_gallery_run!(TextLayoutAndWrap, "04: Text Layout & Wrap", 60, 18);

@@ -1,7 +1,10 @@
 //! Constraint-based `Rect` splitter for multi-panel UIs.
 //!
 //! Splits a [`Rect`] into stacked rows ([`split_v`]) or side-by-side columns
-//! ([`split_h`]) according to a slice of [`Constraint`]s.
+//! ([`split_h`]) according to a slice of [`Constraint`]s. [`split_h_spaced`]/[`split_v_spaced`]
+//! do the same but also carve a fixed-cell gap between every adjacent pair of panes, without the
+//! caller having to interleave `Constraint::Fixed(spacing)` gap constraints and filter them back
+//! out by hand.
 //!
 //! The solver sums the [`Fixed`](Constraint::Fixed) and [`Percent`](Constraint::Percent)
 //! amounts, then distributes whatever remains equally across the
@@ -148,6 +151,70 @@ pub fn split_h(area: Rect, constraints: &[Constraint]) -> Vec<Rect> {
             x = x.saturating_add(w);
             rect
         })
+        .collect()
+}
+
+/// Interleaves a `Constraint::Fixed(spacing)` gap between every pair of adjacent `constraints`.
+///
+/// `[c0, c1, c2]` with `spacing` becomes `[c0, Fixed(spacing), c1, Fixed(spacing), c2]` -- the
+/// same shape a caller would otherwise have to build (and then remember to filter back out) by
+/// hand. No-op with fewer than two constraints.
+fn interleave_gaps(constraints: &[Constraint], spacing: u16) -> Vec<Constraint> {
+    let mut out = Vec::with_capacity(constraints.len().saturating_mul(2).saturating_sub(1));
+    for (i, &c) in constraints.iter().enumerate() {
+        if i > 0 {
+            out.push(Constraint::Fixed(spacing));
+        }
+        out.push(c);
+    }
+    out
+}
+
+/// Split `area` into columns left-to-right, like [`split_h`], but with a fixed `spacing`-cell gap
+/// carved out between every adjacent pair of panes.
+///
+/// Equivalent to interleaving `Constraint::Fixed(spacing)` between `constraints` and calling
+/// [`split_h`], then discarding the gap panes -- but the caller only ever sees the content panes,
+/// with no gap indices to filter out themselves. `spacing` gaps come out of `area` before
+/// `constraints` are resolved, so [`Constraint::Fill`]/[`Percent`](Constraint::Percent) panes
+/// share only what's left after every gap is reserved. No-op (falls back to [`split_h`]) with
+/// fewer than two panes or zero spacing.
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::Rect;
+/// use retroglyph_widgets::{Constraint, split_h_spaced};
+///
+/// let area = Rect::new(0, 0, 59, 6);
+/// let panes = split_h_spaced(area, &[Constraint::Fill; 3], 1);
+/// assert_eq!(panes.iter().map(Rect::width).collect::<Vec<_>>(), vec![19, 19, 19]);
+/// assert_eq!(panes[1].left(), panes[0].right() + 1); // one gap cell between panes
+/// ```
+#[must_use]
+pub fn split_h_spaced(area: Rect, constraints: &[Constraint], spacing: u16) -> Vec<Rect> {
+    if spacing == 0 || constraints.len() < 2 {
+        return split_h(area, constraints);
+    }
+    split_h(area, &interleave_gaps(constraints, spacing))
+        .into_iter()
+        .step_by(2)
+        .collect()
+}
+
+/// Split `area` into stacked rows top-to-bottom, like [`split_v`], but with a fixed `spacing`-cell
+/// gap carved out between every adjacent pair of panes.
+///
+/// See [`split_h_spaced`] for the full behavior; this is the same operation along the vertical
+/// axis.
+#[must_use]
+pub fn split_v_spaced(area: Rect, constraints: &[Constraint], spacing: u16) -> Vec<Rect> {
+    if spacing == 0 || constraints.len() < 2 {
+        return split_v(area, constraints);
+    }
+    split_v(area, &interleave_gaps(constraints, spacing))
+        .into_iter()
+        .step_by(2)
         .collect()
 }
 
@@ -451,6 +518,48 @@ mod tests {
         // 6 cells of slack split into 2 gaps (before and after) of 3 each.
         assert_eq!(panes[0].left(), 3);
         assert_eq!(panes[0].right(), 6);
+    }
+
+    #[test]
+    fn spaced_split_carves_out_gaps_between_panes() {
+        let area = Rect::new(0, 0, 59, 6);
+        let panes = split_h_spaced(
+            area,
+            &[Constraint::Fill, Constraint::Fill, Constraint::Fill],
+            1,
+        );
+        assert_eq!(panes.len(), 3);
+        let widths: Vec<u16> = panes.iter().map(Rect::width).collect();
+        assert_eq!(widths, vec![19, 19, 19]);
+        // Adjacent panes are separated by exactly one gap cell, not touching.
+        assert_eq!(panes[1].left(), panes[0].right() + 1);
+        assert_eq!(panes[2].left(), panes[1].right() + 1);
+    }
+
+    #[test]
+    fn spaced_split_falls_back_with_one_pane_or_no_spacing() {
+        let area = Rect::new(0, 0, 10, 1);
+        assert_eq!(
+            split_h_spaced(area, &[Constraint::Fill], 1),
+            split_h(area, &[Constraint::Fill])
+        );
+        assert_eq!(
+            split_h_spaced(area, &[Constraint::Fill, Constraint::Fill], 0),
+            split_h(area, &[Constraint::Fill, Constraint::Fill])
+        );
+    }
+
+    #[test]
+    fn vertical_spaced_split_matches_horizontal_shape() {
+        let area = Rect::new(0, 0, 6, 59);
+        let panes = split_v_spaced(
+            area,
+            &[Constraint::Fill, Constraint::Fill, Constraint::Fill],
+            1,
+        );
+        let heights: Vec<u16> = panes.iter().map(Rect::height).collect();
+        assert_eq!(heights, vec![19, 19, 19]);
+        assert_eq!(panes[1].top(), panes[0].bottom() + 1);
     }
 
     #[test]

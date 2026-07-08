@@ -55,7 +55,10 @@ pub use interact::{
     DEFAULT_DRAG_THRESHOLD, Density, FocusRing, HitTester, Interaction, Pointer, Response, Sense,
     Shortcuts,
 };
-pub use layout::{Constraint, Flex, centered_rect, split_h, split_h_flex, split_v, split_v_flex};
+pub use layout::{
+    Constraint, Flex, centered_rect, split_h, split_h_flex, split_h_spaced, split_v, split_v_flex,
+    split_v_spaced,
+};
 pub use state::{ListState, ScrollPhysics, ScrollState};
 pub use style::{BoxStyle, Sides};
 pub use text::truncate;

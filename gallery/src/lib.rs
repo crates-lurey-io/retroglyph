@@ -27,7 +27,7 @@ pub fn run_headless<A: App<Headless>>(cols: u16, rows: u16, mut app: A) {
         .unwrap_or(3);
 
     let mut term = Terminal::new(Headless::new(cols, rows));
-    for number in 1..=u64::from(frames) {
+    for number in 0..u64::from(frames) {
         let frame = Frame {
             dt: std::time::Duration::ZERO,
             number,

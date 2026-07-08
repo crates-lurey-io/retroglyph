@@ -14,6 +14,7 @@ workspace = true
 
 [dependencies]
 retroglyph-core = { path = "../crates/core", version = "0.1.0-alpha" }
+retroglyph-widgets = { path = "../crates/widgets", version = "0.1.0-alpha" }
 # Direct dependency (not just via retroglyph-core) so examples can name
 # `gem::space` types themselves -- Rust doesn't let you path into a
 # transitive dependency's crate.

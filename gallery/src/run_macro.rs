@@ -29,7 +29,6 @@ macro_rules! rg_gallery_run {
             let renderer = ::retroglyph_software::SoftwareBackendBuilder::new()
                 .title($title)
                 .grid_size($cols, $rows)
-                .scale(2)
                 .build()
                 .expect("failed to initialize software backend")
                 .run_headless();
