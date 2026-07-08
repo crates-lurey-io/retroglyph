@@ -311,7 +311,30 @@ impl<P: Presenter, F> WindowApp<P, F> {
         #[cfg(target_arch = "wasm32")]
         install_viewport_resize_listener(&window);
 
+        // `WindowEvent::ThemeChanged` (handled in `handle_window_event`)
+        // only fires on a *change*, so an app that never sees a system
+        // theme change would otherwise never learn the starting one.
+        // `Window::theme()` reflects the current system theme both on
+        // native and on winit's web target (backed by the
+        // `prefers-color-scheme` media query there), so query it once
+        // up-front and synthesize the same event a live change would send.
+        if let Some(theme) = window.theme()
+            && let Some(term) = self.terminal.as_mut()
+        {
+            term.backend_mut().push_event(system_theme_event(theme));
+        }
+
         Some(window)
+    }
+}
+
+/// Maps winit's [`Theme`](winit::window::Theme) to the backend-agnostic
+/// [`Event::ThemeChanged`], the only place that conversion needs to happen.
+const fn system_theme_event(theme: winit::window::Theme) -> Event {
+    use retroglyph_core::event::SystemTheme;
+    match theme {
+        winit::window::Theme::Light => Event::ThemeChanged(SystemTheme::Light),
+        winit::window::Theme::Dark => Event::ThemeChanged(SystemTheme::Dark),
     }
 }
 
@@ -504,6 +527,11 @@ where
             WindowEvent::Touch(touch) => self.on_touch(touch),
             WindowEvent::ModifiersChanged(mods) => {
                 self.current_modifiers = translate_modifiers(mods.state());
+            }
+            WindowEvent::ThemeChanged(theme) => {
+                if let Some(term) = self.terminal.as_mut() {
+                    term.backend_mut().push_event(system_theme_event(theme));
+                }
             }
             WindowEvent::KeyboardInput { event, .. } => {
                 if let Some(term) = self.terminal.as_mut()
@@ -1098,6 +1126,26 @@ mod tests {
         let mut app = test_window_app();
         app.handle_window_event(WindowEvent::CloseRequested);
         assert_eq!(poll(&mut app), Some(Event::Close));
+    }
+
+    #[test]
+    fn theme_changed_pushes_mapped_system_theme_event() {
+        let mut app = test_window_app();
+        app.handle_window_event(WindowEvent::ThemeChanged(winit::window::Theme::Light));
+        assert_eq!(
+            poll(&mut app),
+            Some(Event::ThemeChanged(
+                retroglyph_core::event::SystemTheme::Light
+            ))
+        );
+
+        app.handle_window_event(WindowEvent::ThemeChanged(winit::window::Theme::Dark));
+        assert_eq!(
+            poll(&mut app),
+            Some(Event::ThemeChanged(
+                retroglyph_core::event::SystemTheme::Dark
+            ))
+        );
     }
 
     #[test]

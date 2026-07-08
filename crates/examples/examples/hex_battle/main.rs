@@ -89,7 +89,7 @@ fn tick<B: Backend>(term: &mut Terminal<B>, state: &mut State) -> bool {
                 }
             }
             Event::Close => return false,
-            Event::Key(_) | Event::Resize(..) => {}
+            Event::Key(_) | Event::Resize(..) | Event::ThemeChanged(_) => {}
         }
     }
 

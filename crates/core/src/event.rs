@@ -220,6 +220,23 @@ pub struct MouseEvent {
     pub modifiers: KeyModifiers,
 }
 
+/// The system's light/dark color-scheme preference, as reported by the
+/// windowing/browser layer.
+///
+/// Deliberately just these two variants (not, say, a `HighContrast` or
+/// `Auto` case): every source that can report this (winit's `Theme`, the
+/// browser's `prefers-color-scheme` media query) only ever resolves to one
+/// of exactly these two, and a backend that can't determine a preference
+/// simply never emits [`Event::ThemeChanged`] rather than emitting a third
+/// "unknown" case for callers to handle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SystemTheme {
+    /// The system prefers a light color scheme.
+    Light,
+    /// The system prefers a dark color scheme.
+    Dark,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 /// Terminal input event.
 pub enum Event {
@@ -231,6 +248,18 @@ pub enum Event {
     Resize(u16, u16),
     /// Window closed.
     Close,
+    /// The system's light/dark color-scheme preference changed, or was
+    /// determined for the first time at startup.
+    ///
+    /// Only backends with a real source of truth for this emit it: the
+    /// windowed (winit) backend, on both native and wasm (winit's web
+    /// target derives it from the browser's `prefers-color-scheme` media
+    /// query, including live updates). Character-mode backends (crossterm)
+    /// have no equivalent free API -- see the windowed backend's own docs
+    /// for why -- and never emit this; an app that wants a default should
+    /// pick one itself rather than waiting for an event that may never
+    /// arrive.
+    ThemeChanged(SystemTheme),
 }
 
 /// Tracks which keys are currently held down.
