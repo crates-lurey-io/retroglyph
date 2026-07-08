@@ -242,6 +242,20 @@ static EXAMPLES: &[Example] = &[
         docs_headless: true,
         docs_terminal: true,
     },
+    Example {
+        name: "interaction_demo",
+        description: "retroglyph-widgets interact module -- hover/click/drag/focus/scroll",
+        backends: &[
+            Backend::Terminal,
+            Backend::Desktop,
+            Backend::Wasm,
+            Backend::Headless,
+        ],
+        extra_features: &[],
+        backend_features: &[],
+        docs_headless: true,
+        docs_terminal: true,
+    },
 ];
 
 // The standalone `headless` backend demo lives at

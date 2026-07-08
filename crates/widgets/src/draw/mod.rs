@@ -13,6 +13,11 @@
 //!   hardcode a specific dark-theme palette, because they exist for the
 //!   system-monitor dashboard demo rather than as theme-agnostic
 //!   primitives.
+//! - [`scrollbar`] (plus its geometry helpers [`thumb_geometry`] and
+//!   [`offset_for_pos`]): a vertical track+thumb indicator, theme-agnostic
+//!   like the primitives tier. Deliberately independent of
+//!   [`crate::interact`] -- see its own doc comment for how to make one
+//!   draggable using [`Interaction`](crate::Interaction) instead.
 //!
 //! Both tiers are re-exported flat from this module (and from the crate
 //! root), so `retroglyph_widgets::gauge(...)` and
@@ -21,9 +26,11 @@
 
 mod composite;
 pub(crate) mod primitives;
+mod scrollbar;
 
 pub use composite::{gauge, meter_ramp, sparkline, stat_bar, table};
 pub use primitives::{draw_box, fill_rect, log, modal, panel, print_line, progress_bar};
+pub use scrollbar::{offset_for_pos, scrollbar, thumb_geometry};
 
 // Box-drawing codepoints are crate-internal only (reused by `style.rs`), not
 // part of the public API.
