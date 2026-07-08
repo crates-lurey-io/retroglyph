@@ -49,6 +49,20 @@ pub mod sprite_cache;
 #[cfg(feature = "tilesets")]
 pub mod tileset;
 
+// Platform-specific window surface. Both modules expose a `WindowSurface` with
+// the same `new`/`resize`/`present` API and their own `SurfaceError`, so the
+// renderer below drives either without `cfg` in its body. This is the same
+// module-swap pattern std uses for `std::sys`.
+#[cfg(not(target_arch = "wasm32"))]
+#[path = "surface_native.rs"]
+mod surface;
+#[cfg(target_arch = "wasm32")]
+#[path = "surface_wasm.rs"]
+mod surface;
+
+pub use surface::SurfaceError;
+use surface::WindowSurface;
+
 use retroglyph_core::backend::Backend;
 use retroglyph_core::color::{AnsiColor, Color};
 
@@ -69,7 +83,6 @@ use retroglyph_window::WindowHandle;
 #[cfg(feature = "tilesets")]
 use sprite_cache::{Sprite, SpriteCache};
 use std::collections::VecDeque;
-use std::num::NonZeroU32;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -93,45 +106,6 @@ pub struct SoftwareRenderer {
     ctx: RenderContext,
     #[cfg(feature = "tilesets")]
     sprite_cache: Arc<SpriteCache>,
-}
-
-/// Softbuffer window surface.
-///
-/// Holds both the `Context` and `Surface`. The `_context` must outlive
-/// `surface` (softbuffer requires it), but is only stored, not read.
-///
-/// The handle type is `Arc<dyn WindowHandle>` (raw-window-handle), not a
-/// winit type: this crate rasterizes and presents, and any windowing library
-/// that yields raw handles can drive it (see `retroglyph_window::Presenter`).
-struct WindowSurface {
-    _context: softbuffer::Context<Arc<dyn WindowHandle>>,
-    surface: softbuffer::Surface<Arc<dyn WindowHandle>, Arc<dyn WindowHandle>>,
-}
-
-/// Errors that can occur when initializing a window surface.
-#[derive(Debug)]
-pub enum SurfaceError {
-    /// Failed to create the softbuffer context from the window.
-    Context(softbuffer::SoftBufferError),
-    /// Failed to create the softbuffer surface from the window.
-    Surface(softbuffer::SoftBufferError),
-}
-
-impl core::fmt::Display for SurfaceError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::Context(e) => write!(f, "softbuffer context: {e}"),
-            Self::Surface(e) => write!(f, "softbuffer surface: {e}"),
-        }
-    }
-}
-
-impl std::error::Error for SurfaceError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::Context(e) | Self::Surface(e) => Some(e),
-        }
-    }
 }
 
 struct RenderContext {
@@ -188,26 +162,22 @@ impl SoftwareRenderer {
 
     /// Initializes the window surface from a raw window/display handle.
     ///
+    /// The concrete surface is platform-specific (softbuffer on native, a
+    /// `Canvas2D` context on wasm32); see the `surface` module.
+    ///
     /// # Errors
     ///
-    /// Returns [`SurfaceError`] if the softbuffer context or surface cannot be created.
+    /// Returns [`SurfaceError`] if the platform surface cannot be created.
     pub fn init_surface(&mut self, window: Arc<dyn WindowHandle>) -> Result<(), SurfaceError> {
-        let context = softbuffer::Context::new(window.clone()).map_err(SurfaceError::Context)?;
-        let surface = softbuffer::Surface::new(&context, window).map_err(SurfaceError::Surface)?;
-        self.ctx.window_surface = Some(WindowSurface {
-            _context: context,
-            surface,
-        });
+        self.ctx.window_surface = Some(WindowSurface::new(window)?);
         Ok(())
     }
 
     /// Resizes the window surface to `width` x `height` pixels. No-op if the
     /// surface has not been initialized via [`init_surface`](Self::init_surface).
     pub fn resize_surface(&mut self, width: u32, height: u32) {
-        if let Some(surf) = &mut self.ctx.window_surface
-            && let (Some(w), Some(h)) = (NonZeroU32::new(width), NonZeroU32::new(height))
-        {
-            let _ = surf.surface.resize(w, h);
+        if let Some(surf) = &mut self.ctx.window_surface {
+            surf.resize(width, height);
         }
     }
 
@@ -216,24 +186,12 @@ impl SoftwareRenderer {
     ///
     /// # Errors
     ///
-    /// Returns `Err(SurfaceError::Surface(...))` if the softbuffer buffer
-    /// can't be acquired or presented (e.g., context lost on WASM or DRI/KMS
-    /// page flip pending).
+    /// Returns [`SurfaceError`] if the platform surface fails to present.
     pub fn present(&mut self) -> Result<(), SurfaceError> {
-        let Some(surface) = self.ctx.window_surface.as_mut() else {
-            return Ok(()); // headless mode, nothing to present
-        };
-        let mut buffer = surface
-            .surface
-            .buffer_mut()
-            .map_err(SurfaceError::Surface)?;
-        let pixels = self.ctx.pixel_buf.as_ref();
-        if pixels.len() == buffer.len() {
-            buffer.copy_from_slice(pixels);
-        } else {
-            buffer.fill(0);
+        match self.ctx.window_surface.as_mut() {
+            Some(surface) => surface.present(self.ctx.pixel_buf.as_ref()),
+            None => Ok(()), // headless mode, nothing to present
         }
-        buffer.present().map_err(SurfaceError::Surface)
     }
 }
 
