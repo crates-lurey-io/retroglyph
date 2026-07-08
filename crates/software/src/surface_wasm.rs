@@ -24,10 +24,17 @@ pub(crate) struct WindowSurface {
     ctx: web_sys::CanvasRenderingContext2d,
     canvas: web_sys::HtmlCanvasElement,
     /// Persistent RGBA8 buffer, length `width * height * 4`. Reused across
-    /// frames; only [`resize`](Self::resize) reallocates it.
+    /// frames; only reallocated when a [`resize`](Self::resize) is actually
+    /// applied (see `pending_size`).
     rgba: Vec<u8>,
+    /// Size last actually applied to the DOM canvas (i.e. what `rgba` and the
+    /// canvas's own `width`/`height` attributes currently reflect).
     width: u32,
     height: u32,
+    /// A [`resize`](Self::resize) that hasn't been applied to the DOM canvas
+    /// yet -- see `resize`'s doc comment for why applying it there
+    /// immediately caused visible flicker.
+    pending_size: Option<(u32, u32)>,
 }
 
 /// Error locating or using the backing `<canvas>` element.
@@ -91,14 +98,38 @@ impl WindowSurface {
             rgba: Vec::new(),
             width: 0,
             height: 0,
+            pending_size: None,
         })
     }
 
-    /// Sets the canvas backing size (which clears its bitmap, matching
-    /// softbuffer's own resize behavior) and resizes the persistent RGBA
-    /// buffer. Reallocating here, not in [`present`](Self::present), keeps
-    /// steady-state frames allocation-free.
+    /// Records a new canvas backing size to be applied on the next
+    /// [`present`](Self::present), rather than applying it here immediately.
+    ///
+    /// Setting the DOM `width`/`height` attributes on a `<canvas>` clears its
+    /// pixels there and then, synchronously -- per spec, even when the value
+    /// doesn't actually change. `on_resized` (in `retroglyph-window`) calls
+    /// this on essentially every browser resize/reflow tick during a live
+    /// window drag, which fires far more often than we repaint. Applying the
+    /// resize (and the clear that comes with it) right here left the canvas
+    /// visibly blank until the next `present()` -- often a whole
+    /// `requestAnimationFrame` tick later -- flickering throughout the drag.
+    /// Deferring the clear into `present()`, where the freshly cleared canvas
+    /// is immediately repainted in the same call, means the blank state is
+    /// never actually given a chance to be shown on screen. No-op if `width`
+    /// and `height` already match the currently applied size, so redundant
+    /// resize calls (browsers fire plenty of those too) don't even queue a
+    /// pointless clear.
     pub(crate) fn resize(&mut self, width: u32, height: u32) {
+        if (width, height) != (self.width, self.height) {
+            self.pending_size = Some((width, height));
+        }
+    }
+
+    /// Applies a pending resize recorded by [`resize`](Self::resize): sets the
+    /// canvas's DOM size (clearing it) and reallocates `rgba` to match. Called
+    /// from [`present`](Self::present) immediately before repainting, so the
+    /// clear is never left visible on its own.
+    fn apply_pending_resize(&mut self, width: u32, height: u32) {
         self.canvas.set_width(width);
         self.canvas.set_height(height);
         self.width = width;
@@ -132,6 +163,26 @@ impl WindowSurface {
         pixels: &[u32],
         damage: (u32, u32),
     ) -> Result<(), SurfaceError> {
+        // If the caller's pixel buffer hasn't caught up to a pending resize
+        // yet (grid resize still in flight), leave it queued and keep
+        // presenting at the old, still-valid size (`damage` unchanged) below.
+        let damage = if let Some((width, height)) = self.pending_size
+            && pixels.len() == width as usize * height as usize
+        {
+            // `pixels` already matches the pending size, so the caller's
+            // side of the resize (grid/backing-buffer) has caught up. Apply
+            // the DOM resize -- and the clear it causes -- right now, and
+            // repaint the *entire* canvas below in this same call, ignoring
+            // whatever damage band was computed against the old size: the
+            // clear never gets a chance to be the only thing painted for a
+            // frame.
+            self.apply_pending_resize(width, height);
+            self.pending_size = None;
+            (0, height)
+        } else {
+            damage
+        };
+
         if self.width == 0 || self.height == 0 {
             return Ok(()); // not yet sized
         }
