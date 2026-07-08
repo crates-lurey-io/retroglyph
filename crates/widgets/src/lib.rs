@@ -44,8 +44,8 @@ pub mod widget;
 
 pub use block::{blit_into, join_h, join_v};
 pub use draw::{
-    draw_box, fill_rect, gauge, log, meter_ramp, modal, panel, print_line, progress_bar, sparkline,
-    stat_bar, table,
+    draw_box, fill_rect, gauge, log, meter_ramp, modal, offset_for_pos, panel, print_line,
+    progress_bar, scrollbar, sparkline, stat_bar, table, thumb_geometry,
 };
 pub use interact::{
     DEFAULT_DRAG_THRESHOLD, FocusRing, HitTester, Interaction, Pointer, Response, Sense,
