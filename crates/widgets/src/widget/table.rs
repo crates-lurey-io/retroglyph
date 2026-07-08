@@ -1,16 +1,27 @@
-//! [`Table`], the [`StatefulWidget`] form of [`crate::draw::table`].
-use retroglyph_core::{Backend, Rect, Terminal};
+//! [`Table`]: a fixed-column, scrollable table with a highlighted row.
+use retroglyph_core::{Backend, Color, Rect, Style, Terminal};
 
 use super::StatefulWidget;
 use crate::ListState;
+use crate::draw::fill_rect;
+use crate::text::truncate as truncate_to_cols;
 
 /// A fixed-column, scrollable table with a [`ListState`]-driven highlighted
-/// row — the [`StatefulWidget`] form of [`crate::draw::table`].
+/// row.
 ///
-/// Call [`state.ensure_visible(area.height())`](ListState::ensure_visible)
-/// before rendering (with the table's actual row count, header row
-/// excluded) to keep the selection scrolled into view; see
-/// [`crate::draw::table`] for the exact windowing contract.
+/// `headers` render on the first row of the area it's rendered into;
+/// `rows` follow, one per line, clipped to that area. `widths` gives each
+/// column's cell width; columns are space-separated and truncated to fit.
+///
+/// `state.offset()` is the index of the first row drawn below the header --
+/// rendering draws whatever window `offset` names and does not clamp or
+/// auto-scroll it, matching [`ListState`]'s existing "only the caller knows
+/// the viewport height" design. Call
+/// [`state.ensure_visible(visible_row_count)`](ListState::ensure_visible)
+/// before rendering to keep `state.selected()` on-screen. If `selected()` is
+/// `Some` and its row falls within the visible window, that row is drawn
+/// with an inverted highlight background; if it has scrolled out of view,
+/// no row is highlighted.
 #[derive(Clone, Copy, Debug)]
 pub struct Table<'a> {
     headers: &'a [&'a str],
@@ -34,8 +45,104 @@ impl<B: Backend> StatefulWidget<B> for Table<'_> {
     type State = ListState;
 
     fn render(self, area: Rect, term: &mut Terminal<B>, state: &mut Self::State) {
-        crate::draw::table(term, area, self.headers, self.widths, self.rows, state);
+        if area.width() == 0 || area.height() == 0 {
+            return;
+        }
+        let header_style = Style::new()
+            .fg(Color::Rgb {
+                r: 210,
+                g: 210,
+                b: 230,
+            })
+            .bold();
+        draw_row(
+            term,
+            area,
+            area.top(),
+            self.headers,
+            self.widths,
+            header_style,
+            None,
+        );
+
+        let sel_bg = Color::Rgb {
+            r: 40,
+            g: 60,
+            b: 90,
+        };
+        let base_fg = Color::Rgb {
+            r: 170,
+            g: 175,
+            b: 190,
+        };
+        let visible_rows = area.height_usize().saturating_sub(1);
+        let selected = state.selected();
+        for (row_index, row) in visible_window(self.rows, state.offset(), visible_rows) {
+            let y = area.top() + 1 + (row_index - state.offset()) as u16;
+            let (style, bg) = if Some(row_index) == selected {
+                (
+                    Style::new().fg(Color::BRIGHT_WHITE).bg(sel_bg),
+                    Some(sel_bg),
+                )
+            } else {
+                (Style::new().fg(base_fg), None)
+            };
+            let cells: Vec<&str> = row.iter().map(String::as_str).collect();
+            draw_row(term, area, y, &cells, self.widths, style, bg);
+        }
+        term.reset_style();
     }
+}
+
+/// The `(original_index, item)` pairs of `items` visible in a `visible_len`-
+/// item window starting at `offset` -- shared windowing math for any
+/// scrollable, offset-driven listing (currently [`Table`]; a future `Log`
+/// window direction reuses the same idea, see [`super::Log`]'s own doc
+/// comment for why it isn't literally this same function). Out-of-range
+/// `offset` simply yields nothing, the same "no upper clamp, caller's
+/// responsibility" contract as [`ListState::scroll_by`].
+fn visible_window<T>(
+    items: &[T],
+    offset: usize,
+    visible_len: usize,
+) -> impl Iterator<Item = (usize, &T)> {
+    items.iter().enumerate().skip(offset).take(visible_len)
+}
+
+/// Draw one table row of space-separated, per-column-clipped cells at row `y`.
+/// When `bg` is set, the whole row width is filled with that background first.
+fn draw_row<B: Backend>(
+    term: &mut Terminal<B>,
+    area: Rect,
+    y: u16,
+    cells: &[&str],
+    widths: &[u16],
+    style: Style,
+    bg: Option<Color>,
+) {
+    if let Some(bg) = bg {
+        fill_rect(
+            term,
+            Rect::new(area.left(), y, area.width(), 1),
+            ' ',
+            Style::new().bg(bg),
+        );
+    }
+    let mut x = area.left();
+    for (cell, &w) in cells.iter().zip(widths) {
+        if x >= area.right() {
+            break;
+        }
+        let avail = (area.right() - x).min(w) as usize;
+        let text = truncate_to_cols(cell, avail);
+        term.reset_style()
+            .fg(style.foreground())
+            .bg(style.background())
+            .modifier(style.modifiers());
+        term.print(x, y, &text);
+        x = x.saturating_add(w + 1); // one-column gap between columns
+    }
+    term.reset_style();
 }
 
 #[cfg(test)]

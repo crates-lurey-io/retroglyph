@@ -1,29 +1,53 @@
-//! Optional `Widget`/`StatefulWidget` traits over the free-function drawing
-//! helpers in [`draw`](crate::draw).
+//! `Widget`/`StatefulWidget` structs: one file per widget, each a builder
+//! that owns its own drawing logic.
 //!
-//! Nothing in this crate requires implementing these traits: every existing
-//! helper (`panel`, `gauge`, `table`, ...) works exactly as before without
-//! them. They exist for callers who want to box/store heterogeneous widgets
-//! (e.g. a `Vec<Box<dyn Widget<B>>>` of panes to render each frame) instead
-//! of calling free functions directly. Most concrete widgets below (one file
-//! per widget) are thin adapters that call straight through to their
-//! corresponding [`crate::draw`] function and add no drawing logic of their
-//! own -- [`Panel`] and [`Table`] are both like this. `Paragraph` (behind the
-//! `egc` feature) is the exception: there is no `draw::paragraph` free
-//! function, because it needs `retroglyph_core::layout::TextLayout`'s
-//! grapheme-aware word-wrap in order to also implement [`Measure`], which
-//! free functions have no way to model.
+//! `new()` takes only the arguments a widget cannot mean anything without
+//! (the content: a value, a label, a slice of samples/rows). Every other
+//! knob -- styles, offsets, titles -- has a default and is set through a
+//! chainable `#[must_use] fn field(mut self, ...) -> Self` method, the same
+//! shape as [`Panel::title`] or [`Log::offset`]. See `crates/widgets/AGENTS.md`
+//! for the rule this is enforcing and why.
+//!
+//! A few widgets share logic: [`Gauge`] and [`StatBar`] both delegate to a
+//! crate-private `bar` module, and [`Sparkline`]/[`Gauge`]/[`StatBar`] all
+//! use [`Meter`] for their ratio-to-color ramp. [`Paragraph`] (behind the
+//! `egc` feature) additionally implements [`Measure`], since it needs
+//! `retroglyph_core::layout::TextLayout`'s grapheme-aware word-wrap to
+//! report a height before rendering.
 use retroglyph_core::{Backend, Rect, Terminal};
 
+mod bar;
+mod box_border;
+mod gauge;
+mod log;
+mod meter;
+mod modal;
 mod panel;
 #[cfg(feature = "egc")]
 mod paragraph;
+mod print_line;
+mod progress_bar;
+mod scrollbar;
+mod sparkline;
+mod stat_bar;
 mod table;
+mod text;
 
+pub use box_border::BoxBorder;
+pub use gauge::Gauge;
+pub use log::Log;
+pub use meter::Meter;
+pub use modal::Modal;
 pub use panel::Panel;
 #[cfg(feature = "egc")]
 pub use paragraph::Paragraph;
+pub use print_line::PrintLine;
+pub use progress_bar::ProgressBar;
+pub use scrollbar::Scrollbar;
+pub use sparkline::Sparkline;
+pub use stat_bar::StatBar;
 pub use table::Table;
+pub use text::Text;
 
 /// A type that draws itself into a terminal area, without retaining any
 /// state — the minimal shape shared by every widget-like consumer.

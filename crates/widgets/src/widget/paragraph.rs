@@ -14,10 +14,11 @@ use super::{Measure, Widget};
 
 /// Word-wrapped text in a single [`Style`].
 ///
-/// `Paragraph::new(text, style)` wraps `text` to whatever width it is
-/// rendered at (via [`Widget::render`]), or reports the height it would
-/// need at a given width without rendering (via [`Measure::height_for`]) so
-/// a caller can size its pane to fit instead of guessing a fixed height.
+/// `Paragraph::new(text)` wraps `text` to whatever width it is rendered at
+/// (via [`Widget::render`]), or reports the height it would need at a
+/// given width without rendering (via [`Measure::height_for`]) so a caller
+/// can size its pane to fit instead of guessing a fixed height. `style`
+/// defaults to [`Style::new()`]; set it with [`Paragraph::style`].
 #[derive(Clone, Copy, Debug)]
 pub struct Paragraph<'a> {
     text: &'a str,
@@ -25,10 +26,20 @@ pub struct Paragraph<'a> {
 }
 
 impl<'a> Paragraph<'a> {
-    /// Text to be word-wrapped, drawn in `style`.
+    /// Text to be word-wrapped, in the default style.
     #[must_use]
-    pub const fn new(text: &'a str, style: Style) -> Self {
-        Self { text, style }
+    pub fn new(text: &'a str) -> Self {
+        Self {
+            text,
+            style: Style::new(),
+        }
+    }
+
+    /// Set the text's style.
+    #[must_use]
+    pub const fn style(mut self, style: Style) -> Self {
+        self.style = style;
+        self
     }
 
     fn line(&self) -> Line {
@@ -61,7 +72,7 @@ mod tests {
 
     #[test]
     fn height_for_matches_wrapped_line_count() {
-        let p = Paragraph::new("the quick brown fox jumps", Style::new());
+        let p = Paragraph::new("the quick brown fox jumps");
         assert_eq!(p.height_for(10), 3); // "the quick" / "brown fox" / "jumps"
         assert_eq!(p.height_for(100), 1);
     }
@@ -70,7 +81,7 @@ mod tests {
     fn height_for_respects_hard_newlines() {
         // A naive whitespace-based wrap would flatten this to one paragraph;
         // TextLayout treats "\n" as a hard break regardless of width.
-        let p = Paragraph::new("first\nsecond\nthird", Style::new());
+        let p = Paragraph::new("first\nsecond\nthird");
         assert_eq!(p.height_for(100), 3);
     }
 
@@ -78,7 +89,7 @@ mod tests {
     fn render_draws_one_line_per_wrapped_row() {
         let area = Rect::new(0, 0, 10, 5);
         let mut term = Terminal::new(Headless::new(10, 5));
-        Paragraph::new("the quick brown fox jumps", Style::new()).render(area, &mut term);
+        Paragraph::new("the quick brown fox jumps").render(area, &mut term);
 
         let row0: String = (0..10).map(|x| term.grid().get(x, 0).glyph()).collect();
         let row1: String = (0..10).map(|x| term.grid().get(x, 1).glyph()).collect();
@@ -93,7 +104,7 @@ mod tests {
         // Only 1 row of height: only the first wrapped line should draw.
         let area = Rect::new(0, 0, 10, 1);
         let mut term = Terminal::new(Headless::new(10, 2));
-        Paragraph::new("the quick brown fox jumps", Style::new()).render(area, &mut term);
+        Paragraph::new("the quick brown fox jumps").render(area, &mut term);
 
         let row1: String = (0..10).map(|x| term.grid().get(x, 1).glyph()).collect();
         assert_eq!(row1.trim(), "");

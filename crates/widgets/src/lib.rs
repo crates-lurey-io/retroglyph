@@ -5,14 +5,18 @@
 //! ratatui-style `Fixed`/`Percent`/`Fill`/`Min`/`Max` constraints and `Flex`
 //! alignment ([`layout`]).
 //!
-//! Every widget is primarily a free function that draws directly to a
-//! [`Terminal`](retroglyph_core::Terminal) and retains no state. Four
-//! optional layers build on top of that free-function core, each usable
-//! independently:
+//! Every widget ([`widget`]) is a builder struct that draws itself into a
+//! [`Terminal`](retroglyph_core::Terminal) via [`Widget`]/[`StatefulWidget`]
+//! and retains no state of its own -- state that outlives one render call
+//! (a selection index, a scroll offset) lives in [`ListState`] instead. A
+//! handful of things that are genuinely just functions ([`fill_rect`],
+//! [`thumb_geometry`]/[`offset_for_pos`]) stay free functions in [`draw`]
+//! rather than pretending to be widgets. Three more independent layers
+//! build on top:
 //!
-//! - [`Widget`]/[`StatefulWidget`] ([`widget`]) for callers who want to box
-//!   or store heterogeneous widgets, backed by [`ListState`] for selection
-//!   and scroll position.
+//! - [`Widget`]/[`StatefulWidget`] ([`widget`]) let callers box or store
+//!   heterogeneous widgets, e.g. a `Vec<Box<dyn Widget<B>>>` of panes to
+//!   render each frame.
 //! - [`Interaction`] ([`interact`]) for hover/click/drag/focus tracking
 //!   without a retained widget tree -- the sibling of [`ListState`] for
 //!   widgets that don't have a natural selection index of their own.
@@ -24,9 +28,8 @@
 //!   [`Theme::DARK`]/[`Theme::LIGHT`], or builds its own), independent of
 //!   how the app decides which one is active.
 //!
-//! None of this is a replacement for calling the free functions directly;
-//! this crate is itself optional, since games that draw manually depend
-//! only on `retroglyph-core`.
+//! This crate is itself optional: games that draw manually depend only on
+//! `retroglyph-core`.
 
 #![allow(
     clippy::cast_possible_truncation,
@@ -47,10 +50,7 @@ pub mod theme;
 pub mod widget;
 
 pub use block::{blit_into, join_h, join_v};
-pub use draw::{
-    draw_box, fill_rect, gauge, log, meter_ramp, modal, offset_for_pos, panel, print_line,
-    progress_bar, scrollbar, sparkline, stat_bar, table, thumb_geometry,
-};
+pub use draw::{fill_rect, offset_for_pos, thumb_geometry};
 pub use interact::{
     DEFAULT_DRAG_THRESHOLD, Density, FocusRing, HitTester, Interaction, Pointer, Response, Sense,
     Shortcuts,
@@ -62,4 +62,7 @@ pub use text::truncate;
 pub use theme::Theme;
 #[cfg(feature = "egc")]
 pub use widget::Paragraph;
-pub use widget::{Measure, Panel, StatefulWidget, Table, Widget};
+pub use widget::{
+    BoxBorder, Gauge, Log, Measure, Meter, Modal, Panel, PrintLine, ProgressBar, Scrollbar,
+    Sparkline, StatBar, StatefulWidget, Table, Text, Widget,
+};
