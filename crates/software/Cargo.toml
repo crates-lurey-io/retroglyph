@@ -21,10 +21,29 @@ retroglyph-core = { path = "../core", version = "0.1.0-alpha", default-features 
 retroglyph-window = { path = "../window", version = "0.1.0-alpha", default-features = false }
 ixy = "0.6.0-alpha.9"
 grixy = { version = "0.6.0-alpha.8", features = ["alloc", "buffer"] }
-softbuffer = "0.4"
 log = "0.4"
 image = { version = "0.25", optional = true, default-features = false, features = ["png"] }
 alpha-blend = { version = "0.2", optional = true, default-features = false, features = ["std"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+softbuffer = "0.4"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+# On wasm32, present() bypasses softbuffer's web backend (which reallocates
+# a fresh RGBA Vec every frame) in favor of a persistent RGBA buffer reused
+# across frames; see present()'s wasm32 branch. Version pinned to match the
+# wasm-bindgen dependency elsewhere in the workspace (crates/window,
+# crates/terminal-wasm, crates/examples) -- the CLI and the crate version
+# must agree.
+wasm-bindgen = "=0.2.106"
+web-sys = { version = "0.3", features = [
+  "Window",
+  "Document",
+  "Element",
+  "HtmlCanvasElement",
+  "CanvasRenderingContext2d",
+  "ImageData",
+] }
 
 [features]
 # The `software-` prefix from the pre-split monolith is redundant now that
