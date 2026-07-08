@@ -6,6 +6,13 @@ resolver = "2"
 wasm-server-runner = { version = "1.0.1" }
 hk = { version = "1.48.0" }
 cargo-criterion = { version = "1.1.0" }
+# Version pinned to match the `wasm-bindgen` dependency in
+# crates/examples/Cargo.toml and crates/terminal-wasm/Cargo.toml, and the
+# `cargo install wasm-bindgen-cli` step in .github/workflows/docs.yml — all
+# three must move in lockstep. Used by `examples/runner.rs`'s WASM launch
+# path to reproduce the docs site's `wasm-bindgen --target web` pipeline
+# locally (see docs/templates/examples/software-template.html).
+wasm-bindgen-cli = { version = "0.2.106", bins = ["wasm-bindgen"] }
 # cargo-llms-txt is intentionally not managed here: it has no prebuilt
 # binstall/quickinstall binaries, and cargo-run-bin's source-install fallback
 # is broken (https://github.com/dustinblackman/cargo-run-bin/issues/39).

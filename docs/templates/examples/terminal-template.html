@@ -66,10 +66,10 @@
     <div id="screen"></div>
 
     <p class="hint">
-      Tap the terminal to focus it, then use arrow keys, Enter, Backspace, Escape, or printable
-      characters — this demo renders real ANSI/SGR escape codes via
-      <a href="https://xtermjs.org/">xterm.js</a>, the same terminal-family renderer used by the
-      native <code>crossterm</code> backend.
+      Tap, drag, and scroll directly on the terminal (or focus it and use arrow keys, Enter,
+      Backspace, Escape, or printable characters) — this demo renders real ANSI/SGR escape codes
+      via <a href="https://xtermjs.org/">xterm.js</a>, the same terminal-family renderer used by
+      the native <code>crossterm</code> backend.
     </p>
     <a class="back" href="../../">&larr; Back to all examples</a>
 
@@ -80,6 +80,7 @@
         wasm_terminal_example_init,
         wasm_terminal_example_resize,
         wasm_terminal_example_push_key,
+        wasm_terminal_example_push_mouse,
         wasm_terminal_example_tick,
       } from './__EXAMPLE__.js';
 
@@ -157,6 +158,98 @@
         }
       }
 
+      // ── Pointer input (tap, drag, scroll) ──────────────────────────────
+      //
+      // Maps pointer pixels to xterm.js cell coordinates and forwards them
+      // via wasm_terminal_example_push_mouse. `kind` mirrors
+      // retroglyph_examples::util::wasm_pointer::decode_mouse:
+      // 0 down, 1 up, 2 move (drag), 3 scroll up, 4 scroll down.
+      const KIND_DOWN = 0;
+      const KIND_UP = 1;
+      const KIND_MOVE = 2;
+      const KIND_SCROLL_UP = 3;
+      const KIND_SCROLL_DOWN = 4;
+
+      function attachPointerInput(container, term) {
+        // .xterm-screen is the element that exactly bounds the cell grid
+        // (the container has padding/scrollbar slack around it).
+        const gridEl = () => container.querySelector('.xterm-screen') ?? container;
+
+        function cellFromPointer(event) {
+          const rect = gridEl().getBoundingClientRect();
+          if (rect.width <= 0 || rect.height <= 0) return null;
+          const fx = (event.clientX - rect.left) / rect.width;
+          const fy = (event.clientY - rect.top) / rect.height;
+          return {
+            x: Math.min(term.cols - 1, Math.max(0, Math.floor(fx * term.cols))),
+            y: Math.min(term.rows - 1, Math.max(0, Math.floor(fy * term.rows))),
+          };
+        }
+
+        // Track a single pointer (first finger / left button) so a stray
+        // second finger can't teleport an in-progress drag. Capture phase:
+        // xterm.js installs its own handlers on inner elements for text
+        // selection, and games want the raw tap/drag regardless.
+        let activePointer = null;
+        let lastCell = null;
+
+        container.addEventListener(
+          'pointerdown',
+          (event) => {
+            if (activePointer !== null) return;
+            // No preventDefault: xterm still needs the event for tap-to-focus
+            // (which brings up the keyboard-capable focus state on mobile).
+            activePointer = event.pointerId;
+            container.setPointerCapture(event.pointerId);
+            const cell = cellFromPointer(event);
+            if (!cell) return;
+            lastCell = cell;
+            wasm_terminal_example_push_mouse(cell.x, cell.y, KIND_DOWN);
+          },
+          { capture: true },
+        );
+
+        container.addEventListener(
+          'pointermove',
+          (event) => {
+            if (event.pointerId !== activePointer) return;
+            const cell = cellFromPointer(event);
+            // Dedupe: only forward drag moves that cross a cell edge.
+            if (!cell || (lastCell && cell.x === lastCell.x && cell.y === lastCell.y)) return;
+            lastCell = cell;
+            wasm_terminal_example_push_mouse(cell.x, cell.y, KIND_MOVE);
+          },
+          { capture: true },
+        );
+
+        for (const type of ['pointerup', 'pointercancel']) {
+          container.addEventListener(
+            type,
+            (event) => {
+              if (event.pointerId !== activePointer) return;
+              activePointer = null;
+              const cell = cellFromPointer(event) ?? lastCell;
+              lastCell = null;
+              if (!cell) return;
+              wasm_terminal_example_push_mouse(cell.x, cell.y, KIND_UP);
+            },
+            { capture: true },
+          );
+        }
+
+        container.addEventListener(
+          'wheel',
+          (event) => {
+            event.preventDefault();
+            const cell = cellFromPointer(event);
+            if (!cell) return;
+            const kind = event.deltaY < 0 ? KIND_SCROLL_UP : KIND_SCROLL_DOWN;
+            wasm_terminal_example_push_mouse(cell.x, cell.y, kind);
+          },
+          { passive: false, capture: true },
+        );
+      }
+
       async function main() {
         await init();
 
@@ -171,12 +264,14 @@
         });
         const fitAddon = new FitAddon.FitAddon();
         term.loadAddon(fitAddon);
-        term.open(document.getElementById('screen'));
+        const screenEl = document.getElementById('screen');
+        term.open(screenEl);
         fitAddon.fit();
 
         wasm_terminal_example_init(term.cols, term.rows);
 
         term.onData(handleTerminalData);
+        attachPointerInput(screenEl, term);
 
         let resizeTimer = null;
         window.addEventListener('resize', () => {

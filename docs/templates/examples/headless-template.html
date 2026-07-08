@@ -52,6 +52,14 @@
         -webkit-user-select: none;
         user-select: none;
       }
+      /* The grid text itself. Kept as a separate inline-block element so
+         pointer events can be mapped to cell coordinates by measuring the
+         *text's* bounding box, not the padded #screen box (the clamped font
+         size means the 50x25 text block usually doesn't fill #screen). */
+      #grid {
+        display: inline-block;
+        font: inherit;
+      }
       #toolbar {
         display: grid;
         grid-template-columns: repeat(3, minmax(3rem, 4rem));
@@ -110,7 +118,7 @@
     </style>
   </head>
   <body>
-    <pre id="screen">loading…</pre>
+    <pre id="screen"><code id="grid">loading…</code></pre>
 
     <div id="toolbar">
       <button class="up" data-key="up" aria-label="Up">&uarr;</button>
@@ -121,8 +129,9 @@
     </div>
 
     <p class="hint">
-      Arrow keys (or WASD) also work with a physical keyboard. This demo renders as plain text —
-      no canvas, no WebGL — via the same <code>Headless</code> backend used in tests.
+      Tap, drag, and scroll directly on the screen; arrow keys (or WASD) also work with a
+      physical keyboard. This demo renders as plain text — no canvas, no WebGL — via the same
+      <code>Headless</code> backend used in tests.
     </p>
     <a class="back" href="../../">&larr; Back to all examples</a>
 
@@ -130,6 +139,7 @@
       import init, {
         wasm_headless_init,
         wasm_headless_push_key,
+        wasm_headless_push_mouse,
         wasm_headless_tick,
       } from './__EXAMPLE__.js';
 
@@ -150,10 +160,84 @@
       const MOD_ALT = 0b100;
 
       const screen = document.getElementById('screen');
+      const grid = document.getElementById('grid');
 
       function pushKey(code, mods = 0) {
         wasm_headless_push_key(code >>> 0, mods & 0xff);
       }
+
+      // ── Pointer input (tap, drag, scroll) ─────────────────────────────
+      //
+      // Maps pointer pixels to the fixed 50x25 cell grid and forwards them
+      // via wasm_headless_push_mouse. `kind` mirrors
+      // retroglyph_examples::util::wasm_pointer::decode_mouse:
+      // 0 down, 1 up, 2 move (drag), 3 scroll up, 4 scroll down.
+      const COLS = 50;
+      const ROWS = 25;
+      const KIND_DOWN = 0;
+      const KIND_UP = 1;
+      const KIND_MOVE = 2;
+      const KIND_SCROLL_UP = 3;
+      const KIND_SCROLL_DOWN = 4;
+
+      function cellFromPointer(event) {
+        const rect = grid.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) return null;
+        const fx = (event.clientX - rect.left) / rect.width;
+        const fy = (event.clientY - rect.top) / rect.height;
+        return {
+          x: Math.min(COLS - 1, Math.max(0, Math.floor(fx * COLS))),
+          y: Math.min(ROWS - 1, Math.max(0, Math.floor(fy * ROWS))),
+        };
+      }
+
+      // Track a single pointer (first finger / left button) so a stray
+      // second finger can't teleport an in-progress drag.
+      let activePointer = null;
+      let lastCell = null;
+
+      screen.addEventListener('pointerdown', (event) => {
+        if (activePointer !== null) return;
+        event.preventDefault();
+        activePointer = event.pointerId;
+        screen.setPointerCapture(event.pointerId);
+        const cell = cellFromPointer(event);
+        if (!cell) return;
+        lastCell = cell;
+        wasm_headless_push_mouse(cell.x, cell.y, KIND_DOWN);
+      });
+
+      screen.addEventListener('pointermove', (event) => {
+        if (event.pointerId !== activePointer) return;
+        const cell = cellFromPointer(event);
+        // Dedupe: only forward drag moves that actually cross a cell edge.
+        if (!cell || (lastCell && cell.x === lastCell.x && cell.y === lastCell.y)) return;
+        lastCell = cell;
+        wasm_headless_push_mouse(cell.x, cell.y, KIND_MOVE);
+      });
+
+      for (const type of ['pointerup', 'pointercancel']) {
+        screen.addEventListener(type, (event) => {
+          if (event.pointerId !== activePointer) return;
+          activePointer = null;
+          const cell = cellFromPointer(event) ?? lastCell;
+          lastCell = null;
+          if (!cell) return;
+          wasm_headless_push_mouse(cell.x, cell.y, KIND_UP);
+        });
+      }
+
+      screen.addEventListener(
+        'wheel',
+        (event) => {
+          event.preventDefault();
+          const cell = cellFromPointer(event);
+          if (!cell) return;
+          const kind = event.deltaY < 0 ? KIND_SCROLL_UP : KIND_SCROLL_DOWN;
+          wasm_headless_push_mouse(cell.x, cell.y, kind);
+        },
+        { passive: false },
+      );
 
       function pushButtonKey(name) {
         switch (name) {
@@ -226,7 +310,7 @@
         wasm_headless_init();
 
         function frame() {
-          screen.textContent = wasm_headless_tick();
+          grid.textContent = wasm_headless_tick();
           requestAnimationFrame(frame);
         }
         requestAnimationFrame(frame);

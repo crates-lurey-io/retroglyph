@@ -105,6 +105,7 @@ where
         },
         current_modifiers: KeyModifiers::NONE,
         cursor_px: (0.0, 0.0),
+        active_touch: None,
         #[cfg(not(target_arch = "wasm32"))]
         frame_interval,
         #[cfg(not(target_arch = "wasm32"))]
@@ -191,6 +192,15 @@ struct WindowApp<P: Presenter, F> {
     current_modifiers: KeyModifiers,
     /// Last known cursor position in physical pixels.
     cursor_px: (f64, f64),
+    /// The finger currently treated as the pointer, if any.
+    ///
+    /// Touch input (mobile browsers, touchscreens) arrives as
+    /// [`WindowEvent::Touch`], not as `CursorMoved`/`MouseInput`. The first
+    /// finger down is adopted as "the pointer" and synthesized into the same
+    /// left-button mouse events games already handle; other fingers are
+    /// ignored until it lifts, so a stray second finger can't teleport the
+    /// cursor mid-drag.
+    active_touch: Option<u64>,
     /// Optional frame interval for `WaitUntil` throttling. `None` = unbounded.
     #[cfg(not(target_arch = "wasm32"))]
     frame_interval: Option<Duration>,
@@ -204,12 +214,24 @@ impl<P: Presenter, F> WindowApp<P, F> {
     ///
     /// Returns `Some(window)` on success, logs and returns `None` on failure.
     fn create_window_and_surface(&mut self, event_loop: &ActiveEventLoop) -> Option<Arc<Window>> {
+        // On native, size the window to fit the grid (`WindowConfig::fit`)
+        // and let the OS window manager own further resizing. On wasm
+        // there's no OS window to fit into -- the canvas *is* the page --
+        // so size it to the browser viewport instead, for a full-screen,
+        // mobile-web-app feel. winit sets an inline `width`/`height` style
+        // on the canvas matching whatever size we request here; it does not
+        // derive that size from page CSS, so this has to happen in Rust.
+        #[cfg(not(target_arch = "wasm32"))]
+        let physical_size =
+            winit::dpi::PhysicalSize::new(self.init_size.width, self.init_size.height);
+        #[cfg(target_arch = "wasm32")]
+        let physical_size = web_viewport_physical_size().unwrap_or_else(|| {
+            winit::dpi::PhysicalSize::new(self.init_size.width, self.init_size.height)
+        });
+
         let attrs = Window::default_attributes()
             .with_title(&self.title)
-            .with_inner_size(winit::dpi::PhysicalSize::new(
-                self.init_size.width,
-                self.init_size.height,
-            ));
+            .with_inner_size(physical_size);
 
         #[cfg(target_family = "wasm")]
         let attrs = {
@@ -238,10 +260,62 @@ impl<P: Presenter, F> WindowApp<P, F> {
             // Set the initial surface size (required on WASM before first present).
             term.backend_mut()
                 .presenter_mut()
-                .resize_surface(self.init_size.width, self.init_size.height);
+                .resize_surface(physical_size.width, physical_size.height);
         }
 
+        // Keep the canvas matching the browser viewport as it changes
+        // (device rotation, browser window resize, address-bar
+        // show/hide): winit only reacts to size changes we ask for
+        // ourselves (`request_inner_size`), so a `resize` listener is
+        // required to make this genuinely responsive rather than a
+        // one-shot fit at startup.
+        #[cfg(target_arch = "wasm32")]
+        install_viewport_resize_listener(&window);
+
         Some(window)
+    }
+}
+
+/// The browser viewport size in physical (device) pixels, or `None` if
+/// running outside a browser `window` context.
+#[cfg(target_arch = "wasm32")]
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+fn web_viewport_physical_size() -> Option<winit::dpi::PhysicalSize<u32>> {
+    let window = web_sys::window()?;
+    let width = window.inner_width().ok()?.as_f64()?;
+    let height = window.inner_height().ok()?.as_f64()?;
+    let dpr = window.device_pixel_ratio();
+    Some(winit::dpi::PhysicalSize::new(
+        (width * dpr).round() as u32,
+        (height * dpr).round() as u32,
+    ))
+}
+
+/// Re-requests the window's inner size to match the browser viewport on
+/// every `resize` event, so the canvas keeps filling the screen instead of
+/// staying pinned to its size at first paint.
+#[cfg(target_arch = "wasm32")]
+fn install_viewport_resize_listener(window: &Arc<Window>) {
+    use wasm_bindgen::JsCast;
+    use wasm_bindgen::prelude::Closure;
+
+    let Some(web_window) = web_sys::window() else {
+        return;
+    };
+    let window = window.clone();
+    let closure = Closure::<dyn FnMut()>::new(move || {
+        if let Some(size) = web_viewport_physical_size() {
+            let _ = window.request_inner_size(size);
+        }
+    });
+    if web_window
+        .add_event_listener_with_callback("resize", closure.as_ref().unchecked_ref())
+        .is_ok()
+    {
+        // Leaked deliberately: the listener, and the closure it wraps, need
+        // to live as long as the page does -- there's no window-teardown
+        // hook on wasm to drop it from.
+        closure.forget();
     }
 }
 
@@ -312,6 +386,7 @@ where
             WindowEvent::CursorMoved { position, .. } => self.on_cursor_moved(position),
             WindowEvent::MouseInput { state, button, .. } => self.on_mouse_input(state, button),
             WindowEvent::MouseWheel { delta, .. } => self.on_mouse_wheel(delta),
+            WindowEvent::Touch(touch) => self.on_touch(touch),
             WindowEvent::ModifiersChanged(mods) => {
                 self.current_modifiers = translate_modifiers(mods.state());
             }
@@ -419,6 +494,48 @@ where
         }));
     }
 
+    /// Synthesize mouse events from a touch so tap/drag work out of the box.
+    ///
+    /// Mobile browsers (and native touchscreens) deliver touch input as
+    /// [`WindowEvent::Touch`], which has no `CursorMoved`/`MouseInput`
+    /// counterpart. Games shouldn't need a second input path for it, so the
+    /// first finger down becomes the pointer: its start is a `Moved` +
+    /// left-button `Down`, its motion is `Moved` (a drag), and its lift is
+    /// `Up`. Additional simultaneous fingers are ignored.
+    fn on_touch(&mut self, touch: winit::event::Touch) {
+        use winit::event::TouchPhase;
+
+        match touch.phase {
+            TouchPhase::Started => {
+                if self.active_touch.is_some() {
+                    return; // a second finger; keep tracking the first
+                }
+                self.active_touch = Some(touch.id);
+                self.on_cursor_moved(touch.location);
+                self.on_mouse_input(
+                    winit::event::ElementState::Pressed,
+                    winit::event::MouseButton::Left,
+                );
+            }
+            TouchPhase::Moved => {
+                if self.active_touch == Some(touch.id) {
+                    self.on_cursor_moved(touch.location);
+                }
+            }
+            TouchPhase::Ended | TouchPhase::Cancelled => {
+                if self.active_touch != Some(touch.id) {
+                    return;
+                }
+                self.active_touch = None;
+                self.on_cursor_moved(touch.location);
+                self.on_mouse_input(
+                    winit::event::ElementState::Released,
+                    winit::event::MouseButton::Left,
+                );
+            }
+        }
+    }
+
     /// Convert the cached cursor pixel position to [`PhysicalPos`].
     const fn cursor_physical_pos(&self) -> PhysicalPos {
         physical_pos_from(self.cursor_px.0, self.cursor_px.1)
@@ -507,6 +624,7 @@ mod tests {
             },
             current_modifiers: KeyModifiers::NONE,
             cursor_px: (0.0, 0.0),
+            active_touch: None,
             #[cfg(not(target_arch = "wasm32"))]
             frame_interval: None,
             #[cfg(not(target_arch = "wasm32"))]
@@ -634,6 +752,115 @@ mod tests {
             button: winit::event::MouseButton::Other(99),
         });
         assert_eq!(poll(&mut app), None);
+    }
+
+    fn touch(id: u64, phase: winit::event::TouchPhase, x: f64, y: f64) -> WindowEvent {
+        WindowEvent::Touch(winit::event::Touch {
+            device_id: winit::event::DeviceId::dummy(),
+            phase,
+            location: winit::dpi::PhysicalPosition::new(x, y),
+            force: None,
+            id,
+        })
+    }
+
+    #[test]
+    fn touch_tap_synthesizes_left_click() {
+        use winit::event::TouchPhase;
+        let mut app = test_window_app();
+        // MockPresenter cells are 8x16 px; a tap at (20, 18) lands on cell (2, 1).
+        app.handle_window_event(touch(7, TouchPhase::Started, 20.0, 18.0));
+        // Moved (from the synthesized cursor move) then Down.
+        assert!(matches!(
+            poll(&mut app),
+            Some(Event::Mouse(MouseEvent {
+                kind: MouseEventKind::Moved,
+                position: Pos { x: 2, y: 1 },
+                ..
+            }))
+        ));
+        assert!(matches!(
+            poll(&mut app),
+            Some(Event::Mouse(MouseEvent {
+                kind: MouseEventKind::Down(MouseButton::Left),
+                position: Pos { x: 2, y: 1 },
+                ..
+            }))
+        ));
+
+        app.handle_window_event(touch(7, TouchPhase::Ended, 20.0, 18.0));
+        assert!(matches!(
+            poll(&mut app),
+            Some(Event::Mouse(MouseEvent {
+                kind: MouseEventKind::Moved,
+                ..
+            }))
+        ));
+        assert!(matches!(
+            poll(&mut app),
+            Some(Event::Mouse(MouseEvent {
+                kind: MouseEventKind::Up(MouseButton::Left),
+                position: Pos { x: 2, y: 1 },
+                ..
+            }))
+        ));
+        assert_eq!(poll(&mut app), None);
+    }
+
+    #[test]
+    fn touch_drag_synthesizes_moves_between_down_and_up() {
+        use winit::event::TouchPhase;
+        let mut app = test_window_app();
+        app.handle_window_event(touch(1, TouchPhase::Started, 0.0, 0.0));
+        poll(&mut app); // Moved
+        poll(&mut app); // Down
+
+        app.handle_window_event(touch(1, TouchPhase::Moved, 40.0, 32.0));
+        assert!(matches!(
+            poll(&mut app),
+            Some(Event::Mouse(MouseEvent {
+                kind: MouseEventKind::Moved,
+                position: Pos { x: 5, y: 2 },
+                ..
+            }))
+        ));
+
+        app.handle_window_event(touch(1, TouchPhase::Cancelled, 40.0, 32.0));
+        poll(&mut app); // Moved
+        assert!(matches!(
+            poll(&mut app),
+            Some(Event::Mouse(MouseEvent {
+                kind: MouseEventKind::Up(MouseButton::Left),
+                ..
+            }))
+        ));
+    }
+
+    #[test]
+    fn second_finger_is_ignored_while_first_is_down() {
+        use winit::event::TouchPhase;
+        let mut app = test_window_app();
+        app.handle_window_event(touch(1, TouchPhase::Started, 0.0, 0.0));
+        poll(&mut app); // Moved
+        poll(&mut app); // Down
+
+        // A second finger goes down, moves, and lifts: all ignored.
+        app.handle_window_event(touch(2, TouchPhase::Started, 80.0, 80.0));
+        app.handle_window_event(touch(2, TouchPhase::Moved, 88.0, 80.0));
+        app.handle_window_event(touch(2, TouchPhase::Ended, 88.0, 80.0));
+        assert_eq!(poll(&mut app), None);
+
+        // The first finger still completes its gesture.
+        app.handle_window_event(touch(1, TouchPhase::Ended, 8.0, 0.0));
+        poll(&mut app); // Moved
+        assert!(matches!(
+            poll(&mut app),
+            Some(Event::Mouse(MouseEvent {
+                kind: MouseEventKind::Up(MouseButton::Left),
+                position: Pos { x: 1, y: 0 },
+                ..
+            }))
+        ));
     }
 
     #[test]

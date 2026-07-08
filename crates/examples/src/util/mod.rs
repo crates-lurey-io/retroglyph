@@ -198,6 +198,86 @@ pub mod wasm_headless {
     }
 }
 
+/// Shared FFI pointer-event decoding for the `wasm-headless` and
+/// `wasm-terminal` browser entry points.
+///
+/// Both entry modes drive the game from JS, so pointer input (mouse clicks,
+/// and taps/drags on mobile, which the templates translate from
+/// `pointerdown`/`pointermove`/`pointerup`) has to cross the FFI boundary
+/// the same way key events do. Mirrors the `(code, mods)` philosophy of
+/// `wasm_headless::decode_key`: plain integers in, a rich
+/// [`Event`](retroglyph_core::event::Event) out, `None` for anything
+/// malformed rather than a panic.
+#[cfg(any(feature = "wasm-headless", feature = "wasm-terminal"))]
+pub mod wasm_pointer {
+    use retroglyph_core::event::{Event, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+    use retroglyph_core::grid::Pos;
+
+    /// `kind` value for a press (finger down / left button down).
+    pub const KIND_DOWN: u8 = 0;
+    /// `kind` value for a release (finger up / left button up).
+    pub const KIND_UP: u8 = 1;
+    /// `kind` value for movement while pressed (drag).
+    pub const KIND_MOVE: u8 = 2;
+    /// `kind` value for a scroll-up tick (mouse wheel / two-finger scroll).
+    pub const KIND_SCROLL_UP: u8 = 3;
+    /// `kind` value for a scroll-down tick.
+    pub const KIND_SCROLL_DOWN: u8 = 4;
+
+    /// Decode an FFI-friendly `(x, y, kind)` triple into a mouse [`Event`].
+    ///
+    /// `x`/`y` are cell coordinates (the JS side converts pointer pixels to
+    /// cells, since only it knows the rendered cell size). Everything maps
+    /// to the left button: mobile browsers only have one "button", and the
+    /// examples only use left-click anyway. Returns `None` for an unknown
+    /// `kind` so a newer JS build can't crash an older wasm module.
+    #[must_use]
+    pub const fn decode_mouse(x: u16, y: u16, kind: u8) -> Option<Event> {
+        let kind = match kind {
+            KIND_DOWN => MouseEventKind::Down(MouseButton::Left),
+            KIND_UP => MouseEventKind::Up(MouseButton::Left),
+            KIND_MOVE => MouseEventKind::Moved,
+            KIND_SCROLL_UP => MouseEventKind::ScrollUp,
+            KIND_SCROLL_DOWN => MouseEventKind::ScrollDown,
+            _ => return None,
+        };
+        Some(Event::Mouse(MouseEvent {
+            kind,
+            position: Pos { x, y },
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        }))
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn decodes_down_up_move() {
+            for (kind, expect) in [
+                (KIND_DOWN, MouseEventKind::Down(MouseButton::Left)),
+                (KIND_UP, MouseEventKind::Up(MouseButton::Left)),
+                (KIND_MOVE, MouseEventKind::Moved),
+                (KIND_SCROLL_UP, MouseEventKind::ScrollUp),
+                (KIND_SCROLL_DOWN, MouseEventKind::ScrollDown),
+            ] {
+                let Some(Event::Mouse(m)) = decode_mouse(3, 4, kind) else {
+                    panic!("kind {kind} should decode");
+                };
+                assert_eq!(m.kind, expect);
+                assert_eq!((m.position.x, m.position.y), (3, 4));
+                assert!(m.pixel_position.is_none());
+            }
+        }
+
+        #[test]
+        fn rejects_unknown_kind() {
+            assert!(decode_mouse(0, 0, 200).is_none());
+        }
+    }
+}
+
 /// Adapter turning an `init` + `tick` closure pair into an [`App`].
 ///
 /// `tick` keeps its `(&mut Terminal, &mut State) -> bool` shape (return `false`
@@ -500,6 +580,23 @@ macro_rules! wasm_headless_entry {
             });
         }
 
+        /// Decode and queue a pointer (mouse/touch) event. `x`/`y` are cell
+        /// coordinates and `kind` is the encoding documented on
+        /// `wasm_pointer::decode_mouse` (0 down, 1 up, 2 move, 3/4 scroll).
+        /// Unknown kinds are silently dropped.
+        #[::wasm_bindgen::prelude::wasm_bindgen]
+        #[allow(missing_docs)]
+        pub fn wasm_headless_push_mouse(x: u16, y: u16, kind: u8) {
+            let Some(event) = $crate::util::wasm_pointer::decode_mouse(x, y, kind) else {
+                return;
+            };
+            __WASM_HEADLESS.with(|cell| {
+                if let ::std::option::Option::Some(s) = cell.borrow_mut().as_mut() {
+                    s.term.backend_mut().push_event(event);
+                }
+            });
+        }
+
         /// Run one tick of the game loop and return the rendered frame as a
         /// plain string (space cells shown as `·`), suitable for direct
         /// assignment into a `<pre>`/`<textarea>`'s content.
@@ -642,6 +739,24 @@ macro_rules! wasm_terminal_entry {
             __WASM_TERMINAL.with(|cell| {
                 if let ::std::option::Option::Some(s) = cell.borrow_mut().as_mut() {
                     s.term.backend_mut().push_event(::retroglyph_core::event::Event::Key(event));
+                }
+            });
+        }
+
+        /// Decode and queue a pointer (mouse/touch) event. `x`/`y` are cell
+        /// coordinates (the JS side converts pointer pixels to cells via
+        /// xterm.js's rendered cell size) and `kind` is the encoding
+        /// documented on `wasm_pointer::decode_mouse` (0 down, 1 up, 2 move,
+        /// 3/4 scroll). Unknown kinds are silently dropped.
+        #[::wasm_bindgen::prelude::wasm_bindgen]
+        #[allow(missing_docs)]
+        pub fn wasm_terminal_example_push_mouse(x: u16, y: u16, kind: u8) {
+            let Some(event) = $crate::util::wasm_pointer::decode_mouse(x, y, kind) else {
+                return;
+            };
+            __WASM_TERMINAL.with(|cell| {
+                if let ::std::option::Option::Some(s) = cell.borrow_mut().as_mut() {
+                    s.term.backend_mut().push_event(event);
                 }
             });
         }
