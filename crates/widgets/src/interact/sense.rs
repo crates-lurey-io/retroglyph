@@ -39,6 +39,16 @@ impl Sense {
     /// topmost widget under the pointer -- see [`Interaction::interact`](crate::Interaction::interact)'s
     /// doc comment on `scroll_delta` for why.
     pub const SCROLL: Self = Self(1 << 4);
+    /// Report [`Response::secondary_clicked`](crate::Response::secondary_clicked):
+    /// the secondary (right) button pressed and released on this widget
+    /// while still hovered. Independent of [`CLICK`](Self::CLICK) -- combine
+    /// them (`Sense::click() | Sense::SECONDARY_CLICK`) for a widget that
+    /// wants both a primary action and a secondary one (e.g. a context
+    /// menu). Unlike [`CLICK`](Self::CLICK)/[`DRAG`](Self::DRAG), there's no
+    /// drag-threshold suppression for the secondary button: a
+    /// press-and-release on the same widget always counts, since
+    /// secondary-button drags aren't a gesture this module resolves.
+    pub const SECONDARY_CLICK: Self = Self(1 << 5);
     /// Senses nothing: [`interact`](crate::Interaction::interact) still
     /// registers the id nowhere and returns [`Response::default`](crate::Response).
     pub const NONE: Self = Self(0);
@@ -71,6 +81,15 @@ impl Sense {
         Self(Self::HOVER.0 | Self::SCROLL.0)
     }
 
+    /// A widget with a secondary (right-click) action but no primary click,
+    /// e.g. a context-menu-only trigger. Equivalent to `HOVER | SECONDARY_CLICK`.
+    /// Combine with [`click`](Self::click) (`Sense::click() | Sense::SECONDARY_CLICK`)
+    /// for a widget with both a primary and a secondary action.
+    #[must_use]
+    pub const fn secondary_click() -> Self {
+        Self(Self::HOVER.0 | Self::SECONDARY_CLICK.0)
+    }
+
     /// `true` if every bit set in `other` is also set in `self`.
     #[must_use]
     pub const fn contains(self, other: Self) -> bool {
@@ -78,10 +97,17 @@ impl Sense {
     }
 
     /// `true` if this sense wants pointer hit-testing at all ([`HOVER`](Self::HOVER),
-    /// [`CLICK`](Self::CLICK), [`DRAG`](Self::DRAG), or [`SCROLL`](Self::SCROLL)).
+    /// [`CLICK`](Self::CLICK), [`DRAG`](Self::DRAG), [`SCROLL`](Self::SCROLL),
+    /// or [`SECONDARY_CLICK`](Self::SECONDARY_CLICK)).
     #[must_use]
     pub const fn wants_pointer(self) -> bool {
-        self.0 & (Self::HOVER.0 | Self::CLICK.0 | Self::DRAG.0 | Self::SCROLL.0) != 0
+        self.0
+            & (Self::HOVER.0
+                | Self::CLICK.0
+                | Self::DRAG.0
+                | Self::SCROLL.0
+                | Self::SECONDARY_CLICK.0)
+            != 0
     }
 }
 

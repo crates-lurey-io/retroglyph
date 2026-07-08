@@ -3,15 +3,38 @@
 
 use retroglyph_core::{Event, MouseButton, MouseEventKind, Pos};
 
-/// Cell-grid pointer position and primary-button state, updated by feeding
-/// it every [`Event`] you receive.
+/// Per-button down/pressed/released state, tracked independently for each
+/// [`MouseButton`].
+#[derive(Debug, Clone, Copy, Default)]
+struct ButtonState {
+    down: bool,
+    pressed: bool,
+    released: bool,
+}
+
+/// Index into [`Pointer::buttons`] for a given [`MouseButton`]. A plain
+/// match over three fixed variants rather than a `HashMap`: no allocation,
+/// no hashing, and the array stays small/`Copy` -- fits this crate's
+/// dependency-minimal, `no_std`-friendly habits (see
+/// [`Sense`](crate::Sense)'s doc comment for the same reasoning applied to
+/// bitflags).
+const fn button_slot(button: MouseButton) -> usize {
+    match button {
+        MouseButton::Left => 0,
+        MouseButton::Right => 1,
+        MouseButton::Middle => 2,
+    }
+}
+
+/// Cell-grid pointer position and per-button state, updated by feeding it
+/// every [`Event`] you receive.
 ///
-/// Tracks only the primary (left) button; secondary/middle clicks pass
-/// through [`handle_event`](Self::handle_event) untouched, matching this
-/// crate's habit of doing the common case well rather than guessing at
-/// every backend's full button set up front (see
-/// [`KeyState`](retroglyph_core::KeyState) for the same shape applied to
-/// keyboard state).
+/// Tracks all three [`MouseButton`] variants independently (unlike
+/// [`Interaction`](crate::Interaction)'s higher-level click/drag/focus
+/// resolution, which only ever resolves the primary button plus a narrower
+/// secondary-click signal -- see [`Sense::SECONDARY_CLICK`](crate::Sense::SECONDARY_CLICK)).
+/// Mirrors [`KeyState`](retroglyph_core::KeyState)'s "feed events in, query
+/// state out" shape.
 ///
 /// [`pressed`](Self::pressed)/[`released`](Self::released)/[`scroll_delta`](Self::scroll_delta)
 /// are one-shot: populated only for the frame the underlying event arrived
@@ -21,9 +44,7 @@ use retroglyph_core::{Event, MouseButton, MouseEventKind, Pos};
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Pointer {
     pos: Option<Pos>,
-    down: bool,
-    pressed: bool,
-    released: bool,
+    buttons: [ButtonState; 3],
     scroll_delta: i32,
 }
 
@@ -33,9 +54,11 @@ impl Pointer {
     pub const fn new() -> Self {
         Self {
             pos: None,
-            down: false,
-            pressed: false,
-            released: false,
+            buttons: [ButtonState {
+                down: false,
+                pressed: false,
+                released: false,
+            }; 3],
             scroll_delta: 0,
         }
     }
@@ -48,25 +71,31 @@ impl Pointer {
         };
         self.pos = Some(mouse.position);
         match mouse.kind {
-            MouseEventKind::Down(MouseButton::Left) => {
-                self.down = true;
-                self.pressed = true;
+            MouseEventKind::Down(button) => {
+                let slot = &mut self.buttons[button_slot(button)];
+                slot.down = true;
+                slot.pressed = true;
             }
-            MouseEventKind::Up(MouseButton::Left) => {
-                self.down = false;
-                self.released = true;
+            MouseEventKind::Up(button) => {
+                let slot = &mut self.buttons[button_slot(button)];
+                slot.down = false;
+                slot.released = true;
             }
             MouseEventKind::ScrollUp => self.scroll_delta -= 1,
             MouseEventKind::ScrollDown => self.scroll_delta += 1,
-            MouseEventKind::Moved | MouseEventKind::Down(_) | MouseEventKind::Up(_) => {}
+            MouseEventKind::Moved => {}
         }
     }
 
-    /// Clear this frame's one-shot `pressed`/`released`/`scroll_delta`.
-    /// Call once per frame, after drawing.
+    /// Clear every button's one-shot `pressed`/`released` and this frame's
+    /// `scroll_delta`. Call once per frame, after drawing.
     pub const fn end_frame(&mut self) {
-        self.pressed = false;
-        self.released = false;
+        let mut i = 0;
+        while i < self.buttons.len() {
+            self.buttons[i].pressed = false;
+            self.buttons[i].released = false;
+            i += 1;
+        }
         self.scroll_delta = 0;
     }
 
@@ -77,22 +106,22 @@ impl Pointer {
         self.pos
     }
 
-    /// `true` while the primary button is held down.
+    /// `true` while `button` is held down.
     #[must_use]
-    pub const fn is_down(&self) -> bool {
-        self.down
+    pub const fn is_down(&self, button: MouseButton) -> bool {
+        self.buttons[button_slot(button)].down
     }
 
-    /// `true` for exactly the frame the primary button went down.
+    /// `true` for exactly the frame `button` went down.
     #[must_use]
-    pub const fn pressed(&self) -> bool {
-        self.pressed
+    pub const fn pressed(&self, button: MouseButton) -> bool {
+        self.buttons[button_slot(button)].pressed
     }
 
-    /// `true` for exactly the frame the primary button went up.
+    /// `true` for exactly the frame `button` went up.
     #[must_use]
-    pub const fn released(&self) -> bool {
-        self.released
+    pub const fn released(&self, button: MouseButton) -> bool {
+        self.buttons[button_slot(button)].released
     }
 
     /// Scroll wheel delta accumulated this frame: positive is down/forward,
@@ -125,20 +154,35 @@ mod tests {
             MouseEventKind::Down(MouseButton::Left),
             Pos::new(3, 4),
         ));
-        assert!(p.is_down());
-        assert!(p.pressed());
+        assert!(p.is_down(MouseButton::Left));
+        assert!(p.pressed(MouseButton::Left));
         assert_eq!(p.pos(), Some(Pos::new(3, 4)));
 
         p.end_frame();
-        assert!(p.is_down()); // level state survives end_frame
-        assert!(!p.pressed()); // one-shot cleared
+        assert!(p.is_down(MouseButton::Left)); // level state survives end_frame
+        assert!(!p.pressed(MouseButton::Left)); // one-shot cleared
 
         p.handle_event(&mouse(
             MouseEventKind::Up(MouseButton::Left),
             Pos::new(3, 4),
         ));
-        assert!(!p.is_down());
-        assert!(p.released());
+        assert!(!p.is_down(MouseButton::Left));
+        assert!(p.released(MouseButton::Left));
+    }
+
+    #[test]
+    fn buttons_are_tracked_independently() {
+        let mut p = Pointer::new();
+        p.handle_event(&mouse(
+            MouseEventKind::Down(MouseButton::Right),
+            Pos::new(1, 1),
+        ));
+        assert!(p.is_down(MouseButton::Right));
+        assert!(p.pressed(MouseButton::Right));
+        // Left is untouched by a Right-button event.
+        assert!(!p.is_down(MouseButton::Left));
+        assert!(!p.pressed(MouseButton::Left));
+        assert!(!p.is_down(MouseButton::Middle));
     }
 
     #[test]
@@ -158,17 +202,5 @@ mod tests {
         let mut p = Pointer::new();
         p.handle_event(&Event::Resize(80, 24));
         assert_eq!(p.pos(), None);
-    }
-
-    #[test]
-    fn ignores_non_primary_buttons() {
-        let mut p = Pointer::new();
-        p.handle_event(&mouse(
-            MouseEventKind::Down(MouseButton::Right),
-            Pos::new(1, 1),
-        ));
-        assert!(!p.is_down());
-        assert!(!p.pressed());
-        assert_eq!(p.pos(), Some(Pos::new(1, 1))); // position still tracked
     }
 }

@@ -20,10 +20,14 @@
 //!   threshold, read back via [`Interaction::pointer`]'s live position.
 //! - **Track list** — [`Sense::scroll`] on the container feeds
 //!   [`Response::scroll_delta`] straight into
-//!   [`ListState::scroll_by`], while each row senses hover/click without
-//!   being individually Tab-focusable (`Sense::HOVER | Sense::CLICK`,
-//!   skipping [`Sense::FOCUSABLE`]) — a container can hold focus while its
-//!   children stay mouse-only.
+//!   [`ListState::scroll_by`], while each row senses hover/click (plus
+//!   [`Sense::SECONDARY_CLICK`] for right-click-to-favorite) without being
+//!   individually Tab-focusable (skipping [`Sense::FOCUSABLE`]) — a
+//!   container can hold focus while its children stay mouse-only. Clicking
+//!   a row also hand-moves focus to the container via
+//!   [`Interaction::focus_mut`] (rows aren't `FOCUSABLE`, so `interact`'s
+//!   own click-focuses-me behavior doesn't apply to them), so Up/Down keep
+//!   working immediately after a click instead of needing a Tab first.
 //! - The **Focused**/**Pointer** debug lines and the event log read
 //!   [`Interaction::focus`]/[`Interaction::pointer`] directly, and the
 //!   arrow keys change meaning based on which id currently has focus (Up/
@@ -48,6 +52,8 @@
 //! [`Sense::drag`]: retroglyph_widgets::Sense::drag
 //! [`Sense::scroll`]: retroglyph_widgets::Sense::scroll
 //! [`Sense::FOCUSABLE`]: retroglyph_widgets::Sense::FOCUSABLE
+//! [`Sense::SECONDARY_CLICK`]: retroglyph_widgets::Sense::SECONDARY_CLICK
+//! [`Interaction::focus_mut`]: retroglyph_widgets::Interaction::focus_mut
 //! [`ListState::scroll_by`]: retroglyph_widgets::ListState::scroll_by
 //!
 //! # Controls
@@ -56,8 +62,11 @@
 //!   and the track list
 //! - Enter / Space — activate the focused button/toggle
 //! - Up / Down — move the track selection, while the list is focused
+//! - PageUp / PageDown / Home / End — jump the track selection, while the
+//!   list is focused
 //! - Left / Right — nudge the volume, while the slider is focused
-//! - Mouse: click buttons/rows, drag the volume bar, scroll the track list
+//! - Mouse: click buttons/rows, drag the volume bar, scroll the track list,
+//!   right-click a track to favorite it
 //! - Q / Escape — quit
 //!
 //! # Run
@@ -132,188 +141,204 @@ const DIM: Color = Color::Rgb {
 
 // ── Data ──────────────────────────────────────────────────────────────────────
 
+/// One track's fixed data. Kept separate from [`Track`] (which adds mutable
+/// per-instance state like `favorite`) so the initial seed data can stay a
+/// plain `const` slice; [`AppState::tracks`] is built from this once in
+/// [`init`].
+struct TrackSeed {
+    name: &'static str,
+    duration: &'static str,
+}
+
+/// A track row's live state: [`TrackSeed`]'s fixed data plus whatever an
+/// interaction can change about it. Owned (`Vec<Track>` on [`AppState`],
+/// not a `&'static` slice) so rows can be favorited and (eventually)
+/// reordered without needing a parallel, index-keyed side table that would
+/// go stale the moment the order changes.
+#[derive(Clone)]
 struct Track {
     name: &'static str,
     duration: &'static str,
+    favorite: bool,
 }
 
 // More entries than fit in most terminal heights, so the track list actually
 // demonstrates ListState-driven scrolling (both via mouse wheel and
 // Up/Down), not just a static, always-fully-visible list.
-const TRACKS: &[Track] = &[
-    Track {
+const TRACK_SEED: &[TrackSeed] = &[
+    TrackSeed {
         name: "Sunrise Over Static",
         duration: "3:41",
     },
-    Track {
+    TrackSeed {
         name: "Glass Corridor",
         duration: "4:12",
     },
-    Track {
+    TrackSeed {
         name: "Nine Tenths Silence",
         duration: "2:58",
     },
-    Track {
+    TrackSeed {
         name: "Low Orbit",
         duration: "5:03",
     },
-    Track {
+    TrackSeed {
         name: "Paper Weather",
         duration: "3:27",
     },
-    Track {
+    TrackSeed {
         name: "Vacant Frequencies",
         duration: "4:45",
     },
-    Track {
+    TrackSeed {
         name: "Halflight",
         duration: "3:12",
     },
-    Track {
+    TrackSeed {
         name: "The Long Answer",
         duration: "6:08",
     },
-    Track {
+    TrackSeed {
         name: "Slow Static",
         duration: "3:55",
     },
-    Track {
+    TrackSeed {
         name: "Nocturne for Modems",
         duration: "4:33",
     },
-    Track {
+    TrackSeed {
         name: "Rust and Ceremony",
         duration: "2:41",
     },
-    Track {
+    TrackSeed {
         name: "Everything, Eventually",
         duration: "5:19",
     },
-    Track {
+    TrackSeed {
         name: "Fog Index",
         duration: "3:03",
     },
-    Track {
+    TrackSeed {
         name: "Terminal Velocity",
         duration: "4:01",
     },
-    Track {
+    TrackSeed {
         name: "Copper Wire Lullaby",
         duration: "3:38",
     },
-    Track {
+    TrackSeed {
         name: "Departure Gate Four",
         duration: "4:27",
     },
-    Track {
+    TrackSeed {
         name: "Salt Marsh Radio",
         duration: "2:52",
     },
-    Track {
+    TrackSeed {
         name: "Undertow",
         duration: "5:41",
     },
-    Track {
+    TrackSeed {
         name: "Between Two Clocks",
         duration: "3:16",
     },
-    Track {
+    TrackSeed {
         name: "A Room With No Exit",
         duration: "4:09",
     },
-    Track {
+    TrackSeed {
         name: "Faint Signal",
         duration: "2:35",
     },
-    Track {
+    TrackSeed {
         name: "Winter Circuit",
         duration: "5:57",
     },
-    Track {
+    TrackSeed {
         name: "The Last Elevator",
         duration: "3:44",
     },
-    Track {
+    TrackSeed {
         name: "Static Bloom",
         duration: "4:18",
     },
-    Track {
+    TrackSeed {
         name: "Origami Weather",
         duration: "3:02",
     },
-    Track {
+    TrackSeed {
         name: "Blue Hour Traffic",
         duration: "4:52",
     },
-    Track {
+    TrackSeed {
         name: "Nothing But Weather",
         duration: "2:47",
     },
-    Track {
+    TrackSeed {
         name: "Empty Platform",
         duration: "5:11",
     },
-    Track {
+    TrackSeed {
         name: "The Long Way Home",
         duration: "3:29",
     },
-    Track {
+    TrackSeed {
         name: "Analog Ghost",
         duration: "4:36",
     },
-    Track {
+    TrackSeed {
         name: "Loose Change",
         duration: "2:58",
     },
-    Track {
+    TrackSeed {
         name: "Perimeter Walk",
         duration: "5:04",
     },
-    Track {
+    TrackSeed {
         name: "Halfway to Nowhere",
         duration: "3:21",
     },
-    Track {
+    TrackSeed {
         name: "The Quiet Engine",
         duration: "4:44",
     },
-    Track {
+    TrackSeed {
         name: "Overcast Anthem",
         duration: "3:07",
     },
-    Track {
+    TrackSeed {
         name: "Borrowed Time",
         duration: "5:26",
     },
-    Track {
+    TrackSeed {
         name: "Signal to Noise",
         duration: "2:39",
     },
-    Track {
+    TrackSeed {
         name: "Late Checkout",
         duration: "4:15",
     },
-    Track {
+    TrackSeed {
         name: "Paper Boats",
         duration: "3:53",
     },
-    Track {
+    TrackSeed {
         name: "Interference Pattern",
         duration: "5:33",
     },
-    Track {
+    TrackSeed {
         name: "Afterimage",
         duration: "2:44",
     },
-    Track {
+    TrackSeed {
         name: "The Waiting Room",
         duration: "4:08",
     },
-    Track {
+    TrackSeed {
         name: "Common Ground",
         duration: "3:31",
     },
-    Track {
+    TrackSeed {
         name: "Distant Static",
         duration: "5:02",
     },
@@ -352,7 +377,13 @@ fn id_label(id: Id) -> String {
         Id::Mute => "Mute".to_owned(),
         Id::Volume => "Volume".to_owned(),
         Id::TrackList => "Track List".to_owned(),
-        Id::Track(i) => TRACKS
+        // Rows aren't Sense::FOCUSABLE (see the module docs), so `focused()`
+        // never actually resolves to `Track(i)` in practice -- this arm only
+        // exists to keep the match exhaustive. TRACK_SEED (not the live,
+        // reorderable `AppState::tracks`) is fine here for exactly that
+        // reason: this function has no `state` access, and the fallback
+        // path it serves doesn't depend on current track order.
+        Id::Track(i) => TRACK_SEED
             .get(i)
             .map_or_else(|| "Track".to_owned(), |t| format!("Track \"{}\"", t.name)),
     }
@@ -367,13 +398,23 @@ struct AppState {
     delete_count: u32,
     muted: bool,
     volume: i32,
+    tracks: Vec<Track>,
     list_state: ListState,
     log: VecDeque<Line>,
 }
 
 fn init<B: Backend>(_term: &mut Terminal<B>) -> AppState {
+    let tracks: Vec<Track> = TRACK_SEED
+        .iter()
+        .map(|seed| Track {
+            name: seed.name,
+            duration: seed.duration,
+            favorite: false,
+        })
+        .collect();
+
     let mut list_state = ListState::new();
-    list_state.select_first(TRACKS.len());
+    list_state.select_first(tracks.len());
 
     let mut interaction = Interaction::new();
     // Focus the track list by default so Up/Down/scroll work immediately,
@@ -388,6 +429,7 @@ fn init<B: Backend>(_term: &mut Terminal<B>) -> AppState {
         delete_count: 0,
         muted: false,
         volume: 65,
+        tracks,
         list_state,
         log: VecDeque::with_capacity(LOG_CAPACITY),
     }
@@ -490,7 +532,7 @@ fn draw<B: Backend>(term: &mut Terminal<B>, state: &mut AppState) {
     draw_bar(
         term,
         l.footer,
-        " Tab/Shift+Tab: focus   Enter/Space: activate   click/drag/scroll: mouse   Q: quit",
+        " Tab/Shift+Tab: focus   Enter/Space: activate   click/drag/scroll/right-click: mouse   Q: quit",
     );
 
     draw_controls(term, &l, state);
@@ -648,12 +690,16 @@ fn draw_track_list<B: Backend>(term: &mut Terminal<B>, area: Rect, state: &mut A
     }
     let offset = state.list_state.offset();
 
-    for (i, track) in TRACKS.iter().enumerate().skip(offset).take(visible_rows) {
+    let track_count = state.tracks.len();
+    for i in offset..(offset + visible_rows).min(track_count) {
         let y = inner.top() + (i - offset) as u16;
         let row = Rect::new(inner.left(), y, inner.width(), 1);
-        let response = state
-            .interaction
-            .interact(row, Id::Track(i), Sense::HOVER | Sense::CLICK);
+        let response = state.interaction.interact(
+            row,
+            Id::Track(i),
+            Sense::HOVER | Sense::CLICK | Sense::SECONDARY_CLICK,
+        );
+
         if response.clicked() {
             state.list_state.select(Some(i));
             // Rows themselves aren't Sense::FOCUSABLE (they'd clutter the Tab
@@ -663,9 +709,21 @@ fn draw_track_list<B: Backend>(term: &mut Terminal<B>, area: Rect, state: &mut A
             // Up/Down keep working immediately after a click without
             // requiring an extra Tab press first.
             state.interaction.focus_mut().request(Id::TrackList);
-            push_log(state, ACCENT, format!("selected \"{}\"", track.name));
+            let name = state.tracks[i].name;
+            push_log(state, ACCENT, format!("selected \"{name}\""));
+        }
+        if response.secondary_clicked() {
+            state.tracks[i].favorite = !state.tracks[i].favorite;
+            let name = state.tracks[i].name;
+            let verb = if state.tracks[i].favorite {
+                "favorited"
+            } else {
+                "unfavorited"
+            };
+            push_log(state, ACCENT, format!("{verb} \"{name}\""));
         }
 
+        let track = &state.tracks[i];
         let selected = state.list_state.selected() == Some(i);
         let bg = if selected {
             PRESS_BG
@@ -675,11 +733,12 @@ fn draw_track_list<B: Backend>(term: &mut Terminal<B>, area: Rect, state: &mut A
             PANEL_BG
         };
         let style = Style::new().fg(FG).bg(bg);
+        let mark = if track.favorite { '*' } else { ' ' };
         fill_row(term, row, style);
         print_at(
             term,
             row,
-            &format!("{:<24} {}", track.name, track.duration),
+            &format!("{mark}{:<24} {}", track.name, track.duration),
             style,
         );
     }
@@ -792,6 +851,31 @@ fn tick<B: Backend>(term: &mut Terminal<B>, state: &mut AppState) -> bool {
     true
 }
 
+/// How many rows `PageUp`/`PageDown` move the track selection. Not tied to
+/// the actual viewport height (which `handle` has no access to -- that's a
+/// layout concern computed only inside `draw`): an approximate page is fine
+/// for a keyboard shortcut, and [`ListState::ensure_visible`] scrolls
+/// whatever lands into view either way.
+const PAGE_SIZE: usize = 8;
+
+/// Move the track selection by a page, clamped at the ends (unlike
+/// [`ListState::select_next`]/[`select_previous`](ListState::select_previous),
+/// which wrap).
+fn page_selection(state: &mut AppState, direction: i32) {
+    let len = state.tracks.len();
+    if len == 0 {
+        return;
+    }
+    let current = state.list_state.selected().unwrap_or(0);
+    let delta = direction * i32::try_from(PAGE_SIZE).unwrap_or(i32::MAX);
+    let last = i32::try_from(len - 1).unwrap_or(i32::MAX);
+    let next = i32::try_from(current)
+        .unwrap_or(0)
+        .saturating_add(delta)
+        .clamp(0, last);
+    state.list_state.select(usize::try_from(next).ok());
+}
+
 /// Apply one input event. Returns `false` to quit.
 fn handle(state: &mut AppState, event: &Event) -> bool {
     // Arrow keys mean different things depending on what currently holds
@@ -804,10 +888,22 @@ fn handle(state: &mut AppState, event: &Event) -> bool {
         match k.code {
             KeyCode::Char('q' | 'Q') | KeyCode::Escape => return false,
             KeyCode::Up if state.interaction.focus().is_focused(Id::TrackList) => {
-                state.list_state.select_previous(TRACKS.len());
+                state.list_state.select_previous(state.tracks.len());
             }
             KeyCode::Down if state.interaction.focus().is_focused(Id::TrackList) => {
-                state.list_state.select_next(TRACKS.len());
+                state.list_state.select_next(state.tracks.len());
+            }
+            KeyCode::PageUp if state.interaction.focus().is_focused(Id::TrackList) => {
+                page_selection(state, -1);
+            }
+            KeyCode::PageDown if state.interaction.focus().is_focused(Id::TrackList) => {
+                page_selection(state, 1);
+            }
+            KeyCode::Home if state.interaction.focus().is_focused(Id::TrackList) => {
+                state.list_state.select_first(state.tracks.len());
+            }
+            KeyCode::End if state.interaction.focus().is_focused(Id::TrackList) => {
+                state.list_state.select_last(state.tracks.len());
             }
             KeyCode::Left if state.interaction.focus().is_focused(Id::Volume) => {
                 state.volume = (state.volume - 5).max(0);
@@ -1068,6 +1164,51 @@ mod tests {
 
         frame(&mut state, &[key(KeyCode::Down)]);
         assert_eq!(state.list_state.selected(), Some(2)); // moved from row 1
+    }
+
+    #[test]
+    fn right_clicking_a_track_toggles_its_favorite() {
+        let mut state = init_state();
+        frame(&mut state, &[]); // frame 1: registers track row rects
+        assert!(!state.tracks[1].favorite);
+
+        let l = layout(SIZE);
+        let inner = inset(l.list);
+        let second_row = Pos::new(inner.left(), inner.top() + 1);
+        let right_click = [
+            mouse_at(MouseEventKind::Down(MouseButton::Right), second_row),
+            mouse_at(MouseEventKind::Up(MouseButton::Right), second_row),
+        ];
+        frame(&mut state, &right_click); // frame 2: delivers it, not yet resolved
+        assert!(!state.tracks[1].favorite);
+
+        frame(&mut state, &[]); // frame 3: resolves it
+        assert!(state.tracks[1].favorite);
+        // Left-click behavior on the same row is untouched by adding
+        // SECONDARY_CLICK sensing.
+        assert_eq!(state.list_state.selected(), Some(0));
+    }
+
+    #[test]
+    fn page_down_and_end_jump_the_selection_without_wrapping() {
+        let mut state = init_state(); // TrackList focused by default
+        frame(&mut state, &[]);
+
+        frame(&mut state, &[key(KeyCode::PageDown)]);
+        assert_eq!(state.list_state.selected(), Some(PAGE_SIZE));
+
+        frame(&mut state, &[key(KeyCode::End)]);
+        assert_eq!(state.list_state.selected(), Some(state.tracks.len() - 1));
+
+        // PageDown at the end clamps rather than wrapping back to the start.
+        frame(&mut state, &[key(KeyCode::PageDown)]);
+        assert_eq!(state.list_state.selected(), Some(state.tracks.len() - 1));
+
+        frame(&mut state, &[key(KeyCode::Home)]);
+        assert_eq!(state.list_state.selected(), Some(0));
+
+        frame(&mut state, &[key(KeyCode::PageUp)]);
+        assert_eq!(state.list_state.selected(), Some(0)); // clamps, doesn't wrap
     }
 
     #[test]

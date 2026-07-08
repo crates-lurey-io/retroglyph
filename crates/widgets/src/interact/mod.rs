@@ -59,7 +59,7 @@ pub use pointer::Pointer;
 pub use response::Response;
 pub use sense::Sense;
 
-use retroglyph_core::{Event, KeyCode, Pos, Rect};
+use retroglyph_core::{Event, KeyCode, MouseButton, Pos, Rect};
 
 /// Default [`Interaction::with_drag_threshold`].
 ///
@@ -137,6 +137,11 @@ pub const DEFAULT_DRAG_THRESHOLD: u16 = 1;
 /// convention [`ListState`](crate::ListState) uses, rather than the
 /// interior-mutability/global-context pattern egui's `Memory` relies on to
 /// keep its implicit ids from needing to be threaded everywhere.
+// Several of these are independent one-shot snapshots (primary/secondary
+// press/release, keyboard activation), not states of a single state
+// machine -- see the field-level comment above `resolved_press` for why
+// they're snapshotted individually rather than read live off `pointer`.
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub struct Interaction<Id> {
     pointer: Pointer,
@@ -161,8 +166,15 @@ pub struct Interaction<Id> {
     // one frame behind the input that produced them, matching the docs.
     resolved_press: bool,
     resolved_release: bool,
+    resolved_secondary_press: bool,
+    resolved_secondary_release: bool,
     resolved_scroll: i32,
     active: Option<Id>,
+    // Tracked separately from `active`: a secondary press can land on one
+    // widget while the primary button is mid-drag on another (or not
+    // pressed at all), so the two buttons need independent "which widget
+    // did this press originate on" state.
+    secondary_active: Option<Id>,
     drag_origin: Option<Pos>,
     drag_threshold: u16,
     activate_focused: bool,
@@ -180,8 +192,11 @@ impl<Id> Interaction<Id> {
             resolved_pos: None,
             resolved_press: false,
             resolved_release: false,
+            resolved_secondary_press: false,
+            resolved_secondary_release: false,
             resolved_scroll: 0,
             active: None,
+            secondary_active: None,
             drag_origin: None,
             drag_threshold: DEFAULT_DRAG_THRESHOLD,
             activate_focused: false,
@@ -227,13 +242,18 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
     pub fn begin_frame(&mut self) {
         self.resolved_pos = self.pointer.pos();
         self.resolved_hover = self.resolved_pos.and_then(|pos| self.hits.topmost_at(pos));
-        self.resolved_press = self.pointer.pressed();
-        self.resolved_release = self.pointer.released();
+        self.resolved_press = self.pointer.pressed(MouseButton::Left);
+        self.resolved_release = self.pointer.released(MouseButton::Left);
+        self.resolved_secondary_press = self.pointer.pressed(MouseButton::Right);
+        self.resolved_secondary_release = self.pointer.released(MouseButton::Right);
         self.resolved_scroll = self.pointer.scroll_delta();
 
         if self.resolved_press {
             self.active = self.resolved_hover;
-            self.drag_origin = self.pointer.pos();
+            self.drag_origin = self.resolved_pos;
+        }
+        if self.resolved_secondary_press {
+            self.secondary_active = self.resolved_hover;
         }
 
         self.hits.clear();
@@ -295,6 +315,17 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
             && sense.contains(Sense::SCROLL)
             && self.resolved_pos.is_some_and(|pos| rect.contains_pos(pos));
 
+        // The secondary button gets a narrower resolution than the primary
+        // one: no drag-threshold suppression (secondary-button drags aren't
+        // a gesture this module tracks), and it doesn't drive focus the way
+        // a primary click does (see `Response::secondary_clicked`'s doc
+        // comment).
+        let secondary_is_active = self.secondary_active == Some(id);
+        let secondary_clicked = sense.contains(Sense::SECONDARY_CLICK)
+            && secondary_is_active
+            && self.resolved_secondary_release
+            && hovered;
+
         Response {
             hovered,
             pressed: (is_active && self.resolved_press) || key_activated,
@@ -302,6 +333,7 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
             clicked: (senses_click && released_here && hovered && !dragging) || key_activated,
             dragging,
             focused: self.focus.is_focused(id),
+            secondary_clicked,
             scroll_delta: if scrollable_here {
                 self.resolved_scroll
             } else {
@@ -310,13 +342,16 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
         }
     }
 
-    /// Release the active widget, e.g. so a later
-    /// [`focus_mut`](Self::focus_mut)-driven Tab handling starts clean. Call
-    /// once per frame, after drawing.
+    /// Release the active widget (both primary and secondary), e.g. so a
+    /// later [`focus_mut`](Self::focus_mut)-driven Tab handling starts
+    /// clean. Call once per frame, after drawing.
     pub const fn end_frame(&mut self) {
         if self.resolved_release {
             self.active = None;
             self.drag_origin = None;
+        }
+        if self.resolved_secondary_release {
+            self.secondary_active = None;
         }
         self.activate_focused = false;
     }
@@ -609,5 +644,55 @@ mod tests {
 
         assert!(save.hovered());
         assert!(!save.clicked());
+    }
+
+    fn right_click_at(interaction: &mut Interaction<Id>, pos: Pos) {
+        interaction.handle_event(&Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Right),
+            position: pos,
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        }));
+        interaction.handle_event(&Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Up(MouseButton::Right),
+            position: pos,
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        }));
+    }
+
+    #[test]
+    fn secondary_click_is_independent_of_the_primary_button() {
+        let mut interaction = Interaction::<Id>::new();
+
+        fn frame_secondary(interaction: &mut Interaction<Id>) -> (Response, Response) {
+            interaction.begin_frame();
+            let save = interaction.interact(
+                Rect::new(0, 0, 5, 1),
+                Id::Save,
+                Sense::click() | Sense::SECONDARY_CLICK,
+            );
+            let cancel = interaction.interact(Rect::new(6, 0, 5, 1), Id::Cancel, Sense::click());
+            interaction.end_frame();
+            (save, cancel)
+        }
+
+        let _ = frame_secondary(&mut interaction); // frame 1: register
+        right_click_at(&mut interaction, Pos::new(2, 0)); // over Save
+
+        let (save, cancel) = frame_secondary(&mut interaction); // frame 2: resolves
+        assert!(save.secondary_clicked());
+        assert!(!save.clicked()); // primary button never touched
+        assert!(!cancel.secondary_clicked());
+    }
+
+    #[test]
+    fn secondary_click_not_sensed_never_reports_even_when_right_clicked() {
+        let mut interaction = Interaction::<Id>::new();
+        let _ = frame(&mut interaction); // Save/Cancel sensed with Sense::click() only
+        right_click_at(&mut interaction, Pos::new(2, 0));
+
+        let (save, _) = frame(&mut interaction);
+        assert!(!save.secondary_clicked()); // not sensed, so never reported
     }
 }

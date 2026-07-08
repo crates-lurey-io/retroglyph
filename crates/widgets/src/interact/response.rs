@@ -11,7 +11,7 @@
 /// [`Sense`](crate::Sense) are always `false`/`0` -- a widget sensed with
 /// only [`Sense::HOVER`](crate::Sense::HOVER) never reports
 /// [`clicked`](Self::clicked), for instance.
-// Seven flat, independent fields by design: `Response` is a per-frame
+// Eight flat, independent fields by design: `Response` is a per-frame
 // report card, not a state machine -- collapsing it into enums would only
 // make `interact`'s construction of it more awkward for no reader benefit.
 #[allow(clippy::struct_excessive_bools)]
@@ -23,6 +23,7 @@ pub struct Response {
     pub(crate) clicked: bool,
     pub(crate) dragging: bool,
     pub(crate) focused: bool,
+    pub(crate) secondary_clicked: bool,
     pub(crate) scroll_delta: i32,
 }
 
@@ -78,6 +79,18 @@ impl Response {
         self.focused
     }
 
+    /// The secondary (right) mouse button pressed and released on this
+    /// widget this frame while still hovered. Only ever `true` for widgets
+    /// sensed with [`Sense::SECONDARY_CLICK`](crate::Sense::SECONDARY_CLICK).
+    /// Unlike [`clicked`](Self::clicked), there's no keyboard equivalent --
+    /// a secondary action needs its own trigger (a modifier+Enter, a menu
+    /// key, whatever fits the app) since Enter/Space already means
+    /// "primary activate".
+    #[must_use]
+    pub const fn secondary_clicked(&self) -> bool {
+        self.secondary_clicked
+    }
+
     /// Scroll wheel delta accumulated this frame while the pointer was
     /// within this widget's rect (regardless of what else was drawn on top
     /// of it -- see [`Sense::SCROLL`](crate::Sense::SCROLL)): positive
@@ -103,6 +116,7 @@ mod tests {
         assert!(!r.clicked());
         assert!(!r.dragging());
         assert!(!r.focused());
+        assert!(!r.secondary_clicked());
         assert_eq!(r.scroll_delta(), 0);
     }
 }
