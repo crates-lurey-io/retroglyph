@@ -6,13 +6,16 @@
 //! alignment ([`layout`]).
 //!
 //! Every widget is primarily a free function that draws directly to a
-//! [`Terminal`](retroglyph_core::Terminal) and retains no state. Three
+//! [`Terminal`](retroglyph_core::Terminal) and retains no state. Four
 //! optional layers build on top of that free-function core, each usable
 //! independently:
 //!
 //! - [`Widget`]/[`StatefulWidget`] ([`widget`]) for callers who want to box
 //!   or store heterogeneous widgets, backed by [`ListState`] for selection
 //!   and scroll position.
+//! - [`Interaction`] ([`interact`]) for hover/click/drag/focus tracking
+//!   without a retained widget tree -- the sibling of [`ListState`] for
+//!   widgets that don't have a natural selection index of their own.
 //! - [`BoxStyle`] ([`style`]) for a Lip-Gloss-style box model (padding,
 //!   border, margin) rendered into a standalone `Grid`.
 //! - [`join_h`]/[`join_v`] ([`block`]) to compose several `Grid`s -- e.g.
@@ -32,6 +35,7 @@
 
 pub mod block;
 pub mod draw;
+pub mod interact;
 pub mod layout;
 pub mod state;
 pub mod style;
@@ -42,6 +46,9 @@ pub use block::{blit_into, join_h, join_v};
 pub use draw::{
     draw_box, fill_rect, gauge, log, meter_ramp, modal, panel, print_line, progress_bar, sparkline,
     stat_bar, table,
+};
+pub use interact::{
+    DEFAULT_DRAG_THRESHOLD, FocusRing, HitTester, Interaction, Pointer, Response, Sense,
 };
 pub use layout::{Constraint, Flex, centered_rect, split_h, split_h_flex, split_v, split_v_flex};
 pub use state::ListState;

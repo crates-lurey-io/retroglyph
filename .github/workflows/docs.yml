@@ -61,7 +61,8 @@ jobs:
             --example dashboard \
             --example subpixel \
             --example dirty_viz \
-            --example responsive_game_ui
+            --example responsive_game_ui \
+            --example interaction_demo
         continue-on-error: true
 
       - name: Build WASM examples (tilesets)
