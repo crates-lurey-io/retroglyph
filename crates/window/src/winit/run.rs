@@ -16,7 +16,6 @@ use retroglyph_core::Terminal;
 use retroglyph_core::backend::Backend;
 use retroglyph_core::event::{Event, KeyModifiers, MouseEvent, MouseEventKind, PhysicalPos};
 use std::sync::Arc;
-#[cfg(not(target_arch = "wasm32"))]
 use std::time::Duration;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
@@ -126,14 +125,25 @@ where
     }
 }
 
+/// Milliseconds since the page's time origin, from the browser's
+/// high-resolution timer. Falls back to `0.0` if `window()` or
+/// `Performance` is unavailable.
+#[cfg(target_arch = "wasm32")]
+fn wasm_now_ms() -> f64 {
+    web_sys::window()
+        .and_then(|w| w.performance())
+        .map_or(0.0, |p| p.now())
+}
+
 /// Drive an [`App`](retroglyph_core::App) from the windowed event loop.
 ///
 /// This is the inverted driver: winit owns the event loop and calls back
 /// into the app on each redraw, rather than the app owning a `while` loop.
 ///
-/// Each frame builds a [`Frame`](retroglyph_core::Frame) (wall-clock `dt` on
-/// native, `ZERO` on wasm where `std::time::Instant` is unavailable) and
-/// calls [`step`](retroglyph_core::step).
+/// Each frame builds a [`Frame`](retroglyph_core::Frame) with a wall-clock
+/// `dt`: via [`std::time::Instant`] on native, via the browser's
+/// `performance.now()` on wasm (where `std::time::Instant` is unavailable).
+/// Calls [`step`](retroglyph_core::step).
 ///
 /// On [`Flow::Exit`](retroglyph_core::Flow) the process exits on native (the
 /// window is torn down); on wasm the requestAnimationFrame loop cannot be
@@ -155,6 +165,8 @@ where
     let mut number = 0u64;
     #[cfg(not(target_arch = "wasm32"))]
     let mut last = std::time::Instant::now();
+    #[cfg(target_arch = "wasm32")]
+    let mut last = wasm_now_ms();
     run_windowed(config, presenter, move |term| {
         #[cfg(not(target_arch = "wasm32"))]
         let dt = {
@@ -164,7 +176,12 @@ where
             elapsed
         };
         #[cfg(target_arch = "wasm32")]
-        let dt = core::time::Duration::ZERO;
+        let dt = {
+            let now = wasm_now_ms();
+            let elapsed = Duration::from_secs_f64((now - last).max(0.0) / 1000.0);
+            last = now;
+            elapsed
+        };
         let frame = retroglyph_core::Frame { dt, number };
         number = number.wrapping_add(1);
         if retroglyph_core::step(term, &mut app, &frame) == retroglyph_core::Flow::Exit {
@@ -276,6 +293,13 @@ impl<P: Presenter, F> WindowApp<P, F> {
     }
 }
 
+/// Upper bound on the device pixel ratio used to size the canvas backing
+/// store. Present cost is O(pixels), so an uncapped DPR (3 on many phones,
+/// 2 on most laptops) quadruples or worse the per-frame rasterize/present
+/// work for marginal crispness on a pseudo-graphic UI.
+#[cfg(target_arch = "wasm32")]
+const MAX_DEVICE_PIXEL_RATIO: f64 = 1.5;
+
 /// The browser viewport size in physical (device) pixels, or `None` if
 /// running outside a browser `window` context.
 #[cfg(target_arch = "wasm32")]
@@ -284,7 +308,7 @@ fn web_viewport_physical_size() -> Option<winit::dpi::PhysicalSize<u32>> {
     let window = web_sys::window()?;
     let width = window.inner_width().ok()?.as_f64()?;
     let height = window.inner_height().ok()?.as_f64()?;
-    let dpr = window.device_pixel_ratio();
+    let dpr = window.device_pixel_ratio().min(MAX_DEVICE_PIXEL_RATIO);
     Some(winit::dpi::PhysicalSize::new(
         (width * dpr).round() as u32,
         (height * dpr).round() as u32,
