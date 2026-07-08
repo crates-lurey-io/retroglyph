@@ -86,7 +86,7 @@ use std::collections::VecDeque;
 use std::time::Duration;
 
 use retroglyph_core::event::{Event, KeyCode};
-use retroglyph_core::{Backend, Color, Line, Rect, Size, Span, Style, Terminal};
+use retroglyph_core::{Backend, Color, Line, Pos, Rect, Size, Span, Style, Terminal};
 use retroglyph_widgets::{
     Constraint, Interaction, ListState, Response, Sense, gauge, log, offset_for_pos, panel,
     scrollbar, split_h, split_v,
@@ -418,6 +418,21 @@ struct AppState {
     /// comment for how the two get reconciled for the scrollbar's shared,
     /// forward-only geometry math.
     log_scroll: usize,
+    /// The in-progress drag-to-reorder gesture, if any -- see [`Reorder`].
+    reorder: Option<Reorder>,
+    /// Set whenever the track selection changes (Up/Down/PageUp/PageDown/
+    /// Home/End, or clicking a row); consumed by `draw_track_list`, which
+    /// calls `ensure_visible` only on the frame after this is set, then
+    /// clears it.
+    ///
+    /// Without this, `ensure_visible` (idempotent and safe to call every
+    /// frame *for its own purpose*) would fight a free mouse-wheel scroll
+    /// on every frame that isn't itself a scroll event -- which, since
+    /// wheel events are one-shot, is nearly every frame: the view would
+    /// jump back to the selected row the instant the wheel stopped
+    /// spinning, not just on the one frame a selection change needs to be
+    /// followed.
+    follow_selection: bool,
 }
 
 fn init<B: Backend>(_term: &mut Terminal<B>) -> AppState {
@@ -450,6 +465,8 @@ fn init<B: Backend>(_term: &mut Terminal<B>) -> AppState {
         list_state,
         log: VecDeque::with_capacity(LOG_CAPACITY),
         log_scroll: 0,
+        reorder: None,
+        follow_selection: true,
     }
 }
 
@@ -697,18 +714,27 @@ fn draw_track_list<B: Backend>(term: &mut Terminal<B>, area: Rect, state: &mut A
             .interaction
             .interact(list_area, Id::TrackList, Sense::scroll() | Sense::FOCUSABLE);
     let visible_rows = list_area.height() as usize;
-    if list_response.scroll_delta() == 0 {
-        // Only auto-follow the selection (e.g. after Up/Down or a row
-        // click) on frames where the wheel didn't just move the view --
-        // ensure_visible is idempotent and safe to call every such frame,
-        // but calling it unconditionally would immediately snap a free
-        // wheel-scroll straight back to the selected row.
-        state.list_state.ensure_visible(visible_rows);
-    } else {
+    let track_count = state.tracks.len();
+    let max_offset = track_count.saturating_sub(visible_rows);
+
+    if list_response.scroll_delta() != 0 {
         state.list_state.scroll_by(list_response.scroll_delta());
+        // ListState::scroll_by deliberately has no upper clamp (only the
+        // caller knows the content length); without this, repeated
+        // wheel-down scrolls the offset arbitrarily far past the last
+        // page, leaving the list blank until scrolled all the way back.
+        if state.list_state.offset() > max_offset {
+            state.list_state.set_offset(max_offset);
+        }
+    } else if state.follow_selection {
+        // Only follow the selection on the frame *after* it actually
+        // changed (see `follow_selection`'s doc comment) -- not every
+        // frame, which would fight a free wheel-scroll the instant it
+        // stopped.
+        state.list_state.ensure_visible(visible_rows);
+        state.follow_selection = false;
     }
 
-    let track_count = state.tracks.len();
     let current_offset = state.list_state.offset();
     if let Some(new_offset) = draw_scrollbar_column(
         term,
@@ -723,57 +749,186 @@ fn draw_track_list<B: Backend>(term: &mut Terminal<B>, area: Rect, state: &mut A
     }
     let offset = state.list_state.offset();
 
+    let window = TrackWindow {
+        list_area,
+        offset,
+        visible_rows,
+        track_count,
+    };
     for i in offset..(offset + visible_rows).min(track_count) {
         let y = list_area.top() + (i - offset) as u16;
         let row = Rect::new(list_area.left(), y, list_area.width(), 1);
-        let response = state.interaction.interact(
-            row,
-            Id::Track(i),
-            Sense::HOVER | Sense::CLICK | Sense::SECONDARY_CLICK,
-        );
-
-        if response.clicked() {
-            state.list_state.select(Some(i));
-            // Rows themselves aren't Sense::FOCUSABLE (they'd clutter the Tab
-            // order -- see the module docs), so clicking one doesn't
-            // automatically focus anything the way a FOCUSABLE widget's own
-            // click does. Move focus to the container by hand instead, so
-            // Up/Down keep working immediately after a click without
-            // requiring an extra Tab press first.
-            state.interaction.focus_mut().request(Id::TrackList);
-            let name = state.tracks[i].name;
-            push_log(state, ACCENT, format!("selected \"{name}\""));
-        }
-        if response.secondary_clicked() {
-            state.tracks[i].favorite = !state.tracks[i].favorite;
-            let name = state.tracks[i].name;
-            let verb = if state.tracks[i].favorite {
-                "favorited"
-            } else {
-                "unfavorited"
-            };
-            push_log(state, ACCENT, format!("{verb} \"{name}\""));
-        }
-
-        let track = &state.tracks[i];
-        let selected = state.list_state.selected() == Some(i);
-        let bg = if selected {
-            PRESS_BG
-        } else if response.hovered() {
-            HOVER_BG
-        } else {
-            PANEL_BG
-        };
-        let style = Style::new().fg(FG).bg(bg);
-        let mark = if track.favorite { '*' } else { ' ' };
-        fill_row(term, row, style);
-        print_at(
-            term,
-            row,
-            &format!("{mark}{:<24} {}", track.name, track.duration),
-            style,
-        );
+        draw_track_row(term, row, i, window, state);
     }
+}
+
+/// The currently visible slice of the track list, shared by every row's
+/// [`draw_track_row`] call this frame -- just the loop variables
+/// `draw_track_list` already has, grouped into one `Copy` struct so passing
+/// them down doesn't blow past a reasonable argument count.
+#[derive(Clone, Copy)]
+struct TrackWindow {
+    list_area: Rect,
+    offset: usize,
+    visible_rows: usize,
+    track_count: usize,
+}
+
+/// One track row: handles its own click/right-click/drag interaction and
+/// draws itself. Split out of `draw_track_list` purely to keep that
+/// function's own layout/scroll/scrollbar orchestration readable -- this
+/// isn't a reusable widget, just a `for` loop body with somewhere to put
+/// its local variables.
+fn draw_track_row<B: Backend>(
+    term: &mut Terminal<B>,
+    row: Rect,
+    i: usize,
+    window: TrackWindow,
+    state: &mut AppState,
+) {
+    let response = state.interaction.interact(
+        row,
+        Id::Track(i),
+        Sense::HOVER | Sense::CLICK | Sense::SECONDARY_CLICK | Sense::DRAG,
+    );
+
+    if response.clicked() {
+        state.list_state.select(Some(i));
+        state.follow_selection = true;
+        // Rows themselves aren't Sense::FOCUSABLE (they'd clutter the Tab
+        // order -- see the module docs), so clicking one doesn't
+        // automatically focus anything the way a FOCUSABLE widget's own
+        // click does. Move focus to the container by hand instead, so
+        // Up/Down keep working immediately after a click without requiring
+        // an extra Tab press first.
+        state.interaction.focus_mut().request(Id::TrackList);
+        let name = state.tracks[i].name;
+        push_log(state, ACCENT, format!("selected \"{name}\""));
+    }
+    if response.secondary_clicked() {
+        state.tracks[i].favorite = !state.tracks[i].favorite;
+        let name = state.tracks[i].name;
+        let verb = if state.tracks[i].favorite {
+            "favorited"
+        } else {
+            "unfavorited"
+        };
+        push_log(state, ACCENT, format!("{verb} \"{name}\""));
+    }
+    if response.dragging()
+        && let Some(pos) = state.interaction.pointer().pos()
+    {
+        // Only the currently visible window is a valid drop target --
+        // dragging past the top/bottom edge clamps rather than
+        // auto-scrolling the list to reveal more rows. A real app might
+        // want that; it's a reasonable amount of extra state (an
+        // auto-scroll timer/velocity) for a demo already covering a lot of
+        // ground.
+        let target = drop_target_row(
+            window.list_area,
+            pos,
+            window.offset,
+            window.visible_rows,
+            window.track_count,
+        );
+        state.reorder = Some(Reorder { from: i, target });
+    }
+    if response.released() && response.dragging() {
+        if let Some(reorder) = state.reorder.take() {
+            reorder_track(state, reorder.from, reorder.target);
+        }
+    } else if response.released() {
+        // A plain release (no drag) still needs the marker cleared --
+        // dragging() can be true on an earlier frame of the same gesture
+        // and then this widget's `active` clears in end_frame, but a stale
+        // `reorder` naming a row that's no longer the active drag would
+        // otherwise linger and misdraw.
+        state.reorder = None;
+    }
+
+    let is_dragged = state.reorder.as_ref().is_some_and(|r| r.from == i);
+    let is_drop_target = state
+        .reorder
+        .as_ref()
+        .is_some_and(|r| r.target == i && r.from != i);
+    let track = &state.tracks[i];
+    let selected = state.list_state.selected() == Some(i);
+    let bg = if is_dragged {
+        BORDER
+    } else if is_drop_target {
+        ACCENT
+    } else if selected {
+        PRESS_BG
+    } else if response.hovered() {
+        HOVER_BG
+    } else {
+        PANEL_BG
+    };
+    let style = Style::new().fg(FG).bg(bg);
+    let mark = if track.favorite { '*' } else { ' ' };
+    fill_row(term, row, style);
+    print_at(
+        term,
+        row,
+        &format!("{mark}{:<24} {}", track.name, track.duration),
+        style,
+    );
+}
+
+/// In-progress drag-to-reorder gesture: dragging `from` currently wants to
+/// land at `target` (both track indices, in the *pre-drop* array). Cleared
+/// on release (successful or not) -- see `draw_track_list`'s row loop.
+struct Reorder {
+    from: usize,
+    target: usize,
+}
+
+/// The track index a drop at cell-row `pos.y` within `list_area` would
+/// target, clamped to the currently visible window.
+fn drop_target_row(
+    list_area: Rect,
+    pos: Pos,
+    offset: usize,
+    visible_rows: usize,
+    track_count: usize,
+) -> usize {
+    let rel = usize::from(pos.y.saturating_sub(list_area.top()));
+    let rel = rel.min(visible_rows.saturating_sub(1));
+    (offset + rel).min(track_count.saturating_sub(1))
+}
+
+/// Move the track at `from` so it lands just before whatever currently sits
+/// at `target` -- see `draw_track_list`'s doc comment on `Reorder` for the
+/// indices' meaning; see `drop_target_row` for how `target` is chosen from
+/// a live pointer position.
+///
+/// Selection follows the moved track only when it *was* the moved one
+/// (matched by its pre-move index): reordering a row that merely shifted
+/// because something else moved past it doesn't retarget the selection.
+/// Getting that fully right for every row would need remapping the whole
+/// selection by identity rather than index, which is more bookkeeping than
+/// this demo's simple `Option<usize>` selection is set up for.
+fn reorder_track(state: &mut AppState, from: usize, target: usize) {
+    if from == target || from >= state.tracks.len() {
+        return;
+    }
+    let track = state.tracks.remove(from);
+    let name = track.name;
+    // `target` named a slot in the *pre-removal* array; removing `from`
+    // shifts everything after it back by one, so a target past `from`
+    // needs the same adjustment to still mean "insert before this row."
+    let insert_at = if target > from { target - 1 } else { target }.min(state.tracks.len());
+    state.tracks.insert(insert_at, track);
+
+    if state.list_state.selected() == Some(from) {
+        state.list_state.select(Some(insert_at));
+        state.follow_selection = true;
+    }
+    push_log(
+        state,
+        ACCENT,
+        format!("moved \"{name}\" to position {}", insert_at + 1),
+    );
 }
 
 /// `log`'s `offset` counts backward from the tail (`0` = newest message),
@@ -1036,10 +1191,21 @@ fn page_selection(state: &mut AppState, direction: i32) {
         .saturating_add(delta)
         .clamp(0, last);
     state.list_state.select(usize::try_from(next).ok());
+    state.follow_selection = true;
 }
 
 /// Apply one input event. Returns `false` to quit.
 fn handle(state: &mut AppState, event: &Event) -> bool {
+    // The windowed (software) backend's close button doesn't exit on its
+    // own -- retroglyph-window pushes Event::Close and leaves the decision
+    // to the app, same as every other example's handle() (see
+    // responsive_game_ui/sprite_stress/subpixel/tileset). Missing this arm
+    // is why clicking the window's close button used to do nothing; only Q
+    // worked.
+    if *event == Event::Close {
+        return false;
+    }
+
     // Arrow keys mean different things depending on what currently holds
     // focus -- the same `FocusRing` state that gates Tab/Enter also gates
     // plain arrow-key routing, so there's exactly one source of truth for
@@ -1051,9 +1217,11 @@ fn handle(state: &mut AppState, event: &Event) -> bool {
             KeyCode::Char('q' | 'Q') | KeyCode::Escape => return false,
             KeyCode::Up if state.interaction.focus().is_focused(Id::TrackList) => {
                 state.list_state.select_previous(state.tracks.len());
+                state.follow_selection = true;
             }
             KeyCode::Down if state.interaction.focus().is_focused(Id::TrackList) => {
                 state.list_state.select_next(state.tracks.len());
+                state.follow_selection = true;
             }
             KeyCode::PageUp if state.interaction.focus().is_focused(Id::TrackList) => {
                 page_selection(state, -1);
@@ -1063,9 +1231,11 @@ fn handle(state: &mut AppState, event: &Event) -> bool {
             }
             KeyCode::Home if state.interaction.focus().is_focused(Id::TrackList) => {
                 state.list_state.select_first(state.tracks.len());
+                state.follow_selection = true;
             }
             KeyCode::End if state.interaction.focus().is_focused(Id::TrackList) => {
                 state.list_state.select_last(state.tracks.len());
+                state.follow_selection = true;
             }
             KeyCode::Left if state.interaction.focus().is_focused(Id::Volume) => {
                 state.volume = (state.volume - 5).max(0);
@@ -1124,7 +1294,85 @@ fn handle(state: &mut AppState, event: &Event) -> bool {
     true
 }
 
-retroglyph_examples::rg_run!(AppState, init, tick);
+// ── Entry points ────────────────────────────────────────────────────────────
+//
+// Hand-rolled dispatch instead of `rg_run!`: this demo's layout (the fixed
+// CONTROLS_WIDTH/LOG_HEIGHT columns, the {:<24} track-name field) was
+// designed and tested against DEMO_SIZE (also used by the test module
+// below), but `rg_run!`'s software branch hardcodes a much narrower 50x25
+// grid with no way to override it -- more than narrow enough to truncate
+// track names and push the log panel off-screen in the live window. Every
+// branch below is otherwise identical to what `rg_run!` itself expands to
+// (see `util::mod`'s `rg_run!`/`__rg_wasm_headless_arm!`/
+// `__rg_wasm_terminal_arm!`); only the software branch's `grid_size` call
+// differs, which the macro has no parameter for.
+
+/// The grid size this demo's layout is designed for -- drives both the
+/// live software-backend window and the headless test harness below, so
+/// there's exactly one place that has to agree with the layout constants
+/// (`CONTROLS_WIDTH`, `LOG_HEIGHT`) instead of two drifting apart.
+///
+/// `allow(dead_code)`: only referenced by the `feature = "software"` `main`
+/// below and by `#[cfg(test)]`, so a `--features crossterm` (only) build
+/// sees neither use.
+#[allow(dead_code)]
+const DEMO_SIZE: Size = Size {
+    width: 80,
+    height: 30,
+};
+
+#[allow(clippy::missing_const_for_fn, clippy::needless_pass_by_ref_mut)]
+fn __init<B: Backend>(term: &mut Terminal<B>) -> AppState {
+    init(term)
+}
+#[allow(clippy::missing_const_for_fn, clippy::needless_pass_by_ref_mut)]
+fn __tick<B: Backend>(term: &mut Terminal<B>, state: &mut AppState) -> bool {
+    tick(term, state)
+}
+
+#[cfg(feature = "software")]
+fn main() {
+    #[cfg(target_arch = "wasm32")]
+    ::console_error_panic_hook::set_once();
+
+    let renderer = ::retroglyph_software::SoftwareBackendBuilder::new()
+        .grid_size(DEMO_SIZE.width, DEMO_SIZE.height)
+        .scale(2)
+        .build()
+        .expect("failed to initialize software backend")
+        .run_headless();
+    let config =
+        ::retroglyph_window::winit::WindowConfig::fit(&renderer, env!("CARGO_BIN_NAME"), None);
+    let app = retroglyph_examples::util::ClosureApp::new(__init, __tick);
+    ::retroglyph_window::winit::run_app(config, renderer, app).expect("event loop failed");
+}
+
+#[cfg(all(feature = "software", target_arch = "wasm32"))]
+#[allow(missing_docs)]
+#[::wasm_bindgen::prelude::wasm_bindgen(start)]
+pub fn wasm_main() -> ::std::result::Result<(), ::wasm_bindgen::JsValue> {
+    main();
+    ::std::result::Result::Ok(())
+}
+
+#[cfg(all(feature = "crossterm", not(feature = "software")))]
+fn main() -> ::std::result::Result<(), ::std::io::Error> {
+    let app = retroglyph_examples::util::ClosureApp::new(__init, __tick);
+    ::retroglyph_crossterm::Crossterm::run(app)
+}
+
+retroglyph_examples::__rg_wasm_headless_arm!(AppState, __init, __tick);
+retroglyph_examples::__rg_wasm_terminal_arm!(AppState, __init, __tick);
+
+#[cfg(not(any(
+    feature = "crossterm",
+    feature = "software",
+    all(feature = "wasm-headless", target_arch = "wasm32"),
+    all(feature = "wasm-terminal", target_arch = "wasm32"),
+)))]
+fn main() {
+    retroglyph_examples::util::run_headless(__init, __tick);
+}
 
 #[cfg(test)]
 mod tests {
@@ -1133,10 +1381,7 @@ mod tests {
 
     use super::*;
 
-    const SIZE: Size = Size {
-        width: 80,
-        height: 30,
-    };
+    const SIZE: Size = DEMO_SIZE;
 
     fn init_state() -> AppState {
         let mut term = Terminal::new(Headless::new(SIZE.width, SIZE.height));
@@ -1187,6 +1432,17 @@ mod tests {
         assert!(view.contains("CONTROLS"));
         assert!(view.contains("TRACKS"));
         assert!(view.contains("EVENTS"));
+    }
+
+    /// Regression test for a real bug: the windowed backend's close button
+    /// sends `Event::Close` (retroglyph-window leaves quitting up to the
+    /// app rather than exiting on its own), but `handle` never checked for
+    /// it -- only Q/Escape worked, so clicking the window's close button
+    /// silently did nothing.
+    #[test]
+    fn close_event_quits() {
+        let mut state = init_state();
+        assert!(!handle(&mut state, &Event::Close));
     }
 
     #[test]
@@ -1423,6 +1679,60 @@ mod tests {
 
         frame(&mut state, &[]); // frame 3: resolves the scroll
         assert!(state.list_state.offset() > 0);
+    }
+
+    /// Regression test for a real bug: `ensure_visible` used to run
+    /// unconditionally on every frame that wasn't itself a scroll event,
+    /// which is nearly every frame (wheel events are one-shot) -- so a free
+    /// scroll would visibly move for exactly one frame and then snap
+    /// straight back to the selected row the instant the wheel stopped.
+    /// Fixed by only auto-following the selection on the frame after it
+    /// actually changes (`AppState::follow_selection`).
+    #[test]
+    fn scrolling_stays_put_on_later_frames_with_no_further_input() {
+        let mut state = init_state();
+        frame(&mut state, &[]); // frame 1: registers the list container's hit rect
+
+        let l = layout(SIZE);
+        let inner = inset(l.list);
+        let mid = Pos::new(inner.left(), inner.top());
+
+        frame(&mut state, &[mouse_at(MouseEventKind::ScrollDown, mid)]);
+        frame(&mut state, &[]); // resolves the scroll
+        let scrolled_offset = state.list_state.offset();
+        assert!(scrolled_offset > 0);
+
+        // Several more frames with no new input at all -- selection never
+        // changed, so the view must not snap back to it.
+        for _ in 0..5 {
+            frame(&mut state, &[]);
+            assert_eq!(state.list_state.offset(), scrolled_offset);
+        }
+    }
+
+    /// Regression test for a real bug: `ListState::scroll_by` has no upper
+    /// clamp by design (only the caller knows content length), and nothing
+    /// here clamped it either -- so wheel-scrolling down past the last page
+    /// pushed the offset arbitrarily far beyond `tracks.len()`, leaving the
+    /// list blank until scrolled all the way back.
+    #[test]
+    fn scrolling_down_clamps_at_the_last_page() {
+        let mut state = init_state();
+        frame(&mut state, &[]);
+
+        let l = layout(SIZE);
+        let inner = inset(l.list);
+        let mid = Pos::new(inner.left(), inner.top());
+        let visible_rows = inner.height() as usize;
+        let max_offset = state.tracks.len().saturating_sub(visible_rows);
+
+        // Scroll down far more than there is content for.
+        for _ in 0..(state.tracks.len() + 10) {
+            frame(&mut state, &[mouse_at(MouseEventKind::ScrollDown, mid)]);
+            frame(&mut state, &[]); // resolve each one
+        }
+
+        assert_eq!(state.list_state.offset(), max_offset);
     }
 
     #[test]
