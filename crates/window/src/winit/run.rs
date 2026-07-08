@@ -353,6 +353,34 @@ fn web_viewport_layout_physical_size() -> Option<winit::dpi::PhysicalSize<u32>> 
     ))
 }
 
+/// Ratio to convert a pointer position winit reports (always in *real*,
+/// uncapped-DPR physical pixels -- see `to_physical(super::scale_factor)` in
+/// `winit`'s wasm `pointer.rs`) into the raster-backing-store pixel space
+/// that [`Presenter::cell_size`](crate::presenter::Presenter::cell_size),
+/// and therefore [`pixel_to_cell`], are expressed in.
+///
+/// `1.0` whenever `real_dpr` is already at or below `capped_dpr` (desktop,
+/// non-Retina): no correction needed. Below that, taps/clicks land scaled
+/// past their true position -- south-east of the intended cell, growing
+/// with how far `real_dpr` exceeds the cap (2x at DPR 3 against a 1.5 cap).
+/// Pure math, kept separate from [`wasm_pointer_scale`] so it's unit
+/// -testable without a wasm window (hence `cfg(any(.., test))`: unused on a
+/// native non-test build, whose `on_cursor_moved` hardcodes `scale = 1.0`
+/// instead of calling this).
+#[cfg(any(target_arch = "wasm32", test))]
+fn dpr_pointer_scale(real_dpr: f64, capped_dpr: f64) -> f64 {
+    (capped_dpr / real_dpr).min(1.0)
+}
+
+/// [`dpr_pointer_scale`] using the page's actual `devicePixelRatio` and
+/// [`MAX_DEVICE_PIXEL_RATIO`]. `1.0` if no browser `window` is available.
+#[cfg(target_arch = "wasm32")]
+fn wasm_pointer_scale() -> f64 {
+    web_sys::window().map_or(1.0, |w| {
+        dpr_pointer_scale(w.device_pixel_ratio(), MAX_DEVICE_PIXEL_RATIO)
+    })
+}
+
 /// The physical pixel size of the software renderer's raster backing store,
 /// capped at [`MAX_DEVICE_PIXEL_RATIO`] for `present()` cost.
 ///
@@ -521,13 +549,24 @@ where
     }
 
     fn on_cursor_moved(&mut self, position: winit::dpi::PhysicalPosition<f64>) {
-        self.cursor_px = (position.x, position.y);
-        let px = physical_pos_from(position.x, position.y);
+        // winit always reports pointer positions in real-DPR physical
+        // pixels; rescale to the (possibly DPR-capped, on wasm) backing-store
+        // pixel space that `cell_size`/`pixel_to_cell` use, so taps land on
+        // the cell actually under the finger/cursor instead of drifting
+        // south-east of it as the real DPR grows past the cap. `1.0` on
+        // native, where there's no such cap.
+        #[cfg(target_arch = "wasm32")]
+        let scale = wasm_pointer_scale();
+        #[cfg(not(target_arch = "wasm32"))]
+        let scale = 1.0;
+        let (x, y) = (position.x * scale, position.y * scale);
+        self.cursor_px = (x, y);
+        let px = physical_pos_from(x, y);
         let Some(term) = self.terminal.as_mut() else {
             return;
         };
         let (cell_w, cell_h) = term.backend().presenter().cell_size();
-        let pos = pixel_to_cell(position.x, position.y, cell_w, cell_h);
+        let pos = pixel_to_cell(x, y, cell_w, cell_h);
         term.backend_mut().push_event(Event::Mouse(MouseEvent {
             kind: MouseEventKind::Moved,
             position: pos,
@@ -642,6 +681,25 @@ mod tests {
     use retroglyph_core::grid::{Pos, Size};
     use retroglyph_core::tile::Tile;
     use std::time::Duration;
+
+    // ── dpr_pointer_scale ─────────────────────────────────────────────────────
+
+    #[test]
+    fn dpr_pointer_scale_no_correction_below_cap() {
+        // Real DPR at or below the cap: pointer positions already match the
+        // (uncapped) backing store, no rescale needed.
+        assert!((dpr_pointer_scale(1.0, 1.5) - 1.0).abs() < 1e-9);
+        assert!((dpr_pointer_scale(1.5, 1.5) - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn dpr_pointer_scale_corrects_above_cap() {
+        // Real DPR 3 against a 1.5 cap: the backing store is half the real
+        // resolution, so pointer positions must be halved to land on the
+        // right cell instead of drifting south-east of it.
+        assert!((dpr_pointer_scale(3.0, 1.5) - 0.5).abs() < 1e-9);
+        assert!((dpr_pointer_scale(2.0, 1.5) - 0.75).abs() < 1e-9);
+    }
 
     /// A dependency-free [`Presenter`] with fixed 8x16 cells.
     ///
