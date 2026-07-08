@@ -29,20 +29,34 @@ use std::time::{Duration, Instant};
 #[cfg(target_arch = "wasm32")]
 mod wasm_time {
     pub use std::time::Duration;
+
+    /// Milliseconds since the page's time origin, from the browser's
+    /// high-resolution timer. Falls back to `0.0` if `window()` or
+    /// `Performance` is unavailable (e.g. a worker without a `Window`).
+    fn perf_now_ms() -> f64 {
+        web_sys::window()
+            .and_then(|w| w.performance())
+            .map_or(0.0, |p| p.now())
+    }
+
     #[derive(Clone, Copy)]
-    pub struct Instant;
+    pub struct Instant(f64);
+
     impl Instant {
         pub fn now() -> Self {
-            Self
+            Self(perf_now_ms())
         }
         pub fn elapsed(self) -> Duration {
-            Duration::ZERO
+            Self::now().duration_since(self)
+        }
+        pub fn duration_since(self, earlier: Self) -> Duration {
+            Duration::from_secs_f64((self.0 - earlier.0).max(0.0) / 1000.0)
         }
     }
     impl std::ops::Sub for Instant {
         type Output = Duration;
-        fn sub(self, _: Self) -> Duration {
-            Duration::ZERO
+        fn sub(self, other: Self) -> Duration {
+            self.duration_since(other)
         }
     }
 }
@@ -51,10 +65,12 @@ use wasm_time::{Duration, Instant};
 
 /// Measures wall-clock time between frames for feeding a [`FrameClock`].
 ///
-/// Wraps the platform split the demos need: real elapsed time via [`Instant`]
-/// on native targets, a fixed 16 ms assumption on `wasm32` (where there is no
-/// `SystemTime`/`Instant`). This is the tiny helper referenced by the dashboard
-/// demo plan; it exists because `rg_run!`'s `tick` signature hides `Frame.dt`.
+/// Wraps the platform split the demos need: real elapsed time via
+/// [`std::time::Instant`] on native targets, real elapsed time via the
+/// browser's `performance.now()` on `wasm32` (where there is no
+/// `SystemTime`/`Instant`). This is the tiny helper referenced by the
+/// dashboard demo plan; it exists because `rg_run!`'s `tick` signature hides
+/// `Frame.dt`.
 ///
 /// [`FrameClock`]: retroglyph_core::FrameClock
 pub struct Stopwatch {
@@ -68,6 +84,16 @@ impl Default for Stopwatch {
 }
 
 impl Stopwatch {
+    /// Upper bound on a single reported delta.
+    ///
+    /// Frames slower than this run in slight slow motion, which is the
+    /// deliberate trade: a paused tab, a breakpoint, or a backgrounded
+    /// `requestAnimationFrame` (browsers pause rAF on hidden tabs, so
+    /// `performance.now()` can jump by seconds) would otherwise fast-forward
+    /// every animation by the full elapsed time in one step. 100 ms floors
+    /// the effective sim rate at 10 Hz. Standard game-loop "max frame time".
+    const MAX_LAP: Duration = Duration::from_millis(100);
+
     /// Start the stopwatch at the current instant.
     #[must_use]
     pub fn new() -> Self {
@@ -77,19 +103,16 @@ impl Stopwatch {
     }
 
     /// Return the elapsed time since the previous `lap` (or construction) and
-    /// reset the mark. On `wasm32` this always returns a fixed 16 ms tick.
+    /// reset the mark. On `wasm32` this is real wall-clock time measured via
+    /// `performance.now()`, so a slow frame rate advances the sim by more
+    /// time per lap rather than always assuming 16 ms. Clamped to
+    /// [`MAX_LAP`](Self::MAX_LAP) so a paused/backgrounded tab doesn't
+    /// fast-forward animations on resume.
     pub fn lap(&mut self) -> Duration {
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            let now = Instant::now();
-            let dt = now.duration_since(self.last);
-            self.last = now;
-            dt
-        }
-        #[cfg(target_arch = "wasm32")]
-        {
-            Duration::from_millis(16)
-        }
+        let now = Instant::now();
+        let dt = now.duration_since(self.last).min(Self::MAX_LAP);
+        self.last = now;
+        dt
     }
 }
 
@@ -158,10 +181,7 @@ impl FixedStep {
         // accumulator is zero or was just exhausted).
         if self.accumulator == Duration::ZERO {
             let now = Instant::now();
-            #[cfg(not(target_arch = "wasm32"))]
             let delta = now.duration_since(self.last).min(self.max_accumulate);
-            #[cfg(target_arch = "wasm32")]
-            let delta = Duration::ZERO;
             self.last = now;
             self.accumulator += delta;
         }

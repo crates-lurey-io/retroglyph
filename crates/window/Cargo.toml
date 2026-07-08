@@ -26,7 +26,7 @@ log = { version = "0.4", optional = true }
 # a plain target dependency rather than threading an extra optional-feature
 # combination through for a target-gated, always-small pair of crates.
 wasm-bindgen = "=0.2.106"
-web-sys = { version = "0.3", features = ["Window", "EventTarget"] }
+web-sys = { version = "0.3", features = ["Window", "EventTarget", "Performance"] }
 
 [features]
 default = ["winit"]

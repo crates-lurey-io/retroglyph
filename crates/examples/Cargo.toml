@@ -50,6 +50,10 @@ wasm-terminal = ["dep:retroglyph-terminal-wasm"]
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "=0.2.106"
 console_error_panic_hook = "0.1"
+# Used by util/timestep.rs's Stopwatch/FixedStep to read a real wall-clock
+# delta via performance.now(), so wasm animations run at wall-clock speed
+# instead of assuming a fixed frame time.
+web-sys = { version = "0.3", features = ["Window", "Performance"] }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 # Needed by the `tileset`/`sprite_stress` examples' build-time sprite-sheet
