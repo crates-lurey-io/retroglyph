@@ -46,8 +46,7 @@ impl<B: Backend> Widget<B> for Text<'_> {
         let text = truncate_to_cols(self.content, area.width_usize());
         term.reset_style()
             .fg(self.style.foreground())
-            .bg(self.style.background())
-            .modifier(self.style.modifiers());
+            .bg(self.style.background());
         term.print(area.left(), area.top(), &text);
         term.reset_style();
     }

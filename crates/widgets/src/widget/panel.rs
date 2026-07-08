@@ -77,8 +77,7 @@ impl<B: Backend> Widget<B> for Panel<'_> {
             let title_y = area.top();
             term.reset_style()
                 .fg(self.border_style.foreground())
-                .bg(self.border_style.background())
-                .modifier(self.border_style.modifiers());
+                .bg(self.border_style.background());
             term.put(title_x, title_y, ' ');
             term.print(title_x + 1, title_y, &t);
             term.put(title_x + 1 + t.len() as u16, title_y, ' ');

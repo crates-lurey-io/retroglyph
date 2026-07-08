@@ -14,11 +14,13 @@
 #[macro_export]
 macro_rules! rg_gallery_run {
     ($app:expr, $title:literal, $cols:expr, $rows:expr) => {
+        // Terminal.
         #[cfg(feature = "crossterm")]
         fn main() -> ::std::io::Result<()> {
             ::retroglyph_crossterm::Crossterm::run($app)
         }
 
+        // Native window.
         #[cfg(all(feature = "software", not(feature = "crossterm")))]
         fn main() {
             #[cfg(target_arch = "wasm32")]
@@ -35,8 +37,7 @@ macro_rules! rg_gallery_run {
             ::retroglyph_window::winit::run_app(config, renderer, $app).expect("event loop failed");
         }
 
-        // Entry point the browser's wasm-bindgen glue calls to start the
-        // module -- on wasm32 there's no OS process to invoke `main` for us.
+        // Entry point the browser's wasm-bindgen glue calls to start the module.
         #[cfg(all(
             feature = "software",
             not(feature = "crossterm"),
@@ -49,6 +50,7 @@ macro_rules! rg_gallery_run {
             ::std::result::Result::Ok(())
         }
 
+        // Fallback if no features were selected.
         #[cfg(not(any(feature = "crossterm", feature = "software")))]
         fn main() {
             $crate::run_headless($cols, $rows, $app);

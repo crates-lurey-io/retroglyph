@@ -77,7 +77,6 @@ use grixy::ops::GridWrite;
 use grixy::ops::layout::RowMajor;
 use retroglyph_core::event::Event;
 use retroglyph_core::grid::{Pos, Size};
-use retroglyph_core::style::CellModifier;
 use retroglyph_core::tile::Tile;
 use retroglyph_window::WindowHandle;
 #[cfg(feature = "tilesets")]
@@ -628,12 +627,8 @@ fn blit_cell(
         return;
     }
 
-    let mut fg = resolve_color(cell.style().foreground(), DEFAULT_FG);
-    let mut bg = resolve_color(cell.style().background(), DEFAULT_BG);
-
-    if cell.style().modifiers().contains(CellModifier::REVERSE) {
-        core::mem::swap(&mut fg, &mut bg);
-    }
+    let fg = resolve_color(cell.style().foreground(), DEFAULT_FG);
+    let bg = resolve_color(cell.style().background(), DEFAULT_BG);
 
     let glyph_index = font.char_to_index(cell.glyph());
     let rows = font.rows(glyph_index);
@@ -695,12 +690,7 @@ fn blit_glyph(
         return;
     }
 
-    #[allow(clippy::cast_possible_wrap)]
-    let fg = if tile.style().modifiers().contains(CellModifier::REVERSE) {
-        resolve_color(tile.style().background(), DEFAULT_BG)
-    } else {
-        resolve_color(tile.style().foreground(), DEFAULT_FG)
-    };
+    let fg = resolve_color(tile.style().foreground(), DEFAULT_FG);
 
     #[allow(clippy::cast_possible_wrap)]
     let origin_x = px_x as i64 + i64::from(tile.dx()) * scale as i64;

@@ -42,8 +42,7 @@ impl<B: Backend> Widget<B> for BoxBorder {
 
         term.reset_style()
             .fg(self.style.foreground())
-            .bg(self.style.background())
-            .modifier(self.style.modifiers());
+            .bg(self.style.background());
 
         // Corners
         term.put(x0, y0, TL);

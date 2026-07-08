@@ -32,8 +32,7 @@ impl<B: Backend> Widget<B> for PrintLine<'_> {
             let text = truncate_to_cols(&span.content, remaining);
             term.reset_style()
                 .fg(span.style.foreground())
-                .bg(span.style.background())
-                .modifier(span.style.modifiers());
+                .bg(span.style.background());
             term.print(x, area.top(), &text);
             x += text.len() as u16;
         }

@@ -48,13 +48,11 @@ impl<B: Backend> StatefulWidget<B> for Table<'_> {
         if area.width() == 0 || area.height() == 0 {
             return;
         }
-        let header_style = Style::new()
-            .fg(Color::Rgb {
-                r: 210,
-                g: 210,
-                b: 230,
-            })
-            .bold();
+        let header_style = Style::new().fg(Color::Rgb {
+            r: 210,
+            g: 210,
+            b: 230,
+        });
         draw_row(
             term,
             area,
@@ -137,8 +135,7 @@ fn draw_row<B: Backend>(
         let text = truncate_to_cols(cell, avail);
         term.reset_style()
             .fg(style.foreground())
-            .bg(style.background())
-            .modifier(style.modifiers());
+            .bg(style.background());
         term.print(x, y, &text);
         x = x.saturating_add(w + 1); // one-column gap between columns
     }

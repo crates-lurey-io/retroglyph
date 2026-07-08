@@ -37,7 +37,7 @@ src/
   cell.rs           Cell — a glyph + Style
   color.rs          Color enum (Default / ANSI / Indexed / RGB)
   grid.rs           Grid — 2-D cell buffer, diff iterator
-  style.rs          Style, CellModifier
+  style.rs          Style
   event.rs          Event, KeyEvent, MouseEvent
   terminal.rs       Terminal<B> — stateful drawing API, double buffering
 ```

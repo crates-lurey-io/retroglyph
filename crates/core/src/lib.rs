@@ -85,7 +85,7 @@ pub use frame_clock::FrameClock;
 pub use grid::{Grid, Pos, Rect, Size};
 #[cfg(feature = "egc")]
 pub use layout::{HAlign, TextLayout, TextMetrics, VAlign};
-pub use style::{CellModifier, Style};
+pub use style::Style;
 pub use terminal::Terminal;
 pub use text::{Line, Span};
 pub use tile::Tile;

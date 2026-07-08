@@ -56,7 +56,6 @@
 
 use retroglyph_core::color::Color;
 use retroglyph_core::grid::Pos;
-use retroglyph_core::style::CellModifier;
 use retroglyph_core::tile::Tile;
 use std::io::{self, Write};
 
@@ -87,42 +86,6 @@ fn write_sgr_color<W: Write>(out: &mut W, color: Color, base: u8, reset: u8) -> 
     }
 }
 
-/// Writes the SGR attribute-reset-and-reapply sequence for `modifiers`.
-///
-/// Unlike colors, terminal attributes have no single "set to this exact
-/// state" escape; each attribute is toggled independently. We always emit a
-/// full reset (`\x1b[0m`) followed by every attribute in `modifiers`, which
-/// costs a few more bytes than diffing attribute-by-attribute but avoids
-/// having to track which of the 8 independent toggle bits changed.
-fn write_sgr_attributes<W: Write>(out: &mut W, modifiers: CellModifier) -> io::Result<()> {
-    write!(out, "\x1b[0m")?;
-    if modifiers.contains(CellModifier::BOLD) {
-        write!(out, "\x1b[1m")?;
-    }
-    if modifiers.contains(CellModifier::DIM) {
-        write!(out, "\x1b[2m")?;
-    }
-    if modifiers.contains(CellModifier::ITALIC) {
-        write!(out, "\x1b[3m")?;
-    }
-    if modifiers.contains(CellModifier::UNDERLINE) {
-        write!(out, "\x1b[4m")?;
-    }
-    if modifiers.contains(CellModifier::BLINK) {
-        write!(out, "\x1b[5m")?;
-    }
-    if modifiers.contains(CellModifier::REVERSE) {
-        write!(out, "\x1b[7m")?;
-    }
-    if modifiers.contains(CellModifier::HIDDEN) {
-        write!(out, "\x1b[8m")?;
-    }
-    if modifiers.contains(CellModifier::STRIKETHROUGH) {
-        write!(out, "\x1b[9m")?;
-    }
-    Ok(())
-}
-
 /// A generic ANSI/SGR cell-diff renderer.
 ///
 /// Converts [`Tile`] content into standard ANSI/CSI escape sequences and
@@ -141,7 +104,6 @@ pub struct TerminalRenderer<W> {
     writer: W,
     last_fg: Option<Color>,
     last_bg: Option<Color>,
-    last_attrs: Option<CellModifier>,
     cursor_x: Option<u16>,
     cursor_y: Option<u16>,
 }
@@ -153,7 +115,6 @@ impl<W: Write> TerminalRenderer<W> {
             writer,
             last_fg: None,
             last_bg: None,
-            last_attrs: None,
             cursor_x: None,
             cursor_y: None,
         }
@@ -182,7 +143,6 @@ impl<W: Write> TerminalRenderer<W> {
     pub const fn reset_state(&mut self) {
         self.last_fg = None;
         self.last_bg = None;
-        self.last_attrs = None;
         self.cursor_x = None;
         self.cursor_y = None;
     }
@@ -244,7 +204,6 @@ impl<W: Write> TerminalRenderer<W> {
 
             let fg = cell.style().foreground();
             let bg = cell.style().background();
-            let attrs = cell.style().modifiers();
 
             // Only emit a cursor move when the cursor isn't already at the
             // right position (adjacent cells advance the cursor by printing).
@@ -252,20 +211,6 @@ impl<W: Write> TerminalRenderer<W> {
             if needs_move {
                 // CSI row;col H is 1-indexed.
                 write!(self.writer, "\x1b[{};{}H", pos.y + 1, pos.x + 1)?;
-            }
-
-            // Attributes first: `write_sgr_attributes` always starts with a
-            // full SGR reset (`\x1b[0m`), which also resets fg/bg to the
-            // terminal default. Emitting it after the color codes would
-            // silently clobber whatever color was just set.
-            if self.last_attrs != Some(attrs) {
-                write_sgr_attributes(&mut self.writer, attrs)?;
-                self.last_attrs = Some(attrs);
-                // The reset also invalidates the terminal's actual fg/bg
-                // state even when our tracked `last_fg`/`last_bg` value
-                // hasn't changed, so force both to be re-emitted below.
-                self.last_fg = None;
-                self.last_bg = None;
             }
 
             if self.last_fg != Some(fg) {
@@ -385,47 +330,6 @@ mod tests {
         let tile = Tile::new('X', style);
         let out = render_one(&tile);
         assert!(out.contains("\x1b[38;5;200m"), "output: {out:?}");
-    }
-
-    /// Regression test: `write_sgr_attributes` always starts with a full SGR
-    /// reset (`\x1b[0m`), which also resets fg/bg to the terminal default.
-    /// The color codes for a cell must be emitted *after* the attribute
-    /// reset, not before, or a reset clobbers the color that was just set.
-    /// This exact ordering bug broke `tests/e2e_snapshots.rs`'s
-    /// `hex_battle` snapshot during the retroglyph-terminal extraction: the
-    /// first cell drawn (default attributes, non-default color) lost its
-    /// background color entirely.
-    #[test]
-    fn attribute_reset_does_not_clobber_color_on_first_cell() {
-        // Style::default() has empty modifiers, which still differs from the
-        // renderer's initial `last_attrs` of `None`, so the reset is emitted
-        // on this very first cell -- exactly the scenario that regressed.
-        let style = Style::new().fg(Color::Rgb { r: 1, g: 2, b: 3 });
-        let tile = Tile::new('X', style);
-        let mut renderer = TerminalRenderer::new(Vec::new());
-        renderer
-            .draw(core::iter::once((Pos { x: 0, y: 0 }, &tile)))
-            .unwrap();
-        renderer.flush().unwrap();
-        let out = String::from_utf8(renderer.into_writer()).unwrap();
-        // The color escape must appear, and after the last `\x1b[0m` reset
-        // in the stream (not before it, where it would be clobbered).
-        let reset_pos = out.rfind("\x1b[0m").expect("reset should be emitted");
-        let color_pos = out
-            .find("\x1b[38;2;1;2;3m")
-            .expect("color escape should be emitted");
-        assert!(
-            color_pos > reset_pos,
-            "color escape must come after the attribute reset: {out:?}"
-        );
-    }
-
-    #[test]
-    fn bold_attribute_emitted() {
-        let style = Style::new().bold();
-        let tile = Tile::new('X', style);
-        let out = render_one(&tile);
-        assert!(out.contains("\x1b[1m"), "output: {out:?}");
     }
 
     #[test]

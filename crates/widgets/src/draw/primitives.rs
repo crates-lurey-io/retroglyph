@@ -36,8 +36,7 @@ pub(crate) const V: char = '│'; // vertical bar
 pub fn fill_rect<B: Backend>(term: &mut Terminal<B>, rect: Rect, ch: char, style: Style) {
     term.reset_style()
         .fg(style.foreground())
-        .bg(style.background())
-        .modifier(style.modifiers());
+        .bg(style.background());
     for y in rect.top()..rect.bottom() {
         for x in rect.left()..rect.right() {
             term.put(x, y, ch);

@@ -39,7 +39,7 @@ CI. The `doc` recipe swallows `cargo doc` failures due to `|| true` chaining. Se
 src/
   lib.rs             Root: module declarations, feature-gated re-exports
   color.rs           Color (Default / ANSI / Indexed / RGB)
-  style.rs           Style, CellModifier (depends on: color)
+  style.rs           Style (depends on: color)
   tile.rs            Tile — glyph + Style + sub-cell offsets (depends on: style)
   grid.rs            Grid, Pos, Rect, Size (depends on: tile, style; uses grixy)
   event.rs           Event, KeyEvent, MouseEvent (depends on: grid::Pos)

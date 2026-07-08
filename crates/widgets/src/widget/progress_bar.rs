@@ -61,8 +61,7 @@ impl<B: Backend> Widget<B> for ProgressBar {
             };
             term.reset_style()
                 .fg(style.foreground())
-                .bg(style.background())
-                .modifier(style.modifiers());
+                .bg(style.background());
             term.put(x, y, if is_filled { '█' } else { '░' });
         }
         term.reset_style();

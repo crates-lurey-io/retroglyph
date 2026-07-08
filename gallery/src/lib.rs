@@ -1,25 +1,21 @@
 //! Shared plumbing for the gallery's numbered examples.
 //!
-//! Each example implements [`App<B>`](retroglyph_core::App) once, generically
-//! over the backend, then calls [`rg_gallery_run!`] to generate the
-//! per-backend `main` functions (crossterm terminal, software desktop/WASM
-//! window, and a stdout-printing Headless fallback) instead of hand-writing
-//! them. See `examples/01_hello_world.rs` for the shape this expects.
-//!
-//! This is intentionally much smaller than `crates/examples`'s `rg_run!`:
-//! no `ClosureApp` init/tick split, no `wasm-headless`/`wasm-terminal`
-//! browser-native-render branches -- just the four `main`s every example
-//! needs, generated once instead of copy-pasted.
+//! Each example implements [`App<B>`](retroglyph_core::App) once, generically over the backend,
+//! then calls [`rg_gallery_run!`] to generate the per-backend `main` functions (crossterm
+//! terminal, software desktop/WASM window, and a stdout-printing Headless fallback) instead of
+//! hand-writing them. See `examples/01_hello_world.rs` for the shape this expects.
 
+mod press_any_key;
 mod run_macro;
 
 use retroglyph_core::{App, Flow, Frame, Headless, Terminal};
 
-/// Headless fallback: ticks `app` a handful of frames against a fresh
-/// `Terminal<Headless>` of `cols`x`rows`, printing each frame's grid to
-/// stdout. No terminal or window is involved, and no input is ever
-/// injected, so purely time-driven examples show motion across frames
-/// while input-driven ones just repeat their initial state.
+pub use press_any_key::any_key_pressed_or_window_closed;
+
+/// Headless fallback: ticks `app` a handful of frames against a fresh `Terminal<Headless>` of
+/// `cols`x`rows`, printing each frame's grid to stdout. No terminal or window is involved, and no
+/// input is ever injected, so purely time-driven examples show motion across frames while
+/// input-driven ones just repeat their initial state.
 ///
 /// Frame count defaults to 3; override with `RG_HEADLESS_FRAMES`.
 #[doc(hidden)]
