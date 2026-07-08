@@ -1,0 +1,32 @@
+[package]
+name = "retroglyph-gallery"
+version = "0.1.0-alpha"
+description = "Numbered, incremental example gallery for retroglyph (not published)"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+retroglyph-core = { path = "../crates/core", version = "0.1.0-alpha" }
+retroglyph-crossterm = { path = "../crates/crossterm", version = "0.1.0-alpha", optional = true }
+retroglyph-software = { path = "../crates/software", version = "0.1.0-alpha", optional = true }
+retroglyph-window = { path = "../crates/window", version = "0.1.0-alpha", optional = true }
+
+[features]
+# A gallery example selects a backend by enabling one of these. With none
+# enabled, every example still builds and runs against the Headless
+# fallback (see each example's `#[cfg(not(any(...)))] fn main`).
+crossterm = ["dep:retroglyph-crossterm"]
+software = ["dep:retroglyph-software", "dep:retroglyph-window"]
+default-font = ["software", "retroglyph-software/default-font"]
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+# Version must match the wasm-bindgen-cli pin in the workspace root Cargo.toml.
+wasm-bindgen = "=0.2.106"
+console_error_panic_hook = "0.1"
