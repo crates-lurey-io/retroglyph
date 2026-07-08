@@ -114,6 +114,15 @@ struct RenderContext {
     window_surface: Option<WindowSurface>,
     cell_w: u32,
     cell_h: u32,
+    /// Shadow copy of `pixel_buf` from the previous frame, used to compute
+    /// the damaged row range in [`present`](SoftwareRenderer::present).
+    /// Kept the same length as `pixel_buf`; resized (and the whole frame
+    /// marked damaged) whenever the buffer is resized.
+    prev_pixels: Vec<u32>,
+    /// Row range `[y0, y1)` changed since the last present, computed in
+    /// `draw_layers` by diffing against `prev_pixels`. `None` means no rows
+    /// changed (nothing to present).
+    damage_rows: Option<(u32, u32)>,
 }
 
 impl SoftwareRenderer {
@@ -136,6 +145,8 @@ impl SoftwareRenderer {
                 window_surface: None,
                 cell_w,
                 cell_h,
+                prev_pixels: vec![0u32; buf_w * buf_h],
+                damage_rows: None,
             },
             #[cfg(feature = "tilesets")]
             sprite_cache,
@@ -188,10 +199,67 @@ impl SoftwareRenderer {
     ///
     /// Returns [`SurfaceError`] if the platform surface fails to present.
     pub fn present(&mut self) -> Result<(), SurfaceError> {
-        match self.ctx.window_surface.as_mut() {
-            Some(surface) => surface.present(self.ctx.pixel_buf.as_ref()),
-            None => Ok(()), // headless mode, nothing to present
+        let Some(surface) = self.ctx.window_surface.as_mut() else {
+            return Ok(()); // headless mode, nothing to present
+        };
+        // No damage since the last present: nothing changed, so skip the copy
+        // + upload round trip entirely.
+        let Some(damage) = self.ctx.damage_rows else {
+            return Ok(());
+        };
+        let result = surface.present(self.ctx.pixel_buf.as_ref(), damage);
+        // Damage has been presented (or the attempt is done); drop it so a
+        // later present() with no new draw_layers() call is a no-op instead of
+        // re-presenting stale damage.
+        self.ctx.damage_rows = None;
+        result
+    }
+
+    /// Diffs `pixel_buf` against `prev_pixels` row by row to find the
+    /// smallest contiguous `[y0, y1)` band that changed, stores it as
+    /// `damage_rows`, then copies `pixel_buf` into `prev_pixels` for the
+    /// next frame's comparison.
+    ///
+    /// If the buffers differ in length (a resize raced with this call)
+    /// the whole frame is marked damaged and `prev_pixels` is resized to
+    /// match.
+    fn update_damage(&mut self, buf_w: usize) {
+        let pixels = self.ctx.pixel_buf.as_ref();
+        if self.ctx.prev_pixels.len() != pixels.len() {
+            self.ctx.prev_pixels.clear();
+            self.ctx.prev_pixels.extend_from_slice(pixels);
+            let rows = pixels.len().checked_div(buf_w).unwrap_or(0);
+            #[allow(clippy::cast_possible_truncation)]
+            let rows_u32 = rows as u32;
+            self.ctx.damage_rows = if rows == 0 { None } else { Some((0, rows_u32)) };
+            return;
         }
+
+        if buf_w == 0 {
+            self.ctx.damage_rows = None;
+            return;
+        }
+
+        let rows = pixels.len() / buf_w;
+        let mut y0 = None;
+        let mut y1 = 0usize;
+        for row in 0..rows {
+            let start = row * buf_w;
+            let end = start + buf_w;
+            if pixels[start..end] != self.ctx.prev_pixels[start..end] {
+                if y0.is_none() {
+                    y0 = Some(row);
+                }
+                y1 = row + 1;
+            }
+        }
+
+        self.ctx.damage_rows = y0.map(|y0| {
+            #[allow(clippy::cast_possible_truncation)]
+            (y0 as u32, y1 as u32)
+        });
+
+        self.ctx.prev_pixels.copy_from_slice(pixels);
     }
 }
 
@@ -397,6 +465,8 @@ impl Backend for SoftwareRenderer {
                 scale,
             );
         }
+
+        self.update_damage(buf_w);
         Ok(())
     }
 
@@ -422,6 +492,16 @@ impl Backend for SoftwareRenderer {
         let new_w = usize::from(size.width) * cell_w;
         let new_h = usize::from(size.height) * cell_h;
         self.ctx.pixel_buf.resize(new_w, new_h);
+        // Buffer dimensions changed: the shadow buffer no longer matches,
+        // so drop it and force a full-frame damage rect on the next present.
+        self.ctx.prev_pixels.clear();
+        self.ctx.prev_pixels.resize(new_w * new_h, 0);
+        self.ctx.damage_rows = if new_h == 0 {
+            None
+        } else {
+            #[allow(clippy::cast_possible_truncation)]
+            Some((0, new_h as u32))
+        };
         #[allow(clippy::cast_possible_truncation)]
         {
             self.ctx.cell_w = cell_w as u32;
@@ -833,7 +913,7 @@ fn indexed_to_rgb(idx: u8) -> u32 {
 mod tests {
     use super::*;
     use retroglyph_core::color::Color;
-    use retroglyph_core::grid::Pos;
+    use retroglyph_core::grid::{Pos, Size};
     use retroglyph_core::style::Style;
 
     fn test_renderer() -> SoftwareRenderer {
@@ -1060,5 +1140,122 @@ mod tests {
         assert_eq!(pixels[0] & 0x00ff_ffff, 0x00c8_0000);
         // Top-left pixel of cell (1, 0): layer-1 cell was empty, so layer 0 shows.
         assert_eq!(pixels[cell_w] & 0x00ff_ffff, 0x0014_1414);
+    }
+
+    // ── Damage tracking (the row band fed to present_with_damage) ─────────
+    //
+    // The windowed present() upload can't run in a headless test (no surface),
+    // but the damage computation runs in draw_layers regardless, so the band
+    // is exactly what these assert. At scale 1 with the vga8x16 font each cell
+    // is 8x16 px, so the pixel buffer is (cols*8) x (rows*16) and cell-row r
+    // occupies pixel rows [r*16, r*16+16). Damage is reported in pixel rows.
+
+    /// Cell height in pixels at scale 1 (vga8x16).
+    const CELL_H_PX: u32 = 16;
+
+    fn damage_renderer(cols: u16, rows: u16) -> SoftwareRenderer {
+        SoftwareBackendBuilder::new()
+            .grid_size(cols, rows)
+            .scale(1)
+            .build()
+            .unwrap()
+            .run_headless()
+    }
+
+    /// Fill every layer-0 cell with `tile`, overriding cell `(ox, oy)` with
+    /// `over` when given, then run `draw_layers` (which computes damage).
+    fn draw_fill(
+        r: &mut SoftwareRenderer,
+        cols: u16,
+        rows: u16,
+        tile: &Tile,
+        over: Option<(u16, u16, &Tile)>,
+    ) {
+        let mut items: Vec<(u8, Pos, &Tile)> = Vec::new();
+        for y in 0..rows {
+            for x in 0..cols {
+                let t = match over {
+                    Some((ox, oy, ot)) if ox == x && oy == y => ot,
+                    _ => tile,
+                };
+                items.push((0, Pos::new(x, y), t));
+            }
+        }
+        r.draw_layers(items.into_iter()).unwrap();
+    }
+
+    fn bg_tile(r: u8, g: u8, b: u8) -> Tile {
+        Tile::new(' ', Style::new().bg(Color::Rgb { r, g, b }))
+    }
+
+    #[test]
+    fn damage_first_frame_covers_whole_buffer() {
+        // prev_pixels starts zeroed, so a non-black first frame differs on
+        // every row: the whole buffer is damaged.
+        let mut r = damage_renderer(2, 3);
+        draw_fill(&mut r, 2, 3, &bg_tile(200, 0, 0), None);
+        assert_eq!(r.ctx.damage_rows, Some((0, 3 * CELL_H_PX)));
+    }
+
+    #[test]
+    fn damage_is_none_when_a_frame_is_unchanged() {
+        let mut r = damage_renderer(2, 3);
+        let red = bg_tile(200, 0, 0);
+        draw_fill(&mut r, 2, 3, &red, None); // first frame: full damage
+        draw_fill(&mut r, 2, 3, &red, None); // identical redraw: nothing changed
+        assert_eq!(r.ctx.damage_rows, None);
+        // Headless present() is a no-op and must still succeed.
+        assert!(r.present().is_ok());
+    }
+
+    #[test]
+    fn damage_band_is_tight_for_a_localized_change() {
+        let mut r = damage_renderer(2, 3);
+        let red = bg_tile(200, 0, 0);
+        draw_fill(&mut r, 2, 3, &red, None); // baseline
+        // Change only cell (0, 1); its pixels live in rows [16, 32).
+        draw_fill(&mut r, 2, 3, &red, Some((0, 1, &bg_tile(0, 0, 200))));
+        assert_eq!(r.ctx.damage_rows, Some((CELL_H_PX, 2 * CELL_H_PX)));
+    }
+
+    #[test]
+    fn damage_band_spans_from_first_to_last_changed_row() {
+        // Changes in cell-row 0 and cell-row 2 inflate the band to cover the
+        // clean row 1 between them (single row band, documented limitation).
+        let mut r = damage_renderer(2, 3);
+        let red = bg_tile(200, 0, 0);
+        draw_fill(&mut r, 2, 3, &red, None);
+        let blue = bg_tile(0, 0, 200);
+        // Two separate frames would each report one band; do it in one frame
+        // by changing both corners relative to the baseline.
+        let mut items: Vec<(u8, Pos, &Tile)> = Vec::new();
+        for y in 0..3u16 {
+            for x in 0..2u16 {
+                let t = if (x, y) == (0, 0) || (x, y) == (1, 2) {
+                    &blue
+                } else {
+                    &red
+                };
+                items.push((0, Pos::new(x, y), t));
+            }
+        }
+        r.draw_layers(items.into_iter()).unwrap();
+        assert_eq!(r.ctx.damage_rows, Some((0, 3 * CELL_H_PX)));
+    }
+
+    #[test]
+    fn resize_marks_full_frame_damage() {
+        let mut r = damage_renderer(2, 3);
+        let red = bg_tile(200, 0, 0);
+        draw_fill(&mut r, 2, 3, &red, None);
+        draw_fill(&mut r, 2, 3, &red, None);
+        assert_eq!(r.ctx.damage_rows, None);
+        // A resize invalidates the shadow buffer and forces a full repaint so
+        // no stale pixels survive at the new size.
+        r.resize(Size {
+            width: 4,
+            height: 5,
+        });
+        assert_eq!(r.ctx.damage_rows, Some((0, 5 * CELL_H_PX)));
     }
 }

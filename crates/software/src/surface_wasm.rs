@@ -108,14 +108,16 @@ impl WindowSurface {
         self.rgba.resize(len, 0);
     }
 
-    /// Converts `pixels` (`0x00RRGGBB`) into the persistent `rgba` buffer in
-    /// place (no per-frame allocation) and blits it via `put_image_data`.
+    /// Converts only the changed row band `[y0, y1)` of `pixels`
+    /// (`0x00RRGGBB`) into the persistent `rgba` buffer in place (no per-frame
+    /// allocation), then blits just that band via `put_image_data` at row `y0`.
+    /// Rows outside the band are unchanged since the last present, so they stay
+    /// correct on the canvas without being re-uploaded.
     ///
-    /// The `ImageData` is rebuilt each frame because a raw
+    /// The band `ImageData` is rebuilt each frame because a raw
     /// `js_sys::Uint8ClampedArray::view` into WASM linear memory would detach
     /// across any intervening memory growth (and its constructor is `unsafe`,
-    /// which this crate forbids).
-    /// `ImageData::new_with_u8_clamped_array_and_sh` copies `rgba` into a
+    /// which this crate forbids). The constructor copies the band into a
     /// JS-owned buffer, but `rgba` itself is allocated once and reused, so the
     /// `flat_map`/`Vec::collect` allocation softbuffer's web backend performs
     /// on every present is gone.
@@ -124,40 +126,56 @@ impl WindowSurface {
     ///
     /// Returns [`SurfaceError::Canvas`] if `ImageData` construction or
     /// `put_image_data` fails.
-    #[allow(clippy::cast_possible_truncation)]
-    pub(crate) fn present(&mut self, pixels: &[u32]) -> Result<(), SurfaceError> {
+    #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
+    pub(crate) fn present(
+        &mut self,
+        pixels: &[u32],
+        damage: (u32, u32),
+    ) -> Result<(), SurfaceError> {
         if self.width == 0 || self.height == 0 {
             return Ok(()); // not yet sized
         }
         let expected_len = self.width as usize * self.height as usize * 4;
-        if self.rgba.len() != expected_len {
+        if self.rgba.len() != expected_len || pixels.len() * 4 != expected_len {
             // Surface resize is still pending; skip rather than present at
             // mismatched dimensions.
             return Ok(());
         }
 
-        if pixels.len() * 4 == self.rgba.len() {
-            for (px, chunk) in pixels.iter().zip(self.rgba.chunks_exact_mut(4)) {
-                // Truncation is intended: `pixel_buf` packs 0x00RRGGBB, so only
-                // the low byte of each shifted channel is meaningful.
-                chunk[0] = (px >> 16) as u8;
-                chunk[1] = (px >> 8) as u8;
-                chunk[2] = *px as u8;
-                chunk[3] = 255;
-            }
-        } else {
-            self.rgba.fill(0);
+        let w = self.width as usize;
+        let y0 = damage.0 as usize;
+        let y1 = (damage.1 as usize).min(self.height as usize);
+        if y1 <= y0 {
+            return Ok(());
         }
 
+        // Convert only the damaged rows into `rgba` in place.
+        let (start, end) = (y0 * w, y1 * w);
+        for (px, chunk) in pixels[start..end]
+            .iter()
+            .zip(self.rgba[start * 4..end * 4].chunks_exact_mut(4))
+        {
+            // Truncation is intended: `pixel_buf` packs 0x00RRGGBB, so only the
+            // low byte of each shifted channel is meaningful.
+            chunk[0] = (px >> 16) as u8;
+            chunk[1] = (px >> 8) as u8;
+            chunk[2] = *px as u8;
+            chunk[3] = 255;
+        }
+
+        // Build an ImageData covering just the band and blit it at row y0, so
+        // the browser only uploads and paints the changed rows.
+        let band = &self.rgba[start * 4..end * 4];
+        let band_h = (y1 - y0) as u32;
         let image_data = web_sys::ImageData::new_with_u8_clamped_array_and_sh(
-            wasm_bindgen::Clamped(&self.rgba),
+            wasm_bindgen::Clamped(band),
             self.width,
-            self.height,
+            band_h,
         )
         .map_err(|_| SurfaceError::Canvas("ImageData construction failed".to_owned()))?;
 
         self.ctx
-            .put_image_data(&image_data, 0.0, 0.0)
+            .put_image_data(&image_data, 0.0, y0 as f64)
             .map_err(|_| SurfaceError::Canvas("put_image_data() threw".to_owned()))
     }
 }

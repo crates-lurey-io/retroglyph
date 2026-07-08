@@ -25,6 +25,9 @@ use std::sync::Arc;
 pub(crate) struct WindowSurface {
     _context: softbuffer::Context<Arc<dyn WindowHandle>>,
     surface: softbuffer::Surface<Arc<dyn WindowHandle>, Arc<dyn WindowHandle>>,
+    /// Surface width in pixels, tracked so [`present`](Self::present) can build
+    /// a damage `Rect` (softbuffer's `Buffer` doesn't expose its width).
+    width: u32,
 }
 
 /// Errors creating or presenting the native window surface.
@@ -66,6 +69,7 @@ impl WindowSurface {
         Ok(Self {
             _context: context,
             surface,
+            width: 0,
         })
     }
 
@@ -73,22 +77,49 @@ impl WindowSurface {
     pub(crate) fn resize(&mut self, width: u32, height: u32) {
         if let (Some(w), Some(h)) = (NonZeroU32::new(width), NonZeroU32::new(height)) {
             let _ = self.surface.resize(w, h);
+            self.width = width;
         }
     }
 
-    /// Copies `pixels` (`0x00RRGGBB`) into the surface buffer and presents.
+    /// Copies `pixels` (`0x00RRGGBB`) into the surface buffer and presents only
+    /// the changed row band `[y0, y1)` via `present_with_damage`, so softbuffer
+    /// blits just those rows to the window.
+    ///
+    /// Falls back to a full present if the band or width is degenerate, or if
+    /// the buffer size does not match (a resize is mid-flight).
     ///
     /// # Errors
     ///
     /// Returns [`SurfaceError::Surface`] if the softbuffer buffer cannot be
     /// acquired or presented.
-    pub(crate) fn present(&mut self, pixels: &[u32]) -> Result<(), SurfaceError> {
+    pub(crate) fn present(
+        &mut self,
+        pixels: &[u32],
+        damage: (u32, u32),
+    ) -> Result<(), SurfaceError> {
         let mut buffer = self.surface.buffer_mut().map_err(SurfaceError::Surface)?;
-        if pixels.len() == buffer.len() {
-            buffer.copy_from_slice(pixels);
-        } else {
+        if pixels.len() != buffer.len() {
             buffer.fill(0);
+            return buffer.present().map_err(SurfaceError::Surface);
         }
-        buffer.present().map_err(SurfaceError::Surface)
+        buffer.copy_from_slice(pixels);
+        let (y0, y1) = damage;
+        match (
+            NonZeroU32::new(self.width),
+            NonZeroU32::new(y1.saturating_sub(y0)),
+        ) {
+            (Some(width), Some(height)) => {
+                let rect = softbuffer::Rect {
+                    x: 0,
+                    y: y0,
+                    width,
+                    height,
+                };
+                buffer
+                    .present_with_damage(&[rect])
+                    .map_err(SurfaceError::Surface)
+            }
+            _ => buffer.present().map_err(SurfaceError::Surface),
+        }
     }
 }
