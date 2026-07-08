@@ -47,17 +47,21 @@
 //! assert!(!saved); // nothing clicked yet -- no input was fed in
 //! ```
 
+mod density;
 mod focus;
 mod hit;
 mod pointer;
 mod response;
 mod sense;
+mod shortcuts;
 
+pub use density::Density;
 pub use focus::FocusRing;
 pub use hit::HitTester;
 pub use pointer::Pointer;
 pub use response::Response;
 pub use sense::Sense;
+pub use shortcuts::Shortcuts;
 
 use retroglyph_core::{Event, KeyCode, MouseButton, Pos, Rect};
 

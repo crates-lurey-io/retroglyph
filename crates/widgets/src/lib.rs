@@ -20,6 +20,9 @@
 //!   border, margin) rendered into a standalone `Grid`.
 //! - [`join_h`]/[`join_v`] ([`block`]) to compose several `Grid`s -- e.g.
 //!   `BoxStyle::render` output -- into one before drawing it.
+//! - [`Theme`] ([`theme`]) for named color roles (an app picks
+//!   [`Theme::DARK`]/[`Theme::LIGHT`], or builds its own), independent of
+//!   how the app decides which one is active.
 //!
 //! None of this is a replacement for calling the free functions directly;
 //! this crate is itself optional, since games that draw manually depend
@@ -40,6 +43,7 @@ pub mod layout;
 pub mod state;
 pub mod style;
 pub mod text;
+pub mod theme;
 pub mod widget;
 
 pub use block::{blit_into, join_h, join_v};
@@ -48,12 +52,14 @@ pub use draw::{
     progress_bar, scrollbar, sparkline, stat_bar, table, thumb_geometry,
 };
 pub use interact::{
-    DEFAULT_DRAG_THRESHOLD, FocusRing, HitTester, Interaction, Pointer, Response, Sense,
+    DEFAULT_DRAG_THRESHOLD, Density, FocusRing, HitTester, Interaction, Pointer, Response, Sense,
+    Shortcuts,
 };
 pub use layout::{Constraint, Flex, centered_rect, split_h, split_h_flex, split_v, split_v_flex};
 pub use state::ListState;
 pub use style::{BoxStyle, Sides};
 pub use text::truncate;
+pub use theme::Theme;
 #[cfg(feature = "egc")]
 pub use widget::Paragraph;
 pub use widget::{Measure, Panel, StatefulWidget, Table, Widget};

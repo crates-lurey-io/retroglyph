@@ -85,60 +85,20 @@
 use std::collections::VecDeque;
 use std::time::Duration;
 
-use retroglyph_core::event::{Event, KeyCode};
+use retroglyph_core::event::{Event, KeyCode, KeyModifiers, SystemTheme};
 use retroglyph_core::{Backend, Color, Line, Pos, Rect, Size, Span, Style, Terminal};
 use retroglyph_widgets::{
-    Constraint, Interaction, ListState, Response, Sense, gauge, log, offset_for_pos, panel,
-    scrollbar, split_h, split_v,
+    Constraint, Density, Interaction, ListState, Response, Sense, Shortcuts, Theme, log,
+    offset_for_pos, panel, scrollbar, split_h, split_v,
 };
 
-// ── Colors ──────────────────────────────────────────────────────────────────
+// ── Breakpoints ───────────────────────────────────────────────────────────────
 
-const BG: Color = Color::Rgb {
-    r: 16,
-    g: 16,
-    b: 24,
-};
-const PANEL_BG: Color = Color::Rgb {
-    r: 22,
-    g: 22,
-    b: 32,
-};
-const BORDER: Color = Color::Rgb {
-    r: 70,
-    g: 74,
-    b: 96,
-};
-const TITLE_BG: Color = Color::Rgb {
-    r: 30,
-    g: 32,
-    b: 48,
-};
-const FG: Color = Color::Rgb {
-    r: 190,
-    g: 192,
-    b: 208,
-};
-const ACCENT: Color = Color::Rgb {
-    r: 90,
-    g: 170,
-    b: 250,
-};
-const HOVER_BG: Color = Color::Rgb {
-    r: 40,
-    g: 44,
-    b: 64,
-};
-const PRESS_BG: Color = Color::Rgb {
-    r: 60,
-    g: 110,
-    b: 170,
-};
-const DIM: Color = Color::Rgb {
-    r: 110,
-    g: 112,
-    b: 130,
-};
+/// Below this width, [`Density::Compact`] kicks in automatically (unless
+/// overridden by the 'c' shortcut -- see [`AppState::density_manual`]).
+const BP_COMPACT_WIDTH: u16 = 60;
+/// Below this height, likewise.
+const BP_COMPACT_HEIGHT: u16 = 22;
 
 // ── Data ──────────────────────────────────────────────────────────────────────
 
@@ -348,9 +308,36 @@ const TRACK_SEED: &[TrackSeed] = &[
 // Comfortably more than LOG_HEIGHT's visible rows, so the log panel's
 // scrollbar/wheel-scroll actually has history to scroll through instead of
 // always showing everything at once.
+// ── Data ────────────────────────────────────────────────────────────────────
+
+/// Log entry severity — not a pre-rendered line. Entries are re-rendered
+/// every frame in `draw_event_log` so a theme change recolors every entry
+/// immediately, rather than leaving stale dark rows when switching to
+/// light.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LogLevel {
+    Accent,
+    Dim,
+    Red,
+}
+
+/// One stored log entry, rendered fresh each frame by `draw_event_log`.
+#[derive(Debug, Clone)]
+struct LogEntry {
+    level: LogLevel,
+    text: String,
+}
+
+// Comfortably more than LOG_HEIGHT's visible rows, so the log panel's
+// scrollbar/wheel-scroll actually has history to scroll through instead of
+// always showing everything at once.
 const LOG_CAPACITY: usize = 60;
 const CONTROLS_WIDTH: u16 = 30;
 const LOG_HEIGHT: u16 = 10;
+/// The event log's height in [`Density::Compact`], shrunk from `LOG_HEIGHT`
+/// to give the track list more of a narrow terminal's scarce rows -- still
+/// shown, just smaller, rather than hidden outright.
+const COMPACT_LOG_HEIGHT: u16 = 4;
 const POLL_MS: u64 = 60;
 
 // ── Widget identity ─────────────────────────────────────────────────────────
@@ -401,6 +388,11 @@ fn id_label(id: Id) -> String {
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
+// `muted`/`follow_selection`/`theme_manual`/`density_manual` are four
+// independent flags, not states of one state machine (clippy's suggested
+// fix) -- collapsing them into an enum would just be a bitfield with extra
+// steps.
+#[allow(clippy::struct_excessive_bools)]
 struct AppState {
     interaction: Interaction<Id>,
     new_count: u32,
@@ -410,7 +402,7 @@ struct AppState {
     volume: i32,
     tracks: Vec<Track>,
     list_state: ListState,
-    log: VecDeque<Line>,
+    log: VecDeque<LogEntry>,
     /// Scroll position into `log`, in [`log`](retroglyph_widgets::log)'s own
     /// tail-anchored convention: `0` shows the newest messages, larger
     /// values scroll back through history. Deliberately the opposite
@@ -433,9 +425,43 @@ struct AppState {
     /// spinning, not just on the one frame a selection change needs to be
     /// followed.
     follow_selection: bool,
+    /// The active color palette. Auto-detected once at startup and live-
+    /// updated from [`Event::ThemeChanged`] (native/wasm windowed backend
+    /// only -- see the event's own doc comment), unless
+    /// [`theme_manual`](Self::theme_manual) is set.
+    theme: Theme,
+    /// `true` once the 't' shortcut has been used this session: further
+    /// [`Event::ThemeChanged`] events are ignored, so a deliberate choice
+    /// isn't clobbered by the system theme changing again later.
+    theme_manual: bool,
+    /// The active layout/touch-target density. Auto-detected from the
+    /// terminal size every frame, unless
+    /// [`density_manual`](Self::density_manual) is set.
+    density: Density,
+    /// `true` once the 'c' shortcut has been used this session: further
+    /// automatic recomputation from terminal size is skipped, so a
+    /// deliberate choice isn't clobbered by the next resize.
+    density_manual: bool,
+    /// Global keyboard shortcuts ('c'/'t'), resolved in [`handle`] against
+    /// whatever currently holds focus -- see [`Shortcuts`]'s own docs for
+    /// why this doesn't also carry Tab/Enter/Q/Escape or the list's
+    /// arrow-key routing (those need more context than a flat action fits).
+    shortcuts: Shortcuts<Id, Shortcut>,
 }
 
-fn init<B: Backend>(_term: &mut Terminal<B>) -> AppState {
+/// What a global keyboard shortcut (as opposed to a widget's own
+/// [`Sense`]d input) resolves to. See [`AppState::shortcuts`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Shortcut {
+    /// 'c': toggle [`Density::Compact`]/[`Density::Relaxed`] and stop
+    /// auto-detecting it from terminal size for the rest of the session.
+    ToggleDensity,
+    /// 't': toggle [`Theme::DARK`]/[`Theme::LIGHT`] and stop following
+    /// [`Event::ThemeChanged`] for the rest of the session.
+    ToggleTheme,
+}
+
+fn init<B: Backend>(term: &Terminal<B>) -> AppState {
     let tracks: Vec<Track> = TRACK_SEED
         .iter()
         .map(|seed| Track {
@@ -454,6 +480,18 @@ fn init<B: Backend>(_term: &mut Terminal<B>) -> AppState {
     // programmatically via `focus_mut()` rather than only through Tab.
     interaction.focus_mut().request(Id::TrackList);
 
+    let mut shortcuts = Shortcuts::new();
+    shortcuts.bind_global(
+        KeyCode::Char('c'),
+        KeyModifiers::NONE,
+        Shortcut::ToggleDensity,
+    );
+    shortcuts.bind_global(
+        KeyCode::Char('t'),
+        KeyModifiers::NONE,
+        Shortcut::ToggleTheme,
+    );
+
     AppState {
         interaction,
         new_count: 0,
@@ -467,17 +505,29 @@ fn init<B: Backend>(_term: &mut Terminal<B>) -> AppState {
         log_scroll: 0,
         reorder: None,
         follow_selection: true,
+        theme: Theme::DARK,
+        theme_manual: false,
+        density: density_for(term.size()),
+        density_manual: false,
+        shortcuts,
     }
 }
 
-fn push_log(state: &mut AppState, color: Color, text: String) {
+/// The [`Density`] [`BP_COMPACT_WIDTH`]/[`BP_COMPACT_HEIGHT`] auto-select
+/// for a given terminal size.
+const fn density_for(size: Size) -> Density {
+    if size.width < BP_COMPACT_WIDTH || size.height < BP_COMPACT_HEIGHT {
+        Density::Compact
+    } else {
+        Density::Relaxed
+    }
+}
+
+fn push_log(state: &mut AppState, level: LogLevel, text: String) {
     if state.log.len() == LOG_CAPACITY {
         state.log.pop_front();
     }
-    state.log.push_back(Line::from(vec![Span::styled(
-        text,
-        Style::new().fg(color).bg(PANEL_BG),
-    )]));
+    state.log.push_back(LogEntry { level, text });
 }
 
 // ── Layout ────────────────────────────────────────────────────────────────────
@@ -496,147 +546,222 @@ struct Layout {
     delete_row: Rect,
     mute_row: Rect,
     volume_row: Rect,
-    focused_row: Rect,
-    pointer_row: Rect,
+    /// `None` in [`Density::Compact`]: there's no vertical room to spare
+    /// for debug text that's discoverable another way (the demo's own
+    /// controls still work without it).
+    focused_row: Option<Rect>,
+    /// See [`focused_row`](Self::focused_row).
+    pointer_row: Option<Rect>,
+    /// One track-list row's height in cells at the active density --
+    /// [`Density::min_target_size`]'s height, threaded through so
+    /// `draw_track_list`/`draw_track_row` don't recompute it.
+    track_row_height: u16,
 }
 
-fn layout(size: Size) -> Layout {
+fn layout(size: Size, density: Density) -> Layout {
     let screen = Rect::new(0, 0, size.width, size.height);
     let [title, body, footer] = take3(&split_v(
         screen,
         &[Constraint::Fixed(1), Constraint::Fill, Constraint::Fixed(1)],
     ));
-    let [controls, right] = take2(&split_h(
-        body,
-        &[Constraint::Fixed(CONTROLS_WIDTH), Constraint::Fill],
-    ));
-    let [list, log] = take2(&split_v(
-        right,
-        &[Constraint::Fill, Constraint::Fixed(LOG_HEIGHT)],
-    ));
+    let row_h = density.min_target_size().height;
 
-    let rows = split_v(
-        inset(controls),
-        &[
-            Constraint::Fixed(1), // 0: new
-            Constraint::Fixed(1), // 1: save
-            Constraint::Fixed(1), // 2: delete
-            Constraint::Fixed(1), // 3: spacer
-            Constraint::Fixed(1), // 4: mute
-            Constraint::Fixed(1), // 5: spacer
-            Constraint::Fixed(1), // 6: volume
-            Constraint::Fixed(1), // 7: spacer
-            Constraint::Fixed(1), // 8: focused debug line
-            Constraint::Fixed(1), // 9: pointer debug line
-            Constraint::Fill,
-        ],
-    );
+    match density {
+        Density::Relaxed => {
+            let [controls, right] = take2(&split_h(
+                body,
+                &[Constraint::Fixed(CONTROLS_WIDTH), Constraint::Fill],
+            ));
+            let [list, log] = take2(&split_v(
+                right,
+                &[Constraint::Fill, Constraint::Fixed(LOG_HEIGHT)],
+            ));
 
-    Layout {
-        title,
-        footer,
-        controls,
-        list,
-        log,
-        new_row: rows[0],
-        save_row: rows[1],
-        delete_row: rows[2],
-        mute_row: rows[4],
-        volume_row: rows[6],
-        focused_row: rows[8],
-        pointer_row: rows[9],
+            let rows = split_v(
+                inset(controls),
+                &[
+                    Constraint::Fixed(row_h), // 0: new
+                    Constraint::Fixed(row_h), // 1: save
+                    Constraint::Fixed(row_h), // 2: delete
+                    Constraint::Fixed(1),     // 3: spacer
+                    Constraint::Fixed(row_h), // 4: mute
+                    Constraint::Fixed(1),     // 5: spacer
+                    Constraint::Fixed(row_h), // 6: volume
+                    Constraint::Fixed(1),     // 7: spacer
+                    Constraint::Fixed(1),     // 8: focused debug line
+                    Constraint::Fixed(1),     // 9: pointer debug line
+                    Constraint::Fill,
+                ],
+            );
+
+            Layout {
+                title,
+                footer,
+                controls,
+                list,
+                log,
+                new_row: rows[0],
+                save_row: rows[1],
+                delete_row: rows[2],
+                mute_row: rows[4],
+                volume_row: rows[6],
+                focused_row: Some(rows[8]),
+                pointer_row: Some(rows[9]),
+                track_row_height: row_h,
+            }
+        }
+        Density::Compact => {
+            // Controls stacked full-width above the list, instead of a
+            // fixed-width sidebar that would eat well over half a narrow
+            // terminal's columns -- see the module docs' "Controls"
+            // section. No spacer rows and no debug lines: a touch-target
+            // row is already taller than `Relaxed`'s, so there's nothing
+            // left to spare.
+            const CONTROL_ROWS: u16 = 5; // new, save, delete, mute, volume
+            let controls_h = row_h * CONTROL_ROWS + 2; // + top/bottom border
+            let [controls, rest] = take2(&split_v(
+                body,
+                &[Constraint::Fixed(controls_h), Constraint::Fill],
+            ));
+            let [list, log] = take2(&split_v(
+                rest,
+                &[Constraint::Fill, Constraint::Fixed(COMPACT_LOG_HEIGHT)],
+            ));
+
+            let rows = split_v(
+                inset(controls),
+                &[
+                    Constraint::Fixed(row_h), // 0: new
+                    Constraint::Fixed(row_h), // 1: save
+                    Constraint::Fixed(row_h), // 2: delete
+                    Constraint::Fixed(row_h), // 3: mute
+                    Constraint::Fixed(row_h), // 4: volume
+                ],
+            );
+
+            Layout {
+                title,
+                footer,
+                controls,
+                list,
+                log,
+                new_row: rows[0],
+                save_row: rows[1],
+                delete_row: rows[2],
+                mute_row: rows[3],
+                volume_row: rows[4],
+                focused_row: None,
+                pointer_row: None,
+                track_row_height: row_h,
+            }
+        }
     }
 }
 
 // ── Rendering ─────────────────────────────────────────────────────────────────
 
 fn draw<B: Backend>(term: &mut Terminal<B>, state: &mut AppState) {
-    let l = layout(term.size());
+    if !state.density_manual {
+        state.density = density_for(term.size());
+    }
+    let l = layout(term.size(), state.density);
 
     for y in 0..term.size().height {
         for x in 0..term.size().width {
-            term.put_styled(x, y, ' ', Style::new().bg(BG));
+            term.put_styled(x, y, ' ', Style::new().bg(state.theme.bg));
         }
     }
 
     draw_bar(
         term,
         l.title,
+        state.theme,
         " retroglyph — interaction demo (hover / click / drag / focus / scroll)",
     );
     draw_bar(
         term,
         l.footer,
-        " Tab/Shift+Tab: focus   Enter/Space: activate   click/drag/scroll/right-click: mouse   Q: quit",
+        state.theme,
+        " Tab/Shift+Tab: focus   Enter/Space: activate   click/drag/scroll/right-click: mouse   c/t: density/theme   Q: quit",
     );
 
     draw_controls(term, &l, state);
-    draw_track_list(term, l.list, state);
+    draw_track_list(term, l.list, l.track_row_height, state);
     draw_event_log(term, l.log, state);
 }
 
-fn draw_bar<B: Backend>(term: &mut Terminal<B>, area: Rect, text: &str) {
-    let style = Style::new().fg(FG).bg(TITLE_BG);
+fn draw_bar<B: Backend>(term: &mut Terminal<B>, area: Rect, theme: Theme, text: &str) {
+    let style = Style::new().fg(theme.fg).bg(theme.title_bg);
     fill_row(term, area, style);
     print_at(term, area, text, style);
 }
 
 fn draw_controls<B: Backend>(term: &mut Terminal<B>, l: &Layout, state: &mut AppState) {
-    panel_bg(term, l.controls, "CONTROLS", false);
+    panel_bg(term, l.controls, state.theme, "CONTROLS", false);
 
     let new_label = format!("New ({})", state.new_count);
     let r = draw_button(term, l.new_row, Id::New, &new_label, state);
     if r.clicked() {
         state.new_count += 1;
-        push_log(state, ACCENT, "created a new item".to_owned());
+        push_log(state, LogLevel::Accent, "created a new item".to_owned());
     }
 
     let save_label = format!("Save ({})", state.save_count);
     let r = draw_button(term, l.save_row, Id::Save, &save_label, state);
     if r.clicked() {
         state.save_count += 1;
-        push_log(state, ACCENT, "saved".to_owned());
+        push_log(state, LogLevel::Accent, "saved".to_owned());
     }
 
     let delete_label = format!("Delete ({})", state.delete_count);
     let r = draw_button(term, l.delete_row, Id::Delete, &delete_label, state);
     if r.clicked() {
         state.delete_count += 1;
-        push_log(state, Color::RED, "deleted".to_owned());
+        push_log(state, LogLevel::Red, "deleted".to_owned());
     }
 
     let r = draw_toggle(term, l.mute_row, state);
     if r.clicked() {
         state.muted = !state.muted;
-        push_log(state, ACCENT, format!("mute -> {}", state.muted));
+        push_log(state, LogLevel::Accent, format!("mute -> {}", state.muted));
     }
 
     let r = draw_volume(term, l.volume_row, state);
     if r.released() {
-        push_log(state, ACCENT, format!("volume -> {}%", state.volume));
+        push_log(
+            state,
+            LogLevel::Accent,
+            format!("volume -> {}%", state.volume),
+        );
     }
 
-    let focus_text = state.interaction.focus().focused().map_or_else(
-        || "Focused: -".to_owned(),
-        |id| format!("Focused: {}", id_label(id)),
-    );
-    print_at(
-        term,
-        l.focused_row,
-        &focus_text,
-        Style::new().fg(DIM).bg(PANEL_BG),
-    );
+    // No room for these in Density::Compact -- see Layout::focused_row's
+    // doc comment.
+    if let Some(focused_row) = l.focused_row {
+        let focus_text = state.interaction.focus().focused().map_or_else(
+            || "Focused: -".to_owned(),
+            |id| format!("Focused: {}", id_label(id)),
+        );
+        print_at(
+            term,
+            focused_row,
+            &focus_text,
+            Style::new().fg(state.theme.dim).bg(state.theme.panel_bg),
+        );
+    }
 
-    let pointer_text = state.interaction.pointer().pos().map_or_else(
-        || "Pointer: -".to_owned(),
-        |p| format!("Pointer: {},{}", p.x, p.y),
-    );
-    print_at(
-        term,
-        l.pointer_row,
-        &pointer_text,
-        Style::new().fg(DIM).bg(PANEL_BG),
-    );
+    if let Some(pointer_row) = l.pointer_row {
+        let pointer_text = state.interaction.pointer().pos().map_or_else(
+            || "Pointer: -".to_owned(),
+            |p| format!("Pointer: {},{}", p.x, p.y),
+        );
+        print_at(
+            term,
+            pointer_row,
+            &pointer_text,
+            Style::new().fg(state.theme.dim).bg(state.theme.panel_bg),
+        );
+    }
 }
 
 fn draw_button<B: Backend>(
@@ -647,15 +772,15 @@ fn draw_button<B: Backend>(
     state: &mut AppState,
 ) -> Response {
     let response = state.interaction.interact(area, id, Sense::click());
-    let row = focus_gutter(term, area, response.focused());
+    let row = focus_gutter(term, area, state.theme, response.focused());
     let bg = if response.pressed() {
-        PRESS_BG
+        state.theme.press_bg
     } else if response.hovered() {
-        HOVER_BG
+        state.theme.hover_bg
     } else {
-        PANEL_BG
+        state.theme.panel_bg
     };
-    let style = Style::new().fg(FG).bg(bg);
+    let style = Style::new().fg(state.theme.fg).bg(bg);
     fill_row(term, row, style);
     print_at(term, row, &format!("[ {label} ]"), style);
     response
@@ -663,15 +788,15 @@ fn draw_button<B: Backend>(
 
 fn draw_toggle<B: Backend>(term: &mut Terminal<B>, area: Rect, state: &mut AppState) -> Response {
     let response = state.interaction.interact(area, Id::Mute, Sense::click());
-    let row = focus_gutter(term, area, response.focused());
+    let row = focus_gutter(term, area, state.theme, response.focused());
     let bg = if response.pressed() {
-        PRESS_BG
+        state.theme.press_bg
     } else if response.hovered() {
-        HOVER_BG
+        state.theme.hover_bg
     } else {
-        PANEL_BG
+        state.theme.panel_bg
     };
-    let style = Style::new().fg(FG).bg(bg);
+    let style = Style::new().fg(state.theme.fg).bg(bg);
     fill_row(term, row, style);
     let mark = if state.muted { "[x]" } else { "[ ]" };
     print_at(term, row, &format!("{mark} Mute"), style);
@@ -682,7 +807,7 @@ fn draw_toggle<B: Backend>(term: &mut Terminal<B>, area: Rect, state: &mut AppSt
 /// proportionally to the pointer's x position, like a seek bar.
 fn draw_volume<B: Backend>(term: &mut Terminal<B>, area: Rect, state: &mut AppState) -> Response {
     let response = state.interaction.interact(area, Id::Volume, Sense::drag());
-    let row = focus_gutter(term, area, response.focused());
+    let row = focus_gutter(term, area, state.theme, response.focused());
 
     if (response.pressed() || response.dragging())
         && let Some(pos) = state.interaction.pointer().pos()
@@ -692,13 +817,100 @@ fn draw_volume<B: Backend>(term: &mut Terminal<B>, area: Rect, state: &mut AppSt
         state.volume = (ratio.clamp(0.0, 1.0) * 100.0).round() as i32;
     }
 
-    gauge(term, row, "vol", state.volume as f32 / 100.0);
+    // `gauge` hardcodes dark-theme colors for the label/empty-bar
+    // background; draw the bar manually here with the current theme's
+    // colors instead.
+    let theme = state.theme;
+    let pct = format!("{:>3}%", state.volume);
+    let y = row.top() + row.height() / 2;
+    let ratio = (state.volume as f32 / 100.0).clamp(0.0, 1.0);
+
+    // Label
+    let label_style = Style::new().fg(theme.fg).bg(theme.panel_bg);
+    for (i, ch) in "vol".chars().enumerate() {
+        term.put_styled(row.left() + i as u16, y, ch, label_style);
+    }
+    let bar_left = row.left() + 4;
+    let bar_w = row.width().saturating_sub(4 + 1 + pct.len() as u16 + 1);
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let filled = (ratio * f32::from(bar_w)).round() as u16;
+
+    // Filled bar (green→yellow→red ramp, theme-agnostic)
+    for i in 0..bar_w {
+        let t = if bar_w > 1 {
+            f32::from(i) / f32::from(bar_w - 1)
+        } else {
+            0.0
+        };
+        let ch = if i < filled { '█' } else { '░' };
+        let color = if i < filled {
+            gauge_color(t)
+        } else {
+            theme.dim
+        };
+        term.put_styled(
+            bar_left + i,
+            y,
+            ch,
+            Style::new().fg(color).bg(theme.panel_bg),
+        );
+    }
+
+    // % readout
+    let pct_x = bar_left + bar_w + 1;
+    for (i, ch) in pct.chars().enumerate() {
+        let x = pct_x + i as u16;
+        if x >= row.right() {
+            break;
+        }
+        term.put_styled(x, y, ch, Style::new().fg(theme.fg).bg(theme.panel_bg));
+    }
+
     response
 }
 
-fn draw_track_list<B: Backend>(term: &mut Terminal<B>, area: Rect, state: &mut AppState) {
+/// Same green→yellow→red ramp as `meter_ramp`, but computed here so the
+/// demo doesn't add a dependency on a widget whose own label colors are
+/// baked dark. Uses `Color::lerp` (backed by `gem`) — the same underlying
+/// lerp `meter_ramp` itself uses — rather than hand-rolling RGB
+/// interpolation.
+#[must_use]
+fn gauge_color(t: f32) -> Color {
+    #[allow(clippy::unusual_byte_groupings)]
+    const GREEN: Color = Color::Rgb {
+        r: 80,
+        g: 200,
+        b: 120,
+    };
+    #[allow(clippy::unusual_byte_groupings)]
+    const YELLOW: Color = Color::Rgb {
+        r: 220,
+        g: 200,
+        b: 90,
+    };
+    #[allow(clippy::unusual_byte_groupings)]
+    const RED: Color = Color::Rgb {
+        r: 220,
+        g: 90,
+        b: 90,
+    };
+
+    let t = t.clamp(0.0, 1.0);
+    if t < 0.5 {
+        Color::lerp(GREEN, YELLOW, t * 2.0)
+    } else {
+        Color::lerp(YELLOW, RED, (t - 0.5) * 2.0)
+    }
+}
+
+fn draw_track_list<B: Backend>(
+    term: &mut Terminal<B>,
+    area: Rect,
+    row_height: u16,
+    state: &mut AppState,
+) {
     let focused = state.interaction.focus().is_focused(Id::TrackList);
-    panel_bg(term, area, "TRACKS", focused);
+    panel_bg(term, area, state.theme, "TRACKS", focused);
     let inner = inset(area);
     if inner.width() < 2 || inner.height() == 0 {
         return;
@@ -713,7 +925,8 @@ fn draw_track_list<B: Backend>(term: &mut Terminal<B>, area: Rect, state: &mut A
         state
             .interaction
             .interact(list_area, Id::TrackList, Sense::scroll() | Sense::FOCUSABLE);
-    let visible_rows = list_area.height() as usize;
+    let row_height = row_height.max(1);
+    let visible_rows = (list_area.height() / row_height) as usize;
     let track_count = state.tracks.len();
     let max_offset = track_count.saturating_sub(visible_rows);
 
@@ -741,9 +954,12 @@ fn draw_track_list<B: Backend>(term: &mut Terminal<B>, area: Rect, state: &mut A
         bar_area,
         Id::TrackScrollbar,
         &mut state.interaction,
-        track_count,
-        visible_rows,
-        current_offset,
+        state.theme,
+        ScrollGeometry {
+            total_len: track_count,
+            visible_len: visible_rows,
+            forward_offset: current_offset,
+        },
     ) {
         state.list_state.set_offset(new_offset);
     }
@@ -754,10 +970,11 @@ fn draw_track_list<B: Backend>(term: &mut Terminal<B>, area: Rect, state: &mut A
         offset,
         visible_rows,
         track_count,
+        row_height,
     };
     for i in offset..(offset + visible_rows).min(track_count) {
-        let y = list_area.top() + (i - offset) as u16;
-        let row = Rect::new(list_area.left(), y, list_area.width(), 1);
+        let y = list_area.top() + (i - offset) as u16 * row_height;
+        let row = Rect::new(list_area.left(), y, list_area.width(), row_height);
         draw_track_row(term, row, i, window, state);
     }
 }
@@ -772,6 +989,7 @@ struct TrackWindow {
     offset: usize,
     visible_rows: usize,
     track_count: usize,
+    row_height: u16,
 }
 
 /// One track row: handles its own click/right-click/drag interaction and
@@ -803,7 +1021,7 @@ fn draw_track_row<B: Backend>(
         // an extra Tab press first.
         state.interaction.focus_mut().request(Id::TrackList);
         let name = state.tracks[i].name;
-        push_log(state, ACCENT, format!("selected \"{name}\""));
+        push_log(state, LogLevel::Accent, format!("selected \"{name}\""));
     }
     if response.secondary_clicked() {
         state.tracks[i].favorite = !state.tracks[i].favorite;
@@ -813,7 +1031,7 @@ fn draw_track_row<B: Backend>(
         } else {
             "unfavorited"
         };
-        push_log(state, ACCENT, format!("{verb} \"{name}\""));
+        push_log(state, LogLevel::Accent, format!("{verb} \"{name}\""));
     }
     if response.dragging()
         && let Some(pos) = state.interaction.pointer().pos()
@@ -824,13 +1042,7 @@ fn draw_track_row<B: Backend>(
         // want that; it's a reasonable amount of extra state (an
         // auto-scroll timer/velocity) for a demo already covering a lot of
         // ground.
-        let target = drop_target_row(
-            window.list_area,
-            pos,
-            window.offset,
-            window.visible_rows,
-            window.track_count,
-        );
+        let target = drop_target_row(window, pos);
         state.reorder = Some(Reorder { from: i, target });
     }
     if response.released() && response.dragging() {
@@ -854,17 +1066,17 @@ fn draw_track_row<B: Backend>(
     let track = &state.tracks[i];
     let selected = state.list_state.selected() == Some(i);
     let bg = if is_dragged {
-        BORDER
+        state.theme.border
     } else if is_drop_target {
-        ACCENT
+        state.theme.accent
     } else if selected {
-        PRESS_BG
+        state.theme.press_bg
     } else if response.hovered() {
-        HOVER_BG
+        state.theme.hover_bg
     } else {
-        PANEL_BG
+        state.theme.panel_bg
     };
-    let style = Style::new().fg(FG).bg(bg);
+    let style = Style::new().fg(state.theme.fg).bg(bg);
     let mark = if track.favorite { '*' } else { ' ' };
     fill_row(term, row, style);
     print_at(
@@ -883,18 +1095,17 @@ struct Reorder {
     target: usize,
 }
 
-/// The track index a drop at cell-row `pos.y` within `list_area` would
-/// target, clamped to the currently visible window.
-fn drop_target_row(
-    list_area: Rect,
-    pos: Pos,
-    offset: usize,
-    visible_rows: usize,
-    track_count: usize,
-) -> usize {
-    let rel = usize::from(pos.y.saturating_sub(list_area.top()));
-    let rel = rel.min(visible_rows.saturating_sub(1));
-    (offset + rel).min(track_count.saturating_sub(1))
+/// The track index a drop at cell-row `pos.y` would target, clamped to the
+/// currently visible window. `pos.y` is divided by `window.row_height` to
+/// get a row index first -- at `Density::Compact`'s taller rows, a drop
+/// anywhere within a row's multiple cell-rows should still target that one
+/// row, not whichever cell-row happens to be under the pointer.
+fn drop_target_row(window: TrackWindow, pos: Pos) -> usize {
+    let row_height = window.row_height.max(1);
+    let rel_cells = pos.y.saturating_sub(window.list_area.top());
+    let rel = usize::from(rel_cells / row_height);
+    let rel = rel.min(window.visible_rows.saturating_sub(1));
+    (window.offset + rel).min(window.track_count.saturating_sub(1))
 }
 
 /// Move the track at `from` so it lands just before whatever currently sits
@@ -926,7 +1137,7 @@ fn reorder_track(state: &mut AppState, from: usize, target: usize) {
     }
     push_log(
         state,
-        ACCENT,
+        LogLevel::Accent,
         format!("moved \"{name}\" to position {}", insert_at + 1),
     );
 }
@@ -943,7 +1154,7 @@ fn reorder_track(state: &mut AppState, from: usize, target: usize) {
 /// rather than teaching the scrollbar geometry a second direction.
 fn draw_event_log<B: Backend>(term: &mut Terminal<B>, area: Rect, state: &mut AppState) {
     let focused = state.interaction.focus().is_focused(Id::EventLog);
-    panel_bg(term, area, "EVENTS", focused);
+    panel_bg(term, area, state.theme, "EVENTS", focused);
     let inner = inset(area);
     if inner.width() < 2 || inner.height() == 0 {
         return;
@@ -968,15 +1179,39 @@ fn draw_event_log<B: Backend>(term: &mut Terminal<B>, area: Rect, state: &mut Ap
         bar_area,
         Id::EventLogScrollbar,
         &mut state.interaction,
-        total_len,
-        visible_len,
-        forward,
+        state.theme,
+        ScrollGeometry {
+            total_len,
+            visible_len,
+            forward_offset: forward,
+        },
     ) {
         state.log_scroll = max_scroll.saturating_sub(new_forward.min(max_scroll));
     }
 
-    let lines: Vec<Line> = state.log.iter().cloned().collect();
+    let lines: Vec<Line> = state
+        .log
+        .iter()
+        .map(|entry| {
+            let color = log_level_color(entry.level, state.theme);
+            Line::from(vec![Span::styled(
+                entry.text.clone(),
+                Style::new().fg(color).bg(state.theme.panel_bg),
+            )])
+        })
+        .collect();
     log(term, log_area, &lines, state.log_scroll);
+}
+
+/// Maps a [`LogLevel`] to a [`Color`] for the current [`Theme`], so
+/// switching themes recolors every log entry immediately rather than
+/// leaving stale dark rows when switching to light.
+const fn log_level_color(level: LogLevel, theme: Theme) -> Color {
+    match level {
+        LogLevel::Accent => theme.accent,
+        LogLevel::Dim => theme.dim,
+        LogLevel::Red => Color::RED,
+    }
 }
 
 /// Add a signed `delta` to `current`, clamped to `0..=max`. Small enough
@@ -1002,17 +1237,23 @@ fn apply_signed(current: usize, delta: i32, max: usize) -> usize {
 
 // ── Small drawing helpers ─────────────────────────────────────────────────────
 
-fn panel_bg<B: Backend>(term: &mut Terminal<B>, area: Rect, title: &str, focused: bool) {
+fn panel_bg<B: Backend>(
+    term: &mut Terminal<B>,
+    area: Rect,
+    theme: Theme,
+    title: &str,
+    focused: bool,
+) {
     if area.width() < 2 || area.height() < 2 {
         return;
     }
-    let border = if focused { ACCENT } else { BORDER };
+    let border = if focused { theme.accent } else { theme.border };
     panel(
         term,
         area,
         Some(title),
-        Style::new().fg(border).bg(BG),
-        Style::new().bg(PANEL_BG),
+        Style::new().fg(border).bg(theme.bg),
+        Style::new().bg(theme.panel_bg),
     );
 }
 
@@ -1031,18 +1272,19 @@ const fn inset(area: Rect) -> Rect {
 /// [`Sense::FOCUSABLE`] control in the controls panel so focus always reads
 /// the same way regardless of what else a widget's [`Response`] changes
 /// about its own background.
-fn focus_gutter<B: Backend>(term: &mut Terminal<B>, area: Rect, focused: bool) -> Rect {
+fn focus_gutter<B: Backend>(
+    term: &mut Terminal<B>,
+    area: Rect,
+    theme: Theme,
+    focused: bool,
+) -> Rect {
     let (ch, fg) = if focused {
-        ('›', ACCENT)
+        ('›', theme.accent)
     } else {
-        (' ', PANEL_BG)
+        (' ', theme.panel_bg)
     };
-    term.put_styled(
-        area.left(),
-        area.top(),
-        ch,
-        Style::new().fg(fg).bg(PANEL_BG),
-    );
+    let y = area.top() + area.height() / 2;
+    term.put_styled(area.left(), y, ch, Style::new().fg(fg).bg(theme.panel_bg));
     Rect::new(
         area.left() + 1,
         area.top(),
@@ -1051,19 +1293,29 @@ fn focus_gutter<B: Backend>(term: &mut Terminal<B>, area: Rect, focused: bool) -
     )
 }
 
+/// Fills every row of `area`, not just its top one -- at `Density::Compact`'s
+/// taller touch-target rows, a one-row-tall fill would leave the rest of a
+/// button/track row showing whatever was underneath.
 fn fill_row<B: Backend>(term: &mut Terminal<B>, area: Rect, style: Style) {
-    for x in area.left()..area.right() {
-        term.put_styled(x, area.top(), ' ', style);
+    for y in area.top()..area.bottom() {
+        for x in area.left()..area.right() {
+            term.put_styled(x, y, ' ', style);
+        }
     }
 }
 
+/// Prints `text` on `area`'s vertically centered row. For a one-row-tall
+/// `area` (every `Density::Relaxed` row), that's the same as `area.top()`;
+/// for a taller one (`Density::Compact`'s touch targets), it centers the
+/// label instead of pinning it to the first cell-row.
 fn print_at<B: Backend>(term: &mut Terminal<B>, area: Rect, text: &str, style: Style) {
+    let y = area.top() + area.height() / 2;
     for (i, ch) in text.chars().enumerate() {
         let x = area.left() + i as u16;
         if x >= area.right() {
             break;
         }
-        term.put_styled(x, area.top(), ch, style);
+        term.put_styled(x, y, ch, style);
     }
 }
 
@@ -1100,14 +1352,23 @@ fn split_right(area: Rect, cols: u16) -> (Rect, Rect) {
 /// whatever their content's actual offset convention is -- see
 /// `draw_event_log` for a convention that isn't already forward (tail-
 /// anchored, like `log`'s own `offset` parameter).
+/// The three numbers [`thumb_geometry`]/[`offset_for_pos`]/[`scrollbar`]
+/// need to describe a scroll position -- bundled into one `Copy` struct so
+/// `draw_scrollbar_column` doesn't blow past a reasonable argument count.
+#[derive(Clone, Copy)]
+struct ScrollGeometry {
+    total_len: usize,
+    visible_len: usize,
+    forward_offset: usize,
+}
+
 fn draw_scrollbar_column<B: Backend>(
     term: &mut Terminal<B>,
     bar_area: Rect,
     id: Id,
     interaction: &mut Interaction<Id>,
-    total_len: usize,
-    visible_len: usize,
-    forward_offset: usize,
+    theme: Theme,
+    geometry: ScrollGeometry,
 ) -> Option<usize> {
     // No Sense::CLICK: that would also trigger interact()'s auto-focus-
     // request-on-click side effect, stealing keyboard focus away from
@@ -1119,23 +1380,23 @@ fn draw_scrollbar_column<B: Backend>(
     let jumped_to = if (response.pressed() || response.dragging())
         && let Some(pos) = interaction.pointer().pos()
     {
-        offset_for_pos(bar_area, total_len, visible_len, pos)
+        offset_for_pos(bar_area, geometry.total_len, geometry.visible_len, pos)
     } else {
         None
     };
 
-    let track_style = Style::new().bg(PANEL_BG);
+    let track_style = Style::new().bg(theme.panel_bg);
     let thumb_style = if response.hovered() || response.dragging() {
-        Style::new().bg(ACCENT)
+        Style::new().bg(theme.accent)
     } else {
-        Style::new().bg(BORDER)
+        Style::new().bg(theme.border)
     };
     scrollbar(
         term,
         bar_area,
-        total_len,
-        visible_len,
-        forward_offset,
+        geometry.total_len,
+        geometry.visible_len,
+        geometry.forward_offset,
         track_style,
         thumb_style,
     );
@@ -1194,6 +1455,51 @@ fn page_selection(state: &mut AppState, direction: i32) {
     state.follow_selection = true;
 }
 
+/// Live theme updates from `Event::ThemeChanged` (winit native+wasm only —
+/// the crossterm backend never emits this, so `state.theme` stays whatever
+/// `init` seeded it with). No-op once `theme_manual` is set (the user
+/// pressed 't').
+#[allow(clippy::missing_const_for_fn)]
+fn apply_theme_changed(state: &mut AppState, event: &Event) {
+    if let Event::ThemeChanged(system_theme) = event
+        && !state.theme_manual
+    {
+        state.theme = match system_theme {
+            SystemTheme::Light => Theme::LIGHT,
+            SystemTheme::Dark => Theme::DARK,
+        };
+    }
+}
+
+/// Global keyboard shortcuts ('c'/'t'), resolved via
+/// [`Shortcuts`] against whatever currently holds focus — see the
+/// type's own docs for why these two live in a registry while
+/// Tab/Enter/Q/arrows stay direct `match` arms.
+fn apply_shortcut(state: &mut AppState, event: &Event) {
+    if let Some(shortcut) = state
+        .shortcuts
+        .resolve(event, state.interaction.focus().focused())
+    {
+        match shortcut {
+            Shortcut::ToggleDensity => {
+                state.density = match state.density {
+                    Density::Compact => Density::Relaxed,
+                    Density::Relaxed => Density::Compact,
+                };
+                state.density_manual = true;
+            }
+            Shortcut::ToggleTheme => {
+                state.theme = if state.theme == Theme::DARK {
+                    Theme::LIGHT
+                } else {
+                    Theme::DARK
+                };
+                state.theme_manual = true;
+            }
+        }
+    }
+}
+
 /// Apply one input event. Returns `false` to quit.
 fn handle(state: &mut AppState, event: &Event) -> bool {
     // The windowed (software) backend's close button doesn't exit on its
@@ -1205,6 +1511,9 @@ fn handle(state: &mut AppState, event: &Event) -> bool {
     if *event == Event::Close {
         return false;
     }
+
+    apply_theme_changed(state, event);
+    apply_shortcut(state, event);
 
     // Arrow keys mean different things depending on what currently holds
     // focus -- the same `FocusRing` state that gates Tab/Enter also gates
@@ -1288,7 +1597,7 @@ fn handle(state: &mut AppState, event: &Event) -> bool {
     if after != before
         && let Some(id) = after
     {
-        push_log(state, DIM, format!("focus -> {}", id_label(id)));
+        push_log(state, LogLevel::Dim, format!("focus -> {}", id_label(id)));
     }
 
     true
@@ -1450,7 +1759,7 @@ mod tests {
         let mut state = init_state();
         frame(&mut state, &[]); // frame 1: registers New's hit rect
 
-        let l = layout(SIZE);
+        let l = layout(SIZE, Density::Relaxed);
         let pos = Pos::new(l.new_row.left() + 2, l.new_row.top());
         let click = [
             mouse_at(MouseEventKind::Down(MouseButton::Left), pos),
@@ -1540,7 +1849,7 @@ mod tests {
         let mut state = init_state();
         frame(&mut state, &[]); // frame 1: registers the volume bar's hit rect
 
-        let l = layout(SIZE);
+        let l = layout(SIZE, Density::Relaxed);
         let row = Rect::new(
             l.volume_row.left() + 1, // account for the focus gutter
             l.volume_row.top(),
@@ -1572,7 +1881,7 @@ mod tests {
         let mut state = init_state();
         frame(&mut state, &[]); // frame 1: registers track row rects
 
-        let l = layout(SIZE);
+        let l = layout(SIZE, Density::Relaxed);
         let inner = inset(l.list);
         let second_row = Pos::new(inner.left(), inner.top() + 1);
         let click = [
@@ -1605,7 +1914,7 @@ mod tests {
         frame(&mut state, &[key(KeyCode::Tab)]);
         assert_ne!(state.interaction.focus().focused(), Some(Id::TrackList));
 
-        let l = layout(SIZE);
+        let l = layout(SIZE, Density::Relaxed);
         let inner = inset(l.list);
         let second_row = Pos::new(inner.left(), inner.top() + 1);
         let click = [
@@ -1626,7 +1935,7 @@ mod tests {
         frame(&mut state, &[]); // frame 1: registers track row rects
         assert!(!state.tracks[1].favorite);
 
-        let l = layout(SIZE);
+        let l = layout(SIZE, Density::Relaxed);
         let inner = inset(l.list);
         let second_row = Pos::new(inner.left(), inner.top() + 1);
         let right_click = [
@@ -1670,7 +1979,7 @@ mod tests {
         let mut state = init_state();
         frame(&mut state, &[]); // frame 1: registers the list container's hit rect
 
-        let l = layout(SIZE);
+        let l = layout(SIZE, Density::Relaxed);
         let inner = inset(l.list);
         let mid = Pos::new(inner.left(), inner.top());
 
@@ -1693,7 +2002,7 @@ mod tests {
         let mut state = init_state();
         frame(&mut state, &[]); // frame 1: registers the list container's hit rect
 
-        let l = layout(SIZE);
+        let l = layout(SIZE, Density::Relaxed);
         let inner = inset(l.list);
         let mid = Pos::new(inner.left(), inner.top());
 
@@ -1720,7 +2029,7 @@ mod tests {
         let mut state = init_state();
         frame(&mut state, &[]);
 
-        let l = layout(SIZE);
+        let l = layout(SIZE, Density::Relaxed);
         let inner = inset(l.list);
         let mid = Pos::new(inner.left(), inner.top());
         let visible_rows = inner.height() as usize;
@@ -1746,7 +2055,7 @@ mod tests {
             frame(&mut state, &[key(KeyCode::Tab)]);
         }
 
-        let l = layout(SIZE);
+        let l = layout(SIZE, Density::Relaxed);
         let inner = inset(l.log);
         let mid = Pos::new(inner.left(), inner.top());
 
