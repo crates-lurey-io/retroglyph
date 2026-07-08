@@ -276,6 +276,13 @@ impl<P: Presenter, F> WindowApp<P, F> {
     }
 }
 
+/// Upper bound on the device pixel ratio used to size the canvas backing
+/// store. Present cost is O(pixels), so an uncapped DPR (3 on many phones,
+/// 2 on most laptops) quadruples or worse the per-frame rasterize/present
+/// work for marginal crispness on a pseudo-graphic UI.
+#[cfg(target_arch = "wasm32")]
+const MAX_DEVICE_PIXEL_RATIO: f64 = 1.5;
+
 /// The browser viewport size in physical (device) pixels, or `None` if
 /// running outside a browser `window` context.
 #[cfg(target_arch = "wasm32")]
@@ -284,7 +291,7 @@ fn web_viewport_physical_size() -> Option<winit::dpi::PhysicalSize<u32>> {
     let window = web_sys::window()?;
     let width = window.inner_width().ok()?.as_f64()?;
     let height = window.inner_height().ok()?.as_f64()?;
-    let dpr = window.device_pixel_ratio();
+    let dpr = window.device_pixel_ratio().min(MAX_DEVICE_PIXEL_RATIO);
     Some(winit::dpi::PhysicalSize::new(
         (width * dpr).round() as u32,
         (height * dpr).round() as u32,
