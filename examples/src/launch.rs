@@ -115,24 +115,36 @@ impl<B: Backend, E: Example> App<B> for ExampleApp<E> {
 ///
 /// Panics if the software backend fails to initialize, or if the event loop
 /// fails to start.
-///
-/// TODO: this always uses the embedded default font (50x25 grid, `scale(2)`)
-/// with no way to opt out -- `retroglyph-examples`'s `software` feature
-/// unconditionally pulls in `retroglyph-software/default-font` (see the
-/// Cargo.toml comment), and this function hardcodes the builder. If an
-/// example ever wants a custom font, tileset, grid size, or scale, add a
-/// `run_software_with::<E>(builder: SoftwareBackendBuilder)` escape hatch
-/// (mirroring the old `rg_run_software!` macro's `builder = { .. }` arm)
-/// that takes a caller-supplied, already-configured builder instead of
-/// building one here.
 #[cfg(feature = "software")]
 pub fn run_software<E: Example>() {
+    run_software_with::<E>(
+        retroglyph_software::SoftwareBackendBuilder::new()
+            .grid_size(50, 25)
+            .scale(2),
+    );
+}
+
+/// Runs `E` on the software backend using a caller-supplied, already-
+/// configured `builder` instead of [`run_software`]'s hardcoded 50x25-at-2x
+/// default.
+///
+/// This is the escape hatch for examples that need a custom grid size,
+/// scale, font, or tileset -- `retroglyph-examples`'s `software` feature
+/// unconditionally pulls in `retroglyph-software/default-font` (see the
+/// Cargo.toml comment), but the builder itself is fully caller-controlled
+/// here. [`run_software`] delegates to this with its default builder, so
+/// both stay in sync automatically.
+///
+/// # Panics
+///
+/// Panics if the software backend fails to initialize, or if the event loop
+/// fails to start.
+#[cfg(feature = "software")]
+pub fn run_software_with<E: Example>(builder: retroglyph_software::SoftwareBackendBuilder) {
     #[cfg(target_arch = "wasm32")]
     console_error_panic_hook::set_once();
 
-    let renderer = retroglyph_software::SoftwareBackendBuilder::new()
-        .grid_size(50, 25)
-        .scale(2)
+    let renderer = builder
         .build()
         .expect("failed to initialize software backend")
         .run_headless();
