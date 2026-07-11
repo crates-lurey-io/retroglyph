@@ -7,25 +7,33 @@ use retroglyph_core::event::{
 };
 use retroglyph_core::grid::Pos;
 
-/// Translates a winit key event into an [`Event`].
+/// Maps a winit logical [`Key`](winit::keyboard::Key) plus modifiers to a [`KeyCode`].
 ///
-/// Reports [`KeyEventKind::Press`], [`KeyEventKind::Repeat`] (winit's `repeat`
-/// flag), and [`KeyEventKind::Release`]. Returns `None` only for keys we don't
-/// map.
-#[must_use]
-#[allow(clippy::needless_pass_by_value)]
-pub fn translate_key(input: winit::event::KeyEvent, modifiers: KeyModifiers) -> Option<Event> {
+/// Split out from [`translate_key`] so this -- the actual key-identity logic -- is unit-testable
+/// directly: `winit::event::KeyEvent` (the type `translate_key` takes) has a private
+/// platform-specific field in the pinned winit version, so it can't be constructed in test code,
+/// but `winit::keyboard::Key`/`NamedKey` are plain public enums a test can build directly.
+fn key_code_from_logical(key: &winit::keyboard::Key, modifiers: KeyModifiers) -> Option<KeyCode> {
     use winit::keyboard::{Key, NamedKey};
 
-    let kind = key_event_kind(input.state, input.repeat);
-
-    let code = match input.logical_key {
+    Some(match key {
         Key::Named(NamedKey::Enter) => KeyCode::Enter,
         Key::Named(NamedKey::Escape) => KeyCode::Escape,
         Key::Named(NamedKey::Backspace) => KeyCode::Backspace,
         Key::Named(NamedKey::Delete) => KeyCode::Delete,
         Key::Named(NamedKey::Insert) => KeyCode::Insert,
+        // winit has no distinct "Shift+Tab" key value: `Tab` is reported with `modifiers.shift()`
+        // set instead. Normalize that to `KeyCode::BackTab` here (rather than making every
+        // consumer separately check `code == Tab && modifiers.contains(SHIFT)`) so the same
+        // "Shift+Tab" gesture always arrives as one canonical code, matching the crossterm
+        // backend's legacy `ESC[Z` -> `BackTab` behavior.
+        Key::Named(NamedKey::Tab) if modifiers.contains(KeyModifiers::SHIFT) => KeyCode::BackTab,
         Key::Named(NamedKey::Tab) => KeyCode::Tab,
+        // winit 0.30 still reports the spacebar as `NamedKey::Space` (a later winit version is
+        // expected to switch to `Key::Character(" ")` per the UI Events spec, but that hasn't
+        // shipped in the pinned 0.30 line) -- without this arm, every Space press silently falls
+        // through to `_ => return None` and is dropped.
+        Key::Named(NamedKey::Space) => KeyCode::Char(' '),
         Key::Named(NamedKey::ArrowUp) => KeyCode::Up,
         Key::Named(NamedKey::ArrowDown) => KeyCode::Down,
         Key::Named(NamedKey::ArrowLeft) => KeyCode::Left,
@@ -46,13 +54,21 @@ pub fn translate_key(input: winit::event::KeyEvent, modifiers: KeyModifiers) -> 
         Key::Named(NamedKey::F10) => KeyCode::F(10),
         Key::Named(NamedKey::F11) => KeyCode::F(11),
         Key::Named(NamedKey::F12) => KeyCode::F(12),
-        Key::Character(ref s) => {
-            let ch = s.chars().next()?;
-            KeyCode::Char(ch)
-        }
+        Key::Character(s) => KeyCode::Char(s.chars().next()?),
         _ => return None,
-    };
+    })
+}
 
+/// Translates a winit key event into an [`Event`].
+///
+/// Reports [`KeyEventKind::Press`], [`KeyEventKind::Repeat`] (winit's `repeat`
+/// flag), and [`KeyEventKind::Release`]. Returns `None` only for keys we don't
+/// map.
+#[must_use]
+#[allow(clippy::needless_pass_by_value)]
+pub fn translate_key(input: winit::event::KeyEvent, modifiers: KeyModifiers) -> Option<Event> {
+    let kind = key_event_kind(input.state, input.repeat);
+    let code = key_code_from_logical(&input.logical_key, modifiers)?;
     Some(Event::Key(KeyEvent::with_kind(code, modifiers, kind)))
 }
 
@@ -132,6 +148,57 @@ pub fn translate_modifiers(state: winit::keyboard::ModifiersState) -> KeyModifie
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ── key_code_from_logical ─────────────────────────────────────────────────
+
+    #[test]
+    fn space_maps_to_char_space() {
+        // Regression test: winit 0.30 reports the spacebar as `NamedKey::Space`, not
+        // `Key::Character(" ")` -- without a dedicated arm this silently mapped to `None` and
+        // every Space press was dropped.
+        let key = winit::keyboard::Key::Named(winit::keyboard::NamedKey::Space);
+        assert_eq!(
+            key_code_from_logical(&key, KeyModifiers::NONE),
+            Some(KeyCode::Char(' '))
+        );
+    }
+
+    #[test]
+    fn shift_tab_normalizes_to_backtab() {
+        // Regression test: winit has no distinct "Shift+Tab" key value -- it reports `Tab` with
+        // the shift modifier set instead, which has to be normalized to `KeyCode::BackTab` here
+        // (matching the crossterm backend's legacy `ESC[Z` -> `BackTab` behavior) or every
+        // consumer of the event stream sees indistinguishable plain-Tab and Shift+Tab presses.
+        let key = winit::keyboard::Key::Named(winit::keyboard::NamedKey::Tab);
+        assert_eq!(
+            key_code_from_logical(&key, KeyModifiers::SHIFT),
+            Some(KeyCode::BackTab)
+        );
+    }
+
+    #[test]
+    fn plain_tab_is_unaffected() {
+        let key = winit::keyboard::Key::Named(winit::keyboard::NamedKey::Tab);
+        assert_eq!(
+            key_code_from_logical(&key, KeyModifiers::NONE),
+            Some(KeyCode::Tab)
+        );
+    }
+
+    #[test]
+    fn shift_modifier_on_non_tab_keys_is_unaffected() {
+        let key = winit::keyboard::Key::Character("a".into());
+        assert_eq!(
+            key_code_from_logical(&key, KeyModifiers::SHIFT),
+            Some(KeyCode::Char('a'))
+        );
+    }
+
+    #[test]
+    fn unmapped_key_returns_none() {
+        let key = winit::keyboard::Key::Named(winit::keyboard::NamedKey::AudioVolumeUp);
+        assert_eq!(key_code_from_logical(&key, KeyModifiers::NONE), None);
+    }
 
     // ── pixel_to_cell ─────────────────────────────────────────────────────────
 

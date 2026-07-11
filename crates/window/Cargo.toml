@@ -21,7 +21,7 @@ log = { version = "0.4", optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 # Version pinned to match the wasm-bindgen dev-dependency in
-# crates/examples/Cargo.toml -- the CLI and the crate version must agree.
+# examples/Cargo.toml -- the CLI and the crate version must agree.
 # Only exercised behind the `winit` feature (see winit/run.rs), but kept as
 # a plain target dependency rather than threading an extra optional-feature
 # combination through for a target-gated, always-small pair of crates.

@@ -3,7 +3,7 @@
 //! `FrameClock` decouples logic updates (a stable, fixed rate) from rendering
 //! (as fast as the display allows). It is a *pure accumulator*: it never reads a
 //! clock itself. The driver supplies elapsed wall time via
-//! [`Frame::dt`](crate::Frame), which keeps `FrameClock` `no_std`-clean and
+//! [`Frame::delta`](crate::Frame), which keeps `FrameClock` `no_std`-clean and
 //! platform-agnostic (including wasm, where there is no `std::time::Instant`).
 //!
 //! # Example
@@ -71,7 +71,7 @@ impl FrameClock {
 
     /// Add elapsed wall time to the accumulator, clamped to the catch-up cap.
     ///
-    /// Call once per rendered frame with [`Frame::dt`](crate::Frame).
+    /// Call once per rendered frame with [`Frame::delta`](crate::Frame).
     pub fn advance(&mut self, dt: Duration) {
         self.accumulator = (self.accumulator + dt).min(self.max_accumulate);
     }

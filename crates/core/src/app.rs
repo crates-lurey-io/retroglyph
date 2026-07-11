@@ -35,9 +35,9 @@ pub enum Flow {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Frame {
     /// Wall-clock time elapsed since the previous frame, supplied by the driver.
-    pub dt: Duration,
+    pub delta: Duration,
     /// Monotonic frame counter, starting at 0.
-    pub number: u64,
+    pub frame: u64,
 }
 
 /// The per-frame update contract for a game.
@@ -90,14 +90,17 @@ where
     B: Backend,
     A: App<B>,
 {
-    let mut number = 0u64;
+    let mut frame_count = 0u64;
     let mut last = std::time::Instant::now();
     loop {
         let now = std::time::Instant::now();
-        let dt = now.duration_since(last);
+        let delta = now.duration_since(last);
         last = now;
-        let frame = Frame { dt, number };
-        number = number.wrapping_add(1);
+        let frame = Frame {
+            delta,
+            frame: frame_count,
+        };
+        frame_count = frame_count.wrapping_add(1);
         match step(&mut term, &mut app, &frame) {
             Flow::Continue => {}
             Flow::Exit => return,
@@ -121,7 +124,7 @@ mod tests {
             term.put(0, 0, '#');
             term.present().expect("present");
             // Quit when a key is pending, or after a safety cap.
-            if term.has_input() || frame.number >= 100 {
+            if term.has_input() || frame.frame >= 100 {
                 Flow::Exit
             } else {
                 Flow::Continue
@@ -148,11 +151,11 @@ mod tests {
         let mut term = Terminal::new(Headless::new(2, 1));
         let mut app = Counter { frames: 0 };
         let frame = Frame {
-            dt: Duration::ZERO,
-            number: 200,
+            delta: Duration::ZERO,
+            frame: 200,
         };
         let flow = step(&mut term, &mut app, &frame);
-        assert_eq!(flow, Flow::Exit); // number >= 100
+        assert_eq!(flow, Flow::Exit); // frame >= 100
         assert_eq!(app.frames, 1);
     }
 }

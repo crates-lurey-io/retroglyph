@@ -4,7 +4,7 @@ use crate::backend::Backend;
 use crate::color::Color;
 use crate::event::Event;
 use crate::grid::{Grid, Rect, Size};
-use crate::style::{CellModifier, Style};
+use crate::style::Style;
 use crate::text::Line;
 use crate::tile::Tile;
 use core::time::Duration;
@@ -79,12 +79,6 @@ impl<B: Backend> Terminal<B> {
     /// Sets the background color for the stateful API.
     pub const fn bg(&mut self, color: Color) -> &mut Self {
         self.drawing_style.bg = color;
-        self
-    }
-
-    /// Sets text modifiers for the stateful API.
-    pub const fn modifier(&mut self, modifier: CellModifier) -> &mut Self {
-        self.drawing_style.modifiers = modifier;
         self
     }
 

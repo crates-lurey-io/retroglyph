@@ -52,6 +52,14 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 extern crate alloc;
 
+// clippy::too_long_first_doc_paragraph is a known-noisy nursery lint (rust-lang/rust-clippy#13441)
+// that here misattributes its span across every subsequent `pub mod`/`pub use` declaration below
+// (through to the next blank line) rather than just this one doc comment, which is well under
+// its own 100-char threshold in isolation -- confirmed by testing shorter wording alone, which
+// silences it despite touching nothing else in that byte range.
+#[allow(clippy::too_long_first_doc_paragraph)]
+/// Time-driven value animation: easing curves, a stateful `Tween`, and a periodic oscillator.
+pub mod animate;
 /// The `App`-driven game loop.
 pub mod app;
 /// Pluggable rendering backends.
@@ -71,6 +79,7 @@ pub mod text;
 /// The atomic drawable unit (glyph, style, sub-cell offsets).
 pub mod tile;
 
+pub use animate::{Easing, Tween, oscillate};
 #[cfg(feature = "std")]
 pub use app::run_blocking;
 pub use app::{App, Flow, Frame, step};
@@ -85,7 +94,7 @@ pub use frame_clock::FrameClock;
 pub use grid::{Grid, Pos, Rect, Size};
 #[cfg(feature = "egc")]
 pub use layout::{HAlign, TextLayout, TextMetrics, VAlign};
-pub use style::{CellModifier, Style};
+pub use style::Style;
 pub use terminal::Terminal;
 pub use text::{Line, Span};
 pub use tile::Tile;

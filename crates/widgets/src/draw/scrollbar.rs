@@ -1,7 +1,14 @@
-//! [`scrollbar`]: a vertical track+thumb indicator computed from a
-//! [`ListState`](crate::ListState)-shaped offset/visible/total triple.
+//! [`thumb_geometry`]/[`offset_for_pos`]: pure scrollbar geometry, kept as
+//! functions (not [`widget::Scrollbar`](crate::widget::Scrollbar) methods)
+//! because they have legitimate standalone callers that never draw anything
+//! -- e.g. hit-testing a click/drag against the thumb via
+//! [`Interaction::interact`](crate::Interaction::interact) with
+//! [`Sense::DRAG`](crate::Sense::DRAG), independently of (and possibly
+//! before) ever rendering a [`widget::Scrollbar`](crate::widget::Scrollbar).
+//! This module has no dependency on (or awareness of) [`crate::interact`],
+//! and stays that way on purpose.
 
-use retroglyph_core::{Backend, Pos, Rect, Style, Terminal};
+use retroglyph_core::{Pos, Rect};
 
 /// The thumb's row span within `area` (`(start, len)`, both relative to
 /// `area.top()`) for a vertical scrollbar covering `total_len` items in a
@@ -9,18 +16,8 @@ use retroglyph_core::{Backend, Pos, Rect, Style, Terminal};
 ///
 /// `None` if there's nothing to scroll (`area` has no rows, `visible_len`
 /// is zero, or `total_len <= visible_len` -- the whole track already fits
-/// in the viewport). Callers typically skip drawing/interacting with a
-/// thumb in that case, since [`scrollbar`] itself already does (it falls
-/// back to drawing a plain, thumb-less track).
-///
-/// Exposed separately from [`scrollbar`] so an app can hit-test the exact
-/// thumb rect itself, e.g. to make it draggable via
-/// [`Interaction::interact`](crate::Interaction::interact) with
-/// [`Sense::DRAG`](crate::Sense::DRAG) -- this module has no dependency on
-/// (or awareness of) [`crate::interact`], and stays that way on purpose:
-/// drawing and interaction compose here the same way the rest of this
-/// crate's widgets do, rather than a scrollbar needing its own
-/// interaction-aware type.
+/// in the viewport). [`widget::Scrollbar`](crate::widget::Scrollbar) falls
+/// back to drawing a plain, thumb-less track in that case.
 ///
 /// The thumb is sized proportionally to `visible_len / total_len` (clamped
 /// to at least one row so it's never invisible) and positioned
@@ -84,44 +81,8 @@ pub fn offset_for_pos(area: Rect, total_len: usize, visible_len: usize, pos: Pos
     Some(offset.min(max_offset))
 }
 
-/// Draw a vertical scrollbar into `area` (typically one cell wide).
-///
-/// `track_style` fills the whole strip, then [`thumb_geometry`]'s span (if
-/// any) is redrawn with `thumb_style` on top. Draws just the plain track,
-/// with no thumb, if there's nothing to scroll -- see [`thumb_geometry`].
-pub fn scrollbar<B: Backend>(
-    term: &mut Terminal<B>,
-    area: Rect,
-    total_len: usize,
-    visible_len: usize,
-    offset: usize,
-    track_style: Style,
-    thumb_style: Style,
-) {
-    if area.width() == 0 || area.height() == 0 {
-        return;
-    }
-
-    for y in area.top()..area.bottom() {
-        for x in area.left()..area.right() {
-            term.put_styled(x, y, ' ', track_style);
-        }
-    }
-
-    let Some((start, len)) = thumb_geometry(area, total_len, visible_len, offset) else {
-        return;
-    };
-    for y in (area.top() + start)..(area.top() + start + len) {
-        for x in area.left()..area.right() {
-            term.put_styled(x, y, ' ', thumb_style);
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::{Color, Headless, Terminal};
-
     use super::*;
 
     #[test]
@@ -171,39 +132,5 @@ mod tests {
     fn offset_for_pos_outside_the_area_is_none() {
         let area = Rect::new(5, 5, 1, 10);
         assert_eq!(offset_for_pos(area, 40, 10, Pos::new(0, 0)), None);
-    }
-
-    #[test]
-    fn draws_a_plain_track_with_no_thumb_when_nothing_to_scroll() {
-        let area = Rect::new(0, 0, 1, 5);
-        let mut term = Terminal::new(Headless::new(1, 5));
-        let track = Style::new().bg(Color::Rgb { r: 1, g: 1, b: 1 });
-        let thumb = Style::new().bg(Color::Rgb { r: 2, g: 2, b: 2 });
-        scrollbar(&mut term, area, 3, 5, 0, track, thumb);
-        for y in 0..5 {
-            assert_eq!(
-                term.grid().get(0, y).style().background(),
-                track.background()
-            );
-        }
-    }
-
-    #[test]
-    fn draws_the_thumb_over_the_track() {
-        let area = Rect::new(0, 0, 1, 10);
-        let mut term = Terminal::new(Headless::new(1, 10));
-        let track = Style::new().bg(Color::Rgb { r: 1, g: 1, b: 1 });
-        let thumb = Style::new().bg(Color::Rgb { r: 2, g: 2, b: 2 });
-        scrollbar(&mut term, area, 20, 5, 0, track, thumb);
-
-        let (start, len) = thumb_geometry(area, 20, 5, 0).unwrap();
-        for y in 0..10 {
-            let bg = term.grid().get(0, y).style().background();
-            if y >= start && y < start + len {
-                assert_eq!(bg, thumb.background());
-            } else {
-                assert_eq!(bg, track.background());
-            }
-        }
     }
 }

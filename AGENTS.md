@@ -39,7 +39,7 @@ CI. The `doc` recipe swallows `cargo doc` failures due to `|| true` chaining. Se
 src/
   lib.rs             Root: module declarations, feature-gated re-exports
   color.rs           Color (Default / ANSI / Indexed / RGB)
-  style.rs           Style, CellModifier (depends on: color)
+  style.rs           Style (depends on: color)
   tile.rs            Tile — glyph + Style + sub-cell offsets (depends on: style)
   grid.rs            Grid, Pos, Rect, Size (depends on: tile, style; uses grixy)
   event.rs           Event, KeyEvent, MouseEvent (depends on: grid::Pos)
@@ -110,6 +110,10 @@ open tests/snapshots/demo.svg   # visual diff
 
 ## Key rules
 
+- **Comment/doc-comment line width: use the full ~100 cols, not ~80.** There's no `rustfmt.toml` in
+  this repo, so rustfmt's default `max_width = 100` applies, and `wrap_comments` is `false` by
+  default (rustfmt never rewraps prose comments for you). Don't hand-wrap doc comments to ~80 cols
+  out of habit; wrap near the real 100-col budget instead.
 - **No `eprintln!` in library code.** Use the `log` crate (feature-gated). Fatal backend init
   errors: `log::error!` + `event_loop.exit()`, not `panic!`.
 - **`unsafe_code` is forbidden** (`Cargo.toml` lint).

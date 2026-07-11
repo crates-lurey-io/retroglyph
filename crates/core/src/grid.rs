@@ -634,7 +634,7 @@ impl Grid {
     /// - Start from layer 0's tile (its `bg` fills the cell).
     /// - For each higher allocated layer, in ascending order: if the tile is
     ///   not empty (see [`Tile::is_empty`]) replace the glyph, foreground,
-    ///   modifiers, offsets, flags, and extra; if its background is not
+    ///   offsets, flags, and extra; if its background is not
     ///   [`Color::Default`], replace the background.
     ///
     /// Because an explicit space is not empty, drawing one on a higher layer
@@ -653,7 +653,6 @@ impl Grid {
                     if contributes_glyph {
                         out.glyph = tile.glyph;
                         out.style.fg = tile.style.fg;
-                        out.style.modifiers = tile.style.modifiers;
                         out.dx = tile.dx;
                         out.dy = tile.dy;
                         out.flags = tile.flags;

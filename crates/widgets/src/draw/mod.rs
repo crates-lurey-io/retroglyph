@@ -1,37 +1,27 @@
-//! Drawing helpers: box borders, filled rects, panels, gauges, sparklines,
-//! and tables.
+//! [`fill_rect`] and [`thumb_geometry`]/[`offset_for_pos`]: the handful of
+//! things genuinely useful as standalone functions rather than
+//! [`Widget`](crate::widget::Widget)s.
 //!
-//! Split into two source-only tiers, both private modules re-exported flat
-//! below (see [`crate`] for the public surface):
+//! `fill_rect` is a one-shot fill with no configuration worth building.
+//! `thumb_geometry`/`offset_for_pos` are pure position/size arithmetic with
+//! no [`Terminal`](retroglyph_core::Terminal) involved, reused for
+//! hit-testing independently of drawing a
+//! [`Scrollbar`](crate::widget::Scrollbar).
 //!
-//! - Primitives: [`draw_box`], [`fill_rect`], [`panel`], [`modal`],
-//!   [`progress_bar`], [`print_line`], and [`log`]. These take styles as
-//!   parameters and bake in no color opinions of their own -- reusable
-//!   building blocks for any theme.
-//! - Composite widgets: [`gauge`], [`stat_bar`], [`sparkline`], [`table`],
-//!   and [`meter_ramp`]. These are built from the primitives above but
-//!   hardcode a specific dark-theme palette, because they exist for the
-//!   system-monitor dashboard demo rather than as theme-agnostic
-//!   primitives.
-//! - [`scrollbar`] (plus its geometry helpers [`thumb_geometry`] and
-//!   [`offset_for_pos`]): a vertical track+thumb indicator, theme-agnostic
-//!   like the primitives tier. Deliberately independent of
-//!   [`crate::interact`] -- see its own doc comment for how to make one
-//!   draggable using [`Interaction`](crate::Interaction) instead.
-//!
-//! Both tiers are re-exported flat from this module (and from the crate
-//! root), so `retroglyph_widgets::gauge(...)` and
-//! `retroglyph_widgets::draw::gauge(...)` both work; the split is purely
-//! about where the source lives.
+//! Everything else that used to live here -- `panel`, `modal`,
+//! `progress_bar`, `print_line`, `log`, `gauge`, `stat_bar`, `sparkline`,
+//! `table`, `meter_ramp`, `scrollbar` -- is now a [`Widget`](crate::widget::Widget)
+//! (or [`StatefulWidget`](crate::widget::StatefulWidget)) struct under
+//! [`widget`](crate::widget), one file each, so there's a single way to draw
+//! each of them instead of a free function and a builder both doing the same
+//! thing.
 
-mod composite;
-pub(crate) mod primitives;
+mod primitives;
 mod scrollbar;
 
-pub use composite::{gauge, meter_ramp, sparkline, stat_bar, table};
-pub use primitives::{draw_box, fill_rect, log, modal, panel, print_line, progress_bar};
-pub use scrollbar::{offset_for_pos, scrollbar, thumb_geometry};
+pub use primitives::fill_rect;
+pub use scrollbar::{offset_for_pos, thumb_geometry};
 
-// Box-drawing codepoints are crate-internal only (reused by `style.rs`), not
-// part of the public API.
+// Box-drawing codepoints are crate-internal only (reused by `style.rs` and
+// `widget::BoxBorder`), not part of the public API.
 pub(crate) use primitives::{BL, BR, H, TL, TR, V};

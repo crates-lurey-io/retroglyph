@@ -162,28 +162,31 @@ where
     P: Presenter + 'static,
     A: retroglyph_core::App<WindowBackend<P>> + 'static,
 {
-    let mut number = 0u64;
+    let mut frame_count = 0u64;
     #[cfg(not(target_arch = "wasm32"))]
     let mut last = std::time::Instant::now();
     #[cfg(target_arch = "wasm32")]
     let mut last = wasm_now_ms();
     run_windowed(config, presenter, move |term| {
         #[cfg(not(target_arch = "wasm32"))]
-        let dt = {
+        let delta = {
             let now = std::time::Instant::now();
             let elapsed = now.duration_since(last);
             last = now;
             elapsed
         };
         #[cfg(target_arch = "wasm32")]
-        let dt = {
+        let delta = {
             let now = wasm_now_ms();
             let elapsed = Duration::from_secs_f64((now - last).max(0.0) / 1000.0);
             last = now;
             elapsed
         };
-        let frame = retroglyph_core::Frame { dt, number };
-        number = number.wrapping_add(1);
+        let frame = retroglyph_core::Frame {
+            delta,
+            frame: frame_count,
+        };
+        frame_count = frame_count.wrapping_add(1);
         if retroglyph_core::step(term, &mut app, &frame) == retroglyph_core::Flow::Exit {
             #[cfg(not(target_arch = "wasm32"))]
             std::process::exit(0);
