@@ -148,11 +148,11 @@ __ROWS__
         <code>requestAnimationFrame</code> loop and an on-screen button toolbar.
         <strong>Terminal</strong> (via <a href="https://xtermjs.org/">xterm.js</a>) renders real
         ANSI/SGR escape codes — the same terminal-family renderer the native
-        <code>crossterm</code> backend uses. Only wired up for one example so far; more are
-        greyed out until a future pass extends it.
+        <code>crossterm</code> backend uses.
         <strong>Software</strong> is the CPU-rasterized pixel backend, rendered to a
-        <code>&lt;canvas&gt;</code>. Greyed-out cells mean that backend isn't available for that
-        example, not that it failed to build.
+        <code>&lt;canvas&gt;</code>. Every example gets all three variants (see
+        <code>tools/build-wasm-examples.sh</code>) — there's no per-example backend list to keep
+        in sync.
       </p>
     </main>
 
