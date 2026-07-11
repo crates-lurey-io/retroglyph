@@ -68,9 +68,8 @@ use wasm_time::{Duration, Instant};
 /// Wraps the platform split the demos need: real elapsed time via
 /// [`std::time::Instant`] on native targets, real elapsed time via the
 /// browser's `performance.now()` on `wasm32` (where there is no
-/// `SystemTime`/`Instant`). This is the tiny helper referenced by the
-/// dashboard demo plan; it exists because `rg_run!`'s `tick` signature hides
-/// `Frame.dt`.
+/// `SystemTime`/`Instant`). Exists because `rg_run!`'s `tick` signature
+/// hides `Frame.dt`.
 ///
 /// [`FrameClock`]: retroglyph_core::FrameClock
 pub struct Stopwatch {

@@ -2,10 +2,6 @@
 
 #![allow(unreachable_pub, dead_code)]
 
-pub mod action;
-pub mod fov;
-pub mod game;
-pub mod lcg;
 pub mod perf;
 pub mod timestep;
 
@@ -15,9 +11,8 @@ pub mod timestep;
 /// Runs `init` once against a fresh [`Headless`] backend, then ticks a small
 /// fixed number of frames, printing each frame's grid to stdout. No terminal
 /// or window is involved, and no input is ever injected — `tick` only ever
-/// sees an empty event queue, so purely time-driven demos (e.g. `subpixel`,
-/// `dirty_viz`) show motion across frames while input-driven demos just
-/// repeat their initial state.
+/// sees an empty event queue, so purely time-driven demos show motion across
+/// frames while input-driven demos just repeat their initial state.
 ///
 /// This exists so every example keeps a `main` (and stays `cargo build`-able)
 /// with the crate's default feature set, and so `examples/runner.rs` can
@@ -328,8 +323,8 @@ where
 }
 
 /// Emit the `#[cfg]`-gated wasm-headless entry-point arm shared by
-/// [`rg_run!`], [`rg_run_software!`], and any example (e.g. `hex_battle`)
-/// that hand-rolls its own backend dispatch instead of using either macro.
+/// [`rg_run!`], [`rg_run_software!`], and any example that hand-rolls its
+/// own backend dispatch instead of using either macro.
 ///
 /// Broken out so the wasm-headless branch is written once instead of
 /// copy-pasted into every entry-point macro/manual dispatch: it only ever
@@ -370,10 +365,10 @@ macro_rules! __rg_wasm_headless_arm {
 /// Cargo.toml), and the target being `wasm32`. Callers still need their own
 /// fallback `main` guarded with a matching `not(...)` of this same condition.
 ///
-/// Not yet wired into [`rg_run_software!`] or any hand-rolled dispatch (e.g.
-/// `hex_battle`) — only [`rg_run!`] uses this arm today. Add call sites the
-/// same way [`__rg_wasm_headless_arm!`] was added to those spots, when a
-/// `rg_run_software!`-based example needs a Terminal demo.
+/// Not yet wired into [`rg_run_software!`] or any hand-rolled dispatch —
+/// only [`rg_run!`] uses this arm today. Add call sites the same way
+/// [`__rg_wasm_headless_arm!`] was added, when a `rg_run_software!`-based
+/// example needs a Terminal demo.
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __rg_wasm_terminal_arm {

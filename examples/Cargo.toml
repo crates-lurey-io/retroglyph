@@ -1,0 +1,58 @@
+[package]
+name = "retroglyph-examples"
+version = "0.1.0-alpha"
+description = "Runnable examples for retroglyph (not published)"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+retroglyph-core = { path = "../crates/core", version = "0.1.0-alpha" }
+retroglyph-crossterm = { path = "../crates/crossterm", version = "0.1.0-alpha", optional = true }
+retroglyph-software = { path = "../crates/software", version = "0.1.0-alpha", optional = true }
+retroglyph-window = { path = "../crates/window", version = "0.1.0-alpha", optional = true }
+# Optional, wasm32-only in practice: see the `wasm-terminal` feature below.
+# Declared as a plain (non-target-gated) optional dependency because Cargo
+# features can't be restricted to a target; `wasm-terminal` is documented as
+# wasm32-only and the crate itself is a no-op off that target (its `Backend`
+# impl still compiles portably -- only its `#[wasm_bindgen]` FFI module is
+# `cfg(target_arch = "wasm32")`-gated).
+retroglyph-terminal-wasm = { path = "../crates/terminal-wasm", version = "0.1.0-alpha", optional = true }
+
+[features]
+# A game selects a backend by enabling one of these. With none enabled every
+# example still builds and runs against the Headless backend (used by
+# examples/runner.rs's "Headless" option).
+crossterm = ["dep:retroglyph-crossterm"]
+software = ["dep:retroglyph-software", "dep:retroglyph-window"]
+default-font = ["software", "retroglyph-software/default-font"]
+# WASM-only: drives a Terminal<Headless> from a browser requestAnimationFrame
+# loop instead of a canvas/window. See util/mod.rs's `rg_run!` wasm-headless
+# branch. Mutually exclusive with `software` in practice (whichever the example
+# binary is built with wins; `rg_run!` prefers `software` if both are enabled).
+wasm-headless = []
+# WASM-only: drives a Terminal<TerminalWasm> from a browser terminal emulator
+# (e.g. xterm.js -- see docs/templates/examples/terminal-template.html)
+# instead of a canvas/window or a plain <pre>. See util/mod.rs's `rg_run!`
+# wasm-terminal branch. Mutually exclusive with `software`/`wasm-headless` in
+# practice (whichever the example binary is built with wins; `rg_run!`
+# prefers `software`, then `wasm-headless`, then this).
+wasm-terminal = ["dep:retroglyph-terminal-wasm"]
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "=0.2.106"
+console_error_panic_hook = "0.1"
+# Used by util/perf.rs and util/timestep.rs to read a real wall-clock delta
+# via performance.now(), so wasm animations run at wall-clock speed instead
+# of assuming a fixed frame time.
+web-sys = { version = "0.3", features = ["Window", "Performance"] }
+
+[[example]]
+name = "hello_world"
+path = "examples/hello_world.rs"

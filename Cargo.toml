@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/*", "gallery", "tools/cargo-bin"]
+members = ["crates/*", "examples", "tools/cargo-bin"]
 resolver = "2"
 
 [workspace.metadata.bin]
@@ -7,11 +7,11 @@ wasm-server-runner = { version = "1.0.1" }
 hk = { version = "1.48.0" }
 cargo-criterion = { version = "1.1.0" }
 # Version pinned to match the `wasm-bindgen` dependency in
-# crates/examples/Cargo.toml and crates/terminal-wasm/Cargo.toml, and the
+# examples/Cargo.toml and crates/terminal-wasm/Cargo.toml, and the
 # `cargo install wasm-bindgen-cli` step in .github/workflows/docs.yml — all
-# three must move in lockstep. Used by `examples/runner.rs`'s WASM launch
-# path to reproduce the docs site's `wasm-bindgen --target web` pipeline
-# locally (see docs/templates/examples/software-template.html).
+# three must move in lockstep. Used to reproduce the docs site's
+# `wasm-bindgen --target web` pipeline locally, once the examples crate has
+# a WASM launch path again (removed along with the old crates/examples/).
 wasm-bindgen-cli = { version = "0.2.106", bins = ["wasm-bindgen"] }
 # cargo-llms-txt is intentionally not managed here: it has no prebuilt
 # binstall/quickinstall binaries, and cargo-run-bin's source-install fallback

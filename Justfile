@@ -58,19 +58,20 @@ docs-preview: doc
 # ── Test ─────────────────────────────────────────────────────────────────────
 
 test:
-    # Build examples first so e2e_snapshot tests can find them.
-    cargo build -p retroglyph-examples --examples --all-features
     cargo test --workspace --all-features
 
 test-v:
-    cargo build -p retroglyph-examples --examples --all-features
     cargo test --workspace --all-features -- --nocapture
 
 # Run benchmarks locally. Install cargo-criterion first: cargo install cargo-criterion
 # To save a baseline: just bench -- --save-baseline main
 # To compare:        just bench -- --baseline main
+#
+# TODO: no bench target exists yet -- the old crates/examples/benches/retroglyph.rs
+# was deleted along with the rest of crates/examples/. Re-add a `[[bench]]` to
+# examples/Cargo.toml before using this recipe again.
 bench *args:
-    cargo bin cargo-criterion -p retroglyph-examples --bench retroglyph --features default-font {{ args }}
+    @echo "No bench target yet -- see the TODO above this recipe in the Justfile." && exit 1
 
 # ── Dependencies ─────────────────────────────────────────────────────────────
 
@@ -120,8 +121,11 @@ setup-wasm: setup-tools
     # to be created here.
     cargo bin wasm-server-runner --version >/dev/null 2>&1 || true
 
+# TODO: no software-backend example exists yet -- the old crates/examples/examples/dungeon_room.rs
+# was deleted along with the rest of crates/examples/. Point this at a real example once one
+# exists that enables the `software` feature.
 run-wasm:
-    cargo run -p retroglyph-examples --target wasm32-unknown-unknown --example dungeon_room --features default-font
+    @echo "No software-backend example yet -- see the TODO above this recipe in the Justfile." && exit 1
 
 # ── act (local CI runner) ────────────────────────────────────────────────────
 

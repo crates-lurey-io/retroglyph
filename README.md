@@ -7,8 +7,6 @@
 
 A 2D pseudographic terminal library for Rust.
 
-![crossterm demo](crates/examples/tests/snapshots/demo.svg)
-
 `retroglyph` provides a styled character grid, double-buffered rendering, and pluggable backends.
 
 You drive the game loop; `retroglyph` handles drawing efficiently and feeding you input events.

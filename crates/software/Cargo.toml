@@ -33,7 +33,7 @@ softbuffer = "0.4"
 # a fresh RGBA Vec every frame) in favor of a persistent RGBA buffer reused
 # across frames; see present()'s wasm32 branch. Version pinned to match the
 # wasm-bindgen dependency elsewhere in the workspace (crates/window,
-# crates/terminal-wasm, crates/examples) -- the CLI and the crate version
+# crates/terminal-wasm, examples) -- the CLI and the crate version
 # must agree.
 wasm-bindgen = "=0.2.106"
 web-sys = { version = "0.3", features = [

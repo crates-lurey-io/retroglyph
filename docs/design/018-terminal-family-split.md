@@ -167,7 +167,8 @@ from.
   amended here
 - [ADR 011: WASM Portability (Revised)](011-wasm-portability-revised.md) -- prior WASM-specific
   constraints and rAF-driven frame gating precedent
-- `crates/examples/src/util/perf.rs` -- existing precedent for crossing the `wasm-bindgen` FFI
-  boundary with plain integers/floats instead of core types
+- `examples/src/util/perf.rs` (as of writing, part of the now-deleted `crates/examples/`; the
+  examples crate was rebuilt from scratch after this ADR was written) -- existing precedent for
+  crossing the `wasm-bindgen` FFI boundary with plain integers/floats instead of core types
 - [xterm.js](https://xtermjs.org/) -- the reference JS terminal emulator this crate is designed to
   be compatible with, deliberately not depended on

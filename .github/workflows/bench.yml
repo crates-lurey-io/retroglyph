@@ -15,8 +15,10 @@ env:
 
 jobs:
   bench:
-    if:
-      github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'benchmark')
+    # TODO: disabled -- the bench target (crates/examples/benches/retroglyph.rs) was deleted
+    # along with the rest of crates/examples/. Re-enable once the new examples/ crate has a
+    # `[[bench]]` target again, and restore the `if:` condition below.
+    if: false
     runs-on: ubuntu-latest
     permissions:
       checks: write
