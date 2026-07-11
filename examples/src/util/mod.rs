@@ -3,7 +3,6 @@
 #![allow(unreachable_pub, dead_code)]
 
 pub mod perf;
-pub mod timestep;
 
 /// WASM-only support for driving a [`Terminal<Headless>`](retroglyph_core::Terminal)
 /// from a browser `requestAnimationFrame` loop instead of a canvas/window.

@@ -20,8 +20,8 @@ mod keyboard;
 
 use keyboard::Keyboard;
 use retroglyph_core::event::{Event, KeyCode, KeyEvent, KeyModifiers};
-use retroglyph_core::{Headless, Terminal};
-use retroglyph_examples::Example;
+use retroglyph_core::{Frame, Headless, Terminal};
+use retroglyph_examples::{Example, HEADLESS_FRAME_DELTA};
 
 /// Drives `E` through one synthetic key event per tick, returning each frame's
 /// [`Headless::format_view`] text -- mirrors `support::headless_snapshot`'s shape but
@@ -32,9 +32,13 @@ fn headless_keyboard_snapshot<E: Example>(events: &[Event]) -> String {
     let mut state = E::init(&mut term);
 
     let mut views = Vec::new();
-    for &event in events {
+    for (i, &event) in events.iter().enumerate() {
         term.backend_mut().push_event(event);
-        if !state.tick(&mut term) {
+        let frame = Frame {
+            delta: HEADLESS_FRAME_DELTA,
+            frame: i as u64,
+        };
+        if !state.tick(&mut term, &frame) {
             break;
         }
         views.push(term.backend().format_view());

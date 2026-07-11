@@ -63,7 +63,11 @@ impl HelloWorld {
 impl Example for HelloWorld {
     const NAME: &'static str = "01_hello_world";
 
-    fn tick<B: Backend>(&mut self, term: &mut Terminal<B>) -> bool {
+    fn tick<B: Backend>(
+        &mut self,
+        term: &mut Terminal<B>,
+        _frame: &retroglyph_core::Frame,
+    ) -> bool {
         if !self.handle_events(term) {
             return false;
         }

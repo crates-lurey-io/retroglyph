@@ -102,6 +102,8 @@ macro_rules! __wasm_headless_entry {
             struct __RgWasmHeadlessState {
                 term: ::retroglyph_core::Terminal<::retroglyph_core::Headless>,
                 state: $E,
+                last_tick: ::web_time::Instant,
+                frame_count: u64,
             }
 
             ::std::thread_local! {
@@ -119,7 +121,12 @@ macro_rules! __wasm_headless_entry {
                 let mut term = ::retroglyph_core::Terminal::new(backend);
                 let state = <$E as $crate::Example>::init(&mut term);
                 __RG_WASM_HEADLESS.with(|cell| {
-                    *cell.borrow_mut() = ::std::option::Option::Some(__RgWasmHeadlessState { term, state });
+                    *cell.borrow_mut() = ::std::option::Option::Some(__RgWasmHeadlessState {
+                        term,
+                        state,
+                        last_tick: ::web_time::Instant::now(),
+                        frame_count: 0,
+                    });
                 });
             }
 
@@ -167,7 +174,14 @@ macro_rules! __wasm_headless_entry {
                     let Some(s) = guard.as_mut() else {
                         return ::std::string::String::new();
                     };
-                    $crate::Example::tick(&mut s.state, &mut s.term);
+                    let now = ::web_time::Instant::now();
+                    let frame = ::retroglyph_core::Frame {
+                        delta: now.duration_since(s.last_tick),
+                        frame: s.frame_count,
+                    };
+                    s.last_tick = now;
+                    s.frame_count = s.frame_count.wrapping_add(1);
+                    $crate::Example::tick(&mut s.state, &mut s.term, &frame);
                     s.term.backend().format_view()
                 })
             }
@@ -198,6 +212,8 @@ macro_rules! __wasm_terminal_entry {
             struct __RgWasmTerminalState {
                 term: ::retroglyph_core::Terminal<::retroglyph_terminal_wasm::TerminalWasm>,
                 state: $E,
+                last_tick: ::web_time::Instant,
+                frame_count: u64,
             }
 
             ::std::thread_local! {
@@ -218,7 +234,12 @@ macro_rules! __wasm_terminal_entry {
                 let mut term = ::retroglyph_core::Terminal::new(backend);
                 let state = <$E as $crate::Example>::init(&mut term);
                 __RG_WASM_TERMINAL.with(|cell| {
-                    *cell.borrow_mut() = ::std::option::Option::Some(__RgWasmTerminalState { term, state });
+                    *cell.borrow_mut() = ::std::option::Option::Some(__RgWasmTerminalState {
+                        term,
+                        state,
+                        last_tick: ::web_time::Instant::now(),
+                        frame_count: 0,
+                    });
                 });
             }
 
@@ -281,7 +302,14 @@ macro_rules! __wasm_terminal_entry {
                     let Some(s) = guard.as_mut() else {
                         return ::std::string::String::new();
                     };
-                    $crate::Example::tick(&mut s.state, &mut s.term);
+                    let now = ::web_time::Instant::now();
+                    let frame = ::retroglyph_core::Frame {
+                        delta: now.duration_since(s.last_tick),
+                        frame: s.frame_count,
+                    };
+                    s.last_tick = now;
+                    s.frame_count = s.frame_count.wrapping_add(1);
+                    $crate::Example::tick(&mut s.state, &mut s.term, &frame);
                     s.term.backend_mut().take_output()
                 })
             }

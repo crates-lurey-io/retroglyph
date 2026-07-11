@@ -112,7 +112,11 @@ impl Mouse {
 impl Example for Mouse {
     const NAME: &'static str = "04_mouse";
 
-    fn tick<B: Backend>(&mut self, term: &mut Terminal<B>) -> bool {
+    fn tick<B: Backend>(
+        &mut self,
+        term: &mut Terminal<B>,
+        _frame: &retroglyph_core::Frame,
+    ) -> bool {
         self.ticks += 1;
         if !self.handle_events(term) {
             return false;

@@ -114,7 +114,11 @@ impl LayoutGrid {
 impl Example for LayoutGrid {
     const NAME: &'static str = "05_layout_grid";
 
-    fn tick<B: Backend>(&mut self, term: &mut Terminal<B>) -> bool {
+    fn tick<B: Backend>(
+        &mut self,
+        term: &mut Terminal<B>,
+        _frame: &retroglyph_core::Frame,
+    ) -> bool {
         if !self.handle_events(term) {
             return false;
         }

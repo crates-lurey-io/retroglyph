@@ -20,8 +20,8 @@ mod mouse;
 
 use mouse::Mouse;
 use retroglyph_core::event::{Event, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
-use retroglyph_core::{Headless, Pos, Terminal};
-use retroglyph_examples::Example;
+use retroglyph_core::{Frame, Headless, Pos, Terminal};
+use retroglyph_examples::{Example, HEADLESS_FRAME_DELTA};
 
 const fn mouse_event(kind: MouseEventKind, x: u16, y: u16) -> Event {
     Event::Mouse(MouseEvent {
@@ -40,11 +40,15 @@ fn drive(events: &[Option<Event>]) -> String {
     let mut state = Mouse::init(&mut term);
 
     let mut views = Vec::new();
-    for event in events {
+    for (i, event) in events.iter().enumerate() {
         if let Some(event) = event {
             term.backend_mut().push_event(*event);
         }
-        if !state.tick(&mut term) {
+        let frame = Frame {
+            delta: HEADLESS_FRAME_DELTA,
+            frame: i as u64,
+        };
+        if !state.tick(&mut term, &frame) {
             break;
         }
         views.push(term.backend().format_view());
@@ -75,8 +79,12 @@ fn headless_snapshot_motion_unavailable_fallback() {
     let mut state = Mouse::init(&mut term);
 
     let mut views = Vec::new();
-    for i in 1..=130 {
-        if !state.tick(&mut term) {
+    for i in 1..=130u64 {
+        let frame = Frame {
+            delta: HEADLESS_FRAME_DELTA,
+            frame: i,
+        };
+        if !state.tick(&mut term, &frame) {
             break;
         }
         if matches!(i, 1 | 60 | 130) {

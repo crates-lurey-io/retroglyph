@@ -18,6 +18,12 @@ retroglyph-core = { path = "../core", version = "0.1.0-alpha", default-features 
 raw-window-handle = "0.6"
 winit = { version = "0.30", optional = true }
 log = { version = "0.4", optional = true }
+# A portable `std::time::Instant`-alike: plain `std::time` re-export on native, backed by the
+# browser's `Performance.now()` on `wasm32-unknown-unknown`. Already in `Cargo.lock` transitively
+# (winit depends on it), so this adds no new dependency -- it replaces `run.rs`'s own hand-rolled
+# native/wasm `Instant` split (a `#[cfg(target_arch = "wasm32")] fn wasm_now_ms()`) with one
+# non-target-gated call site.
+web-time = "1"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 # Version pinned to match the wasm-bindgen dev-dependency in
@@ -26,7 +32,9 @@ log = { version = "0.4", optional = true }
 # a plain target dependency rather than threading an extra optional-feature
 # combination through for a target-gated, always-small pair of crates.
 wasm-bindgen = "=0.2.106"
-web-sys = { version = "0.3", features = ["Window", "EventTarget", "Performance"] }
+# "Performance" dropped: `web-time` (above) now owns wall-clock timing, so this crate's own
+# wasm32 code only needs `web-sys` for `Window`/`EventTarget` (DPR, resize listeners).
+web-sys = { version = "0.3", features = ["Window", "EventTarget"] }
 
 [features]
 default = ["winit"]

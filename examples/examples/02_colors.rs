@@ -114,7 +114,11 @@ impl Colors {
 impl Example for Colors {
     const NAME: &'static str = "02_colors";
 
-    fn tick<B: Backend>(&mut self, term: &mut Terminal<B>) -> bool {
+    fn tick<B: Backend>(
+        &mut self,
+        term: &mut Terminal<B>,
+        _frame: &retroglyph_core::Frame,
+    ) -> bool {
         if !self.handle_events(term) {
             return false;
         }

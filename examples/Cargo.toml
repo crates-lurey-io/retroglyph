@@ -24,6 +24,12 @@ retroglyph-window = { path = "../crates/window", version = "0.1.0-alpha", option
 # impl still compiles portably -- only its `#[wasm_bindgen]` FFI module is
 # `cfg(target_arch = "wasm32")`-gated).
 retroglyph-terminal-wasm = { path = "../crates/terminal-wasm", version = "0.1.0-alpha", optional = true }
+# A portable `std::time::Instant`-alike: on non-wasm targets it's a zero-cost re-export of
+# `std::time`; on `wasm32-unknown-unknown` it's backed by the browser's `Performance.now()`.
+# Already in the workspace's `Cargo.lock` transitively (pulled by `winit`), so this adds no new
+# dependency -- it just gives `util/perf.rs` and the `wasm_entry!` FFI tick paths a single,
+# non-target-gated `web_time::Instant` instead of each hand-rolling its own native/wasm split.
+web-time = "1"
 
 [features]
 # An example selects a backend by enabling one of these. With none enabled,
@@ -58,10 +64,6 @@ wasm-terminal = ["dep:retroglyph-terminal-wasm"]
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "=0.2.106"
 console_error_panic_hook = "0.1"
-# Used by util/perf.rs and util/timestep.rs to read a real wall-clock delta
-# via performance.now(), so wasm animations run at wall-clock speed instead
-# of assuming a fixed frame time.
-web-sys = { version = "0.3", features = ["Window", "Performance"] }
 
 [dev-dependencies]
 insta = { version = "1.34", features = ["yaml"] }
