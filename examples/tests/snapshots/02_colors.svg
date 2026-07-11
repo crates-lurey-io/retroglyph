@@ -1,0 +1,136 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="436" height="466">
+<rect width="100%" height="100%" fill="#111111"/>
+<text font-family="monospace" font-size="14" y="26.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">                                                  </tspan>
+</text>
+<text font-family="monospace" font-size="14" y="44.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0"> Ansi (16 standard colors):                       </tspan>
+</text>
+<text font-family="monospace" font-size="14" y="62.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0"> </tspan>
+  <tspan fill="#cccccc" x="16.4" style="background:#000000"> </tspan>
+  <tspan fill="#cccccc" x="24.8" style="background:#800000"> </tspan>
+  <tspan fill="#cccccc" x="33.2" style="background:#008000"> </tspan>
+  <tspan fill="#cccccc" x="41.6" style="background:#808000"> </tspan>
+  <tspan fill="#cccccc" x="50.0" style="background:#000080"> </tspan>
+  <tspan fill="#cccccc" x="58.4" style="background:#800080"> </tspan>
+  <tspan fill="#cccccc" x="66.8" style="background:#008080"> </tspan>
+  <tspan fill="#cccccc" x="75.2" style="background:#c0c0c0"> </tspan>
+  <tspan fill="#cccccc" x="83.6" style="background:#808080"> </tspan>
+  <tspan fill="#cccccc" x="92.0" style="background:#ff5555"> </tspan>
+  <tspan fill="#cccccc" x="100.4" style="background:#55ff55"> </tspan>
+  <tspan fill="#cccccc" x="108.8" style="background:#ffff55"> </tspan>
+  <tspan fill="#cccccc" x="117.2" style="background:#5555ff"> </tspan>
+  <tspan fill="#cccccc" x="125.6" style="background:#ff55ff"> </tspan>
+  <tspan fill="#cccccc" x="134.0" style="background:#55ffff"> </tspan>
+  <tspan fill="#cccccc" x="142.4" style="background:#ffffff"> </tspan>
+  <tspan fill="#cccccc" x="150.8">                                 </tspan>
+</text>
+<text font-family="monospace" font-size="14" y="80.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">                                                  </tspan>
+</text>
+<text font-family="monospace" font-size="14" y="98.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0"> Indexed (sampled across 0..256):                 </tspan>
+</text>
+<text font-family="monospace" font-size="14" y="116.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0"> </tspan>
+  <tspan fill="#cccccc" x="16.4" style="background:#000000"> </tspan>
+  <tspan fill="#cccccc" x="24.8" style="background:#808080"> </tspan>
+  <tspan fill="#cccccc" x="33.2" style="background:#888888">                              </tspan>
+  <tspan fill="#cccccc" x="285.2">                 </tspan>
+</text>
+<text font-family="monospace" font-size="14" y="134.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">                                                  </tspan>
+</text>
+<text font-family="monospace" font-size="14" y="152.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0"> Rgb (24-bit gradient, red channel 0..255):       </tspan>
+</text>
+<text font-family="monospace" font-size="14" y="170.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0"> </tspan>
+  <tspan fill="#cccccc" x="16.4" style="background:#0040c0"> </tspan>
+  <tspan fill="#cccccc" x="24.8" style="background:#0840c0"> </tspan>
+  <tspan fill="#cccccc" x="33.2" style="background:#1040c0"> </tspan>
+  <tspan fill="#cccccc" x="41.6" style="background:#1840c0"> </tspan>
+  <tspan fill="#cccccc" x="50.0" style="background:#2040c0"> </tspan>
+  <tspan fill="#cccccc" x="58.4" style="background:#2940c0"> </tspan>
+  <tspan fill="#cccccc" x="66.8" style="background:#3140c0"> </tspan>
+  <tspan fill="#cccccc" x="75.2" style="background:#3940c0"> </tspan>
+  <tspan fill="#cccccc" x="83.6" style="background:#4140c0"> </tspan>
+  <tspan fill="#cccccc" x="92.0" style="background:#4a40c0"> </tspan>
+  <tspan fill="#cccccc" x="100.4" style="background:#5240c0"> </tspan>
+  <tspan fill="#cccccc" x="108.8" style="background:#5a40c0"> </tspan>
+  <tspan fill="#cccccc" x="117.2" style="background:#6240c0"> </tspan>
+  <tspan fill="#cccccc" x="125.6" style="background:#6a40c0"> </tspan>
+  <tspan fill="#cccccc" x="134.0" style="background:#7340c0"> </tspan>
+  <tspan fill="#cccccc" x="142.4" style="background:#7b40c0"> </tspan>
+  <tspan fill="#cccccc" x="150.8" style="background:#8340c0"> </tspan>
+  <tspan fill="#cccccc" x="159.2" style="background:#8b40c0"> </tspan>
+  <tspan fill="#cccccc" x="167.6" style="background:#9440c0"> </tspan>
+  <tspan fill="#cccccc" x="176.0" style="background:#9c40c0"> </tspan>
+  <tspan fill="#cccccc" x="184.4" style="background:#a440c0"> </tspan>
+  <tspan fill="#cccccc" x="192.8" style="background:#ac40c0"> </tspan>
+  <tspan fill="#cccccc" x="201.2" style="background:#b440c0"> </tspan>
+  <tspan fill="#cccccc" x="209.6" style="background:#bd40c0"> </tspan>
+  <tspan fill="#cccccc" x="218.0" style="background:#c540c0"> </tspan>
+  <tspan fill="#cccccc" x="226.4" style="background:#cd40c0"> </tspan>
+  <tspan fill="#cccccc" x="234.8" style="background:#d540c0"> </tspan>
+  <tspan fill="#cccccc" x="243.2" style="background:#de40c0"> </tspan>
+  <tspan fill="#cccccc" x="251.6" style="background:#e640c0"> </tspan>
+  <tspan fill="#cccccc" x="260.0" style="background:#ee40c0"> </tspan>
+  <tspan fill="#cccccc" x="268.4" style="background:#f640c0"> </tspan>
+  <tspan fill="#cccccc" x="276.8" style="background:#ff40c0"> </tspan>
+  <tspan fill="#cccccc" x="285.2">                 </tspan>
+</text>
+<text font-family="monospace" font-size="14" y="188.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">                                                  </tspan>
+</text>
+<text font-family="monospace" font-size="14" y="206.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0"> Default (backend's configured fg/bg):            </tspan>
+</text>
+<text font-family="monospace" font-size="14" y="224.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">                                                  </tspan>
+</text>
+<text font-family="monospace" font-size="14" y="242.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">                                                  </tspan>
+</text>
+<text font-family="monospace" font-size="14" y="260.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0"> Inverse video (fg/bg swap is the only "styled tex</tspan>
+</text>
+<text font-family="monospace" font-size="14" y="278.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0"> </tspan>
+  <tspan fill="#ffff55" x="16.4" style="background:#000080">normal: yellow on blue</tspan>
+  <tspan fill="#cccccc" x="201.2">                           </tspan>
+</text>
+<text font-family="monospace" font-size="14" y="296.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0"> </tspan>
+  <tspan fill="#000080" x="16.4" style="background:#ffff55">inverse: blue on yellow</tspan>
+  <tspan fill="#cccccc" x="209.6">                          </tspan>
+</text>
+<text font-family="monospace" font-size="14" y="314.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">                                                  </tspan>
+</text>
+<text font-family="monospace" font-size="14" y="332.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">                                                  </tspan>
+</text>
+<text font-family="monospace" font-size="14" y="350.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">                                                  </tspan>
+</text>
+<text font-family="monospace" font-size="14" y="368.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">                                                  </tspan>
+</text>
+<text font-family="monospace" font-size="14" y="386.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">                                                  </tspan>
+</text>
+<text font-family="monospace" font-size="14" y="404.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">                                                  </tspan>
+</text>
+<text font-family="monospace" font-size="14" y="422.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">                                                  </tspan>
+</text>
+<text font-family="monospace" font-size="14" y="440.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">                                                  </tspan>
+</text>
+<text font-family="monospace" font-size="14" y="458.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">                                                  </tspan>
+</text>
+</svg>
