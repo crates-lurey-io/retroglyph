@@ -35,9 +35,18 @@
         min-height: 100%;
       }
       #screen {
-        width: 100%;
-        max-width: 46rem;
-        aspect-ratio: 50 / 25;
+        /* Hugs #grid's intrinsic 50ch x 25-line size (see below) instead of
+           being sized independently -- max-width bounds it on wide
+           viewports, font-size (clamped by viewport width) shrinks it on
+           narrow ones, and because #grid's own dimensions are expressed in
+           ch/em (relative to that same font-size), the two always agree.
+           The old version sized this box via a fixed `aspect-ratio` while
+           #grid's font-size floated independently off `vw` -- the two only
+           agreed by coincidence at one specific viewport width, so most of
+           the time #grid didn't fill #screen (a gap on the right) and/or
+           overflowed it vertically (rows clipped by `overflow: hidden`). */
+        width: fit-content;
+        max-width: min(100%, 46rem);
         background: #000;
         color: #c9d1d9;
         border: 1px solid #30363d;
@@ -52,13 +61,22 @@
         -webkit-user-select: none;
         user-select: none;
       }
-      /* The grid text itself. Kept as a separate inline-block element so
-         pointer events can be mapped to cell coordinates by measuring the
-         *text's* bounding box, not the padded #screen box (the clamped font
-         size means the 50x25 text block usually doesn't fill #screen). */
+      /* The grid text itself, sized to exactly 50 columns x 25 lines in
+         units relative to #screen's own font-size (ch = width of the "0"
+         glyph at the current font-size in a monospace font; the line-height
+         factor mirrors #screen's `line-height: 1.15`) -- not derived from
+         the viewport independently of #screen, so it can never disagree
+         with the box around it regardless of how much that box shrinks or
+         grows. Kept as a separate inline-block element (rather than sizing
+         #screen directly) so pointer events can be mapped to cell
+         coordinates by measuring the *text's* bounding box, not the padded
+         #screen box.
+      */
       #grid {
         display: inline-block;
         font: inherit;
+        width: 50ch;
+        height: calc(25 * 1.15em);
       }
       #toolbar {
         display: grid;

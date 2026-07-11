@@ -42,6 +42,11 @@
         background: #000;
         border: 1px solid #30363d;
         border-radius: 6px;
+        /* Without this, xterm.js's own (square-cornered) canvas/DOM layers
+           poke past #screen's rounded corners -- border-radius only clips
+           a straight-cornered child that reaches into the curve if the
+           parent also has overflow set to something other than visible. */
+        overflow: hidden;
         padding: 0.4rem;
         touch-action: none;
       }
