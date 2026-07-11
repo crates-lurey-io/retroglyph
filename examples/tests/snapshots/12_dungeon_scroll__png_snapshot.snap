@@ -1,0 +1,6 @@
+---
+source: examples/tests/12_dungeon_scroll.rs
+expression: png
+extension: png
+snapshot_kind: binary
+---
