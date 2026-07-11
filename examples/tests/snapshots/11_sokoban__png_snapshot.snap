@@ -1,0 +1,6 @@
+---
+source: examples/tests/11_sokoban.rs
+expression: png
+extension: png
+snapshot_kind: binary
+---
