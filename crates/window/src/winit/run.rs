@@ -37,6 +37,18 @@ pub struct WindowConfig {
     /// Optional frame-rate cap. `None` = uncapped (native) / display refresh
     /// (wasm, which is always rAF-driven).
     pub target_fps: Option<u32>,
+    /// On `wasm32`, size (and keep resizing) the canvas to fill the browser
+    /// viewport instead of `width`/`height` -- a full-screen, mobile-web-app
+    /// feel for games that want it. Has no effect on native, where the OS
+    /// window is already sized to `width`/`height` and the window manager
+    /// owns further resizing either way.
+    ///
+    /// Defaults to `false` in [`fit`](Self::fit): most demos/examples
+    /// should render at their natural grid size (`cols x cell_w` by `rows x
+    /// cell_h`) wherever they land on the page, not stretch to fill
+    /// whatever viewport happens to be hosting them. Opt in explicitly for
+    /// an app-like, full-screen game.
+    pub fill_viewport: bool,
 }
 
 impl WindowConfig {
@@ -59,6 +71,7 @@ impl WindowConfig {
             width: u32::from(grid.width) * cell_w,
             height: u32::from(grid.height) * cell_h,
             target_fps,
+            fill_viewport: false,
         }
     }
 }
@@ -102,6 +115,8 @@ where
             width: config.width,
             height: config.height,
         },
+        #[cfg(target_arch = "wasm32")]
+        fill_viewport: config.fill_viewport,
         current_modifiers: KeyModifiers::NONE,
         cursor_px: (0.0, 0.0),
         active_touch: None,
@@ -208,6 +223,10 @@ struct WindowApp<P: Presenter, F> {
     window: Option<Arc<Window>>,
     title: String,
     init_size: InitWindowSize,
+    /// See [`WindowConfig::fill_viewport`]. Only meaningful on `wasm32`; not
+    /// even stored on native, where it would do nothing.
+    #[cfg(target_arch = "wasm32")]
+    fill_viewport: bool,
     /// Current modifier key state, updated by `ModifiersChanged` events.
     current_modifiers: KeyModifiers,
     /// Last known cursor position in physical pixels.
@@ -235,35 +254,47 @@ impl<P: Presenter, F> WindowApp<P, F> {
     /// Returns `Some(window)` on success, logs and returns `None` on failure.
     fn create_window_and_surface(&mut self, event_loop: &ActiveEventLoop) -> Option<Arc<Window>> {
         // On native, size the window to fit the grid (`WindowConfig::fit`)
-        // and let the OS window manager own further resizing. On wasm
-        // there's no OS window to fit into -- the canvas *is* the page --
-        // so size it to the browser viewport instead, for a full-screen,
-        // mobile-web-app feel. winit sets an inline `width`/`height` style
-        // on the canvas matching whatever size we request here; it does not
-        // derive that size from page CSS, so this has to happen in Rust.
+        // and let the OS window manager own further resizing. On wasm, if
+        // `fill_viewport` is set, there's no OS window to fit into -- the
+        // canvas *is* the page -- so size it to the browser viewport
+        // instead, for a full-screen, mobile-web-app feel; otherwise it's
+        // sized the same as native (`init_size`, the natural grid size),
+        // which is what most demos/examples want -- see
+        // `WindowConfig::fill_viewport`'s doc comment. winit sets an inline
+        // `width`/`height` style on the canvas matching whatever size we
+        // request here; it does not derive that size from page CSS, so this
+        // has to happen in Rust.
         //
-        // Crucially, this *must* be the viewport size at the real (uncapped)
-        // device pixel ratio, not the DPR-capped size used for the software
-        // backing store below. winit's wasm backend converts whatever
-        // `PhysicalSize` we pass here back to a logical (CSS pixel) size
-        // using `window.devicePixelRatio()` -- the actual, uncapped ratio --
-        // to set the canvas's inline `style.width`/`style.height`. Handing it
-        // a DPR-capped physical size makes it divide by a *larger* real DPR
-        // than the one used to compute that size, so the resulting CSS size
-        // comes out smaller than the viewport (the higher the real DPR above
-        // the cap, the more the canvas visibly shrinks -- on a phone with
-        // DPR 3 and our 1.5 cap, that's 50% of the screen). See
-        // `web_viewport_surface_physical_size` for the separate, capped size
-        // used for the raster backing store.
+        // Crucially, the viewport-filling size *must* be the viewport size
+        // at the real (uncapped) device pixel ratio, not the DPR-capped size
+        // used for the software backing store below. winit's wasm backend
+        // converts whatever `PhysicalSize` we pass here back to a logical
+        // (CSS pixel) size using `window.devicePixelRatio()` -- the actual,
+        // uncapped ratio -- to set the canvas's inline `style.width`/
+        // `style.height`. Handing it a DPR-capped physical size makes it
+        // divide by a *larger* real DPR than the one used to compute that
+        // size, so the resulting CSS size comes out smaller than the
+        // viewport (the higher the real DPR above the cap, the more the
+        // canvas visibly shrinks -- on a phone with DPR 3 and our 1.5 cap,
+        // that's 50% of the screen). See `web_viewport_surface_physical_size`
+        // for the separate, capped size used for the raster backing store.
         #[cfg(not(target_arch = "wasm32"))]
         let physical_size =
             winit::dpi::PhysicalSize::new(self.init_size.width, self.init_size.height);
         #[cfg(target_arch = "wasm32")]
-        let physical_size = web_viewport_layout_physical_size().unwrap_or_else(|| {
+        let physical_size = if self.fill_viewport {
+            web_viewport_layout_physical_size().unwrap_or_else(|| {
+                winit::dpi::PhysicalSize::new(self.init_size.width, self.init_size.height)
+            })
+        } else {
             winit::dpi::PhysicalSize::new(self.init_size.width, self.init_size.height)
-        });
+        };
         #[cfg(target_arch = "wasm32")]
-        let surface_physical_size = web_viewport_surface_physical_size().unwrap_or(physical_size);
+        let surface_physical_size = if self.fill_viewport {
+            web_viewport_surface_physical_size().unwrap_or(physical_size)
+        } else {
+            physical_size
+        };
         #[cfg(not(target_arch = "wasm32"))]
         let surface_physical_size = physical_size;
 
@@ -310,9 +341,13 @@ impl<P: Presenter, F> WindowApp<P, F> {
         // show/hide): winit only reacts to size changes we ask for
         // ourselves (`request_inner_size`), so a `resize` listener is
         // required to make this genuinely responsive rather than a
-        // one-shot fit at startup.
+        // one-shot fit at startup. Only installed when `fill_viewport` is
+        // set -- otherwise the canvas should stay at its natural grid size
+        // regardless of viewport changes.
         #[cfg(target_arch = "wasm32")]
-        install_viewport_resize_listener(&window);
+        if self.fill_viewport {
+            install_viewport_resize_listener(&window);
+        }
 
         // `WindowEvent::ThemeChanged` (handled in `handle_window_event`)
         // only fires on a *change*, so an app that never sees a system
@@ -562,12 +597,19 @@ where
         let Some(term) = self.terminal.as_mut() else {
             return;
         };
-        // On wasm, `size` is whatever (uncapped) physical size we last
-        // handed winit for CSS layout purposes -- not the backing store
-        // size. Recompute the DPR-capped surface size independently so the
-        // raster buffer doesn't silently lose its cap on every resize.
+        // On wasm with `fill_viewport` set, `size` is whatever (uncapped)
+        // physical size we last handed winit for CSS layout purposes -- not
+        // the backing store size. Recompute the DPR-capped surface size
+        // independently so the raster buffer doesn't silently lose its cap
+        // on every resize. Without `fill_viewport`, the canvas never resizes
+        // on its own (no listener installed above), so `size` here is
+        // already the natural grid size and needs no such override.
         #[cfg(target_arch = "wasm32")]
-        let size = web_viewport_surface_physical_size().unwrap_or(size);
+        let size = if self.fill_viewport {
+            web_viewport_surface_physical_size().unwrap_or(size)
+        } else {
+            size
+        };
         let (cell_w, cell_h) = term.backend().presenter().cell_size();
         let cols = size.width / cell_w;
         let rows = size.height / cell_h;
