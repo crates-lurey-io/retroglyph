@@ -55,6 +55,20 @@ docs-preview: doc
     elif command -v open > /dev/null; then open target/doc/index.html; \
     fi
 
+# Preview the full docs site locally, same content as what ships to GitHub
+# Pages: rustdoc + llms.txt (via `doc`) plus the WASM examples gallery (via
+# tools/build-wasm-examples.sh). Serves target/doc over real HTTP with
+# miniserve (a `cargo bin`-managed local tool -- see workspace root
+# Cargo.toml's [workspace.metadata.bin]), not file://, since the WASM demos
+# fetch() their .wasm module and browsers block that from a file:// origin.
+# Ctrl-C stops the server. Run `just setup-wasm` first if you haven't.
+docs-preview-full: doc
+    tools/build-wasm-examples.sh
+    cargo bin --install
+    @echo "Serving target/doc at http://localhost:8000 (Ctrl-C to stop)"
+    @(sleep 1 && (command -v xdg-open > /dev/null && xdg-open http://localhost:8000 || open http://localhost:8000 2>/dev/null || true)) &
+    cargo bin miniserve target/doc --port 8000 --index index.html -q
+
 # ── Test ─────────────────────────────────────────────────────────────────────
 
 test:
