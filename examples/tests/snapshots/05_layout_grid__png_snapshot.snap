@@ -1,0 +1,6 @@
+---
+source: examples/tests/05_layout_grid.rs
+expression: png
+extension: png
+snapshot_kind: binary
+---

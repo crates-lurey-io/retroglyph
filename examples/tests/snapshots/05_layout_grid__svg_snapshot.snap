@@ -1,0 +1,82 @@
+---
+source: examples/tests/05_layout_grid.rs
+expression: svg
+---
+<svg xmlns="http://www.w3.org/2000/svg" width="436" height="466">
+<rect width="100%" height="100%" fill="#111111"/>
+<text font-family="monospace" font-size="14" y="26.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">┌────────────────────────────────────────────────┐</tspan>
+</text>
+<text font-family="monospace" font-size="14" y="44.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">│                                                │</tspan>
+</text>
+<text font-family="monospace" font-size="14" y="62.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">│                                                │</tspan>
+</text>
+<text font-family="monospace" font-size="14" y="80.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">│                                                │</tspan>
+</text>
+<text font-family="monospace" font-size="14" y="98.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">│                     Pane A                     │</tspan>
+</text>
+<text font-family="monospace" font-size="14" y="116.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">│                                                │</tspan>
+</text>
+<text font-family="monospace" font-size="14" y="134.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">│                                                │</tspan>
+</text>
+<text font-family="monospace" font-size="14" y="152.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">└────────────────────────────────────────────────┘</tspan>
+</text>
+<text font-family="monospace" font-size="14" y="170.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">┌──────────────┐┌───────────────┐┌───────────────┐</tspan>
+</text>
+<text font-family="monospace" font-size="14" y="188.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">│              ││               ││               │</tspan>
+</text>
+<text font-family="monospace" font-size="14" y="206.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">│              ││               ││               │</tspan>
+</text>
+<text font-family="monospace" font-size="14" y="224.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">│              ││               ││               │</tspan>
+</text>
+<text font-family="monospace" font-size="14" y="242.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">│              ││               ││               │</tspan>
+</text>
+<text font-family="monospace" font-size="14" y="260.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">│              ││               ││               │</tspan>
+</text>
+<text font-family="monospace" font-size="14" y="278.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">│              ││               ││               │</tspan>
+</text>
+<text font-family="monospace" font-size="14" y="296.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">│              ││               ││               │</tspan>
+</text>
+<text font-family="monospace" font-size="14" y="314.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">│    Pane B    ││    Pane C     ││    Pane D     │</tspan>
+</text>
+<text font-family="monospace" font-size="14" y="332.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">│              ││               ││               │</tspan>
+</text>
+<text font-family="monospace" font-size="14" y="350.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">│              ││               ││               │</tspan>
+</text>
+<text font-family="monospace" font-size="14" y="368.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">│              ││               ││               │</tspan>
+</text>
+<text font-family="monospace" font-size="14" y="386.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">│              ││               ││               │</tspan>
+</text>
+<text font-family="monospace" font-size="14" y="404.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">│              ││               ││               │</tspan>
+</text>
+<text font-family="monospace" font-size="14" y="422.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">│              ││               ││               │</tspan>
+</text>
+<text font-family="monospace" font-size="14" y="440.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">│              ││               ││               │</tspan>
+</text>
+<text font-family="monospace" font-size="14" y="458.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">└──────────────┘└───────────────┘└───────────────┘</tspan>
+</text>
+</svg>
