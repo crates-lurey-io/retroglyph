@@ -1,12 +1,13 @@
 # AGENTS.md
 
 `retroglyph` is a 2D pseudographic terminal library. It provides a double-buffered `Terminal<B>`
-generic over a pluggable `Backend`, with styled cells, input events, and optional
+generic over a pluggable `Backend`, with styled cells, input events, and pluggable
 software/crossterm/WASM backends.
 
-A workspace split into `retroglyph-core`, `retroglyph-crossterm`, `retroglyph-software`, and a
-`retroglyph` facade crate is planned (ADR 014). The current single-crate structure with feature
-flags will be preserved at the user-facing level.
+The workspace split (ADR 014) is done: the code lives in a Cargo workspace of per-crate members
+under `crates/*` (`retroglyph-core` plus backend and helper crates), an `examples` crate, and
+`tools/cargo-bin`. There is no single-crate `src/` root and no `retroglyph` facade crate; consumers
+depend on `retroglyph-core` and whichever backend/helper crates they need.
 
 ## Correctness gate
 
@@ -33,79 +34,96 @@ committing.
 CI. The `doc` recipe swallows `cargo doc` failures due to `|| true` chaining. See
 `.matan/improve-justfile.md` for the full list.
 
-## Crate layout
+## Workspace layout
 
 ```text
-src/
-  lib.rs             Root: module declarations, feature-gated re-exports
-  color.rs           Color (Default / ANSI / Indexed / RGB)
-  style.rs           Style (depends on: color)
-  tile.rs            Tile — glyph + Style + sub-cell offsets (depends on: style)
-  grid.rs            Grid, Pos, Rect, Size (depends on: tile, style; uses grixy)
-  event.rs           Event, KeyEvent, MouseEvent (depends on: grid::Pos)
-  text.rs            Line, Span (depends on: style)
-  layout.rs          TextLayout, HAlign, VAlign (depends on: text, terminal; feature = "egc")
-  terminal.rs        Terminal<B> — stateful drawing API, double buffering (depends on: all above)
-  backend/
-    mod.rs           Backend trait (depends on: event, grid, tile)
-    headless.rs      In-memory backend for testing (no external deps)
-    crossterm.rs     Crossterm backend (feature = "crossterm")
-    software/
-      mod.rs         SoftwareRenderer, winit event loop (feature = "software")
+crates/
+  core/            retroglyph-core — no_std-capable foundation, no backend
+    src/
+      color.rs       Color (Default / ANSI / Indexed / RGB); Color::lerp behind `gem`
+      style.rs       Style (depends on: color)
+      tile.rs        Tile — glyph + Style + sub-cell offsets (depends on: style)
+      grid.rs        Grid, Pos, Rect, Size, Grid::from_charmap (depends on: tile, style; uses grixy)
+      event.rs       Event, KeyEvent, MouseEvent (depends on: grid::Pos)
+      text.rs        Line, Span (depends on: style)
+      layout.rs      TextLayout, HAlign, VAlign (depends on: text, terminal; feature = "egc")
+      camera.rs      Camera — viewport that follows a target over a larger world
+      animate.rs     Tween/easing helpers for frame-based animation
+      frame_clock.rs FrameClock — fixed-timestep driver
+      app.rs         App/Flow/Frame game-loop contract, run_blocking
+      terminal.rs    Terminal<B> — stateful drawing API, double buffering (depends on: all above)
+      backend/
+        mod.rs       Backend trait (depends on: event, grid, tile)
+        headless.rs  In-memory backend for testing (no external deps)
+  terminal/        retroglyph-terminal — shared ANSI/SGR cell-diff renderer for terminal backends
+  crossterm/       retroglyph-crossterm — real TTY backend (depends on terminal + core)
+  terminal-wasm/   retroglyph-terminal-wasm — browser terminal backend (pushed events, pulled ANSI)
+  software/        retroglyph-software — winit + softbuffer pixel backend
+    src/
       config.rs      SoftwareBackend, SoftwareBackendBuilder
-      bitmap_font.rs BitmapFont, embedded VGA 8x16
-      windowed.rs    WindowedBackend trait
-      tileset.rs     Codepage, TilesetBuilder (feature = "software-tilesets")
-      sprite_cache.rs  SpriteCache, alpha blending (feature = "software-tilesets")
-examples/            Runnable demos (crossterm, software, tileset, headless, WASM)
-tests/
-  e2e.rs             Terminal<Headless> integration tests
-  e2e_snapshots.rs   PTY + vt100 SVG snapshots of the demo example (crossterm backend)
-  software_renderer.rs  Pixel-level software backend tests
-  snapshots/         insta snapshot files (committed)
+      bitmap_font.rs BitmapFont, embedded VGA 8x16 (feature = "default-font")
+      tileset.rs     Codepage, TilesetBuilder (feature = "tilesets")
+      sprite_cache.rs SpriteCache, alpha blending (feature = "tilesets")
+      surface_native.rs / surface_wasm.rs  present targets per platform
+  window/          retroglyph-window — shared winit windowing layer for windowed backends
+  widgets/         retroglyph-widgets — immediate-mode drawing helpers (optional)
+    src/            layout (split_h/v, Constraint, Flex), interact (HitTester, FocusRing,
+                    Interaction, Shortcuts, Density), widget (Table, Gauge, Sparkline, Panel,
+                    Modal, Scrollbar, Log, Meter, Paragraph, ...), state (ListState, ScrollState),
+                    style (BoxStyle), theme (Theme), block (join_h/join_v)
+examples/          retroglyph-examples — Example trait, backend launcher, WASM FFI macros,
+                   snapshot-test harness, and the runnable demos under examples/examples/
+tools/cargo-bin/   cargo-bin shim (workspace dev tooling)
 ```
 
-The internal dependency flow is: `color -> style -> tile -> grid`, with `event` depending only on
-`grid::Pos`, and `terminal` pulling everything together. Each backend depends on the core types but
-not on other backends. This is the natural crate boundary for the planned workspace split (ADR 014).
+The core internal dependency flow is `color -> style -> tile -> grid`, with `event` depending only
+on `grid::Pos`, and `terminal` pulling everything together. Backend crates depend on `core` (and
+`terminal` for the ANSI family, `window` for the windowed family) but not on each other.
+`retroglyph-widgets` depends only on `retroglyph-core`, so games that draw manually never pull it
+in.
 
 ## Feature flags
 
-| Flag                    | Description                                                     |
-| ----------------------- | --------------------------------------------------------------- |
-| `std` (default)         | Enable std-dependent code; disable for `no_std`.                |
-| `egc` (default)         | Extended grapheme cluster support via `unicode-segmentation`.   |
-| `crossterm`             | Crossterm terminal backend.                                     |
-| `software`              | Pixel backend (winit + softbuffer).                             |
-| `software-tilesets`     | PNG sprite sheet tilesets + alpha blending. Implies `software`. |
-| `software-default-font` | Embedded VGA 8×16 bitmap font. Implies `software`.              |
+Features are per-crate now, not a single flat set. The important ones:
+
+| Crate                                                  | Flag              | Description                                                           |
+| ------------------------------------------------------ | ----------------- | --------------------------------------------------------------------- |
+| `retroglyph-core`                                      | `std` (default)   | Enable std-dependent code; disable for `no_std` (`alloc` always).     |
+| `retroglyph-core`                                      | `egc` (default)   | Extended grapheme cluster support via `unicode-segmentation`.         |
+| `retroglyph-core`                                      | `gem` (default)   | `gem`-backed color math (`Color::lerp`, color ramps).                 |
+| `retroglyph-software`                                  | `default-font`    | Embedded VGA 8×16 bitmap font.                                        |
+| `retroglyph-software`                                  | `tilesets`        | PNG sprite sheet tilesets + alpha blending (`image` + `alpha-blend`). |
+| `retroglyph-window`                                    | `winit` (default) | winit windowing layer.                                                |
+| `retroglyph-widgets`                                   | `egc`             | Forwards to core `egc`; needed for `Paragraph` word-wrap.             |
+| `retroglyph-crossterm` / `-terminal-wasm` / `-widgets` | `egc`             | Forward grapheme support to core.                                     |
 
 ## Testing
 
-Unit tests live alongside their modules. `tests/e2e.rs` drives `Terminal<Headless>` through
-game-logic scenarios and asserts on grid state.
+Unit tests live alongside their modules in each crate (core and widgets carry the bulk). Pixel-level
+software regressions live in `crates/software/src/snapshots/`. The examples crate doubles as the
+cross-backend integration + visual-regression harness.
 
 ### Snapshot tests (insta)
 
 `Headless::format_view()` renders the grid to text (spaces → `·`). Use it with
-`insta::assert_snapshot!` for layout assertions. Snapshot files live in `tests/snapshots/` and are
-committed.
+`insta::assert_snapshot!` for layout assertions. Snapshot files are committed next to their crate
+(`crates/*/src/snapshots/`, `examples/tests/snapshots/`).
 
 ```sh
 cargo insta test    # run and open review UI
 cargo insta accept  # accept pending snapshots
 ```
 
-### E2E visual snapshots (crossterm)
+### Example-driven snapshots (examples crate)
 
-`tests/e2e_snapshots.rs` spawns the `demo` binary (built with `--features crossterm`) in a
-pseudo-terminal, feeds key input, parses ANSI via the `vt100` crate, and snapshots the result as
-SVG.
+`examples/tests/support/` drives each `Example` impl through three snapshot types from one source of
+truth: headless text (insta), software PNG (pixel buffer), and crossterm SVG (real PTY capture
+parsed via the `vt100` crate). Every example under `examples/examples/*.rs` is also auto-built to
+three WASM variants (headless / xterm.js terminal / software canvas) and deployed to the docs
+gallery by `.github/workflows/docs.yml`, so each example carries real CI cost.
 
 ```sh
-cargo build --example demo --features crossterm
-cargo test --test e2e_snapshots --all-features
-open tests/snapshots/demo.svg   # visual diff
+cargo test -p retroglyph-examples --all-features
 ```
 
 ## Key rules
