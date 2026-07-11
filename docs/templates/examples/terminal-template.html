@@ -79,11 +79,9 @@
     <a class="back" href="../../">&larr; Back to all examples</a>
 
     <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/lib/xterm.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.11.0/lib/addon-fit.js"></script>
     <script type="module">
       import init, {
         wasm_terminal_example_init,
-        wasm_terminal_example_resize,
         wasm_terminal_example_push_key,
         wasm_terminal_example_push_mouse,
         wasm_terminal_example_tick,
@@ -255,39 +253,76 @@
         );
       }
 
+      // Fixed grid size this demo runs at -- must match what
+      // wasm_terminal_example_init below is called with, and what
+      // HelloWorld's draw coordinates assume (see examples/examples/
+      // 01_hello_world.rs). Kept constant rather than derived from the
+      // page's layout via FitAddon: FitAddon.fit() picks cols/rows to
+      // exactly fill whatever CSS box it's given, but a real monospace
+      // character cell isn't the same aspect ratio as `#screen`'s box, so
+      // that produced a different (and page-width-dependent) grid size,
+      // not a stable 50x25.
+      const COLS = 50;
+      const ROWS = 25;
+      const BASE_FONT_SIZE = 14;
+      // Matches #screen's CSS `max-width: min(100%, 46rem)` (assuming the
+      // usual 16px root font-size -- close enough for a soft cap here).
+      const MAX_WIDTH_PX = 46 * 16;
+
       async function main() {
         await init();
 
         const term = new Terminal({
+          cols: COLS,
+          rows: ROWS,
           cursorBlink: true,
           fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
-          fontSize: 14,
+          fontSize: BASE_FONT_SIZE,
           theme: {
             background: '#000000',
             foreground: '#c9d1d9',
           },
         });
-        const fitAddon = new FitAddon.FitAddon();
-        term.loadAddon(fitAddon);
         const screenEl = document.getElementById('screen');
+        const availableWidthEl = screenEl.parentElement;
         term.open(screenEl);
-        fitAddon.fit();
 
-        wasm_terminal_example_init(term.cols, term.rows);
+        wasm_terminal_example_init(COLS, ROWS);
+
+        // Scales *font size* to fit the available width instead of letting
+        // cols/rows change -- the grid this demo actually runs at never
+        // changes, only how big each cell renders. `baseWidthPx` is
+        // measured once, right after the terminal's first paint at
+        // `BASE_FONT_SIZE`; because cell size scales linearly with
+        // font-size for a monospace font, every later fit() just rescales
+        // from that one measurement instead of resetting to the base size
+        // and re-measuring (which would flash the terminal back to full
+        // size on every resize).
+        let baseWidthPx = null;
+        function fit() {
+          if (baseWidthPx === null) {
+            baseWidthPx = screenEl.getBoundingClientRect().width || 1;
+          }
+          const available = Math.min(availableWidthEl.clientWidth, MAX_WIDTH_PX);
+          const scale = Math.min(1, available / baseWidthPx);
+          const fontSize = Math.max(6, Math.floor(BASE_FONT_SIZE * scale));
+          if (fontSize !== term.options.fontSize) {
+            term.options.fontSize = fontSize;
+          }
+        }
+        // One rAF so the initial `term.open()` layout has settled before
+        // the first measurement.
+        requestAnimationFrame(fit);
 
         term.onData(handleTerminalData);
         attachPointerInput(screenEl, term);
 
         let resizeTimer = null;
         window.addEventListener('resize', () => {
-          // Debounce: a fit + resize on every resize event during a drag is
-          // wasted work, and mobile browsers fire resize repeatedly while
-          // the on-screen keyboard animates in/out.
+          // Debounce: mobile browsers fire resize repeatedly while the
+          // on-screen keyboard animates in/out.
           clearTimeout(resizeTimer);
-          resizeTimer = setTimeout(() => {
-            fitAddon.fit();
-            wasm_terminal_example_resize(term.cols, term.rows);
-          }, 100);
+          resizeTimer = setTimeout(fit, 100);
         });
 
         function frame() {
