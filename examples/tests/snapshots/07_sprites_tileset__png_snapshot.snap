@@ -1,0 +1,6 @@
+---
+source: examples/tests/07_sprites_tileset.rs
+expression: png
+extension: png
+snapshot_kind: binary
+---

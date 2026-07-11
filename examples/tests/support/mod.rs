@@ -38,12 +38,19 @@ pub fn headless_snapshot<E: Example>(frames: u32) -> String {
     retroglyph_examples::render_headless_frames::<E>(frames).join("\n--- frame ---\n")
 }
 
-/// Builds a `SoftwareRenderer` (50x25 grid, embedded default font, `scale`),
-/// runs `E::init` + one `E::tick`, and PNG-encodes the resulting pixel
-/// buffer.
+/// Builds a `SoftwareRenderer` (`cols`x`rows` grid, embedded default font, `scale`, plus
+/// whatever `E::configure_software` adds -- a tileset, most likely), runs `E::init` + one
+/// `E::tick`, and PNG-encodes the resulting pixel buffer.
+///
+/// Threading every example's own [`Example::configure_software`] through here (rather than
+/// building a bare, uncustomized renderer) keeps this snapshot honest: it's built from exactly
+/// the same builder `cargo run --example <name> --features software` would use, not a simplified
+/// stand-in that could drift from it (e.g. missing a registered tileset, so the PNG never
+/// actually exercises sprite rendering at all).
 ///
 /// Requires the `software` feature on `retroglyph-examples` (which pulls in
-/// `retroglyph-software/default-font` -- see the Cargo.toml comment).
+/// `retroglyph-software/default-font` and `retroglyph-software/tilesets` -- see the Cargo.toml
+/// comment).
 ///
 /// # Panics
 ///
@@ -55,9 +62,12 @@ pub fn png_snapshot<E: Example>(cols: u16, rows: u16, scale: u8) -> Vec<u8> {
     use retroglyph_software::SoftwareBackendBuilder;
     use retroglyph_window::Presenter;
 
-    let renderer = SoftwareBackendBuilder::new()
-        .grid_size(cols, rows)
-        .scale(scale)
+    let builder = E::configure_software(
+        SoftwareBackendBuilder::new()
+            .grid_size(cols, rows)
+            .scale(scale),
+    );
+    let renderer = builder
         .build()
         .expect("software backend init")
         .run_headless();
@@ -174,7 +184,14 @@ pub fn capture_pty(bin: &Path, input: &[u8], rows: u16, cols: u16, ready_marker:
     let output_clone = Arc::clone(&output);
     let reader_done = Arc::new(Mutex::new(false));
     let reader_done_clone = Arc::clone(&reader_done);
-    std::thread::spawn(move || {
+    // Keep the `JoinHandle` (rather than only the `reader_done` flag below): setting that flag
+    // and this closure actually *returning* (dropping `output_clone`, its `Arc` clone) are two
+    // separate steps, so polling the flag alone races the still-unwinding thread -- the poll can
+    // observe `true` and reach `Arc::try_unwrap` below a moment before `output_clone` is actually
+    // dropped, which fails non-deterministically (this is what used to intermittently panic
+    // here). `.join()` blocks until the thread function has fully returned, which is the only way
+    // to be sure the second `Arc` reference is gone.
+    let reader_handle = std::thread::spawn(move || {
         let mut buf = [0u8; 4096];
         loop {
             match reader.read(&mut buf) {
@@ -212,6 +229,7 @@ pub fn capture_pty(bin: &Path, input: &[u8], rows: u16, cols: u16, ready_marker:
         assert!(Instant::now() <= deadline);
         std::thread::sleep(Duration::from_millis(50));
     }
+    reader_handle.join().expect("reader thread panicked");
 
     Arc::try_unwrap(output).unwrap().into_inner().unwrap()
 }

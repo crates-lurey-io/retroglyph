@@ -14,6 +14,10 @@ workspace = true
 
 [dependencies]
 retroglyph-core = { path = "../crates/core", version = "0.1.0-alpha" }
+# Unconditional, like `retroglyph-core`: widgets is backend-generic (no backend axis to gate it
+# on), and every Tier 2 example that uses it (09_widgets_dashboard, 10_widgets_interaction) needs
+# it on every backend feature combination this crate builds.
+retroglyph-widgets = { path = "../crates/widgets", version = "0.1.0-alpha" }
 retroglyph-crossterm = { path = "../crates/crossterm", version = "0.1.0-alpha", optional = true }
 retroglyph-software = { path = "../crates/software", version = "0.1.0-alpha", optional = true }
 retroglyph-window = { path = "../crates/window", version = "0.1.0-alpha", optional = true }
@@ -42,10 +46,17 @@ crossterm = ["dep:retroglyph-crossterm"]
 # that benefits from a fontless software backend, so there's nothing to gain
 # from splitting that out into a separate flag here. `--features software`
 # alone is always enough to run.
+# `tilesets` is unconditional here for the same reason `default-font` is: only one example
+# (07_sprites_tileset) needs PNG sprite sheet loading, but `tools/build-wasm-example.sh` builds
+# this whole crate with one shared `software` feature flag per variant, not per example, so
+# there's no cheaper way to give that one example the capability without paying for it everywhere
+# `software` is enabled. The cost is `image`/`alpha-blend` becoming compile-time (not runtime)
+# dependencies of every software-backend build, not a per-example opt-in.
 software = [
   "dep:retroglyph-software",
   "dep:retroglyph-window",
   "retroglyph-software/default-font",
+  "retroglyph-software/tilesets",
 ]
 # WASM-only: drives a Terminal<Headless> from a browser requestAnimationFrame
 # loop instead of a canvas/window. See `wasm_entry!`'s wasm-headless branch.

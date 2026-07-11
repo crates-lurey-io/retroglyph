@@ -56,6 +56,22 @@ pub trait Example: Default + Sized + 'static {
         Self::default()
     }
 
+    /// Customize the software backend's builder before it's built.
+    ///
+    /// Default: `builder` unchanged, i.e. [`run_software`]'s standard 50x25-at-2x grid with no
+    /// tileset. Override this (rather than hand-writing a custom `main`) when an example needs a
+    /// non-default grid size, scale, font, or tileset -- see `07_sprites_tileset.rs` for a real
+    /// override. `launch::<E>()`/`example_main!` still dispatch through the exact same path on
+    /// every backend either way; this is the one customization point `run_software` threads
+    /// through to the example, the same way [`init`](Self::init) is the one customization point
+    /// for backend-dependent startup state.
+    #[cfg(feature = "software")]
+    fn configure_software(
+        builder: retroglyph_software::SoftwareBackendBuilder,
+    ) -> retroglyph_software::SoftwareBackendBuilder {
+        builder
+    }
+
     /// Advance and render one frame. Return `false` to quit.
     ///
     /// `frame` carries the real wall-clock time elapsed since the previous tick
@@ -130,23 +146,24 @@ impl<B: Backend, E: Example> App<B> for ExampleApp<E> {
 /// fails to start.
 #[cfg(feature = "software")]
 pub fn run_software<E: Example>() {
-    run_software_with::<E>(
+    run_software_with::<E>(E::configure_software(
         retroglyph_software::SoftwareBackendBuilder::new()
             .grid_size(50, 25)
             .scale(2),
-    );
+    ));
 }
 
 /// Runs `E` on the software backend using a caller-supplied, already-
 /// configured `builder` instead of [`run_software`]'s hardcoded 50x25-at-2x
 /// default.
 ///
-/// This is the escape hatch for examples that need a custom grid size,
-/// scale, font, or tileset -- `retroglyph-examples`'s `software` feature
-/// unconditionally pulls in `retroglyph-software/default-font` (see the
-/// Cargo.toml comment), but the builder itself is fully caller-controlled
-/// here. [`run_software`] delegates to this with its default builder, so
-/// both stay in sync automatically.
+/// This is the lower-level building block [`run_software`] itself delegates to (via
+/// [`Example::configure_software`]), so both stay in sync automatically; most examples that need
+/// a non-default grid size, scale, font, or tileset should override
+/// [`configure_software`](Example::configure_software) instead of calling this directly, since
+/// that keeps `example_main!`'s single-call-site convention intact. Calling this directly from a
+/// hand-written `main` remains available for anything `configure_software`'s builder-in,
+/// builder-out shape can't express.
 ///
 /// # Panics
 ///

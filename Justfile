@@ -104,8 +104,16 @@ clean:
 
 # ── Convenience ──────────────────────────────────────────────────────────────
 
+# Re-run every snapshot test and bless whatever changed. Deliberately plain `cargo test` plus the
+# `insta` crate's own `INSTA_UPDATE` env var (already a dev-dependency everywhere snapshots live),
+# not the separate `cargo-insta` CLI -- that would be a global tool this repo's tooling convention
+# doesn't otherwise require (unlike `cargo bin`-managed tools in `[workspace.metadata.bin]`, or the
+# `@which ... || cargo install ...` one-shot installs a couple of other recipes fall back to).
+# Review the diff (`jj diff`/`git diff`) before committing -- this blesses unconditionally, with
+# no review step of its own. Install `cargo-insta` by hand if you want its interactive review UI
+# instead; nothing else in this repo depends on it being present.
 insta:
-    cargo insta test --workspace --all-features && cargo insta accept
+    INSTA_UPDATE=always cargo test --workspace --all-features
 
 deny: deny-advisories deny-licenses
 
