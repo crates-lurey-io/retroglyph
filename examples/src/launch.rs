@@ -14,8 +14,9 @@
 //! can't produce. See [`wasm_entry!`](crate::wasm_entry) for that part.
 
 #[cfg(any(feature = "crossterm", feature = "software"))]
-use retroglyph_core::{App, Flow, Frame};
-use retroglyph_core::{Backend, Terminal};
+use retroglyph_core::{App, Flow};
+use retroglyph_core::{Backend, Frame, Terminal};
+use std::time::Duration;
 
 /// A runnable example: `init` builds the state once, `tick` advances and
 /// draws one frame.
@@ -57,6 +58,18 @@ pub trait Example: Default + Sized + 'static {
 
     /// Advance and render one frame. Return `false` to quit.
     ///
+    /// `frame` carries the real wall-clock time elapsed since the previous tick
+    /// ([`Frame::delta`]), already measured correctly by whichever driver is
+    /// actually running (`run_blocking`'s `std::time::Instant` on native,
+    /// `run_app`'s native/wasm split, or a fixed synthetic delta from the
+    /// headless test harness -- see [`render_headless_frames`]). Any example
+    /// that animates over real time (rather than once per raw tick, which can
+    /// fire at wildly different rates depending on the backend -- crossterm's
+    /// `run_blocking` is an unthrottled spin loop, unlike the software
+    /// backend's vsync-paced redraw) should drive a [`Tween`](retroglyph_core::Tween)
+    /// or [`FrameClock`](retroglyph_core::FrameClock) with `frame.delta`
+    /// instead of counting raw `tick` calls -- see `06_layers.rs`.
+    ///
     /// Responsible for calling [`Terminal::present`]. Mirrors
     /// [`App::update`](retroglyph_core::App::update)'s combined
     /// input-then-draw shape deliberately (rather than splitting into
@@ -66,7 +79,7 @@ pub trait Example: Default + Sized + 'static {
     /// into private helper methods once it grows past a couple of lines --
     /// see `01_hello_world.rs`'s `handle_events`/`draw` split for the
     /// pattern -- that's just internal structure, not part of this trait.
-    fn tick<B: Backend>(&mut self, term: &mut Terminal<B>) -> bool;
+    fn tick<B: Backend>(&mut self, term: &mut Terminal<B>, frame: &Frame) -> bool;
 }
 
 /// Adapts an [`Example`] into an [`App`], creating the state lazily on the
@@ -89,9 +102,9 @@ impl<E> ExampleApp<E> {
 
 #[cfg(any(feature = "crossterm", feature = "software"))]
 impl<B: Backend, E: Example> App<B> for ExampleApp<E> {
-    fn update(&mut self, term: &mut Terminal<B>, _frame: &Frame) -> Flow {
+    fn update(&mut self, term: &mut Terminal<B>, frame: &Frame) -> Flow {
         let state = self.state.get_or_insert_with(|| E::init(term));
-        if state.tick(term) {
+        if state.tick(term, frame) {
             Flow::Continue
         } else {
             Flow::Exit
@@ -115,24 +128,36 @@ impl<B: Backend, E: Example> App<B> for ExampleApp<E> {
 ///
 /// Panics if the software backend fails to initialize, or if the event loop
 /// fails to start.
-///
-/// TODO: this always uses the embedded default font (50x25 grid, `scale(2)`)
-/// with no way to opt out -- `retroglyph-examples`'s `software` feature
-/// unconditionally pulls in `retroglyph-software/default-font` (see the
-/// Cargo.toml comment), and this function hardcodes the builder. If an
-/// example ever wants a custom font, tileset, grid size, or scale, add a
-/// `run_software_with::<E>(builder: SoftwareBackendBuilder)` escape hatch
-/// (mirroring the old `rg_run_software!` macro's `builder = { .. }` arm)
-/// that takes a caller-supplied, already-configured builder instead of
-/// building one here.
 #[cfg(feature = "software")]
 pub fn run_software<E: Example>() {
+    run_software_with::<E>(
+        retroglyph_software::SoftwareBackendBuilder::new()
+            .grid_size(50, 25)
+            .scale(2),
+    );
+}
+
+/// Runs `E` on the software backend using a caller-supplied, already-
+/// configured `builder` instead of [`run_software`]'s hardcoded 50x25-at-2x
+/// default.
+///
+/// This is the escape hatch for examples that need a custom grid size,
+/// scale, font, or tileset -- `retroglyph-examples`'s `software` feature
+/// unconditionally pulls in `retroglyph-software/default-font` (see the
+/// Cargo.toml comment), but the builder itself is fully caller-controlled
+/// here. [`run_software`] delegates to this with its default builder, so
+/// both stay in sync automatically.
+///
+/// # Panics
+///
+/// Panics if the software backend fails to initialize, or if the event loop
+/// fails to start.
+#[cfg(feature = "software")]
+pub fn run_software_with<E: Example>(builder: retroglyph_software::SoftwareBackendBuilder) {
     #[cfg(target_arch = "wasm32")]
     console_error_panic_hook::set_once();
 
-    let renderer = retroglyph_software::SoftwareBackendBuilder::new()
-        .grid_size(50, 25)
-        .scale(2)
+    let renderer = builder
         .build()
         .expect("failed to initialize software backend")
         .run_headless();
@@ -155,12 +180,28 @@ pub fn run_crossterm<E: Example>() -> std::io::Result<()> {
 
 // ── Headless (stdout) fallback ──────────────────────────────────────────────
 
+/// The synthetic per-call [`Frame::delta`] fed to [`Example::tick`].
+///
+/// Used by [`render_headless_frames`] and the crate's other hand-rolled headless test
+/// loops (`03_keyboard`'s `headless_keyboard_snapshot`, `04_mouse`'s `drive`,
+/// `support::png_snapshot`). No real clock is involved (headless never runs on wasm32 or against a
+/// live backend, so there's no wall time to measure) -- this is a fixed
+/// stand-in "one call is worth this much simulated time," chosen so a
+/// `FrameClock`/`Tween`-driven example that advances one visible step per
+/// 100ms of real elapsed time (see `06_layers.rs`) advances by exactly one
+/// step per headless frame too, keeping headless snapshots' frame-by-frame
+/// progression identical to what a human would see advancing one step at a
+/// time interactively.
+pub const HEADLESS_FRAME_DELTA: Duration = Duration::from_millis(100);
+
 /// Renders up to `frames` frames of `E` against a fresh 50x25
 /// [`Headless`](retroglyph_core::Headless) backend and returns each frame's
 /// [`format_view`](retroglyph_core::Headless::format_view) text.
 ///
 /// No terminal or window is involved, and no input is ever injected --
-/// `tick` only ever sees an empty event queue. Shared by
+/// `tick` only ever sees an empty event queue. Each call is handed a
+/// [`Frame`] with [`HEADLESS_FRAME_DELTA`] as its delta (see that constant's
+/// doc comment) and a monotonically increasing `frame` counter. Shared by
 /// [`run_headless_stdout`] and the crate's snapshot tests, so both use the
 /// exact same rendering path.
 #[must_use]
@@ -170,8 +211,12 @@ pub fn render_headless_frames<E: Example>(frames: u32) -> Vec<String> {
     let mut state = E::init(&mut term);
 
     let mut views = Vec::new();
-    for _ in 0..frames {
-        if !state.tick(&mut term) {
+    for i in 0..frames {
+        let frame = Frame {
+            delta: HEADLESS_FRAME_DELTA,
+            frame: u64::from(i),
+        };
+        if !state.tick(&mut term, &frame) {
             break;
         }
         views.push(term.backend().format_view());

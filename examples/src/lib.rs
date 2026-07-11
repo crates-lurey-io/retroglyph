@@ -38,11 +38,11 @@ mod launch;
 pub mod util;
 mod wasm_entry;
 
-pub use launch::{Example, render_headless_frames};
+pub use launch::{Example, HEADLESS_FRAME_DELTA, render_headless_frames};
 
 pub use launch::launch;
 #[cfg(feature = "crossterm")]
 pub use launch::run_crossterm;
 pub use launch::run_headless_stdout;
 #[cfg(feature = "software")]
-pub use launch::run_software;
+pub use launch::{run_software, run_software_with};

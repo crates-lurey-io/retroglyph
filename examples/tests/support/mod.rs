@@ -71,7 +71,11 @@ pub fn png_snapshot<E: Example>(cols: u16, rows: u16, scale: u8) -> Vec<u8> {
 
     let mut term = Terminal::new(renderer);
     let mut state = E::init(&mut term);
-    state.tick(&mut term);
+    let frame = retroglyph_core::Frame {
+        delta: retroglyph_examples::HEADLESS_FRAME_DELTA,
+        frame: 0,
+    };
+    state.tick(&mut term, &frame);
 
     let mut rgb = Vec::with_capacity(term.backend().pixels().len() * 3);
     for &p in term.backend().pixels() {

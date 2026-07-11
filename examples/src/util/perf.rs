@@ -12,36 +12,10 @@ use retroglyph_core::color::Color;
 use retroglyph_core::style::Style;
 use retroglyph_core::{Backend, Terminal};
 
-#[cfg(not(target_arch = "wasm32"))]
-use std::time::Instant;
-
-// On WASM `std::time::Instant` is unavailable; delegate to `performance.now()`
-// (sub-millisecond precision) so frame times are real measurements.
-#[cfg(target_arch = "wasm32")]
-mod wasm_time {
-    use wasm_bindgen::prelude::wasm_bindgen;
-
-    #[wasm_bindgen(inline_js = "export function perf_now() { return performance.now(); }")]
-    extern "C" {
-        fn perf_now() -> f64;
-    }
-
-    #[derive(Clone, Copy)]
-    pub struct Instant {
-        ms: f64,
-    }
-    impl Instant {
-        pub fn now() -> Self {
-            Self { ms: perf_now() }
-        }
-        pub fn elapsed(self) -> std::time::Duration {
-            let delta_ms = (perf_now() - self.ms).max(0.0);
-            std::time::Duration::from_secs_f64(delta_ms / 1_000.0)
-        }
-    }
-}
-#[cfg(target_arch = "wasm32")]
-use wasm_time::Instant;
+// `web_time::Instant`: a plain `std::time::Instant` re-export on native, backed by the
+// browser's `Performance.now()` on wasm32 (where `std::time::Instant` is unavailable) --
+// one non-target-gated timing primitive instead of a hand-rolled wasm/native split.
+use web_time::Instant;
 
 /// Number of frames kept in the rolling window.
 const WINDOW: usize = 64;
