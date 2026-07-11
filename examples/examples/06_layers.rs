@@ -15,22 +15,42 @@
 //! cargo run --example 06_layers  # headless fallback, prints a few frames to stdout
 //! ```
 //!
-//! The glyph advances automatically and parks at the end of its track (rather than
-//! looping forever) so the frame settles into a stable, reproducible state; `q` or
-//! `Escape` quits, or close the window.
+//! The glyph advances automatically, one column every 1/[`STEP_INTERVAL_HZ`] of a second
+//! of real elapsed time (not once per raw `tick` call -- see
+//! [`FrameClock`](retroglyph_core::FrameClock)'s doc comment on why: a crossterm binary's
+//! event loop is an unthrottled spin, so counting raw ticks would blow through the whole
+//! track in microseconds instead of animating visibly), and parks at the end of its track
+//! (rather than looping forever) so the frame eventually settles into a stable,
+//! reproducible state; `q` or `Escape` quits, or close the window.
 
 use retroglyph_core::event::{Event, KeyCode};
-use retroglyph_core::{AnsiColor, Backend, Color, Style, Terminal};
+use retroglyph_core::{AnsiColor, Backend, Color, Frame, FrameClock, Style, Terminal};
 use retroglyph_examples::Example;
 
 /// Width of the row the layer-1 glyph travels across before wrapping.
 const TRACK_WIDTH: u16 = 48;
 
-/// State for the layers example: how many ticks have elapsed, which drives the layer-1
-/// glyph's column.
-#[derive(Default)]
+/// How often the glyph advances one column, in real elapsed time. Matches
+/// [`retroglyph_examples::HEADLESS_FRAME_DELTA`] (100ms) so the headless snapshot's
+/// frame-by-frame progression (driven by that fixed synthetic delta) advances by
+/// exactly one column per call, same as before this example switched from a raw
+/// per-tick counter to a wall-clock-paced one.
+const STEP_INTERVAL_HZ: u32 = 10;
+
+/// State for the layers example: a fixed-timestep accumulator gating how many
+/// [`STEP_INTERVAL_HZ`]-spaced steps the layer-1 glyph's column has advanced.
 pub struct Layers {
+    clock: FrameClock,
     ticks: u32,
+}
+
+impl Default for Layers {
+    fn default() -> Self {
+        Self {
+            clock: FrameClock::new(STEP_INTERVAL_HZ),
+            ticks: 0,
+        }
+    }
 }
 
 impl Layers {
@@ -88,12 +108,20 @@ impl Layers {
 impl Example for Layers {
     const NAME: &'static str = "06_layers";
 
-    fn tick<B: Backend>(&mut self, term: &mut Terminal<B>, _frame: &retroglyph_core::Frame) -> bool {
+    fn tick<B: Backend>(&mut self, term: &mut Terminal<B>, frame: &Frame) -> bool {
         if !self.handle_events(term) {
             return false;
         }
         self.draw(term);
-        self.ticks += 1;
+        // Real-time-paced, not once per raw tick: `frame.delta` is the actual elapsed
+        // wall time since the previous call, correct on every backend (including an
+        // unthrottled crossterm spin loop, where many ticks can fire between two
+        // `FrameClock::tick` steps -- `clock.tick()`'s `while` drains however many
+        // STEP_INTERVAL_HZ-sized steps are actually due, zero most of the time).
+        self.clock.advance(frame.delta);
+        while self.clock.tick() {
+            self.ticks = self.ticks.saturating_add(1);
+        }
         true
     }
 }
