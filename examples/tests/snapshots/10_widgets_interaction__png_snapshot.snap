@@ -1,0 +1,6 @@
+---
+source: examples/tests/10_widgets_interaction.rs
+expression: png
+extension: png
+snapshot_kind: binary
+---

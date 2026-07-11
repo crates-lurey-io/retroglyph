@@ -1,0 +1,6 @@
+---
+source: examples/tests/08_animation.rs
+expression: png
+extension: png
+snapshot_kind: binary
+---

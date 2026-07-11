@@ -1,0 +1,6 @@
+---
+source: examples/tests/09_widgets_dashboard.rs
+expression: png
+extension: png
+snapshot_kind: binary
+---

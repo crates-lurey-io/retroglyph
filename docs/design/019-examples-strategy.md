@@ -140,22 +140,63 @@ are **deferred, not blocked** -- everything they need (`retroglyph-widgets`, `so
 
 ### Tier 2: capability proofs (second PR)
 
-Mapped from the 13 examples that existed before the `examples/` rebuild:
+Mapped from the 13 examples that existed before the `examples/` rebuild. Naming continues Tier 1's
+zero-padded `NN_name.rs` convention rather than switching to bare descriptive names -- there is no
+tier-boundary signal worth the inconsistency, and `bin/runner.rs`'s discovery/listing reads better
+sorted.
 
-| Example               | Origin                | Proves                                                                                                           | Backend / fallback                                                                                                                      |
-| --------------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `sprites_tileset`     | `tileset.rs`          | `retroglyph-software`'s `tilesets` feature: PNG sprite sheet loading, alpha-blended compositing                  | software renders real sprites; terminal and headless fall back to an ASCII/glyph representation (mandatory under the all-backends rule) |
-| `animation`           | `subpixel.rs`, tamed  | `animate` tweens plus `frame_clock` fixed-timestep driving, sub-cell `put_offset` on the software backend        | software shows true sub-cell offsets; terminal/headless fall back to whole-cell movement                                                |
-| `benchmark`           | `sprite_stress.rs`    | `PerfOverlay` FPS/throughput reporting under load, stressing the frame diff                                      | all backends; WASM numbers are informational only, not a regression gate                                                                |
-| `widgets_dashboard`   | `dashboard.rs`        | the first `retroglyph-widgets` showcase: `Table`, `Gauge`, `Sparkline`, `split_h`/`split_v`, `BoxStyle`, `Theme` | all backends -- widgets is backend-generic; this is the payoff of "deferred, not blocked"                                               |
-| `widgets_interaction` | `interaction_demo.rs` | `Interaction`, `HitTester`, `FocusRing`, `Shortcuts`, `Density`                                                  | all backends, mouse-driven; pairs with `04_mouse`                                                                                       |
+| #   | Example                  | Origin                | Proves                                                                                                           | Backend / fallback                                                                                                                      |
+| --- | ------------------------ | --------------------- | ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| 07  | `07_sprites_tileset`     | `tileset.rs`          | `retroglyph-software`'s `tilesets` feature: PNG sprite sheet loading, alpha-blended compositing                  | software renders real sprites; terminal and headless fall back to an ASCII/glyph representation (mandatory under the all-backends rule) |
+| 08  | `08_animation`           | `subpixel.rs`, tamed  | `animate` tweens plus `frame_clock` fixed-timestep driving, sub-cell `put_offset` on the software backend        | software shows true sub-cell offsets; terminal/headless fall back to whole-cell movement                                                |
+| 09  | `09_widgets_dashboard`   | `dashboard.rs`        | the first `retroglyph-widgets` showcase: `Table`, `Gauge`, `Sparkline`, `split_h`/`split_v`, `BoxStyle`, `Theme` | all backends -- widgets is backend-generic; this is the payoff of "deferred, not blocked"                                               |
+| 10  | `10_widgets_interaction` | `interaction_demo.rs` | `Interaction`, `HitTester`, `FocusRing`, `Shortcuts`, `Density`                                                  | all backends, mouse-driven; pairs with `04_mouse`                                                                                       |
 
-A `layers_compositing` example derived from `dirty_viz.rs` (deeper multi-layer / dirty-diff
-visualization, with a software-only heatmap extra) is a candidate only if it stays clearly distinct
-from Tier 1's `06_layers`; otherwise it should be dropped rather than shipped as a near-duplicate.
+`09_widgets_dashboard` and `10_widgets_interaction` bring `retroglyph-widgets` into
+`examples/Cargo.toml` for the first time, as a plain unconditional dependency (like
+`retroglyph-core`), not behind a new Cargo feature -- widgets is backend-generic, so there is no
+backend axis to gate it on, and every other Tier 2 example already needs the software/crossterm
+feature flags that exist for backend selection, not capability selection.
 
-CI cost: Tier 1 (18 builds) plus six more examples brings the total to roughly 36 WASM builds,
-estimated at about ten minutes of wall-clock.
+**No `benchmark` example, and no `layers_compositing` example.** Two items considered for Tier 2 are
+deliberately cut from this crate's scope:
+
+- **`benchmark`** (from `sprite_stress.rs`, `PerfOverlay` FPS/throughput under load) is dropped from
+  `examples/`. Performance measurement and the docs-gallery/regression-suite purpose this ADR
+  defines for examples are different concerns and should not be conflated: an examples-crate
+  "example" is judged by its committed snapshots (does it render correctly), not by a throughput
+  number, and nothing in this ADR's harness (`insta`, PNG, SVG snapshots) is built to gate on
+  performance. If a perf-regression benchmark is wanted, it belongs in a `cargo bench`/criterion
+  setup scoped by its own decision, not as a `retroglyph-examples` entry. `PerfOverlay` itself is
+  unaffected and remains available for any example that wants to display live FPS as incidental UI.
+- **`layers_compositing`** (from `dirty_viz.rs`, deeper multi-layer / dirty-diff visualization) is
+  dropped as a near-duplicate of Tier 1's `06_layers`: both exercise the same layer/blit path, and a
+  dirty-diff heatmap is a debugging visualization of the same capability rather than a new one worth
+  a separate committed snapshot triple.
+
+Tier 2 is therefore four examples, not six.
+
+**`Example::configure_software` extends the Tier 1 escape hatch.** `run_software_with` (the Tier 1
+prerequisite above) takes a caller-supplied `SoftwareBackendBuilder`, but nothing called it except a
+hand-written `main`, which would have broken every example's single `example_main!` call site.
+`07_sprites_tileset` (the one Tier 2 example that needs a builder customization -- its PNG tileset)
+instead overrides a new `Example::configure_software` default method (mirroring `Example::init`'s
+existing shape), and `run_software` threads the example's own builder through it before calling
+`run_software_with`. `example_main!`'s one-call convention holds for every example, Tier 1 or Tier
+2, tileset or not.
+
+**Tier 2's size ceiling is looser than Tier 1's.** Tier 1's ~150-line ceiling exists to keep those
+six examples reading as copy-paste templates. Tier 2 examples are explicitly capability proofs, not
+templates -- `09_widgets_dashboard` alone covers `Table`, `Gauge`, `Sparkline`, `split_h`/`split_v`,
+`BoxStyle`, and `Theme`, and forcing that into ~150 lines would make it either incomplete or
+unreadable. Tier 2 examples get a ~300-line ceiling instead. The top-doc-comment and
+`examples/tests/support`-driven three-way-snapshot conventions are unchanged.
+
+CI cost: Tier 1 (18 builds) plus four more examples brings the total to roughly 30 WASM builds,
+estimated at about eight minutes of wall-clock. Before this stage is scheduled, measure the actual
+docs-deploy wall-clock from the merged Tier 1 PR's CI run and confirm it lands near the ~5 minute
+estimate; if it runs meaningfully over, revisit the ~12-minute mitigation threshold (matrix-
+parallelize `docs.yml`'s WASM build job) before adding Tier 2's builds on top rather than after.
 
 ### Tier 3: games (later PRs)
 
@@ -163,10 +204,11 @@ estimated at about ten minutes of wall-clock.
 pathfinding needed. Followed by a roguelike (`scrolling_roguelike`/`roguelike_dungeon` in the
 original set) and `hex_battle` (hex coordinates plus tileset sprites with an ASCII fallback).
 
-CI cost: roughly 45 WASM builds total once all three land, estimated at about twelve minutes of
-wall-clock. If a stage's addition pushes the docs deploy workflow meaningfully past that, the next
-step is matrix-parallelizing the WASM build job in `docs.yml` rather than trimming examples --
-record that as the mitigation to try first, not scope-cutting.
+CI cost: roughly 39 WASM builds total once all three land (30 from Tiers 1-2 plus 9 for three game
+examples), estimated at about eleven minutes of wall-clock. If a stage's addition pushes the docs
+deploy workflow meaningfully past that, the next step is matrix-parallelizing the WASM build job in
+`docs.yml` rather than trimming examples -- record that as the mitigation to try first, not
+scope-cutting.
 
 ### Open gate: FOV and pathfinding for the Tier 3 roguelike (undecided)
 
@@ -246,9 +288,16 @@ together."
   first.
 - Tier 2 and Tier 3 are explicitly not blocked on any missing library capability; their only open
   question is the Tier 3 FOV/pathfinding dependency, deferred by design until Tier 3 is scheduled.
-- CI wall-clock for the docs deploy workflow grows with each stage (about 5 -> 10 -> 12 minutes) and
+- Tier 2 ships four examples, not six: `benchmark` is cut entirely (performance measurement is a
+  separate concern from the snapshot-based examples suite and does not belong in this crate) and
+  `layers_compositing` is cut as a near-duplicate of `06_layers`.
+- Tier 2 introduces `retroglyph-widgets` as an unconditional `examples/Cargo.toml` dependency and
+  relaxes the per-example size ceiling to ~300 lines (from Tier 1's ~150), since Tier 2 examples are
+  capability proofs rather than copy-paste templates.
+- CI wall-clock for the docs deploy workflow grows with each stage (about 5 -> 8 -> 11 minutes) and
   must be watched; the agreed mitigation if a stage exceeds roughly twelve minutes is to
-  matrix-parallelize the WASM build job, not to cut examples.
+  matrix-parallelize the WASM build job, not to cut examples. Tier 2 should not be scheduled until
+  Tier 1's actual measured docs-deploy wall-clock (not just the estimate) is confirmed from CI.
 
 ## Non-goals
 
