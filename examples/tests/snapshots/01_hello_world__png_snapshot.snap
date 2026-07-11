@@ -1,0 +1,7 @@
+---
+source: examples/tests/01_hello_world.rs
+assertion_line: 40
+expression: png
+extension: png
+snapshot_kind: binary
+---

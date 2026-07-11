@@ -121,11 +121,8 @@ setup-wasm: setup-tools
     # to be created here.
     cargo bin wasm-server-runner --version >/dev/null 2>&1 || true
 
-# TODO: no software-backend example exists yet -- the old crates/examples/examples/dungeon_room.rs
-# was deleted along with the rest of crates/examples/. Point this at a real example once one
-# exists that enables the `software` feature.
 run-wasm:
-    @echo "No software-backend example yet -- see the TODO above this recipe in the Justfile." && exit 1
+    cargo run -p retroglyph-examples --target wasm32-unknown-unknown --example 01_hello_world --features software
 
 # ── act (local CI runner) ────────────────────────────────────────────────────
 

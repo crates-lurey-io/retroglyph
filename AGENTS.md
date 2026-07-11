@@ -110,10 +110,10 @@ open tests/snapshots/demo.svg   # visual diff
 
 ## Key rules
 
-- **Comment/doc-comment line width: use the full ~100 cols, not ~80.** There's no `rustfmt.toml`
-  in this repo, so rustfmt's default `max_width = 100` applies, and `wrap_comments` is `false` by
-  default (rustfmt never rewraps prose comments for you). Don't hand-wrap doc comments to ~80
-  cols out of habit; wrap near the real 100-col budget instead.
+- **Comment/doc-comment line width: use the full ~100 cols, not ~80.** There's no `rustfmt.toml` in
+  this repo, so rustfmt's default `max_width = 100` applies, and `wrap_comments` is `false` by
+  default (rustfmt never rewraps prose comments for you). Don't hand-wrap doc comments to ~80 cols
+  out of habit; wrap near the real 100-col budget instead.
 - **No `eprintln!` in library code.** Use the `log` crate (feature-gated). Fatal backend init
   errors: `log::error!` + `event_loop.exit()`, not `panic!`.
 - **`unsafe_code` is forbidden** (`Cargo.toml` lint).

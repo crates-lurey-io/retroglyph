@@ -26,23 +26,33 @@ retroglyph-window = { path = "../crates/window", version = "0.1.0-alpha", option
 retroglyph-terminal-wasm = { path = "../crates/terminal-wasm", version = "0.1.0-alpha", optional = true }
 
 [features]
-# A game selects a backend by enabling one of these. With none enabled every
-# example still builds and runs against the Headless backend (used by
-# examples/runner.rs's "Headless" option).
+# An example selects a backend by enabling one of these. With none enabled,
+# every example still builds and runs against the Headless backend (used by
+# `bin/runner.rs`'s "Headless" option and `launch::<E>()`'s fallback arm).
 crossterm = ["dep:retroglyph-crossterm"]
-software = ["dep:retroglyph-software", "dep:retroglyph-window"]
-default-font = ["software", "retroglyph-software/default-font"]
+# Pulls in `retroglyph-software/default-font` unconditionally: unlike the
+# library itself (where an optional embedded font matters -- downstream
+# users may bring their own bitmap font), there's no example in this gallery
+# that benefits from a fontless software backend, so there's nothing to gain
+# from splitting that out into a separate flag here. `--features software`
+# alone is always enough to run.
+software = [
+  "dep:retroglyph-software",
+  "dep:retroglyph-window",
+  "retroglyph-software/default-font",
+]
 # WASM-only: drives a Terminal<Headless> from a browser requestAnimationFrame
-# loop instead of a canvas/window. See util/mod.rs's `rg_run!` wasm-headless
-# branch. Mutually exclusive with `software` in practice (whichever the example
-# binary is built with wins; `rg_run!` prefers `software` if both are enabled).
+# loop instead of a canvas/window. See `wasm_entry!`'s wasm-headless branch.
+# Mutually exclusive with `software` in practice (whichever the example
+# binary is built with wins; `launch!`/`wasm_entry!` prefer `software` if
+# both are enabled).
 wasm-headless = []
 # WASM-only: drives a Terminal<TerminalWasm> from a browser terminal emulator
 # (e.g. xterm.js -- see docs/templates/examples/terminal-template.html)
-# instead of a canvas/window or a plain <pre>. See util/mod.rs's `rg_run!`
+# instead of a canvas/window or a plain <pre>. See `wasm_entry!`'s
 # wasm-terminal branch. Mutually exclusive with `software`/`wasm-headless` in
-# practice (whichever the example binary is built with wins; `rg_run!`
-# prefers `software`, then `wasm-headless`, then this).
+# practice (whichever the example binary is built with wins; `launch!`/
+# `wasm_entry!` prefer `software`, then `wasm-headless`, then this).
 wasm-terminal = ["dep:retroglyph-terminal-wasm"]
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
@@ -53,6 +63,16 @@ console_error_panic_hook = "0.1"
 # of assuming a fixed frame time.
 web-sys = { version = "0.3", features = ["Window", "Performance"] }
 
+[dev-dependencies]
+insta = { version = "1.34", features = ["yaml"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+# PNG snapshots of the software (headless) renderer's pixel buffer.
+image = { version = "0.25", default-features = false, features = ["png"] }
+# PTY + vt100 SVG snapshots of the crossterm backend's ANSI output.
+portable-pty = "0.9"
+vt100 = "0.15"
+
 [[example]]
-name = "hello_world"
-path = "examples/hello_world.rs"
+name = "01_hello_world"
+path = "examples/01_hello_world.rs"

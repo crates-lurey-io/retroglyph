@@ -45,16 +45,18 @@ jobs:
 
       # ── WASM examples ────────────────────────────────────────────────────
       #
-      # TODO: this whole section was removed along with the old crates/examples/.
-      # It built a fixed list of demo binaries (dungeon_room, sokoban, hex_battle,
-      # etc.) for each backend variant (Software/Headless/Terminal), driven by
-      # `examples/runner.rs --manifest` as the source of truth for which examples
-      # get which variant, then wasm-bindgen'd and packaged each into
-      # target/doc/examples/<name>/<variant>/ using the templates under
-      # docs/templates/examples/. Re-add once the new examples/ crate has actual
-      # WASM-capable examples and a runner manifest again; see git history for
-      # the removed steps (Install wasm-bindgen-cli through Generate examples
-      # index) as a starting point.
+      # Every example in examples/examples/*.rs is built for all three
+      # WASM-capable backend variants (Headless/Terminal/Software) and
+      # packaged into target/doc/examples/<name>/<variant>/, plus an index.
+      # No manifest to keep in sync: see tools/build-wasm-examples.sh.
+      # `cargo bin --install` (same as `just setup-tools`) builds/caches
+      # wasm-bindgen at the version pinned in the workspace root Cargo.toml's
+      # [workspace.metadata.bin] -- see that entry's comment for why the
+      # version must match crates/*/Cargo.toml's wasm-bindgen dependency.
+      - name: Build WASM examples
+        run: |
+          cargo bin --install
+          tools/build-wasm-examples.sh
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
