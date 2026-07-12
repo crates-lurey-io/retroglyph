@@ -122,7 +122,10 @@ jobs:
       - uses: codecov/codecov-action@v5
         with:
           files: lcov.info
-          flags: retroglyph
+          # One combined workspace lcov.info, attributed per crate: each flag below is
+          # scoped by its own `paths:` in codecov.yml, so a single upload still yields
+          # per-crate coverage numbers instead of one blended workspace figure.
+          flags: core,terminal,crossterm,terminal-wasm,software,window,widgets
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: true
 

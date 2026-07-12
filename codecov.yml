@@ -11,9 +11,33 @@ coverage:
         informational: true
 
 flags:
-  retroglyph:
+  core:
     paths:
-      - src/
+      - crates/core/src/
+    carryforward: true
+  terminal:
+    paths:
+      - crates/terminal/src/
+    carryforward: true
+  crossterm:
+    paths:
+      - crates/crossterm/src/
+    carryforward: true
+  terminal-wasm:
+    paths:
+      - crates/terminal-wasm/src/
+    carryforward: true
+  software:
+    paths:
+      - crates/software/src/
+    carryforward: true
+  window:
+    paths:
+      - crates/window/src/
+    carryforward: true
+  widgets:
+    paths:
+      - crates/widgets/src/
     carryforward: true
 
 comment:
