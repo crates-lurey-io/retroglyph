@@ -1,6 +1,6 @@
 [package]
 name = "retroglyph-terminal"
-version = "0.1.0"
+version = "0.1.1"
 description = "Shared ANSI/SGR cell-diff renderer for retroglyph's terminal-family backends"
 readme = "README.md"
 edition.workspace = true
@@ -18,7 +18,7 @@ workspace = true
 all-features = true
 
 [dependencies]
-retroglyph-core = { path = "../core", version = "0.1.0", default-features = false, features = ["std"] }
+retroglyph-core = { path = "../core", version = "0.1.1", default-features = false, features = ["std"] }
 unicode-width = "0.2"
 
 [features]
