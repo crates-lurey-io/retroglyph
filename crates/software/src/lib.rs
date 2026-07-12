@@ -63,6 +63,14 @@ mod surface;
 pub use surface::SurfaceError;
 use surface::WindowSurface;
 
+// Compile the code blocks in this crate's own README as doctests so its quick start is
+// type-checked on every test run and cannot silently rot. The `cfg(doctest)` gate keeps this out
+// of the rendered crate documentation -- see `retroglyph-crossterm`'s matching include for the
+// same pattern applied to the workspace root README.
+#[cfg(doctest)]
+#[doc = include_str!("../README.md")]
+struct ReadmeDoctests;
+
 use retroglyph_core::backend::Backend;
 use retroglyph_core::color::{AnsiColor, Color};
 
@@ -279,12 +287,13 @@ impl SoftwareBackend {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// use retroglyph_software::SoftwareBackendBuilder;
+    /// ```
+    /// use retroglyph_core::Backend;
     /// use retroglyph_core::tile::Tile;
     /// use retroglyph_core::style::Style;
     /// use retroglyph_core::grid::Pos;
     /// use retroglyph_core::Color;
+    /// use retroglyph_software::SoftwareBackendBuilder;
     ///
     /// let mut renderer = SoftwareBackendBuilder::new()
     ///     .grid_size(1, 1)
@@ -294,12 +303,8 @@ impl SoftwareBackend {
     ///     .run_headless();
     ///
     /// // Render a red cell on layer 0.
-    /// let tile = Tile {
-    ///     glyph: ' ',
-    ///     style: Style::new().bg(Color::Rgb { r: 255, g: 0, b: 0 }),
-    ///     ..Tile::default()
-    /// };
-    /// renderer.draw_layers([(0, Pos::new(0, 0), &tile)].into_iter());
+    /// let tile = Tile::new(' ', Style::new().bg(Color::Rgb { r: 255, g: 0, b: 0 }));
+    /// renderer.draw_layers([(0, Pos::new(0, 0), &tile)].into_iter()).unwrap();
     ///
     /// assert!(renderer.pixels().iter().all(|&p| p == 0x00FF_0000));
     /// ```

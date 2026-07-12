@@ -72,6 +72,21 @@ pub trait Example: Default + Sized + 'static {
         builder
     }
 
+    /// Whether the software backend's window should fill the browser viewport on `wasm32`
+    /// (see [`WindowConfig::fill_viewport`](retroglyph_window::winit::WindowConfig::fill_viewport))
+    /// instead of rendering at its natural grid size wherever it lands on the page.
+    ///
+    /// Default: `false`, matching [`WindowConfig::fit`](retroglyph_window::winit::WindowConfig::fit)'s
+    /// own default -- most demos should render at a fixed, predictable grid size. Override this
+    /// (returning `true`) for an app-like example meant to be the whole page, e.g. one with a
+    /// pannable world that benefits from every cell the viewport can offer, especially on a small
+    /// mobile screen -- see `15_outpost_dashboard.rs`. Has no effect on native or on any backend
+    /// but `software`.
+    #[cfg(feature = "software")]
+    fn fill_viewport() -> bool {
+        false
+    }
+
     /// Advance and render one frame. Return `false` to quit.
     ///
     /// `frame` carries the real wall-clock time elapsed since the previous tick
@@ -178,7 +193,8 @@ pub fn run_software_with<E: Example>(builder: retroglyph_software::SoftwareBacke
         .build()
         .expect("failed to initialize software backend")
         .run_headless();
-    let config = retroglyph_window::winit::WindowConfig::fit(&renderer, E::NAME, None);
+    let config = retroglyph_window::winit::WindowConfig::fit(&renderer, E::NAME, None)
+        .fill_viewport(E::fill_viewport());
     let app = ExampleApp::<E>::new();
     retroglyph_window::winit::run_app(config, renderer, app).expect("event loop failed");
 }

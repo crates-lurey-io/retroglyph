@@ -2,14 +2,48 @@
 
 [![CI](https://github.com/crates-lurey-io/retroglyph/actions/workflows/ci.yml/badge.svg)](https://github.com/crates-lurey-io/retroglyph/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/crates-lurey-io/retroglyph/graph/badge.svg?token=z8BBUp8fiY)](https://codecov.io/gh/crates-lurey-io/retroglyph)
-[![docs](https://github.com/crates-lurey-io/retroglyph/actions/workflows/docs.yml/badge.svg)](https://crates-lurey-io.github.io/retroglyph/)
+[![docs](https://github.com/crates-lurey-io/retroglyph/actions/workflows/docs.yml/badge.svg)](https://main.retroglyph.dev/)
 [![Benchmarks](https://img.shields.io/badge/benchmarks-bencher.dev-blue)](https://bencher.dev/perf/retroglyph)
+[![license](https://img.shields.io/crates/l/retroglyph-core.svg)](LICENSE)
 
 A 2D pseudographic terminal library for Rust.
 
 `retroglyph` provides a styled character grid, double-buffered rendering, and pluggable backends.
-
 You drive the game loop; `retroglyph` handles drawing efficiently and feeding you input events.
+
+The same game code runs unchanged against a real terminal, a native window, or a browser tab: swap
+the `Backend` type parameter and nothing else changes. See
+[How retroglyph compares](#how-retroglyph-compares) for how that's different from the alternatives.
+
+<details>
+<summary><strong>Table of contents</strong></summary>
+
+- [Crates](#crates)
+- [Features](#features)
+- [Quick start](#quick-start)
+- [Examples](#examples)
+- [How retroglyph compares](#how-retroglyph-compares)
+- [Documentation](#documentation)
+- [Contributing](#contributing)
+- [License](#license)
+
+</details>
+
+## Crates
+
+`retroglyph-core` is the only required dependency; everything else is an optional backend or drawing
+helper you pull in as needed. All crates version in lockstep (see
+[RELEASING.md](RELEASING.md#versioning)), so every crate below is always at the same version.
+
+| Crate                                              | Description                                                                                                                                 | Version                                                                                                                                       |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`retroglyph-core`](crates/core)                   | `no_std`-compatible foundation: grid, tile, style, color, event types, the `Backend` trait, and the dependency-free `Headless` test backend | [![retroglyph-core version](https://img.shields.io/crates/v/retroglyph-core.svg)](https://docs.rs/retroglyph-core)                            |
+| [`retroglyph-terminal`](crates/terminal)           | Shared ANSI/SGR cell-diff renderer used by both terminal-family backends below                                                              | [![retroglyph-terminal version](https://img.shields.io/crates/v/retroglyph-terminal.svg)](https://docs.rs/retroglyph-terminal)                |
+| [`retroglyph-crossterm`](crates/crossterm)         | Real terminal backend via [`crossterm`](https://crates.io/crates/crossterm): raw mode, alternate screen, mouse capture                      | [![retroglyph-crossterm version](https://img.shields.io/crates/v/retroglyph-crossterm.svg)](https://docs.rs/retroglyph-crossterm)             |
+| [`retroglyph-terminal-wasm`](crates/terminal-wasm) | Browser terminal backend (e.g. xterm.js): pushed input events, pulled ANSI output                                                           | [![retroglyph-terminal-wasm version](https://img.shields.io/crates/v/retroglyph-terminal-wasm.svg)](https://docs.rs/retroglyph-terminal-wasm) |
+| [`retroglyph-window`](crates/window)               | Shared `winit` windowing layer for windowed backends (splits input/output the way a window, not a terminal, needs)                          | [![retroglyph-window version](https://img.shields.io/crates/v/retroglyph-window.svg)](https://docs.rs/retroglyph-window)                      |
+| [`retroglyph-software`](crates/software)           | Pixel rendering backend via `winit` + `softbuffer`: a native window _or_ a browser `<canvas>` from the same code                            | [![retroglyph-software version](https://img.shields.io/crates/v/retroglyph-software.svg)](https://docs.rs/retroglyph-software)                |
+| [`retroglyph-widgets`](crates/widgets)             | Immediate-mode drawing helpers: panels, gauges, tables, sparklines, and a constraint-based layout splitter                                  | [![retroglyph-widgets version](https://img.shields.io/crates/v/retroglyph-widgets.svg)](https://docs.rs/retroglyph-widgets)                   |
 
 ## Features
 
@@ -73,7 +107,7 @@ types. `FrameClock` is a pure fixed-timestep accumulator (fed elapsed `dt`, so i
 to the map edges while following a target, and iterates the visible cells as `(world, screen)`
 pairs. `Grid::from_charmap` builds a styled grid from an ASCII map or level string, one tile per
 character. Combined with multi-layer compositing, this drives scrolling roguelikes (see the
-`scrolling_roguelike` example).
+`12_dungeon_scroll` and `15_outpost_dashboard` examples).
 
 </details>
 
@@ -92,15 +126,20 @@ Multi-codepoint graphemes are capped at 8 codepoints to prevent combining-mark b
 
 The `Backend` trait has a small surface: draw cells, flush, poll events, resize, cursor control.
 
-- **Headless** — in-memory with no I/O. The workhorse for unit and integration tests. Provides
-  `format_view()` for snapshot testing with insta and `push_event()` for synthetic input.
-- **Crossterm** (feature `crossterm`) — full terminal with raw mode, alternate screen, and mouse
+- **Headless** (`retroglyph-core`) — in-memory with no I/O. The workhorse for unit and integration
+  tests. Provides `format_view()` for snapshot testing with insta and `push_event()` for synthetic
+  input.
+- **Crossterm** (`retroglyph-crossterm`) — full terminal with raw mode, alternate screen, and mouse
   capture. Registers a panic hook to safely restore the terminal on crashes.
-- **Software** (feature `software`) — pixel-based rendering via winit + softbuffer. Uses a 1-bit
-  bitmap font (embedded VGA 8x16 with `software-default-font`), with sub-cell pixel offsets,
-  multi-layer compositing, configurable scale factor, and a headless mode for pixel-level testing.
-- **Sprite tilesets** (feature `software-tilesets`) — PNG sprite sheets mapped to a codepage (CP437,
-  Unicode range, or custom), rendered with RGBA alpha blending over bitmap font glyphs.
+- **Software** (`retroglyph-software`) — pixel-based rendering via winit + softbuffer. Uses a 1-bit
+  bitmap font (embedded VGA 8x16 with feature `default-font`), with sub-cell pixel offsets,
+  multi-layer compositing, a configurable scale factor, and a headless mode for pixel-level testing.
+  Runs unchanged as a native window or a browser `<canvas>` (WASM).
+- **Terminal (WASM)** (`retroglyph-terminal-wasm`) — pushes ANSI output to a browser terminal
+  emulator such as xterm.js instead of a native TTY.
+- **Sprite tilesets** (feature `tilesets` on `retroglyph-software`) — PNG sprite sheets mapped to a
+  codepage (CP437, Unicode range, or custom), rendered with RGBA alpha blending over bitmap font
+  glyphs.
 
 </details>
 
@@ -108,9 +147,9 @@ The `Backend` trait has a small surface: draw cells, flush, poll events, resize,
 <summary><strong>Input handling</strong> — keyboard, mouse, resize, and close events</summary>
 
 `Terminal::poll(timeout)` returns `Option<Event>` with support for keyboard (all standard keys +
-modifier flags), mouse (buttons, movement, scroll), window resize, and close events. `has_input()`
-checks for events without blocking. Resize events are automatically applied to the grid before the
-event reaches your code.
+modifier flags), mouse (buttons, movement, scroll), touch (synthesized into the same mouse events on
+the software/WASM backend), window resize, and close events. `has_input()` checks for events without
+blocking. Resize events are automatically applied to the grid before the event reaches your code.
 
 </details>
 
@@ -129,7 +168,8 @@ An optional crate: games that draw manually depend only on `retroglyph-core`. Ev
 primarily a free function (`panel`, `gauge`, `table`, `sparkline`, `draw_box`, ...) that draws
 directly to a `Terminal` and retains no state, plus a constraint-based `Rect` splitter
 (`split_h`/`split_v`) with `Fixed`/`Percent`/`Fill`/`Min`/`Max` constraints and `Flex` alignment
-(`Start`/`End`/`Center`/`SpaceBetween`/`SpaceAround`).
+(`Start`/`End`/`Center`/`SpaceBetween`/`SpaceAround`) -- deliberately similar to
+[ratatui](https://ratatui.rs)'s layout system, for anyone coming from there.
 
 Three optional layers build on that free-function core:
 
@@ -141,7 +181,8 @@ Three optional layers build on that free-function core:
 - `join_h`/`join_v` to compose several `Grid`s -- e.g. `BoxStyle::render` output -- into one before
   drawing it.
 
-See the `dashboard` example for all of the above wired together in one UI.
+See the `09_widgets_dashboard` and `15_outpost_dashboard` examples for all of the above wired
+together in one UI.
 
 </details>
 
@@ -177,8 +218,68 @@ fn main() -> std::io::Result<()> {
 }
 ```
 
-Run the interactive demo:
+This exact snippet is compiled and run as a doctest on every `cargo test` (see
+`crates/crossterm/src/lib.rs`), so it can't silently drift out of date.
+
+Want a native window or a browser tab instead of a real terminal? See
+[`retroglyph-software`](crates/software)'s quick start (same `Terminal`/`Backend` API, a different
+`Backend` type). Every crate in the [table above](#crates) has its own tested quick start.
+
+## Examples
+
+`examples/examples/*.rs` has 15 runnable examples, from a minimal `01_hello_world` up to
+`15_outpost_dashboard`, a flagship dashboard exercising animation, touch-sized controls, and a
+responsive layout. Every example runs on every backend unchanged:
 
 ```sh
-cargo run --example 12_dungeon_scroll --features crossterm
+cargo run --example 12_dungeon_scroll --features crossterm  # real terminal
+cargo run --example 12_dungeon_scroll --features software   # native window
+cargo run --bin runner                                      # interactive picker (all examples x all backends, incl. WASM)
 ```
+
+Every example is also built for WASM (Headless/Terminal/Software variants) and published as an
+interactive gallery at **[main.retroglyph.dev/examples](https://main.retroglyph.dev/examples/)** --
+no local toolchain required to try one in a browser.
+
+## How retroglyph compares
+
+There's no shortage of Rust terminal/ASCII libraries; here's where retroglyph sits relative to the
+two closest:
+
+- **[ratatui](https://ratatui.rs)** is the standard for terminal UIs, with a much larger widget
+  ecosystem. It only draws to a real terminal (through `crossterm`/`termion`/`termwiz`), and has no
+  pixel or WASM backend. retroglyph's widget/layout crate deliberately borrows ratatui's
+  constraint-based layout ergonomics, but retroglyph's `Terminal<B>` also runs against a native
+  pixel-rendered window or a browser canvas without changing a line of game logic -- pick ratatui if
+  a real terminal is always the target and you want its wider widget catalog.
+- **[bracket-lib](https://github.com/amethyst/bracket-lib)** (the maintained successor to RLTK) is
+  the closest match in spirit: one virtual ASCII terminal, several swappable backends including
+  crossterm. Its non-terminal backends go through OpenGL or WebGPU, though, which pulls in a GPU
+  stack; retroglyph's software backend is pure CPU rasterization (`softbuffer`, no GPU dependency),
+  and its core crate is `no_std`-compatible for embedded/kernel-space use, which bracket-lib doesn't
+  target.
+
+If neither of those trade-offs match what you need, retroglyph is probably not the right choice
+either -- these are the two libraries actually worth comparing against, not exhaustive coverage of
+the space.
+
+## Documentation
+
+- docs.rs links for every crate are in the [crates table](#crates) above.
+- [main.retroglyph.dev](https://main.retroglyph.dev/) is the full docs site: rustdoc for every
+  crate, plus the [examples gallery](https://main.retroglyph.dev/examples/).
+- [`llms.txt`](llms.txt) / [`llms-full.txt`](llms-full.txt) are a machine-readable summary of every
+  public module and type, generated by `just llms` -- useful context for AI coding agents working in
+  this repo or against these crates.
+- [`STYLE_GUIDE.md`](STYLE_GUIDE.md) documents this project's Rust API and code style conventions,
+  for anyone contributing.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the development setup, and [AGENTS.md](AGENTS.md) /
+[`STYLE_GUIDE.md`](STYLE_GUIDE.md) for the conventions this workspace holds itself to (`just check`
+must pass before any commit).
+
+## License
+
+Licensed under the [MIT license](LICENSE).

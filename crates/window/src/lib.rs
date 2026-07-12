@@ -56,6 +56,14 @@ pub mod presenter;
 #[cfg(feature = "winit")]
 pub mod winit;
 
+// Compile the code blocks in this crate's own README as doctests so its quick start is
+// type-checked on every test run and cannot silently rot. The `cfg(doctest)` gate keeps this out
+// of the rendered crate documentation -- see `retroglyph-crossterm`'s matching include for the
+// same pattern applied to the workspace root README.
+#[cfg(doctest)]
+#[doc = include_str!("../README.md")]
+struct ReadmeDoctests;
+
 pub use backend::WindowBackend;
 pub use presenter::{Presenter, WindowHandle};
 

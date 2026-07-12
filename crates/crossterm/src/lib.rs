@@ -13,12 +13,16 @@
 //! those methods (e.g. a closed terminal or disconnected pipe) are discarded
 //! silently rather than surfaced.
 
-// Compile the code blocks in the project README as doctests so the quick-start
-// example is type-checked on every test run and cannot silently rot. The
-// `cfg(doctest)` gate keeps this out of the rendered crate documentation.
+// Compile the code blocks in both this crate's own README and the workspace root README as
+// doctests so the quick-start examples are type-checked on every test run and cannot silently
+// rot. The `cfg(doctest)` gate keeps these out of the rendered crate documentation.
+#[cfg(doctest)]
+#[doc = include_str!("../README.md")]
+struct ReadmeDoctests;
+
 #[cfg(doctest)]
 #[doc = include_str!("../../../README.md")]
-struct ReadmeDoctests;
+struct WorkspaceReadmeDoctests;
 
 use core::time::Duration;
 use retroglyph_core::backend::Backend;
