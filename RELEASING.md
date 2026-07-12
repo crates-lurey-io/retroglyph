@@ -113,15 +113,16 @@ jj git push --bookmark v0.1.0
 (Lockstep versioning means one tag covers all 7 crates for this release. Post-release-plz adoption,
 per-crate tags may replace this if versioning splits per crate.)
 
-## Post-0.1.0: adopt release-plz
+## Post-0.1.0: release-plz
 
-[release-plz](https://release-plz.dev) becomes the tool of record for changelog generation, version
-bumps, and publishing from the second release onward. It reads Conventional Commits history per
-crate (`fix(core): ...` -> patch, `feat(widgets): ...` -> minor, `!`/`BREAKING CHANGE:` -> major,
-remapped per the pre-1.0 SemVer policy above while major stays `0`, see `AGENTS.md`'s commit-scope
-convention), opens a release PR with the bumps and changelog already computed, generates changelogs
-via `git-cliff`, and can gate on `cargo-semver-checks` to catch accidental breaking changes before
-they're tagged.
+[release-plz](https://release-plz.dev) is the tool of record for changelog generation, version
+bumps, and publishing from the second release onward. Config: `release-plz.toml`, `cliff.toml`,
+`.github/workflows/release-plz.yml`, `.github/workflows/check-semver.yml`. It reads Conventional
+Commits history per crate (`fix(core): ...` -> patch, `feat(widgets): ...` -> minor,
+`!`/`BREAKING CHANGE:` -> major, remapped per the pre-1.0 SemVer policy above while major stays `0`,
+see `AGENTS.md`'s commit-scope convention), opens a release PR with the bumps and changelog already
+computed, generates changelogs via `git-cliff`, and can gate on `cargo-semver-checks` to catch
+accidental breaking changes before they're tagged.
 
 **Configuration matches the lockstep decision above, following
 [ratatui's proven config](https://github.com/ratatui/ratatui/blob/main/release-plz.toml)** (the
@@ -137,8 +138,13 @@ closest architectural precedent, also lockstep, also release-plz + git-cliff):
   release-plz's own built-in check, so the two mechanisms (commit-driven bump vs. actual API-compat
   check) surface independently instead of one silently overriding the other.
 
-It needs an existing tagged baseline to diff against, which `v0.1.0` (above) provides. Configuring
-and wiring the GitHub Action is a follow-up task, not part of the manual 0.1.0 publish itself.
+It needs an existing tagged baseline to diff against, which `v0.1.0` (above) provides.
+
+**One manual step remains before this actually runs:** a `CARGO_REGISTRY_TOKEN` repo secret
+(Settings -> Secrets and variables -> Actions) with publish rights on all 7 crates. Without it,
+`release-plz-release` will open/update the version-bump PR fine but fail to actually publish once
+that PR is merged. `GITHUB_TOKEN` (used for the PR itself) is already provided automatically by
+Actions -- no setup needed for that half.
 
 ## Non-blocking follow-ups (do alongside, not before)
 

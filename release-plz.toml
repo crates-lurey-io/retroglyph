@@ -1,0 +1,19 @@
+# release-plz configuration.
+# https://release-plz.dev/docs/config
+#
+# Adopted post-0.1.0, following ratatui's proven config (see RELEASING.md's "Post-0.1.0: adopt
+# release-plz" section for the reasoning behind each choice below):
+# https://github.com/ratatui/ratatui/blob/main/release-plz.toml
+
+[workspace]
+changelog_path = "./CHANGELOG.md"
+changelog_config = "cliff.toml"
+# Lockstep versioning (see RELEASING.md): one combined release, not one per crate as changes land.
+release_always = false
+# Handled by a separate cargo-semver-checks CI job instead (.github/workflows/check-semver.yml),
+# so the commit-driven version bump and the actual API-compatibility check surface independently.
+semver_check = false
+
+git_release_body = """
+{{ changelog | replace(from=" by @", to=" by ") }}
+"""
