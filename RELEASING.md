@@ -140,11 +140,31 @@ closest architectural precedent, also lockstep, also release-plz + git-cliff):
 
 It needs an existing tagged baseline to diff against, which `v0.1.0` (above) provides.
 
-**One manual step remains before this actually runs:** a `CARGO_REGISTRY_TOKEN` repo secret
-(Settings -> Secrets and variables -> Actions) with publish rights on all 7 crates. Without it,
-`release-plz-release` will open/update the version-bump PR fine but fail to actually publish once
-that PR is merged. `GITHUB_TOKEN` (used for the PR itself) is already provided automatically by
-Actions -- no setup needed for that half.
+### Publishing: trusted publishing, not a registry token
+
+`release-plz-release` publishes via
+[crates.io trusted publishing](https://crates.io/docs/trusted-publishing) -- no
+`CARGO_REGISTRY_TOKEN` secret exists in this repo at all. release-plz implements the same OIDC token
+exchange as `rust-lang/crates-io-auth-action` internally, so the workflow only needs
+`id-token: write` permission on that job (already set in `.github/workflows/release-plz.yml`).
+
+This was configured on crates.io for all 7 publishable crates (Settings -> Trusted Publishing -> Add
+-> GitHub), each pointing at:
+
+- Repository owner: `crates-lurey-io`
+- Repository name: `retroglyph`
+- Workflow filename: `release-plz.yml`
+- Environment: `release`
+
+Trusted publishing can't be used for a crate's _first_ publish (crates.io requires a real API token
+for that) -- moot here since the 0.1.0 publish already happened manually, so every crate had an
+existing version before trusted publishing was configured.
+
+The `release` environment referenced above
+(github.com/crates-lurey-io/retroglyph/settings/environments) adds a second, independent gate on top
+of trusted publishing's own repo/workflow-filename check: required reviewer (`matanlurey`) and a
+`main`-only branch policy, so an actual crates.io publish always needs a manual approval click, even
+though the workflow itself runs unattended.
 
 ## Non-blocking follow-ups (do alongside, not before)
 
