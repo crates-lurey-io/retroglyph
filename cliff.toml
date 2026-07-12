@@ -1,0 +1,143 @@
+# git-cliff ~ configuration file
+# https://git-cliff.org/docs/configuration
+#
+# Adapted from ratatui's proven config (see RELEASING.md's "Post-0.1.0: adopt release-plz"
+# section): https://github.com/ratatui/ratatui/blob/main/cliff.toml
+
+[remote.github]
+owner = "crates-lurey-io"
+repo = "retroglyph"
+
+[changelog]
+header = """
+# Changelog
+
+All notable changes to this project will be documented in this file.
+<!-- ignore lint rules that are often triggered by content generated from commits / git-cliff -->
+<!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style -->
+"""
+# template for the changelog body
+# https://keats.github.io/tera/docs/#introduction
+# note that the - before / after the % controls whether whitespace is rendered between each line.
+# Getting this right so that the markdown renders with the correct number of lines between headings,
+# code fences, and list items is finicky. The 4 backticks in the commit macro is intentional: it
+# escapes any backticks in the commit body.
+body = """
+{%- if not version %}
+## [unreleased]
+{% else -%}
+{%- if package -%} {# release-plz specific variable #}
+## [{{ version }}+{{ package }}]({{ release_link }}) - {{ timestamp | date(format="%Y-%m-%d") }}
+{%- else -%}
+## [{{ version }}]({{ self::remote_url() }}/releases/tag/{{ version }}) - {{ timestamp | date(format="%Y-%m-%d") }}
+{%- endif %}
+{% endif -%}
+
+{% macro commit(commit) -%}
+- [{{ commit.id | truncate(length=7, end="") }}]({{ self::remote_url() ~ "/commit/" ~ commit.id }}) \
+  *({{commit.scope | default(value = "uncategorized") | lower }})* {{ commit.message | upper_first | trim }}\
+  {% if commit.remote.username %} by `@{{ commit.remote.username }}`{%- endif -%}\
+  {% if commit.remote.pr_number %} in [#{{ commit.remote.pr_number }}]({{ self::remote_url() }}/pull/{{ commit.remote.pr_number }}){%- endif %}\
+{%- if commit.breaking %} [**breaking**]{% endif %}
+{%- if commit.body %}\n\n{{ commit.body | indent(prefix="  > ", first=true, blank=true) }}
+{%- endif %}
+{%- for footer in commit.footers %}\n
+{%- if footer.token != "Signed-off-by" and footer.token != "Co-authored-by" %}
+  >
+{{ footer.token | indent(prefix="  > ", first=true, blank=true) }}
+{{- footer.separator }}
+{{- footer.value| indent(prefix="  > ", first=false, blank=true)  }}
+{%- endif %}
+{%- endfor %}
+{% endmacro -%}
+
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | striptags | trim | upper_first }}
+{% for commit in commits | filter(attribute="scope") | sort(attribute="scope") %}
+{{ self::commit(commit=commit) }}
+{%- endfor -%}
+{% for commit in commits %}
+{%- if not commit.scope %}
+{{ self::commit(commit=commit) }}
+{%- endif -%}
+{%- endfor -%}
+{%- endfor %}
+
+{%- if not release_link -%}
+{% if github.contributors | filter(attribute="is_first_time", value=true) | length != 0 %}
+### New Contributors
+{%- endif %}\
+{% for contributor in github.contributors | filter(attribute="is_first_time", value=true) %}
+* `@{{ contributor.username }}` made their first contribution
+{%- if contributor.pr_number %} in \
+[#{{ contributor.pr_number }}]({{ self::remote_url() }}/pull/{{ contributor.pr_number }}) \
+{%- endif %}
+{%- endfor -%}
+{%- endif -%}
+
+{% if version %}
+{% if previous.version %}
+{%- if release_link -%}
+**Full Changelog**: {{ release_link }} {# release-plz specific variable #}
+{%- else -%}
+**Full Changelog**: {{ self::remote_url() }}/compare/{{ previous.version }}...{{ version }}
+{% endif %}
+{% endif %}
+{% else -%}
+  {% raw %}\n{% endraw %}
+{% endif %}
+
+{%- macro remote_url() -%}
+{%- if remote.owner -%} {# release-plz specific variable #}
+https://github.com/{{ remote.owner }}/{{ remote.repo }}\
+{%- else -%}
+https://github.com/{{ remote.github.owner }}/{{ remote.github.repo }}\
+{%- endif -%}
+{% endmacro %}
+"""
+trim = false
+postprocessors = [
+  { pattern = "<!-- Please read CONTRIBUTING.md before submitting any pull request. -->", replace = "" },
+  { pattern = '>---+\n', replace = "" },
+  { pattern = ' +\n', replace = "\n" },
+]
+
+[git]
+# parse the commits based on https://www.conventionalcommits.org
+conventional_commits = true
+filter_unconventional = true
+split_commits = false
+# strip the trailing "(#123)" PR-number suffix GitHub's squash-merge adds to the commit subject --
+# the PR number is already linked separately via commit.remote.pr_number in the template above.
+commit_preprocessors = [
+  { pattern = '\((\w+\s)?#([0-9]+)\)', replace = "" },
+]
+# regex for parsing and grouping commits, matching AGENTS.md's Conventional Commits scope
+# convention (core, terminal, crossterm, terminal-wasm, software, window, widgets, examples)
+commit_parsers = [
+  { field = "id", pattern = "0000000", skip = true }, # release-plz's release-commit placeholder
+  { message = "^feat", group = "<!-- 00 -->Features" },
+  { message = "^[fF]ix", group = "<!-- 01 -->Bug Fixes" },
+  { message = "^refactor", group = "<!-- 02 -->Refactor" },
+  { message = "^doc", group = "<!-- 03 -->Documentation" },
+  { message = "^perf", group = "<!-- 04 -->Performance" },
+  { message = "^style", group = "<!-- 05 -->Styling" },
+  { message = "^test", group = "<!-- 06 -->Testing" },
+  { message = "^chore\\(release\\): prepare for", skip = true },
+  { message = "^chore: release", skip = true },
+  { message = "^chore\\(deps\\)", skip = true },
+  { message = "^[cC]hore", group = "<!-- 07 -->Miscellaneous Tasks" },
+  { message = "^build\\(deps\\)", skip = true },
+  { message = "^build", group = "<!-- 08 -->Build" },
+  { body = ".*security", group = "<!-- 09 -->Security" },
+  { message = "^ci", group = "<!-- 10 -->Continuous Integration" },
+  { message = "^revert", group = "<!-- 11 -->Reverted Commits" },
+]
+
+protect_breaking_commits = false
+filter_commits = false
+tag_pattern = "v[0-9]*"
+skip_tags = "beta|alpha"
+ignore_tags = "rc"
+topo_order = false
+sort_commits = "newest"
