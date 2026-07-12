@@ -1,7 +1,8 @@
 [package]
 name = "retroglyph-software"
-version = "0.1.0-alpha"
+version = "0.1.0"
 description = "Software (winit + softbuffer) pixel rendering backend for retroglyph"
+readme = "README.md"
 edition.workspace = true
 rust-version.workspace = true
 authors.workspace = true
@@ -13,12 +14,15 @@ categories.workspace = true
 [lints]
 workspace = true
 
+[package.metadata.docs.rs]
+all-features = true
+
 [dependencies]
-retroglyph-core = { path = "../core", version = "0.1.0-alpha", default-features = false, features = ["std"] }
+retroglyph-core = { path = "../core", version = "0.1.0", default-features = false, features = ["std"] }
 # Seam only (Presenter/WindowBackend/WindowHandle): no winit. The loop is the
 # caller's business -- games depend on retroglyph-window with its default
 # `winit` feature; this crate just implements the renderer side.
-retroglyph-window = { path = "../window", version = "0.1.0-alpha", default-features = false }
+retroglyph-window = { path = "../window", version = "0.1.0", default-features = false }
 ixy = "0.6.0-alpha.9"
 grixy = { version = "0.6.0-alpha.8", features = ["alloc", "buffer"] }
 log = "0.4"
@@ -47,7 +51,7 @@ web-sys = { version = "0.3", features = [
 
 [features]
 # The `software-` prefix from the pre-split monolith is redundant now that
-# these live inside `retroglyph-software` (ADR 014): `retroglyph-software/tilesets`
+# these live inside `retroglyph-software`: `retroglyph-software/tilesets`
 # reads better than `.../software-tilesets`.
 tilesets = ["dep:image", "dep:alpha-blend"]
 default-font = []

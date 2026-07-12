@@ -5,7 +5,7 @@
 //! [`Scrollbar`] (its track+thumb), and [`Modal`] (a centered end-of-game dialog). A turn-based
 //! fight against a fixed-stat goblin, deterministic on purpose (no RNG: every attack does the
 //! same damage, so every run -- and every snapshot -- plays out identically), chosen over
-//! `hex_battle` (ADR 019's original next slot) after re-checking what that would actually prove:
+//! `hex_battle` after re-checking what that would actually prove:
 //! hex-grid coordinate conversion is real algorithm work (see e.g. Red Blob Games' hex-grid
 //! reference) with no connection to any `retroglyph` API, and its other half (tileset sprites
 //! plus an ASCII fallback) just re-proves `07_sprites_tileset`/`11_sokoban`'s already-established

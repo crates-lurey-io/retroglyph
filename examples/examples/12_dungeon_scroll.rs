@@ -4,7 +4,7 @@
 //! the 50x25 screen. `Camera` is pure geometry (world/screen coordinate conversion, edge-clamped
 //! following), and this is deliberately the whole point of this example -- not a roguelike with
 //! field-of-view or pathfinding. Neither of those is a rendering capability, and neither exists
-//! in any workspace crate today (see ADR 019's own open-gate note on this); a scrolling dungeon
+//! in any workspace crate today; a scrolling dungeon
 //! crawl doesn't need either one to prove something real about the library, so this example
 //! skips both rather than picking a dependency for algorithms `retroglyph` was never about.
 //!

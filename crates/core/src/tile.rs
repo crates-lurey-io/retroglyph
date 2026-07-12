@@ -1,7 +1,17 @@
 //! Fundamental unit of the grid: a single drawable tile.
 
-// TODO: measure `sizeof::<Tile>()` and consider struct-of-arrays or
-// splitting `dx`/`dy` out of layer 0 if > 32 bytes.
+// TODO: `size_of::<Tile>()` is 32 bytes with `egc` (align 8, forced by the inline
+// `Option<Arc<String>>`), 20 bytes without -- `flags`/`extra`/`dx`/`dy` are kept
+// inline and unconditional (rather than moved to a side-table) so `Tile`'s public
+// shape stays feature-stable, which is what makes the core/backend crate split
+// clean. A side-table (sparse per-layer map, keeping only a `flags` bit on `Tile`)
+// was considered and rejected: the draw path hands backends a `&Tile` via
+// `Backend::draw_layers`, and crossterm/software both read the full grapheme
+// (`cell.extra`) at draw time, so a side-table would force widening the draw item
+// to `(layer, Pos, &Tile, Option<&str>)` across the `Backend` trait and every call
+// site and test. That's a bigger trait change than a size optimization justifies on
+// its own; revisit only alongside a `Backend`-trait change that's already on the
+// table for another reason, not as a standalone shrink.
 
 use crate::style::Style;
 use alloc::string::String;

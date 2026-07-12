@@ -152,8 +152,8 @@ core and the crossterm backend:
 
 ```toml
 [dependencies]
-retroglyph-core = "0.2"
-retroglyph-crossterm = "0.2"
+retroglyph-core = "0.1"
+retroglyph-crossterm = "0.1"
 ```
 
 ```rust,no_run
@@ -180,5 +180,5 @@ fn main() -> std::io::Result<()> {
 Run the interactive demo:
 
 ```sh
-cargo run --example dungeon_room --features crossterm
+cargo run --example 12_dungeon_scroll --features crossterm
 ```

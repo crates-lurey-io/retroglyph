@@ -85,3 +85,8 @@ wrap or delegate to a same-shaped free function in `draw/` (that was the old, si
 explicitly rejected). Widgets _may_ compose other _widgets_ (e.g. `Panel` composes `BoxBorder`,
 `Modal` composes `Panel`, `Log` composes `PrintLine`) -- that's the intended way to share drawing
 logic, not a private free-function core underneath both.
+
+## See also
+
+- Root `AGENTS.md` for workspace-wide rules (correctness gate, testing, commit conventions).
+- `STYLE_GUIDE.md` for general Rust API conventions not specific to this crate.

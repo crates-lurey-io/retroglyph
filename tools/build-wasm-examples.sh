@@ -3,13 +3,11 @@
 # backend variant via tools/build-wasm-example.sh, and writes a top-level
 # index.html linking to all of them.
 #
-# Convention over configuration (see docs/design/018-terminal-family-split.md
-# and the examples crate's own doc comments): every example is assumed to
-# support every variant, so there is no manifest to keep in sync -- the
-# example list comes from `ls examples/examples/*.rs`, and this script just
-# builds all three variants for each one. If an example genuinely can't
-# support a variant (rare; none do today), that's a build failure this
-# script surfaces, not a silent skip.
+# Convention over configuration (see the examples crate's own doc comments): every example is
+# assumed to support every variant, so there is no manifest to keep in sync -- the example list
+# comes from `ls examples/examples/*.rs`, and this script just builds all three variants for each
+# one. If an example genuinely can't support a variant (rare; none do today), that's a build
+# failure this script surfaces, not a silent skip.
 #
 # Usage: tools/build-wasm-examples.sh [output-dir]
 #   output-dir defaults to target/doc/examples
