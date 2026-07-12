@@ -1,7 +1,8 @@
 [package]
 name = "retroglyph-core"
-version = "0.1.0-alpha"
+version = "0.1.0"
 description = "A 2D pseudographic terminal library -- core types, no backend"
+readme = "README.md"
 edition.workspace = true
 rust-version.workspace = true
 authors.workspace = true
@@ -12,6 +13,9 @@ categories.workspace = true
 
 [lints]
 workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
 
 [dependencies]
 # gem gets `libm` as its no_std float-math floor (see the `gem` feature); the

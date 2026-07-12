@@ -1,7 +1,8 @@
 [package]
 name = "retroglyph-widgets"
-version = "0.1.0-alpha"
+version = "0.1.0"
 description = "Immediate-mode drawing helpers for retroglyph (panels, gauges, lists, sparklines)"
+readme = "README.md"
 edition.workspace = true
 rust-version.workspace = true
 authors.workspace = true
@@ -13,6 +14,9 @@ categories.workspace = true
 [lints]
 workspace = true
 
+[package.metadata.docs.rs]
+all-features = true
+
 [features]
 # Forwards to retroglyph-core's egc feature. Paragraph (word-wrap) needs
 # grapheme-cluster-aware TextLayout, which only exists when egc is on.
@@ -22,5 +26,5 @@ egc = ["retroglyph-core/egc"]
 # `gem`: retroglyph-core/Color::lerp (used by meter_ramp's color ramp) is
 # gated behind it. Not a separate widgets-level feature -- color ramping is
 # non-optional composite-tier functionality, not an opt-in extra like `egc`.
-retroglyph-core = { path = "../core", version = "0.1.0-alpha", default-features = false, features = ["std", "gem"] }
+retroglyph-core = { path = "../core", version = "0.1.0", default-features = false, features = ["std", "gem"] }
 unicode-width = "0.2"
