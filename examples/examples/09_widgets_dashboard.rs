@@ -6,8 +6,7 @@
 //! standalone [`Grid`] and blitted in), [`split_h`]/[`split_v`] (the whole layout), and [`Theme`]
 //! (every color in this example comes from [`Theme::DARK`], not a hand-picked one-off).
 //! `retroglyph-widgets` is backend-generic -- nothing here is software/crossterm/headless-
-//! specific -- which is the payoff of deferring it past Tier 1 rather than being blocked on it
-//! (see this crate's ADR 019 doc comment for the full staging rationale).
+//! specific -- which is the payoff of deferring it past Tier 1 rather than being blocked on it.
 //!
 //! ```sh
 //! cargo run --example 09_widgets_dashboard --features crossterm

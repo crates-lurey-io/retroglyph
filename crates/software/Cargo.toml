@@ -47,7 +47,7 @@ web-sys = { version = "0.3", features = [
 
 [features]
 # The `software-` prefix from the pre-split monolith is redundant now that
-# these live inside `retroglyph-software` (ADR 014): `retroglyph-software/tilesets`
+# these live inside `retroglyph-software`: `retroglyph-software/tilesets`
 # reads better than `.../software-tilesets`.
 tilesets = ["dep:image", "dep:alpha-blend"]
 default-font = []

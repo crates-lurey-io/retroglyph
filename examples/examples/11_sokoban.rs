@@ -1,6 +1,6 @@
 //! 11: Sokoban
 //!
-//! Tier 3's pilot game (see this crate's ADR 019 doc comment): pure grid-and-core logic, no
+//! Tier 3's pilot game: pure grid-and-core logic, no
 //! external dependencies, no field-of-view or pathfinding needed -- unlike the roguelike planned
 //! after it, sokoban's rules (push a box onto a goal, don't push it into a wall or another box)
 //! are a handful of `match` arms over a [`Grid::from_charmap`]-built level, not an algorithm.
