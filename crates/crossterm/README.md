@@ -1,10 +1,23 @@
 # retroglyph-crossterm
 
+[![crates.io](https://img.shields.io/crates/v/retroglyph-crossterm.svg)](https://crates.io/crates/retroglyph-crossterm)
+[![docs.rs](https://img.shields.io/docsrs/retroglyph-crossterm)](https://docs.rs/retroglyph-crossterm)
+[![coverage](https://codecov.io/gh/crates-lurey-io/retroglyph/graph/badge.svg?token=z8BBUp8fiY&flag=crossterm)](https://codecov.io/gh/crates-lurey-io/retroglyph)
+[![license](https://img.shields.io/crates/l/retroglyph-crossterm.svg)](https://github.com/crates-lurey-io/retroglyph/blob/main/LICENSE)
+
 A `Backend` implementation for [retroglyph](https://github.com/crates-lurey-io/retroglyph) that
 renders to a real terminal via [`crossterm`](https://crates.io/crates/crossterm). Owns the OS/TTY-
 specific parts (raw mode, the alternate screen, the Kitty keyboard protocol, input polling); cell
 diffing and ANSI/SGR output are delegated to
 [`retroglyph-terminal`](https://crates.io/crates/retroglyph-terminal).
+
+## Quick start
+
+```toml
+[dependencies]
+retroglyph-core = "0.1"
+retroglyph-crossterm = "0.1"
+```
 
 ```rust,no_run
 use retroglyph_core::{Terminal, Color, event::{Event, KeyCode}};

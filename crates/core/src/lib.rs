@@ -52,6 +52,14 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 extern crate alloc;
 
+// Compile the code blocks in this crate's own README as doctests so its quick start is
+// type-checked on every test run and cannot silently rot. The `cfg(doctest)` gate keeps this out
+// of the rendered crate documentation -- see `retroglyph-crossterm`'s matching include for the
+// same pattern applied to the workspace root README.
+#[cfg(doctest)]
+#[doc = include_str!("../README.md")]
+struct ReadmeDoctests;
+
 // clippy::too_long_first_doc_paragraph is a known-noisy nursery lint (rust-lang/rust-clippy#13441)
 // that here misattributes its span across every subsequent `pub mod`/`pub use` declaration below
 // (through to the next blank line) rather than just this one doc comment, which is well under

@@ -44,6 +44,14 @@
 //! requestAnimationFrame(frame);
 //! ```
 
+// Compile the code blocks in this crate's own README as doctests so its quick start is
+// type-checked on every test run and cannot silently rot. The `cfg(doctest)` gate keeps this out
+// of the rendered crate documentation -- see `retroglyph-crossterm`'s matching include for the
+// same pattern applied to the workspace root README.
+#[cfg(doctest)]
+#[doc = include_str!("../README.md")]
+struct ReadmeDoctests;
+
 use retroglyph_core::backend::Backend;
 use retroglyph_core::event::Event;
 use retroglyph_core::grid::{Pos, Size};
