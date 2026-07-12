@@ -1,17 +1,22 @@
 # release-plz configuration.
 # https://release-plz.dev/docs/config
 #
-# Adopted post-0.1.0, following ratatui's proven config (see RELEASING.md's "Post-0.1.0: adopt
-# release-plz" section for the reasoning behind each choice below):
-# https://github.com/ratatui/ratatui/blob/main/release-plz.toml
+# Releases are driven by manual version bumps, not by release-plz PRs: bump the crate versions in
+# a normal PR (lockstep, see RELEASING.md), update CHANGELOG.md, and merge to main. CI
+# (.github/workflows/release-plz.yml) then runs `release-plz release`, which publishes any crate
+# whose Cargo.toml version is ahead of crates.io, tags it, and creates the GitHub release.
+#
+# The `release-pr` command (the mode that watches commit history and auto-opens version-bump PRs)
+# is deliberately not wired up anywhere: an earlier setup ran it on every push to main, and since
+# release-plz treats *any* commit touching a crate's files as releasable by default, it opened
+# https://github.com/crates-lurey-io/retroglyph/pull/78 unprompted (a v0.1.1 bump with an empty
+# changelog, closed as unintended). Manual bumps keep the release decision with a human.
 
 [workspace]
 changelog_path = "./CHANGELOG.md"
 changelog_config = "cliff.toml"
-# Lockstep versioning (see RELEASING.md): one combined release, not one per crate as changes land.
-release_always = false
 # Handled by a separate cargo-semver-checks CI job instead (.github/workflows/check-semver.yml),
-# so the commit-driven version bump and the actual API-compatibility check surface independently.
+# so the version bump and the actual API-compatibility check surface independently.
 semver_check = false
 
 git_release_body = """

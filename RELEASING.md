@@ -1,7 +1,8 @@
 # Releasing
 
-Manual release process for the first `0.1.0` publish. Automation (release-plz, see below) takes over
-from the second release onward.
+Manual release process for the first `0.1.0` publish. From the second release onward the version
+bump stays manual (a normal PR that bumps the crate versions); release-plz automates only the
+publish/tag/GitHub-release half (see below).
 
 ## Versioning
 
@@ -36,11 +37,10 @@ community's convention) shift the breaking-change signal down one slot from the 
 - **MAJOR** stays `0` until an explicit, deliberate decision to stabilize the public API at `1.0.0`.
 
 This is not obvious to consumers who assume "0.x means anything goes," so it's stated here
-explicitly rather than left implicit. When release-plz is adopted (below), verify its commit-driven
-bump logic (`fix:` -> patch, `feat:` -> minor, `!`/`BREAKING CHANGE:` -> major) actually remaps
-correctly for `0.x` packages before trusting it unattended -- the commit-message bump and
-`cargo-semver-checks`' API-compatibility check are two separate mechanisms that should agree, not
-conflict.
+explicitly rather than left implicit. Version bumps are chosen by hand (see "Post-0.1.0" below), so
+applying this remapping correctly is on whoever writes the bump PR; `cargo-semver-checks` in CI
+(`.github/workflows/check-semver.yml`) is the safety net that catches an accidental breaking change
+shipped as a patch.
 
 ### MSRV
 
@@ -115,30 +115,40 @@ per-crate tags may replace this if versioning splits per crate.)
 
 ## Post-0.1.0: release-plz
 
-[release-plz](https://release-plz.dev) is the tool of record for changelog generation, version
-bumps, and publishing from the second release onward. Config: `release-plz.toml`, `cliff.toml`,
-`.github/workflows/release-plz.yml`, `.github/workflows/check-semver.yml`. It reads Conventional
-Commits history per crate (`fix(core): ...` -> patch, `feat(widgets): ...` -> minor,
-`!`/`BREAKING CHANGE:` -> major, remapped per the pre-1.0 SemVer policy above while major stays `0`,
-see `AGENTS.md`'s commit-scope convention), opens a release PR with the bumps and changelog already
-computed, generates changelogs via `git-cliff`, and can gate on `cargo-semver-checks` to catch
-accidental breaking changes before they're tagged.
+[release-plz](https://release-plz.dev) automates the publish half of a release; the version bump
+stays manual. Config: `release-plz.toml`, `cliff.toml`, `.github/workflows/release-plz.yml`,
+`.github/workflows/check-semver.yml`. The flow:
 
-**Configuration matches the lockstep decision above, following
-[ratatui's proven config](https://github.com/ratatui/ratatui/blob/main/release-plz.toml)** (the
-closest architectural precedent, also lockstep, also release-plz + git-cliff):
+1. Bump all 7 crate versions in a normal PR (lockstep, see above), update `CHANGELOG.md` for the new
+   version (by hand, or generate the entries locally with `release-plz update` / `git-cliff`), and
+   merge to `main`.
+2. The `check-versions` job in `release-plz.yml` diffs each crate's `Cargo.toml` version at `HEAD`
+   against its version at the commit main pointed at right before this push (`github.event.before`,
+   plain git history, no tags or crates.io lookups involved). If any version changed, the `release`
+   environment's required reviewer is asked to approve; pushes that don't bump versions never ping
+   anyone.
+3. On approval, `release-plz release` publishes the crates whose version isn't on crates.io yet,
+   tags each as `<name>-v<version>`, and creates GitHub releases with the git-cliff changelog as the
+   body.
 
-- Single combined release PR covering every crate's bump and changelog (release-plz's default,
-  `pr_per_package = false`) -- not one PR per crate, since that mode is meant for workspaces with
-  genuinely independent per-crate cadences, which this one doesn't have.
+release-plz's `release-pr` command (the mode that reads Conventional Commits history and auto-opens
+version-bump PRs) is deliberately not used: it treats _any_ commit touching a crate's files as
+releasable by default, which produced
+[PR #78](https://github.com/crates-lurey-io/retroglyph/pull/78) (an unprompted v0.1.1 bump with an
+empty changelog, closed as unintended). Manual bumps keep the release decision with a human.
+
+Remaining configuration notes:
+
 - No automated alpha/pre-release channel for now (ratatui runs a weekly automated alpha build off
   `main`; that's real CI investment worth deferring until there's actual demand for bleeding-edge
   pre-releases, not something to set up speculatively on a library's first public release).
 - `semver_check` handled via a separate `cargo-semver-checks` CI job (ratatui's pattern), not
-  release-plz's own built-in check, so the two mechanisms (commit-driven bump vs. actual API-compat
-  check) surface independently instead of one silently overriding the other.
+  release-plz's own built-in check, so the manual version bump and the actual API-compat check
+  surface independently instead of one silently overriding the other.
 
-It needs an existing tagged baseline to diff against, which `v0.1.0` (above) provides.
+The `check-versions` job needs no one-time baseline: it only ever looks at the two Cargo.toml
+revisions either side of a push, so it works from the very first push after this workflow lands,
+regardless of how the 0.1.0 release was tagged (or not).
 
 ### Publishing: trusted publishing, not a registry token
 
