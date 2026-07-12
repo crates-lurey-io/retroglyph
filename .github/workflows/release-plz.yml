@@ -6,14 +6,48 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Cheaply determines whether this push is itself a just-merged release-plz PR, *without*
+  # referencing the `release` environment -- so this job never blocks on (or prompts for) the
+  # environment's required-reviewer approval. `release_always = false` in release-plz.toml
+  # already makes `release-plz release` itself a no-op on any other commit (same "does the PR
+  # branch start with release-plz-" check release-plz's own docs describe for that setting), but
+  # that check happens *inside* the job's steps -- too late to stop GitHub from blocking the job
+  # at the environment gate first and pinging a reviewer for a no-op run. Doing the same check
+  # one job earlier, unguarded by any environment, lets `if:` skip the gated job entirely instead.
+  check-release-pr:
+    name: Check for a merged release-plz PR
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      is_release: ${{ steps.check.outputs.is_release }}
+    steps:
+      - name: Check if HEAD is a merged release-plz-* branch PR
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Matches release-plz.toml's (default) `pr_branch_prefix`: release-plz checks the same
+          # thing internally for `release_always = false`, via the same "pull requests associated
+          # with a commit" API -- see https://release-plz.dev/docs/config#the-release_always-field.
+          branch=$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/pulls" --jq '.[0].head.ref // ""')
+          if [[ "$branch" == release-plz-* ]]; then
+            echo "is_release=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_release=false" >> "$GITHUB_OUTPUT"
+          fi
+
   # Publish crates whose Cargo.toml version doesn't match the last release-plz PR's tag yet --
-  # i.e. runs after a release-plz PR (job below) has been reviewed and merged.
+  # i.e. runs after a release-plz PR (job above confirms it) has been reviewed and merged.
   release-plz-release:
     name: Release-plz release
+    needs: check-release-pr
+    if: needs.check-release-pr.outputs.is_release == 'true'
     runs-on: ubuntu-latest
     # Gates the actual crates.io publish behind a required reviewer + main-only branch policy
     # (github.com/crates-lurey-io/retroglyph/settings/environments), on top of trusted
-    # publishing's own repo/workflow-filename check below.
+    # publishing's own repo/workflow-filename check below. Only reached at all when `if:` above
+    # is true, so the reviewer is asked to approve an actual pending release, never a no-op.
     environment: release
     permissions:
       pull-requests: write
