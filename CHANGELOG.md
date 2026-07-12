@@ -7,6 +7,48 @@ SemVer policy this project follows.
 Automated per-crate changelog generation (via `git-cliff`, adopted alongside release-plz) takes over
 after the 0.1.0 release; this file's initial entry is written by hand.
 
+## [0.1.1+retroglyph-widgets](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-widgets-v0.1.0...retroglyph-widgets-v0.1.1) - 2026-07-12
+
+**Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-widgets-v0.1.0...retroglyph-widgets-v0.1.1
+
+
+
+## [0.1.1+retroglyph-terminal-wasm](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-wasm-v0.1.0...retroglyph-terminal-wasm-v0.1.1) - 2026-07-12
+
+**Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-wasm-v0.1.0...retroglyph-terminal-wasm-v0.1.1
+
+
+
+## [0.1.1+retroglyph-software](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-software-v0.1.0...retroglyph-software-v0.1.1) - 2026-07-12
+
+**Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-software-v0.1.0...retroglyph-software-v0.1.1
+
+
+
+## [0.1.1+retroglyph-window](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-window-v0.1.0...retroglyph-window-v0.1.1) - 2026-07-12
+
+**Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-window-v0.1.0...retroglyph-window-v0.1.1
+
+
+
+## [0.1.1+retroglyph-crossterm](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-crossterm-v0.1.0...retroglyph-crossterm-v0.1.1) - 2026-07-12
+
+**Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-crossterm-v0.1.0...retroglyph-crossterm-v0.1.1
+
+
+
+## [0.1.1+retroglyph-terminal](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-v0.1.0...retroglyph-terminal-v0.1.1) - 2026-07-12
+
+**Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-v0.1.0...retroglyph-terminal-v0.1.1
+
+
+
+## [0.1.1+retroglyph-core](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.1.0...retroglyph-core-v0.1.1) - 2026-07-12
+
+**Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.1.0...retroglyph-core-v0.1.1
+
+
+
 ## 0.1.0 - Initial release
 
 First public release of the retroglyph workspace to crates.io:

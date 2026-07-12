@@ -1,6 +1,6 @@
 [package]
 name = "retroglyph-terminal-wasm"
-version = "0.1.0"
+version = "0.1.1"
 description = "WASM/browser terminal backend for retroglyph, driven by pushed events and pulled ANSI output"
 readme = "README.md"
 edition.workspace = true
@@ -18,8 +18,8 @@ workspace = true
 all-features = true
 
 [dependencies]
-retroglyph-core = { path = "../core", version = "0.1.0", default-features = false, features = ["std"] }
-retroglyph-terminal = { path = "../terminal", version = "0.1.0" }
+retroglyph-core = { path = "../core", version = "0.1.1", default-features = false, features = ["std"] }
+retroglyph-terminal = { path = "../terminal", version = "0.1.1" }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 # Version pinned to match the wasm-bindgen dev-dependency in
