@@ -75,6 +75,14 @@ impl WindowConfig {
             fill_viewport: false,
         }
     }
+
+    /// Sets [`fill_viewport`](Self::fill_viewport), returning `self` for chaining off
+    /// [`fit`](Self::fit).
+    #[must_use]
+    pub const fn fill_viewport(mut self, fill_viewport: bool) -> Self {
+        self.fill_viewport = fill_viewport;
+        self
+    }
 }
 
 /// Open a window and drive `app_loop` from the winit event loop.
@@ -605,9 +613,21 @@ where
         // pixel space that `cell_size`/`pixel_to_cell` use, so taps land on
         // the cell actually under the finger/cursor instead of drifting
         // south-east of it as the real DPR grows past the cap. `1.0` on
-        // native, where there's no such cap.
+        // native (no such cap exists there) *and* on wasm when
+        // `fill_viewport` is off: `create_window_and_surface` only computes
+        // a DPR-capped `surface_physical_size` when `fill_viewport` is set
+        // (see its branch above) -- without it, the backing store already
+        // matches the real, uncapped DPR 1:1, so applying the cap
+        // correction anyway scales every reported position *down* toward
+        // the origin for no reason, biasing every tap/click up-and-left of
+        // where it actually landed on any real_dpr > 1.5 device (most
+        // phones, and Retina/HiDPI desktops).
         #[cfg(target_arch = "wasm32")]
-        let scale = wasm_pointer_scale();
+        let scale = if self.fill_viewport {
+            wasm_pointer_scale()
+        } else {
+            1.0
+        };
         #[cfg(not(target_arch = "wasm32"))]
         let scale = 1.0;
         let (x, y) = (position.x * scale, position.y * scale);
