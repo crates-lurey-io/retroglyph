@@ -84,41 +84,57 @@ and git-cliff read stays fully conventional while your work-in-progress commits 
 
 ## Declaring breaking changes
 
-Declare a breaking change with a `!` in the PR title, placed after the scope per Conventional
-Commits grammar: `feat(core)!: ...`, `fix!: ...` (or a `BREAKING CHANGE:` footer in the squash
-commit body). The squash-merge turns that title into the commit release-plz reads, so the `!` is
-what makes release-plz pick the breaking (pre-1.0 minor) bump. A GitHub label cannot do this:
-release-plz reads commit messages, not labels, so a break declared only by a label would still ship
-as a patch. Declare behavioral breaks (same signatures, changed runtime behavior) with `!` too.
+**Do not put `!` on a commit for an ordinary API-signature breaking change.** `semver_check = true`
+(release-plz.toml) runs `cargo-semver-checks` while computing the Release PR and independently
+detects and correctly bumps a crate whose public API actually broke -- it is the real authority, not
+the commit message. Verified concretely: a `#[non_exhaustive]` addition to `retroglyph-core` (a real
+breaking change) computes `retroglyph-core: 0.1.0 -> 0.2.0` from `semver_check` alone, with no `!`
+anywhere in the commit.
 
-`cargo-semver-checks` runs at two points, in two different jobs:
+**Why this matters in a monorepo with atomic, cross-crate commits:** release-plz attributes a
+commit's Conventional Commit classification (including a `!`/`BREAKING CHANGE` marker) to every
+crate whose packaged files that commit touches -- by file path, not by the commit's stated
+`type(scope)`. A single atomic commit that changes `crates/core/` (a real break) and also touches
+`crates/widgets/` (a companion, non-breaking, mechanical fix needed only because of the core change)
+will have its `!` applied to **both** crates, even though widgets' own API is untouched. This isn't
+hypothetical: it happened on this exact repo (`retroglyph-widgets` was incorrectly proposed for a
+`0.1.0 -> 0.2.0` bump from a `feat(core)!:` commit that happened to also touch a private function in
+`crates/widgets/src/interact/pointer.rs`) and required rewriting an already-merged commit's message
+to fix, since `cliff.toml`/`release-plz.toml` config cannot intervene at the granularity needed --
+the misattribution happens before either file's rules are ever read. See the reserved `!` case below
+for commits that unavoidably need to declare a real break; keep them scoped to the crate(s) actually
+breaking, and land any companion cross-crate fix as a **separate** commit/PR when practical, since
+that's the only thing that fully avoids this class of misattribution.
 
-- At release time, inside release-plz (`semver_check = true`): it compares each crate's API against
-  its last crates.io release and forces the proposed bump to be large enough for the changes it
-  finds. This is the real backstop against an undeclared API break shipping as a patch; its result
-  is shown on the Release PR.
-- At PR time (`.github/workflows/check-semver.yml`) as a fast reviewer signal. A crate's
-  `Cargo.toml` version isn't bumped until the Release PR, so a raw semver check fails _any_ breaking
-  PR regardless of intent. This job is therefore skipped when the break is already declared (`!` in
-  the title) or explicitly allowed (`semver-override` label), and gates only _undeclared_ API
-  breaks. A failure means: add the `!`, or apply `semver-override`.
+**Reserve `!` / `BREAKING CHANGE:` for the narrow case `cargo-semver-checks` cannot see:** a
+behavioral break with unchanged public signatures (same types, same function shapes, different
+runtime meaning). That's genuinely rare. Declare it with a `!` in the PR title, placed after the
+scope per Conventional Commits grammar (`feat(core)!: ...`, `fix!: ...`), or a `BREAKING CHANGE:`
+footer in the squash commit body. Prefer keeping that commit scoped to only the crate(s)
+experiencing the break, for the reason above.
 
-The PR-time gate keys off the title `!` and the label, not the commit body, so if you ever declare a
-break with a `BREAKING CHANGE:` footer alone (no title `!`), apply `semver-override` as well to keep
-that gate green. For the normal squash-title workflow the title `!` is both the release-plz bump
-signal and the gate-skip signal, so there's nothing extra to do.
+`cargo-semver-checks` runs at two points:
+
+- At release time, inside release-plz (`semver_check = true`): the authority described above. Its
+  result is shown on the Release PR.
+- At PR time (`.github/workflows/check-semver.yml`), as a **non-blocking** informational comment,
+  not a merge gate. A crate's `Cargo.toml` version isn't bumped until the Release PR, so a hard
+  PR-time gate would fail almost every legitimate breaking PR (since `!` is now reserved for the
+  rare behavioral-break case) and force a `semver-override`-style label onto the common case --
+  exactly backwards. The PR-time job exists purely so a reviewer sees the finding before merge; the
+  real enforcement is `semver_check` on the Release PR.
 
 ## PR labels (overrides)
 
-| Label             | Effect                                                                                                                                 |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `skip-changelog`  | Keep this PR out of the generated changelog. See the note below on how this is wired.                                                  |
-| `semver-override` | Allow an intentional or false-positive `cargo-semver-checks` finding; skips the PR-time semver gate. Does not change the version bump. |
-| `no-release`      | Annotation only: marks a Release PR you intend to hold. Not enforced; the real control is not merging it.                              |
+| Label            | Effect                                                                                                    |
+| ---------------- | --------------------------------------------------------------------------------------------------------- |
+| `skip-changelog` | Keep this PR out of the generated changelog. See the note below on how this is wired.                     |
+| `no-release`     | Annotation only: marks a Release PR you intend to hold. Not enforced; the real control is not merging it. |
 
-There is deliberately no `breaking` label: a label can't drive release-plz's version bump (only the
-`!` in the commit can), so a `breaking` label without a `!` would be a footgun that ships a break as
-a patch. Declare all breaks with `!` in the title instead.
+There is deliberately no `breaking` label: a label can't drive release-plz's version bump (only a
+commit's `!`/`BREAKING CHANGE:` can), so a `breaking` label without one would be a footgun that
+ships a break as a patch. There is also no `semver-override` label anymore: the PR-time semver check
+is non-blocking, so nothing needs overriding.
 
 Note on `skip-changelog`: git-cliff builds the changelog from commit messages, not GitHub labels, so
 label-based exclusion relies on release-plz's GitHub integration attaching PR metadata to each
@@ -211,7 +227,27 @@ The `0.1.0` release was hand-published. These invariants must stay true for auto
 | `crates/*/CHANGELOG.md`              | Per-crate changelog, maintained by release-plz.            |
 | `.github/workflows/release-plz.yml`  | `release-pr` + `release` jobs.                             |
 | `.github/workflows/pr-title.yml`     | Conventional Commit PR-title enforcement.                  |
-| `.github/workflows/check-semver.yml` | PR-time `cargo-semver-checks` gate for undeclared breaks.  |
+| `.github/workflows/check-semver.yml` | Non-blocking PR-time `cargo-semver-checks` report.         |
+
+## Known gotcha: rewriting a commit `main` already has a Release PR built on
+
+If you ever amend an already-merged commit on `main` (e.g. correcting a mis-declared breaking
+change, as happened once on this repo), the _existing_ Release PR's branch does not get rebased
+automatically. release-plz's `release-pr` job will report success and log the correct recomputed
+versions, but silently leave the stale PR's branch content untouched, since it diverges from the new
+`main` and a normal (non-force) update can't reconcile that. Symptom: the Release PR's diff still
+shows the old, wrong numbers despite the workflow run's own logs showing the right ones.
+
+Fix: close the stale Release PR and delete its branch; release-plz creates a fresh one (with a new
+timestamped branch name) on the next push to `main`, correctly based on the new history. If no other
+push is imminent, use `workflow_dispatch` on `Release-plz` (Actions tab, or
+`gh workflow run release-plz.yml`) to trigger it manually rather than waiting.
+
+Rewriting an already-merged commit on `main` at all requires temporarily disabling this repo's
+branch protection ruleset (`Settings -> Rules -> Protect`, or `gh api` on
+`repos/{owner}/{repo}/rulesets/{id}` with `enforcement: disabled`, then `active` again immediately
+after pushing) -- it blocks force-pushes to `main` outright by design. Treat this as a rare,
+deliberate, single-purpose escape hatch, not a normal workflow.
 
 ## Non-blocking follow-ups
 

@@ -59,11 +59,11 @@ CI. The `doc` recipe swallows `cargo doc` failures due to `|| true` chaining. Se
 ## Commit messages
 
 Conventional Commits, scoped to the crate directory under `crates/*` a change touches:
-`feat(widgets): ...`, `fix(software): ...`, `docs(core): ...`. Mark breaking changes with a `!`
-after the scope: `feat(core)!: ...`. Valid scopes: `core`, `terminal`, `crossterm`, `terminal-wasm`,
-`software`, `window`, `widgets`, `examples`. For changes that don't belong to a single crate, use a
-workspace-level scope: `workspace` (tooling, CI, root docs, release config) or `deps` (dependency
-bumps). A scopeless title is still accepted, but prefer `workspace` over omitting the scope.
+`feat(widgets): ...`, `fix(software): ...`, `docs(core): ...`. Valid scopes: `core`, `terminal`,
+`crossterm`, `terminal-wasm`, `software`, `window`, `widgets`, `examples`. For changes that don't
+belong to a single crate, use a workspace-level scope: `workspace` (tooling, CI, root docs, release
+config) or `deps` (dependency bumps). A scopeless title is still accepted, but prefer `workspace`
+over omitting the scope.
 
 The convention is enforced on **PR titles**, not individual commits. The repo is squash-merge only,
 so the PR title becomes the single commit on `main`, and `.github/workflows/pr-title.yml`
@@ -76,6 +76,38 @@ correctly.
 Local `hk` hooks (see Pre-push hooks below) can't enforce this: they run through `jj-hooks`, which
 only supports `pre-commit`/`pre-push` stages, not `commit-msg`. PR-title CI is where enforcement
 lives instead.
+
+### Breaking changes: don't reach for `!` by default
+
+**Do not mark an ordinary API-signature breaking change with `!`.** `release-plz`'s own
+`semver_check` (via `cargo-semver-checks`) independently detects and correctly per-crate-scopes that
+kind of break while computing the Release PR -- verified concretely on this repo: adding
+`#[non_exhaustive]` to a public enum computed the correct `0.1.0 -> 0.2.0` bump from
+`cargo-semver-checks` alone, with no `!` anywhere in the commit.
+
+**Why it matters in this monorepo:** release-plz attributes a commit's Conventional Commit
+classification -- including a `!` -- to every crate whose packaged files that commit touches, by
+file path, not by the commit's stated `type(scope)`. A single atomic commit that changes
+`crates/core/` (a real break) and also touches `crates/widgets/` (a companion, non-breaking,
+mechanical fix needed only because of the core change) will have its `!` applied to **both** crates,
+even though widgets' own API is untouched -- this happened for real on this repo and required
+rewriting an already-merged commit to fix (see `RELEASING.md`'s "Known gotcha" section). Since
+atomic, cross-crate commits are the whole point of this being a monorepo, don't try to avoid this by
+splitting commits; avoid it by not putting `!` on commits that don't need it.
+
+**Reserve `!` / a `BREAKING CHANGE:` footer for the narrow case `cargo-semver-checks` can't see:** a
+behavioral break with unchanged public signatures (same types, same function shapes, different
+runtime meaning). That's genuinely rare. When you do need it, prefer keeping that commit scoped to
+only the crate(s) actually experiencing the break.
+
+### PR labels
+
+| Label            | Effect                                                                                                        |
+| ---------------- | ------------------------------------------------------------------------------------------------------------- |
+| `skip-changelog` | Keep this PR out of the generated per-crate changelog (chore/CI/typo noise).                                  |
+| `no-release`     | Annotation only, marking a Release PR you intend to hold. Not enforced -- the real control is not merging it. |
+
+There is no `breaking` label and no `semver-override` label; see `RELEASING.md` for why.
 
 ## Pre-push hooks
 
