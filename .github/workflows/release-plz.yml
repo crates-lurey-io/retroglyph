@@ -1,84 +1,39 @@
 name: Release-plz
 
+# Automated release flow (see RELEASING.md):
+#   - release-plz-pr: on every push to main, opens/updates a standing Release PR that bumps each
+#     changed crate's version and per-crate CHANGELOG.md from the conventional history.
+#   - release-plz-release: on every push to main, publishes any crate whose Cargo.toml version is
+#     ahead of crates.io (i.e. right after the Release PR merges), tags it, and creates the GitHub
+#     release. A no-op when nothing is unpublished.
+#
+# The developer never bumps a version or pushes a tag by hand: review PRs, then merge the Release PR.
+
 on:
   push:
     branches: [main]
-  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
-  # Releases are triggered by manually bumping the crate versions in Cargo.toml and merging to
-  # main (see RELEASING.md) -- release-plz's release-pr command is deliberately not used, because
-  # it auto-opens version-bump PRs for *any* commit touching crate files (that's what produced the
-  # unintended https://github.com/crates-lurey-io/retroglyph/pull/78).
-  #
-  # This job cheaply determines whether this push actually bumped a crate version, *without*
-  # referencing the `release` environment -- so a push that doesn't bump versions never blocks
-  # on (or prompts for) the environment's required-reviewer approval. `release-plz release`
-  # itself is already a no-op when every version is published, but that check happens *inside*
-  # the job's steps -- too late to stop GitHub from blocking the job at the environment gate
-  # first and pinging a reviewer for a no-op run.
-  #
-  # The baseline is plain git history, not tags or the crates.io index: each crate's Cargo.toml
-  # version at HEAD is compared against its version at `github.event.before` (the commit main
-  # pointed at right before this push). Any difference means a version-bump PR landed and a
-  # release is due. Deliberately not tag-based or crates.io-based -- no extra state to keep in
-  # sync, just the two Cargo.toml revisions git already has.
-  check-versions:
-    name: Check for version bumps in this push
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push'
-    outputs:
-      needs_release: ${{ steps.check.outputs.needs_release }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Compare workspace crate versions against the pre-push commit
-        id: check
-        run: |
-          before="${{ github.event.before }}"
-          needs_release=false
-          # New branch / force-push: no meaningful "before" commit to diff against. Treat as
-          # not needing a release rather than guessing; a real bump will show up on the next
-          # normal push once history is linear again.
-          if [[ -z "$before" || "$before" =~ ^0+$ ]] || ! git cat-file -e "$before" 2>/dev/null; then
-            echo "No usable base commit (new branch or force-push); skipping version-bump check."
-          else
-            for manifest in crates/*/Cargo.toml; do
-              name=$(grep -m1 '^name = ' "$manifest" | cut -d'"' -f2)
-              new_version=$(grep -m1 '^version = ' "$manifest" | cut -d'"' -f2)
-              old_version=$(git show "$before:$manifest" 2>/dev/null | grep -m1 '^version = ' | cut -d'"' -f2 || true)
-              if [[ "$new_version" != "$old_version" ]]; then
-                echo "$name: ${old_version:-<new>} -> $new_version (version changed)"
-                needs_release=true
-              fi
-            done
-          fi
-          echo "needs_release=$needs_release" >> "$GITHUB_OUTPUT"
-
-  # Publish crates whose version was bumped in this push -- i.e. runs after a manual
-  # version-bump PR (job above confirms it) has been merged to main. `workflow_dispatch` always
-  # runs (manual trigger implies intent; there's no "push" event to diff against).
+  # Publishes bumped crates once the Release PR is merged. The single human gate is that merge; the
+  # `release` environment keeps its main-only branch policy but no longer requires a separate
+  # reviewer (a GitHub environment setting, not expressible here).
   release-plz-release:
     name: Release-plz release
-    needs: check-versions
-    if:
-      github.event_name == 'workflow_dispatch' || needs.check-versions.outputs.needs_release ==
-      'true'
     runs-on: ubuntu-latest
-    # Gates the actual crates.io publish behind a required reviewer + main-only branch policy
-    # (github.com/crates-lurey-io/retroglyph/settings/environments), on top of trusted
-    # publishing's own repo/workflow-filename check below. Only reached at all when `if:` above
-    # is true, so the reviewer is asked to approve an actual pending release, never a no-op.
+    # Don't run two publish attempts at once; a concurrent double-publish surfaces confusing
+    # "already exists" errors even though release-plz skips already-published versions.
+    concurrency:
+      group: release-plz-release-${{ github.ref }}
+      cancel-in-progress: false
     environment: release
     permissions:
-      pull-requests: write
       contents: write
-      # Required for trusted publishing: release-plz exchanges this OIDC token for a short-lived
-      # crates.io publish token itself (same API calls as rust-lang/crates-io-auth-action), so no
-      # CARGO_REGISTRY_TOKEN secret exists in this repo at all. Configured per-crate on crates.io
-      # (Settings -> Trusted Publishing -> GitHub -> owner crates-lurey-io, repo retroglyph,
-      # workflow release-plz.yml, environment release) for all 7 publishable crates.
+      # Trusted publishing: release-plz exchanges this OIDC token for a short-lived crates.io token
+      # itself, so there is no CARGO_REGISTRY_TOKEN secret. Configured per-crate on crates.io
+      # (Settings -> Trusted Publishing) for all seven publishable crates.
       id-token: write
     steps:
       - uses: actions/checkout@v4
@@ -89,4 +44,30 @@ jobs:
         with:
           command: release
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Maintains the standing Release PR. Runs cargo-semver-checks (release-plz.toml semver_check) to
+  # keep each proposed bump adequate for the detected API changes.
+  release-plz-pr:
+    name: Release-plz PR
+    runs-on: ubuntu-latest
+    # Never run two PR updates concurrently, but don't cancel an in-flight one mid-write.
+    concurrency:
+      group: release-plz-pr-${{ github.ref }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: release-plz/action@v0.5
+        with:
+          command: release-pr
+        env:
+          # NOTE: a Release PR opened with the default GITHUB_TOKEN does not trigger other
+          # workflows (GitHub's loop-prevention), so CI won't run on the Release PR itself. If that
+          # becomes a problem, swap in a GitHub App token or PAT here (see release-plz docs).
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -59,16 +59,23 @@ CI. The `doc` recipe swallows `cargo doc` failures due to `|| true` chaining. Se
 ## Commit messages
 
 Conventional Commits, scoped to the crate directory under `crates/*` a change touches:
-`feat(widgets): ...`, `fix(software): ...`, `docs(core): ...`. Valid scopes: `core`, `terminal`,
-`crossterm`, `terminal-wasm`, `software`, `window`, `widgets`, `examples`. Omit the scope for
-workspace-wide changes (tooling, CI, root docs).
+`feat(widgets): ...`, `fix(software): ...`, `docs(core): ...`. Mark breaking changes with a `!`
+after the scope: `feat(core)!: ...`. Valid scopes: `core`, `terminal`, `crossterm`, `terminal-wasm`,
+`software`, `window`, `widgets`, `examples`. For changes that don't belong to a single crate, use a
+workspace-level scope: `workspace` (tooling, CI, root docs, release config) or `deps` (dependency
+bumps). A scopeless title is still accepted, but prefer `workspace` over omitting the scope.
 
-This isn't automatically enforced today: `hk` (this repo's hook runner, see Pre-push hooks below) is
-wired through `jj-hooks`, which only supports `pre-commit`/`pre-push` stages, not a `commit-msg`
-stage, since jj has no discrete "commit" step the way git does. The convention is real and load-
-bearing anyway: `release-plz` (see `RELEASING.md`) reads this history to compute per-crate version
-bumps after the 0.1.0 release, so a commit that doesn't follow it simply won't be attributed a
-version bump correctly.
+The convention is enforced on **PR titles**, not individual commits. The repo is squash-merge only,
+so the PR title becomes the single commit on `main`, and `.github/workflows/pr-title.yml`
+(`amannn/action-semantic-pull-request`) validates each title against the grammar and scope list
+above. Work-in-progress commits inside a branch are unconstrained. This is load-bearing:
+`release-plz` (see `RELEASING.md`) reads the squashed history to compute per-crate version bumps and
+changelogs, so a PR title that doesn't follow the convention won't be attributed a version bump
+correctly.
+
+Local `hk` hooks (see Pre-push hooks below) can't enforce this: they run through `jj-hooks`, which
+only supports `pre-commit`/`pre-push` stages, not `commit-msg`. PR-title CI is where enforcement
+lives instead.
 
 ## Pre-push hooks
 

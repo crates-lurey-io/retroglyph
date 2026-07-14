@@ -1,5 +1,14 @@
 name: Check Semver
 
+# Fast PR-time reviewer signal for API breaking changes. This is NOT the enforcement mechanism --
+# release-plz's own semver_check (release-plz.toml) runs cargo-semver-checks while computing the
+# Release PR and forces an adequate bump there. See RELEASING.md.
+#
+# A crate's Cargo.toml version isn't bumped until the Release PR, so a raw semver check fails *any*
+# breaking PR regardless of intent. This job therefore gates only UNDECLARED breaks: it is skipped
+# when the break is declared with `!` in the PR title (feat!:, feat(core)!:) or explicitly allowed
+# with the `semver-override` label. A failure means: add the `!`, or apply `semver-override`.
+
 on:
   pull_request:
     branches: [main]
@@ -8,6 +17,12 @@ jobs:
   check-semver:
     name: Check semver
     runs-on: ubuntu-latest
+    # `contains(title, '!:')` matches both `feat!:` and `feat(core)!:` since `!:` precedes the colon
+    # in both. A break declared via a BREAKING CHANGE: footer alone (no title `!`) should also carry
+    # the `semver-override` label; RELEASING.md documents this.
+    if: >-
+      !contains(github.event.pull_request.title, '!:') &&
+      !contains(github.event.pull_request.labels.*.name, 'semver-override')
     steps:
       - uses: actions/checkout@v4
       - uses: obi1kenobi/cargo-semver-checks-action@v2

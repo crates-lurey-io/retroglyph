@@ -1,23 +1,25 @@
 # release-plz configuration.
 # https://release-plz.dev/docs/config
 #
-# Releases are driven by manual version bumps, not by release-plz PRs: bump the crate versions in
-# a normal PR (lockstep, see RELEASING.md), update CHANGELOG.md, and merge to main. CI
-# (.github/workflows/release-plz.yml) then runs `release-plz release`, which publishes any crate
-# whose Cargo.toml version is ahead of crates.io, tags it, and creates the GitHub release.
+# Flow (see RELEASING.md for the full picture):
+#   1. Land PRs on main. Each PR title is a Conventional Commit; squash-merge makes it the commit.
+#   2. release-plz's `release-pr` command keeps a standing Release PR open, bumping each changed
+#      crate's version + per-crate CHANGELOG.md from that conventional history.
+#   3. Merging the Release PR triggers `release-plz release`, which publishes the bumped crates to
+#      crates.io, tags them, and creates the GitHub releases.
 #
-# The `release-pr` command (the mode that watches commit history and auto-opens version-bump PRs)
-# is deliberately not wired up anywhere: an earlier setup ran it on every push to main, and since
-# release-plz treats *any* commit touching a crate's files as releasable by default, it opened
-# https://github.com/crates-lurey-io/retroglyph/pull/78 unprompted (a v0.1.1 bump with an empty
-# changelog, closed as unintended). Manual bumps keep the release decision with a human.
+# Versioning is per-crate: release-plz bumps only the crates that changed, cascading through the
+# retroglyph-core dependency graph. There is no lockstep and no single workspace changelog.
 
 [workspace]
-changelog_path = "./CHANGELOG.md"
+# Per-crate CHANGELOG.md (release-plz default: crates/<crate>/CHANGELOG.md). No changelog_path
+# override here, unlike the previous single-file setup.
 changelog_config = "cliff.toml"
-# Handled by a separate cargo-semver-checks CI job instead (.github/workflows/check-semver.yml),
-# so the version bump and the actual API-compatibility check surface independently.
-semver_check = false
+
+# Run cargo-semver-checks while computing the Release PR so the proposed bump is always large enough
+# for the API changes release-plz detects. This is the real backstop against an undeclared breaking
+# change shipping as a patch; the PR-time check-semver.yml job is only a fast reviewer signal.
+semver_check = true
 
 git_release_body = """
 {{ changelog | replace(from=" by @", to=" by ") }}

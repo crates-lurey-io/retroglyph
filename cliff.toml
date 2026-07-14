@@ -116,6 +116,13 @@ commit_preprocessors = [
 # convention (core, terminal, crossterm, terminal-wasm, software, window, widgets, examples)
 commit_parsers = [
   { field = "id", pattern = "0000000", skip = true }, # release-plz's release-commit placeholder
+  # skip-changelog: keep a PR out of the changelog. Two mechanisms (see RELEASING.md):
+  #   1. best-effort GitHub label match -- relies on release-plz enriching each commit with its PR
+  #      metadata; the field is null (no match) when that enrichment isn't present, so this is safe
+  #      even without the integration.
+  #   2. guaranteed fallback -- a `changelog: ignore` line in the squash commit body.
+  { field = "github.pr_labels", pattern = "skip-changelog", skip = true },
+  { footer = "(?i)^changelog: ?ignore", skip = true },
   { message = "^feat", group = "<!-- 00 -->Features" },
   { message = "^[fF]ix", group = "<!-- 01 -->Bug Fixes" },
   { message = "^refactor", group = "<!-- 02 -->Refactor" },
