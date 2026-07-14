@@ -1,0 +1,55 @@
+name: PR Title
+
+# Conventional Commits are enforced on PR titles only, not individual commits (see RELEASING.md).
+# The repo is squash-merge only, so the PR title becomes the single commit on main, keeping the
+# history release-plz and git-cliff read fully conventional while WIP commits stay unconstrained.
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  pr-title:
+    name: Validate PR title
+    runs-on: ubuntu-latest
+    steps:
+      - uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # Conventional Commit types allowed in the title. Mirrors cliff.toml's commit_parsers.
+          types: |
+            feat
+            fix
+            refactor
+            docs
+            perf
+            style
+            test
+            chore
+            build
+            ci
+            revert
+          # Allowed scopes. Crate scopes (the crate dir under crates/*) plus workspace-level scopes
+          # for changes that don't belong to a single crate:
+          #   workspace - workspace-wide changes (tooling, CI, root docs, release config)
+          #   deps      - dependency bumps (also what Dependabot uses)
+          # requireScope is false, so a scopeless title is still allowed (e.g. release-plz's own
+          # Release PR); the workspace scope is the convention, not a hard requirement.
+          scopes: |
+            core
+            terminal
+            crossterm
+            terminal-wasm
+            software
+            window
+            widgets
+            examples
+            workspace
+            deps
+          requireScope: false
+          # A `!` before the colon (feat(core)!: ...) is the breaking-change signal; the action
+          # accepts it as valid Conventional Commits grammar.
