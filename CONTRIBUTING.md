@@ -49,7 +49,15 @@ signatures don't change but runtime behavior does, which no tool can detect auto
 not sure whether your change needs `!`, it almost certainly doesn't -- open the PR without it and
 let CI's semver check tell you.
 
-**Labels** you may see or apply on a PR:
+**Labels** are applied along three axes, mostly automatically: `c:<crate>` (area, mirrors the
+Conventional Commit scopes above), `p:0`-`p:3` (priority, critical to low), and `t:<type>`
+(bug/feature/perf/docs/chore/breaking/question). `.github/labels.yml` is the source of truth (synced
+with `.github/scripts/sync-labels.sh`); `.github/labeler.yml` auto-applies and updates `c:` labels
+on PRs from changed file paths as the PR evolves, and `.github/workflows/labeler.yml` derives
+`t:`/`c:` labels from the PR title and marks new issues `s:needs-triage` unless filed by a
+maintainer.
+
+Other labels you may see or apply on a PR:
 
 | Label            | Effect                                                                           |
 | ---------------- | -------------------------------------------------------------------------------- |
