@@ -102,22 +102,37 @@ pub fn png_snapshot<E: Example>(cols: u16, rows: u16, scale: u8) -> Vec<u8> {
     out
 }
 
-/// Locates a compiled example binary next to the current test binary
-/// (`target/debug/deps/../examples/<name>`).
+/// A build directory dedicated to [`build_crossterm_example`]'s output, isolated from the
+/// workspace's normal `target/` dir.
+///
+/// `cargo test --workspace --all-features` (see this crate's `AGENTS.md`/`docs/testing.md`)
+/// compiles every `[[example]]` -- including with the `software` feature, which
+/// [`build_crossterm_example`]'s own doc comment already explains is unusable in a PTY -- into
+/// the ordinary `target/debug/examples/` directory *before* any `#[test]` runs. Building the
+/// crossterm-only variant back into that same path (as this used to do) means every single
+/// `svg_snapshot` test forces a real relink there, fighting the `--all-features` build for the
+/// same output file on every `cargo test` invocation, warm cache or not.
+///
+/// That relink churn isn't just wasted compile time: on macOS, first executing a binary the
+/// kernel hasn't seen this exact content at (a fresh relink counts) triggers a synchronous
+/// code-signature validation that measured ~1.5-2 real seconds per example here -- almost all of
+/// `svg_snapshot`'s wall time for the smaller examples. Routing this crate's crossterm builds to
+/// their own `--target-dir` sidesteps both costs at once: they're never touched by the
+/// `--all-features` build, so once each example has been built here (and executed once, paying
+/// that validation cost a single time ever), every later `cargo test` run -- this one included --
+/// finds a byte-identical, already-validated binary and skips straight to the real capture.
 #[cfg(not(target_arch = "wasm32"))]
-fn example_bin(name: &str) -> PathBuf {
-    let mut path = std::env::current_exe().expect("current exe");
-    path.pop(); // deps/
-    path.pop(); // debug/ or release/
-    path.push("examples");
-    path.push(name);
-    path
+fn crossterm_target_dir() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("target")
+        .join("pty-examples")
 }
 
-/// Builds `example_name` with `--features crossterm` (regardless of what
-/// features this test binary itself was compiled with -- `cargo test
-/// --all-features` would otherwise leave a GUI (`software`) binary on disk
-/// that hangs when spawned in a PTY) and returns its path.
+/// Builds `example_name` with `--features crossterm` into [`crossterm_target_dir`] (regardless of
+/// what features this test binary itself was compiled with -- `cargo test --all-features` would
+/// otherwise leave a GUI (`software`) binary on disk that hangs when spawned in a PTY) and returns
+/// its path.
 ///
 /// # Panics
 ///
@@ -127,6 +142,7 @@ fn example_bin(name: &str) -> PathBuf {
 pub fn build_crossterm_example(example_name: &str) -> PathBuf {
     let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
     let manifest = env!("CARGO_MANIFEST_DIR");
+    let target_dir = crossterm_target_dir();
     let status = std::process::Command::new(&cargo)
         .args([
             "build",
@@ -136,14 +152,16 @@ pub fn build_crossterm_example(example_name: &str) -> PathBuf {
             example_name,
             "--features",
             "crossterm",
+            "--target-dir",
         ])
+        .arg(&target_dir)
         .status()
         .expect("failed to run cargo build");
     assert!(
         status.success(),
         "cargo build --example {example_name} --features crossterm failed"
     );
-    example_bin(example_name)
+    target_dir.join("debug").join("examples").join(example_name)
 }
 
 /// Spawns `bin` in a PTY sized `rows`x`cols`, writes `input`, waits until the
