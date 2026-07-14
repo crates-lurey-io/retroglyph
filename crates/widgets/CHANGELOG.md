@@ -7,6 +7,79 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style -->
 
+## [0.1.1+retroglyph-widgets](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-widgets-v0.1.0...retroglyph-widgets-v0.1.1) - 2026-07-14
+
+### Features
+
+- [d600806](
+https://github.com/crates-lurey-io/retroglyph/commit/d600806d827fdfa7d76eeaab51cc156807714a46) *(core)* Mark evolving input/event enums non_exhaustive by `@matanlurey`
+
+  > Event, KeyCode, MouseButton, and MouseEventKind are all expected to gain
+  > variants as backend input coverage grows (Event::Paste/FocusGained/FocusLost
+  > are already planned; KeyCode/MouseButton/MouseEventKind each lag real
+  > upstream data winit/crossterm already expose, e.g. side mouse buttons and
+  > horizontal scroll). Without #[non_exhaustive] each future addition would be a
+  > breaking change and force a major bump for a purely additive change.
+  >
+  > SystemTheme and Flow were considered and deliberately left exhaustive:
+  > SystemTheme's own doc comment already argues no third state should exist,
+  > and a hypothetical Flow::Paused would need new driver-loop semantics anyway
+  > (a redesign, not an additive case), so a major bump is the right signal for
+  > either rather than something #[non_exhaustive] should paper over.
+  >
+  > Color, AnsiColor, HAlign, and VAlign stay exhaustive as genuinely closed
+  > encodings (unchanged from before this commit).
+  >
+  > Fixes required by the two enums that do change:
+  > - widgets::interact::pointer::button_slot now returns Option<usize> instead
+  >   of aliasing an unknown future MouseButton onto an existing slot, which
+  >   would have silently misreported that button's state.
+  > - 04_mouse example's match on MouseEventKind gains a wildcard arm.
+  >
+  > No longer marked as a Conventional Commits breaking change (dropped the !):
+  > cargo-semver-checks / release-plz's semver_check independently detects and
+  > correctly per-crate-scopes this exact class of break (verified: retroglyph-core
+  > still computes 0.2.0 from the enum_marked_non_exhaustive finding alone, while
+  > retroglyph-widgets -- whose own API is unaffected -- correctly gets only a 0.1.1
+  > patch instead of being dragged to 0.2.0 by a commit-message marker that doesn't
+  > distinguish which crate it applies to). See RELEASING.md's revised breaking-change
+  > policy.
+
+### Continuous Integration
+
+- [1d81906](
+https://github.com/crates-lurey-io/retroglyph/commit/1d81906ea8e380d64de0e05345f103627ef49406) *(workspace)* Automated per-crate release-plz workflow by `@matanlurey` in [#80](
+https://github.com/crates-lurey-io/retroglyph/pull/80)
+
+  > * ci(release): adopt per-crate release-plz flow with PR-title enforcement
+  >
+  > Re-enable release-plz's standing Release PR (release-pr + release jobs) so
+  > version bumps and per-crate changelogs are computed from conventional PR-title
+  > history and published on Release-PR merge; developers never push tags.
+  >
+  > - release-plz.toml: per-crate changelogs (drop changelog_path), semver_check=true
+  > - cliff.toml: skip-changelog via github.pr_labels label + changelog: ignore footer
+  > - release-plz.yml: two-job release-pr/release, concurrency guards, trusted publishing
+  > - check-semver.yml: gate only undeclared breaks (skip on title ! or semver-override)
+  > - pr-title.yml: enforce Conventional Commit PR titles + scope list
+  >
+  > * docs(changelog): split workspace changelog into per-crate files
+  >
+  > Per-crate release-plz needs a CHANGELOG.md per crate. Seed each with its
+  > hand-written 0.1.0 entry; the root CHANGELOG.md becomes an index.
+  >
+  > * docs: rewrite RELEASING.md for the automated release flow
+  >
+  > Document the per-crate, release-plz-driven flow: conventional PR titles,
+  > squash-merge, standing Release PR as the single approval gate, breaking
+  > declared via title !, cargo-semver-checks roles, PR labels, and no pre-1.0
+  > prerelease channel. Update AGENTS.md's commit-message section: enforcement
+  > now lives in pr-title.yml, not local hooks.
+
+**Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-widgets-v0.1.0...retroglyph-widgets-v0.1.1
+
+
+
 ## 0.1.0 - Initial release
 
 - Initial public release. Immediate-mode drawing helpers (panels, gauges, tables, sparklines,

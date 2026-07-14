@@ -7,6 +7,43 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style -->
 
+## [0.1.1+retroglyph-terminal-wasm](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-wasm-v0.1.0...retroglyph-terminal-wasm-v0.1.1) - 2026-07-14
+
+### Continuous Integration
+
+- [1d81906](
+https://github.com/crates-lurey-io/retroglyph/commit/1d81906ea8e380d64de0e05345f103627ef49406) *(workspace)* Automated per-crate release-plz workflow by `@matanlurey` in [#80](
+https://github.com/crates-lurey-io/retroglyph/pull/80)
+
+  > * ci(release): adopt per-crate release-plz flow with PR-title enforcement
+  >
+  > Re-enable release-plz's standing Release PR (release-pr + release jobs) so
+  > version bumps and per-crate changelogs are computed from conventional PR-title
+  > history and published on Release-PR merge; developers never push tags.
+  >
+  > - release-plz.toml: per-crate changelogs (drop changelog_path), semver_check=true
+  > - cliff.toml: skip-changelog via github.pr_labels label + changelog: ignore footer
+  > - release-plz.yml: two-job release-pr/release, concurrency guards, trusted publishing
+  > - check-semver.yml: gate only undeclared breaks (skip on title ! or semver-override)
+  > - pr-title.yml: enforce Conventional Commit PR titles + scope list
+  >
+  > * docs(changelog): split workspace changelog into per-crate files
+  >
+  > Per-crate release-plz needs a CHANGELOG.md per crate. Seed each with its
+  > hand-written 0.1.0 entry; the root CHANGELOG.md becomes an index.
+  >
+  > * docs: rewrite RELEASING.md for the automated release flow
+  >
+  > Document the per-crate, release-plz-driven flow: conventional PR titles,
+  > squash-merge, standing Release PR as the single approval gate, breaking
+  > declared via title !, cargo-semver-checks roles, PR labels, and no pre-1.0
+  > prerelease channel. Update AGENTS.md's commit-message section: enforcement
+  > now lives in pr-title.yml, not local hooks.
+
+**Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-wasm-v0.1.0...retroglyph-terminal-wasm-v0.1.1
+
+
+
 ## 0.1.0 - Initial release
 
 - Initial public release. Browser terminal backend, driven by pushed events and pulled ANSI.
