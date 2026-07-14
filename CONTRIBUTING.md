@@ -26,6 +26,36 @@ are treated as errors.
 | `just test`            | Run all tests with all features                                                  |
 | `just test-v`          | Run all tests with stdout visible                                                |
 
+## Commit messages, PR titles, and labels
+
+This repo is squash-merge only, and PR titles (not individual commits) must follow
+[Conventional Commits](https://www.conventionalcommits.org): `feat(widgets): add sparkline`,
+`fix(core): ...`, `docs(software): ...`. The squash-merge turns your PR title into the single commit
+on `main`, which is what drives per-crate version bumps and changelogs (via
+[release-plz](https://release-plz.dev)) -- see [`RELEASING.md`](RELEASING.md) for the full automated
+release flow. Commits inside your branch are unconstrained; only the PR title is checked (CI:
+`pr-title.yml`).
+
+**Scope** is the crate directory under `crates/*` your change touches: `core`, `terminal`,
+`crossterm`, `terminal-wasm`, `software`, `window`, `widgets`, `examples`. For changes that don't
+belong to one crate, use `workspace` (tooling, CI, docs, release config) or `deps` (dependency
+bumps). A scopeless title is accepted but `workspace` is preferred.
+
+**Breaking changes:** don't add `!` for an ordinary API-breaking change (removing a public method,
+changing a signature, etc.) -- `cargo-semver-checks`, run automatically by release-plz, detects
+those and computes the correct version bump on its own, without any commit-message signal. Reserve
+`!` (`feat(core)!: ...`) or a `BREAKING CHANGE:` footer for the rarer case where the public API's
+signatures don't change but runtime behavior does, which no tool can detect automatically. If you're
+not sure whether your change needs `!`, it almost certainly doesn't -- open the PR without it and
+let CI's semver check tell you.
+
+**Labels** you may see or apply on a PR:
+
+| Label            | Effect                                                                           |
+| ---------------- | -------------------------------------------------------------------------------- |
+| `skip-changelog` | Excludes this PR from the generated per-crate changelog (for chore/CI/typo PRs). |
+| `no-release`     | Marks a maintainer's Release PR as intentionally held; purely informational.     |
+
 ## Crate layout
 
 ```text
