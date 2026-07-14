@@ -12,6 +12,11 @@ name: Release-plz
 on:
   push:
     branches: [main]
+  # Lets an operator manually re-trigger this from the Actions tab or `gh workflow run` --
+  # e.g. if the Release PR's branch ever needs recomputing without an incidental push to main
+  # (this happened once: a history rewrite of an already-merged commit left the existing Release
+  # PR branch diverged from the new main, and it silently failed to update in place).
+  workflow_dispatch:
 
 permissions:
   contents: read

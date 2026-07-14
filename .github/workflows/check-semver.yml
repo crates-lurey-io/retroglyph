@@ -1,13 +1,15 @@
 name: Check Semver
 
-# Fast PR-time reviewer signal for API breaking changes. This is NOT the enforcement mechanism --
-# release-plz's own semver_check (release-plz.toml) runs cargo-semver-checks while computing the
-# Release PR and forces an adequate bump there. See RELEASING.md.
+# Fast PR-time reviewer signal for API breaking changes. NOT the enforcement mechanism, and NOT a
+# merge gate (not in ci.yml's `required` aggregator, and the step below is continue-on-error): the
+# real authority is release-plz's own semver_check (release-plz.toml), which runs cargo-semver-checks
+# while computing the Release PR and correctly bumps (and per-crate scopes) whatever it finds. See
+# RELEASING.md's "Declaring breaking changes" section.
 #
-# A crate's Cargo.toml version isn't bumped until the Release PR, so a raw semver check fails *any*
-# breaking PR regardless of intent. This job therefore gates only UNDECLARED breaks: it is skipped
-# when the break is declared with `!` in the PR title (feat!:, feat(core)!:) or explicitly allowed
-# with the `semver-override` label. A failure means: add the `!`, or apply `semver-override`.
+# Deliberately non-blocking rather than gated on a `!`/label skip condition: `!` is now reserved for
+# the narrow behavioral-break case semver_check can't see, so a hard PR-time gate would fail almost
+# every legitimate API-breaking PR and force a label onto the common case -- backwards. This job
+# exists purely so a reviewer sees the finding before merge.
 
 on:
   pull_request:
@@ -17,12 +19,7 @@ jobs:
   check-semver:
     name: Check semver
     runs-on: ubuntu-latest
-    # `contains(title, '!:')` matches both `feat!:` and `feat(core)!:` since `!:` precedes the colon
-    # in both. A break declared via a BREAKING CHANGE: footer alone (no title `!`) should also carry
-    # the `semver-override` label; RELEASING.md documents this.
-    if: >-
-      !contains(github.event.pull_request.title, '!:') &&
-      !contains(github.event.pull_request.labels.*.name, 'semver-override')
     steps:
       - uses: actions/checkout@v4
       - uses: obi1kenobi/cargo-semver-checks-action@v2
+        continue-on-error: true
