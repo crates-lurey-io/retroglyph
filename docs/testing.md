@@ -35,6 +35,14 @@ one source of truth:
 - **Crossterm SVG** — a real PTY capture, parsed via the `vt100` crate, verifying the ANSI/SGR
   output an actual terminal would receive.
 
+The crossterm binary each `svg_snapshot` test spawns is built with its own `--target-dir`
+(`target/pty-examples/`, see `support::build_crossterm_example`), separate from the workspace's
+normal `target/`. `cargo test --workspace --all-features` builds every example with the `software`
+feature (unusable in a PTY) before any test runs, so building the crossterm-only variant back into
+the same output path would force a relink -- and, on macOS, a real code-signature validation cost of
+roughly a second or two -- on every single test run. The isolated target dir keeps that binary
+byte-identical (and already validated) across runs instead.
+
 Every example under `examples/examples/*.rs` is also auto-built to three WASM variants (headless /
 xterm.js terminal / software canvas) and deployed to the docs gallery by
 `.github/workflows/docs.yml` on every push, so each example carries real, ongoing CI cost, not just
