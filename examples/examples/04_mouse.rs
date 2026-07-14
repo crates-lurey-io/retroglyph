@@ -61,6 +61,7 @@ impl Mouse {
                         }
                         MouseEventKind::ScrollUp => "ScrollUp".to_owned(),
                         MouseEventKind::ScrollDown => "ScrollDown".to_owned(),
+                        _ => "Unknown".to_owned(),
                     };
                 }
                 _ => {}
