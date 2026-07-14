@@ -76,6 +76,7 @@ impl Not for KeyModifiers {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 /// Keyboard key codes.
 pub enum KeyCode {
     /// A character key.
@@ -179,6 +180,7 @@ impl KeyEvent {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 /// Mouse button identifiers.
 pub enum MouseButton {
     /// Left mouse button.
@@ -190,6 +192,7 @@ pub enum MouseButton {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 /// Kinds of mouse events.
 pub enum MouseEventKind {
     /// Mouse button pressed.
@@ -238,6 +241,7 @@ pub enum SystemTheme {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 /// Terminal input event.
 pub enum Event {
     /// Keyboard event.
