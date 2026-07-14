@@ -18,11 +18,16 @@ struct ButtonState {
 /// dependency-minimal, `no_std`-friendly habits (see
 /// [`Sense`](crate::Sense)'s doc comment for the same reasoning applied to
 /// bitflags).
-const fn button_slot(button: MouseButton) -> usize {
+///
+/// `MouseButton` is `#[non_exhaustive]`, so any future variant this crate
+/// doesn't yet know about returns `None` rather than aliasing onto an
+/// existing slot (which would silently misreport that button's state).
+const fn button_slot(button: MouseButton) -> Option<usize> {
     match button {
-        MouseButton::Left => 0,
-        MouseButton::Right => 1,
-        MouseButton::Middle => 2,
+        MouseButton::Left => Some(0),
+        MouseButton::Right => Some(1),
+        MouseButton::Middle => Some(2),
+        _ => None,
     }
 }
 
@@ -72,18 +77,24 @@ impl Pointer {
         self.pos = Some(mouse.position);
         match mouse.kind {
             MouseEventKind::Down(button) => {
-                let slot = &mut self.buttons[button_slot(button)];
-                slot.down = true;
-                slot.pressed = true;
+                if let Some(slot) = button_slot(button) {
+                    let slot = &mut self.buttons[slot];
+                    slot.down = true;
+                    slot.pressed = true;
+                }
             }
             MouseEventKind::Up(button) => {
-                let slot = &mut self.buttons[button_slot(button)];
-                slot.down = false;
-                slot.released = true;
+                if let Some(slot) = button_slot(button) {
+                    let slot = &mut self.buttons[slot];
+                    slot.down = false;
+                    slot.released = true;
+                }
             }
             MouseEventKind::ScrollUp => self.scroll_delta -= 1,
             MouseEventKind::ScrollDown => self.scroll_delta += 1,
-            MouseEventKind::Moved => {}
+            // Moved, plus future MouseEventKind/MouseButton variants (both
+            // #[non_exhaustive]): ignored until this crate is updated to track them.
+            _ => {}
         }
     }
 
@@ -107,21 +118,39 @@ impl Pointer {
     }
 
     /// `true` while `button` is held down.
+    ///
+    /// Always `false` for a `MouseButton` variant this crate doesn't yet track
+    /// (see `button_slot`'s doc comment).
     #[must_use]
     pub const fn is_down(&self, button: MouseButton) -> bool {
-        self.buttons[button_slot(button)].down
+        match button_slot(button) {
+            Some(slot) => self.buttons[slot].down,
+            None => false,
+        }
     }
 
     /// `true` for exactly the frame `button` went down.
+    ///
+    /// Always `false` for a `MouseButton` variant this crate doesn't yet track
+    /// (see `button_slot`'s doc comment).
     #[must_use]
     pub const fn pressed(&self, button: MouseButton) -> bool {
-        self.buttons[button_slot(button)].pressed
+        match button_slot(button) {
+            Some(slot) => self.buttons[slot].pressed,
+            None => false,
+        }
     }
 
     /// `true` for exactly the frame `button` went up.
+    ///
+    /// Always `false` for a `MouseButton` variant this crate doesn't yet track
+    /// (see `button_slot`'s doc comment).
     #[must_use]
     pub const fn released(&self, button: MouseButton) -> bool {
-        self.buttons[button_slot(button)].released
+        match button_slot(button) {
+            Some(slot) => self.buttons[slot].released,
+            None => false,
+        }
     }
 
     /// Scroll wheel delta accumulated this frame: positive is down/forward,
