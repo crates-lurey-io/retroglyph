@@ -192,7 +192,8 @@ pub fn run_software_with<E: Example>(builder: retroglyph_software::SoftwareBacke
     let renderer = builder
         .build()
         .expect("failed to initialize software backend")
-        .run_headless();
+        .run_headless()
+        .expect("failed to build headless renderer");
     let config = retroglyph_window::winit::WindowConfig::fit(&renderer, E::NAME, None)
         .fill_viewport(E::fill_viewport());
     let app = ExampleApp::<E>::new();

@@ -300,7 +300,8 @@ impl SoftwareBackend {
     ///     .scale(1)
     ///     .build()
     ///     .unwrap()
-    ///     .run_headless();
+    ///     .run_headless()
+    ///     .unwrap();
     ///
     /// // Render a red cell on layer 0.
     /// let tile = Tile::new(' ', Style::new().bg(Color::Rgb { r: 255, g: 0, b: 0 }));
@@ -309,14 +310,21 @@ impl SoftwareBackend {
     /// assert!(renderer.pixels().iter().all(|&p| p == 0x00FF_0000));
     /// ```
     ///
+    /// # Errors
+    ///
+    /// Returns [`SoftwareBackendError::NoFont`] if no font is set (only reachable if
+    /// [`SoftwareBackendBuilder::build`] was bypassed) and
+    /// [`SoftwareBackendError::Tileset`] if a registered tileset fails to load.
+    ///
     /// # Panics
     ///
-    /// Panics if `font` is `None`.
-    #[must_use]
-    pub fn run_headless(self) -> SoftwareRenderer {
-        let font = self.font.expect(
-            "run_headless() requires a font; supply one via SoftwareBackendBuilder::font()",
-        );
+    /// Panics only on a `u32`-to-`usize` conversion that cannot fail on any target
+    /// this crate supports (`usize` is at least 32 bits on every 32- and 64-bit
+    /// platform), so this is not reachable in practice.
+    pub fn run_headless(self) -> Result<SoftwareRenderer, SoftwareBackendError> {
+        let Some(font) = self.font else {
+            return Err(SoftwareBackendError::NoFont);
+        };
 
         let cell_w = u32::from(font.glyph_width) * u32::from(self.scale);
         let cell_h = u32::from(font.glyph_height) * u32::from(self.scale);
@@ -330,14 +338,12 @@ impl SoftwareBackend {
         } else {
             let mut cache = SpriteCache::new();
             for opts in &self.tilesets {
-                cache
-                    .load(opts)
-                    .expect("tileset loading failed; check tileset file path and format");
+                cache.load(opts).map_err(SoftwareBackendError::Tileset)?;
             }
             Arc::new(cache)
         };
 
-        SoftwareRenderer::create(
+        Ok(SoftwareRenderer::create(
             self,
             font,
             buf_w,
@@ -346,7 +352,7 @@ impl SoftwareBackend {
             cell_h,
             #[cfg(feature = "tilesets")]
             sprite_cache,
-        )
+        ))
     }
 }
 
@@ -912,17 +918,14 @@ mod tests {
     use retroglyph_core::style::Style;
 
     fn test_renderer() -> SoftwareRenderer {
-        let opts = SoftwareBackend {
-            window_title: String::new(),
-            font: Some(bitmap_font::vga8x16::FONT),
-            cols: 1,
-            rows: 1,
-            scale: 1,
-            #[cfg(feature = "tilesets")]
-            tilesets: Vec::new(),
-            target_fps: None,
-        };
-        opts.run_headless()
+        SoftwareBackendBuilder::new()
+            .font(bitmap_font::vga8x16::FONT)
+            .grid_size(1, 1)
+            .scale(1)
+            .build()
+            .unwrap()
+            .run_headless()
+            .unwrap()
     }
 
     #[test]
@@ -1021,7 +1024,7 @@ mod tests {
             .scale(1)
             .build()
             .unwrap();
-        let mut renderer = opts.run_headless();
+        let mut renderer = opts.run_headless().unwrap();
 
         // Layer 0: dark background, ':' at (0,0) in dim blue, '.' at (1,0) in dim gray.
         let bg = Tile::new(
@@ -1104,7 +1107,7 @@ mod tests {
             .scale(1)
             .build()
             .unwrap();
-        let mut renderer = opts.run_headless();
+        let mut renderer = opts.run_headless().unwrap();
 
         let base = Tile::new(
             ' ',
@@ -1155,6 +1158,7 @@ mod tests {
             .build()
             .unwrap()
             .run_headless()
+            .unwrap()
     }
 
     /// Fill every layer-0 cell with `tile`, overriding cell `(ox, oy)` with

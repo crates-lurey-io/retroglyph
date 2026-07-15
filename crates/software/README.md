@@ -38,7 +38,8 @@ let renderer = SoftwareBackendBuilder::new()
     .scale(1)
     .build()
     .unwrap()
-    .run_headless();
+    .run_headless()
+    .unwrap();
 
 let mut term = Terminal::new(renderer);
 term.put_styled(0, 0, ' ', Style::new().bg(Color::Rgb { r: 255, g: 0, b: 0 }));

@@ -70,7 +70,8 @@ pub fn png_snapshot<E: Example>(cols: u16, rows: u16, scale: u8) -> Vec<u8> {
     let renderer = builder
         .build()
         .expect("software backend init")
-        .run_headless();
+        .run_headless()
+        .expect("headless renderer init");
 
     // Read the pixel-buffer geometry before handing `renderer` to `Terminal`
     // (which owns it from here): cols/rows in cells x the presenter's own
