@@ -634,14 +634,21 @@ where
             return;
         };
         let (cell_w, cell_h) = term.backend().presenter().cell_size();
-        let cols = size.width / cell_w;
-        let rows = size.height / cell_h;
+        // Clamp to at least one cell: a window smaller than one cell in
+        // either dimension would otherwise divide down to 0 cols/rows,
+        // which in turn asks `resize_surface` for a zero-size surface --
+        // softbuffer (and likely other presenters) can't handle that and
+        // panics. `Event::Resize` must report the same clamped grid the
+        // surface was actually sized to, or callers reading `Event::Resize`
+        // and querying the presenter's surface size would disagree.
+        let cols = (size.width / cell_w).max(1);
+        let rows = (size.height / cell_h).max(1);
         term.backend_mut()
             .presenter_mut()
             .resize_surface(cols * cell_w, rows * cell_h);
         #[allow(clippy::cast_possible_truncation)]
         term.backend_mut()
-            .push_event(Event::Resize(cols.max(1) as u16, rows.max(1) as u16));
+            .push_event(Event::Resize(cols as u16, rows as u16));
     }
 
     fn on_cursor_moved(&mut self, position: winit::dpi::PhysicalPosition<f64>) {
@@ -873,6 +880,68 @@ mod tests {
 
         fn scale_factor_changed(&mut self, scale_factor: f64) {
             self.last_scale_factor.set(Some(scale_factor));
+        }
+    }
+
+    /// A [`Presenter`] that records every `resize_surface` call, so tests
+    /// can assert on the pixel dimensions `on_resized` actually requests.
+    #[derive(Default)]
+    struct RecordingPresenter {
+        resize_calls: std::rc::Rc<std::cell::RefCell<Vec<(u32, u32)>>>,
+    }
+
+    impl Presenter for RecordingPresenter {
+        type Error = core::convert::Infallible;
+        type SurfaceError = core::convert::Infallible;
+
+        fn draw<'a, I>(&mut self, _content: I) -> Result<(), Self::Error>
+        where
+            I: Iterator<Item = (Pos, &'a Tile)>,
+        {
+            Ok(())
+        }
+
+        fn draw_layers<'a, I>(&mut self, _content: I) -> Result<(), Self::Error>
+        where
+            I: Iterator<Item = (u8, Pos, &'a Tile)>,
+        {
+            Ok(())
+        }
+
+        fn flush(&mut self) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        fn size(&self) -> Size {
+            Size {
+                width: 10,
+                height: 5,
+            }
+        }
+
+        fn clear(&mut self) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        fn resize(&mut self, _size: Size) {}
+
+        fn init_surface(
+            &mut self,
+            _window: Arc<dyn crate::presenter::WindowHandle>,
+        ) -> Result<(), Self::SurfaceError> {
+            Ok(())
+        }
+
+        fn resize_surface(&mut self, width: u32, height: u32) {
+            self.resize_calls.borrow_mut().push((width, height));
+        }
+
+        fn present(&mut self) -> Result<(), Self::SurfaceError> {
+            Ok(())
+        }
+
+        fn cell_size(&self) -> (u32, u32) {
+            (8, 16)
         }
     }
 
@@ -1286,5 +1355,52 @@ mod tests {
         let mut app = test_window_app();
         app.resize_to(winit::dpi::PhysicalSize::new(90, 81));
         assert_eq!(poll(&mut app), Some(Event::Resize(11, 5)));
+    }
+
+    #[test]
+    fn resized_below_one_cell_clamps_surface_and_event_to_1x1() {
+        // Regression test for #140: an 8x16-cell presenter resized to a
+        // window smaller than one cell (4x4 px) must not compute 0 cols/0
+        // rows -- that would ask `resize_surface` for a zero-size surface,
+        // which crashes softbuffer.
+        type RecordingApp =
+            WindowApp<RecordingPresenter, fn(&mut Terminal<WindowBackend<RecordingPresenter>>)>;
+        let resize_calls = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+        let presenter = RecordingPresenter {
+            resize_calls: resize_calls.clone(),
+        };
+        let terminal = Terminal::new(WindowBackend::new(presenter));
+        let mut app: RecordingApp = WindowApp {
+            terminal: Some(terminal),
+            app_loop: |_| {},
+            window: None,
+            title: String::new(),
+            init_size: InitWindowSize {
+                width: 80,
+                height: 80,
+            },
+            current_modifiers: KeyModifiers::NONE,
+            cursor_px: (0.0, 0.0),
+            active_touch: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            frame_interval: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            next_frame: std::time::Instant::now(),
+        };
+
+        app.handle_window_event(WindowEvent::Resized(winit::dpi::PhysicalSize::new(4, 4)));
+
+        // Surface must be resized to at least one full cell (8x16), not
+        // 0x0.
+        assert_eq!(resize_calls.borrow().as_slice(), &[(8, 16)]);
+        // Event::Resize must report the same clamped 1x1 grid, not 0x0.
+        assert_eq!(
+            app.terminal
+                .as_mut()
+                .unwrap()
+                .backend_mut()
+                .poll_event(Duration::ZERO),
+            Some(Event::Resize(1, 1))
+        );
     }
 }
