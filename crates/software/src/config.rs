@@ -132,7 +132,12 @@ pub struct SoftwareBackend {
     ///
     /// `None` only when `default-font` is disabled and no font has
     /// been supplied via [`SoftwareBackendBuilder::font`].
-    pub font: Option<BitmapFont>,
+    ///
+    /// Crate-private: the only way to reach [`run_headless`](super::SoftwareBackend::run_headless)
+    /// with a `SoftwareBackend` is through [`SoftwareBackendBuilder`], which validates
+    /// this invariant in [`build`](SoftwareBackendBuilder::build). Use
+    /// [`font`](SoftwareBackend::font) to read it back from outside the crate.
+    pub(crate) font: Option<BitmapFont>,
     /// Grid width in cells.
     pub cols: u16,
     /// Grid height in cells.
@@ -155,8 +160,23 @@ pub struct SoftwareBackend {
     pub target_fps: Option<u32>,
 }
 
-impl Default for SoftwareBackend {
-    fn default() -> Self {
+impl SoftwareBackend {
+    /// Returns the configured bitmap font, if any.
+    ///
+    /// `None` only when `default-font` is disabled and no font was supplied
+    /// via [`SoftwareBackendBuilder::font`]; in that case
+    /// [`SoftwareBackendBuilder::build`] fails with [`SoftwareBackendError::NoFont`]
+    /// before a `SoftwareBackend` can be constructed at all.
+    #[must_use]
+    pub const fn font(&self) -> Option<&BitmapFont> {
+        self.font.as_ref()
+    }
+
+    /// Builder-internal defaults. Not exposed as `impl Default`: the only
+    /// supported way to obtain a `SoftwareBackend` is through
+    /// [`SoftwareBackendBuilder`], so that its `font` invariant is always
+    /// validated by [`SoftwareBackendBuilder::build`].
+    fn defaults() -> Self {
         Self {
             window_title: String::from("rg application"),
             #[cfg(feature = "default-font")]
@@ -205,7 +225,7 @@ impl SoftwareBackendBuilder {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            options: SoftwareBackend::default(),
+            options: SoftwareBackend::defaults(),
         }
     }
 
