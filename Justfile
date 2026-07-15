@@ -71,11 +71,31 @@ docs-preview-full: doc
 
 # ── Test ─────────────────────────────────────────────────────────────────────
 
-test:
-    cargo test --workspace --all-features
+# Builds every example with `--features crossterm` into its own `--target-dir` (see
+# `examples/tests/support::build_crossterm_example`'s doc comment for why that dir is isolated
+# from the workspace's normal `target/`), once, up front. Each of the 15 `svg_snapshot` tests
+# (one `[[test]]` binary per example) calls `build_crossterm_example` itself too, as a fallback
+# for running them outside `just` (e.g. `cargo nextest run -p retroglyph-examples` directly) --
+# but under nextest those 15 tests run concurrently, and without this step they'd all race to
+# invoke `cargo build` on the same target dir at once. Cargo's own locking makes that safe, but
+# a dozen-plus processes queuing on one lock and each re-walking the dependency graph is real,
+# avoidable overhead. Running the (single, batched) build here first means every one of those 15
+# calls finds the binaries already fresh and returns immediately.
+build-pty-examples:
+    cargo build --manifest-path examples/Cargo.toml --examples --features crossterm --target-dir target/pty-examples
 
-test-v:
-    cargo test --workspace --all-features -- --nocapture
+# nextest runs every test (including separate `[[test]]` binaries, like each
+# examples/tests/*.rs file) in its own process, in parallel across all of them -- unlike plain
+# `cargo test`, which runs separate integration-test binaries one after another. It doesn't run
+# doctests (https://nexte.st/docs/limitations/), so those still go through plain `cargo test
+# --doc`. See `.config/nextest.toml` for retry/timeout config.
+test: build-pty-examples
+    cargo bin cargo-nextest run --workspace --all-features
+    cargo test --workspace --all-features --doc
+
+test-v: build-pty-examples
+    cargo bin cargo-nextest run --workspace --all-features --no-capture
+    cargo test --workspace --all-features --doc -- --nocapture
 
 # Run benchmarks locally. Install cargo-criterion first: cargo install cargo-criterion
 # To save a baseline: just bench -- --save-baseline main
@@ -112,8 +132,9 @@ clean:
 # Review the diff (`jj diff`/`git diff`) before committing -- this blesses unconditionally, with
 # no review step of its own. Install `cargo-insta` by hand if you want its interactive review UI
 # instead; nothing else in this repo depends on it being present.
-insta:
-    INSTA_UPDATE=always cargo test --workspace --all-features
+insta: build-pty-examples
+    INSTA_UPDATE=always cargo bin cargo-nextest run --workspace --all-features
+    INSTA_UPDATE=always cargo test --workspace --all-features --doc
 
 deny: deny-advisories deny-licenses
 
