@@ -129,10 +129,21 @@ fn crossterm_target_dir() -> PathBuf {
         .join("pty-examples")
 }
 
-/// Builds `example_name` with `--features crossterm` into [`crossterm_target_dir`] (regardless of
-/// what features this test binary itself was compiled with -- `cargo test --all-features` would
-/// otherwise leave a GUI (`software`) binary on disk that hangs when spawned in a PTY) and returns
-/// its path.
+/// Builds *every* `[[example]]` with `--features crossterm` into [`crossterm_target_dir`]
+/// (regardless of what features this test binary itself was compiled with -- `cargo test
+/// --all-features` would otherwise leave a GUI (`software`) binary on disk that hangs when spawned
+/// in a PTY) and returns `example_name`'s path.
+///
+/// Builds `--examples` (plural, i.e. every example target) rather than just `example_name`
+/// deliberately: this is called once per `svg_snapshot` test, and those tests are their own
+/// separate `[[test]]` binaries (15 of them, one per example) that `cargo test`/`cargo nextest`
+/// runs as 15 separate processes -- serially under plain `cargo test`, concurrently under
+/// nextest. Building only the caller's own example would mean 15 separate `cargo build`
+/// invocations, each re-walking the whole dependency graph and each paying its own fingerprint
+/// check. Building everything on every call instead means the *first* call (whichever process
+/// gets there first -- Cargo's own target-dir lock makes this safe under nextest's concurrent
+/// processes too) does one real build of all 15 examples, and every subsequent call across every
+/// other test binary just confirms freshness and returns immediately.
 ///
 /// # Panics
 ///
@@ -148,8 +159,7 @@ pub fn build_crossterm_example(example_name: &str) -> PathBuf {
             "build",
             "--manifest-path",
             &format!("{manifest}/Cargo.toml"),
-            "--example",
-            example_name,
+            "--examples",
             "--features",
             "crossterm",
             "--target-dir",
@@ -159,7 +169,7 @@ pub fn build_crossterm_example(example_name: &str) -> PathBuf {
         .expect("failed to run cargo build");
     assert!(
         status.success(),
-        "cargo build --example {example_name} --features crossterm failed"
+        "cargo build --examples --features crossterm failed"
     );
     target_dir.join("debug").join("examples").join(example_name)
 }
