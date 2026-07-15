@@ -564,6 +564,9 @@ where
                     term.backend_mut().push_event(e);
                 }
             }
+            WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
+                self.on_scale_factor_changed(scale_factor);
+            }
 
             WindowEvent::RedrawRequested => {
                 let Some(term) = self.terminal.as_mut() else {
@@ -580,9 +583,6 @@ where
     }
 
     fn on_resized(&mut self, size: winit::dpi::PhysicalSize<u32>) {
-        let Some(term) = self.terminal.as_mut() else {
-            return;
-        };
         // On wasm with `fill_viewport` set, `size` is whatever (uncapped)
         // physical size we last handed winit for CSS layout purposes -- not
         // the backing store size. Recompute the DPR-capped surface size
@@ -595,6 +595,43 @@ where
             web_viewport_surface_physical_size().unwrap_or(size)
         } else {
             size
+        };
+        self.resize_to(size);
+    }
+
+    /// React to a scale-factor (DPI) change: notify the presenter, then
+    /// realign the surface and grid to the window's new physical size.
+    ///
+    /// Every modern `HiDPI` display is scaled, so without this the surface
+    /// silently keeps rendering at the old (pre-change) physical size --
+    /// e.g. half the true resolution after moving to a 2x-scale display --
+    /// until (if ever) an independent `Resized` event happens to arrive.
+    /// Reusing [`resize_to`](Self::resize_to) here mirrors
+    /// [`on_resized`](Self::on_resized), so both paths clamp/align the
+    /// surface to whole cells the same way.
+    fn on_scale_factor_changed(&mut self, scale_factor: f64) {
+        if let Some(term) = self.terminal.as_mut() {
+            term.backend_mut()
+                .presenter_mut()
+                .scale_factor_changed(scale_factor);
+        }
+        let Some(window) = self.window.clone() else {
+            return;
+        };
+        self.resize_to(window.inner_size());
+    }
+
+    /// Recompute the grid size (in cells) from a physical pixel size, resize
+    /// the presenter's surface to the whole-cell-aligned pixel size, and push
+    /// [`Event::Resize`] with the new cell dimensions.
+    ///
+    /// Shared by [`on_resized`](Self::on_resized) and
+    /// [`on_scale_factor_changed`](Self::on_scale_factor_changed): both need
+    /// the same clamp-to-cell-grid math, just triggered by different winit
+    /// events.
+    fn resize_to(&mut self, size: winit::dpi::PhysicalSize<u32>) {
+        let Some(term) = self.terminal.as_mut() else {
+            return;
         };
         let (cell_w, cell_h) = term.backend().presenter().cell_size();
         let cols = size.width / cell_w;
@@ -776,7 +813,11 @@ mod tests {
     ///
     /// The `WindowApp` tests only exercise event translation, cell math, and
     /// the `WindowBackend` queue — no rasterization or surface is needed.
-    struct MockPresenter;
+    #[derive(Default)]
+    struct MockPresenter {
+        /// Records the last [`Presenter::scale_factor_changed`] argument, if any.
+        last_scale_factor: std::cell::Cell<Option<f64>>,
+    }
 
     impl Presenter for MockPresenter {
         type Error = core::convert::Infallible;
@@ -829,12 +870,16 @@ mod tests {
         fn cell_size(&self) -> (u32, u32) {
             (8, 16)
         }
+
+        fn scale_factor_changed(&mut self, scale_factor: f64) {
+            self.last_scale_factor.set(Some(scale_factor));
+        }
     }
 
     type MockApp = WindowApp<MockPresenter, fn(&mut Terminal<WindowBackend<MockPresenter>>)>;
 
     fn test_window_app() -> MockApp {
-        let terminal = Terminal::new(WindowBackend::new(MockPresenter));
+        let terminal = Terminal::new(WindowBackend::new(MockPresenter::default()));
         WindowApp {
             terminal: Some(terminal),
             app_loop: |_| {},
@@ -866,7 +911,7 @@ mod tests {
 
     #[test]
     fn mouse_event_round_trips_through_event_buffer() {
-        let mut backend = WindowBackend::new(MockPresenter);
+        let mut backend = WindowBackend::new(MockPresenter::default());
         let ev = Event::Mouse(MouseEvent {
             kind: MouseEventKind::Down(MouseButton::Left),
             position: Pos { x: 3, y: 1 },
@@ -880,7 +925,7 @@ mod tests {
 
     #[test]
     fn multiple_mouse_events_preserve_fifo_order() {
-        let mut backend = WindowBackend::new(MockPresenter);
+        let mut backend = WindowBackend::new(MockPresenter::default());
         let moved = Event::Mouse(MouseEvent {
             kind: MouseEventKind::Moved,
             position: Pos { x: 1, y: 2 },
@@ -1196,6 +1241,50 @@ mod tests {
         // 8x16 cells: 88x80 px -> 11 cols, 5 rows.
         let mut app = test_window_app();
         app.handle_window_event(WindowEvent::Resized(winit::dpi::PhysicalSize::new(88, 80)));
+        assert_eq!(poll(&mut app), Some(Event::Resize(11, 5)));
+    }
+
+    // ── scale factor changes ─────────────────────────────────────────────────
+
+    #[test]
+    fn scale_factor_changed_notifies_presenter() {
+        // `handle_window_event` can't be exercised directly here: winit's
+        // `InnerSizeWriter::new` is `pub(crate)`, so a real
+        // `WindowEvent::ScaleFactorChanged` can't be constructed outside the
+        // winit crate. `on_scale_factor_changed` is called directly instead
+        // -- it's the same code the `WindowEvent::ScaleFactorChanged` arm in
+        // `handle_window_event` dispatches to.
+        let mut app = test_window_app();
+        app.on_scale_factor_changed(2.0);
+        assert_eq!(
+            app.terminal
+                .as_ref()
+                .unwrap()
+                .backend()
+                .presenter()
+                .last_scale_factor
+                .get(),
+            Some(2.0)
+        );
+    }
+
+    #[test]
+    fn scale_factor_changed_without_a_window_is_a_no_op_resize() {
+        // `test_window_app` has no real winit window (`window: None`), so
+        // there is no physical size to re-align the surface to -- this must
+        // not panic, and must not push a spurious `Event::Resize`.
+        let mut app = test_window_app();
+        app.on_scale_factor_changed(2.0);
+        assert_eq!(poll(&mut app), None);
+    }
+
+    #[test]
+    fn resize_to_clamps_to_whole_cells_and_pushes_resize_event() {
+        // Shared helper behind both `on_resized` and
+        // `on_scale_factor_changed`: 8x16 cells, 90x81 px clamps down to
+        // 11 cols x 5 rows (88x80 px), not a fractional cell.
+        let mut app = test_window_app();
+        app.resize_to(winit::dpi::PhysicalSize::new(90, 81));
         assert_eq!(poll(&mut app), Some(Event::Resize(11, 5)));
     }
 }
