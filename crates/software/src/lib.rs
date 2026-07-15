@@ -410,7 +410,8 @@ impl Backend for SoftwareRenderer {
     /// [`Color::Default`] background on a higher layer erases the glyph beneath
     /// it when flattened, but here it leaves the lower glyph's pixels intact.
     /// Repainting the lower background per pixel would require composited
-    /// per-cell state this renderer intentionally avoids.
+    /// per-cell state this renderer intentionally avoids. See the "Backend
+    /// parity caveat" section in the crate README for a worked example.
     fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
         I: Iterator<Item = (u8, Pos, &'a Tile)>,
