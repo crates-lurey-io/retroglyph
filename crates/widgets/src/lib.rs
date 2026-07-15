@@ -1,6 +1,6 @@
 //! Immediate-mode drawing helpers over a [`Rect`](retroglyph_core::Rect).
 //!
-//! Box borders, filled panels, gauges, lists, tabs, sparklines, and a small
+//! Box borders, filled panels, gauges, tables, sparklines, and a small
 //! constraint-based [`Rect`](retroglyph_core::Rect) splitter with
 //! ratatui-style `Fixed`/`Percent`/`Fill`/`Min`/`Max` constraints and `Flex`
 //! alignment ([`layout`]).

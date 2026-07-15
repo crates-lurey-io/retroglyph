@@ -1,7 +1,7 @@
 [package]
 name = "retroglyph-widgets"
 version = "0.1.0"
-description = "Immediate-mode drawing helpers for retroglyph (panels, gauges, lists, sparklines)"
+description = "Immediate-mode drawing helpers for retroglyph (panels, gauges, tables, sparklines)"
 readme = "README.md"
 edition.workspace = true
 rust-version.workspace = true
