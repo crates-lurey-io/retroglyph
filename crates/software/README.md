@@ -51,3 +51,22 @@ assert!(term.backend().pixels().iter().all(|&p| p == 0x00FF_0000));
 See [docs.rs](https://docs.rs/retroglyph-software) for the full API, or the
 [workspace README](https://github.com/crates-lurey-io/retroglyph#readme) for a real backend quick
 start.
+
+## Backend parity caveat
+
+`SoftwareRenderer`'s layer compositing
+([`Backend::draw_layers`](https://docs.rs/retroglyph-software/latest/retroglyph_software/struct.SoftwareRenderer.html#method.draw_layers))
+diverges from cell backends (e.g. `retroglyph-crossterm`'s `Grid::flatten_into`) in one case: an
+occupied space (`' '`, non-empty) with a `Color::Default` background on a layer above 0.
+
+- **Cell backends:** flattening treats that space as opaque and erases whatever glyph was on the
+  layer beneath it, replacing it with a blank cell.
+- **`retroglyph-software`:** the renderer paints per pixel and never re-paints a lower layer's
+  pixels once drawn, so the lower glyph's pixels remain visible underneath the higher-layer space
+  instead of being erased.
+
+Repainting the lower layer's background per pixel to match cell-backend behavior would require
+tracking composited per-cell state, which this renderer intentionally avoids for simplicity and
+performance. See the doc comment on
+[`draw_layers`](https://docs.rs/retroglyph-software/latest/retroglyph_software/struct.SoftwareRenderer.html#method.draw_layers)
+for the implementation-level note.
