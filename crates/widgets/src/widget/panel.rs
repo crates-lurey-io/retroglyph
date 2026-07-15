@@ -1,5 +1,6 @@
 //! [`Panel`]: a bordered, titled panel.
 use retroglyph_core::{Backend, Rect, Style, Terminal};
+use unicode_width::UnicodeWidthStr;
 
 use super::{BoxBorder, Widget};
 use crate::draw::fill_rect;
@@ -73,14 +74,15 @@ impl<B: Backend> Widget<B> for Panel<'_> {
             }
             // Truncate to fit.
             let t = truncate_to_cols(t, max_title_w);
-            let title_x = area.left() + (area.width() - t.len() as u16 - 2) / 2;
+            let t_w = t.width() as u16;
+            let title_x = area.left() + (area.width() - t_w - 2) / 2;
             let title_y = area.top();
             term.reset_style()
                 .fg(self.border_style.foreground())
                 .bg(self.border_style.background());
             term.put(title_x, title_y, ' ');
             term.print(title_x + 1, title_y, &t);
-            term.put(title_x + 1 + t.len() as u16, title_y, ' ');
+            term.put(title_x + 1 + t_w, title_y, ' ');
             term.reset_style();
         }
     }
@@ -130,5 +132,23 @@ mod tests {
         let mut term = Terminal::new(Headless::new(1, 1));
         Panel::new().render(area, &mut term);
         assert_eq!(term.grid().get(0, 0).glyph(), ' ');
+    }
+
+    #[test]
+    fn wide_char_title_is_centred_by_display_width_not_byte_length() {
+        // "あ" is 1 char, 3 bytes (UTF-8), 2 display columns. A byte-length
+        // title width (the pre-fix bug) would reserve 3 columns for it and
+        // miscentre the title, and would place the trailing space one
+        // column further right than it should be.
+        let area = Rect::new(0, 0, 10, 3); // max_title_w = 10 - 4 = 6
+        let mut term = Terminal::new(Headless::new(10, 3));
+        Panel::new().title("あ").render(area, &mut term);
+
+        // title_x = 0 + (10 - 2 - 2) / 2 = 3; title glyph at 4, trailing
+        // space at 5. With the pre-fix byte-length bug (width 3) this would
+        // compute title_x = (10 - 3 - 2) / 2 = 2, off by one.
+        assert_eq!(term.grid().get(3, 0).glyph(), ' ');
+        assert_eq!(term.grid().get(4, 0).glyph(), 'あ');
+        assert_eq!(term.grid().get(5, 0).glyph(), ' ');
     }
 }
