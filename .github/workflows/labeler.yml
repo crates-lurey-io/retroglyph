@@ -1,0 +1,117 @@
+name: Labeler
+
+# Two jobs:
+#  - path-labels: applies c: labels from .github/labeler.yml based on changed files, and keeps
+#    them in sync (sync-labels: true) as the PR's diff evolves.
+#  - title-labels: derives t: (and, as a fallback, c:) labels from the Conventional Commit PR
+#    title that pr-title.yml already enforces, e.g. "feat(core)!: ..." -> t:feature, t:breaking,
+#    c:core. Re-run on every title edit/push so labels never go stale.
+
+on:
+  pull_request_target:
+    types: [opened, edited, reopened, synchronize]
+  issues:
+    types: [opened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  path-labels:
+    if: github.event_name == 'pull_request_target'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/labeler@v5
+        with:
+          configuration-path: .github/labeler.yml
+          sync-labels: true
+
+  title-labels:
+    if: github.event_name == 'pull_request_target'
+    runs-on: ubuntu-latest
+    steps:
+      - name: 'Derive t: / c: labels from PR title'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = context.payload.pull_request.title;
+            // feat(core)!: message  ->  type=feat scope=core breaking=true
+            const m = title.match(/^(\w+)(?:\(([\w-]+)\))?(!)?:\s/);
+            if (!m) return;
+            const [, type, scope, breaking] = m;
+
+            const typeMap = {
+              feat: "t:feature",
+              fix: "t:bug",
+              perf: "t:perf",
+              docs: "t:docs",
+              refactor: "t:chore",
+              style: "t:chore",
+              test: "t:chore",
+              chore: "t:chore",
+              build: "t:chore",
+              ci: "t:chore",
+              revert: "t:chore",
+            };
+
+            const labels = [];
+            if (typeMap[type]) labels.push(typeMap[type]);
+            if (breaking) labels.push("t:breaking");
+
+            // Crate scopes map 1:1 to c: labels already applied by path-labels; this is a
+            // fallback for cases the path config can't infer (e.g. deps scope, or a title
+            // written before any files are pushed). workspace/deps scopes don't get a
+            // dedicated c: label of their own (see .github/labels.yml).
+            const crateScopes = [
+              "core", "terminal", "crossterm", "terminal-wasm", "software", "window",
+              "widgets", "examples",
+            ];
+            if (scope && crateScopes.includes(scope)) labels.push(`c:${scope}`);
+            if (scope === "workspace") labels.push("c:workspace");
+
+            if (labels.length === 0) return;
+
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+
+            const { data: current } = await github.rest.issues.listLabelsOnIssue({
+              owner, repo, issue_number,
+            });
+            const currentNames = current.map((l) => l.name);
+            const toAdd = labels.filter((l) => !currentNames.includes(l));
+            if (toAdd.length > 0) {
+              await github.rest.issues.addLabels({ owner, repo, issue_number, labels: toAdd });
+            }
+
+            // If the title no longer says "!" but t:breaking was previously auto-applied by
+            // this same logic, drop it so labels track title edits both ways.
+            if (!breaking && currentNames.includes("t:breaking")) {
+              await github.rest.issues.removeLabel({
+                owner, repo, issue_number, name: "t:breaking",
+              }).catch(() => {});
+            }
+
+  triage-labels:
+    if: github.event_name == 'issues'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Label new issues needs-triage unless filed by a maintainer
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const actor = context.payload.issue.user.login;
+
+            const { data: perm } = await github.rest.repos.getCollaboratorPermissionLevel({
+              owner, repo, username: actor,
+            });
+
+            if (!["admin", "write", "maintain"].includes(perm.permission)) {
+              await github.rest.issues.addLabels({
+                owner, repo,
+                issue_number: context.payload.issue.number,
+                labels: ["s:needs-triage"],
+              });
+            }
