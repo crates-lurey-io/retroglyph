@@ -40,6 +40,15 @@ fn main() -> std::io::Result<()> {
 }
 ```
 
+## RGB colors on 256-color terminals
+
+`Color::Rgb` is written out as a truecolor SGR sequence with no quantization to a 256-color or
+16-color palette -- see
+[`retroglyph-terminal`'s "RGB color fallback" docs](https://docs.rs/retroglyph-terminal) for the
+full contract. On terminals that don't support truecolor, the emitted color depends on the
+terminal/multiplexer's own handling of the extended SGR sequence; use `Color::Indexed` or
+`Color::Ansi` instead of `Color::Rgb` if you need an unambiguous color on such a terminal.
+
 See [docs.rs](https://docs.rs/retroglyph-crossterm) for the full API, or the
 [workspace README](https://github.com/crates-lurey-io/retroglyph#readme) for the crate list and more
 examples.

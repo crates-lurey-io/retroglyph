@@ -53,6 +53,42 @@
 //!
 //! This crate always requires `std` (an `impl std::io::Write` sink), unlike
 //! `retroglyph-core`, which supports `no_std`.
+//!
+//! # RGB color fallback on 256-color terminals
+//!
+//! [`Color::Rgb`] tiles are written out verbatim as a 24-bit truecolor SGR
+//! sequence (`38;2;r;g;b` / `48;2;r;g;b`, one of the codes this crate's
+//! internal SGR-color writer emits). This crate does **not** quantize RGB down to the 256-color or 16-color ANSI
+//! palettes, and neither does `retroglyph-core`: there is no
+//! `Color::to_indexed()`-style guarantee anywhere in this workspace. The
+//! bytes this renderer emits are the same regardless of what the receiving
+//! terminal actually supports.
+//!
+//! This mirrors `crossterm`'s own `SetForegroundColor`/`SetBackgroundColor`
+//! behavior (and that of most Rust terminal-UI crates): truecolor codes are
+//! written unconditionally, and it is left to the terminal emulator (or a
+//! multiplexer like `tmux`/`screen` sitting in between) to interpret or
+//! degrade them. In practice:
+//!
+//! - Terminals that advertise truecolor support (`$COLORTERM=truecolor` or
+//!   `24bit`) render the exact color.
+//! - Many terminals and multiplexers that only support the 256-color palette
+//!   (`$TERM=*-256color`) approximate the requested RGB to the nearest
+//!   palette entry themselves, since terminal implementations commonly
+//!   downsample unrecognized-depth SGR sequences rather than drop them.
+//! - A minority of older/limited terminals may render truecolor sequences
+//!   incorrectly (wrong color, or no color at all) if they don't recognize
+//!   the extended `;2;` SGR form.
+//!
+//! Callers that need a specific, correct color on a known-limited terminal
+//! should use [`Color::Indexed`] or [`Color::Ansi`] explicitly instead of
+//! [`Color::Rgb`]; both are passed through untranslated (`38;5;n` / plain ANSI
+//! codes) and have no ambiguity across terminal color depths. There is
+//! currently no capability-detection step in this crate (or
+//! `retroglyph-crossterm`) that would let it choose automatically -- adding
+//! one would require querying/guessing terminal color depth (`$COLORTERM`,
+//! `$TERM`, or a runtime query), which is out of scope for this shared
+//! renderer and left to callers or a future crate.
 
 // Compile the code blocks in this crate's own README as doctests so its quick start is
 // type-checked on every test run and cannot silently rot. The `cfg(doctest)` gate keeps this out
@@ -90,6 +126,9 @@ fn write_sgr_color<W: Write>(out: &mut W, color: Color, base: u8, reset: u8) -> 
             write!(out, "\x1b[{code}m")
         }
         Color::Indexed(index) => write!(out, "\x1b[{base};5;{index}m"),
+        // No quantization: passed straight through as a 24-bit truecolor SGR
+        // sequence. See the crate-level "RGB color fallback on 256-color
+        // terminals" doc section for the contract this leaves callers with.
         Color::Rgb { r, g, b } => write!(out, "\x1b[{base};2;{r};{g};{b}m"),
     }
 }
@@ -338,6 +377,27 @@ mod tests {
         let tile = Tile::new('X', style);
         let out = render_one(&tile);
         assert!(out.contains("\x1b[38;5;200m"), "output: {out:?}");
+    }
+
+    #[test]
+    fn rgb_color_is_passed_through_without_quantization() {
+        // Regression test for the documented RGB fallback contract: an RGB
+        // value that doesn't land on any of the 256-color palette's exact
+        // entries (e.g. a 6x6x6 cube step or a grayscale ramp step) is still
+        // emitted verbatim as a 24-bit truecolor sequence, not snapped to the
+        // nearest indexed color.
+        let style = Style::new().fg(Color::Rgb {
+            r: 91,
+            g: 142,
+            b: 217,
+        });
+        let tile = Tile::new('X', style);
+        let out = render_one(&tile);
+        assert!(out.contains("\x1b[38;2;91;142;217m"), "output: {out:?}");
+        assert!(
+            !out.contains("38;5;"),
+            "expected no indexed fallback, got: {out:?}"
+        );
     }
 
     #[test]
