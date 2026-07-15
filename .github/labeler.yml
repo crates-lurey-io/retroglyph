@@ -1,0 +1,48 @@
+# Path-based PR labeling config for actions/labeler (see .github/workflows/labeler.yml).
+# Applies every matching c: label; a PR touching multiple crates gets multiple labels.
+# sync-labels: true in the workflow removes a c: label again if a later push no longer
+# touches that crate's paths.
+
+'c:core':
+  - changed-files:
+      - any-glob-to-any-file: 'crates/core/**'
+
+'c:terminal':
+  - changed-files:
+      - any-glob-to-any-file: 'crates/terminal/**'
+
+'c:crossterm':
+  - changed-files:
+      - any-glob-to-any-file: 'crates/crossterm/**'
+
+'c:terminal-wasm':
+  - changed-files:
+      - any-glob-to-any-file: 'crates/terminal-wasm/**'
+
+'c:software':
+  - changed-files:
+      - any-glob-to-any-file: 'crates/software/**'
+
+'c:window':
+  - changed-files:
+      - any-glob-to-any-file: 'crates/window/**'
+
+'c:widgets':
+  - changed-files:
+      - any-glob-to-any-file: 'crates/widgets/**'
+
+'c:examples':
+  - changed-files:
+      - any-glob-to-any-file: 'examples/**'
+
+# Anything outside crates/*/ and examples/ is workspace-wide: root Cargo.toml/Cargo.lock, CI,
+# Justfile, docs/, root README/AGENTS/STYLE_GUIDE, tools/, etc.
+'c:workspace':
+  - changed-files:
+      - any-glob-to-any-file:
+          - '*'
+          - '.github/**'
+          - 'docs/**'
+          - 'tools/**'
+          - '!crates/**'
+          - '!examples/**'
