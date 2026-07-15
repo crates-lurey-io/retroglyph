@@ -42,6 +42,16 @@ let ansi = String::from_utf8(renderer.into_writer()).unwrap();
 assert!(ansi.contains('@'));
 ```
 
+## RGB color fallback on 256-color terminals
+
+`Color::Rgb` tiles are written out as a 24-bit truecolor SGR sequence (`38;2;r;g;b`) with no
+quantization down to the 256-color or 16-color ANSI palettes -- neither this crate nor
+`retroglyph-core` guarantees a `to_indexed()`-style quantizer. This matches `crossterm`'s own
+color-writing behavior: the terminal (or an in-between multiplexer) is responsible for interpreting
+or degrading truecolor codes it doesn't natively support. See the crate-level docs for the full
+contract and its known limitations; use `Color::Indexed`/`Color::Ansi` instead of `Color::Rgb` if
+you need a specific, unambiguous color on a known-limited terminal.
+
 See [docs.rs](https://docs.rs/retroglyph-terminal) for the API, or the
 [workspace README](https://github.com/crates-lurey-io/retroglyph#readme) for a real backend quick
 start.
