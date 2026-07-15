@@ -141,6 +141,19 @@ pub trait Presenter {
     /// Called on every window resize event.
     fn resize_surface(&mut self, width: u32, height: u32);
 
+    /// Notify the presenter that the window's scale factor (DPI) changed.
+    ///
+    /// Called when the window moves to a display with a different pixel density, or the
+    /// system DPI setting changes. The event loop follows this with
+    /// [`resize_surface`](Self::resize_surface) for the window's new physical size, so
+    /// this hook only needs to handle DPI-dependent state that isn't a plain buffer
+    /// resize (e.g. regenerating a font atlas rasterized for a particular scale).
+    ///
+    /// Defaults to a no-op: presenters whose rasterization doesn't depend on DPI (like
+    /// `SoftwareRenderer`'s integer `scale` config, set once at construction) need no
+    /// action here.
+    fn scale_factor_changed(&mut self, _scale_factor: f64) {}
+
     /// Present the rasterized frame to the window surface.
     ///
     /// Called after each app tick. A lost frame is not fatal; the caller
