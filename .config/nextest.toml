@@ -1,0 +1,22 @@
+[store]
+dir = "target/nextest"
+
+# See `just test`/`just test-v` in the Justfile for how this is invoked (paired with a plain
+# `cargo test --doc`, since nextest doesn't run doctests -- https://nexte.st/docs/limitations/).
+[profile.default]
+# Fail fast is off: a broken example shouldn't hide unrelated failures in the same run, and CI
+# wants the full picture in one pass rather than one failure at a time across retries of the job.
+fail-fast = false
+# `examples/tests/*.rs`'s `svg_snapshot` tests spawn a real PTY, drive a child process through it,
+# and poll for a ready marker (see `examples/tests/support/mod.rs::capture_pty`) -- slower than a
+# typical unit test but not slow enough to need retries or a longer-than-default terminate. This
+# just gets nextest to flag one loudly (instead of the default 60s) if the PTY wait logic ever
+# regresses into actually hanging.
+slow-timeout = { period = "20s", terminate-after = 2 }
+
+[profile.ci]
+fail-fast = false
+slow-timeout = { period = "20s", terminate-after = 2 }
+# Machine-readable output for CI annotations/artifacts; local runs use the default profile's
+# human-readable summary instead.
+junit = { path = "junit.xml" }

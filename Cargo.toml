@@ -6,6 +6,12 @@ resolver = "2"
 wasm-server-runner = { version = "1.0.1" }
 hk = { version = "1.48.0" }
 cargo-criterion = { version = "1.1.0" }
+# Test runner used by `just test`/`just test-v` (see `.config/nextest.toml` for its config): runs
+# every test in its own process and parallelizes across all of them (including separate `[[test]]`
+# binaries, which plain `cargo test` runs one-at-a-time), not just tests within one binary. Still
+# paired with a plain `cargo test --doc` for doctests, which nextest doesn't run -- see the `test`
+# recipe below.
+cargo-nextest = { version = "0.9.140", locked = true }
 # Version pinned to match the `wasm-bindgen` dependency in
 # examples/Cargo.toml and crates/terminal-wasm/Cargo.toml, and
 # docs.yml/tools/build-wasm-example*.sh, which all resolve it the same way
