@@ -62,6 +62,65 @@ fn restore_terminal() {
     let _ = crossterm::terminal::disable_raw_mode();
 }
 
+/// Options controlling which optional terminal protocol features
+/// [`Crossterm::with_options`] enables.
+///
+/// Both features default to `true`, matching the unconditional behavior of
+/// [`Crossterm::new`]. Use [`CrosstermOptions::mouse_capture`] or
+/// [`CrosstermOptions::kitty_protocol`] to disable a feature entirely, e.g.
+/// when running on a terminal (or through a pipe/CI harness/`tmux`/SSH
+/// session) where mouse capture or the kitty keyboard protocol is unwanted.
+///
+/// This crate deliberately does not attempt to auto-detect terminal
+/// capabilities (no `TERM` parsing, no `supports_keyboard_enhancement()`
+/// query): those queries can block for seconds on terminals that never
+/// respond. `CrosstermOptions` is the opt-out mechanism instead: callers who
+/// know their environment don't support a feature can disable it explicitly.
+///
+/// ```
+/// use retroglyph_crossterm::CrosstermOptions;
+///
+/// let options = CrosstermOptions::new().mouse_capture(false).kitty_protocol(false);
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CrosstermOptions {
+    mouse_capture: bool,
+    kitty_protocol: bool,
+}
+
+impl CrosstermOptions {
+    /// Creates a new set of options with both features enabled.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Sets whether to enable mouse capture (`crossterm::event::EnableMouseCapture`).
+    #[must_use]
+    pub const fn mouse_capture(mut self, enabled: bool) -> Self {
+        self.mouse_capture = enabled;
+        self
+    }
+
+    /// Sets whether to push the kitty keyboard protocol's enhancement flags
+    /// (`crossterm::event::PushKeyboardEnhancementFlags`).
+    #[must_use]
+    pub const fn kitty_protocol(mut self, enabled: bool) -> Self {
+        self.kitty_protocol = enabled;
+        self
+    }
+}
+
+impl Default for CrosstermOptions {
+    /// Both features enabled, matching [`Crossterm::new`]'s historical behavior.
+    fn default() -> Self {
+        Self {
+            mouse_capture: true,
+            kitty_protocol: true,
+        }
+    }
+}
+
 /// A terminal rendering backend powered by `crossterm`.
 pub struct Crossterm {
     renderer: TerminalRenderer<BufWriter<Stdout>>,
@@ -71,15 +130,38 @@ impl Crossterm {
     /// Creates a new `Crossterm` backend rendering to standard output.
     ///
     /// Enables raw mode, enters the alternate screen, hides the cursor, and
-    /// enables mouse capture. Registers a process-wide panic hook (once, across
-    /// all instances) that restores the terminal before the default panic
-    /// handler runs, so a panic mid-render doesn't leave the user's shell in
-    /// raw mode or the alternate screen.
+    /// enables mouse capture and pushes the kitty keyboard protocol (both by
+    /// default; see [`CrosstermOptions`] to disable either). Registers a
+    /// process-wide panic hook (once, across all instances) that restores
+    /// the terminal before the default panic handler runs, so a panic
+    /// mid-render doesn't leave the user's shell in raw mode or the
+    /// alternate screen.
+    ///
+    /// This is a thin wrapper over [`Crossterm::with_options`] with
+    /// [`CrosstermOptions::default()`].
     ///
     /// # Errors
     ///
     /// Returns an `std::io::Error` if raw mode or terminal commands fail.
     pub fn new() -> Result<Self, std::io::Error> {
+        Self::with_options(CrosstermOptions::default())
+    }
+
+    /// Creates a new `Crossterm` backend rendering to standard output, with
+    /// explicit control over which optional protocol features are enabled.
+    ///
+    /// Enables raw mode, enters the alternate screen, and hides the cursor
+    /// unconditionally. Mouse capture and the kitty keyboard protocol are
+    /// enabled by default but can be disabled individually via `options`; see
+    /// [`CrosstermOptions`]. Registers a process-wide panic hook (once,
+    /// across all instances) that restores the terminal before the default
+    /// panic handler runs, so a panic mid-render doesn't leave the user's
+    /// shell in raw mode or the alternate screen.
+    ///
+    /// # Errors
+    ///
+    /// Returns an `std::io::Error` if raw mode or terminal commands fail.
+    pub fn with_options(options: CrosstermOptions) -> Result<Self, std::io::Error> {
         // Setup panic hook on first backend creation
         static PANIC_HOOK: std::sync::Once = std::sync::Once::new();
         PANIC_HOOK.call_once(|| {
@@ -98,21 +180,26 @@ impl Crossterm {
         crossterm::execute!(
             stdout,
             crossterm::terminal::EnterAlternateScreen,
-            crossterm::cursor::Hide,
-            crossterm::event::EnableMouseCapture
+            crossterm::cursor::Hide
         )?;
 
-        // Opt into the kitty keyboard protocol so we receive key repeat and
-        // release events. We push optimistically rather than gating on
-        // `supports_keyboard_enhancement()`: that query blocks for the
-        // terminal's response (seconds on terminals that never answer, e.g.
-        // pipes and CI), stalling startup. Terminals that don't implement the
-        // protocol silently ignore the CSI sequence, and we map whatever key
-        // events they do send. The matching pop happens on restore.
-        crossterm::execute!(
-            stdout,
-            crossterm::event::PushKeyboardEnhancementFlags(keyboard_enhancement_flags())
-        )?;
+        if options.mouse_capture {
+            crossterm::execute!(stdout, crossterm::event::EnableMouseCapture)?;
+        }
+
+        if options.kitty_protocol {
+            // Opt into the kitty keyboard protocol so we receive key repeat and
+            // release events. We push optimistically rather than gating on
+            // `supports_keyboard_enhancement()`: that query blocks for the
+            // terminal's response (seconds on terminals that never answer, e.g.
+            // pipes and CI), stalling startup. Terminals that don't implement the
+            // protocol silently ignore the CSI sequence, and we map whatever key
+            // events they do send. The matching pop happens on restore.
+            crossterm::execute!(
+                stdout,
+                crossterm::event::PushKeyboardEnhancementFlags(keyboard_enhancement_flags())
+            )?;
+        }
 
         Ok(Self {
             renderer: TerminalRenderer::new(BufWriter::new(stdout)),
@@ -394,6 +481,30 @@ mod tests {
             Ok(Event::Key(key)) => key.code,
             other => panic!("expected Ok(Event::Key(_)), got {other:?}"),
         }
+    }
+
+    #[test]
+    fn crossterm_options_default_matches_historical_always_on_behavior() {
+        // `Crossterm::new()` used to unconditionally enable mouse capture and push the kitty
+        // keyboard protocol; `CrosstermOptions::default()` must preserve that behavior exactly so
+        // `Crossterm::new()` (which delegates to `with_options(CrosstermOptions::default())`)
+        // stays backward compatible.
+        let options = CrosstermOptions::default();
+        assert!(options.mouse_capture);
+        assert!(options.kitty_protocol);
+    }
+
+    #[test]
+    fn crossterm_options_can_opt_out_of_both_features() {
+        // Compile-level/API-shape check: building a `CrosstermOptions` with both flags disabled
+        // via the builder type-checks and round-trips its fields. Exercising the actual terminal
+        // commands (`with_options` itself) requires a real TTY, which isn't available in CI, so
+        // this is intentionally not a full integration test.
+        let options = CrosstermOptions::new()
+            .mouse_capture(false)
+            .kitty_protocol(false);
+        assert!(!options.mouse_capture);
+        assert!(!options.kitty_protocol);
     }
 
     #[test]
