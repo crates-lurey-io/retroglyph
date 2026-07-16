@@ -35,8 +35,8 @@ fn headless_snapshot() {
     let mut state = Dashboard::init(&mut term);
 
     let mut views = Vec::new();
-    for (i, &event) in events.iter().enumerate() {
-        term.backend_mut().push_event(event);
+    for (i, event) in events.iter().enumerate() {
+        term.backend_mut().push_event(event.clone());
         let frame = Frame {
             delta: HEADLESS_FRAME_DELTA,
             frame: i as u64,

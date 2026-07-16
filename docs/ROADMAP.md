@@ -12,14 +12,6 @@ Everything else stays narrative-only until it's actually being scheduled.
 
 ## Adopt
 
-Small, additive, worth doing soon (candidates for landing before or shortly after 0.1.0, since
-they're additive `Event` variants and would otherwise be a semver consideration later):
-
-| Idea                                      | Source           | Why                                                                                                                                        | Effort |
-| ----------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------ |
-| `Event::Paste(String)` (bracketed paste)  | crossterm, tcell | Already emitted by the `crossterm` crate retroglyph's crossterm backend depends on; just needs mapping into retroglyph's own `Event` enum. | small  |
-| `Event::FocusGained` / `Event::FocusLost` | crossterm, tcell | Same rationale as paste. Useful for pause-on-blur / cursor-blink-suspend logic in games.                                                   | small  |
-
 Medium effort, real capability gaps, not urgent:
 
 | Idea                                                                                               | Source                                                   | Why                                                                                                                        | Effort       |

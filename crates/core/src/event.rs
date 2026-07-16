@@ -242,7 +242,7 @@ pub enum SystemTheme {
     Dark,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 /// Terminal input event.
 pub enum Event {
@@ -266,6 +266,25 @@ pub enum Event {
     /// pick one itself rather than waiting for an event that may never
     /// arrive.
     ThemeChanged(SystemTheme),
+    /// Pasted text, delivered as a single event rather than individual key
+    /// presses.
+    ///
+    /// Only emitted by backends with a bracketed-paste or clipboard-commit
+    /// source: the crossterm backend (via terminal bracketed paste). The
+    /// windowed (winit) backend does not currently emit this. Content is
+    /// forwarded verbatim from the source, including embedded newlines; the
+    /// receiving app is responsible for any filtering it needs.
+    Paste(String),
+    /// The terminal or application window gained input focus.
+    ///
+    /// This reflects OS/terminal-level focus, not in-app widget focus (see
+    /// `retroglyph-widgets`' focus ring for that).
+    FocusGained,
+    /// The terminal or application window lost input focus.
+    ///
+    /// This reflects OS/terminal-level focus, not in-app widget focus (see
+    /// `retroglyph-widgets`' focus ring for that).
+    FocusLost,
 }
 
 /// Tracks which keys are currently held down.
@@ -430,6 +449,22 @@ mod tests {
         assert!(state.held().next().is_none());
         state.apply_event(&Event::Key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE)));
         assert!(state.is_held(KeyCode::Up));
+    }
+
+    #[test]
+    fn test_paste_event_carries_text() {
+        let event = Event::Paste("hello".to_string());
+        let Event::Paste(text) = event else {
+            panic!("Expected Event::Paste");
+        };
+        assert_eq!(text, "hello");
+    }
+
+    #[test]
+    fn test_focus_gained_and_lost_are_distinct() {
+        assert!(matches!(Event::FocusGained, Event::FocusGained));
+        assert!(matches!(Event::FocusLost, Event::FocusLost));
+        assert_ne!(Event::FocusGained, Event::FocusLost);
     }
 
     #[test]

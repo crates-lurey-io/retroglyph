@@ -42,7 +42,7 @@ fn drive(events: &[Option<Event>]) -> String {
     let mut views = Vec::new();
     for (i, event) in events.iter().enumerate() {
         if let Some(event) = event {
-            term.backend_mut().push_event(*event);
+            term.backend_mut().push_event(event.clone());
         }
         let frame = Frame {
             delta: HEADLESS_FRAME_DELTA,

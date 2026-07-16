@@ -56,8 +56,8 @@ fn drive_sized<E: Example>(width: u16, height: u16, events: &[Event]) -> (E, Vec
     state.tick(&mut term, &priming_frame);
 
     let mut views = vec![term.backend().format_view()];
-    for &event in events {
-        term.backend_mut().push_event(event);
+    for event in events {
+        term.backend_mut().push_event(event.clone());
         let frame = Frame {
             delta: HEADLESS_FRAME_DELTA,
             frame: 0,
