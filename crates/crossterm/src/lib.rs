@@ -12,6 +12,14 @@
 //! `set_cursor_position` are infallible on [`Backend`], so I/O failures in
 //! those methods (e.g. a closed terminal or disconnected pipe) are discarded
 //! silently rather than surfaced.
+//!
+//! # Event polling and CPU cost
+//!
+//! [`poll_event`](Backend::poll_event) wraps a single `crossterm::event::poll()` syscall per
+//! call; a zero timeout (as used by
+//! [`Terminal::drain_events`](retroglyph_core::Terminal::drain_events)) is one non-blocking OS
+//! poll, not a busy loop. See that method's docs for the responsiveness/CPU tradeoff this implies
+//! for uncapped game loops.
 
 // Compile the code blocks in both this crate's own README and the workspace root README as
 // doctests so the quick-start examples are type-checked on every test run and cannot silently
@@ -318,6 +326,21 @@ impl Backend for Crossterm {
         // Crossterm reads events from its own event stream, not from push.
     }
 
+    /// Polls for the next input event, blocking up to `timeout`.
+    ///
+    /// A zero `timeout` (the case [`Terminal::drain_events`](retroglyph_core::Terminal::drain_events)
+    /// uses to drain everything buffered without blocking) performs one non-blocking
+    /// `crossterm::event::poll(Duration::ZERO)` syscall (`select`/`epoll` under the hood) per
+    /// call, not a busy spin inside this method: once the OS reports no data waiting, this
+    /// returns `None` immediately rather than looping. The CPU cost this issue is actually about
+    /// lives one level up, in the caller's game loop: an uncapped loop that calls
+    /// `drain_events()` every iteration with no frame limiter (no `sleep`, no vsync wait) will
+    /// issue that non-blocking syscall as fast as the CPU allows, trading power/CPU usage for
+    /// input latency. Backends and examples in this workspace that need a frame cap (e.g.
+    /// software + WASM, gated on `requestAnimationFrame`) already throttle themselves upstream of
+    /// this call; a crossterm-driven loop wanting the same tradeoff should add its own
+    /// `std::thread::sleep`/tick budget around `drain_events()` rather than expecting this method
+    /// to throttle on its behalf.
     fn poll_event(&mut self, timeout: Duration) -> Option<Event> {
         let start = std::time::Instant::now();
         let mut remaining = timeout;
