@@ -17,6 +17,8 @@
 //!   return `ceil(glyph_width / 8)` bytes per row and update the bit
 //!   extraction in `blit_cell`/`blit_glyph` to index across bytes. PNG
 //!   sprite tilesets via `SpriteCache` already support arbitrary tile sizes.
+//!   Tracked in retroglyph issue #164; deferred until a second, non-8px-wide
+//!   font is actually needed.
 
 // ── BitmapFont ─────────────────────────────────────────────────────────────
 
