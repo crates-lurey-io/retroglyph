@@ -6,12 +6,12 @@
 [![license](https://img.shields.io/crates/l/retroglyph-widgets.svg)](https://github.com/crates-lurey-io/retroglyph/blob/main/LICENSE)
 
 Immediate-mode drawing helpers for [retroglyph](https://github.com/crates-lurey-io/retroglyph): box
-borders, filled panels, gauges, tables, sparklines, and a small constraint-based layout splitter
-(`split_h`/`split_v` with ratatui-style `Fixed`/`Percent`/`Fill`/`Min`/`Max` constraints), plus
-hover/click/drag/focus interaction tracking. Every widget is a builder struct that draws itself into
-a `Terminal` and retains no state of its own; depends only on
-[`retroglyph-core`](https://crates.io/crates/retroglyph-core), so games that draw manually never
-pull it in.
+borders, filled panels, gauges, tables, lists, tab strips, buttons, sparklines, and a small
+constraint-based layout splitter (`split_h`/`split_v` with ratatui-style
+`Fixed`/`Percent`/`Fill`/`Min`/`Max` constraints), plus hover/click/drag/focus interaction tracking.
+Every widget is a builder struct that draws itself into a `Terminal` and retains no state of its
+own; depends only on [`retroglyph-core`](https://crates.io/crates/retroglyph-core), so games that
+draw manually never pull it in.
 
 ## Quick start
 
