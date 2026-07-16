@@ -212,7 +212,8 @@ fn write_cursor_position(
 ///   `event.key.codePointAt(0)` for a single-character key); for named keys,
 ///   one of [`key_codes`]'s constants (e.g. [`key_codes::LEFT`]).
 /// - `mods`: a bitmask matching [`retroglyph_core::event::KeyModifiers`]'s
-///   layout (`SHIFT = 1`, `CONTROL = 2`, `ALT = 4`).
+///   layout (`SHIFT = 1`, `CONTROL = 2`, `ALT = 4`, `SUPER = 8`). `SUPER` maps to the
+///   JS `metaKey` (Cmd on macOS, the Windows/Super key elsewhere).
 #[must_use]
 pub fn decode_key_event(code: u32, mods: u8) -> Option<retroglyph_core::event::KeyEvent> {
     use key_codes as kc;
@@ -251,6 +252,9 @@ pub fn decode_key_event(code: u32, mods: u8) -> Option<retroglyph_core::event::K
     }
     if mods & 0b100 != 0 {
         modifiers |= KeyModifiers::ALT;
+    }
+    if mods & 0b1000 != 0 {
+        modifiers |= KeyModifiers::SUPER;
     }
 
     Some(retroglyph_core::event::KeyEvent::new(key_code, modifiers))
@@ -464,6 +468,22 @@ mod tests {
         let key = decode_key_event(key_codes::LEFT, 0b010).unwrap();
         assert_eq!(key.code, KeyCode::Left);
         assert!(key.modifiers.contains(KeyModifiers::CONTROL));
+    }
+
+    #[test]
+    fn decode_key_event_maps_super_modifier() {
+        let key = decode_key_event(u32::from('x'), 0b1000).unwrap();
+        assert_eq!(key.code, KeyCode::Char('x'));
+        assert!(key.modifiers.contains(KeyModifiers::SUPER));
+    }
+
+    #[test]
+    fn decode_key_event_maps_super_combined_with_other_modifiers() {
+        let key = decode_key_event(u32::from('x'), 0b1011).unwrap();
+        assert!(key.modifiers.contains(KeyModifiers::SHIFT));
+        assert!(key.modifiers.contains(KeyModifiers::CONTROL));
+        assert!(key.modifiers.contains(KeyModifiers::SUPER));
+        assert!(!key.modifiers.contains(KeyModifiers::ALT));
     }
 
     #[test]
