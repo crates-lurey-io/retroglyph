@@ -557,6 +557,16 @@ where
                     term.backend_mut().push_event(system_theme_event(theme));
                 }
             }
+            WindowEvent::Focused(gained) => {
+                if let Some(term) = self.terminal.as_mut() {
+                    let event = if gained {
+                        Event::FocusGained
+                    } else {
+                        Event::FocusLost
+                    };
+                    term.backend_mut().push_event(event);
+                }
+            }
             WindowEvent::KeyboardInput { event, .. } => {
                 if let Some(term) = self.terminal.as_mut()
                     && let Some(e) = translate_key(event, self.current_modifiers)
@@ -987,7 +997,7 @@ mod tests {
             pixel_position: None,
             modifiers: KeyModifiers::NONE,
         });
-        backend.push_event(ev);
+        backend.push_event(ev.clone());
         assert_eq!(backend.poll_event(Duration::ZERO), Some(ev));
         assert_eq!(backend.poll_event(Duration::ZERO), None);
     }
@@ -1007,8 +1017,8 @@ mod tests {
             pixel_position: None,
             modifiers: KeyModifiers::NONE,
         });
-        backend.push_event(moved);
-        backend.push_event(clicked);
+        backend.push_event(moved.clone());
+        backend.push_event(clicked.clone());
         assert_eq!(backend.poll_event(Duration::ZERO), Some(moved));
         assert_eq!(backend.poll_event(Duration::ZERO), Some(clicked));
     }
@@ -1303,6 +1313,16 @@ mod tests {
                 retroglyph_core::event::SystemTheme::Dark
             ))
         );
+    }
+
+    #[test]
+    fn focused_pushes_focus_gained_and_lost_events() {
+        let mut app = test_window_app();
+        app.handle_window_event(WindowEvent::Focused(true));
+        assert_eq!(poll(&mut app), Some(Event::FocusGained));
+
+        app.handle_window_event(WindowEvent::Focused(false));
+        assert_eq!(poll(&mut app), Some(Event::FocusLost));
     }
 
     #[test]

@@ -55,6 +55,8 @@ fn restore_terminal() {
     let _ = crossterm::execute!(stdout, crossterm::event::PopKeyboardEnhancementFlags);
     let _ = crossterm::execute!(
         stdout,
+        crossterm::event::DisableBracketedPaste,
+        crossterm::event::DisableFocusChange,
         crossterm::event::DisableMouseCapture,
         crossterm::cursor::Show,
         crossterm::terminal::LeaveAlternateScreen
@@ -65,11 +67,13 @@ fn restore_terminal() {
 /// Options controlling which optional terminal protocol features
 /// [`Crossterm::with_options`] enables.
 ///
-/// Both features default to `true`, matching the unconditional behavior of
-/// [`Crossterm::new`]. Use [`CrosstermOptions::mouse_capture`] or
-/// [`CrosstermOptions::kitty_protocol`] to disable a feature entirely, e.g.
-/// when running on a terminal (or through a pipe/CI harness/`tmux`/SSH
-/// session) where mouse capture or the kitty keyboard protocol is unwanted.
+/// All features default to `true`; mouse capture and the kitty keyboard
+/// protocol match the unconditional behavior of [`Crossterm::new`] prior to
+/// this type's introduction. Use [`CrosstermOptions::mouse_capture`],
+/// [`CrosstermOptions::kitty_protocol`], [`CrosstermOptions::focus_change`],
+/// or [`CrosstermOptions::bracketed_paste`] to disable a feature entirely,
+/// e.g. when running on a terminal (or through a pipe/CI harness/`tmux`/SSH
+/// session) where the feature is unwanted.
 ///
 /// This crate deliberately does not attempt to auto-detect terminal
 /// capabilities (no `TERM` parsing, no `supports_keyboard_enhancement()`
@@ -83,9 +87,14 @@ fn restore_terminal() {
 /// let options = CrosstermOptions::new().mouse_capture(false).kitty_protocol(false);
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+// Four independent, unrelated terminal protocol toggles, not a state machine in disguise: each
+// maps to one crossterm enable/disable command pair and is meaningful on its own.
+#[allow(clippy::struct_excessive_bools)]
 pub struct CrosstermOptions {
     mouse_capture: bool,
     kitty_protocol: bool,
+    focus_change: bool,
+    bracketed_paste: bool,
 }
 
 impl CrosstermOptions {
@@ -109,14 +118,34 @@ impl CrosstermOptions {
         self.kitty_protocol = enabled;
         self
     }
+
+    /// Sets whether to report focus gained/lost as
+    /// [`Event::FocusGained`]/[`Event::FocusLost`]
+    /// (`crossterm::event::EnableFocusChange`).
+    #[must_use]
+    pub const fn focus_change(mut self, enabled: bool) -> Self {
+        self.focus_change = enabled;
+        self
+    }
+
+    /// Sets whether to report bracketed paste as [`Event::Paste`]
+    /// (`crossterm::event::EnableBracketedPaste`).
+    #[must_use]
+    pub const fn bracketed_paste(mut self, enabled: bool) -> Self {
+        self.bracketed_paste = enabled;
+        self
+    }
 }
 
 impl Default for CrosstermOptions {
-    /// Both features enabled, matching [`Crossterm::new`]'s historical behavior.
+    /// All features enabled; mouse capture and the kitty keyboard protocol
+    /// match [`Crossterm::new`]'s historical behavior.
     fn default() -> Self {
         Self {
             mouse_capture: true,
             kitty_protocol: true,
+            focus_change: true,
+            bracketed_paste: true,
         }
     }
 }
@@ -130,12 +159,12 @@ impl Crossterm {
     /// Creates a new `Crossterm` backend rendering to standard output.
     ///
     /// Enables raw mode, enters the alternate screen, hides the cursor, and
-    /// enables mouse capture and pushes the kitty keyboard protocol (both by
-    /// default; see [`CrosstermOptions`] to disable either). Registers a
-    /// process-wide panic hook (once, across all instances) that restores
-    /// the terminal before the default panic handler runs, so a panic
-    /// mid-render doesn't leave the user's shell in raw mode or the
-    /// alternate screen.
+    /// enables mouse capture, focus-change reporting, bracketed paste, and
+    /// the kitty keyboard protocol (all by default; see [`CrosstermOptions`]
+    /// to disable any of them). Registers a process-wide panic hook (once,
+    /// across all instances) that restores the terminal before the default
+    /// panic handler runs, so a panic mid-render doesn't leave the user's
+    /// shell in raw mode or the alternate screen.
     ///
     /// This is a thin wrapper over [`Crossterm::with_options`] with
     /// [`CrosstermOptions::default()`].
@@ -151,12 +180,13 @@ impl Crossterm {
     /// explicit control over which optional protocol features are enabled.
     ///
     /// Enables raw mode, enters the alternate screen, and hides the cursor
-    /// unconditionally. Mouse capture and the kitty keyboard protocol are
-    /// enabled by default but can be disabled individually via `options`; see
-    /// [`CrosstermOptions`]. Registers a process-wide panic hook (once,
-    /// across all instances) that restores the terminal before the default
-    /// panic handler runs, so a panic mid-render doesn't leave the user's
-    /// shell in raw mode or the alternate screen.
+    /// unconditionally. Mouse capture, focus-change reporting, bracketed
+    /// paste, and the kitty keyboard protocol are enabled by default but can
+    /// be disabled individually via `options`; see [`CrosstermOptions`].
+    /// Registers a process-wide panic hook (once, across all instances) that
+    /// restores the terminal before the default panic handler runs, so a
+    /// panic mid-render doesn't leave the user's shell in raw mode or the
+    /// alternate screen.
     ///
     /// # Errors
     ///
@@ -185,6 +215,14 @@ impl Crossterm {
 
         if options.mouse_capture {
             crossterm::execute!(stdout, crossterm::event::EnableMouseCapture)?;
+        }
+
+        if options.focus_change {
+            crossterm::execute!(stdout, crossterm::event::EnableFocusChange)?;
+        }
+
+        if options.bracketed_paste {
+            crossterm::execute!(stdout, crossterm::event::EnableBracketedPaste)?;
         }
 
         if options.kitty_protocol {
@@ -468,7 +506,9 @@ fn from_crossterm_event(event: crossterm::event::Event) -> Result<Event, ()> {
         }
         CE::Mouse(m) => Ok(Event::Mouse(from_crossterm_mouse_event(m)?)),
         CE::Resize(w, h) => Ok(Event::Resize(w, h)),
-        _ => Err(()),
+        CE::Paste(text) => Ok(Event::Paste(text)),
+        CE::FocusGained => Ok(Event::FocusGained),
+        CE::FocusLost => Ok(Event::FocusLost),
     }
 }
 
@@ -488,23 +528,30 @@ mod tests {
         // `Crossterm::new()` used to unconditionally enable mouse capture and push the kitty
         // keyboard protocol; `CrosstermOptions::default()` must preserve that behavior exactly so
         // `Crossterm::new()` (which delegates to `with_options(CrosstermOptions::default())`)
-        // stays backward compatible.
+        // stays backward compatible. Focus-change and bracketed-paste reporting are new additions
+        // and default to enabled as well, consistent with the other two features.
         let options = CrosstermOptions::default();
         assert!(options.mouse_capture);
         assert!(options.kitty_protocol);
+        assert!(options.focus_change);
+        assert!(options.bracketed_paste);
     }
 
     #[test]
-    fn crossterm_options_can_opt_out_of_both_features() {
-        // Compile-level/API-shape check: building a `CrosstermOptions` with both flags disabled
+    fn crossterm_options_can_opt_out_of_all_features() {
+        // Compile-level/API-shape check: building a `CrosstermOptions` with all flags disabled
         // via the builder type-checks and round-trips its fields. Exercising the actual terminal
         // commands (`with_options` itself) requires a real TTY, which isn't available in CI, so
         // this is intentionally not a full integration test.
         let options = CrosstermOptions::new()
             .mouse_capture(false)
-            .kitty_protocol(false);
+            .kitty_protocol(false)
+            .focus_change(false)
+            .bracketed_paste(false);
         assert!(!options.mouse_capture);
         assert!(!options.kitty_protocol);
+        assert!(!options.focus_change);
+        assert!(!options.bracketed_paste);
     }
 
     #[test]
@@ -555,5 +602,32 @@ mod tests {
             key_code_of(ct_event),
             retroglyph_core::event::KeyCode::Char('a')
         );
+    }
+
+    #[test]
+    fn crossterm_paste_maps_to_retroglyph_paste() {
+        let ct_event = crossterm::event::Event::Paste("pasted text".to_string());
+        match from_crossterm_event(ct_event) {
+            Ok(Event::Paste(text)) => assert_eq!(text, "pasted text"),
+            other => panic!("expected Ok(Event::Paste(_)), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn crossterm_focus_gained_maps_correctly() {
+        let ct_event = crossterm::event::Event::FocusGained;
+        assert!(matches!(
+            from_crossterm_event(ct_event),
+            Ok(Event::FocusGained)
+        ));
+    }
+
+    #[test]
+    fn crossterm_focus_lost_maps_correctly() {
+        let ct_event = crossterm::event::Event::FocusLost;
+        assert!(matches!(
+            from_crossterm_event(ct_event),
+            Ok(Event::FocusLost)
+        ));
     }
 }

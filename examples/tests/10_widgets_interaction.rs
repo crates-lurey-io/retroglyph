@@ -36,8 +36,8 @@ fn drive(events: &[&[Event]]) -> String {
 
     let mut views = Vec::new();
     for (i, batch) in events.iter().enumerate() {
-        for &event in *batch {
-            term.backend_mut().push_event(event);
+        for event in *batch {
+            term.backend_mut().push_event(event.clone());
         }
         let frame = Frame {
             delta: HEADLESS_FRAME_DELTA,
