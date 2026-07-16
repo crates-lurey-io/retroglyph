@@ -18,6 +18,7 @@
 //! [`super::BoxBorder`] rather than duplicating its drawing loop.
 
 use retroglyph_core::{Backend, Color, Rect, Style, Terminal};
+use unicode_width::UnicodeWidthStr;
 
 use super::{Meter, Text, Widget};
 
@@ -47,8 +48,8 @@ pub(super) fn render<B: Backend>(
     let color = Meter::new(ratio).color();
 
     // Layout: "<label> [########----]  <readout>"
-    let label_w = label.len().min(area.width_usize());
-    let reserved = label_w + 1 + readout.len() + 1; // label + space + gap + readout
+    let label_w = label.width().min(area.width_usize());
+    let reserved = label_w + 1 + readout.width() + 1; // label + space + gap + readout
     let bar_w = area.width_usize().saturating_sub(reserved);
 
     let label_area = Rect::new(area.left(), y, label_w as u16, 1);
@@ -78,4 +79,25 @@ pub(super) fn render<B: Backend>(
         .style(Style::new().fg(color))
         .render(readout_area, term);
     term.reset_style();
+}
+
+#[cfg(test)]
+mod tests {
+    use retroglyph_core::Headless;
+
+    use super::*;
+
+    #[test]
+    fn wide_char_label_uses_display_width_not_byte_length() {
+        // "あ" is 1 char, 3 bytes (UTF-8), 2 display columns. A byte-length
+        // `label_w` (the pre-fix bug) would reserve 3 columns for it and
+        // push the bar's start one column later than it should be.
+        let area = Rect::new(0, 0, 20, 1);
+        let mut term = Terminal::new(Headless::new(20, 1));
+        render(&mut term, area, "あ", default_label_style(), 0.5, "");
+
+        // Bar starts right after the 2-column-wide label plus a 1-column
+        // gap, i.e. at column 3, not column 4.
+        assert_eq!(term.grid().get(3, 0).glyph(), '█');
+    }
 }
