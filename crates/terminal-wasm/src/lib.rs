@@ -362,6 +362,10 @@ pub mod wasm {
 
     /// Reports a new size (in cells) for the terminal identified by
     /// `handle`, e.g. after xterm.js's `fit` addon recomputes `cols`/`rows`.
+    ///
+    /// Logs a warning (via the `log` crate) and otherwise does nothing if
+    /// `handle` is unknown, e.g. because the terminal was already freed via
+    /// [`wasm_terminal_free`].
     #[wasm_bindgen]
     pub fn wasm_terminal_resize(handle: u32, width: u16, height: u16) {
         use retroglyph_core::backend::Backend;
@@ -369,6 +373,8 @@ pub mod wasm {
         INSTANCES.with_borrow_mut(|instances| {
             if let Some(term) = instances.get_mut(&handle) {
                 term.resize(Size { width, height });
+            } else {
+                log::warn!("wasm_terminal_resize: unknown handle {handle}");
             }
         });
     }
@@ -377,7 +383,10 @@ pub mod wasm {
     /// [`decode_key_event`] for the `code`/`mods` encoding.
     ///
     /// Silently ignores codes that don't decode to a known key (e.g. a lone
-    /// Unicode combining mark with no assigned scalar meaning here).
+    /// Unicode combining mark with no assigned scalar meaning here). Logs a
+    /// warning (via the `log` crate) and otherwise does nothing if `handle`
+    /// is unknown, e.g. because the terminal was already freed via
+    /// [`wasm_terminal_free`].
     #[wasm_bindgen]
     pub fn wasm_terminal_push_key(handle: u32, code: u32, mods: u8) {
         use retroglyph_core::event::Event;
@@ -387,6 +396,8 @@ pub mod wasm {
         INSTANCES.with_borrow_mut(|instances| {
             if let Some(term) = instances.get_mut(&handle) {
                 term.push_event(Event::Key(key_event));
+            } else {
+                log::warn!("wasm_terminal_push_key: unknown handle {handle}");
             }
         });
     }
@@ -394,14 +405,19 @@ pub mod wasm {
     /// Drains and returns the ANSI bytes rendered since the last call for the
     /// terminal identified by `handle`. Returns an empty string if `handle`
     /// is unknown or nothing has been drawn since the last call.
+    ///
+    /// Logs a warning (via the `log` crate) in the unknown-`handle` case;
+    /// callers that only ever pass handles from [`wasm_terminal_new`] and
+    /// stop using them after [`wasm_terminal_free`] should never see one.
     #[wasm_bindgen]
     #[must_use]
     pub fn wasm_terminal_take_output(handle: u32) -> String {
         INSTANCES.with_borrow_mut(|instances| {
-            instances
-                .get_mut(&handle)
-                .map(TerminalWasm::take_output)
-                .unwrap_or_default()
+            let Some(term) = instances.get_mut(&handle) else {
+                log::warn!("wasm_terminal_take_output: unknown handle {handle}");
+                return String::new();
+            };
+            term.take_output()
         })
     }
 }
