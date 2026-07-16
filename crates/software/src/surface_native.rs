@@ -98,28 +98,85 @@ impl WindowSurface {
         damage: (u32, u32),
     ) -> Result<(), SurfaceError> {
         let mut buffer = self.surface.buffer_mut().map_err(SurfaceError::Surface)?;
-        if pixels.len() != buffer.len() {
+        if needs_full_present_fallback(pixels.len(), buffer.len()) {
             buffer.fill(0);
             return buffer.present().map_err(SurfaceError::Surface);
         }
         buffer.copy_from_slice(pixels);
-        let (y0, y1) = damage;
-        match (
-            NonZeroU32::new(self.width),
-            NonZeroU32::new(y1.saturating_sub(y0)),
-        ) {
-            (Some(width), Some(height)) => {
-                let rect = softbuffer::Rect {
-                    x: 0,
-                    y: y0,
-                    width,
-                    height,
-                };
-                buffer
-                    .present_with_damage(&[rect])
-                    .map_err(SurfaceError::Surface)
-            }
-            _ => buffer.present().map_err(SurfaceError::Surface),
+        match damage_rect(self.width, damage) {
+            Some(rect) => buffer
+                .present_with_damage(&[rect])
+                .map_err(SurfaceError::Surface),
+            None => buffer.present().map_err(SurfaceError::Surface),
         }
+    }
+}
+
+/// Decides whether [`WindowSurface::present`] must fall back to a full-buffer
+/// present because `pixels` doesn't match the softbuffer buffer's current
+/// length (a resize is mid-flight).
+const fn needs_full_present_fallback(pixels_len: usize, buffer_len: usize) -> bool {
+    pixels_len != buffer_len
+}
+
+/// Converts a damage row band `[y0, y1)` and the surface `width` into a
+/// softbuffer damage [`Rect`](softbuffer::Rect) spanning the full row width,
+/// or `None` if the band or width is degenerate, in which case
+/// [`WindowSurface::present`] falls back to a full present instead.
+const fn damage_rect(width: u32, damage: (u32, u32)) -> Option<softbuffer::Rect> {
+    let (y0, y1) = damage;
+    match (
+        NonZeroU32::new(width),
+        NonZeroU32::new(y1.saturating_sub(y0)),
+    ) {
+        (Some(width), Some(height)) => Some(softbuffer::Rect {
+            x: 0,
+            y: y0,
+            width,
+            height,
+        }),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{NonZeroU32, damage_rect, needs_full_present_fallback};
+
+    #[test]
+    fn full_present_fallback_on_length_mismatch() {
+        assert!(needs_full_present_fallback(3, 4));
+        assert!(needs_full_present_fallback(0, 4));
+    }
+
+    #[test]
+    fn no_fallback_when_lengths_match() {
+        assert!(!needs_full_present_fallback(4, 4));
+        assert!(!needs_full_present_fallback(0, 0));
+    }
+
+    #[test]
+    fn damage_rect_converts_band_to_full_width_rect() {
+        let rect = damage_rect(80, (4, 10)).expect("non-degenerate band");
+        assert_eq!(rect.x, 0);
+        assert_eq!(rect.y, 4);
+        assert_eq!(rect.width, NonZeroU32::new(80).unwrap());
+        assert_eq!(rect.height, NonZeroU32::new(6).unwrap());
+    }
+
+    #[test]
+    fn damage_rect_none_when_width_is_zero() {
+        assert!(damage_rect(0, (0, 10)).is_none());
+    }
+
+    #[test]
+    fn damage_rect_none_when_band_is_empty() {
+        assert!(damage_rect(80, (5, 5)).is_none());
+    }
+
+    #[test]
+    fn damage_rect_none_when_band_is_inverted() {
+        // y1 < y0: saturating_sub yields 0, treated the same as an empty band.
+        assert!(damage_rect(80, (10, 5)).is_none());
     }
 }

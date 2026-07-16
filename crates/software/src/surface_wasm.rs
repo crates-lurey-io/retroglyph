@@ -120,9 +120,7 @@ impl WindowSurface {
     /// resize calls (browsers fire plenty of those too) don't even queue a
     /// pointless clear.
     pub(crate) fn resize(&mut self, width: u32, height: u32) {
-        if (width, height) != (self.width, self.height) {
-            self.pending_size = Some((width, height));
-        }
+        self.pending_size = next_pending_size((self.width, self.height), (width, height));
     }
 
     /// Applies a pending resize recorded by [`resize`](Self::resize): sets the
@@ -166,8 +164,8 @@ impl WindowSurface {
         // If the caller's pixel buffer hasn't caught up to a pending resize
         // yet (grid resize still in flight), leave it queued and keep
         // presenting at the old, still-valid size (`damage` unchanged) below.
-        let damage = if let Some((width, height)) = self.pending_size
-            && pixels.len() == width as usize * height as usize
+        let damage = if let Some((width, height)) =
+            pending_resize_to_apply(self.pending_size, pixels.len())
         {
             // `pixels` already matches the pending size, so the caller's
             // side of the resize (grid/backing-buffer) has caught up. Apply
@@ -194,11 +192,9 @@ impl WindowSurface {
         }
 
         let w = self.width as usize;
-        let y0 = damage.0 as usize;
-        let y1 = (damage.1 as usize).min(self.height as usize);
-        if y1 <= y0 {
+        let Some((y0, y1)) = clamp_damage_rows(damage, self.height) else {
             return Ok(());
-        }
+        };
 
         // Convert only the damaged rows into `rgba` in place.
         let (start, end) = (y0 * w, y1 * w);
@@ -228,5 +224,92 @@ impl WindowSurface {
         self.ctx
             .put_image_data(&image_data, 0.0, y0 as f64)
             .map_err(|_| SurfaceError::Canvas("put_image_data() threw".to_owned()))
+    }
+}
+
+/// Decides what a [`WindowSurface::resize`] call should store in
+/// `pending_size`, given the currently applied `(width, height)`. `None` if
+/// `requested` already matches `current` (a no-op resize that shouldn't queue
+/// a redundant clear).
+fn next_pending_size(current: (u32, u32), requested: (u32, u32)) -> Option<(u32, u32)> {
+    (requested != current).then_some(requested)
+}
+
+/// Decides whether [`WindowSurface::present`] should apply a queued
+/// `pending_size` this frame: only once the caller's `pixels` buffer has
+/// caught up to that pending size (its length matches `width * height`).
+/// Otherwise the resize stays queued and `present` keeps painting at the
+/// old, still-valid size.
+fn pending_resize_to_apply(
+    pending_size: Option<(u32, u32)>,
+    pixels_len: usize,
+) -> Option<(u32, u32)> {
+    pending_size.filter(|&(width, height)| pixels_len == width as usize * height as usize)
+}
+
+/// Clamps a damage row band `[y0, y1)` to `height`, returning `None` if the
+/// clamped range is empty (nothing to repaint this frame).
+fn clamp_damage_rows(damage: (u32, u32), height: u32) -> Option<(usize, usize)> {
+    let y0 = damage.0 as usize;
+    let y1 = (damage.1 as usize).min(height as usize);
+    (y1 > y0).then_some((y0, y1))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{clamp_damage_rows, next_pending_size, pending_resize_to_apply};
+
+    #[test]
+    fn next_pending_size_none_when_unchanged() {
+        assert_eq!(next_pending_size((100, 50), (100, 50)), None);
+    }
+
+    #[test]
+    fn next_pending_size_some_when_changed() {
+        assert_eq!(next_pending_size((100, 50), (120, 60)), Some((120, 60)));
+    }
+
+    #[test]
+    fn next_pending_size_some_when_only_one_dimension_changes() {
+        assert_eq!(next_pending_size((100, 50), (100, 60)), Some((100, 60)));
+    }
+
+    #[test]
+    fn pending_resize_to_apply_none_when_no_pending_size() {
+        assert_eq!(pending_resize_to_apply(None, 6000), None);
+    }
+
+    #[test]
+    fn pending_resize_to_apply_none_when_pixels_not_caught_up() {
+        // pending size is 120x60 = 7200 pixels; caller buffer still 100x50 = 5000.
+        assert_eq!(pending_resize_to_apply(Some((120, 60)), 5000), None);
+    }
+
+    #[test]
+    fn pending_resize_to_apply_some_when_pixels_caught_up() {
+        assert_eq!(
+            pending_resize_to_apply(Some((120, 60)), 120 * 60),
+            Some((120, 60))
+        );
+    }
+
+    #[test]
+    fn clamp_damage_rows_clamps_to_height() {
+        assert_eq!(clamp_damage_rows((4, 100), 10), Some((4, 10)));
+    }
+
+    #[test]
+    fn clamp_damage_rows_none_when_empty() {
+        assert_eq!(clamp_damage_rows((5, 5), 10), None);
+    }
+
+    #[test]
+    fn clamp_damage_rows_none_when_inverted() {
+        assert_eq!(clamp_damage_rows((8, 3), 10), None);
+    }
+
+    #[test]
+    fn clamp_damage_rows_none_when_band_entirely_past_height() {
+        assert_eq!(clamp_damage_rows((12, 15), 10), None);
     }
 }
