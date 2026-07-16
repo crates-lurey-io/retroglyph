@@ -93,6 +93,13 @@ test: build-pty-examples
     cargo bin cargo-nextest run --workspace --all-features
     cargo test --workspace --all-features --doc
 
+# CI variant: assumes `nextest` is already on PATH as a prebuilt binary (e.g. installed via
+# taiki-e/install-action) instead of being compiled from source through `cargo bin`, which is
+# what made the CI `test` job take ~4 minutes longer than every other job.
+test-ci: build-pty-examples
+    cargo nextest run --workspace --all-features
+    cargo test --workspace --all-features --doc
+
 test-v: build-pty-examples
     cargo bin cargo-nextest run --workspace --all-features --no-capture
     cargo test --workspace --all-features --doc -- --nocapture
