@@ -32,6 +32,7 @@ mod sparkline;
 mod stat_bar;
 mod table;
 mod text;
+mod window;
 
 pub use box_border::BoxBorder;
 pub use gauge::Gauge;
