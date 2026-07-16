@@ -110,13 +110,21 @@ impl TerminalWasm {
     ///
     /// # Panics
     ///
-    /// Panics if the buffered output is not valid UTF-8. This can't happen in
-    /// practice: [`TerminalRenderer`] only ever writes ASCII escape codes and
-    /// glyphs encoded via `char`/`&str` (both always valid UTF-8).
+    /// Panics if the buffered output is not valid UTF-8. This can't happen
+    /// through any safe, public API of this crate: [`TerminalRenderer`] only
+    /// ever writes into its `Vec<u8>` writer via `write!`/`write_str` calls
+    /// on ASCII escape sequences and glyphs encoded through `char`/`&str`
+    /// (both always valid UTF-8), and this buffer is never exposed for
+    /// direct mutation between a `take_output` call and the next `draw`. The
+    /// only way to trigger this panic would be memory corruption or an
+    /// `unsafe` write bypassing `TerminalRenderer` entirely -- and this
+    /// workspace forbids `unsafe_code` outright, so no code in this crate
+    /// (or its dependents, absent unsound external `unsafe`) can do that.
     #[must_use]
     pub fn take_output(&mut self) -> String {
         let bytes = std::mem::take(self.renderer.writer_mut());
-        String::from_utf8(bytes).expect("TerminalRenderer only ever writes valid UTF-8")
+        String::from_utf8(bytes)
+            .expect("TerminalRenderer only ever writes valid UTF-8 via safe char/&str APIs")
     }
 }
 
