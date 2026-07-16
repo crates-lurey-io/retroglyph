@@ -20,6 +20,31 @@
 //! [`Terminal::drain_events`](retroglyph_core::Terminal::drain_events)) is one non-blocking OS
 //! poll, not a busy loop. See that method's docs for the responsiveness/CPU tradeoff this implies
 //! for uncapped game loops.
+//!
+//! # Focus and lifecycle events
+//!
+//! With [`CrosstermOptions::focus_change`] enabled (the default), a terminal losing and regaining
+//! input focus is reported as [`Event::FocusLost`]/[`Event::FocusGained`]. This is the only
+//! lifecycle signal this backend currently has: unlike a windowed backend, there's no separate
+//! "suspended"/"paused" notion here, and this crate maps every focus change the same way
+//! regardless of the underlying reason (window manager focus switch, terminal minimized, or --
+//! notably on Wayland compositors -- a terminal surface being hidden or unmapped without an
+//! accompanying resize).
+//!
+//! Terminal-side state (raw mode, the alternate screen, cursor position, last-written
+//! colors/attributes) is untouched by a focus change and is preserved across it: this backend
+//! does not react to [`Event::FocusLost`]/[`Event::FocusGained`] itself, so nothing is torn down
+//! or reinitialized. Rendering is not deferred automatically either -- [`Backend::draw`] and
+//! [`Backend::flush`] keep writing escape sequences to stdout even while unfocused, since
+//! crossterm has no OS-level way to know whether that output is actually being presented while
+//! hidden. An app that wants to pause redraws while unfocused (e.g. to avoid wasted work on a
+//! backgrounded Wayland surface) should track [`Event::FocusLost`]/[`Event::FocusGained`] itself
+//! and skip its own draw calls in between.
+//!
+//! If `retroglyph-core` later adds a dedicated `Event::Suspended` (or similar) distinct from
+//! plain focus loss, this crate would need coordinated changes with `retroglyph-window` (which
+//! shares the `Event` enum) before mapping anything to it; no such variant exists today, so there
+//! is nothing for this backend to emit.
 
 // Compile the code blocks in both this crate's own README and the workspace root README as
 // doctests so the quick-start examples are type-checked on every test run and cannot silently
@@ -130,6 +155,10 @@ impl CrosstermOptions {
     /// Sets whether to report focus gained/lost as
     /// [`Event::FocusGained`]/[`Event::FocusLost`]
     /// (`crossterm::event::EnableFocusChange`).
+    ///
+    /// See the crate-level "Focus and lifecycle events" docs for the pause/resume contract this
+    /// implies (e.g. on Wayland, where a terminal can lose and regain focus independent of any
+    /// resize).
     #[must_use]
     pub const fn focus_change(mut self, enabled: bool) -> Self {
         self.focus_change = enabled;
