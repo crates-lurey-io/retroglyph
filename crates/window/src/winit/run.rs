@@ -264,9 +264,25 @@ impl<P: Presenter, F> WindowApp<P, F> {
         // canvas visibly shrinks -- on a phone with DPR 3 and our 1.5 cap,
         // that's 50% of the screen). See `web_viewport_surface_physical_size`
         // for the separate, capped size used for the raster backing store.
+        // On native, `init_size` is expressed in logical (1x) pixels --
+        // `WindowConfig::fit` derives it from the presenter's grid/cell
+        // geometry, which assumes an unscaled cell. Requesting that count
+        // directly as a `PhysicalSize` on a HiDPI display asks winit/the OS
+        // for a window with fewer true pixels than the monitor actually
+        // has, so it gets upscaled blurrily to fill the same logical space
+        // instead of rendering crisply at native resolution from the first
+        // frame. Scaling by the primary monitor's `scale_factor` up front
+        // (falling back to `1.0` when no monitor is available, e.g.
+        // headless/CI) avoids that: see `physical_size_for`.
         #[cfg(not(target_arch = "wasm32"))]
-        let physical_size =
-            winit::dpi::PhysicalSize::new(self.init_size.width, self.init_size.height);
+        let physical_size = {
+            let scale_factor = event_loop
+                .primary_monitor()
+                .map_or(1.0, |monitor| monitor.scale_factor());
+            let (width, height) =
+                physical_size_for(self.init_size.width, self.init_size.height, scale_factor);
+            winit::dpi::PhysicalSize::new(width, height)
+        };
         #[cfg(target_arch = "wasm32")]
         let physical_size = if self.fill_viewport {
             web_viewport_layout_physical_size().unwrap_or_else(|| {
@@ -350,6 +366,23 @@ impl<P: Presenter, F> WindowApp<P, F> {
 
         Some(window)
     }
+}
+
+/// Scales a logical (1x) initial window size up to true physical pixels for
+/// `scale_factor`, so [`create_window_and_surface`](WindowApp::create_window_and_surface)
+/// can request a window sized to the primary monitor's actual resolution
+/// from the first frame, instead of a too-small physical window the OS then
+/// has to upscale blurrily to fill the same on-screen space.
+///
+/// Pure math, kept separate from `create_window_and_surface` so it's unit
+/// -testable without a live winit event loop / monitor.
+#[cfg(not(target_arch = "wasm32"))]
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+fn physical_size_for(logical_width: u32, logical_height: u32, scale_factor: f64) -> (u32, u32) {
+    (
+        (f64::from(logical_width) * scale_factor).round() as u32,
+        (f64::from(logical_height) * scale_factor).round() as u32,
+    )
 }
 
 /// Maps winit's [`Theme`](winit::window::Theme) to the backend-agnostic
@@ -808,6 +841,27 @@ mod tests {
     use std::time::Duration;
 
     // ── dpr_pointer_scale ─────────────────────────────────────────────────────
+
+    // ── physical_size_for ─────────────────────────────────────────────────────
+
+    #[test]
+    fn physical_size_for_unscaled_monitor_is_unchanged() {
+        assert_eq!(physical_size_for(80, 80, 1.0), (80, 80));
+    }
+
+    #[test]
+    fn physical_size_for_hidpi_monitor_scales_up() {
+        // 2x display: a 80x80 logical window needs 160x160 true physical
+        // pixels to render crisply instead of being upscaled by the OS.
+        assert_eq!(physical_size_for(80, 80, 2.0), (160, 160));
+    }
+
+    #[test]
+    fn physical_size_for_fractional_scale_rounds() {
+        // 1.5x display: 81x81 rounds to the nearest physical pixel rather
+        // than truncating.
+        assert_eq!(physical_size_for(81, 81, 1.5), (122, 122));
+    }
 
     #[test]
     fn dpr_pointer_scale_no_correction_below_cap() {
