@@ -32,6 +32,7 @@ mod scrollbar;
 mod sparkline;
 mod stat_bar;
 mod table;
+mod tabs;
 mod text;
 mod window;
 
@@ -50,6 +51,7 @@ pub use scrollbar::Scrollbar;
 pub use sparkline::Sparkline;
 pub use stat_bar::StatBar;
 pub use table::Table;
+pub use tabs::Tabs;
 pub use text::Text;
 
 /// A type that draws itself into a terminal area, without retaining any

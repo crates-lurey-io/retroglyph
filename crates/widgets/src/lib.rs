@@ -75,5 +75,5 @@ pub use theme::Theme;
 pub use widget::Paragraph;
 pub use widget::{
     BoxBorder, Gauge, List, Log, Measure, Meter, Modal, Panel, PrintLine, ProgressBar, Scrollbar,
-    Sparkline, StatBar, StatefulWidget, Table, Text, Widget,
+    Sparkline, StatBar, StatefulWidget, Table, Tabs, Text, Widget,
 };
