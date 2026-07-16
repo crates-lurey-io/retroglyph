@@ -103,6 +103,19 @@ jobs:
           tool: just,nextest
       - run: just test-ci
 
+  test-wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
+      - run: just test-wasm
+
   coverage:
     runs-on: ubuntu-latest
     steps:
@@ -137,6 +150,7 @@ jobs:
       - docs
       - compile
       - test
+      - test-wasm
       - coverage
     if: ${{ always() }}
     steps:

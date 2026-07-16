@@ -29,6 +29,23 @@ wasm-bindgen = "=0.2.106"
 # crate's non-wasm32 API surface has no fallible operations and stays log-free.
 log = "0.4"
 
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+# Exercises the `wasm` module's FFI surface (tests/wasm_ffi.rs) under an actual wasm32 build --
+# host-target `cargo test` never compiles that module at all (it's `cfg(target_arch = "wasm32")`),
+# so this is the only coverage of the exported `wasm_terminal_*` functions themselves, as opposed
+# to the `TerminalWasm`/`decode_key_event` logic underneath them (already covered by the host-side
+# tests above). Versioned independently of the `wasm-bindgen` dependency above (its own 0.3.x
+# line, not 0.2.x) -- 0.3.56 is the release published from the same wasm-bindgen-repo tag as
+# wasm-bindgen 0.2.106 (its own Cargo.toml exact-pins `wasm-bindgen = "=0.2.106"`), so it's the
+# only wasm-bindgen-test version that resolves against this crate's `wasm-bindgen` pin at all: any
+# newer wasm-bindgen-test release exact-pins a newer wasm-bindgen too. If the `wasm-bindgen`/
+# `wasm-bindgen-cli` pins above are ever bumped, this must move in lockstep -- check
+# `crates/test/Cargo.toml` at the target wasm-bindgen tag for the matching version. Run via
+# `just test-wasm`, which wraps `wasm-pack test --node` (Node.js, not a real browser: this crate's
+# FFI has no DOM/xterm.js dependency to exercise, only the handle registry and event decoding --
+# see that test file's own doc comment for what is and isn't reachable through this FFI).
+wasm-bindgen-test = "=0.3.56"
+
 [features]
 # Forwards to retroglyph-terminal's egc feature.
 egc = ["retroglyph-terminal/egc", "retroglyph-core/egc"]
