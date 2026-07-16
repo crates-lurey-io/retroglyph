@@ -142,6 +142,9 @@ pub fn translate_modifiers(state: winit::keyboard::ModifiersState) -> KeyModifie
     if state.alt_key() {
         m |= KeyModifiers::ALT;
     }
+    if state.super_key() {
+        m |= KeyModifiers::SUPER;
+    }
     m
 }
 
@@ -240,6 +243,54 @@ mod tests {
                 y: u16::MAX
             }
         );
+    }
+
+    // ── translate_modifiers ──────────────────────────────────────────────────
+
+    #[test]
+    fn translate_modifiers_none() {
+        let state = winit::keyboard::ModifiersState::empty();
+        assert_eq!(translate_modifiers(state), KeyModifiers::NONE);
+    }
+
+    #[test]
+    fn translate_modifiers_super_only() {
+        let state = winit::keyboard::ModifiersState::SUPER;
+        let mods = translate_modifiers(state);
+        assert!(mods.contains(KeyModifiers::SUPER));
+        assert!(!mods.contains(KeyModifiers::SHIFT));
+        assert!(!mods.contains(KeyModifiers::CONTROL));
+        assert!(!mods.contains(KeyModifiers::ALT));
+    }
+
+    #[test]
+    fn translate_modifiers_super_without_super_key() {
+        let state = winit::keyboard::ModifiersState::SHIFT;
+        let mods = translate_modifiers(state);
+        assert!(!mods.contains(KeyModifiers::SUPER));
+    }
+
+    #[test]
+    fn translate_modifiers_super_combined_with_shift() {
+        let state = winit::keyboard::ModifiersState::SUPER | winit::keyboard::ModifiersState::SHIFT;
+        let mods = translate_modifiers(state);
+        assert!(mods.contains(KeyModifiers::SUPER));
+        assert!(mods.contains(KeyModifiers::SHIFT));
+        assert!(!mods.contains(KeyModifiers::CONTROL));
+        assert!(!mods.contains(KeyModifiers::ALT));
+    }
+
+    #[test]
+    fn translate_modifiers_all_together() {
+        let state = winit::keyboard::ModifiersState::SHIFT
+            | winit::keyboard::ModifiersState::CONTROL
+            | winit::keyboard::ModifiersState::ALT
+            | winit::keyboard::ModifiersState::SUPER;
+        let mods = translate_modifiers(state);
+        assert!(mods.contains(KeyModifiers::SHIFT));
+        assert!(mods.contains(KeyModifiers::CONTROL));
+        assert!(mods.contains(KeyModifiers::ALT));
+        assert!(mods.contains(KeyModifiers::SUPER));
     }
 
     // ── key_event_kind ────────────────────────────────────────────────────────
