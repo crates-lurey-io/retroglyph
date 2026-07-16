@@ -104,6 +104,12 @@ use std::time::Duration;
 ///
 /// Call [`pixels`](Self::pixels) to inspect the rendered output, or use
 /// [`Backend::draw`] and [`Backend::draw_layers`] to render into it.
+///
+/// If the `tilesets` feature is enabled, the sprite tileset is loaded once, at
+/// [`run_headless`](SoftwareBackend::run_headless) time, into an internal
+/// [`SpriteCache`]. That cache has no reload/hot-swap support (see its
+/// docs); to pick up a changed tileset, rebuild the renderer via a fresh [`SoftwareBackend`]
+/// configuration rather than mutating this one.
 pub struct SoftwareRenderer {
     options: SoftwareBackend,
     /// The bitmap font, extracted from `options.font` at construction time.

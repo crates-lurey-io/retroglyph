@@ -23,6 +23,21 @@ pub struct Sprite {
 }
 
 /// Cache of decoded sprites, keyed by Unicode codepoint.
+///
+/// # Reload / hot-swap is not supported
+///
+/// [`load`](Self::load) is append-only: it decodes a tileset and merges its sprites into the
+/// existing map, with later registrations winning on codepoint collision (see [`load`](Self::load)
+/// docs). There is no `unload` or `clear`, and nothing observes or invalidates sprites already
+/// handed out via [`get`](Self::get).
+///
+/// This is a deliberate scope decision, not an oversight: games generally don't hot-swap tilesets
+/// at runtime, and a `SpriteCache` is only ever populated once, during
+/// [`run_headless`](crate::SoftwareBackend::run_headless). If you need to iterate on a sprite sheet
+/// (e.g. during dev-mode asset editing) or otherwise want a tileset change to take effect, rebuild
+/// the whole [`SoftwareRenderer`](crate::SoftwareRenderer) from a fresh
+/// [`SoftwareBackend`](crate::SoftwareBackend) configuration rather than mutating an existing cache
+/// in place.
 #[derive(Debug)]
 pub struct SpriteCache {
     sprites: BTreeMap<char, Sprite>,
