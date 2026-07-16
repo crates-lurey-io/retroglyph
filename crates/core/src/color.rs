@@ -52,6 +52,276 @@ impl AnsiColor {
     pub const fn to_index(self) -> u8 {
         self as u8
     }
+
+    /// Returns the standard xterm RGB values for this ANSI color.
+    ///
+    /// These are the same 16 reference colors used by [`Color::to_indexed`] and
+    /// [`Color::to_ansi`] when quantizing RGB input; a terminal's actual theme may
+    /// render these colors differently.
+    #[must_use]
+    pub const fn to_rgb(self) -> (u8, u8, u8) {
+        match self {
+            Self::Black => (0, 0, 0),
+            Self::Red => (205, 0, 0),
+            Self::Green => (0, 205, 0),
+            Self::Yellow => (205, 205, 0),
+            Self::Blue => (0, 0, 238),
+            Self::Magenta => (205, 0, 205),
+            Self::Cyan => (0, 205, 205),
+            Self::White => (229, 229, 229),
+            Self::BrightBlack => (127, 127, 127),
+            Self::BrightRed => (255, 0, 0),
+            Self::BrightGreen => (0, 255, 0),
+            Self::BrightYellow => (255, 255, 0),
+            Self::BrightBlue => (92, 92, 255),
+            Self::BrightMagenta => (255, 0, 255),
+            Self::BrightCyan => (0, 255, 255),
+            Self::BrightWhite => (255, 255, 255),
+        }
+    }
+}
+
+/// All 16 [`AnsiColor`] variants in index order (0–15), for iterating the palette.
+const ANSI_COLORS: [AnsiColor; 16] = [
+    AnsiColor::Black,
+    AnsiColor::Red,
+    AnsiColor::Green,
+    AnsiColor::Yellow,
+    AnsiColor::Blue,
+    AnsiColor::Magenta,
+    AnsiColor::Cyan,
+    AnsiColor::White,
+    AnsiColor::BrightBlack,
+    AnsiColor::BrightRed,
+    AnsiColor::BrightGreen,
+    AnsiColor::BrightYellow,
+    AnsiColor::BrightBlue,
+    AnsiColor::BrightMagenta,
+    AnsiColor::BrightCyan,
+    AnsiColor::BrightWhite,
+];
+
+/// The 6 steps used for each channel of the 256-color palette's 6×6×6 RGB cube
+/// (indices 16–231).
+const CUBE_STEPS: [u8; 6] = [0, 95, 135, 175, 215, 255];
+
+/// The 24 grayscale ramp values used by the 256-color palette (indices 232–255).
+const GRAYSCALE_RAMP: [u8; 24] = [
+    8, 18, 28, 38, 48, 58, 68, 78, 88, 98, 108, 118, 128, 138, 148, 158, 168, 178, 188, 198, 208,
+    218, 228, 238,
+];
+
+/// Returns the RGB value for a 256-color palette index (0–255).
+///
+/// Indices 0–15 are the 16 standard ANSI colors, 16–231 are the 6×6×6 RGB cube, and
+/// 232–255 are the grayscale ramp.
+#[cfg(any(feature = "gem", test))]
+const fn indexed_to_rgb(index: u8) -> (u8, u8, u8) {
+    if index < 16 {
+        ANSI_COLORS[index as usize].to_rgb()
+    } else if index < 232 {
+        let cube_index = index - 16;
+        let r = CUBE_STEPS[(cube_index / 36) as usize];
+        let g = CUBE_STEPS[((cube_index / 6) % 6) as usize];
+        let b = CUBE_STEPS[(cube_index % 6) as usize];
+        (r, g, b)
+    } else {
+        let gray = GRAYSCALE_RAMP[(index - 232) as usize];
+        (gray, gray, gray)
+    }
+}
+
+/// Rounds `value` to the nearest of the 6 [`CUBE_STEPS`], returning the step's index
+/// (0–5).
+///
+/// Ties (exactly halfway between two steps) round to the higher step, matching
+/// standard "round half up" arithmetic rounding on the midpoint distance.
+#[cfg(any(not(feature = "gem"), test))]
+fn nearest_cube_step(value: u8) -> u8 {
+    let value = i32::from(value);
+    let mut best_index = 0u8;
+    let mut best_distance = i32::MAX;
+    for (i, &step) in CUBE_STEPS.iter().enumerate() {
+        let distance = (value - i32::from(step)).abs();
+        if distance < best_distance {
+            best_distance = distance;
+            best_index = u8::try_from(i).unwrap_or(0);
+        }
+    }
+    best_index
+}
+
+/// Squared euclidean distance between two RGB colors, as `u32` (no overflow risk for
+/// `u8` channel differences).
+#[cfg(any(not(feature = "gem"), test))]
+const fn rgb_distance_sq(a: (u8, u8, u8), b: (u8, u8, u8)) -> u32 {
+    let dr = a.0.abs_diff(b.0) as u32;
+    let dg = a.1.abs_diff(b.1) as u32;
+    let db = a.2.abs_diff(b.2) as u32;
+    dr * dr + dg * dg + db * db
+}
+
+/// Quantizes `(r, g, b)` to the nearest 256-color palette index using the 6×6×6 RGB
+/// cube, grayscale ramp, and the 16 ANSI colors, breaking ties by preferring the
+/// lower index.
+///
+/// This is the fallback used by [`Color::to_indexed`] without the `gem` feature, and
+/// is always available regardless of feature flags.
+///
+/// Checks the 16 ANSI colors, the cube's single nearest point (found by rounding each
+/// channel independently), and the grayscale ramp's single nearest point, rather than
+/// scanning all 256 entries individually: rounding each channel independently already
+/// finds the cube's closest point, and likewise for the single-channel grayscale ramp.
+/// Candidates are checked in ascending index order and only replace the current best
+/// on strictly smaller distance, so ties naturally resolve to the lower index.
+#[cfg(any(not(feature = "gem"), test))]
+fn cube_map_to_indexed(r: u8, g: u8, b: u8) -> u8 {
+    let mut best_index = 0u8;
+    let mut best_distance = u32::MAX;
+
+    // Candidate group 1: the 16 ANSI colors (indices 0-15), lowest indices first.
+    for (i, ansi) in ANSI_COLORS.iter().enumerate() {
+        let distance = rgb_distance_sq((r, g, b), ansi.to_rgb());
+        if distance < best_distance {
+            best_distance = distance;
+            best_index = u8::try_from(i).unwrap_or(0);
+        }
+    }
+
+    // Candidate group 2: nearest point in the 6x6x6 cube (indices 16-231).
+    let cube_r = nearest_cube_step(r);
+    let cube_g = nearest_cube_step(g);
+    let cube_b = nearest_cube_step(b);
+    let cube_index = 16 + 36 * cube_r + 6 * cube_g + cube_b;
+    let cube_rgb = (
+        CUBE_STEPS[cube_r as usize],
+        CUBE_STEPS[cube_g as usize],
+        CUBE_STEPS[cube_b as usize],
+    );
+    let cube_distance = rgb_distance_sq((r, g, b), cube_rgb);
+    if cube_distance < best_distance {
+        best_distance = cube_distance;
+        best_index = cube_index;
+    }
+
+    // Candidate group 3: nearest grayscale ramp entry (indices 232-255).
+    for (i, &gray) in GRAYSCALE_RAMP.iter().enumerate() {
+        let distance = rgb_distance_sq((r, g, b), (gray, gray, gray));
+        if distance < best_distance {
+            best_distance = distance;
+            best_index = 232 + u8::try_from(i).unwrap_or(0);
+        }
+    }
+
+    best_index
+}
+
+/// Quantizes `(r, g, b)` to the nearest of the 16 standard ANSI colors, using
+/// euclidean RGB distance and breaking ties by preferring the lower index.
+///
+/// This is the fallback used by [`Color::to_ansi`] without the `gem` feature, and is
+/// always available regardless of feature flags.
+#[cfg(any(not(feature = "gem"), test))]
+fn cube_map_to_ansi(r: u8, g: u8, b: u8) -> AnsiColor {
+    let mut best = AnsiColor::Black;
+    let mut best_distance = u32::MAX;
+    for ansi in ANSI_COLORS {
+        let distance = rgb_distance_sq((r, g, b), ansi.to_rgb());
+        if distance < best_distance {
+            best_distance = distance;
+            best = ansi;
+        }
+    }
+    best
+}
+
+/// Squared euclidean distance between two colors in the Oklab perceptually-uniform
+/// color space.
+///
+/// Used instead of raw RGB distance because Oklab distance correlates far better with
+/// human perception of color difference (the same premise as CIEDE2000, without its
+/// extra complexity).
+#[cfg(feature = "gem")]
+fn oklab_distance_sq(a: gem::space::Oklab, b: gem::space::Oklab) -> f32 {
+    let dl = a.l - b.l;
+    let da = a.a - b.a;
+    let db = a.b - b.b;
+    db.mul_add(db, da.mul_add(da, dl * dl))
+}
+
+/// Converts an 8-bit RGB channel triplet to Oklab.
+#[cfg(feature = "gem")]
+fn rgb_to_oklab(r: u8, g: u8, b: u8) -> gem::space::Oklab {
+    gem::space::Oklab::from(Srgb::new(
+        f32::from(r) / 255.0,
+        f32::from(g) / 255.0,
+        f32::from(b) / 255.0,
+    ))
+}
+
+/// Quantizes `(r, g, b)` to the nearest 256-color palette index using perceptual
+/// (Oklab) distance, breaking ties by preferring the lower index.
+#[cfg(feature = "gem")]
+fn perceptual_to_indexed(r: u8, g: u8, b: u8) -> u8 {
+    let target = rgb_to_oklab(r, g, b);
+    let mut best_index = 0u8;
+    let mut best_distance = f32::MAX;
+    for index in 0u16..256 {
+        let index = u8::try_from(index).unwrap_or(u8::MAX);
+        let (pr, pg, pb) = indexed_to_rgb(index);
+        let distance = oklab_distance_sq(target, rgb_to_oklab(pr, pg, pb));
+        if distance < best_distance {
+            best_distance = distance;
+            best_index = index;
+        }
+    }
+    best_index
+}
+
+/// Quantizes `(r, g, b)` to the nearest of the 16 standard ANSI colors using
+/// perceptual (Oklab) distance, breaking ties by preferring the lower index.
+#[cfg(feature = "gem")]
+fn perceptual_to_ansi(r: u8, g: u8, b: u8) -> AnsiColor {
+    let target = rgb_to_oklab(r, g, b);
+    let mut best = AnsiColor::Black;
+    let mut best_distance = f32::MAX;
+    for ansi in ANSI_COLORS {
+        let (pr, pg, pb) = ansi.to_rgb();
+        let distance = oklab_distance_sq(target, rgb_to_oklab(pr, pg, pb));
+        if distance < best_distance {
+            best_distance = distance;
+            best = ansi;
+        }
+    }
+    best
+}
+
+/// Quantizes `(r, g, b)` to the nearest 256-color palette index, using perceptual
+/// (Oklab) distance when the `gem` feature is enabled, or euclidean RGB
+/// cube-mapping otherwise.
+fn rgb_to_indexed(r: u8, g: u8, b: u8) -> u8 {
+    #[cfg(feature = "gem")]
+    {
+        perceptual_to_indexed(r, g, b)
+    }
+    #[cfg(not(feature = "gem"))]
+    {
+        cube_map_to_indexed(r, g, b)
+    }
+}
+
+/// Quantizes `(r, g, b)` to the nearest of the 16 standard ANSI colors, using
+/// perceptual (Oklab) distance when the `gem` feature is enabled, or euclidean RGB
+/// distance otherwise.
+fn rgb_to_ansi(r: u8, g: u8, b: u8) -> AnsiColor {
+    #[cfg(feature = "gem")]
+    {
+        perceptual_to_ansi(r, g, b)
+    }
+    #[cfg(not(feature = "gem"))]
+    {
+        cube_map_to_ansi(r, g, b)
+    }
 }
 
 /// Error returned when a `u8` value has no corresponding [`AnsiColor`].
@@ -325,6 +595,75 @@ impl Color {
         }
     }
 
+    /// Quantizes an RGB color to the nearest entry in the standard 256-color palette.
+    ///
+    /// - `Color::Rgb` inputs are converted to the nearest 256-color palette index (0–255).
+    ///   With the `gem` feature (default), perceptual distance in the Oklab color space is
+    ///   used, which better matches human color perception than raw RGB distance. Without
+    ///   `gem`, euclidean RGB distance is used instead, computed against the 6×6×6 color
+    ///   cube (indices 16–231), supplemented by the grayscale ramp (232–255) and the 16
+    ///   ANSI colors (0–15).
+    /// - `Color::Default`, `Color::Ansi`, and `Color::Indexed` are returned unchanged: this
+    ///   method only downgrades `Rgb` colors.
+    /// - Ties (multiple equidistant palette entries) are resolved by preferring the lower
+    ///   index.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use retroglyph_core::Color;
+    ///
+    /// let black = Color::Rgb { r: 0, g: 0, b: 0 };
+    /// assert_eq!(black.to_indexed(), Color::Indexed(0));
+    ///
+    /// // Non-RGB colors pass through unchanged.
+    /// assert_eq!(Color::Default.to_indexed(), Color::Default);
+    /// ```
+    ///
+    /// Backends that render to terminals without full RGB support can call this method to
+    /// downgrade colors before emitting them; `retroglyph-core` never downgrades colors on
+    /// its own. See [`Color::to_ansi`] to quantize to the smaller 16-color ANSI palette.
+    #[must_use]
+    pub fn to_indexed(self) -> Self {
+        match self {
+            Self::Rgb { r, g, b } => Self::Indexed(rgb_to_indexed(r, g, b)),
+            other => other,
+        }
+    }
+
+    /// Quantizes an RGB color to the nearest of the 16 standard ANSI palette colors.
+    ///
+    /// - `Color::Rgb` inputs are converted to the nearest of the 16 standard ANSI colors.
+    ///   With the `gem` feature (default), perceptual distance in the Oklab color space is
+    ///   used. Without `gem`, euclidean RGB distance is used instead.
+    /// - `Color::Default`, `Color::Ansi`, and `Color::Indexed` are returned unchanged: this
+    ///   method only downgrades `Rgb` colors.
+    /// - Ties (multiple equidistant palette entries) are resolved by preferring the lower
+    ///   ANSI index.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use retroglyph_core::{AnsiColor, Color};
+    ///
+    /// let pure_red = Color::Rgb { r: 255, g: 0, b: 0 };
+    /// assert_eq!(pure_red.to_ansi(), Color::Ansi(AnsiColor::BrightRed));
+    ///
+    /// // Non-RGB colors pass through unchanged.
+    /// assert_eq!(Color::Default.to_ansi(), Color::Default);
+    /// ```
+    ///
+    /// Use this method when rendering to terminals limited to 16 colors, or when a caller
+    /// otherwise needs to reduce color depth. See [`Color::to_indexed`] to quantize to the
+    /// larger 256-color palette instead.
+    #[must_use]
+    pub fn to_ansi(self) -> Self {
+        match self {
+            Self::Rgb { r, g, b } => Self::Ansi(rgb_to_ansi(r, g, b)),
+            other => other,
+        }
+    }
+
     /// Looks up a CSS named color by name (case-insensitive).
     ///
     /// Supports all 147 CSS Color Module Level 4 named colors.
@@ -541,6 +880,167 @@ mod tests {
     fn test_ansi_try_from_invalid() {
         assert_eq!(AnsiColor::try_from(16), Err(InvalidAnsiIndex(16)));
         assert_eq!(AnsiColor::try_from(255), Err(InvalidAnsiIndex(255)));
+    }
+
+    // ── to_indexed / to_ansi (non-RGB passthrough) ─────────────────────────
+
+    #[test]
+    fn test_to_indexed_non_rgb_passthrough() {
+        assert_eq!(Color::Default.to_indexed(), Color::Default);
+        assert_eq!(
+            Color::Ansi(AnsiColor::Red).to_indexed(),
+            Color::Ansi(AnsiColor::Red)
+        );
+        assert_eq!(Color::Indexed(42).to_indexed(), Color::Indexed(42));
+    }
+
+    #[test]
+    fn test_to_ansi_non_rgb_passthrough() {
+        assert_eq!(Color::Default.to_ansi(), Color::Default);
+        assert_eq!(
+            Color::Ansi(AnsiColor::Red).to_ansi(),
+            Color::Ansi(AnsiColor::Red)
+        );
+        assert_eq!(Color::Indexed(42).to_ansi(), Color::Indexed(42));
+    }
+
+    #[test]
+    fn test_to_indexed_returns_indexed_variant() {
+        let c = Color::Rgb {
+            r: 10,
+            g: 20,
+            b: 30,
+        };
+        assert!(matches!(c.to_indexed(), Color::Indexed(_)));
+    }
+
+    #[test]
+    fn test_to_ansi_returns_ansi_variant() {
+        let c = Color::Rgb {
+            r: 10,
+            g: 20,
+            b: 30,
+        };
+        assert!(matches!(c.to_ansi(), Color::Ansi(_)));
+    }
+
+    #[test]
+    fn test_to_indexed_black_and_white() {
+        let black = Color::Rgb { r: 0, g: 0, b: 0 };
+        assert_eq!(black.to_indexed(), Color::Indexed(0));
+
+        let white = Color::Rgb {
+            r: 255,
+            g: 255,
+            b: 255,
+        };
+        assert_eq!(white.to_indexed(), Color::Indexed(15));
+    }
+
+    #[test]
+    fn test_to_ansi_pure_primaries() {
+        let red = Color::Rgb { r: 255, g: 0, b: 0 };
+        assert_eq!(red.to_ansi(), Color::Ansi(AnsiColor::BrightRed));
+
+        let green = Color::Rgb { r: 0, g: 255, b: 0 };
+        assert_eq!(green.to_ansi(), Color::Ansi(AnsiColor::BrightGreen));
+
+        // Pure (0, 0, 255) is closer to the standard Blue reference (0, 0, 238) than to
+        // BrightBlue (92, 92, 255), whose red/green components pull it further away.
+        let blue = Color::Rgb { r: 0, g: 0, b: 255 };
+        assert_eq!(blue.to_ansi(), Color::Ansi(AnsiColor::Blue));
+
+        let black = Color::Rgb { r: 0, g: 0, b: 0 };
+        assert_eq!(black.to_ansi(), Color::Ansi(AnsiColor::Black));
+    }
+
+    #[test]
+    fn test_to_ansi_all_16_roundtrip() {
+        // Each ANSI reference color, when quantized back to ANSI, should resolve to
+        // itself (it is by definition its own nearest neighbor in the ANSI palette).
+        for ansi in ANSI_COLORS {
+            let (r, g, b) = ansi.to_rgb();
+            let c = Color::Rgb { r, g, b };
+            assert_eq!(c.to_ansi(), Color::Ansi(ansi), "ansi color {ansi:?}");
+        }
+    }
+
+    #[test]
+    fn test_to_indexed_mid_gray() {
+        let gray = Color::Rgb {
+            r: 128,
+            g: 128,
+            b: 128,
+        };
+        // Should land in the grayscale ramp or cube, never panics or overflows.
+        assert!(matches!(gray.to_indexed(), Color::Indexed(_)));
+    }
+
+    // ── cube-mapping fallback (always tested, regardless of `gem` feature) ─
+
+    #[test]
+    fn test_nearest_cube_step_boundaries() {
+        assert_eq!(nearest_cube_step(0), 0);
+        assert_eq!(nearest_cube_step(255), 5);
+        assert_eq!(nearest_cube_step(95), 1);
+        assert_eq!(nearest_cube_step(135), 2);
+    }
+
+    #[test]
+    fn test_indexed_to_rgb_ansi_range() {
+        assert_eq!(indexed_to_rgb(0), (0, 0, 0));
+        assert_eq!(indexed_to_rgb(15), (255, 255, 255));
+    }
+
+    #[test]
+    fn test_indexed_to_rgb_cube_range() {
+        // Index 16 is the cube origin (0, 0, 0).
+        assert_eq!(indexed_to_rgb(16), (0, 0, 0));
+        // Index 231 is the cube's opposite corner (255, 255, 255).
+        assert_eq!(indexed_to_rgb(231), (255, 255, 255));
+    }
+
+    #[test]
+    fn test_indexed_to_rgb_grayscale_range() {
+        assert_eq!(indexed_to_rgb(232), (8, 8, 8));
+        assert_eq!(indexed_to_rgb(255), (238, 238, 238));
+    }
+
+    #[test]
+    fn test_cube_map_to_indexed_pure_black() {
+        assert_eq!(cube_map_to_indexed(0, 0, 0), 0);
+    }
+
+    #[test]
+    fn test_cube_map_to_indexed_pure_white() {
+        assert_eq!(cube_map_to_indexed(255, 255, 255), 15);
+    }
+
+    #[test]
+    fn test_cube_map_to_indexed_cube_interior() {
+        // A color exactly on a cube step should map to that exact cube index.
+        // (95, 135, 175) -> cube coords (1, 2, 3) -> 16 + 36*1 + 6*2 + 3 = 67.
+        assert_eq!(cube_map_to_indexed(95, 135, 175), 67);
+    }
+
+    #[test]
+    fn test_cube_map_to_ansi_matches_reference() {
+        for ansi in ANSI_COLORS {
+            let (r, g, b) = ansi.to_rgb();
+            assert_eq!(cube_map_to_ansi(r, g, b), ansi, "ansi color {ansi:?}");
+        }
+    }
+
+    #[test]
+    fn test_rgb_distance_sq_symmetry() {
+        let a = (10, 20, 30);
+        let b = (200, 100, 50);
+        assert_eq!(rgb_distance_sq(a, b), rgb_distance_sq(b, a));
+    }
+
+    #[test]
+    fn test_rgb_distance_sq_zero_for_identical() {
+        assert_eq!(rgb_distance_sq((1, 2, 3), (1, 2, 3)), 0);
     }
 
     #[cfg(feature = "gem")]
