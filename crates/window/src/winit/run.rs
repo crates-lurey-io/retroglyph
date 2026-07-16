@@ -651,6 +651,20 @@ where
         // panics. `Event::Resize` must report the same clamped grid the
         // surface was actually sized to, or callers reading `Event::Resize`
         // and querying the presenter's surface size would disagree.
+        //
+        // Integer division here also truncates any sub-cell remainder: when
+        // `size` isn't an exact multiple of the cell size, `cols`/`rows`
+        // round down and the surface below is sized to exactly
+        // `cols * cell_w` x `rows * cell_h`, which can be smaller than
+        // `size` itself. The OS window stays at the full physical `size`
+        // the window manager gave it -- retroglyph never resizes the OS
+        // window to match -- so a non-exact-multiple resize leaves a thin
+        // strip at the window's trailing (right/bottom) edge outside the
+        // surface entirely. That strip is not cleared or painted by
+        // retroglyph; whatever the OS/windowing backend leaves there (old
+        // frame content, backdrop color) shows through until the window is
+        // resized again to a size the presenter does cover. See
+        // `Presenter::resize_surface` for the documented contract.
         let cols = (size.width / cell_w).max(1);
         let rows = (size.height / cell_h).max(1);
         term.backend_mut()
