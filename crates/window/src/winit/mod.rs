@@ -12,4 +12,7 @@ pub mod run;
 /// winit-event -> retroglyph-event converters.
 pub mod translate;
 
-pub use run::{WindowConfig, run_app, run_windowed};
+pub use run::{
+    EventProxy, EventProxyClosed, WindowConfig, run_app, run_app_with_proxy, run_windowed,
+    run_windowed_with_proxy,
+};

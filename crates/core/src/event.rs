@@ -285,6 +285,21 @@ pub enum Event {
     /// This reflects OS/terminal-level focus, not in-app widget focus (see
     /// `retroglyph-widgets`' focus ring for that).
     FocusLost,
+    /// An application-defined event injected from outside the normal input
+    /// source (e.g. a network, audio, or timer thread), carrying an opaque
+    /// tag the app assigns its own meaning to.
+    ///
+    /// Only emitted by backends with a real cross-thread injection point:
+    /// the windowed (winit) backend's `EventProxy`
+    /// (`retroglyph_window::winit::EventProxy::send_event`), which forwards
+    /// the `u64` unchanged. The payload is deliberately a plain `u64`
+    /// rather than an arbitrary boxed value: it keeps `Event` cheaply
+    /// `Clone`/`PartialEq`/`Eq`/`Hash` (a `Box<dyn Any>` could not derive
+    /// any of those) and needs no generic parameter threaded through every
+    /// crate that names `Event`. Treat it as a correlation id -- look up
+    /// the real payload in whatever shared state or channel the sending
+    /// thread already placed it in.
+    Custom(u64),
 }
 
 /// Tracks which keys are currently held down.
@@ -458,6 +473,16 @@ mod tests {
             panic!("Expected Event::Paste");
         };
         assert_eq!(text, "hello");
+    }
+
+    #[test]
+    fn test_custom_event_carries_opaque_id() {
+        let event = Event::Custom(42);
+        let Event::Custom(id) = event else {
+            panic!("Expected Event::Custom");
+        };
+        assert_eq!(id, 42);
+        assert_ne!(Event::Custom(1), Event::Custom(2));
     }
 
     #[test]

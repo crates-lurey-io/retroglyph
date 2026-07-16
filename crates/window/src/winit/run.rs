@@ -15,6 +15,7 @@ use crate::presenter::Presenter;
 use retroglyph_core::Terminal;
 use retroglyph_core::backend::Backend;
 use retroglyph_core::event::{Event, KeyModifiers, MouseEvent, MouseEventKind, PhysicalPos};
+use std::fmt;
 use std::sync::Arc;
 #[cfg(not(target_arch = "wasm32"))]
 use std::time::Duration;
@@ -22,6 +23,57 @@ use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::{Window, WindowId};
+
+/// The user-event payload type threaded through winit's [`EventLoop`]. A plain `u64` so
+/// [`EventProxy`] stays trivially `Send`/`Sync`/`Clone`; see [`Event::Custom`]'s doc comment for
+/// why the payload is opaque rather than a boxed value.
+type UserEvent = u64;
+
+/// A thread-safe handle for injecting [`Event::Custom`] events into a running windowed event
+/// loop from another thread (network, audio, timer, ...).
+///
+/// Obtained via the `on_proxy` callback passed to [`run_windowed_with_proxy`]/
+/// [`run_app_with_proxy`], invoked synchronously right after the event loop (and this proxy) is
+/// created, before the loop starts blocking the calling thread. Clone it freely to hand a copy to
+/// each worker thread that needs to wake the loop; wraps winit's own
+/// [`EventLoopProxy`](winit::event_loop::EventLoopProxy), which is `Send + Sync` for any
+/// `'static` payload, including `u64`.
+#[derive(Clone, Debug)]
+pub struct EventProxy(winit::event_loop::EventLoopProxy<UserEvent>);
+
+impl EventProxy {
+    /// Injects `id` as [`Event::Custom(id)`](Event::Custom) into the event loop's queue, waking
+    /// it if it's asleep. The event surfaces through the app's normal `poll_event`/frame loop
+    /// like any other [`Event`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`EventProxyClosed`] if the event loop has already exited.
+    pub fn send_event(&self, id: u64) -> Result<(), EventProxyClosed> {
+        self.0.send_event(id).map_err(|e| EventProxyClosed(e.0))
+    }
+}
+
+/// Error returned by [`EventProxy::send_event`] when the event loop it targets has already
+/// exited.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct EventProxyClosed(u64);
+
+impl EventProxyClosed {
+    /// The event id that could not be delivered.
+    #[must_use]
+    pub const fn into_inner(self) -> u64 {
+        self.0
+    }
+}
+
+impl fmt::Display for EventProxyClosed {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "event loop closed")
+    }
+}
+
+impl std::error::Error for EventProxyClosed {}
 
 /// Window configuration for [`run_windowed`] / [`run_app`].
 ///
@@ -107,8 +159,75 @@ where
     P: Presenter + 'static,
     F: FnMut(&mut Terminal<WindowBackend<P>>) + 'static,
 {
+    run_windowed_with_proxy(config, presenter, app_loop, |_proxy| {})
+}
+
+/// Same as [`run_windowed`], but also hands `on_proxy` an [`EventProxy`] for injecting
+/// cross-thread events.
+///
+/// `on_proxy` is called synchronously right after the event loop (and the proxy) is created,
+/// before this function starts blocking the calling thread on native. Use this over
+/// [`run_windowed`] whenever another thread (network, audio, timer, ...) needs to wake the event
+/// loop and deliver an [`Event::Custom`] to the app; `on_proxy` is the hook to hand a clone of the
+/// proxy off to that thread before the loop takes over the calling thread.
+///
+/// # Examples
+///
+/// ```ignore
+/// use retroglyph_core::event::Event;
+/// use retroglyph_software::SoftwareBackendBuilder;
+/// use retroglyph_window::winit::{WindowConfig, run_windowed_with_proxy};
+/// use std::time::Duration;
+///
+/// let renderer = SoftwareBackendBuilder::new()
+///     .grid_size(80, 25)
+///     .scale(2)
+///     .build()
+///     .expect("backend init failed")
+///     .run_headless();
+/// let config = WindowConfig::fit(&renderer, "My Game", None);
+///
+/// run_windowed_with_proxy(
+///     config,
+///     renderer,
+///     move |term| {
+///         if let Some(Event::Custom(id)) = term.poll(Duration::from_millis(16)) {
+///             // Handle the tick/network/audio result tagged `id`.
+///             println!("got custom event {id}");
+///         }
+///     },
+///     |proxy| {
+///         // Runs before the blocking call below starts, so the proxy can be
+///         // handed off to a worker thread up front.
+///         std::thread::spawn(move || loop {
+///             std::thread::sleep(Duration::from_secs(1));
+///             if proxy.send_event(1).is_err() {
+///                 break; // The window closed; stop ticking.
+///             }
+///         });
+///     },
+/// )
+/// .expect("event loop failed");
+/// ```
+///
+/// # Errors
+///
+/// Returns [`winit::error::EventLoopError`] if the event loop cannot be
+/// created or fails while running.
+pub fn run_windowed_with_proxy<P, F, O>(
+    config: WindowConfig,
+    presenter: P,
+    app_loop: F,
+    on_proxy: O,
+) -> Result<(), winit::error::EventLoopError>
+where
+    P: Presenter + 'static,
+    F: FnMut(&mut Terminal<WindowBackend<P>>) + 'static,
+    O: FnOnce(EventProxy),
+{
     let terminal = Terminal::new(WindowBackend::new(presenter));
-    let event_loop = EventLoop::new()?;
+    let event_loop = EventLoop::<UserEvent>::with_user_event().build()?;
+    on_proxy(EventProxy(event_loop.create_proxy()));
 
     #[cfg(not(target_arch = "wasm32"))]
     let frame_interval = config
@@ -171,28 +290,55 @@ where
 pub fn run_app<P, A>(
     config: WindowConfig,
     presenter: P,
-    mut app: A,
+    app: A,
 ) -> Result<(), winit::error::EventLoopError>
 where
     P: Presenter + 'static,
     A: retroglyph_core::App<WindowBackend<P>> + 'static,
 {
+    run_app_with_proxy(config, presenter, app, |_proxy| {})
+}
+
+/// Same as [`run_app`], but also hands `on_proxy` an [`EventProxy`] for injecting cross-thread
+/// events -- see [`run_windowed_with_proxy`] for when/why to use the `_with_proxy` variant over
+/// the plain one.
+///
+/// # Errors
+///
+/// Returns [`winit::error::EventLoopError`] if the event loop cannot be
+/// created or fails while running.
+pub fn run_app_with_proxy<P, A, O>(
+    config: WindowConfig,
+    presenter: P,
+    mut app: A,
+    on_proxy: O,
+) -> Result<(), winit::error::EventLoopError>
+where
+    P: Presenter + 'static,
+    A: retroglyph_core::App<WindowBackend<P>> + 'static,
+    O: FnOnce(EventProxy),
+{
     let mut frame_count = 0u64;
     let mut last = web_time::Instant::now();
-    run_windowed(config, presenter, move |term| {
-        let now = web_time::Instant::now();
-        let delta = now.duration_since(last);
-        last = now;
-        let frame = retroglyph_core::Frame {
-            delta,
-            frame: frame_count,
-        };
-        frame_count = frame_count.wrapping_add(1);
-        if retroglyph_core::step(term, &mut app, &frame) == retroglyph_core::Flow::Exit {
-            #[cfg(not(target_arch = "wasm32"))]
-            std::process::exit(0);
-        }
-    })
+    run_windowed_with_proxy(
+        config,
+        presenter,
+        move |term| {
+            let now = web_time::Instant::now();
+            let delta = now.duration_since(last);
+            last = now;
+            let frame = retroglyph_core::Frame {
+                delta,
+                frame: frame_count,
+            };
+            frame_count = frame_count.wrapping_add(1);
+            if retroglyph_core::step(term, &mut app, &frame) == retroglyph_core::Flow::Exit {
+                #[cfg(not(target_arch = "wasm32"))]
+                std::process::exit(0);
+            }
+        },
+        on_proxy,
+    )
 }
 
 /// Initial window dimensions used before the first Resized event.
@@ -514,7 +660,7 @@ fn install_viewport_resize_listener(window: &Arc<Window>) {
     }
 }
 
-impl<P, F> ApplicationHandler for WindowApp<P, F>
+impl<P, F> ApplicationHandler<UserEvent> for WindowApp<P, F>
 where
     P: Presenter,
     F: FnMut(&mut Terminal<WindowBackend<P>>) + 'static,
@@ -532,6 +678,10 @@ where
         event: WindowEvent,
     ) {
         self.handle_window_event(event);
+    }
+
+    fn user_event(&mut self, _event_loop: &ActiveEventLoop, event: UserEvent) {
+        self.handle_user_event(event);
     }
 
     fn about_to_wait(
@@ -562,6 +712,19 @@ where
     P: Presenter,
     F: FnMut(&mut Terminal<WindowBackend<P>>) + 'static,
 {
+    /// Drain one injected user event into the [`WindowBackend`] queue as [`Event::Custom`].
+    ///
+    /// Extracted from the `ApplicationHandler::user_event` impl for the same reason as
+    /// [`handle_window_event`](Self::handle_window_event): so the drain logic can be exercised in
+    /// unit tests without a live [`ActiveEventLoop`]. There is only ever one event to drain per
+    /// call -- winit calls `user_event` once per [`EventProxy::send_event`] -- so "drain" here
+    /// means "push the one event this call carries", not draining a whole queue at once.
+    fn handle_user_event(&mut self, event: UserEvent) {
+        if let Some(term) = self.terminal.as_mut() {
+            term.backend_mut().push_event(Event::Custom(event));
+        }
+    }
+
     /// Dispatch a [`WindowEvent`] without requiring an [`ActiveEventLoop`].
     ///
     /// Extracted from the `ApplicationHandler` impl so the translation and
@@ -1354,6 +1517,41 @@ mod tests {
                 ..
             }) if modifiers.contains(KeyModifiers::SHIFT)
         ));
+    }
+
+    // ── user events (EventProxy) ─────────────────────────────────────────────
+
+    #[test]
+    fn user_event_pushes_custom_event() {
+        let mut app = test_window_app();
+        app.handle_user_event(42);
+        assert_eq!(poll(&mut app), Some(Event::Custom(42)));
+    }
+
+    #[test]
+    fn multiple_user_events_preserve_fifo_order() {
+        let mut app = test_window_app();
+        app.handle_user_event(1);
+        app.handle_user_event(2);
+        assert_eq!(poll(&mut app), Some(Event::Custom(1)));
+        assert_eq!(poll(&mut app), Some(Event::Custom(2)));
+        assert_eq!(poll(&mut app), None);
+    }
+
+    #[test]
+    fn user_events_interleave_with_window_events_in_arrival_order() {
+        let mut app = test_window_app();
+        app.handle_user_event(7);
+        app.handle_window_event(WindowEvent::CloseRequested);
+        assert_eq!(poll(&mut app), Some(Event::Custom(7)));
+        assert_eq!(poll(&mut app), Some(Event::Close));
+    }
+
+    #[test]
+    fn event_proxy_closed_reports_the_undelivered_id() {
+        let err = EventProxyClosed(42);
+        assert_eq!(err.into_inner(), 42);
+        assert_eq!(err.to_string(), "event loop closed");
     }
 
     #[test]
