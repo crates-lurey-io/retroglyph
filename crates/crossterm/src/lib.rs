@@ -79,9 +79,24 @@ fn keyboard_enhancement_flags() -> crossterm::event::KeyboardEnhancementFlags {
         | crossterm::event::KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
 }
 
+// Tracks whether the currently-live `Crossterm` instance (there's normally at most one, since
+// each holds exclusive use of stdout/raw mode) actually entered the alternate screen / enabled
+// raw mode, so `restore_terminal` -- shared by `Drop` and the process-wide panic hook, neither of
+// which has access to a specific instance's `CrosstermOptions` -- only undoes what was actually
+// done. Unlike the other features (mouse capture, focus-change, bracketed paste, kitty protocol),
+// which are safe to unconditionally disable/pop even if never enabled (crossterm's own commands
+// are no-ops on a terminal that never received the matching enable sequence), unconditionally
+// emitting `LeaveAlternateScreen`/`disable_raw_mode()` when we never entered/enabled them could
+// corrupt a caller's already-cooked-mode terminal or emit a stray escape into their normal
+// scrollback buffer.
+static ALT_SCREEN_ACTIVE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static RAW_MODE_ACTIVE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 /// Helper function to restore the terminal to its normal state.
 /// This is called during drops and emergency panic hooks.
 fn restore_terminal() {
+    use std::sync::atomic::Ordering;
+
     let mut stdout = std::io::stdout();
     // Pop the keyboard enhancement flags pushed in `Crossterm::new`. Terminals
     // that never understood the push ignore the pop just the same.
@@ -91,22 +106,33 @@ fn restore_terminal() {
         crossterm::event::DisableBracketedPaste,
         crossterm::event::DisableFocusChange,
         crossterm::event::DisableMouseCapture,
-        crossterm::cursor::Show,
-        crossterm::terminal::LeaveAlternateScreen
+        crossterm::cursor::Show
     );
-    let _ = crossterm::terminal::disable_raw_mode();
+    if ALT_SCREEN_ACTIVE.swap(false, Ordering::AcqRel) {
+        let _ = crossterm::execute!(stdout, crossterm::terminal::LeaveAlternateScreen);
+    }
+    if RAW_MODE_ACTIVE.swap(false, Ordering::AcqRel) {
+        let _ = crossterm::terminal::disable_raw_mode();
+    }
 }
 
 /// Options controlling which optional terminal protocol features
 /// [`Crossterm::with_options`] enables.
 ///
-/// All features default to `true`; mouse capture and the kitty keyboard
-/// protocol match the unconditional behavior of [`Crossterm::new`] prior to
-/// this type's introduction. Use [`CrosstermOptions::mouse_capture`],
+/// All features default to `true`; mouse capture, the kitty keyboard
+/// protocol, entering the alternate screen, and raw mode all match the
+/// unconditional behavior of [`Crossterm::new`] prior to this type's
+/// introduction. Use [`CrosstermOptions::mouse_capture`],
 /// [`CrosstermOptions::kitty_protocol`], [`CrosstermOptions::focus_change`],
-/// or [`CrosstermOptions::bracketed_paste`] to disable a feature entirely,
-/// e.g. when running on a terminal (or through a pipe/CI harness/`tmux`/SSH
-/// session) where the feature is unwanted.
+/// [`CrosstermOptions::bracketed_paste`], [`CrosstermOptions::alt_screen`], or
+/// [`CrosstermOptions::raw_mode`] to disable a feature entirely, e.g. when
+/// running on a terminal (or through a pipe/CI harness/`tmux`/SSH session)
+/// where the feature is unwanted.
+///
+/// This is also the type returned by [`Crossterm::builder`], the preferred
+/// entry point for constructing one of these: `Crossterm::builder()` reads
+/// better at a call site than `CrosstermOptions::new()` but the two are
+/// otherwise identical (`builder()` just calls `Self::new()`).
 ///
 /// This crate deliberately does not attempt to auto-detect terminal
 /// capabilities (no `TERM` parsing, no `supports_keyboard_enhancement()`
@@ -115,23 +141,26 @@ fn restore_terminal() {
 /// know their environment don't support a feature can disable it explicitly.
 ///
 /// ```
-/// use retroglyph_crossterm::CrosstermOptions;
+/// use retroglyph_crossterm::Crossterm;
 ///
-/// let options = CrosstermOptions::new().mouse_capture(false).kitty_protocol(false);
+/// let options = Crossterm::builder().mouse_capture(false).kitty_protocol(false);
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-// Four independent, unrelated terminal protocol toggles, not a state machine in disguise: each
-// maps to one crossterm enable/disable command pair and is meaningful on its own.
+// Six independent, unrelated terminal protocol toggles, not a state machine in disguise: each
+// maps to one crossterm enable/disable command pair (or, for raw_mode/alt_screen, one
+// enable/leave pair) and is meaningful on its own.
 #[allow(clippy::struct_excessive_bools)]
 pub struct CrosstermOptions {
     mouse_capture: bool,
     kitty_protocol: bool,
     focus_change: bool,
     bracketed_paste: bool,
+    alt_screen: bool,
+    raw_mode: bool,
 }
 
 impl CrosstermOptions {
-    /// Creates a new set of options with both features enabled.
+    /// Creates a new set of options with every feature enabled.
     #[must_use]
     pub fn new() -> Self {
         Self::default()
@@ -172,17 +201,55 @@ impl CrosstermOptions {
         self.bracketed_paste = enabled;
         self
     }
+
+    /// Sets whether to enter the alternate screen
+    /// (`crossterm::terminal::EnterAlternateScreen`).
+    ///
+    /// Disabling this keeps rendering on the caller's normal scrollback buffer instead of
+    /// switching to a dedicated full-screen surface; on exit, [`Crossterm`] only leaves the
+    /// alternate screen (`LeaveAlternateScreen`) if it entered it, so disabling this doesn't
+    /// risk leaving the caller's real terminal buffer in an unexpected state.
+    #[must_use]
+    pub const fn alt_screen(mut self, enabled: bool) -> Self {
+        self.alt_screen = enabled;
+        self
+    }
+
+    /// Sets whether to enable raw mode (`crossterm::terminal::enable_raw_mode`).
+    ///
+    /// Disabling this leaves the terminal in cooked mode, so the OS/shell keep handling line
+    /// buffering, echo, and signal-generating keys (`Ctrl-C`, `Ctrl-Z`) itself instead of
+    /// forwarding every keystroke as an [`Event::Key`].
+    /// Restore only disables raw mode if this backend is the one that enabled it.
+    #[must_use]
+    pub const fn raw_mode(mut self, enabled: bool) -> Self {
+        self.raw_mode = enabled;
+        self
+    }
+
+    /// Builds the [`Crossterm`] backend with these options.
+    ///
+    /// Equivalent to [`Crossterm::with_options`]; this is the terminal step of the
+    /// `Crossterm::builder().<options>().build()` chain started by [`Crossterm::builder`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an `std::io::Error` if raw mode or terminal commands fail.
+    pub fn build(self) -> Result<Crossterm, std::io::Error> {
+        Crossterm::build_from_options(self)
+    }
 }
 
 impl Default for CrosstermOptions {
-    /// All features enabled; mouse capture and the kitty keyboard protocol
-    /// match [`Crossterm::new`]'s historical behavior.
+    /// Every feature enabled; matches [`Crossterm::new`]'s historical behavior.
     fn default() -> Self {
         Self {
             mouse_capture: true,
             kitty_protocol: true,
             focus_change: true,
             bracketed_paste: true,
+            alt_screen: true,
+            raw_mode: true,
         }
     }
 }
@@ -213,22 +280,51 @@ impl Crossterm {
         Self::with_options(CrosstermOptions::default())
     }
 
+    /// Starts building a `Crossterm` backend with explicit control over which optional
+    /// terminal protocol features are enabled.
+    ///
+    /// Equivalent to `CrosstermOptions::new()`; call [`CrosstermOptions::build`] once the
+    /// desired features are chosen. This is the preferred entry point over
+    /// `CrosstermOptions::new()` for readability at the call site:
+    ///
+    /// ```
+    /// use retroglyph_crossterm::Crossterm;
+    ///
+    /// let options = Crossterm::builder()
+    ///     .mouse_capture(false)
+    ///     .kitty_protocol(false)
+    ///     .alt_screen(true)
+    ///     .raw_mode(true);
+    /// // let backend = options.build()?; // requires a real terminal
+    /// ```
+    #[must_use]
+    pub fn builder() -> CrosstermOptions {
+        CrosstermOptions::new()
+    }
+
     /// Creates a new `Crossterm` backend rendering to standard output, with
     /// explicit control over which optional protocol features are enabled.
     ///
-    /// Enables raw mode, enters the alternate screen, and hides the cursor
-    /// unconditionally. Mouse capture, focus-change reporting, bracketed
-    /// paste, and the kitty keyboard protocol are enabled by default but can
-    /// be disabled individually via `options`; see [`CrosstermOptions`].
-    /// Registers a process-wide panic hook (once, across all instances) that
-    /// restores the terminal before the default panic handler runs, so a
-    /// panic mid-render doesn't leave the user's shell in raw mode or the
-    /// alternate screen.
+    /// Hides the cursor unconditionally. Raw mode, entering the alternate screen, mouse
+    /// capture, focus-change reporting, bracketed paste, and the kitty keyboard protocol are
+    /// all enabled by default but can be disabled individually via `options`; see
+    /// [`CrosstermOptions`]. Registers a process-wide panic hook (once, across all instances)
+    /// that restores the terminal before the default panic handler runs, so a panic
+    /// mid-render doesn't leave the user's shell in raw mode or the alternate screen.
+    ///
+    /// This is a thin wrapper over [`CrosstermOptions::build`]; prefer
+    /// `Crossterm::builder().<options>().build()` at new call sites.
     ///
     /// # Errors
     ///
     /// Returns an `std::io::Error` if raw mode or terminal commands fail.
     pub fn with_options(options: CrosstermOptions) -> Result<Self, std::io::Error> {
+        options.build()
+    }
+
+    fn build_from_options(options: CrosstermOptions) -> Result<Self, std::io::Error> {
+        use std::sync::atomic::Ordering;
+
         // Setup panic hook on first backend creation
         static PANIC_HOOK: std::sync::Once = std::sync::Once::new();
         PANIC_HOOK.call_once(|| {
@@ -239,16 +335,19 @@ impl Crossterm {
             }));
         });
 
-        // Enter raw mode
-        crossterm::terminal::enable_raw_mode()?;
+        if options.raw_mode {
+            crossterm::terminal::enable_raw_mode()?;
+            RAW_MODE_ACTIVE.store(true, Ordering::Release);
+        }
 
         let mut stdout = std::io::stdout();
-        // Execute initial setup commands
-        crossterm::execute!(
-            stdout,
-            crossterm::terminal::EnterAlternateScreen,
-            crossterm::cursor::Hide
-        )?;
+
+        if options.alt_screen {
+            crossterm::execute!(stdout, crossterm::terminal::EnterAlternateScreen)?;
+            ALT_SCREEN_ACTIVE.store(true, Ordering::Release);
+        }
+
+        crossterm::execute!(stdout, crossterm::cursor::Hide)?;
 
         if options.mouse_capture {
             crossterm::execute!(stdout, crossterm::event::EnableMouseCapture)?;
@@ -577,33 +676,65 @@ mod tests {
 
     #[test]
     fn crossterm_options_default_matches_historical_always_on_behavior() {
-        // `Crossterm::new()` used to unconditionally enable mouse capture and push the kitty
-        // keyboard protocol; `CrosstermOptions::default()` must preserve that behavior exactly so
-        // `Crossterm::new()` (which delegates to `with_options(CrosstermOptions::default())`)
-        // stays backward compatible. Focus-change and bracketed-paste reporting are new additions
-        // and default to enabled as well, consistent with the other two features.
+        // `Crossterm::new()` used to unconditionally enable raw mode, the alternate screen,
+        // mouse capture, and push the kitty keyboard protocol; `CrosstermOptions::default()`
+        // must preserve that behavior exactly so `Crossterm::new()` (which delegates to
+        // `with_options(CrosstermOptions::default())`) stays backward compatible. Focus-change
+        // and bracketed-paste reporting are later additions and default to enabled as well,
+        // consistent with the other features.
         let options = CrosstermOptions::default();
         assert!(options.mouse_capture);
         assert!(options.kitty_protocol);
         assert!(options.focus_change);
         assert!(options.bracketed_paste);
+        assert!(options.alt_screen);
+        assert!(options.raw_mode);
+    }
+
+    #[test]
+    fn crossterm_builder_is_equivalent_to_options_new() {
+        // `Crossterm::builder()` is the documented preferred entry point; it must produce the
+        // same defaults as `CrosstermOptions::new()`/`::default()`.
+        assert_eq!(Crossterm::builder(), CrosstermOptions::new());
+    }
+
+    #[test]
+    fn disabling_raw_mode_and_alt_screen_lets_build_succeed_without_a_tty() {
+        // With both raw mode and the alternate screen opted out, `build()` no longer calls
+        // `enable_raw_mode()`/`EnterAlternateScreen` -- the two commands that fail outright
+        // without a real controlling terminal -- so construction can succeed even against a
+        // fully redirected/piped stdout (as under `cargo test`). Skip the assertion (rather than
+        // failing) on the rare environment where even the always-safe cursor-hide escape write
+        // fails outright (e.g. a closed stdout), since that's not what this test is about.
+        if let Ok(term) = Crossterm::builder()
+            .raw_mode(false)
+            .alt_screen(false)
+            .build()
+        {
+            drop(term);
+        }
     }
 
     #[test]
     fn crossterm_options_can_opt_out_of_all_features() {
         // Compile-level/API-shape check: building a `CrosstermOptions` with all flags disabled
         // via the builder type-checks and round-trips its fields. Exercising the actual terminal
-        // commands (`with_options` itself) requires a real TTY, which isn't available in CI, so
-        // this is intentionally not a full integration test.
+        // commands (`with_options`/`build` itself) requires a real TTY, which isn't available in
+        // CI, so this is intentionally not a full integration test (see tests/non_tty.rs for the
+        // non-TTY integration coverage that is possible without one).
         let options = CrosstermOptions::new()
             .mouse_capture(false)
             .kitty_protocol(false)
             .focus_change(false)
-            .bracketed_paste(false);
+            .bracketed_paste(false)
+            .alt_screen(false)
+            .raw_mode(false);
         assert!(!options.mouse_capture);
         assert!(!options.kitty_protocol);
         assert!(!options.focus_change);
         assert!(!options.bracketed_paste);
+        assert!(!options.alt_screen);
+        assert!(!options.raw_mode);
     }
 
     #[test]
