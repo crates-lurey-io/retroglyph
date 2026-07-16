@@ -2,6 +2,7 @@
 use retroglyph_core::{Backend, Color, Rect, Style, Terminal};
 
 use super::StatefulWidget;
+use super::window::visible_window;
 use crate::ListState;
 use crate::draw::fill_rect;
 use crate::text::truncate as truncate_to_cols;
@@ -142,21 +143,6 @@ impl<B: Backend> StatefulWidget<B> for Table<'_> {
         }
         term.reset_style();
     }
-}
-
-/// The `(original_index, item)` pairs of `items` visible in a `visible_len`-
-/// item window starting at `offset` -- shared windowing math for any
-/// scrollable, offset-driven listing (currently [`Table`]; a future `Log`
-/// window direction reuses the same idea, see [`super::Log`]'s own doc
-/// comment for why it isn't literally this same function). Out-of-range
-/// `offset` simply yields nothing, the same "no upper clamp, caller's
-/// responsibility" contract as [`ListState::scroll_by`].
-fn visible_window<T>(
-    items: &[T],
-    offset: usize,
-    visible_len: usize,
-) -> impl Iterator<Item = (usize, &T)> {
-    items.iter().enumerate().skip(offset).take(visible_len)
 }
 
 /// The style and layout options for drawing one [`Table`] row, grouped to keep [`draw_row`]'s

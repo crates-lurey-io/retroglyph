@@ -6,13 +6,31 @@ expression: svg
 <rect width="100%" height="100%" fill="#111111"/>
 <text font-family="monospace" font-size="14" y="26.0" xml:space="preserve">
   <tspan fill="#cccccc" x="8.0"> </tspan>
-  <tspan fill="#5aaafa" x="16.4">retroglyph dashboard -- Up/Down selects, q/Escape</tspan>
+  <tspan fill="#5aaafa" x="16.4">retroglyph dashboard -- tabs/select, q/Esc quits</tspan>
+  <tspan fill="#cccccc" x="419.6"> </tspan>
 </text>
 <text font-family="monospace" font-size="14" y="44.0" xml:space="preserve">
   <tspan fill="#d2d2e6" x="8.0">Service</tspan>
   <tspan fill="#cccccc" x="66.8">            </tspan>
   <tspan fill="#d2d2e6" x="167.6">Status</tspan>
   <tspan fill="#cccccc" x="218.0">     </tspan>
+  <tspan fill="#5aaafa" x="260.0" style="background:#161620">Metrics</tspan>
+  <tspan fill="#cccccc" x="318.8"> </tspan>
+  <tspan fill="#6e7082" x="327.2">Alerts</tspan>
+  <tspan fill="#cccccc" x="377.6">      </tspan>
+</text>
+<text font-family="monospace" font-size="14" y="62.0" xml:space="preserve">
+  <tspan fill="#ffffff" x="8.0" style="background:#283c5a">api-gateway</tspan>
+  <tspan fill="#cccccc" x="100.4" style="background:#283c5a">        </tspan>
+  <tspan fill="#ffffff" x="167.6" style="background:#283c5a">OK</tspan>
+  <tspan fill="#cccccc" x="184.4" style="background:#283c5a">         </tspan>
+  <tspan fill="#cccccc" x="260.0">                    </tspan>
+</text>
+<text font-family="monospace" font-size="14" y="80.0" xml:space="preserve">
+  <tspan fill="#aaafbe" x="8.0">auth</tspan>
+  <tspan fill="#cccccc" x="41.6">               </tspan>
+  <tspan fill="#aaafbe" x="167.6">OK</tspan>
+  <tspan fill="#cccccc" x="184.4">         </tspan>
   <tspan fill="#b4b4c8" x="260.0">CPU</tspan>
   <tspan fill="#cccccc" x="285.2"> </tspan>
   <tspan fill="#dcb65a" x="293.6">██████</tspan>
@@ -20,11 +38,11 @@ expression: svg
   <tspan fill="#cccccc" x="386.0"> </tspan>
   <tspan fill="#dcb65a" x="394.4"> 58%</tspan>
 </text>
-<text font-family="monospace" font-size="14" y="62.0" xml:space="preserve">
-  <tspan fill="#ffffff" x="8.0" style="background:#283c5a">api-gateway</tspan>
-  <tspan fill="#cccccc" x="100.4" style="background:#283c5a">        </tspan>
-  <tspan fill="#ffffff" x="167.6" style="background:#283c5a">OK</tspan>
-  <tspan fill="#cccccc" x="184.4" style="background:#283c5a">         </tspan>
+<text font-family="monospace" font-size="14" y="98.0" xml:space="preserve">
+  <tspan fill="#aaafbe" x="8.0">billing</tspan>
+  <tspan fill="#cccccc" x="66.8">            </tspan>
+  <tspan fill="#aaafbe" x="167.6">WARN</tspan>
+  <tspan fill="#cccccc" x="201.2">       </tspan>
   <tspan fill="#b4b4c8" x="260.0">MEM</tspan>
   <tspan fill="#cccccc" x="285.2"> </tspan>
   <tspan fill="#c2c85f" x="293.6">█████</tspan>
@@ -32,18 +50,18 @@ expression: svg
   <tspan fill="#cccccc" x="386.0"> </tspan>
   <tspan fill="#c2c85f" x="394.4"> 41%</tspan>
 </text>
-<text font-family="monospace" font-size="14" y="80.0" xml:space="preserve">
-  <tspan fill="#aaafbe" x="8.0">auth</tspan>
-  <tspan fill="#cccccc" x="41.6">               </tspan>
+<text font-family="monospace" font-size="14" y="116.0" xml:space="preserve">
+  <tspan fill="#aaafbe" x="8.0">search</tspan>
+  <tspan fill="#cccccc" x="58.4">             </tspan>
   <tspan fill="#aaafbe" x="167.6">OK</tspan>
   <tspan fill="#cccccc" x="184.4">         </tspan>
   <tspan fill="#6e7082" x="260.0">History:</tspan>
   <tspan fill="#cccccc" x="327.2">            </tspan>
 </text>
-<text font-family="monospace" font-size="14" y="98.0" xml:space="preserve">
-  <tspan fill="#aaafbe" x="8.0">billing</tspan>
-  <tspan fill="#cccccc" x="66.8">            </tspan>
-  <tspan fill="#aaafbe" x="167.6">WARN</tspan>
+<text font-family="monospace" font-size="14" y="134.0" xml:space="preserve">
+  <tspan fill="#aaafbe" x="8.0">worker-queue</tspan>
+  <tspan fill="#cccccc" x="108.8">       </tspan>
+  <tspan fill="#aaafbe" x="167.6">DOWN</tspan>
   <tspan fill="#cccccc" x="201.2">           </tspan>
   <tspan fill="#a4c865" x="293.6">▂</tspan>
   <tspan fill="#b5c862" x="302.0">▃</tspan>
@@ -62,42 +80,34 @@ expression: svg
   <tspan fill="#dc675a" x="411.2">█</tspan>
   <tspan fill="#dc745a" x="419.6">▇</tspan>
 </text>
-<text font-family="monospace" font-size="14" y="116.0" xml:space="preserve">
-  <tspan fill="#aaafbe" x="8.0">search</tspan>
-  <tspan fill="#cccccc" x="58.4">             </tspan>
-  <tspan fill="#aaafbe" x="167.6">OK</tspan>
-  <tspan fill="#cccccc" x="184.4">         </tspan>
-  <tspan fill="#bec0d0" x="260.0" style="background:#161620">┌──────────────────┐</tspan>
-</text>
-<text font-family="monospace" font-size="14" y="134.0" xml:space="preserve">
-  <tspan fill="#aaafbe" x="8.0">worker-queue</tspan>
-  <tspan fill="#cccccc" x="108.8">       </tspan>
-  <tspan fill="#aaafbe" x="167.6">DOWN</tspan>
-  <tspan fill="#cccccc" x="201.2">       </tspan>
-  <tspan fill="#bec0d0" x="260.0" style="background:#161620">│ Legend           │</tspan>
-</text>
 <text font-family="monospace" font-size="14" y="152.0" xml:space="preserve">
   <tspan fill="#aaafbe" x="8.0">cache</tspan>
   <tspan fill="#cccccc" x="50.0">              </tspan>
   <tspan fill="#aaafbe" x="167.6">OK</tspan>
   <tspan fill="#cccccc" x="184.4">         </tspan>
-  <tspan fill="#bec0d0" x="260.0" style="background:#161620">│ OK / WARN / DOWN │</tspan>
+  <tspan fill="#bec0d0" x="260.0" style="background:#161620">┌──────────────────┐</tspan>
 </text>
 <text font-family="monospace" font-size="14" y="170.0" xml:space="preserve">
   <tspan fill="#cccccc" x="8.0">                              </tspan>
-  <tspan fill="#bec0d0" x="260.0" style="background:#161620">└──────────────────┘</tspan>
+  <tspan fill="#bec0d0" x="260.0" style="background:#161620">│ Legend           │</tspan>
 </text>
 <text font-family="monospace" font-size="14" y="188.0" xml:space="preserve">
-  <tspan fill="#cccccc" x="8.0">                                                  </tspan>
+  <tspan fill="#cccccc" x="8.0">                              </tspan>
+  <tspan fill="#bec0d0" x="260.0" style="background:#161620">│ OK / WARN / DOWN │</tspan>
 </text>
 <text font-family="monospace" font-size="14" y="206.0" xml:space="preserve">
-  <tspan fill="#cccccc" x="8.0">                                                  </tspan>
+  <tspan fill="#cccccc" x="8.0">                              </tspan>
+  <tspan fill="#bec0d0" x="260.0" style="background:#161620">└──────────────────┘</tspan>
 </text>
 <text font-family="monospace" font-size="14" y="224.0" xml:space="preserve">
   <tspan fill="#cccccc" x="8.0">                                                  </tspan>
 </text>
 <text font-family="monospace" font-size="14" y="242.0" xml:space="preserve">
-  <tspan fill="#cccccc" x="8.0">                                                  </tspan>
+  <tspan fill="#cccccc" x="8.0">                              </tspan>
+  <tspan fill="#bec0d0" x="260.0" style="background:#161620">  Ping  </tspan>
+  <tspan fill="#cccccc" x="327.2"> </tspan>
+  <tspan fill="#6e7082" x="335.6">Pings: 0</tspan>
+  <tspan fill="#cccccc" x="402.8">   </tspan>
 </text>
 <text font-family="monospace" font-size="14" y="260.0" xml:space="preserve">
   <tspan fill="#cccccc" x="8.0">                                                  </tspan>

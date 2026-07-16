@@ -18,7 +18,9 @@ use retroglyph_core::{Backend, Rect, Terminal};
 
 mod bar;
 mod box_border;
+mod button;
 mod gauge;
+mod list;
 mod log;
 mod meter;
 mod modal;
@@ -31,10 +33,14 @@ mod scrollbar;
 mod sparkline;
 mod stat_bar;
 mod table;
+mod tabs;
 mod text;
+mod window;
 
 pub use box_border::BoxBorder;
+pub use button::Button;
 pub use gauge::Gauge;
+pub use list::List;
 pub use log::Log;
 pub use meter::Meter;
 pub use modal::Modal;
@@ -47,6 +53,7 @@ pub use scrollbar::Scrollbar;
 pub use sparkline::Sparkline;
 pub use stat_bar::StatBar;
 pub use table::Table;
+pub use tabs::Tabs;
 pub use text::Text;
 
 /// A type that draws itself into a terminal area, without retaining any

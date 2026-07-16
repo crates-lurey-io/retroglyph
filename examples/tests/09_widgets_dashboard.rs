@@ -13,8 +13,10 @@ mod support;
 #[allow(dead_code)] // `main`/the `wasm_entry!` FFI surface aren't exercised by these tests
 mod widgets_dashboard;
 
-use retroglyph_core::event::{Event, KeyCode, KeyEvent, KeyModifiers};
-use retroglyph_core::{Frame, Headless, Terminal};
+use retroglyph_core::event::{
+    Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+};
+use retroglyph_core::{Frame, Headless, Pos, Terminal};
 use retroglyph_examples::{Example, HEADLESS_FRAME_DELTA};
 use widgets_dashboard::Dashboard;
 
@@ -23,20 +25,27 @@ const fn key(code: KeyCode) -> Event {
     Event::Key(KeyEvent::new(code, KeyModifiers::NONE))
 }
 
-#[test]
-fn headless_snapshot() {
-    // Two Down presses move the table's highlighted row from "api-gateway" (the default
-    // selection) to "billing" -- proves `Table`/`ListState`'s highlight actually tracks
-    // input, not just that the widget renders once statically.
-    let events = [key(KeyCode::Down), key(KeyCode::Down)];
+const fn mouse_event(kind: MouseEventKind, x: u16, y: u16) -> Event {
+    Event::Mouse(MouseEvent {
+        kind,
+        position: Pos { x, y },
+        pixel_position: None,
+        modifiers: KeyModifiers::NONE,
+    })
+}
 
+/// Drives `Dashboard` through `events` (one batch of zero or more events per tick), returning
+/// each frame's rendered text.
+fn drive(events: &[&[Event]]) -> String {
     let backend = Headless::new(50, 25);
     let mut term = Terminal::new(backend);
     let mut state = Dashboard::init(&mut term);
 
     let mut views = Vec::new();
-    for (i, event) in events.iter().enumerate() {
-        term.backend_mut().push_event(event.clone());
+    for (i, batch) in events.iter().enumerate() {
+        for event in *batch {
+            term.backend_mut().push_event(event.clone());
+        }
         let frame = Frame {
             delta: HEADLESS_FRAME_DELTA,
             frame: i as u64,
@@ -46,7 +55,27 @@ fn headless_snapshot() {
         }
         views.push(term.backend().format_view());
     }
-    insta::assert_snapshot!(views.join("\n--- frame ---\n"));
+    views.join("\n--- frame ---\n")
+}
+
+#[test]
+fn headless_snapshot() {
+    // Two Down presses move the table's highlighted row from "api-gateway" (the default
+    // selection) to "billing" -- proves `Table`/`ListState`'s highlight actually tracks
+    // input, not just that the widget renders once statically.
+    insta::assert_snapshot!(drive(&[&[key(KeyCode::Down)], &[key(KeyCode::Down)]]));
+}
+
+#[test]
+fn headless_snapshot_ping_button_click() {
+    // Frame 1: registers the dashboard's widgets, including the Metrics tab's "Ping" button, for
+    // frame 2's hit-test (column 33, row 12 is inside the button's rect -- see
+    // `Dashboard::draw_ping_button`). Frame 2: resolves the click one frame later (see
+    // `Interaction`'s own doc comment on why), incrementing the ping counter -- the same
+    // click-resolution proof `10_widgets_interaction` runs on its own buttons.
+    let down = mouse_event(MouseEventKind::Down(MouseButton::Left), 33, 12);
+    let up = mouse_event(MouseEventKind::Up(MouseButton::Left), 33, 12);
+    insta::assert_snapshot!(drive(&[&[down, up], &[]]));
 }
 
 #[cfg(all(feature = "software", not(target_arch = "wasm32")))]

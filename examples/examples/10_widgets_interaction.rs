@@ -2,10 +2,11 @@
 //!
 //! [`Interaction`] (composing [`HitTester`] and [`FocusRing`] internally -- see their own doc
 //! comments for the pieces this ties together), [`Shortcuts`] (a global keyboard binding
-//! independent of focus), and [`Density`] (sizing the buttons' hit targets). Pairs with
-//! `04_mouse`: that example proved raw pointer decode; this one proves what a real widget does
-//! with it -- hover, click, drag-suppressed-click, and Tab/Shift+Tab keyboard focus with
-//! Enter/Space activation, all through one [`Interaction`] context, on three plain buttons.
+//! independent of focus), [`Density`] (sizing the buttons' hit targets), and [`Button`] (the
+//! style-by-[`Response`] widget this example used to hand-roll). Pairs with `04_mouse`: that
+//! example proved raw pointer decode; this one proves what a real widget does with it -- hover,
+//! click, drag-suppressed-click, and Tab/Shift+Tab keyboard focus with Enter/Space activation,
+//! all through one [`Interaction`] context, on three [`Button`]s.
 //!
 //! ```sh
 //! cargo run --example 10_widgets_interaction --features crossterm
@@ -19,7 +20,7 @@
 use retroglyph_core::event::{Event, KeyCode, KeyModifiers};
 use retroglyph_core::{Backend, Color, Frame, Rect, Style, Terminal};
 use retroglyph_examples::Example;
-use retroglyph_widgets::{Density, Interaction, Sense, Shortcuts, Theme, fill_rect};
+use retroglyph_widgets::{Button, Density, Interaction, Sense, Shortcuts, Theme, Widget};
 
 /// Identifies each button for [`Interaction`]'s hit-testing and focus ring.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -90,7 +91,10 @@ impl WidgetsInteraction {
         true
     }
 
-    /// Draws one button, colored by hover/press/focus state, and applies its click to `count`.
+    /// Draws one button, colored by hover/press/focus state via [`Button`], and applies its
+    /// click to `count`. The app still owns `interact`ing (it needs `response.clicked()` for the
+    /// counter logic below); `Button` only turns the resulting `Response` into a styled label,
+    /// replacing what used to be this method's own bg/fg-by-response wiring.
     fn draw_button<B: Backend>(
         &mut self,
         term: &mut Terminal<B>,
@@ -101,24 +105,12 @@ impl WidgetsInteraction {
         let response = self.interaction.interact(rect, id, Sense::click());
         let theme = Theme::DARK;
 
-        let bg = if response.pressed() {
-            theme.press_bg
-        } else if response.hovered() {
-            theme.hover_bg
-        } else {
-            theme.panel_bg
-        };
-        fill_rect(term, rect, ' ', Style::new().bg(bg));
-
-        let fg = if response.focused() {
-            theme.accent
-        } else {
-            theme.fg
-        };
-        term.reset_style().fg(fg).bg(bg);
-        let marker = if response.focused() { '>' } else { ' ' };
-        term.print(rect.left(), rect.top(), &format!("{marker}{label}"));
-        term.reset_style();
+        Button::new(label, response)
+            .style(Style::new().fg(theme.fg).bg(theme.panel_bg))
+            .hovered_style(Style::new().fg(theme.fg).bg(theme.hover_bg))
+            .pressed_style(Style::new().fg(theme.fg).bg(theme.press_bg))
+            .focused_style(Style::new().fg(theme.accent).bg(theme.panel_bg))
+            .render(rect, term);
 
         match (id, response.clicked()) {
             (ButtonId::Increment, true) => self.count += 1,
