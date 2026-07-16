@@ -28,6 +28,8 @@ impl KeyModifiers {
     pub const CONTROL: Self = Self(1 << 1);
     /// Alt key.
     pub const ALT: Self = Self(1 << 2);
+    /// Super/Meta key (macOS Cmd, Windows/Super key).
+    pub const SUPER: Self = Self(1 << 3);
 
     /// Returns `true` if all bits in `other` are set in `self`.
     #[must_use]
@@ -344,8 +346,25 @@ mod tests {
 
         let inverse = !mods;
         assert!(inverse.contains(KeyModifiers::ALT));
+        assert!(inverse.contains(KeyModifiers::SUPER));
         assert!(!inverse.contains(KeyModifiers::SHIFT));
         assert!(!inverse.contains(KeyModifiers::CONTROL));
+    }
+
+    #[test]
+    fn test_key_modifiers_super() {
+        let mods = KeyModifiers::SUPER;
+        assert!(mods.contains(KeyModifiers::SUPER));
+        assert!(!mods.contains(KeyModifiers::SHIFT));
+        assert!(!mods.contains(KeyModifiers::CONTROL));
+        assert!(!mods.contains(KeyModifiers::ALT));
+
+        let all =
+            KeyModifiers::SHIFT | KeyModifiers::CONTROL | KeyModifiers::ALT | KeyModifiers::SUPER;
+        assert!(all.contains(KeyModifiers::SUPER));
+        assert!(all.contains(KeyModifiers::SHIFT));
+        assert!(all.contains(KeyModifiers::CONTROL));
+        assert!(all.contains(KeyModifiers::ALT));
     }
 
     #[test]
