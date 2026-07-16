@@ -99,7 +99,11 @@
   <tspan fill="#cccccc" x="8.0">                                                  </tspan>
 </text>
 <text font-family="monospace" font-size="14" y="242.0" xml:space="preserve">
-  <tspan fill="#cccccc" x="8.0">                                                  </tspan>
+  <tspan fill="#cccccc" x="8.0">                              </tspan>
+  <tspan fill="#bec0d0" x="260.0" style="background:#161620">  Ping  </tspan>
+  <tspan fill="#cccccc" x="327.2"> </tspan>
+  <tspan fill="#6e7082" x="335.6">Pings: 0</tspan>
+  <tspan fill="#cccccc" x="402.8">   </tspan>
 </text>
 <text font-family="monospace" font-size="14" y="260.0" xml:space="preserve">
   <tspan fill="#cccccc" x="8.0">                                                  </tspan>

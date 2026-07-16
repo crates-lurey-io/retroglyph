@@ -1,14 +1,16 @@
 //! 09: Widgets dashboard
 //!
-//! The first `retroglyph-widgets` showcase: [`Table`] (a scrollable service list with a
-//! [`ListState`]-driven highlighted row), [`Tabs`] (switches the right panel between "Metrics"
-//! and "Alerts"), [`List`] (the Alerts panel, its own [`ListState`]-driven highlighted item),
-//! [`Gauge`] (load-colored bars for CPU/memory), [`Sparkline`] (a recent-history graph),
-//! [`BoxStyle`] (a bordered legend box, rendered into a standalone [`Grid`] and blitted in),
-//! [`split_h`]/[`split_v`] (the whole layout), and [`Theme`] (every color in this example comes
-//! from [`Theme::DARK`], not a hand-picked one-off). `retroglyph-widgets` is backend-generic --
-//! nothing here is software/crossterm/headless-specific -- which is the payoff of deferring it
-//! past Tier 1 rather than being blocked on it.
+//! The first `retroglyph-widgets` showcase, now covering every widget in the crate: [`Table`] (a
+//! scrollable service list with a [`ListState`]-driven highlighted row), [`Tabs`] (switches the
+//! right panel between "Metrics" and "Alerts"), [`List`] (the Alerts panel, its own
+//! [`ListState`]-driven highlighted item), [`Button`] (a "Ping" button on the Metrics panel,
+//! styled from an [`Interaction`]-resolved `Response` the same way `10_widgets_interaction`
+//! demonstrates in more depth), [`Gauge`] (load-colored bars for CPU/memory), [`Sparkline`] (a
+//! recent-history graph), [`BoxStyle`] (a bordered legend box, rendered into a standalone
+//! [`Grid`] and blitted in), [`split_h`]/[`split_v`] (the whole layout), and [`Theme`] (every
+//! color in this example comes from [`Theme::DARK`], not a hand-picked one-off).
+//! `retroglyph-widgets` is backend-generic -- nothing here is software/crossterm/headless-
+//! specific -- which is the payoff of deferring it past Tier 1 rather than being blocked on it.
 //!
 //! ```sh
 //! cargo run --example 09_widgets_dashboard --features crossterm
@@ -17,16 +19,23 @@
 //! ```
 //!
 //! Left/Right switches the active tab; Up/Down moves whichever list the active tab shows (the
-//! service table on "Metrics", the alert list on "Alerts"); `q` or `Escape` quits, or close the
-//! window.
+//! service table on "Metrics", the alert list on "Alerts"); on the Metrics tab, click (or Tab to
+//! focus, then Enter/Space) the "Ping" button; `q` or `Escape` quits, or close the window.
 
 use retroglyph_core::event::{Event, KeyCode};
 use retroglyph_core::{Backend, Frame, Rect, Style, Terminal};
 use retroglyph_examples::Example;
 use retroglyph_widgets::{
-    BoxStyle, Constraint, Gauge, List, ListState, Sides, Sparkline, StatefulWidget, Table, Tabs,
-    Theme, Widget, blit_into, split_h, split_v,
+    BoxStyle, Button, Constraint, Gauge, Interaction, List, ListState, Sense, Sides, Sparkline,
+    StatefulWidget, Table, Tabs, Theme, Widget, blit_into, split_h, split_v,
 };
+
+/// Identifies the dashboard's one interactive widget for [`Interaction`]'s hit-testing and focus
+/// ring -- see `10_widgets_interaction` for a fuller demonstration of the same machinery.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DashId {
+    PingButton,
+}
 
 /// Fixed service list the table displays: `(name, status)`.
 const SERVICES: [(&str, &str); 6] = [
@@ -55,8 +64,8 @@ const ALERTS: [&str; 5] = [
     "search: reindex completed",
 ];
 
-/// State for the dashboard example: which table row/alert/tab is selected, and the two gauge
-/// ratios.
+/// State for the dashboard example: which table row/alert/tab is selected, the two gauge ratios,
+/// the [`Button`] interaction context, and how many times "Ping" has been clicked.
 pub struct Dashboard {
     theme: Theme,
     table_state: ListState,
@@ -64,6 +73,8 @@ pub struct Dashboard {
     selected_tab: usize,
     cpu: f32,
     mem: f32,
+    interaction: Interaction<DashId>,
+    pings: u32,
 }
 
 impl Default for Dashboard {
@@ -77,6 +88,8 @@ impl Default for Dashboard {
             selected_tab: 0,
             cpu: 0.58,
             mem: 0.41,
+            interaction: Interaction::new(),
+            pings: 0,
         }
     }
 }
@@ -91,6 +104,7 @@ impl Dashboard {
     /// tap.
     fn handle_events<B: Backend>(&mut self, term: &mut Terminal<B>) -> bool {
         for event in term.drain_events() {
+            self.interaction.handle_event(&event);
             match event {
                 Event::Key(key) if key.is_down() => match key.code {
                     KeyCode::Char('q') | KeyCode::Escape => return false,
@@ -170,9 +184,10 @@ impl Dashboard {
         term.present().ok();
     }
 
-    /// Draws the "Metrics" tab's content: CPU/MEM gauges, a recent-history sparkline, and the
-    /// status legend -- the whole right panel before [`Tabs`]/[`List`] were added.
-    fn draw_metrics<B: Backend>(&self, term: &mut Terminal<B>, area: Rect) {
+    /// Draws the "Metrics" tab's content: CPU/MEM gauges, a recent-history sparkline, the status
+    /// legend, and a "Ping" [`Button`] -- the whole right panel before [`Tabs`]/[`List`] were
+    /// added, plus the [`Button`] this dashboard now also showcases.
+    fn draw_metrics<B: Backend>(&mut self, term: &mut Terminal<B>, area: Rect) {
         let rows = split_v(
             area,
             &[
@@ -195,6 +210,35 @@ impl Dashboard {
             .border(true)
             .render("Legend\nOK / WARN / DOWN");
         blit_into(term, &legend, rows[4].left(), rows[4].top());
+
+        self.draw_ping_button(term, Rect::new(rows[4].left(), rows[4].top() + 5, 8, 1));
+    }
+
+    /// Draws the "Ping" [`Button`] and applies its click to `self.pings`. The app still calls
+    /// [`Interaction::interact`] itself (it needs `response.clicked()` for the counter below);
+    /// `Button` only turns the resulting `Response` into a styled, centered label -- see
+    /// `10_widgets_interaction`'s `draw_button` for the same pattern applied to three buttons.
+    fn draw_ping_button<B: Backend>(&mut self, term: &mut Terminal<B>, rect: Rect) {
+        let response = self
+            .interaction
+            .interact(rect, DashId::PingButton, Sense::click());
+        Button::new("Ping", response)
+            .style(Style::new().fg(self.theme.fg).bg(self.theme.panel_bg))
+            .hovered_style(Style::new().fg(self.theme.fg).bg(self.theme.hover_bg))
+            .pressed_style(Style::new().fg(self.theme.fg).bg(self.theme.press_bg))
+            .focused_style(Style::new().fg(self.theme.accent).bg(self.theme.panel_bg))
+            .render(rect, term);
+        if response.clicked() {
+            self.pings += 1;
+        }
+
+        term.reset_style().fg(self.theme.dim);
+        term.print(
+            rect.left() + rect.width() + 1,
+            rect.top(),
+            &format!("Pings: {}", self.pings),
+        );
+        term.reset_style();
     }
 }
 
@@ -202,10 +246,13 @@ impl Example for Dashboard {
     const NAME: &'static str = "09_widgets_dashboard";
 
     fn tick<B: Backend>(&mut self, term: &mut Terminal<B>, _frame: &Frame) -> bool {
+        self.interaction.begin_frame();
         if !self.handle_events(term) {
+            self.interaction.end_frame();
             return false;
         }
         self.draw(term);
+        self.interaction.end_frame();
         true
     }
 }
