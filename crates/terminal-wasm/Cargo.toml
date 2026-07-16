@@ -25,6 +25,9 @@ retroglyph-terminal = { path = "../terminal", version = "0.1.0" }
 # Version pinned to match the wasm-bindgen dev-dependency in
 # examples/Cargo.toml -- the CLI and the crate version must agree.
 wasm-bindgen = "=0.2.106"
+# Only used to warn on invalid `wasm_terminal_*` handles (see the `wasm` module below); this
+# crate's non-wasm32 API surface has no fallible operations and stays log-free.
+log = "0.4"
 
 [features]
 # Forwards to retroglyph-terminal's egc feature.

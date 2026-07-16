@@ -29,19 +29,68 @@
 //! compiled for `target_arch = "wasm32"`, so it won't appear in docs built
 //! natively) that operate on an opaque handle, since
 //! `retroglyph_core::event::Event` is not itself `wasm-bindgen`-compatible.
-//! A minimal JS driver looks like:
+//!
+//! The example below is a complete, working driver pairing this crate's
+//! `wasm32` build with [xterm.js](https://xtermjs.org/) (any other browser
+//! terminal emulator works the same way; this crate has no dependency on
+//! xterm.js specifically). It assumes a `wasm-pack`/`wasm-bindgen`-generated
+//! `./pkg.js` module built from a binary that re-exports this crate's `wasm`
+//! module, and an `xterm.js` `<script>` already loaded on the page (see
+//! [xterm.js's own quick start](https://xtermjs.org/docs/) for that half):
 //!
 //! ```js
-//! import init, { wasm_terminal_new, wasm_terminal_push_key, wasm_terminal_take_output } from './pkg.js';
-//! await init();
-//! const handle = wasm_terminal_new(80, 24);
-//! term.onData(data => { /* forward decoded key to wasm_terminal_push_key(handle, code, mods) */ });
-//! function frame() {
-//!   const ansi = wasm_terminal_take_output(handle);
-//!   if (ansi) term.write(ansi);
+//! import init, {
+//!   wasm_terminal_new,
+//!   wasm_terminal_resize,
+//!   wasm_terminal_push_key,
+//!   wasm_terminal_take_output,
+//! } from './pkg.js';
+//!
+//! // `code` values above 0x110000 select a named key; see this crate's
+//! // `key_codes` module for the full list (arrows, Home/End, F1-F24, etc).
+//! const NAMED_KEY_BASE = 0x00110000;
+//! const KEY_ENTER = NAMED_KEY_BASE + 1;
+//! const KEY_BACKSPACE = NAMED_KEY_BASE;
+//!
+//! // `mods` is a bitmask: SHIFT = 1, CONTROL = 2, ALT = 4, SUPER = 8.
+//! function decodeXtermData(data) {
+//!   if (data === '\r') return { code: KEY_ENTER, mods: 0 };
+//!   if (data === '\x7f') return { code: KEY_BACKSPACE, mods: 0 };
+//!   // A single printable character forwards as its Unicode codepoint;
+//!   // xterm.js already resolves Shift into the codepoint itself (e.g.
+//!   // 'A' vs 'a'), so no SHIFT bit is needed here.
+//!   if (data.length === 1) return { code: data.codePointAt(0), mods: 0 };
+//!   return null;
+//! }
+//!
+//! async function main() {
+//!   await init();
+//!
+//!   const term = new Terminal({ cols: 80, rows: 24 });
+//!   term.open(document.getElementById('screen'));
+//!
+//!   const handle = wasm_terminal_new(term.cols, term.rows);
+//!
+//!   term.onData((data) => {
+//!     const key = decodeXtermData(data);
+//!     if (key) wasm_terminal_push_key(handle, key.code, key.mods);
+//!   });
+//!
+//!   window.addEventListener('resize', () => {
+//!     // Call whatever fit-to-container logic resizes `term` first (e.g.
+//!     // xterm.js's FitAddon), then tell the backend to match.
+//!     wasm_terminal_resize(handle, term.cols, term.rows);
+//!   });
+//!
+//!   function frame() {
+//!     const ansi = wasm_terminal_take_output(handle);
+//!     if (ansi) term.write(ansi);
+//!     requestAnimationFrame(frame);
+//!   }
 //!   requestAnimationFrame(frame);
 //! }
-//! requestAnimationFrame(frame);
+//!
+//! main();
 //! ```
 
 // Compile the code blocks in this crate's own README as doctests so its quick start is
@@ -110,13 +159,21 @@ impl TerminalWasm {
     ///
     /// # Panics
     ///
-    /// Panics if the buffered output is not valid UTF-8. This can't happen in
-    /// practice: [`TerminalRenderer`] only ever writes ASCII escape codes and
-    /// glyphs encoded via `char`/`&str` (both always valid UTF-8).
+    /// Panics if the buffered output is not valid UTF-8. This can't happen
+    /// through any safe, public API of this crate: [`TerminalRenderer`] only
+    /// ever writes into its `Vec<u8>` writer via `write!`/`write_str` calls
+    /// on ASCII escape sequences and glyphs encoded through `char`/`&str`
+    /// (both always valid UTF-8), and this buffer is never exposed for
+    /// direct mutation between a `take_output` call and the next `draw`. The
+    /// only way to trigger this panic would be memory corruption or an
+    /// `unsafe` write bypassing `TerminalRenderer` entirely -- and this
+    /// workspace forbids `unsafe_code` outright, so no code in this crate
+    /// (or its dependents, absent unsound external `unsafe`) can do that.
     #[must_use]
     pub fn take_output(&mut self) -> String {
         let bytes = std::mem::take(self.renderer.writer_mut());
-        String::from_utf8(bytes).expect("TerminalRenderer only ever writes valid UTF-8")
+        String::from_utf8(bytes)
+            .expect("TerminalRenderer only ever writes valid UTF-8 via safe char/&str APIs")
     }
 }
 
@@ -354,6 +411,10 @@ pub mod wasm {
 
     /// Reports a new size (in cells) for the terminal identified by
     /// `handle`, e.g. after xterm.js's `fit` addon recomputes `cols`/`rows`.
+    ///
+    /// Logs a warning (via the `log` crate) and otherwise does nothing if
+    /// `handle` is unknown, e.g. because the terminal was already freed via
+    /// [`wasm_terminal_free`].
     #[wasm_bindgen]
     pub fn wasm_terminal_resize(handle: u32, width: u16, height: u16) {
         use retroglyph_core::backend::Backend;
@@ -361,6 +422,8 @@ pub mod wasm {
         INSTANCES.with_borrow_mut(|instances| {
             if let Some(term) = instances.get_mut(&handle) {
                 term.resize(Size { width, height });
+            } else {
+                log::warn!("wasm_terminal_resize: unknown handle {handle}");
             }
         });
     }
@@ -369,7 +432,10 @@ pub mod wasm {
     /// [`decode_key_event`] for the `code`/`mods` encoding.
     ///
     /// Silently ignores codes that don't decode to a known key (e.g. a lone
-    /// Unicode combining mark with no assigned scalar meaning here).
+    /// Unicode combining mark with no assigned scalar meaning here). Logs a
+    /// warning (via the `log` crate) and otherwise does nothing if `handle`
+    /// is unknown, e.g. because the terminal was already freed via
+    /// [`wasm_terminal_free`].
     #[wasm_bindgen]
     pub fn wasm_terminal_push_key(handle: u32, code: u32, mods: u8) {
         use retroglyph_core::event::Event;
@@ -379,6 +445,8 @@ pub mod wasm {
         INSTANCES.with_borrow_mut(|instances| {
             if let Some(term) = instances.get_mut(&handle) {
                 term.push_event(Event::Key(key_event));
+            } else {
+                log::warn!("wasm_terminal_push_key: unknown handle {handle}");
             }
         });
     }
@@ -386,14 +454,19 @@ pub mod wasm {
     /// Drains and returns the ANSI bytes rendered since the last call for the
     /// terminal identified by `handle`. Returns an empty string if `handle`
     /// is unknown or nothing has been drawn since the last call.
+    ///
+    /// Logs a warning (via the `log` crate) in the unknown-`handle` case;
+    /// callers that only ever pass handles from [`wasm_terminal_new`] and
+    /// stop using them after [`wasm_terminal_free`] should never see one.
     #[wasm_bindgen]
     #[must_use]
     pub fn wasm_terminal_take_output(handle: u32) -> String {
         INSTANCES.with_borrow_mut(|instances| {
-            instances
-                .get_mut(&handle)
-                .map(TerminalWasm::take_output)
-                .unwrap_or_default()
+            let Some(term) = instances.get_mut(&handle) else {
+                log::warn!("wasm_terminal_take_output: unknown handle {handle}");
+                return String::new();
+            };
+            term.take_output()
         })
     }
 }

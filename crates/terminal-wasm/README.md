@@ -32,5 +32,61 @@ let ansi = term.backend_mut().take_output();
 assert!(ansi.contains('@'));
 ```
 
-See [docs.rs](https://docs.rs/retroglyph-terminal-wasm) for the full API, including the JS-facing
-side of the pushed-event/pulled-output contract.
+## Usage from JS
+
+The `wasm32` build exposes free functions (`wasm_terminal_new`, `wasm_terminal_resize`,
+`wasm_terminal_push_key`, `wasm_terminal_take_output`) that drive a `TerminalWasm` by opaque handle.
+Here's a complete driver pairing them with [xterm.js](https://xtermjs.org/) (any other browser
+terminal emulator works the same way):
+
+```js
+import init, {
+  wasm_terminal_new,
+  wasm_terminal_resize,
+  wasm_terminal_push_key,
+  wasm_terminal_take_output,
+} from './pkg.js';
+
+// `code` values above 0x110000 select a named key; see `key_codes` on docs.rs for the full list.
+const NAMED_KEY_BASE = 0x00110000;
+const KEY_ENTER = NAMED_KEY_BASE + 1;
+const KEY_BACKSPACE = NAMED_KEY_BASE;
+
+// `mods` is a bitmask: SHIFT = 1, CONTROL = 2, ALT = 4, SUPER = 8.
+function decodeXtermData(data) {
+  if (data === '\r') return { code: KEY_ENTER, mods: 0 };
+  if (data === '\x7f') return { code: KEY_BACKSPACE, mods: 0 };
+  if (data.length === 1) return { code: data.codePointAt(0), mods: 0 };
+  return null;
+}
+
+async function main() {
+  await init();
+
+  const term = new Terminal({ cols: 80, rows: 24 });
+  term.open(document.getElementById('screen'));
+
+  const handle = wasm_terminal_new(term.cols, term.rows);
+
+  term.onData((data) => {
+    const key = decodeXtermData(data);
+    if (key) wasm_terminal_push_key(handle, key.code, key.mods);
+  });
+
+  window.addEventListener('resize', () => {
+    wasm_terminal_resize(handle, term.cols, term.rows);
+  });
+
+  function frame() {
+    const ansi = wasm_terminal_take_output(handle);
+    if (ansi) term.write(ansi);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+
+main();
+```
+
+See [docs.rs](https://docs.rs/retroglyph-terminal-wasm) for the full API, including `key_codes` and
+the rest of the pushed-event/pulled-output contract.
