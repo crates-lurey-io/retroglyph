@@ -19,6 +19,7 @@ use retroglyph_core::{Backend, Rect, Terminal};
 mod bar;
 mod box_border;
 mod gauge;
+mod list;
 mod log;
 mod meter;
 mod modal;
@@ -36,6 +37,7 @@ mod window;
 
 pub use box_border::BoxBorder;
 pub use gauge::Gauge;
+pub use list::List;
 pub use log::Log;
 pub use meter::Meter;
 pub use modal::Modal;
