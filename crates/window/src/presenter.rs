@@ -138,7 +138,17 @@ pub trait Presenter {
 
     /// Resize the window surface to a new physical pixel size.
     ///
-    /// Called on every window resize event.
+    /// Called on every window resize event with `width`/`height` already resolved by the
+    /// caller -- for the `winit` driver (see `winit::run::WindowApp::resize_to`), that means
+    /// `cols * cell_w` x `rows * cell_h`, where `cols`/`rows` are the window's physical size
+    /// divided down to whole cells. Any sub-cell remainder is truncated, not centered or
+    /// cleared: when the window's physical size isn't an exact multiple of the cell size,
+    /// `width`/`height` here are the largest whole-cell-multiple that fits, which can be
+    /// smaller than the window's actual physical size. The OS window itself is never resized
+    /// to compensate, so a non-exact-multiple resize leaves a thin strip at the window's
+    /// trailing edge outside the surface -- retroglyph does not paint or clear that strip;
+    /// whatever the OS/windowing backend leaves there remains visible until a subsequent
+    /// resize covers it.
     fn resize_surface(&mut self, width: u32, height: u32);
 
     /// Notify the presenter that the window's scale factor (DPI) changed.
