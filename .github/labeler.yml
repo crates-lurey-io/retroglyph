@@ -37,12 +37,30 @@
 
 # Anything outside crates/*/ and examples/ is workspace-wide: root Cargo.toml/Cargo.lock, CI,
 # Justfile, docs/, root README/AGENTS/STYLE_GUIDE, tools/, etc.
+#
+# `any-glob-to-any-file` matches each pattern independently and ORs the results, so a negation
+# entry like '!crates/**' matches virtually every file on its own (anything not under crates/),
+# which defeats the intended "everything except crates/examples" exclusion -- see #187. Instead:
+#   - Enumerate the known workspace-level paths explicitly (fires per-file, combines correctly
+#     with per-crate labels on mixed PRs).
+#   - Fall back to `all-globs-to-all-files` on the negations, which requires *every* changed file
+#     in the PR to be outside crates/examples -- a correct (if coarser) catch-all for new root
+#     files not yet in the enumerated list above.
 'c:workspace':
-  - changed-files:
-      - any-glob-to-any-file:
-          - '*'
-          - '.github/**'
-          - 'docs/**'
-          - 'tools/**'
-          - '!crates/**'
-          - '!examples/**'
+  - any:
+      - changed-files:
+          - any-glob-to-any-file:
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'Justfile'
+              - 'README.md'
+              - 'AGENTS.md'
+              - 'STYLE_GUIDE.md'
+              - 'RELEASING.md'
+              - '.github/**'
+              - 'docs/**'
+              - 'tools/**'
+      - changed-files:
+          - all-globs-to-all-files:
+              - '!crates/**'
+              - '!examples/**'
