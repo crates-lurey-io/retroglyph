@@ -1,5 +1,88 @@
 //! The layered tile grid: [`Grid`], plus the [`Size`], [`Pos`], and [`Rect`]
 //! coordinate types used throughout the crate.
+//!
+//! # Layers, draw order, and compositing
+//!
+//! A [`Grid`] holds up to 256 independent layers (`u8` ids `0..=255`), one
+//! [`Tile`] per cell on each. Layer 0 is always allocated; layers 1-255 are
+//! allocated lazily, on first write to that layer (see
+//! [`put_tile`](Grid::put_tile), [`cells_mut`](Grid::cells_mut)). This is the
+//! crate's most distinctive feature and the one most worth understanding
+//! before reaching for a second layer.
+//!
+//! ## Draw order
+//!
+//! Layers composite bottom-to-top, in ascending id order: 0 first, then every
+//! allocated layer up to [`max_layer`](Grid::max_layer), each painted over
+//! whatever the layers below it produced. Layer id *is* z-order -- there is
+//! no separate depth or z-index to set. A common convention is layer 0 for
+//! terrain, 1 for items, 2 for actors, 3+ for UI/effects, but the crate
+//! enforces nothing; any id can hold any content.
+//!
+//! Compositing itself happens in one of two places, chosen by the backend
+//! (see [`crate::Backend::composites_layers`]):
+//!
+//! - **Cell backends** (`Headless`, `retroglyph-crossterm`) do not composite
+//!   layers themselves. [`crate::Terminal::present`] calls
+//!   `flatten_into` (crate-private) to collapse every allocated layer
+//!   into a single-layer frame *before* handing it to the backend, so
+//!   layers 1+ behave identically on every cell backend.
+//! - **Pixel backends** (`retroglyph-software`) composite per pixel: they
+//!   receive the raw layered stream from
+//!   [`crate::Backend::draw_layers`] (layer-major, ascending id) and paint
+//!   each layer's cells directly onto the pixel buffer in that order.
+//!
+//! ## The `EMPTY` flag: transparency vs. opaque occlusion
+//!
+//! Every [`Tile`] carries [`TileFlags::EMPTY`], set on [`Tile::default`] and
+//! cleared by every write (`put_tile`, `write_grapheme`, indexing, ...).
+//! Compositing treats it as the transparency bit:
+//!
+//! - An **untouched cell** (`EMPTY` set) is fully transparent:
+//!   [`blit`](Grid::blit) skips it, and `flatten_into` (crate-private)
+//!   leaves whatever the layers below already drew.
+//! - An **explicit space** (`Tile::new(' ', style)`, `EMPTY` clear) is
+//!   opaque: it overwrites the glyph and foreground below it, same as any
+//!   other character. This is the one sharp edge in the model -- `' '`
+//!   painted on a higher layer *erases* content underneath, it does not
+//!   reveal it.
+//!
+//! Background color follows its own rule, independent of `EMPTY`: a tile's
+//! background only overwrites the composited background when it is not
+//! [`Color::Default`]. A non-empty tile with a `Default` background still
+//! lets a lower layer's background show through even though its glyph is
+//! opaque. See `flatten_into` (crate-private) for the exact rule.
+//!
+//! ## No short-circuiting: every allocated layer is visited, for every cell
+//!
+//! Compositing does not stop early when it hits an opaque tile on a high
+//! layer. Both `flatten_into` (crate-private) and the software
+//! backend's per-pixel compositor walk layers `0..=max_layer` in order for
+//! *every* cell, unconditionally -- even if a fully opaque tile on layer 5
+//! makes layers 6-50 invisible at that position. Cost is `O(max_layer)` per
+//! cell, not `O(topmost opaque layer)`. Painting one fully opaque layer 250
+//! over the whole grid still walks (and `EMPTY`-checks) layers 1-249 on
+//! every present.
+//!
+//! ## Allocation cost: layer 1 vs. layer 200
+//!
+//! Writing to a layer for the first time allocates one `width x height`
+//! buffer of [`Tile`]s -- the same cost regardless of the layer's id. Layer
+//! 200 is no more expensive to *allocate* than layer 1: `Grid` stores a
+//! 256-slot `Vec<Option<LayerBuf>>`, and only the slots that have been
+//! written to hold `Some`; the rest are a cheap `None`.
+//!
+//! What the layer id *does* affect is steady-state iteration cost, via
+//! [`max_layer`](Grid::max_layer): every present, diff, and full-grid
+//! iteration walks `0..=max_layer`, skipping unallocated slots with an O(1)
+//! `None` check. `max_layer` only grows -- clearing a layer
+//! ([`clear`](Grid::clear)) does not deallocate it or lower `max_layer`. So
+//! writing once to layer 200 and never touching layers 1-199 means every
+//! future frame's compositing pass walks past 199 unallocated slots to reach
+//! it. That walk is cheap (a pointer-sized `None` check per skipped layer)
+//! but not free; prefer low, contiguous layer ids for frequently-updated
+//! content and reserve high ids for rarely-touched overlays (e.g. a debug
+//! HUD pinned to layer 255).
 
 use crate::color::Color;
 #[cfg(feature = "egc")]
