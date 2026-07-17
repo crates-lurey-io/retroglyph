@@ -82,7 +82,7 @@ impl Presenter for NullPresenter {
 }
 
 let config = WindowConfig::fit(&NullPresenter, "demo", None);
-assert_eq!((config.width, config.height), (80, 80));
+assert_eq!((config.width(), config.height()), (80, 80));
 ```
 
 Hand a real `Presenter` (e.g. `retroglyph-software`'s `SoftwareRenderer`) and a `config` like this

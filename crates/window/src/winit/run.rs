@@ -80,28 +80,23 @@ impl std::error::Error for EventProxyClosed {}
 /// Deliberately renderer-agnostic: pixel dimensions, not grid/font/scale.
 /// Use [`fit`](Self::fit) to derive the pixel size from a presenter's own
 /// cell geometry.
+// Five independent window attribute toggles (`fill_viewport`, `resizable`, `decorations`,
+// `fullscreen`, `transparency`), not a state machine in disguise: each maps to one winit
+// `WindowAttributes` builder call and is meaningful on its own.
+#[allow(clippy::struct_excessive_bools)]
 pub struct WindowConfig {
-    /// Window title.
-    pub title: String,
-    /// Initial inner width in physical pixels.
-    pub width: u32,
-    /// Initial inner height in physical pixels.
-    pub height: u32,
-    /// Optional frame-rate cap. `None` = uncapped (native) / display refresh
-    /// (wasm, which is always rAF-driven).
-    pub target_fps: Option<u32>,
-    /// On `wasm32`, size (and keep resizing) the canvas to fill the browser
-    /// viewport instead of `width`/`height` -- a full-screen, mobile-web-app
-    /// feel for games that want it. Has no effect on native, where the OS
-    /// window is already sized to `width`/`height` and the window manager
-    /// owns further resizing either way.
-    ///
-    /// Defaults to `false` in [`fit`](Self::fit): most demos/examples
-    /// should render at their natural grid size (`cols x cell_w` by `rows x
-    /// cell_h`) wherever they land on the page, not stretch to fill
-    /// whatever viewport happens to be hosting them. Opt in explicitly for
-    /// an app-like, full-screen game.
-    pub fill_viewport: bool,
+    title: String,
+    width: u32,
+    height: u32,
+    target_fps: Option<u32>,
+    fill_viewport: bool,
+    resizable: bool,
+    decorations: bool,
+    min_size: Option<(u32, u32)>,
+    max_size: Option<(u32, u32)>,
+    initial_position: Option<(i32, i32)>,
+    fullscreen: bool,
+    transparency: bool,
 }
 
 impl WindowConfig {
@@ -111,6 +106,10 @@ impl WindowConfig {
     /// This is why renderer crates don't need their own windowing code: the
     /// grid/cell geometry already lives behind [`Presenter::size`] and
     /// [`Presenter::cell_size`].
+    ///
+    /// `target_fps` is an optional frame-rate cap: `None` runs uncapped on native (the event
+    /// loop re-renders as fast as the backend allows) or at display refresh on `wasm32` (always
+    /// `requestAnimationFrame`-driven there regardless of this setting).
     #[must_use]
     pub fn fit<P: Presenter>(
         presenter: &P,
@@ -125,14 +124,147 @@ impl WindowConfig {
             height: u32::from(grid.height) * cell_h,
             target_fps,
             fill_viewport: false,
+            resizable: true,
+            decorations: true,
+            min_size: None,
+            max_size: None,
+            initial_position: None,
+            fullscreen: false,
+            transparency: false,
         }
     }
 
-    /// Sets [`fill_viewport`](Self::fill_viewport), returning `self` for chaining off
-    /// [`fit`](Self::fit).
+    /// The window title, as set by [`fit`](Self::fit).
+    #[must_use]
+    pub fn title(&self) -> &str {
+        &self.title
+    }
+
+    /// Initial inner width in physical pixels, as computed by [`fit`](Self::fit).
+    #[must_use]
+    pub const fn width(&self) -> u32 {
+        self.width
+    }
+
+    /// Initial inner height in physical pixels, as computed by [`fit`](Self::fit).
+    #[must_use]
+    pub const fn height(&self) -> u32 {
+        self.height
+    }
+
+    /// The frame-rate cap passed to [`fit`](Self::fit), if any.
+    #[must_use]
+    pub const fn target_fps(&self) -> Option<u32> {
+        self.target_fps
+    }
+
+    /// Sets whether to size (and keep resizing) the canvas to fill the browser viewport on
+    /// `wasm32`, instead of the pixel size [`fit`](Self::fit) computed -- a full-screen,
+    /// mobile-web-app feel for games that want it. Has no effect on native, where the OS window
+    /// is already sized by [`fit`](Self::fit) and the window manager owns further resizing
+    /// either way.
+    ///
+    /// Defaults to `false`: most demos/examples should render at their natural grid size
+    /// (`cols x cell_w` by `rows x cell_h`) wherever they land on the page, not stretch to fill
+    /// whatever viewport happens to be hosting them. Opt in explicitly for an app-like,
+    /// full-screen game.
     #[must_use]
     pub const fn fill_viewport(mut self, fill_viewport: bool) -> Self {
         self.fill_viewport = fill_viewport;
+        self
+    }
+
+    /// Sets whether the window can be resized by the user/window manager after creation.
+    ///
+    /// Defaults to `true` (winit's own default). Set to `false` for fixed-size retro windows
+    /// where the grid is meant to stay put -- resizing a pseudo-graphic UI usually means picking
+    /// a new grid size, not stretching cells, and most callers that care already size the window
+    /// to their content via [`fit`](Self::fit).
+    ///
+    /// On `wasm32`, winit's web backend ignores this (there is no OS-level resize grip on a
+    /// canvas); it's still applied for source-level parity with native, it just has no effect.
+    #[must_use]
+    pub const fn resizable(mut self, resizable: bool) -> Self {
+        self.resizable = resizable;
+        self
+    }
+
+    /// Sets whether the window has OS chrome: title bar, borders, close/minimize/maximize
+    /// buttons.
+    ///
+    /// Defaults to `true` (winit's own default). Set to `false` for a borderless window
+    /// (custom-drawn title bars, retro full-bleed layouts).
+    ///
+    /// On `wasm32`, winit's web backend ignores this (a canvas has no OS chrome to begin with);
+    /// it's still applied for source-level parity with native, it just has no effect.
+    #[must_use]
+    pub const fn decorations(mut self, decorations: bool) -> Self {
+        self.decorations = decorations;
+        self
+    }
+
+    /// Sets the minimum inner (content) size in physical pixels.
+    ///
+    /// Defaults to no minimum.
+    #[must_use]
+    pub const fn min_size(mut self, width: u32, height: u32) -> Self {
+        self.min_size = Some((width, height));
+        self
+    }
+
+    /// Sets the maximum inner (content) size in physical pixels.
+    ///
+    /// Defaults to no maximum.
+    #[must_use]
+    pub const fn max_size(mut self, width: u32, height: u32) -> Self {
+        self.max_size = Some((width, height));
+        self
+    }
+
+    /// Sets the desired initial outer window position in physical pixels.
+    ///
+    /// Defaults to letting the platform choose.
+    ///
+    /// On `wasm32`, winit's web backend maps this to the canvas's `position: absolute`
+    /// left/top, which only does anything if the page's CSS has already opted the canvas into
+    /// absolute/relative positioning; otherwise normal document flow overrides it.
+    #[must_use]
+    pub const fn initial_position(mut self, x: i32, y: i32) -> Self {
+        self.initial_position = Some((x, y));
+        self
+    }
+
+    /// Sets whether to request borderless fullscreen (on the window's current monitor) at
+    /// creation.
+    ///
+    /// Defaults to `false`. This only exposes borderless fullscreen, not winit's
+    /// exclusive-fullscreen video-mode API: retro/terminal-style apps render a fixed cell grid,
+    /// not a resolution-dependent 3D scene, so there is no benefit to an exclusive video-mode
+    /// switch, only extra platform-specific complexity (enumerating
+    /// [`VideoModeHandle`](winit::monitor::VideoModeHandle)s) for a mode real games would rarely
+    /// want here.
+    ///
+    /// On `wasm32`, winit's web backend maps this to the browser's Fullscreen API
+    /// (`Element.requestFullscreen`), which most browsers refuse to grant without a user
+    /// gesture; requesting it unconditionally at window-creation time (before any gesture) is
+    /// liable to silently fail there. Still applied for source-level parity with native.
+    #[must_use]
+    pub const fn fullscreen(mut self, fullscreen: bool) -> Self {
+        self.fullscreen = fullscreen;
+        self
+    }
+
+    /// Sets whether the window's background supports transparency (alpha blending with whatever
+    /// is behind it).
+    ///
+    /// Defaults to `false` (winit's own default).
+    ///
+    /// On `wasm32`, winit's web backend ignores this (a canvas is already alpha-blended with the
+    /// page behind it via normal CSS compositing); it's still applied for source-level parity
+    /// with native, it just has no effect.
+    #[must_use]
+    pub const fn transparency(mut self, transparency: bool) -> Self {
+        self.transparency = transparency;
         self
     }
 }
@@ -234,6 +366,7 @@ where
         .target_fps
         .map(|fps| Duration::from_secs_f64(1.0 / f64::from(fps)));
 
+    let attrs = WindowAttrs::from(&config);
     let app = WindowApp {
         terminal: Some(terminal),
         app_loop,
@@ -243,6 +376,7 @@ where
             width: config.width,
             height: config.height,
         },
+        attrs,
         #[cfg(target_arch = "wasm32")]
         fill_viewport: config.fill_viewport,
         current_modifiers: KeyModifiers::NONE,
@@ -347,6 +481,55 @@ struct InitWindowSize {
     height: u32,
 }
 
+/// The subset of [`WindowConfig`]'s builder attributes applied once, up front, to
+/// `Window::default_attributes()` in [`create_window_and_surface`](WindowApp::create_window_and_surface).
+///
+/// Grouped into its own type (rather than six more fields directly on [`WindowApp`]) since
+/// they're only ever read in that one place, unlike `fill_viewport`, which also gates per-resize
+/// behavior elsewhere.
+// See `WindowConfig`'s matching `#[allow]` for why these bools are independent toggles, not a
+// state machine.
+#[allow(clippy::struct_excessive_bools)]
+struct WindowAttrs {
+    resizable: bool,
+    decorations: bool,
+    min_size: Option<(u32, u32)>,
+    max_size: Option<(u32, u32)>,
+    initial_position: Option<(i32, i32)>,
+    fullscreen: bool,
+    transparency: bool,
+}
+
+impl From<&WindowConfig> for WindowAttrs {
+    fn from(config: &WindowConfig) -> Self {
+        Self {
+            resizable: config.resizable,
+            decorations: config.decorations,
+            min_size: config.min_size,
+            max_size: config.max_size,
+            initial_position: config.initial_position,
+            fullscreen: config.fullscreen,
+            transparency: config.transparency,
+        }
+    }
+}
+
+impl Default for WindowAttrs {
+    /// Mirrors [`WindowConfig::fit`]'s defaults, for tests that construct a [`WindowApp`]
+    /// directly without going through a [`WindowConfig`].
+    fn default() -> Self {
+        Self {
+            resizable: true,
+            decorations: true,
+            min_size: None,
+            max_size: None,
+            initial_position: None,
+            fullscreen: false,
+            transparency: false,
+        }
+    }
+}
+
 /// The winit `ApplicationHandler`: owns the window, the terminal, and the
 /// per-frame closure.
 struct WindowApp<P: Presenter, F> {
@@ -355,6 +538,9 @@ struct WindowApp<P: Presenter, F> {
     window: Option<Arc<Window>>,
     title: String,
     init_size: InitWindowSize,
+    /// See [`WindowConfig`]'s `resizable`/`decorations`/`min_size`/`max_size`/
+    /// `initial_position`/`fullscreen`/`transparency` fields; applied once at window creation.
+    attrs: WindowAttrs,
     /// See [`WindowConfig::fill_viewport`]. Only meaningful on `wasm32`; not
     /// even stored on native, where it would do nothing.
     #[cfg(target_arch = "wasm32")]
@@ -448,7 +634,27 @@ impl<P: Presenter, F> WindowApp<P, F> {
 
         let attrs = Window::default_attributes()
             .with_title(&self.title)
-            .with_inner_size(physical_size);
+            .with_inner_size(physical_size)
+            .with_resizable(self.attrs.resizable)
+            .with_decorations(self.attrs.decorations)
+            .with_transparent(self.attrs.transparency);
+        let attrs = match self.attrs.min_size {
+            Some((w, h)) => attrs.with_min_inner_size(winit::dpi::PhysicalSize::new(w, h)),
+            None => attrs,
+        };
+        let attrs = match self.attrs.max_size {
+            Some((w, h)) => attrs.with_max_inner_size(winit::dpi::PhysicalSize::new(w, h)),
+            None => attrs,
+        };
+        let attrs = match self.attrs.initial_position {
+            Some((x, y)) => attrs.with_position(winit::dpi::PhysicalPosition::new(x, y)),
+            None => attrs,
+        };
+        let attrs = if self.attrs.fullscreen {
+            attrs.with_fullscreen(Some(winit::window::Fullscreen::Borderless(None)))
+        } else {
+            attrs
+        };
 
         #[cfg(target_family = "wasm")]
         let attrs = {
@@ -1040,6 +1246,66 @@ mod tests {
         assert_eq!(physical_size_for(81, 81, 1.5), (122, 122));
     }
 
+    // ── WindowConfig builder chain ───────────────────────────────────────────
+
+    #[test]
+    fn fit_defaults_match_winit_defaults() {
+        // `fit` should start from the same defaults winit itself uses for a plain
+        // `Window::default_attributes()`, so a caller that never touches the new builder
+        // methods gets identical behavior to before this API existed.
+        let presenter = MockPresenter::default();
+        let config = WindowConfig::fit(&presenter, "test", None);
+        assert!(config.resizable);
+        assert!(config.decorations);
+        assert_eq!(config.min_size, None);
+        assert_eq!(config.max_size, None);
+        assert_eq!(config.initial_position, None);
+        assert!(!config.fullscreen);
+        assert!(!config.transparency);
+        assert!(!config.fill_viewport);
+    }
+
+    #[test]
+    fn builder_chain_sets_each_attribute() {
+        let presenter = MockPresenter::default();
+        let config = WindowConfig::fit(&presenter, "test", None)
+            .resizable(false)
+            .decorations(false)
+            .min_size(320, 240)
+            .max_size(1920, 1080)
+            .initial_position(10, 20)
+            .fullscreen(true)
+            .transparency(true);
+        assert!(!config.resizable);
+        assert!(!config.decorations);
+        assert_eq!(config.min_size, Some((320, 240)));
+        assert_eq!(config.max_size, Some((1920, 1080)));
+        assert_eq!(config.initial_position, Some((10, 20)));
+        assert!(config.fullscreen);
+        assert!(config.transparency);
+    }
+
+    #[test]
+    fn window_attrs_from_config_copies_all_fields() {
+        let presenter = MockPresenter::default();
+        let config = WindowConfig::fit(&presenter, "test", None)
+            .resizable(false)
+            .decorations(false)
+            .min_size(1, 2)
+            .max_size(3, 4)
+            .initial_position(5, 6)
+            .fullscreen(true)
+            .transparency(true);
+        let attrs = WindowAttrs::from(&config);
+        assert!(!attrs.resizable);
+        assert!(!attrs.decorations);
+        assert_eq!(attrs.min_size, Some((1, 2)));
+        assert_eq!(attrs.max_size, Some((3, 4)));
+        assert_eq!(attrs.initial_position, Some((5, 6)));
+        assert!(attrs.fullscreen);
+        assert!(attrs.transparency);
+    }
+
     #[test]
     fn dpr_pointer_scale_no_correction_below_cap() {
         // Real DPR at or below the cap: pointer positions already match the
@@ -1199,6 +1465,7 @@ mod tests {
                 width: 80,
                 height: 80,
             },
+            attrs: WindowAttrs::default(),
             current_modifiers: KeyModifiers::NONE,
             cursor_px: (0.0, 0.0),
             active_touch: None,
@@ -1665,6 +1932,7 @@ mod tests {
                 width: 80,
                 height: 80,
             },
+            attrs: WindowAttrs::default(),
             current_modifiers: KeyModifiers::NONE,
             cursor_px: (0.0, 0.0),
             active_touch: None,
