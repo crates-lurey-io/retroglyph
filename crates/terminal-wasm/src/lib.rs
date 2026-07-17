@@ -211,12 +211,25 @@ fn write_cursor_visibility(
     }
 }
 
+/// Writes a CUP (Cursor Position) sequence, `CSI row;col H`, 1-indexed and
+/// absolute.
+///
+/// This is the standard VT100/ANSI X3.64 (ECMA-48 `CUP`) cursor-positioning
+/// sequence and is not one of the areas where browser terminal emulators
+/// diverge: xterm.js (`CSI Ps ; Ps H`, `InputHandler.cursorPosition`, see
+/// <https://xtermjs.org/docs/api/vtfeatures/> and
+/// <https://github.com/xtermjs/xterm.js/blob/master/src/common/InputHandler.ts>)
+/// and hterm/Terminalemulator (`CSI row ; col H`, `CUP`, see
+/// <https://chromium.googlesource.com/apps/libapps/+/HEAD/hterm/docs/ControlSequences.md>)
+/// both implement it identically, 1-indexed with default `[1, 1]` when
+/// parameters are omitted, matching xterm's own `ctlseqs.txt` reference and
+/// ECMA-48. No 0-indexed variant or alternate escape code was found in any
+/// of these implementations, so no dual-emission fallback is needed here.
 fn write_cursor_position(
     renderer: &mut TerminalRenderer<Vec<u8>>,
     position: Pos,
 ) -> std::io::Result<()> {
     use std::io::Write as _;
-    // CSI row;col H is 1-indexed.
     write!(
         renderer.writer_mut(),
         "\x1b[{};{}H",
@@ -469,6 +482,20 @@ mod tests {
             )))
         );
         assert_eq!(Backend::poll_event(&mut backend, Duration::ZERO), None);
+    }
+
+    #[test]
+    fn cursor_position_uses_1_indexed_cup_sequence() {
+        // CSI row;col H (CUP), 1-indexed and absolute: verified against
+        // xterm.js and hterm/Terminalemulator (see `write_cursor_position`'s
+        // doc comment). Both use the same format, so no dual-emission or
+        // 0-indexed fallback is needed.
+        let mut backend = TerminalWasm::new(10, 3);
+        Backend::set_cursor_position(&mut backend, Pos { x: 0, y: 0 });
+        assert_eq!(backend.take_output(), "\x1b[1;1H");
+
+        Backend::set_cursor_position(&mut backend, Pos { x: 4, y: 2 });
+        assert_eq!(backend.take_output(), "\x1b[3;5H");
     }
 
     #[test]
