@@ -25,9 +25,9 @@
 //!
 //! The `wasm32` build additionally exposes free functions
 //! (`wasm_terminal_new`, `wasm_terminal_resize`, `wasm_terminal_push_key`,
-//! `wasm_terminal_take_output`, in this crate's `wasm` module -- only
-//! compiled for `target_arch = "wasm32"`, so it won't appear in docs built
-//! natively) that operate on an opaque handle, since
+//! `wasm_terminal_push_mouse`, `wasm_terminal_take_output`, in this crate's
+//! `wasm` module -- only compiled for `target_arch = "wasm32"`, so it won't
+//! appear in docs built natively) that operate on an opaque handle, since
 //! `retroglyph_core::event::Event` is not itself `wasm-bindgen`-compatible.
 //!
 //! The example below is a complete, working driver pairing this crate's
@@ -252,7 +252,7 @@ fn write_cursor_position(
 #[must_use]
 pub fn decode_key_event(code: u32, mods: u8) -> Option<retroglyph_core::event::KeyEvent> {
     use key_codes as kc;
-    use retroglyph_core::event::{KeyCode, KeyModifiers};
+    use retroglyph_core::event::KeyCode;
 
     let key_code = match code {
         kc::BACKSPACE => KeyCode::Backspace,
@@ -278,6 +278,20 @@ pub fn decode_key_event(code: u32, mods: u8) -> Option<retroglyph_core::event::K
         _ => KeyCode::Char(char::from_u32(code)?),
     };
 
+    Some(retroglyph_core::event::KeyEvent::new(
+        key_code,
+        decode_key_modifiers(mods),
+    ))
+}
+
+/// Decodes the shared `mods` bitmask used by [`decode_key_event`] and
+/// [`decode_mouse_event`] into a [`retroglyph_core::event::KeyModifiers`].
+///
+/// Bitmask layout: `SHIFT = 1`, `CONTROL = 2`, `ALT = 4`, `SUPER = 8`.
+#[must_use]
+fn decode_key_modifiers(mods: u8) -> retroglyph_core::event::KeyModifiers {
+    use retroglyph_core::event::KeyModifiers;
+
     let mut modifiers = KeyModifiers::NONE;
     if mods & 0b001 != 0 {
         modifiers |= KeyModifiers::SHIFT;
@@ -291,8 +305,101 @@ pub fn decode_key_event(code: u32, mods: u8) -> Option<retroglyph_core::event::K
     if mods & 0b1000 != 0 {
         modifiers |= KeyModifiers::SUPER;
     }
+    modifiers
+}
 
-    Some(retroglyph_core::event::KeyEvent::new(key_code, modifiers))
+/// Decodes an `(x, y, action, button, mods)` tuple from JS into a
+/// [`retroglyph_core::event::MouseEvent`].
+///
+/// Same pattern as [`decode_key_event`]: `retroglyph_core::event::MouseEvent`
+/// (and its `MouseEventKind`/`MouseButton` fields) are not `wasm-bindgen`
+/// FFI-safe types, so JS crosses the boundary with plain integers instead:
+///
+/// - `x`, `y`: the cell-grid column/row the pointer is over, matching
+///   [`retroglyph_core::grid::Pos`]. JS is responsible for converting a raw
+///   pixel position (e.g. from a DOM `MouseEvent`) into cell coordinates
+///   using the terminal emulator's own cell size, the same way it already
+///   tracks `cols`/`rows` for the `wasm32`-only `wasm::wasm_terminal_resize`.
+///   This backend has no sub-cell precision to report, so the returned
+///   event's [`pixel_position`](retroglyph_core::event::MouseEvent::pixel_position)
+///   is always `None` -- the same convention `retroglyph-crossterm` uses for
+///   its own character-mode backend.
+/// - `action`: one of [`mouse_actions`]'s constants (`DOWN`, `UP`, `MOVED`,
+///   `SCROLL_UP`, `SCROLL_DOWN`).
+/// - `button`: which button the event applies to, one of [`mouse_buttons`]'s
+///   constants (`LEFT`, `MIDDLE`, `RIGHT`), matching the DOM
+///   `MouseEvent.button` convention JS already has on hand. Only consulted
+///   when `action` is `DOWN` or `UP`; ignored otherwise.
+/// - `mods`: the same bitmask layout as [`decode_key_event`]'s `mods`
+///   (`SHIFT = 1`, `CONTROL = 2`, `ALT = 4`, `SUPER = 8`).
+///
+/// Returns `None` if `action` doesn't match a known [`mouse_actions`]
+/// constant, or if `action` is `DOWN`/`UP` and `button` doesn't match a known
+/// [`mouse_buttons`] constant.
+#[must_use]
+pub fn decode_mouse_event(
+    x: u16,
+    y: u16,
+    action: u8,
+    button: u8,
+    mods: u8,
+) -> Option<retroglyph_core::event::MouseEvent> {
+    use mouse_actions as ma;
+    use retroglyph_core::event::MouseEventKind;
+
+    let kind = match action {
+        ma::DOWN => MouseEventKind::Down(decode_mouse_button(button)?),
+        ma::UP => MouseEventKind::Up(decode_mouse_button(button)?),
+        ma::MOVED => MouseEventKind::Moved,
+        ma::SCROLL_UP => MouseEventKind::ScrollUp,
+        ma::SCROLL_DOWN => MouseEventKind::ScrollDown,
+        _ => return None,
+    };
+
+    Some(retroglyph_core::event::MouseEvent {
+        kind,
+        position: Pos { x, y },
+        pixel_position: None,
+        modifiers: decode_key_modifiers(mods),
+    })
+}
+
+const fn decode_mouse_button(button: u8) -> Option<retroglyph_core::event::MouseButton> {
+    use mouse_buttons as mb;
+    use retroglyph_core::event::MouseButton;
+
+    match button {
+        mb::LEFT => Some(MouseButton::Left),
+        mb::MIDDLE => Some(MouseButton::Middle),
+        mb::RIGHT => Some(MouseButton::Right),
+        _ => None,
+    }
+}
+
+/// `action` values for [`decode_mouse_event`].
+pub mod mouse_actions {
+    /// A mouse button was pressed. `button` selects which one.
+    pub const DOWN: u8 = 0;
+    /// A mouse button was released. `button` selects which one.
+    pub const UP: u8 = 1;
+    /// The mouse moved. `button` is ignored.
+    pub const MOVED: u8 = 2;
+    /// The mouse wheel scrolled up (away from the user). `button` is ignored.
+    pub const SCROLL_UP: u8 = 3;
+    /// The mouse wheel scrolled down (toward the user). `button` is ignored.
+    pub const SCROLL_DOWN: u8 = 4;
+}
+
+/// `button` values for [`decode_mouse_event`], matching the DOM
+/// `MouseEvent.button` convention (`0` = left, `1` = middle, `2` = right) so
+/// JS can forward its own `event.button` unchanged.
+pub mod mouse_buttons {
+    /// Left (primary) mouse button.
+    pub const LEFT: u8 = 0;
+    /// Middle (auxiliary) mouse button.
+    pub const MIDDLE: u8 = 1;
+    /// Right (secondary) mouse button.
+    pub const RIGHT: u8 = 2;
 }
 
 /// `code` values for [`decode_key_event`]'s named (non-printable) keys.
@@ -352,7 +459,7 @@ pub mod key_codes {
 /// event decoding that every such entry point would otherwise duplicate.
 #[cfg(target_arch = "wasm32")]
 pub mod wasm {
-    use super::{TerminalWasm, decode_key_event};
+    use super::{TerminalWasm, decode_key_event, decode_mouse_event};
     use std::cell::RefCell;
     use std::collections::HashMap;
     use wasm_bindgen::prelude::wasm_bindgen;
@@ -425,6 +532,29 @@ pub mod wasm {
                 term.push_event(Event::Key(key_event));
             } else {
                 log::warn!("wasm_terminal_push_key: unknown handle {handle}");
+            }
+        });
+    }
+
+    /// Pushes a mouse event into the terminal identified by `handle`. See
+    /// [`decode_mouse_event`] for the `x`/`y`/`action`/`button`/`mods`
+    /// encoding.
+    ///
+    /// Silently ignores an `action`/`button` combination that doesn't decode
+    /// to a known mouse event. Logs a warning (via the `log` crate) and
+    /// otherwise does nothing if `handle` is unknown, e.g. because the
+    /// terminal was already freed via [`wasm_terminal_free`].
+    #[wasm_bindgen]
+    pub fn wasm_terminal_push_mouse(handle: u32, x: u16, y: u16, action: u8, button: u8, mods: u8) {
+        use retroglyph_core::event::Event;
+        let Some(mouse_event) = decode_mouse_event(x, y, action, button, mods) else {
+            return;
+        };
+        INSTANCES.with_borrow_mut(|instances| {
+            if let Some(term) = instances.get_mut(&handle) {
+                term.push_event(Event::Mouse(mouse_event));
+            } else {
+                log::warn!("wasm_terminal_push_mouse: unknown handle {handle}");
             }
         });
     }
@@ -558,6 +688,66 @@ mod tests {
 
         let key = decode_key_event(key_codes::F1 + 11, 0).unwrap();
         assert_eq!(key.code, KeyCode::F(12));
+    }
+
+    #[test]
+    fn decode_mouse_event_maps_button_down() {
+        use retroglyph_core::event::{MouseButton, MouseEventKind};
+
+        let mouse = decode_mouse_event(3, 4, mouse_actions::DOWN, mouse_buttons::LEFT, 0).unwrap();
+        assert_eq!(mouse.kind, MouseEventKind::Down(MouseButton::Left));
+        assert_eq!(mouse.position, Pos { x: 3, y: 4 });
+        assert_eq!(mouse.pixel_position, None);
+        assert!(mouse.modifiers.is_empty());
+    }
+
+    #[test]
+    fn decode_mouse_event_maps_button_up() {
+        use retroglyph_core::event::{MouseButton, MouseEventKind};
+
+        let mouse = decode_mouse_event(0, 0, mouse_actions::UP, mouse_buttons::RIGHT, 0).unwrap();
+        assert_eq!(mouse.kind, MouseEventKind::Up(MouseButton::Right));
+    }
+
+    #[test]
+    fn decode_mouse_event_maps_moved_ignoring_button() {
+        use retroglyph_core::event::MouseEventKind;
+
+        // `button` is ignored for `MOVED`; an out-of-range value must not fail decoding.
+        let mouse = decode_mouse_event(1, 1, mouse_actions::MOVED, 0xFF, 0).unwrap();
+        assert_eq!(mouse.kind, MouseEventKind::Moved);
+    }
+
+    #[test]
+    fn decode_mouse_event_maps_scroll() {
+        use retroglyph_core::event::MouseEventKind;
+
+        let up = decode_mouse_event(0, 0, mouse_actions::SCROLL_UP, 0, 0).unwrap();
+        assert_eq!(up.kind, MouseEventKind::ScrollUp);
+
+        let down = decode_mouse_event(0, 0, mouse_actions::SCROLL_DOWN, 0, 0).unwrap();
+        assert_eq!(down.kind, MouseEventKind::ScrollDown);
+    }
+
+    #[test]
+    fn decode_mouse_event_maps_modifiers() {
+        let mouse =
+            decode_mouse_event(0, 0, mouse_actions::DOWN, mouse_buttons::MIDDLE, 0b1101).unwrap();
+        assert!(mouse.modifiers.contains(KeyModifiers::SHIFT));
+        assert!(mouse.modifiers.contains(KeyModifiers::ALT));
+        assert!(mouse.modifiers.contains(KeyModifiers::SUPER));
+        assert!(!mouse.modifiers.contains(KeyModifiers::CONTROL));
+    }
+
+    #[test]
+    fn decode_mouse_event_rejects_unknown_action() {
+        assert!(decode_mouse_event(0, 0, 0xFF, mouse_buttons::LEFT, 0).is_none());
+    }
+
+    #[test]
+    fn decode_mouse_event_rejects_unknown_button_for_down_and_up() {
+        assert!(decode_mouse_event(0, 0, mouse_actions::DOWN, 0xFF, 0).is_none());
+        assert!(decode_mouse_event(0, 0, mouse_actions::UP, 0xFF, 0).is_none());
     }
 
     // Guards against the JS driver example silently forking into two different (and eventually
