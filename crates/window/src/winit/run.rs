@@ -419,6 +419,8 @@ where
         #[cfg(not(target_arch = "wasm32"))]
         next_frame: std::time::Instant::now(),
         exit_requested,
+        needs_redraw: true,
+        consecutive_present_errors: 0,
     };
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -616,6 +618,22 @@ struct WindowApp<P: Presenter, F> {
     /// if it's set, letting the stack unwind normally (`Drop` impls run) instead of
     /// force-terminating the process.
     exit_requested: Rc<Cell<bool>>,
+    /// Set whenever something happened that the app loop should get a chance to react to:
+    /// window creation, an input/window event, or an injected [`Event::Custom`]. Cleared once
+    /// [`about_to_wait`](ApplicationHandler::about_to_wait) turns it into a `request_redraw()`
+    /// call.
+    ///
+    /// Retro/terminal-style apps are event-driven, not animation-driven, so "nothing happened"
+    /// should mean "render nothing new" -- see this field's use in `about_to_wait` for why that
+    /// keeps the loop asleep (`ControlFlow::Wait`) instead of spinning at ~100% CPU redrawing an
+    /// unchanged frame forever. Only consulted when `frame_interval` is `None`: a `target_fps`
+    /// throttle already redraws unconditionally once its `WaitUntil` deadline passes, animation
+    /// or not.
+    needs_redraw: bool,
+    /// Count of consecutive `present()` failures, reset to 0 on the next success. Drives
+    /// [`present_failure_action`]'s logging-verbosity and surface-recovery decisions in the
+    /// `RedrawRequested` arm of [`handle_window_event`](Self::handle_window_event).
+    consecutive_present_errors: u32,
 }
 
 impl<P: Presenter, F> WindowApp<P, F> {
@@ -789,6 +807,72 @@ fn physical_size_for(logical_width: u32, logical_height: u32, scale_factor: f64)
     )
 }
 
+/// Number of consecutive `present()` failures after which
+/// [`handle_window_event`](WindowApp::handle_window_event)'s `RedrawRequested` arm attempts to
+/// recover by re-initializing the surface (see [`PresentFailureAction::Recover`]).
+///
+/// Roughly half a second at 60 FPS: long enough that a single dropped frame (a transient `VSync`
+/// hiccup, a momentarily occluded window) never triggers a surface rebuild, but short enough that
+/// a genuinely broken surface (context loss, invalidated swapchain) doesn't sit unrecovered for
+/// many seconds.
+const PRESENT_FAILURE_RECOVERY_THRESHOLD: u32 = 30;
+
+/// What [`handle_window_event`](WindowApp::handle_window_event)'s `RedrawRequested` arm should do
+/// in response to the outcome of one `present()` call, given the running count of consecutive
+/// failures *before* this call.
+///
+/// [`Presenter::SurfaceError`] is a generic associated type -- the software backend's
+/// `SurfaceError` just wraps `softbuffer::SoftBufferError`, a plain `#[non_exhaustive]` enum with
+/// no `Lost`/`Outdated`/`Timeout` discrimination the way `wgpu::SurfaceError` has -- so the driver
+/// can't pattern-match on *why* a present failed to decide whether it's recoverable the way a
+/// wgpu-based app would. All it can observe is a bare `Display`able error and whether the failure
+/// is a one-off or persistent (via the consecutive-failure count), so the recovery strategy here
+/// is deliberately generic: rate-limit logging so a persistent failure doesn't spam every frame,
+/// and after a run of failures long enough to rule out a one-off glitch, attempt the one
+/// backend-agnostic recovery available -- re-running [`Presenter::init_surface`] to rebuild the
+/// surface from scratch, the same call [`create_window_and_surface`](WindowApp::create_window_and_surface)
+/// makes at startup.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PresentFailureAction {
+    /// Presenting succeeded; if `was_failing` is `true` the caller should log recovery at `info`
+    /// or `warn` level (a prior failure streak just ended).
+    Ok { was_failing: bool },
+    /// Presenting failed; log at `error!` (first failure in a streak, or the very first ever)
+    /// or suppress (a already-logged, ongoing streak below the recovery threshold).
+    Log { at_error_level: bool },
+    /// Presenting failed and the consecutive-failure count just crossed the recovery threshold:
+    /// log at `warn!` and attempt to reinitialize the surface.
+    Recover,
+}
+
+/// Decides the action for one `present()` outcome, given `consecutive_failures` *before* this
+/// call (0 if the previous call succeeded or this is the first call).
+///
+/// Pure decision table, kept separate from the live `RedrawRequested` handling (which needs a
+/// real `Terminal`/`Presenter`/`Window`) so the threshold and logging-level logic is unit
+/// -testable without any of those -- the same reasoning as [`physical_size_for`] and
+/// [`dpr_pointer_scale`] above.
+const fn present_failure_action(
+    consecutive_failures: u32,
+    succeeded: bool,
+) -> PresentFailureAction {
+    if succeeded {
+        return PresentFailureAction::Ok {
+            was_failing: consecutive_failures > 0,
+        };
+    }
+    // `consecutive_failures` is the count *before* this failure, so the count *including* this
+    // one is `consecutive_failures + 1`; recover exactly when that reaches the threshold, and
+    // again every full threshold-worth of failures after that (so a failed recovery attempt
+    // doesn't get retried on literally the next frame, hot-looping surface rebuilds).
+    if (consecutive_failures + 1).is_multiple_of(PRESENT_FAILURE_RECOVERY_THRESHOLD) {
+        return PresentFailureAction::Recover;
+    }
+    PresentFailureAction::Log {
+        at_error_level: consecutive_failures == 0,
+    }
+}
+
 /// Maps winit's [`Theme`](winit::window::Theme) to the backend-agnostic
 /// [`Event::ThemeChanged`], the only place that conversion needs to happen.
 const fn system_theme_event(theme: winit::window::Theme) -> Event {
@@ -927,6 +1011,9 @@ where
         if let Some(window) = self.create_window_and_surface(event_loop) {
             self.window = Some(window);
         }
+        // First frame: nothing has "happened" yet in the input-event sense, but the app still
+        // needs an initial render once the window/surface exists.
+        self.needs_redraw = true;
     }
 
     fn window_event(
@@ -955,7 +1042,10 @@ where
     ) {
         #[cfg(not(target_arch = "wasm32"))]
         if let Some(interval) = self.frame_interval {
-            // Throttled: sleep until the next frame deadline, then render.
+            // Throttled: sleep until the next frame deadline, then render
+            // unconditionally -- a `target_fps` cap is an animation-style
+            // frame rate, not an idle/event-driven one, so it always
+            // redraws once its deadline passes regardless of `needs_redraw`.
             let now = std::time::Instant::now();
             if self.next_frame > now {
                 event_loop
@@ -965,9 +1055,22 @@ where
             // Advance the deadline by one interval, clamping to now so a
             // slow frame doesn't cause a burst of catch-up renders.
             self.next_frame = (self.next_frame + interval).max(now);
+            if let Some(window) = &self.window {
+                window.request_redraw();
+            }
+            return;
         }
-        if let Some(window) = &self.window {
-            window.request_redraw();
+        // Uncapped (`target_fps: None`): only redraw if something actually happened since the
+        // last one. Otherwise leave `ControlFlow` at its default `Wait` so the loop sleeps
+        // instead of spinning at ~100% CPU re-rendering an unchanged frame every iteration --
+        // retro/terminal-style apps are idle most of the time and event-driven, not
+        // animation-driven, so "nothing happened" should mean "render nothing new". See
+        // `needs_redraw`'s doc comment.
+        if self.needs_redraw {
+            self.needs_redraw = false;
+            if let Some(window) = &self.window {
+                window.request_redraw();
+            }
         }
     }
 }
@@ -988,6 +1091,7 @@ where
         if let Some(term) = self.terminal.as_mut() {
             term.backend_mut().push_event(Event::Custom(event));
         }
+        self.needs_redraw = true;
     }
 
     /// Dispatch a [`WindowEvent`] without requiring an [`ActiveEventLoop`].
@@ -996,6 +1100,15 @@ where
     /// event-buffer logic can be called directly in unit tests, where
     /// [`ActiveEventLoop`] is not constructable.
     fn handle_window_event(&mut self, event: WindowEvent) {
+        // Every branch below (other than `RedrawRequested`, which *is* the render this flag
+        // exists to gate) represents something the app loop should get a chance to react to on
+        // the next frame -- see `needs_redraw`'s doc comment for why that matters for idle CPU.
+        // Set unconditionally up front rather than per-arm: simpler, and the only event that must
+        // *not* set it (`RedrawRequested`) already clears it again in `about_to_wait` right before
+        // requesting this same redraw, so a same-tick `RedrawRequested` can't retrigger itself.
+        if !matches!(event, WindowEvent::RedrawRequested) {
+            self.needs_redraw = true;
+        }
         match event {
             WindowEvent::CloseRequested => {
                 // Push the event so the game loop can process it (save game,
@@ -1030,17 +1143,79 @@ where
                 self.on_scale_factor_changed(scale_factor);
             }
 
-            WindowEvent::RedrawRequested => {
-                let Some(term) = self.terminal.as_mut() else {
-                    return;
-                };
-                (self.app_loop)(term);
-                if let Err(e) = term.backend_mut().presenter_mut().present() {
-                    log::error!("frame present failed: {e}");
-                }
-            }
+            WindowEvent::RedrawRequested => self.handle_redraw_requested(),
 
             _ => {}
+        }
+    }
+
+    /// Runs the app closure and presents the frame, tracking consecutive `present()` failures to
+    /// rate-limit logging and trigger surface recovery.
+    ///
+    /// See [`present_failure_action`] for the decision table; this method just runs the `Terminal`
+    /// -/`Presenter`-dependent side effects (`app_loop`, `present`, `init_surface`, logging) that
+    /// function can't perform itself since it's a pure function of the failure count alone.
+    fn handle_redraw_requested(&mut self) {
+        let Some(term) = self.terminal.as_mut() else {
+            return;
+        };
+        (self.app_loop)(term);
+        let result = term.backend_mut().presenter_mut().present();
+        let succeeded = result.is_ok();
+        match present_failure_action(self.consecutive_present_errors, succeeded) {
+            PresentFailureAction::Ok { was_failing } => {
+                if was_failing {
+                    log::info!(
+                        "frame present recovered after {} consecutive failures",
+                        self.consecutive_present_errors
+                    );
+                }
+                self.consecutive_present_errors = 0;
+            }
+            PresentFailureAction::Log { at_error_level } => {
+                self.consecutive_present_errors += 1;
+                let e = result.unwrap_err();
+                if at_error_level {
+                    log::error!("frame present failed: {e}");
+                } else {
+                    // Ongoing failure streak below the recovery threshold: already logged at
+                    // `error!` when the streak started, so avoid re-logging every single frame
+                    // (the log-spam this issue exists to fix) while still keeping the detail
+                    // available at `debug!` for anyone investigating a live failure.
+                    log::debug!("frame present still failing: {e}");
+                }
+            }
+            PresentFailureAction::Recover => {
+                self.consecutive_present_errors += 1;
+                let e = result.unwrap_err();
+                log::warn!(
+                    "frame present failed {} times consecutively ({e}); attempting surface recovery",
+                    self.consecutive_present_errors
+                );
+                self.try_recover_surface();
+            }
+        }
+    }
+
+    /// Attempts to recover from a persistent `present()` failure by re-running
+    /// [`Presenter::init_surface`], the same call
+    /// [`create_window_and_surface`](Self::create_window_and_surface) makes at startup.
+    ///
+    /// This is the only recovery available generically: [`Presenter::SurfaceError`] carries no
+    /// structured "is this recoverable" signal (see [`present_failure_action`]'s doc comment), so
+    /// rebuilding the surface from scratch is the one action that's meaningful across every
+    /// backend. A no-op if there is no window to rebuild the surface from (headless/pre-`resumed`
+    /// states), or if the terminal has already been torn down.
+    fn try_recover_surface(&mut self) {
+        let Some(window) = self.window.clone() else {
+            return;
+        };
+        let Some(term) = self.terminal.as_mut() else {
+            return;
+        };
+        let handle: Arc<dyn crate::presenter::WindowHandle> = window;
+        if let Err(e) = term.backend_mut().presenter_mut().init_surface(handle) {
+            log::error!("surface recovery failed: {e}");
         }
     }
 
@@ -1409,6 +1584,79 @@ mod tests {
         assert!((dpr_pointer_scale(2.0, 1.5) - 0.75).abs() < 1e-9);
     }
 
+    // ── present_failure_action ───────────────────────────────────────────────
+
+    #[test]
+    fn present_success_with_no_prior_failures_is_plain_ok() {
+        assert_eq!(
+            present_failure_action(0, true),
+            PresentFailureAction::Ok { was_failing: false }
+        );
+    }
+
+    #[test]
+    fn present_success_after_a_failure_streak_reports_recovery() {
+        assert_eq!(
+            present_failure_action(5, true),
+            PresentFailureAction::Ok { was_failing: true }
+        );
+    }
+
+    #[test]
+    fn first_failure_in_a_streak_logs_at_error_level() {
+        assert_eq!(
+            present_failure_action(0, false),
+            PresentFailureAction::Log {
+                at_error_level: true
+            }
+        );
+    }
+
+    #[test]
+    fn subsequent_failures_below_threshold_log_below_error_level() {
+        for count in 1..PRESENT_FAILURE_RECOVERY_THRESHOLD - 1 {
+            assert_eq!(
+                present_failure_action(count, false),
+                PresentFailureAction::Log {
+                    at_error_level: false
+                },
+                "consecutive_failures = {count}"
+            );
+        }
+    }
+
+    #[test]
+    fn failure_crossing_the_threshold_triggers_recovery() {
+        // consecutive_failures is the count *before* this call, so
+        // `PRESENT_FAILURE_RECOVERY_THRESHOLD - 1` failures already happened; this call is the
+        // one that reaches the threshold.
+        assert_eq!(
+            present_failure_action(PRESENT_FAILURE_RECOVERY_THRESHOLD - 1, false),
+            PresentFailureAction::Recover
+        );
+    }
+
+    #[test]
+    fn failure_recovers_again_every_full_threshold_after_the_first() {
+        // A failed recovery attempt must not be retried on literally the next frame: the next
+        // `Recover` only fires after another full threshold's worth of failures.
+        assert_eq!(
+            present_failure_action(2 * PRESENT_FAILURE_RECOVERY_THRESHOLD - 1, false),
+            PresentFailureAction::Recover
+        );
+        for count in
+            PRESENT_FAILURE_RECOVERY_THRESHOLD..(2 * PRESENT_FAILURE_RECOVERY_THRESHOLD - 1)
+        {
+            assert_eq!(
+                present_failure_action(count, false),
+                PresentFailureAction::Log {
+                    at_error_level: false
+                },
+                "consecutive_failures = {count}"
+            );
+        }
+    }
+
     /// A dependency-free [`Presenter`] with fixed 8x16 cells.
     ///
     /// The `WindowApp` tests only exercise event translation, cell math, and
@@ -1538,6 +1786,76 @@ mod tests {
         }
     }
 
+    /// A [`Presenter`] whose `present()` fails on demand, and which counts `init_surface` calls
+    /// so tests can assert whether [`WindowApp::try_recover_surface`] actually ran.
+    #[derive(Default)]
+    struct FailingPresenter {
+        /// `present()` returns `Err` while this is `true`.
+        failing: Rc<Cell<bool>>,
+        /// Number of `init_surface` calls observed (1 at construction time in real use; extra
+        /// calls here are surface-recovery attempts).
+        init_surface_calls: Rc<Cell<u32>>,
+    }
+
+    impl Presenter for FailingPresenter {
+        type Error = core::convert::Infallible;
+        type SurfaceError = &'static str;
+
+        fn draw<'a, I>(&mut self, _content: I) -> Result<(), Self::Error>
+        where
+            I: Iterator<Item = (Pos, &'a Tile)>,
+        {
+            Ok(())
+        }
+
+        fn draw_layers<'a, I>(&mut self, _content: I) -> Result<(), Self::Error>
+        where
+            I: Iterator<Item = (u8, Pos, &'a Tile)>,
+        {
+            Ok(())
+        }
+
+        fn flush(&mut self) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        fn size(&self) -> Size {
+            Size {
+                width: 10,
+                height: 5,
+            }
+        }
+
+        fn clear(&mut self) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        fn resize(&mut self, _size: Size) {}
+
+        fn init_surface(
+            &mut self,
+            _window: Arc<dyn crate::presenter::WindowHandle>,
+        ) -> Result<(), Self::SurfaceError> {
+            self.init_surface_calls
+                .set(self.init_surface_calls.get() + 1);
+            Ok(())
+        }
+
+        fn resize_surface(&mut self, _width: u32, _height: u32) {}
+
+        fn present(&mut self) -> Result<(), Self::SurfaceError> {
+            if self.failing.get() {
+                Err("simulated present failure")
+            } else {
+                Ok(())
+            }
+        }
+
+        fn cell_size(&self) -> (u32, u32) {
+            (8, 16)
+        }
+    }
+
     type MockApp = WindowApp<MockPresenter, fn(&mut Terminal<WindowBackend<MockPresenter>>)>;
 
     fn test_window_app() -> MockApp {
@@ -1560,6 +1878,8 @@ mod tests {
             #[cfg(not(target_arch = "wasm32"))]
             next_frame: std::time::Instant::now(),
             exit_requested: Rc::new(Cell::new(false)),
+            needs_redraw: false,
+            consecutive_present_errors: 0,
         }
     }
 
@@ -1960,6 +2280,8 @@ mod tests {
             #[cfg(not(target_arch = "wasm32"))]
             next_frame: std::time::Instant::now(),
             exit_requested,
+            needs_redraw: false,
+            consecutive_present_errors: 0,
         };
 
         assert!(!app.exit_requested.get());
@@ -2169,6 +2491,8 @@ mod tests {
             #[cfg(not(target_arch = "wasm32"))]
             next_frame: std::time::Instant::now(),
             exit_requested: Rc::new(Cell::new(false)),
+            needs_redraw: false,
+            consecutive_present_errors: 0,
         };
 
         app.handle_window_event(WindowEvent::Resized(winit::dpi::PhysicalSize::new(4, 4)));
@@ -2185,5 +2509,173 @@ mod tests {
                 .poll_event(Duration::ZERO),
             Some(Event::Resize(1, 1))
         );
+    }
+
+    // ── needs_redraw (idle/redraw-on-demand, issue #155) ─────────────────────
+
+    #[test]
+    fn fresh_app_does_not_need_a_redraw() {
+        // `test_window_app` starts with `needs_redraw: false` -- unlike the real
+        // `resumed()` path, which sets it `true` once the window/surface exists (a real winit
+        // `ActiveEventLoop` can't be constructed in a unit test, so `resumed` itself isn't
+        // exercised here; see `handle_window_event`/`handle_user_event` below for the parts of
+        // the redraw-on-demand logic that are testable without one).
+        let app = test_window_app();
+        assert!(!app.needs_redraw);
+    }
+
+    #[test]
+    fn window_event_sets_needs_redraw() {
+        // Any real window event (a mouse move here, but any arm other than `RedrawRequested`
+        // behaves the same -- see `handle_window_event`'s doc comment) should mark that the app
+        // loop has something new to react to, so the next `about_to_wait` requests a redraw
+        // instead of leaving the loop idle.
+        let mut app = test_window_app();
+        assert!(!app.needs_redraw);
+        app.handle_window_event(WindowEvent::CursorMoved {
+            device_id: winit::event::DeviceId::dummy(),
+            position: winit::dpi::PhysicalPosition::new(1.0_f64, 1.0_f64),
+        });
+        assert!(app.needs_redraw);
+    }
+
+    #[test]
+    fn redraw_requested_does_not_itself_set_needs_redraw() {
+        // `RedrawRequested` is the render this flag exists to gate, not a new event to redraw
+        // again for -- an idle app that gets exactly one `RedrawRequested` (e.g. right after
+        // `resumed`) must not perpetually re-arm itself into another one forever.
+        let mut app = test_window_app();
+        app.handle_window_event(WindowEvent::RedrawRequested);
+        assert!(!app.needs_redraw);
+    }
+
+    #[test]
+    fn user_event_sets_needs_redraw() {
+        // A cross-thread `Event::Custom` injection (network, audio, timer, ...) must wake an
+        // idle loop into rendering the next frame just like a real window event does.
+        let mut app = test_window_app();
+        assert!(!app.needs_redraw);
+        app.handle_user_event(1);
+        assert!(app.needs_redraw);
+    }
+
+    #[test]
+    fn unhandled_window_events_still_set_needs_redraw() {
+        // Even a `WindowEvent` variant with no dedicated handling below (falls through to the
+        // `_ => {}` arm in `handle_window_event`'s `match`) should still be treated as "something
+        // happened": the flag is set once, up front, before the match runs.
+        let mut app = test_window_app();
+        app.handle_window_event(WindowEvent::Occluded(true));
+        assert!(app.needs_redraw);
+    }
+
+    // ── handle_redraw_requested / present() failure recovery ─────────────────
+
+    type FailingApp =
+        WindowApp<FailingPresenter, fn(&mut Terminal<WindowBackend<FailingPresenter>>)>;
+
+    fn failing_app() -> (FailingApp, Rc<Cell<bool>>, Rc<Cell<u32>>) {
+        let failing = Rc::new(Cell::new(false));
+        let init_surface_calls = Rc::new(Cell::new(0));
+        let presenter = FailingPresenter {
+            failing: failing.clone(),
+            init_surface_calls: init_surface_calls.clone(),
+        };
+        let terminal = Terminal::new(WindowBackend::new(presenter));
+        let app = WindowApp {
+            terminal: Some(terminal),
+            app_loop: (|_| {}) as fn(&mut Terminal<WindowBackend<FailingPresenter>>),
+            window: None,
+            title: String::new(),
+            init_size: InitWindowSize {
+                width: 80,
+                height: 80,
+            },
+            attrs: WindowAttrs::default(),
+            current_modifiers: KeyModifiers::NONE,
+            cursor_px: (0.0, 0.0),
+            active_touch: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            frame_interval: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            next_frame: std::time::Instant::now(),
+            exit_requested: Rc::new(Cell::new(false)),
+            needs_redraw: false,
+            consecutive_present_errors: 0,
+        };
+        (app, failing, init_surface_calls)
+    }
+
+    #[test]
+    fn successful_presents_never_increment_the_failure_counter() {
+        let (mut app, _failing, _init_calls) = failing_app();
+        for _ in 0..5 {
+            app.handle_redraw_requested();
+        }
+        assert_eq!(app.consecutive_present_errors, 0);
+    }
+
+    #[test]
+    fn failing_presents_increment_the_counter_and_stop_short_of_recovery() {
+        let (mut app, failing, init_calls) = failing_app();
+        failing.set(true);
+        for _ in 0..PRESENT_FAILURE_RECOVERY_THRESHOLD - 1 {
+            app.handle_redraw_requested();
+        }
+        assert_eq!(
+            app.consecutive_present_errors,
+            PRESENT_FAILURE_RECOVERY_THRESHOLD - 1
+        );
+        // No window to recover from in this test app (`window: None`), but recovery should not
+        // even have been attempted yet regardless -- confirmed by `try_recover_surface`'s own
+        // no-window guard never being reached, i.e. `init_surface` was never called past the
+        // initial 0.
+        assert_eq!(init_calls.get(), 0);
+    }
+
+    #[test]
+    fn counter_resets_after_recovering_from_a_failure_streak() {
+        let (mut app, failing, _init_calls) = failing_app();
+        failing.set(true);
+        for _ in 0..5 {
+            app.handle_redraw_requested();
+        }
+        assert_eq!(app.consecutive_present_errors, 5);
+
+        failing.set(false);
+        app.handle_redraw_requested();
+        assert_eq!(app.consecutive_present_errors, 0);
+    }
+
+    #[test]
+    fn crossing_the_recovery_threshold_attempts_recovery_without_panicking() {
+        // `test_window_app`/`failing_app` have no real winit `Window` (constructing one needs a
+        // live event loop, unavailable in a unit test -- the same limitation documented on
+        // `scale_factor_changed_without_a_window_is_a_no_op_resize` above), so this can't assert
+        // `init_surface` actually re-runs; `try_recover_surface`'s own no-window guard is exercised
+        // directly below instead. What this does verify: the threshold-crossing call does not
+        // panic, and the counter keeps incrementing through and past the threshold rather than
+        // resetting or overflowing.
+        let (mut app, failing, init_calls) = failing_app();
+        failing.set(true);
+        for _ in 0..PRESENT_FAILURE_RECOVERY_THRESHOLD {
+            app.handle_redraw_requested();
+        }
+        assert_eq!(
+            app.consecutive_present_errors,
+            PRESENT_FAILURE_RECOVERY_THRESHOLD
+        );
+        assert_eq!(
+            init_calls.get(),
+            0,
+            "no window means try_recover_surface's guard skips init_surface"
+        );
+    }
+
+    #[test]
+    fn try_recover_surface_without_a_window_is_a_no_op() {
+        let (mut app, _failing, init_calls) = failing_app();
+        app.try_recover_surface();
+        assert_eq!(init_calls.get(), 0);
     }
 }
