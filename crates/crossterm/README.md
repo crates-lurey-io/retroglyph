@@ -11,6 +11,9 @@ specific parts (raw mode, the alternate screen, the Kitty keyboard protocol, inp
 diffing and ANSI/SGR output are delegated to
 [`retroglyph-terminal`](https://crates.io/crates/retroglyph-terminal).
 
+Optional feature: `tracing` (instruments `draw`, `flush`, and `poll_event` with `tracing` spans for
+profiling render/input time).
+
 ## Quick start
 
 ```toml

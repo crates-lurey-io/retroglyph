@@ -45,6 +45,15 @@
 //! plain focus loss, this crate would need coordinated changes with `retroglyph-window` (which
 //! shares the `Event` enum) before mapping anything to it; no such variant exists today, so there
 //! is nothing for this backend to emit.
+//!
+//! # Tracing
+//!
+//! With the optional `tracing` feature enabled, [`Backend::draw`], [`Backend::flush`], and
+//! [`Backend::poll_event`] are each wrapped in a `tracing` span (`debug` level for `draw`/`flush`,
+//! `trace` for `poll_event` since it's called every game-loop iteration by
+//! [`Terminal::drain_events`](retroglyph_core::Terminal::drain_events)), so a subscriber (e.g.
+//! `tracing-subscriber`'s fmt layer, or a flamegraph via `tracing-flame`) can show where render
+//! and input-polling time actually goes. The feature adds no code and no dependency when disabled.
 
 // Compile the code blocks in both this crate's own README and the workspace root README as
 // doctests so the quick-start examples are type-checked on every test run and cannot silently
@@ -410,6 +419,7 @@ impl Drop for Crossterm {
 impl Backend for Crossterm {
     type Error = std::io::Error;
 
+    #[cfg_attr(feature = "tracing", tracing::instrument(level = "debug", skip_all))]
     fn draw<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
         I: Iterator<Item = (Pos, &'a Tile)>,
@@ -421,6 +431,7 @@ impl Backend for Crossterm {
         Ok(())
     }
 
+    #[cfg_attr(feature = "tracing", tracing::instrument(level = "debug", skip_all))]
     fn flush(&mut self) -> Result<(), Self::Error> {
         self.renderer.end_synchronized_update()?;
         self.renderer.flush()?;
@@ -469,6 +480,7 @@ impl Backend for Crossterm {
     /// this call; a crossterm-driven loop wanting the same tradeoff should add its own
     /// `std::thread::sleep`/tick budget around `drain_events()` rather than expecting this method
     /// to throttle on its behalf.
+    #[cfg_attr(feature = "tracing", tracing::instrument(level = "trace", skip(self)))]
     fn poll_event(&mut self, timeout: Duration) -> Option<Event> {
         let start = std::time::Instant::now();
         let mut remaining = timeout;

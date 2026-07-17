@@ -21,6 +21,9 @@ all-features = true
 retroglyph-core = { path = "../core", version = "0.1.0", default-features = false, features = ["std"] }
 retroglyph-terminal = { path = "../terminal", version = "0.1.0" }
 crossterm = "0.28"
+# Only pulled in behind the `tracing` feature (see below); the `draw`/`flush`/`poll_event`
+# spans this enables are the only code in this crate that references it.
+tracing = { version = "0.1", optional = true, default-features = false, features = ["std", "attributes"] }
 
 [features]
 # Forwards to retroglyph-terminal's egc feature (which forwards to
@@ -29,3 +32,9 @@ crossterm = "0.28"
 # this flag, but still exposes it so callers don't need to know which crate
 # in the terminal family actually implements it.
 egc = ["retroglyph-terminal/egc", "retroglyph-core/egc"]
+# Instruments `Backend::draw`, `Backend::flush`, and `Backend::poll_event` with `tracing` spans
+# (`debug` level for draw/flush, `trace` for poll_event, since the latter is called every game-loop
+# iteration by `drain_events`) so callers can profile where time is spent with any `tracing`
+# subscriber (e.g. `tracing-subscriber`'s fmt layer, or a flamegraph via `tracing-flame`). A no-op,
+# and this dependency entirely absent from the build, unless enabled.
+tracing = ["dep:tracing"]
