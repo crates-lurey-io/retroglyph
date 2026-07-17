@@ -21,6 +21,8 @@ use std::fmt;
 pub enum SoftwareBackendError {
     /// No font was provided and the `default-font` feature is not enabled.
     NoFont,
+    /// `scale` was set to `0`, which would produce a zero-size pixel buffer.
+    ZeroScale,
     /// Tileset loading failed.
     #[cfg(feature = "tilesets")]
     Tileset(super::tileset::TilesetError),
@@ -35,6 +37,10 @@ impl fmt::Display for SoftwareBackendError {
                  SoftwareBackendBuilder::font() or enable the \
                  `default-font` feature"
             ),
+            Self::ZeroScale => write!(
+                f,
+                "scale must be non-zero; a scale of 0 would produce a zero-size pixel buffer"
+            ),
             #[cfg(feature = "tilesets")]
             Self::Tileset(e) => write!(f, "tileset error: {e}"),
         }
@@ -44,7 +50,7 @@ impl fmt::Display for SoftwareBackendError {
 impl std::error::Error for SoftwareBackendError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Self::NoFont => None,
+            Self::NoFont | Self::ZeroScale => None,
             #[cfg(feature = "tilesets")]
             Self::Tileset(e) => Some(e),
         }
@@ -301,9 +307,14 @@ impl SoftwareBackendBuilder {
     ///
     /// Returns [`SoftwareBackendError::NoFont`] if no font was set and the
     /// `default-font` feature is not enabled.
+    ///
+    /// Returns [`SoftwareBackendError::ZeroScale`] if `scale` was set to `0`.
     pub fn build(self) -> Result<SoftwareBackend, SoftwareBackendError> {
         if self.options.font.is_none() {
             return Err(SoftwareBackendError::NoFont);
+        }
+        if self.options.scale == 0 {
+            return Err(SoftwareBackendError::ZeroScale);
         }
         Ok(self.options)
     }
@@ -312,5 +323,33 @@ impl SoftwareBackendBuilder {
 impl Default for SoftwareBackendBuilder {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_font() -> BitmapFont {
+        static DATA: [u8; 16] = [0; 16];
+        BitmapFont::new(&DATA, 8, 16, 1)
+    }
+
+    #[test]
+    fn build_rejects_zero_scale() {
+        let result = SoftwareBackendBuilder::new()
+            .font(test_font())
+            .scale(0)
+            .build();
+        assert!(matches!(result, Err(SoftwareBackendError::ZeroScale)));
+    }
+
+    #[test]
+    fn build_accepts_nonzero_scale() {
+        let result = SoftwareBackendBuilder::new()
+            .font(test_font())
+            .scale(2)
+            .build();
+        assert!(result.is_ok());
     }
 }
