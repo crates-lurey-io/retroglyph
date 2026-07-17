@@ -14,6 +14,31 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # Feeds test-wasm's `if:` below: crates/terminal-wasm's own tree, the two crates it depends
+  # on (core, terminal), and the workspace-wide files that affect how it's built/tested --
+  # Cargo.toml (pins wasm-pack/wasm-bindgen-cli versions in [workspace.metadata.bin] and default
+  # wasm-bindgen resolution), Cargo.lock, .cargo/config.toml, the Justfile recipe itself, and this
+  # workflow file. Every other job stays unconditional.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      wasm: ${{ steps.filter.outputs.wasm }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            wasm:
+              - 'crates/core/**'
+              - 'crates/terminal/**'
+              - 'crates/terminal-wasm/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - '.cargo/**'
+              - 'Justfile'
+              - '.github/workflows/ci.yml'
+
   format:
     runs-on: ubuntu-latest
     steps:
@@ -104,13 +129,25 @@ jobs:
       - run: just test-ci
 
   test-wasm:
+    needs: changes
+    if: needs.changes.outputs.wasm == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
+      # `just test-wasm` runs everything through `cargo bin` (cargo-run-bin), which installs the
+      # versions pinned in Cargo.toml's [workspace.metadata.bin] into ./.bin -- not $CARGO_HOME/bin
+      # -- so a plain taiki-e/install-action install of wasm-pack/wasm-bindgen-cli onto PATH would
+      # never be seen by it. Two things actually make that install fast instead of a from-source
+      # `cargo install` on every run: cargo-binstall on PATH (cargo-run-bin prefers it over
+      # building from source, same as the Build WASM examples step in docs.yml) as a cold-cache
+      # fallback, and caching ./.bin itself so a warm cache skips the install step entirely.
+      - uses: cargo-bins/cargo-binstall@v1.13.0
       - uses: Swatinem/rust-cache@v2
+        with:
+          cache-directories: .bin
       - uses: taiki-e/install-action@v2
         with:
           tool: just
@@ -145,6 +182,7 @@ jobs:
   required:
     runs-on: ubuntu-latest
     needs:
+      - changes
       - format
       - lint
       - docs
