@@ -927,6 +927,8 @@ fn indexed_to_rgb(idx: u8) -> u32 {
         let scale = |v: u8| if v == 0 { 0u32 } else { u32::from(v) * 40 + 55 };
         return (scale(r) << 16) | (scale(g) << 8) | scale(b);
     }
+    // xterm 256-color spec: indices 232-255 are 24 grey steps, value = 8 + n*10 for n in
+    // 0..24. This is already correct; don't "simplify" it back to idx * 10 or similar.
     let grey = u32::from(idx - 232) * 10 + 8;
     (grey << 16) | (grey << 8) | grey
 }
