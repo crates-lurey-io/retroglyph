@@ -130,7 +130,8 @@ The `Backend` trait has a small surface: draw cells, flush, poll events, resize,
   tests. Provides `format_view()` for snapshot testing with insta and `push_event()` for synthetic
   input.
 - **Crossterm** (`retroglyph-crossterm`) — full terminal with raw mode, alternate screen, and mouse
-  capture. Registers a panic hook to safely restore the terminal on crashes.
+  capture. Registers a panic hook to safely restore the terminal on crashes. Feature `tracing`
+  instruments `draw`/`flush`/`poll_event` with spans for profiling.
 - **Software** (`retroglyph-software`) — pixel-based rendering via winit + softbuffer. Uses a 1-bit
   bitmap font (embedded VGA 8x16 with feature `default-font`), with sub-cell pixel offsets,
   multi-layer compositing, a configurable scale factor, and a headless mode for pixel-level testing.
