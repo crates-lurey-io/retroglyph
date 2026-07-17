@@ -131,7 +131,10 @@ The `Backend` trait has a small surface: draw cells, flush, poll events, resize,
   input.
 - **Crossterm** (`retroglyph-crossterm`) — full terminal with raw mode, alternate screen, and mouse
   capture. Registers a panic hook to safely restore the terminal on crashes. Feature `tracing`
-  instruments `draw`/`flush`/`poll_event` with spans for profiling.
+  instruments `draw`/`flush`/`poll_event` with spans for profiling. Generic over its content writer
+  (`Crossterm<W>`, default `BufWriter<Stdout>`) — `Crossterm::with_writer` renders to a file, a
+  pipe, or an in-memory buffer instead, useful for tests that want to inspect the emitted ANSI
+  output without a real TTY.
 - **Software** (`retroglyph-software`) — pixel-based rendering via winit + softbuffer. Uses a 1-bit
   bitmap font (embedded VGA 8x16 with feature `default-font`), with sub-cell pixel offsets,
   multi-layer compositing, a configurable scale factor, and a headless mode for pixel-level testing.
