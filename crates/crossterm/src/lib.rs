@@ -54,6 +54,17 @@
 //! [`Terminal::drain_events`](retroglyph_core::Terminal::drain_events)), so a subscriber (e.g.
 //! `tracing-subscriber`'s fmt layer, or a flamegraph via `tracing-flame`) can show where render
 //! and input-polling time actually goes. The feature adds no code and no dependency when disabled.
+//!
+//! # Content writer
+//!
+//! [`Crossterm`] is generic over its content writer -- `Crossterm<W>`, defaulting to
+//! `BufWriter<Stdout>` to match this type's historical, stdout-only behavior. Use
+//! [`Crossterm::with_writer`] or [`CrosstermOptions::build_with_writer`] to render into a file,
+//! a pipe, or an in-memory buffer instead, e.g. to capture and assert on the emitted ANSI/SGR
+//! bytes in a test without a real TTY. Only the rendered cell content goes through `W`; raw
+//! mode, the alternate screen, and the other terminal-protocol negotiation always target the
+//! real process stdout regardless of `W` -- see [`CrosstermOptions::build_with_writer`]'s docs
+//! for the exact split.
 
 // Compile the code blocks in both this crate's own README and the workspace root README as
 // doctests so the quick-start examples are type-checked on every test run and cannot silently
@@ -236,16 +247,42 @@ impl CrosstermOptions {
         self
     }
 
-    /// Builds the [`Crossterm`] backend with these options.
+    /// Builds the [`Crossterm`] backend with these options, rendering to standard output.
     ///
     /// Equivalent to [`Crossterm::with_options`]; this is the terminal step of the
     /// `Crossterm::builder().<options>().build()` chain started by [`Crossterm::builder`].
+    /// Use [`build_with_writer`](Self::build_with_writer) to render to a different sink (a
+    /// file, a pipe, an in-memory buffer for tests) instead of stdout.
     ///
     /// # Errors
     ///
     /// Returns an `std::io::Error` if raw mode or terminal commands fail.
     pub fn build(self) -> Result<Crossterm, std::io::Error> {
-        Crossterm::build_from_options(self)
+        Crossterm::build_from_options(self, BufWriter::new(std::io::stdout()))
+    }
+
+    /// Builds the [`Crossterm`] backend with these options, rendering to `writer` instead of
+    /// stdout.
+    ///
+    /// `writer` only receives the rendered cell content ([`Backend::draw`]/[`Backend::flush`]
+    /// output, plus the runtime [`Backend::clear`]/[`Backend::set_cursor_visible`]/
+    /// [`Backend::set_cursor_position`] escapes). Terminal-protocol setup/teardown -- raw mode,
+    /// the alternate screen, the initial cursor hide, mouse capture, focus-change reporting,
+    /// bracketed paste, and the kitty keyboard protocol -- always targets the real process
+    /// stdout regardless of `writer`, since those are properties of the actual controlling
+    /// terminal, not of an arbitrary byte sink. Callers rendering to a non-terminal `writer`
+    /// (a file, a pipe, an in-memory buffer) should disable the features they don't want
+    /// touching the real terminal via [`CrosstermOptions::raw_mode`],
+    /// [`CrosstermOptions::alt_screen`], [`CrosstermOptions::mouse_capture`], etc.
+    ///
+    /// # Errors
+    ///
+    /// Returns an `std::io::Error` if raw mode or terminal commands fail.
+    pub fn build_with_writer<W: std::io::Write>(
+        self,
+        writer: W,
+    ) -> Result<Crossterm<W>, std::io::Error> {
+        Crossterm::build_from_options(self, writer)
     }
 }
 
@@ -264,8 +301,16 @@ impl Default for CrosstermOptions {
 }
 
 /// A terminal rendering backend powered by `crossterm`.
-pub struct Crossterm {
-    renderer: TerminalRenderer<BufWriter<Stdout>>,
+///
+/// Generic over the content writer `W` -- the sink that receives rendered cell output
+/// ([`Backend::draw`]/[`Backend::flush`], plus the runtime cursor/clear escapes). Defaults to
+/// `BufWriter<Stdout>`, matching this type's historical behavior; use
+/// [`Crossterm::with_writer`]/[`CrosstermOptions::build_with_writer`] to render to a file, a
+/// pipe, or an in-memory buffer instead (e.g. for tests that want to inspect the emitted ANSI
+/// bytes without a real TTY). See [`CrosstermOptions::build_with_writer`] for exactly which
+/// operations go through `W` versus the real terminal.
+pub struct Crossterm<W: std::io::Write = BufWriter<Stdout>> {
+    renderer: TerminalRenderer<W>,
 }
 
 impl Crossterm {
@@ -292,9 +337,10 @@ impl Crossterm {
     /// Starts building a `Crossterm` backend with explicit control over which optional
     /// terminal protocol features are enabled.
     ///
-    /// Equivalent to `CrosstermOptions::new()`; call [`CrosstermOptions::build`] once the
-    /// desired features are chosen. This is the preferred entry point over
-    /// `CrosstermOptions::new()` for readability at the call site:
+    /// Equivalent to `CrosstermOptions::new()`; call [`CrosstermOptions::build`] (or
+    /// [`CrosstermOptions::build_with_writer`]) once the desired features are chosen. This is
+    /// the preferred entry point over `CrosstermOptions::new()` for readability at the call
+    /// site:
     ///
     /// ```
     /// use retroglyph_crossterm::Crossterm;
@@ -331,7 +377,52 @@ impl Crossterm {
         options.build()
     }
 
-    fn build_from_options(options: CrosstermOptions) -> Result<Self, std::io::Error> {
+    /// Creates a crossterm terminal and drives `app` with the blocking loop until
+    /// it returns [`Flow::Exit`](retroglyph_core::Flow).
+    ///
+    /// This is a thin wrapper over the generic
+    /// [`run_blocking`](retroglyph_core::run_blocking); the terminal is restored on the
+    /// way out via `Drop`, so raw mode and the alternate screen are left intact
+    /// until the loop actually returns.
+    ///
+    /// # Errors
+    ///
+    /// Returns an `std::io::Error` if the terminal fails to initialize.
+    pub fn run<A>(app: A) -> Result<(), std::io::Error>
+    where
+        A: retroglyph_core::App<Self>,
+    {
+        let term = retroglyph_core::Terminal::new(Self::new()?);
+        retroglyph_core::run_blocking(term, app);
+        Ok(())
+    }
+}
+
+impl<W: std::io::Write> Crossterm<W> {
+    /// Creates a new `Crossterm` backend rendering to `writer` instead of standard output.
+    ///
+    /// Thin wrapper over [`CrosstermOptions::build_with_writer`] with
+    /// [`CrosstermOptions::default()`]; see that method for the exact contract of which
+    /// operations go through `writer` versus the real terminal.
+    ///
+    /// # Errors
+    ///
+    /// Returns an `std::io::Error` if raw mode or terminal commands fail.
+    pub fn with_writer(writer: W) -> Result<Self, std::io::Error> {
+        CrosstermOptions::default().build_with_writer(writer)
+    }
+
+    /// Returns a reference to the content writer.
+    pub const fn writer(&self) -> &W {
+        self.renderer.writer()
+    }
+
+    /// Returns a mutable reference to the content writer.
+    pub const fn writer_mut(&mut self) -> &mut W {
+        self.renderer.writer_mut()
+    }
+
+    fn build_from_options(options: CrosstermOptions, writer: W) -> Result<Self, std::io::Error> {
         use std::sync::atomic::Ordering;
 
         // Setup panic hook on first backend creation
@@ -349,6 +440,10 @@ impl Crossterm {
             RAW_MODE_ACTIVE.store(true, Ordering::Release);
         }
 
+        // Terminal-protocol setup always targets the real process stdout, independent of
+        // `writer`: these are properties of the actual controlling terminal (raw mode, the
+        // alternate screen, mouse/focus/paste/kitty negotiation), not of the content sink a
+        // caller may have swapped in via `build_with_writer`. See that method's docs.
         let mut stdout = std::io::stdout();
 
         if options.alt_screen {
@@ -385,38 +480,18 @@ impl Crossterm {
         }
 
         Ok(Self {
-            renderer: TerminalRenderer::new(BufWriter::new(stdout)),
+            renderer: TerminalRenderer::new(writer),
         })
-    }
-
-    /// Creates a crossterm terminal and drives `app` with the blocking loop until
-    /// it returns [`Flow::Exit`](retroglyph_core::Flow).
-    ///
-    /// This is a thin wrapper over the generic
-    /// [`run_blocking`](retroglyph_core::run_blocking); the terminal is restored on the
-    /// way out via `Drop`, so raw mode and the alternate screen are left intact
-    /// until the loop actually returns.
-    ///
-    /// # Errors
-    ///
-    /// Returns an `std::io::Error` if the terminal fails to initialize.
-    pub fn run<A>(app: A) -> Result<(), std::io::Error>
-    where
-        A: retroglyph_core::App<Self>,
-    {
-        let term = retroglyph_core::Terminal::new(Self::new()?);
-        retroglyph_core::run_blocking(term, app);
-        Ok(())
     }
 }
 
-impl Drop for Crossterm {
+impl<W: std::io::Write> Drop for Crossterm<W> {
     fn drop(&mut self) {
         restore_terminal();
     }
 }
 
-impl Backend for Crossterm {
+impl<W: std::io::Write> Backend for Crossterm<W> {
     type Error = std::io::Error;
 
     #[cfg_attr(feature = "tracing", tracing::instrument(level = "debug", skip_all))]
@@ -448,7 +523,6 @@ impl Backend for Crossterm {
     }
 
     fn clear(&mut self) -> Result<(), Self::Error> {
-        use std::io::Write;
         crossterm::queue!(
             self.renderer.writer_mut(),
             crossterm::terminal::Clear(crossterm::terminal::ClearType::All)
@@ -524,7 +598,6 @@ impl Backend for Crossterm {
     }
 
     fn set_cursor_visible(&mut self, visible: bool) {
-        use std::io::Write;
         let writer = self.renderer.writer_mut();
         if visible {
             let _ = crossterm::queue!(writer, crossterm::cursor::Show);
@@ -535,7 +608,6 @@ impl Backend for Crossterm {
     }
 
     fn set_cursor_position(&mut self, position: Pos) {
-        use std::io::Write;
         let writer = self.renderer.writer_mut();
         let _ = crossterm::queue!(writer, crossterm::cursor::MoveTo(position.x, position.y));
         let _ = writer.flush();
@@ -723,6 +795,52 @@ mod tests {
             .alt_screen(false)
             .build()
         {
+            drop(term);
+        }
+    }
+
+    #[test]
+    fn build_with_writer_renders_cell_content_into_a_custom_sink() {
+        // The whole point of a generic content writer: draw/flush output lands in `writer`
+        // (here a `Vec<u8>`) instead of stdout, with no real terminal required as long as the
+        // real-terminal-only features (raw mode, alt screen, mouse/focus/paste/kitty) are
+        // disabled -- exactly the combination `CrosstermOptions::build_with_writer`'s docs
+        // recommend for a non-TTY sink.
+        let mut term = Crossterm::builder()
+            .raw_mode(false)
+            .alt_screen(false)
+            .mouse_capture(false)
+            .focus_change(false)
+            .bracketed_paste(false)
+            .kitty_protocol(false)
+            .build_with_writer(Vec::new())
+            .expect("building against a Vec<u8> writer with all TTY features disabled must not require a real terminal");
+
+        let tile = Tile::new('X', retroglyph_core::style::Style::default());
+        term.draw(core::iter::once((Pos { x: 0, y: 0 }, &tile)))
+            .unwrap();
+        term.flush().unwrap();
+
+        let written = String::from_utf8(term.writer().clone()).unwrap();
+        assert!(
+            written.contains('X'),
+            "expected drawn glyph in output: {written:?}"
+        );
+    }
+
+    #[test]
+    fn with_writer_is_equivalent_to_default_options_build_with_writer() {
+        // `Crossterm::with_writer` is the `CrosstermOptions::default()` shortcut, matching how
+        // `Crossterm::new()` relates to `with_options(CrosstermOptions::default())`. Both fail
+        // the same way without a real terminal (raw mode/alt screen left enabled), so just
+        // assert they agree on success or failure rather than requiring either to succeed.
+        let via_shortcut = Crossterm::with_writer(Vec::<u8>::new());
+        let via_builder = CrosstermOptions::default().build_with_writer(Vec::<u8>::new());
+        assert_eq!(via_shortcut.is_ok(), via_builder.is_ok());
+        if let Ok(term) = via_shortcut {
+            drop(term);
+        }
+        if let Ok(term) = via_builder {
             drop(term);
         }
     }

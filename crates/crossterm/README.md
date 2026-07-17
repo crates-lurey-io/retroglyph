@@ -43,6 +43,31 @@ fn main() -> std::io::Result<()> {
 }
 ```
 
+## Rendering to a non-stdout sink
+
+`Crossterm<W>` is generic over its content writer (default `BufWriter<Stdout>`). Use
+`Crossterm::with_writer`/`CrosstermOptions::build_with_writer` to render into a file, a pipe, or an
+in-memory buffer -- useful for capturing/asserting on the emitted ANSI output in tests without a
+real TTY. Terminal-protocol setup (raw mode, the alternate screen, mouse/focus/paste/kitty) still
+targets the real process stdout regardless of the writer; disable those via `CrosstermOptions` when
+targeting a non-terminal sink:
+
+```rust,no_run
+use retroglyph_crossterm::Crossterm;
+
+let mut buffer = Vec::new();
+let term = Crossterm::builder()
+    .raw_mode(false)
+    .alt_screen(false)
+    .mouse_capture(false)
+    .focus_change(false)
+    .bracketed_paste(false)
+    .kitty_protocol(false)
+    .build_with_writer(&mut buffer)?;
+drop(term);
+# Ok::<(), std::io::Error>(())
+```
+
 ## RGB colors on 256-color terminals
 
 `Color::Rgb` is written out as a truecolor SGR sequence with no quantization to a 256-color or
