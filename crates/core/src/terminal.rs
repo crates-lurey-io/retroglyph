@@ -400,16 +400,19 @@ impl<B: Backend> Terminal<B> {
 
     /// Reads an input event, blocking indefinitely until one is available.
     ///
+    /// Only call this on backends that genuinely block (e.g. crossterm, window). Backends
+    /// that never block (e.g. [`Headless`](crate::backend::Headless), which returns
+    /// immediately regardless of timeout) will panic here once their event queue is
+    /// empty; use [`poll`](Self::poll) or [`drain_events`](Self::drain_events) instead if
+    /// that is a possibility.
+    ///
     /// # Panics
     ///
     /// Panics if the backend's [`poll_event`](crate::Backend::poll_event) returns
-    /// `None` even with an unbounded timeout. Backends that never block (e.g.
-    /// [`Headless`](crate::backend::Headless), which returns immediately
-    /// regardless of timeout) will panic here once their event queue is empty;
-    /// use [`poll`](Self::poll) instead if that is a possibility.
-    pub fn read(&mut self) -> Event {
+    /// `None` even with an unbounded timeout.
+    pub fn read_blocking(&mut self) -> Event {
         self.poll(Duration::MAX)
-            .expect("read() called but no events available")
+            .expect("read_blocking() called but no events available")
     }
 
     /// Drains all available events without blocking.
@@ -543,7 +546,7 @@ mod tests {
         assert_eq!(terminal.poll(Duration::ZERO), Some(Event::Close));
 
         terminal.backend_mut().push_event(Event::Resize(80, 25));
-        assert_eq!(terminal.read(), Event::Resize(80, 25));
+        assert_eq!(terminal.read_blocking(), Event::Resize(80, 25));
     }
 
     #[test]
@@ -565,11 +568,11 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "read() called but no events available")]
+    #[should_panic(expected = "read_blocking() called but no events available")]
     fn test_terminal_read_panic() {
         let backend = Headless::new(10, 10);
         let mut terminal = Terminal::new(backend);
-        let _ = terminal.read();
+        let _ = terminal.read_blocking();
     }
 
     // --- resize ---
