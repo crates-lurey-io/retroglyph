@@ -618,8 +618,11 @@ impl retroglyph_window::Presenter for SoftwareRenderer {
 /// Renders one grid cell into `buffer` using 1-bit bitmap glyph data.
 ///
 /// Each set bit in the font row maps to `fg`; each clear bit maps to `bg`.
-/// No alpha blending is needed: bitmap fonts are 1-bit.
-/// When `scale > 1` each source pixel becomes a `scale×scale` block.
+/// No alpha blending is needed: bitmap fonts are 1-bit. The glyph is shifted
+/// by `cell.dx()/dy()` sub-cell pixel offset (scaled by `scale`), matching
+/// [`blit_glyph`]; the background fill always covers the full, unshifted
+/// cell rectangle. When `scale > 1` each source pixel becomes a `scale×scale`
+/// block.
 ///
 /// If `sprite_cache` contains a sprite for the cell's glyph, the bitmap font
 /// path is skipped in favor of [`blit_sprite`].
@@ -648,42 +651,56 @@ fn blit_cell(
     let fg = resolve_color(cell.style().foreground(), DEFAULT_FG);
     let bg = resolve_color(cell.style().background(), DEFAULT_BG);
 
-    let glyph_index = font.char_to_index(cell.glyph());
-    let rows = font.rows(glyph_index);
-    let src_w = usize::from(font.glyph_width);
-
-    for (src_y, &mask) in rows.iter().enumerate() {
-        for src_x in 0..src_w {
-            let bit = (mask >> (src_w - 1 - src_x)) & 1;
-            let pixel = if bit != 0 { fg } else { bg };
-
-            for dy in 0..scale {
-                let y = px_y + src_y * scale + dy;
-                if y >= px_y + cell_h {
-                    break;
-                }
-                for dx in 0..scale {
-                    let x = px_x + src_x * scale + dx;
-                    if x >= px_x + cell_w {
-                        break;
-                    }
-                    let idx = y * buf_w + x;
-                    if idx < buffer.len() {
-                        buffer[idx] = pixel;
-                    }
-                }
+    // Fill the entire cell rectangle with background first: the glyph is
+    // painted on top, offset by `dx`/`dy`, so it may not cover the whole
+    // cell (or may spill into neighboring cells).
+    for y_off in 0..cell_h {
+        let y = px_y + y_off;
+        for x_off in 0..cell_w {
+            let idx = y * buf_w + px_x + x_off;
+            if idx < buffer.len() {
+                buffer[idx] = bg;
             }
         }
     }
 
-    // Fill remaining strip below the glyph rows with background.
-    let glyph_used_h = rows.len() * scale;
-    for y_off in glyph_used_h..cell_h {
-        let y = px_y + y_off;
-        for x in 0..cell_w {
-            let idx = y * buf_w + px_x + x;
-            if idx < buffer.len() {
-                buffer[idx] = bg;
+    #[allow(clippy::cast_possible_wrap)]
+    let origin_x = px_x as i64 + i64::from(cell.dx()) * scale as i64;
+    #[allow(clippy::cast_possible_wrap)]
+    let origin_y = px_y as i64 + i64::from(cell.dy()) * scale as i64;
+
+    let glyph_index = font.char_to_index(cell.glyph());
+    let rows = font.rows(glyph_index);
+    let src_w = usize::from(font.glyph_width);
+    let buf_h = buffer.len() / buf_w;
+
+    #[allow(
+        clippy::cast_possible_wrap,
+        clippy::cast_sign_loss,
+        clippy::similar_names
+    )]
+    for (src_y, &mask) in rows.iter().enumerate() {
+        for src_x in 0..src_w {
+            if (mask >> (src_w - 1 - src_x)) & 1 == 0 {
+                continue;
+            }
+            for sdy in 0..scale {
+                let y = origin_y + (src_y * scale + sdy) as i64;
+                if y < 0 || y as usize >= buf_h {
+                    continue;
+                }
+                let y = y as usize;
+                for sdx in 0..scale {
+                    let x = origin_x + (src_x * scale + sdx) as i64;
+                    if x < 0 || x as usize >= buf_w {
+                        continue;
+                    }
+                    let x = x as usize;
+                    let idx = y * buf_w + x;
+                    if idx < buffer.len() {
+                        buffer[idx] = fg;
+                    }
+                }
             }
         }
     }
@@ -1028,6 +1045,26 @@ mod tests {
             Tile::new('@', Style::new().fg(Color::Rgb { r: 0, g: 255, b: 0 })).with_offset(1, 0);
         // draw_layers clears buffer first, so pass all layers in one call.
         renderer.draw_layers([(0, Pos::new(0, 0), &bg), (1, Pos::new(0, 0), &fg)].into_iter());
+
+        let buf = renderer.pixels();
+        let has_green = |col: usize| {
+            buf.iter()
+                .enumerate()
+                .any(|(i, &p)| i % 8 == col && p == 0x0000_FF00)
+        };
+        assert!(!has_green(0), "x=0 should have no green pixels with dx=1");
+        assert!(has_green(1), "x=1 should have green pixels with dx=1");
+    }
+
+    #[test]
+    fn blit_cell_respects_sub_cell_offset() {
+        // `Backend::draw` (the non-layered path used by `blit_cell`) must
+        // apply `tile.dx()/dy()` the same way `draw_layers` does.
+        let mut renderer = test_renderer();
+
+        let fg =
+            Tile::new('@', Style::new().fg(Color::Rgb { r: 0, g: 255, b: 0 })).with_offset(1, 0);
+        Backend::draw(&mut renderer, [(Pos::new(0, 0), &fg)].into_iter()).unwrap();
 
         let buf = renderer.pixels();
         let has_green = |col: usize| {
