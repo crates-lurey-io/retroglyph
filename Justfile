@@ -174,6 +174,17 @@ setup-wasm: setup-tools
 run-wasm:
     cargo run -p retroglyph-examples --target wasm32-unknown-unknown --example 01_hello_world --features software
 
+# Runs crates/terminal-wasm's tests/wasm_ffi.rs (the `wasm_terminal_*` FFI surface) under an
+# actual wasm32 build via wasm-pack + Node.js -- the only place those `#[wasm_bindgen]`-exported
+# functions run at all, since host-target `cargo test` never compiles that `cfg(target_arch =
+# "wasm32")` module in the first place. `--node` (not `--chrome`/`--firefox`): this FFI has no
+# DOM/xterm.js dependency to exercise (see that test file's doc comment), and Node avoids needing
+# a browser + webdriver in CI. `wasm-pack test` sets its own cargo runner for the invocation, so
+# it doesn't collide with the `wasm-server-runner` configured for `cfg(target_family = "wasm")` in
+# .cargo/config.toml (that one's only for `just run-wasm`'s manual browser preview).
+test-wasm:
+    cargo bin wasm-pack test --node crates/terminal-wasm
+
 # ── act (local CI runner) ────────────────────────────────────────────────────
 
 act-version := "v0.2.89"

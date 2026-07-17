@@ -18,7 +18,15 @@ cargo-nextest = { version = "0.9.140", locked = true }
 # (`cargo bin wasm-bindgen`) — all of these must move in lockstep. Used to
 # build the docs site's WASM examples gallery, both in CI and locally (see
 # `docs-preview-full` in the Justfile).
-wasm-bindgen-cli = { version = "0.2.106", bins = ["wasm-bindgen"] }
+# `wasm-bindgen-test-runner` (also in this package) is `wasm-pack test`'s test harness --
+# required by `just test-wasm` below, on top of `wasm-bindgen` itself.
+wasm-bindgen-cli = { version = "0.2.106", bins = ["wasm-bindgen", "wasm-bindgen-test-runner"] }
+# Drives `just test-wasm` (crates/terminal-wasm's `tests/wasm_ffi.rs`): `wasm-pack test --node`
+# builds that crate for wasm32-unknown-unknown and runs its wasm-bindgen-test suite under Node.js,
+# bypassing the `wasm-server-runner` set as this workspace's `cfg(target_family = "wasm")` cargo
+# runner (see .cargo/config.toml) -- wasm-pack sets its own runner env var per-invocation rather
+# than relying on that static config, so the two don't conflict.
+wasm-pack = { version = "0.15.0" }
 # Local static file server for `docs-preview-full` (Justfile): serves
 # target/doc over real HTTP (not file://, which browsers block fetch() of
 # the WASM examples' .wasm module from) without depending on Python or any
