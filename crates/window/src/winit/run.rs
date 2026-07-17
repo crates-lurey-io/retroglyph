@@ -15,7 +15,9 @@ use crate::presenter::Presenter;
 use retroglyph_core::Terminal;
 use retroglyph_core::backend::Backend;
 use retroglyph_core::event::{Event, KeyModifiers, MouseEvent, MouseEventKind, PhysicalPos};
+use std::cell::Cell;
 use std::fmt;
+use std::rc::Rc;
 use std::sync::Arc;
 #[cfg(not(target_arch = "wasm32"))]
 use std::time::Duration;
@@ -357,6 +359,36 @@ where
     F: FnMut(&mut Terminal<WindowBackend<P>>) + 'static,
     O: FnOnce(EventProxy),
 {
+    run_windowed_with_proxy_and_exit_flag(
+        config,
+        presenter,
+        app_loop,
+        on_proxy,
+        Rc::new(Cell::new(false)),
+    )
+}
+
+/// Shared implementation behind [`run_windowed_with_proxy`] and
+/// [`run_app_with_proxy`].
+///
+/// `exit_requested` is checked after every [`WindowEvent::RedrawRequested`] and, when set, drives
+/// [`ActiveEventLoop::exit`] so the loop unwinds normally (see [`WindowApp::exit_requested`]'s doc
+/// comment for why this can't be plumbed through `app_loop`'s return value instead).
+/// [`run_windowed_with_proxy`] passes a flag nobody ever sets (a plain `FnMut(&mut Terminal<..>)`
+/// closure has no way to reach it); [`run_app_with_proxy`] shares one with the closure it builds
+/// around `app_loop`, which sets it on [`Flow::Exit`](retroglyph_core::Flow::Exit).
+fn run_windowed_with_proxy_and_exit_flag<P, F, O>(
+    config: WindowConfig,
+    presenter: P,
+    app_loop: F,
+    on_proxy: O,
+    exit_requested: Rc<Cell<bool>>,
+) -> Result<(), winit::error::EventLoopError>
+where
+    P: Presenter + 'static,
+    F: FnMut(&mut Terminal<WindowBackend<P>>) + 'static,
+    O: FnOnce(EventProxy),
+{
     let terminal = Terminal::new(WindowBackend::new(presenter));
     let event_loop = EventLoop::<UserEvent>::with_user_event().build()?;
     on_proxy(EventProxy(event_loop.create_proxy()));
@@ -386,6 +418,7 @@ where
         frame_interval,
         #[cfg(not(target_arch = "wasm32"))]
         next_frame: std::time::Instant::now(),
+        exit_requested,
     };
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -413,9 +446,13 @@ where
 /// `wasm32` (where `std::time::Instant` itself is unavailable). Calls
 /// [`step`](retroglyph_core::step).
 ///
-/// On [`Flow::Exit`](retroglyph_core::Flow) the process exits on native (the
-/// window is torn down); on wasm the requestAnimationFrame loop cannot be
-/// stopped, so exit is a no-op.
+/// On [`Flow::Exit`](retroglyph_core::Flow) the event loop exits gracefully
+/// (via [`ActiveEventLoop::exit`]) instead of force-exiting the process, so
+/// the stack unwinds normally and `Drop` impls up the call chain (unflushed
+/// writes, GPU/surface teardown, app-level RAII) run before the process
+/// exits. This works the same on wasm: winit's web backend implements
+/// `ActiveEventLoop::exit` by stopping its `requestAnimationFrame`-driven
+/// runner rather than leaving it a no-op.
 ///
 /// # Errors
 ///
@@ -454,7 +491,9 @@ where
 {
     let mut frame_count = 0u64;
     let mut last = web_time::Instant::now();
-    run_windowed_with_proxy(
+    let exit_requested = Rc::new(Cell::new(false));
+    let exit_requested_in_loop = exit_requested.clone();
+    run_windowed_with_proxy_and_exit_flag(
         config,
         presenter,
         move |term| {
@@ -467,11 +506,11 @@ where
             };
             frame_count = frame_count.wrapping_add(1);
             if retroglyph_core::step(term, &mut app, &frame) == retroglyph_core::Flow::Exit {
-                #[cfg(not(target_arch = "wasm32"))]
-                std::process::exit(0);
+                exit_requested_in_loop.set(true);
             }
         },
         on_proxy,
+        exit_requested,
     )
 }
 
@@ -564,6 +603,19 @@ struct WindowApp<P: Presenter, F> {
     /// Deadline for the next frame when `frame_interval` is set.
     #[cfg(not(target_arch = "wasm32"))]
     next_frame: std::time::Instant,
+    /// Set by `app_loop` (specifically [`run_app_with_proxy`]'s closure) to request the event
+    /// loop stop, instead of calling `std::process::exit` directly.
+    ///
+    /// `app_loop` is a plain `FnMut(&mut Terminal<..>)` with no return value and no
+    /// [`ActiveEventLoop`] handle, so it can't call `event_loop.exit()` itself; it can only flip
+    /// this shared flag. [`handle_window_event`](Self::handle_window_event) -- which runs
+    /// `app_loop` on [`WindowEvent::RedrawRequested`] -- deliberately takes no
+    /// [`ActiveEventLoop`] either, so unit tests can drive it without a live winit loop (see its
+    /// doc comment). `ApplicationHandler::window_event`, which does have the `ActiveEventLoop`,
+    /// checks this flag right after `handle_window_event` returns and calls `event_loop.exit()`
+    /// if it's set, letting the stack unwind normally (`Drop` impls run) instead of
+    /// force-terminating the process.
+    exit_requested: Rc<Cell<bool>>,
 }
 
 impl<P: Presenter, F> WindowApp<P, F> {
@@ -879,11 +931,18 @@ where
 
     fn window_event(
         &mut self,
-        _event_loop: &ActiveEventLoop,
+        event_loop: &ActiveEventLoop,
         _window_id: WindowId,
         event: WindowEvent,
     ) {
         self.handle_window_event(event);
+        // `app_loop` (run on `RedrawRequested`, inside `handle_window_event`) can only signal
+        // exit by setting `exit_requested` -- see its doc comment for why. Check it here, where
+        // an `ActiveEventLoop` is actually available, and ask winit to exit gracefully instead of
+        // the caller force-exiting the process.
+        if self.exit_requested.get() {
+            event_loop.exit();
+        }
     }
 
     fn user_event(&mut self, _event_loop: &ActiveEventLoop, event: UserEvent) {
@@ -1247,6 +1306,7 @@ mod tests {
     use retroglyph_core::event::{MouseButton, MouseEvent, MouseEventKind};
     use retroglyph_core::grid::{Pos, Size};
     use retroglyph_core::tile::Tile;
+    use std::cell::RefCell;
     use std::time::Duration;
 
     // ── dpr_pointer_scale ─────────────────────────────────────────────────────
@@ -1356,7 +1416,7 @@ mod tests {
     #[derive(Default)]
     struct MockPresenter {
         /// Records the last [`Presenter::scale_factor_changed`] argument, if any.
-        last_scale_factor: std::cell::Cell<Option<f64>>,
+        last_scale_factor: Cell<Option<f64>>,
     }
 
     impl Presenter for MockPresenter {
@@ -1420,7 +1480,7 @@ mod tests {
     /// can assert on the pixel dimensions `on_resized` actually requests.
     #[derive(Default)]
     struct RecordingPresenter {
-        resize_calls: std::rc::Rc<std::cell::RefCell<Vec<(u32, u32)>>>,
+        resize_calls: Rc<RefCell<Vec<(u32, u32)>>>,
     }
 
     impl Presenter for RecordingPresenter {
@@ -1499,6 +1559,7 @@ mod tests {
             frame_interval: None,
             #[cfg(not(target_arch = "wasm32"))]
             next_frame: std::time::Instant::now(),
+            exit_requested: Rc::new(Cell::new(false)),
         }
     }
 
@@ -1854,6 +1915,58 @@ mod tests {
         assert_eq!(poll(&mut app), Some(Event::Close));
     }
 
+    // ── graceful exit (issue #157) ────────────────────────────────────────────
+
+    /// A `WindowApp` whose `app_loop` is a boxed closure, so a test can capture and flip a
+    /// shared flag from inside it -- mirroring how `run_app_with_proxy`'s real closure sets
+    /// `exit_requested` on `Flow::Exit` (it can't return a value or reach `ActiveEventLoop`
+    /// itself; see `exit_requested`'s doc comment).
+    type BoxedAppLoop = Box<dyn FnMut(&mut Terminal<WindowBackend<MockPresenter>>)>;
+    type BoxedApp = WindowApp<MockPresenter, BoxedAppLoop>;
+
+    #[test]
+    fn redraw_requested_runs_app_loop_and_does_not_set_exit_by_default() {
+        let mut app = test_window_app();
+        app.handle_window_event(WindowEvent::RedrawRequested);
+        assert!(!app.exit_requested.get());
+    }
+
+    #[test]
+    fn app_loop_setting_exit_requested_is_observed_after_redraw() {
+        // Simulates `run_app_with_proxy`'s closure: on `Flow::Exit` it sets the shared flag
+        // instead of calling `std::process::exit`. `handle_window_event` itself never calls
+        // `event_loop.exit()` (it can't -- no `ActiveEventLoop` -- see its doc comment); that
+        // happens in `ApplicationHandler::window_event`, which this flag lets the test assert
+        // on without a live winit event loop.
+        let terminal = Terminal::new(WindowBackend::new(MockPresenter::default()));
+        let exit_requested = Rc::new(Cell::new(false));
+        let exit_requested_in_loop = exit_requested.clone();
+        let app_loop: BoxedAppLoop = Box::new(move |_term| exit_requested_in_loop.set(true));
+        let mut app: BoxedApp = WindowApp {
+            terminal: Some(terminal),
+            app_loop,
+            window: None,
+            title: String::new(),
+            init_size: InitWindowSize {
+                width: 80,
+                height: 80,
+            },
+            attrs: WindowAttrs::default(),
+            current_modifiers: KeyModifiers::NONE,
+            cursor_px: (0.0, 0.0),
+            active_touch: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            frame_interval: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            next_frame: std::time::Instant::now(),
+            exit_requested,
+        };
+
+        assert!(!app.exit_requested.get());
+        app.handle_window_event(WindowEvent::RedrawRequested);
+        assert!(app.exit_requested.get());
+    }
+
     #[test]
     fn theme_changed_pushes_mapped_system_theme_event() {
         let mut app = test_window_app();
@@ -2033,7 +2146,7 @@ mod tests {
         // which crashes softbuffer.
         type RecordingApp =
             WindowApp<RecordingPresenter, fn(&mut Terminal<WindowBackend<RecordingPresenter>>)>;
-        let resize_calls = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+        let resize_calls = Rc::new(RefCell::new(Vec::new()));
         let presenter = RecordingPresenter {
             resize_calls: resize_calls.clone(),
         };
@@ -2055,6 +2168,7 @@ mod tests {
             frame_interval: None,
             #[cfg(not(target_arch = "wasm32"))]
             next_frame: std::time::Instant::now(),
+            exit_requested: Rc::new(Cell::new(false)),
         };
 
         app.handle_window_event(WindowEvent::Resized(winit::dpi::PhysicalSize::new(4, 4)));
