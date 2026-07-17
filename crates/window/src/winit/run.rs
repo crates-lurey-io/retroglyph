@@ -959,16 +959,7 @@ where
                     term.backend_mut().push_event(system_theme_event(theme));
                 }
             }
-            WindowEvent::Focused(gained) => {
-                if let Some(term) = self.terminal.as_mut() {
-                    let event = if gained {
-                        Event::FocusGained
-                    } else {
-                        Event::FocusLost
-                    };
-                    term.backend_mut().push_event(event);
-                }
-            }
+            WindowEvent::Focused(gained) => self.on_focus_changed(gained),
             WindowEvent::KeyboardInput { event, .. } => {
                 if let Some(term) = self.terminal.as_mut()
                     && let Some(e) = translate_key(event, self.current_modifiers)
@@ -1212,6 +1203,41 @@ where
     /// Convert the cached cursor pixel position to [`PhysicalPos`].
     const fn cursor_physical_pos(&self) -> PhysicalPos {
         physical_pos_from(self.cursor_px.0, self.cursor_px.1)
+    }
+
+    /// Push [`Event::FocusGained`]/[`Event::FocusLost`], and on loss, reset state that only makes
+    /// sense while the window is focused.
+    ///
+    /// Winit keeps delivering `ModifiersChanged` only while focused, so a modifier key held down
+    /// when focus is lost (e.g. alt-tabbing away while holding Shift) never generates the release
+    /// that would normally clear it: without this, `current_modifiers` stays stuck "held" for
+    /// every event after focus returns. Similarly, a finger lifted while the window is
+    /// unfocused/backgrounded never delivers `TouchPhase::Ended`/`Cancelled`, so `active_touch`
+    /// would otherwise stay set forever, permanently ignoring the next finger down. The stuck
+    /// touch is released the same way a real lift is (see [`on_touch`](Self::on_touch)'s
+    /// `Ended`/`Cancelled` arm): a left-button `Up` at the last known cursor position, so the app
+    /// sees a normal, balanced Down/Up pair instead of a Down with no matching Up. No `Moved` is
+    /// synthesized first, unlike a real lift -- blur carries no new pointer location, and
+    /// `cursor_px` already holds the touch's last reported position from the `Started`/`Moved`
+    /// arms that got it there.
+    fn on_focus_changed(&mut self, gained: bool) {
+        if let Some(term) = self.terminal.as_mut() {
+            let event = if gained {
+                Event::FocusGained
+            } else {
+                Event::FocusLost
+            };
+            term.backend_mut().push_event(event);
+        }
+        if !gained {
+            self.current_modifiers = KeyModifiers::NONE;
+            if self.active_touch.take().is_some() {
+                self.on_mouse_input(
+                    winit::event::ElementState::Released,
+                    winit::event::MouseButton::Left,
+                );
+            }
+        }
     }
 }
 
@@ -1856,6 +1882,95 @@ mod tests {
 
         app.handle_window_event(WindowEvent::Focused(false));
         assert_eq!(poll(&mut app), Some(Event::FocusLost));
+    }
+
+    #[test]
+    fn focus_lost_resets_stuck_modifiers() {
+        // Regression test for #153: a modifier held down when focus is lost
+        // (e.g. alt-tabbing away while holding Shift) must not stay "held"
+        // for events delivered after focus returns.
+        let mut app = test_window_app();
+        app.handle_window_event(WindowEvent::ModifiersChanged(
+            winit::event::Modifiers::from(winit::keyboard::ModifiersState::SHIFT),
+        ));
+        let _ = poll(&mut app); // no event emitted for modifiers
+        assert_eq!(app.current_modifiers, KeyModifiers::SHIFT);
+
+        app.handle_window_event(WindowEvent::Focused(false));
+        assert_eq!(poll(&mut app), Some(Event::FocusLost));
+        assert_eq!(app.current_modifiers, KeyModifiers::NONE);
+
+        // A click after refocusing must not still carry the stale Shift.
+        app.handle_window_event(WindowEvent::Focused(true));
+        assert_eq!(poll(&mut app), Some(Event::FocusGained));
+        app.handle_window_event(WindowEvent::MouseInput {
+            device_id: winit::event::DeviceId::dummy(),
+            state: winit::event::ElementState::Pressed,
+            button: winit::event::MouseButton::Left,
+        });
+        let ev = poll(&mut app).unwrap();
+        assert!(matches!(
+            ev,
+            Event::Mouse(MouseEvent { modifiers, .. }) if modifiers == KeyModifiers::NONE
+        ));
+    }
+
+    #[test]
+    fn focus_lost_releases_stuck_active_touch() {
+        // Regression test for #153: a finger lifted while the window is
+        // unfocused/backgrounded never delivers `TouchPhase::Ended` or
+        // `Cancelled`, so `active_touch` must be released on blur instead of
+        // silently ignoring every subsequent finger down.
+        use winit::event::TouchPhase;
+        let mut app = test_window_app();
+        app.handle_window_event(touch(3, TouchPhase::Started, 20.0, 18.0));
+        poll(&mut app); // Moved
+        poll(&mut app); // Down
+        assert_eq!(app.active_touch, Some(3));
+
+        app.handle_window_event(WindowEvent::Focused(false));
+        assert_eq!(poll(&mut app), Some(Event::FocusLost));
+        // Synthesized Up releasing the stuck touch at its last known
+        // position; no new Moved, since blur carries no fresh location.
+        assert!(matches!(
+            poll(&mut app),
+            Some(Event::Mouse(MouseEvent {
+                kind: MouseEventKind::Up(MouseButton::Left),
+                ..
+            }))
+        ));
+        assert_eq!(poll(&mut app), None);
+        assert_eq!(app.active_touch, None);
+
+        // A new finger down after refocusing must be tracked, not ignored.
+        app.handle_window_event(WindowEvent::Focused(true));
+        assert_eq!(poll(&mut app), Some(Event::FocusGained));
+        app.handle_window_event(touch(4, TouchPhase::Started, 40.0, 32.0));
+        assert!(matches!(
+            poll(&mut app),
+            Some(Event::Mouse(MouseEvent {
+                kind: MouseEventKind::Moved,
+                ..
+            }))
+        ));
+        assert!(matches!(
+            poll(&mut app),
+            Some(Event::Mouse(MouseEvent {
+                kind: MouseEventKind::Down(MouseButton::Left),
+                ..
+            }))
+        ));
+        assert_eq!(app.active_touch, Some(4));
+    }
+
+    #[test]
+    fn focus_lost_without_active_touch_pushes_no_extra_events() {
+        // No touch in progress: blur should push exactly one FocusLost, no
+        // synthesized mouse events.
+        let mut app = test_window_app();
+        app.handle_window_event(WindowEvent::Focused(false));
+        assert_eq!(poll(&mut app), Some(Event::FocusLost));
+        assert_eq!(poll(&mut app), None);
     }
 
     #[test]
