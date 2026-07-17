@@ -52,6 +52,14 @@ See [docs.rs](https://docs.rs/retroglyph-software) for the full API, or the
 [workspace README](https://github.com/crates-lurey-io/retroglyph#readme) for a real backend quick
 start.
 
+## WASM caveat: `target_fps` is a no-op
+
+[`SoftwareBackendBuilder::target_fps`](https://docs.rs/retroglyph-software/latest/retroglyph_software/struct.SoftwareBackendBuilder.html#method.target_fps)
+caps the frame rate on native targets by sleeping in `about_to_wait` until the next frame deadline.
+On `wasm32` this has no effect: `requestAnimationFrame` drives the loop at the display refresh rate
+regardless, so a native app that relies on `target_fps` to throttle rendering will run uncapped once
+ported to the web.
+
 ## Backend parity caveat
 
 `SoftwareRenderer`'s layer compositing
