@@ -419,6 +419,7 @@ where
         #[cfg(not(target_arch = "wasm32"))]
         next_frame: std::time::Instant::now(),
         exit_requested,
+        needs_redraw: true,
     };
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -616,6 +617,18 @@ struct WindowApp<P: Presenter, F> {
     /// if it's set, letting the stack unwind normally (`Drop` impls run) instead of
     /// force-terminating the process.
     exit_requested: Rc<Cell<bool>>,
+    /// Set whenever something happened that the app loop should get a chance to react to:
+    /// window creation, an input/window event, or an injected [`Event::Custom`]. Cleared once
+    /// [`about_to_wait`](ApplicationHandler::about_to_wait) turns it into a `request_redraw()`
+    /// call.
+    ///
+    /// Retro/terminal-style apps are event-driven, not animation-driven, so "nothing happened"
+    /// should mean "render nothing new" -- see this field's use in `about_to_wait` for why that
+    /// keeps the loop asleep (`ControlFlow::Wait`) instead of spinning at ~100% CPU redrawing an
+    /// unchanged frame forever. Only consulted when `frame_interval` is `None`: a `target_fps`
+    /// throttle already redraws unconditionally once its `WaitUntil` deadline passes, animation
+    /// or not.
+    needs_redraw: bool,
 }
 
 impl<P: Presenter, F> WindowApp<P, F> {
@@ -927,6 +940,9 @@ where
         if let Some(window) = self.create_window_and_surface(event_loop) {
             self.window = Some(window);
         }
+        // First frame: nothing has "happened" yet in the input-event sense, but the app still
+        // needs an initial render once the window/surface exists.
+        self.needs_redraw = true;
     }
 
     fn window_event(
@@ -955,7 +971,10 @@ where
     ) {
         #[cfg(not(target_arch = "wasm32"))]
         if let Some(interval) = self.frame_interval {
-            // Throttled: sleep until the next frame deadline, then render.
+            // Throttled: sleep until the next frame deadline, then render
+            // unconditionally -- a `target_fps` cap is an animation-style
+            // frame rate, not an idle/event-driven one, so it always
+            // redraws once its deadline passes regardless of `needs_redraw`.
             let now = std::time::Instant::now();
             if self.next_frame > now {
                 event_loop
@@ -965,9 +984,22 @@ where
             // Advance the deadline by one interval, clamping to now so a
             // slow frame doesn't cause a burst of catch-up renders.
             self.next_frame = (self.next_frame + interval).max(now);
+            if let Some(window) = &self.window {
+                window.request_redraw();
+            }
+            return;
         }
-        if let Some(window) = &self.window {
-            window.request_redraw();
+        // Uncapped (`target_fps: None`): only redraw if something actually happened since the
+        // last one. Otherwise leave `ControlFlow` at its default `Wait` so the loop sleeps
+        // instead of spinning at ~100% CPU re-rendering an unchanged frame every iteration --
+        // retro/terminal-style apps are idle most of the time and event-driven, not
+        // animation-driven, so "nothing happened" should mean "render nothing new". See
+        // `needs_redraw`'s doc comment.
+        if self.needs_redraw {
+            self.needs_redraw = false;
+            if let Some(window) = &self.window {
+                window.request_redraw();
+            }
         }
     }
 }
@@ -988,6 +1020,7 @@ where
         if let Some(term) = self.terminal.as_mut() {
             term.backend_mut().push_event(Event::Custom(event));
         }
+        self.needs_redraw = true;
     }
 
     /// Dispatch a [`WindowEvent`] without requiring an [`ActiveEventLoop`].
@@ -996,6 +1029,15 @@ where
     /// event-buffer logic can be called directly in unit tests, where
     /// [`ActiveEventLoop`] is not constructable.
     fn handle_window_event(&mut self, event: WindowEvent) {
+        // Every branch below (other than `RedrawRequested`, which *is* the render this flag
+        // exists to gate) represents something the app loop should get a chance to react to on
+        // the next frame -- see `needs_redraw`'s doc comment for why that matters for idle CPU.
+        // Set unconditionally up front rather than per-arm: simpler, and the only event that must
+        // *not* set it (`RedrawRequested`) already clears it again in `about_to_wait` right before
+        // requesting this same redraw, so a same-tick `RedrawRequested` can't retrigger itself.
+        if !matches!(event, WindowEvent::RedrawRequested) {
+            self.needs_redraw = true;
+        }
         match event {
             WindowEvent::CloseRequested => {
                 // Push the event so the game loop can process it (save game,
@@ -1560,6 +1602,7 @@ mod tests {
             #[cfg(not(target_arch = "wasm32"))]
             next_frame: std::time::Instant::now(),
             exit_requested: Rc::new(Cell::new(false)),
+            needs_redraw: false,
         }
     }
 
@@ -1951,6 +1994,7 @@ mod tests {
                 width: 80,
                 height: 80,
             },
+            attrs: WindowAttrs::default(),
             current_modifiers: KeyModifiers::NONE,
             cursor_px: (0.0, 0.0),
             active_touch: None,
@@ -1959,6 +2003,7 @@ mod tests {
             #[cfg(not(target_arch = "wasm32"))]
             next_frame: std::time::Instant::now(),
             exit_requested,
+            needs_redraw: false,
         };
 
         assert!(!app.exit_requested.get());
@@ -2168,6 +2213,7 @@ mod tests {
             #[cfg(not(target_arch = "wasm32"))]
             next_frame: std::time::Instant::now(),
             exit_requested: Rc::new(Cell::new(false)),
+            needs_redraw: false,
         };
 
         app.handle_window_event(WindowEvent::Resized(winit::dpi::PhysicalSize::new(4, 4)));
@@ -2184,5 +2230,63 @@ mod tests {
                 .poll_event(Duration::ZERO),
             Some(Event::Resize(1, 1))
         );
+    }
+
+    // ── needs_redraw (idle/redraw-on-demand, issue #155) ─────────────────────
+
+    #[test]
+    fn fresh_app_does_not_need_a_redraw() {
+        // `test_window_app` starts with `needs_redraw: false` -- unlike the real
+        // `resumed()` path, which sets it `true` once the window/surface exists (a real winit
+        // `ActiveEventLoop` can't be constructed in a unit test, so `resumed` itself isn't
+        // exercised here; see `handle_window_event`/`handle_user_event` below for the parts of
+        // the redraw-on-demand logic that are testable without one).
+        let app = test_window_app();
+        assert!(!app.needs_redraw);
+    }
+
+    #[test]
+    fn window_event_sets_needs_redraw() {
+        // Any real window event (a mouse move here, but any arm other than `RedrawRequested`
+        // behaves the same -- see `handle_window_event`'s doc comment) should mark that the app
+        // loop has something new to react to, so the next `about_to_wait` requests a redraw
+        // instead of leaving the loop idle.
+        let mut app = test_window_app();
+        assert!(!app.needs_redraw);
+        app.handle_window_event(WindowEvent::CursorMoved {
+            device_id: winit::event::DeviceId::dummy(),
+            position: winit::dpi::PhysicalPosition::new(1.0_f64, 1.0_f64),
+        });
+        assert!(app.needs_redraw);
+    }
+
+    #[test]
+    fn redraw_requested_does_not_itself_set_needs_redraw() {
+        // `RedrawRequested` is the render this flag exists to gate, not a new event to redraw
+        // again for -- an idle app that gets exactly one `RedrawRequested` (e.g. right after
+        // `resumed`) must not perpetually re-arm itself into another one forever.
+        let mut app = test_window_app();
+        app.handle_window_event(WindowEvent::RedrawRequested);
+        assert!(!app.needs_redraw);
+    }
+
+    #[test]
+    fn user_event_sets_needs_redraw() {
+        // A cross-thread `Event::Custom` injection (network, audio, timer, ...) must wake an
+        // idle loop into rendering the next frame just like a real window event does.
+        let mut app = test_window_app();
+        assert!(!app.needs_redraw);
+        app.handle_user_event(1);
+        assert!(app.needs_redraw);
+    }
+
+    #[test]
+    fn unhandled_window_events_still_set_needs_redraw() {
+        // Even a `WindowEvent` variant with no dedicated handling below (falls through to the
+        // `_ => {}` arm in `handle_window_event`'s `match`) should still be treated as "something
+        // happened": the flag is set once, up front, before the match runs.
+        let mut app = test_window_app();
+        app.handle_window_event(WindowEvent::Occluded(true));
+        assert!(app.needs_redraw);
     }
 }
