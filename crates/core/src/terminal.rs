@@ -3,7 +3,7 @@
 use crate::backend::Backend;
 use crate::color::Color;
 use crate::event::Event;
-use crate::grid::{Grid, Rect, Size};
+use crate::grid::{Grid, Pos, Rect, Size};
 use crate::style::Style;
 use crate::text::Line;
 use crate::tile::Tile;
@@ -151,6 +151,14 @@ impl<B: Backend> Terminal<B> {
             let tile = Tile::new(ch, style);
             self.current.put_tile(self.active_layer, x, y, tile);
         }
+    }
+
+    /// Place a character at `pos` on the active layer with the current style.
+    ///
+    /// Equivalent to [`put`](Self::put), but takes a [`Pos`] to match the
+    /// `Rect`/`Size`-based drawing APIs elsewhere on `Terminal`.
+    pub fn put_at(&mut self, pos: Pos, ch: char) {
+        self.put(pos.x, pos.y, ch);
     }
 
     /// Returns a reference to the current grid.
@@ -778,6 +786,13 @@ mod tests {
         #[cfg(not(feature = "egc"))]
         assert_eq!(term.grid().get(1, 0).glyph(), '\0');
         assert_eq!(term.grid().get(2, 0).glyph(), 'x');
+    }
+
+    #[test]
+    fn test_put_at_matches_put() {
+        let mut term = Terminal::new(Headless::new(10, 3));
+        term.put_at(Pos::new(2, 1), 'X');
+        assert_eq!(term.grid().get(2, 1).glyph(), 'X');
     }
 
     #[test]
