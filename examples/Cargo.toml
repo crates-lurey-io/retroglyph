@@ -13,21 +13,21 @@ publish = false
 workspace = true
 
 [dependencies]
-retroglyph-core = { path = "../crates/core", version = "0.1.0-alpha" }
+retroglyph-core = { path = "../crates/core", version = "0.2.0" }
 # Unconditional, like `retroglyph-core`: widgets is backend-generic (no backend axis to gate it
 # on), and every Tier 2 example that uses it (09_widgets_dashboard, 10_widgets_interaction) needs
 # it on every backend feature combination this crate builds.
-retroglyph-widgets = { path = "../crates/widgets", version = "0.1.0-alpha" }
-retroglyph-crossterm = { path = "../crates/crossterm", version = "0.1.0-alpha", optional = true }
-retroglyph-software = { path = "../crates/software", version = "0.1.0-alpha", optional = true }
-retroglyph-window = { path = "../crates/window", version = "0.1.0-alpha", optional = true }
+retroglyph-widgets = { path = "../crates/widgets", version = "0.2.0" }
+retroglyph-crossterm = { path = "../crates/crossterm", version = "0.1.1", optional = true }
+retroglyph-software = { path = "../crates/software", version = "0.2.0", optional = true }
+retroglyph-window = { path = "../crates/window", version = "0.2.0", optional = true }
 # Optional, wasm32-only in practice: see the `wasm-terminal` feature below.
 # Declared as a plain (non-target-gated) optional dependency because Cargo
 # features can't be restricted to a target; `wasm-terminal` is documented as
 # wasm32-only and the crate itself is a no-op off that target (its `Backend`
 # impl still compiles portably -- only its `#[wasm_bindgen]` FFI module is
 # `cfg(target_arch = "wasm32")`-gated).
-retroglyph-terminal-wasm = { path = "../crates/terminal-wasm", version = "0.1.0-alpha", optional = true }
+retroglyph-terminal-wasm = { path = "../crates/terminal-wasm", version = "0.1.1", optional = true }
 # A portable `std::time::Instant`-alike: on non-wasm targets it's a zero-cost re-export of
 # `std::time`; on `wasm32-unknown-unknown` it's backed by the browser's `Performance.now()`.
 # Already in the workspace's `Cargo.lock` transitively (pulled by `winit`), so this adds no new

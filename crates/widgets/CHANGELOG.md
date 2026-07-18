@@ -7,6 +7,266 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style -->
 
+## [0.2.0+retroglyph-widgets](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-widgets-v0.1.0...retroglyph-widgets-v0.2.0) - 2026-07-18
+
+### Features
+
+- [d600806](
+https://github.com/crates-lurey-io/retroglyph/commit/d600806d827fdfa7d76eeaab51cc156807714a46) *(core)* Mark evolving input/event enums non_exhaustive by `@matanlurey`
+
+  > Event, KeyCode, MouseButton, and MouseEventKind are all expected to gain
+  > variants as backend input coverage grows (Event::Paste/FocusGained/FocusLost
+  > are already planned; KeyCode/MouseButton/MouseEventKind each lag real
+  > upstream data winit/crossterm already expose, e.g. side mouse buttons and
+  > horizontal scroll). Without #[non_exhaustive] each future addition would be a
+  > breaking change and force a major bump for a purely additive change.
+  >
+  > SystemTheme and Flow were considered and deliberately left exhaustive:
+  > SystemTheme's own doc comment already argues no third state should exist,
+  > and a hypothetical Flow::Paused would need new driver-loop semantics anyway
+  > (a redesign, not an additive case), so a major bump is the right signal for
+  > either rather than something #[non_exhaustive] should paper over.
+  >
+  > Color, AnsiColor, HAlign, and VAlign stay exhaustive as genuinely closed
+  > encodings (unchanged from before this commit).
+  >
+  > Fixes required by the two enums that do change:
+  > - widgets::interact::pointer::button_slot now returns Option<usize> instead
+  >   of aliasing an unknown future MouseButton onto an existing slot, which
+  >   would have silently misreported that button's state.
+  > - 04_mouse example's match on MouseEventKind gains a wildcard arm.
+  >
+  > No longer marked as a Conventional Commits breaking change (dropped the !):
+  > cargo-semver-checks / release-plz's semver_check independently detects and
+  > correctly per-crate-scopes this exact class of break (verified: retroglyph-core
+  > still computes 0.2.0 from the enum_marked_non_exhaustive finding alone, while
+  > retroglyph-widgets -- whose own API is unaffected -- correctly gets only a 0.1.1
+  > patch instead of being dragged to 0.2.0 by a commit-message marker that doesn't
+  > distinguish which crate it applies to). See RELEASING.md's revised breaking-change
+  > policy.
+
+- [17e1728](
+https://github.com/crates-lurey-io/retroglyph/commit/17e17285f1f7d921ce23e0c47470373ba9586fb5) *(widgets)* Add Response::held for live press/hover re-check by `@matanlurey` in [#245](
+https://github.com/crates-lurey-io/retroglyph/pull/245)
+
+- [e335482](
+https://github.com/crates-lurey-io/retroglyph/commit/e335482bb602f9a9b54e81c9d5dd418be76367d5) *(widgets)* Weighted Constraint::Fill for proportional space distribution by `@matanlurey` in [#241](
+https://github.com/crates-lurey-io/retroglyph/pull/241)
+  >
+  > Constraint::Fill becomes Fill(u16): a weight, not a unit variant. solve()
+  > now distributes the Fill/Min/Max remainder in proportion to each pane's
+  > weight (Fill(w) weighs w; Min/Max always weigh 1) via the largest-remainder
+  > method, instead of always splitting equally. Fill(1) reproduces the old
+  > equal-distribution behavior exactly -- for uniform weights the new solver
+  > reduces to the same round-robin-from-the-front assignment the old one used,
+  > so every existing test in the file passes unchanged with only the s/Fill/Fill(1)/
+  > mechanical update.
+  >
+  > Adds weighted_fill_* test cases covering proportional splits, the
+  > largest-remainder tie-break, weight-0 panes, and mixing weighted Fill with
+  > Min/Max. Adds the 18_weighted_fill example (plus its three snapshots) as a
+  > visual proof: four split_h rows showing equal thirds, a 1:2:3 ratio, a fixed
+  > pane eating into the weighted remainder, and Min/Fill/Max mixed together.
+  >
+  > Closes #148
+
+- [5bcef82](
+https://github.com/crates-lurey-io/retroglyph/commit/5bcef82fc1614ae05a2287920504e0095e91710e) *(widgets)* Text alignment knob for Text/PrintLine/Panel/Modal titles by `@matanlurey` in [#240](
+https://github.com/crates-lurey-io/retroglyph/pull/240)
+
+  > * feat(widgets): shared Align enum for Text/PrintLine/Panel/Modal titles
+  >
+  > Adds a shared Align enum (Left/Center/Right) as a builder knob. Text and
+  > PrintLine gain .align() (default Left, their prior behavior); Panel and
+  > Modal gain .title_align() (default Center, their prior behavior). Closes the
+  > gap where Text/PrintLine were left-only and panel/modal titles were
+  > hardcoded center-only.
+  >
+  > Closes #146
+  >
+  > * docs(examples): add 18_text_align example with snapshots
+  >
+  > New 18_text_align example demonstrates the Align knob across Text,
+  > PrintLine, Panel titles, and a Modal title, with the three snapshot
+  > artifacts (headless text, software PNG, crossterm SVG). Bumps the README
+  > example count.
+
+- [ecd72ce](
+https://github.com/crates-lurey-io/retroglyph/commit/ecd72cebb1d158225dfa0e9b7f5425079839d41a) *(widgets)* Theme-mapping .theme() builder method + runtime switch demo by `@matanlurey` in [#238](
+https://github.com/crates-lurey-io/retroglyph/pull/238)
+
+  > * feat(widgets): add a Theme-mapping .theme() builder method to every widget
+  >
+  > Every widget with at least one style knob (Panel, Modal, BoxBorder, Table, Tabs,
+  > Button, List, Gauge, StatBar, ProgressBar, Scrollbar) gets a .theme(Theme)
+  > builder method that maps Theme's named color roles onto that widget's
+  > existing _style fields, mirroring the mapping 09_widgets_dashboard and
+  > 10_widgets_interaction already hand-thread at each call site (border/fill,
+  > header/row/selected, style/hovered/pressed/focused, item/selected,
+  > track/thumb, filled/empty). Theme stays fully optional: .theme() is additive
+  > sugar over the individual setters, and any manual _style override called
+  > after .theme() still wins, same as every other builder method in this crate.
+  >
+  > Widgets with no natural Theme-role mapping are left alone on purpose: Log/
+  > PrintLine/Text/Paragraph's one style knob is used for too many different
+  > purposes by different callers to have a single canonical role, and Sparkline/
+  > Meter/Gauge's-and-StatBar's bar fill are deliberately load-colored rather
+  > than palette-colored.
+  >
+  > Each new method has its own unit test asserting the mapped colors, and
+  > crates/widgets/README.md gains a short mention of the feature.
+  >
+  > * feat(examples): add 17_theme_switch, a runtime Theme::DARK/LIGHT toggle demo
+  >
+  > No existing example showed Theme switching at runtime -- 09_widgets_dashboard
+  > and 10_widgets_interaction both pick a single fixed Theme::DARK and
+  > hand-thread theme.* into each style knob. 17_theme_switch adds the 'manual
+  > toggle key' scenario Theme's own doc comment names as one way an app might
+  > pick between the two palettes: pressing t (or clicking/focusing a button)
+  > flips Theme::DARK/Theme::LIGHT, and every widget on screen (Panel, Tabs,
+  > List, Button, ProgressBar) re-derives its styling from the active theme via
+  > the new .theme() builder method added in the previous commit, replacing the
+  > hand-threaded theme.* calls those two existing examples still use.
+  >
+  > Includes the standard three committed snapshots (insta headless text,
+  > software PNG, crossterm SVG) plus a sibling examples/tests/17_theme_switch.rs
+  > per examples/AGENTS.md conventions, and updates the workspace README to
+  > mention Theme/.theme() and point at the new example.
+
+- [e06cf4b](
+https://github.com/crates-lurey-io/retroglyph/commit/e06cf4b9a2d6049d2ecdfc20ae9544c1c1eeb4a5) *(widgets)* Add List, Tabs, and Button widgets by `@matanlurey` in [#203](
+https://github.com/crates-lurey-io/retroglyph/pull/203)
+
+  > * refactor(widgets): extract shared Table/List windowing helper
+  >
+  > Move Table's private visible_window helper into a new crate-private
+  > widget/window.rs module (pub(super), same visibility shape as bar.rs/
+  > meter.rs's cross-widget sharing), in preparation for the List widget
+  > reusing the same offset-anchored windowing math. No behavior change.
+  >
+  > * feat(widgets): add List widget
+  >
+  > A scrollable, single-column list of plain-text items with a
+  > ListState-driven highlighted item -- Table's single-column sibling.
+  > Reuses the shared windowing helper extracted in the previous commit,
+  > and Table's row_style/selected_style default palette. Closes #137.
+  >
+  > * feat(widgets): add Tabs widget
+  >
+  > A horizontal strip of tab labels with a highlighted selected index.
+  > Unlike Table/List, Tabs is a plain Widget (not StatefulWidget): there
+  > is no scroll offset for a tab strip, only a selected index, taken
+  > directly as selected: Option<usize> via .select() rather than a
+  > ListState -- matching ratatui's Tabs (also non-stateful), the closest
+  > analog among the libraries surveyed for this issue. column_spacing
+  > matches Table's knob of the same name; divider is optional and off by
+  > default. Closes #138.
+  >
+  > * feat(widgets): add Button widget
+  >
+  > A filled, centered label styled from an already-resolved Response
+  > (interaction.interact(...) called by the app, same as the interact
+  > module's own doctest). No Id type parameter and no interact() call of
+  > its own -- pure presentation, consistent with every other widget here
+  > (state lives outside; the widget only reads it). Four style knobs
+  > (style/hovered_style/pressed_style/focused_style) with pressed >
+  > hovered > focused > default precedence. Closes #141.
+  >
+  > * feat(examples): use List and Tabs in 09_widgets_dashboard
+  >
+  > Adds a Tabs strip switching the right panel between "Metrics" (the
+  > existing gauges/sparkline/legend content, now in draw_metrics) and a
+  > new "Alerts" tab backed by List/ListState. Left/Right switches the
+  > active tab; Up/Down now moves whichever list the active tab shows.
+  > Regenerated all three committed snapshots (headless/PNG/SVG).
+  >
+  > * feat(examples): use Button widget in 10_widgets_interaction
+  >
+  > Replaces draw_button's hand-rolled bg/fg-by-Response wiring with the
+  > new Button widget -- the exact boilerplate #141 was written to remove.
+  > The app still calls interaction.interact(...) itself (it needs
+  > response.clicked() for the counter logic); Button only turns the
+  > result into a styled, centered label. Drops the '>' focus marker now
+  > that focused_style gives focus its own distinct look. Regenerated all
+  > committed snapshots.
+  >
+  > * feat(examples): showcase Button in 09_widgets_dashboard too
+  >
+  > Adds a "Ping" Button to the Metrics tab, wired through a new
+  > Interaction<DashId> field, so every widget this crate ships (Table,
+  > List, Tabs, Button, Gauge, Sparkline, BoxStyle) is represented in the
+  > one dashboard example, not split across 09/10. Click (or Tab-focus +
+  > Enter/Space) the button to increment the on-screen "Pings: N"
+  > counter. Regenerated all three snapshots and added a new headless
+  > test (headless_snapshot_ping_button_click) proving the click resolves
+  > and increments the counter, mirroring 10_widgets_interaction's own
+  > click-resolution proof.
+
+- [b523f70](
+https://github.com/crates-lurey-io/retroglyph/commit/b523f709e047142ca0004ddf70fa87a79f80f819) *(widgets)* Add builder overrides for Table styles by `@matanlurey` in [#183](
+https://github.com/crates-lurey-io/retroglyph/pull/183)
+  >
+  > Table::render hardcoded header_style, selection background, and base foreground with no override, violating the crate's no-hardcoded-styles design principle. Adds chainable header_style(), row_style(), selected_style(), and column_spacing() builder methods, each defaulting to the previous hardcoded values, so this is additive and backward compatible.
+
+### Bug Fixes
+
+- [43c72c2](
+https://github.com/crates-lurey-io/retroglyph/commit/43c72c266454099200736ab891d971f77f3d5466) *(widgets)* Make .theme() text/border styles opaque, not Color::Default by `@matanlurey` in [#239](
+https://github.com/crates-lurey-io/retroglyph/pull/239)
+
+  > * fix(widgets): make .theme() text/border styles opaque, not Color::Default
+  >
+  > * test(examples): add light-theme PNG/SVG snapshots for 17_theme_switch
+
+- [c016b38](
+https://github.com/crates-lurey-io/retroglyph/commit/c016b384a6276aedf2ebac801c133f3330f82ee5) *(widgets)* Use unicode display width for bar/panel label and title positioning by `@matanlurey` in [#178](
+https://github.com/crates-lurey-io/retroglyph/pull/178)
+
+  > bar.rs and panel.rs computed label/title width via .len() (byte length) instead of display width, unlike the rest of the crate which correctly uses unicode-width. Multi-byte or wide-character labels/titles were misaligned; ASCII-only content was unaffected. Switches both to UnicodeWidthStr::width() and adds regression tests.
+
+### Documentation
+
+- [69ed0e1](
+https://github.com/crates-lurey-io/retroglyph/commit/69ed0e19e025366231068267004a13f3074e61d5) *(widgets)* Fix docs/code drift for unshipped List and Tabs widgets by `@matanlurey` in [#182](
+https://github.com/crates-lurey-io/retroglyph/pull/182)
+
+  > src/lib.rs's module doc and Cargo.toml's description both listed List and Tabs as shipped widgets; neither exists under src/widget/. Fixes the prose to match the actual shipped surface regardless of whether List/Tabs ship later (tracked in separate issues).
+
+### Continuous Integration
+
+- [1d81906](
+https://github.com/crates-lurey-io/retroglyph/commit/1d81906ea8e380d64de0e05345f103627ef49406) *(workspace)* Automated per-crate release-plz workflow by `@matanlurey` in [#80](
+https://github.com/crates-lurey-io/retroglyph/pull/80)
+
+  > * ci(release): adopt per-crate release-plz flow with PR-title enforcement
+  >
+  > Re-enable release-plz's standing Release PR (release-pr + release jobs) so
+  > version bumps and per-crate changelogs are computed from conventional PR-title
+  > history and published on Release-PR merge; developers never push tags.
+  >
+  > - release-plz.toml: per-crate changelogs (drop changelog_path), semver_check=true
+  > - cliff.toml: skip-changelog via github.pr_labels label + changelog: ignore footer
+  > - release-plz.yml: two-job release-pr/release, concurrency guards, trusted publishing
+  > - check-semver.yml: gate only undeclared breaks (skip on title ! or semver-override)
+  > - pr-title.yml: enforce Conventional Commit PR titles + scope list
+  >
+  > * docs(changelog): split workspace changelog into per-crate files
+  >
+  > Per-crate release-plz needs a CHANGELOG.md per crate. Seed each with its
+  > hand-written 0.1.0 entry; the root CHANGELOG.md becomes an index.
+  >
+  > * docs: rewrite RELEASING.md for the automated release flow
+  >
+  > Document the per-crate, release-plz-driven flow: conventional PR titles,
+  > squash-merge, standing Release PR as the single approval gate, breaking
+  > declared via title !, cargo-semver-checks roles, PR labels, and no pre-1.0
+  > prerelease channel. Update AGENTS.md's commit-message section: enforcement
+  > now lives in pr-title.yml, not local hooks.
+
+**Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-widgets-v0.1.0...retroglyph-widgets-v0.2.0
+
+
+
 ## 0.1.0 - Initial release
 
 - Initial public release. Immediate-mode drawing helpers (panels, gauges, tables, sparklines,

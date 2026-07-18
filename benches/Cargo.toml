@@ -19,7 +19,7 @@ workspace = true
 bench = false
 
 [dev-dependencies]
-retroglyph-core = { path = "../crates/core", version = "0.1.0" }
+retroglyph-core = { path = "../crates/core", version = "0.2.0" }
 criterion = "0.5"
 fastrand = "2"
 
