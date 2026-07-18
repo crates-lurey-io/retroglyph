@@ -21,6 +21,12 @@ all-features = true
 retroglyph-core = { path = "../core", version = "0.1.0", default-features = false, features = ["std"] }
 retroglyph-terminal = { path = "../terminal", version = "0.1.0" }
 
+[dev-dependencies]
+# Fuzzes decode_key_event/decode_key_modifiers over arbitrary (code, mods) pairs -- see the
+# decode_key_event_proptests module in lib.rs. Same version as retroglyph-core's own proptest
+# dev-dependency.
+proptest = "1"
+
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 # Version pinned to match the wasm-bindgen dev-dependency in
 # examples/Cargo.toml -- the CLI and the crate version must agree.

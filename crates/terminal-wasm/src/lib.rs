@@ -799,6 +799,73 @@ mod tests {
     }
 
     #[test]
+    fn decode_key_event_maps_f24_the_last_of_the_contiguous_range() {
+        let key = decode_key_event(key_codes::F24, 0).unwrap();
+        assert_eq!(key.code, KeyCode::F(24));
+    }
+
+    #[test]
+    fn decode_key_event_one_past_f24_falls_through_to_char_decode_and_fails() {
+        // `F24 + 1` is `BASE + 124`, past `char::MAX` (0x10FFFF): not a named key and not a
+        // valid `char` either, so this must decode to `None`, not panic or wrap into a bogus
+        // `KeyCode::F(25)`.
+        assert!(decode_key_event(key_codes::F24 + 1, 0).is_none());
+    }
+
+    #[test]
+    fn decode_key_event_maps_every_named_key_constant() {
+        use key_codes::{
+            BACKSPACE, BACKTAB, DELETE, DOWN, END, ENTER, ESCAPE, HOME, INSERT, LEFT, PAGE_DOWN,
+            PAGE_UP, RIGHT, TAB, UP,
+        };
+
+        for &(code, expected) in &[
+            (BACKSPACE, KeyCode::Backspace),
+            (ENTER, KeyCode::Enter),
+            (LEFT, KeyCode::Left),
+            (RIGHT, KeyCode::Right),
+            (UP, KeyCode::Up),
+            (DOWN, KeyCode::Down),
+            (HOME, KeyCode::Home),
+            (END, KeyCode::End),
+            (PAGE_UP, KeyCode::PageUp),
+            (PAGE_DOWN, KeyCode::PageDown),
+            (TAB, KeyCode::Tab),
+            (BACKTAB, KeyCode::BackTab),
+            (DELETE, KeyCode::Delete),
+            (INSERT, KeyCode::Insert),
+            (ESCAPE, KeyCode::Escape),
+        ] {
+            assert_eq!(decode_key_event(code, 0).unwrap().code, expected);
+        }
+    }
+
+    #[test]
+    fn decode_key_event_accepts_the_null_char() {
+        // 0x00 is a valid (if unusual) Unicode scalar value, and not a named key code.
+        let key = decode_key_event(0x00, 0).unwrap();
+        assert_eq!(key.code, KeyCode::Char('\0'));
+    }
+
+    #[test]
+    fn decode_key_event_rejects_lone_surrogate_half_code_points() {
+        // 0xD800..=0xDFFF are lone UTF-16 surrogate halves: never a valid `char`, and outside
+        // every named-key range, so this must decode to `None`, not panic.
+        assert!(decode_key_event(0xD800, 0).is_none());
+        assert!(decode_key_event(0xDFFF, 0).is_none());
+    }
+
+    #[test]
+    fn decode_key_event_rejects_out_of_range_code_points() {
+        assert!(decode_key_event(u32::MAX, 0).is_none());
+        // In the gap between the named control-key block (`BASE..=BASE+14`) and the F-key block
+        // (`BASE+100..=BASE+123`): not a named key, and -- like every named-key code, since
+        // `BASE` (`0x0011_0000`) sits one past `char::MAX` (0x10FFFF) -- not a valid `char`
+        // either. `BASE` itself is *not* an out-of-range example: it's `KeyCode::Backspace`.
+        assert!(decode_key_event(key_codes::ESCAPE + 1, 0).is_none());
+    }
+
+    #[test]
     fn decode_mouse_event_maps_button_down() {
         use retroglyph_core::event::{MouseButton, MouseEventKind};
 
@@ -884,5 +951,72 @@ mod tests {
             "README.md's JS driver example has drifted from js/xterm-driver.js -- update \
              README.md's fenced ```js block to match the canonical file"
         );
+    }
+}
+
+/// Fuzzes [`decode_key_event`] over arbitrary `(code, mods)` pairs: no `(u32, u8)` input may
+/// panic, produce invalid Unicode, or produce an out-of-bounds F-key index. See
+/// `crates/core/src/grid.rs`'s `egc_proptests` module for the same pattern applied elsewhere in
+/// the workspace.
+#[cfg(test)]
+mod decode_key_event_proptests {
+    use super::*;
+    use proptest::prelude::*;
+    use retroglyph_core::event::{KeyCode, KeyModifiers};
+
+    /// The contiguous `BASE..=BASE+14` block of named, non-`char`, non-F control keys
+    /// ([`key_codes::BACKSPACE`] through [`key_codes::ESCAPE`]).
+    fn is_named_control_key(code: u32) -> bool {
+        (key_codes::BACKSPACE..=key_codes::ESCAPE).contains(&code)
+    }
+
+    proptest! {
+        /// Every `(code, mods)` pair must be explainable by exactly one of three cases -- a
+        /// named control key, the contiguous F1-F24 range, or a valid printable `char` -- and
+        /// must never panic getting there.
+        #[test]
+        fn never_panics_and_result_matches_one_of_three_cases(code: u32, mods: u8) {
+            let result = decode_key_event(code, mods);
+
+            if is_named_control_key(code) {
+                let key = result.expect("named control key code decoded to None");
+                assert!(
+                    !matches!(key.code, KeyCode::Char(_) | KeyCode::F(_)),
+                    "named control key code {code:#x} decoded to {:?}",
+                    key.code
+                );
+            } else if (key_codes::F1..=key_codes::F24).contains(&code) {
+                let key = result.expect("F1..=F24 range code decoded to None");
+                let KeyCode::F(n) = key.code else {
+                    panic!("F-key range code {code:#x} decoded to {:?}, not KeyCode::F", key.code);
+                };
+                assert!((1..=24).contains(&n), "F-key index {n} out of the documented 1..=24 range");
+                assert_eq!(u32::from(n), code - key_codes::F1 + 1);
+            } else if let Some(c) = char::from_u32(code) {
+                let key = result.expect("valid, non-named char code decoded to None");
+                assert_eq!(key.code, KeyCode::Char(c));
+            } else {
+                // Not a named key, not an F-key, and not a valid Unicode scalar value (a lone
+                // UTF-16 surrogate half, or anything past `char::MAX`): must decode to `None`,
+                // not panic or fabricate a `KeyCode`.
+                assert!(
+                    result.is_none(),
+                    "invalid Unicode code point {code:#x} decoded to {:?} instead of None",
+                    result.map(|k| k.code)
+                );
+            }
+        }
+
+        /// Modifier decoding is independent of `code`: every bit of `mods` maps to exactly one
+        /// `KeyModifiers` flag, for every key that successfully decodes.
+        #[test]
+        fn modifiers_decode_independently_of_code(code: u32, mods: u8) {
+            if let Some(key) = decode_key_event(code, mods) {
+                assert_eq!(key.modifiers.contains(KeyModifiers::SHIFT), mods & 0b0001 != 0);
+                assert_eq!(key.modifiers.contains(KeyModifiers::CONTROL), mods & 0b0010 != 0);
+                assert_eq!(key.modifiers.contains(KeyModifiers::ALT), mods & 0b0100 != 0);
+                assert_eq!(key.modifiers.contains(KeyModifiers::SUPER), mods & 0b1000 != 0);
+            }
+        }
     }
 }
