@@ -58,6 +58,69 @@
 //! ```js
 #![doc = include_str!("../js/xterm-driver.js")]
 //! ```
+//!
+//! # ANSI sequences emitted
+//!
+//! [`TerminalWasm`] renders through [`retroglyph_terminal::TerminalRenderer`] (see that crate's
+//! docs for the full cell-diff renderer contract) and adds a handful of sequences of its own
+//! ([`clear`](Backend::clear), [`set_cursor_visible`](Backend::set_cursor_visible)). Every
+//! sequence below is standard ANSI X3.64 (ECMA-48) CSI -- the subset xterm's own control-sequence
+//! reference calls plain "ANSI"/VT100-compatible -- nothing proprietary or emulator-specific. The
+//! bytes are the same regardless of what emulator eventually reads them; this crate makes no
+//! attempt to detect or work around variance between implementations (see the quirks below for
+//! the two places that matters).
+//!
+//! | Sequence | Name | Emitted by | Meaning |
+//! | --- | --- | --- | --- |
+//! | `CSI Ps;Ps H` | CUP (Cursor Position) | [`draw`](Backend::draw), for a non-adjacent cell; [`set_cursor_position`](Backend::set_cursor_position) | move the cursor, 1-indexed `row;col`, always absolute |
+//! | `CSI 39 m` / `CSI 49 m` | SGR reset FG/BG | `draw`, for [`Color::Default`](retroglyph_core::color::Color::Default) | reset foreground/background to the emulator's default |
+//! | `CSI 3n m` / `CSI 4n m` (`30`-`37` / `40`-`47`) | SGR ANSI FG/BG | `draw`, for the standard 8 [`Color::Ansi`](retroglyph_core::color::Color::Ansi) values | set foreground/background to a standard ANSI color |
+//! | `CSI 9n m` / `CSI 10n m` (`90`-`97` / `100`-`107`) | SGR bright ANSI FG/BG | `draw`, for the bright 8 [`Color::Ansi`](retroglyph_core::color::Color::Ansi) values | set foreground/background to a bright ANSI color |
+//! | `CSI 38;5;n m` / `CSI 48;5;n m` | SGR indexed FG/BG | `draw`, for [`Color::Indexed`](retroglyph_core::color::Color::Indexed) | set foreground/background from the 256-color palette |
+//! | `CSI 38;2;r;g;b m` / `CSI 48;2;r;g;b m` | SGR truecolor FG/BG | `draw`, for [`Color::Rgb`](retroglyph_core::color::Color::Rgb) | set foreground/background to a 24-bit RGB color, unquantized |
+//! | `CSI ?2026 h` / `CSI ?2026 l` | DEC private mode 2026 (synchronized update) | every [`draw`](Backend::draw)/[`flush`](Backend::flush) pair | hold rendering until the matching end marker, avoiding tearing mid-frame |
+//! | `CSI ?25 h` / `CSI ?25 l` | DECTCEM (cursor visibility) | [`set_cursor_visible`](Backend::set_cursor_visible) | show/hide the terminal cursor |
+//! | `CSI 2J` then `CSI H` | ED (erase display) + CUP home | [`clear`](Backend::clear) | clear the screen, then move the cursor to `(1, 1)` |
+//!
+//! retroglyph does not model text attributes (bold, italic, underline, etc. -- see
+//! [`retroglyph_core::style::Style`]'s docs for why), so no SGR attribute codes (`1`, `3`, `4`,
+//! ...) are ever emitted here; only the color and cursor/erase sequences above. Glyph bytes
+//! themselves (see [`take_output`](TerminalWasm::take_output)) are plain UTF-8, not an escape
+//! sequence.
+//!
+//! ## `TerminalRenderer` quirks to know before validating against a specific emulator
+//!
+//! - **Absolute positions only, never relative.** Every cursor move is a full CUP with both `row`
+//!   and `col`, even to step one cell right or down -- there is no `CSI C`/`CSI B`
+//!   (cursor-relative) fallback.
+//!   [`TerminalRenderer::draw`](retroglyph_terminal::TerminalRenderer::draw) does skip the move
+//!   entirely when the cursor is already at the right cell from printing the previous glyph
+//!   (adjacent same-row cells), but it never emits a *relative* move to get there.
+//! - **No RGB-to-256/16-color quantization.** [`Color::Rgb`](retroglyph_core::color::Color::Rgb)
+//!   is always written as the 24-bit `38;2;...`/`48;2;...` form, even targeting an emulator that
+//!   only supports the 256-color or 16-color palette; downsampling (if any) is left entirely to
+//!   the receiving emulator. See `retroglyph-terminal`'s crate-level docs ("RGB color fallback on
+//!   256-color terminals") for the full rationale; use
+//!   [`Color::Indexed`](retroglyph_core::color::Color::Indexed) or
+//!   [`Color::Ansi`](retroglyph_core::color::Color::Ansi) instead when a specific emulator's color
+//!   depth is known ahead of time.
+//! - **`clear` always re-syncs tracked state.** [`clear`](Backend::clear) additionally resets this
+//!   renderer's tracked cursor/color state, so the *next* `draw` call re-emits a full CUP and
+//!   color codes for every cell instead of (incorrectly) assuming the emulator remembers the old
+//!   state through the erase.
+//! - **Every `draw` is wrapped in its own synchronized-update pair.** [`draw`](Backend::draw)
+//!   itself emits `CSI ?2026 h` before drawing, and the paired [`flush`](Backend::flush) call
+//!   emits `CSI ?2026 l` after. An emulator that doesn't recognize DEC private mode 2026 ignores
+//!   both codes per the CSI spec's "unknown private mode" behavior, so this is safe to send
+//!   unconditionally.
+//!
+//! xterm's own control-sequence reference
+//! (<https://invisible-island.net/xterm/ctlseqs/ctlseqs.html>) and ECMA-48 (the formal standard
+//! behind "ANSI X3.64", <https://www.ecma-international.org/publications-and-standards/standards/ecma-48/>)
+//! are the normative references for every sequence in the table above. The synchronized-update
+//! mode (`2026`) isn't part of either: it follows the de facto convention specified at
+//! <https://gist.github.com/christianparpart/d8a62cc1ab659194337d73e399004036> and implemented by
+//! xterm.js, kitty, iTerm2, and others.
 
 // Compile the code blocks in this crate's own README as doctests so its quick start is
 // type-checked on every test run and cannot silently rot. The `cfg(doctest)` gate keeps this out
