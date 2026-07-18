@@ -32,18 +32,19 @@ the `Backend` type parameter and nothing else changes. See
 ## Crates
 
 `retroglyph-core` is the only required dependency; everything else is an optional backend or drawing
-helper you pull in as needed. All crates version in lockstep (see
-[RELEASING.md](RELEASING.md#versioning)), so every crate below is always at the same version.
+helper you pull in as needed. Each crate versions independently (see
+[RELEASING.md](RELEASING.md#versioning)): a `core` change commonly cascades a bump to its
+dependents, but a leaf-crate change bumps only that crate.
 
-| Crate                                              | Description                                                                                                                                 | Version                                                                                                                                       |
-| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`retroglyph-core`](crates/core)                   | `no_std`-compatible foundation: grid, tile, style, color, event types, the `Backend` trait, and the dependency-free `Headless` test backend | [![retroglyph-core version](https://img.shields.io/crates/v/retroglyph-core.svg)](https://docs.rs/retroglyph-core)                            |
-| [`retroglyph-terminal`](crates/terminal)           | Shared ANSI/SGR cell-diff renderer used by both terminal-family backends below                                                              | [![retroglyph-terminal version](https://img.shields.io/crates/v/retroglyph-terminal.svg)](https://docs.rs/retroglyph-terminal)                |
-| [`retroglyph-crossterm`](crates/crossterm)         | Real terminal backend via [`crossterm`](https://crates.io/crates/crossterm): raw mode, alternate screen, mouse capture                      | [![retroglyph-crossterm version](https://img.shields.io/crates/v/retroglyph-crossterm.svg)](https://docs.rs/retroglyph-crossterm)             |
-| [`retroglyph-terminal-wasm`](crates/terminal-wasm) | Browser terminal backend (e.g. xterm.js): pushed input events, pulled ANSI output                                                           | [![retroglyph-terminal-wasm version](https://img.shields.io/crates/v/retroglyph-terminal-wasm.svg)](https://docs.rs/retroglyph-terminal-wasm) |
-| [`retroglyph-window`](crates/window)               | Shared `winit` windowing layer for windowed backends (splits input/output the way a window, not a terminal, needs)                          | [![retroglyph-window version](https://img.shields.io/crates/v/retroglyph-window.svg)](https://docs.rs/retroglyph-window)                      |
-| [`retroglyph-software`](crates/software)           | Pixel rendering backend via `winit` + `softbuffer`: a native window _or_ a browser `<canvas>` from the same code                            | [![retroglyph-software version](https://img.shields.io/crates/v/retroglyph-software.svg)](https://docs.rs/retroglyph-software)                |
-| [`retroglyph-widgets`](crates/widgets)             | Immediate-mode drawing helpers: panels, gauges, tables, sparklines, and a constraint-based layout splitter                                  | [![retroglyph-widgets version](https://img.shields.io/crates/v/retroglyph-widgets.svg)](https://docs.rs/retroglyph-widgets)                   |
+| Crate                                    | Description                                                                 | Version                                                                                                                                       |
+| ---------------------------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`-core`](crates/core)                   | `no_std`-compatible foundation: grid, tile, style, color, `Backend` trait   | [![retroglyph-core version](https://img.shields.io/crates/v/retroglyph-core.svg)](https://docs.rs/retroglyph-core)                            |
+| [`-terminal`](crates/terminal)           | Shared ANSI/SGR cell-diff renderer for the terminal-family backends         | [![retroglyph-terminal version](https://img.shields.io/crates/v/retroglyph-terminal.svg)](https://docs.rs/retroglyph-terminal)                |
+| [`-crossterm`](crates/crossterm)         | Real terminal backend via [`crossterm`](https://crates.io/crates/crossterm) | [![retroglyph-crossterm version](https://img.shields.io/crates/v/retroglyph-crossterm.svg)](https://docs.rs/retroglyph-crossterm)             |
+| [`-terminal-wasm`](crates/terminal-wasm) | Browser terminal backend (e.g. xterm.js) over pushed/pulled ANSI I/O        | [![retroglyph-terminal-wasm version](https://img.shields.io/crates/v/retroglyph-terminal-wasm.svg)](https://docs.rs/retroglyph-terminal-wasm) |
+| [`-window`](crates/window)               | Shared `winit` windowing layer for windowed backends                        | [![retroglyph-window version](https://img.shields.io/crates/v/retroglyph-window.svg)](https://docs.rs/retroglyph-window)                      |
+| [`-software`](crates/software)           | Pixel backend via `winit` + `softbuffer`: native window or browser canvas   | [![retroglyph-software version](https://img.shields.io/crates/v/retroglyph-software.svg)](https://docs.rs/retroglyph-software)                |
+| [`-widgets`](crates/widgets)             | Immediate-mode drawing helpers: panels, gauges, tables, sparklines, layout  | [![retroglyph-widgets version](https://img.shields.io/crates/v/retroglyph-widgets.svg)](https://docs.rs/retroglyph-widgets)                   |
 
 ## Features
 

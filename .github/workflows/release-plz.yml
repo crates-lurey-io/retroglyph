@@ -1,11 +1,19 @@
 name: Release-plz
 
 # Automated release flow (see RELEASING.md):
-#   - release-plz-pr: on every push to main, opens/updates a standing Release PR that bumps each
-#     changed crate's version and per-crate CHANGELOG.md from the conventional history.
 #   - release-plz-release: on every push to main, publishes any crate whose Cargo.toml version is
 #     ahead of crates.io (i.e. right after the Release PR merges), tags it, and creates the GitHub
 #     release. A no-op when nothing is unpublished.
+#   - release-plz-pr: on every push to main, opens/updates a standing Release PR that bumps each
+#     changed crate's version and per-crate CHANGELOG.md from the conventional history. Runs after
+#     release-plz-release (see `needs:` below) so it always sees that job's freshly created tags /
+#     crates.io publishes -- without that ordering, the very push that merges the Release PR makes
+#     both jobs start from the same pre-publish state, and release-plz-pr can race ahead and
+#     re-propose the version that release-plz-release is in the middle of publishing, producing a
+#     duplicate changelog entry for it (happened for real: PR #250, opened seconds after #248
+#     merged, duplicated #248's just-landed `## [0.2.0+retroglyph-software]` entries). This is a
+#     known release-plz footgun; see e.g.
+#     https://github.com/MarcoIeni/release-plz/issues/1542.
 #
 # The developer never bumps a version or pushes a tag by hand: review PRs, then merge the Release PR.
 
@@ -56,6 +64,10 @@ jobs:
   release-plz-pr:
     name: Release-plz PR
     runs-on: ubuntu-latest
+    # Always wait for the publish job on this same push to finish first -- see the top-of-file
+    # comment for why (avoids racing release-plz-release and duplicating a changelog entry for the
+    # version it's in the middle of publishing).
+    needs: release-plz-release
     # Never run two PR updates concurrently, but don't cancel an in-flight one mid-write.
     concurrency:
       group: release-plz-pr-${{ github.ref }}
