@@ -153,6 +153,7 @@ pub struct TerminalRenderer<W> {
     last_bg: Option<Color>,
     cursor_x: Option<u16>,
     cursor_y: Option<u16>,
+    plain: bool,
 }
 
 impl<W: Write> TerminalRenderer<W> {
@@ -164,7 +165,48 @@ impl<W: Write> TerminalRenderer<W> {
             last_bg: None,
             cursor_x: None,
             cursor_y: None,
+            plain: false,
         }
+    }
+
+    /// Creates a new renderer writing to `writer`, with plain-mode set explicitly.
+    ///
+    /// See [`set_plain_mode`](Self::set_plain_mode) for what plain mode changes; prefer
+    /// [`TerminalRenderer::auto`] when `W` implements [`std::io::IsTerminal`] and the mode should
+    /// be picked automatically instead of hardcoded.
+    pub const fn with_plain_mode(writer: W, plain: bool) -> Self {
+        Self {
+            writer,
+            last_fg: None,
+            last_bg: None,
+            cursor_x: None,
+            cursor_y: None,
+            plain,
+        }
+    }
+
+    /// Returns whether plain mode is enabled. See [`set_plain_mode`](Self::set_plain_mode).
+    pub const fn plain_mode(&self) -> bool {
+        self.plain
+    }
+
+    /// Enables or disables plain mode.
+    ///
+    /// In plain mode, [`draw`](Self::draw) and the synchronized-update markers stop emitting
+    /// ANSI/CSI escape sequences (cursor moves, color/SGR codes, `\x1b[?2026h`/`l`) entirely.
+    /// Cell text is written as plain text instead, with row changes turned into `\n` and gaps
+    /// between non-adjacent cells on the same row padded with spaces, so a full-grid
+    /// [`draw`](Self::draw) call degrades to a readable ASCII rendering of that frame.
+    ///
+    /// This is modeled on Python's `blessed`, which does the same thing when its output stream
+    /// isn't a TTY: piping or redirecting output (`myapp > log.txt`) shouldn't leave a file full
+    /// of unreadable escape codes. Because this renderer only ever draws *changed* cells, repeated
+    /// [`draw`](Self::draw) calls in plain mode append each frame's diff as more plain text rather
+    /// than overwriting previous output in place -- there is no cursor-addressable terminal to
+    /// overwrite when the sink is a file or pipe, so this is a lossy degradation intended for
+    /// logging/debugging, not for reproducing the exact interactive frame sequence.
+    pub const fn set_plain_mode(&mut self, plain: bool) {
+        self.plain = plain;
     }
 
     /// Returns a reference to the underlying writer.
@@ -204,7 +246,14 @@ impl<W: Write> TerminalRenderer<W> {
     /// # Errors
     ///
     /// Returns an error if the writer fails.
+    ///
+    /// A no-op in [plain mode](Self::set_plain_mode): synchronized updates are themselves a
+    /// control code with nothing to synchronize once cell output has already degraded to plain
+    /// text.
     pub fn begin_synchronized_update(&mut self) -> io::Result<()> {
+        if self.plain {
+            return Ok(());
+        }
         write!(self.writer, "\x1b[?2026h")
     }
 
@@ -214,7 +263,13 @@ impl<W: Write> TerminalRenderer<W> {
     /// # Errors
     ///
     /// Returns an error if the writer fails.
+    ///
+    /// A no-op in [plain mode](Self::set_plain_mode); see
+    /// [`begin_synchronized_update`](Self::begin_synchronized_update).
     pub fn end_synchronized_update(&mut self) -> io::Result<()> {
+        if self.plain {
+            return Ok(());
+        }
         write!(self.writer, "\x1b[?2026l")
     }
 
@@ -256,22 +311,48 @@ impl<W: Write> TerminalRenderer<W> {
             let fg = cell.style().foreground();
             let bg = cell.style().background();
 
-            // Only emit a cursor move when the cursor isn't already at the
-            // right position (adjacent cells advance the cursor by printing).
-            let needs_move = self.cursor_y != Some(pos.y) || self.cursor_x != Some(pos.x);
-            if needs_move {
-                // CSI row;col H is 1-indexed.
-                write!(self.writer, "\x1b[{};{}H", pos.y + 1, pos.x + 1)?;
-            }
+            if self.plain {
+                // Row change: newline(s) instead of a cursor-move escape. Advancing rows emits
+                // one `\n` per skipped row so blank rows still show up as blank lines; a
+                // same-or-backward row repeat (a new frame's diff starting over) just starts a
+                // fresh line, since there's no cursor-addressable terminal to overwrite in place.
+                let start_col = match self.cursor_y {
+                    Some(y) if pos.y == y => self.cursor_x.unwrap_or(0),
+                    Some(y) if pos.y > y => {
+                        for _ in 0..(pos.y - y) {
+                            writeln!(self.writer)?;
+                        }
+                        0
+                    }
+                    Some(_) => {
+                        writeln!(self.writer)?;
+                        0
+                    }
+                    None => 0,
+                };
+                // Pad gaps between non-adjacent cells on the same row with spaces so columns
+                // still line up; a fresh row starts padding from column 0.
+                for _ in start_col..pos.x {
+                    write!(self.writer, " ")?;
+                }
+            } else {
+                // Only emit a cursor move when the cursor isn't already at the
+                // right position (adjacent cells advance the cursor by printing).
+                let needs_move = self.cursor_y != Some(pos.y) || self.cursor_x != Some(pos.x);
+                if needs_move {
+                    // CSI row;col H is 1-indexed.
+                    write!(self.writer, "\x1b[{};{}H", pos.y + 1, pos.x + 1)?;
+                }
 
-            if self.last_fg != Some(fg) {
-                write_sgr_color(&mut self.writer, fg, 38, 39)?;
-                self.last_fg = Some(fg);
-            }
+                if self.last_fg != Some(fg) {
+                    write_sgr_color(&mut self.writer, fg, 38, 39)?;
+                    self.last_fg = Some(fg);
+                }
 
-            if self.last_bg != Some(bg) {
-                write_sgr_color(&mut self.writer, bg, 48, 49)?;
-                self.last_bg = Some(bg);
+                if self.last_bg != Some(bg) {
+                    write_sgr_color(&mut self.writer, bg, 48, 49)?;
+                    self.last_bg = Some(bg);
+                }
             }
 
             #[allow(unused_assignments)]
@@ -315,6 +396,25 @@ impl<W: Write> TerminalRenderer<W> {
     /// Returns an error if the writer fails to flush.
     pub fn flush(&mut self) -> io::Result<()> {
         self.writer.flush()
+    }
+}
+
+impl<W: Write + io::IsTerminal> TerminalRenderer<W> {
+    /// Creates a new renderer writing to `writer`, auto-detecting plain mode from whether
+    /// `writer` is a TTY.
+    ///
+    /// Equivalent to `TerminalRenderer::with_plain_mode(writer, !writer.is_terminal())`. `W`
+    /// must implement [`std::io::IsTerminal`] for this to be callable -- `std::io::Stdout`,
+    /// `std::io::Stdin`, `std::io::Stderr`, `std::fs::File`, and their `*Lock` variants all do;
+    /// an in-memory sink like `Vec<u8>` does not, so use
+    /// [`with_plain_mode`](Self::with_plain_mode) directly for those.
+    ///
+    /// This mirrors how `retroglyph-crossterm` would typically wire up pipe-safe output: check
+    /// once at startup whether the real destination is an interactive terminal, and fall back to
+    /// plain text for everything else (files, pipes, `> log.txt` redirection, CI runners).
+    pub fn auto(writer: W) -> Self {
+        let plain = !writer.is_terminal();
+        Self::with_plain_mode(writer, plain)
     }
 }
 
@@ -450,6 +550,97 @@ mod tests {
         renderer.flush().unwrap();
         let out = String::from_utf8(renderer.into_writer()).unwrap();
         assert_eq!(out, "\x1b[?2026h\x1b[?2026l");
+    }
+
+    #[test]
+    fn plain_mode_strips_escape_codes() {
+        let style = Style::new().fg(Color::Ansi(AnsiColor::Red));
+        let tile = Tile::new('X', style);
+        let mut renderer = TerminalRenderer::with_plain_mode(Vec::new(), true);
+        renderer
+            .draw(core::iter::once((Pos { x: 0, y: 0 }, &tile, None)))
+            .unwrap();
+        renderer.flush().unwrap();
+        let out = String::from_utf8(renderer.into_writer()).unwrap();
+        assert_eq!(out, "X");
+    }
+
+    #[test]
+    fn plain_mode_renders_full_grid_as_readable_ascii() {
+        // A 2-row, gapped grid: row 0 has 'A' at col 0 and 'B' at col 2 (a
+        // gap at col 1); row 1 has 'C' at col 0. Plain mode should turn this
+        // into readable text: gaps become spaces, row changes become '\n'.
+        let a = Tile::new('A', Style::default());
+        let b = Tile::new('B', Style::default());
+        let c = Tile::new('C', Style::default());
+        let mut renderer = TerminalRenderer::with_plain_mode(Vec::new(), true);
+        renderer
+            .draw(
+                [
+                    (Pos { x: 0, y: 0 }, &a, None),
+                    (Pos { x: 2, y: 0 }, &b, None),
+                    (Pos { x: 0, y: 1 }, &c, None),
+                ]
+                .into_iter(),
+            )
+            .unwrap();
+        renderer.flush().unwrap();
+        let out = String::from_utf8(renderer.into_writer()).unwrap();
+        assert_eq!(out, "A B\nC");
+        assert!(!out.contains('\x1b'), "output: {out:?}");
+    }
+
+    #[test]
+    fn plain_mode_skips_blank_rows() {
+        let a = Tile::new('A', Style::default());
+        let b = Tile::new('B', Style::default());
+        let mut renderer = TerminalRenderer::with_plain_mode(Vec::new(), true);
+        renderer
+            .draw(
+                [
+                    (Pos { x: 0, y: 0 }, &a, None),
+                    (Pos { x: 0, y: 2 }, &b, None),
+                ]
+                .into_iter(),
+            )
+            .unwrap();
+        renderer.flush().unwrap();
+        let out = String::from_utf8(renderer.into_writer()).unwrap();
+        assert_eq!(out, "A\n\nB");
+    }
+
+    #[test]
+    fn plain_mode_suppresses_synchronized_update_markers() {
+        let mut renderer = TerminalRenderer::with_plain_mode(Vec::new(), true);
+        renderer.begin_synchronized_update().unwrap();
+        renderer.end_synchronized_update().unwrap();
+        renderer.flush().unwrap();
+        let out = String::from_utf8(renderer.into_writer()).unwrap();
+        assert_eq!(out, "");
+    }
+
+    #[test]
+    fn plain_mode_setter_and_getter_round_trip() {
+        let mut renderer = TerminalRenderer::new(Vec::new());
+        assert!(!renderer.plain_mode());
+        renderer.set_plain_mode(true);
+        assert!(renderer.plain_mode());
+    }
+
+    #[test]
+    fn auto_detects_plain_mode_from_non_terminal_writer() {
+        // `Vec<u8>` isn't a TTY-capable writer, but `std::fs::File` implements
+        // `IsTerminal`, and a regular file is never a terminal.
+        let path = std::env::temp_dir().join(format!(
+            "retroglyph-terminal-auto-plain-mode-test-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let file = std::fs::File::create(&path).unwrap();
+        let renderer = TerminalRenderer::auto(file);
+        assert!(renderer.plain_mode());
+        drop(renderer);
+        let _ = std::fs::remove_file(&path);
     }
 
     #[cfg(feature = "egc")]

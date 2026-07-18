@@ -44,6 +44,26 @@ let ansi = String::from_utf8(renderer.into_writer()).unwrap();
 assert!(ansi.contains('@'));
 ```
 
+## Plain mode for non-TTY output
+
+`TerminalRenderer::set_plain_mode`/`with_plain_mode` strip ANSI/CSI escape sequences (cursor moves,
+colors, synchronized-update markers) entirely, degrading `draw` output to plain text with row
+changes turned into `\n` and gaps padded with spaces -- modeled on Python's `blessed`, which does
+the same thing when its output stream isn't a TTY. `TerminalRenderer::auto` picks the mode
+automatically for any writer implementing `std::io::IsTerminal` (`Stdout`, `File`, ...):
+
+```rust
+use retroglyph_terminal::TerminalRenderer;
+
+// Falls back to plain text when stdout is piped/redirected (`myapp > log.txt`), instead of a
+// file full of unreadable escape codes.
+let renderer = TerminalRenderer::auto(std::io::stdout());
+```
+
+This is intended for logging/debugging when output is redirected, not for reproducing exact
+interactive frames: this renderer only ever draws _changed_ cells, so repeated `draw` calls in plain
+mode append each frame's diff as more text rather than overwriting prior output in place.
+
 ## RGB color fallback on 256-color terminals
 
 `Color::Rgb` tiles are written out as a 24-bit truecolor SGR sequence (`38;2;r;g;b`) with no
