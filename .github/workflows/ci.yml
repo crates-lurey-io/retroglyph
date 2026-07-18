@@ -127,6 +127,23 @@ jobs:
         with:
           tool: just,nextest
       - run: just test-ci
+      # Powers https://app.codecov.io/gh/crates-lurey-io/retroglyph/tests (flaky-test detection,
+      # failure rate, run time trends). Reads the JUnit XML the `ci` nextest profile writes to
+      # `target/nextest/ci/junit.xml` (see .config/nextest.toml). Runs even if `just test-ci`
+      # failed above (`!cancelled()`, not just `always()`, so a *cancelled* run still skips it) --
+      # failed runs are exactly the ones Test Analytics most wants to see.
+      #
+      # Uses codecov/codecov-action (same action as the `coverage` job below) with
+      # `report_type: test_results`, not the separate codecov/test-results-action: that action's
+      # own README says it's being deprecated in favor of this, and its highest published tag is
+      # `v1` -- the `v5` tag some Codecov docs reference for it doesn't exist.
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v5
+        with:
+          files: target/nextest/ci/junit.xml
+          report_type: test_results
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   test-wasm:
     needs: changes
