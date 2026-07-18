@@ -24,6 +24,51 @@ cargo insta test    # run and open review UI
 cargo insta accept  # accept pending snapshots
 ```
 
+## Driving `Headless` with synthetic events
+
+`Headless` doesn't just render; it also accepts input, via `Backend::push_event` /
+`Headless::push_event`. That makes it possible to test a whole update-draw cycle -- inject a key or
+mouse event, drain it through your app's event handling, then snapshot the resulting grid -- without
+a real terminal, window, or PTY. This is the same technique used throughout this crate's own unit
+and integration tests (see `crates/core/src/terminal.rs`, `crates/core/src/app.rs`) and in
+`crates/core/examples/headless.rs`.
+
+```rust
+use retroglyph_core::{Terminal, Headless};
+use retroglyph_core::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+
+let backend = Headless::new(10, 3);
+let mut term = Terminal::new(backend);
+
+// Draw an initial frame.
+term.put(1, 1, '@');
+term.present().unwrap();
+
+// Inject a synthetic key event, exactly as a real backend would push one from its own input
+// source (a crossterm poll, a winit `KeyEvent`, a browser `keydown`, ...).
+term.backend_mut().push_event(Event::Key(KeyEvent::new(
+    KeyCode::Right,
+    KeyModifiers::NONE,
+)));
+
+// Drain the queued event(s) and let your app's update logic react to them, then redraw.
+for event in term.drain_events() {
+    // handle_input(event) -- move the `@`, etc.
+    let _ = event;
+}
+term.put(1, 1, ' ');
+term.put(2, 1, '@');
+term.present().unwrap();
+
+// Assert on the result. In a real test this is `insta::assert_snapshot!(view, @"...")`
+// instead of a manual string compare.
+let view = term.backend().format_view();
+assert!(view.contains('@'));
+```
+
+Run `cargo run -p retroglyph-core --example headless` to see this end to end, including the
+before/after `format_view()` output printed to stdout.
+
 ## Example-driven snapshots (examples crate)
 
 `examples/tests/support/` drives every `Example` implementation through three snapshot types from

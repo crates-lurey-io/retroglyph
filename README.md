@@ -128,7 +128,9 @@ The `Backend` trait has a small surface: draw cells, flush, poll events, resize,
 
 - **Headless** (`retroglyph-core`) — in-memory with no I/O. The workhorse for unit and integration
   tests. Provides `format_view()` for snapshot testing with insta and `push_event()` for synthetic
-  input.
+  input -- see
+  ["Driving `Headless` with synthetic events"](docs/testing.md#driving-headless-with-synthetic-events)
+  for the full workflow.
 - **Crossterm** (`retroglyph-crossterm`) — full terminal with raw mode, alternate screen, and mouse
   capture. Registers a panic hook to safely restore the terminal on crashes. Feature `tracing`
   instruments `draw`/`flush`/`poll_event` with spans for profiling. Generic over its content writer
