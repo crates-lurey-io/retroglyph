@@ -47,6 +47,7 @@
 #[doc = include_str!("../README.md")]
 struct ReadmeDoctests;
 
+pub mod align;
 pub mod block;
 pub mod draw;
 pub mod interact;
@@ -57,6 +58,7 @@ pub mod text;
 pub mod theme;
 pub mod widget;
 
+pub use align::Align;
 pub use block::{blit_into, join_h, join_v};
 pub use draw::{fill_rect, offset_for_pos, thumb_geometry};
 pub use interact::{
