@@ -2,7 +2,7 @@
 
 [![crates.io](https://img.shields.io/crates/v/retroglyph-terminal.svg)](https://crates.io/crates/retroglyph-terminal)
 [![docs.rs](https://img.shields.io/docsrs/retroglyph-terminal)](https://docs.rs/retroglyph-terminal)
-[![coverage](https://codecov.io/gh/crates-lurey-io/retroglyph/graph/badge.svg?token=z8BBUp8fiY&flag=terminal)](https://codecov.io/gh/crates-lurey-io/retroglyph)
+[![coverage](https://codecov.io/gh/crates-lurey-io/retroglyph/graph/badge.svg?token=z8BBUp8fiY&flag=terminal)](https://app.codecov.io/gh/crates-lurey-io/retroglyph/flags)
 [![license](https://img.shields.io/crates/l/retroglyph-terminal.svg)](https://github.com/crates-lurey-io/retroglyph/blob/main/LICENSE)
 
 Shared ANSI/SGR cell-diff renderer for [retroglyph](https://github.com/crates-lurey-io/retroglyph)'s

@@ -2,7 +2,7 @@
 
 [![crates.io](https://img.shields.io/crates/v/retroglyph-window.svg)](https://crates.io/crates/retroglyph-window)
 [![docs.rs](https://img.shields.io/docsrs/retroglyph-window)](https://docs.rs/retroglyph-window)
-[![coverage](https://codecov.io/gh/crates-lurey-io/retroglyph/graph/badge.svg?token=z8BBUp8fiY&flag=window)](https://codecov.io/gh/crates-lurey-io/retroglyph)
+[![coverage](https://codecov.io/gh/crates-lurey-io/retroglyph/graph/badge.svg?token=z8BBUp8fiY&flag=window)](https://app.codecov.io/gh/crates-lurey-io/retroglyph/flags)
 [![license](https://img.shields.io/crates/l/retroglyph-window.svg)](https://github.com/crates-lurey-io/retroglyph/blob/main/LICENSE)
 
 A shared windowing layer for [retroglyph](https://github.com/crates-lurey-io/retroglyph)'s

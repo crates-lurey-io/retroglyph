@@ -2,7 +2,7 @@
 
 [![crates.io](https://img.shields.io/crates/v/retroglyph-terminal-wasm.svg)](https://crates.io/crates/retroglyph-terminal-wasm)
 [![docs.rs](https://img.shields.io/docsrs/retroglyph-terminal-wasm)](https://docs.rs/retroglyph-terminal-wasm)
-[![coverage](https://codecov.io/gh/crates-lurey-io/retroglyph/graph/badge.svg?token=z8BBUp8fiY&flag=terminal-wasm)](https://codecov.io/gh/crates-lurey-io/retroglyph)
+[![coverage](https://codecov.io/gh/crates-lurey-io/retroglyph/graph/badge.svg?token=z8BBUp8fiY&flag=terminal-wasm)](https://app.codecov.io/gh/crates-lurey-io/retroglyph/flags)
 [![license](https://img.shields.io/crates/l/retroglyph-terminal-wasm.svg)](https://github.com/crates-lurey-io/retroglyph/blob/main/LICENSE)
 
 A WASM/browser terminal backend for [retroglyph](https://github.com/crates-lurey-io/retroglyph),

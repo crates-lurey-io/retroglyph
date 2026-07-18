@@ -28,12 +28,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
+          components: llvm-tools-preview
 
       - uses: Swatinem/rust-cache@v2
 
       - uses: taiki-e/install-action@v2
         with:
-          tool: just
+          tool: just,cargo-llvm-cov
 
       - uses: cargo-bins/cargo-binstall@v1.13.0
 
@@ -42,6 +43,20 @@ jobs:
 
       - name: Build docs
         run: just doc
+
+      # A self-hosted, always-current-for-this-commit coverage report at
+      # https://main.retroglyph.dev/coverage/, alongside the rustdocs -- unlike the Codecov badges
+      # (crates.io/docs.rs-adjacent, summary-only), this is the same per-line HTML view `just
+      # coverage` produces locally, browsable without a Codecov account. Same `--lib`-only scope
+      # as `just coverage-ci` (see that recipe's comment for why), so the numbers match what PRs
+      # see in the Codecov project/patch/component statuses. `--output-dir` always writes into an
+      # `html/` subdirectory, hence the `mv` -- there's no flag to land the report at the directory
+      # root directly.
+      - name: Build coverage report
+        run: |
+          cargo llvm-cov --workspace --lib --all-features --html --output-dir target/doc/coverage
+          mv target/doc/coverage/html/* target/doc/coverage/
+          rmdir target/doc/coverage/html
 
       # ── WASM examples ────────────────────────────────────────────────────
       #

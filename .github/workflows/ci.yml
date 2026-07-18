@@ -133,16 +133,97 @@ jobs:
       # failed above (`!cancelled()`, not just `always()`, so a *cancelled* run still skips it) --
       # failed runs are exactly the ones Test Analytics most wants to see.
       #
-      # Uses codecov/codecov-action (same action as the `coverage` job below) with
-      # `report_type: test_results`, not the separate codecov/test-results-action: that action's
-      # own README says it's being deprecated in favor of this, and its highest published tag is
-      # `v1` -- the `v5` tag some Codecov docs reference for it doesn't exist.
-      - name: Upload test results to Codecov
+      # Split first, into one file per crate flag: Codecov's `flags` filter on the Tests dashboard
+      # is set per *upload*, not per `<testsuite>` inside one upload, so a single combined-
+      # workspace upload can carry at most one flag without misattributing every crate's tests to
+      # every other crate's flag (see tools/split-junit-flags.py's docstring, and Codecov's own
+      # Flags docs, which warn about exactly this for coverage uploads -- same limitation here).
+      - name: Split JUnit report by crate flag
+        if: ${{ !cancelled() }}
+        run: python3 tools/split-junit-flags.py target/nextest/ci/junit.xml target/nextest/ci/flags
+      # One upload per crate flag (codecov/codecov-action, same action as the `coverage` job below,
+      # with `report_type: test_results` -- not the separate codecov/test-results-action: that
+      # action's own README says it's being deprecated in favor of this, and its highest published
+      # tag is `v1` -- the `v5` tag some Codecov docs reference for it doesn't exist). `unflagged`
+      # is the examples crate's snapshot tests, which exercise several backend crates at once and
+      # don't map to a single crate flag, so it uploads with no `flags` input.
+      #
+      # `disable_search: true` on every one of these is load-bearing, not cosmetic: the Codecov CLI
+      # auto-discovers any `*junit.xml` on disk in addition to `files:`, and the pre-split
+      # `target/nextest/ci/junit.xml` (all 669 tests) still sits right next to the split files it
+      # came from. Without this, every flag below would silently re-upload that combined file too,
+      # tagging every crate's tests with every other crate's flag -- exactly the bug this split was
+      # meant to avoid.
+      - name: Upload test results to Codecov (core)
         if: ${{ !cancelled() }}
         uses: codecov/codecov-action@v5
         with:
-          files: target/nextest/ci/junit.xml
+          files: target/nextest/ci/flags/core.xml
+          flags: core
           report_type: test_results
+          disable_search: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+      - name: Upload test results to Codecov (terminal)
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v5
+        with:
+          files: target/nextest/ci/flags/terminal.xml
+          flags: terminal
+          report_type: test_results
+          disable_search: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+      - name: Upload test results to Codecov (crossterm)
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v5
+        with:
+          files: target/nextest/ci/flags/crossterm.xml
+          flags: crossterm
+          report_type: test_results
+          disable_search: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+      - name: Upload test results to Codecov (terminal-wasm)
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v5
+        with:
+          files: target/nextest/ci/flags/terminal-wasm.xml
+          flags: terminal-wasm
+          report_type: test_results
+          disable_search: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+      - name: Upload test results to Codecov (software)
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v5
+        with:
+          files: target/nextest/ci/flags/software.xml
+          flags: software
+          report_type: test_results
+          disable_search: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+      - name: Upload test results to Codecov (window)
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v5
+        with:
+          files: target/nextest/ci/flags/window.xml
+          flags: window
+          report_type: test_results
+          disable_search: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+      - name: Upload test results to Codecov (widgets)
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v5
+        with:
+          files: target/nextest/ci/flags/widgets.xml
+          flags: widgets
+          report_type: test_results
+          disable_search: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+      - name: Upload test results to Codecov (unflagged)
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v5
+        with:
+          files: target/nextest/ci/flags/unflagged.xml
+          report_type: test_results
+          disable_search: true
           token: ${{ secrets.CODECOV_TOKEN }}
 
   test-wasm:

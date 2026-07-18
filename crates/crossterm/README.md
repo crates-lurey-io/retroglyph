@@ -2,7 +2,7 @@
 
 [![crates.io](https://img.shields.io/crates/v/retroglyph-crossterm.svg)](https://crates.io/crates/retroglyph-crossterm)
 [![docs.rs](https://img.shields.io/docsrs/retroglyph-crossterm)](https://docs.rs/retroglyph-crossterm)
-[![coverage](https://codecov.io/gh/crates-lurey-io/retroglyph/graph/badge.svg?token=z8BBUp8fiY&flag=crossterm)](https://codecov.io/gh/crates-lurey-io/retroglyph)
+[![coverage](https://codecov.io/gh/crates-lurey-io/retroglyph/graph/badge.svg?token=z8BBUp8fiY&flag=crossterm)](https://app.codecov.io/gh/crates-lurey-io/retroglyph/flags)
 [![license](https://img.shields.io/crates/l/retroglyph-crossterm.svg)](https://github.com/crates-lurey-io/retroglyph/blob/main/LICENSE)
 
 A `Backend` implementation for [retroglyph](https://github.com/crates-lurey-io/retroglyph) that
