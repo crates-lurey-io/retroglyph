@@ -2,8 +2,8 @@
 use retroglyph_core::{Backend, Rect, Style, Terminal};
 
 use super::{Panel, Widget};
-use crate::Theme;
 use crate::layout::centered_rect;
+use crate::{Align, Theme};
 
 /// A bordered, filled box centered in a screen [`Rect`].
 ///
@@ -27,6 +27,7 @@ pub struct Modal<'a> {
     width: u16,
     height: u16,
     title: Option<&'a str>,
+    title_align: Align,
     border_style: Style,
     fill_style: Style,
 }
@@ -39,6 +40,7 @@ impl<'a> Modal<'a> {
             width,
             height,
             title: None,
+            title_align: Align::Center,
             border_style: Style::new(),
             fill_style: Style::new(),
         }
@@ -48,6 +50,14 @@ impl<'a> Modal<'a> {
     #[must_use]
     pub const fn title(mut self, title: &'a str) -> Self {
         self.title = Some(title);
+        self
+    }
+
+    /// Set how the title is aligned along the top border. Defaults to
+    /// [`Align::Center`], the same as [`Panel::title_align`].
+    #[must_use]
+    pub const fn title_align(mut self, align: Align) -> Self {
+        self.title_align = align;
         self
     }
 
@@ -84,7 +94,8 @@ impl<'a> Modal<'a> {
         let rect = centered_rect(screen, self.width, self.height);
         let mut panel = Panel::new()
             .border_style(self.border_style)
-            .fill_style(self.fill_style);
+            .fill_style(self.fill_style)
+            .title_align(self.title_align);
         if let Some(title) = self.title {
             panel = panel.title(title);
         }

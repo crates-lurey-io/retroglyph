@@ -3,20 +3,22 @@ use retroglyph_core::{Backend, Rect, Style, Terminal};
 use unicode_width::UnicodeWidthStr;
 
 use super::{BoxBorder, Widget};
-use crate::Theme;
 use crate::draw::fill_rect;
 use crate::text::truncate as truncate_to_cols;
+use crate::{Align, Theme};
 
 /// A bordered panel: a filled background with a box border and an optional
-/// title centred in the top edge.
+/// title in the top edge.
 ///
 /// `border_style` (the box outline and title) and `fill_style` (the
 /// interior background) both default to [`Style::new()`]; there is no
-/// title by default. Set whichever of these a caller needs via
-/// [`Panel::border_style`]/[`Panel::fill_style`]/[`Panel::title`].
+/// title by default, and the title (if any) defaults to [`Align::Center`].
+/// Set whichever of these a caller needs via
+/// [`Panel::border_style`]/[`Panel::fill_style`]/[`Panel::title`]/[`Panel::title_align`].
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Panel<'a> {
     title: Option<&'a str>,
+    title_align: Align,
     border_style: Style,
     fill_style: Style,
 }
@@ -25,13 +27,24 @@ impl<'a> Panel<'a> {
     /// A plain, untitled panel in the default style.
     #[must_use]
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            title_align: Align::Center,
+            ..Self::default()
+        }
     }
 
     /// Set the panel's title.
     #[must_use]
     pub const fn title(mut self, title: &'a str) -> Self {
         self.title = Some(title);
+        self
+    }
+
+    /// Set how the title is aligned along the top border. Defaults to
+    /// [`Align::Center`].
+    #[must_use]
+    pub const fn title_align(mut self, align: Align) -> Self {
+        self.title_align = align;
         self
     }
 
@@ -89,7 +102,10 @@ impl<B: Backend> Widget<B> for Panel<'_> {
             // Truncate to fit.
             let t = truncate_to_cols(t, max_title_w);
             let t_w = t.width() as u16;
-            let title_x = area.left() + (area.width() - t_w - 2) / 2;
+            // The padded title (a space either side of the text) is aligned
+            // within the region between the two corners (`area.width() - 2`).
+            let padded = t_w + 2;
+            let title_x = area.left() + 1 + self.title_align.offset(area.width() - 2, padded);
             let title_y = area.top();
             term.reset_style()
                 .fg(self.border_style.foreground())
@@ -158,6 +174,38 @@ mod tests {
             term.grid().get(1, 1).style().background(),
             Theme::DARK.panel_bg
         );
+    }
+
+    #[test]
+    fn left_aligned_title_starts_after_the_corner() {
+        let area = Rect::new(0, 0, 12, 3);
+        let mut term = Terminal::new(Headless::new(12, 3));
+        Panel::new()
+            .title("hi")
+            .title_align(Align::Left)
+            .render(area, &mut term);
+
+        // Padded title " hi " starts at column 1 (just inside the corner):
+        // space at 1, text at 2..4, trailing space at 4.
+        assert_eq!(term.grid().get(1, 0).glyph(), ' ');
+        assert_eq!(term.grid().get(2, 0).glyph(), 'h');
+        assert_eq!(term.grid().get(3, 0).glyph(), 'i');
+    }
+
+    #[test]
+    fn right_aligned_title_ends_before_the_corner() {
+        let area = Rect::new(0, 0, 12, 3);
+        let mut term = Terminal::new(Headless::new(12, 3));
+        Panel::new()
+            .title("hi")
+            .title_align(Align::Right)
+            .render(area, &mut term);
+
+        // Padded title " hi " (4 cols) ends against the right corner at
+        // column 11: trailing space at 10, text at 8..10.
+        assert_eq!(term.grid().get(8, 0).glyph(), 'h');
+        assert_eq!(term.grid().get(9, 0).glyph(), 'i');
+        assert_eq!(term.grid().get(10, 0).glyph(), ' ');
     }
 
     #[test]
