@@ -2,6 +2,7 @@
 use retroglyph_core::{Backend, Rect, Style, Terminal};
 
 use super::{Widget, bar};
+use crate::Theme;
 
 /// A labeled gauge: a `label`, then a bar filling `ratio` (0.0-1.0) of the
 /// remaining width, colored by [`super::Meter`], with a trailing percentage.
@@ -33,6 +34,19 @@ impl<'a> Gauge<'a> {
     #[must_use]
     pub const fn label_style(mut self, style: Style) -> Self {
         self.label_style = style;
+        self
+    }
+
+    /// Sets `label_style` to `theme.dim` -- the same de-emphasized role `09_widgets_dashboard`
+    /// already uses for the plain-text label next to this gauge's sparkline. The bar's own fill
+    /// stays load-colored via [`super::Meter`] regardless of `theme`, matching every other
+    /// gauge/meter-backed widget here (see [`super::Sparkline`]'s doc comment for why that
+    /// coloring is deliberately not part of the [`Theme`] role palette).
+    ///
+    /// Call before any manual [`Gauge::label_style`] override you want to keep.
+    #[must_use]
+    pub fn theme(mut self, theme: Theme) -> Self {
+        self.label_style = Style::new().fg(theme.dim);
         self
     }
 }
@@ -72,5 +86,16 @@ mod tests {
             .render(area, &mut term);
 
         assert_eq!(term.grid().get(0, 0).style().foreground(), Color::WHITE);
+    }
+
+    #[test]
+    fn theme_maps_dim_role_onto_label_style() {
+        let area = Rect::new(0, 0, 20, 1);
+        let mut term = Terminal::new(Headless::new(20, 1));
+        Gauge::new("H", 0.5)
+            .theme(Theme::DARK)
+            .render(area, &mut term);
+
+        assert_eq!(term.grid().get(0, 0).style().foreground(), Theme::DARK.dim);
     }
 }

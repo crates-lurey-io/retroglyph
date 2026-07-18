@@ -3,6 +3,7 @@ use retroglyph_core::{Backend, Rect, Style, Terminal};
 use unicode_width::UnicodeWidthStr;
 
 use super::{BoxBorder, Widget};
+use crate::Theme;
 use crate::draw::fill_rect;
 use crate::text::truncate as truncate_to_cols;
 
@@ -45,6 +46,19 @@ impl<'a> Panel<'a> {
     #[must_use]
     pub const fn fill_style(mut self, style: Style) -> Self {
         self.fill_style = style;
+        self
+    }
+
+    /// Applies `theme`'s named roles to this panel's border and fill: `border_style` becomes
+    /// `theme.border` on `theme.title_bg` (the same background the title, if any, is drawn on),
+    /// and `fill_style` becomes `theme.panel_bg`.
+    ///
+    /// Like every other builder method here, whichever call comes last wins -- call `.theme(...)`
+    /// before any manual [`Panel::border_style`]/[`Panel::fill_style`] override you want to keep.
+    #[must_use]
+    pub fn theme(mut self, theme: Theme) -> Self {
+        self.border_style = Style::new().fg(theme.border).bg(theme.title_bg);
+        self.fill_style = Style::new().bg(theme.panel_bg);
         self
     }
 }
@@ -124,6 +138,26 @@ mod tests {
 
         let top_row: String = (0..8).map(|x| term.grid().get(x, 0).glyph()).collect();
         assert!(!top_row.contains("a very long title"));
+    }
+
+    #[test]
+    fn theme_maps_named_roles_onto_border_and_fill() {
+        let area = Rect::new(0, 0, 10, 4);
+        let mut term = Terminal::new(Headless::new(10, 4));
+        Panel::new().theme(Theme::DARK).render(area, &mut term);
+
+        assert_eq!(
+            term.grid().get(0, 0).style().foreground(),
+            Theme::DARK.border
+        );
+        assert_eq!(
+            term.grid().get(0, 0).style().background(),
+            Theme::DARK.title_bg
+        );
+        assert_eq!(
+            term.grid().get(1, 1).style().background(),
+            Theme::DARK.panel_bg
+        );
     }
 
     #[test]

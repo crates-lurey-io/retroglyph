@@ -2,6 +2,7 @@
 use retroglyph_core::{Backend, Rect, Style, Terminal};
 
 use super::{Panel, Widget};
+use crate::Theme;
 use crate::layout::centered_rect;
 
 /// A bordered, filled box centered in a screen [`Rect`].
@@ -64,6 +65,19 @@ impl<'a> Modal<'a> {
         self
     }
 
+    /// Applies `theme`'s named roles to this modal's border and fill, the same mapping as
+    /// [`Panel::theme`] (a [`Modal`] is just a centered [`Panel`]): `border_style` becomes
+    /// `theme.border` on `theme.title_bg`, and `fill_style` becomes `theme.panel_bg`.
+    ///
+    /// Call before any manual [`Modal::border_style`]/[`Modal::fill_style`] override you want to
+    /// keep -- whichever call comes last wins.
+    #[must_use]
+    pub fn theme(mut self, theme: Theme) -> Self {
+        self.border_style = Style::new().fg(theme.border).bg(theme.title_bg);
+        self.fill_style = Style::new().bg(theme.panel_bg);
+        self
+    }
+
     /// Draw the modal centered in `screen`, returning its inner content
     /// [`Rect`].
     pub fn render<B: Backend>(self, screen: Rect, term: &mut Terminal<B>) -> Rect {
@@ -112,5 +126,28 @@ mod tests {
 
         // A corner of the screen far from the centered box is untouched.
         assert_eq!(term.grid().get(0, 0).glyph(), ' ');
+    }
+
+    #[test]
+    fn theme_maps_named_roles_onto_border_and_fill() {
+        let screen = Rect::new(0, 0, 20, 10);
+        let mut term = Terminal::new(Headless::new(20, 10));
+        Modal::new(10, 4)
+            .theme(Theme::DARK)
+            .render(screen, &mut term);
+
+        // Box is centered_rect(screen, 10, 4) = Rect::new(5, 3, 10, 4).
+        assert_eq!(
+            term.grid().get(5, 3).style().foreground(),
+            Theme::DARK.border
+        );
+        assert_eq!(
+            term.grid().get(5, 3).style().background(),
+            Theme::DARK.title_bg
+        );
+        assert_eq!(
+            term.grid().get(6, 4).style().background(),
+            Theme::DARK.panel_bg
+        );
     }
 }

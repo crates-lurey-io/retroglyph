@@ -4,6 +4,7 @@ use retroglyph_core::{Backend, Color, Rect, Style, Terminal};
 use super::StatefulWidget;
 use super::window::visible_window;
 use crate::ListState;
+use crate::Theme;
 use crate::draw::fill_rect;
 use crate::text::truncate as truncate_to_cols;
 
@@ -94,6 +95,22 @@ impl<'a> Table<'a> {
     #[must_use]
     pub const fn column_spacing(mut self, spacing: u16) -> Self {
         self.column_spacing = spacing;
+        self
+    }
+
+    /// Applies `theme`'s named roles to this table's row styles: `header_style` becomes
+    /// `theme.fg` (brighter, matching the header's original brighter-than-row default),
+    /// `row_style` becomes `theme.dim` (the same de-emphasized role a plain body row already
+    /// reads as), and `selected_style` becomes `theme.bg` on `theme.accent` -- the same
+    /// bright-on-accent highlight [`super::List::theme`] and [`super::Button::theme`] use.
+    ///
+    /// Call before any manual [`Table::header_style`]/[`Table::row_style`]/
+    /// [`Table::selected_style`] override you want to keep.
+    #[must_use]
+    pub fn theme(mut self, theme: Theme) -> Self {
+        self.header_style = Style::new().fg(theme.fg);
+        self.row_style = Style::new().fg(theme.dim);
+        self.selected_style = Style::new().fg(theme.bg).bg(theme.accent);
         self
     }
 }
@@ -332,6 +349,28 @@ mod tests {
 
         assert_eq!(term.grid().get(0, 2).style().foreground(), Color::GREEN);
         assert_eq!(term.grid().get(0, 2).style().background(), Color::BLUE);
+    }
+
+    #[test]
+    fn theme_maps_named_roles_onto_header_row_and_selected_styles() {
+        let area = Rect::new(0, 0, 20, 3);
+        let headers = ["Name"];
+        let widths = [10u16];
+        let rows = vec![vec!["Alpha".to_string()], vec!["Bravo".to_string()]];
+        let table = Table::new(&headers, &widths, &rows).theme(Theme::DARK);
+
+        let mut term = Terminal::new(Headless::new(20, 3));
+        let mut state = ListState::new();
+        state.select(Some(1));
+        table.render(area, &mut term, &mut state);
+
+        assert_eq!(term.grid().get(0, 0).style().foreground(), Theme::DARK.fg);
+        assert_eq!(term.grid().get(0, 1).style().foreground(), Theme::DARK.dim);
+        assert_eq!(term.grid().get(0, 2).style().foreground(), Theme::DARK.bg);
+        assert_eq!(
+            term.grid().get(0, 2).style().background(),
+            Theme::DARK.accent
+        );
     }
 
     #[test]

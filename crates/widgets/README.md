@@ -13,6 +13,11 @@ Every widget is a builder struct that draws itself into a `Terminal` and retains
 own; depends only on [`retroglyph-core`](https://crates.io/crates/retroglyph-core), so games that
 draw manually never pull it in.
 
+`Theme` (`Theme::DARK`/`Theme::LIGHT`, or a caller-built palette) is a set of named color roles --
+every widget with a style knob has a matching `.theme(Theme)` builder method that maps those roles
+onto it, optionally: nothing requires a `Theme` at all, and a manual `.border_style(...)`/etc. call
+after `.theme(...)` still wins.
+
 ## Quick start
 
 ```toml

@@ -4,6 +4,7 @@ use retroglyph_core::{Backend, Color, Rect, Style, Terminal};
 use super::StatefulWidget;
 use super::window::visible_window;
 use crate::ListState;
+use crate::Theme;
 use crate::draw::fill_rect;
 use crate::text::truncate as truncate_to_cols;
 
@@ -60,6 +61,19 @@ impl<'a> List<'a> {
     #[must_use]
     pub const fn selected_style(mut self, style: Style) -> Self {
         self.selected_style = style;
+        self
+    }
+
+    /// Applies `theme`'s named roles to this list: `item_style` becomes `theme.fg`, and
+    /// `selected_style` becomes `theme.bg` on `theme.accent` -- the same mapping
+    /// `09_widgets_dashboard`'s Alerts list hand-threads today.
+    ///
+    /// Call before any manual [`List::item_style`]/[`List::selected_style`] override you want to
+    /// keep.
+    #[must_use]
+    pub fn theme(mut self, theme: Theme) -> Self {
+        self.item_style = Style::new().fg(theme.fg);
+        self.selected_style = Style::new().fg(theme.bg).bg(theme.accent);
         self
     }
 }
@@ -242,5 +256,24 @@ mod tests {
         list.render(area, &mut term, &mut state);
 
         assert_eq!(term.grid().get(0, 0).glyph(), ' ');
+    }
+
+    #[test]
+    fn theme_maps_named_roles_onto_item_and_selected_styles() {
+        let area = Rect::new(0, 0, 20, 2);
+        let items = ["Alpha", "Bravo"];
+        let list = List::new(&items).theme(Theme::DARK);
+
+        let mut term = Terminal::new(Headless::new(20, 2));
+        let mut state = ListState::new();
+        state.select(Some(1));
+        list.render(area, &mut term, &mut state);
+
+        assert_eq!(term.grid().get(0, 0).style().foreground(), Theme::DARK.fg);
+        assert_eq!(term.grid().get(0, 1).style().foreground(), Theme::DARK.bg);
+        assert_eq!(
+            term.grid().get(0, 1).style().background(),
+            Theme::DARK.accent
+        );
     }
 }

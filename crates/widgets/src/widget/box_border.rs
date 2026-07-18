@@ -2,6 +2,7 @@
 use retroglyph_core::{Backend, Rect, Style, Terminal};
 
 use super::Widget;
+use crate::Theme;
 use crate::draw::{BL, BR, H, TL, TR, V};
 
 /// A single-line box border drawn around a [`Rect`].
@@ -25,6 +26,17 @@ impl BoxBorder {
     #[must_use]
     pub const fn style(mut self, style: Style) -> Self {
         self.style = style;
+        self
+    }
+
+    /// Sets `style`'s foreground to `theme.border`, leaving the background unset (a standalone
+    /// [`BoxBorder`] doesn't know what it's drawn over, unlike [`super::Panel`], which also owns
+    /// its interior fill and can safely use `theme.panel_bg` behind the border row).
+    ///
+    /// Call before any manual [`BoxBorder::style`] override you want to keep.
+    #[must_use]
+    pub fn theme(mut self, theme: Theme) -> Self {
+        self.style = Style::new().fg(theme.border);
         self
     }
 }
@@ -96,5 +108,17 @@ mod tests {
         let mut term = Terminal::new(Headless::new(1, 1));
         BoxBorder::new().render(area, &mut term);
         assert_eq!(term.grid().get(0, 0).glyph(), ' ');
+    }
+
+    #[test]
+    fn theme_maps_border_role_onto_style() {
+        let area = Rect::new(0, 0, 5, 3);
+        let mut term = Terminal::new(Headless::new(5, 3));
+        BoxBorder::new().theme(Theme::DARK).render(area, &mut term);
+
+        assert_eq!(
+            term.grid().get(0, 0).style().foreground(),
+            Theme::DARK.border
+        );
     }
 }
