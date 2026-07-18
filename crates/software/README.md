@@ -2,7 +2,7 @@
 
 [![crates.io](https://img.shields.io/crates/v/retroglyph-software.svg)](https://crates.io/crates/retroglyph-software)
 [![docs.rs](https://img.shields.io/docsrs/retroglyph-software)](https://docs.rs/retroglyph-software)
-[![coverage](https://codecov.io/gh/crates-lurey-io/retroglyph/graph/badge.svg?token=z8BBUp8fiY&flag=software)](https://codecov.io/gh/crates-lurey-io/retroglyph)
+[![coverage](https://codecov.io/gh/crates-lurey-io/retroglyph/graph/badge.svg?token=z8BBUp8fiY&flag=software)](https://app.codecov.io/gh/crates-lurey-io/retroglyph/flags)
 [![license](https://img.shields.io/crates/l/retroglyph-software.svg)](https://github.com/crates-lurey-io/retroglyph/blob/main/LICENSE)
 
 A CPU rasterization backend for [retroglyph](https://github.com/crates-lurey-io/retroglyph): renders

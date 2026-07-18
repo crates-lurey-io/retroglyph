@@ -2,7 +2,7 @@
 
 [![crates.io](https://img.shields.io/crates/v/retroglyph-widgets.svg)](https://crates.io/crates/retroglyph-widgets)
 [![docs.rs](https://img.shields.io/docsrs/retroglyph-widgets)](https://docs.rs/retroglyph-widgets)
-[![coverage](https://codecov.io/gh/crates-lurey-io/retroglyph/graph/badge.svg?token=z8BBUp8fiY&flag=widgets)](https://codecov.io/gh/crates-lurey-io/retroglyph)
+[![coverage](https://codecov.io/gh/crates-lurey-io/retroglyph/graph/badge.svg?token=z8BBUp8fiY&flag=widgets)](https://app.codecov.io/gh/crates-lurey-io/retroglyph/flags)
 [![license](https://img.shields.io/crates/l/retroglyph-widgets.svg)](https://github.com/crates-lurey-io/retroglyph/blob/main/LICENSE)
 
 Immediate-mode drawing helpers for [retroglyph](https://github.com/crates-lurey-io/retroglyph): box
