@@ -117,12 +117,15 @@ experiencing the break, for the reason above.
 
 - At release time, inside release-plz (`semver_check = true`): the authority described above. Its
   result is shown on the Release PR.
-- At PR time (`.github/workflows/check-semver.yml`), as a **non-blocking** informational comment,
-  not a merge gate. A crate's `Cargo.toml` version isn't bumped until the Release PR, so a hard
-  PR-time gate would fail almost every legitimate breaking PR (since `!` is now reserved for the
-  rare behavioral-break case) and force a `semver-override`-style label onto the common case --
-  exactly backwards. The PR-time job exists purely so a reviewer sees the finding before merge; the
-  real enforcement is `semver_check` on the Release PR.
+- At PR time (`.github/workflows/check-semver.yml`), as a **non-blocking** informational check, not
+  a merge gate. A crate's `Cargo.toml` version isn't bumped until the Release PR, so a hard PR-time
+  gate would fail almost every legitimate breaking PR (since `!` is now reserved for the rare
+  behavioral-break case) and force a `semver-override`-style label onto the common case -- exactly
+  backwards. The PR-time job exists purely so a reviewer sees the finding before merge; the real
+  enforcement is `semver_check` on the Release PR. To make that finding visible without opening the
+  Actions run, the job also syncs the `t:breaking` label onto the PR (added when it finds a break,
+  removed when it doesn't) -- purely a categorization mirror of its own finding, not an input to
+  anything downstream; see the note on `t:breaking` below.
 
 ## PR labels (overrides)
 
@@ -131,10 +134,17 @@ experiencing the break, for the reason above.
 | `skip-changelog` | Keep this PR out of the generated changelog. See the note below on how this is wired.                     |
 | `no-release`     | Annotation only: marks a Release PR you intend to hold. Not enforced; the real control is not merging it. |
 
-There is deliberately no `breaking` label: a label can't drive release-plz's version bump (only a
-commit's `!`/`BREAKING CHANGE:` can), so a `breaking` label without one would be a footgun that
+There is deliberately no label that _drives_ the version bump: a label can't do that (only a
+commit's `!`/`BREAKING CHANGE:` can), so a bump-driving label without one would be a footgun that
 ships a break as a patch. There is also no `semver-override` label anymore: the PR-time semver check
 is non-blocking, so nothing needs overriding.
+
+`t:breaking` (`.github/labels.yml`) is different: it's a plain categorization label, synced
+automatically by `check-semver.yml` from that job's own `cargo-semver-checks` finding (see above),
+the same way `c:*` labels are synced from changed paths. It never drives release-plz and can't ship
+a break as a patch -- release-plz only ever reads the commit `!`/`BREAKING CHANGE:` marker, never PR
+labels, so `t:breaking` being present, absent, or momentarily wrong changes nothing about the actual
+bump. Treat it as a search/filter aid, not a signal to act on by itself.
 
 Note on `skip-changelog`: git-cliff builds the changelog from commit messages, not GitHub labels, so
 label-based exclusion relies on release-plz's GitHub integration attaching PR metadata to each

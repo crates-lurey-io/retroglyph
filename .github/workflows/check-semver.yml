@@ -10,10 +10,19 @@ name: Check Semver
 # the narrow behavioral-break case semver_check can't see, so a hard PR-time gate would fail almost
 # every legitimate API-breaking PR and force a label onto the common case -- backwards. This job
 # exists purely so a reviewer sees the finding before merge.
+#
+# The `t:breaking` label is synced (added/removed) to mirror the finding directly on the PR, so it's
+# visible without opening the Actions run -- purely informational, same as the job itself: it does
+# not drive release-plz's version bump (only a commit's `!`/`BREAKING CHANGE:` does that; see
+# RELEASING.md's "PR labels (overrides)" section) and label sync is best-effort only, since a
+# fork PR's `GITHUB_TOKEN` is always read-only on `pull_request` and can't write the label.
 
 on:
   pull_request:
     branches: [main]
+
+permissions:
+  pull-requests: write
 
 jobs:
   check-semver:
@@ -21,5 +30,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: obi1kenobi/cargo-semver-checks-action@v2
+      - name: Run cargo-semver-checks
+        id: semver-check
+        uses: obi1kenobi/cargo-semver-checks-action@v2
         continue-on-error: true
+
+      # Best-effort: on a fork PR, GITHUB_TOKEN is read-only for `pull_request` and these
+      # `gh pr edit` calls fail silently on the label write; they don't affect the job's outcome.
+      - name: Add t:breaking label
+        if: steps.semver-check.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh pr edit ${{ github.event.pull_request.number }} --add-label t:breaking || true
+      - name: Remove t:breaking label
+        if: steps.semver-check.outcome != 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh pr edit ${{ github.event.pull_request.number }} --remove-label t:breaking || true
