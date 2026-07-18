@@ -35,13 +35,14 @@ assert!(ansi.contains('@'));
 ## Usage from JS
 
 The `wasm32` build exposes free functions (`wasm_terminal_new`, `wasm_terminal_resize`,
-`wasm_terminal_push_key`, `wasm_terminal_push_mouse`, `wasm_terminal_take_output`) that drive a
-`TerminalWasm` by opaque handle. Here's a complete driver pairing them with
-[xterm.js](https://xtermjs.org/) (any other browser terminal emulator works the same way; the driver
-below only wires up keyboard input -- see `wasm_terminal_push_mouse` and `decode_mouse_event`'s docs
-on [docs.rs](https://docs.rs/retroglyph-terminal-wasm) for mouse support). It's a wiring template,
-not a full game -- it plumbs input/output through this handle-based FFI but calls no per-frame
-drawing logic of its own (that's the consumer's job, via their own Rust code holding the
+`wasm_terminal_push_key`, `wasm_terminal_push_mouse`, `wasm_terminal_push_paste`,
+`wasm_terminal_take_output`) that drive a `TerminalWasm` by opaque handle. Here's a complete driver
+pairing them with [xterm.js](https://xtermjs.org/) (any other browser terminal emulator works the
+same way; the driver below only wires up keyboard input -- see
+`wasm_terminal_push_mouse`/`decode_mouse_event` and `wasm_terminal_push_paste`'s docs on
+[docs.rs](https://docs.rs/retroglyph-terminal-wasm) for mouse and paste support). It's a wiring
+template, not a full game -- it plumbs input/output through this handle-based FFI but calls no
+per-frame drawing logic of its own (that's the consumer's job, via their own Rust code holding the
 `Terminal<TerminalWasm>`). For a complete, running example with an actual game loop, see the
 [WASM demo gallery](https://crates-lurey-io.github.io/retroglyph/examples/) linked from the
 workspace README; those demos use a different, single-instance-per-page convenience FFI

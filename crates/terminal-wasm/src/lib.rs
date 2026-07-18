@@ -25,9 +25,10 @@
 //!
 //! The `wasm32` build additionally exposes free functions
 //! (`wasm_terminal_new`, `wasm_terminal_resize`, `wasm_terminal_push_key`,
-//! `wasm_terminal_push_mouse`, `wasm_terminal_take_output`, in this crate's
-//! `wasm` module -- only compiled for `target_arch = "wasm32"`, so it won't
-//! appear in docs built natively) that operate on an opaque handle, since
+//! `wasm_terminal_push_mouse`, `wasm_terminal_push_paste`,
+//! `wasm_terminal_take_output`, in this crate's `wasm` module -- only
+//! compiled for `target_arch = "wasm32"`, so it won't appear in docs built
+//! natively) that operate on an opaque handle, since
 //! `retroglyph_core::event::Event` is not itself `wasm-bindgen`-compatible.
 //!
 //! The example below is a complete, working driver pairing this crate's
@@ -559,6 +560,36 @@ pub mod wasm {
         });
     }
 
+    /// Pushes pasted text into the terminal identified by `handle`, delivered
+    /// as a single [`retroglyph_core::event::Event::Paste`] rather than
+    /// synthesized key events.
+    ///
+    /// Unlike [`wasm_terminal_push_key`], this takes a plain JS string
+    /// directly -- `String` is already `wasm-bindgen`-FFI-safe, so there's no
+    /// `decode_*` step to pair with it, and no risk of a paste of `N`
+    /// characters being misread as `N` individual keystrokes (which would let
+    /// pasted text trigger single-key game commands one character at a
+    /// time).
+    ///
+    /// The driver is responsible for sourcing `text`: e.g. a native browser
+    /// `paste` event's `event.clipboardData.getData('text/plain')`, read
+    /// synchronously and without an Async Clipboard API permission prompt.
+    /// This crate has no opinion on *how* JS obtains the text, only that it
+    /// arrives here as one call per paste. Logs a warning (via the `log`
+    /// crate) and otherwise does nothing if `handle` is unknown, e.g.
+    /// because the terminal was already freed via [`wasm_terminal_free`].
+    #[wasm_bindgen]
+    pub fn wasm_terminal_push_paste(handle: u32, text: String) {
+        use retroglyph_core::event::Event;
+        INSTANCES.with_borrow_mut(|instances| {
+            if let Some(term) = instances.get_mut(&handle) {
+                term.push_event(Event::Paste(text));
+            } else {
+                log::warn!("wasm_terminal_push_paste: unknown handle {handle}");
+            }
+        });
+    }
+
     /// Drains and returns the ANSI bytes rendered since the last call for the
     /// terminal identified by `handle`. Returns an empty string if `handle`
     /// is unknown or nothing has been drawn since the last call.
@@ -610,6 +641,20 @@ mod tests {
                 KeyCode::Left,
                 KeyModifiers::NONE
             )))
+        );
+        assert_eq!(Backend::poll_event(&mut backend, Duration::ZERO), None);
+    }
+
+    #[test]
+    fn push_event_supports_paste_as_a_single_event() {
+        // A paste is delivered as one `Event::Paste`, not one `Event::Key` per character -- see
+        // `wasm::wasm_terminal_push_paste`'s doc comment for why that distinction matters (pasted
+        // text must not be misread as individual keystrokes triggering single-key commands).
+        let mut backend = TerminalWasm::new(10, 3);
+        backend.push_event(Event::Paste("hello, world".to_string()));
+        assert_eq!(
+            Backend::poll_event(&mut backend, Duration::ZERO),
+            Some(Event::Paste("hello, world".to_string()))
         );
         assert_eq!(Backend::poll_event(&mut backend, Duration::ZERO), None);
     }
