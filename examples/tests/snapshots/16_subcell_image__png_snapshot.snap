@@ -1,0 +1,6 @@
+---
+source: examples/tests/16_subcell_image.rs
+expression: png
+extension: png
+snapshot_kind: binary
+---
