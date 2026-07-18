@@ -40,6 +40,62 @@ flags:
       - crates/widgets/src/
     carryforward: true
 
+# One coverage status per crate, so a PR that only touches e.g. `crates/widgets` shows a
+# `widgets` check instead of a single blended workspace number. Reuses the flags above via
+# `flag_regexes` (anchored, since these are regexes and unanchored `terminal` would also match
+# `terminal-wasm`) rather than redefining paths, so flags and components can't drift apart.
+# Informational like the project/patch defaults above -- these are visibility, not gates.
+component_management:
+  default_rules:
+    statuses:
+      - type: project
+        informational: true
+      - type: patch
+        informational: true
+  individual_components:
+    - component_id: core
+      name: core
+      flag_regexes:
+        - ^core$
+    - component_id: terminal
+      name: terminal
+      flag_regexes:
+        - ^terminal$
+    - component_id: crossterm
+      name: crossterm
+      flag_regexes:
+        - ^crossterm$
+    - component_id: terminal-wasm
+      name: terminal-wasm
+      flag_regexes:
+        - ^terminal-wasm$
+    - component_id: software
+      name: software
+      flag_regexes:
+        - ^software$
+    - component_id: window
+      name: window
+      flag_regexes:
+        - ^window$
+    - component_id: widgets
+      name: widgets
+      flag_regexes:
+        - ^widgets$
+
+# Inline diff annotations on PR file views, on top of the summary comment below.
+github_checks:
+  annotations: true
+
+# `just coverage-ci` already scopes `cargo llvm-cov` to `--lib`, so non-lib code (examples/,
+# benches/, tools/, build.rs) never lands in lcov.info -- these are a defensive backstop against
+# that drifting (e.g. a future `--lib` -> full-workspace change) rather than covering an active
+# problem today.
+ignore:
+  - 'benches/**'
+  - 'examples/**'
+  - 'tools/**'
+  - '**/build.rs'
+
 comment:
   layout: condensed_header, condensed_files, condensed_footer
   behavior: default

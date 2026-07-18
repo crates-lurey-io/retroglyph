@@ -96,8 +96,12 @@ test: build-pty-examples
 # CI variant: assumes `nextest` is already on PATH as a prebuilt binary (e.g. installed via
 # taiki-e/install-action) instead of being compiled from source through `cargo bin`, which is
 # what made the CI `test` job take ~4 minutes longer than every other job.
+#
+# Uses the `ci` nextest profile (see `.config/nextest.toml`) instead of `default`: identical
+# retry/timeout settings, but also writes JUnit XML to `target/nextest/ci/junit.xml`, which the
+# `test` CI job uploads to Codecov's Test Analytics via `codecov/test-results-action`.
 test-ci: build-pty-examples
-    cargo nextest run --workspace --all-features
+    cargo nextest run --workspace --all-features --profile ci
     cargo test --workspace --all-features --doc
 
 test-v: build-pty-examples
