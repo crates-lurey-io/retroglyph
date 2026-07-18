@@ -138,7 +138,7 @@ impl Dashboard {
     /// Draws this frame and presents it.
     fn draw<B: Backend>(&mut self, term: &mut Terminal<B>) {
         let area = Rect::new(0, 0, 50, 25);
-        let rows = split_v(area, &[Constraint::Fixed(1), Constraint::Fill]);
+        let rows = split_v(area, &[Constraint::Fixed(1), Constraint::Fill(1)]);
         let (title_area, body_area) = (rows[0], rows[1]);
 
         term.reset_style().fg(self.theme.accent);
@@ -149,7 +149,7 @@ impl Dashboard {
         );
         term.reset_style();
 
-        let cols = split_h(body_area, &[Constraint::Percent(60), Constraint::Fill]);
+        let cols = split_h(body_area, &[Constraint::Percent(60), Constraint::Fill(1)]);
         let (left, right) = (cols[0], cols[1]);
 
         let headers = ["Service", "Status"];
@@ -162,7 +162,11 @@ impl Dashboard {
 
         let right_rows = split_v(
             right,
-            &[Constraint::Fixed(1), Constraint::Fixed(1), Constraint::Fill],
+            &[
+                Constraint::Fixed(1),
+                Constraint::Fixed(1),
+                Constraint::Fill(1),
+            ],
         );
         let (tabs_area, panel_area) = (right_rows[0], right_rows[2]);
 
@@ -195,7 +199,7 @@ impl Dashboard {
                 Constraint::Fixed(1),
                 Constraint::Fixed(1),
                 Constraint::Fixed(1),
-                Constraint::Fill,
+                Constraint::Fill(1),
             ],
         );
         Gauge::new("CPU", self.cpu).render(rows[0], term);

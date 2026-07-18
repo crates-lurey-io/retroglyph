@@ -297,7 +297,7 @@ impl Sokoban {
 
     fn draw<B: Backend>(&self, term: &mut Terminal<B>) {
         let area = Rect::new(0, 0, 50, 25);
-        let rows = split_v(area, &[Constraint::Fixed(1), Constraint::Fill]);
+        let rows = split_v(area, &[Constraint::Fixed(1), Constraint::Fill(1)]);
         let (title_area, body_area) = (rows[0], rows[1]);
 
         term.print(
@@ -306,7 +306,7 @@ impl Sokoban {
             "Sokoban -- arrows move/push, u undoes, r resets, q/Escape quits",
         );
 
-        let cols = split_h(body_area, &[Constraint::Fixed(24), Constraint::Fill]);
+        let cols = split_h(body_area, &[Constraint::Fixed(24), Constraint::Fill(1)]);
         let (play_area, status_area) = (cols[0], cols[1]);
 
         let level_x = play_area.left() + 2;

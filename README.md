@@ -175,7 +175,9 @@ primarily a free function (`panel`, `gauge`, `table`, `sparkline`, `draw_box`, .
 directly to a `Terminal` and retains no state, plus a constraint-based `Rect` splitter
 (`split_h`/`split_v`) with `Fixed`/`Percent`/`Fill`/`Min`/`Max` constraints and `Flex` alignment
 (`Start`/`End`/`Center`/`SpaceBetween`/`SpaceAround`) -- deliberately similar to
-[ratatui](https://ratatui.rs)'s layout system, for anyone coming from there.
+[ratatui](https://ratatui.rs)'s layout system, for anyone coming from there. `Fill(weight)` claims a
+share of the leftover space proportional to `weight` relative to the other `Fill`/`Min`/`Max` panes
+in the same split (`Fill(1)` reproduces plain equal distribution).
 
 Three optional layers build on that free-function core:
 
@@ -192,8 +194,8 @@ Three optional layers build on that free-function core:
   wins, and nothing requires a `Theme` at all.
 
 See the `09_widgets_dashboard` and `15_outpost_dashboard` examples for all of the above wired
-together in one UI, or `17_theme_switch` for `Theme::DARK`/`Theme::LIGHT` switched live at runtime
-by a keypress.
+together in one UI, `17_theme_switch` for `Theme::DARK`/`Theme::LIGHT` switched live at runtime by a
+keypress, or `18_weighted_fill` for `Fill(weight)`'s proportional splits.
 
 </details>
 

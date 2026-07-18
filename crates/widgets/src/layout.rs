@@ -7,13 +7,16 @@
 //! out by hand.
 //!
 //! The solver sums the [`Fixed`](Constraint::Fixed) and [`Percent`](Constraint::Percent)
-//! amounts, then distributes whatever remains equally across the
-//! [`Fill`](Constraint::Fill), [`Min`](Constraint::Min), and [`Max`](Constraint::Max)
-//! panes. Sizes are clamped so the panes never spill past `area`. This is a single
-//! sequential pass, not an iterative constraint solver: a [`Max`](Constraint::Max)
-//! pane that is capped below its equal share does not redistribute the excess to
-//! other panes, so leftover space can remain unclaimed (see [`Flex`] for how that
-//! leftover is placed via [`split_v_flex`]/[`split_h_flex`]).
+//! amounts, then distributes whatever remains across the [`Fill`](Constraint::Fill),
+//! [`Min`](Constraint::Min), and [`Max`](Constraint::Max) panes in proportion to their
+//! weight: a `Fill(w)` pane claims a share proportional to `w` relative
+//! to the other flexible panes, while [`Min`](Constraint::Min) and [`Max`](Constraint::Max)
+//! panes always weigh 1. `Fill(1)` (equivalent to every pane weighing 1) reproduces plain
+//! equal distribution. Sizes are clamped so the panes never spill past `area`. This is a
+//! single sequential pass, not an iterative constraint solver: a [`Max`](Constraint::Max)
+//! pane that is capped below its share does not redistribute the excess to other panes, so
+//! leftover space can remain unclaimed (see [`Flex`] for how that leftover is placed via
+//! [`split_v_flex`]/[`split_h_flex`]).
 use retroglyph_core::Rect;
 
 /// How a single pane claims space along the split axis.
@@ -23,13 +26,17 @@ pub enum Constraint {
     Fixed(u16),
     /// A percentage (0–100) of the axis length.
     Percent(u16),
-    /// Claim an equal share of whatever space the fixed/percent panes leave.
-    Fill,
-    /// Like [`Fill`](Self::Fill), but guarantees at least this many cells
-    /// even if the axis is too small for every pane to get an equal share.
+    /// Claim a share of whatever space the fixed/percent panes leave, proportional to
+    /// `weight` relative to the other [`Fill`](Self::Fill)/[`Min`](Self::Min)/[`Max`](Self::Max)
+    /// panes in the same split ([`Min`](Self::Min)/[`Max`](Self::Max) panes always weigh 1).
+    /// `Fill(1)` reproduces plain equal distribution across an all-`Fill` split; a weight of
+    /// 0 claims no share of the remainder.
+    Fill(u16),
+    /// Like [`Fill`](Self::Fill), but guarantees at least this many cells even if the axis
+    /// is too small for every pane to get its share, and always weighs 1.
     Min(u16),
-    /// Like [`Fill`](Self::Fill), but never grows past this many cells; any
-    /// share past the cap is left unclaimed rather than redistributed.
+    /// Like [`Fill`](Self::Fill), but never grows past this many cells (any share past the
+    /// cap is left unclaimed rather than redistributed), and always weighs 1.
     Max(u16),
 }
 
@@ -48,7 +55,7 @@ impl Constraint {
                     (u32::from(total) * p / 100) as u16
                 }
             }
-            Self::Fill | Self::Max(_) => 0,
+            Self::Fill(_) | Self::Max(_) => 0,
         }
     }
 }
@@ -66,30 +73,56 @@ fn solve(total: u16, constraints: &[Constraint]) -> Vec<u16> {
         used += *size;
     }
 
-    // Distribute the remainder equally across the Fill, Min, and Max panes.
-    // Min panes add their share on top of the floor already reserved above;
-    // Max panes start at zero and are capped at their declared value (any
-    // share past the cap is simply left unclaimed, not redistributed).
-    let flexible: Vec<(usize, Option<u16>)> = constraints
+    // Distribute the remainder across the Fill, Min, and Max panes in proportion to
+    // their weight (Fill(w) weighs w; Min/Max always weigh 1). Min panes add their
+    // share on top of the floor already reserved above; Max panes start at zero and
+    // are capped at their declared value (any share past the cap is simply left
+    // unclaimed, not redistributed).
+    let flexible: Vec<(usize, u16, Option<u16>)> = constraints
         .iter()
         .enumerate()
         .filter_map(|(i, c)| match c {
-            Constraint::Fill | Constraint::Min(_) => Some((i, None)),
-            Constraint::Max(cap) => Some((i, Some(*cap))),
+            Constraint::Fill(weight) => Some((i, *weight, None)),
+            Constraint::Min(_) => Some((i, 1, None)),
+            Constraint::Max(cap) => Some((i, 1, Some(*cap))),
             Constraint::Fixed(_) | Constraint::Percent(_) => None,
         })
         .collect();
     if !flexible.is_empty() {
         let remainder = total.saturating_sub(used);
-        #[allow(clippy::cast_possible_truncation)]
-        let each = remainder / flexible.len() as u16;
-        #[allow(clippy::cast_possible_truncation)]
-        let mut extra = remainder % flexible.len() as u16;
-        for &(i, cap) in &flexible {
-            let share = each + u16::from(extra > 0);
-            extra = extra.saturating_sub(1);
-            let grown = sizes[i].saturating_add(share);
-            sizes[i] = cap.map_or(grown, |max| grown.min(max));
+        let total_weight: u32 = flexible.iter().map(|&(_, w, _)| u32::from(w)).sum();
+        if let Some(total_weight) = std::num::NonZeroU32::new(total_weight) {
+            // Largest-remainder method: give every pane the integer floor of its
+            // proportional share, then hand out the leftover cells one at a time to
+            // the panes with the largest fractional remainder (ties -> earlier pane
+            // first). For equal weights every fraction ties, so this reduces to the
+            // original round-robin-from-the-front behavior exactly.
+            let mut shares: Vec<u32> = Vec::with_capacity(flexible.len());
+            let mut fracs: Vec<u32> = Vec::with_capacity(flexible.len());
+            let mut floor_sum: u32 = 0;
+            for &(_, weight, _) in &flexible {
+                let product = u32::from(remainder) * u32::from(weight);
+                let share = product / total_weight;
+                fracs.push(product % total_weight);
+                shares.push(share);
+                floor_sum += share;
+            }
+            let mut leftover = u32::from(remainder).saturating_sub(floor_sum);
+            let mut order: Vec<usize> = (0..flexible.len()).collect();
+            order.sort_by(|&a, &b| fracs[b].cmp(&fracs[a]).then(a.cmp(&b)));
+            for idx in order {
+                if leftover == 0 {
+                    break;
+                }
+                shares[idx] += 1;
+                leftover -= 1;
+            }
+            for (k, &(i, _, cap)) in flexible.iter().enumerate() {
+                #[allow(clippy::cast_possible_truncation)]
+                let share = shares[k] as u16;
+                let grown = sizes[i].saturating_add(share);
+                sizes[i] = cap.map_or(grown, |max| grown.min(max));
+            }
         }
     }
 
@@ -108,7 +141,7 @@ fn solve(total: u16, constraints: &[Constraint]) -> Vec<u16> {
 /// use retroglyph_widgets::{Constraint, split_v};
 ///
 /// let area = Rect::new(0, 0, 20, 10);
-/// let panes = split_v(area, &[Constraint::Fixed(1), Constraint::Fill, Constraint::Fixed(1)]);
+/// let panes = split_v(area, &[Constraint::Fixed(1), Constraint::Fill(1), Constraint::Fixed(1)]);
 /// assert_eq!(panes.iter().map(Rect::height).collect::<Vec<_>>(), vec![1, 8, 1]);
 /// ```
 #[must_use]
@@ -137,7 +170,7 @@ pub fn split_v(area: Rect, constraints: &[Constraint]) -> Vec<Rect> {
 /// use retroglyph_widgets::{Constraint, split_h};
 ///
 /// let area = Rect::new(0, 0, 100, 5);
-/// let panes = split_h(area, &[Constraint::Percent(30), Constraint::Fill]);
+/// let panes = split_h(area, &[Constraint::Percent(30), Constraint::Fill(1)]);
 /// assert_eq!(panes.iter().map(Rect::width).collect::<Vec<_>>(), vec![30, 70]);
 /// ```
 #[must_use]
@@ -176,7 +209,7 @@ fn interleave_gaps(constraints: &[Constraint], spacing: u16) -> Vec<Constraint> 
 /// Equivalent to interleaving `Constraint::Fixed(spacing)` between `constraints` and calling
 /// [`split_h`], then discarding the gap panes -- but the caller only ever sees the content panes,
 /// with no gap indices to filter out themselves. `spacing` gaps come out of `area` before
-/// `constraints` are resolved, so [`Constraint::Fill`]/[`Percent`](Constraint::Percent) panes
+/// `constraints` are resolved, so [`Fill`](Constraint::Fill)/[`Percent`](Constraint::Percent) panes
 /// share only what's left after every gap is reserved. No-op (falls back to [`split_h`]) with
 /// fewer than two panes or zero spacing.
 ///
@@ -187,7 +220,7 @@ fn interleave_gaps(constraints: &[Constraint], spacing: u16) -> Vec<Constraint> 
 /// use retroglyph_widgets::{Constraint, split_h_spaced};
 ///
 /// let area = Rect::new(0, 0, 59, 6);
-/// let panes = split_h_spaced(area, &[Constraint::Fill; 3], 1);
+/// let panes = split_h_spaced(area, &[Constraint::Fill(1); 3], 1);
 /// assert_eq!(panes.iter().map(Rect::width).collect::<Vec<_>>(), vec![19, 19, 19]);
 /// assert_eq!(panes[1].left(), panes[0].right() + 1); // one gap cell between panes
 /// ```
@@ -357,7 +390,11 @@ mod tests {
         let area = Rect::new(0, 0, 20, 10);
         let panes = split_v(
             area,
-            &[Constraint::Fixed(1), Constraint::Fill, Constraint::Fixed(1)],
+            &[
+                Constraint::Fixed(1),
+                Constraint::Fill(1),
+                Constraint::Fixed(1),
+            ],
         );
         assert_eq!(panes.len(), 3);
         // Heights: 1 + 8 + 1 = 10, exactly filling the area.
@@ -378,7 +415,7 @@ mod tests {
     #[test]
     fn horizontal_percent_and_fill() {
         let area = Rect::new(0, 0, 100, 5);
-        let panes = split_h(area, &[Constraint::Percent(30), Constraint::Fill]);
+        let panes = split_h(area, &[Constraint::Percent(30), Constraint::Fill(1)]);
         assert_eq!(panes[0].width(), 30);
         assert_eq!(panes[1].width(), 70);
         assert_eq!(panes[0].left(), 0);
@@ -392,7 +429,11 @@ mod tests {
         // 10 cells across 3 fills: 4, 3, 3 (leftover goes to the front).
         let panes = split_h(
             area,
-            &[Constraint::Fill, Constraint::Fill, Constraint::Fill],
+            &[
+                Constraint::Fill(1),
+                Constraint::Fill(1),
+                Constraint::Fill(1),
+            ],
         );
         let widths: Vec<u16> = panes.iter().map(Rect::width).collect();
         assert_eq!(widths, vec![4, 3, 3]);
@@ -429,7 +470,7 @@ mod tests {
         // cells, since Min's floor is reserved up front and then also
         // shares in distributing the remaining 7: Min ends up with
         // 3 (floor) + 4 (share, rounded up) = 7, Fill gets the other 3.
-        let panes = split_h(area, &[Constraint::Min(3), Constraint::Fill]);
+        let panes = split_h(area, &[Constraint::Min(3), Constraint::Fill(1)]);
         let widths: Vec<u16> = panes.iter().map(Rect::width).collect();
         assert_eq!(widths, vec![7, 3]);
         assert_eq!(widths.iter().sum::<u16>(), 10);
@@ -444,7 +485,7 @@ mod tests {
         // two Fill panes.
         let panes = split_h(
             area,
-            &[Constraint::Min(4), Constraint::Fill, Constraint::Fill],
+            &[Constraint::Min(4), Constraint::Fill(1), Constraint::Fill(1)],
         );
         let widths: Vec<u16> = panes.iter().map(Rect::width).collect();
         assert_eq!(widths[0], 6);
@@ -458,10 +499,95 @@ mod tests {
         let area = Rect::new(0, 0, 10, 1);
         // Fill and Max(2) would each get 5; Max(2) is capped, and its extra
         // 3 cells are left unclaimed (no redistribution), not given to Fill.
-        let panes = split_h(area, &[Constraint::Fill, Constraint::Max(2)]);
+        let panes = split_h(area, &[Constraint::Fill(1), Constraint::Max(2)]);
         let widths: Vec<u16> = panes.iter().map(Rect::width).collect();
         assert_eq!(widths, vec![5, 2]);
         assert_eq!(widths.iter().sum::<u16>(), 7);
+    }
+
+    #[test]
+    fn weighted_fill_splits_proportionally() {
+        let area = Rect::new(0, 0, 12, 1);
+        // Fill(2) claims twice the share of Fill(1): 4 and 8 of 12.
+        let panes = split_h(area, &[Constraint::Fill(1), Constraint::Fill(2)]);
+        let widths: Vec<u16> = panes.iter().map(Rect::width).collect();
+        assert_eq!(widths, vec![4, 8]);
+        assert_eq!(widths.iter().sum::<u16>(), 12);
+    }
+
+    #[test]
+    fn weighted_fill_at_weight_one_matches_equal_distribution() {
+        let area = Rect::new(0, 0, 10, 1);
+        // Every pane weighing the same value (not just 1) still divides
+        // evenly, since distribution is by weight *ratio*, not magnitude.
+        let panes = split_h(
+            area,
+            &[
+                Constraint::Fill(5),
+                Constraint::Fill(5),
+                Constraint::Fill(5),
+            ],
+        );
+        let widths: Vec<u16> = panes.iter().map(Rect::width).collect();
+        assert_eq!(widths, vec![4, 3, 3]);
+        assert_eq!(widths.iter().sum::<u16>(), 10);
+    }
+
+    #[test]
+    fn weighted_fill_leftover_goes_to_the_largest_fractional_share() {
+        let area = Rect::new(0, 0, 10, 1);
+        // Ideal shares are 30/7 ~= 4.29, 20/7 ~= 2.86, 20/7 ~= 2.86. Floors are
+        // 4, 2, 2 (sum 8); the 2 leftover cells go to the panes with the
+        // largest fractional remainder, in this case the two Fill(2)s tied
+        // ahead of Fill(3) -- not to the first pane in the slice.
+        let panes = split_h(
+            area,
+            &[
+                Constraint::Fill(3),
+                Constraint::Fill(2),
+                Constraint::Fill(2),
+            ],
+        );
+        let widths: Vec<u16> = panes.iter().map(Rect::width).collect();
+        assert_eq!(widths, vec![4, 3, 3]);
+        assert_eq!(widths.iter().sum::<u16>(), 10);
+    }
+
+    #[test]
+    fn fill_weight_zero_claims_no_share_of_the_remainder() {
+        let area = Rect::new(0, 0, 10, 1);
+        let panes = split_h(area, &[Constraint::Fill(0), Constraint::Fill(1)]);
+        let widths: Vec<u16> = panes.iter().map(Rect::width).collect();
+        assert_eq!(widths, vec![0, 10]);
+    }
+
+    #[test]
+    fn all_fill_weights_zero_leaves_the_remainder_unclaimed() {
+        let area = Rect::new(0, 0, 10, 1);
+        let panes = split_h(area, &[Constraint::Fill(0), Constraint::Fill(0)]);
+        let widths: Vec<u16> = panes.iter().map(Rect::width).collect();
+        assert_eq!(widths, vec![0, 0]);
+    }
+
+    #[test]
+    fn weighted_fill_mixes_with_min_and_max_at_weight_one() {
+        let area = Rect::new(0, 0, 20, 1);
+        // Fill(3) claims 3 parts of the 6-way weight pool (3 + 1 + 1 + 1 = 6);
+        // Min(2) and Max(10) each claim 1 part like before. Remainder after
+        // Min's floor: 20 - 2 = 18, split 3:1:1:1 -> 9, 3, 3, 3; Min ends at
+        // 2 + 3 = 5.
+        let panes = split_h(
+            area,
+            &[
+                Constraint::Fill(3),
+                Constraint::Min(2),
+                Constraint::Fill(1),
+                Constraint::Max(10),
+            ],
+        );
+        let widths: Vec<u16> = panes.iter().map(Rect::width).collect();
+        assert_eq!(widths, vec![9, 5, 3, 3]);
+        assert_eq!(widths.iter().sum::<u16>(), 20);
     }
 
     #[test]
@@ -525,7 +651,11 @@ mod tests {
         let area = Rect::new(0, 0, 59, 6);
         let panes = split_h_spaced(
             area,
-            &[Constraint::Fill, Constraint::Fill, Constraint::Fill],
+            &[
+                Constraint::Fill(1),
+                Constraint::Fill(1),
+                Constraint::Fill(1),
+            ],
             1,
         );
         assert_eq!(panes.len(), 3);
@@ -540,12 +670,12 @@ mod tests {
     fn spaced_split_falls_back_with_one_pane_or_no_spacing() {
         let area = Rect::new(0, 0, 10, 1);
         assert_eq!(
-            split_h_spaced(area, &[Constraint::Fill], 1),
-            split_h(area, &[Constraint::Fill])
+            split_h_spaced(area, &[Constraint::Fill(1)], 1),
+            split_h(area, &[Constraint::Fill(1)])
         );
         assert_eq!(
-            split_h_spaced(area, &[Constraint::Fill, Constraint::Fill], 0),
-            split_h(area, &[Constraint::Fill, Constraint::Fill])
+            split_h_spaced(area, &[Constraint::Fill(1), Constraint::Fill(1)], 0),
+            split_h(area, &[Constraint::Fill(1), Constraint::Fill(1)])
         );
     }
 
@@ -554,7 +684,11 @@ mod tests {
         let area = Rect::new(0, 0, 6, 59);
         let panes = split_v_spaced(
             area,
-            &[Constraint::Fill, Constraint::Fill, Constraint::Fill],
+            &[
+                Constraint::Fill(1),
+                Constraint::Fill(1),
+                Constraint::Fill(1),
+            ],
             1,
         );
         let heights: Vec<u16> = panes.iter().map(Rect::height).collect();

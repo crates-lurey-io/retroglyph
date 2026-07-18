@@ -749,7 +749,7 @@ impl OutpostDashboard {
                 area.width().saturating_sub(2 * MIN_TARGET_W + 2),
                 3,
             ),
-            &[Constraint::Fill; 4],
+            &[Constraint::Fill(1); 4],
             1,
         );
         for (col, stat) in cols.iter().zip(&self.stats) {
@@ -1066,7 +1066,7 @@ impl OutpostDashboard {
             screen,
             &[
                 Constraint::Fixed(header_h),
-                Constraint::Fill,
+                Constraint::Fill(1),
                 Constraint::Fixed(nav_h),
             ],
         );
@@ -1076,7 +1076,7 @@ impl OutpostDashboard {
 
         let wide = size.width >= BP_WIDE;
         let (main_area, sidebar_area) = if wide && self.tab == Tab::Overview {
-            let cols = split_h(body_area, &[Constraint::Fill, Constraint::Fixed(30)]);
+            let cols = split_h(body_area, &[Constraint::Fill(1), Constraint::Fixed(30)]);
             (cols[0], Some(cols[1]))
         } else {
             (body_area, None)
