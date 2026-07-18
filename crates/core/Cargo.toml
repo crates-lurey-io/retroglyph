@@ -23,6 +23,11 @@ all-features = true
 # when both are present. So std builds use std's float intrinsics and no_std
 # builds fall back to libm, with no code change in retroglyph-core.
 gem = { version = "0.1.0-alpha.6", optional = true, default-features = false }
+# SCREEN/DODGE/BURN/OVERLAY blend modes for `Grid::blit_alpha` (see `BlendMode`); linear blending
+# stays on `gem::rgb::Lerp` above. Same std/libm split as `gem` (see the `gem`/`std` features
+# below) and gated behind the same `gem` feature -- one crate feature covers all of blit_alpha's
+# blend modes rather than splitting into a second flag for what's one capability to callers.
+alpha-blend = { version = "0.2", optional = true, default-features = false }
 ixy = "0.6.0-alpha.9"
 # Pure-Rust sin/cos/pow for `animate`'s trig-based easing curves and its oscillator -- unlike
 # `gem`'s libm usage (internal to its own color-space math, not reusable here), this is a plain,
@@ -36,10 +41,10 @@ unicode-segmentation = { version = "1.13", default-features = false, optional = 
 
 [features]
 default = ["std", "egc", "gem"]
-# `gem?/std`: only when gem is also enabled, prefer std float math over libm.
-std = ["gem?/std"]
+# `gem?/std`, `alpha-blend?/std`: only when gem is also enabled, prefer std float math over libm.
+std = ["gem?/std", "alpha-blend?/std"]
 egc = ["dep:unicode-segmentation"]
-gem = ["dep:gem", "gem/libm"]
+gem = ["dep:gem", "gem/libm", "dep:alpha-blend", "alpha-blend/libm"]
 
 [dev-dependencies]
 unicode-width = "0.2"

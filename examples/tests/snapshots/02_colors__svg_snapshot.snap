@@ -114,22 +114,107 @@ expression: svg
   <tspan fill="#cccccc" x="8.0">                                                  </tspan>
 </text>
 <text font-family="monospace" font-size="14" y="332.0" xml:space="preserve">
-  <tspan fill="#cccccc" x="8.0">                                                  </tspan>
+  <tspan fill="#cccccc" x="8.0"> Blend modes (blit_alpha, warm/cool, alpha 0..1): </tspan>
 </text>
 <text font-family="monospace" font-size="14" y="350.0" xml:space="preserve">
-  <tspan fill="#cccccc" x="8.0">                                                  </tspan>
+  <tspan fill="#cccccc" x="8.0"> Linear:  </tspan>
+  <tspan fill="#cccccc" x="92.0" style="background:#14288c"> </tspan>
+  <tspan fill="#cccccc" x="100.4" style="background:#243185"> </tspan>
+  <tspan fill="#cccccc" x="108.8" style="background:#333b7f"> </tspan>
+  <tspan fill="#cccccc" x="117.2" style="background:#434478"> </tspan>
+  <tspan fill="#cccccc" x="125.6" style="background:#534d71"> </tspan>
+  <tspan fill="#cccccc" x="134.0" style="background:#62576b"> </tspan>
+  <tspan fill="#cccccc" x="142.4" style="background:#726064"> </tspan>
+  <tspan fill="#cccccc" x="150.8" style="background:#82695d"> </tspan>
+  <tspan fill="#cccccc" x="159.2" style="background:#917357"> </tspan>
+  <tspan fill="#cccccc" x="167.6" style="background:#a17c50"> </tspan>
+  <tspan fill="#cccccc" x="176.0" style="background:#b18549"> </tspan>
+  <tspan fill="#cccccc" x="184.4" style="background:#c08f43"> </tspan>
+  <tspan fill="#cccccc" x="192.8" style="background:#d0983c"> </tspan>
+  <tspan fill="#cccccc" x="201.2" style="background:#e0a135"> </tspan>
+  <tspan fill="#cccccc" x="209.6" style="background:#efab2f"> </tspan>
+  <tspan fill="#cccccc" x="218.0" style="background:#ffb428"> </tspan>
+  <tspan fill="#cccccc" x="226.4">                        </tspan>
 </text>
 <text font-family="monospace" font-size="14" y="368.0" xml:space="preserve">
-  <tspan fill="#cccccc" x="8.0">                                                  </tspan>
+  <tspan fill="#cccccc" x="8.0"> Screen:  </tspan>
+  <tspan fill="#cccccc" x="92.0" style="background:#14288c"> </tspan>
+  <tspan fill="#cccccc" x="100.4" style="background:#24328d"> </tspan>
+  <tspan fill="#cccccc" x="108.8" style="background:#333c8e"> </tspan>
+  <tspan fill="#cccccc" x="117.2" style="background:#434690"> </tspan>
+  <tspan fill="#cccccc" x="125.6" style="background:#535091"> </tspan>
+  <tspan fill="#cccccc" x="134.0" style="background:#625b92"> </tspan>
+  <tspan fill="#cccccc" x="142.4" style="background:#726593"> </tspan>
+  <tspan fill="#cccccc" x="150.8" style="background:#826f94"> </tspan>
+  <tspan fill="#cccccc" x="159.2" style="background:#917996"> </tspan>
+  <tspan fill="#cccccc" x="167.6" style="background:#a18397"> </tspan>
+  <tspan fill="#cccccc" x="176.0" style="background:#b18d98"> </tspan>
+  <tspan fill="#cccccc" x="184.4" style="background:#c09799"> </tspan>
+  <tspan fill="#cccccc" x="192.8" style="background:#d0a19a"> </tspan>
+  <tspan fill="#cccccc" x="201.2" style="background:#e0ac9c"> </tspan>
+  <tspan fill="#cccccc" x="209.6" style="background:#efb69d"> </tspan>
+  <tspan fill="#cccccc" x="218.0" style="background:#ffc09e"> </tspan>
+  <tspan fill="#cccccc" x="226.4">                        </tspan>
 </text>
 <text font-family="monospace" font-size="14" y="386.0" xml:space="preserve">
-  <tspan fill="#cccccc" x="8.0">                                                  </tspan>
+  <tspan fill="#cccccc" x="8.0"> Dodge:   </tspan>
+  <tspan fill="#cccccc" x="92.0" style="background:#14288c"> </tspan>
+  <tspan fill="#cccccc" x="100.4" style="background:#242e8e"> </tspan>
+  <tspan fill="#cccccc" x="108.8" style="background:#33358f"> </tspan>
+  <tspan fill="#cccccc" x="117.2" style="background:#433b91"> </tspan>
+  <tspan fill="#cccccc" x="125.6" style="background:#534293"> </tspan>
+  <tspan fill="#cccccc" x="134.0" style="background:#624895"> </tspan>
+  <tspan fill="#cccccc" x="142.4" style="background:#724e96"> </tspan>
+  <tspan fill="#cccccc" x="150.8" style="background:#825598"> </tspan>
+  <tspan fill="#cccccc" x="159.2" style="background:#915b9a"> </tspan>
+  <tspan fill="#cccccc" x="167.6" style="background:#a1629c"> </tspan>
+  <tspan fill="#cccccc" x="176.0" style="background:#b1689d"> </tspan>
+  <tspan fill="#cccccc" x="184.4" style="background:#c06e9f"> </tspan>
+  <tspan fill="#cccccc" x="192.8" style="background:#d075a1"> </tspan>
+  <tspan fill="#cccccc" x="201.2" style="background:#e07ba3"> </tspan>
+  <tspan fill="#cccccc" x="209.6" style="background:#ef82a4"> </tspan>
+  <tspan fill="#cccccc" x="218.0" style="background:#ff88a6"> </tspan>
+  <tspan fill="#cccccc" x="226.4">                        </tspan>
 </text>
 <text font-family="monospace" font-size="14" y="404.0" xml:space="preserve">
-  <tspan fill="#cccccc" x="8.0">                                                  </tspan>
+  <tspan fill="#cccccc" x="8.0"> Burn:    </tspan>
+  <tspan fill="#cccccc" x="92.0" style="background:#14288c"> </tspan>
+  <tspan fill="#cccccc" x="100.4" style="background:#142583"> </tspan>
+  <tspan fill="#cccccc" x="108.8" style="background:#142379"> </tspan>
+  <tspan fill="#cccccc" x="117.2" style="background:#142070"> </tspan>
+  <tspan fill="#cccccc" x="125.6" style="background:#141d67"> </tspan>
+  <tspan fill="#cccccc" x="134.0" style="background:#141b5d"> </tspan>
+  <tspan fill="#cccccc" x="142.4" style="background:#141854"> </tspan>
+  <tspan fill="#cccccc" x="150.8" style="background:#14154b"> </tspan>
+  <tspan fill="#cccccc" x="159.2" style="background:#141341"> </tspan>
+  <tspan fill="#cccccc" x="167.6" style="background:#141038"> </tspan>
+  <tspan fill="#cccccc" x="176.0" style="background:#140d2f"> </tspan>
+  <tspan fill="#cccccc" x="184.4" style="background:#140b25"> </tspan>
+  <tspan fill="#cccccc" x="192.8" style="background:#14081c"> </tspan>
+  <tspan fill="#cccccc" x="201.2" style="background:#140513"> </tspan>
+  <tspan fill="#cccccc" x="209.6" style="background:#140309"> </tspan>
+  <tspan fill="#cccccc" x="218.0" style="background:#140000"> </tspan>
+  <tspan fill="#cccccc" x="226.4">                        </tspan>
 </text>
 <text font-family="monospace" font-size="14" y="422.0" xml:space="preserve">
-  <tspan fill="#cccccc" x="8.0">                                                  </tspan>
+  <tspan fill="#cccccc" x="8.0"> Overlay: </tspan>
+  <tspan fill="#cccccc" x="92.0" style="background:#14288c"> </tspan>
+  <tspan fill="#cccccc" x="100.4" style="background:#152987"> </tspan>
+  <tspan fill="#cccccc" x="108.8" style="background:#172a81"> </tspan>
+  <tspan fill="#cccccc" x="117.2" style="background:#182b7c"> </tspan>
+  <tspan fill="#cccccc" x="125.6" style="background:#192c77"> </tspan>
+  <tspan fill="#cccccc" x="134.0" style="background:#1b2d72"> </tspan>
+  <tspan fill="#cccccc" x="142.4" style="background:#1c2f6c"> </tspan>
+  <tspan fill="#cccccc" x="150.8" style="background:#1d3067"> </tspan>
+  <tspan fill="#cccccc" x="159.2" style="background:#1f3162"> </tspan>
+  <tspan fill="#cccccc" x="167.6" style="background:#20325d"> </tspan>
+  <tspan fill="#cccccc" x="176.0" style="background:#213357"> </tspan>
+  <tspan fill="#cccccc" x="184.4" style="background:#233452"> </tspan>
+  <tspan fill="#cccccc" x="192.8" style="background:#24354d"> </tspan>
+  <tspan fill="#cccccc" x="201.2" style="background:#253648"> </tspan>
+  <tspan fill="#cccccc" x="209.6" style="background:#273742"> </tspan>
+  <tspan fill="#cccccc" x="218.0" style="background:#28383d"> </tspan>
+  <tspan fill="#cccccc" x="226.4">                        </tspan>
 </text>
 <text font-family="monospace" font-size="14" y="440.0" xml:space="preserve">
   <tspan fill="#cccccc" x="8.0">                                                  </tspan>
