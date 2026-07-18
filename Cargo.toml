@@ -32,6 +32,11 @@ wasm-pack = { version = "0.15.0" }
 # the WASM examples' .wasm module from) without depending on Python or any
 # other tool outside the Rust toolchain.
 miniserve = { version = "0.35.0" }
+# Drives `just sweep`: prunes stale `target/` build artifacts (old incremental-compile variants,
+# artifacts from toolchains no longer installed) without a full `cargo clean`. Unmaintained
+# upstream (see its README) but still the simplest tool for this; re-evaluate against
+# `cargo-clean-all` if it ever stops working.
+cargo-sweep = { version = "0.8.0" }
 # cargo-llms-txt is intentionally not managed here: it has no prebuilt
 # binstall/quickinstall binaries, and cargo-run-bin's source-install fallback
 # is broken (https://github.com/dustinblackman/cargo-run-bin/issues/39).

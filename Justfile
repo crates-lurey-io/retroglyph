@@ -129,6 +129,13 @@ check: fmt-check lint compile test doc
 clean:
     cargo clean
 
+# Prunes `target/` build artifacts untouched in the last 14 days, without a full `cargo clean`.
+# Run this periodically (or wire into a cron/launchd job) to keep `target/` from accumulating
+# stale incremental-compile variants across toolchain bumps and one-off feature combinations --
+# `cargo clean` (above) is the nuclear option when you want a fully clean slate instead.
+sweep:
+    cargo bin cargo-sweep --time 14
+
 # ── Convenience ──────────────────────────────────────────────────────────────
 
 # Re-run every snapshot test and bless whatever changed. Deliberately plain `cargo test` plus the
