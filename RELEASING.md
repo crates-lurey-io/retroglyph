@@ -122,10 +122,21 @@ experiencing the break, for the reason above.
   gate would fail almost every legitimate breaking PR (since `!` is now reserved for the rare
   behavioral-break case) and force a `semver-override`-style label onto the common case -- exactly
   backwards. The PR-time job exists purely so a reviewer sees the finding before merge; the real
-  enforcement is `semver_check` on the Release PR. To make that finding visible without opening the
-  Actions run, the job also syncs the `t:breaking` label onto the PR (added when it finds a break,
-  removed when it doesn't) -- purely a categorization mirror of its own finding, not an input to
-  anything downstream; see the note on `t:breaking` below.
+  enforcement is `semver_check` on the Release PR.
+
+  Unlike the release-time check, the PR-time job compares against the PR's own base commit
+  (`--baseline-rev`), not the last crates.io release. Comparing against crates.io like release-plz
+  does would mean every PR stacked on an already-unreleased breaking change on `main` also reports
+  breaking, even PRs that never touch the API -- the PR-time job answers "did _this_ PR add a
+  break", not "is `main` breaking relative to the last release" (that's release-plz's question).
+
+  To make the finding visible without opening the Actions run, the job also syncs the `t:breaking`
+  label and a report comment onto the PR: added/updated when it finds a break (the comment holds the
+  full `cargo-semver-checks` output, re-run and edited in place on every push, not reposted),
+  removed when it doesn't. Both are purely a mirror of the job's own finding, not an input to
+  anything downstream; see the note on `t:breaking` below. If the tool itself fails to complete
+  (exit code other than clean or breaking-found) the job leaves the label/comment untouched rather
+  than guessing, since an inconclusive run isn't evidence of either state.
 
 ## PR labels (overrides)
 

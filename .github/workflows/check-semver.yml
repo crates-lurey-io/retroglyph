@@ -1,21 +1,31 @@
 name: Check Semver
 
 # Fast PR-time reviewer signal for API breaking changes. NOT the enforcement mechanism, and NOT a
-# merge gate (not in ci.yml's `required` aggregator, and the step below is continue-on-error): the
-# real authority is release-plz's own semver_check (release-plz.toml), which runs cargo-semver-checks
+# merge gate (the job always exits 0): the real authority is release-plz's own semver_check
+# (release-plz.toml), which runs cargo-semver-checks against the last published crates.io version
 # while computing the Release PR and correctly bumps (and per-crate scopes) whatever it finds. See
 # RELEASING.md's "Declaring breaking changes" section.
+#
+# Deliberately checks against the PR's base commit (`--baseline-rev`), not the last crates.io
+# release: comparing against crates.io like release-plz does means every PR stacked on top of an
+# already-unreleased breaking change on `main` would also show as breaking, even PRs that never
+# touch the API. Comparing against the PR's own base isolates "did *this* PR add a break" from "is
+# `main` breaking relative to the last release" -- the latter is release-plz's question to answer,
+# not this job's.
 #
 # Deliberately non-blocking rather than gated on a `!`/label skip condition: `!` is now reserved for
 # the narrow behavioral-break case semver_check can't see, so a hard PR-time gate would fail almost
 # every legitimate API-breaking PR and force a label onto the common case -- backwards. This job
 # exists purely so a reviewer sees the finding before merge.
 #
-# The `t:breaking` label is synced (added/removed) to mirror the finding directly on the PR, so it's
-# visible without opening the Actions run -- purely informational, same as the job itself: it does
-# not drive release-plz's version bump (only a commit's `!`/`BREAKING CHANGE:` does that; see
-# RELEASING.md's "PR labels (overrides)" section) and label sync is best-effort only, since a
-# fork PR's `GITHUB_TOKEN` is always read-only on `pull_request` and can't write the label.
+# The `t:breaking` label and a report comment are synced (added/updated/removed) to mirror the
+# finding directly on the PR, so it's visible without opening the Actions run -- purely
+# informational, same as the job itself: neither drives release-plz's version bump (only a commit's
+# `!`/`BREAKING CHANGE:` does that; see RELEASING.md's "PR labels (overrides)" section). Both are
+# best-effort only, since a fork PR's `GITHUB_TOKEN` is always read-only on `pull_request` and can't
+# write labels or comments. Distinguishes `cargo-semver-checks`' own exit codes (0 = clean,
+# 100 = breaking change found, anything else = the tool itself failed to complete) so a build/network
+# hiccup can't be misread as "no breaking change" and flip the label/comment the wrong way.
 
 on:
   pull_request:
@@ -30,20 +40,95 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history so `--baseline-rev` can resolve the PR's base commit locally.
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-semver-checks
+
       - name: Run cargo-semver-checks
         id: semver-check
-        uses: obi1kenobi/cargo-semver-checks-action@v2
-        continue-on-error: true
+        run: |
+          set +e
+          cargo semver-checks check-release \
+            --baseline-rev "${{ github.event.pull_request.base.sha }}" \
+            --color never \
+            2>&1 | tee semver-check-output.txt
+          exit_code="${PIPESTATUS[0]}"
+          echo "exit_code=$exit_code" >> "$GITHUB_OUTPUT"
+        shell: bash
 
-      # Best-effort: on a fork PR, GITHUB_TOKEN is read-only for `pull_request` and these
-      # `gh pr edit` calls fail silently on the label write; they don't affect the job's outcome.
-      - name: Add t:breaking label
-        if: steps.semver-check.outcome == 'failure'
+      - name: Sync t:breaking label and report comment
+        if: always()
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh pr edit ${{ github.event.pull_request.number }} --add-label t:breaking || true
-      - name: Remove t:breaking label
-        if: steps.semver-check.outcome != 'failure'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh pr edit ${{ github.event.pull_request.number }} --remove-label t:breaking || true
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          EXIT_CODE: ${{ steps.semver-check.outputs.exit_code }}
+        run: |
+          # No `set -e`: every mutating gh call below is already `|| true`-guarded (best-effort,
+          # see the top-of-file comment on fork PRs), and a failed read here should just fall
+          # back to "no existing comment found" rather than aborting the step.
+          marker='<!-- check-semver:report -->'
+          existing_id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" --paginate \
+            --jq "[.[] | select(.body | startswith(\"$marker\"))] | if length > 0 then .[-1].id else empty end")
+
+          case "$EXIT_CODE" in
+            0)
+              # Clean: drop the label and any stale report comment, best-effort.
+              gh pr edit "$PR_NUMBER" --remove-label t:breaking || true
+              if [ -n "$existing_id" ]; then
+                gh api "repos/$GITHUB_REPOSITORY/issues/comments/$existing_id" -X DELETE || true
+              fi
+              ;;
+            100)
+              # Breaking change found against the PR's base: label + upsert the report comment.
+              gh pr edit "$PR_NUMBER" --add-label t:breaking || true
+
+              # Cap the embedded report well under GitHub's ~65k comment body limit; the full,
+              # untruncated output is always in the linked Actions run log.
+              report=$(cat semver-check-output.txt)
+              max_chars=50000
+              if [ "${#report}" -gt "$max_chars" ]; then
+                report="${report:0:$max_chars}"$'\n'"... (truncated -- see the full log in the Actions run linked below)"
+              fi
+              run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+
+              {
+                echo "$marker"
+                echo "### :warning: Breaking API change detected"
+                echo
+                echo "\`cargo-semver-checks\` found a breaking change in this PR relative to its"
+                echo "base commit (\`$BASE_SHA\`). This is a non-blocking, PR-time signal only --"
+                echo "see [RELEASING.md](https://github.com/$GITHUB_REPOSITORY/blob/main/RELEASING.md#declaring-breaking-changes)"
+                echo "for how breaking changes are actually declared and versioned."
+                echo
+                echo '<details><summary>Full report</summary>'
+                echo
+                echo '```'
+                echo "$report"
+                echo '```'
+                echo
+                echo '</details>'
+                echo
+                echo "_Updated automatically as this PR changes._ Last run: <$run_url>"
+              } >comment-body.md
+
+              if [ -n "$existing_id" ]; then
+                gh api "repos/$GITHUB_REPOSITORY/issues/comments/$existing_id" \
+                  -X PATCH -F body=@comment-body.md || true
+              else
+                gh pr comment "$PR_NUMBER" --body-file comment-body.md || true
+              fi
+              ;;
+            *)
+              # cargo-semver-checks itself failed to complete (build error, missing baseline,
+              # etc.) rather than reaching a verdict. Leave the label/comment as they were --
+              # flipping either based on an inconclusive run would misreport the PR's actual
+              # state. The job log has the failure for a maintainer to investigate.
+              echo "::warning::cargo-semver-checks exited $EXIT_CODE (not 0 or 100); leaving t:breaking label/comment untouched. See the job log for details."
+              ;;
+          esac
