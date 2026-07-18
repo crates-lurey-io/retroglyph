@@ -104,15 +104,22 @@ test-v: build-pty-examples
     cargo bin cargo-nextest run --workspace --all-features --no-capture
     cargo test --workspace --all-features --doc -- --nocapture
 
-# Run benchmarks locally. Install cargo-criterion first: cargo install cargo-criterion
-# To save a baseline: just bench -- --save-baseline main
-# To compare:        just bench -- --baseline main
-#
-# TODO: no bench target exists yet -- the old crates/examples/benches/retroglyph.rs
-# was deleted along with the rest of crates/examples/. Re-add a `[[bench]]` to
-# examples/Cargo.toml before using this recipe again.
+# Run every benchmark once, locally, no comparison. Args are forwarded to `cargo bench`/criterion:
+#   just bench                                    # everything
+#   just bench -- grid_diff/80x24                 # filter to one group
+#   just bench -- grid_diff/80x24 --sample-size 20 # filter + fewer samples for a quick check
 bench *args:
-    @echo "No bench target yet -- see the TODO above this recipe in the Justfile." && exit 1
+    cargo bench -p retroglyph-benches --benches {{ args }}
+
+# Compare the current working copy (dirty changes included) against another git ref, default
+# origin/main. See tools/bench-compare.sh for the full flag/example list (`-b <bench-name>`,
+# forwarding extra criterion args after `--`, etc.):
+#   just bench-compare                 # origin/main vs. current working copy
+#   just bench-compare HEAD~5          # 5 commits back vs. current working copy
+#   just bench-compare v0.3.0
+#   just bench-compare -- grid_diff/80x24 --sample-size 20
+bench-compare *args:
+    ./tools/bench-compare.sh {{ args }}
 
 # ── Dependencies ─────────────────────────────────────────────────────────────
 

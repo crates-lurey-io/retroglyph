@@ -15,10 +15,6 @@ env:
 
 jobs:
   bench:
-    # TODO: disabled -- the bench target (crates/examples/benches/retroglyph.rs) was deleted
-    # along with the rest of crates/examples/. Re-enable once the new examples/ crate has a
-    # `[[bench]]` target again, and restore the `if:` condition below.
-    if: false
     runs-on: ubuntu-latest
     permissions:
       checks: write
@@ -53,7 +49,7 @@ jobs:
             --thresholds-reset \
             --error-on-alert \
             --github-actions '${{ secrets.GITHUB_TOKEN }}' \
-            "cargo bench -p retroglyph-examples --bench retroglyph --features default-font"
+            "cargo bench -p retroglyph-benches --bench grid_diff"
 
       # On labeled PRs: run the PR branch, compare against main's historical data.
       - name: Benchmark (check PR)
@@ -72,4 +68,4 @@ jobs:
             --start-point-reset \
             --error-on-alert \
             --github-actions '${{ secrets.GITHUB_TOKEN }}' \
-            "cargo bench -p retroglyph-examples --bench retroglyph --features default-font"
+            "cargo bench -p retroglyph-benches --bench grid_diff"

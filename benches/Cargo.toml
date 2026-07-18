@@ -1,0 +1,28 @@
+[package]
+name = "retroglyph-benches"
+version = "0.1.0-alpha"
+description = "Performance benchmarks for retroglyph (not published)"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+# lib.rs has no `#[bench]` items (it exists only so Cargo has a target -- see its doc comment);
+# without this, `cargo bench --benches` (every target with `bench = true`, the default) also tries
+# to run it as a libtest bench harness, which fails on any criterion CLI arg it doesn't recognize.
+[lib]
+bench = false
+
+[dev-dependencies]
+retroglyph-core = { path = "../crates/core", version = "0.1.0" }
+criterion = "0.5"
+fastrand = "2"
+
+[[bench]]
+name = "grid_diff"
+harness = false
