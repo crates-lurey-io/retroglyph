@@ -39,6 +39,82 @@ use std::time::Duration;
 /// translated input event, and calls `Terminal::present` (which drives
 /// `Presenter::flush`) plus `presenter_mut().present()` once per frame.
 ///
+/// # Example: driving without `winit`
+///
+/// ```rust
+/// use retroglyph_core::{Backend, Event, Pos, Size, Terminal, Tile};
+/// use retroglyph_window::{Presenter, WindowBackend, WindowHandle};
+/// use std::sync::Arc;
+/// use std::time::Duration;
+///
+/// struct NullPresenter;
+///
+/// impl Presenter for NullPresenter {
+///     type Error = core::convert::Infallible;
+///     type SurfaceError = core::convert::Infallible;
+///
+///     fn draw<'a, I>(&mut self, _content: I) -> Result<(), Self::Error>
+///     where
+///         I: Iterator<Item = (Pos, &'a Tile, Option<&'a str>)>,
+///     {
+///         Ok(())
+///     }
+///
+///     fn draw_layers<'a, I>(&mut self, _content: I) -> Result<(), Self::Error>
+///     where
+///         I: Iterator<Item = (u8, Pos, &'a Tile, Option<&'a str>)>,
+///     {
+///         Ok(())
+///     }
+///
+///     fn flush(&mut self) -> Result<(), Self::Error> {
+///         Ok(())
+///     }
+///
+///     fn size(&self) -> Size {
+///         Size { width: 4, height: 2 }
+///     }
+///
+///     fn clear(&mut self) -> Result<(), Self::Error> {
+///         Ok(())
+///     }
+///
+///     fn resize(&mut self, _size: Size) {}
+///
+///     fn init_surface(&mut self, _window: Arc<dyn WindowHandle>) -> Result<(), Self::SurfaceError> {
+///         Ok(())
+///     }
+///
+///     fn resize_surface(&mut self, _width: u32, _height: u32) {}
+///
+///     fn present(&mut self) -> Result<(), Self::SurfaceError> {
+///         Ok(())
+///     }
+///
+///     fn cell_size(&self) -> (u32, u32) {
+///         (8, 16)
+///     }
+/// }
+///
+/// // A caller driving its own loop (SDL2, tao, a hand-rolled driver) builds
+/// // `WindowBackend` directly -- no `winit` feature required.
+/// let backend = WindowBackend::new(NullPresenter);
+/// let mut term = Terminal::new(backend);
+///
+/// // The loop pushes each translated input event onto the queue...
+/// term.backend_mut().push_event(Event::FocusGained);
+///
+/// // ...and the app drains it through the normal `Terminal` polling API,
+/// // which never blocks for `WindowBackend`.
+/// while term.poll(Duration::ZERO).is_some() {}
+///
+/// // Once per frame: `Terminal::present` diffs the grid and drives
+/// // `Presenter::flush`, then the caller drives `Presenter::present` itself
+/// // to push pixels to the window.
+/// term.present().unwrap();
+/// term.backend_mut().presenter_mut().present().unwrap();
+/// ```
+///
 /// [`poll_event`](Backend::poll_event) never blocks: frame timing is owned by
 /// the event loop, not by input waits.
 pub struct WindowBackend<P: Presenter> {
