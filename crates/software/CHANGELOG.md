@@ -11,6 +11,205 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 ### Features
 
+- [e6fc7ff](
+https://github.com/crates-lurey-io/retroglyph/commit/e6fc7ff098c6e28d56818bcefd8856a2448bb3b2) *(core)* Implement Grid::clone and shrink Tile via an EGC side-table by `@matanlurey` in [#225](
+https://github.com/crates-lurey-io/retroglyph/pull/225)
+  >
+  > Closes #130.
+  >
+  > - Grid::clone: derive Clone on LayerBuf and Grid now that ixy 0.6.0-alpha.8+
+  >   implements Clone/Copy for the RowMajor layout marker, removing the
+  >   upstream-blocked TODO in grid.rs.
+  >
+  > - Tile layout shrink: move the (rare) multi-codepoint EGC grapheme text out
+  >   of Tile and into a sparse per-layer side-table on Grid (LayerBuf::extras),
+  >   gated by a new TileFlags::HAS_EXTRA bit. Tile drops from 32 to 20 bytes and
+  >   becomes Copy. Tile::extra()/grapheme() are replaced by Grid::grapheme(),
+  >   since a bare Tile can no longer answer that on its own.
+  >
+  >   This requires widening Backend::draw/draw_layers items from (Pos, &Tile)
+  >   to (Pos, &Tile, Option<&str>) (and the layered equivalent) so backends
+  >   that render the full grapheme cluster (retroglyph-terminal, shared by
+  >   crossterm and terminal-wasm) still can. Grid::layers()/diff() are widened
+  >   to match, and diff() is now hand-rolled instead of delegating to grixy's
+  >   GridDiff, so a grapheme-only change (same glyph/style/flags, different
+  >   combining mark) is still detected as a diff.
+  >
+  >   Both TODOs were tracked together in #130; the Backend-trait widening was
+  >   previously deferred pending 'a Backend-trait change already on the table
+  >   for another reason' -- this is that reason.
+
+### Bug Fixes
+
+- [8dcf5dc](
+https://github.com/crates-lurey-io/retroglyph/commit/8dcf5dcb88090491bef76e284648e91076af9eaf) *(software)* Apply sub-cell offset in blit_cell to match blit_glyph by `@matanlurey` in [#211](
+https://github.com/crates-lurey-io/retroglyph/pull/211)
+
+  > blit_cell (the non-layered Backend::draw path) filled the whole cell
+  > rectangle with the glyph, ignoring tile.dx()/dy(). blit_glyph (the
+  > draw_layers path) and blit_sprite already apply that offset, so any
+  > app relying on Backend::draw instead of draw_layers silently lost
+  > per-cell sub-cell offsets.
+  >
+  > Rewrite blit_cell to fill the cell background first, then paint the
+  > glyph foreground pixels at an origin shifted by dx/dy (scaled),
+  > mirroring blit_glyph's bounds-checked loop. Add a unit test exercising
+  > Backend::draw directly to confirm the shift takes effect on that path.
+  >
+  > Closes #169
+
+- [0d7cad6](
+https://github.com/crates-lurey-io/retroglyph/commit/0d7cad6bdcd24ce9952edff70b5ad301fe7fdc90) *(software)* Reject scale == 0 in SoftwareBackendBuilder::build by `@matanlurey` in [#212](
+https://github.com/crates-lurey-io/retroglyph/pull/212)
+  >
+  > Closes #171
+
+- [b0ab717](
+https://github.com/crates-lurey-io/retroglyph/commit/b0ab71792aa3b81417c2f17982d70d26179dda6c) *(software)* Make run_headless() return Result instead of panicking by `@matanlurey` in [#175](
+https://github.com/crates-lurey-io/retroglyph/pull/175)
+  >
+  > SoftwareBackendBuilder::build() already validates and returns
+  > Err(SoftwareBackendError::NoFont) when no font is set and default-font is
+  > off, but run_headless() re-panicked on self.font.expect(...) if that
+  > invariant was ever violated -- reachable by constructing SoftwareBackend
+  > directly, since its fields were all pub and it implemented Default with
+  >
+  > font:None in that case.
+  >
+  > - SoftwareBackend::font is now crate-private (with a new pub font()
+  >   getter); the public Default impl is replaced with a crate-private
+  >   defaults() used only by SoftwareBackendBuilder::new(), so the only way
+  >   to reach run_headless() is through the builder.
+  > - run_headless() now returns Result<SoftwareRenderer, SoftwareBackendError>,
+  >   matching build()'s existing contract, instead of panicking.
+  > - The tileset-loading .expect() in the same function is converted to
+  >   propagate SoftwareBackendError::Tileset for the same reason.
+  > - Updates the handful of call sites (doctests, README, examples,
+  >   in-crate tests) accordingly.
+  >
+  > Closes #163.
+
+- [50b274f](
+https://github.com/crates-lurey-io/retroglyph/commit/50b274f07527c62bd5af9a46c90cc7a6f03f081c) *(workspace)* Squash 3+ blank lines and allow MD037 in generated changelogs by `@matanlurey` in [#247](
+https://github.com/crates-lurey-io/retroglyph/pull/247)
+
+  > release-plz's per-crate CHANGELOG.md is prepended above the hand-written 0.1.0
+  > entry using cliff.toml's body template. The tail block that renders the
+  > `**Full Changelog**: ...` link can't be trimmed with Tera's `-` whitespace
+  > markers without also swallowing the blank line that's supposed to separate it
+  > from the next heading -- that separator has to come from literal template text
+  > sitting between nested {% if %} blocks -- so it leaves 3 blank lines at that
+  > boundary instead of 1. Add a postprocessor that squashes any run of 3+
+  > newlines down to a single blank line, matching Keep a Changelog / prettier /
+  > markdownlint's MD012 expectation.
+  >
+  > Also extend the per-changelog markdownlint-disable comment (both the
+  > already-checked-in header on all 7 crates' CHANGELOG.md, and cliff.toml's
+  > header template for any crate whose changelog doesn't exist yet) with
+  > no-space-in-emphasis: commit bodies are freeform prose and can contain a
+  > literal _ or * adjacent to other text (e.g. `wasm_terminal_* FFI`, `manual
+  > _style override`) that markdownlint's MD037 misreads as unbalanced emphasis
+  > markers. That's not something a template fix can prevent, since it depends on
+  > historical commit message content.
+  >
+  > Fixes the release-plz standing PR's format/lint CI failure .
+
+### Documentation
+
+- [d80639a](
+https://github.com/crates-lurey-io/retroglyph/commit/d80639a63c045a8b98508e39547e681cbb0c97a3) *(software)* Surface wasm32 target_fps no-op caveat in README by `@matanlurey` in [#210](
+https://github.com/crates-lurey-io/retroglyph/pull/210)
+  >
+  > Closes #170
+
+- [8d7d45e](
+https://github.com/crates-lurey-io/retroglyph/commit/8d7d45e15b3ec55d97f1c5e98dddf8f0fb48d1b2) *(software)* Cite xterm greyscale ramp source in indexed_to_rgb by `@matanlurey` in [#209](
+https://github.com/crates-lurey-io/retroglyph/pull/209)
+  >
+  > Closes #168
+
+- [85562c8](
+https://github.com/crates-lurey-io/retroglyph/commit/85562c89acf96655d65533e8a040f9dfe8aa0439) *(software)* Link wider-than-8px glyph deferral to issue #164 by `@matanlurey` in [#196](
+https://github.com/crates-lurey-io/retroglyph/pull/196)
+
+- [0fbcb53](
+https://github.com/crates-lurey-io/retroglyph/commit/0fbcb5320a4de96855bb01316c5b021caecb0c70) *(software)* Document ANSI/indexed palette drift risk vs core by `@matanlurey` in [#195](
+https://github.com/crates-lurey-io/retroglyph/pull/195)
+
+  > docs(software): document ANSI/indexed palette drift risk vs core
+  >
+  > ansi_to_rgb/indexed_to_rgb in retroglyph-software independently duplicate
+  > the xterm 16-color and 256-color palette math that retroglyph-core also
+  > implements (AnsiColor::to_rgb, plus a private gem-gated 256-color table).
+  > Investigation confirms the two tables do NOT fully agree today -- e.g.
+  > core's AnsiColor::Red is (205, 0, 0) (true xterm) while software's is
+  > (128, 0, 0) (classic web-safe ANSI) -- so consuming core's resolver as-is
+  > would be a rendering behavior change, not a pure refactor, and core has
+  > no public forward indexed->RGB resolver to consume regardless.
+  >
+  > Document the intentional duplication and drift risk on both functions,
+  > and add a regression test pinning the palette entries that do currently
+  > agree with retroglyph_core::color::AnsiColor::to_rgb (7 of 16), plus a
+  > dedicated pin for AnsiColor::White = 0x00c0c0c0 as cited in the issue,
+  > so any further accidental drift is caught by CI.
+
+- [84ee88f](
+https://github.com/crates-lurey-io/retroglyph/commit/84ee88f22b2b45c8173e4fb1fd030adf0125b155) *(software)* Document sprite cache reload-by-rebuild scope decision by `@matanlurey` in [#193](
+https://github.com/crates-lurey-io/retroglyph/pull/193)
+
+  > docs(software): document sprite cache reload-by-rebuild scope decision
+
+- [70c6143](
+https://github.com/crates-lurey-io/retroglyph/commit/70c6143b318edf2e6263b55386372d7a4658c497) *(software)* Document layer-1 background-erasure divergence from cell backends by `@matanlurey` in [#179](
+https://github.com/crates-lurey-io/retroglyph/pull/179)
+
+  > Add a named 'Backend parity caveat' section to crates/software/README.md
+  > covering the divergence between draw_layers and cell-backend flattening
+  > for occupied spaces with a Color::Default background on layer 1+, and
+  > cross-reference it from the existing draw_layers doc comment.
+
+### Testing
+
+- [12f98f1](
+https://github.com/crates-lurey-io/retroglyph/commit/12f98f15c65e6f4a9d508af393166e84ad2532f6) *(software)* Extract and test pure presentation-path helpers by `@matanlurey` in [#194](
+https://github.com/crates-lurey-io/retroglyph/pull/194)
+
+### Continuous Integration
+
+- [1d81906](
+https://github.com/crates-lurey-io/retroglyph/commit/1d81906ea8e380d64de0e05345f103627ef49406) *(workspace)* Automated per-crate release-plz workflow by `@matanlurey` in [#80](
+https://github.com/crates-lurey-io/retroglyph/pull/80)
+
+  > * ci(release): adopt per-crate release-plz flow with PR-title enforcement
+  >
+  > Re-enable release-plz's standing Release PR (release-pr + release jobs) so
+  > version bumps and per-crate changelogs are computed from conventional PR-title
+  > history and published on Release-PR merge; developers never push tags.
+  >
+  > - release-plz.toml: per-crate changelogs (drop changelog_path), semver_check=true
+  > - cliff.toml: skip-changelog via github.pr_labels label + changelog: ignore footer
+  > - release-plz.yml: two-job release-pr/release, concurrency guards, trusted publishing
+  > - check-semver.yml: gate only undeclared breaks (skip on title ! or semver-override)
+  > - pr-title.yml: enforce Conventional Commit PR titles + scope list
+  >
+  > * docs(changelog): split workspace changelog into per-crate files
+  >
+  > Per-crate release-plz needs a CHANGELOG.md per crate. Seed each with its
+  > hand-written 0.1.0 entry; the root CHANGELOG.md becomes an index.
+  >
+  > * docs: rewrite RELEASING.md for the automated release flow
+  >
+  > Document the per-crate, release-plz-driven flow: conventional PR titles,
+  > squash-merge, standing Release PR as the single approval gate, breaking
+  > declared via title !, cargo-semver-checks roles, PR labels, and no pre-1.0
+  > prerelease channel. Update AGENTS.md's commit-message section: enforcement
+  > now lives in pr-title.yml, not local hooks.
+
+
+## [0.2.0+retroglyph-software](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-software-v0.1.0...retroglyph-software-v0.2.0) - 2026-07-18
+
+### Features
+
 - [e6fc7ff](https://github.com/crates-lurey-io/retroglyph/commit/e6fc7ff098c6e28d56818bcefd8856a2448bb3b2)
   _(core)_ Implement Grid::clone and shrink Tile via an EGC side-table by `@matanlurey` in
   [#225](https://github.com/crates-lurey-io/retroglyph/pull/225)
