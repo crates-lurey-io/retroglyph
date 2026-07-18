@@ -11,7 +11,7 @@
   <tspan fill="#464a60" x="8.0" style="background:#1e2030">│</tspan>
   <tspan fill="#5aaafa" x="16.4" style="background:#161620">Info</tspan>
   <tspan fill="#cccccc" x="50.0" style="background:#161620"> </tspan>
-  <tspan fill="#6e7082" x="58.4">Settings</tspan>
+  <tspan fill="#6e7082" x="58.4" style="background:#161620">Settings</tspan>
   <tspan fill="#cccccc" x="125.6" style="background:#161620">                                   </tspan>
   <tspan fill="#464a60" x="419.6" style="background:#1e2030">│</tspan>
 </text>
@@ -28,19 +28,19 @@
 </text>
 <text font-family="monospace" font-size="14" y="116.0" xml:space="preserve">
   <tspan fill="#464a60" x="8.0" style="background:#1e2030">│</tspan>
-  <tspan fill="#bec0d0" x="16.4">Bravo</tspan>
+  <tspan fill="#bec0d0" x="16.4" style="background:#161620">Bravo</tspan>
   <tspan fill="#cccccc" x="58.4" style="background:#161620">                                           </tspan>
   <tspan fill="#464a60" x="419.6" style="background:#1e2030">│</tspan>
 </text>
 <text font-family="monospace" font-size="14" y="134.0" xml:space="preserve">
   <tspan fill="#464a60" x="8.0" style="background:#1e2030">│</tspan>
-  <tspan fill="#bec0d0" x="16.4">Charlie</tspan>
+  <tspan fill="#bec0d0" x="16.4" style="background:#161620">Charlie</tspan>
   <tspan fill="#cccccc" x="75.2" style="background:#161620">                                         </tspan>
   <tspan fill="#464a60" x="419.6" style="background:#1e2030">│</tspan>
 </text>
 <text font-family="monospace" font-size="14" y="152.0" xml:space="preserve">
   <tspan fill="#464a60" x="8.0" style="background:#1e2030">│</tspan>
-  <tspan fill="#bec0d0" x="16.4">Delta</tspan>
+  <tspan fill="#bec0d0" x="16.4" style="background:#161620">Delta</tspan>
   <tspan fill="#cccccc" x="58.4" style="background:#161620">                                           </tspan>
   <tspan fill="#464a60" x="419.6" style="background:#1e2030">│</tspan>
 </text>
@@ -62,8 +62,8 @@
 </text>
 <text font-family="monospace" font-size="14" y="224.0" xml:space="preserve">
   <tspan fill="#464a60" x="8.0" style="background:#1e2030">│</tspan>
-  <tspan fill="#5aaafa" x="16.4">█████████████████████████████████</tspan>
-  <tspan fill="#6e7082" x="293.6">░░░░░░░░░░░░░░░</tspan>
+  <tspan fill="#5aaafa" x="16.4" style="background:#161620">█████████████████████████████████</tspan>
+  <tspan fill="#6e7082" x="293.6" style="background:#161620">░░░░░░░░░░░░░░░</tspan>
   <tspan fill="#464a60" x="419.6" style="background:#1e2030">│</tspan>
 </text>
 <text font-family="monospace" font-size="14" y="242.0" xml:space="preserve">

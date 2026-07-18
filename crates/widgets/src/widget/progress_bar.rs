@@ -46,14 +46,24 @@ impl ProgressBar {
 
     /// Applies `theme`'s named roles to this bar: `filled_style` becomes `theme.accent` (progress
     /// reads as emphasis, the same role [`super::Tabs::theme`]/[`super::Button::theme`] use for a
-    /// selected/focused state), and `empty_style` becomes `theme.dim`.
+    /// selected/focused state) on `theme.panel_bg`, and `empty_style` becomes `theme.dim` on
+    /// `theme.panel_bg`.
+    ///
+    /// Both set an explicit background rather than leaving it at [`Style::new()`]'s default: an
+    /// unset background isn't "transparent" once a real backend draws it (a bare `Color::Default`
+    /// cell paints as solid black behind the glyph -- see `retroglyph-software`'s `DEFAULT_BG`),
+    /// which matters most for `empty_style`'s `'░'` glyph (it doesn't fully cover its cell the way
+    /// `filled_style`'s `'█'` does, so its background actually shows). This widget assumes it's
+    /// drawn on `theme.panel_bg`, true when composed with a themed [`super::Panel`]/
+    /// [`super::Modal`]. Drawing this bar directly on the raw screen background instead needs a
+    /// manual `.filled_style(...)`/`.empty_style(...)` override afterwards.
     ///
     /// Call before any manual [`ProgressBar::filled_style`]/[`ProgressBar::empty_style`] override
     /// you want to keep.
     #[must_use]
     pub fn theme(mut self, theme: Theme) -> Self {
-        self.filled_style = Style::new().fg(theme.accent);
-        self.empty_style = Style::new().fg(theme.dim);
+        self.filled_style = Style::new().fg(theme.accent).bg(theme.panel_bg);
+        self.empty_style = Style::new().fg(theme.dim).bg(theme.panel_bg);
         self
     }
 }
@@ -137,6 +147,14 @@ mod tests {
             term.grid().get(0, 0).style().foreground(),
             Theme::DARK.accent
         );
+        assert_eq!(
+            term.grid().get(0, 0).style().background(),
+            Theme::DARK.panel_bg
+        );
         assert_eq!(term.grid().get(3, 0).style().foreground(), Theme::DARK.dim);
+        assert_eq!(
+            term.grid().get(3, 0).style().background(),
+            Theme::DARK.panel_bg
+        );
     }
 }

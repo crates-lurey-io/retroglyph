@@ -64,15 +64,22 @@ impl<'a> List<'a> {
         self
     }
 
-    /// Applies `theme`'s named roles to this list: `item_style` becomes `theme.fg`, and
-    /// `selected_style` becomes `theme.bg` on `theme.accent` -- the same mapping
-    /// `09_widgets_dashboard`'s Alerts list hand-threads today.
+    /// Applies `theme`'s named roles to this list: `item_style` becomes `theme.fg` on
+    /// `theme.panel_bg`, and `selected_style` becomes `theme.bg` on `theme.accent`.
+    ///
+    /// `item_style` sets an explicit background rather than leaving it at [`Style::new()`]'s
+    /// default: an unset background isn't "transparent" once a real backend draws it (a bare
+    /// `Color::Default` cell paints as solid black behind the glyph -- see
+    /// `retroglyph-software`'s `DEFAULT_BG`), so this widget assumes it's drawn on
+    /// `theme.panel_bg`, true when composed with a themed [`super::Panel`]/[`super::Modal`].
+    /// Drawing this list directly on the raw screen background instead needs a manual
+    /// `.item_style(...)` override afterwards.
     ///
     /// Call before any manual [`List::item_style`]/[`List::selected_style`] override you want to
     /// keep.
     #[must_use]
     pub fn theme(mut self, theme: Theme) -> Self {
-        self.item_style = Style::new().fg(theme.fg);
+        self.item_style = Style::new().fg(theme.fg).bg(theme.panel_bg);
         self.selected_style = Style::new().fg(theme.bg).bg(theme.accent);
         self
     }
@@ -270,6 +277,10 @@ mod tests {
         list.render(area, &mut term, &mut state);
 
         assert_eq!(term.grid().get(0, 0).style().foreground(), Theme::DARK.fg);
+        assert_eq!(
+            term.grid().get(0, 0).style().background(),
+            Theme::DARK.panel_bg
+        );
         assert_eq!(term.grid().get(0, 1).style().foreground(), Theme::DARK.bg);
         assert_eq!(
             term.grid().get(0, 1).style().background(),

@@ -29,14 +29,23 @@ impl BoxBorder {
         self
     }
 
-    /// Sets `style`'s foreground to `theme.border`, leaving the background unset (a standalone
-    /// [`BoxBorder`] doesn't know what it's drawn over, unlike [`super::Panel`], which also owns
-    /// its interior fill and can safely use `theme.panel_bg` behind the border row).
+    /// Sets `style` to `theme.border` on `theme.panel_bg`.
+    ///
+    /// The background is set explicitly rather than left at [`Style::new()`]'s default: an unset
+    /// background isn't "transparent" once a real backend draws it (a bare `Color::Default` cell
+    /// paints as solid black behind the glyph, not whatever was there before -- see
+    /// `retroglyph-software`'s `DEFAULT_BG`), which would leave a visible black grid of border
+    /// cells on a light [`Theme`] rather than a border blending into its surroundings. That means
+    /// this widget has to assume *something* about what it's drawn over, even though (unlike
+    /// [`super::Panel`], which also owns and fills its own interior) a standalone `BoxBorder`
+    /// genuinely doesn't know -- `theme.panel_bg` is the closest default, matching what a themed
+    /// [`super::Panel`]/[`super::Modal`] around it would use. Drawing this border directly on the
+    /// raw screen background instead needs a manual [`BoxBorder::style`] override afterwards.
     ///
     /// Call before any manual [`BoxBorder::style`] override you want to keep.
     #[must_use]
     pub fn theme(mut self, theme: Theme) -> Self {
-        self.style = Style::new().fg(theme.border);
+        self.style = Style::new().fg(theme.border).bg(theme.panel_bg);
         self
     }
 }
@@ -119,6 +128,10 @@ mod tests {
         assert_eq!(
             term.grid().get(0, 0).style().foreground(),
             Theme::DARK.border
+        );
+        assert_eq!(
+            term.grid().get(0, 0).style().background(),
+            Theme::DARK.panel_bg
         );
     }
 }
