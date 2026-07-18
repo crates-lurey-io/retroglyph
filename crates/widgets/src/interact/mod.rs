@@ -92,17 +92,20 @@ pub const DEFAULT_DRAG_THRESHOLD: u16 = 1;
 ///    registrations aren't complete until step 3 finishes, and this frame's
 ///    events haven't arrived yet (they're step 2), so every [`Response`] in
 ///    a given frame is one frame stale relative to what's being drawn/fed in
-///    *this* frame -- uniformly for hover, press, release, click, drag, and
+///    *this* frame -- uniformly for hover, press, release, click, and
 ///    scroll, all resolved from that one snapshot. At typical redraw rates
 ///    this is imperceptible; it's the same kind of trade-off
 ///    [`ListState::ensure_visible`](crate::ListState::ensure_visible)
 ///    documents for a different reason (only the caller knows the current
 ///    viewport height), applied here because only the *previous* frame
 ///    knows the full hit list and the pointer's position as of the input
-///    that's about to be processed. Keyboard focus is the one exception:
-///    [`Response::focused`] and Enter/Space activation read
-///    [`FocusRing`]'s `current` live, since it's plain level state with no
-///    hit-testing involved -- no staleness to trade off.
+///    that's about to be processed. `dragging` and [`Response::held`] are exceptions: both
+///    re-check the pointer's *live* position (via [`Pointer::pos`]/[`Pointer::is_down`]) rather
+///    than the frame-stale snapshot, because a drag-in-progress or a press-cancel needs to react
+///    the instant the pointer moves, not one frame later. Keyboard focus is the remaining
+///    exception: [`Response::focused`] and Enter/Space activation read [`FocusRing`]'s `current`
+///    live, since it's plain level state with no hit-testing involved -- no staleness to trade
+///    off.
 /// 2. [`handle_event`](Self::handle_event) updates pointer position/buttons
 ///    and, by default, cycles focus on Tab/Shift+Tab.
 /// 3. Each widget calls [`interact`](Self::interact) with its rect, a
@@ -301,6 +304,18 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
         // drag's terminating release, not just the frames in between.
         let dragging = is_active && sense.contains(Sense::DRAG) && self.past_drag_threshold();
 
+        // Live re-check, deliberately not gated on `hovered`/`resolved_hover` the way `pressed`
+        // is: those are resolved from *last* frame's hit-test snapshot (see the `Interaction`
+        // frame-lifecycle docs), but a slide-off cancellation needs to see the pointer's
+        // *current* position the instant it leaves this rect, not one frame later. Mirrors how
+        // `dragging` above already reads `self.pointer.pos()` live instead of `resolved_pos`, and
+        // how `scroll_delta` below bypasses the single-topmost-winner rule -- same "read live
+        // state, scoped to my own rect" shape, applied a third time.
+        let held = senses_click
+            && is_active
+            && self.pointer.is_down(MouseButton::Left)
+            && self.pointer.pos().is_some_and(|pos| rect.contains_pos(pos));
+
         if senses_click && released_here && hovered && !dragging {
             self.focus.request(id);
         }
@@ -335,6 +350,7 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
             pressed: (is_active && self.resolved_press) || key_activated,
             released: released_here || key_activated,
             clicked: (senses_click && released_here && hovered && !dragging) || key_activated,
+            held,
             dragging,
             focused: self.focus.is_focused(id),
             secondary_clicked,
@@ -564,6 +580,84 @@ mod tests {
         let save = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, Sense::drag());
         assert!(!save.clicked()); // released after dragging, not a click
         assert!(save.released());
+    }
+
+    #[test]
+    fn held_is_true_while_pressed_and_hovering_and_false_once_the_pointer_slides_off() {
+        let mut interaction = Interaction::<Id>::new();
+        let _ = frame(&mut interaction); // frame 1: registers Save/Cancel
+
+        interaction.handle_event(&Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            position: Pos::new(2, 0), // over Save
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        }));
+
+        // frame 2: press resolves against frame 1's registrations, pointer still over Save.
+        let (save, _) = frame(&mut interaction);
+        assert!(save.held());
+
+        interaction.handle_event(&Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Moved,
+            position: Pos::new(20, 0), // outside Save's rect, still held down
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        }));
+        interaction.begin_frame();
+        let save = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, Sense::click());
+        let _ = interaction.interact(Rect::new(6, 0, 5, 1), Id::Cancel, Sense::click());
+        interaction.end_frame();
+        assert!(!save.held()); // slid off before release -- cancels immediately
+
+        interaction.handle_event(&Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Moved,
+            position: Pos::new(2, 0), // back over Save, still held down, before release
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        }));
+        interaction.begin_frame();
+        let save = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, Sense::click());
+        let _ = interaction.interact(Rect::new(6, 0, 5, 1), Id::Cancel, Sense::click());
+        interaction.end_frame();
+        assert!(save.held()); // back inside -- held again
+
+        interaction.handle_event(&Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Up(MouseButton::Left),
+            position: Pos::new(2, 0),
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        }));
+        interaction.begin_frame();
+        let save = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, Sense::click());
+        let _ = interaction.interact(Rect::new(6, 0, 5, 1), Id::Cancel, Sense::click());
+        interaction.end_frame();
+        assert!(!save.held());
+        assert!(save.released());
+        assert!(save.clicked());
+    }
+
+    #[test]
+    fn held_requires_click_sense() {
+        let mut interaction = Interaction::<Id>::new();
+        interaction.begin_frame();
+        let _ = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, Sense::hover());
+        interaction.end_frame();
+
+        interaction.handle_event(&Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            position: Pos::new(2, 0), // over Save
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        }));
+
+        interaction.begin_frame();
+        // `active` is assigned from whichever id was topmost at press time, regardless of that
+        // id's own `Sense` (see `begin_frame`'s `self.active = self.resolved_hover;`), so Save
+        // is `is_active` here even though it only sensed `HOVER` -- `held` must still stay false.
+        let save = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, Sense::hover());
+        interaction.end_frame();
+        assert!(!save.held());
     }
 
     #[test]

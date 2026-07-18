@@ -21,6 +21,7 @@ pub struct Response {
     pub(crate) pressed: bool,
     pub(crate) released: bool,
     pub(crate) clicked: bool,
+    pub(crate) held: bool,
     pub(crate) dragging: bool,
     pub(crate) focused: bool,
     pub(crate) secondary_clicked: bool,
@@ -61,6 +62,19 @@ impl Response {
     #[must_use]
     pub const fn clicked(&self) -> bool {
         self.clicked
+    }
+
+    /// The primary pointer button is down *and* the pointer is currently over this widget's
+    /// rect, re-checked live every frame -- unlike [`pressed`](Self::pressed), which fires
+    /// once on the down edge and never re-checks position. Automatically cancels (goes
+    /// `false`) the instant the pointer slides off this widget's rect, even before release,
+    /// without waiting for a release event -- the same "slide-to-cancel" feedback
+    /// `is_pointer_button_down_on` gives egui widgets and `IsItemHovered() && IsItemActive()`
+    /// gives Dear `ImGui` widgets. Only ever `true` for widgets sensed with
+    /// [`Sense::CLICK`](crate::Sense::CLICK).
+    #[must_use]
+    pub const fn held(&self) -> bool {
+        self.held
     }
 
     /// The pointer moved past the drag threshold while pressed on this
@@ -114,6 +128,7 @@ mod tests {
         assert!(!r.pressed());
         assert!(!r.released());
         assert!(!r.clicked());
+        assert!(!r.held());
         assert!(!r.dragging());
         assert!(!r.focused());
         assert!(!r.secondary_clicked());
