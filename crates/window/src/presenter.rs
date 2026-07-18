@@ -11,6 +11,12 @@
 //! | `SoftwareRenderer` (retroglyph-software) | Copies pixel buffer to softbuffer surface | Creates `softbuffer::Context` + `Surface` |
 //! | `WgpuRenderer` (future) | Submits render pass + presents swap chain | Creates `wgpu::Surface` + `Device` |
 //! | `GlRenderer` (future) | Draws full-screen quad + swaps buffers | Creates GL context from the window |
+//!
+//! See the crate-level docs (`crate` root, "DPI, scale, and the resize contract" and
+//! "Threading model" sections) for the physical-pixel/no-auto-scaling contract on
+//! [`cell_size`](Presenter::cell_size), the sub-cell-remainder behavior on
+//! [`resize_surface`](Presenter::resize_surface), and the single-threaded execution model
+//! every `Presenter` implementation runs under.
 
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use retroglyph_core::backend::BackendError;
@@ -177,6 +183,12 @@ pub trait Presenter {
     fn present(&mut self) -> Result<(), Self::SurfaceError>;
 
     /// Cell size in physical pixels `(width, height)`.
+    ///
+    /// Physical pixels, not logical/DPI-scaled pixels, and never auto-scaled by this crate for
+    /// display DPI -- see the crate-level "DPI, scale, and the resize contract" docs. A presenter
+    /// whose cells should grow on a `HiDPI` display must change what this returns itself (from
+    /// [`resize`](Self::resize) or [`scale_factor_changed`](Self::scale_factor_changed)); absent
+    /// that, it stays constant for the presenter's lifetime.
     ///
     /// `(u32, u32)` rather than [`Size`] because grid coordinates are `u16`
     /// but pixel arithmetic uses `u32` (winit `PhysicalSize`).

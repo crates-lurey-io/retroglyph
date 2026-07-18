@@ -47,6 +47,36 @@
 //! the event loop, event translation, and the `run_windowed`/`run_app`
 //! drivers. Disable it to implement or drive `Presenter` with a different
 //! windowing library (SDL2, tao, a custom loop) without pulling in winit.
+//!
+//! # DPI, scale, and the resize contract
+//!
+//! [`Presenter::cell_size`] returns the cell size in **physical pixels** -- the same pixel
+//! space as `winit::dpi::PhysicalSize` -- not logical/DPI-scaled ("CSS" or "point") pixels.
+//! This crate performs no automatic DPI scaling of it: nothing here changes `cell_size()` in
+//! response to a display's scale factor. `SoftwareRenderer`'s cell size, for example, is
+//! fixed at construction (glyph size × its integer `scale` config) and never changes on a
+//! [`Presenter::scale_factor_changed`] notification. A presenter that wants larger cells on a
+//! `HiDPI` display has to opt into that itself from `scale_factor_changed` (e.g. regenerating a
+//! font atlas at a new pixel density); until one does, the grid renders at a fixed physical
+//! pixel size on every display, `HiDPI` or not.
+//!
+//! Window resize is clamped to whole cells: a physical size that isn't an exact multiple of
+//! `cell_size()` has its sub-cell remainder truncated, not centered or cleared, and the OS
+//! window is never resized to compensate -- see [`Presenter::resize_surface`]'s doc comment
+//! for the full contract, including the unpainted trailing strip this can leave on screen.
+//!
+//! # Threading model
+//!
+//! The windowed drivers (`winit::run_windowed`, `winit::run_app`, and their `_with_proxy`
+//! variants) are single-threaded: the event loop, every [`Presenter`] call, and the app
+//! closure/[`App`](retroglyph_core::App) callback all run on the one thread that calls
+//! `run_windowed`/`run_app` -- the main thread, on platforms (e.g. macOS) that require it for
+//! windowing. Neither [`Presenter`] nor [`WindowBackend`] carries a `Send`/`Sync` bound
+//! anywhere in this crate, and a presenter is free to hold thread-affine state accordingly
+//! (an `Rc`, a non-`Send` GPU context handle). The only supported way to reach the loop from
+//! another thread is `winit::EventProxy`, which is `Send + Sync + Clone` but only injects an
+//! opaque `u64` as [`Event::Custom`](retroglyph_core::event::Event::Custom) -- it does not
+//! give another thread direct access to the `Presenter` or `Terminal`.
 
 /// The generic [`Backend`](retroglyph_core::Backend) for windowed presenters.
 pub mod backend;
