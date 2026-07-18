@@ -7,6 +7,144 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 
+## [0.1.1+retroglyph-terminal](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-v0.1.0...retroglyph-terminal-v0.1.1) - 2026-07-18
+
+### Features
+
+- [e6fc7ff](
+https://github.com/crates-lurey-io/retroglyph/commit/e6fc7ff098c6e28d56818bcefd8856a2448bb3b2) *(core)* Implement Grid::clone and shrink Tile via an EGC side-table by `@matanlurey` in [#225](
+https://github.com/crates-lurey-io/retroglyph/pull/225)
+  >
+  > Closes #130.
+  >
+  > - Grid::clone: derive Clone on LayerBuf and Grid now that ixy 0.6.0-alpha.8+
+  >   implements Clone/Copy for the RowMajor layout marker, removing the
+  >   upstream-blocked TODO in grid.rs.
+  >
+  > - Tile layout shrink: move the (rare) multi-codepoint EGC grapheme text out
+  >   of Tile and into a sparse per-layer side-table on Grid (LayerBuf::extras),
+  >   gated by a new TileFlags::HAS_EXTRA bit. Tile drops from 32 to 20 bytes and
+  >   becomes Copy. Tile::extra()/grapheme() are replaced by Grid::grapheme(),
+  >   since a bare Tile can no longer answer that on its own.
+  >
+  >   This requires widening Backend::draw/draw_layers items from (Pos, &Tile)
+  >   to (Pos, &Tile, Option<&str>) (and the layered equivalent) so backends
+  >   that render the full grapheme cluster (retroglyph-terminal, shared by
+  >   crossterm and terminal-wasm) still can. Grid::layers()/diff() are widened
+  >   to match, and diff() is now hand-rolled instead of delegating to grixy's
+  >   GridDiff, so a grapheme-only change (same glyph/style/flags, different
+  >   combining mark) is still detected as a diff.
+  >
+  >   Both TODOs were tracked together in #130; the Backend-trait widening was
+  >   previously deferred pending 'a Backend-trait change already on the table
+  >   for another reason' -- this is that reason.
+
+- [d879ff1](
+https://github.com/crates-lurey-io/retroglyph/commit/d879ff17ed33b2f082c641d391a25b9a70689aca) *(terminal)* Add pipe-safe plain-mode output for non-TTY sinks by `@matanlurey` in [#231](
+https://github.com/crates-lurey-io/retroglyph/pull/231)
+
+  > Auto-detect when stdout isn't a TTY and strip control codes, so output
+  > degrades gracefully when redirected to a file or piped. Modeled on
+  > blessed (Python).
+  >
+  > - `TerminalRenderer::with_plain_mode`/`set_plain_mode`/`plain_mode` turn
+  >   ANSI/CSI escape output (cursor moves, colors, synchronized-update
+  >   markers) off in favor of plain text, with row changes becoming `\n`
+  >   and cell gaps padded with spaces so a full-grid draw degrades to
+  >   readable ASCII.
+  > - `TerminalRenderer::auto` picks the mode automatically for any writer
+  >   implementing `std::io::IsTerminal` (`Stdout`, `File`, ...).
+  >
+  > Closes #108
+
+### Bug Fixes
+
+- [50b274f](
+https://github.com/crates-lurey-io/retroglyph/commit/50b274f07527c62bd5af9a46c90cc7a6f03f081c) *(workspace)* Squash 3+ blank lines and allow MD037 in generated changelogs by `@matanlurey` in [#247](
+https://github.com/crates-lurey-io/retroglyph/pull/247)
+
+  > release-plz's per-crate CHANGELOG.md is prepended above the hand-written 0.1.0
+  > entry using cliff.toml's body template. The tail block that renders the
+  > `**Full Changelog**: ...` link can't be trimmed with Tera's `-` whitespace
+  > markers without also swallowing the blank line that's supposed to separate it
+  > from the next heading -- that separator has to come from literal template text
+  > sitting between nested {% if %} blocks -- so it leaves 3 blank lines at that
+  > boundary instead of 1. Add a postprocessor that squashes any run of 3+
+  > newlines down to a single blank line, matching Keep a Changelog / prettier /
+  > markdownlint's MD012 expectation.
+  >
+  > Also extend the per-changelog markdownlint-disable comment (both the
+  > already-checked-in header on all 7 crates' CHANGELOG.md, and cliff.toml's
+  > header template for any crate whose changelog doesn't exist yet) with
+  > no-space-in-emphasis: commit bodies are freeform prose and can contain a
+  > literal _ or * adjacent to other text (e.g. `wasm_terminal_* FFI`, `manual
+  > _style override`) that markdownlint's MD037 misreads as unbalanced emphasis
+  > markers. That's not something a template fix can prevent, since it depends on
+  > historical commit message content.
+  >
+  > Fixes the release-plz standing PR's format/lint CI failure .
+
+### Documentation
+
+- [6c3a096](
+https://github.com/crates-lurey-io/retroglyph/commit/6c3a0964c593d88ba5f2221a67526e5946c993cb) *(crossterm)* Document RGB color fallback contract on 256-color terminals by `@matanlurey` in [#184](
+https://github.com/crates-lurey-io/retroglyph/pull/184)
+
+  > Neither retroglyph-core nor retroglyph-terminal guarantees a
+  > to_indexed()-style RGB quantizer (grepped the workspace for
+  > to_indexed/quantiz -- no hits). TerminalRenderer::write_sgr_color, shared
+  > by retroglyph-crossterm and retroglyph-terminal-wasm, writes Color::Rgb
+  > straight through as a 24-bit truecolor SGR sequence (38;2;r;g;b) with no
+  > downsampling, mirroring crossterm's own truecolor-writing behavior. This
+  > is a documentation-first fix: the existing pass-through behavior matches
+  > the rest of the Rust terminal-UI ecosystem and terminals/multiplexers
+  > generally handle degrading truecolor themselves, so no new quantization
+  > code was added.
+  >
+  > Documents the contract in retroglyph-terminal's crate-level docs (with
+  > the 256-color/older-terminal caveats and a pointer to
+  > Color::Indexed/Color::Ansi as the unambiguous alternative), and links to
+  > it from both retroglyph-terminal's and retroglyph-crossterm's READMEs.
+  > Adds a regression test (rgb_color_is_passed_through_without_quantization)
+  > asserting a non-palette-aligned RGB value is emitted verbatim rather than
+  > snapped to an indexed color.
+  >
+  > Fixes #94
+
+### Continuous Integration
+
+- [1d81906](
+https://github.com/crates-lurey-io/retroglyph/commit/1d81906ea8e380d64de0e05345f103627ef49406) *(workspace)* Automated per-crate release-plz workflow by `@matanlurey` in [#80](
+https://github.com/crates-lurey-io/retroglyph/pull/80)
+
+  > * ci(release): adopt per-crate release-plz flow with PR-title enforcement
+  >
+  > Re-enable release-plz's standing Release PR (release-pr + release jobs) so
+  > version bumps and per-crate changelogs are computed from conventional PR-title
+  > history and published on Release-PR merge; developers never push tags.
+  >
+  > - release-plz.toml: per-crate changelogs (drop changelog_path), semver_check=true
+  > - cliff.toml: skip-changelog via github.pr_labels label + changelog: ignore footer
+  > - release-plz.yml: two-job release-pr/release, concurrency guards, trusted publishing
+  > - check-semver.yml: gate only undeclared breaks (skip on title ! or semver-override)
+  > - pr-title.yml: enforce Conventional Commit PR titles + scope list
+  >
+  > * docs(changelog): split workspace changelog into per-crate files
+  >
+  > Per-crate release-plz needs a CHANGELOG.md per crate. Seed each with its
+  > hand-written 0.1.0 entry; the root CHANGELOG.md becomes an index.
+  >
+  > * docs: rewrite RELEASING.md for the automated release flow
+  >
+  > Document the per-crate, release-plz-driven flow: conventional PR titles,
+  > squash-merge, standing Release PR as the single approval gate, breaking
+  > declared via title !, cargo-semver-checks roles, PR labels, and no pre-1.0
+  > prerelease channel. Update AGENTS.md's commit-message section: enforcement
+  > now lives in pr-title.yml, not local hooks.
+
+**Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-v0.1.0...retroglyph-terminal-v0.1.1
+
+
 ## 0.1.0 - Initial release
 
 - Initial public release. Shared ANSI/SGR cell-diff renderer for the terminal-family backends.

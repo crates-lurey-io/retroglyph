@@ -7,6 +7,234 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 
+## [0.1.1+retroglyph-terminal-wasm](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-wasm-v0.1.0...retroglyph-terminal-wasm-v0.1.1) - 2026-07-18
+
+### Features
+
+- [e6fc7ff](
+https://github.com/crates-lurey-io/retroglyph/commit/e6fc7ff098c6e28d56818bcefd8856a2448bb3b2) *(core)* Implement Grid::clone and shrink Tile via an EGC side-table by `@matanlurey` in [#225](
+https://github.com/crates-lurey-io/retroglyph/pull/225)
+  >
+  > Closes #130.
+  >
+  > - Grid::clone: derive Clone on LayerBuf and Grid now that ixy 0.6.0-alpha.8+
+  >   implements Clone/Copy for the RowMajor layout marker, removing the
+  >   upstream-blocked TODO in grid.rs.
+  >
+  > - Tile layout shrink: move the (rare) multi-codepoint EGC grapheme text out
+  >   of Tile and into a sparse per-layer side-table on Grid (LayerBuf::extras),
+  >   gated by a new TileFlags::HAS_EXTRA bit. Tile drops from 32 to 20 bytes and
+  >   becomes Copy. Tile::extra()/grapheme() are replaced by Grid::grapheme(),
+  >   since a bare Tile can no longer answer that on its own.
+  >
+  >   This requires widening Backend::draw/draw_layers items from (Pos, &Tile)
+  >   to (Pos, &Tile, Option<&str>) (and the layered equivalent) so backends
+  >   that render the full grapheme cluster (retroglyph-terminal, shared by
+  >   crossterm and terminal-wasm) still can. Grid::layers()/diff() are widened
+  >   to match, and diff() is now hand-rolled instead of delegating to grixy's
+  >   GridDiff, so a grapheme-only change (same glyph/style/flags, different
+  >   combining mark) is still detected as a diff.
+  >
+  >   Both TODOs were tracked together in #130; the Backend-trait widening was
+  >   previously deferred pending 'a Backend-trait change already on the table
+  >   for another reason' -- this is that reason.
+
+- [55f97ae](
+https://github.com/crates-lurey-io/retroglyph/commit/55f97ae7bf3938739cb8d9d450f1f467c6e823fb) *(terminal-wasm)* Support paste/clipboard events by `@matanlurey` in [#229](
+https://github.com/crates-lurey-io/retroglyph/pull/229)
+
+  > Adds wasm_terminal_push_paste(handle, text), pushing Event::Paste directly
+  > -- unlike push_key/push_mouse there's no decode_* step needed since String
+  > is already wasm-bindgen-FFI-safe, so a paste can't be misread as N
+  > individual keystrokes triggering single-key game commands.
+  >
+  > Closes #98.
+  >
+  > Also simplifies Event::Paste's doc comment, which previously hardcoded an
+  > enumerated list of emitting backends that's now out of date; it just notes
+  > paste isn't emitted by all backends and points to each backend's own docs.
+  >
+  > Filed #228 to track the same support for the windowed (winit) backend,
+  > which has no native paste/clipboard event and needs a real dependency
+  > decision (e.g. arboard) plus a separate wasm32 web-canvas-listener path --
+  > out of scope here.
+
+- [9288322](
+https://github.com/crates-lurey-io/retroglyph/commit/9288322695aa0fc7e948c3410ce26f879851b0ed) *(terminal-wasm)* Add mouse event support (decode_mouse_event) by `@matanlurey` in [#222](
+https://github.com/crates-lurey-io/retroglyph/pull/222)
+
+  > feat(terminal-wasm): add decode_mouse_event and wasm_terminal_push_mouse
+  >
+  > Mirrors decode_key_event's pattern for mouse input: JS crosses the
+  > wasm-bindgen boundary with plain integers (x, y, action, button,
+  > mods) since MouseEvent/MouseEventKind/MouseButton aren't
+  > wasm-bindgen FFI-safe types.
+  >
+  > - decode_mouse_event(x, y, action, button, mods) decodes into a
+  >   retroglyph_core::event::MouseEvent, with mouse_actions and
+  >   mouse_buttons constant modules (button follows the DOM
+  >   MouseEvent.button convention: 0 = left, 1 = middle, 2 = right).
+  > - wasm_terminal_push_mouse(handle, x, y, action, button, mods) is
+  >   the new wasm32-only FFI entry point, following the same
+  >   unknown-handle/undecodable-input no-op contract as
+  >   wasm_terminal_push_key.
+  > - Factored the shared SHIFT/CONTROL/ALT/SUPER mods bitmask decoding
+  >   out of decode_key_event into decode_key_modifiers, reused by both
+  >   decoders.
+  > - Position is cell-grid only (pixel_position: None); JS is
+  >   responsible for converting a raw pixel position into cell
+  >   coordinates the same way it already tracks cols/rows for resize.
+  >
+  > Closes #92.
+
+- [a4bff8a](
+https://github.com/crates-lurey-io/retroglyph/commit/a4bff8a8a59220ab7ff4d104126c10ebdbb05e17) *(terminal-wasm)* Add Super/Meta modifier support by `@matanlurey` in [#191](
+https://github.com/crates-lurey-io/retroglyph/pull/191)
+
+### Bug Fixes
+
+- [748a362](
+https://github.com/crates-lurey-io/retroglyph/commit/748a362a60cb912aec11749d3b8b681fd5d03343) *(terminal-wasm)* Validate and document CUP cursor-position CSI format by `@matanlurey` in [#207](
+https://github.com/crates-lurey-io/retroglyph/pull/207)
+
+  > write_cursor_position emits CSI row;col H (CUP), 1-indexed and absolute.
+  > Verified against xterm.js (InputHandler::cursorPosition) and
+  > hterm/Terminalemulator's ControlSequences reference, both of which match
+  > ECMA-48/VT100 exactly -- no 0-indexed or alternate escape code found in
+  > either, so no dual-emission fallback is needed. Documented the sequence
+  > and its cross-emulator compatibility on write_cursor_position, and added
+  > a regression test pinning the exact byte output for two positions.
+  >
+  > Closes #104
+
+- [97d7ad3](
+https://github.com/crates-lurey-io/retroglyph/commit/97d7ad37958ac1c7ddcaecea70271f2db366ecaa) *(terminal-wasm)* Robustness and docs fixes for the WASM backend by `@matanlurey` in [#201](
+https://github.com/crates-lurey-io/retroglyph/pull/201)
+
+  > * fix(terminal-wasm): clarify UTF-8 invariant panic message in take_output
+  >
+  > * fix(terminal-wasm): log a warning on invalid wasm-bindgen handles
+  >
+  > * docs(terminal-wasm): replace pseudo-code JS example with a working xterm.js driver
+
+- [50b274f](
+https://github.com/crates-lurey-io/retroglyph/commit/50b274f07527c62bd5af9a46c90cc7a6f03f081c) *(workspace)* Squash 3+ blank lines and allow MD037 in generated changelogs by `@matanlurey` in [#247](
+https://github.com/crates-lurey-io/retroglyph/pull/247)
+
+  > release-plz's per-crate CHANGELOG.md is prepended above the hand-written 0.1.0
+  > entry using cliff.toml's body template. The tail block that renders the
+  > `**Full Changelog**: ...` link can't be trimmed with Tera's `-` whitespace
+  > markers without also swallowing the blank line that's supposed to separate it
+  > from the next heading -- that separator has to come from literal template text
+  > sitting between nested {% if %} blocks -- so it leaves 3 blank lines at that
+  > boundary instead of 1. Add a postprocessor that squashes any run of 3+
+  > newlines down to a single blank line, matching Keep a Changelog / prettier /
+  > markdownlint's MD012 expectation.
+  >
+  > Also extend the per-changelog markdownlint-disable comment (both the
+  > already-checked-in header on all 7 crates' CHANGELOG.md, and cliff.toml's
+  > header template for any crate whose changelog doesn't exist yet) with
+  > no-space-in-emphasis: commit bodies are freeform prose and can contain a
+  > literal _ or * adjacent to other text (e.g. `wasm_terminal_* FFI`, `manual
+  > _style override`) that markdownlint's MD037 misreads as unbalanced emphasis
+  > markers. That's not something a template fix can prevent, since it depends on
+  > historical commit message content.
+  >
+  > Fixes the release-plz standing PR's format/lint CI failure .
+
+### Documentation
+
+- [06b08a3](
+https://github.com/crates-lurey-io/retroglyph/commit/06b08a3e74709d9814e501f844e2ec69194fde70) *(terminal-wasm)* Document ANSI sequences emitted by TerminalRenderer by `@matanlurey` in [#230](
+https://github.com/crates-lurey-io/retroglyph/pull/230)
+
+- [08b76d1](
+https://github.com/crates-lurey-io/retroglyph/commit/08b76d11a48b29acb198b165185671d6bd75e151) *(terminal-wasm)* Dedupe JS driver example + FFI robustness tests by `@matanlurey` in [#206](
+https://github.com/crates-lurey-io/retroglyph/pull/206)
+
+  > docs(terminal-wasm): dedupe JS driver example + FFI robustness tests
+  >
+  > - Extract the xterm.js driver example (already made real/working by #201) into a
+  >   single canonical crates/terminal-wasm/js/xterm-driver.js, included verbatim into
+  >   the crate's rustdoc via include_str! and mirrored in README.md. A new
+  >   readme_js_example_matches_canonical_driver test guards the README copy against
+  >   drifting from the canonical file, since crates.io/GitHub render README.md as
+  >   plain markdown and can't include_str! it the way rustdoc can.
+  > - Note in both docs that this handle-based wasm_terminal_* FFI differs from the
+  >   examples/ crate's deployed demo gallery, which uses a separate single-instance
+  >   wasm_terminal_example_* FFI built on the same TerminalWasm backend.
+  > - Add crates/terminal-wasm/tests/wasm_ffi.rs: wasm-bindgen-test coverage of the
+  >   wasm module's exported wasm_terminal_* functions themselves (handle uniqueness,
+  >   safe no-ops on freed/unknown handles, undecodable key codes silently dropped),
+  >   run via wasm-pack test --node (new just test-wasm recipe + CI job). This is the
+  >   only place those #[wasm_bindgen] functions actually run under cargo test, since
+  >   the wasm module is cfg(target_arch = "wasm32")-gated and doesn't exist in a
+  >   host-target build.
+  > - Pin wasm-pack (workspace tool) and wasm-bindgen-test (=0.3.56, the release built
+  >   against wasm-bindgen 0.2.106, matching this workspace's existing wasm-bindgen
+  >   pin) plus wasm-bindgen-test-runner (bundled in the already-pinned
+  >   wasm-bindgen-cli package).
+
+### Testing
+
+- [f2aaa54](
+https://github.com/crates-lurey-io/retroglyph/commit/f2aaa54e20183359f95230a06d43049216573efe) *(terminal-wasm)* Fuzz decode_key_event with proptest by `@matanlurey` in [#236](
+https://github.com/crates-lurey-io/retroglyph/pull/236)
+
+  > Adds a proptest property-based module (decode_key_event_proptests) that
+  > generates arbitrary (code: u32, mods: u8) pairs and asserts:
+  > - no panics for any input
+  > - the Some/None split and resulting KeyCode is always explained by exactly
+  >   one of: a named control key, the contiguous F1-F24 range, or a valid
+  >   printable char
+  > - F-key indices always land in the documented 1..=24 range (guards the
+  >   `as u8` cast from ever wrapping)
+  > - modifier decoding is independent of the key code
+  >
+  > Also adds targeted regression tests for the edge cases called out in the
+  > issue: every named key constant, the F24 boundary, lone UTF-16 surrogate
+  > halves, u32::MAX, the unnamed gap between the control-key and F-key
+  > blocks, and the null char.
+  >
+  > Adds proptest as a host-target dev-dependency (matching retroglyph-core's
+  > existing use), so cargo-fuzz/quickcheck are not needed for this crate.
+  >
+  > Closes #121.
+
+### Continuous Integration
+
+- [1d81906](
+https://github.com/crates-lurey-io/retroglyph/commit/1d81906ea8e380d64de0e05345f103627ef49406) *(workspace)* Automated per-crate release-plz workflow by `@matanlurey` in [#80](
+https://github.com/crates-lurey-io/retroglyph/pull/80)
+
+  > * ci(release): adopt per-crate release-plz flow with PR-title enforcement
+  >
+  > Re-enable release-plz's standing Release PR (release-pr + release jobs) so
+  > version bumps and per-crate changelogs are computed from conventional PR-title
+  > history and published on Release-PR merge; developers never push tags.
+  >
+  > - release-plz.toml: per-crate changelogs (drop changelog_path), semver_check=true
+  > - cliff.toml: skip-changelog via github.pr_labels label + changelog: ignore footer
+  > - release-plz.yml: two-job release-pr/release, concurrency guards, trusted publishing
+  > - check-semver.yml: gate only undeclared breaks (skip on title ! or semver-override)
+  > - pr-title.yml: enforce Conventional Commit PR titles + scope list
+  >
+  > * docs(changelog): split workspace changelog into per-crate files
+  >
+  > Per-crate release-plz needs a CHANGELOG.md per crate. Seed each with its
+  > hand-written 0.1.0 entry; the root CHANGELOG.md becomes an index.
+  >
+  > * docs: rewrite RELEASING.md for the automated release flow
+  >
+  > Document the per-crate, release-plz-driven flow: conventional PR titles,
+  > squash-merge, standing Release PR as the single approval gate, breaking
+  > declared via title !, cargo-semver-checks roles, PR labels, and no pre-1.0
+  > prerelease channel. Update AGENTS.md's commit-message section: enforcement
+  > now lives in pr-title.yml, not local hooks.
+
+**Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-wasm-v0.1.0...retroglyph-terminal-wasm-v0.1.1
+
+
 ## 0.1.0 - Initial release
 
 - Initial public release. Browser terminal backend, driven by pushed events and pulled ANSI.
