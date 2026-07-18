@@ -223,8 +223,9 @@ impl<W: Write> TerminalRenderer<W> {
     /// drawn.
     ///
     /// Mirrors [`Backend::draw`](retroglyph_core::backend::Backend::draw)'s
-    /// contract: `content` is a stream of `(Pos, &Tile)` pairs to render.
-    /// Does not flush; call [`flush`](Self::flush) after.
+    /// contract: `content` is a stream of `(Pos, &Tile, Option<&str>)` items
+    /// to render, the last being the tile's full grapheme text when it has
+    /// one. Does not flush; call [`flush`](Self::flush) after.
     ///
     /// # Errors
     ///
@@ -232,9 +233,12 @@ impl<W: Write> TerminalRenderer<W> {
     #[allow(clippy::similar_names)]
     pub fn draw<'a, I>(&mut self, content: I) -> io::Result<()>
     where
-        I: Iterator<Item = (Pos, &'a Tile)>,
+        I: Iterator<Item = (Pos, &'a Tile, Option<&'a str>)>,
     {
-        for (pos, cell) in content {
+        for (pos, cell, extra) in content {
+            #[cfg(not(feature = "egc"))]
+            let _ = extra;
+
             // Spacer cells are the right half of a wide character. The wide
             // char itself already drew over this position, so skip it.
             #[cfg(feature = "egc")]
@@ -276,7 +280,7 @@ impl<W: Write> TerminalRenderer<W> {
             {
                 // Print the full EGC if present; otherwise the primary glyph.
                 let mut glyph_buf = [0u8; 4];
-                let s: &str = match cell.extra() {
+                let s: &str = match extra {
                     Some(extra) => extra,
                     None => cell.glyph().encode_utf8(&mut glyph_buf),
                 };
@@ -323,7 +327,7 @@ mod tests {
     fn render_one(tile: &Tile) -> String {
         let mut renderer = TerminalRenderer::new(Vec::new());
         renderer
-            .draw(core::iter::once((Pos { x: 0, y: 0 }, tile)))
+            .draw(core::iter::once((Pos { x: 0, y: 0 }, tile, None)))
             .unwrap();
         renderer.flush().unwrap();
         String::from_utf8(renderer.into_writer()).unwrap()
@@ -406,7 +410,13 @@ mod tests {
         let tile_b = Tile::new('B', Style::default());
         let mut renderer = TerminalRenderer::new(Vec::new());
         renderer
-            .draw([(Pos { x: 0, y: 0 }, &tile_a), (Pos { x: 1, y: 0 }, &tile_b)].into_iter())
+            .draw(
+                [
+                    (Pos { x: 0, y: 0 }, &tile_a, None),
+                    (Pos { x: 1, y: 0 }, &tile_b, None),
+                ]
+                .into_iter(),
+            )
             .unwrap();
         renderer.flush().unwrap();
         let out = String::from_utf8(renderer.into_writer()).unwrap();
@@ -419,11 +429,11 @@ mod tests {
         let tile = Tile::new('X', Style::default());
         let mut renderer = TerminalRenderer::new(Vec::new());
         renderer
-            .draw(core::iter::once((Pos { x: 0, y: 0 }, &tile)))
+            .draw(core::iter::once((Pos { x: 0, y: 0 }, &tile, None)))
             .unwrap();
         renderer.reset_state();
         renderer
-            .draw(core::iter::once((Pos { x: 0, y: 0 }, &tile)))
+            .draw(core::iter::once((Pos { x: 0, y: 0 }, &tile, None)))
             .unwrap();
         renderer.flush().unwrap();
         let out = String::from_utf8(renderer.into_writer()).unwrap();
@@ -440,5 +450,25 @@ mod tests {
         renderer.flush().unwrap();
         let out = String::from_utf8(renderer.into_writer()).unwrap();
         assert_eq!(out, "\x1b[?2026h\x1b[?2026l");
+    }
+
+    #[cfg(feature = "egc")]
+    #[test]
+    fn draw_prints_full_grapheme_when_provided() {
+        // The tile's `glyph` is just the primary codepoint ('e'); the full
+        // combining-mark cluster only reaches the renderer via the third
+        // `draw` item, not the tile itself (see `Grid::grapheme`).
+        let tile = Tile::new('e', Style::default());
+        let mut renderer = TerminalRenderer::new(Vec::new());
+        renderer
+            .draw(core::iter::once((
+                Pos { x: 0, y: 0 },
+                &tile,
+                Some("e\u{0301}"),
+            )))
+            .unwrap();
+        renderer.flush().unwrap();
+        let out = String::from_utf8(renderer.into_writer()).unwrap();
+        assert!(out.contains("e\u{0301}"), "output: {out:?}");
     }
 }

@@ -147,7 +147,7 @@ impl Backend for TerminalWasm {
 
     fn draw<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
-        I: Iterator<Item = (Pos, &'a Tile)>,
+        I: Iterator<Item = (Pos, &'a Tile, Option<&'a str>)>,
     {
         self.renderer.begin_synchronized_update()?;
         self.renderer.draw(content)

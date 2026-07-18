@@ -35,7 +35,9 @@ use retroglyph_terminal::TerminalRenderer;
 // `retroglyph-crossterm`, a `String` buffer in `retroglyph-terminal-wasm`.
 let mut renderer = TerminalRenderer::new(Vec::new());
 let tile = Tile::new('@', Style::default());
-renderer.draw(core::iter::once((Pos::new(0, 0), &tile))).unwrap();
+renderer
+    .draw(core::iter::once((Pos::new(0, 0), &tile, None)))
+    .unwrap();
 renderer.flush().unwrap();
 
 let ansi = String::from_utf8(renderer.into_writer()).unwrap();

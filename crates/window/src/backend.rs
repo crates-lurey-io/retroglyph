@@ -79,14 +79,14 @@ impl<P: Presenter> Backend for WindowBackend<P> {
 
     fn draw<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
-        I: Iterator<Item = (Pos, &'a Tile)>,
+        I: Iterator<Item = (Pos, &'a Tile, Option<&'a str>)>,
     {
         self.presenter.draw(content)
     }
 
     fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
-        I: Iterator<Item = (u8, Pos, &'a Tile)>,
+        I: Iterator<Item = (u8, Pos, &'a Tile, Option<&'a str>)>,
     {
         self.presenter.draw_layers(content)
     }

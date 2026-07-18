@@ -88,10 +88,14 @@ impl Backend for Headless {
 
     fn draw<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
-        I: Iterator<Item = (Pos, &'a Tile)>,
+        I: Iterator<Item = (Pos, &'a Tile, Option<&'a str>)>,
     {
-        for (pos, cell) in content {
-            self.grid.checked_put(pos.x, pos.y, cell.clone());
+        for (pos, cell, extra) in content {
+            self.grid.checked_put(pos.x, pos.y, *cell);
+            if let Some(extra) = extra {
+                self.grid
+                    .set_extra(0, pos.x, pos.y, alloc::sync::Arc::from(extra));
+            }
         }
         Ok(())
     }

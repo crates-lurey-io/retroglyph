@@ -67,7 +67,7 @@ pub trait Presenter {
     /// Returns [`Self::Error`] if rasterization fails.
     fn draw<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
-        I: Iterator<Item = (Pos, &'a Tile)>;
+        I: Iterator<Item = (Pos, &'a Tile, Option<&'a str>)>;
 
     /// Rasterize the full layered frame.
     ///
@@ -80,7 +80,7 @@ pub trait Presenter {
     /// Returns [`Self::Error`] if rasterization fails.
     fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
-        I: Iterator<Item = (u8, Pos, &'a Tile)>;
+        I: Iterator<Item = (u8, Pos, &'a Tile, Option<&'a str>)>;
 
     /// Flush buffered rasterization work.
     ///

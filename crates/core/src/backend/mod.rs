@@ -33,13 +33,21 @@ pub trait Backend {
 
     /// Draw changed cells to the output surface.
     ///
+    /// The third element of each item is the tile's full grapheme cluster
+    /// (see [`Grid::grapheme`](crate::grid::Grid::grapheme)), `Some` only for
+    /// multi-codepoint EGCs (combining marks, ZWJ sequences); `None` means
+    /// render the tile's [`glyph`](Tile::glyph) alone. `Tile` itself never
+    /// carries this text (it lives in a side-table on `Grid`), so backends
+    /// that need the full grapheme at draw time must read it from here
+    /// rather than from the tile.
+    ///
     /// # Errors
     ///
     /// Returns an error if the backend cannot write to the output surface
     /// (e.g., a broken pipe or closed terminal).
     fn draw<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
-        I: Iterator<Item = (Pos, &'a Tile)>;
+        I: Iterator<Item = (Pos, &'a Tile, Option<&'a str>)>;
 
     /// Draw changed cells across all layers.
     ///
@@ -51,18 +59,22 @@ pub trait Backend {
     /// receives **all** cells from every allocated layer, and the backend
     /// should clear its output surface before drawing.
     ///
+    /// See [`draw`](Self::draw) for the meaning of each item's grapheme text.
+    ///
     /// # Errors
     ///
     /// See [`draw`](Self::draw).
     fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
-        I: Iterator<Item = (u8, Pos, &'a Tile)>,
+        I: Iterator<Item = (u8, Pos, &'a Tile, Option<&'a str>)>,
     {
-        self.draw(content.filter_map(
-            |(layer, pos, tile)| {
-                if layer == 0 { Some((pos, tile)) } else { None }
-            },
-        ))
+        self.draw(content.filter_map(|(layer, pos, tile, extra)| {
+            if layer == 0 {
+                Some((pos, tile, extra))
+            } else {
+                None
+            }
+        }))
     }
 
     /// Returns `true` if the backend needs the **entire** frame (all cells on
