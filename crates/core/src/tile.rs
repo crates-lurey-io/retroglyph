@@ -1,21 +1,8 @@
 //! Fundamental unit of the grid: a single drawable tile.
 
-// TODO: `size_of::<Tile>()` is 32 bytes with `egc` (align 8, forced by the inline
-// `Option<Arc<String>>`), 20 bytes without -- `flags`/`extra`/`dx`/`dy` are kept
-// inline and unconditional (rather than moved to a side-table) so `Tile`'s public
-// shape stays feature-stable, which is what makes the core/backend crate split
-// clean. A side-table (sparse per-layer map, keeping only a `flags` bit on `Tile`)
-// was considered and rejected: the draw path hands backends a `&Tile` via
-// `Backend::draw_layers`, and crossterm/software both read the full grapheme
-// (`cell.extra`) at draw time, so a side-table would force widening the draw item
-// to `(layer, Pos, &Tile, Option<&str>)` across the `Backend` trait and every call
-// site and test. That's a bigger trait change than a size optimization justifies on
-// its own; revisit only alongside a `Backend`-trait change that's already on the
-// table for another reason, not as a standalone shrink.
-
 use crate::style::Style;
+#[cfg(feature = "egc")]
 use alloc::string::String;
-use alloc::sync::Arc;
 
 bitflags::bitflags! {
     /// Bit-flags tracking wide-character tile roles.
@@ -32,6 +19,17 @@ bitflags::bitflags! {
         /// empty tiles, so an *explicit* space (which is not empty) is opaque
         /// and overwrites lower layers, while an untouched cell is not.
         const EMPTY            = 0b0000_0100;
+        /// This tile has an entry in its layer's sparse EGC side-table
+        /// (see `Grid`'s internal `LayerBuf::extras`), because it holds a
+        /// multi-codepoint grapheme cluster (combining marks, ZWJ sequences).
+        ///
+        /// This flag is authoritative for whether extra text exists: code
+        /// that reads a tile's grapheme must check this bit first and treat
+        /// the side-table as backing storage only, never the other way
+        /// around. `Tile` cannot carry the string itself and stay small (see
+        /// [`Grid::grapheme`](crate::grid::Grid::grapheme)); the split is
+        /// what keeps the common single-codepoint tile compact.
+        const HAS_EXTRA         = 0b0000_1000;
     }
 }
 
@@ -42,11 +40,13 @@ bitflags::bitflags! {
 /// bottom-to-top. Sub-cell pixel offsets (`dx`, `dy`) are visual only, they do
 /// not affect grid logic or hit-testing. Backends that cannot represent pixel
 /// offsets (e.g. `CrosstermBackend`) ignore them.
-// The manual `PartialEq` below only adds an `Arc::ptr_eq` fast path in front of
-// the same field-by-field comparison the derive would generate, so it stays
-// consistent with the derived `Hash` (equal tiles have equal grapheme content).
-#[allow(clippy::derived_hash_with_manual_eq)]
-#[derive(Clone, Debug, Eq, Hash)]
+///
+/// A tile does *not* carry its own multi-codepoint grapheme text (see
+/// [`TileFlags::HAS_EXTRA`]): that lives in a sparse side-table on the owning
+/// [`Grid`](crate::grid::Grid), keeping every `Tile` a small, fully `Copy`
+/// value regardless of whether the `egc` feature is enabled. Read it back via
+/// [`Grid::grapheme`](crate::grid::Grid::grapheme).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Tile {
     /// Primary codepoint. For ASCII and most Unicode this is the whole story.
     pub(crate) glyph: char,
@@ -65,32 +65,6 @@ pub struct Tile {
     /// Always present so `Tile`'s layout is stable whether or not the `egc`
     /// feature is enabled. Without `egc` it is never set to anything but empty.
     pub(crate) flags: TileFlags,
-    /// Allocated only when the grapheme cluster has more than one codepoint
-    /// (combining marks, ZWJ emoji sequences, etc.).
-    ///
-    /// When `Some`, the full EGC string is stored here. The `glyph` field
-    /// still holds the first codepoint for fast single-char paths.
-    ///
-    /// Always present for a stable layout across `egc`; without `egc` it is
-    /// always `None` (nothing writes it, so it never allocates).
-    pub(crate) extra: Option<Arc<String>>,
-}
-
-impl PartialEq for Tile {
-    fn eq(&self, other: &Self) -> bool {
-        self.glyph == other.glyph
-            && self.style == other.style
-            && self.dx == other.dx
-            && self.dy == other.dy
-            && self.flags == other.flags
-            && match (&self.extra, &other.extra) {
-                // Fast path: the common single-codepoint case, and shared Arcs
-                // (e.g. cloned tiles) settle without touching the heap string.
-                (None, None) => true,
-                (Some(a), Some(b)) => Arc::ptr_eq(a, b) || a == b,
-                _ => false,
-            }
-    }
 }
 
 impl Default for Tile {
@@ -101,7 +75,6 @@ impl Default for Tile {
             dx: 0,
             dy: 0,
             flags: TileFlags::EMPTY,
-            extra: None,
         }
     }
 }
@@ -118,7 +91,6 @@ impl Tile {
             dx: 0,
             dy: 0,
             flags: TileFlags::empty(),
-            extra: None,
         }
     }
 
@@ -161,29 +133,6 @@ impl Tile {
         self.flags.contains(TileFlags::EMPTY)
     }
 
-    /// Returns the extra EGC data for this tile, if any.
-    ///
-    /// `Some` only for multi-codepoint grapheme clusters (combining marks,
-    /// ZWJ sequences, etc.). `None` for the common single-codepoint case, and
-    /// always `None` without the `egc` feature.
-    #[must_use]
-    pub fn extra(&self) -> Option<&str> {
-        self.extra.as_deref().map(String::as_str)
-    }
-
-    /// Returns the full grapheme cluster for this tile.
-    ///
-    /// When the tile contains a multi-codepoint EGC (combining marks, ZWJ
-    /// sequences, etc.) this returns the stored string. For the common
-    /// single-codepoint case it returns `None`; use [`glyph`](Self::glyph)
-    /// and [`encode_utf8`](char::encode_utf8) to reconstruct the string.
-    ///
-    /// Always `None` without the `egc` feature.
-    #[must_use]
-    pub fn grapheme(&self) -> Option<&str> {
-        self.extra.as_deref().map(String::as_str)
-    }
-
     /// Sets the glyph for this tile (builder style).
     ///
     /// Writing content marks the tile non-empty (see [`is_empty`](Self::is_empty)).
@@ -216,6 +165,10 @@ impl Tile {
     }
 
     /// Resets this tile to the default (empty, space, default style, no offset).
+    ///
+    /// Does not touch the owning [`Grid`]'s EGC side-table; callers that
+    /// reset a tile which may have carried [`TileFlags::HAS_EXTRA`] are
+    /// responsible for also clearing that entry (see `Grid::clear_overlap`).
     #[cfg(feature = "egc")]
     pub(crate) fn reset(&mut self) {
         self.glyph = ' ';
@@ -223,7 +176,6 @@ impl Tile {
         self.dx = 0;
         self.dy = 0;
         self.flags = TileFlags::EMPTY;
-        self.extra = None;
     }
 }
 
@@ -246,6 +198,14 @@ mod tests {
     use super::*;
     use crate::color::Color;
 
+    /// Regression guard for the size win the EGC side-table exists for: a
+    /// `Tile` must stay small and feature-stable (same layout with or
+    /// without `egc`) now that it no longer inlines grapheme text.
+    #[test]
+    fn test_tile_size_is_stable_and_small() {
+        assert_eq!(size_of::<Tile>(), 20);
+    }
+
     #[test]
     fn test_tile_defaults() {
         let tile = Tile::default();
@@ -256,8 +216,6 @@ mod tests {
         // The default tile is empty (transparent when composited).
         assert!(tile.is_empty());
         assert_eq!(tile.flags(), TileFlags::EMPTY);
-        #[cfg(feature = "egc")]
-        assert!(tile.extra().is_none());
     }
 
     #[test]
@@ -299,65 +257,6 @@ mod tests {
         assert_eq!(tile.dx, 0);
         assert_eq!(tile.dy, 0);
         assert!(tile.is_empty());
-    }
-
-    #[cfg(feature = "egc")]
-    #[test]
-    fn test_tile_grapheme_single() {
-        let tile = Tile::new('A', Style::default());
-        assert_eq!(tile.grapheme(), None); // single-char, no extra
-    }
-
-    #[cfg(feature = "egc")]
-    #[test]
-    fn test_tile_grapheme_multi() {
-        // Multi-codepoint EGC: e + combining acute
-        let extra_str = Arc::new(String::from("e\u{0301}"));
-        let tile = Tile {
-            glyph: 'e',
-            style: Style::default(),
-            dx: 0,
-            dy: 0,
-            flags: TileFlags::empty(),
-            extra: Some(extra_str),
-        };
-        assert_eq!(tile.grapheme(), Some("e\u{0301}"));
-    }
-
-    #[cfg(feature = "egc")]
-    #[test]
-    fn test_tile_eq_arc_fast_path_and_value_fallback() {
-        let tile_with = |s: &str| Tile {
-            glyph: 'e',
-            style: Style::default(),
-            dx: 0,
-            dy: 0,
-            flags: TileFlags::empty(),
-            extra: Some(Arc::new(String::from(s))),
-        };
-
-        // Cloned tiles share the same Arc: equal via the pointer fast path.
-        let a = tile_with("e\u{0301}");
-        let cloned = a.clone();
-        assert!(Arc::ptr_eq(
-            a.extra.as_ref().unwrap(),
-            cloned.extra.as_ref().unwrap()
-        ));
-        assert_eq!(a, cloned);
-
-        // Distinct Arcs with equal contents fall back to a value compare.
-        let b = tile_with("e\u{0301}");
-        assert!(!Arc::ptr_eq(
-            a.extra.as_ref().unwrap(),
-            b.extra.as_ref().unwrap()
-        ));
-        assert_eq!(a, b);
-
-        // Different contents are unequal.
-        assert_ne!(a, tile_with("a\u{0301}"));
-
-        // None vs Some are unequal.
-        assert_ne!(a, Tile::new('e', Style::default()));
     }
 
     #[cfg(feature = "egc")]

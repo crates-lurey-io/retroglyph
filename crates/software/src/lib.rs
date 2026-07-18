@@ -311,7 +311,9 @@ impl SoftwareBackend {
     ///
     /// // Render a red cell on layer 0.
     /// let tile = Tile::new(' ', Style::new().bg(Color::Rgb { r: 255, g: 0, b: 0 }));
-    /// renderer.draw_layers([(0, Pos::new(0, 0), &tile)].into_iter()).unwrap();
+    /// renderer
+    ///     .draw_layers([(0, Pos::new(0, 0), &tile, None)].into_iter())
+    ///     .unwrap();
     ///
     /// assert!(renderer.pixels().iter().all(|&p| p == 0x00FF_0000));
     /// ```
@@ -373,7 +375,7 @@ impl Backend for SoftwareRenderer {
 
     fn draw<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
-        I: Iterator<Item = (Pos, &'a Tile)>,
+        I: Iterator<Item = (Pos, &'a Tile, Option<&'a str>)>,
     {
         let font = &self.font;
         let scale = usize::from(self.options.scale);
@@ -385,7 +387,10 @@ impl Backend for SoftwareRenderer {
         #[cfg(feature = "tilesets")]
         let sprite_cache = Some(&*self.sprite_cache);
 
-        for (pos, cell) in content {
+        // This bitmap/sprite renderer keys everything off `Tile::glyph`, not
+        // the full grapheme cluster: sprite lookup, ligature-free bitmap
+        // fonts, and sub-cell offsets are all single-codepoint concepts here.
+        for (pos, cell, _extra) in content {
             blit_cell(
                 self.ctx.pixel_buf.as_mut(),
                 buf_w,
@@ -420,7 +425,7 @@ impl Backend for SoftwareRenderer {
     /// parity caveat" section in the crate README for a worked example.
     fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
-        I: Iterator<Item = (u8, Pos, &'a Tile)>,
+        I: Iterator<Item = (u8, Pos, &'a Tile, Option<&'a str>)>,
     {
         // Clear the entire buffer before redrawing.  Pixel-based backends
         // get the full frame (see `needs_full_frame`), so this wipes any
@@ -439,7 +444,7 @@ impl Backend for SoftwareRenderer {
         #[cfg(feature = "tilesets")]
         let sprite_cache = Some(&*self.sprite_cache);
 
-        for (layer_id, pos, tile) in content {
+        for (layer_id, pos, tile, _extra) in content {
             let px_x = usize::from(pos.x) * cell_w;
             let px_y = usize::from(pos.y) * cell_h;
 
@@ -568,14 +573,14 @@ impl retroglyph_window::Presenter for SoftwareRenderer {
 
     fn draw<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
-        I: Iterator<Item = (Pos, &'a Tile)>,
+        I: Iterator<Item = (Pos, &'a Tile, Option<&'a str>)>,
     {
         <Self as Backend>::draw(self, content)
     }
 
     fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
-        I: Iterator<Item = (u8, Pos, &'a Tile)>,
+        I: Iterator<Item = (u8, Pos, &'a Tile, Option<&'a str>)>,
     {
         <Self as Backend>::draw_layers(self, content)
     }
@@ -974,7 +979,7 @@ mod tests {
     fn layer0_paints_background() {
         let mut renderer = test_renderer();
         let tile = Tile::new(' ', Style::new().bg(Color::Rgb { r: 255, g: 0, b: 0 }));
-        let diff: Vec<(u8, Pos, &Tile)> = vec![(0, Pos::new(0, 0), &tile)];
+        let diff: Vec<(u8, Pos, &Tile, Option<&str>)> = vec![(0, Pos::new(0, 0), &tile, None)];
         renderer.draw_layers(diff.into_iter());
 
         let buf = renderer.pixels();
@@ -994,8 +999,8 @@ mod tests {
         // draw_layers clears buffer first, so pass all layers in one call.
         renderer.draw_layers(
             [
-                (0, Pos::new(0, 0), &bg_tile),
-                (1, Pos::new(0, 0), &space_tile),
+                (0, Pos::new(0, 0), &bg_tile, None),
+                (1, Pos::new(0, 0), &space_tile, None),
             ]
             .into_iter(),
         );
@@ -1024,7 +1029,13 @@ mod tests {
         );
         let fg = Tile::new('@', Style::new().fg(Color::Rgb { r: 0, g: 255, b: 0 }));
         // draw_layers clears buffer first, so pass all layers in one call.
-        renderer.draw_layers([(0, Pos::new(0, 0), &bg), (1, Pos::new(0, 0), &fg)].into_iter());
+        renderer.draw_layers(
+            [
+                (0, Pos::new(0, 0), &bg, None),
+                (1, Pos::new(0, 0), &fg, None),
+            ]
+            .into_iter(),
+        );
 
         let buf = renderer.pixels();
         assert!(buf.contains(&0x0000_FF00), "some pixels should be green");
@@ -1046,7 +1057,13 @@ mod tests {
         let fg =
             Tile::new('@', Style::new().fg(Color::Rgb { r: 0, g: 255, b: 0 })).with_offset(1, 0);
         // draw_layers clears buffer first, so pass all layers in one call.
-        renderer.draw_layers([(0, Pos::new(0, 0), &bg), (1, Pos::new(0, 0), &fg)].into_iter());
+        renderer.draw_layers(
+            [
+                (0, Pos::new(0, 0), &bg, None),
+                (1, Pos::new(0, 0), &fg, None),
+            ]
+            .into_iter(),
+        );
 
         let buf = renderer.pixels();
         let has_green = |col: usize| {
@@ -1066,7 +1083,7 @@ mod tests {
 
         let fg =
             Tile::new('@', Style::new().fg(Color::Rgb { r: 0, g: 255, b: 0 })).with_offset(1, 0);
-        Backend::draw(&mut renderer, [(Pos::new(0, 0), &fg)].into_iter()).unwrap();
+        Backend::draw(&mut renderer, [(Pos::new(0, 0), &fg, None)].into_iter()).unwrap();
 
         let buf = renderer.pixels();
         let has_green = |col: usize| {
@@ -1131,9 +1148,9 @@ mod tests {
         // Single draw_layers call (clears buffer first).
         renderer.draw_layers(
             [
-                (0, Pos::new(0, 0), &bg),
-                (0, Pos::new(1, 0), &dot),
-                (1, Pos::new(0, 0), &entity),
+                (0, Pos::new(0, 0), &bg, None),
+                (0, Pos::new(1, 0), &dot, None),
+                (1, Pos::new(0, 0), &entity, None),
             ]
             .into_iter(),
         );
@@ -1186,10 +1203,10 @@ mod tests {
 
         renderer.draw_layers(
             [
-                (0, Pos::new(0, 0), &base),
-                (0, Pos::new(1, 0), &base),
-                (1, Pos::new(0, 0), &overlay),
-                (1, Pos::new(1, 0), &empty),
+                (0, Pos::new(0, 0), &base, None),
+                (0, Pos::new(1, 0), &base, None),
+                (1, Pos::new(0, 0), &overlay, None),
+                (1, Pos::new(1, 0), &empty, None),
             ]
             .into_iter(),
         );
@@ -1232,14 +1249,14 @@ mod tests {
         tile: &Tile,
         over: Option<(u16, u16, &Tile)>,
     ) {
-        let mut items: Vec<(u8, Pos, &Tile)> = Vec::new();
+        let mut items: Vec<(u8, Pos, &Tile, Option<&str>)> = Vec::new();
         for y in 0..rows {
             for x in 0..cols {
                 let t = match over {
                     Some((ox, oy, ot)) if ox == x && oy == y => ot,
                     _ => tile,
                 };
-                items.push((0, Pos::new(x, y), t));
+                items.push((0, Pos::new(x, y), t, None));
             }
         }
         r.draw_layers(items.into_iter()).unwrap();
@@ -1289,7 +1306,7 @@ mod tests {
         let blue = bg_tile(0, 0, 200);
         // Two separate frames would each report one band; do it in one frame
         // by changing both corners relative to the baseline.
-        let mut items: Vec<(u8, Pos, &Tile)> = Vec::new();
+        let mut items: Vec<(u8, Pos, &Tile, Option<&str>)> = Vec::new();
         for y in 0..3u16 {
             for x in 0..2u16 {
                 let t = if (x, y) == (0, 0) || (x, y) == (1, 2) {
@@ -1297,7 +1314,7 @@ mod tests {
                 } else {
                     &red
                 };
-                items.push((0, Pos::new(x, y), t));
+                items.push((0, Pos::new(x, y), t, None));
             }
         }
         r.draw_layers(items.into_iter()).unwrap();

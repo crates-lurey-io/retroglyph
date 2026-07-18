@@ -497,7 +497,7 @@ impl<W: std::io::Write> Backend for Crossterm<W> {
     #[cfg_attr(feature = "tracing", tracing::instrument(level = "debug", skip_all))]
     fn draw<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
-        I: Iterator<Item = (Pos, &'a Tile)>,
+        I: Iterator<Item = (Pos, &'a Tile, Option<&'a str>)>,
     {
         // Begin synchronized update so the terminal holds rendering until
         // flush() sends the matching End marker.
@@ -817,7 +817,7 @@ mod tests {
             .expect("building against a Vec<u8> writer with all TTY features disabled must not require a real terminal");
 
         let tile = Tile::new('X', retroglyph_core::style::Style::default());
-        term.draw(core::iter::once((Pos { x: 0, y: 0 }, &tile)))
+        term.draw(core::iter::once((Pos { x: 0, y: 0 }, &tile, None)))
             .unwrap();
         term.flush().unwrap();
 

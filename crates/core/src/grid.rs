@@ -91,12 +91,14 @@ use crate::tile::Tile;
 use crate::tile::TileFlags;
 #[cfg(feature = "egc")]
 use crate::tile::cap_grapheme;
+use alloc::collections::BTreeMap;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt;
 use core::ops::{Index, IndexMut};
 use grixy::buf::GridBuf;
 use grixy::ops::layout::RowMajor;
-use grixy::ops::{ExactSizeGrid, GridDiff, GridRead, GridWrite};
+use grixy::ops::{ExactSizeGrid, GridRead, GridWrite};
 
 /// Size of the grid.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, PartialOrd, Ord)]
@@ -135,12 +137,6 @@ impl From<Size> for (u16, u16) {
 
 fn to_grixy_pos(pos: Pos) -> grixy::core::Pos {
     grixy::core::Pos::new(usize::from(pos.x), usize::from(pos.y))
-}
-
-#[allow(clippy::missing_const_for_fn)]
-fn from_grixy_pos(pos: grixy::core::Pos) -> Pos {
-    #[allow(clippy::cast_possible_truncation)]
-    Pos::new(pos.x as u16, pos.y as u16)
 }
 
 // ---------------------------------------------------------------------------
@@ -195,10 +191,23 @@ impl<'a> Iterator for CellsMut<'a> {
 ///
 /// Layer 0 is always allocated. Layers 1–255 are allocated on first write
 /// (see [`Grid::put_tile`]).
-// TODO: derive Clone once ixy's RowMajor (a ZST layout marker) implements Clone/Copy.
-// Blocked on upstream: https://github.com/crates-lurey-io/ixy
+#[derive(Clone)]
 pub(crate) struct LayerBuf {
     pub(crate) buf: GridBuf<Tile, Vec<Tile>, RowMajor>,
+    /// Sparse EGC side-table: flat row-major index -> full grapheme text, for
+    /// tiles with [`TileFlags::HAS_EXTRA`] set. Empty unless the `egc`
+    /// feature is used to write a multi-codepoint grapheme, which is what
+    /// keeps [`Tile`] itself small (see [`Grid::grapheme`]).
+    ///
+    /// The `HAS_EXTRA` flag is authoritative: readers must check it before
+    /// consulting this map, since some write paths (`put`, `put_tile`,
+    /// `IndexMut`, `cells_mut`) can leave a stale entry behind when they
+    /// overwrite a tile that used to carry extra text without an explicit
+    /// cleanup call. Since those paths only ever hand out or store tiles
+    /// with `HAS_EXTRA` clear, a stale entry is harmless: it is simply
+    /// never looked up until the slot is reused by `write_grapheme`, which
+    /// always overwrites it.
+    extras: BTreeMap<usize, Arc<str>>,
 }
 
 impl LayerBuf {
@@ -206,6 +215,29 @@ impl LayerBuf {
         let n = usize::from(width) * usize::from(height);
         Self {
             buf: GridBuf::from_buffer(alloc::vec![Tile::default(); n], usize::from(width)),
+            extras: BTreeMap::new(),
+        }
+    }
+
+    /// Returns the grapheme text for the tile at flat index `idx`, or `None`
+    /// if `tile` doesn't have [`TileFlags::HAS_EXTRA`] set.
+    fn extra_for(&self, idx: usize, tile: &Tile) -> Option<&str> {
+        if tile.flags.contains(TileFlags::HAS_EXTRA) {
+            self.extras.get(&idx).map(|s| &**s)
+        } else {
+            None
+        }
+    }
+
+    /// Returns a cloned `Arc` handle to the grapheme text at flat index
+    /// `idx`, or `None` if `tile` doesn't have [`TileFlags::HAS_EXTRA`] set.
+    /// Used to copy extras between grids (e.g. [`Grid::blit`]) without
+    /// re-allocating the string.
+    fn extra_arc_for(&self, idx: usize, tile: &Tile) -> Option<Arc<str>> {
+        if tile.flags.contains(TileFlags::HAS_EXTRA) {
+            self.extras.get(&idx).cloned()
+        } else {
+            None
         }
     }
 }
@@ -221,6 +253,7 @@ impl LayerBuf {
 ///
 /// Requires an allocator (backed by `alloc::vec::Vec`), so it is unavailable
 /// in strictly static, no-alloc environments.
+#[derive(Clone)]
 pub struct Grid {
     width: u16,
     height: u16,
@@ -360,16 +393,23 @@ impl Grid {
 
     /// Sets the tile at the given coordinates on layer 0.
     ///
+    /// Since [`Tile`] cannot carry a multi-codepoint grapheme itself (see
+    /// [`grapheme`](Self::grapheme)), overwriting a cell this way always
+    /// clears any extra text previously stored for it -- use
+    /// [`write_grapheme`](Self::write_grapheme) to write EGCs.
+    ///
     /// # Panics
     ///
     /// Panics if the coordinates are out of bounds.
     pub fn put(&mut self, x: u16, y: u16, tile: Tile) {
         let pos = to_grixy_pos(Pos::new(x, y));
+        let idx = usize::from(y) * usize::from(self.width) + usize::from(x);
         let lb = self.layer0_mut();
         assert!(
             lb.buf.contains(pos),
             "coordinates out of bounds: ({x}, {y})"
         );
+        lb.extras.remove(&idx);
         lb.buf[pos] = tile;
     }
 
@@ -383,13 +423,38 @@ impl Grid {
         &self.layer0().buf[to_grixy_pos(Pos::new(x, y))]
     }
 
+    /// Returns the full grapheme cluster stored for the tile at `(x, y)` on
+    /// `layer`, if any.
+    ///
+    /// `Some` only when the tile has [`TileFlags::HAS_EXTRA`] set, i.e. it
+    /// was written via [`write_grapheme`](Self::write_grapheme) with a
+    /// multi-codepoint EGC (combining marks, ZWJ sequences, etc.). For the
+    /// common single-codepoint case, or without the `egc` feature, this is
+    /// always `None`; use [`get_tile`](Self::get_tile)'s
+    /// [`Tile::glyph`](crate::tile::Tile::glyph) and
+    /// [`encode_utf8`](char::encode_utf8) to reconstruct the string instead.
+    ///
+    /// Returns `None` if the layer is unallocated or the coordinates are out
+    /// of bounds.
+    #[must_use]
+    pub fn grapheme(&self, layer: u8, x: u16, y: u16) -> Option<&str> {
+        let lb = self.layer(layer)?;
+        let pos = to_grixy_pos(Pos::new(x, y));
+        let tile = lb.buf.get(pos)?;
+        let idx = usize::from(y) * usize::from(self.width) + usize::from(x);
+        lb.extra_for(idx, tile)
+    }
+
     /// Tries to set the tile at the given coordinates on layer 0.
     ///
-    /// Returns `None` if the coordinates are out of bounds.
+    /// Returns `None` if the coordinates are out of bounds. See
+    /// [`put`](Self::put) for the EGC-clearing caveat.
     pub fn checked_put(&mut self, x: u16, y: u16, tile: Tile) -> Option<()> {
         let pos = to_grixy_pos(Pos::new(x, y));
+        let idx = usize::from(y) * usize::from(self.width) + usize::from(x);
         let lb = self.layer0_mut();
         if lb.buf.contains(pos) {
+            lb.extras.remove(&idx);
             lb.buf[pos] = tile;
             Some(())
         } else {
@@ -445,6 +510,7 @@ impl Grid {
     pub fn clear(&mut self, layer: u8) {
         if let Some(lb) = self.layers[usize::from(layer)].as_mut() {
             lb.buf.clear();
+            lb.extras.clear();
         }
     }
 
@@ -454,10 +520,28 @@ impl Grid {
     /// layers. New cells are initialised to the default tile. Shrinking
     /// discards tiles outside the new bounds.
     pub fn resize(&mut self, width: u16, height: u16) {
+        let old_width = usize::from(self.width);
+        let new_width = usize::from(width);
+        let new_height = usize::from(height);
         self.width = width;
         self.height = height;
         for layer in self.layers.iter_mut().flatten() {
-            layer.buf.resize(usize::from(width), usize::from(height));
+            // The extras side-table is keyed by flat row-major index, which
+            // shifts whenever the width changes -- remap it in lockstep with
+            // `buf.resize` (below) rather than leaving it pointing at stale
+            // (or now out-of-bounds) cells.
+            if !layer.extras.is_empty() {
+                layer.extras = layer
+                    .extras
+                    .iter()
+                    .filter_map(|(&old_idx, s)| {
+                        let x = old_idx % old_width;
+                        let y = old_idx / old_width;
+                        (x < new_width && y < new_height).then(|| (y * new_width + x, s.clone()))
+                    })
+                    .collect();
+            }
+            layer.buf.resize(new_width, new_height);
         }
     }
 
@@ -476,8 +560,9 @@ impl Grid {
     /// - Sets [`TileFlags::WIDE_CHAR`] on the primary cell and places a
     ///   [`TileFlags::WIDE_CHAR_SPACER`] in the adjacent cell for 2-column
     ///   characters.
-    /// - Stores multi-codepoint EGCs (combining marks, ZWJ sequences) in
-    ///   `Tile::extra`, capped at 8 codepoints total.
+    /// - Stores multi-codepoint EGCs (combining marks, ZWJ sequences) in the
+    ///   layer's EGC side-table (see [`grapheme`](Self::grapheme)), capped at
+    ///   8 codepoints total.
     ///
     /// Does nothing if `(x, y)` is out of bounds, if the grapheme has zero
     /// display width, or if a 2-column wide character would overflow the grid
@@ -524,21 +609,25 @@ impl Grid {
         let mut chars = grapheme.chars();
         let first = chars.next().unwrap_or(' ');
         let has_extra = chars.next().is_some();
-        let extra = if has_extra {
-            Some(alloc::sync::Arc::new(cap_grapheme(grapheme)))
-        } else {
-            None
-        };
         let flags = if width == 2 {
             TileFlags::WIDE_CHAR
         } else {
             TileFlags::empty()
         };
+        let flags = if has_extra {
+            flags | TileFlags::HAS_EXTRA
+        } else {
+            flags
+        };
 
         lb.buf.as_mut()[idx].glyph = first;
         lb.buf.as_mut()[idx].style = style;
-        lb.buf.as_mut()[idx].extra = extra;
         lb.buf.as_mut()[idx].flags = flags;
+        if has_extra {
+            lb.extras.insert(idx, Arc::from(cap_grapheme(grapheme)));
+        } else {
+            lb.extras.remove(&idx);
+        }
 
         // Place spacer for wide characters.
         if width == 2 {
@@ -547,8 +636,8 @@ impl Grid {
                 let spacer = &mut lb.buf.as_mut()[spacer_idx];
                 spacer.glyph = ' ';
                 spacer.style = style;
-                spacer.extra = None;
                 spacer.flags = TileFlags::WIDE_CHAR_SPACER;
+                lb.extras.remove(&spacer_idx);
             }
         }
     }
@@ -572,6 +661,7 @@ impl Grid {
                 let pidx = usize::from(y) * w + usize::from(cx - 1);
                 if pidx < cap {
                     lb.buf.as_mut()[pidx].reset();
+                    lb.extras.remove(&pidx);
                 }
             }
 
@@ -579,6 +669,7 @@ impl Grid {
                 let sidx = usize::from(y) * w + usize::from(cx + 1);
                 if sidx < cap {
                     lb.buf.as_mut()[sidx].reset();
+                    lb.extras.remove(&sidx);
                 }
             }
         }
@@ -596,14 +687,38 @@ impl Grid {
     /// if `(x, y)` is out of bounds.
     ///
     /// To read back, use [`get_tile`](Self::get_tile).
-    pub fn put_tile(&mut self, layer: u8, x: u16, y: u16, tile: Tile) -> Option<()> {
+    ///
+    /// Like [`put`](Self::put), any tile written this way has its extra
+    /// grapheme text cleared, since a caller-constructed [`Tile`] can never
+    /// legitimately carry [`TileFlags::HAS_EXTRA`] (the flag is
+    /// crate-private). Internal callers that need to preserve EGC text
+    /// across a copy (e.g. [`blit`](Self::blit)) follow up with a direct
+    /// extras-table write.
+    pub fn put_tile(&mut self, layer: u8, x: u16, y: u16, mut tile: Tile) -> Option<()> {
         let pos = to_grixy_pos(Pos::new(x, y));
+        let idx = usize::from(y) * usize::from(self.width) + usize::from(x);
         let lb = self.layer_or_alloc(layer);
         if !lb.buf.contains(pos) {
             return None;
         }
+        lb.extras.remove(&idx);
+        tile.flags.remove(TileFlags::HAS_EXTRA);
         lb.buf[pos] = tile;
         Some(())
+    }
+
+    /// Sets the extra grapheme text for an already-written tile at `(x, y)`
+    /// on `layer`, setting [`TileFlags::HAS_EXTRA`] to match. Does nothing if
+    /// out of bounds. Crate-private: the only external way to write EGC text
+    /// is [`write_grapheme`](Self::write_grapheme).
+    pub(crate) fn set_extra(&mut self, layer: u8, x: u16, y: u16, extra: Arc<str>) {
+        let pos = to_grixy_pos(Pos::new(x, y));
+        let idx = usize::from(y) * usize::from(self.width) + usize::from(x);
+        let lb = self.layer_or_alloc(layer);
+        if lb.buf.contains(pos) {
+            lb.buf[pos].flags.insert(TileFlags::HAS_EXTRA);
+            lb.extras.insert(idx, extra);
+        }
     }
 
     /// Read a tile on `layer` at `(x, y)`, or `None` if the layer is
@@ -627,7 +742,14 @@ impl Grid {
                 if !tile.flags.contains(TileFlags::EMPTY) {
                     let dx = dst_x + sx.saturating_sub(src_rect.left());
                     let dy = dst_y + sy.saturating_sub(src_rect.top());
-                    self.put_tile(layer, dx, dy, tile.clone());
+                    let src_idx = usize::from(sy) * usize::from(src.width) + usize::from(sx);
+                    let extra = src
+                        .layer(layer)
+                        .and_then(|lb| lb.extra_arc_for(src_idx, tile));
+                    self.put_tile(layer, dx, dy, *tile);
+                    if let Some(extra) = extra {
+                        self.set_extra(layer, dx, dy, extra);
+                    }
                 }
             }
         }
@@ -663,7 +785,7 @@ impl Grid {
                 if !tile.flags.contains(TileFlags::EMPTY) {
                     let dx = dst_x + sx.saturating_sub(src_rect.left());
                     let dy = dst_y + sy.saturating_sub(src_rect.top());
-                    let mut blended = tile.clone();
+                    let mut blended = *tile;
                     if let Some(dst) = self.get_tile(layer, dx, dy) {
                         if fg_alpha != 1.0 {
                             blended.style.fg = blend_fg(tile.style.fg, dst.style.fg, fg_alpha);
@@ -672,20 +794,30 @@ impl Grid {
                             blended.style.bg = blend_bg(tile.style.bg, dst.style.bg, bg_alpha);
                         }
                     }
+                    let src_idx = usize::from(sy) * usize::from(src.width) + usize::from(sx);
+                    let extra = src
+                        .layer(layer)
+                        .and_then(|lb| lb.extra_arc_for(src_idx, tile));
                     self.put_tile(layer, dx, dy, blended);
+                    if let Some(extra) = extra {
+                        self.set_extra(layer, dx, dy, extra);
+                    }
                 }
             }
         }
     }
 
-    /// Yield `(layer_id, Pos, &Tile)` for every allocated cell across
-    /// all layers, in layer-major (0 → `max_layer`) then row-major order.
+    /// Yield `(layer_id, Pos, &Tile, Option<&str>)` for every allocated cell
+    /// across all layers, in layer-major (0 → `max_layer`) then row-major
+    /// order. The last element is the tile's grapheme text (see
+    /// [`grapheme`](Self::grapheme)), `Some` only when
+    /// [`TileFlags::HAS_EXTRA`] is set.
     ///
     /// Unallocated layers are skipped. This is used by backends that need
     /// the full frame on every draw (see [`crate::Backend::needs_full_frame`]).
     ///
     /// This iterator is zero-allocation: it walks the layer buffers inline.
-    pub fn layers(&self) -> impl Iterator<Item = (u8, Pos, &Tile)> + '_ {
+    pub fn layers(&self) -> impl Iterator<Item = (u8, Pos, &Tile, Option<&str>)> + '_ {
         let width = usize::from(self.width);
         (0..=self.max_layer)
             .filter_map(move |id| self.layer(id).map(|lb| (id, lb)))
@@ -695,7 +827,7 @@ impl Grid {
                     let x = (i % width) as u16;
                     #[allow(clippy::cast_possible_truncation)]
                     let y = (i / width) as u16;
-                    (id, Pos::new(x, y), tile)
+                    (id, Pos::new(x, y), tile, lb.extra_for(i, tile))
                 })
             })
     }
@@ -704,6 +836,7 @@ impl Grid {
     pub fn clear_all(&mut self) {
         for layer in self.layers.iter_mut().flatten() {
             layer.buf.clear();
+            layer.extras.clear();
         }
     }
 
@@ -725,9 +858,12 @@ impl Grid {
     ///
     /// `dst` must have the same dimensions as `self`.
     pub(crate) fn flatten_into(&self, dst: &mut Self) {
+        let width = usize::from(self.width);
         for y in 0..self.height {
             for x in 0..self.width {
-                let mut out = self.get(x, y).clone();
+                let mut out = *self.get(x, y);
+                let idx = usize::from(y) * width + usize::from(x);
+                let mut out_extra = self.layer0().extra_arc_for(idx, &out);
                 for id in 1..=self.max_layer {
                     let Some(tile) = self.get_tile(id, x, y) else {
                         continue;
@@ -739,28 +875,38 @@ impl Grid {
                         out.dx = tile.dx;
                         out.dy = tile.dy;
                         out.flags = tile.flags;
-                        out.extra.clone_from(&tile.extra);
+                        out_extra = self.layer(id).and_then(|lb| lb.extra_arc_for(idx, tile));
                     }
                     if tile.style.bg != Color::Default {
                         out.style.bg = tile.style.bg;
                     }
                 }
                 dst.put(x, y, out);
+                if let Some(extra) = out_extra {
+                    dst.set_extra(0, x, y, extra);
+                }
             }
         }
     }
 
-    /// Yield `(layer_id, Pos, &Tile)` for every changed position across all
-    /// layers, in layer-major (0 → `max_layer`) then row-major order.
+    /// Yield `(layer_id, Pos, &Tile, Option<&str>)` for every changed
+    /// position across all layers, in layer-major (0 → `max_layer`) then
+    /// row-major order. The last element is the changed tile's grapheme text
+    /// (see [`grapheme`](Self::grapheme)).
     ///
     /// Three cases per layer:
     /// - Layer absent in `self`: nothing yielded.
     /// - Layer in `self`, absent in `other` (newly allocated): all
     ///   `width × height` tiles yielded.
-    /// - Layer in both: only positions where the `Tile` differs are yielded.
+    /// - Layer in both: only positions where the `Tile` or its grapheme text
+    ///   differs are yielded. `self` and `other` must have matching
+    ///   dimensions for this case; the crate never calls `diff` otherwise.
     ///
     /// This iterator is zero-allocation: it walks the layer buffers inline.
-    pub fn diff<'a>(&'a self, other: &'a Self) -> impl Iterator<Item = (u8, Pos, &'a Tile)> + 'a {
+    pub fn diff<'a>(
+        &'a self,
+        other: &'a Self,
+    ) -> impl Iterator<Item = (u8, Pos, &'a Tile, Option<&'a str>)> + 'a {
         let width = usize::from(self.width);
         let max = self.max_layer;
         (0..=max).flat_map(move |id| {
@@ -779,16 +925,32 @@ impl Grid {
                             let x = (i % width) as u16;
                             #[allow(clippy::cast_possible_truncation)]
                             let y = (i / width) as u16;
-                            (id, Pos::new(x, y), tile)
+                            (id, Pos::new(x, y), tile, cur_lb.extra_for(i, tile))
                         }),
                 ),
-                // Layer in both: only the differing cells.
-                (Some(cur_lb), Some(prev_lb)) => LayerDiff::Diff(
-                    cur_lb
-                        .buf
-                        .diff(&prev_lb.buf)
-                        .map(move |(pos, tile)| (id, from_grixy_pos(pos), tile)),
-                ),
+                // Layer in both: only the differing cells. Compared by hand
+                // (rather than delegating to grixy's `GridDiff`) because a
+                // `Tile`-only comparison can't see grapheme-text changes: two
+                // multi-codepoint EGCs sharing a primary codepoint but
+                // different combining marks (e.g. `e\u{0301}` vs `e\u{0300}`)
+                // compare equal on every `Tile` field.
+                (Some(cur_lb), Some(prev_lb)) => {
+                    LayerDiff::Diff(cur_lb.buf.as_ref().iter().enumerate().filter_map(
+                        move |(i, tile)| {
+                            let prev_tile = &prev_lb.buf.as_ref()[i];
+                            let cur_extra = cur_lb.extra_for(i, tile);
+                            let prev_extra = prev_lb.extra_for(i, prev_tile);
+                            if tile == prev_tile && cur_extra == prev_extra {
+                                return None;
+                            }
+                            #[allow(clippy::cast_possible_truncation)]
+                            let x = (i % width) as u16;
+                            #[allow(clippy::cast_possible_truncation)]
+                            let y = (i / width) as u16;
+                            Some((id, Pos::new(x, y), tile, cur_extra))
+                        },
+                    ))
+                }
             }
         })
     }
@@ -804,10 +966,10 @@ enum LayerDiff<F, D> {
 
 impl<'a, F, D> Iterator for LayerDiff<F, D>
 where
-    F: Iterator<Item = (u8, Pos, &'a Tile)>,
-    D: Iterator<Item = (u8, Pos, &'a Tile)>,
+    F: Iterator<Item = (u8, Pos, &'a Tile, Option<&'a str>)>,
+    D: Iterator<Item = (u8, Pos, &'a Tile, Option<&'a str>)>,
 {
-    type Item = (u8, Pos, &'a Tile);
+    type Item = (u8, Pos, &'a Tile, Option<&'a str>);
 
     fn next(&mut self) -> Option<Self::Item> {
         match self {
@@ -970,7 +1132,7 @@ mod tests {
 
         let diffs: Vec<_> = g1.diff(&g2).collect();
         assert_eq!(diffs.len(), 1);
-        assert_eq!(diffs[0], (0, Pos::new(0, 0), g1.get(0, 0)));
+        assert_eq!(diffs[0], (0, Pos::new(0, 0), g1.get(0, 0), None));
     }
 
     #[test]
@@ -1190,7 +1352,7 @@ mod tests {
         let diffs: Vec<_> = cur.diff(&prev).collect();
         // All 12 cells of the newly allocated layer 1 are yielded.
         assert_eq!(diffs.len(), 12);
-        assert!(diffs.iter().all(|(l, _, _)| *l == 1));
+        assert!(diffs.iter().all(|(l, _, _, _)| *l == 1));
     }
 
     #[test]
@@ -1199,7 +1361,7 @@ mod tests {
         let prev = Grid::new(3, 3);
         cur.put_tile(2, 0, 0, Tile::new('B', Style::default()));
         cur.put_tile(0, 1, 0, Tile::new('A', Style::default()));
-        let layers: Vec<u8> = cur.diff(&prev).map(|(l, _, _)| l).collect();
+        let layers: Vec<u8> = cur.diff(&prev).map(|(l, _, _, _)| l).collect();
         // Layer 0's change appears first, then all of layer 2.
         assert_eq!(layers[0], 0);
         assert!(layers[1..].iter().all(|&l| l == 2));
@@ -1237,6 +1399,125 @@ mod tests {
         // Both layers reset to default (space).
         assert_eq!(g.get(0, 0).glyph, ' ');
         assert_eq!(g.get_tile(1, 0, 0).unwrap().glyph, ' ');
+    }
+
+    #[test]
+    fn test_grid_clone_is_independent() {
+        let mut g = Grid::new(3, 3);
+        g.put_tile(0, 0, 0, Tile::new('A', Style::default()));
+        g.put_tile(2, 1, 1, Tile::new('B', Style::default()));
+
+        let mut cloned = g.clone();
+        assert_eq!(cloned.get(0, 0).glyph, 'A');
+        assert_eq!(cloned.get_tile(2, 1, 1).unwrap().glyph, 'B');
+        assert_eq!(cloned.max_layer(), g.max_layer());
+
+        // Mutating the clone must not affect the original (deep copy).
+        cloned.put_tile(0, 0, 0, Tile::new('Z', Style::default()));
+        assert_eq!(cloned.get(0, 0).glyph, 'Z');
+        assert_eq!(g.get(0, 0).glyph, 'A');
+    }
+
+    // --- Extra grapheme text (EGC side-table) ---
+
+    #[cfg(feature = "egc")]
+    #[test]
+    fn test_grid_write_grapheme_stores_and_reads_extra() {
+        let mut g = Grid::new(5, 5);
+        g.write_grapheme(0, 1, 1, "e\u{0301}", Style::default());
+        assert_eq!(g.get(1, 1).glyph, 'e');
+        assert_eq!(g.grapheme(0, 1, 1), Some("e\u{0301}"));
+
+        // Single-codepoint writes never populate the side-table.
+        g.write_grapheme(0, 2, 2, "a", Style::default());
+        assert_eq!(g.grapheme(0, 2, 2), None);
+    }
+
+    #[cfg(feature = "egc")]
+    #[test]
+    fn test_grid_overwrite_clears_extra() {
+        let mut g = Grid::new(5, 5);
+        g.write_grapheme(0, 0, 0, "e\u{0301}", Style::default());
+        assert_eq!(g.grapheme(0, 0, 0), Some("e\u{0301}"));
+
+        // A plain `put` (or a later single-codepoint `write_grapheme`) must
+        // drop the stale side-table entry, not just leave it unreachable.
+        g.put(0, 0, Tile::new('X', Style::default()));
+        assert_eq!(g.grapheme(0, 0, 0), None);
+        assert!(!g.get(0, 0).flags().contains(TileFlags::HAS_EXTRA));
+    }
+
+    #[cfg(feature = "egc")]
+    #[test]
+    fn test_grid_resize_remaps_extras_to_new_stride() {
+        let mut g = Grid::new(4, 4);
+        g.write_grapheme(0, 3, 1, "e\u{0301}", Style::default());
+        assert_eq!(g.grapheme(0, 3, 1), Some("e\u{0301}"));
+
+        // Widening changes the row stride, so the flat index for (3, 1)
+        // changes even though the cell itself is preserved.
+        g.resize(8, 4);
+        assert_eq!(g.get(3, 1).glyph, 'e');
+        assert_eq!(g.grapheme(0, 3, 1), Some("e\u{0301}"));
+        // No ghost entry landed on some other cell at the old flat index.
+        assert_eq!(g.grapheme(0, 7, 0), None);
+
+        // Shrinking past the cell drops its extras entry along with the tile.
+        g.resize(2, 4);
+        assert_eq!(g.grapheme(0, 3, 1), None);
+    }
+
+    #[cfg(feature = "egc")]
+    #[test]
+    fn test_grid_diff_detects_grapheme_only_change() {
+        // Same glyph, style, and flags on both sides -- only the combining
+        // mark differs. A `Tile`-only diff would miss this.
+        let mut cur = Grid::new(2, 2);
+        let mut prev = Grid::new(2, 2);
+        cur.write_grapheme(0, 0, 0, "e\u{0301}", Style::default());
+        prev.write_grapheme(0, 0, 0, "e\u{0300}", Style::default());
+
+        let diffs: Vec<_> = cur.diff(&prev).collect();
+        assert_eq!(diffs.len(), 1);
+        assert_eq!(diffs[0].1, Pos::new(0, 0));
+        assert_eq!(diffs[0].3, Some("e\u{0301}"));
+
+        // Identical grapheme text on both sides: no diff.
+        let mut prev2 = Grid::new(2, 2);
+        prev2.write_grapheme(0, 0, 0, "e\u{0301}", Style::default());
+        assert_eq!(cur.diff(&prev2).count(), 0);
+    }
+
+    #[cfg(feature = "egc")]
+    #[test]
+    fn test_grid_blit_preserves_extra() {
+        let mut src = Grid::new(2, 2);
+        src.write_grapheme(0, 0, 0, "e\u{0301}", Style::default());
+
+        let mut dst = Grid::new(2, 2);
+        dst.blit(0, &src, Rect::new(0, 0, 2, 2), 0, 0);
+        assert_eq!(dst.get(0, 0).glyph, 'e');
+        assert_eq!(dst.grapheme(0, 0, 0), Some("e\u{0301}"));
+    }
+
+    #[cfg(feature = "egc")]
+    #[test]
+    fn test_grid_clone_preserves_extra() {
+        let mut g = Grid::new(2, 2);
+        g.write_grapheme(0, 0, 0, "e\u{0301}", Style::default());
+        let cloned = g.clone();
+        assert_eq!(cloned.grapheme(0, 0, 0), Some("e\u{0301}"));
+    }
+
+    #[cfg(feature = "egc")]
+    #[test]
+    fn test_grid_flatten_into_carries_extra_from_higher_layer() {
+        let mut g = Grid::new(2, 2);
+        g.write_grapheme(1, 0, 0, "e\u{0301}", Style::default());
+        let mut flattened = Grid::new(2, 2);
+        g.flatten_into(&mut flattened);
+        assert_eq!(flattened.get(0, 0).glyph, 'e');
+        assert_eq!(flattened.grapheme(0, 0, 0), Some("e\u{0301}"));
     }
 }
 

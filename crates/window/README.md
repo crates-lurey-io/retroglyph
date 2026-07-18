@@ -40,14 +40,14 @@ impl Presenter for NullPresenter {
 
     fn draw<'a, I>(&mut self, _content: I) -> Result<(), Self::Error>
     where
-        I: Iterator<Item = (Pos, &'a Tile)>,
+        I: Iterator<Item = (Pos, &'a Tile, Option<&'a str>)>,
     {
         Ok(())
     }
 
     fn draw_layers<'a, I>(&mut self, _content: I) -> Result<(), Self::Error>
     where
-        I: Iterator<Item = (u8, Pos, &'a Tile)>,
+        I: Iterator<Item = (u8, Pos, &'a Tile, Option<&'a str>)>,
     {
         Ok(())
     }
