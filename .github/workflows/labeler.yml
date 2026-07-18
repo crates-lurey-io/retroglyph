@@ -5,7 +5,8 @@ name: Labeler
 #    them in sync (sync-labels: true) as the PR's diff evolves.
 #  - title-labels: derives a c: label, as a fallback, from the Conventional Commit PR title
 #    that pr-title.yml already enforces, e.g. "feat(core): ..." -> c:core. Re-run on every
-#    title edit/push so labels never go stale. t: labels are not auto-applied; they're defined
+#    title edit/push so labels never go stale. Other than `t:breaking`, which check-semver.yml
+#    syncs from cargo-semver-checks' finding, t: labels are not auto-applied; they're defined
 #    in .github/labels.yml for manual/optional use only.
 
 on:
