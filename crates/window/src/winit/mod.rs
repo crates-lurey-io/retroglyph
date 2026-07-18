@@ -11,6 +11,8 @@
 pub mod run;
 /// winit-event -> retroglyph-event converters.
 pub mod translate;
+/// wasm32-only DPR/viewport/pointer-rescaling helpers used internally by `run`.
+mod web;
 
 pub use run::{
     EventProxy, EventProxyClosed, WindowConfig, run_app, run_app_with_proxy, run_windowed,
