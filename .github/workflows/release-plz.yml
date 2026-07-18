@@ -68,11 +68,48 @@ jobs:
         with:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
-      - uses: release-plz/action@v0.5
+      - name: Run release-plz
+        id: release-plz
+        uses: release-plz/action@v0.5
         with:
           command: release-pr
         env:
-          # NOTE: a Release PR opened with the default GITHUB_TOKEN does not trigger other
-          # workflows (GitHub's loop-prevention), so CI won't run on the Release PR itself. If that
-          # becomes a problem, swap in a GitHub App token or PAT here (see release-plz docs).
+          # NOTE: GitHub's loop-prevention only blocks `push`-triggered workflows from a
+          # GITHUB_TOKEN-authored push (that's why release-plz-pr, itself push-triggered, doesn't
+          # re-trigger itself); it does NOT apply to ci.yml, which is `pull_request`-triggered and
+          # therefore DOES run against this Release PR. That's exactly what caught
+          # https://github.com/crates-lurey-io/retroglyph/pull/90 and /pull/248's format/lint
+          # failures below.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # release-plz's cliff.toml-driven CHANGELOG.md generation doesn't reliably land on
+      # prettier's/markdownlint's blank-line normalization -- e.g. PR #248 still had 2 blank lines
+      # at the boundary between a freshly rendered release entry and the existing file's body
+      # after cliff.toml's own postprocessor squashed a 3-blank-line run to 1, because release-plz's
+      # header-preserving splice (concatenating the rendered entry with the old file's body
+      # verbatim) adds newlines of its own on top. Rather than keep chasing that concatenation's
+      # exact newline count across release-plz versions, just run the same formatters CI's
+      # `format`/`lint` jobs enforce directly on the Release PR branch, and push a fixup commit if
+      # they change anything.
+      - name: Fix formatting on the Release PR
+        if: steps.release-plz.outputs.prs_created == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ fromJSON(steps.release-plz.outputs.pr).number }}
+        run: |
+          set -e
+          gh pr checkout "$PR_NUMBER"
+          npm ci --prefix tools
+          # markdownlint --fix runs first because it can itself introduce a prettier violation
+          # (reproduced locally fixing PR #248: markdownlint --fix left one CHANGELOG.md failing
+          # prettier --check that had just passed). prettier --write must run last so its output is
+          # what actually gets committed and checked.
+          npm run --prefix tools lint:fix
+          npm run --prefix tools format
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git commit -am "chore: fix formatting on the Release PR"
+            git push
+          else
+            echo "Nothing to fix, formatters made no changes."
+          fi
