@@ -87,6 +87,61 @@ fn png_snapshot() {
     insta::assert_binary_snapshot!(".png", png);
 }
 
+/// Like [`support::png_snapshot`], but pushes a `t` keypress before the one rendered tick, so the
+/// committed pixels are [`Theme::LIGHT`]'s palette rather than [`ThemeSwitch::default`]'s
+/// [`Theme::DARK`] -- this is the regression test for the light-theme readability bug fixed
+/// alongside it (every `.theme()` mapping used to leave some widgets' text background at
+/// [`Style::new()`]'s default, which paints solid black behind the glyph on a real backend
+/// instead of blending with the panel's white fill -- invisible on a near-black `Theme::DARK`
+/// panel, glaring on `Theme::LIGHT`'s white one). Not built from [`support::png_snapshot`]
+/// directly since that helper always runs `E::init` + one plain `tick` with no way to inject
+/// input first; duplicating its short body here is cheaper than widening a helper every other
+/// example's test also uses just for this one example's needs.
+///
+/// [`Style::new()`]: retroglyph_core::Style::new
+/// [`Theme::DARK`]: retroglyph_widgets::Theme::DARK
+/// [`Theme::LIGHT`]: retroglyph_widgets::Theme::LIGHT
+#[cfg(all(feature = "software", not(target_arch = "wasm32")))]
+#[test]
+fn png_snapshot_light() {
+    use retroglyph_software::SoftwareBackendBuilder;
+    use retroglyph_window::Presenter;
+
+    let (cols, rows, scale) = (50u16, 25u16, 2u8);
+    let renderer = SoftwareBackendBuilder::new()
+        .grid_size(cols, rows)
+        .scale(scale)
+        .build()
+        .expect("software backend init")
+        .run_headless()
+        .expect("headless renderer init");
+    let (cell_w, cell_h) = renderer.cell_size();
+    let (width, height) = (u32::from(cols) * cell_w, u32::from(rows) * cell_h);
+
+    let mut term = Terminal::new(renderer);
+    let mut state = ThemeSwitch::init(&mut term);
+    term.backend_mut().push_event(key(KeyCode::Char('t')));
+    let frame = Frame {
+        delta: HEADLESS_FRAME_DELTA,
+        frame: 0,
+    };
+    state.tick(&mut term, &frame);
+
+    let mut rgb = Vec::with_capacity(term.backend().pixels().len() * 3);
+    for &p in term.backend().pixels() {
+        rgb.push(((p >> 16) & 0xff) as u8);
+        rgb.push(((p >> 8) & 0xff) as u8);
+        rgb.push((p & 0xff) as u8);
+    }
+    let img: image::RgbImage =
+        image::ImageBuffer::from_raw(width, height, rgb).expect("pixel buffer matches dimensions");
+    let mut png = Vec::new();
+    img.write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+        .expect("PNG encode");
+
+    insta::assert_binary_snapshot!(".png", png);
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
 fn svg_snapshot() {
@@ -98,5 +153,23 @@ fn svg_snapshot() {
         "SVG output missing expected list content"
     );
     support::write_snapshot_file("17_theme_switch.svg", svg.as_bytes());
+    insta::assert_snapshot!(svg);
+}
+
+/// Same PTY capture as [`svg_snapshot`], but sends a `t` keypress as input first, so the
+/// committed SVG proves `Theme::LIGHT` renders correctly through the real crossterm/ANSI path
+/// too, not just the software backend's pixel buffer (see [`png_snapshot_light`]'s doc comment
+/// for the bug this guards against).
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn svg_snapshot_light() {
+    let bin = support::build_crossterm_example("17_theme_switch");
+    let raw = support::capture_pty(&bin, b"t", 25, 50, "toggles theme");
+    let svg = support::svg_snapshot(&raw, 25, 50);
+    assert!(
+        svg.contains("Alpha"),
+        "SVG output missing expected list content"
+    );
+    support::write_snapshot_file("17_theme_switch_light.svg", svg.as_bytes());
     insta::assert_snapshot!(svg);
 }
