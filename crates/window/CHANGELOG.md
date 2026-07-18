@@ -11,281 +11,260 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 ### Features
 
-- [e6fc7ff](
-https://github.com/crates-lurey-io/retroglyph/commit/e6fc7ff098c6e28d56818bcefd8856a2448bb3b2) *(core)* Implement Grid::clone and shrink Tile via an EGC side-table by `@matanlurey` in [#225](
-https://github.com/crates-lurey-io/retroglyph/pull/225)
-  >
+- [e6fc7ff](https://github.com/crates-lurey-io/retroglyph/commit/e6fc7ff098c6e28d56818bcefd8856a2448bb3b2)
+  _(core)_ Implement Grid::clone and shrink Tile via an EGC side-table by `@matanlurey` in
+  [#225](https://github.com/crates-lurey-io/retroglyph/pull/225)
+
   > Closes #130.
   >
-  > - Grid::clone: derive Clone on LayerBuf and Grid now that ixy 0.6.0-alpha.8+
-  >   implements Clone/Copy for the RowMajor layout marker, removing the
-  >   upstream-blocked TODO in grid.rs.
+  > - Grid::clone: derive Clone on LayerBuf and Grid now that ixy 0.6.0-alpha.8+ implements
+  >   Clone/Copy for the RowMajor layout marker, removing the upstream-blocked TODO in grid.rs.
+  > - Tile layout shrink: move the (rare) multi-codepoint EGC grapheme text out of Tile and into a
+  >   sparse per-layer side-table on Grid (LayerBuf::extras), gated by a new TileFlags::HAS_EXTRA
+  >   bit. Tile drops from 32 to 20 bytes and becomes Copy. Tile::extra()/grapheme() are replaced by
+  >   Grid::grapheme(), since a bare Tile can no longer answer that on its own.
   >
-  > - Tile layout shrink: move the (rare) multi-codepoint EGC grapheme text out
-  >   of Tile and into a sparse per-layer side-table on Grid (LayerBuf::extras),
-  >   gated by a new TileFlags::HAS_EXTRA bit. Tile drops from 32 to 20 bytes and
-  >   becomes Copy. Tile::extra()/grapheme() are replaced by Grid::grapheme(),
-  >   since a bare Tile can no longer answer that on its own.
+  >   This requires widening Backend::draw/draw_layers items from (Pos, &Tile) to (Pos, &Tile,
+  >   Option<&str>) (and the layered equivalent) so backends that render the full grapheme cluster
+  >   (retroglyph-terminal, shared by crossterm and terminal-wasm) still can. Grid::layers()/diff()
+  >   are widened to match, and diff() is now hand-rolled instead of delegating to grixy's GridDiff,
+  >   so a grapheme-only change (same glyph/style/flags, different combining mark) is still detected
+  >   as a diff.
   >
-  >   This requires widening Backend::draw/draw_layers items from (Pos, &Tile)
-  >   to (Pos, &Tile, Option<&str>) (and the layered equivalent) so backends
-  >   that render the full grapheme cluster (retroglyph-terminal, shared by
-  >   crossterm and terminal-wasm) still can. Grid::layers()/diff() are widened
-  >   to match, and diff() is now hand-rolled instead of delegating to grixy's
-  >   GridDiff, so a grapheme-only change (same glyph/style/flags, different
-  >   combining mark) is still detected as a diff.
-  >
-  >   Both TODOs were tracked together in #130; the Backend-trait widening was
-  >   previously deferred pending 'a Backend-trait change already on the table
-  >   for another reason' -- this is that reason.
+  >   Both TODOs were tracked together in #130; the Backend-trait widening was previously deferred
+  >   pending 'a Backend-trait change already on the table for another reason' -- this is that
+  >   reason.
 
-- [e073dd9](
-https://github.com/crates-lurey-io/retroglyph/commit/e073dd9db007988f0cb4378de1989a643215b01b) *(core)* Add Event::Paste and FocusGained/FocusLost variants by `@matanlurey` in [#190](
-https://github.com/crates-lurey-io/retroglyph/pull/190)
+- [e073dd9](https://github.com/crates-lurey-io/retroglyph/commit/e073dd9db007988f0cb4378de1989a643215b01b)
+  _(core)_ Add Event::Paste and FocusGained/FocusLost variants by `@matanlurey` in
+  [#190](https://github.com/crates-lurey-io/retroglyph/pull/190)
 
-  > Adds Event::Paste(String), Event::FocusGained, and Event::FocusLost to
-  > retroglyph-core, made possible by the existing #[non_exhaustive] on Event.
-  > Removes Copy from Event's derives since String is not Copy; all
-  > existing consumers already clone or borrow, and the fallout is fixed here
-  > (a handful of test call sites that relied on Event: Copy now clone
-  > explicitly).
+  > Adds Event::Paste(String), Event::FocusGained, and Event::FocusLost to retroglyph-core, made
+  > possible by the existing #[non_exhaustive] on Event. Removes Copy from Event's derives since
+  > String is not Copy; all existing consumers already clone or borrow, and the fallout is fixed
+  > here (a handful of test call sites that relied on Event: Copy now clone explicitly).
   >
   > Wires the new variants into both existing backends:
-  > - crossterm: from_crossterm_event now maps CE::Paste/FocusGained/FocusLost.
-  >   Since crossterm only emits these when the terminal has been sent
-  >   EnableBracketedPaste/EnableFocusChange, CrosstermOptions gains matching
-  >   focus_change/bracketed_paste toggles (default true) alongside the
-  >   existing mouse_capture/kitty_protocol pattern, so the new Event variants
-  >   are reachable rather than dead code.
-  > - winit: WindowEvent::Focused(bool) now pushes FocusGained/FocusLost.
-  >   Winit has no native paste event (Ime::Commit is IME composition, not
-  >   clipboard paste), so windowed paste support is left for a follow-up.
   >
-  > Removes the now-implemented Paste/FocusGained/FocusLost rows from
-  > docs/ROADMAP.md's Adopt table.
+  > - crossterm: from_crossterm_event now maps CE::Paste/FocusGained/FocusLost. Since crossterm only
+  >   emits these when the terminal has been sent EnableBracketedPaste/EnableFocusChange,
+  >   CrosstermOptions gains matching focus_change/bracketed_paste toggles (default true) alongside
+  >   the existing mouse_capture/kitty_protocol pattern, so the new Event variants are reachable
+  >   rather than dead code.
+  > - winit: WindowEvent::Focused(bool) now pushes FocusGained/FocusLost. Winit has no native paste
+  >   event (Ime::Commit is IME composition, not clipboard paste), so windowed paste support is left
+  >   for a follow-up.
+  >
+  > Removes the now-implemented Paste/FocusGained/FocusLost rows from docs/ROADMAP.md's Adopt table.
   >
   > Fixes #107.
 
-- [3b2c563](
-https://github.com/crates-lurey-io/retroglyph/commit/3b2c56399ca0ba35deb80f50ab88df4c5f38ff41) *(window)* Add window attribute builder API by `@matanlurey` in [#213](
-https://github.com/crates-lurey-io/retroglyph/pull/213)
+- [3b2c563](https://github.com/crates-lurey-io/retroglyph/commit/3b2c56399ca0ba35deb80f50ab88df4c5f38ff41)
+  _(window)_ Add window attribute builder API by `@matanlurey` in
+  [#213](https://github.com/crates-lurey-io/retroglyph/pull/213)
 
-  > Add `resizable`, `decorations`, `min_size`, `max_size`, `initial_position`,
-  > `fullscreen`, and `transparency` builder methods to `WindowConfig`, chaining
-  > off `WindowConfig::fit(...)` the same way `fill_viewport` already does.
-  > Wires them into `Window::default_attributes()` in
+  > Add `resizable`, `decorations`, `min_size`, `max_size`, `initial_position`, `fullscreen`, and
+  > `transparency` builder methods to `WindowConfig`, chaining off `WindowConfig::fit(...)` the same
+  > way `fill_viewport` already does. Wires them into `Window::default_attributes()` in
   > `WindowApp::create_window_and_surface` via winit's
   > `with_resizable`/`with_decorations`/`with_min_inner_size`/
   > `with_max_inner_size`/`with_position`/`with_fullscreen`/`with_transparent`.
   >
   > `fullscreen` only exposes borderless fullscreen on the current monitor
-  > (`Fullscreen::Borderless(None)`), not winit's exclusive-fullscreen
-  > video-mode API -- retro/terminal-style apps render a fixed cell grid, not
-  > a resolution-dependent scene, so exclusive video-mode switching adds
-  > complexity without benefit here.
+  > (`Fullscreen::Borderless(None)`), not winit's exclusive-fullscreen video-mode API --
+  > retro/terminal-style apps render a fixed cell grid, not a resolution-dependent scene, so
+  > exclusive video-mode switching adds complexity without benefit here.
   >
   > Closes #156.
 
-- [6d5ba48](
-https://github.com/crates-lurey-io/retroglyph/commit/6d5ba48fd8292bf3ce7eb65ffa90aff286217ba4) *(window)* Expose EventLoopProxy for cross-thread event injection by `@matanlurey` in [#199](
-https://github.com/crates-lurey-io/retroglyph/pull/199)
+- [6d5ba48](https://github.com/crates-lurey-io/retroglyph/commit/6d5ba48fd8292bf3ce7eb65ffa90aff286217ba4)
+  _(window)_ Expose EventLoopProxy for cross-thread event injection by `@matanlurey` in
+  [#199](https://github.com/crates-lurey-io/retroglyph/pull/199)
 
   > feat(window): expose EventLoopProxy for cross-thread event injection
 
-- [b8563f4](
-https://github.com/crates-lurey-io/retroglyph/commit/b8563f4e0fa68067f5087cbfad0d876630ec5b77) *(window)* Add Super/Meta modifier support to KeyModifiers by `@matanlurey` in [#186](
-https://github.com/crates-lurey-io/retroglyph/pull/186)
+- [b8563f4](https://github.com/crates-lurey-io/retroglyph/commit/b8563f4e0fa68067f5087cbfad0d876630ec5b77)
+  _(window)_ Add Super/Meta modifier support to KeyModifiers by `@matanlurey` in
+  [#186](https://github.com/crates-lurey-io/retroglyph/pull/186)
 
-- [49781d2](
-https://github.com/crates-lurey-io/retroglyph/commit/49781d25edfcd996da5b932ae893404bdd7e6aa2) *(window)* Handle WindowEvent::ScaleFactorChanged by `@matanlurey` in [#180](
-https://github.com/crates-lurey-io/retroglyph/pull/180)
+- [49781d2](https://github.com/crates-lurey-io/retroglyph/commit/49781d25edfcd996da5b932ae893404bdd7e6aa2)
+  _(window)_ Handle WindowEvent::ScaleFactorChanged by `@matanlurey` in
+  [#180](https://github.com/crates-lurey-io/retroglyph/pull/180)
 
-  > Adds a Presenter::scale_factor_changed hook and a WindowEvent::ScaleFactorChanged arm in handle_window_event so HiDPI displays render at full physical resolution instead of 50% physical size on 2x-scale displays.
+  > Adds a Presenter::scale_factor_changed hook and a WindowEvent::ScaleFactorChanged arm in
+  > handle_window_event so HiDPI displays render at full physical resolution instead of 50% physical
+  > size on 2x-scale displays.
 
 ### Bug Fixes
 
-- [095a150](
-https://github.com/crates-lurey-io/retroglyph/commit/095a1505de6dffecce3f74f51255e62c5fe2d1d4) *(window)* Add redraw-on-demand mode to avoid idle CPU spin by `@matanlurey` in [#216](
-https://github.com/crates-lurey-io/retroglyph/pull/216)
+- [095a150](https://github.com/crates-lurey-io/retroglyph/commit/095a1505de6dffecce3f74f51255e62c5fe2d1d4)
+  _(window)_ Add redraw-on-demand mode to avoid idle CPU spin by `@matanlurey` in
+  [#216](https://github.com/crates-lurey-io/retroglyph/pull/216)
 
-  > * fix(window): add redraw-on-demand mode to avoid idle CPU spin
+  > - fix(window): add redraw-on-demand mode to avoid idle CPU spin
+  > - fix(window): rate-limit and recover from repeated present() errors
+
+- [3d229d2](https://github.com/crates-lurey-io/retroglyph/commit/3d229d22f33b3d3585f4e61f4cfa67e7283f847c)
+  _(window)_ Exit event loop gracefully instead of process::exit(0) by `@matanlurey` in
+  [#215](https://github.com/crates-lurey-io/retroglyph/pull/215)
+
+  > - feat(window): add window attribute builder API
   >
-  > * fix(window): rate-limit and recover from repeated present() errors
-
-- [3d229d2](
-https://github.com/crates-lurey-io/retroglyph/commit/3d229d22f33b3d3585f4e61f4cfa67e7283f847c) *(window)* Exit event loop gracefully instead of process::exit(0) by `@matanlurey` in [#215](
-https://github.com/crates-lurey-io/retroglyph/pull/215)
-
-  > * feat(window): add window attribute builder API
-  >
-  > Add `resizable`, `decorations`, `min_size`, `max_size`, `initial_position`,
-  > `fullscreen`, and `transparency` builder methods to `WindowConfig`, chaining
-  > off `WindowConfig::fit(...)` the same way `fill_viewport` already does.
-  > Wires them into `Window::default_attributes()` in
+  > Add `resizable`, `decorations`, `min_size`, `max_size`, `initial_position`, `fullscreen`, and
+  > `transparency` builder methods to `WindowConfig`, chaining off `WindowConfig::fit(...)` the same
+  > way `fill_viewport` already does. Wires them into `Window::default_attributes()` in
   > `WindowApp::create_window_and_surface` via winit's
   > `with_resizable`/`with_decorations`/`with_min_inner_size`/
   > `with_max_inner_size`/`with_position`/`with_fullscreen`/`with_transparent`.
   >
   > `fullscreen` only exposes borderless fullscreen on the current monitor
-  > (`Fullscreen::Borderless(None)`), not winit's exclusive-fullscreen
-  > video-mode API -- retro/terminal-style apps render a fixed cell grid, not
-  > a resolution-dependent scene, so exclusive video-mode switching adds
-  > complexity without benefit here.
+  > (`Fullscreen::Borderless(None)`), not winit's exclusive-fullscreen video-mode API --
+  > retro/terminal-style apps render a fixed cell grid, not a resolution-dependent scene, so
+  > exclusive video-mode switching adds complexity without benefit here.
   >
   > Closes #156.
   >
-  > * fix(window): reset stuck modifiers and active touch on focus loss
+  > - fix(window): reset stuck modifiers and active touch on focus loss
   >
-  > WindowEvent::Focused(false) previously only pushed Event::FocusLost, leaving
-  > current_modifiers and active_touch untouched. A modifier held down when
-  > focus is lost (alt-tabbing away while holding Shift) never gets its release
-  > event, so it stayed stuck 'held' for every event after focus returned.
-  > Similarly, a finger lifted while the window is unfocused/backgrounded never
-  > delivers TouchPhase::Ended/Cancelled, permanently ignoring the next finger
-  > down.
+  > WindowEvent::Focused(false) previously only pushed Event::FocusLost, leaving current_modifiers
+  > and active_touch untouched. A modifier held down when focus is lost (alt-tabbing away while
+  > holding Shift) never gets its release event, so it stayed stuck 'held' for every event after
+  > focus returned. Similarly, a finger lifted while the window is unfocused/backgrounded never
+  > delivers TouchPhase::Ended/Cancelled, permanently ignoring the next finger down.
   >
-  > Extract on_focus_changed, which resets current_modifiers to NONE and
-  > releases any active_touch (synthesizing a left-button Up at its last known
-  > position, mirroring on_touch's Ended/Cancelled arm) whenever focus is lost.
+  > Extract on_focus_changed, which resets current_modifiers to NONE and releases any active_touch
+  > (synthesizing a left-button Up at its last known position, mirroring on_touch's Ended/Cancelled
+  > arm) whenever focus is lost.
   >
-  > * fix(window): exit event loop gracefully instead of process::exit(0)
+  > - fix(window): exit event loop gracefully instead of process::exit(0)
   >
   > run_app's inverted driver called std::process::exit(0) directly on
   >
-  > Flow::Exit, skipping every pending Drop impl up the stack (unflushed
-  > writes, GPU/surface teardown, app-level RAII). handle_window_event
-  > can't call ActiveEventLoop::exit itself -- it deliberately takes no
-  > ActiveEventLoop so it stays unit-testable without a live winit loop --
-  > so run_app_with_proxy's closure now sets a shared exit_requested flag
-  > on Flow::Exit instead, and ApplicationHandler::window_event (which
-  > does have the ActiveEventLoop) checks it after handling the event and
-  > calls event_loop.exit(), letting the stack unwind normally.
+  > Flow::Exit, skipping every pending Drop impl up the stack (unflushed writes, GPU/surface
+  > teardown, app-level RAII). handle_window_event can't call ActiveEventLoop::exit itself -- it
+  > deliberately takes no ActiveEventLoop so it stays unit-testable without a live winit loop -- so
+  > run_app_with_proxy's closure now sets a shared exit_requested flag on Flow::Exit instead, and
+  > ApplicationHandler::window_event (which does have the ActiveEventLoop) checks it after handling
+  > the event and calls event_loop.exit(), letting the stack unwind normally.
   >
   > winit's web backend implements ActiveEventLoop::exit by stopping its
-  > requestAnimationFrame-driven runner, so this also fixes exit on wasm,
-  > which was previously a documented no-op.
+  > requestAnimationFrame-driven runner, so this also fixes exit on wasm, which was previously a
+  > documented no-op.
   >
   > Fixes #157
 
-- [2777993](
-https://github.com/crates-lurey-io/retroglyph/commit/27779932068fc6267b524382ee66201cf76d8511) *(window)* Reset stuck modifiers and active touch on focus loss by `@matanlurey` in [#214](
-https://github.com/crates-lurey-io/retroglyph/pull/214)
+- [2777993](https://github.com/crates-lurey-io/retroglyph/commit/27779932068fc6267b524382ee66201cf76d8511)
+  _(window)_ Reset stuck modifiers and active touch on focus loss by `@matanlurey` in
+  [#214](https://github.com/crates-lurey-io/retroglyph/pull/214)
 
-  > * feat(window): add window attribute builder API
+  > - feat(window): add window attribute builder API
   >
-  > Add `resizable`, `decorations`, `min_size`, `max_size`, `initial_position`,
-  > `fullscreen`, and `transparency` builder methods to `WindowConfig`, chaining
-  > off `WindowConfig::fit(...)` the same way `fill_viewport` already does.
-  > Wires them into `Window::default_attributes()` in
+  > Add `resizable`, `decorations`, `min_size`, `max_size`, `initial_position`, `fullscreen`, and
+  > `transparency` builder methods to `WindowConfig`, chaining off `WindowConfig::fit(...)` the same
+  > way `fill_viewport` already does. Wires them into `Window::default_attributes()` in
   > `WindowApp::create_window_and_surface` via winit's
   > `with_resizable`/`with_decorations`/`with_min_inner_size`/
   > `with_max_inner_size`/`with_position`/`with_fullscreen`/`with_transparent`.
   >
   > `fullscreen` only exposes borderless fullscreen on the current monitor
-  > (`Fullscreen::Borderless(None)`), not winit's exclusive-fullscreen
-  > video-mode API -- retro/terminal-style apps render a fixed cell grid, not
-  > a resolution-dependent scene, so exclusive video-mode switching adds
-  > complexity without benefit here.
+  > (`Fullscreen::Borderless(None)`), not winit's exclusive-fullscreen video-mode API --
+  > retro/terminal-style apps render a fixed cell grid, not a resolution-dependent scene, so
+  > exclusive video-mode switching adds complexity without benefit here.
   >
   > Closes #156.
   >
-  > * fix(window): reset stuck modifiers and active touch on focus loss
+  > - fix(window): reset stuck modifiers and active touch on focus loss
   >
-  > WindowEvent::Focused(false) previously only pushed Event::FocusLost, leaving
-  > current_modifiers and active_touch untouched. A modifier held down when
-  > focus is lost (alt-tabbing away while holding Shift) never gets its release
-  > event, so it stayed stuck 'held' for every event after focus returned.
-  > Similarly, a finger lifted while the window is unfocused/backgrounded never
-  > delivers TouchPhase::Ended/Cancelled, permanently ignoring the next finger
-  > down.
+  > WindowEvent::Focused(false) previously only pushed Event::FocusLost, leaving current_modifiers
+  > and active_touch untouched. A modifier held down when focus is lost (alt-tabbing away while
+  > holding Shift) never gets its release event, so it stayed stuck 'held' for every event after
+  > focus returned. Similarly, a finger lifted while the window is unfocused/backgrounded never
+  > delivers TouchPhase::Ended/Cancelled, permanently ignoring the next finger down.
   >
-  > Extract on_focus_changed, which resets current_modifiers to NONE and
-  > releases any active_touch (synthesizing a left-button Up at its last known
-  > position, mirroring on_touch's Ended/Cancelled arm) whenever focus is lost.
+  > Extract on_focus_changed, which resets current_modifiers to NONE and releases any active_touch
+  > (synthesizing a left-button Up at its last known position, mirroring on_touch's Ended/Cancelled
+  > arm) whenever focus is lost.
 
-- [32fe45f](
-https://github.com/crates-lurey-io/retroglyph/commit/32fe45f04ab551008da4c2aa5b689c6f0ed02ef7) *(window)* Clamp initial window size to monitor scale factor by `@matanlurey` in [#197](
-https://github.com/crates-lurey-io/retroglyph/pull/197)
+- [32fe45f](https://github.com/crates-lurey-io/retroglyph/commit/32fe45f04ab551008da4c2aa5b689c6f0ed02ef7)
+  _(window)_ Clamp initial window size to monitor scale factor by `@matanlurey` in
+  [#197](https://github.com/crates-lurey-io/retroglyph/pull/197)
 
   > fix(window): clamp initial window size to monitor scale factor
 
-- [940e640](
-https://github.com/crates-lurey-io/retroglyph/commit/940e64028e39a87a2db9ac65ea429568d298ac66) *(window)* Clamp surface size to at least 1x1 cell by `@matanlurey` in [#177](
-https://github.com/crates-lurey-io/retroglyph/pull/177)
+- [940e640](https://github.com/crates-lurey-io/retroglyph/commit/940e64028e39a87a2db9ac65ea429568d298ac66)
+  _(window)_ Clamp surface size to at least 1x1 cell by `@matanlurey` in
+  [#177](https://github.com/crates-lurey-io/retroglyph/pull/177)
 
-  > Clamp cols/rows and the resulting pixel dimensions to >= 1 before calling resize_surface in on_resized, matching the existing .max(1) clamp already applied to Event::Resize, to avoid a zero-size-surface crash on very small windows.
+  > Clamp cols/rows and the resulting pixel dimensions to >= 1 before calling resize_surface in
+  > on_resized, matching the existing .max(1) clamp already applied to Event::Resize, to avoid a
+  > zero-size-surface crash on very small windows.
 
-- [50b274f](
-https://github.com/crates-lurey-io/retroglyph/commit/50b274f07527c62bd5af9a46c90cc7a6f03f081c) *(workspace)* Squash 3+ blank lines and allow MD037 in generated changelogs by `@matanlurey` in [#247](
-https://github.com/crates-lurey-io/retroglyph/pull/247)
+- [50b274f](https://github.com/crates-lurey-io/retroglyph/commit/50b274f07527c62bd5af9a46c90cc7a6f03f081c)
+  _(workspace)_ Squash 3+ blank lines and allow MD037 in generated changelogs by `@matanlurey` in
+  [#247](https://github.com/crates-lurey-io/retroglyph/pull/247)
 
-  > release-plz's per-crate CHANGELOG.md is prepended above the hand-written 0.1.0
-  > entry using cliff.toml's body template. The tail block that renders the
-  > `**Full Changelog**: ...` link can't be trimmed with Tera's `-` whitespace
-  > markers without also swallowing the blank line that's supposed to separate it
-  > from the next heading -- that separator has to come from literal template text
-  > sitting between nested {% if %} blocks -- so it leaves 3 blank lines at that
-  > boundary instead of 1. Add a postprocessor that squashes any run of 3+
-  > newlines down to a single blank line, matching Keep a Changelog / prettier /
-  > markdownlint's MD012 expectation.
+  > release-plz's per-crate CHANGELOG.md is prepended above the hand-written 0.1.0 entry using
+  > cliff.toml's body template. The tail block that renders the `**Full Changelog**: ...` link can't
+  > be trimmed with Tera's `-` whitespace markers without also swallowing the blank line that's
+  > supposed to separate it from the next heading -- that separator has to come from literal
+  > template text sitting between nested {% if %} blocks -- so it leaves 3 blank lines at that
+  > boundary instead of 1. Add a postprocessor that squashes any run of 3+ newlines down to a single
+  > blank line, matching Keep a Changelog / prettier / markdownlint's MD012 expectation.
   >
-  > Also extend the per-changelog markdownlint-disable comment (both the
-  > already-checked-in header on all 7 crates' CHANGELOG.md, and cliff.toml's
-  > header template for any crate whose changelog doesn't exist yet) with
-  > no-space-in-emphasis: commit bodies are freeform prose and can contain a
-  > literal _ or * adjacent to other text (e.g. `wasm_terminal_* FFI`, `manual
-  > _style override`) that markdownlint's MD037 misreads as unbalanced emphasis
-  > markers. That's not something a template fix can prevent, since it depends on
-  > historical commit message content.
+  > Also extend the per-changelog markdownlint-disable comment (both the already-checked-in header
+  > on all 7 crates' CHANGELOG.md, and cliff.toml's header template for any crate whose changelog
+  > doesn't exist yet) with no-space-in-emphasis: commit bodies are freeform prose and can contain a
+  > literal _ or \* adjacent to other text (e.g. `wasm_terminal_\* FFI`, `manual \_style override`)
+  > that markdownlint's MD037 misreads as unbalanced emphasis markers. That's not something a
+  > template fix can prevent, since it depends on historical commit message content.
   >
   > Fixes the release-plz standing PR's format/lint CI failure .
 
 ### Refactor
 
-- [3af2d5c](
-https://github.com/crates-lurey-io/retroglyph/commit/3af2d5c65b5d6cd9216f8f3ab649e5f7f12b7628) *(window)* Extract wasm DPR/viewport helpers into winit/web.rs by `@matanlurey` in [#244](
-https://github.com/crates-lurey-io/retroglyph/pull/244)
+- [3af2d5c](https://github.com/crates-lurey-io/retroglyph/commit/3af2d5c65b5d6cd9216f8f3ab649e5f7f12b7628)
+  _(window)_ Extract wasm DPR/viewport helpers into winit/web.rs by `@matanlurey` in
+  [#244](https://github.com/crates-lurey-io/retroglyph/pull/244)
 
-  > Moves the wasm32-only DPR-capping, browser-viewport-fill, and pointer-
-  > rescaling helper functions (and the dpr_pointer_scale unit tests) out of
-  > winit/run.rs into a new private winit/web.rs submodule. Call sites in
-  > run.rs now go through web::; no logic, cfg gating, or test behavior
-  > changes -- pure relocation.
+  > Moves the wasm32-only DPR-capping, browser-viewport-fill, and pointer- rescaling helper
+  > functions (and the dpr_pointer_scale unit tests) out of winit/run.rs into a new private
+  > winit/web.rs submodule. Call sites in run.rs now go through web::; no logic, cfg gating, or test
+  > behavior changes -- pure relocation.
 
 ### Documentation
 
-- [4125a1b](
-https://github.com/crates-lurey-io/retroglyph/commit/4125a1b3b306331766273018eacea6b2615aa5bc) *(window)* Add doctest for the no-winit custom event-loop path by `@matanlurey` in [#243](
-https://github.com/crates-lurey-io/retroglyph/pull/243)
+- [4125a1b](https://github.com/crates-lurey-io/retroglyph/commit/4125a1b3b306331766273018eacea6b2615aa5bc)
+  _(window)_ Add doctest for the no-winit custom event-loop path by `@matanlurey` in
+  [#243](https://github.com/crates-lurey-io/retroglyph/pull/243)
 
-- [4b41a7e](
-https://github.com/crates-lurey-io/retroglyph/commit/4b41a7ef3834652831b2409200bdadc0c985017c) *(window)* Document DPI/scale and resize-remainder contract by `@matanlurey` in [#242](
-https://github.com/crates-lurey-io/retroglyph/pull/242)
+- [4b41a7e](https://github.com/crates-lurey-io/retroglyph/commit/4b41a7ef3834652831b2409200bdadc0c985017c)
+  _(window)_ Document DPI/scale and resize-remainder contract by `@matanlurey` in
+  [#242](https://github.com/crates-lurey-io/retroglyph/pull/242)
 
   > Adds a "DPI, scale, and the resize contract" and a "Threading model" section to
-  > crates/window/src/lib.rs's crate-level docs, cross-references them from Presenter's
-  > trait-level module doc, and tightens Presenter::cell_size's own doc comment to state
-  > the physical-pixels/no-auto-scaling fact directly. Docs-only change, no behavior change.
+  > crates/window/src/lib.rs's crate-level docs, cross-references them from Presenter's trait-level
+  > module doc, and tightens Presenter::cell_size's own doc comment to state the
+  > physical-pixels/no-auto-scaling fact directly. Docs-only change, no behavior change.
   >
   > Closes #159.
 
-- [ca4e1d6](
-https://github.com/crates-lurey-io/retroglyph/commit/ca4e1d675f0eca4c8ec574b08b9655eec4259191) *(window)* Document sub-cell resize-remainder truncation contract by `@matanlurey` in [#198](
-https://github.com/crates-lurey-io/retroglyph/pull/198)
+- [ca4e1d6](https://github.com/crates-lurey-io/retroglyph/commit/ca4e1d675f0eca4c8ec574b08b9655eec4259191)
+  _(window)_ Document sub-cell resize-remainder truncation contract by `@matanlurey` in
+  [#198](https://github.com/crates-lurey-io/retroglyph/pull/198)
 
   > docs(window): document sub-cell resize-remainder truncation contract
 
 ### Continuous Integration
 
-- [1d81906](
-https://github.com/crates-lurey-io/retroglyph/commit/1d81906ea8e380d64de0e05345f103627ef49406) *(workspace)* Automated per-crate release-plz workflow by `@matanlurey` in [#80](
-https://github.com/crates-lurey-io/retroglyph/pull/80)
+- [1d81906](https://github.com/crates-lurey-io/retroglyph/commit/1d81906ea8e380d64de0e05345f103627ef49406)
+  _(workspace)_ Automated per-crate release-plz workflow by `@matanlurey` in
+  [#80](https://github.com/crates-lurey-io/retroglyph/pull/80)
 
-  > * ci(release): adopt per-crate release-plz flow with PR-title enforcement
+  > - ci(release): adopt per-crate release-plz flow with PR-title enforcement
   >
-  > Re-enable release-plz's standing Release PR (release-pr + release jobs) so
-  > version bumps and per-crate changelogs are computed from conventional PR-title
-  > history and published on Release-PR merge; developers never push tags.
+  > Re-enable release-plz's standing Release PR (release-pr + release jobs) so version bumps and
+  > per-crate changelogs are computed from conventional PR-title history and published on Release-PR
+  > merge; developers never push tags.
   >
   > - release-plz.toml: per-crate changelogs (drop changelog_path), semver_check=true
   > - cliff.toml: skip-changelog via github.pr_labels label + changelog: ignore footer
@@ -295,19 +274,18 @@ https://github.com/crates-lurey-io/retroglyph/pull/80)
   >
   > * docs(changelog): split workspace changelog into per-crate files
   >
-  > Per-crate release-plz needs a CHANGELOG.md per crate. Seed each with its
-  > hand-written 0.1.0 entry; the root CHANGELOG.md becomes an index.
+  > Per-crate release-plz needs a CHANGELOG.md per crate. Seed each with its hand-written 0.1.0
+  > entry; the root CHANGELOG.md becomes an index.
   >
-  > * docs: rewrite RELEASING.md for the automated release flow
+  > - docs: rewrite RELEASING.md for the automated release flow
   >
-  > Document the per-crate, release-plz-driven flow: conventional PR titles,
-  > squash-merge, standing Release PR as the single approval gate, breaking
-  > declared via title !, cargo-semver-checks roles, PR labels, and no pre-1.0
-  > prerelease channel. Update AGENTS.md's commit-message section: enforcement
-  > now lives in pr-title.yml, not local hooks.
+  > Document the per-crate, release-plz-driven flow: conventional PR titles, squash-merge, standing
+  > Release PR as the single approval gate, breaking declared via title !, cargo-semver-checks
+  > roles, PR labels, and no pre-1.0 prerelease channel. Update AGENTS.md's commit-message section:
+  > enforcement now lives in pr-title.yml, not local hooks.
 
-**Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-window-v0.1.0...retroglyph-window-v0.2.0
-
+**Full Changelog**:
+https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-window-v0.1.0...retroglyph-window-v0.2.0
 
 ## 0.1.0 - Initial release
 

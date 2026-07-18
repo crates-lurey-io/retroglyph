@@ -11,280 +11,255 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 ### Features
 
-- [d9cd409](
-https://github.com/crates-lurey-io/retroglyph/commit/d9cd409ad373e97140bf46f1c950bb4d94d21963) *(core)* Add put_at(pos, ch) overload by `@matanlurey` in [#237](
-https://github.com/crates-lurey-io/retroglyph/pull/237)
+- [d9cd409](https://github.com/crates-lurey-io/retroglyph/commit/d9cd409ad373e97140bf46f1c950bb4d94d21963)
+  _(core)_ Add put_at(pos, ch) overload by `@matanlurey` in
+  [#237](https://github.com/crates-lurey-io/retroglyph/pull/237)
 
-- [029317d](
-https://github.com/crates-lurey-io/retroglyph/commit/029317d3df1b11baf1aa9fdd32f3d0c42b820c03) *(core)* Add SCREEN/DODGE/BURN/OVERLAY blend modes to blit_alpha by `@matanlurey` in [#234](
-https://github.com/crates-lurey-io/retroglyph/pull/234)
+- [029317d](https://github.com/crates-lurey-io/retroglyph/commit/029317d3df1b11baf1aa9fdd32f3d0c42b820c03)
+  _(core)_ Add SCREEN/DODGE/BURN/OVERLAY blend modes to blit_alpha by `@matanlurey` in
+  [#234](https://github.com/crates-lurey-io/retroglyph/pull/234)
 
-  > * feat(core): add SCREEN/DODGE/BURN/OVERLAY blend modes to blit_alpha
+  > - feat(core): add SCREEN/DODGE/BURN/OVERLAY blend modes to blit_alpha
   >
-  > Adds BlendMode (Linear/Screen/Dodge/Burn/Overlay) as a new required
-  > parameter on Grid::blit_alpha, closing crates-lurey-io/retroglyph#112.
-  > The non-Linear modes delegate their per-channel math to alpha-blend's
-  > new blend_modes::SeparableBlendMode (crates-lurey-io/alpha-blend,
-  > branch blend-modes-112, pending crates.io publish -- pinned via a
-  > workspace [patch.crates-io] entry until then, removable once 0.2.2+
-  > ships), converting u8 <-> f32 at the boundary; Linear keeps its
-  > existing gem::rgb::Lerp path.
+  > Adds BlendMode (Linear/Screen/Dodge/Burn/Overlay) as a new required parameter on
+  > Grid::blit_alpha, closing crates-lurey-io/retroglyph#112. The non-Linear modes delegate their
+  > per-channel math to alpha-blend's new blend_modes::SeparableBlendMode
+  > (crates-lurey-io/alpha-blend, branch blend-modes-112, pending crates.io publish -- pinned via a
+  > workspace [patch.crates-io] entry until then, removable once 0.2.2+ ships), converting u8 <->
+  > f32 at the boundary; Linear keeps its existing gem::rgb::Lerp path.
   >
-  > Also fixes a bug found while building this: blit_alpha's Linear mode
-  > had src/dst swapped in its gem::rgb::Lerp call, so t=0.0 returned src
-  > and t=1.0 returned dst -- backwards from the doc comment's own '0.0 =
-  > keep destination, 1.0 = replace with src' contract. No prior tests
-  > covered blit_alpha, so this shipped unnoticed. Fixed to lerp dst -> src,
-  > matching both the doc and the new modes' shared t convention. Also
-  > fixes blit_alpha/blend_color's t==1.0 fast path, which used to skip
-  > straight to the raw source color for every mode; that's only valid for
-  > Linear (identity at t=1), so non-Linear modes now always run their mix
-  > formula.
+  > Also fixes a bug found while building this: blit_alpha's Linear mode had src/dst swapped in its
+  > gem::rgb::Lerp call, so t=0.0 returned src and t=1.0 returned dst -- backwards from the doc
+  > comment's own '0.0 = keep destination, 1.0 = replace with src' contract. No prior tests covered
+  > blit_alpha, so this shipped unnoticed. Fixed to lerp dst -> src, matching both the doc and the
+  > new modes' shared t convention. Also fixes blit_alpha/blend_color's t==1.0 fast path, which used
+  > to skip straight to the raw source color for every mode; that's only valid for Linear (identity
+  > at t=1), so non-Linear modes now always run their mix formula.
   >
-  > examples/examples/02_colors.rs gets a new blend-mode swatch section
-  > (warm source over cool destination, 16 alpha steps per mode); all
-  > three 02_colors snapshots (headless text, PNG, SVG) are regenerated.
+  > examples/examples/02_colors.rs gets a new blend-mode swatch section (warm source over cool
+  > destination, 16 alpha steps per mode); all three 02_colors snapshots (headless text, PNG, SVG)
+  > are regenerated.
   >
-  > * chore(workspace): drop the alpha-blend git patch now that 0.2.2 is on crates.io
+  > - chore(workspace): drop the alpha-blend git patch now that 0.2.2 is on crates.io
 
-- [d6ab3b1](
-https://github.com/crates-lurey-io/retroglyph/commit/d6ab3b18d5ec45ed210a8bd8de14b2ac84f324b1) *(core)* Add subcell image-to-glyph blit utility by `@matanlurey` in [#232](
-https://github.com/crates-lurey-io/retroglyph/pull/232)
+- [d6ab3b1](https://github.com/crates-lurey-io/retroglyph/commit/d6ab3b18d5ec45ed210a8bd8de14b2ac84f324b1)
+  _(core)_ Add subcell image-to-glyph blit utility by `@matanlurey` in
+  [#232](https://github.com/crates-lurey-io/retroglyph/pull/232)
 
-  > Posterizes small pixel blocks to the best-matching Unicode block-element
-  > glyph (half-block/quadrant/sextant), per doryen-rs's blit_2x, libtcod, and
-  > notcurses's blitter chain -- closes crates-lurey-io/retroglyph#106.
+  > Posterizes small pixel blocks to the best-matching Unicode block-element glyph
+  > (half-block/quadrant/sextant), per doryen-rs's blit_2x, libtcod, and notcurses's blitter chain
+  > -- closes crates-lurey-io/retroglyph#106.
   >
   > retroglyph_core::subcell adds quantize_half_block/quantize_quadrant/
   >
-  > quantize_sextant:exhaustive search over every way to split an N-pixel
-  > block into a foreground/background set, scored by total squared color
-  > error, picking whichever glyph+colors best reconstruct the block. The
-  > glyph tables (indexed by row-major bit pattern rather than Unicode
-  > codepoint order) are adapted from ratatui-core's symbols::pixel module
-  > (MIT), since the sextant block in particular is not contiguous in Unicode
-  > and a hand-rolled table is exactly where subtle bugs hide.
+  > quantize_sextant:exhaustive search over every way to split an N-pixel block into a
+  > foreground/background set, scored by total squared color error, picking whichever glyph+colors
+  > best reconstruct the block. The glyph tables (indexed by row-major bit pattern rather than
+  > Unicode codepoint order) are adapted from ratatui-core's symbols::pixel module (MIT), since the
+  > sextant block in particular is not contiguous in Unicode and a hand-rolled table is exactly
+  > where subtle bugs hide.
   >
-  > Adds examples/examples/16_subcell_image.rs: a procedurally generated
-  > concentric-ring scene rendered through all three fidelities side by side
-  > (no image file or tileset dependency), with headless/PNG/SVG snapshots.
-  > Notes the software backend's CP437-only embedded font renders quadrant/
-  > sextant glyphs as solid blocks (a real, documented capability gap); the
-  > crossterm/SVG path renders the actual glyphs.
+  > Adds examples/examples/16_subcell_image.rs: a procedurally generated concentric-ring scene
+  > rendered through all three fidelities side by side (no image file or tileset dependency), with
+  > headless/PNG/SVG snapshots. Notes the software backend's CP437-only embedded font renders
+  > quadrant/ sextant glyphs as solid blocks (a real, documented capability gap); the crossterm/SVG
+  > path renders the actual glyphs.
   >
   > Marks the roadmap item done in docs/ROADMAP.md.
 
-- [e6fc7ff](
-https://github.com/crates-lurey-io/retroglyph/commit/e6fc7ff098c6e28d56818bcefd8856a2448bb3b2) *(core)* Implement Grid::clone and shrink Tile via an EGC side-table by `@matanlurey` in [#225](
-https://github.com/crates-lurey-io/retroglyph/pull/225)
-  >
+- [e6fc7ff](https://github.com/crates-lurey-io/retroglyph/commit/e6fc7ff098c6e28d56818bcefd8856a2448bb3b2)
+  _(core)_ Implement Grid::clone and shrink Tile via an EGC side-table by `@matanlurey` in
+  [#225](https://github.com/crates-lurey-io/retroglyph/pull/225)
+
   > Closes #130.
   >
-  > - Grid::clone: derive Clone on LayerBuf and Grid now that ixy 0.6.0-alpha.8+
-  >   implements Clone/Copy for the RowMajor layout marker, removing the
-  >   upstream-blocked TODO in grid.rs.
+  > - Grid::clone: derive Clone on LayerBuf and Grid now that ixy 0.6.0-alpha.8+ implements
+  >   Clone/Copy for the RowMajor layout marker, removing the upstream-blocked TODO in grid.rs.
+  > - Tile layout shrink: move the (rare) multi-codepoint EGC grapheme text out of Tile and into a
+  >   sparse per-layer side-table on Grid (LayerBuf::extras), gated by a new TileFlags::HAS_EXTRA
+  >   bit. Tile drops from 32 to 20 bytes and becomes Copy. Tile::extra()/grapheme() are replaced by
+  >   Grid::grapheme(), since a bare Tile can no longer answer that on its own.
   >
-  > - Tile layout shrink: move the (rare) multi-codepoint EGC grapheme text out
-  >   of Tile and into a sparse per-layer side-table on Grid (LayerBuf::extras),
-  >   gated by a new TileFlags::HAS_EXTRA bit. Tile drops from 32 to 20 bytes and
-  >   becomes Copy. Tile::extra()/grapheme() are replaced by Grid::grapheme(),
-  >   since a bare Tile can no longer answer that on its own.
+  >   This requires widening Backend::draw/draw_layers items from (Pos, &Tile) to (Pos, &Tile,
+  >   Option<&str>) (and the layered equivalent) so backends that render the full grapheme cluster
+  >   (retroglyph-terminal, shared by crossterm and terminal-wasm) still can. Grid::layers()/diff()
+  >   are widened to match, and diff() is now hand-rolled instead of delegating to grixy's GridDiff,
+  >   so a grapheme-only change (same glyph/style/flags, different combining mark) is still detected
+  >   as a diff.
   >
-  >   This requires widening Backend::draw/draw_layers items from (Pos, &Tile)
-  >   to (Pos, &Tile, Option<&str>) (and the layered equivalent) so backends
-  >   that render the full grapheme cluster (retroglyph-terminal, shared by
-  >   crossterm and terminal-wasm) still can. Grid::layers()/diff() are widened
-  >   to match, and diff() is now hand-rolled instead of delegating to grixy's
-  >   GridDiff, so a grapheme-only change (same glyph/style/flags, different
-  >   combining mark) is still detected as a diff.
-  >
-  >   Both TODOs were tracked together in #130; the Backend-trait widening was
-  >   previously deferred pending 'a Backend-trait change already on the table
-  >   for another reason' -- this is that reason.
+  >   Both TODOs were tracked together in #130; the Backend-trait widening was previously deferred
+  >   pending 'a Backend-trait change already on the table for another reason' -- this is that
+  >   reason.
 
-- [e073dd9](
-https://github.com/crates-lurey-io/retroglyph/commit/e073dd9db007988f0cb4378de1989a643215b01b) *(core)* Add Event::Paste and FocusGained/FocusLost variants by `@matanlurey` in [#190](
-https://github.com/crates-lurey-io/retroglyph/pull/190)
+- [e073dd9](https://github.com/crates-lurey-io/retroglyph/commit/e073dd9db007988f0cb4378de1989a643215b01b)
+  _(core)_ Add Event::Paste and FocusGained/FocusLost variants by `@matanlurey` in
+  [#190](https://github.com/crates-lurey-io/retroglyph/pull/190)
 
-  > Adds Event::Paste(String), Event::FocusGained, and Event::FocusLost to
-  > retroglyph-core, made possible by the existing #[non_exhaustive] on Event.
-  > Removes Copy from Event's derives since String is not Copy; all
-  > existing consumers already clone or borrow, and the fallout is fixed here
-  > (a handful of test call sites that relied on Event: Copy now clone
-  > explicitly).
+  > Adds Event::Paste(String), Event::FocusGained, and Event::FocusLost to retroglyph-core, made
+  > possible by the existing #[non_exhaustive] on Event. Removes Copy from Event's derives since
+  > String is not Copy; all existing consumers already clone or borrow, and the fallout is fixed
+  > here (a handful of test call sites that relied on Event: Copy now clone explicitly).
   >
   > Wires the new variants into both existing backends:
-  > - crossterm: from_crossterm_event now maps CE::Paste/FocusGained/FocusLost.
-  >   Since crossterm only emits these when the terminal has been sent
-  >   EnableBracketedPaste/EnableFocusChange, CrosstermOptions gains matching
-  >   focus_change/bracketed_paste toggles (default true) alongside the
-  >   existing mouse_capture/kitty_protocol pattern, so the new Event variants
-  >   are reachable rather than dead code.
-  > - winit: WindowEvent::Focused(bool) now pushes FocusGained/FocusLost.
-  >   Winit has no native paste event (Ime::Commit is IME composition, not
-  >   clipboard paste), so windowed paste support is left for a follow-up.
   >
-  > Removes the now-implemented Paste/FocusGained/FocusLost rows from
-  > docs/ROADMAP.md's Adopt table.
+  > - crossterm: from_crossterm_event now maps CE::Paste/FocusGained/FocusLost. Since crossterm only
+  >   emits these when the terminal has been sent EnableBracketedPaste/EnableFocusChange,
+  >   CrosstermOptions gains matching focus_change/bracketed_paste toggles (default true) alongside
+  >   the existing mouse_capture/kitty_protocol pattern, so the new Event variants are reachable
+  >   rather than dead code.
+  > - winit: WindowEvent::Focused(bool) now pushes FocusGained/FocusLost. Winit has no native paste
+  >   event (Ime::Commit is IME composition, not clipboard paste), so windowed paste support is left
+  >   for a follow-up.
+  >
+  > Removes the now-implemented Paste/FocusGained/FocusLost rows from docs/ROADMAP.md's Adopt table.
   >
   > Fixes #107.
 
-- [f1ffa31](
-https://github.com/crates-lurey-io/retroglyph/commit/f1ffa315dcc0817656cd6a7ca5990219eeeff4cc) *(core)* Add RGB to indexed/ANSI downgrade helper by `@matanlurey` in [#188](
-https://github.com/crates-lurey-io/retroglyph/pull/188)
+- [f1ffa31](https://github.com/crates-lurey-io/retroglyph/commit/f1ffa315dcc0817656cd6a7ca5990219eeeff4cc)
+  _(core)_ Add RGB to indexed/ANSI downgrade helper by `@matanlurey` in
+  [#188](https://github.com/crates-lurey-io/retroglyph/pull/188)
 
-  > Adds Color::to_indexed() and Color::to_ansi(), which quantize an RGB
-  > color down to the 256-color palette or the 16-color ANSI palette.
+  > Adds Color::to_indexed() and Color::to_ansi(), which quantize an RGB color down to the 256-color
+  > palette or the 16-color ANSI palette.
   >
-  > With the gem feature (default), quantization uses perceptual distance
-  > in the Oklab color space, which correlates much better with human
-  > color perception than raw RGB distance. Without gem, quantization
-  > falls back to euclidean RGB distance against the 6x6x6 color cube,
-  > grayscale ramp, and 16 ANSI colors. Both methods are unconditionally
-  > public regardless of feature flags; only the underlying distance
-  > metric changes.
+  > With the gem feature (default), quantization uses perceptual distance in the Oklab color space,
+  > which correlates much better with human color perception than raw RGB distance. Without gem,
+  > quantization falls back to euclidean RGB distance against the 6x6x6 color cube, grayscale ramp,
+  > and 16 ANSI colors. Both methods are unconditionally public regardless of feature flags; only
+  > the underlying distance metric changes.
   >
-  > Non-RGB colors (Default, Ansi, Indexed) pass through unchanged. Ties
-  > are resolved by preferring the lower palette index.
+  > Non-RGB colors (Default, Ansi, Indexed) pass through unchanged. Ties are resolved by preferring
+  > the lower palette index.
   >
-  > retroglyph-core and retroglyph-terminal still do not quantize colors
-  > on their own; backends opt in by calling these methods explicitly.
+  > retroglyph-core and retroglyph-terminal still do not quantize colors on their own; backends opt
+  > in by calling these methods explicitly.
 
-- [d600806](
-https://github.com/crates-lurey-io/retroglyph/commit/d600806d827fdfa7d76eeaab51cc156807714a46) *(core)* Mark evolving input/event enums non_exhaustive by `@matanlurey`
+- [d600806](https://github.com/crates-lurey-io/retroglyph/commit/d600806d827fdfa7d76eeaab51cc156807714a46)
+  _(core)_ Mark evolving input/event enums non_exhaustive by `@matanlurey`
 
-  > Event, KeyCode, MouseButton, and MouseEventKind are all expected to gain
-  > variants as backend input coverage grows (Event::Paste/FocusGained/FocusLost
-  > are already planned; KeyCode/MouseButton/MouseEventKind each lag real
-  > upstream data winit/crossterm already expose, e.g. side mouse buttons and
-  > horizontal scroll). Without #[non_exhaustive] each future addition would be a
-  > breaking change and force a major bump for a purely additive change.
+  > Event, KeyCode, MouseButton, and MouseEventKind are all expected to gain variants as backend
+  > input coverage grows (Event::Paste/FocusGained/FocusLost are already planned;
+  > KeyCode/MouseButton/MouseEventKind each lag real upstream data winit/crossterm already expose,
+  > e.g. side mouse buttons and horizontal scroll). Without #[non_exhaustive] each future addition
+  > would be a breaking change and force a major bump for a purely additive change.
   >
-  > SystemTheme and Flow were considered and deliberately left exhaustive:
-  > SystemTheme's own doc comment already argues no third state should exist,
-  > and a hypothetical Flow::Paused would need new driver-loop semantics anyway
-  > (a redesign, not an additive case), so a major bump is the right signal for
-  > either rather than something #[non_exhaustive] should paper over.
+  > SystemTheme and Flow were considered and deliberately left exhaustive: SystemTheme's own doc
+  > comment already argues no third state should exist, and a hypothetical Flow::Paused would need
+  > new driver-loop semantics anyway (a redesign, not an additive case), so a major bump is the
+  > right signal for either rather than something #[non_exhaustive] should paper over.
   >
-  > Color, AnsiColor, HAlign, and VAlign stay exhaustive as genuinely closed
-  > encodings (unchanged from before this commit).
+  > Color, AnsiColor, HAlign, and VAlign stay exhaustive as genuinely closed encodings (unchanged
+  > from before this commit).
   >
   > Fixes required by the two enums that do change:
-  > - widgets::interact::pointer::button_slot now returns Option<usize> instead
-  >   of aliasing an unknown future MouseButton onto an existing slot, which
-  >   would have silently misreported that button's state.
+  >
+  > - widgets::interact::pointer::button_slot now returns Option<usize> instead of aliasing an
+  >   unknown future MouseButton onto an existing slot, which would have silently misreported that
+  >   button's state.
   > - 04_mouse example's match on MouseEventKind gains a wildcard arm.
   >
-  > No longer marked as a Conventional Commits breaking change (dropped the !):
-  > cargo-semver-checks / release-plz's semver_check independently detects and
-  > correctly per-crate-scopes this exact class of break (verified: retroglyph-core
-  > still computes 0.2.0 from the enum_marked_non_exhaustive finding alone, while
-  > retroglyph-widgets -- whose own API is unaffected -- correctly gets only a 0.1.1
-  > patch instead of being dragged to 0.2.0 by a commit-message marker that doesn't
-  > distinguish which crate it applies to). See RELEASING.md's revised breaking-change
-  > policy.
+  > No longer marked as a Conventional Commits breaking change (dropped the !): cargo-semver-checks
+  > / release-plz's semver_check independently detects and correctly per-crate-scopes this exact
+  > class of break (verified: retroglyph-core still computes 0.2.0 from the
+  > enum_marked_non_exhaustive finding alone, while retroglyph-widgets -- whose own API is
+  > unaffected -- correctly gets only a 0.1.1 patch instead of being dragged to 0.2.0 by a
+  > commit-message marker that doesn't distinguish which crate it applies to). See RELEASING.md's
+  > revised breaking-change policy.
 
-- [55f97ae](
-https://github.com/crates-lurey-io/retroglyph/commit/55f97ae7bf3938739cb8d9d450f1f467c6e823fb) *(terminal-wasm)* Support paste/clipboard events by `@matanlurey` in [#229](
-https://github.com/crates-lurey-io/retroglyph/pull/229)
+- [55f97ae](https://github.com/crates-lurey-io/retroglyph/commit/55f97ae7bf3938739cb8d9d450f1f467c6e823fb)
+  _(terminal-wasm)_ Support paste/clipboard events by `@matanlurey` in
+  [#229](https://github.com/crates-lurey-io/retroglyph/pull/229)
 
-  > Adds wasm_terminal_push_paste(handle, text), pushing Event::Paste directly
-  > -- unlike push_key/push_mouse there's no decode_* step needed since String
-  > is already wasm-bindgen-FFI-safe, so a paste can't be misread as N
-  > individual keystrokes triggering single-key game commands.
+  > Adds wasm*terminal_push_paste(handle, text), pushing Event::Paste directly -- unlike
+  > push_key/push_mouse there's no decode*\* step needed since String is already
+  > wasm-bindgen-FFI-safe, so a paste can't be misread as N individual keystrokes triggering
+  > single-key game commands.
   >
   > Closes #98.
   >
-  > Also simplifies Event::Paste's doc comment, which previously hardcoded an
-  > enumerated list of emitting backends that's now out of date; it just notes
-  > paste isn't emitted by all backends and points to each backend's own docs.
+  > Also simplifies Event::Paste's doc comment, which previously hardcoded an enumerated list of
+  > emitting backends that's now out of date; it just notes paste isn't emitted by all backends and
+  > points to each backend's own docs.
   >
-  > Filed #228 to track the same support for the windowed (winit) backend,
-  > which has no native paste/clipboard event and needs a real dependency
-  > decision (e.g. arboard) plus a separate wasm32 web-canvas-listener path --
-  > out of scope here.
+  > Filed #228 to track the same support for the windowed (winit) backend, which has no native
+  > paste/clipboard event and needs a real dependency decision (e.g. arboard) plus a separate wasm32
+  > web-canvas-listener path -- out of scope here.
 
-- [6d5ba48](
-https://github.com/crates-lurey-io/retroglyph/commit/6d5ba48fd8292bf3ce7eb65ffa90aff286217ba4) *(window)* Expose EventLoopProxy for cross-thread event injection by `@matanlurey` in [#199](
-https://github.com/crates-lurey-io/retroglyph/pull/199)
+- [6d5ba48](https://github.com/crates-lurey-io/retroglyph/commit/6d5ba48fd8292bf3ce7eb65ffa90aff286217ba4)
+  _(window)_ Expose EventLoopProxy for cross-thread event injection by `@matanlurey` in
+  [#199](https://github.com/crates-lurey-io/retroglyph/pull/199)
 
   > feat(window): expose EventLoopProxy for cross-thread event injection
 
-- [b8563f4](
-https://github.com/crates-lurey-io/retroglyph/commit/b8563f4e0fa68067f5087cbfad0d876630ec5b77) *(window)* Add Super/Meta modifier support to KeyModifiers by `@matanlurey` in [#186](
-https://github.com/crates-lurey-io/retroglyph/pull/186)
+- [b8563f4](https://github.com/crates-lurey-io/retroglyph/commit/b8563f4e0fa68067f5087cbfad0d876630ec5b77)
+  _(window)_ Add Super/Meta modifier support to KeyModifiers by `@matanlurey` in
+  [#186](https://github.com/crates-lurey-io/retroglyph/pull/186)
 
 ### Bug Fixes
 
-- [4c9e1a0](
-https://github.com/crates-lurey-io/retroglyph/commit/4c9e1a04ba7c3316e17d2094d9aaa6dae08e405f) *(core)* Rename Terminal::read to read_blocking by `@matanlurey` in [#221](
-https://github.com/crates-lurey-io/retroglyph/pull/221)
-  >
-  > Terminal::read() panicked when called on drained non-blocking backends
-  > (e.g. Headless) with no signal in the name that this could happen.
-  > Rename to read_blocking() so the contract is explicit; poll() and
-  > drain_events() remain the non-panicking alternatives.
+- [4c9e1a0](https://github.com/crates-lurey-io/retroglyph/commit/4c9e1a04ba7c3316e17d2094d9aaa6dae08e405f)
+  _(core)_ Rename Terminal::read to read_blocking by `@matanlurey` in
+  [#221](https://github.com/crates-lurey-io/retroglyph/pull/221)
+
+  > Terminal::read() panicked when called on drained non-blocking backends (e.g. Headless) with no
+  > signal in the name that this could happen. Rename to read_blocking() so the contract is
+  > explicit; poll() and drain_events() remain the non-panicking alternatives.
   >
   > Closes #113
 
-- [50b274f](
-https://github.com/crates-lurey-io/retroglyph/commit/50b274f07527c62bd5af9a46c90cc7a6f03f081c) *(workspace)* Squash 3+ blank lines and allow MD037 in generated changelogs by `@matanlurey` in [#247](
-https://github.com/crates-lurey-io/retroglyph/pull/247)
+- [50b274f](https://github.com/crates-lurey-io/retroglyph/commit/50b274f07527c62bd5af9a46c90cc7a6f03f081c)
+  _(workspace)_ Squash 3+ blank lines and allow MD037 in generated changelogs by `@matanlurey` in
+  [#247](https://github.com/crates-lurey-io/retroglyph/pull/247)
 
-  > release-plz's per-crate CHANGELOG.md is prepended above the hand-written 0.1.0
-  > entry using cliff.toml's body template. The tail block that renders the
-  > `**Full Changelog**: ...` link can't be trimmed with Tera's `-` whitespace
-  > markers without also swallowing the blank line that's supposed to separate it
-  > from the next heading -- that separator has to come from literal template text
-  > sitting between nested {% if %} blocks -- so it leaves 3 blank lines at that
-  > boundary instead of 1. Add a postprocessor that squashes any run of 3+
-  > newlines down to a single blank line, matching Keep a Changelog / prettier /
-  > markdownlint's MD012 expectation.
+  > release-plz's per-crate CHANGELOG.md is prepended above the hand-written 0.1.0 entry using
+  > cliff.toml's body template. The tail block that renders the `**Full Changelog**: ...` link can't
+  > be trimmed with Tera's `-` whitespace markers without also swallowing the blank line that's
+  > supposed to separate it from the next heading -- that separator has to come from literal
+  > template text sitting between nested {% if %} blocks -- so it leaves 3 blank lines at that
+  > boundary instead of 1. Add a postprocessor that squashes any run of 3+ newlines down to a single
+  > blank line, matching Keep a Changelog / prettier / markdownlint's MD012 expectation.
   >
-  > Also extend the per-changelog markdownlint-disable comment (both the
-  > already-checked-in header on all 7 crates' CHANGELOG.md, and cliff.toml's
-  > header template for any crate whose changelog doesn't exist yet) with
-  > no-space-in-emphasis: commit bodies are freeform prose and can contain a
-  > literal _ or * adjacent to other text (e.g. `wasm_terminal_* FFI`, `manual
-  > _style override`) that markdownlint's MD037 misreads as unbalanced emphasis
-  > markers. That's not something a template fix can prevent, since it depends on
-  > historical commit message content.
+  > Also extend the per-changelog markdownlint-disable comment (both the already-checked-in header
+  > on all 7 crates' CHANGELOG.md, and cliff.toml's header template for any crate whose changelog
+  > doesn't exist yet) with no-space-in-emphasis: commit bodies are freeform prose and can contain a
+  > literal _ or \* adjacent to other text (e.g. `wasm_terminal_\* FFI`, `manual \_style override`)
+  > that markdownlint's MD037 misreads as unbalanced emphasis markers. That's not something a
+  > template fix can prevent, since it depends on historical commit message content.
   >
   > Fixes the release-plz standing PR's format/lint CI failure .
 
 ### Documentation
 
-- [8cd7a96](
-https://github.com/crates-lurey-io/retroglyph/commit/8cd7a96c7022e30d132e4240134394e6d81e5f20) *(core)* Document Style::patch semantics, add reset_fg/reset_bg, surface headless testing workflow by `@matanlurey` in [#235](
-https://github.com/crates-lurey-io/retroglyph/pull/235)
+- [8cd7a96](https://github.com/crates-lurey-io/retroglyph/commit/8cd7a96c7022e30d132e4240134394e6d81e5f20)
+  _(core)_ Document Style::patch semantics, add reset_fg/reset_bg, surface headless testing workflow
+  by `@matanlurey` in [#235](https://github.com/crates-lurey-io/retroglyph/pull/235)
 
-- [51f9637](
-https://github.com/crates-lurey-io/retroglyph/commit/51f9637350293b52bc72e044c5076a5ac3a01077) *(core)* Document grid multi-layer draw order and compositing semantics by `@matanlurey` in [#208](
-https://github.com/crates-lurey-io/retroglyph/pull/208)
-  >
+- [51f9637](https://github.com/crates-lurey-io/retroglyph/commit/51f9637350293b52bc72e044c5076a5ac3a01077)
+  _(core)_ Document grid multi-layer draw order and compositing semantics by `@matanlurey` in
+  [#208](https://github.com/crates-lurey-io/retroglyph/pull/208)
   > Closes #99. Expands the grid module doc to cover:
-  > - layer draw order (ascending id, layer 0 first) and where compositing
-  >   happens for cell vs. pixel backends
-  > - the EMPTY flag: untouched cells are transparent, an explicit space is
-  >   opaque and erases content beneath it; background follows a separate
-  >   non-Default rule
-  > - no short-circuiting: flatten_into and the software backend's per-pixel
-  >   compositor always walk every allocated layer, O(max_layer) per cell
-  > - allocation cost is identical regardless of layer id (one width x height
-  >   buffer per written layer); the layer id only affects steady-state
-  >   iteration cost via max_layer, which never shrinks
+  >
+  > - layer draw order (ascending id, layer 0 first) and where compositing happens for cell vs.
+  >   pixel backends
+  > - the EMPTY flag: untouched cells are transparent, an explicit space is opaque and erases
+  >   content beneath it; background follows a separate non-Default rule
+  > - no short-circuiting: flatten_into and the software backend's per-pixel compositor always walk
+  >   every allocated layer, O(max_layer) per cell
+  > - allocation cost is identical regardless of layer id (one width x height buffer per written
+  >   layer); the layer id only affects steady-state iteration cost via max_layer, which never
+  >   shrinks
 
 ### Continuous Integration
 
-- [1d81906](
-https://github.com/crates-lurey-io/retroglyph/commit/1d81906ea8e380d64de0e05345f103627ef49406) *(workspace)* Automated per-crate release-plz workflow by `@matanlurey` in [#80](
-https://github.com/crates-lurey-io/retroglyph/pull/80)
+- [1d81906](https://github.com/crates-lurey-io/retroglyph/commit/1d81906ea8e380d64de0e05345f103627ef49406)
+  _(workspace)_ Automated per-crate release-plz workflow by `@matanlurey` in
+  [#80](https://github.com/crates-lurey-io/retroglyph/pull/80)
 
-  > * ci(release): adopt per-crate release-plz flow with PR-title enforcement
+  > - ci(release): adopt per-crate release-plz flow with PR-title enforcement
   >
-  > Re-enable release-plz's standing Release PR (release-pr + release jobs) so
-  > version bumps and per-crate changelogs are computed from conventional PR-title
-  > history and published on Release-PR merge; developers never push tags.
+  > Re-enable release-plz's standing Release PR (release-pr + release jobs) so version bumps and
+  > per-crate changelogs are computed from conventional PR-title history and published on Release-PR
+  > merge; developers never push tags.
   >
   > - release-plz.toml: per-crate changelogs (drop changelog_path), semver_check=true
   > - cliff.toml: skip-changelog via github.pr_labels label + changelog: ignore footer
@@ -294,19 +269,18 @@ https://github.com/crates-lurey-io/retroglyph/pull/80)
   >
   > * docs(changelog): split workspace changelog into per-crate files
   >
-  > Per-crate release-plz needs a CHANGELOG.md per crate. Seed each with its
-  > hand-written 0.1.0 entry; the root CHANGELOG.md becomes an index.
+  > Per-crate release-plz needs a CHANGELOG.md per crate. Seed each with its hand-written 0.1.0
+  > entry; the root CHANGELOG.md becomes an index.
   >
-  > * docs: rewrite RELEASING.md for the automated release flow
+  > - docs: rewrite RELEASING.md for the automated release flow
   >
-  > Document the per-crate, release-plz-driven flow: conventional PR titles,
-  > squash-merge, standing Release PR as the single approval gate, breaking
-  > declared via title !, cargo-semver-checks roles, PR labels, and no pre-1.0
-  > prerelease channel. Update AGENTS.md's commit-message section: enforcement
-  > now lives in pr-title.yml, not local hooks.
+  > Document the per-crate, release-plz-driven flow: conventional PR titles, squash-merge, standing
+  > Release PR as the single approval gate, breaking declared via title !, cargo-semver-checks
+  > roles, PR labels, and no pre-1.0 prerelease channel. Update AGENTS.md's commit-message section:
+  > enforcement now lives in pr-title.yml, not local hooks.
 
-**Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.1.0...retroglyph-core-v0.2.0
-
+**Full Changelog**:
+https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.1.0...retroglyph-core-v0.2.0
 
 ## 0.1.0 - Initial release
 
