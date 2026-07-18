@@ -186,9 +186,14 @@ Three optional layers build on that free-function core:
   `TextLayout` and implements a `Measure` trait so a caller can size a pane to fit before rendering.
 - `join_h`/`join_v` to compose several `Grid`s -- e.g. `BoxStyle::render` output -- into one before
   drawing it.
+- `Theme` (`Theme::DARK`/`Theme::LIGHT`, or a caller-built palette): named color roles (`border`,
+  `accent`, `hover_bg`, ...) that every widget with a style knob can pick up via a `.theme(Theme)`
+  builder method, optionally -- a manual `.border_style(...)`/etc. call after `.theme(...)` still
+  wins, and nothing requires a `Theme` at all.
 
 See the `09_widgets_dashboard` and `15_outpost_dashboard` examples for all of the above wired
-together in one UI.
+together in one UI, or `17_theme_switch` for `Theme::DARK`/`Theme::LIGHT` switched live at runtime
+by a keypress.
 
 </details>
 
