@@ -69,12 +69,3 @@ must_use_candidate = "deny"
 missing_errors_doc = "deny"
 missing_panics_doc = "deny"
 module_name_repetitions = "allow"
-
-# Temporary: pins the whole workspace's `alpha-blend` dependency (crates/core and
-# crates/software both declare `alpha-blend = "0.2"`) to the `blend-modes-112` branch, which adds
-# `SeparableBlendMode` (Screen/ColorDodge/ColorBurn/Overlay) ahead of its crates.io release. Without
-# this patch, crates/core's git-sourced alpha-blend and crates/software's crates.io-sourced
-# alpha-blend would compile as two separate copies of the crate. Remove once alpha-blend 0.2.2+ is
-# published on crates.io (see https://github.com/crates-lurey-io/alpha-blend, retroglyph#112).
-[patch.crates-io]
-alpha-blend = { git = "https://github.com/crates-lurey-io/alpha-blend", branch = "blend-modes-112" }
