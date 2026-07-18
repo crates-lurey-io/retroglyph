@@ -958,7 +958,13 @@ mod tests {
 /// panic, produce invalid Unicode, or produce an out-of-bounds F-key index. See
 /// `crates/core/src/grid.rs`'s `egc_proptests` module for the same pattern applied elsewhere in
 /// the workspace.
-#[cfg(test)]
+///
+/// Not compiled for `wasm32`: `proptest` pulls in `rand`/`getrandom`, and `getrandom` does not
+/// build for `wasm32-unknown-unknown` without extra feature wiring that `just test-wasm`'s
+/// `wasm-pack` build doesn't do (see the matching `proptest` dev-dependency's cfg gate in
+/// `Cargo.toml`). `decode_key_event` itself has no wasm-specific behavior, so host-only coverage
+/// is sufficient.
+#[cfg(all(test, not(target_arch = "wasm32")))]
 mod decode_key_event_proptests {
     use super::*;
     use proptest::prelude::*;
