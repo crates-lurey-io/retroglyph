@@ -82,6 +82,7 @@ pub mod grid;
 #[cfg(feature = "egc")]
 pub mod layout;
 pub mod style;
+pub mod subcell;
 pub mod terminal;
 pub mod text;
 /// The atomic drawable unit (glyph, style, sub-cell offsets).
@@ -103,6 +104,7 @@ pub use grid::{Grid, Pos, Rect, Size};
 #[cfg(feature = "egc")]
 pub use layout::{HAlign, TextLayout, TextMetrics, VAlign};
 pub use style::Style;
+pub use subcell::{Glyph, quantize_half_block, quantize_quadrant, quantize_sextant};
 pub use terminal::Terminal;
 pub use text::{Line, Span};
 pub use tile::Tile;

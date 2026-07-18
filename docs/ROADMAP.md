@@ -14,10 +14,14 @@ Everything else stays narrative-only until it's actually being scheduled.
 
 Medium effort, real capability gaps, not urgent:
 
-| Idea                                                                                               | Source                                                   | Why                                                                                                                        | Effort       |
-| -------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ------------ |
-| Subcell image-to-glyph blit (posterize a pixel block to the best block/quadrant/sextant character) | doryen-rs, libtcod (`blit2x`), notcurses (blitter chain) | Pure rendering utility, no game-logic scope creep. Lets users render raster images as ASCII/Unicode art without a tileset. | medium       |
-| Non-alternate-screen / inline rendering mode for the crossterm backend                             | termbox2 (as a documented gap)                           | Worth as a config option regardless of the source library; useful for `fzf`-style inline TUIs.                             | small-medium |
+| Idea                                                                   | Source                         | Why                                                                                            | Effort       |
+| ---------------------------------------------------------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------- | ------------ |
+| Non-alternate-screen / inline rendering mode for the crossterm backend | termbox2 (as a documented gap) | Worth as a config option regardless of the source library; useful for `fzf`-style inline TUIs. | small-medium |
+
+Shipped: subcell image-to-glyph blit (posterize a pixel block to the best block/quadrant/sextant
+character, per doryen-rs/libtcod/notcurses) as `retroglyph_core::subcell`
+(`quantize_half_block`/`quantize_quadrant`/`quantize_sextant`) -- see
+`examples/examples/16_subcell_image.rs`.
 
 ## Defer
 
