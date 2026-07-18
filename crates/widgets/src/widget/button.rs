@@ -3,6 +3,7 @@ use retroglyph_core::{Backend, Color, Rect, Style, Terminal};
 
 use super::Widget;
 use crate::Response;
+use crate::Theme;
 use crate::draw::fill_rect;
 use crate::text::truncate as truncate_to_cols;
 
@@ -116,6 +117,21 @@ impl<'a> Button<'a> {
     #[must_use]
     pub const fn focused_style(mut self, style: Style) -> Self {
         self.focused_style = style;
+        self
+    }
+
+    /// Applies `theme`'s named roles to all four of this button's states: idle becomes
+    /// `theme.fg` on `theme.panel_bg`; hovered/pressed swap in `theme.hover_bg`/`theme.press_bg`
+    /// for the background; focused becomes `theme.accent` on `theme.panel_bg`. The same mapping
+    /// `09_widgets_dashboard`'s "Ping" button hand-threads today.
+    ///
+    /// Call before any manual `_style` override you want to keep.
+    #[must_use]
+    pub fn theme(mut self, theme: Theme) -> Self {
+        self.style = Style::new().fg(theme.fg).bg(theme.panel_bg);
+        self.hovered_style = Style::new().fg(theme.fg).bg(theme.hover_bg);
+        self.pressed_style = Style::new().fg(theme.fg).bg(theme.press_bg);
+        self.focused_style = Style::new().fg(theme.accent).bg(theme.panel_bg);
         self
     }
 
@@ -312,5 +328,23 @@ mod tests {
         let mut term = Terminal::new(Headless::new(1, 1));
         Button::new("Go", Response::default()).render(area, &mut term);
         assert_eq!(term.grid().get(0, 0).glyph(), ' ');
+    }
+
+    #[test]
+    fn theme_maps_named_roles_onto_every_state() {
+        use crate::Theme;
+
+        let response = Response {
+            hovered: true,
+            ..Response::default()
+        };
+        let button = Button::new("Go", response).theme(Theme::DARK);
+
+        assert_eq!(button.style.foreground(), Theme::DARK.fg);
+        assert_eq!(button.style.background(), Theme::DARK.panel_bg);
+        assert_eq!(button.hovered_style.background(), Theme::DARK.hover_bg);
+        assert_eq!(button.pressed_style.background(), Theme::DARK.press_bg);
+        assert_eq!(button.focused_style.foreground(), Theme::DARK.accent);
+        assert_eq!(button.resolved_style().background(), Theme::DARK.hover_bg);
     }
 }

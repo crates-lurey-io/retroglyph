@@ -2,6 +2,7 @@
 use retroglyph_core::{Backend, Color, Rect, Style, Terminal};
 
 use super::Widget;
+use crate::Theme;
 use crate::draw::fill_rect;
 use crate::text::truncate as truncate_to_cols;
 
@@ -89,6 +90,18 @@ impl<'a> Tabs<'a> {
     #[must_use]
     pub const fn divider(mut self, divider: Option<char>) -> Self {
         self.divider = divider;
+        self
+    }
+
+    /// Applies `theme`'s named roles to this tab strip: `style` becomes `theme.dim` (unselected
+    /// tabs read as de-emphasized), and `selected_style` becomes `theme.accent` on
+    /// `theme.panel_bg`.
+    ///
+    /// Call before any manual [`Tabs::style`]/[`Tabs::selected_style`] override you want to keep.
+    #[must_use]
+    pub fn theme(mut self, theme: Theme) -> Self {
+        self.style = Style::new().fg(theme.dim);
+        self.selected_style = Style::new().fg(theme.accent).bg(theme.panel_bg);
         self
     }
 }
@@ -263,5 +276,26 @@ mod tests {
         let mut term = Terminal::new(Headless::new(1, 1));
         Tabs::new(&titles).render(area, &mut term);
         assert_eq!(term.grid().get(0, 0).glyph(), ' ');
+    }
+
+    #[test]
+    fn theme_maps_named_roles_onto_style_and_selected_style() {
+        let area = Rect::new(0, 0, 20, 1);
+        let titles = ["One", "Two"];
+        let mut term = Terminal::new(Headless::new(20, 1));
+        Tabs::new(&titles)
+            .theme(Theme::DARK)
+            .select(Some(1))
+            .render(area, &mut term);
+
+        assert_eq!(term.grid().get(0, 0).style().foreground(), Theme::DARK.dim);
+        assert_eq!(
+            term.grid().get(4, 0).style().foreground(),
+            Theme::DARK.accent
+        );
+        assert_eq!(
+            term.grid().get(4, 0).style().background(),
+            Theme::DARK.panel_bg
+        );
     }
 }

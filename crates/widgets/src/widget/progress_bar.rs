@@ -2,6 +2,7 @@
 use retroglyph_core::{Backend, Rect, Style, Terminal};
 
 use super::Widget;
+use crate::Theme;
 
 /// A horizontal progress bar that fills `value / max` of the area it's
 /// rendered into.
@@ -40,6 +41,19 @@ impl ProgressBar {
     #[must_use]
     pub const fn empty_style(mut self, style: Style) -> Self {
         self.empty_style = style;
+        self
+    }
+
+    /// Applies `theme`'s named roles to this bar: `filled_style` becomes `theme.accent` (progress
+    /// reads as emphasis, the same role [`super::Tabs::theme`]/[`super::Button::theme`] use for a
+    /// selected/focused state), and `empty_style` becomes `theme.dim`.
+    ///
+    /// Call before any manual [`ProgressBar::filled_style`]/[`ProgressBar::empty_style`] override
+    /// you want to keep.
+    #[must_use]
+    pub fn theme(mut self, theme: Theme) -> Self {
+        self.filled_style = Style::new().fg(theme.accent);
+        self.empty_style = Style::new().fg(theme.dim);
         self
     }
 }
@@ -109,5 +123,20 @@ mod tests {
 
         assert_eq!(term.grid().get(0, 0).style().foreground(), Color::WHITE);
         assert_eq!(term.grid().get(3, 0).style().foreground(), Color::BLACK);
+    }
+
+    #[test]
+    fn theme_maps_named_roles_onto_filled_and_empty_styles() {
+        let area = Rect::new(0, 0, 4, 1);
+        let mut term = Terminal::new(Headless::new(4, 1));
+        ProgressBar::new(2, 4)
+            .theme(Theme::DARK)
+            .render(area, &mut term);
+
+        assert_eq!(
+            term.grid().get(0, 0).style().foreground(),
+            Theme::DARK.accent
+        );
+        assert_eq!(term.grid().get(3, 0).style().foreground(), Theme::DARK.dim);
     }
 }

@@ -2,6 +2,7 @@
 use retroglyph_core::{Backend, Rect, Style, Terminal};
 
 use super::{Widget, bar};
+use crate::Theme;
 
 /// A labeled stat bar: `label`, a bar filling `current / max` of the
 /// remaining width colored by [`super::Meter`], and a trailing
@@ -40,6 +41,17 @@ impl<'a> StatBar<'a> {
     #[must_use]
     pub const fn label_style(mut self, style: Style) -> Self {
         self.label_style = style;
+        self
+    }
+
+    /// Sets `label_style` to `theme.dim`, the same mapping as [`super::Gauge::theme`] (see its
+    /// doc comment for why the bar's own load-colored fill stays outside `theme`'s role
+    /// palette).
+    ///
+    /// Call before any manual [`StatBar::label_style`] override you want to keep.
+    #[must_use]
+    pub fn theme(mut self, theme: Theme) -> Self {
+        self.label_style = Style::new().fg(theme.dim);
         self
     }
 }
@@ -107,5 +119,16 @@ mod tests {
             .render(area, &mut term);
 
         assert_eq!(term.grid().get(0, 0).style().foreground(), Color::WHITE);
+    }
+
+    #[test]
+    fn theme_maps_dim_role_onto_label_style() {
+        let area = Rect::new(0, 0, 20, 1);
+        let mut term = Terminal::new(Headless::new(20, 1));
+        StatBar::new("H", 45, 100)
+            .theme(Theme::DARK)
+            .render(area, &mut term);
+
+        assert_eq!(term.grid().get(0, 0).style().foreground(), Theme::DARK.dim);
     }
 }
