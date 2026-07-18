@@ -37,16 +37,24 @@ impl<'a> Gauge<'a> {
         self
     }
 
-    /// Sets `label_style` to `theme.dim` -- the same de-emphasized role `09_widgets_dashboard`
-    /// already uses for the plain-text label next to this gauge's sparkline. The bar's own fill
-    /// stays load-colored via [`super::Meter`] regardless of `theme`, matching every other
-    /// gauge/meter-backed widget here (see [`super::Sparkline`]'s doc comment for why that
-    /// coloring is deliberately not part of the [`Theme`] role palette).
+    /// Sets `label_style` to `theme.dim` on `theme.panel_bg` -- the same de-emphasized role
+    /// `09_widgets_dashboard` already uses for the plain-text label next to this gauge's
+    /// sparkline. The bar's own fill stays load-colored via [`super::Meter`] regardless of
+    /// `theme`, matching every other gauge/meter-backed widget here (see [`super::Sparkline`]'s
+    /// doc comment for why that coloring is deliberately not part of the [`Theme`] role palette).
+    ///
+    /// `label_style` sets an explicit background rather than leaving it at [`Style::new()`]'s
+    /// default: an unset background isn't "transparent" once a real backend draws it (a bare
+    /// `Color::Default` cell paints as solid black behind the glyph -- see
+    /// `retroglyph-software`'s `DEFAULT_BG`), so this widget assumes it's drawn on
+    /// `theme.panel_bg`, true when composed with a themed [`super::Panel`]/[`super::Modal`].
+    /// Drawing this gauge directly on the raw screen background instead needs a manual
+    /// `.label_style(...)` override afterwards.
     ///
     /// Call before any manual [`Gauge::label_style`] override you want to keep.
     #[must_use]
     pub fn theme(mut self, theme: Theme) -> Self {
-        self.label_style = Style::new().fg(theme.dim);
+        self.label_style = Style::new().fg(theme.dim).bg(theme.panel_bg);
         self
     }
 }
@@ -97,5 +105,9 @@ mod tests {
             .render(area, &mut term);
 
         assert_eq!(term.grid().get(0, 0).style().foreground(), Theme::DARK.dim);
+        assert_eq!(
+            term.grid().get(0, 0).style().background(),
+            Theme::DARK.panel_bg
+        );
     }
 }

@@ -44,14 +44,15 @@ impl<'a> StatBar<'a> {
         self
     }
 
-    /// Sets `label_style` to `theme.dim`, the same mapping as [`super::Gauge::theme`] (see its
-    /// doc comment for why the bar's own load-colored fill stays outside `theme`'s role
-    /// palette).
+    /// Sets `label_style` to `theme.dim` on `theme.panel_bg`, the same mapping (and the same
+    /// "assumes it's drawn on `theme.panel_bg`" caveat) as [`super::Gauge::theme`] -- see its
+    /// doc comment for the full explanation, including why the bar's own load-colored fill stays
+    /// outside `theme`'s role palette.
     ///
     /// Call before any manual [`StatBar::label_style`] override you want to keep.
     #[must_use]
     pub fn theme(mut self, theme: Theme) -> Self {
-        self.label_style = Style::new().fg(theme.dim);
+        self.label_style = Style::new().fg(theme.dim).bg(theme.panel_bg);
         self
     }
 }
@@ -130,5 +131,9 @@ mod tests {
             .render(area, &mut term);
 
         assert_eq!(term.grid().get(0, 0).style().foreground(), Theme::DARK.dim);
+        assert_eq!(
+            term.grid().get(0, 0).style().background(),
+            Theme::DARK.panel_bg
+        );
     }
 }

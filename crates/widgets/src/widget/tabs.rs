@@ -94,13 +94,21 @@ impl<'a> Tabs<'a> {
     }
 
     /// Applies `theme`'s named roles to this tab strip: `style` becomes `theme.dim` (unselected
-    /// tabs read as de-emphasized), and `selected_style` becomes `theme.accent` on
-    /// `theme.panel_bg`.
+    /// tabs read as de-emphasized) on `theme.panel_bg`, and `selected_style` becomes
+    /// `theme.accent` on `theme.panel_bg`.
+    ///
+    /// `style` sets an explicit background rather than leaving it at [`Style::new()`]'s default:
+    /// an unset background isn't "transparent" once a real backend draws it (a bare
+    /// `Color::Default` cell paints as solid black behind the glyph -- see
+    /// `retroglyph-software`'s `DEFAULT_BG`), so this widget assumes it's drawn on
+    /// `theme.panel_bg`, true when composed with a themed [`super::Panel`]/[`super::Modal`].
+    /// Drawing this tab strip directly on the raw screen background instead needs a manual
+    /// `.style(...)` override afterwards.
     ///
     /// Call before any manual [`Tabs::style`]/[`Tabs::selected_style`] override you want to keep.
     #[must_use]
     pub fn theme(mut self, theme: Theme) -> Self {
-        self.style = Style::new().fg(theme.dim);
+        self.style = Style::new().fg(theme.dim).bg(theme.panel_bg);
         self.selected_style = Style::new().fg(theme.accent).bg(theme.panel_bg);
         self
     }
@@ -289,6 +297,10 @@ mod tests {
             .render(area, &mut term);
 
         assert_eq!(term.grid().get(0, 0).style().foreground(), Theme::DARK.dim);
+        assert_eq!(
+            term.grid().get(0, 0).style().background(),
+            Theme::DARK.panel_bg
+        );
         assert_eq!(
             term.grid().get(4, 0).style().foreground(),
             Theme::DARK.accent

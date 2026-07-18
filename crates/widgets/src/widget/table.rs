@@ -99,17 +99,28 @@ impl<'a> Table<'a> {
     }
 
     /// Applies `theme`'s named roles to this table's row styles: `header_style` becomes
-    /// `theme.fg` (brighter, matching the header's original brighter-than-row default),
-    /// `row_style` becomes `theme.dim` (the same de-emphasized role a plain body row already
-    /// reads as), and `selected_style` becomes `theme.bg` on `theme.accent` -- the same
-    /// bright-on-accent highlight [`super::List::theme`] and [`super::Button::theme`] use.
+    /// `theme.fg` (brighter, matching the header's original brighter-than-row default) on
+    /// `theme.panel_bg`, `row_style` becomes `theme.dim` (the same de-emphasized role a plain
+    /// body row already reads as) on `theme.panel_bg`, and `selected_style` becomes `theme.bg`
+    /// on `theme.accent` -- the same bright-on-accent highlight [`super::List::theme`] and
+    /// [`super::Button::theme`] use.
+    ///
+    /// `header_style`/`row_style` always set an explicit background rather than leaving it at
+    /// [`Style::new()`]'s default: an unset background isn't "transparent" once a real backend
+    /// draws it (a bare `Color::Default` cell paints as solid black behind the glyph, not
+    /// whatever was there before -- see `retroglyph-software`'s `DEFAULT_BG`), so this widget
+    /// assumes it's drawn on `theme.panel_bg` -- true when composed with a themed
+    /// [`super::Panel`]/[`super::Modal`], the common case -- rather than risk a black box behind
+    /// every row on a light [`Theme`]. Drawing this table directly on the raw screen background
+    /// instead of inside a themed panel needs a manual `.header_style(...)`/`.row_style(...)`
+    /// override afterwards.
     ///
     /// Call before any manual [`Table::header_style`]/[`Table::row_style`]/
     /// [`Table::selected_style`] override you want to keep.
     #[must_use]
     pub fn theme(mut self, theme: Theme) -> Self {
-        self.header_style = Style::new().fg(theme.fg);
-        self.row_style = Style::new().fg(theme.dim);
+        self.header_style = Style::new().fg(theme.fg).bg(theme.panel_bg);
+        self.row_style = Style::new().fg(theme.dim).bg(theme.panel_bg);
         self.selected_style = Style::new().fg(theme.bg).bg(theme.accent);
         self
     }
@@ -365,7 +376,15 @@ mod tests {
         table.render(area, &mut term, &mut state);
 
         assert_eq!(term.grid().get(0, 0).style().foreground(), Theme::DARK.fg);
+        assert_eq!(
+            term.grid().get(0, 0).style().background(),
+            Theme::DARK.panel_bg
+        );
         assert_eq!(term.grid().get(0, 1).style().foreground(), Theme::DARK.dim);
+        assert_eq!(
+            term.grid().get(0, 1).style().background(),
+            Theme::DARK.panel_bg
+        );
         assert_eq!(term.grid().get(0, 2).style().foreground(), Theme::DARK.bg);
         assert_eq!(
             term.grid().get(0, 2).style().background(),
