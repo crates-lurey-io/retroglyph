@@ -269,11 +269,10 @@ pub enum Event {
     /// Pasted text, delivered as a single event rather than individual key
     /// presses.
     ///
-    /// Only emitted by backends with a bracketed-paste or clipboard-commit
-    /// source: the crossterm backend (via terminal bracketed paste). The
-    /// windowed (winit) backend does not currently emit this. Content is
-    /// forwarded verbatim from the source, including embedded newlines; the
-    /// receiving app is responsible for any filtering it needs.
+    /// Not emitted by all backends -- see each backend's own docs for
+    /// whether and how it sources this. Content is forwarded verbatim from
+    /// the source, including embedded newlines; the receiving app is
+    /// responsible for any filtering it needs.
     Paste(String),
     /// The terminal or application window gained input focus.
     ///
