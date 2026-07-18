@@ -5,7 +5,10 @@
 //! `Ansi` (16), `Indexed` (a sampled strip of the 256-value palette), `Rgb`
 //! (24-bit gradient), and `Default` -- plus inverse video (swapping fg/bg on
 //! the same two colors), which is the only "styled text" effect retroglyph
-//! has (no bold/italic/underline -- see [`Style`]'s doc comment for why).
+//! has (no bold/italic/underline -- see [`Style`]'s doc comment for why) --
+//! plus [`Grid::blit_alpha`]'s [`BlendMode`]s: the same warm source color
+//! composited over the same cool destination color, once per mode, across
+//! 16 alpha steps, so the modes' curves are visually comparable side by side.
 //!
 //! ```sh
 //! cargo run --example 02_colors --features crossterm
@@ -17,7 +20,7 @@
 
 use retroglyph_core::event::{Event, KeyCode};
 use retroglyph_core::text::{Line, Span};
-use retroglyph_core::{AnsiColor, Backend, Color, Style, Terminal};
+use retroglyph_core::{AnsiColor, Backend, BlendMode, Color, Grid, Rect, Style, Terminal, Tile};
 use retroglyph_examples::Example;
 
 /// State for the colors example (none needed: the palette layout never changes).
@@ -54,6 +57,46 @@ impl Colors {
         for i in 0..count {
             let style = Style::new().bg(color_at(i));
             term.put_styled(x + u16::from(i), y, ' ', style);
+        }
+    }
+
+    /// A cool backdrop color (the destination `blend_row` blits onto).
+    const BLEND_DST: Color = Color::Rgb {
+        r: 20,
+        g: 40,
+        b: 140,
+    };
+
+    /// A warm overlay color (the source `blend_row` blits, at increasing alpha).
+    const BLEND_SRC: Color = Color::Rgb {
+        r: 255,
+        g: 180,
+        b: 40,
+    };
+
+    /// Draws one row of `count` swatches at `(x, y)`: [`Self::BLEND_SRC`] blended over
+    /// [`Self::BLEND_DST`] via [`Grid::blit_alpha`] under `mode`, at `count` alpha steps evenly
+    /// spanning `0.0..=1.0` left to right.
+    ///
+    /// Unlike [`swatch_row`](Self::swatch_row), which picks a `Color` outright per cell, this
+    /// goes through the real `blit_alpha` API (via [`Terminal::grid_mut`]) since blending, not
+    /// color selection, is what this row demonstrates.
+    fn blend_row<B: Backend>(term: &mut Terminal<B>, x: u16, y: u16, count: u8, mode: BlendMode) {
+        let mut overlay = Grid::new(1, 1);
+        overlay.put(
+            0,
+            0,
+            Tile::default().with_style(Style::new().bg(Self::BLEND_SRC)),
+        );
+
+        for i in 0..count {
+            let cx = x + u16::from(i);
+            term.put_styled(cx, y, ' ', Style::new().bg(Self::BLEND_DST));
+            // `count` is always a small literal (16, see `draw`), never 0: no div-by-zero.
+            #[allow(clippy::cast_precision_loss)]
+            let t = f32::from(i) / f32::from(count - 1);
+            term.grid_mut()
+                .blit_alpha(0, &overlay, Rect::new(0, 0, 1, 1), cx, y, mode, 1.0, t);
         }
     }
 
@@ -106,6 +149,26 @@ impl Colors {
                 Style::new().fg(bg).bg(fg),
             )),
         );
+
+        // Kept under 49 chars (the row's available width from x=1): `print` (unlike
+        // `print_styled`) wraps overflow onto the next row at the same `x` rather than clipping
+        // it, which would otherwise stomp the "Linear:" row right below.
+        term.print(1, 17, "Blend modes (blit_alpha, warm/cool, alpha 0..1):");
+        for (i, (label, mode)) in [
+            ("Linear:", BlendMode::Linear),
+            ("Screen:", BlendMode::Screen),
+            ("Dodge:", BlendMode::Dodge),
+            ("Burn:", BlendMode::Burn),
+            ("Overlay:", BlendMode::Overlay),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            #[allow(clippy::cast_possible_truncation)]
+            let row = 18 + i as u16;
+            term.print(1, row, label);
+            Self::blend_row(term, 10, row, 16, mode);
+        }
 
         term.present().ok();
     }
