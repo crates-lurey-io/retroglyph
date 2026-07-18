@@ -124,7 +124,13 @@ deny-licenses:
 
 # ── Composite ────────────────────────────────────────────────────────────────
 
-check: fmt-check lint compile test doc
+# `compile` is deliberately not a dependency here: `lint` (clippy) already performs a full,
+# strictly-stronger typecheck than plain `cargo check`, and `test` immediately after does a full
+# build (also a superset of `check`). A standalone `cargo check --all-features` pass between them
+# never catches anything those two don't already catch, and it's another full-workspace fingerprint
+# pass for no extra correctness. `just compile` remains available on its own for a fast, cheap
+# check-only iteration loop outside this composite.
+check: fmt-check lint test doc
 
 clean:
     cargo clean
