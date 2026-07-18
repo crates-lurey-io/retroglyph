@@ -14,7 +14,7 @@ header = """
 
 All notable changes to this project will be documented in this file.
 <!-- ignore lint rules that are often triggered by content generated from commits / git-cliff -->
-<!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style -->
+<!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 """
 # template for the changelog body
 # https://keats.github.io/tera/docs/#introduction
@@ -100,6 +100,14 @@ postprocessors = [
   { pattern = "<!-- Please read CONTRIBUTING.md before submitting any pull request. -->", replace = "" },
   { pattern = '>---+\n', replace = "" },
   { pattern = ' +\n', replace = "\n" },
+  # The body template's tail (the **Full Changelog** link block) can't be trimmed with Tera's
+  # `-` whitespace-control markers without also swallowing the blank line that's supposed to
+  # separate it from the next heading, because that separator has to come from literal template
+  # text sitting between nested `{% if %}` blocks. Squash the resulting run of 3+ blank lines
+  # (seen at the boundary between a freshly rendered release entry and the next one, e.g. an
+  # old hand-written 0.1.0 entry) down to a single blank line instead, matching Keep a Changelog
+  # / prettier / markdownlint's `MD012` expectation of at most one.
+  { pattern = '\n{3,}', replace = "\n\n" },
 ]
 
 [git]
