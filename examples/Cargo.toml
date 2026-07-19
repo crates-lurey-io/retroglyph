@@ -28,6 +28,10 @@ retroglyph-window = { path = "../crates/window", version = "0.2.1", optional = t
 # impl still compiles portably -- only its `#[wasm_bindgen]` FFI module is
 # `cfg(target_arch = "wasm32")`-gated).
 retroglyph-terminal-wasm = { path = "../crates/terminal-wasm", version = "0.1.2", optional = true }
+# Axial hex coordinates for 19_overworld's strategic hex-tile view: offset<->axial conversion,
+# neighbor directions, and hex distance. `no_std`, dependency-free, so it costs nothing on the
+# WASM builds.
+hexal = "0.1"
 # A portable `std::time::Instant`-alike: on non-wasm targets it's a zero-cost re-export of
 # `std::time`; on `wasm32-unknown-unknown` it's backed by the browser's `Performance.now()`.
 # Already in the workspace's `Cargo.lock` transitively (pulled by `winit`), so this adds no new
