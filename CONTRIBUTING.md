@@ -197,5 +197,5 @@ alongside `grid_diff`, add it to the `cargo bench` invocations in `bench.yml` to
 | `crossterm`             | off     | Enable the `Crossterm` backend. Pulls in the `crossterm` crate.    |
 | `software`              | off     | Software pixel backend (winit + softbuffer).                       |
 | `software-tilesets`     | off     | PNG sprite sheet tilesets with alpha blending. Implies `software`. |
-| `software-default-font` | off     | Include the embedded VGA 8x16 bitmap font. Implies `software`.     |
+| `software-default-font` | off     | Include the embedded Unscii 16 bitmap font. Implies `software`.    |
 | `egc`                   | on      | Extended grapheme cluster support (combining marks, wide chars).   |

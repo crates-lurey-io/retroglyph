@@ -151,7 +151,7 @@ pub struct SoftwareBackend {
     /// Pixel-scale factor applied to each font pixel.
     ///
     /// A scale of 2 renders each 1-bit font pixel as a 2×2 block, making
-    /// the VGA 8×16 font display at 16×32 pixels per cell. Default is 1.
+    /// the Unscii 16 font display at 16×32 pixels per cell. Default is 1.
     pub scale: u8,
     /// Registered tileset options, loaded at [`run_headless`](SoftwareBackend::run_headless) time.
     #[cfg(feature = "tilesets")]
@@ -186,7 +186,7 @@ impl SoftwareBackend {
         Self {
             window_title: String::from("rg application"),
             #[cfg(feature = "default-font")]
-            font: Some(super::bitmap_font::vga8x16::FONT),
+            font: Some(super::bitmap_font::unscii16::FONT),
             #[cfg(not(feature = "default-font"))]
             font: None,
             cols: 80,
@@ -206,7 +206,7 @@ impl SoftwareBackend {
 /// ```ignore
 /// use retroglyph_software::SoftwareBackendBuilder;
 ///
-/// // With the `default-font` feature the embedded VGA 8×16 font is
+/// // With the `default-font` feature the embedded Unscii 16 font is
 /// // used automatically.  To supply your own 8×16 bitmap font:
 /// //
 /// //   use retroglyph_software::bitmap_font::BitmapFont;
@@ -226,7 +226,7 @@ pub struct SoftwareBackendBuilder {
 impl SoftwareBackendBuilder {
     /// Creates a builder with default options.
     ///
-    /// When the `default-font` feature is enabled the IBM VGA 8×16
+    /// When the `default-font` feature is enabled the Unscii 16
     /// font is pre-selected; otherwise you must call [`font`](Self::font).
     #[must_use]
     pub fn new() -> Self {
