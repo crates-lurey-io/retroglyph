@@ -139,7 +139,7 @@ The `Backend` trait has a small surface: draw cells, flush, poll events, resize,
   pipe, or an in-memory buffer instead, useful for tests that want to inspect the emitted ANSI
   output without a real TTY.
 - **Software** (`retroglyph-software`) — pixel-based rendering via winit + softbuffer. Uses a 1-bit
-  bitmap font (embedded VGA 8x16 with feature `default-font`), with sub-cell pixel offsets,
+  bitmap font (embedded Unscii 16 with feature `default-font`), with sub-cell pixel offsets,
   multi-layer compositing, a configurable scale factor, and a headless mode for pixel-level testing.
   Runs unchanged as a native window or a browser `<canvas>` (WASM).
 - **Terminal (WASM)** (`retroglyph-terminal-wasm`) — pushes ANSI output to a browser terminal

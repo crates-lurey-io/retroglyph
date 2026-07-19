@@ -11,7 +11,7 @@ grid cells into a pixel buffer and blits it to a window surface via
 (font, grid size, scale); it builds a `SoftwareRenderer`, wrapped by
 [`retroglyph-window`](https://crates.io/crates/retroglyph-window) into a real windowed `Backend`.
 
-Optional features: `default-font` (an embedded VGA 8x16 bitmap font) and `tilesets` (PNG sprite
+Optional features: `default-font` (an embedded Unscii 16 bitmap font) and `tilesets` (PNG sprite
 sheet tilesets with alpha blending).
 
 ## Quick start

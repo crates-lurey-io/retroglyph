@@ -966,7 +966,7 @@ mod tests {
 
     fn test_renderer() -> SoftwareRenderer {
         SoftwareBackendBuilder::new()
-            .font(bitmap_font::vga8x16::FONT)
+            .font(bitmap_font::unscii16::FONT)
             .grid_size(1, 1)
             .scale(1)
             .build()
@@ -1223,11 +1223,11 @@ mod tests {
     //
     // The windowed present() upload can't run in a headless test (no surface),
     // but the damage computation runs in draw_layers regardless, so the band
-    // is exactly what these assert. At scale 1 with the vga8x16 font each cell
+    // is exactly what these assert. At scale 1 with the unscii16 font each cell
     // is 8x16 px, so the pixel buffer is (cols*8) x (rows*16) and cell-row r
     // occupies pixel rows [r*16, r*16+16). Damage is reported in pixel rows.
 
-    /// Cell height in pixels at scale 1 (vga8x16).
+    /// Cell height in pixels at scale 1 (unscii16).
     const CELL_H_PX: u32 = 16;
 
     fn damage_renderer(cols: u16, rows: u16) -> SoftwareRenderer {

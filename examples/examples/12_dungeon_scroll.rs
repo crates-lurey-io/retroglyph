@@ -22,6 +22,13 @@
 //! ```
 //!
 //! Arrow keys move (blocked by walls); `q`/`Escape` quits.
+//!
+//! Room 1 also carries four decorative floor tiles ([`decorations`]) that exercise the extended
+//! ASCII glyphs the embedded Unscii 16 font (`default-font` feature) adds on top of plain ASCII:
+//! a hut (U+2302 HOUSE), a torch (U+263C WHITE SUN WITH RAYS), a cracked rune (U+2310 REVERSED
+//! NOT SIGN), and loose rubble (U+2219 BULLET OPERATOR). All four sit in room 1, which is on
+//! screen from the very first frame, so the software backend's `png_snapshot` test alone proves
+//! they rasterize correctly -- no walk to a later room required.
 
 use retroglyph_core::event::{Event, KeyCode};
 use retroglyph_core::{
@@ -56,6 +63,28 @@ fn floor_style() -> Style {
     Style::new().fg(Color::Ansi(AnsiColor::BrightBlack))
 }
 
+/// Four hand-placed floor decorations inside room 1 (`(x, y, glyph, style)`), each one of the
+/// extended-ASCII glyphs the embedded Unscii 16 font adds beyond plain ASCII -- see this module's
+/// top doc comment for what each one represents and why room 1 specifically.
+fn decorations() -> [(u16, u16, char, Style); 4] {
+    [
+        (3, 3, '⌂', Style::new().fg(Color::Ansi(AnsiColor::White))), // hut
+        (
+            9,
+            3,
+            '☼',
+            Style::new().fg(Color::Ansi(AnsiColor::BrightYellow)),
+        ), // torch
+        (
+            3,
+            5,
+            '⌐',
+            Style::new().fg(Color::Ansi(AnsiColor::BrightMagenta)),
+        ), // cracked rune
+        (9, 5, '∙', Style::new().fg(Color::Ansi(AnsiColor::Green))), // rubble
+    ]
+}
+
 /// Builds the fixed dungeon: every cell starts as wall, then each room and corridor carves
 /// floor over it.
 fn build_world() -> Grid {
@@ -79,6 +108,9 @@ fn build_world() -> Grid {
         for y in fy.min(ty)..=fy.max(ty) {
             world.put_tile(0, tx, y, Tile::new('.', floor_style()));
         }
+    }
+    for (x, y, glyph, style) in decorations() {
+        world.put_tile(0, x, y, Tile::new(glyph, style));
     }
     world
 }
