@@ -112,6 +112,10 @@ impl Eq for BitmapFont {}
 /// transforms of neighboring unscii glyphs (e.g. REVERSED NOT SIGN is a
 /// horizontal mirror of unscii's own NOT SIGN) rather than pulling in
 /// unscii's GPL-licensed `-full` variant (which adds GNU Unifont glyphs).
+/// `unicode_to_cp437` carries matching reverse-mapping arms for all four
+/// (`☼` already had one; the `⌂`/`⌐`/`∙` arms are new here) so all four
+/// are reachable through the normal char-to-glyph path, not just by raw
+/// glyph index.
 #[cfg(feature = "default-font")]
 pub mod unscii16 {
     use super::BitmapFont;
@@ -445,6 +449,7 @@ pub(crate) const fn unicode_to_cp437(ch: char) -> u8 {
         'ª' => 0xA6,
         'º' => 0xA7,
         '¿' => 0xA8,
+        '⌐' => 0xA9,
         '½' => 0xAB,
         '¼' => 0xAC,
         '¡' => 0xAD,
@@ -531,7 +536,7 @@ pub(crate) const fn unicode_to_cp437(ch: char) -> u8 {
         '÷' => 0xF6,
         '≈' => 0xF7,
         '°' => 0xF8,
-        '·' => 0xF9,
+        '·' | '∙' => 0xF9,
         '√' => 0xFB,
         'ⁿ' => 0xFC,
         '²' => 0xFD,
@@ -569,7 +574,25 @@ pub(crate) const fn unicode_to_cp437(ch: char) -> u8 {
         '↔' => 0x1D,
         '▲' => 0x1E,
         '▼' => 0x1F,
+        '⌂' => 0x7F,
 
         _ => FALLBACK,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::unicode_to_cp437;
+
+    /// The four codepoints patched into `unscii16`'s `DATA` (see that module's doc comment)
+    /// must actually be reachable through the char-to-glyph path, not just present at their
+    /// raw glyph index -- otherwise they're invisible to anything that goes through
+    /// `BitmapFont::char_to_index`/`term.print`, which is every real caller.
+    #[test]
+    fn patched_glyphs_are_reachable_by_char() {
+        assert_eq!(unicode_to_cp437('⌂'), 0x7F, "U+2302 HOUSE");
+        assert_eq!(unicode_to_cp437('☼'), 0x0F, "U+263C WHITE SUN WITH RAYS");
+        assert_eq!(unicode_to_cp437('⌐'), 0xA9, "U+2310 REVERSED NOT SIGN");
+        assert_eq!(unicode_to_cp437('∙'), 0xF9, "U+2219 BULLET OPERATOR");
     }
 }
