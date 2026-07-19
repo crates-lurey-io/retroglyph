@@ -13,14 +13,18 @@
 //! coordinates, so the same seed always produces the same world (see the `noise`/`world`
 //! modules below).
 //!
-//! `T` cycles the main map through three views: the per-cell terrain above, and two strategic
-//! "tiled" views (square provinces and a staggered hex honeycomb) that aggregate each 16x8-cell
+//! `T` cycles the main map through five views. Beyond the per-cell terrain above, two strategic
+//! "tiled" views (square provinces and a staggered hex honeycomb) aggregate each 16x8-cell
 //! block of the same world into one bevel-shaded tile -- majority biome, the most notable
 //! landmark, and road/river connections toward like neighbors survive the zoom-out; per-cell
 //! detail deliberately doesn't. That's the abstraction bargain a strategy game makes: a tile is
-//! "mostly forest, has a village, road east", not 128 individually animated cells. Hex layout
-//! and adjacency (offset-to-axial conversion, the six neighbor directions for connectors, hex
-//! distance for the reticle's ring highlight) come from the `hexal` crate.
+//! "mostly forest, has a village, road east", not 128 individually animated cells. Two "grid"
+//! overlay views make the opposite bargain: they keep the terrain at full per-cell fidelity and
+//! draw the boundaries of the same square/hex provinces over it as background-tinted lines (one
+//! cell thick, hex edges as clean staircases), with the reticle's province outlined and its
+//! neighbors ringed -- the "detailed map with a hex grid" look. Hex layout and adjacency
+//! (offset-to-axial conversion, the six neighbor directions for connectors, hex distance for
+//! the reticle's ring highlight) come from the `hexal` crate in all four.
 //!
 //! At or above [`BP_SIDEBAR`] columns, an info sidebar opens: coordinates, the biome/landmark
 //! under the reticle, elevation, a live minimap (rendered at double vertical resolution via
@@ -39,7 +43,7 @@
 //!
 //! - Arrow keys / WASD: pan the camera one cell (one tile in the tile views); hold Shift to
 //!   pan 8 cells (4 tiles) at a time
-//! - `T`: cycle the map view: terrain cells / square tiles / hex tiles
+//! - `T`: cycle the map view: terrain cells / square tiles / square grid / hex tiles / hex grid
 //! - Drag the map with the mouse, or scroll the wheel: pan the camera
 //! - Click or drag the sidebar minimap: jump the camera straight to that point on the map
 //! - `R`: regenerate the world with a new seed
@@ -2122,9 +2126,12 @@ const HEX_ROW_H: u16 = 2;
 
 /// How the main map renders the world; `T` cycles.
 ///
-/// [`View::Cells`] is the classic per-cell terrain; the two tile views aggregate
+/// [`View::Cells`] is the classic per-cell terrain. The two *tile* views aggregate
 /// [`TILE_W`]x[`TILE_H`] world-cell blocks into province-sized counters (see
-/// [`world::TileMap`]) -- the abstraction level a strategy game would run its turns on.
+/// [`world::TileMap`]) -- the abstraction level a strategy game would run its turns on. The two
+/// *grid* views keep the per-cell terrain at full fidelity and instead draw the boundaries of
+/// those same provinces over it as background-tinted border lines (see [`grid_region`]) -- the
+/// "detailed terrain with a hex grid" look, rather than the "board-game counters" look.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum View {
     /// One glyph per world cell (the original view).
@@ -2132,17 +2139,23 @@ pub enum View {
     Cells,
     /// Square strategic tiles, [`SQ_W`]x[`SQ_H`] screen cells each.
     Squares,
+    /// Per-cell terrain with the square-tile boundaries overlaid.
+    SquareGrid,
     /// Hexagonal strategic tiles on a staggered (odd rows shifted right) honeycomb, laid out
     /// and reasoned about with [`hexal`]'s `OddR` offset coordinates.
     Hexes,
+    /// Per-cell terrain with the hex boundaries overlaid.
+    HexGrid,
 }
 
 impl View {
     const fn next(self) -> Self {
         match self {
             Self::Cells => Self::Squares,
-            Self::Squares => Self::Hexes,
-            Self::Hexes => Self::Cells,
+            Self::Squares => Self::SquareGrid,
+            Self::SquareGrid => Self::Hexes,
+            Self::Hexes => Self::HexGrid,
+            Self::HexGrid => Self::Cells,
         }
     }
 
@@ -2150,15 +2163,18 @@ impl View {
         match self {
             Self::Cells => "terrain",
             Self::Squares => "square tiles",
+            Self::SquareGrid => "square grid",
             Self::Hexes => "hex tiles",
+            Self::HexGrid => "hex grid",
         }
     }
 
     /// World cells per screen cell `(x, y)`, so mouse drags and wheel scrolls track the map 1:1
     /// in every view -- a tile view shows more world per screen cell, so a drag must pan more.
+    /// The grid overlays render cells 1:1 like [`Self::Cells`], so they scale 1:1 too.
     const fn pan_scale(self) -> (i32, i32) {
         match self {
-            Self::Cells => (1, 1),
+            Self::Cells | Self::SquareGrid | Self::HexGrid => (1, 1),
             Self::Squares => ((TILE_W / SQ_W) as i32, (TILE_H / SQ_H) as i32),
             Self::Hexes => ((TILE_W / HEX_W) as i32, (TILE_H / HEX_ROW_H) as i32),
         }
@@ -2210,6 +2226,13 @@ const TILE_RIVER_FG: Color = Color::Rgb {
     r: 120,
     g: 182,
     b: 235,
+};
+/// Grid-line tint for the overlay views: the sidebar [`BORDER`] family, lightened enough to
+/// register on dark ocean without shouting over land terrain.
+const GRID_LINE: Color = Color::Rgb {
+    r: 148,
+    g: 142,
+    b: 178,
 };
 
 // ── State ────────────────────────────────────────────────────────────────────
@@ -2287,7 +2310,7 @@ impl Overworld {
         // that matters there, and sub-tile nudges wouldn't visibly move the reticle.
         let shift = mods.contains(KeyModifiers::SHIFT);
         let (step_x, step_y): (i32, i32) = match self.view {
-            View::Cells => {
+            View::Cells | View::SquareGrid | View::HexGrid => {
                 let s = if shift { 8 } else { 1 };
                 (s, s)
             }
@@ -2388,20 +2411,34 @@ impl Overworld {
         }
         self.last_map_rect = Some(area);
         match self.view {
-            View::Cells => self.draw_cells(term, area),
+            View::Cells | View::SquareGrid | View::HexGrid => self.draw_cells(term, area),
             View::Squares => self.draw_tiles(term, area, false),
             View::Hexes => self.draw_tiles(term, area, true),
         }
     }
 
-    /// The classic per-cell terrain view (see [`World::render_cell`]).
+    /// The per-cell terrain view (see [`World::render_cell`]), which also serves the two grid
+    /// overlays: those render every cell identically and then re-tint backgrounds along province
+    /// boundaries (see [`grid_overlay`]).
     fn draw_cells<B: Backend>(&mut self, term: &mut Terminal<B>, area: Rect) {
         self.camera.set_viewport(area);
         self.camera.center_on(self.cam_center);
         self.visible_world = self.camera.visible_bounds();
 
+        // `Some(hex?)` in the grid overlay views, `None` in plain Cells.
+        let grid = match self.view {
+            View::SquareGrid => Some(false),
+            View::HexGrid => Some(true),
+            _ => None,
+        };
+        let selected =
+            grid.map(|hex| grid_region(hex, self.cam_center.x.into(), self.cam_center.y.into()));
+
         for (world_pos, screen_pos) in self.camera.cells() {
-            let (glyph, style) = self.world.render_cell(world_pos, self.time);
+            let (glyph, mut style) = self.world.render_cell(world_pos, self.time);
+            if let (Some(hex), Some(selected)) = (grid, selected) {
+                style = grid_overlay(style, hex, world_pos, selected);
+            }
             term.put_styled(screen_pos.x, screen_pos.y, glyph, style);
         }
 
@@ -2698,6 +2735,90 @@ fn tile_face(tile: &world::Tile, highlight: f32, col: u16, row: u16, time: f64) 
     (face, glyph_fg)
 }
 
+// ── Grid overlays ────────────────────────────────────────────────────────────────
+
+/// Stagger, in world cells, of a hex-lattice row: odd rows shift right half a hex -- the same
+/// `OddR` convention as everything else hex in this example. `rem_euclid` so out-of-world
+/// fragment rows above the map keep a consistent identity.
+fn hex_row_stagger(row: i32) -> i32 {
+    if row.rem_euclid(2) == 1 {
+        i32::from(TILE_W / 2)
+    } else {
+        0
+    }
+}
+
+/// Which province of the overlay grid owns world cell `(x, y)` -- squares when `hex` is false,
+/// the honeycomb otherwise.
+///
+/// The hex partition is the same lattice the aggregated hex view uses ([`TILE_W`]-wide,
+/// [`TILE_H`]-row pitch, odd rows staggered right), but as the *exact* hexagon footprint
+/// rather than that view's rectangular sampling approximation: scaled up from the screen-space
+/// honeycomb [`HEX_ROW_H`] describes, each hex has a half-height taper band at its top and
+/// bottom shared with its vertical neighbors (rows split there between the hex whose neck the
+/// cell is under and the staggered one beside it), and every interior hex owns exactly
+/// `TILE_W * TILE_H` cells. Returns lattice `(col, row)`, possibly outside the world for
+/// border fragments -- callers only compare identities, so that's harmless.
+fn grid_region(hex: bool, x: i32, y: i32) -> (i32, i32) {
+    let w = i32::from(TILE_W);
+    let h = i32::from(TILE_H);
+    if !hex {
+        return (x.div_euclid(w), y.div_euclid(h));
+    }
+    let indent = w / 4;
+    let band = y.div_euclid(h / 2);
+    if band.rem_euclid(2) == 1 {
+        // The middle band: unambiguously this row's hex.
+        let row = band.div_euclid(2);
+        ((x - hex_row_stagger(row)).div_euclid(w), row)
+    } else {
+        // A shared taper band: cells under the neck of `below`'s hexes belong to them; the
+        // staggered cells between necks belong to the previous row's bottom tapers.
+        let below = band.div_euclid(2);
+        let cx = x - hex_row_stagger(below) - indent;
+        if cx.rem_euclid(w) < w / 2 {
+            (cx.div_euclid(w), below)
+        } else {
+            let above = below - 1;
+            ((x - hex_row_stagger(above) - indent).div_euclid(w), above)
+        }
+    }
+}
+
+/// Applies the grid-overlay tint for one world cell: terrain glyph and colors stay, only the
+/// background shifts. A cell is a border cell iff its north or west neighbor lies in a
+/// different province -- checking just those two sides keeps every boundary one cell thick, and
+/// gives hex edges clean staircases with no line glyphs. The selected province's border gets
+/// the reticle color, its neighbors' borders (hexal distance 1, or the 4-neighborhood for
+/// squares) a fainter ring, and its interior a whisper of tint so the territory reads as a
+/// whole.
+fn grid_overlay(style: Style, hex: bool, pos: Pos, selected: (i32, i32)) -> Style {
+    let (x, y) = (i32::from(pos.x), i32::from(pos.y));
+    let region = grid_region(hex, x, y);
+    let border = (x > 0 && grid_region(hex, x - 1, y) != region)
+        || (y > 0 && grid_region(hex, x, y - 1) != region);
+    let dist = if hex {
+        let a = OffsetHex::<i32, OddR>::new(region.0, region.1).to_hex();
+        let b = OffsetHex::<i32, OddR>::new(selected.0, selected.1).to_hex();
+        a.distance(b)
+    } else {
+        (region.0 - selected.0).abs() + (region.1 - selected.1).abs()
+    };
+    let bg = style.background();
+    if border {
+        let (line, strength) = match dist {
+            0 => (RETICLE, 0.70),
+            1 => (RETICLE, 0.30),
+            _ => (GRID_LINE, 0.30),
+        };
+        style.bg(Color::lerp(bg, line, strength))
+    } else if dist == 0 {
+        style.bg(Color::lerp(bg, RETICLE, 0.10))
+    } else {
+        style
+    }
+}
+
 /// A stable per-tile hash for decorative choices, mirroring what `noise::hash01` does for world
 /// cells: keyed on absolute tile coordinates so the pattern doesn't crawl when the view pans.
 /// Both tile renderers use its low bits to scatter dim copies of the tile's glyph -- enough
@@ -2973,3 +3094,70 @@ impl Example for Overworld {
 }
 
 retroglyph_examples::example_main!(Overworld);
+
+#[cfg(test)]
+mod grid_tests {
+    use super::*;
+
+    #[test]
+    fn hex_regions_partition_the_plane_into_equal_areas() {
+        let mut counts = std::collections::HashMap::new();
+        for y in 0..220 {
+            for x in 0..220 {
+                *counts.entry(grid_region(true, x, y)).or_insert(0u32) += 1;
+            }
+        }
+        // Interior hexes (fully inside the sampled window) must each own exactly one tile's
+        // worth of cells -- the partition neither overlaps nor leaks.
+        for col in 2..10 {
+            for row in 2..24 {
+                assert_eq!(
+                    counts.get(&(col, row)).copied(),
+                    Some(u32::from(TILE_W) * u32::from(TILE_H)),
+                    "hex ({col}, {row}) area"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn hex_region_borders_touch_only_hexal_neighbors() {
+        // Any two 4-adjacent cells in different provinces must straddle hexes at hexal
+        // distance 1 -- the geometric partition and hexal's adjacency model must agree, or the
+        // ring highlight and the connector logic would be lying.
+        for y in 0..200 {
+            for x in 0..200 {
+                let a = grid_region(true, x, y);
+                for (nx, ny) in [(x + 1, y), (x, y + 1)] {
+                    let b = grid_region(true, nx, ny);
+                    if a != b {
+                        let ha = OffsetHex::<i32, OddR>::new(a.0, a.1).to_hex();
+                        let hb = OffsetHex::<i32, OddR>::new(b.0, b.1).to_hex();
+                        assert_eq!(
+                            ha.distance(hb),
+                            1,
+                            "cells ({x}, {y})/({nx}, {ny}) straddle non-adjacent hexes {a:?}/{b:?}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn square_regions_match_tile_blocks() {
+        assert_eq!(grid_region(false, 0, 0), (0, 0));
+        assert_eq!(
+            grid_region(false, i32::from(TILE_W) - 1, i32::from(TILE_H) - 1),
+            (0, 0)
+        );
+        assert_eq!(
+            grid_region(false, i32::from(TILE_W), i32::from(TILE_H)),
+            (1, 1)
+        );
+        assert_eq!(
+            grid_region(false, i32::from(TILE_W) * 3 + 5, i32::from(TILE_H) * 2 + 3),
+            (3, 2)
+        );
+    }
+}
