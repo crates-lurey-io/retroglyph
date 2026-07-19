@@ -13,6 +13,19 @@
 //! coordinates, so the same seed always produces the same world (see the `noise`/`world`
 //! modules below).
 //!
+//! `T` cycles the main map through five views. Beyond the per-cell terrain above, two strategic
+//! "tiled" views (square provinces and a staggered hex honeycomb) aggregate each 16x8-cell
+//! block of the same world into one bevel-shaded tile -- majority biome, the most notable
+//! landmark, and road/river connections toward like neighbors survive the zoom-out; per-cell
+//! detail deliberately doesn't. That's the abstraction bargain a strategy game makes: a tile is
+//! "mostly forest, has a village, road east", not 128 individually animated cells. Two "grid"
+//! overlay views make the opposite bargain: they keep the terrain at full per-cell fidelity and
+//! draw the boundaries of the same square/hex provinces over it as background-tinted lines (one
+//! cell thick, hex edges as clean staircases), with the reticle's province outlined and its
+//! neighbors ringed -- the "detailed map with a hex grid" look. Hex layout and adjacency
+//! (offset-to-axial conversion, the six neighbor directions for connectors, hex distance for
+//! the reticle's ring highlight) come from the `hexal` crate in all four.
+//!
 //! At or above [`BP_SIDEBAR`] columns, an info sidebar opens: coordinates, the biome/landmark
 //! under the reticle, elevation, a live minimap (rendered at double vertical resolution via
 //! [`retroglyph_core::subcell::quantize_half_block`], the same subcell technique
@@ -28,7 +41,9 @@
 //!
 //! # Controls
 //!
-//! - Arrow keys / WASD: pan the camera one cell; hold Shift to pan 8 cells at a time
+//! - Arrow keys / WASD: pan the camera one cell (one tile in the tile views); hold Shift to
+//!   pan 8 cells (4 tiles) at a time
+//! - `T`: cycle the map view: terrain cells / square tiles / square grid / hex tiles / hex grid
 //! - Drag the map with the mouse, or scroll the wheel: pan the camera
 //! - Click or drag the sidebar minimap: jump the camera straight to that point on the map
 //! - `R`: regenerate the world with a new seed
@@ -546,7 +561,7 @@ mod world {
             }
         }
 
-        const fn glyph_color(self) -> (char, Color) {
+        pub(crate) const fn glyph_color(self) -> (char, Color) {
             match self {
                 Self::City => ('■', rgb(246, 214, 120)),
                 Self::Village => ('⌂', rgb(224, 176, 96)),
@@ -1634,6 +1649,203 @@ mod world {
         }
     }
 
+    // ── Strategic tiles ──────────────────────────────────────────────────────
+
+    /// Width of one strategic tile, in world cells; see [`TileMap`].
+    pub(crate) const TILE_W: u16 = 16;
+    /// Height of one strategic tile, in world cells. Half of [`TILE_W`]: terminal glyphs are
+    /// roughly twice as tall as wide, so a 16x8 world block reads as a square-ish province
+    /// however the tile itself is drawn.
+    pub(crate) const TILE_H: u16 = 8;
+
+    /// One strategic tile: a [`TILE_W`]x[`TILE_H`] block of world cells collapsed to what a
+    /// strategy-game player needs at province scale -- the majority biome, at most one landmark,
+    /// and whether roads or rivers pass through. Everything (colors included) is resolved at
+    /// build time, so rendering a tile is pure lookups, the same bargain [`World::render_cell`]
+    /// makes per cell.
+    #[derive(Clone, Copy, PartialEq, Debug)]
+    pub(crate) struct Tile {
+        /// Majority biome of the block: the most common water biome if the block is mostly
+        /// water, otherwise the most common land biome (so a coastal province reads as its land,
+        /// not as "technically 45% shallows").
+        pub(crate) biome: Biome,
+        /// Flat face color: the average of the block's per-cell map colors (hillshaded land,
+        /// depth-graded water), so tiles match the minimap's palette and coastal tiles blend
+        /// toward blue instead of snapping to a binary land/water color.
+        pub(crate) base: Color,
+        /// Dominant-biome glyph, sampled with a fixed decorative hash -- tiles don't twinkle;
+        /// the strategic views trade cell mode's ambience for a stable counter-like read.
+        pub(crate) glyph: char,
+        /// Foreground color for [`Self::glyph`].
+        pub(crate) glyph_color: Color,
+        /// The most notable landmark in the block, if any (see [`poi_rank`]).
+        pub(crate) poi: Option<Poi>,
+        /// Whether any river cell falls in the block.
+        pub(crate) river: bool,
+        /// Whether any road or bridge cell falls in the block.
+        pub(crate) road: bool,
+        /// Whether the block is mostly water.
+        pub(crate) water: bool,
+    }
+
+    /// The strategic-tile grid over a [`World`]: [`World::tile_map`] aggregates every
+    /// [`TILE_W`]x[`TILE_H`] block once, and the per-frame tile renderers only ever index into
+    /// the result. `staggered` builds the hex variant, where odd rows sample half a tile
+    /// further right so each hex aggregates the world cells actually under its staggered
+    /// on-screen footprint.
+    pub(crate) struct TileMap {
+        cols: u16,
+        rows: u16,
+        staggered: bool,
+        tiles: Vec<Tile>,
+    }
+
+    impl TileMap {
+        #[must_use]
+        pub(crate) const fn cols(&self) -> u16 {
+            self.cols
+        }
+
+        #[must_use]
+        pub(crate) const fn rows(&self) -> u16 {
+            self.rows
+        }
+
+        /// The tile at `(col, row)`, or `None` outside the grid -- signed so callers can probe
+        /// neighbors without pre-clamping.
+        #[must_use]
+        pub(crate) fn get(&self, col: i32, row: i32) -> Option<&Tile> {
+            if col < 0 || row < 0 || col >= i32::from(self.cols) || row >= i32::from(self.rows) {
+                return None;
+            }
+            self.tiles
+                .get(row as usize * self.cols as usize + col as usize)
+        }
+
+        /// The `(col, row)` of the tile whose sample block contains world position `pos`.
+        #[must_use]
+        pub(crate) fn tile_of(&self, pos: Pos) -> (u16, u16) {
+            let row = (pos.y / TILE_H).min(self.rows - 1);
+            let stag = if self.staggered && row % 2 == 1 {
+                TILE_W / 2
+            } else {
+                0
+            };
+            let col = (pos.x.saturating_sub(stag) / TILE_W).min(self.cols - 1);
+            (col, row)
+        }
+    }
+
+    impl World {
+        /// Aggregates this world into a [`TileMap`] -- one pass over the cached per-cell arrays,
+        /// so it's cheap enough to rebuild whenever the seed or the stagger changes.
+        #[must_use]
+        pub(crate) fn tile_map(&self, staggered: bool) -> TileMap {
+            let cols = WORLD_W.div_ceil(TILE_W);
+            let rows = WORLD_H.div_ceil(TILE_H);
+            let mut tiles = Vec::with_capacity(usize::from(cols) * usize::from(rows));
+            for row in 0..rows {
+                let stag = if staggered && row % 2 == 1 {
+                    TILE_W / 2
+                } else {
+                    0
+                };
+                for col in 0..cols {
+                    // Blocks that hang past the world edge (the last column/row, and staggered
+                    // odd rows) clamp their sample range; the border is all sea, so a partial
+                    // edge sample still aggregates to an honest ocean tile.
+                    let x0 = (col * TILE_W + stag).min(WORLD_W - 1);
+                    let y0 = (row * TILE_H).min(WORLD_H - 1);
+                    let x1 = (x0 + TILE_W).min(WORLD_W);
+                    let y1 = (y0 + TILE_H).min(WORLD_H);
+                    tiles.push(self.build_tile(x0, x1, y0, y1));
+                }
+            }
+            TileMap {
+                cols,
+                rows,
+                staggered,
+                tiles,
+            }
+        }
+
+        /// Aggregates one block of world cells into a [`Tile`]; see [`Tile`]'s field docs for
+        /// exactly what survives the zoom-out.
+        fn build_tile(&self, x0: u16, x1: u16, y0: u16, y1: u16) -> Tile {
+            // Insertion-ordered counts, not a HashMap: ties on the majority vote must break
+            // deterministically, or the same seed could render different tiles run to run.
+            let mut counts: Vec<(Biome, u32)> = Vec::new();
+            let mut water_cells = 0u32;
+            let mut total = 0u32;
+            let (mut r_sum, mut g_sum, mut b_sum) = (0.0f32, 0.0f32, 0.0f32);
+            let mut river = false;
+            let mut road = false;
+            let mut poi: Option<Poi> = None;
+            for y in y0..y1 {
+                for x in x0..x1 {
+                    let i = idx(x, y);
+                    let biome = self.biome[i];
+                    match counts.iter_mut().find(|(b, _)| *b == biome) {
+                        Some((_, n)) => *n += 1,
+                        None => counts.push((biome, 1)),
+                    }
+                    total += 1;
+                    river |= biome == Biome::River;
+                    road |= self.road[i] != RoadCell::None;
+                    let color = if biome.is_water() {
+                        water_cells += 1;
+                        self.water_color(i, biome)
+                    } else {
+                        shade_color(biome.color(), self.shade[i])
+                    };
+                    let (r, g, b) = to_rgb(color);
+                    r_sum += f32::from(r);
+                    g_sum += f32::from(g);
+                    b_sum += f32::from(b);
+                    if let Some(&kind) = self.pois.get(&(x, y))
+                        && poi.is_none_or(|cur| poi_rank(kind) < poi_rank(cur))
+                    {
+                        poi = Some(kind);
+                    }
+                }
+            }
+            let water = water_cells * 2 > total;
+            let biome = counts
+                .iter()
+                .filter(|(b, _)| b.is_water() == water)
+                .max_by_key(|(_, n)| *n)
+                .map_or(Biome::DeepOcean, |(b, _)| *b);
+            let scale = 1.0 / total.max(1) as f32;
+            let base = rgb(
+                (r_sum * scale) as u8,
+                (g_sum * scale) as u8,
+                (b_sum * scale) as u8,
+            );
+            let (glyph, glyph_color) = biome.glyph(0.3, 0.0);
+            Tile {
+                biome,
+                base,
+                glyph,
+                glyph_color,
+                poi,
+                river,
+                road,
+                water,
+            }
+        }
+    }
+
+    /// Display priority for the single landmark a [`Tile`] keeps: cities over villages over
+    /// everything else, then rarer kinds (lower [`Poi::weight`]) over common ones -- a dragon's
+    /// lair should beat a waystone for a province's one icon slot.
+    const fn poi_rank(poi: Poi) -> u32 {
+        match poi {
+            Poi::City => 0,
+            Poi::Village => 1,
+            _ => 2 + poi.weight(),
+        }
+    }
+
     /// Applies a hillshade multiplier to a color: `s < 1` darkens toward black, `s > 1` lightens
     /// toward white (attenuated, so lit slopes glow rather than wash out).
     fn shade_color(c: Color, s: f32) -> Color {
@@ -1808,15 +2020,71 @@ mod world {
                 );
             }
         }
+
+        #[test]
+        fn tile_map_covers_the_world_and_is_deterministic() {
+            let world = World::generate(2);
+            let a = world.tile_map(false);
+            let b = world.tile_map(false);
+            assert_eq!(a.cols, WORLD_W.div_ceil(TILE_W));
+            assert_eq!(a.rows, WORLD_H.div_ceil(TILE_H));
+            assert_eq!(a.tiles.len(), usize::from(a.cols) * usize::from(a.rows));
+            assert_eq!(a.tiles, b.tiles, "same seed must aggregate identically");
+            let hexes = world.tile_map(true);
+            assert_eq!(hexes.tiles.len(), a.tiles.len());
+        }
+
+        #[test]
+        fn tile_map_keeps_the_strategic_features() {
+            let world = World::generate(2);
+            for staggered in [false, true] {
+                let map = world.tile_map(staggered);
+                for col in 0..map.cols {
+                    let top = map.get(i32::from(col), 0).expect("top tile");
+                    let bottom = map
+                        .get(i32::from(col), i32::from(map.rows - 1))
+                        .expect("bottom tile");
+                    assert!(top.water && bottom.water, "map borders are open sea");
+                }
+                assert!(map.tiles.iter().any(|t| !t.water), "expected land tiles");
+                assert!(map.tiles.iter().any(|t| t.road), "expected road tiles");
+                assert!(map.tiles.iter().any(|t| t.river), "expected river tiles");
+                assert!(
+                    map.tiles.iter().any(|t| t.poi.is_some()),
+                    "expected landmark tiles"
+                );
+            }
+        }
+
+        #[test]
+        fn tile_of_stays_in_bounds_everywhere() {
+            let world = World::generate(2);
+            for staggered in [false, true] {
+                let map = world.tile_map(staggered);
+                for &pos in &[
+                    Pos::new(0, 0),
+                    Pos::new(WORLD_W - 1, 0),
+                    Pos::new(0, WORLD_H - 1),
+                    Pos::new(WORLD_W - 1, WORLD_H - 1),
+                    Pos::new(WORLD_W / 2, WORLD_H / 2),
+                ] {
+                    let (col, row) = map.tile_of(pos);
+                    assert!(col < map.cols && row < map.rows, "({col}, {row}) in bounds");
+                    assert!(map.get(i32::from(col), i32::from(row)).is_some());
+                }
+                assert_eq!(map.tile_of(Pos::new(0, 0)), (0, 0));
+            }
+        }
     }
 }
 
+use hexal::{Direction, OddR, OffsetHex};
 use retroglyph_core::event::{Event, KeyCode, KeyModifiers, MouseButton, MouseEventKind};
 use retroglyph_core::{Backend, Camera, Color, Frame, Pos, Rect, Size, Style, Terminal};
 use retroglyph_examples::Example;
 use retroglyph_widgets::{Constraint, Panel, Widget, split_h, truncate};
 
-use world::World;
+use world::{TILE_H, TILE_W, TileMap, World};
 pub use world::{WORLD_H, WORLD_W};
 
 /// The world seed used on startup, chosen (by eyeballing histogram dumps over the first dozen
@@ -1835,6 +2103,83 @@ const BP_TALL: u16 = 18;
 
 const SIDEBAR_W: u16 = 30;
 const MINIMAP_H: u16 = 11;
+
+// ── Strategic tile geometry ────────────────────────────────────────────────
+
+/// Screen width of one square-view tile, in terminal cells; with [`SQ_H`] rows it draws as an
+/// 8x4 block, roughly square at the typical 1:2 glyph aspect.
+const SQ_W: u16 = 8;
+/// Screen height of one square-view tile, in terminal cells.
+const SQ_H: u16 = 4;
+
+/// Horizontal pitch between hex tiles in a row, in terminal cells -- also the width of a hex's
+/// middle row. See [`HEX_ROW_H`] for how the 3-row hexes interlock.
+const HEX_W: u16 = 8;
+/// Vertical pitch between hex rows, in terminal cells.
+///
+/// Each hex is drawn 3 rows tall (a 4-cell taper row, the 8-cell middle row, another taper),
+/// but consecutive rows share their taper rows: a hex's bottom-taper screen row is also the
+/// next row's top-taper screen row, with the odd-row stagger keeping the two sets of taper
+/// cells disjoint. The result partitions the plane exactly -- every map cell belongs to one
+/// hex -- which is what makes the honeycomb read without drawing outline glyphs.
+const HEX_ROW_H: u16 = 2;
+
+/// How the main map renders the world; `T` cycles.
+///
+/// [`View::Cells`] is the classic per-cell terrain. The two *tile* views aggregate
+/// [`TILE_W`]x[`TILE_H`] world-cell blocks into province-sized counters (see
+/// [`world::TileMap`]) -- the abstraction level a strategy game would run its turns on. The two
+/// *grid* views keep the per-cell terrain at full fidelity and instead draw the boundaries of
+/// those same provinces over it as background-tinted border lines (see [`grid_region`]) -- the
+/// "detailed terrain with a hex grid" look, rather than the "board-game counters" look.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum View {
+    /// One glyph per world cell (the original view).
+    #[default]
+    Cells,
+    /// Square strategic tiles, [`SQ_W`]x[`SQ_H`] screen cells each.
+    Squares,
+    /// Per-cell terrain with the square-tile boundaries overlaid.
+    SquareGrid,
+    /// Hexagonal strategic tiles on a staggered (odd rows shifted right) honeycomb, laid out
+    /// and reasoned about with [`hexal`]'s `OddR` offset coordinates.
+    Hexes,
+    /// Per-cell terrain with the hex boundaries overlaid.
+    HexGrid,
+}
+
+impl View {
+    const fn next(self) -> Self {
+        match self {
+            Self::Cells => Self::Squares,
+            Self::Squares => Self::SquareGrid,
+            Self::SquareGrid => Self::Hexes,
+            Self::Hexes => Self::HexGrid,
+            Self::HexGrid => Self::Cells,
+        }
+    }
+
+    const fn label(self) -> &'static str {
+        match self {
+            Self::Cells => "terrain",
+            Self::Squares => "square tiles",
+            Self::SquareGrid => "square grid",
+            Self::Hexes => "hex tiles",
+            Self::HexGrid => "hex grid",
+        }
+    }
+
+    /// World cells per screen cell `(x, y)`, so mouse drags and wheel scrolls track the map 1:1
+    /// in every view -- a tile view shows more world per screen cell, so a drag must pan more.
+    /// The grid overlays render cells 1:1 like [`Self::Cells`], so they scale 1:1 too.
+    const fn pan_scale(self) -> (i32, i32) {
+        match self {
+            Self::Cells | Self::SquareGrid | Self::HexGrid => (1, 1),
+            Self::Squares => ((TILE_W / SQ_W) as i32, (TILE_H / SQ_H) as i32),
+            Self::Hexes => ((TILE_W / HEX_W) as i32, (TILE_H / HEX_ROW_H) as i32),
+        }
+    }
+}
 
 // ── Palette ──────────────────────────────────────────────────────────────────
 
@@ -1869,6 +2214,26 @@ const RETICLE: Color = Color::Rgb {
     g: 236,
     b: 170,
 };
+/// Road connector marks in the tile views, matching cell mode's trade-road dots.
+const TILE_ROAD_FG: Color = Color::Rgb {
+    r: 216,
+    g: 196,
+    b: 150,
+};
+/// River connector marks in the tile views: cell mode's river blue, lightened to read against
+/// a tile's darkened face color.
+const TILE_RIVER_FG: Color = Color::Rgb {
+    r: 120,
+    g: 182,
+    b: 235,
+};
+/// Grid-line tint for the overlay views: the sidebar [`BORDER`] family, lightened enough to
+/// register on dark ocean without shouting over land terrain.
+const GRID_LINE: Color = Color::Rgb {
+    r: 148,
+    g: 142,
+    b: 178,
+};
 
 // ── State ────────────────────────────────────────────────────────────────────
 
@@ -1897,6 +2262,14 @@ pub struct Overworld {
     /// it to fit), so a stray click can't be misread as landing on it.
     pub last_minimap_rect: Option<Rect>,
     drag: Option<Drag>,
+    /// Active map view; `T` cycles. `pub` so the sibling test file can assert the cycling.
+    pub view: View,
+    /// Cached [`TileMap`] keyed by `(seed, staggered)`, rebuilt lazily when either changes --
+    /// aggregation is one pass over the world, cheap, but not something to redo every frame.
+    tile_cache: Option<((u32, bool), TileMap)>,
+    /// The world rect the most recent [`Self::draw_map`] showed, whichever view drew it -- the
+    /// minimap's "you are here" box reads this instead of poking at view-specific camera state.
+    visible_world: Rect,
 }
 
 impl Default for Overworld {
@@ -1918,6 +2291,9 @@ impl Default for Overworld {
             last_map_rect: None,
             last_minimap_rect: None,
             drag: None,
+            view: View::Cells,
+            tile_cache: None,
+            visible_world: Rect::new(0, 0, 0, 0),
         }
     }
 }
@@ -1930,17 +2306,26 @@ impl Overworld {
     }
 
     fn handle_key(&mut self, code: KeyCode, mods: KeyModifiers) -> bool {
-        let step: i32 = if mods.contains(KeyModifiers::SHIFT) {
-            8
-        } else {
-            1
+        // In the tile views one keypress moves one whole tile -- the strategic grid is the unit
+        // that matters there, and sub-tile nudges wouldn't visibly move the reticle.
+        let shift = mods.contains(KeyModifiers::SHIFT);
+        let (step_x, step_y): (i32, i32) = match self.view {
+            View::Cells | View::SquareGrid | View::HexGrid => {
+                let s = if shift { 8 } else { 1 };
+                (s, s)
+            }
+            View::Squares | View::Hexes => {
+                let m = if shift { 4 } else { 1 };
+                (i32::from(TILE_W) * m, i32::from(TILE_H) * m)
+            }
         };
         match code {
             KeyCode::Char('q' | 'Q') | KeyCode::Escape => return false,
-            KeyCode::Up | KeyCode::Char('w' | 'W') => self.pan(0, -step),
-            KeyCode::Down | KeyCode::Char('s' | 'S') => self.pan(0, step),
-            KeyCode::Left | KeyCode::Char('a' | 'A') => self.pan(-step, 0),
-            KeyCode::Right | KeyCode::Char('d' | 'D') => self.pan(step, 0),
+            KeyCode::Up | KeyCode::Char('w' | 'W') => self.pan(0, -step_y),
+            KeyCode::Down | KeyCode::Char('s' | 'S') => self.pan(0, step_y),
+            KeyCode::Left | KeyCode::Char('a' | 'A') => self.pan(-step_x, 0),
+            KeyCode::Right | KeyCode::Char('d' | 'D') => self.pan(step_x, 0),
+            KeyCode::Char('t' | 'T') => self.view = self.view.next(),
             KeyCode::Char('r' | 'R') => {
                 self.world = World::generate(self.world.seed().wrapping_add(1));
                 self.cam_center = self.world.starting_view();
@@ -1987,16 +2372,17 @@ impl Overworld {
             MouseEventKind::Moved => match self.drag {
                 Some(Drag::Minimap) => self.jump_to_minimap(pos),
                 Some(Drag::Map(last)) => {
+                    let (sx, sy) = self.view.pan_scale();
                     self.pan(
-                        i32::from(last.x) - i32::from(pos.x),
-                        i32::from(last.y) - i32::from(pos.y),
+                        (i32::from(last.x) - i32::from(pos.x)) * sx,
+                        (i32::from(last.y) - i32::from(pos.y)) * sy,
                     );
                     self.drag = Some(Drag::Map(pos));
                 }
                 None => {}
             },
-            MouseEventKind::ScrollUp if on_map => self.pan(0, -2),
-            MouseEventKind::ScrollDown if on_map => self.pan(0, 2),
+            MouseEventKind::ScrollUp if on_map => self.pan(0, -2 * self.view.pan_scale().1),
+            MouseEventKind::ScrollDown if on_map => self.pan(0, 2 * self.view.pan_scale().1),
             _ => {}
         }
     }
@@ -2023,12 +2409,36 @@ impl Overworld {
         if area.width() == 0 || area.height() == 0 {
             return;
         }
+        self.last_map_rect = Some(area);
+        match self.view {
+            View::Cells | View::SquareGrid | View::HexGrid => self.draw_cells(term, area),
+            View::Squares => self.draw_tiles(term, area, false),
+            View::Hexes => self.draw_tiles(term, area, true),
+        }
+    }
+
+    /// The per-cell terrain view (see [`World::render_cell`]), which also serves the two grid
+    /// overlays: those render every cell identically and then re-tint backgrounds along province
+    /// boundaries (see [`grid_overlay`]).
+    fn draw_cells<B: Backend>(&mut self, term: &mut Terminal<B>, area: Rect) {
         self.camera.set_viewport(area);
         self.camera.center_on(self.cam_center);
-        self.last_map_rect = Some(area);
+        self.visible_world = self.camera.visible_bounds();
+
+        // `Some(hex?)` in the grid overlay views, `None` in plain Cells.
+        let grid = match self.view {
+            View::SquareGrid => Some(false),
+            View::HexGrid => Some(true),
+            _ => None,
+        };
+        let selected =
+            grid.map(|hex| grid_region(hex, self.cam_center.x.into(), self.cam_center.y.into()));
 
         for (world_pos, screen_pos) in self.camera.cells() {
-            let (glyph, style) = self.world.render_cell(world_pos, self.time);
+            let (glyph, mut style) = self.world.render_cell(world_pos, self.time);
+            if let (Some(hex), Some(selected)) = (grid, selected) {
+                style = grid_overlay(style, hex, world_pos, selected);
+            }
             term.put_styled(screen_pos.x, screen_pos.y, glyph, style);
         }
 
@@ -2039,6 +2449,24 @@ impl Overworld {
             let highlighted = style.bg(Color::lerp(style.background(), RETICLE, 0.55));
             term.put_styled(screen.x, screen.y, glyph, highlighted);
         }
+    }
+
+    /// Shared driver for both strategic tile views: refreshes the cached [`TileMap`] if the
+    /// seed or stagger changed, then hands off to the mode's renderer.
+    fn draw_tiles<B: Backend>(&mut self, term: &mut Terminal<B>, area: Rect, hex: bool) {
+        let key = (self.world.seed(), hex);
+        if self.tile_cache.as_ref().is_none_or(|(k, _)| *k != key) {
+            self.tile_cache = Some((key, self.world.tile_map(hex)));
+        }
+        let Some((_, map)) = self.tile_cache.as_ref() else {
+            return;
+        };
+        let vis = if hex {
+            draw_hex_tiles(term, area, map, self.cam_center, self.time)
+        } else {
+            draw_square_tiles(term, area, map, self.cam_center, self.time)
+        };
+        self.visible_world = vis;
     }
 
     fn draw_minimap<B: Backend>(&mut self, term: &mut Terminal<B>, area: Rect) {
@@ -2060,9 +2488,13 @@ impl Overworld {
             }
         }
 
-        // Overlay the camera's visible-world rectangle so the minimap doubles as a "you are
-        // here, and this is how much of the map fits on screen" indicator.
-        let vis = self.camera.visible_bounds();
+        // Overlay the visible-world rectangle so the minimap doubles as a "you are here, and
+        // this is how much of the map fits on screen" indicator, whichever view drew the map.
+        let vis = self.visible_world;
+        if vis.width() == 0 || vis.height() == 0 {
+            term.reset_style();
+            return;
+        }
         let to_col = |x: u16| {
             (u32::from(x) * u32::from(area.width()) / u32::from(WORLD_W))
                 .min(u32::from(area.width()) - 1) as u16
@@ -2145,9 +2577,16 @@ impl Overworld {
             y,
             &truncate(&format!("elevation ~{elev_pct:.0}%"), w),
         );
+        y += 1;
+
+        term.print(
+            inner.left(),
+            y,
+            &truncate(&format!("view: {} [T]", self.view.label()), w),
+        );
         y += 2;
 
-        if inner.height() >= MINIMAP_H + 15 {
+        if inner.height() >= MINIMAP_H + 16 {
             self.draw_minimap(term, Rect::new(inner.left(), y, inner.width(), MINIMAP_H));
             y += MINIMAP_H + 1;
         }
@@ -2170,7 +2609,7 @@ impl Overworld {
         term.print(
             inner.left(),
             inner.bottom() - 1,
-            &truncate("arrows/drag pan, R rerolls", w),
+            &truncate("drag pans, T tiles, R reroll", w),
         );
         term.reset_style();
     }
@@ -2184,7 +2623,7 @@ impl Overworld {
         }
         let label = self.world.label_at(self.cam_center);
         let text = format!(
-            "({}, {})  {label}  -- arrows pan, R rerolls, Q quits",
+            "({}, {})  {label}  -- arrows pan, T view, R rerolls, Q quits",
             self.cam_center.x, self.cam_center.y
         );
         term.reset_style().fg(FG).bg(PANEL_BG);
@@ -2229,6 +2668,413 @@ impl Overworld {
     }
 }
 
+// ── Strategic tile rendering ─────────────────────────────────────────────────
+
+/// A `(dx, dy)` cell offset into a tile's screen footprint, marking where a road or river
+/// connector is drawn.
+type MarkCell = (i32, i32);
+
+/// Square-view neighbor links: `(dcol, drow, road mark cell, river mark cell)` -- where in the
+/// [`SQ_W`]x[`SQ_H`] block the connector toward that neighbor goes. Road and river marks for
+/// the same edge sit on different cells so a tile that has both shows both.
+const SQ_LINKS: [(i32, i32, MarkCell, MarkCell); 4] = [
+    (0, -1, (4, 0), (3, 0)),
+    (0, 1, (4, 3), (3, 3)),
+    (-1, 0, (0, 1), (0, 2)),
+    (1, 0, (7, 1), (7, 2)),
+];
+
+/// Hex-view neighbor links: `(direction, road mark cell, river mark cell)`, with cells given as
+/// `(dx, dy)` offsets into the hex footprint (`dy` 0/2 are the taper rows, 1 the middle row).
+/// The six [`Direction`]s come from `hexal`; roads sit toward the corner of each edge, rivers
+/// just inside them. The cells are chosen so that a connector and its counterpart on the
+/// neighbor land on adjacent screen cells (E/W share a row; the diagonal pairs meet on the
+/// shared taper row), so a route reads as a continuous dotted line, not scattered specks.
+const HEX_LINKS: [(Direction, MarkCell, MarkCell); 6] = [
+    (Direction::E, (7, 1), (6, 1)),
+    (Direction::W, (0, 1), (1, 1)),
+    (Direction::NE, (5, 0), (4, 0)),
+    (Direction::NW, (2, 0), (3, 0)),
+    (Direction::SE, (5, 2), (4, 2)),
+    (Direction::SW, (2, 2), (3, 2)),
+];
+
+/// [`Terminal::put_styled`] with clipping to `area`: tiles at the map edges legitimately hang
+/// partly outside the viewport, so every tile-view write funnels through this.
+fn put_clipped<B: Backend>(
+    term: &mut Terminal<B>,
+    area: Rect,
+    x: i32,
+    y: i32,
+    glyph: char,
+    style: Style,
+) {
+    if x >= i32::from(area.left())
+        && x < i32::from(area.right())
+        && y >= i32::from(area.top())
+        && y < i32::from(area.bottom())
+    {
+        term.put_styled(x as u16, y as u16, glyph, style);
+    }
+}
+
+/// Resolved face and glyph colors for one drawn tile: the flat face color (darkened toward the
+/// scene background, with the reticle highlight already mixed in) and the glyph foreground
+/// (with the per-tile water swell applied -- the tile views' one surviving animation).
+fn tile_face(tile: &world::Tile, highlight: f32, col: u16, row: u16, time: f64) -> (Color, Color) {
+    let mut face = Color::lerp(tile.base, BG, 0.34);
+    if highlight > 0.0 {
+        face = Color::lerp(face, RETICLE, highlight);
+    }
+    let mut glyph_fg = tile.glyph_color;
+    if tile.water {
+        let swell =
+            ((time * 1.1 + f64::from(col) * 0.9 + f64::from(row) * 1.4).sin() * 0.5 + 0.5) as f32;
+        glyph_fg = Color::lerp(glyph_fg, Color::WHITE, 0.10 + swell * 0.25);
+    }
+    (face, glyph_fg)
+}
+
+// ── Grid overlays ────────────────────────────────────────────────────────────────
+
+/// Stagger, in world cells, of a hex-lattice row: odd rows shift right half a hex -- the same
+/// `OddR` convention as everything else hex in this example. `rem_euclid` so out-of-world
+/// fragment rows above the map keep a consistent identity.
+fn hex_row_stagger(row: i32) -> i32 {
+    if row.rem_euclid(2) == 1 {
+        i32::from(TILE_W / 2)
+    } else {
+        0
+    }
+}
+
+/// Which province of the overlay grid owns world cell `(x, y)` -- squares when `hex` is false,
+/// the honeycomb otherwise.
+///
+/// The hex partition is the same lattice the aggregated hex view uses ([`TILE_W`]-wide,
+/// [`TILE_H`]-row pitch, odd rows staggered right), but as the *exact* hexagon footprint
+/// rather than that view's rectangular sampling approximation: scaled up from the screen-space
+/// honeycomb [`HEX_ROW_H`] describes, each hex has a half-height taper band at its top and
+/// bottom shared with its vertical neighbors (rows split there between the hex whose neck the
+/// cell is under and the staggered one beside it), and every interior hex owns exactly
+/// `TILE_W * TILE_H` cells. Returns lattice `(col, row)`, possibly outside the world for
+/// border fragments -- callers only compare identities, so that's harmless.
+fn grid_region(hex: bool, x: i32, y: i32) -> (i32, i32) {
+    let w = i32::from(TILE_W);
+    let h = i32::from(TILE_H);
+    if !hex {
+        return (x.div_euclid(w), y.div_euclid(h));
+    }
+    let indent = w / 4;
+    let band = y.div_euclid(h / 2);
+    if band.rem_euclid(2) == 1 {
+        // The middle band: unambiguously this row's hex.
+        let row = band.div_euclid(2);
+        ((x - hex_row_stagger(row)).div_euclid(w), row)
+    } else {
+        // A shared taper band: cells under the neck of `below`'s hexes belong to them; the
+        // staggered cells between necks belong to the previous row's bottom tapers.
+        let below = band.div_euclid(2);
+        let cx = x - hex_row_stagger(below) - indent;
+        if cx.rem_euclid(w) < w / 2 {
+            (cx.div_euclid(w), below)
+        } else {
+            let above = below - 1;
+            ((x - hex_row_stagger(above) - indent).div_euclid(w), above)
+        }
+    }
+}
+
+/// Applies the grid-overlay tint for one world cell: terrain glyph and colors stay, only the
+/// background shifts. A cell is a border cell iff its north or west neighbor lies in a
+/// different province -- checking just those two sides keeps every boundary one cell thick, and
+/// gives hex edges clean staircases with no line glyphs. The selected province's border gets
+/// the reticle color, its neighbors' borders (hexal distance 1, or the 4-neighborhood for
+/// squares) a fainter ring, and its interior a whisper of tint so the territory reads as a
+/// whole.
+fn grid_overlay(style: Style, hex: bool, pos: Pos, selected: (i32, i32)) -> Style {
+    let (x, y) = (i32::from(pos.x), i32::from(pos.y));
+    let region = grid_region(hex, x, y);
+    let border = (x > 0 && grid_region(hex, x - 1, y) != region)
+        || (y > 0 && grid_region(hex, x, y - 1) != region);
+    let dist = if hex {
+        let a = OffsetHex::<i32, OddR>::new(region.0, region.1).to_hex();
+        let b = OffsetHex::<i32, OddR>::new(selected.0, selected.1).to_hex();
+        a.distance(b)
+    } else {
+        (region.0 - selected.0).abs() + (region.1 - selected.1).abs()
+    };
+    let bg = style.background();
+    if border {
+        let (line, strength) = match dist {
+            0 => (RETICLE, 0.70),
+            1 => (RETICLE, 0.30),
+            _ => (GRID_LINE, 0.30),
+        };
+        style.bg(Color::lerp(bg, line, strength))
+    } else if dist == 0 {
+        style.bg(Color::lerp(bg, RETICLE, 0.10))
+    } else {
+        style
+    }
+}
+
+/// A stable per-tile hash for decorative choices, mirroring what `noise::hash01` does for world
+/// cells: keyed on absolute tile coordinates so the pattern doesn't crawl when the view pans.
+/// Both tile renderers use its low bits to scatter dim copies of the tile's glyph -- enough
+/// texture that a province reads as "made of forest" rather than a flat slab, dim enough
+/// (foreground pulled most of the way to the face color) not to compete with the real markers.
+const fn tile_hash(col: u16, row: u16) -> u32 {
+    (col as u32).wrapping_mul(0x9E37_79B9) ^ (row as u32).wrapping_mul(0x85EB_CA6B)
+}
+
+/// Top-left visible tile and the world rect that view implies -- the shared "camera" math of
+/// both tile views: center the reticle's tile, clamp to the tile grid the way
+/// [`Camera::center_on`] clamps to world cells.
+fn tile_view_origin(map: &TileMap, center: Pos, fit_x: u16, fit_y: u16) -> (u16, u16, Rect) {
+    let (fit_x, fit_y) = (fit_x.min(map.cols()), fit_y.min(map.rows()));
+    let (ccol, crow) = map.tile_of(center);
+    let origin_col = ccol
+        .saturating_sub(fit_x / 2)
+        .min(map.cols().saturating_sub(fit_x));
+    let origin_row = crow
+        .saturating_sub(fit_y / 2)
+        .min(map.rows().saturating_sub(fit_y));
+    let x = origin_col * TILE_W;
+    let y = origin_row * TILE_H;
+    let vis = Rect::new(
+        x,
+        y,
+        (fit_x * TILE_W).min(WORLD_W.saturating_sub(x)),
+        (fit_y * TILE_H).min(WORLD_H.saturating_sub(y)),
+    );
+    (origin_col, origin_row, vis)
+}
+
+/// Beveled face color for one cell of a square tile: lit top edge, shadowed bottom, faint
+/// left/right relief -- the same northwest-light convention as the terrain hillshade, and what
+/// separates two adjacent tiles of the same biome without spending cells on border glyphs.
+fn square_bevel(face: Color, dx: i32, dy: i32) -> Color {
+    let mut c = face;
+    if dy == 0 {
+        c = Color::lerp(c, Color::WHITE, 0.16);
+    } else if dy == i32::from(SQ_H) - 1 {
+        c = Color::lerp(c, Color::BLACK, 0.34);
+    }
+    if dx == 0 {
+        c = Color::lerp(c, Color::WHITE, 0.08);
+    } else if dx == i32::from(SQ_W) - 1 {
+        c = Color::lerp(c, Color::BLACK, 0.20);
+    }
+    c
+}
+
+/// Beveled face color for one cell of a hex tile: lit top taper, shadowed bottom taper, faintly
+/// shadowed middle-row ends. Same job as [`square_bevel`], shaped to the hex footprint.
+fn hex_bevel(face: Color, dx: i32, dy: i32) -> Color {
+    match dy {
+        0 => Color::lerp(face, Color::WHITE, 0.16),
+        2 => Color::lerp(face, Color::BLACK, 0.34),
+        _ if dx == 0 || dx == i32::from(HEX_W) - 1 => Color::lerp(face, Color::BLACK, 0.18),
+        _ => face,
+    }
+}
+
+/// Draws the square strategic-tile view into `area` and returns the visible world rect (for
+/// the minimap overlay). The reticle's tile gets a strong highlight and its 4-neighborhood a
+/// faint one -- the square counterpart of the hex view's adjacency ring.
+fn draw_square_tiles<B: Backend>(
+    term: &mut Terminal<B>,
+    area: Rect,
+    map: &TileMap,
+    center: Pos,
+    time: f64,
+) -> Rect {
+    let (ccol, crow) = map.tile_of(center);
+    let (origin_col, origin_row, vis) = tile_view_origin(
+        map,
+        center,
+        (area.width() / SQ_W).max(1),
+        (area.height() / SQ_H).max(1),
+    );
+    let row_end = map.rows().min(origin_row + area.height() / SQ_H + 1);
+    let col_end = map.cols().min(origin_col + area.width() / SQ_W + 1);
+    for row in origin_row..row_end {
+        for col in origin_col..col_end {
+            let Some(tile) = map.get(i32::from(col), i32::from(row)) else {
+                continue;
+            };
+            let sx = i32::from(area.left()) + i32::from(col - origin_col) * i32::from(SQ_W);
+            let sy = i32::from(area.top()) + i32::from(row - origin_row) * i32::from(SQ_H);
+            let dist =
+                (i32::from(col) - i32::from(ccol)).abs() + (i32::from(row) - i32::from(crow)).abs();
+            let highlight = match dist {
+                0 => 0.55,
+                1 => 0.18,
+                _ => 0.0,
+            };
+            let (face, glyph_fg) = tile_face(tile, highlight, col, row, time);
+
+            for dy in 0..i32::from(SQ_H) {
+                for dx in 0..i32::from(SQ_W) {
+                    let bg = square_bevel(face, dx, dy);
+                    put_clipped(term, area, sx + dx, sy + dy, ' ', Style::new().bg(bg));
+                }
+            }
+            let dim = Color::lerp(tile.glyph_color, face, 0.45);
+            let hash = tile_hash(col, row);
+            for (bit, (dx, dy)) in [(1, 2), (6, 1)].into_iter().enumerate() {
+                if (hash >> bit) & 1 == 1 {
+                    let style = Style::new().fg(dim).bg(square_bevel(face, dx, dy));
+                    put_clipped(term, area, sx + dx, sy + dy, tile.glyph, style);
+                }
+            }
+
+            for (dc, dr, road_at, river_at) in SQ_LINKS {
+                let Some(neighbor) = map.get(i32::from(col) + dc, i32::from(row) + dr) else {
+                    continue;
+                };
+                if tile.river && neighbor.river {
+                    let (dx, dy) = river_at;
+                    let bg = Color::lerp(square_bevel(face, dx, dy), TILE_RIVER_FG, 0.40);
+                    let style = Style::new().fg(TILE_RIVER_FG).bg(bg);
+                    put_clipped(term, area, sx + dx, sy + dy, '~', style);
+                }
+                if tile.road && neighbor.road {
+                    let (dx, dy) = road_at;
+                    let bg = Color::lerp(square_bevel(face, dx, dy), TILE_ROAD_FG, 0.40);
+                    let style = Style::new().fg(TILE_ROAD_FG).bg(bg);
+                    put_clipped(term, area, sx + dx, sy + dy, '·', style);
+                }
+            }
+
+            let style = Style::new().fg(glyph_fg).bg(square_bevel(face, 3, 1));
+            put_clipped(term, area, sx + 3, sy + 1, tile.glyph, style);
+            if let Some(poi) = tile.poi {
+                let (glyph, color) = poi.glyph_color();
+                let style = Style::new().fg(color).bg(square_bevel(face, 4, 1));
+                put_clipped(term, area, sx + 4, sy + 1, glyph, style);
+            } else if tile.road {
+                // A road tile with no landmark carries a center dot, so a route reads as a
+                // continuous line through the tile instead of stubs at its edges.
+                let style = Style::new().fg(TILE_ROAD_FG).bg(square_bevel(face, 4, 1));
+                put_clipped(term, area, sx + 4, sy + 1, '·', style);
+            }
+        }
+    }
+    vis
+}
+
+/// Draws the hex strategic-tile view into `area` and returns the visible world rect (for the
+/// minimap overlay).
+///
+/// Layout is the interlocking honeycomb [`HEX_ROW_H`] describes; coordinates go through
+/// `hexal`: each `(col, row)` converts to an axial [`hexal::Hex`] via the [`OddR`] offset
+/// scheme, road/river connectors probe the six [`Direction`] neighbors, and the reticle
+/// highlight is hex distance (the selected hex strong, its ring of six faint).
+fn draw_hex_tiles<B: Backend>(
+    term: &mut Terminal<B>,
+    area: Rect,
+    map: &TileMap,
+    center: Pos,
+    time: f64,
+) -> Rect {
+    let (ccol, crow) = map.tile_of(center);
+    let (origin_col, origin_row, vis) = tile_view_origin(
+        map,
+        center,
+        (area.width() / HEX_W).max(1),
+        (area.height() / HEX_ROW_H).max(1),
+    );
+    let selected = OffsetHex::<i32, OddR>::new(i32::from(ccol), i32::from(crow)).to_hex();
+    // One extra row/column past every edge: staggered odd rows poke half a hex into the margins,
+    // and shared taper rows mean the row above the origin still owns cells on the top screen row.
+    let row_end = map.rows().min(origin_row + area.height() / HEX_ROW_H + 2);
+    let col_end = map.cols().min(origin_col + area.width() / HEX_W + 1);
+    for row in origin_row.saturating_sub(1)..row_end {
+        let stag = if row % 2 == 1 {
+            i32::from(HEX_W / 2)
+        } else {
+            0
+        };
+        for col in origin_col.saturating_sub(1)..col_end {
+            let Some(tile) = map.get(i32::from(col), i32::from(row)) else {
+                continue;
+            };
+            let sx = i32::from(area.left())
+                + (i32::from(col) - i32::from(origin_col)) * i32::from(HEX_W)
+                + stag;
+            let sy = i32::from(area.top())
+                + (i32::from(row) - i32::from(origin_row)) * i32::from(HEX_ROW_H);
+            let hex = OffsetHex::<i32, OddR>::new(i32::from(col), i32::from(row)).to_hex();
+            let highlight = match hex.distance(selected) {
+                0 => 0.55,
+                1 => 0.18,
+                _ => 0.0,
+            };
+            let (face, glyph_fg) = tile_face(tile, highlight, col, row, time);
+
+            // Footprint: taper rows above and below the 8-cell middle row (see [`HEX_ROW_H`]).
+            for dx in 2..6 {
+                put_clipped(
+                    term,
+                    area,
+                    sx + dx,
+                    sy,
+                    ' ',
+                    Style::new().bg(hex_bevel(face, dx, 0)),
+                );
+                let bottom = Style::new().bg(hex_bevel(face, dx, 2));
+                put_clipped(term, area, sx + dx, sy + 2, ' ', bottom);
+            }
+            for dx in 0..i32::from(HEX_W) {
+                let bg = hex_bevel(face, dx, 1);
+                put_clipped(term, area, sx + dx, sy + 1, ' ', Style::new().bg(bg));
+            }
+            let dim = Color::lerp(tile.glyph_color, face, 0.45);
+            let hash = tile_hash(col, row);
+            for (bit, (dx, dy)) in [(1, 1), (6, 1)].into_iter().enumerate() {
+                if (hash >> bit) & 1 == 1 {
+                    let style = Style::new().fg(dim).bg(hex_bevel(face, dx, dy));
+                    put_clipped(term, area, sx + dx, sy + dy, tile.glyph, style);
+                }
+            }
+
+            for (dir, road_at, river_at) in HEX_LINKS {
+                let offset = hex.neighbor(dir).to_offset::<OddR>();
+                let Some(neighbor) = map.get(offset.col, offset.row) else {
+                    continue;
+                };
+                if tile.river && neighbor.river {
+                    let (dx, dy) = river_at;
+                    let bg = Color::lerp(hex_bevel(face, dx, dy), TILE_RIVER_FG, 0.40);
+                    let style = Style::new().fg(TILE_RIVER_FG).bg(bg);
+                    put_clipped(term, area, sx + dx, sy + dy, '~', style);
+                }
+                if tile.road && neighbor.road {
+                    let (dx, dy) = road_at;
+                    let bg = Color::lerp(hex_bevel(face, dx, dy), TILE_ROAD_FG, 0.40);
+                    let style = Style::new().fg(TILE_ROAD_FG).bg(bg);
+                    put_clipped(term, area, sx + dx, sy + dy, '·', style);
+                }
+            }
+
+            let style = Style::new().fg(glyph_fg).bg(hex_bevel(face, 3, 1));
+            put_clipped(term, area, sx + 3, sy + 1, tile.glyph, style);
+            if let Some(poi) = tile.poi {
+                let (glyph, color) = poi.glyph_color();
+                let style = Style::new().fg(color).bg(hex_bevel(face, 4, 1));
+                put_clipped(term, area, sx + 4, sy + 1, glyph, style);
+            } else if tile.road {
+                // Same center-dot trick as the square view: routes read as lines, not stubs.
+                let style = Style::new().fg(TILE_ROAD_FG).bg(hex_bevel(face, 4, 1));
+                put_clipped(term, area, sx + 4, sy + 1, '·', style);
+            }
+        }
+    }
+    vis
+}
+
 impl Example for Overworld {
     const NAME: &'static str = "19_overworld";
 
@@ -2248,3 +3094,70 @@ impl Example for Overworld {
 }
 
 retroglyph_examples::example_main!(Overworld);
+
+#[cfg(test)]
+mod grid_tests {
+    use super::*;
+
+    #[test]
+    fn hex_regions_partition_the_plane_into_equal_areas() {
+        let mut counts = std::collections::HashMap::new();
+        for y in 0..220 {
+            for x in 0..220 {
+                *counts.entry(grid_region(true, x, y)).or_insert(0u32) += 1;
+            }
+        }
+        // Interior hexes (fully inside the sampled window) must each own exactly one tile's
+        // worth of cells -- the partition neither overlaps nor leaks.
+        for col in 2..10 {
+            for row in 2..24 {
+                assert_eq!(
+                    counts.get(&(col, row)).copied(),
+                    Some(u32::from(TILE_W) * u32::from(TILE_H)),
+                    "hex ({col}, {row}) area"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn hex_region_borders_touch_only_hexal_neighbors() {
+        // Any two 4-adjacent cells in different provinces must straddle hexes at hexal
+        // distance 1 -- the geometric partition and hexal's adjacency model must agree, or the
+        // ring highlight and the connector logic would be lying.
+        for y in 0..200 {
+            for x in 0..200 {
+                let a = grid_region(true, x, y);
+                for (nx, ny) in [(x + 1, y), (x, y + 1)] {
+                    let b = grid_region(true, nx, ny);
+                    if a != b {
+                        let ha = OffsetHex::<i32, OddR>::new(a.0, a.1).to_hex();
+                        let hb = OffsetHex::<i32, OddR>::new(b.0, b.1).to_hex();
+                        assert_eq!(
+                            ha.distance(hb),
+                            1,
+                            "cells ({x}, {y})/({nx}, {ny}) straddle non-adjacent hexes {a:?}/{b:?}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn square_regions_match_tile_blocks() {
+        assert_eq!(grid_region(false, 0, 0), (0, 0));
+        assert_eq!(
+            grid_region(false, i32::from(TILE_W) - 1, i32::from(TILE_H) - 1),
+            (0, 0)
+        );
+        assert_eq!(
+            grid_region(false, i32::from(TILE_W), i32::from(TILE_H)),
+            (1, 1)
+        );
+        assert_eq!(
+            grid_region(false, i32::from(TILE_W) * 3 + 5, i32::from(TILE_H) * 2 + 3),
+            (3, 2)
+        );
+    }
+}
