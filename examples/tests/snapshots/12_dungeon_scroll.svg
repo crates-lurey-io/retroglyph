@@ -18,7 +18,11 @@
 </text>
 <text font-family="monospace" font-size="14" y="98.0" xml:space="preserve">
   <tspan fill="#c0c0c0" x="8.0">##</tspan>
-  <tspan fill="#808080" x="24.8">.........</tspan>
+  <tspan fill="#808080" x="24.8">.</tspan>
+  <tspan fill="#c0c0c0" x="33.2">⌂</tspan>
+  <tspan fill="#808080" x="41.6">.....</tspan>
+  <tspan fill="#ffff55" x="83.6">☼</tspan>
+  <tspan fill="#808080" x="92.0">.</tspan>
   <tspan fill="#c0c0c0" x="100.4">#########################</tspan>
   <tspan fill="#808080" x="310.4">.........</tspan>
   <tspan fill="#c0c0c0" x="386.0">#####</tspan>
@@ -32,7 +36,11 @@
 </text>
 <text font-family="monospace" font-size="14" y="134.0" xml:space="preserve">
   <tspan fill="#c0c0c0" x="8.0">##</tspan>
-  <tspan fill="#808080" x="24.8">.........</tspan>
+  <tspan fill="#808080" x="24.8">.</tspan>
+  <tspan fill="#ff55ff" x="33.2">⌐</tspan>
+  <tspan fill="#808080" x="41.6">.....</tspan>
+  <tspan fill="#008000" x="83.6">∙</tspan>
+  <tspan fill="#808080" x="92.0">.</tspan>
   <tspan fill="#c0c0c0" x="100.4">#########################</tspan>
   <tspan fill="#808080" x="310.4">.........</tspan>
   <tspan fill="#c0c0c0" x="386.0">#####</tspan>
