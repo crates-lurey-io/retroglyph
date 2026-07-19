@@ -1,6 +1,6 @@
 [package]
 name = "retroglyph-widgets"
-version = "0.2.0"
+version = "0.2.1"
 description = "Immediate-mode drawing helpers for retroglyph (panels, gauges, tables, sparklines)"
 readme = "README.md"
 edition.workspace = true
@@ -26,5 +26,5 @@ egc = ["retroglyph-core/egc"]
 # `gem`: retroglyph-core/Color::lerp (used by meter_ramp's color ramp) is
 # gated behind it. Not a separate widgets-level feature -- color ramping is
 # non-optional composite-tier functionality, not an opt-in extra like `egc`.
-retroglyph-core = { path = "../core", version = "0.2.0", default-features = false, features = ["std", "gem"] }
+retroglyph-core = { path = "../core", version = "0.2.1", default-features = false, features = ["std", "gem"] }
 unicode-width = "0.2"

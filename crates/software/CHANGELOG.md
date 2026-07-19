@@ -7,6 +7,78 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 
+## [0.3.0+retroglyph-software](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-software-v0.2.0...retroglyph-software-v0.3.0) - 2026-07-19
+
+### Features
+
+- [9f54b41](https://github.com/crates-lurey-io/retroglyph/commit/9f54b41e569b1f61394c102aa6a5699f9eec59df)
+  _(software)_ Swap embedded default font from IBM VGA 8x16 to Unscii 16 by `@matanlurey` in
+  [#256](https://github.com/crates-lurey-io/retroglyph/pull/256)
+
+  > - feat(software): swap embedded default font from IBM VGA 8x16 to Unscii 16
+  >
+  > The default-font feature previously embedded the IBM VGA 8x16 font, sourced verbatim from the
+  > Linux kernel's lib/fonts/font_8x16.c (GPL-2.0), while this crate is MIT. Swap to Unscii 16
+  > instead: same geometry (8x16, 1bpp, one byte per row), same CP437 glyph-index layout, but
+  > sourced from unscii's public-domain/CC0 unscii-16.hex (https://github.com/viznut/unscii),
+  > removing the license-provenance ambiguity outright.
+  >
+  > Four CP437 codepoints plain unscii-16.hex doesn't cover (U+2302 HOUSE, U+263C WHITE SUN WITH
+  > RAYS, U+2310 REVERSED NOT SIGN, U+2219 BULLET OPERATOR) are filled in with original pixel art or
+  > mechanical transforms of neighboring unscii glyphs, rather than pulling in unscii's GPL-licensed
+  > -full variant.
+  >
+  > Regenerates every example's committed PNG/text snapshot for the new glyph shapes; no
+  > rendering-code changes needed since the geometry is unchanged.
+  >
+  > - fix(software): make house/reversed-not-sign/bullet-operator glyphs reachable
+  >
+  > unicode_to_cp437's reverse-mapping arms skipped 3 of the 4 codepoints just patched into
+  > unscii16's DATA (U+2302 HOUSE, U+2310 REVERSED NOT SIGN, U+2219 BULLET OPERATOR) -- their
+  > bitmaps were correctly in the font, but nothing routed a printable char to those glyph indices,
+  > so any real caller (BitmapFont::char_to_index / term.print) fell through to the fallback solid
+  > block. Only U+263C WHITE SUN WITH RAYS already had an arm. Add the missing three, plus a
+  > regression test pinning all four to their glyph index.
+  >
+  > No example currently prints any of these four characters, so this doesn't change any committed
+  > snapshot on its own.
+  >
+  > - docs(examples): show the new extended-ASCII glyphs in 12_dungeon_scroll
+  >
+  > Place four decorative floor tiles in room 1 -- a hut, a torch, a cracked rune, and loose rubble
+  > -- using U+2302 HOUSE, U+263C WHITE SUN WITH RAYS, U+2310 REVERSED NOT SIGN, and U+2219 BULLET
+  > OPERATOR, the four codepoints just made reachable in the previous commit. Room 1 is on screen
+  > from the very first frame, so the png_snapshot test alone proves the software backend actually
+  > rasterizes the new glyphs correctly, not just that the lookup returns the right index.
+  >
+  > Resnapshots 12_dungeon_scroll's headless/PNG/SVG baselines.
+
+### Continuous Integration
+
+- [b43e553](https://github.com/crates-lurey-io/retroglyph/commit/b43e5539812dfff9703a9eab99f424b7ce03a755)
+  _(workspace)_ Per-crate test analytics flags + self-hosted coverage report by `@matanlurey` in
+  [#254](https://github.com/crates-lurey-io/retroglyph/pull/254)
+
+  > - Split the workspace nextest JUnit report per crate flag before uploading to Codecov Test
+  >   Analytics (tools/split-junit-flags.py): a single combined-workspace upload can only carry one
+  >   flag before misattributing every crate's tests to every other crate's flag, so upload once per
+  >   flag instead of once for the whole workspace. Fixes the empty Flags filter on
+  >   https://app.codecov.io/gh/crates-lurey-io/retroglyph/tests.
+  > - disable_search: true on every one of those uploads: the Codecov CLI auto-discovers any
+  >   \*junit.xml on disk in addition to the explicit files: input, and the pre-split combined
+  >   junit.xml sits right next to the split files it came from. Caught this live in run 29653543638
+  >   (test job, "Upload test results to Codecov (unflagged)" step logged "Found 2 test_results
+  >   files to report") before merging -- without disable_search, every flag upload would have
+  >   silently re-included all 669 tests too.
+  > - Point each crate README's coverage badge at the repo's Flags tab instead of the generic
+  >   overview page (query-param deep links like ?flags[0]=x do not work against the current Codecov
+  >   app, verified live).
+  > - docs.yml: publish a self-hosted `cargo llvm-cov --html` report at
+  >   https://main.retroglyph.dev/coverage/ alongside the rustdocs, rebuilt on every push to main.
+
+**Full Changelog**:
+https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-software-v0.2.0...retroglyph-software-v0.3.0
+
 ## [0.2.0+retroglyph-software](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-software-v0.1.0...retroglyph-software-v0.2.0) - 2026-07-18
 
 ### Features
