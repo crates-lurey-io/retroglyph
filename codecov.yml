@@ -82,9 +82,18 @@ component_management:
       flag_regexes:
         - ^widgets$
 
-# Inline diff annotations on PR file views, on top of the summary comment below.
+# `false`, not the default `true`: with `annotations: true`, Codecov posts every status below
+# (codecov/patch, codecov/patch/core, ...) twice on each PR -- once via the classic Statuses API
+# (what coverage.status/component_management below actually configure) and once more via the
+# GitHub Checks API for inline diff annotations, both under the identical context name. Confirmed
+# on PR #259: `gh pr view 259 --json statusCheckRollup` showed a CheckRun and a StatusContext for
+# every single context (codecov/patch, codecov/patch/core, etc.), all SUCCESS, same target URL.
+# Annotations are also a dead feature here regardless: Codecov's own docs say annotations "do not
+# work if Flags or Components are configured" -- this repo uses both -- and codecov-action#1710
+# tracks the annotations feature's deprecation. So this is pure downside: doubled, non-functional
+# checks with no working annotations to show for it.
 github_checks:
-  annotations: true
+  annotations: false
 
 # `just coverage-ci` already scopes `cargo llvm-cov` to `--lib`, so non-lib code (examples/,
 # benches/, tools/, build.rs) never lands in lcov.info -- these are a defensive backstop against
