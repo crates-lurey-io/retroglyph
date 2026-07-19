@@ -11,17 +11,17 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 ### Continuous Integration
 
-- [b43e553](
-https://github.com/crates-lurey-io/retroglyph/commit/b43e5539812dfff9703a9eab99f424b7ce03a755) *(workspace)* Per-crate test analytics flags + self-hosted coverage report by `@matanlurey` in [#254](
-https://github.com/crates-lurey-io/retroglyph/pull/254)
+- [b43e553](https://github.com/crates-lurey-io/retroglyph/commit/b43e5539812dfff9703a9eab99f424b7ce03a755)
+  _(workspace)_ Per-crate test analytics flags + self-hosted coverage report by `@matanlurey` in
+  [#254](https://github.com/crates-lurey-io/retroglyph/pull/254)
 
   > - Split the workspace nextest JUnit report per crate flag before uploading to Codecov Test
   >   Analytics (tools/split-junit-flags.py): a single combined-workspace upload can only carry one
-  >   flag before misattributing every crate's tests to every other crate's flag, so upload once
-  >   per flag instead of once for the whole workspace. Fixes the empty Flags filter on
+  >   flag before misattributing every crate's tests to every other crate's flag, so upload once per
+  >   flag instead of once for the whole workspace. Fixes the empty Flags filter on
   >   https://app.codecov.io/gh/crates-lurey-io/retroglyph/tests.
   > - disable_search: true on every one of those uploads: the Codecov CLI auto-discovers any
-  >   *junit.xml on disk in addition to the explicit files: input, and the pre-split combined
+  >   \*junit.xml on disk in addition to the explicit files: input, and the pre-split combined
   >   junit.xml sits right next to the split files it came from. Caught this live in run 29653543638
   >   (test job, "Upload test results to Codecov (unflagged)" step logged "Found 2 test_results
   >   files to report") before merging -- without disable_search, every flag upload would have
@@ -32,8 +32,8 @@ https://github.com/crates-lurey-io/retroglyph/pull/254)
   > - docs.yml: publish a self-hosted `cargo llvm-cov --html` report at
   >   https://main.retroglyph.dev/coverage/ alongside the rustdocs, rebuilt on every push to main.
 
-**Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-window-v0.2.0...retroglyph-window-v0.2.1
-
+**Full Changelog**:
+https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-window-v0.2.0...retroglyph-window-v0.2.1
 
 ## [0.2.0+retroglyph-window](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-window-v0.1.0...retroglyph-window-v0.2.0) - 2026-07-18
 
