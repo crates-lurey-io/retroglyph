@@ -18,8 +18,10 @@ mod support;
 #[allow(dead_code)] // `main`/the `wasm_entry!` FFI surface aren't exercised by these tests
 mod overworld;
 
-use overworld::{Overworld, WORLD_H, WORLD_W};
-use retroglyph_core::event::{Event, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+use overworld::{Overworld, View, WORLD_H, WORLD_W};
+use retroglyph_core::event::{
+    Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+};
 use retroglyph_core::{Frame, Headless, Terminal};
 use retroglyph_examples::{Example, HEADLESS_FRAME_DELTA};
 
@@ -29,6 +31,14 @@ const fn mouse(kind: MouseEventKind, x: u16, y: u16) -> Event {
         position: retroglyph_core::Pos { x, y },
         pixel_position: None,
         modifiers: KeyModifiers::NONE,
+    })
+}
+
+const fn key(ch: char) -> Event {
+    Event::Key(KeyEvent {
+        code: KeyCode::Char(ch),
+        modifiers: KeyModifiers::NONE,
+        kind: KeyEventKind::Press,
     })
 }
 
@@ -99,6 +109,83 @@ fn narrow_layout_snapshot() {
     // Below BP_SIDEBAR: chrome collapses to a single status line, no sidebar/minimap.
     let (_, view) = draw_at(50, 20);
     insta::assert_snapshot!(view);
+}
+
+#[test]
+fn t_cycles_the_map_views() {
+    let order = [
+        View::Squares,
+        View::SquareGrid,
+        View::Hexes,
+        View::HexGrid,
+        View::Cells,
+    ];
+    let mut presses = Vec::new();
+    for expected in order {
+        presses.push(key(if presses.len() % 2 == 0 { 't' } else { 'T' }));
+        let (state, _) = drive(&presses);
+        assert_eq!(state.view, expected, "after {} presses", presses.len());
+    }
+}
+
+/// One `T` press per step toward the wanted view, in [`View`]'s cycle order.
+fn presses_for(view: View) -> Vec<Event> {
+    let steps = match view {
+        View::Cells => 0,
+        View::Squares => 1,
+        View::SquareGrid => 2,
+        View::Hexes => 3,
+        View::HexGrid => 4,
+    };
+    (0..steps).map(|_| key('t')).collect()
+}
+
+#[test]
+fn square_tile_view_snapshot() {
+    let (_, views) = drive(&presses_for(View::Squares));
+    insta::assert_snapshot!(views.last().expect("at least one frame"));
+}
+
+#[test]
+fn hex_tile_view_snapshot() {
+    let (_, views) = drive(&presses_for(View::Hexes));
+    insta::assert_snapshot!(views.last().expect("at least one frame"));
+}
+
+#[test]
+fn square_grid_view_snapshot() {
+    let (_, views) = drive(&presses_for(View::SquareGrid));
+    insta::assert_snapshot!(views.last().expect("at least one frame"));
+}
+
+#[test]
+fn hex_grid_view_snapshot() {
+    let (_, views) = drive(&presses_for(View::HexGrid));
+    insta::assert_snapshot!(views.last().expect("at least one frame"));
+}
+
+#[test]
+fn dragging_pans_further_in_the_tile_views() {
+    // The same 3-cell drag must cover more world in a tile view than in cell view, since each
+    // screen cell spans more world cells there.
+    let (state0, _) = draw_at(100, 32);
+    let map = state0.last_map_rect.expect("map rect");
+    let (x, y) = (map.left() + 20, map.top() + 10);
+    let drag = |prefix: &[Event]| {
+        let mut events = prefix.to_vec();
+        events.push(mouse(MouseEventKind::Down(MouseButton::Left), x, y));
+        events.push(mouse(MouseEventKind::Moved, x + 3, y + 2));
+        events
+    };
+    let (cells, _) = drive(&drag(&[]));
+    let (hexes, _) = drive(&drag(&presses_for(View::Hexes)));
+    let start = Overworld::default().cam_center;
+    let cells_dx = (i32::from(cells.cam_center.x) - i32::from(start.x)).abs();
+    let hexes_dx = (i32::from(hexes.cam_center.x) - i32::from(start.x)).abs();
+    assert!(
+        hexes_dx > cells_dx,
+        "hex view should pan more world per screen cell ({hexes_dx} vs {cells_dx})"
+    );
 }
 
 #[test]
@@ -252,7 +339,7 @@ fn svg_snapshot() {
     // lands on is real-wall-clock dependent and provably flaky (confirmed by hand: this snapshot
     // fails on a plain rerun with no code change). Assert on the chrome that layout, not the
     // clock, controls instead: the sidebar panel, legend, and status hint text.
-    for expected in ["OVERWORLD", "Legend", "arrows/drag pan, R rerolls"] {
+    for expected in ["OVERWORLD", "Legend", "drag pans, T tiles, R reroll"] {
         assert!(
             svg.contains(expected),
             "SVG output missing expected sidebar text {expected:?}"
