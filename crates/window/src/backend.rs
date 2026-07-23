@@ -3,7 +3,7 @@
 
 use crate::presenter::Presenter;
 use retroglyph_core::backend::{Cursor, Input, Output};
-use retroglyph_core::event::Event;
+use retroglyph_core::event::{Event, MouseEvent, MouseEventKind};
 use retroglyph_core::grid::{Pos, Size};
 use retroglyph_core::tile::Tile;
 use std::collections::VecDeque;
@@ -204,6 +204,25 @@ impl<P: Presenter> Input for WindowBackend<P> {
     }
 
     fn push_event(&mut self, event: Event) {
+        // Coalesce consecutive `Mouse(Moved)` events: winit can deliver `CursorMoved` at device
+        // polling rate (hundreds/sec) though only the latest position matters once the next frame
+        // polls the queue, so replace the queue's tail in place instead of growing it unbounded
+        // (retroglyph#294). Every other event kind (clicks, scrolls, keys, resize, ...) still
+        // pushes in O(1) as before; only two back-to-back `Moved` events collapse.
+        if let Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Moved,
+            ..
+        }) = &event
+            && let Some(
+                back @ Event::Mouse(MouseEvent {
+                    kind: MouseEventKind::Moved,
+                    ..
+                }),
+            ) = self.events.back_mut()
+        {
+            *back = event;
+            return;
+        }
         self.events.push_back(event);
     }
 }
@@ -211,3 +230,117 @@ impl<P: Presenter> Input for WindowBackend<P> {
 // No hardware text cursor in windowed mode (games draw their own): the trait's no-op default
 // bodies are exactly right here.
 impl<P: Presenter> Cursor for WindowBackend<P> {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::presenter::WindowHandle;
+    use retroglyph_core::event::{KeyModifiers, MouseButton};
+    use std::sync::Arc;
+
+    struct NullPresenter;
+
+    impl Output for NullPresenter {
+        type Error = core::convert::Infallible;
+
+        fn draw<'a, I>(&mut self, _content: I) -> Result<(), Self::Error>
+        where
+            I: Iterator<Item = (Pos, &'a Tile, Option<&'a str>)>,
+        {
+            Ok(())
+        }
+
+        fn draw_layers<'a, I>(&mut self, _content: I) -> Result<(), Self::Error>
+        where
+            I: Iterator<Item = (u8, Pos, &'a Tile, Option<&'a str>)>,
+        {
+            Ok(())
+        }
+
+        fn flush(&mut self) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        fn size(&self) -> Size {
+            Size {
+                width: 4,
+                height: 2,
+            }
+        }
+
+        fn clear(&mut self) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        fn resize(&mut self, _size: Size) {}
+    }
+
+    impl Presenter for NullPresenter {
+        type SurfaceError = core::convert::Infallible;
+
+        fn init_surface(
+            &mut self,
+            _window: Arc<dyn WindowHandle>,
+        ) -> Result<(), Self::SurfaceError> {
+            Ok(())
+        }
+
+        fn resize_surface(&mut self, _width: u32, _height: u32) {}
+
+        fn present(&mut self) -> Result<(), Self::SurfaceError> {
+            Ok(())
+        }
+
+        fn cell_size(&self) -> (u32, u32) {
+            (8, 16)
+        }
+    }
+
+    fn moved(x: u16) -> Event {
+        Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Moved,
+            position: Pos { x, y: 0 },
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        })
+    }
+
+    /// Regression test for retroglyph#294: a burst of consecutive `Moved` events must coalesce
+    /// down to the single most recent one instead of growing the queue by one entry per event.
+    #[test]
+    fn consecutive_moved_events_coalesce_to_one() {
+        let mut backend = WindowBackend::new(NullPresenter);
+        for x in 0..1_000u16 {
+            backend.push_event(moved(x));
+        }
+        assert_eq!(backend.events.len(), 1);
+        assert_eq!(backend.poll_event(Duration::ZERO), Some(moved(999)));
+        assert_eq!(backend.poll_event(Duration::ZERO), None);
+    }
+
+    /// A non-`Moved` event between two `Moved` bursts must not be swallowed: only *consecutive*
+    /// `Moved` events collapse, so interleaving a click still yields three distinct events.
+    #[test]
+    fn non_moved_event_breaks_coalescing() {
+        let mut backend = WindowBackend::new(NullPresenter);
+        backend.push_event(moved(1));
+        backend.push_event(moved(2));
+        backend.push_event(Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            position: Pos { x: 2, y: 0 },
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        }));
+        backend.push_event(moved(3));
+        assert_eq!(backend.events.len(), 3);
+        assert_eq!(backend.poll_event(Duration::ZERO), Some(moved(2)));
+        assert!(matches!(
+            backend.poll_event(Duration::ZERO),
+            Some(Event::Mouse(MouseEvent {
+                kind: MouseEventKind::Down(MouseButton::Left),
+                ..
+            }))
+        ));
+        assert_eq!(backend.poll_event(Duration::ZERO), Some(moved(3)));
+    }
+}

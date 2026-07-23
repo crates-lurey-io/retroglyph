@@ -1259,14 +1259,27 @@ where
         };
         let (cell_w, cell_h) = term.backend().presenter().cell_size();
         let pos = pixel_to_cell(self.cursor_px.0, self.cursor_px.1, cell_w, cell_h);
-        let scroll_y = match delta {
-            winit::event::MouseScrollDelta::LineDelta(_, y) => f64::from(y),
-            winit::event::MouseScrollDelta::PixelDelta(p) => p.y,
+        let (scroll_x, scroll_y) = match delta {
+            winit::event::MouseScrollDelta::LineDelta(x, y) => (f64::from(x), f64::from(y)),
+            winit::event::MouseScrollDelta::PixelDelta(p) => (p.x, p.y),
         };
-        let kind = if scroll_y > 0.0 {
-            MouseEventKind::ScrollUp
+        // Vertical takes priority (matches a physical mouse wheel and most trackpad gestures),
+        // but a pure horizontal scroll (trackpad two-finger swipe, tilt wheel) has `scroll_y ==
+        // 0.0`; report `ScrollLeft`/`ScrollRight` for that instead of falling through to a
+        // spurious `ScrollDown` (retroglyph#293). A delta of exactly zero on both axes emits
+        // nothing.
+        let Some(kind) = (if scroll_y > 0.0 {
+            Some(MouseEventKind::ScrollUp)
+        } else if scroll_y < 0.0 {
+            Some(MouseEventKind::ScrollDown)
+        } else if scroll_x > 0.0 {
+            Some(MouseEventKind::ScrollRight)
+        } else if scroll_x < 0.0 {
+            Some(MouseEventKind::ScrollLeft)
         } else {
-            MouseEventKind::ScrollDown
+            None
+        }) else {
+            return;
         };
         term.backend_mut().push_event(Event::Mouse(MouseEvent {
             kind,
@@ -2043,6 +2056,59 @@ mod tests {
                 ..
             })
         ));
+    }
+
+    #[test]
+    fn scroll_right_line_delta() {
+        // A pure horizontal LineDelta (trackpad swipe, tilt wheel): scroll_y == 0.0.
+        let mut app = test_window_app();
+        app.handle_window_event(WindowEvent::MouseWheel {
+            device_id: winit::event::DeviceId::dummy(),
+            delta: winit::event::MouseScrollDelta::LineDelta(1.0, 0.0),
+            phase: winit::event::TouchPhase::Moved,
+        });
+        let ev = poll(&mut app).unwrap();
+        assert!(matches!(
+            ev,
+            Event::Mouse(MouseEvent {
+                kind: MouseEventKind::ScrollRight,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn scroll_left_pixel_delta() {
+        // Regression test for retroglyph#293: before the fix, a pure-horizontal `PixelDelta`
+        // (scroll_y == 0.0) spuriously fell through to `ScrollDown` instead of being reported
+        // as (or, before ScrollLeft/ScrollRight were wired up, dropped as) a horizontal scroll.
+        let mut app = test_window_app();
+        app.handle_window_event(WindowEvent::MouseWheel {
+            device_id: winit::event::DeviceId::dummy(),
+            delta: winit::event::MouseScrollDelta::PixelDelta(winit::dpi::PhysicalPosition::new(
+                -15.0_f64, 0.0_f64,
+            )),
+            phase: winit::event::TouchPhase::Moved,
+        });
+        let ev = poll(&mut app).unwrap();
+        assert!(matches!(
+            ev,
+            Event::Mouse(MouseEvent {
+                kind: MouseEventKind::ScrollLeft,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn scroll_with_zero_delta_on_both_axes_pushes_no_event() {
+        let mut app = test_window_app();
+        app.handle_window_event(WindowEvent::MouseWheel {
+            device_id: winit::event::DeviceId::dummy(),
+            delta: winit::event::MouseScrollDelta::LineDelta(0.0, 0.0),
+            phase: winit::event::TouchPhase::Moved,
+        });
+        assert_eq!(poll(&mut app), None);
     }
 
     #[test]
