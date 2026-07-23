@@ -827,13 +827,18 @@ impl Grid {
         let dst_lb = self.layer_or_alloc(layer);
         let mut pending_extras: Vec<(usize, Arc<str>)> = Vec::new();
 
+        // `dst_x`/`dst_y` saturate on overflow (retroglyph#268): a `u16::MAX`-adjacent origin
+        // combined with a `src_rect` offset would otherwise wrap silently and either write to
+        // the wrong cell or get rejected by luck rather than by design. Saturating to `u16::MAX`
+        // is always caught by the `>= dst_width`/`>= dst_height` bounds check below, since a
+        // valid index must be strictly less than a `u16`-derived dimension.
         for sy in sy0..sy1 {
-            let dy = dst_y + (sy - src_rect.top());
+            let dy = dst_y.saturating_add(sy - src_rect.top());
             if usize::from(dy) >= dst_height {
                 continue;
             }
             for sx in sx0..sx1 {
-                let dx = dst_x + (sx - src_rect.left());
+                let dx = dst_x.saturating_add(sx - src_rect.left());
                 if usize::from(dx) >= dst_width {
                     continue;
                 }
@@ -924,13 +929,15 @@ impl Grid {
         let dst_lb = self.layer_or_alloc(layer);
         let mut pending_extras: Vec<(usize, Arc<str>)> = Vec::new();
 
+        // See `blit`'s matching comment (retroglyph#268): `saturating_add` here, paired with the
+        // bounds checks below, prevents a `u16::MAX`-adjacent destination origin from wrapping.
         for sy in sy0..sy1 {
-            let dy = dst_y + (sy - src_rect.top());
+            let dy = dst_y.saturating_add(sy - src_rect.top());
             if usize::from(dy) >= dst_height {
                 continue;
             }
             for sx in sx0..sx1 {
-                let dx = dst_x + (sx - src_rect.left());
+                let dx = dst_x.saturating_add(sx - src_rect.left());
                 if usize::from(dx) >= dst_width {
                     continue;
                 }
@@ -1811,6 +1818,46 @@ mod tests {
         assert!(dst.get_tile(1, 0, 0).is_none());
     }
 
+    #[test]
+    fn test_grid_blit_dest_origin_near_u16_max_does_not_wrap() {
+        // retroglyph#268: with a plain (non-saturating) `dst_x + (sx - src_rect.left())`, an
+        // origin this close to `u16::MAX` overflows and wraps back into a small, in-bounds
+        // value -- silently corrupting an unrelated cell instead of being clamped out. Picked so
+        // that `dst_x + 3` overflows `u16` and wraps to `1`, which *is* in-bounds for this small
+        // `dst` grid: `65534u16.wrapping_add(3) == 1`.
+        let mut src = Grid::new(4, 1);
+        src.put(3, 0, Tile::new('Q', Style::default()));
+
+        let mut dst = Grid::new(4, 1);
+        dst.blit(0, &src, Rect::new(0, 0, 4, 1), u16::MAX - 1, 0);
+
+        // The would-be-wrapped cell (index 1) must not have been touched.
+        assert_eq!(dst.get(1, 0).glyph(), ' ');
+        // No other cell was touched either -- the whole row's writes overflowed and were
+        // skipped (dst_x saturates to u16::MAX for every column in this row).
+        for x in 0..4 {
+            assert_eq!(
+                dst.get(x, 0).glyph(),
+                ' ',
+                "cell ({x}, 0) unexpectedly written"
+            );
+        }
+    }
+
+    #[test]
+    fn test_grid_blit_normal_offset_unaffected_by_overflow_fix() {
+        // A typical, non-overflowing blit must still work exactly as before.
+        let mut src = Grid::new(2, 2);
+        src.put(0, 0, Tile::new('A', Style::default()));
+        src.put(1, 1, Tile::new('B', Style::default()));
+
+        let mut dst = Grid::new(4, 4);
+        dst.blit(0, &src, Rect::new(0, 0, 2, 2), 1, 1);
+
+        assert_eq!(dst.get(1, 1).glyph(), 'A');
+        assert_eq!(dst.get(2, 2).glyph(), 'B');
+    }
+
     // --- `BlendMode` / `blit_alpha` ---
 
     #[cfg(feature = "gem")]
@@ -1924,6 +1971,36 @@ mod tests {
                 b: 224
             }
         );
+    }
+
+    /// retroglyph#268: same wraparound guard as `blit`'s
+    /// `test_grid_blit_dest_origin_near_u16_max_does_not_wrap`, but through `blit_alpha`'s
+    /// separate `dst_x`/`dst_y` computation.
+    #[cfg(feature = "gem")]
+    #[test]
+    fn test_grid_blit_alpha_dest_origin_near_u16_max_does_not_wrap() {
+        let mut src = Grid::new(4, 1);
+        src.put(3, 0, Tile::new('Q', Style::default()));
+
+        let mut dst = Grid::new(4, 1);
+        dst.blit_alpha(
+            0,
+            &src,
+            Rect::new(0, 0, 4, 1),
+            u16::MAX - 1,
+            0,
+            BlendMode::Linear,
+            1.0,
+            1.0,
+        );
+
+        for x in 0..4 {
+            assert_eq!(
+                dst.get(x, 0).glyph(),
+                ' ',
+                "cell ({x}, 0) unexpectedly written"
+            );
+        }
     }
 
     /// `BlendMode::Linear` at `t == 0.0` keeps the destination and at `t == 1.0` uses the source
