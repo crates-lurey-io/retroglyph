@@ -957,46 +957,24 @@ fn resolve_color(color: Color, default_rgb: u32) -> u32 {
     }
 }
 
-/// Standard xterm 16-color palette, 0x00RRGGBB.
+/// Resolves an [`AnsiColor`] to a packed `0x00RRGGBB` value.
 ///
-/// This intentionally duplicates the ANSI/indexed-to-RGB palette math that
-/// `retroglyph-core`'s [`AnsiColor::to_rgb`] and its (private,
-/// `gem`-feature-gated) 256-color quantizer table already implement. The two
-/// crates' tables do *not* currently agree value-for-value -- e.g. core's
-/// `AnsiColor::Red` is `(205, 0, 0)` (true xterm) while this table uses
-/// `(128, 0, 0)` (the classic "web-safe" ANSI values) -- so swapping this out
-/// for `AnsiColor::to_rgb` today would be a rendering behavior change, not a
-/// pure refactor. Consolidating onto a single canonical, value-compatible
-/// resolver is tracked as a known drift risk; see the `parity_with_core_ansi_colors`
-/// test below, which pins the entries that do happen to agree today so any
-/// accidental further drift is caught.
-#[allow(clippy::match_same_arms)]
-const fn ansi_to_rgb(color: AnsiColor) -> u32 {
-    match color {
-        AnsiColor::Black => 0x0000_0000,
-        AnsiColor::Red => 0x0080_0000,
-        AnsiColor::Green => 0x0000_8000,
-        AnsiColor::Yellow => 0x0080_8000,
-        AnsiColor::Blue => 0x0000_0080,
-        AnsiColor::Magenta => 0x0080_0080,
-        AnsiColor::Cyan => 0x0000_8080,
-        AnsiColor::White => 0x00c0_c0c0,
-        AnsiColor::BrightBlack => 0x0080_8080,
-        AnsiColor::BrightRed => 0x00ff_0000,
-        AnsiColor::BrightGreen => 0x0000_ff00,
-        AnsiColor::BrightYellow => 0x00ff_ff00,
-        AnsiColor::BrightBlue => 0x0000_00ff,
-        AnsiColor::BrightMagenta => 0x00ff_00ff,
-        AnsiColor::BrightCyan => 0x0000_ffff,
-        AnsiColor::BrightWhite => 0x00ff_ffff,
-    }
+/// This is a thin wrapper over `retroglyph-core`'s [`AnsiColor::to_rgb`], which is the
+/// single canonical source of ANSI-to-RGB values shared by all backends. Do not
+/// reimplement the palette here; call into core so software's rendering stays in sync
+/// with core's (and, transitively, other backends') color resolution.
+fn ansi_to_rgb(color: AnsiColor) -> u32 {
+    let (r, g, b) = color.to_rgb();
+    (u32::from(r) << 16) | (u32::from(g) << 8) | u32::from(b)
 }
 
 /// Maps xterm 256-color index to 0x00RRGGBB.
 ///
-/// Same independent-duplication caveat as [`ansi_to_rgb`]: this reimplements the
-/// 6x6x6 color cube and greyscale ramp math that `retroglyph-core` also has (behind
-/// the `gem` feature), rather than consuming a shared resolver.
+/// Indices 0-15 delegate to [`ansi_to_rgb`] (and thus to core's canonical
+/// [`AnsiColor::to_rgb`]). Indices 16-255 (the 6x6x6 color cube and greyscale ramp)
+/// still reimplement the math that `retroglyph-core` also has behind its private,
+/// `gem`-feature-gated 256-color quantizer table, since core doesn't currently expose
+/// that part of the palette publicly.
 fn indexed_to_rgb(idx: u8) -> u32 {
     if let Ok(ansi) = AnsiColor::try_from(idx) {
         return ansi_to_rgb(ansi);
@@ -1397,42 +1375,24 @@ mod tests {
         assert_eq!(r.ctx.damage_rows, Some((0, 5 * CELL_H_PX)));
     }
 
-    // ── Palette parity with retroglyph-core (issue #165) ────────────────
+    // ── Palette parity with retroglyph-core (issue #308) ────────────────
     //
-    // `ansi_to_rgb`/`indexed_to_rgb` above intentionally duplicate
-    // retroglyph-core's ANSI/indexed color math independently, and the two
-    // tables don't fully agree (see the doc comments on those functions).
-    // This pins the subset of 16-color entries that *do* currently agree, so
-    // any future edit that accidentally moves one of them out of sync with
-    // `retroglyph_core::color::AnsiColor::to_rgb` is caught by CI rather than
-    // discovered as a rendering regression.
+    // `ansi_to_rgb` above now delegates directly to `AnsiColor::to_rgb`, so this
+    // asserts the two always agree for every variant, across the full palette, rather
+    // than pinning a hand-picked subset that happened to agree before the fix.
 
     #[test]
-    fn parity_with_core_ansi_colors() {
-        let agreeing = [
-            AnsiColor::Black,
-            AnsiColor::BrightRed,
-            AnsiColor::BrightGreen,
-            AnsiColor::BrightYellow,
-            AnsiColor::BrightMagenta,
-            AnsiColor::BrightCyan,
-            AnsiColor::BrightWhite,
-        ];
-        for color in agreeing {
+    fn ansi_to_rgb_matches_core_for_all_variants() {
+        for index in 0..16u8 {
+            let color = AnsiColor::try_from(index).expect("0..16 are valid ANSI indices");
             let (r, g, b) = color.to_rgb();
             let core_rgb = (u32::from(r) << 16) | (u32::from(g) << 8) | u32::from(b);
             assert_eq!(
                 ansi_to_rgb(color),
                 core_rgb,
-                "{color:?}: retroglyph-software's palette drifted from \
+                "{color:?}: retroglyph-software's ansi_to_rgb no longer matches \
                  retroglyph-core's AnsiColor::to_rgb"
             );
         }
-    }
-
-    #[test]
-    fn ansi_white_is_pinned_to_documented_value() {
-        // Regression pin for the specific value cited in issue #165.
-        assert_eq!(ansi_to_rgb(AnsiColor::White), 0x00c0_c0c0);
     }
 }
