@@ -788,25 +788,77 @@ impl Grid {
     /// on `layer`. Empty tiles (nothing written; see [`Tile::is_empty`]) are
     /// treated as transparent and skipped. An explicit space is copied and
     /// overwrites the destination.
+    ///
+    /// Walks `src`'s and `self`'s layer buffers directly by flat index instead of going through
+    /// [`get_tile`](Self::get_tile)/[`put_tile`](Self::put_tile) per cell (see retroglyph#263):
+    /// each of those recomputes a coordinate conversion and a bounds check per cell, which this
+    /// does once per row instead. The destination layer is allocated once, up front, rather than
+    /// as a side effect of the first written cell -- but only if `src_rect` (clamped to `src`'s
+    /// bounds) contains at least one non-empty tile, matching `put_tile`'s original
+    /// allocate-on-first-write behavior for a `src_rect` that is entirely transparent.
     pub fn blit(&mut self, layer: u8, src: &Self, src_rect: Rect, dst_x: u16, dst_y: u16) {
-        for sy in src_rect.top()..src_rect.bottom() {
-            for sx in src_rect.left()..src_rect.right() {
-                let Some(tile) = src.get_tile(layer, sx, sy) else {
+        let Some(src_lb) = src.layer(layer) else {
+            return;
+        };
+        let src_width = usize::from(src.width);
+        let sx0 = src_rect.left().min(src.width);
+        let sx1 = src_rect.right().min(src.width);
+        let sy0 = src_rect.top().min(src.height);
+        let sy1 = src_rect.bottom().min(src.height);
+        if sx0 >= sx1 || sy0 >= sy1 {
+            return;
+        }
+
+        // Matches the original's implicit allocate-on-first-write: only touch the destination
+        // layer at all if there's at least one visible (non-empty) source tile to copy.
+        let has_visible = (sy0..sy1).any(|sy| {
+            let start = usize::from(sy) * src_width + usize::from(sx0);
+            let end = usize::from(sy) * src_width + usize::from(sx1);
+            src_lb.buf.as_ref()[start..end]
+                .iter()
+                .any(|t| !t.flags.contains(TileFlags::EMPTY))
+        });
+        if !has_visible {
+            return;
+        }
+
+        let dst_width = usize::from(self.width);
+        let dst_height = usize::from(self.height);
+        let dst_lb = self.layer_or_alloc(layer);
+        let mut pending_extras: Vec<(usize, Arc<str>)> = Vec::new();
+
+        for sy in sy0..sy1 {
+            let dy = dst_y + (sy - src_rect.top());
+            if usize::from(dy) >= dst_height {
+                continue;
+            }
+            for sx in sx0..sx1 {
+                let dx = dst_x + (sx - src_rect.left());
+                if usize::from(dx) >= dst_width {
                     continue;
-                };
-                if !tile.flags.contains(TileFlags::EMPTY) {
-                    let dx = dst_x + sx.saturating_sub(src_rect.left());
-                    let dy = dst_y + sy.saturating_sub(src_rect.top());
-                    let src_idx = usize::from(sy) * usize::from(src.width) + usize::from(sx);
-                    let extra = src
-                        .layer(layer)
-                        .and_then(|lb| lb.extra_arc_for(src_idx, tile));
-                    self.put_tile(layer, dx, dy, *tile);
-                    if let Some(extra) = extra {
-                        self.set_extra(layer, dx, dy, extra);
+                }
+                let src_idx = usize::from(sy) * src_width + usize::from(sx);
+                let tile = &src_lb.buf.as_ref()[src_idx];
+                if tile.flags.contains(TileFlags::EMPTY) {
+                    continue;
+                }
+                let dst_idx = usize::from(dy) * dst_width + usize::from(dx);
+                let mut out_tile = *tile;
+                out_tile.flags.remove(TileFlags::HAS_EXTRA);
+                dst_lb.buf.as_mut()[dst_idx] = out_tile;
+                if tile.flags.contains(TileFlags::HAS_EXTRA) {
+                    if let Some(extra) = src_lb.extra_arc_for(src_idx, tile) {
+                        pending_extras.push((dst_idx, extra));
                     }
+                } else {
+                    dst_lb.extras.remove(&dst_idx);
                 }
             }
+        }
+
+        for (idx, extra) in pending_extras {
+            dst_lb.buf.as_mut()[idx].flags.insert(TileFlags::HAS_EXTRA);
+            dst_lb.extras.insert(idx, extra);
         }
     }
 
@@ -824,6 +876,11 @@ impl Grid {
     /// Requires the `gem` feature (default on): [`BlendMode::Linear`]'s
     /// per-channel color lerp is delegated to [`gem::rgb::Lerp`]; the other
     /// modes delegate to [`alpha_blend::blend_modes::SeparableBlendMode`].
+    ///
+    /// Like [`blit`](Self::blit) (see retroglyph#262/#263), walks `src`'s and `self`'s layer
+    /// buffers directly by flat index instead of per-cell [`get_tile`](Self::get_tile)/
+    /// [`put_tile`](Self::put_tile), and allocates the destination layer once, up front, rather
+    /// than as a side effect of the first written cell.
     #[cfg(feature = "gem")]
     #[allow(clippy::too_many_arguments, clippy::float_cmp)]
     pub fn blit_alpha(
@@ -837,39 +894,83 @@ impl Grid {
         fg_alpha: f32,
         bg_alpha: f32,
     ) {
-        for sy in src_rect.top()..src_rect.bottom() {
-            for sx in src_rect.left()..src_rect.right() {
-                let Some(tile) = src.get_tile(layer, sx, sy) else {
+        let Some(src_lb) = src.layer(layer) else {
+            return;
+        };
+        let src_width = usize::from(src.width);
+        let sx0 = src_rect.left().min(src.width);
+        let sx1 = src_rect.right().min(src.width);
+        let sy0 = src_rect.top().min(src.height);
+        let sy1 = src_rect.bottom().min(src.height);
+        if sx0 >= sx1 || sy0 >= sy1 {
+            return;
+        }
+
+        // Matches the original's implicit allocate-on-first-write: only touch the destination
+        // layer at all if there's at least one visible (non-empty) source tile to copy.
+        let has_visible = (sy0..sy1).any(|sy| {
+            let start = usize::from(sy) * src_width + usize::from(sx0);
+            let end = usize::from(sy) * src_width + usize::from(sx1);
+            src_lb.buf.as_ref()[start..end]
+                .iter()
+                .any(|t| !t.flags.contains(TileFlags::EMPTY))
+        });
+        if !has_visible {
+            return;
+        }
+
+        let dst_width = usize::from(self.width);
+        let dst_height = usize::from(self.height);
+        let dst_lb = self.layer_or_alloc(layer);
+        let mut pending_extras: Vec<(usize, Arc<str>)> = Vec::new();
+
+        for sy in sy0..sy1 {
+            let dy = dst_y + (sy - src_rect.top());
+            if usize::from(dy) >= dst_height {
+                continue;
+            }
+            for sx in sx0..sx1 {
+                let dx = dst_x + (sx - src_rect.left());
+                if usize::from(dx) >= dst_width {
                     continue;
-                };
-                if !tile.flags.contains(TileFlags::EMPTY) {
-                    let dx = dst_x + sx.saturating_sub(src_rect.left());
-                    let dy = dst_y + sy.saturating_sub(src_rect.top());
-                    let mut blended = *tile;
-                    if let Some(dst) = self.get_tile(layer, dx, dy) {
-                        // `fg_alpha == 1.0` only lets `Linear` skip the call: `Linear` at `t ==
-                        // 1.0` is `src` by definition, but a `Screen`/`Dodge`/`Burn`/`Overlay`
-                        // mix at full alpha still needs to run the mode's formula -- it isn't
-                        // equivalent to the raw source color (see `blend_color`'s matching guard).
-                        if mode != BlendMode::Linear || fg_alpha != 1.0 {
-                            blended.style.fg =
-                                blend_fg(mode, tile.style.fg, dst.style.fg, fg_alpha);
-                        }
-                        if mode != BlendMode::Linear || bg_alpha != 1.0 {
-                            blended.style.bg =
-                                blend_bg(mode, tile.style.bg, dst.style.bg, bg_alpha);
-                        }
+                }
+                let src_idx = usize::from(sy) * src_width + usize::from(sx);
+                let tile = &src_lb.buf.as_ref()[src_idx];
+                if tile.flags.contains(TileFlags::EMPTY) {
+                    continue;
+                }
+                let dst_idx = usize::from(dy) * dst_width + usize::from(dx);
+                let mut blended = *tile;
+                {
+                    let dst_tile = &dst_lb.buf.as_ref()[dst_idx];
+                    // `fg_alpha == 1.0` only lets `Linear` skip the call: `Linear` at `t ==
+                    // 1.0` is `src` by definition, but a `Screen`/`Dodge`/`Burn`/`Overlay`
+                    // mix at full alpha still needs to run the mode's formula -- it isn't
+                    // equivalent to the raw source color (see `blend_color`'s matching guard).
+                    if mode != BlendMode::Linear || fg_alpha != 1.0 {
+                        blended.style.fg =
+                            blend_fg(mode, tile.style.fg, dst_tile.style.fg, fg_alpha);
                     }
-                    let src_idx = usize::from(sy) * usize::from(src.width) + usize::from(sx);
-                    let extra = src
-                        .layer(layer)
-                        .and_then(|lb| lb.extra_arc_for(src_idx, tile));
-                    self.put_tile(layer, dx, dy, blended);
-                    if let Some(extra) = extra {
-                        self.set_extra(layer, dx, dy, extra);
+                    if mode != BlendMode::Linear || bg_alpha != 1.0 {
+                        blended.style.bg =
+                            blend_bg(mode, tile.style.bg, dst_tile.style.bg, bg_alpha);
                     }
                 }
+                blended.flags.remove(TileFlags::HAS_EXTRA);
+                dst_lb.buf.as_mut()[dst_idx] = blended;
+                if tile.flags.contains(TileFlags::HAS_EXTRA) {
+                    if let Some(extra) = src_lb.extra_arc_for(src_idx, tile) {
+                        pending_extras.push((dst_idx, extra));
+                    }
+                } else {
+                    dst_lb.extras.remove(&dst_idx);
+                }
             }
+        }
+
+        for (idx, extra) in pending_extras {
+            dst_lb.buf.as_mut()[idx].flags.insert(TileFlags::HAS_EXTRA);
+            dst_lb.extras.insert(idx, extra);
         }
     }
 
@@ -923,34 +1024,60 @@ impl Grid {
     /// overwrites (erases) the glyph beneath it.
     ///
     /// `dst` must have the same dimensions as `self`.
+    ///
+    /// Walks layer buffers directly by flat index instead of calling
+    /// [`get`](Self::get)/[`get_tile`](Self::get_tile) per cell (see retroglyph#262): each of
+    /// those recomputes a coordinate conversion and a bounds check per cell, which a flat scan
+    /// over each layer's backing buffer -- the same style [`layers`](Self::layers) and
+    /// [`diff`](Self::diff) already use -- avoids entirely.
     pub(crate) fn flatten_into(&self, dst: &mut Self) {
-        let width = usize::from(self.width);
-        for y in 0..self.height {
-            for x in 0..self.width {
-                let mut out = *self.get(x, y);
-                let idx = usize::from(y) * width + usize::from(x);
-                let mut out_extra = self.layer0().extra_arc_for(idx, &out);
-                for id in 1..=self.max_layer {
-                    let Some(tile) = self.get_tile(id, x, y) else {
-                        continue;
-                    };
-                    let contributes_glyph = !tile.flags.contains(TileFlags::EMPTY);
-                    if contributes_glyph {
+        let layer0 = self.layer0();
+        let cell_count = layer0.buf.as_ref().len();
+
+        // Seed every destination cell from layer 0: its tile verbatim, and its extra text
+        // filtered through `HAS_EXTRA` (the flag is authoritative -- see `LayerBuf::extras`'
+        // doc comment -- so a stale, unflagged entry in `layer0.extras` is not carried over).
+        let dst_layer0 = dst.layer0_mut();
+        dst_layer0.buf.as_mut().copy_from_slice(layer0.buf.as_ref());
+        dst_layer0.extras.clear();
+        for (&idx, extra) in &layer0.extras {
+            if layer0.buf.as_ref()[idx]
+                .flags
+                .contains(TileFlags::HAS_EXTRA)
+            {
+                dst_layer0.extras.insert(idx, extra.clone());
+            }
+        }
+
+        // Overlay every higher allocated layer, in ascending order, index-for-index.
+        for id in 1..=self.max_layer {
+            let Some(lb) = self.layer(id) else {
+                continue;
+            };
+            let src_buf = lb.buf.as_ref();
+            debug_assert_eq!(src_buf.len(), cell_count);
+            let dst_layer0 = dst.layer0_mut();
+            for (idx, tile) in src_buf.iter().enumerate() {
+                if !tile.flags.contains(TileFlags::EMPTY) {
+                    {
+                        let out = &mut dst_layer0.buf.as_mut()[idx];
                         out.glyph = tile.glyph;
                         out.width = tile.width;
                         out.style.fg = tile.style.fg;
                         out.dx = tile.dx;
                         out.dy = tile.dy;
                         out.flags = tile.flags;
-                        out_extra = self.layer(id).and_then(|lb| lb.extra_arc_for(idx, tile));
                     }
-                    if tile.style.bg != Color::Default {
-                        out.style.bg = tile.style.bg;
+                    if tile.flags.contains(TileFlags::HAS_EXTRA) {
+                        if let Some(extra) = lb.extra_arc_for(idx, tile) {
+                            dst_layer0.extras.insert(idx, extra);
+                        }
+                    } else {
+                        dst_layer0.extras.remove(&idx);
                     }
                 }
-                dst.put(x, y, out);
-                if let Some(extra) = out_extra {
-                    dst.set_extra(0, x, y, extra);
+                if tile.style.bg != Color::Default {
+                    dst_layer0.buf.as_mut()[idx].style.bg = tile.style.bg;
                 }
             }
         }
@@ -1607,6 +1734,83 @@ mod tests {
         assert_eq!(dst.grapheme(0, 0, 0), Some("e\u{0301}"));
     }
 
+    #[test]
+    fn test_grid_blit_empty_rect_is_a_no_op() {
+        // A zero-area `src_rect` has no cells at all -- `sx0 >= sx1` should short-circuit before
+        // touching the destination.
+        let src = Grid::new(2, 2);
+        let mut dst = Grid::new(2, 2);
+        dst.put(0, 0, Tile::new('x', Style::default()));
+        dst.blit(0, &src, Rect::new(0, 0, 0, 0), 0, 0);
+        assert_eq!(dst.get(0, 0).glyph(), 'x');
+        assert_eq!(dst.max_layer(), 0);
+    }
+
+    #[test]
+    fn test_grid_blit_fully_transparent_source_does_not_allocate_dst_layer() {
+        // Perf refactor (#263): the destination layer is allocated up front, but only after
+        // confirming the (clamped) source region has at least one non-empty tile -- matching
+        // `put_tile`'s original allocate-on-first-write behavior for an all-transparent blit.
+        let src = Grid::new(2, 2);
+        let mut dst = Grid::new(2, 2);
+        dst.blit(3, &src, Rect::new(0, 0, 2, 2), 0, 0);
+        assert_eq!(dst.max_layer(), 0);
+    }
+
+    #[test]
+    fn test_grid_blit_skips_out_of_bounds_source_and_dest_regions() {
+        let mut src = Grid::new(4, 4);
+        for y in 0..4 {
+            for x in 0..4 {
+                src.put(x, y, Tile::new('#', Style::default()));
+            }
+        }
+
+        let mut dst = Grid::new(2, 2);
+        // `src_rect` extends past `src`'s bounds and the destination offset pushes part of the
+        // copied region past `dst`'s bounds too; both should be silently clamped, not panic.
+        dst.blit(0, &src, Rect::new(2, 2, 10, 10), 1, 1);
+        assert_eq!(dst.get(1, 1).glyph(), '#');
+        assert_eq!(dst.get(0, 0).glyph(), ' ');
+        assert_eq!(dst.get(0, 1).glyph(), ' ');
+        assert_eq!(dst.get(1, 0).glyph(), ' ');
+    }
+
+    #[test]
+    fn test_grid_blit_sub_cell_offset_and_transparency() {
+        let mut src = Grid::new(2, 2);
+        src.put(0, 0, Tile::new('A', Style::default()));
+        // (1, 0) and (1, 1) stay at their default (empty) tile -- transparent, should not
+        // overwrite the destination.
+        src.put(0, 1, Tile::new('B', Style::default()));
+
+        let mut dst = Grid::new(3, 3);
+        dst.put(2, 2, Tile::new('Z', Style::default()));
+        dst.blit(0, &src, Rect::new(0, 0, 2, 2), 1, 1);
+
+        assert_eq!(dst.get(1, 1).glyph(), 'A');
+        assert_eq!(dst.get(1, 2).glyph(), 'B');
+        // Untouched by the (transparent) source cells at (1, 0) and (1, 1).
+        assert_eq!(dst.get(2, 1).glyph(), ' ');
+        assert_eq!(dst.get(2, 2).glyph(), 'Z');
+    }
+
+    #[test]
+    fn test_grid_blit_multi_layer_independent() {
+        let mut src = Grid::new(2, 2);
+        src.put_tile(0, 0, 0, Tile::new('a', Style::default()));
+        src.put_tile(2, 0, 0, Tile::new('b', Style::default()));
+
+        let mut dst = Grid::new(2, 2);
+        dst.blit(0, &src, Rect::new(0, 0, 2, 2), 0, 0);
+        dst.blit(2, &src, Rect::new(0, 0, 2, 2), 0, 0);
+
+        assert_eq!(dst.get_tile(0, 0, 0).map(Tile::glyph), Some('a'));
+        assert_eq!(dst.get_tile(2, 0, 0).map(Tile::glyph), Some('b'));
+        // Layer 1 was never written by either blit call.
+        assert!(dst.get_tile(1, 0, 0).is_none());
+    }
+
     // --- `BlendMode` / `blit_alpha` ---
 
     #[cfg(feature = "gem")]
@@ -1824,6 +2028,64 @@ mod tests {
         g.flatten_into(&mut flattened);
         assert_eq!(flattened.get(0, 0).glyph, 'e');
         assert_eq!(flattened.grapheme(0, 0, 0), Some("e\u{0301}"));
+    }
+
+    #[test]
+    fn test_grid_flatten_into_single_layer_is_a_plain_copy() {
+        let mut g = Grid::new(2, 2);
+        g.put(0, 0, Tile::new('a', Style::default()));
+        g.put(1, 1, Tile::new('b', Style::default()));
+        let mut flattened = Grid::new(2, 2);
+        g.flatten_into(&mut flattened);
+        assert_eq!(flattened.get(0, 0).glyph(), 'a');
+        assert_eq!(flattened.get(1, 1).glyph(), 'b');
+        assert_eq!(flattened.get(1, 0).glyph(), ' ');
+    }
+
+    #[test]
+    fn test_grid_flatten_into_higher_layer_overwrites_glyph_and_fg_but_not_default_bg() {
+        let mut g = Grid::new(1, 1);
+        g.put(
+            0,
+            0,
+            Tile::new('a', Style::new().fg(Color::BLACK).bg(Color::WHITE)),
+        );
+        g.put_tile(1, 0, 0, Tile::new('b', Style::new().fg(Color::WHITE)));
+
+        let mut flattened = Grid::new(1, 1);
+        g.flatten_into(&mut flattened);
+        let out = flattened.get(0, 0);
+        assert_eq!(out.glyph(), 'b');
+        assert_eq!(out.style().fg, Color::WHITE);
+        // Layer 1's tile has a `Default` background, so layer 0's background shows through.
+        assert_eq!(out.style().bg, Color::WHITE);
+    }
+
+    #[test]
+    fn test_grid_flatten_into_empty_higher_layer_cell_is_transparent() {
+        let mut g = Grid::new(2, 1);
+        g.put(0, 0, Tile::new('a', Style::default()));
+        g.put(1, 0, Tile::new('b', Style::default()));
+        // Only touch (0, 0) on layer 1; (1, 0) on layer 1 stays at its default (EMPTY) tile.
+        g.put_tile(1, 0, 0, Tile::new('c', Style::default()));
+
+        let mut flattened = Grid::new(2, 1);
+        g.flatten_into(&mut flattened);
+        assert_eq!(flattened.get(0, 0).glyph(), 'c');
+        // Untouched by the transparent layer-1 cell -- layer 0's glyph shows through.
+        assert_eq!(flattened.get(1, 0).glyph(), 'b');
+    }
+
+    #[test]
+    fn test_grid_flatten_into_multi_layer_stale_dst_extra_is_cleared() {
+        // `dst` may be a reused scratch buffer with stale content from a previous frame (see
+        // `Terminal::present`) -- `flatten_into` must fully overwrite it, not merge with it.
+        let mut flattened = Grid::new(1, 1);
+        flattened.put(0, 0, Tile::new('z', Style::default()));
+
+        let g = Grid::new(1, 1);
+        g.flatten_into(&mut flattened);
+        assert_eq!(flattened.get(0, 0).glyph(), ' ');
     }
 }
 
