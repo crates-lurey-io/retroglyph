@@ -130,13 +130,13 @@ experiencing the break, for the reason above.
   breaking, even PRs that never touch the API -- the PR-time job answers "did _this_ PR add a
   break", not "is `main` breaking relative to the last release" (that's release-plz's question).
 
-  To make the finding visible without opening the Actions run, the job also syncs the `t:breaking`
+  To make the finding visible without opening the Actions run, the job also syncs the `breaking`
   label and a report comment onto the PR: added/updated when it finds a break (the comment holds the
   full `cargo-semver-checks` output, re-run and edited in place on every push, not reposted),
   removed when it doesn't. Both are purely a mirror of the job's own finding, not an input to
-  anything downstream; see the note on `t:breaking` below. If the tool itself fails to complete
-  (exit code other than clean or breaking-found) the job leaves the label/comment untouched rather
-  than guessing, since an inconclusive run isn't evidence of either state.
+  anything downstream; see the note on `breaking` below. If the tool itself fails to complete (exit
+  code other than clean or breaking-found) the job leaves the label/comment untouched rather than
+  guessing, since an inconclusive run isn't evidence of either state.
 
 ## PR labels (overrides)
 
@@ -150,11 +150,11 @@ commit's `!`/`BREAKING CHANGE:` can), so a bump-driving label without one would 
 ships a break as a patch. There is also no `semver-override` label anymore: the PR-time semver check
 is non-blocking, so nothing needs overriding.
 
-`t:breaking` (`.github/labels.yml`) is different: it's a plain categorization label, synced
+`breaking` (`.github/labels.yml`) is different: it's a plain categorization label, synced
 automatically by `check-semver.yml` from that job's own `cargo-semver-checks` finding (see above),
 the same way `c:*` labels are synced from changed paths. It never drives release-plz and can't ship
 a break as a patch -- release-plz only ever reads the commit `!`/`BREAKING CHANGE:` marker, never PR
-labels, so `t:breaking` being present, absent, or momentarily wrong changes nothing about the actual
+labels, so `breaking` being present, absent, or momentarily wrong changes nothing about the actual
 bump. Treat it as a search/filter aid, not a signal to act on by itself.
 
 Note on `skip-changelog`: git-cliff builds the changelog from commit messages, not GitHub labels, so

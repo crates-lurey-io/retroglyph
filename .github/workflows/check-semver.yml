@@ -18,7 +18,7 @@ name: Check Semver
 # every legitimate API-breaking PR and force a label onto the common case -- backwards. This job
 # exists purely so a reviewer sees the finding before merge.
 #
-# The `t:breaking` label and a report comment are synced (added/updated/removed) to mirror the
+# The `breaking` label and a report comment are synced (added/updated/removed) to mirror the
 # finding directly on the PR, so it's visible without opening the Actions run -- purely
 # informational, same as the job itself: neither drives release-plz's version bump (only a commit's
 # `!`/`BREAKING CHANGE:` does that; see RELEASING.md's "PR labels (overrides)" section). Both are
@@ -61,7 +61,7 @@ jobs:
           echo "exit_code=$exit_code" >> "$GITHUB_OUTPUT"
         shell: bash
 
-      - name: Sync t:breaking label and report comment
+      - name: Sync breaking label and report comment
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
@@ -79,14 +79,14 @@ jobs:
           case "$EXIT_CODE" in
             0)
               # Clean: drop the label and any stale report comment, best-effort.
-              gh pr edit "$PR_NUMBER" --remove-label t:breaking || true
+              gh pr edit "$PR_NUMBER" --remove-label breaking || true
               if [ -n "$existing_id" ]; then
                 gh api "repos/$GITHUB_REPOSITORY/issues/comments/$existing_id" -X DELETE || true
               fi
               ;;
             100)
               # Breaking change found against the PR's base: label + upsert the report comment.
-              gh pr edit "$PR_NUMBER" --add-label t:breaking || true
+              gh pr edit "$PR_NUMBER" --add-label breaking || true
 
               # Cap the embedded report well under GitHub's ~65k comment body limit; the full,
               # untruncated output is always in the linked Actions run log.
@@ -129,6 +129,6 @@ jobs:
               # etc.) rather than reaching a verdict. Leave the label/comment as they were --
               # flipping either based on an inconclusive run would misreport the PR's actual
               # state. The job log has the failure for a maintainer to investigate.
-              echo "::warning::cargo-semver-checks exited $EXIT_CODE (not 0 or 100); leaving t:breaking label/comment untouched. See the job log for details."
+              echo "::warning::cargo-semver-checks exited $EXIT_CODE (not 0 or 100); leaving breaking label/comment untouched. See the job log for details."
               ;;
           esac

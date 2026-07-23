@@ -45,4 +45,3 @@
 - name: 'blocked'
   color: '000000'
   description: 'Waiting on an external dependency or decision'
-
