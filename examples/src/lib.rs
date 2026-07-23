@@ -43,6 +43,8 @@ pub use launch::{Example, HEADLESS_FRAME_DELTA, render_headless_frames};
 pub use launch::launch;
 #[cfg(feature = "crossterm")]
 pub use launch::run_crossterm;
+#[cfg(feature = "gl")]
+pub use launch::run_gl;
 pub use launch::run_headless_stdout;
 #[cfg(feature = "software")]
 pub use launch::{run_software, run_software_with};
