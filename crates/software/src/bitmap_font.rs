@@ -81,6 +81,22 @@ impl BitmapFont {
     pub const fn char_to_index(&self, ch: char) -> u8 {
         unicode_to_cp437(ch)
     }
+
+    /// Attempts to map a Unicode `char` to a glyph index in this font, returning `None`
+    /// instead of substituting the solid-block fallback glyph on a miss.
+    ///
+    /// A miss is either `ch` not being in the CP437 mapping table at all, or its mapped
+    /// index falling outside this font's `glyph_count` (e.g. a font built with fewer than
+    /// 256 glyphs). [`FallbackFontChain::resolve`] uses this to keep trying further fonts
+    /// in the chain rather than settling for [`char_to_index`](Self::char_to_index)'s
+    /// unconditional solid-block substitution.
+    #[must_use]
+    pub const fn try_char_to_index(&self, ch: char) -> Option<u8> {
+        match try_unicode_to_cp437(ch) {
+            Some(index) if (index as u16) < self.glyph_count => Some(index),
+            _ => None,
+        }
+    }
 }
 
 // Two `BitmapFont`s are equal when they point at the same static data and
@@ -96,6 +112,89 @@ impl PartialEq for BitmapFont {
 }
 
 impl Eq for BitmapFont {}
+
+// ── Fallback font chain ─────────────────────────────────────────────────────
+
+/// A glyph resolved from a [`FallbackFontChain`]: the glyph index plus the specific
+/// [`BitmapFont`] it came from, since each font in a chain owns its own bitmap data.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ResolvedGlyph {
+    font: BitmapFont,
+    index: u8,
+}
+
+impl ResolvedGlyph {
+    /// The font this glyph was resolved from.
+    #[must_use]
+    pub const fn font(&self) -> &BitmapFont {
+        &self.font
+    }
+
+    /// The glyph index within [`font`](Self::font).
+    #[must_use]
+    pub const fn index(&self) -> u8 {
+        self.index
+    }
+
+    /// Returns the row bytes for this glyph; see [`BitmapFont::rows`].
+    #[must_use]
+    pub fn rows(&self) -> &[u8] {
+        self.font.rows(self.index)
+    }
+}
+
+/// Combines a primary [`BitmapFont`] with an ordered list of fallback fonts.
+///
+/// [`resolve`](Self::resolve) tries the primary font's char mapping first; on a miss, it
+/// tries each fallback font in order; only if every font in the chain misses does it fall
+/// back to the primary font's solid-block glyph. This lets a caller layer, say, an ASCII
+/// or partial-coverage primary font with one or more broader fallback fonts, so a char
+/// missing from the primary doesn't automatically become a solid block if some other font
+/// in the chain actually has it.
+///
+/// This type ships **no bundled fallback font data** -- every font in the chain, primary
+/// or fallback, is supplied by the caller. Bundling a ready-to-use Latin-1/Extended
+/// fallback font is a natural follow-up now that this mechanism exists, but is out of
+/// scope here.
+///
+/// Callers who don't need a fallback chain can keep using a bare [`BitmapFont`] and
+/// [`BitmapFont::char_to_index`]/[`BitmapFont::rows`] directly, exactly as before --
+/// this type is purely additive and opt-in.
+#[derive(Debug, Clone, Copy)]
+pub struct FallbackFontChain<'a> {
+    primary: BitmapFont,
+    fallbacks: &'a [BitmapFont],
+}
+
+impl<'a> FallbackFontChain<'a> {
+    /// Constructs a chain from a primary font and an ordered list of fallback fonts.
+    #[must_use]
+    pub const fn new(primary: BitmapFont, fallbacks: &'a [BitmapFont]) -> Self {
+        Self { primary, fallbacks }
+    }
+
+    /// Resolves `ch` to a glyph, trying the primary font first, then each fallback font
+    /// in order, only substituting the primary font's solid-block glyph if every font in
+    /// the chain misses.
+    #[must_use]
+    pub fn resolve(&self, ch: char) -> ResolvedGlyph {
+        if let Some(index) = self.primary.try_char_to_index(ch) {
+            return ResolvedGlyph {
+                font: self.primary,
+                index,
+            };
+        }
+        for font in self.fallbacks {
+            if let Some(index) = font.try_char_to_index(ch) {
+                return ResolvedGlyph { font: *font, index };
+            }
+        }
+        ResolvedGlyph {
+            font: self.primary,
+            index: FALLBACK,
+        }
+    }
+}
 
 // ── Default embedded font ──────────────────────────────────────────────────
 
@@ -392,197 +491,209 @@ pub mod unscii16 {
 /// Solid block, the fallback for any unmapped character.
 const FALLBACK: u8 = 0xDB;
 
-/// Maps a Unicode scalar to its CP437 glyph index.
+/// Maps a Unicode scalar to its CP437 glyph index, falling back to a solid block
+/// (CP437 `0xDB`) for characters not covered by [`try_unicode_to_cp437`].
+pub(crate) const fn unicode_to_cp437(ch: char) -> u8 {
+    match try_unicode_to_cp437(ch) {
+        Some(index) => index,
+        None => FALLBACK,
+    }
+}
+
+/// Attempts to map a Unicode scalar to its CP437 glyph index.
 ///
 /// ASCII (U+0020–U+007E) maps identically.  Common box-drawing characters,
-/// block-elements, and roguelike symbols are mapped explicitly.  Everything
-/// else falls back to a solid block (CP437 `0xDB`).
+/// block-elements, and roguelike symbols are mapped explicitly.  Returns
+/// `None` for anything else, distinguishing "not in the CP437 table" from a
+/// character that legitimately maps to the solid-block glyph (`'█'`) --
+/// [`FallbackFontChain`] relies on that distinction to keep trying further
+/// fonts on a miss instead of stopping at a false-positive solid-block hit.
 #[allow(clippy::too_many_lines)]
-pub(crate) const fn unicode_to_cp437(ch: char) -> u8 {
+const fn try_unicode_to_cp437(ch: char) -> Option<u8> {
     // Direct ASCII pass-through (the most common path for roguelikes).
     let u = ch as u32;
     if u < 0x80 {
         #[allow(clippy::cast_possible_truncation)]
-        return u as u8;
+        return Some(u as u8);
     }
 
     // Named mappings for the characters roguelikes actually use.
     match ch {
         // ── Latin-1 accented letters that overlap CP437 ──────────────────
-        'Ç' => 0x80,
-        'ü' => 0x81,
-        'é' => 0x82,
-        'â' => 0x83,
-        'ä' => 0x84,
-        'à' => 0x85,
-        'å' => 0x86,
-        'ç' => 0x87,
-        'ê' => 0x88,
-        'ë' => 0x89,
-        'è' => 0x8A,
-        'ï' => 0x8B,
-        'î' => 0x8C,
-        'ì' => 0x8D,
-        'Ä' => 0x8E,
-        'Å' => 0x8F,
-        'É' => 0x90,
-        'æ' => 0x91,
-        'Æ' => 0x92,
-        'ô' => 0x93,
-        'ö' => 0x94,
-        'ò' => 0x95,
-        'û' => 0x96,
-        'ù' => 0x97,
-        'ÿ' => 0x98,
-        'Ö' => 0x99,
-        'Ü' => 0x9A,
-        '¢' => 0x9B,
-        '£' => 0x9C,
-        '¥' => 0x9D,
-        'ƒ' => 0x9F,
-        'á' => 0xA0,
-        'í' => 0xA1,
-        'ó' => 0xA2,
-        'ú' => 0xA3,
-        'ñ' => 0xA4,
-        'Ñ' => 0xA5,
-        'ª' => 0xA6,
-        'º' => 0xA7,
-        '¿' => 0xA8,
-        '⌐' => 0xA9,
-        '½' => 0xAB,
-        '¼' => 0xAC,
-        '¡' => 0xAD,
-        '«' => 0xAE,
-        '»' => 0xAF,
+        'Ç' => Some(0x80),
+        'ü' => Some(0x81),
+        'é' => Some(0x82),
+        'â' => Some(0x83),
+        'ä' => Some(0x84),
+        'à' => Some(0x85),
+        'å' => Some(0x86),
+        'ç' => Some(0x87),
+        'ê' => Some(0x88),
+        'ë' => Some(0x89),
+        'è' => Some(0x8A),
+        'ï' => Some(0x8B),
+        'î' => Some(0x8C),
+        'ì' => Some(0x8D),
+        'Ä' => Some(0x8E),
+        'Å' => Some(0x8F),
+        'É' => Some(0x90),
+        'æ' => Some(0x91),
+        'Æ' => Some(0x92),
+        'ô' => Some(0x93),
+        'ö' => Some(0x94),
+        'ò' => Some(0x95),
+        'û' => Some(0x96),
+        'ù' => Some(0x97),
+        'ÿ' => Some(0x98),
+        'Ö' => Some(0x99),
+        'Ü' => Some(0x9A),
+        '¢' => Some(0x9B),
+        '£' => Some(0x9C),
+        '¥' => Some(0x9D),
+        'ƒ' => Some(0x9F),
+        'á' => Some(0xA0),
+        'í' => Some(0xA1),
+        'ó' => Some(0xA2),
+        'ú' => Some(0xA3),
+        'ñ' => Some(0xA4),
+        'Ñ' => Some(0xA5),
+        'ª' => Some(0xA6),
+        'º' => Some(0xA7),
+        '¿' => Some(0xA8),
+        '⌐' => Some(0xA9),
+        '½' => Some(0xAB),
+        '¼' => Some(0xAC),
+        '¡' => Some(0xAD),
+        '«' => Some(0xAE),
+        '»' => Some(0xAF),
 
         // ── Shade characters ─────────────────────────────────────────────
-        '░' => 0xB0,
-        '▒' => 0xB1,
-        '▓' => 0xB2,
+        '░' => Some(0xB0),
+        '▒' => Some(0xB1),
+        '▓' => Some(0xB2),
 
         // ── Single-line box drawing ───────────────────────────────────────
-        '│' => 0xB3,
-        '┤' => 0xB4,
-        '╡' => 0xB5,
-        '╢' => 0xB6,
-        '╖' => 0xB7,
-        '╕' => 0xB8,
-        '╣' => 0xB9,
-        '║' => 0xBA,
-        '╗' => 0xBB,
-        '╝' => 0xBC,
-        '╜' => 0xBD,
-        '╛' => 0xBE,
-        '┐' => 0xBF,
-        '└' => 0xC0,
-        '┴' => 0xC1,
-        '┬' => 0xC2,
-        '├' => 0xC3,
-        '─' => 0xC4,
-        '┼' => 0xC5,
-        '╞' => 0xC6,
-        '╟' => 0xC7,
-        '╚' => 0xC8,
-        '╔' => 0xC9,
-        '╩' => 0xCA,
-        '╦' => 0xCB,
-        '╠' => 0xCC,
-        '═' => 0xCD,
-        '╬' => 0xCE,
-        '╧' => 0xCF,
-        '╨' => 0xD0,
-        '╤' => 0xD1,
-        '╥' => 0xD2,
-        '╙' => 0xD3,
-        '╘' => 0xD4,
-        '╒' => 0xD5,
-        '╓' => 0xD6,
-        '╫' => 0xD7,
-        '╪' => 0xD8,
-        '┘' => 0xD9,
-        '┌' => 0xDA,
+        '│' => Some(0xB3),
+        '┤' => Some(0xB4),
+        '╡' => Some(0xB5),
+        '╢' => Some(0xB6),
+        '╖' => Some(0xB7),
+        '╕' => Some(0xB8),
+        '╣' => Some(0xB9),
+        '║' => Some(0xBA),
+        '╗' => Some(0xBB),
+        '╝' => Some(0xBC),
+        '╜' => Some(0xBD),
+        '╛' => Some(0xBE),
+        '┐' => Some(0xBF),
+        '└' => Some(0xC0),
+        '┴' => Some(0xC1),
+        '┬' => Some(0xC2),
+        '├' => Some(0xC3),
+        '─' => Some(0xC4),
+        '┼' => Some(0xC5),
+        '╞' => Some(0xC6),
+        '╟' => Some(0xC7),
+        '╚' => Some(0xC8),
+        '╔' => Some(0xC9),
+        '╩' => Some(0xCA),
+        '╦' => Some(0xCB),
+        '╠' => Some(0xCC),
+        '═' => Some(0xCD),
+        '╬' => Some(0xCE),
+        '╧' => Some(0xCF),
+        '╨' => Some(0xD0),
+        '╤' => Some(0xD1),
+        '╥' => Some(0xD2),
+        '╙' => Some(0xD3),
+        '╘' => Some(0xD4),
+        '╒' => Some(0xD5),
+        '╓' => Some(0xD6),
+        '╫' => Some(0xD7),
+        '╪' => Some(0xD8),
+        '┘' => Some(0xD9),
+        '┌' => Some(0xDA),
 
         // ── Block elements ────────────────────────────────────────────────
-        '█' => 0xDB,
-        '▄' => 0xDC,
-        '▌' => 0xDD,
-        '▐' => 0xDE,
-        '▀' => 0xDF,
+        '█' => Some(0xDB),
+        '▄' => Some(0xDC),
+        '▌' => Some(0xDD),
+        '▐' => Some(0xDE),
+        '▀' => Some(0xDF),
 
         // ── Greek / math ──────────────────────────────────────────────────
-        'α' => 0xE0,
-        'ß' => 0xE1,
-        'Γ' => 0xE2,
-        'π' => 0xE3,
-        'Σ' => 0xE4,
-        'σ' => 0xE5,
-        'µ' | 'μ' => 0xE6,
-        'τ' => 0xE7,
-        'Φ' => 0xE8,
-        'Θ' => 0xE9,
-        'Ω' => 0xEA,
-        'δ' => 0xEB,
-        '∞' => 0xEC,
-        'φ' => 0xED,
-        'ε' => 0xEE,
-        '∩' => 0xEF,
-        '≡' => 0xF0,
-        '±' => 0xF1,
-        '≥' => 0xF2,
-        '≤' => 0xF3,
-        '⌠' => 0xF4,
-        '⌡' => 0xF5,
-        '÷' => 0xF6,
-        '≈' => 0xF7,
-        '°' => 0xF8,
-        '·' | '∙' => 0xF9,
-        '√' => 0xFB,
-        'ⁿ' => 0xFC,
-        '²' => 0xFD,
-        '■' => 0xFE,
+        'α' => Some(0xE0),
+        'ß' => Some(0xE1),
+        'Γ' => Some(0xE2),
+        'π' => Some(0xE3),
+        'Σ' => Some(0xE4),
+        'σ' => Some(0xE5),
+        'µ' | 'μ' => Some(0xE6),
+        'τ' => Some(0xE7),
+        'Φ' => Some(0xE8),
+        'Θ' => Some(0xE9),
+        'Ω' => Some(0xEA),
+        'δ' => Some(0xEB),
+        '∞' => Some(0xEC),
+        'φ' => Some(0xED),
+        'ε' => Some(0xEE),
+        '∩' => Some(0xEF),
+        '≡' => Some(0xF0),
+        '±' => Some(0xF1),
+        '≥' => Some(0xF2),
+        '≤' => Some(0xF3),
+        '⌠' => Some(0xF4),
+        '⌡' => Some(0xF5),
+        '÷' => Some(0xF6),
+        '≈' => Some(0xF7),
+        '°' => Some(0xF8),
+        '·' | '∙' => Some(0xF9),
+        '√' => Some(0xFB),
+        'ⁿ' => Some(0xFC),
+        '²' => Some(0xFD),
+        '■' => Some(0xFE),
 
         // ── Roguelike / Unicode symbols ───────────────────────────────────
-        '☺' => 0x01,
-        '•' => 0x07,
-        '☻' => 0x02,
-        '♥' => 0x03,
-        '♦' => 0x04,
-        '♣' => 0x05,
-        '♠' => 0x06,
-        '◘' => 0x08,
-        '○' => 0x09,
-        '◙' => 0x0A,
-        '♂' => 0x0B,
-        '♀' => 0x0C,
-        '♪' => 0x0D,
-        '♫' => 0x0E,
-        '☼' => 0x0F,
-        '►' => 0x10,
-        '◄' => 0x11,
-        '↕' => 0x12,
-        '‼' => 0x13,
-        '¶' => 0x14,
-        '§' => 0x15,
-        '▬' => 0x16,
-        '↨' => 0x17,
-        '↑' => 0x18,
-        '↓' => 0x19,
-        '→' => 0x1A,
-        '←' => 0x1B,
-        '∟' => 0x1C,
-        '↔' => 0x1D,
-        '▲' => 0x1E,
-        '▼' => 0x1F,
-        '⌂' => 0x7F,
+        '☺' => Some(0x01),
+        '•' => Some(0x07),
+        '☻' => Some(0x02),
+        '♥' => Some(0x03),
+        '♦' => Some(0x04),
+        '♣' => Some(0x05),
+        '♠' => Some(0x06),
+        '◘' => Some(0x08),
+        '○' => Some(0x09),
+        '◙' => Some(0x0A),
+        '♂' => Some(0x0B),
+        '♀' => Some(0x0C),
+        '♪' => Some(0x0D),
+        '♫' => Some(0x0E),
+        '☼' => Some(0x0F),
+        '►' => Some(0x10),
+        '◄' => Some(0x11),
+        '↕' => Some(0x12),
+        '‼' => Some(0x13),
+        '¶' => Some(0x14),
+        '§' => Some(0x15),
+        '▬' => Some(0x16),
+        '↨' => Some(0x17),
+        '↑' => Some(0x18),
+        '↓' => Some(0x19),
+        '→' => Some(0x1A),
+        '←' => Some(0x1B),
+        '∟' => Some(0x1C),
+        '↔' => Some(0x1D),
+        '▲' => Some(0x1E),
+        '▼' => Some(0x1F),
+        '⌂' => Some(0x7F),
 
-        _ => FALLBACK,
+        _ => None,
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::unicode_to_cp437;
+    use super::{BitmapFont, FALLBACK, FallbackFontChain, unicode_to_cp437};
 
     /// The four codepoints patched into `unscii16`'s `DATA` (see that module's doc comment)
     /// must actually be reachable through the char-to-glyph path, not just present at their
@@ -594,5 +705,45 @@ mod tests {
         assert_eq!(unicode_to_cp437('☼'), 0x0F, "U+263C WHITE SUN WITH RAYS");
         assert_eq!(unicode_to_cp437('⌐'), 0xA9, "U+2310 REVERSED NOT SIGN");
         assert_eq!(unicode_to_cp437('∙'), 0xF9, "U+2219 BULLET OPERATOR");
+    }
+
+    /// A primary font that only covers the ASCII half of CP437 (glyph indices 0..128), so
+    /// any character mapping into the extended range (128..256) is a miss for it.
+    static PRIMARY_DATA: [u8; 128 * 16] = [0; 128 * 16];
+    const PRIMARY: BitmapFont = BitmapFont::new(&PRIMARY_DATA, 8, 16, 128);
+
+    /// A fallback font with full CP437 coverage (glyph indices 0..256).
+    static FALLBACK_DATA: [u8; 256 * 16] = [0; 256 * 16];
+    const FALLBACK_FONT: BitmapFont = BitmapFont::new(&FALLBACK_DATA, 8, 16, 256);
+
+    #[test]
+    fn chain_resolves_char_present_only_in_fallback_font() {
+        // 'Ç' maps to CP437 index 0x80, which is out of range for `PRIMARY`
+        // (glyph_count == 128) but present in `FALLBACK_FONT` (glyph_count == 256).
+        let chain = FallbackFontChain::new(PRIMARY, &[FALLBACK_FONT]);
+        let resolved = chain.resolve('Ç');
+        assert_eq!(*resolved.font(), FALLBACK_FONT);
+        assert_eq!(resolved.index(), 0x80);
+    }
+
+    #[test]
+    fn chain_falls_back_to_solid_block_when_every_font_misses() {
+        // 'あ' (U+3042 HIRAGANA LETTER A) isn't in the CP437 table at all, so both
+        // fonts in the chain miss and resolution must fall back to the documented
+        // solid-block glyph, taken from the primary font.
+        let chain = FallbackFontChain::new(PRIMARY, &[FALLBACK_FONT]);
+        let resolved = chain.resolve('あ');
+        assert_eq!(*resolved.font(), PRIMARY);
+        assert_eq!(resolved.index(), FALLBACK);
+    }
+
+    #[test]
+    fn zero_fallback_chain_matches_plain_char_to_index() {
+        let chain = FallbackFontChain::new(FALLBACK_FONT, &[]);
+        for ch in ['A', ' ', '█', '│', 'Ç', 'あ', '☺'] {
+            let resolved = chain.resolve(ch);
+            assert_eq!(*resolved.font(), FALLBACK_FONT);
+            assert_eq!(resolved.index(), FALLBACK_FONT.char_to_index(ch));
+        }
     }
 }
