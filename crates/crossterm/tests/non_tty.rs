@@ -6,6 +6,7 @@
 
 use retroglyph_core::backend::Backend;
 use retroglyph_crossterm::Crossterm;
+use std::io::IsTerminal;
 
 /// `Crossterm::new()` must never panic in a restricted context: on a real non-TTY (no
 /// controlling terminal reachable at all, e.g. a detached CI runner), raw-mode/terminal setup
@@ -62,5 +63,24 @@ fn size_falls_back_instead_of_panicking() {
         // test harnesses). Reaching this line at all (rather than unwinding) is the assertion;
         // either `Result` variant is an acceptable outcome.
         let _ = term.draw(std::iter::empty());
+    }
+}
+
+/// `CrosstermOptions::build()`/`Crossterm::new()` must wire up pipe-safe plain mode (see
+/// `retroglyph_terminal::TerminalRenderer::auto`) based on whether the real process stdout is
+/// an interactive terminal, rather than always leaving ANSI/SGR escapes on. Under `cargo test`
+/// (default, captured) this process's real stdout is a pipe, not a TTY, so `plain_mode()` should
+/// be `true`; run with `--nocapture` on a machine with a real controlling terminal still
+/// reachable, it could observe the other outcome instead -- either way, the assertion compares
+/// against a fresh, independent `is_terminal()` check so it holds under both.
+#[test]
+fn build_auto_detects_plain_mode_from_real_stdout() {
+    if let Ok(term) = Crossterm::new() {
+        let expected_plain = !std::io::stdout().is_terminal();
+        assert_eq!(
+            term.plain_mode(),
+            expected_plain,
+            "Crossterm::new()'s plain mode must track stdout's actual terminal status"
+        );
     }
 }

@@ -12,16 +12,16 @@ Everything else stays narrative-only until it's actually being scheduled.
 
 ## Adopt
 
-Medium effort, real capability gaps, not urgent:
-
-| Idea                                                                   | Source                         | Why                                                                                            | Effort       |
-| ---------------------------------------------------------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------- | ------------ |
-| Non-alternate-screen / inline rendering mode for the crossterm backend | termbox2 (as a documented gap) | Worth as a config option regardless of the source library; useful for `fzf`-style inline TUIs. | small-medium |
+Medium effort, real capability gaps, not urgent. Nothing currently outstanding in this category;
+items land here as they're identified, then move to a "Shipped" note below once implemented.
 
 Shipped: subcell image-to-glyph blit (posterize a pixel block to the best block/quadrant/sextant
 character, per doryen-rs/libtcod/notcurses) as `retroglyph_core::subcell`
 (`quantize_half_block`/`quantize_quadrant`/`quantize_sextant`) -- see
 `examples/examples/16_subcell_image.rs`.
+
+Shipped: non-alternate-screen / inline rendering mode for the crossterm backend (termbox2, as a
+documented gap) as `CrosstermOptions::alt_screen(false)` -- see `crates/crossterm/src/lib.rs`.
 
 ## Defer
 
