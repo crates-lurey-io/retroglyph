@@ -657,6 +657,33 @@ pub mod wasm {
         });
     }
 
+    /// Pushes a focus-change event into the terminal identified by `handle`:
+    /// `focused: true` delivers [`Event::FocusGained`], `focused: false`
+    /// delivers [`Event::FocusLost`]. Mirrors the crossterm backend's
+    /// `EnableFocusChange`-driven [`Event::FocusGained`]/[`Event::FocusLost`]
+    /// mapping, so a browser terminal element's native `focus`/`blur` DOM
+    /// events can drive the same "pause when unfocused" pattern.
+    ///
+    /// Logs a warning (via the `log` crate) and otherwise does nothing if
+    /// `handle` is unknown, e.g. because the terminal was already freed via
+    /// [`wasm_terminal_free`].
+    #[wasm_bindgen]
+    pub fn wasm_terminal_push_focus(handle: u32, focused: bool) {
+        use retroglyph_core::event::Event;
+        let event = if focused {
+            Event::FocusGained
+        } else {
+            Event::FocusLost
+        };
+        INSTANCES.with_borrow_mut(|instances| {
+            if let Some(term) = instances.get_mut(&handle) {
+                term.push_event(event);
+            } else {
+                log::warn!("wasm_terminal_push_focus: unknown handle {handle}");
+            }
+        });
+    }
+
     /// Drains and returns the ANSI bytes rendered since the last call for the
     /// terminal identified by `handle`. Returns an empty string if `handle`
     /// is unknown or nothing has been drawn since the last call.
@@ -722,6 +749,22 @@ mod tests {
         assert_eq!(
             Input::poll_event(&mut backend, Duration::ZERO),
             Some(Event::Paste("hello, world".to_string()))
+        );
+        assert_eq!(Input::poll_event(&mut backend, Duration::ZERO), None);
+    }
+
+    #[test]
+    fn push_event_supports_focus_gained_and_lost() {
+        let mut backend = TerminalWasm::new(10, 3);
+        backend.push_event(Event::FocusGained);
+        backend.push_event(Event::FocusLost);
+        assert_eq!(
+            Input::poll_event(&mut backend, Duration::ZERO),
+            Some(Event::FocusGained)
+        );
+        assert_eq!(
+            Input::poll_event(&mut backend, Duration::ZERO),
+            Some(Event::FocusLost)
         );
         assert_eq!(Input::poll_event(&mut backend, Duration::ZERO), None);
     }
