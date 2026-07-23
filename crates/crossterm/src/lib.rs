@@ -715,8 +715,17 @@ fn from_crossterm_mouse_event(
 
 // Taking ownership matches the call site: `crossterm::event::read()` hands us
 // a freshly-owned `Event` with nothing else holding a reference to it.
-#[allow(clippy::needless_pass_by_value)]
-fn from_crossterm_event(event: crossterm::event::Event) -> Result<Event, ()> {
+//
+// `#[doc(hidden)] pub` (rather than private) solely so `benches/event_translation.rs` (a
+// separate compiled crate, same restriction as an integration test) can call it directly to
+// measure retroglyph#285's "event translation throughput" case; this is not a supported public
+// API and can change or disappear without a semver-relevant changelog entry.
+#[doc(hidden)]
+// The `()` error carries no information beyond "unmappable"; a richer error type would be pure
+// overhead for an internal, non-public conversion whose only caller (`poll_event`) already
+// discards the error entirely (see the retry-on-unmappable-event loop above).
+#[allow(clippy::needless_pass_by_value, clippy::result_unit_err)]
+pub fn from_crossterm_event(event: crossterm::event::Event) -> Result<Event, ()> {
     use crossterm::event::Event as CE;
     match event {
         CE::Key(k) => {
