@@ -103,14 +103,16 @@ use retroglyph_core::grid::Pos;
 use retroglyph_core::tile::Tile;
 use std::io::{self, Write};
 
-/// Converts a [`Color`] to a standard ANSI/CSI `SetForegroundColor` (`38;...`)
-/// or `SetBackgroundColor` (`48;...`) parameter sequence, written to `out`.
+/// Writes a [`Color`]'s SGR parameter list (no `\x1b[`/`m` wrapper) for `SetForegroundColor`
+/// (`38;...`) or `SetBackgroundColor` (`48;...`) to `out`.
 ///
-/// `base` is `38` for foreground, `48` for background (the standard SGR
-/// prefix codes); `reset` is `39`/`49`, used for [`Color::Default`].
-fn write_sgr_color<W: Write>(out: &mut W, color: Color, base: u8, reset: u8) -> io::Result<()> {
+/// `base` is `38` for foreground, `48` for background (the standard SGR prefix codes); `reset`
+/// is `39`/`49`, used for [`Color::Default`]. This is the shared parameter-building block behind
+/// both [`write_sgr_color`] (a single complete escape sequence) and the combined-fg/bg path in
+/// [`TerminalRenderer::draw`], which concatenates two calls' output with `;` into one sequence.
+fn write_sgr_params<W: Write>(out: &mut W, color: Color, base: u8, reset: u8) -> io::Result<()> {
     match color {
-        Color::Default => write!(out, "\x1b[{reset}m"),
+        Color::Default => write!(out, "{reset}"),
         Color::Ansi(ansi) => {
             // Standard/bright ANSI codes are offsets from the SGR base:
             // foreground 30-37/90-97, background 40-47/100-107. `base` here
@@ -123,14 +125,25 @@ fn write_sgr_color<W: Write>(out: &mut W, color: Color, base: u8, reset: u8) -> 
             } else {
                 bright_base + (index - 8)
             };
-            write!(out, "\x1b[{code}m")
+            write!(out, "{code}")
         }
-        Color::Indexed(index) => write!(out, "\x1b[{base};5;{index}m"),
+        Color::Indexed(index) => write!(out, "{base};5;{index}"),
         // No quantization: passed straight through as a 24-bit truecolor SGR
         // sequence. See the crate-level "RGB color fallback on 256-color
         // terminals" doc section for the contract this leaves callers with.
-        Color::Rgb { r, g, b } => write!(out, "\x1b[{base};2;{r};{g};{b}m"),
+        Color::Rgb { r, g, b } => write!(out, "{base};2;{r};{g};{b}"),
     }
+}
+
+/// Converts a [`Color`] to a standard ANSI/CSI `SetForegroundColor` (`38;...`)
+/// or `SetBackgroundColor` (`48;...`) escape sequence, written to `out`.
+///
+/// `base` is `38` for foreground, `48` for background (the standard SGR
+/// prefix codes); `reset` is `39`/`49`, used for [`Color::Default`].
+fn write_sgr_color<W: Write>(out: &mut W, color: Color, base: u8, reset: u8) -> io::Result<()> {
+    write!(out, "\x1b[")?;
+    write_sgr_params(out, color, base, reset)?;
+    write!(out, "m")
 }
 
 /// A generic ANSI/SGR cell-diff renderer.
@@ -344,12 +357,26 @@ impl<W: Write> TerminalRenderer<W> {
                     write!(self.writer, "\x1b[{};{}H", pos.y + 1, pos.x + 1)?;
                 }
 
-                if self.last_fg != Some(fg) {
+                let fg_changed = self.last_fg != Some(fg);
+                let bg_changed = self.last_bg != Some(bg);
+
+                // When both channels change in the same cell transition, combine them into a
+                // single SGR sequence (`\x1b[38;...;48;...m`) instead of two: same visual
+                // effect, half the CSI-introducer/terminator overhead. Only one of the two
+                // actually changing still gets a single-channel sequence, so an unchanged
+                // channel is never re-emitted.
+                if fg_changed && bg_changed {
+                    write!(self.writer, "\x1b[")?;
+                    write_sgr_params(&mut self.writer, fg, 38, 39)?;
+                    write!(self.writer, ";")?;
+                    write_sgr_params(&mut self.writer, bg, 48, 49)?;
+                    write!(self.writer, "m")?;
+                    self.last_fg = Some(fg);
+                    self.last_bg = Some(bg);
+                } else if fg_changed {
                     write_sgr_color(&mut self.writer, fg, 38, 39)?;
                     self.last_fg = Some(fg);
-                }
-
-                if self.last_bg != Some(bg) {
+                } else if bg_changed {
                     write_sgr_color(&mut self.writer, bg, 48, 49)?;
                     self.last_bg = Some(bg);
                 }
@@ -445,8 +472,9 @@ mod tests {
     fn default_color_emits_reset_codes() {
         let tile = Tile::new('X', Style::default());
         let out = render_one(&tile);
-        assert!(out.contains("\x1b[39m"), "output: {out:?}");
-        assert!(out.contains("\x1b[49m"), "output: {out:?}");
+        // Both fg and bg are unset on the very first draw, so they're combined into a single
+        // SGR sequence rather than two separate `\x1b[39m\x1b[49m` escapes.
+        assert!(out.contains("\x1b[39;49m"), "output: {out:?}");
     }
 
     #[test]
@@ -454,8 +482,9 @@ mod tests {
         let style = Style::new().fg(Color::Ansi(AnsiColor::Red));
         let tile = Tile::new('X', style);
         let out = render_one(&tile);
-        // Red is index 1 -> plain base 30 + 1 = 31.
-        assert!(out.contains("\x1b[31m"), "output: {out:?}");
+        // Red is index 1 -> plain base 30 + 1 = 31. Background is still default (49), and both
+        // channels changed on this first draw, so they're combined into one sequence.
+        assert!(out.contains("\x1b[31;49m"), "output: {out:?}");
     }
 
     #[test]
@@ -463,8 +492,8 @@ mod tests {
         let style = Style::new().fg(Color::Ansi(AnsiColor::BrightRed));
         let tile = Tile::new('X', style);
         let out = render_one(&tile);
-        // BrightRed is index 9 -> bright base 90 + (9-8) = 91.
-        assert!(out.contains("\x1b[91m"), "output: {out:?}");
+        // BrightRed is index 9 -> bright base 90 + (9-8) = 91, combined with the default bg.
+        assert!(out.contains("\x1b[91;49m"), "output: {out:?}");
     }
 
     #[test]
@@ -472,7 +501,7 @@ mod tests {
         let style = Style::new().fg(Color::Rgb { r: 1, g: 2, b: 3 });
         let tile = Tile::new('X', style);
         let out = render_one(&tile);
-        assert!(out.contains("\x1b[38;2;1;2;3m"), "output: {out:?}");
+        assert!(out.contains("\x1b[38;2;1;2;3;49m"), "output: {out:?}");
     }
 
     #[test]
@@ -480,7 +509,7 @@ mod tests {
         let style = Style::new().fg(Color::Indexed(200));
         let tile = Tile::new('X', style);
         let out = render_one(&tile);
-        assert!(out.contains("\x1b[38;5;200m"), "output: {out:?}");
+        assert!(out.contains("\x1b[38;5;200;49m"), "output: {out:?}");
     }
 
     #[test]
@@ -497,10 +526,92 @@ mod tests {
         });
         let tile = Tile::new('X', style);
         let out = render_one(&tile);
-        assert!(out.contains("\x1b[38;2;91;142;217m"), "output: {out:?}");
+        assert!(out.contains("\x1b[38;2;91;142;217;49m"), "output: {out:?}");
         assert!(
             !out.contains("38;5;"),
             "expected no indexed fallback, got: {out:?}"
+        );
+    }
+
+    #[test]
+    fn combines_fg_and_bg_into_single_sequence_when_both_change() {
+        // Both channels change relative to the previous cell's state, so they should be
+        // coalesced into one `\x1b[38;...;48;...m` sequence instead of two separate escapes.
+        let old = Tile::new(
+            'A',
+            Style::new()
+                .fg(Color::Rgb { r: 1, g: 2, b: 3 })
+                .bg(Color::Rgb { r: 4, g: 5, b: 6 }),
+        );
+        let new = Tile::new(
+            'B',
+            Style::new()
+                .fg(Color::Rgb {
+                    r: 10,
+                    g: 20,
+                    b: 30,
+                })
+                .bg(Color::Rgb {
+                    r: 40,
+                    g: 50,
+                    b: 60,
+                }),
+        );
+        let mut renderer = TerminalRenderer::new(Vec::new());
+        renderer
+            .draw(core::iter::once((Pos { x: 0, y: 0 }, &old, None)))
+            .unwrap();
+        renderer
+            .draw(core::iter::once((Pos { x: 0, y: 0 }, &new, None)))
+            .unwrap();
+        renderer.flush().unwrap();
+        let out = String::from_utf8(renderer.into_writer()).unwrap();
+        assert!(
+            out.contains("\x1b[38;2;10;20;30;48;2;40;50;60m"),
+            "output: {out:?}"
+        );
+        assert!(
+            !out.contains("\x1b[48;2;40;50;60m"),
+            "bg should not be emitted as a separate sequence, got: {out:?}"
+        );
+    }
+
+    #[test]
+    fn only_fg_change_emits_single_channel_sequence() {
+        // Background is unchanged between the two draws, so only the fg escape should be
+        // emitted -- no combined sequence, and no redundant bg re-emission.
+        let bg = Color::Rgb { r: 4, g: 5, b: 6 };
+        let old = Tile::new('A', Style::new().fg(Color::Rgb { r: 1, g: 2, b: 3 }).bg(bg));
+        let new = Tile::new(
+            'B',
+            Style::new()
+                .fg(Color::Rgb {
+                    r: 10,
+                    g: 20,
+                    b: 30,
+                })
+                .bg(bg),
+        );
+        let mut renderer = TerminalRenderer::new(Vec::new());
+        renderer
+            .draw(core::iter::once((Pos { x: 0, y: 0 }, &old, None)))
+            .unwrap();
+        renderer
+            .draw(core::iter::once((Pos { x: 0, y: 0 }, &new, None)))
+            .unwrap();
+        renderer.flush().unwrap();
+        let out = String::from_utf8(renderer.into_writer()).unwrap();
+        // Only the second draw's fg escape should appear after the first draw's combined one;
+        // check the second draw doesn't re-emit a bg sequence.
+        let second_draw_start = out.rfind("\x1b[1;1H").unwrap();
+        let second_draw = &out[second_draw_start..];
+        assert!(
+            second_draw.contains("\x1b[38;2;10;20;30m"),
+            "output: {second_draw:?}"
+        );
+        assert!(
+            !second_draw.contains("48;2;4;5;6"),
+            "output: {second_draw:?}"
         );
     }
 
