@@ -40,6 +40,28 @@ wasm-bindgen = "=0.2.106"
 # wasm32 code only needs `web-sys` for `Window`/`EventTarget` (DPR, resize listeners).
 web-sys = { version = "0.3", features = ["Window", "EventTarget"] }
 
+[dev-dependencies]
+# Used by the pixel_to_cell/key_translate/cursor_moved criterion benches (benches/*.rs) for
+# deterministic, seeded pseudo-random input streams. Same version as retroglyph-core's and
+# retroglyph-software's own fastrand dev-dependency.
+criterion = "0.5"
+fastrand = "2"
+
+[[bench]]
+name = "pixel_to_cell"
+harness = false
+required-features = ["winit"]
+
+[[bench]]
+name = "key_translate"
+harness = false
+required-features = ["winit"]
+
+[[bench]]
+name = "cursor_moved"
+harness = false
+required-features = ["winit"]
+
 [features]
 default = ["winit"]
 # The winit event loop and event translation (`run`, `translate`). Renderer
