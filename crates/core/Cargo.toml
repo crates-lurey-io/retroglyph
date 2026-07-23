@@ -56,3 +56,19 @@ fastrand = "2"
 [[bench]]
 name = "grid_diff"
 harness = false
+
+[[bench]]
+name = "flatten"
+harness = false
+
+[[bench]]
+name = "blit"
+harness = false
+
+[[bench]]
+name = "subcell"
+harness = false
+
+[[bench]]
+name = "color"
+harness = false
