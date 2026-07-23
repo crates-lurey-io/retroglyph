@@ -269,7 +269,10 @@ macro_rules! __wasm_terminal_entry {
                 };
                 __RG_WASM_TERMINAL.with(|cell| {
                     if let ::std::option::Option::Some(s) = cell.borrow_mut().as_mut() {
-                        s.term.backend_mut().push_event(::retroglyph_core::event::Event::Key(event));
+                        ::retroglyph_core::Input::push_event(
+                            s.term.backend_mut(),
+                            ::retroglyph_core::event::Event::Key(event),
+                        );
                     }
                 });
             }
@@ -284,7 +287,7 @@ macro_rules! __wasm_terminal_entry {
                 };
                 __RG_WASM_TERMINAL.with(|cell| {
                     if let ::std::option::Option::Some(s) = cell.borrow_mut().as_mut() {
-                        s.term.backend_mut().push_event(event);
+                        ::retroglyph_core::Input::push_event(s.term.backend_mut(), event);
                     }
                 });
             }
