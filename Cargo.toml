@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/*", "examples", "benches", "tools/cargo-bin"]
+members = ["crates/*", "examples", "tools/cargo-bin"]
 resolver = "2"
 
 [workspace.metadata.bin]
@@ -7,8 +7,8 @@ wasm-server-runner = { version = "1.0.1" }
 hk = { version = "1.48.0" }
 # Compares two `--save-baseline`-tagged criterion runs (e.g. `main` vs. the current working copy)
 # and prints a table of the delta. Used by `just bench-compare` / `tools/bench-compare.sh`; see
-# `benches/` for the benchmark crate and criterion's baseline docs for why plain `cargo bench`
-# alone only ever compares against "the previous run", not a named revision.
+# `crates/*/benches/` for the per-crate benchmark targets and criterion's baseline docs for why
+# plain `cargo bench` alone only ever compares against "the previous run", not a named revision.
 critcmp = { version = "0.1.8" }
 # Test runner used by `just test`/`just test-v` (see `.config/nextest.toml` for its config): runs
 # every test in its own process and parallelizes across all of them (including separate `[[test]]`

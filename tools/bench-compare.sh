@@ -16,8 +16,10 @@
 #
 # Usage: tools/bench-compare.sh [-b <bench-name>] [<ref>]
 #   <ref>            git commit-ish to compare against (default: origin/main). Must already
-#                    contain benches/ (an older ref predating this benchmark crate won't work).
-#   -b <bench-name>  criterion bench target under benches/benches/ to run (default: grid_diff)
+#                    contain the bench target being compared (an older ref predating that
+#                    crate's benches/ won't work).
+#   -b <bench-name>  criterion bench target under some crates/*/benches/ to run (default:
+#                    grid_diff). Resolved workspace-wide (no -p), so the name must be unique.
 #
 # Extra args after `--` are forwarded to the criterion run, e.g. to filter to one benchmark or
 # shorten sample time for a quick check:
@@ -89,7 +91,7 @@ run_bench() {
   echo "==> Benchmarking in $dir (saving baseline '$save_name')" >&2
   (
     cd "$dir"
-    CARGO_TARGET_DIR="$cargo_target_dir" cargo bench -p retroglyph-benches --bench "$bench_name" -- \
+    CARGO_TARGET_DIR="$cargo_target_dir" cargo bench --workspace --all-features --bench "$bench_name" -- \
       --save-baseline "$save_name" "${extra_args[@]}"
   )
 }

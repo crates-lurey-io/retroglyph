@@ -96,11 +96,11 @@ github_checks:
   annotations: false
 
 # `just coverage-ci` already scopes `cargo llvm-cov` to `--lib`, so non-lib code (examples/,
-# benches/, tools/, build.rs) never lands in lcov.info -- these are a defensive backstop against
-# that drifting (e.g. a future `--lib` -> full-workspace change) rather than covering an active
-# problem today.
+# crates/*/benches/, tools/, build.rs) never lands in lcov.info -- these are a defensive backstop
+# against that drifting (e.g. a future `--lib` -> full-workspace change) rather than covering an
+# active problem today.
 ignore:
-  - 'benches/**'
+  - 'crates/*/benches/**'
   - 'examples/**'
   - 'tools/**'
   - '**/build.rs'

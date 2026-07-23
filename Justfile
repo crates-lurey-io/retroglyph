@@ -113,7 +113,7 @@ test-v: build-pty-examples
 #   just bench -- grid_diff/80x24                 # filter to one group
 #   just bench -- grid_diff/80x24 --sample-size 20 # filter + fewer samples for a quick check
 bench *args:
-    cargo bench -p retroglyph-benches --benches {{ args }}
+    cargo bench --workspace --all-features --benches {{ args }}
 
 # Compare the current working copy (dirty changes included) against another git ref, default
 # origin/main. See tools/bench-compare.sh for the full flag/example list (`-b <bench-name>`,

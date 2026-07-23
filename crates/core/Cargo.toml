@@ -50,3 +50,9 @@ gem = ["dep:gem", "gem/libm", "dep:alpha-blend", "alpha-blend/libm"]
 unicode-width = "0.2"
 insta = { version = "1.34", features = ["yaml"] }
 proptest = "1"
+criterion = "0.5"
+fastrand = "2"
+
+[[bench]]
+name = "grid_diff"
+harness = false
