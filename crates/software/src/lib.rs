@@ -656,16 +656,21 @@ fn blit_cell(
     let fg = resolve_color(cell.style().foreground(), DEFAULT_FG);
     let bg = resolve_color(cell.style().background(), DEFAULT_BG);
 
+    let buf_h = buffer.len() / buf_w;
+
     // Fill the entire cell rectangle with background first: the glyph is
     // painted on top, offset by `dx`/`dy`, so it may not cover the whole
-    // cell (or may spill into neighboring cells).
-    for y_off in 0..cell_h {
-        let y = px_y + y_off;
-        for x_off in 0..cell_w {
-            let idx = y * buf_w + px_x + x_off;
-            if idx < buffer.len() {
-                buffer[idx] = bg;
-            }
+    // cell (or may spill into neighboring cells). The background fill is
+    // never sub-cell-offset, so the only clipping needed is against the
+    // buffer edges (for a partial cell at the grid boundary); precompute the
+    // clamped range once and fill whole rows instead of checking every pixel.
+    if px_y < buf_h && px_x < buf_w {
+        let y_end = (px_y + cell_h).min(buf_h);
+        let x_end = (px_x + cell_w).min(buf_w);
+        for y in px_y..y_end {
+            let row_start = y * buf_w + px_x;
+            let row_end = y * buf_w + x_end;
+            buffer[row_start..row_end].fill(bg);
         }
     }
 
@@ -677,7 +682,66 @@ fn blit_cell(
     let glyph_index = font.char_to_index(cell.glyph());
     let rows = font.rows(glyph_index);
     let src_w = usize::from(font.glyph_width);
-    let buf_h = buffer.len() / buf_w;
+
+    blit_glyph_mask(
+        buffer, buf_w, buf_h, origin_x, origin_y, rows, src_w, scale, fg,
+    );
+}
+
+/// Paints the set bits of a 1-bit glyph bitmap (`rows`, each `src_w` bits
+/// wide) into `buffer` as `color`, with each source pixel scaled to a
+/// `scale x scale` destination block.
+///
+/// The glyph's top-left destination corner is `(origin_x, origin_y)`
+/// (already including any sub-cell `dx`/`dy` offset, scaled). When the whole
+/// glyph's destination bounding box fits inside `buffer` -- the overwhelmingly
+/// common case, since it only fails for cells with a nonzero `dx`/`dy` that
+/// pushes them past a buffer edge -- this takes a fast path with no per-pixel
+/// bounds check: it fills each `scale`-wide destination run in one slice
+/// `fill` call. Otherwise it falls back to a row-clamped path that clips
+/// each destination run to the buffer bounds once per row, rather than
+/// checking every pixel.
+#[allow(clippy::too_many_arguments, clippy::cast_possible_truncation)]
+fn blit_glyph_mask(
+    buffer: &mut [u32],
+    buf_w: usize,
+    buf_h: usize,
+    origin_x: i64,
+    origin_y: i64,
+    rows: &[u8],
+    src_w: usize,
+    scale: usize,
+    color: u32,
+) {
+    let glyph_w = src_w * scale;
+    let glyph_h = rows.len() * scale;
+
+    #[allow(clippy::cast_sign_loss)]
+    let in_bounds = origin_x >= 0
+        && origin_y >= 0
+        && origin_x as usize + glyph_w <= buf_w
+        && origin_y as usize + glyph_h <= buf_h;
+
+    if in_bounds {
+        #[allow(clippy::cast_sign_loss)]
+        let ox = origin_x as usize;
+        #[allow(clippy::cast_sign_loss)]
+        let oy = origin_y as usize;
+        for (src_y, &mask) in rows.iter().enumerate() {
+            for src_x in 0..src_w {
+                if (mask >> (src_w - 1 - src_x)) & 1 == 0 {
+                    continue;
+                }
+                let x0 = ox + src_x * scale;
+                let y0 = oy + src_y * scale;
+                for sdy in 0..scale {
+                    let row_start = (y0 + sdy) * buf_w + x0;
+                    buffer[row_start..row_start + scale].fill(color);
+                }
+            }
+        }
+        return;
+    }
 
     #[allow(
         clippy::cast_possible_wrap,
@@ -695,17 +759,16 @@ fn blit_cell(
                     continue;
                 }
                 let y = y as usize;
-                for sdx in 0..scale {
-                    let x = origin_x + (src_x * scale + sdx) as i64;
-                    if x < 0 || x as usize >= buf_w {
-                        continue;
-                    }
-                    let x = x as usize;
-                    let idx = y * buf_w + x;
-                    if idx < buffer.len() {
-                        buffer[idx] = fg;
-                    }
+                let x_start = origin_x + (src_x * scale) as i64;
+                let x_end = x_start + scale as i64;
+                let x0 = x_start.max(0);
+                let x1 = x_end.min(buf_w as i64);
+                if x0 >= x1 {
+                    continue;
                 }
+                let row_start = y * buf_w + x0 as usize;
+                let row_end = y * buf_w + x1 as usize;
+                buffer[row_start..row_end].fill(color);
             }
         }
     }
@@ -742,36 +805,9 @@ fn blit_glyph(
     let src_w = usize::from(font.glyph_width);
     let buf_h = buffer.len() / buf_w;
 
-    #[allow(
-        clippy::cast_possible_wrap,
-        clippy::cast_sign_loss,
-        clippy::similar_names
-    )]
-    for (src_y, &mask) in rows.iter().enumerate() {
-        for src_x in 0..src_w {
-            if (mask >> (src_w - 1 - src_x)) & 1 == 0 {
-                continue;
-            }
-            for sdy in 0..scale {
-                let y = origin_y + (src_y * scale + sdy) as i64;
-                if y < 0 || y as usize >= buf_h {
-                    continue;
-                }
-                let y = y as usize;
-                for sdx in 0..scale {
-                    let x = origin_x + (src_x * scale + sdx) as i64;
-                    if x < 0 || x as usize >= buf_w {
-                        continue;
-                    }
-                    let x = x as usize;
-                    let idx = y * buf_w + x;
-                    if idx < buffer.len() {
-                        buffer[idx] = fg;
-                    }
-                }
-            }
-        }
-    }
+    blit_glyph_mask(
+        buffer, buf_w, buf_h, origin_x, origin_y, rows, src_w, scale, fg,
+    );
 }
 
 /// Blit a decoded RGBA8 sprite into `buffer` with alpha blending.
@@ -808,6 +844,19 @@ fn blit_sprite(
     let src_w = sprite.pixel_width as usize;
     let src_h = sprite.pixel_height as usize;
 
+    // Precompute once whether the sprite's whole destination bounding box
+    // fits inside `buffer`: true for the overwhelmingly common case (no
+    // sub-cell offset, sprite fully on-screen). When it does, the fast path
+    // below skips the per-destination-pixel bounds check entirely; only
+    // sprites clipped by a nonzero `dx`/`dy` or a screen edge fall back to
+    // the clamped, per-row-checked slow path.
+    let glyph_w = src_w * scale;
+    let glyph_h = src_h * scale;
+    let in_bounds = origin_x >= 0
+        && origin_y >= 0
+        && origin_x as usize + glyph_w <= buf_w
+        && origin_y as usize + glyph_h <= buf_h;
+
     for src_y in 0..src_h {
         for src_x in 0..src_w {
             let src_idx = (src_y * src_w + src_x) * 4;
@@ -827,32 +876,52 @@ fn blit_sprite(
             // construction + source_over for the common case.
             let rgb = u32::from(src.r) << 16 | u32::from(src.g) << 8 | u32::from(src.b);
             if src.alpha() == 255 {
-                for dy in 0..scale {
-                    #[allow(clippy::cast_sign_loss)]
-                    let dst_y = origin_y + (src_y * scale + dy) as i64;
-                    if dst_y < 0 || dst_y as usize >= buf_h {
-                        continue;
+                if in_bounds {
+                    let x0 = origin_x as usize + src_x * scale;
+                    let y0 = origin_y as usize + src_y * scale;
+                    for dy in 0..scale {
+                        let row_start = (y0 + dy) * buf_w + x0;
+                        buffer[row_start..row_start + scale].fill(rgb);
                     }
-                    let dst_y = dst_y as usize;
-                    for dx in 0..scale {
-                        #[allow(clippy::cast_sign_loss)]
-                        let dst_x = origin_x + (src_x * scale + dx) as i64;
-                        if dst_x < 0 || dst_x as usize >= buf_w {
+                } else {
+                    for dy in 0..scale {
+                        let dst_y = origin_y + (src_y * scale + dy) as i64;
+                        if dst_y < 0 || dst_y as usize >= buf_h {
                             continue;
                         }
-                        let dst_x = dst_x as usize;
-                        let dst_idx = dst_y * buf_w + dst_x;
-                        if dst_idx < buffer.len() {
-                            buffer[dst_idx] = rgb;
+                        let dst_y = dst_y as usize;
+                        let x_start = origin_x + (src_x * scale) as i64;
+                        let x_end = x_start + scale as i64;
+                        let x0 = x_start.max(0);
+                        let x1 = x_end.min(buf_w as i64);
+                        if x0 >= x1 {
+                            continue;
                         }
+                        let row_start = dst_y * buf_w + x0 as usize;
+                        let row_end = dst_y * buf_w + x1 as usize;
+                        buffer[row_start..row_end].fill(rgb);
                     }
                 }
                 continue;
             }
 
             // Each source pixel maps to `scale x scale` destination pixels.
+            if in_bounds {
+                let x0 = origin_x as usize + src_x * scale;
+                let y0 = origin_y as usize + src_y * scale;
+                for dy in 0..scale {
+                    let row = (y0 + dy) * buf_w;
+                    for dx in 0..scale {
+                        let dst_idx = row + x0 + dx;
+                        let dst = U8x4Rgba::from_rgb_u32(buffer[dst_idx]);
+                        let blended = src.source_over(dst);
+                        buffer[dst_idx] = blended.to_rgb_u32();
+                    }
+                }
+                continue;
+            }
+
             for dy in 0..scale {
-                #[allow(clippy::cast_sign_loss)]
                 let dst_y = origin_y + (src_y * scale + dy) as i64;
                 if dst_y < 0 || dst_y as usize >= buf_h {
                     continue;
@@ -860,7 +929,6 @@ fn blit_sprite(
                 let dst_y = dst_y as usize;
 
                 for dx in 0..scale {
-                    #[allow(clippy::cast_sign_loss)]
                     let dst_x = origin_x + (src_x * scale + dx) as i64;
                     if dst_x < 0 || dst_x as usize >= buf_w {
                         continue;
@@ -868,9 +936,6 @@ fn blit_sprite(
                     let dst_x = dst_x as usize;
 
                     let dst_idx = dst_y * buf_w + dst_x;
-                    if dst_idx >= buffer.len() {
-                        continue;
-                    }
 
                     let dst = U8x4Rgba::from_rgb_u32(buffer[dst_idx]);
                     let blended = src.source_over(dst);
