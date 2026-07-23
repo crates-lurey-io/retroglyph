@@ -162,6 +162,12 @@ fn write_sgr_color<W: Write>(out: &mut W, color: Color, base: u8, reset: u8) -> 
 #[derive(Debug)]
 pub struct TerminalRenderer<W> {
     writer: W,
+    /// Reusable scratch buffer that a whole [`draw`](Self::draw) call is rendered into, so the
+    /// call ends with exactly one [`Write::write_all`] against `writer` instead of up to four
+    /// small `write!` calls per cell. Cleared (not reallocated) after each flush to `writer`, so
+    /// its capacity grows to fit the largest frame drawn and is then reused every call. See
+    /// retroglyph#271.
+    buf: Vec<u8>,
     last_fg: Option<Color>,
     last_bg: Option<Color>,
     cursor_x: Option<u16>,
@@ -174,6 +180,7 @@ impl<W: Write> TerminalRenderer<W> {
     pub const fn new(writer: W) -> Self {
         Self {
             writer,
+            buf: Vec::new(),
             last_fg: None,
             last_bg: None,
             cursor_x: None,
@@ -190,6 +197,7 @@ impl<W: Write> TerminalRenderer<W> {
     pub const fn with_plain_mode(writer: W, plain: bool) -> Self {
         Self {
             writer,
+            buf: Vec::new(),
             last_fg: None,
             last_bg: None,
             cursor_x: None,
@@ -298,11 +306,37 @@ impl<W: Write> TerminalRenderer<W> {
     /// always `None` and is ignored here (see the `let _ = extra;` below).
     /// Does not flush; call [`flush`](Self::flush) after.
     ///
+    /// Whether [plain mode](Self::set_plain_mode) is on is checked once here, not once per
+    /// cell -- it dispatches once to one of two internal, disjoint code paths for the rest of
+    /// the call. The whole call is rendered into an
+    /// internal scratch buffer first, then written to `writer` with a single
+    /// [`Write::write_all`], rather than up to four small `write!` calls per cell (see
+    /// retroglyph#271); this also means `writer` no longer needs to be pre-wrapped in a
+    /// `BufWriter` for reasonable syscall behavior, though nothing stops a caller from still
+    /// doing so.
+    ///
     /// # Errors
     ///
     /// Returns an error if the writer fails.
-    #[allow(clippy::similar_names)]
     pub fn draw<'a, I>(&mut self, content: I) -> io::Result<()>
+    where
+        I: Iterator<Item = (Pos, &'a Tile, Option<&'a str>)>,
+    {
+        if self.plain {
+            self.draw_plain(content)?;
+        } else {
+            self.draw_escape(content)?;
+        }
+        self.writer.write_all(&self.buf)?;
+        self.buf.clear();
+        Ok(())
+    }
+
+    /// Escape-mode half of [`draw`](Self::draw): full ANSI/CSI cursor-move and SGR color/attribute
+    /// diffing against tracked state, renders into `self.buf`. See [`draw`](Self::draw) for the
+    /// shared contract and [`draw_plain`](Self::draw_plain) for the plain-mode counterpart.
+    #[allow(clippy::similar_names)]
+    fn draw_escape<'a, I>(&mut self, content: I) -> io::Result<()>
     where
         I: Iterator<Item = (Pos, &'a Tile, Option<&'a str>)>,
     {
@@ -327,89 +361,39 @@ impl<W: Write> TerminalRenderer<W> {
             let fg = cell.style().foreground();
             let bg = cell.style().background();
 
-            if self.plain {
-                // Row change: newline(s) instead of a cursor-move escape. Advancing rows emits
-                // one `\n` per skipped row so blank rows still show up as blank lines; a
-                // same-or-backward row repeat (a new frame's diff starting over) just starts a
-                // fresh line, since there's no cursor-addressable terminal to overwrite in place.
-                let start_col = match self.cursor_y {
-                    Some(y) if pos.y == y => self.cursor_x.unwrap_or(0),
-                    Some(y) if pos.y > y => {
-                        for _ in 0..(pos.y - y) {
-                            writeln!(self.writer)?;
-                        }
-                        0
-                    }
-                    Some(_) => {
-                        writeln!(self.writer)?;
-                        0
-                    }
-                    None => 0,
-                };
-                // Pad gaps between non-adjacent cells on the same row with spaces so columns
-                // still line up; a fresh row starts padding from column 0.
-                for _ in start_col..pos.x {
-                    write!(self.writer, " ")?;
-                }
-            } else {
-                // Only emit a cursor move when the cursor isn't already at the
-                // right position (adjacent cells advance the cursor by printing).
-                let needs_move = self.cursor_y != Some(pos.y) || self.cursor_x != Some(pos.x);
-                if needs_move {
-                    // CSI row;col H is 1-indexed.
-                    write!(self.writer, "\x1b[{};{}H", pos.y + 1, pos.x + 1)?;
-                }
-
-                let fg_changed = self.last_fg != Some(fg);
-                let bg_changed = self.last_bg != Some(bg);
-
-                // When both channels change in the same cell transition, combine them into a
-                // single SGR sequence (`\x1b[38;...;48;...m`) instead of two: same visual
-                // effect, half the CSI-introducer/terminator overhead. Only one of the two
-                // actually changing still gets a single-channel sequence, so an unchanged
-                // channel is never re-emitted.
-                if fg_changed && bg_changed {
-                    write!(self.writer, "\x1b[")?;
-                    write_sgr_params(&mut self.writer, fg, 38, 39)?;
-                    write!(self.writer, ";")?;
-                    write_sgr_params(&mut self.writer, bg, 48, 49)?;
-                    write!(self.writer, "m")?;
-                    self.last_fg = Some(fg);
-                    self.last_bg = Some(bg);
-                } else if fg_changed {
-                    write_sgr_color(&mut self.writer, fg, 38, 39)?;
-                    self.last_fg = Some(fg);
-                } else if bg_changed {
-                    write_sgr_color(&mut self.writer, bg, 48, 49)?;
-                    self.last_bg = Some(bg);
-                }
+            // Only emit a cursor move when the cursor isn't already at the
+            // right position (adjacent cells advance the cursor by printing).
+            let needs_move = self.cursor_y != Some(pos.y) || self.cursor_x != Some(pos.x);
+            if needs_move {
+                // CSI row;col H is 1-indexed.
+                write!(self.buf, "\x1b[{};{}H", pos.y + 1, pos.x + 1)?;
             }
 
-            #[allow(unused_assignments)]
-            let mut cell_width: u16 = 1;
-            #[cfg(feature = "egc")]
-            {
-                // Print the full EGC if present; otherwise the primary glyph.
-                let mut glyph_buf = [0u8; 4];
-                let s: &str = match extra {
-                    Some(extra) => extra,
-                    None => cell.glyph().encode_utf8(&mut glyph_buf),
-                };
-                #[allow(clippy::cast_possible_truncation)]
-                {
-                    cell_width = unicode_width::UnicodeWidthStr::width(s).max(1) as u16;
-                }
-                write!(self.writer, "{s}")?;
+            let fg_changed = self.last_fg != Some(fg);
+            let bg_changed = self.last_bg != Some(bg);
+
+            // When both channels change in the same cell transition, combine them into a
+            // single SGR sequence (`\x1b[38;...;48;...m`) instead of two: same visual
+            // effect, half the CSI-introducer/terminator overhead. Only one of the two
+            // actually changing still gets a single-channel sequence, so an unchanged
+            // channel is never re-emitted.
+            if fg_changed && bg_changed {
+                write!(self.buf, "\x1b[")?;
+                write_sgr_params(&mut self.buf, fg, 38, 39)?;
+                write!(self.buf, ";")?;
+                write_sgr_params(&mut self.buf, bg, 48, 49)?;
+                write!(self.buf, "m")?;
+                self.last_fg = Some(fg);
+                self.last_bg = Some(bg);
+            } else if fg_changed {
+                write_sgr_color(&mut self.buf, fg, 38, 39)?;
+                self.last_fg = Some(fg);
+            } else if bg_changed {
+                write_sgr_color(&mut self.buf, bg, 48, 49)?;
+                self.last_bg = Some(bg);
             }
-            #[cfg(not(feature = "egc"))]
-            {
-                #[allow(clippy::cast_possible_truncation)]
-                {
-                    cell_width =
-                        unicode_width::UnicodeWidthChar::width(cell.glyph()).unwrap_or(1) as u16;
-                }
-                write!(self.writer, "{}", cell.glyph())?;
-            }
+
+            let cell_width = Self::write_glyph(&mut self.buf, cell, extra)?;
 
             // After printing, the terminal cursor advances by the cell's
             // display width. Track that so the next cell can skip the move.
@@ -417,6 +401,94 @@ impl<W: Write> TerminalRenderer<W> {
             self.cursor_y = Some(pos.y);
         }
         Ok(())
+    }
+
+    /// Plain-mode half of [`draw`](Self::draw): no escape sequences, cell text degraded to
+    /// readable ASCII (row changes become `\n`, gaps become spaces), renders into `self.buf`.
+    /// See [`draw`](Self::draw) for the shared contract, [`set_plain_mode`](Self::set_plain_mode)
+    /// for the full plain-mode contract, and [`draw_escape`](Self::draw_escape) for the
+    /// escape-mode counterpart.
+    fn draw_plain<'a, I>(&mut self, content: I) -> io::Result<()>
+    where
+        I: Iterator<Item = (Pos, &'a Tile, Option<&'a str>)>,
+    {
+        for (pos, cell, extra) in content {
+            #[cfg(not(feature = "egc"))]
+            let _ = extra;
+
+            #[cfg(feature = "egc")]
+            if cell
+                .flags()
+                .contains(retroglyph_core::tile::TileFlags::WIDE_CHAR_SPACER)
+            {
+                continue;
+            }
+            #[cfg(not(feature = "egc"))]
+            if cell.glyph() == '\0' {
+                continue;
+            }
+
+            // Row change: newline(s) instead of a cursor-move escape. Advancing rows emits one
+            // `\n` per skipped row so blank rows still show up as blank lines. A backward row, or
+            // (the `pos.x < cursor_x` guard below) a same-row cell arriving out of ascending-x
+            // order, both just start a fresh line: plain mode has no cursor-addressing escape
+            // codes to seek backward with, so there is no way to overwrite/insert at an
+            // already-passed column without corrupting what was already written. Starting a new
+            // line is the least-surprising degradation available -- it reproduces the
+            // already-established backward-row behavior instead of silently misplacing the cell
+            // right after the previous one at the wrong column (see retroglyph#273).
+            let start_col = match self.cursor_y {
+                Some(y) if pos.y == y && pos.x >= self.cursor_x.unwrap_or(0) => {
+                    self.cursor_x.unwrap_or(0)
+                }
+                Some(y) if pos.y > y => {
+                    for _ in 0..(pos.y - y) {
+                        writeln!(self.buf)?;
+                    }
+                    0
+                }
+                Some(_) => {
+                    writeln!(self.buf)?;
+                    0
+                }
+                None => 0,
+            };
+            // Pad gaps between non-adjacent cells on the same row with spaces so columns
+            // still line up; a fresh row starts padding from column 0.
+            for _ in start_col..pos.x {
+                write!(self.buf, " ")?;
+            }
+
+            let cell_width = Self::write_glyph(&mut self.buf, cell, extra)?;
+
+            self.cursor_x = Some(pos.x + cell_width);
+            self.cursor_y = Some(pos.y);
+        }
+        Ok(())
+    }
+
+    /// Writes `cell`'s printable text (the full grapheme from `extra` when the `egc` feature
+    /// provides one, otherwise just the primary glyph) to `out`, returning its precomputed
+    /// display width ([`Tile::width`]) so the caller can advance the tracked cursor position.
+    /// Shared by [`draw_escape`](Self::draw_escape) and [`draw_plain`](Self::draw_plain).
+    fn write_glyph(out: &mut Vec<u8>, cell: &Tile, extra: Option<&str>) -> io::Result<u16> {
+        #[cfg(not(feature = "egc"))]
+        let _ = extra;
+        #[cfg(feature = "egc")]
+        {
+            // Print the full EGC if present; otherwise the primary glyph.
+            let mut glyph_buf = [0u8; 4];
+            let s: &str = match extra {
+                Some(extra) => extra,
+                None => cell.glyph().encode_utf8(&mut glyph_buf),
+            };
+            write!(out, "{s}")?;
+        }
+        #[cfg(not(feature = "egc"))]
+        {
+            write!(out, "{}", cell.glyph())?;
+        }
+        Ok(cell.width())
     }
 
     /// Flushes the underlying writer.
@@ -721,6 +793,35 @@ mod tests {
         renderer.flush().unwrap();
         let out = String::from_utf8(renderer.into_writer()).unwrap();
         assert_eq!(out, "A\n\nB");
+    }
+
+    #[test]
+    fn plain_mode_handles_descending_x_on_same_row_without_corrupting_output() {
+        // Regression test for retroglyph#273: two cells on the same row delivered out of
+        // ascending-x order (x=5 then x=2) used to compute an empty `start_col..pos.x` padding
+        // range (5..2), silently appending the second cell right after the first with no
+        // separator, misplacing it. Plain mode has no cursor-addressing escapes to seek
+        // backward with, so the fix starts a fresh line for the out-of-order cell instead --
+        // the same fallback already used for backward-row repeats -- rather than corrupting the
+        // column alignment of the first line.
+        let a = Tile::new('A', Style::default());
+        let b = Tile::new('B', Style::default());
+        let mut renderer = TerminalRenderer::with_plain_mode(Vec::new(), true);
+        renderer
+            .draw(
+                [
+                    (Pos { x: 5, y: 0 }, &a, None),
+                    (Pos { x: 2, y: 0 }, &b, None),
+                ]
+                .into_iter(),
+            )
+            .unwrap();
+        renderer.flush().unwrap();
+        let out = String::from_utf8(renderer.into_writer()).unwrap();
+        // First line: 5 spaces of padding then 'A'. Second line (fresh, since x went
+        // backward): 2 spaces of padding then 'B'. Never "AB" or "A B" glued together on one
+        // line at the wrong column.
+        assert_eq!(out, "     A\n  B");
     }
 
     #[test]

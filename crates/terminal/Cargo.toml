@@ -19,7 +19,6 @@ all-features = true
 
 [dependencies]
 retroglyph-core = { path = "../core", version = "0.2.1", default-features = false, features = ["std"] }
-unicode-width = "0.2"
 
 [dev-dependencies]
 criterion = "0.5"
