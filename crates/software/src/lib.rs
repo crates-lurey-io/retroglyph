@@ -229,9 +229,18 @@ impl SoftwareRenderer {
     }
 
     /// Diffs `pixel_buf` against `prev_pixels` row by row to find the
-    /// smallest contiguous `[y0, y1)` band that changed, stores it as
-    /// `damage_rows`, then copies `pixel_buf` into `prev_pixels` for the
-    /// next frame's comparison.
+    /// smallest contiguous `[y0, y1)` band that changed and stores it as
+    /// `damage_rows`.
+    ///
+    /// Only the `[y0, y1)` band (not the whole buffer) is copied from
+    /// `pixel_buf` into `prev_pixels` afterwards, since every other row is
+    /// already known to match; when nothing changed, the copy is skipped
+    /// entirely. `draw_layers` always repaints every cell (see
+    /// [`Backend::needs_full_frame`]), so `prev_pixels` still has to hold a
+    /// full previous-frame pixel buffer to diff against -- this only removes
+    /// the copy's cost from being proportional to the whole buffer instead of
+    /// the changed region, which is what actually dominates this function's
+    /// cost on an unchanged or near-unchanged frame.
     ///
     /// If the buffers differ in length (a resize raced with this call)
     /// the whole frame is marked damaged and `prev_pixels` is resized to
@@ -272,7 +281,15 @@ impl SoftwareRenderer {
             (y0 as u32, y1 as u32)
         });
 
-        self.ctx.prev_pixels.copy_from_slice(pixels);
+        // Only the changed band needs copying: every row outside `[y0, y1)`
+        // already matched `pixels` in the loop above, so re-copying it would
+        // just repeat work for no effect. When `y0` is `None` (nothing
+        // changed), skip the copy entirely.
+        if let Some(y0) = y0 {
+            let start = y0 * buf_w;
+            let end = y1 * buf_w;
+            self.ctx.prev_pixels[start..end].copy_from_slice(&pixels[start..end]);
+        }
     }
 }
 
