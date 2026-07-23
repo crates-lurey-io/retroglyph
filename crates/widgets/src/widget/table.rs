@@ -35,7 +35,7 @@ use crate::text::truncate as truncate_to_cols;
 pub struct Table<'a> {
     headers: &'a [&'a str],
     widths: &'a [u16],
-    rows: &'a [Vec<String>],
+    rows: &'a [&'a [&'a str]],
     header_style: Style,
     row_style: Style,
     selected_style: Style,
@@ -46,7 +46,7 @@ impl<'a> Table<'a> {
     /// A table with the given header labels, column widths, and rows, in the
     /// default style.
     #[must_use]
-    pub fn new(headers: &'a [&'a str], widths: &'a [u16], rows: &'a [Vec<String>]) -> Self {
+    pub fn new(headers: &'a [&'a str], widths: &'a [u16], rows: &'a [&'a [&'a str]]) -> Self {
         Self {
             headers,
             widths,
@@ -155,12 +155,11 @@ impl<B: Backend> StatefulWidget<B> for Table<'_> {
             } else {
                 (self.row_style, None)
             };
-            let cells: Vec<&str> = row.iter().map(String::as_str).collect();
             draw_row(
                 term,
                 area,
                 y,
-                &cells,
+                row,
                 self.widths,
                 RowStyle {
                     style,
@@ -234,7 +233,7 @@ mod tests {
         let area = Rect::new(0, 0, 20, 3);
         let headers = ["Name"];
         let widths = [10u16];
-        let rows = vec![vec!["Alpha".to_string()], vec!["Bravo".to_string()]];
+        let rows: [&[&str]; 2] = [&["Alpha"], &["Bravo"]];
         let table = Table::new(&headers, &widths, &rows);
 
         let mut term = Terminal::new(Headless::new(20, 3));
@@ -253,7 +252,7 @@ mod tests {
         let area = Rect::new(0, 0, 20, 3);
         let headers = ["Name"];
         let widths = [10u16];
-        let rows = vec![vec!["Alpha".to_string()], vec!["Bravo".to_string()]];
+        let rows: [&[&str]; 2] = [&["Alpha"], &["Bravo"]];
         let table = Table::new(&headers, &widths, &rows);
 
         let mut term = Terminal::new(Headless::new(20, 3));
@@ -265,8 +264,12 @@ mod tests {
         assert_eq!(row0_bg, row1_bg);
     }
 
-    fn rows(names: &[&str]) -> Vec<Vec<String>> {
-        names.iter().map(|n| vec![(*n).to_string()]).collect()
+    fn rows<'a>(names: &[&'a str]) -> Vec<[&'a str; 1]> {
+        names.iter().map(|n| [*n]).collect()
+    }
+
+    fn row_refs<'a>(rows: &'a [[&'a str; 1]]) -> Vec<&'a [&'a str]> {
+        rows.iter().map(<[&str; 1]>::as_slice).collect()
     }
 
     #[test]
@@ -276,6 +279,7 @@ mod tests {
         let headers = ["Name"];
         let widths = [10u16];
         let rows = rows(&["Alpha", "Bravo", "Charlie", "Delta"]);
+        let rows = row_refs(&rows);
         let table = Table::new(&headers, &widths, &rows);
 
         let mut term = Terminal::new(Headless::new(20, 3));
@@ -295,6 +299,7 @@ mod tests {
         let headers = ["Name"];
         let widths = [10u16];
         let rows = rows(&["Alpha", "Bravo", "Charlie", "Delta"]);
+        let rows = row_refs(&rows);
         let table = Table::new(&headers, &widths, &rows);
 
         let mut term = Terminal::new(Headless::new(20, 3));
@@ -313,7 +318,7 @@ mod tests {
         let area = Rect::new(0, 0, 20, 2);
         let headers = ["Name"];
         let widths = [10u16];
-        let rows: Vec<Vec<String>> = vec![];
+        let rows: Vec<&[&str]> = vec![];
         let table = Table::new(&headers, &widths, &rows);
 
         let mut term = Terminal::new(Headless::new(20, 2));
@@ -333,7 +338,7 @@ mod tests {
         let area = Rect::new(0, 0, 20, 2);
         let headers = ["Name"];
         let widths = [10u16];
-        let rows: Vec<Vec<String>> = vec![];
+        let rows: Vec<&[&str]> = vec![];
         let custom = Style::new().fg(Color::RED);
         let table = Table::new(&headers, &widths, &rows).header_style(custom);
 
@@ -349,7 +354,7 @@ mod tests {
         let area = Rect::new(0, 0, 20, 3);
         let headers = ["Name"];
         let widths = [10u16];
-        let rows = vec![vec!["Alpha".to_string()], vec!["Bravo".to_string()]];
+        let rows: [&[&str]; 2] = [&["Alpha"], &["Bravo"]];
         let custom = Style::new().fg(Color::GREEN).bg(Color::BLUE);
         let table = Table::new(&headers, &widths, &rows).selected_style(custom);
 
@@ -367,7 +372,7 @@ mod tests {
         let area = Rect::new(0, 0, 20, 3);
         let headers = ["Name"];
         let widths = [10u16];
-        let rows = vec![vec!["Alpha".to_string()], vec!["Bravo".to_string()]];
+        let rows: [&[&str]; 2] = [&["Alpha"], &["Bravo"]];
         let table = Table::new(&headers, &widths, &rows).theme(Theme::DARK);
 
         let mut term = Terminal::new(Headless::new(20, 3));
@@ -397,7 +402,7 @@ mod tests {
         let area = Rect::new(0, 0, 20, 1);
         let headers = ["A", "B"];
         let widths = [1u16, 1u16];
-        let rows: Vec<Vec<String>> = vec![];
+        let rows: Vec<&[&str]> = vec![];
         let table = Table::new(&headers, &widths, &rows).column_spacing(3);
 
         let mut term = Terminal::new(Headless::new(20, 1));
@@ -416,6 +421,7 @@ mod tests {
         let headers = ["Name"];
         let widths = [10u16];
         let rows = rows(&["Alpha", "Bravo", "Charlie", "Delta"]);
+        let rows = row_refs(&rows);
         let table = Table::new(&headers, &widths, &rows);
 
         let mut term = Terminal::new(Headless::new(20, 3));

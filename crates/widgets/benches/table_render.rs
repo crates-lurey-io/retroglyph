@@ -1,12 +1,11 @@
 //! Benchmarks for [`Table::render`] at realistic row/column counts.
 //!
 //! retroglyph#316 flags `Table::render` as the highest-value widget benchmark in the crate: it
-//! exercises per-row truncation (`text::truncate`), a per-row `Vec<&str>` collection of the
-//! caller's `Vec<String>` cells, and column-by-column formatting -- all per-frame allocation
+//! exercises per-row truncation (`text::truncate`) and column-by-column formatting -- per-frame
 //! traffic that's easy to regress silently without a number to compare against. This benchmark
 //! measures full-table renders at a handful of representative sizes (a compact status table, a
 //! wide multi-column dashboard, a long scrolling log-like table) so future changes to the
-//! truncation/collection path have something concrete to check against.
+//! truncation path have something concrete to check against.
 //!
 //! `--test` runs each benchmark once (a compile/smoke check); a real run is
 //! `cargo bench -p retroglyph-widgets --bench table_render`.
@@ -39,7 +38,12 @@ fn rows(rows: usize, cols: usize) -> Vec<Vec<String>> {
 /// Registers one `rows x cols` case at a fixed terminal size, with a mid-list selection so the
 /// highlighted-row path is also exercised every iteration.
 fn bench_size(c: &mut Criterion, rows_n: usize, cols_n: usize) {
-    let data = rows(rows_n, cols_n);
+    let owned = rows(rows_n, cols_n);
+    let cell_rows: Vec<Vec<&str>> = owned
+        .iter()
+        .map(|row| row.iter().map(String::as_str).collect())
+        .collect();
+    let data: Vec<&[&str]> = cell_rows.iter().map(Vec::as_slice).collect();
     let headers: Vec<&str> = (0..cols_n).map(|_| "Header").collect();
     let widths: Vec<u16> = (0..cols_n).map(|_| 12u16).collect();
     let area = Rect::new(0, 0, (cols_n * 13) as u16, 24);
