@@ -872,26 +872,30 @@ const fn from_crossterm_mouse_button(
     }
 }
 
+// Every `crossterm::event::MouseEventKind` variant now has a retroglyph equivalent (unlike
+// `from_crossterm_key_code`, which still has unmappable `KeyCode`s), so this is infallible.
 const fn from_crossterm_mouse_event_kind(
     kind: crossterm::event::MouseEventKind,
-) -> Option<retroglyph_core::event::MouseEventKind> {
+) -> retroglyph_core::event::MouseEventKind {
     use crossterm::event::MouseEventKind as CM;
     use retroglyph_core::event::MouseEventKind as K;
     match kind {
-        CM::Down(btn) => Some(K::Down(from_crossterm_mouse_button(btn))),
-        CM::Up(btn) => Some(K::Up(from_crossterm_mouse_button(btn))),
-        CM::Moved | CM::Drag(_) => Some(K::Moved),
-        CM::ScrollUp => Some(K::ScrollUp),
-        CM::ScrollDown => Some(K::ScrollDown),
-        _ => None,
+        CM::Down(btn) => K::Down(from_crossterm_mouse_button(btn)),
+        CM::Up(btn) => K::Up(from_crossterm_mouse_button(btn)),
+        CM::Drag(btn) => K::Drag(from_crossterm_mouse_button(btn)),
+        CM::Moved => K::Moved,
+        CM::ScrollUp => K::ScrollUp,
+        CM::ScrollDown => K::ScrollDown,
+        CM::ScrollLeft => K::ScrollLeft,
+        CM::ScrollRight => K::ScrollRight,
     }
 }
 
 fn from_crossterm_mouse_event(
     m: crossterm::event::MouseEvent,
-) -> Option<retroglyph_core::event::MouseEvent> {
-    Some(retroglyph_core::event::MouseEvent {
-        kind: from_crossterm_mouse_event_kind(m.kind)?,
+) -> retroglyph_core::event::MouseEvent {
+    retroglyph_core::event::MouseEvent {
+        kind: from_crossterm_mouse_event_kind(m.kind),
         position: Pos {
             x: m.column,
             y: m.row,
@@ -899,7 +903,7 @@ fn from_crossterm_mouse_event(
         // Crossterm is a character-mode backend; it has no sub-cell resolution.
         pixel_position: None,
         modifiers: from_crossterm_key_modifiers(m.modifiers),
-    })
+    }
 }
 
 // Taking ownership matches the call site: `crossterm::event::read()` hands us
@@ -938,7 +942,7 @@ pub fn from_crossterm_event(event: crossterm::event::Event) -> Option<Event> {
                 from_crossterm_key_kind(k.kind),
             )))
         }
-        CE::Mouse(m) => Some(Event::Mouse(from_crossterm_mouse_event(m)?)),
+        CE::Mouse(m) => Some(Event::Mouse(from_crossterm_mouse_event(m))),
         CE::Resize(w, h) => Some(Event::Resize(w, h)),
         CE::Paste(text) => Some(Event::Paste(text)),
         CE::FocusGained => Some(Event::FocusGained),
@@ -1305,5 +1309,79 @@ mod tests {
             from_crossterm_event(ct_event),
             Some(Event::FocusLost)
         ));
+    }
+
+    fn mouse_event_kind_of(
+        kind: crossterm::event::MouseEventKind,
+    ) -> retroglyph_core::event::MouseEventKind {
+        from_crossterm_mouse_event_kind(kind)
+    }
+
+    #[test]
+    fn mouse_down_and_up_still_map_after_option_signature_change() {
+        use retroglyph_core::event::{MouseButton as B, MouseEventKind as K};
+
+        assert_eq!(
+            mouse_event_kind_of(crossterm::event::MouseEventKind::Down(
+                crossterm::event::MouseButton::Left
+            )),
+            K::Down(B::Left)
+        );
+        assert_eq!(
+            mouse_event_kind_of(crossterm::event::MouseEventKind::Up(
+                crossterm::event::MouseButton::Right
+            )),
+            K::Up(B::Right)
+        );
+        assert_eq!(
+            mouse_event_kind_of(crossterm::event::MouseEventKind::Moved),
+            K::Moved
+        );
+        assert_eq!(
+            mouse_event_kind_of(crossterm::event::MouseEventKind::ScrollUp),
+            K::ScrollUp
+        );
+        assert_eq!(
+            mouse_event_kind_of(crossterm::event::MouseEventKind::ScrollDown),
+            K::ScrollDown
+        );
+    }
+
+    #[test]
+    fn mouse_drag_preserves_which_button_is_held() {
+        use retroglyph_core::event::{MouseButton as B, MouseEventKind as K};
+
+        assert_eq!(
+            mouse_event_kind_of(crossterm::event::MouseEventKind::Drag(
+                crossterm::event::MouseButton::Left
+            )),
+            K::Drag(B::Left)
+        );
+        assert_eq!(
+            mouse_event_kind_of(crossterm::event::MouseEventKind::Drag(
+                crossterm::event::MouseButton::Right
+            )),
+            K::Drag(B::Right)
+        );
+        assert_eq!(
+            mouse_event_kind_of(crossterm::event::MouseEventKind::Drag(
+                crossterm::event::MouseButton::Middle
+            )),
+            K::Drag(B::Middle)
+        );
+    }
+
+    #[test]
+    fn mouse_horizontal_scroll_round_trips() {
+        use retroglyph_core::event::MouseEventKind as K;
+
+        assert_eq!(
+            mouse_event_kind_of(crossterm::event::MouseEventKind::ScrollLeft),
+            K::ScrollLeft
+        );
+        assert_eq!(
+            mouse_event_kind_of(crossterm::event::MouseEventKind::ScrollRight),
+            K::ScrollRight
+        );
     }
 }

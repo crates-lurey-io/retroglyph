@@ -7,9 +7,9 @@
 //! benchmark measures translation throughput over a representative mix of the event kinds a real
 //! session produces: key presses (with and without the kitty-protocol Shift+Tab special case),
 //! key repeat/release, mouse moves/clicks/scrolls, resizes, paste, and focus changes, plus the
-//! single unmappable-event case (`MouseEventKind::Drag` maps via `Moved`, so genuinely unmappable
-//! crossterm events are rare; `KeyCode::Media(_)` etc. are used here as a stand-in) that exercises
-//! the `None` branch `poll_event`'s retry loop depends on.
+//! single unmappable-event case (genuinely unmappable crossterm events are rare; `KeyCode::Media(_)`
+//! etc. are used here as a stand-in) that exercises the `None` branch `poll_event`'s retry loop
+//! depends on.
 //!
 //! `from_crossterm_event` is a private implementation detail of `retroglyph-crossterm` and is
 //! exposed here only via a `#[doc(hidden)] pub` escape hatch (see its doc comment in `lib.rs`) --
