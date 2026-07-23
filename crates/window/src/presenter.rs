@@ -38,6 +38,45 @@ pub trait WindowHandle: HasWindowHandle + HasDisplayHandle {}
 
 impl<T: HasWindowHandle + HasDisplayHandle + ?Sized> WindowHandle for T {}
 
+/// A surface-lifecycle error that can optionally signal whether it's worth retrying.
+///
+/// [`Presenter::SurfaceError`] is a per-implementation associated type: softbuffer's error enum
+/// has no `Lost`/`Outdated`/`Timeout` discrimination the way `wgpu::SurfaceError` does, so today's
+/// only backend (`SoftwareRenderer`) has no structured way to say "this specific failure is
+/// fatal, don't bother retrying." [`is_recoverable`](Self::is_recoverable) is that hook: a
+/// presenter with real error categories can override it to return `false` for a truly fatal
+/// failure, while every presenter that doesn't need the distinction (including every backend that
+/// exists in this crate today) can implement this trait with an empty body and inherit the
+/// default `true`.
+///
+/// Deliberately not blanket-implemented for every `Debug + Display` type: that would make it
+/// impossible for any concrete error type to override [`is_recoverable`](Self::is_recoverable) at
+/// all (a specific `impl` would conflict with the blanket one), defeating the point of the trait.
+/// Instead, each `SurfaceError` type needs one explicit (and usually empty) `impl
+/// RecoverableError for ...` block -- see `retroglyph_software`'s `SurfaceError` for the minimal
+/// case that just inherits the default.
+pub trait RecoverableError: core::fmt::Debug + core::fmt::Display {
+    /// Whether this error represents a transient failure worth retrying, as opposed to a fatal
+    /// one.
+    ///
+    /// Defaults to `true`: absent any structured error categorization, every failure is treated
+    /// as potentially transient, matching the generic consecutive-failure recovery heuristic
+    /// `winit::run::present_failure_action` already applies. Override to return `false` only for
+    /// an error variant known to be unrecoverable regardless of retries (e.g. a `wgpu::SurfaceError
+    /// ::Lost` variant that persists until the surface is fully rebuilt from a different code
+    /// path than a simple retry).
+    #[must_use]
+    fn is_recoverable(&self) -> bool {
+        true
+    }
+}
+
+// `Infallible` is uninhabited -- no value of it can ever exist, so `is_recoverable` can never
+// actually be called on one -- but a presenter that can't fail (e.g. a test mock) still needs
+// `type SurfaceError = core::convert::Infallible` to satisfy the `RecoverableError` bound, so
+// this impl exists purely for that convenience.
+impl RecoverableError for core::convert::Infallible {}
+
 /// A renderer that rasterizes grid content and presents it to a window
 /// surface.
 ///
@@ -48,7 +87,7 @@ impl<T: HasWindowHandle + HasDisplayHandle + ?Sized> WindowHandle for T {}
 pub trait Presenter: Output {
     /// Surface lifecycle error (context creation, buffer acquisition,
     /// present).
-    type SurfaceError: core::fmt::Debug + core::fmt::Display;
+    type SurfaceError: RecoverableError;
 
     /// Initialize the window surface.
     ///
