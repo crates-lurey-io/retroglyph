@@ -1,6 +1,6 @@
 [package]
 name = "retroglyph-core"
-version = "0.2.1"
+version = "0.3.0"
 description = "A 2D pseudographic terminal library -- core types, no backend"
 readme = "README.md"
 edition.workspace = true

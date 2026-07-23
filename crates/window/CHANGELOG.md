@@ -7,6 +7,189 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 
+## [0.3.0+retroglyph-window](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-window-v0.2.1...retroglyph-window-v0.3.0) - 2026-07-23
+
+### Features
+
+- [fc1fea7](https://github.com/crates-lurey-io/retroglyph/commit/fc1fea70a8dfdc7265bb5a6bff1a9d054dcf5770)
+  _(window)_ Optional recoverability signal on Presenter::SurfaceError by `@matanlurey` in
+  [#360](https://github.com/crates-lurey-io/retroglyph/pull/360)
+
+  > Adds RecoverableError (Debug + Display + is_recoverable() -> true by default) and changes
+  > Presenter::SurfaceError's bound from Debug + Display to RecoverableError. present_failure_action
+  > (winit::run) now takes a recoverable flag: a present() failure whose error reports
+  > is_recoverable() == false skips the consecutive- failure/recovery heuristic entirely and takes
+  > an immediate PresentFailureAction::Fatal (log::error! once, no init_surface retry), instead of
+  > waiting out PRESENT_FAILURE_RECOVERY_THRESHOLD like a generic failure does.
+  >
+  > SoftwareRenderer's SurfaceError types (native + wasm) get a one-line 'impl RecoverableError for
+  > SurfaceError {}' to opt into the unchanged default behavior -- not a blanket impl over every
+  > Debug + Display type, since that would make it impossible for any concrete error type (including
+  > the test fakes here, and a future wgpu presenter) to ever override is_recoverable via a
+  > conflicting-impl compile error.
+  >
+  > Closes #298.
+
+- [4a81394](https://github.com/crates-lurey-io/retroglyph/commit/4a813942cac90eba30e05e4bf372ea2c5e13069c)
+  _(window)_ Generic EventProxy<T> for cross-thread event injection by `@matanlurey` in
+  [#345](https://github.com/crates-lurey-io/retroglyph/pull/345)
+
+  > EventProxy<T:Send + 'static = u64> now wraps winit's own EventLoopProxy<T> directly, instead of
+  > a fixed u64. The u64 default keeps run_windowed_with_proxy/ run_app_with_proxy's public
+  > signatures and behavior unchanged, still delivering the payload as Event::Custom(u64) through
+  > the app's normal poll_event loop.
+  >
+  > New run_windowed_with_typed_proxy/run_app_with_typed_proxy entry points accept any T: Send +
+  > 'static plus an on_custom_event handler invoked directly from winit's user_event callback,
+  > bypassing retroglyph_core::Event entirely for non-u64 payloads (Event::Custom stays fixed to u64
+  > -- widening it to a generic payload would be a much larger, invasive breaking change to
+  > retroglyph_core than this issue asks for).
+  >
+  > Closes #295
+
+- [9cc6ada](https://github.com/crates-lurey-io/retroglyph/commit/9cc6ada60355fd3401af32d1cb9e06e79fc158f0)
+  _(window)_ Clipboard and IME support for windowed apps by `@matanlurey` in
+  [#343](https://github.com/crates-lurey-io/retroglyph/pull/343)
+  > Closes #296.
+  >
+  > - Translate winit's WindowEvent::Ime(Ime::Commit(text)) into Event::Paste(text) (Event
+  >   is #[non_exhaustive] and Paste already models 'atomic block of text', matching the crossterm
+  >   backend's own bracketed-paste -> Event::Paste path). Ime::Enabled/Preedit/Disabled and empty
+  >   commits are intentionally dropped.
+  > - Enable IME composition per-window via Window::set_ime_allowed(true), which winit requires
+  >   opt-in for WindowEvent::Ime to fire at all.
+  > - Add a Clipboard trait (get_text/set_text) plus a native-only, arboard-backed SystemClipboard,
+  >   kept in retroglyph-window (not retroglyph-core). arboard is cfg-gated to non-wasm32 targets,
+  >   matching this crate's existing native/wasm module-swap convention.
+  > - Unit tests cover the IME translation layer and dispatch path headlessly, and the Clipboard
+  >   trait via an in-memory fake (SystemClipboard itself needs a live OS clipboard and is not
+  >   covered by automated tests -- see PR body).
+
+### Bug Fixes
+
+- [fa274fa](https://github.com/crates-lurey-io/retroglyph/commit/fa274fa1451ad3ca9ece7fb2e1b3efc935bafc01)
+  _(window)_ Re-export run_windowed_with_typed_proxy/run_app_with_typed_proxy by `@matanlurey` in
+  [#354](https://github.com/crates-lurey-io/retroglyph/pull/354)
+
+  > #345 added these two functions but never added them to winit::mod's `pub use run::{...}` list,
+  > so their own advertised import path (`retroglyph_window::winit::run_windowed_with_typed_proxy`,
+  > per the module docs and the function's own doctest) doesn't resolve -- caught by an independent
+  > reviewer pass. They remained reachable via `winit::run::...` since `run` is itself a public
+  > module, so the feature wasn't dead, just not surfaced at its documented path.
+  >
+  > Also documents (per the same review) that a typed-proxy payload is delivered as a side channel,
+  > synchronously from winit's user_event callback, rather than interleaved with the poll() event
+  > FIFO the way the plain u64/Event::Custom path is -- a real semantic difference between the two
+  > that wasn't previously called out.
+  >
+  > Closes #295 (re-opening scope: the original PR closed it, but the public API it added was
+  > unreachable at its documented path until this fix).
+
+- [fda7303](https://github.com/crates-lurey-io/retroglyph/commit/fda7303d7e2031d607635848b9ad0823302b04b3)
+  _(window)_ Automatically present the terminal after each windowed frame by `@matanlurey` in
+  [#353](https://github.com/crates-lurey-io/retroglyph/pull/353)
+
+- [732c016](https://github.com/crates-lurey-io/retroglyph/commit/732c01632519c1d9b20743e48ae3fe5883a634d0)
+  _(window)_ Correct horizontal wheel scroll, coalesce cursor-moved events, add translate-layer
+  benchmarks by `@matanlurey` in [#346](https://github.com/crates-lurey-io/retroglyph/pull/346)
+
+  > - on_mouse_wheel now reports ScrollLeft/ScrollRight for pure-horizontal deltas (scroll_y == 0.0)
+  >   instead of falling through to a spurious ScrollDown; a zero delta on both axes pushes no event
+  >   at all .
+  > - WindowBackend::push_event coalesces consecutive Mouse(Moved) events by replacing the queue's
+  >   tail in place instead of growing it, since only the latest position matters once the queue is
+  >   next polled; every other event kind still pushes in O(1) as before .
+  > - Added a benches/ directory + criterion dev-dependency to retroglyph-window (previously had
+  >   neither), with benchmarks for pixel_to_cell/ physical_pos_from,
+  >   key_event_kind/translate_modifiers, and a cursor-moved burst through WindowBackend::push_event
+  >   that demonstrates the #294 coalescing fix, plus a unit test asserting the queue stays at
+  >   length 1 after such a burst .
+  >
+  > Closes #293, Closes #294, Closes #299
+
+### Refactor
+
+- [c6f36d7](https://github.com/crates-lurey-io/retroglyph/commit/c6f36d7bdf320b10cca5d3df9d71d97620852297)
+  _(core)_ Split Backend into Output/Input/Cursor facets by `@matanlurey` in
+  [#331](https://github.com/crates-lurey-io/retroglyph/pull/331)
+
+  > - refactor(core): split Backend into Output/Input/Cursor facets
+  >
+  > Splits the fused Backend trait into three independent sibling traits with no supertrait
+  > relationship: Output (draw/draw_layers/flush/size/clear/resize, the only fallible facet), Input
+  > (poll_event/push_event, push_event defaults to a no-op), and Cursor
+  > (set_cursor_visible/set_cursor_position, both default to a no-op). Backend becomes a pure
+  > ergonomic bundle:
+  >
+  >     pub trait Backend: Output + Input + Cursor {}
+  >     impl<T: Output + Input + Cursor> Backend for T {}
+  >
+  > so every existing B: Backend generic call site (Terminal<B>, App<B>::step, layout::render, every
+  > widget) keeps compiling unchanged. Headless now implements Output/Input/Cursor separately
+  > instead of one impl Backend.
+  >
+  > Also fixes stray doc/grid/terminal references to crate::Backend::\* methods that moved to
+  > Output/Input, and updates the workspace README's backend overview.
+  >
+  > - refactor(crossterm): implement Output/Input/Cursor instead of fused Backend
+  >
+  > Crossterm now implements Output (draw/flush/size/clear/resize, propagating std::io::Error),
+  > Input (real poll_event; push_event uses the new trait default since crossterm reads its own
+  > event stream), and Cursor (real escape-code-based show/hide and move) instead of one impl
+  > Backend. Updates crate docs, tests, and benches that referenced Backend::\* methods directly on
+  > a concrete Crossterm<W> to import Output/Input instead (bundle-trait method resolution only
+  > works through a generic B: Backend bound, not a concrete type).
+  >
+  > - refactor(window): fold Presenter into an Output supertrait
+  >
+  > Presenter is now `pub trait Presenter: Output`, dropping its duplicated
+  > draw/draw_layers/needs_full_frame/composites_layers/flush/size/clear/resize signatures
+  > (inherited from Output) and its own Error associated type (also inherited); Presenter keeps only
+  > SurfaceError plus the surface lifecycle (init_surface/resize_surface/present/cell_size).
+  > WindowBackend<P: Presenter> now implements Output by delegating to P, Input via its own event
+  > queue, and Cursor via the trait's no-op default (confirmed this matches the prior fused-Backend
+  > impl's cursor methods, which were already no-ops for the windowed family -- a straight split,
+  > not a behavior change). Updates crate docs (lib.rs architecture diagram, presenter.rs's stale
+  > "mirrors the output half" doc comment, README) and the winit test/doctest presenter stubs to
+  > implement Output + Presenter separately.
+  >
+  > - refactor(software): implement Output/Input/Cursor, drop duplicate Presenter forwarding
+  >
+  > SoftwareRenderer now implements Output, Input, and Cursor directly instead of one impl Backend.
+  > Since retroglyph-window's Presenter is now an Output supertrait, SoftwareRenderer's own Output
+  > impl already satisfies Presenter: Output, so the old impl retroglyph_window::Presenter block
+  > (which duplicated draw/draw_layers/flush/size/clear/resize by forwarding through
+  > <Self as Backend>::method, specifically to keep Presenter out of scope and avoid
+  > method-resolution ambiguity) is deleted; the new Presenter impl only defines SurfaceError,
+  > init_surface, resize_surface, present, and cell_size. Updates crate/module docs and the benches
+  > that called draw/draw_layers directly on a concrete SoftwareRenderer to import Output instead of
+  > Backend.
+  >
+  > - refactor(terminal-wasm): implement Output/Input/Cursor instead of fused Backend
+  >
+  > TerminalWasm now implements Output (ANSI-emitting draw/flush/clear/resize), Input (real
+  > push*event/poll_event, since this backend is entirely push-driven), and Cursor (real escape-code
+  > cursor show/hide/move) instead of one impl Backend. Updates doc comment links
+  > (Backend::draw/clear/etc. -> Output::/Input::/Cursor::) and the event-throughput bench's Backend
+  > as * import to Input as \_.
+  >
+  > - fix(terminal-wasm): import Output for wasm32-gated resize call
+  >
+  > The wasm32-only wasm_terminal_resize FFI export imported the old fused Backend trait to call
+  > resize(); after the Output/Input/Cursor split that method lives on Output. This module
+  > is #[cfg(target_arch = "wasm32")], so cargo test --all-features never compiled it -- only just
+  > test-wasm (wasm-pack test) exercises this path, and CI caught it as a build failure on PR #331.
+  >
+  > - docs(workspace): update Backend/Presenter references after the trait split
+  >
+  > Sweeps remaining prose describing Backend as a single fused output+input+cursor trait: the
+  > workspace README's backend overview, the retroglyph-terminal crate's doc comment linking to the
+  > old Backend::draw method (now Output::draw), and docs/testing.md's reference to
+  > Backend::push_event (now Input::push_event).
+
+**Full Changelog**:
+https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-window-v0.2.1...retroglyph-window-v0.3.0
+
 ## [0.2.1+retroglyph-window](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-window-v0.2.0...retroglyph-window-v0.2.1) - 2026-07-19
 
 ### Continuous Integration

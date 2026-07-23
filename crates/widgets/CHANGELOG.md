@@ -7,6 +7,139 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 
+## [0.3.0+retroglyph-widgets](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-widgets-v0.2.1...retroglyph-widgets-v0.3.0) - 2026-07-23
+
+### Features
+
+- [b2edc04](https://github.com/crates-lurey-io/retroglyph/commit/b2edc04feb8f31e340a147c32865848eaf0bfbb4)
+  _(widgets)_ Add theme_on(theme, bg) to make themed widgets' backdrop assumption explicit by
+  `@matanlurey` in [#356](https://github.com/crates-lurey-io/retroglyph/pull/356)
+
+### Bug Fixes
+
+- [cde6a52](https://github.com/crates-lurey-io/retroglyph/commit/cde6a52cc29d9bebc014d927ff6047c0682fa0f0)
+  _(widgets)_ Saturate column-width addition before advancing Table::draw_row's column position by
+  `@matanlurey` in [#355](https://github.com/crates-lurey-io/retroglyph/pull/355)
+
+### Refactor
+
+- [3df2762](https://github.com/crates-lurey-io/retroglyph/commit/3df27629fd1c574c222468389c58657eea7c7fee)
+  _(widgets)_ Table borrows &str rows instead of owning Vec<Vec<String>>, drop draw_row's per-row
+  Vec collect by `@matanlurey` in [#350](https://github.com/crates-lurey-io/retroglyph/pull/350)
+
+  > refactor(widgets): Table borrows &str rows instead of owning Vec<Vec<String>>
+  >
+  > Table::new's rows parameter changes from &[Vec<String>] to &[&[&str]], matching List's existing
+  > &[&str] borrowed-input convention in this crate rather than introducing ratatui-style Row/Cell
+  > wrapper types. Callers with &'static str or numeric data no longer need to materialize an owned
+  > Vec<Vec<String>> just to call Table::new; callers that do have owned Strings borrow &str out of
+  > them instead of the table taking ownership.
+  >
+  > draw_row's per-row-per-frame `let cells: Vec<&str> = row.iter().map(String::as_str).collect();`
+  > is now unnecessary and removed, since rows are already &[&str] once inside render's per-row
+  > loop.
+  >
+  > Updates the 09_widgets_dashboard example and the table_render bench to the new signature. Re-ran
+  > the bench before/after: results are noise-dominated at this scale
+  > (single-digit-to-tens-of-microseconds full-table renders where terminal grid writes dominate),
+  > with no consistent directional improvement across the three sized cases -- the removed per-row
+  > Vec allocation is real but too small relative to total render cost to show up cleanly in
+  > wall-clock bench numbers at these sizes.
+  >
+  > Closes #310, Closes #312
+
+### Performance
+
+- [dfd9c0f](https://github.com/crates-lurey-io/retroglyph/commit/dfd9c0fd7b43163f45af40ee1782e259460de8f5)
+  _(widgets)_ Avoid per-call Vec allocation in layout::solve by `@matanlurey` in
+  [#357](https://github.com/crates-lurey-io/retroglyph/pull/357)
+
+  > layout::solve built four separate heap-allocated Vecs on every call (sizes, plus the
+  > flexible/shares/fracs/order scratch buffers used by the largest-remainder Fill/Min/Max
+  > distribution pass), even though real callers (split_h/split_v and friends) invoke it several
+  > times per frame for multi-panel UIs with only a handful of panes.
+  >
+  > Introduce a small internal SmallBuf<T, N> type (stack array for up to N = STACK_CAP (8) items,
+  > falling back to a heap Vec past that) and use it for every scratch buffer inside solve. This is
+  > purely internal to solve -- the public split_h/split_v/split_v_flex/split_h_flex signatures are
+  > unchanged, still returning Vec<Rect> as before. No unsafe code: SmallBuf's stack variant only
+  > works with Copy + Default element types (u16, u32, usize, and the (usize, u16, Option<u16>)
+  > flexible-pane tuple), which lets every element be initialized up front without MaybeUninit.
+  >
+  > Benchmark (cargo bench -p retroglyph-widgets --bench layout_solve), split_h, before -> after:
+  >
+  > - 5 panes: ~139 ns -> ~95 ns (~32% faster; heap allocs eliminated)
+  > - 25 panes: ~354 ns -> ~361 ns (unchanged; above STACK_CAP, heap path same as before)
+  > - 100 panes: ~1.05 us -> ~2.6 us (within noise/outliers of this run; same heap path as before)
+  >
+  > The win is concentrated in the common small-pane case (well under STACK_CAP), which is exactly
+  > the per-frame multi-panel-UI workload the issue describes; larger constraint counts fall back to
+  > the heap and are unaffected.
+  >
+  > Added split_beyond_stack_cap_matches_small_case_behavior and
+  > weighted_fill_beyond_stack_cap_matches_small_case_proportions unit tests covering both the
+  > Fixed-only and Fill/Min/Max-mixed paths past STACK_CAP, confirming solve's output is unchanged
+  > for large constraint counts.
+  >
+  > Closes #314
+
+- [8155db5](https://github.com/crates-lurey-io/retroglyph/commit/8155db5049170e757257cca6c2a5c870ec3ff402)
+  _(widgets)_ Stack-buffer readout formatting for gauge/progress/stat_bar widgets by `@matanlurey`
+  in [#349](https://github.com/crates-lurey-io/retroglyph/pull/349)
+
+  > Gauge::render and StatBar::render each format!()'d their trailing readout string (a "87%"
+  > percentage, a "45/100" current/max pair) into a heap-allocated String every frame. Factor a
+  > small ReadoutBuf<const N: usize> stack buffer (implementing
+  >
+  > fmt::Write) into the shared bar module -- the same module the two widgets already share their
+  > label/bar/readout layout through -- so both widgets write! into a fixed [u8; N] buffer instead.
+  >
+  > Closes #311.
+
+- [676c803](https://github.com/crates-lurey-io/retroglyph/commit/676c803e9cc8e9660664487780e36f0d1c4ef6cc)
+  _(widgets)_ Return &str from text::truncate instead of allocating by `@matanlurey` in
+  [#326](https://github.com/crates-lurey-io/retroglyph/pull/326) [**breaking**]
+  > text::truncate walked s.chars() to find a char-boundary byte offset within the display-width
+  > budget, then always copied the surviving prefix into a new String even though s[..end] is
+  > already a valid borrowed &str. This is a hot path (Table::draw_row calls it per column per
+  > visible row per frame), so every truncated cell paid for a throwaway allocation.
+  >
+  > truncate now returns &str, borrowing from its input. Added truncate_owned for callers who need
+  > an owned String. Updated all internal call sites (table.rs, button.rs, tabs.rs, list.rs,
+  > print_line.rs, panel.rs, widget/text.rs, style.rs) to use the borrowed &str directly instead of
+  > re-borrowing/allocating, and the examples crate's needless-borrow call sites accordingly.
+  >
+  > BREAKING CHANGE:text::truncate (re-exported as retroglyph_widgets::truncate) now returns &str
+  > instead of String. Callers needing an owned String should call the new
+  > retroglyph_widgets::truncate_owned instead.
+
+### Testing
+
+- [28913a3](https://github.com/crates-lurey-io/retroglyph/commit/28913a384f8eb82133fda17f49b4f7e777813f93)
+  _(widgets)_ Add benchmarks for table/list/sparkline render, layout, and hit-testing by
+  `@matanlurey` in [#321](https://github.com/crates-lurey-io/retroglyph/pull/321)
+
+  > Adds criterion benchmarks (harness = false, following crates/core/benches/grid_diff.rs's style:
+  > deterministic fastrand::Rng::with_seed(42) inputs, black_box, doc comments explaining why each
+  > case exists) for the widgets this crate had no per-frame cost numbers for:
+  >
+  > - table_render: Table::render at realistic row/column counts (a compact status table, a wide
+  >   multi-column dashboard, a long scrolling table), including the highlighted-row and
+  >   scroll-window paths.
+  > - list_sparkline_render: List::render over long lists, and Sparkline::render's per-cell Meter
+  >   color ramp across recent-history and long-history sample buffers.
+  > - layout_solve: split_h/split_v (layout::solve's public entry points) with a mix of every
+  >   Constraint kind, at a range of pane counts.
+  > - text_truncate: text::truncate on ASCII, wide-char, and zero-width input, to guard a future
+  >   borrowing rewrite of its allocation.
+  > - hit_testing: HitTester::topmost_at and a full Interaction frame (register + resolve every
+  >   widget) at a range of registered-widget counts.
+  >
+  > Closes #316.
+
+**Full Changelog**:
+https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-widgets-v0.2.1...retroglyph-widgets-v0.3.0
+
 ## [0.2.1+retroglyph-widgets](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-widgets-v0.2.0...retroglyph-widgets-v0.2.1) - 2026-07-19
 
 ### Continuous Integration
