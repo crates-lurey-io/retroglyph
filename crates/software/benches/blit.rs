@@ -6,7 +6,7 @@
 //! (retroglyph#307).
 //!
 //! Both blit functions are crate-private, so this bench (an external
-//! `benches/` binary) drives them indirectly through `Backend::draw_layers`
+//! `benches/` binary) drives them indirectly through `Output::draw_layers`
 //! with content engineered so every cell takes exactly one path: an
 //! all-glyph frame for `blit_glyph`, and all-sprite frames (fully opaque vs
 //! fully alpha-blended) for `blit_sprite`. `blit_glyph` has no alpha

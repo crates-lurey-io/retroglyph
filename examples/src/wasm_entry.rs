@@ -230,7 +230,7 @@ macro_rules! __wasm_terminal_entry {
             pub fn wasm_terminal_example_init(width: u16, height: u16) {
                 ::console_error_panic_hook::set_once();
                 let mut backend = ::retroglyph_terminal_wasm::TerminalWasm::new(width, height);
-                ::retroglyph_core::backend::Backend::set_cursor_visible(&mut backend, false);
+                ::retroglyph_core::backend::Cursor::set_cursor_visible(&mut backend, false);
                 let mut term = ::retroglyph_core::Terminal::new(backend);
                 let state = <$E as $crate::Example>::init(&mut term);
                 __RG_WASM_TERMINAL.with(|cell| {
@@ -251,7 +251,7 @@ macro_rules! __wasm_terminal_entry {
             pub fn wasm_terminal_example_resize(width: u16, height: u16) {
                 __RG_WASM_TERMINAL.with(|cell| {
                     if let ::std::option::Option::Some(s) = cell.borrow_mut().as_mut() {
-                        ::retroglyph_core::backend::Backend::resize(
+                        ::retroglyph_core::backend::Output::resize(
                             s.term.backend_mut(),
                             ::retroglyph_core::grid::Size { width, height },
                         );
