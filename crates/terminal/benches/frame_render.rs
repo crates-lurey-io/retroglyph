@@ -82,12 +82,20 @@ fn checkerboard(cols: u16, rows: u16) -> Grid {
     grid
 }
 
-/// Renders `old.diff(new)` through a [`TerminalRenderer`] and returns the emitted bytes.
+/// Renders `new.diff(old)` through a [`TerminalRenderer`] and returns the emitted bytes.
+///
+/// `Grid::diff`'s contract is `self.diff(other)` yields `self`'s tiles at positions differing
+/// from `other` (see the real call site in `retroglyph-core`'s `Terminal::render`:
+/// `self.current.diff(&self.previous)`, current-diffed-against-previous, tiles taken from
+/// current). This helper used to call it backwards (`old.diff(new)`), which yielded `old`'s own
+/// (blank/default-styled) tiles at every changed position instead of `new`'s -- every group in
+/// this file was silently rendering blank frames rather than the intended colored/glyph content,
+/// so none of the `Throughput::Bytes` numbers reflected real output.
 fn render_diff(old: &Grid, new: &Grid, plain: bool) -> Vec<u8> {
     let mut renderer = TerminalRenderer::with_plain_mode(Vec::new(), plain);
     renderer
         .draw(
-            old.diff(new)
+            new.diff(old)
                 .map(|(_, pos, tile, extra)| (pos, tile, extra)),
         )
         .expect("Vec<u8> writes never fail");
