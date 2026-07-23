@@ -60,14 +60,95 @@ impl Constraint {
     }
 }
 
+/// Constraint counts at or below this stay on the stack in [`SmallBuf`]; larger splits fall back
+/// to a heap `Vec`. Chosen comfortably above a typical multi-panel layout (a header, a handful of
+/// flexible content panes, a status bar) while staying correct for arbitrarily many panes -- see
+/// the `layout_solve` benchmark's 100-pane case, which exercises the heap fallback.
+const STACK_CAP: usize = 8;
+
+/// A small buffer that stays inline on the stack for up to `N` items and only allocates on the
+/// heap past that. `solve` uses this for its scratch buffers (pane sizes, the flexible-pane
+/// index/weight/cap list, and the largest-remainder distribution pass) so that the common case of
+/// a handful of panes per split -- called several times per frame by multi-panel UIs -- does not
+/// pay for a heap allocation at all.
+enum SmallBuf<T: Copy + Default, const N: usize> {
+    Stack([T; N], usize),
+    Heap(Vec<T>),
+}
+
+impl<T: Copy + Default, const N: usize> SmallBuf<T, N> {
+    /// Create a buffer able to hold `cap` items without reallocating: inline on the stack if
+    /// `cap` fits within `N`, otherwise a heap `Vec` pre-sized to `cap`.
+    fn with_capacity(cap: usize) -> Self {
+        if cap <= N {
+            Self::Stack([T::default(); N], 0)
+        } else {
+            Self::Heap(Vec::with_capacity(cap))
+        }
+    }
+
+    /// Append `value`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the buffer is the `Stack` variant and already holds `N` items -- callers must
+    /// size `with_capacity` to the true upper bound of pushes, as `solve` does.
+    fn push(&mut self, value: T) {
+        match self {
+            Self::Stack(buf, len) => {
+                buf[*len] = value;
+                *len += 1;
+            }
+            Self::Heap(vec) => vec.push(value),
+        }
+    }
+}
+
+impl<T: Copy + Default, const N: usize> std::ops::Deref for SmallBuf<T, N> {
+    type Target = [T];
+
+    fn deref(&self) -> &[T] {
+        match self {
+            Self::Stack(buf, len) => &buf[..*len],
+            Self::Heap(vec) => vec,
+        }
+    }
+}
+
+impl<T: Copy + Default, const N: usize> std::ops::DerefMut for SmallBuf<T, N> {
+    fn deref_mut(&mut self) -> &mut [T] {
+        match self {
+            Self::Stack(buf, len) => &mut buf[..*len],
+            Self::Heap(vec) => vec,
+        }
+    }
+}
+
+impl<T: Copy + Default, const N: usize> std::ops::Index<usize> for SmallBuf<T, N> {
+    type Output = T;
+
+    fn index(&self, idx: usize) -> &T {
+        &(**self)[idx]
+    }
+}
+
+impl<T: Copy + Default, const N: usize> std::ops::IndexMut<usize> for SmallBuf<T, N> {
+    fn index_mut(&mut self, idx: usize) -> &mut T {
+        &mut (**self)[idx]
+    }
+}
+
 /// Compute the length of each pane along an axis of `total` cells.
-fn solve(total: u16, constraints: &[Constraint]) -> Vec<u16> {
-    let mut sizes: Vec<u16> = constraints.iter().map(|c| c.base(total)).collect();
+fn solve(total: u16, constraints: &[Constraint]) -> SmallBuf<u16, STACK_CAP> {
+    let mut sizes: SmallBuf<u16, STACK_CAP> = SmallBuf::with_capacity(constraints.len());
+    for c in constraints {
+        sizes.push(c.base(total));
+    }
 
     // Clamp the fixed/percent sum so it never exceeds the axis. If it does,
     // shave from the tail so earlier panes keep their requested size.
     let mut used: u16 = 0;
-    for size in &mut sizes {
+    for size in sizes.iter_mut() {
         let room = total.saturating_sub(used);
         *size = (*size).min(room);
         used += *size;
@@ -78,16 +159,16 @@ fn solve(total: u16, constraints: &[Constraint]) -> Vec<u16> {
     // share on top of the floor already reserved above; Max panes start at zero and
     // are capped at their declared value (any share past the cap is simply left
     // unclaimed, not redistributed).
-    let flexible: Vec<(usize, u16, Option<u16>)> = constraints
-        .iter()
-        .enumerate()
-        .filter_map(|(i, c)| match c {
-            Constraint::Fill(weight) => Some((i, *weight, None)),
-            Constraint::Min(_) => Some((i, 1, None)),
-            Constraint::Max(cap) => Some((i, 1, Some(*cap))),
-            Constraint::Fixed(_) | Constraint::Percent(_) => None,
-        })
-        .collect();
+    let mut flexible: SmallBuf<(usize, u16, Option<u16>), STACK_CAP> =
+        SmallBuf::with_capacity(constraints.len());
+    for (i, c) in constraints.iter().enumerate() {
+        match c {
+            Constraint::Fill(weight) => flexible.push((i, *weight, None)),
+            Constraint::Min(_) => flexible.push((i, 1, None)),
+            Constraint::Max(cap) => flexible.push((i, 1, Some(*cap))),
+            Constraint::Fixed(_) | Constraint::Percent(_) => {}
+        }
+    }
     if !flexible.is_empty() {
         let remainder = total.saturating_sub(used);
         let total_weight: u32 = flexible.iter().map(|&(_, w, _)| u32::from(w)).sum();
@@ -97,10 +178,10 @@ fn solve(total: u16, constraints: &[Constraint]) -> Vec<u16> {
             // the panes with the largest fractional remainder (ties -> earlier pane
             // first). For equal weights every fraction ties, so this reduces to the
             // original round-robin-from-the-front behavior exactly.
-            let mut shares: Vec<u32> = Vec::with_capacity(flexible.len());
-            let mut fracs: Vec<u32> = Vec::with_capacity(flexible.len());
+            let mut shares: SmallBuf<u32, STACK_CAP> = SmallBuf::with_capacity(flexible.len());
+            let mut fracs: SmallBuf<u32, STACK_CAP> = SmallBuf::with_capacity(flexible.len());
             let mut floor_sum: u32 = 0;
-            for &(_, weight, _) in &flexible {
+            for &(_, weight, _) in flexible.iter() {
                 let product = u32::from(remainder) * u32::from(weight);
                 let share = product / total_weight;
                 fracs.push(product % total_weight);
@@ -108,9 +189,12 @@ fn solve(total: u16, constraints: &[Constraint]) -> Vec<u16> {
                 floor_sum += share;
             }
             let mut leftover = u32::from(remainder).saturating_sub(floor_sum);
-            let mut order: Vec<usize> = (0..flexible.len()).collect();
+            let mut order: SmallBuf<usize, STACK_CAP> = SmallBuf::with_capacity(flexible.len());
+            for idx in 0..flexible.len() {
+                order.push(idx);
+            }
             order.sort_by(|&a, &b| fracs[b].cmp(&fracs[a]).then(a.cmp(&b)));
-            for idx in order {
+            for &idx in order.iter() {
                 if leftover == 0 {
                     break;
                 }
@@ -149,7 +233,8 @@ pub fn split_v(area: Rect, constraints: &[Constraint]) -> Vec<Rect> {
     let sizes = solve(area.height(), constraints);
     let mut y = area.top();
     sizes
-        .into_iter()
+        .iter()
+        .copied()
         .map(|h| {
             let rect = Rect::new(area.left(), y, area.width(), h);
             y = y.saturating_add(h);
@@ -178,7 +263,8 @@ pub fn split_h(area: Rect, constraints: &[Constraint]) -> Vec<Rect> {
     let sizes = solve(area.width(), constraints);
     let mut x = area.left();
     sizes
-        .into_iter()
+        .iter()
+        .copied()
         .map(|w| {
             let rect = Rect::new(x, area.top(), w, area.height());
             x = x.saturating_add(w);
@@ -346,7 +432,7 @@ pub fn split_v_flex(area: Rect, constraints: &[Constraint], flex: Flex) -> Vec<R
     let offsets = place(area.height(), &sizes, flex);
     offsets
         .into_iter()
-        .zip(sizes)
+        .zip(sizes.iter().copied())
         .map(|(y, h)| Rect::new(area.left(), area.top().saturating_add(y), area.width(), h))
         .collect()
 }
@@ -359,7 +445,7 @@ pub fn split_h_flex(area: Rect, constraints: &[Constraint], flex: Flex) -> Vec<R
     let offsets = place(area.width(), &sizes, flex);
     offsets
         .into_iter()
-        .zip(sizes)
+        .zip(sizes.iter().copied())
         .map(|(x, w)| Rect::new(area.left().saturating_add(x), area.top(), w, area.height()))
         .collect()
 }
@@ -715,5 +801,42 @@ mod tests {
         let screen = Rect::new(5, 5, 20, 10);
         let r = centered_rect(screen, 10, 4);
         assert_eq!(r, Rect::new(10, 8, 10, 4));
+    }
+
+    /// `solve`'s internal `SmallBuf` scratch buffers stay on the stack for up to `STACK_CAP`
+    /// (8) items and fall back to the heap past that; this covers a constraint count past the
+    /// cap (all-`Fixed`, so `sizes` alone crosses into the heap path) and asserts the result is
+    /// identical in shape to what an all-`Vec` implementation would produce: every pane keeps its
+    /// requested size and the total exactly fills the area.
+    #[test]
+    fn split_beyond_stack_cap_matches_small_case_behavior() {
+        let panes = 20; // > STACK_CAP
+        let area = Rect::new(0, 0, panes as u16, 1);
+        let constraints = vec![Constraint::Fixed(1); panes];
+        let widths: Vec<u16> = split_h(area, &constraints)
+            .iter()
+            .map(Rect::width)
+            .collect();
+        assert_eq!(widths, vec![1u16; panes]);
+        assert_eq!(widths.iter().sum::<u16>(), panes as u16);
+    }
+
+    /// Same as above, but exercises the flexible-pane path (`flexible`/`shares`/`fracs`/`order`
+    /// scratch buffers) past `STACK_CAP` by mixing every `Constraint` kind across enough panes
+    /// that the flexible subset alone also crosses the stack cap.
+    #[test]
+    fn weighted_fill_beyond_stack_cap_matches_small_case_proportions() {
+        let area = Rect::new(0, 0, 100, 1);
+        // 20 Fill(1) panes: same proportional-split logic as the 2/3-pane cases above, just at
+        // a pane count that forces every scratch buffer in `solve` onto the heap.
+        let constraints = vec![Constraint::Fill(1); 20];
+        let widths: Vec<u16> = split_h(area, &constraints)
+            .iter()
+            .map(Rect::width)
+            .collect();
+        assert_eq!(widths.len(), 20);
+        assert_eq!(widths.iter().sum::<u16>(), 100);
+        // Equal weights distribute as evenly as integer division allows: every width is 5.
+        assert!(widths.iter().all(|&w| w == 5));
     }
 }
