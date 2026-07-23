@@ -7,6 +7,359 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 
+## [0.3.1+retroglyph-software](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-software-v0.3.0...retroglyph-software-v0.3.1) - 2026-07-23
+
+### Features
+
+- [6439f8c](
+https://github.com/crates-lurey-io/retroglyph/commit/6439f8cbc7703d05658ba101d2d2dab2b491ff12) *(software)* Font fallback-chain mechanism for BitmapFont by `@matanlurey` in [#348](
+https://github.com/crates-lurey-io/retroglyph/pull/348)
+
+  > Adds FallbackFontChain, combining a primary BitmapFont with an ordered list
+  > of fallback fonts: resolve() tries the primary font's CP437 mapping first,
+  > then each fallback in order, and only substitutes the primary's solid-block
+  > glyph if every font in the chain misses.
+  >
+  > Since each font in a chain has its own bitmap data, a resolved glyph is
+  > returned as a ResolvedGlyph (font + index) rather than a bare u8, so callers
+  > know which font's rows() to read.
+  >
+  > A new BitmapFont::try_char_to_index distinguishes a genuine mapping miss
+  > from a character that legitimately maps to the solid-block glyph itself
+  > ('█'), which the existing infallible char_to_index/unicode_to_cp437 could
+  > not previously tell apart.
+  >
+  > The mechanism is purely additive: BitmapFont::char_to_index and the default
+  > SoftwareBackend config (single font, zero fallbacks) are unchanged. No new
+  > bundled font data is included; bundling a Latin-1/Extended fallback font is
+  > a natural, separately scoped follow-up.
+  >
+  > Closes #306
+
+- [fc1fea7](
+https://github.com/crates-lurey-io/retroglyph/commit/fc1fea70a8dfdc7265bb5a6bff1a9d054dcf5770) *(window)* Optional recoverability signal on Presenter::SurfaceError by `@matanlurey` in [#360](
+https://github.com/crates-lurey-io/retroglyph/pull/360)
+
+  > Adds RecoverableError (Debug + Display + is_recoverable() -> true by default) and
+  > changes Presenter::SurfaceError's bound from Debug + Display to RecoverableError.
+  > present_failure_action (winit::run) now takes a recoverable flag: a present()
+  > failure whose error reports is_recoverable() == false skips the consecutive-
+  > failure/recovery heuristic entirely and takes an immediate PresentFailureAction::Fatal
+  > (log::error! once, no init_surface retry), instead of waiting out
+  > PRESENT_FAILURE_RECOVERY_THRESHOLD like a generic failure does.
+  >
+  > SoftwareRenderer's SurfaceError types (native + wasm) get a one-line
+  > 'impl RecoverableError for SurfaceError {}' to opt into the unchanged default
+  > behavior -- not a blanket impl over every Debug + Display type, since that would
+  > make it impossible for any concrete error type (including the test fakes here,
+  > and a future wgpu presenter) to ever override is_recoverable via a conflicting-impl
+  > compile error.
+  >
+  > Closes #298.
+
+### Bug Fixes
+
+- [9e4027f](
+https://github.com/crates-lurey-io/retroglyph/commit/9e4027f376023e9ebcf26ff1a2aa3bd0618075a9) *(core)* Mark Color, SystemTheme, and Flow #[non_exhaustive] for consistency with sibling enums by `@matanlurey` in [#361](
+https://github.com/crates-lurey-io/retroglyph/pull/361)
+
+  > Color, SystemTheme, and Flow were the only public enums lacking
+  > #[non_exhaustive], unlike their siblings (KeyCode, MouseButton,
+  > MouseEventKind, Event, BlendMode). Color in particular is widely matched
+  > downstream, and a future variant (a named/theme color, a 256-palette
+  > split) would otherwise be a breaking change to add.
+  >
+  > Internal exhaustive matches on Color that needed a wildcard arm to keep
+  > compiling:
+  > - crates/software/src/lib.rs: resolve_color (falls back to default_rgb)
+  > - crates/terminal/src/lib.rs: write_sgr_params (falls back to the reset
+  >   code, same as Color::Default)
+  >
+  > crates/core/src/app.rs's run loop's match on Flow was converted to an
+  > equality check against Flow::Exit (clippy single_match), so any future
+  > Flow variant is treated as Flow::Continue rather than exiting.
+  >
+  > SystemTheme's doc comment previously argued for staying exhaustive
+  > (exactly two variants can ever be reported by winit/browser APIs); it's
+  > been updated to note the #[non_exhaustive] marker is for consistency
+  > with sibling enums rather than an expectation of a near-term third
+  > variant.
+  >
+  > Per AGENTS.md's breaking-change policy, no ! on this commit -- these are
+  > ordinary API-signature breaks that cargo-semver-checks/release-plz
+  > detect and version-bump on their own.
+  >
+  > Closes #267
+
+- [d57f757](
+https://github.com/crates-lurey-io/retroglyph/commit/d57f757a3549e24f4613eeddece210b9b0593e5d) *(core, software)* ANSI palette drift between core and the software backend by `@matanlurey` in [#333](
+https://github.com/crates-lurey-io/retroglyph/pull/333)
+
+- [1ec40a8](
+https://github.com/crates-lurey-io/retroglyph/commit/1ec40a835bdb571e1ae0a207fc933e6d54cc2ad6) *(examples)* Fix wasm-terminal entry macro after Backend/Output/Input/Cursor split by `@matanlurey` in [#339](
+https://github.com/crates-lurey-io/retroglyph/pull/339)
+
+  > fix(examples, core): fix wasm-terminal example entry macro and stale Backend doc refs
+  >
+  > The #265 Backend/Output/Input/Cursor trait split  left two call
+  > sites in examples/src/wasm_entry.rs using UFCS `Backend::set_cursor_visible`
+  > / `Backend::resize`, which no longer compile since `Backend` now has no
+  > methods of its own (it's a pure Output+Input+Cursor bundle). This path is
+  > gated on the wasm-terminal example feature + wasm32 target, so
+  > `cargo test --all-features --workspace` on a host target never compiled it;
+  > only the Docs workflow's WASM example build caught it, breaking main's Docs
+  > job after PR #337 merged.
+  >
+  > Also updates three remaining doc-comment mentions of `Backend::draw_layers`/
+  >
+  > `Backend::composites_layers` in software/core bench file docs that the #265
+  > docs sweep missed.
+  >
+  > Verified with tools/build-wasm-examples.sh (all examples, all three
+  > Headless/Terminal/Software WASM variants) and `just check`.
+
+- [68d2073](
+https://github.com/crates-lurey-io/retroglyph/commit/68d207334df1399878dfb20c05453ac74e77c724) *(software)* Background fill parity with cell backends and blit_cell perf by `@matanlurey` in [#358](
+https://github.com/crates-lurey-io/retroglyph/pull/358)
+
+  > retroglyph#303 (perf): re-verified against current main -- blit_cell's background
+  > fill was already rewritten to a clamped, row-slice `.fill(bg)` loop by PR #328
+  > (precompute clamped destination range in blit_cell/blit_glyph/blit_sprite),
+  > well before this change. No code change needed; only #304 required work.
+  >
+  > retroglyph#304 (bug): an occupied (non-empty) higher-layer cell with a
+  > Color::Default background is supposed to be opaque and erase whatever glyph a
+  > lower layer drew underneath it, matching cell backends' Grid::flatten_into (see
+  > the crate README's former 'Backend parity caveat', now updated). The software
+  > backend's draw_layers/composite_cell previously only filled a higher layer's
+  > background when it was non-default, so an occupied-but-default-background cell
+  > painted neither a background fill nor foreground ink (space glyphs are blank),
+  > leaving the lower layer's glyph pixels untouched -- a real cross-backend
+  > divergence.
+  >
+  > Add resolve_bg_fill, computed once per composited cell in draw_layers using the
+  > already-cached per-layer prev_tiles shadow (no new composited-per-cell state),
+  > mirroring flatten_into's exact background-inheritance rule: a Color::Default
+  > background never overwrites the destination background, so an erased cell
+  > inherits whichever layer below it last established a real background instead of
+  > resetting to this renderer's own default background color.
+  >
+  > Sprites are explicitly excluded from the new forced-erasure rule (has_sprite):
+  > they carry genuine per-pixel alpha that core's Tile/Grid model has no concept
+  > of, and forcing an opaque fill underneath one before it blends would erase
+  > transparency the sprite's own pixels are meant to show through -- confirmed by
+  > a real snapshot regression in the 07_sprites_tileset example that surfaced
+  > this and was fixed by adding the guard.
+  >
+  > Add a pixel-level regression test (layer1_occupied_default_bg_erases_layer0_glyph)
+  > covering the corrected behavior, and accept the one genuine snapshot diff this
+  > produces (06_layers, a stray dot's ink correctly erased instead of left behind).
+  >
+  > Closes #303, Closes #304.
+
+### Refactor
+
+- [c6f36d7](
+https://github.com/crates-lurey-io/retroglyph/commit/c6f36d7bdf320b10cca5d3df9d71d97620852297) *(core)* Split Backend into Output/Input/Cursor facets by `@matanlurey` in [#331](
+https://github.com/crates-lurey-io/retroglyph/pull/331)
+
+  > * refactor(core): split Backend into Output/Input/Cursor facets
+  >
+  > Splits the fused Backend trait into three independent sibling traits with
+  > no supertrait relationship: Output (draw/draw_layers/flush/size/clear/resize,
+  > the only fallible facet), Input (poll_event/push_event, push_event defaults
+  > to a no-op), and Cursor (set_cursor_visible/set_cursor_position, both default
+  > to a no-op). Backend becomes a pure ergonomic bundle:
+  >
+  >     pub trait Backend: Output + Input + Cursor {}
+  >     impl<T: Output + Input + Cursor> Backend for T {}
+  >
+  > so every existing B: Backend generic call site (Terminal<B>, App<B>::step,
+  > layout::render, every widget) keeps compiling unchanged. Headless now
+  > implements Output/Input/Cursor separately instead of one impl Backend.
+  >
+  > Also fixes stray doc/grid/terminal references to crate::Backend::* methods
+  > that moved to Output/Input, and updates the workspace README's backend
+  > overview.
+  >
+  > * refactor(crossterm): implement Output/Input/Cursor instead of fused Backend
+  >
+  > Crossterm now implements Output (draw/flush/size/clear/resize, propagating
+  > std::io::Error), Input (real poll_event; push_event uses the new trait
+  > default since crossterm reads its own event stream), and Cursor (real
+  > escape-code-based show/hide and move) instead of one impl Backend. Updates
+  > crate docs, tests, and benches that referenced Backend::* methods directly
+  > on a concrete Crossterm<W> to import Output/Input instead (bundle-trait
+  > method resolution only works through a generic B: Backend bound, not a
+  > concrete type).
+  >
+  > * refactor(window): fold Presenter into an Output supertrait
+  >
+  > Presenter is now `pub trait Presenter: Output`, dropping its duplicated
+  > draw/draw_layers/needs_full_frame/composites_layers/flush/size/clear/resize
+  > signatures (inherited from Output) and its own Error associated type (also
+  > inherited); Presenter keeps only SurfaceError plus the surface lifecycle
+  > (init_surface/resize_surface/present/cell_size). WindowBackend<P: Presenter>
+  > now implements Output by delegating to P, Input via its own event queue, and
+  > Cursor via the trait's no-op default (confirmed this matches the prior
+  > fused-Backend impl's cursor methods, which were already no-ops for the
+  > windowed family -- a straight split, not a behavior change). Updates crate
+  > docs (lib.rs architecture diagram, presenter.rs's stale "mirrors the output
+  > half" doc comment, README) and the winit test/doctest presenter stubs to
+  > implement Output + Presenter separately.
+  >
+  > * refactor(software): implement Output/Input/Cursor, drop duplicate Presenter forwarding
+  >
+  > SoftwareRenderer now implements Output, Input, and Cursor directly instead
+  > of one impl Backend. Since retroglyph-window's Presenter is now an Output
+  > supertrait, SoftwareRenderer's own Output impl already satisfies
+  > Presenter: Output, so the old impl retroglyph_window::Presenter block
+  > (which duplicated draw/draw_layers/flush/size/clear/resize by forwarding
+  > through <Self as Backend>::method, specifically to keep Presenter out of
+  > scope and avoid method-resolution ambiguity) is deleted; the new Presenter
+  > impl only defines SurfaceError, init_surface, resize_surface, present, and
+  > cell_size. Updates crate/module docs and the benches that called
+  > draw/draw_layers directly on a concrete SoftwareRenderer to import Output
+  > instead of Backend.
+  >
+  > * refactor(terminal-wasm): implement Output/Input/Cursor instead of fused Backend
+  >
+  > TerminalWasm now implements Output (ANSI-emitting draw/flush/clear/resize),
+  > Input (real push_event/poll_event, since this backend is entirely
+  > push-driven), and Cursor (real escape-code cursor show/hide/move) instead of
+  > one impl Backend. Updates doc comment links (Backend::draw/clear/etc. ->
+  > Output::/Input::/Cursor::) and the event-throughput bench's Backend as _
+  > import to Input as _.
+  >
+  > * fix(terminal-wasm): import Output for wasm32-gated resize call
+  >
+  > The wasm32-only wasm_terminal_resize FFI export imported the old fused
+  > Backend trait to call resize(); after the Output/Input/Cursor split that
+  > method lives on Output. This module is #[cfg(target_arch = "wasm32")], so
+  > cargo test --all-features never compiled it -- only just test-wasm
+  > (wasm-pack test) exercises this path, and CI caught it as a build failure
+  > on PR #331.
+  >
+  > * docs(workspace): update Backend/Presenter references after the trait split
+  >
+  > Sweeps remaining prose describing Backend as a single fused
+  > output+input+cursor trait: the workspace README's backend overview, the
+  > retroglyph-terminal crate's doc comment linking to the old
+  > Backend::draw method (now Output::draw), and docs/testing.md's reference to
+  > Backend::push_event (now Input::push_event).
+
+### Performance
+
+- [f687793](
+https://github.com/crates-lurey-io/retroglyph/commit/f6877934bc029999962c1f5539152e003e3b1ac6) *(software)* Dirty-cell repaint path for draw_layers by `@matanlurey` in [#352](
+https://github.com/crates-lurey-io/retroglyph/pull/352)
+
+  > draw_layers previously cleared the whole pixel buffer and repainted every cell
+  > on every call, since needs_full_frame() is always true for this backend (see
+  > its docs) -- Terminal::present's diff-only path never applies to a pixel
+  > backend, so draw_layers always received every cell on every allocated layer
+  > regardless of how much actually changed.
+  >
+  > Keep an internal per-cell shadow copy of the last frame's tiles inside
+  > RenderContext and diff incoming cells against it in draw_layers itself, without
+  > touching core's diff model or the Output trait: cells whose tile is unchanged
+  > since the last call are skipped instead of being cleared and repainted. Falls
+  > back to the old clear-and-repaint-everything strategy when either any tile
+  > this frame has a nonzero sub-cell offset (Tile::dx/dy is unbounded, so
+  > containing a spill to a neighborhood around the changed cells isn't possible
+  > without a magnitude cap core doesn't provide) or the number of allocated
+  > layers changed since the last call (a layer's cells falling out of/into the
+  > frame can't be diffed against a shadow copy that no longer describes this
+  > frame's layer set). When neither applies, a changed cell also forces every
+  > other layer at that position to repaint, since a lower layer's background
+  > fill would otherwise erase an unchanged higher layer's glyph on top of it.
+  >
+  > Closes #302.
+
+- [2997e28](
+https://github.com/crates-lurey-io/retroglyph/commit/2997e28ea5498b70f88dde40fbcaa493621619f1) *(software)* Skip unconditional full-buffer copy in update_damage by `@matanlurey` in [#330](
+https://github.com/crates-lurey-io/retroglyph/pull/330)
+
+  > update_damage previously did an unconditional copy_from_slice of the
+  > entire pixel buffer into prev_pixels every frame, regardless of whether
+  > anything actually changed (even on a frame identical to the last one).
+  > Since the preceding row scan already finds the exact [y0, y1) band that
+  > differs, only that band needs to be copied back into prev_pixels for the
+  > next frame's comparison; when nothing changed, the copy is skipped
+  > entirely.
+  >
+  > The row-level value diff itself is kept as-is: draw_layers always
+  > repaints every cell (needs_full_frame() is true for this backend, so
+  > content is layer-major and always covers the full grid), so a full
+  > previous-frame pixel buffer is still needed to know which rows actually
+  > changed color, and tracking only positions painted per frame would
+  > always report the whole buffer as damaged (defeating damage tracking
+  > entirely and breaking the existing tight-band tests).
+
+- [97967e4](
+https://github.com/crates-lurey-io/retroglyph/commit/97967e40b9181f8de810f3a7bcfa04b5730e7965) *(software)* Precompute clamped destination range in blit_cell/blit_glyph/blit_sprite by `@matanlurey` in [#328](
+https://github.com/crates-lurey-io/retroglyph/pull/328)
+
+  > blit_cell, blit_glyph, and blit_sprite each did an if idx < buffer.len() (plus
+  > per-axis x/y >= buf_w/buf_h) bounds check inside the innermost scale x scale
+  > loop, once per output pixel. For the common case of a cell fully inside the
+  > buffer with no sub-cell offset, the destination rectangle is provably
+  > in-bounds, so those checks were pure overhead multiplied by
+  > cell_w * cell_h * scale^2 per cell.
+  >
+  > Precompute the glyph/sprite's destination bounding box once per call and
+  > branch on whether it fits inside the buffer:
+  > - Fast path (fully in-bounds, the overwhelmingly common case): no per-pixel
+  >   bounds check; scale-wide destination runs are written with a single slice
+  >   fill (glyph/opaque-sprite) or blended pixel-by-pixel without any bounds
+  >   check (alpha sprite).
+  > - Slow path (clipped by a nonzero dx/dy or a screen edge): clamp each
+  >   destination run to [x0, x1) once per row instead of checking every pixel.
+  >
+  > blit_cell's background fill (never sub-cell-offset) gets the same clamped
+  > row-fill treatment. blit_cell and blit_glyph's glyph-mask painting is now
+  > shared via a new blit_glyph_mask helper instead of duplicated inline.
+  >
+  > No unsafe code introduced; all clipping is done with safe slice ranges plus
+  > chunks/fill.
+
+### Testing
+
+- [9da2421](
+https://github.com/crates-lurey-io/retroglyph/commit/9da24210045e5cbfba5f4c336a5ee0eb4ddab463) *(software)* Add benchmarks for rasterization/damage-diff/blit hot paths by `@matanlurey` in [#323](
+https://github.com/crates-lurey-io/retroglyph/pull/323)
+
+  > Adds four criterion bench files under crates/software/benches/, covering
+  > the CPU hot paths flagged in #307 as unmeasured:
+  >
+  > - raster.rs: full-frame draw_layers at 3 grid sizes (40x20/80x24/160x48)
+  >   x 3 scales (1/2/4), separating glyph-heavy content (blit_glyph path)
+  >   from sprite-heavy content (blit_sprite path, tilesets feature).
+  > - damage.rs: isolates update_damage's diff cost (no_change vs
+  >   one_cell_changed vs all_changed, via iter_batched resetting to a known
+  >   baseline each iteration) and benchmarks the end-to-end
+  >   draw_layers + present combo, documenting that present() is a no-op in
+  >   headless mode (no window surface) so its own contribution is ~0 there.
+  > - blit.rs: blit_glyph vs blit_sprite opaque vs alpha, to guard the
+  >   opaque-pixel fast path in blit_sprite (alpha == 255 skips blending).
+  > - resolve_color.rs: per-cell color resolution cost across
+  >   Color::Default/Rgb/Ansi/Indexed, holding glyph and grid size constant.
+  >
+  > update_damage, blit_glyph, blit_sprite, and resolve_color are all
+  > crate-private, so every bench drives them indirectly through the public
+  > Backend::draw_layers/present API with content engineered to exercise one
+  > code path at a time, following the style of crates/core/benches/grid_diff.rs
+  > (seeded fastrand::Rng, doc comments explaining why, criterion_group!/main!).
+  >
+  > Adds criterion, fastrand, and image (png feature, for building synthetic
+  > sprite-sheet PNGs in-memory) as new dev-dependencies, plus a [[bench]]
+  > entry per file.
+  >
+  > Closes #307
+
+**Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-software-v0.3.0...retroglyph-software-v0.3.1
+
+
 ## [0.3.0+retroglyph-software](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-software-v0.2.0...retroglyph-software-v0.3.0) - 2026-07-19
 
 ### Features

@@ -7,6 +7,199 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 
+## [0.1.3+retroglyph-crossterm](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-crossterm-v0.1.2...retroglyph-crossterm-v0.1.3) - 2026-07-23
+
+### Features
+
+- [63533bd](
+https://github.com/crates-lurey-io/retroglyph/commit/63533bdff04be0b5691d228d248e3e4300fd38e4) *(crossterm)* Wire pipe-safe plain mode into the default stdout build path by `@matanlurey` in [#325](
+https://github.com/crates-lurey-io/retroglyph/pull/325)
+  >
+  > CrosstermOptions::build() (and Crossterm::new()) always constructed
+  >
+  > TerminalRenderer::new(writer), never TerminalRenderer::auto(writer), so the
+  > pipe-safe plain-text mode retroglyph-terminal already implements was
+  > unreachable through this backend even when stdout is a file or pipe.
+  >
+  > build() now checks std::io::stdout().is_terminal() once up front (on the
+  > un-wrapped Stdout handle, since the buffered BufWriter<Stdout> writer type
+  > this backend renders through doesn't implement IsTerminal) and threads the
+  > resulting plain flag through to TerminalRenderer::with_plain_mode, which is
+  > what TerminalRenderer::auto does internally. build_with_writer keeps its
+  > historical behavior (plain mode off) unconditionally, since an arbitrary
+  > caller-supplied writer has no IsTerminal bound to auto-detect from.
+  >
+  > Also expose Crossterm::plain_mode() so callers/tests can introspect the
+  > result, and mark docs/ROADMAP.md's non-alternate-screen inline rendering
+  > entry as shipped (already implemented via CrosstermOptions::alt_screen(false)).
+
+### Bug Fixes
+
+- [9ee7ddb](
+https://github.com/crates-lurey-io/retroglyph/commit/9ee7ddb2fd542a0753392a0d4614f7b22ef1299b) *(crossterm)* Reject constructing a second live Crossterm instance by `@matanlurey` in [#327](
+https://github.com/crates-lurey-io/retroglyph/pull/327)
+
+  > ALT_SCREEN_ACTIVE/RAW_MODE_ACTIVE are process-global statics shared by
+  > Drop and the panic hook; constructing a second Crossterm while a first
+  > is still live corrupts that shared bookkeeping (dropping one instance
+  > disables raw mode / clears the flag out from under the other, which
+  > then silently receives line-buffered, echoed input).
+  >
+  > Reject the second construction outright instead: build_from_options now
+  > acquires a process-wide InstanceGuard (an AtomicBool compare_exchange)
+  > before touching any terminal state, returning std::io::ErrorKind::ResourceBusy
+  > if another instance is already live. The guard is stored on Crossterm and
+  > released by its Drop impl, so it naturally releases on early-return (a
+  > failed ? mid-construction) as well as on normal/panicking teardown, with
+  > no manual cleanup threading and no double-release hazard versus the
+  > existing restore_terminal()/panic-hook path (which it deliberately does
+  > not touch).
+  >
+  > Adds regression tests (both against the internal guard type and through
+  > the public Crossterm API) and documents the new one-instance-per-process
+  > contract on Crossterm and each fallible constructor.
+
+### Refactor
+
+- [c6f36d7](
+https://github.com/crates-lurey-io/retroglyph/commit/c6f36d7bdf320b10cca5d3df9d71d97620852297) *(core)* Split Backend into Output/Input/Cursor facets by `@matanlurey` in [#331](
+https://github.com/crates-lurey-io/retroglyph/pull/331)
+
+  > * refactor(core): split Backend into Output/Input/Cursor facets
+  >
+  > Splits the fused Backend trait into three independent sibling traits with
+  > no supertrait relationship: Output (draw/draw_layers/flush/size/clear/resize,
+  > the only fallible facet), Input (poll_event/push_event, push_event defaults
+  > to a no-op), and Cursor (set_cursor_visible/set_cursor_position, both default
+  > to a no-op). Backend becomes a pure ergonomic bundle:
+  >
+  >     pub trait Backend: Output + Input + Cursor {}
+  >     impl<T: Output + Input + Cursor> Backend for T {}
+  >
+  > so every existing B: Backend generic call site (Terminal<B>, App<B>::step,
+  > layout::render, every widget) keeps compiling unchanged. Headless now
+  > implements Output/Input/Cursor separately instead of one impl Backend.
+  >
+  > Also fixes stray doc/grid/terminal references to crate::Backend::* methods
+  > that moved to Output/Input, and updates the workspace README's backend
+  > overview.
+  >
+  > * refactor(crossterm): implement Output/Input/Cursor instead of fused Backend
+  >
+  > Crossterm now implements Output (draw/flush/size/clear/resize, propagating
+  > std::io::Error), Input (real poll_event; push_event uses the new trait
+  > default since crossterm reads its own event stream), and Cursor (real
+  > escape-code-based show/hide and move) instead of one impl Backend. Updates
+  > crate docs, tests, and benches that referenced Backend::* methods directly
+  > on a concrete Crossterm<W> to import Output/Input instead (bundle-trait
+  > method resolution only works through a generic B: Backend bound, not a
+  > concrete type).
+  >
+  > * refactor(window): fold Presenter into an Output supertrait
+  >
+  > Presenter is now `pub trait Presenter: Output`, dropping its duplicated
+  > draw/draw_layers/needs_full_frame/composites_layers/flush/size/clear/resize
+  > signatures (inherited from Output) and its own Error associated type (also
+  > inherited); Presenter keeps only SurfaceError plus the surface lifecycle
+  > (init_surface/resize_surface/present/cell_size). WindowBackend<P: Presenter>
+  > now implements Output by delegating to P, Input via its own event queue, and
+  > Cursor via the trait's no-op default (confirmed this matches the prior
+  > fused-Backend impl's cursor methods, which were already no-ops for the
+  > windowed family -- a straight split, not a behavior change). Updates crate
+  > docs (lib.rs architecture diagram, presenter.rs's stale "mirrors the output
+  > half" doc comment, README) and the winit test/doctest presenter stubs to
+  > implement Output + Presenter separately.
+  >
+  > * refactor(software): implement Output/Input/Cursor, drop duplicate Presenter forwarding
+  >
+  > SoftwareRenderer now implements Output, Input, and Cursor directly instead
+  > of one impl Backend. Since retroglyph-window's Presenter is now an Output
+  > supertrait, SoftwareRenderer's own Output impl already satisfies
+  > Presenter: Output, so the old impl retroglyph_window::Presenter block
+  > (which duplicated draw/draw_layers/flush/size/clear/resize by forwarding
+  > through <Self as Backend>::method, specifically to keep Presenter out of
+  > scope and avoid method-resolution ambiguity) is deleted; the new Presenter
+  > impl only defines SurfaceError, init_surface, resize_surface, present, and
+  > cell_size. Updates crate/module docs and the benches that called
+  > draw/draw_layers directly on a concrete SoftwareRenderer to import Output
+  > instead of Backend.
+  >
+  > * refactor(terminal-wasm): implement Output/Input/Cursor instead of fused Backend
+  >
+  > TerminalWasm now implements Output (ANSI-emitting draw/flush/clear/resize),
+  > Input (real push_event/poll_event, since this backend is entirely
+  > push-driven), and Cursor (real escape-code cursor show/hide/move) instead of
+  > one impl Backend. Updates doc comment links (Backend::draw/clear/etc. ->
+  > Output::/Input::/Cursor::) and the event-throughput bench's Backend as _
+  > import to Input as _.
+  >
+  > * fix(terminal-wasm): import Output for wasm32-gated resize call
+  >
+  > The wasm32-only wasm_terminal_resize FFI export imported the old fused
+  > Backend trait to call resize(); after the Output/Input/Cursor split that
+  > method lives on Output. This module is #[cfg(target_arch = "wasm32")], so
+  > cargo test --all-features never compiled it -- only just test-wasm
+  > (wasm-pack test) exercises this path, and CI caught it as a build failure
+  > on PR #331.
+  >
+  > * docs(workspace): update Backend/Presenter references after the trait split
+  >
+  > Sweeps remaining prose describing Backend as a single fused
+  > output+input+cursor trait: the workspace README's backend overview, the
+  > retroglyph-terminal crate's doc comment linking to the old
+  > Backend::draw method (now Output::draw), and docs/testing.md's reference to
+  > Backend::push_event (now Input::push_event).
+
+- [98b5f3a](
+https://github.com/crates-lurey-io/retroglyph/commit/98b5f3a6ef11ef1854e29dfbb280ee93b1bc4006) *(crossterm)* Option-based event conversion, fix mouse drag/scroll mapping by `@matanlurey` in [#337](
+https://github.com/crates-lurey-io/retroglyph/pull/337)
+
+### Performance
+
+- [2764ee9](
+https://github.com/crates-lurey-io/retroglyph/commit/2764ee9633d54879d6a87ad2ed11a414c985c65b) *(crossterm)* Defer cursor flush, drop redundant push_event stub by `@matanlurey` in [#336](
+https://github.com/crates-lurey-io/retroglyph/pull/336)
+
+- [54b8295](
+https://github.com/crates-lurey-io/retroglyph/commit/54b82957a480bf224936d44997a07aff25622fb2) *(crossterm)* Cache and event-refresh terminal size by `@matanlurey` in [#334](
+https://github.com/crates-lurey-io/retroglyph/pull/334)
+
+### Testing
+
+- [b0d5eb3](
+https://github.com/crates-lurey-io/retroglyph/commit/b0d5eb313e89e67d05149dc6ef8815abb23e00b2) *(crossterm)* Add benchmarks for event translation and draw overhead by `@matanlurey` in [#324](
+https://github.com/crates-lurey-io/retroglyph/pull/324)
+
+  > Adds crates/crossterm/benches/ covering the highest-value gaps flagged in #285:
+  >
+  > - event_translation.rs: from_crossterm_event throughput over a representative
+  >   mix of key/mouse/resize/paste/focus events, plus one unmappable-event case
+  >   (KeyCode::Media) exercising the Err(()) branch poll_event's retry loop
+  >   depends on.
+  > - draw_overhead.rs: a full draw()+flush() frame into an in-memory Vec<u8> via
+  >   CrosstermOptions::build_with_writer, at 80x24 and 200x60, to isolate this
+  >   crate's overhead on top of retroglyph-terminal's renderer.
+  > - backend_overhead.rs: Backend::size() per-call cost.
+  >
+  > from_crossterm_event was private; it's now exposed as #[doc(hidden)] pub
+  > (with a doc comment explaining it's not a supported public API) solely so
+  > these benches -- compiled as separate crates, same restriction as
+  > integration tests -- can call it directly.
+  >
+  > poll_event's retry-on-unmappable-event path (lib.rs:778-786) is not
+  > benchmarked: crossterm reads events from the real stdin/TTY fd with no
+  > injectable mock source, so there's no headless way to hand it a queue of
+  > unmappable events without misrepresenting what's actually being measured.
+  > Documented in backend_overhead.rs instead of faked.
+  >
+  > Adds criterion/fastrand dev-dependencies to crates/crossterm/Cargo.toml,
+  > version-pinned to match crates/core/Cargo.toml.
+  >
+  > Closes #285
+
+**Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-crossterm-v0.1.2...retroglyph-crossterm-v0.1.3
+
+
 ## [0.1.2+retroglyph-crossterm](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-crossterm-v0.1.1...retroglyph-crossterm-v0.1.2) - 2026-07-19
 
 ### Continuous Integration

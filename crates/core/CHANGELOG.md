@@ -7,6 +7,289 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 
+## [0.3.0+retroglyph-core](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.2.1...retroglyph-core-v0.3.0) - 2026-07-23
+
+### Bug Fixes
+
+- [9e4027f](
+https://github.com/crates-lurey-io/retroglyph/commit/9e4027f376023e9ebcf26ff1a2aa3bd0618075a9) *(core)* Mark Color, SystemTheme, and Flow #[non_exhaustive] for consistency with sibling enums by `@matanlurey` in [#361](
+https://github.com/crates-lurey-io/retroglyph/pull/361)
+
+  > Color, SystemTheme, and Flow were the only public enums lacking
+  > #[non_exhaustive], unlike their siblings (KeyCode, MouseButton,
+  > MouseEventKind, Event, BlendMode). Color in particular is widely matched
+  > downstream, and a future variant (a named/theme color, a 256-palette
+  > split) would otherwise be a breaking change to add.
+  >
+  > Internal exhaustive matches on Color that needed a wildcard arm to keep
+  > compiling:
+  > - crates/software/src/lib.rs: resolve_color (falls back to default_rgb)
+  > - crates/terminal/src/lib.rs: write_sgr_params (falls back to the reset
+  >   code, same as Color::Default)
+  >
+  > crates/core/src/app.rs's run loop's match on Flow was converted to an
+  > equality check against Flow::Exit (clippy single_match), so any future
+  > Flow variant is treated as Flow::Continue rather than exiting.
+  >
+  > SystemTheme's doc comment previously argued for staying exhaustive
+  > (exactly two variants can ever be reported by winit/browser APIs); it's
+  > been updated to note the #[non_exhaustive] marker is for consistency
+  > with sibling enums rather than an expectation of a near-term third
+  > variant.
+  >
+  > Per AGENTS.md's breaking-change policy, no ! on this commit -- these are
+  > ordinary API-signature breaks that cargo-semver-checks/release-plz
+  > detect and version-bump on their own.
+  >
+  > Closes #267
+
+- [678298e](
+https://github.com/crates-lurey-io/retroglyph/commit/678298e0fee4bb73d701491b32d0ee92ecca5c58) *(core)* Saturating add for blit destination coordinates by `@matanlurey` in [#351](
+https://github.com/crates-lurey-io/retroglyph/pull/351)
+
+  > blit/blit_alpha computed the destination coordinate as dst_x/dst_y + (offset
+  > from src_rect origin), where the subtraction saturated but the addition did
+  > not. A destination origin near u16::MAX could wrap the addition, either
+  > landing on the wrong cell (if the wrapped value happened to be in-bounds) or
+  > being rejected by put_tile's bounds check only by luck.
+  >
+  > Switch both computations (in blit and blit_alpha) to saturating_add, matching
+  > the saturating-math convention already used elsewhere in this crate
+  > (from_charmap's height.saturating_add(1), write_grapheme's
+  > x.saturating_add(1)). Saturating to u16::MAX is always caught by the
+  > existing >= dst_width/dst_height bounds check, since a valid index must be
+  > strictly less than a u16-derived dimension.
+  >
+  > Adds unit tests for both blit and blit_alpha with a destination origin near
+  > u16::MAX chosen so the unfixed wrapping add would land in-bounds, asserting
+  > the write is skipped instead, plus a sanity test that ordinary
+  > non-overflowing blits are unaffected.
+  >
+  > Closes #268.
+
+- [1ec40a8](
+https://github.com/crates-lurey-io/retroglyph/commit/1ec40a835bdb571e1ae0a207fc933e6d54cc2ad6) *(examples)* Fix wasm-terminal entry macro after Backend/Output/Input/Cursor split by `@matanlurey` in [#339](
+https://github.com/crates-lurey-io/retroglyph/pull/339)
+
+  > fix(examples, core): fix wasm-terminal example entry macro and stale Backend doc refs
+  >
+  > The #265 Backend/Output/Input/Cursor trait split  left two call
+  > sites in examples/src/wasm_entry.rs using UFCS `Backend::set_cursor_visible`
+  > / `Backend::resize`, which no longer compile since `Backend` now has no
+  > methods of its own (it's a pure Output+Input+Cursor bundle). This path is
+  > gated on the wasm-terminal example feature + wasm32 target, so
+  > `cargo test --all-features --workspace` on a host target never compiled it;
+  > only the Docs workflow's WASM example build caught it, breaking main's Docs
+  > job after PR #337 merged.
+  >
+  > Also updates three remaining doc-comment mentions of `Backend::draw_layers`/
+  >
+  > `Backend::composites_layers` in software/core bench file docs that the #265
+  > docs sweep missed.
+  >
+  > Verified with tools/build-wasm-examples.sh (all examples, all three
+  > Headless/Terminal/Software WASM variants) and `just check`.
+
+- [fda7303](
+https://github.com/crates-lurey-io/retroglyph/commit/fda7303d7e2031d607635848b9ad0823302b04b3) *(window)* Automatically present the terminal after each windowed frame by `@matanlurey` in [#353](
+https://github.com/crates-lurey-io/retroglyph/pull/353)
+
+### Refactor
+
+- [c6f36d7](
+https://github.com/crates-lurey-io/retroglyph/commit/c6f36d7bdf320b10cca5d3df9d71d97620852297) *(core)* Split Backend into Output/Input/Cursor facets by `@matanlurey` in [#331](
+https://github.com/crates-lurey-io/retroglyph/pull/331)
+
+  > * refactor(core): split Backend into Output/Input/Cursor facets
+  >
+  > Splits the fused Backend trait into three independent sibling traits with
+  > no supertrait relationship: Output (draw/draw_layers/flush/size/clear/resize,
+  > the only fallible facet), Input (poll_event/push_event, push_event defaults
+  > to a no-op), and Cursor (set_cursor_visible/set_cursor_position, both default
+  > to a no-op). Backend becomes a pure ergonomic bundle:
+  >
+  >     pub trait Backend: Output + Input + Cursor {}
+  >     impl<T: Output + Input + Cursor> Backend for T {}
+  >
+  > so every existing B: Backend generic call site (Terminal<B>, App<B>::step,
+  > layout::render, every widget) keeps compiling unchanged. Headless now
+  > implements Output/Input/Cursor separately instead of one impl Backend.
+  >
+  > Also fixes stray doc/grid/terminal references to crate::Backend::* methods
+  > that moved to Output/Input, and updates the workspace README's backend
+  > overview.
+  >
+  > * refactor(crossterm): implement Output/Input/Cursor instead of fused Backend
+  >
+  > Crossterm now implements Output (draw/flush/size/clear/resize, propagating
+  > std::io::Error), Input (real poll_event; push_event uses the new trait
+  > default since crossterm reads its own event stream), and Cursor (real
+  > escape-code-based show/hide and move) instead of one impl Backend. Updates
+  > crate docs, tests, and benches that referenced Backend::* methods directly
+  > on a concrete Crossterm<W> to import Output/Input instead (bundle-trait
+  > method resolution only works through a generic B: Backend bound, not a
+  > concrete type).
+  >
+  > * refactor(window): fold Presenter into an Output supertrait
+  >
+  > Presenter is now `pub trait Presenter: Output`, dropping its duplicated
+  > draw/draw_layers/needs_full_frame/composites_layers/flush/size/clear/resize
+  > signatures (inherited from Output) and its own Error associated type (also
+  > inherited); Presenter keeps only SurfaceError plus the surface lifecycle
+  > (init_surface/resize_surface/present/cell_size). WindowBackend<P: Presenter>
+  > now implements Output by delegating to P, Input via its own event queue, and
+  > Cursor via the trait's no-op default (confirmed this matches the prior
+  > fused-Backend impl's cursor methods, which were already no-ops for the
+  > windowed family -- a straight split, not a behavior change). Updates crate
+  > docs (lib.rs architecture diagram, presenter.rs's stale "mirrors the output
+  > half" doc comment, README) and the winit test/doctest presenter stubs to
+  > implement Output + Presenter separately.
+  >
+  > * refactor(software): implement Output/Input/Cursor, drop duplicate Presenter forwarding
+  >
+  > SoftwareRenderer now implements Output, Input, and Cursor directly instead
+  > of one impl Backend. Since retroglyph-window's Presenter is now an Output
+  > supertrait, SoftwareRenderer's own Output impl already satisfies
+  > Presenter: Output, so the old impl retroglyph_window::Presenter block
+  > (which duplicated draw/draw_layers/flush/size/clear/resize by forwarding
+  > through <Self as Backend>::method, specifically to keep Presenter out of
+  > scope and avoid method-resolution ambiguity) is deleted; the new Presenter
+  > impl only defines SurfaceError, init_surface, resize_surface, present, and
+  > cell_size. Updates crate/module docs and the benches that called
+  > draw/draw_layers directly on a concrete SoftwareRenderer to import Output
+  > instead of Backend.
+  >
+  > * refactor(terminal-wasm): implement Output/Input/Cursor instead of fused Backend
+  >
+  > TerminalWasm now implements Output (ANSI-emitting draw/flush/clear/resize),
+  > Input (real push_event/poll_event, since this backend is entirely
+  > push-driven), and Cursor (real escape-code cursor show/hide/move) instead of
+  > one impl Backend. Updates doc comment links (Backend::draw/clear/etc. ->
+  > Output::/Input::/Cursor::) and the event-throughput bench's Backend as _
+  > import to Input as _.
+  >
+  > * fix(terminal-wasm): import Output for wasm32-gated resize call
+  >
+  > The wasm32-only wasm_terminal_resize FFI export imported the old fused
+  > Backend trait to call resize(); after the Output/Input/Cursor split that
+  > method lives on Output. This module is #[cfg(target_arch = "wasm32")], so
+  > cargo test --all-features never compiled it -- only just test-wasm
+  > (wasm-pack test) exercises this path, and CI caught it as a build failure
+  > on PR #331.
+  >
+  > * docs(workspace): update Backend/Presenter references after the trait split
+  >
+  > Sweeps remaining prose describing Backend as a single fused
+  > output+input+cursor trait: the workspace README's backend overview, the
+  > retroglyph-terminal crate's doc comment linking to the old
+  > Backend::draw method (now Output::draw), and docs/testing.md's reference to
+  > Backend::push_event (now Input::push_event).
+
+- [98b5f3a](
+https://github.com/crates-lurey-io/retroglyph/commit/98b5f3a6ef11ef1854e29dfbb280ee93b1bc4006) *(crossterm)* Option-based event conversion, fix mouse drag/scroll mapping by `@matanlurey` in [#337](
+https://github.com/crates-lurey-io/retroglyph/pull/337)
+
+- [9187baf](
+https://github.com/crates-lurey-io/retroglyph/commit/9187baf83c3a4e4decc3f05e644730c6ac97ac35) *(workspace)* Move benchmarks to per-crate crates/*/benches directories by `@matanlurey` in [#317](
+https://github.com/crates-lurey-io/retroglyph/pull/317)
+
+  > Replaces the single top-level retroglyph-benches crate with Cargo's standard
+  > per-crate benches/ convention (starting with crates/core/benches/grid_diff.rs).
+  > We're about to add benchmarks for every backend/widgets crate (issues #269,
+  > #275, #285, #292, #307, #316); a shared crate would otherwise accumulate every
+  > crate's dev-dependencies and bench targets in one place instead of living next
+  > to the code each bench measures.
+  >
+  > - Move benches/benches/grid_diff.rs -> crates/core/benches/grid_diff.rs and its
+  >   [[bench]] entry + dev-dependencies (criterion, fastrand) into
+  >   crates/core/Cargo.toml. Drop the now-empty retroglyph-benches crate and its
+  >   workspace member entry.
+  > - just bench, tools/bench-compare.sh, and .github/workflows/bench.yml now run
+  >   `cargo bench --workspace --all-features` (no -p), so a uniquely-named bench
+  >   target resolves regardless of which crate owns it. --all-features matches
+  >   just test's convention and avoids a pre-existing retroglyph-software
+  >   default-features gap (missing default-font) that only surfaces once the
+  >   whole workspace builds in bench/test profile together.
+  > - Update CONTRIBUTING.md, codecov.yml's ignore globs, and Cargo.toml's
+  >   comments to match.
+
+### Documentation
+
+- [81d2e1b](
+https://github.com/crates-lurey-io/retroglyph/commit/81d2e1b485d23006ec31505625a2315cab0d4727) *(core)* Clarify draw's egc-only grapheme field by `@matanlurey` in [#332](
+https://github.com/crates-lurey-io/retroglyph/pull/332)
+
+### Performance
+
+- [8b7cc7a](
+https://github.com/crates-lurey-io/retroglyph/commit/8b7cc7a88e37ec6f159f05bb1cecd95d7fd33737) *(core)* Reduce Grid's layer-table footprint for typical single/few-layer use by `@matanlurey` in [#359](
+https://github.com/crates-lurey-io/retroglyph/pull/359)
+
+  > perf(core): lazily grow Grid's layer table instead of pre-allocating all 256 slots
+  >
+  > Grid::new previously called layers.resize_with(256, || None) unconditionally, so
+  > every Grid carried a 256-element Vec<Option<LayerBuf>> (16,384 bytes -- 256 * 64
+  > bytes per Option<LayerBuf>, measured via size_of) even for single-layer use.
+  > Terminal holds up to four Grids (current, previous, flattened_current,
+  > flattened_previous), so this was 65,536 bytes of always-allocated, mostly-null
+  > layer table per Terminal.
+  >
+  > Grid::new now starts the layer table at a single slot (layer 0, always
+  > allocated). layer_or_alloc grows the Vec via resize_with up to id + 1 only when
+  > a layer is first written to. Reads of an id beyond the table's current length
+  > return None via a bounds check (Vec::get) instead of indexing directly, with
+  > identical semantics to an in-bounds None slot. max_layer tracking, clear,
+  > clear_all, diff, and flatten_into are unaffected: they already walk
+  > 0..=max_layer or self.layers.iter_mut().flatten(), both of which are correct
+  > over a shorter Vec.
+  >
+  > Added crates/core/benches/grid_construct.rs to measure Grid::new's construction
+  > cost before/after (see PR body for numbers), and unit tests covering lazy growth
+  > to the written id, monotonic growth across writes, and out-of-bounds reads/
+  > clears behaving like in-bounds None slots.
+  >
+  > Closes #264
+
+- [d30b1c1](
+https://github.com/crates-lurey-io/retroglyph/commit/d30b1c1281f0f64639293d8e7942fa366a575844) *(core)* Flat-iteration flatten_into and blit/blit_alpha by `@matanlurey` in [#338](
+https://github.com/crates-lurey-io/retroglyph/pull/338)
+
+- [6ae4219](
+https://github.com/crates-lurey-io/retroglyph/commit/6ae4219b9bd7c066d40051bc9fa4c247d9e454d2) *(terminal)* Buffered, width-precomputed draw with escape/plain split by `@matanlurey` in [#335](
+https://github.com/crates-lurey-io/retroglyph/pull/335)
+
+### Testing
+
+- [0884ca6](
+https://github.com/crates-lurey-io/retroglyph/commit/0884ca6fa26557b6348f4b32abc78f4a6f1314fc) *(core)* Add benchmarks for flatten/blit/subcell/color hot paths by `@matanlurey` in [#322](
+https://github.com/crates-lurey-io/retroglyph/pull/322)
+
+  > Adds criterion benches for the remaining per-frame hot paths flagged in
+  > #269 (grid_diff.rs already covered Grid::diff):
+  >
+  > - flatten.rs: Grid::flatten_into at 1/4/16 layers, driven through
+  >   Terminal::present (flatten_into is crate-private) since Headless never
+  >   overrides composites_layers.
+  > - blit.rs: Grid::blit and Grid::blit_alpha (each BlendMode) over a large
+  >   rect (80x24 and 200x60).
+  > - subcell.rs: quantize_half_block/quantize_quadrant/quantize_sextant over
+  >   batches of random pixel blocks.
+  > - color.rs: Color::to_indexed (the gem 256-color quantizer), Color::lerp,
+  >   and the non-Linear BlendModes via blit_alpha on a 1x1 grid (blend_color
+  >   itself is crate-private, so blit_alpha is the only public entry point
+  >   that reaches it).
+  >
+  > All inputs use fastrand::Rng::with_seed(42) (or another fixed seed) for
+  > deterministic, --baseline-comparable runs, following grid_diff.rs's
+  > existing style. Each bench group sets criterion::Throughput::Elements to
+  > report cells/blocks/colors-touched alongside time, per the issue's ask
+  > for regressions in output size (not just speed) to stay visible.
+  >
+  > Closes #269
+
+**Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.2.1...retroglyph-core-v0.3.0
+
+
 ## [0.2.1+retroglyph-core](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.2.0...retroglyph-core-v0.2.1) - 2026-07-19
 
 ### Continuous Integration

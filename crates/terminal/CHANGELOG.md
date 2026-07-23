@@ -7,6 +7,202 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 
+## [0.1.3+retroglyph-terminal](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-v0.1.2...retroglyph-terminal-v0.1.3) - 2026-07-23
+
+### Bug Fixes
+
+- [9e4027f](
+https://github.com/crates-lurey-io/retroglyph/commit/9e4027f376023e9ebcf26ff1a2aa3bd0618075a9) *(core)* Mark Color, SystemTheme, and Flow #[non_exhaustive] for consistency with sibling enums by `@matanlurey` in [#361](
+https://github.com/crates-lurey-io/retroglyph/pull/361)
+
+  > Color, SystemTheme, and Flow were the only public enums lacking
+  > #[non_exhaustive], unlike their siblings (KeyCode, MouseButton,
+  > MouseEventKind, Event, BlendMode). Color in particular is widely matched
+  > downstream, and a future variant (a named/theme color, a 256-palette
+  > split) would otherwise be a breaking change to add.
+  >
+  > Internal exhaustive matches on Color that needed a wildcard arm to keep
+  > compiling:
+  > - crates/software/src/lib.rs: resolve_color (falls back to default_rgb)
+  > - crates/terminal/src/lib.rs: write_sgr_params (falls back to the reset
+  >   code, same as Color::Default)
+  >
+  > crates/core/src/app.rs's run loop's match on Flow was converted to an
+  > equality check against Flow::Exit (clippy single_match), so any future
+  > Flow variant is treated as Flow::Continue rather than exiting.
+  >
+  > SystemTheme's doc comment previously argued for staying exhaustive
+  > (exactly two variants can ever be reported by winit/browser APIs); it's
+  > been updated to note the #[non_exhaustive] marker is for consistency
+  > with sibling enums rather than an expectation of a near-term third
+  > variant.
+  >
+  > Per AGENTS.md's breaking-change policy, no ! on this commit -- these are
+  > ordinary API-signature breaks that cargo-semver-checks/release-plz
+  > detect and version-bump on their own.
+  >
+  > Closes #267
+
+### Refactor
+
+- [c6f36d7](
+https://github.com/crates-lurey-io/retroglyph/commit/c6f36d7bdf320b10cca5d3df9d71d97620852297) *(core)* Split Backend into Output/Input/Cursor facets by `@matanlurey` in [#331](
+https://github.com/crates-lurey-io/retroglyph/pull/331)
+
+  > * refactor(core): split Backend into Output/Input/Cursor facets
+  >
+  > Splits the fused Backend trait into three independent sibling traits with
+  > no supertrait relationship: Output (draw/draw_layers/flush/size/clear/resize,
+  > the only fallible facet), Input (poll_event/push_event, push_event defaults
+  > to a no-op), and Cursor (set_cursor_visible/set_cursor_position, both default
+  > to a no-op). Backend becomes a pure ergonomic bundle:
+  >
+  >     pub trait Backend: Output + Input + Cursor {}
+  >     impl<T: Output + Input + Cursor> Backend for T {}
+  >
+  > so every existing B: Backend generic call site (Terminal<B>, App<B>::step,
+  > layout::render, every widget) keeps compiling unchanged. Headless now
+  > implements Output/Input/Cursor separately instead of one impl Backend.
+  >
+  > Also fixes stray doc/grid/terminal references to crate::Backend::* methods
+  > that moved to Output/Input, and updates the workspace README's backend
+  > overview.
+  >
+  > * refactor(crossterm): implement Output/Input/Cursor instead of fused Backend
+  >
+  > Crossterm now implements Output (draw/flush/size/clear/resize, propagating
+  > std::io::Error), Input (real poll_event; push_event uses the new trait
+  > default since crossterm reads its own event stream), and Cursor (real
+  > escape-code-based show/hide and move) instead of one impl Backend. Updates
+  > crate docs, tests, and benches that referenced Backend::* methods directly
+  > on a concrete Crossterm<W> to import Output/Input instead (bundle-trait
+  > method resolution only works through a generic B: Backend bound, not a
+  > concrete type).
+  >
+  > * refactor(window): fold Presenter into an Output supertrait
+  >
+  > Presenter is now `pub trait Presenter: Output`, dropping its duplicated
+  > draw/draw_layers/needs_full_frame/composites_layers/flush/size/clear/resize
+  > signatures (inherited from Output) and its own Error associated type (also
+  > inherited); Presenter keeps only SurfaceError plus the surface lifecycle
+  > (init_surface/resize_surface/present/cell_size). WindowBackend<P: Presenter>
+  > now implements Output by delegating to P, Input via its own event queue, and
+  > Cursor via the trait's no-op default (confirmed this matches the prior
+  > fused-Backend impl's cursor methods, which were already no-ops for the
+  > windowed family -- a straight split, not a behavior change). Updates crate
+  > docs (lib.rs architecture diagram, presenter.rs's stale "mirrors the output
+  > half" doc comment, README) and the winit test/doctest presenter stubs to
+  > implement Output + Presenter separately.
+  >
+  > * refactor(software): implement Output/Input/Cursor, drop duplicate Presenter forwarding
+  >
+  > SoftwareRenderer now implements Output, Input, and Cursor directly instead
+  > of one impl Backend. Since retroglyph-window's Presenter is now an Output
+  > supertrait, SoftwareRenderer's own Output impl already satisfies
+  > Presenter: Output, so the old impl retroglyph_window::Presenter block
+  > (which duplicated draw/draw_layers/flush/size/clear/resize by forwarding
+  > through <Self as Backend>::method, specifically to keep Presenter out of
+  > scope and avoid method-resolution ambiguity) is deleted; the new Presenter
+  > impl only defines SurfaceError, init_surface, resize_surface, present, and
+  > cell_size. Updates crate/module docs and the benches that called
+  > draw/draw_layers directly on a concrete SoftwareRenderer to import Output
+  > instead of Backend.
+  >
+  > * refactor(terminal-wasm): implement Output/Input/Cursor instead of fused Backend
+  >
+  > TerminalWasm now implements Output (ANSI-emitting draw/flush/clear/resize),
+  > Input (real push_event/poll_event, since this backend is entirely
+  > push-driven), and Cursor (real escape-code cursor show/hide/move) instead of
+  > one impl Backend. Updates doc comment links (Backend::draw/clear/etc. ->
+  > Output::/Input::/Cursor::) and the event-throughput bench's Backend as _
+  > import to Input as _.
+  >
+  > * fix(terminal-wasm): import Output for wasm32-gated resize call
+  >
+  > The wasm32-only wasm_terminal_resize FFI export imported the old fused
+  > Backend trait to call resize(); after the Output/Input/Cursor split that
+  > method lives on Output. This module is #[cfg(target_arch = "wasm32")], so
+  > cargo test --all-features never compiled it -- only just test-wasm
+  > (wasm-pack test) exercises this path, and CI caught it as a build failure
+  > on PR #331.
+  >
+  > * docs(workspace): update Backend/Presenter references after the trait split
+  >
+  > Sweeps remaining prose describing Backend as a single fused
+  > output+input+cursor trait: the workspace README's backend overview, the
+  > retroglyph-terminal crate's doc comment linking to the old
+  > Backend::draw method (now Output::draw), and docs/testing.md's reference to
+  > Backend::push_event (now Input::push_event).
+
+### Documentation
+
+- [81d2e1b](
+https://github.com/crates-lurey-io/retroglyph/commit/81d2e1b485d23006ec31505625a2315cab0d4727) *(core)* Clarify draw's egc-only grapheme field by `@matanlurey` in [#332](
+https://github.com/crates-lurey-io/retroglyph/pull/332)
+
+### Performance
+
+- [6ae4219](
+https://github.com/crates-lurey-io/retroglyph/commit/6ae4219b9bd7c066d40051bc9fa4c247d9e454d2) *(terminal)* Buffered, width-precomputed draw with escape/plain split by `@matanlurey` in [#335](
+https://github.com/crates-lurey-io/retroglyph/pull/335)
+
+- [ac8a5dc](
+https://github.com/crates-lurey-io/retroglyph/commit/ac8a5dcf1189c114c8328b9fb90e6303a4f50ae1) *(terminal)* Combine fg/bg SGR escapes into a single sequence in draw by `@matanlurey` in [#329](
+https://github.com/crates-lurey-io/retroglyph/pull/329)
+
+  > * test(terminal): fix render_diff bench helper's backwards diff() argument order
+  >
+  > render_diff called old.diff(new), but Grid::diff's contract is self.diff(other) yields self's
+  > tiles at positions differing from other (see the real call site in
+  > retroglyph-core's Terminal::render: self.current.diff(&self.previous)). Calling it as
+  > old.diff(new) yielded old's own blank/default-styled tiles at every changed position instead of
+  > new's, so every group in frame_render.rs (full_vs_sparse, sgr_churn, plain_vs_escape) was
+  > silently rendering blank frames and reporting Throughput::Bytes numbers that didn't reflect any
+  > real output.
+  >
+  > Swapped to new.diff(old), matching the real call-site convention. Needed as a prerequisite to get
+  > valid before/after byte-count evidence for the following fg/bg SGR-coalescing perf fix, since the
+  > sgr_churn_200x50 group exists specifically to quantify that fix and was measuring nothing
+  > meaningful before this.
+  >
+  > * perf(terminal): combine fg/bg SGR escapes into a single sequence in draw
+  >
+  > draw emitted foreground and background as two independent escape sequences whenever both changed
+  > in the same cell transition (\x1b[38;...m\x1b[48;...m), doubling the CSI introducer/terminator
+  > overhead on color-churning frames (gradients, heatmaps, the subcell image demo). SGR parameters
+  > combine into one sequence (\x1b[38;...;48;...m) with identical visual effect.
+  >
+  > Split write_sgr_color into a shared write_sgr_params helper (writes just the parameter list, no
+  > \x1b[/m wrapper) plus the existing full-escape write_sgr_color built on top of it. draw now checks
+  > whether fg and bg both changed for a cell and, if so, writes one combined escape via two
+  > write_sgr_params calls joined by ';'; when only one channel changed it still emits a single,
+  > separate escape as before, so an unchanged channel is never re-emitted.
+  >
+  > Fixes #270.
+
+### Testing
+
+- [ab589bf](
+https://github.com/crates-lurey-io/retroglyph/commit/ab589bf2d5d87a40f299be9ce2c10bc4361d1af0) *(terminal)* Add benchmarks for full-repaint/sparse-diff/SGR-churn frames by `@matanlurey` in [#320](
+https://github.com/crates-lurey-io/retroglyph/pull/320)
+
+  > Adds crates/terminal/benches covering:
+  > - Full-repaint vs sparse-diff (1%) at 200x50.
+  > - SGR-churn (alternating fg/bg per cell) vs a single-color frame, to quantify
+  >   the fg/bg-coalescing win in TerminalRenderer::draw.
+  > - Plain mode vs escape mode on the same frame.
+  > - Wide-char-heavy frame (CJK/emoji via write_grapheme, gated behind the egc
+  >   feature) vs an ASCII baseline, to measure unicode_width cost.
+  >
+  > Each case reports bytes emitted via Criterion::benchmark_group's
+  > Throughput::Bytes alongside wall time, since the terminal-wasm backend's
+  > per-frame JS string size matters as much as CPU.
+  >
+  > Closes #275
+
+**Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-v0.1.2...retroglyph-terminal-v0.1.3
+
+
 ## [0.1.2+retroglyph-terminal](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-v0.1.1...retroglyph-terminal-v0.1.2) - 2026-07-19
 
 ### Continuous Integration
