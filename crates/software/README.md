@@ -60,21 +60,18 @@ On `wasm32` this has no effect: `requestAnimationFrame` drives the loop at the d
 regardless, so a native app that relies on `target_fps` to throttle rendering will run uncapped once
 ported to the web.
 
-## Backend parity caveat
+## Backend parity: occupied default-background cells
 
 `SoftwareRenderer`'s layer compositing
 ([`Backend::draw_layers`](https://docs.rs/retroglyph-software/latest/retroglyph_software/struct.SoftwareRenderer.html#method.draw_layers))
-diverges from cell backends (e.g. `retroglyph-crossterm`'s `Grid::flatten_into`) in one case: an
-occupied space (`' '`, non-empty) with a `Color::Default` background on a layer above 0.
+matches cell backends (e.g. `retroglyph-crossterm`'s `Grid::flatten_into`) for an occupied space
+(`' '`, non-empty) with a `Color::Default` background on a layer above 0: that space is opaque and
+erases whatever glyph was on the layer beneath it, replacing it with a blank cell, on both kinds of
+backend.
 
-- **Cell backends:** flattening treats that space as opaque and erases whatever glyph was on the
-  layer beneath it, replacing it with a blank cell.
-- **`retroglyph-software`:** the renderer paints per pixel and never re-paints a lower layer's
-  pixels once drawn, so the lower glyph's pixels remain visible underneath the higher-layer space
-  instead of being erased.
-
-Repainting the lower layer's background per pixel to match cell-backend behavior would require
-tracking composited per-cell state, which this renderer intentionally avoids for simplicity and
-performance. See the doc comment on
-[`draw_layers`](https://docs.rs/retroglyph-software/latest/retroglyph_software/struct.SoftwareRenderer.html#method.draw_layers)
-for the implementation-level note.
+The background that shows through after that erasure is _not_ necessarily this renderer's default
+background color, though: matching `flatten_into`'s inheritance rule, a `Color::Default` background
+never overwrites the destination background, so the erased cell inherits whichever layer below it
+(down to and including layer 0) last established a real background. See the `resolve_bg_fill`
+private helper's doc comment in `crates/software/src/lib.rs` for the implementation-level rule
+(retroglyph#304).
