@@ -67,10 +67,13 @@
 //! ## Allocation cost: layer 1 vs. layer 200
 //!
 //! Writing to a layer for the first time allocates one `width x height`
-//! buffer of [`Tile`]s -- the same cost regardless of the layer's id. Layer
-//! 200 is no more expensive to *allocate* than layer 1: `Grid` stores a
-//! 256-slot `Vec<Option<LayerBuf>>`, and only the slots that have been
-//! written to hold `Some`; the rest are a cheap `None`.
+//! buffer of [`Tile`]s -- the same cost regardless of the layer's id, plus a
+//! one-time growth of the layer table's `Vec<Option<LayerBuf>>` up to that
+//! layer's id (see [`Grid::new`]): the table starts at a single slot (layer
+//! 0) and only grows as far as the highest layer id ever written, so a
+//! single/few-layer `Grid` never pays for slots it never touches. Writing to
+//! layer 200 first grows the table to 201 slots, then allocates layer 200's
+//! buffer; the untouched slots 1-199 in between are a cheap `None`.
 //!
 //! What the layer id *does* affect is steady-state iteration cost, via
 //! [`max_layer`](Grid::max_layer): every present, diff, and full-grid
@@ -295,8 +298,10 @@ impl LayerBuf {
 
 /// A 2D buffer of [`Tile`]s, addressable across up to 256 stacked layers.
 ///
-/// Layer 0 is always allocated; higher layers are allocated on first write.
-/// Single-layer use pays no overhead: layers 1+ stay unallocated until used.
+/// Layer 0 is always allocated; higher layers are allocated on first write, growing the
+/// layer-table `Vec` up to that layer's id as needed (see [`Grid::new`]). Single-layer use pays
+/// no overhead: layers 1+ stay unallocated until used, and the layer table itself never grows
+/// past a single slot.
 ///
 /// Requires an allocator (backed by `alloc::vec::Vec`), so it is unavailable
 /// in strictly static, no-alloc environments.
@@ -304,8 +309,10 @@ impl LayerBuf {
 pub struct Grid {
     width: u16,
     height: u16,
-    /// Indexed by layer ID (0–255). Index 0 is always `Some`.
-    /// Unwritten layers are `None` — no allocation until first write.
+    /// Indexed by layer ID (0–255), but only as long as the highest layer id ever written to
+    /// (see [`layer_or_alloc`](Self::layer_or_alloc)) -- not always all 256 slots. Index 0 is
+    /// always `Some`. Unwritten layers within the current length are `None`; ids past the end
+    /// are treated identically to a `None` slot (see [`layer`](Self::layer)).
     layers: Vec<Option<LayerBuf>>,
     /// Highest layer ID that has been allocated. Always at least 0.
     max_layer: u8,
@@ -317,13 +324,24 @@ pub struct Grid {
 
 impl Grid {
     /// Borrow a specific layer, or `None` if unallocated.
+    ///
+    /// `id` may be beyond the current layer-table `Vec`'s length -- the table only grows as far
+    /// as the highest layer id ever written (see [`layer_or_alloc`](Self::layer_or_alloc)), so an
+    /// id past the end simply means "never written", same as an in-bounds `None` slot.
     fn layer(&self, id: u8) -> Option<&LayerBuf> {
-        self.layers[usize::from(id)].as_ref()
+        self.layers.get(usize::from(id))?.as_ref()
     }
 
     /// Borrow a specific layer mutably, allocating it if necessary.
+    ///
+    /// Grows the layer-table `Vec` up to `id + 1` slots on demand, rather than the table always
+    /// holding all 256 possible slots (see retroglyph#264): a `Grid` that only ever writes to
+    /// layer 0, or a handful of low ids, never pays for the 250+ slots it never touches.
     fn layer_or_alloc(&mut self, id: u8) -> &mut LayerBuf {
         let idx = usize::from(id);
+        if idx >= self.layers.len() {
+            self.layers.resize_with(idx + 1, || None);
+        }
         if self.layers[idx].is_none() {
             self.layers[idx] = Some(LayerBuf::new(self.width, self.height));
         }
@@ -353,16 +371,15 @@ impl Grid {
     /// Creates a new grid of the given dimensions.
     ///
     /// Layer 0 is allocated immediately. Layers 1–255 are `None` until first
-    /// write via [`put_tile`](Self::put_tile).
+    /// write via [`put_tile`](Self::put_tile); the layer table itself only
+    /// grows as far as the highest layer id ever written, not all 256 slots
+    /// up front.
     #[must_use]
     pub fn new(width: u16, height: u16) -> Self {
-        let mut layers = alloc::vec![];
-        layers.resize_with(256, || None);
-        layers[0] = Some(LayerBuf::new(width, height));
         Self {
             width,
             height,
-            layers,
+            layers: alloc::vec![Some(LayerBuf::new(width, height))],
             max_layer: 0,
         }
     }
@@ -555,7 +572,11 @@ impl Grid {
     ///
     /// Does nothing if the layer is unallocated.
     pub fn clear(&mut self, layer: u8) {
-        if let Some(lb) = self.layers[usize::from(layer)].as_mut() {
+        if let Some(lb) = self
+            .layers
+            .get_mut(usize::from(layer))
+            .and_then(Option::as_mut)
+        {
             lb.buf.clear();
             lb.extras.clear();
         }
@@ -1564,6 +1585,66 @@ mod tests {
         g.put_tile(3, 0, 0, Tile::new('@', Style::default()));
         assert!(g.layer(3).is_some());
         assert!(g.layer(4).is_none());
+    }
+
+    #[test]
+    fn test_grid_new_layer_table_starts_at_a_single_slot() {
+        // retroglyph#264: the layer-table `Vec` itself should start small (a single slot for
+        // layer 0), not pre-allocate all 256 possible slots up front.
+        let g = Grid::new(5, 5);
+        assert_eq!(g.layers.len(), 1);
+        assert_eq!(g.max_layer(), 0);
+    }
+
+    #[test]
+    fn test_grid_layer_or_alloc_grows_table_lazily_to_the_written_id() {
+        let mut g = Grid::new(5, 5);
+        g.put_tile(10, 0, 0, Tile::new('@', Style::default()));
+        // The table grows to exactly `id + 1` slots -- not all 256.
+        assert_eq!(g.layers.len(), 11);
+        assert_eq!(g.max_layer(), 10);
+        assert!(g.layer(10).is_some());
+        for id in 1u8..10 {
+            assert!(g.layer(id).is_none(), "layer {id} should be None");
+        }
+    }
+
+    #[test]
+    fn test_grid_layer_beyond_table_length_reads_as_none() {
+        // A layer id past the current table length (never written) must read identically to an
+        // in-bounds `None` slot, not panic or error.
+        let g = Grid::new(5, 5);
+        assert_eq!(g.layers.len(), 1);
+        assert!(g.layer(255).is_none());
+        assert!(g.get_tile(255, 0, 0).is_none());
+        assert!(g.grapheme(255, 0, 0).is_none());
+    }
+
+    #[test]
+    fn test_grid_clear_beyond_table_length_is_a_no_op() {
+        // Clearing an id past the current table length must not panic -- it's equivalent to
+        // clearing an unallocated in-bounds layer (does nothing).
+        let mut g = Grid::new(5, 5);
+        g.clear(255);
+        assert_eq!(g.layers.len(), 1);
+    }
+
+    #[test]
+    fn test_grid_layer_table_growth_is_monotonic_across_writes() {
+        // Writing to a lower layer id after a higher one must not shrink the table, and must
+        // preserve the higher layer's content.
+        let mut g = Grid::new(5, 5);
+        g.put_tile(20, 1, 1, Tile::new('H', Style::default()));
+        assert_eq!(g.layers.len(), 21);
+        g.put_tile(2, 0, 0, Tile::new('L', Style::default()));
+        assert_eq!(
+            g.layers.len(),
+            21,
+            "writing a lower id must not shrink the table"
+        );
+        assert_eq!(g.max_layer(), 20);
+        assert_eq!(g.get_tile(20, 1, 1).unwrap().glyph, 'H');
+        assert_eq!(g.get_tile(2, 0, 0).unwrap().glyph, 'L');
     }
 
     #[test]

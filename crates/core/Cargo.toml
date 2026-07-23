@@ -58,6 +58,10 @@ name = "grid_diff"
 harness = false
 
 [[bench]]
+name = "grid_construct"
+harness = false
+
+[[bench]]
 name = "flatten"
 harness = false
 
