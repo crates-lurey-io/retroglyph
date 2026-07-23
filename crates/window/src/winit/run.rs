@@ -15,7 +15,7 @@ use super::web;
 use crate::backend::WindowBackend;
 use crate::presenter::Presenter;
 use retroglyph_core::Terminal;
-use retroglyph_core::backend::Backend;
+use retroglyph_core::backend::Input;
 use retroglyph_core::event::{Event, KeyModifiers, MouseEvent, MouseEventKind, PhysicalPos};
 use std::cell::Cell;
 use std::fmt;
@@ -108,7 +108,8 @@ impl WindowConfig {
     /// `cols x cell_w` by `rows x cell_h` physical pixels.
     ///
     /// This is why renderer crates don't need their own windowing code: the
-    /// grid/cell geometry already lives behind [`Presenter::size`] and
+    /// grid/cell geometry already lives behind
+    /// [`Output::size`](retroglyph_core::backend::Output::size) and
     /// [`Presenter::cell_size`].
     ///
     /// `target_fps` is an optional frame-rate cap: `None` runs uncapped on native (the event
@@ -1361,6 +1362,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use retroglyph_core::backend::Output;
     use retroglyph_core::event::{MouseButton, MouseEvent, MouseEventKind};
     use retroglyph_core::grid::{Pos, Size};
     use retroglyph_core::tile::Tile;
@@ -1531,9 +1533,8 @@ mod tests {
         last_scale_factor: Cell<Option<f64>>,
     }
 
-    impl Presenter for MockPresenter {
+    impl Output for MockPresenter {
         type Error = core::convert::Infallible;
-        type SurfaceError = core::convert::Infallible;
 
         fn draw<'a, I>(&mut self, _content: I) -> Result<(), Self::Error>
         where
@@ -1565,6 +1566,10 @@ mod tests {
         }
 
         fn resize(&mut self, _size: Size) {}
+    }
+
+    impl Presenter for MockPresenter {
+        type SurfaceError = core::convert::Infallible;
 
         fn init_surface(
             &mut self,
@@ -1595,9 +1600,8 @@ mod tests {
         resize_calls: Rc<RefCell<Vec<(u32, u32)>>>,
     }
 
-    impl Presenter for RecordingPresenter {
+    impl Output for RecordingPresenter {
         type Error = core::convert::Infallible;
-        type SurfaceError = core::convert::Infallible;
 
         fn draw<'a, I>(&mut self, _content: I) -> Result<(), Self::Error>
         where
@@ -1629,6 +1633,10 @@ mod tests {
         }
 
         fn resize(&mut self, _size: Size) {}
+    }
+
+    impl Presenter for RecordingPresenter {
+        type SurfaceError = core::convert::Infallible;
 
         fn init_surface(
             &mut self,
@@ -1661,9 +1669,8 @@ mod tests {
         init_surface_calls: Rc<Cell<u32>>,
     }
 
-    impl Presenter for FailingPresenter {
+    impl Output for FailingPresenter {
         type Error = core::convert::Infallible;
-        type SurfaceError = &'static str;
 
         fn draw<'a, I>(&mut self, _content: I) -> Result<(), Self::Error>
         where
@@ -1695,6 +1702,10 @@ mod tests {
         }
 
         fn resize(&mut self, _size: Size) {}
+    }
+
+    impl Presenter for FailingPresenter {
+        type SurfaceError = &'static str;
 
         fn init_surface(
             &mut self,

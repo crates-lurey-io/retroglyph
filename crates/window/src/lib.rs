@@ -2,11 +2,11 @@
 //!
 //! # Architecture
 //!
-//! [`Backend`](retroglyph_core::Backend) fuses input (`poll_event`/
-//! `push_event`) and output (`draw_layers`/`flush`/...), which fits a
-//! terminal process but not a window: there, an event loop owns input and a
-//! renderer owns output. This crate splits the two apart and reassembles
-//! them into one `Backend`:
+//! [`retroglyph_core::backend::Input`] and [`retroglyph_core::backend::Output`] are two
+//! independent facets of [`Backend`](retroglyph_core::Backend), which fits a terminal process
+//! (one type implements both) but not a window: there, an event loop owns input and a renderer
+//! owns output separately. This crate keeps that split -- [`Presenter`] is an `Output` supertrait,
+//! [`WindowBackend`] owns its own `Input` event queue -- and reassembles both into one `Backend`:
 //!
 //! ```text
 //!               ┌─────────────────────────────┐
@@ -30,12 +30,12 @@
 //!         └───────────────────────────────┘
 //! ```
 //!
-//! - [`Presenter`] is the output half: rasterization plus the surface
-//!   lifecycle (`init_surface`/`resize_surface`/`present`/`cell_size`).
-//!   Renderer crates implement only this trait.
-//! - <code>[WindowBackend]&lt;P: Presenter&gt;</code> implements `Backend`
-//!   generically, holding the input event queue and delegating output to
-//!   `P`.
+//! - [`Presenter`] is `Output` plus the surface lifecycle
+//!   (`init_surface`/`resize_surface`/`present`/`cell_size`). Renderer crates implement only
+//!   this trait, which gives them `Output` for free.
+//! - <code>[WindowBackend]&lt;P: Presenter&gt;</code> implements `Output` (by delegating to
+//!   `P`), `Input` (via its own event queue), and the no-op default `Cursor` (windowed backends
+//!   have no text cursor), which together give it `Backend` generically.
 //! - The `winit` module (feature-gated, see below) drives the event loop
 //!   that fills that queue and calls `Presenter::present` each frame.
 //!

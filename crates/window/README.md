@@ -6,10 +6,11 @@
 [![license](https://img.shields.io/crates/l/retroglyph-window.svg)](https://github.com/crates-lurey-io/retroglyph/blob/main/LICENSE)
 
 A shared windowing layer for [retroglyph](https://github.com/crates-lurey-io/retroglyph)'s
-window-based backends (software today; GL/wgpu are future candidates). `Backend` fuses input and
-output, which fits a terminal process but not a window, where an event loop owns input and a
-renderer owns output separately -- this crate splits the two apart and reassembles them into one
-`Backend` via `winit`.
+window-based backends (software today; GL/wgpu are future candidates). `Input` and `Output` are
+independent facets of `Backend`, which fits a terminal process (one type implements both) but not a
+window, where an event loop owns input and a renderer owns output separately -- this crate keeps
+that split (`Presenter` is an `Output` supertrait; `WindowBackend` owns its own `Input` queue) and
+reassembles both into one `Backend` via `winit`.
 
 Most consumers don't depend on this crate directly; use
 [`retroglyph-software`](https://crates.io/crates/retroglyph-software) instead, which depends on it.
@@ -26,6 +27,7 @@ renderer backend does. This is the whole contract it implements, sized to fit a 
 cell geometry via [`WindowConfig::fit`]:
 
 ```rust
+use retroglyph_core::backend::Output;
 use retroglyph_core::grid::{Pos, Size};
 use retroglyph_core::tile::Tile;
 use retroglyph_window::winit::WindowConfig;
@@ -34,9 +36,8 @@ use std::sync::Arc;
 
 struct NullPresenter;
 
-impl Presenter for NullPresenter {
+impl Output for NullPresenter {
     type Error = core::convert::Infallible;
-    type SurfaceError = core::convert::Infallible;
 
     fn draw<'a, I>(&mut self, _content: I) -> Result<(), Self::Error>
     where
@@ -65,6 +66,10 @@ impl Presenter for NullPresenter {
     }
 
     fn resize(&mut self, _size: Size) {}
+}
+
+impl Presenter for NullPresenter {
+    type SurfaceError = core::convert::Infallible;
 
     fn init_surface(&mut self, _window: Arc<dyn WindowHandle>) -> Result<(), Self::SurfaceError> {
         Ok(())
