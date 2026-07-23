@@ -131,7 +131,7 @@
 struct ReadmeDoctests;
 
 use retroglyph_core::backend::{Cursor, Input, Output};
-use retroglyph_core::event::Event;
+use retroglyph_core::event::{Event, MouseEventKind};
 use retroglyph_core::grid::{Pos, Size};
 use retroglyph_core::tile::Tile;
 use retroglyph_terminal::TerminalRenderer;
@@ -192,6 +192,19 @@ pub struct TerminalWasm {
     event_queue: VecDeque<Event>,
 }
 
+/// The maximum number of events [`TerminalWasm::push_event`] will hold at once.
+///
+/// There is no OS-level backpressure here the way there is on native (crossterm's underlying
+/// input buffer naturally throttles a stalled reader): JS keeps calling the `wasm_terminal_push_*`
+/// entry points regardless of whether the Rust game loop is still draining
+/// [`poll_event`](Input::poll_event) every frame (e.g. a backgrounded tab throttling
+/// `requestAnimationFrame`, or the game loop itself stalling), so an unbounded queue can grow
+/// forever. `4096` is generously above any single-frame burst a real pointer/keyboard/paste stream
+/// should ever produce (a 250 Hz mouse plus a full frame of dropped rendering is still only a few
+/// hundred events), while staying small enough that hitting the cap and dropping the oldest event
+/// is a clearly abnormal, log-worthy condition rather than routine behavior.
+const EVENT_QUEUE_CAP: usize = 4096;
+
 impl TerminalWasm {
     /// Creates a new backend with the given initial size in cells.
     #[must_use]
@@ -208,9 +221,42 @@ impl TerminalWasm {
     ///
     /// Called from JS (via the `wasm-bindgen` entry points below) or from
     /// tests; not part of [`Backend`](retroglyph_core::Backend) itself beyond the no-op default.
+    ///
+    /// Two mitigations guard against a stalled or throttled consumer (e.g. a backgrounded tab, or
+    /// a Rust game loop that's paused) while JS keeps forwarding input -- there is no OS-level
+    /// backpressure here the way there is on native (crossterm's underlying input buffer
+    /// naturally throttles a stalled reader):
+    ///
+    /// - **Pointer-move coalescing.** If `event` is
+    ///   [`Event::Mouse`](Event) with [`MouseEventKind::Moved`] and the queue's current back is
+    ///   also a `Moved` event, `event` replaces it in place instead of growing the queue -- a
+    ///   consumer that's fallen behind only ever cares about the most recent pointer position, not
+    ///   every intermediate one. Any other event kind (including a `Down`/`Up`/scroll mouse event)
+    ///   always pushes normally, so this never reorders or merges anything but a `Moved` run.
+    /// - **Capacity cap.** Once the queue holds `EVENT_QUEUE_CAP` (4096) events, pushing another
+    ///   silently drops the *oldest* queued event (via `pop_front`) to make room. Oldest was
+    ///   chosen over dropping the new event so a consumer that's fallen behind and only pulls a
+    ///   few events per frame still gets its queue trending toward current/recent input as it
+    ///   catches up, rather than being stuck forever behind the exact backlog that triggered the
+    ///   cap. This is silent rather than logged: this crate's non-wasm32 API surface has no
+    ///   other fallible/observable operations and stays log-free (see the `wasm` module below for
+    ///   where this crate *does* use `log`, at the FFI boundary specifically), and a queue that's
+    ///   this far behind is already producing stale input for the consumer regardless.
+    ///
     /// Crate-private: [`Input::push_event`] is the sole public way to push an event onto a
     /// `TerminalWasm`, so there is only one way for external callers to do this.
     pub(crate) fn push_event(&mut self, event: Event) {
+        if let Event::Mouse(mouse) = &event
+            && mouse.kind == MouseEventKind::Moved
+            && let Some(Event::Mouse(back)) = self.event_queue.back_mut()
+            && back.kind == MouseEventKind::Moved
+        {
+            *back = *mouse;
+            return;
+        }
+        if self.event_queue.len() >= EVENT_QUEUE_CAP {
+            self.event_queue.pop_front();
+        }
         self.event_queue.push_back(event);
     }
 
@@ -1060,6 +1106,119 @@ mod tests {
     fn decode_mouse_event_rejects_unknown_button_for_down_and_up() {
         assert!(decode_mouse_event(0, 0, mouse_actions::DOWN, 0xFF, 0).is_none());
         assert!(decode_mouse_event(0, 0, mouse_actions::UP, 0xFF, 0).is_none());
+    }
+
+    #[test]
+    fn push_event_caps_queue_and_drops_oldest_under_burst() {
+        // A burst well past `EVENT_QUEUE_CAP`, of non-coalescing events (alternating key codes,
+        // so nothing here hits the `Moved` coalescing path) must never grow the queue past the
+        // cap, and the oldest entries are the ones dropped -- the earliest surviving key should
+        // be from partway through the burst, not from the very start.
+        let mut backend = TerminalWasm::new(10, 3);
+        let total = EVENT_QUEUE_CAP + 500;
+        for i in 0..total {
+            #[allow(clippy::cast_possible_truncation)]
+            let code = u32::from(b'a') + (i % 26) as u32;
+            backend.push_event(Event::Key(retroglyph_core::event::KeyEvent::new(
+                KeyCode::Char(char::from_u32(code).unwrap()),
+                KeyModifiers::NONE,
+            )));
+        }
+        assert_eq!(backend.event_queue.len(), EVENT_QUEUE_CAP);
+
+        // Drain and count: still exactly the cap's worth of events, none created out of thin air.
+        let mut drained = 0usize;
+        while Input::poll_event(&mut backend, Duration::ZERO).is_some() {
+            drained += 1;
+        }
+        assert_eq!(drained, EVENT_QUEUE_CAP);
+    }
+
+    #[test]
+    fn push_event_coalesces_consecutive_moved_events() {
+        use retroglyph_core::event::{MouseButton, MouseEvent, MouseEventKind};
+
+        let mut backend = TerminalWasm::new(80, 24);
+        for x in 0..200u16 {
+            backend.push_event(Event::Mouse(MouseEvent {
+                kind: MouseEventKind::Moved,
+                position: Pos { x, y: 0 },
+                pixel_position: None,
+                modifiers: KeyModifiers::NONE,
+            }));
+        }
+
+        // All 200 `Moved` pushes collapsed into a single queued event, holding only the latest
+        // position.
+        assert_eq!(backend.event_queue.len(), 1);
+        assert_eq!(
+            Input::poll_event(&mut backend, Duration::ZERO),
+            Some(Event::Mouse(MouseEvent {
+                kind: MouseEventKind::Moved,
+                position: Pos { x: 199, y: 0 },
+                pixel_position: None,
+                modifiers: KeyModifiers::NONE,
+            }))
+        );
+        assert_eq!(Input::poll_event(&mut backend, Duration::ZERO), None);
+
+        // A non-`Moved` mouse event breaks the coalescing run: it queues alongside, not merged
+        // into, a preceding `Moved`.
+        backend.push_event(Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Moved,
+            position: Pos { x: 1, y: 1 },
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        }));
+        backend.push_event(Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            position: Pos { x: 1, y: 1 },
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        }));
+        assert_eq!(backend.event_queue.len(), 2);
+    }
+
+    #[test]
+    fn push_event_never_drops_or_coalesces_non_moved_events_under_burst() {
+        use retroglyph_core::event::{MouseButton, MouseEvent, MouseEventKind};
+
+        // A burst of distinct key presses, mouse clicks, and pastes -- well under the cap, and
+        // none of them `Moved` -- must all survive untouched: no coalescing (they're not `Moved`)
+        // and no dropping (the burst never reaches `EVENT_QUEUE_CAP`).
+        let mut backend = TerminalWasm::new(80, 24);
+        let mut expected = Vec::new();
+
+        for i in 0..50u16 {
+            let key = Event::Key(retroglyph_core::event::KeyEvent::new(
+                KeyCode::Char('a'),
+                KeyModifiers::NONE,
+            ));
+            backend.push_event(key.clone());
+            expected.push(key);
+
+            let click = Event::Mouse(MouseEvent {
+                kind: MouseEventKind::Down(MouseButton::Left),
+                position: Pos { x: i, y: i },
+                pixel_position: None,
+                modifiers: KeyModifiers::NONE,
+            });
+            backend.push_event(click.clone());
+            expected.push(click);
+
+            let paste = Event::Paste(format!("paste-{i}"));
+            backend.push_event(paste.clone());
+            expected.push(paste);
+        }
+
+        assert_eq!(backend.event_queue.len(), expected.len());
+        for expected_event in expected {
+            assert_eq!(
+                Input::poll_event(&mut backend, Duration::ZERO),
+                Some(expected_event)
+            );
+        }
+        assert_eq!(Input::poll_event(&mut backend, Duration::ZERO), None);
     }
 
     // Guards against the JS driver example silently forking into two different (and eventually
