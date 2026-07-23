@@ -201,12 +201,18 @@ pub enum MouseEventKind {
     Down(MouseButton),
     /// Mouse button released.
     Up(MouseButton),
+    /// Mouse moved while a button was held down; carries which button.
+    Drag(MouseButton),
     /// Mouse moved.
     Moved,
     /// Mouse wheel scrolled up.
     ScrollUp,
     /// Mouse wheel scrolled down.
     ScrollDown,
+    /// Mouse wheel scrolled left (mostly on a laptop touchpad).
+    ScrollLeft,
+    /// Mouse wheel scrolled right (mostly on a laptop touchpad).
+    ScrollRight,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
