@@ -1,11 +1,10 @@
-//! Everything winit-specific in this crate: the event loop, event
-//! translation, and the windowed app drivers.
+//! Everything winit-specific in this crate: the event loop, event translation, and the windowed
+//! app drivers.
 //!
-//! A driver for another windowing library (SDL2, tao, a custom loop) would
-//! be a sibling module with the same shape: create a window, translate its
-//! events into [`Event`](retroglyph_core::event::Event)s pushed onto
-//! [`WindowBackend`](crate::WindowBackend), and call
-//! [`Presenter::present`](crate::Presenter::present) once per frame.
+//! A driver for another windowing library (SDL2, tao, a custom loop) would be a sibling module
+//! with the same shape: create a window, translate its events into
+//! [`Event`](retroglyph_core::event::Event)s pushed onto [`WindowBackend`](crate::WindowBackend),
+//! and call [`Presenter::present`](crate::Presenter::present) once per frame.
 
 /// The winit event loop, `WindowConfig`, and the `run_windowed`/`run_app` drivers.
 pub mod run;

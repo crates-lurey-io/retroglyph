@@ -82,9 +82,8 @@ pub fn translate_ime(ime: winit::event::Ime) -> Option<Event> {
 
 /// Translates a winit key event into an [`Event`].
 ///
-/// Reports [`KeyEventKind::Press`], [`KeyEventKind::Repeat`] (winit's `repeat`
-/// flag), and [`KeyEventKind::Release`]. Returns `None` only for keys we don't
-/// map.
+/// Reports [`KeyEventKind::Press`], [`KeyEventKind::Repeat`] (winit's `repeat` flag), and
+/// [`KeyEventKind::Release`]. Returns `None` only for keys we don't map.
 #[must_use]
 #[allow(clippy::needless_pass_by_value)]
 pub fn translate_key(input: winit::event::KeyEvent, modifiers: KeyModifiers) -> Option<Event> {
@@ -95,9 +94,8 @@ pub fn translate_key(input: winit::event::KeyEvent, modifiers: KeyModifiers) -> 
 
 /// Converts a raw f64 cursor position to a [`PhysicalPos`].
 ///
-/// `f64.max(0.0) as u32`: the `.max(0.0)` clamp makes sign loss intentional.
-/// Truncation of the fractional part is also intentional — pixel coordinates
-/// are always integers.
+/// `f64.max(0.0) as u32`: the `.max(0.0)` clamp makes sign loss intentional. Truncation of the
+/// fractional part is also intentional -- pixel coordinates are always integers.
 #[must_use]
 #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
 pub const fn physical_pos_from(x: f64, y: f64) -> PhysicalPos {
@@ -109,9 +107,8 @@ pub const fn physical_pos_from(x: f64, y: f64) -> PhysicalPos {
 
 /// Converts physical pixel coordinates to a grid cell [`Pos`].
 ///
-/// Clamps to `u16::MAX` so out-of-bounds cursor positions (negative or
-/// extremely large) don't panic — the game loop is responsible for
-/// bounds-checking against the terminal size.
+/// Clamps to `u16::MAX` so out-of-bounds cursor positions (negative or extremely large) don't
+/// panic -- the game loop is responsible for bounds-checking against the terminal size.
 #[must_use]
 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 pub fn pixel_to_cell(px_x: f64, px_y: f64, cell_w: u32, cell_h: u32) -> Pos {

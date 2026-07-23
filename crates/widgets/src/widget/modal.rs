@@ -22,6 +22,19 @@ use crate::{Align, Theme};
 /// cells, a separate feature from this thin layout convenience). Not a
 /// [`Widget`]: [`Widget::render`] can't return a value, and the inner
 /// content rect is part of this type's contract.
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::{Headless, Rect, Terminal};
+/// use retroglyph_widgets::Modal;
+///
+/// let mut term = Terminal::new(Headless::new(20, 10));
+/// let screen = Rect::new(0, 0, 20, 10);
+/// let inner = Modal::new(10, 4).title("Confirm").render(screen, &mut term);
+/// // `inner` is ready to hand to another widget, e.g. a `Log` or `Text`.
+/// assert_eq!(inner.width(), 8);
+/// ```
 #[derive(Clone, Copy, Debug)]
 pub struct Modal<'a> {
     width: u16,

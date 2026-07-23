@@ -81,7 +81,8 @@ impl std::error::Error for SoftwareBackendError {
 ///     .scale(2)
 ///     .build()
 ///     .expect("backend init failed")
-///     .run_headless();
+///     .run_headless()
+///     .expect("renderer init failed");
 ///
 /// let config = WindowConfig::fit(&renderer, "My Game", None);
 /// run_windowed(config, renderer, move |term| {
@@ -113,17 +114,14 @@ impl std::error::Error for SoftwareBackendError {
 ///     .build()
 ///     .unwrap();
 ///
-/// let mut renderer: SoftwareRenderer = opts.run_headless();
+/// let mut renderer: SoftwareRenderer = opts.run_headless().unwrap();
 ///
 /// // Draw a red cell on layer 0.
 /// use retroglyph_core::tile::Tile;
-/// renderer.draw_layers(
-///     [(0, Pos::new(0, 0), &Tile {
-///         glyph: ' ',
-///         style: Style::new().bg(Color::Rgb { r: 255, g: 0, b: 0 }),
-///         ..Tile::default()
-///     })].into_iter(),
-/// );
+/// let tile = Tile::new(' ', Style::new().bg(Color::Rgb { r: 255, g: 0, b: 0 }));
+/// renderer
+///     .draw_layers([(0, Pos::new(0, 0), &tile, None)].into_iter())
+///     .unwrap();
 ///
 /// let pixels = renderer.pixels();
 /// assert!(pixels.iter().all(|&p| p == 0x00FF_0000));

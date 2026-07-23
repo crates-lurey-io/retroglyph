@@ -1852,8 +1852,8 @@ mod tests {
 
     /// A dependency-free [`Presenter`] with fixed 8x16 cells.
     ///
-    /// The `WindowApp` tests only exercise event translation, cell math, and
-    /// the `WindowBackend` queue — no rasterization or surface is needed.
+    /// The `WindowApp` tests only exercise event translation, cell math, and the `WindowBackend`
+    /// queue -- no rasterization or surface is needed.
     #[derive(Default)]
     struct MockPresenter {
         /// Records the last [`Presenter::scale_factor_changed`] argument, if any.

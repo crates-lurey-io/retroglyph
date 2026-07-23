@@ -1,12 +1,9 @@
-//! ANSI/SGR cell-diff renderer shared by retroglyph's terminal-family
-//! backends.
+//! ANSI/SGR cell-diff renderer shared by retroglyph's terminal-family backends.
 //!
-//! [`TerminalRenderer`] converts [`Tile`] content into standard ANSI/CSI
-//! escape sequences (cursor movement,
-//! `SetForegroundColor`/`SetBackgroundColor`/SGR attributes, synchronized
-//! update markers) and writes them to any [`std::io::Write`] sink. It has no
-//! opinion about where those bytes end up or how input arrives; two crates
-//! plug it into a concrete environment:
+//! [`TerminalRenderer`] converts [`Tile`] content into standard ANSI/CSI escape sequences (cursor
+//! movement, `SetForegroundColor`/`SetBackgroundColor`/SGR attributes, synchronized update markers)
+//! and writes them to any [`std::io::Write`] sink. It has no opinion about where those bytes end up
+//! or how input arrives; two crates plug it into a concrete environment:
 //!
 //! ```text
 //!                     +-----------------------+
@@ -28,67 +25,57 @@
 //!  +-----------------------------+   +-----------------------------+
 //! ```
 //!
-//! - [`retroglyph-crossterm`](https://docs.rs/retroglyph-crossterm) drives a
-//!   real TTY: raw mode, alternate screen, the kitty keyboard protocol, and
-//!   `crossterm::event` polling. It writes this renderer's output straight to
-//!   `stdout`.
-//! - [`retroglyph-terminal-wasm`](https://docs.rs/retroglyph-terminal-wasm)
-//!   drives a browser terminal emulator (e.g. xterm.js) from WASM: no TTY, no
-//!   polling, output collected into a `String` for JS to pull each frame,
-//!   input pushed in from JS callbacks.
+//! - [`retroglyph-crossterm`](https://docs.rs/retroglyph-crossterm) drives a real TTY: raw mode,
+//!   alternate screen, the kitty keyboard protocol, and `crossterm::event` polling. It writes this
+//!   renderer's output straight to `stdout`.
+//! - [`retroglyph-terminal-wasm`](https://docs.rs/retroglyph-terminal-wasm) drives a browser
+//!   terminal emulator (e.g. xterm.js) from WASM: no TTY, no polling, output collected into a
+//!   `String` for JS to pull each frame, input pushed in from JS callbacks.
 //!
 //! # Why not part of `retroglyph-window`
 //!
-//! `retroglyph-window` splits input (winit event loop) from output
-//! (`Presenter`) because every windowed backend shares one runtime driver:
-//! the winit event loop. That split lets renderer crates avoid depending on
-//! winit's frequent major-version bumps.
+//! `retroglyph-window` splits input (winit event loop) from output (`Presenter`) because every
+//! windowed backend shares one runtime driver: the winit event loop. That split lets renderer
+//! crates avoid depending on winit's frequent major-version bumps.
 //!
-//! Crossterm and the wasm/xterm.js driver share no such runtime: crossterm
-//! owns a blocking poll loop against a real TTY, and the wasm driver is
-//! pushed into by JS with no polling loop at all. What they do share is the
-//! ANSI/SGR cell-diff renderer, so that is what lives in this crate.
+//! Crossterm and the wasm/xterm.js driver share no such runtime: crossterm owns a blocking poll
+//! loop against a real TTY, and the wasm driver is pushed into by JS with no polling loop at all.
+//! What they do share is the ANSI/SGR cell-diff renderer, so that is what lives in this crate.
 //!
 //! # `no_std`
 //!
-//! This crate always requires `std` (an `impl std::io::Write` sink), unlike
-//! `retroglyph-core`, which supports `no_std`.
+//! This crate always requires `std` (an `impl std::io::Write` sink), unlike `retroglyph-core`,
+//! which supports `no_std`.
 //!
 //! # RGB color fallback on 256-color terminals
 //!
-//! [`Color::Rgb`] tiles are written out verbatim as a 24-bit truecolor SGR
-//! sequence (`38;2;r;g;b` / `48;2;r;g;b`, one of the codes this crate's
-//! internal SGR-color writer emits). This crate does **not** quantize RGB down to the 256-color or 16-color ANSI
-//! palettes, and neither does `retroglyph-core`: there is no
-//! `Color::to_indexed()`-style guarantee anywhere in this workspace. The
-//! bytes this renderer emits are the same regardless of what the receiving
-//! terminal actually supports.
+//! [`Color::Rgb`] tiles are written out verbatim as a 24-bit truecolor SGR sequence (`38;2;r;g;b` /
+//! `48;2;r;g;b`, one of the codes this crate's internal SGR-color writer emits). This crate does
+//! **not** quantize RGB down to the 256-color or 16-color ANSI palettes, and neither does
+//! `retroglyph-core`: there is no `Color::to_indexed()`-style guarantee anywhere in this workspace.
+//! The bytes this renderer emits are the same regardless of what the receiving terminal actually
+//! supports.
 //!
-//! This mirrors `crossterm`'s own `SetForegroundColor`/`SetBackgroundColor`
-//! behavior (and that of most Rust terminal-UI crates): truecolor codes are
-//! written unconditionally, and it is left to the terminal emulator (or a
-//! multiplexer like `tmux`/`screen` sitting in between) to interpret or
-//! degrade them. In practice:
+//! This mirrors `crossterm`'s own `SetForegroundColor`/`SetBackgroundColor` behavior (and that of
+//! most Rust terminal-UI crates): truecolor codes are written unconditionally, and it is left to
+//! the terminal emulator (or a multiplexer like `tmux`/`screen` sitting in between) to interpret
+//! or degrade them. In practice:
 //!
-//! - Terminals that advertise truecolor support (`$COLORTERM=truecolor` or
-//!   `24bit`) render the exact color.
-//! - Many terminals and multiplexers that only support the 256-color palette
-//!   (`$TERM=*-256color`) approximate the requested RGB to the nearest
-//!   palette entry themselves, since terminal implementations commonly
-//!   downsample unrecognized-depth SGR sequences rather than drop them.
-//! - A minority of older/limited terminals may render truecolor sequences
-//!   incorrectly (wrong color, or no color at all) if they don't recognize
-//!   the extended `;2;` SGR form.
+//! - Terminals that advertise truecolor support (`$COLORTERM=truecolor` or `24bit`) render the
+//!   exact color.
+//! - Many terminals and multiplexers that only support the 256-color palette (`$TERM=*-256color`)
+//!   approximate the requested RGB to the nearest palette entry themselves, since terminal
+//!   implementations commonly downsample unrecognized-depth SGR sequences rather than drop them.
+//! - A minority of older/limited terminals may render truecolor sequences incorrectly (wrong color,
+//!   or no color at all) if they don't recognize the extended `;2;` SGR form.
 //!
-//! Callers that need a specific, correct color on a known-limited terminal
-//! should use [`Color::Indexed`] or [`Color::Ansi`] explicitly instead of
-//! [`Color::Rgb`]; both are passed through untranslated (`38;5;n` / plain ANSI
-//! codes) and have no ambiguity across terminal color depths. There is
-//! currently no capability-detection step in this crate (or
-//! `retroglyph-crossterm`) that would let it choose automatically -- adding
-//! one would require querying/guessing terminal color depth (`$COLORTERM`,
-//! `$TERM`, or a runtime query), which is out of scope for this shared
-//! renderer and left to callers or a future crate.
+//! Callers that need a specific, correct color on a known-limited terminal should use
+//! [`Color::Indexed`] or [`Color::Ansi`] explicitly instead of [`Color::Rgb`]; both are passed
+//! through untranslated (`38;5;n` / plain ANSI codes) and have no ambiguity across terminal color
+//! depths. There is currently no capability-detection step in this crate (or
+//! `retroglyph-crossterm`) that would let it choose automatically -- adding one would require
+//! querying/guessing terminal color depth (`$COLORTERM`, `$TERM`, or a runtime query), which is
+//! out of scope for this shared renderer and left to callers or a future crate.
 
 // Compile the code blocks in this crate's own README as doctests so its quick start is
 // type-checked on every test run and cannot silently rot. The `cfg(doctest)` gate keeps this out
@@ -137,11 +124,11 @@ fn write_sgr_params<W: Write>(out: &mut W, color: Color, base: u8, reset: u8) ->
     }
 }
 
-/// Converts a [`Color`] to a standard ANSI/CSI `SetForegroundColor` (`38;...`)
-/// or `SetBackgroundColor` (`48;...`) escape sequence, written to `out`.
+/// Converts a [`Color`] to a standard ANSI/CSI `SetForegroundColor` (`38;...`) or
+/// `SetBackgroundColor` (`48;...`) escape sequence, written to `out`.
 ///
-/// `base` is `38` for foreground, `48` for background (the standard SGR
-/// prefix codes); `reset` is `39`/`49`, used for [`Color::Default`].
+/// `base` is `38` for foreground, `48` for background (the standard SGR prefix codes); `reset` is
+/// `39`/`49`, used for [`Color::Default`].
 fn write_sgr_color<W: Write>(out: &mut W, color: Color, base: u8, reset: u8) -> io::Result<()> {
     write!(out, "\x1b[")?;
     write_sgr_params(out, color, base, reset)?;
@@ -150,17 +137,15 @@ fn write_sgr_color<W: Write>(out: &mut W, color: Color, base: u8, reset: u8) -> 
 
 /// A generic ANSI/SGR cell-diff renderer.
 ///
-/// Converts [`Tile`] content into standard ANSI/CSI escape sequences and
-/// writes them to a caller-supplied [`std::io::Write`] sink `W`. Tracks
-/// cursor position and the last-emitted foreground/background/attribute
-/// state across calls to [`draw`](Self::draw) so it only emits the escape
-/// codes needed to move to changed cells and change state.
+/// Converts [`Tile`] content into standard ANSI/CSI escape sequences and writes them to a
+/// caller-supplied [`std::io::Write`] sink `W`. Tracks cursor position and the last-emitted
+/// foreground/background/attribute state across calls to [`draw`](Self::draw) so it only emits
+/// the escape codes needed to move to changed cells and change state.
 ///
-/// This type has no knowledge of *how* its output bytes reach a display
-/// (stdout, a `String` buffer for JS, a test harness) or *how* input
-/// arrives -- it is a pure `Tile` stream -> ANSI bytes transform, reused by
-/// every terminal-family [`Backend`](retroglyph_core::backend::Backend)
-/// implementor.
+/// This type has no knowledge of *how* its output bytes reach a display (stdout, a `String`
+/// buffer for JS, a test harness) or *how* input arrives -- it is a pure `Tile` stream -> ANSI
+/// bytes transform, reused by every terminal-family
+/// [`Backend`](retroglyph_core::backend::Backend) implementor.
 #[derive(Debug)]
 pub struct TerminalRenderer<W> {
     writer: W,
@@ -249,9 +234,9 @@ impl<W: Write> TerminalRenderer<W> {
 
     /// Resets tracked cursor/style state without touching the writer.
     ///
-    /// Call this after an external clear (e.g. `\x1b[2J`) so the next
-    /// [`draw`](Self::draw) doesn't skip a `MoveTo`/color/attribute escape
-    /// under the assumption the terminal is still in the last-known state.
+    /// Call this after an external clear (e.g. `\x1b[2J`) so the next [`draw`](Self::draw)
+    /// doesn't skip a `MoveTo`/color/attribute escape under the assumption the terminal is still
+    /// in the last-known state.
     pub const fn reset_state(&mut self) {
         self.last_fg = None;
         self.last_bg = None;
@@ -262,17 +247,16 @@ impl<W: Write> TerminalRenderer<W> {
     /// Begins a synchronized update (`\x1b[?2026h`).
     ///
     /// Terminals that support this hold rendering until the matching
-    /// [`end_synchronized_update`](Self::end_synchronized_update), avoiding
-    /// visible tearing mid-frame. Terminals that don't understand the
-    /// sequence ignore it.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the writer fails.
+    /// [`end_synchronized_update`](Self::end_synchronized_update), avoiding visible tearing
+    /// mid-frame. Terminals that don't understand the sequence ignore it.
     ///
     /// A no-op in [plain mode](Self::set_plain_mode): synchronized updates are themselves a
     /// control code with nothing to synchronize once cell output has already degraded to plain
     /// text.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the writer fails.
     pub fn begin_synchronized_update(&mut self) -> io::Result<()> {
         if self.plain {
             return Ok(());
@@ -283,12 +267,12 @@ impl<W: Write> TerminalRenderer<W> {
     /// Ends a synchronized update (`\x1b[?2026l`). See
     /// [`begin_synchronized_update`](Self::begin_synchronized_update).
     ///
+    /// A no-op in [plain mode](Self::set_plain_mode); see
+    /// [`begin_synchronized_update`](Self::begin_synchronized_update).
+    ///
     /// # Errors
     ///
     /// Returns an error if the writer fails.
-    ///
-    /// A no-op in [plain mode](Self::set_plain_mode); see
-    /// [`begin_synchronized_update`](Self::begin_synchronized_update).
     pub fn end_synchronized_update(&mut self) -> io::Result<()> {
         if self.plain {
             return Ok(());
@@ -296,26 +280,23 @@ impl<W: Write> TerminalRenderer<W> {
         write!(self.writer, "\x1b[?2026l")
     }
 
-    /// Draws changed cells, emitting only the escape sequences needed to
-    /// move the cursor and change color/attribute state versus what was last
-    /// drawn.
+    /// Draws changed cells, emitting only the escape sequences needed to move the cursor and
+    /// change color/attribute state versus what was last drawn.
     ///
-    /// Mirrors [`Output::draw`](retroglyph_core::backend::Output::draw)'s
-    /// contract: `content` is a stream of `(Pos, &Tile, Option<&str>)` items
-    /// to render, the last being the tile's full grapheme text when it has
-    /// one. As with `Output::draw`, that trailing `Option<&str>` is only ever
-    /// `Some` when this crate's `egc` feature is enabled; without `egc` it is
-    /// always `None` and is ignored here (see the `let _ = extra;` below).
-    /// Does not flush; call [`flush`](Self::flush) after.
+    /// Mirrors [`Output::draw`](retroglyph_core::backend::Output::draw)'s contract: `content` is
+    /// a stream of `(Pos, &Tile, Option<&str>)` items to render, the last being the tile's full
+    /// grapheme text when it has one. As with `Output::draw`, that trailing `Option<&str>` is
+    /// only ever `Some` when this crate's `egc` feature is enabled; without `egc` it is always
+    /// `None` and is ignored here (see the `let _ = extra;` below). Does not flush; call
+    /// [`flush`](Self::flush) after.
     ///
-    /// Whether [plain mode](Self::set_plain_mode) is on is checked once here, not once per
-    /// cell -- it dispatches once to one of two internal, disjoint code paths for the rest of
-    /// the call. The whole call is rendered into an
-    /// internal scratch buffer first, then written to `writer` with a single
-    /// [`Write::write_all`], rather than up to four small `write!` calls per cell (see
-    /// retroglyph#271); this also means `writer` no longer needs to be pre-wrapped in a
-    /// `BufWriter` for reasonable syscall behavior, though nothing stops a caller from still
-    /// doing so.
+    /// Whether [plain mode](Self::set_plain_mode) is on is checked once here, not once per cell --
+    /// it dispatches once to one of two internal, disjoint code paths for the rest of the call.
+    /// The whole call is rendered into an internal scratch buffer first, then written to `writer`
+    /// with a single [`Write::write_all`], rather than up to four small `write!` calls per cell
+    /// (see retroglyph#271); this also means `writer` no longer needs to be pre-wrapped in a
+    /// `BufWriter` for reasonable syscall behavior, though nothing stops a caller from still doing
+    /// so.
     ///
     /// # Errors
     ///

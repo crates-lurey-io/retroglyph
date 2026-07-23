@@ -15,9 +15,9 @@
 //!
 //! The real OS clipboard ([`SystemClipboard`]) cannot be exercised headlessly in CI (no display
 //! server / clipboard manager is guaranteed to be running), so it has no automated test coverage
-//! here -- see this crate's `README.md`/the PR description for what needs manual verification.
-//! [`Clipboard`] is a plain trait specifically so app code (and this module's own tests) can
-//! substitute an in-memory fake in its place; see the `tests` module below for an example.
+//! here; it needs manual verification on each target platform instead. [`Clipboard`] is a plain
+//! trait specifically so app code (and this module's own tests) can substitute an in-memory fake
+//! in its place; see the `tests` module below for an example.
 
 use std::fmt;
 

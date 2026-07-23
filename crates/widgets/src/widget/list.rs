@@ -24,6 +24,20 @@ use crate::text::truncate as truncate_to_cols;
 /// [`Table`](super::Table)'s `row_style`/`selected_style` (a dim gray-blue for unselected items,
 /// a bright-white-on-dark-blue highlight for the selected one); set them with
 /// [`List::item_style`]/[`List::selected_style`].
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::{Headless, Rect, Terminal};
+/// use retroglyph_widgets::{List, ListState, StatefulWidget};
+///
+/// let items = ["Alpha", "Bravo", "Charlie"];
+/// let mut state = ListState::new();
+/// state.select(Some(1));
+///
+/// let mut term = Terminal::new(Headless::new(20, 3));
+/// List::new(&items).render(Rect::new(0, 0, 20, 3), &mut term, &mut state);
+/// ```
 #[derive(Clone, Copy, Debug)]
 pub struct List<'a> {
     items: &'a [&'a str],

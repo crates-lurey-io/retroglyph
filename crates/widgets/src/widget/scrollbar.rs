@@ -21,6 +21,16 @@ use crate::draw::thumb_geometry;
 /// [`crate::draw::thumb_geometry`] and
 /// [`crate::draw::offset_for_pos`]'s own doc comments for how to make this
 /// draggable using [`Interaction`](crate::Interaction) instead.
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::{Headless, Rect, Terminal};
+/// use retroglyph_widgets::{Scrollbar, Widget};
+///
+/// let mut term = Terminal::new(Headless::new(1, 10));
+/// Scrollbar::new(100, 10).offset(20).render(Rect::new(0, 0, 1, 10), &mut term);
+/// ```
 #[derive(Clone, Copy, Debug)]
 pub struct Scrollbar {
     total_len: usize,

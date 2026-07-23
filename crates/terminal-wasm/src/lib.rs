@@ -750,16 +750,16 @@ pub mod wasm {
         });
     }
 
-    /// Pushes a focus-change event into the terminal identified by `handle`:
-    /// `focused: true` delivers [`Event::FocusGained`], `focused: false`
-    /// delivers [`Event::FocusLost`]. Mirrors the crossterm backend's
-    /// `EnableFocusChange`-driven [`Event::FocusGained`]/[`Event::FocusLost`]
-    /// mapping, so a browser terminal element's native `focus`/`blur` DOM
-    /// events can drive the same "pause when unfocused" pattern.
+    /// Pushes a focus-change event into the terminal identified by `handle`.
     ///
-    /// Logs a warning (via the `log` crate) and otherwise does nothing if
-    /// `handle` is unknown, e.g. because the terminal was already freed via
-    /// [`wasm_terminal_free`].
+    /// `focused: true` delivers [`Event::FocusGained`](retroglyph_core::event::Event::FocusGained),
+    /// `focused: false` delivers
+    /// [`Event::FocusLost`](retroglyph_core::event::Event::FocusLost). Mirrors the crossterm
+    /// backend's `EnableFocusChange`-driven focus-event mapping, so a browser terminal element's
+    /// native `focus`/`blur` DOM events can drive the same "pause when unfocused" pattern.
+    ///
+    /// Logs a warning (via the `log` crate) and otherwise does nothing if `handle` is unknown,
+    /// e.g. because the terminal was already freed via [`wasm_terminal_free`].
     #[wasm_bindgen]
     pub fn wasm_terminal_push_focus(handle: u32, focused: bool) {
         use retroglyph_core::event::Event;

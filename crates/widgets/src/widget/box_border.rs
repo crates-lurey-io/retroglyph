@@ -10,6 +10,16 @@ use crate::draw::{BL, BR, H, TL, TR, V};
 /// The interior of the rectangle is not touched. `area` must be at least
 /// 2×2, or [`Widget::render`] is a no-op. `style` defaults to
 /// [`Style::new()`]; set it with [`BoxBorder::style`].
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::{Headless, Rect, Terminal};
+/// use retroglyph_widgets::{BoxBorder, Widget};
+///
+/// let mut term = Terminal::new(Headless::new(10, 4));
+/// BoxBorder::new().render(Rect::new(0, 0, 10, 4), &mut term);
+/// ```
 #[derive(Clone, Copy, Debug, Default)]
 pub struct BoxBorder {
     style: Style,

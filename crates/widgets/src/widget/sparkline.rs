@@ -12,6 +12,17 @@ const BLOCKS: [char; 9] = [' ', '▁', '▂', '▃', '▄', '▅', '▆', '▇',
 /// The most recent samples are right-aligned so the graph scrolls left as
 /// new data arrives. Bar height (and color) tracks each sample's fraction
 /// of the max via [`Meter`]. Only the first row of `area` is drawn.
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::{Headless, Rect, Terminal};
+/// use retroglyph_widgets::{Sparkline, Widget};
+///
+/// let samples = [1.0, 3.0, 2.0, 4.0, 1.5];
+/// let mut term = Terminal::new(Headless::new(10, 1));
+/// Sparkline::new(&samples).render(Rect::new(0, 0, 10, 1), &mut term);
+/// ```
 #[derive(Clone, Copy, Debug)]
 pub struct Sparkline<'a> {
     samples: &'a [f32],
