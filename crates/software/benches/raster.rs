@@ -1,4 +1,4 @@
-//! Benchmarks for full-frame `Backend::draw_layers` rasterization in
+//! Benchmarks for full-frame `Output::draw_layers` rasterization in
 //! `retroglyph-software`, the CPU hot path this crate has never measured
 //! (retroglyph#307).
 //!

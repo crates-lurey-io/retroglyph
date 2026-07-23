@@ -6,7 +6,7 @@
 //! of every frame.
 //!
 //! `resolve_color` is crate-private, so this bench (an external `benches/`
-//! binary) drives it indirectly through `Backend::draw_layers`: each
+//! binary) drives it indirectly through `Output::draw_layers`: each
 //! scenario below fills a grid with the same constant glyph (so the raster
 //! path -- `blit_glyph`'s inner loop -- is identical across scenarios) and
 //! varies only the [`Color`] variant used for both foreground and

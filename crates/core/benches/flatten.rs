@@ -1,6 +1,6 @@
 //! Benchmarks for layer compositing (`Grid::flatten_into`), the per-frame step
 //! `Terminal::present` runs for every backend that doesn't composite layers itself (see
-//! `crate::Backend::composites_layers`) -- currently `Headless` and `retroglyph-crossterm`.
+//! `crate::backend::Output::composites_layers`) -- currently `Headless` and `retroglyph-crossterm`.
 //!
 //! retroglyph#269 asks for coverage of this hot path across 1/4/16 layers: `flatten_into` walks
 //! every allocated layer for every cell unconditionally (see `grid.rs`'s module doc, "No
