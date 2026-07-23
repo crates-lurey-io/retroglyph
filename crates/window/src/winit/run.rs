@@ -20,6 +20,7 @@ use retroglyph_core::backend::Input;
 use retroglyph_core::event::{Event, KeyModifiers, MouseEvent, MouseEventKind, PhysicalPos};
 use std::cell::Cell;
 use std::fmt;
+use std::marker::PhantomData;
 use std::rc::Rc;
 use std::sync::Arc;
 #[cfg(not(target_arch = "wasm32"))]
@@ -29,56 +30,79 @@ use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::{Window, WindowId};
 
-/// The user-event payload type threaded through winit's [`EventLoop`]. A plain `u64` so
-/// [`EventProxy`] stays trivially `Send`/`Sync`/`Clone`; see [`Event::Custom`]'s doc comment for
-/// why the payload is opaque rather than a boxed value.
-type UserEvent = u64;
-
-/// A thread-safe handle for injecting [`Event::Custom`] events into a running windowed event
+/// A thread-safe handle for injecting application-defined events into a running windowed event
 /// loop from another thread (network, audio, timer, ...).
 ///
 /// Obtained via the `on_proxy` callback passed to [`run_windowed_with_proxy`]/
-/// [`run_app_with_proxy`], invoked synchronously right after the event loop (and this proxy) is
-/// created, before the loop starts blocking the calling thread. Clone it freely to hand a copy to
-/// each worker thread that needs to wake the loop; wraps winit's own
+/// [`run_app_with_proxy`] (payload fixed to `u64`, delivered as [`Event::Custom`]) or
+/// [`run_windowed_with_typed_proxy`]/[`run_app_with_typed_proxy`] (any `T: Send + 'static`,
+/// delivered to a caller-supplied handler), invoked synchronously right after the event loop
+/// (and this proxy) is created, before the loop starts blocking the calling thread. Clone it
+/// freely to hand a copy to each worker thread that needs to wake the loop; wraps winit's own
 /// [`EventLoopProxy`](winit::event_loop::EventLoopProxy), which is `Send + Sync` for any
-/// `'static` payload, including `u64`.
-#[derive(Clone, Debug)]
-pub struct EventProxy(winit::event_loop::EventLoopProxy<UserEvent>);
+/// `T: Send + 'static` payload.
+///
+/// `T` defaults to `u64` -- the payload [`Event::Custom`] itself carries -- so existing code
+/// naming the bare `EventProxy` type (from before this type became generic) keeps compiling
+/// unchanged.
+pub struct EventProxy<T: Send + 'static = u64>(winit::event_loop::EventLoopProxy<T>);
 
-impl EventProxy {
-    /// Injects `id` as [`Event::Custom(id)`](Event::Custom) into the event loop's queue, waking
-    /// it if it's asleep. The event surfaces through the app's normal `poll_event`/frame loop
-    /// like any other [`Event`].
+// Hand-written rather than `#[derive(Clone, Debug)]`: a derive would add `T: Clone`/`T: Debug`
+// bounds to the impl, but `winit::event_loop::EventLoopProxy<T>` itself needs neither -- cloning
+// or formatting the proxy handle never touches a buffered `T` value (there isn't one; `T` is
+// only ever a transient argument to `send_event`).
+impl<T: Send + 'static> Clone for EventProxy<T> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
+impl<T: Send + 'static> fmt::Debug for EventProxy<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("EventProxy").field(&self.0).finish()
+    }
+}
+
+impl<T: Send + 'static> EventProxy<T> {
+    /// Injects `payload` into the event loop's queue, waking it if it's asleep.
+    ///
+    /// With the default `T = u64` (via [`run_windowed_with_proxy`]/[`run_app_with_proxy`]), the
+    /// payload surfaces through the app's normal `poll_event`/frame loop as
+    /// [`Event::Custom(payload)`](Event::Custom), like any other [`Event`]. With a custom `T`
+    /// (via [`run_windowed_with_typed_proxy`]/[`run_app_with_typed_proxy`]), the payload is
+    /// handed directly to that call's `on_custom_event` handler instead -- it never becomes an
+    /// [`Event`], since [`Event::Custom`] is fixed to `u64`.
     ///
     /// # Errors
     ///
     /// Returns [`EventProxyClosed`] if the event loop has already exited.
-    pub fn send_event(&self, id: u64) -> Result<(), EventProxyClosed> {
-        self.0.send_event(id).map_err(|e| EventProxyClosed(e.0))
+    pub fn send_event(&self, payload: T) -> Result<(), EventProxyClosed<T>> {
+        self.0
+            .send_event(payload)
+            .map_err(|e| EventProxyClosed(e.0))
     }
 }
 
 /// Error returned by [`EventProxy::send_event`] when the event loop it targets has already
 /// exited.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct EventProxyClosed(u64);
+pub struct EventProxyClosed<T = u64>(T);
 
-impl EventProxyClosed {
-    /// The event id that could not be delivered.
+impl<T> EventProxyClosed<T> {
+    /// The payload that could not be delivered.
     #[must_use]
-    pub const fn into_inner(self) -> u64 {
+    pub fn into_inner(self) -> T {
         self.0
     }
 }
 
-impl fmt::Display for EventProxyClosed {
+impl<T> fmt::Display for EventProxyClosed<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "event loop closed")
     }
 }
 
-impl std::error::Error for EventProxyClosed {}
+impl<T: fmt::Debug> std::error::Error for EventProxyClosed<T> {}
 
 /// Window configuration for [`run_windowed`] / [`run_app`].
 ///
@@ -309,6 +333,11 @@ where
 /// loop and deliver an [`Event::Custom`] to the app; `on_proxy` is the hook to hand a clone of the
 /// proxy off to that thread before the loop takes over the calling thread.
 ///
+/// The injected payload is always a `u64`, delivered as [`Event::Custom`] through the app's
+/// normal `poll_event`/frame loop -- see [`run_windowed_with_typed_proxy`] if a worker thread
+/// needs to hand back a real payload (a loaded asset, a network response) instead of a
+/// correlation id into a side table.
+///
 /// # Examples
 ///
 /// ```ignore
@@ -363,38 +392,132 @@ where
     F: FnMut(&mut Terminal<WindowBackend<P>>) + 'static,
     O: FnOnce(EventProxy),
 {
-    run_windowed_with_proxy_and_exit_flag(
+    run_windowed_with_typed_proxy_and_exit_flag(
         config,
         presenter,
         app_loop,
         on_proxy,
+        push_custom_event,
         Rc::new(Cell::new(false)),
     )
 }
 
-/// Shared implementation behind [`run_windowed_with_proxy`] and
-/// [`run_app_with_proxy`].
+/// Same as [`run_windowed_with_proxy`], but the injected payload can be any `T: Send + 'static`
+/// instead of a fixed `u64`.
 ///
-/// `exit_requested` is checked after every [`WindowEvent::RedrawRequested`] and, when set, drives
-/// [`ActiveEventLoop::exit`] so the loop unwinds normally (see [`WindowApp::exit_requested`]'s doc
-/// comment for why this can't be plumbed through `app_loop`'s return value instead).
-/// [`run_windowed_with_proxy`] passes a flag nobody ever sets (a plain `FnMut(&mut Terminal<..>)`
-/// closure has no way to reach it); [`run_app_with_proxy`] shares one with the closure it builds
-/// around `app_loop`, which sets it on [`Flow::Exit`](retroglyph_core::Flow::Exit).
-fn run_windowed_with_proxy_and_exit_flag<P, F, O>(
+/// A `T` payload never becomes a [`retroglyph_core::event::Event`]: [`Event::Custom`] is fixed to
+/// `u64` (see its doc comment for why), so genericizing it would be a breaking change to
+/// [`retroglyph_core`] far larger than this API needs. Instead, each injected `T` is handed
+/// directly to `on_custom_event`, called synchronously from winit's `user_event` callback with
+/// the same `&mut Terminal<WindowBackend<P>>` `app_loop` receives on redraw -- so a handler that
+/// wants the result to affect the next frame just needs to record it in state the closures
+/// share, or push its own backend-agnostic event/marker for `app_loop` to notice.
+///
+/// # Examples
+///
+/// ```ignore
+/// use retroglyph_software::SoftwareBackendBuilder;
+/// use retroglyph_window::winit::{WindowConfig, run_windowed_with_typed_proxy};
+/// use std::time::Duration;
+///
+/// enum WorkerResult {
+///     AssetLoaded { name: String, bytes: Vec<u8> },
+/// }
+///
+/// let renderer = SoftwareBackendBuilder::new()
+///     .grid_size(80, 25)
+///     .scale(2)
+///     .build()
+///     .expect("backend init failed")
+///     .run_headless();
+/// let config = WindowConfig::fit(&renderer, "My Game", None);
+///
+/// run_windowed_with_typed_proxy(
+///     config,
+///     renderer,
+///     move |term| {
+///         let _ = term.poll(Duration::from_millis(16));
+///     },
+///     |proxy| {
+///         std::thread::spawn(move || {
+///             let bytes = std::fs::read("asset.bin").unwrap_or_default();
+///             let _ = proxy.send_event(WorkerResult::AssetLoaded {
+///                 name: "asset.bin".into(),
+///                 bytes,
+///             });
+///         });
+///     },
+///     |result: WorkerResult, _term| match result {
+///         WorkerResult::AssetLoaded { name, bytes } => {
+///             println!("loaded {name}: {} bytes", bytes.len());
+///         }
+///     },
+/// )
+/// .expect("event loop failed");
+/// ```
+///
+/// # Errors
+///
+/// Returns [`winit::error::EventLoopError`] if the event loop cannot be
+/// created or fails while running.
+pub fn run_windowed_with_typed_proxy<T, P, F, O, D>(
     config: WindowConfig,
     presenter: P,
     app_loop: F,
     on_proxy: O,
+    on_custom_event: D,
+) -> Result<(), winit::error::EventLoopError>
+where
+    T: Send + 'static,
+    P: Presenter + 'static,
+    F: FnMut(&mut Terminal<WindowBackend<P>>) + 'static,
+    O: FnOnce(EventProxy<T>),
+    D: FnMut(T, &mut Terminal<WindowBackend<P>>) + 'static,
+{
+    run_windowed_with_typed_proxy_and_exit_flag(
+        config,
+        presenter,
+        app_loop,
+        on_proxy,
+        on_custom_event,
+        Rc::new(Cell::new(false)),
+    )
+}
+
+/// Delivers a `u64` payload injected through [`EventProxy::send_event`] as
+/// [`Event::Custom`] -- the fixed `on_custom_event` behind [`run_windowed_with_proxy`]/
+/// [`run_app_with_proxy`], preserving the pre-generic behavior exactly.
+fn push_custom_event<P: Presenter>(id: u64, term: &mut Terminal<WindowBackend<P>>) {
+    term.backend_mut().push_event(Event::Custom(id));
+}
+
+/// Shared implementation behind [`run_windowed_with_proxy`], [`run_windowed_with_typed_proxy`],
+/// [`run_app_with_proxy`], and [`run_app_with_typed_proxy`].
+///
+/// `exit_requested` is checked after every [`WindowEvent::RedrawRequested`] and, when set, drives
+/// [`ActiveEventLoop::exit`] so the loop unwinds normally (see [`WindowApp::exit_requested`]'s doc
+/// comment for why this can't be plumbed through `app_loop`'s return value instead).
+/// [`run_windowed_with_proxy`]/[`run_windowed_with_typed_proxy`] pass a flag nobody ever sets (a
+/// plain `FnMut(&mut Terminal<..>)` closure has no way to reach it); [`run_app_with_proxy`]/
+/// [`run_app_with_typed_proxy`] share one with the closure they build around `app_loop`, which
+/// sets it on [`Flow::Exit`](retroglyph_core::Flow::Exit).
+fn run_windowed_with_typed_proxy_and_exit_flag<T, P, F, O, D>(
+    config: WindowConfig,
+    presenter: P,
+    app_loop: F,
+    on_proxy: O,
+    on_custom_event: D,
     exit_requested: Rc<Cell<bool>>,
 ) -> Result<(), winit::error::EventLoopError>
 where
+    T: Send + 'static,
     P: Presenter + 'static,
     F: FnMut(&mut Terminal<WindowBackend<P>>) + 'static,
-    O: FnOnce(EventProxy),
+    O: FnOnce(EventProxy<T>),
+    D: FnMut(T, &mut Terminal<WindowBackend<P>>) + 'static,
 {
     let terminal = Terminal::new(WindowBackend::new(presenter));
-    let event_loop = EventLoop::<UserEvent>::with_user_event().build()?;
+    let event_loop = EventLoop::<T>::with_user_event().build()?;
     on_proxy(EventProxy(event_loop.create_proxy()));
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -406,6 +529,7 @@ where
     let app = WindowApp {
         terminal: Some(terminal),
         app_loop,
+        on_custom_event,
         window: None,
         title: config.title,
         init_size: InitWindowSize {
@@ -425,6 +549,7 @@ where
         exit_requested,
         needs_redraw: true,
         consecutive_present_errors: 0,
+        _user_event: PhantomData,
     };
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -477,8 +602,11 @@ where
 }
 
 /// Same as [`run_app`], but also hands `on_proxy` an [`EventProxy`] for injecting cross-thread
-/// events -- see [`run_windowed_with_proxy`] for when/why to use the `_with_proxy` variant over
-/// the plain one.
+/// events.
+///
+/// See [`run_windowed_with_proxy`] for when/why to use the `_with_proxy` variant over the plain
+/// one. The injected payload is always a `u64`, delivered as [`Event::Custom`]; see
+/// [`run_app_with_typed_proxy`] for injecting any `T: Send + 'static`.
 ///
 /// # Errors
 ///
@@ -487,7 +615,7 @@ where
 pub fn run_app_with_proxy<P, A, O>(
     config: WindowConfig,
     presenter: P,
-    mut app: A,
+    app: A,
     on_proxy: O,
 ) -> Result<(), winit::error::EventLoopError>
 where
@@ -495,11 +623,39 @@ where
     A: retroglyph_core::App<WindowBackend<P>> + 'static,
     O: FnOnce(EventProxy),
 {
+    run_app_with_typed_proxy(config, presenter, app, on_proxy, push_custom_event)
+}
+
+/// Same as [`run_app_with_proxy`], but the injected payload can be any `T: Send + 'static`
+/// instead of a fixed `u64`.
+///
+/// See [`run_windowed_with_typed_proxy`] for the same generalization on the raw closure-based
+/// driver, including why a non-`u64` payload bypasses [`retroglyph_core::event::Event`] entirely
+/// and goes straight to `on_custom_event`.
+///
+/// # Errors
+///
+/// Returns [`winit::error::EventLoopError`] if the event loop cannot be
+/// created or fails while running.
+pub fn run_app_with_typed_proxy<T, P, A, O, D>(
+    config: WindowConfig,
+    presenter: P,
+    mut app: A,
+    on_proxy: O,
+    on_custom_event: D,
+) -> Result<(), winit::error::EventLoopError>
+where
+    T: Send + 'static,
+    P: Presenter + 'static,
+    A: retroglyph_core::App<WindowBackend<P>> + 'static,
+    O: FnOnce(EventProxy<T>),
+    D: FnMut(T, &mut Terminal<WindowBackend<P>>) + 'static,
+{
     let mut frame_count = 0u64;
     let mut last = web_time::Instant::now();
     let exit_requested = Rc::new(Cell::new(false));
     let exit_requested_in_loop = exit_requested.clone();
-    run_windowed_with_proxy_and_exit_flag(
+    run_windowed_with_typed_proxy_and_exit_flag(
         config,
         presenter,
         move |term| {
@@ -516,6 +672,7 @@ where
             }
         },
         on_proxy,
+        on_custom_event,
         exit_requested,
     )
 }
@@ -577,9 +734,21 @@ impl Default for WindowAttrs {
 
 /// The winit `ApplicationHandler`: owns the window, the terminal, and the
 /// per-frame closure.
-struct WindowApp<P: Presenter, F> {
+///
+/// Generic over the injected user-event payload `T` and its delivery handler `D`, so the same
+/// type backs both the `u64`/[`Event::Custom`] path ([`run_windowed_with_proxy`]/
+/// [`run_app_with_proxy`], where `T = u64` and `D` is [`push_custom_event`]) and the typed-`T`
+/// path ([`run_windowed_with_typed_proxy`]/[`run_app_with_typed_proxy`], where `D` is the
+/// caller-supplied `on_custom_event`).
+struct WindowApp<P: Presenter, F, T, D> {
     terminal: Option<Terminal<WindowBackend<P>>>,
     app_loop: F,
+    /// Delivers one injected `T` payload to the app; see [`handle_user_event`](Self::handle_user_event).
+    on_custom_event: D,
+    /// `T` only ever appears as `D`'s argument, never stored directly -- see [`ApplicationHandler`]
+    /// for why `WindowApp` still needs to name it (winit dispatches `user_event` generically over
+    /// the event-loop's payload type).
+    _user_event: PhantomData<fn(T)>,
     window: Option<Arc<Window>>,
     title: String,
     init_size: InitWindowSize,
@@ -640,7 +809,7 @@ struct WindowApp<P: Presenter, F> {
     consecutive_present_errors: u32,
 }
 
-impl<P: Presenter, F> WindowApp<P, F> {
+impl<P: Presenter, F, T, D> WindowApp<P, F, T, D> {
     /// Create the window and initialize the surface.
     ///
     /// Returns `Some(window)` on success, logs and returns `None` on failure.
@@ -894,10 +1063,12 @@ const fn system_theme_event(theme: winit::window::Theme) -> Event {
     }
 }
 
-impl<P, F> ApplicationHandler<UserEvent> for WindowApp<P, F>
+impl<P, F, T, D> ApplicationHandler<T> for WindowApp<P, F, T, D>
 where
     P: Presenter,
     F: FnMut(&mut Terminal<WindowBackend<P>>) + 'static,
+    T: 'static,
+    D: FnMut(T, &mut Terminal<WindowBackend<P>>) + 'static,
 {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if let Some(window) = self.create_window_and_surface(event_loop) {
@@ -924,7 +1095,7 @@ where
         }
     }
 
-    fn user_event(&mut self, _event_loop: &ActiveEventLoop, event: UserEvent) {
+    fn user_event(&mut self, _event_loop: &ActiveEventLoop, event: T) {
         self.handle_user_event(event);
     }
 
@@ -967,21 +1138,25 @@ where
     }
 }
 
-impl<P, F> WindowApp<P, F>
+impl<P, F, T, D> WindowApp<P, F, T, D>
 where
     P: Presenter,
     F: FnMut(&mut Terminal<WindowBackend<P>>) + 'static,
+    D: FnMut(T, &mut Terminal<WindowBackend<P>>) + 'static,
 {
-    /// Drain one injected user event into the [`WindowBackend`] queue as [`Event::Custom`].
+    /// Drain one injected user event into `on_custom_event`.
     ///
     /// Extracted from the `ApplicationHandler::user_event` impl for the same reason as
     /// [`handle_window_event`](Self::handle_window_event): so the drain logic can be exercised in
     /// unit tests without a live [`ActiveEventLoop`]. There is only ever one event to drain per
     /// call -- winit calls `user_event` once per [`EventProxy::send_event`] -- so "drain" here
-    /// means "push the one event this call carries", not draining a whole queue at once.
-    fn handle_user_event(&mut self, event: UserEvent) {
+    /// means "push the one event this call carries", not draining a whole queue at once. For the
+    /// `u64`/[`Event::Custom`] path, `on_custom_event` is [`push_custom_event`]; for a typed `T`,
+    /// it's the caller-supplied `on_custom_event` handler passed to
+    /// [`run_windowed_with_typed_proxy`]/[`run_app_with_typed_proxy`].
+    fn handle_user_event(&mut self, event: T) {
         if let Some(term) = self.terminal.as_mut() {
-            term.backend_mut().push_event(Event::Custom(event));
+            (self.on_custom_event)(event, term);
         }
         self.needs_redraw = true;
     }
@@ -1759,13 +1934,20 @@ mod tests {
         }
     }
 
-    type MockApp = WindowApp<MockPresenter, fn(&mut Terminal<WindowBackend<MockPresenter>>)>;
+    type MockApp = WindowApp<
+        MockPresenter,
+        fn(&mut Terminal<WindowBackend<MockPresenter>>),
+        u64,
+        fn(u64, &mut Terminal<WindowBackend<MockPresenter>>),
+    >;
 
     fn test_window_app() -> MockApp {
         let terminal = Terminal::new(WindowBackend::new(MockPresenter::default()));
         WindowApp {
             terminal: Some(terminal),
             app_loop: |_| {},
+            on_custom_event: push_custom_event,
+            _user_event: PhantomData,
             window: None,
             title: String::new(),
             init_size: InitWindowSize {
@@ -2185,6 +2367,98 @@ mod tests {
     }
 
     #[test]
+    fn event_proxy_closed_round_trips_a_non_u64_payload() {
+        // `EventProxyClosed<T>` carries whatever `T` `EventProxy<T>::send_event` was called
+        // with, not just the `u64` default.
+        let err = EventProxyClosed(String::from("asset.bin"));
+        assert_eq!(err.to_string(), "event loop closed");
+        assert_eq!(err.into_inner(), "asset.bin");
+    }
+
+    // ── typed EventProxy<T> (non-`u64` custom payload) ────────────────────────
+
+    /// A payload that is emphatically not `u64`, to prove the typed path never funnels through
+    /// [`Event::Custom`] (which is fixed to `u64` in `retroglyph_core`).
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    struct AssetLoaded {
+        name: String,
+        bytes: usize,
+    }
+
+    type TypedAppLoop = fn(&mut Terminal<WindowBackend<MockPresenter>>);
+    type TypedHandler = Box<dyn FnMut(AssetLoaded, &mut Terminal<WindowBackend<MockPresenter>>)>;
+    type TypedApp = WindowApp<MockPresenter, TypedAppLoop, AssetLoaded, TypedHandler>;
+
+    fn test_typed_window_app(on_custom_event: TypedHandler) -> TypedApp {
+        let terminal = Terminal::new(WindowBackend::new(MockPresenter::default()));
+        WindowApp {
+            terminal: Some(terminal),
+            app_loop: |_| {},
+            on_custom_event,
+            _user_event: PhantomData,
+            window: None,
+            title: String::new(),
+            init_size: InitWindowSize {
+                width: 80,
+                height: 80,
+            },
+            attrs: WindowAttrs::default(),
+            current_modifiers: KeyModifiers::NONE,
+            cursor_px: (0.0, 0.0),
+            active_touch: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            frame_interval: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            next_frame: std::time::Instant::now(),
+            exit_requested: Rc::new(Cell::new(false)),
+            needs_redraw: false,
+            consecutive_present_errors: 0,
+        }
+    }
+
+    #[test]
+    fn typed_user_event_reaches_the_custom_handler_not_event_custom() {
+        let received: Rc<RefCell<Vec<AssetLoaded>>> = Rc::new(RefCell::new(Vec::new()));
+        let received_in_handler = received.clone();
+        let handler: TypedHandler = Box::new(move |payload, _term| {
+            received_in_handler.borrow_mut().push(payload);
+        });
+        let mut app = test_typed_window_app(handler);
+
+        let payload = AssetLoaded {
+            name: "asset.bin".to_string(),
+            bytes: 4096,
+        };
+        app.handle_user_event(payload.clone());
+
+        // Delivered to the handler directly...
+        assert_eq!(received.borrow().as_slice(), &[payload]);
+        // ...and never pushed onto the `WindowBackend` event queue as an `Event` at all: there is
+        // no `Event` variant a non-`u64` payload could become.
+        assert_eq!(
+            app.terminal
+                .as_mut()
+                .unwrap()
+                .backend_mut()
+                .poll_event(Duration::ZERO),
+            None
+        );
+    }
+
+    #[test]
+    fn typed_user_event_still_sets_needs_redraw() {
+        // Same wake-the-idle-loop behavior as the `u64`/`Event::Custom` path.
+        let handler: TypedHandler = Box::new(|_payload, _term| {});
+        let mut app = test_typed_window_app(handler);
+        assert!(!app.needs_redraw);
+        app.handle_user_event(AssetLoaded {
+            name: "asset.bin".to_string(),
+            bytes: 4096,
+        });
+        assert!(app.needs_redraw);
+    }
+
+    #[test]
     fn close_requested_pushes_close_event() {
         let mut app = test_window_app();
         app.handle_window_event(WindowEvent::CloseRequested);
@@ -2220,7 +2494,12 @@ mod tests {
     /// `exit_requested` on `Flow::Exit` (it can't return a value or reach `ActiveEventLoop`
     /// itself; see `exit_requested`'s doc comment).
     type BoxedAppLoop = Box<dyn FnMut(&mut Terminal<WindowBackend<MockPresenter>>)>;
-    type BoxedApp = WindowApp<MockPresenter, BoxedAppLoop>;
+    type BoxedApp = WindowApp<
+        MockPresenter,
+        BoxedAppLoop,
+        u64,
+        fn(u64, &mut Terminal<WindowBackend<MockPresenter>>),
+    >;
 
     #[test]
     fn redraw_requested_runs_app_loop_and_does_not_set_exit_by_default() {
@@ -2243,6 +2522,8 @@ mod tests {
         let mut app: BoxedApp = WindowApp {
             terminal: Some(terminal),
             app_loop,
+            on_custom_event: push_custom_event,
+            _user_event: PhantomData,
             window: None,
             title: String::new(),
             init_size: InitWindowSize {
@@ -2444,8 +2725,12 @@ mod tests {
         // window smaller than one cell (4x4 px) must not compute 0 cols/0
         // rows -- that would ask `resize_surface` for a zero-size surface,
         // which crashes softbuffer.
-        type RecordingApp =
-            WindowApp<RecordingPresenter, fn(&mut Terminal<WindowBackend<RecordingPresenter>>)>;
+        type RecordingApp = WindowApp<
+            RecordingPresenter,
+            fn(&mut Terminal<WindowBackend<RecordingPresenter>>),
+            u64,
+            fn(u64, &mut Terminal<WindowBackend<RecordingPresenter>>),
+        >;
         let resize_calls = Rc::new(RefCell::new(Vec::new()));
         let presenter = RecordingPresenter {
             resize_calls: resize_calls.clone(),
@@ -2454,6 +2739,8 @@ mod tests {
         let mut app: RecordingApp = WindowApp {
             terminal: Some(terminal),
             app_loop: |_| {},
+            on_custom_event: push_custom_event,
+            _user_event: PhantomData,
             window: None,
             title: String::new(),
             init_size: InitWindowSize {
@@ -2549,8 +2836,12 @@ mod tests {
 
     // ── handle_redraw_requested / present() failure recovery ─────────────────
 
-    type FailingApp =
-        WindowApp<FailingPresenter, fn(&mut Terminal<WindowBackend<FailingPresenter>>)>;
+    type FailingApp = WindowApp<
+        FailingPresenter,
+        fn(&mut Terminal<WindowBackend<FailingPresenter>>),
+        u64,
+        fn(u64, &mut Terminal<WindowBackend<FailingPresenter>>),
+    >;
 
     fn failing_app() -> (FailingApp, Rc<Cell<bool>>, Rc<Cell<u32>>) {
         let failing = Rc::new(Cell::new(false));
@@ -2560,9 +2851,11 @@ mod tests {
             init_surface_calls: init_surface_calls.clone(),
         };
         let terminal = Terminal::new(WindowBackend::new(presenter));
-        let app = WindowApp {
+        let app: FailingApp = WindowApp {
             terminal: Some(terminal),
             app_loop: (|_| {}) as fn(&mut Terminal<WindowBackend<FailingPresenter>>),
+            on_custom_event: push_custom_event,
+            _user_event: PhantomData,
             window: None,
             title: String::new(),
             init_size: InitWindowSize {

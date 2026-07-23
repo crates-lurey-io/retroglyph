@@ -74,9 +74,14 @@
 //! windowing. Neither [`Presenter`] nor [`WindowBackend`] carries a `Send`/`Sync` bound
 //! anywhere in this crate, and a presenter is free to hold thread-affine state accordingly
 //! (an `Rc`, a non-`Send` GPU context handle). The only supported way to reach the loop from
-//! another thread is `winit::EventProxy`, which is `Send + Sync + Clone` but only injects an
-//! opaque `u64` as [`Event::Custom`](retroglyph_core::event::Event::Custom) -- it does not
-//! give another thread direct access to the `Presenter` or `Terminal`.
+//! another thread is `winit::EventProxy<T>`, which is `Send + Sync + Clone` for any
+//! `T: Send + 'static` -- it does not give another thread direct access to the `Presenter` or
+//! `Terminal`. With the default `T = u64` (`winit::run_windowed_with_proxy`/
+//! `run_app_with_proxy`), the payload surfaces as an opaque
+//! [`Event::Custom`](retroglyph_core::event::Event::Custom); a custom `T`
+//! (`winit::run_windowed_with_typed_proxy`/`run_app_with_typed_proxy`) bypasses `Event` entirely
+//! and goes straight to a caller-supplied handler, since `Event::Custom` itself stays fixed to
+//! `u64`.
 
 /// The generic [`Backend`](retroglyph_core::Backend) for windowed presenters.
 pub mod backend;
