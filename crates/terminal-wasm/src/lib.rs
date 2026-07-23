@@ -136,7 +136,40 @@ use retroglyph_core::grid::{Pos, Size};
 use retroglyph_core::tile::Tile;
 use retroglyph_terminal::TerminalRenderer;
 use std::collections::VecDeque;
+use std::io;
 use std::time::Duration;
+
+/// A `std::io::Write` sink backed by a `String` instead of a `Vec<u8>`.
+///
+/// [`TerminalRenderer`] only ever writes complete, already-valid-UTF-8 fragments into its writer:
+/// ASCII escape sequences from `write!`/`write_str` calls and glyphs sourced from `char`/`&str`
+/// (see [`TerminalWasm::take_output`]'s doc comment for the full argument). Writing straight into
+/// a `String`-backed sink instead of a `Vec<u8>` means [`take_output`](TerminalWasm::take_output)
+/// never has to re-validate those bytes as UTF-8 on drain (each frame, previously, via
+/// `String::from_utf8`) -- see retroglyph#288. `Write::write` still validates its input as UTF-8
+/// (returning [`io::ErrorKind::InvalidData`] on failure) rather than trusting the caller, since the
+/// `std::io::Write` contract itself makes no UTF-8 guarantee about the bytes it's handed; only this
+/// crate's own, always-valid-UTF-8 call sites are relied upon to make that error path dead code in
+/// practice.
+#[derive(Debug, Default)]
+struct Utf8Sink(String);
+
+impl io::Write for Utf8Sink {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let s =
+            std::str::from_utf8(buf).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+        self.0.push_str(s);
+        Ok(buf.len())
+    }
+
+    fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
+        self.write(buf).map(|_| ())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
 
 /// A [`Backend`](retroglyph_core::Backend) that renders into an in-memory ANSI byte buffer and accepts
 /// pushed input, for driving a browser terminal emulator from WASM.
@@ -154,7 +187,7 @@ use std::time::Duration;
 ///   descriptor; call [`take_output`](Self::take_output) once per animation
 ///   frame to drain them.
 pub struct TerminalWasm {
-    renderer: TerminalRenderer<Vec<u8>>,
+    renderer: TerminalRenderer<Utf8Sink>,
     size: Size,
     event_queue: VecDeque<Event>,
 }
@@ -164,7 +197,7 @@ impl TerminalWasm {
     #[must_use]
     pub const fn new(width: u16, height: u16) -> Self {
         Self {
-            renderer: TerminalRenderer::new(Vec::new()),
+            renderer: TerminalRenderer::new(Utf8Sink(String::new())),
             size: Size { width, height },
             event_queue: VecDeque::new(),
         }
@@ -186,28 +219,38 @@ impl TerminalWasm {
     /// call. Call this once per animation frame from JS and write the result
     /// into the terminal emulator.
     ///
-    /// # Panics
-    ///
-    /// Panics if the buffered output is not valid UTF-8. This can't happen
-    /// through any safe, public API of this crate: [`TerminalRenderer`] only
-    /// ever writes into its `Vec<u8>` writer via `write!`/`write_str` calls
-    /// on ASCII escape sequences and glyphs encoded through `char`/`&str`
-    /// (both always valid UTF-8), and this buffer is never exposed for
-    /// direct mutation between a `take_output` call and the next `draw`. The
-    /// only way to trigger this panic would be memory corruption or an
-    /// `unsafe` write bypassing `TerminalRenderer` entirely -- and this
-    /// workspace forbids `unsafe_code` outright, so no code in this crate
-    /// (or its dependents, absent unsound external `unsafe`) can do that.
+    /// This allocates a fresh `String` every call (the replacement buffer left behind is
+    /// pre-sized to the outgoing one's capacity, so a steady frame rate converges to one
+    /// right-sized allocation per frame instead of regrowing from empty each time -- see
+    /// retroglyph#287). Callers that can reuse a long-lived, JS-side buffer across frames
+    /// should prefer [`take_output_into`](Self::take_output_into) instead, which never
+    /// allocates on the hot path.
     #[must_use]
     pub fn take_output(&mut self) -> String {
-        let bytes = std::mem::take(self.renderer.writer_mut());
-        String::from_utf8(bytes)
-            .expect("TerminalRenderer only ever writes valid UTF-8 via safe char/&str APIs")
+        let sink = &mut self.renderer.writer_mut().0;
+        let replacement = String::with_capacity(sink.capacity());
+        std::mem::replace(sink, replacement)
+    }
+
+    /// Drains the ANSI bytes rendered since the last call into `buf`, clearing `buf` first.
+    ///
+    /// Equivalent to `*buf = self.take_output()` but reuses `buf`'s existing allocation instead
+    /// of returning a new `String` each call, and leaves this backend's own internal buffer
+    /// capacity untouched (just cleared) for the next frame -- so neither side allocates once
+    /// `buf` has grown to its steady-state size. Intended for callers holding a long-lived
+    /// buffer across frames (e.g. a JS-side driver reusing the same `String` every animation
+    /// frame) instead of receiving a fresh allocation from [`take_output`](Self::take_output)
+    /// each time.
+    pub fn take_output_into(&mut self, buf: &mut String) {
+        buf.clear();
+        let sink = &mut self.renderer.writer_mut().0;
+        buf.push_str(sink);
+        sink.clear();
     }
 }
 
 impl Output for TerminalWasm {
-    type Error = std::io::Error;
+    type Error = io::Error;
 
     fn draw<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
@@ -268,9 +311,9 @@ impl Cursor for TerminalWasm {
 }
 
 fn write_cursor_visibility(
-    renderer: &mut TerminalRenderer<Vec<u8>>,
+    renderer: &mut TerminalRenderer<Utf8Sink>,
     visible: bool,
-) -> std::io::Result<()> {
+) -> io::Result<()> {
     use std::io::Write as _;
     if visible {
         write!(renderer.writer_mut(), "\x1b[?25h")
@@ -294,9 +337,9 @@ fn write_cursor_visibility(
 /// ECMA-48. No 0-indexed variant or alternate escape code was found in any
 /// of these implementations, so no dual-emission fallback is needed here.
 fn write_cursor_position(
-    renderer: &mut TerminalRenderer<Vec<u8>>,
+    renderer: &mut TerminalRenderer<Utf8Sink>,
     position: Pos,
-) -> std::io::Result<()> {
+) -> io::Result<()> {
     use std::io::Write as _;
     write!(
         renderer.writer_mut(),
@@ -693,6 +736,49 @@ mod tests {
         assert!(out.contains('H'), "output: {out:?}");
         // Draining again returns nothing new until the next present().
         assert_eq!(term.backend_mut().take_output(), "");
+    }
+
+    #[test]
+    fn take_output_retains_capacity_across_frames() {
+        // retroglyph#287: the replacement buffer left behind after a drain should be pre-sized
+        // to the outgoing buffer's capacity, not restart from zero every frame.
+        let backend = TerminalWasm::new(40, 12);
+        let mut term = Terminal::new(backend);
+        for y in 0..12 {
+            for x in 0..40 {
+                term.put(x, y, 'X');
+            }
+        }
+        term.present().unwrap();
+        let first = term.backend_mut().take_output();
+        assert!(!first.is_empty());
+
+        // The internal sink left behind should already be sized to hold another frame of
+        // similar size without regrowing from an empty allocation.
+        let internal_capacity = term.backend_mut().renderer.writer().0.capacity();
+        assert!(
+            internal_capacity >= first.len(),
+            "expected the replacement buffer to retain the previous frame's capacity \
+             ({internal_capacity} < {})",
+            first.len()
+        );
+    }
+
+    #[test]
+    fn take_output_into_clears_and_fills_caller_buffer() {
+        let backend = TerminalWasm::new(10, 3);
+        let mut term = Terminal::new(backend);
+        term.put(1, 1, 'H');
+        term.present().unwrap();
+
+        let mut buf = String::from("stale contents");
+        term.backend_mut().take_output_into(&mut buf);
+        assert!(buf.contains('H'), "buf: {buf:?}");
+        assert!(!buf.contains("stale"));
+
+        // Draining again with nothing new pending clears the caller's buffer to empty.
+        term.backend_mut().take_output_into(&mut buf);
+        assert_eq!(buf, "");
     }
 
     #[test]
