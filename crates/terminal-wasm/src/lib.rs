@@ -1,6 +1,6 @@
 //! A WASM/browser terminal backend, driven by pushed input and pulled ANSI output.
 //!
-//! [`TerminalWasm`] implements [`Backend`] directly (like
+//! [`TerminalWasm`] implements [`Backend`](retroglyph_core::Backend) directly (like
 //! [`Headless`](retroglyph_core::backend::Headless)): there is no event loop
 //! here. A browser terminal emulator (e.g. xterm.js -- this crate has no
 //! dependency on it and no opinion about which one is used) is driven from
@@ -63,7 +63,7 @@
 //!
 //! [`TerminalWasm`] renders through [`retroglyph_terminal::TerminalRenderer`] (see that crate's
 //! docs for the full cell-diff renderer contract) and adds a handful of sequences of its own
-//! ([`clear`](Backend::clear), [`set_cursor_visible`](Backend::set_cursor_visible)). Every
+//! ([`clear`](Output::clear), [`set_cursor_visible`](Cursor::set_cursor_visible)). Every
 //! sequence below is standard ANSI X3.64 (ECMA-48) CSI -- the subset xterm's own control-sequence
 //! reference calls plain "ANSI"/VT100-compatible -- nothing proprietary or emulator-specific. The
 //! bytes are the same regardless of what emulator eventually reads them; this crate makes no
@@ -72,15 +72,15 @@
 //!
 //! | Sequence | Name | Emitted by | Meaning |
 //! | --- | --- | --- | --- |
-//! | `CSI Ps;Ps H` | CUP (Cursor Position) | [`draw`](Backend::draw), for a non-adjacent cell; [`set_cursor_position`](Backend::set_cursor_position) | move the cursor, 1-indexed `row;col`, always absolute |
+//! | `CSI Ps;Ps H` | CUP (Cursor Position) | [`draw`](Output::draw), for a non-adjacent cell; [`set_cursor_position`](Cursor::set_cursor_position) | move the cursor, 1-indexed `row;col`, always absolute |
 //! | `CSI 39 m` / `CSI 49 m` | SGR reset FG/BG | `draw`, for [`Color::Default`](retroglyph_core::color::Color::Default) | reset foreground/background to the emulator's default |
 //! | `CSI 3n m` / `CSI 4n m` (`30`-`37` / `40`-`47`) | SGR ANSI FG/BG | `draw`, for the standard 8 [`Color::Ansi`](retroglyph_core::color::Color::Ansi) values | set foreground/background to a standard ANSI color |
 //! | `CSI 9n m` / `CSI 10n m` (`90`-`97` / `100`-`107`) | SGR bright ANSI FG/BG | `draw`, for the bright 8 [`Color::Ansi`](retroglyph_core::color::Color::Ansi) values | set foreground/background to a bright ANSI color |
 //! | `CSI 38;5;n m` / `CSI 48;5;n m` | SGR indexed FG/BG | `draw`, for [`Color::Indexed`](retroglyph_core::color::Color::Indexed) | set foreground/background from the 256-color palette |
 //! | `CSI 38;2;r;g;b m` / `CSI 48;2;r;g;b m` | SGR truecolor FG/BG | `draw`, for [`Color::Rgb`](retroglyph_core::color::Color::Rgb) | set foreground/background to a 24-bit RGB color, unquantized |
-//! | `CSI ?2026 h` / `CSI ?2026 l` | DEC private mode 2026 (synchronized update) | every [`draw`](Backend::draw)/[`flush`](Backend::flush) pair | hold rendering until the matching end marker, avoiding tearing mid-frame |
-//! | `CSI ?25 h` / `CSI ?25 l` | DECTCEM (cursor visibility) | [`set_cursor_visible`](Backend::set_cursor_visible) | show/hide the terminal cursor |
-//! | `CSI 2J` then `CSI H` | ED (erase display) + CUP home | [`clear`](Backend::clear) | clear the screen, then move the cursor to `(1, 1)` |
+//! | `CSI ?2026 h` / `CSI ?2026 l` | DEC private mode 2026 (synchronized update) | every [`draw`](Output::draw)/[`flush`](Output::flush) pair | hold rendering until the matching end marker, avoiding tearing mid-frame |
+//! | `CSI ?25 h` / `CSI ?25 l` | DECTCEM (cursor visibility) | [`set_cursor_visible`](Cursor::set_cursor_visible) | show/hide the terminal cursor |
+//! | `CSI 2J` then `CSI H` | ED (erase display) + CUP home | [`clear`](Output::clear) | clear the screen, then move the cursor to `(1, 1)` |
 //!
 //! retroglyph does not model text attributes (bold, italic, underline, etc. -- see
 //! [`retroglyph_core::style::Style`]'s docs for why), so no SGR attribute codes (`1`, `3`, `4`,
@@ -104,12 +104,12 @@
 //!   [`Color::Indexed`](retroglyph_core::color::Color::Indexed) or
 //!   [`Color::Ansi`](retroglyph_core::color::Color::Ansi) instead when a specific emulator's color
 //!   depth is known ahead of time.
-//! - **`clear` always re-syncs tracked state.** [`clear`](Backend::clear) additionally resets this
+//! - **`clear` always re-syncs tracked state.** [`clear`](Output::clear) additionally resets this
 //!   renderer's tracked cursor/color state, so the *next* `draw` call re-emits a full CUP and
 //!   color codes for every cell instead of (incorrectly) assuming the emulator remembers the old
 //!   state through the erase.
-//! - **Every `draw` is wrapped in its own synchronized-update pair.** [`draw`](Backend::draw)
-//!   itself emits `CSI ?2026 h` before drawing, and the paired [`flush`](Backend::flush) call
+//! - **Every `draw` is wrapped in its own synchronized-update pair.** [`draw`](Output::draw)
+//!   itself emits `CSI ?2026 h` before drawing, and the paired [`flush`](Output::flush) call
 //!   emits `CSI ?2026 l` after. An emulator that doesn't recognize DEC private mode 2026 ignores
 //!   both codes per the CSI spec's "unknown private mode" behavior, so this is safe to send
 //!   unconditionally.
@@ -130,7 +130,7 @@
 #[doc = include_str!("../README.md")]
 struct ReadmeDoctests;
 
-use retroglyph_core::backend::Backend;
+use retroglyph_core::backend::{Cursor, Input, Output};
 use retroglyph_core::event::Event;
 use retroglyph_core::grid::{Pos, Size};
 use retroglyph_core::tile::Tile;
@@ -138,17 +138,17 @@ use retroglyph_terminal::TerminalRenderer;
 use std::collections::VecDeque;
 use std::time::Duration;
 
-/// A [`Backend`] that renders into an in-memory ANSI byte buffer and accepts
+/// A [`Backend`](retroglyph_core::Backend) that renders into an in-memory ANSI byte buffer and accepts
 /// pushed input, for driving a browser terminal emulator from WASM.
 ///
 /// Unlike [`retroglyph_crossterm::Crossterm`](https://docs.rs/retroglyph-crossterm),
 /// this backend:
 ///
-/// - never queries a TTY for its size -- call [`resize`](Backend::resize) (or
+/// - never queries a TTY for its size -- call [`resize`](Output::resize) (or
 ///   [`Terminal::resize`](retroglyph_core::Terminal::resize)) whenever the
 ///   host reports a new size (e.g. from xterm.js's `fit` addon);
 /// - never polls for input -- input only ever arrives via
-///   [`push_event`](Backend::push_event), called from a `wasm-bindgen`
+///   [`push_event`](Input::push_event), called from a `wasm-bindgen`
 ///   entry point in response to a JS event;
 /// - buffers rendered ANSI bytes in memory rather than writing to a
 ///   descriptor; call [`take_output`](Self::take_output) once per animation
@@ -171,10 +171,10 @@ impl TerminalWasm {
     }
 
     /// Injects a synthetic input event into the queue, to be returned by the
-    /// next [`poll_event`](Backend::poll_event) call.
+    /// next [`poll_event`](Input::poll_event) call.
     ///
     /// Called from JS (via the `wasm-bindgen` entry points below) or from
-    /// tests; not part of [`Backend`] itself beyond the no-op default.
+    /// tests; not part of [`Backend`](retroglyph_core::Backend) itself beyond the no-op default.
     pub fn push_event(&mut self, event: Event) {
         self.event_queue.push_back(event);
     }
@@ -206,7 +206,7 @@ impl TerminalWasm {
     }
 }
 
-impl Backend for TerminalWasm {
+impl Output for TerminalWasm {
     type Error = std::io::Error;
 
     fn draw<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
@@ -243,17 +243,21 @@ impl Backend for TerminalWasm {
         self.renderer.reset_state();
         Ok(())
     }
+}
 
-    fn push_event(&mut self, event: Event) {
-        Self::push_event(self, event);
-    }
-
+impl Input for TerminalWasm {
     fn poll_event(&mut self, _timeout: Duration) -> Option<Event> {
         // Never blocks: there is no runtime loop to block in. `_timeout` is
         // ignored, matching Headless's push-driven, non-blocking contract.
         self.event_queue.pop_front()
     }
 
+    fn push_event(&mut self, event: Event) {
+        Self::push_event(self, event);
+    }
+}
+
+impl Cursor for TerminalWasm {
     fn set_cursor_visible(&mut self, visible: bool) {
         let _ = write_cursor_visibility(&mut self.renderer, visible);
     }
@@ -699,13 +703,13 @@ mod tests {
             KeyModifiers::NONE,
         )));
         assert_eq!(
-            Backend::poll_event(&mut backend, Duration::ZERO),
+            Input::poll_event(&mut backend, Duration::ZERO),
             Some(Event::Key(retroglyph_core::event::KeyEvent::new(
                 KeyCode::Left,
                 KeyModifiers::NONE
             )))
         );
-        assert_eq!(Backend::poll_event(&mut backend, Duration::ZERO), None);
+        assert_eq!(Input::poll_event(&mut backend, Duration::ZERO), None);
     }
 
     #[test]
@@ -716,10 +720,10 @@ mod tests {
         let mut backend = TerminalWasm::new(10, 3);
         backend.push_event(Event::Paste("hello, world".to_string()));
         assert_eq!(
-            Backend::poll_event(&mut backend, Duration::ZERO),
+            Input::poll_event(&mut backend, Duration::ZERO),
             Some(Event::Paste("hello, world".to_string()))
         );
-        assert_eq!(Backend::poll_event(&mut backend, Duration::ZERO), None);
+        assert_eq!(Input::poll_event(&mut backend, Duration::ZERO), None);
     }
 
     #[test]
@@ -729,10 +733,10 @@ mod tests {
         // doc comment). Both use the same format, so no dual-emission or
         // 0-indexed fallback is needed.
         let mut backend = TerminalWasm::new(10, 3);
-        Backend::set_cursor_position(&mut backend, Pos { x: 0, y: 0 });
+        Cursor::set_cursor_position(&mut backend, Pos { x: 0, y: 0 });
         assert_eq!(backend.take_output(), "\x1b[1;1H");
 
-        Backend::set_cursor_position(&mut backend, Pos { x: 4, y: 2 });
+        Cursor::set_cursor_position(&mut backend, Pos { x: 4, y: 2 });
         assert_eq!(backend.take_output(), "\x1b[3;5H");
     }
 
