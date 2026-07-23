@@ -308,6 +308,15 @@ impl WindowConfig {
 /// every frame tick. Window close pushes [`Event::Close`] into the event
 /// queue rather than exiting: the game decides when to terminate.
 ///
+/// # Presenting is automatic
+///
+/// Unlike [`run_blocking`](retroglyph_core::run_blocking), this driver calls
+/// [`Terminal::present`] for you, once, right after `app_loop` returns each frame -- you no longer
+/// need to (and, for a stale-content bug fixed by this behavior, should not rely on remembering
+/// to) call it yourself inside `app_loop`. Calling it yourself is still supported and has no ill
+/// effect (the driver detects it already ran and skips its own call), for example if you also want
+/// to call [`Terminal::present`] to observe its `Result` directly.
+///
 /// # Errors
 ///
 /// Returns [`winit::error::EventLoopError`] if the event loop cannot be
@@ -337,6 +346,11 @@ where
 /// normal `poll_event`/frame loop -- see [`run_windowed_with_typed_proxy`] if a worker thread
 /// needs to hand back a real payload (a loaded asset, a network response) instead of a
 /// correlation id into a side table.
+///
+/// # Presenting is automatic
+///
+/// See [`run_windowed`]'s "Presenting is automatic" section -- this function shares the same
+/// automatic-present behavior; `app_loop` no longer needs to call [`Terminal::present`] itself.
 ///
 /// # Examples
 ///
@@ -412,6 +426,11 @@ where
 /// the same `&mut Terminal<WindowBackend<P>>` `app_loop` receives on redraw -- so a handler that
 /// wants the result to affect the next frame just needs to record it in state the closures
 /// share, or push its own backend-agnostic event/marker for `app_loop` to notice.
+///
+/// # Presenting is automatic
+///
+/// See [`run_windowed`]'s "Presenting is automatic" section -- this function shares the same
+/// automatic-present behavior; `app_loop` no longer needs to call [`Terminal::present`] itself.
 ///
 /// # Examples
 ///
@@ -585,6 +604,12 @@ where
 /// `ActiveEventLoop::exit` by stopping its `requestAnimationFrame`-driven
 /// runner rather than leaving it a no-op.
 ///
+/// # Presenting is automatic
+///
+/// Unlike [`run_blocking`](retroglyph_core::run_blocking), [`App::update`](retroglyph_core::App::update)
+/// no longer needs to call [`Terminal::present`] itself here: this driver presents automatically
+/// after each call, the same as [`run_windowed`] (see its "Presenting is automatic" section).
+///
 /// # Errors
 ///
 /// Returns [`winit::error::EventLoopError`] if the event loop cannot be
@@ -607,6 +632,9 @@ where
 /// See [`run_windowed_with_proxy`] for when/why to use the `_with_proxy` variant over the plain
 /// one. The injected payload is always a `u64`, delivered as [`Event::Custom`]; see
 /// [`run_app_with_typed_proxy`] for injecting any `T: Send + 'static`.
+///
+/// See [`run_app`]'s "Presenting is automatic" section -- this function shares the same
+/// automatic-present behavior.
 ///
 /// # Errors
 ///
@@ -632,6 +660,9 @@ where
 /// See [`run_windowed_with_typed_proxy`] for the same generalization on the raw closure-based
 /// driver, including why a non-`u64` payload bypasses [`retroglyph_core::event::Event`] entirely
 /// and goes straight to `on_custom_event`.
+///
+/// See [`run_app`]'s "Presenting is automatic" section -- this function shares the same
+/// automatic-present behavior.
 ///
 /// # Errors
 ///
@@ -1223,17 +1254,39 @@ where
         }
     }
 
-    /// Runs the app closure and presents the frame, tracking consecutive `present()` failures to
-    /// rate-limit logging and trigger surface recovery.
+    /// Runs the app closure, automatically presents the `Terminal` if the app didn't already, and
+    /// presents the frame to the surface, tracking consecutive `present()` failures to rate-limit
+    /// logging and trigger surface recovery.
     ///
     /// See [`present_failure_action`] for the decision table; this method just runs the `Terminal`
     /// -/`Presenter`-dependent side effects (`app_loop`, `present`, `init_surface`, logging) that
     /// function can't perform itself since it's a pure function of the failure count alone.
+    ///
+    /// # Automatic `Terminal::present`
+    ///
+    /// Windowed apps no longer need to call [`Terminal::present`] themselves: this method calls it
+    /// once, right after `app_loop` returns, using [`Terminal::present_count`] to detect whether
+    /// `app_loop` already called it and skip the redundant call if so. That check matters, not
+    /// just avoids duplicate work: calling `Terminal::present` twice in a row with nothing newly
+    /// drawn in between actively erases the frame just presented (see `Terminal::present`'s doc
+    /// comment), so an unconditional second call would blank every frame drawn by an `app_loop`
+    /// that still presents itself. A [`Terminal::present`] error is logged and does not stop the
+    /// surface-level present below from running (matching this function's existing
+    /// keep-going-on-failure philosophy); it uses a different error type
+    /// (`<B as Output>::Error`) than [`Presenter::SurfaceError`], so it is tracked and logged
+    /// independently of the consecutive-failure counter below, which is scoped to the surface
+    /// present.
     fn handle_redraw_requested(&mut self) {
         let Some(term) = self.terminal.as_mut() else {
             return;
         };
+        let present_count_before = term.present_count();
         (self.app_loop)(term);
+        if term.present_count() == present_count_before
+            && let Err(e) = term.present()
+        {
+            log::error!("automatic terminal present failed: {e}");
+        }
         let result = term.backend_mut().presenter_mut().present();
         let succeeded = result.is_ok();
         match present_failure_action(self.consecutive_present_errors, succeeded) {
@@ -2948,5 +3001,170 @@ mod tests {
         let (mut app, _failing, init_calls) = failing_app();
         app.try_recover_surface();
         assert_eq!(init_calls.get(), 0);
+    }
+
+    // ── automatic `Terminal::present` on redraw ───────────────────────────────
+
+    /// A [`Presenter`] that mirrors every drawn diff into an in-memory grid (like
+    /// [`retroglyph_core::backend::Headless`], but implementing [`Presenter`] instead), so tests
+    /// can assert on what was actually presented rather than just on whether `present()` returned
+    /// `Ok`.
+    #[derive(Default)]
+    struct GridRecordingPresenter {
+        /// `(x, y) -> glyph` for every cell ever written by `draw_layers`. A real display only
+        /// keeps the latest write per cell, which is exactly what repeated `HashMap` inserts give
+        /// us here.
+        cells: RefCell<std::collections::HashMap<(u16, u16), char>>,
+        /// Number of `draw_layers` calls observed, so tests can assert whether a second (and, per
+        /// this module's `present`-erases-if-nothing-new-was-drawn finding, harmful) diff was ever
+        /// sent.
+        draw_calls: Cell<u32>,
+    }
+
+    impl Output for GridRecordingPresenter {
+        type Error = core::convert::Infallible;
+
+        fn draw<'a, I>(&mut self, _content: I) -> Result<(), Self::Error>
+        where
+            I: Iterator<Item = (Pos, &'a Tile, Option<&'a str>)>,
+        {
+            Ok(())
+        }
+
+        fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
+        where
+            I: Iterator<Item = (u8, Pos, &'a Tile, Option<&'a str>)>,
+        {
+            self.draw_calls.set(self.draw_calls.get() + 1);
+            let mut cells = self.cells.borrow_mut();
+            for (_layer, pos, tile, _extra) in content {
+                cells.insert((pos.x, pos.y), tile.glyph());
+            }
+            Ok(())
+        }
+
+        fn flush(&mut self) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        fn size(&self) -> Size {
+            Size {
+                width: 10,
+                height: 5,
+            }
+        }
+
+        fn clear(&mut self) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        fn resize(&mut self, _size: Size) {}
+    }
+
+    impl Presenter for GridRecordingPresenter {
+        type SurfaceError = core::convert::Infallible;
+
+        fn init_surface(
+            &mut self,
+            _window: Arc<dyn crate::presenter::WindowHandle>,
+        ) -> Result<(), Self::SurfaceError> {
+            Ok(())
+        }
+
+        fn resize_surface(&mut self, _width: u32, _height: u32) {}
+
+        fn present(&mut self) -> Result<(), Self::SurfaceError> {
+            Ok(())
+        }
+
+        fn cell_size(&self) -> (u32, u32) {
+            (8, 16)
+        }
+    }
+
+    type GridRecordingApp = WindowApp<
+        GridRecordingPresenter,
+        fn(&mut Terminal<WindowBackend<GridRecordingPresenter>>),
+        u64,
+        fn(u64, &mut Terminal<WindowBackend<GridRecordingPresenter>>),
+    >;
+
+    fn recording_app(
+        app_loop: fn(&mut Terminal<WindowBackend<GridRecordingPresenter>>),
+    ) -> GridRecordingApp {
+        let terminal = Terminal::new(WindowBackend::new(GridRecordingPresenter::default()));
+        WindowApp {
+            terminal: Some(terminal),
+            app_loop,
+            on_custom_event: push_custom_event,
+            _user_event: PhantomData,
+            window: None,
+            title: String::new(),
+            init_size: InitWindowSize {
+                width: 80,
+                height: 80,
+            },
+            attrs: WindowAttrs::default(),
+            current_modifiers: KeyModifiers::NONE,
+            cursor_px: (0.0, 0.0),
+            active_touch: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            frame_interval: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            next_frame: std::time::Instant::now(),
+            exit_requested: Rc::new(Cell::new(false)),
+            needs_redraw: false,
+            consecutive_present_errors: 0,
+        }
+    }
+
+    #[test]
+    fn app_loop_that_never_presents_is_still_drawn_by_the_automatic_present() {
+        // Case (a): an `app_loop` that draws but never calls `term.present()` itself must still
+        // reach the backend -- that's the whole point of this driver-side automatic present.
+        let mut app = recording_app(|term| {
+            term.put(0, 0, '@');
+        });
+        app.handle_redraw_requested();
+        let term = app.terminal.as_ref().unwrap();
+        let presenter = term.backend().presenter();
+        assert_eq!(presenter.cells.borrow().get(&(0, 0)), Some(&'@'));
+        assert_eq!(
+            presenter.draw_calls.get(),
+            1,
+            "exactly one present this frame"
+        );
+    }
+
+    #[test]
+    fn app_loop_that_already_presents_itself_is_not_double_drawn() {
+        // Case (b): an `app_loop` that still calls `term.present()` itself (the pre-fix pattern)
+        // must keep working -- and, crucially, must not have its frame blanked by a second,
+        // driver-side `present()` call diffing an now-empty `current` against the just-drawn
+        // `previous` (see `Terminal::present`'s doc comment for why that second call would
+        // otherwise erase the frame).
+        let mut app = recording_app(|term| {
+            term.put(0, 0, '@');
+            term.present().expect("app_loop's own present");
+        });
+        app.handle_redraw_requested();
+        let term = app.terminal.as_ref().unwrap();
+        let presenter = term.backend().presenter();
+        assert_eq!(presenter.cells.borrow().get(&(0, 0)), Some(&'@'));
+        assert_eq!(
+            presenter.draw_calls.get(),
+            1,
+            "the driver must detect app_loop's own present and skip its automatic one"
+        );
+    }
+
+    #[test]
+    fn present_count_advances_once_per_present_call() {
+        let mut term = Terminal::new(WindowBackend::new(GridRecordingPresenter::default()));
+        assert_eq!(term.present_count(), 0);
+        term.present().expect("present");
+        assert_eq!(term.present_count(), 1);
+        term.present().expect("present");
+        assert_eq!(term.present_count(), 2);
     }
 }

@@ -51,7 +51,7 @@ pub struct Frame {
 /// impl<B: Backend> App<B> for MyGame {
 ///     fn update(&mut self, term: &mut Terminal<B>, _frame: &Frame) -> Flow {
 ///         term.put(0, 0, '@');
-///         term.present().ok();
+///         term.present().ok(); // Required under `run_blocking`; automatic under the windowed drivers.
 ///         Flow::Exit
 ///     }
 /// }
@@ -59,9 +59,15 @@ pub struct Frame {
 pub trait App<B: Backend> {
     /// Advance and render one frame.
     ///
-    /// Draw into `term`, read input via `term`, and call
-    /// [`term.present()`](Terminal::present) to render the frame. Return
-    /// [`Flow::Exit`] to stop the loop.
+    /// Draw into `term`, read input via `term`, and return [`Flow::Exit`] to stop the loop.
+    ///
+    /// Whether you must call [`term.present()`](Terminal::present) yourself depends on the driver:
+    /// under [`run_blocking`], yes -- it owns a real blocking loop and never presents on your
+    /// behalf, so a forgotten `present()` call there is a silent no-render bug. Under
+    /// `retroglyph-window`'s windowed drivers (`run_windowed`/`run_app` and their `_with_proxy`
+    /// variants), presenting happens automatically right after this method returns each frame, so
+    /// calling `present()` yourself is optional (and harmless: the driver detects it already ran
+    /// and skips its own call).
     fn update(&mut self, term: &mut Terminal<B>, frame: &Frame) -> Flow;
 }
 
@@ -84,6 +90,11 @@ pub fn step<B: Backend, A: App<B>>(term: &mut Terminal<B>, app: &mut A, frame: &
 ///
 /// The terminal is owned and dropped when the loop exits, so backend teardown
 /// (for example crossterm's terminal restore) runs on the way out.
+///
+/// Unlike `retroglyph-window`'s windowed drivers, this function does **not** present
+/// automatically: it owns a real blocking loop rather than being redraw-event-driven, so
+/// [`App::update`] must call [`term.present()`](Terminal::present) itself every frame it wants
+/// rendered.
 #[cfg(feature = "std")]
 pub fn run_blocking<B, A>(mut term: Terminal<B>, mut app: A)
 where
