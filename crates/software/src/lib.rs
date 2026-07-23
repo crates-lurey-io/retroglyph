@@ -319,9 +319,24 @@ impl SoftwareRenderer {
         }
     }
 
+    /// Whether `glyph` resolves to a registered sprite in the `tilesets` sprite cache.
+    ///
+    /// Sprites carry their own per-pixel alpha, so a tile that dispatches to one does not fit
+    /// [`resolve_bg_fill`]'s "an occupied tile is opaque" rule -- see its doc comment. Without the
+    /// `tilesets` feature there is no sprite cache at all, so this always returns `false`.
+    #[cfg(feature = "tilesets")]
+    fn has_sprite(&self, glyph: char) -> bool {
+        self.sprite_cache.get(glyph).is_some()
+    }
+
+    #[cfg(not(feature = "tilesets"))]
+    fn has_sprite(&self, _glyph: char) -> bool {
+        false
+    }
+
     /// Paints one layer's tile at `pos` into the pixel buffer: the cell-rect background fill
-    /// (when this layer/tile contributes one, see [`Output::draw_layers`]'s doc for the exact
-    /// rule) followed by the sprite or bitmap-glyph foreground.
+    /// (when `bg_fill` is `Some`, see [`resolve_bg_fill`] and [`Output::draw_layers`]'s doc for
+    /// the exact rule) followed by the sprite or bitmap-glyph foreground.
     ///
     /// `tile` is taken by value (it's `Copy`) rather than by reference so callers can read it out
     /// of `self.ctx.prev_tiles` before calling this, instead of holding a borrow of `self.ctx`
@@ -333,20 +348,14 @@ impl SoftwareRenderer {
         cell_w: usize,
         cell_h: usize,
         scale: usize,
-        layer_id: u8,
         pos: Pos,
         tile: Tile,
+        bg_fill: Option<u32>,
     ) {
         let px_x = usize::from(pos.x) * cell_w;
         let px_y = usize::from(pos.y) * cell_h;
 
-        // Layer 0 always paints its background. Higher layers paint theirs
-        // only when the tile actually contributes an opaque background,
-        // matching `Grid::flatten_into`.
-        let paints_bg =
-            layer_id == 0 || (!tile.is_empty() && tile.style().background() != Color::Default);
-        if paints_bg {
-            let bg = resolve_color(tile.style().background(), DEFAULT_BG);
+        if let Some(bg) = bg_fill {
             let rect = ixy::Rect::new(px_x, px_y, cell_w, cell_h);
             self.ctx.pixel_buf.fill_rect_solid(rect, bg);
         }
@@ -514,19 +523,20 @@ impl Output for SoftwareRenderer {
     /// Composite the raw layer stream into the pixel buffer.
     ///
     /// Layers arrive layer-major (0 first), so painting them in order gives the
-    /// correct z-order. Layer 0 always fills its cell background; a higher layer
-    /// fills the background only when its tile is non-empty and its background is
-    /// not [`Color::Default`], mirroring the layer-flattening rule so cell and
-    /// pixel backends agree. The `is_empty` guard matters because this
-    /// receives the full frame (see [`needs_full_frame`](Output::needs_full_frame)),
-    /// including empty higher-layer cells that must not overwrite layer 0.
+    /// correct z-order. Layer 0 always fills its cell background; a higher layer's
+    /// occupied (non-empty) tile always fills a background too, and an empty tile
+    /// never does -- see the private `resolve_bg_fill` helper for the exact color each of those
+    /// cases paints (it is not always the tile's own background, to mirror
+    /// `Grid::flatten_into`'s background-inheritance rule exactly). The `is_empty`
+    /// guard matters because this receives the full frame (see
+    /// [`needs_full_frame`](Output::needs_full_frame)), including empty
+    /// higher-layer cells that must not overwrite layer 0.
     ///
-    /// Known divergence from cell backends: an occupied space with a
-    /// [`Color::Default`] background on a higher layer erases the glyph beneath
-    /// it when flattened, but here it leaves the lower glyph's pixels intact.
-    /// Repainting the lower background per pixel would require composited
-    /// per-cell state this renderer intentionally avoids. See the "Backend
-    /// parity caveat" section in the crate README for a worked example.
+    /// This matches cell backends (retroglyph#304): an occupied space with a
+    /// [`Color::Default`] background on a higher layer erases the glyph beneath it
+    /// when flattened, and this backend now does too, by repainting that cell's
+    /// background (see the private `resolve_bg_fill` helper) even though the occupied tile's own
+    /// background is the default one.
     ///
     /// # Dirty-cell repaint (retroglyph#302)
     ///
@@ -609,11 +619,14 @@ impl Output for SoftwareRenderer {
             self.ctx.pixel_buf.clear();
             for layer_id in 0..layer_count_now {
                 for idx in 0..cell_count {
-                    let tile = self.ctx.prev_tiles[layer_id][idx];
+                    #[allow(clippy::cast_possible_truncation)]
+                    let layer_id = layer_id as u8;
+                    let tile = self.ctx.prev_tiles[layer_id as usize][idx];
+                    let has_sprite = self.has_sprite(tile.glyph());
+                    let bg_fill = resolve_bg_fill(&self.ctx.prev_tiles, layer_id, idx, has_sprite);
                     #[allow(clippy::cast_possible_truncation)]
                     let pos = Pos::new((idx % cols) as u16, (idx / cols) as u16);
-                    #[allow(clippy::cast_possible_truncation)]
-                    self.composite_cell(buf_w, cell_w, cell_h, scale, layer_id as u8, pos, tile);
+                    self.composite_cell(buf_w, cell_w, cell_h, scale, pos, tile, bg_fill);
                 }
             }
         } else if any_dirty {
@@ -624,9 +637,12 @@ impl Output for SoftwareRenderer {
                 #[allow(clippy::cast_possible_truncation)]
                 let pos = Pos::new((idx % cols) as u16, (idx / cols) as u16);
                 for layer_id in 0..layer_count_now {
-                    let tile = self.ctx.prev_tiles[layer_id][idx];
                     #[allow(clippy::cast_possible_truncation)]
-                    self.composite_cell(buf_w, cell_w, cell_h, scale, layer_id as u8, pos, tile);
+                    let layer_id = layer_id as u8;
+                    let tile = self.ctx.prev_tiles[layer_id as usize][idx];
+                    let has_sprite = self.has_sprite(tile.glyph());
+                    let bg_fill = resolve_bg_fill(&self.ctx.prev_tiles, layer_id, idx, has_sprite);
+                    self.composite_cell(buf_w, cell_w, cell_h, scale, pos, tile, bg_fill);
                 }
             }
         }
@@ -1079,6 +1095,57 @@ const DEFAULT_FG: u32 = 0x00d4_d4d4;
 /// Default background when [`Color::Default`] is used.
 const DEFAULT_BG: u32 = 0x0000_0000;
 
+/// Determines the background this layer/tile should paint at `idx` in `composite_cell`, if any,
+/// mirroring [`Grid::flatten_into`](retroglyph_core::grid::Grid)'s background-inheritance rule so
+/// cell and pixel backends agree (retroglyph#304).
+///
+/// - Layer 0 always paints: its own background, substituting [`DEFAULT_BG`] for
+///   [`Color::Default`].
+/// - A higher layer's empty tile paints nothing (`None`): it doesn't contribute to the flattened
+///   cell at all.
+/// - A higher layer's occupied (non-empty) tile with a non-[`Color::Default`] background paints
+///   that color.
+/// - A higher layer's occupied tile with a [`Color::Default`] background still paints, *unless*
+///   `has_sprite` is `true` -- this is the fix for retroglyph#304: an occupied space is opaque and
+///   erases whatever glyph a lower layer drew there, even though its own background is the
+///   default one. What it paints with is *not* [`DEFAULT_BG`] though: matching `flatten_into`'s
+///   `if tile.style.bg != Color::Default` guard, a `Color::Default` background never overwrites
+///   the destination background, so this walks back down through the layers below `layer_id`
+///   (down to and including layer 0) to find whichever one last established a background, and
+///   repaints with that instead. `has_sprite` opts a tile out of this rule entirely: sprites
+///   carry genuine per-pixel alpha (see [`SoftwareRenderer::has_sprite`]), so forcing an opaque
+///   fill underneath one before it's blended would erase transparency the sprite's own pixels are
+///   supposed to let show through -- core's `Tile`/`Grid` model has no such per-pixel concept, so
+///   the cell-backend-parity rule this function otherwise implements just doesn't apply to them.
+fn resolve_bg_fill(
+    prev_tiles: &[Vec<Tile>],
+    layer_id: u8,
+    idx: usize,
+    has_sprite: bool,
+) -> Option<u32> {
+    let layer_idx = usize::from(layer_id);
+    let tile = prev_tiles[layer_idx][idx];
+    if layer_idx == 0 {
+        return Some(resolve_color(tile.style().background(), DEFAULT_BG));
+    }
+    if tile.is_empty() {
+        return None;
+    }
+    if tile.style().background() != Color::Default {
+        return Some(resolve_color(tile.style().background(), DEFAULT_BG));
+    }
+    if has_sprite {
+        return None;
+    }
+    for below in (0..layer_idx).rev() {
+        let bg = prev_tiles[below][idx].style().background();
+        if below == 0 || bg != Color::Default {
+            return Some(resolve_color(bg, DEFAULT_BG));
+        }
+    }
+    unreachable!("the loop above always terminates at `below == 0`, which always returns")
+}
+
 /// Resolve a [`Color`] to a packed `0x00RRGGBB` value, substituting
 /// `default_rgb` for [`Color::Default`].
 fn resolve_color(color: Color, default_rgb: u32) -> u32 {
@@ -1211,6 +1278,42 @@ mod tests {
         let buf = renderer.pixels();
         assert!(buf.contains(&0x0000_FF00), "some pixels should be green");
         assert!(buf.iter().all(|&p| p == 0x0000_FF00 || p == 0x000A_0A0A));
+    }
+
+    #[test]
+    fn layer1_occupied_default_bg_erases_layer0_glyph() {
+        // retroglyph#304: an occupied (non-empty) higher-layer tile with a
+        // `Color::Default` background is opaque and erases whatever glyph a lower
+        // layer drew underneath it, matching cell backends' `Grid::flatten_into`
+        // (see the crate README's "Backend parity" section). The erased cell's
+        // background is inherited from layer 0 (red here), not reset to this
+        // renderer's own default background.
+        let mut renderer = test_renderer();
+
+        let glyph_on_red = Tile::new(
+            '@',
+            Style::new()
+                .fg(Color::Rgb { r: 0, g: 255, b: 0 })
+                .bg(Color::Rgb { r: 255, g: 0, b: 0 }),
+        );
+        // Occupied (non-empty, via the `Tile::new` builder) space with no explicit
+        // background: `Color::Default`.
+        let occupied_default_bg = Tile::new(' ', Style::default());
+        // draw_layers clears buffer first, so pass all layers in one call.
+        renderer.draw_layers(
+            [
+                (0, Pos::new(0, 0), &glyph_on_red, None),
+                (1, Pos::new(0, 0), &occupied_default_bg, None),
+            ]
+            .into_iter(),
+        );
+
+        let buf = renderer.pixels();
+        assert!(
+            buf.iter().all(|&p| p == 0x00FF_0000),
+            "layer 1's occupied default-bg space should erase layer 0's glyph, leaving only \
+             the inherited red background, but got: {buf:?}"
+        );
     }
 
     #[test]
