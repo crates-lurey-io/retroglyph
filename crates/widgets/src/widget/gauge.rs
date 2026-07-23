@@ -14,6 +14,16 @@ use crate::Theme;
 /// label/readout. For a `current`/`max` integer stat (health, mana) rather
 /// than a `0.0..=1.0` load ratio, see [`super::StatBar`]. `label_style`
 /// defaults to a neutral gray-blue; set it with [`Gauge::label_style`].
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::{Headless, Rect, Terminal};
+/// use retroglyph_widgets::{Gauge, Widget};
+///
+/// let mut term = Terminal::new(Headless::new(20, 1));
+/// Gauge::new("CPU", 0.75).render(Rect::new(0, 0, 20, 1), &mut term);
+/// ```
 #[derive(Clone, Copy, Debug)]
 pub struct Gauge<'a> {
     label: &'a str,

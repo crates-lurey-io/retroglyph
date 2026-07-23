@@ -19,6 +19,19 @@ use super::{Measure, Widget};
 /// given width without rendering (via [`Measure::height_for`]) so a caller
 /// can size its pane to fit instead of guessing a fixed height. `style`
 /// defaults to [`Style::new()`]; set it with [`Paragraph::style`].
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::{Headless, Rect, Terminal};
+/// use retroglyph_widgets::{Measure, Paragraph, Widget};
+///
+/// let p = Paragraph::new("the quick brown fox jumps");
+/// let height = p.height_for(10); // rows needed to wrap at 10 columns
+///
+/// let mut term = Terminal::new(Headless::new(10, height));
+/// p.render(Rect::new(0, 0, 10, height), &mut term);
+/// ```
 #[derive(Clone, Copy, Debug)]
 pub struct Paragraph<'a> {
     text: &'a str,

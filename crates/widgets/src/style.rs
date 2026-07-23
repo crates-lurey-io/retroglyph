@@ -106,6 +106,19 @@ impl Sides {
 /// Layers from the inside out: content -> padding -> border -> margin.
 /// Margin cells are left empty (transparent, per [`Grid::new`]'s default
 /// tiles), matching CSS margin being outside the box's own background.
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::Style;
+/// use retroglyph_widgets::{BoxStyle, Sides};
+///
+/// let grid = BoxStyle::new(Style::new())
+///     .border(true)
+///     .padding(Sides::all(1))
+///     .render("hi");
+/// assert_eq!(grid.get(2, 2).glyph(), 'h'); // 1 border + 1 padding cell in from the corner
+/// ```
 #[derive(Clone, Copy, Debug)]
 pub struct BoxStyle {
     style: Style,

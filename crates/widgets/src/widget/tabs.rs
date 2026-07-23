@@ -25,6 +25,17 @@ use crate::text::truncate as truncate_to_cols;
 /// `style` and `selected_style` each default to the same fixed palette as
 /// [`Table`](super::Table)'s `row_style`/`selected_style`; set them with [`Tabs::style`]/
 /// [`Tabs::selected_style`].
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::{Headless, Rect, Terminal};
+/// use retroglyph_widgets::{Tabs, Widget};
+///
+/// let titles = ["Overview", "Details", "Settings"];
+/// let mut term = Terminal::new(Headless::new(30, 1));
+/// Tabs::new(&titles).select(Some(0)).render(Rect::new(0, 0, 30, 1), &mut term);
+/// ```
 #[derive(Clone, Copy, Debug)]
 pub struct Tabs<'a> {
     titles: &'a [&'a str],

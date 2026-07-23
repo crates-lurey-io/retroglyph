@@ -25,6 +25,18 @@ use super::{PrintLine, Widget};
 /// this widget only reads it. Rows beyond the available messages are left
 /// untouched -- compose with [`fill_rect`](crate::draw::fill_rect) first
 /// for a solid background if one is wanted.
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::text::Line;
+/// use retroglyph_core::{Headless, Rect, Terminal};
+/// use retroglyph_widgets::{Log, Widget};
+///
+/// let messages = [Line::raw("connected"), Line::raw("joined #general")];
+/// let mut term = Terminal::new(Headless::new(20, 2));
+/// Log::new(&messages).render(Rect::new(0, 0, 20, 2), &mut term);
+/// ```
 #[derive(Clone, Copy, Debug)]
 pub struct Log<'a> {
     messages: &'a [Line],

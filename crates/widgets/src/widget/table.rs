@@ -31,6 +31,23 @@ use crate::text::truncate as truncate_to_cols;
 /// with [`Table::header_style`], [`Table::row_style`], and
 /// [`Table::selected_style`]. `column_spacing` defaults to `1` (a single
 /// blank column between cells); set it with [`Table::column_spacing`].
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::{Headless, Rect, Terminal};
+/// use retroglyph_widgets::{ListState, StatefulWidget, Table};
+///
+/// let headers = ["Name", "Score"];
+/// let widths = [10u16, 6];
+/// let rows: [&[&str]; 2] = [&["Alpha", "10"], &["Bravo", "20"]];
+///
+/// let mut state = ListState::new();
+/// state.select(Some(1));
+///
+/// let mut term = Terminal::new(Headless::new(20, 3));
+/// Table::new(&headers, &widths, &rows).render(Rect::new(0, 0, 20, 3), &mut term, &mut state);
+/// ```
 #[derive(Clone, Copy, Debug)]
 pub struct Table<'a> {
     headers: &'a [&'a str],

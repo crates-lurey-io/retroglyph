@@ -15,6 +15,16 @@ use crate::{Align, Theme};
 /// title by default, and the title (if any) defaults to [`Align::Center`].
 /// Set whichever of these a caller needs via
 /// [`Panel::border_style`]/[`Panel::fill_style`]/[`Panel::title`]/[`Panel::title_align`].
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::{Headless, Rect, Terminal};
+/// use retroglyph_widgets::{Panel, Widget};
+///
+/// let mut term = Terminal::new(Headless::new(20, 5));
+/// Panel::new().title("Status").render(Rect::new(0, 0, 20, 5), &mut term);
+/// ```
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Panel<'a> {
     title: Option<&'a str>,

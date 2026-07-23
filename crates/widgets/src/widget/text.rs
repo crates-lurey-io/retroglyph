@@ -17,6 +17,16 @@ use crate::text::truncate as truncate_to_cols;
 /// style, with no wrapping and no per-span styling. `style` defaults to
 /// [`Style::new()`] and `align` to [`Align::Left`]; set them with
 /// [`Text::style`]/[`Text::align`].
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::{Headless, Rect, Terminal};
+/// use retroglyph_widgets::{Align, Text, Widget};
+///
+/// let mut term = Terminal::new(Headless::new(10, 1));
+/// Text::new("OK").align(Align::Right).render(Rect::new(0, 0, 10, 1), &mut term);
+/// ```
 #[derive(Clone, Copy, Debug)]
 pub struct Text<'a> {
     content: &'a str,

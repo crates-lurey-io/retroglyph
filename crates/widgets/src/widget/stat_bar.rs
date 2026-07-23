@@ -19,6 +19,16 @@ use crate::Theme;
 /// still caps at 100%, but the readout shows the true, uncapped numbers
 /// (`"120/100"`) so the overflow stays visible in text. `label_style`
 /// defaults to a neutral gray-blue; set it with [`StatBar::label_style`].
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::{Headless, Rect, Terminal};
+/// use retroglyph_widgets::{StatBar, Widget};
+///
+/// let mut term = Terminal::new(Headless::new(20, 1));
+/// StatBar::new("HP", 45, 100).render(Rect::new(0, 0, 20, 1), &mut term);
+/// ```
 #[derive(Clone, Copy, Debug)]
 pub struct StatBar<'a> {
     label: &'a str,

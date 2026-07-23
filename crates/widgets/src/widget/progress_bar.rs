@@ -10,6 +10,16 @@ use crate::Theme;
 /// `filled_style`/`empty_style` default to [`Style::new()`]; set them with
 /// [`ProgressBar::filled_style`]/[`ProgressBar::empty_style`].
 /// `area.height()` is ignored; only the first row is drawn.
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::{Headless, Rect, Terminal};
+/// use retroglyph_widgets::{ProgressBar, Widget};
+///
+/// let mut term = Terminal::new(Headless::new(10, 1));
+/// ProgressBar::new(5, 10).render(Rect::new(0, 0, 10, 1), &mut term);
+/// ```
 #[derive(Clone, Copy, Debug)]
 pub struct ProgressBar {
     value: u32,
