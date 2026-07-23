@@ -38,17 +38,17 @@
   <tspan fill="#687439" x="360.8" style="background:#212e1c">.</tspan>
   <tspan fill="#709c4a" x="369.2" style="background:#212e1c">,,,,,",",,</tspan>
   <tspan fill="#d8c694" x="453.2" style="background:#3c3930">...</tspan>
-  <tspan fill="#4a79a9" x="478.4" style="background:#142c47">~</tspan>
-  <tspan fill="#5381ae" x="486.8" style="background:#142c47">≈</tspan>
-  <tspan fill="#4675a5" x="495.2" style="background:#142c46">≈</tspan>
-  <tspan fill="#5885b1" x="503.6" style="background:#142b46">~</tspan>
-  <tspan fill="#5c88b4" x="512.0" style="background:#132b46">~</tspan>
-  <tspan fill="#5683b0" x="520.4" style="background:#142b46">~</tspan>
+  <tspan fill="#4a7aa9" x="478.4" style="background:#142c47">~</tspan>
+  <tspan fill="#5280ae" x="486.8" style="background:#142c47">≈</tspan>
+  <tspan fill="#4674a4" x="495.2" style="background:#142c46">≈</tspan>
+  <tspan fill="#5985b2" x="503.6" style="background:#142b46">~</tspan>
+  <tspan fill="#5c89b5" x="512.0" style="background:#132b46">~</tspan>
+  <tspan fill="#5783b0" x="520.4" style="background:#142b46">~</tspan>
   <tspan fill="#5a87b4" x="528.8" style="background:#142c47">~</tspan>
-  <tspan fill="#4171a3" x="537.2" style="background:#142c47">≈</tspan>
+  <tspan fill="#4171a2" x="537.2" style="background:#142c47">≈</tspan>
   <tspan fill="#d8c694" x="545.6" style="background:#3c3930">:...</tspan>
-  <tspan fill="#4272a2" x="579.2" style="background:#142c47">≈</tspan>
-  <tspan fill="#5a86b3" x="587.6" style="background:#132b45">≈</tspan>
+  <tspan fill="#4272a3" x="579.2" style="background:#142c47">≈</tspan>
+  <tspan fill="#5a86b2" x="587.6" style="background:#132b45">≈</tspan>
   <tspan fill="#4a4460" x="596.0" style="background:#10111a">┌───────  OVERWORLD  ────────┐</tspan>
 </text>
 <text font-family="monospace" font-size="14" y="44.0" xml:space="preserve">
@@ -80,19 +80,19 @@
   <tspan fill="#c8b48a" x="243.2" style="background:#3d462d">·</tspan>
   <tspan fill="#709c4a" x="251.6" style="background:#212e1c">,,,,,,"",",",,",,,,,""</tspan>
   <tspan fill="#d8c694" x="436.4" style="background:#3c3930">:...</tspan>
-  <tspan fill="#4b7aa9" x="470.0" style="background:#142c47">~</tspan>
-  <tspan fill="#5381ae" x="478.4" style="background:#142c46">~</tspan>
+  <tspan fill="#4c7baa" x="470.0" style="background:#142c47">~</tspan>
+  <tspan fill="#5481af" x="478.4" style="background:#142c46">~</tspan>
   <tspan fill="#5d89b5" x="486.8" style="background:#132b46">~</tspan>
-  <tspan fill="#5985b2" x="495.2" style="background:#132b45">~</tspan>
-  <tspan fill="#5885b1" x="503.6" style="background:#132b45">~</tspan>
-  <tspan fill="#4a77a6" x="512.0" style="background:#132b45">≈</tspan>
-  <tspan fill="#5b88b4" x="520.4" style="background:#132b46">~</tspan>
-  <tspan fill="#4473a3" x="528.8" style="background:#142c46">~</tspan>
-  <tspan fill="#4d7baa" x="537.2" style="background:#142c47">≈</tspan>
+  <tspan fill="#5885b1" x="495.2" style="background:#132b45">~</tspan>
+  <tspan fill="#5884b1" x="503.6" style="background:#132b45">~</tspan>
+  <tspan fill="#4b78a7" x="512.0" style="background:#132b45">≈</tspan>
+  <tspan fill="#5b87b4" x="520.4" style="background:#132b46">~</tspan>
+  <tspan fill="#4372a2" x="528.8" style="background:#142c46">~</tspan>
+  <tspan fill="#4e7cab" x="537.2" style="background:#142c47">≈</tspan>
   <tspan fill="#d8c694" x="545.6" style="background:#3c3930">..</tspan>
   <tspan fill="#709c4a" x="562.4" style="background:#212e1c">",</tspan>
   <tspan fill="#d8c694" x="579.2" style="background:#3c3930">.</tspan>
-  <tspan fill="#4574a3" x="587.6" style="background:#132b46">~</tspan>
+  <tspan fill="#4674a4" x="587.6" style="background:#132b46">~</tspan>
   <tspan fill="#4a4460" x="596.0" style="background:#10111a">│</tspan>
   <tspan fill="#7a768e" x="604.4" style="background:#10111a">seed 2  (365, 86)</tspan>
   <tspan fill="#cccccc" x="747.2" style="background:#10111a">           </tspan>
@@ -131,24 +131,24 @@
   <tspan fill="#687439" x="386.0" style="background:#212e1c">.</tspan>
   <tspan fill="#709c4a" x="394.4" style="background:#212e1c">,,",</tspan>
   <tspan fill="#d8c694" x="428.0" style="background:#3c3930">:</tspan>
-  <tspan fill="#4070a1" x="436.4" style="background:#142c47">≈</tspan>
+  <tspan fill="#4171a1" x="436.4" style="background:#142c47">≈</tspan>
   <tspan fill="#3f6ea0" x="444.8" style="background:#142c47">~</tspan>
   <tspan fill="#3f6fa0" x="453.2" style="background:#142c47">~</tspan>
   <tspan fill="#5c89b6" x="461.6" style="background:#142c47">~</tspan>
-  <tspan fill="#4a79a8" x="470.0" style="background:#142c47">≈</tspan>
-  <tspan fill="#5682af" x="478.4" style="background:#142b46">~</tspan>
-  <tspan fill="#5884b1" x="486.8" style="background:#132b45">~</tspan>
-  <tspan fill="#4572a2" x="495.2" style="background:#132a45">≈</tspan>
-  <tspan fill="#3e6d9d" x="503.6" style="background:#132b45">≈</tspan>
-  <tspan fill="#4f7caa" x="512.0" style="background:#132b45">≈</tspan>
-  <tspan fill="#3f6e9e" x="520.4" style="background:#132b45">≈</tspan>
-  <tspan fill="#4170a0" x="528.8" style="background:#142c46">≈</tspan>
-  <tspan fill="#4574a5" x="537.2" style="background:#142c47">≈</tspan>
+  <tspan fill="#4978a8" x="470.0" style="background:#142c47">≈</tspan>
+  <tspan fill="#5783b0" x="478.4" style="background:#142b46">~</tspan>
+  <tspan fill="#5885b1" x="486.8" style="background:#132b45">~</tspan>
+  <tspan fill="#4471a1" x="495.2" style="background:#132a45">≈</tspan>
+  <tspan fill="#3f6d9d" x="503.6" style="background:#132b45">≈</tspan>
+  <tspan fill="#507dab" x="512.0" style="background:#132b45">≈</tspan>
+  <tspan fill="#406e9f" x="520.4" style="background:#132b45">≈</tspan>
+  <tspan fill="#4170a1" x="528.8" style="background:#142c46">≈</tspan>
+  <tspan fill="#4473a4" x="537.2" style="background:#142c47">≈</tspan>
   <tspan fill="#d8c694" x="545.6" style="background:#3c3930">..</tspan>
   <tspan fill="#e2aad2" x="562.4" style="background:#212e1c">*</tspan>
   <tspan fill="#709c4a" x="570.8" style="background:#212e1c">,</tspan>
   <tspan fill="#d8c694" x="579.2" style="background:#3c3930">.</tspan>
-  <tspan fill="#4472a2" x="587.6" style="background:#142b46">≈</tspan>
+  <tspan fill="#4371a1" x="587.6" style="background:#142b46">≈</tspan>
   <tspan fill="#4a4460" x="596.0" style="background:#10111a">│</tspan>
   <tspan fill="#d6d4e2" x="604.4" style="background:#10111a">The Misty Lowlands</tspan>
   <tspan fill="#cccccc" x="755.6" style="background:#10111a">          </tspan>
@@ -180,25 +180,25 @@
   <tspan fill="#c8b48a" x="251.6" style="background:#3d462d">·</tspan>
   <tspan fill="#709c4a" x="260.0" style="background:#212e1c">,",","""""","""","</tspan>
   <tspan fill="#d8c694" x="411.2" style="background:#3c3930">..</tspan>
-  <tspan fill="#5b89b6" x="428.0" style="background:#142c47">≈</tspan>
+  <tspan fill="#5b88b5" x="428.0" style="background:#142c47">≈</tspan>
   <tspan fill="#3f6e9f" x="436.4" style="background:#142c46">~</tspan>
-  <tspan fill="#5581af" x="444.8" style="background:#142b46">≈</tspan>
-  <tspan fill="#4e7ba9" x="453.2" style="background:#142b46">≈</tspan>
-  <tspan fill="#5682b0" x="461.6" style="background:#142b46">≈</tspan>
-  <tspan fill="#4170a0" x="470.0" style="background:#142b46">≈</tspan>
-  <tspan fill="#5682af" x="478.4" style="background:#132b45">~</tspan>
-  <tspan fill="#4d7aa9" x="486.8" style="background:#132b45">≈</tspan>
-  <tspan fill="#5683af" x="495.2" style="background:#132b45">~</tspan>
-  <tspan fill="#5885b1" x="503.6" style="background:#132b45">~</tspan>
-  <tspan fill="#5884b1" x="512.0" style="background:#132b46">≈</tspan>
+  <tspan fill="#5480ae" x="444.8" style="background:#142b46">≈</tspan>
+  <tspan fill="#4d7aa8" x="453.2" style="background:#142b46">≈</tspan>
+  <tspan fill="#5582af" x="461.6" style="background:#142b46">≈</tspan>
+  <tspan fill="#416fa0" x="470.0" style="background:#142b46">≈</tspan>
+  <tspan fill="#5683b0" x="478.4" style="background:#132b45">~</tspan>
+  <tspan fill="#4e7baa" x="486.8" style="background:#132b45">≈</tspan>
+  <tspan fill="#5582af" x="495.2" style="background:#132b45">~</tspan>
+  <tspan fill="#5884b1" x="503.6" style="background:#132b45">~</tspan>
+  <tspan fill="#5885b2" x="512.0" style="background:#132b46">≈</tspan>
   <tspan fill="#5d89b6" x="520.4" style="background:#142b46">≈</tspan>
-  <tspan fill="#4b7aa9" x="528.8" style="background:#142c47">≈</tspan>
-  <tspan fill="#4777a7" x="537.2" style="background:#142d48">~</tspan>
+  <tspan fill="#4c7baa" x="528.8" style="background:#142c47">≈</tspan>
+  <tspan fill="#4676a7" x="537.2" style="background:#142d48">~</tspan>
   <tspan fill="#d8c694" x="545.6" style="background:#3c3930">.</tspan>
   <tspan fill="#e8d678" x="554.0" style="background:#212e1c">*</tspan>
   <tspan fill="#709c4a" x="562.4" style="background:#212e1c">",</tspan>
   <tspan fill="#d8c694" x="579.2" style="background:#3c3930">.</tspan>
-  <tspan fill="#4d7aa9" x="587.6" style="background:#142b46">≈</tspan>
+  <tspan fill="#4c79a8" x="587.6" style="background:#142b46">≈</tspan>
   <tspan fill="#4a4460" x="596.0" style="background:#10111a">│</tspan>
   <tspan fill="#f8c65a" x="604.4" style="background:#10111a">Stonemere (City)</tspan>
   <tspan fill="#cccccc" x="738.8" style="background:#10111a">            </tspan>
@@ -234,19 +234,19 @@
   <tspan fill="#687439" x="386.0" style="background:#212e1c">.</tspan>
   <tspan fill="#d8c694" x="394.4" style="background:#3c3930">..</tspan>
   <tspan fill="#5d8bb7" x="411.2" style="background:#142d47">≈</tspan>
-  <tspan fill="#4070a1" x="419.6" style="background:#142c47">~</tspan>
-  <tspan fill="#5481af" x="428.0" style="background:#142c47">~</tspan>
+  <tspan fill="#4170a2" x="419.6" style="background:#142c47">~</tspan>
+  <tspan fill="#5582b0" x="428.0" style="background:#142c47">~</tspan>
   <tspan fill="#3f6d9f" x="436.4" style="background:#142b46">≈</tspan>
-  <tspan fill="#4776a5" x="444.8" style="background:#132b46">≈</tspan>
+  <tspan fill="#4675a4" x="444.8" style="background:#132b46">≈</tspan>
   <tspan fill="#406e9f" x="453.2" style="background:#132b45">≈</tspan>
-  <tspan fill="#5481ae" x="461.6" style="background:#132b45">~</tspan>
-  <tspan fill="#5b87b3" x="470.0" style="background:#132b45">~</tspan>
-  <tspan fill="#517eab" x="478.4" style="background:#132b45">≈</tspan>
-  <tspan fill="#4876a5" x="486.8" style="background:#132b45">~</tspan>
+  <tspan fill="#5582af" x="461.6" style="background:#132b45">~</tspan>
+  <tspan fill="#5a86b3" x="470.0" style="background:#132b45">~</tspan>
+  <tspan fill="#527eac" x="478.4" style="background:#132b45">≈</tspan>
+  <tspan fill="#4775a5" x="486.8" style="background:#132b45">~</tspan>
   <tspan fill="#5d89b5" x="495.2" style="background:#132b46">~</tspan>
-  <tspan fill="#5c88b4" x="503.6" style="background:#142b46">~</tspan>
+  <tspan fill="#5b87b4" x="503.6" style="background:#142b46">~</tspan>
   <tspan fill="#3f6ea0" x="512.0" style="background:#142c47">~</tspan>
-  <tspan fill="#5886b3" x="520.4" style="background:#142c47">≈</tspan>
+  <tspan fill="#5885b2" x="520.4" style="background:#142c47">≈</tspan>
   <tspan fill="#d8c694" x="528.8" style="background:#3c3930">...</tspan>
   <tspan fill="#709c4a" x="554.0" style="background:#212e1c">"</tspan>
   <tspan fill="#e8d678" x="562.4" style="background:#212e1c">*</tspan>
@@ -287,24 +287,24 @@
   <tspan fill="#709c4a" x="268.4" style="background:#212e1c">",",,""","",,,</tspan>
   <tspan fill="#d8c694" x="386.0" style="background:#3c3930">.</tspan>
   <tspan fill="#4070a2" x="394.4" style="background:#142c47">≈</tspan>
-  <tspan fill="#5b88b4" x="402.8" style="background:#142c47">≈</tspan>
+  <tspan fill="#5b88b5" x="402.8" style="background:#142c47">≈</tspan>
   <tspan fill="#4372a2" x="411.2" style="background:#142c46">≈</tspan>
-  <tspan fill="#3f6e9f" x="419.6" style="background:#142b46">≈</tspan>
-  <tspan fill="#4e7caa" x="428.0" style="background:#132b46">~</tspan>
-  <tspan fill="#5482af" x="436.4" style="background:#132b46">~</tspan>
+  <tspan fill="#3f6e9e" x="419.6" style="background:#142b46">≈</tspan>
+  <tspan fill="#4f7dab" x="428.0" style="background:#132b46">~</tspan>
+  <tspan fill="#5582af" x="436.4" style="background:#132b46">~</tspan>
   <tspan fill="#5d89b4" x="444.8" style="background:#132b45">~</tspan>
-  <tspan fill="#527fac" x="453.2" style="background:#132b45">~</tspan>
-  <tspan fill="#4b78a6" x="461.6" style="background:#132b45">~</tspan>
-  <tspan fill="#5a86b2" x="470.0" style="background:#132b45">~</tspan>
-  <tspan fill="#5c89b5" x="478.4" style="background:#132b46">~</tspan>
-  <tspan fill="#4271a2" x="486.8" style="background:#142b46">≈</tspan>
-  <tspan fill="#517fae" x="495.2" style="background:#142c47">≈</tspan>
-  <tspan fill="#4d7bab" x="503.6" style="background:#142c47">≈</tspan>
+  <tspan fill="#5380ad" x="453.2" style="background:#132b45">~</tspan>
+  <tspan fill="#4a77a5" x="461.6" style="background:#132b45">~</tspan>
+  <tspan fill="#5985b2" x="470.0" style="background:#132b45">~</tspan>
+  <tspan fill="#5d89b5" x="478.4" style="background:#132b46">~</tspan>
+  <tspan fill="#4371a2" x="486.8" style="background:#142b46">≈</tspan>
+  <tspan fill="#507ead" x="495.2" style="background:#142c47">≈</tspan>
+  <tspan fill="#4c7aaa" x="503.6" style="background:#142c47">≈</tspan>
   <tspan fill="#d8c694" x="512.0" style="background:#3c3930">.:.</tspan>
   <tspan fill="#709c4a" x="537.2" style="background:#212e1c">",</tspan>
   <tspan fill="#e0b060" x="554.0" style="background:#304325">⌂</tspan>
   <tspan fill="#709c4a" x="562.4" style="background:#212e1c">","</tspan>
-  <tspan fill="#3f6f9f" x="587.6" style="background:#142c46">≈</tspan>
+  <tspan fill="#3f6e9f" x="587.6" style="background:#142c46">≈</tspan>
   <tspan fill="#4a4460" x="596.0" style="background:#10111a">│</tspan>
   <tspan fill="#7a768e" x="604.4" style="background:#10111a">view: terrain [T]</tspan>
   <tspan fill="#cccccc" x="747.2" style="background:#10111a">           </tspan>
@@ -340,18 +340,18 @@
   <tspan fill="#e8d678" x="310.4" style="background:#212e1c">*</tspan>
   <tspan fill="#709c4a" x="318.8" style="background:#212e1c">,,"",",</tspan>
   <tspan fill="#d8c694" x="377.6" style="background:#3c3930">.</tspan>
-  <tspan fill="#4978a8" x="386.0" style="background:#142c47">≈</tspan>
+  <tspan fill="#4877a7" x="386.0" style="background:#142c47">≈</tspan>
   <tspan fill="#5d89b5" x="394.4" style="background:#142b46">≈</tspan>
-  <tspan fill="#4775a4" x="402.8" style="background:#132b45">≈</tspan>
-  <tspan fill="#5682af" x="411.2" style="background:#132b45">≈</tspan>
-  <tspan fill="#3f6c9d" x="419.6" style="background:#132a45">≈</tspan>
-  <tspan fill="#4b78a6" x="428.0" style="background:#132b45">≈</tspan>
-  <tspan fill="#5985b1" x="436.4" style="background:#132b45">~</tspan>
-  <tspan fill="#4977a5" x="444.8" style="background:#132b45">≈</tspan>
-  <tspan fill="#4d7aa8" x="453.2" style="background:#132b45">≈</tspan>
-  <tspan fill="#4775a4" x="461.6" style="background:#132b45">≈</tspan>
-  <tspan fill="#4574a4" x="470.0" style="background:#132b46">~</tspan>
-  <tspan fill="#5c88b5" x="478.4" style="background:#142c46">≈</tspan>
+  <tspan fill="#4674a3" x="402.8" style="background:#132b45">≈</tspan>
+  <tspan fill="#5582af" x="411.2" style="background:#132b45">≈</tspan>
+  <tspan fill="#3f6d9d" x="419.6" style="background:#132a45">≈</tspan>
+  <tspan fill="#4a78a6" x="428.0" style="background:#132b45">≈</tspan>
+  <tspan fill="#5884b1" x="436.4" style="background:#132b45">~</tspan>
+  <tspan fill="#4a78a6" x="444.8" style="background:#132b45">≈</tspan>
+  <tspan fill="#4e7ba9" x="453.2" style="background:#132b45">≈</tspan>
+  <tspan fill="#4876a5" x="461.6" style="background:#132b45">≈</tspan>
+  <tspan fill="#4473a3" x="470.0" style="background:#132b46">~</tspan>
+  <tspan fill="#5c89b5" x="478.4" style="background:#142c46">≈</tspan>
   <tspan fill="#5e8ab7" x="486.8" style="background:#142c47">≈</tspan>
   <tspan fill="#d8c694" x="495.2" style="background:#3c3930">..</tspan>
   <tspan fill="#709c4a" x="512.0" style="background:#212e1c">,"",</tspan>
@@ -359,7 +359,7 @@
   <tspan fill="#709c4a" x="554.0" style="background:#212e1c">"</tspan>
   <tspan fill="#c8b48a" x="562.4" style="background:#3d462d">·</tspan>
   <tspan fill="#709c4a" x="570.8" style="background:#212e1c">""</tspan>
-  <tspan fill="#4877a7" x="587.6" style="background:#142c47">≈</tspan>
+  <tspan fill="#4776a6" x="587.6" style="background:#142c47">≈</tspan>
   <tspan fill="#4a4460" x="596.0" style="background:#10111a">│</tspan>
   <tspan fill="#cccccc" x="604.4" style="background:#10111a">                            </tspan>
   <tspan fill="#4a4460" x="839.6" style="background:#10111a">│</tspan>
@@ -396,18 +396,18 @@
   <tspan fill="#709c4a" x="360.8" style="background:#212e1c">,</tspan>
   <tspan fill="#d8c694" x="369.2" style="background:#3c3930">.</tspan>
   <tspan fill="#5e8ab7" x="377.6" style="background:#142c47">≈</tspan>
-  <tspan fill="#4371a1" x="386.0" style="background:#142b46">≈</tspan>
-  <tspan fill="#406e9e" x="394.4" style="background:#132b45">≈</tspan>
-  <tspan fill="#4875a4" x="402.8" style="background:#132a44">≈</tspan>
-  <tspan fill="#5480ad" x="411.2" style="background:#132a44">~</tspan>
-  <tspan fill="#416e9f" x="419.6" style="background:#132a44">≈</tspan>
-  <tspan fill="#4573a1" x="428.0" style="background:#132a44">≈</tspan>
-  <tspan fill="#426fa0" x="436.4" style="background:#132a45">≈</tspan>
-  <tspan fill="#5884b0" x="444.8" style="background:#132a45">~</tspan>
-  <tspan fill="#3e6d9e" x="453.2" style="background:#132b45">≈</tspan>
-  <tspan fill="#5985b2" x="461.6" style="background:#132b45">~</tspan>
-  <tspan fill="#5d89b5" x="470.0" style="background:#142c46">≈</tspan>
-  <tspan fill="#5784b2" x="478.4" style="background:#142c47">~</tspan>
+  <tspan fill="#4270a1" x="386.0" style="background:#142b46">≈</tspan>
+  <tspan fill="#3f6e9e" x="394.4" style="background:#132b45">≈</tspan>
+  <tspan fill="#4774a3" x="402.8" style="background:#132a44">≈</tspan>
+  <tspan fill="#5581ae" x="411.2" style="background:#132a44">~</tspan>
+  <tspan fill="#416f9f" x="419.6" style="background:#132a44">≈</tspan>
+  <tspan fill="#4472a1" x="428.0" style="background:#132a44">≈</tspan>
+  <tspan fill="#416f9f" x="436.4" style="background:#132a45">≈</tspan>
+  <tspan fill="#5883b0" x="444.8" style="background:#132a45">~</tspan>
+  <tspan fill="#3f6d9e" x="453.2" style="background:#132b45">≈</tspan>
+  <tspan fill="#5985b1" x="461.6" style="background:#132b45">~</tspan>
+  <tspan fill="#5c89b5" x="470.0" style="background:#142c46">≈</tspan>
+  <tspan fill="#5684b1" x="478.4" style="background:#142c47">~</tspan>
   <tspan fill="#d8c694" x="486.8" style="background:#3c3930">:</tspan>
   <tspan fill="#709c4a" x="495.2" style="background:#212e1c">,"","</tspan>
   <tspan fill="#c8b48a" x="537.2" style="background:#3d462d">·</tspan>
@@ -471,19 +471,19 @@
   <tspan fill="#c8b48a" x="268.4" style="background:#3d462d">·</tspan>
   <tspan fill="#709c4a" x="276.8" style="background:#212e1c">"",",,"",,</tspan>
   <tspan fill="#d8c694" x="360.8" style="background:#3c3930">:</tspan>
-  <tspan fill="#5e8bb7" x="369.2" style="background:#142c47">≈</tspan>
-  <tspan fill="#4372a3" x="377.6" style="background:#142b46">~</tspan>
-  <tspan fill="#5b87b3" x="386.0" style="background:#132b45">~</tspan>
-  <tspan fill="#3f6d9e" x="394.4" style="background:#132a44">≈</tspan>
-  <tspan fill="#5883af" x="402.8" style="background:#132a44">~</tspan>
+  <tspan fill="#5d8ab7" x="369.2" style="background:#142c47">≈</tspan>
+  <tspan fill="#4472a3" x="377.6" style="background:#142b46">~</tspan>
+  <tspan fill="#5b87b2" x="386.0" style="background:#132b45">~</tspan>
+  <tspan fill="#406e9e" x="394.4" style="background:#132a44">≈</tspan>
+  <tspan fill="#5783af" x="402.8" style="background:#132a44">~</tspan>
   <tspan fill="#5c86b2" x="411.2" style="background:#132944">~</tspan>
-  <tspan fill="#426f9f" x="419.6" style="background:#132944">≈</tspan>
+  <tspan fill="#416e9e" x="419.6" style="background:#132944">≈</tspan>
   <tspan fill="#5c87b3" x="428.0" style="background:#132a44">~</tspan>
-  <tspan fill="#4875a3" x="436.4" style="background:#132a44">~</tspan>
-  <tspan fill="#527eab" x="444.8" style="background:#132a45">~</tspan>
-  <tspan fill="#406e9f" x="453.2" style="background:#132b45">~</tspan>
+  <tspan fill="#4774a3" x="436.4" style="background:#132a44">~</tspan>
+  <tspan fill="#517dab" x="444.8" style="background:#132a45">~</tspan>
+  <tspan fill="#3f6e9e" x="453.2" style="background:#132b45">~</tspan>
   <tspan fill="#5d89b5" x="461.6" style="background:#142c46">≈</tspan>
-  <tspan fill="#4f7ead" x="470.0" style="background:#142c47">~</tspan>
+  <tspan fill="#4e7dac" x="470.0" style="background:#142c47">~</tspan>
   <tspan fill="#d8c694" x="478.4" style="background:#3c3930">:</tspan>
   <tspan fill="#709c4a" x="486.8" style="background:#212e1c">",,""</tspan>
   <tspan fill="#c8b48a" x="528.8" style="background:#3d462d">·</tspan>
@@ -547,18 +547,18 @@
   <tspan fill="#c8b48a" x="276.8" style="background:#3d462d">·</tspan>
   <tspan fill="#709c4a" x="285.2" style="background:#212e1c">,",""",,"</tspan>
   <tspan fill="#d8c694" x="360.8" style="background:#3c3930">.</tspan>
-  <tspan fill="#4171a1" x="369.2" style="background:#142c46">≈</tspan>
-  <tspan fill="#5b87b3" x="377.6" style="background:#132b45">~</tspan>
-  <tspan fill="#4471a1" x="386.0" style="background:#132a44">≈</tspan>
-  <tspan fill="#3e6b9b" x="394.4" style="background:#132a44">≈</tspan>
+  <tspan fill="#4170a1" x="369.2" style="background:#142c46">≈</tspan>
+  <tspan fill="#5c88b3" x="377.6" style="background:#132b45">~</tspan>
+  <tspan fill="#4370a0" x="386.0" style="background:#132a44">≈</tspan>
+  <tspan fill="#3d6b9b" x="394.4" style="background:#132a44">≈</tspan>
   <tspan fill="#3d6a9a" x="402.8" style="background:#132943">≈</tspan>
-  <tspan fill="#4e7aa7" x="411.2" style="background:#132943">~</tspan>
-  <tspan fill="#537fac" x="419.6" style="background:#132944">~</tspan>
+  <tspan fill="#4d79a6" x="411.2" style="background:#132943">~</tspan>
+  <tspan fill="#527eab" x="419.6" style="background:#132944">~</tspan>
   <tspan fill="#5c87b3" x="428.0" style="background:#132a44">≈</tspan>
-  <tspan fill="#4572a2" x="436.4" style="background:#132a45">≈</tspan>
-  <tspan fill="#406e9f" x="444.8" style="background:#132b45">~</tspan>
-  <tspan fill="#4371a1" x="453.2" style="background:#142b46">~</tspan>
-  <tspan fill="#4777a7" x="461.6" style="background:#142c47">~</tspan>
+  <tspan fill="#4673a3" x="436.4" style="background:#132a45">≈</tspan>
+  <tspan fill="#3f6e9e" x="444.8" style="background:#132b45">~</tspan>
+  <tspan fill="#4270a1" x="453.2" style="background:#142b46">~</tspan>
+  <tspan fill="#4776a6" x="461.6" style="background:#142c47">~</tspan>
   <tspan fill="#d8c694" x="470.0" style="background:#3c3930">.</tspan>
   <tspan fill="#709c4a" x="478.4" style="background:#212e1c">,",,,,"</tspan>
   <tspan fill="#c8b48a" x="537.2" style="background:#3d462d">·</tspan>
@@ -620,18 +620,17 @@
   <tspan fill="#c8b48a" x="285.2" style="background:#3d462d">·</tspan>
   <tspan fill="#709c4a" x="293.6" style="background:#212e1c">,""""""</tspan>
   <tspan fill="#d8c694" x="352.4" style="background:#3c3930">.</tspan>
-  <tspan fill="#4574a4" x="360.8" style="background:#142c46">≈</tspan>
-  <tspan fill="#5b87b2" x="369.2" style="background:#132b45">~</tspan>
-  <tspan fill="#4774a3" x="377.6" style="background:#132a44">≈</tspan>
-  <tspan fill="#4672a1" x="386.0" style="background:#132943">≈</tspan>
-  <tspan fill="#406d9c" x="394.4" style="background:#132943">≈</tspan>
-  <tspan fill="#5782ae" x="402.8" style="background:#132943">≈</tspan>
-  <tspan fill="#5883af" x="411.2" style="background:#132943">~</tspan>
-  <tspan fill="#426e9e" x="419.6" style="background:#132944">≈</tspan>
-  <tspan fill="#4370a0" x="428.0" style="background:#132a44">≈</tspan>
-  <tspan fill="#4673a3" x="436.4" style="background:#132a45">~</tspan>
-  <tspan fill="#406f9f" x="444.8" style="background:#132b45">~</tspan>
-  <tspan fill="#5d8ab5" x="453.2" style="background:#142c46">≈</tspan>
+  <tspan fill="#4473a3" x="360.8" style="background:#142c46">≈</tspan>
+  <tspan fill="#5a86b2" x="369.2" style="background:#132b45">~</tspan>
+  <tspan fill="#4673a3" x="377.6" style="background:#132a44">≈</tspan>
+  <tspan fill="#4773a2" x="386.0" style="background:#132943">≈</tspan>
+  <tspan fill="#416d9d" x="394.4" style="background:#132943">≈</tspan>
+  <tspan fill="#5782ae" x="402.8" style="background:#132943">≈~</tspan>
+  <tspan fill="#426f9f" x="419.6" style="background:#132944">≈</tspan>
+  <tspan fill="#4471a1" x="428.0" style="background:#132a44">≈</tspan>
+  <tspan fill="#4573a2" x="436.4" style="background:#132a45">~</tspan>
+  <tspan fill="#406e9f" x="444.8" style="background:#132b45">~</tspan>
+  <tspan fill="#5d89b5" x="453.2" style="background:#142c46">≈</tspan>
   <tspan fill="#d8c694" x="461.6" style="background:#3c3930">:</tspan>
   <tspan fill="#709c4a" x="470.0" style="background:#212e1c">"""</tspan>
   <tspan fill="#687439" x="495.2" style="background:#212e1c">.</tspan>
@@ -692,19 +691,19 @@
   <tspan fill="#c8b48a" x="285.2" style="background:#3d462d">·</tspan>
   <tspan fill="#709c4a" x="293.6" style="background:#212e1c">,"",""</tspan>
   <tspan fill="#d8c694" x="344.0" style="background:#3c3930">.</tspan>
-  <tspan fill="#5886b3" x="352.4" style="background:#142c47">≈</tspan>
-  <tspan fill="#3f6e9f" x="360.8" style="background:#132b45">≈</tspan>
-  <tspan fill="#426f9f" x="369.2" style="background:#132a44">≈</tspan>
-  <tspan fill="#5580ac" x="377.6" style="background:#132943">≈</tspan>
-  <tspan fill="#5983b0" x="386.0" style="background:#132943">≈</tspan>
-  <tspan fill="#4672a1" x="394.4" style="background:#132943">≈</tspan>
-  <tspan fill="#4b77a5" x="402.8" style="background:#132943">≈</tspan>
-  <tspan fill="#4471a0" x="411.2" style="background:#132944">~</tspan>
+  <tspan fill="#5885b2" x="352.4" style="background:#142c47">≈</tspan>
+  <tspan fill="#406e9f" x="360.8" style="background:#132b45">≈</tspan>
+  <tspan fill="#416e9f" x="369.2" style="background:#132a44">≈</tspan>
+  <tspan fill="#5581ad" x="377.6" style="background:#132943">≈</tspan>
+  <tspan fill="#5a84b0" x="386.0" style="background:#132943">≈</tspan>
+  <tspan fill="#4773a1" x="394.4" style="background:#132943">≈</tspan>
+  <tspan fill="#4c78a6" x="402.8" style="background:#132943">≈</tspan>
+  <tspan fill="#4370a0" x="411.2" style="background:#132944">~</tspan>
   <tspan fill="#3d6b9b" x="419.6" style="background:#132a44">~</tspan>
-  <tspan fill="#527eab" x="428.0" style="background:#132a44">~</tspan>
+  <tspan fill="#517daa" x="428.0" style="background:#132a44">~</tspan>
   <tspan fill="#3e6d9e" x="436.4" style="background:#132b45">~</tspan>
-  <tspan fill="#5a86b3" x="444.8" style="background:#142b46">≈</tspan>
-  <tspan fill="#4575a6" x="453.2" style="background:#142c47">≈</tspan>
+  <tspan fill="#5985b2" x="444.8" style="background:#142b46">≈</tspan>
+  <tspan fill="#4474a5" x="453.2" style="background:#142c47">≈</tspan>
   <tspan fill="#d8c694" x="461.6" style="background:#3c3930">.</tspan>
   <tspan fill="#709c4a" x="470.0" style="background:#212e1c">,,",,,"</tspan>
   <tspan fill="#c8b48a" x="528.8" style="background:#3d462d">·</tspan>
@@ -771,18 +770,18 @@
   <tspan fill="#687439" x="318.8" style="background:#212e1c">.</tspan>
   <tspan fill="#709c4a" x="327.2" style="background:#212e1c">,"</tspan>
   <tspan fill="#d8c694" x="344.0" style="background:#3c3930">.</tspan>
-  <tspan fill="#4573a3" x="352.4" style="background:#142c46">≈</tspan>
-  <tspan fill="#5480ad" x="360.8" style="background:#132b45">≈</tspan>
-  <tspan fill="#4f7ba9" x="369.2" style="background:#132a44">≈</tspan>
-  <tspan fill="#4471a0" x="377.6" style="background:#132944">~</tspan>
-  <tspan fill="#4672a1" x="386.0" style="background:#132943">~</tspan>
-  <tspan fill="#5984b0" x="394.4" style="background:#132943">~</tspan>
-  <tspan fill="#4673a2" x="402.8" style="background:#132944">~</tspan>
-  <tspan fill="#5480ad" x="411.2" style="background:#132a44">~</tspan>
-  <tspan fill="#416e9f" x="419.6" style="background:#132a45">~</tspan>
-  <tspan fill="#3f6e9e" x="428.0" style="background:#132b45">~</tspan>
-  <tspan fill="#5c89b5" x="436.4" style="background:#142c46">≈</tspan>
-  <tspan fill="#4a79a9" x="444.8" style="background:#142c47">≈</tspan>
+  <tspan fill="#4473a3" x="352.4" style="background:#142c46">≈</tspan>
+  <tspan fill="#5581ae" x="360.8" style="background:#132b45">≈</tspan>
+  <tspan fill="#507caa" x="369.2" style="background:#132a44">≈</tspan>
+  <tspan fill="#4370a0" x="377.6" style="background:#132944">~</tspan>
+  <tspan fill="#4571a0" x="386.0" style="background:#132943">~</tspan>
+  <tspan fill="#5883af" x="394.4" style="background:#132943">~</tspan>
+  <tspan fill="#4572a1" x="402.8" style="background:#132944">~</tspan>
+  <tspan fill="#537fad" x="411.2" style="background:#132a44">~</tspan>
+  <tspan fill="#406e9e" x="419.6" style="background:#132a45">~</tspan>
+  <tspan fill="#3f6e9f" x="428.0" style="background:#132b45">~</tspan>
+  <tspan fill="#5c88b4" x="436.4" style="background:#142c46">≈</tspan>
+  <tspan fill="#4978a8" x="444.8" style="background:#142c47">≈</tspan>
   <tspan fill="#d8c694" x="453.2" style="background:#3c3930">.</tspan>
   <tspan fill="#687439" x="461.6" style="background:#212e1c">.</tspan>
   <tspan fill="#709c4a" x="470.0" style="background:#212e1c">,,,</tspan>
@@ -852,17 +851,17 @@
   <tspan fill="#c8b48a" x="285.2" style="background:#3d462d">·</tspan>
   <tspan fill="#709c4a" x="293.6" style="background:#212e1c">",,""</tspan>
   <tspan fill="#d8c694" x="335.6" style="background:#3c3930">.</tspan>
-  <tspan fill="#4f7dac" x="344.0" style="background:#142c47">≈</tspan>
-  <tspan fill="#3f6e9e" x="352.4" style="background:#142b46">≈</tspan>
-  <tspan fill="#4876a5" x="360.8" style="background:#132b45">≈</tspan>
-  <tspan fill="#4472a1" x="369.2" style="background:#132a44">≈</tspan>
-  <tspan fill="#4471a0" x="377.6" style="background:#132a44">~</tspan>
-  <tspan fill="#3f6d9c" x="386.0" style="background:#132a44">~</tspan>
-  <tspan fill="#4976a4" x="394.4" style="background:#132a44">~</tspan>
-  <tspan fill="#507caa" x="402.8" style="background:#132a44">~</tspan>
+  <tspan fill="#507ead" x="344.0" style="background:#142c47">≈</tspan>
+  <tspan fill="#3f6d9e" x="352.4" style="background:#142b46">≈</tspan>
+  <tspan fill="#4977a5" x="360.8" style="background:#132b45">≈</tspan>
+  <tspan fill="#4573a1" x="369.2" style="background:#132a44">≈</tspan>
+  <tspan fill="#4371a0" x="377.6" style="background:#132a44">~</tspan>
+  <tspan fill="#3e6c9c" x="386.0" style="background:#132a44">~</tspan>
+  <tspan fill="#4875a3" x="394.4" style="background:#132a44">~</tspan>
+  <tspan fill="#4f7ba9" x="402.8" style="background:#132a44">~</tspan>
   <tspan fill="#3e6c9d" x="411.2" style="background:#132a45">~</tspan>
-  <tspan fill="#4c79a8" x="419.6" style="background:#132b45">~</tspan>
-  <tspan fill="#507eac" x="428.0" style="background:#142c47">~</tspan>
+  <tspan fill="#4d7aa9" x="419.6" style="background:#132b45">~</tspan>
+  <tspan fill="#517fad" x="428.0" style="background:#142c47">~</tspan>
   <tspan fill="#d8c694" x="436.4" style="background:#3c3930">.</tspan>
   <tspan fill="#709c4a" x="444.8" style="background:#212e1c">,,,""</tspan>
   <tspan fill="#8ca0ff" x="486.8" style="background:#304325">Φ</tspan>
@@ -934,16 +933,16 @@
   <tspan fill="#c8b48a" x="285.2" style="background:#3d462d">·</tspan>
   <tspan fill="#709c4a" x="293.6" style="background:#212e1c">,,,,,</tspan>
   <tspan fill="#d8c694" x="335.6" style="background:#3c3930">.</tspan>
-  <tspan fill="#5583b0" x="344.0" style="background:#142c47">≈</tspan>
-  <tspan fill="#517eac" x="352.4" style="background:#142b46">~</tspan>
+  <tspan fill="#5482af" x="344.0" style="background:#142c47">≈</tspan>
+  <tspan fill="#507dab" x="352.4" style="background:#142b46">~</tspan>
   <tspan fill="#5d89b4" x="360.8" style="background:#132b45">≈</tspan>
-  <tspan fill="#5480ad" x="369.2" style="background:#132a45">~</tspan>
-  <tspan fill="#4875a4" x="377.6" style="background:#132a45">≈</tspan>
-  <tspan fill="#4572a2" x="386.0" style="background:#132a45">~</tspan>
-  <tspan fill="#537fad" x="394.4" style="background:#132a45">≈</tspan>
-  <tspan fill="#4270a0" x="402.8" style="background:#132b45">~</tspan>
+  <tspan fill="#537fad" x="369.2" style="background:#132a45">~</tspan>
+  <tspan fill="#4976a5" x="377.6" style="background:#132a45">≈</tspan>
+  <tspan fill="#4472a2" x="386.0" style="background:#132a45">~</tspan>
+  <tspan fill="#537fac" x="394.4" style="background:#132a45">≈</tspan>
+  <tspan fill="#416f9f" x="402.8" style="background:#132b45">~</tspan>
   <tspan fill="#5b87b3" x="411.2" style="background:#132b45">≈</tspan>
-  <tspan fill="#4574a4" x="419.6" style="background:#142c47">≈</tspan>
+  <tspan fill="#4473a4" x="419.6" style="background:#142c47">≈</tspan>
   <tspan fill="#d8c694" x="428.0" style="background:#3c3930">.</tspan>
   <tspan fill="#709c4a" x="436.4" style="background:#212e1c">"",","",",</tspan>
   <tspan fill="#c8b48a" x="520.4" style="background:#3d462d">·</tspan>
@@ -1011,16 +1010,16 @@
   <tspan fill="#709c4a" x="243.2" style="background:#212e1c">",,",</tspan>
   <tspan fill="#c8b48a" x="285.2" style="background:#3d462d">·</tspan>
   <tspan fill="#709c4a" x="293.6" style="background:#212e1c">",,",</tspan>
-  <tspan fill="#4272a3" x="335.6" style="background:#142c47">≈</tspan>
+  <tspan fill="#4171a3" x="335.6" style="background:#142c47">≈</tspan>
   <tspan fill="#5d89b5" x="344.0" style="background:#142c46">~</tspan>
-  <tspan fill="#5481ae" x="352.4" style="background:#142b46">~</tspan>
+  <tspan fill="#5380ae" x="352.4" style="background:#142b46">~</tspan>
   <tspan fill="#5c88b4" x="360.8" style="background:#132b45">≈</tspan>
-  <tspan fill="#5a86b3" x="369.2" style="background:#132b45">≈</tspan>
-  <tspan fill="#5481ae" x="377.6" style="background:#132b45">≈</tspan>
+  <tspan fill="#5a86b2" x="369.2" style="background:#132b45">≈</tspan>
+  <tspan fill="#5380ad" x="377.6" style="background:#132b45">≈</tspan>
   <tspan fill="#5c88b4" x="386.0" style="background:#132b45">≈</tspan>
-  <tspan fill="#5d89b5" x="394.4" style="background:#142b46">≈</tspan>
-  <tspan fill="#4271a1" x="402.8" style="background:#142c46">~</tspan>
-  <tspan fill="#5784b1" x="411.2" style="background:#142c47">~</tspan>
+  <tspan fill="#5d88b4" x="394.4" style="background:#142b46">≈</tspan>
+  <tspan fill="#4372a2" x="402.8" style="background:#142c46">~</tspan>
+  <tspan fill="#5885b2" x="411.2" style="background:#142c47">~</tspan>
   <tspan fill="#d8c694" x="419.6" style="background:#3c3930">:</tspan>
   <tspan fill="#709c4a" x="428.0" style="background:#212e1c">,,"""</tspan>
   <tspan fill="#687439" x="470.0" style="background:#212e1c">.</tspan>
@@ -1093,13 +1092,13 @@
   <tspan fill="#709c4a" x="310.4" style="background:#212e1c">""</tspan>
   <tspan fill="#d8c694" x="327.2" style="background:#3c3930">.</tspan>
   <tspan fill="#5e8ab7" x="335.6" style="background:#142c47">≈</tspan>
-  <tspan fill="#4473a3" x="344.0" style="background:#142c46">≈</tspan>
-  <tspan fill="#406fa0" x="352.4" style="background:#142b46">~</tspan>
-  <tspan fill="#5884b1" x="360.8" style="background:#142b46">≈</tspan>
-  <tspan fill="#5783b0" x="369.2" style="background:#142b46">≈</tspan>
-  <tspan fill="#5481af" x="377.6" style="background:#142b46">≈</tspan>
-  <tspan fill="#5a87b4" x="386.0" style="background:#142c47">≈</tspan>
-  <tspan fill="#4071a1" x="394.4" style="background:#142c47">≈</tspan>
+  <tspan fill="#4574a4" x="344.0" style="background:#142c46">≈</tspan>
+  <tspan fill="#416fa1" x="352.4" style="background:#142b46">~</tspan>
+  <tspan fill="#5985b2" x="360.8" style="background:#142b46">≈</tspan>
+  <tspan fill="#5683b0" x="369.2" style="background:#142b46">≈</tspan>
+  <tspan fill="#5380ae" x="377.6" style="background:#142b46">≈</tspan>
+  <tspan fill="#5a86b3" x="386.0" style="background:#142c47">≈</tspan>
+  <tspan fill="#4171a2" x="394.4" style="background:#142c47">≈</tspan>
   <tspan fill="#d8c694" x="402.8" style="background:#3c3930">..</tspan>
   <tspan fill="#709c4a" x="419.6" style="background:#212e1c">",,,,,,","</tspan>
   <tspan fill="#c8b48a" x="503.6" style="background:#3d462d">·</tspan>
@@ -1171,10 +1170,10 @@
   <tspan fill="#d8c694" x="327.2" style="background:#3c3930">.</tspan>
   <tspan fill="#5c89b5" x="335.6" style="background:#142c47">≈</tspan>
   <tspan fill="#5c89b5" x="344.0" style="background:#142c46">≈</tspan>
-  <tspan fill="#3f6fa0" x="352.4" style="background:#142c46">~</tspan>
-  <tspan fill="#5c89b5" x="360.8" style="background:#142c47">≈</tspan>
-  <tspan fill="#4272a2" x="369.2" style="background:#142c47">~</tspan>
-  <tspan fill="#4372a3" x="377.6" style="background:#142c47">≈</tspan>
+  <tspan fill="#3f6f9f" x="352.4" style="background:#142c46">~</tspan>
+  <tspan fill="#5c88b5" x="360.8" style="background:#142c47">≈</tspan>
+  <tspan fill="#4171a2" x="369.2" style="background:#142c47">~</tspan>
+  <tspan fill="#4272a3" x="377.6" style="background:#142c47">≈</tspan>
   <tspan fill="#4071a2" x="386.0" style="background:#142d48">≈</tspan>
   <tspan fill="#d8c694" x="394.4" style="background:#3c3930">.</tspan>
   <tspan fill="#687439" x="402.8" style="background:#212e1c">.</tspan>
@@ -1257,9 +1256,9 @@
   <tspan fill="#c8b48a" x="318.8" style="background:#3d462d">·</tspan>
   <tspan fill="#d8c694" x="327.2" style="background:#3c3930">.</tspan>
   <tspan fill="#3f6fa0" x="335.6" style="background:#142c47">~</tspan>
-  <tspan fill="#406fa0" x="344.0" style="background:#142c46">~</tspan>
-  <tspan fill="#4978a7" x="352.4" style="background:#142c47">≈</tspan>
-  <tspan fill="#4071a1" x="360.8" style="background:#142c47">~</tspan>
+  <tspan fill="#3f6fa0" x="344.0" style="background:#142c46">~</tspan>
+  <tspan fill="#4877a7" x="352.4" style="background:#142c47">≈</tspan>
+  <tspan fill="#4070a1" x="360.8" style="background:#142c47">~</tspan>
   <tspan fill="#4071a2" x="369.2" style="background:#142d47">≈</tspan>
   <tspan fill="#d8c694" x="377.6" style="background:#3c3930">..</tspan>
   <tspan fill="#e2aad2" x="394.4" style="background:#212e1c">*</tspan>
@@ -1311,9 +1310,9 @@
   <tspan fill="#c8b48a" x="293.6" style="background:#3d462d">·</tspan>
   <tspan fill="#709c4a" x="302.0" style="background:#212e1c">","</tspan>
   <tspan fill="#c8b48a" x="327.2" style="background:#57503f">·</tspan>
-  <tspan fill="#517fad" x="335.6" style="background:#142c47">≈</tspan>
-  <tspan fill="#4271a2" x="344.0" style="background:#142c47">≈</tspan>
-  <tspan fill="#4475a6" x="352.4" style="background:#142d48">~</tspan>
+  <tspan fill="#507fad" x="335.6" style="background:#142c47">≈</tspan>
+  <tspan fill="#4171a2" x="344.0" style="background:#142c47">≈</tspan>
+  <tspan fill="#4575a6" x="352.4" style="background:#142d48">~</tspan>
   <tspan fill="#d8c694" x="360.8" style="background:#3c3930">...</tspan>
   <tspan fill="#709c4a" x="386.0" style="background:#212e1c">",",",""",</tspan>
   <tspan fill="#687439" x="470.0" style="background:#212e1c">.</tspan>
@@ -1731,7 +1730,7 @@
   <tspan fill="#709c4a" x="453.2" style="background:#212e1c">"""","</tspan>
   <tspan fill="#687439" x="503.6" style="background:#212e1c">.</tspan>
   <tspan fill="#709c4a" x="512.0" style="background:#212e1c">",,",,","</tspan>
-  <tspan fill="#5381af" x="587.6" style="background:#142c47">≈</tspan>
+  <tspan fill="#5482b0" x="587.6" style="background:#142c47">≈</tspan>
   <tspan fill="#4a4460" x="596.0" style="background:#10111a">│</tspan>
   <tspan fill="#a29447" x="604.4" style="background:#10111a">,</tspan>
   <tspan fill="#cccccc" x="612.8" style="background:#10111a"> </tspan>
@@ -1780,7 +1779,7 @@
   <tspan fill="#709c4a" x="486.8" style="background:#212e1c">,,,","""</tspan>
   <tspan fill="#687439" x="554.0" style="background:#212e1c">.</tspan>
   <tspan fill="#709c4a" x="562.4" style="background:#212e1c">"""</tspan>
-  <tspan fill="#406f9f" x="587.6" style="background:#132b45">≈</tspan>
+  <tspan fill="#416fa0" x="587.6" style="background:#132b45">≈</tspan>
   <tspan fill="#4a4460" x="596.0" style="background:#10111a">│</tspan>
   <tspan fill="#cccccc" x="604.4" style="background:#10111a">                            </tspan>
   <tspan fill="#4a4460" x="839.6" style="background:#10111a">│</tspan>
@@ -1820,7 +1819,7 @@
   <tspan fill="#7a7b4d" x="453.2" style="background:#25261e">∩</tspan>
   <tspan fill="#709c4a" x="461.6" style="background:#212e1c">,,",,,",,"",""</tspan>
   <tspan fill="#d8c694" x="579.2" style="background:#3c3930">:</tspan>
-  <tspan fill="#5a85b2" x="587.6" style="background:#132a44">~</tspan>
+  <tspan fill="#5985b1" x="587.6" style="background:#132a44">~</tspan>
   <tspan fill="#4a4460" x="596.0" style="background:#10111a">│</tspan>
   <tspan fill="#7a768e" x="604.4" style="background:#10111a">drag pans, T tiles, R reroll</tspan>
   <tspan fill="#4a4460" x="839.6" style="background:#10111a">│</tspan>
@@ -1862,8 +1861,8 @@
   <tspan fill="#709c4a" x="461.6" style="background:#212e1c">,</tspan>
   <tspan fill="#687439" x="470.0" style="background:#212e1c">.</tspan>
   <tspan fill="#709c4a" x="478.4" style="background:#212e1c">,"""",,,,,,"</tspan>
-  <tspan fill="#4e7dab" x="579.2" style="background:#142c47">≈</tspan>
-  <tspan fill="#5680ac" x="587.6" style="background:#132943">~</tspan>
+  <tspan fill="#4d7cab" x="579.2" style="background:#142c47">≈</tspan>
+  <tspan fill="#557fac" x="587.6" style="background:#132943">~</tspan>
   <tspan fill="#4a4460" x="596.0" style="background:#10111a">└────────────────────────────┘</tspan>
 </text>
 </svg>

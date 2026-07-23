@@ -36,6 +36,13 @@ pub struct Terminal<B: Backend> {
     /// multi-layer present clears `flattened_previous` first so it does a full
     /// redraw instead of diffing against stale data.
     flattened_stale: bool,
+    /// Incremented every time [`present`](Self::present) is called (successful or not).
+    ///
+    /// Lets embedding drivers detect whether application code already presented during a frame,
+    /// so they can skip a redundant driver-side present -- calling `present` twice with nothing
+    /// newly drawn in between is not a no-op (the second call diffs an emptied `current` against
+    /// the just-drawn `previous` and erases it), so this is load-bearing, not just an optimization.
+    present_count: u64,
 }
 
 impl<B: Backend> Terminal<B> {
@@ -58,6 +65,7 @@ impl<B: Backend> Terminal<B> {
             queued_event: None,
             active_layer: 0,
             flattened_stale: false,
+            present_count: 0,
         }
     }
 
@@ -319,6 +327,19 @@ impl<B: Backend> Terminal<B> {
             .render(self);
     }
 
+    /// Number of times [`present`](Self::present) has been called so far (successful or not).
+    ///
+    /// Wraps on overflow; intended for detecting whether `present` was called *at all* between two
+    /// points in time (compare a saved count against the current one), not as a precise total.
+    /// Embedding drivers (e.g. `retroglyph-window`'s windowed drivers) use this to decide whether
+    /// application code already presented during a frame, so they can skip a redundant
+    /// driver-side present -- see `present`'s doc comment for why that redundant call is not a
+    /// harmless no-op.
+    #[must_use]
+    pub const fn present_count(&self) -> u64 {
+        self.present_count
+    }
+
     /// Present the current frame.
     ///
     /// Computes diff, sends changed cells to the backend, flushes, then swaps buffers.
@@ -343,6 +364,13 @@ impl<B: Backend> Terminal<B> {
     /// calls to `present` on an actual state change rather than presenting on a
     /// fixed clock and expecting the previous frame's cells to persist.
     ///
+    /// Calling `present` twice in a row with nothing newly drawn in between is **not** a harmless
+    /// no-op: the second call diffs the now-empty `current` buffer against `previous` (which still
+    /// holds the just-presented frame), so every previously-drawn cell is re-sent as a diff entry
+    /// reverting to its default/blank content -- i.e. it erases the frame that was just presented.
+    /// Use [`present_count`](Self::present_count) if you need to detect "was `present` already
+    /// called this frame" before deciding whether to call it again.
+    ///
     /// [ratatui]: https://docs.rs/ratatui
     ///
     /// # Errors
@@ -351,6 +379,7 @@ impl<B: Backend> Terminal<B> {
     /// [`draw_layers`](crate::Output::draw_layers) or
     /// [`flush`](crate::Output::flush) operations.
     pub fn present(&mut self) -> Result<(), <B as Output>::Error> {
+        self.present_count = self.present_count.wrapping_add(1);
         if self.backend.composites_layers() {
             // Pixel/GPU backends composite the raw layered stream themselves.
             if self.backend.needs_full_frame() {
