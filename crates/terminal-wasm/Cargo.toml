@@ -29,6 +29,16 @@ retroglyph-terminal = { path = "../terminal", version = "0.1.2" }
 # retroglyph-core's own proptest dev-dependency; core never runs its own tests under wasm32
 # (only this crate has a `just test-wasm` target), which is why this doesn't affect it.
 proptest = "1"
+# Used by the take_output/event_throughput criterion benches (benches/*.rs) for deterministic,
+# seeded pseudo-random inputs (sparse-diff cell selection, representative key/mouse event
+# streams). Same version as retroglyph-core's own fastrand dev-dependency (crates/core/benches/
+# grid_diff.rs uses it the same way). Host-only for the same reason as proptest above: criterion
+# benches only ever run on the host (`cargo bench`), never under wasm-pack's `just test-wasm`.
+fastrand = "2"
+# Benchmarking harness for benches/take_output.rs and benches/event_throughput.rs. Same version as
+# retroglyph-core's own criterion dev-dependency. Host-only: `[[bench]]` targets aren't built by
+# `just test-wasm`'s wasm-pack invocation, only by `cargo bench`, which never targets wasm32 here.
+criterion = "0.5"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 # Version pinned to match the wasm-bindgen dev-dependency in
@@ -58,3 +68,11 @@ wasm-bindgen-test = "=0.3.56"
 [features]
 # Forwards to retroglyph-terminal's egc feature.
 egc = ["retroglyph-terminal/egc", "retroglyph-core/egc"]
+
+[[bench]]
+name = "take_output"
+harness = false
+
+[[bench]]
+name = "event_throughput"
+harness = false
