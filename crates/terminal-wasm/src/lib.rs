@@ -175,7 +175,9 @@ impl TerminalWasm {
     ///
     /// Called from JS (via the `wasm-bindgen` entry points below) or from
     /// tests; not part of [`Backend`](retroglyph_core::Backend) itself beyond the no-op default.
-    pub fn push_event(&mut self, event: Event) {
+    /// Crate-private: [`Input::push_event`] is the sole public way to push an event onto a
+    /// `TerminalWasm`, so there is only one way for external callers to do this.
+    pub(crate) fn push_event(&mut self, event: Event) {
         self.event_queue.push_back(event);
     }
 
@@ -252,6 +254,8 @@ impl Input for TerminalWasm {
         self.event_queue.pop_front()
     }
 
+    /// The sole public way to push an event onto a `TerminalWasm`; forwards to the crate-private
+    /// inherent `push_event`.
     fn push_event(&mut self, event: Event) {
         Self::push_event(self, event);
     }
