@@ -111,7 +111,7 @@ impl<B: Backend> Widget<B> for Panel<'_> {
                 .fg(self.border_style.foreground())
                 .bg(self.border_style.background());
             term.put(title_x, title_y, ' ');
-            term.print(title_x + 1, title_y, &t);
+            term.print(title_x + 1, title_y, t);
             term.put(title_x + 1 + t_w, title_y, ' ');
             term.reset_style();
         }

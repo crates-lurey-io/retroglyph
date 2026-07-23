@@ -9,8 +9,12 @@ use unicode_width::UnicodeWidthChar;
 ///
 /// Truncates on a whole-character boundary; a character that would push the
 /// total over `max_cols` is dropped along with the rest of the string.
+///
+/// Returns a borrowed slice of `s`, so this allocates nothing. See
+/// [`truncate_owned`] if you need an owned `String` (e.g. to store past the
+/// lifetime of `s`).
 #[must_use]
-pub fn truncate(s: &str, max_cols: usize) -> String {
+pub fn truncate(s: &str, max_cols: usize) -> &str {
     let mut cols = 0usize;
     let mut end = 0usize;
     for ch in s.chars() {
@@ -21,7 +25,17 @@ pub fn truncate(s: &str, max_cols: usize) -> String {
         cols += w;
         end += ch.len_utf8();
     }
-    s[..end].to_owned()
+    &s[..end]
+}
+
+/// Owned variant of [`truncate`]: truncate `s` to `max_cols` display columns and copy the
+/// surviving prefix into a new `String`.
+///
+/// Prefer [`truncate`] on hot paths (it borrows instead of allocating); reach for this only when
+/// an owned `String` is actually needed.
+#[must_use]
+pub fn truncate_owned(s: &str, max_cols: usize) -> String {
+    truncate(s, max_cols).to_owned()
 }
 
 #[cfg(test)]

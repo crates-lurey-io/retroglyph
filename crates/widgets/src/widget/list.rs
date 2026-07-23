@@ -112,7 +112,7 @@ impl<B: Backend> StatefulWidget<B> for List<'_> {
             term.reset_style()
                 .fg(style.foreground())
                 .bg(style.background());
-            term.print(area.left(), y, &text);
+            term.print(area.left(), y, text);
         }
         term.reset_style();
     }
