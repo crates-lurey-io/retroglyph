@@ -38,3 +38,19 @@ egc = ["retroglyph-terminal/egc", "retroglyph-core/egc"]
 # subscriber (e.g. `tracing-subscriber`'s fmt layer, or a flamegraph via `tracing-flame`). A no-op,
 # and this dependency entirely absent from the build, unless enabled.
 tracing = ["dep:tracing"]
+
+[dev-dependencies]
+criterion = "0.5"
+fastrand = "2"
+
+[[bench]]
+name = "event_translation"
+harness = false
+
+[[bench]]
+name = "draw_overhead"
+harness = false
+
+[[bench]]
+name = "backend_overhead"
+harness = false
