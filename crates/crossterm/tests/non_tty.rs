@@ -53,8 +53,8 @@ fn repeated_construction_does_not_panic() {
 /// `Output` instance to query (covered instead by `new_does_not_panic_when_terminal_unavailable`
 /// above). As of retroglyph#279, `size()` itself never queries the terminal at all -- it
 /// returns a size cached at construction time (seeded from `crossterm::terminal::size()`,
-/// falling back to a sane default if that initial query fails) and refreshed only on
-/// `Event::Resize`.
+/// falling back to 80x24 -- not the previous, non-conventional, 80x25 -- if that initial query
+/// fails, per retroglyph#281) and refreshed only on `Event::Resize`.
 #[test]
 fn size_falls_back_instead_of_panicking() {
     if let Ok(mut term) = Crossterm::new() {

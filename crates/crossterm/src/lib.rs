@@ -430,6 +430,11 @@ pub struct Crossterm<W: std::io::Write = BufWriter<Stdout>> {
     // Resize` -- the app already receives that event on every real terminal resize, so there's
     // no need to re-query on every `Output::size()` call (a `TIOCGWINSZ` ioctl), which used to
     // run once per frame. See retroglyph#279.
+    //
+    // `size()` itself never re-queries after construction (see retroglyph#279), so the only
+    // fallible query is the one-time seed in `build_from_options`; that's also the only place a
+    // hardcoded guess (80x24, not a "last known good" value, since none exists yet) is ever
+    // used. See retroglyph#281.
     cached_size: Size,
 }
 
@@ -642,10 +647,11 @@ impl<W: std::io::Write> Crossterm<W> {
         }
 
         // Seed the cached size once, up front, so `size()` never has to query on the
-        // per-frame path; kept fresh afterward by `poll_event` observing `Event::Resize`
-        // (see below). Matches `Output::size()`'s historical fallback for now; retroglyph#281
-        // revisits this default separately.
-        let (width, height) = crossterm::terminal::size().unwrap_or((80, 25));
+        // per-frame path; kept fresh afterward by `poll_event` observing `Event::Resize` (see
+        // below). Fall back to 80x24 -- not the historical, and non-conventional, 80x25 -- if
+        // this initial query fails; there's no better "last known good" size to fall back to
+        // yet, since none has been observed. See retroglyph#281.
+        let (width, height) = crossterm::terminal::size().unwrap_or((80, 24));
 
         Ok(Self {
             renderer: TerminalRenderer::with_plain_mode(writer, plain),

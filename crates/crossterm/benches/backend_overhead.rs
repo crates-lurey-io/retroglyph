@@ -3,9 +3,9 @@
 //! retroglyph#285 asked for this number to justify (or not) caching `size()` instead of calling
 //! `crossterm::terminal::size()` -- an ioctl-backed syscall -- on every call; retroglyph#279 did
 //! exactly that, so `size()` now just returns a field cached at construction (seeded from
-//! `crossterm::terminal::size()`, falling back to its historical default if that initial query
-//! fails) and refreshed only on `Event::Resize`, never re-querying the terminal per call. This
-//! benchmark now measures (and guards against regressing back to) that near-zero
+//! `crossterm::terminal::size()`, falling back to 80x24 if that initial query fails, per
+//! retroglyph#281) and refreshed only on `Event::Resize`, never re-querying the terminal per
+//! call. This benchmark now measures (and guards against regressing back to) that near-zero
 //! cached-field-read cost, rather than the syscall-per-call cost it originally captured.
 //!
 //! # `poll_event`'s retry-on-unmappable-event path: not benchmarked here
