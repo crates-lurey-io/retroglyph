@@ -1,12 +1,12 @@
 //! Benchmarks `Output::size()`'s per-call cost against a headless `Crossterm<Vec<u8>>`.
 //!
-//! retroglyph#285 asks for this number to justify (or not) caching `size()` instead of calling
-//! `crossterm::terminal::size()` -- an ioctl-backed syscall -- on every call. Run under `cargo
-//! bench` (no TTY attached to the process's stdout), `crossterm::terminal::size()` fails and
-//! `Output::size()` falls back to its hardcoded `(80, 25)` default; the syscall (and its
-//! failure path) still runs every time, which is exactly the per-call cost this benchmark is
-//! measuring -- a real TTY would additionally pay for the ioctl's kernel-side work, so this
-//! number is a floor, not a ceiling, on the real-terminal cost.
+//! retroglyph#285 asked for this number to justify (or not) caching `size()` instead of calling
+//! `crossterm::terminal::size()` -- an ioctl-backed syscall -- on every call; retroglyph#279 did
+//! exactly that, so `size()` now just returns a field cached at construction (seeded from
+//! `crossterm::terminal::size()`, falling back to its historical default if that initial query
+//! fails) and refreshed only on `Event::Resize`, never re-querying the terminal per call. This
+//! benchmark now measures (and guards against regressing back to) that near-zero
+//! cached-field-read cost, rather than the syscall-per-call cost it originally captured.
 //!
 //! # `poll_event`'s retry-on-unmappable-event path: not benchmarked here
 //!
