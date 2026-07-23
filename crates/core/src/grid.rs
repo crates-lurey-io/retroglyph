@@ -915,33 +915,59 @@ impl Grid {
     /// overwrites (erases) the glyph beneath it.
     ///
     /// `dst` must have the same dimensions as `self`.
+    ///
+    /// Walks layer buffers directly by flat index instead of calling
+    /// [`get`](Self::get)/[`get_tile`](Self::get_tile) per cell (see retroglyph#262): each of
+    /// those recomputes a coordinate conversion and a bounds check per cell, which a flat scan
+    /// over each layer's backing buffer -- the same style [`layers`](Self::layers) and
+    /// [`diff`](Self::diff) already use -- avoids entirely.
     pub(crate) fn flatten_into(&self, dst: &mut Self) {
-        let width = usize::from(self.width);
-        for y in 0..self.height {
-            for x in 0..self.width {
-                let mut out = *self.get(x, y);
-                let idx = usize::from(y) * width + usize::from(x);
-                let mut out_extra = self.layer0().extra_arc_for(idx, &out);
-                for id in 1..=self.max_layer {
-                    let Some(tile) = self.get_tile(id, x, y) else {
-                        continue;
-                    };
-                    let contributes_glyph = !tile.flags.contains(TileFlags::EMPTY);
-                    if contributes_glyph {
+        let layer0 = self.layer0();
+        let cell_count = layer0.buf.as_ref().len();
+
+        // Seed every destination cell from layer 0: its tile verbatim, and its extra text
+        // filtered through `HAS_EXTRA` (the flag is authoritative -- see `LayerBuf::extras`'
+        // doc comment -- so a stale, unflagged entry in `layer0.extras` is not carried over).
+        let dst_layer0 = dst.layer0_mut();
+        dst_layer0.buf.as_mut().copy_from_slice(layer0.buf.as_ref());
+        dst_layer0.extras.clear();
+        for (&idx, extra) in &layer0.extras {
+            if layer0.buf.as_ref()[idx]
+                .flags
+                .contains(TileFlags::HAS_EXTRA)
+            {
+                dst_layer0.extras.insert(idx, extra.clone());
+            }
+        }
+
+        // Overlay every higher allocated layer, in ascending order, index-for-index.
+        for id in 1..=self.max_layer {
+            let Some(lb) = self.layer(id) else {
+                continue;
+            };
+            let src_buf = lb.buf.as_ref();
+            debug_assert_eq!(src_buf.len(), cell_count);
+            let dst_layer0 = dst.layer0_mut();
+            for (idx, tile) in src_buf.iter().enumerate() {
+                if !tile.flags.contains(TileFlags::EMPTY) {
+                    {
+                        let out = &mut dst_layer0.buf.as_mut()[idx];
                         out.glyph = tile.glyph;
                         out.style.fg = tile.style.fg;
                         out.dx = tile.dx;
                         out.dy = tile.dy;
                         out.flags = tile.flags;
-                        out_extra = self.layer(id).and_then(|lb| lb.extra_arc_for(idx, tile));
                     }
-                    if tile.style.bg != Color::Default {
-                        out.style.bg = tile.style.bg;
+                    if tile.flags.contains(TileFlags::HAS_EXTRA) {
+                        if let Some(extra) = lb.extra_arc_for(idx, tile) {
+                            dst_layer0.extras.insert(idx, extra);
+                        }
+                    } else {
+                        dst_layer0.extras.remove(&idx);
                     }
                 }
-                dst.put(x, y, out);
-                if let Some(extra) = out_extra {
-                    dst.set_extra(0, x, y, extra);
+                if tile.style.bg != Color::Default {
+                    dst_layer0.buf.as_mut()[idx].style.bg = tile.style.bg;
                 }
             }
         }
@@ -1815,6 +1841,64 @@ mod tests {
         g.flatten_into(&mut flattened);
         assert_eq!(flattened.get(0, 0).glyph, 'e');
         assert_eq!(flattened.grapheme(0, 0, 0), Some("e\u{0301}"));
+    }
+
+    #[test]
+    fn test_grid_flatten_into_single_layer_is_a_plain_copy() {
+        let mut g = Grid::new(2, 2);
+        g.put(0, 0, Tile::new('a', Style::default()));
+        g.put(1, 1, Tile::new('b', Style::default()));
+        let mut flattened = Grid::new(2, 2);
+        g.flatten_into(&mut flattened);
+        assert_eq!(flattened.get(0, 0).glyph(), 'a');
+        assert_eq!(flattened.get(1, 1).glyph(), 'b');
+        assert_eq!(flattened.get(1, 0).glyph(), ' ');
+    }
+
+    #[test]
+    fn test_grid_flatten_into_higher_layer_overwrites_glyph_and_fg_but_not_default_bg() {
+        let mut g = Grid::new(1, 1);
+        g.put(
+            0,
+            0,
+            Tile::new('a', Style::new().fg(Color::BLACK).bg(Color::WHITE)),
+        );
+        g.put_tile(1, 0, 0, Tile::new('b', Style::new().fg(Color::WHITE)));
+
+        let mut flattened = Grid::new(1, 1);
+        g.flatten_into(&mut flattened);
+        let out = flattened.get(0, 0);
+        assert_eq!(out.glyph(), 'b');
+        assert_eq!(out.style().fg, Color::WHITE);
+        // Layer 1's tile has a `Default` background, so layer 0's background shows through.
+        assert_eq!(out.style().bg, Color::WHITE);
+    }
+
+    #[test]
+    fn test_grid_flatten_into_empty_higher_layer_cell_is_transparent() {
+        let mut g = Grid::new(2, 1);
+        g.put(0, 0, Tile::new('a', Style::default()));
+        g.put(1, 0, Tile::new('b', Style::default()));
+        // Only touch (0, 0) on layer 1; (1, 0) on layer 1 stays at its default (EMPTY) tile.
+        g.put_tile(1, 0, 0, Tile::new('c', Style::default()));
+
+        let mut flattened = Grid::new(2, 1);
+        g.flatten_into(&mut flattened);
+        assert_eq!(flattened.get(0, 0).glyph(), 'c');
+        // Untouched by the transparent layer-1 cell -- layer 0's glyph shows through.
+        assert_eq!(flattened.get(1, 0).glyph(), 'b');
+    }
+
+    #[test]
+    fn test_grid_flatten_into_multi_layer_stale_dst_extra_is_cleared() {
+        // `dst` may be a reused scratch buffer with stale content from a previous frame (see
+        // `Terminal::present`) -- `flatten_into` must fully overwrite it, not merge with it.
+        let mut flattened = Grid::new(1, 1);
+        flattened.put(0, 0, Tile::new('z', Style::default()));
+
+        let g = Grid::new(1, 1);
+        g.flatten_into(&mut flattened);
+        assert_eq!(flattened.get(0, 0).glyph(), ' ');
     }
 }
 
