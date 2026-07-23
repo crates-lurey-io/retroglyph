@@ -746,6 +746,11 @@ impl<W: std::io::Write> Input for Crossterm<W> {
 }
 
 impl<W: std::io::Write> Cursor for Crossterm<W> {
+    /// Queues the show/hide escape without flushing; the next [`Output::flush`] call drains it
+    /// along with everything else. A caller that hides the cursor and moves it in the same frame
+    /// (a common pattern right before a draw) would otherwise pay an extra flush per call on top
+    /// of the normal draw/flush pair, with no observable benefit since nothing reads the terminal
+    /// state in between.
     fn set_cursor_visible(&mut self, visible: bool) {
         let writer = self.renderer.writer_mut();
         if visible {
@@ -753,13 +758,13 @@ impl<W: std::io::Write> Cursor for Crossterm<W> {
         } else {
             let _ = crossterm::queue!(writer, crossterm::cursor::Hide);
         }
-        let _ = writer.flush();
     }
 
+    /// Queues the cursor-move escape without flushing; see [`set_cursor_visible`](Self::set_cursor_visible)'s
+    /// docs for why this is deferred to the next [`Output::flush`] instead of flushing here.
     fn set_cursor_position(&mut self, position: Pos) {
         let writer = self.renderer.writer_mut();
         let _ = crossterm::queue!(writer, crossterm::cursor::MoveTo(position.x, position.y));
-        let _ = writer.flush();
     }
 }
 
