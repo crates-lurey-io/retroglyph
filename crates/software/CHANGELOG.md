@@ -266,11 +266,11 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
   _(software)_ Precompute clamped destination range in blit_cell/blit_glyph/blit_sprite by
   `@matanlurey` in [#328](https://github.com/crates-lurey-io/retroglyph/pull/328)
 
-  > blit_cell, blit_glyph, and blit_sprite each did an if idx < buffer.len() (plus per-axis x/y >=
+  > blit*cell, blit_glyph, and blit_sprite each did an if idx < buffer.len() (plus per-axis x/y >=
   > buf_w/buf_h) bounds check inside the innermost scale x scale loop, once per output pixel. For
   > the common case of a cell fully inside the buffer with no sub-cell offset, the destination
-  > rectangle is provably in-bounds, so those checks were pure overhead multiplied by cell_w _
-  > cell_h _ scale^2 per cell.
+  > rectangle is provably in-bounds, so those checks were pure overhead multiplied by cell_w *
+  > cell*h * scale^2 per cell.
   >
   > Precompute the glyph/sprite's destination bounding box once per call and branch on whether it
   > fits inside the buffer:
