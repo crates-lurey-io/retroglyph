@@ -9,7 +9,7 @@
 //! key repeat/release, mouse moves/clicks/scrolls, resizes, paste, and focus changes, plus the
 //! single unmappable-event case (`MouseEventKind::Drag` maps via `Moved`, so genuinely unmappable
 //! crossterm events are rare; `KeyCode::Media(_)` etc. are used here as a stand-in) that exercises
-//! the `Err(())` branch `poll_event`'s retry loop depends on.
+//! the `None` branch `poll_event`'s retry loop depends on.
 //!
 //! `from_crossterm_event` is a private implementation detail of `retroglyph-crossterm` and is
 //! exposed here only via a `#[doc(hidden)] pub` escape hatch (see its doc comment in `lib.rs`) --
@@ -32,7 +32,7 @@ use std::hint::black_box;
 /// repeat/release, mouse move/click/scroll, a resize batch, a paste, and a focus change --
 /// roughly proportioned the way an interactive session would actually produce them (many key
 /// presses and mouse moves, occasional everything else), plus one genuinely unmappable event
-/// (`KeyCode::Media`, which `from_crossterm_key_code` has no mapping for) to cover the `Err(())`
+/// (`KeyCode::Media`, which `from_crossterm_key_code` has no mapping for) to cover the `None`
 /// path `poll_event`'s retry loop relies on.
 fn representative_events() -> Vec<CtEvent> {
     let mut events = Vec::new();
