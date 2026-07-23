@@ -49,13 +49,15 @@ signatures don't change but runtime behavior does, which no tool can detect auto
 not sure whether your change needs `!`, it almost certainly doesn't -- open the PR without it and
 let CI's semver check tell you.
 
-**Labels** are applied along three axes, mostly automatically: `c:<crate>` (area, mirrors the
-Conventional Commit scopes above), `p:0`-`p:3` (priority, critical to low), and `t:<type>`
-(bug/feature/perf/docs/chore/breaking/question). `.github/labels.yml` is the source of truth (synced
-with `.github/scripts/sync-labels.sh`); `.github/labeler.yml` auto-applies and updates `c:` labels
-on PRs from changed file paths as the PR evolves, and `.github/workflows/labeler.yml` derives
-`t:`/`c:` labels from the PR title and marks new issues `s:needs-triage` unless filed by a
-maintainer.
+**Labels** are applied mostly automatically: `c:<crate>` (area, mirrors the Conventional Commit
+scopes above) plus a handful of standalone status/categorization labels (`breaking`, `benchmark`,
+`needs-triage`, `blocked`). Priority and type are tracked with GitHub's native Type/Priority issue
+fields instead of labels. `.github/labels.yml` is the source of truth (synced with
+`.github/scripts/sync-labels.sh`); `.github/labeler.yml` auto-applies and updates `c:` labels on PRs
+from changed file paths as the PR evolves, `.github/workflows/labeler.yml`'s title-labels job
+derives a fallback `c:` label from the PR title, `check-semver.yml` syncs the `breaking` label from
+its own findings (see `RELEASING.md`), and `labeler.yml` marks new issues `needs-triage` unless
+filed by a maintainer.
 
 Other labels you may see or apply on a PR:
 

@@ -107,7 +107,9 @@ only the crate(s) actually experiencing the break.
 | `skip-changelog` | Keep this PR out of the generated per-crate changelog (chore/CI/typo noise).                                  |
 | `no-release`     | Annotation only, marking a Release PR you intend to hold. Not enforced -- the real control is not merging it. |
 
-There is no `breaking` label and no `semver-override` label; see `RELEASING.md` for why.
+The `breaking` label (`.github/labels.yml`) is a plain categorization label synced automatically by
+`check-semver.yml` from its own `cargo-semver-checks` finding; it never drives release-plz's version
+bump. There is no `semver-override` label; see `RELEASING.md` for why.
 
 ## Pre-push hooks
 
