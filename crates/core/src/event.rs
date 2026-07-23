@@ -234,13 +234,15 @@ pub struct MouseEvent {
 /// The system's light/dark color-scheme preference, as reported by the
 /// windowing/browser layer.
 ///
-/// Deliberately just these two variants (not, say, a `HighContrast` or
-/// `Auto` case): every source that can report this (winit's `Theme`, the
-/// browser's `prefers-color-scheme` media query) only ever resolves to one
-/// of exactly these two, and a backend that can't determine a preference
-/// simply never emits [`Event::ThemeChanged`] rather than emitting a third
-/// "unknown" case for callers to handle.
+/// Currently just these two variants: every source that can report this
+/// (winit's `Theme`, the browser's `prefers-color-scheme` media query) only
+/// ever resolves to one of exactly these two, and a backend that can't
+/// determine a preference simply never emits [`Event::ThemeChanged`] rather
+/// than emitting a third "unknown" case for callers to handle. Marked
+/// `#[non_exhaustive]` for consistency with sibling public enums, in case a
+/// future source (e.g. a `HighContrast` case) needs to be added.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum SystemTheme {
     /// The system prefers a light color scheme.
     Light,

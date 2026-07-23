@@ -361,6 +361,7 @@ impl TryFrom<u8> for AnsiColor {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[non_exhaustive]
 /// Represents a color in the terminal grid.
 pub enum Color {
     #[default]
