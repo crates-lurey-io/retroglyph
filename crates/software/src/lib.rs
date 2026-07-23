@@ -140,6 +140,23 @@ struct RenderContext {
     /// `draw_layers` by diffing against `prev_pixels`. `None` means no rows
     /// changed (nothing to present).
     damage_rows: Option<(u32, u32)>,
+    /// Shadow copy of every allocated layer's tiles from the last `draw_layers` call, indexed by
+    /// `[layer_id][y * cols + x]`. Used to find dirty cells without touching core's diff model:
+    /// `draw_layers` already receives every cell on every allocated layer every frame (see
+    /// [`Output::needs_full_frame`]), so comparing against this shadow copy in place is enough to
+    /// tell which cells actually changed, with no new core API needed. Resized (and cleared,
+    /// forcing a full repaint) whenever the grid is resized; grown (never shrunk) as new layer ids
+    /// are seen.
+    prev_tiles: Vec<Vec<Tile>>,
+    /// Reusable per-cell dirty scratch buffer, `true` at index `y * cols + x` when any layer's
+    /// tile at that position changed this frame. Indexed the same way as each `prev_tiles` layer;
+    /// resized alongside it.
+    dirty_mask: Vec<bool>,
+    /// Number of layers (`max layer id + 1`) present in the last `draw_layers` call. A change in
+    /// this count between frames (a layer being newly allocated or fully deallocated) forces a
+    /// full repaint next frame, since the dirty-cell path can only compare cells within layers
+    /// present in both frames.
+    prev_layer_count: usize,
 }
 
 impl SoftwareRenderer {
@@ -164,6 +181,12 @@ impl SoftwareRenderer {
                 cell_h,
                 prev_pixels: vec![0u32; buf_w * buf_h],
                 damage_rows: None,
+                prev_tiles: Vec::new(),
+                dirty_mask: Vec::new(),
+                // Sentinel distinct from any real layer count (always < 256), so the very first
+                // `draw_layers` call is unconditionally treated as a layer-set change and takes
+                // the full-repaint path once, seeding `prev_tiles` for every subsequent frame.
+                prev_layer_count: usize::MAX,
             },
             #[cfg(feature = "tilesets")]
             sprite_cache,
@@ -294,6 +317,70 @@ impl SoftwareRenderer {
             let end = y1 * buf_w;
             self.ctx.prev_pixels[start..end].copy_from_slice(&pixels[start..end]);
         }
+    }
+
+    /// Paints one layer's tile at `pos` into the pixel buffer: the cell-rect background fill
+    /// (when this layer/tile contributes one, see [`Output::draw_layers`]'s doc for the exact
+    /// rule) followed by the sprite or bitmap-glyph foreground.
+    ///
+    /// `tile` is taken by value (it's `Copy`) rather than by reference so callers can read it out
+    /// of `self.ctx.prev_tiles` before calling this, instead of holding a borrow of `self.ctx`
+    /// across a call that needs `&mut self.ctx.pixel_buf`.
+    #[allow(clippy::too_many_arguments)]
+    fn composite_cell(
+        &mut self,
+        buf_w: usize,
+        cell_w: usize,
+        cell_h: usize,
+        scale: usize,
+        layer_id: u8,
+        pos: Pos,
+        tile: Tile,
+    ) {
+        let px_x = usize::from(pos.x) * cell_w;
+        let px_y = usize::from(pos.y) * cell_h;
+
+        // Layer 0 always paints its background. Higher layers paint theirs
+        // only when the tile actually contributes an opaque background,
+        // matching `Grid::flatten_into`.
+        let paints_bg =
+            layer_id == 0 || (!tile.is_empty() && tile.style().background() != Color::Default);
+        if paints_bg {
+            let bg = resolve_color(tile.style().background(), DEFAULT_BG);
+            let rect = ixy::Rect::new(px_x, px_y, cell_w, cell_h);
+            self.ctx.pixel_buf.fill_rect_solid(rect, bg);
+        }
+
+        // Sprite cache dispatch: sprite wins over bitmap font.
+        #[cfg(feature = "tilesets")]
+        {
+            let buf_h = self.ctx.pixel_buf.as_ref().len() / buf_w;
+            if let Some(sprite) = self.sprite_cache.get(tile.glyph()) {
+                blit_sprite(
+                    self.ctx.pixel_buf.as_mut(),
+                    buf_w,
+                    buf_h,
+                    px_x,
+                    px_y,
+                    &tile,
+                    sprite,
+                    scale,
+                );
+                return;
+            }
+        }
+
+        blit_glyph(
+            self.ctx.pixel_buf.as_mut(),
+            buf_w,
+            px_x,
+            px_y,
+            &tile,
+            &self.font,
+            cell_w,
+            cell_h,
+            scale,
+        );
     }
 }
 
@@ -440,69 +527,108 @@ impl Output for SoftwareRenderer {
     /// Repainting the lower background per pixel would require composited
     /// per-cell state this renderer intentionally avoids. See the "Backend
     /// parity caveat" section in the crate README for a worked example.
+    ///
+    /// # Dirty-cell repaint (retroglyph#302)
+    ///
+    /// `needs_full_frame` always returns `true` for this backend (see its docs), so this
+    /// receives every cell on every allocated layer on every call -- `Terminal::present`'s
+    /// diff-only path (used when a backend's `needs_full_frame` is `false`) never applies here,
+    /// and changing that would be a `retroglyph-core` API change. Instead, this method keeps its
+    /// own per-cell shadow copy of the last frame's tiles (see `RenderContext::prev_tiles`) and
+    /// diffs incoming cells against it here, entirely internally: cells whose tile is unchanged
+    /// since the last call are skipped instead of being cleared and repainted.
+    ///
+    /// This falls back to the old clear-then-repaint-every-cell strategy when either:
+    /// - any tile this frame has a nonzero sub-cell offset ([`Tile::dx`]/[`Tile::dy`]): offsets
+    ///   can spill glyph pixels into neighboring cells by an amount `Tile` does not bound, so
+    ///   containing the repaint to a neighborhood around the changed cells isn't possible without
+    ///   a magnitude cap core doesn't provide; or
+    /// - the number of allocated layers changed since the last call: a layer's cells falling out
+    ///   of (or into) the frame can't be diffed against a shadow copy that no longer describes
+    ///   this frame's layer set.
+    ///
+    /// When neither applies, a changed cell at a given position also forces every *other* layer
+    /// at that same position to be repainted (even if unchanged there), because a lower layer's
+    /// background fill covers the whole cell rect and would otherwise erase an unchanged higher
+    /// layer's already-composited glyph pixels on top of it.
     fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
         I: Iterator<Item = (u8, Pos, &'a Tile, Option<&'a str>)>,
     {
-        // Clear the entire buffer before redrawing.  Pixel-based backends
-        // get the full frame (see `needs_full_frame`), so this wipes any
-        // orphaned pixels from sub-cell offset spill in the previous frame.
-        self.ctx.pixel_buf.clear();
-
-        let font = &self.font;
+        let cols = usize::from(self.options.cols);
+        let rows = usize::from(self.options.rows);
         let scale = usize::from(self.options.scale);
-        let cols = self.options.cols;
-        let cell_w = usize::from(font.glyph_width) * scale;
-        let cell_h = usize::from(font.glyph_height) * scale;
-        let buf_w = usize::from(cols) * cell_w;
-        #[cfg(feature = "tilesets")]
-        let buf_h = self.ctx.pixel_buf.as_ref().len() / buf_w;
+        let cell_w = usize::from(self.font.glyph_width) * scale;
+        let cell_h = usize::from(self.font.glyph_height) * scale;
+        let buf_w = cols * cell_w;
+        let cell_count = cols * rows;
 
-        #[cfg(feature = "tilesets")]
-        let sprite_cache = Some(&*self.sprite_cache);
+        if self.ctx.dirty_mask.len() == cell_count {
+            self.ctx.dirty_mask.iter_mut().for_each(|d| *d = false);
+        } else {
+            self.ctx.dirty_mask.clear();
+            self.ctx.dirty_mask.resize(cell_count, false);
+        }
+
+        let mut any_offset = false;
+        let mut any_dirty = false;
+        let mut max_layer_seen: i32 = -1;
 
         for (layer_id, pos, tile, _extra) in content {
-            let px_x = usize::from(pos.x) * cell_w;
-            let px_y = usize::from(pos.y) * cell_h;
+            let layer_idx = usize::from(layer_id);
+            max_layer_seen = max_layer_seen.max(i32::from(layer_id));
 
-            // Layer 0 always paints its background. Higher layers paint theirs
-            // only when the tile actually contributes an opaque background,
-            // matching `Grid::flatten_into`.
-            let paints_bg =
-                layer_id == 0 || (!tile.is_empty() && tile.style().background() != Color::Default);
-            if paints_bg {
-                let bg = resolve_color(tile.style().background(), DEFAULT_BG);
-                let rect = ixy::Rect::new(px_x, px_y, cell_w, cell_h);
-                self.ctx.pixel_buf.fill_rect_solid(rect, bg);
+            if layer_idx >= self.ctx.prev_tiles.len() {
+                self.ctx
+                    .prev_tiles
+                    .resize_with(layer_idx + 1, || vec![Tile::default(); cell_count]);
+            } else if self.ctx.prev_tiles[layer_idx].len() != cell_count {
+                self.ctx.prev_tiles[layer_idx] = vec![Tile::default(); cell_count];
             }
 
-            // Sprite cache dispatch: sprite wins over bitmap font.
-            #[cfg(feature = "tilesets")]
-            if let Some(sprite) = sprite_cache.and_then(|c| c.get(tile.glyph())) {
-                blit_sprite(
-                    self.ctx.pixel_buf.as_mut(),
-                    buf_w,
-                    buf_h,
-                    px_x,
-                    px_y,
-                    tile,
-                    sprite,
-                    scale,
-                );
-                continue;
+            let idx = usize::from(pos.y) * cols + usize::from(pos.x);
+            let slot = &mut self.ctx.prev_tiles[layer_idx][idx];
+            if *slot != *tile {
+                self.ctx.dirty_mask[idx] = true;
+                any_dirty = true;
+                *slot = *tile;
             }
+            if tile.dx() != 0 || tile.dy() != 0 {
+                any_offset = true;
+            }
+        }
 
-            blit_glyph(
-                self.ctx.pixel_buf.as_mut(),
-                buf_w,
-                px_x,
-                px_y,
-                tile,
-                font,
-                cell_w,
-                cell_h,
-                scale,
-            );
+        #[allow(clippy::cast_sign_loss)]
+        let layer_count_now = (max_layer_seen + 1) as usize;
+        let layers_changed = layer_count_now != self.ctx.prev_layer_count;
+        self.ctx.prev_layer_count = layer_count_now;
+
+        let full_repaint = any_offset || layers_changed;
+
+        if full_repaint {
+            self.ctx.pixel_buf.clear();
+            for layer_id in 0..layer_count_now {
+                for idx in 0..cell_count {
+                    let tile = self.ctx.prev_tiles[layer_id][idx];
+                    #[allow(clippy::cast_possible_truncation)]
+                    let pos = Pos::new((idx % cols) as u16, (idx / cols) as u16);
+                    #[allow(clippy::cast_possible_truncation)]
+                    self.composite_cell(buf_w, cell_w, cell_h, scale, layer_id as u8, pos, tile);
+                }
+            }
+        } else if any_dirty {
+            for idx in 0..cell_count {
+                if !self.ctx.dirty_mask[idx] {
+                    continue;
+                }
+                #[allow(clippy::cast_possible_truncation)]
+                let pos = Pos::new((idx % cols) as u16, (idx / cols) as u16);
+                for layer_id in 0..layer_count_now {
+                    let tile = self.ctx.prev_tiles[layer_id][idx];
+                    #[allow(clippy::cast_possible_truncation)]
+                    self.composite_cell(buf_w, cell_w, cell_h, scale, layer_id as u8, pos, tile);
+                }
+            }
         }
 
         self.update_damage(buf_w);
@@ -535,6 +661,13 @@ impl Output for SoftwareRenderer {
         // so drop it and force a full-frame damage rect on the next present.
         self.ctx.prev_pixels.clear();
         self.ctx.prev_pixels.resize(new_w * new_h, 0);
+        // The per-cell tile shadow is keyed by the old grid dimensions; drop it too so the next
+        // `draw_layers` call can't misread stale entries against the new layout, and force that
+        // call onto the full-repaint path (`prev_layer_count` back to its initial value never
+        // matches a real frame's layer count).
+        self.ctx.prev_tiles.clear();
+        self.ctx.dirty_mask.clear();
+        self.ctx.prev_layer_count = usize::MAX;
         self.ctx.damage_rows = if new_h == 0 {
             None
         } else {
@@ -1375,7 +1508,211 @@ mod tests {
         assert_eq!(r.ctx.damage_rows, Some((0, 5 * CELL_H_PX)));
     }
 
-    // ── Palette parity with retroglyph-core (issue #308) ────────────────
+    // ── Dirty-cell repaint (retroglyph#302) ──────────────────────────────
+    //
+    // `draw_layers` always receives every cell (see `Output::needs_full_frame`), but internally
+    // it should only actually repaint pixels for cells that changed since the last call, falling
+    // back to a full clear + repaint when a sub-cell offset or a layer-count change is in play.
+    // These assert on the rendered pixels (not on any private dirty-tracking state), so they
+    // hold regardless of how the internal shadow copy is implemented.
+
+    /// Fills every layer-0 cell with `bg`, sets one cell's foreground glyph, and returns the tile
+    /// list (index-stable across calls so a second call can flip one cell without rebuilding the
+    /// rest).
+    fn glyph_scene(
+        cols: u16,
+        rows: u16,
+        bg: Color,
+        glyph_pos: (u16, u16),
+        glyph: char,
+    ) -> Vec<Tile> {
+        let mut out = Vec::with_capacity(usize::from(cols) * usize::from(rows));
+        for y in 0..rows {
+            for x in 0..cols {
+                let style = if (x, y) == glyph_pos {
+                    Style::new().fg(Color::Rgb { r: 0, g: 255, b: 0 }).bg(bg)
+                } else {
+                    Style::new().bg(bg)
+                };
+                out.push(Tile::new(
+                    if (x, y) == glyph_pos { glyph } else { ' ' },
+                    style,
+                ));
+            }
+        }
+        out
+    }
+
+    fn draw_scene(r: &mut SoftwareRenderer, cols: u16, tiles: &[Tile]) {
+        let content = tiles.iter().enumerate().map(|(i, t)| {
+            #[allow(clippy::cast_possible_truncation)]
+            let pos = Pos::new(
+                (i % usize::from(cols)) as u16,
+                (i / usize::from(cols)) as u16,
+            );
+            (0u8, pos, t, None)
+        });
+        r.draw_layers(content).unwrap();
+    }
+
+    #[test]
+    fn dirty_cell_repaint_leaves_unchanged_cell_pixels_untouched() {
+        // 3x1 grid, all cells the same dark background, distinct glyphs so a stray repaint of an
+        // untouched cell would be visible. Change only the middle cell's glyph and re-draw; the
+        // other two cells' pixels must be byte-for-byte identical to the first frame.
+        let mut r = damage_renderer(3, 1);
+        let base = glyph_scene(
+            3,
+            1,
+            Color::Rgb {
+                r: 10,
+                g: 10,
+                b: 10,
+            },
+            (1, 0),
+            '@',
+        );
+        draw_scene(&mut r, 3, &base);
+        let before = r.pixels().to_vec();
+
+        let mut changed = base.clone();
+        changed[1] = Tile::new(
+            '#',
+            Style::new()
+                .fg(Color::Rgb { r: 0, g: 0, b: 255 })
+                .bg(Color::Rgb {
+                    r: 10,
+                    g: 10,
+                    b: 10,
+                }),
+        );
+        draw_scene(&mut r, 3, &changed);
+        let after = r.pixels().to_vec();
+
+        let cell_w = 8usize; // unscii16 glyph width at scale 1.
+        let cell_h = 16usize;
+        let buf_w = 3 * cell_w;
+        // Extracts cell `col`'s full pixel rect (all `cell_h` rows) out of a `buf_w`-wide buffer.
+        let cell_pixels = |buf: &[u32], col: usize| -> Vec<u32> {
+            (0..cell_h)
+                .flat_map(|row| {
+                    let start = row * buf_w + col * cell_w;
+                    buf[start..start + cell_w].to_vec()
+                })
+                .collect()
+        };
+
+        // Cell 0 and cell 2 (unchanged) must be pixel-identical across the two frames.
+        assert_eq!(
+            cell_pixels(&before, 0),
+            cell_pixels(&after, 0),
+            "cell 0 pixels changed"
+        );
+        assert_eq!(
+            cell_pixels(&before, 2),
+            cell_pixels(&after, 2),
+            "cell 2 pixels changed"
+        );
+        // Cell 1 (changed) must actually differ: '@' vs '#' in different colors.
+        assert_ne!(
+            cell_pixels(&before, 1),
+            cell_pixels(&after, 1),
+            "cell 1 pixels should have changed"
+        );
+    }
+
+    #[test]
+    fn dirty_cell_repaint_updates_changed_cell() {
+        let mut r = damage_renderer(2, 1);
+        let base = glyph_scene(2, 1, Color::Rgb { r: 0, g: 0, b: 0 }, (0, 0), ' ');
+        draw_scene(&mut r, 2, &base);
+
+        let mut changed = base;
+        changed[0] = Tile::new(' ', Style::new().bg(Color::Rgb { r: 200, g: 0, b: 0 }));
+        draw_scene(&mut r, 2, &changed);
+
+        let cell_w = 8usize;
+        assert!(
+            r.pixels()[0..cell_w].iter().all(|&p| p == 0x00C8_0000),
+            "changed cell should show its new red background"
+        );
+    }
+
+    #[test]
+    fn sub_cell_offset_forces_full_frame_fallback_even_for_unchanged_cells() {
+        // 2x1 grid. Frame 1: cell 0 has an offset glyph, cell 1 is plain. Frame 2: identical
+        // content (nothing actually changed), but since a sub-cell offset is in play this frame,
+        // the fallback repaint path runs regardless of the dirty set -- assert the buffer is
+        // still correct (not that any particular code path ran).
+        let mut r = damage_renderer(2, 1);
+        let bg = Tile::new(' ', Style::new().bg(Color::Rgb { r: 5, g: 5, b: 5 }));
+        let offset_fg =
+            Tile::new('@', Style::new().fg(Color::Rgb { r: 0, g: 255, b: 0 })).with_offset(1, 0);
+
+        let draw = |r: &mut SoftwareRenderer| {
+            r.draw_layers(
+                [
+                    (0, Pos::new(0, 0), &bg, None),
+                    (1, Pos::new(0, 0), &offset_fg, None),
+                    (0, Pos::new(1, 0), &bg, None),
+                ]
+                .into_iter(),
+            )
+            .unwrap();
+        };
+
+        draw(&mut r);
+        let before = r.pixels().to_vec();
+        draw(&mut r); // identical content; offsets are in play, so this takes the fallback path.
+        let after = r.pixels().to_vec();
+
+        assert_eq!(
+            before, after,
+            "identical frames with an active offset must render identically"
+        );
+        let has_green = |col: usize| {
+            after
+                .iter()
+                .enumerate()
+                .any(|(i, &p)| i % 16 == col && p == 0x0000_FF00)
+        };
+        assert!(!has_green(0), "x=0 should have no green pixels with dx=1");
+        assert!(has_green(1), "x=1 should have green pixels with dx=1");
+    }
+
+    #[test]
+    fn layer_count_change_forces_full_frame_repaint() {
+        // 1x1 grid. Frame 1: only layer 0. Frame 2: layer 0 unchanged, but layer 1 newly
+        // allocated with an opaque background -- the layer-set change must not be missed by the
+        // dirty-cell path (layer 0's own cell never changed, so a naive per-cell diff limited to
+        // previously-seen layers would skip it).
+        let mut r = damage_renderer(1, 1);
+        let base = Tile::new(
+            ' ',
+            Style::new().bg(Color::Rgb {
+                r: 10,
+                g: 10,
+                b: 10,
+            }),
+        );
+        r.draw_layers(core::iter::once((0, Pos::new(0, 0), &base, None)))
+            .unwrap();
+
+        let overlay = Tile::new(' ', Style::new().bg(Color::Rgb { r: 200, g: 0, b: 0 }));
+        r.draw_layers(
+            [
+                (0, Pos::new(0, 0), &base, None),
+                (1, Pos::new(0, 0), &overlay, None),
+            ]
+            .into_iter(),
+        )
+        .unwrap();
+
+        assert!(
+            r.pixels().iter().all(|&p| p & 0x00ff_ffff == 0x00c8_0000),
+            "newly-allocated layer 1's opaque background must be visible everywhere"
+        );
+    }
     //
     // `ansi_to_rgb` above now delegates directly to `AnsiColor::to_rgb`, so this
     // asserts the two always agree for every variant, across the full palette, rather
