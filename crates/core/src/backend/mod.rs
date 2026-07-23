@@ -44,6 +44,13 @@ pub trait Output {
     /// that need the full grapheme at draw time must read it from here
     /// rather than from the tile.
     ///
+    /// **This field is only ever `Some` when the crate's `egc` feature is enabled.** Without
+    /// `egc`, `Grid` never populates its EGC side-table, so every item's third element is
+    /// always `None` -- there is no multi-codepoint grapheme text to read, ever. Backends that
+    /// don't opt into `egc` support can safely ignore this field entirely (e.g. `let _ = extra;`
+    /// and render each tile from [`glyph`](Tile::glyph) alone); it carries no information in
+    /// that configuration.
+    ///
     /// # Errors
     ///
     /// Returns an error if the backend cannot write to the output surface
@@ -62,7 +69,8 @@ pub trait Output {
     /// receives **all** cells from every allocated layer, and the backend
     /// should clear its output surface before drawing.
     ///
-    /// See [`draw`](Self::draw) for the meaning of each item's grapheme text.
+    /// See [`draw`](Self::draw) for the meaning of each item's grapheme text, including the
+    /// `egc`-feature-only contract for the trailing `Option<&str>`.
     ///
     /// # Errors
     ///
