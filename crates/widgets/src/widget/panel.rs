@@ -1,5 +1,5 @@
 //! [`Panel`]: a bordered, titled panel.
-use retroglyph_core::{Backend, Rect, Style, Terminal};
+use retroglyph_core::{Backend, Color, Rect, Style, Terminal};
 use unicode_width::UnicodeWidthStr;
 
 use super::{BoxBorder, Widget};
@@ -69,9 +69,18 @@ impl<'a> Panel<'a> {
     /// Like every other builder method here, whichever call comes last wins -- call `.theme(...)`
     /// before any manual [`Panel::border_style`]/[`Panel::fill_style`] override you want to keep.
     #[must_use]
-    pub fn theme(mut self, theme: Theme) -> Self {
+    pub fn theme(self, theme: Theme) -> Self {
+        self.theme_on(theme, theme.panel_bg)
+    }
+
+    /// Same as [`Panel::theme`], but `fill_style` is drawn on `bg` instead of `theme.panel_bg` --
+    /// for a panel whose interior should read as a different surface than `theme.panel_bg`
+    /// (`border_style` still uses `theme.title_bg`, unaffected by `bg`). [`Panel::theme`] is
+    /// exactly `theme_on(theme, theme.panel_bg)`.
+    #[must_use]
+    pub fn theme_on(mut self, theme: Theme, bg: Color) -> Self {
         self.border_style = Style::new().fg(theme.border).bg(theme.title_bg);
-        self.fill_style = Style::new().bg(theme.panel_bg);
+        self.fill_style = Style::new().bg(bg);
         self
     }
 }
@@ -174,6 +183,25 @@ mod tests {
             term.grid().get(1, 1).style().background(),
             Theme::DARK.panel_bg
         );
+    }
+
+    #[test]
+    fn theme_on_uses_the_given_backdrop_instead_of_panel_bg() {
+        let area = Rect::new(0, 0, 10, 4);
+        let mut term = Terminal::new(Headless::new(10, 4));
+        Panel::new()
+            .theme_on(Theme::DARK, Color::Default)
+            .render(area, &mut term);
+
+        assert_eq!(
+            term.grid().get(0, 0).style().foreground(),
+            Theme::DARK.border
+        );
+        assert_eq!(
+            term.grid().get(0, 0).style().background(),
+            Theme::DARK.title_bg
+        );
+        assert_eq!(term.grid().get(1, 1).style().background(), Color::Default);
     }
 
     #[test]
