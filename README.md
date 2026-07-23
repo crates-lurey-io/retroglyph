@@ -125,7 +125,10 @@ Multi-codepoint graphemes are capped at 8 codepoints to prevent combining-mark b
 <details>
 <summary><strong>Pluggable backends</strong> — swap rendering targets without touching game logic</summary>
 
-The `Backend` trait has a small surface: draw cells, flush, poll events, resize, cursor control.
+The `Backend` trait bundles three independent facets: `Output` (draw cells, flush, resize), `Input`
+(poll/push events), and `Cursor` (show/hide, move). A backend implements whichever facets it
+actually needs -- `Backend` itself has no methods of its own, and any type implementing all three
+gets it for free.
 
 - **Headless** (`retroglyph-core`) — in-memory with no I/O. The workhorse for unit and integration
   tests. Provides `format_view()` for snapshot testing with insta and `push_event()` for synthetic

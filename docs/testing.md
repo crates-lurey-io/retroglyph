@@ -26,7 +26,7 @@ cargo insta accept  # accept pending snapshots
 
 ## Driving `Headless` with synthetic events
 
-`Headless` doesn't just render; it also accepts input, via `Backend::push_event` /
+`Headless` doesn't just render; it also accepts input, via `Input::push_event` /
 `Headless::push_event`. That makes it possible to test a whole update-draw cycle -- inject a key or
 mouse event, drain it through your app's event handling, then snapshot the resulting grid -- without
 a real terminal, window, or PTY. This is the same technique used throughout this crate's own unit

@@ -290,7 +290,7 @@ impl<W: Write> TerminalRenderer<W> {
     /// move the cursor and change color/attribute state versus what was last
     /// drawn.
     ///
-    /// Mirrors [`Backend::draw`](retroglyph_core::backend::Backend::draw)'s
+    /// Mirrors [`Output::draw`](retroglyph_core::backend::Output::draw)'s
     /// contract: `content` is a stream of `(Pos, &Tile, Option<&str>)` items
     /// to render, the last being the tile's full grapheme text when it has
     /// one. Does not flush; call [`flush`](Self::flush) after.
