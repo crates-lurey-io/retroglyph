@@ -1,7 +1,7 @@
 //! In-memory backend for testing. Stores presented content
 //! and allows injecting synthetic events.
 
-use crate::backend::Backend;
+use crate::backend::{Cursor, Input, Output};
 use crate::event::Event;
 use crate::grid::{Grid, Pos, Size};
 use crate::tile::Tile;
@@ -83,7 +83,7 @@ impl Headless {
     }
 }
 
-impl Backend for Headless {
+impl Output for Headless {
     type Error = core::convert::Infallible;
 
     fn draw<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
@@ -119,7 +119,9 @@ impl Backend for Headless {
         self.grid.clear_all();
         Ok(())
     }
+}
 
+impl Input for Headless {
     fn poll_event(&mut self, _timeout: Duration) -> Option<Event> {
         self.event_queue.pop_front()
     }
@@ -127,7 +129,9 @@ impl Backend for Headless {
     fn push_event(&mut self, event: Event) {
         Self::push_event(self, event);
     }
+}
 
+impl Cursor for Headless {
     fn set_cursor_visible(&mut self, visible: bool) {
         self.cursor_visible = visible;
     }

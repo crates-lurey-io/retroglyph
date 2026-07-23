@@ -20,7 +20,7 @@
 //! enforces nothing; any id can hold any content.
 //!
 //! Compositing itself happens in one of two places, chosen by the backend
-//! (see [`crate::Backend::composites_layers`]):
+//! (see [`crate::Output::composites_layers`]):
 //!
 //! - **Cell backends** (`Headless`, `retroglyph-crossterm`) do not composite
 //!   layers themselves. [`crate::Terminal::present`] calls
@@ -29,7 +29,7 @@
 //!   layers 1+ behave identically on every cell backend.
 //! - **Pixel backends** (`retroglyph-software`) composite per pixel: they
 //!   receive the raw layered stream from
-//!   [`crate::Backend::draw_layers`] (layer-major, ascending id) and paint
+//!   [`crate::Output::draw_layers`] (layer-major, ascending id) and paint
 //!   each layer's cells directly onto the pixel buffer in that order.
 //!
 //! ## The `EMPTY` flag: transparency vs. opaque occlusion
@@ -872,7 +872,7 @@ impl Grid {
     /// [`TileFlags::HAS_EXTRA`] is set.
     ///
     /// Unallocated layers are skipped. This is used by backends that need
-    /// the full frame on every draw (see [`crate::Backend::needs_full_frame`]).
+    /// the full frame on every draw (see [`crate::Output::needs_full_frame`]).
     ///
     /// This iterator is zero-allocation: it walks the layer buffers inline.
     pub fn layers(&self) -> impl Iterator<Item = (u8, Pos, &Tile, Option<&str>)> + '_ {
@@ -901,7 +901,7 @@ impl Grid {
     /// Composite every allocated layer into `dst`'s layer 0, one tile per cell.
     ///
     /// Used by [`crate::Terminal::present`] for backends that do not composite
-    /// layers themselves (see [`crate::Backend::composites_layers`]). The rule
+    /// layers themselves (see [`crate::Output::composites_layers`]). The rule
     /// matches the software renderer's pixel semantics and the [`blit`](Self::blit)
     /// transparency convention:
     ///

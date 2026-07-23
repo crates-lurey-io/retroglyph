@@ -1,9 +1,9 @@
 //! Pluggable rendering backends.
 //!
-//! Only the [`Backend`] trait and the dependency-free [`Headless`] test
-//! backend live here. Platform backends (crossterm, software/winit) are
-//! separate crates (`retroglyph-crossterm`, `retroglyph-software`) that
-//! depend on this one and implement [`Backend`].
+//! The [`Output`], [`Input`], and [`Cursor`] traits (plus the [`Backend`] bundle that ties them
+//! together) and the dependency-free [`Headless`] test backend live here. Platform backends
+//! (crossterm, software/winit) are separate crates (`retroglyph-crossterm`, `retroglyph-software`)
+//! that depend on this one and implement these traits.
 
 pub mod headless;
 
@@ -25,9 +25,12 @@ impl BackendError for core::convert::Infallible {}
 #[cfg(feature = "std")]
 impl BackendError for std::io::Error {}
 
-/// A rendering backend that presents grid content to a display
-/// and provides input events.
-pub trait Backend {
+/// Draws grid content to a display and reports its dimensions.
+///
+/// This is the only one of the three backend facets ([`Output`], [`Input`], [`Cursor`]) that's
+/// fallible: writing to a real display can fail (a broken pipe, a closed terminal, a lost
+/// surface), so every mutating method here returns `Result<(), Self::Error>`.
+pub trait Output {
     /// Error type returned by fallible operations.
     type Error: BackendError;
 
@@ -129,15 +132,16 @@ pub trait Backend {
     fn resize(&mut self, size: Size) {
         let _ = size;
     }
+}
 
+/// Polls for and accepts input events.
+///
+/// Backends that never receive events from outside their own [`poll_event`](Self::poll_event)
+/// implementation (e.g. `Crossterm`, which reads its own event stream) can use the default
+/// no-op [`push_event`](Self::push_event) via an empty `impl Input for X {}`.
+pub trait Input {
     /// Poll for an input event, waiting up to `timeout`.
     fn poll_event(&mut self, timeout: Duration) -> Option<Event>;
-
-    /// Show or hide the cursor.
-    fn set_cursor_visible(&mut self, visible: bool);
-
-    /// Move the cursor to a position.
-    fn set_cursor_position(&mut self, position: Pos);
 
     /// Push an event into the backend's event buffer.
     ///
@@ -150,3 +154,26 @@ pub trait Backend {
     /// - Crossterm: reads from its own event stream; no-op here.
     fn push_event(&mut self, _event: Event) {}
 }
+
+/// Shows, hides, and moves a text cursor.
+///
+/// Both methods default to a no-op so backends with no text cursor to manage (pixel/windowed
+/// backends, where games draw their own cursor if they want one) can use an empty
+/// `impl Cursor for X {}` instead of writing dead stub bodies by hand.
+pub trait Cursor {
+    /// Show or hide the cursor.
+    fn set_cursor_visible(&mut self, _visible: bool) {}
+
+    /// Move the cursor to a position.
+    fn set_cursor_position(&mut self, _position: Pos) {}
+}
+
+/// A rendering backend that presents grid content to a display and provides input events.
+///
+/// This is a pure ergonomic bundle over [`Output`], [`Input`], and [`Cursor`], with no members
+/// of its own: every type implementing all three gets `Backend` for free, and every generic
+/// call site that only needs one or two facets should bound on those directly instead of
+/// requiring all three through this trait.
+pub trait Backend: Output + Input + Cursor {}
+
+impl<T: Output + Input + Cursor> Backend for T {}

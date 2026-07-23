@@ -1,6 +1,6 @@
 //! Stateful terminal management and double-buffering.
 
-use crate::backend::Backend;
+use crate::backend::{Backend, Output};
 use crate::color::Color;
 use crate::event::Event;
 use crate::grid::{Grid, Pos, Rect, Size};
@@ -324,7 +324,7 @@ impl<B: Backend> Terminal<B> {
     /// Computes diff, sends changed cells to the backend, flushes, then swaps buffers.
     ///
     /// When the backend requires a full frame (see
-    /// [`crate::Backend::needs_full_frame`]), all cells from every allocated layer are
+    /// [`crate::Output::needs_full_frame`]), all cells from every allocated layer are
     /// sent rather than just the diff, so pixel-based backends can clear and
     /// redraw to avoid orphaned pixels from sub-cell offsets.
     ///
@@ -348,9 +348,9 @@ impl<B: Backend> Terminal<B> {
     /// # Errors
     ///
     /// Propagates errors from the backend's
-    /// [`draw_layers`](crate::Backend::draw_layers) or
-    /// [`flush`](crate::Backend::flush) operations.
-    pub fn present(&mut self) -> Result<(), <B as Backend>::Error> {
+    /// [`draw_layers`](crate::Output::draw_layers) or
+    /// [`flush`](crate::Output::flush) operations.
+    pub fn present(&mut self) -> Result<(), <B as Output>::Error> {
         if self.backend.composites_layers() {
             // Pixel/GPU backends composite the raw layered stream themselves.
             if self.backend.needs_full_frame() {
@@ -416,7 +416,7 @@ impl<B: Backend> Terminal<B> {
     ///
     /// # Panics
     ///
-    /// Panics if the backend's [`poll_event`](crate::Backend::poll_event) returns
+    /// Panics if the backend's [`poll_event`](crate::Input::poll_event) returns
     /// `None` even with an unbounded timeout.
     pub fn read_blocking(&mut self) -> Event {
         self.poll(Duration::MAX)

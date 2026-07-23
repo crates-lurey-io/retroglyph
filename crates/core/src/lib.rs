@@ -1,9 +1,9 @@
 //! retroglyph-core: the `no_std`-compatible foundation of retroglyph.
 //!
 //! Grid, tile, style, color, text, terminal, and event types, plus the
-//! [`Backend`] trait and the dependency-free [`Headless`] test backend, and
-//! the `App`/`Flow`/`Frame` game loop contract. Platform backends
-//! (`retroglyph-crossterm`, `retroglyph-software`) and drawing helpers
+//! [`Output`]/[`Input`]/[`Cursor`] backend facets (bundled together as [`Backend`]) and the
+//! dependency-free [`Headless`] test backend, and the `App`/`Flow`/`Frame` game loop contract.
+//! Platform backends (`retroglyph-crossterm`, `retroglyph-software`) and drawing helpers
 //! (`retroglyph-widgets`) are separate crates that depend on this one.
 //!
 //! # Architecture
@@ -26,7 +26,7 @@
 //!                              │ draw / draw_layers / poll_event
 //!                              ▼
 //!               ┌───────────────────────────┐
-//!               │      B: Backend            │  the only piece that swaps out
+//!               │  B: Output + Input + Cursor │  the only piece that swaps out
 //!               └──────────────┬─────────────┘
 //!                              │
 //!        ┌─────────────────────┼─────────────────────┐
@@ -92,7 +92,7 @@ pub use animate::{Easing, Tween, oscillate};
 #[cfg(feature = "std")]
 pub use app::run_blocking;
 pub use app::{App, Flow, Frame, step};
-pub use backend::{Backend, Headless};
+pub use backend::{Backend, Cursor, Headless, Input, Output};
 pub use camera::Camera;
 pub use color::{AnsiColor, Color, InvalidAnsiIndex};
 pub use event::{
