@@ -154,10 +154,11 @@ impl Dashboard {
 
         let headers = ["Service", "Status"];
         let widths = [18u16, 8u16];
-        let table_rows: Vec<Vec<String>> = SERVICES
+        let table_rows: Vec<[&str; 2]> = SERVICES
             .iter()
-            .map(|&(name, status)| vec![name.to_owned(), status.to_owned()])
+            .map(|&(name, status)| <[&str; 2]>::from((name, status)))
             .collect();
+        let table_rows: Vec<&[&str]> = table_rows.iter().map(<[&str; 2]>::as_slice).collect();
         Table::new(&headers, &widths, &table_rows).render(left, term, &mut self.table_state);
 
         let right_rows = split_v(
