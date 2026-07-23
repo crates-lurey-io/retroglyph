@@ -58,3 +58,22 @@ default-font = []
 
 [dev-dependencies]
 insta = { version = "1.34", features = ["yaml"] }
+criterion = "0.5"
+fastrand = "2"
+image = { version = "0.25", default-features = false, features = ["png"] }
+
+[[bench]]
+name = "raster"
+harness = false
+
+[[bench]]
+name = "damage"
+harness = false
+
+[[bench]]
+name = "blit"
+harness = false
+
+[[bench]]
+name = "resolve_color"
+harness = false
