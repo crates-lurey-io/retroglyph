@@ -8,8 +8,8 @@
 //! | Presenter | `present()` | `init_surface()` |
 //! |---|---|---|
 //! | `SoftwareRenderer` (retroglyph-software) | Copies pixel buffer to softbuffer surface | Creates `softbuffer::Context` + `Surface` |
+//! | `GlRenderer` (retroglyph-gl) | Instanced draw + swaps buffers | Creates a GL context (glutin native / WebGL2 wasm) from the window |
 //! | `WgpuRenderer` (future) | Submits render pass + presents swap chain | Creates `wgpu::Surface` + `Device` |
-//! | `GlRenderer` (future) | Draws full-screen quad + swaps buffers | Creates GL context from the window |
 //!
 //! See the crate-level docs (`crate` root, "DPI, scale, and the resize contract" and
 //! "Threading model" sections) for the physical-pixel/no-auto-scaling contract on

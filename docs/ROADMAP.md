@@ -23,6 +23,17 @@ character, per doryen-rs/libtcod/notcurses) as `retroglyph_core::subcell`
 Shipped: non-alternate-screen / inline rendering mode for the crossterm backend (termbox2, as a
 documented gap) as `CrosstermOptions::alt_screen(false)` -- see `crates/crossterm/src/lib.rs`.
 
+Shipped: GPU rendering backend (`retroglyph-gl`) -- native OpenGL 3.3 core and browser WebGL2 from
+one `glow` codebase, instanced-quad rendering with an `R8` glyph-atlas texture array (the
+beamterm/alacritty/xterm.js model). Implements `retroglyph_window::Presenter`, so it drops into the
+same winit loop as the software backend with no window-crate changes. The bitmap font was extracted
+into a shared `retroglyph-font` crate so both backends render pixel-identical text, and
+`Color::resolve_rgb` was added to core as the shared color-to-RGB path. v1 follow-ups are tracked as
+issues: sub-cell offsets (#365), sprites/tilesets (#366), dynamic/TTF atlas (#367), GPU layer
+compositing + blend modes (#368), post-processing shaders (#369), live WebGL2 CI (#370), wide-char
+handling (#371), dirty-range upload (#372), context-loss recovery (#373), GLX fallback (#374), wasm
+examples (#375).
+
 Shipped: pipe-safe / non-TTY output degradation (blessed's auto-detect-non-interactive-stdout,
 strip-control-codes idea, originally listed below under Defer) as `retroglyph-terminal`'s
 `TerminalRenderer::set_plain_mode`/`with_plain_mode`/`auto` -- see `crates/terminal/src/lib.rs`.
@@ -35,13 +46,13 @@ what this entry was about.
 
 Real ideas, not urgent, no current plan to schedule:
 
-| Idea                                                                                        | Source                                              | Why deferred                                                                                                                                                            |
-| ------------------------------------------------------------------------------------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| REXPaint (`.xp`) file import                                                                | libtcod, python-tcod, bracket-lib                   | Self-contained asset-format nicety with precedent, but no demonstrated user demand yet.                                                                                 |
-| Sixel / Kitty graphics protocol output (real pixel images in a real terminal)               | notcurses                                           | Valuable but high effort and fragmented terminal support (notcurses itself dropped iTerm2 support over this). The software backend already covers "I want real pixels." |
-| Cell blend-mode enum (SCREEN, DODGE, BURN, OVERLAY, ...) beyond linear alpha                | libtcod                                             | Niche VFX polish; `Grid::blit_alpha`'s linear blend already covers the common compositing case.                                                                         |
-| Custom post-processing shaders (CRT scanlines, fog-of-war overlays) on the software backend | ebiten (Kage), bracket-lib                          | Requires a GPU shader pipeline the softbuffer-based software backend doesn't have. Would need its own design doc before any code.                                       |
-| Text-input / line-editor widget                                                             | ftxui (`Input`), ratatui ecosystem (`tui-textarea`) | Scope question first: does retroglyph want to own interactive text entry? Not a clear miss given the free-function/no-retained-tree widget philosophy.                  |
+| Idea                                                                          | Source                                              | Why deferred                                                                                                                                                                         |
+| ----------------------------------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| REXPaint (`.xp`) file import                                                  | libtcod, python-tcod, bracket-lib                   | Self-contained asset-format nicety with precedent, but no demonstrated user demand yet.                                                                                              |
+| Sixel / Kitty graphics protocol output (real pixel images in a real terminal) | notcurses                                           | Valuable but high effort and fragmented terminal support (notcurses itself dropped iTerm2 support over this). The software backend already covers "I want real pixels."              |
+| Cell blend-mode enum (SCREEN, DODGE, BURN, OVERLAY, ...) beyond linear alpha  | libtcod                                             | Niche VFX polish; `Grid::blit_alpha`'s linear blend already covers the common compositing case.                                                                                      |
+| Custom post-processing shaders (CRT scanlines, fog-of-war overlays)           | ebiten (Kage), bracket-lib                          | The GPU backend (`retroglyph-gl`) now provides the shader pipeline the software backend lacked; tracked as #369 (render to an offscreen FBO, then a configurable post-process pass). |
+| Text-input / line-editor widget                                               | ftxui (`Input`), ratatui ecosystem (`tui-textarea`) | Scope question first: does retroglyph want to own interactive text entry? Not a clear miss given the free-function/no-retained-tree widget philosophy.                               |
 
 ## Reject
 
