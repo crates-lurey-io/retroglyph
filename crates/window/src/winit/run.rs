@@ -1041,15 +1041,22 @@ const PRESENT_FAILURE_RECOVERY_THRESHOLD: u32 = 30;
 ///
 /// [`Presenter::SurfaceError`] is a generic associated type -- the software backend's
 /// `SurfaceError` just wraps `softbuffer::SoftBufferError`, a plain `#[non_exhaustive]` enum with
-/// no `Lost`/`Outdated`/`Timeout` discrimination the way `wgpu::SurfaceError` has -- so the driver
-/// can't pattern-match on *why* a present failed to decide whether it's recoverable the way a
-/// wgpu-based app would. All it can observe is a bare `Display`able error and whether the failure
-/// is a one-off or persistent (via the consecutive-failure count), so the recovery strategy here
-/// is deliberately generic: rate-limit logging so a persistent failure doesn't spam every frame,
-/// and after a run of failures long enough to rule out a one-off glitch, attempt the one
-/// backend-agnostic recovery available -- re-running [`Presenter::init_surface`] to rebuild the
-/// surface from scratch, the same call [`create_window_and_surface`](WindowApp::create_window_and_surface)
-/// makes at startup.
+/// no `Lost`/`Outdated`/`Timeout` discrimination the way `wgpu::SurfaceError` has -- so most
+/// backends can't pattern-match on *why* a present failed to decide whether it's recoverable the
+/// way a wgpu-based app would. All they can generally observe is a bare `Display`able error and
+/// whether the failure is a one-off or persistent (via the consecutive-failure count), so the
+/// recovery strategy here is deliberately generic for that case: rate-limit logging so a
+/// persistent failure doesn't spam every frame, and after a run of failures long enough to rule
+/// out a one-off glitch, attempt the one backend-agnostic recovery available -- re-running
+/// [`Presenter::init_surface`] to rebuild the surface from scratch, the same call
+/// [`create_window_and_surface`](WindowApp::create_window_and_surface) makes at startup.
+///
+/// [`RecoverableError::is_recoverable`](crate::presenter::RecoverableError::is_recoverable) is
+/// the escape hatch for a presenter that *can* categorize its errors: when a failed `present()`
+/// reports `is_recoverable() == false`, that decision table is skipped entirely in favor of
+/// [`PresentFailureAction::Fatal`] -- retrying a failure the presenter itself already knows is
+/// unrecoverable can't help, so there's no reason to wait out the consecutive-failure threshold
+/// first.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PresentFailureAction {
     /// Presenting succeeded; if `was_failing` is `true` the caller should log recovery at `info`
@@ -1061,10 +1068,19 @@ enum PresentFailureAction {
     /// Presenting failed and the consecutive-failure count just crossed the recovery threshold:
     /// log at `warn!` and attempt to reinitialize the surface.
     Recover,
+    /// Presenting failed with an error the presenter reports as unrecoverable (see
+    /// [`RecoverableError::is_recoverable`](crate::presenter::RecoverableError::is_recoverable)):
+    /// log at `error!` immediately and skip the consecutive-failure/recovery bookkeeping
+    /// entirely -- rebuilding the surface via [`Presenter::init_surface`] cannot help a failure
+    /// already classified as fatal.
+    Fatal,
 }
 
 /// Decides the action for one `present()` outcome, given `consecutive_failures` *before* this
-/// call (0 if the previous call succeeded or this is the first call).
+/// call (0 if the previous call succeeded or this is the first call) and, for a failed call,
+/// whether the presenter reports the error as recoverable (see
+/// [`RecoverableError::is_recoverable`](crate::presenter::RecoverableError::is_recoverable);
+/// ignored when `succeeded` is `true`).
 ///
 /// Pure decision table, kept separate from the live `RedrawRequested` handling (which needs a
 /// real `Terminal`/`Presenter`/`Window`) so the threshold and logging-level logic is unit
@@ -1073,11 +1089,15 @@ enum PresentFailureAction {
 const fn present_failure_action(
     consecutive_failures: u32,
     succeeded: bool,
+    recoverable: bool,
 ) -> PresentFailureAction {
     if succeeded {
         return PresentFailureAction::Ok {
             was_failing: consecutive_failures > 0,
         };
+    }
+    if !recoverable {
+        return PresentFailureAction::Fatal;
     }
     // `consecutive_failures` is the count *before* this failure, so the count *including* this
     // one is `consecutive_failures + 1`; recover exactly when that reaches the threshold, and
@@ -1296,7 +1316,11 @@ where
         }
         let result = term.backend_mut().presenter_mut().present();
         let succeeded = result.is_ok();
-        match present_failure_action(self.consecutive_present_errors, succeeded) {
+        let recoverable = result
+            .as_ref()
+            .err()
+            .is_none_or(crate::presenter::RecoverableError::is_recoverable);
+        match present_failure_action(self.consecutive_present_errors, succeeded, recoverable) {
             PresentFailureAction::Ok { was_failing } => {
                 if was_failing {
                     log::info!(
@@ -1327,6 +1351,11 @@ where
                     self.consecutive_present_errors
                 );
                 self.try_recover_surface();
+            }
+            PresentFailureAction::Fatal => {
+                self.consecutive_present_errors += 1;
+                let e = result.unwrap_err();
+                log::error!("frame present failed with an unrecoverable error: {e}");
             }
         }
     }
@@ -1718,7 +1747,7 @@ mod tests {
     #[test]
     fn present_success_with_no_prior_failures_is_plain_ok() {
         assert_eq!(
-            present_failure_action(0, true),
+            present_failure_action(0, true, true),
             PresentFailureAction::Ok { was_failing: false }
         );
     }
@@ -1726,7 +1755,7 @@ mod tests {
     #[test]
     fn present_success_after_a_failure_streak_reports_recovery() {
         assert_eq!(
-            present_failure_action(5, true),
+            present_failure_action(5, true, true),
             PresentFailureAction::Ok { was_failing: true }
         );
     }
@@ -1734,7 +1763,7 @@ mod tests {
     #[test]
     fn first_failure_in_a_streak_logs_at_error_level() {
         assert_eq!(
-            present_failure_action(0, false),
+            present_failure_action(0, false, true),
             PresentFailureAction::Log {
                 at_error_level: true
             }
@@ -1745,7 +1774,7 @@ mod tests {
     fn subsequent_failures_below_threshold_log_below_error_level() {
         for count in 1..PRESENT_FAILURE_RECOVERY_THRESHOLD - 1 {
             assert_eq!(
-                present_failure_action(count, false),
+                present_failure_action(count, false, true),
                 PresentFailureAction::Log {
                     at_error_level: false
                 },
@@ -1760,7 +1789,7 @@ mod tests {
         // `PRESENT_FAILURE_RECOVERY_THRESHOLD - 1` failures already happened; this call is the
         // one that reaches the threshold.
         assert_eq!(
-            present_failure_action(PRESENT_FAILURE_RECOVERY_THRESHOLD - 1, false),
+            present_failure_action(PRESENT_FAILURE_RECOVERY_THRESHOLD - 1, false, true),
             PresentFailureAction::Recover
         );
     }
@@ -1770,20 +1799,55 @@ mod tests {
         // A failed recovery attempt must not be retried on literally the next frame: the next
         // `Recover` only fires after another full threshold's worth of failures.
         assert_eq!(
-            present_failure_action(2 * PRESENT_FAILURE_RECOVERY_THRESHOLD - 1, false),
+            present_failure_action(2 * PRESENT_FAILURE_RECOVERY_THRESHOLD - 1, false, true),
             PresentFailureAction::Recover
         );
         for count in
             PRESENT_FAILURE_RECOVERY_THRESHOLD..(2 * PRESENT_FAILURE_RECOVERY_THRESHOLD - 1)
         {
             assert_eq!(
-                present_failure_action(count, false),
+                present_failure_action(count, false, true),
                 PresentFailureAction::Log {
                     at_error_level: false
                 },
                 "consecutive_failures = {count}"
             );
         }
+    }
+
+    #[test]
+    fn unrecoverable_failure_is_fatal_immediately_regardless_of_streak_length() {
+        // A presenter reporting `is_recoverable() == false` should skip straight to `Fatal` on
+        // the very first failure, not wait for the consecutive-failure threshold the way the
+        // generic (`recoverable == true`) path does.
+        assert_eq!(
+            present_failure_action(0, false, false),
+            PresentFailureAction::Fatal
+        );
+    }
+
+    #[test]
+    fn unrecoverable_failure_stays_fatal_mid_streak() {
+        // Whatever the running consecutive-failure count, an unrecoverable error always takes
+        // the fatal path rather than the count-dependent `Log`/`Recover` decision.
+        assert_eq!(
+            present_failure_action(5, false, false),
+            PresentFailureAction::Fatal
+        );
+        assert_eq!(
+            present_failure_action(PRESENT_FAILURE_RECOVERY_THRESHOLD - 1, false, false),
+            PresentFailureAction::Fatal
+        );
+    }
+
+    #[test]
+    fn recoverable_flag_is_ignored_on_success() {
+        // `recoverable` only matters for a failed present; passing `false` alongside
+        // `succeeded == true` must not change the outcome.
+        assert_eq!(
+            present_failure_action(3, true, false),
+            PresentFailureAction::Ok { was_failing: true }
+        );
     }
 
     /// A dependency-free [`Presenter`] with fixed 8x16 cells.
@@ -1984,6 +2048,105 @@ mod tests {
         fn present(&mut self) -> Result<(), Self::SurfaceError> {
             if self.failing.get() {
                 Err("simulated present failure")
+            } else {
+                Ok(())
+            }
+        }
+
+        fn cell_size(&self) -> (u32, u32) {
+            (8, 16)
+        }
+    }
+
+    // `&'static str` inherits the default `is_recoverable() -> true`: `FailingPresenter`'s tests
+    // exercise the existing (pre-`RecoverableError`) `Log`/`Recover` behavior, which must stay
+    // unchanged now that `Presenter::SurfaceError` is bounded by `RecoverableError` instead of
+    // plain `Debug + Display`.
+    impl crate::presenter::RecoverableError for &'static str {}
+
+    /// A `present()` error that always reports itself as unrecoverable (overrides
+    /// [`RecoverableError::is_recoverable`](crate::presenter::RecoverableError::is_recoverable) to
+    /// return `false`), so tests can exercise [`PresentFailureAction::Fatal`] end to end through
+    /// [`WindowApp::handle_redraw_requested`].
+    #[derive(Debug)]
+    struct UnrecoverableError(&'static str);
+
+    impl core::fmt::Display for UnrecoverableError {
+        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            write!(f, "{}", self.0)
+        }
+    }
+
+    impl crate::presenter::RecoverableError for UnrecoverableError {
+        fn is_recoverable(&self) -> bool {
+            false
+        }
+    }
+
+    /// A [`Presenter`] whose `present()` always fails with an [`UnrecoverableError`] on demand,
+    /// otherwise identical to [`FailingPresenter`].
+    #[derive(Default)]
+    struct FatalPresenter {
+        /// `present()` returns `Err` while this is `true`.
+        failing: Rc<Cell<bool>>,
+        /// Number of `init_surface` calls observed.
+        init_surface_calls: Rc<Cell<u32>>,
+    }
+
+    impl Output for FatalPresenter {
+        type Error = core::convert::Infallible;
+
+        fn draw<'a, I>(&mut self, _content: I) -> Result<(), Self::Error>
+        where
+            I: Iterator<Item = (Pos, &'a Tile, Option<&'a str>)>,
+        {
+            Ok(())
+        }
+
+        fn draw_layers<'a, I>(&mut self, _content: I) -> Result<(), Self::Error>
+        where
+            I: Iterator<Item = (u8, Pos, &'a Tile, Option<&'a str>)>,
+        {
+            Ok(())
+        }
+
+        fn flush(&mut self) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        fn size(&self) -> Size {
+            Size {
+                width: 10,
+                height: 5,
+            }
+        }
+
+        fn clear(&mut self) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        fn resize(&mut self, _size: Size) {}
+    }
+
+    impl Presenter for FatalPresenter {
+        type SurfaceError = UnrecoverableError;
+
+        fn init_surface(
+            &mut self,
+            _window: Arc<dyn crate::presenter::WindowHandle>,
+        ) -> Result<(), Self::SurfaceError> {
+            self.init_surface_calls
+                .set(self.init_surface_calls.get() + 1);
+            Ok(())
+        }
+
+        fn resize_surface(&mut self, _width: u32, _height: u32) {}
+
+        fn present(&mut self) -> Result<(), Self::SurfaceError> {
+            if self.failing.get() {
+                Err(UnrecoverableError(
+                    "simulated unrecoverable present failure",
+                ))
             } else {
                 Ok(())
             }
@@ -3173,5 +3336,87 @@ mod tests {
         assert_eq!(term.present_count(), 1);
         term.present().expect("present");
         assert_eq!(term.present_count(), 2);
+    }
+
+    // ── handle_redraw_requested / unrecoverable (`is_recoverable() == false`) errors ─────────
+
+    type FatalApp = WindowApp<
+        FatalPresenter,
+        fn(&mut Terminal<WindowBackend<FatalPresenter>>),
+        u64,
+        fn(u64, &mut Terminal<WindowBackend<FatalPresenter>>),
+    >;
+
+    fn fatal_app() -> (FatalApp, Rc<Cell<bool>>, Rc<Cell<u32>>) {
+        let failing = Rc::new(Cell::new(false));
+        let init_surface_calls = Rc::new(Cell::new(0));
+        let presenter = FatalPresenter {
+            failing: failing.clone(),
+            init_surface_calls: init_surface_calls.clone(),
+        };
+        let terminal = Terminal::new(WindowBackend::new(presenter));
+        let app: FatalApp = WindowApp {
+            terminal: Some(terminal),
+            app_loop: (|_| {}) as fn(&mut Terminal<WindowBackend<FatalPresenter>>),
+            on_custom_event: push_custom_event,
+            _user_event: PhantomData,
+            window: None,
+            title: String::new(),
+            init_size: InitWindowSize {
+                width: 80,
+                height: 80,
+            },
+            attrs: WindowAttrs::default(),
+            current_modifiers: KeyModifiers::NONE,
+            cursor_px: (0.0, 0.0),
+            active_touch: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            frame_interval: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            next_frame: std::time::Instant::now(),
+            exit_requested: Rc::new(Cell::new(false)),
+            needs_redraw: false,
+            consecutive_present_errors: 0,
+        };
+        (app, failing, init_surface_calls)
+    }
+
+    #[test]
+    fn unrecoverable_present_failure_never_attempts_recovery_even_past_the_threshold() {
+        // Unlike `FailingPresenter` (recoverable errors, generic threshold-based recovery), a
+        // `FatalPresenter` failure is fatal on every single call -- `present_failure_action`
+        // returns `Fatal` immediately (see the pure-function tests above), so
+        // `handle_redraw_requested` must never route it through `try_recover_surface`, no matter
+        // how many consecutive failures accumulate past `PRESENT_FAILURE_RECOVERY_THRESHOLD`.
+        let (mut app, failing, init_calls) = fatal_app();
+        failing.set(true);
+        for _ in 0..2 * PRESENT_FAILURE_RECOVERY_THRESHOLD {
+            app.handle_redraw_requested();
+        }
+        assert_eq!(init_calls.get(), 0);
+    }
+
+    #[test]
+    fn unrecoverable_present_failure_does_not_panic_and_keeps_counting() {
+        let (mut app, failing, _init_calls) = fatal_app();
+        failing.set(true);
+        for _ in 0..5 {
+            app.handle_redraw_requested();
+        }
+        assert_eq!(app.consecutive_present_errors, 5);
+    }
+
+    #[test]
+    fn recovering_from_an_unrecoverable_failure_streak_still_resets_the_counter() {
+        let (mut app, failing, _init_calls) = fatal_app();
+        failing.set(true);
+        for _ in 0..3 {
+            app.handle_redraw_requested();
+        }
+        assert_eq!(app.consecutive_present_errors, 3);
+
+        failing.set(false);
+        app.handle_redraw_requested();
+        assert_eq!(app.consecutive_present_errors, 0);
     }
 }
