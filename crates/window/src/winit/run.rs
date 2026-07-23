@@ -8,7 +8,8 @@
 //! `while` loop.
 
 use super::translate::{
-    physical_pos_from, pixel_to_cell, translate_key, translate_modifiers, translate_mouse_button,
+    physical_pos_from, pixel_to_cell, translate_ime, translate_key, translate_modifiers,
+    translate_mouse_button,
 };
 #[cfg(target_arch = "wasm32")]
 use super::web;
@@ -744,6 +745,13 @@ impl<P: Presenter, F> WindowApp<P, F> {
             }
         });
 
+        // IME composition (`WindowEvent::Ime`) is opt-in per winit's own doc comment on that
+        // variant -- without this, platform input methods (Pinyin, Kana, dead-key accents, ...)
+        // never surface composed text at all, silently limiting windowed-app text input to
+        // whatever a bare `KeyboardInput` logical key can express. See `translate::translate_ime`
+        // for how a committed composition is turned into an `Event`.
+        window.set_ime_allowed(true);
+
         if let Some(term) = self.terminal.as_mut() {
             // Hand the presenter a windowing-library-agnostic handle (see
             // `Presenter::init_surface`); the winit window stays owned here.
@@ -1019,6 +1027,13 @@ where
             WindowEvent::KeyboardInput { event, .. } => {
                 if let Some(term) = self.terminal.as_mut()
                     && let Some(e) = translate_key(event, self.current_modifiers)
+                {
+                    term.backend_mut().push_event(e);
+                }
+            }
+            WindowEvent::Ime(ime) => {
+                if let Some(term) = self.terminal.as_mut()
+                    && let Some(e) = translate_ime(ime)
                 {
                     term.backend_mut().push_event(e);
                 }
@@ -2174,6 +2189,28 @@ mod tests {
         let mut app = test_window_app();
         app.handle_window_event(WindowEvent::CloseRequested);
         assert_eq!(poll(&mut app), Some(Event::Close));
+    }
+
+    // ── IME (issue #296) ──────────────────────────────────────────────────────
+
+    #[test]
+    fn ime_commit_pushes_paste_event() {
+        let mut app = test_window_app();
+        app.handle_window_event(WindowEvent::Ime(winit::event::Ime::Commit(
+            "pasted".to_string(),
+        )));
+        assert_eq!(poll(&mut app), Some(Event::Paste("pasted".to_string())));
+    }
+
+    #[test]
+    fn ime_preedit_and_enabled_push_no_event() {
+        let mut app = test_window_app();
+        app.handle_window_event(WindowEvent::Ime(winit::event::Ime::Enabled));
+        app.handle_window_event(WindowEvent::Ime(winit::event::Ime::Preedit(
+            "nihon".to_string(),
+            Some((0, 5)),
+        )));
+        assert_eq!(poll(&mut app), None);
     }
 
     // ── graceful exit (issue #157) ────────────────────────────────────────────

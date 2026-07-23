@@ -29,6 +29,16 @@ log = { version = "0.4", optional = true }
 # non-target-gated call site.
 web-time = "1"
 
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# Native OS clipboard read/write (`clipboard::SystemClipboard`), named explicitly by issue #296.
+# wasm32 has no equivalent here: the browser clipboard API is async-only (`navigator.clipboard`
+# returns a `Promise`), which doesn't fit this crate's synchronous `Clipboard` trait, and arboard
+# itself does not build for `wasm32-unknown-unknown` -- so this is a native-only dependency, kept
+# out of the `wasm32` target section below entirely rather than feature-gated, matching this
+# crate's existing native/wasm module-swap convention (see `crates/software/src/lib.rs`'s
+# `#[cfg(not(target_arch = "wasm32"))]`/`#[cfg(target_arch = "wasm32")]` `mod surface` split).
+arboard = "3"
+
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 # Version pinned to match the wasm-bindgen dev-dependency in
 # examples/Cargo.toml -- the CLI and the crate version must agree.

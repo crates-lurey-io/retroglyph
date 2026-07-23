@@ -59,6 +59,27 @@ fn key_code_from_logical(key: &winit::keyboard::Key, modifiers: KeyModifiers) ->
     })
 }
 
+/// Translates a winit [`Ime`](winit::event::Ime) event into an [`Event`].
+///
+/// Only [`Ime::Commit`](winit::event::Ime) carries a complete, atomic block of text -- the same
+/// shape as the crossterm backend's `Event::Paste` (see its handling of `crossterm::event::Event
+/// ::Paste` in `crates/crossterm/src/lib.rs`), so a commit is mapped to [`Event::Paste`] rather
+/// than adding a new `Event` variant: `Event` is `#[non_exhaustive]`, so a new variant would be
+/// backward-compatible for exhaustive-matching consumers (per issue #267), but there is no need
+/// for a new one when an existing variant already fits the shape of the data. `Ime::Enabled`,
+/// `Ime::Preedit` (in-progress composition, not yet committed), and `Ime::Disabled` have no
+/// existing-`Event` equivalent and are intentionally dropped -- an app that wants live preedit
+/// rendering is out of scope for this landable-sized change (see issue #296). An empty commit
+/// (`Ime::Commit(String::new())`) is also dropped: winit can send an empty commit as part of
+/// clearing composition state, and forwarding it would deliver a spurious empty paste.
+#[must_use]
+pub fn translate_ime(ime: winit::event::Ime) -> Option<Event> {
+    match ime {
+        winit::event::Ime::Commit(text) if !text.is_empty() => Some(Event::Paste(text)),
+        _ => None,
+    }
+}
+
 /// Translates a winit key event into an [`Event`].
 ///
 /// Reports [`KeyEventKind::Press`], [`KeyEventKind::Repeat`] (winit's `repeat`
@@ -201,6 +222,40 @@ mod tests {
     fn unmapped_key_returns_none() {
         let key = winit::keyboard::Key::Named(winit::keyboard::NamedKey::AudioVolumeUp);
         assert_eq!(key_code_from_logical(&key, KeyModifiers::NONE), None);
+    }
+
+    // ── translate_ime ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn ime_commit_maps_to_paste_event() {
+        let ime = winit::event::Ime::Commit("hello".to_string());
+        assert_eq!(translate_ime(ime), Some(Event::Paste("hello".to_string())));
+    }
+
+    #[test]
+    fn ime_empty_commit_produces_no_event() {
+        // winit can send an empty commit while clearing composition state; forwarding it would
+        // deliver a spurious empty paste.
+        let ime = winit::event::Ime::Commit(String::new());
+        assert_eq!(translate_ime(ime), None);
+    }
+
+    #[test]
+    fn ime_enabled_produces_no_event() {
+        assert_eq!(translate_ime(winit::event::Ime::Enabled), None);
+    }
+
+    #[test]
+    fn ime_disabled_produces_no_event() {
+        assert_eq!(translate_ime(winit::event::Ime::Disabled), None);
+    }
+
+    #[test]
+    fn ime_preedit_produces_no_event() {
+        // In-progress composition text (not yet committed) has no `Event` equivalent -- only a
+        // completed `Commit` is forwarded.
+        let ime = winit::event::Ime::Preedit("nihon".to_string(), Some((0, 5)));
+        assert_eq!(translate_ime(ime), None);
     }
 
     // ── pixel_to_cell ─────────────────────────────────────────────────────────

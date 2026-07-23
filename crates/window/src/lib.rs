@@ -80,6 +80,8 @@
 
 /// The generic [`Backend`](retroglyph_core::Backend) for windowed presenters.
 pub mod backend;
+/// System clipboard read/write ([`Clipboard`], [`SystemClipboard`] on native targets).
+pub mod clipboard;
 /// The [`Presenter`] trait and [`WindowHandle`](presenter::WindowHandle).
 pub mod presenter;
 /// The winit event loop, event translation, and app drivers.
@@ -95,6 +97,9 @@ pub mod winit;
 struct ReadmeDoctests;
 
 pub use backend::WindowBackend;
+#[cfg(not(target_arch = "wasm32"))]
+pub use clipboard::SystemClipboard;
+pub use clipboard::{Clipboard, ClipboardError};
 pub use presenter::{Presenter, WindowHandle};
 
 // Re-exported so presenters can name the handle traits without adding their
