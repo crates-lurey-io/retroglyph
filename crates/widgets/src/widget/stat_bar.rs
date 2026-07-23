@@ -1,4 +1,6 @@
 //! [`StatBar`]: a labeled `current`/`max` stat bar.
+use core::fmt::Write as _;
+
 use retroglyph_core::{Backend, Rect, Style, Terminal};
 
 use super::{Widget, bar};
@@ -64,8 +66,17 @@ impl<B: Backend> Widget<B> for StatBar<'_> {
         } else {
             self.current as f32 / self.max as f32
         };
-        let readout = format!("{}/{}", self.current, self.max);
-        bar::render(term, area, self.label, self.label_style, ratio, &readout);
+        // `"4294967295/4294967295"` (two `u32::MAX`s) is the longest possible output: 21 bytes.
+        let mut readout = bar::ReadoutBuf::<24>::new();
+        let _ = write!(readout, "{}/{}", self.current, self.max);
+        bar::render(
+            term,
+            area,
+            self.label,
+            self.label_style,
+            ratio,
+            readout.as_str(),
+        );
     }
 }
 

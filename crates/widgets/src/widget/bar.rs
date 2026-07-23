@@ -17,10 +17,58 @@
 //! internally for the same reason [`super::Panel`] composes
 //! [`super::BoxBorder`] rather than duplicating its drawing loop.
 
+use core::fmt;
+
 use retroglyph_core::{Backend, Color, Rect, Style, Terminal};
 use unicode_width::UnicodeWidthStr;
 
 use super::{Meter, Text, Widget};
+
+/// A fixed-capacity, stack-allocated [`fmt::Write`] sink for a widget's short trailing
+/// `readout` text (a `"87%"` percentage for [`super::Gauge`], a `"45/100"` current/max pair for
+/// [`super::StatBar`]), so formatting it doesn't heap-allocate a `String` every frame.
+///
+/// `N` is the buffer's byte capacity; pick it large enough for the caller's longest possible
+/// output (e.g. `4` for a `"100%"` percentage, `24` for two `u32`s joined by `/`). Writes past
+/// `N` bytes are rejected by [`fmt::Write::write_str`] returning `Err`, matching `core::fmt`'s
+/// own "stop, don't panic" overflow policy; [`ReadoutBuf::as_str`] then simply returns whatever
+/// was successfully written before the overflow.
+pub(super) struct ReadoutBuf<const N: usize> {
+    bytes: [u8; N],
+    len: usize,
+}
+
+impl<const N: usize> ReadoutBuf<N> {
+    /// An empty buffer, ready for `write!`.
+    pub(super) const fn new() -> Self {
+        Self {
+            bytes: [0; N],
+            len: 0,
+        }
+    }
+
+    /// The bytes written so far, as a `str`.
+    ///
+    /// Only ASCII digits, `%`, and `/` are ever written into this buffer by [`super::Gauge`] and
+    /// [`super::StatBar`], so `len` bytes are always valid UTF-8; this falls back to `""` rather
+    /// than panicking if that invariant is ever broken by a future caller.
+    pub(super) fn as_str(&self) -> &str {
+        core::str::from_utf8(&self.bytes[..self.len]).unwrap_or("")
+    }
+}
+
+impl<const N: usize> fmt::Write for ReadoutBuf<N> {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        let bytes = s.as_bytes();
+        let end = self.len + bytes.len();
+        if end > N {
+            return Err(fmt::Error);
+        }
+        self.bytes[self.len..end].copy_from_slice(bytes);
+        self.len = end;
+        Ok(())
+    }
+}
 
 /// The default label color, used when a caller doesn't set one via
 /// [`super::Gauge::label_style`]/[`super::StatBar::label_style`].
@@ -83,9 +131,28 @@ pub(super) fn render<B: Backend>(
 
 #[cfg(test)]
 mod tests {
+    use core::fmt::Write as _;
+
     use retroglyph_core::Headless;
 
     use super::*;
+
+    #[test]
+    fn readout_buf_formats_without_allocating() {
+        let mut buf = ReadoutBuf::<4>::new();
+        write!(buf, "{:>3}%", 87).unwrap();
+        assert_eq!(buf.as_str(), " 87%");
+    }
+
+    #[test]
+    fn readout_buf_rejects_writes_past_capacity_and_keeps_what_fit() {
+        let mut buf = ReadoutBuf::<4>::new();
+        // "12345" (5 bytes) doesn't fit in a 4-byte buffer; the write errors out and only
+        // whatever was written before the overflow (nothing, here, since it overflows on the
+        // very first `write_str` call) is kept.
+        assert!(write!(buf, "12345").is_err());
+        assert_eq!(buf.as_str(), "");
+    }
 
     #[test]
     fn wide_char_label_uses_display_width_not_byte_length() {

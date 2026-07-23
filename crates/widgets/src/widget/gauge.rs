@@ -1,4 +1,6 @@
 //! [`Gauge`]: a labeled, load-colored progress bar.
+use core::fmt::Write as _;
+
 use retroglyph_core::{Backend, Rect, Style, Terminal};
 
 use super::{Widget, bar};
@@ -62,8 +64,17 @@ impl<'a> Gauge<'a> {
 impl<B: Backend> Widget<B> for Gauge<'_> {
     fn render(self, area: Rect, term: &mut Terminal<B>) {
         let ratio = self.ratio.clamp(0.0, 1.0);
-        let pct = format!("{:>3}%", (ratio * 100.0).round() as i32);
-        bar::render(term, area, self.label, self.label_style, ratio, &pct);
+        // "100%" is the longest possible output: 4 bytes.
+        let mut pct = bar::ReadoutBuf::<4>::new();
+        let _ = write!(pct, "{:>3}%", (ratio * 100.0).round() as i32);
+        bar::render(
+            term,
+            area,
+            self.label,
+            self.label_style,
+            ratio,
+            pct.as_str(),
+        );
     }
 }
 
