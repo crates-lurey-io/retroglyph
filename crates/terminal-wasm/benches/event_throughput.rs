@@ -12,7 +12,7 @@
 #![allow(missing_docs)]
 
 use criterion::{BatchSize, Criterion, Throughput, criterion_group, criterion_main};
-use retroglyph_core::backend::Backend as _;
+use retroglyph_core::backend::Input as _;
 use retroglyph_core::event::Event;
 use retroglyph_terminal_wasm::{TerminalWasm, decode_key_event, decode_mouse_event, mouse_actions};
 use std::hint::black_box;

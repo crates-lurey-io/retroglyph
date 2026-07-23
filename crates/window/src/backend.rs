@@ -2,19 +2,20 @@
 //! implementation for windowed presenters.
 
 use crate::presenter::Presenter;
-use retroglyph_core::backend::Backend;
+use retroglyph_core::backend::{Cursor, Input, Output};
 use retroglyph_core::event::Event;
 use retroglyph_core::grid::{Pos, Size};
 use retroglyph_core::tile::Tile;
 use std::collections::VecDeque;
 use std::time::Duration;
 
-/// A [`Backend`] built from a [`Presenter`] plus an input event queue.
+/// A [`Backend`](retroglyph_core::Backend) built from a [`Presenter`] plus an input event queue.
 ///
-/// `Backend` fuses input and output, which does not fit a window: some event
-/// loop owns input, while a per-renderer surface owns output. `WindowBackend`
-/// reunites the two so [`Terminal`](retroglyph_core::Terminal) gets the full
-/// `Backend` it needs, while renderer crates implement only [`Presenter`]:
+/// [`Input`] and [`Output`] are independent facets of `Backend`, which does not fit a window as
+/// one type: some event loop owns input, while a per-renderer surface owns output.
+/// `WindowBackend` reunites the two -- implementing `Output` by delegating to `P`, `Input` via
+/// its own event queue, and the no-op default `Cursor` -- so [`Terminal`](retroglyph_core::Terminal)
+/// gets the full `Backend` it needs, while renderer crates implement only [`Presenter`]:
 ///
 /// ```text
 /// event loop.push_event(e) ──> VecDeque<Event> ──> app.poll_event()
@@ -42,16 +43,15 @@ use std::time::Duration;
 /// # Example: driving without `winit`
 ///
 /// ```rust
-/// use retroglyph_core::{Backend, Event, Pos, Size, Terminal, Tile};
+/// use retroglyph_core::{Backend, Event, Input, Output, Pos, Size, Terminal, Tile};
 /// use retroglyph_window::{Presenter, WindowBackend, WindowHandle};
 /// use std::sync::Arc;
 /// use std::time::Duration;
 ///
 /// struct NullPresenter;
 ///
-/// impl Presenter for NullPresenter {
+/// impl Output for NullPresenter {
 ///     type Error = core::convert::Infallible;
-///     type SurfaceError = core::convert::Infallible;
 ///
 ///     fn draw<'a, I>(&mut self, _content: I) -> Result<(), Self::Error>
 ///     where
@@ -80,6 +80,10 @@ use std::time::Duration;
 ///     }
 ///
 ///     fn resize(&mut self, _size: Size) {}
+/// }
+///
+/// impl Presenter for NullPresenter {
+///     type SurfaceError = core::convert::Infallible;
 ///
 ///     fn init_surface(&mut self, _window: Arc<dyn WindowHandle>) -> Result<(), Self::SurfaceError> {
 ///         Ok(())
@@ -115,7 +119,7 @@ use std::time::Duration;
 /// term.backend_mut().presenter_mut().present().unwrap();
 /// ```
 ///
-/// [`poll_event`](Backend::poll_event) never blocks: frame timing is owned by
+/// [`poll_event`](Input::poll_event) never blocks: frame timing is owned by
 /// the event loop, not by input waits.
 pub struct WindowBackend<P: Presenter> {
     presenter: P,
@@ -150,7 +154,7 @@ impl<P: Presenter> WindowBackend<P> {
     }
 }
 
-impl<P: Presenter> Backend for WindowBackend<P> {
+impl<P: Presenter> Output for WindowBackend<P> {
     type Error = P::Error;
 
     fn draw<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
@@ -190,7 +194,9 @@ impl<P: Presenter> Backend for WindowBackend<P> {
     fn composites_layers(&self) -> bool {
         self.presenter.composites_layers()
     }
+}
 
+impl<P: Presenter> Input for WindowBackend<P> {
     fn poll_event(&mut self, _timeout: Duration) -> Option<Event> {
         // Non-blocking by design: the caller's event loop drives frame
         // timing, so there is nothing to sleep on here.
@@ -200,12 +206,8 @@ impl<P: Presenter> Backend for WindowBackend<P> {
     fn push_event(&mut self, event: Event) {
         self.events.push_back(event);
     }
-
-    fn set_cursor_visible(&mut self, _visible: bool) {
-        // No hardware text cursor in windowed mode; games draw their own.
-    }
-
-    fn set_cursor_position(&mut self, _position: Pos) {
-        // No hardware text cursor in windowed mode.
-    }
 }
+
+// No hardware text cursor in windowed mode (games draw their own): the trait's no-op default
+// bodies are exactly right here.
+impl<P: Presenter> Cursor for WindowBackend<P> {}

@@ -1,8 +1,8 @@
 //! The [`Presenter`] trait: what a renderer crate implements to rasterize a
 //! grid and present it to a window surface.
 //!
-//! `Presenter` is the output half of [`Backend`](retroglyph_core::Backend)
-//! plus window-surface operations, with no input methods: the event loop
+//! `Presenter` is an [`Output`](retroglyph_core::backend::Output) supertrait plus
+//! window-surface operations, with no input methods: the event loop
 //! owns input, and [`WindowBackend`](crate::WindowBackend) forwards
 //! translated events into its own queue instead.
 //!
@@ -19,9 +19,7 @@
 //! every `Presenter` implementation runs under.
 
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
-use retroglyph_core::backend::BackendError;
-use retroglyph_core::grid::{Pos, Size};
-use retroglyph_core::tile::Tile;
+use retroglyph_core::backend::Output;
 use std::sync::Arc;
 
 /// A window/display handle pair, as one trait.
@@ -43,93 +41,14 @@ impl<T: HasWindowHandle + HasDisplayHandle + ?Sized> WindowHandle for T {}
 /// A renderer that rasterizes grid content and presents it to a window
 /// surface.
 ///
-/// Mirrors the output half of [`Backend`](retroglyph_core::Backend) (`draw`,
-/// `draw_layers`, `flush`, `size`, `clear`, `resize`) so
-/// [`WindowBackend`](crate::WindowBackend) can delegate those methods
-/// wholesale, and adds the surface lifecycle (`init_surface`,
-/// `resize_surface`, `present`, `cell_size`) that the event loop drives.
-///
-/// The `needs_full_frame` and `composites_layers` defaults are `true`: every
-/// windowed presenter is a pixel-family backend that composites layers
-/// itself, receiving the raw per-layer stream instead of a pre-flattened
-/// single layer. Only character-cell terminal backends return `false`, and
-/// those implement [`Backend`](retroglyph_core::Backend) directly instead of
-/// this trait.
-pub trait Presenter {
-    /// Rasterization error (mirrors `Backend::Error`).
-    ///
-    /// In-memory rasterizers are infallible and use
-    /// [`core::convert::Infallible`].
-    type Error: BackendError;
-
+/// A supertrait of [`Output`], adding the surface lifecycle (`init_surface`, `resize_surface`,
+/// `present`, `cell_size`) that the event loop drives. Every `Presenter` implementation is an
+/// `Output` implementation for free: [`WindowBackend`](crate::WindowBackend) delegates its own
+/// `Output` impl straight through to `P: Presenter`, with no duplicated method bodies.
+pub trait Presenter: Output {
     /// Surface lifecycle error (context creation, buffer acquisition,
     /// present).
     type SurfaceError: core::fmt::Debug + core::fmt::Display;
-
-    /// Rasterize changed cells (single layer).
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if rasterization fails.
-    fn draw<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
-    where
-        I: Iterator<Item = (Pos, &'a Tile, Option<&'a str>)>;
-
-    /// Rasterize the full layered frame.
-    ///
-    /// Because [`needs_full_frame`](Self::needs_full_frame) defaults to
-    /// `true`, this receives every cell of every allocated layer and should
-    /// clear its target before drawing.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if rasterization fails.
-    fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
-    where
-        I: Iterator<Item = (u8, Pos, &'a Tile, Option<&'a str>)>;
-
-    /// Flush buffered rasterization work.
-    ///
-    /// Distinct from [`present`](Self::present): `flush` completes drawing
-    /// into the presenter's own target; `present` pushes that target to the
-    /// OS window.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the flush fails.
-    fn flush(&mut self) -> Result<(), Self::Error>;
-
-    /// Current grid dimensions in cells.
-    #[must_use]
-    fn size(&self) -> Size;
-
-    /// Clear the rasterization target.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the clear fails.
-    fn clear(&mut self) -> Result<(), Self::Error>;
-
-    /// Resize the grid (in cells), reallocating the rasterization target.
-    fn resize(&mut self, size: Size);
-
-    /// Whether the full frame is required on every `draw_layers` call.
-    ///
-    /// Defaults to `true` for the windowed family (sub-cell offsets spill
-    /// pixels across cells; partial redraws would leave orphans).
-    #[must_use]
-    fn needs_full_frame(&self) -> bool {
-        true
-    }
-
-    /// Whether this presenter composites layers itself, receiving the raw
-    /// `(layer, Pos, Tile)` stream instead of a pre-flattened single layer.
-    ///
-    /// Defaults to `true` for the windowed family.
-    #[must_use]
-    fn composites_layers(&self) -> bool {
-        true
-    }
 
     /// Initialize the window surface.
     ///
@@ -187,11 +106,11 @@ pub trait Presenter {
     /// Physical pixels, not logical/DPI-scaled pixels, and never auto-scaled by this crate for
     /// display DPI -- see the crate-level "DPI, scale, and the resize contract" docs. A presenter
     /// whose cells should grow on a `HiDPI` display must change what this returns itself (from
-    /// [`resize`](Self::resize) or [`scale_factor_changed`](Self::scale_factor_changed)); absent
+    /// [`resize`](Output::resize) or [`scale_factor_changed`](Self::scale_factor_changed)); absent
     /// that, it stays constant for the presenter's lifetime.
     ///
-    /// `(u32, u32)` rather than [`Size`] because grid coordinates are `u16`
-    /// but pixel arithmetic uses `u32` (winit `PhysicalSize`).
+    /// `(u32, u32)` rather than [`Size`](retroglyph_core::grid::Size) because grid coordinates
+    /// are `u16` but pixel arithmetic uses `u32` (winit `PhysicalSize`).
     #[must_use]
     fn cell_size(&self) -> (u32, u32);
 }

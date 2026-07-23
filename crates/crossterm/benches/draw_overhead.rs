@@ -1,4 +1,4 @@
-//! Benchmarks a full `Backend::draw` + `Backend::flush` frame through the crossterm backend,
+//! Benchmarks a full `Output::draw` + `Output::flush` frame through the crossterm backend,
 //! writing into an in-memory `Vec<u8>` via `CrosstermOptions::build_with_writer` instead of a
 //! real terminal.
 //!
@@ -21,7 +21,7 @@
 #![allow(missing_docs)]
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use retroglyph_core::backend::Backend;
+use retroglyph_core::backend::Output;
 use retroglyph_core::color::Color;
 use retroglyph_core::grid::Pos;
 use retroglyph_core::style::Style;

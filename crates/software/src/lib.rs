@@ -4,7 +4,7 @@
 //! # Architecture
 //!
 //! [`SoftwareBackend`] holds configuration only (font, grid size, scale); it
-//! does not implement [`Backend`]. Call
+//! does not implement [`Backend`](retroglyph_core::Backend). Call
 //! [`run_headless`](SoftwareBackend::run_headless) to build a
 //! [`SoftwareRenderer`], which does the actual rendering work:
 //!
@@ -13,8 +13,8 @@
 //!   |  .run_headless()
 //!   v
 //! SoftwareRenderer
-//!   implements retroglyph_core::Backend
-//!   implements retroglyph_window::Presenter
+//!   implements retroglyph_core::{Output, Input, Cursor} (= Backend)
+//!   implements retroglyph_window::Presenter (an Output supertrait)
 //!   |                                |
 //!   |                                v
 //!   |                     wrapped in retroglyph_window::WindowBackend,
@@ -30,15 +30,19 @@
 //! This crate does not depend on winit. [`SoftwareRenderer`] implements
 //! [`Presenter`](retroglyph_window::Presenter) against raw window handles
 //! ([`WindowHandle`]), so anything that produces those (winit via
-//! `retroglyph-window`, or another windowing library) can drive it.
-//! `retroglyph-window`'s [`WindowBackend`](retroglyph_window::WindowBackend)
-//! wraps a `Presenter` to provide the full [`Backend`] for windowed use,
-//! owning the input event queue that this crate does not.
+//! `retroglyph-window`, or another windowing library) can drive it. Because
+//! `Presenter` is an [`Output`] supertrait, `SoftwareRenderer`'s single
+//! `Output` implementation satisfies both `Backend`'s output half and `Presenter` directly, with
+//! no duplicated method bodies. `retroglyph-window`'s
+//! [`WindowBackend`](retroglyph_window::WindowBackend) wraps a `Presenter` to provide the full
+//! [`Backend`](retroglyph_core::Backend) for windowed use, owning the input event queue that this
+//! crate does not.
 //!
 //! For headless use (in-memory rendering, pixel-level tests) skip windowing
-//! entirely: [`SoftwareRenderer`] implements [`Backend`] directly, so
-//! `Terminal<SoftwareRenderer>` works without a window, and
-//! [`pixels`](SoftwareRenderer::pixels) gives direct access to the rendered
+//! entirely: [`SoftwareRenderer`] implements [`Output`],
+//! [`Input`], and [`Cursor`] directly (bundled
+//! as [`Backend`](retroglyph_core::Backend)), so `Terminal<SoftwareRenderer>` works without a
+//! window, and [`pixels`](SoftwareRenderer::pixels) gives direct access to the rendered
 //! buffer.
 
 pub mod bitmap_font;
@@ -71,7 +75,7 @@ use surface::WindowSurface;
 #[doc = include_str!("../README.md")]
 struct ReadmeDoctests;
 
-use retroglyph_core::backend::Backend;
+use retroglyph_core::backend::{Cursor, Input, Output};
 use retroglyph_core::color::{AnsiColor, Color};
 
 pub use bitmap_font::BitmapFont;
@@ -99,11 +103,11 @@ use std::time::Duration;
 ///
 /// Unlike [`SoftwareBackend`] (which is just configuration), this type
 /// always has an active rendering context: its pixel buffer is always
-/// available, and the `ctx` field is never `None`, so [`Backend`] methods
+/// available, and the `ctx` field is never `None`, so [`Output`] methods
 /// never panic for missing initialisation.
 ///
 /// Call [`pixels`](Self::pixels) to inspect the rendered output, or use
-/// [`Backend::draw`] and [`Backend::draw_layers`] to render into it.
+/// [`Output::draw`] and [`Output::draw_layers`] to render into it.
 ///
 /// If the `tilesets` feature is enabled, the sprite tileset is loaded once, at
 /// [`run_headless`](SoftwareBackend::run_headless) time, into an internal
@@ -179,7 +183,7 @@ impl SoftwareRenderer {
     }
 
     /// Pushes an event into the internal buffer, to be drained by
-    /// [`Backend::poll_event`].
+    /// [`Input::poll_event`].
     pub fn push_event(&mut self, event: Event) {
         self.ctx.event_buffer.push_back(event);
     }
@@ -236,7 +240,7 @@ impl SoftwareRenderer {
     /// `pixel_buf` into `prev_pixels` afterwards, since every other row is
     /// already known to match; when nothing changed, the copy is skipped
     /// entirely. `draw_layers` always repaints every cell (see
-    /// [`Backend::needs_full_frame`]), so `prev_pixels` still has to hold a
+    /// [`Output::needs_full_frame`]), so `prev_pixels` still has to hold a
     /// full previous-frame pixel buffer to diff against -- this only removes
     /// the copy's cost from being proportional to the whole buffer instead of
     /// the changed region, which is what actually dominates this function's
@@ -311,7 +315,7 @@ impl SoftwareBackend {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::Backend;
+    /// use retroglyph_core::Output;
     /// use retroglyph_core::tile::Tile;
     /// use retroglyph_core::style::Style;
     /// use retroglyph_core::grid::Pos;
@@ -381,14 +385,10 @@ impl SoftwareBackend {
     }
 }
 
-// ── Backend impl ────────────────────────────────────────────────────────────────
+// ── Output impl ─────────────────────────────────────────────────────────────────
 
-impl Backend for SoftwareRenderer {
+impl Output for SoftwareRenderer {
     type Error = core::convert::Infallible;
-
-    fn push_event(&mut self, event: Event) {
-        Self::push_event(self, event);
-    }
 
     fn draw<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
@@ -431,7 +431,7 @@ impl Backend for SoftwareRenderer {
     /// fills the background only when its tile is non-empty and its background is
     /// not [`Color::Default`], mirroring the layer-flattening rule so cell and
     /// pixel backends agree. The `is_empty` guard matters because this
-    /// receives the full frame (see [`needs_full_frame`](Backend::needs_full_frame)),
+    /// receives the full frame (see [`needs_full_frame`](Output::needs_full_frame)),
     /// including empty higher-layer cells that must not overwrite layer 0.
     ///
     /// Known divergence from cell backends: an occupied space with a
@@ -560,7 +560,11 @@ impl Backend for SoftwareRenderer {
     fn composites_layers(&self) -> bool {
         true
     }
+}
 
+// ── Input impl ───────────────────────────────────────────────────────────────────
+
+impl Input for SoftwareRenderer {
     fn poll_event(&mut self, _timeout: Duration) -> Option<Event> {
         // Non-blocking: the game loop is driven by `about_to_wait` →
         // `request_redraw`, so there is no background thread to sleep on.
@@ -568,6 +572,14 @@ impl Backend for SoftwareRenderer {
         self.ctx.event_buffer.pop_front()
     }
 
+    fn push_event(&mut self, event: Event) {
+        Self::push_event(self, event);
+    }
+}
+
+// ── Cursor impl ──────────────────────────────────────────────────────────────────
+
+impl Cursor for SoftwareRenderer {
     fn set_cursor_visible(&mut self, _visible: bool) {
         // No hardware cursor in software mode.
     }
@@ -579,44 +591,10 @@ impl Backend for SoftwareRenderer {
 
 // ── Presenter impl ───────────────────────────────────────────────────────────
 
-// Implemented via full path (no `use retroglyph_window::Presenter`) so the
-// trait is never in scope in this file: `SoftwareRenderer` also implements
-// `Backend` (for the headless path), and both traits share method names
-// (`draw_layers`, `flush`, ...) -- keeping `Presenter` out of scope avoids
-// method-resolution ambiguity at every call site below.
+// `SoftwareRenderer`'s own `Output` impl above already satisfies `Presenter: Output`, so this
+// only needs the surface lifecycle: no forwarding/duplication of draw/flush/size/clear/resize.
 impl retroglyph_window::Presenter for SoftwareRenderer {
-    type Error = core::convert::Infallible;
     type SurfaceError = SurfaceError;
-
-    fn draw<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
-    where
-        I: Iterator<Item = (Pos, &'a Tile, Option<&'a str>)>,
-    {
-        <Self as Backend>::draw(self, content)
-    }
-
-    fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
-    where
-        I: Iterator<Item = (u8, Pos, &'a Tile, Option<&'a str>)>,
-    {
-        <Self as Backend>::draw_layers(self, content)
-    }
-
-    fn flush(&mut self) -> Result<(), Self::Error> {
-        <Self as Backend>::flush(self)
-    }
-
-    fn size(&self) -> Size {
-        <Self as Backend>::size(self)
-    }
-
-    fn clear(&mut self) -> Result<(), Self::Error> {
-        <Self as Backend>::clear(self)
-    }
-
-    fn resize(&mut self, size: Size) {
-        <Self as Backend>::resize(self, size);
-    }
 
     fn init_surface(&mut self, window: Arc<dyn WindowHandle>) -> Result<(), SurfaceError> {
         Self::init_surface(self, window)
@@ -1159,13 +1137,13 @@ mod tests {
 
     #[test]
     fn blit_cell_respects_sub_cell_offset() {
-        // `Backend::draw` (the non-layered path used by `blit_cell`) must
+        // `Output::draw` (the non-layered path used by `blit_cell`) must
         // apply `tile.dx()/dy()` the same way `draw_layers` does.
         let mut renderer = test_renderer();
 
         let fg =
             Tile::new('@', Style::new().fg(Color::Rgb { r: 0, g: 255, b: 0 })).with_offset(1, 0);
-        Backend::draw(&mut renderer, [(Pos::new(0, 0), &fg, None)].into_iter()).unwrap();
+        Output::draw(&mut renderer, [(Pos::new(0, 0), &fg, None)].into_iter()).unwrap();
 
         let buf = renderer.pixels();
         let has_green = |col: usize| {

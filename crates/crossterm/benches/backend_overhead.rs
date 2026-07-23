@@ -1,9 +1,9 @@
-//! Benchmarks `Backend::size()`'s per-call cost against a headless `Crossterm<Vec<u8>>`.
+//! Benchmarks `Output::size()`'s per-call cost against a headless `Crossterm<Vec<u8>>`.
 //!
 //! retroglyph#285 asks for this number to justify (or not) caching `size()` instead of calling
 //! `crossterm::terminal::size()` -- an ioctl-backed syscall -- on every call. Run under `cargo
 //! bench` (no TTY attached to the process's stdout), `crossterm::terminal::size()` fails and
-//! `Backend::size()` falls back to its hardcoded `(80, 25)` default; the syscall (and its
+//! `Output::size()` falls back to its hardcoded `(80, 25)` default; the syscall (and its
 //! failure path) still runs every time, which is exactly the per-call cost this benchmark is
 //! measuring -- a real TTY would additionally pay for the ioctl's kernel-side work, so this
 //! number is a floor, not a ceiling, on the real-terminal cost.
@@ -21,7 +21,7 @@
 //! retry loop's cost is dominated by the repeated `crossterm::event::poll`/`read` syscalls, not
 //! by `from_crossterm_event` itself, and stubbing out the syscalls would just be measuring
 //! `event_translation`'s benchmark a second time under a different name. Guarding the retry path
-//! is left to the existing `Backend::poll_event` doc comment's non-blocking-single-syscall
+//! is left to the existing `Input::poll_event` doc comment's non-blocking-single-syscall
 //! contract plus manual/integration testing against a real TTY, rather than a headless benchmark
 //! that can't actually exercise it.
 
@@ -30,7 +30,7 @@
 #![allow(missing_docs)]
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use retroglyph_core::backend::Backend;
+use retroglyph_core::backend::Output;
 use retroglyph_crossterm::Crossterm;
 use std::hint::black_box;
 

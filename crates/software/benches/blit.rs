@@ -19,7 +19,7 @@
 #![allow(missing_docs)]
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use retroglyph_core::{Backend, Color, Pos, Style, Tile};
+use retroglyph_core::{Color, Output, Pos, Style, Tile};
 use retroglyph_software::SoftwareBackendBuilder;
 use retroglyph_software::bitmap_font::unscii16;
 
