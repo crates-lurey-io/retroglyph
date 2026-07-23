@@ -749,7 +749,7 @@ impl<W: std::io::Write> Input for Crossterm<W> {
                         // itself is about to receive, so `size()` (no syscall) stays consistent
                         // with what already triggered this event. See retroglyph#279.
                         self.refresh_cached_size_on_resize(&event);
-                        if let Ok(mapped) = from_crossterm_event(event) {
+                        if let Some(mapped) = from_crossterm_event(event) {
                             return Some(mapped);
                         }
                     }
@@ -805,28 +805,28 @@ impl<W: std::io::Write> Cursor for Crossterm<W> {
 
 const fn from_crossterm_key_code(
     code: crossterm::event::KeyCode,
-) -> Result<retroglyph_core::event::KeyCode, ()> {
+) -> Option<retroglyph_core::event::KeyCode> {
     use crossterm::event::KeyCode as CK;
     use retroglyph_core::event::KeyCode as K;
     match code {
-        CK::Char(c) => Ok(K::Char(c)),
-        CK::F(n) => Ok(K::F(n)),
-        CK::Backspace => Ok(K::Backspace),
-        CK::Enter => Ok(K::Enter),
-        CK::Left => Ok(K::Left),
-        CK::Right => Ok(K::Right),
-        CK::Up => Ok(K::Up),
-        CK::Down => Ok(K::Down),
-        CK::Home => Ok(K::Home),
-        CK::End => Ok(K::End),
-        CK::PageUp => Ok(K::PageUp),
-        CK::PageDown => Ok(K::PageDown),
-        CK::Tab => Ok(K::Tab),
-        CK::BackTab => Ok(K::BackTab),
-        CK::Delete => Ok(K::Delete),
-        CK::Insert => Ok(K::Insert),
-        CK::Esc => Ok(K::Escape),
-        _ => Err(()),
+        CK::Char(c) => Some(K::Char(c)),
+        CK::F(n) => Some(K::F(n)),
+        CK::Backspace => Some(K::Backspace),
+        CK::Enter => Some(K::Enter),
+        CK::Left => Some(K::Left),
+        CK::Right => Some(K::Right),
+        CK::Up => Some(K::Up),
+        CK::Down => Some(K::Down),
+        CK::Home => Some(K::Home),
+        CK::End => Some(K::End),
+        CK::PageUp => Some(K::PageUp),
+        CK::PageDown => Some(K::PageDown),
+        CK::Tab => Some(K::Tab),
+        CK::BackTab => Some(K::BackTab),
+        CK::Delete => Some(K::Delete),
+        CK::Insert => Some(K::Insert),
+        CK::Esc => Some(K::Escape),
+        _ => None,
     }
 }
 
@@ -872,26 +872,30 @@ const fn from_crossterm_mouse_button(
     }
 }
 
+// Every `crossterm::event::MouseEventKind` variant now has a retroglyph equivalent (unlike
+// `from_crossterm_key_code`, which still has unmappable `KeyCode`s), so this is infallible.
 const fn from_crossterm_mouse_event_kind(
     kind: crossterm::event::MouseEventKind,
-) -> Result<retroglyph_core::event::MouseEventKind, ()> {
+) -> retroglyph_core::event::MouseEventKind {
     use crossterm::event::MouseEventKind as CM;
     use retroglyph_core::event::MouseEventKind as K;
     match kind {
-        CM::Down(btn) => Ok(K::Down(from_crossterm_mouse_button(btn))),
-        CM::Up(btn) => Ok(K::Up(from_crossterm_mouse_button(btn))),
-        CM::Moved | CM::Drag(_) => Ok(K::Moved),
-        CM::ScrollUp => Ok(K::ScrollUp),
-        CM::ScrollDown => Ok(K::ScrollDown),
-        _ => Err(()),
+        CM::Down(btn) => K::Down(from_crossterm_mouse_button(btn)),
+        CM::Up(btn) => K::Up(from_crossterm_mouse_button(btn)),
+        CM::Drag(btn) => K::Drag(from_crossterm_mouse_button(btn)),
+        CM::Moved => K::Moved,
+        CM::ScrollUp => K::ScrollUp,
+        CM::ScrollDown => K::ScrollDown,
+        CM::ScrollLeft => K::ScrollLeft,
+        CM::ScrollRight => K::ScrollRight,
     }
 }
 
 fn from_crossterm_mouse_event(
     m: crossterm::event::MouseEvent,
-) -> Result<retroglyph_core::event::MouseEvent, ()> {
-    Ok(retroglyph_core::event::MouseEvent {
-        kind: from_crossterm_mouse_event_kind(m.kind)?,
+) -> retroglyph_core::event::MouseEvent {
+    retroglyph_core::event::MouseEvent {
+        kind: from_crossterm_mouse_event_kind(m.kind),
         position: Pos {
             x: m.column,
             y: m.row,
@@ -899,7 +903,7 @@ fn from_crossterm_mouse_event(
         // Crossterm is a character-mode backend; it has no sub-cell resolution.
         pixel_position: None,
         modifiers: from_crossterm_key_modifiers(m.modifiers),
-    })
+    }
 }
 
 // Taking ownership matches the call site: `crossterm::event::read()` hands us
@@ -910,11 +914,12 @@ fn from_crossterm_mouse_event(
 // measure retroglyph#285's "event translation throughput" case; this is not a supported public
 // API and can change or disappear without a semver-relevant changelog entry.
 #[doc(hidden)]
-// The `()` error carries no information beyond "unmappable"; a richer error type would be pure
-// overhead for an internal, non-public conversion whose only caller (`poll_event`) already
-// discards the error entirely (see the retry-on-unmappable-event loop above).
-#[allow(clippy::needless_pass_by_value, clippy::result_unit_err)]
-pub fn from_crossterm_event(event: crossterm::event::Event) -> Result<Event, ()> {
+// The single failure mode is "this event has no retroglyph equivalent", which `Option` expresses
+// directly; the only caller (`poll_event`) already discards an unmappable event entirely (see the
+// retry-on-unmappable-event loop above).
+#[must_use]
+#[allow(clippy::needless_pass_by_value)]
+pub fn from_crossterm_event(event: crossterm::event::Event) -> Option<Event> {
     use crossterm::event::Event as CE;
     match event {
         CE::Key(k) => {
@@ -931,17 +936,17 @@ pub fn from_crossterm_event(event: crossterm::event::Event) -> Result<Event, ()>
             } else {
                 from_crossterm_key_code(k.code)?
             };
-            Ok(Event::Key(retroglyph_core::event::KeyEvent::with_kind(
+            Some(Event::Key(retroglyph_core::event::KeyEvent::with_kind(
                 code,
                 from_crossterm_key_modifiers(k.modifiers),
                 from_crossterm_key_kind(k.kind),
             )))
         }
-        CE::Mouse(m) => Ok(Event::Mouse(from_crossterm_mouse_event(m)?)),
-        CE::Resize(w, h) => Ok(Event::Resize(w, h)),
-        CE::Paste(text) => Ok(Event::Paste(text)),
-        CE::FocusGained => Ok(Event::FocusGained),
-        CE::FocusLost => Ok(Event::FocusLost),
+        CE::Mouse(m) => Some(Event::Mouse(from_crossterm_mouse_event(m))),
+        CE::Resize(w, h) => Some(Event::Resize(w, h)),
+        CE::Paste(text) => Some(Event::Paste(text)),
+        CE::FocusGained => Some(Event::FocusGained),
+        CE::FocusLost => Some(Event::FocusLost),
     }
 }
 
@@ -959,8 +964,8 @@ mod tests {
 
     fn key_code_of(ct_event: crossterm::event::Event) -> retroglyph_core::event::KeyCode {
         match from_crossterm_event(ct_event) {
-            Ok(Event::Key(key)) => key.code,
-            other => panic!("expected Ok(Event::Key(_)), got {other:?}"),
+            Some(Event::Key(key)) => key.code,
+            other => panic!("expected Some(Event::Key(_)), got {other:?}"),
         }
     }
 
@@ -1283,8 +1288,8 @@ mod tests {
     fn crossterm_paste_maps_to_retroglyph_paste() {
         let ct_event = crossterm::event::Event::Paste("pasted text".to_string());
         match from_crossterm_event(ct_event) {
-            Ok(Event::Paste(text)) => assert_eq!(text, "pasted text"),
-            other => panic!("expected Ok(Event::Paste(_)), got {other:?}"),
+            Some(Event::Paste(text)) => assert_eq!(text, "pasted text"),
+            other => panic!("expected Some(Event::Paste(_)), got {other:?}"),
         }
     }
 
@@ -1293,7 +1298,7 @@ mod tests {
         let ct_event = crossterm::event::Event::FocusGained;
         assert!(matches!(
             from_crossterm_event(ct_event),
-            Ok(Event::FocusGained)
+            Some(Event::FocusGained)
         ));
     }
 
@@ -1302,7 +1307,81 @@ mod tests {
         let ct_event = crossterm::event::Event::FocusLost;
         assert!(matches!(
             from_crossterm_event(ct_event),
-            Ok(Event::FocusLost)
+            Some(Event::FocusLost)
         ));
+    }
+
+    fn mouse_event_kind_of(
+        kind: crossterm::event::MouseEventKind,
+    ) -> retroglyph_core::event::MouseEventKind {
+        from_crossterm_mouse_event_kind(kind)
+    }
+
+    #[test]
+    fn mouse_down_and_up_still_map_after_option_signature_change() {
+        use retroglyph_core::event::{MouseButton as B, MouseEventKind as K};
+
+        assert_eq!(
+            mouse_event_kind_of(crossterm::event::MouseEventKind::Down(
+                crossterm::event::MouseButton::Left
+            )),
+            K::Down(B::Left)
+        );
+        assert_eq!(
+            mouse_event_kind_of(crossterm::event::MouseEventKind::Up(
+                crossterm::event::MouseButton::Right
+            )),
+            K::Up(B::Right)
+        );
+        assert_eq!(
+            mouse_event_kind_of(crossterm::event::MouseEventKind::Moved),
+            K::Moved
+        );
+        assert_eq!(
+            mouse_event_kind_of(crossterm::event::MouseEventKind::ScrollUp),
+            K::ScrollUp
+        );
+        assert_eq!(
+            mouse_event_kind_of(crossterm::event::MouseEventKind::ScrollDown),
+            K::ScrollDown
+        );
+    }
+
+    #[test]
+    fn mouse_drag_preserves_which_button_is_held() {
+        use retroglyph_core::event::{MouseButton as B, MouseEventKind as K};
+
+        assert_eq!(
+            mouse_event_kind_of(crossterm::event::MouseEventKind::Drag(
+                crossterm::event::MouseButton::Left
+            )),
+            K::Drag(B::Left)
+        );
+        assert_eq!(
+            mouse_event_kind_of(crossterm::event::MouseEventKind::Drag(
+                crossterm::event::MouseButton::Right
+            )),
+            K::Drag(B::Right)
+        );
+        assert_eq!(
+            mouse_event_kind_of(crossterm::event::MouseEventKind::Drag(
+                crossterm::event::MouseButton::Middle
+            )),
+            K::Drag(B::Middle)
+        );
+    }
+
+    #[test]
+    fn mouse_horizontal_scroll_round_trips() {
+        use retroglyph_core::event::MouseEventKind as K;
+
+        assert_eq!(
+            mouse_event_kind_of(crossterm::event::MouseEventKind::ScrollLeft),
+            K::ScrollLeft
+        );
+        assert_eq!(
+            mouse_event_kind_of(crossterm::event::MouseEventKind::ScrollRight),
+            K::ScrollRight
+        );
     }
 }
