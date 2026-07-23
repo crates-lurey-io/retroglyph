@@ -1,21 +1,21 @@
-//! A [`Backend`] implementation that renders to a real terminal via
-//! `crossterm`.
+//! [`Output`], [`Input`], and [`Cursor`] implementations that render to a real terminal via
+//! `crossterm`, bundled together as [`Backend`](retroglyph_core::Backend).
 //!
 //! This crate owns the OS/TTY-specific parts: raw mode, the alternate
 //! screen, the kitty keyboard protocol, and `crossterm::event` polling.
 //! Cell-diffing and ANSI/SGR output are delegated to
 //! [`retroglyph_terminal::TerminalRenderer`].
 //!
-//! [`draw`](Backend::draw), [`flush`](Backend::flush), and
-//! [`clear`](Backend::clear) propagate `std::io::Error` through this
-//! backend's [`Backend::Error`] type. `resize`, `set_cursor_visible`, and
-//! `set_cursor_position` are infallible on [`Backend`], so I/O failures in
-//! those methods (e.g. a closed terminal or disconnected pipe) are discarded
-//! silently rather than surfaced.
+//! [`draw`](Output::draw), [`flush`](Output::flush), and
+//! [`clear`](Output::clear) propagate `std::io::Error` through this
+//! backend's [`Output::Error`] type. `resize`, `set_cursor_visible`, and
+//! `set_cursor_position` are infallible ([`Output::resize`] and the [`Cursor`] methods have no
+//! `Result` return), so I/O failures in those methods (e.g. a closed terminal or disconnected
+//! pipe) are discarded silently rather than surfaced.
 //!
 //! # Event polling and CPU cost
 //!
-//! [`poll_event`](Backend::poll_event) wraps a single `crossterm::event::poll()` syscall per
+//! [`poll_event`](Input::poll_event) wraps a single `crossterm::event::poll()` syscall per
 //! call; a zero timeout (as used by
 //! [`Terminal::drain_events`](retroglyph_core::Terminal::drain_events)) is one non-blocking OS
 //! poll, not a busy loop. See that method's docs for the responsiveness/CPU tradeoff this implies
@@ -34,8 +34,8 @@
 //! Terminal-side state (raw mode, the alternate screen, cursor position, last-written
 //! colors/attributes) is untouched by a focus change and is preserved across it: this backend
 //! does not react to [`Event::FocusLost`]/[`Event::FocusGained`] itself, so nothing is torn down
-//! or reinitialized. Rendering is not deferred automatically either -- [`Backend::draw`] and
-//! [`Backend::flush`] keep writing escape sequences to stdout even while unfocused, since
+//! or reinitialized. Rendering is not deferred automatically either -- [`Output::draw`] and
+//! [`Output::flush`] keep writing escape sequences to stdout even while unfocused, since
 //! crossterm has no OS-level way to know whether that output is actually being presented while
 //! hidden. An app that wants to pause redraws while unfocused (e.g. to avoid wasted work on a
 //! backgrounded Wayland surface) should track [`Event::FocusLost`]/[`Event::FocusGained`] itself
@@ -48,8 +48,8 @@
 //!
 //! # Tracing
 //!
-//! With the optional `tracing` feature enabled, [`Backend::draw`], [`Backend::flush`], and
-//! [`Backend::poll_event`] are each wrapped in a `tracing` span (`debug` level for `draw`/`flush`,
+//! With the optional `tracing` feature enabled, [`Output::draw`], [`Output::flush`], and
+//! [`Input::poll_event`] are each wrapped in a `tracing` span (`debug` level for `draw`/`flush`,
 //! `trace` for `poll_event` since it's called every game-loop iteration by
 //! [`Terminal::drain_events`](retroglyph_core::Terminal::drain_events)), so a subscriber (e.g.
 //! `tracing-subscriber`'s fmt layer, or a flamegraph via `tracing-flame`) can show where render
@@ -78,7 +78,7 @@ struct ReadmeDoctests;
 struct WorkspaceReadmeDoctests;
 
 use core::time::Duration;
-use retroglyph_core::backend::Backend;
+use retroglyph_core::backend::{Cursor, Input, Output};
 use retroglyph_core::event::Event;
 use retroglyph_core::grid::{Pos, Size};
 use retroglyph_core::tile::Tile;
@@ -274,9 +274,9 @@ impl CrosstermOptions {
     /// Builds the [`Crossterm`] backend with these options, rendering to `writer` instead of
     /// stdout.
     ///
-    /// `writer` only receives the rendered cell content ([`Backend::draw`]/[`Backend::flush`]
-    /// output, plus the runtime [`Backend::clear`]/[`Backend::set_cursor_visible`]/
-    /// [`Backend::set_cursor_position`] escapes). Terminal-protocol setup/teardown -- raw mode,
+    /// `writer` only receives the rendered cell content ([`Output::draw`]/[`Output::flush`]
+    /// output, plus the runtime [`Output::clear`]/[`Cursor::set_cursor_visible`]/
+    /// [`Cursor::set_cursor_position`] escapes). Terminal-protocol setup/teardown -- raw mode,
     /// the alternate screen, the initial cursor hide, mouse capture, focus-change reporting,
     /// bracketed paste, and the kitty keyboard protocol -- always targets the real process
     /// stdout regardless of `writer`, since those are properties of the actual controlling
@@ -317,7 +317,7 @@ impl Default for CrosstermOptions {
 /// A terminal rendering backend powered by `crossterm`.
 ///
 /// Generic over the content writer `W` -- the sink that receives rendered cell output
-/// ([`Backend::draw`]/[`Backend::flush`], plus the runtime cursor/clear escapes). Defaults to
+/// ([`Output::draw`]/[`Output::flush`], plus the runtime cursor/clear escapes). Defaults to
 /// `BufWriter<Stdout>`, matching this type's historical behavior; use
 /// [`Crossterm::with_writer`]/[`CrosstermOptions::build_with_writer`] to render to a file, a
 /// pipe, or an in-memory buffer instead (e.g. for tests that want to inspect the emitted ANSI
@@ -521,7 +521,7 @@ impl<W: std::io::Write> Drop for Crossterm<W> {
     }
 }
 
-impl<W: std::io::Write> Backend for Crossterm<W> {
+impl<W: std::io::Write> Output for Crossterm<W> {
     type Error = std::io::Error;
 
     #[cfg_attr(feature = "tracing", tracing::instrument(level = "debug", skip_all))]
@@ -564,11 +564,9 @@ impl<W: std::io::Write> Backend for Crossterm<W> {
         self.renderer.reset_state();
         Ok(())
     }
+}
 
-    fn push_event(&mut self, _event: Event) {
-        // Crossterm reads events from its own event stream, not from push.
-    }
-
+impl<W: std::io::Write> Input for Crossterm<W> {
     /// Polls for the next input event, blocking up to `timeout`.
     ///
     /// A zero `timeout` (the case [`Terminal::drain_events`](retroglyph_core::Terminal::drain_events)
@@ -627,6 +625,11 @@ impl<W: std::io::Write> Backend for Crossterm<W> {
         }
     }
 
+    // `push_event` uses the trait default: crossterm reads events from its own event stream, not
+    // from an externally pushed queue.
+}
+
+impl<W: std::io::Write> Cursor for Crossterm<W> {
     fn set_cursor_visible(&mut self, visible: bool) {
         let writer = self.renderer.writer_mut();
         if visible {

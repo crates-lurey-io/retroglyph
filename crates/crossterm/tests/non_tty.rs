@@ -4,7 +4,7 @@
 //! runs without any extra harness; they also degrade gracefully (see each test's comment) on a
 //! developer machine where a real controlling terminal is still reachable via `/dev/tty`.
 
-use retroglyph_core::backend::Backend;
+use retroglyph_core::backend::Output;
 use retroglyph_crossterm::Crossterm;
 use std::io::IsTerminal;
 
@@ -46,12 +46,12 @@ fn repeated_construction_does_not_panic() {
     }
 }
 
-/// `Backend::size()` must never panic and must fall back to a sane default when the underlying
+/// `Output::size()` must never panic and must fall back to a sane default when the underlying
 /// `crossterm::terminal::size()` query fails (no controlling terminal, e.g. piped/CI stdio).
 /// This exercises the fallback directly against a constructed backend when one is available;
 /// on a restricted context where construction itself fails, this test is skipped since there's no
-/// `Backend` instance to query (covered instead by `new_does_not_panic_when_terminal_unavailable`
-/// above, and by the crate's own `Backend::size()` implementation using `unwrap_or((80, 25))`).
+/// `Output` instance to query (covered instead by `new_does_not_panic_when_terminal_unavailable`
+/// above, and by the crate's own `Output::size()` implementation using `unwrap_or((80, 25))`).
 #[test]
 fn size_falls_back_instead_of_panicking() {
     if let Ok(mut term) = Crossterm::new() {

@@ -1,4 +1,4 @@
-//! Benchmarks `from_crossterm_event`, the per-event mapping `Backend::poll_event` runs on every
+//! Benchmarks `from_crossterm_event`, the per-event mapping `Input::poll_event` runs on every
 //! `crossterm::event::read()` result before handing an event back to
 //! [`retroglyph_core::Terminal::drain_events`].
 //!
