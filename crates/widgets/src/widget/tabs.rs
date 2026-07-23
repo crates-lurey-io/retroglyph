@@ -145,7 +145,7 @@ impl<B: Backend> Widget<B> for Tabs<'_> {
             term.reset_style()
                 .fg(style.foreground())
                 .bg(style.background());
-            term.print(x, y, &text);
+            term.print(x, y, text);
             x = x.saturating_add(text_width);
 
             if index + 1 < self.titles.len() {

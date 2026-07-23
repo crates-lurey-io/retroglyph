@@ -71,7 +71,7 @@ pub use layout::{
 };
 pub use state::{ListState, ScrollPhysics, ScrollState, SelectionWrap};
 pub use style::{BoxStyle, Sides};
-pub use text::truncate;
+pub use text::{truncate, truncate_owned};
 pub use theme::Theme;
 #[cfg(feature = "egc")]
 pub use widget::Paragraph;

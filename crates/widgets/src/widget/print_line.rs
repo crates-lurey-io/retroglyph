@@ -61,7 +61,7 @@ impl<B: Backend> Widget<B> for PrintLine<'_> {
             term.reset_style()
                 .fg(span.style.foreground())
                 .bg(span.style.background());
-            term.print(x, area.top(), &text);
+            term.print(x, area.top(), text);
             x += text.width() as u16;
         }
         term.reset_style();

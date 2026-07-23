@@ -167,7 +167,7 @@ impl<B: Backend> Widget<B> for Button<'_> {
         term.reset_style()
             .fg(style.foreground())
             .bg(style.background());
-        term.print(x, y, &text);
+        term.print(x, y, text);
         term.reset_style();
     }
 }

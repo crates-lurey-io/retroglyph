@@ -217,7 +217,7 @@ fn draw_row<B: Backend>(
         term.reset_style()
             .fg(style.foreground())
             .bg(style.background());
-        term.print(x, y, &text);
+        term.print(x, y, text);
         x = x.saturating_add(w + column_spacing);
     }
     term.reset_style();

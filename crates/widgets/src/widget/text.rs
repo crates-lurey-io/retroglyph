@@ -60,7 +60,7 @@ impl<B: Backend> Widget<B> for Text<'_> {
         term.reset_style()
             .fg(self.style.foreground())
             .bg(self.style.background());
-        term.print(x, area.top(), &text);
+        term.print(x, area.top(), text);
         term.reset_style();
     }
 }

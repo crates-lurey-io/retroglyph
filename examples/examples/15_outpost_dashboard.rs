@@ -722,7 +722,7 @@ impl OutpostDashboard {
         let tx = rect.left() + (rect.width().saturating_sub(text.chars().count() as u16)) / 2;
         let ty = rect.top() + rect.height() / 2;
         term.reset_style().fg(fg).bg(bg);
-        term.print(tx, ty, &text);
+        term.print(tx, ty, text);
         term.reset_style();
         hitboxes.push((rect, target));
     }
@@ -766,7 +766,7 @@ impl OutpostDashboard {
             term.print(
                 col.left(),
                 col.top() + 1,
-                &truncate(&text, col.width_usize()),
+                truncate(&text, col.width_usize()),
             );
         }
 
@@ -861,7 +861,7 @@ impl OutpostDashboard {
             let hint = truncate("drag: pan   tap: select", area.width_usize());
             let x = area.right().saturating_sub(hint.chars().count() as u16 + 1);
             term.reset_style().fg(DIM_FG).bg(BG);
-            term.print(x, area.bottom() - 1, &hint);
+            term.print(x, area.bottom() - 1, hint);
             term.reset_style();
         }
     }
@@ -895,7 +895,7 @@ impl OutpostDashboard {
             term.print(
                 inner.left(),
                 inner.top() + 1,
-                &truncate("Select a tile to inspect it.", inner.width_usize()),
+                truncate("Select a tile to inspect it.", inner.width_usize()),
             );
             term.reset_style();
             return;
@@ -929,14 +929,14 @@ impl OutpostDashboard {
             as usize;
 
         term.reset_style().fg(color).bg(PANEL_BG);
-        term.print(inner.left(), inner.top(), &truncate(title, text_w));
+        term.print(inner.left(), inner.top(), truncate(title, text_w));
         term.reset_style().fg(DIM_FG).bg(PANEL_BG);
         term.print(
             inner.left(),
             inner.top() + 1,
-            &truncate(&format!("({}, {})", sel.x, sel.y), text_w),
+            truncate(&format!("({}, {})", sel.x, sel.y), text_w),
         );
-        term.print(inner.left(), inner.top() + 2, &truncate(detail, text_w));
+        term.print(inner.left(), inner.top() + 2, truncate(detail, text_w));
 
         let y = inner.top() + 4;
         if y + 3 <= inner.bottom() + 1 {

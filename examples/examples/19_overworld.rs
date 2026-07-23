@@ -2548,7 +2548,7 @@ impl Overworld {
         term.print(
             inner.left(),
             y,
-            &truncate(
+            truncate(
                 &format!(
                     "seed {}  ({}, {})",
                     self.world.seed(),
@@ -2562,12 +2562,12 @@ impl Overworld {
 
         let region = self.world.region_at(self.cam_center).to_owned();
         term.reset_style().fg(FG).bg(PANEL_BG);
-        term.print(inner.left(), y, &truncate(&region, w));
+        term.print(inner.left(), y, truncate(&region, w));
         y += 1;
 
         let label = self.world.label_at(self.cam_center);
         term.reset_style().fg(ACCENT).bg(PANEL_BG);
-        term.print(inner.left(), y, &truncate(&label, w));
+        term.print(inner.left(), y, truncate(&label, w));
         y += 1;
 
         let elev_pct = self.world.elevation_pct(self.cam_center);
@@ -2575,14 +2575,14 @@ impl Overworld {
         term.print(
             inner.left(),
             y,
-            &truncate(&format!("elevation ~{elev_pct:.0}%"), w),
+            truncate(&format!("elevation ~{elev_pct:.0}%"), w),
         );
         y += 1;
 
         term.print(
             inner.left(),
             y,
-            &truncate(&format!("view: {} [T]", self.view.label()), w),
+            truncate(&format!("view: {} [T]", self.view.label()), w),
         );
         y += 2;
 
@@ -2592,7 +2592,7 @@ impl Overworld {
         }
 
         term.reset_style().fg(FG).bg(PANEL_BG);
-        term.print(inner.left(), y, &truncate("Legend", w));
+        term.print(inner.left(), y, truncate("Legend", w));
         y += 1;
         for (glyph, color, name) in World::legend() {
             if y >= inner.bottom() - 2 {
@@ -2601,7 +2601,7 @@ impl Overworld {
             term.reset_style().fg(color).bg(PANEL_BG);
             term.put(inner.left(), y, glyph);
             term.reset_style().fg(DIM_FG).bg(PANEL_BG);
-            term.print(inner.left() + 2, y, &truncate(name, w.saturating_sub(2)));
+            term.print(inner.left() + 2, y, truncate(name, w.saturating_sub(2)));
             y += 1;
         }
 
@@ -2609,7 +2609,7 @@ impl Overworld {
         term.print(
             inner.left(),
             inner.bottom() - 1,
-            &truncate("drag pans, T tiles, R reroll", w),
+            truncate("drag pans, T tiles, R reroll", w),
         );
         term.reset_style();
     }
@@ -2630,7 +2630,7 @@ impl Overworld {
         term.print(
             area.left() + 1,
             area.top(),
-            &truncate(&text, area.width_usize().saturating_sub(1)),
+            truncate(&text, area.width_usize().saturating_sub(1)),
         );
         term.reset_style();
     }
