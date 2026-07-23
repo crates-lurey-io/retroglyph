@@ -83,7 +83,7 @@ use retroglyph_core::event::Event;
 use retroglyph_core::grid::{Pos, Size};
 use retroglyph_core::tile::Tile;
 use retroglyph_terminal::TerminalRenderer;
-use std::io::{BufWriter, Stdout};
+use std::io::{BufWriter, IsTerminal, Stdout};
 
 // Orphan-rule note: `retroglyph_core` types and `crossterm` types are both
 // foreign to this crate now that the workspace is split, so `From`/`TryFrom`
@@ -258,7 +258,17 @@ impl CrosstermOptions {
     ///
     /// Returns an `std::io::Error` if raw mode or terminal commands fail.
     pub fn build(self) -> Result<Crossterm, std::io::Error> {
-        Crossterm::build_from_options(self, BufWriter::new(std::io::stdout()))
+        // Detect once, up front, whether the real process stdout is an interactive terminal so
+        // the resulting renderer degrades to pipe-safe plain text (see
+        // `TerminalRenderer::set_plain_mode`) when stdout is a file, a pipe, or otherwise
+        // redirected (`> log.txt`, CI runners, etc). This mirrors
+        // `TerminalRenderer::auto`, but is spelled out with an explicit `is_terminal()` check on
+        // the un-wrapped `Stdout` handle rather than a call to `auto` itself: `auto` requires
+        // `W: IsTerminal`, and the buffered `BufWriter<Stdout>` this backend renders through
+        // doesn't implement that trait (only the unbuffered `Stdout`/`File`/etc. do), so the
+        // check has to happen before wrapping in `BufWriter`.
+        let plain = !std::io::stdout().is_terminal();
+        Crossterm::build_from_options(self, BufWriter::new(std::io::stdout()), plain)
     }
 
     /// Builds the [`Crossterm`] backend with these options, rendering to `writer` instead of
@@ -282,7 +292,11 @@ impl CrosstermOptions {
         self,
         writer: W,
     ) -> Result<Crossterm<W>, std::io::Error> {
-        Crossterm::build_from_options(self, writer)
+        // Unlike `build`, `writer` here is an arbitrary caller-supplied sink with no `IsTerminal`
+        // bound (a `Vec<u8>` in tests, for instance, doesn't implement it), so there's no way to
+        // auto-detect plain mode; default to `false` (ANSI/SGR escapes on), matching this
+        // method's historical behavior.
+        Crossterm::build_from_options(self, writer, false)
     }
 }
 
@@ -417,12 +431,28 @@ impl<W: std::io::Write> Crossterm<W> {
         self.renderer.writer()
     }
 
+    /// Returns whether the underlying renderer is in plain (non-ANSI) mode.
+    ///
+    /// [`CrosstermOptions::build`] sets this automatically based on whether the real process
+    /// stdout is an interactive terminal (see that method's docs); [`CrosstermOptions::build_with_writer`]
+    /// always leaves it `false`, since an arbitrary writer's "is this a terminal" status can't be
+    /// determined generically. See
+    /// [`TerminalRenderer::set_plain_mode`](retroglyph_terminal::TerminalRenderer::set_plain_mode)
+    /// for what plain mode changes about rendering.
+    pub const fn plain_mode(&self) -> bool {
+        self.renderer.plain_mode()
+    }
+
     /// Returns a mutable reference to the content writer.
     pub const fn writer_mut(&mut self) -> &mut W {
         self.renderer.writer_mut()
     }
 
-    fn build_from_options(options: CrosstermOptions, writer: W) -> Result<Self, std::io::Error> {
+    fn build_from_options(
+        options: CrosstermOptions,
+        writer: W,
+        plain: bool,
+    ) -> Result<Self, std::io::Error> {
         use std::sync::atomic::Ordering;
 
         // Setup panic hook on first backend creation
@@ -480,7 +510,7 @@ impl<W: std::io::Write> Crossterm<W> {
         }
 
         Ok(Self {
-            renderer: TerminalRenderer::new(writer),
+            renderer: TerminalRenderer::with_plain_mode(writer, plain),
         })
     }
 }
@@ -825,6 +855,10 @@ mod tests {
         assert!(
             written.contains('X'),
             "expected drawn glyph in output: {written:?}"
+        );
+        assert!(
+            !term.plain_mode(),
+            "build_with_writer must not auto-detect plain mode for an arbitrary writer"
         );
     }
 
