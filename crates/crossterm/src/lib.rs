@@ -112,6 +112,77 @@ fn keyboard_enhancement_flags() -> crossterm::event::KeyboardEnhancementFlags {
 static ALT_SCREEN_ACTIVE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static RAW_MODE_ACTIVE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
+// Tracks whether *some* `Crossterm` instance is currently live, independent of the two statics
+// above (which track what a *single* construction actually enabled, for `restore_terminal`'s own
+// bookkeeping). This is the fix for the hazard those two statics can't protect against on their
+// own: constructing a second `Crossterm` while a first is still alive both stomp the same
+// process-wide raw-mode/alternate-screen state, and dropping either one calls the shared
+// `restore_terminal()`, which would tear down state the other instance still believes is active
+// (e.g. dropping instance A disables raw mode and clears `RAW_MODE_ACTIVE`, while instance B is
+// still alive and now silently receives line-buffered, echoed input instead of raw key events).
+// Rather than trying to make concurrent instances safe (which would need real per-instance
+// state, not process-global statics, since stdout/raw-mode/the alternate screen are process-wide
+// OS resources with no instance-scoped handle), construction of a second live instance is
+// rejected outright -- see [`InstanceGuard`].
+static INSTANCE_LIVE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// RAII guard enforcing the "at most one live [`Crossterm`] instance per process" invariant.
+///
+/// [`InstanceGuard::acquire`] atomically claims [`INSTANCE_LIVE`] (returning an error if another
+/// instance already holds it) and stores the resulting guard as a field of [`Crossterm`], so it
+/// stays held for exactly as long as that `Crossterm` is alive. Dropping the guard -- whether via
+/// the owning `Crossterm`'s normal `Drop`, or because a `?` inside
+/// [`Crossterm::build_from_options`] unwound out of the constructor after the guard was acquired
+/// but before construction finished -- releases the flag, so a single failed construction attempt
+/// can never permanently wedge out all future construction.
+///
+/// This is deliberately independent of `restore_terminal()`/the panic hook: `restore_terminal()`
+/// only clears `ALT_SCREEN_ACTIVE`/`RAW_MODE_ACTIVE` (idempotent swaps that are safe to call any
+/// number of times, including from both the panic hook and the eventual `Drop`). Ordinary Rust
+/// destructor semantics already guarantee this guard's `Drop` runs during an unwind (the panic
+/// hook itself runs *before* unwinding starts, so it never needs to touch `INSTANCE_LIVE`), so
+/// there's no double-release or release-when-nothing-was-acquired hazard: exactly one `Drop` runs
+/// per successful `acquire()`, whether the instance is dropped normally or unwinds away after a
+/// panic.
+struct InstanceGuard {
+    // Always `true` for a live `InstanceGuard`; `acquire()` never constructs one otherwise. Kept
+    // as a field (rather than always releasing unconditionally in `Drop`) so the invariant "one
+    // release per successful acquire" is enforced by the type itself, not just by convention.
+    armed: bool,
+}
+
+impl InstanceGuard {
+    /// Attempts to claim the process-wide "a `Crossterm` instance is live" flag.
+    ///
+    /// Returns `Err` with [`std::io::ErrorKind::ResourceBusy`] if another instance already holds
+    /// it; the caller (`Crossterm::build_from_options`) is expected to propagate that error
+    /// straight out of the constructor via `?` without attempting any teardown, since nothing was
+    /// set up yet.
+    fn acquire() -> Result<Self, std::io::Error> {
+        use std::sync::atomic::Ordering;
+
+        INSTANCE_LIVE
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .map(|_| Self { armed: true })
+            .map_err(|_| {
+                std::io::Error::new(
+                    std::io::ErrorKind::ResourceBusy,
+                    "a Crossterm instance is already live in this process; only one may be \
+                     constructed at a time (drop the existing instance before constructing \
+                     another)",
+                )
+            })
+    }
+}
+
+impl Drop for InstanceGuard {
+    fn drop(&mut self) {
+        if self.armed {
+            INSTANCE_LIVE.store(false, std::sync::atomic::Ordering::Release);
+        }
+    }
+}
+
 /// Helper function to restore the terminal to its normal state.
 /// This is called during drops and emergency panic hooks.
 fn restore_terminal() {
@@ -256,7 +327,10 @@ impl CrosstermOptions {
     ///
     /// # Errors
     ///
-    /// Returns an `std::io::Error` if raw mode or terminal commands fail.
+    /// Returns an `std::io::Error` if raw mode or terminal commands fail. Also returns an
+    /// `std::io::Error` with [`std::io::ErrorKind::ResourceBusy`] if another [`Crossterm`]
+    /// instance is already live in this process -- see the concurrency contract documented on
+    /// [`Crossterm`].
     pub fn build(self) -> Result<Crossterm, std::io::Error> {
         // Detect once, up front, whether the real process stdout is an interactive terminal so
         // the resulting renderer degrades to pipe-safe plain text (see
@@ -287,7 +361,10 @@ impl CrosstermOptions {
     ///
     /// # Errors
     ///
-    /// Returns an `std::io::Error` if raw mode or terminal commands fail.
+    /// Returns an `std::io::Error` if raw mode or terminal commands fail. Also returns an
+    /// `std::io::Error` with [`std::io::ErrorKind::ResourceBusy`] if another [`Crossterm`]
+    /// instance is already live in this process -- see the concurrency contract documented on
+    /// [`Crossterm`].
     pub fn build_with_writer<W: std::io::Write>(
         self,
         writer: W,
@@ -323,8 +400,31 @@ impl Default for CrosstermOptions {
 /// pipe, or an in-memory buffer instead (e.g. for tests that want to inspect the emitted ANSI
 /// bytes without a real TTY). See [`CrosstermOptions::build_with_writer`] for exactly which
 /// operations go through `W` versus the real terminal.
+///
+/// # Concurrency: only one live instance per process
+///
+/// Raw mode, the alternate screen, and the other terminal-protocol state this backend negotiates
+/// are process-wide OS resources (there's exactly one controlling terminal, one raw-mode flag,
+/// one alternate-screen buffer), not something a `Crossterm` instance owns exclusively the way a
+/// `File` owns a file descriptor. Because of that, at most one `Crossterm` (of any `W`) may be
+/// live at a time in a process: constructing a second one while a first is still alive ([`new`],
+/// [`with_options`], [`with_writer`], and every [`CrosstermOptions::build`]/
+/// [`CrosstermOptions::build_with_writer`] call) returns an `std::io::Error` with
+/// [`std::io::ErrorKind::ResourceBusy`] instead of proceeding -- this is a documented error, not
+/// undefined behavior, and nothing is torn down or corrupted by the attempt. Sequential
+/// construct-drop-construct is fully supported: once the live instance is dropped, a new one can
+/// be constructed immediately.
+///
+/// [`new`]: Crossterm::new
+/// [`with_options`]: Crossterm::with_options
+/// [`with_writer`]: Crossterm::with_writer
 pub struct Crossterm<W: std::io::Write = BufWriter<Stdout>> {
     renderer: TerminalRenderer<W>,
+    // Held for exactly the lifetime of this instance; releases the process-wide "an instance is
+    // live" flag when this value is dropped (see [`InstanceGuard`]). Never read after
+    // construction -- it's kept purely for its `Drop` side effect -- hence the leading
+    // underscore, which also suppresses the otherwise-applicable `dead_code` lint.
+    _instance_guard: InstanceGuard,
 }
 
 impl Crossterm {
@@ -343,7 +443,10 @@ impl Crossterm {
     ///
     /// # Errors
     ///
-    /// Returns an `std::io::Error` if raw mode or terminal commands fail.
+    /// Returns an `std::io::Error` if raw mode or terminal commands fail. Also returns an
+    /// `std::io::Error` with [`std::io::ErrorKind::ResourceBusy`] if another [`Crossterm`]
+    /// instance is already live in this process -- see the concurrency contract documented on
+    /// [`Crossterm`].
     pub fn new() -> Result<Self, std::io::Error> {
         Self::with_options(CrosstermOptions::default())
     }
@@ -386,7 +489,10 @@ impl Crossterm {
     ///
     /// # Errors
     ///
-    /// Returns an `std::io::Error` if raw mode or terminal commands fail.
+    /// Returns an `std::io::Error` if raw mode or terminal commands fail. Also returns an
+    /// `std::io::Error` with [`std::io::ErrorKind::ResourceBusy`] if another [`Crossterm`]
+    /// instance is already live in this process -- see the concurrency contract documented on
+    /// [`Crossterm`].
     pub fn with_options(options: CrosstermOptions) -> Result<Self, std::io::Error> {
         options.build()
     }
@@ -421,7 +527,10 @@ impl<W: std::io::Write> Crossterm<W> {
     ///
     /// # Errors
     ///
-    /// Returns an `std::io::Error` if raw mode or terminal commands fail.
+    /// Returns an `std::io::Error` if raw mode or terminal commands fail. Also returns an
+    /// `std::io::Error` with [`std::io::ErrorKind::ResourceBusy`] if another [`Crossterm`]
+    /// instance is already live in this process -- see the concurrency contract documented on
+    /// [`Crossterm`].
     pub fn with_writer(writer: W) -> Result<Self, std::io::Error> {
         CrosstermOptions::default().build_with_writer(writer)
     }
@@ -464,6 +573,12 @@ impl<W: std::io::Write> Crossterm<W> {
                 original_hook(panic_info);
             }));
         });
+
+        // Reject a second concurrent instance up front, before touching any terminal state.
+        // Held for the lifetime of the returned `Crossterm` (see `InstanceGuard`'s docs); if any
+        // `?` below returns early, this local binding drops immediately and releases the flag, so
+        // a failed construction attempt never permanently wedges out future construction.
+        let instance_guard = InstanceGuard::acquire()?;
 
         if options.raw_mode {
             crossterm::terminal::enable_raw_mode()?;
@@ -511,6 +626,7 @@ impl<W: std::io::Write> Crossterm<W> {
 
         Ok(Self {
             renderer: TerminalRenderer::with_plain_mode(writer, plain),
+            _instance_guard: instance_guard,
         })
     }
 }
@@ -790,6 +906,14 @@ pub fn from_crossterm_event(event: crossterm::event::Event) -> Result<Event, ()>
 mod tests {
     use super::*;
 
+    // `cargo test` runs `#[test]` functions in this module across multiple threads by default.
+    // Any test that actually constructs a `Crossterm`/acquires an `InstanceGuard` contends for
+    // the same process-wide `INSTANCE_LIVE` flag, so without serializing them a legitimate
+    // concurrent construction from an unrelated test in this file could spuriously trip the new
+    // "second live instance" rejection. This lock -- held only by tests that touch that shared
+    // state -- keeps those tests deterministic without disabling parallelism for the whole file.
+    static TEST_GUARD_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     fn key_code_of(ct_event: crossterm::event::Event) -> retroglyph_core::event::KeyCode {
         match from_crossterm_event(ct_event) {
             Ok(Event::Key(key)) => key.code,
@@ -829,6 +953,9 @@ mod tests {
         // fully redirected/piped stdout (as under `cargo test`). Skip the assertion (rather than
         // failing) on the rare environment where even the always-safe cursor-hide escape write
         // fails outright (e.g. a closed stdout), since that's not what this test is about.
+        let _lock = TEST_GUARD_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if let Ok(term) = Crossterm::builder()
             .raw_mode(false)
             .alt_screen(false)
@@ -845,6 +972,9 @@ mod tests {
         // real-terminal-only features (raw mode, alt screen, mouse/focus/paste/kitty) are
         // disabled -- exactly the combination `CrosstermOptions::build_with_writer`'s docs
         // recommend for a non-TTY sink.
+        let _lock = TEST_GUARD_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let mut term = Crossterm::builder()
             .raw_mode(false)
             .alt_screen(false)
@@ -876,16 +1006,90 @@ mod tests {
         // `Crossterm::with_writer` is the `CrosstermOptions::default()` shortcut, matching how
         // `Crossterm::new()` relates to `with_options(CrosstermOptions::default())`. Both fail
         // the same way without a real terminal (raw mode/alt screen left enabled), so just
-        // assert they agree on success or failure rather than requiring either to succeed.
+        // assert they agree on success or failure rather than requiring either to succeed. Each
+        // build is dropped before the next one starts (rather than held simultaneously) so the
+        // comparison reflects real-terminal availability, not a spurious rejection from the new
+        // "only one live instance" guard tripping on the still-live first instance.
+        let _lock = TEST_GUARD_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let via_shortcut = Crossterm::with_writer(Vec::<u8>::new());
+        let via_shortcut_ok = via_shortcut.is_ok();
+        drop(via_shortcut);
         let via_builder = CrosstermOptions::default().build_with_writer(Vec::<u8>::new());
-        assert_eq!(via_shortcut.is_ok(), via_builder.is_ok());
-        if let Ok(term) = via_shortcut {
-            drop(term);
+        let via_builder_ok = via_builder.is_ok();
+        drop(via_builder);
+        assert_eq!(via_shortcut_ok, via_builder_ok);
+    }
+
+    #[test]
+    fn instance_guard_rejects_a_second_concurrent_acquire() {
+        // Exercises the internal guard type directly: deterministic and doesn't require a real
+        // TTY, unlike driving raw-mode/alt-screen terminal calls through a full `Crossterm`
+        // construction would. The first `acquire()` claims the process-wide flag; a second
+        // `acquire()` while the first guard is still alive must be rejected; once the first guard
+        // is dropped, `acquire()` must succeed again.
+        let _lock = TEST_GUARD_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+
+        let first = InstanceGuard::acquire().expect("first acquire must succeed");
+
+        match InstanceGuard::acquire() {
+            Ok(_) => {
+                panic!("a second concurrent acquire must be rejected while the first guard is live")
+            }
+            Err(err) => assert_eq!(err.kind(), std::io::ErrorKind::ResourceBusy),
         }
-        if let Ok(term) = via_builder {
-            drop(term);
+
+        drop(first);
+
+        let third = InstanceGuard::acquire();
+        assert!(
+            third.is_ok(),
+            "acquire must succeed again once the prior guard is dropped"
+        );
+    }
+
+    #[test]
+    fn constructing_a_second_live_crossterm_is_rejected_until_the_first_is_dropped() {
+        // End-to-end version of `instance_guard_rejects_a_second_concurrent_acquire`, through the
+        // public `Crossterm` API rather than the internal guard type. All TTY-only features are
+        // disabled so construction doesn't require a real terminal (see
+        // `build_with_writer_renders_cell_content_into_a_custom_sink` above for why that
+        // combination is safe under `cargo test`'s captured, non-TTY stdout).
+        let _lock = TEST_GUARD_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+
+        let options = || {
+            Crossterm::builder()
+                .raw_mode(false)
+                .alt_screen(false)
+                .mouse_capture(false)
+                .focus_change(false)
+                .bracketed_paste(false)
+                .kitty_protocol(false)
+        };
+
+        let first = options()
+            .build_with_writer(Vec::new())
+            .expect("first construction must succeed without a TTY");
+
+        match options().build_with_writer(Vec::new()) {
+            Ok(_) => panic!(
+                "a second live Crossterm instance must be rejected while the first is still alive"
+            ),
+            Err(err) => assert_eq!(err.kind(), std::io::ErrorKind::ResourceBusy),
         }
+
+        drop(first);
+
+        let third = options().build_with_writer(Vec::new());
+        assert!(
+            third.is_ok(),
+            "construction must succeed again once the first instance is dropped"
+        );
     }
 
     #[test]
