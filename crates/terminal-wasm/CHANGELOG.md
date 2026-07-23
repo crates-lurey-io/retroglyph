@@ -11,198 +11,177 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 ### Features
 
-- [2edba00](
-https://github.com/crates-lurey-io/retroglyph/commit/2edba00a5c15b059152e930c1f21d6f9a2e65f99) *(terminal-wasm)* Add focus/blur FFI push entry point by `@matanlurey` in [#340](
-https://github.com/crates-lurey-io/retroglyph/pull/340)
+- [2edba00](https://github.com/crates-lurey-io/retroglyph/commit/2edba00a5c15b059152e930c1f21d6f9a2e65f99)
+  _(terminal-wasm)_ Add focus/blur FFI push entry point by `@matanlurey` in
+  [#340](https://github.com/crates-lurey-io/retroglyph/pull/340)
 
-  > Adds wasm_terminal_push_focus(handle, focused) to the wasm-bindgen FFI
-  > surface, pushing Event::FocusGained/Event::FocusLost -- mirroring the
-  > crossterm backend's focus-change mapping so a browser terminal element's
-  > focus/blur DOM events can drive the same 'pause when unfocused' pattern.
+  > Adds wasm_terminal_push_focus(handle, focused) to the wasm-bindgen FFI surface, pushing
+  > Event::FocusGained/Event::FocusLost -- mirroring the crossterm backend's focus-change mapping so
+  > a browser terminal element's focus/blur DOM events can drive the same 'pause when unfocused'
+  > pattern.
   >
   > Closes #289.
 
 ### Bug Fixes
 
-- [f8e5766](
-https://github.com/crates-lurey-io/retroglyph/commit/f8e57661e87dfbd08b878bd3647754d2614242a6) *(terminal-wasm)* Bound event_queue and coalesce pointer-move events by `@matanlurey` in [#342](
-https://github.com/crates-lurey-io/retroglyph/pull/342)
+- [f8e5766](https://github.com/crates-lurey-io/retroglyph/commit/f8e57661e87dfbd08b878bd3647754d2614242a6)
+  _(terminal-wasm)_ Bound event_queue and coalesce pointer-move events by `@matanlurey` in
+  [#342](https://github.com/crates-lurey-io/retroglyph/pull/342)
 
-  > The event_queue VecDeque had no cap, drained only by poll_event. If the Rust
-  > game loop stalls (backgrounded tab, throttled requestAnimationFrame) while JS
-  > keeps forwarding high-frequency mousemove events, the queue could grow
-  > unbounded -- unlike native backends, where crossterm's OS input buffer
-  > applies backpressure.
+  > The event_queue VecDeque had no cap, drained only by poll_event. If the Rust game loop stalls
+  > (backgrounded tab, throttled requestAnimationFrame) while JS keeps forwarding high-frequency
+  > mousemove events, the queue could grow unbounded -- unlike native backends, where crossterm's OS
+  > input buffer applies backpressure.
   >
   > push_event now:
-  > - coalesces consecutive MouseEventKind::Moved events by replacing the queue's
-  >   back entry in place instead of growing the queue
-  > - caps the queue at EVENT_QUEUE_CAP (4096) events, dropping the oldest entry
-  >   and logging via log::warn! once at capacity
   >
-  > Adds unit tests for the cap, Moved coalescing, and that non-Moved events
-  > (keys, clicks, paste) are never dropped or coalesced, plus a new
-  > event_queue_coalesce_moved_burst criterion bench demonstrating the fix under
-  > a high-frequency Moved burst.
+  > - coalesces consecutive MouseEventKind::Moved events by replacing the queue's back entry in
+  >   place instead of growing the queue
+  > - caps the queue at EVENT_QUEUE_CAP (4096) events, dropping the oldest entry and logging via
+  >   log::warn! once at capacity
+  >
+  > Adds unit tests for the cap, Moved coalescing, and that non-Moved events (keys, clicks, paste)
+  > are never dropped or coalesced, plus a new event_queue_coalesce_moved_burst criterion bench
+  > demonstrating the fix under a high-frequency Moved burst.
   >
   > Closes #286
 
 ### Refactor
 
-- [c6f36d7](
-https://github.com/crates-lurey-io/retroglyph/commit/c6f36d7bdf320b10cca5d3df9d71d97620852297) *(core)* Split Backend into Output/Input/Cursor facets by `@matanlurey` in [#331](
-https://github.com/crates-lurey-io/retroglyph/pull/331)
+- [c6f36d7](https://github.com/crates-lurey-io/retroglyph/commit/c6f36d7bdf320b10cca5d3df9d71d97620852297)
+  _(core)_ Split Backend into Output/Input/Cursor facets by `@matanlurey` in
+  [#331](https://github.com/crates-lurey-io/retroglyph/pull/331)
 
-  > * refactor(core): split Backend into Output/Input/Cursor facets
+  > - refactor(core): split Backend into Output/Input/Cursor facets
   >
-  > Splits the fused Backend trait into three independent sibling traits with
-  > no supertrait relationship: Output (draw/draw_layers/flush/size/clear/resize,
-  > the only fallible facet), Input (poll_event/push_event, push_event defaults
-  > to a no-op), and Cursor (set_cursor_visible/set_cursor_position, both default
-  > to a no-op). Backend becomes a pure ergonomic bundle:
+  > Splits the fused Backend trait into three independent sibling traits with no supertrait
+  > relationship: Output (draw/draw_layers/flush/size/clear/resize, the only fallible facet), Input
+  > (poll_event/push_event, push_event defaults to a no-op), and Cursor
+  > (set_cursor_visible/set_cursor_position, both default to a no-op). Backend becomes a pure
+  > ergonomic bundle:
   >
   >     pub trait Backend: Output + Input + Cursor {}
   >     impl<T: Output + Input + Cursor> Backend for T {}
   >
-  > so every existing B: Backend generic call site (Terminal<B>, App<B>::step,
-  > layout::render, every widget) keeps compiling unchanged. Headless now
-  > implements Output/Input/Cursor separately instead of one impl Backend.
+  > so every existing B: Backend generic call site (Terminal<B>, App<B>::step, layout::render, every
+  > widget) keeps compiling unchanged. Headless now implements Output/Input/Cursor separately
+  > instead of one impl Backend.
   >
-  > Also fixes stray doc/grid/terminal references to crate::Backend::* methods
-  > that moved to Output/Input, and updates the workspace README's backend
-  > overview.
+  > Also fixes stray doc/grid/terminal references to crate::Backend::\* methods that moved to
+  > Output/Input, and updates the workspace README's backend overview.
   >
-  > * refactor(crossterm): implement Output/Input/Cursor instead of fused Backend
+  > - refactor(crossterm): implement Output/Input/Cursor instead of fused Backend
   >
-  > Crossterm now implements Output (draw/flush/size/clear/resize, propagating
-  > std::io::Error), Input (real poll_event; push_event uses the new trait
-  > default since crossterm reads its own event stream), and Cursor (real
-  > escape-code-based show/hide and move) instead of one impl Backend. Updates
-  > crate docs, tests, and benches that referenced Backend::* methods directly
-  > on a concrete Crossterm<W> to import Output/Input instead (bundle-trait
-  > method resolution only works through a generic B: Backend bound, not a
-  > concrete type).
+  > Crossterm now implements Output (draw/flush/size/clear/resize, propagating std::io::Error),
+  > Input (real poll_event; push_event uses the new trait default since crossterm reads its own
+  > event stream), and Cursor (real escape-code-based show/hide and move) instead of one impl
+  > Backend. Updates crate docs, tests, and benches that referenced Backend::\* methods directly on
+  > a concrete Crossterm<W> to import Output/Input instead (bundle-trait method resolution only
+  > works through a generic B: Backend bound, not a concrete type).
   >
-  > * refactor(window): fold Presenter into an Output supertrait
+  > - refactor(window): fold Presenter into an Output supertrait
   >
   > Presenter is now `pub trait Presenter: Output`, dropping its duplicated
-  > draw/draw_layers/needs_full_frame/composites_layers/flush/size/clear/resize
-  > signatures (inherited from Output) and its own Error associated type (also
-  > inherited); Presenter keeps only SurfaceError plus the surface lifecycle
-  > (init_surface/resize_surface/present/cell_size). WindowBackend<P: Presenter>
-  > now implements Output by delegating to P, Input via its own event queue, and
-  > Cursor via the trait's no-op default (confirmed this matches the prior
-  > fused-Backend impl's cursor methods, which were already no-ops for the
-  > windowed family -- a straight split, not a behavior change). Updates crate
-  > docs (lib.rs architecture diagram, presenter.rs's stale "mirrors the output
-  > half" doc comment, README) and the winit test/doctest presenter stubs to
+  > draw/draw_layers/needs_full_frame/composites_layers/flush/size/clear/resize signatures
+  > (inherited from Output) and its own Error associated type (also inherited); Presenter keeps only
+  > SurfaceError plus the surface lifecycle (init_surface/resize_surface/present/cell_size).
+  > WindowBackend<P: Presenter> now implements Output by delegating to P, Input via its own event
+  > queue, and Cursor via the trait's no-op default (confirmed this matches the prior fused-Backend
+  > impl's cursor methods, which were already no-ops for the windowed family -- a straight split,
+  > not a behavior change). Updates crate docs (lib.rs architecture diagram, presenter.rs's stale
+  > "mirrors the output half" doc comment, README) and the winit test/doctest presenter stubs to
   > implement Output + Presenter separately.
   >
-  > * refactor(software): implement Output/Input/Cursor, drop duplicate Presenter forwarding
+  > - refactor(software): implement Output/Input/Cursor, drop duplicate Presenter forwarding
   >
-  > SoftwareRenderer now implements Output, Input, and Cursor directly instead
-  > of one impl Backend. Since retroglyph-window's Presenter is now an Output
-  > supertrait, SoftwareRenderer's own Output impl already satisfies
-  > Presenter: Output, so the old impl retroglyph_window::Presenter block
-  > (which duplicated draw/draw_layers/flush/size/clear/resize by forwarding
-  > through <Self as Backend>::method, specifically to keep Presenter out of
-  > scope and avoid method-resolution ambiguity) is deleted; the new Presenter
-  > impl only defines SurfaceError, init_surface, resize_surface, present, and
-  > cell_size. Updates crate/module docs and the benches that called
-  > draw/draw_layers directly on a concrete SoftwareRenderer to import Output
-  > instead of Backend.
+  > SoftwareRenderer now implements Output, Input, and Cursor directly instead of one impl Backend.
+  > Since retroglyph-window's Presenter is now an Output supertrait, SoftwareRenderer's own Output
+  > impl already satisfies Presenter: Output, so the old impl retroglyph_window::Presenter block
+  > (which duplicated draw/draw_layers/flush/size/clear/resize by forwarding through
+  > <Self as Backend>::method, specifically to keep Presenter out of scope and avoid
+  > method-resolution ambiguity) is deleted; the new Presenter impl only defines SurfaceError,
+  > init_surface, resize_surface, present, and cell_size. Updates crate/module docs and the benches
+  > that called draw/draw_layers directly on a concrete SoftwareRenderer to import Output instead of
+  > Backend.
   >
-  > * refactor(terminal-wasm): implement Output/Input/Cursor instead of fused Backend
+  > - refactor(terminal-wasm): implement Output/Input/Cursor instead of fused Backend
   >
-  > TerminalWasm now implements Output (ANSI-emitting draw/flush/clear/resize),
-  > Input (real push_event/poll_event, since this backend is entirely
-  > push-driven), and Cursor (real escape-code cursor show/hide/move) instead of
-  > one impl Backend. Updates doc comment links (Backend::draw/clear/etc. ->
-  > Output::/Input::/Cursor::) and the event-throughput bench's Backend as _
-  > import to Input as _.
+  > TerminalWasm now implements Output (ANSI-emitting draw/flush/clear/resize), Input (real
+  > push*event/poll_event, since this backend is entirely push-driven), and Cursor (real escape-code
+  > cursor show/hide/move) instead of one impl Backend. Updates doc comment links
+  > (Backend::draw/clear/etc. -> Output::/Input::/Cursor::) and the event-throughput bench's Backend
+  > as * import to Input as \_.
   >
-  > * fix(terminal-wasm): import Output for wasm32-gated resize call
+  > - fix(terminal-wasm): import Output for wasm32-gated resize call
   >
-  > The wasm32-only wasm_terminal_resize FFI export imported the old fused
-  > Backend trait to call resize(); after the Output/Input/Cursor split that
-  > method lives on Output. This module is #[cfg(target_arch = "wasm32")], so
-  > cargo test --all-features never compiled it -- only just test-wasm
-  > (wasm-pack test) exercises this path, and CI caught it as a build failure
-  > on PR #331.
+  > The wasm32-only wasm_terminal_resize FFI export imported the old fused Backend trait to call
+  > resize(); after the Output/Input/Cursor split that method lives on Output. This module
+  > is #[cfg(target_arch = "wasm32")], so cargo test --all-features never compiled it -- only just
+  > test-wasm (wasm-pack test) exercises this path, and CI caught it as a build failure on PR #331.
   >
-  > * docs(workspace): update Backend/Presenter references after the trait split
+  > - docs(workspace): update Backend/Presenter references after the trait split
   >
-  > Sweeps remaining prose describing Backend as a single fused
-  > output+input+cursor trait: the workspace README's backend overview, the
-  > retroglyph-terminal crate's doc comment linking to the old
-  > Backend::draw method (now Output::draw), and docs/testing.md's reference to
+  > Sweeps remaining prose describing Backend as a single fused output+input+cursor trait: the
+  > workspace README's backend overview, the retroglyph-terminal crate's doc comment linking to the
+  > old Backend::draw method (now Output::draw), and docs/testing.md's reference to
   > Backend::push_event (now Input::push_event).
 
-- [f6f35da](
-https://github.com/crates-lurey-io/retroglyph/commit/f6f35da518d9491bd34b981f8dfded9af75dec50) *(terminal-wasm)* Make TerminalWasm's inherent push_event pub(crate) by `@matanlurey` in [#341](
-https://github.com/crates-lurey-io/retroglyph/pull/341)
-  >
-  > Input::push_event is now the sole public way to push an event onto a
-  > TerminalWasm; the inherent method is pub(crate), used internally by the
-  > wasm-bindgen FFI functions and the crate's own tests. External callers that
-  > called .push_event(...) on a bare TerminalWasm without importing the Input
-  > trait now need it in scope, or a fully-qualified call.
+- [f6f35da](https://github.com/crates-lurey-io/retroglyph/commit/f6f35da518d9491bd34b981f8dfded9af75dec50)
+  _(terminal-wasm)_ Make TerminalWasm's inherent push_event pub(crate) by `@matanlurey` in
+  [#341](https://github.com/crates-lurey-io/retroglyph/pull/341)
+  > Input::push_event is now the sole public way to push an event onto a TerminalWasm; the inherent
+  > method is pub(crate), used internally by the wasm-bindgen FFI functions and the crate's own
+  > tests. External callers that called .push_event(...) on a bare TerminalWasm without importing
+  > the Input trait now need it in scope, or a fully-qualified call.
   >
   > Closes #291.
 
 ### Performance
 
-- [e54ed98](
-https://github.com/crates-lurey-io/retroglyph/commit/e54ed986031c3b56b0ca96c3b70cf4e211cc2beb) *(terminal-wasm)* Avoid per-frame reallocation and UTF-8 revalidation in take_output by `@matanlurey` in [#344](
-https://github.com/crates-lurey-io/retroglyph/pull/344)
+- [e54ed98](https://github.com/crates-lurey-io/retroglyph/commit/e54ed986031c3b56b0ca96c3b70cf4e211cc2beb)
+  _(terminal-wasm)_ Avoid per-frame reallocation and UTF-8 revalidation in take_output by
+  `@matanlurey` in [#344](https://github.com/crates-lurey-io/retroglyph/pull/344)
 
-  > - Replace TerminalWasm's TerminalRenderer<Vec<u8>> writer with a new Utf8Sink,
-  >   a std::io::Write sink backed by a String. TerminalRenderer only ever writes
-  >   complete, already-valid-UTF-8 fragments into its writer, so take_output no
-  >   longer has to re-validate the drained buffer as UTF-8 via String::from_utf8
-  >   every frame (retroglyph#288).
-  > - take_output now replaces the drained buffer with one pre-sized to the
-  >   outgoing buffer's capacity instead of an empty Vec::new()/String::new(),
-  >   so a steady frame rate converges to one right-sized allocation per frame
-  >   instead of regrowing from empty every time (retroglyph#287).
-  > - Add TerminalWasm::take_output_into(&mut String), an allocation-free
-  >   alternative for callers holding a long-lived buffer across frames
-  >   (retroglyph#290).
-  > - Add unit tests for take_output's capacity retention and take_output_into's
-  >   clear+fill behavior.
+  > - Replace TerminalWasm's TerminalRenderer<Vec<u8>> writer with a new Utf8Sink, a std::io::Write
+  >   sink backed by a String. TerminalRenderer only ever writes complete, already-valid-UTF-8
+  >   fragments into its writer, so take_output no longer has to re-validate the drained buffer as
+  >   UTF-8 via String::from_utf8 every frame (retroglyph#288).
+  > - take_output now replaces the drained buffer with one pre-sized to the outgoing buffer's
+  >   capacity instead of an empty Vec::new()/String::new(), so a steady frame rate converges to one
+  >   right-sized allocation per frame instead of regrowing from empty every time (retroglyph#287).
+  > - Add TerminalWasm::take_output_into(&mut String), an allocation-free alternative for callers
+  >   holding a long-lived buffer across frames (retroglyph#290).
+  > - Add unit tests for take_output's capacity retention and take_output_into's clear+fill
+  >   behavior.
 
 ### Testing
 
-- [424e466](
-https://github.com/crates-lurey-io/retroglyph/commit/424e4662f410294683686b31948bdab0f3509b66) *(terminal-wasm)* Add benchmarks for take_output and event-decode throughput by `@matanlurey` in [#319](
-https://github.com/crates-lurey-io/retroglyph/pull/319)
+- [424e466](https://github.com/crates-lurey-io/retroglyph/commit/424e4662f410294683686b31948bdab0f3509b66)
+  _(terminal-wasm)_ Add benchmarks for take_output and event-decode throughput by `@matanlurey` in
+  [#319](https://github.com/crates-lurey-io/retroglyph/pull/319)
 
-  > Adds two criterion bench targets, following crates/core/benches/grid_diff.rs's
-  > style (deterministic fastrand-seeded inputs, doc comments explaining why,
-  > #![allow(missing_docs)]):
+  > Adds two criterion bench targets, following crates/core/benches/grid_diff.rs's style
+  > (deterministic fastrand-seeded inputs, doc comments explaining why, #![allow(missing_docs)]):
   >
-  > - benches/take_output.rs: TerminalWasm::take_output on a full-repaint vs
-  >   sparse-diff (1%/5%) frame at three grid sizes (40x12, 80x24, 200x60),
-  >   reporting both wall time and output byte length via
-  >   Criterion::benchmark_group's Throughput::Bytes -- the marshalled string size
-  >   matters as much as CPU time since take_output crosses the WASM/JS boundary
-  >   once per animation frame.
-  > - benches/event_throughput.rs: decode_key_event/decode_mouse_event throughput
-  >   over a representative 10k-event stream (Throughput::Elements), plus event
-  >   queue drain throughput/growth under a burst of pushed mouse-move events at
-  >   a few burst sizes.
+  > - benches/take_output.rs: TerminalWasm::take_output on a full-repaint vs sparse-diff (1%/5%)
+  >   frame at three grid sizes (40x12, 80x24, 200x60), reporting both wall time and output byte
+  >   length via Criterion::benchmark_group's Throughput::Bytes -- the marshalled string size
+  >   matters as much as CPU time since take_output crosses the WASM/JS boundary once per animation
+  >   frame.
+  > - benches/event_throughput.rs: decode_key_event/decode_mouse_event throughput over a
+  >   representative 10k-event stream (Throughput::Elements), plus event queue drain
+  >   throughput/growth under a burst of pushed mouse-move events at a few burst sizes.
   >
-  > criterion and fastrand are added as non-wasm32 dev-dependencies (merged into
-  > the existing [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-  > table alongside proptest), matching this crate's existing target-gating
-  > convention for the decode_key_event_proptests module: criterion benches only
-  > ever run on the host, and wasm-pack's just test-wasm only builds --tests, not
-  > --benches, so no additional gating was needed.
+  > criterion and fastrand are added as non-wasm32 dev-dependencies (merged into the existing
+  > [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies] table alongside proptest), matching
+  > this crate's existing target-gating convention for the decode_key_event_proptests module:
+  > criterion benches only ever run on the host, and wasm-pack's just test-wasm only builds --tests,
+  > not --benches, so no additional gating was needed.
   >
   > Closes #292
 
-**Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-wasm-v0.1.2...retroglyph-terminal-wasm-v0.1.3
-
+**Full Changelog**:
+https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-wasm-v0.1.2...retroglyph-terminal-wasm-v0.1.3
 
 ## [0.1.2+retroglyph-terminal-wasm](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-wasm-v0.1.1...retroglyph-terminal-wasm-v0.1.2) - 2026-07-19
 
