@@ -217,7 +217,7 @@ fn draw_row<B: Backend>(
             .fg(style.foreground())
             .bg(style.background());
         term.print(x, y, text);
-        x = x.saturating_add(w + column_spacing);
+        x = x.saturating_add(w.saturating_add(column_spacing));
     }
     term.reset_style();
 }
@@ -413,6 +413,27 @@ mod tests {
         // it out to column 4.
         assert_eq!(term.grid().get(0, 0).glyph(), 'A');
         assert_eq!(term.grid().get(4, 0).glyph(), 'B');
+    }
+
+    #[test]
+    fn draw_row_column_width_plus_spacing_saturates_instead_of_overflowing() {
+        // A column width near `u16::MAX` combined with a nonzero `column_spacing` must not
+        // overflow the intermediate `w + column_spacing` addition (see issue #315); the whole
+        // expression should saturate to `u16::MAX` instead of panicking (debug) or wrapping
+        // (release).
+        let area = Rect::new(0, 0, 20, 1);
+        let cells: [&str; 2] = ["A", "B"];
+        let widths = [u16::MAX - 1, 1];
+        let row_style = RowStyle {
+            style: Style::new(),
+            bg: None,
+            column_spacing: 3,
+        };
+
+        let mut term = Terminal::new(Headless::new(20, 1));
+        draw_row(&mut term, area, 0, &cells, &widths, row_style);
+
+        assert_eq!(term.grid().get(0, 0).glyph(), 'A');
     }
 
     #[test]
