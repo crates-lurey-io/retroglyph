@@ -140,5 +140,50 @@ fn queue_drain_throughput(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, decode_throughput, queue_drain_throughput);
+/// Benchmarks pushing a burst of *consecutive* mouse-move events (no interleaved clicks/keys, the
+/// worst case for a stalled consumer -- e.g. a fast drag or a high-polling-rate pointer while the
+/// Rust game loop is paused/backgrounded) -- demonstrating that retroglyph#286's `Moved`
+/// coalescing keeps the queue at a single entry throughout the burst, rather than growing
+/// unboundedly like `queue_drain_throughput`'s burst above (which mixes in occasional non-`Moved`
+/// events, so it still grows with burst size).
+fn queue_coalesce_moved_burst(c: &mut Criterion) {
+    let mut group = c.benchmark_group("event_queue_coalesce_moved_burst");
+
+    for burst in [100u64, 1_000, 10_000] {
+        group.throughput(Throughput::Elements(burst));
+        #[allow(clippy::cast_possible_truncation)]
+        group.bench_function(format!("burst_{burst}"), |b| {
+            b.iter_batched(
+                || TerminalWasm::new(80, 24),
+                |mut backend| {
+                    for i in 0..burst {
+                        backend.push_event(Event::Mouse(
+                            decode_mouse_event(
+                                (i % 80) as u16,
+                                (i % 24) as u16,
+                                mouse_actions::MOVED,
+                                0,
+                                0,
+                            )
+                            .expect("MOVED action always decodes"),
+                        ));
+                    }
+                    // The whole point of coalescing: however large `burst` is, only the latest
+                    // `Moved` event is ever queued.
+                    black_box(backend)
+                },
+                BatchSize::SmallInput,
+            );
+        });
+    }
+
+    group.finish();
+}
+
+criterion_group!(
+    benches,
+    decode_throughput,
+    queue_drain_throughput,
+    queue_coalesce_moved_burst
+);
 criterion_main!(benches);
