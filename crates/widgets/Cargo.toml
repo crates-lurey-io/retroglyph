@@ -28,3 +28,27 @@ egc = ["retroglyph-core/egc"]
 # non-optional composite-tier functionality, not an opt-in extra like `egc`.
 retroglyph-core = { path = "../core", version = "0.2.1", default-features = false, features = ["std", "gem"] }
 unicode-width = "0.2"
+
+[dev-dependencies]
+criterion = "0.5"
+fastrand = "2"
+
+[[bench]]
+name = "table_render"
+harness = false
+
+[[bench]]
+name = "list_sparkline_render"
+harness = false
+
+[[bench]]
+name = "layout_solve"
+harness = false
+
+[[bench]]
+name = "text_truncate"
+harness = false
+
+[[bench]]
+name = "hit_testing"
+harness = false
