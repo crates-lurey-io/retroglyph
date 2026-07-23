@@ -23,6 +23,7 @@ use core::time::Duration;
 
 /// Whether the game loop should continue or stop after a frame.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum Flow {
     /// Run another frame.
     Continue,
@@ -112,9 +113,10 @@ where
             frame: frame_count,
         };
         frame_count = frame_count.wrapping_add(1);
-        match step(&mut term, &mut app, &frame) {
-            Flow::Continue => {}
-            Flow::Exit => return,
+        // `Flow` is `#[non_exhaustive]`; treat any variant other than `Flow::Exit` the same as
+        // `Flow::Continue` (keep looping) rather than exiting on an unknown future value.
+        if step(&mut term, &mut app, &frame) == Flow::Exit {
+            return;
         }
     }
 }

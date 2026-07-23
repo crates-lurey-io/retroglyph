@@ -112,7 +112,6 @@ use std::io::{self, Write};
 /// [`TerminalRenderer::draw`], which concatenates two calls' output with `;` into one sequence.
 fn write_sgr_params<W: Write>(out: &mut W, color: Color, base: u8, reset: u8) -> io::Result<()> {
     match color {
-        Color::Default => write!(out, "{reset}"),
         Color::Ansi(ansi) => {
             // Standard/bright ANSI codes are offsets from the SGR base:
             // foreground 30-37/90-97, background 40-47/100-107. `base` here
@@ -132,6 +131,9 @@ fn write_sgr_params<W: Write>(out: &mut W, color: Color, base: u8, reset: u8) ->
         // sequence. See the crate-level "RGB color fallback on 256-color
         // terminals" doc section for the contract this leaves callers with.
         Color::Rgb { r, g, b } => write!(out, "{base};2;{r};{g};{b}"),
+        // Covers `Color::Default` plus any future variant (`Color` is `#[non_exhaustive]`) this
+        // crate doesn't know how to resolve yet; both fall back to the reset code.
+        _ => write!(out, "{reset}"),
     }
 }
 

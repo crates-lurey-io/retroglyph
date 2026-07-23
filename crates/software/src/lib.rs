@@ -1150,10 +1150,12 @@ fn resolve_bg_fill(
 /// `default_rgb` for [`Color::Default`].
 fn resolve_color(color: Color, default_rgb: u32) -> u32 {
     match color {
-        Color::Default => default_rgb,
         Color::Rgb { r, g, b } => (u32::from(r) << 16) | (u32::from(g) << 8) | u32::from(b),
         Color::Ansi(a) => ansi_to_rgb(a),
         Color::Indexed(idx) => indexed_to_rgb(idx),
+        // Covers `Color::Default` plus any future variant (`Color` is `#[non_exhaustive]`) this
+        // crate doesn't know how to resolve yet.
+        _ => default_rgb,
     }
 }
 
