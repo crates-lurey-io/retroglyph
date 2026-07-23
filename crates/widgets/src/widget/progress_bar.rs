@@ -1,5 +1,5 @@
 //! [`ProgressBar`]: a horizontal progress bar.
-use retroglyph_core::{Backend, Rect, Style, Terminal};
+use retroglyph_core::{Backend, Color, Rect, Style, Terminal};
 
 use super::Widget;
 use crate::Theme;
@@ -61,9 +61,18 @@ impl ProgressBar {
     /// Call before any manual [`ProgressBar::filled_style`]/[`ProgressBar::empty_style`] override
     /// you want to keep.
     #[must_use]
-    pub fn theme(mut self, theme: Theme) -> Self {
-        self.filled_style = Style::new().fg(theme.accent).bg(theme.panel_bg);
-        self.empty_style = Style::new().fg(theme.dim).bg(theme.panel_bg);
+    pub fn theme(self, theme: Theme) -> Self {
+        self.theme_on(theme, theme.panel_bg)
+    }
+
+    /// Same as [`ProgressBar::theme`], but `filled_style`/`empty_style` are drawn on `bg` instead
+    /// of `theme.panel_bg` -- for a bar drawn directly on a backdrop other than a themed
+    /// [`super::Panel`]/[`super::Modal`]'s fill. [`ProgressBar::theme`] is exactly
+    /// `theme_on(theme, theme.panel_bg)`.
+    #[must_use]
+    pub fn theme_on(mut self, theme: Theme, bg: Color) -> Self {
+        self.filled_style = Style::new().fg(theme.accent).bg(bg);
+        self.empty_style = Style::new().fg(theme.dim).bg(bg);
         self
     }
 }
@@ -156,5 +165,22 @@ mod tests {
             term.grid().get(3, 0).style().background(),
             Theme::DARK.panel_bg
         );
+    }
+
+    #[test]
+    fn theme_on_uses_the_given_backdrop_instead_of_panel_bg() {
+        let area = Rect::new(0, 0, 4, 1);
+        let mut term = Terminal::new(Headless::new(4, 1));
+        ProgressBar::new(2, 4)
+            .theme_on(Theme::DARK, Color::Default)
+            .render(area, &mut term);
+
+        assert_eq!(
+            term.grid().get(0, 0).style().foreground(),
+            Theme::DARK.accent
+        );
+        assert_eq!(term.grid().get(0, 0).style().background(), Color::Default);
+        assert_eq!(term.grid().get(3, 0).style().foreground(), Theme::DARK.dim);
+        assert_eq!(term.grid().get(3, 0).style().background(), Color::Default);
     }
 }

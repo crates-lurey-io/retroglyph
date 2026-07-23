@@ -1,5 +1,5 @@
 //! [`Modal`]: a bordered, filled box centered on screen.
-use retroglyph_core::{Backend, Rect, Style, Terminal};
+use retroglyph_core::{Backend, Color, Rect, Style, Terminal};
 
 use super::{Panel, Widget};
 use crate::layout::centered_rect;
@@ -82,9 +82,18 @@ impl<'a> Modal<'a> {
     /// Call before any manual [`Modal::border_style`]/[`Modal::fill_style`] override you want to
     /// keep -- whichever call comes last wins.
     #[must_use]
-    pub fn theme(mut self, theme: Theme) -> Self {
+    pub fn theme(self, theme: Theme) -> Self {
+        self.theme_on(theme, theme.panel_bg)
+    }
+
+    /// Same as [`Modal::theme`], but `fill_style` is drawn on `bg` instead of `theme.panel_bg` --
+    /// the same [`Panel::theme_on`] escape hatch, for a modal whose interior should read as a
+    /// different surface than `theme.panel_bg` (`border_style` still uses `theme.title_bg`,
+    /// unaffected by `bg`). [`Modal::theme`] is exactly `theme_on(theme, theme.panel_bg)`.
+    #[must_use]
+    pub fn theme_on(mut self, theme: Theme, bg: Color) -> Self {
         self.border_style = Style::new().fg(theme.border).bg(theme.title_bg);
-        self.fill_style = Style::new().bg(theme.panel_bg);
+        self.fill_style = Style::new().bg(bg);
         self
     }
 
@@ -160,5 +169,24 @@ mod tests {
             term.grid().get(6, 4).style().background(),
             Theme::DARK.panel_bg
         );
+    }
+
+    #[test]
+    fn theme_on_uses_the_given_backdrop_instead_of_panel_bg() {
+        let screen = Rect::new(0, 0, 20, 10);
+        let mut term = Terminal::new(Headless::new(20, 10));
+        Modal::new(10, 4)
+            .theme_on(Theme::DARK, Color::Default)
+            .render(screen, &mut term);
+
+        assert_eq!(
+            term.grid().get(5, 3).style().foreground(),
+            Theme::DARK.border
+        );
+        assert_eq!(
+            term.grid().get(5, 3).style().background(),
+            Theme::DARK.title_bg
+        );
+        assert_eq!(term.grid().get(6, 4).style().background(), Color::Default);
     }
 }

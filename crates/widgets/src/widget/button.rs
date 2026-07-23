@@ -127,11 +127,21 @@ impl<'a> Button<'a> {
     ///
     /// Call before any manual `_style` override you want to keep.
     #[must_use]
-    pub fn theme(mut self, theme: Theme) -> Self {
-        self.style = Style::new().fg(theme.fg).bg(theme.panel_bg);
+    pub fn theme(self, theme: Theme) -> Self {
+        self.theme_on(theme, theme.panel_bg)
+    }
+
+    /// Same as [`Button::theme`], but the idle and focused states are drawn on `bg` instead of
+    /// `theme.panel_bg` (`hovered_style`/`pressed_style` still use `theme.hover_bg`/
+    /// `theme.press_bg`, unaffected by `bg`) -- for a button drawn directly on a backdrop other
+    /// than a themed [`super::Panel`]/[`super::Modal`]'s fill. [`Button::theme`] is exactly
+    /// `theme_on(theme, theme.panel_bg)`.
+    #[must_use]
+    pub fn theme_on(mut self, theme: Theme, bg: Color) -> Self {
+        self.style = Style::new().fg(theme.fg).bg(bg);
         self.hovered_style = Style::new().fg(theme.fg).bg(theme.hover_bg);
         self.pressed_style = Style::new().fg(theme.fg).bg(theme.press_bg);
-        self.focused_style = Style::new().fg(theme.accent).bg(theme.panel_bg);
+        self.focused_style = Style::new().fg(theme.accent).bg(bg);
         self
     }
 
@@ -346,5 +356,20 @@ mod tests {
         assert_eq!(button.pressed_style.background(), Theme::DARK.press_bg);
         assert_eq!(button.focused_style.foreground(), Theme::DARK.accent);
         assert_eq!(button.resolved_style().background(), Theme::DARK.hover_bg);
+    }
+
+    #[test]
+    fn theme_on_uses_the_given_backdrop_instead_of_panel_bg() {
+        use crate::Theme;
+
+        let button = Button::new("Go", Response::default()).theme_on(Theme::DARK, Color::Default);
+
+        assert_eq!(button.style.foreground(), Theme::DARK.fg);
+        assert_eq!(button.style.background(), Color::Default);
+        assert_eq!(button.focused_style.foreground(), Theme::DARK.accent);
+        assert_eq!(button.focused_style.background(), Color::Default);
+        // Unaffected by `bg`.
+        assert_eq!(button.hovered_style.background(), Theme::DARK.hover_bg);
+        assert_eq!(button.pressed_style.background(), Theme::DARK.press_bg);
     }
 }

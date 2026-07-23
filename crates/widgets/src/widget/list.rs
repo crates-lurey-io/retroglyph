@@ -78,8 +78,16 @@ impl<'a> List<'a> {
     /// Call before any manual [`List::item_style`]/[`List::selected_style`] override you want to
     /// keep.
     #[must_use]
-    pub fn theme(mut self, theme: Theme) -> Self {
-        self.item_style = Style::new().fg(theme.fg).bg(theme.panel_bg);
+    pub fn theme(self, theme: Theme) -> Self {
+        self.theme_on(theme, theme.panel_bg)
+    }
+
+    /// Same as [`List::theme`], but `item_style` is drawn on `bg` instead of `theme.panel_bg` --
+    /// for a list drawn directly on a backdrop other than a themed [`super::Panel`]/
+    /// [`super::Modal`]'s fill. [`List::theme`] is exactly `theme_on(theme, theme.panel_bg)`.
+    #[must_use]
+    pub fn theme_on(mut self, theme: Theme, bg: Color) -> Self {
+        self.item_style = Style::new().fg(theme.fg).bg(bg);
         self.selected_style = Style::new().fg(theme.bg).bg(theme.accent);
         self
     }
@@ -286,5 +294,19 @@ mod tests {
             term.grid().get(0, 1).style().background(),
             Theme::DARK.accent
         );
+    }
+
+    #[test]
+    fn theme_on_uses_the_given_backdrop_instead_of_panel_bg() {
+        let area = Rect::new(0, 0, 20, 1);
+        let items = ["Alpha"];
+        let list = List::new(&items).theme_on(Theme::DARK, Color::Default);
+
+        let mut term = Terminal::new(Headless::new(20, 1));
+        let mut state = ListState::new();
+        list.render(area, &mut term, &mut state);
+
+        assert_eq!(term.grid().get(0, 0).style().foreground(), Theme::DARK.fg);
+        assert_eq!(term.grid().get(0, 0).style().background(), Color::Default);
     }
 }

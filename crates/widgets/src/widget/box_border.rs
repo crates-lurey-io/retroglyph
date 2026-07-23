@@ -1,5 +1,5 @@
 //! [`BoxBorder`]: a single-line box border.
-use retroglyph_core::{Backend, Rect, Style, Terminal};
+use retroglyph_core::{Backend, Color, Rect, Style, Terminal};
 
 use super::Widget;
 use crate::Theme;
@@ -44,8 +44,16 @@ impl BoxBorder {
     ///
     /// Call before any manual [`BoxBorder::style`] override you want to keep.
     #[must_use]
-    pub fn theme(mut self, theme: Theme) -> Self {
-        self.style = Style::new().fg(theme.border).bg(theme.panel_bg);
+    pub fn theme(self, theme: Theme) -> Self {
+        self.theme_on(theme, theme.panel_bg)
+    }
+
+    /// Same as [`BoxBorder::theme`], but `style` is drawn on `bg` instead of `theme.panel_bg` --
+    /// for a border drawn directly on a backdrop other than a themed [`super::Panel`]/
+    /// [`super::Modal`]'s fill. [`BoxBorder::theme`] is exactly `theme_on(theme, theme.panel_bg)`.
+    #[must_use]
+    pub fn theme_on(mut self, theme: Theme, bg: Color) -> Self {
+        self.style = Style::new().fg(theme.border).bg(bg);
         self
     }
 }
@@ -133,5 +141,20 @@ mod tests {
             term.grid().get(0, 0).style().background(),
             Theme::DARK.panel_bg
         );
+    }
+
+    #[test]
+    fn theme_on_uses_the_given_backdrop_instead_of_panel_bg() {
+        let area = Rect::new(0, 0, 5, 3);
+        let mut term = Terminal::new(Headless::new(5, 3));
+        BoxBorder::new()
+            .theme_on(Theme::DARK, Color::Default)
+            .render(area, &mut term);
+
+        assert_eq!(
+            term.grid().get(0, 0).style().foreground(),
+            Theme::DARK.border
+        );
+        assert_eq!(term.grid().get(0, 0).style().background(), Color::Default);
     }
 }

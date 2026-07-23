@@ -107,9 +107,18 @@ impl<'a> Tabs<'a> {
     ///
     /// Call before any manual [`Tabs::style`]/[`Tabs::selected_style`] override you want to keep.
     #[must_use]
-    pub fn theme(mut self, theme: Theme) -> Self {
-        self.style = Style::new().fg(theme.dim).bg(theme.panel_bg);
-        self.selected_style = Style::new().fg(theme.accent).bg(theme.panel_bg);
+    pub fn theme(self, theme: Theme) -> Self {
+        self.theme_on(theme, theme.panel_bg)
+    }
+
+    /// Same as [`Tabs::theme`], but `style`/`selected_style` are drawn on `bg` instead of
+    /// `theme.panel_bg` -- for a tab strip drawn directly on a backdrop other than a themed
+    /// [`super::Panel`]/[`super::Modal`]'s fill. [`Tabs::theme`] is exactly
+    /// `theme_on(theme, theme.panel_bg)`.
+    #[must_use]
+    pub fn theme_on(mut self, theme: Theme, bg: Color) -> Self {
+        self.style = Style::new().fg(theme.dim).bg(bg);
+        self.selected_style = Style::new().fg(theme.accent).bg(bg);
         self
     }
 }
@@ -309,5 +318,22 @@ mod tests {
             term.grid().get(4, 0).style().background(),
             Theme::DARK.panel_bg
         );
+    }
+
+    #[test]
+    fn theme_on_uses_the_given_backdrop_instead_of_panel_bg() {
+        let area = Rect::new(0, 0, 20, 1);
+        let titles = ["One"];
+        let mut term = Terminal::new(Headless::new(20, 1));
+        Tabs::new(&titles)
+            .theme_on(Theme::DARK, Color::Default)
+            .select(Some(0))
+            .render(area, &mut term);
+
+        assert_eq!(
+            term.grid().get(0, 0).style().foreground(),
+            Theme::DARK.accent
+        );
+        assert_eq!(term.grid().get(0, 0).style().background(), Color::Default);
     }
 }

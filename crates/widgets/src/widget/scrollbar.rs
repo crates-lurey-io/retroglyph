@@ -1,5 +1,5 @@
 //! [`Scrollbar`]: a vertical track+thumb indicator.
-use retroglyph_core::{Backend, Rect, Style, Terminal};
+use retroglyph_core::{Backend, Color, Rect, Style, Terminal};
 
 use super::Widget;
 use crate::Theme;
@@ -73,8 +73,17 @@ impl Scrollbar {
     /// Call before any manual [`Scrollbar::track_style`]/[`Scrollbar::thumb_style`] override you
     /// want to keep.
     #[must_use]
-    pub fn theme(mut self, theme: Theme) -> Self {
-        self.track_style = Style::new().bg(theme.panel_bg);
+    pub fn theme(self, theme: Theme) -> Self {
+        self.theme_on(theme, theme.panel_bg)
+    }
+
+    /// Same as [`Scrollbar::theme`], but `track_style` is drawn on `bg` instead of
+    /// `theme.panel_bg` -- for a scrollbar drawn directly on a backdrop other than a themed
+    /// [`super::Panel`]/[`super::Modal`]'s fill. [`Scrollbar::theme`] is exactly
+    /// `theme_on(theme, theme.panel_bg)`.
+    #[must_use]
+    pub fn theme_on(mut self, theme: Theme, bg: Color) -> Self {
+        self.track_style = Style::new().bg(bg);
         self.thumb_style = Style::new().bg(theme.border);
         self
     }
@@ -167,6 +176,25 @@ mod tests {
                 assert_eq!(bg, Theme::DARK.border);
             } else {
                 assert_eq!(bg, Theme::DARK.panel_bg);
+            }
+        }
+    }
+
+    #[test]
+    fn theme_on_uses_the_given_backdrop_instead_of_panel_bg() {
+        let area = Rect::new(0, 0, 1, 10);
+        let mut term = Terminal::new(Headless::new(1, 10));
+        Scrollbar::new(20, 5)
+            .theme_on(Theme::DARK, Color::Default)
+            .render(area, &mut term);
+
+        let (start, len) = thumb_geometry(area, 20, 5, 0).unwrap();
+        for y in 0..10 {
+            let bg = term.grid().get(0, y).style().background();
+            if y >= start && y < start + len {
+                assert_eq!(bg, Theme::DARK.border);
+            } else {
+                assert_eq!(bg, Color::Default);
             }
         }
     }
