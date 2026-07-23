@@ -570,7 +570,7 @@ pub mod wasm {
     /// [`wasm_terminal_free`].
     #[wasm_bindgen]
     pub fn wasm_terminal_resize(handle: u32, width: u16, height: u16) {
-        use retroglyph_core::backend::Backend;
+        use retroglyph_core::backend::Output;
         use retroglyph_core::grid::Size;
         INSTANCES.with_borrow_mut(|instances| {
             if let Some(term) = instances.get_mut(&handle) {
