@@ -51,7 +51,10 @@ fn repeated_construction_does_not_panic() {
 /// This exercises the fallback directly against a constructed backend when one is available;
 /// on a restricted context where construction itself fails, this test is skipped since there's no
 /// `Output` instance to query (covered instead by `new_does_not_panic_when_terminal_unavailable`
-/// above, and by the crate's own `Output::size()` implementation using `unwrap_or((80, 25))`).
+/// above). As of retroglyph#279, `size()` itself never queries the terminal at all -- it
+/// returns a size cached at construction time (seeded from `crossterm::terminal::size()`,
+/// falling back to 80x24 -- not the previous, non-conventional, 80x25 -- if that initial query
+/// fails, per retroglyph#281) and refreshed only on `Event::Resize`.
 #[test]
 fn size_falls_back_instead_of_panicking() {
     if let Ok(mut term) = Crossterm::new() {

@@ -425,6 +425,17 @@ pub struct Crossterm<W: std::io::Write = BufWriter<Stdout>> {
     // construction -- it's kept purely for its `Drop` side effect -- hence the leading
     // underscore, which also suppresses the otherwise-applicable `dead_code` lint.
     _instance_guard: InstanceGuard,
+    // Cached result of the last successful `crossterm::terminal::size()` query. Seeded once at
+    // construction and refreshed only when `poll_event` observes a `crossterm::event::Event::
+    // Resize` -- the app already receives that event on every real terminal resize, so there's
+    // no need to re-query on every `Output::size()` call (a `TIOCGWINSZ` ioctl), which used to
+    // run once per frame. See retroglyph#279.
+    //
+    // `size()` itself never re-queries after construction (see retroglyph#279), so the only
+    // fallible query is the one-time seed in `build_from_options`; that's also the only place a
+    // hardcoded guess (80x24, not a "last known good" value, since none exists yet) is ever
+    // used. See retroglyph#281.
+    cached_size: Size,
 }
 
 impl Crossterm {
@@ -557,6 +568,17 @@ impl<W: std::io::Write> Crossterm<W> {
         self.renderer.writer_mut()
     }
 
+    /// Updates the cached size field if `event` is a `crossterm::event::Event::Resize`; a
+    /// no-op for every other event kind.
+    ///
+    /// Split out of [`Input::poll_event`] so it can be exercised directly in tests without
+    /// requiring a real terminal event source. See retroglyph#279.
+    const fn refresh_cached_size_on_resize(&mut self, event: &crossterm::event::Event) {
+        if let crossterm::event::Event::Resize(width, height) = *event {
+            self.cached_size = Size { width, height };
+        }
+    }
+
     fn build_from_options(
         options: CrosstermOptions,
         writer: W,
@@ -624,9 +646,17 @@ impl<W: std::io::Write> Crossterm<W> {
             )?;
         }
 
+        // Seed the cached size once, up front, so `size()` never has to query on the
+        // per-frame path; kept fresh afterward by `poll_event` observing `Event::Resize` (see
+        // below). Fall back to 80x24 -- not the historical, and non-conventional, 80x25 -- if
+        // this initial query fails; there's no better "last known good" size to fall back to
+        // yet, since none has been observed. See retroglyph#281.
+        let (width, height) = crossterm::terminal::size().unwrap_or((80, 24));
+
         Ok(Self {
             renderer: TerminalRenderer::with_plain_mode(writer, plain),
             _instance_guard: instance_guard,
+            cached_size: Size { width, height },
         })
     }
 }
@@ -660,8 +690,9 @@ impl<W: std::io::Write> Output for Crossterm<W> {
     }
 
     fn size(&self) -> Size {
-        let (width, height) = crossterm::terminal::size().unwrap_or((80, 25));
-        Size { width, height }
+        // No syscall: just return the size cached at construction and kept fresh by
+        // `poll_event` observing `Event::Resize`. See retroglyph#279.
+        self.cached_size
     }
 
     fn resize(&mut self, _size: Size) {
@@ -713,10 +744,14 @@ impl<W: std::io::Write> Input for Crossterm<W> {
 
             match crossterm::event::poll(poll_timeout) {
                 Ok(true) => {
-                    if let Ok(event) = crossterm::event::read()
-                        && let Ok(mapped) = from_crossterm_event(event)
-                    {
-                        return Some(mapped);
+                    if let Ok(event) = crossterm::event::read() {
+                        // Refresh the cached size in lockstep with the resize event the app
+                        // itself is about to receive, so `size()` (no syscall) stays consistent
+                        // with what already triggered this event. See retroglyph#279.
+                        self.refresh_cached_size_on_resize(&event);
+                        if let Ok(mapped) = from_crossterm_event(event) {
+                            return Some(mapped);
+                        }
                     }
                     // An unmappable event was consumed. In non-blocking mode
                     // (timeout zero, used by drain_events), retry immediately
@@ -1164,6 +1199,78 @@ mod tests {
         assert_eq!(
             key_code_of(ct_event),
             retroglyph_core::event::KeyCode::Char('a')
+        );
+    }
+
+    #[test]
+    fn size_does_not_requery_after_construction() {
+        // `size()` must return the field cached at construction rather than issuing a fresh
+        // `crossterm::terminal::size()` syscall on every call (retroglyph#279). Overwrite the
+        // cached field with a sentinel value no real terminal query would plausibly produce,
+        // then confirm `size()` echoes that sentinel back instead of re-querying and returning
+        // whatever the actual (non-TTY, under `cargo test`) terminal size happens to be.
+        let _lock = TEST_GUARD_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut term = Crossterm::builder()
+            .raw_mode(false)
+            .alt_screen(false)
+            .mouse_capture(false)
+            .focus_change(false)
+            .bracketed_paste(false)
+            .kitty_protocol(false)
+            .build_with_writer(Vec::new())
+            .expect("building against a Vec<u8> writer with all TTY features disabled must not require a real terminal");
+
+        let sentinel = Size {
+            width: 4321,
+            height: 1234,
+        };
+        term.cached_size = sentinel;
+
+        assert_eq!(
+            term.size(),
+            sentinel,
+            "size() must return the cached field, not re-query the terminal"
+        );
+    }
+
+    #[test]
+    fn resize_event_refreshes_the_cached_size() {
+        // `poll_event` refreshes the cached size in lockstep with any `Event::Resize` it reads
+        // (retroglyph#279). `refresh_cached_size_on_resize` is the extracted helper it
+        // calls; exercising it directly avoids needing a real terminal event source to prove
+        // the cache-update behavior.
+        let _lock = TEST_GUARD_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut term = Crossterm::builder()
+            .raw_mode(false)
+            .alt_screen(false)
+            .mouse_capture(false)
+            .focus_change(false)
+            .bracketed_paste(false)
+            .kitty_protocol(false)
+            .build_with_writer(Vec::new())
+            .expect("building against a Vec<u8> writer with all TTY features disabled must not require a real terminal");
+
+        term.refresh_cached_size_on_resize(&crossterm::event::Event::Resize(120, 40));
+        assert_eq!(
+            term.size(),
+            Size {
+                width: 120,
+                height: 40
+            }
+        );
+
+        // Non-resize events must not disturb the cached size.
+        term.refresh_cached_size_on_resize(&crossterm::event::Event::FocusGained);
+        assert_eq!(
+            term.size(),
+            Size {
+                width: 120,
+                height: 40
+            }
         );
     }
 
