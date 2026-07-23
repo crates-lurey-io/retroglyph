@@ -432,6 +432,13 @@ where
 /// See [`run_windowed`]'s "Presenting is automatic" section -- this function shares the same
 /// automatic-present behavior; `app_loop` no longer needs to call [`Terminal::present`] itself.
 ///
+/// This delivery is a side channel, not a queued [`Event`]: `on_custom_event` runs as soon as
+/// winit dispatches the `user_event`, which can be before `app_loop` next drains earlier-queued
+/// window/input events via [`poll`](retroglyph_core::Terminal::poll). Don't assume a `T` arrives
+/// interleaved with the `poll()` stream in send order relative to those events -- if that matters,
+/// use [`run_windowed_with_proxy`]'s plain `u64`/[`Event::Custom`] path instead, which does
+/// interleave on the backend's own FIFO.
+///
 /// # Examples
 ///
 /// ```ignore

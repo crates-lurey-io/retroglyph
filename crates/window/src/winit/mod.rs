@@ -15,6 +15,6 @@ pub mod translate;
 mod web;
 
 pub use run::{
-    EventProxy, EventProxyClosed, WindowConfig, run_app, run_app_with_proxy, run_windowed,
-    run_windowed_with_proxy,
+    EventProxy, EventProxyClosed, WindowConfig, run_app, run_app_with_proxy,
+    run_app_with_typed_proxy, run_windowed, run_windowed_with_proxy, run_windowed_with_typed_proxy,
 };
