@@ -293,7 +293,10 @@ impl<W: Write> TerminalRenderer<W> {
     /// Mirrors [`Output::draw`](retroglyph_core::backend::Output::draw)'s
     /// contract: `content` is a stream of `(Pos, &Tile, Option<&str>)` items
     /// to render, the last being the tile's full grapheme text when it has
-    /// one. Does not flush; call [`flush`](Self::flush) after.
+    /// one. As with `Output::draw`, that trailing `Option<&str>` is only ever
+    /// `Some` when this crate's `egc` feature is enabled; without `egc` it is
+    /// always `None` and is ignored here (see the `let _ = extra;` below).
+    /// Does not flush; call [`flush`](Self::flush) after.
     ///
     /// # Errors
     ///
