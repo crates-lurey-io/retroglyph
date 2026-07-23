@@ -1,0 +1,67 @@
+[package]
+name = "retroglyph-gl"
+version = "0.1.0"
+description = "GPU rendering backend for retroglyph: OpenGL 3.3 (native) and WebGL2 (wasm) via glow"
+readme = "README.md"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+# NOTE: this crate deliberately does NOT use `[lints] workspace = true`.
+# The workspace sets `unsafe_code = "forbid"`, which cannot be relaxed by an inner `#![allow]`.
+# A `glow`/`glutin` GPU backend is unavoidably unsafe (every GL call, every context-creation call),
+# so this crate mirrors the workspace lint table below with `unsafe_code = "allow"` instead of
+# forbidding it. Every other workspace lint (pedantic/nursery clippy, missing_docs, etc.) is kept
+# identical, so this crate is held to the same standard everywhere unsafe isn't involved.
+[lints.rust]
+unsafe_code = "allow"
+missing_docs = "warn"
+unreachable_pub = "warn"
+unused_qualifications = "warn"
+
+[lints.clippy]
+all = { level = "deny", priority = -1 }
+pedantic = { level = "deny", priority = -1 }
+nursery = { level = "deny", priority = -1 }
+must_use_candidate = "deny"
+missing_errors_doc = "deny"
+missing_panics_doc = "deny"
+module_name_repetitions = "allow"
+
+[package.metadata.docs.rs]
+all-features = true
+
+[dependencies]
+retroglyph-core = { path = "../core", version = "0.3.0", default-features = false, features = ["std"] }
+retroglyph-window = { path = "../window", version = "0.3.0", default-features = false }
+retroglyph-font = { path = "../font", version = "0.1.0", default-features = false }
+glow = "0.16"
+log = "0.4"
+raw-window-handle = "0.6"
+
+# Native GL context creation (EGL/GLX/WGL/CGL) from the window's raw handles. Not needed on wasm,
+# where the WebGL2 context comes from the canvas via web-sys.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+glutin = "0.32"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+# Version pinned to match the rest of the workspace (crates/window, crates/software, examples):
+# the CLI and the crate version must agree.
+wasm-bindgen = "=0.2.106"
+web-sys = { version = "0.3", features = [
+  "Window",
+  "Document",
+  "Element",
+  "HtmlCanvasElement",
+  "WebGl2RenderingContext",
+] }
+
+[features]
+# Embeds the Unscii 16 default font so a caller can build a renderer with no font of its own.
+# Off by default, mirroring `retroglyph-software`: a caller supplying its own `BitmapFont` pays
+# nothing for the embedded atlas.
+default-font = ["retroglyph-font/default-font"]
