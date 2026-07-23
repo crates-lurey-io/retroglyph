@@ -1,24 +1,28 @@
-//! Bitmap glyph fonts for the software rendering backend.
+//! Bitmap glyph fonts and CP437 mapping, shared by retroglyph's graphical backends.
 //!
-//! A [`BitmapFont`] holds a static 1-bit-per-pixel glyph table.  Each glyph
-//! is stored as `glyph_height` bytes, one byte per row, MSB = leftmost pixel.
-//! For the standard 8-pixel-wide VGA format one byte covers all 8 pixels of a
-//! row; wider fonts would need two bytes per row, but that is not yet
-//! supported.
+//! A [`BitmapFont`] holds a static 1-bit-per-pixel glyph table. Each glyph is stored as
+//! `glyph_height` bytes, one byte per row, MSB = leftmost pixel. For the standard 8-pixel-wide
+//! VGA format one byte covers all 8 pixels of a row; wider fonts would need two bytes per row,
+//! but that is not yet supported.
+//!
+//! This crate is `no_std` and dependency-free: it is the glyph-source layer both
+//! `retroglyph-software` (CPU rasterizer) and `retroglyph-gl` (GPU atlas) build on, so their
+//! text output stays pixel-identical. Enable the `default-font` feature for the embedded Unscii
+//! 16 font ([`unscii16::FONT`]); leave it off to supply your own via [`BitmapFont::new`].
 //!
 //! # Future work
 //!
-//! - **Expanded glyph cache:** For wider fonts (>8px), consider pre-computing
-//!   expanded scanlines to avoid per-frame bit extraction. Currently the bit
-//!   extraction loop is not a bottleneck for 8px-wide fonts at typical grid
-//!   sizes, but wider fonts (10px, 16px) would benefit from caching.
+//! - **Expanded glyph cache:** For wider fonts (>8px), consider pre-computing expanded scanlines
+//!   to avoid per-frame bit extraction. Currently the bit extraction loop is not a bottleneck
+//!   for 8px-wide fonts at typical grid sizes, but wider fonts (10px, 16px) would benefit from
+//!   caching.
 //!
-//! - **Wider glyphs:** To support glyphs wider than 8px, change `rows()` to
-//!   return `ceil(glyph_width / 8)` bytes per row and update the bit
-//!   extraction in `blit_cell`/`blit_glyph` to index across bytes. PNG
-//!   sprite tilesets via `SpriteCache` already support arbitrary tile sizes.
-//!   Tracked in retroglyph issue #164; deferred until a second, non-8px-wide
-//!   font is actually needed.
+//! - **Wider glyphs:** To support glyphs wider than 8px, change [`BitmapFont::rows`] to return
+//!   `ceil(glyph_width / 8)` bytes per row and update the consumers' bit extraction to index
+//!   across bytes. Tracked in retroglyph issue #164; deferred until a second, non-8px-wide font
+//!   is actually needed.
+
+#![no_std]
 
 // ── BitmapFont ─────────────────────────────────────────────────────────────
 
@@ -73,6 +77,15 @@ impl BitmapFont {
         let h = usize::from(self.glyph_height);
         let start = usize::from(index) * h;
         &self.data[start..start + h]
+    }
+
+    /// The total number of glyphs stored in this font.
+    ///
+    /// Glyph indices `0..glyph_count()` are valid arguments to [`rows`](Self::rows). A GPU
+    /// backend uses this to size its glyph atlas (one texture-array layer per glyph).
+    #[must_use]
+    pub const fn glyph_count(&self) -> u16 {
+        self.glyph_count
     }
 
     /// Maps a Unicode `char` to a glyph index in this font using the CP437

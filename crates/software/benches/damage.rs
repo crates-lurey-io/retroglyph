@@ -30,8 +30,8 @@
 
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 use retroglyph_core::{Color, Output, Pos, Style, Tile};
+use retroglyph_font::unscii16;
 use retroglyph_software::SoftwareBackendBuilder;
-use retroglyph_software::bitmap_font::unscii16;
 use std::cell::RefCell;
 
 /// Builds a `cols x rows` frame with every layer-0 cell set to the same

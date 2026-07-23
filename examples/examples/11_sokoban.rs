@@ -50,7 +50,7 @@ const LEVEL: &str = "\
 ###########";
 
 /// Cell width/height in pixels of the software backend's default embedded font (see
-/// `crates/software/src/bitmap_font.rs`'s `FONT` constant) -- the scale `put_offset`'s `dx`/`dy`
+/// `crates/font/src/lib.rs`'s `FONT` constant) -- the scale `put_offset`'s `dx`/`dy`
 /// pixel units are relative to.
 const CELL_W_PX: f32 = 8.0;
 const CELL_H_PX: f32 = 16.0;

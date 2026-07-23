@@ -1,7 +1,7 @@
 //! Tileset configuration: codepage mappings, options, builder, and error types.
 //!
 //! This module defines the public API for configuring PNG sprite sheet tilesets
-//! that overlay or replace [`BitmapFont`](super::bitmap_font::BitmapFont) glyphs.
+//! that overlay or replace [`BitmapFont`](retroglyph_font::BitmapFont) glyphs.
 //! A tileset is a sprite sheet PNG sliced into equally sized tiles, each
 //! mapped to a Unicode codepoint via a [`Codepage`]; [`SpriteCache`](super::sprite_cache::SpriteCache)
 //! decodes and indexes those tiles for lookup by glyph at draw time.
