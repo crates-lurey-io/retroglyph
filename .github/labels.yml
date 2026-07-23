@@ -1,12 +1,9 @@
 # Source of truth for repo labels. Applied via .github/scripts/sync-labels.sh (run manually by a
 # maintainer with `gh` auth; not run in CI to avoid needing elevated token scopes on every push).
 #
-# Three orthogonal axes plus status/meta labels:
-#   c: <crate>  - which crate/area the issue or PR touches (mirrors Conventional Commit scopes)
-#   p: <0-3>    - priority
-#   t: <type>   - what kind of change (mirrors Conventional Commit types)
-#   s: <status> - triage/workflow state
-# Plus a handful of unprefixed GitHub-default labels kept for triage workflow.
+# c: <crate>  - which crate/area the issue or PR touches (mirrors Conventional Commit scopes)
+#
+# This project uses Github 2026's "Type" and "Priority" fields instead of labels.
 
 - name: 'c:core'
   color: '1D76DB'
@@ -36,63 +33,16 @@
   color: '0E4A8C'
   description: 'Workspace-wide: tooling, CI, root docs, release config'
 
-- name: 'p:0'
-  color: 'B60205'
-  description: 'Critical: data loss, build broken, security'
-- name: 'p:1'
-  color: 'D93F0B'
-  description: 'High: should land in the next release'
-- name: 'p:2'
-  color: 'FBCA04'
-  description: 'Normal: default triage state, no urgency'
-- name: 'p:3'
-  color: 'C5DEF5'
-  description: 'Low: nice to have, no timeline'
-
-- name: 't:bug'
-  color: 'D73A4A'
-  description: "Something isn't working"
-- name: 't:feature'
-  color: 'A2EEEF'
-  description: 'New feature or request'
-- name: 't:perf'
-  color: '5319E7'
-  description: 'Performance or benchmark regression/improvement'
-- name: 't:docs'
-  color: '0075CA'
-  description: 'Documentation only'
-- name: 't:chore'
-  color: 'CFD3D7'
-  description: 'Tooling, CI, refactor with no user-facing change'
-- name: 't:breaking'
+- name: 'breaking'
   color: 'E99695'
   description: 'Semver-breaking change'
-- name: 't:question'
-  color: 'D876E3'
-  description: 'Further information is requested'
-
-- name: 's:needs-triage'
-  color: 'EDEDED'
-  description: 'Not yet reviewed by a maintainer'
-- name: 's:blocked'
-  color: '000000'
-  description: 'Waiting on an external dependency or decision'
-
-- name: 'good first issue'
-  color: '7057FF'
-  description: 'Good for newcomers'
-- name: 'help wanted'
-  color: '008672'
-  description: 'Extra attention is needed'
-- name: 'duplicate'
-  color: 'CFD3D7'
-  description: 'This issue or pull request already exists'
-- name: 'invalid'
-  color: 'E4E669'
-  description: "This doesn't seem right"
-- name: 'wontfix'
-  color: 'FFFFFF'
-  description: 'This will not be worked on'
 - name: 'benchmark'
   color: '0075CA'
   description: 'Run benchmarks on this PR'
+- name: 'needs-triage'
+  color: 'EDEDED'
+  description: 'Not yet reviewed by a maintainer'
+- name: 'blocked'
+  color: '000000'
+  description: 'Waiting on an external dependency or decision'
+
