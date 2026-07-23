@@ -670,6 +670,13 @@ impl Grid {
         lb.buf.as_mut()[idx].glyph = first;
         lb.buf.as_mut()[idx].style = style;
         lb.buf.as_mut()[idx].flags = flags;
+        // `width` here is the full grapheme's display width (1 or 2), not just `first`'s -- more
+        // accurate than recomputing from the primary codepoint alone, and exactly what the
+        // terminal renderer needs to advance the cursor after printing this cell.
+        #[allow(clippy::cast_possible_truncation)]
+        {
+            lb.buf.as_mut()[idx].width = width as u8;
+        }
         if has_extra {
             lb.extras.insert(idx, Arc::from(cap_grapheme(grapheme)));
         } else {
@@ -683,6 +690,7 @@ impl Grid {
                 let spacer = &mut lb.buf.as_mut()[spacer_idx];
                 spacer.glyph = ' ';
                 spacer.style = style;
+                spacer.width = 0;
                 spacer.flags = TileFlags::WIDE_CHAR_SPACER;
                 lb.extras.remove(&spacer_idx);
             }
@@ -929,6 +937,7 @@ impl Grid {
                     let contributes_glyph = !tile.flags.contains(TileFlags::EMPTY);
                     if contributes_glyph {
                         out.glyph = tile.glyph;
+                        out.width = tile.width;
                         out.style.fg = tile.style.fg;
                         out.dx = tile.dx;
                         out.dy = tile.dy;

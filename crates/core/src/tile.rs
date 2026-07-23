@@ -3,6 +3,17 @@
 use crate::style::Style;
 #[cfg(feature = "egc")]
 use alloc::string::String;
+use unicode_width::UnicodeWidthChar;
+
+/// Computes the display (column) width of a single glyph, capped to what fits in a `u8`
+/// (`unicode_width` only ever returns 0, 1, or 2 for a single `char`, well within range).
+/// Unassigned/control-character widths (`None`) are treated as 1, matching this crate's prior
+/// per-cell fallback behavior.
+fn glyph_width(glyph: char) -> u8 {
+    #[allow(clippy::cast_possible_truncation)]
+    let width = glyph.width().unwrap_or(1) as u8;
+    width
+}
 
 bitflags::bitflags! {
     /// Bit-flags tracking wide-character tile roles.
@@ -52,6 +63,17 @@ pub struct Tile {
     pub(crate) glyph: char,
     /// Style applied to this tile.
     pub(crate) style: Style,
+    /// Display (column) width of `glyph`, precomputed at write time.
+    ///
+    /// Terminal-family renderers need this on every [`draw`](crate::backend::Output::draw) call
+    /// to know how far the cursor advances after printing a cell; recomputing it with
+    /// `unicode_width` on every cell of every frame is pure waste since a glyph's width never
+    /// changes between frames. It is computed once, here, whenever the glyph is written (see
+    /// [`with_glyph`](Self::with_glyph) and [`Grid::write_grapheme`](crate::grid::Grid::write_grapheme)),
+    /// and just read back afterward. Almost always 0, 1, or 2 (control characters/combining
+    /// marks are 0; a handful of grapheme clusters can report other values via
+    /// `unicode_width`, but `u8` comfortably covers every value that crate returns).
+    pub(crate) width: u8,
     /// Pixel offset from the cell's left edge. Negative shifts left.
     ///
     /// Only meaningful for graphical backends (e.g. `SoftwareBackend`).
@@ -72,6 +94,7 @@ impl Default for Tile {
         Self {
             glyph: ' ',
             style: Style::default(),
+            width: 1,
             dx: 0,
             dy: 0,
             flags: TileFlags::EMPTY,
@@ -82,12 +105,14 @@ impl Default for Tile {
 impl Tile {
     /// Creates a new tile with the given glyph and style.
     ///
-    /// `dx` and `dy` default to 0 (no sub-cell offset).
+    /// `dx` and `dy` default to 0 (no sub-cell offset). `glyph`'s display width is computed
+    /// once here (see [`width`](Self::width)) rather than on every render.
     #[must_use]
-    pub const fn new(glyph: char, style: Style) -> Self {
+    pub fn new(glyph: char, style: Style) -> Self {
         Self {
             glyph,
             style,
+            width: glyph_width(glyph),
             dx: 0,
             dy: 0,
             flags: TileFlags::empty(),
@@ -98,6 +123,17 @@ impl Tile {
     #[must_use]
     pub const fn glyph(&self) -> char {
         self.glyph
+    }
+
+    /// Returns the precomputed display (column) width of [`glyph`](Self::glyph).
+    ///
+    /// Computed once when the glyph is written (see [`with_glyph`](Self::with_glyph) and
+    /// [`Grid::write_grapheme`](crate::grid::Grid::write_grapheme)), not recomputed on every
+    /// render. For tiles written via `write_grapheme`, this reflects the full grapheme cluster's
+    /// width, not just the primary codepoint's.
+    #[must_use]
+    pub const fn width(&self) -> u16 {
+        self.width as u16
     }
 
     /// Returns the tile's style.
@@ -135,10 +171,12 @@ impl Tile {
 
     /// Sets the glyph for this tile (builder style).
     ///
-    /// Writing content marks the tile non-empty (see [`is_empty`](Self::is_empty)).
+    /// Writing content marks the tile non-empty (see [`is_empty`](Self::is_empty)). Recomputes
+    /// the cached display width (see [`width`](Self::width)) for the new glyph.
     #[must_use]
-    pub const fn with_glyph(mut self, glyph: char) -> Self {
+    pub fn with_glyph(mut self, glyph: char) -> Self {
         self.glyph = glyph;
+        self.width = glyph_width(glyph);
         self.flags = self.flags.difference(TileFlags::EMPTY);
         self
     }
@@ -173,6 +211,7 @@ impl Tile {
     pub(crate) fn reset(&mut self) {
         self.glyph = ' ';
         self.style = Style::default();
+        self.width = 1;
         self.dx = 0;
         self.dy = 0;
         self.flags = TileFlags::EMPTY;
@@ -266,5 +305,21 @@ mod tests {
         tile.flags = TileFlags::WIDE_CHAR;
         assert!(tile.flags().contains(TileFlags::WIDE_CHAR));
         assert!(!tile.flags().contains(TileFlags::WIDE_CHAR_SPACER));
+    }
+
+    #[test]
+    fn test_tile_width_is_precomputed_from_glyph() {
+        // ASCII is single-column; a CJK ideograph is double-column. Both are computed once at
+        // write time (`new`/`with_glyph`), not left for callers to recompute per render.
+        assert_eq!(Tile::new('A', Style::default()).width(), 1);
+        assert_eq!(Tile::new('漢', Style::default()).width(), 2);
+        assert_eq!(Tile::default().width(), 1);
+    }
+
+    #[test]
+    fn test_tile_with_glyph_recomputes_width() {
+        let tile = Tile::new('A', Style::default()).with_glyph('漢');
+        assert_eq!(tile.glyph(), '漢');
+        assert_eq!(tile.width(), 2);
     }
 }
