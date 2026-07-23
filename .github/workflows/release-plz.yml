@@ -102,6 +102,11 @@ jobs:
       # exact newline count across release-plz versions, just run the same formatters CI's
       # `format`/`lint` jobs enforce directly on the Release PR branch, and push a fixup commit if
       # they change anything.
+      #
+      # `prs_created` is misleadingly named: the composite action sets it whenever `prs` is
+      # non-empty, i.e. whenever a release PR exists after this run (created OR just updated) --
+      # not only on first creation -- so this step runs on essentially every push to main once the
+      # standing Release PR exists, which is the common case.
       - name: Fix formatting on the Release PR
         if: steps.release-plz.outputs.prs_created == 'true'
         env:
@@ -111,12 +116,29 @@ jobs:
           set -e
           gh pr checkout "$PR_NUMBER"
           npm ci --prefix tools
-          # markdownlint --fix runs first because it can itself introduce a prettier violation
-          # (reproduced locally fixing PR #248: markdownlint --fix left one CHANGELOG.md failing
-          # prettier --check that had just passed). prettier --write must run last so its output is
-          # what actually gets committed and checked.
-          npm run --prefix tools lint:fix
-          npm run --prefix tools format
+          # Loop lint:fix + format to a fixed point instead of running each once: prettier isn't
+          # always idempotent in a single --write pass on release-plz's raw, verbatim-spliced
+          # commit-message content -- e.g. a PR body containing literal `cell_w * cell_h` (meant as
+          # plain-text multiplication) parses as ambiguous markdown emphasis, and resolving that
+          # ambiguity can itself produce output prettier still wants to change on a second pass
+          # (reproduced for real: PR #318's crates/software/CHANGELOG.md entry for #328 needed two
+          # `prettier --write` passes to converge; the single-pass version of this step landed a
+          # partial fix that still failed `prettier --check` in CI). markdownlint --fix runs before
+          # prettier --write in each iteration because it can itself introduce a prettier violation
+          # (reproduced locally fixing PR #248), so prettier's output is always what's checked for
+          # convergence and ultimately committed.
+          for _ in 1 2 3 4 5; do
+            npm run --prefix tools lint:fix
+            npm run --prefix tools format
+            if npm run --prefix tools format:check > /dev/null 2>&1; then
+              break
+            fi
+          done
+          # Belt-and-suspenders: fail loudly instead of committing/pushing content that still isn't
+          # converged after 5 rounds, rather than silently leaving CI to fail on the pushed commit
+          # the way the single-pass version of this step did.
+          npm run --prefix tools format:check
+
           if ! git diff --quiet; then
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
