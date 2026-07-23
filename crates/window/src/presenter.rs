@@ -1,10 +1,9 @@
-//! The [`Presenter`] trait: what a renderer crate implements to rasterize a
-//! grid and present it to a window surface.
+//! The [`Presenter`] trait: what a renderer crate implements to rasterize a grid and present it
+//! to a window surface.
 //!
-//! `Presenter` is an [`Output`](retroglyph_core::backend::Output) supertrait plus
-//! window-surface operations, with no input methods: the event loop
-//! owns input, and [`WindowBackend`](crate::WindowBackend) forwards
-//! translated events into its own queue instead.
+//! `Presenter` is an [`Output`](retroglyph_core::backend::Output) supertrait plus window-surface
+//! operations, with no input methods: the event loop owns input, and
+//! [`WindowBackend`](crate::WindowBackend) forwards translated events into its own queue instead.
 //!
 //! | Presenter | `present()` | `init_surface()` |
 //! |---|---|---|
@@ -24,16 +23,15 @@ use std::sync::Arc;
 
 /// A window/display handle pair, as one trait.
 ///
-/// Presenters receive [`raw-window-handle`](raw_window_handle) types, not a
-/// concrete `winit::window::Window`: softbuffer, wgpu, and glutin all accept
-/// these handles directly, so any windowing library that produces them can
-/// drive the same presenter, and only this crate depends on winit itself.
+/// Presenters receive [`raw-window-handle`](raw_window_handle) types, not a concrete
+/// `winit::window::Window`: softbuffer, wgpu, and glutin all accept these handles directly, so
+/// any windowing library that produces them can drive the same presenter, and only this crate
+/// depends on winit itself.
 ///
-/// `raw-window-handle` has no combined trait, and surface libraries need to
-/// *own* the handle (softbuffer stores it for the surface's lifetime), so
-/// presenters receive `Arc<dyn WindowHandle>` -- rwh implements the handle
-/// traits for `Arc<H: ?Sized>`, so the trait object passes straight into
-/// `softbuffer::Surface::new` / `wgpu::Instance::create_surface`.
+/// `raw-window-handle` has no combined trait, and surface libraries need to *own* the handle
+/// (softbuffer stores it for the surface's lifetime), so presenters receive `Arc<dyn
+/// WindowHandle>` -- rwh implements the handle traits for `Arc<H: ?Sized>`, so the trait object
+/// passes straight into `softbuffer::Surface::new` / `wgpu::Instance::create_surface`.
 pub trait WindowHandle: HasWindowHandle + HasDisplayHandle {}
 
 impl<T: HasWindowHandle + HasDisplayHandle + ?Sized> WindowHandle for T {}
@@ -77,8 +75,7 @@ pub trait RecoverableError: core::fmt::Debug + core::fmt::Display {
 // this impl exists purely for that convenience.
 impl RecoverableError for core::convert::Infallible {}
 
-/// A renderer that rasterizes grid content and presents it to a window
-/// surface.
+/// A renderer that rasterizes grid content and presents it to a window surface.
 ///
 /// A supertrait of [`Output`], adding the surface lifecycle (`init_surface`, `resize_surface`,
 /// `present`, `cell_size`) that the event loop drives. Every `Presenter` implementation is an

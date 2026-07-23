@@ -1,5 +1,5 @@
-//! [`WindowBackend`]: the generic [`Backend`](retroglyph_core::Backend)
-//! implementation for windowed presenters.
+//! [`WindowBackend`]: the generic [`Backend`](retroglyph_core::Backend) implementation for
+//! windowed presenters.
 
 use crate::presenter::Presenter;
 use retroglyph_core::backend::{Cursor, Input, Output};
@@ -30,15 +30,13 @@ use std::time::Duration;
 ///                                                 P: Presenter (output)
 /// ```
 ///
-/// With the `winit` feature enabled, `winit::run_windowed` and
-/// `winit::run_app` own the event loop, call `push_event` as winit events
-/// are translated, and call [`Presenter::present`] once per frame; callers
-/// never touch `WindowBackend` directly. With `winit` disabled,
-/// `retroglyph-window` exports no event loop at all: a caller driving its
-/// own loop (SDL2, tao, a custom driver) constructs
-/// `WindowBackend::new(presenter)` itself, calls `push_event` for each
-/// translated input event, and calls `Terminal::present` (which drives
-/// `Presenter::flush`) plus `presenter_mut().present()` once per frame.
+/// With the `winit` feature enabled, `winit::run_windowed` and `winit::run_app` own the event
+/// loop, call `push_event` as winit events are translated, and call [`Presenter::present`] once
+/// per frame; callers never touch `WindowBackend` directly. With `winit` disabled,
+/// `retroglyph-window` exports no event loop at all: a caller driving its own loop (SDL2, tao, a
+/// custom driver) constructs `WindowBackend::new(presenter)` itself, calls `push_event` for each
+/// translated input event, and calls `Terminal::present` (which drives `Presenter::flush`) plus
+/// `presenter_mut().present()` once per frame.
 ///
 /// # Example: driving without `winit`
 ///
@@ -119,8 +117,8 @@ use std::time::Duration;
 /// term.backend_mut().presenter_mut().present().unwrap();
 /// ```
 ///
-/// [`poll_event`](Input::poll_event) never blocks: frame timing is owned by
-/// the event loop, not by input waits.
+/// [`poll_event`](Input::poll_event) never blocks: frame timing is owned by the event loop, not
+/// by input waits.
 pub struct WindowBackend<P: Presenter> {
     presenter: P,
     events: VecDeque<Event>,

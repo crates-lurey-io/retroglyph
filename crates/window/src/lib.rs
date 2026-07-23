@@ -31,22 +31,21 @@
 //! ```
 //!
 //! - [`Presenter`] is `Output` plus the surface lifecycle
-//!   (`init_surface`/`resize_surface`/`present`/`cell_size`). Renderer crates implement only
-//!   this trait, which gives them `Output` for free.
-//! - <code>[WindowBackend]&lt;P: Presenter&gt;</code> implements `Output` (by delegating to
-//!   `P`), `Input` (via its own event queue), and the no-op default `Cursor` (windowed backends
-//!   have no text cursor), which together give it `Backend` generically.
-//! - The `winit` module (feature-gated, see below) drives the event loop
-//!   that fills that queue and calls `Presenter::present` each frame.
+//!   (`init_surface`/`resize_surface`/`present`/`cell_size`). Renderer crates implement only this
+//!   trait, which gives them `Output` for free.
+//! - <code>[WindowBackend]&lt;P: Presenter&gt;</code> implements `Output` (by delegating to `P`),
+//!   `Input` (via its own event queue), and the no-op default `Cursor` (windowed backends have no
+//!   text cursor), which together give it `Backend` generically.
+//! - The `winit` module (feature-gated, see below) drives the event loop that fills that queue
+//!   and calls `Presenter::present` each frame.
 //!
 //! # Feature flags
 //!
 //! [`Presenter`], [`WindowBackend`], and [`WindowHandle`] depend only on
-//! [`raw-window-handle`](raw_window_handle) and are always available. The
-//! `winit` feature (default on) additionally provides the `winit` module:
-//! the event loop, event translation, and the `run_windowed`/`run_app`
-//! drivers. Disable it to implement or drive `Presenter` with a different
-//! windowing library (SDL2, tao, a custom loop) without pulling in winit.
+//! [`raw-window-handle`](raw_window_handle) and are always available. The `winit` feature
+//! (default on) additionally provides the `winit` module: the event loop, event translation, and
+//! the `run_windowed`/`run_app` drivers. Disable it to implement or drive `Presenter` with a
+//! different windowing library (SDL2, tao, a custom loop) without pulling in winit.
 //!
 //! # DPI, scale, and the resize contract
 //!
