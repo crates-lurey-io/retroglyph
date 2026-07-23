@@ -153,10 +153,14 @@ open tests/snapshots/demo.svg
 
 ## Benchmarking
 
-Performance benchmarks live in the top-level `benches/` crate (`retroglyph-benches`), not under
-`crates/*` or `examples/` -- see `examples/AGENTS.md` for why perf work and the examples
-docs-gallery/regression-suite are kept separate. Each `benches/benches/*.rs` file is a
-[criterion](https://github.com/bheisler/criterion.rs) benchmark, `harness = false`.
+Performance benchmarks live per-crate, under each crate's own `crates/<name>/benches/` directory
+(e.g. `crates/core/benches/grid_diff.rs`) -- not in a shared top-level crate, and not under
+`examples/` (see `examples/AGENTS.md` for why perf work and the examples docs-gallery/regression-
+suite are kept separate). This mirrors Cargo's own convention for a package's benches and keeps each
+crate's `[[bench]]` targets next to the code they measure and its own dev-dependencies (e.g.
+`criterion`, `fastrand`), rather than accumulating every crate's benchmarks -- and their combined
+dev-dependency set -- in one ever-growing shared crate. Each `<name>.rs` file under a crate's
+`benches/` is a [criterion](https://github.com/bheisler/criterion.rs) benchmark, `harness = false`.
 
 | Command                                    | What it does                                                     |
 | ------------------------------------------ | ---------------------------------------------------------------- |
@@ -171,25 +175,30 @@ out the comparison ref into a throwaway `git worktree`, so your checkout is neve
 share this repo's `target/` directory so criterion's `--save-baseline` data lands in one place, then
 [`critcmp`](https://github.com/BurntSushi/critcmp) (resolved via `cargo bin`, like the workspace's
 other pinned dev tools) prints the delta. See `tools/bench-compare.sh` (`-h` for the full
-flag/example list) for the mechanics.
+flag/example list) for the mechanics. Both `just bench` and `tools/bench-compare.sh` invoke
+`cargo bench --workspace --all-features` (no `-p`), so a bench target is found regardless of which
+crate owns it, as long as its name is unique across the workspace (`--all-features` matches
+`just test`'s convention and avoids feature-gated crates failing to build in isolation).
 
-Note: the comparison ref must already contain `benches/` -- you can't compare against a commit that
-predates this benchmark crate.
+Note: the comparison ref must already contain the bench target being compared -- you can't compare
+against a commit that predates that crate's `benches/` directory.
 
 ### CI
 
-`.github/workflows/bench.yml` runs the same `cargo bench -p retroglyph-benches --bench grid_diff` on
-every push to `main` (tracked as historical data via [Bencher](https://bencher.dev)) and, when a PR
-is labeled `benchmark`, compares that PR's branch against `main`'s tracked history and fails the
-check on a statistically significant regression (`--error-on-alert`). Add the `benchmark` label to a
-PR to trigger a check; it's removed automatically once the workflow runs.
+`.github/workflows/bench.yml` runs the same
+`cargo bench --workspace --all-features --bench grid_diff` on every push to `main` (tracked as
+historical data via [Bencher](https://bencher.dev)) and, when a PR is labeled `benchmark`, compares
+that PR's branch against `main`'s tracked history and fails the check on a statistically significant
+regression (`--error-on-alert`). Add the `benchmark` label to a PR to trigger a check; it's removed
+automatically once the workflow runs.
 
 ### Adding a new benchmark
 
-Add a `benches/benches/<name>.rs` file (see `grid_diff.rs` for the pattern: build inputs
-deterministically -- fixed RNG seeds -- so `--save-baseline`/`--baseline` comparisons are
-meaningful) and a matching `[[bench]]` entry in `benches/Cargo.toml`. If you want it tracked in CI
-alongside `grid_diff`, add it to the `cargo bench` invocations in `bench.yml` too.
+Add a `crates/<name>/benches/<bench-name>.rs` file (see `crates/core/benches/grid_diff.rs` for the
+pattern: build inputs deterministically -- fixed RNG seeds -- so `--save-baseline`/`--baseline`
+comparisons are meaningful) and a matching `[[bench]]` entry plus any needed dev-dependencies (e.g.
+`criterion`, `fastrand`) in that crate's `Cargo.toml`. If you want it tracked in CI alongside
+`grid_diff`, add it to the `cargo bench` invocations in `bench.yml` too.
 
 ## Feature flags
 

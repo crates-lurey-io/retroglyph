@@ -49,7 +49,7 @@ jobs:
             --thresholds-reset \
             --error-on-alert \
             --github-actions '${{ secrets.GITHUB_TOKEN }}' \
-            "cargo bench -p retroglyph-benches --bench grid_diff"
+            "cargo bench --workspace --all-features --bench grid_diff"
 
       # On labeled PRs: run the PR branch, compare against main's historical data.
       - name: Benchmark (check PR)
@@ -68,4 +68,4 @@ jobs:
             --start-point-reset \
             --error-on-alert \
             --github-actions '${{ secrets.GITHUB_TOKEN }}' \
-            "cargo bench -p retroglyph-benches --bench grid_diff"
+            "cargo bench --workspace --all-features --bench grid_diff"
