@@ -87,6 +87,9 @@ pub mod backend;
 /// System clipboard read/write ([`Clipboard`], [`SystemClipboard`] on native targets).
 pub mod clipboard;
 pub mod font;
+/// Canonical default colors ([`DEFAULT_FG`](palette::DEFAULT_FG),
+/// [`DEFAULT_BG`](palette::DEFAULT_BG)) shared by the graphical backends.
+pub mod palette;
 /// The [`Presenter`] trait and [`WindowHandle`](presenter::WindowHandle).
 pub mod presenter;
 /// The winit event loop, event translation, and app drivers.
