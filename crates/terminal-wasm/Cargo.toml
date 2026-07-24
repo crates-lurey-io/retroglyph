@@ -43,7 +43,7 @@ criterion = "0.5"
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 # Version pinned to match the wasm-bindgen dev-dependency in
 # examples/Cargo.toml -- the CLI and the crate version must agree.
-wasm-bindgen = "=0.2.106"
+wasm-bindgen = "=0.2.126"
 # Only used to warn on invalid `wasm_terminal_*` handles (see the `wasm` module below); this
 # crate's non-wasm32 API surface has no fallible operations and stays log-free.
 log = "0.4"
@@ -54,8 +54,8 @@ log = "0.4"
 # so this is the only coverage of the exported `wasm_terminal_*` functions themselves, as opposed
 # to the `TerminalWasm`/`decode_key_event` logic underneath them (already covered by the host-side
 # tests above). Versioned independently of the `wasm-bindgen` dependency above (its own 0.3.x
-# line, not 0.2.x) -- 0.3.56 is the release published from the same wasm-bindgen-repo tag as
-# wasm-bindgen 0.2.106 (its own Cargo.toml exact-pins `wasm-bindgen = "=0.2.106"`), so it's the
+# line, not 0.2.x) -- 0.3.76 is the release published from the same wasm-bindgen-repo tag as
+# wasm-bindgen 0.2.126 (its own Cargo.toml exact-pins `wasm-bindgen = "=0.2.126"`), so it's the
 # only wasm-bindgen-test version that resolves against this crate's `wasm-bindgen` pin at all: any
 # newer wasm-bindgen-test release exact-pins a newer wasm-bindgen too. If the `wasm-bindgen`/
 # `wasm-bindgen-cli` pins above are ever bumped, this must move in lockstep -- check
@@ -63,7 +63,7 @@ log = "0.4"
 # `just test-wasm`, which wraps `wasm-pack test --node` (Node.js, not a real browser: this crate's
 # FFI has no DOM/xterm.js dependency to exercise, only the handle registry and event decoding --
 # see that test file's own doc comment for what is and isn't reachable through this FFI).
-wasm-bindgen-test = "=0.3.56"
+wasm-bindgen-test = "=0.3.76"
 
 [features]
 # Forwards to retroglyph-terminal's egc feature.

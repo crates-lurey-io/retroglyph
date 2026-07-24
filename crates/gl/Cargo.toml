@@ -42,11 +42,12 @@ retroglyph-core = { path = "../core", version = "0.3.0", default-features = fals
 retroglyph-window = { path = "../window", version = "0.3.0", default-features = false }
 # 0.17 fixed a WebGL2 bug where the web backend passed `texImage3D`'s `depth` and `border`
 # arguments swapped, which made the glyph-atlas upload fail (`INVALID_VALUE: texImage3D: border
-# != 0`) so no text rendered in the browser. Do NOT bump to 0.18: it adds a wasm64 dependency on
-# `wasm-bindgen ~0.2.123`, and because Cargo unifies target-specific deps in one lockfile that
-# collides with the workspace-wide `wasm-bindgen = "=0.2.106"` pin (and its matching
-# `wasm-bindgen-cli`). Bumping to 0.18 requires moving the whole wasm-bindgen stack in lockstep.
-glow = "0.17"
+# != 0`) so no text rendered in the browser. 0.18 adds a wasm64 dependency on
+# `wasm-bindgen ~0.2.123`; because Cargo unifies target-specific deps in one lockfile, moving to it
+# required bumping the whole workspace wasm-bindgen stack in lockstep (wasm-bindgen 0.2.126 +
+# matching wasm-bindgen-cli/wasm-bindgen-test), which is why the pins below are 0.2.126, not the
+# older 0.2.106.
+glow = "0.18"
 log = "0.4"
 raw-window-handle = "0.6"
 
@@ -67,7 +68,7 @@ retroglyph-software = { path = "../software", version = "0.3.1", default-feature
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 # Version pinned to match the rest of the workspace (crates/window, crates/software, examples):
 # the CLI and the crate version must agree.
-wasm-bindgen = "=0.2.106"
+wasm-bindgen = "=0.2.126"
 web-sys = { version = "0.3", features = [
   "Window",
   "Document",
@@ -81,10 +82,10 @@ web-sys = { version = "0.3", features = [
 # place the wasm32/WebGL2 draw path actually executes (the `compile-wasm-gl` CI job just
 # build-checks it). Run via `just test-wasm-gl` (`wasm-pack test --headless --chrome`). Version
 # pinned in lockstep with the `wasm-bindgen` dependency above, exactly as crates/terminal-wasm
-# does: 0.3.56 is the wasm-bindgen-test release cut from the same wasm-bindgen-repo tag as
-# wasm-bindgen 0.2.106, so it's the only version that resolves against this crate's pin. If the
+# does: 0.3.76 is the wasm-bindgen-test release cut from the same wasm-bindgen-repo tag as
+# wasm-bindgen 0.2.126, so it's the only version that resolves against this crate's pin. If the
 # `wasm-bindgen` pin moves, this must move in lockstep.
-wasm-bindgen-test = "=0.3.56"
+wasm-bindgen-test = "=0.3.76"
 
 [features]
 # Embeds the Unscii 16 default font so a caller can build a renderer with no font of its own.
