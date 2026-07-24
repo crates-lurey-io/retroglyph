@@ -38,16 +38,7 @@ impl GlContext {
         width: u32,
         height: u32,
     ) -> Result<Self, SurfaceError> {
-        let document = web_sys::window()
-            .ok_or_else(|| SurfaceError::Init("no global `Window`".to_owned()))?
-            .document()
-            .ok_or_else(|| SurfaceError::Init("no `Document`".to_owned()))?;
-        let canvas: web_sys::HtmlCanvasElement = document
-            .query_selector("canvas")
-            .map_err(|_| SurfaceError::Init("query_selector() threw".to_owned()))?
-            .ok_or_else(|| SurfaceError::Init("no canvas element found".to_owned()))?
-            .dyn_into()
-            .map_err(|_| SurfaceError::Init("queried element is not a canvas".to_owned()))?;
+        let canvas = retroglyph_window::web::winit_canvas().map_err(SurfaceError::Init)?;
 
         canvas.set_width(width.max(1));
         canvas.set_height(height.max(1));

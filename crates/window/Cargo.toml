@@ -47,8 +47,10 @@ arboard = "3"
 # combination through for a target-gated, always-small pair of crates.
 wasm-bindgen = "=0.2.106"
 # "Performance" dropped: `web-time` (above) now owns wall-clock timing, so this crate's own
-# wasm32 code only needs `web-sys` for `Window`/`EventTarget` (DPR, resize listeners).
-web-sys = { version = "0.3", features = ["Window", "EventTarget"] }
+# wasm32 code only needs `web-sys` for `Window`/`EventTarget` (DPR, resize listeners), plus
+# `Document`/`Element`/`HtmlCanvasElement` for `web::winit_canvas`'s DOM canvas lookup, shared by
+# the graphical backends (retroglyph-gl, retroglyph-software).
+web-sys = { version = "0.3", features = ["Window", "EventTarget", "Document", "Element", "HtmlCanvasElement"] }
 
 [dev-dependencies]
 # Used by the pixel_to_cell/key_translate/cursor_moved criterion benches (benches/*.rs) for

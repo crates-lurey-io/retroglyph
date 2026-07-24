@@ -76,17 +76,7 @@ impl WindowSurface {
     // `Presenter::init_surface` signature it feeds.
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn new(_window: Arc<dyn WindowHandle>) -> Result<Self, SurfaceError> {
-        let document = web_sys::window()
-            .ok_or_else(|| SurfaceError::Canvas("no global `Window`".to_owned()))?
-            .document()
-            .ok_or_else(|| SurfaceError::Canvas("no `Document`".to_owned()))?;
-
-        let canvas: web_sys::HtmlCanvasElement = document
-            .query_selector("canvas")
-            .map_err(|_| SurfaceError::Canvas("query_selector() threw".to_owned()))?
-            .ok_or_else(|| SurfaceError::Canvas("no canvas element found".to_owned()))?
-            .dyn_into()
-            .map_err(|_| SurfaceError::Canvas("queried element is not a canvas".to_owned()))?;
+        let canvas = retroglyph_window::web::winit_canvas().map_err(SurfaceError::Canvas)?;
 
         let ctx: web_sys::CanvasRenderingContext2d = canvas
             .get_context("2d")
