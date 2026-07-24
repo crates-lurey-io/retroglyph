@@ -24,3 +24,18 @@ semver_check = true
 git_release_body = """
 {{ changelog | replace(from=" by @", to=" by ") }}
 """
+
+# retroglyph-gl (added in #377) is not ready to auto-publish yet, so keep `release-plz release` from
+# attempting it on every push to main. Two things must land first:
+#   1. A *published* retroglyph-window that has the `default-font` feature. retroglyph-gl depends on
+#      `retroglyph-window/default-font`, but that feature was added in #377 without bumping window,
+#      so no published window (<= 0.3.0) has it -- gl can't even be packaged (cargo can't resolve the
+#      feature). The standing Release PR bumps window to 0.3.1, which will carry `default-font`.
+#   2. Trusted Publishing configured for retroglyph-gl on crates.io (the name is now reserved via a
+#      0.0.0-reserved placeholder; the other seven crates were set up at initial release, gl is the
+#      eighth and was added later).
+# Once window 0.3.1 is on crates.io and gl's Trusted Publishing is set up, flip this to `true` (or
+# delete this block) and the next push will publish retroglyph-gl 0.1.0.
+[[package]]
+name = "retroglyph-gl"
+release = false
