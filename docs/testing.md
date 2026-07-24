@@ -33,7 +33,21 @@ the flag and forces Mesa's llvmpipe software rasterizer (`LIBGL_ALWAYS_SOFTWARE=
 `GALLIUM_DRIVER=llvmpipe`) after installing the Mesa EGL/GL packages, so rendering runs against one
 known-good software stack; with the flag set, a missing/broken context is a hard failure instead of
 a silent skip. To run them locally, set `RETROGLYPH_REQUIRE_GL=1` on a Linux box with a headless
-GL/EGL stack. The WebGL2/browser side is tracked separately (issue #370).
+GL/EGL stack.
+
+### WebGL2 browser render test (issue #370)
+
+`crates/gl/src/webgl_smoke.rs` is the browser sibling of `headless.rs`: a `wasm-bindgen-test` that
+builds a WebGL2 context from a `<canvas>`, runs the same `GlRenderer::build_resources` + instanced
+draw the windowed path uses, reads the pixels back, and asserts a full-block cell is entirely its
+foreground (an atlas that fails to upload -- the glow 0.16 `texImage3D` bug -- renders it as the
+background, failing the test). It runs in real headless Chrome via `just test-wasm-gl`
+(`wasm-pack test --headless --chrome`); CI runners have no GPU, so `crates/gl/webdriver.json`
+launches Chrome with `--enable-unsafe-swiftshader` for a software WebGL2 stack. The dedicated
+`test-wasm-gl` job (`.github/workflows/ci.yml`) installs a matched Chrome + chromedriver pair and
+runs it; the `compile-wasm-gl` job stays as the fast build-only check. Locally, a Chrome that lags
+the latest stable needs a matching chromedriver (a major-version skew makes the WebDriver session
+fail to start).
 
 ## Snapshot tests (insta)
 

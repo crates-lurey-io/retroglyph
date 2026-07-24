@@ -56,6 +56,11 @@ impl GlContext {
     }
 
     /// WebGL2 always uses the `300 es` GLSL flavor.
+    //
+    // `&self` is unused (the answer is constant on the web) but is kept to mirror the native
+    // `GlContext::flavor(&self)`, which does branch on the created context's API -- the renderer
+    // calls `ctx.flavor()` generically across both, so the signatures must match.
+    #[allow(clippy::unused_self)]
     pub(crate) const fn flavor(&self) -> GlslFlavor {
         GlslFlavor::Es300
     }

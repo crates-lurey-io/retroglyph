@@ -235,9 +235,9 @@ jobs:
           disable_search: true
           token: ${{ secrets.CODECOV_TOKEN }}
 
-  # Build-only check that the GL backend's WebGL2 path compiles for wasm32. A live headless-Chrome
-  # WebGL2 run is deferred (tracked in a follow-up issue): CI runners have no GPU, and a software
-  # GL rasterizer (llvmpipe/SwiftShader) run needs extra plumbing not worth it for v1.
+  # Build-only check that the GL backend's WebGL2 path compiles for wasm32. This is the fast
+  # signal; the live browser run below (test-wasm-gl) actually executes a WebGL2 frame. Kept as a
+  # separate quick job so a plain compile break is reported without waiting on the browser harness.
   compile-wasm-gl:
     runs-on: ubuntu-latest
     steps:
@@ -247,6 +247,43 @@ jobs:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
       - run: cargo check -p retroglyph-gl --target wasm32-unknown-unknown --features default-font
+
+  # Live headless-Chrome WebGL2 render smoke test (issue #370): the browser sibling of the native
+  # gl-headless job. It runs crates/gl/src/webgl_smoke.rs (a `wasm-bindgen-test`) through
+  # `wasm-pack test --headless --chrome`, which builds the crate for wasm32, drives a real WebGL2
+  # context, renders a frame, and reads the pixels back -- so a backend that compiles but renders
+  # nothing (the glow 0.16 texImage3D atlas-upload bug) fails here instead of shipping green. CI
+  # runners have no GPU, so crates/gl/webdriver.json launches Chrome with `--enable-unsafe-swiftshader`
+  # for a software WebGL2 stack. The WebDriver session fails to start if chromedriver and Chrome
+  # differ by a major version, so this uses the ubuntu-latest image's *preinstalled, matched*
+  # google-chrome + chromedriver pair (chromedriver dir in $CHROMEWEBDRIVER) rather than installing
+  # a separate one -- browser-actions/setup-chrome's "stable" resolves Chrome and chromedriver to
+  # different majors (150 vs 151 as of this writing), which is exactly that failure.
+  test-wasm-gl:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      # Same cargo-run-bin provisioning as the test-wasm job: cargo-binstall on PATH as a fast
+      # fallback, and caching ./.bin so a warm cache skips the wasm-pack/wasm-bindgen install.
+      - uses: cargo-bins/cargo-binstall@v1.13.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-directories: .bin
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
+      # wasm-pack honors CHROMEDRIVER; point it at the image's chromedriver, matched to the
+      # google-chrome the driver auto-discovers on PATH. Print both versions first so a future
+      # image skew is obvious in the log.
+      - name: Run WebGL2 smoke test
+        run: |
+          export CHROMEDRIVER="$CHROMEWEBDRIVER/chromedriver"
+          google-chrome --version
+          "$CHROMEDRIVER" --version
+          just test-wasm-gl
 
   # Native offscreen render tests for retroglyph-gl (issue #376). The windowed GL context needs a
   # real window, so it can't run here; the crate's `src/headless.rs` instead creates an EGL
@@ -338,6 +375,7 @@ jobs:
       - test
       - test-wasm
       - compile-wasm-gl
+      - test-wasm-gl
       - gl-headless
       - coverage
     if: ${{ always() }}

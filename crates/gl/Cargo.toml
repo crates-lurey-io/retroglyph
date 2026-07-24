@@ -76,6 +76,16 @@ web-sys = { version = "0.3", features = [
   "WebGl2RenderingContext",
 ] }
 
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+# Drives the live WebGL2 render smoke test (src/webgl_smoke.rs) in a headless browser -- the only
+# place the wasm32/WebGL2 draw path actually executes (the `compile-wasm-gl` CI job just
+# build-checks it). Run via `just test-wasm-gl` (`wasm-pack test --headless --chrome`). Version
+# pinned in lockstep with the `wasm-bindgen` dependency above, exactly as crates/terminal-wasm
+# does: 0.3.56 is the wasm-bindgen-test release cut from the same wasm-bindgen-repo tag as
+# wasm-bindgen 0.2.106, so it's the only version that resolves against this crate's pin. If the
+# `wasm-bindgen` pin moves, this must move in lockstep.
+wasm-bindgen-test = "=0.3.56"
+
 [features]
 # Embeds the Unscii 16 default font so a caller can build a renderer with no font of its own.
 # Off by default, mirroring `retroglyph-software`: a caller supplying its own `BitmapFont` pays

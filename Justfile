@@ -209,6 +209,16 @@ run-wasm:
 test-wasm:
     cargo bin wasm-pack test --node crates/terminal-wasm
 
+# Runs crates/gl's live WebGL2 render smoke test (src/webgl_smoke.rs) in a real headless browser --
+# the only place the wasm32/WebGL2 draw path actually executes (the `compile-wasm-gl` CI job just
+# build-checks it, which is how the glow 0.16 texImage3D atlas-upload bug shipped green). `--chrome`
+# (not `--node`): WebGL2 needs a browser + a `<canvas>`. `--headless` for CI. CI runners have no
+# GPU, so crates/gl/webdriver.json launches Chrome with `--enable-unsafe-swiftshader` for a
+# software WebGL2 implementation. `default-font` so the test builds a renderer from the embedded
+# atlas (same gate as the native `headless` render tests).
+test-wasm-gl:
+    cargo bin wasm-pack test --headless --chrome crates/gl --features default-font
+
 # ── act (local CI runner) ────────────────────────────────────────────────────
 
 act-version := "v0.2.89"
