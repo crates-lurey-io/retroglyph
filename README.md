@@ -255,7 +255,7 @@ cargo run --example 12_dungeon_scroll --features software   # native window
 cargo run --bin runner                                      # interactive picker (all examples x all backends, incl. WASM)
 ```
 
-Every example is also built for WASM (Headless/Terminal/Software variants) and published as an
+Every example is also built for WASM (Headless/Terminal/Software/WebGL variants) and published as an
 interactive gallery at **[main.retroglyph.dev/examples](https://main.retroglyph.dev/examples/)** --
 no local toolchain required to try one in a browser.
 

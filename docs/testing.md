@@ -124,5 +124,5 @@ cargo test -p retroglyph-examples --all-features
 ```
 
 See `examples/AGENTS.md` for the per-example validation checklist a new example must satisfy before
-it's considered complete (all three snapshot types, all three WASM variants, graceful backend
+it's considered complete (all three snapshot types, all four WASM variants, graceful backend
 degradation, etc.).

@@ -1,21 +1,22 @@
 # AGENTS.md (examples)
 
 `examples/examples/*.rs` is dual-purpose, not documentation-only: `.github/workflows/docs.yml`
-builds every file here to three WASM variants (headless text, xterm.js terminal, software canvas)
-and deploys them to the docs gallery, and each example's three committed snapshots pin its rendered
-output as a cross-backend regression suite. A change that breaks color mapping, event decoding, or
-layer compositing on any backend fails `cargo test -p retroglyph-examples --all-features` before it
-fails a user's build. Because every example carries a real, measured CI cost (three WASM builds plus
-a snapshot triple), adding one is a deliberate decision, not "the more the better."
+builds every file here to four WASM variants (headless text, xterm.js terminal, software canvas,
+WebGL2 canvas) and deploys them to the docs gallery, and each example's three committed snapshots
+pin its rendered output as a cross-backend regression suite. A change that breaks color mapping,
+event decoding, or layer compositing on any backend fails
+`cargo test -p retroglyph-examples --all-features` before it fails a user's build. Because every
+example carries a real, measured CI cost (four WASM builds plus a snapshot triple), adding one is a
+deliberate decision, not "the more the better."
 
 ## Per-example validation gates
 
 Every example must pass all of the following before merge:
 
-1. Compiles for all three WASM variants (`wasm-headless`, `wasm-terminal`, `software`); a failure
-   here blocks the docs deploy workflow, so verify locally before pushing.
-2. Builds and runs on all three native backends (`--features crossterm`, `--features software`, and
-   the headless-stdout fallback with no backend feature enabled).
+1. Compiles for all four WASM variants (`wasm-headless`, `wasm-terminal`, `software`, `gl`); a
+   failure here blocks the docs deploy workflow, so verify locally before pushing.
+2. Builds and runs on all native backends (`--features crossterm`, `--features software`,
+   `--features gl`, and the headless-stdout fallback with no backend feature enabled).
 3. All three snapshots are committed (headless text via `insta`, software PNG, crossterm SVG), and
    `cargo test -p retroglyph-examples --all-features` is green.
 4. Any backend-specific capability gap degrades visibly (an on-screen note) rather than panicking or
