@@ -94,6 +94,9 @@ pub mod geometry;
 pub mod palette;
 /// The [`Presenter`] trait and [`WindowHandle`](presenter::WindowHandle).
 pub mod presenter;
+/// Locates winit's `<canvas>` element via the DOM ([`web::winit_canvas`]).
+#[cfg(target_arch = "wasm32")]
+pub mod web;
 /// The winit event loop, event translation, and app drivers.
 #[cfg(feature = "winit")]
 pub mod winit;
