@@ -80,6 +80,33 @@ impl BitmapFont {
         &self.data[start..start + h]
     }
 
+    /// Iterates the set ("on") pixels of glyph `index` as `(x, y)` coordinates, row-major from the
+    /// top: `x` in `0..glyph_width`, `y` in `0..glyph_height`.
+    ///
+    /// This is the single place the 1-bit format's MSB-first bit order lives -- pixel `x` of a row
+    /// is bit `glyph_width - 1 - x` of that row's byte -- so consumers (the GL atlas builder, the
+    /// software rasterizer's glyph blit) decode through it instead of each re-deriving the shift
+    /// and risking disagreement. It is also the one seam that has to change for wider-than-8px
+    /// glyphs (multi-byte rows, #164): today a row is a single byte (`glyph_width <= 8`), so its
+    /// bits are read straight out of that byte.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `index as u16 >= self.glyph_count` (via [`rows`](Self::rows)).
+    #[must_use = "iterators are lazy and do nothing unless consumed"]
+    pub fn glyph_pixels(&self, index: u8) -> impl Iterator<Item = (u8, u8)> + '_ {
+        let width = self.glyph_width;
+        self.rows(index)
+            .iter()
+            .enumerate()
+            .flat_map(move |(y, &row)| {
+                #[allow(clippy::cast_possible_truncation)]
+                let y = y as u8;
+                (0..width)
+                    .filter_map(move |x| ((row >> (width - 1 - x)) & 1 == 1).then_some((x, y)))
+            })
+    }
+
     /// The total number of glyphs stored in this font.
     ///
     /// Glyph indices `0..glyph_count()` are valid arguments to [`rows`](Self::rows). A GPU
@@ -759,5 +786,35 @@ mod tests {
             assert_eq!(*resolved.font(), FALLBACK_FONT);
             assert_eq!(resolved.index(), FALLBACK_FONT.char_to_index(ch));
         }
+    }
+
+    #[test]
+    fn glyph_pixels_decodes_msb_first_row_major() {
+        // Two 8x2 glyphs. Glyph 0: corners of the top row set; glyph 1: full top row plus one
+        // interior pixel on the second row.
+        static DATA: [u8; 4] = [0b1000_0001, 0b0000_0000, 0b1111_1111, 0b0000_1000];
+        let font = BitmapFont::new(&DATA, 8, 2, 2);
+
+        let g0: Vec<(u8, u8)> = font.glyph_pixels(0).collect();
+        assert_eq!(
+            g0,
+            [(0, 0), (7, 0)],
+            "MSB is the leftmost pixel; row 0 first"
+        );
+
+        let g1: Vec<(u8, u8)> = font.glyph_pixels(1).collect();
+        let mut expected: Vec<(u8, u8)> = (0..8).map(|x| (x, 0)).collect();
+        expected.push((4, 1)); // bit 3 of 0b0000_1000 -> x = width-1-3 = 4
+        assert_eq!(g1, expected);
+    }
+
+    #[test]
+    fn glyph_pixels_is_parameterized_by_width_not_hardcoded_to_8() {
+        // A 5px-wide glyph: set pixels must come from bits (width-1-x), i.e. bit 4 and bit 0, not
+        // bit 7 and bit 3. This guards against a consumer re-introducing a hardcoded `7 - x`.
+        static DATA: [u8; 1] = [0b0001_0001];
+        let font = BitmapFont::new(&DATA, 5, 1, 1);
+        let pixels: Vec<(u8, u8)> = font.glyph_pixels(0).collect();
+        assert_eq!(pixels, [(0, 0), (4, 0)]);
     }
 }

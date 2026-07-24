@@ -44,17 +44,13 @@ impl AtlasData {
 
         let mut coverage = vec![0u8; (layers * height * width) as usize];
         for layer in 0..layers {
-            // `glyph_count()` guarantees every index in `0..layers` is a valid `rows()` argument.
-            let rows = font.rows(layer as u8);
-            for (y, &row_bits) in rows.iter().enumerate() {
-                for x in 0..width {
-                    // Bit 7 (MSB) is the leftmost pixel.
-                    let set = (row_bits >> (7 - x)) & 1 == 1;
-                    if set {
-                        let idx = ((layer * height + y as u32) * width + x) as usize;
-                        coverage[idx] = 0xFF;
-                    }
-                }
+            // `glyph_count()` guarantees every index in `0..layers` is a valid glyph index.
+            // `glyph_pixels` yields each set pixel `(x, y)` decoded MSB-first, so the atlas builder
+            // no longer hardcodes an 8-pixel row (the bit order lives in `retroglyph-window`'s font
+            // module, the one place that changes for wider glyphs, #164).
+            for (x, y) in font.glyph_pixels(layer as u8) {
+                let idx = ((layer * height + u32::from(y)) * width + u32::from(x)) as usize;
+                coverage[idx] = 0xFF;
             }
         }
 
