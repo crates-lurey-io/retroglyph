@@ -95,11 +95,11 @@ pub struct GlRenderer {
     cell_h: u32,
     /// Atlas layer for the space glyph, used to initialize blank cells.
     space_glyph: u16,
-    /// One entry per cell (`cols * rows`), row-major. Patched by [`Output::draw`], uploaded whole
-    /// on [`present`](Presenter::present) when [`dirty`](Self::dirty) is set.
+    /// One entry per cell (`cols * rows`), row-major. Patched by [`Output::draw`]; the changed
+    /// sub-range is uploaded on [`present`](Presenter::present).
     instances: Vec<Instance>,
-    /// Whether `instances` changed since the last GPU upload.
-    dirty: bool,
+    /// The sub-range of `instances` changed since the last GPU upload (see [`DirtyRange`]).
+    dirty: DirtyRange,
     /// Input events pushed by the windowing loop, drained by [`Input::poll_event`].
     events: VecDeque<Event>,
     /// The current surface size in physical pixels (set by [`resize_surface`](Presenter::resize_surface)).
@@ -123,7 +123,8 @@ impl GlRenderer {
         let cell_h = u32::from(font.glyph_height) * u32::from(scale);
         let space_glyph = u16::from(font.char_to_index(' '));
         let blank = Instance::new(space_glyph, to_arr(DEFAULT_FG), to_arr(DEFAULT_BG));
-        let instances = vec![blank; usize::from(cols) * usize::from(rows)];
+        let count = usize::from(cols) * usize::from(rows);
+        let instances = vec![blank; count];
         Self {
             font,
             cols,
@@ -132,7 +133,7 @@ impl GlRenderer {
             cell_h,
             space_glyph,
             instances,
-            dirty: true,
+            dirty: DirtyRange::full(count),
             events: VecDeque::new(),
             surface_size: (cols_px(cols, cell_w), cols_px(rows, cell_h)),
             gpu: None,
@@ -159,8 +160,9 @@ impl GlRenderer {
         let glyph = u16::from(self.font.char_to_index(tile.glyph()));
         let fg = to_arr(tile.style().foreground().resolve_rgb(DEFAULT_FG));
         let bg = to_arr(tile.style().background().resolve_rgb(DEFAULT_BG));
-        self.instances[y * cols + x] = Instance::new(glyph, fg, bg);
-        self.dirty = true;
+        let idx = y * cols + x;
+        self.instances[idx] = Instance::new(glyph, fg, bg);
+        self.dirty.insert(idx);
     }
 
     /// Pushes an input event (called by the windowing loop). Public inherent method so the
@@ -178,6 +180,54 @@ const fn to_arr(rgb: (u8, u8, u8)) -> [u8; 3] {
 /// Cells along one axis times the per-cell pixel size.
 const fn cols_px(cells: u16, cell: u32) -> u32 {
     cells as u32 * cell
+}
+
+/// Half-open range `[lo, hi)` of instance indices changed since the last GPU upload.
+///
+/// [`present`](Presenter::present) uploads exactly `instances[lo..hi]` instead of the whole
+/// `cols * rows` buffer. A single contiguous range keeps [`insert`](Self::insert) O(1) and captures
+/// the common terminal update (a changed line or rectangular region) tightly; scattered writes
+/// conservatively widen to their bounding range rather than tracking each cell individually. The
+/// empty state uses `lo > hi` (`usize::MAX .. 0`) so a fresh range needs no `Option`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+struct DirtyRange {
+    lo: usize,
+    hi: usize,
+}
+
+impl DirtyRange {
+    /// The empty range: nothing pending. `lo >= hi`, so [`take`](Self::take) yields `None`.
+    const EMPTY: Self = Self {
+        lo: usize::MAX,
+        hi: 0,
+    };
+
+    /// A range covering every cell in `0..count` (a full re-upload). Empty when `count == 0`.
+    const fn full(count: usize) -> Self {
+        Self { lo: 0, hi: count }
+    }
+
+    /// Whether the range covers no cells.
+    const fn is_empty(&self) -> bool {
+        self.lo >= self.hi
+    }
+
+    /// Widens the range to include cell `idx`.
+    const fn insert(&mut self, idx: usize) {
+        if idx < self.lo {
+            self.lo = idx;
+        }
+        if idx + 1 > self.hi {
+            self.hi = idx + 1;
+        }
+    }
+
+    /// Returns the pending range and resets to empty, or `None` when nothing is dirty.
+    fn take(&mut self) -> Option<core::ops::Range<usize>> {
+        let range = (!self.is_empty()).then_some(self.lo..self.hi);
+        *self = Self::EMPTY;
+        range
+    }
 }
 
 // ── Output ───────────────────────────────────────────────────────────────────
@@ -214,7 +264,7 @@ impl Output for GlRenderer {
         for cell in &mut self.instances {
             *cell = blank;
         }
-        self.dirty = true;
+        self.dirty = DirtyRange::full(self.instances.len());
         Ok(())
     }
 
@@ -223,7 +273,7 @@ impl Output for GlRenderer {
         self.rows = size.height;
         let blank = self.blank();
         self.instances = vec![blank; self.cell_count()];
-        self.dirty = true;
+        self.dirty = DirtyRange::full(self.instances.len());
     }
 }
 
@@ -264,7 +314,8 @@ impl Presenter for GlRenderer {
             self.cell_h as f32,
             i32::from(self.cols),
         );
-        self.dirty = false;
+        // The whole buffer was just uploaded above; nothing is pending.
+        self.dirty = DirtyRange::EMPTY;
         self.gpu = Some(Gpu { ctx, res });
         Ok(())
     }
@@ -294,11 +345,16 @@ impl Presenter for GlRenderer {
         // `Output::resize`, out of band from surface resizes).
         if gpu.res.capacity() != cell_count {
             gpu.res.resize_instances(&gpu.ctx.gl, cell_count);
-            self.dirty = true;
+            // The reallocated buffer holds no cell data yet; re-upload everything.
+            self.dirty = DirtyRange::full(cell_count);
         }
-        if self.dirty {
-            gpu.res.upload(&gpu.ctx.gl, &self.instances);
-            self.dirty = false;
+        if let Some(range) = self.dirty.take() {
+            // Clamp against the current instance count in case a grid resize shrank the array
+            // between the write and this present.
+            let end = range.end.min(self.instances.len());
+            let start = range.start.min(end);
+            gpu.res
+                .upload_range(&gpu.ctx.gl, start, &self.instances[start..end]);
         }
 
         gpu.res
@@ -318,5 +374,49 @@ impl Drop for GlRenderer {
         if let Some(gpu) = &self.gpu {
             gpu.res.delete(&gpu.ctx.gl);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::DirtyRange;
+
+    #[test]
+    fn empty_takes_nothing() {
+        let mut d = DirtyRange::EMPTY;
+        assert!(d.is_empty());
+        assert_eq!(d.take(), None);
+    }
+
+    #[test]
+    fn full_covers_all_cells() {
+        assert_eq!(DirtyRange::full(6).take(), Some(0..6));
+        // A zero-cell grid is empty, not a `0..0` upload.
+        assert!(DirtyRange::full(0).is_empty());
+    }
+
+    #[test]
+    fn single_insert_is_a_one_cell_range() {
+        let mut d = DirtyRange::EMPTY;
+        d.insert(3);
+        assert_eq!(d.take(), Some(3..4));
+    }
+
+    #[test]
+    fn scattered_inserts_widen_to_the_bounding_range() {
+        let mut d = DirtyRange::EMPTY;
+        d.insert(10);
+        d.insert(2);
+        d.insert(7);
+        // Bounding range of {2, 7, 10} is [2, 11).
+        assert_eq!(d.take(), Some(2..11));
+    }
+
+    #[test]
+    fn take_resets_to_empty() {
+        let mut d = DirtyRange::full(4);
+        assert_eq!(d.take(), Some(0..4));
+        assert!(d.is_empty());
+        assert_eq!(d.take(), None);
     }
 }
