@@ -9,8 +9,8 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 ## [0.1.4+retroglyph-crossterm](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-crossterm-v0.1.3...retroglyph-crossterm-v0.1.4) - 2026-07-24
 
-**Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-crossterm-v0.1.3...retroglyph-crossterm-v0.1.4
-
+**Full Changelog**:
+https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-crossterm-v0.1.3...retroglyph-crossterm-v0.1.4
 
 ## [0.1.3+retroglyph-crossterm](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-crossterm-v0.1.2...retroglyph-crossterm-v0.1.3) - 2026-07-23
 
