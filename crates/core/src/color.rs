@@ -115,7 +115,10 @@ const GRAYSCALE_RAMP: [u8; 24] = [
 ///
 /// Indices 0–15 are the 16 standard ANSI colors, 16–231 are the 6×6×6 RGB cube, and
 /// 232–255 are the grayscale ramp.
-#[cfg(any(feature = "gem", test))]
+///
+/// Not feature-gated: [`Color::resolve_rgb`] calls it on every build, so it must always compile
+/// regardless of the `gem` feature (the `to_indexed`-family callers below are `gem`-gated, but
+/// this table lookup itself has no `gem` dependency).
 const fn indexed_to_rgb(index: u8) -> (u8, u8, u8) {
     if index < 16 {
         ANSI_COLORS[index as usize].to_rgb()
@@ -422,6 +425,37 @@ impl Color {
     pub const BRIGHT_CYAN: Self = Self::Ansi(AnsiColor::BrightCyan);
     /// Bright White (ANSI).
     pub const BRIGHT_WHITE: Self = Self::Ansi(AnsiColor::BrightWhite);
+
+    /// Resolves this color to a concrete 24-bit `(r, g, b)` triple, substituting `default` for
+    /// [`Color::Default`].
+    ///
+    /// This is the canonical color-to-RGB resolution every graphical backend shares, so that a
+    /// glyph drawn through the CPU rasterizer (`retroglyph-software`) and the GPU atlas
+    /// (`retroglyph-gl`) comes out the same pixel color:
+    ///
+    /// - [`Rgb`](Self::Rgb) passes through unchanged.
+    /// - [`Ansi`](Self::Ansi) resolves through [`AnsiColor::to_rgb`] (the one canonical ANSI
+    ///   palette).
+    /// - [`Indexed`](Self::Indexed) resolves through the 256-color palette (16 ANSI + 6×6×6 cube
+    ///   + grayscale ramp).
+    /// - [`Default`](Self::Default) (and any future non-exhaustive variant this crate can't yet
+    ///   resolve) returns `default`, which the caller picks per channel (foreground vs
+    ///   background).
+    ///
+    /// Terminal backends do *not* use this: they emit ANSI/indexed colors as-is and let the
+    /// terminal apply the user's theme. It exists specifically for pixel/GPU backends that must
+    /// produce real RGB.
+    #[must_use]
+    pub const fn resolve_rgb(self, default: (u8, u8, u8)) -> (u8, u8, u8) {
+        match self {
+            Self::Rgb { r, g, b } => (r, g, b),
+            Self::Ansi(ansi) => ansi.to_rgb(),
+            Self::Indexed(index) => indexed_to_rgb(index),
+            // `Color::Default` plus any future `#[non_exhaustive]` variant this crate doesn't yet
+            // know how to resolve to RGB.
+            _ => default,
+        }
+    }
 
     // ── gem integration ────────────────────────────────────────────────────
 
@@ -861,6 +895,34 @@ mod tests {
     #[test]
     fn test_color_defaults() {
         assert_eq!(Color::default(), Color::Default);
+    }
+
+    #[test]
+    fn test_resolve_rgb() {
+        // Rgb passes through; Default uses the supplied fallback (per channel).
+        assert_eq!(
+            Color::Rgb {
+                r: 10,
+                g: 20,
+                b: 30
+            }
+            .resolve_rgb((1, 2, 3)),
+            (10, 20, 30)
+        );
+        assert_eq!(Color::Default.resolve_rgb((1, 2, 3)), (1, 2, 3));
+        // Ansi resolves through the canonical palette.
+        assert_eq!(
+            Color::Ansi(AnsiColor::Red).resolve_rgb((0, 0, 0)),
+            AnsiColor::Red.to_rgb()
+        );
+        // Indexed: 0..16 == ANSI, the cube and grayscale ramp resolve too.
+        assert_eq!(
+            Color::Indexed(1).resolve_rgb((0, 0, 0)),
+            AnsiColor::Red.to_rgb()
+        );
+        assert_eq!(Color::Indexed(16).resolve_rgb((0, 0, 0)), (0, 0, 0));
+        assert_eq!(Color::Indexed(231).resolve_rgb((0, 0, 0)), (255, 255, 255));
+        assert_eq!(Color::Indexed(232).resolve_rgb((0, 0, 0)), (8, 8, 8));
     }
 
     #[test]

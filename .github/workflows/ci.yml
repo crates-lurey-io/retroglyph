@@ -199,6 +199,15 @@ jobs:
           report_type: test_results
           disable_search: true
           token: ${{ secrets.CODECOV_TOKEN }}
+      - name: Upload test results to Codecov (gl)
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v5
+        with:
+          files: target/nextest/ci/flags/gl.xml
+          flags: gl
+          report_type: test_results
+          disable_search: true
+          token: ${{ secrets.CODECOV_TOKEN }}
       - name: Upload test results to Codecov (window)
         if: ${{ !cancelled() }}
         uses: codecov/codecov-action@v5
@@ -225,6 +234,19 @@ jobs:
           report_type: test_results
           disable_search: true
           token: ${{ secrets.CODECOV_TOKEN }}
+
+  # Build-only check that the GL backend's WebGL2 path compiles for wasm32. A live headless-Chrome
+  # WebGL2 run is deferred (tracked in a follow-up issue): CI runners have no GPU, and a software
+  # GL rasterizer (llvmpipe/SwiftShader) run needs extra plumbing not worth it for v1.
+  compile-wasm-gl:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check -p retroglyph-gl --target wasm32-unknown-unknown --features default-font
 
   test-wasm:
     needs: changes
@@ -273,7 +295,7 @@ jobs:
           # One combined workspace lcov.info, attributed per crate: each flag below is
           # scoped by its own `paths:` in codecov.yml, so a single upload still yields
           # per-crate coverage numbers instead of one blended workspace figure.
-          flags: core,terminal,crossterm,terminal-wasm,software,window,widgets
+          flags: core,terminal,crossterm,terminal-wasm,software,gl,window,widgets
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: true
 
@@ -287,6 +309,7 @@ jobs:
       - compile
       - test
       - test-wasm
+      - compile-wasm-gl
       - coverage
     if: ${{ always() }}
     steps:

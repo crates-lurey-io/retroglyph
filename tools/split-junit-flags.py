@@ -29,7 +29,16 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 # Keep in sync with the `flags:` section of codecov.yml (one flag per crates/* directory).
-FLAGS = ["core", "terminal", "crossterm", "terminal-wasm", "software", "window", "widgets"]
+FLAGS = [
+    "core",
+    "terminal",
+    "crossterm",
+    "terminal-wasm",
+    "software",
+    "gl",
+    "window",
+    "widgets",
+]
 
 
 def flag_for_suite(suite_name: str) -> str | None:

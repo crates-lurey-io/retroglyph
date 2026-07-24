@@ -45,7 +45,6 @@
 //! window, and [`pixels`](SoftwareRenderer::pixels) gives direct access to the rendered
 //! buffer.
 
-pub mod bitmap_font;
 pub mod config;
 
 #[cfg(feature = "tilesets")]
@@ -76,14 +75,17 @@ use surface::WindowSurface;
 struct ReadmeDoctests;
 
 use retroglyph_core::backend::{Cursor, Input, Output};
-use retroglyph_core::color::{AnsiColor, Color};
+use retroglyph_core::color::Color;
 
-pub use bitmap_font::BitmapFont;
+// The bitmap font lives in `retroglyph-window`'s winit-free `font` module (both graphical
+// backends already depend on that crate for `Presenter`), so `retroglyph-gl` shares the exact
+// same glyph source. Re-exported here for ergonomics (the builder's `font()` takes one);
+// `FallbackFontChain`, `unscii16`, etc. are reached through `retroglyph_window::font` directly.
 pub use config::{SoftwareBackend, SoftwareBackendBuilder, SoftwareBackendError};
+pub use retroglyph_window::font::BitmapFont;
 
 #[cfg(feature = "tilesets")]
 use alpha_blend::rgba::U8x4Rgba;
-use bitmap_font::BitmapFont as Font;
 use grixy::buf::GridBuf;
 use grixy::ops::GridWrite;
 use grixy::ops::layout::RowMajor;
@@ -91,6 +93,7 @@ use retroglyph_core::event::Event;
 use retroglyph_core::grid::{Pos, Size};
 use retroglyph_core::tile::Tile;
 use retroglyph_window::WindowHandle;
+use retroglyph_window::font::BitmapFont as Font;
 #[cfg(feature = "tilesets")]
 use sprite_cache::{Sprite, SpriteCache};
 use std::collections::VecDeque;
@@ -1148,51 +1151,20 @@ fn resolve_bg_fill(
 
 /// Resolve a [`Color`] to a packed `0x00RRGGBB` value, substituting
 /// `default_rgb` for [`Color::Default`].
+///
+/// Delegates the actual palette resolution to `retroglyph-core`'s [`Color::resolve_rgb`], the
+/// single canonical color-to-RGB path every graphical backend shares (so the CPU rasterizer and
+/// `retroglyph-gl`'s GPU atlas agree on every pixel color); this only unpacks/repacks between
+/// core's `(r, g, b)` triples and this backend's `0x00RRGGBB` `u32` pixel format.
 fn resolve_color(color: Color, default_rgb: u32) -> u32 {
-    match color {
-        Color::Rgb { r, g, b } => (u32::from(r) << 16) | (u32::from(g) << 8) | u32::from(b),
-        Color::Ansi(a) => ansi_to_rgb(a),
-        Color::Indexed(idx) => indexed_to_rgb(idx),
-        // Covers `Color::Default` plus any future variant (`Color` is `#[non_exhaustive]`) this
-        // crate doesn't know how to resolve yet.
-        _ => default_rgb,
-    }
-}
-
-/// Resolves an [`AnsiColor`] to a packed `0x00RRGGBB` value.
-///
-/// This is a thin wrapper over `retroglyph-core`'s [`AnsiColor::to_rgb`], which is the
-/// single canonical source of ANSI-to-RGB values shared by all backends. Do not
-/// reimplement the palette here; call into core so software's rendering stays in sync
-/// with core's (and, transitively, other backends') color resolution.
-fn ansi_to_rgb(color: AnsiColor) -> u32 {
-    let (r, g, b) = color.to_rgb();
+    #[allow(clippy::cast_possible_truncation)]
+    let default = (
+        (default_rgb >> 16) as u8,
+        (default_rgb >> 8) as u8,
+        default_rgb as u8,
+    );
+    let (r, g, b) = color.resolve_rgb(default);
     (u32::from(r) << 16) | (u32::from(g) << 8) | u32::from(b)
-}
-
-/// Maps xterm 256-color index to 0x00RRGGBB.
-///
-/// Indices 0-15 delegate to [`ansi_to_rgb`] (and thus to core's canonical
-/// [`AnsiColor::to_rgb`]). Indices 16-255 (the 6x6x6 color cube and greyscale ramp)
-/// still reimplement the math that `retroglyph-core` also has behind its private,
-/// `gem`-feature-gated 256-color quantizer table, since core doesn't currently expose
-/// that part of the palette publicly.
-fn indexed_to_rgb(idx: u8) -> u32 {
-    if let Ok(ansi) = AnsiColor::try_from(idx) {
-        return ansi_to_rgb(ansi);
-    }
-    if idx < 232 {
-        let i = idx - 16;
-        let b = i % 6;
-        let g = (i / 6) % 6;
-        let r = i / 36;
-        let scale = |v: u8| if v == 0 { 0u32 } else { u32::from(v) * 40 + 55 };
-        return (scale(r) << 16) | (scale(g) << 8) | scale(b);
-    }
-    // xterm 256-color spec: indices 232-255 are 24 grey steps, value = 8 + n*10 for n in
-    // 0..24. This is already correct; don't "simplify" it back to idx * 10 or similar.
-    let grey = u32::from(idx - 232) * 10 + 8;
-    (grey << 16) | (grey << 8) | grey
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -1206,7 +1178,7 @@ mod tests {
 
     fn test_renderer() -> SoftwareRenderer {
         SoftwareBackendBuilder::new()
-            .font(bitmap_font::unscii16::FONT)
+            .font(retroglyph_window::font::unscii16::FONT)
             .grid_size(1, 1)
             .scale(1)
             .build()
@@ -1819,21 +1791,21 @@ mod tests {
         );
     }
     //
-    // `ansi_to_rgb` above now delegates directly to `AnsiColor::to_rgb`, so this
-    // asserts the two always agree for every variant, across the full palette, rather
-    // than pinning a hand-picked subset that happened to agree before the fix.
+    // `resolve_color` now delegates entirely to core's `Color::resolve_rgb`; this asserts the
+    // packing is correct and that ANSI resolution agrees with core across the full 16-color
+    // palette, so a regression in either the delegation or the packing is caught.
 
     #[test]
-    fn ansi_to_rgb_matches_core_for_all_variants() {
+    fn resolve_color_matches_core_for_all_ansi_variants() {
+        use retroglyph_core::color::AnsiColor;
         for index in 0..16u8 {
-            let color = AnsiColor::try_from(index).expect("0..16 are valid ANSI indices");
-            let (r, g, b) = color.to_rgb();
+            let ansi = AnsiColor::try_from(index).expect("0..16 are valid ANSI indices");
+            let (r, g, b) = ansi.to_rgb();
             let core_rgb = (u32::from(r) << 16) | (u32::from(g) << 8) | u32::from(b);
             assert_eq!(
-                ansi_to_rgb(color),
+                resolve_color(Color::Ansi(ansi), DEFAULT_BG),
                 core_rgb,
-                "{color:?}: retroglyph-software's ansi_to_rgb no longer matches \
-                 retroglyph-core's AnsiColor::to_rgb"
+                "{ansi:?}: resolve_color no longer matches retroglyph-core's Color::resolve_rgb"
             );
         }
     }

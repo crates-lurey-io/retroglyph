@@ -79,3 +79,7 @@ default = ["winit"]
 # on raw-window-handle; loops other than winit (SDL2, tao, custom) bring
 # their own driver against `Presenter` + `WindowBackend`.
 winit = ["dep:winit", "dep:log"]
+# Embeds the Unscii 16 default font (`font::unscii16`). Off by default so a consumer that supplies
+# its own bitmap font pays nothing for the ~4 KB atlas; the graphical backends' own `default-font`
+# features forward to this one.
+default-font = []

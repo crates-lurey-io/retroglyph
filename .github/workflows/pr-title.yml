@@ -45,6 +45,7 @@ jobs:
             crossterm
             terminal-wasm
             software
+            gl
             window
             widgets
             examples

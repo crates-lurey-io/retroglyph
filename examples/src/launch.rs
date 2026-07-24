@@ -13,7 +13,7 @@
 //! concrete, statically-named exported symbols, which a generic function
 //! can't produce. See [`wasm_entry!`](crate::wasm_entry) for that part.
 
-#[cfg(any(feature = "crossterm", feature = "software"))]
+#[cfg(any(feature = "crossterm", feature = "software", feature = "gl"))]
 use retroglyph_core::{App, Flow};
 use retroglyph_core::{Backend, Frame, Terminal};
 use std::time::Duration;
@@ -119,19 +119,19 @@ pub trait Example: Default + Sized + 'static {
 ///
 /// Only referenced by [`run_software`]/[`run_crossterm`]; with neither
 /// feature enabled (the headless-stdout fallback), nothing constructs one.
-#[cfg(any(feature = "crossterm", feature = "software"))]
+#[cfg(any(feature = "crossterm", feature = "software", feature = "gl"))]
 struct ExampleApp<E> {
     state: Option<E>,
 }
 
-#[cfg(any(feature = "crossterm", feature = "software"))]
+#[cfg(any(feature = "crossterm", feature = "software", feature = "gl"))]
 impl<E> ExampleApp<E> {
     const fn new() -> Self {
         Self { state: None }
     }
 }
 
-#[cfg(any(feature = "crossterm", feature = "software"))]
+#[cfg(any(feature = "crossterm", feature = "software", feature = "gl"))]
 impl<B: Backend, E: Example> App<B> for ExampleApp<E> {
     fn update(&mut self, term: &mut Terminal<B>, frame: &Frame) -> Flow {
         let state = self.state.get_or_insert_with(|| E::init(term));
@@ -196,6 +196,35 @@ pub fn run_software_with<E: Example>(builder: retroglyph_software::SoftwareBacke
         .expect("failed to build headless renderer");
     let config = retroglyph_window::winit::WindowConfig::fit(&renderer, E::NAME, None)
         .fill_viewport(E::fill_viewport());
+    let app = ExampleApp::<E>::new();
+    retroglyph_window::winit::run_app(config, renderer, app).expect("event loop failed");
+}
+
+// ── GL backend (desktop + WASM) ─────────────────────────────────────────────
+
+/// Runs `E` on the GPU (OpenGL 3.3 native / WebGL2 wasm) backend.
+///
+/// Builds a 50x25 window at `scale(2)` sized to fit via
+/// [`WindowConfig::fit`](retroglyph_window::winit::WindowConfig::fit), then drives it with
+/// `retroglyph-window`'s winit `App` driver -- the same driver `run_software` uses, since
+/// `GlRenderer` is a `Presenter` too. The GL backend does not read
+/// [`Example::configure_software`] (that builder is software-specific); GL examples render at this
+/// fixed default grid.
+///
+/// # Panics
+///
+/// Panics if the GL backend fails to initialize, or if the event loop fails to start.
+#[cfg(feature = "gl")]
+pub fn run_gl<E: Example>() {
+    #[cfg(target_arch = "wasm32")]
+    console_error_panic_hook::set_once();
+
+    let renderer = retroglyph_gl::GlBackendBuilder::new()
+        .grid_size(50, 25)
+        .scale(2)
+        .build()
+        .expect("failed to initialize gl backend");
+    let config = retroglyph_window::winit::WindowConfig::fit(&renderer, E::NAME, None);
     let app = ExampleApp::<E>::new();
     retroglyph_window::winit::run_app(config, renderer, app).expect("event loop failed");
 }
@@ -297,8 +326,15 @@ pub fn launch<E: Example>() {
     run_software::<E>();
 }
 
+/// See [`launch`]'s software-enabled overload. `gl` is the GPU windowed backend; `software` wins
+/// if both are somehow enabled.
+#[cfg(all(feature = "gl", not(feature = "software")))]
+pub fn launch<E: Example>() {
+    run_gl::<E>();
+}
+
 /// See [`launch`]'s software-enabled overload.
-#[cfg(all(feature = "crossterm", not(feature = "software")))]
+#[cfg(all(feature = "crossterm", not(any(feature = "software", feature = "gl"))))]
 pub fn launch<E: Example>() {
     run_crossterm::<E>().expect("crossterm backend failed");
 }
@@ -309,7 +345,7 @@ pub fn launch<E: Example>() {
 /// through `main`.
 #[cfg(all(
     feature = "wasm-headless",
-    not(feature = "software"),
+    not(any(feature = "software", feature = "gl")),
     target_arch = "wasm32"
 ))]
 pub fn launch<E: Example>() {
@@ -319,7 +355,7 @@ pub fn launch<E: Example>() {
 /// No-op on `wasm32`: see the `wasm-headless` overload above.
 #[cfg(all(
     feature = "wasm-terminal",
-    not(any(feature = "software", feature = "wasm-headless")),
+    not(any(feature = "software", feature = "gl", feature = "wasm-headless")),
     target_arch = "wasm32"
 ))]
 pub fn launch<E: Example>() {
@@ -331,6 +367,7 @@ pub fn launch<E: Example>() {
 #[cfg(not(any(
     feature = "crossterm",
     feature = "software",
+    feature = "gl",
     all(feature = "wasm-headless", target_arch = "wasm32"),
     all(feature = "wasm-terminal", target_arch = "wasm32"),
 )))]

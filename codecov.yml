@@ -31,6 +31,10 @@ flags:
     paths:
       - crates/software/src/
     carryforward: true
+  gl:
+    paths:
+      - crates/gl/src/
+    carryforward: true
   window:
     paths:
       - crates/window/src/
@@ -73,6 +77,10 @@ component_management:
       name: software
       flag_regexes:
         - ^software$
+    - component_id: gl
+      name: gl
+      flag_regexes:
+        - ^gl$
     - component_id: window
       name: window
       flag_regexes:

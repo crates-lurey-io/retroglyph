@@ -1,4 +1,6 @@
 .matan/
+.pi/
+.pi-subagents/
 target/
 node_modules/
 bin/

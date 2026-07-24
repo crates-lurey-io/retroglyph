@@ -42,7 +42,7 @@ const TRACK_ROW: u16 = 12;
 const TRACK_LEFT: u16 = 1;
 const TRACK_RIGHT: u16 = 48;
 /// How wide one grid cell is in the software backend's default embedded font, in pixels --
-/// see `crates/software/src/bitmap_font.rs`'s `FONT` constant. [`Terminal::put_offset`]'s
+/// see `crates/window/src/font.rs`'s `FONT` constant. [`Terminal::put_offset`]'s
 /// `dx`/`dy` are raw pixel units at this scale, so a full cell of horizontal travel is exactly
 /// `CELL_W_PX` of offset.
 const CELL_W_PX: f32 = 8.0;
