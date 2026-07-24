@@ -320,7 +320,7 @@ fn full_block_cell_is_all_foreground_blank_cell_is_all_background() {
     paint(&mut r, &cells);
 
     let frame = render_to_frame(&ctx, &r).expect("render");
-    let (cw, ch) = (r.cell_w, r.cell_h);
+    let (cw, ch) = r.geometry.cell_size();
 
     for y in 0..ch {
         for x in 0..cw {

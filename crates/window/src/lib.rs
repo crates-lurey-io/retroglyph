@@ -87,6 +87,8 @@ pub mod backend;
 /// System clipboard read/write ([`Clipboard`], [`SystemClipboard`] on native targets).
 pub mod clipboard;
 pub mod font;
+/// Shared cell/surface pixel geometry ([`CellGeometry`](geometry::CellGeometry)).
+pub mod geometry;
 /// Canonical default colors ([`DEFAULT_FG`](palette::DEFAULT_FG),
 /// [`DEFAULT_BG`](palette::DEFAULT_BG)) shared by the graphical backends.
 pub mod palette;
@@ -108,6 +110,7 @@ pub use backend::WindowBackend;
 #[cfg(not(target_arch = "wasm32"))]
 pub use clipboard::SystemClipboard;
 pub use clipboard::{Clipboard, ClipboardError};
+pub use geometry::CellGeometry;
 pub use presenter::{Presenter, RecoverableError, WindowHandle};
 
 // Re-exported so presenters can name the handle traits without adding their
