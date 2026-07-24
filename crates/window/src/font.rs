@@ -5,10 +5,13 @@
 //! VGA format one byte covers all 8 pixels of a row; wider fonts would need two bytes per row,
 //! but that is not yet supported.
 //!
-//! This crate is `no_std` and dependency-free: it is the glyph-source layer both
-//! `retroglyph-software` (CPU rasterizer) and `retroglyph-gl` (GPU atlas) build on, so their
-//! text output stays pixel-identical. Enable the `default-font` feature for the embedded Unscii
-//! 16 font ([`unscii16::FONT`]); leave it off to supply your own via [`BitmapFont::new`].
+//! This module is the dependency-free glyph-source layer both `retroglyph-software` (CPU
+//! rasterizer) and `retroglyph-gl` (GPU atlas) build on, so their text output stays
+//! pixel-identical. It lives here (rather than in a standalone crate) because both consumers
+//! already depend on `retroglyph-window` for [`Presenter`](crate::Presenter), and it needs none of
+//! winit -- it is available with `default-features = false`. Enable the `default-font` feature for
+//! the embedded Unscii 16 font ([`unscii16::FONT`]); leave it off to supply your own via
+//! [`BitmapFont::new`].
 //!
 //! # Future work
 //!
@@ -21,8 +24,6 @@
 //!   `ceil(glyph_width / 8)` bytes per row and update the consumers' bit extraction to index
 //!   across bytes. Tracked in retroglyph issue #164; deferred until a second, non-8px-wide font
 //!   is actually needed.
-
-#![no_std]
 
 // ── BitmapFont ─────────────────────────────────────────────────────────────
 

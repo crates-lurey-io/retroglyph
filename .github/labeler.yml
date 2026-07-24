@@ -27,10 +27,6 @@
   - changed-files:
       - any-glob-to-any-file: 'crates/gl/**'
 
-'c:font':
-  - changed-files:
-      - any-glob-to-any-file: 'crates/font/**'
-
 'c:window':
   - changed-files:
       - any-glob-to-any-file: 'crates/window/**'

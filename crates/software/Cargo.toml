@@ -19,10 +19,6 @@ all-features = true
 
 [dependencies]
 retroglyph-core = { path = "../core", version = "0.3.0", default-features = false, features = ["std"] }
-# The bitmap font + CP437 mapping, extracted so retroglyph-gl can share the exact same glyph
-# source (and thus render pixel-identical text). `BitmapFont` is re-exported from the crate root
-# for ergonomics; `default-font` here forwards to this crate's feature.
-retroglyph-font = { path = "../font", version = "0.1.0", default-features = false }
 # Seam only (Presenter/WindowBackend/WindowHandle): no winit. The loop is the
 # caller's business -- games depend on retroglyph-window with its default
 # `winit` feature; this crate just implements the renderer side.
@@ -58,7 +54,7 @@ web-sys = { version = "0.3", features = [
 # these live inside `retroglyph-software`: `retroglyph-software/tilesets`
 # reads better than `.../software-tilesets`.
 tilesets = ["dep:image", "dep:alpha-blend"]
-default-font = ["retroglyph-font/default-font"]
+default-font = ["retroglyph-window/default-font"]
 
 [dev-dependencies]
 insta = { version = "1.34", features = ["yaml"] }

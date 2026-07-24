@@ -57,7 +57,7 @@ mod context;
 pub use config::{GlBackendBuilder, GlBackendError};
 pub use error::SurfaceError;
 // Re-export the font types so a consumer can build a custom atlas without a separate dependency.
-pub use retroglyph_font::{self as font, BitmapFont};
+pub use retroglyph_window::font::{self as font, BitmapFont};
 
 use context::GlContext;
 use renderer::{GlResources, Instance};

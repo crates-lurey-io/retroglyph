@@ -208,15 +208,6 @@ jobs:
           report_type: test_results
           disable_search: true
           token: ${{ secrets.CODECOV_TOKEN }}
-      - name: Upload test results to Codecov (font)
-        if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@v5
-        with:
-          files: target/nextest/ci/flags/font.xml
-          flags: font
-          report_type: test_results
-          disable_search: true
-          token: ${{ secrets.CODECOV_TOKEN }}
       - name: Upload test results to Codecov (window)
         if: ${{ !cancelled() }}
         uses: codecov/codecov-action@v5
@@ -304,7 +295,7 @@ jobs:
           # One combined workspace lcov.info, attributed per crate: each flag below is
           # scoped by its own `paths:` in codecov.yml, so a single upload still yields
           # per-crate coverage numbers instead of one blended workspace figure.
-          flags: core,terminal,crossterm,terminal-wasm,software,gl,font,window,widgets
+          flags: core,terminal,crossterm,terminal-wasm,software,gl,window,widgets
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: true
 

@@ -7,7 +7,7 @@
 //! [`Presenter::init_surface`](retroglyph_window::Presenter::init_surface).
 
 use crate::GlRenderer;
-use retroglyph_font::BitmapFont;
+use retroglyph_window::font::BitmapFont;
 use std::fmt;
 
 /// Errors from configuring the GL backend.
@@ -135,7 +135,7 @@ impl GlBackendBuilder {
         }
         #[cfg(feature = "default-font")]
         {
-            Ok(retroglyph_font::unscii16::FONT)
+            Ok(retroglyph_window::font::unscii16::FONT)
         }
         #[cfg(not(feature = "default-font"))]
         {

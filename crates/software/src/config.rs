@@ -9,7 +9,7 @@
 
 #[cfg(feature = "tilesets")]
 use super::tileset::TilesetOptions;
-use retroglyph_font::BitmapFont;
+use retroglyph_window::font::BitmapFont;
 use std::fmt;
 
 /// Errors that can occur when configuring the software backend.
@@ -184,7 +184,7 @@ impl SoftwareBackend {
         Self {
             window_title: String::from("rg application"),
             #[cfg(feature = "default-font")]
-            font: Some(retroglyph_font::unscii16::FONT),
+            font: Some(retroglyph_window::font::unscii16::FONT),
             #[cfg(not(feature = "default-font"))]
             font: None,
             cols: 80,
@@ -207,7 +207,7 @@ impl SoftwareBackend {
 /// // With the `default-font` feature the embedded Unscii 16 font is
 /// // used automatically.  To supply your own 8×16 bitmap font:
 /// //
-/// //   use retroglyph_font::BitmapFont;
+/// //   use retroglyph_window::font::BitmapFont;
 /// //   let my_font = BitmapFont::new(include_bytes!("my_font.bin"), 8, 16, 256);
 /// //   SoftwareBackendBuilder::new().font(my_font)...
 ///

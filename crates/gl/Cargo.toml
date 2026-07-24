@@ -37,8 +37,9 @@ all-features = true
 
 [dependencies]
 retroglyph-core = { path = "../core", version = "0.3.0", default-features = false, features = ["std"] }
+# The glyph source (BitmapFont + unscii16) lives in retroglyph-window's winit-free `font` module,
+# which this crate already depends on for `Presenter`. `default-font` forwards to window's feature.
 retroglyph-window = { path = "../window", version = "0.3.0", default-features = false }
-retroglyph-font = { path = "../font", version = "0.1.0", default-features = false }
 glow = "0.16"
 log = "0.4"
 raw-window-handle = "0.6"
@@ -64,4 +65,4 @@ web-sys = { version = "0.3", features = [
 # Embeds the Unscii 16 default font so a caller can build a renderer with no font of its own.
 # Off by default, mirroring `retroglyph-software`: a caller supplying its own `BitmapFont` pays
 # nothing for the embedded atlas.
-default-font = ["retroglyph-font/default-font"]
+default-font = ["retroglyph-window/default-font"]

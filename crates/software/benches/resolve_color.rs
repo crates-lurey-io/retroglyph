@@ -22,8 +22,8 @@
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use retroglyph_core::{AnsiColor, Color, Output, Pos, Style, Tile};
-use retroglyph_font::unscii16;
 use retroglyph_software::SoftwareBackendBuilder;
+use retroglyph_window::font::unscii16;
 
 const GRID: (u16, u16) = (80, 24);
 

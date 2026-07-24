@@ -35,10 +35,6 @@ flags:
     paths:
       - crates/gl/src/
     carryforward: true
-  font:
-    paths:
-      - crates/font/src/
-    carryforward: true
   window:
     paths:
       - crates/window/src/
@@ -85,10 +81,6 @@ component_management:
       name: gl
       flag_regexes:
         - ^gl$
-    - component_id: font
-      name: font
-      flag_regexes:
-        - ^font$
     - component_id: window
       name: window
       flag_regexes:

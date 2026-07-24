@@ -13,7 +13,7 @@
 // nursery `redundant_pub_crate` lint conflicts with keeping the module structure explicit.
 #![allow(clippy::redundant_pub_crate)]
 
-use retroglyph_font::BitmapFont;
+use retroglyph_window::font::BitmapFont;
 
 /// CPU-side glyph atlas: the raw `R8` coverage bytes plus the dimensions needed to upload them as a
 /// `TEXTURE_2D_ARRAY` and to index a glyph's layer in the shader.
@@ -70,7 +70,7 @@ impl AtlasData {
 #[cfg(all(test, feature = "default-font"))]
 mod tests {
     use super::AtlasData;
-    use retroglyph_font::unscii16;
+    use retroglyph_window::font::unscii16;
 
     #[test]
     fn atlas_dims_match_unscii16() {

@@ -77,11 +77,12 @@ struct ReadmeDoctests;
 use retroglyph_core::backend::{Cursor, Input, Output};
 use retroglyph_core::color::Color;
 
-// The bitmap font lives in its own crate (`retroglyph-font`) so `retroglyph-gl` can share the
-// exact same glyph source. Re-exported here for ergonomics (the builder's `font()` takes one);
-// `FallbackFontChain`, `unscii16`, etc. are reached through `retroglyph_font` directly.
+// The bitmap font lives in `retroglyph-window`'s winit-free `font` module (both graphical
+// backends already depend on that crate for `Presenter`), so `retroglyph-gl` shares the exact
+// same glyph source. Re-exported here for ergonomics (the builder's `font()` takes one);
+// `FallbackFontChain`, `unscii16`, etc. are reached through `retroglyph_window::font` directly.
 pub use config::{SoftwareBackend, SoftwareBackendBuilder, SoftwareBackendError};
-pub use retroglyph_font::BitmapFont;
+pub use retroglyph_window::font::BitmapFont;
 
 #[cfg(feature = "tilesets")]
 use alpha_blend::rgba::U8x4Rgba;
@@ -91,8 +92,8 @@ use grixy::ops::layout::RowMajor;
 use retroglyph_core::event::Event;
 use retroglyph_core::grid::{Pos, Size};
 use retroglyph_core::tile::Tile;
-use retroglyph_font::BitmapFont as Font;
 use retroglyph_window::WindowHandle;
+use retroglyph_window::font::BitmapFont as Font;
 #[cfg(feature = "tilesets")]
 use sprite_cache::{Sprite, SpriteCache};
 use std::collections::VecDeque;
@@ -1177,7 +1178,7 @@ mod tests {
 
     fn test_renderer() -> SoftwareRenderer {
         SoftwareBackendBuilder::new()
-            .font(retroglyph_font::unscii16::FONT)
+            .font(retroglyph_window::font::unscii16::FONT)
             .grid_size(1, 1)
             .scale(1)
             .build()

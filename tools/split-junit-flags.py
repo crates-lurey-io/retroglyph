@@ -36,7 +36,6 @@ FLAGS = [
     "terminal-wasm",
     "software",
     "gl",
-    "font",
     "window",
     "widgets",
 ]

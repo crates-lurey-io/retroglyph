@@ -60,9 +60,9 @@ CI. The `doc` recipe swallows `cargo doc` failures due to `|| true` chaining. Se
 
 Conventional Commits, scoped to the crate directory under `crates/*` a change touches:
 `feat(widgets): ...`, `fix(software): ...`, `docs(core): ...`. Valid scopes: `core`, `terminal`,
-`crossterm`, `terminal-wasm`, `software`, `gl`, `font`, `window`, `widgets`, `examples`. For changes
-that don't belong to a single crate, use a workspace-level scope: `workspace` (tooling, CI, root
-docs, release config) or `deps` (dependency bumps). A scopeless title is still accepted, but prefer
+`crossterm`, `terminal-wasm`, `software`, `gl`, `window`, `widgets`, `examples`. For changes that
+don't belong to a single crate, use a workspace-level scope: `workspace` (tooling, CI, root docs,
+release config) or `deps` (dependency bumps). A scopeless title is still accepted, but prefer
 `workspace` over omitting the scope.
 
 The convention is enforced on **PR titles**, not individual commits. The repo is squash-merge only,

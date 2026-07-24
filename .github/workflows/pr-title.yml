@@ -46,7 +46,6 @@ jobs:
             terminal-wasm
             software
             gl
-            font
             window
             widgets
             examples
