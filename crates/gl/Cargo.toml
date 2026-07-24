@@ -49,6 +49,15 @@ raw-window-handle = "0.6"
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 glutin = "0.32"
 
+# Headless render tests (src/headless.rs, Linux/EGL only): they create an EGL surfaceless context,
+# run the real pipeline into an offscreen FBO, and read the pixels back to compare against the CPU
+# rasterizer (cross-backend parity). `retroglyph-software` is that reference rasterizer; both
+# backends share `retroglyph-window`'s font, so the comparison is a real pixel-identity check.
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+retroglyph-software = { path = "../software", version = "0.3.1", default-features = false, features = [
+  "default-font",
+] }
+
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 # Version pinned to match the rest of the workspace (crates/window, crates/software, examples):
 # the CLI and the crate version must agree.

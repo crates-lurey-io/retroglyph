@@ -45,6 +45,12 @@ mod error;
 mod renderer;
 mod shaders;
 
+// Headless offscreen render tests: create an EGL surfaceless context, run the real pipeline into an
+// FBO, and read the pixels back to assert on them (issue #376). Linux/EGL only -- see the module
+// docs -- and gated to `default-font` since the tests build a renderer from the embedded atlas.
+#[cfg(all(test, target_os = "linux", feature = "default-font"))]
+mod headless;
+
 // Platform-specific GL context, swapped by target. Both expose the same `GlContext` API (see the
 // module docs), the same pattern `retroglyph-software` uses for its window surface.
 #[cfg(not(target_arch = "wasm32"))]
@@ -66,6 +72,7 @@ use retroglyph_core::event::Event;
 use retroglyph_core::grid::{Pos, Size};
 use retroglyph_core::tile::Tile;
 use retroglyph_window::{Presenter, WindowHandle};
+use shaders::GlslFlavor;
 use std::collections::VecDeque;
 use std::sync::Arc;
 use std::time::Duration;
@@ -175,6 +182,43 @@ impl GlRenderer {
     /// [`Input`] impl can forward to it without ambiguity.
     pub fn push_event(&mut self, event: Event) {
         self.events.push_back(event);
+    }
+
+    /// Builds the GL resources for the current instance array on an already-current context:
+    /// compiles the program, uploads the glyph atlas and the full instance buffer, and sets the
+    /// glyph-size and projection uniforms.
+    ///
+    /// Shared by [`Presenter::init_surface`] (windowed) and the headless render-test path so both
+    /// exercise byte-for-byte the same setup -- the point of the render tests is to catch a break
+    /// in exactly this pipeline, so it must not diverge from the real one.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SurfaceError::Init`] if a shader fails to compile or the program fails to link.
+    #[allow(clippy::cast_precision_loss)]
+    pub(crate) fn build_resources(
+        &self,
+        gl: &glow::Context,
+        flavor: GlslFlavor,
+    ) -> Result<GlResources, SurfaceError> {
+        let (w, h) = self.surface_size;
+        let atlas = atlas::AtlasData::build(&self.font);
+        let res = GlResources::new(gl, flavor, &atlas, self.cell_count())?;
+        res.upload(gl, &self.instances);
+        res.set_glyph_size(
+            gl,
+            f32::from(self.font.glyph_width),
+            f32::from(self.font.glyph_height),
+        );
+        res.set_projection(
+            gl,
+            w as f32,
+            h as f32,
+            self.cell_w as f32,
+            self.cell_h as f32,
+            i32::from(self.cols),
+        );
+        Ok(res)
     }
 }
 
@@ -305,26 +349,10 @@ impl Cursor for GlRenderer {}
 impl Presenter for GlRenderer {
     type SurfaceError = SurfaceError;
 
-    #[allow(clippy::cast_precision_loss)]
     fn init_surface(&mut self, window: Arc<dyn WindowHandle>) -> Result<(), SurfaceError> {
         let (w, h) = self.surface_size;
         let ctx = GlContext::new(&window, w, h)?;
-        let atlas = atlas::AtlasData::build(&self.font);
-        let res = GlResources::new(&ctx.gl, ctx.flavor(), &atlas, self.cell_count())?;
-        res.upload(&ctx.gl, &self.instances);
-        res.set_glyph_size(
-            &ctx.gl,
-            f32::from(self.font.glyph_width),
-            f32::from(self.font.glyph_height),
-        );
-        res.set_projection(
-            &ctx.gl,
-            w as f32,
-            h as f32,
-            self.cell_w as f32,
-            self.cell_h as f32,
-            i32::from(self.cols),
-        );
+        let res = self.build_resources(&ctx.gl, ctx.flavor())?;
         // The whole buffer was just uploaded above; nothing is pending.
         self.dirty = DirtyRange::EMPTY;
         self.gpu = Some(Gpu { ctx, res });

@@ -47,6 +47,14 @@ glyphs alpha-blended on top), so an offset glyph spills past its cell edge into 
 `retroglyph-software`. Sprites/tilesets, dynamic Unicode atlases, and GPU-side layer compositing are
 tracked as follow-ups.
 
+## Testing
+
+Beyond the CPU-side units (atlas byte layout, shader-string generation), `src/headless.rs` runs the
+real GL pipeline into an offscreen framebuffer and reads it back, asserting property checks and
+pixel-for-pixel parity with the `retroglyph-software` CPU rasterizer. Those tests are
+`cfg(target_os = "linux")` and run in CI on Mesa's llvmpipe software rasterizer (no GPU needed); see
+`docs/testing.md` for details.
+
 ## License
 
 Same as the workspace (MIT).

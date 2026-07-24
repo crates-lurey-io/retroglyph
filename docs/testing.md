@@ -9,6 +9,32 @@ Unit tests live alongside their modules in each crate (`retroglyph-core` and `re
 carry the bulk of them). Pixel-level software-backend regressions live in
 `crates/software/src/snapshots/`.
 
+## Headless GPU render tests (retroglyph-gl, Linux)
+
+`crates/gl/src/headless.rs` runs the real native GL pipeline (shader compile/link, atlas upload,
+instanced draw) and reads the result back with `glReadPixels`, so the GPU path is actually exercised
+instead of only its CPU-side units (atlas byte layout, shader-string generation). It creates an EGL
+_surfaceless_ context off the windowed path -- an EGL display built from an EGL device via glutin's
+`api::egl`, made current with no surface -- and renders into an offscreen framebuffer; the windowed
+`GlContext` needs a real window handle and can't run in CI.
+
+The module is `cfg(test, target_os = "linux")`: the EGL device platform is the portable CI-able
+headless path (macOS's CGL pbuffer is deprecated, Windows differs), and render correctness only
+needs asserting on one platform. It asserts two ways, both robust against driver-version pixel
+drift: property checks (a full-block cell is entirely its foreground, a blank cell entirely its
+background, a glyph matches the font's own coverage bits) and pixel-for-pixel parity against the
+`retroglyph-software` CPU rasterizer, which shares the same `retroglyph-window` font.
+
+The render only runs when `RETROGLYPH_REQUIRE_GL` is set; otherwise the tests skip. That keeps the
+ordinary `test`/`coverage` jobs from depending on whatever GL a runner happens to expose (GitHub's
+stock `ubuntu-latest` ships llvmpipe, so an unconditional "run if a context exists" would assert
+against an uncontrolled driver). The dedicated `gl-headless` job (`.github/workflows/ci.yml`) sets
+the flag and forces Mesa's llvmpipe software rasterizer (`LIBGL_ALWAYS_SOFTWARE=1`,
+`GALLIUM_DRIVER=llvmpipe`) after installing the Mesa EGL/GL packages, so rendering runs against one
+known-good software stack; with the flag set, a missing/broken context is a hard failure instead of
+a silent skip. To run them locally, set `RETROGLYPH_REQUIRE_GL=1` on a Linux box with a headless
+GL/EGL stack. The WebGL2/browser side is tracked separately (issue #370).
+
 ## Snapshot tests (insta)
 
 `Headless::format_view()` renders a grid to text (spaces become `·`). Combined with

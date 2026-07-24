@@ -248,6 +248,34 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo check -p retroglyph-gl --target wasm32-unknown-unknown --features default-font
 
+  # Native offscreen render tests for retroglyph-gl (issue #376). The windowed GL context needs a
+  # real window, so it can't run here; the crate's `src/headless.rs` instead creates an EGL
+  # surfaceless context (glutin's EGL-device path), runs the real pipeline into an FBO, and reads
+  # the pixels back to assert on them (property checks + pixel-for-pixel parity with the
+  # retroglyph-software CPU rasterizer). CI has no GPU, so it forces Mesa's llvmpipe software
+  # rasterizer. RETROGLYPH_REQUIRE_GL turns a missing/broken Mesa install into a hard failure here
+  # (elsewhere those tests skip), so this job can't silently pass without actually rendering.
+  # Linux-only by design (the tests are `cfg(target_os = "linux")`); the WebGL2 browser path is
+  # tracked separately in #370.
+  gl-headless:
+    runs-on: ubuntu-latest
+    env:
+      LIBGL_ALWAYS_SOFTWARE: '1'
+      GALLIUM_DRIVER: llvmpipe
+      RETROGLYPH_REQUIRE_GL: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # llvmpipe (software GL) plus the Mesa EGL driver that exposes the surfaceless EGL device the
+      # headless context is built from.
+      - name: Install Mesa (llvmpipe) + EGL
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libegl1 libegl-mesa0 libgl1-mesa-dri libglvnd0
+      - run: cargo test -p retroglyph-gl --features default-font -- headless
+
   test-wasm:
     needs: changes
     if: needs.changes.outputs.wasm == 'true'
@@ -310,6 +338,7 @@ jobs:
       - test
       - test-wasm
       - compile-wasm-gl
+      - gl-headless
       - coverage
     if: ${{ always() }}
     steps:
