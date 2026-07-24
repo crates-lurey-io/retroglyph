@@ -14,8 +14,9 @@
 //!   |  .build()
 //!   v
 //! GlRenderer
-//!   implements retroglyph_core::{Output, Input, Cursor} (= Backend)
 //!   implements retroglyph_window::Presenter (an Output supertrait)
+//!   wrapped by retroglyph_window::WindowBackend to become a full Backend
+//!   (WindowBackend owns the input event queue and the no-op Cursor)
 //!   |
 //!   |  init_surface(window) -> GlContext (glutin native / WebGL2 wasm) + GlResources
 //!   v
@@ -67,23 +68,29 @@ pub use retroglyph_window::font::{self as font, BitmapFont};
 
 use context::GlContext;
 use renderer::{GlResources, Instance};
-use retroglyph_core::backend::{Cursor, Input, Output};
-use retroglyph_core::event::Event;
+use retroglyph_core::backend::Output;
 use retroglyph_core::grid::{Pos, Size};
 use retroglyph_core::tile::Tile;
 use retroglyph_window::palette::{DEFAULT_BG, DEFAULT_FG};
 use retroglyph_window::{CellGeometry, Presenter, WindowHandle};
 use shaders::GlslFlavor;
-use std::collections::VecDeque;
 use std::sync::Arc;
-use std::time::Duration;
 
 // Compile the crate README's code blocks as doctests so the quick start can't silently rot.
 #[cfg(doctest)]
 #[doc = include_str!("../README.md")]
 struct ReadmeDoctests;
 
-/// The live GL renderer: a [`Backend`](retroglyph_core::Backend) and [`Presenter`].
+/// The live GL renderer: a [`Presenter`], wrapped in
+/// [`WindowBackend`](retroglyph_window::WindowBackend) to form a full
+/// [`Backend`](retroglyph_core::Backend) for the windowing loop.
+///
+/// It deliberately does not implement [`Input`](retroglyph_core::backend::Input) or
+/// [`Cursor`](retroglyph_core::backend::Cursor) itself: a GL renderer cannot present without a
+/// live context, so there is no headless-with-input use for a bare `Terminal<GlRenderer>`. In
+/// windowed use `WindowBackend` owns the input queue (with its `Mouse(Moved)` coalescing) and the
+/// no-op cursor, so a duplicate queue here would only ever be dead. See the sub-cell offset note
+/// on [`Presenter`] for the shared rendering contract.
 ///
 /// Build one with [`GlBackendBuilder`]. Before the windowing loop calls
 /// [`init_surface`](Presenter::init_surface) there is no GL context; drawing updates only the
@@ -103,8 +110,6 @@ pub struct GlRenderer {
     instances: Vec<Instance>,
     /// The sub-range of `instances` changed since the last GPU upload (see [`DirtyRange`]).
     dirty: DirtyRange,
-    /// Input events pushed by the windowing loop, drained by [`Input::poll_event`].
-    events: VecDeque<Event>,
     /// The current surface size in physical pixels (set by [`resize_surface`](Presenter::resize_surface)).
     surface_size: (u32, u32),
     /// GL context + resources. `None` until [`init_surface`](Presenter::init_surface).
@@ -135,7 +140,6 @@ impl GlRenderer {
             space_glyph,
             instances,
             dirty: DirtyRange::full(count),
-            events: VecDeque::new(),
             surface_size: geometry.surface_size(cols, rows),
             gpu: None,
         }
@@ -170,12 +174,6 @@ impl GlRenderer {
         let idx = y * cols + x;
         self.instances[idx] = Instance::new(glyph, fg, bg, tile.dx(), tile.dy());
         self.dirty.insert(idx);
-    }
-
-    /// Pushes an input event (called by the windowing loop). Public inherent method so the
-    /// [`Input`] impl can forward to it without ambiguity.
-    pub fn push_event(&mut self, event: Event) {
-        self.events.push_back(event);
     }
 
     /// Builds the GL resources for the current instance array on an already-current context:
@@ -317,22 +315,9 @@ impl Output for GlRenderer {
     }
 }
 
-// ── Input ────────────────────────────────────────────────────────────────────
-
-impl Input for GlRenderer {
-    fn poll_event(&mut self, _timeout: Duration) -> Option<Event> {
-        // Non-blocking: the windowing loop drives frame timing.
-        self.events.pop_front()
-    }
-
-    fn push_event(&mut self, event: Event) {
-        Self::push_event(self, event);
-    }
-}
-
-// ── Cursor (no hardware cursor in windowed mode) ─────────────────────────────
-
-impl Cursor for GlRenderer {}
+// GlRenderer implements neither `Input` nor `Cursor`: `WindowBackend<GlRenderer>` supplies both
+// for windowed use (its input queue coalesces `Mouse(Moved)`; its cursor is a no-op), and a GL
+// renderer has no headless-with-input path that would need its own. See the type-level docs.
 
 // ── Presenter ────────────────────────────────────────────────────────────────
 
