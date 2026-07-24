@@ -94,6 +94,7 @@ use retroglyph_core::grid::{Pos, Size};
 use retroglyph_core::tile::Tile;
 use retroglyph_window::WindowHandle;
 use retroglyph_window::font::BitmapFont as Font;
+use retroglyph_window::palette::{DEFAULT_BG, DEFAULT_FG};
 #[cfg(feature = "tilesets")]
 use sprite_cache::{Sprite, SpriteCache};
 use std::collections::VecDeque;
@@ -1132,10 +1133,8 @@ fn blit_sprite(
     }
 }
 
-/// Default foreground when [`Color::Default`] is used.
-const DEFAULT_FG: u32 = 0x00d4_d4d4;
-/// Default background when [`Color::Default`] is used.
-const DEFAULT_BG: u32 = 0x0000_0000;
+// The canonical `Color::Default` fallbacks live in `retroglyph-window`'s `palette` module so the
+// gl and software backends can't drift; imported above as `(u8, u8, u8)` triples.
 
 /// Determines the background this layer/tile should paint at `idx` in `composite_cell`, if any,
 /// mirroring [`Grid::flatten_into`](retroglyph_core::grid::Grid)'s background-inheritance rule so
@@ -1188,20 +1187,15 @@ fn resolve_bg_fill(
     unreachable!("the loop above always terminates at `below == 0`, which always returns")
 }
 
-/// Resolve a [`Color`] to a packed `0x00RRGGBB` value, substituting
-/// `default_rgb` for [`Color::Default`].
+/// Resolve a [`Color`] to a packed `0x00RRGGBB` value, substituting `default` for
+/// [`Color::Default`].
 ///
 /// Delegates the actual palette resolution to `retroglyph-core`'s [`Color::resolve_rgb`], the
 /// single canonical color-to-RGB path every graphical backend shares (so the CPU rasterizer and
-/// `retroglyph-gl`'s GPU atlas agree on every pixel color); this only unpacks/repacks between
-/// core's `(r, g, b)` triples and this backend's `0x00RRGGBB` `u32` pixel format.
-fn resolve_color(color: Color, default_rgb: u32) -> u32 {
-    #[allow(clippy::cast_possible_truncation)]
-    let default = (
-        (default_rgb >> 16) as u8,
-        (default_rgb >> 8) as u8,
-        default_rgb as u8,
-    );
+/// `retroglyph-gl`'s GPU atlas agree on every pixel color); this only repacks core's `(r, g, b)`
+/// triple into this backend's `0x00RRGGBB` `u32` pixel format. The `default` fallback is a triple
+/// too (from [`retroglyph_window::palette`]), so no unpack step is needed.
+fn resolve_color(color: Color, default: (u8, u8, u8)) -> u32 {
     let (r, g, b) = color.resolve_rgb(default);
     (u32::from(r) << 16) | (u32::from(g) << 8) | u32::from(b)
 }

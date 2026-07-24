@@ -71,6 +71,7 @@ use retroglyph_core::backend::{Cursor, Input, Output};
 use retroglyph_core::event::Event;
 use retroglyph_core::grid::{Pos, Size};
 use retroglyph_core::tile::Tile;
+use retroglyph_window::palette::{DEFAULT_BG, DEFAULT_FG};
 use retroglyph_window::{Presenter, WindowHandle};
 use shaders::GlslFlavor;
 use std::collections::VecDeque;
@@ -81,12 +82,6 @@ use std::time::Duration;
 #[cfg(doctest)]
 #[doc = include_str!("../README.md")]
 struct ReadmeDoctests;
-
-/// Default foreground for `Color::Default`, matching `retroglyph-software` for cross-backend
-/// visual parity.
-const DEFAULT_FG: (u8, u8, u8) = (0xD4, 0xD4, 0xD4);
-/// Default background for `Color::Default`, matching `retroglyph-software`.
-const DEFAULT_BG: (u8, u8, u8) = (0x00, 0x00, 0x00);
 
 /// The live GL renderer: a [`Backend`](retroglyph_core::Backend) and [`Presenter`].
 ///
