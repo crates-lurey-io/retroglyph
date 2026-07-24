@@ -24,7 +24,7 @@ cargo-nextest = { version = "0.9.140", locked = true }
 # `docs-preview-full` in the Justfile).
 # `wasm-bindgen-test-runner` (also in this package) is `wasm-pack test`'s test harness --
 # required by `just test-wasm` below, on top of `wasm-bindgen` itself.
-wasm-bindgen-cli = { version = "0.2.106", bins = ["wasm-bindgen", "wasm-bindgen-test-runner"] }
+wasm-bindgen-cli = { version = "0.2.126", bins = ["wasm-bindgen", "wasm-bindgen-test-runner"] }
 # Drives `just test-wasm` (crates/terminal-wasm's `tests/wasm_ffi.rs`): `wasm-pack test --node`
 # builds that crate for wasm32-unknown-unknown and runs its wasm-bindgen-test suite under Node.js,
 # bypassing the `wasm-server-runner` set as this workspace's `cfg(target_family = "wasm")` cargo
