@@ -19,6 +19,7 @@
 
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use retroglyph_core::backend::Output;
+use std::fmt;
 use std::sync::Arc;
 
 /// A window/display handle pair, as one trait.
@@ -74,6 +75,44 @@ pub trait RecoverableError: core::fmt::Debug + core::fmt::Display {
 // `type SurfaceError = core::convert::Infallible` to satisfy the `RecoverableError` bound, so
 // this impl exists purely for that convenience.
 impl RecoverableError for core::convert::Infallible {}
+
+/// A ready-made, string-backed [`SurfaceError`](Presenter::SurfaceError) for presenters whose
+/// underlying surface library reports failures as opaque strings rather than a structured error
+/// enum.
+///
+/// Several presenter backends (e.g. `retroglyph-gl`'s native/wasm split, or a future softbuffer
+/// backend) need only two buckets -- "surface/context creation failed" (fatal) and "presenting a
+/// frame failed" (potentially recoverable) -- and would otherwise each hand-roll the same `enum {
+/// Init(String), Present(String) }` plus [`RecoverableError`] impl. This type is that common
+/// shape, provided once here so backends can reuse it directly instead of duplicating it.
+#[derive(Debug)]
+pub enum GenericSurfaceError {
+    /// Creating the surface or its underlying context failed. Treated as fatal (not
+    /// recoverable): a presenter cannot proceed without a surface, and retrying the same
+    /// creation path is very unlikely to succeed.
+    Init(String),
+    /// Presenting a frame failed. Treated as potentially recoverable so the event loop's
+    /// consecutive-failure heuristic can retry before giving up.
+    Present(String),
+}
+
+impl fmt::Display for GenericSurfaceError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Init(msg) => write!(f, "surface init: {msg}"),
+            Self::Present(msg) => write!(f, "surface present: {msg}"),
+        }
+    }
+}
+
+impl std::error::Error for GenericSurfaceError {}
+
+impl RecoverableError for GenericSurfaceError {
+    fn is_recoverable(&self) -> bool {
+        // Init failures are fatal (nothing to retry into); present failures may be transient.
+        matches!(self, Self::Present(_))
+    }
+}
 
 /// A renderer that rasterizes grid content and presents it to a window surface.
 ///
@@ -173,4 +212,30 @@ pub trait Presenter: Output {
     /// are `u16` but pixel arithmetic uses `u32` (winit `PhysicalSize`).
     #[must_use]
     fn cell_size(&self) -> (u32, u32);
+}
+
+#[cfg(test)]
+mod generic_surface_error_tests {
+    use super::{GenericSurfaceError, RecoverableError};
+
+    #[test]
+    fn init_is_not_recoverable() {
+        let err = GenericSurfaceError::Init("boom".to_string());
+        assert!(!err.is_recoverable());
+    }
+
+    #[test]
+    fn present_is_recoverable() {
+        let err = GenericSurfaceError::Present("boom".to_string());
+        assert!(err.is_recoverable());
+    }
+
+    #[test]
+    fn display_includes_message() {
+        let init = GenericSurfaceError::Init("init failed".to_string());
+        assert!(init.to_string().contains("init failed"));
+
+        let present = GenericSurfaceError::Present("present failed".to_string());
+        assert!(present.to_string().contains("present failed"));
+    }
 }
