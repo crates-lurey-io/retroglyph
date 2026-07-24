@@ -36,10 +36,10 @@ module_name_repetitions = "allow"
 all-features = true
 
 [dependencies]
-retroglyph-core = { path = "../core", version = "0.3.0", default-features = false, features = ["std"] }
+retroglyph-core = { path = "../core", version = "0.3.1", default-features = false, features = ["std"] }
 # The glyph source (BitmapFont + unscii16) lives in retroglyph-window's winit-free `font` module,
 # which this crate already depends on for `Presenter`. `default-font` forwards to window's feature.
-retroglyph-window = { path = "../window", version = "0.3.0", default-features = false }
+retroglyph-window = { path = "../window", version = "0.3.1", default-features = false }
 glow = "0.16"
 log = "0.4"
 raw-window-handle = "0.6"
@@ -54,7 +54,7 @@ glutin = "0.32"
 # rasterizer (cross-backend parity). `retroglyph-software` is that reference rasterizer; both
 # backends share `retroglyph-window`'s font, so the comparison is a real pixel-identity check.
 [target.'cfg(target_os = "linux")'.dev-dependencies]
-retroglyph-software = { path = "../software", version = "0.3.1", default-features = false, features = [
+retroglyph-software = { path = "../software", version = "0.4.0", default-features = false, features = [
   "default-font",
 ] }
 

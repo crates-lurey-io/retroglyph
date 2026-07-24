@@ -7,6 +7,212 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 
+## [0.4.0+retroglyph-software](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-software-v0.3.1...retroglyph-software-v0.4.0) - 2026-07-24
+
+### Features
+
+- [7a1a023](https://github.com/crates-lurey-io/retroglyph/commit/7a1a023848ce405468a31490a4c8f6db2d017617)
+  _(gl)_ Add GPU rendering backend (OpenGL 3.3 native, WebGL2 wasm) by `@matanlurey` in
+  [#377](https://github.com/crates-lurey-io/retroglyph/pull/377)
+
+  > - feat(font): extract BitmapFont and unscii16 into retroglyph-font crate
+  >
+  > Move the 1-bit BitmapFont, FallbackFontChain, CP437 mapping, and embedded unscii16 default font
+  > out of retroglyph-software into a new no_std, zero-dep retroglyph-font crate, so retroglyph-gl
+  > can share the exact same glyph source and render pixel-identical text.
+  >
+  > Breaking:the retroglyph_software::bitmap_font module path is removed. BitmapFont is still
+  > re-exported from the retroglyph_software crate root for ergonomics (the builder's font() takes
+  > one); FallbackFontChain, unscii16, etc. now live at
+  >
+  > retroglyph_font::. default-font forwards to the new crate's feature.
+  >
+  > Also add Color::resolve_rgb to retroglyph-core as the canonical color-to-RGB resolution
+  > (ANSI/indexed/rgb, with a caller-supplied default for Color::Default) and refactor software's
+  > private resolve_color to delegate to it, so every graphical backend resolves colors identically.
+  >
+  > - feat(gl): add retroglyph-gl GPU backend (OpenGL 3.3 + WebGL2 via glow)
+  >
+  > New crate implementing retroglyph_window::Presenter with a single instanced draw call per frame
+  > (the beamterm/alacritty/xterm.js model): a unit quad instanced cols\*rows times, each instance
+  > carrying a glyph id + fg/bg color, sampling an R8 glyph-atlas TEXTURE_2D_ARRAY and blending
+  > mix(bg, fg, coverage).
+  >
+  > One glow codebase drives both native OpenGL 3.3 core (context created from the window's raw
+  > handles via glutin, no window-crate changes) and browser WebGL2 (context from the winit canvas),
+  > swapped by a context_native/context_wasm module split mirroring retroglyph-software's surface
+  > split. Layers are flattened by the core Terminal (composites_layers=false); the GPU redraws
+  > every cell each frame so no full-frame request is needed. v1 renders a fixed CP437 bitmap atlas;
+  > sub-cell offsets, sprites, dynamic atlases, and GPU compositing are tracked as follow-up issues
+  > (#365-375).
+  >
+  > - feat(examples): wire retroglyph-gl backend into the example runner
+  >
+  > Add a gl feature and run_gl (native OpenGL/WebGL2), dispatched by launch::<E>() below software
+  > in the backend priority chain. GL is a windowed Presenter like software, so it reuses the same
+  > winit run_app driver.
+  >
+  > - ci(workspace): add gl/font to CI, codecov, and labels
+  >
+  > Add a compile-wasm-gl job that build-checks retroglyph-gl for wasm32/WebGL2 (a live headless run
+  > is deferred, tracked in #370), wire it into required. Add gl/font Codecov flags + components,
+  > test-results uploads, and the split-junit crate list. Add c:gl/c:font labels + labeler globs and
+  > the gl/font PR-title scopes.
+  >
+  > - chore(workspace): prettier-ignore agent scratch dirs (.pi, .pi-subagents)
+  >
+  > Mirror the existing .matan/ ignore so agent tooling scratch files (which are git-ignored
+  > already) don't fail 'just prettier' / 'just check' in agent sessions.
+  >
+  > - docs(workspace): record retroglyph-gl and retroglyph-font
+  >
+  > Add both crates to the README crate table and llms.txt, note the shipped GPU backend in ROADMAP
+  > (with follow-up issue links) and mark post-processing shaders enabled by it, update the
+  > Presenter doc table to list GlRenderer as real (glutin native / WebGL2 wasm), and add gl/font to
+  > AGENTS.md commit scopes.
+  >
+  > - refactor(workspace): fold retroglyph-font into retroglyph-window, drop the separate crate
+  >
+  > Both font consumers (retroglyph-software, retroglyph-gl) already depend on retroglyph-window
+  > (with default-features=false, so no winit), so the font's glyph data lives there as a winit-free
+  > module instead of a standalone crate. retroglyph-font is removed;
+  > BitmapFont/FallbackFontChain/unscii16 now live at
+  >
+  > retroglyph_window::font, gated by retroglyph-window's default-font feature.
+
+### Bug Fixes
+
+- [d7e6673](https://github.com/crates-lurey-io/retroglyph/commit/d7e6673d1930559f6b787462a93a9dc43d4f7eea)
+  _(software)_ Render sub-cell offset spill uniformly in all directions by `@matanlurey` in
+  [#380](https://github.com/crates-lurey-io/retroglyph/pull/380)
+
+  > - feat(gl): honor sub-cell dx/dy pixel offsets (spill past cell edge)
+  >
+  > Carry each tile's dx/dy sub-cell offset as a per-instance vertex attribute and render in two
+  > instanced passes: opaque cell backgrounds first, then the glyphs offset by (dx, dy) and
+  > alpha-blended on top. The offset shifts the glyph quad's position, so an offset glyph spills
+  > past its cell edge into neighbors, matching retroglyph-software. Closes #365.
+  >
+  > - fix(software): render sub-cell offset spill uniformly in all directions
+  >
+  > The full-repaint path composited each cell as background-then-glyph in a single interleaved
+  > pass, so a glyph offset past its right/bottom edge was overwritten by the next cell's background
+  > fill (only left/up spill survived). Split the repaint into two sub-passes per layer -- all
+  > backgrounds, then all glyphs -- so an offset glyph spills over the backgrounds already laid
+  > down, uniformly in every direction. This matches the two-pass retroglyph-gl backend for
+  > cross-backend parity.
+
+### Refactor
+
+- [e1824eb](https://github.com/crates-lurey-io/retroglyph/commit/e1824eb8237a8bb724f6c4d28139865488b2cf14)
+  _(window)_ Share winit <canvas> lookup for the wasm backends by `@matanlurey` in
+  [#398](https://github.com/crates-lurey-io/retroglyph/pull/398)
+
+  > Both graphical backends duplicated the identical wasm DOM lookup of winit's single <canvas>
+  > (winit reports RawWindowHandle::WebCanvas, whose canvas can only be read via a forbidden unsafe
+  > cast, so both find it through the DOM). Extract it into retroglyph_window::web::winit_canvas
+  > (wasm-only), returning the failure as a String so each backend wraps it in its own surface-error
+  > variant (gl: Init, software: Canvas). Removes the duplicated lookup from both call sites.
+
+- [9a9f225](https://github.com/crates-lurey-io/retroglyph/commit/9a9f2258a8edc8bb240a86b73cf18a2942e10ea7)
+  _(window)_ Extract CellGeometry value type for cell/surface size by `@matanlurey` in
+  [#394](https://github.com/crates-lurey-io/retroglyph/pull/394)
+
+  > The 'physical pixels, glyph x scale' cell-size contract (and the cols\*cell_w surface product)
+  > was re-derived independently in gl and software, in different integer types, with no single code
+  > embodiment -- software even recomputed it on every resize.
+  >
+  > Add retroglyph_window::CellGeometry { glyph_w, glyph_h, scale } with const cell_size() and
+  > surface_size(cols, rows). gl and software each store one and delegate Presenter::cell_size to
+  > it; gl drops its cols_px helper, software drops the resize-time cell-size recompute (the cell
+  > size is constant across a grid resize). One tested source of the contract.
+  >
+  > Verified:window geometry unit tests, software's pixel snapshot test, and the gl<->software
+  > headless render parity test all pass (rendering unchanged).
+
+- [052fe5c](https://github.com/crates-lurey-io/retroglyph/commit/052fe5cf9f6e4c5cd08e971c14e07f2a05ded507)
+  _(window)_ Add BitmapFont::glyph_pixels, drop gl's hardcoded 7 by `@matanlurey` in
+  [#393](https://github.com/crates-lurey-io/retroglyph/pull/393)
+
+  > Both backends decoded the 1-bit BitmapFont MSB-first with subtly different code: gl's atlas
+  > builder hardcoded 'row_bits >> (7 - x)' (the 7 assumes an 8px-wide glyph), while software's blit
+  > used the width-parameterized 'src_w - 1 - src_x'. When wider-than-8px glyphs land gl's 7 becomes
+  > a silent bug.
+  >
+  > Add BitmapFont::glyph_pixels(index), an iterator over set (x, y) pixels that is now the single
+  > place the MSB-first bit order is decoded. gl's AtlasData::build and software's blit_glyph_mask
+  > both source their set pixels from it (software keeps its fast/slow scaling+clipping paths, just
+  > swapping the bit source), so the two backends can't disagree and #164 has one seam to change.
+  >
+  > Verified:software's pixel snapshot test and the gl<->software headless render parity test both
+  > still pass (pixel-identical), plus new font unit tests pinning the MSB-first,
+  > width-parameterized decode.
+
+- [abdae9f](https://github.com/crates-lurey-io/retroglyph/commit/abdae9f35327e8d1952de439edf45f76d1ebbba3)
+  _(window)_ Hoist shared DEFAULT_FG/DEFAULT_BG palette out of gl + software by `@matanlurey` in
+  [#392](https://github.com/crates-lurey-io/retroglyph/pull/392)
+
+  > Both graphical backends hardcoded the same Color::Default fallback colors in different
+  > representations (gl as (u8,u8,u8), software as 0x00RRGGBB u32), kept in sync only by a
+  > hand-written "matching retroglyph-software" comment that could silently drift.
+  >
+  > Add a retroglyph_window::palette module with the canonical pair as (u8,u8,u8) consts. gl imports
+  > them directly; software seeds its u32 from the triple, which also drops resolve_color's unpack
+  > step (it now takes the triple). Color resolution itself was already shared via core's
+  > Color::resolve_rgb; only the magic default values were duplicated.
+
+### Documentation
+
+- [ecd4dd5](https://github.com/crates-lurey-io/retroglyph/commit/ecd4dd5b1304c4f56b45ff54066f343d04bd4f8b)
+  _(window)_ Document the sub-cell offset/spill contract in one place by `@matanlurey` in
+  [#395](https://github.com/crates-lurey-io/retroglyph/pull/395)
+
+  > The two-pass 'lay every background first, then every glyph, so an offset glyph spills over the
+  > neighbor's already-painted background uniformly in all four directions' rule was a cross-backend
+  > behavioral contract kept in sync only by mirrored gl/software comments that referenced each
+  > other.
+  >
+  > Write it once, authoritatively, as a 'Sub-cell offsets and spill' section on the Presenter trait
+  > (dx/dy units and sign, full-unshifted background fill, uniform four-direction spill, the
+  > two-pass mechanism). gl's renderer and software's draw_layers now cite that single source
+  > instead of each other. Docs-only.
+
+- [c1ffba1](https://github.com/crates-lurey-io/retroglyph/commit/c1ffba1341271c8543021d10fb6e30f53612c809)
+  _(workspace)_ Refactor doc comments across all crates by `@matanlurey` in
+  [#363](https://github.com/crates-lurey-io/retroglyph/pull/363)
+
+  > - docs(software): rewrap module docs and fix broken doctest examples
+  >
+  > Rewrap module/doc-comment prose to the ~100-col budget instead of ~80, and fix
+  > run_headless()/draw_layers() doctest examples in config.rs that no longer matched the current
+  > fallible signatures.
+  >
+  > - docs(terminal): rewrap module and item docs to the 100-col budget
+  >
+  > No content changes; re-wraps existing crate-level and item doc comments that were hand-wrapped
+  > near ~80 cols instead of rustfmt's 100-col default.
+  >
+  > - docs(terminal-wasm): clean up wasm-bindgen export doc comments
+  >
+  > Rewrap prose to ~100 cols and use proper intra-doc links for Event::FocusGained/FocusLost
+  > instead of unresolvable bare paths.
+  >
+  > - docs(widgets): add # Examples sections to widget doc comments
+  >
+  > Every widget's main struct now has a runnable rustdoc example (construction, builder chaining,
+  > and rendering via Headless/Terminal) except Button, interact, Shortcuts, and layout::split\_\*,
+  > which already had one. No logic changes; verified by cargo test --doc.
+  >
+  > - docs(window): rewrap doc comments and fix a stale internal-doc citation
+  >
+  > Rewrap module/item doc prose to the ~100-col budget across backend.rs, presenter.rs, lib.rs, and
+  > the winit submodules. clipboard.rs also drops a citation of the crate README/PR description for
+  > SystemClipboard's lack of automated coverage, per STYLE_GUIDE's rule against pointing published
+  > docs at internal-only references; the rationale is restated inline instead.
+
+**Full Changelog**:
+https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-software-v0.3.1...retroglyph-software-v0.4.0
+
 ## [0.3.1+retroglyph-software](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-software-v0.3.0...retroglyph-software-v0.3.1) - 2026-07-23
 
 ### Features

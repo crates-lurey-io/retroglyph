@@ -1,6 +1,6 @@
 [package]
 name = "retroglyph-window"
-version = "0.3.0"
+version = "0.3.1"
 description = "Shared winit windowing layer for retroglyph's windowed backends"
 readme = "README.md"
 edition.workspace = true
@@ -18,7 +18,7 @@ workspace = true
 all-features = true
 
 [dependencies]
-retroglyph-core = { path = "../core", version = "0.3.0", default-features = false, features = ["std"] }
+retroglyph-core = { path = "../core", version = "0.3.1", default-features = false, features = ["std"] }
 raw-window-handle = "0.6"
 winit = { version = "0.30", optional = true }
 log = { version = "0.4", optional = true }

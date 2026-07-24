@@ -7,6 +7,82 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 
+## [0.3.1+retroglyph-core](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.3.0...retroglyph-core-v0.3.1) - 2026-07-24
+
+### Features
+
+- [7a1a023](https://github.com/crates-lurey-io/retroglyph/commit/7a1a023848ce405468a31490a4c8f6db2d017617)
+  _(gl)_ Add GPU rendering backend (OpenGL 3.3 native, WebGL2 wasm) by `@matanlurey` in
+  [#377](https://github.com/crates-lurey-io/retroglyph/pull/377)
+
+  > - feat(font): extract BitmapFont and unscii16 into retroglyph-font crate
+  >
+  > Move the 1-bit BitmapFont, FallbackFontChain, CP437 mapping, and embedded unscii16 default font
+  > out of retroglyph-software into a new no_std, zero-dep retroglyph-font crate, so retroglyph-gl
+  > can share the exact same glyph source and render pixel-identical text.
+  >
+  > Breaking:the retroglyph_software::bitmap_font module path is removed. BitmapFont is still
+  > re-exported from the retroglyph_software crate root for ergonomics (the builder's font() takes
+  > one); FallbackFontChain, unscii16, etc. now live at
+  >
+  > retroglyph_font::. default-font forwards to the new crate's feature.
+  >
+  > Also add Color::resolve_rgb to retroglyph-core as the canonical color-to-RGB resolution
+  > (ANSI/indexed/rgb, with a caller-supplied default for Color::Default) and refactor software's
+  > private resolve_color to delegate to it, so every graphical backend resolves colors identically.
+  >
+  > - feat(gl): add retroglyph-gl GPU backend (OpenGL 3.3 + WebGL2 via glow)
+  >
+  > New crate implementing retroglyph_window::Presenter with a single instanced draw call per frame
+  > (the beamterm/alacritty/xterm.js model): a unit quad instanced cols\*rows times, each instance
+  > carrying a glyph id + fg/bg color, sampling an R8 glyph-atlas TEXTURE_2D_ARRAY and blending
+  > mix(bg, fg, coverage).
+  >
+  > One glow codebase drives both native OpenGL 3.3 core (context created from the window's raw
+  > handles via glutin, no window-crate changes) and browser WebGL2 (context from the winit canvas),
+  > swapped by a context_native/context_wasm module split mirroring retroglyph-software's surface
+  > split. Layers are flattened by the core Terminal (composites_layers=false); the GPU redraws
+  > every cell each frame so no full-frame request is needed. v1 renders a fixed CP437 bitmap atlas;
+  > sub-cell offsets, sprites, dynamic atlases, and GPU compositing are tracked as follow-up issues
+  > (#365-375).
+  >
+  > - feat(examples): wire retroglyph-gl backend into the example runner
+  >
+  > Add a gl feature and run_gl (native OpenGL/WebGL2), dispatched by launch::<E>() below software
+  > in the backend priority chain. GL is a windowed Presenter like software, so it reuses the same
+  > winit run_app driver.
+  >
+  > - ci(workspace): add gl/font to CI, codecov, and labels
+  >
+  > Add a compile-wasm-gl job that build-checks retroglyph-gl for wasm32/WebGL2 (a live headless run
+  > is deferred, tracked in #370), wire it into required. Add gl/font Codecov flags + components,
+  > test-results uploads, and the split-junit crate list. Add c:gl/c:font labels + labeler globs and
+  > the gl/font PR-title scopes.
+  >
+  > - chore(workspace): prettier-ignore agent scratch dirs (.pi, .pi-subagents)
+  >
+  > Mirror the existing .matan/ ignore so agent tooling scratch files (which are git-ignored
+  > already) don't fail 'just prettier' / 'just check' in agent sessions.
+  >
+  > - docs(workspace): record retroglyph-gl and retroglyph-font
+  >
+  > Add both crates to the README crate table and llms.txt, note the shipped GPU backend in ROADMAP
+  > (with follow-up issue links) and mark post-processing shaders enabled by it, update the
+  > Presenter doc table to list GlRenderer as real (glutin native / WebGL2 wasm), and add gl/font to
+  > AGENTS.md commit scopes.
+  >
+  > - refactor(workspace): fold retroglyph-font into retroglyph-window, drop the separate crate
+  >
+  > Both font consumers (retroglyph-software, retroglyph-gl) already depend on retroglyph-window
+  > (with default-features=false, so no winit), so the font's glyph data lives there as a winit-free
+  > module instead of a standalone crate. retroglyph-font is removed;
+  > BitmapFont/FallbackFontChain/unscii16 now live at
+  >
+  > retroglyph_window::font, gated by retroglyph-window's default-font feature.
+
+**Full Changelog**:
+https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.3.0...retroglyph-core-v0.3.1
+
 ## [0.3.0+retroglyph-core](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.2.1...retroglyph-core-v0.3.0) - 2026-07-23
 
 ### Bug Fixes

@@ -7,6 +7,46 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 
+## [0.1.4+retroglyph-terminal](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-v0.1.3...retroglyph-terminal-v0.1.4) - 2026-07-24
+
+### Documentation
+
+- [c1ffba1](https://github.com/crates-lurey-io/retroglyph/commit/c1ffba1341271c8543021d10fb6e30f53612c809)
+  _(workspace)_ Refactor doc comments across all crates by `@matanlurey` in
+  [#363](https://github.com/crates-lurey-io/retroglyph/pull/363)
+
+  > - docs(software): rewrap module docs and fix broken doctest examples
+  >
+  > Rewrap module/doc-comment prose to the ~100-col budget instead of ~80, and fix
+  > run_headless()/draw_layers() doctest examples in config.rs that no longer matched the current
+  > fallible signatures.
+  >
+  > - docs(terminal): rewrap module and item docs to the 100-col budget
+  >
+  > No content changes; re-wraps existing crate-level and item doc comments that were hand-wrapped
+  > near ~80 cols instead of rustfmt's 100-col default.
+  >
+  > - docs(terminal-wasm): clean up wasm-bindgen export doc comments
+  >
+  > Rewrap prose to ~100 cols and use proper intra-doc links for Event::FocusGained/FocusLost
+  > instead of unresolvable bare paths.
+  >
+  > - docs(widgets): add # Examples sections to widget doc comments
+  >
+  > Every widget's main struct now has a runnable rustdoc example (construction, builder chaining,
+  > and rendering via Headless/Terminal) except Button, interact, Shortcuts, and layout::split\_\*,
+  > which already had one. No logic changes; verified by cargo test --doc.
+  >
+  > - docs(window): rewrap doc comments and fix a stale internal-doc citation
+  >
+  > Rewrap module/item doc prose to the ~100-col budget across backend.rs, presenter.rs, lib.rs, and
+  > the winit submodules. clipboard.rs also drops a citation of the crate README/PR description for
+  > SystemClipboard's lack of automated coverage, per STYLE_GUIDE's rule against pointing published
+  > docs at internal-only references; the rationale is restated inline instead.
+
+**Full Changelog**:
+https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-v0.1.3...retroglyph-terminal-v0.1.4
+
 ## [0.1.3+retroglyph-terminal](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-v0.1.2...retroglyph-terminal-v0.1.3) - 2026-07-23
 
 ### Bug Fixes

@@ -1,6 +1,6 @@
 [package]
 name = "retroglyph-terminal-wasm"
-version = "0.1.3"
+version = "0.1.4"
 description = "WASM/browser terminal backend for retroglyph, driven by pushed events and pulled ANSI output"
 readme = "README.md"
 edition.workspace = true
@@ -18,8 +18,8 @@ workspace = true
 all-features = true
 
 [dependencies]
-retroglyph-core = { path = "../core", version = "0.3.0", default-features = false, features = ["std"] }
-retroglyph-terminal = { path = "../terminal", version = "0.1.3" }
+retroglyph-core = { path = "../core", version = "0.3.1", default-features = false, features = ["std"] }
+retroglyph-terminal = { path = "../terminal", version = "0.1.4" }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 # Fuzzes decode_key_event/decode_key_modifiers over arbitrary (code, mods) pairs -- see the
