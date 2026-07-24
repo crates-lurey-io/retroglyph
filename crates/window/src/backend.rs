@@ -30,6 +30,14 @@ use std::time::Duration;
 ///                                                 P: Presenter (output)
 /// ```
 ///
+/// Because `WindowBackend` owns input, a [`Presenter`] should **not** implement [`Input`] or
+/// [`Cursor`] itself for windowed use: those impls would be dead (the event loop pushes to
+/// *this* queue, not the presenter's) and would silently miss the `Mouse(Moved)` coalescing that
+/// [`push_event`](WindowBackend::push_event) applies. A presenter that also wants a direct
+/// headless `Terminal<Self>` input path (as `retroglyph-software` does for pixel tests) may still
+/// implement `Input` for that path, accepting that a bare queue does not coalesce; a presenter
+/// with no such path (as `retroglyph-gl`) implements only `Presenter`.
+///
 /// With the `winit` feature enabled, `winit::run_windowed` and `winit::run_app` own the event
 /// loop, call `push_event` as winit events are translated, and call [`Presenter::present`] once
 /// per frame; callers never touch `WindowBackend` directly. With `winit` disabled,
