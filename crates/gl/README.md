@@ -41,8 +41,11 @@ run_windowed(config, renderer, move |term| {
 ## Status
 
 v1 renders a fixed CP437 bitmap-font atlas with per-cell foreground/background color. Layers are
-flattened by the core `Terminal` before they reach this backend. Sub-cell offsets (`dx`/`dy`),
-sprites/tilesets, dynamic Unicode atlases, and GPU-side layer compositing are tracked as follow-ups.
+flattened by the core `Terminal` before they reach this backend. Sub-cell offsets (`dx`/`dy`) shift
+the glyph by whole/fractional pixels via a two-pass draw (opaque backgrounds first, then offset
+glyphs alpha-blended on top), so an offset glyph spills past its cell edge into neighbors, matching
+`retroglyph-software`. Sprites/tilesets, dynamic Unicode atlases, and GPU-side layer compositing are
+tracked as follow-ups.
 
 ## License
 

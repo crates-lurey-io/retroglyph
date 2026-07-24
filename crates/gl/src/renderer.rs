@@ -16,10 +16,11 @@ use crate::error::SurfaceError;
 use crate::shaders::{GlslFlavor, Shader, source};
 use glow::HasContext as _;
 
-/// Per-cell instance data, tightly packed to 12 bytes and uploaded straight to the GPU.
+/// Per-cell instance data, tightly packed to 16 bytes and uploaded straight to the GPU.
 ///
 /// `#[repr(C)]` with explicit padding so the field offsets match the vertex-attribute pointers in
-/// [`GlResources::configure_instance_attribs`]: `glyph` at 0, `fg` at 4, `bg` at 8.
+/// [`GlResources::configure_instance_attribs`]: `glyph` at 0, `fg` at 4, `bg` at 8, `dx`/`dy` at
+/// 12/14.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub(crate) struct Instance {
@@ -32,11 +33,18 @@ pub(crate) struct Instance {
     /// Background RGB (uploaded as normalized `u8`).
     pub bg: [u8; 3],
     _bg_pad: u8,
+    /// Sub-cell pixel offset from the cell's left edge, in unscaled font pixels (from
+    /// [`Tile::dx`](retroglyph_core::tile::Tile::dx)). Shifts the glyph horizontally; negative is
+    /// left.
+    pub dx: i16,
+    /// Sub-cell pixel offset from the cell's top edge, in unscaled font pixels (from
+    /// [`Tile::dy`](retroglyph_core::tile::Tile::dy)). Shifts the glyph vertically; negative is up.
+    pub dy: i16,
 }
 
 impl Instance {
-    /// A cell with the given glyph and colors.
-    pub(crate) const fn new(glyph: u16, fg: [u8; 3], bg: [u8; 3]) -> Self {
+    /// A cell with the given glyph, colors, and sub-cell pixel offset.
+    pub(crate) const fn new(glyph: u16, fg: [u8; 3], bg: [u8; 3], dx: i16, dy: i16) -> Self {
         Self {
             glyph,
             _pad: 0,
@@ -44,6 +52,8 @@ impl Instance {
             _fg_pad: 0,
             bg,
             _bg_pad: 0,
+            dx,
+            dy,
         }
     }
 }
@@ -72,9 +82,9 @@ const QUAD_CORNERS: [f32; 8] = [
 const QUAD_INDICES: [u16; 6] = [0, 1, 2, 2, 1, 3];
 
 /// Byte stride of one [`Instance`] in the instance buffer, as GL wants it (`i32`).
-const INSTANCE_STRIDE: i32 = 12;
+const INSTANCE_STRIDE: i32 = 16;
 /// The same stride as a `usize`, for buffer-size arithmetic.
-const INSTANCE_BYTES: usize = 12;
+const INSTANCE_BYTES: usize = 16;
 
 /// GL objects for the instanced cell renderer.
 pub(crate) struct GlResources {
@@ -88,6 +98,8 @@ pub(crate) struct GlResources {
     u_cell: Option<glow::UniformLocation>,
     u_cols: Option<glow::UniformLocation>,
     u_atlas: Option<glow::UniformLocation>,
+    u_glyph: Option<glow::UniformLocation>,
+    u_draw_glyph: Option<glow::UniformLocation>,
     /// Number of instances the instance VBO is currently sized for (`cols * rows`).
     capacity: usize,
 }
@@ -159,6 +171,8 @@ impl GlResources {
             let u_cell = gl.get_uniform_location(program, "u_cell");
             let u_cols = gl.get_uniform_location(program, "u_cols");
             let u_atlas = gl.get_uniform_location(program, "u_atlas");
+            let u_glyph = gl.get_uniform_location(program, "u_glyph");
+            let u_draw_glyph = gl.get_uniform_location(program, "u_draw_glyph");
 
             Ok(Self {
                 program,
@@ -171,6 +185,8 @@ impl GlResources {
                 u_cell,
                 u_cols,
                 u_atlas,
+                u_glyph,
+                u_draw_glyph,
                 capacity: cell_count,
             })
         }
@@ -192,6 +208,11 @@ impl GlResources {
             gl.vertex_attrib_pointer_f32(3, 3, glow::UNSIGNED_BYTE, true, INSTANCE_STRIDE, 8);
             gl.enable_vertex_attrib_array(3);
             gl.vertex_attrib_divisor(3, 1);
+            // offset: two signed shorts (dx, dy) in unscaled font pixels, read as an integer
+            // attribute (`ivec2` in the shader).
+            gl.vertex_attrib_pointer_i32(4, 2, glow::SHORT, INSTANCE_STRIDE, 12);
+            gl.enable_vertex_attrib_array(4);
+            gl.vertex_attrib_divisor(4, 1);
         }
     }
 
@@ -235,6 +256,16 @@ impl GlResources {
         }
     }
 
+    /// Sets the glyph size (in unscaled font pixels) used to convert a cell's `dx`/`dy` pixel
+    /// offset into a texture-space shift in the vertex shader. Constant for the renderer's
+    /// lifetime, so this is called once at init rather than per frame.
+    pub(crate) fn set_glyph_size(&self, gl: &glow::Context, glyph_w: f32, glyph_h: f32) {
+        unsafe {
+            gl.use_program(Some(self.program));
+            gl.uniform_2_f32(self.u_glyph.as_ref(), glyph_w, glyph_h);
+        }
+    }
+
     /// Sets the GL viewport and the projection uniforms. Call once per frame before
     /// [`draw`](Self::draw) so the surface size, cell size, and column count always agree with the
     /// instance count, regardless of the order surface- and grid-resize events arrive in.
@@ -257,9 +288,16 @@ impl GlResources {
         }
     }
 
-    /// Clears the framebuffer and draws every cell in one instanced call.
+    /// Clears the framebuffer and draws every cell in two instanced passes.
+    ///
+    /// Pass 1 fills each cell's opaque background at its unshifted origin. Pass 2 draws the glyphs
+    /// with their sub-cell `dx`/`dy` offset applied to the quad *position* and coverage as alpha,
+    /// alpha-blended over the backgrounds. Splitting the passes is what lets an offset glyph spill
+    /// past its cell edge into neighbors (matching `retroglyph-software`): a single interleaved
+    /// pass would let a later cell's background overwrite an earlier neighbor's spill.
     pub(crate) fn draw(&self, gl: &glow::Context, cell_count: i32) {
         unsafe {
+            // Clear covers any surface area outside the grid; pass 1 paints the per-cell colors.
             gl.clear_color(0.0, 0.0, 0.0, 1.0);
             gl.clear(glow::COLOR_BUFFER_BIT);
 
@@ -267,9 +305,27 @@ impl GlResources {
             gl.active_texture(glow::TEXTURE0);
             gl.bind_texture(glow::TEXTURE_2D_ARRAY, Some(self.atlas));
             gl.uniform_1_i32(self.u_atlas.as_ref(), 0);
-
             gl.bind_vertex_array(Some(self.vao));
+
+            // Pass 1: opaque backgrounds, no offset, no blending.
+            gl.disable(glow::BLEND);
+            gl.uniform_1_i32(self.u_draw_glyph.as_ref(), 0);
             gl.draw_elements_instanced(glow::TRIANGLES, 6, glow::UNSIGNED_SHORT, 0, cell_count);
+
+            // Pass 2: offset glyphs, coverage as alpha, blended over the backgrounds. Keep the
+            // framebuffer's alpha channel solid (`ONE`/`ZERO`) so a composited surface stays
+            // opaque regardless of glyph coverage.
+            gl.enable(glow::BLEND);
+            gl.blend_func_separate(
+                glow::SRC_ALPHA,
+                glow::ONE_MINUS_SRC_ALPHA,
+                glow::ONE,
+                glow::ZERO,
+            );
+            gl.uniform_1_i32(self.u_draw_glyph.as_ref(), 1);
+            gl.draw_elements_instanced(glow::TRIANGLES, 6, glow::UNSIGNED_SHORT, 0, cell_count);
+            gl.disable(glow::BLEND);
+
             gl.bind_vertex_array(None);
         }
     }
@@ -399,4 +455,23 @@ const fn bytemuck_u16(data: &[u16]) -> &[u8] {
     // SAFETY: `u16` has no invalid bit patterns and no padding; the byte view covers exactly the
     // slice's bytes.
     unsafe { core::slice::from_raw_parts(data.as_ptr().cast::<u8>(), size_of_val(data)) }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{INSTANCE_BYTES, INSTANCE_STRIDE, Instance};
+    use core::mem::offset_of;
+
+    #[test]
+    fn instance_layout_matches_vertex_attrib_offsets() {
+        // The `configure_instance_attribs` pointer offsets (glyph@0, fg@4, bg@8, offset@12) and
+        // the stride constants must match the actual `#[repr(C)]` layout, or the GPU reads garbage.
+        assert_eq!(size_of::<Instance>(), INSTANCE_BYTES);
+        assert_eq!(INSTANCE_STRIDE, i32::try_from(INSTANCE_BYTES).unwrap());
+        assert_eq!(offset_of!(Instance, glyph), 0);
+        assert_eq!(offset_of!(Instance, fg), 4);
+        assert_eq!(offset_of!(Instance, bg), 8);
+        assert_eq!(offset_of!(Instance, dx), 12);
+        assert_eq!(offset_of!(Instance, dy), 14);
+    }
 }

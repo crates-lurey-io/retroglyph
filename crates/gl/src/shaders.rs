@@ -32,14 +32,17 @@ pub(crate) enum GlslFlavor {
 
 /// Vertex shader body (no `#version` line -- that is prepended by [`source`]).
 const VERTEX_BODY: &str = r"
-layout(location = 0) in vec2 a_corner; // unit-quad corner in [0,1], also the in-cell glyph UV
-layout(location = 1) in uint a_glyph;  // atlas layer (glyph id), per instance
-layout(location = 2) in vec3 a_fg;     // foreground RGB (normalized u8), per instance
-layout(location = 3) in vec3 a_bg;     // background RGB (normalized u8), per instance
+layout(location = 0) in vec2  a_corner; // unit-quad corner in [0,1], also the in-cell glyph UV
+layout(location = 1) in uint  a_glyph;  // atlas layer (glyph id), per instance
+layout(location = 2) in vec3  a_fg;     // foreground RGB (normalized u8), per instance
+layout(location = 3) in vec3  a_bg;     // background RGB (normalized u8), per instance
+layout(location = 4) in ivec2 a_offset; // sub-cell (dx, dy) in unscaled font pixels, per instance
 
-uniform vec2 u_screen; // surface size in physical pixels
-uniform vec2 u_cell;   // cell size in physical pixels (glyph size * scale)
-uniform int  u_cols;   // grid columns, to unpack gl_InstanceID into (col, row)
+uniform vec2 u_screen;     // surface size in physical pixels
+uniform vec2 u_cell;       // cell size in physical pixels (glyph size * scale)
+uniform vec2 u_glyph;      // glyph size in unscaled font pixels, to scale (dx, dy) into pixels
+uniform int  u_cols;       // grid columns, to unpack gl_InstanceID into (col, row)
+uniform int  u_draw_glyph; // 0 = background pass (no offset), 1 = glyph pass (apply offset)
 
 flat out uint v_glyph;
 flat out vec3 v_fg;
@@ -51,6 +54,13 @@ void main() {
     int row = gl_InstanceID / u_cols;
     vec2 origin = vec2(float(col), float(row)) * u_cell;
     vec2 px = origin + a_corner * u_cell;
+    // On the glyph pass, shift the whole quad by the sub-cell offset so the glyph is free to spill
+    // past the cell edge into neighbors. dx/dy are in unscaled font pixels; u_cell / u_glyph is the
+    // integer scale, so this converts them to physical pixels. The background pass leaves the quad
+    // pinned to the cell, so backgrounds never move.
+    if (u_draw_glyph == 1) {
+        px += vec2(a_offset) * (u_cell / u_glyph);
+    }
     // Pixel space (y-down, origin top-left) -> clip space (y-up). Flipping y here means the atlas
     // can store glyph row 0 first and sample with v_uv.y = a_corner.y (0 at the cell's top).
     vec2 clip = vec2(px.x / u_screen.x * 2.0 - 1.0, 1.0 - px.y / u_screen.y * 2.0);
@@ -66,6 +76,7 @@ void main() {
 /// [`source`] for the ES flavor).
 const FRAGMENT_BODY: &str = r"
 uniform highp sampler2DArray u_atlas;
+uniform int u_draw_glyph; // 0 = background pass, 1 = glyph pass
 
 flat in uint v_glyph;
 flat in vec3 v_fg;
@@ -75,8 +86,15 @@ in vec2 v_uv;
 out vec4 frag;
 
 void main() {
-    float coverage = texture(u_atlas, vec3(v_uv, float(v_glyph))).r;
-    frag = vec4(mix(v_bg, v_fg, coverage), 1.0);
+    if (u_draw_glyph == 0) {
+        // Background pass: the cell's opaque background.
+        frag = vec4(v_bg, 1.0);
+    } else {
+        // Glyph pass: foreground with atlas coverage as alpha, so non-glyph texels are transparent
+        // and the background (or a neighbor's spilled glyph) shows through when blended.
+        float coverage = texture(u_atlas, vec3(v_uv, float(v_glyph))).r;
+        frag = vec4(v_fg, coverage);
+    }
 }
 ";
 
@@ -136,5 +154,40 @@ mod tests {
         let vs = source(GlslFlavor::Es300, Shader::Vertex);
         assert!(vs.contains("precision highp float;"));
         assert!(!vs.contains("sampler2DArray"));
+    }
+
+    #[test]
+    fn vertex_offsets_the_glyph_quad_only_on_the_glyph_pass() {
+        for flavor in [GlslFlavor::Desktop330, GlslFlavor::Es300] {
+            let vs = source(flavor, Shader::Vertex);
+            // The offset attribute (location 4), the glyph-size uniform, and the pass selector must
+            // be present, and the offset must be applied to the quad position under the glyph pass.
+            assert!(
+                vs.contains("in ivec2 a_offset"),
+                "{flavor:?} vertex missing a_offset"
+            );
+            assert!(
+                vs.contains("uniform vec2 u_glyph"),
+                "{flavor:?} vertex missing u_glyph"
+            );
+            assert!(
+                vs.contains("u_draw_glyph == 1"),
+                "{flavor:?} vertex does not gate the offset on the glyph pass"
+            );
+            assert!(
+                vs.contains("px += vec2(a_offset) * (u_cell / u_glyph)"),
+                "{flavor:?} vertex does not offset the quad position"
+            );
+        }
+    }
+
+    #[test]
+    fn fragment_splits_background_and_glyph_passes() {
+        // Pass 0 emits the opaque background; pass 1 emits fg with coverage as alpha so glyphs
+        // blend over (and spill onto) the backgrounds drawn in pass 0.
+        let fs = source(GlslFlavor::Es300, Shader::Fragment);
+        assert!(fs.contains("u_draw_glyph == 0"));
+        assert!(fs.contains("vec4(v_bg, 1.0)"));
+        assert!(fs.contains("vec4(v_fg, coverage)"));
     }
 }
