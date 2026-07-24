@@ -94,6 +94,7 @@ use retroglyph_core::grid::{Pos, Size};
 use retroglyph_core::tile::Tile;
 use retroglyph_window::WindowHandle;
 use retroglyph_window::font::BitmapFont as Font;
+use retroglyph_window::geometry::CellGeometry;
 use retroglyph_window::palette::{DEFAULT_BG, DEFAULT_FG};
 #[cfg(feature = "tilesets")]
 use sprite_cache::{Sprite, SpriteCache};
@@ -133,8 +134,10 @@ struct RenderContext {
     event_buffer: VecDeque<Event>,
     pixel_buf: GridBuf<u32, Vec<u32>, RowMajor>,
     window_surface: Option<WindowSurface>,
-    cell_w: u32,
-    cell_h: u32,
+    /// Cell/surface pixel geometry (glyph size x scale); constant for the renderer's lifetime
+    /// (a grid resize changes cols/rows, never the cell size). The single source of the
+    /// `cell_size` contract, delegated to by [`Presenter::cell_size`].
+    geometry: CellGeometry,
     /// Shadow copy of `pixel_buf` from the previous frame, used to compute
     /// the damaged row range in [`present`](SoftwareRenderer::present).
     /// Kept the same length as `pixel_buf`; resized (and the whole frame
@@ -170,8 +173,7 @@ impl SoftwareRenderer {
         font: BitmapFont,
         buf_w: usize,
         buf_h: usize,
-        cell_w: u32,
-        cell_h: u32,
+        geometry: CellGeometry,
         #[cfg(feature = "tilesets")] sprite_cache: Arc<SpriteCache>,
     ) -> Self {
         Self {
@@ -181,8 +183,7 @@ impl SoftwareRenderer {
                 event_buffer: VecDeque::new(),
                 pixel_buf: GridBuf::from_buffer(vec![0u32; buf_w * buf_h], buf_w),
                 window_surface: None,
-                cell_w,
-                cell_h,
+                geometry,
                 prev_pixels: vec![0u32; buf_w * buf_h],
                 damage_rows: None,
                 prev_tiles: Vec::new(),
@@ -478,11 +479,12 @@ impl SoftwareBackend {
             return Err(SoftwareBackendError::NoFont);
         };
 
-        let cell_w = u32::from(font.glyph_width) * u32::from(self.scale);
-        let cell_h = u32::from(font.glyph_height) * u32::from(self.scale);
+        let geometry =
+            CellGeometry::new(font.glyph_width, font.glyph_height, u16::from(self.scale));
+        let (buf_w, buf_h) = geometry.surface_size(self.cols, self.rows);
         // u32 always fits in usize (all targets: 32- and 64-bit).
-        let buf_w = usize::from(self.cols) * usize::try_from(cell_w).unwrap();
-        let buf_h = usize::from(self.rows) * usize::try_from(cell_h).unwrap();
+        let buf_w = usize::try_from(buf_w).unwrap();
+        let buf_h = usize::try_from(buf_h).unwrap();
 
         #[cfg(feature = "tilesets")]
         let sprite_cache = if self.tilesets.is_empty() {
@@ -500,8 +502,7 @@ impl SoftwareBackend {
             font,
             buf_w,
             buf_h,
-            cell_w,
-            cell_h,
+            geometry,
             #[cfg(feature = "tilesets")]
             sprite_cache,
         ))
@@ -710,11 +711,10 @@ impl Output for SoftwareRenderer {
     fn resize(&mut self, size: Size) {
         self.options.cols = size.width;
         self.options.rows = size.height;
-        let font = &self.font;
-        let cell_w = usize::from(font.glyph_width) * usize::from(self.options.scale);
-        let cell_h = usize::from(font.glyph_height) * usize::from(self.options.scale);
-        let new_w = usize::from(size.width) * cell_w;
-        let new_h = usize::from(size.height) * cell_h;
+        // Cell size is constant (glyph x scale); only the surface size changes with the grid.
+        let (new_w, new_h) = self.ctx.geometry.surface_size(size.width, size.height);
+        let new_w = usize::try_from(new_w).expect("surface width fits usize");
+        let new_h = usize::try_from(new_h).expect("surface height fits usize");
         self.ctx.pixel_buf.resize(new_w, new_h);
         // Buffer dimensions changed: the shadow buffer no longer matches,
         // so drop it and force a full-frame damage rect on the next present.
@@ -733,11 +733,6 @@ impl Output for SoftwareRenderer {
             #[allow(clippy::cast_possible_truncation)]
             Some((0, new_h as u32))
         };
-        #[allow(clippy::cast_possible_truncation)]
-        {
-            self.ctx.cell_w = cell_w as u32;
-            self.ctx.cell_h = cell_h as u32;
-        }
     }
 
     fn clear(&mut self) -> Result<(), Self::Error> {
@@ -801,7 +796,7 @@ impl retroglyph_window::Presenter for SoftwareRenderer {
     }
 
     fn cell_size(&self) -> (u32, u32) {
-        (self.ctx.cell_w, self.ctx.cell_h)
+        self.ctx.geometry.cell_size()
     }
 }
 

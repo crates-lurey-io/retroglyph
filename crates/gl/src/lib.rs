@@ -72,7 +72,7 @@ use retroglyph_core::event::Event;
 use retroglyph_core::grid::{Pos, Size};
 use retroglyph_core::tile::Tile;
 use retroglyph_window::palette::{DEFAULT_BG, DEFAULT_FG};
-use retroglyph_window::{Presenter, WindowHandle};
+use retroglyph_window::{CellGeometry, Presenter, WindowHandle};
 use shaders::GlslFlavor;
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -93,8 +93,9 @@ pub struct GlRenderer {
     font: BitmapFont,
     cols: u16,
     rows: u16,
-    cell_w: u32,
-    cell_h: u32,
+    /// Cell/surface pixel geometry (glyph size x scale); the single source of the `cell_size`
+    /// contract, delegated to by [`Presenter::cell_size`].
+    geometry: CellGeometry,
     /// Atlas layer for the space glyph, used to initialize blank cells.
     space_glyph: u16,
     /// One entry per cell (`cols * rows`), row-major. Patched by [`Output::draw`]; the changed
@@ -121,8 +122,7 @@ impl GlRenderer {
     /// Builds a renderer for the given font, grid size, and scale. Called by
     /// [`GlBackendBuilder::build`].
     pub(crate) fn new(font: BitmapFont, cols: u16, rows: u16, scale: u16) -> Self {
-        let cell_w = u32::from(font.glyph_width) * u32::from(scale);
-        let cell_h = u32::from(font.glyph_height) * u32::from(scale);
+        let geometry = CellGeometry::new(font.glyph_width, font.glyph_height, scale);
         let space_glyph = u16::from(font.char_to_index(' '));
         let blank = Instance::new(space_glyph, to_arr(DEFAULT_FG), to_arr(DEFAULT_BG), 0, 0);
         let count = usize::from(cols) * usize::from(rows);
@@ -131,13 +131,12 @@ impl GlRenderer {
             font,
             cols,
             rows,
-            cell_w,
-            cell_h,
+            geometry,
             space_glyph,
             instances,
             dirty: DirtyRange::full(count),
             events: VecDeque::new(),
-            surface_size: (cols_px(cols, cell_w), cols_px(rows, cell_h)),
+            surface_size: geometry.surface_size(cols, rows),
             gpu: None,
         }
     }
@@ -205,12 +204,13 @@ impl GlRenderer {
             f32::from(self.font.glyph_width),
             f32::from(self.font.glyph_height),
         );
+        let (cell_w, cell_h) = self.geometry.cell_size();
         res.set_projection(
             gl,
             w as f32,
             h as f32,
-            self.cell_w as f32,
-            self.cell_h as f32,
+            cell_w as f32,
+            cell_h as f32,
             i32::from(self.cols),
         );
         Ok(res)
@@ -220,11 +220,6 @@ impl GlRenderer {
 /// `(u8, u8, u8)` -> `[u8; 3]`, for packing resolved colors into an [`Instance`].
 const fn to_arr(rgb: (u8, u8, u8)) -> [u8; 3] {
     [rgb.0, rgb.1, rgb.2]
-}
-
-/// Cells along one axis times the per-cell pixel size.
-const fn cols_px(cells: u16, cell: u32) -> u32 {
-    cells as u32 * cell
 }
 
 /// Half-open range `[lo, hi)` of instance indices changed since the last GPU upload.
@@ -366,7 +361,8 @@ impl Presenter for GlRenderer {
         let cell_count = self.cell_count();
         let cols = i32::from(self.cols);
         let (w, h) = self.surface_size;
-        let (cell_w, cell_h) = (self.cell_w as f32, self.cell_h as f32);
+        let (cell_w, cell_h) = self.geometry.cell_size();
+        let (cell_w, cell_h) = (cell_w as f32, cell_h as f32);
 
         // Split borrow: `gpu` borrows `self.gpu`, while `self.instances`/`self.dirty` are disjoint
         // fields, so direct field access to them stays legal below.
@@ -399,7 +395,7 @@ impl Presenter for GlRenderer {
     }
 
     fn cell_size(&self) -> (u32, u32) {
-        (self.cell_w, self.cell_h)
+        self.geometry.cell_size()
     }
 }
 
