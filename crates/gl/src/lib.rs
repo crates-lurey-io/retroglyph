@@ -52,6 +52,11 @@ mod shaders;
 #[cfg(all(test, target_os = "linux", feature = "default-font"))]
 mod headless;
 
+// Live WebGL2 render smoke test (issue #370): the browser sibling of `headless`, run under
+// `wasm-bindgen-test` in headless Chrome (`just test-wasm-gl`). Gated to wasm32 + `default-font`.
+#[cfg(all(test, target_arch = "wasm32", feature = "default-font"))]
+mod webgl_smoke;
+
 // Platform-specific GL context, swapped by target. Both expose the same `GlContext` API (see the
 // module docs), the same pattern `retroglyph-software` uses for its window surface.
 #[cfg(not(target_arch = "wasm32"))]

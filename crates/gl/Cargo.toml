@@ -40,7 +40,13 @@ retroglyph-core = { path = "../core", version = "0.3.0", default-features = fals
 # The glyph source (BitmapFont + unscii16) lives in retroglyph-window's winit-free `font` module,
 # which this crate already depends on for `Presenter`. `default-font` forwards to window's feature.
 retroglyph-window = { path = "../window", version = "0.3.0", default-features = false }
-glow = "0.16"
+# 0.17 fixed a WebGL2 bug where the web backend passed `texImage3D`'s `depth` and `border`
+# arguments swapped, which made the glyph-atlas upload fail (`INVALID_VALUE: texImage3D: border
+# != 0`) so no text rendered in the browser. Do NOT bump to 0.18: it adds a wasm64 dependency on
+# `wasm-bindgen ~0.2.123`, and because Cargo unifies target-specific deps in one lockfile that
+# collides with the workspace-wide `wasm-bindgen = "=0.2.106"` pin (and its matching
+# `wasm-bindgen-cli`). Bumping to 0.18 requires moving the whole wasm-bindgen stack in lockstep.
+glow = "0.17"
 log = "0.4"
 raw-window-handle = "0.6"
 
@@ -69,6 +75,16 @@ web-sys = { version = "0.3", features = [
   "HtmlCanvasElement",
   "WebGl2RenderingContext",
 ] }
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+# Drives the live WebGL2 render smoke test (src/webgl_smoke.rs) in a headless browser -- the only
+# place the wasm32/WebGL2 draw path actually executes (the `compile-wasm-gl` CI job just
+# build-checks it). Run via `just test-wasm-gl` (`wasm-pack test --headless --chrome`). Version
+# pinned in lockstep with the `wasm-bindgen` dependency above, exactly as crates/terminal-wasm
+# does: 0.3.56 is the wasm-bindgen-test release cut from the same wasm-bindgen-repo tag as
+# wasm-bindgen 0.2.106, so it's the only version that resolves against this crate's pin. If the
+# `wasm-bindgen` pin moves, this must move in lockstep.
+wasm-bindgen-test = "=0.3.56"
 
 [features]
 # Embeds the Unscii 16 default font so a caller can build a renderer with no font of its own.
