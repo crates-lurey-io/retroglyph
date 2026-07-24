@@ -355,13 +355,36 @@ impl SoftwareRenderer {
         tile: Tile,
         bg_fill: Option<u32>,
     ) {
-        let px_x = usize::from(pos.x) * cell_w;
-        let px_y = usize::from(pos.y) * cell_h;
+        self.fill_cell_bg(cell_w, cell_h, pos, bg_fill);
+        self.blit_cell_glyph(buf_w, cell_w, cell_h, scale, pos, tile);
+    }
 
+    /// Fills a cell's background rectangle when `bg_fill` is opaque. The rectangle is always the
+    /// full, unshifted cell: sub-cell `dx`/`dy` offsets move only the glyph, never the background.
+    fn fill_cell_bg(&mut self, cell_w: usize, cell_h: usize, pos: Pos, bg_fill: Option<u32>) {
         if let Some(bg) = bg_fill {
+            let px_x = usize::from(pos.x) * cell_w;
+            let px_y = usize::from(pos.y) * cell_h;
             let rect = ixy::Rect::new(px_x, px_y, cell_w, cell_h);
             self.ctx.pixel_buf.fill_rect_solid(rect, bg);
         }
+    }
+
+    /// Blits a cell's glyph (a cached sprite if one matches, else the bitmap font), shifted by the
+    /// tile's sub-cell `dx`/`dy` offset. The glyph may spill past the cell edge into neighbors, so
+    /// callers that want that spill preserved must lay down every background first (see the
+    /// two-pass repaint in [`draw_layers`](Self::draw_layers)).
+    fn blit_cell_glyph(
+        &mut self,
+        buf_w: usize,
+        cell_w: usize,
+        cell_h: usize,
+        scale: usize,
+        pos: Pos,
+        tile: Tile,
+    ) {
+        let px_x = usize::from(pos.x) * cell_w;
+        let px_y = usize::from(pos.y) * cell_h;
 
         // Sprite cache dispatch: sprite wins over bitmap font.
         #[cfg(feature = "tilesets")]
@@ -551,7 +574,7 @@ impl Output for SoftwareRenderer {
     /// diffs incoming cells against it here, entirely internally: cells whose tile is unchanged
     /// since the last call are skipped instead of being cleared and repainted.
     ///
-    /// This falls back to the old clear-then-repaint-every-cell strategy when either:
+    /// This falls back to a full clear-and-repaint of every cell when either:
     /// - any tile this frame has a nonzero sub-cell offset ([`Tile::dx`]/[`Tile::dy`]): offsets
     ///   can spill glyph pixels into neighboring cells by an amount `Tile` does not bound, so
     ///   containing the repaint to a neighborhood around the changed cells isn't possible without
@@ -559,6 +582,11 @@ impl Output for SoftwareRenderer {
     /// - the number of allocated layers changed since the last call: a layer's cells falling out
     ///   of (or into) the frame can't be diffed against a shadow copy that no longer describes
     ///   this frame's layer set.
+    ///
+    /// The full repaint runs two sub-passes per layer -- every background first, then every glyph
+    /// -- so a glyph offset past its right/bottom edge spills onto the neighbor's already-painted
+    /// background instead of being clobbered by that neighbor's later background fill. Spill is
+    /// therefore uniform in all four directions, matching the two-pass `retroglyph-gl` backend.
     ///
     /// When neither applies, a changed cell at a given position also forces every *other* layer
     /// at that same position to be repainted (even if unchanged there), because a lower layer's
@@ -621,15 +649,26 @@ impl Output for SoftwareRenderer {
         if full_repaint {
             self.ctx.pixel_buf.clear();
             for layer_id in 0..layer_count_now {
+                #[allow(clippy::cast_possible_truncation)]
+                let layer_id = layer_id as u8;
+                // Pass 1: lay down every cell's background on this layer first.
                 for idx in 0..cell_count {
-                    #[allow(clippy::cast_possible_truncation)]
-                    let layer_id = layer_id as u8;
                     let tile = self.ctx.prev_tiles[layer_id as usize][idx];
                     let has_sprite = self.has_sprite(tile.glyph());
                     let bg_fill = resolve_bg_fill(&self.ctx.prev_tiles, layer_id, idx, has_sprite);
                     #[allow(clippy::cast_possible_truncation)]
                     let pos = Pos::new((idx % cols) as u16, (idx / cols) as u16);
-                    self.composite_cell(buf_w, cell_w, cell_h, scale, pos, tile, bg_fill);
+                    self.fill_cell_bg(cell_w, cell_h, pos, bg_fill);
+                }
+                // Pass 2: blit every cell's glyph over those backgrounds. A glyph offset past its
+                // right/bottom edge now spills onto the neighbor's already-painted background
+                // instead of being clobbered by that neighbor's later background fill, so spill is
+                // uniform in all four directions (matching the two-pass `retroglyph-gl` backend).
+                for idx in 0..cell_count {
+                    let tile = self.ctx.prev_tiles[layer_id as usize][idx];
+                    #[allow(clippy::cast_possible_truncation)]
+                    let pos = Pos::new((idx % cols) as u16, (idx / cols) as u16);
+                    self.blit_cell_glyph(buf_w, cell_w, cell_h, scale, pos, tile);
                 }
             }
         } else if any_dirty {
@@ -1341,6 +1380,69 @@ mod tests {
         };
         assert!(!has_green(0), "x=0 should have no green pixels with dx=1");
         assert!(has_green(1), "x=1 should have green pixels with dx=1");
+    }
+
+    #[test]
+    fn draw_layers_spills_glyph_right_into_the_neighbor_cell() {
+        // Regression guard for uniform spill: a glyph offset past its right edge must land on the
+        // neighbor's already-painted background, not be clobbered by the neighbor's background
+        // fill. Before the two-pass repaint, only left/up spill survived; right/down was lost.
+        let mut renderer = SoftwareBackendBuilder::new()
+            .font(retroglyph_window::font::unscii16::FONT)
+            .grid_size(2, 1)
+            .scale(1)
+            .build()
+            .unwrap()
+            .run_headless()
+            .unwrap();
+
+        // Full block (all 8x16 pixels set), green, shifted right by 4px (half a cell): its left
+        // half stays in cell 0, its right half spills into cell 1.
+        let block = Tile::new(
+            '\u{2588}',
+            Style::new().fg(Color::Rgb { r: 0, g: 255, b: 0 }),
+        )
+        .with_offset(4, 0);
+        // Neighbor cell (1, 0): blank with an opaque blue background -- the fill that used to erase
+        // the spill.
+        let neighbor = Tile::new(' ', Style::new().bg(Color::Rgb { r: 0, g: 0, b: 255 }));
+
+        renderer.draw_layers(
+            [
+                (0, Pos::new(0, 0), &block, None),
+                (0, Pos::new(1, 0), &neighbor, None),
+            ]
+            .into_iter(),
+        );
+
+        // Buffer is 16x16 (2 cols * 8px, 1 row * 16px), so `i % 16` is the pixel's x coordinate.
+        let buf = renderer.pixels();
+        let green = 0x0000_FF00_u32;
+        let has_green_at_x = |x: usize| {
+            buf.iter()
+                .enumerate()
+                .any(|(i, &p)| i % 16 == x && p == green)
+        };
+
+        // Cell 1 (x >= 8): left half is the spilled block, right half is blue background.
+        assert!(
+            has_green_at_x(8),
+            "block must spill into the neighbor cell at x=8"
+        );
+        assert!(has_green_at_x(11), "spill must reach x=11");
+        assert!(
+            !has_green_at_x(12),
+            "spill stops at half the neighbor cell (x=12 is bg)"
+        );
+        // Cell 0 (x < 8): left half is now empty (block shifted right), right half is green.
+        assert!(
+            !has_green_at_x(0),
+            "block shifted right, so x=0 is background"
+        );
+        assert!(
+            has_green_at_x(4),
+            "block still occupies x=4 in its own cell"
+        );
     }
 
     #[test]
