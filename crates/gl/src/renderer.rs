@@ -293,8 +293,10 @@ impl GlResources {
     /// Pass 1 fills each cell's opaque background at its unshifted origin. Pass 2 draws the glyphs
     /// with their sub-cell `dx`/`dy` offset applied to the quad *position* and coverage as alpha,
     /// alpha-blended over the backgrounds. Splitting the passes is what lets an offset glyph spill
-    /// past its cell edge into neighbors (matching `retroglyph-software`): a single interleaved
-    /// pass would let a later cell's background overwrite an earlier neighbor's spill.
+    /// past its cell edge into neighbors: a single interleaved pass would let a later cell's
+    /// background overwrite an earlier neighbor's spill. This is the two-pass mechanism of the
+    /// "Sub-cell offsets and spill" contract documented on [`Presenter`](retroglyph_window::Presenter),
+    /// shared with `retroglyph-software`.
     pub(crate) fn draw(&self, gl: &glow::Context, cell_count: i32) {
         unsafe {
             // Clear covers any surface area outside the grid; pass 1 paints the per-cell colors.

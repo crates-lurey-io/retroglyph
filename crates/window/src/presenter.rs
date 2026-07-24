@@ -81,6 +81,30 @@ impl RecoverableError for core::convert::Infallible {}
 /// `present`, `cell_size`) that the event loop drives. Every `Presenter` implementation is an
 /// `Output` implementation for free: [`WindowBackend`](crate::WindowBackend) delegates its own
 /// `Output` impl straight through to `P: Presenter`, with no duplicated method bodies.
+///
+/// # Sub-cell offsets and spill
+///
+/// A [`Tile`](retroglyph_core::tile::Tile)'s `dx`/`dy` shift its glyph within, and past, its cell.
+/// This is a cross-backend rendering contract: the CPU rasterizer (`retroglyph-software`) and the
+/// GPU one (`retroglyph-gl`) must produce the same pixels, so it is specified here once instead of
+/// in mirrored per-backend comments that reference each other (and drift when only one is
+/// touched). A `Presenter` that honors sub-cell offsets must obey all four points:
+///
+/// - `dx`/`dy` are in **unscaled font pixels** (a presenter multiplies by its own integer scale);
+///   negative `dx` shifts the glyph left, negative `dy` up.
+/// - The cell's **background fill is always the full, unshifted cell** rectangle. An offset moves
+///   only the glyph, never the background.
+/// - An offset glyph **may spill past its cell edge into neighboring cells**, and that spill is
+///   **uniform in all four directions** -- a glyph pushed right/down onto a later neighbor spills
+///   the same way as one pushed left/up onto an earlier neighbor.
+/// - The mechanism that guarantees that uniformity is a **two-pass draw**: lay down *every* cell's
+///   background first, then draw *every* cell's (offset) glyph over the result. Interleaving the
+///   two per cell would let a later cell's background overwrite an earlier neighbor's spilled
+///   glyph, breaking spill in the right/down directions only.
+///
+/// The offset *application* is deliberately not shared code: `retroglyph-gl` shifts a quad's vertex
+/// position in its vertex shader, `retroglyph-software` shifts `origin_x`/`origin_y` in a CPU blit
+/// -- irreducibly different mechanics that must nonetheless agree on the four points above.
 pub trait Presenter: Output {
     /// Surface lifecycle error (context creation, buffer acquisition,
     /// present).

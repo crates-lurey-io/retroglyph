@@ -588,7 +588,9 @@ impl Output for SoftwareRenderer {
     /// The full repaint runs two sub-passes per layer -- every background first, then every glyph
     /// -- so a glyph offset past its right/bottom edge spills onto the neighbor's already-painted
     /// background instead of being clobbered by that neighbor's later background fill. Spill is
-    /// therefore uniform in all four directions, matching the two-pass `retroglyph-gl` backend.
+    /// therefore uniform in all four directions: the two-pass mechanism of the "Sub-cell offsets
+    /// and spill" contract documented on [`Presenter`](retroglyph_window::Presenter), shared with
+    /// `retroglyph-gl`.
     ///
     /// When neither applies, a changed cell at a given position also forces every *other* layer
     /// at that same position to be repainted (even if unchanged there), because a lower layer's
@@ -665,7 +667,8 @@ impl Output for SoftwareRenderer {
                 // Pass 2: blit every cell's glyph over those backgrounds. A glyph offset past its
                 // right/bottom edge now spills onto the neighbor's already-painted background
                 // instead of being clobbered by that neighbor's later background fill, so spill is
-                // uniform in all four directions (matching the two-pass `retroglyph-gl` backend).
+                // uniform in all four directions -- the two-pass mechanism of the sub-cell
+                // offset/spill contract on `retroglyph_window::Presenter` (see its rustdoc).
                 for idx in 0..cell_count {
                     let tile = self.ctx.prev_tiles[layer_id as usize][idx];
                     #[allow(clippy::cast_possible_truncation)]
