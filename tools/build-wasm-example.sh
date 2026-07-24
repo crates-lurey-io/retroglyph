@@ -12,12 +12,12 @@
 # Cargo.toml's [workspace.metadata.bin]. Run `just setup-wasm` first if
 # `cargo bin wasm-bindgen --version` hasn't been built yet.
 #
-# Usage: tools/build-wasm-example.sh <example> <headless|terminal|software> <dest-dir>
+# Usage: tools/build-wasm-example.sh <example> <headless|terminal|software|gl> <dest-dir>
 
 set -euo pipefail
 
 if [ "$#" -ne 3 ]; then
-  echo "usage: $0 <example> <headless|terminal|software> <dest-dir>" >&2
+  echo "usage: $0 <example> <headless|terminal|software|gl> <dest-dir>" >&2
   exit 1
 fi
 
@@ -33,8 +33,9 @@ case "$variant" in
   headless) features=wasm-headless; template=headless-template.html ;;
   terminal) features=wasm-terminal; template=terminal-template.html ;;
   software) features=software; template=software-template.html ;;
+  gl) features=gl; template=gl-template.html ;;
   *)
-    echo "unknown variant: $variant (expected headless, terminal, or software)" >&2
+    echo "unknown variant: $variant (expected headless, terminal, software, or gl)" >&2
     exit 1
     ;;
 esac

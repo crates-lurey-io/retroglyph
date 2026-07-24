@@ -57,20 +57,23 @@ macro_rules! example_main {
 /// example built with no wasm-capable feature just doesn't get any FFI
 /// surface, which is correct since nothing would call it).
 ///
-/// - `software` (wins if enabled): a `#[wasm_bindgen(start)]` shim that
-///   calls the example's own `main()` -- `run_software::<E>()` is already
-///   portable to `wasm32` via winit, it just needs something to invoke it
-///   when the module loads.
-/// - `wasm-headless` (if `software` is off): drives a
+/// - `software` or `gl` (either wins if enabled): a `#[wasm_bindgen(start)]`
+///   shim that calls the example's own `main()`. Both `run_software::<E>()`
+///   and `run_gl::<E>()` are already portable to `wasm32` via winit (canvas +
+///   WebGL2 for `gl`); they just need something to invoke them when the
+///   module loads.
+/// - `wasm-headless` (if `software`/`gl` are off): drives a
 ///   `Terminal<Headless>` from a browser `requestAnimationFrame` loop. See
 ///   [`wasm_headless`](crate::util::wasm_headless) for the FFI key decoder.
-/// - `wasm-terminal` (if neither of the above is on): drives a
+/// - `wasm-terminal` (if none of the above is on): drives a
 ///   `Terminal<TerminalWasm>` from a browser terminal emulator (e.g.
 ///   xterm.js).
 #[macro_export]
 macro_rules! wasm_entry {
     ($E:ty) => {
-        #[cfg(all(feature = "software", target_arch = "wasm32"))]
+        // Both windowed backends (software canvas, gl WebGL2) run their winit event loop from
+        // `main()`; this shim is the module-load hook that invokes it.
+        #[cfg(all(any(feature = "software", feature = "gl"), target_arch = "wasm32"))]
         #[allow(missing_docs)]
         #[::wasm_bindgen::prelude::wasm_bindgen(start)]
         pub fn __rg_wasm_start() -> ::std::result::Result<(), ::wasm_bindgen::JsValue> {
@@ -95,7 +98,7 @@ macro_rules! __wasm_headless_entry {
     ($E:ty) => {
         #[cfg(all(
             feature = "wasm-headless",
-            not(feature = "software"),
+            not(any(feature = "software", feature = "gl")),
             target_arch = "wasm32"
         ))]
         const _: () = {
@@ -205,7 +208,7 @@ macro_rules! __wasm_terminal_entry {
     ($E:ty) => {
         #[cfg(all(
             feature = "wasm-terminal",
-            not(any(feature = "software", feature = "wasm-headless")),
+            not(any(feature = "software", feature = "gl", feature = "wasm-headless")),
             target_arch = "wasm32"
         ))]
         const _: () = {
