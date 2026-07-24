@@ -220,6 +220,21 @@ impl GlResources {
         }
     }
 
+    /// Uploads only `instances[start..]` (the dirty sub-range) at the matching byte offset in the
+    /// instance VBO, leaving the rest of the buffer untouched. `start` is a cell index; the caller
+    /// passes the already-sliced dirty range, so `sub` covers `[start, start + sub.len())`.
+    #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+    pub(crate) fn upload_range(&self, gl: &glow::Context, start: usize, sub: &[Instance]) {
+        if sub.is_empty() {
+            return;
+        }
+        let offset = (start * INSTANCE_BYTES) as i32;
+        unsafe {
+            gl.bind_buffer(glow::ARRAY_BUFFER, Some(self.instance_vbo));
+            gl.buffer_sub_data_u8_slice(glow::ARRAY_BUFFER, offset, instances_as_bytes(sub));
+        }
+    }
+
     /// Sets the GL viewport and the projection uniforms. Call once per frame before
     /// [`draw`](Self::draw) so the surface size, cell size, and column count always agree with the
     /// instance count, regardless of the order surface- and grid-resize events arrive in.
