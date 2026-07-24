@@ -8,15 +8,16 @@
 //! example list is just "every `.rs` file in that directory," discovered at
 //! runtime rather than hardcoded or read from `cargo metadata`.
 //!
-//! Each of the 3 backends has a WASM counterpart: press `w` at the backend
-//! prompt to toggle between native and WASM before picking 1/2/3. A WASM
-//! choice is built and packaged with the same real HTML/JS template the
-//! docs site uses (via `tools/build-wasm-example.sh`), then served from a
-//! throwaway local static server and opened in your default browser --
-//! *not* run through `wasm-server-runner`, which only auto-invokes a
-//! `#[wasm_bindgen(start)]` function and so only ever showed anything for
-//! the Software variant; Headless and Terminal are driven by JS calling
-//! specific exported functions in a loop, which only the real templates do.
+//! Each backend has a WASM counterpart: press `w` at the backend prompt to
+//! toggle between native and WASM before picking a backend. A WASM choice is
+//! built and packaged with the same real HTML/JS template the docs site uses
+//! (via `tools/build-wasm-example.sh`), then served from a throwaway local
+//! static server and opened in your default browser -- *not* run through
+//! `wasm-server-runner`, which only auto-invokes a `#[wasm_bindgen(start)]`
+//! function and so only ever showed anything for the windowed variants
+//! (Software and GL, which start a winit event loop from `main`); Headless
+//! and Terminal are driven by JS calling specific exported functions in a
+//! loop, which only the real templates do.
 //!
 //! Run with `cargo run --bin runner` (or `--release` to also run the picked
 //! native example in release mode; ignored for WASM choices, which always
@@ -32,7 +33,7 @@ use std::process::ExitCode;
 /// value for the native variant (`None` means "run with no backend feature
 /// enabled," i.e. the headless stdout fallback -- only ever true for the
 /// native Headless entry), and the WASM variant name `tools/build-wasm-
-/// example.sh` understands (`headless`/`terminal`/`software`).
+/// example.sh` understands (`headless`/`terminal`/`software`/`gl`).
 struct Backend {
     label: &'static str,
     native_features: Option<&'static str>,
@@ -54,6 +55,11 @@ const BACKENDS: &[Backend] = &[
         label: "Software (a window) / Software (browser, canvas)",
         native_features: Some("software"),
         wasm_variant: "software",
+    },
+    Backend {
+        label: "GL (a window, OpenGL 3.3) / WebGL2 (browser, canvas)",
+        native_features: Some("gl"),
+        wasm_variant: "gl",
     },
 ];
 

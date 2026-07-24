@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="apple-mobile-web-app-title" content="__EXAMPLE__" />
+    <meta name="theme-color" content="#0d1117" />
+    <meta name="color-scheme" content="dark" />
+    <!-- No web app manifest here (unlike software-template.html): the `gl`
+         variant of tools/build-wasm-example.sh does not emit a
+         manifest.webmanifest, so linking one would 404. Add a gl manifest to
+         the build script and a link here if the WebGL2 build should be
+         installable as a PWA. -->
+    <title>retroglyph — __EXAMPLE__ (WebGL2)</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        background: #000;
+        overflow: hidden;
+        width: 100%;
+        height: 100%;
+        overscroll-behavior: none;
+      }
+      canvas {
+        display: block;
+        touch-action: none;
+        /* retroglyph-window sets the canvas's inline size to the browser
+           viewport at startup and on every `resize` event (winit's web
+           backend doesn't derive canvas size from page CSS -- see
+           crates/window/src/winit/run.rs), so this is mostly a fallback for
+           the first paint before that JS runs. `dvw`/`dvh` (dynamic
+           viewport units) come after the `vw`/`vh` fallback so mobile
+           browsers that account for retracting address bars don't leave a
+           sliver of the page scrollable underneath. */
+        width: 100vw;
+        height: 100vh;
+        width: 100dvw;
+        height: 100dvh;
+      }
+    </style>
+  </head>
+  <body>
+    <script type="module">
+      import init from './__EXAMPLE__.js';
+      init();
+    </script>
+  </body>
+</html>
