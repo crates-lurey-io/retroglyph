@@ -122,7 +122,7 @@ impl GlRenderer {
         let cell_w = u32::from(font.glyph_width) * u32::from(scale);
         let cell_h = u32::from(font.glyph_height) * u32::from(scale);
         let space_glyph = u16::from(font.char_to_index(' '));
-        let blank = Instance::new(space_glyph, to_arr(DEFAULT_FG), to_arr(DEFAULT_BG));
+        let blank = Instance::new(space_glyph, to_arr(DEFAULT_FG), to_arr(DEFAULT_BG), 0, 0);
         let count = usize::from(cols) * usize::from(rows);
         let instances = vec![blank; count];
         Self {
@@ -140,9 +140,15 @@ impl GlRenderer {
         }
     }
 
-    /// The blank instance (space glyph, default colors) used to clear/resize cells.
+    /// The blank instance (space glyph, default colors, no offset) used to clear/resize cells.
     const fn blank(&self) -> Instance {
-        Instance::new(self.space_glyph, to_arr(DEFAULT_FG), to_arr(DEFAULT_BG))
+        Instance::new(
+            self.space_glyph,
+            to_arr(DEFAULT_FG),
+            to_arr(DEFAULT_BG),
+            0,
+            0,
+        )
     }
 
     /// Total cell count for the current grid.
@@ -161,7 +167,7 @@ impl GlRenderer {
         let fg = to_arr(tile.style().foreground().resolve_rgb(DEFAULT_FG));
         let bg = to_arr(tile.style().background().resolve_rgb(DEFAULT_BG));
         let idx = y * cols + x;
-        self.instances[idx] = Instance::new(glyph, fg, bg);
+        self.instances[idx] = Instance::new(glyph, fg, bg, tile.dx(), tile.dy());
         self.dirty.insert(idx);
     }
 
@@ -306,6 +312,11 @@ impl Presenter for GlRenderer {
         let atlas = atlas::AtlasData::build(&self.font);
         let res = GlResources::new(&ctx.gl, ctx.flavor(), &atlas, self.cell_count())?;
         res.upload(&ctx.gl, &self.instances);
+        res.set_glyph_size(
+            &ctx.gl,
+            f32::from(self.font.glyph_width),
+            f32::from(self.font.glyph_height),
+        );
         res.set_projection(
             &ctx.gl,
             w as f32,
@@ -418,5 +429,39 @@ mod tests {
         assert_eq!(d.take(), Some(0..4));
         assert!(d.is_empty());
         assert_eq!(d.take(), None);
+    }
+}
+
+#[cfg(all(test, feature = "default-font"))]
+mod offset_tests {
+    use crate::GlBackendBuilder;
+    use retroglyph_core::backend::Output;
+    use retroglyph_core::grid::Pos;
+    use retroglyph_core::style::Style;
+    use retroglyph_core::tile::Tile;
+
+    #[test]
+    fn draw_records_sub_cell_offset_in_the_instance() {
+        let mut r = GlBackendBuilder::new()
+            .grid_size(4, 2)
+            .build()
+            .expect("default-font builds");
+        let tile = Tile::new('A', Style::new()).with_offset(-3, 5);
+        r.draw(core::iter::once((Pos::new(1, 0), &tile, None)))
+            .expect("draw is infallible");
+
+        let inst = r.instances[1];
+        assert_eq!(inst.dx, -3);
+        assert_eq!(inst.dy, 5);
+        assert_eq!(inst.glyph, u16::from(r.font.char_to_index('A')));
+    }
+
+    #[test]
+    fn blank_cells_carry_no_offset() {
+        let r = GlBackendBuilder::new()
+            .grid_size(3, 3)
+            .build()
+            .expect("default-font builds");
+        assert!(r.instances.iter().all(|i| i.dx == 0 && i.dy == 0));
     }
 }
