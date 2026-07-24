@@ -60,8 +60,8 @@ jobs:
 
       # ── WASM examples ────────────────────────────────────────────────────
       #
-      # Every example in examples/examples/*.rs is built for all three
-      # WASM-capable backend variants (Headless/Terminal/Software) and
+      # Every example in examples/examples/*.rs is built for all four
+      # WASM-capable backend variants (Headless/Terminal/Software/WebGL) and
       # packaged into target/doc/examples/<name>/<variant>/, plus an index.
       # No manifest to keep in sync: see tools/build-wasm-examples.sh.
       # `cargo bin --install` (same as `just setup-tools`) builds/caches

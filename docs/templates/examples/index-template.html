@@ -135,6 +135,7 @@
             <th>Headless</th>
             <th>Terminal</th>
             <th>Software</th>
+            <th>WebGL</th>
           </tr>
         </thead>
         <tbody>
@@ -150,7 +151,10 @@ __ROWS__
         ANSI/SGR escape codes — the same terminal-family renderer the native
         <code>crossterm</code> backend uses.
         <strong>Software</strong> is the CPU-rasterized pixel backend, rendered to a
-        <code>&lt;canvas&gt;</code>. Every example gets all three variants (see
+        <code>&lt;canvas&gt;</code>.
+        <strong>WebGL</strong> is the GPU backend (<code>retroglyph-gl</code>) running on WebGL2 —
+        the same instanced-quad renderer the native OpenGL 3.3 backend uses, rendered to a
+        <code>&lt;canvas&gt;</code>. Every example gets all four variants (see
         <code>tools/build-wasm-examples.sh</code>) — there's no per-example backend list to keep
         in sync.
       </p>

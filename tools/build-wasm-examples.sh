@@ -5,7 +5,7 @@
 #
 # Convention over configuration (see the examples crate's own doc comments): every example is
 # assumed to support every variant, so there is no manifest to keep in sync -- the example list
-# comes from `ls examples/examples/*.rs`, and this script just builds all three variants for each
+# comes from `ls examples/examples/*.rs`, and this script just builds all four variants for each
 # one. If an example genuinely can't support a variant (rare; none do today), that's a build
 # failure this script surfaces, not a silent skip.
 #
@@ -19,8 +19,9 @@ examples_dir="$repo_root/examples"
 out_dir="${1:-$repo_root/target/doc/examples}"
 templates_dir="$repo_root/docs/templates/examples"
 
-variants_label=(Headless Terminal Software)
-variants_dir=(headless terminal software)
+# Column order here must match the `<th>` order in index-template.html.
+variants_label=(Headless Terminal Software WebGL)
+variants_dir=(headless terminal software gl)
 
 mkdir -p "$out_dir"
 rows=""
