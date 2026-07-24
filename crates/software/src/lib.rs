@@ -867,17 +867,26 @@ fn blit_cell(
     let origin_y = px_y as i64 + i64::from(cell.dy()) * scale as i64;
 
     let glyph_index = font.char_to_index(cell.glyph());
-    let rows = font.rows(glyph_index);
-    let src_w = usize::from(font.glyph_width);
 
     blit_glyph_mask(
-        buffer, buf_w, buf_h, origin_x, origin_y, rows, src_w, scale, fg,
+        buffer,
+        buf_w,
+        buf_h,
+        origin_x,
+        origin_y,
+        font,
+        glyph_index,
+        scale,
+        fg,
     );
 }
 
-/// Paints the set bits of a 1-bit glyph bitmap (`rows`, each `src_w` bits
-/// wide) into `buffer` as `color`, with each source pixel scaled to a
-/// `scale x scale` destination block.
+/// Paints the set ("on") pixels of glyph `glyph_index` in `font` into `buffer` as `color`, with
+/// each source pixel scaled to a `scale x scale` destination block.
+///
+/// Set pixels come from [`BitmapFont::glyph_pixels`], the one place the 1-bit MSB-first bit layout
+/// is decoded (shared with the GL atlas builder), so this backend and `retroglyph-gl` can't
+/// disagree on which texels a glyph covers, and neither hardcodes an 8-pixel row.
 ///
 /// The glyph's top-left destination corner is `(origin_x, origin_y)`
 /// (already including any sub-cell `dx`/`dy` offset, scaled). When the whole
@@ -895,13 +904,13 @@ fn blit_glyph_mask(
     buf_h: usize,
     origin_x: i64,
     origin_y: i64,
-    rows: &[u8],
-    src_w: usize,
+    font: &Font,
+    glyph_index: u8,
     scale: usize,
     color: u32,
 ) {
-    let glyph_w = src_w * scale;
-    let glyph_h = rows.len() * scale;
+    let glyph_w = usize::from(font.glyph_width) * scale;
+    let glyph_h = usize::from(font.glyph_height) * scale;
 
     #[allow(clippy::cast_sign_loss)]
     let in_bounds = origin_x >= 0
@@ -914,17 +923,12 @@ fn blit_glyph_mask(
         let ox = origin_x as usize;
         #[allow(clippy::cast_sign_loss)]
         let oy = origin_y as usize;
-        for (src_y, &mask) in rows.iter().enumerate() {
-            for src_x in 0..src_w {
-                if (mask >> (src_w - 1 - src_x)) & 1 == 0 {
-                    continue;
-                }
-                let x0 = ox + src_x * scale;
-                let y0 = oy + src_y * scale;
-                for sdy in 0..scale {
-                    let row_start = (y0 + sdy) * buf_w + x0;
-                    buffer[row_start..row_start + scale].fill(color);
-                }
+        for (src_x, src_y) in font.glyph_pixels(glyph_index) {
+            let x0 = ox + usize::from(src_x) * scale;
+            let y0 = oy + usize::from(src_y) * scale;
+            for sdy in 0..scale {
+                let row_start = (y0 + sdy) * buf_w + x0;
+                buffer[row_start..row_start + scale].fill(color);
             }
         }
         return;
@@ -935,28 +939,23 @@ fn blit_glyph_mask(
         clippy::cast_sign_loss,
         clippy::similar_names
     )]
-    for (src_y, &mask) in rows.iter().enumerate() {
-        for src_x in 0..src_w {
-            if (mask >> (src_w - 1 - src_x)) & 1 == 0 {
+    for (src_x, src_y) in font.glyph_pixels(glyph_index) {
+        for sdy in 0..scale {
+            let y = origin_y + (usize::from(src_y) * scale + sdy) as i64;
+            if y < 0 || y as usize >= buf_h {
                 continue;
             }
-            for sdy in 0..scale {
-                let y = origin_y + (src_y * scale + sdy) as i64;
-                if y < 0 || y as usize >= buf_h {
-                    continue;
-                }
-                let y = y as usize;
-                let x_start = origin_x + (src_x * scale) as i64;
-                let x_end = x_start + scale as i64;
-                let x0 = x_start.max(0);
-                let x1 = x_end.min(buf_w as i64);
-                if x0 >= x1 {
-                    continue;
-                }
-                let row_start = y * buf_w + x0 as usize;
-                let row_end = y * buf_w + x1 as usize;
-                buffer[row_start..row_end].fill(color);
+            let y = y as usize;
+            let x_start = origin_x + (usize::from(src_x) * scale) as i64;
+            let x_end = x_start + scale as i64;
+            let x0 = x_start.max(0);
+            let x1 = x_end.min(buf_w as i64);
+            if x0 >= x1 {
+                continue;
             }
+            let row_start = y * buf_w + x0 as usize;
+            let row_end = y * buf_w + x1 as usize;
+            buffer[row_start..row_end].fill(color);
         }
     }
 }
@@ -988,12 +987,18 @@ fn blit_glyph(
     let origin_y = px_y as i64 + i64::from(tile.dy()) * scale as i64;
 
     let glyph_index = font.char_to_index(tile.glyph());
-    let rows = font.rows(glyph_index);
-    let src_w = usize::from(font.glyph_width);
     let buf_h = buffer.len() / buf_w;
 
     blit_glyph_mask(
-        buffer, buf_w, buf_h, origin_x, origin_y, rows, src_w, scale, fg,
+        buffer,
+        buf_w,
+        buf_h,
+        origin_x,
+        origin_y,
+        font,
+        glyph_index,
+        scale,
+        fg,
     );
 }
 
