@@ -3,12 +3,13 @@
 //! The [`SpriteCache`] is built from [`TilesetOptions`]
 //! and provides O(1) lookup of decoded RGBA8 sprites by codepoint.
 
-use crate::tileset::{TilesetError, TilesetOptions};
+use crate::tileset::{SpriteAlign, TilesetError, TilesetOptions};
 use alpha_blend::rgba::U8x4Rgba;
 use std::collections::BTreeMap;
 
 /// A decoded, ready-to-blit sprite.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct Sprite {
     /// RGBA8 pixel data, row-major, `pixel_width * pixel_height * 4` bytes.
     pub pixels: Vec<u8>,
@@ -16,10 +17,33 @@ pub struct Sprite {
     pub pixel_width: u32,
     /// Pixel height of the sprite.
     pub pixel_height: u32,
-    /// How many grid cells wide this sprite is.
-    pub spacing_cells_x: u16,
-    /// How many grid cells tall this sprite is.
-    pub spacing_cells_y: u16,
+    /// Where this sprite sits inside the multi-cell box a span reserves for it.
+    pub align: SpriteAlign,
+}
+
+impl Sprite {
+    /// Returns the offset, in unscaled pixels, from the top-left corner of a `span_w` x `span_h`
+    /// cell box to where this sprite's own top-left pixel belongs, per [`align`](Self::align).
+    ///
+    /// `glyph_w`/`glyph_h` are the unscaled cell size, so the box is
+    /// `span_w * glyph_w` x `span_h * glyph_h` pixels. Returns `(0, 0)` whenever the art already
+    /// fills the box, which is the common case; a backend can add the result to a tile's
+    /// [`dx`](retroglyph_core::Tile::dx)/[`dy`](retroglyph_core::Tile::dy) unconditionally.
+    #[must_use]
+    pub const fn align_offset(
+        &self,
+        span_w: u16,
+        span_h: u16,
+        glyph_w: u8,
+        glyph_h: u8,
+    ) -> (i16, i16) {
+        // A zero cell size would make the box degenerate; treat it as one pixel so the sprite
+        // stays pinned to its anchor rather than being offset by a nonsense amount.
+        let box_w = span_w as u32 * if glyph_w == 0 { 1 } else { glyph_w as u32 };
+        let box_h = span_h as u32 * if glyph_h == 0 { 1 } else { glyph_h as u32 };
+        self.align
+            .offset(self.pixel_width, self.pixel_height, box_w, box_h)
+    }
 }
 
 /// Cache of decoded sprites, keyed by Unicode codepoint.
@@ -144,8 +168,7 @@ impl SpriteCache {
                 pixels,
                 pixel_width: tile_w,
                 pixel_height: tile_h,
-                spacing_cells_x: opts.spacing_cells_x,
-                spacing_cells_y: opts.spacing_cells_y,
+                align: opts.align,
             };
 
             if self.sprites.insert(codepoint, sprite).is_some() {
@@ -185,7 +208,7 @@ pub fn source_over(src: U8x4Rgba, dst: U8x4Rgba) -> U8x4Rgba {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tileset::{Codepage, TilesetOptions};
+    use crate::tileset::{Codepage, SpriteAlign, TilesetOptions};
     use image::ImageEncoder;
 
     /// Build a programmatic RGBA8 PNG for testing.
@@ -314,6 +337,51 @@ mod tests {
         assert!(cache.get('A').is_some());
         assert!(cache.get('B').is_some());
         assert!(cache.get('C').is_none()); // tile index 2 unmapped
+    }
+
+    // ── Alignment inside a span's cell box ─────────────────────────────
+
+    /// Loads a single-tile `tile_w` x `tile_h` sheet mapped to `'A'` with the given alignment.
+    fn one_sprite(tile_w: u32, tile_h: u32, align: SpriteAlign) -> Sprite {
+        let png = make_test_png(tile_w, tile_h, 1, 1);
+        #[allow(clippy::cast_possible_truncation)]
+        let opts = TilesetOptions::from_bytes(png)
+            .tile_size(tile_w as u16, tile_h as u16)
+            .codepage(Codepage::Custom(vec!['A']))
+            .align(align)
+            .build()
+            .unwrap();
+        let mut cache = SpriteCache::new();
+        cache.load(&opts).unwrap();
+        cache.get('A').unwrap().clone()
+    }
+
+    #[test]
+    fn sprite_align_offset_centres_art_in_a_multi_cell_box() {
+        // An 8x16 sprite in a 2x1 span of 8x16 cells: 8 pixels of horizontal slack, none vertical.
+        let sprite = one_sprite(8, 16, SpriteAlign::Center);
+        assert_eq!(sprite.align_offset(2, 1, 8, 16), (4, 0));
+        assert_eq!(sprite.align_offset(2, 2, 8, 16), (4, 8));
+    }
+
+    #[test]
+    fn sprite_align_offset_is_zero_when_the_art_fills_its_span() {
+        // A 16x32 sprite in the 2x2 span of 8x16 cells it was drawn for.
+        let sprite = one_sprite(16, 32, SpriteAlign::Center);
+        assert_eq!(sprite.align_offset(2, 2, 8, 16), (0, 0));
+    }
+
+    #[test]
+    fn sprite_align_offset_defaults_to_top_left() {
+        let sprite = one_sprite(8, 16, SpriteAlign::TopLeft);
+        assert_eq!(sprite.align_offset(4, 4, 8, 16), (0, 0));
+    }
+
+    #[test]
+    fn sprite_align_offset_tolerates_a_zero_cell_size() {
+        // A degenerate cell size must not offset the sprite off its anchor.
+        let sprite = one_sprite(8, 16, SpriteAlign::Center);
+        assert_eq!(sprite.align_offset(2, 2, 0, 0), (0, 0));
     }
 
     // ── source_over tests ────────────────────────────────────────────────
