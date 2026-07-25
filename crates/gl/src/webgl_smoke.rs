@@ -111,7 +111,7 @@ impl Frame {
 
 /// Builds the renderer's resources, renders its current instance array into an RGBA8 offscreen
 /// framebuffer via the real [`GlRenderer::build_resources`] + `draw`, and reads the pixels back.
-fn render_to_frame(gl: &glow::Context, renderer: &mut GlRenderer) -> Frame {
+fn render_to_frame(gl: &glow::Context, renderer: &GlRenderer) -> Frame {
     let (w, h) = renderer.surface_size;
     let res = renderer
         .build_resources(gl, GlslFlavor::Es300)
@@ -143,11 +143,6 @@ fn render_to_frame(gl: &glow::Context, renderer: &mut GlRenderer) -> Frame {
         // back-to-front (upload + two instanced passes each) -- the same loop the windowed
         // `present` runs, so a single-layer frame and a multi-layer one both go through it.
         res.clear(gl);
-        // Upload any glyphs a dynamic atlas rasterized (empty for the bitmap source), mirroring
-        // `present`, so grid-packed slots in higher layers are populated before drawing.
-        for (slot, cov) in renderer.glyphs.take_pending() {
-            res.upload_glyph(gl, slot, &cov);
-        }
         for layer in &renderer.layers {
             res.upload(gl, layer);
             res.draw_layer(gl, renderer.cell_count() as i32);
@@ -212,7 +207,7 @@ fn full_block_cell_is_all_foreground_blank_cell_is_all_background() {
     paint(&mut r, &cells);
 
     let gl = webgl2_context(r.surface_size.0, r.surface_size.1);
-    let frame = render_to_frame(&gl, &mut r);
+    let frame = render_to_frame(&gl, &r);
     let (cw, ch) = r.geometry.cell_size();
 
     for y in 0..ch {
@@ -271,7 +266,7 @@ fn composites_two_layers_back_to_front() {
     paint_layers(&mut r, &layered);
 
     let gl = webgl2_context(r.surface_size.0, r.surface_size.1);
-    let frame = render_to_frame(&gl, &mut r);
+    let frame = render_to_frame(&gl, &r);
     let (cw, ch) = r.geometry.cell_size();
 
     for y in 0..ch {
@@ -293,97 +288,4 @@ fn composites_two_layers_back_to_front() {
             );
         }
     }
-}
-
-#[wasm_bindgen_test]
-fn dynamic_atlas_packs_glyphs_across_layers() {
-    // A dynamic atlas with a full 16x16 grid per layer needs >256 distinct glyphs to spill into a
-    // second array layer (issue #367). Draw 300 distinct characters, forcing slots 0..300 -- so
-    // the last ~44 live in layer 1 -- with the test-only synthetic source (every non-space cell is
-    // fully covered). If the shader's slot -> (layer, cell) unpacking or the per-glyph
-    // `texSubImage3D` were wrong for slot >= 256, those cells would sample empty coverage and show
-    // their background instead of their foreground.
-    let (cols, rows) = (20u16, 15u16); // 300 cells.
-    let mut r = GlRenderer::new(
-        crate::glyphs::GlyphCache::synthetic(8, 8, 512),
-        cols,
-        rows,
-        1,
-    );
-
-    // A distinct, non-space character per cell (offset past the ASCII control range).
-    let mut cells = Vec::new();
-    for i in 0..usize::from(cols) * usize::from(rows) {
-        let ch = char::from_u32(0x21 + i as u32).unwrap_or('?');
-        #[allow(clippy::cast_possible_truncation)]
-        let (x, y) = (
-            (i % usize::from(cols)) as u16,
-            (i / usize::from(cols)) as u16,
-        );
-        cells.push((
-            Pos::new(x, y),
-            Tile::new(ch, Style::new().fg(rgb(RED)).bg(rgb(BLUE))),
-        ));
-    }
-    paint(&mut r, &cells);
-
-    let gl = webgl2_context(r.surface_size.0, r.surface_size.1);
-    let frame = render_to_frame(&gl, &mut r);
-    let (cw, ch) = r.geometry.cell_size();
-
-    // Every cell's synthetic glyph fully covers it, so every cell must be its foreground -- proving
-    // both the layer-0 and the layer-1 (slot >= 256) glyphs sampled correctly.
-    for cy in 0..u32::from(rows) {
-        for cx in 0..u32::from(cols) {
-            let (px, py) = (cx * cw + cw / 2, cy * ch + ch / 2);
-            assert_eq!(
-                frame.rgb(px, py),
-                RED,
-                "cell ({cx},{cy}) glyph did not sample -- cross-layer packing broken?"
-            );
-        }
-    }
-}
-
-#[wasm_bindgen_test]
-fn dynamic_ttf_glyph_rasterizes_and_renders() {
-    // The full dynamic path end to end on real WebGL2 (issue #367): a real TTF glyph is rasterized
-    // by fontdue, uploaded to its atlas slot via texSubImage3D, and sampled by the shader. Tiny5
-    // (SIL OFL 1.1) is bundled under crates/gl/testdata.
-    const TINY5: &[u8] = include_bytes!("../testdata/Tiny5-Regular.ttf");
-    let mut r = GlBackendBuilder::new()
-        .grid_size(1, 1)
-        .ttf(TINY5.to_vec(), 16.0)
-        .build()
-        .expect("TTF backend builds");
-    paint(
-        &mut r,
-        &[(
-            Pos::new(0, 0),
-            Tile::new('A', Style::new().fg(rgb(RED)).bg(rgb(BLUE))),
-        )],
-    );
-
-    let gl = webgl2_context(r.surface_size.0, r.surface_size.1);
-    let frame = render_to_frame(&gl, &mut r);
-    let (cw, ch) = r.geometry.cell_size();
-
-    // The glyph must produce some foreground pixels (it rendered) and leave some background (it is
-    // not a solid block) -- i.e. a real 'A' shape was rasterized, uploaded, and sampled.
-    let mut any_fg = false;
-    let mut any_bg = false;
-    for y in 0..ch {
-        for x in 0..cw {
-            match frame.rgb(x, y) {
-                RED => any_fg = true,
-                BLUE => any_bg = true,
-                _ => {}
-            }
-        }
-    }
-    assert!(any_fg, "TTF 'A' rendered no foreground pixels");
-    assert!(
-        any_bg,
-        "TTF 'A' cell is entirely foreground (glyph did not rasterize a shape)"
-    );
 }

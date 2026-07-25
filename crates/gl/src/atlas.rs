@@ -8,8 +8,8 @@
 //! `(layer, column, row)` sub-rect (see `shaders.rs`).
 //!
 //! This module owns the CPU-side byte layout ([`AtlasGeometry`] plus the initial coverage buffer
-//! for the static [`BitmapFont`] path); the GL upload (whole-texture and per-glyph `texSubImage3D`)
-//! lives in [`renderer`](crate::renderer), which owns the `glow` context.
+//! for the [`BitmapFont`]); the whole-texture GL upload lives in [`renderer`](crate::renderer),
+//! which owns the `glow` context.
 //!
 //! A set bit / non-zero coverage sample becomes up to `0xFF`; the fragment shader samples with
 //! `NEAREST` and blends foreground over background by coverage, so glyphs stay crisp at any integer
@@ -51,11 +51,6 @@ impl AtlasGeometry {
         }
     }
 
-    /// Total glyph slots this atlas can hold.
-    pub(crate) const fn capacity(&self) -> u32 {
-        SLOTS_PER_LAYER * self.layers
-    }
-
     /// One layer's texture width in texels.
     pub(crate) const fn tex_w(&self) -> u32 {
         self.cell_w * ATLAS_COLS
@@ -71,12 +66,6 @@ impl AtlasGeometry {
         let layer = slot / SLOTS_PER_LAYER;
         let within = slot % SLOTS_PER_LAYER;
         (layer, within % ATLAS_COLS, within / ATLAS_COLS)
-    }
-
-    /// The top-left texel `(x, y)` of `slot`'s cell within its layer.
-    pub(crate) const fn cell_origin(&self, slot: u32) -> (u32, u32) {
-        let (_, col, row) = Self::locate(slot);
-        (col * self.cell_w, row * self.cell_h)
     }
 }
 
@@ -149,7 +138,7 @@ mod tests {
         let g = AtlasGeometry::new(8, 16, 256);
         assert_eq!(g.tex_w(), 8 * 16);
         assert_eq!(g.tex_h(), 16 * 16);
-        assert_eq!(g.capacity(), 256);
+        assert_eq!(g.layers, 1);
     }
 
     #[cfg(feature = "default-font")]

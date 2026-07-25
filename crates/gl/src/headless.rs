@@ -362,10 +362,7 @@ fn glyph_matches_font_coverage_fg_vs_bg() {
 
     let frame = render_to_frame(&ctx, &r).expect("render");
 
-    let font = r
-        .glyphs
-        .bitmap_font()
-        .expect("default font is a bitmap font");
+    let font = r.glyphs.bitmap_font();
     let gw = u32::from(font.glyph_width);
     let gh = u32::from(font.glyph_height);
     let idx = font.char_to_index('A');

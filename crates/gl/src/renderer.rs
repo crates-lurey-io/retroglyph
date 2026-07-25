@@ -11,7 +11,7 @@
 // idiomatic GL code, so they're allowed crate-locally here.
 #![allow(clippy::redundant_pub_crate)]
 
-use crate::atlas::{ATLAS_COLS, ATLAS_ROWS, AtlasData, AtlasGeometry};
+use crate::atlas::{ATLAS_COLS, ATLAS_ROWS, AtlasData};
 use crate::error::SurfaceError;
 use crate::shaders::{GlslFlavor, Shader, source};
 use glow::HasContext as _;
@@ -113,8 +113,6 @@ pub(crate) struct GlResources {
     index_buffer: glow::Buffer,
     instance_vbo: glow::Buffer,
     atlas: glow::Texture,
-    /// The grid packing of the atlas texture, for per-glyph `texSubImage3D` uploads.
-    atlas_geometry: AtlasGeometry,
     u_screen: Option<glow::UniformLocation>,
     u_cell: Option<glow::UniformLocation>,
     u_cols: Option<glow::UniformLocation>,
@@ -209,7 +207,6 @@ impl GlResources {
                 index_buffer,
                 instance_vbo,
                 atlas: atlas_tex,
-                atlas_geometry: atlas.geometry,
                 u_screen,
                 u_cell,
                 u_cols,
@@ -370,34 +367,6 @@ impl GlResources {
     /// The instance-buffer capacity in cells.
     pub(crate) const fn capacity(&self) -> usize {
         self.capacity
-    }
-
-    /// Uploads one glyph's `cell_w * cell_h` coverage bytes into its atlas slot via
-    /// `texSubImage3D` (the dynamic-atlas path, issue #367). `coverage` is row-major, top row
-    /// first, matching the initial atlas build.
-    #[allow(clippy::cast_possible_wrap)]
-    pub(crate) fn upload_glyph(&self, gl: &glow::Context, slot: u32, coverage: &[u8]) {
-        let g = self.atlas_geometry;
-        debug_assert_eq!(coverage.len(), (g.cell_w * g.cell_h) as usize);
-        let (layer, _, _) = AtlasGeometry::locate(slot);
-        let (ox, oy) = g.cell_origin(slot);
-        unsafe {
-            gl.bind_texture(glow::TEXTURE_2D_ARRAY, Some(self.atlas));
-            gl.pixel_store_i32(glow::UNPACK_ALIGNMENT, 1);
-            gl.tex_sub_image_3d(
-                glow::TEXTURE_2D_ARRAY,
-                0,
-                ox as i32,
-                oy as i32,
-                layer as i32,
-                g.cell_w as i32,
-                g.cell_h as i32,
-                1,
-                glow::RED,
-                glow::UNSIGNED_BYTE,
-                glow::PixelUnpackData::Slice(Some(coverage)),
-            );
-        }
     }
 
     /// Deletes every GL object. Call before dropping the context.
