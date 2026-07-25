@@ -23,7 +23,6 @@ use std::fmt;
 use std::marker::PhantomData;
 use std::rc::Rc;
 use std::sync::Arc;
-#[cfg(not(target_arch = "wasm32"))]
 use std::time::Duration;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
@@ -137,9 +136,23 @@ impl WindowConfig {
     /// [`Output::size`](retroglyph_core::backend::Output::size) and
     /// [`Presenter::cell_size`].
     ///
-    /// `target_fps` is an optional frame-rate cap: `None` runs uncapped on native (the event
-    /// loop re-renders as fast as the backend allows) or at display refresh on `wasm32` (always
-    /// `requestAnimationFrame`-driven there regardless of this setting).
+    /// `target_fps` picks between the two redraw modes, on native and `wasm32` alike:
+    ///
+    /// - `None` is **redraw-on-demand**: a frame is rendered only after something happened (an
+    ///   input or window event, an injected [`Event::Custom`], window creation), and the loop
+    ///   sleeps otherwise. Right for event-driven retro/terminal UIs, which are idle most of the
+    ///   time; wrong for anything that animates from [`Frame::delta`](retroglyph_core::Frame::delta),
+    ///   which will render one frame and then sit still until the next stray event.
+    /// - `Some(fps)` is **continuous**: a frame is rendered every interval whether or not
+    ///   anything happened, which is what a [`Tween`](retroglyph_core::Tween)/
+    ///   [`FrameClock`](retroglyph_core::FrameClock)-driven app needs.
+    ///
+    /// On `wasm32` the browser owns frame pacing: winit's web backend delivers each requested
+    /// redraw on the next `requestAnimationFrame`, so `Some(_)` runs at the display refresh rate
+    /// and the specific number is advisory (there is no way to render faster than
+    /// `requestAnimationFrame`, and rendering slower would mean discarding frames the browser
+    /// already scheduled). Only the `Some`/`None` choice carries across, which is the choice that
+    /// matters.
     #[must_use]
     pub fn fit<P: Presenter>(
         presenter: &P,
@@ -546,7 +559,6 @@ where
     let event_loop = EventLoop::<T>::with_user_event().build()?;
     on_proxy(EventProxy(event_loop.create_proxy()));
 
-    #[cfg(not(target_arch = "wasm32"))]
     let frame_interval = config
         .target_fps
         .map(|fps| Duration::from_secs_f64(1.0 / f64::from(fps)));
@@ -568,7 +580,6 @@ where
         current_modifiers: KeyModifiers::NONE,
         cursor_px: (0.0, 0.0),
         active_touch: None,
-        #[cfg(not(target_arch = "wasm32"))]
         frame_interval,
         #[cfg(not(target_arch = "wasm32"))]
         next_frame: std::time::Instant::now(),
@@ -810,10 +821,14 @@ struct WindowApp<P: Presenter, F, T, D> {
     /// ignored until it lifts, so a stray second finger can't teleport the
     /// cursor mid-drag.
     active_touch: Option<u64>,
-    /// Optional frame interval for `WaitUntil` throttling. `None` = unbounded.
-    #[cfg(not(target_arch = "wasm32"))]
+    /// Frame interval derived from [`WindowConfig::target_fps`]. `Some` selects continuous
+    /// (animation) redraws, `None` selects redraw-on-demand -- see [`WindowConfig::fit`].
+    ///
+    /// Stored on `wasm32` too, where only the `Some`/`None` distinction is used: the browser's
+    /// `requestAnimationFrame` already paces the loop, so there is no deadline to sleep until.
     frame_interval: Option<Duration>,
-    /// Deadline for the next frame when `frame_interval` is set.
+    /// Deadline for the next frame when `frame_interval` is set. Native only: `wasm32` has no
+    /// sleeping event loop to schedule against.
     #[cfg(not(target_arch = "wasm32"))]
     next_frame: std::time::Instant,
     /// Set by `app_loop` (specifically [`run_app_with_proxy`]'s closure) to request the event
@@ -837,9 +852,11 @@ struct WindowApp<P: Presenter, F, T, D> {
     /// Retro/terminal-style apps are event-driven, not animation-driven, so "nothing happened"
     /// should mean "render nothing new" -- see this field's use in `about_to_wait` for why that
     /// keeps the loop asleep (`ControlFlow::Wait`) instead of spinning at ~100% CPU redrawing an
-    /// unchanged frame forever. Only consulted when `frame_interval` is `None`: a `target_fps`
-    /// throttle already redraws unconditionally once its `WaitUntil` deadline passes, animation
-    /// or not.
+    /// unchanged frame forever.
+    ///
+    /// Only consulted when `frame_interval` is `None`, i.e. redraw-on-demand mode. An app that
+    /// animates over time has no event to point at and would freeze under this gate, which is
+    /// what `Some(fps)` (continuous mode) is for -- see [`WindowConfig::fit`].
     needs_redraw: bool,
     /// Count of consecutive `present()` failures, reset to 0 on the next success. Drives
     /// [`present_failure_action`]'s logging-verbosity and surface-recovery decisions in the
@@ -1111,6 +1128,32 @@ const fn present_failure_action(
     }
 }
 
+/// Continuous mode's next-frame decision on native: `None` while `now` is still short of
+/// `next_frame` (the caller parks the loop on `ControlFlow::WaitUntil(next_frame)`), or
+/// `Some(advanced)` once the deadline has passed, where `advanced` is the deadline for the frame
+/// after this one.
+///
+/// `advanced` is `next_frame + interval` clamped to `now`, so a frame that overran its budget (a
+/// stalled GPU, a descheduled thread) resumes from the present rather than firing a burst of
+/// catch-up renders to "make up" the lost time -- there is nothing to make up when every frame
+/// renders the current state.
+///
+/// Pure function of the two instants and the interval, kept separate from the live `about_to_wait`
+/// handling (which needs an [`ActiveEventLoop`] no unit test can construct) for the same reason as
+/// [`present_failure_action`] and [`physical_size_for`] above. `wasm32` has no sleeping event loop
+/// to schedule against and never calls this -- see `about_to_wait`.
+#[cfg(not(target_arch = "wasm32"))]
+fn next_frame_deadline(
+    now: std::time::Instant,
+    next_frame: std::time::Instant,
+    interval: Duration,
+) -> Option<std::time::Instant> {
+    if next_frame > now {
+        return None;
+    }
+    Some((next_frame + interval).max(now))
+}
+
 /// Maps winit's [`Theme`](winit::window::Theme) to the backend-agnostic
 /// [`Event::ThemeChanged`], the only place that conversion needs to happen.
 const fn system_theme_event(theme: winit::window::Theme) -> Event {
@@ -1161,38 +1204,44 @@ where
         &mut self,
         #[cfg_attr(target_arch = "wasm32", allow(unused_variables))] event_loop: &ActiveEventLoop,
     ) {
+        let Some(interval) = self.frame_interval else {
+            // Redraw-on-demand (`target_fps: None`): only redraw if something actually happened
+            // since the last one. Otherwise leave `ControlFlow` at its default `Wait` so the loop
+            // sleeps instead of spinning at ~100% CPU re-rendering an unchanged frame every
+            // iteration -- retro/terminal-style apps are idle most of the time and event-driven,
+            // so "nothing happened" should mean "render nothing new". See `needs_redraw`'s doc
+            // comment.
+            if self.needs_redraw {
+                self.needs_redraw = false;
+                self.request_redraw();
+            }
+            return;
+        };
+
+        // Continuous (`target_fps: Some`): render regardless of `needs_redraw`. An app driving a
+        // tween off `Frame::delta` has something new to show every frame even though no input
+        // event arrived, which is precisely what the `needs_redraw` gate above cannot express.
+        //
+        // The two platforms pace that differently. Native sleeps until the deadline and then
+        // renders, since `request_redraw` is serviced within the same loop iteration. On `wasm32`
+        // there is nothing to sleep in: winit's web backend services `request_redraw` on the
+        // browser's next `requestAnimationFrame`, roughly one display frame later, so sleeping out
+        // a full interval *before* asking would pay that latency on top of it and halve the
+        // achieved frame rate. Ask on every iteration instead and let `requestAnimationFrame` do
+        // the pacing -- which is also what the browser wants, since it already throttles
+        // background tabs and matches the compositor's cadence.
         #[cfg(not(target_arch = "wasm32"))]
-        if let Some(interval) = self.frame_interval {
-            // Throttled: sleep until the next frame deadline, then render
-            // unconditionally -- a `target_fps` cap is an animation-style
-            // frame rate, not an idle/event-driven one, so it always
-            // redraws once its deadline passes regardless of `needs_redraw`.
-            let now = std::time::Instant::now();
-            if self.next_frame > now {
+        match next_frame_deadline(std::time::Instant::now(), self.next_frame, interval) {
+            None => {
                 event_loop
                     .set_control_flow(winit::event_loop::ControlFlow::WaitUntil(self.next_frame));
                 return;
             }
-            // Advance the deadline by one interval, clamping to now so a
-            // slow frame doesn't cause a burst of catch-up renders.
-            self.next_frame = (self.next_frame + interval).max(now);
-            if let Some(window) = &self.window {
-                window.request_redraw();
-            }
-            return;
+            Some(advanced) => self.next_frame = advanced,
         }
-        // Uncapped (`target_fps: None`): only redraw if something actually happened since the
-        // last one. Otherwise leave `ControlFlow` at its default `Wait` so the loop sleeps
-        // instead of spinning at ~100% CPU re-rendering an unchanged frame every iteration --
-        // retro/terminal-style apps are idle most of the time and event-driven, not
-        // animation-driven, so "nothing happened" should mean "render nothing new". See
-        // `needs_redraw`'s doc comment.
-        if self.needs_redraw {
-            self.needs_redraw = false;
-            if let Some(window) = &self.window {
-                window.request_redraw();
-            }
-        }
+        #[cfg(target_arch = "wasm32")]
+        let _ = interval;
+        self.request_redraw();
     }
 }
 
@@ -1202,6 +1251,16 @@ where
     F: FnMut(&mut Terminal<WindowBackend<P>>) + 'static,
     D: FnMut(T, &mut Terminal<WindowBackend<P>>) + 'static,
 {
+    /// Ask winit for a `RedrawRequested`, if the window exists yet.
+    ///
+    /// Both [`about_to_wait`](ApplicationHandler::about_to_wait) branches end here; the window is
+    /// `None` only before `resumed` has run.
+    fn request_redraw(&self) {
+        if let Some(window) = &self.window {
+            window.request_redraw();
+        }
+    }
+
     /// Drain one injected user event into `on_custom_event`.
     ///
     /// Extracted from the `ApplicationHandler::user_event` impl for the same reason as
@@ -2181,7 +2240,6 @@ mod tests {
             current_modifiers: KeyModifiers::NONE,
             cursor_px: (0.0, 0.0),
             active_touch: None,
-            #[cfg(not(target_arch = "wasm32"))]
             frame_interval: None,
             #[cfg(not(target_arch = "wasm32"))]
             next_frame: std::time::Instant::now(),
@@ -2629,7 +2687,6 @@ mod tests {
             current_modifiers: KeyModifiers::NONE,
             cursor_px: (0.0, 0.0),
             active_touch: None,
-            #[cfg(not(target_arch = "wasm32"))]
             frame_interval: None,
             #[cfg(not(target_arch = "wasm32"))]
             next_frame: std::time::Instant::now(),
@@ -2757,7 +2814,6 @@ mod tests {
             current_modifiers: KeyModifiers::NONE,
             cursor_px: (0.0, 0.0),
             active_touch: None,
-            #[cfg(not(target_arch = "wasm32"))]
             frame_interval: None,
             #[cfg(not(target_arch = "wasm32"))]
             next_frame: std::time::Instant::now(),
@@ -2974,7 +3030,6 @@ mod tests {
             current_modifiers: KeyModifiers::NONE,
             cursor_px: (0.0, 0.0),
             active_touch: None,
-            #[cfg(not(target_arch = "wasm32"))]
             frame_interval: None,
             #[cfg(not(target_arch = "wasm32"))]
             next_frame: std::time::Instant::now(),
@@ -3057,6 +3112,70 @@ mod tests {
         assert!(app.needs_redraw);
     }
 
+    // ── continuous mode (target_fps: Some) ───────────────────────────────────
+
+    #[test]
+    fn target_fps_none_is_redraw_on_demand() {
+        // The mode switch itself: `None` leaves `frame_interval` unset, which is what sends
+        // `about_to_wait` down the `needs_redraw`-gated branch.
+        let presenter = MockPresenter::default();
+        assert_eq!(
+            WindowConfig::fit(&presenter, "test", None).target_fps(),
+            None
+        );
+    }
+
+    #[test]
+    fn target_fps_some_survives_to_the_config() {
+        // Regression guard for the wasm32 half of the freeze this mode fixes: `target_fps` used
+        // to be dropped on the floor for wasm builds (`frame_interval` was `#[cfg(not(target_arch
+        // = "wasm32"))]`), so a browser app asking for continuous rendering silently got
+        // redraw-on-demand and rendered one frame for the life of the page. The field is
+        // unconditional now; this pins the config end of that, and the `compile-wasm` CI job pins
+        // the driver end.
+        let presenter = MockPresenter::default();
+        assert_eq!(
+            WindowConfig::fit(&presenter, "test", Some(60)).target_fps(),
+            Some(60)
+        );
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn frame_deadline_in_the_future_parks_the_loop() {
+        let now = std::time::Instant::now();
+        let next = now + Duration::from_millis(10);
+        assert_eq!(
+            next_frame_deadline(now, next, Duration::from_millis(16)),
+            None
+        );
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn frame_deadline_reached_advances_by_exactly_one_interval() {
+        // On time (deadline just passed): the next deadline is one interval on from the *deadline*,
+        // not from `now`, so a steady loop doesn't drift later and later.
+        let interval = Duration::from_millis(16);
+        let next = std::time::Instant::now();
+        let now = next + Duration::from_micros(200);
+        assert_eq!(
+            next_frame_deadline(now, next, interval),
+            Some(next + interval)
+        );
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn overrun_frame_deadline_clamps_to_now_instead_of_bursting() {
+        // A frame that blew well past its budget must not leave a backlog of deadlines already in
+        // the past, which would render several catch-up frames back to back at full speed.
+        let interval = Duration::from_millis(16);
+        let next = std::time::Instant::now();
+        let now = next + Duration::from_millis(500);
+        assert_eq!(next_frame_deadline(now, next, interval), Some(now));
+    }
+
     // ── handle_redraw_requested / present() failure recovery ─────────────────
 
     type FailingApp = WindowApp<
@@ -3089,7 +3208,6 @@ mod tests {
             current_modifiers: KeyModifiers::NONE,
             cursor_px: (0.0, 0.0),
             active_touch: None,
-            #[cfg(not(target_arch = "wasm32"))]
             frame_interval: None,
             #[cfg(not(target_arch = "wasm32"))]
             next_frame: std::time::Instant::now(),
@@ -3278,7 +3396,6 @@ mod tests {
             current_modifiers: KeyModifiers::NONE,
             cursor_px: (0.0, 0.0),
             active_touch: None,
-            #[cfg(not(target_arch = "wasm32"))]
             frame_interval: None,
             #[cfg(not(target_arch = "wasm32"))]
             next_frame: std::time::Instant::now(),
@@ -3370,7 +3487,6 @@ mod tests {
             current_modifiers: KeyModifiers::NONE,
             cursor_px: (0.0, 0.0),
             active_touch: None,
-            #[cfg(not(target_arch = "wasm32"))]
             frame_interval: None,
             #[cfg(not(target_arch = "wasm32"))]
             next_frame: std::time::Instant::now(),
