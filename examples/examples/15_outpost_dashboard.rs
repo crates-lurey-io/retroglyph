@@ -1126,11 +1126,12 @@ impl OutpostDashboard {
 impl Example for OutpostDashboard {
     const NAME: &'static str = "15_outpost_dashboard";
 
-    // Fill the whole browser viewport on the software/wasm backend instead of rendering at a
-    // fixed 50x25 grid wherever it lands on the page: this is a flagship, app-like dashboard
-    // meant to be the whole page (see the module doc comment's "genuine responsiveness" bullet),
-    // and a fixed small grid leaves most of a phone screen black -- see `Example::fill_viewport`.
-    #[cfg(feature = "software")]
+    // Fill the whole browser viewport on the wasm backends (software Canvas2D and GL WebGL2)
+    // instead of rendering at a fixed 50x25 grid wherever it lands on the page: this is a
+    // flagship, app-like dashboard meant to be the whole page (see the module doc comment's
+    // "genuine responsiveness" bullet), and a fixed small grid leaves most of a phone screen
+    // black -- see `Example::fill_viewport`.
+    #[cfg(any(feature = "software", feature = "gl"))]
     fn fill_viewport() -> bool {
         true
     }
