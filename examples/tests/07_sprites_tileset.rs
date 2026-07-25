@@ -5,12 +5,16 @@
 //! 07_sprites_tileset` runs.
 //!
 //! The headless snapshot drives synthetic movement through
-//! [`Headless::push_event`] to actually walk the player onto a coin -- this is what
-//! proves collection (and the score readout) work, not just that the room renders.
-//! The PNG snapshot is the one that matters most for this example specifically: it's
-//! the only one of the three where `Example::configure_software`'s tileset
-//! registration (see `support::png_snapshot`'s doc comment) actually renders real
-//! sprites instead of the bitmap font.
+//! [`Headless::push_event`] to actually walk the player onto a coin and then onto the
+//! chest -- this is what proves collection, multi-cell hit testing, and the score
+//! readout work, not just that the room renders.
+//!
+//! The three snapshots are also where the multi-cell fallback is checked end to end,
+//! since they are the same scene rendered by both kinds of backend: the headless and
+//! SVG snapshots must show the chest's eight ASCII glyphs, and the PNG must show one
+//! chest sprite covering those cells instead. The PNG is the only one of the three
+//! where `Example::configure_software`'s tileset registration (see
+//! `support::png_snapshot`'s doc comment) renders real sprites at all.
 
 #![allow(unreachable_pub)]
 
@@ -33,17 +37,19 @@ const fn key(code: KeyCode) -> Event {
 
 #[test]
 fn headless_snapshot() {
-    // Walks the player left 5 then down 2, from its spawn point onto the coin at
-    // `COIN_OFFSETS[3]` -- proves movement, collision-free floor traversal, and coin
-    // collection (the score readout incrementing) all in one driven sequence.
+    // Up 2 onto the coin at `COIN_OFFSETS[2]` (+1), back down 2, then right 4 onto the
+    // chest's bottom-left cell (+5). Deliberately lands on a *covered* cell rather than
+    // the span's anchor, so the last frame proves `Grid::span_owner` hit-tests the whole
+    // 4x2 footprint and not just the one cell the sprite is keyed to.
     let events = [
-        key(KeyCode::Left),
-        key(KeyCode::Left),
-        key(KeyCode::Left),
-        key(KeyCode::Left),
-        key(KeyCode::Left),
+        key(KeyCode::Up),
+        key(KeyCode::Up),
         key(KeyCode::Down),
         key(KeyCode::Down),
+        key(KeyCode::Right),
+        key(KeyCode::Right),
+        key(KeyCode::Right),
+        key(KeyCode::Right),
     ];
 
     let backend = Headless::new(50, 25);

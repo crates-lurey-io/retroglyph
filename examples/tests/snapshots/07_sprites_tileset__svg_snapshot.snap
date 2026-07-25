@@ -8,10 +8,10 @@ expression: svg
   <tspan fill="#cccccc" x="8.0">                                                  </tspan>
 </text>
 <text font-family="monospace" font-size="14" y="44.0" xml:space="preserve">
-  <tspan fill="#cccccc" x="8.0"> Arrows move, collect $ coins; q / Escape quits.  </tspan>
+  <tspan fill="#cccccc" x="8.0"> Arrows move; collect $ coins and open the chest  </tspan>
 </text>
 <text font-family="monospace" font-size="14" y="62.0" xml:space="preserve">
-  <tspan fill="#cccccc" x="8.0"> Score: 0                                         </tspan>
+  <tspan fill="#cccccc" x="8.0"> Score: 0   q / Escape quits                      </tspan>
 </text>
 <text font-family="monospace" font-size="14" y="80.0" xml:space="preserve">
   <tspan fill="#cccccc" x="8.0">  ######################                          </tspan>
@@ -32,10 +32,10 @@ expression: svg
   <tspan fill="#cccccc" x="8.0">  #.........$..........#                          </tspan>
 </text>
 <text font-family="monospace" font-size="14" y="188.0" xml:space="preserve">
-  <tspan fill="#cccccc" x="8.0">  #....................#                          </tspan>
+  <tspan fill="#cccccc" x="8.0">  #.............[==]...#                          </tspan>
 </text>
 <text font-family="monospace" font-size="14" y="206.0" xml:space="preserve">
-  <tspan fill="#cccccc" x="8.0">  #.........@..........#                          </tspan>
+  <tspan fill="#cccccc" x="8.0">  #.........@...|__|...#                          </tspan>
 </text>
 <text font-family="monospace" font-size="14" y="224.0" xml:space="preserve">
   <tspan fill="#cccccc" x="8.0">  #....................#                          </tspan>
