@@ -119,8 +119,7 @@ pub trait Example: Default + Sized + 'static {
     /// instead of counting raw `tick` calls -- see `06_layers.rs`.
     ///
     /// Draws only -- it does **not** call [`Terminal::present`]. The shared driver presents after
-    /// `tick` returns (so it can stamp the optional FPS overlay on top first; see the `fps`
-    /// feature). Mirrors
+    /// `tick` returns, so it can stamp the [FPS overlay](crate::fps) on top first. Mirrors
     /// [`App::update`](retroglyph_core::App::update)'s combined
     /// input-then-draw shape deliberately (rather than splitting into
     /// separate `handle_events`/`draw` trait methods) so `Example` stays a
@@ -143,19 +142,20 @@ struct ExampleApp<E> {
     state: Option<E>,
     /// Backend label for the FPS overlay ("software"/"gl"/"crossterm").
     backend_name: &'static str,
-    /// Smoothed frame-timing state for the optional FPS overlay (`fps` feature).
-    #[cfg(feature = "fps")]
+    /// Smoothed frame-timing state for the FPS overlay.
     fps: crate::fps::Fps,
+    /// Whether to draw the overlay at all; see [`fps::overlay_enabled`](crate::fps::overlay_enabled).
+    fps_enabled: bool,
 }
 
 #[cfg(any(feature = "crossterm", feature = "software", feature = "gl"))]
 impl<E> ExampleApp<E> {
-    const fn new(backend_name: &'static str) -> Self {
+    fn new(backend_name: &'static str) -> Self {
         Self {
             state: None,
             backend_name,
-            #[cfg(feature = "fps")]
             fps: crate::fps::Fps::new(),
+            fps_enabled: crate::fps::overlay_enabled(),
         }
     }
 }
@@ -165,8 +165,6 @@ impl<B: Backend, E: Example> App<B> for ExampleApp<E> {
     fn update(&mut self, term: &mut Terminal<B>, frame: &Frame) -> Flow {
         let state = self.state.get_or_insert_with(|| E::init(term));
         let keep_going = state.tick(term, frame);
-        // `backend_name` is unused without `fps`.
-        let _ = self.backend_name;
         if !keep_going {
             // Quitting: `present` clears `current` each frame, so an example that returns without
             // drawing (it quit in its event handler before drawing) leaves `current` empty --
@@ -174,10 +172,9 @@ impl<B: Backend, E: Example> App<B> for ExampleApp<E> {
             // exit, matching the old contract where `tick` presented only when it actually drew.
             return Flow::Exit;
         }
-        // Mechanism A: the driver owns `present`, so the FPS overlay (a top layer) is stamped after
-        // the example's draw and survives to the flush.
-        #[cfg(feature = "fps")]
-        {
+        // The driver owns `present`, so the FPS overlay (a top layer) is stamped after the
+        // example's draw and survives to the flush.
+        if self.fps_enabled {
             self.fps.tick(frame.delta);
             self.fps.draw(term, self.backend_name);
         }

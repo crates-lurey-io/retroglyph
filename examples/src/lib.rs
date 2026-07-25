@@ -34,10 +34,9 @@
     rustdoc::private_intra_doc_links
 )]
 
-#[cfg(all(
-    feature = "fps",
-    any(feature = "crossterm", feature = "software", feature = "gl")
-))]
+// Only the live backends have a frame rate worth reporting: the headless paths are frame-stepped
+// at a fixed synthetic delta, and nothing there constructs the `ExampleApp` driver that draws it.
+#[cfg(any(feature = "crossterm", feature = "software", feature = "gl"))]
 mod fps;
 mod launch;
 pub mod util;

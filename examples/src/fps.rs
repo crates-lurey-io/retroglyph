@@ -1,5 +1,9 @@
-//! Optional FPS / frame-time overlay, drawn by the shared driver ([`ExampleApp`](crate::launch))
-//! when the `fps` feature is enabled.
+//! FPS / frame-time overlay, drawn by the shared driver ([`ExampleApp`](crate::launch)) on top of
+//! every windowed and crossterm example.
+//!
+//! On by default -- running an example should show its frame rate without having to know a flag
+//! exists. [`overlay_enabled`] is the native opt-out (`RG_FPS=0`); on wasm the overlay injects a
+//! live toggle button instead.
 //!
 //! This is deliberately example-only shared code, not a `retroglyph-widgets` widget: the reusable
 //! part (draw a small labeled box) is trivial, while everything that matters here -- the backend
@@ -20,6 +24,31 @@ const OVERLAY_LAYER: u8 = 2;
 /// Exponential-moving-average weight for each new frame's time. Small = steadier readout, slower to
 /// react to a genuine frame-rate change.
 const ALPHA: f64 = 0.1;
+
+/// Whether the driver should draw the overlay at all, from the `RG_FPS` environment variable.
+///
+/// Set `RG_FPS=0` (or `false`/`off`) to suppress it. That's what `examples/tests/support`'s
+/// `capture_pty` does when it spawns an example under a PTY: a live frame rate is by definition
+/// not reproducible, so leaving it on would make every SVG snapshot churn on every run.
+///
+/// Read by the driver once at startup rather than by [`Fps::draw`], so [`Fps`] stays a pure
+/// renderer whose unit tests don't depend on the ambient environment. Always `true` on `wasm32`
+/// (nothing sets environment variables there); the toggle button covers that target instead.
+pub(crate) fn overlay_enabled() -> bool {
+    enabled_from_env(std::env::var("RG_FPS").ok().as_deref())
+}
+
+/// [`overlay_enabled`]'s parsing, split out so it's testable without mutating the process
+/// environment (`std::env::set_var` is `unsafe` in edition 2024, and `unsafe_code` is forbidden
+/// workspace-wide).
+fn enabled_from_env(value: Option<&str>) -> bool {
+    value.is_none_or(|value| {
+        !matches!(
+            value.trim().to_ascii_lowercase().as_str(),
+            "0" | "false" | "off"
+        )
+    })
+}
 
 /// Smoothed frame-timing state behind the [FPS overlay](Self::draw).
 pub(crate) struct Fps {
@@ -154,9 +183,22 @@ mod wasm_toggle {
 
 #[cfg(test)]
 mod tests {
-    use super::Fps;
+    use super::{Fps, enabled_from_env};
     use retroglyph_core::{Headless, Terminal};
     use std::time::Duration;
+
+    #[test]
+    fn overlay_is_on_unless_rg_fps_says_otherwise() {
+        assert!(enabled_from_env(None), "on by default");
+        assert!(enabled_from_env(Some("1")));
+        assert!(
+            enabled_from_env(Some("")),
+            "an empty value is not an opt-out"
+        );
+        for off in ["0", "false", "off", "OFF", " 0 "] {
+            assert!(!enabled_from_env(Some(off)), "{off:?} should disable");
+        }
+    }
 
     #[test]
     fn overlay_renders_fps_ms_and_backend_top_right() {

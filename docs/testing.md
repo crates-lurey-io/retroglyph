@@ -152,6 +152,12 @@ one source of truth:
 - **Crossterm SVG** — a real PTY capture, parsed via the `vt100` crate, verifying the ANSI/SGR
   output an actual terminal would receive.
 
+`support::capture_pty` spawns those crossterm binaries with `RG_FPS=0`, because the shared example
+driver draws its FPS overlay by default and a live frame rate is not reproducible. The one place
+that deliberately doesn't is `examples/tests/fps_overlay.rs`, which pins the default itself (the
+overlay was originally behind an opt-in Cargo feature, so nothing that ran an example the documented
+way ever saw it).
+
 The crossterm binary each `svg_snapshot` test spawns is built with its own `--target-dir`
 (`target/pty-examples/`, see `support::build_crossterm_example`), separate from the workspace's
 normal `target/`. `cargo test --workspace --all-features` builds every example with the `software`
