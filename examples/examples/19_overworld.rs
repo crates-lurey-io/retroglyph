@@ -3078,7 +3078,10 @@ fn draw_hex_tiles<B: Backend>(
 impl Example for Overworld {
     const NAME: &'static str = "19_overworld";
 
-    #[cfg(feature = "software")]
+    // Fill the whole browser viewport on the wasm backends (software Canvas2D and GL WebGL2)
+    // instead of the fixed 50x25 grid: this is a pannable overworld that should use every cell
+    // the viewport offers -- see `Example::fill_viewport`.
+    #[cfg(any(feature = "software", feature = "gl"))]
     fn fill_viewport() -> bool {
         true
     }

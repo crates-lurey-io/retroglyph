@@ -72,7 +72,7 @@ pub trait Example: Default + Sized + 'static {
         builder
     }
 
-    /// Whether the software backend's window should fill the browser viewport on `wasm32`
+    /// Whether the windowed backend's window should fill the browser viewport on `wasm32`
     /// (see [`WindowConfig::fill_viewport`](retroglyph_window::winit::WindowConfig::fill_viewport))
     /// instead of rendering at its natural grid size wherever it lands on the page.
     ///
@@ -80,9 +80,10 @@ pub trait Example: Default + Sized + 'static {
     /// own default -- most demos should render at a fixed, predictable grid size. Override this
     /// (returning `true`) for an app-like example meant to be the whole page, e.g. one with a
     /// pannable world that benefits from every cell the viewport can offer, especially on a small
-    /// mobile screen -- see `15_outpost_dashboard.rs`. Has no effect on native or on any backend
-    /// but `software`.
-    #[cfg(feature = "software")]
+    /// mobile screen -- see `15_outpost_dashboard.rs`. Read by both [`run_software`] and
+    /// [`run_gl`], so it applies to the software (`Canvas2D`) and GL (WebGL2) wasm backends alike;
+    /// has no effect on native.
+    #[cfg(any(feature = "software", feature = "gl"))]
     fn fill_viewport() -> bool {
         false
     }
@@ -208,8 +209,10 @@ pub fn run_software_with<E: Example>(builder: retroglyph_software::SoftwareBacke
 /// [`WindowConfig::fit`](retroglyph_window::winit::WindowConfig::fit), then drives it with
 /// `retroglyph-window`'s winit `App` driver -- the same driver `run_software` uses, since
 /// `GlRenderer` is a `Presenter` too. The GL backend does not read
-/// [`Example::configure_software`] (that builder is software-specific); GL examples render at this
-/// fixed default grid.
+/// [`Example::configure_software`] (that builder is software-specific), so GL examples render at
+/// this fixed default grid -- except that, like `run_software`, it honors
+/// [`Example::fill_viewport`] to fill the browser viewport on `wasm32` (the grid then grows to the
+/// canvas via the winit resize path).
 ///
 /// # Panics
 ///
@@ -224,7 +227,8 @@ pub fn run_gl<E: Example>() {
         .scale(2)
         .build()
         .expect("failed to initialize gl backend");
-    let config = retroglyph_window::winit::WindowConfig::fit(&renderer, E::NAME, None);
+    let config = retroglyph_window::winit::WindowConfig::fit(&renderer, E::NAME, None)
+        .fill_viewport(E::fill_viewport());
     let app = ExampleApp::<E>::new();
     retroglyph_window::winit::run_app(config, renderer, app).expect("event loop failed");
 }
