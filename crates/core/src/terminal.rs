@@ -230,27 +230,26 @@ impl<B: Backend> Terminal<B> {
         }
     }
 
-    /// Write a multi-cell span at `(x, y)` on the active layer with the current style: one
-    /// piece of artwork that occupies a `w x h` block of cells instead of one.
+    /// Writes a multi-cell span at `(x, y)` on the active layer with the current style: one piece
+    /// of artwork occupying a block of cells rather than one.
     ///
     /// `rows` holds one string per row of the footprint. Its first character is the **anchor**
-    /// glyph, which is what a pixel backend looks up in its sprite cache; the rest are the
-    /// span's **text fallback**, rendered by cell backends and skipped by pixel backends. One
-    /// call therefore covers every backend with no capability check:
+    /// glyph, which a pixel backend looks up in its sprite cache; the rest are the span's **text
+    /// fallback**, printed by cell backends and skipped by pixel backends. One call therefore
+    /// renders correctly on every backend with no capability check:
     ///
     /// ```
     /// # use retroglyph_core::{Headless, Terminal};
     /// # let mut term = Terminal::new(Headless::new(20, 10));
-    /// // A 2x2 chest: one sprite on `retroglyph-software`/`retroglyph-gl`, four glyphs on a
-    /// // real terminal.
-    /// term.put_span(4, 2, &["C=",
-    ///                       "[]"]);
+    /// // One 4x2 chest sprite on `retroglyph-software`/`retroglyph-gl`, eight glyphs on a real
+    /// // terminal.
+    /// term.put_span(4, 2, &["[==]",
+    ///                       "|__|"]);
     /// ```
     ///
-    /// Use [`Grid::span_owner`](crate::grid::Grid::span_owner) to hit-test against the whole
-    /// footprint. See that method and
-    /// [`Grid::write_span`](crate::grid::Grid::write_span) for the exact write semantics,
-    /// including what makes a span silently refuse to be written.
+    /// Silently writes nothing if `rows` is empty, ragged, or does not fit at `(x, y)`; see
+    /// [`Grid::write_span`](crate::grid::Grid::write_span) for the full write semantics, and
+    /// [`Grid::span_owner`](crate::grid::Grid::span_owner) to hit-test the whole footprint.
     pub fn put_span(&mut self, x: u16, y: u16, rows: &[&str]) {
         let style = self.drawing_style;
         self.put_span_styled(x, y, rows, style);

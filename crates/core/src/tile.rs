@@ -213,12 +213,14 @@ impl Tile {
         }
     }
 
-    /// Returns this tile's offset back to its span anchor, or `None` if it is not covered by one.
+    /// Returns this tile's `(dx, dy)` offset back to its span anchor, or `None` when it is not
+    /// covered by one.
     ///
-    /// The anchor of a covered cell at `(x, y)` is at `(x - dx, y - dy)`. A backend holding a
-    /// whole layer can therefore reach the anchor with one subtraction; a caller holding a
+    /// A covered cell at `(x, y)` has its anchor at `(x - dx, y - dy)`, so a backend holding a
+    /// whole layer reaches it with one subtraction. A caller holding a
     /// [`Grid`](crate::grid::Grid) should use
-    /// [`Grid::span_owner`](crate::grid::Grid::span_owner) instead.
+    /// [`Grid::span_owner`](crate::grid::Grid::span_owner) instead, which handles the bounds and
+    /// the anchor-cell case too.
     #[must_use]
     pub const fn span_offset(&self) -> Option<(u16, u16)> {
         if self.flags.contains(TileFlags::SPAN_COVERED) {

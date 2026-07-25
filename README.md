@@ -148,9 +148,20 @@ gets it for free.
   Runs unchanged as a native window or a browser `<canvas>` (WASM).
 - **Terminal (WASM)** (`retroglyph-terminal-wasm`) — pushes ANSI output to a browser terminal
   emulator such as xterm.js instead of a native TTY.
-- **Sprite tilesets** (feature `tilesets` on `retroglyph-software`) — PNG sprite sheets mapped to a
-  codepage (CP437, Unicode range, or custom), rendered with RGBA alpha blending over bitmap font
-  glyphs.
+- **Sprite tilesets** (feature `tilesets` on `retroglyph-software` and `retroglyph-gl`) — PNG sprite
+  sheets mapped to a codepage (CP437, Unicode range, or custom), rendered with RGBA alpha blending
+  over bitmap font glyphs, on the CPU or the GPU.
+- **Multi-cell sprites** — `Terminal::put_span` writes one piece of artwork across a `w × h` block
+  of cells and carries its own text fallback with it, so the same call renders as one sprite on a
+  graphical backend and as readable ASCII on a terminal, with no capability check:
+
+  ```rust,ignore
+  term.put_span(x, y, &["[==]",
+                        "|__|"]);
+  ```
+
+  `Grid::span_owner` resolves any cell of a span to its anchor in O(1), so hit-testing multi-cell
+  artwork is one comparison; `SpriteAlign` positions art inside a span box larger than itself.
 
 </details>
 

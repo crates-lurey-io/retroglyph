@@ -25,9 +25,13 @@ impl Sprite {
     /// Returns the offset, in unscaled pixels, from the top-left corner of a `span_w` x `span_h`
     /// cell box to where this sprite's own top-left pixel belongs, per [`align`](Self::align).
     ///
-    /// `glyph_w`/`glyph_h` are the unscaled cell size, so the box is
-    /// `span_w * glyph_w` x `span_h * glyph_h` pixels. Returns `(0, 0)` whenever the art already
-    /// fills the box, which is the common case; a backend can add the result to a tile's
+    /// `span_w`/`span_h` come from [`Tile::span`](retroglyph_core::Tile::span) and `glyph_w`/
+    /// `glyph_h` are the unscaled cell size, so the box is `span_w * glyph_w` x
+    /// `span_h * glyph_h` pixels. A zero cell size is treated as one pixel, leaving the sprite on
+    /// its anchor rather than offsetting it by a meaningless amount.
+    ///
+    /// Returns `(0, 0)` whenever the art already fills its box, which is the common case, so a
+    /// backend can add the result to a tile's
     /// [`dx`](retroglyph_core::Tile::dx)/[`dy`](retroglyph_core::Tile::dy) unconditionally.
     #[must_use]
     pub const fn align_offset(
@@ -188,15 +192,19 @@ impl Default for SpriteCache {
 }
 
 /// Warns, at most once per glyph, that `glyph`'s sprite is larger than one cell but was drawn
-/// without a span to reserve the cells it covers.
+/// without a span reserving the cells it covers.
 ///
-/// Such a sprite still blits at its natural size, so its pixels land in neighbouring cells that
-/// go on painting their own background and glyph over it. Both graphical backends call this from
-/// their sprite blit so the diagnostic, and the fix it names, are identical on each.
+/// For backend implementors: both graphical backends call this from their sprite blit, so the
+/// diagnostic and the fix it names are identical on each. Such a sprite still draws at its
+/// natural size, but its pixels land in neighbouring cells that go on painting their own
+/// background and glyph over it, which is a confusing thing to debug from the rendered output
+/// alone.
 ///
-/// `sprite` and `cell` are `(width, height)` in unscaled pixels. `seen` is caller-owned so a
-/// redraw loop logs each offending glyph once rather than every frame. Returns `true` when a
-/// warning was emitted.
+/// `sprite` and `cell` are `(width, height)` in unscaled pixels; a sprite fitting within `cell`
+/// on both axes is silent. `seen` is caller-owned state so a redraw loop reports each offending
+/// glyph once rather than every frame; entries are only ever added.
+///
+/// Returns whether a warning was emitted.
 pub fn warn_sprite_needs_span(
     seen: &mut BTreeSet<char>,
     glyph: char,

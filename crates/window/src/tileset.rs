@@ -39,15 +39,24 @@ pub enum SpriteAlign {
 }
 
 impl SpriteAlign {
-    /// Returns the offset, in unscaled pixels, of a `sprite_w` x `sprite_h` sprite placed inside
-    /// a `box_w` x `box_h` box.
+    /// Returns the offset of a `sprite_w` x `sprite_h` sprite placed inside a `box_w` x `box_h`
+    /// box, in unscaled pixels to match [`Tile::dx`](retroglyph_core::Tile::dx).
     ///
     /// Centring uses integer division, so an odd leftover pixel lands on the right/bottom side.
-    /// Saturates at `(0, 0)` on either axis where the sprite is at least as large as the box,
-    /// so an oversized sprite is never pulled off its own anchor cell.
+    /// Saturates at `0` on either axis where the sprite is at least as large as the box, so an
+    /// oversized sprite is never pulled off its own anchor cell.
     ///
-    /// Unscaled pixels, to match [`Tile::dx`](retroglyph_core::Tile::dx): every backend
-    /// multiplies both by the same integer render scale.
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_window::tileset::SpriteAlign;
+    ///
+    /// // 16x16 art in a 32x32 box leaves 16 pixels of slack on each axis.
+    /// assert_eq!(SpriteAlign::Center.offset(16, 16, 32, 32), (8, 8));
+    /// assert_eq!(SpriteAlign::BottomRight.offset(16, 16, 32, 32), (16, 16));
+    /// // Art that fills its box renders identically under every variant.
+    /// assert_eq!(SpriteAlign::Center.offset(16, 16, 16, 16), (0, 0));
+    /// ```
     #[must_use]
     pub const fn offset(self, sprite_w: u32, sprite_h: u32, box_w: u32, box_h: u32) -> (i16, i16) {
         let slack_x = box_w.saturating_sub(sprite_w);

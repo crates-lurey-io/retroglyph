@@ -805,22 +805,23 @@ impl Grid {
 // ---------------------------------------------------------------------------
 
 impl Grid {
-    /// Write a multi-cell span at `(x, y)` on `layer`: one tile that occupies a `w x h` block of
-    /// cells instead of one.
+    /// Writes a multi-cell span at `(x, y)` on `layer`: one piece of artwork occupying a block of
+    /// cells rather than one.
     ///
-    /// `rows` gives one string per grid row of the footprint, so the span is `rows.len()` cells
-    /// tall and `rows[0]`'s character count wide. `rows[0]`'s first character is written to the
-    /// **anchor** cell at `(x, y)` with [`TileFlags::SPAN_ANCHOR`]; every other character is
-    /// written to its cell with [`TileFlags::SPAN_COVERED`].
+    /// `rows` holds one string per row of the footprint, so the span is `rows.len()` cells tall
+    /// and `rows[0]`'s character count wide, and every row must be that same width. The first
+    /// character goes to the **anchor** cell at `(x, y)` with [`TileFlags::SPAN_ANCHOR`]; each
+    /// remaining character goes to its own cell with [`TileFlags::SPAN_COVERED`]. `style` applies
+    /// to every cell.
     ///
-    /// # Why the covered cells get real glyphs
+    /// # Text fallback
     ///
-    /// The covered glyphs are the span's **text fallback**, and they are what makes one drawing
-    /// call work on every backend without a capability check:
+    /// The covered cells keep real glyphs, which is what lets one call render correctly on every
+    /// backend with no capability check:
     ///
     /// - A **cell backend** (`Headless`, `retroglyph-crossterm`, `retroglyph-terminal`) ignores
-    ///   `SPAN_COVERED` and renders all `w * h` glyphs, so `&["C=", "[]"]` reads as a small piece
-    ///   of ASCII art.
+    ///   [`TileFlags::SPAN_COVERED`] and prints all of them, so `["[==]", "|__|"]` reads as a
+    ///   small piece of ASCII art.
     /// - A **pixel backend** (`retroglyph-software`, `retroglyph-gl`) looks the anchor glyph up in
     ///   its sprite cache, draws that one sprite across the whole footprint, and skips every
     ///   covered cell's glyph.
@@ -828,30 +829,28 @@ impl Grid {
     /// This is the deliberate difference from [`TileFlags::WIDE_CHAR_SPACER`], which every
     /// backend skips.
     ///
-    /// # Overlap
-    ///
     /// Any existing span or wide character the footprint would partially overwrite is cleared
-    /// first, in full, exactly as [`write_grapheme`](Self::write_grapheme) does for its own 1- or
-    /// 2-cell write.
+    /// first, in full, as [`write_grapheme`](Self::write_grapheme) does for its own 1- or 2-cell
+    /// write.
     ///
     /// # Returns
     ///
-    /// `None`, having written nothing, if `rows` is empty, holds an empty first row, is ragged
-    /// (rows of differing character counts), exceeds 255 cells on either axis, or would not fit
-    /// inside the grid at `(x, y)`. A span is written whole or not at all.
+    /// `Some(())` once the whole span is written, or `None` having written nothing at all when
+    /// `rows` is empty, its first row is empty, its rows differ in width, either axis exceeds 255
+    /// cells, or the footprint would not fit in the grid at `(x, y)`.
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Grid, Style};
+    /// use retroglyph_core::{Grid, Pos, Style};
     ///
     /// let mut grid = Grid::new(8, 4);
-    /// grid.write_span(0, 1, 1, &["C=", "[]"], Style::default()).unwrap();
+    /// grid.write_span(0, 1, 1, &["[==]", "|__|"], Style::default()).unwrap();
     ///
-    /// assert_eq!(grid.get_tile(0, 1, 1).unwrap().span(), (2, 2));
-    /// // The covered cells keep their fallback glyphs, and name their anchor.
-    /// assert_eq!(grid.get_tile(0, 2, 2).unwrap().glyph(), ']');
-    /// assert_eq!(grid.span_owner(0, 2, 2), Some(retroglyph_core::Pos::new(1, 1)));
+    /// assert_eq!(grid.get_tile(0, 1, 1).unwrap().span(), (4, 2));
+    /// // Covered cells keep their fallback glyphs, and name their anchor.
+    /// assert_eq!(grid.get_tile(0, 4, 2).unwrap().glyph(), '|');
+    /// assert_eq!(grid.span_owner(0, 4, 2), Some(Pos::new(1, 1)));
     /// ```
     pub fn write_span(
         &mut self,
@@ -939,8 +938,9 @@ impl Grid {
     /// Clears the whole multi-cell span that `(x, y)` on `layer` belongs to, anchor included,
     /// resetting every one of its cells to the default (empty) tile.
     ///
-    /// Works from any cell of the span, not just the anchor. No-op if the cell is not part of
-    /// one.
+    /// Works from any cell of the span, so it pairs with [`span_owner`](Self::span_owner): hit-test
+    /// a cell, then clear the artwork it belongs to. Does nothing if the cell is not part of a
+    /// span, is out of bounds, or the layer is unallocated.
     pub fn clear_span(&mut self, layer: u8, x: u16, y: u16) {
         if let Some(anchor) = self.span_anchor_at(layer, x, y) {
             self.reset_span_at(layer, anchor);
