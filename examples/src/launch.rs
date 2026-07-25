@@ -142,10 +142,11 @@ struct ExampleApp<E> {
     state: Option<E>,
     /// Backend label for the FPS overlay ("software"/"gl"/"crossterm").
     backend_name: &'static str,
-    /// Smoothed frame-timing state for the FPS overlay.
+    /// Smoothed frame-timing state and visibility for the FPS overlay.
     fps: crate::fps::Fps,
-    /// Whether to draw the overlay at all; see [`fps::overlay_enabled`](crate::fps::overlay_enabled).
-    fps_enabled: bool,
+    /// Scratch buffer for [`intercept_overlay_keys`]'s pass-through events, reused across frames
+    /// so the interception doesn't allocate on every frame that has input.
+    passthrough: Vec<retroglyph_core::event::Event>,
 }
 
 #[cfg(any(feature = "crossterm", feature = "software", feature = "gl"))]
@@ -154,8 +155,40 @@ impl<E> ExampleApp<E> {
         Self {
             state: None,
             backend_name,
-            fps: crate::fps::Fps::new(),
-            fps_enabled: crate::fps::overlay_enabled(),
+            fps: crate::fps::Fps::new(crate::fps::starts_visible()),
+            passthrough: Vec::new(),
+        }
+    }
+
+    /// Consumes the [FPS overlay's toggle key](crate::fps::is_toggle_key) out of this frame's
+    /// pending input, and hands everything else straight back.
+    ///
+    /// The overlay is the driver's, not the example's, so its key has to be handled here -- but
+    /// there's no non-destructive way to look at the queue ([`Terminal`] buffers exactly one
+    /// event and won't hand it back, and [`App`] has no event hook), so "look at it" means drain
+    /// it and re-push what wasn't ours. Order is preserved: the drain empties both the terminal's
+    /// one-event buffer and the backend's queue, so re-pushing to the back of an empty queue puts
+    /// everything back in the order it arrived, still ahead of anything that lands later.
+    ///
+    /// This is why [`Input::push_event`](retroglyph_core::Input::push_event) has to actually work
+    /// on every backend an example runs on. It didn't on crossterm until it grew a pushback queue
+    /// of its own; the trait default silently drops, which here would have eaten every keystroke.
+    fn intercept_overlay_keys<B: Backend>(&mut self, term: &mut Terminal<B>) {
+        self.passthrough.clear();
+        self.passthrough.extend(term.drain_events());
+
+        let mut toggles = 0usize;
+        self.passthrough.retain(|event| {
+            let is_toggle = crate::fps::is_toggle_key(event);
+            toggles += usize::from(is_toggle);
+            !is_toggle
+        });
+        for _ in 0..toggles {
+            self.fps.toggle();
+        }
+
+        for event in self.passthrough.drain(..) {
+            term.backend_mut().push_event(event);
         }
     }
 }
@@ -163,6 +196,7 @@ impl<E> ExampleApp<E> {
 #[cfg(any(feature = "crossterm", feature = "software", feature = "gl"))]
 impl<B: Backend, E: Example> App<B> for ExampleApp<E> {
     fn update(&mut self, term: &mut Terminal<B>, frame: &Frame) -> Flow {
+        self.intercept_overlay_keys(term);
         let state = self.state.get_or_insert_with(|| E::init(term));
         let keep_going = state.tick(term, frame);
         if !keep_going {
@@ -174,10 +208,8 @@ impl<B: Backend, E: Example> App<B> for ExampleApp<E> {
         }
         // The driver owns `present`, so the FPS overlay (a top layer) is stamped after the
         // example's draw and survives to the flush.
-        if self.fps_enabled {
-            self.fps.tick(frame.delta);
-            self.fps.draw(term, self.backend_name);
-        }
+        self.fps.tick(frame.delta);
+        self.fps.draw(term, self.backend_name);
         term.present().ok();
         Flow::Continue
     }

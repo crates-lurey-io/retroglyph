@@ -1,9 +1,11 @@
 //! FPS / frame-time overlay, drawn by the shared driver ([`ExampleApp`](crate::launch)) on top of
 //! every windowed and crossterm example.
 //!
-//! On by default -- running an example should show its frame rate without having to know a flag
-//! exists. [`overlay_enabled`] is the native opt-out (`RG_FPS=0`); on wasm the overlay injects a
-//! live toggle button instead.
+//! Visible by default -- running an example should show its frame rate without having to know a
+//! flag exists -- and toggled at runtime by pressing [`` ` ``/F1](is_toggle_key), or by clicking
+//! the floating button the overlay injects on wasm (where there's no key the page reliably owns).
+//! `RG_FPS=0` picks the *starting* state for a run that wants to come up clean; see
+//! [`starts_visible`].
 //!
 //! This is deliberately example-only shared code, not a `retroglyph-widgets` widget: the reusable
 //! part (draw a small labeled box) is trivial, while everything that matters here -- the backend
@@ -12,6 +14,7 @@
 
 #![allow(clippy::redundant_pub_crate)]
 
+use retroglyph_core::event::{Event, KeyCode, KeyEventKind};
 use retroglyph_core::{Backend, Color, Style, Terminal};
 use std::time::Duration;
 
@@ -25,23 +28,41 @@ const OVERLAY_LAYER: u8 = 2;
 /// react to a genuine frame-rate change.
 const ALPHA: f64 = 0.1;
 
-/// Whether the driver should draw the overlay at all, from the `RG_FPS` environment variable.
+/// Whether `event` is the overlay's toggle key.
 ///
-/// Set `RG_FPS=0` (or `false`/`off`) to suppress it. That's what `examples/tests/support`'s
-/// `capture_pty` does when it spawns an example under a PTY: a live frame rate is by definition
-/// not reproducible, so leaving it on would make every SVG snapshot churn on every run.
+/// Backtick, plus F1 as an alias. Backtick is the primary because it's the one that survives
+/// everywhere this runs unmodified: macOS maps F1 to a system brightness key unless the user has
+/// opted into "use F1, F2, etc. as standard function keys", and browsers claim several of the
+/// function row outright. Neither is bound by any example in the gallery.
+///
+/// Only [`KeyEventKind::Press`] counts. The windowed backends (and crossterm under the kitty
+/// keyboard protocol) report releases too, so matching on the key alone would toggle twice per
+/// physical press and appear to do nothing at all.
+pub(crate) fn is_toggle_key(event: &Event) -> bool {
+    let Event::Key(key) = event else {
+        return false;
+    };
+    key.kind == KeyEventKind::Press && matches!(key.code, KeyCode::Char('`') | KeyCode::F(1))
+}
+
+/// Whether the overlay starts visible, from the `RG_FPS` environment variable.
+///
+/// This is the *starting* state only -- [`is_toggle_key`] flips it at runtime either way. It
+/// exists for runs that need to come up clean and never touch a keyboard: `examples/tests/support`'s
+/// `capture_pty` sets `RG_FPS=0` when it spawns an example under a PTY, because a live frame rate
+/// is by definition not reproducible and would otherwise churn every committed SVG on every run.
 ///
 /// Read by the driver once at startup rather than by [`Fps::draw`], so [`Fps`] stays a pure
 /// renderer whose unit tests don't depend on the ambient environment. Always `true` on `wasm32`
-/// (nothing sets environment variables there); the toggle button covers that target instead.
-pub(crate) fn overlay_enabled() -> bool {
-    enabled_from_env(std::env::var("RG_FPS").ok().as_deref())
+/// (nothing sets environment variables there).
+pub(crate) fn starts_visible() -> bool {
+    visible_from_env(std::env::var("RG_FPS").ok().as_deref())
 }
 
-/// [`overlay_enabled`]'s parsing, split out so it's testable without mutating the process
+/// [`starts_visible`]'s parsing, split out so it's testable without mutating the process
 /// environment (`std::env::set_var` is `unsafe` in edition 2024, and `unsafe_code` is forbidden
 /// workspace-wide).
-fn enabled_from_env(value: Option<&str>) -> bool {
+fn visible_from_env(value: Option<&str>) -> bool {
     value.is_none_or(|value| {
         !matches!(
             value.trim().to_ascii_lowercase().as_str(),
@@ -54,17 +75,35 @@ fn enabled_from_env(value: Option<&str>) -> bool {
 pub(crate) struct Fps {
     /// Smoothed frame time in seconds; `None` until the first [`tick`](Self::tick).
     smoothed_secs: Option<f64>,
+    /// Whether [`draw`](Self::draw) renders anything. Flipped by [`toggle`](Self::toggle).
+    visible: bool,
 }
 
 impl Fps {
-    pub(crate) const fn new() -> Self {
+    pub(crate) const fn new(visible: bool) -> Self {
         Self {
             smoothed_secs: None,
+            visible,
         }
     }
 
-    /// Folds one frame's wall-clock delta into the smoothed average.
+    /// Shows the overlay if it's hidden, hides it if it's shown.
+    pub(crate) const fn toggle(&mut self) {
+        self.visible = !self.visible;
+    }
+
+    /// Folds one frame's wall-clock delta into the smoothed average, and applies a pending click
+    /// on the wasm toggle button (the one input source that can't reach the driver's key
+    /// interception, since it's a DOM button rather than an [`Event`]).
     pub(crate) fn tick(&mut self, delta: Duration) {
+        #[cfg(all(target_arch = "wasm32", any(feature = "software", feature = "gl")))]
+        {
+            wasm_toggle::ensure_button();
+            if wasm_toggle::take_toggle_request() {
+                self.toggle();
+            }
+        }
+
         let secs = delta.as_secs_f64();
         self.smoothed_secs = Some(
             self.smoothed_secs
@@ -73,24 +112,18 @@ impl Fps {
     }
 
     /// Draws `NNN fps  MM.M ms  <backend>` in the top-right corner on a solid dark background, on a
-    /// top layer so it sits over the example's content. No-op before the first [`tick`](Self::tick)
-    /// or if the grid is narrower than the readout.
+    /// top layer so it sits over the example's content. No-op while hidden
+    /// ([`toggle`](Self::toggle)), before the first [`tick`](Self::tick), or if the grid is
+    /// narrower than the readout.
+    ///
+    /// Nothing has to be wiped when it's hidden: [`Terminal::present`] clears every layer of the
+    /// working grid after each frame, so simply not drawing leaves the overlay layer empty and the
+    /// next present diffs the old readout away.
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     pub(crate) fn draw<B: Backend>(&self, term: &mut Terminal<B>, backend: &str) {
-        // On wasm the overlay is live-toggleable via an injected floating button, so it works even
-        // over a full-screen canvas without touching the example's input. When toggled off, wipe
-        // any prior readout so it doesn't linger.
-        #[cfg(all(target_arch = "wasm32", any(feature = "software", feature = "gl")))]
-        {
-            wasm_toggle::ensure_button();
-            if !wasm_toggle::enabled() {
-                term.layer(OVERLAY_LAYER);
-                term.clear();
-                term.layer(0);
-                return;
-            }
+        if !self.visible {
+            return;
         }
-
         let Some(secs) = self.smoothed_secs else {
             return;
         };
@@ -133,9 +166,13 @@ impl Fps {
     }
 }
 
-/// The wasm-only floating toggle button. A `position: fixed` DOM button (so it works over a
-/// full-screen canvas) flips a thread-local flag the overlay reads each frame -- a live toggle that
-/// never touches the example's event queue.
+/// The wasm-only floating toggle button: the browser counterpart to the native
+/// [backtick/F1 key](is_toggle_key).
+///
+/// A `position: fixed` DOM button, so it works over a full-screen canvas, and a click never
+/// touches the example's event queue. It can't route through the driver's key interception like
+/// the native toggle does (it isn't an [`Event`] and never enters the backend's queue), so it
+/// records a request that [`Fps::tick`] picks up on the next frame instead.
 #[cfg(all(target_arch = "wasm32", any(feature = "software", feature = "gl")))]
 mod wasm_toggle {
     use std::cell::Cell;
@@ -143,12 +180,16 @@ mod wasm_toggle {
     use wasm_bindgen::prelude::Closure;
 
     thread_local! {
-        static ENABLED: Cell<bool> = const { Cell::new(true) };
+        static TOGGLE_REQUESTED: Cell<bool> = const { Cell::new(false) };
         static BUTTON_ADDED: Cell<bool> = const { Cell::new(false) };
     }
 
-    pub(super) fn enabled() -> bool {
-        ENABLED.with(Cell::get)
+    /// Consumes a pending click, if any. Coalescing (rather than counting) is deliberate: two
+    /// clicks inside one frame are two flips, i.e. no change, so collapsing them to one pending
+    /// request and dropping the pair would be wrong only if a frame never ran in between -- in
+    /// which case nothing was ever drawn differently anyway.
+    pub(super) fn take_toggle_request() -> bool {
+        TOGGLE_REQUESTED.with(|requested| requested.replace(false))
     }
 
     /// Injects the toggle button once (idempotent).
@@ -172,7 +213,7 @@ mod wasm_toggle {
         );
         btn.set_text_content(Some("FPS"));
         let onclick = Closure::<dyn FnMut()>::new(|| {
-            ENABLED.with(|e| e.set(!e.get()));
+            TOGGLE_REQUESTED.with(|requested| requested.set(true));
         });
         let _ = btn.add_event_listener_with_callback("click", onclick.as_ref().unchecked_ref());
         // Leak the closure so the callback stays valid for the page's lifetime.
@@ -183,35 +224,43 @@ mod wasm_toggle {
 
 #[cfg(test)]
 mod tests {
-    use super::{Fps, enabled_from_env};
+    use super::{Fps, is_toggle_key, visible_from_env};
+    use retroglyph_core::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
     use retroglyph_core::{Headless, Terminal};
     use std::time::Duration;
 
+    /// A settled `Fps`: ~16 ms/frame -> ~62 fps, fed enough frames for the EMA to converge.
+    fn settled(visible: bool) -> Fps {
+        let mut fps = Fps::new(visible);
+        for _ in 0..200 {
+            fps.tick(Duration::from_millis(16));
+        }
+        fps
+    }
+
+    fn rendered(fps: &Fps, backend: &str) -> String {
+        let mut term = Terminal::new(Headless::new(40, 5));
+        fps.draw(&mut term, backend);
+        term.present().ok();
+        term.backend().format_view()
+    }
+
     #[test]
-    fn overlay_is_on_unless_rg_fps_says_otherwise() {
-        assert!(enabled_from_env(None), "on by default");
-        assert!(enabled_from_env(Some("1")));
+    fn overlay_starts_visible_unless_rg_fps_says_otherwise() {
+        assert!(visible_from_env(None), "visible by default");
+        assert!(visible_from_env(Some("1")));
         assert!(
-            enabled_from_env(Some("")),
+            visible_from_env(Some("")),
             "an empty value is not an opt-out"
         );
         for off in ["0", "false", "off", "OFF", " 0 "] {
-            assert!(!enabled_from_env(Some(off)), "{off:?} should disable");
+            assert!(!visible_from_env(Some(off)), "{off:?} should start hidden");
         }
     }
 
     #[test]
     fn overlay_renders_fps_ms_and_backend_top_right() {
-        let mut term = Terminal::new(Headless::new(40, 5));
-        let mut fps = Fps::new();
-        // ~16 ms/frame -> ~62 fps; feed enough that the EMA settles.
-        for _ in 0..200 {
-            fps.tick(Duration::from_millis(16));
-        }
-        fps.draw(&mut term, "software");
-        term.present().ok();
-
-        let view = term.backend().format_view();
+        let view = rendered(&settled(true), "software");
         let top = view.lines().next().expect("a top row");
         assert!(top.contains("fps"), "top row missing fps: {top:?}");
         assert!(top.contains("ms"), "top row missing ms: {top:?}");
@@ -222,10 +271,67 @@ mod tests {
 
     #[test]
     fn draw_is_a_noop_before_the_first_tick() {
-        let mut term = Terminal::new(Headless::new(40, 5));
-        Fps::new().draw(&mut term, "gl");
-        term.present().ok();
-        let view = term.backend().format_view();
+        let view = rendered(&Fps::new(true), "gl");
         assert!(!view.contains("fps"), "nothing should render before a tick");
+    }
+
+    #[test]
+    fn toggle_hides_and_shows_a_settled_overlay() {
+        let mut fps = settled(true);
+        assert!(rendered(&fps, "software").contains("fps"));
+
+        fps.toggle();
+        assert!(
+            !rendered(&fps, "software").contains("fps"),
+            "toggled off, nothing should render"
+        );
+
+        fps.toggle();
+        assert!(
+            rendered(&fps, "software").contains("fps"),
+            "toggled back on"
+        );
+    }
+
+    #[test]
+    fn an_overlay_that_starts_hidden_can_be_toggled_on() {
+        let mut fps = settled(false);
+        assert!(!rendered(&fps, "crossterm").contains("fps"));
+        fps.toggle();
+        assert!(rendered(&fps, "crossterm").contains("fps"));
+    }
+
+    #[test]
+    fn backtick_and_f1_presses_are_the_toggle() {
+        for code in [KeyCode::Char('`'), KeyCode::F(1)] {
+            let press = Event::Key(KeyEvent::new(code, KeyModifiers::NONE));
+            assert!(is_toggle_key(&press), "{code:?} press should toggle");
+        }
+    }
+
+    #[test]
+    fn key_releases_and_repeats_are_not_the_toggle() {
+        // Otherwise one physical press on a backend that reports releases (the windowed ones,
+        // and crossterm under the kitty protocol) would flip twice and look like a no-op.
+        for kind in [KeyEventKind::Release, KeyEventKind::Repeat] {
+            let event = Event::Key(KeyEvent::with_kind(
+                KeyCode::Char('`'),
+                KeyModifiers::NONE,
+                kind,
+            ));
+            assert!(!is_toggle_key(&event), "{kind:?} should not toggle");
+        }
+    }
+
+    #[test]
+    fn other_input_is_left_for_the_example() {
+        for event in [
+            Event::Key(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE)),
+            Event::Key(KeyEvent::new(KeyCode::F(2), KeyModifiers::NONE)),
+            Event::Resize(80, 24),
+            Event::Close,
+        ] {
+            assert!(!is_toggle_key(&event), "{event:?} should not toggle");
+        }
     }
 }

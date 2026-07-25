@@ -156,7 +156,7 @@ one source of truth:
 driver draws its FPS overlay by default and a live frame rate is not reproducible. The one place
 that deliberately doesn't is `examples/tests/fps_overlay.rs`, which pins the default itself (the
 overlay was originally behind an opt-in Cargo feature, so nothing that ran an example the documented
-way ever saw it).
+way ever saw it) and drives its `` ` `` toggle through the PTY in both directions.
 
 The crossterm binary each `svg_snapshot` test spawns is built with its own `--target-dir`
 (`target/pty-examples/`, see `support::build_crossterm_example`), separate from the workspace's
