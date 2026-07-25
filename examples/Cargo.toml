@@ -71,10 +71,15 @@ software = [
 # The GPU (OpenGL/WebGL2) backend. A windowed backend like `software`, and mutually exclusive with
 # it in practice: `launch::<E>()` prefers `software`, then `gl`. Pulls in `default-font` for the
 # same reason `software` does (no fontless example in this gallery).
+# `tilesets` for the same reason `software` enables it: the wasm build script picks one feature
+# per variant for the whole crate, so the one example that needs sprite sheets can't opt in
+# alone. Without it the WebGL2 gallery variant renders bitmap glyphs where the software variant
+# renders sprites.
 gl = [
   "dep:retroglyph-gl",
   "dep:retroglyph-window",
   "retroglyph-gl/default-font",
+  "retroglyph-gl/tilesets",
 ]
 # WASM-only: drives a Terminal<Headless> from a browser requestAnimationFrame
 # loop instead of a canvas/window. See `wasm_entry!`'s wasm-headless branch.

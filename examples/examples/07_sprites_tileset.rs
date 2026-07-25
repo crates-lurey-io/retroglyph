@@ -133,29 +133,43 @@ impl SpritesTileset {
     }
 }
 
+/// The example's sprite sheet, as backend-agnostic options.
+///
+/// Shared verbatim by [`SpritesTileset::configure_software`] and
+/// [`SpritesTileset::configure_gl`]: the two builders are different types, but the tileset they
+/// register is the same one, so it is described once here.
+#[cfg(any(feature = "software", feature = "gl"))]
+fn room_tileset() -> retroglyph_window::tileset::TilesetOptions {
+    use retroglyph_window::tileset::{Codepage, TilesetOptions};
+
+    let png = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/tileset.png")).to_vec();
+    TilesetOptions::from_bytes(png)
+        .tile_size(8, 16)
+        .columns(2)
+        .codepage(Codepage::Custom(vec!['#', '.', '@', '$']))
+        .build()
+        .expect("tileset asset is a valid 16x32 PNG, evenly divisible into 8x16 tiles")
+}
+
 impl Example for SpritesTileset {
     const NAME: &'static str = "07_sprites_tileset";
 
-    /// Registers `assets/tileset.png` on the software backend's builder --
-    /// the one customization point [`Example`] threads through to
-    /// [`retroglyph_examples::run_software`] so this example can still end
-    /// in a plain [`retroglyph_examples::example_main!`] call like every
-    /// other one, rather than hand-writing its own `main`.
+    /// Registers the sprite sheet on the software backend's builder -- one of the two
+    /// customization points [`Example`] threads through, so this example can still end in a plain
+    /// [`retroglyph_examples::example_main!`] call like every other one, rather than hand-writing
+    /// its own `main`.
     #[cfg(feature = "software")]
     fn configure_software(
         builder: retroglyph_software::SoftwareBackendBuilder,
     ) -> retroglyph_software::SoftwareBackendBuilder {
-        let png =
-            include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/tileset.png")).to_vec();
-        let opts = retroglyph_software::tileset::TilesetOptions::from_bytes(png)
-            .tile_size(8, 16)
-            .columns(2)
-            .codepage(retroglyph_software::tileset::Codepage::Custom(vec![
-                '#', '.', '@', '$',
-            ]))
-            .build()
-            .expect("tileset asset is a valid 16x32 PNG, evenly divisible into 8x16 tiles");
-        builder.tileset(opts)
+        builder.tileset(room_tileset())
+    }
+
+    /// Registers the same sheet on the GL backend, so the WebGL2 build renders sprites rather
+    /// than falling back to bitmap glyphs.
+    #[cfg(feature = "gl")]
+    fn configure_gl(builder: retroglyph_gl::GlBackendBuilder) -> retroglyph_gl::GlBackendBuilder {
+        builder.tileset(room_tileset())
     }
 
     fn tick<B: Backend>(

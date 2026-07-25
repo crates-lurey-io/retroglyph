@@ -72,6 +72,22 @@ pub trait Example: Default + Sized + 'static {
         builder
     }
 
+    /// Customize the GL backend's builder before it's built.
+    ///
+    /// The GL counterpart of [`configure_software`](Self::configure_software), and the reason it
+    /// is a second method rather than a shared one: the two builders are different types from
+    /// different crates. An example that registers a tileset needs to register it on both, or the
+    /// docs gallery's WebGL2 variant renders bitmap glyphs where the software variant renders
+    /// sprites. The [`TilesetOptions`](retroglyph_window::tileset::TilesetOptions) themselves are
+    /// shared, so the usual shape is one helper returning the options and two one-line overrides
+    /// -- see `07_sprites_tileset.rs`.
+    ///
+    /// Default: `builder` unchanged, i.e. [`run_gl`]'s standard 50x25-at-2x grid with no tileset.
+    #[cfg(feature = "gl")]
+    fn configure_gl(builder: retroglyph_gl::GlBackendBuilder) -> retroglyph_gl::GlBackendBuilder {
+        builder
+    }
+
     /// Whether the windowed backend's window should fill the browser viewport on `wasm32`
     /// (see [`WindowConfig::fill_viewport`](retroglyph_window::winit::WindowConfig::fill_viewport))
     /// instead of rendering at its natural grid size wherever it lands on the page.
@@ -234,11 +250,10 @@ pub fn run_software_with<E: Example>(builder: retroglyph_software::SoftwareBacke
 /// Builds a 50x25 window at `scale(2)` sized to fit via
 /// [`WindowConfig::fit`](retroglyph_window::winit::WindowConfig::fit), then drives it with
 /// `retroglyph-window`'s winit `App` driver -- the same driver `run_software` uses, since
-/// `GlRenderer` is a `Presenter` too. The GL backend does not read
-/// [`Example::configure_software`] (that builder is software-specific), so GL examples render at
-/// this fixed default grid -- except that, like `run_software`, it honors
-/// [`Example::fill_viewport`] to fill the browser viewport on `wasm32` (the grid then grows to the
-/// canvas via the winit resize path).
+/// `GlRenderer` is a `Presenter` too. Customization goes through [`Example::configure_gl`]
+/// rather than [`Example::configure_software`], since the two backends have different builder
+/// types. Like `run_software`, it honors [`Example::fill_viewport`] to fill the browser viewport
+/// on `wasm32` (the grid then grows to the canvas via the winit resize path).
 ///
 /// # Panics
 ///
@@ -248,11 +263,13 @@ pub fn run_gl<E: Example>() {
     #[cfg(target_arch = "wasm32")]
     console_error_panic_hook::set_once();
 
-    let renderer = retroglyph_gl::GlBackendBuilder::new()
-        .grid_size(50, 25)
-        .scale(2)
-        .build()
-        .expect("failed to initialize gl backend");
+    let renderer = E::configure_gl(
+        retroglyph_gl::GlBackendBuilder::new()
+            .grid_size(50, 25)
+            .scale(2),
+    )
+    .build()
+    .expect("failed to initialize gl backend");
     let config = retroglyph_window::winit::WindowConfig::fit(&renderer, E::NAME, None)
         .fill_viewport(E::fill_viewport());
     let app = ExampleApp::<E>::new("gl");
