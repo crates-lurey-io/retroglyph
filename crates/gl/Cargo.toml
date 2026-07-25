@@ -3,9 +3,6 @@ name = "retroglyph-gl"
 version = "0.1.0"
 description = "GPU rendering backend for retroglyph: OpenGL 3.3 (native) and WebGL2 (wasm) via glow"
 readme = "README.md"
-# `testdata/` holds the Tiny5 OFL font used only by tests (see testdata/README.md); keep it out of
-# the published package.
-exclude = ["testdata/"]
 edition.workspace = true
 rust-version.workspace = true
 authors.workspace = true
@@ -51,10 +48,6 @@ retroglyph-window = { path = "../window", version = "0.3.0", default-features = 
 # matching wasm-bindgen-cli/wasm-bindgen-test), which is why the pins below are 0.2.126, not the
 # older 0.2.106.
 glow = "0.18"
-# Pure-Rust TrueType rasterizer for the dynamic Unicode glyph atlas (issue #367). Chosen over a
-# Canvas2D/FontFace path on wasm so glyphs rasterize identically on native and in the browser (one
-# code path, testable parity). Grayscale coverage output feeds the existing R8 atlas directly.
-fontdue = "0.9"
 log = "0.4"
 raw-window-handle = "0.6"
 

@@ -3,12 +3,12 @@
 //!
 //! # Architecture
 //!
-//! [`GlBackendBuilder`] holds configuration (glyph source, grid size, integer scale) and
-//! [`build`](GlBackendBuilder::build)s a [`GlRenderer`]. The glyph source is either the static
-//! [`BitmapFont`] or a dynamic TrueType font ([`GlBackendBuilder::ttf`], issue #367); glyphs are
-//! grid-packed into a `TEXTURE_2D_ARRAY` atlas and addressed by a flat slot id. The renderer
-//! maintains per-layer CPU-side instance arrays (one entry per cell: glyph slot + fg/bg RGB +
-//! flags) and a GL context that is created lazily when the windowing loop calls
+//! [`GlBackendBuilder`] holds configuration (font, grid size, integer scale) and
+//! [`build`](GlBackendBuilder::build)s a [`GlRenderer`]. The glyph source is a static
+//! [`BitmapFont`]; glyphs are grid-packed into a `TEXTURE_2D_ARRAY` atlas and addressed by a flat
+//! slot id (issue #367's grid-packing half, lifting the 256-layer cap). The renderer maintains
+//! per-layer CPU-side instance arrays (one entry per cell: glyph slot + fg/bg RGB + flags) and a GL
+//! context that is created lazily when the windowing loop calls
 //! [`Presenter::init_surface`]:
 //!
 //! ```text
@@ -115,7 +115,7 @@ struct ReadmeDoctests;
 /// CPU-side instance array, and [`present`](Presenter::present) is a no-op. Once the surface
 /// exists, `present` uploads changed cells and issues the single instanced draw call.
 pub struct GlRenderer {
-    /// Character-to-atlas-slot cache (static bitmap or dynamic TTF, issue #367).
+    /// Character-to-atlas-slot map for the bitmap font (grid-packed, issue #367).
     glyphs: GlyphCache,
     cols: u16,
     rows: u16,
@@ -147,7 +147,7 @@ impl GlRenderer {
     /// [`GlBackendBuilder::build`].
     ///
     /// Glyph cells wider or taller than 255 unscaled pixels are clamped to 255 (the
-    /// [`CellGeometry`] limit); pick a TTF pixel size within that range.
+    /// [`CellGeometry`] limit).
     #[allow(clippy::cast_possible_truncation)]
     pub(crate) fn new(glyphs: GlyphCache, cols: u16, rows: u16, scale: u16) -> Self {
         let (cell_w, cell_h) = glyphs.cell_size();
@@ -446,10 +446,6 @@ impl Presenter for GlRenderer {
                 Ok(res) => {
                     gpu.res = res;
                     self.gpu = Some(gpu);
-                    // The rebuilt atlas texture is empty; re-queue every cached dynamic glyph so
-                    // the upload pass below refills it (no-op for the static bitmap atlas, which
-                    // `build_resources` rebuilds whole).
-                    self.glyphs.requeue_all();
                 }
                 Err(e) => {
                     self.gpu = Some(gpu);
@@ -473,11 +469,6 @@ impl Presenter for GlRenderer {
 
         gpu.res
             .set_projection(&gpu.ctx.gl, w as f32, h as f32, cell_w, cell_h, cols);
-        // Upload any glyphs the dynamic (TTF) atlas rasterized this frame before drawing (issue
-        // #367); empty for the static bitmap atlas.
-        for (slot, coverage) in self.glyphs.take_pending() {
-            gpu.res.upload_glyph(&gpu.ctx.gl, slot, &coverage);
-        }
         // Composite every layer back-to-front: clear once, then upload and draw each layer's
         // instances in turn (issue #368). This backend requests full frames, so `self.layers`
         // already holds the whole current frame.
