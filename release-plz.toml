@@ -25,17 +25,7 @@ git_release_body = """
 {{ changelog | replace(from=" by @", to=" by ") }}
 """
 
-# retroglyph-gl (added in #377) is NOT enabled for release yet. `release-plz release` runs on every
-# push to main and publishes any crate whose Cargo.toml version is unpublished -- so with gl
-# enabled it tries to publish retroglyph-gl 0.1.0 *immediately*, before the standing Release PR
-# merges. That fails: gl depends on `retroglyph-window/default-font`, and no published window
-# (0.3.0) has that feature -- only the unpublished 0.3.1 (bumped in the Release PR) does. cargo
-# can't package gl against the registry, so the release job red-Xes every push (verified: PR #408
-# broke it exactly this way, reverted here).
-#
-# Correct order: merge the standing Release PR first (publishes window 0.3.1 with default-font),
-# THEN flip this to `true` (or delete this block) in a one-line follow-up. Trusted Publishing for
-# retroglyph-gl is already configured on crates.io.
-[[package]]
-name = "retroglyph-gl"
-release = false
+# retroglyph-gl now releases like every other crate. Its former blocker is resolved: window 0.3.1
+# is published on crates.io with the `default-font` (and `tilesets`) features, so gl's
+# `retroglyph-window/default-font` dependency resolves when `release-plz release` packages gl
+# against the registry. Trusted Publishing for retroglyph-gl is configured on crates.io.
