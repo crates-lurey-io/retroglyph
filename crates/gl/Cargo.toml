@@ -64,6 +64,8 @@ glutin = "0.32"
 retroglyph-software = { path = "../software", version = "0.3.1", default-features = false, features = [
   "default-font",
 ] }
+# Generates tiny in-memory PNG tilesets for the sprite render tests (issue #366).
+image = { version = "0.25", default-features = false, features = ["png"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 # Version pinned to match the rest of the workspace (crates/window, crates/software, examples):
@@ -97,9 +99,14 @@ wasm-bindgen-test = "=0.3.76"
 web-sys = { version = "0.3", features = ["WebglLoseContext"] }
 js-sys = "0.3"
 wasm-bindgen-futures = "0.4"
+# Generates a tiny in-memory PNG tileset for the sprite render smoke test (issue #366).
+image = { version = "0.25", default-features = false, features = ["png"] }
 
 [features]
 # Embeds the Unscii 16 default font so a caller can build a renderer with no font of its own.
 # Off by default, mirroring `retroglyph-software`: a caller supplying its own `BitmapFont` pays
 # nothing for the embedded atlas.
 default-font = ["retroglyph-window/default-font"]
+# PNG sprite/tileset support (issue #366): an RGBA TEXTURE_2D_ARRAY atlas + a second draw pass.
+# Forwards to retroglyph-window's shared tileset decode (Codepage, TilesetOptions, SpriteCache).
+tilesets = ["retroglyph-window/tilesets"]

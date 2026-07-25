@@ -113,7 +113,8 @@ impl Frame {
 /// framebuffer via the real [`GlRenderer::build_resources`] + `draw`, and reads the pixels back.
 fn render_to_frame(gl: &glow::Context, renderer: &GlRenderer) -> Frame {
     let (w, h) = renderer.surface_size;
-    let res = renderer
+    #[cfg_attr(not(feature = "tilesets"), allow(unused_mut))]
+    let mut res = renderer
         .build_resources(gl, GlslFlavor::Es300)
         .expect("build GL resources");
 
@@ -143,10 +144,18 @@ fn render_to_frame(gl: &glow::Context, renderer: &GlRenderer) -> Frame {
         // back-to-front (upload + two instanced passes each) -- the same loop the windowed
         // `present` runs, so a single-layer frame and a multi-layer one both go through it.
         res.clear(gl);
-        for layer in &renderer.layers {
-            res.upload(gl, layer);
+        for l in 0..renderer.layers.len() {
+            res.upload(gl, &renderer.layers[l]);
             res.draw_layer(gl, renderer.cell_count() as i32);
+            #[cfg(feature = "tilesets")]
+            if let Some(sprites) = renderer.sprite_layers.get(l) {
+                res.draw_sprites(gl, sprites);
+            }
         }
+        // Fail loudly on any GL error from the draw passes (e.g. an attribute type mismatch that
+        // silently drops a draw) rather than only on the pixel assertions downstream.
+        let err = gl.get_error();
+        assert_eq!(err, glow::NO_ERROR, "GL error after draw loop: {err:#06x}");
         gl.finish();
 
         let mut buf = vec![0u8; (w * h * 4) as usize];
@@ -285,6 +294,89 @@ fn composites_two_layers_back_to_front() {
                 frame.rgb(2 * cw + x, y),
                 BLUE,
                 "cell 2 (opaque space erases base glyph) pixel ({x},{y})"
+            );
+        }
+    }
+}
+
+/// A 2-tile PNG tileset (issue #366): tile 0 solid red, tile 1 solid green, each 8x16, two columns.
+#[cfg(feature = "tilesets")]
+fn two_tile_png() -> Vec<u8> {
+    use image::ImageEncoder as _;
+    let (tile_w, tile_h) = (8u32, 16u32);
+    let img_w = tile_w * 2;
+    let mut img = image::RgbaImage::new(img_w, tile_h);
+    for y in 0..tile_h {
+        for x in 0..img_w {
+            let px = if x < tile_w {
+                [0xFF, 0x00, 0x00, 0xFF]
+            } else {
+                [0x00, 0xFF, 0x00, 0xFF]
+            };
+            img.put_pixel(x, y, image::Rgba(px));
+        }
+    }
+    let mut png = Vec::new();
+    image::codecs::png::PngEncoder::new(&mut png)
+        .write_image(img.as_raw(), img_w, tile_h, image::ExtendedColorType::Rgba8)
+        .expect("encode test tileset PNG");
+    png
+}
+
+#[cfg(feature = "tilesets")]
+#[wasm_bindgen_test]
+fn sprite_cells_render_their_tileset_colors() {
+    // The full sprite path on real WebGL2 (issue #366): 'A' -> tile 0 (red), 'B' -> tile 1 (green),
+    // each 8x16 sprite filling one cell. Proves tileset decode, the RGBA atlas upload, the sprite
+    // pass, and glyph -> sprite dispatch all work in the browser.
+    use retroglyph_window::tileset::{Codepage, TilesetOptions};
+    let opts = TilesetOptions::from_bytes(two_tile_png())
+        .tile_size(8, 16)
+        .columns(2)
+        .codepage(Codepage::Custom(vec!['A', 'B']))
+        .build()
+        .expect("valid 2-tile tileset");
+    let mut r = GlBackendBuilder::new()
+        .grid_size(2, 1)
+        .scale(1)
+        .tileset(opts)
+        .build()
+        .expect("gl renderer with tileset");
+    // Route through `draw_layers` (layer 0), the path the compositing GL backend actually uses --
+    // sprite dispatch lives there, not in the single-layer `draw`.
+    paint_layers(
+        &mut r,
+        &[
+            (
+                0,
+                Pos::new(0, 0),
+                Tile::new('A', Style::new().bg(rgb(BLUE))),
+            ),
+            (
+                0,
+                Pos::new(1, 0),
+                Tile::new('B', Style::new().bg(rgb(BLUE))),
+            ),
+        ],
+    );
+
+    // draw_layers must have collected one sprite instance per cell on layer 0.
+    assert_eq!(
+        r.sprite_layers.first().map(Vec::len),
+        Some(2),
+        "sprite dispatch did not collect instances"
+    );
+
+    let gl = webgl2_context(r.surface_size.0, r.surface_size.1);
+    let frame = render_to_frame(&gl, &r);
+    let (cw, ch) = r.geometry.cell_size();
+    for y in 0..ch {
+        for x in 0..cw {
+            assert_eq!(frame.rgb(x, y), RED, "sprite 'A' cell pixel ({x},{y})");
+            assert_eq!(
+                frame.rgb(cw + x, y),
+                GREEN,
+                "sprite 'B' cell pixel ({x},{y})"
             );
         }
     }

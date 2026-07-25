@@ -217,7 +217,7 @@ test-wasm:
 # software WebGL2 implementation. `default-font` so the test builds a renderer from the embedded
 # atlas (same gate as the native `headless` render tests).
 test-wasm-gl:
-    cargo bin wasm-pack test --headless --chrome crates/gl --features default-font
+    cargo bin wasm-pack test --headless --chrome crates/gl --features default-font,tilesets
 
 # ── act (local CI runner) ────────────────────────────────────────────────────
 

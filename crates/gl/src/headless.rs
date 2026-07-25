@@ -181,7 +181,8 @@ fn render_to_frame(ctx: &HeadlessContext, renderer: &GlRenderer) -> Result<Frame
     let gl = &ctx.gl;
     let (w, h) = renderer.surface_size;
 
-    let res = renderer
+    #[cfg_attr(not(feature = "tilesets"), allow(unused_mut))]
+    let mut res = renderer
         .build_resources(gl, ctx.flavor)
         .map_err(|e| format!("build GL resources: {e}"))?;
 
@@ -213,9 +214,13 @@ fn render_to_frame(ctx: &HeadlessContext, renderer: &GlRenderer) -> Result<Frame
         // back-to-front (upload + two instanced passes each) into the bound framebuffer -- the same
         // loop the windowed `present` runs.
         res.clear(gl);
-        for layer in &renderer.layers {
-            res.upload(gl, layer);
+        for l in 0..renderer.layers.len() {
+            res.upload(gl, &renderer.layers[l]);
             res.draw_layer(gl, renderer.cell_count() as i32);
+            #[cfg(feature = "tilesets")]
+            if let Some(sprites) = renderer.sprite_layers.get(l) {
+                res.draw_sprites(gl, sprites);
+            }
         }
         gl.finish();
 
@@ -521,4 +526,84 @@ fn assert_frames_match(frame: &Frame, software: &[u32]) {
         "GL vs software pixel mismatch(es): {}",
         mismatches.join(", ")
     );
+}
+
+/// A 2-tile PNG tileset (issue #366): tile 0 solid red, tile 1 solid green, each `8x16` (the
+/// Unscii cell), laid out in two columns.
+#[cfg(feature = "tilesets")]
+fn two_tile_png() -> Vec<u8> {
+    use image::ImageEncoder as _;
+    let (tile_w, tile_h) = (8u32, 16u32);
+    let img_w = tile_w * 2;
+    let mut img = image::RgbaImage::new(img_w, tile_h);
+    for y in 0..tile_h {
+        for x in 0..img_w {
+            let px = if x < tile_w {
+                [0xFF, 0x00, 0x00, 0xFF]
+            } else {
+                [0x00, 0xFF, 0x00, 0xFF]
+            };
+            img.put_pixel(x, y, image::Rgba(px));
+        }
+    }
+    let mut png = Vec::new();
+    image::codecs::png::PngEncoder::new(&mut png)
+        .write_image(img.as_raw(), img_w, tile_h, image::ExtendedColorType::Rgba8)
+        .expect("encode test tileset PNG");
+    png
+}
+
+#[cfg(feature = "tilesets")]
+#[test]
+fn sprite_cells_render_their_tileset_colors() {
+    use retroglyph_window::tileset::{Codepage, TilesetOptions};
+    let Some(ctx) = context_or_skip("sprite_cells_render_their_tileset_colors") else {
+        return;
+    };
+
+    // 'A' -> tile 0 (red), 'B' -> tile 1 (green). Each 8x16 sprite exactly fills one cell at
+    // scale 1, so cell 0 must be all red and cell 1 all green -- proving tileset decode, the RGBA
+    // atlas upload, the sprite pass, and per-cell glyph -> sprite dispatch all work on real GL.
+    let opts = TilesetOptions::from_bytes(two_tile_png())
+        .tile_size(8, 16)
+        .columns(2)
+        .codepage(Codepage::Custom(vec!['A', 'B']))
+        .build()
+        .expect("valid 2-tile tileset");
+    let mut r = GlBackendBuilder::new()
+        .grid_size(2, 1)
+        .scale(1)
+        .tileset(opts)
+        .build()
+        .expect("gl renderer with tileset");
+    // Route through `draw_layers` (layer 0), the path the compositing GL backend actually uses --
+    // sprite dispatch lives there, not in the single-layer `draw`.
+    paint_layers(
+        &mut r,
+        &[
+            (
+                0,
+                Pos::new(0, 0),
+                Tile::new('A', Style::new().bg(rgb(BLUE))),
+            ),
+            (
+                0,
+                Pos::new(1, 0),
+                Tile::new('B', Style::new().bg(rgb(BLUE))),
+            ),
+        ],
+    );
+
+    let frame = render_to_frame(&ctx, &r).expect("render");
+    let (cw, ch) = r.geometry.cell_size();
+    for y in 0..ch {
+        for x in 0..cw {
+            assert_eq!(frame.rgb(x, y), RED, "sprite 'A' cell pixel ({x},{y})");
+            assert_eq!(
+                frame.rgb(cw + x, y),
+                GREEN,
+                "sprite 'B' cell pixel ({x},{y})"
+            );
+        }
+    }
 }

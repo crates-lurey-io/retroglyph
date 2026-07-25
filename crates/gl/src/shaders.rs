@@ -125,18 +125,79 @@ void main() {
 }
 ";
 
+/// Vertex shader body for the RGBA sprite pass (issue #366). Unlike the glyph shader, sprite
+/// instances carry an explicit grid cell (sprite cells are sparse, so `gl_InstanceID` can't derive
+/// it) and a sprite pixel size, so the quad scales to the sprite -- which may exceed one cell and
+/// spill into neighbours, exactly like `retroglyph-software`'s sprite blit.
+// Integer attribute signedness must match the vertex-array data type or WebGL2/SwiftShader raises
+// INVALID_OPERATION at draw: `a_cell`/`a_layer`/`a_sprite` are fed UNSIGNED_SHORT so they are
+// `uvec`, and `a_offset` is fed signed SHORT so it stays `ivec2`.
+#[cfg(feature = "tilesets")]
+const VERTEX_SPRITE_BODY: &str = r"
+layout(location = 0) in vec2  a_corner; // unit-quad corner in [0,1]
+layout(location = 1) in uvec2 a_cell;   // grid (col, row) of the sprite's top-left cell
+layout(location = 2) in uint  a_layer;  // sprite atlas array layer
+layout(location = 3) in uvec2 a_sprite; // sprite size in unscaled pixels (may exceed a cell)
+layout(location = 4) in ivec2 a_offset; // sub-cell (dx, dy) in unscaled pixels
+
+uniform vec2 u_screen;     // surface size in physical pixels
+uniform vec2 u_cell;       // cell size in physical pixels (glyph size * scale)
+uniform vec2 u_glyph;      // glyph size in unscaled pixels (u_cell / u_glyph = integer scale)
+uniform vec2 u_sprite_tex; // sprite atlas layer size in texels (the max sprite dims)
+
+out vec2 v_uv;
+flat out uint v_layer;
+flat out vec2 v_uv_scale; // maps the [0,1] quad onto the sprite's sub-rect within its layer
+
+void main() {
+    vec2 scale = u_cell / u_glyph;
+    vec2 origin = vec2(a_cell) * u_cell + vec2(a_offset) * scale;
+    vec2 px = origin + a_corner * (vec2(a_sprite) * scale);
+    vec2 clip = vec2(px.x / u_screen.x * 2.0 - 1.0, 1.0 - px.y / u_screen.y * 2.0);
+    gl_Position = vec4(clip, 0.0, 1.0);
+    v_uv = a_corner;
+    v_layer = a_layer;
+    v_uv_scale = vec2(a_sprite) / u_sprite_tex;
+}
+";
+
+/// Fragment shader body for the RGBA sprite pass. Samples the sprite's sub-rect (top-left of its
+/// layer, the rest of the layer is transparent padding) and outputs straight-alpha RGBA; the caller
+/// enables source-over blending, so a sprite's transparent pixels let the layers below show through.
+#[cfg(feature = "tilesets")]
+const FRAGMENT_SPRITE_BODY: &str = r"
+uniform highp sampler2DArray u_sprites;
+
+in vec2 v_uv;
+flat in uint v_layer;
+flat in vec2 v_uv_scale;
+
+out vec4 frag;
+
+void main() {
+    vec2 uv = v_uv * v_uv_scale;
+    frag = texture(u_sprites, vec3(uv, float(v_layer)));
+}
+";
+
 /// Builds a complete shader source string for `flavor`, prepending the right `#version` line (and,
 /// for ES, the precision qualifiers a fragment shader needs).
 pub(crate) fn source(flavor: GlslFlavor, body: Shader) -> String {
     let mut out = String::new();
+    let is_fragment = match body {
+        Shader::Fragment => true,
+        #[cfg(feature = "tilesets")]
+        Shader::SpriteFragment => true,
+        _ => false,
+    };
     match flavor {
         GlslFlavor::Desktop330 => out.push_str("#version 330 core\n"),
         GlslFlavor::Es300 => {
             out.push_str("#version 300 es\n");
-            // ES requires explicit default precision. The fragment shader also samples an integer
-            // array texture, so give both float and the sampler a high precision default.
+            // ES requires explicit default precision. The fragment shaders also sample an array
+            // texture, so give both float and the sampler a high precision default.
             out.push_str("precision highp float;\nprecision highp int;\n");
-            if matches!(body, Shader::Fragment) {
+            if is_fragment {
                 out.push_str("precision highp sampler2DArray;\n");
             }
         }
@@ -144,17 +205,27 @@ pub(crate) fn source(flavor: GlslFlavor, body: Shader) -> String {
     out.push_str(match body {
         Shader::Vertex => VERTEX_BODY,
         Shader::Fragment => FRAGMENT_BODY,
+        #[cfg(feature = "tilesets")]
+        Shader::SpriteVertex => VERTEX_SPRITE_BODY,
+        #[cfg(feature = "tilesets")]
+        Shader::SpriteFragment => FRAGMENT_SPRITE_BODY,
     });
     out
 }
 
-/// Which of the two shader stages to emit.
+/// Which shader stage to emit.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Shader {
-    /// The vertex stage ([`VERTEX_BODY`]).
+    /// The glyph vertex stage ([`VERTEX_BODY`]).
     Vertex,
-    /// The fragment stage ([`FRAGMENT_BODY`]).
+    /// The glyph fragment stage ([`FRAGMENT_BODY`]).
     Fragment,
+    /// The sprite vertex stage ([`VERTEX_SPRITE_BODY`], issue #366).
+    #[cfg(feature = "tilesets")]
+    SpriteVertex,
+    /// The sprite fragment stage ([`FRAGMENT_SPRITE_BODY`], issue #366).
+    #[cfg(feature = "tilesets")]
+    SpriteFragment,
 }
 
 #[cfg(test)]

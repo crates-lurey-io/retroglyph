@@ -246,7 +246,9 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
-      - run: cargo check -p retroglyph-gl --target wasm32-unknown-unknown --features default-font
+      - run:
+          cargo check -p retroglyph-gl --target wasm32-unknown-unknown --features
+          default-font,tilesets
 
   # Live headless-Chrome WebGL2 render smoke test (issue #370): the browser sibling of the native
   # gl-headless job. It runs crates/gl/src/webgl_smoke.rs (a `wasm-bindgen-test`) through
@@ -311,7 +313,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             libegl1 libegl-mesa0 libgl1-mesa-dri libglvnd0
-      - run: cargo test -p retroglyph-gl --features default-font -- headless
+      - run: cargo test -p retroglyph-gl --features default-font,tilesets -- headless
 
   test-wasm:
     needs: changes

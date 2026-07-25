@@ -48,8 +48,13 @@ the 256-layer GL floor. Grid layers are composited back-to-front on the GPU (occ
 transparency matching `retroglyph-software`), rather than being flattened by the core `Terminal`.
 Sub-cell offsets (`dx`/`dy`) shift the glyph by whole/fractional pixels via a two-pass draw (opaque
 backgrounds first, then offset glyphs alpha-blended on top), so an offset glyph spills past its cell
-edge into neighbors. WebGL2 context loss is recovered by rebuilding GL resources. Sprites/tilesets
-remain a follow-up.
+edge into neighbors. WebGL2 context loss is recovered by rebuilding GL resources.
+
+With the `tilesets` feature, PNG sprite sheets (`GlBackendBuilder::tileset`) render on the GPU too
+(issue #366): sprites decode into an RGBA `TEXTURE_2D_ARRAY` and draw in a second, source-over
+blended pass over the glyph passes, so a sprite's transparent pixels reveal the layers beneath and a
+sprite larger than a cell spills into its neighbours -- matching `retroglyph-software`'s sprite
+blit. The tileset config + decode is shared with the software backend via `retroglyph-window`.
 
 ## Testing
 
