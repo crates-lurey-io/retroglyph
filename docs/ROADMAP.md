@@ -29,10 +29,10 @@ beamterm/alacritty/xterm.js model). Implements `retroglyph_window::Presenter`, s
 same winit loop as the software backend with no window-crate changes. The bitmap font moved into
 `retroglyph-window`'s winit-free `font` module so both graphical backends render pixel-identical
 text, and `Color::resolve_rgb` was added to core as the shared color-to-RGB path. v1 follow-ups are
-tracked as issues: sub-cell offsets (#365), sprites/tilesets (#366), dynamic/TTF atlas (#367), GPU
-layer compositing + blend modes (#368), post-processing shaders (#369), live WebGL2 CI (#370),
-wide-char handling (#371), dirty-range upload (#372), context-loss recovery (#373), GLX fallback
-(#374), wasm examples (#375).
+tracked as issues: sub-cell offsets (#365), sprites/tilesets (#366), multi-cell sprites (#412),
+dynamic/TTF atlas (#367), GPU layer compositing + blend modes (#368), post-processing shaders
+(#369), live WebGL2 CI (#370), wide-char handling (#371), dirty-range upload (#372), context-loss
+recovery (#373), GLX fallback (#374), wasm examples (#375).
 
 Shipped: pipe-safe / non-TTY output degradation (blessed's auto-detect-non-interactive-stdout,
 strip-control-codes idea, originally listed below under Defer) as `retroglyph-terminal`'s

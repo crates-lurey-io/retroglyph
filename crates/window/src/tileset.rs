@@ -8,8 +8,92 @@
 
 use core::fmt;
 
+/// Where a sprite sits inside the multi-cell box a span reserves for it.
+///
+/// Only observable when the reserved box is larger than the sprite's own pixels, i.e. when
+/// [`Terminal::put_span`](retroglyph_core::Terminal::put_span) declares more cells than the
+/// artwork fills. A sprite drawn into a box its art exactly fills -- the common case -- renders
+/// identically under every variant. Mirrors `BearLibTerminal`'s tileset `align=` option.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub enum SpriteAlign {
+    /// Flush with the box's top-left corner.
+    #[default]
+    TopLeft,
+    /// Centred horizontally, flush with the top edge.
+    Top,
+    /// Flush with the top-right corner.
+    TopRight,
+    /// Flush with the left edge, centred vertically.
+    Left,
+    /// Centred on both axes.
+    Center,
+    /// Flush with the right edge, centred vertically.
+    Right,
+    /// Flush with the bottom-left corner.
+    BottomLeft,
+    /// Centred horizontally, flush with the bottom edge.
+    Bottom,
+    /// Flush with the bottom-right corner.
+    BottomRight,
+}
+
+impl SpriteAlign {
+    /// Returns the offset of a `sprite_w` x `sprite_h` sprite placed inside a `box_w` x `box_h`
+    /// box, in unscaled pixels to match [`Tile::dx`](retroglyph_core::Tile::dx).
+    ///
+    /// Centring uses integer division, so an odd leftover pixel lands on the right/bottom side.
+    /// Saturates at `0` on either axis where the sprite is at least as large as the box, so an
+    /// oversized sprite is never pulled off its own anchor cell.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_window::tileset::SpriteAlign;
+    ///
+    /// // 16x16 art in a 32x32 box leaves 16 pixels of slack on each axis.
+    /// assert_eq!(SpriteAlign::Center.offset(16, 16, 32, 32), (8, 8));
+    /// assert_eq!(SpriteAlign::BottomRight.offset(16, 16, 32, 32), (16, 16));
+    /// // Art that fills its box renders identically under every variant.
+    /// assert_eq!(SpriteAlign::Center.offset(16, 16, 16, 16), (0, 0));
+    /// ```
+    #[must_use]
+    pub const fn offset(self, sprite_w: u32, sprite_h: u32, box_w: u32, box_h: u32) -> (i16, i16) {
+        let slack_x = box_w.saturating_sub(sprite_w);
+        let slack_y = box_h.saturating_sub(sprite_h);
+        let (x, y) = match self {
+            Self::TopLeft => (0, 0),
+            Self::Top => (slack_x / 2, 0),
+            Self::TopRight => (slack_x, 0),
+            Self::Left => (0, slack_y / 2),
+            Self::Center => (slack_x / 2, slack_y / 2),
+            Self::Right => (slack_x, slack_y / 2),
+            Self::BottomLeft => (0, slack_y),
+            Self::Bottom => (slack_x / 2, slack_y),
+            Self::BottomRight => (slack_x, slack_y),
+        };
+        // Slack is bounded by the box, which is a cell count times a `u8` glyph size, so it
+        // cannot reach `i16::MAX` for any grid a backend can actually render. `saturating_as`
+        // isn't const, hence the explicit clamp.
+        #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+        (
+            (if x > i16::MAX as u32 {
+                i16::MAX as u32
+            } else {
+                x
+            }) as i16,
+            (if y > i16::MAX as u32 {
+                i16::MAX as u32
+            } else {
+                y
+            }) as i16,
+        )
+    }
+}
+
 /// Errors that can occur during tileset validation or decoding.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum TilesetError {
     /// PNG decode failed.
     PngDecode(String),
@@ -21,8 +105,6 @@ pub enum TilesetError {
     UnsupportedPixelFormat(String),
     /// `tile_width` or `tile_height` is zero.
     ZeroTileSize,
-    /// `spacing_cells_x` or `spacing_cells_y` is zero.
-    ZeroSpacing,
 }
 
 impl fmt::Display for TilesetError {
@@ -41,9 +123,6 @@ impl fmt::Display for TilesetError {
             }
             Self::ZeroTileSize => {
                 write!(f, "tile_width and tile_height must be non-zero")
-            }
-            Self::ZeroSpacing => {
-                write!(f, "spacing_cells_x and spacing_cells_y must be non-zero")
             }
         }
     }
@@ -164,10 +243,8 @@ pub struct TilesetOptions {
     pub columns: Option<u16>,
     /// Codepoint mapping from tile index to Unicode character.
     pub codepage: Codepage,
-    /// Number of grid cells this sprite spans horizontally. Must be >= 1.
-    pub spacing_cells_x: u16,
-    /// Number of grid cells this sprite spans vertically. Must be >= 1.
-    pub spacing_cells_y: u16,
+    /// Where each sprite sits inside the multi-cell box a span reserves for it.
+    pub align: SpriteAlign,
     /// If set, any pixel matching this RGB colour is made fully transparent
     /// (alpha = 0) when decoding the tileset.
     ///
@@ -190,8 +267,7 @@ impl TilesetOptions {
             tile_height: 0,
             columns: None,
             codepage: Codepage::Cp437,
-            spacing_cells_x: 1,
-            spacing_cells_y: 1,
+            align: SpriteAlign::TopLeft,
             transparent_color: None,
         }
     }
@@ -219,19 +295,22 @@ impl TilesetOptions {
 ///     .unwrap();
 /// ```
 ///
-/// Private-use sprite sheet addressed by index:
+/// Private-use sprite sheet addressed by index, centred in whatever box a span reserves:
 ///
 /// ```ignore
-/// use retroglyph_window::tileset::{Codepage, TilesetOptions};
+/// use retroglyph_window::tileset::{Codepage, SpriteAlign, TilesetOptions};
 ///
 /// let png: Vec<u8> = std::fs::read("assets/sprites.png").unwrap();
 /// let opts = TilesetOptions::from_bytes(png)
 ///     .tile_size(32, 32)
-///     .codepage(Codepage::Identity) // tile 0 = '\0', tile 1 = '\x01', …
-///     .spacing(2, 2)                // each sprite occupies 2×2 grid cells
+///     .codepage(Codepage::Identity)  // tile 0 = '\0', tile 1 = '\x01', …
+///     .align(SpriteAlign::Center)
 ///     .build()
 ///     .unwrap();
 /// ```
+///
+/// How many cells a sprite occupies is a per-write decision, not a tileset-wide one: declare it
+/// with [`Terminal::put_span`](retroglyph_core::Terminal::put_span) at the draw call.
 ///
 /// Unicode private-use area sprite sheet:
 ///
@@ -251,8 +330,7 @@ pub struct TilesetBuilder {
     tile_height: u16,
     columns: Option<u16>,
     codepage: Codepage,
-    spacing_cells_x: u16,
-    spacing_cells_y: u16,
+    align: SpriteAlign,
     transparent_color: Option<(u8, u8, u8)>,
 }
 
@@ -290,13 +368,13 @@ impl TilesetBuilder {
         self
     }
 
-    /// Number of grid cells each sprite occupies (width x height).
+    /// Sets where each sprite sits inside the multi-cell box a span reserves for it.
     ///
-    /// Defaults to (1, 1). A value of (2, 2) means the sprite spans 2x2 cells.
+    /// Defaults to [`SpriteAlign::TopLeft`]. Has no visible effect on a sprite whose art fills
+    /// its box exactly; see [`SpriteAlign`].
     #[must_use]
-    pub const fn spacing(mut self, x: u16, y: u16) -> Self {
-        self.spacing_cells_x = x;
-        self.spacing_cells_y = y;
+    pub const fn align(mut self, align: SpriteAlign) -> Self {
+        self.align = align;
         self
     }
 
@@ -314,15 +392,11 @@ impl TilesetBuilder {
     ///
     /// # Errors
     ///
-    /// Returns [`TilesetError::ZeroTileSize`] if tile dimensions are 0,
-    /// [`TilesetError::ZeroSpacing`] if spacing is 0, or
+    /// Returns [`TilesetError::ZeroTileSize`] if tile dimensions are 0, or
     /// [`TilesetError::EmptyCodepage`] if `Custom` codepage is empty.
     pub fn build(self) -> Result<TilesetOptions, TilesetError> {
         if self.tile_width == 0 || self.tile_height == 0 {
             return Err(TilesetError::ZeroTileSize);
-        }
-        if self.spacing_cells_x == 0 || self.spacing_cells_y == 0 {
-            return Err(TilesetError::ZeroSpacing);
         }
         if let Codepage::Custom(ref t) = self.codepage
             && t.is_empty()
@@ -335,8 +409,7 @@ impl TilesetBuilder {
             tile_height: self.tile_height,
             columns: self.columns,
             codepage: self.codepage,
-            spacing_cells_x: self.spacing_cells_x,
-            spacing_cells_y: self.spacing_cells_y,
+            align: self.align,
             transparent_color: self.transparent_color,
         })
     }
@@ -355,15 +428,6 @@ mod tests {
     }
 
     #[test]
-    fn tileset_builder_rejects_zero_spacing() {
-        let opts = TilesetOptions::from_bytes(vec![])
-            .tile_size(16, 16)
-            .spacing(0, 1)
-            .build();
-        assert!(matches!(opts, Err(TilesetError::ZeroSpacing)));
-    }
-
-    #[test]
     fn tileset_builder_rejects_empty_custom_codepage() {
         let opts = TilesetOptions::from_bytes(vec![])
             .tile_size(16, 16)
@@ -377,15 +441,70 @@ mod tests {
         let opts = TilesetOptions::from_bytes(vec![0u8; 64])
             .tile_size(16, 16)
             .start_codepoint('\u{E000}')
-            .spacing(2, 2)
+            .align(SpriteAlign::Center)
             .build()
             .unwrap();
         assert_eq!(opts.tile_width, 16);
-        assert_eq!(opts.spacing_cells_x, 2);
+        assert_eq!(opts.align, SpriteAlign::Center);
         assert!(matches!(
             opts.codepage,
             Codepage::Unicode { start: '\u{E000}' }
         ));
+    }
+
+    #[test]
+    fn tileset_builder_defaults_to_top_left_alignment() {
+        let opts = TilesetOptions::from_bytes(vec![0u8; 64])
+            .tile_size(16, 16)
+            .build()
+            .unwrap();
+        assert_eq!(opts.align, SpriteAlign::TopLeft);
+    }
+
+    #[test]
+    fn sprite_align_positions_art_within_a_larger_box() {
+        // 16x16 art in a 32x32 box: 16 pixels of slack on each axis.
+        let at = |align: SpriteAlign| align.offset(16, 16, 32, 32);
+        assert_eq!(at(SpriteAlign::TopLeft), (0, 0));
+        assert_eq!(at(SpriteAlign::Top), (8, 0));
+        assert_eq!(at(SpriteAlign::TopRight), (16, 0));
+        assert_eq!(at(SpriteAlign::Left), (0, 8));
+        assert_eq!(at(SpriteAlign::Center), (8, 8));
+        assert_eq!(at(SpriteAlign::Right), (16, 8));
+        assert_eq!(at(SpriteAlign::BottomLeft), (0, 16));
+        assert_eq!(at(SpriteAlign::Bottom), (8, 16));
+        assert_eq!(at(SpriteAlign::BottomRight), (16, 16));
+    }
+
+    #[test]
+    fn sprite_align_centring_rounds_down() {
+        // 9 pixels of slack: the odd leftover pixel goes to the right/bottom.
+        assert_eq!(SpriteAlign::Center.offset(7, 7, 16, 16), (4, 4));
+        assert_eq!(SpriteAlign::Center.offset(8, 8, 15, 15), (3, 3));
+    }
+
+    #[test]
+    fn sprite_align_is_a_no_op_when_the_art_fills_the_box() {
+        for align in [
+            SpriteAlign::TopLeft,
+            SpriteAlign::Top,
+            SpriteAlign::TopRight,
+            SpriteAlign::Left,
+            SpriteAlign::Center,
+            SpriteAlign::Right,
+            SpriteAlign::BottomLeft,
+            SpriteAlign::Bottom,
+            SpriteAlign::BottomRight,
+        ] {
+            assert_eq!(align.offset(16, 16, 16, 16), (0, 0), "{align:?}");
+        }
+    }
+
+    #[test]
+    fn sprite_align_saturates_when_the_art_exceeds_the_box() {
+        // Never pull an oversized sprite off its own anchor cell.
+        assert_eq!(SpriteAlign::Center.offset(32, 32, 16, 16), (0, 0));
+        assert_eq!(SpriteAlign::BottomRight.offset(32, 32, 16, 16), (0, 0));
     }
 
     #[test]

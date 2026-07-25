@@ -607,3 +607,133 @@ fn sprite_cells_render_their_tileset_colors() {
         }
     }
 }
+
+/// A one-tile PNG of `w` x `h` solid opaque red pixels.
+#[cfg(feature = "tilesets")]
+fn wide_tile_png(w: u32, h: u32) -> Vec<u8> {
+    use image::ImageEncoder as _;
+    let mut img = image::RgbaImage::new(w, h);
+    for y in 0..h {
+        for x in 0..w {
+            img.put_pixel(x, y, image::Rgba([0xFF, 0x00, 0x00, 0xFF]));
+        }
+    }
+    let mut png = Vec::new();
+    image::codecs::png::PngEncoder::new(&mut png)
+        .write_image(img.as_raw(), w, h, image::ExtendedColorType::Rgba8)
+        .expect("encode test tileset PNG");
+    png
+}
+
+/// A `cols` x `rows` grid painted from `grid`'s layer 0, in the all-cells layer-major order a
+/// `composites_layers` backend receives.
+#[cfg(feature = "tilesets")]
+fn span_scene(grid: &retroglyph_core::Grid) -> Vec<(u8, Pos, Tile)> {
+    (0..grid.height())
+        .flat_map(|y| (0..grid.width()).map(move |x| (x, y)))
+        .map(|(x, y)| (0u8, Pos::new(x, y), *grid.get_tile(0, x, y).unwrap()))
+        .collect()
+}
+
+#[cfg(feature = "tilesets")]
+#[test]
+fn multicell_span_covers_every_cell_of_its_footprint() {
+    use retroglyph_core::Grid;
+    use retroglyph_window::tileset::{Codepage, TilesetOptions};
+
+    let Some(ctx) = context_or_skip("multicell_span_covers_every_cell_of_its_footprint") else {
+        return;
+    };
+
+    // A 16x16 sprite is two 8x16 cells wide, declared as a 2x1 span. Every pixel of both cells
+    // must be the sprite, with no trace of the covered cell's fallback glyph or background.
+    let opts = TilesetOptions::from_bytes(wide_tile_png(16, 16))
+        .tile_size(16, 16)
+        .columns(1)
+        .codepage(Codepage::Custom(vec!['S']))
+        .build()
+        .expect("valid 1-tile tileset");
+    let mut r = GlBackendBuilder::new()
+        .grid_size(2, 1)
+        .scale(1)
+        .tileset(opts)
+        .build()
+        .expect("gl renderer with tileset");
+
+    let mut grid = Grid::new(2, 1);
+    grid.write_span(0, 0, 0, &["S#"], Style::new().bg(rgb(BLUE)))
+        .expect("2x1 span fits");
+    paint_layers(&mut r, &span_scene(&grid));
+
+    let frame = render_to_frame(&ctx, &r).expect("render");
+    let (cw, ch) = r.geometry.cell_size();
+    for y in 0..ch {
+        for x in 0..cw * 2 {
+            assert_eq!(frame.rgb(x, y), RED, "span pixel ({x},{y})");
+        }
+    }
+}
+
+/// The strongest guarantee available here: multi-cell spans must render pixel-for-pixel
+/// identically on the GPU and on `retroglyph-software`'s CPU rasterizer. Covers the covered-cell
+/// background, the suppressed fallback glyph, and a `Center`-aligned sprite in a span box larger
+/// than its art -- the three things retroglyph#412 adds -- in one scene.
+#[cfg(feature = "tilesets")]
+#[test]
+fn matches_software_backend_for_multicell_spans() {
+    use retroglyph_core::Grid;
+    use retroglyph_window::tileset::{Codepage, SpriteAlign, TilesetOptions};
+
+    let Some(ctx) = context_or_skip("matches_software_backend_for_multicell_spans") else {
+        return;
+    };
+
+    let (cols, rows, scale) = (6u16, 2u16, 2u16);
+    // An 8x16 sprite is exactly one cell, so every span below reserves more cells than the art
+    // fills and alignment is observable.
+    let tileset = || {
+        TilesetOptions::from_bytes(wide_tile_png(8, 16))
+            .tile_size(8, 16)
+            .columns(1)
+            .codepage(Codepage::Custom(vec!['S']))
+            .align(SpriteAlign::Center)
+            .build()
+            .expect("valid 1-tile tileset")
+    };
+
+    let mut grid = Grid::new(cols, rows);
+    for y in 0..rows {
+        for x in 0..cols {
+            grid.put_tile(0, x, y, Tile::new('.', Style::new().bg(rgb(BLUE))));
+        }
+    }
+    // A 3x1 span (art centred in it) and a 2x2 span, both with fallback glyphs a cell backend
+    // would print and a pixel backend must not.
+    grid.write_span(0, 0, 0, &["S=-"], Style::new().bg(rgb(GREEN)))
+        .expect("3x1 span fits");
+    grid.write_span(0, 4, 0, &["S=", "[]"], Style::new())
+        .expect("2x2 span fits");
+    let scene = span_scene(&grid);
+
+    let mut gl = GlBackendBuilder::new()
+        .grid_size(cols, rows)
+        .scale(scale)
+        .tileset(tileset())
+        .build()
+        .expect("gl renderer with tileset");
+    paint_layers(&mut gl, &scene);
+    let frame = render_to_frame(&ctx, &gl).expect("render");
+
+    #[allow(clippy::cast_possible_truncation)]
+    let mut sw = retroglyph_software::SoftwareBackendBuilder::new()
+        .grid_size(cols, rows)
+        .scale(scale as u8)
+        .tileset(tileset())
+        .build()
+        .expect("default-font builds")
+        .run_headless()
+        .expect("headless software renderer");
+    paint_layers(&mut sw, &scene);
+
+    assert_frames_match(&frame, sw.pixels());
+}

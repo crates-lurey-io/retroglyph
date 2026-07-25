@@ -41,6 +41,15 @@ CI. The `doc` recipe swallows `cargo doc` failures due to `|| true` chaining. Se
   this repo, so rustfmt's default `max_width = 100` applies, and `wrap_comments` is `false` by
   default (rustfmt never rewraps prose comments for you). Don't hand-wrap doc comments to ~80 cols
   out of habit; wrap near the real 100-col budget instead.
+- **Doc comments describe the API as it is, never the change that produced it.** A reader of
+  `cargo doc` has no idea what the code looked like before, so a comment written from the diff's
+  point of view is noise to them and rots the moment the next change lands. Don't write "this used
+  to be X", "the only behaviour available before Y existed", "kept for backwards compatibility",
+  "renamed from Z", or attribute rationale ("`#[non_exhaustive]` so adding a variant isn't a
+  breaking change"). State the current contract and the reason it holds, in the present tense. That
+  history belongs in the commit message, the PR body, or the changelog, all of which are addressed
+  to reviewers rather than to consumers. Referencing an issue for design context (`retroglyph#304`)
+  is fine and already common in this repo; narrating the edit is not.
 - **No `eprintln!` in library code.** Use the `log` crate (feature-gated). Fatal backend init
   errors: `log::error!` + `event_loop.exit()`, not `panic!`.
 - **`unsafe_code` is forbidden** (`Cargo.toml` lint).

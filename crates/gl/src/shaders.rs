@@ -279,6 +279,30 @@ mod tests {
         }
     }
 
+    /// Sprite alignment inside a multi-cell span (retroglyph#412) is folded into `a_offset` on
+    /// the CPU, in unscaled pixels, precisely so no shader or vertex-stride change is needed.
+    /// The sprite vertex stage must therefore keep applying `a_offset` scaled by
+    /// `u_cell / u_glyph`, or every aligned sprite silently renders in the wrong place.
+    #[cfg(feature = "tilesets")]
+    #[test]
+    fn sprite_vertex_applies_the_scaled_sub_cell_offset() {
+        for flavor in [GlslFlavor::Desktop330, GlslFlavor::Es300] {
+            let vs = source(flavor, Shader::SpriteVertex);
+            assert!(
+                vs.contains("in ivec2 a_offset"),
+                "{flavor:?} sprite vertex missing a_offset"
+            );
+            assert!(
+                vs.contains("vec2 scale = u_cell / u_glyph"),
+                "{flavor:?} sprite vertex no longer derives the render scale"
+            );
+            assert!(
+                vs.contains("vec2(a_offset) * scale"),
+                "{flavor:?} sprite vertex no longer offsets the quad origin"
+            );
+        }
+    }
+
     #[test]
     fn fragment_splits_background_and_glyph_passes() {
         // Pass 0 emits the opaque background; pass 1 emits fg with coverage as alpha so glyphs

@@ -52,9 +52,16 @@ edge into neighbors. WebGL2 context loss is recovered by rebuilding GL resources
 
 With the `tilesets` feature, PNG sprite sheets (`GlBackendBuilder::tileset`) render on the GPU too
 (issue #366): sprites decode into an RGBA `TEXTURE_2D_ARRAY` and draw in a second, source-over
-blended pass over the glyph passes, so a sprite's transparent pixels reveal the layers beneath and a
-sprite larger than a cell spills into its neighbours -- matching `retroglyph-software`'s sprite
-blit. The tileset config + decode is shared with the software backend via `retroglyph-window`.
+blended pass over the glyph passes, so a sprite's transparent pixels reveal the layers beneath. The
+tileset config + decode is shared with the software backend via `retroglyph-window`.
+
+Artwork larger than one cell is drawn as a multi-cell span (`Terminal::put_span`): the span's anchor
+emits one sprite across the whole footprint, and the cells it covers draw no glyph of their own and
+take the anchor's background, so the sprite sits on one uniform backdrop. Their glyphs are the
+span's text fallback, which cell backends print instead. `SpriteAlign` positions art inside a span
+box larger than itself, folded into the per-instance sub-cell offset the vertex shader already
+applies. All of it matches `retroglyph-software` pixel for pixel, asserted by the headless parity
+tests.
 
 ## Testing
 

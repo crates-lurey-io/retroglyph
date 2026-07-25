@@ -202,12 +202,14 @@ impl<B: Backend> Terminal<B> {
     }
 
     /// Clear a rectangular region.
+    ///
+    /// Goes through [`Grid::checked_put`](crate::grid::Grid::checked_put) rather than writing
+    /// cells directly, so clearing part of a multi-cell span clears the whole span instead of
+    /// leaving an anchor claiming cells that are now blank.
     pub fn clear_region(&mut self, rect: Rect) {
         for y in rect.top()..rect.bottom() {
             for x in rect.left()..rect.right() {
-                if let Some(cell) = self.current.checked_get_mut(x, y) {
-                    *cell = Tile::default();
-                }
+                self.current.checked_put(x, y, Tile::default());
             }
         }
     }
@@ -226,6 +228,38 @@ impl<B: Backend> Terminal<B> {
             let tile = Tile::new(ch, style);
             self.current.put_tile(self.active_layer, x, y, tile);
         }
+    }
+
+    /// Writes a multi-cell span at `(x, y)` on the active layer with the current style: one piece
+    /// of artwork occupying a block of cells rather than one.
+    ///
+    /// `rows` holds one string per row of the footprint. Its first character is the **anchor**
+    /// glyph, which a pixel backend looks up in its sprite cache; the rest are the span's **text
+    /// fallback**, printed by cell backends and skipped by pixel backends. One call therefore
+    /// renders correctly on every backend with no capability check:
+    ///
+    /// ```
+    /// # use retroglyph_core::{Headless, Terminal};
+    /// # let mut term = Terminal::new(Headless::new(20, 10));
+    /// // One 4x2 chest sprite on `retroglyph-software`/`retroglyph-gl`, eight glyphs on a real
+    /// // terminal.
+    /// term.put_span(4, 2, &["[==]",
+    ///                       "|__|"]);
+    /// ```
+    ///
+    /// Silently writes nothing if `rows` is empty, ragged, or does not fit at `(x, y)`; see
+    /// [`Grid::write_span`](crate::grid::Grid::write_span) for the full write semantics, and
+    /// [`Grid::span_owner`](crate::grid::Grid::span_owner) to hit-test the whole footprint.
+    pub fn put_span(&mut self, x: u16, y: u16, rows: &[&str]) {
+        let style = self.drawing_style;
+        self.put_span_styled(x, y, rows, style);
+    }
+
+    /// [`put_span`](Self::put_span) with an explicit style instead of the terminal's current
+    /// drawing style. The style applies to every cell of the span, anchor and fallback alike.
+    pub fn put_span_styled(&mut self, x: u16, y: u16, rows: &[&str], style: Style) {
+        self.current
+            .write_span(self.active_layer, x, y, rows, style);
     }
 
     /// Place a character at `(x, y)` with a sub-cell pixel offset `(dx, dy)`.

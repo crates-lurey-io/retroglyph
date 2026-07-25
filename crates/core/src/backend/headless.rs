@@ -176,4 +176,22 @@ mod tests {
         ··········
         "#);
     }
+
+    /// A multi-cell span's covered cells are its text fallback, so a cell backend must render
+    /// all four glyphs. This is the deliberate difference from `WIDE_CHAR_SPACER`, which
+    /// `format_view` blanks out just above this test's code path.
+    #[test]
+    fn test_format_view_renders_span_fallback_glyphs() {
+        use crate::Terminal;
+        let backend = Headless::new(6, 3);
+        let mut term = Terminal::new(backend);
+        term.put_span(1, 0, &["C=", "[]"]);
+        term.present();
+        let view = term.backend().format_view();
+        insta::assert_snapshot!(view, @r#"
+        ·C=···
+        ·[]···
+        ······
+        "#);
+    }
 }
