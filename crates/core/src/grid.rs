@@ -765,9 +765,9 @@ impl Grid {
     /// Clears wide-character cells that would be partially overwritten by a
     /// write starting at `(x, y)` spanning `width` columns.
     ///
-    /// The multi-cell-span analogue is `clear_span_overlap`, which is not `egc`-gated: spans are
-    /// not a Unicode concept, so they exist on every feature combination. Write paths that can
-    /// land inside either kind of multi-cell structure call both.
+    /// `clear_span_overlap` is the multi-cell-span analogue. It is not `egc`-gated, because a
+    /// span is not a Unicode concept and exists on every feature combination, so a write that
+    /// can land inside either kind of multi-cell structure calls both.
     #[cfg(feature = "egc")]
     fn clear_overlap(&mut self, layer: u8, x: u16, y: u16, width: u16) {
         let w = usize::from(self.width);

@@ -39,6 +39,14 @@ without a conscious decision to change the defaults.
   so rustfmt never rewraps prose for you; hand-wrapping to ~80 out of habit just leaves ragged
   lines.
 - Comment the why, not the what. No banners, section dividers, or decorative comment blocks.
+- Write from the reader's point of view, not the diff's. A doc comment describes the API as it is,
+  in the present tense; it never narrates the change that produced it. No "this used to be X", no
+  "the only behaviour available before Y existed", no "kept for backwards compatibility", no
+  "renamed from Z", and no attribute rationale ("`#[non_exhaustive]` so adding a variant isn't a
+  breaking change"). Someone reading `cargo doc` has never seen the previous version, so that
+  framing is noise to them, and it rots the moment the next change lands. History belongs in the
+  commit message, the PR body, and the changelog, which are addressed to reviewers instead. Citing
+  an issue for design context (`retroglyph#304`) is fine; narrating the edit is not.
 - Omit doc comments on functions where the name and signature already say it all. Every public item
   still needs _something_ because of `missing_docs`, but that something can be one line.
 - Every fallible public function needs a `# Errors` section (clippy `missing_errors_doc`); every

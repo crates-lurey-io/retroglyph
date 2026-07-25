@@ -16,7 +16,8 @@ fn glyph_width(glyph: char) -> u8 {
 }
 
 bitflags::bitflags! {
-    /// Bit-flags tracking wide-character tile roles.
+    /// Bit-flags tracking a tile's emptiness and its role in any multi-cell structure it is part
+    /// of: a wide character, or a [span](crate::grid::Grid::write_span).
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
     pub struct TileFlags: u8 {
         /// This tile is the left half of a 2-column wide character.
@@ -98,10 +99,11 @@ pub struct Tile {
     ///
     /// Only meaningful for graphical backends (e.g. `SoftwareBackend`).
     pub(crate) dy: i16,
-    /// Wide-character role flags (e.g. [`TileFlags::WIDE_CHAR`]).
+    /// Role and occupancy flags: emptiness, wide-character halves, EGC side-table presence, and
+    /// multi-cell span roles (see [`TileFlags`]).
     ///
     /// Always present so `Tile`'s layout is stable whether or not the `egc`
-    /// feature is enabled. Without `egc` it is never set to anything but empty.
+    /// feature is enabled. Without `egc`, the wide-character and side-table bits are never set.
     pub(crate) flags: TileFlags,
     /// Multi-cell span bookkeeping, **overloaded by role** (see `flags`):
     ///
@@ -111,9 +113,9 @@ pub struct Tile {
     /// | [`TileFlags::SPAN_COVERED`] | `x - anchor.x` | `y - anchor.y` |
     /// | neither | 1 | 1 |
     ///
-    /// The overload is what makes [`Grid::span_owner`](crate::grid::Grid::span_owner) O(1) -- a
-    /// covered cell names its anchor directly instead of being found by scanning -- and it fits
-    /// in `Tile`'s existing tail padding, so spans cost zero bytes (see the size test below).
+    /// The overload is what makes [`Grid::span_owner`](crate::grid::Grid::span_owner) O(1): a
+    /// covered cell names its anchor directly instead of being found by scanning. Both bytes sit
+    /// in `Tile`'s tail padding, so spans cost nothing (see `test_tile_size_is_stable_and_small`).
     /// Read them through [`span`](Self::span) and [`span_offset`](Self::span_offset), which
     /// enforce the roles, rather than touching the fields directly.
     pub(crate) span_w: u8,
@@ -273,9 +275,6 @@ impl Tile {
     /// Does not touch the owning [`Grid`]'s EGC side-table; callers that
     /// reset a tile which may have carried [`TileFlags::HAS_EXTRA`] are
     /// responsible for also clearing that entry (see `Grid::clear_overlap`).
-    ///
-    /// Not `egc`-gated: span clearing (`Grid::clear_span_overlap`) needs it on every feature
-    /// combination, unlike the wide-character clearing it was originally written for.
     pub(crate) fn reset(&mut self) {
         self.glyph = ' ';
         self.style = Style::default();
