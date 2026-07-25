@@ -69,7 +69,7 @@ impl Layers {
         true
     }
 
-    /// Draws this frame and presents it: a layer-0 background fill, then a single
+    /// Draws this frame (the driver presents): a layer-0 background fill, then a single
     /// layer-1 glyph at a column derived from `self.ticks`.
     fn draw<B: Backend>(&self, term: &mut Terminal<B>) {
         term.print(1, 1, "Layer 0: background fill. Layer 1: moving glyph.");
@@ -100,8 +100,6 @@ impl Layers {
             .bg(Color::Default);
         term.layer(1);
         term.put_styled(glyph_x, 10, '@', glyph_style);
-
-        term.present().ok();
     }
 }
 

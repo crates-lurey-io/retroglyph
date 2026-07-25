@@ -34,6 +34,11 @@
     rustdoc::private_intra_doc_links
 )]
 
+#[cfg(all(
+    feature = "fps",
+    any(feature = "crossterm", feature = "software", feature = "gl")
+))]
+mod fps;
 mod launch;
 pub mod util;
 mod wasm_entry;

@@ -1106,7 +1106,6 @@ impl OutpostDashboard {
 
         self.draw_nav_bar(term, nav_area);
         self.draw_floating(term);
-        term.present().ok();
     }
 
     fn draw_floating<B: Backend>(&self, term: &mut Terminal<B>) {

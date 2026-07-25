@@ -200,7 +200,7 @@ Three optional layers build on that free-function core:
 
 See the `09_widgets_dashboard` and `15_outpost_dashboard` examples for all of the above wired
 together in one UI, `17_theme_switch` for `Theme::DARK`/`Theme::LIGHT` switched live at runtime by a
-keypress, or `18_weighted_fill` for `Fill(weight)`'s proportional splits.
+keypress, or `19_weighted_fill` for `Fill(weight)`'s proportional splits.
 
 </details>
 

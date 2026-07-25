@@ -46,6 +46,7 @@ fn drive(events: &[&[Event]]) -> String {
         if !state.tick(&mut term, &frame) {
             break;
         }
+        term.present().ok();
         views.push(term.backend().format_view());
     }
     views.join("\n--- frame ---\n")

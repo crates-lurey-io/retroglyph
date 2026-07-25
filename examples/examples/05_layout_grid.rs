@@ -90,7 +90,7 @@ impl LayoutGrid {
         term.print(label_x, label_y, label);
     }
 
-    /// Draws this frame and presents it.
+    /// Draws this frame (the driver presents).
     #[allow(clippy::unused_self)]
     fn draw<B: Backend>(&self, term: &mut Terminal<B>) {
         let full = Rect::new(0, 0, 50, 25);
@@ -106,8 +106,6 @@ impl LayoutGrid {
         Self::draw_pane(term, left, "Pane B");
         Self::draw_pane(term, middle, "Pane C");
         Self::draw_pane(term, right, "Pane D");
-
-        term.present().ok();
     }
 }
 

@@ -1,4 +1,4 @@
-//! 18: Weighted fill
+//! 19: Weighted fill
 //!
 //! Proves `Constraint::Fill(weight)`: `split_h`'s remainder now divides in proportion to each
 //! pane's weight instead of always splitting equally. Four static rows, stacked with
@@ -14,9 +14,9 @@
 //!   always weigh 1 regardless of their floor/cap value.
 //!
 //! ```sh
-//! cargo run --example 18_weighted_fill --features crossterm
-//! cargo run --example 18_weighted_fill --features software
-//! cargo run --example 18_weighted_fill  # headless fallback, prints a few frames to stdout
+//! cargo run --example 19_weighted_fill --features crossterm
+//! cargo run --example 19_weighted_fill --features software
+//! cargo run --example 19_weighted_fill  # headless fallback, prints a few frames to stdout
 //! ```
 //!
 //! Press `q` or `Escape` to quit on the interactive backends, or close the window.
@@ -99,7 +99,7 @@ impl WeightedFill {
         }
     }
 
-    /// Draws this frame and presents it.
+    /// Draws this frame (the driver presents).
     #[allow(clippy::unused_self)]
     fn draw<B: Backend>(&self, term: &mut Terminal<B>) {
         let full = Rect::new(0, 0, 50, 25);
@@ -150,13 +150,11 @@ impl WeightedFill {
             &[Constraint::Min(6), Constraint::Fill(2), Constraint::Max(12)],
             &["Min(6)", "Fill(2)", "Max(12)"],
         );
-
-        term.present().ok();
     }
 }
 
 impl Example for WeightedFill {
-    const NAME: &'static str = "18_weighted_fill";
+    const NAME: &'static str = "19_weighted_fill";
 
     fn tick<B: Backend>(
         &mut self,

@@ -91,7 +91,7 @@ impl Animation {
         true
     }
 
-    /// Draws this frame and presents it: the track, then the ball at its tweened position, with
+    /// Draws this frame (the driver presents): the track, then the ball at its tweened position, with
     /// a sub-cell pixel offset for the fractional part of that position.
     fn draw<B: Backend>(&self, term: &mut Terminal<B>) {
         term.print(
@@ -123,8 +123,6 @@ impl Animation {
             .fg(Color::Ansi(AnsiColor::BrightYellow))
             .bg(Color::Default);
         term.put_offset(cell_x, TRACK_ROW, dx, 0, 'o');
-
-        term.present().ok();
     }
 }
 

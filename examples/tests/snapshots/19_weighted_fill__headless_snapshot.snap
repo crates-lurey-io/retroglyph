@@ -1,5 +1,5 @@
 ---
-source: examples/tests/18_weighted_fill.rs
+source: examples/tests/19_weighted_fill.rs
 expression: "support::headless_snapshot::<WeightedFill>(1)"
 ---
 ·Constraint::Fill(weight):·proportional·splits····

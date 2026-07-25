@@ -195,8 +195,6 @@ impl DungeonScroll {
             term.put(screen.x, screen.y, '@');
             term.reset_style();
         }
-
-        term.present().ok();
     }
 }
 

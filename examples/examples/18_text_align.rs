@@ -71,7 +71,7 @@ impl TextAlign {
         PrintLine::new(&line).align(align).render(below, term);
     }
 
-    /// Draws this frame and presents it. `&self` (unused) is the shape a real
+    /// Draws this frame (the driver presents). `&self` (unused) is the shape a real
     /// example's draw step needs; this one has no state to read.
     #[allow(clippy::unused_self)]
     fn draw<B: Backend>(&self, term: &mut Terminal<B>) {
@@ -102,8 +102,6 @@ impl TextAlign {
             .style(Style::new().fg(Color::GREEN))
             .align(Align::Right)
             .render(row, term);
-
-        term.present().ok();
     }
 }
 

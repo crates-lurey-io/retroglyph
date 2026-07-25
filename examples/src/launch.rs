@@ -102,7 +102,9 @@ pub trait Example: Default + Sized + 'static {
     /// or [`FrameClock`](retroglyph_core::FrameClock) with `frame.delta`
     /// instead of counting raw `tick` calls -- see `06_layers.rs`.
     ///
-    /// Responsible for calling [`Terminal::present`]. Mirrors
+    /// Draws only -- it does **not** call [`Terminal::present`]. The shared driver presents after
+    /// `tick` returns (so it can stamp the optional FPS overlay on top first; see the `fps`
+    /// feature). Mirrors
     /// [`App::update`](retroglyph_core::App::update)'s combined
     /// input-then-draw shape deliberately (rather than splitting into
     /// separate `handle_events`/`draw` trait methods) so `Example` stays a
@@ -123,12 +125,22 @@ pub trait Example: Default + Sized + 'static {
 #[cfg(any(feature = "crossterm", feature = "software", feature = "gl"))]
 struct ExampleApp<E> {
     state: Option<E>,
+    /// Backend label for the FPS overlay ("software"/"gl"/"crossterm").
+    backend_name: &'static str,
+    /// Smoothed frame-timing state for the optional FPS overlay (`fps` feature).
+    #[cfg(feature = "fps")]
+    fps: crate::fps::Fps,
 }
 
 #[cfg(any(feature = "crossterm", feature = "software", feature = "gl"))]
 impl<E> ExampleApp<E> {
-    const fn new() -> Self {
-        Self { state: None }
+    const fn new(backend_name: &'static str) -> Self {
+        Self {
+            state: None,
+            backend_name,
+            #[cfg(feature = "fps")]
+            fps: crate::fps::Fps::new(),
+        }
     }
 }
 
@@ -136,11 +148,25 @@ impl<E> ExampleApp<E> {
 impl<B: Backend, E: Example> App<B> for ExampleApp<E> {
     fn update(&mut self, term: &mut Terminal<B>, frame: &Frame) -> Flow {
         let state = self.state.get_or_insert_with(|| E::init(term));
-        if state.tick(term, frame) {
-            Flow::Continue
-        } else {
-            Flow::Exit
+        let keep_going = state.tick(term, frame);
+        // `backend_name` is unused without `fps`.
+        let _ = self.backend_name;
+        if !keep_going {
+            // Quitting: `present` clears `current` each frame, so an example that returns without
+            // drawing (it quit in its event handler before drawing) leaves `current` empty --
+            // presenting it would erase the last frame. Leave the last drawn frame on screen and
+            // exit, matching the old contract where `tick` presented only when it actually drew.
+            return Flow::Exit;
         }
+        // Mechanism A: the driver owns `present`, so the FPS overlay (a top layer) is stamped after
+        // the example's draw and survives to the flush.
+        #[cfg(feature = "fps")]
+        {
+            self.fps.tick(frame.delta);
+            self.fps.draw(term, self.backend_name);
+        }
+        term.present().ok();
+        Flow::Continue
     }
 }
 
@@ -197,7 +223,7 @@ pub fn run_software_with<E: Example>(builder: retroglyph_software::SoftwareBacke
         .expect("failed to build headless renderer");
     let config = retroglyph_window::winit::WindowConfig::fit(&renderer, E::NAME, None)
         .fill_viewport(E::fill_viewport());
-    let app = ExampleApp::<E>::new();
+    let app = ExampleApp::<E>::new("software");
     retroglyph_window::winit::run_app(config, renderer, app).expect("event loop failed");
 }
 
@@ -229,7 +255,7 @@ pub fn run_gl<E: Example>() {
         .expect("failed to initialize gl backend");
     let config = retroglyph_window::winit::WindowConfig::fit(&renderer, E::NAME, None)
         .fill_viewport(E::fill_viewport());
-    let app = ExampleApp::<E>::new();
+    let app = ExampleApp::<E>::new("gl");
     retroglyph_window::winit::run_app(config, renderer, app).expect("event loop failed");
 }
 
@@ -242,7 +268,7 @@ pub fn run_gl<E: Example>() {
 /// Returns an error if the terminal fails to initialize.
 #[cfg(feature = "crossterm")]
 pub fn run_crossterm<E: Example>() -> std::io::Result<()> {
-    retroglyph_crossterm::Crossterm::run(ExampleApp::<E>::new())
+    retroglyph_crossterm::Crossterm::run(ExampleApp::<E>::new("crossterm"))
 }
 
 // ── Headless (stdout) fallback ──────────────────────────────────────────────
@@ -286,6 +312,10 @@ pub fn render_headless_frames<E: Example>(frames: u32) -> Vec<String> {
         if !state.tick(&mut term, &frame) {
             break;
         }
+        // The driver owns `present` now (the example's `tick` no longer does). No FPS overlay
+        // here: headless is frame-stepped at a fixed synthetic delta, so a frame rate is meaningless
+        // and it would perturb the snapshots.
+        term.present().ok();
         views.push(term.backend().format_view());
     }
     views

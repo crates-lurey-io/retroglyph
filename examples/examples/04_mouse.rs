@@ -77,7 +77,7 @@ impl Mouse {
         !self.motion_seen && self.ticks > MOTION_GRACE_TICKS
     }
 
-    /// Draws this frame and presents it.
+    /// Draws this frame (the driver presents).
     fn draw<B: Backend>(&self, term: &mut Terminal<B>) {
         term.print(1, 1, "Move the mouse and click; q / Escape quits.");
 
@@ -105,8 +105,6 @@ impl Mouse {
 
         term.print(1, 8, "Clicks:");
         term.print(9, 8, &self.click_count.to_string());
-
-        term.present().ok();
     }
 }
 

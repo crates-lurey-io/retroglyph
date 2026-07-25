@@ -153,8 +153,6 @@ impl CombatLog {
             term.print(inner.left(), inner.top() + 2, "r: reset");
             term.print(inner.left(), inner.top() + 3, "q / Esc: quit");
         }
-
-        term.present().ok();
     }
 }
 

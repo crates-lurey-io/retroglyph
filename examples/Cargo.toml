@@ -29,7 +29,7 @@ retroglyph-window = { path = "../crates/window", version = "0.3.1", optional = t
 # impl still compiles portably -- only its `#[wasm_bindgen]` FFI module is
 # `cfg(target_arch = "wasm32")`-gated).
 retroglyph-terminal-wasm = { path = "../crates/terminal-wasm", version = "0.1.4", optional = true }
-# Axial hex coordinates for 19_overworld's strategic hex-tile view: offset<->axial conversion,
+# Axial hex coordinates for 20_overworld's strategic hex-tile view: offset<->axial conversion,
 # neighbor directions, and hex distance. `no_std`, dependency-free, so it costs nothing on the
 # WASM builds.
 hexal = "0.1"
@@ -41,6 +41,11 @@ hexal = "0.1"
 web-time = "1"
 
 [features]
+# Draws a small FPS / frame-time / backend readout in the top-right corner of every windowed and
+# crossterm example, via the shared driver (examples/src/launch.rs owns `present` and stamps the
+# overlay after each example's `tick`). Off by default; opt in with `--features software,fps` (or
+# gl/crossterm). Headless/snapshot runs never draw it (fixed synthetic frame delta).
+fps = []
 # An example selects a backend by enabling one of these. With none enabled,
 # every example still builds and runs against the Headless backend (used by
 # `bin/runner.rs`'s "Headless" option and `launch::<E>()`'s fallback arm).
@@ -88,6 +93,16 @@ wasm-terminal = ["dep:retroglyph-terminal-wasm"]
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "=0.2.126"
 console_error_panic_hook = "0.1"
+# DOM access for the `fps` overlay's floating toggle button on wasm (see src/fps.rs). Features
+# unify with retroglyph-window's own web-sys; only exercised behind the `fps` feature.
+web-sys = { version = "0.3", features = [
+  "Window",
+  "Document",
+  "Element",
+  "HtmlElement",
+  "Node",
+  "EventTarget",
+] }
 
 [dev-dependencies]
 insta = { version = "1.34", features = ["yaml"] }

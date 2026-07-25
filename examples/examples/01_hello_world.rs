@@ -46,7 +46,7 @@ impl HelloWorld {
         true
     }
 
-    /// Draws this frame and presents it. Unconditional -- called every tick
+    /// Draws this frame (the driver presents). Unconditional -- called every tick
     /// regardless of what `handle_events` saw, since this example's content
     /// never changes.
     ///
@@ -56,7 +56,6 @@ impl HelloWorld {
     #[allow(clippy::unused_self)]
     fn draw<B: Backend>(&self, term: &mut Terminal<B>) {
         term.print(18, 12, "Hello, world!");
-        term.present().ok();
     }
 }
 

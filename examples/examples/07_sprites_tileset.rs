@@ -100,7 +100,7 @@ impl SpritesTileset {
         }
     }
 
-    /// Draws this frame and presents it: layer 0 is the wall ring and
+    /// Draws this frame (the driver presents): layer 0 is the wall ring and
     /// floor; layer 1 is the remaining coins and the player.
     fn draw<B: Backend>(&self, term: &mut Terminal<B>) {
         term.print(1, 1, "Arrows move, collect $ coins; q / Escape quits.");
@@ -130,8 +130,6 @@ impl SpritesTileset {
             }
         }
         term.put(self.player.x, self.player.y, '@');
-
-        term.present().ok();
     }
 }
 

@@ -135,7 +135,7 @@ impl Dashboard {
         true
     }
 
-    /// Draws this frame and presents it.
+    /// Draws this frame (the driver presents).
     fn draw<B: Backend>(&mut self, term: &mut Terminal<B>) {
         let area = Rect::new(0, 0, 50, 25);
         let rows = split_v(area, &[Constraint::Fixed(1), Constraint::Fill(1)]);
@@ -185,8 +185,6 @@ impl Dashboard {
                 .selected_style(Style::new().fg(self.theme.bg).bg(self.theme.accent))
                 .render(panel_area, term, &mut self.alerts_state);
         }
-
-        term.present().ok();
     }
 
     /// Draws the "Metrics" tab's content: CPU/MEM gauges, a recent-history sparkline, the status

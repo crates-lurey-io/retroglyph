@@ -93,7 +93,7 @@ impl ThemeSwitch {
         true
     }
 
-    /// Draws this frame and presents it.
+    /// Draws this frame (the driver presents).
     fn draw<B: Backend>(&mut self, term: &mut Terminal<B>) {
         let theme = self.theme();
 
@@ -140,8 +140,6 @@ impl ThemeSwitch {
             Rect::new(inner.left(), inner.top() + 9, inner.width(), 1),
             term,
         );
-
-        term.present().ok();
     }
 
     /// Draws the "Switch to ..." [`Button`] and applies its click to `self.dark`. Mirrors
