@@ -75,6 +75,10 @@ web-sys = { version = "0.3", features = [
   "Element",
   "HtmlCanvasElement",
   "WebGl2RenderingContext",
+  # Context-loss recovery (issue #373): `Event::prevent_default` on `webglcontextlost`, and
+  # `EventTarget::add/remove_event_listener_with_callback` to (de)register the canvas listeners.
+  "Event",
+  "EventTarget",
 ] }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
@@ -86,6 +90,13 @@ web-sys = { version = "0.3", features = [
 # wasm-bindgen 0.2.126, so it's the only version that resolves against this crate's pin. If the
 # `wasm-bindgen` pin moves, this must move in lockstep.
 wasm-bindgen-test = "=0.3.76"
+# The context-loss recovery test (src/webgl_recovery.rs) forces a real lost/restored cycle via the
+# `WEBGL_lose_context` extension and awaits the async restore event, so it needs the extension type
+# plus a Promise-based `setTimeout` sleep. `js-sys`/`wasm-bindgen-futures`/the extra `web-sys`
+# feature are test-only; `web-sys` unifies with the dependency features above.
+web-sys = { version = "0.3", features = ["WebglLoseContext"] }
+js-sys = "0.3"
+wasm-bindgen-futures = "0.4"
 
 [features]
 # Embeds the Unscii 16 default font so a caller can build a renderer with no font of its own.

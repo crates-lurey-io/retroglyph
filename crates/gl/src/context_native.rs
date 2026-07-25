@@ -146,6 +146,14 @@ impl GlContext {
         self.flavor
     }
 
+    /// Always `false`: desktop GL has no context-loss/restore cycle to recover from the way WebGL2
+    /// does (a lost native context is fatal and not handled here). Mirrors the wasm
+    /// `GlContext::take_needs_rebuild` (issue #373) so the renderer can poll it without a `cfg`.
+    #[allow(clippy::unused_self)]
+    pub(crate) const fn take_needs_rebuild(&self) -> bool {
+        false
+    }
+
     /// Resizes the GL surface (required on EGL/Wayland/macOS; a no-op elsewhere).
     pub(crate) fn resize(&self, width: u32, height: u32) {
         let (w, h) = nonzero_size(width, height);
