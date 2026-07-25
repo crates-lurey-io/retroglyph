@@ -1,12 +1,14 @@
 //! Configuration, builder, and error types for the GL backend.
 //!
-//! [`GlBackendBuilder`] gathers grid size, integer scale, and a [`BitmapFont`], then
-//! [`build`](GlBackendBuilder::build) produces a [`GlRenderer`]. The renderer is
+//! [`GlBackendBuilder`] gathers grid size, integer scale, and a glyph source -- a static
+//! [`BitmapFont`] (default) or a dynamic TrueType font via [`ttf`](GlBackendBuilder::ttf) (issue
+//! #367) -- then [`build`](GlBackendBuilder::build) produces a [`GlRenderer`]. The renderer is
 //! created without a GL context; the context and GPU resources are created lazily when the
 //! windowing loop calls
 //! [`Presenter::init_surface`](retroglyph_window::Presenter::init_surface).
 
 use crate::GlRenderer;
+use crate::glyphs::{GlyphCache, TtfFont};
 use retroglyph_window::font::BitmapFont;
 use std::fmt;
 
@@ -19,6 +21,8 @@ pub enum GlBackendError {
     ZeroScale,
     /// The grid was configured with a zero column or row count.
     ZeroGrid,
+    /// The TTF font supplied to [`GlBackendBuilder::ttf`] could not be parsed.
+    Font(String),
 }
 
 impl fmt::Display for GlBackendError {
@@ -31,6 +35,7 @@ impl fmt::Display for GlBackendError {
             ),
             Self::ZeroScale => write!(f, "scale must be non-zero"),
             Self::ZeroGrid => write!(f, "grid columns and rows must both be non-zero"),
+            Self::Font(msg) => write!(f, "invalid TTF font: {msg}"),
         }
     }
 }
@@ -56,6 +61,8 @@ impl std::error::Error for GlBackendError {}
 #[derive(Debug, Clone)]
 pub struct GlBackendBuilder {
     font: Option<BitmapFont>,
+    /// A dynamic TTF font source (bytes + pixel height); takes precedence over `font` when set.
+    ttf: Option<(Vec<u8>, f32)>,
     cols: u16,
     rows: u16,
     scale: u16,
@@ -74,6 +81,7 @@ impl GlBackendBuilder {
     pub const fn new() -> Self {
         Self {
             font: None,
+            ttf: None,
             cols: 80,
             rows: 25,
             scale: 1,
@@ -102,6 +110,18 @@ impl GlBackendBuilder {
         self
     }
 
+    /// Uses a dynamic TrueType/OpenType font instead of a bitmap font (issue #367).
+    ///
+    /// `bytes` is the raw font file; `px_height` is the rasterization size in pixels (the glyph
+    /// cell height, capped at 255). Glyphs are rasterized on demand into an LRU-managed atlas, so
+    /// arbitrary Unicode works without a fixed 256-glyph table. Takes precedence over
+    /// [`font`](Self::font) and the `default-font` fallback when set.
+    #[must_use]
+    pub fn ttf(mut self, bytes: impl Into<Vec<u8>>, px_height: f32) -> Self {
+        self.ttf = Some((bytes.into(), px_height));
+        self
+    }
+
     /// Builds the [`GlRenderer`].
     ///
     /// The renderer holds no GL context yet; the context is created when the windowing loop calls
@@ -119,8 +139,12 @@ impl GlBackendBuilder {
         if self.cols == 0 || self.rows == 0 {
             return Err(GlBackendError::ZeroGrid);
         }
-        let font = self.resolve_font()?;
-        Ok(GlRenderer::new(font, self.cols, self.rows, self.scale))
+        let glyphs = if let Some((bytes, px)) = &self.ttf {
+            GlyphCache::ttf(TtfFont::new(bytes, *px).map_err(GlBackendError::Font)?)
+        } else {
+            GlyphCache::bitmap(self.resolve_font()?)
+        };
+        Ok(GlRenderer::new(glyphs, self.cols, self.rows, self.scale))
     }
 
     /// Resolves the font: the explicitly set one, else the embedded default (if the feature is on),

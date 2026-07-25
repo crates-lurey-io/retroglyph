@@ -58,6 +58,15 @@ transparent empty overlay, an opaque occluding glyph, and an opaque space that e
 while inheriting its background) -- the runnable local counterpart to the Linux-only multi-layer
 software-parity test above.
 
+Two more `webgl_smoke.rs` browser tests cover the dynamic glyph atlas (issue #367):
+`dynamic_atlas_packs_glyphs_across_layers` draws 300 distinct glyphs so slots spill past the 256th
+into a second array layer, proving the grid-packed slot -> `(layer, cell)` shader math and the
+per-glyph `texSubImage3D` upload for cross-layer slots; `dynamic_ttf_glyph_rasterizes_and_renders`
+runs the full `GlBackendBuilder::ttf` path end to end -- `fontdue` rasterizes a real glyph (Tiny5,
+SIL OFL 1.1, bundled under `crates/gl/testdata`), it's uploaded to its slot, and the shader samples
+it into a recognizable shape. The atlas packing, LRU eviction, and `fontdue` rasterization also have
+plain unit tests in `src/atlas.rs` and `src/glyphs.rs`.
+
 `crates/gl/src/webgl_recovery.rs` is the companion context-loss test (issue #373). It drives the
 real windowed path (`Presenter::init_surface` then `present`), forces a lost/restored cycle with the
 `WEBGL_lose_context` extension, and asserts `present()` reports the recoverable error while lost and
