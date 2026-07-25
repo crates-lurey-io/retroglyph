@@ -41,11 +41,6 @@ hexal = "0.1"
 web-time = "1"
 
 [features]
-# Draws a small FPS / frame-time / backend readout in the top-right corner of every windowed and
-# crossterm example, via the shared driver (examples/src/launch.rs owns `present` and stamps the
-# overlay after each example's `tick`). Off by default; opt in with `--features software,fps` (or
-# gl/crossterm). Headless/snapshot runs never draw it (fixed synthetic frame delta).
-fps = []
 # An example selects a backend by enabling one of these. With none enabled,
 # every example still builds and runs against the Headless backend (used by
 # `bin/runner.rs`'s "Headless" option and `launch::<E>()`'s fallback arm).
@@ -93,8 +88,8 @@ wasm-terminal = ["dep:retroglyph-terminal-wasm"]
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "=0.2.126"
 console_error_panic_hook = "0.1"
-# DOM access for the `fps` overlay's floating toggle button on wasm (see src/fps.rs). Features
-# unify with retroglyph-window's own web-sys; only exercised behind the `fps` feature.
+# DOM access for the FPS overlay's floating toggle button on wasm (see src/fps.rs). Features
+# unify with retroglyph-window's own web-sys.
 web-sys = { version = "0.3", features = [
   "Window",
   "Document",

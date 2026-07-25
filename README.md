@@ -245,8 +245,8 @@ Want a native window or a browser tab instead of a real terminal? See
 
 ## Examples
 
-`examples/examples/*.rs` has 18 runnable examples, from a minimal `01_hello_world` up to
-`18_text_align`, with `15_outpost_dashboard` a flagship dashboard exercising animation, touch-sized
+`examples/examples/*.rs` has 20 runnable examples, from a minimal `01_hello_world` up to
+`20_overworld`, with `15_outpost_dashboard` a flagship dashboard exercising animation, touch-sized
 controls, and a responsive layout. Every example runs on every backend unchanged:
 
 ```sh
@@ -254,6 +254,9 @@ cargo run --example 12_dungeon_scroll --features crossterm  # real terminal
 cargo run --example 12_dungeon_scroll --features software   # native window
 cargo run --bin runner                                      # interactive picker (all examples x all backends, incl. WASM)
 ```
+
+Every windowed and crossterm example draws an `NNN fps  MM.M ms  <backend>` readout in the top-right
+corner. Set `RG_FPS=0` to turn it off (on WASM, click the floating `FPS` button instead).
 
 Every example is also built for WASM (Headless/Terminal/Software/WebGL variants) and published as an
 interactive gallery at **[main.retroglyph.dev/examples](https://main.retroglyph.dev/examples/)** --

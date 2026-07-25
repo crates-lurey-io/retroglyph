@@ -180,6 +180,11 @@ pub fn build_crossterm_example(example_name: &str) -> PathBuf {
 /// screen contains `ready_marker`, then closes the writer (EOF) and returns
 /// all captured output bytes.
 ///
+/// Runs the child with `RG_FPS=0`: the shared driver draws its FPS overlay by default (see
+/// `retroglyph_examples::fps`), and a live frame rate is not reproducible, so leaving it on would
+/// diff every committed SVG on every run. Use [`capture_pty_with_env`] directly to capture a run
+/// with the overlay left alone.
+///
 /// # Panics
 ///
 /// Panics if the PTY can't be opened, or if `ready_marker` never appears
@@ -187,6 +192,25 @@ pub fn build_crossterm_example(example_name: &str) -> PathBuf {
 #[cfg(not(target_arch = "wasm32"))]
 #[must_use]
 pub fn capture_pty(bin: &Path, input: &[u8], rows: u16, cols: u16, ready_marker: &str) -> Vec<u8> {
+    capture_pty_with_env(bin, input, rows, cols, ready_marker, &[("RG_FPS", "0")])
+}
+
+/// [`capture_pty`] with an explicit child environment instead of its default `RG_FPS=0`.
+///
+/// # Panics
+///
+/// Panics if the PTY can't be opened, or if `ready_marker` never appears
+/// within 10 seconds.
+#[cfg(not(target_arch = "wasm32"))]
+#[must_use]
+pub fn capture_pty_with_env(
+    bin: &Path,
+    input: &[u8],
+    rows: u16,
+    cols: u16,
+    ready_marker: &str,
+    env: &[(&str, &str)],
+) -> Vec<u8> {
     use portable_pty::{CommandBuilder, PtySize, native_pty_system};
     use std::io::{Read, Write};
     use std::sync::{Arc, Mutex};
@@ -204,6 +228,9 @@ pub fn capture_pty(bin: &Path, input: &[u8], rows: u16, cols: u16, ready_marker:
 
     let mut cmd = CommandBuilder::new(bin);
     cmd.env("TERM", "xterm-256color");
+    for (key, value) in env {
+        cmd.env(key, value);
+    }
     let mut child = pair.slave.spawn_command(cmd).expect("spawn");
     drop(pair.slave);
 
