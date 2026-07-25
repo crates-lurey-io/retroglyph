@@ -46,7 +46,8 @@ jobs:
       contents: write
       # Trusted publishing: release-plz exchanges this OIDC token for a short-lived crates.io token
       # itself, so there is no CARGO_REGISTRY_TOKEN secret. Configured per-crate on crates.io
-      # (Settings -> Trusted Publishing) for all eight publishable crates (retroglyph-gl included).
+      # (Settings -> Trusted Publishing) for all seven currently-published crates (retroglyph-gl's
+      # is configured too, but its release-plz release is disabled until window 0.3.1 publishes).
       id-token: write
     steps:
       - uses: actions/checkout@v4
