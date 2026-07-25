@@ -41,6 +41,22 @@ bitflags::bitflags! {
         /// [`Grid::grapheme`](crate::grid::Grid::grapheme)); the split is
         /// what keeps the common single-codepoint tile compact.
         const HAS_EXTRA         = 0b0000_1000;
+        /// This tile is the top-left anchor of a multi-cell span: it occupies
+        /// [`Tile::span`] cells, not one.
+        ///
+        /// Written only by [`Grid::write_span`](crate::grid::Grid::write_span), which also writes
+        /// the matching [`SPAN_COVERED`](Self::SPAN_COVERED) tiles. An anchor without its covered
+        /// cells is a broken invariant, which is why there is no `Tile` builder for this flag.
+        const SPAN_ANCHOR       = 0b0001_0000;
+        /// This tile is covered by a multi-cell span anchored above and/or to its left; see
+        /// [`Tile::span_offset`].
+        ///
+        /// Unlike [`WIDE_CHAR_SPACER`](Self::WIDE_CHAR_SPACER), a covered tile keeps a real glyph
+        /// and **is** rendered by cell backends: that glyph is the span artwork's text fallback.
+        /// Only a backend that actually draws the span's artwork -- a pixel backend blitting one
+        /// sprite across the whole footprint -- skips it. See the [`grid`](crate::grid) module
+        /// docs for the full contract.
+        const SPAN_COVERED      = 0b0010_0000;
     }
 }
 
@@ -87,6 +103,22 @@ pub struct Tile {
     /// Always present so `Tile`'s layout is stable whether or not the `egc`
     /// feature is enabled. Without `egc` it is never set to anything but empty.
     pub(crate) flags: TileFlags,
+    /// Multi-cell span bookkeeping, **overloaded by role** (see `flags`):
+    ///
+    /// | Flag | `span_w` | `span_h` |
+    /// | --- | --- | --- |
+    /// | [`TileFlags::SPAN_ANCHOR`] | footprint width in cells (>= 1) | footprint height (>= 1) |
+    /// | [`TileFlags::SPAN_COVERED`] | `x - anchor.x` | `y - anchor.y` |
+    /// | neither | 1 | 1 |
+    ///
+    /// The overload is what makes [`Grid::span_owner`](crate::grid::Grid::span_owner) O(1) -- a
+    /// covered cell names its anchor directly instead of being found by scanning -- and it fits
+    /// in `Tile`'s existing tail padding, so spans cost zero bytes (see the size test below).
+    /// Read them through [`span`](Self::span) and [`span_offset`](Self::span_offset), which
+    /// enforce the roles, rather than touching the fields directly.
+    pub(crate) span_w: u8,
+    /// See [`span_w`](Self::span_w): the vertical half of the same overloaded pair.
+    pub(crate) span_h: u8,
 }
 
 impl Default for Tile {
@@ -98,6 +130,8 @@ impl Default for Tile {
             dx: 0,
             dy: 0,
             flags: TileFlags::EMPTY,
+            span_w: 1,
+            span_h: 1,
         }
     }
 }
@@ -116,6 +150,8 @@ impl Tile {
             dx: 0,
             dy: 0,
             flags: TileFlags::empty(),
+            span_w: 1,
+            span_h: 1,
         }
     }
 
@@ -158,6 +194,36 @@ impl Tile {
     #[must_use]
     pub const fn flags(&self) -> TileFlags {
         self.flags
+    }
+
+    /// Returns how many cells this tile occupies, `(width, height)`.
+    ///
+    /// `(1, 1)` for every tile except a [`TileFlags::SPAN_ANCHOR`], which reports the footprint
+    /// declared by [`Grid::write_span`](crate::grid::Grid::write_span). A covered cell reports
+    /// `(1, 1)`: it does not own a footprint, it is inside one (see
+    /// [`span_offset`](Self::span_offset)).
+    #[must_use]
+    pub const fn span(&self) -> (u16, u16) {
+        if self.flags.contains(TileFlags::SPAN_ANCHOR) {
+            (self.span_w as u16, self.span_h as u16)
+        } else {
+            (1, 1)
+        }
+    }
+
+    /// Returns this tile's offset back to its span anchor, or `None` if it is not covered by one.
+    ///
+    /// The anchor of a covered cell at `(x, y)` is at `(x - dx, y - dy)`. A backend holding a
+    /// whole layer can therefore reach the anchor with one subtraction; a caller holding a
+    /// [`Grid`](crate::grid::Grid) should use
+    /// [`Grid::span_owner`](crate::grid::Grid::span_owner) instead.
+    #[must_use]
+    pub const fn span_offset(&self) -> Option<(u16, u16)> {
+        if self.flags.contains(TileFlags::SPAN_COVERED) {
+            Some((self.span_w as u16, self.span_h as u16))
+        } else {
+            None
+        }
     }
 
     /// Returns `true` if nothing has been written to this tile.
@@ -207,7 +273,9 @@ impl Tile {
     /// Does not touch the owning [`Grid`]'s EGC side-table; callers that
     /// reset a tile which may have carried [`TileFlags::HAS_EXTRA`] are
     /// responsible for also clearing that entry (see `Grid::clear_overlap`).
-    #[cfg(feature = "egc")]
+    ///
+    /// Not `egc`-gated: span clearing (`Grid::clear_span_overlap`) needs it on every feature
+    /// combination, unlike the wide-character clearing it was originally written for.
     pub(crate) fn reset(&mut self) {
         self.glyph = ' ';
         self.style = Style::default();
@@ -215,6 +283,20 @@ impl Tile {
         self.dx = 0;
         self.dy = 0;
         self.flags = TileFlags::EMPTY;
+        self.span_w = 1;
+        self.span_h = 1;
+    }
+
+    /// Strips this tile's multi-cell span role, leaving its glyph and style alone.
+    ///
+    /// Used by copy paths that cannot preserve a span's cross-cell invariant --
+    /// [`Grid::blit`](crate::grid::Grid::blit) can clip a footprint in half -- so the copy
+    /// degrades to exactly the span's text fallback instead of to a dangling anchor.
+    pub(crate) fn clear_span(&mut self) {
+        self.flags
+            .remove(TileFlags::SPAN_ANCHOR | TileFlags::SPAN_COVERED);
+        self.span_w = 1;
+        self.span_h = 1;
     }
 }
 
@@ -321,5 +403,56 @@ mod tests {
         let tile = Tile::new('A', Style::default()).with_glyph('漢');
         assert_eq!(tile.glyph(), '漢');
         assert_eq!(tile.width(), 2);
+    }
+
+    #[test]
+    fn test_tile_span_defaults_to_one_by_one() {
+        assert_eq!(Tile::default().span(), (1, 1));
+        assert_eq!(Tile::new('A', Style::default()).span(), (1, 1));
+        assert_eq!(Tile::default().span_offset(), None);
+        assert_eq!(Tile::new('A', Style::default()).span_offset(), None);
+    }
+
+    /// `span_w`/`span_h` are overloaded by role, so reading them through the wrong accessor must
+    /// report the neutral answer rather than the other role's number.
+    #[test]
+    fn test_tile_span_accessors_are_keyed_by_role() {
+        let mut anchor = Tile::new('C', Style::default());
+        anchor.flags = TileFlags::SPAN_ANCHOR;
+        anchor.span_w = 2;
+        anchor.span_h = 3;
+        assert_eq!(anchor.span(), (2, 3));
+        assert_eq!(anchor.span_offset(), None);
+
+        let mut covered = Tile::new(']', Style::default());
+        covered.flags = TileFlags::SPAN_COVERED;
+        covered.span_w = 1;
+        covered.span_h = 2;
+        assert_eq!(covered.span_offset(), Some((1, 2)));
+        assert_eq!(covered.span(), (1, 1));
+    }
+
+    #[test]
+    fn test_tile_clear_span_keeps_the_glyph() {
+        let mut tile = Tile::new('C', Style::default());
+        tile.flags = TileFlags::SPAN_ANCHOR;
+        tile.span_w = 2;
+        tile.span_h = 2;
+        tile.clear_span();
+        assert_eq!(tile.glyph(), 'C');
+        assert_eq!(tile.span(), (1, 1));
+        assert!(!tile.flags().contains(TileFlags::SPAN_ANCHOR));
+    }
+
+    #[test]
+    fn test_tile_reset_clears_span() {
+        let mut tile = Tile::new('C', Style::default());
+        tile.flags = TileFlags::SPAN_ANCHOR;
+        tile.span_w = 4;
+        tile.span_h = 4;
+        tile.reset();
+        assert_eq!(tile.span(), (1, 1));
+        assert_eq!(tile.span_offset(), None);
+        assert!(tile.is_empty());
     }
 }

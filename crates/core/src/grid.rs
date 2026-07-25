@@ -53,6 +53,33 @@
 //! lets a lower layer's background show through even though its glyph is
 //! opaque. See `flatten_into` (crate-private) for the exact rule.
 //!
+//! ## Multi-cell spans
+//!
+//! [`write_span`](Grid::write_span) writes one piece of artwork across a `w x h` block of cells:
+//! the top-left cell is the **anchor** ([`TileFlags::SPAN_ANCHOR`], carrying the footprint), and
+//! every other cell is **covered** ([`TileFlags::SPAN_COVERED`], carrying its offset back to the
+//! anchor). [`span_owner`](Grid::span_owner) resolves any cell of a span to its anchor in O(1),
+//! so hit-testing a multi-cell sprite is one lookup rather than a rectangle scan.
+//!
+//! Covered cells keep **real glyphs**, and that is the point: they are the span's text fallback.
+//! One `write_span` call renders correctly on every backend without a capability check.
+//!
+//! - A **cell backend** ignores `SPAN_COVERED` and prints all `w * h` glyphs, so `["C=", "[]"]`
+//!   reads as a little piece of ASCII art.
+//! - A **pixel backend** looks the anchor glyph up in its sprite cache, draws that one sprite
+//!   across the whole footprint, and skips every covered cell's glyph.
+//!
+//! This is the deliberate difference from [`TileFlags::WIDE_CHAR_SPACER`], which every backend
+//! skips: a wide character's spacer has no content of its own, whereas a covered cell does.
+//!
+//! A span is written and cleared whole. Any ordinary write into one of its cells
+//! ([`put`](Grid::put), [`put_tile`](Grid::put_tile), [`write_grapheme`](Grid::write_grapheme))
+//! clears the entire span first, so an anchor can never be left claiming cells it no longer owns.
+//! The exceptions are the escape hatches that hand out a `&mut Tile` directly
+//! ([`checked_get_mut`](Grid::checked_get_mut), [`cells_mut`](Grid::cells_mut), `IndexMut`),
+//! which cannot intercept the write; use [`clear_span`](Grid::clear_span) first if you reach for
+//! one of those on a grid that uses spans.
+//!
 //! ## No short-circuiting: every allocated layer is visited, for every cell
 //!
 //! Compositing does not stop early when it hits an opaque tile on a high
@@ -88,7 +115,6 @@
 //! HUD pinned to layer 255).
 
 use crate::color::Color;
-#[cfg(feature = "egc")]
 use crate::style::Style;
 use crate::tile::Tile;
 use crate::tile::TileFlags;
@@ -316,6 +342,16 @@ pub struct Grid {
     layers: Vec<Option<LayerBuf>>,
     /// Highest layer ID that has been allocated. Always at least 0.
     max_layer: u8,
+    /// Whether any multi-cell span has ever been written to this grid (see
+    /// [`write_span`](Self::write_span)).
+    ///
+    /// Conservative and one-way: set on the first `write_span`, never cleared. Every ordinary
+    /// write has to clear a span it would partially overwrite
+    /// (`clear_span_overlap`), and this flag is what keeps that check from
+    /// costing a buffer read per `put` in the overwhelmingly common grid that never uses a span
+    /// at all -- it degrades to one `bool` test. Clearing it again on the last span's removal
+    /// would need span refcounting for no observable gain.
+    has_spans: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -381,6 +417,7 @@ impl Grid {
             height,
             layers: alloc::vec![Some(LayerBuf::new(width, height))],
             max_layer: 0,
+            has_spans: false,
         }
     }
 
@@ -462,10 +499,15 @@ impl Grid {
     /// clears any extra text previously stored for it -- use
     /// [`write_grapheme`](Self::write_grapheme) to write EGCs.
     ///
+    /// If the cell belongs to a multi-cell span (see [`write_span`](Self::write_span)), that
+    /// whole span is cleared first: a span whose anchor or covered cells were partially
+    /// overwritten would leave an anchor pointing at cells it no longer owns.
+    ///
     /// # Panics
     ///
     /// Panics if the coordinates are out of bounds.
     pub fn put(&mut self, x: u16, y: u16, tile: Tile) {
+        self.clear_span_overlap(0, x, y, 1);
         let pos = to_grixy_pos(Pos::new(x, y));
         let idx = usize::from(y) * usize::from(self.width) + usize::from(x);
         let lb = self.layer0_mut();
@@ -512,8 +554,9 @@ impl Grid {
     /// Tries to set the tile at the given coordinates on layer 0.
     ///
     /// Returns `None` if the coordinates are out of bounds. See
-    /// [`put`](Self::put) for the EGC-clearing caveat.
+    /// [`put`](Self::put) for the EGC- and span-clearing caveats.
     pub fn checked_put(&mut self, x: u16, y: u16, tile: Tile) -> Option<()> {
+        self.clear_span_overlap(0, x, y, 1);
         let pos = to_grixy_pos(Pos::new(x, y));
         let idx = usize::from(y) * usize::from(self.width) + usize::from(x);
         let lb = self.layer0_mut();
@@ -665,7 +708,8 @@ impl Grid {
             return;
         }
 
-        // Clear any wide-char cell that would be partially overwritten.
+        // Clear any wide-char cell, or any multi-cell span, that would be partially overwritten.
+        self.clear_span_overlap(layer, x, y, width);
         self.clear_overlap(layer, x, y, width);
 
         // Capture width before borrowing self mutably.
@@ -720,6 +764,10 @@ impl Grid {
 
     /// Clears wide-character cells that would be partially overwritten by a
     /// write starting at `(x, y)` spanning `width` columns.
+    ///
+    /// The multi-cell-span analogue is `clear_span_overlap`, which is not `egc`-gated: spans are
+    /// not a Unicode concept, so they exist on every feature combination. Write paths that can
+    /// land inside either kind of multi-cell structure call both.
     #[cfg(feature = "egc")]
     fn clear_overlap(&mut self, layer: u8, x: u16, y: u16, width: u16) {
         let w = usize::from(self.width);
@@ -753,6 +801,243 @@ impl Grid {
 }
 
 // ---------------------------------------------------------------------------
+// Grid — multi-cell spans
+// ---------------------------------------------------------------------------
+
+impl Grid {
+    /// Write a multi-cell span at `(x, y)` on `layer`: one tile that occupies a `w x h` block of
+    /// cells instead of one.
+    ///
+    /// `rows` gives one string per grid row of the footprint, so the span is `rows.len()` cells
+    /// tall and `rows[0]`'s character count wide. `rows[0]`'s first character is written to the
+    /// **anchor** cell at `(x, y)` with [`TileFlags::SPAN_ANCHOR`]; every other character is
+    /// written to its cell with [`TileFlags::SPAN_COVERED`].
+    ///
+    /// # Why the covered cells get real glyphs
+    ///
+    /// The covered glyphs are the span's **text fallback**, and they are what makes one drawing
+    /// call work on every backend without a capability check:
+    ///
+    /// - A **cell backend** (`Headless`, `retroglyph-crossterm`, `retroglyph-terminal`) ignores
+    ///   `SPAN_COVERED` and renders all `w * h` glyphs, so `&["C=", "[]"]` reads as a small piece
+    ///   of ASCII art.
+    /// - A **pixel backend** (`retroglyph-software`, `retroglyph-gl`) looks the anchor glyph up in
+    ///   its sprite cache, draws that one sprite across the whole footprint, and skips every
+    ///   covered cell's glyph.
+    ///
+    /// This is the deliberate difference from [`TileFlags::WIDE_CHAR_SPACER`], which every
+    /// backend skips.
+    ///
+    /// # Overlap
+    ///
+    /// Any existing span or wide character the footprint would partially overwrite is cleared
+    /// first, in full, exactly as [`write_grapheme`](Self::write_grapheme) does for its own 1- or
+    /// 2-cell write.
+    ///
+    /// # Returns
+    ///
+    /// `None`, having written nothing, if `rows` is empty, holds an empty first row, is ragged
+    /// (rows of differing character counts), exceeds 255 cells on either axis, or would not fit
+    /// inside the grid at `(x, y)`. A span is written whole or not at all.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use retroglyph_core::{Grid, Style};
+    ///
+    /// let mut grid = Grid::new(8, 4);
+    /// grid.write_span(0, 1, 1, &["C=", "[]"], Style::default()).unwrap();
+    ///
+    /// assert_eq!(grid.get_tile(0, 1, 1).unwrap().span(), (2, 2));
+    /// // The covered cells keep their fallback glyphs, and name their anchor.
+    /// assert_eq!(grid.get_tile(0, 2, 2).unwrap().glyph(), ']');
+    /// assert_eq!(grid.span_owner(0, 2, 2), Some(retroglyph_core::Pos::new(1, 1)));
+    /// ```
+    pub fn write_span(
+        &mut self,
+        layer: u8,
+        x: u16,
+        y: u16,
+        rows: &[&str],
+        style: Style,
+    ) -> Option<()> {
+        let cols = rows.first()?.chars().count();
+        if cols == 0 || rows.iter().any(|r| r.chars().count() != cols) {
+            return None;
+        }
+        // `Tile` stores a span's dimensions in one byte each (see `Tile::span_w`), so a span
+        // wider or taller than 255 cells is not representable.
+        let footprint_w = u8::try_from(cols).ok()?;
+        let footprint_h = u8::try_from(rows.len()).ok()?;
+
+        let grid_w = usize::from(self.width);
+        if usize::from(x) + cols > grid_w || usize::from(y) + rows.len() > usize::from(self.height)
+        {
+            return None;
+        }
+
+        // Clear anything the footprint would partially overwrite. Every rejection above happens
+        // first, so a refused write can never have already destroyed the caller's content.
+        for row in 0..footprint_h {
+            let cy = y + u16::from(row);
+            self.clear_span_overlap(layer, x, cy, u16::from(footprint_w));
+            #[cfg(feature = "egc")]
+            self.clear_overlap(layer, x, cy, u16::from(footprint_w));
+        }
+
+        self.has_spans = true;
+        let lb = self.layer_or_alloc(layer);
+        for (row, line) in rows.iter().enumerate() {
+            for (col, ch) in line.chars().enumerate() {
+                let idx = (usize::from(y) + row) * grid_w + usize::from(x) + col;
+                let mut tile = Tile::new(ch, style);
+                if row == 0 && col == 0 {
+                    tile.flags = TileFlags::SPAN_ANCHOR;
+                    tile.span_w = footprint_w;
+                    tile.span_h = footprint_h;
+                } else {
+                    // Both fit in a `u8`: they are strictly less than the footprint, which was
+                    // already narrowed to one above.
+                    #[allow(clippy::cast_possible_truncation)]
+                    {
+                        tile.flags = TileFlags::SPAN_COVERED;
+                        tile.span_w = col as u8;
+                        tile.span_h = row as u8;
+                    }
+                }
+                lb.buf.as_mut()[idx] = tile;
+                lb.extras.remove(&idx);
+            }
+        }
+        Some(())
+    }
+
+    /// The anchor of the multi-cell span occupying `(x, y)` on `layer`, or `None` when the cell
+    /// belongs to no span or is out of bounds.
+    ///
+    /// An anchor cell reports itself, so every cell of one span answers with the same position
+    /// and hit-testing multi-cell artwork is a single comparison:
+    ///
+    /// ```
+    /// # use retroglyph_core::{Grid, Pos, Style};
+    /// # let mut grid = Grid::new(8, 4);
+    /// grid.write_span(0, 2, 1, &["[==]", "|__|"], Style::default()).unwrap();
+    /// let chest = Pos::new(2, 1);
+    /// // Any of the eight cells counts as standing on the chest.
+    /// assert_eq!(grid.span_owner(0, 2, 1), Some(chest));
+    /// assert_eq!(grid.span_owner(0, 5, 2), Some(chest));
+    /// assert_eq!(grid.span_owner(0, 6, 2), None);
+    /// ```
+    ///
+    /// O(1): a covered tile stores its offset back to the anchor (see [`Tile::span_offset`]), so
+    /// this is a lookup and a subtraction, not a scan.
+    #[must_use]
+    pub fn span_owner(&self, layer: u8, x: u16, y: u16) -> Option<Pos> {
+        self.span_anchor_at(layer, x, y)
+    }
+
+    /// Clears the whole multi-cell span that `(x, y)` on `layer` belongs to, anchor included,
+    /// resetting every one of its cells to the default (empty) tile.
+    ///
+    /// Works from any cell of the span, not just the anchor. No-op if the cell is not part of
+    /// one.
+    pub fn clear_span(&mut self, layer: u8, x: u16, y: u16) {
+        if let Some(anchor) = self.span_anchor_at(layer, x, y) {
+            self.reset_span_at(layer, anchor);
+        }
+    }
+
+    /// The anchor of the span `(x, y)` belongs to, treating an anchor cell as its own anchor.
+    fn span_anchor_at(&self, layer: u8, x: u16, y: u16) -> Option<Pos> {
+        let tile = self.layer(layer)?.buf.get(to_grixy_pos(Pos::new(x, y)))?;
+        if tile.flags.contains(TileFlags::SPAN_ANCHOR) {
+            return Some(Pos::new(x, y));
+        }
+        let (dx, dy) = tile.span_offset()?;
+        Some(Pos::new(x.checked_sub(dx)?, y.checked_sub(dy)?))
+    }
+
+    /// Resets every cell of the span anchored at `anchor` on `layer`. No-op if that cell is not
+    /// a [`TileFlags::SPAN_ANCHOR`], or the layer is unallocated.
+    fn reset_span_at(&mut self, layer: u8, anchor: Pos) {
+        let w = usize::from(self.width);
+        let h = usize::from(self.height);
+        let Some(lb) = self
+            .layers
+            .get_mut(usize::from(layer))
+            .and_then(Option::as_mut)
+        else {
+            return;
+        };
+        let anchor_idx = usize::from(anchor.y) * w + usize::from(anchor.x);
+        let Some(anchor_tile) = lb.buf.as_ref().get(anchor_idx).copied() else {
+            return;
+        };
+        if !anchor_tile.flags.contains(TileFlags::SPAN_ANCHOR) {
+            return;
+        }
+        for row in 0..usize::from(anchor_tile.span_h) {
+            let cy = usize::from(anchor.y) + row;
+            if cy >= h {
+                break;
+            }
+            for col in 0..usize::from(anchor_tile.span_w) {
+                let cx = usize::from(anchor.x) + col;
+                if cx >= w {
+                    break;
+                }
+                let idx = cy * w + cx;
+                lb.buf.as_mut()[idx].reset();
+                lb.extras.remove(&idx);
+            }
+        }
+    }
+
+    /// Clears every multi-cell span that a `width`-cell write starting at `(x, y)` on `layer`
+    /// would partially overwrite.
+    ///
+    /// The span analogue of [`clear_overlap`](Self::clear_overlap), and the reason every ordinary
+    /// write path calls it: overwriting one cell of a span would otherwise leave an anchor
+    /// claiming cells it no longer owns, or a covered cell pointing at an anchor that is gone.
+    ///
+    /// Returns immediately on a grid that has never had a span written to it, which is what keeps
+    /// this off the cost of an ordinary [`put`](Self::put) (see
+    /// [`has_spans`](Self::has_spans)).
+    fn clear_span_overlap(&mut self, layer: u8, x: u16, y: u16, width: u16) {
+        if !self.has_spans {
+            return;
+        }
+        // Collect first: resetting a span mutates cells this scan is still reading. Overlapping
+        // writes touch at most a handful of spans, so the linear `contains` beats a set.
+        let mut anchors: Vec<Pos> = Vec::new();
+        let Some(lb) = self.layer(layer) else {
+            return;
+        };
+        for cx in x..x.saturating_add(width) {
+            let Some(tile) = lb.buf.get(to_grixy_pos(Pos::new(cx, y))) else {
+                continue;
+            };
+            let anchor = if tile.flags.contains(TileFlags::SPAN_ANCHOR) {
+                Pos::new(cx, y)
+            } else if let Some((dx, dy)) = tile.span_offset() {
+                match (cx.checked_sub(dx), y.checked_sub(dy)) {
+                    (Some(ax), Some(ay)) => Pos::new(ax, ay),
+                    _ => continue,
+                }
+            } else {
+                continue;
+            };
+            if !anchors.contains(&anchor) {
+                anchors.push(anchor);
+            }
+        }
+        for anchor in anchors {
+            self.reset_span_at(layer, anchor);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Grid — multi-layer API
 // ---------------------------------------------------------------------------
 
@@ -769,8 +1054,10 @@ impl Grid {
     /// legitimately carry [`TileFlags::HAS_EXTRA`] (the flag is
     /// crate-private). Internal callers that need to preserve EGC text
     /// across a copy (e.g. [`blit`](Self::blit)) follow up with a direct
-    /// extras-table write.
+    /// extras-table write. Any multi-cell span the cell belongs to is cleared first, for the
+    /// reason given on [`put`](Self::put).
     pub fn put_tile(&mut self, layer: u8, x: u16, y: u16, mut tile: Tile) -> Option<()> {
+        self.clear_span_overlap(layer, x, y, 1);
         let pos = to_grixy_pos(Pos::new(x, y));
         let idx = usize::from(y) * usize::from(self.width) + usize::from(x);
         let lb = self.layer_or_alloc(layer);
@@ -809,6 +1096,12 @@ impl Grid {
     /// on `layer`. Empty tiles (nothing written; see [`Tile::is_empty`]) are
     /// treated as transparent and skipped. An explicit space is copied and
     /// overwrites the destination.
+    ///
+    /// Multi-cell spans (see [`write_span`](Self::write_span)) do **not** survive a blit: copied
+    /// tiles keep their glyphs but lose [`TileFlags::SPAN_ANCHOR`]/[`TileFlags::SPAN_COVERED`],
+    /// so a span degrades to exactly its text fallback. `src_rect` can clip a span in half, and
+    /// half a span is not a thing the grid can represent; degrading to the fallback glyphs is
+    /// both representable and the same content a cell backend would have drawn anyway.
     ///
     /// Walks `src`'s and `self`'s layer buffers directly by flat index instead of going through
     /// [`get_tile`](Self::get_tile)/[`put_tile`](Self::put_tile) per cell (see retroglyph#263):
@@ -871,6 +1164,7 @@ impl Grid {
                 let dst_idx = usize::from(dy) * dst_width + usize::from(dx);
                 let mut out_tile = *tile;
                 out_tile.flags.remove(TileFlags::HAS_EXTRA);
+                out_tile.clear_span();
                 dst_lb.buf.as_mut()[dst_idx] = out_tile;
                 if tile.flags.contains(TileFlags::HAS_EXTRA) {
                     if let Some(extra) = src_lb.extra_arc_for(src_idx, tile) {
@@ -985,6 +1279,7 @@ impl Grid {
                     }
                 }
                 blended.flags.remove(TileFlags::HAS_EXTRA);
+                blended.clear_span();
                 dst_lb.buf.as_mut()[dst_idx] = blended;
                 if tile.flags.contains(TileFlags::HAS_EXTRA) {
                     if let Some(extra) = src_lb.extra_arc_for(src_idx, tile) {
@@ -1045,8 +1340,12 @@ impl Grid {
     /// - Start from layer 0's tile (its `bg` fills the cell).
     /// - For each higher allocated layer, in ascending order: if the tile is
     ///   not empty (see [`Tile::is_empty`]) replace the glyph, foreground,
-    ///   offsets, flags, and extra; if its background is not
+    ///   offsets, flags, span, and extra; if its background is not
     ///   [`Color::Default`], replace the background.
+    ///
+    /// The span fields travel with the flags they are keyed by (see [`Tile::span`]): a
+    /// multi-cell span on a higher layer must arrive at a cell backend intact, or its covered
+    /// cells lose the anchor they name.
     ///
     /// Because an explicit space is not empty, drawing one on a higher layer
     /// overwrites (erases) the glyph beneath it.
@@ -1059,6 +1358,7 @@ impl Grid {
     /// over each layer's backing buffer -- the same style [`layers`](Self::layers) and
     /// [`diff`](Self::diff) already use -- avoids entirely.
     pub(crate) fn flatten_into(&self, dst: &mut Self) {
+        dst.has_spans |= self.has_spans;
         let layer0 = self.layer0();
         let cell_count = layer0.buf.as_ref().len();
 
@@ -1095,6 +1395,8 @@ impl Grid {
                         out.dx = tile.dx;
                         out.dy = tile.dy;
                         out.flags = tile.flags;
+                        out.span_w = tile.span_w;
+                        out.span_h = tile.span_h;
                     }
                     if tile.flags.contains(TileFlags::HAS_EXTRA) {
                         if let Some(extra) = lb.extra_arc_for(idx, tile) {
@@ -2244,6 +2546,227 @@ mod tests {
         let g = Grid::new(1, 1);
         g.flatten_into(&mut flattened);
         assert_eq!(flattened.get(0, 0).glyph(), ' ');
+    }
+
+    // ── Multi-cell spans (retroglyph#412) ────────────────────────────────
+
+    /// The anchor owns the footprint; every other cell names the anchor and keeps its own glyph.
+    #[test]
+    fn write_span_marks_anchor_and_covered_cells() {
+        let mut grid = Grid::new(4, 4);
+        grid.write_span(0, 1, 1, &["C=", "[]"], Style::default())
+            .expect("2x2 span fits in a 4x4 grid");
+
+        let anchor = grid.get_tile(0, 1, 1).unwrap();
+        assert!(anchor.flags().contains(TileFlags::SPAN_ANCHOR));
+        assert_eq!(anchor.span(), (2, 2));
+        assert_eq!(anchor.span_offset(), None);
+        assert_eq!(anchor.glyph(), 'C');
+
+        for (x, y, glyph, offset) in [
+            (2, 1, '=', (1, 0)),
+            (1, 2, '[', (0, 1)),
+            (2, 2, ']', (1, 1)),
+        ] {
+            let tile = grid.get_tile(0, x, y).unwrap();
+            assert!(
+                tile.flags().contains(TileFlags::SPAN_COVERED),
+                "({x}, {y}) should be covered"
+            );
+            assert_eq!(tile.glyph(), glyph, "({x}, {y}) keeps its fallback glyph");
+            assert_eq!(tile.span_offset(), Some(offset));
+            // A covered cell is inside a footprint, it does not own one.
+            assert_eq!(tile.span(), (1, 1));
+        }
+    }
+
+    /// The whole point of `SPAN_COVERED` differing from `WIDE_CHAR_SPACER`: cell backends read
+    /// these glyphs, so they must survive the write intact.
+    #[test]
+    fn write_span_keeps_the_fallback_glyphs_readable() {
+        let mut grid = Grid::new(4, 4);
+        grid.write_span(0, 0, 0, &["C=", "[]"], Style::default())
+            .unwrap();
+        let read = |x, y| grid.get_tile(0, x, y).unwrap().glyph();
+        assert_eq!(
+            [read(0, 0), read(1, 0), read(0, 1), read(1, 1)],
+            ['C', '=', '[', ']']
+        );
+    }
+
+    #[test]
+    fn span_owner_reports_the_anchor_from_every_cell_of_the_span() {
+        let mut grid = Grid::new(6, 6);
+        grid.write_span(0, 2, 3, &["AB", "CD", "EF"], Style::default())
+            .unwrap();
+
+        // Every cell of the footprint, the anchor included, answers with the same position, so
+        // hit-testing is one comparison.
+        for (x, y) in [(2, 3), (3, 3), (2, 4), (3, 4), (2, 5), (3, 5)] {
+            assert_eq!(grid.span_owner(0, x, y), Some(Pos::new(2, 3)), "({x}, {y})");
+        }
+        // A free cell, an out-of-bounds one, and one on an unallocated layer belong to no span.
+        assert_eq!(grid.span_owner(0, 0, 0), None);
+        assert_eq!(grid.span_owner(0, 99, 99), None);
+        assert_eq!(grid.span_owner(3, 3, 3), None);
+    }
+
+    #[test]
+    fn write_span_rejects_malformed_input_without_writing() {
+        let mut grid = Grid::new(4, 4);
+        assert_eq!(grid.write_span(0, 0, 0, &[], Style::default()), None);
+        assert_eq!(grid.write_span(0, 0, 0, &[""], Style::default()), None);
+        // Ragged rows.
+        assert_eq!(
+            grid.write_span(0, 0, 0, &["ab", "c"], Style::default()),
+            None
+        );
+        // Too wide / too tall for the grid at this origin.
+        assert_eq!(grid.write_span(0, 3, 0, &["ab"], Style::default()), None);
+        assert_eq!(
+            grid.write_span(0, 0, 3, &["a", "b"], Style::default()),
+            None
+        );
+        // Nothing was written by any of the above.
+        for y in 0..4 {
+            for x in 0..4 {
+                assert!(grid.get(x, y).is_empty(), "({x}, {y}) should be untouched");
+            }
+        }
+    }
+
+    #[test]
+    fn writing_into_a_covered_cell_clears_the_whole_span() {
+        let mut grid = Grid::new(4, 4);
+        grid.write_span(0, 0, 0, &["C=", "[]"], Style::default())
+            .unwrap();
+        grid.put(1, 1, Tile::new('x', Style::default()));
+
+        assert_eq!(grid.get(1, 1).glyph(), 'x');
+        for (x, y) in [(0, 0), (1, 0), (0, 1)] {
+            let tile = grid.get(x, y);
+            assert!(tile.is_empty(), "({x}, {y}) should have been cleared");
+            assert_eq!(tile.flags(), TileFlags::EMPTY);
+        }
+    }
+
+    #[test]
+    fn writing_over_the_anchor_clears_the_whole_span() {
+        let mut grid = Grid::new(4, 4);
+        grid.write_span(0, 0, 0, &["C=", "[]"], Style::default())
+            .unwrap();
+        grid.put_tile(0, 0, 0, Tile::new('x', Style::default()));
+
+        assert_eq!(grid.get(0, 0).glyph(), 'x');
+        assert_eq!(grid.get(0, 0).span(), (1, 1));
+        for (x, y) in [(1, 0), (0, 1), (1, 1)] {
+            assert!(grid.get(x, y).is_empty(), "({x}, {y}) should be cleared");
+        }
+    }
+
+    #[test]
+    fn overlapping_spans_erase_the_old_one_entirely() {
+        let mut grid = Grid::new(4, 4);
+        grid.write_span(0, 0, 0, &["AB", "CD"], Style::default())
+            .unwrap();
+        // Overlaps the first span's bottom-right cell only; all four of its cells must go.
+        grid.write_span(0, 1, 1, &["EF", "GH"], Style::default())
+            .unwrap();
+
+        assert!(grid.get(0, 0).is_empty());
+        assert!(grid.get(1, 0).is_empty());
+        assert!(grid.get(0, 1).is_empty());
+        assert_eq!(grid.get(1, 1).glyph(), 'E');
+        assert_eq!(grid.span_owner(0, 2, 2), Some(Pos::new(1, 1)));
+    }
+
+    #[test]
+    fn clear_span_works_from_any_cell_of_the_span() {
+        let mut grid = Grid::new(4, 4);
+        for from in [(0, 0), (1, 0), (0, 1), (1, 1)] {
+            grid.write_span(0, 0, 0, &["C=", "[]"], Style::default())
+                .unwrap();
+            grid.clear_span(0, from.0, from.1);
+            for y in 0..2 {
+                for x in 0..2 {
+                    assert!(
+                        grid.get(x, y).is_empty(),
+                        "clearing from {from:?}: ({x}, {y})"
+                    );
+                }
+            }
+        }
+        // A cell that is not part of a span is left alone.
+        grid.put(3, 3, Tile::new('z', Style::default()));
+        grid.clear_span(0, 3, 3);
+        assert_eq!(grid.get(3, 3).glyph(), 'z');
+    }
+
+    #[test]
+    fn spans_are_layer_scoped() {
+        let mut grid = Grid::new(4, 4);
+        grid.write_span(1, 0, 0, &["C=", "[]"], Style::default())
+            .unwrap();
+        assert_eq!(grid.span_owner(1, 1, 1), Some(Pos::new(0, 0)));
+        // Layer 0 knows nothing about layer 1's span, and writing there leaves it intact.
+        assert_eq!(grid.span_owner(0, 1, 1), None);
+        assert_eq!(grid.span_owner(0, 0, 0), None);
+        grid.put(1, 1, Tile::new('x', Style::default()));
+        assert_eq!(grid.span_owner(1, 1, 1), Some(Pos::new(0, 0)));
+    }
+
+    #[test]
+    fn flatten_into_carries_span() {
+        // Cell backends receive the flattened grid, so a span on a higher layer has to survive
+        // flattening with both its flags *and* its span fields, or every covered cell ends up
+        // naming an anchor that isn't there.
+        let mut grid = Grid::new(4, 4);
+        grid.write_span(2, 1, 1, &["C=", "[]"], Style::default())
+            .unwrap();
+
+        let mut flat = Grid::new(4, 4);
+        grid.flatten_into(&mut flat);
+
+        assert_eq!(flat.get(1, 1).span(), (2, 2));
+        assert!(flat.get(1, 1).flags().contains(TileFlags::SPAN_ANCHOR));
+        assert_eq!(flat.span_owner(0, 2, 2), Some(Pos::new(1, 1)));
+        assert_eq!(flat.get(2, 2).glyph(), ']');
+    }
+
+    #[test]
+    fn blit_degrades_a_span_to_its_fallback_glyphs() {
+        // `src_rect` can clip a footprint in half, and half a span is not representable, so
+        // `blit` drops the span role and keeps the glyphs (which are the text fallback anyway).
+        let mut src = Grid::new(4, 4);
+        src.write_span(0, 0, 0, &["C=", "[]"], Style::default())
+            .unwrap();
+
+        let mut dst = Grid::new(4, 4);
+        dst.blit(0, &src, Rect::new(0, 0, 2, 2), 0, 0);
+
+        assert_eq!(dst.get(0, 0).glyph(), 'C');
+        assert_eq!(dst.get(1, 1).glyph(), ']');
+        assert_eq!(dst.get(0, 0).span(), (1, 1));
+        assert_eq!(dst.span_owner(0, 1, 1), None);
+        for (x, y) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
+            let flags = dst.get(x, y).flags();
+            assert!(!flags.contains(TileFlags::SPAN_ANCHOR), "({x}, {y})");
+            assert!(!flags.contains(TileFlags::SPAN_COVERED), "({x}, {y})");
+        }
+    }
+
+    #[test]
+    fn clear_region_clears_a_span_it_only_partly_covers() {
+        let mut grid = Grid::new(4, 4);
+        grid.write_span(0, 0, 0, &["C=", "[]"], Style::default())
+            .unwrap();
+        // Only the anchor cell is inside the region, but the whole span must go.
+        grid.checked_put(0, 0, Tile::default());
+        for y in 0..2 {
+            for x in 0..2 {
+                assert!(grid.get(x, y).is_empty(), "({x}, {y})");
+            }
+        }
     }
 }
 

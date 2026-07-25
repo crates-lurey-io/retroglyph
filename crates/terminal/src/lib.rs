@@ -721,6 +721,36 @@ mod tests {
         assert_eq!(out, "\x1b[?2026h\x1b[?2026l");
     }
 
+    /// A multi-cell span's covered cells carry that span's text fallback, so a terminal must
+    /// print all of them. Deliberately unlike `WIDE_CHAR_SPACER`, which both draw paths skip.
+    #[test]
+    fn span_covered_cells_are_printed_as_the_text_fallback() {
+        use retroglyph_core::Grid;
+
+        let mut grid = Grid::new(2, 2);
+        grid.write_span(0, 0, 0, &["C=", "[]"], Style::default())
+            .expect("2x2 span fits in a 2x2 grid");
+        let tiles: Vec<(Pos, Tile)> = (0..2)
+            .flat_map(|y| (0..2).map(move |x| (Pos { x, y }, x, y)))
+            .map(|(pos, x, y)| (pos, *grid.get_tile(0, x, y).unwrap()))
+            .collect();
+
+        for plain in [false, true] {
+            let mut renderer = TerminalRenderer::with_plain_mode(Vec::new(), plain);
+            renderer
+                .draw(tiles.iter().map(|(pos, tile)| (*pos, tile, None)))
+                .unwrap();
+            renderer.flush().unwrap();
+            let out = String::from_utf8(renderer.into_writer()).unwrap();
+            for glyph in ['C', '=', '[', ']'] {
+                assert!(
+                    out.contains(glyph),
+                    "plain={plain}: span fallback glyph {glyph:?} missing from {out:?}"
+                );
+            }
+        }
+    }
+
     #[test]
     fn plain_mode_strips_escape_codes() {
         let style = Style::new().fg(Color::Ansi(AnsiColor::Red));
