@@ -26,7 +26,11 @@ use glow::HasContext as _;
 pub(crate) struct Instance {
     /// Atlas layer (glyph id) for this cell.
     pub glyph: u16,
-    _pad: u16,
+    /// Compositing flags ([`FLAG_HAS_BG`] | [`FLAG_HAS_GLYPH`]). A cleared bit makes the matching
+    /// pass `discard` this cell, so a transparent background or empty glyph in a higher layer lets
+    /// the layer beneath show through -- the GPU form of `Grid::flatten_into`'s occlusion rule.
+    pub flags: u8,
+    _pad: u8,
     /// Foreground RGB (uploaded as normalized `u8`).
     pub fg: [u8; 3],
     _fg_pad: u8,
@@ -42,11 +46,26 @@ pub(crate) struct Instance {
     pub dy: i16,
 }
 
+/// [`Instance::flags`] bit: paint this cell's opaque background. Cleared = transparent background
+/// (the background pass `discard`s the cell, so a lower layer shows through).
+pub(crate) const FLAG_HAS_BG: u8 = 1 << 0;
+/// [`Instance::flags`] bit: draw this cell's glyph. Cleared = empty cell (the glyph pass `discard`s
+/// it), so a higher layer's untouched cells don't erase the layer beneath.
+pub(crate) const FLAG_HAS_GLYPH: u8 = 1 << 1;
+
 impl Instance {
-    /// A cell with the given glyph, colors, and sub-cell pixel offset.
-    pub(crate) const fn new(glyph: u16, fg: [u8; 3], bg: [u8; 3], dx: i16, dy: i16) -> Self {
+    /// A cell with the given glyph, colors, sub-cell pixel offset, and compositing flags.
+    pub(crate) const fn new(
+        glyph: u16,
+        fg: [u8; 3],
+        bg: [u8; 3],
+        dx: i16,
+        dy: i16,
+        flags: u8,
+    ) -> Self {
         Self {
             glyph,
+            flags,
             _pad: 0,
             fg,
             _fg_pad: 0,
@@ -213,6 +232,10 @@ impl GlResources {
             gl.vertex_attrib_pointer_i32(4, 2, glow::SHORT, INSTANCE_STRIDE, 12);
             gl.enable_vertex_attrib_array(4);
             gl.vertex_attrib_divisor(4, 1);
+            // flags: one unsigned byte at offset 2, read as an integer attribute (`uint`).
+            gl.vertex_attrib_pointer_i32(5, 1, glow::UNSIGNED_BYTE, INSTANCE_STRIDE, 2);
+            gl.enable_vertex_attrib_array(5);
+            gl.vertex_attrib_divisor(5, 1);
         }
     }
 
@@ -238,21 +261,6 @@ impl GlResources {
         unsafe {
             gl.bind_buffer(glow::ARRAY_BUFFER, Some(self.instance_vbo));
             gl.buffer_sub_data_u8_slice(glow::ARRAY_BUFFER, 0, instances_as_bytes(instances));
-        }
-    }
-
-    /// Uploads only `instances[start..]` (the dirty sub-range) at the matching byte offset in the
-    /// instance VBO, leaving the rest of the buffer untouched. `start` is a cell index; the caller
-    /// passes the already-sliced dirty range, so `sub` covers `[start, start + sub.len())`.
-    #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
-    pub(crate) fn upload_range(&self, gl: &glow::Context, start: usize, sub: &[Instance]) {
-        if sub.is_empty() {
-            return;
-        }
-        let offset = (start * INSTANCE_BYTES) as i32;
-        unsafe {
-            gl.bind_buffer(glow::ARRAY_BUFFER, Some(self.instance_vbo));
-            gl.buffer_sub_data_u8_slice(glow::ARRAY_BUFFER, offset, instances_as_bytes(sub));
         }
     }
 
@@ -288,35 +296,52 @@ impl GlResources {
         }
     }
 
-    /// Clears the framebuffer and draws every cell in two instanced passes.
+    /// Clears the framebuffer to opaque black. Call once per frame before compositing layers with
+    /// [`draw_layer`](Self::draw_layer); the base layer's opaque backgrounds then paint over it.
+    //
+    // Takes `&self` for call-site symmetry with `draw_layer`/`upload` (all invoked as `res.*`);
+    // the clear itself is framebuffer state, not resource state, so `self` is unused.
+    #[allow(clippy::unused_self)]
+    pub(crate) fn clear(&self, gl: &glow::Context) {
+        unsafe {
+            gl.clear_color(0.0, 0.0, 0.0, 1.0);
+            gl.clear(glow::COLOR_BUFFER_BIT);
+        }
+    }
+
+    /// Draws one layer's currently-uploaded instances in two instanced passes, compositing over
+    /// whatever is already in the framebuffer (so calling this per layer back-to-front composites
+    /// the layers).
     ///
-    /// Pass 1 fills each cell's opaque background at its unshifted origin. Pass 2 draws the glyphs
+    /// Pass 1 fills each cell's opaque background at its unshifted origin; pass 2 draws the glyphs
     /// with their sub-cell `dx`/`dy` offset applied to the quad *position* and coverage as alpha,
     /// alpha-blended over the backgrounds. Splitting the passes is what lets an offset glyph spill
     /// past its cell edge into neighbors: a single interleaved pass would let a later cell's
     /// background overwrite an earlier neighbor's spill. This is the two-pass mechanism of the
     /// "Sub-cell offsets and spill" contract documented on [`Presenter`](retroglyph_window::Presenter),
     /// shared with `retroglyph-software`.
-    pub(crate) fn draw(&self, gl: &glow::Context, cell_count: i32) {
+    ///
+    /// A cell whose [`Instance::flags`] clears [`FLAG_HAS_BG`] / [`FLAG_HAS_GLYPH`] is `discard`ed
+    /// by the matching pass, so a transparent background or empty glyph in a higher layer leaves
+    /// the layer beneath visible.
+    pub(crate) fn draw_layer(&self, gl: &glow::Context, cell_count: i32) {
         unsafe {
-            // Clear covers any surface area outside the grid; pass 1 paints the per-cell colors.
-            gl.clear_color(0.0, 0.0, 0.0, 1.0);
-            gl.clear(glow::COLOR_BUFFER_BIT);
-
             gl.use_program(Some(self.program));
             gl.active_texture(glow::TEXTURE0);
             gl.bind_texture(glow::TEXTURE_2D_ARRAY, Some(self.atlas));
             gl.uniform_1_i32(self.u_atlas.as_ref(), 0);
             gl.bind_vertex_array(Some(self.vao));
 
-            // Pass 1: opaque backgrounds, no offset, no blending.
+            // Pass 1: opaque backgrounds, no offset, no blending (discarded where FLAG_HAS_BG is
+            // clear, i.e. a transparent-background cell).
             gl.disable(glow::BLEND);
             gl.uniform_1_i32(self.u_draw_glyph.as_ref(), 0);
             gl.draw_elements_instanced(glow::TRIANGLES, 6, glow::UNSIGNED_SHORT, 0, cell_count);
 
-            // Pass 2: offset glyphs, coverage as alpha, blended over the backgrounds. Keep the
-            // framebuffer's alpha channel solid (`ONE`/`ZERO`) so a composited surface stays
-            // opaque regardless of glyph coverage.
+            // Pass 2: offset glyphs, coverage as alpha, blended over the backgrounds (discarded
+            // where FLAG_HAS_GLYPH is clear, i.e. an empty cell). Keep the framebuffer's alpha
+            // channel solid (`ONE`/`ZERO`) so a composited surface stays opaque regardless of
+            // glyph coverage.
             gl.enable(glow::BLEND);
             gl.blend_func_separate(
                 glow::SRC_ALPHA,
@@ -471,6 +496,7 @@ mod tests {
         assert_eq!(size_of::<Instance>(), INSTANCE_BYTES);
         assert_eq!(INSTANCE_STRIDE, i32::try_from(INSTANCE_BYTES).unwrap());
         assert_eq!(offset_of!(Instance, glyph), 0);
+        assert_eq!(offset_of!(Instance, flags), 2);
         assert_eq!(offset_of!(Instance, fg), 4);
         assert_eq!(offset_of!(Instance, bg), 8);
         assert_eq!(offset_of!(Instance, dx), 12);

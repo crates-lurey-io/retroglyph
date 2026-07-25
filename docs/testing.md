@@ -23,7 +23,10 @@ headless path (macOS's CGL pbuffer is deprecated, Windows differs), and render c
 needs asserting on one platform. It asserts two ways, both robust against driver-version pixel
 drift: property checks (a full-block cell is entirely its foreground, a blank cell entirely its
 background, a glyph matches the font's own coverage bits) and pixel-for-pixel parity against the
-`retroglyph-software` CPU rasterizer, which shares the same `retroglyph-window` font.
+`retroglyph-software` CPU rasterizer, which shares the same `retroglyph-window` font. Parity is
+checked for both a single flattened frame and a full multi-layer frame (`draw_layers`), so the GPU's
+back-to-front layer compositing (issue #368) is verified to match the software backend's per-pixel
+occlusion -- including the opaque-space-erases-lower-glyph and inherited-background cases.
 
 The render only runs when `RETROGLYPH_REQUIRE_GL` is set; otherwise the tests skip. That keeps the
 ordinary `test`/`coverage` jobs from depending on whatever GL a runner happens to expose (GitHub's
@@ -48,6 +51,12 @@ launches Chrome with `--enable-unsafe-swiftshader` for a software WebGL2 stack. 
 runs it; the `compile-wasm-gl` job stays as the fast build-only check. Locally, a Chrome that lags
 the latest stable needs a matching chromedriver (a major-version skew makes the WebDriver session
 fail to start).
+
+`crates/gl/src/webgl_smoke.rs` also carries `composites_two_layers_back_to_front`, which drives the
+GPU compositing path (issue #368) in the browser and asserts the three occlusion cases directly (a
+transparent empty overlay, an opaque occluding glyph, and an opaque space that erases the base glyph
+while inheriting its background) -- the runnable local counterpart to the Linux-only multi-layer
+software-parity test above.
 
 `crates/gl/src/webgl_recovery.rs` is the companion context-loss test (issue #373). It drives the
 real windowed path (`Presenter::init_surface` then `present`), forces a lost/restored cycle with the

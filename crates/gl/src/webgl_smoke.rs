@@ -139,9 +139,14 @@ fn render_to_frame(gl: &glow::Context, renderer: &GlRenderer) -> Frame {
             "framebuffer incomplete: {status:#06x}"
         );
 
-        // The renderer's own draw sets the viewport (via `build_resources`' `set_projection`),
-        // clears, and issues the two instanced passes into the bound framebuffer.
-        res.draw(gl, renderer.cell_count() as i32);
+        // `build_resources` set the viewport/projection; clear once, then composite every layer
+        // back-to-front (upload + two instanced passes each) -- the same loop the windowed
+        // `present` runs, so a single-layer frame and a multi-layer one both go through it.
+        res.clear(gl);
+        for layer in &renderer.layers {
+            res.upload(gl, layer);
+            res.draw_layer(gl, renderer.cell_count() as i32);
+        }
         gl.finish();
 
         let mut buf = vec![0u8; (w * h * 4) as usize];
@@ -168,6 +173,13 @@ fn render_to_frame(gl: &glow::Context, renderer: &GlRenderer) -> Frame {
 /// Draws `cells` (single layer) into the renderer. Both backends' `draw` is infallible.
 fn paint(out: &mut GlRenderer, cells: &[(Pos, Tile)]) {
     out.draw(cells.iter().map(|(p, t)| (*p, t, None))).ok();
+}
+
+/// Feeds a full layered frame `(layer, pos, tile)` into the renderer via `draw_layers`, the way the
+/// core `Terminal` drives this `composites_layers` backend.
+fn paint_layers(out: &mut GlRenderer, cells: &[(u8, Pos, Tile)]) {
+    out.draw_layers(cells.iter().map(|(l, p, t)| (*l, *p, t, None)))
+        .ok();
 }
 
 #[wasm_bindgen_test]
@@ -202,6 +214,78 @@ fn full_block_cell_is_all_foreground_blank_cell_is_all_background() {
         for x in 0..cw {
             assert_eq!(frame.rgb(x, y), RED, "full-block pixel ({x},{y}) not fg");
             assert_eq!(frame.rgb(cw + x, y), GREEN, "blank pixel ({x},{y}) not bg");
+        }
+    }
+}
+
+#[wasm_bindgen_test]
+fn composites_two_layers_back_to_front() {
+    // A 3x1 grid exercising every branch of the GPU occlusion rule (issue #368):
+    //
+    //   cell 0: base space on BLUE; layer 1 EMPTY        -> transparent, base shows -> BLUE
+    //   cell 1: base space on BLUE; layer 1 full-block GREEN (default bg, occupied) -> GREEN
+    //   cell 2: base full-block RED on BLUE; layer 1 space (default bg, occupied)
+    //           -> opaque erase inheriting BLUE, space draws nothing -> BLUE (the base RED is gone)
+    //
+    // If higher-layer occupied cells were treated as transparent-background (the wrong model),
+    // cell 2 would still show the base's RED block bleeding around the space, and cell 1's GREEN
+    // block would composite over BLUE rather than replacing it.
+    let block = '\u{2588}';
+    let mut r = GlBackendBuilder::new()
+        .grid_size(3, 1)
+        .build()
+        .expect("default-font builds a renderer");
+    let layered = [
+        (
+            0u8,
+            Pos::new(0, 0),
+            Tile::new(' ', Style::new().bg(rgb(BLUE))),
+        ),
+        (
+            0u8,
+            Pos::new(1, 0),
+            Tile::new(' ', Style::new().bg(rgb(BLUE))),
+        ),
+        (
+            0u8,
+            Pos::new(2, 0),
+            Tile::new(block, Style::new().fg(rgb(RED)).bg(rgb(BLUE))),
+        ),
+        (1u8, Pos::new(0, 0), Tile::default()),
+        (
+            1u8,
+            Pos::new(1, 0),
+            Tile::new(block, Style::new().fg(rgb(GREEN))),
+        ),
+        (
+            1u8,
+            Pos::new(2, 0),
+            Tile::new(' ', Style::new().fg(rgb(RED))),
+        ),
+    ];
+    paint_layers(&mut r, &layered);
+
+    let gl = webgl2_context(r.surface_size.0, r.surface_size.1);
+    let frame = render_to_frame(&gl, &r);
+    let (cw, ch) = r.geometry.cell_size();
+
+    for y in 0..ch {
+        for x in 0..cw {
+            assert_eq!(
+                frame.rgb(x, y),
+                BLUE,
+                "cell 0 (empty overlay) pixel ({x},{y})"
+            );
+            assert_eq!(
+                frame.rgb(cw + x, y),
+                GREEN,
+                "cell 1 (opaque green block) pixel ({x},{y})"
+            );
+            assert_eq!(
+                frame.rgb(2 * cw + x, y),
+                BLUE,
+                "cell 2 (opaque space erases base glyph) pixel ({x},{y})"
+            );
         }
     }
 }

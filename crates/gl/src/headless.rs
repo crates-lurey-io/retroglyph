@@ -209,9 +209,14 @@ fn render_to_frame(ctx: &HeadlessContext, renderer: &GlRenderer) -> Result<Frame
             return Err(format!("framebuffer incomplete: {status:#06x}"));
         }
 
-        // The renderer's own draw sets the viewport, clears, and issues the two instanced passes
-        // into the bound framebuffer.
-        res.draw(gl, renderer.cell_count() as i32);
+        // `build_resources` set the viewport/projection; clear once, then composite every layer
+        // back-to-front (upload + two instanced passes each) into the bound framebuffer -- the same
+        // loop the windowed `present` runs.
+        res.clear(gl);
+        for layer in &renderer.layers {
+            res.upload(gl, layer);
+            res.draw_layer(gl, renderer.cell_count() as i32);
+        }
         gl.finish();
 
         let mut buf = vec![0u8; (w * h * 4) as usize];
@@ -283,6 +288,14 @@ fn gl_renderer(cols: u16, rows: u16, scale: u16) -> GlRenderer {
 /// Draws `cells` (single layer) into any [`Output`]. Both backends' `draw` is infallible.
 fn paint(out: &mut impl Output, cells: &[(Pos, Tile)]) {
     out.draw(cells.iter().map(|(p, t)| (*p, t, None))).ok();
+}
+
+/// Feeds a full layered frame `(layer, pos, tile)` into any [`Output`] via `draw_layers`, the way
+/// the core `Terminal` drives a `composites_layers` backend. Both GL and software composite this
+/// stream themselves, so the two must agree pixel-for-pixel.
+fn paint_layers(out: &mut impl Output, cells: &[(u8, Pos, Tile)]) {
+    out.draw_layers(cells.iter().map(|(l, p, t)| (*l, *p, t, None)))
+        .ok();
 }
 
 const RED: (u8, u8, u8) = (0xFF, 0x00, 0x00);
@@ -390,6 +403,63 @@ fn matches_software_backend_pixel_for_pixel() {
     let sw_pixels = sw.pixels();
 
     assert_frames_match(&frame, sw_pixels);
+}
+
+#[test]
+fn matches_software_backend_with_layers_pixel_for_pixel() {
+    let Some(ctx) = context_or_skip("matches_software_backend_with_layers") else {
+        return;
+    };
+
+    let (cols, rows, scale) = (8u16, 5u16, 2u16);
+    let layered = sample_layered(cols, rows);
+
+    // GL composites the layered stream on the GPU.
+    let mut gl = gl_renderer(cols, rows, scale);
+    paint_layers(&mut gl, &layered);
+    let frame = render_to_frame(&ctx, &gl).expect("render");
+
+    // Software composites the same stream on the CPU (the parity reference).
+    let mut sw = retroglyph_software::SoftwareBackendBuilder::new()
+        .grid_size(cols, rows)
+        .scale(scale as u8)
+        .build()
+        .expect("default-font builds")
+        .run_headless()
+        .expect("headless software renderer");
+    paint_layers(&mut sw, &layered);
+    let sw_pixels = sw.pixels();
+
+    assert_frames_match(&frame, sw_pixels);
+}
+
+/// A deterministic two-layer frame in the layer-major, all-cells order `Grid::layers` produces: a
+/// full base layer plus a higher layer mixing empty (transparent) cells, occupied cells with a
+/// `Color::Default` background (opaque, inheriting the base background), and occupied cells with
+/// their own background. Exercises every branch of the occlusion rule both backends must share.
+fn sample_layered(cols: u16, rows: u16) -> Vec<(u8, Pos, Tile)> {
+    let base = sample_grid(cols, rows);
+    let mut cells: Vec<(u8, Pos, Tile)> = base.into_iter().map(|(p, t)| (0u8, p, t)).collect();
+
+    // Layer 1: every cell (layer-major full-frame order), mostly empty with a few overlays.
+    for y in 0..rows {
+        for x in 0..cols {
+            let i = usize::from(y) * usize::from(cols) + usize::from(x);
+            let tile = match i % 4 {
+                // Empty: transparent, the base shows through.
+                0 => Tile::default(),
+                // Occupied, default background: opaque, inherits the base background, erases the
+                // base glyph, draws its own.
+                1 => Tile::new('*', Style::new().fg(rgb(GREEN))),
+                // Occupied space, default background: opaque erase with no visible glyph.
+                2 => Tile::new(' ', Style::new().fg(rgb(RED))),
+                // Occupied, own background.
+                _ => Tile::new('=', Style::new().fg(rgb(BLUE)).bg(rgb(GREEN))),
+            };
+            cells.push((1u8, Pos::new(x, y), tile));
+        }
+    }
+    cells
 }
 
 /// A deterministic mixed grid: varied glyphs (letters, digits, punctuation, full and partial block
