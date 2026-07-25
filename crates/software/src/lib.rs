@@ -638,9 +638,9 @@ impl Output for SoftwareRenderer {
     /// rule that decides whether a background is painted at all is resolved against the *anchor*
     /// (see `resolve_cell_bg`), so one span never sits on two different backdrops.
     ///
-    /// A covered cell's tile does not change when only the anchor's artwork does, so a change at
-    /// an anchor additionally marks its whole footprint dirty (see `mark_span_dirty`); without
-    /// that, the previous sprite's pixels would survive in cells the diff considers unchanged.
+    /// A covered cell's tile does not change when only the anchor's artwork does, so a dirty cell
+    /// anywhere in a span dirties the whole span (see `expand_dirty_spans`); without that, the
+    /// previous sprite's pixels would survive in cells the diff considers unchanged.
     fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
         I: Iterator<Item = (u8, Pos, &'a Tile, Option<&'a str>)>,
@@ -679,18 +679,20 @@ impl Output for SoftwareRenderer {
             let idx = usize::from(pos.y) * cols + usize::from(pos.x);
             let slot = &mut self.ctx.prev_tiles[layer_idx][idx];
             if *slot != *tile {
-                let departing = *slot;
                 self.ctx.dirty_mask[idx] = true;
                 any_dirty = true;
                 *slot = *tile;
-                // A multi-cell span paints past its anchor cell, so a change at `idx` dirties
-                // every cell the span touches -- both the one that just left and the one that
-                // just arrived, since neither's neighbours have changed on their own account.
-                mark_span_dirty(&mut self.ctx.dirty_mask, idx, departing, cols, rows);
-                mark_span_dirty(&mut self.ctx.dirty_mask, idx, *tile, cols, rows);
             }
             if tile.dx() != 0 || tile.dy() != 0 {
                 any_offset = true;
+            }
+        }
+
+        if any_dirty {
+            // Runs after the whole stream, so every layer's shadow copy is current: a span's
+            // footprint has to be read off an anchor this frame actually wrote.
+            for layer in &self.ctx.prev_tiles {
+                expand_dirty_spans(&mut self.ctx.dirty_mask, layer, cols, rows);
             }
         }
 
@@ -1225,40 +1227,45 @@ fn blit_sprite(
     }
 }
 
-/// Marks every cell that `tile`'s multi-cell span occupies as dirty, so the incremental repaint
-/// path covers the whole footprint rather than just the cell that changed.
+/// Extends `dirty` so that whenever any cell of a multi-cell span is dirty, every cell of that
+/// span is.
 ///
-/// `idx` is `tile`'s own flat cell index. Handles both roles: an anchor dirties the footprint it
-/// owns, and a covered cell dirties its anchor plus that anchor's whole footprint (a covered cell
-/// changing means the artwork over it has to be redrawn from the anchor). A tile that is not part
-/// of a span costs one flag test.
+/// A span's artwork is drawn once, from its anchor, across the whole footprint, so repainting
+/// part of one is never right: the anchor has to be redrawn, and every cell it paints over has to
+/// have its background laid down again first. The diff that fills `dirty` cannot see this, because
+/// a covered cell's tile holds only the fallback glyph and the offset back to the anchor -- both
+/// unchanged while the anchor's artwork changes underneath it.
 ///
-/// Cells past the grid edge are skipped; a span cannot be written past the edge in the first
-/// place, but the shadow buffer this reads from can lag a resize by one frame.
-fn mark_span_dirty(dirty: &mut [bool], idx: usize, tile: Tile, cols: usize, rows: usize) {
+/// Expansion always runs from the anchor outwards over its full declared footprint, so one pass
+/// reaches every cell no matter which one of them was dirty to begin with. Cells past the grid
+/// edge are skipped: a span cannot be written past the edge, but this reads a shadow buffer that
+/// can lag a resize by a frame.
+fn expand_dirty_spans(dirty: &mut [bool], layer: &[Tile], cols: usize, rows: usize) {
     if cols == 0 {
         return;
     }
-    let (anchor_idx, span_w, span_h) = if let Some((dx, dy)) = tile.span_offset() {
-        let back = usize::from(dy) * cols + usize::from(dx);
-        let Some(anchor_idx) = idx.checked_sub(back) else {
-            return;
-        };
-        // The anchor's own footprint isn't readable from here, so dirty a box big enough to
-        // contain it: the offset back to the anchor bounds the span on both axes.
-        (anchor_idx, usize::from(dx) + 1, usize::from(dy) + 1)
-    } else {
-        let (w, h) = tile.span();
-        if (w, h) == (1, 1) {
-            return;
+    for idx in 0..layer.len().min(dirty.len()) {
+        if !dirty[idx] {
+            continue;
         }
-        (idx, usize::from(w), usize::from(h))
-    };
-
-    let (ax, ay) = (anchor_idx % cols, anchor_idx / cols);
-    for row in ay..(ay + span_h).min(rows) {
-        for col in ax..(ax + span_w).min(cols) {
-            dirty[row * cols + col] = true;
+        let tile = layer[idx];
+        let anchor_idx = match tile.span_offset() {
+            Some((dx, dy)) => match idx.checked_sub(usize::from(dy) * cols + usize::from(dx)) {
+                Some(anchor_idx) => anchor_idx,
+                None => continue,
+            },
+            None if tile.span() != (1, 1) => idx,
+            None => continue,
+        };
+        let Some(anchor) = layer.get(anchor_idx) else {
+            continue;
+        };
+        let (span_w, span_h) = anchor.span();
+        let (ax, ay) = (anchor_idx % cols, anchor_idx / cols);
+        for row in ay..(ay + usize::from(span_h)).min(rows) {
+            for col in ax..(ax + usize::from(span_w)).min(cols) {
+                dirty[row * cols + col] = true;
+            }
         }
     }
 }
