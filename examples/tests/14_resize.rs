@@ -42,6 +42,7 @@ fn drive<E: Example>(events: &[Event]) -> Vec<String> {
         if !state.tick(&mut term, &frame) {
             break;
         }
+        term.present().ok();
         views.push(term.backend().format_view());
     }
     views

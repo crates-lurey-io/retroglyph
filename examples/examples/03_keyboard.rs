@@ -83,7 +83,7 @@ impl Keyboard {
         !quit
     }
 
-    /// Draws this frame and presents it.
+    /// Draws this frame (the driver presents).
     fn draw<B: Backend>(&self, term: &mut Terminal<B>) {
         term.print(
             1,
@@ -100,8 +100,6 @@ impl Keyboard {
             let y = 7 + u16::try_from(i).expect("LOG_LEN fits in u16");
             term.print(1, y, entry);
         }
-
-        term.present().ok();
     }
 }
 

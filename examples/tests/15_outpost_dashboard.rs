@@ -54,6 +54,7 @@ fn drive_sized<E: Example>(width: u16, height: u16, events: &[Event]) -> (E, Vec
         frame: 0,
     };
     state.tick(&mut term, &priming_frame);
+    term.present().ok();
 
     let mut views = vec![term.backend().format_view()];
     for event in events {
@@ -65,6 +66,7 @@ fn drive_sized<E: Example>(width: u16, height: u16, events: &[Event]) -> (E, Vec
         if !state.tick(&mut term, &frame) {
             break;
         }
+        term.present().ok();
         views.push(term.backend().format_view());
     }
     (state, views)
@@ -85,6 +87,7 @@ fn draw_at(width: u16, height: u16) -> (OutpostDashboard, String) {
         frame: 0,
     };
     state.tick(&mut term, &frame);
+    term.present().ok();
     let view = term.backend().format_view();
     (state, view)
 }

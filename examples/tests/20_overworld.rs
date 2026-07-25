@@ -1,7 +1,7 @@
-//! Snapshot and behavior tests for the `19_overworld` example.
+//! Snapshot and behavior tests for the `20_overworld` example.
 //!
 //! Includes the example's own source (rather than reimplementing its logic) via `#[path]`, so
-//! these tests exercise exactly what `cargo run --example 19_overworld` runs.
+//! these tests exercise exactly what `cargo run --example 20_overworld` runs.
 //!
 //! Beyond the headless/PNG/SVG snapshots every example gets, this drives real synthetic mouse
 //! sequences against the sidebar minimap and the main map: click-to-jump, drag-to-keep-jumping,
@@ -14,7 +14,7 @@
 #[path = "support/mod.rs"]
 mod support;
 
-#[path = "../examples/19_overworld.rs"]
+#[path = "../examples/20_overworld.rs"]
 #[allow(dead_code)] // `main`/the `wasm_entry!` FFI surface aren't exercised by these tests
 mod overworld;
 
@@ -49,6 +49,7 @@ fn draw_at(width: u16, height: u16) -> (Overworld, String) {
     let mut term = Terminal::new(backend);
     let mut state = Overworld::init(&mut term);
     state.draw(&mut term);
+    term.present().ok();
     let view = term.backend().format_view();
     (state, view)
 }
@@ -70,6 +71,7 @@ fn drive_sized(width: u16, height: u16, events: &[Event]) -> (Overworld, Vec<Str
         frame: 0,
     };
     state.tick(&mut term, &priming);
+    term.present().ok();
 
     let mut views = vec![term.backend().format_view()];
     for event in events {
@@ -81,6 +83,7 @@ fn drive_sized(width: u16, height: u16, events: &[Event]) -> (Overworld, Vec<Str
         if !state.tick(&mut term, &frame) {
             break;
         }
+        term.present().ok();
         views.push(term.backend().format_view());
     }
     (state, views)
@@ -326,7 +329,7 @@ fn png_snapshot() {
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
 fn svg_snapshot() {
-    let bin = support::build_crossterm_example("19_overworld");
+    let bin = support::build_crossterm_example("20_overworld");
     let raw = support::capture_pty(&bin, b"", 32, 100, "OVERWORLD");
     let svg = support::svg_snapshot(&raw, 32, 100);
 
@@ -345,5 +348,5 @@ fn svg_snapshot() {
             "SVG output missing expected sidebar text {expected:?}"
         );
     }
-    support::write_snapshot_file("19_overworld.svg", svg.as_bytes());
+    support::write_snapshot_file("20_overworld.svg", svg.as_bytes());
 }

@@ -120,7 +120,7 @@ impl WidgetsInteraction {
         }
     }
 
-    /// Draws this frame and presents it. Must run between the frame's own
+    /// Draws this frame (the driver presents). Must run between the frame's own
     /// [`Interaction::begin_frame`] and [`Interaction::end_frame`].
     fn draw<B: Backend>(&mut self, term: &mut Terminal<B>) {
         term.reset_style().fg(Color::WHITE);
@@ -142,8 +142,6 @@ impl WidgetsInteraction {
         term.reset_style().fg(Color::WHITE);
         term.print(2, y + btn_h + 1, &format!("Count: {}", self.count));
         term.reset_style();
-
-        term.present().ok();
     }
 }
 

@@ -51,6 +51,7 @@ fn drive(events: &[Option<Event>]) -> String {
         if !state.tick(&mut term, &frame) {
             break;
         }
+        term.present().ok();
         views.push(term.backend().format_view());
     }
     views.join("\n--- frame ---\n")
@@ -87,6 +88,7 @@ fn headless_snapshot_motion_unavailable_fallback() {
         if !state.tick(&mut term, &frame) {
             break;
         }
+        term.present().ok();
         if matches!(i, 1 | 60 | 130) {
             views.push(format!("-- tick {i} --\n{}", term.backend().format_view()));
         }

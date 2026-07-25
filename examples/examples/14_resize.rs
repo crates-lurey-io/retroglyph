@@ -73,7 +73,6 @@ impl Resize {
     fn draw<B: Backend>(term: &mut Terminal<B>) {
         let area = term.area();
         if area.width() == 0 || area.height() == 0 {
-            term.present().ok();
             return;
         }
 
@@ -105,8 +104,6 @@ impl Resize {
             term.reset_style();
             term.print(x, y, &label);
         }
-
-        term.present().ok();
     }
 }
 

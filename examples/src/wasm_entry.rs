@@ -185,6 +185,8 @@ macro_rules! __wasm_headless_entry {
                     s.last_tick = now;
                     s.frame_count = s.frame_count.wrapping_add(1);
                     $crate::Example::tick(&mut s.state, &mut s.term, &frame);
+                    // The driver owns `present` now (the example's `tick` no longer does).
+                    let _ = s.term.present();
                     s.term.backend().format_view()
                 })
             }
@@ -316,6 +318,8 @@ macro_rules! __wasm_terminal_entry {
                     s.last_tick = now;
                     s.frame_count = s.frame_count.wrapping_add(1);
                     $crate::Example::tick(&mut s.state, &mut s.term, &frame);
+                    // The driver owns `present` now (the example's `tick` no longer does).
+                    let _ = s.term.present();
                     s.term.backend_mut().take_output()
                 })
             }

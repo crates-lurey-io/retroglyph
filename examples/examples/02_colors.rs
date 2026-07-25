@@ -100,7 +100,7 @@ impl Colors {
         }
     }
 
-    /// Draws this frame and presents it.
+    /// Draws this frame (the driver presents).
     #[allow(clippy::unused_self)]
     fn draw<B: Backend>(&self, term: &mut Terminal<B>) {
         term.print(1, 1, "Ansi (16 standard colors):");
@@ -169,8 +169,6 @@ impl Colors {
             term.print(1, row, label);
             Self::blend_row(term, 10, row, 16, mode);
         }
-
-        term.present().ok();
     }
 }
 

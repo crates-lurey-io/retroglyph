@@ -351,8 +351,6 @@ impl Sokoban {
             term.print(inner_x, y, "*** Solved! ***");
             term.reset_style();
         }
-
-        term.present().ok();
     }
 }
 

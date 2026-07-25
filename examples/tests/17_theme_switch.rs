@@ -53,6 +53,7 @@ fn drive(events: &[&[Event]]) -> String {
         if !state.tick(&mut term, &frame) {
             break;
         }
+        term.present().ok();
         views.push(term.backend().format_view());
     }
     views.join("\n--- frame ---\n")
@@ -126,6 +127,7 @@ fn png_snapshot_light() {
         frame: 0,
     };
     state.tick(&mut term, &frame);
+    term.present().ok();
 
     let mut rgb = Vec::with_capacity(term.backend().pixels().len() * 3);
     for &p in term.backend().pixels() {

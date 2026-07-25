@@ -1,5 +1,5 @@
 ---
-source: examples/tests/18_weighted_fill.rs
+source: examples/tests/19_weighted_fill.rs
 expression: svg
 ---
 <svg xmlns="http://www.w3.org/2000/svg" width="436" height="466">

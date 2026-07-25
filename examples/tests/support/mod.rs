@@ -87,6 +87,7 @@ pub fn png_snapshot<E: Example>(cols: u16, rows: u16, scale: u8) -> Vec<u8> {
         frame: 0,
     };
     state.tick(&mut term, &frame);
+    term.present().ok();
 
     let mut rgb = Vec::with_capacity(term.backend().pixels().len() * 3);
     for &p in term.backend().pixels() {

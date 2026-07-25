@@ -1,4 +1,4 @@
-//! 19: Overworld
+//! 20: Overworld
 //!
 //! A scrollable camera over a large, procedurally generated high-fantasy map.
 //!
@@ -34,9 +34,9 @@
 //! narrow terminal.
 //!
 //! ```sh
-//! cargo run --example 19_overworld --features crossterm
-//! cargo run --example 19_overworld --features software
-//! cargo run --example 19_overworld  # headless fallback, prints a few frames to stdout
+//! cargo run --example 20_overworld --features crossterm
+//! cargo run --example 20_overworld --features software
+//! cargo run --example 20_overworld  # headless fallback, prints a few frames to stdout
 //! ```
 //!
 //! # Controls
@@ -2635,7 +2635,7 @@ impl Overworld {
         term.reset_style();
     }
 
-    /// Draws this frame and presents it. `pub` (unlike this example's other `draw_*` helpers) so
+    /// Draws this frame (the driver presents). `pub` (unlike this example's other `draw_*` helpers) so
     /// the sibling test file can prime layout state (`last_map_rect`/`last_minimap_rect`) with a
     /// single draw before driving synthetic input at it.
     pub fn draw<B: Backend>(&mut self, term: &mut Terminal<B>) {
@@ -2663,8 +2663,6 @@ impl Overworld {
         } else {
             self.draw_map(term, screen);
         }
-
-        term.present().ok();
     }
 }
 
@@ -3076,7 +3074,7 @@ fn draw_hex_tiles<B: Backend>(
 }
 
 impl Example for Overworld {
-    const NAME: &'static str = "19_overworld";
+    const NAME: &'static str = "20_overworld";
 
     // Fill the whole browser viewport on the wasm backends (software Canvas2D and GL WebGL2)
     // instead of the fixed 50x25 grid: this is a pannable overworld that should use every cell

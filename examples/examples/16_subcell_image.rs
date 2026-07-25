@@ -157,7 +157,7 @@ impl SubcellImage {
         }
     }
 
-    /// Draws this frame and presents it.
+    /// Draws this frame (the driver presents).
     #[allow(clippy::unused_self)]
     fn draw<B: Backend>(&self, term: &mut Terminal<B>) {
         term.print(1, 1, "16: Subcell blit -- one scene, 3 fidelities");
@@ -176,8 +176,6 @@ impl SubcellImage {
              built-in font is CP437-only, so quadrant/sextant show as solid \
              colored blocks there; crossterm renders the real glyphs.",
         );
-
-        term.present().ok();
     }
 }
 

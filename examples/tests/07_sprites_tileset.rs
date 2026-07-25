@@ -60,6 +60,7 @@ fn headless_snapshot() {
         if !state.tick(&mut term, &frame) {
             break;
         }
+        term.present().ok();
         views.push(term.backend().format_view());
     }
     insta::assert_snapshot!(views.join("\n--- frame ---\n"));
