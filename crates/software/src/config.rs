@@ -7,9 +7,9 @@
 //! `retroglyph_window::winit::run_windowed` to open a window, or use it
 //! directly for in-memory rendering.
 
+use retroglyph_window::font::BitmapFont;
 #[cfg(feature = "tilesets")]
 use retroglyph_window::tileset::TilesetOptions;
-use retroglyph_window::font::BitmapFont;
 use std::fmt;
 
 /// Errors that can occur when configuring the software backend.
