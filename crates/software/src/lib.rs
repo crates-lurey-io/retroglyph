@@ -47,10 +47,11 @@
 
 pub mod config;
 
+// The sprite/tileset decode + config now lives in `retroglyph-window` (winit-free), shared with
+// `retroglyph-gl` the same way `BitmapFont` is. Re-exported here so the existing
+// `retroglyph_software::tileset` / `::sprite_cache` paths keep working.
 #[cfg(feature = "tilesets")]
-pub mod sprite_cache;
-#[cfg(feature = "tilesets")]
-pub mod tileset;
+pub use retroglyph_window::{sprite_cache, tileset};
 
 // Platform-specific window surface. Both modules expose a `WindowSurface` with
 // the same `new`/`resize`/`present` API and their own `SurfaceError`, so the
@@ -97,7 +98,7 @@ use retroglyph_window::font::BitmapFont as Font;
 use retroglyph_window::geometry::CellGeometry;
 use retroglyph_window::palette::{DEFAULT_BG, DEFAULT_FG};
 #[cfg(feature = "tilesets")]
-use sprite_cache::{Sprite, SpriteCache};
+use retroglyph_window::sprite_cache::{Sprite, SpriteCache};
 use std::collections::VecDeque;
 use std::sync::Arc;
 use std::time::Duration;

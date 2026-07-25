@@ -94,6 +94,13 @@ pub mod geometry;
 pub mod palette;
 /// The [`Presenter`] trait and [`WindowHandle`](presenter::WindowHandle).
 pub mod presenter;
+/// Decoded PNG sprite cache ([`SpriteCache`](sprite_cache::SpriteCache), issue #366).
+#[cfg(feature = "tilesets")]
+pub mod sprite_cache;
+/// PNG sprite-sheet tileset configuration ([`TilesetOptions`](tileset::TilesetOptions), issue
+/// #366), shared by the graphical backends.
+#[cfg(feature = "tilesets")]
+pub mod tileset;
 /// Locates winit's `<canvas>` element via the DOM ([`web::winit_canvas`]).
 #[cfg(target_arch = "wasm32")]
 pub mod web;

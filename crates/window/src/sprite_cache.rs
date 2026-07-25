@@ -3,7 +3,7 @@
 //! The [`SpriteCache`] is built from [`TilesetOptions`]
 //! and provides O(1) lookup of decoded RGBA8 sprites by codepoint.
 
-use super::tileset::{TilesetError, TilesetOptions};
+use crate::tileset::{TilesetError, TilesetOptions};
 use alpha_blend::rgba::U8x4Rgba;
 use std::collections::BTreeMap;
 
