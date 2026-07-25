@@ -185,6 +185,28 @@ impl<B: Backend, E: Example> App<B> for ExampleApp<E> {
 
 // ── Software backend (desktop + WASM) ───────────────────────────────────────
 
+/// Frame rate requested from the windowed backends, i.e. the
+/// [`target_fps`](retroglyph_window::winit::WindowConfig::fit) every example in this gallery runs
+/// at.
+///
+/// `Some(_)` rather than `None` for the whole gallery, not just the five examples that animate
+/// (`06_layers`, `08_animation`, `11_sokoban`, `15_outpost_dashboard`, `20_overworld`): `None`
+/// selects the windowed driver's redraw-on-demand mode, where a frame is only rendered in response
+/// to an input/window event. That mode is right for the event-driven retro UIs the library is aimed
+/// at, but wrong for a demo gallery -- an animating example under it renders one frame and then
+/// freezes until the viewer happens to move the mouse, which reads as severe jank rather than as
+/// a deliberate power saving. It also puts the four WASM variants of the docs gallery on the same
+/// footing: the headless and terminal ones are already driven by an unconditional
+/// `requestAnimationFrame` loop in their HTML templates (see
+/// `docs/templates/examples/terminal-template.html`), so this is what makes the software and GL
+/// canvases tick the same way rather than being the odd two out.
+///
+/// 60 specifically because that's the common display refresh rate, so on native it lands one frame
+/// per vsync without a partial-interval sleep; on `wasm32` the number is advisory and the browser's
+/// `requestAnimationFrame` cadence wins either way.
+#[cfg(any(feature = "software", feature = "gl"))]
+const TARGET_FPS: Option<u32> = Some(60);
+
 /// Runs `E` on the software (winit + softbuffer/Canvas2D) backend.
 ///
 /// Builds a 50x25 window at `scale(2)` sized to fit via
@@ -234,7 +256,7 @@ pub fn run_software_with<E: Example>(builder: retroglyph_software::SoftwareBacke
         .expect("failed to initialize software backend")
         .run_headless()
         .expect("failed to build headless renderer");
-    let config = retroglyph_window::winit::WindowConfig::fit(&renderer, E::NAME, None)
+    let config = retroglyph_window::winit::WindowConfig::fit(&renderer, E::NAME, TARGET_FPS)
         .fill_viewport(E::fill_viewport());
     let app = ExampleApp::<E>::new("software");
     retroglyph_window::winit::run_app(config, renderer, app).expect("event loop failed");
@@ -267,7 +289,7 @@ pub fn run_gl<E: Example>() {
     )
     .build()
     .expect("failed to initialize gl backend");
-    let config = retroglyph_window::winit::WindowConfig::fit(&renderer, E::NAME, None)
+    let config = retroglyph_window::winit::WindowConfig::fit(&renderer, E::NAME, TARGET_FPS)
         .fill_viewport(E::fill_viewport());
     let app = ExampleApp::<E>::new("gl");
     retroglyph_window::winit::run_app(config, renderer, app).expect("event loop failed");
