@@ -6,11 +6,14 @@
 //!
 //! - A single unit quad (4 corners, 6 indices) is drawn `cols * rows` times via
 //!   `draw_elements_instanced`.
-//! - Per-instance attributes (divisor 1) carry the glyph's atlas layer plus foreground/background
-//!   RGB. There is no per-instance position: the vertex shader derives `(col, row)` from
-//!   `gl_InstanceID` and a `u_cols` uniform, so the instance buffer stays 12 bytes/cell.
+//! - Per-instance attributes (divisor 1) carry the glyph's atlas layer, foreground/background RGB,
+//!   the sub-cell offset, and compositing flags. There is no per-instance position: the vertex
+//!   shader derives `(col, row)` from `gl_InstanceID` and a `u_cols` uniform.
 //! - The glyph atlas is a `sampler2DArray` (`R8` coverage, one layer per glyph). The fragment
-//!   shader samples coverage and does `mix(bg, fg, coverage)`.
+//!   shader samples coverage and blends foreground over background.
+//! - The per-instance `a_flags` bits (has-background, has-glyph) drive a `discard` in each pass, so
+//!   the same shader composites multiple grid layers back-to-front: a transparent background or an
+//!   empty glyph in a higher layer is discarded and the layer beneath shows through (issue #368).
 
 // `pub(crate)` items in this private module are the crate-internal shader API; the nursery
 // `redundant_pub_crate` lint conflicts with keeping the module boundary explicit.
@@ -37,6 +40,7 @@ layout(location = 1) in uint  a_glyph;  // atlas layer (glyph id), per instance
 layout(location = 2) in vec3  a_fg;     // foreground RGB (normalized u8), per instance
 layout(location = 3) in vec3  a_bg;     // background RGB (normalized u8), per instance
 layout(location = 4) in ivec2 a_offset; // sub-cell (dx, dy) in unscaled font pixels, per instance
+layout(location = 5) in uint  a_flags;  // compositing flags: bit0 = has bg, bit1 = has glyph
 
 uniform vec2 u_screen;     // surface size in physical pixels
 uniform vec2 u_cell;       // cell size in physical pixels (glyph size * scale)
@@ -47,6 +51,7 @@ uniform int  u_draw_glyph; // 0 = background pass (no offset), 1 = glyph pass (a
 flat out uint v_glyph;
 flat out vec3 v_fg;
 flat out vec3 v_bg;
+flat out uint v_flags;
 out vec2 v_uv;
 
 void main() {
@@ -69,6 +74,7 @@ void main() {
     v_glyph = a_glyph;
     v_fg = a_fg;
     v_bg = a_bg;
+    v_flags = a_flags;
 }
 ";
 
@@ -81,17 +87,26 @@ uniform int u_draw_glyph; // 0 = background pass, 1 = glyph pass
 flat in uint v_glyph;
 flat in vec3 v_fg;
 flat in vec3 v_bg;
+flat in uint v_flags;
 in vec2 v_uv;
 
 out vec4 frag;
 
 void main() {
     if (u_draw_glyph == 0) {
-        // Background pass: the cell's opaque background.
+        // Background pass: the cell's opaque background. A cell with no background (a transparent
+        // cell in a higher layer) is discarded so the layer beneath shows through.
+        if ((v_flags & 1u) == 0u) {
+            discard;
+        }
         frag = vec4(v_bg, 1.0);
     } else {
         // Glyph pass: foreground with atlas coverage as alpha, so non-glyph texels are transparent
-        // and the background (or a neighbor's spilled glyph) shows through when blended.
+        // and the background (or a neighbor's spilled glyph) shows through when blended. An empty
+        // cell (no glyph) is discarded so it can't erase the layer beneath.
+        if ((v_flags & 2u) == 0u) {
+            discard;
+        }
         float coverage = texture(u_atlas, vec3(v_uv, float(v_glyph))).r;
         frag = vec4(v_fg, coverage);
     }
@@ -189,5 +204,27 @@ mod tests {
         assert!(fs.contains("u_draw_glyph == 0"));
         assert!(fs.contains("vec4(v_bg, 1.0)"));
         assert!(fs.contains("vec4(v_fg, coverage)"));
+    }
+
+    #[test]
+    fn compositing_flags_discard_transparent_and_empty_cells() {
+        // The flags attribute must reach the fragment shader and gate each pass with a `discard`,
+        // or higher grid layers can't be transparent (issue #368).
+        let vs = source(GlslFlavor::Es300, Shader::Vertex);
+        assert!(vs.contains("in uint  a_flags"), "vertex missing a_flags");
+        assert!(
+            vs.contains("v_flags = a_flags"),
+            "vertex does not forward a_flags"
+        );
+        let fs = source(GlslFlavor::Es300, Shader::Fragment);
+        assert!(
+            fs.contains("(v_flags & 1u) == 0u"),
+            "fragment missing has-bg discard"
+        );
+        assert!(
+            fs.contains("(v_flags & 2u) == 0u"),
+            "fragment missing has-glyph discard"
+        );
+        assert!(fs.contains("discard"), "fragment missing discard");
     }
 }
