@@ -94,6 +94,10 @@ pub mod geometry;
 pub mod palette;
 /// The [`Presenter`] trait and [`WindowHandle`](presenter::WindowHandle).
 pub mod presenter;
+#[cfg(feature = "tilesets")]
+pub mod sprite_cache;
+#[cfg(feature = "tilesets")]
+pub mod tileset;
 /// Locates winit's `<canvas>` element via the DOM ([`web::winit_canvas`]).
 #[cfg(target_arch = "wasm32")]
 pub mod web;

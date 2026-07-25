@@ -7,9 +7,9 @@
 //! `retroglyph_window::winit::run_windowed` to open a window, or use it
 //! directly for in-memory rendering.
 
-#[cfg(feature = "tilesets")]
-use super::tileset::TilesetOptions;
 use retroglyph_window::font::BitmapFont;
+#[cfg(feature = "tilesets")]
+use retroglyph_window::tileset::TilesetOptions;
 use std::fmt;
 
 /// Errors that can occur when configuring the software backend.
@@ -25,7 +25,7 @@ pub enum SoftwareBackendError {
     ZeroScale,
     /// Tileset loading failed.
     #[cfg(feature = "tilesets")]
-    Tileset(super::tileset::TilesetError),
+    Tileset(retroglyph_window::tileset::TilesetError),
 }
 
 impl fmt::Display for SoftwareBackendError {

@@ -22,6 +22,11 @@ retroglyph-core = { path = "../core", version = "0.3.0", default-features = fals
 raw-window-handle = "0.6"
 winit = { version = "0.30", optional = true }
 log = { version = "0.4", optional = true }
+# PNG decode + straight-alpha blending for the shared sprite/tileset support (issue #366), used by
+# both graphical backends (software CPU blit, gl RGBA atlas upload). Feature-gated so a consumer
+# that only needs windowing/fonts pays nothing.
+image = { version = "0.25", optional = true, default-features = false, features = ["png"] }
+alpha-blend = { version = "0.2", optional = true, default-features = false, features = ["std"] }
 # A portable `std::time::Instant`-alike: plain `std::time` re-export on native, backed by the
 # browser's `Performance.now()` on `wasm32-unknown-unknown`. Already in `Cargo.lock` transitively
 # (winit depends on it), so this adds no new dependency -- it replaces `run.rs`'s own hand-rolled
@@ -85,3 +90,6 @@ winit = ["dep:winit", "dep:log"]
 # its own bitmap font pays nothing for the ~4 KB atlas; the graphical backends' own `default-font`
 # features forward to this one.
 default-font = []
+# Shared PNG sprite/tileset support (`tileset` + `sprite_cache` modules, issue #366). Off by
+# default; both graphical backends' own `tilesets` features forward to this one.
+tilesets = ["dep:image", "dep:alpha-blend", "dep:log"]

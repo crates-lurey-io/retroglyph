@@ -3,7 +3,7 @@
 //! The [`SpriteCache`] is built from [`TilesetOptions`]
 //! and provides O(1) lookup of decoded RGBA8 sprites by codepoint.
 
-use super::tileset::{TilesetError, TilesetOptions};
+use crate::tileset::{TilesetError, TilesetOptions};
 use alpha_blend::rgba::U8x4Rgba;
 use std::collections::BTreeMap;
 
@@ -32,12 +32,10 @@ pub struct Sprite {
 /// handed out via [`get`](Self::get).
 ///
 /// This is a deliberate scope decision, not an oversight: games generally don't hot-swap tilesets
-/// at runtime, and a `SpriteCache` is only ever populated once, during
-/// [`run_headless`](crate::SoftwareBackend::run_headless). If you need to iterate on a sprite sheet
-/// (e.g. during dev-mode asset editing) or otherwise want a tileset change to take effect, rebuild
-/// the whole [`SoftwareRenderer`](crate::SoftwareRenderer) from a fresh
-/// [`SoftwareBackend`](crate::SoftwareBackend) configuration rather than mutating an existing cache
-/// in place.
+/// at runtime, and a `SpriteCache` is only ever populated once, when a backend is built. If you
+/// need to iterate on a sprite sheet (e.g. during dev-mode asset editing) or otherwise want a
+/// tileset change to take effect, rebuild the whole renderer from a fresh backend configuration
+/// rather than mutating an existing cache in place.
 #[derive(Debug)]
 pub struct SpriteCache {
     sprites: BTreeMap<char, Sprite>,

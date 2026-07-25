@@ -1,9 +1,9 @@
 //! Tileset configuration: codepage mappings, options, builder, and error types.
 //!
 //! This module defines the public API for configuring PNG sprite sheet tilesets
-//! that overlay or replace [`BitmapFont`](retroglyph_window::font::BitmapFont) glyphs.
+//! that overlay or replace [`BitmapFont`](crate::font::BitmapFont) glyphs.
 //! A tileset is a sprite sheet PNG sliced into equally sized tiles, each
-//! mapped to a Unicode codepoint via a [`Codepage`]; [`SpriteCache`](super::sprite_cache::SpriteCache)
+//! mapped to a Unicode codepoint via a [`Codepage`]; [`SpriteCache`](crate::sprite_cache::SpriteCache)
 //! decodes and indexes those tiles for lookup by glyph at draw time.
 
 use core::fmt;
@@ -210,7 +210,7 @@ impl TilesetOptions {
 /// Standard CP437 tileset:
 ///
 /// ```ignore
-/// use retroglyph_software::tileset::TilesetOptions;
+/// use retroglyph_window::tileset::TilesetOptions;
 ///
 /// let png: Vec<u8> = std::fs::read("assets/cp437_16x16.png").unwrap();
 /// let opts = TilesetOptions::from_bytes(png)
@@ -222,7 +222,7 @@ impl TilesetOptions {
 /// Private-use sprite sheet addressed by index:
 ///
 /// ```ignore
-/// use retroglyph_software::tileset::{Codepage, TilesetOptions};
+/// use retroglyph_window::tileset::{Codepage, TilesetOptions};
 ///
 /// let png: Vec<u8> = std::fs::read("assets/sprites.png").unwrap();
 /// let opts = TilesetOptions::from_bytes(png)
@@ -236,7 +236,7 @@ impl TilesetOptions {
 /// Unicode private-use area sprite sheet:
 ///
 /// ```ignore
-/// use retroglyph_software::tileset::TilesetOptions;
+/// use retroglyph_window::tileset::TilesetOptions;
 ///
 /// let png: Vec<u8> = std::fs::read("assets/monsters.png").unwrap();
 /// let opts = TilesetOptions::from_bytes(png)
