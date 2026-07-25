@@ -12,7 +12,38 @@
 #![allow(clippy::redundant_pub_crate)]
 
 use retroglyph_window::sprite_cache::SpriteCache;
+use retroglyph_window::tileset::SpriteAlign;
 use std::collections::HashMap;
+
+/// Everything the draw path needs about one `char`'s sprite: where it lives in the atlas, how
+/// big it is, and how it sits inside the multi-cell box a span reserves for it.
+#[derive(Clone, Copy)]
+pub(crate) struct SpriteSlot {
+    /// Sprite atlas array layer.
+    pub layer: u16,
+    /// Sprite size in unscaled pixels.
+    pub w: u16,
+    pub h: u16,
+    /// Placement within a span's cell box.
+    pub align: SpriteAlign,
+}
+
+impl SpriteSlot {
+    /// The offset, in unscaled pixels, from the anchor cell's top-left corner to this sprite's
+    /// own top-left pixel, for a span of `span_w` x `span_h` cells of `glyph_w` x `glyph_h`.
+    pub(crate) fn align_offset(
+        self,
+        span_w: u16,
+        span_h: u16,
+        glyph_w: u8,
+        glyph_h: u8,
+    ) -> (i16, i16) {
+        let box_w = u32::from(span_w) * u32::from(glyph_w.max(1));
+        let box_h = u32::from(span_h) * u32::from(glyph_h.max(1));
+        self.align
+            .offset(u32::from(self.w), u32::from(self.h), box_w, box_h)
+    }
+}
 
 /// One sprite instance for the sprite draw pass: which cell, which atlas layer, the sprite's pixel
 /// size, and the sub-cell offset. Matches the `a_cell`/`a_layer`/`a_sprite`/`a_offset` attributes
@@ -64,6 +95,8 @@ pub(crate) struct SpriteSet {
     slots: HashMap<char, u16>,
     /// Per-layer sprite pixel size `(w, h)`.
     sizes: Vec<(u16, u16)>,
+    /// Per-layer sprite placement within a span's cell box.
+    aligns: Vec<SpriteAlign>,
     /// One layer's texture size in texels: the max sprite `(w, h)` across the set.
     tex_w: u32,
     tex_h: u32,
@@ -99,10 +132,12 @@ impl SpriteSet {
         let mut rgba = vec![0u8; layer_texels * layers as usize];
         let mut slots = HashMap::new();
         let mut sizes = Vec::with_capacity(layers as usize);
+        let mut aligns = Vec::with_capacity(layers as usize);
 
         for (layer, (ch, sprite)) in cache.iter().enumerate() {
             slots.insert(ch, layer as u16);
             sizes.push((sprite.pixel_width as u16, sprite.pixel_height as u16));
+            aligns.push(sprite.align);
 
             let base = layer * layer_texels;
             let src_row = (sprite.pixel_width * 4) as usize;
@@ -117,6 +152,7 @@ impl SpriteSet {
         Some(Self {
             slots,
             sizes,
+            aligns,
             tex_w,
             tex_h,
             layers,
@@ -124,11 +160,16 @@ impl SpriteSet {
         })
     }
 
-    /// The atlas layer + pixel size for `ch`, if it has a sprite.
-    pub(crate) fn slot(&self, ch: char) -> Option<(u16, u16, u16)> {
+    /// The atlas slot for `ch`, if it has a sprite.
+    pub(crate) fn slot(&self, ch: char) -> Option<SpriteSlot> {
         let layer = *self.slots.get(&ch)?;
         let (w, h) = self.sizes[layer as usize];
-        Some((layer, w, h))
+        Some(SpriteSlot {
+            layer,
+            w,
+            h,
+            align: self.aligns[layer as usize],
+        })
     }
 
     /// One layer's texture size in texels `(w, h)`.

@@ -98,7 +98,7 @@ use retroglyph_window::font::BitmapFont as Font;
 use retroglyph_window::geometry::CellGeometry;
 use retroglyph_window::palette::{DEFAULT_BG, DEFAULT_FG};
 #[cfg(feature = "tilesets")]
-use retroglyph_window::sprite_cache::{Sprite, SpriteCache};
+use retroglyph_window::sprite_cache::{Sprite, SpriteCache, warn_sprite_needs_span};
 #[cfg(feature = "tilesets")]
 use std::collections::BTreeSet;
 use std::collections::VecDeque;
@@ -427,7 +427,14 @@ impl SoftwareRenderer {
                     sprite,
                     scale,
                 );
-                self.warn_oversized_sprite(tile);
+                if tile.span() == (1, 1) {
+                    warn_sprite_needs_span(
+                        &mut self.ctx.warned_oversized,
+                        tile.glyph(),
+                        (sprite.pixel_width, sprite.pixel_height),
+                        (u32::from(glyph_w), u32::from(glyph_h)),
+                    );
+                }
                 return;
             }
         }
@@ -442,39 +449,6 @@ impl SoftwareRenderer {
             cell_w,
             cell_h,
             scale,
-        );
-    }
-
-    /// Logs once per glyph when a sprite's artwork is larger than one cell but its tile declares
-    /// no span, so its pixels spill into neighbours that still paint their own background and
-    /// glyph over it.
-    ///
-    /// The fix is always the same -- reserve the footprint with `Terminal::put_span` -- so the
-    /// message names it rather than describing the symptom.
-    #[cfg(feature = "tilesets")]
-    fn warn_oversized_sprite(&mut self, tile: Tile) {
-        if tile.span() != (1, 1) {
-            return;
-        }
-        let Some(sprite) = self.sprite_cache.get(tile.glyph()) else {
-            return;
-        };
-        let (cell_w, cell_h) = (
-            u32::from(self.font.glyph_width),
-            u32::from(self.font.glyph_height),
-        );
-        if sprite.pixel_width <= cell_w && sprite.pixel_height <= cell_h {
-            return;
-        }
-        let glyph = tile.glyph();
-        if !self.ctx.warned_oversized.insert(glyph) {
-            return;
-        }
-        let (w, h) = (sprite.pixel_width, sprite.pixel_height);
-        log::warn!(
-            "sprite for {glyph:?} is {w}x{h}px, larger than the {cell_w}x{cell_h}px cell, but was \
-             drawn without a span: its pixels will be overdrawn by the neighbouring cells. Use \
-             `Terminal::put_span` to reserve the cells it covers."
         );
     }
 }

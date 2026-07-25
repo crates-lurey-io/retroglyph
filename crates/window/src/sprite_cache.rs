@@ -5,7 +5,7 @@
 
 use crate::tileset::{SpriteAlign, TilesetError, TilesetOptions};
 use alpha_blend::rgba::U8x4Rgba;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// A decoded, ready-to-blit sprite.
 #[derive(Debug, Clone)]
@@ -185,6 +185,37 @@ impl Default for SpriteCache {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Warns, at most once per glyph, that `glyph`'s sprite is larger than one cell but was drawn
+/// without a span to reserve the cells it covers.
+///
+/// Such a sprite still blits at its natural size, so its pixels land in neighbouring cells that
+/// go on painting their own background and glyph over it. Both graphical backends call this from
+/// their sprite blit so the diagnostic, and the fix it names, are identical on each.
+///
+/// `sprite` and `cell` are `(width, height)` in unscaled pixels. `seen` is caller-owned so a
+/// redraw loop logs each offending glyph once rather than every frame. Returns `true` when a
+/// warning was emitted.
+pub fn warn_sprite_needs_span(
+    seen: &mut BTreeSet<char>,
+    glyph: char,
+    sprite: (u32, u32),
+    cell: (u32, u32),
+) -> bool {
+    let ((w, h), (cell_w, cell_h)) = (sprite, cell);
+    if w <= cell_w && h <= cell_h {
+        return false;
+    }
+    if !seen.insert(glyph) {
+        return false;
+    }
+    log::warn!(
+        "sprite for {glyph:?} is {w}x{h}px, larger than the {cell_w}x{cell_h}px cell, but was \
+         drawn without a span: neighbouring cells will paint over it. Reserve the cells it \
+         covers with `Terminal::put_span`."
+    );
+    true
 }
 
 /// Blends `src` over `dst` using the Porter-Duff `SRC_OVER` operator for

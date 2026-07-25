@@ -95,7 +95,7 @@ use retroglyph_window::palette::{DEFAULT_BG, DEFAULT_FG};
 use retroglyph_window::{CellGeometry, Presenter, WindowHandle};
 use shaders::GlslFlavor;
 #[cfg(feature = "tilesets")]
-use sprites::{SpriteInstance, SpriteSet};
+use sprites::{SpriteInstance, SpriteSet, SpriteSlot};
 use std::sync::Arc;
 
 // Compile the crate README's code blocks as doctests so the quick start can't silently rot.
@@ -141,6 +141,10 @@ pub struct GlRenderer {
     /// [`Output::draw_layers`]. Empty layers (or a renderer with no tileset) carry no sprites.
     #[cfg(feature = "tilesets")]
     sprite_layers: Vec<Vec<SpriteInstance>>,
+    /// Glyphs already reported as needing a span, so a redraw loop logs each one once instead of
+    /// every frame. See `retroglyph_window::sprite_cache::warn_sprite_needs_span`.
+    #[cfg(feature = "tilesets")]
+    warned_oversized: std::collections::BTreeSet<char>,
     /// The current surface size in physical pixels (set by [`resize_surface`](Presenter::resize_surface)).
     surface_size: (u32, u32),
     /// GL context + resources. `None` until [`init_surface`](Presenter::init_surface).
@@ -179,6 +183,8 @@ impl GlRenderer {
             sprite_set: None,
             #[cfg(feature = "tilesets")]
             sprite_layers: Vec::new(),
+            #[cfg(feature = "tilesets")]
+            warned_oversized: std::collections::BTreeSet::new(),
             surface_size: geometry.surface_size(cols, rows),
             gpu: None,
         }
@@ -196,6 +202,26 @@ impl GlRenderer {
     /// cell is the default background.
     const fn base_blank(&self) -> Instance {
         base_blank(self.space_glyph)
+    }
+
+    /// Reports a sprite drawn larger than one cell without a span to reserve the cells it covers.
+    ///
+    /// Shares `retroglyph-window`'s diagnostic with the software backend so both name the same
+    /// fix. A tile that already declares a span is fine and says nothing.
+    #[cfg(feature = "tilesets")]
+    fn warn_if_sprite_needs_span(&mut self, tile: &Tile, sprite: SpriteSlot) {
+        if tile.span() != (1, 1) {
+            return;
+        }
+        retroglyph_window::sprite_cache::warn_sprite_needs_span(
+            &mut self.warned_oversized,
+            tile.glyph(),
+            (u32::from(sprite.w), u32::from(sprite.h)),
+            (
+                u32::from(self.geometry.glyph_w),
+                u32::from(self.geometry.glyph_h),
+            ),
+        );
     }
 
     /// Total cell count for the current grid.
@@ -371,27 +397,59 @@ impl Output for GlRenderer {
             #[allow(clippy::cast_possible_truncation)]
             let (cx, cy) = (x as u16, y as u16);
 
+            // A cell covered by a multi-cell span (retroglyph#412) draws no glyph of its own: the
+            // span's anchor emitted one sprite across the whole footprint, and this cell's glyph
+            // is that sprite's text fallback, for backends that can't draw it. It takes the
+            // anchor's background so the footprint sits on one uniform backdrop. The stream is
+            // row-major within a layer, so the anchor's instance is always already written.
+            if let Some((back_x, back_y)) = tile.span_offset() {
+                let anchor = idx
+                    .checked_sub(usize::from(back_y) * cols + usize::from(back_x))
+                    .and_then(|anchor_idx| self.layers[l].get(anchor_idx).copied());
+                if let Some(anchor) = anchor {
+                    let covered = Instance::new(
+                        self.space_glyph,
+                        anchor.fg,
+                        anchor.bg,
+                        0,
+                        0,
+                        anchor.flags & FLAG_HAS_BG,
+                    );
+                    if covered.flags & FLAG_HAS_BG != 0 {
+                        inherited_bg[idx] = covered.bg;
+                    }
+                    self.layers[l][idx] = covered;
+                    continue;
+                }
+            }
+
             if layer_id == 0 {
                 #[allow(clippy::cast_possible_truncation)]
                 let slot = self.glyphs.resolve(tile.glyph()) as u16;
                 let inst = base_instance(slot, tile);
                 #[cfg(feature = "tilesets")]
-                if let Some((layer, w, h)) =
-                    self.sprite_set.as_ref().and_then(|s| s.slot(tile.glyph()))
-                {
+                if let Some(sprite) = self.sprite_set.as_ref().and_then(|s| s.slot(tile.glyph())) {
                     // Keep layer 0's opaque background; drop the glyph, the sprite covers it.
                     let sprite_inst =
                         Instance::new(inst.glyph, inst.fg, inst.bg, 0, 0, inst.flags & FLAG_HAS_BG);
                     inherited_bg[idx] = sprite_inst.bg;
                     self.layers[0][idx] = sprite_inst;
+                    let (span_w, span_h) = tile.span();
+                    let align = sprite.align_offset(
+                        span_w,
+                        span_h,
+                        self.geometry.glyph_w,
+                        self.geometry.glyph_h,
+                    );
+                    self.warn_if_sprite_needs_span(tile, sprite);
                     self.sprite_layers[0].push(SpriteInstance::new(
                         cx,
                         cy,
-                        layer,
-                        w,
-                        h,
-                        tile.dx(),
-                        tile.dy(),
+                        sprite.layer,
+                        sprite.w,
+                        sprite.h,
+                        tile.dx() + align.0,
+                        tile.dy() + align.1,
                     ));
                     continue;
                 }
@@ -418,8 +476,7 @@ impl Output for GlRenderer {
                 resolved
             };
             #[cfg(feature = "tilesets")]
-            if let Some((layer, w, h)) = self.sprite_set.as_ref().and_then(|s| s.slot(tile.glyph()))
-            {
+            if let Some(sprite) = self.sprite_set.as_ref().and_then(|s| s.slot(tile.glyph())) {
                 // No bitmap glyph. An occupied higher-layer sprite cell with a `Default` background
                 // paints no background (the sprite's own alpha provides coverage, so lower layers
                 // show through its transparent pixels), matching `resolve_bg_fill`'s has_sprite
@@ -430,14 +487,22 @@ impl Output for GlRenderer {
                     FLAG_HAS_BG
                 };
                 self.layers[l][idx] = Instance::new(glyph, fg, bg, 0, 0, has_bg);
+                let (span_w, span_h) = tile.span();
+                let align = sprite.align_offset(
+                    span_w,
+                    span_h,
+                    self.geometry.glyph_w,
+                    self.geometry.glyph_h,
+                );
+                self.warn_if_sprite_needs_span(tile, sprite);
                 self.sprite_layers[l].push(SpriteInstance::new(
                     cx,
                     cy,
-                    layer,
-                    w,
-                    h,
-                    tile.dx(),
-                    tile.dy(),
+                    sprite.layer,
+                    sprite.w,
+                    sprite.h,
+                    tile.dx() + align.0,
+                    tile.dy() + align.1,
                 ));
                 continue;
             }
@@ -704,5 +769,61 @@ mod compositing_tests {
         r.draw_layers(core::iter::once((0u8, Pos::new(0, 0), &tile, None)))
             .expect("draw_layers");
         assert_eq!(r.layers.len(), 1);
+    }
+
+    /// A span's covered cells draw no glyph of their own and take the anchor's background, so one
+    /// piece of artwork sits on one uniform backdrop (retroglyph#412).
+    #[test]
+    fn draw_layers_gives_span_covered_cells_the_anchors_background_and_no_glyph() {
+        use retroglyph_core::Grid;
+
+        let mut r = GlBackendBuilder::new()
+            .grid_size(3, 1)
+            .build()
+            .expect("default-font builds");
+
+        let mut grid = Grid::new(3, 1);
+        grid.write_span(0, 0, 0, &["C="], Style::new().bg(RED))
+            .expect("2x1 span fits");
+        let tiles: Vec<(u8, Pos, Tile)> = (0..3)
+            .map(|x| (0u8, Pos::new(x, 0), *grid.get_tile(0, x, 0).unwrap()))
+            .collect();
+        r.draw_layers(tiles.iter().map(|(l, pos, t)| (*l, *pos, t, None)))
+            .expect("draw_layers is infallible");
+
+        let (anchor, covered, free) = (r.layers[0][0], r.layers[0][1], r.layers[0][2]);
+        assert_eq!(anchor.flags, FLAG_HAS_BG | FLAG_HAS_GLYPH, "anchor draws");
+        assert_eq!(covered.flags, FLAG_HAS_BG, "covered cell draws no glyph");
+        assert_eq!(
+            covered.bg, anchor.bg,
+            "covered cell inherits the anchor's bg"
+        );
+        assert_eq!(covered.bg, [255, 0, 0]);
+        // A cell outside the span is untouched by any of this.
+        assert_eq!(free.flags, FLAG_HAS_BG);
+        assert_ne!(free.bg, [255, 0, 0]);
+    }
+
+    /// Covered-cell suppression is grid state, not a tileset feature, so it holds with the
+    /// `tilesets` feature off too -- a span with no sprite behind it renders as its anchor glyph
+    /// alone, the same on both pixel backends.
+    #[test]
+    fn draw_layers_suppresses_covered_glyphs_without_a_sprite() {
+        use retroglyph_core::Grid;
+
+        let mut r = GlBackendBuilder::new()
+            .grid_size(2, 1)
+            .build()
+            .expect("default-font builds");
+        let mut grid = Grid::new(2, 1);
+        grid.write_span(0, 0, 0, &["AB"], Style::new()).unwrap();
+        let tiles: Vec<(u8, Pos, Tile)> = (0..2)
+            .map(|x| (0u8, Pos::new(x, 0), *grid.get_tile(0, x, 0).unwrap()))
+            .collect();
+        r.draw_layers(tiles.iter().map(|(l, pos, t)| (*l, *pos, t, None)))
+            .expect("draw_layers is infallible");
+
+        assert_eq!(r.layers[0][0].flags & FLAG_HAS_GLYPH, FLAG_HAS_GLYPH);
+        assert_eq!(r.layers[0][1].flags & FLAG_HAS_GLYPH, 0);
     }
 }

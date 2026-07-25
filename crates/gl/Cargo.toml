@@ -61,8 +61,10 @@ glutin = "0.32"
 # rasterizer (cross-backend parity). `retroglyph-software` is that reference rasterizer; both
 # backends share `retroglyph-window`'s font, so the comparison is a real pixel-identity check.
 [target.'cfg(target_os = "linux")'.dev-dependencies]
+# `tilesets` so the sprite/span parity tests can build the same tileset on both backends.
 retroglyph-software = { path = "../software", version = "0.4.0", default-features = false, features = [
   "default-font",
+  "tilesets",
 ] }
 # Generates tiny in-memory PNG tilesets for the sprite render tests (issue #366).
 image = { version = "0.25", default-features = false, features = ["png"] }
