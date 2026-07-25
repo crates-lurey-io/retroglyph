@@ -92,13 +92,15 @@ use grixy::ops::GridWrite;
 use grixy::ops::layout::RowMajor;
 use retroglyph_core::event::Event;
 use retroglyph_core::grid::{Pos, Size};
-use retroglyph_core::tile::Tile;
+use retroglyph_core::tile::{Tile, TileFlags};
 use retroglyph_window::WindowHandle;
 use retroglyph_window::font::BitmapFont as Font;
 use retroglyph_window::geometry::CellGeometry;
 use retroglyph_window::palette::{DEFAULT_BG, DEFAULT_FG};
 #[cfg(feature = "tilesets")]
 use retroglyph_window::sprite_cache::{Sprite, SpriteCache};
+#[cfg(feature = "tilesets")]
+use std::collections::BTreeSet;
 use std::collections::VecDeque;
 use std::sync::Arc;
 use std::time::Duration;
@@ -165,6 +167,10 @@ struct RenderContext {
     /// full repaint next frame, since the dirty-cell path can only compare cells within layers
     /// present in both frames.
     prev_layer_count: usize,
+    /// Glyphs already reported by [`warn_oversized_sprite`] as needing a span, so a 60fps redraw
+    /// loop logs each one once instead of every frame.
+    #[cfg(feature = "tilesets")]
+    warned_oversized: BTreeSet<char>,
 }
 
 impl SoftwareRenderer {
@@ -193,6 +199,8 @@ impl SoftwareRenderer {
                 // `draw_layers` call is unconditionally treated as a layer-set change and takes
                 // the full-repaint path once, seeding `prev_tiles` for every subsequent frame.
                 prev_layer_count: usize::MAX,
+                #[cfg(feature = "tilesets")]
+                warned_oversized: BTreeSet::new(),
             },
             #[cfg(feature = "tilesets")]
             sprite_cache,
@@ -340,26 +348,33 @@ impl SoftwareRenderer {
         false
     }
 
-    /// Paints one layer's tile at `pos` into the pixel buffer: the cell-rect background fill
-    /// (when `bg_fill` is `Some`, see [`resolve_bg_fill`] and [`Output::draw_layers`]'s doc for
-    /// the exact rule) followed by the sprite or bitmap-glyph foreground.
+    /// Determines the background `layer_id`'s cell at flat index `idx` should paint, if any.
     ///
-    /// `tile` is taken by value (it's `Copy`) rather than by reference so callers can read it out
-    /// of `self.ctx.prev_tiles` before calling this, instead of holding a borrow of `self.ctx`
-    /// across a call that needs `&mut self.ctx.pixel_buf`.
-    #[allow(clippy::too_many_arguments)]
-    fn composite_cell(
-        &mut self,
-        buf_w: usize,
-        cell_w: usize,
-        cell_h: usize,
-        scale: usize,
-        pos: Pos,
-        tile: Tile,
-        bg_fill: Option<u32>,
-    ) {
-        self.fill_cell_bg(cell_w, cell_h, pos, bg_fill);
-        self.blit_cell_glyph(buf_w, cell_w, cell_h, scale, pos, tile);
+    /// Wraps [`resolve_bg_fill`] with the one thing that function cannot see on its own: whether
+    /// this cell is inside a multi-cell span whose *anchor* dispatches to a sprite. A covered
+    /// cell holds the span's text fallback glyph (`'='`, `'['`, ...), which has no sprite of its
+    /// own, so asking [`resolve_bg_fill`] about that glyph would make the covered cells paint an
+    /// opaque background while the anchor cell stays transparent -- one sprite, drawn over two
+    /// different backdrops. Resolving the sprite question against the anchor keeps the whole
+    /// footprint consistent.
+    ///
+    /// The *position* stays this cell's own, so background inheritance from lower layers is still
+    /// resolved per cell rather than smeared from the anchor's column.
+    fn resolve_cell_bg(&self, layer_id: u8, idx: usize, cols: usize) -> Option<u32> {
+        let tile = self.ctx.prev_tiles[usize::from(layer_id)][idx];
+        let anchor_glyph = match tile.span_offset() {
+            Some((dx, dy)) => {
+                let back = usize::from(dy) * cols + usize::from(dx);
+                idx.checked_sub(back)
+                    .and_then(|anchor_idx| {
+                        self.ctx.prev_tiles[usize::from(layer_id)].get(anchor_idx)
+                    })
+                    .map_or_else(|| tile.glyph(), Tile::glyph)
+            }
+            None => tile.glyph(),
+        };
+        let has_sprite = self.has_sprite(anchor_glyph);
+        resolve_bg_fill(&self.ctx.prev_tiles, layer_id, idx, has_sprite)
     }
 
     /// Fills a cell's background rectangle when `bg_fill` is opaque. The rectangle is always the
@@ -377,6 +392,10 @@ impl SoftwareRenderer {
     /// tile's sub-cell `dx`/`dy` offset. The glyph may spill past the cell edge into neighbors, so
     /// callers that want that spill preserved must lay down every background first (see the
     /// two-pass repaint in [`draw_layers`](Self::draw_layers)).
+    ///
+    /// A sprite is additionally shifted by its alignment inside the tile's span box (see
+    /// [`Sprite::align_offset`]), which is `(0, 0)` unless the span reserves more cells than the
+    /// artwork fills.
     fn blit_cell_glyph(
         &mut self,
         buf_w: usize,
@@ -393,17 +412,22 @@ impl SoftwareRenderer {
         #[cfg(feature = "tilesets")]
         {
             let buf_h = self.ctx.pixel_buf.as_ref().len() / buf_w;
+            let (glyph_w, glyph_h) = (self.font.glyph_width, self.font.glyph_height);
             if let Some(sprite) = self.sprite_cache.get(tile.glyph()) {
+                let (span_w, span_h) = tile.span();
+                let align = sprite.align_offset(span_w, span_h, glyph_w, glyph_h);
                 blit_sprite(
                     self.ctx.pixel_buf.as_mut(),
                     buf_w,
                     buf_h,
                     px_x,
                     px_y,
-                    &tile,
+                    tile.dx() + align.0,
+                    tile.dy() + align.1,
                     sprite,
                     scale,
                 );
+                self.warn_oversized_sprite(tile);
                 return;
             }
         }
@@ -418,6 +442,39 @@ impl SoftwareRenderer {
             cell_w,
             cell_h,
             scale,
+        );
+    }
+
+    /// Logs once per glyph when a sprite's artwork is larger than one cell but its tile declares
+    /// no span, so its pixels spill into neighbours that still paint their own background and
+    /// glyph over it.
+    ///
+    /// The fix is always the same -- reserve the footprint with `Terminal::put_span` -- so the
+    /// message names it rather than describing the symptom.
+    #[cfg(feature = "tilesets")]
+    fn warn_oversized_sprite(&mut self, tile: Tile) {
+        if tile.span() != (1, 1) {
+            return;
+        }
+        let Some(sprite) = self.sprite_cache.get(tile.glyph()) else {
+            return;
+        };
+        let (cell_w, cell_h) = (
+            u32::from(self.font.glyph_width),
+            u32::from(self.font.glyph_height),
+        );
+        if sprite.pixel_width <= cell_w && sprite.pixel_height <= cell_h {
+            return;
+        }
+        let glyph = tile.glyph();
+        if !self.ctx.warned_oversized.insert(glyph) {
+            return;
+        }
+        let (w, h) = (sprite.pixel_width, sprite.pixel_height);
+        log::warn!(
+            "sprite for {glyph:?} is {w}x{h}px, larger than the {cell_w}x{cell_h}px cell, but was \
+             drawn without a span: its pixels will be overdrawn by the neighbouring cells. Use \
+             `Terminal::put_span` to reserve the cells it covers."
         );
     }
 }
@@ -586,17 +643,30 @@ impl Output for SoftwareRenderer {
     ///   of (or into) the frame can't be diffed against a shadow copy that no longer describes
     ///   this frame's layer set.
     ///
-    /// The full repaint runs two sub-passes per layer -- every background first, then every glyph
-    /// -- so a glyph offset past its right/bottom edge spills onto the neighbor's already-painted
+    /// Both paths run two sub-passes per layer -- every background first, then every glyph -- so
+    /// artwork that lands outside its own cell spills onto the neighbor's already-painted
     /// background instead of being clobbered by that neighbor's later background fill. Spill is
     /// therefore uniform in all four directions: the two-pass mechanism of the "Sub-cell offsets
     /// and spill" contract documented on [`Presenter`](retroglyph_window::Presenter), shared with
-    /// `retroglyph-gl`.
+    /// `retroglyph-gl`. A multi-cell span's sprite relies on the same ordering, since it is drawn
+    /// once from the anchor and covers cells that paint backgrounds of their own.
     ///
     /// When neither applies, a changed cell at a given position also forces every *other* layer
     /// at that same position to be repainted (even if unchanged there), because a lower layer's
     /// background fill covers the whole cell rect and would otherwise erase an unchanged higher
     /// layer's already-composited glyph pixels on top of it.
+    ///
+    /// # Multi-cell spans (retroglyph#412)
+    ///
+    /// A [`TileFlags::SPAN_COVERED`] cell paints its background but not its glyph: the span's
+    /// anchor already drew one sprite across the whole footprint, and the covered cell's glyph is
+    /// that sprite's text fallback, for backends that cannot draw it. The sprite-transparency
+    /// rule that decides whether a background is painted at all is resolved against the *anchor*
+    /// (see `resolve_cell_bg`), so one span never sits on two different backdrops.
+    ///
+    /// A covered cell's tile does not change when only the anchor's artwork does, so a change at
+    /// an anchor additionally marks its whole footprint dirty (see `mark_span_dirty`); without
+    /// that, the previous sprite's pixels would survive in cells the diff considers unchanged.
     fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
         I: Iterator<Item = (u8, Pos, &'a Tile, Option<&'a str>)>,
@@ -635,9 +705,15 @@ impl Output for SoftwareRenderer {
             let idx = usize::from(pos.y) * cols + usize::from(pos.x);
             let slot = &mut self.ctx.prev_tiles[layer_idx][idx];
             if *slot != *tile {
+                let departing = *slot;
                 self.ctx.dirty_mask[idx] = true;
                 any_dirty = true;
                 *slot = *tile;
+                // A multi-cell span paints past its anchor cell, so a change at `idx` dirties
+                // every cell the span touches -- both the one that just left and the one that
+                // just arrived, since neither's neighbours have changed on their own account.
+                mark_span_dirty(&mut self.ctx.dirty_mask, idx, departing, cols, rows);
+                mark_span_dirty(&mut self.ctx.dirty_mask, idx, *tile, cols, rows);
             }
             if tile.dx() != 0 || tile.dy() != 0 {
                 any_offset = true;
@@ -658,9 +734,7 @@ impl Output for SoftwareRenderer {
                 let layer_id = layer_id as u8;
                 // Pass 1: lay down every cell's background on this layer first.
                 for idx in 0..cell_count {
-                    let tile = self.ctx.prev_tiles[layer_id as usize][idx];
-                    let has_sprite = self.has_sprite(tile.glyph());
-                    let bg_fill = resolve_bg_fill(&self.ctx.prev_tiles, layer_id, idx, has_sprite);
+                    let bg_fill = self.resolve_cell_bg(layer_id, idx, cols);
                     #[allow(clippy::cast_possible_truncation)]
                     let pos = Pos::new((idx % cols) as u16, (idx / cols) as u16);
                     self.fill_cell_bg(cell_w, cell_h, pos, bg_fill);
@@ -678,19 +752,31 @@ impl Output for SoftwareRenderer {
                 }
             }
         } else if any_dirty {
-            for idx in 0..cell_count {
-                if !self.ctx.dirty_mask[idx] {
-                    continue;
-                }
+            // The same two-pass split as the full repaint, restricted to the dirty cells: every
+            // dirty cell's background on a layer goes down before any of that layer's glyphs, so
+            // artwork that spills out of its own cell (a multi-cell span's sprite, or a glyph
+            // pushed out by a sub-cell offset) is not erased by the neighbour's background fill
+            // arriving after it.
+            for layer_id in 0..layer_count_now {
                 #[allow(clippy::cast_possible_truncation)]
-                let pos = Pos::new((idx % cols) as u16, (idx / cols) as u16);
-                for layer_id in 0..layer_count_now {
+                let layer_id = layer_id as u8;
+                for idx in 0..cell_count {
+                    if !self.ctx.dirty_mask[idx] {
+                        continue;
+                    }
+                    let bg_fill = self.resolve_cell_bg(layer_id, idx, cols);
                     #[allow(clippy::cast_possible_truncation)]
-                    let layer_id = layer_id as u8;
-                    let tile = self.ctx.prev_tiles[layer_id as usize][idx];
-                    let has_sprite = self.has_sprite(tile.glyph());
-                    let bg_fill = resolve_bg_fill(&self.ctx.prev_tiles, layer_id, idx, has_sprite);
-                    self.composite_cell(buf_w, cell_w, cell_h, scale, pos, tile, bg_fill);
+                    let pos = Pos::new((idx % cols) as u16, (idx / cols) as u16);
+                    self.fill_cell_bg(cell_w, cell_h, pos, bg_fill);
+                }
+                for idx in 0..cell_count {
+                    if !self.ctx.dirty_mask[idx] {
+                        continue;
+                    }
+                    let tile = self.ctx.prev_tiles[usize::from(layer_id)][idx];
+                    #[allow(clippy::cast_possible_truncation)]
+                    let pos = Pos::new((idx % cols) as u16, (idx / cols) as u16);
+                    self.blit_cell_glyph(buf_w, cell_w, cell_h, scale, pos, tile);
                 }
             }
         }
@@ -817,6 +903,10 @@ impl retroglyph_window::Presenter for SoftwareRenderer {
 ///
 /// If `sprite_cache` contains a sprite for the cell's glyph, the bitmap font
 /// path is skipped in favor of [`blit_sprite`].
+///
+/// A cell covered by a multi-cell span ([`TileFlags::SPAN_COVERED`]) paints its background but
+/// not its glyph: that glyph is the span's text fallback, and the span's anchor already drew a
+/// sprite over this cell.
 #[allow(clippy::cast_possible_truncation, clippy::too_many_arguments)]
 fn blit_cell(
     buffer: &mut [u32],
@@ -835,7 +925,19 @@ fn blit_cell(
     #[cfg(feature = "tilesets")]
     if let Some(sprite) = sprite_cache.and_then(|c| c.get(cell.glyph())) {
         let buf_h = buffer.len() / buf_w;
-        blit_sprite(buffer, buf_w, buf_h, px_x, px_y, cell, sprite, scale);
+        let (span_w, span_h) = cell.span();
+        let align = sprite.align_offset(span_w, span_h, font.glyph_width, font.glyph_height);
+        blit_sprite(
+            buffer,
+            buf_w,
+            buf_h,
+            px_x,
+            px_y,
+            cell.dx() + align.0,
+            cell.dy() + align.1,
+            sprite,
+            scale,
+        );
         return;
     }
 
@@ -858,6 +960,12 @@ fn blit_cell(
             let row_end = y * buf_w + x_end;
             buffer[row_start..row_end].fill(bg);
         }
+    }
+
+    // The span's anchor already blitted a sprite across this cell; its glyph is the text
+    // fallback, for backends that can't draw that sprite.
+    if cell.flags().contains(TileFlags::SPAN_COVERED) {
+        return;
     }
 
     #[allow(clippy::cast_possible_wrap)]
@@ -962,6 +1070,9 @@ fn blit_glyph_mask(
 /// Blits a glyph's set bits into `buffer` at `(px_x, px_y)` plus sub-cell
 /// offset from `tile.dx`/`tile.dy`. Only the foreground (glyph) pixels are
 /// painted; background is left untouched.
+///
+/// Draws nothing for a cell covered by a multi-cell span: its glyph is the span's text fallback,
+/// and the span's anchor already drew artwork over this cell.
 #[allow(clippy::cast_possible_truncation, clippy::too_many_arguments)]
 fn blit_glyph(
     buffer: &mut [u32],
@@ -974,7 +1085,7 @@ fn blit_glyph(
     _cell_h: usize,
     scale: usize,
 ) {
-    if tile.glyph() == ' ' {
+    if tile.glyph() == ' ' || tile.flags().contains(TileFlags::SPAN_COVERED) {
         return;
     }
 
@@ -1003,9 +1114,11 @@ fn blit_glyph(
 
 /// Blit a decoded RGBA8 sprite into `buffer` with alpha blending.
 ///
-/// The sprite's top-left corner is at pixel `(cell_px_x + tile.dx * scale,
-/// cell_px_y + tile.dy * scale)`. If `spacing_cells > 1`, the sprite's pixels
-/// extend beyond the anchor cell into adjacent cells.
+/// The sprite's top-left corner is at pixel `(cell_px_x + offset_x * scale,
+/// cell_px_y + offset_y * scale)`, where the offset is in unscaled pixels and combines the
+/// tile's own sub-cell `dx`/`dy` with the sprite's alignment inside its span box (see
+/// [`Sprite::align_offset`]). A sprite larger than one cell extends past the anchor cell into
+/// the cells its span covers.
 ///
 /// Pixels outside `buffer` bounds are silently clipped.
 ///
@@ -1025,12 +1138,13 @@ fn blit_sprite(
     buf_h: usize,
     cell_px_x: usize,
     cell_px_y: usize,
-    tile: &Tile,
+    offset_x: i16,
+    offset_y: i16,
     sprite: &Sprite,
     scale: usize,
 ) {
-    let origin_x = cell_px_x as i64 + i64::from(tile.dx()) * scale as i64;
-    let origin_y = cell_px_y as i64 + i64::from(tile.dy()) * scale as i64;
+    let origin_x = cell_px_x as i64 + i64::from(offset_x) * scale as i64;
+    let origin_y = cell_px_y as i64 + i64::from(offset_y) * scale as i64;
 
     let src_w = sprite.pixel_width as usize;
     let src_h = sprite.pixel_height as usize;
@@ -1137,10 +1251,48 @@ fn blit_sprite(
     }
 }
 
+/// Marks every cell that `tile`'s multi-cell span occupies as dirty, so the incremental repaint
+/// path covers the whole footprint rather than just the cell that changed.
+///
+/// `idx` is `tile`'s own flat cell index. Handles both roles: an anchor dirties the footprint it
+/// owns, and a covered cell dirties its anchor plus that anchor's whole footprint (a covered cell
+/// changing means the artwork over it has to be redrawn from the anchor). A tile that is not part
+/// of a span costs one flag test.
+///
+/// Cells past the grid edge are skipped; a span cannot be written past the edge in the first
+/// place, but the shadow buffer this reads from can lag a resize by one frame.
+fn mark_span_dirty(dirty: &mut [bool], idx: usize, tile: Tile, cols: usize, rows: usize) {
+    if cols == 0 {
+        return;
+    }
+    let (anchor_idx, span_w, span_h) = if let Some((dx, dy)) = tile.span_offset() {
+        let back = usize::from(dy) * cols + usize::from(dx);
+        let Some(anchor_idx) = idx.checked_sub(back) else {
+            return;
+        };
+        // The anchor's own footprint isn't readable from here, so dirty a box big enough to
+        // contain it: the offset back to the anchor bounds the span on both axes.
+        (anchor_idx, usize::from(dx) + 1, usize::from(dy) + 1)
+    } else {
+        let (w, h) = tile.span();
+        if (w, h) == (1, 1) {
+            return;
+        }
+        (idx, usize::from(w), usize::from(h))
+    };
+
+    let (ax, ay) = (anchor_idx % cols, anchor_idx / cols);
+    for row in ay..(ay + span_h).min(rows) {
+        for col in ax..(ax + span_w).min(cols) {
+            dirty[row * cols + col] = true;
+        }
+    }
+}
+
 // The canonical `Color::Default` fallbacks live in `retroglyph-window`'s `palette` module so the
 // gl and software backends can't drift; imported above as `(u8, u8, u8)` triples.
 
-/// Determines the background this layer/tile should paint at `idx` in `composite_cell`, if any,
+/// Determines the background this layer/tile should paint at `idx`, if any,
 /// mirroring [`Grid::flatten_into`](retroglyph_core::grid::Grid)'s background-inheritance rule so
 /// cell and pixel backends agree (retroglyph#304).
 ///
@@ -1908,5 +2060,324 @@ mod tests {
                 "{ansi:?}: resolve_color no longer matches retroglyph-core's Color::resolve_rgb"
             );
         }
+    }
+}
+
+// ── Multi-cell sprite tests (retroglyph#412) ────────────────────────────────
+
+#[cfg(all(test, feature = "tilesets"))]
+mod span_tests {
+    use super::*;
+    use retroglyph_core::Grid;
+    use retroglyph_core::color::Color;
+    use retroglyph_core::grid::Pos;
+    use retroglyph_core::style::Style;
+    use retroglyph_window::tileset::{Codepage, SpriteAlign, TilesetOptions};
+
+    const RED: u32 = 0x00FF_0000;
+    const BLUE: u32 = 0x0000_00FF;
+    const GREEN: u32 = 0x0000_FF00;
+
+    /// A one-tile PNG of `w` x `h` pixels, solid opaque red except for a fully transparent
+    /// right-hand column band `transparent_from` pixels in, so a test can see the background
+    /// through part of the sprite.
+    fn sprite_png(w: u32, h: u32, transparent_from: u32) -> Vec<u8> {
+        use image::ImageEncoder as _;
+        let mut img = image::RgbaImage::new(w, h);
+        for y in 0..h {
+            for x in 0..w {
+                let px = if x >= transparent_from {
+                    [0, 0, 0, 0]
+                } else {
+                    [0xFF, 0, 0, 0xFF]
+                };
+                img.put_pixel(x, y, image::Rgba(px));
+            }
+        }
+        let mut png = Vec::new();
+        image::codecs::png::PngEncoder::new(&mut png)
+            .write_image(img.as_raw(), w, h, image::ExtendedColorType::Rgba8)
+            .expect("encode test tileset PNG");
+        png
+    }
+
+    /// A `cols` x `rows` renderer at scale 1 with `'S'` bound to a `w` x `h` sprite.
+    fn renderer_with_sprite(
+        cols: u16,
+        rows: u16,
+        w: u32,
+        h: u32,
+        transparent_from: u32,
+        align: SpriteAlign,
+    ) -> SoftwareRenderer {
+        #[allow(clippy::cast_possible_truncation)]
+        let opts = TilesetOptions::from_bytes(sprite_png(w, h, transparent_from))
+            .tile_size(w as u16, h as u16)
+            .columns(1)
+            .codepage(Codepage::Custom(vec!['S']))
+            .align(align)
+            .build()
+            .expect("valid single-tile tileset");
+        SoftwareBackendBuilder::new()
+            .font(retroglyph_window::font::unscii16::FONT)
+            .grid_size(cols, rows)
+            .scale(1)
+            .tileset(opts)
+            .build()
+            .unwrap()
+            .run_headless()
+            .unwrap()
+    }
+
+    /// A 2-tile 16x16 PNG: tile 0 (`'S'`) fully opaque red, tile 1 (`'T'`) red only in its left
+    /// half and transparent in its right. Swapping between the two changes what the sprite paints
+    /// in the *second* cell of a 2x1 span without changing that cell's tile at all.
+    fn wide_and_narrow_png() -> Vec<u8> {
+        use image::ImageEncoder as _;
+        let (w, h) = (16u32, 16u32);
+        let mut img = image::RgbaImage::new(w * 2, h);
+        for y in 0..h {
+            for x in 0..w * 2 {
+                let opaque = x < w || x - w < 8;
+                let px = if opaque {
+                    [0xFF, 0, 0, 0xFF]
+                } else {
+                    [0, 0, 0, 0]
+                };
+                img.put_pixel(x, y, image::Rgba(px));
+            }
+        }
+        let mut png = Vec::new();
+        image::codecs::png::PngEncoder::new(&mut png)
+            .write_image(img.as_raw(), w * 2, h, image::ExtendedColorType::Rgba8)
+            .expect("encode test tileset PNG");
+        png
+    }
+
+    /// Streams every cell of `grid`'s layer 0 through `draw_layers`, the path the compositing
+    /// backend actually uses.
+    fn paint(renderer: &mut SoftwareRenderer, grid: &Grid) {
+        let tiles: Vec<(u8, Pos, Tile)> = (0..grid.height())
+            .flat_map(|y| (0..grid.width()).map(move |x| (x, y)))
+            .map(|(x, y)| (0u8, Pos::new(x, y), *grid.get_tile(0, x, y).unwrap()))
+            .collect();
+        renderer
+            .draw_layers(tiles.iter().map(|(l, pos, tile)| (*l, *pos, tile, None)))
+            .unwrap();
+    }
+
+    /// The buffer's pixel at `(x, y)`, given a `cols`-wide grid of 8x16 cells at scale 1.
+    fn px(renderer: &SoftwareRenderer, cols: usize, x: usize, y: usize) -> u32 {
+        renderer.pixels()[y * cols * 8 + x]
+    }
+
+    /// The literal subject of retroglyph#412: a span reserves cells the artwork does not fill,
+    /// and the reserved cells stop drawing their own glyph and take the anchor's background.
+    #[test]
+    fn span_reserves_cells_beyond_the_artwork() {
+        // An 8x16 sprite (exactly one cell) declared as a 2x1 span, so cell 1 is reserved but no
+        // sprite pixel ever reaches it.
+        let mut r = renderer_with_sprite(2, 1, 8, 16, 8, SpriteAlign::TopLeft);
+        let mut grid = Grid::new(2, 1);
+        grid.write_span(
+            0,
+            0,
+            0,
+            &["S#"],
+            Style::new().bg(Color::Rgb { r: 0, g: 0, b: 255 }),
+        )
+        .unwrap();
+        paint(&mut r, &grid);
+
+        // Cell 0 is the sprite.
+        assert_eq!(px(&r, 2, 0, 0), RED);
+        // Cell 1 is the anchor's background, with no trace of the '#' fallback glyph.
+        for y in 0..16 {
+            for x in 8..16 {
+                assert_eq!(px(&r, 2, x, y), BLUE, "covered cell pixel ({x}, {y})");
+            }
+        }
+    }
+
+    #[test]
+    fn covered_cell_glyph_is_not_drawn() {
+        // A fully transparent sprite: anything visible in cell 1 can only be its fallback glyph.
+        let mut r = renderer_with_sprite(2, 1, 8, 16, 0, SpriteAlign::TopLeft);
+        let mut grid = Grid::new(2, 1);
+        grid.write_span(
+            0,
+            0,
+            0,
+            &["S#"],
+            Style::new()
+                .fg(Color::Rgb { r: 0, g: 255, b: 0 })
+                .bg(Color::Rgb { r: 0, g: 0, b: 255 }),
+        )
+        .unwrap();
+        paint(&mut r, &grid);
+
+        assert!(
+            !r.pixels().contains(&GREEN),
+            "the covered cell's fallback glyph must not be drawn on a pixel backend"
+        );
+    }
+
+    #[test]
+    fn span_background_fills_the_whole_footprint() {
+        // A 16x16 sprite spanning 2x1 cells, transparent past x=8: the background must show
+        // through the transparent half, which lives in the *covered* cell.
+        let mut r = renderer_with_sprite(2, 1, 16, 16, 8, SpriteAlign::TopLeft);
+        let mut grid = Grid::new(2, 1);
+        grid.write_span(
+            0,
+            0,
+            0,
+            &["S#"],
+            Style::new().bg(Color::Rgb { r: 0, g: 0, b: 255 }),
+        )
+        .unwrap();
+        paint(&mut r, &grid);
+
+        assert_eq!(px(&r, 2, 0, 0), RED, "sprite's opaque half");
+        // The transparent half lands in the covered cell, so what shows through there is the
+        // background the anchor established -- not the renderer's default, and not a fill of the
+        // covered cell's own.
+        for y in 0..16 {
+            assert_eq!(px(&r, 2, 8, y), BLUE, "covered cell pixel (8, {y})");
+        }
+    }
+
+    #[test]
+    fn sprite_align_center_shifts_the_blit_within_the_span_box() {
+        // An 8x16 sprite centred in a 2x1 span of 8x16 cells: 8px of slack, so it starts at x=4.
+        let mut r = renderer_with_sprite(2, 1, 8, 16, 8, SpriteAlign::Center);
+        let mut grid = Grid::new(2, 1);
+        grid.write_span(
+            0,
+            0,
+            0,
+            &["S#"],
+            Style::new().bg(Color::Rgb { r: 0, g: 0, b: 255 }),
+        )
+        .unwrap();
+        paint(&mut r, &grid);
+
+        assert_eq!(px(&r, 2, 3, 0), BLUE, "left of the centred sprite");
+        assert_eq!(px(&r, 2, 4, 0), RED, "centred sprite starts at x=4");
+        assert_eq!(px(&r, 2, 11, 0), RED, "centred sprite ends at x=11");
+        assert_eq!(px(&r, 2, 12, 0), BLUE, "right of the centred sprite");
+    }
+
+    /// Regression guard for the stale-pixel half of retroglyph#412.
+    ///
+    /// The incremental repaint path only touches cells whose own tile changed, but a span's
+    /// artwork is drawn from its anchor and paints across every cell the span covers. A covered
+    /// cell's tile holds only the fallback glyph and the offset back to the anchor, so it stays
+    /// byte-identical while the anchor's artwork changes underneath it, and its pixels go stale.
+    ///
+    /// Each direction of the swap below catches one half of the fix:
+    ///
+    /// - Opaque to transparent needs the covered cell to be marked dirty *from the anchor*, or
+    ///   its background is never repainted and the old opaque pixels survive.
+    /// - Transparent to opaque needs every dirty cell's background laid down *before* any glyph,
+    ///   or the covered cell's own background fill erases the sprite the anchor spilled into it.
+    #[test]
+    fn changing_only_a_span_anchor_repaints_its_covered_cells() {
+        let opts = TilesetOptions::from_bytes(wide_and_narrow_png())
+            .tile_size(16, 16)
+            .columns(2)
+            .codepage(Codepage::Custom(vec!['S', 'T']))
+            .build()
+            .expect("valid 2-tile tileset");
+        let mut r = SoftwareBackendBuilder::new()
+            .font(retroglyph_window::font::unscii16::FONT)
+            .grid_size(2, 1)
+            .scale(1)
+            .tileset(opts)
+            .build()
+            .unwrap()
+            .run_headless()
+            .unwrap();
+
+        let bg = Style::new().bg(Color::Rgb { r: 0, g: 0, b: 255 });
+        let frame = |anchor: &str| {
+            let mut grid = Grid::new(2, 1);
+            grid.write_span(0, 0, 0, &[anchor], bg).unwrap();
+            grid
+        };
+        let wide = frame("S#");
+        let narrow = frame("T#");
+        assert_eq!(
+            wide.get_tile(0, 1, 0),
+            narrow.get_tile(0, 1, 0),
+            "this only bites while the covered cell's own tile is unchanged"
+        );
+
+        // The right half of the span is the covered cell, at x >= 8.
+        let covered_is = |r: &SoftwareRenderer, want: u32, what: &str| {
+            for y in 0..16 {
+                for x in 8..16 {
+                    assert_eq!(px(r, 2, x, y), want, "{what}: covered pixel ({x}, {y})");
+                }
+            }
+        };
+
+        paint(&mut r, &wide);
+        covered_is(&r, RED, "sanity: the wide sprite reaches the covered cell");
+
+        paint(&mut r, &narrow);
+        covered_is(&r, BLUE, "opaque to transparent left stale sprite pixels");
+
+        paint(&mut r, &wide);
+        covered_is(&r, RED, "transparent to opaque had its spill erased");
+    }
+
+    #[test]
+    fn a_span_on_layer_0_does_not_suppress_layer_1() {
+        // Coverage is per layer: a sprite on layer 0 must not blank a glyph drawn above it.
+        let mut r = renderer_with_sprite(2, 1, 16, 16, 16, SpriteAlign::TopLeft);
+        let mut grid = Grid::new(2, 1);
+        grid.write_span(0, 0, 0, &["S#"], Style::default()).unwrap();
+        grid.put_tile(
+            1,
+            1,
+            0,
+            Tile::new(
+                '\u{2588}',
+                Style::new().fg(Color::Rgb { r: 0, g: 255, b: 0 }),
+            ),
+        );
+
+        let tiles: Vec<(u8, Pos, Tile)> = (0..=1u8)
+            .flat_map(|layer| (0..2u16).map(move |x| (layer, x)))
+            .map(|(layer, x)| (layer, Pos::new(x, 0), *grid.get_tile(layer, x, 0).unwrap()))
+            .collect();
+        r.draw_layers(tiles.iter().map(|(l, pos, tile)| (*l, *pos, tile, None)))
+            .unwrap();
+
+        assert!(
+            r.pixels().contains(&GREEN),
+            "layer 1's glyph must still render over a layer 0 span"
+        );
+    }
+
+    #[test]
+    fn a_span_with_no_sprite_draws_only_its_anchor_glyph() {
+        // No tileset entry for 'X', so the anchor falls back to the bitmap font -- and the
+        // covered cells stay blank rather than each drawing their own fallback glyph.
+        let mut r = renderer_with_sprite(2, 1, 8, 16, 8, SpriteAlign::TopLeft);
+        let mut grid = Grid::new(2, 1);
+        grid.write_span(
+            0,
+            0,
+            0,
+            &["\u{2588}\u{2588}"],
+            Style::new().fg(Color::Rgb { r: 0, g: 255, b: 0 }),
+        )
+        .unwrap();
+        paint(&mut r, &grid);
+
+        assert_eq!(px(&r, 2, 0, 0), GREEN, "the anchor's own glyph still draws");
+        assert_ne!(px(&r, 2, 8, 0), GREEN, "the covered cell's glyph does not");
     }
 }
