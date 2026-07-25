@@ -50,6 +50,8 @@ mod error;
 mod glyphs;
 mod renderer;
 mod shaders;
+#[cfg(feature = "tilesets")]
+mod sprites;
 
 // Headless offscreen render tests: create an EGL surfaceless context, run the real pipeline into an
 // FBO, and read the pixels back to assert on them (issue #376). Linux/EGL only -- see the module
@@ -92,6 +94,8 @@ use retroglyph_core::tile::Tile;
 use retroglyph_window::palette::{DEFAULT_BG, DEFAULT_FG};
 use retroglyph_window::{CellGeometry, Presenter, WindowHandle};
 use shaders::GlslFlavor;
+#[cfg(feature = "tilesets")]
+use sprites::{SpriteInstance, SpriteSet};
 use std::sync::Arc;
 
 // Compile the crate README's code blocks as doctests so the quick start can't silently rot.
@@ -129,6 +133,14 @@ pub struct GlRenderer {
     /// (see [`present`](Presenter::present)). Rebuilt each frame by [`Output::draw_layers`], since
     /// this backend requests full frames. There is always at least the base layer.
     layers: Vec<Vec<Instance>>,
+    /// The decoded sprite atlas (issue #366), if a tileset was loaded. Retained so the GPU atlas
+    /// can be rebuilt after a WebGL2 context loss.
+    #[cfg(feature = "tilesets")]
+    sprite_set: Option<SpriteSet>,
+    /// Per-layer sprite instances, parallel to `layers`, rebuilt each frame by
+    /// [`Output::draw_layers`]. Empty layers (or a renderer with no tileset) carry no sprites.
+    #[cfg(feature = "tilesets")]
+    sprite_layers: Vec<Vec<SpriteInstance>>,
     /// The current surface size in physical pixels (set by [`resize_surface`](Presenter::resize_surface)).
     surface_size: (u32, u32),
     /// GL context + resources. `None` until [`init_surface`](Presenter::init_surface).
@@ -163,9 +175,20 @@ impl GlRenderer {
             geometry,
             space_glyph,
             layers,
+            #[cfg(feature = "tilesets")]
+            sprite_set: None,
+            #[cfg(feature = "tilesets")]
+            sprite_layers: Vec::new(),
             surface_size: geometry.surface_size(cols, rows),
             gpu: None,
         }
+    }
+
+    /// Attaches a decoded sprite atlas (issue #366). Called by [`GlBackendBuilder::build`] when a
+    /// tileset was registered; the GPU atlas is built later in [`build_resources`](Self::build_resources).
+    #[cfg(feature = "tilesets")]
+    pub(crate) fn set_sprites(&mut self, set: SpriteSet) {
+        self.sprite_set = Some(set);
     }
 
     /// The base-layer blank instance: space glyph, default colors, opaque default background, no
@@ -214,11 +237,19 @@ impl GlRenderer {
     ) -> Result<GlResources, SurfaceError> {
         let (w, h) = self.surface_size;
         let atlas = self.glyphs.initial_atlas();
-        let res = GlResources::new(gl, flavor, &atlas, self.cell_count())?;
+        #[cfg_attr(not(feature = "tilesets"), allow(unused_mut))]
+        let mut res = GlResources::new(gl, flavor, &atlas, self.cell_count())?;
         res.upload(gl, &self.layers[0]);
         let (cw, ch) = self.glyphs.cell_size();
         #[allow(clippy::cast_precision_loss)]
         res.set_glyph_size(gl, cw as f32, ch as f32);
+        // Build the RGBA sprite atlas + program on the same context (issue #366).
+        #[cfg(feature = "tilesets")]
+        if let Some(set) = &self.sprite_set {
+            res.attach_sprites(gl, flavor, set)?;
+            #[allow(clippy::cast_precision_loss)]
+            res.set_sprite_glyph_size(gl, cw as f32, ch as f32);
+        }
         let (cell_w, cell_h) = self.geometry.cell_size();
         res.set_projection(
             gl,
@@ -277,6 +308,7 @@ impl Output for GlRenderer {
         Ok(())
     }
 
+    #[allow(clippy::too_many_lines)]
     fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
         I: Iterator<Item = (u8, Pos, &'a Tile, Option<&'a str>)>,
@@ -303,6 +335,17 @@ impl Output for GlRenderer {
         // above, so a layer's lower neighbours are always processed first.
         let mut inherited_bg = vec![to_arr(DEFAULT_BG); cell_count];
 
+        // Sprite instances are collected per layer in lockstep with `self.layers` (issue #366):
+        // reset to just the (empty) base layer; higher layers are grown alongside `self.layers`.
+        #[cfg(feature = "tilesets")]
+        {
+            self.sprite_layers.truncate(1);
+            if self.sprite_layers.is_empty() {
+                self.sprite_layers.push(Vec::new());
+            }
+            self.sprite_layers[0].clear();
+        }
+
         let cols = usize::from(self.cols);
         let rows = usize::from(self.rows);
         for (layer_id, pos, tile, _extra) in content {
@@ -317,13 +360,41 @@ impl Output for GlRenderer {
                     Instance::new(self.space_glyph, [0; 3], [0; 3], 0, 0, 0);
                     cell_count
                 ]);
+                #[cfg(feature = "tilesets")]
+                self.sprite_layers.push(Vec::new());
             }
             let idx = y * cols + x;
+
+            // A cell whose glyph has a sprite draws the sprite instead of a bitmap glyph (issue
+            // #366); the glyph instance keeps only the background (per `resolve_bg_fill`).
+            #[cfg(feature = "tilesets")]
+            #[allow(clippy::cast_possible_truncation)]
+            let (cx, cy) = (x as u16, y as u16);
 
             if layer_id == 0 {
                 #[allow(clippy::cast_possible_truncation)]
                 let slot = self.glyphs.resolve(tile.glyph()) as u16;
                 let inst = base_instance(slot, tile);
+                #[cfg(feature = "tilesets")]
+                if let Some((layer, w, h)) =
+                    self.sprite_set.as_ref().and_then(|s| s.slot(tile.glyph()))
+                {
+                    // Keep layer 0's opaque background; drop the glyph, the sprite covers it.
+                    let sprite_inst =
+                        Instance::new(inst.glyph, inst.fg, inst.bg, 0, 0, inst.flags & FLAG_HAS_BG);
+                    inherited_bg[idx] = sprite_inst.bg;
+                    self.layers[0][idx] = sprite_inst;
+                    self.sprite_layers[0].push(SpriteInstance::new(
+                        cx,
+                        cy,
+                        layer,
+                        w,
+                        h,
+                        tile.dx(),
+                        tile.dy(),
+                    ));
+                    continue;
+                }
                 inherited_bg[idx] = inst.bg;
                 self.layers[0][idx] = inst;
                 continue;
@@ -346,6 +417,30 @@ impl Output for GlRenderer {
                 inherited_bg[idx] = resolved;
                 resolved
             };
+            #[cfg(feature = "tilesets")]
+            if let Some((layer, w, h)) = self.sprite_set.as_ref().and_then(|s| s.slot(tile.glyph()))
+            {
+                // No bitmap glyph. An occupied higher-layer sprite cell with a `Default` background
+                // paints no background (the sprite's own alpha provides coverage, so lower layers
+                // show through its transparent pixels), matching `resolve_bg_fill`'s has_sprite
+                // rule; an explicit background is still painted opaque.
+                let has_bg = if bg_color == Color::Default {
+                    0
+                } else {
+                    FLAG_HAS_BG
+                };
+                self.layers[l][idx] = Instance::new(glyph, fg, bg, 0, 0, has_bg);
+                self.sprite_layers[l].push(SpriteInstance::new(
+                    cx,
+                    cy,
+                    layer,
+                    w,
+                    h,
+                    tile.dx(),
+                    tile.dy(),
+                ));
+                continue;
+            }
             self.layers[l][idx] = Instance::new(
                 glyph,
                 fg,
@@ -474,9 +569,15 @@ impl Presenter for GlRenderer {
         // already holds the whole current frame.
         gpu.res.clear(&gpu.ctx.gl);
         #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
-        for layer in &self.layers {
-            gpu.res.upload(&gpu.ctx.gl, layer);
+        for l in 0..self.layers.len() {
+            gpu.res.upload(&gpu.ctx.gl, &self.layers[l]);
             gpu.res.draw_layer(&gpu.ctx.gl, cell_count as i32);
+            // Sprite pass for this layer, over its glyph passes and source-over blended (issue
+            // #366). Parallel to `self.layers`; a layer with no sprite cells draws nothing.
+            #[cfg(feature = "tilesets")]
+            if let Some(sprites) = self.sprite_layers.get(l) {
+                gpu.res.draw_sprites(&gpu.ctx.gl, sprites);
+            }
         }
         gpu.ctx.present()
     }

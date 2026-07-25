@@ -1,13 +1,16 @@
 //! Configuration, builder, and error types for the GL backend.
 //!
-//! [`GlBackendBuilder`] gathers grid size, integer scale, and a [`BitmapFont`], then
-//! [`build`](GlBackendBuilder::build) produces a [`GlRenderer`]. The renderer is created without a
-//! GL context; the context and GPU resources are created lazily when the windowing loop calls
+//! [`GlBackendBuilder`] gathers grid size, integer scale, a [`BitmapFont`], and (with the
+//! `tilesets` feature) any PNG sprite tilesets, then [`build`](GlBackendBuilder::build) produces a
+//! [`GlRenderer`]. The renderer is created without a GL context; the context and GPU resources are
+//! created lazily when the windowing loop calls
 //! [`Presenter::init_surface`](retroglyph_window::Presenter::init_surface).
 
 use crate::GlRenderer;
 use crate::glyphs::GlyphCache;
 use retroglyph_window::font::BitmapFont;
+#[cfg(feature = "tilesets")]
+use retroglyph_window::tileset::TilesetOptions;
 use std::fmt;
 
 /// Errors from configuring the GL backend.
@@ -19,6 +22,9 @@ pub enum GlBackendError {
     ZeroScale,
     /// The grid was configured with a zero column or row count.
     ZeroGrid,
+    /// A registered tileset failed to decode (issue #366).
+    #[cfg(feature = "tilesets")]
+    Tileset(retroglyph_window::tileset::TilesetError),
 }
 
 impl fmt::Display for GlBackendError {
@@ -31,6 +37,8 @@ impl fmt::Display for GlBackendError {
             ),
             Self::ZeroScale => write!(f, "scale must be non-zero"),
             Self::ZeroGrid => write!(f, "grid columns and rows must both be non-zero"),
+            #[cfg(feature = "tilesets")]
+            Self::Tileset(e) => write!(f, "tileset error: {e}"),
         }
     }
 }
@@ -56,6 +64,9 @@ impl std::error::Error for GlBackendError {}
 #[derive(Debug, Clone)]
 pub struct GlBackendBuilder {
     font: Option<BitmapFont>,
+    /// Registered tilesets, decoded into a sprite atlas at [`build`](Self::build) time (issue #366).
+    #[cfg(feature = "tilesets")]
+    tilesets: Vec<TilesetOptions>,
     cols: u16,
     rows: u16,
     scale: u16,
@@ -74,6 +85,8 @@ impl GlBackendBuilder {
     pub const fn new() -> Self {
         Self {
             font: None,
+            #[cfg(feature = "tilesets")]
+            tilesets: Vec::new(),
             cols: 80,
             rows: 25,
             scale: 1,
@@ -102,6 +115,18 @@ impl GlBackendBuilder {
         self
     }
 
+    /// Registers a PNG sprite tileset (issue #366). Glyphs a tileset maps override the bitmap font
+    /// for those codepoints; register multiple and later ones win on codepoint collision. Build
+    /// the options with [`TilesetOptions::from_bytes`](retroglyph_window::tileset::TilesetOptions::from_bytes).
+    ///
+    /// Available only with the `tilesets` feature.
+    #[cfg(feature = "tilesets")]
+    #[must_use]
+    pub fn tileset(mut self, opts: TilesetOptions) -> Self {
+        self.tilesets.push(opts);
+        self
+    }
+
     /// Builds the [`GlRenderer`].
     ///
     /// The renderer holds no GL context yet; the context is created when the windowing loop calls
@@ -120,7 +145,19 @@ impl GlBackendBuilder {
             return Err(GlBackendError::ZeroGrid);
         }
         let glyphs = GlyphCache::bitmap(self.resolve_font()?);
-        Ok(GlRenderer::new(glyphs, self.cols, self.rows, self.scale))
+        #[cfg_attr(not(feature = "tilesets"), allow(unused_mut))]
+        let mut renderer = GlRenderer::new(glyphs, self.cols, self.rows, self.scale);
+        #[cfg(feature = "tilesets")]
+        {
+            let mut cache = retroglyph_window::sprite_cache::SpriteCache::new();
+            for opts in &self.tilesets {
+                cache.load(opts).map_err(GlBackendError::Tileset)?;
+            }
+            if let Some(set) = crate::sprites::SpriteSet::from_cache(&cache) {
+                renderer.set_sprites(set);
+            }
+        }
+        Ok(renderer)
     }
 
     /// Resolves the font: the explicitly set one, else the embedded default (if the feature is on),

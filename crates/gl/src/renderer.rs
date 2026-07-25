@@ -14,6 +14,8 @@
 use crate::atlas::{ATLAS_COLS, ATLAS_ROWS, AtlasData};
 use crate::error::SurfaceError;
 use crate::shaders::{GlslFlavor, Shader, source};
+#[cfg(feature = "tilesets")]
+use crate::sprites::{SpriteInstance, SpriteSet};
 use glow::HasContext as _;
 
 /// Per-cell instance data, tightly packed to 16 bytes and uploaded straight to the GPU.
@@ -113,6 +115,10 @@ pub(crate) struct GlResources {
     index_buffer: glow::Buffer,
     instance_vbo: glow::Buffer,
     atlas: glow::Texture,
+    /// The RGBA sprite atlas + its own program/VAO/instances (issue #366); `None` unless a tileset
+    /// was loaded.
+    #[cfg(feature = "tilesets")]
+    sprites: Option<SpriteGpu>,
     u_screen: Option<glow::UniformLocation>,
     u_cell: Option<glow::UniformLocation>,
     u_cols: Option<glow::UniformLocation>,
@@ -207,6 +213,8 @@ impl GlResources {
                 index_buffer,
                 instance_vbo,
                 atlas: atlas_tex,
+                #[cfg(feature = "tilesets")]
+                sprites: None,
                 u_screen,
                 u_cell,
                 u_cols,
@@ -301,6 +309,10 @@ impl GlResources {
             gl.uniform_2_f32(self.u_cell.as_ref(), cell_w, cell_h);
             gl.uniform_1_i32(self.u_cols.as_ref(), cols);
         }
+        #[cfg(feature = "tilesets")]
+        if let Some(sprites) = &self.sprites {
+            sprites.set_projection(gl, screen_w, screen_h, cell_w, cell_h);
+        }
     }
 
     /// Clears the framebuffer to opaque black. Call once per frame before compositing layers with
@@ -379,14 +391,66 @@ impl GlResources {
             gl.delete_buffer(self.instance_vbo);
             gl.delete_texture(self.atlas);
         }
+        #[cfg(feature = "tilesets")]
+        if let Some(sprites) = &self.sprites {
+            sprites.delete(gl);
+        }
+    }
+
+    /// Sets the glyph size on the sprite program too (issue #366), so a sprite cell's `dx`/`dy`
+    /// pixel offset scales correctly. No-op without a sprite atlas.
+    #[cfg(feature = "tilesets")]
+    pub(crate) fn set_sprite_glyph_size(&self, gl: &glow::Context, glyph_w: f32, glyph_h: f32) {
+        if let Some(sprites) = &self.sprites {
+            sprites.set_glyph_size(gl, glyph_w, glyph_h);
+        }
+    }
+
+    /// Builds the RGBA sprite atlas + program from `set` and attaches it, reusing the shared quad
+    /// and index buffers (issue #366).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SurfaceError::Init`] if the sprite program or atlas texture can't be created.
+    #[cfg(feature = "tilesets")]
+    pub(crate) fn attach_sprites(
+        &mut self,
+        gl: &glow::Context,
+        flavor: GlslFlavor,
+        set: &SpriteSet,
+    ) -> Result<(), SurfaceError> {
+        // SAFETY: `gl` is the live context these resources belong to; `SpriteGpu::new` only issues
+        // GL calls against it, matching every other resource-creation path in this module.
+        let sprites = unsafe { SpriteGpu::new(gl, flavor, self.quad_vbo, set)? };
+        self.sprites = Some(sprites);
+        Ok(())
+    }
+
+    /// Uploads and draws one layer's sprite instances over the glyph passes, source-over blended
+    /// (issue #366). No-op without a sprite atlas or with no sprite cells on the layer.
+    #[cfg(feature = "tilesets")]
+    pub(crate) fn draw_sprites(&mut self, gl: &glow::Context, instances: &[SpriteInstance]) {
+        if let Some(sprites) = &mut self.sprites {
+            sprites.draw(gl, instances);
+        }
     }
 }
 
-/// Compiles both stages and links the program, returning a descriptive [`SurfaceError::Init`] on
-/// any compile/link failure (with the GL info log).
+/// Compiles the glyph program (its vertex + fragment stages).
 unsafe fn build_program(
     gl: &glow::Context,
     flavor: GlslFlavor,
+) -> Result<glow::Program, SurfaceError> {
+    unsafe { build_program_stages(gl, flavor, Shader::Vertex, Shader::Fragment) }
+}
+
+/// Compiles the given vertex + fragment stages and links the program, returning a descriptive
+/// [`SurfaceError::Init`] on any compile/link failure (with the GL info log).
+unsafe fn build_program_stages(
+    gl: &glow::Context,
+    flavor: GlslFlavor,
+    vs: Shader,
+    fs: Shader,
 ) -> Result<glow::Program, SurfaceError> {
     unsafe {
         let program = gl
@@ -394,8 +458,8 @@ unsafe fn build_program(
             .map_err(|e| SurfaceError::Init(format!("create program: {e}")))?;
 
         let stages = [
-            (glow::VERTEX_SHADER, source(flavor, Shader::Vertex)),
-            (glow::FRAGMENT_SHADER, source(flavor, Shader::Fragment)),
+            (glow::VERTEX_SHADER, source(flavor, vs)),
+            (glow::FRAGMENT_SHADER, source(flavor, fs)),
         ];
         let mut compiled = Vec::with_capacity(stages.len());
         for (stage, src) in stages {
@@ -490,6 +554,217 @@ const fn bytemuck_u16(data: &[u16]) -> &[u8] {
     // SAFETY: `u16` has no invalid bit patterns and no padding; the byte view covers exactly the
     // slice's bytes.
     unsafe { core::slice::from_raw_parts(data.as_ptr().cast::<u8>(), size_of_val(data)) }
+}
+
+/// Byte stride of one [`SpriteInstance`], as GL wants it (`i32`).
+#[cfg(feature = "tilesets")]
+const SPRITE_STRIDE: i32 = 16;
+
+/// Initial sprite-instance buffer capacity, in sprites. `draw` grows it when a layer needs more.
+#[cfg(feature = "tilesets")]
+const INITIAL_SPRITES: usize = 64;
+
+/// The RGBA sprite atlas plus its own program, VAO, and instance buffer (issue #366). Shares
+/// [`GlResources`]'s quad and index buffers; owns everything else.
+#[cfg(feature = "tilesets")]
+struct SpriteGpu {
+    program: glow::Program,
+    vao: glow::VertexArray,
+    instance_vbo: glow::Buffer,
+    atlas: glow::Texture,
+    u_screen: Option<glow::UniformLocation>,
+    u_cell: Option<glow::UniformLocation>,
+    u_glyph: Option<glow::UniformLocation>,
+    u_sprites: Option<glow::UniformLocation>,
+    /// Instance-buffer capacity in sprites (grows as layers need more sprite cells).
+    capacity: usize,
+}
+
+#[cfg(feature = "tilesets")]
+impl SpriteGpu {
+    #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+    unsafe fn new(
+        gl: &glow::Context,
+        flavor: GlslFlavor,
+        quad_vbo: glow::Buffer,
+        set: &SpriteSet,
+    ) -> Result<Self, SurfaceError> {
+        unsafe {
+            let program =
+                build_program_stages(gl, flavor, Shader::SpriteVertex, Shader::SpriteFragment)?;
+
+            let vao = gl
+                .create_vertex_array()
+                .map_err(|e| SurfaceError::Init(format!("create sprite VAO: {e}")))?;
+            gl.bind_vertex_array(Some(vao));
+
+            // Shared unit-quad geometry (attribute 0, divisor 0). Drawn as a triangle strip, so no
+            // index buffer is needed.
+            gl.bind_buffer(glow::ARRAY_BUFFER, Some(quad_vbo));
+            gl.vertex_attrib_pointer_f32(0, 2, glow::FLOAT, false, 8, 0);
+            gl.enable_vertex_attrib_array(0);
+
+            let instance_vbo = gl
+                .create_buffer()
+                .map_err(|e| SurfaceError::Init(format!("create sprite instance VBO: {e}")))?;
+            gl.bind_buffer(glow::ARRAY_BUFFER, Some(instance_vbo));
+            // Pre-allocate a small data store before configuring the attribs (matching the glyph
+            // instance buffer), so the VAO records a real buffer binding; `draw` grows it as needed.
+            gl.buffer_data_size(
+                glow::ARRAY_BUFFER,
+                (INITIAL_SPRITES * SPRITE_STRIDE as usize) as i32,
+                glow::DYNAMIC_DRAW,
+            );
+            // a_cell (2 u16 @0), a_layer (1 u16 @4), a_sprite (2 u16 @6), a_offset (2 i16 @10).
+            gl.vertex_attrib_pointer_i32(1, 2, glow::UNSIGNED_SHORT, SPRITE_STRIDE, 0);
+            gl.enable_vertex_attrib_array(1);
+            gl.vertex_attrib_divisor(1, 1);
+            gl.vertex_attrib_pointer_i32(2, 1, glow::UNSIGNED_SHORT, SPRITE_STRIDE, 4);
+            gl.enable_vertex_attrib_array(2);
+            gl.vertex_attrib_divisor(2, 1);
+            gl.vertex_attrib_pointer_i32(3, 2, glow::UNSIGNED_SHORT, SPRITE_STRIDE, 6);
+            gl.enable_vertex_attrib_array(3);
+            gl.vertex_attrib_divisor(3, 1);
+            gl.vertex_attrib_pointer_i32(4, 2, glow::SHORT, SPRITE_STRIDE, 10);
+            gl.enable_vertex_attrib_array(4);
+            gl.vertex_attrib_divisor(4, 1);
+            gl.bind_vertex_array(None);
+
+            let atlas = upload_sprite_atlas(gl, set)?;
+
+            let u_screen = gl.get_uniform_location(program, "u_screen");
+            let u_cell = gl.get_uniform_location(program, "u_cell");
+            let u_glyph = gl.get_uniform_location(program, "u_glyph");
+            let u_sprite_tex = gl.get_uniform_location(program, "u_sprite_tex");
+            let u_sprites = gl.get_uniform_location(program, "u_sprites");
+
+            // The atlas layer size is fixed for the renderer's life, so set it once.
+            let (tw, th) = set.tex_size();
+            gl.use_program(Some(program));
+            #[allow(clippy::cast_precision_loss)]
+            gl.uniform_2_f32(u_sprite_tex.as_ref(), tw as f32, th as f32);
+
+            Ok(Self {
+                program,
+                vao,
+                instance_vbo,
+                atlas,
+                u_screen,
+                u_cell,
+                u_glyph,
+                u_sprites,
+                capacity: INITIAL_SPRITES,
+            })
+        }
+    }
+
+    fn set_projection(&self, gl: &glow::Context, sw: f32, sh: f32, cw: f32, ch: f32) {
+        unsafe {
+            gl.use_program(Some(self.program));
+            gl.uniform_2_f32(self.u_screen.as_ref(), sw, sh);
+            gl.uniform_2_f32(self.u_cell.as_ref(), cw, ch);
+        }
+    }
+
+    fn set_glyph_size(&self, gl: &glow::Context, gw: f32, gh: f32) {
+        unsafe {
+            gl.use_program(Some(self.program));
+            gl.uniform_2_f32(self.u_glyph.as_ref(), gw, gh);
+        }
+    }
+
+    #[allow(clippy::cast_possible_wrap, clippy::cast_possible_truncation)]
+    fn draw(&mut self, gl: &glow::Context, instances: &[SpriteInstance]) {
+        if instances.is_empty() {
+            return;
+        }
+        unsafe {
+            gl.use_program(Some(self.program));
+            gl.active_texture(glow::TEXTURE0);
+            gl.bind_texture(glow::TEXTURE_2D_ARRAY, Some(self.atlas));
+            gl.uniform_1_i32(self.u_sprites.as_ref(), 0);
+            gl.bind_vertex_array(Some(self.vao));
+            gl.bind_buffer(glow::ARRAY_BUFFER, Some(self.instance_vbo));
+            let bytes = sprite_instances_as_bytes(instances);
+            if instances.len() > self.capacity {
+                gl.buffer_data_u8_slice(glow::ARRAY_BUFFER, bytes, glow::DYNAMIC_DRAW);
+                self.capacity = instances.len();
+            } else {
+                gl.buffer_sub_data_u8_slice(glow::ARRAY_BUFFER, 0, bytes);
+            }
+
+            // Source-over blend so a sprite's transparent pixels reveal what's beneath; keep the
+            // framebuffer alpha at 1 (`ONE`/`ONE_MINUS_SRC_ALPHA`) so the surface stays opaque.
+            gl.enable(glow::BLEND);
+            gl.blend_func_separate(
+                glow::SRC_ALPHA,
+                glow::ONE_MINUS_SRC_ALPHA,
+                glow::ONE,
+                glow::ONE_MINUS_SRC_ALPHA,
+            );
+            // The quad corners are in triangle-strip order (TL, TR, BL, BR), so draw the sprite
+            // quads without an index buffer.
+            gl.draw_arrays_instanced(glow::TRIANGLE_STRIP, 0, 4, instances.len() as i32);
+            gl.disable(glow::BLEND);
+            gl.bind_vertex_array(None);
+        }
+    }
+
+    fn delete(&self, gl: &glow::Context) {
+        unsafe {
+            gl.delete_program(self.program);
+            gl.delete_vertex_array(self.vao);
+            gl.delete_buffer(self.instance_vbo);
+            gl.delete_texture(self.atlas);
+        }
+    }
+}
+
+/// Reinterprets a [`SpriteInstance`] slice as bytes for `buffer_data`.
+#[cfg(feature = "tilesets")]
+const fn sprite_instances_as_bytes(data: &[SpriteInstance]) -> &[u8] {
+    // SAFETY: `SpriteInstance` is `#[repr(C)]`, all-integer, no padding beyond the explicit field;
+    // the byte view covers exactly the slice's bytes.
+    unsafe { core::slice::from_raw_parts(data.as_ptr().cast::<u8>(), size_of_val(data)) }
+}
+
+/// Uploads the RGBA sprite atlas as an `RGBA8` `TEXTURE_2D_ARRAY` with `NEAREST` filtering and
+/// `CLAMP_TO_EDGE` wrapping (issue #366).
+#[cfg(feature = "tilesets")]
+#[allow(clippy::cast_possible_wrap)]
+unsafe fn upload_sprite_atlas(
+    gl: &glow::Context,
+    set: &SpriteSet,
+) -> Result<glow::Texture, SurfaceError> {
+    unsafe {
+        let tex = gl
+            .create_texture()
+            .map_err(|e| SurfaceError::Init(format!("create sprite atlas texture: {e}")))?;
+        gl.bind_texture(glow::TEXTURE_2D_ARRAY, Some(tex));
+        gl.pixel_store_i32(glow::UNPACK_ALIGNMENT, 1);
+        let (tw, th) = set.tex_size();
+        gl.tex_image_3d(
+            glow::TEXTURE_2D_ARRAY,
+            0,
+            glow::RGBA8 as i32,
+            tw as i32,
+            th as i32,
+            set.layers() as i32,
+            0,
+            glow::RGBA,
+            glow::UNSIGNED_BYTE,
+            glow::PixelUnpackData::Slice(Some(set.rgba())),
+        );
+        for (param, value) in [
+            (glow::TEXTURE_MIN_FILTER, glow::NEAREST),
+            (glow::TEXTURE_MAG_FILTER, glow::NEAREST),
+            (glow::TEXTURE_WRAP_S, glow::CLAMP_TO_EDGE),
+            (glow::TEXTURE_WRAP_T, glow::CLAMP_TO_EDGE),
+        ] {
+            gl.tex_parameter_i32(glow::TEXTURE_2D_ARRAY, param, value as i32);
+        }
+        Ok(tex)
+    }
 }
 
 #[cfg(test)]

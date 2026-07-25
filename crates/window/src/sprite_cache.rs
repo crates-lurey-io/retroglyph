@@ -56,6 +56,21 @@ impl SpriteCache {
         self.sprites.get(&ch)
     }
 
+    /// Iterates every registered `(codepoint, sprite)` in codepoint order.
+    ///
+    /// Used by GPU backends to build a sprite atlas from the whole decoded set (the software
+    /// backend only ever needs per-glyph [`get`](Self::get) at blit time).
+    #[must_use]
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = (char, &Sprite)> {
+        self.sprites.iter().map(|(&ch, sprite)| (ch, sprite))
+    }
+
+    /// Whether any sprite is registered.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.sprites.is_empty()
+    }
+
     /// Loads a tileset, decoding the PNG and inserting all sprites.
     ///
     /// On codepoint collision, the new sprite replaces the old one and a

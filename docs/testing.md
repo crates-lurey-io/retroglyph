@@ -63,6 +63,15 @@ lifting the 256-layer cap). The bundled Unscii 16 font is 256 glyphs, so it stay
 slot -> `(layer, column, row)` addressing that would span layers is covered by `src/atlas.rs` unit
 tests, and the within-layer sub-rect sampling is exercised by every bitmap render test above.
 
+Sprite/tileset rendering (issue #366, `tilesets` feature) has a matching pair:
+`sprite_cells_render_their_tileset_colors` in both `src/headless.rs` (Linux llvmpipe) and
+`src/webgl_smoke.rs` (browser SwiftShader) builds a renderer from a tiny in-memory 2-tile PNG (red
+and green tiles), draws them through `draw_layers`, and asserts each cell is its tile's color --
+exercising the RGBA sprite atlas upload, the second (source-over) sprite pass, and the per-cell
+glyph -> sprite dispatch. The Linux and browser gl jobs both build with `--features tilesets`. Note
+the browser harness asserts `glGetError` is clear after the draw passes, which is what first caught
+the signed/unsigned vertex-attribute mismatch that SwiftShader rejects.
+
 `crates/gl/src/webgl_recovery.rs` is the companion context-loss test (issue #373). It drives the
 real windowed path (`Presenter::init_surface` then `present`), forces a lost/restored cycle with the
 `WEBGL_lose_context` extension, and asserts `present()` reports the recoverable error while lost and
