@@ -35,7 +35,7 @@ known-good software stack; with the flag set, a missing/broken context is a hard
 a silent skip. To run them locally, set `RETROGLYPH_REQUIRE_GL=1` on a Linux box with a headless
 GL/EGL stack.
 
-### WebGL2 browser render test (issue #370)
+### WebGL2 browser render + recovery tests (issues #370, #373)
 
 `crates/gl/src/webgl_smoke.rs` is the browser sibling of `headless.rs`: a `wasm-bindgen-test` that
 builds a WebGL2 context from a `<canvas>`, runs the same `GlRenderer::build_resources` + instanced
@@ -48,6 +48,15 @@ launches Chrome with `--enable-unsafe-swiftshader` for a software WebGL2 stack. 
 runs it; the `compile-wasm-gl` job stays as the fast build-only check. Locally, a Chrome that lags
 the latest stable needs a matching chromedriver (a major-version skew makes the WebDriver session
 fail to start).
+
+`crates/gl/src/webgl_recovery.rs` is the companion context-loss test (issue #373). It drives the
+real windowed path (`Presenter::init_surface` then `present`), forces a lost/restored cycle with the
+`WEBGL_lose_context` extension, and asserts `present()` reports the recoverable error while lost and
+then renders the full-block cell correctly again after the restore -- which only holds if the
+invalidated program/atlas/buffers were rebuilt on the live context. It runs under the same
+`just test-wasm-gl` / `test-wasm-gl` CI job (both tests are in the crate, so `wasm-pack test` runs
+them together). The `WEBGL_lose_context` extension is implemented by the browser, not the GL driver,
+so it works under SwiftShader.
 
 ## Snapshot tests (insta)
 

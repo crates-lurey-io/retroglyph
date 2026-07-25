@@ -57,6 +57,12 @@ mod headless;
 #[cfg(all(test, target_arch = "wasm32", feature = "default-font"))]
 mod webgl_smoke;
 
+// Live WebGL2 context-loss recovery test (issue #373): forces a real lost/restored cycle via the
+// `WEBGL_lose_context` extension and asserts the pipeline rebuilds and renders again. Same gating
+// and `just test-wasm-gl` runner as `webgl_smoke`.
+#[cfg(all(test, target_arch = "wasm32", feature = "default-font"))]
+mod webgl_recovery;
+
 // Platform-specific GL context, swapped by target. Both expose the same `GlContext` API (see the
 // module docs), the same pattern `retroglyph-software` uses for its window surface.
 #[cfg(not(target_arch = "wasm32"))]
@@ -353,6 +359,31 @@ impl Presenter for GlRenderer {
         let (w, h) = self.surface_size;
         let (cell_w, cell_h) = self.geometry.cell_size();
         let (cell_w, cell_h) = (cell_w as f32, cell_h as f32);
+
+        // WebGL2 context-loss recovery (issue #373): if the context was lost and has since been
+        // restored, every GL object (program, buffers, atlas texture) was invalidated, so rebuild
+        // them on the now-live context before drawing. `build_resources` re-uploads the full
+        // instance array, so the dirty range is cleared. Always a no-op on native, where
+        // `take_needs_rebuild` is `const false`. Taken out of `self.gpu` for the rebuild so
+        // `build_resources`' `&self` borrow doesn't overlap the `&mut self.gpu` one.
+        if self
+            .gpu
+            .as_ref()
+            .is_some_and(|gpu| gpu.ctx.take_needs_rebuild())
+        {
+            let mut gpu = self.gpu.take().expect("is_some_and matched above");
+            match self.build_resources(&gpu.ctx.gl, gpu.ctx.flavor()) {
+                Ok(res) => {
+                    gpu.res = res;
+                    self.dirty = DirtyRange::EMPTY;
+                    self.gpu = Some(gpu);
+                }
+                Err(e) => {
+                    self.gpu = Some(gpu);
+                    return Err(e);
+                }
+            }
+        }
 
         // Split borrow: `gpu` borrows `self.gpu`, while `self.instances`/`self.dirty` are disjoint
         // fields, so direct field access to them stays legal below.
