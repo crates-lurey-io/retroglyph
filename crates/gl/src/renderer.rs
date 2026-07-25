@@ -11,7 +11,7 @@
 // idiomatic GL code, so they're allowed crate-locally here.
 #![allow(clippy::redundant_pub_crate)]
 
-use crate::atlas::AtlasData;
+use crate::atlas::{ATLAS_COLS, ATLAS_ROWS, AtlasData, AtlasGeometry};
 use crate::error::SurfaceError;
 use crate::shaders::{GlslFlavor, Shader, source};
 use glow::HasContext as _;
@@ -113,6 +113,8 @@ pub(crate) struct GlResources {
     index_buffer: glow::Buffer,
     instance_vbo: glow::Buffer,
     atlas: glow::Texture,
+    /// The grid packing of the atlas texture, for per-glyph `texSubImage3D` uploads.
+    atlas_geometry: AtlasGeometry,
     u_screen: Option<glow::UniformLocation>,
     u_cell: Option<glow::UniformLocation>,
     u_cols: Option<glow::UniformLocation>,
@@ -193,6 +195,13 @@ impl GlResources {
             let u_glyph = gl.get_uniform_location(program, "u_glyph");
             let u_draw_glyph = gl.get_uniform_location(program, "u_draw_glyph");
 
+            // The atlas grid packing is fixed, so set its uniforms once here.
+            let u_atlas_cols = gl.get_uniform_location(program, "u_atlas_cols");
+            let u_atlas_rows = gl.get_uniform_location(program, "u_atlas_rows");
+            gl.use_program(Some(program));
+            gl.uniform_1_i32(u_atlas_cols.as_ref(), ATLAS_COLS as i32);
+            gl.uniform_1_i32(u_atlas_rows.as_ref(), ATLAS_ROWS as i32);
+
             Ok(Self {
                 program,
                 vao,
@@ -200,6 +209,7 @@ impl GlResources {
                 index_buffer,
                 instance_vbo,
                 atlas: atlas_tex,
+                atlas_geometry: atlas.geometry,
                 u_screen,
                 u_cell,
                 u_cols,
@@ -362,6 +372,34 @@ impl GlResources {
         self.capacity
     }
 
+    /// Uploads one glyph's `cell_w * cell_h` coverage bytes into its atlas slot via
+    /// `texSubImage3D` (the dynamic-atlas path, issue #367). `coverage` is row-major, top row
+    /// first, matching the initial atlas build.
+    #[allow(clippy::cast_possible_wrap)]
+    pub(crate) fn upload_glyph(&self, gl: &glow::Context, slot: u32, coverage: &[u8]) {
+        let g = self.atlas_geometry;
+        debug_assert_eq!(coverage.len(), (g.cell_w * g.cell_h) as usize);
+        let (layer, _, _) = AtlasGeometry::locate(slot);
+        let (ox, oy) = g.cell_origin(slot);
+        unsafe {
+            gl.bind_texture(glow::TEXTURE_2D_ARRAY, Some(self.atlas));
+            gl.pixel_store_i32(glow::UNPACK_ALIGNMENT, 1);
+            gl.tex_sub_image_3d(
+                glow::TEXTURE_2D_ARRAY,
+                0,
+                ox as i32,
+                oy as i32,
+                layer as i32,
+                g.cell_w as i32,
+                g.cell_h as i32,
+                1,
+                glow::RED,
+                glow::UNSIGNED_BYTE,
+                glow::PixelUnpackData::Slice(Some(coverage)),
+            );
+        }
+    }
+
     /// Deletes every GL object. Call before dropping the context.
     pub(crate) fn delete(&self, gl: &glow::Context) {
         unsafe {
@@ -431,16 +469,17 @@ unsafe fn upload_atlas(
             .create_texture()
             .map_err(|e| SurfaceError::Init(format!("create atlas texture: {e}")))?;
         gl.bind_texture(glow::TEXTURE_2D_ARRAY, Some(tex));
-        // Glyph rows are 8px wide -> not 4-byte aligned; unpack one byte at a time.
+        // R8 rows are 1-byte-per-texel and not 4-byte aligned; unpack one byte at a time.
         gl.pixel_store_i32(glow::UNPACK_ALIGNMENT, 1);
+        let g = atlas.geometry;
         #[allow(clippy::cast_possible_wrap)]
         gl.tex_image_3d(
             glow::TEXTURE_2D_ARRAY,
             0,
             glow::R8 as i32,
-            atlas.width as i32,
-            atlas.height as i32,
-            atlas.layers as i32,
+            g.tex_w() as i32,
+            g.tex_h() as i32,
+            g.layers as i32,
             0,
             glow::RED,
             glow::UNSIGNED_BYTE,

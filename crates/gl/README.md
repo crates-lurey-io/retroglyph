@@ -3,9 +3,11 @@
 GPU rendering backend for [retroglyph](https://github.com/crates-lurey-io/retroglyph): native OpenGL
 3.3 core and browser WebGL2, from a single codebase via [`glow`](https://crates.io/crates/glow).
 
-One instanced draw call per frame (the beamterm/alacritty/xterm.js model): a unit quad is instanced
-`cols * rows` times, each instance carrying a glyph id plus foreground/background color, sampling an
-`R8` glyph atlas (`TEXTURE_2D_ARRAY`) and blending `mix(bg, fg, coverage)`.
+Instanced quads (the beamterm/alacritty/xterm.js model): a unit quad is instanced `cols * rows`
+times, each instance carrying an atlas glyph slot plus foreground/background color and sub-cell
+offset, sampling an `R8` glyph atlas (`TEXTURE_2D_ARRAY`, glyphs grid-packed into layers) and
+blending foreground over background by coverage. Grid layers are composited back-to-front on the
+GPU, two passes per layer.
 
 Implements [`retroglyph_window::Presenter`], so it drops into the same winit windowing loop as
 `retroglyph-software`. The GL context is created from the window's raw handles (native, via
@@ -20,6 +22,7 @@ use retroglyph_window::winit::{WindowConfig, run_windowed};
 let renderer = GlBackendBuilder::new()
     .grid_size(80, 25)
     .scale(2)
+    // .ttf(std::fs::read("MyFont.ttf")?, 16.0) // dynamic TrueType instead of the bitmap font
     .build()
     .expect("gl backend init failed");
 
@@ -40,12 +43,16 @@ run_windowed(config, renderer, move |term| {
 
 ## Status
 
-v1 renders a fixed CP437 bitmap-font atlas with per-cell foreground/background color. Layers are
-flattened by the core `Terminal` before they reach this backend. Sub-cell offsets (`dx`/`dy`) shift
-the glyph by whole/fractional pixels via a two-pass draw (opaque backgrounds first, then offset
-glyphs alpha-blended on top), so an offset glyph spills past its cell edge into neighbors, matching
-`retroglyph-software`. Sprites/tilesets, dynamic Unicode atlases, and GPU-side layer compositing are
-tracked as follow-ups.
+Renders either a static CP437 bitmap-font atlas or a dynamic TrueType atlas
+(`GlBackendBuilder::ttf`, via `fontdue`), with per-cell foreground/background color. The atlas
+grid-packs glyphs into `TEXTURE_2D_ARRAY` layers, so a font can exceed the 256-layer GL floor; the
+dynamic atlas rasterizes glyphs on demand into an LRU-managed cache. Grid layers are composited
+back-to-front on the GPU (occlusion + transparency matching `retroglyph-software`), rather than
+being flattened by the core `Terminal`. Sub-cell offsets (`dx`/`dy`) shift the glyph by
+whole/fractional pixels via a two-pass draw (opaque backgrounds first, then offset glyphs
+alpha-blended on top), so an offset glyph spills past its cell edge into neighbors. WebGL2 context
+loss is recovered by rebuilding GL resources (the dynamic atlas re-rasterizes its working set).
+Sprites/tilesets remain a follow-up.
 
 ## Testing
 

@@ -3,10 +3,12 @@
 //!
 //! # Architecture
 //!
-//! [`GlBackendBuilder`] holds configuration (font, grid size, integer scale) and
-//! [`build`](GlBackendBuilder::build)s a [`GlRenderer`]. The renderer maintains a CPU-side
-//! instance array (one entry per cell: glyph id + fg/bg RGB) and a GL context that is created
-//! lazily when the windowing loop calls
+//! [`GlBackendBuilder`] holds configuration (glyph source, grid size, integer scale) and
+//! [`build`](GlBackendBuilder::build)s a [`GlRenderer`]. The glyph source is either the static
+//! [`BitmapFont`] or a dynamic TrueType font ([`GlBackendBuilder::ttf`], issue #367); glyphs are
+//! grid-packed into a `TEXTURE_2D_ARRAY` atlas and addressed by a flat slot id. The renderer
+//! maintains per-layer CPU-side instance arrays (one entry per cell: glyph slot + fg/bg RGB +
+//! flags) and a GL context that is created lazily when the windowing loop calls
 //! [`Presenter::init_surface`]:
 //!
 //! ```text
@@ -45,6 +47,7 @@ pub mod config;
 
 mod atlas;
 mod error;
+mod glyphs;
 mod renderer;
 mod shaders;
 
@@ -80,6 +83,7 @@ pub use error::SurfaceError;
 pub use retroglyph_window::font::{self as font, BitmapFont};
 
 use context::GlContext;
+use glyphs::GlyphCache;
 use renderer::{FLAG_HAS_BG, FLAG_HAS_GLYPH, GlResources, Instance};
 use retroglyph_core::backend::Output;
 use retroglyph_core::color::Color;
@@ -111,13 +115,14 @@ struct ReadmeDoctests;
 /// CPU-side instance array, and [`present`](Presenter::present) is a no-op. Once the surface
 /// exists, `present` uploads changed cells and issues the single instanced draw call.
 pub struct GlRenderer {
-    font: BitmapFont,
+    /// Character-to-atlas-slot cache (static bitmap or dynamic TTF, issue #367).
+    glyphs: GlyphCache,
     cols: u16,
     rows: u16,
     /// Cell/surface pixel geometry (glyph size x scale); the single source of the `cell_size`
     /// contract, delegated to by [`Presenter::cell_size`].
     geometry: CellGeometry,
-    /// Atlas layer for the space glyph, used to initialize blank cells.
+    /// Atlas slot for the space glyph, used to initialize blank cells.
     space_glyph: u16,
     /// Per-layer instance arrays (index = grid layer id), each `cols * rows` in row-major cell
     /// order. `layers[0]` is the always-opaque base; higher layers composite over it back-to-front
@@ -138,16 +143,21 @@ struct Gpu {
 }
 
 impl GlRenderer {
-    /// Builds a renderer for the given font, grid size, and scale. Called by
+    /// Builds a renderer for the given glyph cache, grid size, and scale. Called by
     /// [`GlBackendBuilder::build`].
-    pub(crate) fn new(font: BitmapFont, cols: u16, rows: u16, scale: u16) -> Self {
-        let geometry = CellGeometry::new(font.glyph_width, font.glyph_height, scale);
-        let space_glyph = u16::from(font.char_to_index(' '));
+    ///
+    /// Glyph cells wider or taller than 255 unscaled pixels are clamped to 255 (the
+    /// [`CellGeometry`] limit); pick a TTF pixel size within that range.
+    #[allow(clippy::cast_possible_truncation)]
+    pub(crate) fn new(glyphs: GlyphCache, cols: u16, rows: u16, scale: u16) -> Self {
+        let (cell_w, cell_h) = glyphs.cell_size();
+        let geometry = CellGeometry::new(cell_w.min(255) as u8, cell_h.min(255) as u8, scale);
+        let space_glyph = glyphs.space_slot() as u16;
         let count = usize::from(cols) * usize::from(rows);
         let base = base_blank(space_glyph);
         let layers = vec![vec![base; count]];
         Self {
-            font,
+            glyphs,
             cols,
             rows,
             geometry,
@@ -165,23 +175,6 @@ impl GlRenderer {
         base_blank(self.space_glyph)
     }
 
-    /// The glyph atlas layer and resolved foreground for `tile`.
-    fn glyph_and_fg(&self, tile: &Tile) -> (u16, [u8; 3]) {
-        (
-            u16::from(self.font.char_to_index(tile.glyph())),
-            to_arr(tile.style().foreground().resolve_rgb(DEFAULT_FG)),
-        )
-    }
-
-    /// Builds the base-layer (layer 0) [`Instance`] for `tile`: the background is always opaque
-    /// (default-substituted), and the glyph is drawn only when the tile is non-empty.
-    fn base_instance(&self, tile: &Tile) -> Instance {
-        let (glyph, fg) = self.glyph_and_fg(tile);
-        let bg = to_arr(tile.style().background().resolve_rgb(DEFAULT_BG));
-        let flags = FLAG_HAS_BG | if tile.is_empty() { 0 } else { FLAG_HAS_GLYPH };
-        Instance::new(glyph, fg, bg, tile.dx(), tile.dy(), flags)
-    }
-
     /// Total cell count for the current grid.
     fn cell_count(&self) -> usize {
         usize::from(self.cols) * usize::from(self.rows)
@@ -197,7 +190,9 @@ impl GlRenderer {
             return;
         }
         let idx = y * cols + x;
-        self.layers[0][idx] = self.base_instance(tile);
+        #[allow(clippy::cast_possible_truncation)]
+        let slot = self.glyphs.resolve(tile.glyph()) as u16;
+        self.layers[0][idx] = base_instance(slot, tile);
     }
 
     /// Builds the GL resources for the current instance array on an already-current context:
@@ -218,14 +213,12 @@ impl GlRenderer {
         flavor: GlslFlavor,
     ) -> Result<GlResources, SurfaceError> {
         let (w, h) = self.surface_size;
-        let atlas = atlas::AtlasData::build(&self.font);
+        let atlas = self.glyphs.initial_atlas();
         let res = GlResources::new(gl, flavor, &atlas, self.cell_count())?;
         res.upload(gl, &self.layers[0]);
-        res.set_glyph_size(
-            gl,
-            f32::from(self.font.glyph_width),
-            f32::from(self.font.glyph_height),
-        );
+        let (cw, ch) = self.glyphs.cell_size();
+        #[allow(clippy::cast_precision_loss)]
+        res.set_glyph_size(gl, cw as f32, ch as f32);
         let (cell_w, cell_h) = self.geometry.cell_size();
         res.set_projection(
             gl,
@@ -255,6 +248,16 @@ const fn base_blank(space_glyph: u16) -> Instance {
         0,
         FLAG_HAS_BG,
     )
+}
+
+/// Builds the base-layer (layer 0) [`Instance`] for `tile` at the already-resolved atlas `slot`:
+/// the background is always opaque (default-substituted), and the glyph is drawn only when the tile
+/// is non-empty.
+const fn base_instance(slot: u16, tile: &Tile) -> Instance {
+    let fg = to_arr(tile.style().foreground().resolve_rgb(DEFAULT_FG));
+    let bg = to_arr(tile.style().background().resolve_rgb(DEFAULT_BG));
+    let flags = FLAG_HAS_BG | if tile.is_empty() { 0 } else { FLAG_HAS_GLYPH };
+    Instance::new(slot, fg, bg, tile.dx(), tile.dy(), flags)
 }
 
 // ── Output ───────────────────────────────────────────────────────────────────
@@ -318,7 +321,9 @@ impl Output for GlRenderer {
             let idx = y * cols + x;
 
             if layer_id == 0 {
-                let inst = self.base_instance(tile);
+                #[allow(clippy::cast_possible_truncation)]
+                let slot = self.glyphs.resolve(tile.glyph()) as u16;
+                let inst = base_instance(slot, tile);
                 inherited_bg[idx] = inst.bg;
                 self.layers[0][idx] = inst;
                 continue;
@@ -330,7 +335,9 @@ impl Output for GlRenderer {
             }
             // Occupied higher-layer tile: opaque background (own colour, or the inherited one when
             // the tile's background is `Default`) plus its glyph.
-            let (glyph, fg) = self.glyph_and_fg(tile);
+            #[allow(clippy::cast_possible_truncation)]
+            let glyph = self.glyphs.resolve(tile.glyph()) as u16;
+            let fg = to_arr(tile.style().foreground().resolve_rgb(DEFAULT_FG));
             let bg_color = tile.style().background();
             let bg = if bg_color == Color::Default {
                 inherited_bg[idx]
@@ -439,6 +446,10 @@ impl Presenter for GlRenderer {
                 Ok(res) => {
                     gpu.res = res;
                     self.gpu = Some(gpu);
+                    // The rebuilt atlas texture is empty; re-queue every cached dynamic glyph so
+                    // the upload pass below refills it (no-op for the static bitmap atlas, which
+                    // `build_resources` rebuilds whole).
+                    self.glyphs.requeue_all();
                 }
                 Err(e) => {
                     self.gpu = Some(gpu);
@@ -462,6 +473,11 @@ impl Presenter for GlRenderer {
 
         gpu.res
             .set_projection(&gpu.ctx.gl, w as f32, h as f32, cell_w, cell_h, cols);
+        // Upload any glyphs the dynamic (TTF) atlas rasterized this frame before drawing (issue
+        // #367); empty for the static bitmap atlas.
+        for (slot, coverage) in self.glyphs.take_pending() {
+            gpu.res.upload_glyph(&gpu.ctx.gl, slot, &coverage);
+        }
         // Composite every layer back-to-front: clear once, then upload and draw each layer's
         // instances in turn (issue #368). This backend requests full frames, so `self.layers`
         // already holds the whole current frame.
@@ -512,7 +528,9 @@ mod compositing_tests {
         let inst = r.layers[0][1];
         assert_eq!(inst.dx, -3);
         assert_eq!(inst.dy, 5);
-        assert_eq!(inst.glyph, u16::from(r.font.char_to_index('A')));
+        #[allow(clippy::cast_possible_truncation)]
+        let a_slot = r.glyphs.resolve('A') as u16;
+        assert_eq!(inst.glyph, a_slot);
         // A non-empty tile on the base layer draws both its glyph and its (base) background.
         assert_eq!(inst.flags, FLAG_HAS_BG | FLAG_HAS_GLYPH);
     }

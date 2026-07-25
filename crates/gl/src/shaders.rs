@@ -6,11 +6,13 @@
 //!
 //! - A single unit quad (4 corners, 6 indices) is drawn `cols * rows` times via
 //!   `draw_elements_instanced`.
-//! - Per-instance attributes (divisor 1) carry the glyph's atlas layer, foreground/background RGB,
-//!   the sub-cell offset, and compositing flags. There is no per-instance position: the vertex
-//!   shader derives `(col, row)` from `gl_InstanceID` and a `u_cols` uniform.
-//! - The glyph atlas is a `sampler2DArray` (`R8` coverage, one layer per glyph). The fragment
-//!   shader samples coverage and blends foreground over background.
+//! - Per-instance attributes (divisor 1) carry the glyph's atlas *slot*, foreground/background
+//!   RGB, the sub-cell offset, and compositing flags. There is no per-instance position: the
+//!   vertex shader derives `(col, row)` from `gl_InstanceID` and a `u_cols` uniform.
+//! - The glyph atlas is a `sampler2DArray` (`R8` coverage) with glyphs grid-packed
+//!   `u_atlas_cols`x`u_atlas_rows` per layer (issue #367). The fragment shader unpacks the
+//!   per-instance slot id into a `(layer, column, row)` sub-rect, samples its coverage, and blends
+//!   foreground over background.
 //! - The per-instance `a_flags` bits (has-background, has-glyph) drive a `discard` in each pass, so
 //!   the same shader composites multiple grid layers back-to-front: a transparent background or an
 //!   empty glyph in a higher layer is discarded and the layer beneath shows through (issue #368).
@@ -83,6 +85,8 @@ void main() {
 const FRAGMENT_BODY: &str = r"
 uniform highp sampler2DArray u_atlas;
 uniform int u_draw_glyph; // 0 = background pass, 1 = glyph pass
+uniform int u_atlas_cols; // glyph columns packed per atlas layer
+uniform int u_atlas_rows; // glyph rows packed per atlas layer
 
 flat in uint v_glyph;
 flat in vec3 v_fg;
@@ -107,7 +111,15 @@ void main() {
         if ((v_flags & 2u) == 0u) {
             discard;
         }
-        float coverage = texture(u_atlas, vec3(v_uv, float(v_glyph))).r;
+        // The glyph id is a flat atlas slot; unpack it into a (layer, column, row) sub-rect within
+        // the grid-packed TEXTURE_2D_ARRAY (issue #367) and sample that cell with the in-cell UV.
+        uint perLayer = uint(u_atlas_cols * u_atlas_rows);
+        uint layer = v_glyph / perLayer;
+        uint within = v_glyph % perLayer;
+        float gcol = float(within % uint(u_atlas_cols));
+        float grow = float(within / uint(u_atlas_cols));
+        vec2 uv = (vec2(gcol, grow) + v_uv) / vec2(float(u_atlas_cols), float(u_atlas_rows));
+        float coverage = texture(u_atlas, vec3(uv, float(layer))).r;
         frag = vec4(v_fg, coverage);
     }
 }
