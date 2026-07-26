@@ -478,7 +478,7 @@ impl Grid {
     /// matches ASCII / CP437 maps and level/prefab strings. Wide characters are
     /// not width-adjusted.
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```
     /// use retroglyph_core::{Grid, Pos, Style, Tile};

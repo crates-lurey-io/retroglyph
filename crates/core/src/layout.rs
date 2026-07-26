@@ -166,7 +166,7 @@ fn wrap_line(line: &Line, max_width: u16) -> Vec<WrappedLine> {
 /// touching any surface, or [`render_to_surface`](TextLayout::render_to_surface) to write
 /// directly into a [`Surface`].
 ///
-/// # Example
+/// # Examples
 ///
 /// ```
 /// use retroglyph_core::layout::{TextLayout, HAlign, VAlign};
