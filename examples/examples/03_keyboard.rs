@@ -3,7 +3,7 @@
 //! [`Event::Key`]/[`KeyCode`] decode-and-echo: shows the most recently pressed key
 //! (including arrows, modifiers, and function keys) and keeps a scrolling log of the
 //! last several keys seen. A drain-events loop is the standard shape for consuming
-//! input every tick -- see [`Terminal::drain_events`].
+//! input every tick; see [`Terminal::drain_events`].
 //!
 //! ```sh
 //! cargo run --example 03_keyboard --features crossterm
@@ -11,9 +11,9 @@
 //! cargo run --example 03_keyboard  # headless fallback, prints a few frames to stdout
 //! ```
 //!
-//! Press any key to see it echoed; `q` or `Escape` quits immediately (the quitting key
-//! itself is decoded but never drawn, since the frame loop exits before the next
-//! present), or close the window.
+//! Keys: any key echoes it. `q` or `Escape` quits immediately; the quitting key itself is
+//! decoded but never drawn, since the frame loop exits before the next present. Or close the
+//! window.
 
 use retroglyph_core::event::{Event, KeyCode, KeyModifiers};
 use retroglyph_core::{Backend, Style, Terminal};

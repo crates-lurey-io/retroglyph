@@ -1,16 +1,15 @@
 //! 09: Widgets dashboard
 //!
-//! The first `retroglyph-widgets` showcase, now covering every widget in the crate: [`Table`] (a
-//! scrollable service list with a [`ListState`]-driven highlighted row), [`Tabs`] (switches the
-//! right panel between "Metrics" and "Alerts"), [`List`] (the Alerts panel, its own
-//! [`ListState`]-driven highlighted item), [`Button`] (a "Ping" button on the Metrics panel,
-//! styled from an [`Interaction`]-resolved `Response` the same way `10_widgets_interaction`
-//! demonstrates in more depth), [`Gauge`] (load-colored bars for CPU/memory), [`Sparkline`] (a
-//! recent-history graph), [`BoxStyle`] (a bordered legend box, rendered into a standalone
-//! [`Grid`] and blitted in), [`split_h`]/[`split_v`] (the whole layout), and [`Theme`] (every
-//! color in this example comes from [`Theme::DARK`], not a hand-picked one-off).
-//! `retroglyph-widgets` is backend-generic -- nothing here is software/crossterm/headless-
-//! specific -- which is the payoff of deferring it past Tier 1 rather than being blocked on it.
+//! A `retroglyph-widgets` showcase covering every widget in the crate: [`Table`] (a scrollable
+//! service list with a [`ListState`]-driven highlighted row), [`Tabs`] (switches the right panel
+//! between "Metrics" and "Alerts"), [`List`] (the Alerts panel, its own [`ListState`]-driven
+//! highlighted item), [`Button`] (a "Ping" button on the Metrics panel, styled from an
+//! [`Interaction`]-resolved `Response` the same way `10_widgets_interaction` demonstrates in
+//! more depth), [`Gauge`] (load-colored bars for CPU/memory), [`Sparkline`] (a recent-history
+//! graph), [`BoxStyle`] (a bordered legend box, rendered into a standalone [`Grid`] and blitted
+//! in), [`split_h`]/[`split_v`] (the whole layout), and [`Theme`] (every color in this example
+//! comes from [`Theme::DARK`], not a hand-picked one-off). `retroglyph-widgets` is
+//! backend-generic: nothing here is software, crossterm, or headless specific.
 //!
 //! ```sh
 //! cargo run --example 09_widgets_dashboard --features crossterm
@@ -18,9 +17,10 @@
 //! cargo run --example 09_widgets_dashboard  # headless fallback, prints a few frames to stdout
 //! ```
 //!
-//! Left/Right switches the active tab; Up/Down moves whichever list the active tab shows (the
-//! service table on "Metrics", the alert list on "Alerts"); on the Metrics tab, click (or Tab to
-//! focus, then Enter/Space) the "Ping" button; `q` or `Escape` quits, or close the window.
+//! Keys: Left/Right switches the active tab. Up/Down moves whichever list the active tab shows
+//! (the service table on "Metrics", the alert list on "Alerts"). On the Metrics tab, click (or
+//! Tab to focus, then Enter/Space) the "Ping" button. `q` or `Escape` quits, or close the
+//! window.
 
 use retroglyph_core::event::{Event, KeyCode};
 use retroglyph_core::{Backend, Frame, Rect, Style, Surface, Terminal};

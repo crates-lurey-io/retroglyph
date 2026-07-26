@@ -1,12 +1,12 @@
 //! 10: Widgets interaction
 //!
-//! [`Interaction`] (composing [`HitTester`] and [`FocusRing`] internally -- see their own doc
+//! [`Interaction`] (composing [`HitTester`] and [`FocusRing`] internally; see their own doc
 //! comments for the pieces this ties together), [`Shortcuts`] (a global keyboard binding
 //! independent of focus), [`Density`] (sizing the buttons' hit targets), and [`Button`] (the
-//! style-by-[`Response`] widget this example used to hand-roll). Pairs with `04_mouse`: that
-//! example proved raw pointer decode; this one proves what a real widget does with it -- hover,
-//! click, drag-suppressed-click, and Tab/Shift+Tab keyboard focus with Enter/Space activation,
-//! all through one [`Interaction`] context, on three [`Button`]s.
+//! style-by-[`Response`] widget). `04_mouse` proves raw pointer decode; this example shows what
+//! a real widget does with it: hover, click, drag-suppressed-click, and Tab/Shift+Tab keyboard
+//! focus with Enter/Space activation, all through one [`Interaction`] context, on three
+//! [`Button`]s.
 //!
 //! ```sh
 //! cargo run --example 10_widgets_interaction --features crossterm
@@ -14,8 +14,8 @@
 //! cargo run --example 10_widgets_interaction  # headless fallback, prints a few frames to stdout
 //! ```
 //!
-//! Click a button, or Tab to it and press Enter/Space; `r` resets the counter regardless of
-//! focus (a [`Shortcuts`] global binding); `q` or `Escape` quits, or close the window.
+//! Keys: click a button, or Tab to it and press Enter/Space. `r` resets the counter regardless
+//! of focus (a [`Shortcuts`] global binding). `q` or `Escape` quits, or close the window.
 
 use retroglyph_core::event::{Event, KeyCode, KeyModifiers};
 use retroglyph_core::{Backend, Color, Frame, Rect, Style, Surface, Terminal};

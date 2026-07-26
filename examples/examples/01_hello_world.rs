@@ -1,8 +1,8 @@
 //! 01: Hello, world!
 //!
-//! The smallest possible retroglyph example: prints "Hello, world!" centered
-//! on a 50x25 grid. The exact same `HelloWorld` implementation runs on every
-//! backend this crate is built with -- only the Cargo feature flag changes:
+//! The smallest possible retroglyph example: prints "Hello, world!" centered on a 50x25 grid.
+//! The same `HelloWorld` implementation runs on every backend this crate is built with; only
+//! the Cargo feature flag changes:
 //!
 //! ```sh
 //! cargo run --example 01_hello_world --features crossterm
@@ -10,9 +10,8 @@
 //! cargo run --example 01_hello_world  # headless fallback, prints a few frames to stdout
 //! ```
 //!
-//! Press `q` or `Escape` to quit on the interactive backends, or close the
-//! window (the windowed backend reports the close button as an [`Event`],
-//! not a forced exit -- it's up to the game to act on it).
+//! Keys: `q` or `Escape` quits on the interactive backends. Closing the window is reported as
+//! an [`Event`] rather than forcing an exit, so it's up to the example to act on it.
 
 use retroglyph_core::event::{Event, KeyCode};
 use retroglyph_core::{Backend, Style, Terminal};

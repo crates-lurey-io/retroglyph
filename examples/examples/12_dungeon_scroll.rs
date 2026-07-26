@@ -1,18 +1,17 @@
 //! 12: Dungeon scroll
 //!
-//! [`Camera`], the first example to exercise it: a scrolling viewport onto a world larger than
-//! the 50x25 screen. `Camera` is pure geometry (world/screen coordinate conversion, edge-clamped
-//! following), and this is deliberately the whole point of this example -- not a roguelike with
-//! field-of-view or pathfinding. Neither of those is a rendering capability, and neither exists
-//! in any workspace crate today; a scrolling dungeon
-//! crawl doesn't need either one to prove something real about the library, so this example
-//! skips both rather than picking a dependency for algorithms `retroglyph` was never about.
+//! [`Camera`]: a scrolling viewport onto a world larger than the 50x25 screen. `Camera` is pure
+//! geometry (world/screen coordinate conversion, edge-clamped following), and that geometry is
+//! the whole point of this example, not field-of-view or pathfinding. Neither of those is a
+//! rendering capability, neither exists in any workspace crate today, and a scrolling dungeon
+//! crawl doesn't need either one to show something real about the library, so this example
+//! skips both.
 //!
-//! The world is four hand-placed rooms joined by straight corridors (a fixed layout, like
-//! `11_sokoban`'s level -- no RNG, so every run and every snapshot is identical). Every step,
+//! The world is four hand-placed rooms joined by straight corridors, a fixed layout like
+//! `11_sokoban`'s level: no RNG, so every run and every snapshot is identical. Every step,
 //! [`Camera::center_on`] re-centers on the player (clamped at the world edges, per its own doc
 //! comment), [`Grid::blit`] copies exactly [`Camera::visible_bounds`] into the terminal at the
-//! viewport's origin, and [`Camera::world_to_screen`] places the player glyph -- the same three
+//! viewport's origin, and [`Camera::world_to_screen`] places the player glyph: the same three
 //! methods a real scrolling map would use, exercised end to end.
 //!
 //! ```sh
@@ -21,14 +20,14 @@
 //! cargo run --example 12_dungeon_scroll  # headless fallback, prints a few frames to stdout
 //! ```
 //!
-//! Arrow keys move (blocked by walls); `q`/`Escape` quits.
+//! Keys: arrow keys move, blocked by walls. `q` or `Escape` quits.
 //!
 //! Room 1 also carries four decorative floor tiles ([`decorations`]) that exercise the extended
 //! ASCII glyphs the embedded Unscii 16 font (`default-font` feature) adds on top of plain ASCII:
 //! a hut (U+2302 HOUSE), a torch (U+263C WHITE SUN WITH RAYS), a cracked rune (U+2310 REVERSED
 //! NOT SIGN), and loose rubble (U+2219 BULLET OPERATOR). All four sit in room 1, which is on
 //! screen from the very first frame, so the software backend's `png_snapshot` test alone proves
-//! they rasterize correctly -- no walk to a later room required.
+//! they rasterize correctly. No walk to a later room is required.
 
 use retroglyph_core::event::{Event, KeyCode};
 use retroglyph_core::{

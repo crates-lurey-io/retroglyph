@@ -1,17 +1,12 @@
 //! 13: Combat log
 //!
-//! Four `retroglyph-widgets` proofs Tier 2/3's earlier examples never exercised:
-//! [`StatBar`] (a health readout), [`Log`] (a scrolled-back message tail),
-//! [`Scrollbar`] (its track+thumb), and [`Modal`] (a centered end-of-game dialog). A turn-based
-//! fight against a fixed-stat goblin, deterministic on purpose (no RNG: every attack does the
-//! same damage, so every run -- and every snapshot -- plays out identically), chosen over
-//! `hex_battle` after re-checking what that would actually prove:
-//! hex-grid coordinate conversion is real algorithm work (see e.g. Red Blob Games' hex-grid
-//! reference) with no connection to any `retroglyph` API, and its other half (tileset sprites
-//! plus an ASCII fallback) just re-proves `07_sprites_tileset`/`11_sokoban`'s already-established
-//! pattern. `Scrollbar`, `Log`, `Modal`, and a stat-bar widget are shipped, proven nowhere yet,
-//! and -- per a look at what libraries like ratatui treat as must-have gallery entries -- exactly
-//! the kind of thing a real game built on this library needs.
+//! Four `retroglyph-widgets` widgets none of the earlier examples exercise: [`StatBar`] (a
+//! health readout), [`Log`] (a scrolled-back message tail), [`Scrollbar`] (its track and thumb),
+//! and [`Modal`] (a centered end-of-game dialog). A turn-based fight against a fixed-stat
+//! goblin, deterministic on purpose: every attack does the same damage, so every run, and every
+//! snapshot, plays out identically. `Scrollbar`, `Log`, `Modal`, and a stat-bar widget are the
+//! kind of thing a real game built on this library needs, and libraries like ratatui treat them
+//! as must-have gallery entries.
 //!
 //! ```sh
 //! cargo run --example 13_combat_log --features crossterm
@@ -19,8 +14,8 @@
 //! cargo run --example 13_combat_log  # headless fallback, prints a few frames to stdout
 //! ```
 //!
-//! `a` attacks; `Up`/`Down` scroll the log; `r` resets after the fight ends; `q`/`Escape` quits
-//! at any time.
+//! Keys: `a` attacks. `Up`/`Down` scroll the log. `r` resets after the fight ends. `q` or
+//! `Escape` quits at any time.
 
 use retroglyph_core::event::{Event, KeyCode};
 use retroglyph_core::text::Line;

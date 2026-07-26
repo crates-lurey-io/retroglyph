@@ -1,14 +1,13 @@
 //! 17: Theme switch
 //!
-//! Proves [`Theme::DARK`]/[`Theme::LIGHT`] runtime switching together with the `.theme()`
-//! builder method every widget in `retroglyph-widgets` now has: [`Panel`] (border+fill),
-//! [`Tabs`] (unselected/selected), [`List`] (item/selected), [`Button`] (all four interaction
-//! states, doubling as the toggle control itself), and [`ProgressBar`] (filled/empty) all
-//! re-derive their colors from whichever [`Theme`] is active on every frame -- no widget bakes
-//! in a palette of its own. This is the "manual toggle key" scenario [`Theme`]'s own doc comment
-//! names as one of several ways an app might pick between the two palettes; `09_widgets_dashboard`
-//! and `10_widgets_interaction` pick a single fixed [`Theme::DARK`] and hand-thread `theme.*`
-//! into each style knob, which is exactly the boilerplate `.theme()` replaces.
+//! Runtime switching between [`Theme::DARK`] and [`Theme::LIGHT`], using the `.theme()` builder
+//! method every widget in `retroglyph-widgets` has: [`Panel`] (border and fill), [`Tabs`]
+//! (unselected/selected), [`List`] (item/selected), [`Button`] (all four interaction states,
+//! doubling as the toggle control itself), and [`ProgressBar`] (filled/empty) all re-derive
+//! their colors from whichever [`Theme`] is active on every frame; no widget bakes in a palette
+//! of its own. `09_widgets_dashboard` and `10_widgets_interaction` pick a single fixed
+//! [`Theme::DARK`] and hand-thread `theme.*` into each style knob; `.theme()` replaces that
+//! boilerplate.
 //!
 //! ```sh
 //! cargo run --example 17_theme_switch --features crossterm
@@ -16,9 +15,9 @@
 //! cargo run --example 17_theme_switch  # headless fallback, prints a few frames to stdout
 //! ```
 //!
-//! Press `t`, or click (or Tab to it, then Enter/Space) the "Switch to ..." button, to flip the
-//! active theme; Left/Right switches tabs, Up/Down moves the list selection; `q`/`Escape` quits,
-//! or close the window.
+//! Keys: `t`, or click (or Tab to it, then Enter/Space) the "Switch to ..." button, flips the
+//! active theme. Left/Right switches tabs, Up/Down moves the list selection. `q` or `Escape`
+//! quits, or close the window.
 
 use retroglyph_core::event::{Event, KeyCode};
 use retroglyph_core::{Backend, Frame, Rect, Style, Surface, Terminal};

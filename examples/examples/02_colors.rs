@@ -1,14 +1,13 @@
 //! 02: Colors
 //!
-//! retroglyph's whole styling vocabulary: [`Style`] has exactly two knobs, `fg`
-//! and `bg`, both [`Color`]. This example lays out every `Color` variant --
-//! `Ansi` (16), `Indexed` (a sampled strip of the 256-value palette), `Rgb`
-//! (24-bit gradient), and `Default` -- plus inverse video (swapping fg/bg on
-//! the same two colors), which is the only "styled text" effect retroglyph
-//! has (no bold/italic/underline -- see [`Style`]'s doc comment for why) --
-//! plus [`Grid::blit_alpha`]'s [`BlendMode`]s: the same warm source color
-//! composited over the same cool destination color, once per mode, across
-//! 16 alpha steps, so the modes' curves are visually comparable side by side.
+//! retroglyph's whole styling vocabulary: [`Style`] has exactly two knobs, `fg` and `bg`, both
+//! [`Color`]. This example lays out every `Color` variant: `Ansi` (16), `Indexed` (a sampled
+//! strip of the 256-value palette), `Rgb` (24-bit gradient), and `Default`. It also shows
+//! inverse video (swapping fg/bg on the same two colors), the only "styled text" effect
+//! retroglyph has (no bold, italic, or underline; see [`Style`]'s doc comment for why), and
+//! [`Grid::blit_alpha`]'s [`BlendMode`]s: the same warm source color composited over the same
+//! cool destination color, once per mode, across 16 alpha steps, so the modes' curves are
+//! visually comparable side by side.
 //!
 //! ```sh
 //! cargo run --example 02_colors --features crossterm
@@ -16,7 +15,7 @@
 //! cargo run --example 02_colors  # headless fallback, prints a few frames to stdout
 //! ```
 //!
-//! Press `q` or `Escape` to quit on the interactive backends, or close the window.
+//! Keys: `q` or `Escape` quits, or close the window.
 
 use retroglyph_core::event::{Event, KeyCode};
 use retroglyph_core::text::{Line, Span};

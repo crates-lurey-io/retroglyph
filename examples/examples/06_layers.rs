@@ -1,13 +1,13 @@
 //! 06: Layers
 //!
 //! Multi-layer compositing: [`Surface::on_layer`] scopes a view over a different layer for a
-//! block of draw calls. A background fill lives on layer 0; a single glyph that steps one cell to the
-//! right each tick lives on layer 1. Layer 1's untouched cells stay the default, empty
-//! [`Tile`](retroglyph_core::Tile), which is transparent -- so the layer-0 fill shows through
-//! everywhere the moving glyph currently isn't, proving both z-order (layer 1 draws over
-//! layer 0) and transparency (an empty tile on a higher layer never occludes a lower one).
-//! [`Terminal::present`] composites every allocated layer into one frame on every backend,
-//! not just pixel ones, so this looks identical everywhere.
+//! block of draw calls. A background fill lives on layer 0; a single glyph that steps one cell
+//! to the right each tick lives on layer 1. Layer 1's untouched cells stay the default, empty
+//! [`Tile`](retroglyph_core::Tile), which is transparent, so the layer-0 fill shows through
+//! everywhere the moving glyph currently isn't. That demonstrates both z-order (layer 1 draws
+//! over layer 0) and transparency (an empty tile on a higher layer never occludes a lower one).
+//! [`Terminal::present`] composites every allocated layer into one frame on every backend, not
+//! just pixel ones, so this looks identical everywhere.
 //!
 //! ```sh
 //! cargo run --example 06_layers --features crossterm
@@ -15,13 +15,14 @@
 //! cargo run --example 06_layers  # headless fallback, prints a few frames to stdout
 //! ```
 //!
-//! The glyph advances automatically, one column every 1/[`STEP_INTERVAL_HZ`] of a second
-//! of real elapsed time (not once per raw `tick` call -- see
-//! [`FrameClock`](retroglyph_core::FrameClock)'s doc comment on why: a crossterm binary's
-//! event loop is an unthrottled spin, so counting raw ticks would blow through the whole
-//! track in microseconds instead of animating visibly), and parks at the end of its track
-//! (rather than looping forever) so the frame eventually settles into a stable,
-//! reproducible state; `q` or `Escape` quits, or close the window.
+//! The glyph advances automatically, one column every 1/[`STEP_INTERVAL_HZ`] of a second of
+//! real elapsed time, not once per raw `tick` call. See
+//! [`FrameClock`](retroglyph_core::FrameClock)'s doc comment for why: a crossterm binary's event
+//! loop is an unthrottled spin, so counting raw ticks would blow through the whole track in
+//! microseconds instead of animating visibly. The glyph parks at the end of its track rather
+//! than looping forever, so the frame eventually settles into a stable, reproducible state.
+//!
+//! Keys: `q` or `Escape` quits, or close the window.
 
 use retroglyph_core::event::{Event, KeyCode};
 use retroglyph_core::{AnsiColor, Backend, Color, Frame, FrameClock, Style, Terminal};

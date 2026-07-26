@@ -1,10 +1,9 @@
 //! 05: Layout grid
 //!
 //! Core [`Rect`] geometry: subdividing the 50x25 grid into panes by hand, with manual
-//! arithmetic only -- no `retroglyph-widgets`, whose `split_h`/`split_v`/`Constraint`/`Flex`
-//! would make this shorter. That's the point: this is the "before" baseline showing what
-//! plain `Rect` math looks like, which a later widgets example contrasts against. Each pane
-//! gets a box-drawn border and a centered label.
+//! arithmetic only. `retroglyph-widgets`'s `split_h`/`split_v`/`Constraint`/`Flex` would make
+//! this shorter, and `09_widgets_dashboard` shows that path; this example is the plain `Rect`
+//! math baseline instead. Each pane gets a box-drawn border and a centered label.
 //!
 //! ```sh
 //! cargo run --example 05_layout_grid --features crossterm
@@ -12,7 +11,7 @@
 //! cargo run --example 05_layout_grid  # headless fallback, prints a few frames to stdout
 //! ```
 //!
-//! Press `q` or `Escape` to quit on the interactive backends, or close the window.
+//! Keys: `q` or `Escape` quits, or close the window.
 
 use retroglyph_core::event::{Event, KeyCode};
 use retroglyph_core::{Backend, Rect, Style, Surface, Terminal};

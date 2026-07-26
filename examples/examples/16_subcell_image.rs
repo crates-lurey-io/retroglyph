@@ -1,12 +1,11 @@
 //! 16: Subcell image-to-glyph blit
 //!
 //! [`quantize_half_block`], [`quantize_quadrant`], and [`quantize_sextant`] posterize small
-//! blocks of raw pixels to the best-matching Unicode block-element glyph -- retroglyph's
+//! blocks of raw pixels to the best-matching Unicode block-element glyph: retroglyph's
 //! "render a raster image as text, no tileset required" utility (see `retroglyph_core::subcell`
-//! for the algorithm). This example renders the same procedural "scene" (concentric color rings,
-//! computed on the fly -- no image file, proving the "no tileset dependency" claim literally)
-//! through all three fidelities side by side, sampling more source pixels per cell as fidelity
-//! increases:
+//! for the algorithm). This example renders the same procedural scene (concentric color rings,
+//! computed on the fly, no image file) through all three fidelities side by side, sampling more
+//! source pixels per cell as fidelity increases:
 //!
 //! - **Half-block**: 1x2 pixels/cell, `' '`/`▀`/`▄`/`█` only. Coarsest, most compatible.
 //! - **Quadrant**: 2x2 pixels/cell, 16 glyphs. Double the resolution both ways.
@@ -20,7 +19,7 @@
 //! cargo run --example 16_subcell_image  # headless fallback, prints a few frames to stdout
 //! ```
 //!
-//! Press `q` or `Escape` to quit on the interactive backends, or close the window.
+//! Keys: `q` or `Escape` quits, or close the window.
 
 use retroglyph_core::event::{Event, KeyCode};
 use retroglyph_core::subcell::{Rgb, quantize_half_block, quantize_quadrant, quantize_sextant};
