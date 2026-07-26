@@ -30,6 +30,24 @@
 //! any of the eight cells counts, with no rectangle arithmetic in the
 //! example.
 //!
+//! ## Tinting one sprite into many
+//!
+//! The room has one floor sprite and one wall sprite, and every cell of the room draws the same
+//! two. A [`Tint`](retroglyph_core::Tint) recolours them per cell, so the light radius around
+//! the player is a falloff over that one pair of sprites rather than a sheet of pre-shaded
+//! variants:
+//!
+//! - [`Tint::Multiply`](retroglyph_core::Tint::Multiply) scales the room's sprites toward black
+//!   with distance from the player. Multiply preserves the artwork's own shading, which is what
+//!   makes it right for lighting.
+//! - [`Tint::Mix`](retroglyph_core::Tint::Mix) blends the chest toward white while the player
+//!   stands on it, so it reads as "press to open". Multiply can only darken, so it cannot
+//!   express a highlight at all.
+//!
+//! Both go through [`Surface::with_tint`](retroglyph_core::Surface::with_tint), which applies to
+//! sprites only. On a cell backend there is no sprite to recolour, so the room renders in its
+//! own style exactly as it did before, with no `cfg` and no capability check (retroglyph#537).
+//!
 //! Coins live on layer 1 (see `06_layers` for the layer/transparency model)
 //! over a layer-0 floor, so a coin's round, partially-transparent corners
 //! (see the sprite sheet's own pixels) are genuine alpha-blended
@@ -48,7 +66,7 @@
 //! `q` or `Escape` quits, or close the window.
 
 use retroglyph_core::event::{Event, KeyCode};
-use retroglyph_core::{Backend, Pos, Rect, Style, Terminal};
+use retroglyph_core::{Backend, Pos, Rect, Style, Terminal, Tint};
 use retroglyph_examples::Example;
 
 /// The room's interior (floor + player + coins), in grid cells. The wall
@@ -68,11 +86,34 @@ const CHEST: Pos = Pos::new(ROOM.left() + 13, ROOM.top() + 5);
 /// two tall, matching `assets/chest.png`'s 32x32 pixels against this example's 8x16 cells.
 const CHEST_ART: [&str; 2] = ["[==]", "|__|"];
 
+/// The chest's 4x2 footprint grown by one cell on every side: the area from which the player can
+/// reach it, which is what drives its highlight.
+///
+/// Reach rather than occupancy, because occupancy is unreachable as a *drawn* state: stepping
+/// onto the chest opens it on the same tick, so a highlight keyed to standing on it would never
+/// render. Highlighting the approach is also the more useful signal, since it says "you can open
+/// this" while the player can still act on it.
+///
+/// Hit-testing which cell actually *owns* the chest still goes through
+/// [`Grid::span_owner`](retroglyph_core::Grid::span_owner); this is only about drawing.
+const CHEST_REACH: Rect = Rect::new(CHEST.x - 1, CHEST.y - 1, 6, 4);
+
 /// The layer the chest and the other collectables live on.
 const ITEM_LAYER: u8 = 1;
 
 /// What opening the chest is worth, against one point per coin.
 const CHEST_SCORE: u32 = 5;
+
+/// How far the player's light reaches, in cells. Past this the room sits at [`MIN_LIGHT`].
+const LIGHT_RADIUS: u16 = 7;
+
+/// How dark an unlit cell gets, as a multiply factor.
+///
+/// Deliberately nowhere near zero. A convincing torch radius would drop the far corners to
+/// near-black, but this example's subject is sprites and multi-cell spans, and an unreadable
+/// room would obscure the thing it is actually here to show. High enough that the wall ring and
+/// the far coins stay legible, low enough that the falloff is unmistakable.
+const MIN_LIGHT: u8 = 135;
 
 /// State for the sprites example: player position (in absolute grid cells),
 /// which coins remain, and whether the chest is still shut.
@@ -98,6 +139,24 @@ impl Default for SpritesTileset {
 }
 
 impl SpritesTileset {
+    /// The light level at `pos`: a linear falloff from full brightness on the player's own cell
+    /// to [`MIN_LIGHT`] at [`LIGHT_RADIUS`] and beyond.
+    ///
+    /// Chebyshev distance (the larger of the two axis deltas) rather than Euclidean, so the lit
+    /// area is a square. On a grid whose cells are twice as tall as they are wide, a round
+    /// falloff computed in cells renders as an ellipse anyway, and the square reads as
+    /// deliberate where the ellipse reads as a bug.
+    fn light_at(&self, pos: Pos) -> Tint {
+        let dx = pos.x.abs_diff(self.player.x);
+        let dy = pos.y.abs_diff(self.player.y);
+        let dist = dx.max(dy).min(LIGHT_RADIUS);
+        let range = u32::from(255 - MIN_LIGHT);
+        let fade = range * u32::from(LIGHT_RADIUS - dist) / u32::from(LIGHT_RADIUS);
+        #[allow(clippy::cast_possible_truncation)]
+        let level = (u32::from(MIN_LIGHT) + fade) as u8;
+        Tint::multiply(level, level, level)
+    }
+
     /// Drains pending input: arrow keys move the player (clamped to the
     /// room's floor); `q`/`Escape` quits.
     ///
@@ -161,7 +220,12 @@ impl SpritesTileset {
                         || y == wall_rect.bottom() - 1
                         || x == wall_rect.left()
                         || x == wall_rect.right() - 1;
-                    layer0.put((x, y), if on_wall_ring { '#' } else { '.' }, style);
+                    let glyph = if on_wall_ring { '#' } else { '.' };
+                    // One `put` per cell either way; the tint is what makes each cell's copy of
+                    // the same sprite look different.
+                    layer0
+                        .with_tint(self.light_at(Pos::new(x, y)))
+                        .put((x, y), glyph, style);
                 }
             }
         }
@@ -172,9 +236,20 @@ impl SpritesTileset {
             let mut surface = term.surface();
             let mut layer_items = surface.on_layer(ITEM_LAYER);
             if self.chest_shut {
+                // Standing within reach of the chest highlights it. `Mix` toward white rather
+                // than a brighter multiply, because multiplying an already-lit sprite can only
+                // ever darken it.
+                let within_reach = CHEST_REACH.contains(self.player.x, self.player.y);
+                let tint = if within_reach {
+                    Tint::mix(255, 255, 255, 110)
+                } else {
+                    self.light_at(CHEST)
+                };
                 // One call for all eight cells: the anchor glyph drives the sprite lookup on pixel
-                // backends, and the whole block is readable ASCII art on cell backends.
+                // backends, and the whole block is readable ASCII art on cell backends. The tint
+                // lands on the anchor, which is the cell the sprite is drawn from.
                 layer_items
+                    .with_tint(tint)
                     .put_span((CHEST.x, CHEST.y), &CHEST_ART, style)
                     .expect("the chest art fits inside the room");
             }
@@ -199,9 +274,15 @@ impl SpritesTileset {
             let mut layer_items = surface.on_layer(ITEM_LAYER);
             for (i, &(dx, dy)) in COIN_OFFSETS.iter().enumerate() {
                 if self.coins[i] {
-                    layer_items.put((ROOM.left() + dx, ROOM.top() + dy), '$', style);
+                    let pos = Pos::new(ROOM.left() + dx, ROOM.top() + dy);
+                    // Coins take the same falloff as the floor beneath them, so a distant one
+                    // dims with its surroundings instead of floating in the dark.
+                    layer_items
+                        .with_tint(self.light_at(pos))
+                        .put(pos, '$', style);
                 }
             }
+            // The player is always on their own cell, so their light is always full.
             layer_items.put((self.player.x, self.player.y), '@', style);
         }
 
