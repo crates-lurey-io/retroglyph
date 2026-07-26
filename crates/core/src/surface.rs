@@ -9,6 +9,7 @@ use crate::grid::{Grid, Offset, Pos, Rect, Size};
 use crate::style::Style;
 use crate::text::Line;
 use crate::tile::Tile;
+use crate::tint::Tint;
 #[cfg(not(feature = "egc"))]
 use unicode_width::UnicodeWidthChar;
 
@@ -35,12 +36,18 @@ pub struct Surface<'a> {
     grid: &'a mut Grid,
     area: Rect,
     layer: u8,
+    tint: Tint,
 }
 
 impl<'a> Surface<'a> {
-    /// A surface over `grid`, scoped to `area` on `layer`.
+    /// A surface over `grid`, scoped to `area` on `layer`, tinting nothing.
     pub const fn new(grid: &'a mut Grid, area: Rect, layer: u8) -> Self {
-        Self { grid, area, layer }
+        Self {
+            grid,
+            area,
+            layer,
+            tint: Tint::None,
+        }
     }
 
     /// The area this surface clips writes to.
@@ -74,6 +81,61 @@ impl<'a> Surface<'a> {
             grid: self.grid,
             area: self.area,
             layer,
+            tint: self.tint,
+        }
+    }
+
+    /// The tint every sprite drawn through this surface is recoloured by.
+    #[must_use]
+    pub const fn tint(&self) -> Tint {
+        self.tint
+    }
+
+    /// A new surface over the same grid, area, and layer, recolouring every sprite it draws by
+    /// `tint`.
+    ///
+    /// Substituted rather than combined: unlike [`clip`](Self::clip), which can only narrow,
+    /// a tint replaces whatever the parent surface carried. Two tints do not compose into a
+    /// third meaningful one, and silently multiplying an inherited shadow into a caller's damage
+    /// flash would be harder to predict than replacing it.
+    ///
+    /// Applies to sprites only. A cell backend has no sprite to recolour and draws the cell's
+    /// glyph in its own [`Style`], tinted or not, so this is invisible there. See [`Tint`].
+    ///
+    /// For a multi-cell span the tint lands on the anchor cell, which is where a pixel backend
+    /// draws the sprite from.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # fn main() {
+    /// # fn run() -> Option<()> {
+    /// use retroglyph_core::{Grid, Rect, Style, Surface, Tint};
+    ///
+    /// let mut grid = Grid::new(8, 4);
+    /// let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 8, 4), 0);
+    ///
+    /// // One grass sprite, drawn twice: once as itself, once dimmed into shadow.
+    /// let grass = '\u{E000}';
+    /// surface.put_span_uniform((0, 0), (2, 1), grass, ' ', Style::default())?;
+    /// surface
+    ///     .with_tint(Tint::multiply(128, 128, 128))
+    ///     .put_span_uniform((2, 0), (2, 1), grass, ' ', Style::default())?;
+    ///
+    /// assert_eq!(grid.tint(0, 0, 0), Tint::None);
+    /// assert_eq!(grid.tint(0, 2, 0), Tint::multiply(128, 128, 128));
+    /// # Some(())
+    /// # }
+    /// # run().unwrap();
+    /// # }
+    /// ```
+    #[must_use]
+    pub const fn with_tint(&mut self, tint: Tint) -> Surface<'_> {
+        Surface {
+            grid: self.grid,
+            area: self.area,
+            layer: self.layer,
+            tint,
         }
     }
 
@@ -118,6 +180,7 @@ impl<'a> Surface<'a> {
             area: self.area.intersect(area),
             grid: self.grid,
             layer: self.layer,
+            tint: self.tint,
         }
     }
 
@@ -145,6 +208,18 @@ impl<'a> Surface<'a> {
         self.area.contains(x, y)
     }
 
+    /// Applies this surface's tint to the cell just written at `(x, y)`.
+    ///
+    /// Called after a write rather than as part of one, because a glyph write drops whatever
+    /// tint the cell held (see [`Grid::set_tint`]); doing it in the other order would erase the
+    /// tint being applied. Untinted surfaces skip the call entirely, so the ordinary text path
+    /// never touches the side table.
+    fn apply_tint(&mut self, x: u16, y: u16) {
+        if self.tint != Tint::None {
+            self.grid.set_tint(self.layer, x, y, self.tint);
+        }
+    }
+
     /// Writes `grapheme` (already a single extended grapheme cluster) at `(x, y)`. A no-op if
     /// out of this surface's area.
     #[cfg(feature = "egc")]
@@ -153,6 +228,7 @@ impl<'a> Surface<'a> {
             return;
         }
         self.grid.write_grapheme(self.layer, x, y, grapheme, style);
+        self.apply_tint(x, y);
     }
 
     /// Place `ch` at `pos` in `style`. A no-op if `pos` is outside this surface's area.
@@ -175,6 +251,7 @@ impl<'a> Surface<'a> {
             }
             let tile = Tile::new(ch, style);
             self.grid.put_tile(self.layer, pos, tile);
+            self.apply_tint(pos.x, pos.y);
         }
     }
 
@@ -330,7 +407,12 @@ impl<'a> Surface<'a> {
         if !self.span_fits(pos, w, h) {
             return None;
         }
-        self.grid.write_span(self.layer, pos.x, pos.y, rows, style)
+        self.grid
+            .write_span(self.layer, pos.x, pos.y, rows, style)?;
+        // The anchor only: a pixel backend draws the whole footprint from that one cell, so the
+        // covered cells have no sprite of their own to recolour.
+        self.apply_tint(pos.x, pos.y);
+        Some(())
     }
 
     /// Writes a `size` multi-cell span at `pos` on this surface's layer in `style`: `anchor` in
@@ -384,7 +466,9 @@ impl<'a> Surface<'a> {
             return None;
         }
         self.grid
-            .write_span_uniform(self.layer, pos, size, anchor, fill, style)
+            .write_span_uniform(self.layer, pos, size, anchor, fill, style)?;
+        self.apply_tint(pos.x, pos.y);
+        Some(())
     }
 
     /// `true` if a `w` x `h` footprint at `pos` lies entirely within this surface's area.
@@ -617,6 +701,115 @@ mod tests {
         assert_eq!(grid[Pos::new(0, 0)].style().foreground(), crate::Color::RED);
         assert_eq!(grid[Pos::new(0, 1)].style().foreground(), crate::Color::RED);
         assert_eq!(grid[Pos::new(0, 1)].span(), (2, 1));
+    }
+
+    #[test]
+    fn with_tint_applies_to_the_cell_it_writes() {
+        let mut grid = Grid::new(4, 4);
+        {
+            let mut surface = screen(&mut grid);
+            surface
+                .with_tint(Tint::multiply(128, 64, 32))
+                .put((1, 1), '@', Style::default());
+        }
+
+        assert_eq!(grid[Pos::new(1, 1)].glyph(), '@');
+        assert_eq!(grid.tint(0, 1, 1), Tint::multiply(128, 64, 32));
+    }
+
+    #[test]
+    fn an_untinted_surface_leaves_the_side_table_alone() {
+        let mut grid = Grid::new(4, 4);
+        screen(&mut grid).put((1, 1), '@', Style::default());
+
+        assert_eq!(grid.tint(0, 1, 1), Tint::None);
+    }
+
+    #[test]
+    fn with_tint_lands_on_the_span_anchor_only() {
+        let mut grid = Grid::new(4, 4);
+        {
+            let mut surface = screen(&mut grid);
+            surface
+                .with_tint(Tint::multiply(200, 200, 200))
+                .put_span((0, 0), &["ab", "cd"], Style::default())
+                .expect("span write");
+        }
+
+        // A pixel backend draws the whole footprint from the anchor, so that is the only cell
+        // with a sprite to recolour.
+        assert_eq!(grid.tint(0, 0, 0), Tint::multiply(200, 200, 200));
+        assert_eq!(grid.tint(0, 1, 0), Tint::None);
+        assert_eq!(grid.tint(0, 1, 1), Tint::None);
+    }
+
+    #[test]
+    fn with_tint_applies_to_a_uniform_span_anchor() {
+        let mut grid = Grid::new(4, 4);
+        {
+            let mut surface = screen(&mut grid);
+            surface
+                .with_tint(Tint::mix(255, 0, 0, 128))
+                .put_span_uniform((1, 1), (2, 2), 'C', '.', Style::default())
+                .expect("span write");
+        }
+
+        assert_eq!(grid.tint(0, 1, 1), Tint::mix(255, 0, 0, 128));
+        assert_eq!(grid.tint(0, 2, 2), Tint::None);
+    }
+
+    #[test]
+    fn with_tint_is_not_applied_to_a_refused_span() {
+        let mut grid = Grid::new(4, 4);
+        let area = Rect::new(0, 0, 2, 2);
+        {
+            let mut surface = Surface::new(&mut grid, area, 0);
+            // Fits the grid, leaves the area: nothing is written, so nothing is tinted.
+            assert_eq!(
+                surface.with_tint(Tint::multiply(1, 2, 3)).put_span(
+                    (1, 1),
+                    &["ab"],
+                    Style::default()
+                ),
+                None
+            );
+        }
+
+        assert_eq!(grid.tint(0, 1, 1), Tint::None);
+    }
+
+    #[test]
+    fn with_tint_survives_clip_and_on_layer() {
+        let mut grid = Grid::new(8, 4);
+        {
+            let mut surface = screen(&mut grid);
+            let mut tinted = surface.with_tint(Tint::multiply(9, 9, 9));
+            assert_eq!(tinted.tint(), Tint::multiply(9, 9, 9));
+            assert_eq!(
+                tinted.clip(Rect::new(0, 0, 4, 4)).tint(),
+                Tint::multiply(9, 9, 9)
+            );
+            assert_eq!(tinted.on_layer(2).tint(), Tint::multiply(9, 9, 9));
+
+            tinted.on_layer(2).put((1, 1), '@', Style::default());
+        }
+
+        assert_eq!(grid.tint(2, 1, 1), Tint::multiply(9, 9, 9));
+    }
+
+    #[test]
+    fn with_tint_replaces_rather_than_composes() {
+        let mut grid = Grid::new(4, 4);
+        {
+            let mut surface = screen(&mut grid);
+            let mut outer = surface.with_tint(Tint::multiply(128, 128, 128));
+            // Unlike `clip`, a nested tint substitutes: two tints have no meaningful product.
+            outer
+                .with_tint(Tint::mix(255, 0, 0, 64))
+                .put((0, 0), '@', Style::default());
+        }
+
+        assert_eq!(grid.tint(0, 0, 0), Tint::mix(255, 0, 0, 64));
     }
 
     #[test]
