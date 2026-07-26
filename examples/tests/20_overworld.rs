@@ -20,7 +20,8 @@ mod overworld;
 
 use overworld::{Overworld, View, WORLD_H, WORLD_W};
 use retroglyph_core::event::{
-    Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+    Event, KeyCode, KeyEvent, KeyEventKind, KeyLocation, KeyModifiers, MouseButton, MouseEvent,
+    MouseEventKind,
 };
 use retroglyph_core::{Frame, Headless, Terminal};
 use retroglyph_examples::{Example, HEADLESS_FRAME_DELTA};
@@ -39,6 +40,7 @@ const fn key(ch: char) -> Event {
         code: KeyCode::Char(ch),
         modifiers: KeyModifiers::NONE,
         kind: KeyEventKind::Press,
+        location: KeyLocation::Standard,
     })
 }
 

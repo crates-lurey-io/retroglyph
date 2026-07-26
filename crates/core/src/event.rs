@@ -138,6 +138,27 @@ pub enum KeyEventKind {
     Release,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[non_exhaustive]
+/// The physical location of a key on the keyboard, for keys that appear in more than one place.
+///
+/// Mirrors [winit's `KeyLocation`](https://docs.rs/winit/latest/winit/keyboard/enum.KeyLocation.html):
+/// a key like "1" carries the same [`KeyCode`] whether it's pressed above the letters or on the
+/// numpad, and modifier keys like Shift exist on both the left and right sides. This field
+/// disambiguates those cases.
+pub enum KeyLocation {
+    /// The key is in its single, non-duplicated location, or the backend cannot determine which
+    /// side/area a duplicated key came from.
+    #[default]
+    Standard,
+    /// The key is the left-hand copy of a duplicated key (e.g. left Shift).
+    Left,
+    /// The key is the right-hand copy of a duplicated key (e.g. right Shift).
+    Right,
+    /// The key originates from the numeric keypad.
+    Numpad,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 /// Keyboard input event.
 pub struct KeyEvent {
@@ -150,26 +171,49 @@ pub struct KeyEvent {
     /// Backends that cannot distinguish these always report
     /// [`KeyEventKind::Press`]. See [`KeyEventKind`] for per-backend behavior.
     pub kind: KeyEventKind,
+    /// The physical location of the key, for keys that appear in more than one place.
+    ///
+    /// Backends that cannot determine this always report [`KeyLocation::Standard`].
+    pub location: KeyLocation,
 }
 
 impl KeyEvent {
-    /// Creates a key press event with the given code and modifiers.
+    /// Creates a key press event with the given code and modifiers, and
+    /// [`KeyLocation::Standard`].
     #[must_use]
     pub const fn new(code: KeyCode, modifiers: KeyModifiers) -> Self {
         Self {
             code,
             modifiers,
             kind: KeyEventKind::Press,
+            location: KeyLocation::Standard,
         }
     }
 
-    /// Creates a key event with an explicit [`KeyEventKind`].
+    /// Creates a key event with an explicit [`KeyEventKind`] and [`KeyLocation::Standard`].
     #[must_use]
     pub const fn with_kind(code: KeyCode, modifiers: KeyModifiers, kind: KeyEventKind) -> Self {
         Self {
             code,
             modifiers,
             kind,
+            location: KeyLocation::Standard,
+        }
+    }
+
+    /// Creates a key event with an explicit [`KeyEventKind`] and [`KeyLocation`].
+    #[must_use]
+    pub const fn with_location(
+        code: KeyCode,
+        modifiers: KeyModifiers,
+        kind: KeyEventKind,
+        location: KeyLocation,
+    ) -> Self {
+        Self {
+            code,
+            modifiers,
+            kind,
+            location,
         }
     }
 
@@ -316,13 +360,17 @@ pub enum Event {
 /// considered held from its first [`KeyEventKind::Press`] until a matching
 /// [`KeyEventKind::Release`].
 ///
+/// Held keys are keyed by `(KeyCode, KeyLocation)`, so a held Numpad8 and a held digit-row 8 are
+/// tracked separately: [`is_held`](Self::is_held) takes the pair, and [`held`](Self::held) yields
+/// it.
+///
 /// This is only useful on backends that emit release events (winit, or a
 /// terminal with the kitty keyboard protocol). On press-only backends a key
 /// never leaves the held set on its own, so call [`clear`](Self::clear) at a
 /// suitable boundary (e.g. once per turn) if you rely on it there.
 #[derive(Debug, Clone, Default)]
 pub struct KeyState {
-    held: Vec<KeyCode>,
+    held: Vec<(KeyCode, KeyLocation)>,
 }
 
 impl KeyState {
@@ -335,16 +383,17 @@ impl KeyState {
     /// Updates the held set from a key event.
     ///
     /// [`Press`](KeyEventKind::Press) and [`Repeat`](KeyEventKind::Repeat) add
-    /// the key; [`Release`](KeyEventKind::Release) removes it.
+    /// the `(code, location)` pair; [`Release`](KeyEventKind::Release) removes it.
     pub fn apply(&mut self, event: KeyEvent) {
+        let entry = (event.code, event.location);
         match event.kind {
             KeyEventKind::Press | KeyEventKind::Repeat => {
-                if !self.held.contains(&event.code) {
-                    self.held.push(event.code);
+                if !self.held.contains(&entry) {
+                    self.held.push(entry);
                 }
             }
             KeyEventKind::Release => {
-                self.held.retain(|&c| c != event.code);
+                self.held.retain(|&e| e != entry);
             }
         }
     }
@@ -356,14 +405,14 @@ impl KeyState {
         }
     }
 
-    /// Returns `true` if `code` is currently held.
+    /// Returns `true` if `code` at `location` is currently held.
     #[must_use]
-    pub fn is_held(&self, code: KeyCode) -> bool {
-        self.held.contains(&code)
+    pub fn is_held(&self, code: KeyCode, location: KeyLocation) -> bool {
+        self.held.contains(&(code, location))
     }
 
-    /// Iterates the currently held keys, in first-pressed order.
-    pub fn held(&self) -> impl Iterator<Item = KeyCode> + '_ {
+    /// Iterates the currently held `(code, location)` pairs, in first-pressed order.
+    pub fn held(&self) -> impl Iterator<Item = (KeyCode, KeyLocation)> + '_ {
         self.held.iter().copied()
     }
 
@@ -443,10 +492,10 @@ mod tests {
     #[test]
     fn test_key_state_tracks_held_keys() {
         let mut state = KeyState::new();
-        assert!(!state.is_held(KeyCode::Left));
+        assert!(!state.is_held(KeyCode::Left, KeyLocation::Standard));
 
         state.apply(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE));
-        assert!(state.is_held(KeyCode::Left));
+        assert!(state.is_held(KeyCode::Left, KeyLocation::Standard));
 
         // Repeat keeps it held.
         state.apply(KeyEvent::with_kind(
@@ -454,14 +503,39 @@ mod tests {
             KeyModifiers::NONE,
             KeyEventKind::Repeat,
         ));
-        assert!(state.is_held(KeyCode::Left));
+        assert!(state.is_held(KeyCode::Left, KeyLocation::Standard));
 
         state.apply(KeyEvent::with_kind(
             KeyCode::Left,
             KeyModifiers::NONE,
             KeyEventKind::Release,
         ));
-        assert!(!state.is_held(KeyCode::Left));
+        assert!(!state.is_held(KeyCode::Left, KeyLocation::Standard));
+    }
+
+    #[test]
+    fn test_key_state_distinguishes_numpad_from_standard() {
+        let mut state = KeyState::new();
+        state.apply(KeyEvent::with_location(
+            KeyCode::Char('8'),
+            KeyModifiers::NONE,
+            KeyEventKind::Press,
+            KeyLocation::Numpad,
+        ));
+        assert!(state.is_held(KeyCode::Char('8'), KeyLocation::Numpad));
+        assert!(!state.is_held(KeyCode::Char('8'), KeyLocation::Standard));
+
+        state.apply(KeyEvent::new(KeyCode::Char('8'), KeyModifiers::NONE));
+        assert!(state.is_held(KeyCode::Char('8'), KeyLocation::Standard));
+        assert!(state.is_held(KeyCode::Char('8'), KeyLocation::Numpad));
+
+        state.apply(KeyEvent::with_kind(
+            KeyCode::Char('8'),
+            KeyModifiers::NONE,
+            KeyEventKind::Release,
+        ));
+        assert!(!state.is_held(KeyCode::Char('8'), KeyLocation::Standard));
+        assert!(state.is_held(KeyCode::Char('8'), KeyLocation::Numpad));
     }
 
     #[test]
@@ -470,7 +544,7 @@ mod tests {
         state.apply_event(&Event::Resize(1, 1));
         assert!(state.held().next().is_none());
         state.apply_event(&Event::Key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE)));
-        assert!(state.is_held(KeyCode::Up));
+        assert!(state.is_held(KeyCode::Up, KeyLocation::Standard));
     }
 
     #[test]
