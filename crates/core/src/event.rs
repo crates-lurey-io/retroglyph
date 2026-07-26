@@ -1,6 +1,7 @@
 //! Input event system.
 
 use crate::grid::Pos;
+use alloc::string::String;
 use alloc::vec::Vec;
 use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
 
