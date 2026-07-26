@@ -2,7 +2,7 @@
 //!
 //! [`TerminalWasm`] implements [`Backend`](retroglyph_core::Backend) directly (like
 //! [`Headless`](retroglyph_core::backend::Headless)): there is no event loop
-//! here. A browser terminal emulator (e.g. xterm.js -- this crate has no
+//! here. A browser terminal emulator (e.g. xterm.js, this crate has no
 //! dependency on it and no opinion about which one is used) is driven from
 //! JS, which calls into this crate once per animation frame (or on demand)
 //! to pull freshly rendered ANSI bytes and push back any input it collected.
@@ -25,7 +25,7 @@
 //! The `wasm32` build additionally exposes free functions
 //! (`wasm_terminal_new`, `wasm_terminal_resize`, `wasm_terminal_push_key`,
 //! `wasm_terminal_push_mouse`, `wasm_terminal_push_paste`,
-//! `wasm_terminal_take_output`, in this crate's `wasm` module -- only
+//! `wasm_terminal_take_output`, in this crate's `wasm` module, only
 //! compiled for `target_arch = "wasm32"`, so it won't appear in docs built
 //! natively) that operate on an opaque handle, since
 //! `retroglyph_core::event::Event` is not itself `wasm-bindgen`-compatible.
@@ -41,7 +41,7 @@
 //! It's a wiring template, not a full game: it plumbs input/output through
 //! this crate's generic handle-based FFI but calls no per-frame drawing
 //! logic of its own (that's the consumer's job, via their own Rust code
-//! holding the `Terminal<TerminalWasm>` -- see "Usage from Rust" above). For
+//! holding the `Terminal<TerminalWasm>`; see "Usage from Rust" above). For
 //! a complete, running example with an actual game loop, see the
 //! `examples/` crate's [WASM demo gallery](https://crates-lurey-io.github.io/retroglyph/examples/)
 //! linked from the workspace README; those demos use a different,
@@ -63,8 +63,8 @@
 //! [`TerminalWasm`] renders through [`retroglyph_terminal::TerminalRenderer`] (see that crate's
 //! docs for the full cell-diff renderer contract) and adds a handful of sequences of its own
 //! ([`clear`](Output::clear), [`set_cursor_visible`](Cursor::set_cursor_visible)). Every
-//! sequence below is standard ANSI X3.64 (ECMA-48) CSI -- the subset xterm's own control-sequence
-//! reference calls plain "ANSI"/VT100-compatible -- nothing proprietary or emulator-specific. The
+//! sequence below is standard ANSI X3.64 (ECMA-48) CSI (the subset xterm's own control-sequence
+//! reference calls plain "ANSI"/VT100-compatible), nothing proprietary or emulator-specific. The
 //! bytes are the same regardless of what emulator eventually reads them; this crate makes no
 //! attempt to detect or work around variance between implementations (see the quirks below for
 //! the two places that matters).
@@ -81,7 +81,7 @@
 //! | `CSI ?25 h` / `CSI ?25 l` | DECTCEM (cursor visibility) | [`set_cursor_visible`](Cursor::set_cursor_visible) | show/hide the terminal cursor |
 //! | `CSI 2J` then `CSI H` | ED (erase display) + CUP home | [`clear`](Output::clear) | clear the screen, then move the cursor to `(1, 1)` |
 //!
-//! retroglyph does not model text attributes (bold, italic, underline, etc. -- see
+//! retroglyph does not model text attributes (bold, italic, underline, etc.; see
 //! [`retroglyph_core::style::Style`]'s docs for why), so no SGR attribute codes (`1`, `3`, `4`,
 //! ...) are ever emitted here; only the color and cursor/erase sequences above. Glyph bytes
 //! themselves (see [`take_output`](TerminalWasm::take_output)) are plain UTF-8, not an escape
@@ -90,7 +90,7 @@
 //! ## `TerminalRenderer` quirks to know before validating against a specific emulator
 //!
 //! - **Absolute positions only, never relative.** Every cursor move is a full CUP with both `row`
-//!   and `col`, even to step one cell right or down -- there is no `CSI C`/`CSI B`
+//!   and `col`, even to step one cell right or down: there is no `CSI C`/`CSI B`
 //!   (cursor-relative) fallback.
 //!   [`TerminalRenderer::draw`](retroglyph_terminal::TerminalRenderer::draw) does skip the move
 //!   entirely when the cursor is already at the right cell from printing the previous glyph
@@ -125,7 +125,7 @@
 
 // Compile the code blocks in this crate's own README as doctests so its quick start is
 // type-checked on every test run and cannot silently rot. The `cfg(doctest)` gate keeps this out
-// of the rendered crate documentation -- see `retroglyph-crossterm`'s matching include for the
+// of the rendered crate documentation: see `retroglyph-crossterm`'s matching include for the
 // same pattern applied to the workspace root README.
 #[cfg(doctest)]
 #[doc = include_str!("../README.md")]
@@ -147,7 +147,7 @@ use std::time::Duration;
 /// (see [`TerminalWasm::take_output`]'s doc comment for the full argument). Writing straight into
 /// a `String`-backed sink instead of a `Vec<u8>` means [`take_output`](TerminalWasm::take_output)
 /// never has to re-validate those bytes as UTF-8 on drain (each frame, previously, via
-/// `String::from_utf8`) -- see retroglyph#288. `Write::write` still validates its input as UTF-8
+/// `String::from_utf8`): see retroglyph#288. `Write::write` still validates its input as UTF-8
 /// (returning [`io::ErrorKind::InvalidData`] on failure) rather than trusting the caller, since the
 /// `std::io::Write` contract itself makes no UTF-8 guarantee about the bytes it's handed; only this
 /// crate's own, always-valid-UTF-8 call sites are relied upon to make that error path dead code in
@@ -178,10 +178,10 @@ impl io::Write for Utf8Sink {
 /// Unlike [`retroglyph_crossterm::Crossterm`](https://docs.rs/retroglyph-crossterm),
 /// this backend:
 ///
-/// - never queries a TTY for its size -- call [`resize`](Output::resize) (or
+/// - never queries a TTY for its size: call [`resize`](Output::resize) (or
 ///   [`Terminal::resize`](retroglyph_core::Terminal::resize)) whenever the
 ///   host reports a new size (e.g. from xterm.js's `fit` addon);
-/// - never polls for input -- input only ever arrives via
+/// - never polls for input: input only ever arrives via
 ///   [`push_event`](Input::push_event), called from a `wasm-bindgen`
 ///   entry point in response to a JS event;
 /// - buffers rendered ANSI bytes in memory rather than writing to a
@@ -224,13 +224,13 @@ impl TerminalWasm {
     /// tests; not part of [`Backend`](retroglyph_core::Backend) itself beyond the no-op default.
     ///
     /// Two mitigations guard against a stalled or throttled consumer (e.g. a backgrounded tab, or
-    /// a Rust game loop that's paused) while JS keeps forwarding input -- there is no OS-level
+    /// a Rust game loop that's paused) while JS keeps forwarding input: there is no OS-level
     /// backpressure here the way there is on native (crossterm's underlying input buffer
     /// naturally throttles a stalled reader):
     ///
     /// - **Pointer-move coalescing.** If `event` is
     ///   [`Event::Mouse`](Event) with [`MouseEventKind::Moved`] and the queue's current back is
-    ///   also a `Moved` event, `event` replaces it in place instead of growing the queue -- a
+    ///   also a `Moved` event, `event` replaces it in place instead of growing the queue: a
     ///   consumer that's fallen behind only ever cares about the most recent pointer position, not
     ///   every intermediate one. Any other event kind (including a `Down`/`Up`/scroll mouse event)
     ///   always pushes normally, so this never reorders or merges anything but a `Moved` run.
@@ -270,7 +270,7 @@ impl TerminalWasm {
     ///
     /// This allocates a fresh `String` every call (the replacement buffer left behind is
     /// pre-sized to the outgoing one's capacity, so a steady frame rate converges to one
-    /// right-sized allocation per frame instead of regrowing from empty each time -- see
+    /// right-sized allocation per frame instead of regrowing from empty each time; see
     /// retroglyph#287). Callers that can reuse a long-lived, JS-side buffer across frames
     /// should prefer [`take_output_into`](Self::take_output_into) instead, which never
     /// allocates on the hot path.
@@ -285,7 +285,7 @@ impl TerminalWasm {
     ///
     /// Equivalent to `*buf = self.take_output()` but reuses `buf`'s existing allocation instead
     /// of returning a new `String` each call, and leaves this backend's own internal buffer
-    /// capacity untouched (just cleared) for the next frame -- so neither side allocates once
+    /// capacity untouched (just cleared) for the next frame, so neither side allocates once
     /// `buf` has grown to its steady-state size. Intended for callers holding a long-lived
     /// buffer across frames (e.g. a JS-side driver reusing the same `String` every animation
     /// frame) instead of receiving a fresh allocation from [`take_output`](Self::take_output)
@@ -484,7 +484,7 @@ fn decode_key_modifiers(mods: u8) -> retroglyph_core::event::KeyModifiers {
 ///   tracks `cols`/`rows` for the `wasm32`-only `wasm::wasm_terminal_resize`.
 ///   This backend has no sub-cell precision to report, so the returned
 ///   event's [`pixel_position`](retroglyph_core::event::MouseEvent::pixel_position)
-///   is always `None` -- the same convention `retroglyph-crossterm` uses for
+///   is always `None`: the same convention `retroglyph-crossterm` uses for
 ///   its own character-mode backend.
 /// - `action`: one of [`mouse_actions`]'s constants (`DOWN`, `UP`, `MOVED`,
 ///   `SCROLL_UP`, `SCROLL_DOWN`).
@@ -726,7 +726,7 @@ pub mod wasm {
     /// synthesized key events.
     ///
     /// Unlike [`wasm_terminal_push_key`], this takes a plain JS string
-    /// directly -- `String` is already `wasm-bindgen`-FFI-safe, so there's no
+    /// directly: `String` is already `wasm-bindgen`-FFI-safe, so there's no
     /// `decode_*` step to pair with it, and no risk of a paste of `N`
     /// characters being misread as `N` individual keystrokes (which would let
     /// pasted text trigger single-key game commands one character at a
@@ -878,7 +878,7 @@ mod tests {
 
     #[test]
     fn push_event_supports_paste_as_a_single_event() {
-        // A paste is delivered as one `Event::Paste`, not one `Event::Key` per character -- see
+        // A paste is delivered as one `Event::Paste`, not one `Event::Key` per character; see
         // `wasm::wasm_terminal_push_paste`'s doc comment for why that distinction matters (pasted
         // text must not be misread as individual keystrokes triggering single-key commands).
         let mut backend = TerminalWasm::new(10, 3);
@@ -1043,8 +1043,8 @@ mod tests {
     fn decode_key_event_rejects_out_of_range_code_points() {
         assert!(decode_key_event(u32::MAX, 0).is_none());
         // In the gap between the named control-key block (`BASE..=BASE+14`) and the F-key block
-        // (`BASE+100..=BASE+123`): not a named key, and -- like every named-key code, since
-        // `BASE` (`0x0011_0000`) sits one past `char::MAX` (0x10FFFF) -- not a valid `char`
+        // (`BASE+100..=BASE+123`): not a named key, and (like every named-key code, since
+        // `BASE` (`0x0011_0000`) sits one past `char::MAX` (0x10FFFF)) not a valid `char`
         // either. `BASE` itself is *not* an out-of-range example: it's `KeyCode::Backspace`.
         assert!(decode_key_event(key_codes::ESCAPE + 1, 0).is_none());
     }
@@ -1113,7 +1113,7 @@ mod tests {
     fn push_event_caps_queue_and_drops_oldest_under_burst() {
         // A burst well past `EVENT_QUEUE_CAP`, of non-coalescing events (alternating key codes,
         // so nothing here hits the `Moved` coalescing path) must never grow the queue past the
-        // cap, and the oldest entries are the ones dropped -- the earliest surviving key should
+        // cap, and the oldest entries are the ones dropped: the earliest surviving key should
         // be from partway through the burst, not from the very start.
         let mut backend = TerminalWasm::new(10, 3);
         let total = EVENT_QUEUE_CAP + 500;
@@ -1184,8 +1184,8 @@ mod tests {
     fn push_event_never_drops_or_coalesces_non_moved_events_under_burst() {
         use retroglyph_core::event::{MouseButton, MouseEvent, MouseEventKind};
 
-        // A burst of distinct key presses, mouse clicks, and pastes -- well under the cap, and
-        // none of them `Moved` -- must all survive untouched: no coalescing (they're not `Moved`)
+        // A burst of distinct key presses, mouse clicks, and pastes (well under the cap, and
+        // none of them `Moved`) must all survive untouched: no coalescing (they're not `Moved`)
         // and no dropping (the burst never reaches `EVENT_QUEUE_CAP`).
         let mut backend = TerminalWasm::new(80, 24);
         let mut expected = Vec::new();
@@ -1245,7 +1245,7 @@ mod tests {
 
         assert_eq!(
             readme_js, canonical,
-            "README.md's JS driver example has drifted from js/xterm-driver.js -- update \
+            "README.md's JS driver example has drifted from js/xterm-driver.js: update \
              README.md's fenced ```js block to match the canonical file"
         );
     }
@@ -1274,8 +1274,8 @@ mod decode_key_event_proptests {
     }
 
     proptest! {
-        /// Every `(code, mods)` pair must be explainable by exactly one of three cases -- a
-        /// named control key, the contiguous F1-F24 range, or a valid printable `char` -- and
+        /// Every `(code, mods)` pair must be explainable by exactly one of three cases (a
+        /// named control key, the contiguous F1-F24 range, or a valid printable `char`) and
         /// must never panic getting there.
         #[test]
         fn never_panics_and_result_matches_one_of_three_cases(code: u32, mods: u8) {
