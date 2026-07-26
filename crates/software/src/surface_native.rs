@@ -32,6 +32,7 @@ pub(crate) struct WindowSurface {
 
 /// Errors creating or presenting the native window surface.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum SurfaceError {
     /// Failed to create the softbuffer context from the window.
     Context(softbuffer::SoftBufferError),

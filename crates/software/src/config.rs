@@ -18,6 +18,7 @@ use std::fmt;
 /// this crate builds renderers, and the loop -- `retroglyph-window` or
 /// another windowing integration -- reports its own errors.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum SoftwareBackendError {
     /// No font was provided and the `default-font` feature is not enabled.
     NoFont,

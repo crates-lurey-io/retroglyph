@@ -19,7 +19,12 @@ use core::time::Duration;
 /// Backends that are infallible (e.g. `Headless`, `SoftwareRenderer`) use
 /// [`core::convert::Infallible`]. Fallible backends (e.g. `Crossterm`) use
 /// [`std::io::Error`].
-pub trait BackendError: core::fmt::Display + core::fmt::Debug {}
+///
+/// Requiring [`core::error::Error`] rather than just [`Display`](core::fmt::Display) +
+/// [`Debug`](core::fmt::Debug) lets generic code convert `B::Error` into `Box<dyn Error>` or any
+/// error-trait-based caller error with a plain `?`, and exposes `source()` chains for concrete
+/// error types that wrap an inner error.
+pub trait BackendError: core::error::Error {}
 
 impl BackendError for core::convert::Infallible {}
 #[cfg(feature = "std")]
