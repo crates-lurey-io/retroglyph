@@ -136,7 +136,7 @@ impl<'a> Modal<'a> {
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::Grid;
+    use retroglyph_core::{Grid, Pos};
 
     use super::*;
 
@@ -150,8 +150,8 @@ mod tests {
         // the inner content rect is inset by the one-cell border.
         assert_eq!(inner, Rect::new(6, 4, 8, 2));
         // The border was actually drawn at the box's corners.
-        assert_eq!(grid.get(5, 3).glyph(), '┌');
-        assert_eq!(grid.get(14, 3).glyph(), '┐');
+        assert_eq!(grid[Pos::new(5, 3)].glyph(), '┌');
+        assert_eq!(grid[Pos::new(14, 3)].glyph(), '┐');
     }
 
     #[test]
@@ -161,7 +161,7 @@ mod tests {
         Modal::new(10, 4).render(screen, &mut Surface::new(&mut grid, screen, 0));
 
         // A corner of the screen far from the centered box is untouched.
-        assert_eq!(grid.get(0, 0).glyph(), ' ');
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
     }
 
     #[test]
@@ -173,9 +173,18 @@ mod tests {
             .render(screen, &mut Surface::new(&mut grid, screen, 0));
 
         // Box is centered_rect(screen, 10, 4) = Rect::new(5, 3, 10, 4).
-        assert_eq!(grid.get(5, 3).style().foreground(), Theme::DARK.border);
-        assert_eq!(grid.get(5, 3).style().background(), Theme::DARK.title_bg);
-        assert_eq!(grid.get(6, 4).style().background(), Theme::DARK.panel_bg);
+        assert_eq!(
+            grid[Pos::new(5, 3)].style().foreground(),
+            Theme::DARK.border
+        );
+        assert_eq!(
+            grid[Pos::new(5, 3)].style().background(),
+            Theme::DARK.title_bg
+        );
+        assert_eq!(
+            grid[Pos::new(6, 4)].style().background(),
+            Theme::DARK.panel_bg
+        );
     }
 
     #[test]
@@ -186,8 +195,14 @@ mod tests {
             .theme_on(Theme::DARK, Color::Default)
             .render(screen, &mut Surface::new(&mut grid, screen, 0));
 
-        assert_eq!(grid.get(5, 3).style().foreground(), Theme::DARK.border);
-        assert_eq!(grid.get(5, 3).style().background(), Theme::DARK.title_bg);
-        assert_eq!(grid.get(6, 4).style().background(), Color::Default);
+        assert_eq!(
+            grid[Pos::new(5, 3)].style().foreground(),
+            Theme::DARK.border
+        );
+        assert_eq!(
+            grid[Pos::new(5, 3)].style().background(),
+            Theme::DARK.title_bg
+        );
+        assert_eq!(grid[Pos::new(6, 4)].style().background(), Color::Default);
     }
 }

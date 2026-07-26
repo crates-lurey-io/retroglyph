@@ -100,7 +100,7 @@ impl Widget for Gauge<'_> {
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::Grid;
+    use retroglyph_core::{Grid, Pos};
 
     use super::*;
 
@@ -110,8 +110,8 @@ mod tests {
         let mut grid = Grid::new(20, 1);
         Gauge::new("H", 0.5).render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(grid.get(2, 0).glyph(), '█'); // bar starts filled
-        assert_eq!(grid.get(19, 0).glyph(), '%'); // "XX%"-style readout
+        assert_eq!(grid[Pos::new(2, 0)].glyph(), '█'); // bar starts filled
+        assert_eq!(grid[Pos::new(19, 0)].glyph(), '%'); // "XX%"-style readout
     }
 
     #[test]
@@ -124,7 +124,7 @@ mod tests {
             .label_style(Style::new().fg(Color::WHITE))
             .render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(grid.get(0, 0).style().foreground(), Color::WHITE);
+        assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Color::WHITE);
     }
 
     #[test]
@@ -135,8 +135,11 @@ mod tests {
             .theme(Theme::DARK)
             .render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(grid.get(0, 0).style().foreground(), Theme::DARK.dim);
-        assert_eq!(grid.get(0, 0).style().background(), Theme::DARK.panel_bg);
+        assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Theme::DARK.dim);
+        assert_eq!(
+            grid[Pos::new(0, 0)].style().background(),
+            Theme::DARK.panel_bg
+        );
     }
 
     #[test]
@@ -149,7 +152,7 @@ mod tests {
             .theme_on(Theme::DARK, Color::Default)
             .render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(grid.get(0, 0).style().foreground(), Theme::DARK.dim);
-        assert_eq!(grid.get(0, 0).style().background(), Color::Default);
+        assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Theme::DARK.dim);
+        assert_eq!(grid[Pos::new(0, 0)].style().background(), Color::Default);
     }
 }

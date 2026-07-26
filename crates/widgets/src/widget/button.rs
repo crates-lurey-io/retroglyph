@@ -200,8 +200,8 @@ mod tests {
         Button::new("Go", Response::default()).render(area, &mut Surface::new(&mut grid, area, 0));
 
         // "Go" (2 cols) centered in width 7 starts at column (7-2)/2 = 2.
-        assert_eq!(grid.get(2, 0).glyph(), 'G');
-        assert_eq!(grid.get(3, 0).glyph(), 'o');
+        assert_eq!(grid[Pos::new(2, 0)].glyph(), 'G');
+        assert_eq!(grid[Pos::new(3, 0)].glyph(), 'o');
     }
 
     #[test]
@@ -222,8 +222,8 @@ mod tests {
                 b: 58,
             })
             .background();
-        assert_eq!(grid.get(0, 0).style().background(), idle_bg);
-        assert_eq!(grid.get(6, 0).style().background(), idle_bg);
+        assert_eq!(grid[Pos::new(0, 0)].style().background(), idle_bg);
+        assert_eq!(grid[Pos::new(6, 0)].style().background(), idle_bg);
     }
 
     #[test]
@@ -334,7 +334,7 @@ mod tests {
         let area = Rect::new(0, 0, 0, 1);
         let mut grid = Grid::new(1, 1);
         Button::new("Go", Response::default()).render(area, &mut Surface::new(&mut grid, area, 0));
-        assert_eq!(grid.get(0, 0).glyph(), ' ');
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
     }
 
     #[test]

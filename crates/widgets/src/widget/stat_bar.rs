@@ -103,7 +103,7 @@ impl Widget for StatBar<'_> {
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::Grid;
+    use retroglyph_core::{Grid, Pos};
 
     use super::*;
 
@@ -115,8 +115,8 @@ mod tests {
         let mut grid = Grid::new(20, 1);
         StatBar::new("H", 0, 0).render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(grid.get(2, 0).glyph(), '░'); // empty bar cell
-        assert_eq!(grid.get(19, 0).glyph(), '0'); // last char of "0/0"
+        assert_eq!(grid[Pos::new(2, 0)].glyph(), '░'); // empty bar cell
+        assert_eq!(grid[Pos::new(19, 0)].glyph(), '0'); // last char of "0/0"
     }
 
     #[test]
@@ -125,8 +125,8 @@ mod tests {
         let mut grid = Grid::new(20, 1);
         StatBar::new("H", 45, 100).render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(grid.get(2, 0).glyph(), '█'); // bar starts filled
-        assert_eq!(grid.get(19, 0).glyph(), '0'); // last char of "45/100"
+        assert_eq!(grid[Pos::new(2, 0)].glyph(), '█'); // bar starts filled
+        assert_eq!(grid[Pos::new(19, 0)].glyph(), '0'); // last char of "45/100"
     }
 
     #[test]
@@ -137,8 +137,8 @@ mod tests {
 
         // Bar's last cell before the gap+readout is fully filled (clamped
         // to 100%), but the readout still reads the true "150/100".
-        assert_eq!(grid.get(11, 0).glyph(), '█');
-        assert_eq!(grid.get(19, 0).glyph(), '0'); // last char of "150/100"
+        assert_eq!(grid[Pos::new(11, 0)].glyph(), '█');
+        assert_eq!(grid[Pos::new(19, 0)].glyph(), '0'); // last char of "150/100"
     }
 
     #[test]
@@ -151,7 +151,7 @@ mod tests {
             .label_style(Style::new().fg(Color::WHITE))
             .render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(grid.get(0, 0).style().foreground(), Color::WHITE);
+        assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Color::WHITE);
     }
 
     #[test]
@@ -162,8 +162,11 @@ mod tests {
             .theme(Theme::DARK)
             .render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(grid.get(0, 0).style().foreground(), Theme::DARK.dim);
-        assert_eq!(grid.get(0, 0).style().background(), Theme::DARK.panel_bg);
+        assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Theme::DARK.dim);
+        assert_eq!(
+            grid[Pos::new(0, 0)].style().background(),
+            Theme::DARK.panel_bg
+        );
     }
 
     #[test]
@@ -174,7 +177,7 @@ mod tests {
             .theme_on(Theme::DARK, Color::Default)
             .render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(grid.get(0, 0).style().foreground(), Theme::DARK.dim);
-        assert_eq!(grid.get(0, 0).style().background(), Color::Default);
+        assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Theme::DARK.dim);
+        assert_eq!(grid[Pos::new(0, 0)].style().background(), Color::Default);
     }
 }

@@ -631,7 +631,7 @@ fn wide_tile_png(w: u32, h: u32) -> Vec<u8> {
 fn span_scene(grid: &retroglyph_core::Grid) -> Vec<(u8, Pos, Tile)> {
     (0..grid.height())
         .flat_map(|y| (0..grid.width()).map(move |x| (x, y)))
-        .map(|(x, y)| (0u8, Pos::new(x, y), *grid.get_tile(0, x, y).unwrap()))
+        .map(|(x, y)| (0u8, Pos::new(x, y), *grid.tile(0, (x, y)).unwrap()))
         .collect()
 }
 
@@ -704,7 +704,7 @@ fn matches_software_backend_for_multicell_spans() {
     let mut grid = Grid::new(cols, rows);
     for y in 0..rows {
         for x in 0..cols {
-            grid.put_tile(0, x, y, Tile::new('.', Style::new().bg(rgb(BLUE))));
+            grid.put_tile(0, (x, y), Tile::new('.', Style::new().bg(rgb(BLUE))));
         }
     }
     // A 3x1 span (art centred in it) and a 2x2 span, both with fallback glyphs a cell backend

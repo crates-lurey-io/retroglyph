@@ -786,7 +786,7 @@ mod compositing_tests {
         grid.write_span(0, 0, 0, &["C="], Style::new().bg(RED))
             .expect("2x1 span fits");
         let tiles: Vec<(u8, Pos, Tile)> = (0..3)
-            .map(|x| (0u8, Pos::new(x, 0), *grid.get_tile(0, x, 0).unwrap()))
+            .map(|x| (0u8, Pos::new(x, 0), *grid.tile(0, (x, 0)).unwrap()))
             .collect();
         r.draw_layers(tiles.iter().map(|(l, pos, t)| (*l, *pos, t, None)))
             .expect("draw_layers is infallible");
@@ -818,7 +818,7 @@ mod compositing_tests {
         let mut grid = Grid::new(2, 1);
         grid.write_span(0, 0, 0, &["AB"], Style::new()).unwrap();
         let tiles: Vec<(u8, Pos, Tile)> = (0..2)
-            .map(|x| (0u8, Pos::new(x, 0), *grid.get_tile(0, x, 0).unwrap()))
+            .map(|x| (0u8, Pos::new(x, 0), *grid.tile(0, (x, 0)).unwrap()))
             .collect();
         r.draw_layers(tiles.iter().map(|(l, pos, t)| (*l, *pos, t, None)))
             .expect("draw_layers is infallible");

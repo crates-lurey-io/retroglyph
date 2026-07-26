@@ -84,7 +84,7 @@ impl Widget for Paragraph<'_> {
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::Grid;
+    use retroglyph_core::{Grid, Pos};
 
     use super::*;
 
@@ -110,9 +110,9 @@ mod tests {
         Paragraph::new("the quick brown fox jumps")
             .render(area, &mut Surface::new(&mut grid, area, 0));
 
-        let row0: String = (0..10).map(|x| grid.get(x, 0).glyph()).collect();
-        let row1: String = (0..10).map(|x| grid.get(x, 1).glyph()).collect();
-        let row2: String = (0..10).map(|x| grid.get(x, 2).glyph()).collect();
+        let row0: String = (0..10).map(|x| grid[Pos::new(x, 0)].glyph()).collect();
+        let row1: String = (0..10).map(|x| grid[Pos::new(x, 1)].glyph()).collect();
+        let row2: String = (0..10).map(|x| grid[Pos::new(x, 2)].glyph()).collect();
         assert!(row0.starts_with("the quick"));
         assert!(row1.starts_with("brown fox"));
         assert!(row2.starts_with("jumps"));
@@ -126,7 +126,7 @@ mod tests {
         Paragraph::new("the quick brown fox jumps")
             .render(area, &mut Surface::new(&mut grid, area, 0));
 
-        let row1: String = (0..10).map(|x| grid.get(x, 1).glyph()).collect();
+        let row1: String = (0..10).map(|x| grid[Pos::new(x, 1)].glyph()).collect();
         assert_eq!(row1.trim(), "");
     }
 }

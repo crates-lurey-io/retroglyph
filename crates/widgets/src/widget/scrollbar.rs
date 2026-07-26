@@ -130,7 +130,7 @@ impl Widget for Scrollbar {
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::{Color, Grid};
+    use retroglyph_core::{Color, Grid, Pos};
 
     use super::*;
     use crate::Surface;
@@ -146,7 +146,10 @@ mod tests {
             .thumb_style(thumb)
             .render(area, &mut Surface::new(&mut grid, area, 0));
         for y in 0..5 {
-            assert_eq!(grid.get(0, y).style().background(), track.background());
+            assert_eq!(
+                grid[Pos::new(0, y)].style().background(),
+                track.background()
+            );
         }
     }
 
@@ -164,7 +167,7 @@ mod tests {
 
         let (start, len) = thumb_geometry(area, 20, 5, 0).unwrap();
         for y in 0..10 {
-            let bg = grid.get(0, y).style().background();
+            let bg = grid[Pos::new(0, y)].style().background();
             if y >= start && y < start + len {
                 assert_eq!(bg, thumb.background());
             } else {
@@ -183,7 +186,7 @@ mod tests {
 
         let (start, len) = thumb_geometry(area, 20, 5, 0).unwrap();
         for y in 0..10 {
-            let bg = grid.get(0, y).style().background();
+            let bg = grid[Pos::new(0, y)].style().background();
             if y >= start && y < start + len {
                 assert_eq!(bg, Theme::DARK.border);
             } else {
@@ -202,7 +205,7 @@ mod tests {
 
         let (start, len) = thumb_geometry(area, 20, 5, 0).unwrap();
         for y in 0..10 {
-            let bg = grid.get(0, y).style().background();
+            let bg = grid[Pos::new(0, y)].style().background();
             if y >= start && y < start + len {
                 assert_eq!(bg, Theme::DARK.border);
             } else {

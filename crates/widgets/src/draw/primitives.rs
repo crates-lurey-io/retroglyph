@@ -39,7 +39,7 @@ pub fn fill_rect(surface: &mut Surface<'_>, rect: Rect, ch: char, style: Style) 
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::Grid;
+    use retroglyph_core::{Grid, Pos};
 
     use super::*;
 
@@ -57,10 +57,10 @@ mod tests {
 
         for y in 1..3 {
             for x in 1..5 {
-                assert_eq!(grid.get(x, y).glyph(), '#');
+                assert_eq!(grid[Pos::new(x, y)].glyph(), '#');
             }
         }
         // Untouched outside the rect.
-        assert_eq!(grid.get(0, 0).glyph(), ' ');
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
     }
 }

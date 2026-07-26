@@ -135,7 +135,7 @@ pub(super) fn render(
 mod tests {
     use core::fmt::Write as _;
 
-    use retroglyph_core::Grid;
+    use retroglyph_core::{Grid, Pos};
 
     use super::*;
     use crate::Surface;
@@ -175,6 +175,6 @@ mod tests {
 
         // Bar starts right after the 2-column-wide label plus a 1-column
         // gap, i.e. at column 3, not column 4.
-        assert_eq!(grid.get(3, 0).glyph(), '█');
+        assert_eq!(grid[Pos::new(3, 0)].glyph(), '█');
     }
 }

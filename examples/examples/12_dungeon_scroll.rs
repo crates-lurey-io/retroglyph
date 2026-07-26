@@ -91,26 +91,26 @@ fn build_world() -> Grid {
     let mut world = Grid::new(WORLD_W, WORLD_H);
     for y in 0..WORLD_H {
         for x in 0..WORLD_W {
-            world.put_tile(0, x, y, Tile::new('#', wall_style()));
+            world.put_tile(0, (x, y), Tile::new('#', wall_style()));
         }
     }
     for &(x, y, w, h) in &ROOMS {
         for cy in y..y + h {
             for cx in x..x + w {
-                world.put_tile(0, cx, cy, Tile::new('.', floor_style()));
+                world.put_tile(0, (cx, cy), Tile::new('.', floor_style()));
             }
         }
     }
     for &((fx, fy), (tx, ty)) in &CORRIDORS {
         for x in fx.min(tx)..=fx.max(tx) {
-            world.put_tile(0, x, fy, Tile::new('.', floor_style()));
+            world.put_tile(0, (x, fy), Tile::new('.', floor_style()));
         }
         for y in fy.min(ty)..=fy.max(ty) {
-            world.put_tile(0, tx, y, Tile::new('.', floor_style()));
+            world.put_tile(0, (tx, y), Tile::new('.', floor_style()));
         }
     }
     for (x, y, glyph, style) in decorations() {
-        world.put_tile(0, x, y, Tile::new(glyph, style));
+        world.put_tile(0, (x, y), Tile::new(glyph, style));
     }
     world
 }
@@ -143,7 +143,12 @@ impl Default for DungeonScroll {
 
 impl DungeonScroll {
     fn is_floor(&self, pos: Pos) -> bool {
-        pos.x < WORLD_W && pos.y < WORLD_H && self.world.get(pos.x, pos.y).glyph() != '#'
+        pos.x < WORLD_W
+            && pos.y < WORLD_H
+            && self
+                .world
+                .tile(0, pos)
+                .is_some_and(|tile| tile.glyph() != '#')
     }
 
     fn try_move(&mut self, dx: i32, dy: i32) {

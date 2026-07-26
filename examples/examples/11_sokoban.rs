@@ -196,7 +196,12 @@ impl Sokoban {
         let (Ok(ux), Ok(uy)) = (u16::try_from(x), u16::try_from(y)) else {
             return true; // negative: off the top/left edge, treated as a wall
         };
-        ux >= self.width || uy >= self.height || self.level.get(ux, uy).glyph() == '#'
+        ux >= self.width
+            || uy >= self.height
+            || self
+                .level
+                .tile(0, (ux, uy))
+                .is_some_and(|tile| tile.glyph() == '#')
     }
 
     fn box_at(&self, cell: Cell) -> Option<usize> {

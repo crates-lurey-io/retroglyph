@@ -77,7 +77,7 @@ impl Widget for Text<'_> {
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::{Color, Grid};
+    use retroglyph_core::{Color, Grid, Pos};
 
     use super::*;
 
@@ -89,9 +89,9 @@ mod tests {
             .style(Style::new().fg(Color::WHITE))
             .render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(grid.get(0, 0).glyph(), 'h');
-        assert_eq!(grid.get(1, 0).glyph(), 'i');
-        assert_eq!(grid.get(0, 0).style().foreground(), Color::WHITE);
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), 'h');
+        assert_eq!(grid[Pos::new(1, 0)].glyph(), 'i');
+        assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Color::WHITE);
     }
 
     #[test]
@@ -101,7 +101,7 @@ mod tests {
         Text::new("a much longer message than fits")
             .render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(grid.get(4, 0).glyph(), 'c'); // "a muc"
+        assert_eq!(grid[Pos::new(4, 0)].glyph(), 'c'); // "a muc"
     }
 
     #[test]
@@ -113,9 +113,9 @@ mod tests {
             .render(area, &mut Surface::new(&mut grid, area, 0));
 
         // "hi" (2 cols) in 10 cols, right-aligned: starts at column 8.
-        assert_eq!(grid.get(8, 0).glyph(), 'h');
-        assert_eq!(grid.get(9, 0).glyph(), 'i');
-        assert_eq!(grid.get(7, 0).glyph(), ' ');
+        assert_eq!(grid[Pos::new(8, 0)].glyph(), 'h');
+        assert_eq!(grid[Pos::new(9, 0)].glyph(), 'i');
+        assert_eq!(grid[Pos::new(7, 0)].glyph(), ' ');
     }
 
     #[test]
@@ -127,8 +127,8 @@ mod tests {
             .render(area, &mut Surface::new(&mut grid, area, 0));
 
         // 8 cols slack, 4 on the left: "hi" starts at column 4.
-        assert_eq!(grid.get(4, 0).glyph(), 'h');
-        assert_eq!(grid.get(5, 0).glyph(), 'i');
+        assert_eq!(grid[Pos::new(4, 0)].glyph(), 'h');
+        assert_eq!(grid[Pos::new(5, 0)].glyph(), 'i');
     }
 
     #[test]
@@ -136,6 +136,6 @@ mod tests {
         let area = Rect::new(0, 0, 0, 1);
         let mut grid = Grid::new(1, 1);
         Text::new("hi").render(area, &mut Surface::new(&mut grid, area, 0));
-        assert_eq!(grid.get(0, 0).glyph(), ' ');
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
     }
 }

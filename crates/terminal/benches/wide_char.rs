@@ -62,7 +62,7 @@ fn ascii_grid(cols: u16, rows: u16) -> Grid {
     let mut grid = Grid::new(cols, rows);
     for y in 0..rows {
         for x in 0..cols {
-            grid.put(x, y, Tile::new('a', style));
+            grid.put_tile(0, (x, y), Tile::new('a', style));
         }
     }
     grid

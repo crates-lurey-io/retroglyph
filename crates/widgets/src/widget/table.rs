@@ -251,7 +251,7 @@ fn draw_row(
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::Grid;
+    use retroglyph_core::{Grid, Pos};
 
     use super::*;
 
@@ -269,8 +269,8 @@ mod tests {
         table.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
 
         // Row 1 ("Bravo") is highlighted; row 0 ("Alpha") is not.
-        let highlighted_bg = grid.get(0, 2).style().background();
-        let plain_bg = grid.get(0, 1).style().background();
+        let highlighted_bg = grid[Pos::new(0, 2)].style().background();
+        let plain_bg = grid[Pos::new(0, 1)].style().background();
         assert_ne!(highlighted_bg, plain_bg);
     }
 
@@ -286,8 +286,8 @@ mod tests {
         let mut state = ListState::new(); // nothing selected
         table.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
 
-        let row0_bg = grid.get(0, 1).style().background();
-        let row1_bg = grid.get(0, 2).style().background();
+        let row0_bg = grid[Pos::new(0, 1)].style().background();
+        let row1_bg = grid[Pos::new(0, 2)].style().background();
         assert_eq!(row0_bg, row1_bg);
     }
 
@@ -316,8 +316,8 @@ mod tests {
 
         // Row 1 is "Charlie", row 2 is "Delta"; neither "Alpha" nor "Bravo"
         // (offset 0/1) are drawn anywhere.
-        assert_eq!(grid.get(0, 1).glyph(), 'C');
-        assert_eq!(grid.get(0, 2).glyph(), 'D');
+        assert_eq!(grid[Pos::new(0, 1)].glyph(), 'C');
+        assert_eq!(grid[Pos::new(0, 2)].glyph(), 'D');
     }
 
     #[test]
@@ -335,8 +335,8 @@ mod tests {
         state.set_offset(2); // but the window starts at "Charlie"
         table.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
 
-        let row0_bg = grid.get(0, 1).style().background();
-        let row1_bg = grid.get(0, 2).style().background();
+        let row0_bg = grid[Pos::new(0, 1)].style().background();
+        let row1_bg = grid[Pos::new(0, 2)].style().background();
         assert_eq!(row0_bg, row1_bg); // neither visible row is highlighted
     }
 
@@ -357,7 +357,7 @@ mod tests {
             g: 210,
             b: 230,
         };
-        assert_eq!(grid.get(0, 0).style().foreground(), expected);
+        assert_eq!(grid[Pos::new(0, 0)].style().foreground(), expected);
     }
 
     #[test]
@@ -373,7 +373,7 @@ mod tests {
         let mut state = ListState::new();
         table.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
 
-        assert_eq!(grid.get(0, 0).style().foreground(), Color::RED);
+        assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Color::RED);
     }
 
     #[test]
@@ -390,8 +390,8 @@ mod tests {
         state.select(Some(1));
         table.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
 
-        assert_eq!(grid.get(0, 2).style().foreground(), Color::GREEN);
-        assert_eq!(grid.get(0, 2).style().background(), Color::BLUE);
+        assert_eq!(grid[Pos::new(0, 2)].style().foreground(), Color::GREEN);
+        assert_eq!(grid[Pos::new(0, 2)].style().background(), Color::BLUE);
     }
 
     #[test]
@@ -407,12 +407,21 @@ mod tests {
         state.select(Some(1));
         table.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
 
-        assert_eq!(grid.get(0, 0).style().foreground(), Theme::DARK.fg);
-        assert_eq!(grid.get(0, 0).style().background(), Theme::DARK.panel_bg);
-        assert_eq!(grid.get(0, 1).style().foreground(), Theme::DARK.dim);
-        assert_eq!(grid.get(0, 1).style().background(), Theme::DARK.panel_bg);
-        assert_eq!(grid.get(0, 2).style().foreground(), Theme::DARK.bg);
-        assert_eq!(grid.get(0, 2).style().background(), Theme::DARK.accent);
+        assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Theme::DARK.fg);
+        assert_eq!(
+            grid[Pos::new(0, 0)].style().background(),
+            Theme::DARK.panel_bg
+        );
+        assert_eq!(grid[Pos::new(0, 1)].style().foreground(), Theme::DARK.dim);
+        assert_eq!(
+            grid[Pos::new(0, 1)].style().background(),
+            Theme::DARK.panel_bg
+        );
+        assert_eq!(grid[Pos::new(0, 2)].style().foreground(), Theme::DARK.bg);
+        assert_eq!(
+            grid[Pos::new(0, 2)].style().background(),
+            Theme::DARK.accent
+        );
     }
 
     #[test]
@@ -427,10 +436,10 @@ mod tests {
         let mut state = ListState::new();
         table.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
 
-        assert_eq!(grid.get(0, 0).style().foreground(), Theme::DARK.fg);
-        assert_eq!(grid.get(0, 0).style().background(), Color::Default);
-        assert_eq!(grid.get(0, 1).style().foreground(), Theme::DARK.dim);
-        assert_eq!(grid.get(0, 1).style().background(), Color::Default);
+        assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Theme::DARK.fg);
+        assert_eq!(grid[Pos::new(0, 0)].style().background(), Color::Default);
+        assert_eq!(grid[Pos::new(0, 1)].style().foreground(), Theme::DARK.dim);
+        assert_eq!(grid[Pos::new(0, 1)].style().background(), Color::Default);
     }
 
     #[test]
@@ -447,8 +456,8 @@ mod tests {
 
         // Default spacing (1) would put "B" at column 2; spacing 3 pushes
         // it out to column 4.
-        assert_eq!(grid.get(0, 0).glyph(), 'A');
-        assert_eq!(grid.get(4, 0).glyph(), 'B');
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), 'A');
+        assert_eq!(grid[Pos::new(4, 0)].glyph(), 'B');
     }
 
     #[test]
@@ -476,7 +485,7 @@ mod tests {
             row_style,
         );
 
-        assert_eq!(grid.get(0, 0).glyph(), 'A');
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), 'A');
     }
 
     #[test]
@@ -496,9 +505,9 @@ mod tests {
 
         // ensure_visible moved the window to [2, 4): "Charlie" then "Delta",
         // with "Delta" (the selection) highlighted on the last visible row.
-        assert_eq!(grid.get(0, 2).glyph(), 'D');
-        let highlighted_bg = grid.get(0, 2).style().background();
-        let plain_bg = grid.get(0, 1).style().background();
+        assert_eq!(grid[Pos::new(0, 2)].glyph(), 'D');
+        let highlighted_bg = grid[Pos::new(0, 2)].style().background();
+        let plain_bg = grid[Pos::new(0, 1)].style().background();
         assert_ne!(highlighted_bg, plain_bg);
     }
 }
