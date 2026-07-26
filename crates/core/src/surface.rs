@@ -5,7 +5,7 @@
 //! scoped to the whole grid, and `retroglyph-widgets` renders every widget into a `Surface`
 //! scoped to a sub-[`Rect`]: there is no separate stateful drawing API on `Terminal` itself.
 
-use crate::grid::{Grid, Offset, Pos, Rect};
+use crate::grid::{Grid, Offset, Pos, Rect, Size};
 use crate::style::Style;
 use crate::text::Line;
 use crate::tile::Tile;
@@ -236,34 +236,100 @@ impl<'a> Surface<'a> {
     ///
     /// `rows` holds one string per row of the footprint. Its first character is the **anchor**
     /// glyph, which a pixel backend looks up in its sprite cache; the rest are the span's **text
-    /// fallback**, printed by cell backends and skipped by pixel backends.
+    /// fallback**, printed by cell backends and skipped by pixel backends. Any `AsRef<str>` row
+    /// works, so a literal footprint (`&["[==]", "|__|"]`) and a computed one (`&Vec<String>`)
+    /// both pass without a borrowing pass over the rows; for the uniform case, see
+    /// [`put_span_uniform`](Self::put_span_uniform).
     ///
-    /// A no-op if `rows` is empty, ragged, or the footprint does not fit entirely within this
-    /// surface's own area (not just the grid) at `pos`; see [`Grid::write_span`] for the full
-    /// write semantics, and [`Grid::span_owner`] to hit-test the whole footprint.
-    pub fn put_span(&mut self, pos: impl Into<Pos>, rows: &[&str], style: Style) {
+    /// See [`Grid::write_span`] for the full write semantics, and [`Grid::span_owner`] to
+    /// hit-test the whole footprint.
+    ///
+    /// # Returns
+    ///
+    /// `Some(())` once the whole span is written, or `None` having written nothing at all when
+    /// `rows` is empty or ragged, either axis exceeds 255 cells, or the footprint does not fit
+    /// entirely within this surface's own area (not just the grid) at `pos`. The surface has
+    /// strictly more ways to refuse a span than [`Grid::write_span`] does, so a sprite that did
+    /// not draw is answered here rather than in the backend.
+    pub fn put_span<S: AsRef<str>>(
+        &mut self,
+        pos: impl Into<Pos>,
+        rows: &[S],
+        style: Style,
+    ) -> Option<()> {
         let pos = pos.into();
-        let Some(first) = rows.first() else {
-            return;
-        };
-        let cols = first.chars().count();
-        if cols == 0 {
-            return;
+        let cols = rows.first()?.as_ref().chars().count();
+        let w = u16::try_from(cols).ok()?;
+        let h = u16::try_from(rows.len()).ok()?;
+        if !self.span_fits(pos, w, h) {
+            return None;
         }
-        let Ok(w) = u16::try_from(cols) else {
-            return;
-        };
-        let Ok(h) = u16::try_from(rows.len()) else {
-            return;
-        };
-        if pos.x < self.area.left()
-            || pos.y < self.area.top()
-            || pos.x.saturating_add(w) > self.area.right()
-            || pos.y.saturating_add(h) > self.area.bottom()
-        {
-            return;
+        self.grid.write_span(self.layer, pos.x, pos.y, rows, style)
+    }
+
+    /// Writes a `size` multi-cell span at `pos` on this surface's layer in `style`: `anchor` in
+    /// the anchor cell, `fill` in every other cell of the footprint, the [`Surface`] twin of
+    /// [`Grid::write_span_uniform`].
+    ///
+    /// The uniform case of [`put_span`](Self::put_span), and what a sheet-driven renderer usually
+    /// wants: one sprite, chosen at runtime, with the cells it covers blanked so nothing shows
+    /// through its transparent pixels. `fill` is the text fallback a *cell* backend prints for
+    /// those covered cells, so `' '` blanks them and a visible character keeps the footprint
+    /// legible in a terminal.
+    ///
+    /// `style` reads exactly as it does for [`put_span`](Self::put_span): it applies to the text
+    /// fallback, never to the sprite.
+    ///
+    /// # Returns
+    ///
+    /// `Some(())` once the whole span is written, or `None` having written nothing at all when
+    /// either axis of `size` is `0` or exceeds 255 cells, or the footprint does not fit entirely
+    /// within this surface's own area at `pos`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # fn main() {
+    /// # fn run() -> Option<()> {
+    /// use retroglyph_core::{Grid, Rect, Style, Surface};
+    ///
+    /// let mut grid = Grid::new(8, 4);
+    /// let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 8, 4), 0);
+    ///
+    /// // A 16x16 sprite over a 2x1 block of 8x16 cells, anchored at a runtime glyph.
+    /// let anchor = '\u{E000}';
+    /// surface.put_span_uniform((1, 1), (2, 1), anchor, ' ', Style::default())?;
+    /// # Some(())
+    /// # }
+    /// # run().unwrap();
+    /// # }
+    /// ```
+    pub fn put_span_uniform(
+        &mut self,
+        pos: impl Into<Pos>,
+        size: impl Into<Size>,
+        anchor: char,
+        fill: char,
+        style: Style,
+    ) -> Option<()> {
+        let pos = pos.into();
+        let size = size.into();
+        if !self.span_fits(pos, size.width, size.height) {
+            return None;
         }
-        self.grid.write_span(self.layer, pos.x, pos.y, rows, style);
+        self.grid
+            .write_span_uniform(self.layer, pos, size, anchor, fill, style)
+    }
+
+    /// `true` if a `w` x `h` footprint at `pos` lies entirely within this surface's area.
+    ///
+    /// A span is all-or-nothing rather than clipped like the per-cell writes, because a
+    /// footprint half outside the area would reserve cells the caller does not own.
+    fn span_fits(&self, pos: Pos, w: u16, h: u16) -> bool {
+        pos.x >= self.area.left()
+            && pos.y >= self.area.top()
+            && pos.x.saturating_add(w) <= self.area.right()
+            && pos.y.saturating_add(h) <= self.area.bottom()
     }
 
     /// Place `ch` at `pos` with a sub-cell pixel `offset`, in `style`.
@@ -349,12 +415,141 @@ impl<'a> StyledSurface<'_, 'a> {
     }
 
     /// [`Surface::put_span`] using this view's bound style.
-    pub fn put_span(&mut self, pos: impl Into<Pos>, rows: &[&str]) {
-        self.surface.put_span(pos, rows, self.style);
+    pub fn put_span<S: AsRef<str>>(&mut self, pos: impl Into<Pos>, rows: &[S]) -> Option<()> {
+        self.surface.put_span(pos, rows, self.style)
+    }
+
+    /// [`Surface::put_span_uniform`] using this view's bound style.
+    pub fn put_span_uniform(
+        &mut self,
+        pos: impl Into<Pos>,
+        size: impl Into<Size>,
+        anchor: char,
+        fill: char,
+    ) -> Option<()> {
+        self.surface
+            .put_span_uniform(pos, size, anchor, fill, self.style)
     }
 
     /// [`Surface::put_offset`] using this view's bound style.
     pub fn put_offset(&mut self, pos: impl Into<Pos>, offset: impl Into<Offset>, ch: char) {
         self.surface.put_offset(pos, offset, ch, self.style);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn screen(grid: &mut Grid) -> Surface<'_> {
+        let area = Rect::new(0, 0, grid.width(), grid.height());
+        Surface::new(grid, area, 0)
+    }
+
+    #[test]
+    fn put_span_takes_any_as_ref_str_row() {
+        let mut grid = Grid::new(4, 4);
+        // A footprint computed at runtime: owned rows, no borrowing pass over them.
+        let rows: Vec<String> = (0..2)
+            .map(|row| {
+                (0..2)
+                    .map(|col| if (row, col) == (0, 0) { 'C' } else { ' ' })
+                    .collect()
+            })
+            .collect();
+
+        assert_eq!(
+            screen(&mut grid).put_span((0, 0), &rows, Style::default()),
+            Some(())
+        );
+        assert_eq!(grid[Pos::new(0, 0)].span(), (2, 2));
+    }
+
+    #[test]
+    fn put_span_reports_why_a_span_did_not_draw() {
+        let mut grid = Grid::new(4, 4);
+        let area = Rect::new(0, 0, 2, 2);
+        let mut surface = Surface::new(&mut grid, area, 0);
+        let style = Style::default();
+
+        assert_eq!(surface.put_span((0, 0), &[] as &[&str], style), None);
+        assert_eq!(surface.put_span((0, 0), &[""], style), None);
+        // Ragged rows are refused by the grid, and that answer is passed through.
+        assert_eq!(surface.put_span((0, 0), &["ab", "c"], style), None);
+        // Fits the grid, but leaves the surface's own area.
+        assert_eq!(surface.put_span((1, 1), &["ab"], style), None);
+        assert_eq!(surface.put_span((0, 0), &["ab"], style), Some(()));
+    }
+
+    #[test]
+    fn put_span_uniform_writes_the_anchor_once_and_fills_the_rest() {
+        let mut grid = Grid::new(4, 4);
+        assert_eq!(
+            screen(&mut grid).put_span_uniform((1, 1), (2, 2), 'C', '.', Style::default()),
+            Some(())
+        );
+
+        assert_eq!(grid[Pos::new(1, 1)].glyph(), 'C');
+        assert_eq!(grid[Pos::new(1, 1)].span(), (2, 2));
+        assert_eq!(grid[Pos::new(2, 2)].glyph(), '.');
+        assert_eq!(grid.span_owner(0, 2, 2), Some(Pos::new(1, 1)));
+    }
+
+    #[test]
+    fn put_span_uniform_writes_to_this_surfaces_layer() {
+        let mut grid = Grid::new(4, 4);
+        {
+            let mut surface = screen(&mut grid);
+            surface
+                .on_layer(2)
+                .put_span_uniform((0, 0), (2, 1), 'C', ' ', Style::default())
+                .expect("span write");
+        }
+
+        assert_eq!(grid.span_owner(2, 1, 0), Some(Pos::new(0, 0)));
+        assert_eq!(grid.span_owner(0, 1, 0), None);
+    }
+
+    #[test]
+    fn put_span_uniform_refuses_a_footprint_that_leaves_the_surfaces_area() {
+        let mut grid = Grid::new(4, 4);
+        let area = Rect::new(0, 0, 2, 2);
+        let mut surface = Surface::new(&mut grid, area, 0);
+        let style = Style::default();
+
+        // Both fit the grid; neither fits the area.
+        assert_eq!(
+            surface.put_span_uniform((1, 0), (2, 1), 'C', ' ', style),
+            None
+        );
+        assert_eq!(
+            surface.put_span_uniform((0, 1), (1, 2), 'C', ' ', style),
+            None
+        );
+        assert_eq!(
+            surface.put_span_uniform((0, 0), (0, 1), 'C', ' ', style),
+            None
+        );
+        assert_eq!(
+            surface.put_span_uniform((0, 0), (2, 2), 'C', ' ', style),
+            Some(())
+        );
+    }
+
+    #[test]
+    fn styled_surface_forwards_both_span_calls() {
+        let mut grid = Grid::new(4, 4);
+        {
+            let mut surface = screen(&mut grid);
+            let mut styled = surface.with_style(Style::new().fg(crate::Color::RED));
+            styled.put_span((0, 0), &["ab"]).expect("span write");
+            styled
+                .put_span_uniform((0, 1), (2, 1), 'C', ' ')
+                .expect("span write");
+        }
+
+        assert_eq!(grid[Pos::new(0, 0)].style().foreground(), crate::Color::RED);
+        assert_eq!(grid[Pos::new(0, 1)].style().foreground(), crate::Color::RED);
+        assert_eq!(grid[Pos::new(0, 1)].span(), (2, 1));
     }
 }
