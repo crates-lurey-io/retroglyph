@@ -109,7 +109,7 @@ pub use event::{
     MouseEvent, MouseEventKind, PhysicalPos, SystemTheme,
 };
 pub use frame_clock::FrameClock;
-#[cfg(feature = "gem")]
+#[cfg(feature = "color-space")]
 pub use grid::BlendMode;
 pub use grid::{Grid, Offset, Pos, Rect, Size};
 #[cfg(feature = "egc")]

@@ -57,7 +57,7 @@ fn bench_blit(c: &mut Criterion, cols: u16, rows: u16) {
 
 /// Registers a `blit_alpha` case per [`BlendMode`] variant, over the same large rect used by
 /// `bench_blit` above, so the two are directly comparable.
-#[cfg(feature = "gem")]
+#[cfg(feature = "color-space")]
 fn bench_blit_alpha(c: &mut Criterion, cols: u16, rows: u16) {
     use retroglyph_core::BlendMode;
 
@@ -97,7 +97,7 @@ fn blit(c: &mut Criterion) {
     // 80x24: the classic terminal default. 200x60: a large terminal / roguelike viewport.
     bench_blit(c, 80, 24);
     bench_blit(c, 200, 60);
-    #[cfg(feature = "gem")]
+    #[cfg(feature = "color-space")]
     {
         bench_blit_alpha(c, 80, 24);
         bench_blit_alpha(c, 200, 60);
