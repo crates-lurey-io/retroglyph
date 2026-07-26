@@ -348,5 +348,11 @@ fn svg_snapshot() {
             "SVG output missing expected sidebar text {expected:?}"
         );
     }
-    support::write_snapshot_file("20_overworld.svg", svg.as_bytes());
+
+    // Scratch, not `write_snapshot_file`, for the same reason. Every other example's SVG is a
+    // tracked companion to an `insta`-pinned assertion, so rewriting it each run is a no-op; this
+    // one has nothing pinning it, so a tracked copy would be rewritten with different bytes on
+    // literally every `cargo test` and show up as a spurious diff in whatever commit came next.
+    let path = support::write_scratch_file("20_overworld.svg", svg.as_bytes());
+    println!("wrote {} for visual review", path.display());
 }

@@ -130,8 +130,6 @@ impl std::error::Error for SoftwareBackendError {
 /// See the `demo` example for a complete runnable program.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SoftwareBackend {
-    /// Title shown in the window's title bar.
-    pub window_title: String,
     /// Bitmap font used to render glyphs.
     ///
     /// `None` only when `default-font` is disabled and no font has
@@ -154,14 +152,6 @@ pub struct SoftwareBackend {
     /// Registered tileset options, loaded at [`run_headless`](SoftwareBackend::run_headless) time.
     #[cfg(feature = "tilesets")]
     pub tilesets: Vec<TilesetOptions>,
-    /// Target frame rate cap in frames per second.
-    ///
-    /// `None` (the default) runs unbounded: the event loop re-renders as fast
-    /// as the backend allows. Set to e.g. `Some(60)` to cap at 60 fps by
-    /// sleeping in `about_to_wait` until the next frame deadline. On WASM
-    /// this has no effect; `requestAnimationFrame` drives the loop at the
-    /// display refresh rate regardless.
-    pub target_fps: Option<u32>,
 }
 
 impl SoftwareBackend {
@@ -180,9 +170,8 @@ impl SoftwareBackend {
     /// supported way to obtain a `SoftwareBackend` is through
     /// [`SoftwareBackendBuilder`], so that its `font` invariant is always
     /// validated by [`SoftwareBackendBuilder::build`].
-    fn defaults() -> Self {
+    const fn defaults() -> Self {
         Self {
-            window_title: String::from("rg application"),
             #[cfg(feature = "default-font")]
             font: Some(retroglyph_window::font::unscii16::FONT),
             #[cfg(not(feature = "default-font"))]
@@ -192,7 +181,6 @@ impl SoftwareBackend {
             scale: 1,
             #[cfg(feature = "tilesets")]
             tilesets: Vec::new(),
-            target_fps: None,
         }
     }
 }
@@ -227,17 +215,10 @@ impl SoftwareBackendBuilder {
     /// When the `default-font` feature is enabled the Unscii 16
     /// font is pre-selected; otherwise you must call [`font`](Self::font).
     #[must_use]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             options: SoftwareBackend::defaults(),
         }
-    }
-
-    /// Sets the window title.
-    #[must_use]
-    pub fn title(mut self, title: &str) -> Self {
-        self.options.window_title = title.to_string();
-        self
     }
 
     /// Sets the grid dimensions in cells.
@@ -280,18 +261,6 @@ impl SoftwareBackendBuilder {
     #[must_use]
     pub fn tileset(mut self, opts: TilesetOptions) -> Self {
         self.options.tilesets.push(opts);
-        self
-    }
-
-    /// Sets a target frame rate cap in frames per second.
-    ///
-    /// When set, `about_to_wait` sleeps until the next frame deadline instead
-    /// of rendering as fast as possible. Useful for CPU-friendly demos that
-    /// don't need maximum throughput. Pass `0` to disable the cap (same as
-    /// not calling this method). On WASM this has no effect.
-    #[must_use]
-    pub const fn target_fps(mut self, fps: u32) -> Self {
-        self.options.target_fps = if fps == 0 { None } else { Some(fps) };
         self
     }
 

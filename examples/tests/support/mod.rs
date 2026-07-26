@@ -469,9 +469,31 @@ fn render_svg(screen: &vt100::Screen, rows: u16, cols: u16) -> String {
 /// Writes `bytes` to `tests/snapshots/<file_name>`, creating the directory
 /// if needed. Used for the PNG/SVG artifacts: reviewed visually (`git diff`
 /// on a binary/SVG file, or opening the PNG), not text-diffed by insta.
+///
+/// Only for output that some `insta` assertion in the same test already pinned byte-for-byte.
+/// This overwrites a *tracked* file on every run, so writing anything clock- or
+/// machine-dependent here leaves the working copy permanently dirty and puts noise in every
+/// unrelated commit made after a test run. Use [`write_scratch_file`] for that instead.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn write_snapshot_file(file_name: &str, bytes: &[u8]) {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots");
     std::fs::create_dir_all(&dir).expect("create snapshots dir");
     std::fs::write(dir.join(file_name), bytes).expect("write snapshot file");
+}
+
+/// Writes `bytes` to cargo's per-test scratch directory and returns the path, for a visual-review
+/// artifact that can't be pinned byte-for-byte.
+///
+/// [`CARGO_TARGET_TMPDIR`] lives under `target/`, so unlike [`write_snapshot_file`] this leaves
+/// no tracked file to go stale or dirty. Print the returned path from the test so a reviewer can
+/// still open the artifact after a run.
+///
+/// [`CARGO_TARGET_TMPDIR`]: https://doc.rust-lang.org/cargo/reference/environment-variables.html
+#[cfg(not(target_arch = "wasm32"))]
+pub fn write_scratch_file(file_name: &str, bytes: &[u8]) -> PathBuf {
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("snapshots");
+    std::fs::create_dir_all(&dir).expect("create scratch dir");
+    let path = dir.join(file_name);
+    std::fs::write(&path, bytes).expect("write scratch file");
+    path
 }

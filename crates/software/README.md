@@ -58,13 +58,27 @@ See [docs.rs](https://docs.rs/retroglyph-software) for the full API, or the
 [workspace README](https://github.com/crates-lurey-io/retroglyph#readme) for a real backend quick
 start.
 
-## WASM caveat: `target_fps` is a no-op
+## Frame rate and window title live on `WindowConfig`, not on this builder
 
-[`SoftwareBackendBuilder::target_fps`](https://docs.rs/retroglyph-software/latest/retroglyph_software/struct.SoftwareBackendBuilder.html#method.target_fps)
-caps the frame rate on native targets by sleeping in `about_to_wait` until the next frame deadline.
-On `wasm32` this has no effect: `requestAnimationFrame` drives the loop at the display refresh rate
-regardless, so a native app that relies on `target_fps` to throttle rendering will run uncapped once
-ported to the web.
+This builder configures the renderer -- font, grid, scale, tilesets -- and nothing else. Window
+title and frame rate are windowing concerns, so they belong to
+[`WindowConfig::fit`](https://docs.rs/retroglyph-window/latest/retroglyph_window/winit/struct.WindowConfig.html#method.fit),
+which takes both:
+
+```rust,ignore
+let config = WindowConfig::fit(&renderer, "My Game", Some(60));
+```
+
+`target_fps` there is a mode switch before it is a cap. `Some(_)` renders continuously, which is
+what an app animating over time (a `Tween`, a `FrameClock`, anything driven by `Frame::delta`)
+needs; `None` renders only in response to input, which is right for an event-driven UI that should
+sleep when idle but will look frozen under an animation.
+
+The number itself is only honored on native, where the event loop can sleep until the next frame
+deadline. On `wasm32` the browser owns frame pacing -- winit's web backend services each requested
+redraw on the next `requestAnimationFrame` -- so a `Some(_)` app always runs at the display refresh
+rate, and a native app relying on `target_fps` to throttle below that will run uncapped once ported
+to the web.
 
 ## Backend parity: occupied default-background cells
 
