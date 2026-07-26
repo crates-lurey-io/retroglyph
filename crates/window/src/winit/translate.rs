@@ -3,7 +3,7 @@
 //! Pure functions, unit-testable without a window.
 
 use retroglyph_core::event::{
-    Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, PhysicalPos,
+    Event, KeyCode, KeyEvent, KeyEventKind, KeyLocation, KeyModifiers, MouseButton, PhysicalPos,
 };
 use retroglyph_core::grid::Pos;
 
@@ -89,7 +89,22 @@ pub fn translate_ime(ime: winit::event::Ime) -> Option<Event> {
 pub fn translate_key(input: winit::event::KeyEvent, modifiers: KeyModifiers) -> Option<Event> {
     let kind = key_event_kind(input.state, input.repeat);
     let code = key_code_from_logical(&input.logical_key, modifiers)?;
-    Some(Event::Key(KeyEvent::with_kind(code, modifiers, kind)))
+    let location = translate_key_location(input.location);
+    Some(Event::Key(KeyEvent::with_location(
+        code, modifiers, kind, location,
+    )))
+}
+
+/// Maps winit's [`KeyLocation`](winit::keyboard::KeyLocation) 1:1 onto our [`KeyLocation`].
+#[must_use]
+pub const fn translate_key_location(location: winit::keyboard::KeyLocation) -> KeyLocation {
+    use winit::keyboard::KeyLocation as WL;
+    match location {
+        WL::Standard => KeyLocation::Standard,
+        WL::Left => KeyLocation::Left,
+        WL::Right => KeyLocation::Right,
+        WL::Numpad => KeyLocation::Numpad,
+    }
 }
 
 /// Converts a raw f64 cursor position to a [`PhysicalPos`].
@@ -367,6 +382,17 @@ mod tests {
             key_event_kind(ElementState::Released, true),
             KeyEventKind::Release
         );
+    }
+
+    // ── translate_key_location ────────────────────────────────────────────────
+
+    #[test]
+    fn translate_key_location_maps_all_variants() {
+        use winit::keyboard::KeyLocation as WL;
+        assert_eq!(translate_key_location(WL::Standard), KeyLocation::Standard);
+        assert_eq!(translate_key_location(WL::Left), KeyLocation::Left);
+        assert_eq!(translate_key_location(WL::Right), KeyLocation::Right);
+        assert_eq!(translate_key_location(WL::Numpad), KeyLocation::Numpad);
     }
 
     // ── translate_mouse_button ────────────────────────────────────────────────

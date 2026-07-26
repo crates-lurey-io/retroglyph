@@ -866,6 +866,20 @@ const fn from_crossterm_key_kind(
     }
 }
 
+// Crossterm only ever reports a key as originating from the keypad (`KeyEventState::KEYPAD`,
+// set under the kitty keyboard protocol); it has no notion of a left/right pair for a single
+// symbolic key, so `Left`/`Right` are unreachable from this backend.
+const fn from_crossterm_key_state(
+    state: crossterm::event::KeyEventState,
+) -> retroglyph_core::event::KeyLocation {
+    use retroglyph_core::event::KeyLocation as L;
+    if state.contains(crossterm::event::KeyEventState::KEYPAD) {
+        L::Numpad
+    } else {
+        L::Standard
+    }
+}
+
 fn from_crossterm_key_modifiers(
     mods: crossterm::event::KeyModifiers,
 ) -> retroglyph_core::event::KeyModifiers {
@@ -960,10 +974,11 @@ pub fn from_crossterm_event(event: crossterm::event::Event) -> Option<Event> {
             } else {
                 from_crossterm_key_code(k.code)?
             };
-            Some(Event::Key(retroglyph_core::event::KeyEvent::with_kind(
+            Some(Event::Key(retroglyph_core::event::KeyEvent::with_location(
                 code,
                 from_crossterm_key_modifiers(k.modifiers),
                 from_crossterm_key_kind(k.kind),
+                from_crossterm_key_state(k.state),
             )))
         }
         CE::Mouse(m) => Some(Event::Mouse(from_crossterm_mouse_event(m))),
@@ -991,6 +1006,33 @@ mod tests {
             Some(Event::Key(key)) => key.code,
             other => panic!("expected Some(Event::Key(_)), got {other:?}"),
         }
+    }
+
+    #[test]
+    fn keypad_state_maps_to_numpad_location() {
+        let ct_event =
+            crossterm::event::Event::Key(crossterm::event::KeyEvent::new_with_kind_and_state(
+                crossterm::event::KeyCode::Char('8'),
+                crossterm::event::KeyModifiers::NONE,
+                crossterm::event::KeyEventKind::Press,
+                crossterm::event::KeyEventState::KEYPAD,
+            ));
+        let Some(Event::Key(key)) = from_crossterm_event(ct_event) else {
+            panic!("expected Some(Event::Key(_))");
+        };
+        assert_eq!(key.location, retroglyph_core::event::KeyLocation::Numpad);
+    }
+
+    #[test]
+    fn no_keypad_state_maps_to_standard_location() {
+        let ct_event = crossterm::event::Event::Key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char('8'),
+            crossterm::event::KeyModifiers::NONE,
+        ));
+        let Some(Event::Key(key)) = from_crossterm_event(ct_event) else {
+            panic!("expected Some(Event::Key(_))");
+        };
+        assert_eq!(key.location, retroglyph_core::event::KeyLocation::Standard);
     }
 
     #[test]

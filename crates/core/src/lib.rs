@@ -97,8 +97,8 @@ pub use backend::{Backend, Cursor, Headless, Input, Output};
 pub use camera::Camera;
 pub use color::{AnsiColor, Color, InvalidAnsiIndex};
 pub use event::{
-    Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, KeyState, MouseButton, MouseEvent,
-    MouseEventKind, PhysicalPos, SystemTheme,
+    Event, KeyCode, KeyEvent, KeyEventKind, KeyLocation, KeyModifiers, KeyState, MouseButton,
+    MouseEvent, MouseEventKind, PhysicalPos, SystemTheme,
 };
 pub use frame_clock::FrameClock;
 #[cfg(feature = "gem")]
