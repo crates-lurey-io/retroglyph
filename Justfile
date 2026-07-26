@@ -35,6 +35,9 @@ lint: clippy markdown
 
 compile:
     cargo check --workspace --all-features
+    # retroglyph#547: dep:gem is unconditional in retroglyph-core now, so this has to compile
+    # with zero features, not just fewer -- the whole point of making it non-optional.
+    cargo check -p retroglyph-core --no-default-features
 
 doc:
     # --exclude: neither is part of the published API surface (cargo-bin is a

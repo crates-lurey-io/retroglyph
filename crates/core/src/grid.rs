@@ -126,8 +126,11 @@ use crate::tint::Tint;
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-#[cfg(feature = "gem")]
-use alpha_blend::blend_modes::SeparableBlendMode;
+// Aliased rather than imported as `BlendMode`: this module already defines its own `BlendMode`
+// (below), and alpha-blend 0.3 renamed `blend_modes::SeparableBlendMode` to a top-level
+// `BlendMode` of its own, which would otherwise collide.
+#[cfg(feature = "color-space")]
+use alpha_blend::BlendMode as SeparableBlendMode;
 use core::fmt;
 use core::ops::{Index, IndexMut};
 use grixy::buf::GridBuf;
@@ -139,15 +142,16 @@ use grixy::ops::{ExactSizeGrid, GridRead, GridWrite};
 ///
 /// [`Linear`](Self::Linear) is a straight per-channel color lerp: `blit_alpha`'s original
 /// behavior. The remaining variants are the [W3C separable blend modes] libtcod also offers:
-/// each computes a fully blended color per channel via
-/// [`alpha_blend::blend_modes::SeparableBlendMode`], and *that* result is what gets lerped
-/// against the destination by the alpha factor, in place of the source color `Linear` would use.
+/// each computes a fully blended color per channel via [`alpha_blend::BlendMode`] (imported
+/// here under its old name, [`SeparableBlendMode`], to avoid colliding with this module's own
+/// [`BlendMode`]), and *that* result is what gets lerped against the destination by the alpha
+/// factor, in place of the source color `Linear` would use.
 ///
-/// Requires the `gem` feature (default on): see [`Grid::blit_alpha`]'s doc comment for which
+/// Requires the `color-space` feature (default on): see [`Grid::blit_alpha`]'s doc comment for which
 /// crate backs each mode.
 ///
 /// [W3C separable blend modes]: https://www.w3.org/TR/compositing-1/#blending
-#[cfg(feature = "gem")]
+#[cfg(feature = "color-space")]
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum BlendMode {
@@ -162,12 +166,15 @@ pub enum BlendMode {
     Burn,
     /// Multiplies or screens the colors, depending on the destination.
     Overlay,
+    /// Darkens: `dst * src`. Always at least as dark as either input; the complement of
+    /// [`Screen`](Self::Screen).
+    Multiply,
 }
 
-#[cfg(feature = "gem")]
+#[cfg(feature = "color-space")]
 impl BlendMode {
     /// The equivalent [`SeparableBlendMode`], or `None` for [`Linear`](Self::Linear) (which uses
-    /// [`gem::rgb::Lerp`] instead: see [`blend_color`]).
+    /// [`gem::Mix`] instead: see [`blend_color`]).
     const fn separable(self) -> Option<SeparableBlendMode> {
         match self {
             Self::Linear => None,
@@ -175,6 +182,7 @@ impl BlendMode {
             Self::Dodge => Some(SeparableBlendMode::ColorDodge),
             Self::Burn => Some(SeparableBlendMode::ColorBurn),
             Self::Overlay => Some(SeparableBlendMode::Overlay),
+            Self::Multiply => Some(SeparableBlendMode::Multiply),
         }
     }
 }
@@ -1413,15 +1421,16 @@ impl Grid {
     /// the destination. Non-RGB color variants (Ansi/Indexed) are passed
     /// through unblended, regardless of `mode`.
     ///
-    /// Requires the `gem` feature (default on): [`BlendMode::Linear`]'s
-    /// per-channel color lerp is delegated to [`gem::rgb::Lerp`]; the other
-    /// modes delegate to [`alpha_blend::blend_modes::SeparableBlendMode`].
+    /// Requires the `color-space` feature (default on): [`BlendMode::Linear`]'s
+    /// per-channel color lerp is delegated to [`gem::Mix`]; the other
+    /// modes delegate to [`alpha_blend::BlendMode`] (imported in this module as
+    /// `SeparableBlendMode` to avoid colliding with this crate's own [`BlendMode`]).
     ///
     /// Like [`blit`](Self::blit) (see retroglyph#262/#263), walks `src`'s and `self`'s layer
     /// buffers directly by flat index instead of per-cell [`tile`](Self::tile)/
     /// [`put_tile`](Self::put_tile), and allocates the destination layer once, up front, rather
     /// than as a side effect of the first written cell.
-    #[cfg(feature = "gem")]
+    #[cfg(feature = "color-space")]
     #[allow(clippy::too_many_arguments, clippy::float_cmp)]
     pub fn blit_alpha(
         &mut self,
@@ -1746,16 +1755,17 @@ where
 /// destination. Non-RGB source colors are returned as-is (no resolution).
 ///
 /// [`BlendMode::Linear`] is a per-channel sRGB-domain lerp (dst -> src by
-/// `t`) delegated to [`gem::rgb::Lerp`], which is `no_std`-safe (round-half-
+/// `t`) delegated to [`gem::Mix`], which is `no_std`-safe (round-half-
 /// away via `floor(x + 0.5)`, no `std`/`libm` float intrinsics). The other
 /// modes evaluate [`SeparableBlendMode::mix`] per channel in `0.0..=1.0`
 /// (converting u8 <-> f32 at the boundary; see [`blend_separable_channel`]),
 /// then lerp that fully mixed color against the destination by `t`, same as
 /// `Linear`.
-#[cfg(feature = "gem")]
+#[cfg(feature = "color-space")]
 #[allow(clippy::float_cmp)]
 fn blend_color(mode: BlendMode, src: Color, dst: Color, t: f32) -> Color {
-    use gem::rgb::{HasBlue as _, HasGreen as _, HasRed as _, Lerp as _, Rgb888};
+    use gem::Mix as _;
+    use gem::rgb::{HasBlue as _, HasGreen as _, HasRed as _, Rgb888};
     match (src, dst) {
         (Color::Default, _) => Color::Default,
         (
@@ -1774,11 +1784,11 @@ fn blend_color(mode: BlendMode, src: Color, dst: Color, t: f32) -> Color {
             // the other modes must still run their mix formula at `t == 1.0`: see `blit_alpha`.
             let (r, g, b) = mode.separable().map_or_else(
                 || {
-                    // `dst.lerp(src, t)`, not `src.lerp(dst, t)`: at `t == 0.0` this must return
+                    // `dst.mix(src, t)`, not `src.mix(dst, t)`: at `t == 0.0` this must return
                     // `dst` ("keep destination", per `blit_alpha`'s doc comment) and only reach
                     // `src` at `t == 1.0`: the same `0.0 == dst, 1.0 == fully blended` contract
                     // every other `BlendMode` follows (see `blend_separable_channel`).
-                    let out = Rgb888::from_rgb(dr, dg, db).lerp(Rgb888::from_rgb(sr, sg, sb), t);
+                    let out = Rgb888::from_rgb(dr, dg, db).mix(Rgb888::from_rgb(sr, sg, sb), t);
                     (out.red(), out.green(), out.blue())
                 },
                 |sep| {
@@ -1801,7 +1811,7 @@ fn blend_color(mode: BlendMode, src: Color, dst: Color, t: f32) -> Color {
 /// (a `std`-only method not available in `core`, same reasoning as `libm::fmaf` in
 /// `animate::easing`) and clamps before converting back to u8, since `ColorDodge`/`ColorBurn`'s
 /// `min(1.0, ...)` branches can round a hair outside `0.0..=1.0` at the float boundary.
-#[cfg(feature = "gem")]
+#[cfg(feature = "color-space")]
 fn blend_separable_channel(sep: SeparableBlendMode, src: u8, dst: u8, t: f32) -> u8 {
     let cs = f32::from(src) / 255.0;
     let cb = f32::from(dst) / 255.0;
@@ -1814,12 +1824,12 @@ fn blend_separable_channel(sep: SeparableBlendMode, src: u8, dst: u8, t: f32) ->
     out
 }
 
-#[cfg(feature = "gem")]
+#[cfg(feature = "color-space")]
 fn blend_fg(mode: BlendMode, src: Color, dst: Color, t: f32) -> Color {
     blend_color(mode, src, dst, t)
 }
 
-#[cfg(feature = "gem")]
+#[cfg(feature = "color-space")]
 fn blend_bg(mode: BlendMode, src: Color, dst: Color, t: f32) -> Color {
     blend_color(mode, src, dst, t)
 }
@@ -2688,7 +2698,7 @@ mod tests {
 
     // --- `BlendMode` / `blit_alpha` ---
 
-    #[cfg(feature = "gem")]
+    #[cfg(feature = "color-space")]
     #[test]
     fn test_blend_separable_channel_screen() {
         // cb = 102 (0.4), cs = 204 (0.8): screen = cb + cs - cb*cs = 0.88.
@@ -2703,7 +2713,7 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "gem")]
+    #[cfg(feature = "color-space")]
     #[test]
     fn test_blend_separable_channel_dodge() {
         // cb = 51 (0.2), cs = 204 (0.8): min(1, 0.2 / 0.2) saturates to 1.0.
@@ -2717,7 +2727,7 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "gem")]
+    #[cfg(feature = "color-space")]
     #[test]
     fn test_blend_separable_channel_burn() {
         // cb = 204 (0.8), cs = 51 (0.2): 1 - min(1, 0.2 / 0.2) bottoms out at 0.0.
@@ -2731,7 +2741,7 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "gem")]
+    #[cfg(feature = "color-space")]
     #[test]
     fn test_blend_separable_channel_overlay() {
         // cb = 51 (0.2, the <= 0.5 branch): 2 * cb * cs.
@@ -2752,7 +2762,7 @@ mod tests {
 
     /// End-to-end through `blit_alpha`, not just the per-channel helper: proves `BlendMode`
     /// actually reaches `blend_fg`/`blend_bg` and lands on the destination tile's style.
-    #[cfg(feature = "gem")]
+    #[cfg(feature = "color-space")]
     #[test]
     fn test_grid_blit_alpha_screen_blends_fg() {
         let mut src = Grid::new(1, 1);
@@ -2804,7 +2814,7 @@ mod tests {
     /// retroglyph#268: same wraparound guard as `blit`'s
     /// `test_grid_blit_dest_origin_near_u16_max_does_not_wrap`, but through `blit_alpha`'s
     /// separate `dst_x`/`dst_y` computation.
-    #[cfg(feature = "gem")]
+    #[cfg(feature = "color-space")]
     #[test]
     fn test_grid_blit_alpha_dest_origin_near_u16_max_does_not_wrap() {
         let mut src = Grid::new(4, 1);
@@ -2833,10 +2843,10 @@ mod tests {
 
     /// `BlendMode::Linear` at `t == 0.0` keeps the destination and at `t == 1.0` uses the source,
     /// matching `blit_alpha`'s doc comment (this direction was actually inverted before this
-    /// change: the underlying `gem::rgb::Lerp` call had `src`/`dst` swapped, so `t == 0.0` used
+    /// change: the underlying `gem::Mix` call had `src`/`dst` swapped, so `t == 0.0` used
     /// to return `src` and `t == 1.0` returned `dst`. No prior tests covered `blit_alpha`, so
     /// this had shipped unnoticed).
-    #[cfg(feature = "gem")]
+    #[cfg(feature = "color-space")]
     #[test]
     fn test_grid_blit_alpha_linear_direction() {
         let mut src = Grid::new(1, 1);
@@ -2894,7 +2904,7 @@ mod tests {
 
     /// Every `BlendMode` preserves `Color::Default` and passes non-RGB colors through unblended,
     /// same as the pre-existing `Linear` behavior.
-    #[cfg(feature = "gem")]
+    #[cfg(feature = "color-space")]
     #[test]
     fn test_blend_color_non_rgb_passthrough_all_modes() {
         for mode in [
@@ -2903,6 +2913,7 @@ mod tests {
             BlendMode::Dodge,
             BlendMode::Burn,
             BlendMode::Overlay,
+            BlendMode::Multiply,
         ] {
             assert_eq!(
                 blend_color(mode, Color::Default, Color::Rgb { r: 1, g: 2, b: 3 }, 0.5),

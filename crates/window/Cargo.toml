@@ -27,7 +27,7 @@ log = { version = "0.4", optional = true }
 # both graphical backends (software CPU blit, gl RGBA atlas upload). Feature-gated so a consumer
 # that only needs windowing/fonts pays nothing.
 image = { version = "0.25", optional = true, default-features = false, features = ["png"] }
-alpha-blend = { version = "0.2", optional = true, default-features = false, features = ["std"] }
+alpha-blend = { version = "0.3", optional = true, default-features = false, features = ["std"] }
 # A portable `std::time::Instant`-alike: plain `std::time` re-export on native, backed by the
 # browser's `Performance.now()` on `wasm32-unknown-unknown`. Already in `Cargo.lock` transitively
 # (winit depends on it), so this adds no new dependency -- it replaces `run.rs`'s own hand-rolled

@@ -114,15 +114,6 @@ pub struct Glyph {
     pub bg: Color,
 }
 
-/// Squared euclidean distance between two RGB colors, as `u32` (no overflow risk for `u8`
-/// channel differences).
-const fn distance_sq(a: Rgb, b: Rgb) -> u32 {
-    let dr = a.0.abs_diff(b.0) as u32;
-    let dg = a.1.abs_diff(b.1) as u32;
-    let db = a.2.abs_diff(b.2) as u32;
-    dr * dr + dg * dg + db * db
-}
-
 /// Averages the `pixels` selected by `mask` (bit `i` set means `pixels[i]` is included), rounding
 /// each channel to the nearest integer. Returns `None` if `mask` selects no pixels.
 fn average(pixels: &[Rgb], mask: usize) -> Option<Rgb> {
@@ -162,7 +153,7 @@ fn posterize(pixels: &[Rgb], table: &[char]) -> Glyph {
         let mut error = 0u32;
         for (i, &pixel) in pixels.iter().enumerate() {
             let assigned = if mask & (1 << i) != 0 { fg } else { bg };
-            error += distance_sq(pixel, assigned);
+            error += gem::rgb::distance_sq(pixel, assigned);
         }
         if error < best_error {
             best_error = error;
@@ -276,9 +267,7 @@ pub fn quantize_sextant(pixels: [Rgb; 6]) -> Glyph {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        Color, average, distance_sq, quantize_half_block, quantize_quadrant, quantize_sextant,
-    };
+    use super::{Color, average, quantize_half_block, quantize_quadrant, quantize_sextant};
 
     const BLACK: (u8, u8, u8) = (0, 0, 0);
     const WHITE: (u8, u8, u8) = (255, 255, 255);
@@ -286,8 +275,8 @@ mod tests {
 
     #[test]
     fn distance_sq_matches_manual_euclidean() {
-        assert_eq!(distance_sq(BLACK, WHITE), 255 * 255 * 3);
-        assert_eq!(distance_sq(BLACK, BLACK), 0);
+        assert_eq!(gem::rgb::distance_sq(BLACK, WHITE), 255 * 255 * 3);
+        assert_eq!(gem::rgb::distance_sq(BLACK, BLACK), 0);
     }
 
     #[test]

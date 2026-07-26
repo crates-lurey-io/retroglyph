@@ -1,5 +1,7 @@
 //! Sprite colour modulation: how a sprite's own pixels are recoloured at draw time.
 
+use gem::rgb::Rgb888;
+
 /// How a sprite's own pixels are recoloured at draw time.
 ///
 /// A sprite is composited from the artwork's pixels, and a cell's
@@ -125,52 +127,51 @@ impl Tint {
     /// Alpha is not an input and not an output: a tint never changes which pixels are opaque.
     #[must_use]
     pub const fn apply(self, rgb: (u8, u8, u8)) -> (u8, u8, u8) {
+        use gem::channel::{mix_u8, multiply_u8};
         let (sr, sg, sb) = rgb;
         match self {
             Self::None => (sr, sg, sb),
-            Self::Multiply { r, g, b } => (scale(sr, r), scale(sg, g), scale(sb, b)),
+            Self::Multiply { r, g, b } => {
+                (multiply_u8(sr, r), multiply_u8(sg, g), multiply_u8(sb, b))
+            }
             Self::Mix { r, g, b, amount } => (
-                lerp(sr, r, amount),
-                lerp(sg, g, amount),
-                lerp(sb, b, amount),
+                mix_u8(sr, r, amount),
+                mix_u8(sg, g, amount),
+                mix_u8(sb, b, amount),
             ),
         }
     }
-}
 
-/// `a * b / 255`, rounded to nearest, exact at both endpoints.
-///
-/// The `+ 127` biases the truncating divide to round-half-up, which is what keeps
-/// `scale(255, 255) == 255` and `scale(x, 0) == 0` rather than drifting a channel darker on
-/// every application.
-const fn scale(a: u8, b: u8) -> u8 {
-    // `a * b` peaks at 65025 and the divide brings it back under 256, so the cast cannot
-    // truncate.
-    #[allow(clippy::cast_possible_truncation)]
-    {
-        ((a as u16 * b as u16 + 127) / 255) as u8
+    /// Applies this tint to an [`Rgb888`], the same operation as [`apply`](Self::apply) but
+    /// without the channel-order round trip through a bare `(u8, u8, u8)` tuple.
+    ///
+    /// `const` because [`Rgb888::to_rgb`][gem::rgb::Rgb::to_rgb] is a const inherent method
+    /// (gem 0.2.0): the equivalent by way of the [`HasRed`](gem::rgb::HasRed)-family traits
+    /// cannot be, since trait methods aren't const-callable on stable.
+    ///
+    /// ```rust
+    /// use retroglyph_core::Tint;
+    /// use gem::rgb::Rgb888;
+    ///
+    /// const PX: Rgb888 = Tint::Multiply { r: 128, g: 128, b: 128 }
+    ///     .apply_rgb888(Rgb888::from_rgb(200, 180, 60));
+    /// assert_eq!(PX, Rgb888::from_rgb(100, 90, 30));
+    /// ```
+    #[must_use]
+    pub const fn apply_rgb888(self, px: Rgb888) -> Rgb888 {
+        let (r, g, b) = self.apply(px.to_rgb());
+        Rgb888::from_rgb(r, g, b)
     }
-}
 
-/// `a` blended `t / 255` of the way toward `b`, rounded to nearest.
-///
-/// Written as `a + (b - a) * t` over signed intermediates rather than `a * (1 - t) + b * t` so
-/// that `t == 0` returns `a` and `t == 255` returns `b` exactly, with no rounding error at
-/// either end.
-const fn lerp(a: u8, b: u8, t: u8) -> u8 {
-    let (a, b, t) = (a as i32, b as i32, t as i32);
-    let delta = (b - a) * t;
-    // Round half away from zero so a blend toward a darker colour and a blend toward a lighter
-    // one lose the same amount to rounding.
-    let rounded = if delta >= 0 {
-        (delta + 127) / 255
-    } else {
-        (delta - 127) / 255
-    };
-    // `a` is in 0..=255 and `a + rounded` lands between `a` and `b`, so it stays in range.
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    {
-        (a + rounded) as u8
+    /// A [`Multiply`](Self::Multiply) tint by `color`'s resolved RGB, falling back to `default`
+    /// for [`Color::Default`](crate::Color::Default) (which has no intrinsic reading as a
+    /// modulation value). Built for `retroglyph-window`'s sheet-level recolouring: a
+    /// `SheetColor::Mask` sheet is tinted by the cell's own foreground colour this way before
+    /// the cell's own [`Tint`] is applied on top.
+    #[must_use]
+    pub const fn multiply_color(c: crate::color::Color, default: (u8, u8, u8)) -> Self {
+        let (r, g, b) = c.resolve_rgb(default);
+        Self::multiply(r, g, b)
     }
 }
 

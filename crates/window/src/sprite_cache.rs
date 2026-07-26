@@ -4,6 +4,10 @@
 //! and provides O(1) lookup of decoded RGBA8 sprites by codepoint.
 
 use crate::tileset::{SheetColor, SpriteAlign, TilesetError, TilesetOptions};
+// Only used by the source_over tests below (retroglyph#547): production code no longer has its
+// own source_over to exercise this type through, now that it delegates to the inherent
+// U8x4Rgba::source_over directly at its real call sites.
+#[cfg(test)]
 use alpha_blend::rgba::U8x4Rgba;
 use retroglyph_core::dev_only;
 use retroglyph_core::{Color, Tint};
@@ -296,22 +300,6 @@ pub fn warn_sprite_needs_span(
     false
 }
 
-/// Blends `src` over `dst` using the Porter-Duff `SRC_OVER` operator for
-/// straight-alpha pixels: `out = src + dst * (1 - src.a)` for each channel,
-/// including alpha.
-///
-/// Delegates to the `alpha-blend` crate's `BlendMode::SourceOver`, converting
-/// through `F32x4Rgba` for the blend math.
-#[inline]
-#[must_use]
-pub fn source_over(src: U8x4Rgba, dst: U8x4Rgba) -> U8x4Rgba {
-    use alpha_blend::rgba::F32x4Rgba;
-    use alpha_blend::{BlendMode, RgbaBlend};
-    BlendMode::SourceOver
-        .apply(F32x4Rgba::from(src), F32x4Rgba::from(dst))
-        .into()
-}
-
 // ── Tests ─────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -499,7 +487,7 @@ mod tests {
     fn source_over_opaque_overwrites_destination() {
         let src = U8x4Rgba::new(0, 255, 0, 255); // opaque green
         let dst = U8x4Rgba::new(255, 0, 0, 255); // opaque red
-        let result = source_over(src, dst);
+        let result = src.source_over(dst);
         assert_eq!(result, src);
     }
 
@@ -507,7 +495,7 @@ mod tests {
     fn source_over_transparent_preserves_destination() {
         let src = U8x4Rgba::TRANSPARENT;
         let dst = U8x4Rgba::new(255, 0, 0, 255);
-        let result = source_over(src, dst);
+        let result = src.source_over(dst);
         assert_eq!(result, dst);
     }
 
@@ -516,21 +504,18 @@ mod tests {
         // Green at 50% over red at 100%.
         let src = U8x4Rgba::new(0, 255, 0, 128);
         let dst = U8x4Rgba::new(255, 0, 0, 255);
-        let result = source_over(src, dst);
-        // Expected (using float reference):
-        //   out.r = 0*0.5 + 255*0.5 = 127.5  -> 127
-        //   out.g = 255*0.5 + 0*0.5 = 127.5  -> 127
-        //   out.b = 0*0.5 + 0*0.5 = 0
-        //   out.a = 128 + 255*(1-128/255) = 128 + 127 = 255
-        // Porter-Duff SRC_OVER applied uniformly to all channels (including alpha):
-        //   out.r = 0.0*128 + 255.0*127 ≈ 127   (0.498*255)
-        //   out.g = 255.0*128 + 0.0*127 ≈ 128   (0.502*255)
-        //   out.b = 0
-        //   out.a = 128*128 + 255*127 ≈ 191      (0.750*255)
-        assert_eq!(result.r, 127);
-        assert_eq!(result.g, 128);
-        assert_eq!(result.b, 0);
-        assert_eq!(result.a, 191);
+        let result = src.source_over(dst);
+        // Green (0, 255, 0) at alpha 128 over an opaque red (255, 0, 0) destination.
+        // U8x4Rgba::source_over (alpha-blend 0.3.0) rounds to nearest, once, from an exact
+        // widened intermediate (retroglyph#547): r and g both land almost exactly halfway
+        // (127.5), and round to 127 and 128 respectively rather than both flooring to 127.
+        // A fully opaque destination always yields a fully opaque result.
+        //
+        // Before 0.3.0, source_over used the `(v + (v >> 8) + 1) >> 8` shift trick, which is
+        // exactly `floor`, and gave (127, 127, 0, 255) here -- one LSB darker on the green
+        // channel. That downward bias, applied every frame a sprite is composited, is the bug
+        // this crate depends on alpha-blend 0.3.0 to fix.
+        assert_eq!(result, U8x4Rgba::new(127, 128, 0, 255));
     }
 
     // ── SpriteTint resolution ─────────────────────────────────────────

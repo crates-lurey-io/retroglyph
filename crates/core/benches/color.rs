@@ -54,7 +54,7 @@ fn to_indexed(c: &mut Criterion) {
     group.finish();
 }
 
-#[cfg(feature = "gem")]
+#[cfg(feature = "color-space")]
 fn lerp(c: &mut Criterion) {
     let mut group = c.benchmark_group("color/lerp");
     group.throughput(Throughput::Elements(SAMPLES as u64));
@@ -75,7 +75,7 @@ fn lerp(c: &mut Criterion) {
 /// Benchmarks each non-`Linear` [`BlendMode`] via `Grid::blit_alpha` on a 1x1 grid, batching
 /// `SAMPLES` calls per iteration -- see this file's module doc for why `blit_alpha` (rather than
 /// `blend_color` directly) is the entry point used.
-#[cfg(feature = "gem")]
+#[cfg(feature = "color-space")]
 fn blend_modes(c: &mut Criterion) {
     use retroglyph_core::{BlendMode, Grid};
 
@@ -91,6 +91,7 @@ fn blend_modes(c: &mut Criterion) {
         BlendMode::Dodge,
         BlendMode::Burn,
         BlendMode::Overlay,
+        BlendMode::Multiply,
     ] {
         group.bench_function(format!("{mode:?}"), |b| {
             let mut src = Grid::new(1, 1);
@@ -120,7 +121,7 @@ fn blend_modes(c: &mut Criterion) {
 
 fn color(c: &mut Criterion) {
     to_indexed(c);
-    #[cfg(feature = "gem")]
+    #[cfg(feature = "color-space")]
     {
         lerp(c);
         blend_modes(c);
