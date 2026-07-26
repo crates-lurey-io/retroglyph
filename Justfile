@@ -45,11 +45,6 @@ doc:
     @cp -r docs/public/. target/doc/ 2>/dev/null || true
     @sed -i.bak "s/__GIT_SHA__/$(git rev-parse --short HEAD 2>/dev/null || echo unknown)/g" target/doc/index.html && rm -f target/doc/index.html.bak || true
 
-# Regenerate the workspace-level llms.txt / llms-full.txt (root only); `just doc`
-# also generates per-crate copies under target/doc/<crate>/.
-llms:
-    @./.bin/manual/bin/cargo-llms-txt 2>/dev/null || cargo llms-txt 2>/dev/null || true
-
 docs-preview: doc
     @if command -v xdg-open > /dev/null; then xdg-open target/doc/index.html; \
     elif command -v open > /dev/null; then open target/doc/index.html; \

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Generates per-crate llms.txt / llms-full.txt files for every publishable
-# workspace member, plus a workspace-level pair for the landing page.
+# workspace member.
 #
 # cargo-llms-txt reads a crate's Cargo.toml directly and chokes on workspace
 # inheritance (`authors.workspace = true` etc.), so it can't be pointed at a
@@ -12,8 +12,12 @@
 # copy both into the same `target/doc/<crate>/` folder:
 #   target/doc/<lib_target_name>/llms.txt
 #   target/doc/<lib_target_name>/llms-full.txt
-#   target/doc/llms.txt           (workspace overview, unchanged)
-#   target/doc/llms-full.txt
+#
+# There is no workspace-level pair: this workspace has no root crate, and
+# running cargo-llms-txt against the workspace `Cargo.toml` (a members-only
+# manifest with no `[package]`) produces a hollow file with an empty table of
+# contents and no API content. Per-crate output is the real, complete API
+# surface; use that instead of a workspace-level summary.
 set -euo pipefail
 
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -26,11 +30,6 @@ fi
 
 out_dir="${1:-target/doc}"
 mkdir -p "$out_dir"
-
-# Workspace-level overview (README + workspace Cargo.toml), used by the docs
-# landing page and unrelated to any single crate's API surface.
-$llms_txt_bin >/dev/null
-cp llms.txt llms-full.txt "$out_dir/"
 
 work_root="$(mktemp -d)"
 trap 'rm -rf "$work_root"' EXIT

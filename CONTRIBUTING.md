@@ -12,19 +12,19 @@ Prerequisites:
 `just check` is the gate before every commit. All clippy lints (including `pedantic` and `nursery`)
 are treated as errors.
 
-| Command                | What it does                                                                     |
-| ---------------------- | -------------------------------------------------------------------------------- |
-| `just check`           | Full gate: fmt-check, lint, compile, test, doc                                   |
-| `just clippy`          | Run clippy with `-D warnings` on all targets                                     |
-| `just compile`         | `cargo check --all-features`                                                     |
-| `just deny-advisories` | `cargo deny check advisories`                                                    |
-| `just deny-licenses`   | `cargo deny check bans licenses sources`                                         |
-| `just doc`             | Generate private rustdocs, regenerate `llms.txt` / `llms-full.txt`, open browser |
-| `just fmt`             | Format Rust + Markdown/JSON/YAML files                                           |
-| `just fmt-check`       | Verify formatting without modifying (for CI)                                     |
-| `just lint`            | Clippy + markdownlint                                                            |
-| `just test`            | Run all tests with all features                                                  |
-| `just test-v`          | Run all tests with stdout visible                                                |
+| Command                | What it does                                                                 |
+| ---------------------- | ---------------------------------------------------------------------------- |
+| `just check`           | Full gate: fmt-check, lint, compile, test, doc                               |
+| `just clippy`          | Run clippy with `-D warnings` on all targets                                 |
+| `just compile`         | `cargo check --all-features`                                                 |
+| `just deny-advisories` | `cargo deny check advisories`                                                |
+| `just deny-licenses`   | `cargo deny check bans licenses sources`                                     |
+| `just doc`             | Generate private rustdocs, regenerate per-crate `llms.txt` / `llms-full.txt` |
+| `just fmt`             | Format Rust + Markdown/JSON/YAML files                                       |
+| `just fmt-check`       | Verify formatting without modifying (for CI)                                 |
+| `just lint`            | Clippy + markdownlint                                                        |
+| `just test`            | Run all tests with all features                                              |
+| `just test-v`          | Run all tests with stdout visible                                            |
 
 ## Commit messages, PR titles, and labels
 
