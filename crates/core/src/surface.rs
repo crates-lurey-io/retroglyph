@@ -3,7 +3,7 @@
 //! `Surface` is the workspace's one grid-drawing primitive. [`Terminal`](crate::Terminal)'s
 //! [`draw`](crate::Terminal::draw)/[`surface`](crate::Terminal::surface) hand out a `Surface`
 //! scoped to the whole grid, and `retroglyph-widgets` renders every widget into a `Surface`
-//! scoped to a sub-[`Rect`] -- there is no separate stateful drawing API on `Terminal` itself.
+//! scoped to a sub-[`Rect`]: there is no separate stateful drawing API on `Terminal` itself.
 
 use crate::grid::{Grid, Offset, Pos, Rect};
 use crate::style::Style;
@@ -20,7 +20,7 @@ use unicode_width::UnicodeWidthChar;
 /// each caller's own `area: Rect` (a sub-rect of the surface's own area, e.g. one produced by a
 /// layout split) is in the same coordinate space as [`Surface::area`] itself.
 /// [`Surface::put`]/[`Surface::print`]/... take coordinates in that same space and silently clip
-/// any write that falls outside [`Surface::area`] -- a caller cannot draw outside the [`Rect`] it
+/// any write that falls outside [`Surface::area`]: a caller cannot draw outside the [`Rect`] it
 /// was given, matching the rest of the workspace's clip-on-draw policy for out-of-bounds drawing.
 ///
 /// A caller that genuinely needs more than one layer at once (e.g. a modal dimming layer 0 while
@@ -268,7 +268,7 @@ impl<'a> Surface<'a> {
 
     /// Place `ch` at `pos` with a sub-cell pixel `offset`, in `style`.
     ///
-    /// Sub-cell offsets are visual only -- they do not affect grid logic or hit-testing.
+    /// Sub-cell offsets are visual only: they do not affect grid logic or hit-testing.
     /// Backends that cannot represent pixel offsets (e.g. `CrosstermBackend`) ignore them. A
     /// no-op if `pos` is outside this surface's area.
     pub fn put_offset(

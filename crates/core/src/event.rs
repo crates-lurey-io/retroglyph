@@ -319,15 +319,15 @@ pub enum Event {
     /// windowed (winit) backend, on both native and wasm (winit's web
     /// target derives it from the browser's `prefers-color-scheme` media
     /// query, including live updates). Character-mode backends (crossterm)
-    /// have no equivalent free API -- see the windowed backend's own docs
-    /// for why -- and never emit this; an app that wants a default should
+    /// have no equivalent free API (see the windowed backend's own docs
+    /// for why) and never emit this; an app that wants a default should
     /// pick one itself rather than waiting for an event that may never
     /// arrive.
     ThemeChanged(SystemTheme),
     /// Pasted text, delivered as a single event rather than individual key
     /// presses.
     ///
-    /// Not emitted by all backends -- see each backend's own docs for
+    /// Not emitted by all backends: see each backend's own docs for
     /// whether and how it sources this. Content is forwarded verbatim from
     /// the source, including embedded newlines; the receiving app is
     /// responsible for any filtering it needs.
@@ -353,7 +353,7 @@ pub enum Event {
     /// rather than an arbitrary boxed value: it keeps `Event` cheaply
     /// `Clone`/`PartialEq`/`Eq`/`Hash` (a `Box<dyn Any>` could not derive
     /// any of those) and needs no generic parameter threaded through every
-    /// crate that names `Event`. Treat it as a correlation id -- look up
+    /// crate that names `Event`. Treat it as a correlation id: look up
     /// the real payload in whatever shared state or channel the sending
     /// thread already placed it in.
     Custom(u64),

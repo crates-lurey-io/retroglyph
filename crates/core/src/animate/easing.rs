@@ -22,11 +22,11 @@ pub enum Easing {
     EaseOutQuad,
     /// Slow -> fast -> slow, quadratically.
     EaseInOutQuad,
-    /// Starts slow, accelerates, cubically -- a stronger version of [`EaseInQuad`](Self::EaseInQuad).
+    /// Starts slow, accelerates, cubically: a stronger version of [`EaseInQuad`](Self::EaseInQuad).
     EaseInCubic,
-    /// Starts fast, decelerates, cubically -- a stronger version of [`EaseOutQuad`](Self::EaseOutQuad).
+    /// Starts fast, decelerates, cubically: a stronger version of [`EaseOutQuad`](Self::EaseOutQuad).
     EaseOutCubic,
-    /// Slow -> fast -> slow, cubically -- a stronger version of [`EaseInOutQuad`](Self::EaseInOutQuad).
+    /// Slow -> fast -> slow, cubically: a stronger version of [`EaseInOutQuad`](Self::EaseInOutQuad).
     EaseInOutCubic,
     /// A gentle sine-shaped start.
     EaseInSine,
@@ -83,7 +83,7 @@ impl Easing {
     }
 }
 
-/// `t * (10 * t - 10.75) * (2 pi / 3)`'s sine, decayed by `2^(-10t)` -- see
+/// `t * (10 * t - 10.75) * (2 pi / 3)`'s sine, decayed by `2^(-10t)`: see
 /// <https://easings.net/#easeOutElastic>.
 fn ease_out_elastic(t: f32) -> f32 {
     const C4: f32 = 2.0 * core::f32::consts::PI / 3.0;
@@ -101,7 +101,7 @@ fn ease_out_elastic(t: f32) -> f32 {
     )
 }
 
-/// Four piecewise quadratic segments, each bouncing to a smaller peak -- see
+/// Four piecewise quadratic segments, each bouncing to a smaller peak: see
 /// <https://easings.net/#easeOutBounce>.
 fn ease_out_bounce(t: f32) -> f32 {
     const N1: f32 = 7.5625;

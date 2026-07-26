@@ -14,7 +14,7 @@
 //!
 //! Layers composite bottom-to-top, in ascending id order: 0 first, then every
 //! allocated layer up to [`max_layer`](Grid::max_layer), each painted over
-//! whatever the layers below it produced. Layer id *is* z-order -- there is
+//! whatever the layers below it produced. Layer id *is* z-order: there is
 //! no separate depth or z-index to set. A common convention is layer 0 for
 //! terrain, 1 for items, 2 for actors, 3+ for UI/effects, but the crate
 //! enforces nothing; any id can hold any content.
@@ -43,7 +43,7 @@
 //!   leaves whatever the layers below already drew.
 //! - An **explicit space** (`Tile::new(' ', style)`, `EMPTY` clear) is
 //!   opaque: it overwrites the glyph and foreground below it, same as any
-//!   other character. This is the one sharp edge in the model -- `' '`
+//!   other character. This is the one sharp edge in the model: `' '`
 //!   painted on a higher layer *erases* content underneath, it does not
 //!   reveal it.
 //!
@@ -86,7 +86,7 @@
 //! Compositing does not stop early when it hits an opaque tile on a high
 //! layer. Both `flatten_into` (crate-private) and the software
 //! backend's per-pixel compositor walk layers `0..=max_layer` in order for
-//! *every* cell, unconditionally -- even if a fully opaque tile on layer 5
+//! *every* cell, unconditionally, even if a fully opaque tile on layer 5
 //! makes layers 6-50 invisible at that position. Cost is `O(max_layer)` per
 //! cell, not `O(topmost opaque layer)`. Painting one fully opaque layer 250
 //! over the whole grid still walks (and `EMPTY`-checks) layers 1-249 on
@@ -95,7 +95,7 @@
 //! ## Allocation cost: layer 1 vs. layer 200
 //!
 //! Writing to a layer for the first time allocates one `width x height`
-//! buffer of [`Tile`]s -- the same cost regardless of the layer's id, plus a
+//! buffer of [`Tile`]s, the same cost regardless of the layer's id, plus a
 //! one-time growth of the layer table's `Vec<Option<LayerBuf>>` up to that
 //! layer's id (see [`Grid::new`]): the table starts at a single slot (layer
 //! 0) and only grows as far as the highest layer id ever written, so a
@@ -106,7 +106,7 @@
 //! What the layer id *does* affect is steady-state iteration cost, via
 //! [`max_layer`](Grid::max_layer): every present, diff, and full-grid
 //! iteration walks `0..=max_layer`, skipping unallocated slots with an O(1)
-//! `None` check. `max_layer` only grows -- clearing a layer
+//! `None` check. `max_layer` only grows. Clearing a layer
 //! ([`clear`](Grid::clear)) does not deallocate it or lower `max_layer`. So
 //! writing once to layer 200 and never touching layers 1-199 means every
 //! future frame's compositing pass walks past 199 unallocated slots to reach
@@ -135,7 +135,7 @@ use grixy::ops::{ExactSizeGrid, GridRead, GridWrite};
 /// Blend mode for [`Grid::blit_alpha`], selecting how source and destination colors combine
 /// before the `fg_alpha`/`bg_alpha` factor is applied.
 ///
-/// [`Linear`](Self::Linear) is a straight per-channel color lerp -- `blit_alpha`'s original
+/// [`Linear`](Self::Linear) is a straight per-channel color lerp: `blit_alpha`'s original
 /// behavior. The remaining variants are the [W3C separable blend modes] libtcod also offers:
 /// each computes a fully blended color per channel via
 /// [`alpha_blend::blend_modes::SeparableBlendMode`], and *that* result is what gets lerped
@@ -165,7 +165,7 @@ pub enum BlendMode {
 #[cfg(feature = "gem")]
 impl BlendMode {
     /// The equivalent [`SeparableBlendMode`], or `None` for [`Linear`](Self::Linear) (which uses
-    /// [`gem::rgb::Lerp`] instead -- see [`blend_color`]).
+    /// [`gem::rgb::Lerp`] instead: see [`blend_color`]).
     const fn separable(self) -> Option<SeparableBlendMode> {
         match self {
             Self::Linear => None,
@@ -382,7 +382,7 @@ pub struct Grid {
     width: u16,
     height: u16,
     /// Indexed by layer ID (0–255), but only as long as the highest layer id ever written to
-    /// (see [`layer_or_alloc`](Self::layer_or_alloc)) -- not always all 256 slots. Index 0 is
+    /// (see [`layer_or_alloc`](Self::layer_or_alloc)), not always all 256 slots. Index 0 is
     /// always `Some`. Unwritten layers within the current length are `None`; ids past the end
     /// are treated identically to a `None` slot (see [`layer`](Self::layer)).
     layers: Vec<Option<LayerBuf>>,
@@ -395,7 +395,7 @@ pub struct Grid {
     /// write has to clear a span it would partially overwrite
     /// (`clear_span_overlap`), and this flag is what keeps that check from
     /// costing a buffer read per `put` in the overwhelmingly common grid that never uses a span
-    /// at all -- it degrades to one `bool` test. Clearing it again on the last span's removal
+    /// at all: it degrades to one `bool` test. Clearing it again on the last span's removal
     /// would need span refcounting for no observable gain.
     has_spans: bool,
 }
@@ -407,7 +407,7 @@ pub struct Grid {
 impl Grid {
     /// Borrow a specific layer, or `None` if unallocated.
     ///
-    /// `id` may be beyond the current layer-table `Vec`'s length -- the table only grows as far
+    /// `id` may be beyond the current layer-table `Vec`'s length: the table only grows as far
     /// as the highest layer id ever written (see [`layer_or_alloc`](Self::layer_or_alloc)), so an
     /// id past the end simply means "never written", same as an in-bounds `None` slot.
     fn layer(&self, id: u8) -> Option<&LayerBuf> {
@@ -628,7 +628,7 @@ impl Grid {
         self.height = height;
         for layer in self.layers.iter_mut().flatten() {
             // The extras side-table is keyed by flat row-major index, which
-            // shifts whenever the width changes -- remap it in lockstep with
+            // shifts whenever the width changes: remap it in lockstep with
             // `buf.resize` (below) rather than leaving it pointing at stale
             // (or now out-of-bounds) cells.
             if !layer.extras.is_empty() {
@@ -724,7 +724,7 @@ impl Grid {
         lb.buf.as_mut()[idx].glyph = first;
         lb.buf.as_mut()[idx].style = style;
         lb.buf.as_mut()[idx].flags = flags;
-        // `width` here is the full grapheme's display width (1 or 2), not just `first`'s -- more
+        // `width` here is the full grapheme's display width (1 or 2), not just `first`'s: more
         // accurate than recomputing from the primary codepoint alone, and exactly what the
         // terminal renderer needs to advance the cursor after printing this cell.
         #[allow(clippy::cast_possible_truncation)]
@@ -1125,7 +1125,7 @@ impl Grid {
     /// [`tile`](Self::tile)/[`put_tile`](Self::put_tile) per cell (see retroglyph#263):
     /// each of those recomputes a coordinate conversion and a bounds check per cell, which this
     /// does once per row instead. The destination layer is allocated once, up front, rather than
-    /// as a side effect of the first written cell -- but only if `src_rect` (clamped to `src`'s
+    /// as a side effect of the first written cell, but only if `src_rect` (clamped to `src`'s
     /// bounds) contains at least one non-empty tile, matching `put_tile`'s original
     /// allocate-on-first-write behavior for a `src_rect` that is entirely transparent.
     pub fn blit(&mut self, layer: u8, src: &Self, src_rect: Rect, dst_x: u16, dst_y: u16) {
@@ -1285,7 +1285,7 @@ impl Grid {
                     let dst_tile = &dst_lb.buf.as_ref()[dst_idx];
                     // `fg_alpha == 1.0` only lets `Linear` skip the call: `Linear` at `t ==
                     // 1.0` is `src` by definition, but a `Screen`/`Dodge`/`Burn`/`Overlay`
-                    // mix at full alpha still needs to run the mode's formula -- it isn't
+                    // mix at full alpha still needs to run the mode's formula: it isn't
                     // equivalent to the raw source color (see `blend_color`'s matching guard).
                     if mode != BlendMode::Linear || fg_alpha != 1.0 {
                         blended.style.fg =
@@ -1373,7 +1373,7 @@ impl Grid {
     /// Walks layer buffers directly by flat index instead of calling
     /// [`tile`](Self::tile) per cell (see retroglyph#262): that recomputes a coordinate
     /// conversion and a bounds check per cell, which a flat scan over each layer's backing
-    /// buffer -- the same style [`layers`](Self::layers) and [`diff`](Self::diff) already use --
+    /// buffer (the same style [`layers`](Self::layers) and [`diff`](Self::diff) already use)
     /// avoids entirely.
     pub(crate) fn flatten_into(&self, dst: &mut Self) {
         dst.has_spans |= self.has_spans;
@@ -1381,8 +1381,8 @@ impl Grid {
         let cell_count = layer0.buf.as_ref().len();
 
         // Seed every destination cell from layer 0: its tile verbatim, and its extra text
-        // filtered through `HAS_EXTRA` (the flag is authoritative -- see `LayerBuf::extras`'
-        // doc comment -- so a stale, unflagged entry in `layer0.extras` is not carried over).
+        // filtered through `HAS_EXTRA` (the flag is authoritative, see `LayerBuf::extras`'
+        // doc comment, so a stale, unflagged entry in `layer0.extras` is not carried over).
         let dst_layer0 = dst.layer0_mut();
         dst_layer0.buf.as_mut().copy_from_slice(layer0.buf.as_ref());
         dst_layer0.extras.clear();
@@ -1551,12 +1551,12 @@ fn blend_color(mode: BlendMode, src: Color, dst: Color, t: f32) -> Color {
             },
         ) if mode != BlendMode::Linear || t != 1.0 => {
             // `Linear` at `t == 1.0` is `src` by definition (skip to the catch-all arm below);
-            // the other modes must still run their mix formula at `t == 1.0` -- see `blit_alpha`.
+            // the other modes must still run their mix formula at `t == 1.0`: see `blit_alpha`.
             let (r, g, b) = mode.separable().map_or_else(
                 || {
                     // `dst.lerp(src, t)`, not `src.lerp(dst, t)`: at `t == 0.0` this must return
                     // `dst` ("keep destination", per `blit_alpha`'s doc comment) and only reach
-                    // `src` at `t == 1.0` -- the same `0.0 == dst, 1.0 == fully blended` contract
+                    // `src` at `t == 1.0`: the same `0.0 == dst, 1.0 == fully blended` contract
                     // every other `BlendMode` follows (see `blend_separable_channel`).
                     let out = Rgb888::from_rgb(dr, dg, db).lerp(Rgb888::from_rgb(sr, sg, sb), t);
                     (out.red(), out.green(), out.blue())
@@ -1576,7 +1576,7 @@ fn blend_color(mode: BlendMode, src: Color, dst: Color, t: f32) -> Color {
 }
 
 /// Evaluates `sep`'s per-channel mixing function for one RGB channel (`src`/`dst` are u8, `sep`
-/// operates in `0.0..=1.0` f32), then lerps that mixed value against `dst` by `t` -- `0.0` keeps
+/// operates in `0.0..=1.0` f32), then lerps that mixed value against `dst` by `t`: `0.0` keeps
 /// `dst`, `1.0` uses the fully mixed color. Rounds with `libm::roundf` rather than `f32::round`
 /// (a `std`-only method not available in `core`, same reasoning as `libm::fmaf` in
 /// `animate::easing`) and clamps before converting back to u8, since `ColorDodge`/`ColorBurn`'s
@@ -1961,7 +1961,7 @@ mod tests {
     fn test_grid_layer_or_alloc_grows_table_lazily_to_the_written_id() {
         let mut g = Grid::new(5, 5);
         g.put_tile(10, (0, 0), Tile::new('@', Style::default()));
-        // The table grows to exactly `id + 1` slots -- not all 256.
+        // The table grows to exactly `id + 1` slots, not all 256.
         assert_eq!(g.layers.len(), 11);
         assert_eq!(g.max_layer(), 10);
         assert!(g.layer(10).is_some());
@@ -1983,7 +1983,7 @@ mod tests {
 
     #[test]
     fn test_grid_clear_beyond_table_length_is_a_no_op() {
-        // Clearing an id past the current table length must not panic -- it's equivalent to
+        // Clearing an id past the current table length must not panic: it's equivalent to
         // clearing an unallocated in-bounds layer (does nothing).
         let mut g = Grid::new(5, 5);
         g.clear(255);
@@ -2169,7 +2169,7 @@ mod tests {
     #[cfg(feature = "egc")]
     #[test]
     fn test_grid_diff_detects_grapheme_only_change() {
-        // Same glyph, style, and flags on both sides -- only the combining
+        // Same glyph, style, and flags on both sides: only the combining
         // mark differs. A `Tile`-only diff would miss this.
         let mut cur = Grid::new(2, 2);
         let mut prev = Grid::new(2, 2);
@@ -2201,7 +2201,7 @@ mod tests {
 
     #[test]
     fn test_grid_blit_empty_rect_is_a_no_op() {
-        // A zero-area `src_rect` has no cells at all -- `sx0 >= sx1` should short-circuit before
+        // A zero-area `src_rect` has no cells at all: `sx0 >= sx1` should short-circuit before
         // touching the destination.
         let src = Grid::new(2, 2);
         let mut dst = Grid::new(2, 2);
@@ -2214,7 +2214,7 @@ mod tests {
     #[test]
     fn test_grid_blit_fully_transparent_source_does_not_allocate_dst_layer() {
         // Perf refactor (#263): the destination layer is allocated up front, but only after
-        // confirming the (clamped) source region has at least one non-empty tile -- matching
+        // confirming the (clamped) source region has at least one non-empty tile, matching
         // `put_tile`'s original allocate-on-first-write behavior for an all-transparent blit.
         let src = Grid::new(2, 2);
         let mut dst = Grid::new(2, 2);
@@ -2245,7 +2245,7 @@ mod tests {
     fn test_grid_blit_sub_cell_offset_and_transparency() {
         let mut src = Grid::new(2, 2);
         src.put_tile(0, (0, 0), Tile::new('A', Style::default()));
-        // (1, 0) and (1, 1) stay at their default (empty) tile -- transparent, should not
+        // (1, 0) and (1, 1) stay at their default (empty) tile: transparent, should not
         // overwrite the destination.
         src.put_tile(0, (0, 1), Tile::new('B', Style::default()));
 
@@ -2280,7 +2280,7 @@ mod tests {
     fn test_grid_blit_dest_origin_near_u16_max_does_not_wrap() {
         // retroglyph#268: with a plain (non-saturating) `dst_x + (sx - src_rect.left())`, an
         // origin this close to `u16::MAX` overflows and wraps back into a small, in-bounds
-        // value -- silently corrupting an unrelated cell instead of being clamped out. Picked so
+        // value: silently corrupting an unrelated cell instead of being clamped out. Picked so
         // that `dst_x + 3` overflows `u16` and wraps to `1`, which *is* in-bounds for this small
         // `dst` grid: `65534u16.wrapping_add(3) == 1`.
         let mut src = Grid::new(4, 1);
@@ -2291,7 +2291,7 @@ mod tests {
 
         // The would-be-wrapped cell (index 1) must not have been touched.
         assert_eq!(dst[Pos::new(1, 0)].glyph(), ' ');
-        // No other cell was touched either -- the whole row's writes overflowed and were
+        // No other cell was touched either: the whole row's writes overflowed and were
         // skipped (dst_x saturates to u16::MAX for every column in this row).
         for x in 0..4 {
             assert_eq!(
@@ -2461,8 +2461,8 @@ mod tests {
         }
     }
 
-    /// `BlendMode::Linear` at `t == 0.0` keeps the destination and at `t == 1.0` uses the source
-    /// -- matching `blit_alpha`'s doc comment (this direction was actually inverted before this
+    /// `BlendMode::Linear` at `t == 0.0` keeps the destination and at `t == 1.0` uses the source,
+    /// matching `blit_alpha`'s doc comment (this direction was actually inverted before this
     /// change: the underlying `gem::rgb::Lerp` call had `src`/`dst` swapped, so `t == 0.0` used
     /// to return `src` and `t == 1.0` returned `dst`. No prior tests covered `blit_alpha`, so
     /// this had shipped unnoticed).
@@ -2607,14 +2607,14 @@ mod tests {
         let mut flattened = Grid::new(2, 1);
         g.flatten_into(&mut flattened);
         assert_eq!(flattened[Pos::new(0, 0)].glyph(), 'c');
-        // Untouched by the transparent layer-1 cell -- layer 0's glyph shows through.
+        // Untouched by the transparent layer-1 cell: layer 0's glyph shows through.
         assert_eq!(flattened[Pos::new(1, 0)].glyph(), 'b');
     }
 
     #[test]
     fn test_grid_flatten_into_multi_layer_stale_dst_extra_is_cleared() {
         // `dst` may be a reused scratch buffer with stale content from a previous frame (see
-        // `Terminal::present`) -- `flatten_into` must fully overwrite it, not merge with it.
+        // `Terminal::present`): `flatten_into` must fully overwrite it, not merge with it.
         let mut flattened = Grid::new(1, 1);
         flattened.put_tile(0, (0, 0), Tile::new('z', Style::default()));
 

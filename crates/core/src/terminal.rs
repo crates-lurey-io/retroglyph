@@ -9,7 +9,7 @@ use core::time::Duration;
 /// A double-buffered terminal generic over a [`Backend`].
 ///
 /// Owns the current and previous frame grids and the backend's lifecycle (resize, present,
-/// events). Drawing itself goes entirely through [`Surface`] -- see [`draw`](Self::draw) for the
+/// events). Drawing itself goes entirely through [`Surface`]: see [`draw`](Self::draw) for the
 /// common case (draw a frame, then present it) and [`surface`](Self::surface) for manual control
 /// over presenting.
 ///
@@ -69,7 +69,7 @@ impl<B: Backend> Terminal<B> {
     /// whether anything changed calls this once per frame. A caller that only wants to redraw
     /// when its own state changed should gate the call to `draw` itself (e.g. `if
     /// state.changed() { term.draw(|s| render(s, &state))?; }`) rather than rely on `draw`/
-    /// [`present`](Self::present) to no-op -- unlike some earlier revisions of this API, presenting
+    /// [`present`](Self::present) to no-op. Unlike some earlier revisions of this API, presenting
     /// is unconditional here.
     ///
     /// # Errors
@@ -165,7 +165,7 @@ impl<B: Backend> Terminal<B> {
 
     /// Present the current frame: computes the diff against the previous frame, sends changed
     /// cells to the backend, flushes, then swaps buffers. Always presents unconditionally, even
-    /// if nothing was drawn since the last call -- most callers want [`draw`](Self::draw) instead
+    /// if nothing was drawn since the last call; most callers want [`draw`](Self::draw) instead
     /// of calling this directly.
     ///
     /// When the backend requires a full frame (see
@@ -506,7 +506,7 @@ mod tests {
     #[test]
     fn test_terminal_resize_preserves_current_content() {
         // Writes through `surface()` rather than `draw()`, so `current` is inspected before any
-        // `present()` clears it -- `draw()` always presents, which would swap this content out to
+        // `present()` clears it: `draw()` always presents, which would swap this content out to
         // `previous` and clear the new `current` before the assertions below could see it.
         let mut term = Terminal::new(Headless::new(10, 10));
         term.surface().put((2, 2), 'X', Style::default());

@@ -51,7 +51,7 @@ pub trait Output {
     ///
     /// **This field is only ever `Some` when the crate's `egc` feature is enabled.** Without
     /// `egc`, `Grid` never populates its EGC side-table, so every item's third element is
-    /// always `None` -- there is no multi-codepoint grapheme text to read, ever. Backends that
+    /// always `None`: there is no multi-codepoint grapheme text to read, ever. Backends that
     /// don't opt into `egc` support can safely ignore this field entirely (e.g. `let _ = extra;`
     /// and render each tile from [`glyph`](Tile::glyph) alone); it carries no information in
     /// that configuration.

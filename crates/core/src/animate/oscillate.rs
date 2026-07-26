@@ -6,7 +6,7 @@ use core::time::Duration;
 /// from its natural `-1.0..=1.0` range to `0.0..=1.0`.
 ///
 /// For a finite transition that starts, runs once, and stops, see [`Tween`](super::Tween)
-/// instead -- this is for motion with no start or end (a pulsing indicator, a breathing effect):
+/// instead. This is for motion with no start or end (a pulsing indicator, a breathing effect):
 /// keep accumulating `elapsed` every frame and re-sample.
 ///
 /// ```
@@ -22,7 +22,7 @@ pub fn oscillate(elapsed: Duration, period: Duration) -> f32 {
     if period.is_zero() {
         return 0.5;
     }
-    let cycles = elapsed.as_secs_f32() / period.as_secs_f32(); // unbounded -- doesn't wrap itself
+    let cycles = elapsed.as_secs_f32() / period.as_secs_f32(); // unbounded; doesn't wrap itself
     let radians = cycles * 2.0 * core::f32::consts::PI;
     libm::fmaf(0.5, libm::sinf(radians), 0.5)
 }
