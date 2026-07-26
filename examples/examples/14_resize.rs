@@ -81,18 +81,18 @@ impl Resize {
         // shrink-then-grow sequence.
         for y in area.top()..area.bottom() {
             for x in area.left()..area.right() {
-                term.put_styled(x, y, ' ', Style::default());
+                term.put_styled((x, y), ' ', Style::default());
             }
         }
 
         let border = Style::new().fg(Color::Ansi(AnsiColor::BrightBlack));
         for x in area.left()..area.right() {
-            term.put_styled(x, area.top(), '#', border);
-            term.put_styled(x, area.bottom() - 1, '#', border);
+            term.put_styled((x, area.top()), '#', border);
+            term.put_styled((x, area.bottom() - 1), '#', border);
         }
         for y in area.top()..area.bottom() {
-            term.put_styled(area.left(), y, '#', border);
-            term.put_styled(area.right() - 1, y, '#', border);
+            term.put_styled((area.left(), y), '#', border);
+            term.put_styled((area.right() - 1, y), '#', border);
         }
 
         let label = format!("{}x{} cells -- resize me", area.width(), area.height());
@@ -102,7 +102,7 @@ impl Resize {
             let x = area.left() + (area.width() - label_width) / 2;
             let y = area.top() + area.height() / 2;
             term.reset_style();
-            term.print(x, y, &label);
+            term.print((x, y), &label);
         }
     }
 }

@@ -715,14 +715,14 @@ impl OutpostDashboard {
         };
         for y in rect.top()..rect.bottom() {
             for x in rect.left()..rect.right() {
-                term.put_styled(x, y, ' ', Style::new().bg(bg));
+                term.put_styled((x, y), ' ', Style::new().bg(bg));
             }
         }
         let text = truncate(label, rect.width_usize().saturating_sub(2));
         let tx = rect.left() + (rect.width().saturating_sub(text.chars().count() as u16)) / 2;
         let ty = rect.top() + rect.height() / 2;
         term.reset_style().fg(fg).bg(bg);
-        term.print(tx, ty, text);
+        term.print((tx, ty), text);
         term.reset_style();
         hitboxes.push((rect, target));
     }
@@ -730,11 +730,14 @@ impl OutpostDashboard {
     fn draw_header<B: Backend>(&mut self, term: &mut Terminal<B>, area: Rect) {
         for y in area.top()..area.bottom() {
             for x in area.left()..area.right() {
-                term.put_styled(x, y, ' ', Style::new().bg(CHROME_BG));
+                term.put_styled((x, y), ' ', Style::new().bg(CHROME_BG));
             }
         }
         term.reset_style().fg(ACCENT).bg(CHROME_BG);
-        term.print(area.left() + 1, area.top(), "Outpost 7 -- Ridgeline Watch");
+        term.print(
+            (area.left() + 1, area.top()),
+            "Outpost 7 -- Ridgeline Watch",
+        );
 
         if area.height() < 4 {
             term.reset_style();
@@ -764,8 +767,7 @@ impl OutpostDashboard {
             };
             term.reset_style().fg(stat.color).bg(CHROME_BG);
             term.print(
-                col.left(),
-                col.top() + 1,
+                (col.left(), col.top() + 1),
                 truncate(&text, col.width_usize()),
             );
         }
@@ -854,14 +856,14 @@ impl OutpostDashboard {
             } else {
                 Style::new().fg(color).bg(BG)
             };
-            term.put_styled(screen_pos.x, screen_pos.y, glyph, style);
+            term.put_styled((screen_pos.x, screen_pos.y), glyph, style);
         }
         term.reset_style();
         if area.width() >= 26 && area.height() >= 4 {
             let hint = truncate("drag: pan   tap: select", area.width_usize());
             let x = area.right().saturating_sub(hint.chars().count() as u16 + 1);
             term.reset_style().fg(DIM_FG).bg(BG);
-            term.print(x, area.bottom() - 1, hint);
+            term.print((x, area.bottom() - 1), hint);
             term.reset_style();
         }
     }
@@ -877,11 +879,11 @@ impl OutpostDashboard {
         }
         for y in area.top()..area.bottom() {
             for x in area.left()..area.right() {
-                term.put_styled(x, y, ' ', Style::new().bg(PANEL_BG));
+                term.put_styled((x, y), ' ', Style::new().bg(PANEL_BG));
             }
         }
         for x in area.left()..area.right() {
-            term.put_styled(x, area.top(), '-', Style::new().fg(BORDER).bg(PANEL_BG));
+            term.put_styled((x, area.top()), '-', Style::new().fg(BORDER).bg(PANEL_BG));
         }
         let inner = Rect::new(
             area.left() + 1,
@@ -893,8 +895,7 @@ impl OutpostDashboard {
         let Some(sel) = self.selected else {
             term.reset_style().fg(DIM_FG).bg(PANEL_BG);
             term.print(
-                inner.left(),
-                inner.top() + 1,
+                (inner.left(), inner.top() + 1),
                 truncate("Select a tile to inspect it.", inner.width_usize()),
             );
             term.reset_style();
@@ -929,14 +930,13 @@ impl OutpostDashboard {
             as usize;
 
         term.reset_style().fg(color).bg(PANEL_BG);
-        term.print(inner.left(), inner.top(), truncate(title, text_w));
+        term.print((inner.left(), inner.top()), truncate(title, text_w));
         term.reset_style().fg(DIM_FG).bg(PANEL_BG);
         term.print(
-            inner.left(),
-            inner.top() + 1,
+            (inner.left(), inner.top() + 1),
             truncate(&format!("({}, {})", sel.x, sel.y), text_w),
         );
-        term.print(inner.left(), inner.top() + 2, truncate(detail, text_w));
+        term.print((inner.left(), inner.top() + 2), truncate(detail, text_w));
 
         let y = inner.top() + 4;
         if y + 3 <= inner.bottom() + 1 {
@@ -971,11 +971,11 @@ impl OutpostDashboard {
         }
         for y in area.top()..area.bottom() {
             for x in area.left()..area.right() {
-                term.put_styled(x, y, ' ', Style::new().bg(PANEL_BG));
+                term.put_styled((x, y), ' ', Style::new().bg(PANEL_BG));
             }
         }
         term.reset_style().fg(FG).bg(PANEL_BG);
-        term.print(area.left() + 1, area.top() + 1, "Settings");
+        term.print((area.left() + 1, area.top() + 1), "Settings");
 
         let labels = ["Sound", "Notifications"];
         let toggles = self.settings_toggles;
@@ -1013,7 +1013,7 @@ impl OutpostDashboard {
         }
         for y in area.top()..area.bottom() {
             for x in area.left()..area.right() {
-                term.put_styled(x, y, ' ', Style::new().bg(CHROME_BG));
+                term.put_styled((x, y), ' ', Style::new().bg(CHROME_BG));
             }
         }
         let n = Tab::ALL.len() as u16;
@@ -1032,14 +1032,14 @@ impl OutpostDashboard {
             let fg = if active { ACCENT } else { DIM_FG };
             for yy in rect.top()..rect.bottom() {
                 for xx in rect.left()..rect.right() {
-                    term.put_styled(xx, yy, ' ', Style::new().bg(bg));
+                    term.put_styled((xx, yy), ' ', Style::new().bg(bg));
                 }
             }
             let label = tab.label();
             let ly = rect.top() + rect.height() / 2;
             let lx = x + (w.saturating_sub(label.chars().count() as u16)) / 2;
             term.reset_style().fg(fg).bg(bg);
-            term.print(lx, ly, label);
+            term.print((lx, ly), label);
             self.hitboxes.push((rect, HitTarget::Tab(tab)));
             x += w;
         }
@@ -1055,7 +1055,7 @@ impl OutpostDashboard {
         let screen = Rect::new(0, 0, size.width, size.height);
         for y in 0..size.height {
             for x in 0..size.width {
-                term.put_styled(x, y, ' ', Style::new().bg(BG));
+                term.put_styled((x, y), ' ', Style::new().bg(BG));
             }
         }
 
@@ -1116,7 +1116,7 @@ impl OutpostDashboard {
             let x = f.x.round().max(0.0) as u16;
             let y = f.y.round().max(0.0) as u16;
             term.reset_style().fg(color).bg(BG);
-            term.print(x, y, &f.text);
+            term.print((x, y), &f.text);
         }
         term.reset_style();
     }

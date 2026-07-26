@@ -30,7 +30,7 @@ fn main() -> std::io::Result<()> {
     let mut term = Terminal::new(Crossterm::new()?);
     loop {
         term.fg(Color::GREEN);
-        term.put(5, 5, '@');
+        term.put((5, 5), '@');
         term.present()?;
 
         if let Some(Event::Key(k)) = term.poll(std::time::Duration::from_secs(1)) {

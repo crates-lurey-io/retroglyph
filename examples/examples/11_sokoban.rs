@@ -306,8 +306,7 @@ impl Sokoban {
         let (title_area, body_area) = (rows[0], rows[1]);
 
         term.print(
-            title_area.left() + 1,
-            title_area.top(),
+            (title_area.left() + 1, title_area.top()),
             "Sokoban -- arrows move/push, u undoes, r resets, q/Escape quits",
         );
 
@@ -334,14 +333,14 @@ impl Sokoban {
             };
             term.reset_style().fg(Color::Ansi(color)).bg(Color::Default);
             let glyph = if on_goal { '*' } else { '$' };
-            term.put_offset(level_x + cx, level_y + cy, dx, dy, glyph);
+            term.put_offset((level_x + cx, level_y + cy), (dx, dy), glyph);
         }
 
         let (px, py, pdx, pdy) = self.player.draw_pos();
         term.reset_style()
             .fg(Color::Ansi(AnsiColor::BrightCyan))
             .bg(Color::Default);
-        term.put_offset(level_x + px, level_y + py, pdx, pdy, '@');
+        term.put_offset((level_x + px, level_y + py), (pdx, pdy), '@');
         term.reset_style();
 
         let term_area = term.area();
@@ -351,19 +350,19 @@ impl Sokoban {
         );
         let inner_x = status_area.left() + 2;
         let mut y = status_area.top() + 1;
-        term.print(inner_x, y, &format!("Moves: {}", self.moves));
+        term.print((inner_x, y), &format!("Moves: {}", self.moves));
         y += 2;
-        term.print(inner_x, y, "Arrows: move / push");
+        term.print((inner_x, y), "Arrows: move / push");
         y += 1;
-        term.print(inner_x, y, "u: undo");
+        term.print((inner_x, y), "u: undo");
         y += 1;
-        term.print(inner_x, y, "r: reset level");
+        term.print((inner_x, y), "r: reset level");
         y += 1;
-        term.print(inner_x, y, "q / Esc: quit");
+        term.print((inner_x, y), "q / Esc: quit");
         if self.won {
             y += 2;
             term.reset_style().fg(Color::Ansi(AnsiColor::BrightGreen));
-            term.print(inner_x, y, "*** Solved! ***");
+            term.print((inner_x, y), "*** Solved! ***");
             term.reset_style();
         }
     }

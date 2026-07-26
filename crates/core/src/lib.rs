@@ -103,7 +103,7 @@ pub use event::{
 pub use frame_clock::FrameClock;
 #[cfg(feature = "gem")]
 pub use grid::BlendMode;
-pub use grid::{Grid, Pos, Rect, Size};
+pub use grid::{Grid, Offset, Pos, Rect, Size};
 #[cfg(feature = "egc")]
 pub use layout::{HAlign, TextLayout, TextMetrics, VAlign};
 pub use style::Style;

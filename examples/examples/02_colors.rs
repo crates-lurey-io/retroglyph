@@ -56,7 +56,7 @@ impl Colors {
     ) {
         for i in 0..count {
             let style = Style::new().bg(color_at(i));
-            term.put_styled(x + u16::from(i), y, ' ', style);
+            term.put_styled((x + u16::from(i), y), ' ', style);
         }
     }
 
@@ -91,7 +91,7 @@ impl Colors {
 
         for i in 0..count {
             let cx = x + u16::from(i);
-            term.put_styled(cx, y, ' ', Style::new().bg(Self::BLEND_DST));
+            term.put_styled((cx, y), ' ', Style::new().bg(Self::BLEND_DST));
             // `count` is always a small literal (16, see `draw`), never 0: no div-by-zero.
             #[allow(clippy::cast_precision_loss)]
             let t = f32::from(i) / f32::from(count - 1);
@@ -103,18 +103,18 @@ impl Colors {
     /// Draws this frame (the driver presents).
     #[allow(clippy::unused_self)]
     fn draw<B: Backend>(&self, term: &mut Terminal<B>) {
-        term.print(1, 1, "Ansi (16 standard colors):");
+        term.print((1, 1), "Ansi (16 standard colors):");
         Self::swatch_row(term, 1, 2, 16, |i| {
             Color::Ansi(AnsiColor::try_from(i).expect("0..16 is a valid AnsiColor index"))
         });
 
-        term.print(1, 4, "Indexed (sampled across 0..256):");
+        term.print((1, 4), "Indexed (sampled across 0..256):");
         // 32 swatches sampled evenly across the 256-value palette (every 8th index):
         // the full palette doesn't fit a 50-column grid, and a representative strip
         // is enough to prove the Indexed(u8) mapping is stable per backend.
         Self::swatch_row(term, 1, 5, 32, |i| Color::Indexed(i * 8));
 
-        term.print(1, 7, "Rgb (24-bit gradient, red channel 0..255):");
+        term.print((1, 7), "Rgb (24-bit gradient, red channel 0..255):");
         Self::swatch_row(term, 1, 8, 32, |i| Color::Rgb {
             // `u32` intermediate (`i * 255` up to 31 * 255 = 7905 doesn't fit `u8`), then
             // `try_from` back down: the `/ 31` bounds the result to 0..=255, so this never fails.
@@ -123,27 +123,24 @@ impl Colors {
             b: 192,
         });
 
-        term.print(1, 10, "Default (backend's configured fg/bg):");
+        term.print((1, 10), "Default (backend's configured fg/bg):");
         Self::swatch_row(term, 1, 11, 1, |_| Color::Default);
 
         term.print(
-            1,
-            13,
+            (1, 13),
             "Inverse video (fg/bg swap is the only \"styled text\" retroglyph has):",
         );
         let fg = Color::Ansi(AnsiColor::BrightYellow);
         let bg = Color::Ansi(AnsiColor::Blue);
         term.print_styled(
-            1,
-            14,
+            (1, 14),
             &Line::from(Span::styled(
                 "normal: yellow on blue",
                 Style::new().fg(fg).bg(bg),
             )),
         );
         term.print_styled(
-            1,
-            15,
+            (1, 15),
             &Line::from(Span::styled(
                 "inverse: blue on yellow",
                 Style::new().fg(bg).bg(fg),
@@ -153,7 +150,7 @@ impl Colors {
         // Kept under 49 chars (the row's available width from x=1): `print` (unlike
         // `print_styled`) wraps overflow onto the next row at the same `x` rather than clipping
         // it, which would otherwise stomp the "Linear:" row right below.
-        term.print(1, 17, "Blend modes (blit_alpha, warm/cool, alpha 0..1):");
+        term.print((1, 17), "Blend modes (blit_alpha, warm/cool, alpha 0..1):");
         for (i, (label, mode)) in [
             ("Linear:", BlendMode::Linear),
             ("Screen:", BlendMode::Screen),
@@ -166,7 +163,7 @@ impl Colors {
         {
             #[allow(clippy::cast_possible_truncation)]
             let row = 18 + i as u16;
-            term.print(1, row, label);
+            term.print((1, row), label);
             Self::blend_row(term, 10, row, 16, mode);
         }
     }

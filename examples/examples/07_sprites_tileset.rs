@@ -159,7 +159,7 @@ impl SpritesTileset {
                     || y == wall_rect.bottom() - 1
                     || x == wall_rect.left()
                     || x == wall_rect.right() - 1;
-                term.put(x, y, if on_wall_ring { '#' } else { '.' });
+                term.put((x, y), if on_wall_ring { '#' } else { '.' });
             }
         }
 
@@ -167,7 +167,7 @@ impl SpritesTileset {
         if self.chest_shut {
             // One call for all eight cells: the anchor glyph drives the sprite lookup on pixel
             // backends, and the whole block is readable ASCII art on cell backends.
-            term.put_span(CHEST.x, CHEST.y, &CHEST_ART);
+            term.put_span((CHEST.x, CHEST.y), &CHEST_ART);
             // Standing anywhere on the chest opens it. `span_owner` answers with the span's
             // anchor from any of its eight cells, so this is one comparison and the example
             // never has to know the footprint's shape; `clear_span` then removes all eight.
@@ -183,15 +183,15 @@ impl SpritesTileset {
         }
         for (i, &(dx, dy)) in COIN_OFFSETS.iter().enumerate() {
             if self.coins[i] {
-                term.put(ROOM.left() + dx, ROOM.top() + dy, '$');
+                term.put((ROOM.left() + dx, ROOM.top() + dy), '$');
             }
         }
-        term.put(self.player.x, self.player.y, '@');
+        term.put((self.player.x, self.player.y), '@');
 
         // No trailing full stops: `.` is keyed to the floor sprite, so a pixel backend
         // would render one as a floor tile mid-sentence.
-        term.print(1, 1, "Arrows move; collect $ coins and open the chest");
-        term.print(1, 2, &format!("Score: {}   q / Escape quits", self.score));
+        term.print((1, 1), "Arrows move; collect $ coins and open the chest");
+        term.print((1, 2), &format!("Score: {}   q / Escape quits", self.score));
     }
 }
 

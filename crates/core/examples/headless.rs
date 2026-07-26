@@ -18,7 +18,7 @@ fn main() {
     let mut term = Terminal::new(backend);
 
     // Frame 1: draw a lone `@` and present it.
-    term.put(1, 1, '@');
+    term.put((1, 1), '@');
     term.present().unwrap();
     println!("--- Frame 1 ---");
     println!("{}", term.backend().format_view());
@@ -35,8 +35,8 @@ fn main() {
     // shows the injection landing in the queue, then redraws one cell over
     // to keep the example self-contained.
     let _ = term.drain_events();
-    term.put(1, 1, ' ');
-    term.put(2, 1, '@');
+    term.put((1, 1), ' ');
+    term.put((2, 1), '@');
     term.present().unwrap();
     println!("--- Frame 2 (after injecting a move-right event) ---");
     println!("{}", term.backend().format_view());

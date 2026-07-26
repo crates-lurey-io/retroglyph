@@ -188,7 +188,7 @@ impl PerfOverlay {
 
         for (i, ch) in text.chars().enumerate() {
             #[allow(clippy::cast_possible_truncation)]
-            term.put_styled(x + i as u16, y, ch, style);
+            term.put_styled((x + i as u16, y), ch, style);
         }
     }
 }

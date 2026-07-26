@@ -61,7 +61,8 @@ pub struct Frame {
 /// struct MyGame;
 /// impl<B: Backend> App<B> for MyGame {
 ///     fn update(&mut self, term: &mut Terminal<B>, _frame: &Frame) -> Flow {
-///         term.put(0, 0, '@');
+///         term.put((0, 0), '@');
+///         term.present().ok(); // Required under `run_blocking`; automatic under the windowed drivers.
 ///         Flow::Exit
 ///     }
 /// }
@@ -216,7 +217,7 @@ mod tests {
     impl App<Headless> for Counter {
         fn update(&mut self, term: &mut Terminal<Headless>, frame: &Frame) -> Flow {
             self.frames += 1;
-            term.put(0, 0, '#');
+            term.put((0, 0), '#');
             term.present().expect("present");
             // Quit when a key is pending, or after a safety cap.
             if term.has_input() || frame.frame >= 100 {
@@ -291,7 +292,7 @@ mod tests {
     impl App<Headless> for DrawsAndExits {
         fn update(&mut self, term: &mut Terminal<Headless>, frame: &Frame) -> Flow {
             self.frames += 1;
-            term.put(0, 0, 'x');
+            term.put((0, 0), 'x');
             if frame.frame >= self.exit_at {
                 Flow::Exit
             } else {

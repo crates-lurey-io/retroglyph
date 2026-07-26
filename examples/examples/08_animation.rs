@@ -95,8 +95,7 @@ impl Animation {
     /// a sub-cell pixel offset for the fractional part of that position.
     fn draw<B: Backend>(&self, term: &mut Terminal<B>) {
         term.print(
-            1,
-            1,
+            (1, 1),
             "A ball travels the track below and back; q / Escape quits.",
         );
         // `bounces == 1` is the moment the ball *reaches* the right end and starts heading
@@ -104,12 +103,12 @@ impl Animation {
         // the ball) only actually settles at TRACK_LEFT once the second clock fire completes
         // that return trip.
         if self.bounces >= 2 {
-            term.print(1, 2, "(parked at left end)");
+            term.print((1, 2), "(parked at left end)");
         }
 
         let track_style = Style::new().fg(Color::Ansi(AnsiColor::BrightBlack));
         for x in TRACK_LEFT..=TRACK_RIGHT {
-            term.put_styled(x, TRACK_ROW, '-', track_style);
+            term.put_styled((x, TRACK_ROW), '-', track_style);
         }
 
         let pos = self.position.value();
@@ -122,7 +121,7 @@ impl Animation {
         term.reset_style()
             .fg(Color::Ansi(AnsiColor::BrightYellow))
             .bg(Color::Default);
-        term.put_offset(cell_x, TRACK_ROW, dx, 0, 'o');
+        term.put_offset((cell_x, TRACK_ROW), (dx, 0), 'o');
     }
 }
 

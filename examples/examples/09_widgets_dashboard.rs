@@ -143,8 +143,7 @@ impl Dashboard {
 
         term.reset_style().fg(self.theme.accent);
         term.print(
-            title_area.left() + 1,
-            title_area.top(),
+            (title_area.left() + 1, title_area.top()),
             "retroglyph dashboard -- tabs/select, q/Esc quits",
         );
         term.reset_style();
@@ -216,7 +215,7 @@ impl Dashboard {
         Gauge::new("MEM", self.mem)
             .render(rows[1], &mut Surface::new(term.grid_mut(), term_area, 0));
         term.reset_style().fg(self.theme.dim);
-        term.print(rows[2].left(), rows[2].top(), "History:");
+        term.print((rows[2].left(), rows[2].top()), "History:");
         term.reset_style();
         Sparkline::new(&CPU_HISTORY)
             .render(rows[3], &mut Surface::new(term.grid_mut(), term_area, 0));
@@ -256,8 +255,7 @@ impl Dashboard {
 
         term.reset_style().fg(self.theme.dim);
         term.print(
-            rect.left() + rect.width() + 1,
-            rect.top(),
+            (rect.left() + rect.width() + 1, rect.top()),
             &format!("Pings: {}", self.pings),
         );
         term.reset_style();

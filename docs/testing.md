@@ -113,7 +113,7 @@ let backend = Headless::new(10, 3);
 let mut term = Terminal::new(backend);
 
 // Draw an initial frame.
-term.put(1, 1, '@');
+term.put((1, 1), '@');
 term.present().unwrap();
 
 // Inject a synthetic key event, exactly as a real backend would push one from its own input
@@ -128,8 +128,8 @@ for event in term.drain_events() {
     // handle_input(event) -- move the `@`, etc.
     let _ = event;
 }
-term.put(1, 1, ' ');
-term.put(2, 1, '@');
+term.put((1, 1), ' ');
+term.put((2, 1), '@');
 term.present().unwrap();
 
 // Assert on the result. In a real test this is `insta::assert_snapshot!(view, @"...")`

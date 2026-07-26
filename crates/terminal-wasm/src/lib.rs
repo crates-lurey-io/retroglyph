@@ -15,7 +15,7 @@
 //!
 //! let backend = TerminalWasm::new(80, 24);
 //! let mut term = Terminal::new(backend);
-//! term.put(0, 0, '@');
+//! term.put((0, 0), '@');
 //! term.present().unwrap();
 //! let ansi = term.backend_mut().take_output();
 //! assert!(ansi.contains('@'));
@@ -807,7 +807,7 @@ mod tests {
     fn renders_into_pullable_buffer() {
         let backend = TerminalWasm::new(10, 3);
         let mut term = Terminal::new(backend);
-        term.put(1, 1, 'H');
+        term.put((1, 1), 'H');
         term.present().unwrap();
         let out = term.backend_mut().take_output();
         assert!(out.contains('H'), "output: {out:?}");
@@ -823,7 +823,7 @@ mod tests {
         let mut term = Terminal::new(backend);
         for y in 0..12 {
             for x in 0..40 {
-                term.put(x, y, 'X');
+                term.put((x, y), 'X');
             }
         }
         term.present().unwrap();
@@ -845,7 +845,7 @@ mod tests {
     fn take_output_into_clears_and_fills_caller_buffer() {
         let backend = TerminalWasm::new(10, 3);
         let mut term = Terminal::new(backend);
-        term.put(1, 1, 'H');
+        term.put((1, 1), 'H');
         term.present().unwrap();
 
         let mut buf = String::from("stale contents");

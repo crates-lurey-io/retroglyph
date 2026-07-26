@@ -48,7 +48,7 @@ let renderer = SoftwareBackendBuilder::new()
     .unwrap();
 
 let mut term = Terminal::new(renderer);
-term.put_styled(0, 0, ' ', Style::new().bg(Color::Rgb { r: 255, g: 0, b: 0 }));
+term.put_styled((0, 0), ' ', Style::new().bg(Color::Rgb { r: 255, g: 0, b: 0 }));
 term.present().unwrap();
 
 assert!(term.backend().pixels().iter().all(|&p| p == 0x00FF_0000));

@@ -88,7 +88,7 @@ impl std::error::Error for SoftwareBackendError {
 /// let config = WindowConfig::fit(&renderer, "My Game", None);
 /// run_windowed(config, renderer, move |term| {
 ///     term.clear();
-///     term.print(0, 0, "Hello from rg!");
+///     term.print((0, 0), "Hello from rg!");
 ///     term.present();
 ///
 ///     if let Some(event) = term.poll(Duration::from_millis(16)) {

@@ -286,7 +286,7 @@ impl Fps {
 
         term.layer(OVERLAY_LAYER);
         for (i, ch) in text.chars().enumerate() {
-            term.put_styled(x0 + i as u16, 0, ch, style);
+            term.put_styled((x0 + i as u16, 0), ch, style);
         }
         // Restore the base layer so the next example `tick` draws where it expects.
         term.layer(0);

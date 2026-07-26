@@ -105,7 +105,7 @@ use retroglyph::{Terminal, backend::Headless};
 
 let backend = Headless::new(20, 5);
 let mut term = Terminal::new(backend);
-term.put(2, 2, 'X');
+term.put((2, 2), 'X');
 term.present();
 insta::assert_snapshot!(term.backend().format_view());
 ```

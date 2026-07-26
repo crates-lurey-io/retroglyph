@@ -79,7 +79,7 @@ impl TextAlign {
     #[allow(clippy::unused_self)]
     fn draw<B: Backend>(&self, term: &mut Terminal<B>) {
         term.reset_style().fg(Color::WHITE);
-        term.print(1, 0, "Align: Left / Center / Right on titles and text");
+        term.print((1, 0), "Align: Left / Center / Right on titles and text");
         term.reset_style();
 
         Self::draw_panel(term, Rect::new(0, 1, 50, 5), "Left", Align::Left);

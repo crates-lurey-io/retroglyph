@@ -166,8 +166,8 @@ mod tests {
         use crate::Terminal;
         let backend = Headless::new(10, 3);
         let mut term = Terminal::new(backend);
-        term.put(1, 1, 'H');
-        term.put(2, 1, 'i');
+        term.put((1, 1), 'H');
+        term.put((2, 1), 'i');
         term.present();
         let view = term.backend().format_view();
         insta::assert_snapshot!(view, @r#"
@@ -185,7 +185,7 @@ mod tests {
         use crate::Terminal;
         let backend = Headless::new(6, 3);
         let mut term = Terminal::new(backend);
-        term.put_span(1, 0, &["C=", "[]"]);
+        term.put_span((1, 0), &["C=", "[]"]);
         term.present();
         let view = term.backend().format_view();
         insta::assert_snapshot!(view, @r#"

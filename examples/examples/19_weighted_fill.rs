@@ -54,17 +54,17 @@ impl WeightedFill {
         }
         let (l, t, r, b) = (rect.left(), rect.top(), rect.right() - 1, rect.bottom() - 1);
 
-        term.put(l, t, '┌');
-        term.put(r, t, '┐');
-        term.put(l, b, '└');
-        term.put(r, b, '┘');
+        term.put((l, t), '┌');
+        term.put((r, t), '┐');
+        term.put((l, b), '└');
+        term.put((r, b), '┘');
         for x in (l + 1)..r {
-            term.put(x, t, '─');
-            term.put(x, b, '─');
+            term.put((x, t), '─');
+            term.put((x, b), '─');
         }
         for y in (t + 1)..b {
-            term.put(l, y, '│');
-            term.put(r, y, '│');
+            term.put((l, y), '│');
+            term.put((r, y), '│');
         }
 
         let interior_width = rect.width().saturating_sub(2);
@@ -74,10 +74,10 @@ impl WeightedFill {
         };
         let width_readout = format!("w={}", rect.width());
         if rect.height() >= 4 {
-            term.print(center(label), t + 1, label);
-            term.print(center(&width_readout), t + 2, &width_readout);
+            term.print((center(label), t + 1), label);
+            term.print((center(&width_readout), t + 2), &width_readout);
         } else if rect.height() >= 2 {
-            term.print(center(label), t + rect.height() / 2, label);
+            term.print((center(label), t + rect.height() / 2), label);
         }
     }
 
@@ -91,7 +91,7 @@ impl WeightedFill {
         labels: &[&str],
     ) {
         term.reset_style();
-        term.print(row.left(), row.top(), caption);
+        term.print((row.left(), row.top()), caption);
         let body = Rect::new(row.left(), row.top() + 1, row.width(), row.height() - 1);
         let panes = split_h(body, constraints);
         for (pane, label) in panes.iter().zip(labels) {
@@ -103,7 +103,7 @@ impl WeightedFill {
     #[allow(clippy::unused_self)]
     fn draw<B: Backend>(&self, term: &mut Terminal<B>) {
         let full = Rect::new(0, 0, 50, 25);
-        term.print(1, 0, "Constraint::Fill(weight): proportional splits");
+        term.print((1, 0), "Constraint::Fill(weight): proportional splits");
 
         let rows = split_v(
             Rect::new(full.left(), full.top() + 1, full.width(), full.height() - 1),
