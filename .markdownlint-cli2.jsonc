@@ -4,10 +4,8 @@
     "no-duplicate-heading": { "siblings_only": true },
     "no-inline-html": false
   },
+  "gitignore": true,
   "ignores": [
-    "**/node_modules/**",
-    "target/**",
-    ".git/**",
     ".jj/**",
     ".matan/**"
   ]

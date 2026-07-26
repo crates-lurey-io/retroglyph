@@ -1,8 +1,5 @@
 # git-cliff ~ configuration file
 # https://git-cliff.org/docs/configuration
-#
-# Adapted from ratatui's proven config (see RELEASING.md's "Post-0.1.0: adopt release-plz"
-# section): https://github.com/ratatui/ratatui/blob/main/cliff.toml
 
 [remote.github]
 owner = "crates-lurey-io"
@@ -16,12 +13,7 @@ All notable changes to this project will be documented in this file.
 <!-- ignore lint rules that are often triggered by content generated from commits / git-cliff -->
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 """
-# template for the changelog body
-# https://keats.github.io/tera/docs/#introduction
-# note that the - before / after the % controls whether whitespace is rendered between each line.
-# Getting this right so that the markdown renders with the correct number of lines between headings,
-# code fences, and list items is finicky. The 4 backticks in the commit macro is intentional: it
-# escapes any backticks in the commit body.
+
 body = """
 {%- if not version %}
 ## [unreleased]
@@ -100,40 +92,18 @@ postprocessors = [
   { pattern = "<!-- Please read CONTRIBUTING.md before submitting any pull request. -->", replace = "" },
   { pattern = '>---+\n', replace = "" },
   { pattern = ' +\n', replace = "\n" },
-  # The body template's tail (the **Full Changelog** link block) can't be trimmed with Tera's
-  # `-` whitespace-control markers without also swallowing the blank line that's supposed to
-  # separate it from the next heading, because that separator has to come from literal template
-  # text sitting between nested `{% if %}` blocks. Squash the resulting run of 3+ blank lines
-  # (seen at the boundary between a freshly rendered release entry and the next one, e.g. an
-  # old hand-written 0.1.0 entry) down to a single blank line instead, matching Keep a Changelog
-  # / prettier / markdownlint's `MD012` expectation of at most one.
   { pattern = '\n{3,}', replace = "\n\n" },
 ]
 
 [git]
-# parse the commits based on https://www.conventionalcommits.org
 conventional_commits = true
 filter_unconventional = true
 split_commits = false
-# strip the trailing "(#123)" PR-number suffix GitHub's squash-merge adds to the commit subject --
-# the PR number is already linked separately via commit.remote.pr_number in the template above.
 commit_preprocessors = [
   { pattern = '\((\w+\s)?#([0-9]+)\)', replace = "" },
 ]
-# regex for parsing and grouping commits, matching AGENTS.md's Conventional Commits scope
-# convention (core, terminal, crossterm, terminal-wasm, software, window, widgets, examples)
 commit_parsers = [
-  { field = "id", pattern = "0000000", skip = true }, # release-plz's release-commit placeholder
-  # skip-changelog: keep a PR out of the changelog. Two mechanisms (see RELEASING.md):
-  #   1. GitHub label match. Verified against release-plz's actual template context (not just
-  #      plain git-cliff's, which differs): release-plz injects a `remote` object per commit
-  #      (RemoteContributor { username, pr_number, pr_labels, ... }), NOT the `github` object
-  #      standalone git-cliff exposes. A wrong field path here doesn't just fail to match -- it
-  #      silently drops the ENTIRE commit from the changelog (reproduced locally: `field =
-  #      "github.pr_labels"` emptied every changelog entry release-plz generated, even though
-  #      plain git-cliff with the same commit rendered fine). `remote.pr_labels` is the verified
-  #      correct path.
-  #   2. guaranteed fallback -- a `changelog: ignore` line in the squash commit body.
+  { field = "id", pattern = "0000000", skip = true },
   { field = "remote.pr_labels", pattern = "skip-changelog", skip = true },
   { footer = "(?i)^changelog: ?ignore", skip = true },
   { message = "^feat", group = "<!-- 00 -->Features" },

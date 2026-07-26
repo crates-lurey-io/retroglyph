@@ -78,9 +78,7 @@ above. Work-in-progress commits inside a branch are unconstrained. This is load-
 changelogs, so a PR title that doesn't follow the convention won't be attributed a version bump
 correctly.
 
-Local `hk` hooks (see Pre-push hooks below) can't enforce this: they run through `jj-hooks`, which
-only supports `pre-commit`/`pre-push` stages, not `commit-msg`. PR-title CI is where enforcement
-lives instead.
+PR-title CI is where enforcement lives; there's no local commit-msg hook for this.
 
 ### Breaking changes: don't reach for `!` by default
 
@@ -115,18 +113,6 @@ only the crate(s) actually experiencing the break.
 The `breaking` label (`.github/labels.yml`) is a plain categorization label synced automatically by
 `check-semver.yml` from its own `cargo-semver-checks` finding; it never drives release-plz's version
 bump. There is no `semver-override` label; see `RELEASING.md` for why.
-
-## Pre-push hooks
-
-`hk` (configured in `hk.pkl`) runs on every `jj push` via `jj-hooks`:
-
-- `just fmt-check` (rustfmt + prettier)
-- `just lint` (clippy + markdown lint)
-
-```sh
-cargo bin hk run pre-push     # run manually
-JJ_HOOKS_SKIP=1 jj push       # bypass (use sparingly)
-```
 
 ## Docs
 

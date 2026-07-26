@@ -4,15 +4,9 @@
 # Node tools
 /tools/node_modules/
 
-# IDEs
-/.idea/
-/.vscode/
-
-# OS files
+# OS Files
 .DS_Store
+
 # Generated files
 .bin/
-llms.txt
-llms-full.txt
-# Agent scratch (pi-subagents artifacts/transcripts)
-.pi-subagents/
+
