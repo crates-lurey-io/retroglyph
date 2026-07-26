@@ -68,3 +68,11 @@ must_use_candidate = "deny"
 missing_errors_doc = "deny"
 missing_panics_doc = "deny"
 module_name_repetitions = "allow"
+
+[workspace.lints.rustdoc]
+broken_intra_doc_links = "deny"
+private_intra_doc_links = "warn"
+invalid_codeblock_attributes = "deny"
+invalid_rust_codeblocks = "deny"
+bare_urls = "warn"
+unescaped_backticks = "warn"
