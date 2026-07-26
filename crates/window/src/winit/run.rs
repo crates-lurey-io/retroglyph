@@ -398,7 +398,7 @@ where
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```no_run
 /// use retroglyph_core::event::Event;
 /// use retroglyph_software::SoftwareBackendBuilder;
 /// use retroglyph_window::winit::{WindowConfig, run_windowed_with_proxy};
@@ -409,7 +409,8 @@ where
 ///     .scale(2)
 ///     .build()
 ///     .expect("backend init failed")
-///     .run_headless();
+///     .run_headless()
+///     .expect("renderer init failed");
 /// let config = WindowConfig::fit(&renderer, "My Game", None, true);
 ///
 /// run_windowed_with_proxy(
@@ -486,7 +487,7 @@ where
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```no_run
 /// use retroglyph_software::SoftwareBackendBuilder;
 /// use retroglyph_window::winit::{WindowConfig, run_windowed_with_typed_proxy};
 /// use std::time::Duration;
@@ -500,7 +501,8 @@ where
 ///     .scale(2)
 ///     .build()
 ///     .expect("backend init failed")
-///     .run_headless();
+///     .run_headless()
+///     .expect("renderer init failed");
 /// let config = WindowConfig::fit(&renderer, "My Game", None, true);
 ///
 /// run_windowed_with_typed_proxy(

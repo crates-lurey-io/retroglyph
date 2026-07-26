@@ -285,7 +285,7 @@ impl TilesetOptions {
 ///
 /// Standard CP437 tileset:
 ///
-/// ```ignore
+/// ```no_run
 /// use retroglyph_window::tileset::TilesetOptions;
 ///
 /// let png: Vec<u8> = std::fs::read("assets/cp437_16x16.png").unwrap();
@@ -297,7 +297,7 @@ impl TilesetOptions {
 ///
 /// Private-use sprite sheet addressed by index, centred in whatever box a span reserves:
 ///
-/// ```ignore
+/// ```no_run
 /// use retroglyph_window::tileset::{Codepage, SpriteAlign, TilesetOptions};
 ///
 /// let png: Vec<u8> = std::fs::read("assets/sprites.png").unwrap();
@@ -314,7 +314,7 @@ impl TilesetOptions {
 ///
 /// Unicode private-use area sprite sheet:
 ///
-/// ```ignore
+/// ```no_run
 /// use retroglyph_window::tileset::TilesetOptions;
 ///
 /// let png: Vec<u8> = std::fs::read("assets/monsters.png").unwrap();

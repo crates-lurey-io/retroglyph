@@ -49,9 +49,12 @@ impl std::error::Error for GlBackendError {}
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```no_run
+/// # #[cfg(not(target_arch = "wasm32"))]
+/// # fn main() {
+/// use retroglyph_core::Style;
 /// use retroglyph_gl::GlBackendBuilder;
-/// use retroglyph_window::winit::{WindowConfig, run_app};
+/// use retroglyph_window::winit::{WindowConfig, run_windowed};
 ///
 /// let renderer = GlBackendBuilder::new()
 ///     .grid_size(80, 25)
@@ -59,7 +62,14 @@ impl std::error::Error for GlBackendError {}
 ///     .build()
 ///     .expect("gl backend init failed");
 /// let config = WindowConfig::fit(&renderer, "My Game", None, true);
-/// // run_app(config, renderer, app)?;
+/// run_windowed(config, renderer, move |term| {
+///     term.draw(|s| s.print((0, 0), "Hello from retroglyph-gl!", Style::default()))
+///         .ok();
+/// })
+/// .expect("event loop failed");
+/// # }
+/// # #[cfg(target_arch = "wasm32")]
+/// # fn main() {}
 /// ```
 #[derive(Debug, Clone)]
 pub struct GlBackendBuilder {

@@ -71,7 +71,7 @@ impl std::error::Error for SoftwareBackendError {
 /// Windowed mode (requires `default-font` feature; the loop comes
 /// from `retroglyph-window`):
 ///
-/// ```ignore
+/// ```no_run
 /// use retroglyph_software::SoftwareBackendBuilder;
 /// use retroglyph_window::winit::{WindowConfig, run_windowed};
 /// use retroglyph_core::event::{Event, KeyCode};
@@ -102,11 +102,11 @@ impl std::error::Error for SoftwareBackendError {
 ///
 /// Headless mode (useful for testing):
 ///
-/// ```ignore
+/// ```
 /// use retroglyph_software::{SoftwareBackendBuilder, SoftwareRenderer};
 /// use retroglyph_core::style::Style;
 /// use retroglyph_core::grid::Pos;
-/// use retroglyph_core::Color;
+/// use retroglyph_core::{Color, Output};
 ///
 /// let opts = SoftwareBackendBuilder::new()
 ///     .grid_size(1, 1)
@@ -189,7 +189,7 @@ impl SoftwareBackend {
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```
 /// use retroglyph_software::SoftwareBackendBuilder;
 ///
 /// // With the `default-font` feature the embedded Unscii 16 font is
@@ -200,7 +200,6 @@ impl SoftwareBackend {
 /// //   SoftwareBackendBuilder::new().font(my_font)...
 ///
 /// let backend = SoftwareBackendBuilder::new()
-///     .title("My Game")
 ///     .grid_size(80, 25)
 ///     .build()
 ///     .expect("backend init failed");
