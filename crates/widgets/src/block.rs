@@ -66,8 +66,8 @@ pub fn join_v(grids: &[Grid]) -> Grid {
 ///
 /// A thin convenience over [`Grid::blit`] (via [`Surface::grid_mut`]) so callers composing
 /// widget output with [`join_h`]/[`join_v`] don't need to reach into the surface's grid by hand
-/// for the final copy. Writes to `surface`'s own layer, but -- like [`Surface::grid_mut`] itself
-/// -- is not clipped to `surface`'s area: `(x, y)` and `grid`'s extent are trusted as given.
+/// for the final copy. Writes to `surface`'s own layer, but (like [`Surface::grid_mut`] itself)
+/// is not clipped to `surface`'s area: `(x, y)` and `grid`'s extent are trusted as given.
 pub fn blit_into(surface: &mut Surface<'_>, grid: &Grid, x: u16, y: u16) {
     let rect = Rect::new(0, 0, grid.width(), grid.height());
     let layer = surface.layer();

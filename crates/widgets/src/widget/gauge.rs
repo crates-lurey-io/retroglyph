@@ -51,7 +51,7 @@ impl<'a> Gauge<'a> {
         self
     }
 
-    /// Sets `label_style` to `theme.dim` on `theme.panel_bg` -- the same de-emphasized role
+    /// Sets `label_style` to `theme.dim` on `theme.panel_bg`: the same de-emphasized role
     /// `09_widgets_dashboard` already uses for the plain-text label next to this gauge's
     /// sparkline. The bar's own fill stays load-colored via [`super::Meter`] regardless of
     /// `theme`, matching every other gauge/meter-backed widget here (see [`super::Sparkline`]'s
@@ -59,7 +59,7 @@ impl<'a> Gauge<'a> {
     ///
     /// `label_style` sets an explicit background rather than leaving it at [`Style::new()`]'s
     /// default: an unset background isn't "transparent" once a real backend draws it (a bare
-    /// `Color::Default` cell paints as solid black behind the glyph -- see
+    /// `Color::Default` cell paints as solid black behind the glyph; see
     /// `retroglyph-software`'s `DEFAULT_BG`), so this widget assumes it's drawn on
     /// `theme.panel_bg`, true when composed with a themed [`super::Panel`]/[`super::Modal`].
     /// Drawing this gauge directly on the raw screen background instead needs a manual
@@ -71,8 +71,8 @@ impl<'a> Gauge<'a> {
         self.theme_on(theme, theme.panel_bg)
     }
 
-    /// Same as [`Gauge::theme`], but `label_style` is drawn on `bg` instead of `theme.panel_bg`
-    /// -- for a gauge drawn directly on a backdrop other than a themed [`super::Panel`]/
+    /// Same as [`Gauge::theme`], but `label_style` is drawn on `bg` instead of `theme.panel_bg`,
+    /// for a gauge drawn directly on a backdrop other than a themed [`super::Panel`]/
     /// [`super::Modal`]'s fill. [`Gauge::theme`] is exactly `theme_on(theme, theme.panel_bg)`.
     #[must_use]
     pub fn theme_on(mut self, theme: Theme, bg: Color) -> Self {

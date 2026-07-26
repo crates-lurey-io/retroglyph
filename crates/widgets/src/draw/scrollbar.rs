@@ -1,7 +1,7 @@
 //! [`thumb_geometry`]/[`offset_for_pos`]: pure scrollbar geometry, kept as
 //! functions (not [`widget::Scrollbar`](crate::widget::Scrollbar) methods)
-//! because they have legitimate standalone callers that never draw anything
-//! -- e.g. hit-testing a click/drag against the thumb via
+//! because they have legitimate standalone callers that never draw anything:
+//! e.g. hit-testing a click/drag against the thumb via
 //! [`Interaction::interact`](crate::Interaction::interact) with
 //! [`Sense::DRAG`](crate::Sense::DRAG), independently of (and possibly
 //! before) ever rendering a [`widget::Scrollbar`](crate::widget::Scrollbar).
@@ -15,7 +15,7 @@ use retroglyph_core::{Pos, Rect};
 /// `visible_len`-row viewport currently starting at `offset`.
 ///
 /// `None` if there's nothing to scroll (`area` has no rows, `visible_len`
-/// is zero, or `total_len <= visible_len` -- the whole track already fits
+/// is zero, or `total_len <= visible_len`, the whole track already fits
 /// in the viewport). [`widget::Scrollbar`](crate::widget::Scrollbar) falls
 /// back to drawing a plain, thumb-less track in that case.
 ///
@@ -74,7 +74,7 @@ pub fn offset_for_pos(area: Rect, total_len: usize, visible_len: usize, pos: Pos
     let max_offset = total_len - visible_len;
     // height() - 1, not height(): mapping the *last* row to max_offset (not
     // one row short of it) needs `rel` to range over 0..=track, not
-    // 0..track -- an off-by-one that would otherwise leave the bottom row
+    // 0..track: an off-by-one that would otherwise leave the bottom row
     // of the track unable to reach the maximum offset.
     let track = area.height().saturating_sub(1).max(1);
     let rel = pos.y.saturating_sub(area.top()).min(track);

@@ -6,7 +6,7 @@ use retroglyph_core::{Pos, Rect};
 /// A per-frame registry of `(Rect, Id)` pairs, queried by pointer position
 /// to find the topmost widget under a point.
 ///
-/// Standalone and headless -- no [`Backend`](retroglyph_core::Backend)
+/// Standalone and headless: no [`Backend`](retroglyph_core::Backend)
 /// dependency, so it's usable (and unit-testable) without a
 /// [`Terminal`](retroglyph_core::Terminal) or any drawing at all, e.g. for
 /// hand-rolled hit-testing outside of [`Interaction`](crate::Interaction).

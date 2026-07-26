@@ -11,7 +11,7 @@ use crate::Surface;
 // `pub(crate)`, not private: reused by `style.rs`'s `BoxStyle` border
 // rendering and `widget::BoxBorder`, but not part of the public API. The
 // enclosing `primitives` module is itself `pub(crate)` for the same reason,
-// which is what makes clippy's redundant-pub-crate lint fire here -- allowed
+// which is what makes clippy's redundant-pub-crate lint fire here: allowed
 // rather than restructured, since `pub(crate)` is the accurate, intentional
 // visibility.
 #[allow(clippy::redundant_pub_crate)]

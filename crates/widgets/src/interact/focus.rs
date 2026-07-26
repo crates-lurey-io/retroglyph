@@ -8,7 +8,7 @@ use retroglyph_core::{Event, KeyCode};
 ///
 /// Like [`HitTester`](crate::HitTester), registrations are per-frame and
 /// draw-ordered, but [`advance`](Self::advance)/[`retreat`](Self::retreat)
-/// always walk *last* frame's finalized order -- this frame's registrations
+/// always walk *last* frame's finalized order: this frame's registrations
 /// aren't complete until the draw pass finishes. `current` itself, unlike
 /// the order, persists across frames like any other piece of app state,
 /// until focus moves or is [`clear`](Self::clear)ed.

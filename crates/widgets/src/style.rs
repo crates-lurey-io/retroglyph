@@ -197,7 +197,7 @@ impl BoxStyle {
     /// same line over by 2 columns rather than 1. It is, however, written
     /// without a `WIDE_CHAR_SPACER` reservation on the cell to its right (see
     /// `retroglyph_core::Grid::write_grapheme`, which requires the `egc`
-    /// feature this module does not depend on) -- terminal-
+    /// feature this module does not depend on): terminal-
     /// rendering backends may misalign output by one column per wide
     /// character as a result. Fully correct wide-character rendering needs
     /// an `egc`-gated code path; not yet implemented here.
@@ -314,7 +314,7 @@ impl BoxStyle {
 /// via [`BoxStyle::text`].
 ///
 /// [`Widget::render`] places the box at `area`'s top-left corner, sized to
-/// the style's own explicit-or-content-fit dimensions -- it does not stretch
+/// the style's own explicit-or-content-fit dimensions: it does not stretch
 /// or clip to fill `area`. It always uses [`BoxStyle::render`] (not
 /// `BoxStyle::render_wrapped`, behind the `egc` feature); for wrapped
 /// content, call `render_wrapped` directly and [`crate::blit_into`] the

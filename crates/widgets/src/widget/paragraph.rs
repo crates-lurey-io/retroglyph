@@ -4,7 +4,7 @@
 //! Requires the `egc` feature: wrapping is delegated entirely to
 //! [`retroglyph_core::layout::TextLayout`], which handles grapheme clusters
 //! and hard newlines correctly. This module adds no wrapping logic of its
-//! own -- see `crates/widgets/src/text.rs` for why that duplication was
+//! own: see `crates/widgets/src/text.rs` for why that duplication was
 //! removed.
 use retroglyph_core::layout::TextLayout;
 use retroglyph_core::text::{Line, Span};

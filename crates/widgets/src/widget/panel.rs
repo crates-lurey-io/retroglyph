@@ -80,7 +80,7 @@ impl<'a> Panel<'a> {
     /// `theme.border` on `theme.title_bg` (the same background the title, if any, is drawn on),
     /// and `fill_style` becomes `theme.panel_bg`.
     ///
-    /// Like every other builder method here, whichever call comes last wins -- call `.theme(...)`
+    /// Like every other builder method here, whichever call comes last wins: call `.theme(...)`
     /// before any manual [`Panel::border_style`]/[`Panel::fill_style`] override you want to keep.
     #[must_use]
     pub fn theme(self, theme: Theme) -> Self {

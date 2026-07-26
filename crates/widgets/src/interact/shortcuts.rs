@@ -24,12 +24,12 @@ struct Binding<Id, Action> {
 ///
 /// This does not replace ad hoc `match key.code { .. }` handling for
 /// widget-specific navigation (arrow keys meaning "move selection" only
-/// while a particular id is focused, say) -- that kind of binding usually
+/// while a particular id is focused, say): that kind of binding usually
 /// carries extra context (list length, current offset) that doesn't fit a
 /// flat `Action` enum. `Shortcuts` is for the simple case: one key, always
 /// the same `Action`, wherever it's in scope. Bindings are a fixed table set
 /// up once (there's no per-frame `begin_frame`/registration step like
-/// [`FocusRing`](crate::FocusRing)'s -- a key combination either exists or
+/// [`FocusRing`](crate::FocusRing)'s, a key combination either exists or
 /// it doesn't, regardless of what happened to be drawn this frame).
 ///
 /// # Examples

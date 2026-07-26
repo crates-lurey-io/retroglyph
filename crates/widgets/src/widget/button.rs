@@ -13,7 +13,7 @@ use crate::text::truncate as truncate_to_cols;
 ///
 /// `Button` is pure presentation, not a new source of truth: it never calls `interact` itself and
 /// has no `Id` type parameter, unlike `Interaction<Id>`. The app still owns the `Interaction<Id>`
-/// context and decides the button's id/[`Sense`](crate::Sense) -- the same division of labor as
+/// context and decides the button's id/[`Sense`](crate::Sense): the same division of labor as
 /// every other widget here (state lives outside; the widget only reads it), applied to the
 /// `interact` module's own doctest pattern ("draw the button, using `response.hovered()`/
 /// `focused()` to pick a style") instead of leaving every call site to hand-roll it:
@@ -38,7 +38,7 @@ use crate::text::truncate as truncate_to_cols;
 ///
 /// Precedence when more than one [`Response`] flag is set at once:
 /// [`pressed`](Response::pressed) &gt; [`hovered`](Response::hovered) &gt;
-/// [`focused`](Response::focused) &gt; the default `style` -- matching the conventional
+/// [`focused`](Response::focused) &gt; the default `style`: matching the conventional
 /// `:active` &gt; `:hover` &gt; `:focus` ordering, so a press always reads as pressed even while
 /// still hovered, and a keyboard-focused-but-not-hovered button still shows something distinct
 /// from idle.
@@ -134,7 +134,7 @@ impl<'a> Button<'a> {
 
     /// Same as [`Button::theme`], but the idle and focused states are drawn on `bg` instead of
     /// `theme.panel_bg` (`hovered_style`/`pressed_style` still use `theme.hover_bg`/
-    /// `theme.press_bg`, unaffected by `bg`) -- for a button drawn directly on a backdrop other
+    /// `theme.press_bg`, unaffected by `bg`): for a button drawn directly on a backdrop other
     /// than a themed [`super::Panel`]/[`super::Modal`]'s fill. [`Button::theme`] is exactly
     /// `theme_on(theme, theme.panel_bg)`.
     #[must_use]
@@ -319,7 +319,7 @@ mod tests {
 
         // The synthetic down+up pair above lands in one `handle_event` batch (see
         // `Interaction`'s doc comment on this exact edge case), so `pressed` is still `true` on
-        // the same frame `clicked` resolves -- `Button` renders with `pressed_style` here, not
+        // the same frame `clicked` resolves: `Button` renders with `pressed_style` here, not
         // idle. Confirms end-to-end wiring (a real click drives a real style pick), not just that
         // `resolved_style` matches its own precedence rules in isolation (the other tests above).
         let button = Button::new("Go", response);

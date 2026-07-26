@@ -2,7 +2,7 @@
 
 use retroglyph_core::Color;
 
-/// A palette of named color roles, rather than a CSS-style cascade -- draw
+/// A palette of named color roles, rather than a CSS-style cascade: draw
 /// code picks the role it means (`theme.accent`, `theme.border`) and the
 /// active [`Theme`] decides what color that resolves to.
 ///
@@ -10,7 +10,7 @@ use retroglyph_core::Color;
 /// [`DARK`](Self::DARK) and [`LIGHT`](Self::LIGHT) (a manual toggle key, a
 /// [`SystemTheme`](retroglyph_core::SystemTheme) from
 /// [`Event::ThemeChanged`](retroglyph_core::Event::ThemeChanged), or just
-/// always the same one) -- it only owns the two palettes themselves, so an
+/// always the same one): it only owns the two palettes themselves, so an
 /// app doesn't have to invent one from scratch.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Theme {

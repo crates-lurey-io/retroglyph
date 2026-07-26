@@ -15,10 +15,10 @@ use crate::draw::thumb_geometry;
 ///
 /// `track_style` fills the whole strip, then [`crate::draw::thumb_geometry`]'s
 /// span (if any) is redrawn with `thumb_style` on top. Draws just the plain
-/// track, with no thumb, if there's nothing to scroll -- see
+/// track, with no thumb, if there's nothing to scroll: see
 /// [`crate::draw::thumb_geometry`].
 ///
-/// Deliberately independent of [`crate::interact`] -- see
+/// Deliberately independent of [`crate::interact`]: see
 /// [`crate::draw::thumb_geometry`] and
 /// [`crate::draw::offset_for_pos`]'s own doc comments for how to make this
 /// draggable using [`Interaction`](crate::Interaction) instead.
@@ -80,8 +80,8 @@ impl Scrollbar {
     }
 
     /// Applies `theme`'s named roles to this scrollbar: `track_style` becomes `theme.panel_bg`
-    /// (the same surface the scrolled content sits on), and `thumb_style` becomes `theme.border`
-    /// -- a subtle divider-like color rather than `theme.accent`, so a themed scrollbar doesn't
+    /// (the same surface the scrolled content sits on), and `thumb_style` becomes `theme.border`:
+    /// a subtle divider-like color rather than `theme.accent`, so a themed scrollbar doesn't
     /// compete with an actually-selected/focused control for attention.
     ///
     /// Call before any manual [`Scrollbar::track_style`]/[`Scrollbar::thumb_style`] override you
@@ -92,7 +92,7 @@ impl Scrollbar {
     }
 
     /// Same as [`Scrollbar::theme`], but `track_style` is drawn on `bg` instead of
-    /// `theme.panel_bg` -- for a scrollbar drawn directly on a backdrop other than a themed
+    /// `theme.panel_bg`: for a scrollbar drawn directly on a backdrop other than a themed
     /// [`super::Panel`]/[`super::Modal`]'s fill. [`Scrollbar::theme`] is exactly
     /// `theme_on(theme, theme.panel_bg)`.
     #[must_use]

@@ -92,7 +92,7 @@ impl ListState {
     /// selection is already visible. Call this once per frame before
     /// rendering (with the actual, current viewport height, since that can
     /// change on terminal resize) rather than only after moving the
-    /// selection -- it's cheap and idempotent, so redoing it every frame
+    /// selection: it's cheap and idempotent, so redoing it every frame
     /// costs nothing and needs no special-casing for resize.
     pub const fn ensure_visible(&mut self, visible_height: usize) {
         let Some(selected) = self.selected else {

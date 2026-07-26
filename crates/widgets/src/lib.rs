@@ -7,7 +7,7 @@
 //!
 //! Every widget ([`widget`]) is a builder struct that draws itself into a
 //! [`Grid`](retroglyph_core::Grid) via [`Widget`]/[`StatefulWidget`] and
-//! retains no state of its own -- state that outlives one render call (a
+//! retains no state of its own: state that outlives one render call (a
 //! selection index, a scroll offset) lives in [`ListState`] instead. A
 //! handful of things that are genuinely just functions ([`fill_rect`],
 //! [`thumb_geometry`]/[`offset_for_pos`]) stay free functions in [`draw`]
@@ -17,15 +17,15 @@
 //! - [`Widget`]/[`StatefulWidget`] ([`widget`]) render into a [`Surface`],
 //!   an area-relative, single-layer view over a [`Grid`](retroglyph_core::Grid), and let
 //!   callers box or store heterogeneous widgets, e.g. a `Vec<Box<dyn Widget>>` of panes to
-//!   render each frame -- with no `Backend` type parameter, since drawing touches nothing but
+//!   render each frame, with no `Backend` type parameter, since drawing touches nothing but
 //!   cells.
 //! - [`Interaction`] ([`interact`]) for hover/click/drag/focus tracking
-//!   without a retained widget tree -- the sibling of [`ListState`] for
+//!   without a retained widget tree: the sibling of [`ListState`] for
 //!   widgets that don't have a natural selection index of their own.
 //! - [`BoxStyle`] ([`style`]) for a Lip-Gloss-style box model (padding,
 //!   border, margin) rendered into a standalone `Grid`.
-//! - [`join_h`]/[`join_v`] ([`block`]) to compose several `Grid`s -- e.g.
-//!   `BoxStyle::render` output -- into one before drawing it.
+//! - [`join_h`]/[`join_v`] ([`block`]) to compose several `Grid`s (e.g.
+//!   `BoxStyle::render` output) into one before drawing it.
 //! - [`Theme`] ([`theme`]) for named color roles (an app picks
 //!   [`Theme::DARK`]/[`Theme::LIGHT`], or builds its own), independent of
 //!   how the app decides which one is active.
@@ -37,7 +37,7 @@
 
 // Compile the code blocks in this crate's own README as doctests so its quick start is
 // type-checked on every test run and cannot silently rot. The `cfg(doctest)` gate keeps this out
-// of the rendered crate documentation -- see `retroglyph-crossterm`'s matching include for the
+// of the rendered crate documentation: see `retroglyph-crossterm`'s matching include for the
 // same pattern applied to the workspace root README.
 #[cfg(doctest)]
 #[doc = include_str!("../README.md")]

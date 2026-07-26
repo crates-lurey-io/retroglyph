@@ -3,19 +3,19 @@
 //!
 //! [`ListState`](crate::ListState) answers "where is this list scrolled to
 //! and what's selected"; this module answers the sibling question, "what
-//! did the user just do to this widget" -- hover, click, drag, focus,
-//! scroll -- for widgets that don't have a natural selection index of their
+//! did the user just do to this widget" (hover, click, drag, focus,
+//! scroll) for widgets that don't have a natural selection index of their
 //! own (buttons, tabs, draggable panes, ...). Four independently usable
 //! pieces, composed by [`Interaction`] the way [`ListState`](crate::ListState)
 //! composes with [`crate::widget::Table`]:
 //!
-//! - [`Pointer`] -- raw mouse position/button/scroll state from a stream of
+//! - [`Pointer`]: raw mouse position/button/scroll state from a stream of
 //!   [`Event`]s.
-//! - [`HitTester`] -- resolves a pointer position to the topmost registered
+//! - [`HitTester`]: resolves a pointer position to the topmost registered
 //!   widget id.
-//! - [`FocusRing`] -- which id holds keyboard focus, plus Tab/Shift+Tab
+//! - [`FocusRing`]: which id holds keyboard focus, plus Tab/Shift+Tab
 //!   cycling.
-//! - [`Response`] -- what [`Interaction::interact`] reports back to a
+//! - [`Response`]: what [`Interaction::interact`] reports back to a
 //!   widget call site, gated by what it asked for via [`Sense`].
 //!
 //! # Example
@@ -44,7 +44,7 @@
 //! interaction.begin_frame();
 //! let saved = draw(&mut term, &mut interaction);
 //! interaction.end_frame();
-//! assert!(!saved); // nothing clicked yet -- no input was fed in
+//! assert!(!saved); // nothing clicked yet: no input was fed in
 //! ```
 
 mod density;
@@ -82,7 +82,7 @@ pub const DEFAULT_DRAG_THRESHOLD: u16 = 1;
 /// for event in poll_events() {
 ///     interaction.handle_event(&event);       // 2
 /// }
-/// draw(&mut term, &mut interaction, &state);  // 3 -- calls interaction.interact(...)
+/// draw(&mut term, &mut interaction, &state);  // 3: calls interaction.interact(...)
 /// interaction.end_frame();                    // 4
 /// ```
 ///
@@ -92,7 +92,7 @@ pub const DEFAULT_DRAG_THRESHOLD: u16 = 1;
 ///    registrations aren't complete until step 3 finishes, and this frame's
 ///    events haven't arrived yet (they're step 2), so every [`Response`] in
 ///    a given frame is one frame stale relative to what's being drawn/fed in
-///    *this* frame -- uniformly for hover, press, release, click, and
+///    *this* frame: uniformly for hover, press, release, click, and
 ///    scroll, all resolved from that one snapshot. At typical redraw rates
 ///    this is imperceptible; it's the same kind of trade-off
 ///    [`ListState::ensure_visible`](crate::ListState::ensure_visible)
@@ -104,7 +104,7 @@ pub const DEFAULT_DRAG_THRESHOLD: u16 = 1;
 ///    than the frame-stale snapshot, because a drag-in-progress or a press-cancel needs to react
 ///    the instant the pointer moves, not one frame later. Keyboard focus is the remaining
 ///    exception: [`Response::focused`] and Enter/Space activation read [`FocusRing`]'s `current`
-///    live, since it's plain level state with no hit-testing involved -- no staleness to trade
+///    live, since it's plain level state with no hit-testing involved: no staleness to trade
 ///    off.
 /// 2. [`handle_event`](Self::handle_event) updates pointer position/buttons
 ///    and, by default, cycles focus on Tab/Shift+Tab.
@@ -129,10 +129,10 @@ pub const DEFAULT_DRAG_THRESHOLD: u16 = 1;
 ///
 /// Immediate-mode toolkits like egui derive a widget's identity from its
 /// call-site source location (optionally salted with data) hashed down to
-/// an opaque integer -- flexible, but it means two widgets can collide onto
+/// an opaque integer, flexible, but it means two widgets can collide onto
 /// the same id at runtime with no compile-time signal, and the id carries
 /// no meaning a debugger can show you. `Interaction<Id>` instead asks the
-/// app for whatever id type it already has lying around -- typically a
+/// app for whatever id type it already has lying around: typically a
 /// small `Copy` enum like the hand-rolled hit-target enum an app would
 /// otherwise define anyway. Collisions become unrepresentable if the enum
 /// is exhaustive, and `{:?}`-printing an id tells you exactly which widget
@@ -146,7 +146,7 @@ pub const DEFAULT_DRAG_THRESHOLD: u16 = 1;
 /// keep its implicit ids from needing to be threaded everywhere.
 // Several of these are independent one-shot snapshots (primary/secondary
 // press/release, keyboard activation), not states of a single state
-// machine -- see the field-level comment above `resolved_press` for why
+// machine: see the field-level comment above `resolved_press` for why
 // they're snapshotted individually rather than read live off `pointer`.
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
@@ -166,7 +166,7 @@ pub struct Interaction<Id> {
     // `begin_frame` and `interact` calls (see the frame lifecycle docs), so a
     // press/release arriving this frame would otherwise be visible to
     // `interact` immediately while `resolved_hover` (computed before that
-    // event) still reflects last frame's pointer position -- `active` would
+    // event) still reflects last frame's pointer position: `active` would
     // then latch onto whatever was hovered *last* frame, not the widget the
     // fresh press actually landed on. Resolving everything from one
     // consistent snapshot keeps hover/press/release/click/scroll uniformly
@@ -271,7 +271,7 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
     }
 
     /// Feed a raw input event: updates the pointer, and (by default) Tab
-    /// cycles focus -- see [`FocusRing::handle_event`] if you need to
+    /// cycles focus: see [`FocusRing::handle_event`] if you need to
     /// override that.
     pub fn handle_event(&mut self, event: &Event) {
         self.pointer.handle_event(event);
@@ -280,7 +280,7 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
     }
 
     /// Register `id`'s `rect` for whatever `sense` asks for, and report
-    /// what happened to it, resolved from *last* frame's input -- see the
+    /// what happened to it, resolved from *last* frame's input: see the
     /// [`Interaction`] docs for the frame lifecycle this implies.
     pub fn interact(&mut self, rect: Rect, id: Id, sense: Sense) -> Response {
         if sense.wants_pointer() {
@@ -309,7 +309,7 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
         // frame-lifecycle docs), but a slide-off cancellation needs to see the pointer's
         // *current* position the instant it leaves this rect, not one frame later. Mirrors how
         // `dragging` above already reads `self.pointer.pos()` live instead of `resolved_pos`, and
-        // how `scroll_delta` below bypasses the single-topmost-winner rule -- same "read live
+        // how `scroll_delta` below bypasses the single-topmost-winner rule: same "read live
         // state, scoped to my own rect" shape, applied a third time.
         let held = senses_click
             && is_active
@@ -327,7 +327,7 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
         // clickable), which would otherwise shadow the container at every
         // point inside it and make it un-scrollable. Any rect the resolved
         // pointer position falls within gets scroll credit, regardless of
-        // what's drawn on top of it -- matching how wheel input behaves in
+        // what's drawn on top of it, matching how wheel input behaves in
         // most real UIs (it reaches the nearest scrollable ancestor, not
         // just whatever's topmost at the exact pixel).
         let scrollable_here = sense.wants_pointer()
@@ -608,7 +608,7 @@ mod tests {
         let save = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, Sense::click());
         let _ = interaction.interact(Rect::new(6, 0, 5, 1), Id::Cancel, Sense::click());
         interaction.end_frame();
-        assert!(!save.held()); // slid off before release -- cancels immediately
+        assert!(!save.held()); // slid off before release: cancels immediately
 
         interaction.handle_event(&Event::Mouse(MouseEvent {
             kind: MouseEventKind::Moved,
@@ -620,7 +620,7 @@ mod tests {
         let save = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, Sense::click());
         let _ = interaction.interact(Rect::new(6, 0, 5, 1), Id::Cancel, Sense::click());
         interaction.end_frame();
-        assert!(save.held()); // back inside -- held again
+        assert!(save.held()); // back inside: held again
 
         interaction.handle_event(&Event::Mouse(MouseEvent {
             kind: MouseEventKind::Up(MouseButton::Left),
@@ -654,7 +654,7 @@ mod tests {
         interaction.begin_frame();
         // `active` is assigned from whichever id was topmost at press time, regardless of that
         // id's own `Sense` (see `begin_frame`'s `self.active = self.resolved_hover;`), so Save
-        // is `is_active` here even though it only sensed `HOVER` -- `held` must still stay false.
+        // is `is_active` here even though it only sensed `HOVER`: `held` must still stay false.
         let save = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, Sense::hover());
         interaction.end_frame();
         assert!(!save.held());
@@ -694,14 +694,14 @@ mod tests {
     /// "scroll only reports for the single topmost-hovered id" rule the
     /// container could never win hover against its own rows and would
     /// never see a scroll. Fixed by making `SCROLL` independent of the
-    /// topmost-hover winner -- see [`Sense::SCROLL`]'s doc comment.
+    /// topmost-hover winner: see [`Sense::SCROLL`]'s doc comment.
     #[test]
     fn scroll_reaches_a_container_through_an_overlapping_child() {
         let mut interaction = Interaction::<Id>::new();
         interaction.begin_frame();
         // The child (Cancel, standing in for a list row) is registered
         // *after* the container (Save), so it's topmost at any point they
-        // share -- exactly like a row drawn on top of its list container.
+        // share, exactly like a row drawn on top of its list container.
         let _ = interaction.interact(Rect::new(0, 0, 10, 1), Id::Save, Sense::scroll());
         let _ = interaction.interact(
             Rect::new(0, 0, 10, 1),

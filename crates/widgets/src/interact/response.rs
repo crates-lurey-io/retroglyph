@@ -8,11 +8,11 @@
 /// is `true` for exactly the one frame the release lands on), except
 /// [`focused`](Self::focused), which stays `true` across frames until focus
 /// moves elsewhere. Fields a widget didn't ask for via
-/// [`Sense`](crate::Sense) are always `false`/`0` -- a widget sensed with
+/// [`Sense`](crate::Sense) are always `false`/`0`: a widget sensed with
 /// only [`Sense::HOVER`](crate::Sense::HOVER) never reports
 /// [`clicked`](Self::clicked), for instance.
 // Eight flat, independent fields by design: `Response` is a per-frame
-// report card, not a state machine -- collapsing it into enums would only
+// report card, not a state machine: collapsing it into enums would only
 // make `interact`'s construction of it more awkward for no reader benefit.
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -30,7 +30,7 @@ pub struct Response {
 
 impl Response {
     /// The pointer is over this widget's rect, resolved from last frame's
-    /// hit-test -- see [`Interaction`](crate::Interaction) for why there's a
+    /// hit-test: see [`Interaction`](crate::Interaction) for why there's a
     /// frame of latency.
     #[must_use]
     pub const fn hovered(&self) -> bool {
@@ -65,10 +65,10 @@ impl Response {
     }
 
     /// The primary pointer button is down *and* the pointer is currently over this widget's
-    /// rect, re-checked live every frame -- unlike [`pressed`](Self::pressed), which fires
+    /// rect, re-checked live every frame, unlike [`pressed`](Self::pressed), which fires
     /// once on the down edge and never re-checks position. Automatically cancels (goes
     /// `false`) the instant the pointer slides off this widget's rect, even before release,
-    /// without waiting for a release event -- the same "slide-to-cancel" feedback
+    /// without waiting for a release event: the same "slide-to-cancel" feedback
     /// `is_pointer_button_down_on` gives egui widgets and `IsItemHovered() && IsItemActive()`
     /// gives Dear `ImGui` widgets. Only ever `true` for widgets sensed with
     /// [`Sense::CLICK`](crate::Sense::CLICK).
@@ -107,7 +107,7 @@ impl Response {
 
     /// Scroll wheel delta accumulated this frame while the pointer was
     /// within this widget's rect (regardless of what else was drawn on top
-    /// of it -- see [`Sense::SCROLL`](crate::Sense::SCROLL)): positive
+    /// of it; see [`Sense::SCROLL`](crate::Sense::SCROLL)): positive
     /// scrolls forward/down, negative scrolls backward/up. Feeds straight
     /// into [`ListState::scroll_by`](crate::ListState::scroll_by). Zero
     /// unless sensed with `SCROLL` and something scrolled.

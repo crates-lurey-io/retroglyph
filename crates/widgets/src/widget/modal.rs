@@ -10,7 +10,7 @@ use crate::{Align, Theme};
 ///
 /// Shorthand for a [`Panel`] sized `width` x `height` and centered via
 /// [`centered_rect`]. `border_style`/`fill_style` default to
-/// [`Style::new()`] and there is no title by default -- set whichever a
+/// [`Style::new()`] and there is no title by default: set whichever a
 /// caller needs via [`Modal::border_style`]/[`Modal::fill_style`]/[`Modal::title`],
 /// the same as [`Panel`].
 ///
@@ -19,7 +19,7 @@ use crate::{Align, Theme};
 /// interior) ready to hand to another widget (e.g. [`super::Log`]).
 ///
 /// Draws only the box itself; everything outside it is left untouched (no
-/// dimming or backdrop fill -- that would need to read and blend existing
+/// dimming or backdrop fill, that would need to read and blend existing
 /// cells, a separate feature from this thin layout convenience). Not a
 /// [`Widget`]: [`Widget::render`] can't return a value, and the inner
 /// content rect is part of this type's contract.
@@ -96,7 +96,7 @@ impl<'a> Modal<'a> {
     /// `theme.border` on `theme.title_bg`, and `fill_style` becomes `theme.panel_bg`.
     ///
     /// Call before any manual [`Modal::border_style`]/[`Modal::fill_style`] override you want to
-    /// keep -- whichever call comes last wins.
+    /// keep: whichever call comes last wins.
     #[must_use]
     pub fn theme(self, theme: Theme) -> Self {
         self.theme_on(theme, theme.panel_bg)

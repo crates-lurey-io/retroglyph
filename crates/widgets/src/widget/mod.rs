@@ -3,7 +3,7 @@
 //!
 //! `new()` takes only the arguments a widget cannot mean anything without
 //! (the content: a value, a label, a slice of samples/rows). Every other
-//! knob -- styles, offsets, titles -- has a default and is set through a
+//! knob (styles, offsets, titles) has a default and is set through a
 //! chainable `#[must_use] fn field(mut self, ...) -> Self` method, the same
 //! shape as [`Panel::title`] or [`Log::offset`]. See `crates/widgets/AGENTS.md`
 //! for the rule this is enforcing and why.

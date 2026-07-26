@@ -7,8 +7,8 @@ use retroglyph_core::Color;
 /// range are clamped. Delegates to [`Color::lerp`] (backed by `gem`) rather
 /// than hand-rolling RGB interpolation.
 ///
-/// Not a drawing widget -- there's no [`Terminal`](retroglyph_core::Terminal)
-/// involved, just a ratio-to-color mapping -- but kept as its own small
+/// Not a drawing widget: there's no [`Terminal`](retroglyph_core::Terminal)
+/// involved, just a ratio-to-color mapping, but kept as its own small
 /// struct rather than a free function so [`Gauge`](super::Gauge),
 /// [`StatBar`](super::StatBar), and [`Sparkline`](super::Sparkline) share
 /// one place that owns the ramp.
