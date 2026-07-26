@@ -862,12 +862,18 @@ impl Color {
     /// # Examples
     ///
     /// ```rust
+    /// # fn main() {
+    /// # fn run() -> Option<()> {
     /// use retroglyph_core::Color;
     ///
-    /// let c = Color::from_hex("#ff8000").unwrap();
+    /// let c = Color::from_hex("#ff8000")?;
     /// assert_eq!(c, Color::Rgb { r: 255, g: 128, b: 0 });
     ///
     /// assert_eq!(Color::from_hex("not-color"), None);
+    /// # Some(())
+    /// # }
+    /// # run().unwrap();
+    /// # }
     /// ```
     #[cfg(feature = "gem")]
     #[must_use]

@@ -21,10 +21,13 @@ retroglyph-core = "0.1"
 ```
 
 ```rust
+# fn main() -> Result<(), core::convert::Infallible> {
 use retroglyph_core::{Terminal, Color, Style, backend::Headless};
 
 let mut term = Terminal::new(Headless::new(80, 24));
-term.draw(|s| s.put((5, 5), '@', Style::new().fg(Color::GREEN))).unwrap();
+term.draw(|s| s.put((5, 5), '@', Style::new().fg(Color::GREEN)))?;
+# Ok(())
+# }
 ```
 
 `Headless` never touches a real terminal or window, so this runs anywhere -- including this README's

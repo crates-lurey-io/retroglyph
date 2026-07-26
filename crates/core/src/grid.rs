@@ -831,15 +831,21 @@ impl Grid {
     /// # Examples
     ///
     /// ```
+    /// # fn main() {
+    /// # fn run() -> Option<()> {
     /// use retroglyph_core::{Grid, Pos, Style};
     ///
     /// let mut grid = Grid::new(8, 4);
-    /// grid.write_span(0, 1, 1, &["[==]", "|__|"], Style::default()).unwrap();
+    /// grid.write_span(0, 1, 1, &["[==]", "|__|"], Style::default())?;
     ///
-    /// assert_eq!(grid.tile(0, Pos::new(1, 1)).unwrap().span(), (4, 2));
+    /// assert_eq!(grid.tile(0, Pos::new(1, 1))?.span(), (4, 2));
     /// // Covered cells keep their fallback glyphs, and name their anchor.
-    /// assert_eq!(grid.tile(0, Pos::new(4, 2)).unwrap().glyph(), '|');
+    /// assert_eq!(grid.tile(0, Pos::new(4, 2))?.glyph(), '|');
     /// assert_eq!(grid.span_owner(0, 4, 2), Some(Pos::new(1, 1)));
+    /// # Some(())
+    /// # }
+    /// # run().unwrap();
+    /// # }
     /// ```
     pub fn write_span(
         &mut self,
@@ -907,14 +913,20 @@ impl Grid {
     /// and hit-testing multi-cell artwork is a single comparison:
     ///
     /// ```
+    /// # fn main() {
+    /// # fn run() -> Option<()> {
     /// # use retroglyph_core::{Grid, Pos, Style};
     /// # let mut grid = Grid::new(8, 4);
-    /// grid.write_span(0, 2, 1, &["[==]", "|__|"], Style::default()).unwrap();
+    /// grid.write_span(0, 2, 1, &["[==]", "|__|"], Style::default())?;
     /// let chest = Pos::new(2, 1);
     /// // Any of the eight cells counts as standing on the chest.
     /// assert_eq!(grid.span_owner(0, 2, 1), Some(chest));
     /// assert_eq!(grid.span_owner(0, 5, 2), Some(chest));
     /// assert_eq!(grid.span_owner(0, 6, 2), None);
+    /// # Some(())
+    /// # }
+    /// # run().unwrap();
+    /// # }
     /// ```
     ///
     /// O(1): a covered tile stores its offset back to the anchor (see [`Tile::span_offset`]), so
