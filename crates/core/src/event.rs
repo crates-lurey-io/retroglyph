@@ -302,7 +302,13 @@ pub enum Event {
     Key(KeyEvent),
     /// Mouse event.
     Mouse(MouseEvent),
-    /// Terminal window resized.
+    /// Terminal window resized to the given `(cols, rows)`.
+    ///
+    /// This event does not resize anything on its own: the receiving app must call
+    /// [`Terminal::resize`](crate::Terminal::resize) with these dimensions to resize the
+    /// terminal's own grid buffers. A windowed backend's own reported
+    /// [`Output::size`](crate::backend::Output::size) may already reflect the new dimensions
+    /// by the time this event is polled, but that does not substitute for resizing the grid.
     Resize(u16, u16),
     /// Window closed.
     Close,

@@ -16,7 +16,7 @@ use super::web;
 use crate::backend::WindowBackend;
 use crate::presenter::Presenter;
 use retroglyph_core::Terminal;
-use retroglyph_core::backend::Input;
+use retroglyph_core::backend::{Input, Output};
 use retroglyph_core::event::{Event, KeyModifiers, MouseEvent, MouseEventKind, PhysicalPos};
 use std::cell::Cell;
 use std::fmt;
@@ -133,7 +133,7 @@ impl WindowConfig {
     ///
     /// This is why renderer crates don't need their own windowing code: the
     /// grid/cell geometry already lives behind
-    /// [`Output::size`](retroglyph_core::backend::Output::size) and
+    /// [`Output::size`] and
     /// [`Presenter::cell_size`].
     ///
     /// `target_fps` picks between the two redraw modes, on native and `wasm32` alike:
@@ -634,6 +634,12 @@ where
 /// (see its "Presenting is automatic" section), except on
 /// [`Flow::Idle`](retroglyph_core::Flow::Idle), where the present is skipped entirely and the
 /// previous frame stays on screen.
+///
+/// # Resizing is not automatic
+///
+/// This driver does not resize the [`Terminal`] itself. On every window resize it pushes
+/// [`Event::Resize`] with the new cell dimensions; the app must poll that event and call
+/// [`Terminal::resize`] to resize the terminal's own grid buffers.
 ///
 /// # Errors
 ///
@@ -1507,8 +1513,13 @@ where
     }
 
     /// Recompute the grid size (in cells) from a physical pixel size, resize
-    /// the presenter's surface to the whole-cell-aligned pixel size, and push
-    /// [`Event::Resize`] with the new cell dimensions.
+    /// the presenter's surface to the whole-cell-aligned pixel size, update
+    /// the backend's own reported [`Output::size`], and push [`Event::Resize`] with the new
+    /// cell dimensions.
+    ///
+    /// This keeps `backend.size()` in sync with the surface immediately, but it does not
+    /// resize the [`Terminal`]'s own grid buffers -- that stays the app's responsibility,
+    /// done by calling [`Terminal::resize`] in response to the pushed [`Event::Resize`].
     ///
     /// Shared by [`on_resized`](Self::on_resized) and
     /// [`on_scale_factor_changed`](Self::on_scale_factor_changed): both need
@@ -1546,8 +1557,16 @@ where
             .presenter_mut()
             .resize_surface(cols * cell_w, rows * cell_h);
         #[allow(clippy::cast_possible_truncation)]
-        term.backend_mut()
-            .push_event(Event::Resize(cols as u16, rows as u16));
+        let (cols, rows) = (cols as u16, rows as u16);
+        // Update the backend's own reported size immediately so `backend.size()` agrees with
+        // the surface without waiting for the app to react to `Event::Resize` below. This does
+        // not touch the `Terminal`'s grid content (see `Terminal::resize`, which additionally
+        // resizes/clears both grids) -- that remains the app's job in response to the event.
+        term.backend_mut().resize(retroglyph_core::grid::Size {
+            width: cols,
+            height: rows,
+        });
+        term.backend_mut().push_event(Event::Resize(cols, rows));
     }
 
     fn on_cursor_moved(&mut self, position: winit::dpi::PhysicalPosition<f64>) {
@@ -1939,10 +1958,25 @@ mod tests {
     ///
     /// The `WindowApp` tests only exercise event translation, cell math, and the `WindowBackend`
     /// queue -- no rasterization or surface is needed.
-    #[derive(Default)]
     struct MockPresenter {
         /// Records the last [`Presenter::scale_factor_changed`] argument, if any.
         last_scale_factor: Cell<Option<f64>>,
+        /// The size last reported by [`Output::size`], updated by [`Output::resize`] so tests
+        /// can assert that `resize_to` keeps it in sync with the surface immediately, rather
+        /// than only via a separate `Terminal::resize` call in response to `Event::Resize`.
+        size: Cell<Size>,
+    }
+
+    impl Default for MockPresenter {
+        fn default() -> Self {
+            Self {
+                last_scale_factor: Cell::new(None),
+                size: Cell::new(Size {
+                    width: 10,
+                    height: 5,
+                }),
+            }
+        }
     }
 
     impl Output for MockPresenter {
@@ -1967,17 +2001,16 @@ mod tests {
         }
 
         fn size(&self) -> Size {
-            Size {
-                width: 10,
-                height: 5,
-            }
+            self.size.get()
         }
 
         fn clear(&mut self) -> Result<(), Self::Error> {
             Ok(())
         }
 
-        fn resize(&mut self, _size: Size) {}
+        fn resize(&mut self, size: Size) {
+            self.size.set(size);
+        }
     }
 
     impl Presenter for MockPresenter {
@@ -3025,6 +3058,40 @@ mod tests {
         let mut app = test_window_app();
         app.resize_to(winit::dpi::PhysicalSize::new(90, 81));
         assert_eq!(poll(&mut app), Some(Event::Resize(11, 5)));
+    }
+
+    #[test]
+    fn resize_to_updates_backend_size_immediately() {
+        // Regression test for #508: previously `backend.size()` (via `Output::size`) kept
+        // reporting the pre-resize dimensions until the app called `Terminal::resize` in
+        // response to `Event::Resize`, so polling the backend directly for drift was useless.
+        // `resize_to` must now also call `Output::resize` so `size()` agrees with the surface
+        // right away, independent of whether/when the app resizes the terminal's own grid.
+        let mut app = test_window_app();
+        assert_eq!(
+            app.terminal.as_ref().unwrap().backend().size(),
+            Size {
+                width: 10,
+                height: 5,
+            }
+        );
+        app.resize_to(winit::dpi::PhysicalSize::new(90, 81));
+        assert_eq!(
+            app.terminal.as_ref().unwrap().backend().size(),
+            Size {
+                width: 11,
+                height: 5,
+            }
+        );
+        // `Terminal::size` (the grid itself) is untouched -- that stays the app's job, done by
+        // calling `Terminal::resize` in response to the `Event::Resize` this same call pushed.
+        assert_eq!(
+            app.terminal.as_ref().unwrap().size(),
+            Size {
+                width: 10,
+                height: 5,
+            }
+        );
     }
 
     #[test]
