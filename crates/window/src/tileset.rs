@@ -8,6 +8,38 @@
 
 use core::fmt;
 
+/// What a tileset's pixels mean, which decides how its sprites respond to the cell's foreground
+/// color.
+///
+/// This is a fact about how the artwork was authored, not about any one draw call, which is why
+/// it sits on the tileset rather than at the call site. A sheet of full-color terrain and a sheet
+/// of white icon masks can be loaded side by side and each behave correctly.
+///
+/// Orthogonal to [`Tint`](retroglyph_core::Tint), which is per-cell and applies on top: see
+/// [`Surface::with_tint`](retroglyph_core::Surface::with_tint).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[non_exhaustive]
+pub enum SheetColor {
+    /// Full-color artwork, composited verbatim.
+    ///
+    /// The cell's [`Style::fg`](retroglyph_core::Style::fg) does not touch it. The default,
+    /// because a sheet that carries its own color is the common case and rendering it as
+    /// authored is the unsurprising outcome.
+    #[default]
+    Art,
+    /// A white-on-transparent mask, colored by the cell's foreground the way a font glyph is.
+    ///
+    /// Equivalent to a [`Tint::Multiply`](retroglyph_core::Tint::Multiply) by the resolved
+    /// foreground color, so a white pixel takes the foreground exactly and a grey one takes a
+    /// proportionally darker shade. This is how libtcod tilesets, Dwarf Fortress's classic
+    /// tileset, and `BearLibTerminal`'s bitmap fonts all behave, and it is the one case where
+    /// reading `fg` as a sprite's color is correct rather than a workaround.
+    ///
+    /// It also keeps a sprite and its text fallback in agreement: the same `fg` colors the
+    /// sprite on a pixel backend and the fallback glyph on a cell backend.
+    Mask,
+}
+
 /// Where a sprite sits inside the multi-cell box a span reserves for it.
 ///
 /// Geometry only: alignment moves a sprite's pixels, it never changes their color. See
@@ -235,15 +267,17 @@ pub const CP437_TO_UNICODE: [char; 256] = [
 ///
 /// # Sprites carry their own color
 ///
-/// A tileset's artwork is composited verbatim. The cell's
-/// [`Style::fg`](retroglyph_core::Style::fg) does not tint a sprite, so a full-color sheet
-/// renders exactly as authored and a white-on-transparent sheet renders white, not in the
-/// cell's foreground color the way a bitmap font glyph would. The cell's background is still
-/// painted behind the sprite and shows through its transparent pixels.
+/// By default ([`SheetColor::Art`]) a tileset's artwork is composited verbatim: the cell's
+/// [`Style::fg`](retroglyph_core::Style::fg) does not tint it, so a full-color sheet renders
+/// exactly as authored. The cell's background is still painted behind the sprite and shows
+/// through its transparent pixels.
 ///
-/// Recoloring one piece of artwork per cell (biome variants, team colors, damage flashes) is
-/// therefore not something a style can express: author each variant as its own tile and
-/// address it by its own codepoint.
+/// A sheet authored as white-on-transparent masks declares [`SheetColor::Mask`] instead, and its
+/// sprites are colored by the cell's foreground the way a bitmap font glyph is.
+///
+/// Recoloring one piece of artwork per cell (biome variants, damage flashes) is a per-draw
+/// decision rather than a sheet-wide one, and goes through
+/// [`Surface::with_tint`](retroglyph_core::Surface::with_tint).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TilesetOptions {
     /// Raw bytes of the PNG file.
@@ -260,6 +294,8 @@ pub struct TilesetOptions {
     pub codepage: Codepage,
     /// Where each sprite sits inside the multi-cell box a span reserves for it.
     pub align: SpriteAlign,
+    /// What this sheet's pixels mean, and so whether the cell's foreground color colors them.
+    pub color: SheetColor,
     /// If set, any pixel matching this RGB colour is made fully transparent
     /// (alpha = 0) when decoding the tileset.
     ///
@@ -283,6 +319,7 @@ impl TilesetOptions {
             columns: None,
             codepage: Codepage::Cp437,
             align: SpriteAlign::TopLeft,
+            color: SheetColor::Art,
             transparent_color: None,
         }
     }
@@ -346,6 +383,7 @@ pub struct TilesetBuilder {
     columns: Option<u16>,
     codepage: Codepage,
     align: SpriteAlign,
+    color: SheetColor,
     transparent_color: Option<(u8, u8, u8)>,
 }
 
@@ -393,6 +431,23 @@ impl TilesetBuilder {
         self
     }
 
+    /// Declares what this sheet's pixels mean, and so whether the cell's foreground color
+    /// colors them.
+    ///
+    /// Defaults to [`SheetColor::Art`]: composited verbatim. See [`SheetColor`].
+    #[must_use]
+    pub const fn color(mut self, color: SheetColor) -> Self {
+        self.color = color;
+        self
+    }
+
+    /// Shorthand for [`color(SheetColor::Mask)`](Self::color): this sheet is white-on-
+    /// transparent artwork to be colored by each cell's foreground.
+    #[must_use]
+    pub const fn mask(self) -> Self {
+        self.color(SheetColor::Mask)
+    }
+
     /// Pixels matching `(r, g, b)` are made fully transparent (alpha = 0).
     ///
     /// Use this for spritesheets that use a solid colour background instead
@@ -425,6 +480,7 @@ impl TilesetBuilder {
             columns: self.columns,
             codepage: self.codepage,
             align: self.align,
+            color: self.color,
             transparent_color: self.transparent_color,
         })
     }
