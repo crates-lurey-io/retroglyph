@@ -32,6 +32,14 @@ missing_errors_doc = "deny"
 missing_panics_doc = "deny"
 module_name_repetitions = "allow"
 
+[lints.rustdoc]
+broken_intra_doc_links = "deny"
+private_intra_doc_links = "warn"
+invalid_codeblock_attributes = "deny"
+invalid_rust_codeblocks = "deny"
+bare_urls = "warn"
+unescaped_backticks = "warn"
+
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
