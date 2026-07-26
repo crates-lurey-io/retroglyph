@@ -2,14 +2,13 @@
 //!
 //! The entry point is [`TextLayout`], a builder that accepts a [`Line`] and
 //! layout parameters, then either measures the result or renders it into a
-//! [`Terminal`].
+//! [`Surface`].
 //!
 //! Only available when the `egc` feature is enabled (requires `alloc`).
 
-use crate::backend::Backend;
 use crate::grid::{Grid, Rect};
 use crate::style::Style;
-use crate::terminal::Terminal;
+use crate::surface::Surface;
 use crate::text::Line;
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -164,8 +163,8 @@ fn wrap_line(line: &Line, max_width: u16) -> Vec<WrappedLine> {
 /// Builder for laying out a [`Line`] within a bounded [`Rect`].
 ///
 /// Call [`measure`](TextLayout::measure) to get [`TextMetrics`] without
-/// touching any terminal, or [`render`](TextLayout::render) to write directly
-/// into a [`Terminal`].
+/// touching any surface, or [`render_to_surface`](TextLayout::render_to_surface) to write
+/// directly into a [`Surface`].
 ///
 /// # Example
 ///
@@ -196,7 +195,7 @@ impl<'a> TextLayout<'a> {
     ///
     /// Defaults: zero-sized rect at origin, left/top alignment. Call
     /// [`rect`](Self::rect) before [`measure`](Self::measure) or
-    /// [`render`](Self::render).
+    /// [`render_to_surface`](Self::render_to_surface).
     #[must_use]
     pub const fn new(line: &'a Line) -> Self {
         Self {
@@ -240,15 +239,24 @@ impl<'a> TextLayout<'a> {
         TextMetrics { width, height }
     }
 
-    /// Renders the text into `terminal`, clipping to the rect's bounds.
-    pub fn render<B: Backend>(&self, terminal: &mut Terminal<B>) {
-        self.render_to_grid(terminal.grid_mut(), 0);
+    /// Renders the text into `surface`, clipping to both the rect's bounds and `surface`'s own
+    /// area (the rect is intersected with [`Surface::area`] first, so text can never escape the
+    /// surface it was given even if `rect` extends past it).
+    pub fn render_to_surface(&self, surface: &mut Surface<'_>) {
+        let clipped = Self {
+            line: self.line,
+            rect: self.rect.intersect(surface.area()),
+            h_align: self.h_align,
+            v_align: self.v_align,
+        };
+        let layer = surface.layer();
+        clipped.render_to_grid(surface.grid_mut(), layer);
     }
 
     /// Renders the text into `grid` on `layer`, clipping to the rect's bounds.
     ///
-    /// The [`Grid`]-level twin of [`render`](Self::render), for callers with no [`Terminal`] --
-    /// e.g. a widget rendering into a `Surface`.
+    /// The [`Grid`]-level twin of [`render_to_surface`](Self::render_to_surface), for callers
+    /// with no [`Surface`] of their own to hand over.
     pub fn render_to_grid(&self, grid: &mut Grid, layer: u8) {
         let lines = wrap_line(self.line, self.rect.width());
         let rect = self.rect;
@@ -392,7 +400,7 @@ mod tests {
         let line = Line::raw("hi");
         TextLayout::new(&line)
             .rect(Rect::new(2, 1, 10, 3))
-            .render(&mut term);
+            .render_to_surface(&mut term.surface());
 
         assert_eq!(term.grid()[Pos::new(2, 1)].glyph(), 'h');
         assert_eq!(term.grid()[Pos::new(3, 1)].glyph(), 'i');
@@ -410,7 +418,7 @@ mod tests {
         TextLayout::new(&line)
             .rect(Rect::new(0, 0, 10, 3))
             .h_align(HAlign::Center)
-            .render(&mut term);
+            .render_to_surface(&mut term.surface());
 
         assert_eq!(term.grid()[Pos::new(4, 0)].glyph(), 'h');
         assert_eq!(term.grid()[Pos::new(5, 0)].glyph(), 'i');
@@ -427,7 +435,7 @@ mod tests {
         TextLayout::new(&line)
             .rect(Rect::new(0, 0, 10, 3))
             .h_align(HAlign::Right)
-            .render(&mut term);
+            .render_to_surface(&mut term.surface());
 
         assert_eq!(term.grid()[Pos::new(8, 0)].glyph(), 'h');
         assert_eq!(term.grid()[Pos::new(9, 0)].glyph(), 'i');
@@ -444,7 +452,7 @@ mod tests {
         TextLayout::new(&line)
             .rect(Rect::new(0, 0, 10, 5))
             .v_align(VAlign::Middle)
-            .render(&mut term);
+            .render_to_surface(&mut term.surface());
 
         assert_eq!(term.grid()[Pos::new(0, 2)].glyph(), 'h');
     }
@@ -460,7 +468,7 @@ mod tests {
         TextLayout::new(&line)
             .rect(Rect::new(0, 0, 10, 5))
             .v_align(VAlign::Bottom)
-            .render(&mut term);
+            .render_to_surface(&mut term.surface());
 
         assert_eq!(term.grid()[Pos::new(0, 4)].glyph(), 'h');
     }
@@ -475,7 +483,7 @@ mod tests {
         let line = Line::raw("a b c");
         TextLayout::new(&line)
             .rect(Rect::new(0, 0, 1, 2))
-            .render(&mut term);
+            .render_to_surface(&mut term.surface());
 
         assert_eq!(term.grid()[Pos::new(0, 0)].glyph(), 'a');
         assert_eq!(term.grid()[Pos::new(0, 1)].glyph(), 'b');

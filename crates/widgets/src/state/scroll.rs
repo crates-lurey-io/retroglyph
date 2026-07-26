@@ -120,6 +120,8 @@ impl ScrollState {
         if self.offset < 0.0 {
             0
         } else {
+            // `self.offset` is checked non-negative above and scroll offsets never approach
+            // usize::MAX, so truncation can't happen in practice.
             #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
             {
                 self.offset as usize
@@ -133,7 +135,14 @@ impl ScrollState {
         if self.offset < 0.0 {
             self.offset
         } else {
-            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            // Truncate to the integer part via usize (offset is non-negative here), then back to
+            // f32 to subtract. Scroll offsets stay well under 2^24 items, so the round-trip is
+            // exact in practice despite f32's 23-bit mantissa.
+            #[allow(
+                clippy::cast_possible_truncation,
+                clippy::cast_sign_loss,
+                clippy::cast_precision_loss
+            )]
             let int_part = self.offset as usize as f32;
             self.offset - int_part
         }

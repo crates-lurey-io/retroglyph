@@ -761,8 +761,6 @@ mod tests {
 
     #[test]
     fn secondary_click_is_independent_of_the_primary_button() {
-        let mut interaction = Interaction::<Id>::new();
-
         fn frame_secondary(interaction: &mut Interaction<Id>) -> (Response, Response) {
             interaction.begin_frame();
             let save = interaction.interact(
@@ -775,6 +773,7 @@ mod tests {
             (save, cancel)
         }
 
+        let mut interaction = Interaction::<Id>::new();
         let _ = frame_secondary(&mut interaction); // frame 1: register
         right_click_at(&mut interaction, Pos::new(2, 0)); // over Save
 

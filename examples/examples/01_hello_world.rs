@@ -15,7 +15,7 @@
 //! not a forced exit -- it's up to the game to act on it).
 
 use retroglyph_core::event::{Event, KeyCode};
-use retroglyph_core::{Backend, Terminal};
+use retroglyph_core::{Backend, Style, Terminal};
 use retroglyph_examples::Example;
 
 /// State for the hello-world example (none needed: the text never changes).
@@ -55,7 +55,8 @@ impl HelloWorld {
     /// state.
     #[allow(clippy::unused_self)]
     fn draw<B: Backend>(&self, term: &mut Terminal<B>) {
-        term.print((18, 12), "Hello, world!");
+        term.surface()
+            .print((18, 12), "Hello, world!", Style::default());
     }
 }
 

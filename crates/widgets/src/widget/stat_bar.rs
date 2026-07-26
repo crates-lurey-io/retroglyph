@@ -85,7 +85,13 @@ impl Widget for StatBar<'_> {
         let ratio = if self.max == 0 {
             0.0
         } else {
-            self.current as f32 / self.max as f32
+            // `current`/`max` are gauge readouts (health, ammo, ...) for on-screen display; values
+            // near `u32::MAX` losing mantissa bits below f32's 2^23 threshold has no visible
+            // effect on the rendered ratio.
+            #[allow(clippy::cast_precision_loss)]
+            {
+                self.current as f32 / self.max as f32
+            }
         };
         // `"4294967295/4294967295"` (two `u32::MAX`s) is the longest possible output: 21 bytes.
         let mut readout = bar::ReadoutBuf::<24>::new();

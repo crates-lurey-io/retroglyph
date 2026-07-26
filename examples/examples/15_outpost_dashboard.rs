@@ -57,7 +57,7 @@
 
 use retroglyph_core::event::{Event, KeyCode, MouseButton, MouseEventKind};
 use retroglyph_core::{
-    Backend, Camera, Color, Easing, Frame, Pos, Rect, Size, Style, Terminal, Tween,
+    Backend, Camera, Color, Easing, Frame, Pos, Rect, Size, Style, Surface, Terminal, Tween,
 };
 use retroglyph_examples::Example;
 use retroglyph_widgets::{Constraint, split_h, split_h_spaced, split_v, truncate};
@@ -695,8 +695,8 @@ impl OutpostDashboard {
 
     // ── Drawing ────────────────────────────────────────────────────────────
 
-    fn draw_button<B: Backend>(
-        term: &mut Terminal<B>,
+    fn draw_button(
+        surface: &mut Surface<'_>,
         hitboxes: &mut Vec<(Rect, HitTarget)>,
         pointer: Option<&PointerState>,
         rect: Rect,
@@ -715,32 +715,30 @@ impl OutpostDashboard {
         };
         for y in rect.top()..rect.bottom() {
             for x in rect.left()..rect.right() {
-                term.put_styled((x, y), ' ', Style::new().bg(bg));
+                surface.put((x, y), ' ', Style::new().bg(bg));
             }
         }
         let text = truncate(label, rect.width_usize().saturating_sub(2));
         let tx = rect.left() + (rect.width().saturating_sub(text.chars().count() as u16)) / 2;
         let ty = rect.top() + rect.height() / 2;
-        term.reset_style().fg(fg).bg(bg);
-        term.print((tx, ty), text);
-        term.reset_style();
+        let style = Style::new().fg(fg).bg(bg);
+        surface.print((tx, ty), text, style);
         hitboxes.push((rect, target));
     }
 
-    fn draw_header<B: Backend>(&mut self, term: &mut Terminal<B>, area: Rect) {
+    fn draw_header(&mut self, surface: &mut Surface<'_>, area: Rect) {
         for y in area.top()..area.bottom() {
             for x in area.left()..area.right() {
-                term.put_styled((x, y), ' ', Style::new().bg(CHROME_BG));
+                surface.put((x, y), ' ', Style::new().bg(CHROME_BG));
             }
         }
-        term.reset_style().fg(ACCENT).bg(CHROME_BG);
-        term.print(
+        surface.print(
             (area.left() + 1, area.top()),
             "Outpost 7 -- Ridgeline Watch",
+            Style::new().fg(ACCENT).bg(CHROME_BG),
         );
 
         if area.height() < 4 {
-            term.reset_style();
             return;
         }
 
@@ -765,10 +763,10 @@ impl OutpostDashboard {
             } else {
                 format!("{} {value:.1}{}", stat.label, stat.unit)
             };
-            term.reset_style().fg(stat.color).bg(CHROME_BG);
-            term.print(
+            surface.print(
                 (col.left(), col.top() + 1),
                 truncate(&text, col.width_usize()),
+                Style::new().fg(stat.color).bg(CHROME_BG),
             );
         }
 
@@ -779,7 +777,7 @@ impl OutpostDashboard {
             MIN_TARGET_H,
         );
         Self::draw_button(
-            term,
+            surface,
             &mut self.hitboxes,
             self.pointer.as_ref(),
             gear,
@@ -796,7 +794,7 @@ impl OutpostDashboard {
         );
         let bell_color = if self.notifications > 0 { BAD } else { DIM_FG };
         Self::draw_button(
-            term,
+            surface,
             &mut self.hitboxes,
             self.pointer.as_ref(),
             bell,
@@ -804,10 +802,9 @@ impl OutpostDashboard {
             bell_color,
             HitTarget::AlertBell,
         );
-        term.reset_style();
     }
 
-    fn draw_map<B: Backend>(&mut self, term: &mut Terminal<B>, area: Rect) {
+    fn draw_map(&mut self, surface: &mut Surface<'_>, area: Rect) {
         if area.width() < 2 || area.height() < 2 {
             return;
         }
@@ -856,34 +853,26 @@ impl OutpostDashboard {
             } else {
                 Style::new().fg(color).bg(BG)
             };
-            term.put_styled((screen_pos.x, screen_pos.y), glyph, style);
+            surface.put((screen_pos.x, screen_pos.y), glyph, style);
         }
-        term.reset_style();
         if area.width() >= 26 && area.height() >= 4 {
             let hint = truncate("drag: pan   tap: select", area.width_usize());
             let x = area.right().saturating_sub(hint.chars().count() as u16 + 1);
-            term.reset_style().fg(DIM_FG).bg(BG);
-            term.print((x, area.bottom() - 1), hint);
-            term.reset_style();
+            surface.print((x, area.bottom() - 1), hint, Style::new().fg(DIM_FG).bg(BG));
         }
     }
 
-    fn draw_detail_panel<B: Backend>(
-        &mut self,
-        term: &mut Terminal<B>,
-        area: Rect,
-        is_sheet: bool,
-    ) {
+    fn draw_detail_panel(&mut self, surface: &mut Surface<'_>, area: Rect, is_sheet: bool) {
         if area.width() < 8 || area.height() < 4 {
             return;
         }
         for y in area.top()..area.bottom() {
             for x in area.left()..area.right() {
-                term.put_styled((x, y), ' ', Style::new().bg(PANEL_BG));
+                surface.put((x, y), ' ', Style::new().bg(PANEL_BG));
             }
         }
         for x in area.left()..area.right() {
-            term.put_styled((x, area.top()), '-', Style::new().fg(BORDER).bg(PANEL_BG));
+            surface.put((x, area.top()), '-', Style::new().fg(BORDER).bg(PANEL_BG));
         }
         let inner = Rect::new(
             area.left() + 1,
@@ -893,12 +882,11 @@ impl OutpostDashboard {
         );
 
         let Some(sel) = self.selected else {
-            term.reset_style().fg(DIM_FG).bg(PANEL_BG);
-            term.print(
+            surface.print(
                 (inner.left(), inner.top() + 1),
                 truncate("Select a tile to inspect it.", inner.width_usize()),
+                Style::new().fg(DIM_FG).bg(PANEL_BG),
             );
-            term.reset_style();
             return;
         };
 
@@ -910,7 +898,7 @@ impl OutpostDashboard {
                 MIN_TARGET_H,
             );
             Self::draw_button(
-                term,
+                surface,
                 &mut self.hitboxes,
                 self.pointer.as_ref(),
                 close,
@@ -929,14 +917,22 @@ impl OutpostDashboard {
             .saturating_sub(if is_sheet { MIN_TARGET_W + 1 } else { 0 })
             as usize;
 
-        term.reset_style().fg(color).bg(PANEL_BG);
-        term.print((inner.left(), inner.top()), truncate(title, text_w));
-        term.reset_style().fg(DIM_FG).bg(PANEL_BG);
-        term.print(
+        surface.print(
+            (inner.left(), inner.top()),
+            truncate(title, text_w),
+            Style::new().fg(color).bg(PANEL_BG),
+        );
+        let dim_style = Style::new().fg(DIM_FG).bg(PANEL_BG);
+        surface.print(
             (inner.left(), inner.top() + 1),
             truncate(&format!("({}, {})", sel.x, sel.y), text_w),
+            dim_style,
         );
-        term.print((inner.left(), inner.top() + 2), truncate(detail, text_w));
+        surface.print(
+            (inner.left(), inner.top() + 2),
+            truncate(detail, text_w),
+            dim_style,
+        );
 
         let y = inner.top() + 4;
         if y + 3 <= inner.bottom() + 1 {
@@ -944,7 +940,7 @@ impl OutpostDashboard {
             let repair = Rect::new(inner.left(), y, bw, 3);
             let inspect = Rect::new(inner.left() + bw + 1, y, bw, 3);
             Self::draw_button(
-                term,
+                surface,
                 &mut self.hitboxes,
                 self.pointer.as_ref(),
                 repair,
@@ -953,7 +949,7 @@ impl OutpostDashboard {
                 HitTarget::Repair,
             );
             Self::draw_button(
-                term,
+                surface,
                 &mut self.hitboxes,
                 self.pointer.as_ref(),
                 inspect,
@@ -962,20 +958,22 @@ impl OutpostDashboard {
                 HitTarget::Inspect,
             );
         }
-        term.reset_style();
     }
 
-    fn draw_settings<B: Backend>(&mut self, term: &mut Terminal<B>, area: Rect) {
+    fn draw_settings(&mut self, surface: &mut Surface<'_>, area: Rect) {
         if area.width() < 4 || area.height() < 4 {
             return;
         }
         for y in area.top()..area.bottom() {
             for x in area.left()..area.right() {
-                term.put_styled((x, y), ' ', Style::new().bg(PANEL_BG));
+                surface.put((x, y), ' ', Style::new().bg(PANEL_BG));
             }
         }
-        term.reset_style().fg(FG).bg(PANEL_BG);
-        term.print((area.left() + 1, area.top() + 1), "Settings");
+        surface.print(
+            (area.left() + 1, area.top() + 1),
+            "Settings",
+            Style::new().fg(FG).bg(PANEL_BG),
+        );
 
         let labels = ["Sound", "Notifications"];
         let toggles = self.settings_toggles;
@@ -994,7 +992,7 @@ impl OutpostDashboard {
             );
             let color = if on { GOOD } else { DIM_FG };
             Self::draw_button(
-                term,
+                surface,
                 &mut self.hitboxes,
                 self.pointer.as_ref(),
                 btn,
@@ -1004,16 +1002,15 @@ impl OutpostDashboard {
             );
             y += 4;
         }
-        term.reset_style();
     }
 
-    fn draw_nav_bar<B: Backend>(&mut self, term: &mut Terminal<B>, area: Rect) {
+    fn draw_nav_bar(&mut self, surface: &mut Surface<'_>, area: Rect) {
         if area.width() == 0 || area.height() == 0 {
             return;
         }
         for y in area.top()..area.bottom() {
             for x in area.left()..area.right() {
-                term.put_styled((x, y), ' ', Style::new().bg(CHROME_BG));
+                surface.put((x, y), ' ', Style::new().bg(CHROME_BG));
             }
         }
         let n = Tab::ALL.len() as u16;
@@ -1032,18 +1029,16 @@ impl OutpostDashboard {
             let fg = if active { ACCENT } else { DIM_FG };
             for yy in rect.top()..rect.bottom() {
                 for xx in rect.left()..rect.right() {
-                    term.put_styled((xx, yy), ' ', Style::new().bg(bg));
+                    surface.put((xx, yy), ' ', Style::new().bg(bg));
                 }
             }
             let label = tab.label();
             let ly = rect.top() + rect.height() / 2;
             let lx = x + (w.saturating_sub(label.chars().count() as u16)) / 2;
-            term.reset_style().fg(fg).bg(bg);
-            term.print((lx, ly), label);
+            surface.print((lx, ly), label, Style::new().fg(fg).bg(bg));
             self.hitboxes.push((rect, HitTarget::Tab(tab)));
             x += w;
         }
-        term.reset_style();
     }
 
     /// Lays out and draws the whole screen from `term.size()`, rebuilding [`Self::hitboxes`].
@@ -1051,11 +1046,12 @@ impl OutpostDashboard {
     /// states before asserting on `hitboxes`.
     pub fn draw<B: Backend>(&mut self, term: &mut Terminal<B>) {
         let size = term.size();
+        let mut surface = term.surface();
         self.hitboxes.clear();
         let screen = Rect::new(0, 0, size.width, size.height);
         for y in 0..size.height {
             for x in 0..size.width {
-                term.put_styled((x, y), ' ', Style::new().bg(BG));
+                surface.put((x, y), ' ', Style::new().bg(BG));
             }
         }
 
@@ -1072,7 +1068,7 @@ impl OutpostDashboard {
         );
         let (header_area, body_area, nav_area) = (rows[0], rows[1], rows[2]);
 
-        self.draw_header(term, header_area);
+        self.draw_header(&mut surface, header_area);
 
         let wide = size.width >= BP_WIDE;
         let (main_area, sidebar_area) = if wide && self.tab == Tab::Overview {
@@ -1083,13 +1079,13 @@ impl OutpostDashboard {
         };
 
         match self.tab {
-            Tab::Overview => self.draw_map(term, main_area),
-            Tab::Settings => self.draw_settings(term, main_area),
+            Tab::Overview => self.draw_map(&mut surface, main_area),
+            Tab::Settings => self.draw_settings(&mut surface, main_area),
         }
 
         if self.tab == Tab::Overview {
             if let Some(sidebar) = sidebar_area {
-                self.draw_detail_panel(term, sidebar, false);
+                self.draw_detail_panel(&mut surface, sidebar, false);
             } else if self.sheet_open {
                 let h = 9u16.min(main_area.height().saturating_sub(2));
                 if h > 0 {
@@ -1099,26 +1095,24 @@ impl OutpostDashboard {
                         main_area.width(),
                         h,
                     );
-                    self.draw_detail_panel(term, sheet, true);
+                    self.draw_detail_panel(&mut surface, sheet, true);
                 }
             }
         }
 
-        self.draw_nav_bar(term, nav_area);
-        self.draw_floating(term);
+        self.draw_nav_bar(&mut surface, nav_area);
+        self.draw_floating(&mut surface);
     }
 
-    fn draw_floating<B: Backend>(&self, term: &mut Terminal<B>) {
+    fn draw_floating(&self, surface: &mut Surface<'_>) {
         for f in &self.floating {
             let age = self.time - f.born;
             let alpha = (1.0 - age / FLOATING_TEXT_LIFETIME).clamp(0.0, 1.0) as f32;
             let color = Color::lerp(BG, f.color, alpha);
             let x = f.x.round().max(0.0) as u16;
             let y = f.y.round().max(0.0) as u16;
-            term.reset_style().fg(color).bg(BG);
-            term.print((x, y), &f.text);
+            surface.print((x, y), &f.text, Style::new().fg(color).bg(BG));
         }
-        term.reset_style();
     }
 }
 

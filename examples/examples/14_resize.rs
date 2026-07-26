@@ -76,23 +76,25 @@ impl Resize {
             return;
         }
 
+        let mut surface = term.surface();
+
         // Fill every cell in the current area, not just the border outline -- see the module
         // doc comment for why a hollow-border-only redraw can leave stale glyphs behind after a
         // shrink-then-grow sequence.
         for y in area.top()..area.bottom() {
             for x in area.left()..area.right() {
-                term.put_styled((x, y), ' ', Style::default());
+                surface.put((x, y), ' ', Style::default());
             }
         }
 
         let border = Style::new().fg(Color::Ansi(AnsiColor::BrightBlack));
         for x in area.left()..area.right() {
-            term.put_styled((x, area.top()), '#', border);
-            term.put_styled((x, area.bottom() - 1), '#', border);
+            surface.put((x, area.top()), '#', border);
+            surface.put((x, area.bottom() - 1), '#', border);
         }
         for y in area.top()..area.bottom() {
-            term.put_styled((area.left(), y), '#', border);
-            term.put_styled((area.right() - 1, y), '#', border);
+            surface.put((area.left(), y), '#', border);
+            surface.put((area.right() - 1, y), '#', border);
         }
 
         let label = format!("{}x{} cells -- resize me", area.width(), area.height());
@@ -101,8 +103,7 @@ impl Resize {
         if label_width < area.width() {
             let x = area.left() + (area.width() - label_width) / 2;
             let y = area.top() + area.height() / 2;
-            term.reset_style();
-            term.print((x, y), &label);
+            surface.print((x, y), &label, Style::default());
         }
     }
 }

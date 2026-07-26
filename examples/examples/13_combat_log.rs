@@ -24,9 +24,9 @@
 
 use retroglyph_core::event::{Event, KeyCode};
 use retroglyph_core::text::Line;
-use retroglyph_core::{AnsiColor, Backend, Color, Frame, Rect, Style, Terminal};
+use retroglyph_core::{AnsiColor, Backend, Color, Frame, Rect, Style, Surface, Terminal};
 use retroglyph_examples::Example;
-use retroglyph_widgets::{Log, Modal, Scrollbar, StatBar, Surface, Widget};
+use retroglyph_widgets::{Log, Modal, Scrollbar, StatBar, Widget};
 
 const PLAYER_MAX_HP: u32 = 30;
 const ENEMY_MAX_HP: u32 = 40;
@@ -114,10 +114,17 @@ impl CombatLog {
     }
 
     fn draw<B: Backend>(&self, term: &mut Terminal<B>) {
-        // Kept short on purpose: this is a 50-column grid, and `Terminal::print` wraps text
+        // Kept short on purpose: this is a 50-column grid, and `Surface::print` wraps text
         // that overflows the width onto the next row -- which would otherwise stomp on the
         // stat bars printed right below.
-        term.print((1, 0), "a: attack  Up/Down: scroll  r: reset  q/Esc: quit");
+        {
+            let mut surface = term.surface();
+            surface.print(
+                (1, 0),
+                "a: attack  Up/Down: scroll  r: reset  q/Esc: quit",
+                Style::default(),
+            );
+        }
 
         let term_area = term.area();
         StatBar::new("You  ", self.player_hp, PLAYER_MAX_HP).render(
@@ -155,15 +162,25 @@ impl CombatLog {
                     Rect::new(0, 0, 50, 25),
                     &mut Surface::new(term.grid_mut(), term_area, 0),
                 );
-            term.print(
+            let mut surface = term.surface();
+            surface.print(
                 (inner.left(), inner.top()),
                 &format!(
                     "You: {}/{PLAYER_MAX_HP}  Goblin: {}/{ENEMY_MAX_HP}",
                     self.player_hp, self.enemy_hp
                 ),
+                Style::default(),
             );
-            term.print((inner.left(), inner.top() + 2), "r: reset");
-            term.print((inner.left(), inner.top() + 3), "q / Esc: quit");
+            surface.print(
+                (inner.left(), inner.top() + 2),
+                "r: reset",
+                Style::default(),
+            );
+            surface.print(
+                (inner.left(), inner.top() + 3),
+                "q / Esc: quit",
+                Style::default(),
+            );
         }
     }
 }

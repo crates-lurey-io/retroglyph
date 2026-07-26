@@ -101,12 +101,23 @@ pub(super) fn render(
     let reserved = label_w + 1 + readout.width() + 1; // label + space + gap + readout
     let bar_w = area.width_usize().saturating_sub(reserved);
 
-    let label_area = Rect::new(area.left(), y, label_w as u16, 1);
+    // `label_w` is `label.width().min(area.width_usize())`, so it never exceeds `area`'s own
+    // `u16` width: narrowing it back is always exact.
+    #[allow(clippy::cast_possible_truncation)]
+    let label_w_u16 = label_w as u16;
+    let label_area = Rect::new(area.left(), y, label_w_u16, 1);
     Text::new(label)
         .style(label_style)
         .render(label_area, surface);
-    let mut x = area.left() + label_w as u16 + 1; // gap after label
+    let mut x = area.left() + label_w_u16 + 1; // gap after label
 
+    // `bar_w` is bounded by the terminal's column count (well under f32's 2^24 exact-integer
+    // range), `ratio` is clamped to `0.0..=1.0`, so `filled` always lands in `0..=bar_w`.
+    #[allow(
+        clippy::cast_precision_loss,
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss
+    )]
     let filled = (ratio * bar_w as f32).round() as usize;
     let filled_style = Style::new().fg(color);
     let empty_style = Style::new().fg(Color::Rgb {

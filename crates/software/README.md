@@ -14,7 +14,7 @@ grid cells into a pixel buffer and blits it to a window surface via
 Optional features: `default-font` (an embedded Unscii 16 bitmap font) and `tilesets` (PNG sprite
 sheet tilesets with alpha blending).
 
-Artwork larger than one cell is drawn as a multi-cell span (`Terminal::put_span`): the span's anchor
+Artwork larger than one cell is drawn as a multi-cell span (`Surface::put_span`): the span's anchor
 blits one sprite across the whole footprint, and the cells it covers draw no glyph of their own and
 take the anchor's background, so the sprite sits on one uniform backdrop. Their glyphs are the
 span's text fallback, which cell backends print instead. `SpriteAlign` positions art inside a span
@@ -48,8 +48,8 @@ let renderer = SoftwareBackendBuilder::new()
     .unwrap();
 
 let mut term = Terminal::new(renderer);
-term.put_styled((0, 0), ' ', Style::new().bg(Color::Rgb { r: 255, g: 0, b: 0 }));
-term.present().unwrap();
+term.draw(|s| s.put((0, 0), ' ', Style::new().bg(Color::Rgb { r: 255, g: 0, b: 0 })))
+    .unwrap();
 
 assert!(term.backend().pixels().iter().all(|&p| p == 0x00FF_0000));
 ```

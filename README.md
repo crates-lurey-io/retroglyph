@@ -160,13 +160,13 @@ gets it for free.
 - **Sprite tilesets** (feature `tilesets` on `retroglyph-software` and `retroglyph-gl`) — PNG sprite
   sheets mapped to a codepage (CP437, Unicode range, or custom), rendered with RGBA alpha blending
   over bitmap font glyphs, on the CPU or the GPU.
-- **Multi-cell sprites** — `Terminal::put_span` writes one piece of artwork across a `w × h` block
-  of cells and carries its own text fallback with it, so the same call renders as one sprite on a
+- **Multi-cell sprites** — `Surface::put_span` writes one piece of artwork across a `w × h` block of
+  cells and carries its own text fallback with it, so the same call renders as one sprite on a
   graphical backend and as readable ASCII on a terminal, with no capability check:
 
   ```rust,ignore
-  term.put_span((x, y), &["[==]",
-                         "|__|"]);
+  surface.put_span((x, y), &["[==]",
+                         "|__|"], style);
   ```
 
   `Grid::span_owner` resolves any cell of a span to its anchor in O(1), so hit-testing multi-cell
@@ -242,15 +242,13 @@ retroglyph-crossterm = "0.1"
 ```
 
 ```rust,no_run
-use retroglyph_core::{Terminal, Color, event::{Event, KeyCode}};
+use retroglyph_core::{Terminal, Color, Style, event::{Event, KeyCode}};
 use retroglyph_crossterm::Crossterm;
 
 fn main() -> std::io::Result<()> {
     let mut term = Terminal::new(Crossterm::new()?);
     loop {
-        term.fg(Color::GREEN);
-        term.put((5, 5), '@');
-        term.present()?;
+        term.draw(|s| s.put((5, 5), '@', Style::new().fg(Color::GREEN)))?;
 
         if let Some(Event::Key(k)) = term.poll(std::time::Duration::from_secs(1)) {
             if k.code == KeyCode::Char('q') {

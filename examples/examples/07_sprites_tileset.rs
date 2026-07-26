@@ -17,7 +17,7 @@
 //!
 //! The chest (`assets/chest.png`, one 32x32 sprite) is four cells wide and
 //! two tall, drawn with a single
-//! [`Terminal::put_span`](retroglyph_core::Terminal::put_span) call that
+//! [`Surface::put_span`](retroglyph_core::Surface::put_span) call that
 //! carries its own text fallback:
 //!
 //! ```text
@@ -51,7 +51,7 @@
 //! the chest; `q` or `Escape` quits, or close the window.
 
 use retroglyph_core::event::{Event, KeyCode};
-use retroglyph_core::{Backend, Pos, Rect, Terminal};
+use retroglyph_core::{Backend, Pos, Rect, Style, Terminal};
 use retroglyph_examples::Example;
 
 /// The room's interior (floor + player + coins), in grid cells. The wall
@@ -146,52 +146,82 @@ impl SpritesTileset {
     /// the frame that drew it is still being built. The header is printed last, for the same
     /// reason: it reports a score this frame may still change.
     fn draw<B: Backend>(&mut self, term: &mut Terminal<B>) {
-        term.layer(0);
-        let wall_rect = Rect::new(
-            ROOM.left() - 1,
-            ROOM.top() - 1,
-            ROOM.width() + 2,
-            ROOM.height() + 2,
-        );
-        for y in wall_rect.top()..wall_rect.bottom() {
-            for x in wall_rect.left()..wall_rect.right() {
-                let on_wall_ring = y == wall_rect.top()
-                    || y == wall_rect.bottom() - 1
-                    || x == wall_rect.left()
-                    || x == wall_rect.right() - 1;
-                term.put((x, y), if on_wall_ring { '#' } else { '.' });
+        let style = Style::default();
+
+        // Layer 0: wall ring and floor
+        {
+            let mut surface = term.surface();
+            let mut layer0 = surface.on_layer(0);
+            let wall_rect = Rect::new(
+                ROOM.left() - 1,
+                ROOM.top() - 1,
+                ROOM.width() + 2,
+                ROOM.height() + 2,
+            );
+            for y in wall_rect.top()..wall_rect.bottom() {
+                for x in wall_rect.left()..wall_rect.right() {
+                    let on_wall_ring = y == wall_rect.top()
+                        || y == wall_rect.bottom() - 1
+                        || x == wall_rect.left()
+                        || x == wall_rect.right() - 1;
+                    layer0.put((x, y), if on_wall_ring { '#' } else { '.' }, style);
+                }
             }
         }
 
-        term.layer(ITEM_LAYER);
-        if self.chest_shut {
-            // One call for all eight cells: the anchor glyph drives the sprite lookup on pixel
-            // backends, and the whole block is readable ASCII art on cell backends.
-            term.put_span((CHEST.x, CHEST.y), &CHEST_ART);
-            // Standing anywhere on the chest opens it. `span_owner` answers with the span's
-            // anchor from any of its eight cells, so this is one comparison and the example
-            // never has to know the footprint's shape; `clear_span` then removes all eight.
-            if term
+        // Layer 1: chest, coins, and player
+        // Draw chest and check for collision while surface is in scope
+        {
+            let mut surface = term.surface();
+            let mut layer_items = surface.on_layer(ITEM_LAYER);
+            if self.chest_shut {
+                // One call for all eight cells: the anchor glyph drives the sprite lookup on pixel
+                // backends, and the whole block is readable ASCII art on cell backends.
+                layer_items.put_span((CHEST.x, CHEST.y), &CHEST_ART, style);
+            }
+        }
+        // Drop surface here so we can access term.grid()
+
+        // Check if player is on chest and update state
+        if self.chest_shut
+            && term
                 .grid()
                 .span_owner(ITEM_LAYER, self.player.x, self.player.y)
                 == Some(CHEST)
-            {
-                self.chest_shut = false;
-                self.score += CHEST_SCORE;
-                term.grid_mut().clear_span(ITEM_LAYER, CHEST.x, CHEST.y);
-            }
+        {
+            self.chest_shut = false;
+            self.score += CHEST_SCORE;
+            term.grid_mut().clear_span(ITEM_LAYER, CHEST.x, CHEST.y);
         }
-        for (i, &(dx, dy)) in COIN_OFFSETS.iter().enumerate() {
-            if self.coins[i] {
-                term.put((ROOM.left() + dx, ROOM.top() + dy), '$');
-            }
-        }
-        term.put((self.player.x, self.player.y), '@');
 
-        // No trailing full stops: `.` is keyed to the floor sprite, so a pixel backend
-        // would render one as a floor tile mid-sentence.
-        term.print((1, 1), "Arrows move; collect $ coins and open the chest");
-        term.print((1, 2), &format!("Score: {}   q / Escape quits", self.score));
+        // Draw coins and player
+        {
+            let mut surface = term.surface();
+            let mut layer_items = surface.on_layer(ITEM_LAYER);
+            for (i, &(dx, dy)) in COIN_OFFSETS.iter().enumerate() {
+                if self.coins[i] {
+                    layer_items.put((ROOM.left() + dx, ROOM.top() + dy), '$', style);
+                }
+            }
+            layer_items.put((self.player.x, self.player.y), '@', style);
+        }
+
+        // Draw text (on main layer 0 implicitly)
+        {
+            let mut surface = term.surface();
+            // No trailing full stops: `.` is keyed to the floor sprite, so a pixel backend
+            // would render one as a floor tile mid-sentence.
+            surface.print(
+                (1, 1),
+                "Arrows move; collect $ coins and open the chest",
+                style,
+            );
+            surface.print(
+                (1, 2),
+                &format!("Score: {}   q / Escape quits", self.score),
+                style,
+            );
+        }
     }
 }
 
@@ -204,7 +234,7 @@ impl SpritesTileset {
 /// The first sheet is the one-cell room tiles; the second is the chest, a single 32x32 sprite
 /// that covers the 4x2 cells [`CHEST_ART`] spans. Nothing in the tileset says how many cells a
 /// sprite occupies -- that is declared per draw call, by
-/// [`Terminal::put_span`](retroglyph_core::Terminal::put_span).
+/// [`Surface::put_span`](retroglyph_core::Surface::put_span).
 #[cfg(any(feature = "software", feature = "gl"))]
 fn tilesets() -> [retroglyph_window::tileset::TilesetOptions; 2] {
     use retroglyph_window::tileset::{Codepage, TilesetOptions};

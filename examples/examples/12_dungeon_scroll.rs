@@ -182,7 +182,11 @@ impl DungeonScroll {
     }
 
     fn draw<B: Backend>(&self, term: &mut Terminal<B>) {
-        term.print((1, 0), "Dungeon scroll -- arrows move, q/Escape quits");
+        term.surface().print(
+            (1, 0),
+            "Dungeon scroll -- arrows move, q/Escape quits",
+            Style::default(),
+        );
 
         let viewport = self.camera.viewport();
         term.grid_mut().blit(
@@ -194,11 +198,10 @@ impl DungeonScroll {
         );
 
         if let Some(screen) = self.camera.world_to_screen(self.player) {
-            term.reset_style()
+            let style = Style::new()
                 .fg(Color::Ansi(AnsiColor::BrightCyan))
                 .bg(Color::Default);
-            term.put((screen.x, screen.y), '@');
-            term.reset_style();
+            term.surface().put((screen.x, screen.y), '@', style);
         }
     }
 }

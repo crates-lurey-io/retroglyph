@@ -70,7 +70,11 @@ impl Widget for Text<'_> {
             return;
         }
         let text = truncate_to_cols(self.content, area.width_usize());
-        let x = area.left() + self.align.offset(area.width(), text.width() as u16);
+        // `text` is bounded to `area.width_usize()` columns above, itself widened from `area`'s
+        // own `u16` width, so narrowing the display width back is always exact.
+        #[allow(clippy::cast_possible_truncation)]
+        let text_width = text.width() as u16;
+        let x = area.left() + self.align.offset(area.width(), text_width);
         surface.print((x, area.top()), text, self.style);
     }
 }

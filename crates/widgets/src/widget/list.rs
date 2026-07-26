@@ -120,7 +120,12 @@ impl StatefulWidget for List<'_> {
         let visible_items = area.height_usize();
         let selected = state.selected();
         for (item_index, &item) in visible_window(self.items, state.offset(), visible_items) {
-            let y = area.top() + (item_index - state.offset()) as u16;
+            // `item_index - state.offset()` is a row within the visible window, so it never
+            // exceeds `visible_items` (`area.height_usize()`, itself widened from `area`'s `u16`
+            // height).
+            #[allow(clippy::cast_possible_truncation)]
+            let row = (item_index - state.offset()) as u16;
+            let y = area.top() + row;
             let style = if Some(item_index) == selected {
                 fill_rect(
                     surface,

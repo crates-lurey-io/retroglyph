@@ -11,7 +11,7 @@ use core::fmt;
 /// Where a sprite sits inside the multi-cell box a span reserves for it.
 ///
 /// Only observable when the reserved box is larger than the sprite's own pixels, i.e. when
-/// [`Terminal::put_span`](retroglyph_core::Terminal::put_span) declares more cells than the
+/// [`Surface::put_span`](retroglyph_core::Surface::put_span) declares more cells than the
 /// artwork fills. A sprite drawn into a box its art exactly fills -- the common case -- renders
 /// identically under every variant. Mirrors `BearLibTerminal`'s tileset `align=` option.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -310,7 +310,7 @@ impl TilesetOptions {
 /// ```
 ///
 /// How many cells a sprite occupies is a per-write decision, not a tileset-wide one: declare it
-/// with [`Terminal::put_span`](retroglyph_core::Terminal::put_span) at the draw call.
+/// with [`Surface::put_span`](retroglyph_core::Surface::put_span) at the draw call.
 ///
 /// Unicode private-use area sprite sheet:
 ///

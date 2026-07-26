@@ -197,7 +197,7 @@ pub type Pos = ixy::Pos<u16>;
 pub type Rect = ixy::Rect<u16>;
 
 /// A sub-cell pixel offset `(dx, dy)`, distinct from [`Pos`] so a caller can't transpose a
-/// position and an offset in a call like [`Terminal::put_offset`](crate::terminal::Terminal::put_offset).
+/// position and an offset in a call like [`Surface::put_offset`](crate::surface::Surface::put_offset).
 ///
 /// Visual only: an offset shifts where a glyph is painted within its cell on backends that
 /// support sub-cell placement (e.g. `retroglyph-software`); it never changes which cell a glyph

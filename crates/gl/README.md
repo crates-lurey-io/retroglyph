@@ -18,6 +18,7 @@ Implements [`retroglyph_window::Presenter`], so it drops into the same winit win
 ```rust,ignore
 use retroglyph_gl::GlBackendBuilder;
 use retroglyph_window::winit::{WindowConfig, run_windowed};
+use retroglyph_core::Style;
 
 let renderer = GlBackendBuilder::new()
     .grid_size(80, 25)
@@ -27,9 +28,7 @@ let renderer = GlBackendBuilder::new()
 
 let config = WindowConfig::fit(&renderer, "Hello, GL", None, true);
 run_windowed(config, renderer, move |term| {
-    term.clear();
-    term.print((0, 0), "Hello from retroglyph-gl!");
-    true
+    term.surface().print((0, 0), "Hello from retroglyph-gl!", Style::default());
 })
 .expect("event loop failed");
 ```
@@ -55,7 +54,7 @@ With the `tilesets` feature, PNG sprite sheets (`GlBackendBuilder::tileset`) ren
 blended pass over the glyph passes, so a sprite's transparent pixels reveal the layers beneath. The
 tileset config + decode is shared with the software backend via `retroglyph-window`.
 
-Artwork larger than one cell is drawn as a multi-cell span (`Terminal::put_span`): the span's anchor
+Artwork larger than one cell is drawn as a multi-cell span (`Surface::put_span`): the span's anchor
 emits one sprite across the whole footprint, and the cells it covers draw no glyph of their own and
 take the anchor's background, so the sprite sits on one uniform backdrop. Their glyphs are the
 span's text fallback, which cell backends print instead. `SpriteAlign` positions art inside a span

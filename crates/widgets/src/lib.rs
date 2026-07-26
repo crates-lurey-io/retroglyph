@@ -34,13 +34,6 @@
 //! `retroglyph-core`.
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
-#![allow(
-    clippy::cast_possible_truncation,
-    clippy::cast_lossless,
-    clippy::cast_precision_loss,
-    clippy::cast_sign_loss,
-    clippy::items_after_statements
-)]
 
 // Compile the code blocks in this crate's own README as doctests so its quick start is
 // type-checked on every test run and cannot silently rot. The `cfg(doctest)` gate keeps this out
@@ -57,7 +50,6 @@ pub mod interact;
 pub mod layout;
 pub mod state;
 pub mod style;
-pub mod surface;
 pub mod text;
 pub mod theme;
 pub mod widget;
@@ -73,9 +65,9 @@ pub use layout::{
     Constraint, Flex, centered_rect, split_h, split_h_flex, split_h_spaced, split_v, split_v_flex,
     split_v_spaced,
 };
+pub use retroglyph_core::{StyledSurface, Surface};
 pub use state::{ListState, ScrollPhysics, ScrollState, SelectionWrap};
 pub use style::{BoxStyle, Sides};
-pub use surface::Surface;
 pub use text::{truncate, truncate_owned};
 pub use theme::Theme;
 #[cfg(feature = "egc")]

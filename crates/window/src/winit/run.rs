@@ -766,8 +766,8 @@ where
             match retroglyph_core::step(term, &mut app, &frame) {
                 retroglyph_core::Flow::Exit => exit_requested_in_loop.set(true),
                 // Nothing changed: tell `handle_redraw_requested` to skip its automatic present
-                // for this frame, explicitly, rather than relying on `Terminal::present`'s dirty
-                // flag alone to make the skip a no-op.
+                // for this frame. `Terminal::present` always presents unconditionally, so this
+                // flag is the only thing standing between an idle frame and an unwanted redraw.
                 retroglyph_core::Flow::Idle => skip_present_in_loop.set(true),
                 // `Flow` is `#[non_exhaustive]`; any other variant (including `Continue`) presents
                 // as usual via `handle_redraw_requested`'s automatic present.
@@ -3595,7 +3595,8 @@ mod tests {
         // Case (a): an `app_loop` that draws but never calls `term.present()` itself must still
         // reach the backend -- that's the whole point of this driver-side automatic present.
         let mut app = recording_app(|term| {
-            term.put((0, 0), '@');
+            term.surface()
+                .put((0, 0), '@', retroglyph_core::Style::default());
         });
         app.handle_redraw_requested();
         let term = app.terminal.as_ref().unwrap();
@@ -3616,7 +3617,8 @@ mod tests {
         // `previous` (see `Terminal::present`'s doc comment for why that second call would
         // otherwise erase the frame).
         let mut app = recording_app(|term| {
-            term.put((0, 0), '@');
+            term.surface()
+                .put((0, 0), '@', retroglyph_core::Style::default());
             term.present().expect("app_loop's own present");
         });
         app.handle_redraw_requested();
@@ -3635,9 +3637,9 @@ mod tests {
         // Simulates an `App::update` returning `Flow::Idle`: `run_app_with_proxy`'s closure draws
         // nothing and sets `skip_present` from inside `app_loop`, the same point in the frame
         // `run_app_with_proxy`'s real closure sets it from. `handle_redraw_requested` must honor
-        // it -- `Terminal::present` would already be a no-op here since nothing was drawn, but
-        // this asserts the explicit skip actually runs, not just that the dirty flag happens to
-        // agree with it.
+        // it -- `Terminal::present` always presents unconditionally (even on an untouched frame),
+        // so without this explicit skip it would still run and erase whatever the previous frame
+        // left on screen.
         let terminal = Terminal::new(WindowBackend::new(GridRecordingPresenter::default()));
         let skip_present = Rc::new(Cell::new(false));
         let skip_present_in_loop = skip_present.clone();
@@ -3682,7 +3684,8 @@ mod tests {
         // `handle_redraw_requested` must reset `skip_present` before running `app_loop`, so a
         // stale `true` from a previous `Idle` frame can't suppress the next frame's present.
         let mut app = recording_app(|term| {
-            term.put((0, 0), '@');
+            term.surface()
+                .put((0, 0), '@', retroglyph_core::Style::default());
         });
         app.skip_present.set(true); // Stale value, as if left over from a prior Idle frame.
         app.handle_redraw_requested();

@@ -8,9 +8,9 @@
 //! for external analysis (CSV export, benchmark assertions, etc.).
 #![allow(dead_code)]
 
+use retroglyph_core::Surface;
 use retroglyph_core::color::Color;
 use retroglyph_core::style::Style;
-use retroglyph_core::{Backend, Terminal};
 
 // `web_time::Instant`: a plain `std::time::Instant` re-export on native, backed by the
 // browser's `Performance.now()` on wasm32 (where `std::time::Instant` is unavailable) --
@@ -44,9 +44,9 @@ pub struct FrameStats {
 ///
 /// fn tick(term: &mut Terminal<impl Backend>, state: &mut State) -> bool {
 ///     perf.begin_frame();
+///     let mut surface = term.surface();
 ///     // ... game update and draw ...
-///     perf.draw(term);   // optional
-///     term.present().unwrap();
+///     perf.draw(&mut surface, 0, 0);   // optional
 ///     true
 /// }
 /// ```
@@ -163,7 +163,7 @@ impl PerfOverlay {
     /// Format: `FPS  60.1  avg  16.6ms  min  14.2ms  max  22.1ms`
     ///
     /// Does nothing if `self.visible` is false or there are no samples yet.
-    pub fn draw<B: Backend>(&self, term: &mut Terminal<B>, x: u16, y: u16) {
+    pub fn draw(&self, surface: &mut Surface<'_>, x: u16, y: u16) {
         if !self.visible {
             return;
         }
@@ -188,7 +188,7 @@ impl PerfOverlay {
 
         for (i, ch) in text.chars().enumerate() {
             #[allow(clippy::cast_possible_truncation)]
-            term.put_styled((x + i as u16, y), ch, style);
+            surface.put((x + i as u16, y), ch, style);
         }
     }
 }

@@ -221,7 +221,7 @@ pub fn warn_sprite_needs_span(
     log::warn!(
         "sprite for {glyph:?} is {w}x{h}px, larger than the {cell_w}x{cell_h}px cell, but was \
          drawn without a span: neighbouring cells will paint over it. Reserve the cells it \
-         covers with `Terminal::put_span`."
+         covers with `Surface::put_span`."
     );
     true
 }

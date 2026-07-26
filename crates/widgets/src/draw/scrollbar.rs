@@ -35,13 +35,20 @@ pub fn thumb_geometry(
     }
 
     let track_f = f32::from(track);
+    // `visible_len`/`total_len` are item counts feeding a display ratio; losing mantissa bits
+    // above f32's 2^23 threshold has no visible effect on scrollbar geometry.
     #[allow(clippy::cast_precision_loss)]
     let ratio = visible_len as f32 / total_len as f32;
+    // Explicitly clamped to `1.0..=track_f`, itself derived from `area`'s `u16` height, so the
+    // result always narrows back exactly and is never negative.
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let len = (track_f * ratio).round().clamp(1.0, track_f) as u16;
 
     let max_offset = total_len - visible_len; // > 0, since total_len > visible_len here
     let max_start = track.saturating_sub(len); // last row the thumb can start on
+    // `offset <= max_offset`, so the ratio is in `0.0..=1.0`; the result is clamped below to
+    // `max_start` (itself a `u16`) and is never negative. `offset`/`max_offset` are item counts
+    // (same precision-loss rationale as `ratio` above).
     #[allow(
         clippy::cast_precision_loss,
         clippy::cast_possible_truncation,

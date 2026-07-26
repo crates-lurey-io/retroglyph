@@ -126,6 +126,9 @@ impl Widget for Panel<'_> {
             }
             // Truncate to fit.
             let t = truncate_to_cols(t, max_title_w);
+            // `truncate_to_cols` bounds `t` to `max_title_w` columns, itself derived from `area`'s
+            // `u16` width, so narrowing the display width back is always exact.
+            #[allow(clippy::cast_possible_truncation)]
             let t_w = t.width() as u16;
             // The padded title (a space either side of the text) is aligned
             // within the region between the two corners (`area.width() - 2`).

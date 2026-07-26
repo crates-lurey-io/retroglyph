@@ -56,13 +56,12 @@ pub struct Frame {
 /// Implement this once, generically over the backend, to run everywhere:
 ///
 /// ```
-/// use retroglyph_core::{App, Backend, Flow, Frame, Terminal};
+/// use retroglyph_core::{App, Backend, Flow, Frame, Style, Terminal};
 ///
 /// struct MyGame;
 /// impl<B: Backend> App<B> for MyGame {
 ///     fn update(&mut self, term: &mut Terminal<B>, _frame: &Frame) -> Flow {
-///         term.put((0, 0), '@');
-///         term.present().ok(); // Required under `run_blocking`; automatic under the windowed drivers.
+///         term.surface().put((0, 0), '@', Style::default());
 ///         Flow::Exit
 ///     }
 /// }
@@ -72,11 +71,14 @@ pub trait App<B: Backend> {
     ///
     /// Draw into `term`, read input via `term`, and return [`Flow::Exit`] to stop the loop.
     ///
-    /// Every driver ([`run_blocking`] and `retroglyph-window`'s windowed drivers) presents the
-    /// frame automatically right after this method returns, unless it returned [`Flow::Idle`], in
-    /// which case the driver skips [`present`](Terminal::present) entirely. Calling `present`
-    /// yourself inside `update` remains fine (the driver detects it already ran via
-    /// [`present_count`](Terminal::present_count) and skips its own call) but is never required.
+    /// Draw via [`term.surface()`](Terminal::surface) or [`term.draw()`](Terminal::draw) (though
+    /// `draw` presents itself, which usually conflicts with the driver's own automatic present
+    /// below -- prefer `surface()` inside `update`). Every driver ([`run_blocking`] and
+    /// `retroglyph-window`'s windowed drivers) presents the frame automatically right after this
+    /// method returns, unless it returned [`Flow::Idle`], in which case the driver skips
+    /// [`present`](Terminal::present) entirely. Calling `present` yourself inside `update` remains
+    /// fine (the driver detects it already ran via [`present_count`](Terminal::present_count) and
+    /// skips its own call) but is never required.
     fn update(&mut self, term: &mut Terminal<B>, frame: &Frame) -> Flow;
 }
 
@@ -190,13 +192,16 @@ where
             frame: frame_count,
         };
         frame_count = frame_count.wrapping_add(1);
+        let present_count_before = term.present_count();
         let flow = step(&mut term, &mut app, &frame);
         if flow == Flow::Exit {
             return Ok(());
         }
-        if flow != Flow::Idle {
-            // A no-op if `update` already called `present()` itself: see `Terminal::present`'s
-            // dirty-flag behavior.
+        // A no-op if `update` already called `present()` itself (detected via `present_count`
+        // rather than relying on `present()` being a safe no-op to call twice: it always presents
+        // unconditionally, so a second call here would diff the just-cleared `current` against
+        // the just-presented `previous` and erase the frame `update` already sent).
+        if flow != Flow::Idle && term.present_count() == present_count_before {
             term.present()?;
         }
         // `Flow` is `#[non_exhaustive]`; treat any variant other than `Exit`/`Idle` the same as
@@ -217,7 +222,8 @@ mod tests {
     impl App<Headless> for Counter {
         fn update(&mut self, term: &mut Terminal<Headless>, frame: &Frame) -> Flow {
             self.frames += 1;
-            term.put((0, 0), '#');
+            term.surface()
+                .put((0, 0), '#', crate::style::Style::default());
             term.present().expect("present");
             // Quit when a key is pending, or after a safety cap.
             if term.has_input() || frame.frame >= 100 {
@@ -292,7 +298,8 @@ mod tests {
     impl App<Headless> for DrawsAndExits {
         fn update(&mut self, term: &mut Terminal<Headless>, frame: &Frame) -> Flow {
             self.frames += 1;
-            term.put((0, 0), 'x');
+            term.surface()
+                .put((0, 0), 'x', crate::style::Style::default());
             if frame.frame >= self.exit_at {
                 Flow::Exit
             } else {
