@@ -117,6 +117,7 @@ pub struct WindowConfig {
     width: u32,
     height: u32,
     target_fps: Option<u32>,
+    event_driven: bool,
     fill_viewport: bool,
     resizable: bool,
     decorations: bool,
@@ -136,28 +137,39 @@ impl WindowConfig {
     /// [`Output::size`] and
     /// [`Presenter::cell_size`].
     ///
-    /// `target_fps` picks between the two redraw modes, on native and `wasm32` alike:
+    /// `target_fps` and `event_driven` are independent controls, on native and `wasm32` alike:
     ///
-    /// - `None` is **redraw-on-demand**: a frame is rendered only after something happened (an
-    ///   input or window event, an injected [`Event::Custom`], window creation), and the loop
-    ///   sleeps otherwise. Right for event-driven retro/terminal UIs, which are idle most of the
-    ///   time; wrong for anything that animates from [`Frame::delta`](retroglyph_core::Frame::delta),
-    ///   which will render one frame and then sit still until the next stray event.
-    /// - `Some(fps)` is **continuous**: a frame is rendered every interval whether or not
-    ///   anything happened, which is what a [`Tween`](retroglyph_core::Tween)/
-    ///   [`FrameClock`](retroglyph_core::FrameClock)-driven app needs.
+    /// - `target_fps` is the frame-rate cap applied whenever a frame is actually rendered: `None`
+    ///   is uncapped (render as fast as the loop reaches a redraw), `Some(fps)` paces redraws to
+    ///   no more than `fps` per second.
+    /// - `event_driven` picks between the two redraw-triggering modes:
+    ///   - `true` is **redraw-on-demand**: a frame is rendered only after something happened (an
+    ///     input or window event, an injected [`Event::Custom`], window creation), and the loop
+    ///     sleeps otherwise. Right for event-driven retro/terminal UIs, which are idle most of
+    ///     the time; wrong for anything that animates from
+    ///     [`Frame::delta`](retroglyph_core::Frame::delta), which will render one frame and then
+    ///     sit still until the next stray event.
+    ///   - `false` is **continuous**: a frame is rendered every tick whether or not anything
+    ///     happened, which is what a [`Tween`](retroglyph_core::Tween)/
+    ///     [`FrameClock`](retroglyph_core::FrameClock)-driven app needs.
+    ///
+    /// The two combine independently: `(Some(fps), false)` is the common capped-animation shape
+    /// (see [`Self::animated`] for a shorthand), `(None, true)` is the common idle-UI shape, and
+    /// `(None, false)` -- render every tick, uncapped -- is the one combination that was
+    /// previously inexpressible, useful for e.g. measuring a render loop's raw throughput.
     ///
     /// On `wasm32` the browser owns frame pacing: winit's web backend delivers each requested
-    /// redraw on the next `requestAnimationFrame`, so `Some(_)` runs at the display refresh rate
-    /// and the specific number is advisory (there is no way to render faster than
-    /// `requestAnimationFrame`, and rendering slower would mean discarding frames the browser
-    /// already scheduled). Only the `Some`/`None` choice carries across, which is the choice that
-    /// matters.
+    /// redraw on the next `requestAnimationFrame`, so an uncapped or `event_driven: false` loop
+    /// still runs at the display refresh rate and `target_fps`'s specific number is advisory
+    /// (there is no way to render faster than `requestAnimationFrame`, and rendering slower would
+    /// mean discarding frames the browser already scheduled). Only the `event_driven` choice
+    /// carries across unaffected.
     #[must_use]
     pub fn fit<P: Presenter>(
         presenter: &P,
         title: impl Into<String>,
         target_fps: Option<u32>,
+        event_driven: bool,
     ) -> Self {
         let grid = presenter.size();
         let (cell_w, cell_h) = presenter.cell_size();
@@ -166,6 +178,7 @@ impl WindowConfig {
             width: u32::from(grid.width) * cell_w,
             height: u32::from(grid.height) * cell_h,
             target_fps,
+            event_driven,
             fill_viewport: false,
             resizable: true,
             decorations: true,
@@ -195,10 +208,28 @@ impl WindowConfig {
         self.height
     }
 
-    /// The frame-rate cap passed to [`fit`](Self::fit), if any.
+    /// Shorthand for [`fit`](Self::fit) with continuous, non-event-driven, `fps`-capped
+    /// redraws -- the shape most animated apps want. Equivalent to
+    /// `Self::fit(presenter, title, Some(fps), false)`.
+    #[must_use]
+    pub fn animated<P: Presenter>(presenter: &P, title: impl Into<String>, fps: u32) -> Self {
+        Self::fit(presenter, title, Some(fps), false)
+    }
+
+    /// The frame-rate cap passed to [`fit`](Self::fit), if any. `None` means uncapped: a frame
+    /// renders as fast as the loop reaches a redraw -- see [`event_driven`](Self::event_driven)
+    /// for whether that's every tick or only on demand.
     #[must_use]
     pub const fn target_fps(&self) -> Option<u32> {
         self.target_fps
+    }
+
+    /// Whether the loop only redraws after an input/window event or injected
+    /// [`Event::Custom`] (`true`), or every tick regardless (`false`), as passed to
+    /// [`fit`](Self::fit).
+    #[must_use]
+    pub const fn event_driven(&self) -> bool {
+        self.event_driven
     }
 
     /// Sets whether to size (and keep resizing) the canvas to fill the browser viewport on
@@ -379,7 +410,7 @@ where
 ///     .build()
 ///     .expect("backend init failed")
 ///     .run_headless();
-/// let config = WindowConfig::fit(&renderer, "My Game", None);
+/// let config = WindowConfig::fit(&renderer, "My Game", None, true);
 ///
 /// run_windowed_with_proxy(
 ///     config,
@@ -470,7 +501,7 @@ where
 ///     .build()
 ///     .expect("backend init failed")
 ///     .run_headless();
-/// let config = WindowConfig::fit(&renderer, "My Game", None);
+/// let config = WindowConfig::fit(&renderer, "My Game", None, true);
 ///
 /// run_windowed_with_typed_proxy(
 ///     config,
@@ -585,6 +616,7 @@ where
         cursor_px: (0.0, 0.0),
         active_touch: None,
         frame_interval,
+        event_driven: config.event_driven,
         #[cfg(not(target_arch = "wasm32"))]
         next_frame: std::time::Instant::now(),
         exit_requested,
@@ -844,8 +876,9 @@ struct WindowApp<P: Presenter, F, T, D> {
     /// ignored until it lifts, so a stray second finger can't teleport the
     /// cursor mid-drag.
     active_touch: Option<u64>,
-    /// Frame interval derived from [`WindowConfig::target_fps`]. `Some` selects continuous
-    /// (animation) redraws, `None` selects redraw-on-demand -- see [`WindowConfig::fit`].
+    /// Frame-rate cap derived from [`WindowConfig::target_fps`]: `Some(interval)` paces redraws
+    /// to no more than one per `interval`, `None` leaves them uncapped. Independent of
+    /// [`event_driven`](Self::event_driven) -- see [`WindowConfig::fit`].
     ///
     /// Stored on `wasm32` too, where only the `Some`/`None` distinction is used: the browser's
     /// `requestAnimationFrame` already paces the loop, so there is no deadline to sleep until.
@@ -854,6 +887,12 @@ struct WindowApp<P: Presenter, F, T, D> {
     /// sleeping event loop to schedule against.
     #[cfg(not(target_arch = "wasm32"))]
     next_frame: std::time::Instant,
+    /// Whether [`about_to_wait`](ApplicationHandler::about_to_wait) gates redraws on
+    /// [`needs_redraw`](Self::needs_redraw) (`true`) or always redraws every tick (`false`),
+    /// as passed to [`WindowConfig::fit`]. Independent of
+    /// [`frame_interval`](Self::frame_interval): this controls *whether* a tick redraws at all,
+    /// the frame-rate cap controls *how often* once it does.
+    event_driven: bool,
     /// Set by `app_loop` (specifically [`run_app_with_proxy`]'s closure) to request the event
     /// loop stop, instead of calling `std::process::exit` directly.
     ///
@@ -886,9 +925,10 @@ struct WindowApp<P: Presenter, F, T, D> {
     /// keeps the loop asleep (`ControlFlow::Wait`) instead of spinning at ~100% CPU redrawing an
     /// unchanged frame forever.
     ///
-    /// Only consulted when `frame_interval` is `None`, i.e. redraw-on-demand mode. An app that
-    /// animates over time has no event to point at and would freeze under this gate, which is
-    /// what `Some(fps)` (continuous mode) is for -- see [`WindowConfig::fit`].
+    /// Only consulted when [`event_driven`](Self::event_driven) is `true`, i.e. redraw-on-demand
+    /// mode. An app that animates over time has no event to point at and would freeze under this
+    /// gate, which is what `event_driven: false` (continuous mode) is for -- see
+    /// [`WindowConfig::fit`].
     needs_redraw: bool,
     /// Count of consecutive `present()` failures, reset to 0 on the next success. Drives
     /// [`present_failure_action`]'s logging-verbosity and surface-recovery decisions in the
@@ -1236,32 +1276,33 @@ where
         &mut self,
         #[cfg_attr(target_arch = "wasm32", allow(unused_variables))] event_loop: &ActiveEventLoop,
     ) {
+        // `event_driven` (redraw-on-demand): only proceed if something actually happened since
+        // the last redraw. Otherwise leave `ControlFlow` at its default `Wait` so the loop sleeps
+        // instead of spinning at ~100% CPU re-rendering an unchanged frame every iteration --
+        // retro/terminal-style apps are idle most of the time and event-driven, so "nothing
+        // happened" should mean "render nothing new". See `needs_redraw`'s doc comment. Not
+        // `event_driven` (continuous): always proceed, regardless of `needs_redraw` -- an app
+        // driving a tween off `Frame::delta` has something new to show every tick even though no
+        // input event arrived, which is precisely what the `needs_redraw` gate cannot express.
+        if self.event_driven && !self.needs_redraw {
+            return;
+        }
+
         let Some(interval) = self.frame_interval else {
-            // Redraw-on-demand (`target_fps: None`): only redraw if something actually happened
-            // since the last one. Otherwise leave `ControlFlow` at its default `Wait` so the loop
-            // sleeps instead of spinning at ~100% CPU re-rendering an unchanged frame every
-            // iteration -- retro/terminal-style apps are idle most of the time and event-driven,
-            // so "nothing happened" should mean "render nothing new". See `needs_redraw`'s doc
-            // comment.
-            if self.needs_redraw {
-                self.needs_redraw = false;
-                self.request_redraw();
-            }
+            // Uncapped: render every tick this point is reached.
+            self.needs_redraw = false;
+            self.request_redraw();
             return;
         };
 
-        // Continuous (`target_fps: Some`): render regardless of `needs_redraw`. An app driving a
-        // tween off `Frame::delta` has something new to show every frame even though no input
-        // event arrived, which is precisely what the `needs_redraw` gate above cannot express.
-        //
-        // The two platforms pace that differently. Native sleeps until the deadline and then
-        // renders, since `request_redraw` is serviced within the same loop iteration. On `wasm32`
-        // there is nothing to sleep in: winit's web backend services `request_redraw` on the
-        // browser's next `requestAnimationFrame`, roughly one display frame later, so sleeping out
-        // a full interval *before* asking would pay that latency on top of it and halve the
-        // achieved frame rate. Ask on every iteration instead and let `requestAnimationFrame` do
-        // the pacing -- which is also what the browser wants, since it already throttles
-        // background tabs and matches the compositor's cadence.
+        // Capped: pace to `interval`. The two platforms do that differently. Native sleeps until
+        // the deadline and then renders, since `request_redraw` is serviced within the same loop
+        // iteration. On `wasm32` there is nothing to sleep in: winit's web backend services
+        // `request_redraw` on the browser's next `requestAnimationFrame`, roughly one display
+        // frame later, so sleeping out a full interval *before* asking would pay that latency on
+        // top of it and halve the achieved frame rate. Ask on every iteration instead and let
+        // `requestAnimationFrame` do the pacing -- which is also what the browser wants, since it
+        // already throttles background tabs and matches the compositor's cadence.
         #[cfg(not(target_arch = "wasm32"))]
         match next_frame_deadline(std::time::Instant::now(), self.next_frame, interval) {
             None => {
@@ -1273,6 +1314,7 @@ where
         }
         #[cfg(target_arch = "wasm32")]
         let _ = interval;
+        self.needs_redraw = false;
         self.request_redraw();
     }
 }
@@ -1794,7 +1836,7 @@ mod tests {
         // `Window::default_attributes()`, so a caller that never touches the new builder
         // methods gets identical behavior to before this API existed.
         let presenter = MockPresenter::default();
-        let config = WindowConfig::fit(&presenter, "test", None);
+        let config = WindowConfig::fit(&presenter, "test", None, true);
         assert!(config.resizable);
         assert!(config.decorations);
         assert_eq!(config.min_size, None);
@@ -1808,7 +1850,7 @@ mod tests {
     #[test]
     fn builder_chain_sets_each_attribute() {
         let presenter = MockPresenter::default();
-        let config = WindowConfig::fit(&presenter, "test", None)
+        let config = WindowConfig::fit(&presenter, "test", None, true)
             .resizable(false)
             .decorations(false)
             .min_size(320, 240)
@@ -1828,7 +1870,7 @@ mod tests {
     #[test]
     fn window_attrs_from_config_copies_all_fields() {
         let presenter = MockPresenter::default();
-        let config = WindowConfig::fit(&presenter, "test", None)
+        let config = WindowConfig::fit(&presenter, "test", None, true)
             .resizable(false)
             .decorations(false)
             .min_size(1, 2)
@@ -2300,6 +2342,7 @@ mod tests {
             cursor_px: (0.0, 0.0),
             active_touch: None,
             frame_interval: None,
+            event_driven: true,
             #[cfg(not(target_arch = "wasm32"))]
             next_frame: std::time::Instant::now(),
             exit_requested: Rc::new(Cell::new(false)),
@@ -2748,6 +2791,7 @@ mod tests {
             cursor_px: (0.0, 0.0),
             active_touch: None,
             frame_interval: None,
+            event_driven: true,
             #[cfg(not(target_arch = "wasm32"))]
             next_frame: std::time::Instant::now(),
             exit_requested: Rc::new(Cell::new(false)),
@@ -2876,6 +2920,7 @@ mod tests {
             cursor_px: (0.0, 0.0),
             active_touch: None,
             frame_interval: None,
+            event_driven: true,
             #[cfg(not(target_arch = "wasm32"))]
             next_frame: std::time::Instant::now(),
             exit_requested,
@@ -3127,6 +3172,7 @@ mod tests {
             cursor_px: (0.0, 0.0),
             active_touch: None,
             frame_interval: None,
+            event_driven: true,
             #[cfg(not(target_arch = "wasm32"))]
             next_frame: std::time::Instant::now(),
             exit_requested: Rc::new(Cell::new(false)),
@@ -3209,15 +3255,16 @@ mod tests {
         assert!(app.needs_redraw);
     }
 
-    // ── continuous mode (target_fps: Some) ───────────────────────────────────
+    // ── frame-rate cap (target_fps) ───────────────────────────────────────────
 
     #[test]
     fn target_fps_none_is_redraw_on_demand() {
-        // The mode switch itself: `None` leaves `frame_interval` unset, which is what sends
-        // `about_to_wait` down the `needs_redraw`-gated branch.
+        // `target_fps: None` leaves `frame_interval` unset, i.e. uncapped whenever a redraw
+        // happens; `event_driven: true` is what sends `about_to_wait` down the
+        // `needs_redraw`-gated branch.
         let presenter = MockPresenter::default();
         assert_eq!(
-            WindowConfig::fit(&presenter, "test", None).target_fps(),
+            WindowConfig::fit(&presenter, "test", None, true).target_fps(),
             None
         );
     }
@@ -3232,9 +3279,34 @@ mod tests {
         // the driver end.
         let presenter = MockPresenter::default();
         assert_eq!(
-            WindowConfig::fit(&presenter, "test", Some(60)).target_fps(),
+            WindowConfig::fit(&presenter, "test", Some(60), false).target_fps(),
             Some(60)
         );
+    }
+
+    #[test]
+    fn event_driven_accessor_reflects_the_config() {
+        let presenter = MockPresenter::default();
+        assert!(WindowConfig::fit(&presenter, "test", None, true).event_driven());
+        assert!(!WindowConfig::fit(&presenter, "test", None, false).event_driven());
+    }
+
+    #[test]
+    fn target_fps_and_event_driven_combine_independently() {
+        // The combination `fit` alone couldn't express before: always redraw (not event-driven)
+        // but uncapped (no `target_fps`).
+        let presenter = MockPresenter::default();
+        let config = WindowConfig::fit(&presenter, "test", None, false);
+        assert_eq!(config.target_fps(), None);
+        assert!(!config.event_driven());
+    }
+
+    #[test]
+    fn animated_is_sugar_for_continuous_capped_fit() {
+        let presenter = MockPresenter::default();
+        let config = WindowConfig::animated(&presenter, "test", 60);
+        assert_eq!(config.target_fps(), Some(60));
+        assert!(!config.event_driven());
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -3306,6 +3378,7 @@ mod tests {
             cursor_px: (0.0, 0.0),
             active_touch: None,
             frame_interval: None,
+            event_driven: true,
             #[cfg(not(target_arch = "wasm32"))]
             next_frame: std::time::Instant::now(),
             exit_requested: Rc::new(Cell::new(false)),
@@ -3507,6 +3580,7 @@ mod tests {
             cursor_px: (0.0, 0.0),
             active_touch: None,
             frame_interval: None,
+            event_driven: true,
             #[cfg(not(target_arch = "wasm32"))]
             next_frame: std::time::Instant::now(),
             exit_requested: Rc::new(Cell::new(false)),
@@ -3585,6 +3659,7 @@ mod tests {
             cursor_px: (0.0, 0.0),
             active_touch: None,
             frame_interval: None,
+            event_driven: true,
             #[cfg(not(target_arch = "wasm32"))]
             next_frame: std::time::Instant::now(),
             exit_requested: Rc::new(Cell::new(false)),
@@ -3660,6 +3735,7 @@ mod tests {
             cursor_px: (0.0, 0.0),
             active_touch: None,
             frame_interval: None,
+            event_driven: true,
             #[cfg(not(target_arch = "wasm32"))]
             next_frame: std::time::Instant::now(),
             exit_requested: Rc::new(Cell::new(false)),

@@ -297,7 +297,7 @@ pub fn run_software_with<E: Example>(builder: retroglyph_software::SoftwareBacke
         .expect("failed to initialize software backend")
         .run_headless()
         .expect("failed to build headless renderer");
-    let config = retroglyph_window::winit::WindowConfig::fit(&renderer, E::NAME, TARGET_FPS)
+    let config = retroglyph_window::winit::WindowConfig::fit(&renderer, E::NAME, TARGET_FPS, false)
         .fill_viewport(E::fill_viewport());
     let app = ExampleApp::<E>::new("software");
     retroglyph_window::winit::run_app(config, renderer, app).expect("event loop failed");
@@ -330,7 +330,7 @@ pub fn run_gl<E: Example>() {
     )
     .build()
     .expect("failed to initialize gl backend");
-    let config = retroglyph_window::winit::WindowConfig::fit(&renderer, E::NAME, TARGET_FPS)
+    let config = retroglyph_window::winit::WindowConfig::fit(&renderer, E::NAME, TARGET_FPS, false)
         .fill_viewport(E::fill_viewport());
     let app = ExampleApp::<E>::new("gl");
     retroglyph_window::winit::run_app(config, renderer, app).expect("event loop failed");
