@@ -2,8 +2,8 @@
 //!
 //! [`webgl_smoke`](crate::webgl_smoke) proves a healthy WebGL2 context renders; this proves the
 //! backend recovers when that context is *lost and restored* (a backgrounded tab reclaiming GPU
-//! resources, a driver reset). It drives the real windowed path -- [`Presenter::init_surface`]
-//! then [`Presenter::present`] -- so it exercises the actual listener registration in
+//! resources, a driver reset). It drives the real windowed path ([`Presenter::init_surface`]
+//! then [`Presenter::present`]), so it exercises the actual listener registration in
 //! `context_wasm.rs` and the rebuild branch in `GlRenderer::present`, not a stand-in.
 //!
 //! # The property under test
@@ -15,8 +15,8 @@
 //!
 //! 1. a healthy frame renders (full-block cell is its foreground color);
 //! 2. while lost, `present()` reports the recoverable error;
-//! 3. after restore, `present()` succeeds *and* the full-block cell is its foreground color again
-//!    -- which can only happen if the invalidated program/atlas/buffers were rebuilt on the live
+//! 3. after restore, `present()` succeeds *and* the full-block cell is its foreground color again,
+//!    which can only happen if the invalidated program/atlas/buffers were rebuilt on the live
 //!    context.
 //!
 //! Step 3 is the load-bearing one: if recovery only cleared the error flag without rebuilding, the
@@ -63,7 +63,7 @@ const fn rgb(c: (u8, u8, u8)) -> Color {
 /// A [`WindowHandle`] that never yields a real handle.
 ///
 /// The wasm `GlContext::new` locates its canvas through the DOM and ignores the window argument
-/// entirely (see `context_wasm.rs`), so these methods are never called on wasm -- the renderer only
+/// entirely (see `context_wasm.rs`), so these methods are never called on wasm: the renderer only
 /// needs *a* value of the right type to pass to [`Presenter::init_surface`].
 struct NoWindow;
 
@@ -180,7 +180,7 @@ async fn context_loss_is_recovered_by_rebuilding_on_restore() {
         .expect("draw is infallible");
 
     // The renderer got the context from the same canvas, so `getContext` hands back that very
-    // context here -- used to drive the loss extension and read pixels back.
+    // context here, used to drive the loss extension and read pixels back.
     let gl2 = canvas
         .get_context("webgl2")
         .expect("get_context threw")

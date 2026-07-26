@@ -3,7 +3,7 @@
 //! v1 uploaded one glyph per array layer, which capped a font at
 //! `GL_MAX_ARRAY_TEXTURE_LAYERS` (256 on the GL 3.3 / GL ES 3.0 floor). This module instead packs a
 //! fixed [`ATLAS_COLS`]x[`ATLAS_ROWS`] grid of glyphs into each layer, so `N` glyphs need only
-//! `ceil(N / 256)` layers -- lifting the cap to 65536 glyphs while staying within the 256-layer
+//! `ceil(N / 256)` layers, lifting the cap to 65536 glyphs while staying within the 256-layer
 //! minimum. A glyph is addressed by a flat *slot* index; the shader turns that back into a
 //! `(layer, column, row)` sub-rect (see `shaders.rs`).
 //!

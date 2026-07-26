@@ -56,8 +56,8 @@ mod shaders;
 mod sprites;
 
 // Headless offscreen render tests: create an EGL surfaceless context, run the real pipeline into an
-// FBO, and read the pixels back to assert on them (issue #376). Linux/EGL only -- see the module
-// docs -- and gated to `default-font` since the tests build a renderer from the embedded atlas.
+// FBO, and read the pixels back to assert on them (issue #376). Linux/EGL only (see the module
+// docs) and gated to `default-font` since the tests build a renderer from the embedded atlas.
 #[cfg(all(test, target_os = "linux", feature = "default-font"))]
 mod headless;
 
@@ -251,7 +251,7 @@ impl GlRenderer {
     /// glyph-size and projection uniforms.
     ///
     /// Shared by [`Presenter::init_surface`] (windowed) and the headless render-test path so both
-    /// exercise byte-for-byte the same setup -- the point of the render tests is to catch a break
+    /// exercise byte-for-byte the same setup: the point of the render tests is to catch a break
     /// in exactly this pipeline, so it must not diverge from the real one.
     ///
     /// # Errors
@@ -357,7 +357,7 @@ impl Output for GlRenderer {
 
         // Per-cell running background, updated bottom-up as layers are processed. An occupied
         // higher-layer tile with a `Color::Default` background inherits this instead of being
-        // transparent -- matching `retroglyph-software`'s `resolve_bg_fill`: an occupied tile is
+        // transparent: matching `retroglyph-software`'s `resolve_bg_fill`, an occupied tile is
         // opaque and erases the glyph beneath it, repainting whichever background a lower layer
         // last established (down to layer 0's default). This relies on the layer-major stream order
         // above, so a layer's lower neighbours are always processed first.
@@ -748,7 +748,7 @@ mod compositing_tests {
         // Higher-layer empty cell: fully transparent (nothing drawn -> lower layer shows).
         assert_eq!(r.layers[1][0].flags, 0);
         // Higher-layer occupied cell with a Default background is opaque (it erases the glyph
-        // beneath), inheriting the background from below -- here the untouched base cell.
+        // beneath), inheriting the background from below: here the untouched base cell.
         assert_eq!(r.layers[1][1].flags, FLAG_HAS_BG | FLAG_HAS_GLYPH);
         assert_eq!(r.layers[1][1].bg, r.layers[0][1].bg);
         // Higher-layer glyph with a real background: both, with its own colour.
@@ -807,7 +807,7 @@ mod compositing_tests {
     }
 
     /// Covered-cell suppression is grid state, not a tileset feature, so it holds with the
-    /// `tilesets` feature off too -- a span with no sprite behind it renders as its anchor glyph
+    /// `tilesets` feature off too: a span with no sprite behind it renders as its anchor glyph
     /// alone, the same on both pixel backends.
     #[test]
     fn draw_layers_suppresses_covered_glyphs_without_a_sprite() {

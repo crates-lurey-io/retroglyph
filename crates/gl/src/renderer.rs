@@ -30,7 +30,7 @@ pub(crate) struct Instance {
     pub glyph: u16,
     /// Compositing flags ([`FLAG_HAS_BG`] | [`FLAG_HAS_GLYPH`]). A cleared bit makes the matching
     /// pass `discard` this cell, so a transparent background or empty glyph in a higher layer lets
-    /// the layer beneath show through -- the GPU form of `Grid::flatten_into`'s occlusion rule.
+    /// the layer beneath show through: the GPU form of `Grid::flatten_into`'s occlusion rule.
     pub flags: u8,
     _pad: u8,
     /// Foreground RGB (uploaded as normalized `u8`).
@@ -359,7 +359,7 @@ impl GlResources {
 
             // Pass 2: offset glyphs, coverage as alpha, blended over the backgrounds (discarded
             // where FLAG_HAS_GLYPH is clear, i.e. an empty cell). The alpha factors are
-            // `ZERO`/`ONE` -- `A = src.a * 0 + dst.a * 1`, so the destination alpha survives
+            // `ZERO`/`ONE`: `A = src.a * 0 + dst.a * 1`, so the destination alpha survives
             // untouched. Coverage must drive the color channels only: it is a glyph mask, not a
             // surface transparency, and letting it reach the alpha channel would punch every
             // non-glyph texel down to alpha 0. A WebGL2 canvas is composited by the page (winit
