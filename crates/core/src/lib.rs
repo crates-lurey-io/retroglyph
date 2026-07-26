@@ -93,6 +93,7 @@ pub mod terminal;
 pub mod text;
 /// The atomic drawable unit (glyph, style, sub-cell offsets).
 pub mod tile;
+pub mod tint;
 
 pub use animate::{Easing, Tween, oscillate};
 pub use app::{App, Flow, Frame, step};
@@ -119,3 +120,4 @@ pub use surface::{StyledSurface, Surface};
 pub use terminal::Terminal;
 pub use text::{Line, Span};
 pub use tile::Tile;
+pub use tint::Tint;
