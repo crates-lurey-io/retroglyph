@@ -426,6 +426,7 @@ where
         on_proxy,
         push_custom_event,
         Rc::new(Cell::new(false)),
+        Rc::new(Cell::new(false)),
     )
 }
 
@@ -520,6 +521,7 @@ where
         on_proxy,
         on_custom_event,
         Rc::new(Cell::new(false)),
+        Rc::new(Cell::new(false)),
     )
 }
 
@@ -536,10 +538,11 @@ fn push_custom_event<P: Presenter>(id: u64, term: &mut Terminal<WindowBackend<P>
 /// `exit_requested` is checked after every [`WindowEvent::RedrawRequested`] and, when set, drives
 /// [`ActiveEventLoop::exit`] so the loop unwinds normally (see [`WindowApp::exit_requested`]'s doc
 /// comment for why this can't be plumbed through `app_loop`'s return value instead).
-/// [`run_windowed_with_proxy`]/[`run_windowed_with_typed_proxy`] pass a flag nobody ever sets (a
-/// plain `FnMut(&mut Terminal<..>)` closure has no way to reach it); [`run_app_with_proxy`]/
-/// [`run_app_with_typed_proxy`] share one with the closure they build around `app_loop`, which
-/// sets it on [`Flow::Exit`](retroglyph_core::Flow::Exit).
+/// [`run_windowed_with_proxy`]/[`run_windowed_with_typed_proxy`] pass flags nobody ever sets (a
+/// plain `FnMut(&mut Terminal<..>)` closure has no way to reach them); [`run_app_with_proxy`]/
+/// [`run_app_with_typed_proxy`] share both with the closure they build around `app_loop`: it sets
+/// `exit_requested` on [`Flow::Exit`](retroglyph_core::Flow::Exit) and `skip_present` on
+/// [`Flow::Idle`](retroglyph_core::Flow::Idle).
 fn run_windowed_with_typed_proxy_and_exit_flag<T, P, F, O, D>(
     config: WindowConfig,
     presenter: P,
@@ -547,6 +550,7 @@ fn run_windowed_with_typed_proxy_and_exit_flag<T, P, F, O, D>(
     on_proxy: O,
     on_custom_event: D,
     exit_requested: Rc<Cell<bool>>,
+    skip_present: Rc<Cell<bool>>,
 ) -> Result<(), winit::error::EventLoopError>
 where
     T: Send + 'static,
@@ -584,6 +588,7 @@ where
         #[cfg(not(target_arch = "wasm32"))]
         next_frame: std::time::Instant::now(),
         exit_requested,
+        skip_present,
         needs_redraw: true,
         consecutive_present_errors: 0,
         _user_event: PhantomData,
@@ -624,9 +629,11 @@ where
 ///
 /// # Presenting is automatic
 ///
-/// Unlike [`run_blocking`](retroglyph_core::run_blocking), [`App::update`](retroglyph_core::App::update)
-/// no longer needs to call [`Terminal::present`] itself here: this driver presents automatically
-/// after each call, the same as [`run_windowed`] (see its "Presenting is automatic" section).
+/// [`App::update`](retroglyph_core::App::update) no longer needs to call [`Terminal::present`]
+/// itself here: this driver presents automatically after each call, the same as [`run_windowed`]
+/// (see its "Presenting is automatic" section), except on
+/// [`Flow::Idle`](retroglyph_core::Flow::Idle), where the present is skipped entirely and the
+/// previous frame stays on screen.
 ///
 /// # Errors
 ///
@@ -704,6 +711,8 @@ where
     let mut last = web_time::Instant::now();
     let exit_requested = Rc::new(Cell::new(false));
     let exit_requested_in_loop = exit_requested.clone();
+    let skip_present = Rc::new(Cell::new(false));
+    let skip_present_in_loop = skip_present.clone();
     run_windowed_with_typed_proxy_and_exit_flag(
         config,
         presenter,
@@ -716,13 +725,21 @@ where
                 frame: frame_count,
             };
             frame_count = frame_count.wrapping_add(1);
-            if retroglyph_core::step(term, &mut app, &frame) == retroglyph_core::Flow::Exit {
-                exit_requested_in_loop.set(true);
+            match retroglyph_core::step(term, &mut app, &frame) {
+                retroglyph_core::Flow::Exit => exit_requested_in_loop.set(true),
+                // Nothing changed: tell `handle_redraw_requested` to skip its automatic present
+                // for this frame, explicitly, rather than relying on `Terminal::present`'s dirty
+                // flag alone to make the skip a no-op.
+                retroglyph_core::Flow::Idle => skip_present_in_loop.set(true),
+                // `Flow` is `#[non_exhaustive]`; any other variant (including `Continue`) presents
+                // as usual via `handle_redraw_requested`'s automatic present.
+                _ => {}
             }
         },
         on_proxy,
         on_custom_event,
         exit_requested,
+        skip_present,
     )
 }
 
@@ -844,6 +861,15 @@ struct WindowApp<P: Presenter, F, T, D> {
     /// if it's set, letting the stack unwind normally (`Drop` impls run) instead of
     /// force-terminating the process.
     exit_requested: Rc<Cell<bool>>,
+    /// Set by `app_loop` (specifically [`run_app_with_proxy`]'s closure) on
+    /// [`Flow::Idle`](retroglyph_core::Flow::Idle) to tell
+    /// [`handle_redraw_requested`](Self::handle_redraw_requested) to skip its automatic present
+    /// for this frame. Cleared at the start of every `handle_redraw_requested` call, so it only
+    /// ever reflects the outcome of the `app_loop` call about to run.
+    ///
+    /// A plain `FnMut(&mut Terminal<..>)` closure (`run_windowed`/`run_windowed_with_proxy`) has
+    /// no `Flow` concept and never sets this, the same way it never sets `exit_requested`.
+    skip_present: Rc<Cell<bool>>,
     /// Set whenever something happened that the app loop should get a chance to react to:
     /// window creation, an input/window event, or an injected [`Event::Custom`]. Cleared once
     /// [`about_to_wait`](ApplicationHandler::about_to_wait) turns it into a `request_redraw()`
@@ -1340,9 +1366,10 @@ where
         }
     }
 
-    /// Runs the app closure, automatically presents the `Terminal` if the app didn't already, and
-    /// presents the frame to the surface, tracking consecutive `present()` failures to rate-limit
-    /// logging and trigger surface recovery.
+    /// Runs the app closure, automatically presents the `Terminal` if the app didn't already (and
+    /// didn't return [`Flow::Idle`](retroglyph_core::Flow::Idle)), and presents the frame to the
+    /// surface, tracking consecutive `present()` failures to rate-limit logging and trigger
+    /// surface recovery.
     ///
     /// See [`present_failure_action`] for the decision table; this method just runs the `Terminal`
     /// -/`Presenter`-dependent side effects (`app_loop`, `present`, `init_surface`, logging) that
@@ -1351,14 +1378,11 @@ where
     /// # Automatic `Terminal::present`
     ///
     /// Windowed apps no longer need to call [`Terminal::present`] themselves: this method calls it
-    /// once, right after `app_loop` returns, using [`Terminal::present_count`] to detect whether
-    /// `app_loop` already called it and skip the redundant call if so. That check matters, not
-    /// just avoids duplicate work: calling `Terminal::present` twice in a row with nothing newly
-    /// drawn in between actively erases the frame just presented (see `Terminal::present`'s doc
-    /// comment), so an unconditional second call would blank every frame drawn by an `app_loop`
-    /// that still presents itself. A [`Terminal::present`] error is logged and does not stop the
-    /// surface-level present below from running (matching this function's existing
-    /// keep-going-on-failure philosophy); it uses a different error type
+    /// once, right after `app_loop` returns, unless [`skip_present`](Self::skip_present) was set
+    /// (an [`App`](retroglyph_core::App) returned `Flow::Idle`) or
+    /// [`Terminal::present_count`] shows `app_loop` already called it. A [`Terminal::present`]
+    /// error is logged and does not stop the surface-level present below from running (matching
+    /// this function's existing keep-going-on-failure philosophy); it uses a different error type
     /// (`<B as Output>::Error`) than [`Presenter::SurfaceError`], so it is tracked and logged
     /// independently of the consecutive-failure counter below, which is scoped to the surface
     /// present.
@@ -1366,9 +1390,11 @@ where
         let Some(term) = self.terminal.as_mut() else {
             return;
         };
+        self.skip_present.set(false);
         let present_count_before = term.present_count();
         (self.app_loop)(term);
-        if term.present_count() == present_count_before
+        if !self.skip_present.get()
+            && term.present_count() == present_count_before
             && let Err(e) = term.present()
         {
             log::error!("automatic terminal present failed: {e}");
@@ -2244,6 +2270,7 @@ mod tests {
             #[cfg(not(target_arch = "wasm32"))]
             next_frame: std::time::Instant::now(),
             exit_requested: Rc::new(Cell::new(false)),
+            skip_present: Rc::new(Cell::new(false)),
             needs_redraw: false,
             consecutive_present_errors: 0,
         }
@@ -2691,6 +2718,7 @@ mod tests {
             #[cfg(not(target_arch = "wasm32"))]
             next_frame: std::time::Instant::now(),
             exit_requested: Rc::new(Cell::new(false)),
+            skip_present: Rc::new(Cell::new(false)),
             needs_redraw: false,
             consecutive_present_errors: 0,
         }
@@ -2818,6 +2846,7 @@ mod tests {
             #[cfg(not(target_arch = "wasm32"))]
             next_frame: std::time::Instant::now(),
             exit_requested,
+            skip_present: Rc::new(Cell::new(false)),
             needs_redraw: false,
             consecutive_present_errors: 0,
         };
@@ -3034,6 +3063,7 @@ mod tests {
             #[cfg(not(target_arch = "wasm32"))]
             next_frame: std::time::Instant::now(),
             exit_requested: Rc::new(Cell::new(false)),
+            skip_present: Rc::new(Cell::new(false)),
             needs_redraw: false,
             consecutive_present_errors: 0,
         };
@@ -3212,6 +3242,7 @@ mod tests {
             #[cfg(not(target_arch = "wasm32"))]
             next_frame: std::time::Instant::now(),
             exit_requested: Rc::new(Cell::new(false)),
+            skip_present: Rc::new(Cell::new(false)),
             needs_redraw: false,
             consecutive_present_errors: 0,
         };
@@ -3377,6 +3408,18 @@ mod tests {
         fn(u64, &mut Terminal<WindowBackend<GridRecordingPresenter>>),
     >;
 
+    /// Boxed-closure counterparts of [`GridRecordingApp`]'s type parameters, for tests (like
+    /// [`skip_present_set_inside_app_loop_suppresses_the_automatic_present`]) whose `app_loop`
+    /// needs to capture and mutate a shared flag, which a bare `fn` pointer cannot do.
+    type BoxedGridRecordingAppLoop =
+        Box<dyn FnMut(&mut Terminal<WindowBackend<GridRecordingPresenter>>)>;
+    type BoxedGridRecordingApp = WindowApp<
+        GridRecordingPresenter,
+        BoxedGridRecordingAppLoop,
+        u64,
+        fn(u64, &mut Terminal<WindowBackend<GridRecordingPresenter>>),
+    >;
+
     fn recording_app(
         app_loop: fn(&mut Terminal<WindowBackend<GridRecordingPresenter>>),
     ) -> GridRecordingApp {
@@ -3400,6 +3443,7 @@ mod tests {
             #[cfg(not(target_arch = "wasm32"))]
             next_frame: std::time::Instant::now(),
             exit_requested: Rc::new(Cell::new(false)),
+            skip_present: Rc::new(Cell::new(false)),
             needs_redraw: false,
             consecutive_present_errors: 0,
         }
@@ -3443,6 +3487,67 @@ mod tests {
             1,
             "the driver must detect app_loop's own present and skip its automatic one"
         );
+    }
+
+    #[test]
+    fn skip_present_set_inside_app_loop_suppresses_the_automatic_present() {
+        // Simulates an `App::update` returning `Flow::Idle`: `run_app_with_proxy`'s closure draws
+        // nothing and sets `skip_present` from inside `app_loop`, the same point in the frame
+        // `run_app_with_proxy`'s real closure sets it from. `handle_redraw_requested` must honor
+        // it -- `Terminal::present` would already be a no-op here since nothing was drawn, but
+        // this asserts the explicit skip actually runs, not just that the dirty flag happens to
+        // agree with it.
+        let terminal = Terminal::new(WindowBackend::new(GridRecordingPresenter::default()));
+        let skip_present = Rc::new(Cell::new(false));
+        let skip_present_in_loop = skip_present.clone();
+        let app_loop: BoxedGridRecordingAppLoop =
+            Box::new(move |_term| skip_present_in_loop.set(true));
+        let mut app: BoxedGridRecordingApp = WindowApp {
+            terminal: Some(terminal),
+            app_loop,
+            on_custom_event: push_custom_event,
+            _user_event: PhantomData,
+            window: None,
+            title: String::new(),
+            init_size: InitWindowSize {
+                width: 80,
+                height: 80,
+            },
+            attrs: WindowAttrs::default(),
+            current_modifiers: KeyModifiers::NONE,
+            cursor_px: (0.0, 0.0),
+            active_touch: None,
+            frame_interval: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            next_frame: std::time::Instant::now(),
+            exit_requested: Rc::new(Cell::new(false)),
+            skip_present,
+            needs_redraw: false,
+            consecutive_present_errors: 0,
+        };
+        app.handle_redraw_requested();
+        let term = app.terminal.as_ref().unwrap();
+        let presenter = term.backend().presenter();
+        assert_eq!(
+            presenter.draw_calls.get(),
+            0,
+            "no present reaches the backend when app_loop sets skip_present"
+        );
+    }
+
+    #[test]
+    fn skip_present_does_not_carry_over_to_the_next_redraw() {
+        // `handle_redraw_requested` must reset `skip_present` before running `app_loop`, so a
+        // stale `true` from a previous `Idle` frame can't suppress the next frame's present.
+        let mut app = recording_app(|term| {
+            term.put(0, 0, '@');
+        });
+        app.skip_present.set(true); // Stale value, as if left over from a prior Idle frame.
+        app.handle_redraw_requested();
+        let term = app.terminal.as_ref().unwrap();
+        let presenter = term.backend().presenter();
+        assert_eq!(presenter.cells.borrow().get(&(0, 0)), Some(&'@'));
+        assert_eq!(presenter.draw_calls.get(), 1);
     }
 
     #[test]
@@ -3491,6 +3596,7 @@ mod tests {
             #[cfg(not(target_arch = "wasm32"))]
             next_frame: std::time::Instant::now(),
             exit_requested: Rc::new(Cell::new(false)),
+            skip_present: Rc::new(Cell::new(false)),
             needs_redraw: false,
             consecutive_present_errors: 0,
         };

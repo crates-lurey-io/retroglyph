@@ -39,10 +39,15 @@ pub struct Terminal<B: Backend> {
     /// Incremented every time [`present`](Self::present) is called (successful or not).
     ///
     /// Lets embedding drivers detect whether application code already presented during a frame,
-    /// so they can skip a redundant driver-side present -- calling `present` twice with nothing
-    /// newly drawn in between is not a no-op (the second call diffs an emptied `current` against
-    /// the just-drawn `previous` and erases it), so this is load-bearing, not just an optimization.
+    /// so they can skip a redundant driver-side present.
     present_count: u64,
+    /// `true` when a draw call has written to `current` since the last [`present`](Self::present).
+    ///
+    /// `present` on a clean frame is a no-op: there is nothing new to send to the backend, and
+    /// diffing an untouched `current` against `previous` would erase the just-presented frame
+    /// instead. Every draw call (`put`, `print`, `clear`, `grid_mut`, ...) sets this; `present`
+    /// clears it after a real present.
+    dirty: bool,
 }
 
 impl<B: Backend> Terminal<B> {
@@ -66,6 +71,7 @@ impl<B: Backend> Terminal<B> {
             active_layer: 0,
             flattened_stale: false,
             present_count: 0,
+            dirty: false,
         }
     }
 
@@ -146,6 +152,7 @@ impl<B: Backend> Terminal<B> {
     /// Sub-cell offsets are always visual only — use [`put_offset`](Self::put_offset)
     /// for offset writes.
     pub fn put(&mut self, x: u16, y: u16, ch: char) {
+        self.dirty = true;
         let style = self.drawing_style;
         #[cfg(feature = "egc")]
         {
@@ -176,7 +183,11 @@ impl<B: Backend> Terminal<B> {
     }
 
     /// Returns a mutable reference to the current grid.
+    ///
+    /// Marks the frame dirty unconditionally: the caller has a live handle capable of writing to
+    /// `current`, whether or not it actually does.
     pub const fn grid_mut(&mut self) -> &mut Grid {
+        self.dirty = true;
         &mut self.current
     }
 
@@ -192,12 +203,20 @@ impl<B: Backend> Terminal<B> {
     }
 
     /// Clear the active layer.
+    ///
+    /// This is a draw call: it marks the frame dirty, so an intentional blank frame still
+    /// presents (as blank content) rather than being mistaken for "nothing was drawn".
     pub fn clear(&mut self) {
+        self.dirty = true;
         self.current.clear(self.active_layer);
     }
 
     /// Clear every allocated layer.
+    ///
+    /// This is a draw call: it marks the frame dirty, so an intentional blank frame still
+    /// presents (as blank content) rather than being mistaken for "nothing was drawn".
     pub fn clear_all(&mut self) {
+        self.dirty = true;
         self.current.clear_all();
     }
 
@@ -207,6 +226,7 @@ impl<B: Backend> Terminal<B> {
     /// cells directly, so clearing part of a multi-cell span clears the whole span instead of
     /// leaving an anchor claiming cells that are now blank.
     pub fn clear_region(&mut self, rect: Rect) {
+        self.dirty = true;
         for y in rect.top()..rect.bottom() {
             for x in rect.left()..rect.right() {
                 self.current.checked_put(x, y, Tile::default());
@@ -216,6 +236,7 @@ impl<B: Backend> Terminal<B> {
 
     /// Place a character on the active layer with an explicit style.
     pub fn put_styled(&mut self, x: u16, y: u16, ch: char, style: Style) {
+        self.dirty = true;
         #[cfg(feature = "egc")]
         {
             let mut buf = [0u8; 4];
@@ -258,6 +279,7 @@ impl<B: Backend> Terminal<B> {
     /// [`put_span`](Self::put_span) with an explicit style instead of the terminal's current
     /// drawing style. The style applies to every cell of the span, anchor and fallback alike.
     pub fn put_span_styled(&mut self, x: u16, y: u16, rows: &[&str], style: Style) {
+        self.dirty = true;
         self.current
             .write_span(self.active_layer, x, y, rows, style);
     }
@@ -268,6 +290,7 @@ impl<B: Backend> Terminal<B> {
     /// only — they do not affect grid logic or hit-testing. Backends that
     /// cannot represent pixel offsets (e.g. `CrosstermBackend`) ignore them.
     pub fn put_offset(&mut self, x: u16, y: u16, dx: i16, dy: i16, ch: char) {
+        self.dirty = true;
         let tile = Tile::new(ch, self.drawing_style).with_offset(dx, dy);
         self.current.put_tile(self.active_layer, x, y, tile);
     }
@@ -278,6 +301,7 @@ impl<B: Backend> Terminal<B> {
     /// (CJK, emoji) advance the cursor by 2 columns. Characters that would
     /// extend beyond the grid width wrap to the next row.
     pub fn print(&mut self, x: u16, y: u16, text: &str) {
+        self.dirty = true;
         let style = self.drawing_style;
         #[cfg(feature = "egc")]
         self.print_str_egc(x, y, text, style);
@@ -291,6 +315,7 @@ impl<B: Backend> Terminal<B> {
     /// drawing style is not modified. Wide characters advance the cursor by
     /// 2 columns. Rendering stops at the grid boundary.
     pub fn print_styled(&mut self, x: u16, y: u16, line: &Line) {
+        self.dirty = true;
         #[cfg(feature = "egc")]
         {
             use unicode_segmentation::UnicodeSegmentation;
@@ -361,14 +386,14 @@ impl<B: Backend> Terminal<B> {
             .render(self);
     }
 
-    /// Number of times [`present`](Self::present) has been called so far (successful or not).
+    /// Number of times [`present`](Self::present) has been called so far (successful or not, and
+    /// including no-op calls on a clean frame).
     ///
     /// Wraps on overflow; intended for detecting whether `present` was called *at all* between two
     /// points in time (compare a saved count against the current one), not as a precise total.
     /// Embedding drivers (e.g. `retroglyph-window`'s windowed drivers) use this to decide whether
     /// application code already presented during a frame, so they can skip a redundant
-    /// driver-side present -- see `present`'s doc comment for why that redundant call is not a
-    /// harmless no-op.
+    /// driver-side present.
     #[must_use]
     pub const fn present_count(&self) -> u64 {
         self.present_count
@@ -376,15 +401,17 @@ impl<B: Backend> Terminal<B> {
 
     /// Present the current frame.
     ///
-    /// Computes diff, sends changed cells to the backend, flushes, then swaps buffers.
+    /// A no-op returning `Ok(())` if nothing has been drawn since the last `present` (no draw
+    /// call, so nothing to send and nothing to swap). Otherwise, computes the diff, sends changed
+    /// cells to the backend, flushes, then swaps buffers.
     ///
     /// When the backend requires a full frame (see
     /// [`crate::Output::needs_full_frame`]), all cells from every allocated layer are
     /// sent rather than just the diff, so pixel-based backends can clear and
     /// redraw to avoid orphaned pixels from sub-cell offsets.
     ///
-    /// After swap the new current buffer is cleared so the next frame starts
-    /// empty. Callers should not call `clear()` before drawing the next frame.
+    /// After a real present, the new current buffer is cleared so the next frame starts empty.
+    /// Callers should not call `clear()` before drawing the next frame.
     ///
     /// # Immediate mode
     ///
@@ -396,14 +423,11 @@ impl<B: Backend> Terminal<B> {
     ///
     /// Turn-based games that render only when state changes should gate their
     /// calls to `present` on an actual state change rather than presenting on a
-    /// fixed clock and expecting the previous frame's cells to persist.
-    ///
-    /// Calling `present` twice in a row with nothing newly drawn in between is **not** a harmless
-    /// no-op: the second call diffs the now-empty `current` buffer against `previous` (which still
-    /// holds the just-presented frame), so every previously-drawn cell is re-sent as a diff entry
-    /// reverting to its default/blank content -- i.e. it erases the frame that was just presented.
-    /// Use [`present_count`](Self::present_count) if you need to detect "was `present` already
-    /// called this frame" before deciding whether to call it again.
+    /// fixed clock and expecting the previous frame's cells to persist. Calling `present` again
+    /// with nothing newly drawn is safe either way: it is a no-op rather than re-diffing an empty
+    /// `current` against the just-presented `previous`. An intentional blank frame is expressed
+    /// with [`clear`](Self::clear)/[`clear_all`](Self::clear_all), which are themselves draw
+    /// calls, so "draw nothing on purpose" still presents.
     ///
     /// [ratatui]: https://docs.rs/ratatui
     ///
@@ -414,6 +438,10 @@ impl<B: Backend> Terminal<B> {
     /// [`flush`](crate::Output::flush) operations.
     pub fn present(&mut self) -> Result<(), <B as Output>::Error> {
         self.present_count = self.present_count.wrapping_add(1);
+        if !self.dirty {
+            return Ok(());
+        }
+        self.dirty = false;
         if self.backend.composites_layers() {
             // Pixel/GPU backends composite the raw layered stream themselves.
             if self.backend.needs_full_frame() {
@@ -699,6 +727,34 @@ mod tests {
         term.present().expect("present failed");
         assert_eq!(term.backend().grid().get(0, 0).glyph(), 'a');
         assert_eq!(term.backend().grid().get(2, 0).glyph(), ' ');
+    }
+
+    #[test]
+    fn test_present_is_noop_on_clean_frame() {
+        // present() on a clean frame does not re-diff the empty current buffer against the
+        // just-presented previous one, so the backend keeps showing the last real frame.
+        let mut term = Terminal::new(Headless::new(3, 1));
+        term.put(0, 0, 'a');
+        term.present().expect("present failed");
+        assert_eq!(term.backend().grid().get(0, 0).glyph(), 'a');
+
+        // Nothing drawn since the last present: this must be a no-op, not an erase.
+        term.present().expect("present failed");
+        assert_eq!(term.backend().grid().get(0, 0).glyph(), 'a');
+    }
+
+    #[test]
+    fn test_clear_marks_dirty_so_blank_frame_presents() {
+        // clear() is itself a draw call: an intentional blank frame still presents (as blank),
+        // rather than being treated as "nothing was drawn" and skipped.
+        let mut term = Terminal::new(Headless::new(3, 1));
+        term.put(0, 0, 'a');
+        term.present().expect("present failed");
+        assert_eq!(term.backend().grid().get(0, 0).glyph(), 'a');
+
+        term.clear();
+        term.present().expect("present failed");
+        assert_eq!(term.backend().grid().get(0, 0).glyph(), ' ');
     }
 
     #[test]

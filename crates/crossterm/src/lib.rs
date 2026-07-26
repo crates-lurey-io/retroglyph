@@ -528,14 +528,14 @@ impl Crossterm {
     ///
     /// # Errors
     ///
-    /// Returns an `std::io::Error` if the terminal fails to initialize.
+    /// Returns an `std::io::Error` if the terminal fails to initialize, or if a frame present
+    /// fails while `app` is running.
     pub fn run<A>(app: A) -> Result<(), std::io::Error>
     where
         A: retroglyph_core::App<Self>,
     {
         let term = retroglyph_core::Terminal::new(Self::new()?);
-        retroglyph_core::run_blocking(term, app);
-        Ok(())
+        retroglyph_core::run_blocking(term, app)
     }
 }
 
