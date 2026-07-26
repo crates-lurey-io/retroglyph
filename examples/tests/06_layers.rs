@@ -40,8 +40,13 @@ fn svg_snapshot() {
     // track once it gets there (see the example's own doc comment) specifically so this
     // capture has a stable frame to wait for: "(parked at track end)" only ever appears
     // once the animation has genuinely finished, giving a reproducible ready_marker.
+    //
+    // That marker is therefore a wall-clock wait -- 47 steps at STEP_INTERVAL_HZ, i.e. 4.7s --
+    // which `capture_pty_animated` fast-forwards. See its doc comment: at real speed this is the
+    // slowest capture in the gallery, and `FrameClock`'s catch-up cap means any time the child
+    // loses to a stall is time the animation never gets back (retroglyph#544).
     let bin = support::build_crossterm_example("06_layers");
-    let raw = support::capture_pty(&bin, b"", 25, 50, "parked at track end");
+    let raw = support::capture_pty_animated(&bin, b"", 25, 50, "parked at track end");
     let svg = support::svg_snapshot(&raw, 25, 50);
     assert!(
         svg.contains("moving glyph"),

@@ -158,6 +158,22 @@ that deliberately doesn't is `examples/tests/fps_overlay.rs`, which pins the def
 overlay was originally behind an opt-in Cargo feature, so nothing that ran an example the documented
 way ever saw it) and drives its `` ` `` toggle through the PTY in both directions.
 
+Two examples need more than `RG_FPS=0`. `06_layers` and `08_animation` animate to a parked end state
+and use _that_ as their ready marker, because an animation that loops forever never settles into a
+single frame a snapshot can pin. Waiting on those markers is therefore waiting on real elapsed time
+(4.7s and 2.3s respectively), and `FrameClock::advance` caps catch-up at five steps -- so whenever a
+loaded test runner deschedules the child for longer than that cap, the lost wall time is animation
+time it never gets back and the capture stretches without bound. Measured on a 12-core machine,
+freezing the child for 1.5s five times pushed `06_layers` from 4.7s to 9.9s, past the harness's old
+fixed 10s budget; that is retroglyph#544. `support::capture_pty_animated` runs those two with
+`RG_TIME_SCALE` (see the README) so the marker still means "the animation has settled" but no longer
+has a wall-clock floor under it, which takes the same stall case to 1.7s.
+
+The ready-marker wait itself is a liveness check rather than a total budget: it fails when the child
+produces no new output for `READY_IDLE_TIMEOUT`, has closed the PTY, or blows the
+`READY_HARD_TIMEOUT` backstop (kept under nextest's own 40s kill so the failure names the marker it
+was waiting for).
+
 The crossterm binary each `svg_snapshot` test spawns is built with its own `--target-dir`
 (`target/pty-examples/`, see `support::build_crossterm_example`), separate from the workspace's
 normal `target/`. `cargo test --workspace --all-features` builds every example with the `software`

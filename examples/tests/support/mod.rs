@@ -182,6 +182,29 @@ pub fn build_crossterm_example(example_name: &str) -> PathBuf {
 #[cfg(not(target_arch = "wasm32"))]
 const POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(5);
 
+/// How long the ready-marker wait tolerates the child producing *no new output at all* before
+/// declaring it hung.
+///
+/// This is a liveness check, not a wall-clock budget, and the difference is the whole point. An
+/// example whose marker only appears once an animation has finished measures that animation in
+/// real elapsed time, and [`FrameClock::advance`](retroglyph_core::FrameClock::advance) caps
+/// catch-up at five steps -- so every stretch the child spends descheduled under a loaded runner
+/// is animation time it never gets back, and a fixed total budget turns that into an
+/// intermittent, load-dependent failure (retroglyph#544). Measuring "has it stopped talking to
+/// us" instead still fails fast on a genuinely stuck example while tolerating a merely starved
+/// one.
+#[cfg(not(target_arch = "wasm32"))]
+const READY_IDLE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// Absolute backstop on the ready-marker wait, for a child that keeps emitting bytes but never
+/// reaches its marker (so [`READY_IDLE_TIMEOUT`] never fires).
+///
+/// Comfortably under nextest's own kill -- `.config/nextest.toml` sets `slow-timeout = { period =
+/// "20s", terminate-after = 2 }`, i.e. 40s -- so a test that trips this reports *which* marker it
+/// was waiting for instead of being killed from the outside with no such detail.
+#[cfg(not(target_arch = "wasm32"))]
+const READY_HARD_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
 /// Spawns `bin` in a PTY sized `rows`x`cols`, waits until the screen contains `ready_marker`,
 /// writes `input`, then quits the example and returns all captured output bytes.
 ///
@@ -198,6 +221,51 @@ const POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(5);
 #[must_use]
 pub fn capture_pty(bin: &Path, input: &[u8], rows: u16, cols: u16, ready_marker: &str) -> Vec<u8> {
     capture_pty_with_env(bin, input, rows, cols, ready_marker, &[("RG_FPS", "0")])
+}
+
+/// How much faster than real time [`capture_pty_animated`] runs its example.
+///
+/// Large enough that the wall-clock cost of the slowest animation in the gallery (`06_layers`, at
+/// 4.7s) stops being a meaningful share of the capture, small enough to stay far away from the
+/// per-step granularity where a scaled delta could skip visible states.
+#[cfg(not(target_arch = "wasm32"))]
+const ANIMATION_TIME_SCALE: &str = "20";
+
+/// [`capture_pty`] for an example whose `ready_marker` only appears once an animation has
+/// finished, fast-forwarding that animation via `RG_TIME_SCALE`.
+///
+/// Most examples publish a static marker (a title, a key legend) that is on screen from the first
+/// frame. `06_layers` and `08_animation` deliberately do not: both animate to a parked end state
+/// and announce *that*, because an animation that loops forever never settles into a single frame
+/// a snapshot can pin. That makes their markers a wall-clock wait, and
+/// [`FrameClock`](retroglyph_core::FrameClock)'s catch-up cap means the wait cannot be made up
+/// after a stall -- see [`READY_IDLE_TIMEOUT`] and retroglyph#544.
+///
+/// Scaling time keeps the marker's meaning intact ("the animation has settled", still reached by
+/// running the example's real logic on the real backend) while removing the fixed floor under how
+/// long that takes. The captured frame is the parked one either way, so the committed SVG is
+/// unchanged.
+///
+/// # Panics
+///
+/// Panics if the PTY can't be opened, or if `ready_marker` never appears.
+#[cfg(not(target_arch = "wasm32"))]
+#[must_use]
+pub fn capture_pty_animated(
+    bin: &Path,
+    input: &[u8],
+    rows: u16,
+    cols: u16,
+    ready_marker: &str,
+) -> Vec<u8> {
+    capture_pty_with_env(
+        bin,
+        input,
+        rows,
+        cols,
+        ready_marker,
+        &[("RG_FPS", "0"), ("RG_TIME_SCALE", ANIMATION_TIME_SCALE)],
+    )
 }
 
 /// [`capture_pty`] with an explicit child environment instead of its default `RG_FPS=0`.
@@ -221,6 +289,66 @@ pub fn capture_pty_with_env(
     env: &[(&str, &str)],
 ) -> Vec<u8> {
     capture_pty_until(bin, input, rows, cols, ready_marker, env, &|_| true)
+}
+
+/// Blocks until `ready_marker` appears in `output`, which the caller's reader thread is filling.
+///
+/// # Panics
+///
+/// Panics if the child closes the PTY without printing `ready_marker`, if it produces no new
+/// output at all for [`READY_IDLE_TIMEOUT`], or if it never reaches the marker within
+/// [`READY_HARD_TIMEOUT`].
+#[cfg(not(target_arch = "wasm32"))]
+fn wait_for_marker(
+    output: &std::sync::Arc<std::sync::Mutex<Vec<u8>>>,
+    reader_done: &std::sync::Arc<std::sync::Mutex<bool>>,
+    ready_marker: &str,
+) {
+    use std::time::Instant;
+
+    let hard_deadline = Instant::now() + READY_HARD_TIMEOUT;
+    let mut idle_deadline = Instant::now() + READY_IDLE_TIMEOUT;
+    // Scans only the bytes that arrived since the last poll, keeping `ready_marker.len() - 1`
+    // bytes of overlap so a marker split across two reads still matches. Rescanning the whole
+    // capture every 5ms (as this used to) is not just quadratic in a capture that reaches
+    // hundreds of kilobytes -- it does that work while holding the very lock the reader thread
+    // needs in order to append, throttling the drain that keeps the child off a full PTY buffer.
+    let mut scanned = 0usize;
+    let overlap = ready_marker.len().saturating_sub(1);
+    loop {
+        let (found, len) = {
+            let raw = output.lock().unwrap();
+            let from = scanned.saturating_sub(overlap);
+            (
+                String::from_utf8_lossy(&raw[from..]).contains(ready_marker),
+                raw.len(),
+            )
+        };
+        if found {
+            return;
+        }
+        if len > scanned {
+            scanned = len;
+            idle_deadline = Instant::now() + READY_IDLE_TIMEOUT;
+        }
+        // A child that has closed the PTY is never going to print the marker, so there's no point
+        // waiting out either timeout: report it now, and quote what it did manage to print.
+        assert!(
+            !*reader_done.lock().unwrap(),
+            "child exited before printing {ready_marker:?}; captured:\n{}",
+            String::from_utf8_lossy(&output.lock().unwrap())
+        );
+        let now = Instant::now();
+        assert!(
+            now <= idle_deadline,
+            "no PTY output for {READY_IDLE_TIMEOUT:?} while waiting for {ready_marker:?}"
+        );
+        assert!(
+            now <= hard_deadline,
+            "timed out after {READY_HARD_TIMEOUT:?} waiting for {ready_marker:?} in PTY output"
+        );
+        std::thread::sleep(POLL_INTERVAL);
+    }
 }
 
 /// [`capture_pty_with_env`], but waits for `settled` to accept the rendered screen after writing
@@ -306,17 +434,7 @@ pub fn capture_pty_until(
     // Nothing is typed until the example has drawn a frame. Before that it hasn't enabled raw
     // mode yet, so the line discipline would hold the bytes in its canonical-mode line buffer and
     // echo them straight back into the capture.
-    let deadline = Instant::now() + Duration::from_secs(10);
-    loop {
-        if String::from_utf8_lossy(&output.lock().unwrap()).contains(ready_marker) {
-            break;
-        }
-        assert!(
-            Instant::now() <= deadline,
-            "timed out waiting for {ready_marker:?} in PTY output"
-        );
-        std::thread::sleep(POLL_INTERVAL);
-    }
+    wait_for_marker(&output, &reader_done, ready_marker);
 
     if !input.is_empty() {
         writer.write_all(input).expect("write input");

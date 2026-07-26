@@ -297,6 +297,11 @@ Every windowed and crossterm example draws an `NNN fps  MM.M ms  <backend>` read
 corner. Press `` ` `` (or `F1`) to toggle it while the example runs; in the browser, click the
 floating `FPS` button. Set `RG_FPS=0` to start with it hidden.
 
+Examples that animate over real elapsed time also honour `RG_TIME_SCALE`, a multiplier on the frame
+delta they're handed (`RG_TIME_SCALE=20` runs an example twenty times faster, `0.25` a quarter
+speed). It's a debugging and capture aid -- the PTY snapshot tests use it so a capture that waits on
+an animation to settle doesn't have to spend real seconds waiting.
+
 Every example is also built for WASM (Headless/Terminal/Software/WebGL variants) and published as an
 interactive gallery at **[main.retroglyph.dev/examples](https://main.retroglyph.dev/examples/)** --
 no local toolchain required to try one in a browser.
