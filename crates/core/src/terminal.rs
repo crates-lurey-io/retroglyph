@@ -17,6 +17,14 @@ use unicode_width::UnicodeWidthChar;
 /// API (`put`, `print`, `layer`, ...). Call [`present`](Self::present) once
 /// per frame to diff against the previous frame and send only the changed
 /// cells to the backend.
+///
+/// # Out-of-bounds drawing
+///
+/// Drawing off the grid is a no-op, the same convention as drawing off-screen: every drawing
+/// method here ([`put`](Self::put), [`print`](Self::print), and the rest of the stateful API)
+/// silently clips any part of the write that falls outside the current [`size`](Self::size),
+/// rather than panicking. See [`Grid`]'s own "Out-of-bounds drawing" section for the underlying
+/// rule this stateful API is built on.
 pub struct Terminal<B: Backend> {
     current: Grid,
     previous: Grid,
