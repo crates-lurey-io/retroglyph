@@ -3,9 +3,10 @@
 //! The [`SpriteCache`] is built from [`TilesetOptions`]
 //! and provides O(1) lookup of decoded RGBA8 sprites by codepoint.
 
-use crate::tileset::{SpriteAlign, TilesetError, TilesetOptions};
+use crate::tileset::{SheetColor, SpriteAlign, TilesetError, TilesetOptions};
 use alpha_blend::rgba::U8x4Rgba;
 use retroglyph_core::dev_only;
+use retroglyph_core::{Color, Tint};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// A decoded, ready-to-blit sprite.
@@ -20,6 +21,13 @@ pub struct Sprite {
     pub pixel_height: u32,
     /// Where this sprite sits inside the multi-cell box a span reserves for it.
     pub align: SpriteAlign,
+    /// What this sprite's own sheet declared its pixels to mean.
+    ///
+    /// Copied from the sheet at load time rather than looked up at draw time: a `SpriteCache` is
+    /// a flat map keyed by codepoint, so a sprite loses track of which sheet it came from the
+    /// moment it lands there. One byte per sprite keeps the sheet's declaration with the pixels
+    /// it describes.
+    pub color: SheetColor,
 }
 
 impl Sprite {
@@ -174,6 +182,7 @@ impl SpriteCache {
                 pixel_width: tile_w,
                 pixel_height: tile_h,
                 align: opts.align,
+                color: opts.color,
             };
 
             if self.sprites.insert(codepoint, sprite).is_some() {
@@ -189,6 +198,60 @@ impl SpriteCache {
 impl Default for SpriteCache {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// The complete recolouring one sprite goes through in one cell: the sheet's own treatment,
+/// then the cell's tint.
+///
+/// Two stages rather than one because they do not always fold together. A [`SheetColor::Mask`]
+/// sheet is a multiply by the cell's foreground, and a multiply composes with another multiply,
+/// but not with a [`Tint::Mix`]: "colour this mask red, then flash it half-way to white" is two
+/// operations and cannot be written as one.
+///
+/// Both pixel backends resolve through here, so a sprite recoloured on the software rasteriser
+/// and the same sprite recoloured in the GL fragment shader cannot disagree. The GL side uploads
+/// the two stages as instance attributes and mirrors [`apply`](Self::apply)'s order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct SpriteTint {
+    /// The sheet's own treatment, applied first.
+    ///
+    /// [`Tint::Multiply`] by the cell's resolved foreground colour for a [`SheetColor::Mask`]
+    /// sheet, [`Tint::None`] for [`SheetColor::Art`].
+    pub mask: Tint,
+    /// The cell's own tint, applied second.
+    pub tint: Tint,
+}
+
+impl SpriteTint {
+    /// Resolves what `sprite` should look like in a cell with foreground `fg` and tint `tint`.
+    ///
+    /// `default_fg` is the palette fallback for [`Color::Default`], which has no reading as a
+    /// modulation value on its own (see [`Tint`]); [`palette::DEFAULT_FG`](crate::palette) is
+    /// what both backends pass.
+    #[must_use]
+    pub const fn resolve(sprite: &Sprite, fg: Color, tint: Tint, default_fg: (u8, u8, u8)) -> Self {
+        let mask = match sprite.color {
+            SheetColor::Art => Tint::None,
+            SheetColor::Mask => {
+                let (r, g, b) = fg.resolve_rgb(default_fg);
+                Tint::multiply(r, g, b)
+            }
+        };
+        Self { mask, tint }
+    }
+
+    /// Whether this leaves every pixel exactly as authored, so a renderer can take its untinted
+    /// path.
+    #[must_use]
+    pub const fn is_identity(&self) -> bool {
+        self.mask.is_identity() && self.tint.is_identity()
+    }
+
+    /// Applies both stages to one straight-alpha RGB triple, sheet treatment first.
+    #[must_use]
+    pub const fn apply(&self, rgb: (u8, u8, u8)) -> (u8, u8, u8) {
+        self.tint.apply(self.mask.apply(rgb))
     }
 }
 
@@ -468,6 +531,103 @@ mod tests {
         assert_eq!(result.g, 128);
         assert_eq!(result.b, 0);
         assert_eq!(result.a, 191);
+    }
+
+    // ── SpriteTint resolution ─────────────────────────────────────────
+
+    fn sprite_with(color: SheetColor) -> Sprite {
+        Sprite {
+            pixels: vec![255, 255, 255, 255],
+            pixel_width: 1,
+            pixel_height: 1,
+            align: SpriteAlign::TopLeft,
+            color,
+        }
+    }
+
+    const DEFAULT_FG: (u8, u8, u8) = (0xD4, 0xD4, 0xD4);
+
+    #[test]
+    fn art_sheet_ignores_fg_entirely() {
+        let art = sprite_with(SheetColor::Art);
+        let resolved = SpriteTint::resolve(&art, Color::RED, Tint::None, DEFAULT_FG);
+
+        assert_eq!(resolved.mask, Tint::None);
+        assert!(resolved.is_identity());
+        // The whole point of #537: a full-colour sheet renders as authored, whatever fg says.
+        assert_eq!(resolved.apply((10, 200, 30)), (10, 200, 30));
+    }
+
+    #[test]
+    fn mask_sheet_takes_its_colour_from_fg() {
+        let mask = sprite_with(SheetColor::Mask);
+        let (r, g, b) = Color::RED.resolve_rgb(DEFAULT_FG);
+        let resolved = SpriteTint::resolve(&mask, Color::RED, Tint::None, DEFAULT_FG);
+
+        assert_eq!(resolved.mask, Tint::multiply(r, g, b));
+        // A white mask pixel takes the foreground exactly.
+        assert_eq!(resolved.apply((255, 255, 255)), (r, g, b));
+    }
+
+    #[test]
+    fn mask_sheet_shades_a_grey_pixel_proportionally() {
+        let mask = sprite_with(SheetColor::Mask);
+        let resolved = SpriteTint::resolve(
+            &mask,
+            Color::Rgb {
+                r: 200,
+                g: 100,
+                b: 50,
+            },
+            Tint::None,
+            DEFAULT_FG,
+        );
+
+        // Half-grey artwork lands on a proportionally darker shade of the foreground, which is
+        // how a libtcod/Dwarf Fortress style tileset is authored.
+        let (r, _, _) = resolved.apply((128, 128, 128));
+        assert!(r > 0 && r < 200, "expected a shade of the fg, got {r}");
+    }
+
+    #[test]
+    fn mask_sheet_resolves_default_fg_through_the_palette() {
+        let mask = sprite_with(SheetColor::Mask);
+        let resolved = SpriteTint::resolve(&mask, Color::Default, Tint::None, DEFAULT_FG);
+
+        // `Color::Default` has no reading as a modulation value on its own, so it goes through
+        // the palette rather than being treated as white.
+        assert_eq!(resolved.mask, Tint::multiply(0xD4, 0xD4, 0xD4));
+    }
+
+    #[test]
+    fn the_cell_tint_applies_on_top_of_an_art_sheet() {
+        let art = sprite_with(SheetColor::Art);
+        let resolved =
+            SpriteTint::resolve(&art, Color::RED, Tint::multiply(128, 128, 128), DEFAULT_FG);
+
+        assert!(!resolved.is_identity());
+        assert_eq!(resolved.apply((200, 180, 60)), (100, 90, 30));
+    }
+
+    #[test]
+    fn both_stages_apply_in_order_on_a_mask_sheet() {
+        let mask = sprite_with(SheetColor::Mask);
+        let flash = Tint::mix(255, 255, 255, 255);
+        let resolved =
+            SpriteTint::resolve(&mask, Color::Rgb { r: 255, g: 0, b: 0 }, flash, DEFAULT_FG);
+
+        // Mask first would give red; the flash then takes it all the way to white. The other
+        // order would give red, which is why the order is part of the contract.
+        assert_eq!(resolved.apply((255, 255, 255)), (255, 255, 255));
+    }
+
+    #[test]
+    fn an_untouched_art_cell_is_identity_so_renderers_can_skip_the_work() {
+        let art = sprite_with(SheetColor::Art);
+        assert!(SpriteTint::resolve(&art, Color::Default, Tint::None, DEFAULT_FG).is_identity());
+        // A mask sheet is never identity: its colour always comes from somewhere.
+        let mask = sprite_with(SheetColor::Mask);
+        assert!(!SpriteTint::resolve(&mask, Color::Default, Tint::None, DEFAULT_FG).is_identity());
     }
 
     // `warn_sprite_needs_span` reports only in a build that compiles diagnostics in, so every
