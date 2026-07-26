@@ -12,6 +12,9 @@ Prerequisites:
 `just check` is the gate before every commit. All clippy lints (including `pedantic` and `nursery`)
 are treated as errors.
 
+Documentation changes: read your prose out loud before pushing. If it sounds like a product page or
+a wiki summary rather than one engineer telling another how something works, rewrite it.
+
 | Command                | What it does                                                                 |
 | ---------------------- | ---------------------------------------------------------------------------- |
 | `just check`           | Full gate: fmt-check, lint, compile, test, doc                               |

@@ -56,6 +56,24 @@ without a conscious decision to change the defaults.
   Those readers have no access to the file and the reference is dead weight. If a doc comment needs
   the rationale, restate the relevant part of it inline instead of pointing at an internal doc.
 
+### Prose style
+
+Write like an engineer explaining something to a colleague, not like a product page.
+
+- No em-dashes, and no ' -- ' standing in for one. Pick the punctuation that matches the
+  relationship: comma for apposition, parentheses for asides, colon for consequence, period for two
+  independent thoughts.
+- State design decisions; don't defend them. "X does not implement Input" beats "X deliberately does
+  not implement Input", unless a reader would otherwise file a bug.
+- Vary sentence length. Uniform rhythm is the most reliable tell there is.
+- Bullet lists are for genuinely parallel items. Explanation goes in prose.
+- No marketing adjectives: robust, powerful, elegant, seamless, comprehensive, flexible. If a claim
+  needs an adjective it needs a number instead.
+- Cut opening hedges. "It's worth noting that X" is "X".
+- Don't summarize a section you just wrote.
+- Internal planning vocabulary (Tier, milestone, phase, PR campaign) never appears in user-facing
+  documentation.
+
 ## Error handling
 
 Retroglyph forbids `unsafe_code` and stays `no_std`-capable at the core, which shapes the error
