@@ -373,6 +373,22 @@ impl<B: Backend> Terminal<B> {
         }
     }
 
+    /// Print a string starting at `pos` with an explicit style.
+    ///
+    /// Like [`print`](Self::print), but every character is written in `style` instead of the
+    /// terminal's current drawing style, and the drawing style is left unchanged. Use this for a
+    /// single string in a single style; use [`print_styled`](Self::print_styled) instead when
+    /// different parts of the text need different styles, since that takes a [`Line`] of
+    /// independently styled spans rather than one style for the whole string.
+    pub fn print_str_styled(&mut self, pos: impl Into<Pos>, text: &str, style: Style) {
+        self.dirty = true;
+        let pos = pos.into();
+        #[cfg(feature = "egc")]
+        self.print_str_egc(pos.x, pos.y, text, style);
+        #[cfg(not(feature = "egc"))]
+        self.print_str_chars(pos.x, pos.y, text, style);
+    }
+
     /// Render a [`Line`] of styled text into a bounded rectangle.
     ///
     /// Performs greedy word-wrapping at `rect`'s width, then positions the
@@ -1002,5 +1018,18 @@ mod tests {
         #[cfg(not(feature = "egc"))]
         assert_eq!(term.grid()[Pos::new(1, 0)].glyph(), '\0');
         assert_eq!(term.grid()[Pos::new(2, 0)].glyph(), 'x');
+    }
+
+    #[test]
+    fn test_print_str_styled_applies_style_to_every_cell() {
+        let mut term = Terminal::new(Headless::new(20, 3));
+        term.fg(Color::RED);
+        term.print_str_styled((0, 0), "HP", Style::new().fg(Color::GREEN));
+        assert_eq!(term.grid()[Pos::new(0, 0)].glyph(), 'H');
+        assert_eq!(term.grid()[Pos::new(0, 0)].style.fg, Color::GREEN);
+        assert_eq!(term.grid()[Pos::new(1, 0)].glyph(), 'P');
+        assert_eq!(term.grid()[Pos::new(1, 0)].style.fg, Color::GREEN);
+        // Drawing style must be unchanged.
+        assert_eq!(term.style().fg, Color::RED);
     }
 }
