@@ -10,6 +10,9 @@ use core::fmt;
 
 /// Where a sprite sits inside the multi-cell box a span reserves for it.
 ///
+/// Geometry only: alignment moves a sprite's pixels, it never changes their color. See
+/// [`TilesetOptions`] for how a sprite's color relates to the cell's style.
+///
 /// Only observable when the reserved box is larger than the sprite's own pixels, i.e. when
 /// [`Surface::put_span`](retroglyph_core::Surface::put_span) declares more cells than the
 /// artwork fills. A sprite drawn into a box its art exactly fills (the common case) renders
@@ -229,6 +232,18 @@ pub const CP437_TO_UNICODE: [char; 256] = [
 ];
 
 /// Options for loading a single tileset (sprite sheet).
+///
+/// # Sprites carry their own color
+///
+/// A tileset's artwork is composited verbatim. The cell's
+/// [`Style::fg`](retroglyph_core::Style::fg) does not tint a sprite, so a full-color sheet
+/// renders exactly as authored and a white-on-transparent sheet renders white, not in the
+/// cell's foreground color the way a bitmap font glyph would. The cell's background is still
+/// painted behind the sprite and shows through its transparent pixels.
+///
+/// Recoloring one piece of artwork per cell (biome variants, team colors, damage flashes) is
+/// therefore not something a style can express: author each variant as its own tile and
+/// address it by its own codepoint.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TilesetOptions {
     /// Raw bytes of the PNG file.

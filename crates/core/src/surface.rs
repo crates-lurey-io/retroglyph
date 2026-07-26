@@ -106,6 +106,10 @@ impl<'a> Surface<'a> {
     }
 
     /// Place `ch` at `pos` in `style`. A no-op if `pos` is outside this surface's area.
+    ///
+    /// If a pixel backend resolves `ch` to a sprite, that sprite is composited from its own
+    /// pixels: [`style.fg`](Style::fg) does not tint it, and `style.bg` shows through only where
+    /// the sprite is transparent. See [`put_span`](Self::put_span).
     pub fn put(&mut self, pos: impl Into<Pos>, ch: char, style: Style) {
         let pos = pos.into();
         #[cfg(feature = "egc")]
@@ -241,6 +245,18 @@ impl<'a> Surface<'a> {
     /// A no-op if `rows` is empty, ragged, or the footprint does not fit entirely within this
     /// surface's own area (not just the grid) at `pos`; see [`Grid::write_span`] for the full
     /// write semantics, and [`Grid::span_owner`] to hit-test the whole footprint.
+    ///
+    /// # `style` applies to the text fallback, not to the sprite
+    ///
+    /// A sprite is composited from its own pixels. [`style.fg`](Style::fg) does not tint it;
+    /// `style.bg` is still painted behind it, so it shows through wherever the sprite is
+    /// transparent. Recoloring a shared sprite per cell is therefore not possible: draw a
+    /// variant of the artwork instead, which is the usual tileset idiom.
+    ///
+    /// `style` is not dead on such a cell, because the same span drawn by a *cell* backend
+    /// renders the text fallback in it. The consequence is that `fg` reads very differently
+    /// depending on the backend, and that a glyph missing from the sprite cache silently falls
+    /// back to a font glyph that *is* `fg`-colored, which looks a lot like a tint working.
     pub fn put_span(&mut self, pos: impl Into<Pos>, rows: &[&str], style: Style) {
         let pos = pos.into();
         let Some(first) = rows.first() else {
