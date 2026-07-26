@@ -30,6 +30,9 @@ use core::time::Duration;
 /// Feed elapsed wall time with [`advance`](Self::advance), then call
 /// [`tick`](Self::tick) in a loop to drain whole logic steps. Use
 /// [`alpha`](Self::alpha) to interpolate rendering between logic frames.
+///
+/// See the `08_animation` example for `FrameClock` in action:
+/// <https://main.retroglyph.dev/examples/08_animation/terminal/>.
 #[derive(Debug, Clone)]
 pub struct FrameClock {
     step: Duration,

@@ -11,6 +11,9 @@
 //! except near the edges, where it drifts toward the corner. A world smaller
 //! than the viewport pins the origin at `(0, 0)`.
 //!
+//! See the `12_dungeon_scroll` example for `Camera` in action:
+//! <https://main.retroglyph.dev/examples/12_dungeon_scroll/terminal/>.
+//!
 //! # Example
 //!
 //! ```
