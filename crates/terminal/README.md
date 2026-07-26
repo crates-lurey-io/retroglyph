@@ -26,6 +26,7 @@ retroglyph-core = "0.1"
 ```
 
 ```rust
+use retroglyph_core::DrawCell;
 use retroglyph_core::grid::Pos;
 use retroglyph_core::style::Style;
 use retroglyph_core::tile::Tile;
@@ -36,7 +37,7 @@ use retroglyph_terminal::TerminalRenderer;
 let mut renderer = TerminalRenderer::new(Vec::new());
 let tile = Tile::new('@', Style::default());
 renderer
-    .draw(core::iter::once((Pos::new(0, 0), &tile, None)))
+    .draw(core::iter::once(DrawCell::new(Pos::new(0, 0), &tile)))
     .unwrap();
 renderer.flush().unwrap();
 

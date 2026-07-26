@@ -90,6 +90,7 @@ pub use retroglyph_window::font::{self as font, BitmapFont, FontChain};
 use context::GlContext;
 use glyphs::GlyphCache;
 use renderer::{FLAG_HAS_BG, FLAG_HAS_GLYPH, GlResources, Instance};
+use retroglyph_core::DrawCell;
 use retroglyph_core::backend::Output;
 use retroglyph_core::color::Color;
 use retroglyph_core::grid::{Pos, Size};
@@ -335,9 +336,10 @@ impl Output for GlRenderer {
 
     fn draw<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
-        I: Iterator<Item = (Pos, &'a Tile, Option<&'a str>)>,
+        I: Iterator<Item = DrawCell<'a>>,
     {
-        for (pos, tile, _extra) in content {
+        for draw_cell in content {
+            let (pos, tile) = (draw_cell.pos, draw_cell.tile);
             self.write_tile(pos, tile);
         }
         Ok(())
@@ -346,7 +348,7 @@ impl Output for GlRenderer {
     #[allow(clippy::too_many_lines)]
     fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
-        I: Iterator<Item = (u8, Pos, &'a Tile, Option<&'a str>)>,
+        I: Iterator<Item = DrawCell<'a>>,
     {
         // This backend requests full frames, so `content` is every cell of every allocated layer in
         // layer-major (0..=max) then row-major order (see `Grid::layers`). Rebuild the per-layer
@@ -383,7 +385,8 @@ impl Output for GlRenderer {
 
         let cols = usize::from(self.cols);
         let rows = usize::from(self.rows);
-        for (layer_id, pos, tile, _extra) in content {
+        for draw_cell in content {
+            let (layer_id, pos, tile) = (draw_cell.layer, draw_cell.pos, draw_cell.tile);
             let (x, y) = (usize::from(pos.x), usize::from(pos.y));
             if x >= cols || y >= rows {
                 continue;
@@ -672,6 +675,7 @@ impl Drop for GlRenderer {
 mod compositing_tests {
     use super::{FLAG_HAS_BG, FLAG_HAS_GLYPH};
     use crate::GlBackendBuilder;
+    use retroglyph_core::DrawCell;
     use retroglyph_core::backend::Output;
     use retroglyph_core::color::Color;
     use retroglyph_core::grid::Pos;
@@ -687,7 +691,7 @@ mod compositing_tests {
             .build()
             .expect("default-font builds");
         let tile = Tile::new('A', Style::new()).with_offset(-3, 5);
-        r.draw(core::iter::once((Pos::new(1, 0), &tile, None)))
+        r.draw(core::iter::once(DrawCell::new(Pos::new(1, 0), &tile)))
             .expect("draw is infallible");
 
         let inst = r.layers[0][1];
@@ -738,10 +742,10 @@ mod compositing_tests {
         let glyph_default_bg = Tile::new('Y', Style::new());
         let glyph_real_bg = Tile::new('Z', Style::new().bg(RED));
         let stream = [
-            (0u8, Pos::new(0, 0), &base, None),
-            (1u8, Pos::new(0, 0), &empty, None),
-            (1u8, Pos::new(1, 0), &glyph_default_bg, None),
-            (1u8, Pos::new(2, 0), &glyph_real_bg, None),
+            DrawCell::on_layer(0, Pos::new(0, 0), &base),
+            DrawCell::on_layer(1, Pos::new(0, 0), &empty),
+            DrawCell::on_layer(1, Pos::new(1, 0), &glyph_default_bg),
+            DrawCell::on_layer(1, Pos::new(2, 0), &glyph_real_bg),
         ];
         r.draw_layers(stream.iter().copied())
             .expect("draw_layers is infallible");
@@ -769,12 +773,20 @@ mod compositing_tests {
             .expect("default-font builds");
         let tile = Tile::new('Q', Style::new());
         // Frame 1: two layers.
-        r.draw_layers(core::iter::once((1u8, Pos::new(0, 0), &tile, None)))
-            .expect("draw_layers");
+        r.draw_layers(core::iter::once(DrawCell::on_layer(
+            1,
+            Pos::new(0, 0),
+            &tile,
+        )))
+        .expect("draw_layers");
         assert_eq!(r.layers.len(), 2);
         // Frame 2: only the base layer is streamed, so the higher layer must not linger.
-        r.draw_layers(core::iter::once((0u8, Pos::new(0, 0), &tile, None)))
-            .expect("draw_layers");
+        r.draw_layers(core::iter::once(DrawCell::on_layer(
+            0,
+            Pos::new(0, 0),
+            &tile,
+        )))
+        .expect("draw_layers");
         assert_eq!(r.layers.len(), 1);
     }
 
@@ -795,8 +807,12 @@ mod compositing_tests {
         let tiles: Vec<(u8, Pos, Tile)> = (0..3)
             .map(|x| (0u8, Pos::new(x, 0), *grid.tile(0, (x, 0)).unwrap()))
             .collect();
-        r.draw_layers(tiles.iter().map(|(l, pos, t)| (*l, *pos, t, None)))
-            .expect("draw_layers is infallible");
+        r.draw_layers(
+            tiles
+                .iter()
+                .map(|(l, pos, t)| DrawCell::on_layer(*l, *pos, t)),
+        )
+        .expect("draw_layers is infallible");
 
         let (anchor, covered, free) = (r.layers[0][0], r.layers[0][1], r.layers[0][2]);
         assert_eq!(anchor.flags, FLAG_HAS_BG | FLAG_HAS_GLYPH, "anchor draws");
@@ -827,8 +843,12 @@ mod compositing_tests {
         let tiles: Vec<(u8, Pos, Tile)> = (0..2)
             .map(|x| (0u8, Pos::new(x, 0), *grid.tile(0, (x, 0)).unwrap()))
             .collect();
-        r.draw_layers(tiles.iter().map(|(l, pos, t)| (*l, *pos, t, None)))
-            .expect("draw_layers is infallible");
+        r.draw_layers(
+            tiles
+                .iter()
+                .map(|(l, pos, t)| DrawCell::on_layer(*l, *pos, t)),
+        )
+        .expect("draw_layers is infallible");
 
         assert_eq!(r.layers[0][0].flags & FLAG_HAS_GLYPH, FLAG_HAS_GLYPH);
         assert_eq!(r.layers[0][1].flags & FLAG_HAS_GLYPH, 0);

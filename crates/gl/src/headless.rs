@@ -55,6 +55,7 @@ use glow::HasContext as _;
 use glutin::config::{ConfigSurfaceTypes, ConfigTemplateBuilder};
 use glutin::context::{ContextApi, ContextAttributesBuilder, Version};
 use glutin::prelude::*;
+use retroglyph_core::DrawCell;
 use retroglyph_core::backend::Output;
 use retroglyph_core::color::Color;
 use retroglyph_core::grid::Pos;
@@ -298,14 +299,15 @@ fn gl_renderer(cols: u16, rows: u16, scale: u16) -> GlRenderer {
 
 /// Draws `cells` (single layer) into any [`Output`]. Both backends' `draw` is infallible.
 fn paint(out: &mut impl Output, cells: &[(Pos, Tile)]) {
-    out.draw(cells.iter().map(|(p, t)| (*p, t, None))).ok();
+    out.draw(cells.iter().map(|(p, t)| DrawCell::new(*p, t)))
+        .ok();
 }
 
 /// Feeds a full layered frame `(layer, pos, tile)` into any [`Output`] via `draw_layers`, the way
 /// the core `Terminal` drives a `composites_layers` backend. Both GL and software composite this
 /// stream themselves, so the two must agree pixel-for-pixel.
 fn paint_layers(out: &mut impl Output, cells: &[(u8, Pos, Tile)]) {
-    out.draw_layers(cells.iter().map(|(l, p, t)| (*l, *p, t, None)))
+    out.draw_layers(cells.iter().map(|(l, p, t)| DrawCell::on_layer(*l, *p, t)))
         .ok();
 }
 

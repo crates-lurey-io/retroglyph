@@ -12,6 +12,7 @@ pub use headless::Headless;
 use crate::event::Event;
 use crate::grid::{Pos, Size};
 use crate::tile::Tile;
+use crate::tint::Tint;
 use core::time::Duration;
 
 /// Associated error type used by all fallible backend methods.
@@ -30,6 +31,80 @@ impl BackendError for core::convert::Infallible {}
 #[cfg(feature = "std")]
 impl BackendError for std::io::Error {}
 
+/// One cell handed to a backend at draw time: the tile, plus the state that does not fit in one.
+///
+/// [`Tile`] is deliberately compact (20 bytes, no padding to spare), so a cell's rarer members
+/// live in a sparse side table on [`Grid`](crate::grid::Grid) instead. A backend cannot reach
+/// that table, so they are delivered here.
+///
+/// This is a struct rather than a tuple because it has grown twice and will grow again. Each
+/// addition would otherwise break every backend's `draw` signature and leave the meaning of a
+/// fourth or fifth unnamed element to the reader.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct DrawCell<'a> {
+    /// Which layer this cell belongs to. Always `0` for cells arriving through
+    /// [`Output::draw`].
+    pub layer: u8,
+    /// Where the cell sits in the grid.
+    pub pos: Pos,
+    /// The tile itself.
+    pub tile: &'a Tile,
+    /// The tile's full grapheme cluster, or `None` to render [`Tile::glyph`] alone.
+    ///
+    /// `Some` only for multi-codepoint clusters (combining marks, ZWJ sequences), and **only
+    /// ever `Some` when the `egc` feature is enabled**: without it `Grid` never populates the
+    /// side table, so a backend that does not support `egc` can ignore this entirely and render
+    /// from [`Tile::glyph`].
+    pub grapheme: Option<&'a str>,
+    /// How a pixel backend recolours this cell's sprite.
+    ///
+    /// [`Tint::None`] for the overwhelming majority of cells. Cell backends have no sprite to
+    /// recolour and ignore it; see [`Tint`].
+    pub tint: Tint,
+}
+
+impl<'a> DrawCell<'a> {
+    /// A cell on layer 0 with no grapheme text and no tint: the shape almost every test and
+    /// cell backend wants.
+    #[must_use]
+    pub const fn new(pos: Pos, tile: &'a Tile) -> Self {
+        Self {
+            layer: 0,
+            pos,
+            tile,
+            grapheme: None,
+            tint: Tint::None,
+        }
+    }
+
+    /// [`new`](Self::new) on an explicit layer.
+    #[must_use]
+    pub const fn on_layer(layer: u8, pos: Pos, tile: &'a Tile) -> Self {
+        Self {
+            layer,
+            pos,
+            tile,
+            grapheme: None,
+            tint: Tint::None,
+        }
+    }
+
+    /// This cell with `grapheme` as its full cluster text.
+    #[must_use]
+    pub const fn with_grapheme(mut self, grapheme: Option<&'a str>) -> Self {
+        self.grapheme = grapheme;
+        self
+    }
+
+    /// This cell with `tint` applied to its sprite.
+    #[must_use]
+    pub const fn with_tint(mut self, tint: Tint) -> Self {
+        self.tint = tint;
+        self
+    }
+}
+
 /// Draws grid content to a display and reports its dimensions.
 ///
 /// This is the only one of the three backend facets ([`Output`], [`Input`], [`Cursor`]) that's
@@ -41,20 +116,10 @@ pub trait Output {
 
     /// Draw changed cells to the output surface.
     ///
-    /// The third element of each item is the tile's full grapheme cluster
-    /// (see [`Grid::grapheme`](crate::grid::Grid::grapheme)), `Some` only for
-    /// multi-codepoint EGCs (combining marks, ZWJ sequences); `None` means
-    /// render the tile's [`glyph`](Tile::glyph) alone. `Tile` itself never
-    /// carries this text (it lives in a side-table on `Grid`), so backends
-    /// that need the full grapheme at draw time must read it from here
-    /// rather than from the tile.
-    ///
-    /// **This field is only ever `Some` when the crate's `egc` feature is enabled.** Without
-    /// `egc`, `Grid` never populates its EGC side-table, so every item's third element is
-    /// always `None`: there is no multi-codepoint grapheme text to read, ever. Backends that
-    /// don't opt into `egc` support can safely ignore this field entirely (e.g. `let _ = extra;`
-    /// and render each tile from [`glyph`](Tile::glyph) alone); it carries no information in
-    /// that configuration.
+    /// Every cell arrives as a [`DrawCell`], which carries the out-of-line state a [`Tile`]
+    /// cannot: its full grapheme cluster and its tint. Both live in a side table on
+    /// [`Grid`](crate::grid::Grid)
+    /// rather than in the tile, so a backend that needs either must read it from here.
     ///
     /// # Errors
     ///
@@ -62,7 +127,7 @@ pub trait Output {
     /// (e.g., a broken pipe or closed terminal).
     fn draw<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
-        I: Iterator<Item = (Pos, &'a Tile, Option<&'a str>)>;
+        I: Iterator<Item = DrawCell<'a>>;
 
     /// Draw changed cells across all layers.
     ///
@@ -74,23 +139,17 @@ pub trait Output {
     /// receives **all** cells from every allocated layer, and the backend
     /// should clear its output surface before drawing.
     ///
-    /// See [`draw`](Self::draw) for the meaning of each item's grapheme text, including the
-    /// `egc`-feature-only contract for the trailing `Option<&str>`.
+    /// Items are the same [`DrawCell`] [`draw`](Self::draw) receives, read through
+    /// [`DrawCell::layer`] rather than a separate element.
     ///
     /// # Errors
     ///
     /// See [`draw`](Self::draw).
     fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
-        I: Iterator<Item = (u8, Pos, &'a Tile, Option<&'a str>)>,
+        I: Iterator<Item = DrawCell<'a>>,
     {
-        self.draw(content.filter_map(|(layer, pos, tile, extra)| {
-            if layer == 0 {
-                Some((pos, tile, extra))
-            } else {
-                None
-            }
-        }))
+        self.draw(content.filter(|cell| cell.layer == 0))
     }
 
     /// Returns `true` if the backend needs the **entire** frame (all cells on

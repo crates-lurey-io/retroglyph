@@ -113,7 +113,7 @@ impl std::error::Error for SoftwareBackendError {
 /// use retroglyph_software::{SoftwareBackendBuilder, SoftwareRenderer};
 /// use retroglyph_core::style::Style;
 /// use retroglyph_core::grid::Pos;
-/// use retroglyph_core::{Color, Output};
+/// use retroglyph_core::{Color, DrawCell, Output};
 ///
 /// let opts = SoftwareBackendBuilder::new()
 ///     .grid_size(1, 1)
@@ -127,7 +127,7 @@ impl std::error::Error for SoftwareBackendError {
 /// use retroglyph_core::tile::Tile;
 /// let tile = Tile::new(' ', Style::new().bg(Color::Rgb { r: 255, g: 0, b: 0 }));
 /// renderer
-///     .draw_layers([(0, Pos::new(0, 0), &tile, None)].into_iter())
+///     .draw_layers([DrawCell::on_layer(0, Pos::new(0, 0), &tile)].into_iter())
 ///     .unwrap();
 ///
 /// let pixels = renderer.pixels();

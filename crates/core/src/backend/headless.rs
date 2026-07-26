@@ -4,7 +4,6 @@
 use crate::backend::{Cursor, Input, Output};
 use crate::event::Event;
 use crate::grid::{Grid, Pos, Size};
-use crate::tile::Tile;
 use alloc::collections::VecDeque;
 use alloc::string::String;
 use core::time::Duration;
@@ -88,21 +87,18 @@ impl Output for Headless {
 
     fn draw<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
-        I: Iterator<Item = (Pos, &'a Tile, Option<&'a str>)>,
+        I: Iterator<Item = crate::backend::DrawCell<'a>>,
     {
-        for (pos, cell, extra) in content {
-            self.grid.put_tile(0, pos, *cell);
-            if let Some(extra) = extra {
-                self.grid.set_extra(
-                    0,
-                    pos.x,
-                    pos.y,
-                    crate::grid::TileExtra {
-                        grapheme: Some(alloc::sync::Arc::from(extra)),
-                        tint: crate::Tint::None,
-                    },
-                );
-            }
+        for cell in content {
+            let pos = cell.pos;
+            self.grid.put_tile(0, pos, *cell.tile);
+            // Rebuild the side-table entry from the parts that arrived, so a headless capture
+            // round-trips both members rather than only the grapheme.
+            let extra = crate::grid::TileExtra {
+                grapheme: cell.grapheme.map(alloc::sync::Arc::from),
+                tint: cell.tint,
+            };
+            self.grid.set_extra(0, pos.x, pos.y, extra);
         }
         Ok(())
     }

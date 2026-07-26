@@ -12,10 +12,10 @@
 #![allow(missing_docs)]
 
 use criterion::{Criterion, criterion_group, criterion_main};
+use retroglyph_core::DrawCell;
 use retroglyph_core::backend::{Input, Output};
 use retroglyph_core::event::{Event, KeyModifiers, MouseEvent, MouseEventKind};
 use retroglyph_core::grid::{Pos, Size};
-use retroglyph_core::tile::Tile;
 use retroglyph_window::{Presenter, WindowBackend, WindowHandle};
 use std::sync::Arc;
 use std::time::Duration;
@@ -29,14 +29,14 @@ impl Output for NullPresenter {
 
     fn draw<'a, I>(&mut self, _content: I) -> Result<(), Self::Error>
     where
-        I: Iterator<Item = (Pos, &'a Tile, Option<&'a str>)>,
+        I: Iterator<Item = DrawCell<'a>>,
     {
         Ok(())
     }
 
     fn draw_layers<'a, I>(&mut self, _content: I) -> Result<(), Self::Error>
     where
-        I: Iterator<Item = (u8, Pos, &'a Tile, Option<&'a str>)>,
+        I: Iterator<Item = DrawCell<'a>>,
     {
         Ok(())
     }

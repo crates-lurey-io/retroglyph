@@ -19,6 +19,7 @@
 #![allow(missing_docs)]
 
 use criterion::{Criterion, criterion_group, criterion_main};
+use retroglyph_core::DrawCell;
 use retroglyph_core::{Color, Output, Pos, Style, Tile};
 use retroglyph_software::SoftwareBackendBuilder;
 use retroglyph_window::font::unscii16;
@@ -28,10 +29,10 @@ use retroglyph_software::tileset::{Codepage, TilesetOptions};
 
 const GRID: (u16, u16) = (80, 24);
 
-fn to_content(frame: &[(u8, Pos, Tile)]) -> impl Iterator<Item = (u8, Pos, &Tile, Option<&str>)> {
+fn to_content(frame: &[(u8, Pos, Tile)]) -> impl Iterator<Item = DrawCell<'_>> {
     frame
         .iter()
-        .map(|(layer, pos, tile)| (*layer, *pos, tile, None))
+        .map(|(layer, pos, tile)| DrawCell::on_layer(*layer, *pos, tile))
 }
 
 fn glyph_frame(cols: u16, rows: u16) -> Vec<(u8, Pos, Tile)> {

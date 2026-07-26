@@ -131,10 +131,10 @@
 #[doc = include_str!("../README.md")]
 struct ReadmeDoctests;
 
+use retroglyph_core::DrawCell;
 use retroglyph_core::backend::{Cursor, Input, Output};
 use retroglyph_core::event::{Event, MouseEventKind};
 use retroglyph_core::grid::{Pos, Size};
-use retroglyph_core::tile::Tile;
 use retroglyph_terminal::TerminalRenderer;
 use std::collections::VecDeque;
 use std::io;
@@ -303,7 +303,7 @@ impl Output for TerminalWasm {
 
     fn draw<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
-        I: Iterator<Item = (Pos, &'a Tile, Option<&'a str>)>,
+        I: Iterator<Item = DrawCell<'a>>,
     {
         self.renderer.begin_synchronized_update()?;
         self.renderer.draw(content)

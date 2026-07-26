@@ -77,6 +77,7 @@ use surface::WindowSurface;
 #[doc = include_str!("../README.md")]
 struct ReadmeDoctests;
 
+use retroglyph_core::DrawCell;
 use retroglyph_core::backend::{Cursor, Input, Output};
 use retroglyph_core::color::Color;
 
@@ -476,7 +477,7 @@ impl SoftwareBackend {
     /// use retroglyph_core::tile::Tile;
     /// use retroglyph_core::style::Style;
     /// use retroglyph_core::grid::Pos;
-    /// use retroglyph_core::Color;
+    /// use retroglyph_core::{Color, DrawCell};
     /// use retroglyph_software::SoftwareBackendBuilder;
     ///
     /// let mut renderer = SoftwareBackendBuilder::new()
@@ -490,7 +491,7 @@ impl SoftwareBackend {
     /// // Render a red cell on layer 0.
     /// let tile = Tile::new(' ', Style::new().bg(Color::Rgb { r: 255, g: 0, b: 0 }));
     /// renderer
-    ///     .draw_layers([(0, Pos::new(0, 0), &tile, None)].into_iter())
+    ///     .draw_layers([DrawCell::on_layer(0, Pos::new(0, 0), &tile)].into_iter())
     ///     .unwrap();
     ///
     /// assert!(renderer.pixels().iter().all(|&p| p == 0x00FF_0000));
@@ -552,7 +553,7 @@ impl Output for SoftwareRenderer {
 
     fn draw<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
-        I: Iterator<Item = (Pos, &'a Tile, Option<&'a str>)>,
+        I: Iterator<Item = DrawCell<'a>>,
     {
         let fonts = &self.fonts;
         let scale = usize::from(self.options.scale);
@@ -567,7 +568,8 @@ impl Output for SoftwareRenderer {
         // This bitmap/sprite renderer keys everything off `Tile::glyph`, not
         // the full grapheme cluster: sprite lookup, ligature-free bitmap
         // fonts, and sub-cell offsets are all single-codepoint concepts here.
-        for (pos, cell, _extra) in content {
+        for draw_cell in content {
+            let (pos, cell) = (draw_cell.pos, draw_cell.tile);
             blit_cell(
                 self.ctx.pixel_buf.as_mut(),
                 buf_w,
@@ -647,7 +649,7 @@ impl Output for SoftwareRenderer {
     /// previous sprite's pixels would survive in cells the diff considers unchanged.
     fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
-        I: Iterator<Item = (u8, Pos, &'a Tile, Option<&'a str>)>,
+        I: Iterator<Item = DrawCell<'a>>,
     {
         let cols = usize::from(self.options.cols);
         let rows = usize::from(self.options.rows);
@@ -668,7 +670,8 @@ impl Output for SoftwareRenderer {
         let mut any_dirty = false;
         let mut max_layer_seen: i32 = -1;
 
-        for (layer_id, pos, tile, _extra) in content {
+        for draw_cell in content {
+            let (layer_id, pos, tile) = (draw_cell.layer, draw_cell.pos, draw_cell.tile);
             let layer_idx = usize::from(layer_id);
             max_layer_seen = max_layer_seen.max(i32::from(layer_id));
 
@@ -1378,7 +1381,7 @@ mod tests {
     fn layer0_paints_background() {
         let mut renderer = test_renderer();
         let tile = Tile::new(' ', Style::new().bg(Color::Rgb { r: 255, g: 0, b: 0 }));
-        let diff: Vec<(u8, Pos, &Tile, Option<&str>)> = vec![(0, Pos::new(0, 0), &tile, None)];
+        let diff: Vec<DrawCell<'_>> = vec![DrawCell::on_layer(0, Pos::new(0, 0), &tile)];
         renderer.draw_layers(diff.into_iter());
 
         let buf = renderer.pixels();
@@ -1398,8 +1401,8 @@ mod tests {
         // draw_layers clears buffer first, so pass all layers in one call.
         renderer.draw_layers(
             [
-                (0, Pos::new(0, 0), &bg_tile, None),
-                (1, Pos::new(0, 0), &space_tile, None),
+                DrawCell::on_layer(0, Pos::new(0, 0), &bg_tile),
+                DrawCell::on_layer(1, Pos::new(0, 0), &space_tile),
             ]
             .into_iter(),
         );
@@ -1430,8 +1433,8 @@ mod tests {
         // draw_layers clears buffer first, so pass all layers in one call.
         renderer.draw_layers(
             [
-                (0, Pos::new(0, 0), &bg, None),
-                (1, Pos::new(0, 0), &fg, None),
+                DrawCell::on_layer(0, Pos::new(0, 0), &bg),
+                DrawCell::on_layer(1, Pos::new(0, 0), &fg),
             ]
             .into_iter(),
         );
@@ -1463,8 +1466,8 @@ mod tests {
         // draw_layers clears buffer first, so pass all layers in one call.
         renderer.draw_layers(
             [
-                (0, Pos::new(0, 0), &glyph_on_red, None),
-                (1, Pos::new(0, 0), &occupied_default_bg, None),
+                DrawCell::on_layer(0, Pos::new(0, 0), &glyph_on_red),
+                DrawCell::on_layer(1, Pos::new(0, 0), &occupied_default_bg),
             ]
             .into_iter(),
         );
@@ -1494,8 +1497,8 @@ mod tests {
         // draw_layers clears buffer first, so pass all layers in one call.
         renderer.draw_layers(
             [
-                (0, Pos::new(0, 0), &bg, None),
-                (1, Pos::new(0, 0), &fg, None),
+                DrawCell::on_layer(0, Pos::new(0, 0), &bg),
+                DrawCell::on_layer(1, Pos::new(0, 0), &fg),
             ]
             .into_iter(),
         );
@@ -1518,7 +1521,11 @@ mod tests {
 
         let fg =
             Tile::new('@', Style::new().fg(Color::Rgb { r: 0, g: 255, b: 0 })).with_offset(1, 0);
-        Output::draw(&mut renderer, [(Pos::new(0, 0), &fg, None)].into_iter()).unwrap();
+        Output::draw(
+            &mut renderer,
+            [DrawCell::new(Pos::new(0, 0), &fg)].into_iter(),
+        )
+        .unwrap();
 
         let buf = renderer.pixels();
         let has_green = |col: usize| {
@@ -1557,8 +1564,8 @@ mod tests {
 
         renderer.draw_layers(
             [
-                (0, Pos::new(0, 0), &block, None),
-                (0, Pos::new(1, 0), &neighbor, None),
+                DrawCell::on_layer(0, Pos::new(0, 0), &block),
+                DrawCell::on_layer(0, Pos::new(1, 0), &neighbor),
             ]
             .into_iter(),
         );
@@ -1646,9 +1653,9 @@ mod tests {
         // Single draw_layers call (clears buffer first).
         renderer.draw_layers(
             [
-                (0, Pos::new(0, 0), &bg, None),
-                (0, Pos::new(1, 0), &dot, None),
-                (1, Pos::new(0, 0), &entity, None),
+                DrawCell::on_layer(0, Pos::new(0, 0), &bg),
+                DrawCell::on_layer(0, Pos::new(1, 0), &dot),
+                DrawCell::on_layer(1, Pos::new(0, 0), &entity),
             ]
             .into_iter(),
         );
@@ -1701,10 +1708,10 @@ mod tests {
 
         renderer.draw_layers(
             [
-                (0, Pos::new(0, 0), &base, None),
-                (0, Pos::new(1, 0), &base, None),
-                (1, Pos::new(0, 0), &overlay, None),
-                (1, Pos::new(1, 0), &empty, None),
+                DrawCell::on_layer(0, Pos::new(0, 0), &base),
+                DrawCell::on_layer(0, Pos::new(1, 0), &base),
+                DrawCell::on_layer(1, Pos::new(0, 0), &overlay),
+                DrawCell::on_layer(1, Pos::new(1, 0), &empty),
             ]
             .into_iter(),
         );
@@ -1747,14 +1754,14 @@ mod tests {
         tile: &Tile,
         over: Option<(u16, u16, &Tile)>,
     ) {
-        let mut items: Vec<(u8, Pos, &Tile, Option<&str>)> = Vec::new();
+        let mut items: Vec<DrawCell<'_>> = Vec::new();
         for y in 0..rows {
             for x in 0..cols {
                 let t = match over {
                     Some((ox, oy, ot)) if ox == x && oy == y => ot,
                     _ => tile,
                 };
-                items.push((0, Pos::new(x, y), t, None));
+                items.push(DrawCell::on_layer(0, Pos::new(x, y), t));
             }
         }
         r.draw_layers(items.into_iter()).unwrap();
@@ -1804,7 +1811,7 @@ mod tests {
         let blue = bg_tile(0, 0, 200);
         // Two separate frames would each report one band; do it in one frame
         // by changing both corners relative to the baseline.
-        let mut items: Vec<(u8, Pos, &Tile, Option<&str>)> = Vec::new();
+        let mut items: Vec<DrawCell<'_>> = Vec::new();
         for y in 0..3u16 {
             for x in 0..2u16 {
                 let t = if (x, y) == (0, 0) || (x, y) == (1, 2) {
@@ -1812,7 +1819,7 @@ mod tests {
                 } else {
                     &red
                 };
-                items.push((0, Pos::new(x, y), t, None));
+                items.push(DrawCell::on_layer(0, Pos::new(x, y), t));
             }
         }
         r.draw_layers(items.into_iter()).unwrap();
@@ -1877,7 +1884,7 @@ mod tests {
                 (i % usize::from(cols)) as u16,
                 (i / usize::from(cols)) as u16,
             );
-            (0u8, pos, t, None)
+            DrawCell::on_layer(0, pos, t)
         });
         r.draw_layers(content).unwrap();
     }
@@ -1979,9 +1986,9 @@ mod tests {
         let draw = |r: &mut SoftwareRenderer| {
             r.draw_layers(
                 [
-                    (0, Pos::new(0, 0), &bg, None),
-                    (1, Pos::new(0, 0), &offset_fg, None),
-                    (0, Pos::new(1, 0), &bg, None),
+                    DrawCell::on_layer(0, Pos::new(0, 0), &bg),
+                    DrawCell::on_layer(1, Pos::new(0, 0), &offset_fg),
+                    DrawCell::on_layer(0, Pos::new(1, 0), &bg),
                 ]
                 .into_iter(),
             )
@@ -2022,14 +2029,18 @@ mod tests {
                 b: 10,
             }),
         );
-        r.draw_layers(core::iter::once((0, Pos::new(0, 0), &base, None)))
-            .unwrap();
+        r.draw_layers(core::iter::once(DrawCell::on_layer(
+            0,
+            Pos::new(0, 0),
+            &base,
+        )))
+        .unwrap();
 
         let overlay = Tile::new(' ', Style::new().bg(Color::Rgb { r: 200, g: 0, b: 0 }));
         r.draw_layers(
             [
-                (0, Pos::new(0, 0), &base, None),
-                (1, Pos::new(0, 0), &overlay, None),
+                DrawCell::on_layer(0, Pos::new(0, 0), &base),
+                DrawCell::on_layer(1, Pos::new(0, 0), &overlay),
             ]
             .into_iter(),
         )
@@ -2160,7 +2171,11 @@ mod span_tests {
             .map(|(x, y)| (0u8, Pos::new(x, y), *grid.tile(0, (x, y)).unwrap()))
             .collect();
         renderer
-            .draw_layers(tiles.iter().map(|(l, pos, tile)| (*l, *pos, tile, None)))
+            .draw_layers(
+                tiles
+                    .iter()
+                    .map(|(l, pos, tile)| DrawCell::on_layer(*l, *pos, tile)),
+            )
             .unwrap();
     }
 
@@ -2349,8 +2364,12 @@ mod span_tests {
             .flat_map(|layer| (0..2u16).map(move |x| (layer, x)))
             .map(|(layer, x)| (layer, Pos::new(x, 0), *grid.tile(layer, (x, 0)).unwrap()))
             .collect();
-        r.draw_layers(tiles.iter().map(|(l, pos, tile)| (*l, *pos, tile, None)))
-            .unwrap();
+        r.draw_layers(
+            tiles
+                .iter()
+                .map(|(l, pos, tile)| DrawCell::on_layer(*l, *pos, tile)),
+        )
+        .unwrap();
 
         assert!(
             r.pixels().contains(&GREEN),
@@ -2419,7 +2438,11 @@ mod font_chain_tests {
             .expect("renderer builds");
         let tile = Tile::new(ch, Style::new().fg(fg).bg(BLACK));
         renderer
-            .draw_layers(core::iter::once((0, Pos::new(0, 0), &tile, None)))
+            .draw_layers(core::iter::once(DrawCell::on_layer(
+                0,
+                Pos::new(0, 0),
+                &tile,
+            )))
             .unwrap();
         renderer.pixels().to_vec()
     }

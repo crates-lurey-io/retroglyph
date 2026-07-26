@@ -42,6 +42,7 @@ use crate::GlBackendBuilder;
 use crate::GlRenderer;
 use crate::shaders::GlslFlavor;
 use glow::HasContext as _;
+use retroglyph_core::DrawCell;
 use retroglyph_core::backend::Output;
 use retroglyph_core::color::Color;
 use retroglyph_core::grid::Pos;
@@ -187,13 +188,14 @@ fn render_to_frame(gl: &glow::Context, renderer: &GlRenderer) -> Frame {
 
 /// Draws `cells` (single layer) into the renderer. Both backends' `draw` is infallible.
 fn paint(out: &mut GlRenderer, cells: &[(Pos, Tile)]) {
-    out.draw(cells.iter().map(|(p, t)| (*p, t, None))).ok();
+    out.draw(cells.iter().map(|(p, t)| DrawCell::new(*p, t)))
+        .ok();
 }
 
 /// Feeds a full layered frame `(layer, pos, tile)` into the renderer via `draw_layers`, the way the
 /// core `Terminal` drives this `composites_layers` backend.
 fn paint_layers(out: &mut GlRenderer, cells: &[(u8, Pos, Tile)]) {
-    out.draw_layers(cells.iter().map(|(l, p, t)| (*l, *p, t, None)))
+    out.draw_layers(cells.iter().map(|(l, p, t)| DrawCell::on_layer(*l, *p, t)))
         .ok();
 }
 

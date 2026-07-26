@@ -14,10 +14,11 @@
 
 #![allow(clippy::redundant_pub_crate)]
 
+use retroglyph_core::DrawCell;
 use retroglyph_core::event::{Event, KeyCode, KeyEventKind};
 use retroglyph_core::{Color, Style, Surface};
 #[cfg(feature = "crossterm")]
-use retroglyph_core::{Cursor, Input, Output, Pos, Size, Tile};
+use retroglyph_core::{Cursor, Input, Output, Pos, Size};
 use std::cell::Cell;
 use std::rc::Rc;
 use std::time::Duration;
@@ -95,14 +96,14 @@ impl<B: Output> Output for ToggleFilter<B> {
 
     fn draw<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
-        I: Iterator<Item = (Pos, &'a Tile, Option<&'a str>)>,
+        I: Iterator<Item = DrawCell<'a>>,
     {
         self.inner.draw(content)
     }
 
     fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
-        I: Iterator<Item = (u8, Pos, &'a Tile, Option<&'a str>)>,
+        I: Iterator<Item = DrawCell<'a>>,
     {
         self.inner.draw_layers(content)
     }

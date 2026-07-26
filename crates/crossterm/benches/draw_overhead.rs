@@ -21,6 +21,7 @@
 #![allow(missing_docs)]
 
 use criterion::{Criterion, criterion_group, criterion_main};
+use retroglyph_core::DrawCell;
 use retroglyph_core::backend::Output;
 use retroglyph_core::color::Color;
 use retroglyph_core::grid::Pos;
@@ -74,7 +75,7 @@ fn bench_size(c: &mut Criterion, cols: u16, rows: u16) {
         b.iter_batched(
             headless_backend,
             |mut term| {
-                term.draw(cells.iter().map(|(pos, tile)| (*pos, tile, None)))
+                term.draw(cells.iter().map(|(pos, tile)| DrawCell::new(*pos, tile)))
                     .expect("draw into an in-memory Vec<u8> writer cannot fail");
                 term.flush()
                     .expect("flush into an in-memory Vec<u8> writer cannot fail");
