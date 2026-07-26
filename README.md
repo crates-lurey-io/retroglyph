@@ -267,7 +267,8 @@ cargo run --bin runner                                      # interactive picker
 ```
 
 Every windowed and crossterm example draws an `NNN fps  MM.M ms  <backend>` readout in the top-right
-corner. Set `RG_FPS=0` to turn it off (on WASM, click the floating `FPS` button instead).
+corner. Press `` ` `` (or `F1`) to toggle it while the example runs; in the browser, click the
+floating `FPS` button. Set `RG_FPS=0` to start with it hidden.
 
 Every example is also built for WASM (Headless/Terminal/Software/WebGL variants) and published as an
 interactive gallery at **[main.retroglyph.dev/examples](https://main.retroglyph.dev/examples/)** --

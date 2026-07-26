@@ -83,6 +83,7 @@ use retroglyph_core::event::Event;
 use retroglyph_core::grid::{Pos, Size};
 use retroglyph_core::tile::Tile;
 use retroglyph_terminal::TerminalRenderer;
+use std::collections::VecDeque;
 use std::io::{BufWriter, IsTerminal, Stdout};
 
 // Orphan-rule note: `retroglyph_core` types and `crossterm` types are both
@@ -436,6 +437,15 @@ pub struct Crossterm<W: std::io::Write = BufWriter<Stdout>> {
     // hardcoded guess (80x24, not a "last known good" value, since none exists yet) is ever
     // used. See retroglyph#281.
     cached_size: Size,
+    // Events handed to `Input::push_event`, drained ahead of the real terminal by `poll_event`.
+    //
+    // Unlike the windowed backends, this one has its own event source, so nothing *has* to push
+    // into it -- but the `Input::push_event` contract is "queue this for `poll_event`", and a
+    // silent no-op is a trap for the two callers that legitimately want it: a test harness
+    // injecting synthetic input, and a driver that drains the queue to intercept a key and hands
+    // the rest back (see `retroglyph-examples`' FPS overlay toggle). Both used to lose every
+    // event they pushed here.
+    pushed_events: VecDeque<Event>,
 }
 
 impl Crossterm {
@@ -657,6 +667,7 @@ impl<W: std::io::Write> Crossterm<W> {
             renderer: TerminalRenderer::with_plain_mode(writer, plain),
             _instance_guard: instance_guard,
             cached_size: Size { width, height },
+            pushed_events: VecDeque::new(),
         })
     }
 }
@@ -731,6 +742,13 @@ impl<W: std::io::Write> Input for Crossterm<W> {
     /// to throttle on its behalf.
     #[cfg_attr(feature = "tracing", tracing::instrument(level = "trace", skip(self)))]
     fn poll_event(&mut self, timeout: Duration) -> Option<Event> {
+        // Pushed events jump the queue: they were either injected by a test harness or handed
+        // back by a driver that already read them off the real terminal, so in both cases they
+        // are older than anything crossterm still has waiting.
+        if let Some(event) = self.pushed_events.pop_front() {
+            return Some(event);
+        }
+
         let start = std::time::Instant::now();
         let mut remaining = timeout;
 
@@ -776,8 +794,14 @@ impl<W: std::io::Write> Input for Crossterm<W> {
         }
     }
 
-    // `push_event` uses the trait default: crossterm reads events from its own event stream, not
-    // from an externally pushed queue.
+    /// Queues `event` ahead of the real terminal's own stream; the next
+    /// [`poll_event`](Self::poll_event) returns it.
+    ///
+    /// See the `pushed_events` field comment for why this backend implements this at all, when it
+    /// has a perfectly good event source of its own.
+    fn push_event(&mut self, event: Event) {
+        self.pushed_events.push_back(event);
+    }
 }
 
 impl<W: std::io::Write> Cursor for Crossterm<W> {
@@ -1011,6 +1035,36 @@ mod tests {
         {
             drop(term);
         }
+    }
+
+    #[test]
+    fn pushed_events_are_returned_by_poll_event_in_order() {
+        use retroglyph_core::event::{KeyCode, KeyEvent, KeyModifiers};
+
+        let _lock = TEST_GUARD_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let Ok(mut term) = CrosstermOptions::new()
+            .raw_mode(false)
+            .alt_screen(false)
+            .mouse_capture(false)
+            .focus_change(false)
+            .bracketed_paste(false)
+            .kitty_protocol(false)
+            .build_with_writer(Vec::new())
+        else {
+            return;
+        };
+
+        let first = Event::Key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+        let second = Event::Resize(10, 4);
+        term.push_event(first.clone());
+        term.push_event(second.clone());
+
+        assert_eq!(term.poll_event(Duration::ZERO), Some(first));
+        assert_eq!(term.poll_event(Duration::ZERO), Some(second));
+        // Drained: the next poll falls through to the real (empty, non-TTY) event source.
+        assert_eq!(term.poll_event(Duration::ZERO), None);
     }
 
     #[test]
