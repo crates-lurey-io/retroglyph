@@ -349,7 +349,7 @@ pub enum Event {
     /// Only emitted by backends with a real cross-thread injection point:
     /// the windowed (winit) backend's `EventProxy`
     /// (`retroglyph_window::winit::EventProxy::send_event`), which forwards
-    /// the `u64` unchanged. The payload is deliberately a plain `u64`
+    /// the `u64` unchanged. The payload is a plain `u64`
     /// rather than an arbitrary boxed value: it keeps `Event` cheaply
     /// `Clone`/`PartialEq`/`Eq`/`Hash` (a `Box<dyn Any>` could not derive
     /// any of those) and needs no generic parameter threaded through every
