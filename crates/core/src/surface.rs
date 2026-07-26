@@ -20,8 +20,13 @@ use unicode_width::UnicodeWidthChar;
 /// each caller's own `area: Rect` (a sub-rect of the surface's own area, e.g. one produced by a
 /// layout split) is in the same coordinate space as [`Surface::area`] itself.
 /// [`Surface::put`]/[`Surface::print`]/... take coordinates in that same space and silently clip
-/// any write that falls outside [`Surface::area`]: a caller cannot draw outside the [`Rect`] it
-/// was given, matching the rest of the workspace's clip-on-draw policy for out-of-bounds drawing.
+/// any write that falls outside [`Surface::area`], matching the rest of the workspace's
+/// clip-on-draw policy for out-of-bounds drawing.
+///
+/// [`Surface::clip`] turns a sub-rect into a surface of its own, so a subsystem that should not
+/// draw outside one is bounded by the type rather than trusted to respect an `area` handed to it
+/// alongside a wider surface. The clip is intersected, never substituted, so narrowing only ever
+/// tightens.
 ///
 /// A caller that genuinely needs more than one layer at once (e.g. a modal dimming layer 0 while
 /// drawing its own content on layer 1) switches layers with [`Surface::on_layer`] rather than
@@ -72,6 +77,50 @@ impl<'a> Surface<'a> {
         }
     }
 
+    /// A new surface over the same grid and layer, clipped to `area` intersected with this
+    /// surface's own area.
+    ///
+    /// Coordinates are unchanged: the sub-surface addresses the same space this one does, so a
+    /// sub-rect computed against [`Surface::area`] (e.g. by a [`layout`](crate::layout) split)
+    /// can be passed straight in. Because `area` is intersected rather than substituted,
+    /// narrowing is monotonic: handing a surface down a layout tree can only ever tighten what a
+    /// callee is able to touch.
+    ///
+    /// Clipping is also how the area-sensitive calls are told what they are drawing into:
+    ///
+    /// - [`print`](Self::print) wraps overflow onto the next row. Clipped to a one-row bar, the
+    ///   wrapped remainder falls outside the area and is dropped, which is what a single-line
+    ///   bar wants.
+    /// - [`put_span`](Self::put_span) and [`put_span_uniform`](Self::put_span_uniform) refuse a
+    ///   footprint that leaves the area. Clipped to a content rect, "fits" stops meaning "fits
+    ///   the screen" and starts meaning "does not reserve cells in the status bar below".
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_core::{Grid, Pos, Rect, Style, Surface};
+    ///
+    /// let mut grid = Grid::new(6, 2);
+    /// let mut screen = Surface::new(&mut grid, Rect::new(0, 0, 6, 2), 0);
+    ///
+    /// // A title too long for the one-row bar at the top: the remainder wraps out of the
+    /// // clip instead of onto the map below.
+    /// screen
+    ///     .clip(Rect::new(0, 0, 6, 1))
+    ///     .print((0, 0), "retroglyph", Style::default());
+    ///
+    /// assert_eq!(grid[Pos::new(0, 0)].glyph(), 'r');
+    /// assert_eq!(grid[Pos::new(0, 1)].glyph(), ' ');
+    /// ```
+    #[must_use]
+    pub fn clip(&mut self, area: Rect) -> Surface<'_> {
+        Surface {
+            area: self.area.intersect(area),
+            grid: self.grid,
+            layer: self.layer,
+        }
+    }
+
     /// A styled view over this surface: same area and layer, but every draw call uses `style`
     /// without needing to pass it each time. Handy for a run of same-styled writes (e.g. filling
     /// in a wall glyph over many cells) without repeating the [`Style`] at every call site.
@@ -85,7 +134,8 @@ impl<'a> Surface<'a> {
     /// Borrows the underlying [`Grid`] directly, with no clipping.
     ///
     /// Escape hatch for multi-layer or whole-grid operations (e.g. [`Grid::blit`]) that don't fit
-    /// this surface's clipped, single-layer model.
+    /// this surface's clipped, single-layer model. Drawing into a sub-rect is not one of those:
+    /// [`clip`](Self::clip) narrows a surface without handing out the unclipped grid to do it.
     pub const fn grid_mut(&mut self) -> &mut Grid {
         self.grid
     }
@@ -551,5 +601,135 @@ mod tests {
         assert_eq!(grid[Pos::new(0, 0)].style().foreground(), crate::Color::RED);
         assert_eq!(grid[Pos::new(0, 1)].style().foreground(), crate::Color::RED);
         assert_eq!(grid[Pos::new(0, 1)].span(), (2, 1));
+    }
+
+    #[test]
+    fn clip_narrows_the_area_and_keeps_the_coordinate_space() {
+        let mut grid = Grid::new(8, 4);
+        let mut surface = screen(&mut grid);
+        let sub = surface.clip(Rect::new(2, 1, 4, 2));
+
+        assert_eq!(sub.area(), Rect::new(2, 1, 4, 2));
+        assert_eq!(sub.width(), 4);
+        assert_eq!(sub.height(), 2);
+    }
+
+    #[test]
+    fn clip_keeps_the_layer() {
+        let mut grid = Grid::new(4, 4);
+        let mut surface = screen(&mut grid);
+        let mut layer1 = surface.on_layer(1);
+
+        assert_eq!(layer1.clip(Rect::new(0, 0, 2, 2)).layer(), 1);
+    }
+
+    #[test]
+    fn clip_intersects_rather_than_replaces_so_it_cannot_widen() {
+        let mut grid = Grid::new(8, 4);
+        let area = Rect::new(2, 1, 4, 2);
+        let mut surface = Surface::new(&mut grid, area, 0);
+
+        // A rect reaching outside the surface's own area only ever tightens it.
+        assert_eq!(surface.clip(Rect::new(0, 0, 8, 4)).area(), area);
+        assert_eq!(
+            surface.clip(Rect::new(0, 0, 4, 4)).area(),
+            Rect::new(2, 1, 2, 2)
+        );
+    }
+
+    #[test]
+    fn clip_writes_outside_the_sub_rect_are_dropped() {
+        let mut grid = Grid::new(4, 2);
+        {
+            let mut surface = screen(&mut grid);
+            let mut top = surface.clip(Rect::new(0, 0, 4, 1));
+            top.put((1, 0), 'a', Style::default());
+            // Inside the surface's own area, outside the clip.
+            top.put((1, 1), 'b', Style::default());
+        }
+
+        assert_eq!(grid[Pos::new(1, 0)].glyph(), 'a');
+        assert_eq!(grid[Pos::new(1, 1)].glyph(), ' ');
+    }
+
+    #[test]
+    fn clip_to_one_row_drops_print_overflow_instead_of_wrapping_it() {
+        let mut grid = Grid::new(4, 2);
+        {
+            let mut surface = screen(&mut grid);
+            surface
+                .clip(Rect::new(0, 0, 4, 1))
+                .print((0, 0), "abcdef", Style::default());
+        }
+
+        assert_eq!(grid[Pos::new(3, 0)].glyph(), 'd');
+        // "ef" wrapped onto row 1, which the clip excludes.
+        assert_eq!(grid[Pos::new(0, 1)].glyph(), ' ');
+    }
+
+    #[test]
+    fn clip_makes_put_span_measure_its_footprint_against_the_sub_rect() {
+        let mut grid = Grid::new(4, 3);
+        {
+            let mut surface = screen(&mut grid);
+            // Fits the grid, but reserves a cell on the bottom row the clip excludes.
+            surface
+                .clip(Rect::new(0, 0, 4, 2))
+                .put_span((0, 1), &["ab", "cd"], Style::default());
+        }
+
+        assert_eq!(grid[Pos::new(0, 1)].glyph(), ' ');
+
+        let mut surface = screen(&mut grid);
+        surface
+            .clip(Rect::new(0, 0, 4, 2))
+            .put_span((0, 0), &["ab", "cd"], Style::default());
+
+        assert_eq!(grid[Pos::new(0, 0)].span(), (2, 2));
+    }
+
+    #[test]
+    fn clip_makes_put_span_uniform_measure_its_footprint_against_the_sub_rect() {
+        let mut grid = Grid::new(4, 3);
+        let style = Style::default();
+        {
+            let mut surface = screen(&mut grid);
+            let mut content = surface.clip(Rect::new(0, 0, 4, 2));
+            // Fits the grid, but reserves a cell on the bottom row the clip excludes.
+            assert_eq!(
+                content.put_span_uniform((0, 1), (2, 2), 'C', '.', style),
+                None
+            );
+            assert_eq!(
+                content.put_span_uniform((0, 0), (2, 2), 'C', '.', style),
+                Some(())
+            );
+        }
+
+        assert_eq!(grid[Pos::new(0, 0)].span(), (2, 2));
+        assert_eq!(grid[Pos::new(0, 2)].glyph(), ' ');
+    }
+
+    #[test]
+    fn clip_to_a_disjoint_rect_is_empty_and_drops_every_write() {
+        let mut grid = Grid::new(8, 4);
+        {
+            let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 4, 4), 0);
+            let mut sub = surface.clip(Rect::new(4, 0, 4, 4));
+            assert_eq!(sub.area(), Rect::EMPTY);
+            sub.print((0, 0), "abc", Style::default());
+        }
+
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
+    }
+
+    #[test]
+    fn clip_nests_monotonically() {
+        let mut grid = Grid::new(8, 4);
+        let mut surface = screen(&mut grid);
+        let mut outer = surface.clip(Rect::new(1, 1, 4, 2));
+        let inner = outer.clip(Rect::new(0, 0, 8, 4));
+
+        assert_eq!(inner.area(), Rect::new(1, 1, 4, 2));
     }
 }
