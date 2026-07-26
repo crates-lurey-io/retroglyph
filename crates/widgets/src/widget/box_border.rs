@@ -103,7 +103,7 @@ impl Widget for BoxBorder {
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::{Color, Grid};
+    use retroglyph_core::{Color, Grid, Pos};
 
     use super::*;
 
@@ -115,14 +115,14 @@ mod tests {
             .style(Style::new().fg(Color::WHITE))
             .render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(grid.get(0, 0).glyph(), TL);
-        assert_eq!(grid.get(4, 0).glyph(), TR);
-        assert_eq!(grid.get(0, 2).glyph(), BL);
-        assert_eq!(grid.get(4, 2).glyph(), BR);
-        assert_eq!(grid.get(2, 0).glyph(), H);
-        assert_eq!(grid.get(0, 1).glyph(), V);
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), TL);
+        assert_eq!(grid[Pos::new(4, 0)].glyph(), TR);
+        assert_eq!(grid[Pos::new(0, 2)].glyph(), BL);
+        assert_eq!(grid[Pos::new(4, 2)].glyph(), BR);
+        assert_eq!(grid[Pos::new(2, 0)].glyph(), H);
+        assert_eq!(grid[Pos::new(0, 1)].glyph(), V);
         // Interior untouched.
-        assert_eq!(grid.get(2, 1).glyph(), ' ');
+        assert_eq!(grid[Pos::new(2, 1)].glyph(), ' ');
     }
 
     #[test]
@@ -130,7 +130,7 @@ mod tests {
         let area = Rect::new(0, 0, 1, 1);
         let mut grid = Grid::new(1, 1);
         BoxBorder::new().render(area, &mut Surface::new(&mut grid, area, 0));
-        assert_eq!(grid.get(0, 0).glyph(), ' ');
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
     }
 
     #[test]
@@ -141,8 +141,14 @@ mod tests {
             .theme(Theme::DARK)
             .render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(grid.get(0, 0).style().foreground(), Theme::DARK.border);
-        assert_eq!(grid.get(0, 0).style().background(), Theme::DARK.panel_bg);
+        assert_eq!(
+            grid[Pos::new(0, 0)].style().foreground(),
+            Theme::DARK.border
+        );
+        assert_eq!(
+            grid[Pos::new(0, 0)].style().background(),
+            Theme::DARK.panel_bg
+        );
     }
 
     #[test]
@@ -153,7 +159,10 @@ mod tests {
             .theme_on(Theme::DARK, Color::Default)
             .render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(grid.get(0, 0).style().foreground(), Theme::DARK.border);
-        assert_eq!(grid.get(0, 0).style().background(), Color::Default);
+        assert_eq!(
+            grid[Pos::new(0, 0)].style().foreground(),
+            Theme::DARK.border
+        );
+        assert_eq!(grid[Pos::new(0, 0)].style().background(), Color::Default);
     }
 }

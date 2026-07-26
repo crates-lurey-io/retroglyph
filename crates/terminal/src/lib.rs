@@ -734,7 +734,7 @@ mod tests {
             .expect("2x2 span fits in a 2x2 grid");
         let tiles: Vec<(Pos, Tile)> = (0..2)
             .flat_map(|y| (0..2).map(move |x| (Pos { x, y }, x, y)))
-            .map(|(pos, x, y)| (pos, *grid.get_tile(0, x, y).unwrap()))
+            .map(|(pos, x, y)| (pos, *grid.tile(0, (x, y)).unwrap()))
             .collect();
 
         for plain in [false, true] {

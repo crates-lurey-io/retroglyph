@@ -41,7 +41,7 @@ fn terminal_with_layers(cols: u16, rows: u16, layers: u8) -> Terminal<Headless> 
         for y in 0..rows {
             for x in 0..cols {
                 term.grid_mut()
-                    .put_tile(layer, x, y, Tile::new(glyph, style));
+                    .put_tile(layer, (x, y), Tile::new(glyph, style));
             }
         }
     }

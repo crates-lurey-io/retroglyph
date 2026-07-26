@@ -93,7 +93,7 @@ impl<'a> Surface<'a> {
         #[cfg(not(feature = "egc"))]
         {
             let tile = Tile::new(ch, style);
-            self.grid.put_tile(self.layer, x, y, tile);
+            self.grid.put_tile(self.layer, (x, y), tile);
         }
     }
 

@@ -184,7 +184,7 @@ impl Widget for Tabs<'_> {
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::Grid;
+    use retroglyph_core::{Grid, Pos};
 
     use super::*;
 
@@ -195,9 +195,9 @@ mod tests {
         let mut grid = Grid::new(20, 1);
         Tabs::new(&titles).render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(grid.get(0, 0).glyph(), 'O');
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), 'O');
         // "One" (3) + column_spacing (1) = tab 2 starts at column 4.
-        assert_eq!(grid.get(4, 0).glyph(), 'T');
+        assert_eq!(grid[Pos::new(4, 0)].glyph(), 'T');
     }
 
     #[test]
@@ -209,8 +209,8 @@ mod tests {
             .select(Some(1))
             .render(area, &mut Surface::new(&mut grid, area, 0));
 
-        let selected_bg = grid.get(4, 0).style().background();
-        let plain_bg = grid.get(0, 0).style().background();
+        let selected_bg = grid[Pos::new(4, 0)].style().background();
+        let plain_bg = grid[Pos::new(0, 0)].style().background();
         assert_ne!(selected_bg, plain_bg);
     }
 
@@ -221,8 +221,8 @@ mod tests {
         let mut grid = Grid::new(20, 1);
         Tabs::new(&titles).render(area, &mut Surface::new(&mut grid, area, 0));
 
-        let bg0 = grid.get(0, 0).style().background();
-        let bg1 = grid.get(4, 0).style().background();
+        let bg0 = grid[Pos::new(0, 0)].style().background();
+        let bg1 = grid[Pos::new(4, 0)].style().background();
         assert_eq!(bg0, bg1);
     }
 
@@ -236,8 +236,8 @@ mod tests {
             .render(area, &mut Surface::new(&mut grid, area, 0));
 
         // Default spacing (1) would put "B" at column 2; spacing 3 pushes it to column 4.
-        assert_eq!(grid.get(0, 0).glyph(), 'A');
-        assert_eq!(grid.get(4, 0).glyph(), 'B');
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), 'A');
+        assert_eq!(grid[Pos::new(4, 0)].glyph(), 'B');
     }
 
     #[test]
@@ -251,7 +251,7 @@ mod tests {
             .render(area, &mut Surface::new(&mut grid, area, 0));
 
         // "A" at 0, spacing [1,3), midpoint at 1 + 3/2 = 2.
-        assert_eq!(grid.get(2, 0).glyph(), '|');
+        assert_eq!(grid[Pos::new(2, 0)].glyph(), '|');
     }
 
     #[test]
@@ -261,7 +261,7 @@ mod tests {
         let mut grid = Grid::new(20, 1);
         Tabs::new(&titles).render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(grid.get(1, 0).glyph(), ' ');
+        assert_eq!(grid[Pos::new(1, 0)].glyph(), ' ');
     }
 
     #[test]
@@ -271,7 +271,7 @@ mod tests {
         let mut grid = Grid::new(4, 1);
         Tabs::new(&titles).render(area, &mut Surface::new(&mut grid, area, 0)); // must not panic
 
-        assert_eq!(grid.get(0, 0).glyph(), 'A');
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), 'A');
     }
 
     #[test]
@@ -286,7 +286,7 @@ mod tests {
             .style(custom)
             .render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(grid.get(0, 0).style().foreground(), Color::RED);
+        assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Color::RED);
     }
 
     #[test]
@@ -302,8 +302,8 @@ mod tests {
             .select(Some(0))
             .render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(grid.get(0, 0).style().foreground(), Color::GREEN);
-        assert_eq!(grid.get(0, 0).style().background(), Color::BLUE);
+        assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Color::GREEN);
+        assert_eq!(grid[Pos::new(0, 0)].style().background(), Color::BLUE);
     }
 
     #[test]
@@ -312,7 +312,7 @@ mod tests {
         let titles = ["One"];
         let mut grid = Grid::new(1, 1);
         Tabs::new(&titles).render(area, &mut Surface::new(&mut grid, area, 0));
-        assert_eq!(grid.get(0, 0).glyph(), ' ');
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
     }
 
     #[test]
@@ -325,10 +325,19 @@ mod tests {
             .select(Some(1))
             .render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(grid.get(0, 0).style().foreground(), Theme::DARK.dim);
-        assert_eq!(grid.get(0, 0).style().background(), Theme::DARK.panel_bg);
-        assert_eq!(grid.get(4, 0).style().foreground(), Theme::DARK.accent);
-        assert_eq!(grid.get(4, 0).style().background(), Theme::DARK.panel_bg);
+        assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Theme::DARK.dim);
+        assert_eq!(
+            grid[Pos::new(0, 0)].style().background(),
+            Theme::DARK.panel_bg
+        );
+        assert_eq!(
+            grid[Pos::new(4, 0)].style().foreground(),
+            Theme::DARK.accent
+        );
+        assert_eq!(
+            grid[Pos::new(4, 0)].style().background(),
+            Theme::DARK.panel_bg
+        );
     }
 
     #[test]
@@ -343,7 +352,10 @@ mod tests {
             .select(Some(0))
             .render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(grid.get(0, 0).style().foreground(), Theme::DARK.accent);
-        assert_eq!(grid.get(0, 0).style().background(), Color::Default);
+        assert_eq!(
+            grid[Pos::new(0, 0)].style().foreground(),
+            Theme::DARK.accent
+        );
+        assert_eq!(grid[Pos::new(0, 0)].style().background(), Color::Default);
     }
 }

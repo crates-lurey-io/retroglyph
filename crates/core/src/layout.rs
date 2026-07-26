@@ -292,6 +292,7 @@ impl<'a> TextLayout<'a> {
 mod tests {
     use super::*;
     use crate::color::Color;
+    use crate::grid::Pos;
     use crate::style::Style;
     use crate::text::{Line, Span};
 
@@ -393,9 +394,9 @@ mod tests {
             .rect(Rect::new(2, 1, 10, 3))
             .render(&mut term);
 
-        assert_eq!(term.grid().get(2, 1).glyph(), 'h');
-        assert_eq!(term.grid().get(3, 1).glyph(), 'i');
-        assert_eq!(term.grid().get(4, 1).glyph(), ' '); // unchanged
+        assert_eq!(term.grid()[Pos::new(2, 1)].glyph(), 'h');
+        assert_eq!(term.grid()[Pos::new(3, 1)].glyph(), 'i');
+        assert_eq!(term.grid()[Pos::new(4, 1)].glyph(), ' '); // unchanged
     }
 
     #[test]
@@ -411,8 +412,8 @@ mod tests {
             .h_align(HAlign::Center)
             .render(&mut term);
 
-        assert_eq!(term.grid().get(4, 0).glyph(), 'h');
-        assert_eq!(term.grid().get(5, 0).glyph(), 'i');
+        assert_eq!(term.grid()[Pos::new(4, 0)].glyph(), 'h');
+        assert_eq!(term.grid()[Pos::new(5, 0)].glyph(), 'i');
     }
 
     #[test]
@@ -428,8 +429,8 @@ mod tests {
             .h_align(HAlign::Right)
             .render(&mut term);
 
-        assert_eq!(term.grid().get(8, 0).glyph(), 'h');
-        assert_eq!(term.grid().get(9, 0).glyph(), 'i');
+        assert_eq!(term.grid()[Pos::new(8, 0)].glyph(), 'h');
+        assert_eq!(term.grid()[Pos::new(9, 0)].glyph(), 'i');
     }
 
     #[test]
@@ -445,7 +446,7 @@ mod tests {
             .v_align(VAlign::Middle)
             .render(&mut term);
 
-        assert_eq!(term.grid().get(0, 2).glyph(), 'h');
+        assert_eq!(term.grid()[Pos::new(0, 2)].glyph(), 'h');
     }
 
     #[test]
@@ -461,7 +462,7 @@ mod tests {
             .v_align(VAlign::Bottom)
             .render(&mut term);
 
-        assert_eq!(term.grid().get(0, 4).glyph(), 'h');
+        assert_eq!(term.grid()[Pos::new(0, 4)].glyph(), 'h');
     }
 
     #[test]
@@ -476,8 +477,8 @@ mod tests {
             .rect(Rect::new(0, 0, 1, 2))
             .render(&mut term);
 
-        assert_eq!(term.grid().get(0, 0).glyph(), 'a');
-        assert_eq!(term.grid().get(0, 1).glyph(), 'b');
-        assert_eq!(term.grid().get(0, 2).glyph(), ' '); // clipped
+        assert_eq!(term.grid()[Pos::new(0, 0)].glyph(), 'a');
+        assert_eq!(term.grid()[Pos::new(0, 1)].glyph(), 'b');
+        assert_eq!(term.grid()[Pos::new(0, 2)].glyph(), ' '); // clipped
     }
 }

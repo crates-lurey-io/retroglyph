@@ -30,7 +30,7 @@ fn filled(cols: u16, rows: u16, seed: u64) -> Grid {
                 g: rng.u8(..),
                 b: rng.u8(..),
             });
-            grid.put(x, y, Tile::new('#', style));
+            grid.put_tile(0, (x, y), Tile::new('#', style));
         }
     }
     grid

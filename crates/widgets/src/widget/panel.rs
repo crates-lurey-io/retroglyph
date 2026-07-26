@@ -141,7 +141,7 @@ impl Widget for Panel<'_> {
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::{Color, Grid};
+    use retroglyph_core::{Color, Grid, Pos};
 
     use super::*;
 
@@ -158,10 +158,10 @@ mod tests {
             .title("hi")
             .render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(grid.get(0, 0).glyph(), '┌');
-        assert_eq!(grid.get(1, 1).glyph(), ' '); // interior filled
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), '┌');
+        assert_eq!(grid[Pos::new(1, 1)].glyph(), ' '); // interior filled
         // Title centred in the top border somewhere.
-        let top_row: String = (0..10).map(|x| grid.get(x, 0).glyph()).collect();
+        let top_row: String = (0..10).map(|x| grid[Pos::new(x, 0)].glyph()).collect();
         assert!(top_row.contains("hi"));
     }
 
@@ -173,7 +173,7 @@ mod tests {
             .title("a very long title")
             .render(area, &mut Surface::new(&mut grid, area, 0));
 
-        let top_row: String = (0..8).map(|x| grid.get(x, 0).glyph()).collect();
+        let top_row: String = (0..8).map(|x| grid[Pos::new(x, 0)].glyph()).collect();
         assert!(!top_row.contains("a very long title"));
     }
 
@@ -185,9 +185,18 @@ mod tests {
             .theme(Theme::DARK)
             .render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(grid.get(0, 0).style().foreground(), Theme::DARK.border);
-        assert_eq!(grid.get(0, 0).style().background(), Theme::DARK.title_bg);
-        assert_eq!(grid.get(1, 1).style().background(), Theme::DARK.panel_bg);
+        assert_eq!(
+            grid[Pos::new(0, 0)].style().foreground(),
+            Theme::DARK.border
+        );
+        assert_eq!(
+            grid[Pos::new(0, 0)].style().background(),
+            Theme::DARK.title_bg
+        );
+        assert_eq!(
+            grid[Pos::new(1, 1)].style().background(),
+            Theme::DARK.panel_bg
+        );
     }
 
     #[test]
@@ -198,9 +207,15 @@ mod tests {
             .theme_on(Theme::DARK, Color::Default)
             .render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(grid.get(0, 0).style().foreground(), Theme::DARK.border);
-        assert_eq!(grid.get(0, 0).style().background(), Theme::DARK.title_bg);
-        assert_eq!(grid.get(1, 1).style().background(), Color::Default);
+        assert_eq!(
+            grid[Pos::new(0, 0)].style().foreground(),
+            Theme::DARK.border
+        );
+        assert_eq!(
+            grid[Pos::new(0, 0)].style().background(),
+            Theme::DARK.title_bg
+        );
+        assert_eq!(grid[Pos::new(1, 1)].style().background(), Color::Default);
     }
 
     #[test]
@@ -214,9 +229,9 @@ mod tests {
 
         // Padded title " hi " starts at column 1 (just inside the corner):
         // space at 1, text at 2..4, trailing space at 4.
-        assert_eq!(grid.get(1, 0).glyph(), ' ');
-        assert_eq!(grid.get(2, 0).glyph(), 'h');
-        assert_eq!(grid.get(3, 0).glyph(), 'i');
+        assert_eq!(grid[Pos::new(1, 0)].glyph(), ' ');
+        assert_eq!(grid[Pos::new(2, 0)].glyph(), 'h');
+        assert_eq!(grid[Pos::new(3, 0)].glyph(), 'i');
     }
 
     #[test]
@@ -230,9 +245,9 @@ mod tests {
 
         // Padded title " hi " (4 cols) ends against the right corner at
         // column 11: trailing space at 10, text at 8..10.
-        assert_eq!(grid.get(8, 0).glyph(), 'h');
-        assert_eq!(grid.get(9, 0).glyph(), 'i');
-        assert_eq!(grid.get(10, 0).glyph(), ' ');
+        assert_eq!(grid[Pos::new(8, 0)].glyph(), 'h');
+        assert_eq!(grid[Pos::new(9, 0)].glyph(), 'i');
+        assert_eq!(grid[Pos::new(10, 0)].glyph(), ' ');
     }
 
     #[test]
@@ -240,7 +255,7 @@ mod tests {
         let area = Rect::new(0, 0, 1, 1);
         let mut grid = Grid::new(1, 1);
         Panel::new().render(area, &mut Surface::new(&mut grid, area, 0));
-        assert_eq!(grid.get(0, 0).glyph(), ' ');
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
     }
 
     #[test]
@@ -258,8 +273,8 @@ mod tests {
         // title_x = 0 + (10 - 2 - 2) / 2 = 3; title glyph at 4, trailing
         // space at 5. With the pre-fix byte-length bug (width 3) this would
         // compute title_x = (10 - 3 - 2) / 2 = 2, off by one.
-        assert_eq!(grid.get(3, 0).glyph(), ' ');
-        assert_eq!(grid.get(4, 0).glyph(), 'あ');
-        assert_eq!(grid.get(5, 0).glyph(), ' ');
+        assert_eq!(grid[Pos::new(3, 0)].glyph(), ' ');
+        assert_eq!(grid[Pos::new(4, 0)].glyph(), 'あ');
+        assert_eq!(grid[Pos::new(5, 0)].glyph(), ' ');
     }
 }

@@ -61,7 +61,7 @@ impl Headless {
         let mut out = String::new();
         for y in 0..self.grid.height() {
             for x in 0..self.grid.width() {
-                let cell = self.grid.get(x, y);
+                let cell = &self.grid[Pos::new(x, y)];
                 #[cfg(feature = "egc")]
                 let is_spacer = cell
                     .flags()
@@ -91,7 +91,7 @@ impl Output for Headless {
         I: Iterator<Item = (Pos, &'a Tile, Option<&'a str>)>,
     {
         for (pos, cell, extra) in content {
-            self.grid.checked_put(pos.x, pos.y, *cell);
+            self.grid.put_tile(0, pos, *cell);
             if let Some(extra) = extra {
                 self.grid
                     .set_extra(0, pos.x, pos.y, alloc::sync::Arc::from(extra));

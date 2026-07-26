@@ -111,14 +111,14 @@ impl Sides {
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::Style;
+/// use retroglyph_core::{Pos, Style};
 /// use retroglyph_widgets::{BoxStyle, Sides};
 ///
 /// let grid = BoxStyle::new(Style::new())
 ///     .border(true)
 ///     .padding(Sides::all(1))
 ///     .render("hi");
-/// assert_eq!(grid.get(2, 2).glyph(), 'h'); // 1 border + 1 padding cell in from the corner
+/// assert_eq!(grid[Pos::new(2, 2)].glyph(), 'h'); // 1 border + 1 padding cell in from the corner
 /// ```
 #[derive(Clone, Copy, Debug)]
 pub struct BoxStyle {
@@ -221,7 +221,11 @@ impl BoxStyle {
                 if col.saturating_add(w) > content_w {
                     break;
                 }
-                grid.put(content_x + col, content_y + row, Tile::new(ch, self.style));
+                grid.put_tile(
+                    0,
+                    (content_x + col, content_y + row),
+                    Tile::new(ch, self.style),
+                );
                 col = col.saturating_add(w);
             }
         }
@@ -340,7 +344,7 @@ impl Widget for Boxed<'_> {
 fn fill_rect(grid: &mut Grid, x: u16, y: u16, w: u16, h: u16, style: Style) {
     for dy in 0..h {
         for dx in 0..w {
-            grid.put(x + dx, y + dy, Tile::new(' ', style));
+            grid.put_tile(0, (x + dx, y + dy), Tile::new(' ', style));
         }
     }
 }
@@ -351,27 +355,32 @@ fn draw_border(grid: &mut Grid, x: u16, y: u16, w: u16, h: u16, style: Style) {
     let right = x + w - 1;
     let bottom = y + h - 1;
 
-    grid.put(x, y, Tile::new(TL, style));
-    grid.put(right, y, Tile::new(TR, style));
-    grid.put(x, bottom, Tile::new(BL, style));
-    grid.put(right, bottom, Tile::new(BR, style));
+    grid.put_tile(0, (x, y), Tile::new(TL, style));
+    grid.put_tile(0, (right, y), Tile::new(TR, style));
+    grid.put_tile(0, (x, bottom), Tile::new(BL, style));
+    grid.put_tile(0, (right, bottom), Tile::new(BR, style));
     for cx in (x + 1)..right {
-        grid.put(cx, y, Tile::new(H, style));
-        grid.put(cx, bottom, Tile::new(H, style));
+        grid.put_tile(0, (cx, y), Tile::new(H, style));
+        grid.put_tile(0, (cx, bottom), Tile::new(H, style));
     }
     for cy in (y + 1)..bottom {
-        grid.put(x, cy, Tile::new(V, style));
-        grid.put(right, cy, Tile::new(V, style));
+        grid.put_tile(0, (x, cy), Tile::new(V, style));
+        grid.put_tile(0, (right, cy), Tile::new(V, style));
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use retroglyph_core::Pos;
 
     fn glyphs(grid: &Grid) -> Vec<String> {
         (0..grid.height())
-            .map(|y| (0..grid.width()).map(|x| grid.get(x, y).glyph()).collect())
+            .map(|y| {
+                (0..grid.width())
+                    .map(|x| grid[Pos::new(x, y)].glyph())
+                    .collect()
+            })
             .collect()
     }
 
@@ -401,25 +410,25 @@ mod tests {
     fn sizes_to_content_with_no_padding_or_border() {
         let grid = BoxStyle::new(Style::default()).render("hi");
         assert_eq!((grid.width(), grid.height()), (2, 1));
-        assert_eq!(grid.get(0, 0).glyph(), 'h');
-        assert_eq!(grid.get(1, 0).glyph(), 'i');
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), 'h');
+        assert_eq!(grid[Pos::new(1, 0)].glyph(), 'i');
     }
 
     #[test]
     fn sizes_to_the_widest_of_multiple_lines() {
         let grid = BoxStyle::new(Style::default()).render("a\nbcd\nef");
         assert_eq!((grid.width(), grid.height()), (3, 3));
-        assert_eq!(grid.get(0, 0).glyph(), 'a');
-        assert_eq!(grid.get(1, 0).glyph(), ' '); // shorter line padded with blanks
-        assert_eq!(grid.get(0, 1).glyph(), 'b');
-        assert_eq!(grid.get(2, 1).glyph(), 'd');
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), 'a');
+        assert_eq!(grid[Pos::new(1, 0)].glyph(), ' '); // shorter line padded with blanks
+        assert_eq!(grid[Pos::new(0, 1)].glyph(), 'b');
+        assert_eq!(grid[Pos::new(2, 1)].glyph(), 'd');
     }
 
     #[test]
     fn explicit_width_clips_longer_lines_and_pads_shorter_ones() {
         let grid = BoxStyle::new(Style::default()).width(3).render("hello");
         assert_eq!(grid.width(), 3);
-        let row: String = (0..3).map(|x| grid.get(x, 0).glyph()).collect();
+        let row: String = (0..3).map(|x| grid[Pos::new(x, 0)].glyph()).collect();
         assert_eq!(row, "hel");
     }
 
@@ -427,7 +436,7 @@ mod tests {
     fn explicit_height_drops_extra_lines() {
         let grid = BoxStyle::new(Style::default()).height(1).render("a\nb\nc");
         assert_eq!(grid.height(), 1);
-        assert_eq!(grid.get(0, 0).glyph(), 'a');
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), 'a');
     }
 
     #[test]
@@ -437,8 +446,8 @@ mod tests {
             .render("x");
         // 1 content col/row + 1 padding on each side = 3x3.
         assert_eq!((grid.width(), grid.height()), (3, 3));
-        assert_eq!(grid.get(1, 1).glyph(), 'x');
-        assert_eq!(grid.get(0, 0).glyph(), ' ');
+        assert_eq!(grid[Pos::new(1, 1)].glyph(), 'x');
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
     }
 
     #[test]
@@ -461,8 +470,8 @@ mod tests {
         // written, so they keep Grid::new's default "empty" tile, which
         // Grid::blit treats as transparent.
         assert_eq!((grid.width(), grid.height()), (3, 3));
-        assert!(grid.get(0, 0).is_empty());
-        assert_eq!(grid.get(1, 1).glyph(), 'x');
+        assert!(grid[Pos::new(0, 0)].is_empty());
+        assert_eq!(grid[Pos::new(1, 1)].glyph(), 'x');
     }
 
     #[test]
@@ -477,9 +486,9 @@ mod tests {
         // misrender the cell to its right.
         let grid = BoxStyle::new(Style::default()).render("aあb");
         assert_eq!(grid.width(), 4);
-        assert_eq!(grid.get(0, 0).glyph(), 'a');
-        assert_eq!(grid.get(1, 0).glyph(), 'あ');
-        assert_eq!(grid.get(3, 0).glyph(), 'b');
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), 'a');
+        assert_eq!(grid[Pos::new(1, 0)].glyph(), 'あ');
+        assert_eq!(grid[Pos::new(3, 0)].glyph(), 'b');
     }
 
     #[test]
@@ -515,8 +524,8 @@ mod tests {
         // is short enough to need wrapping.
         let grid = BoxStyle::new(Style::default()).render_wrapped("hi");
         assert_eq!((grid.width(), grid.height()), (2, 1));
-        assert_eq!(grid.get(0, 0).glyph(), 'h');
-        assert_eq!(grid.get(1, 0).glyph(), 'i');
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), 'h');
+        assert_eq!(grid[Pos::new(1, 0)].glyph(), 'i');
     }
 
     #[test]
@@ -530,8 +539,8 @@ mod tests {
         // 3 content cols + 2 padding + 2 border = 7; 1 content row + 2
         // padding + 2 border = 5.
         assert_eq!((grid.width(), grid.height()), (7, 5));
-        assert_eq!(grid.get(2, 2).glyph(), 'h');
-        assert_eq!(grid.get(3, 2).glyph(), 'i');
+        assert_eq!(grid[Pos::new(2, 2)].glyph(), 'h');
+        assert_eq!(grid[Pos::new(3, 2)].glyph(), 'i');
     }
 
     #[test]
@@ -543,9 +552,9 @@ mod tests {
 
         // 2 content cols + 2 border = 4 wide, 1 content row + 2 border = 3
         // tall, anchored at (2, 1) regardless of the much larger area.
-        assert_eq!(grid.get(2, 1).glyph(), '┌');
-        assert_eq!(grid.get(3, 2).glyph(), 'h');
-        assert_eq!(grid.get(4, 2).glyph(), 'i');
-        assert_eq!(grid.get(5, 3).glyph(), '┘');
+        assert_eq!(grid[Pos::new(2, 1)].glyph(), '┌');
+        assert_eq!(grid[Pos::new(3, 2)].glyph(), 'h');
+        assert_eq!(grid[Pos::new(4, 2)].glyph(), 'i');
+        assert_eq!(grid[Pos::new(5, 3)].glyph(), '┘');
     }
 }

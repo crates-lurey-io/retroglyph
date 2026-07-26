@@ -111,7 +111,7 @@ impl Widget for ProgressBar {
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::Grid;
+    use retroglyph_core::{Grid, Pos};
 
     use super::*;
 
@@ -122,10 +122,10 @@ mod tests {
         ProgressBar::new(5, 10).render(area, &mut Surface::new(&mut grid, area, 0));
 
         for x in 0..5 {
-            assert_eq!(grid.get(x, 0).glyph(), '█');
+            assert_eq!(grid[Pos::new(x, 0)].glyph(), '█');
         }
         for x in 5..10 {
-            assert_eq!(grid.get(x, 0).glyph(), '░');
+            assert_eq!(grid[Pos::new(x, 0)].glyph(), '░');
         }
     }
 
@@ -134,7 +134,7 @@ mod tests {
         let area = Rect::new(0, 0, 10, 1);
         let mut grid = Grid::new(10, 1);
         ProgressBar::new(0, 0).render(area, &mut Surface::new(&mut grid, area, 0));
-        assert_eq!(grid.get(0, 0).glyph(), ' ');
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
     }
 
     #[test]
@@ -148,8 +148,8 @@ mod tests {
             .empty_style(Style::new().fg(Color::BLACK))
             .render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(grid.get(0, 0).style().foreground(), Color::WHITE);
-        assert_eq!(grid.get(3, 0).style().foreground(), Color::BLACK);
+        assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Color::WHITE);
+        assert_eq!(grid[Pos::new(3, 0)].style().foreground(), Color::BLACK);
     }
 
     #[test]
@@ -160,10 +160,19 @@ mod tests {
             .theme(Theme::DARK)
             .render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(grid.get(0, 0).style().foreground(), Theme::DARK.accent);
-        assert_eq!(grid.get(0, 0).style().background(), Theme::DARK.panel_bg);
-        assert_eq!(grid.get(3, 0).style().foreground(), Theme::DARK.dim);
-        assert_eq!(grid.get(3, 0).style().background(), Theme::DARK.panel_bg);
+        assert_eq!(
+            grid[Pos::new(0, 0)].style().foreground(),
+            Theme::DARK.accent
+        );
+        assert_eq!(
+            grid[Pos::new(0, 0)].style().background(),
+            Theme::DARK.panel_bg
+        );
+        assert_eq!(grid[Pos::new(3, 0)].style().foreground(), Theme::DARK.dim);
+        assert_eq!(
+            grid[Pos::new(3, 0)].style().background(),
+            Theme::DARK.panel_bg
+        );
     }
 
     #[test]
@@ -174,9 +183,12 @@ mod tests {
             .theme_on(Theme::DARK, Color::Default)
             .render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(grid.get(0, 0).style().foreground(), Theme::DARK.accent);
-        assert_eq!(grid.get(0, 0).style().background(), Color::Default);
-        assert_eq!(grid.get(3, 0).style().foreground(), Theme::DARK.dim);
-        assert_eq!(grid.get(3, 0).style().background(), Color::Default);
+        assert_eq!(
+            grid[Pos::new(0, 0)].style().foreground(),
+            Theme::DARK.accent
+        );
+        assert_eq!(grid[Pos::new(0, 0)].style().background(), Color::Default);
+        assert_eq!(grid[Pos::new(3, 0)].style().foreground(), Theme::DARK.dim);
+        assert_eq!(grid[Pos::new(3, 0)].style().background(), Color::Default);
     }
 }

@@ -73,10 +73,10 @@
 //! skips: a wide character's spacer has no content of its own, whereas a covered cell does.
 //!
 //! A span is written and cleared whole. Any ordinary write into one of its cells
-//! ([`put`](Grid::put), [`put_tile`](Grid::put_tile), [`write_grapheme`](Grid::write_grapheme))
+//! ([`put_tile`](Grid::put_tile), [`write_grapheme`](Grid::write_grapheme))
 //! clears the entire span first, so an anchor can never be left claiming cells it no longer owns.
 //! The exceptions are the escape hatches that hand out a `&mut Tile` directly
-//! ([`checked_get_mut`](Grid::checked_get_mut), [`cells_mut`](Grid::cells_mut), `IndexMut`),
+//! ([`tile_mut`](Grid::tile_mut), [`cells_mut`](Grid::cells_mut), `IndexMut`),
 //! which cannot intercept the write; use [`clear_span`](Grid::clear_span) first if you reach for
 //! one of those on a grid that uses spans.
 //!
@@ -276,7 +276,7 @@ pub(crate) struct LayerBuf {
     /// keeps [`Tile`] itself small (see [`Grid::grapheme`]).
     ///
     /// The `HAS_EXTRA` flag is authoritative: readers must check it before
-    /// consulting this map, since some write paths (`put`, `put_tile`,
+    /// consulting this map, since some write paths (`put_tile`,
     /// `IndexMut`, `cells_mut`) can leave a stale entry behind when they
     /// overwrite a tile that used to carry extra text without an explicit
     /// cleanup call. Since those paths only ever hand out or store tiles
@@ -435,15 +435,15 @@ impl Grid {
     /// # Example
     ///
     /// ```
-    /// use retroglyph_core::{Grid, Style, Tile};
+    /// use retroglyph_core::{Grid, Pos, Style, Tile};
     ///
     /// let grid = Grid::from_charmap("##\n#.", |c| match c {
     ///     '#' => Tile::new('#', Style::default()),
     ///     _ => Tile::default(),
     /// });
     /// assert_eq!((grid.width(), grid.height()), (2, 2));
-    /// assert_eq!(grid.get(0, 0).glyph(), '#');
-    /// assert_eq!(grid.get(1, 1).glyph(), ' ');
+    /// assert_eq!(grid[Pos::new(0, 0)].glyph(), '#');
+    /// assert_eq!(grid[Pos::new(1, 1)].glyph(), ' ');
     /// ```
     #[must_use]
     pub fn from_charmap<F>(map: &str, mut f: F) -> Self
@@ -464,7 +464,7 @@ impl Grid {
             for (x, ch) in line.chars().enumerate() {
                 #[allow(clippy::cast_possible_truncation)]
                 let x = x as u16;
-                grid.put_tile(0, x, y, f(ch));
+                grid.put_tile(0, Pos::new(x, y), f(ch));
             }
         }
         grid
@@ -492,43 +492,6 @@ impl Grid {
         self.max_layer
     }
 
-    /// Sets the tile at the given coordinates on layer 0.
-    ///
-    /// Since [`Tile`] cannot carry a multi-codepoint grapheme itself (see
-    /// [`grapheme`](Self::grapheme)), overwriting a cell this way always
-    /// clears any extra text previously stored for it -- use
-    /// [`write_grapheme`](Self::write_grapheme) to write EGCs.
-    ///
-    /// If the cell belongs to a multi-cell span (see [`write_span`](Self::write_span)), that
-    /// whole span is cleared first: a span whose anchor or covered cells were partially
-    /// overwritten would leave an anchor pointing at cells it no longer owns.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the coordinates are out of bounds.
-    pub fn put(&mut self, x: u16, y: u16, tile: Tile) {
-        self.clear_span_overlap(0, x, y, 1);
-        let pos = to_grixy_pos(Pos::new(x, y));
-        let idx = usize::from(y) * usize::from(self.width) + usize::from(x);
-        let lb = self.layer0_mut();
-        assert!(
-            lb.buf.contains(pos),
-            "coordinates out of bounds: ({x}, {y})"
-        );
-        lb.extras.remove(&idx);
-        lb.buf[pos] = tile;
-    }
-
-    /// Gets the tile at the given coordinates on layer 0.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the coordinates are out of bounds.
-    #[must_use]
-    pub fn get(&self, x: u16, y: u16) -> &Tile {
-        &self.layer0().buf[to_grixy_pos(Pos::new(x, y))]
-    }
-
     /// Returns the full grapheme cluster stored for the tile at `(x, y)` on
     /// `layer`, if any.
     ///
@@ -536,7 +499,7 @@ impl Grid {
     /// was written via [`write_grapheme`](Self::write_grapheme) with a
     /// multi-codepoint EGC (combining marks, ZWJ sequences, etc.). For the
     /// common single-codepoint case, or without the `egc` feature, this is
-    /// always `None`; use [`get_tile`](Self::get_tile)'s
+    /// always `None`; use [`tile`](Self::tile)'s
     /// [`Tile::glyph`](crate::tile::Tile::glyph) and
     /// [`encode_utf8`](char::encode_utf8) to reconstruct the string instead.
     ///
@@ -549,42 +512,6 @@ impl Grid {
         let tile = lb.buf.get(pos)?;
         let idx = usize::from(y) * usize::from(self.width) + usize::from(x);
         lb.extra_for(idx, tile)
-    }
-
-    /// Tries to set the tile at the given coordinates on layer 0.
-    ///
-    /// Returns `None` if the coordinates are out of bounds. See
-    /// [`put`](Self::put) for the EGC- and span-clearing caveats.
-    pub fn checked_put(&mut self, x: u16, y: u16, tile: Tile) -> Option<()> {
-        self.clear_span_overlap(0, x, y, 1);
-        let pos = to_grixy_pos(Pos::new(x, y));
-        let idx = usize::from(y) * usize::from(self.width) + usize::from(x);
-        let lb = self.layer0_mut();
-        if lb.buf.contains(pos) {
-            lb.extras.remove(&idx);
-            lb.buf[pos] = tile;
-            Some(())
-        } else {
-            None
-        }
-    }
-
-    /// Tries to get the tile at the given coordinates on layer 0.
-    ///
-    /// Returns `None` if the coordinates are out of bounds.
-    #[must_use]
-    pub fn checked_get(&self, x: u16, y: u16) -> Option<&Tile> {
-        let pos = to_grixy_pos(Pos::new(x, y));
-        self.layer0().buf.get(pos)
-    }
-
-    /// Tries to get a mutable reference to the tile at the given coordinates
-    /// on layer 0.
-    ///
-    /// Returns `None` if the coordinates are out of bounds.
-    pub fn checked_get_mut(&mut self, x: u16, y: u16) -> Option<&mut Tile> {
-        let pos = to_grixy_pos(Pos::new(x, y));
-        self.layer0_mut().buf.get_mut(pos)
     }
 
     /// Iterates all tiles on `layer` with their `(x, y)` coordinates.
@@ -847,9 +774,9 @@ impl Grid {
     /// let mut grid = Grid::new(8, 4);
     /// grid.write_span(0, 1, 1, &["[==]", "|__|"], Style::default()).unwrap();
     ///
-    /// assert_eq!(grid.get_tile(0, 1, 1).unwrap().span(), (4, 2));
+    /// assert_eq!(grid.tile(0, Pos::new(1, 1)).unwrap().span(), (4, 2));
     /// // Covered cells keep their fallback glyphs, and name their anchor.
-    /// assert_eq!(grid.get_tile(0, 4, 2).unwrap().glyph(), '|');
+    /// assert_eq!(grid.tile(0, Pos::new(4, 2)).unwrap().glyph(), '|');
     /// assert_eq!(grid.span_owner(0, 4, 2), Some(Pos::new(1, 1)));
     /// ```
     pub fn write_span(
@@ -1001,7 +928,7 @@ impl Grid {
     /// claiming cells it no longer owns, or a covered cell pointing at an anchor that is gone.
     ///
     /// Returns immediately on a grid that has never had a span written to it, which is what keeps
-    /// this off the cost of an ordinary [`put`](Self::put) (see
+    /// this off the cost of an ordinary [`put_tile`](Self::put_tile) (see
     /// [`has_spans`](Self::has_spans)).
     fn clear_span_overlap(&mut self, layer: u8, x: u16, y: u16, width: u16) {
         if !self.has_spans {
@@ -1042,31 +969,32 @@ impl Grid {
 // ---------------------------------------------------------------------------
 
 impl Grid {
-    /// Write a tile to `layer` at `(x, y)`.
+    /// Write a tile to `layer` at `pos`.
     ///
     /// Allocates the layer if it has not been written to yet. Returns `None`
-    /// if `(x, y)` is out of bounds.
+    /// if `pos` is out of bounds.
     ///
-    /// To read back, use [`get_tile`](Self::get_tile).
+    /// To read back, use [`tile`](Self::tile).
     ///
-    /// Like [`put`](Self::put), any tile written this way has its extra
-    /// grapheme text cleared, since a caller-constructed [`Tile`] can never
-    /// legitimately carry [`TileFlags::HAS_EXTRA`] (the flag is
-    /// crate-private). Internal callers that need to preserve EGC text
-    /// across a copy (e.g. [`blit`](Self::blit)) follow up with a direct
-    /// extras-table write. Any multi-cell span the cell belongs to is cleared first, for the
-    /// reason given on [`put`](Self::put).
-    pub fn put_tile(&mut self, layer: u8, x: u16, y: u16, mut tile: Tile) -> Option<()> {
-        self.clear_span_overlap(layer, x, y, 1);
-        let pos = to_grixy_pos(Pos::new(x, y));
-        let idx = usize::from(y) * usize::from(self.width) + usize::from(x);
+    /// Any tile written this way has its extra grapheme text cleared, since a
+    /// caller-constructed [`Tile`] can never legitimately carry
+    /// [`TileFlags::HAS_EXTRA`] (the flag is crate-private). Internal callers
+    /// that need to preserve EGC text across a copy (e.g. [`blit`](Self::blit))
+    /// follow up with a direct extras-table write. Any multi-cell span the
+    /// cell belongs to is cleared first, so a write can never leave an anchor
+    /// pointing at cells it no longer owns.
+    pub fn put_tile(&mut self, layer: u8, pos: impl Into<Pos>, mut tile: Tile) -> Option<()> {
+        let pos = pos.into();
+        self.clear_span_overlap(layer, pos.x, pos.y, 1);
+        let gpos = to_grixy_pos(pos);
+        let idx = usize::from(pos.y) * usize::from(self.width) + usize::from(pos.x);
         let lb = self.layer_or_alloc(layer);
-        if !lb.buf.contains(pos) {
+        if !lb.buf.contains(gpos) {
             return None;
         }
         lb.extras.remove(&idx);
         tile.flags.remove(TileFlags::HAS_EXTRA);
-        lb.buf[pos] = tile;
+        lb.buf[gpos] = tile;
         Some(())
     }
 
@@ -1084,12 +1012,28 @@ impl Grid {
         }
     }
 
-    /// Read a tile on `layer` at `(x, y)`, or `None` if the layer is
-    /// unallocated or the coordinates are out of bounds.
+    /// Read a tile on `layer` at `pos`, or `None` if the layer is
+    /// unallocated or `pos` is out of bounds.
     #[must_use]
-    pub fn get_tile(&self, layer: u8, x: u16, y: u16) -> Option<&Tile> {
-        let pos = to_grixy_pos(Pos::new(x, y));
+    pub fn tile(&self, layer: u8, pos: impl Into<Pos>) -> Option<&Tile> {
+        let pos = to_grixy_pos(pos.into());
         self.layer(layer)?.buf.get(pos)
+    }
+
+    /// Mutably borrow a tile on `layer` at `pos`, or `None` if the layer is
+    /// unallocated or `pos` is out of bounds.
+    ///
+    /// This hands out a direct `&mut Tile`, so it cannot intercept a write the way
+    /// [`put_tile`](Self::put_tile) does: it does not clear a multi-cell span `pos` belongs to,
+    /// and it does not clear grapheme extras stored for the tile. Call
+    /// [`clear_span`](Self::clear_span) first if `pos` may belong to a span.
+    pub fn tile_mut(&mut self, layer: u8, pos: impl Into<Pos>) -> Option<&mut Tile> {
+        let pos = to_grixy_pos(pos.into());
+        self.layers
+            .get_mut(usize::from(layer))?
+            .as_mut()?
+            .buf
+            .get_mut(pos)
     }
 
     /// Copy tiles from `src` within `src_rect` to `self` at `(dst_x, dst_y)`
@@ -1104,7 +1048,7 @@ impl Grid {
     /// both representable and the same content a cell backend would have drawn anyway.
     ///
     /// Walks `src`'s and `self`'s layer buffers directly by flat index instead of going through
-    /// [`get_tile`](Self::get_tile)/[`put_tile`](Self::put_tile) per cell (see retroglyph#263):
+    /// [`tile`](Self::tile)/[`put_tile`](Self::put_tile) per cell (see retroglyph#263):
     /// each of those recomputes a coordinate conversion and a bounds check per cell, which this
     /// does once per row instead. The destination layer is allocated once, up front, rather than
     /// as a side effect of the first written cell -- but only if `src_rect` (clamped to `src`'s
@@ -1198,7 +1142,7 @@ impl Grid {
     /// modes delegate to [`alpha_blend::blend_modes::SeparableBlendMode`].
     ///
     /// Like [`blit`](Self::blit) (see retroglyph#262/#263), walks `src`'s and `self`'s layer
-    /// buffers directly by flat index instead of per-cell [`get_tile`](Self::get_tile)/
+    /// buffers directly by flat index instead of per-cell [`tile`](Self::tile)/
     /// [`put_tile`](Self::put_tile), and allocates the destination layer once, up front, rather
     /// than as a side effect of the first written cell.
     #[cfg(feature = "gem")]
@@ -1353,10 +1297,10 @@ impl Grid {
     /// `dst` must have the same dimensions as `self`.
     ///
     /// Walks layer buffers directly by flat index instead of calling
-    /// [`get`](Self::get)/[`get_tile`](Self::get_tile) per cell (see retroglyph#262): each of
-    /// those recomputes a coordinate conversion and a bounds check per cell, which a flat scan
-    /// over each layer's backing buffer -- the same style [`layers`](Self::layers) and
-    /// [`diff`](Self::diff) already use -- avoids entirely.
+    /// [`tile`](Self::tile) per cell (see retroglyph#262): that recomputes a coordinate
+    /// conversion and a bounds check per cell, which a flat scan over each layer's backing
+    /// buffer -- the same style [`layers`](Self::layers) and [`diff`](Self::diff) already use --
+    /// avoids entirely.
     pub(crate) fn flatten_into(&self, dst: &mut Self) {
         dst.has_spans |= self.has_spans;
         let layer0 = self.layer0();
@@ -1613,7 +1557,7 @@ impl fmt::Display for Grid {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for y in 0..self.height() {
             for x in 0..self.width() {
-                let tile = self.get(x, y);
+                let tile = &self[Pos::new(x, y)];
                 #[cfg(feature = "egc")]
                 let is_spacer = tile.flags.contains(TileFlags::WIDE_CHAR_SPACER);
                 #[cfg(not(feature = "egc"))]
@@ -1664,8 +1608,8 @@ mod tests {
         let mut grid = Grid::new(10, 10);
         let tile = Tile::default().with_glyph('X');
 
-        grid.put(5, 5, tile);
-        assert_eq!(grid.get(5, 5).glyph(), 'X');
+        grid.put_tile(0, (5, 5), tile);
+        assert_eq!(grid[Pos::new(5, 5)].glyph(), 'X');
     }
 
     #[test]
@@ -1673,18 +1617,24 @@ mod tests {
         let mut grid = Grid::new(10, 10);
         let tile = Tile::default().with_glyph('Y');
 
-        assert!(grid.checked_put(5, 5, tile).is_some());
-        assert_eq!(grid.checked_get(5, 5).unwrap().glyph(), 'Y');
+        assert!(grid.put_tile(0, (5, 5), tile).is_some());
+        assert_eq!(grid.tile(0, (5, 5)).unwrap().glyph(), 'Y');
 
-        assert!(grid.checked_get(10, 0).is_none());
-        assert!(grid.checked_put(0, 10, Tile::default()).is_none());
+        assert!(grid.tile(0, (10, 0)).is_none());
+        assert!(grid.put_tile(0, (0, 10), Tile::default()).is_none());
     }
 
     #[test]
-    #[should_panic(expected = "coordinates out of bounds")]
-    fn test_grid_panic_put() {
+    fn test_grid_put_tile_out_of_bounds_returns_none() {
         let mut grid = Grid::new(10, 10);
-        grid.put(10, 0, Tile::default());
+        assert!(grid.put_tile(0, (10, 0), Tile::default()).is_none());
+    }
+
+    #[test]
+    #[should_panic(expected = "index out of bounds")]
+    fn test_grid_index_panics_out_of_bounds() {
+        let grid = Grid::new(10, 10);
+        let _ = &grid[Pos::new(0, 10)];
     }
 
     #[test]
@@ -1692,48 +1642,48 @@ mod tests {
         let mut g1 = Grid::new(2, 2);
         let g2 = Grid::new(2, 2);
 
-        g1.put(0, 0, Tile::default().with_glyph('A'));
+        g1.put_tile(0, (0, 0), Tile::default().with_glyph('A'));
 
         let diffs: Vec<_> = g1.diff(&g2).collect();
         assert_eq!(diffs.len(), 1);
-        assert_eq!(diffs[0], (0, Pos::new(0, 0), g1.get(0, 0), None));
+        assert_eq!(diffs[0], (0, Pos::new(0, 0), &g1[Pos::new(0, 0)], None));
     }
 
     #[test]
     fn test_grid_resize_expand() {
         let mut grid = Grid::new(3, 3);
-        grid.put(1, 1, Tile::default().with_glyph('X'));
+        grid.put_tile(0, (1, 1), Tile::default().with_glyph('X'));
         grid.resize(6, 6);
         assert_eq!(grid.width(), 6);
         assert_eq!(grid.height(), 6);
-        assert_eq!(grid.get(1, 1).glyph(), 'X'); // preserved
-        assert_eq!(grid.get(5, 5).glyph(), ' '); // new cells default
+        assert_eq!(grid[Pos::new(1, 1)].glyph(), 'X'); // preserved
+        assert_eq!(grid[Pos::new(5, 5)].glyph(), ' '); // new cells default
     }
 
     #[test]
     fn test_grid_resize_shrink() {
         let mut grid = Grid::new(10, 10);
-        grid.put(1, 1, Tile::default().with_glyph('A'));
+        grid.put_tile(0, (1, 1), Tile::default().with_glyph('A'));
         grid.resize(5, 5);
         assert_eq!(grid.width(), 5);
         assert_eq!(grid.height(), 5);
-        assert_eq!(grid.get(1, 1).glyph(), 'A'); // still in bounds, preserved
+        assert_eq!(grid[Pos::new(1, 1)].glyph(), 'A'); // still in bounds, preserved
     }
 
     #[test]
     fn test_grid_resize_preserves_overlap() {
         let mut grid = Grid::new(4, 4);
-        grid.put(0, 0, Tile::default().with_glyph('@'));
-        grid.put(3, 3, Tile::default().with_glyph('X'));
+        grid.put_tile(0, (0, 0), Tile::default().with_glyph('@'));
+        grid.put_tile(0, (3, 3), Tile::default().with_glyph('X'));
         grid.resize(3, 3); // shrink: (3,3) falls outside
-        assert_eq!(grid.get(0, 0).glyph(), '@');
-        assert_eq!(grid.get(2, 2).glyph(), ' '); // was default, still default
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), '@');
+        assert_eq!(grid[Pos::new(2, 2)].glyph(), ' '); // was default, still default
     }
 
     #[test]
     fn test_grid_display() {
         let mut grid = Grid::new(3, 2);
-        grid.put(0, 0, Tile::default().with_glyph('A'));
+        grid.put_tile(0, (0, 0), Tile::default().with_glyph('A'));
 
         let s = alloc::format!("{grid}");
         assert_eq!(s, "A··\n···\n");
@@ -1764,10 +1714,10 @@ mod tests {
             let idx = (y * 2 + x) as u8;
             *tile = Tile::new(char::from(b'A' + idx), Style::default());
         }
-        assert_eq!(grid.get(0, 0).glyph(), 'A');
-        assert_eq!(grid.get(1, 0).glyph(), 'B');
-        assert_eq!(grid.get(0, 1).glyph(), 'C');
-        assert_eq!(grid.get(1, 1).glyph(), 'D');
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), 'A');
+        assert_eq!(grid[Pos::new(1, 0)].glyph(), 'B');
+        assert_eq!(grid[Pos::new(0, 1)].glyph(), 'C');
+        assert_eq!(grid[Pos::new(1, 1)].glyph(), 'D');
     }
 
     #[test]
@@ -1884,7 +1834,7 @@ mod tests {
     #[test]
     fn test_grid_put_tile_allocates_layer() {
         let mut g = Grid::new(5, 5);
-        g.put_tile(3, 0, 0, Tile::new('@', Style::default()));
+        g.put_tile(3, (0, 0), Tile::new('@', Style::default()));
         assert!(g.layer(3).is_some());
         assert!(g.layer(4).is_none());
     }
@@ -1901,7 +1851,7 @@ mod tests {
     #[test]
     fn test_grid_layer_or_alloc_grows_table_lazily_to_the_written_id() {
         let mut g = Grid::new(5, 5);
-        g.put_tile(10, 0, 0, Tile::new('@', Style::default()));
+        g.put_tile(10, (0, 0), Tile::new('@', Style::default()));
         // The table grows to exactly `id + 1` slots -- not all 256.
         assert_eq!(g.layers.len(), 11);
         assert_eq!(g.max_layer(), 10);
@@ -1918,7 +1868,7 @@ mod tests {
         let g = Grid::new(5, 5);
         assert_eq!(g.layers.len(), 1);
         assert!(g.layer(255).is_none());
-        assert!(g.get_tile(255, 0, 0).is_none());
+        assert!(g.tile(255, (0, 0)).is_none());
         assert!(g.grapheme(255, 0, 0).is_none());
     }
 
@@ -1936,17 +1886,17 @@ mod tests {
         // Writing to a lower layer id after a higher one must not shrink the table, and must
         // preserve the higher layer's content.
         let mut g = Grid::new(5, 5);
-        g.put_tile(20, 1, 1, Tile::new('H', Style::default()));
+        g.put_tile(20, (1, 1), Tile::new('H', Style::default()));
         assert_eq!(g.layers.len(), 21);
-        g.put_tile(2, 0, 0, Tile::new('L', Style::default()));
+        g.put_tile(2, (0, 0), Tile::new('L', Style::default()));
         assert_eq!(
             g.layers.len(),
             21,
             "writing a lower id must not shrink the table"
         );
         assert_eq!(g.max_layer(), 20);
-        assert_eq!(g.get_tile(20, 1, 1).unwrap().glyph, 'H');
-        assert_eq!(g.get_tile(2, 0, 0).unwrap().glyph, 'L');
+        assert_eq!(g.tile(20, (1, 1)).unwrap().glyph, 'H');
+        assert_eq!(g.tile(2, (0, 0)).unwrap().glyph, 'L');
     }
 
     #[test]
@@ -1960,7 +1910,7 @@ mod tests {
     fn test_grid_diff_reports_changed_cell() {
         let mut cur = Grid::new(5, 5);
         let prev = Grid::new(5, 5);
-        cur.put_tile(0, 2, 3, Tile::new('X', Style::default()));
+        cur.put_tile(0, (2, 3), Tile::new('X', Style::default()));
         let diffs: Vec<_> = cur.diff(&prev).collect();
         assert_eq!(diffs.len(), 1);
         assert_eq!(diffs[0].0, 0);
@@ -1972,7 +1922,7 @@ mod tests {
     fn test_grid_diff_new_layer_yields_all_cells() {
         let mut cur = Grid::new(3, 4);
         let prev = Grid::new(3, 4);
-        cur.put_tile(1, 0, 0, Tile::new('A', Style::default()));
+        cur.put_tile(1, (0, 0), Tile::new('A', Style::default()));
         let diffs: Vec<_> = cur.diff(&prev).collect();
         // All 12 cells of the newly allocated layer 1 are yielded.
         assert_eq!(diffs.len(), 12);
@@ -1983,8 +1933,8 @@ mod tests {
     fn test_grid_diff_layer_major_order() {
         let mut cur = Grid::new(3, 3);
         let prev = Grid::new(3, 3);
-        cur.put_tile(2, 0, 0, Tile::new('B', Style::default()));
-        cur.put_tile(0, 1, 0, Tile::new('A', Style::default()));
+        cur.put_tile(2, (0, 0), Tile::new('B', Style::default()));
+        cur.put_tile(0, (1, 0), Tile::new('A', Style::default()));
         let layers: Vec<u8> = cur.diff(&prev).map(|(l, _, _, _)| l).collect();
         // Layer 0's change appears first, then all of layer 2.
         assert_eq!(layers[0], 0);
@@ -1995,51 +1945,67 @@ mod tests {
     fn test_grid_put_and_get_on_layer_2() {
         use crate::style::Style;
         let mut g = Grid::new(5, 5);
-        g.put_tile(2, 1, 1, Tile::new('Z', Style::default()));
-        assert_eq!(g.get_tile(2, 1, 1).unwrap().glyph, 'Z');
+        g.put_tile(2, (1, 1), Tile::new('Z', Style::default()));
+        assert_eq!(g.tile(2, (1, 1)).unwrap().glyph, 'Z');
         // Layer 0 at same position should still be default.
-        assert_eq!(g.get(1, 1).glyph, ' ');
+        assert_eq!(g[Pos::new(1, 1)].glyph, ' ');
         // Unallocated layer returns None.
-        assert!(g.get_tile(3, 0, 0).is_none());
+        assert!(g.tile(3, (0, 0)).is_none());
+    }
+
+    #[test]
+    fn test_grid_tile_mut_writes_in_place_without_clearing_spans() {
+        let mut g = Grid::new(4, 4);
+        g.write_span(0, 0, 0, &["C=", "[]"], Style::default())
+            .unwrap();
+
+        // Unlike `put_tile`, `tile_mut` hands out a direct `&mut Tile` and does not intercept
+        // the write, so the span's other cells are left dangling on purpose here.
+        g.tile_mut(0, (0, 0)).unwrap().glyph = 'x';
+        assert_eq!(g[Pos::new(0, 0)].glyph(), 'x');
+
+        // Unallocated layer and out-of-bounds position both report `None`, not a panic.
+        assert!(g.tile_mut(1, (0, 0)).is_none());
+        assert!(g.tile_mut(0, (10, 10)).is_none());
     }
 
     #[test]
     fn test_grid_clear_layer() {
         let mut g = Grid::new(5, 5);
-        g.put_tile(1, 0, 0, Tile::new('Z', Style::default()));
-        g.put_tile(0, 0, 0, Tile::new('A', Style::default()));
+        g.put_tile(1, (0, 0), Tile::new('Z', Style::default()));
+        g.put_tile(0, (0, 0), Tile::new('A', Style::default()));
         g.clear(1);
-        assert_eq!(g.get_tile(0, 0, 0).unwrap().glyph, 'A');
-        assert!(g.get_tile(1, 0, 0).is_some());
-        assert_eq!(g.get_tile(1, 0, 0).unwrap().glyph, ' '); // cleared
+        assert_eq!(g.tile(0, (0, 0)).unwrap().glyph, 'A');
+        assert!(g.tile(1, (0, 0)).is_some());
+        assert_eq!(g.tile(1, (0, 0)).unwrap().glyph, ' '); // cleared
     }
 
     #[test]
     fn test_grid_clear_all() {
         let mut g = Grid::new(5, 5);
-        g.put_tile(1, 0, 0, Tile::new('Z', Style::default()));
-        g.put_tile(0, 0, 0, Tile::new('A', Style::default()));
+        g.put_tile(1, (0, 0), Tile::new('Z', Style::default()));
+        g.put_tile(0, (0, 0), Tile::new('A', Style::default()));
         g.clear_all();
         // Both layers reset to default (space).
-        assert_eq!(g.get(0, 0).glyph, ' ');
-        assert_eq!(g.get_tile(1, 0, 0).unwrap().glyph, ' ');
+        assert_eq!(g[Pos::new(0, 0)].glyph, ' ');
+        assert_eq!(g.tile(1, (0, 0)).unwrap().glyph, ' ');
     }
 
     #[test]
     fn test_grid_clone_is_independent() {
         let mut g = Grid::new(3, 3);
-        g.put_tile(0, 0, 0, Tile::new('A', Style::default()));
-        g.put_tile(2, 1, 1, Tile::new('B', Style::default()));
+        g.put_tile(0, (0, 0), Tile::new('A', Style::default()));
+        g.put_tile(2, (1, 1), Tile::new('B', Style::default()));
 
         let mut cloned = g.clone();
-        assert_eq!(cloned.get(0, 0).glyph, 'A');
-        assert_eq!(cloned.get_tile(2, 1, 1).unwrap().glyph, 'B');
+        assert_eq!(cloned[Pos::new(0, 0)].glyph, 'A');
+        assert_eq!(cloned.tile(2, (1, 1)).unwrap().glyph, 'B');
         assert_eq!(cloned.max_layer(), g.max_layer());
 
         // Mutating the clone must not affect the original (deep copy).
-        cloned.put_tile(0, 0, 0, Tile::new('Z', Style::default()));
-        assert_eq!(cloned.get(0, 0).glyph, 'Z');
-        assert_eq!(g.get(0, 0).glyph, 'A');
+        cloned.put_tile(0, (0, 0), Tile::new('Z', Style::default()));
+        assert_eq!(cloned[Pos::new(0, 0)].glyph, 'Z');
+        assert_eq!(g[Pos::new(0, 0)].glyph, 'A');
     }
 
     // --- Extra grapheme text (EGC side-table) ---
@@ -2049,7 +2015,7 @@ mod tests {
     fn test_grid_write_grapheme_stores_and_reads_extra() {
         let mut g = Grid::new(5, 5);
         g.write_grapheme(0, 1, 1, "e\u{0301}", Style::default());
-        assert_eq!(g.get(1, 1).glyph, 'e');
+        assert_eq!(g[Pos::new(1, 1)].glyph, 'e');
         assert_eq!(g.grapheme(0, 1, 1), Some("e\u{0301}"));
 
         // Single-codepoint writes never populate the side-table.
@@ -2066,9 +2032,9 @@ mod tests {
 
         // A plain `put` (or a later single-codepoint `write_grapheme`) must
         // drop the stale side-table entry, not just leave it unreachable.
-        g.put(0, 0, Tile::new('X', Style::default()));
+        g.put_tile(0, (0, 0), Tile::new('X', Style::default()));
         assert_eq!(g.grapheme(0, 0, 0), None);
-        assert!(!g.get(0, 0).flags().contains(TileFlags::HAS_EXTRA));
+        assert!(!g[Pos::new(0, 0)].flags().contains(TileFlags::HAS_EXTRA));
     }
 
     #[cfg(feature = "egc")]
@@ -2081,7 +2047,7 @@ mod tests {
         // Widening changes the row stride, so the flat index for (3, 1)
         // changes even though the cell itself is preserved.
         g.resize(8, 4);
-        assert_eq!(g.get(3, 1).glyph, 'e');
+        assert_eq!(g[Pos::new(3, 1)].glyph, 'e');
         assert_eq!(g.grapheme(0, 3, 1), Some("e\u{0301}"));
         // No ghost entry landed on some other cell at the old flat index.
         assert_eq!(g.grapheme(0, 7, 0), None);
@@ -2120,7 +2086,7 @@ mod tests {
 
         let mut dst = Grid::new(2, 2);
         dst.blit(0, &src, Rect::new(0, 0, 2, 2), 0, 0);
-        assert_eq!(dst.get(0, 0).glyph, 'e');
+        assert_eq!(dst[Pos::new(0, 0)].glyph, 'e');
         assert_eq!(dst.grapheme(0, 0, 0), Some("e\u{0301}"));
     }
 
@@ -2130,9 +2096,9 @@ mod tests {
         // touching the destination.
         let src = Grid::new(2, 2);
         let mut dst = Grid::new(2, 2);
-        dst.put(0, 0, Tile::new('x', Style::default()));
+        dst.put_tile(0, (0, 0), Tile::new('x', Style::default()));
         dst.blit(0, &src, Rect::new(0, 0, 0, 0), 0, 0);
-        assert_eq!(dst.get(0, 0).glyph(), 'x');
+        assert_eq!(dst[Pos::new(0, 0)].glyph(), 'x');
         assert_eq!(dst.max_layer(), 0);
     }
 
@@ -2152,7 +2118,7 @@ mod tests {
         let mut src = Grid::new(4, 4);
         for y in 0..4 {
             for x in 0..4 {
-                src.put(x, y, Tile::new('#', Style::default()));
+                src.put_tile(0, (x, y), Tile::new('#', Style::default()));
             }
         }
 
@@ -2160,45 +2126,45 @@ mod tests {
         // `src_rect` extends past `src`'s bounds and the destination offset pushes part of the
         // copied region past `dst`'s bounds too; both should be silently clamped, not panic.
         dst.blit(0, &src, Rect::new(2, 2, 10, 10), 1, 1);
-        assert_eq!(dst.get(1, 1).glyph(), '#');
-        assert_eq!(dst.get(0, 0).glyph(), ' ');
-        assert_eq!(dst.get(0, 1).glyph(), ' ');
-        assert_eq!(dst.get(1, 0).glyph(), ' ');
+        assert_eq!(dst[Pos::new(1, 1)].glyph(), '#');
+        assert_eq!(dst[Pos::new(0, 0)].glyph(), ' ');
+        assert_eq!(dst[Pos::new(0, 1)].glyph(), ' ');
+        assert_eq!(dst[Pos::new(1, 0)].glyph(), ' ');
     }
 
     #[test]
     fn test_grid_blit_sub_cell_offset_and_transparency() {
         let mut src = Grid::new(2, 2);
-        src.put(0, 0, Tile::new('A', Style::default()));
+        src.put_tile(0, (0, 0), Tile::new('A', Style::default()));
         // (1, 0) and (1, 1) stay at their default (empty) tile -- transparent, should not
         // overwrite the destination.
-        src.put(0, 1, Tile::new('B', Style::default()));
+        src.put_tile(0, (0, 1), Tile::new('B', Style::default()));
 
         let mut dst = Grid::new(3, 3);
-        dst.put(2, 2, Tile::new('Z', Style::default()));
+        dst.put_tile(0, (2, 2), Tile::new('Z', Style::default()));
         dst.blit(0, &src, Rect::new(0, 0, 2, 2), 1, 1);
 
-        assert_eq!(dst.get(1, 1).glyph(), 'A');
-        assert_eq!(dst.get(1, 2).glyph(), 'B');
+        assert_eq!(dst[Pos::new(1, 1)].glyph(), 'A');
+        assert_eq!(dst[Pos::new(1, 2)].glyph(), 'B');
         // Untouched by the (transparent) source cells at (1, 0) and (1, 1).
-        assert_eq!(dst.get(2, 1).glyph(), ' ');
-        assert_eq!(dst.get(2, 2).glyph(), 'Z');
+        assert_eq!(dst[Pos::new(2, 1)].glyph(), ' ');
+        assert_eq!(dst[Pos::new(2, 2)].glyph(), 'Z');
     }
 
     #[test]
     fn test_grid_blit_multi_layer_independent() {
         let mut src = Grid::new(2, 2);
-        src.put_tile(0, 0, 0, Tile::new('a', Style::default()));
-        src.put_tile(2, 0, 0, Tile::new('b', Style::default()));
+        src.put_tile(0, (0, 0), Tile::new('a', Style::default()));
+        src.put_tile(2, (0, 0), Tile::new('b', Style::default()));
 
         let mut dst = Grid::new(2, 2);
         dst.blit(0, &src, Rect::new(0, 0, 2, 2), 0, 0);
         dst.blit(2, &src, Rect::new(0, 0, 2, 2), 0, 0);
 
-        assert_eq!(dst.get_tile(0, 0, 0).map(Tile::glyph), Some('a'));
-        assert_eq!(dst.get_tile(2, 0, 0).map(Tile::glyph), Some('b'));
+        assert_eq!(dst.tile(0, (0, 0)).map(Tile::glyph), Some('a'));
+        assert_eq!(dst.tile(2, (0, 0)).map(Tile::glyph), Some('b'));
         // Layer 1 was never written by either blit call.
-        assert!(dst.get_tile(1, 0, 0).is_none());
+        assert!(dst.tile(1, (0, 0)).is_none());
     }
 
     #[test]
@@ -2209,18 +2175,18 @@ mod tests {
         // that `dst_x + 3` overflows `u16` and wraps to `1`, which *is* in-bounds for this small
         // `dst` grid: `65534u16.wrapping_add(3) == 1`.
         let mut src = Grid::new(4, 1);
-        src.put(3, 0, Tile::new('Q', Style::default()));
+        src.put_tile(0, (3, 0), Tile::new('Q', Style::default()));
 
         let mut dst = Grid::new(4, 1);
         dst.blit(0, &src, Rect::new(0, 0, 4, 1), u16::MAX - 1, 0);
 
         // The would-be-wrapped cell (index 1) must not have been touched.
-        assert_eq!(dst.get(1, 0).glyph(), ' ');
+        assert_eq!(dst[Pos::new(1, 0)].glyph(), ' ');
         // No other cell was touched either -- the whole row's writes overflowed and were
         // skipped (dst_x saturates to u16::MAX for every column in this row).
         for x in 0..4 {
             assert_eq!(
-                dst.get(x, 0).glyph(),
+                dst[Pos::new(x, 0)].glyph(),
                 ' ',
                 "cell ({x}, 0) unexpectedly written"
             );
@@ -2231,14 +2197,14 @@ mod tests {
     fn test_grid_blit_normal_offset_unaffected_by_overflow_fix() {
         // A typical, non-overflowing blit must still work exactly as before.
         let mut src = Grid::new(2, 2);
-        src.put(0, 0, Tile::new('A', Style::default()));
-        src.put(1, 1, Tile::new('B', Style::default()));
+        src.put_tile(0, (0, 0), Tile::new('A', Style::default()));
+        src.put_tile(0, (1, 1), Tile::new('B', Style::default()));
 
         let mut dst = Grid::new(4, 4);
         dst.blit(0, &src, Rect::new(0, 0, 2, 2), 1, 1);
 
-        assert_eq!(dst.get(1, 1).glyph(), 'A');
-        assert_eq!(dst.get(2, 2).glyph(), 'B');
+        assert_eq!(dst[Pos::new(1, 1)].glyph(), 'A');
+        assert_eq!(dst[Pos::new(2, 2)].glyph(), 'B');
     }
 
     // --- `BlendMode` / `blit_alpha` ---
@@ -2311,9 +2277,9 @@ mod tests {
     #[test]
     fn test_grid_blit_alpha_screen_blends_fg() {
         let mut src = Grid::new(1, 1);
-        src.put(
+        src.put_tile(
             0,
-            0,
+            (0, 0),
             Tile::default()
                 .with_glyph('X')
                 .with_style(Style::new().fg(Color::Rgb {
@@ -2324,9 +2290,9 @@ mod tests {
         );
 
         let mut dst = Grid::new(1, 1);
-        dst.put(
+        dst.put_tile(
             0,
-            0,
+            (0, 0),
             Tile::default()
                 .with_glyph('_')
                 .with_style(Style::new().fg(Color::Rgb {
@@ -2347,7 +2313,7 @@ mod tests {
             1.0,
         );
         assert_eq!(
-            dst.get(0, 0).style.fg,
+            dst[Pos::new(0, 0)].style.fg,
             Color::Rgb {
                 r: 224,
                 g: 224,
@@ -2363,7 +2329,7 @@ mod tests {
     #[test]
     fn test_grid_blit_alpha_dest_origin_near_u16_max_does_not_wrap() {
         let mut src = Grid::new(4, 1);
-        src.put(3, 0, Tile::new('Q', Style::default()));
+        src.put_tile(0, (3, 0), Tile::new('Q', Style::default()));
 
         let mut dst = Grid::new(4, 1);
         dst.blit_alpha(
@@ -2379,7 +2345,7 @@ mod tests {
 
         for x in 0..4 {
             assert_eq!(
-                dst.get(x, 0).glyph(),
+                dst[Pos::new(x, 0)].glyph(),
                 ' ',
                 "cell ({x}, 0) unexpectedly written"
             );
@@ -2395,9 +2361,9 @@ mod tests {
     #[test]
     fn test_grid_blit_alpha_linear_direction() {
         let mut src = Grid::new(1, 1);
-        src.put(
+        src.put_tile(
             0,
-            0,
+            (0, 0),
             Tile::default()
                 .with_glyph('X')
                 .with_style(Style::new().fg(Color::Rgb {
@@ -2410,9 +2376,9 @@ mod tests {
         let dst_color = Color::Rgb { r: 0, g: 0, b: 0 };
         let at = |t: f32| {
             let mut dst = Grid::new(1, 1);
-            dst.put(
+            dst.put_tile(
                 0,
-                0,
+                (0, 0),
                 Tile::default()
                     .with_glyph('_')
                     .with_style(Style::new().fg(dst_color)),
@@ -2427,7 +2393,7 @@ mod tests {
                 t,
                 1.0,
             );
-            dst.get(0, 0).style.fg
+            dst[Pos::new(0, 0)].style.fg
         };
 
         assert_eq!(at(0.0), dst_color);
@@ -2486,35 +2452,35 @@ mod tests {
         g.write_grapheme(1, 0, 0, "e\u{0301}", Style::default());
         let mut flattened = Grid::new(2, 2);
         g.flatten_into(&mut flattened);
-        assert_eq!(flattened.get(0, 0).glyph, 'e');
+        assert_eq!(flattened[Pos::new(0, 0)].glyph, 'e');
         assert_eq!(flattened.grapheme(0, 0, 0), Some("e\u{0301}"));
     }
 
     #[test]
     fn test_grid_flatten_into_single_layer_is_a_plain_copy() {
         let mut g = Grid::new(2, 2);
-        g.put(0, 0, Tile::new('a', Style::default()));
-        g.put(1, 1, Tile::new('b', Style::default()));
+        g.put_tile(0, (0, 0), Tile::new('a', Style::default()));
+        g.put_tile(0, (1, 1), Tile::new('b', Style::default()));
         let mut flattened = Grid::new(2, 2);
         g.flatten_into(&mut flattened);
-        assert_eq!(flattened.get(0, 0).glyph(), 'a');
-        assert_eq!(flattened.get(1, 1).glyph(), 'b');
-        assert_eq!(flattened.get(1, 0).glyph(), ' ');
+        assert_eq!(flattened[Pos::new(0, 0)].glyph(), 'a');
+        assert_eq!(flattened[Pos::new(1, 1)].glyph(), 'b');
+        assert_eq!(flattened[Pos::new(1, 0)].glyph(), ' ');
     }
 
     #[test]
     fn test_grid_flatten_into_higher_layer_overwrites_glyph_and_fg_but_not_default_bg() {
         let mut g = Grid::new(1, 1);
-        g.put(
+        g.put_tile(
             0,
-            0,
+            (0, 0),
             Tile::new('a', Style::new().fg(Color::BLACK).bg(Color::WHITE)),
         );
-        g.put_tile(1, 0, 0, Tile::new('b', Style::new().fg(Color::WHITE)));
+        g.put_tile(1, (0, 0), Tile::new('b', Style::new().fg(Color::WHITE)));
 
         let mut flattened = Grid::new(1, 1);
         g.flatten_into(&mut flattened);
-        let out = flattened.get(0, 0);
+        let out = flattened[Pos::new(0, 0)];
         assert_eq!(out.glyph(), 'b');
         assert_eq!(out.style().fg, Color::WHITE);
         // Layer 1's tile has a `Default` background, so layer 0's background shows through.
@@ -2524,16 +2490,16 @@ mod tests {
     #[test]
     fn test_grid_flatten_into_empty_higher_layer_cell_is_transparent() {
         let mut g = Grid::new(2, 1);
-        g.put(0, 0, Tile::new('a', Style::default()));
-        g.put(1, 0, Tile::new('b', Style::default()));
+        g.put_tile(0, (0, 0), Tile::new('a', Style::default()));
+        g.put_tile(0, (1, 0), Tile::new('b', Style::default()));
         // Only touch (0, 0) on layer 1; (1, 0) on layer 1 stays at its default (EMPTY) tile.
-        g.put_tile(1, 0, 0, Tile::new('c', Style::default()));
+        g.put_tile(1, (0, 0), Tile::new('c', Style::default()));
 
         let mut flattened = Grid::new(2, 1);
         g.flatten_into(&mut flattened);
-        assert_eq!(flattened.get(0, 0).glyph(), 'c');
+        assert_eq!(flattened[Pos::new(0, 0)].glyph(), 'c');
         // Untouched by the transparent layer-1 cell -- layer 0's glyph shows through.
-        assert_eq!(flattened.get(1, 0).glyph(), 'b');
+        assert_eq!(flattened[Pos::new(1, 0)].glyph(), 'b');
     }
 
     #[test]
@@ -2541,11 +2507,11 @@ mod tests {
         // `dst` may be a reused scratch buffer with stale content from a previous frame (see
         // `Terminal::present`) -- `flatten_into` must fully overwrite it, not merge with it.
         let mut flattened = Grid::new(1, 1);
-        flattened.put(0, 0, Tile::new('z', Style::default()));
+        flattened.put_tile(0, (0, 0), Tile::new('z', Style::default()));
 
         let g = Grid::new(1, 1);
         g.flatten_into(&mut flattened);
-        assert_eq!(flattened.get(0, 0).glyph(), ' ');
+        assert_eq!(flattened[Pos::new(0, 0)].glyph(), ' ');
     }
 
     // ── Multi-cell spans (retroglyph#412) ────────────────────────────────
@@ -2557,7 +2523,7 @@ mod tests {
         grid.write_span(0, 1, 1, &["C=", "[]"], Style::default())
             .expect("2x2 span fits in a 4x4 grid");
 
-        let anchor = grid.get_tile(0, 1, 1).unwrap();
+        let anchor = grid.tile(0, (1, 1)).unwrap();
         assert!(anchor.flags().contains(TileFlags::SPAN_ANCHOR));
         assert_eq!(anchor.span(), (2, 2));
         assert_eq!(anchor.span_offset(), None);
@@ -2568,7 +2534,7 @@ mod tests {
             (1, 2, '[', (0, 1)),
             (2, 2, ']', (1, 1)),
         ] {
-            let tile = grid.get_tile(0, x, y).unwrap();
+            let tile = grid.tile(0, (x, y)).unwrap();
             assert!(
                 tile.flags().contains(TileFlags::SPAN_COVERED),
                 "({x}, {y}) should be covered"
@@ -2587,7 +2553,7 @@ mod tests {
         let mut grid = Grid::new(4, 4);
         grid.write_span(0, 0, 0, &["C=", "[]"], Style::default())
             .unwrap();
-        let read = |x, y| grid.get_tile(0, x, y).unwrap().glyph();
+        let read = |x, y| grid.tile(0, (x, y)).unwrap().glyph();
         assert_eq!(
             [read(0, 0), read(1, 0), read(0, 1), read(1, 1)],
             ['C', '=', '[', ']']
@@ -2630,7 +2596,10 @@ mod tests {
         // Nothing was written by any of the above.
         for y in 0..4 {
             for x in 0..4 {
-                assert!(grid.get(x, y).is_empty(), "({x}, {y}) should be untouched");
+                assert!(
+                    grid[Pos::new(x, y)].is_empty(),
+                    "({x}, {y}) should be untouched"
+                );
             }
         }
     }
@@ -2640,11 +2609,11 @@ mod tests {
         let mut grid = Grid::new(4, 4);
         grid.write_span(0, 0, 0, &["C=", "[]"], Style::default())
             .unwrap();
-        grid.put(1, 1, Tile::new('x', Style::default()));
+        grid.put_tile(0, (1, 1), Tile::new('x', Style::default()));
 
-        assert_eq!(grid.get(1, 1).glyph(), 'x');
+        assert_eq!(grid[Pos::new(1, 1)].glyph(), 'x');
         for (x, y) in [(0, 0), (1, 0), (0, 1)] {
-            let tile = grid.get(x, y);
+            let tile = grid[Pos::new(x, y)];
             assert!(tile.is_empty(), "({x}, {y}) should have been cleared");
             assert_eq!(tile.flags(), TileFlags::EMPTY);
         }
@@ -2655,12 +2624,15 @@ mod tests {
         let mut grid = Grid::new(4, 4);
         grid.write_span(0, 0, 0, &["C=", "[]"], Style::default())
             .unwrap();
-        grid.put_tile(0, 0, 0, Tile::new('x', Style::default()));
+        grid.put_tile(0, (0, 0), Tile::new('x', Style::default()));
 
-        assert_eq!(grid.get(0, 0).glyph(), 'x');
-        assert_eq!(grid.get(0, 0).span(), (1, 1));
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), 'x');
+        assert_eq!(grid[Pos::new(0, 0)].span(), (1, 1));
         for (x, y) in [(1, 0), (0, 1), (1, 1)] {
-            assert!(grid.get(x, y).is_empty(), "({x}, {y}) should be cleared");
+            assert!(
+                grid[Pos::new(x, y)].is_empty(),
+                "({x}, {y}) should be cleared"
+            );
         }
     }
 
@@ -2673,10 +2645,10 @@ mod tests {
         grid.write_span(0, 1, 1, &["EF", "GH"], Style::default())
             .unwrap();
 
-        assert!(grid.get(0, 0).is_empty());
-        assert!(grid.get(1, 0).is_empty());
-        assert!(grid.get(0, 1).is_empty());
-        assert_eq!(grid.get(1, 1).glyph(), 'E');
+        assert!(grid[Pos::new(0, 0)].is_empty());
+        assert!(grid[Pos::new(1, 0)].is_empty());
+        assert!(grid[Pos::new(0, 1)].is_empty());
+        assert_eq!(grid[Pos::new(1, 1)].glyph(), 'E');
         assert_eq!(grid.span_owner(0, 2, 2), Some(Pos::new(1, 1)));
     }
 
@@ -2690,16 +2662,16 @@ mod tests {
             for y in 0..2 {
                 for x in 0..2 {
                     assert!(
-                        grid.get(x, y).is_empty(),
+                        grid[Pos::new(x, y)].is_empty(),
                         "clearing from {from:?}: ({x}, {y})"
                     );
                 }
             }
         }
         // A cell that is not part of a span is left alone.
-        grid.put(3, 3, Tile::new('z', Style::default()));
+        grid.put_tile(0, (3, 3), Tile::new('z', Style::default()));
         grid.clear_span(0, 3, 3);
-        assert_eq!(grid.get(3, 3).glyph(), 'z');
+        assert_eq!(grid[Pos::new(3, 3)].glyph(), 'z');
     }
 
     #[test]
@@ -2711,7 +2683,7 @@ mod tests {
         // Layer 0 knows nothing about layer 1's span, and writing there leaves it intact.
         assert_eq!(grid.span_owner(0, 1, 1), None);
         assert_eq!(grid.span_owner(0, 0, 0), None);
-        grid.put(1, 1, Tile::new('x', Style::default()));
+        grid.put_tile(0, (1, 1), Tile::new('x', Style::default()));
         assert_eq!(grid.span_owner(1, 1, 1), Some(Pos::new(0, 0)));
     }
 
@@ -2727,10 +2699,14 @@ mod tests {
         let mut flat = Grid::new(4, 4);
         grid.flatten_into(&mut flat);
 
-        assert_eq!(flat.get(1, 1).span(), (2, 2));
-        assert!(flat.get(1, 1).flags().contains(TileFlags::SPAN_ANCHOR));
+        assert_eq!(flat[Pos::new(1, 1)].span(), (2, 2));
+        assert!(
+            flat[Pos::new(1, 1)]
+                .flags()
+                .contains(TileFlags::SPAN_ANCHOR)
+        );
         assert_eq!(flat.span_owner(0, 2, 2), Some(Pos::new(1, 1)));
-        assert_eq!(flat.get(2, 2).glyph(), ']');
+        assert_eq!(flat[Pos::new(2, 2)].glyph(), ']');
     }
 
     #[test]
@@ -2744,12 +2720,12 @@ mod tests {
         let mut dst = Grid::new(4, 4);
         dst.blit(0, &src, Rect::new(0, 0, 2, 2), 0, 0);
 
-        assert_eq!(dst.get(0, 0).glyph(), 'C');
-        assert_eq!(dst.get(1, 1).glyph(), ']');
-        assert_eq!(dst.get(0, 0).span(), (1, 1));
+        assert_eq!(dst[Pos::new(0, 0)].glyph(), 'C');
+        assert_eq!(dst[Pos::new(1, 1)].glyph(), ']');
+        assert_eq!(dst[Pos::new(0, 0)].span(), (1, 1));
         assert_eq!(dst.span_owner(0, 1, 1), None);
         for (x, y) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
-            let flags = dst.get(x, y).flags();
+            let flags = dst[Pos::new(x, y)].flags();
             assert!(!flags.contains(TileFlags::SPAN_ANCHOR), "({x}, {y})");
             assert!(!flags.contains(TileFlags::SPAN_COVERED), "({x}, {y})");
         }
@@ -2761,10 +2737,10 @@ mod tests {
         grid.write_span(0, 0, 0, &["C=", "[]"], Style::default())
             .unwrap();
         // Only the anchor cell is inside the region, but the whole span must go.
-        grid.checked_put(0, 0, Tile::default());
+        grid.put_tile(0, (0, 0), Tile::default());
         for y in 0..2 {
             for x in 0..2 {
-                assert!(grid.get(x, y).is_empty(), "({x}, {y})");
+                assert!(grid[Pos::new(x, y)].is_empty(), "({x}, {y})");
             }
         }
     }
@@ -2793,7 +2769,7 @@ mod egc_proptests {
     fn assert_wide_invariants(grid: &Grid) {
         for y in 0..grid.height() {
             for x in 0..grid.width() {
-                let flags = grid.get(x, y).flags();
+                let flags = grid[Pos::new(x, y)].flags();
                 let lead = flags.contains(TileFlags::WIDE_CHAR);
                 let spacer = flags.contains(TileFlags::WIDE_CHAR_SPACER);
 
@@ -2805,7 +2781,7 @@ mod egc_proptests {
                 if lead {
                     assert!(x + 1 < grid.width(), "wide lead at ({x}, {y}) has no room");
                     assert!(
-                        grid.get(x + 1, y)
+                        grid[Pos::new(x + 1, y)]
                             .flags()
                             .contains(TileFlags::WIDE_CHAR_SPACER),
                         "wide lead at ({x}, {y}) is missing its spacer"
@@ -2815,7 +2791,9 @@ mod egc_proptests {
                 if spacer {
                     assert!(x > 0, "orphan spacer at ({x}, {y}) (no cell to the left)");
                     assert!(
-                        grid.get(x - 1, y).flags().contains(TileFlags::WIDE_CHAR),
+                        grid[Pos::new(x - 1, y)]
+                            .flags()
+                            .contains(TileFlags::WIDE_CHAR),
                         "orphan spacer at ({x}, {y}) (left cell is not a wide lead)"
                     );
                 }

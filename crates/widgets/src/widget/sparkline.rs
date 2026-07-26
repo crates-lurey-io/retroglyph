@@ -77,7 +77,7 @@ impl Widget for Sparkline<'_> {
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::Grid;
+    use retroglyph_core::{Grid, Pos};
 
     use super::*;
 
@@ -87,10 +87,10 @@ mod tests {
         let mut grid = Grid::new(5, 1);
         Sparkline::new(&[1.0, 2.0]).render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(grid.get(0, 0).glyph(), ' ');
-        assert_eq!(grid.get(2, 0).glyph(), ' ');
-        assert_eq!(grid.get(3, 0).glyph(), BLOCKS[4]); // 1.0 / 2.0 -> half
-        assert_eq!(grid.get(4, 0).glyph(), BLOCKS[8]); // 2.0 / 2.0 -> full
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
+        assert_eq!(grid[Pos::new(2, 0)].glyph(), ' ');
+        assert_eq!(grid[Pos::new(3, 0)].glyph(), BLOCKS[4]); // 1.0 / 2.0 -> half
+        assert_eq!(grid[Pos::new(4, 0)].glyph(), BLOCKS[8]); // 2.0 / 2.0 -> full
     }
 
     #[test]
@@ -99,7 +99,7 @@ mod tests {
         let mut grid = Grid::new(3, 1);
         Sparkline::new(&[]).render(area, &mut Surface::new(&mut grid, area, 0));
         for x in 0..3 {
-            assert_eq!(grid.get(x, 0).glyph(), ' ');
+            assert_eq!(grid[Pos::new(x, 0)].glyph(), ' ');
         }
     }
 }

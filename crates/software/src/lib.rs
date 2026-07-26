@@ -2142,7 +2142,7 @@ mod span_tests {
     fn paint(renderer: &mut SoftwareRenderer, grid: &Grid) {
         let tiles: Vec<(u8, Pos, Tile)> = (0..grid.height())
             .flat_map(|y| (0..grid.width()).map(move |x| (x, y)))
-            .map(|(x, y)| (0u8, Pos::new(x, y), *grid.get_tile(0, x, y).unwrap()))
+            .map(|(x, y)| (0u8, Pos::new(x, y), *grid.tile(0, (x, y)).unwrap()))
             .collect();
         renderer
             .draw_layers(tiles.iter().map(|(l, pos, tile)| (*l, *pos, tile, None)))
@@ -2291,8 +2291,8 @@ mod span_tests {
         let wide = frame("S#");
         let narrow = frame("T#");
         assert_eq!(
-            wide.get_tile(0, 1, 0),
-            narrow.get_tile(0, 1, 0),
+            wide.tile(0, (1, 0)),
+            narrow.tile(0, (1, 0)),
             "this only bites while the covered cell's own tile is unchanged"
         );
 
@@ -2323,8 +2323,7 @@ mod span_tests {
         grid.write_span(0, 0, 0, &["S#"], Style::default()).unwrap();
         grid.put_tile(
             1,
-            1,
-            0,
+            (1, 0),
             Tile::new(
                 '\u{2588}',
                 Style::new().fg(Color::Rgb { r: 0, g: 255, b: 0 }),
@@ -2333,7 +2332,7 @@ mod span_tests {
 
         let tiles: Vec<(u8, Pos, Tile)> = (0..=1u8)
             .flat_map(|layer| (0..2u16).map(move |x| (layer, x)))
-            .map(|(layer, x)| (layer, Pos::new(x, 0), *grid.get_tile(layer, x, 0).unwrap()))
+            .map(|(layer, x)| (layer, Pos::new(x, 0), *grid.tile(layer, (x, 0)).unwrap()))
             .collect();
         r.draw_layers(tiles.iter().map(|(l, pos, tile)| (*l, *pos, tile, None)))
             .unwrap();

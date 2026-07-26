@@ -97,8 +97,8 @@ fn blend_modes(c: &mut Criterion) {
             let mut dst = Grid::new(1, 1);
             b.iter(|| {
                 for (&sc, &dc) in src_colors.iter().zip(&dst_colors) {
-                    src.put(0, 0, Tile::new('#', Style::new().fg(sc)));
-                    dst.put(0, 0, Tile::new('#', Style::new().fg(dc)));
+                    src.put_tile(0, (0, 0), Tile::new('#', Style::new().fg(sc)));
+                    dst.put_tile(0, (0, 0), Tile::new('#', Style::new().fg(dc)));
                     dst.blit_alpha(
                         0,
                         &src,

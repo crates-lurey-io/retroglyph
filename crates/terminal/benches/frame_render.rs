@@ -31,7 +31,7 @@ fn filled(cols: u16, rows: u16, glyph: char, style: Style) -> Grid {
     let mut grid = Grid::new(cols, rows);
     for y in 0..rows {
         for x in 0..cols {
-            grid.put(x, y, Tile::new(glyph, style));
+            grid.put_tile(0, (x, y), Tile::new(glyph, style));
         }
     }
     grid
@@ -54,7 +54,7 @@ fn sparse_pair(cols: u16, rows: u16, pct: u32) -> (Grid, Grid) {
     for _ in 0..changes {
         let x = rng.u16(0..cols);
         let y = rng.u16(0..rows);
-        new.put(x, y, Tile::new('X', changed_style));
+        new.put_tile(0, (x, y), Tile::new('X', changed_style));
     }
     (old, new)
 }
@@ -76,7 +76,7 @@ fn checkerboard(cols: u16, rows: u16) -> Grid {
     for y in 0..rows {
         for x in 0..cols {
             let style = if (x + y) % 2 == 0 { style_a } else { style_b };
-            grid.put(x, y, Tile::new('#', style));
+            grid.put_tile(0, (x, y), Tile::new('#', style));
         }
     }
     grid

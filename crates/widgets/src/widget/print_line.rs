@@ -67,7 +67,8 @@ impl Widget for PrintLine<'_> {
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::{Grid, text::Span};
+    use retroglyph_core::text::Span;
+    use retroglyph_core::{Grid, Pos};
 
     use super::*;
 
@@ -78,7 +79,7 @@ mod tests {
         let mut grid = Grid::new(20, 1);
         PrintLine::new(&line).render(area, &mut Surface::new(&mut grid, area, 0));
 
-        let row: String = (0..20).map(|x| grid.get(x, 0).glyph()).collect();
+        let row: String = (0..20).map(|x| grid[Pos::new(x, 0)].glyph()).collect();
         assert!(row.starts_with("hi there"));
     }
 
@@ -92,7 +93,7 @@ mod tests {
             .render(area, &mut Surface::new(&mut grid, area, 0));
 
         // "hi there" is 8 cols; right-aligned in 20 it ends at column 19.
-        let row: String = (0..20).map(|x| grid.get(x, 0).glyph()).collect();
+        let row: String = (0..20).map(|x| grid[Pos::new(x, 0)].glyph()).collect();
         assert!(row.ends_with("hi there"), "row was {row:?}");
     }
 
@@ -104,6 +105,6 @@ mod tests {
         PrintLine::new(&line).render(area, &mut Surface::new(&mut grid, area, 0));
 
         // "a much longer..." clipped to 5 columns is "a muc".
-        assert_eq!(grid.get(4, 0).glyph(), 'c');
+        assert_eq!(grid[Pos::new(4, 0)].glyph(), 'c');
     }
 }

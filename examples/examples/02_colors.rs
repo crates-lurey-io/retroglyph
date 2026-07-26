@@ -83,9 +83,9 @@ impl Colors {
     /// color selection, is what this row demonstrates.
     fn blend_row<B: Backend>(term: &mut Terminal<B>, x: u16, y: u16, count: u8, mode: BlendMode) {
         let mut overlay = Grid::new(1, 1);
-        overlay.put(
+        overlay.put_tile(
             0,
-            0,
+            (0, 0),
             Tile::default().with_style(Style::new().bg(Self::BLEND_SRC)),
         );
 

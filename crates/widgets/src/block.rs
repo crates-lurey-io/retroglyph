@@ -76,38 +76,38 @@ pub fn blit_into(surface: &mut Surface<'_>, grid: &Grid, x: u16, y: u16) {
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::{Color, Style, Tile};
+    use retroglyph_core::{Color, Pos, Style, Tile};
 
     use super::*;
 
     #[test]
     fn join_h_concatenates_and_pads_shorter_grids() {
         let mut a = Grid::new(2, 3);
-        a.put(0, 0, Tile::new('a', Style::default()));
+        a.put_tile(0, (0, 0), Tile::new('a', Style::default()));
         let mut b = Grid::new(2, 1);
-        b.put(0, 0, Tile::new('b', Style::default()));
+        b.put_tile(0, (0, 0), Tile::new('b', Style::default()));
 
         let joined = join_h(&[a, b]);
         assert_eq!((joined.width(), joined.height()), (4, 3));
-        assert_eq!(joined.get(0, 0).glyph(), 'a');
-        assert_eq!(joined.get(2, 0).glyph(), 'b');
+        assert_eq!(joined[Pos::new(0, 0)].glyph(), 'a');
+        assert_eq!(joined[Pos::new(2, 0)].glyph(), 'b');
         // b is only 1 row tall; row 1 under it was never written.
-        assert_eq!(joined.get(2, 1).glyph(), ' ');
+        assert_eq!(joined[Pos::new(2, 1)].glyph(), ' ');
     }
 
     #[test]
     fn join_v_stacks_and_pads_narrower_grids() {
         let mut a = Grid::new(3, 1);
-        a.put(0, 0, Tile::new('a', Style::default()));
+        a.put_tile(0, (0, 0), Tile::new('a', Style::default()));
         let mut b = Grid::new(1, 1);
-        b.put(0, 0, Tile::new('b', Style::default()));
+        b.put_tile(0, (0, 0), Tile::new('b', Style::default()));
 
         let joined = join_v(&[a, b]);
         assert_eq!((joined.width(), joined.height()), (3, 2));
-        assert_eq!(joined.get(0, 0).glyph(), 'a');
-        assert_eq!(joined.get(0, 1).glyph(), 'b');
+        assert_eq!(joined[Pos::new(0, 0)].glyph(), 'a');
+        assert_eq!(joined[Pos::new(0, 1)].glyph(), 'b');
         // b is only 1 column wide; the rest of its row was never written.
-        assert_eq!(joined.get(1, 1).glyph(), ' ');
+        assert_eq!(joined[Pos::new(1, 1)].glyph(), ' ');
     }
 
     #[test]
@@ -123,27 +123,27 @@ mod tests {
     #[test]
     fn join_only_copies_layer_zero() {
         let mut a = Grid::new(1, 1);
-        a.put(0, 0, Tile::new('a', Style::default())); // layer 0
-        a.put_tile(1, 0, 0, Tile::new('z', Style::default())); // layer 1
+        a.put_tile(0, (0, 0), Tile::new('a', Style::default())); // layer 0
+        a.put_tile(1, (0, 0), Tile::new('z', Style::default())); // layer 1
 
         let joined = join_h(&[a]);
-        assert_eq!(joined.get(0, 0).glyph(), 'a');
-        assert_eq!(joined.get_tile(1, 0, 0), None); // layer 1 was never allocated
+        assert_eq!(joined[Pos::new(0, 0)].glyph(), 'a');
+        assert_eq!(joined.tile(1, (0, 0)), None); // layer 1 was never allocated
     }
 
     #[test]
     fn blit_into_stamps_a_grid_onto_a_surface_at_an_offset() {
         let mut src = Grid::new(2, 2);
-        src.put(0, 0, Tile::new('x', Style::new().fg(Color::GREEN)));
-        src.put(1, 1, Tile::new('y', Style::default()));
+        src.put_tile(0, (0, 0), Tile::new('x', Style::new().fg(Color::GREEN)));
+        src.put_tile(0, (1, 1), Tile::new('y', Style::default()));
 
         let mut dst = Grid::new(5, 5);
         let area = Rect::new(0, 0, 5, 5);
         blit_into(&mut Surface::new(&mut dst, area, 0), &src, 2, 1);
 
-        assert_eq!(dst.get(2, 1).glyph(), 'x');
-        assert_eq!(dst.get(3, 2).glyph(), 'y');
+        assert_eq!(dst[Pos::new(2, 1)].glyph(), 'x');
+        assert_eq!(dst[Pos::new(3, 2)].glyph(), 'y');
         // Untouched cells stay whatever the destination started with.
-        assert_eq!(dst.get(0, 0).glyph(), ' ');
+        assert_eq!(dst[Pos::new(0, 0)].glyph(), ' ');
     }
 }

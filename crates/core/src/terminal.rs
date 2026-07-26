@@ -164,7 +164,7 @@ impl<B: Backend> Terminal<B> {
         #[cfg(not(feature = "egc"))]
         {
             let tile = Tile::new(ch, style);
-            self.current.put_tile(self.active_layer, x, y, tile);
+            self.current.put_tile(self.active_layer, (x, y), tile);
         }
     }
 
@@ -222,14 +222,14 @@ impl<B: Backend> Terminal<B> {
 
     /// Clear a rectangular region.
     ///
-    /// Goes through [`Grid::checked_put`](crate::grid::Grid::checked_put) rather than writing
+    /// Goes through [`Grid::put_tile`](crate::grid::Grid::put_tile) rather than writing
     /// cells directly, so clearing part of a multi-cell span clears the whole span instead of
     /// leaving an anchor claiming cells that are now blank.
     pub fn clear_region(&mut self, rect: Rect) {
         self.dirty = true;
         for y in rect.top()..rect.bottom() {
             for x in rect.left()..rect.right() {
-                self.current.checked_put(x, y, Tile::default());
+                self.current.put_tile(0, (x, y), Tile::default());
             }
         }
     }
@@ -247,7 +247,7 @@ impl<B: Backend> Terminal<B> {
         #[cfg(not(feature = "egc"))]
         {
             let tile = Tile::new(ch, style);
-            self.current.put_tile(self.active_layer, x, y, tile);
+            self.current.put_tile(self.active_layer, (x, y), tile);
         }
     }
 
@@ -292,7 +292,7 @@ impl<B: Backend> Terminal<B> {
     pub fn put_offset(&mut self, x: u16, y: u16, dx: i16, dy: i16, ch: char) {
         self.dirty = true;
         let tile = Tile::new(ch, self.drawing_style).with_offset(dx, dy);
-        self.current.put_tile(self.active_layer, x, y, tile);
+        self.current.put_tile(self.active_layer, (x, y), tile);
     }
 
     /// Print a string starting at `(x, y)` with the current style.
@@ -355,7 +355,7 @@ impl<B: Backend> Terminal<B> {
                         break;
                     }
                     let tile = Tile::new(ch, span.style);
-                    self.current.put_tile(self.active_layer, cur_x, y, tile);
+                    self.current.put_tile(self.active_layer, (cur_x, y), tile);
                     cur_x += w;
                 }
             }
@@ -603,7 +603,8 @@ impl<B: Backend> Terminal<B> {
                 #[allow(clippy::cast_possible_truncation)]
                 let w = UnicodeWidthChar::width(c).unwrap_or(1) as u16;
                 let tile = Tile::new(c, style);
-                self.current.put_tile(self.active_layer, cur_x, cur_y, tile);
+                self.current
+                    .put_tile(self.active_layer, (cur_x, cur_y), tile);
                 cur_x += w;
                 if usize::from(cur_x) >= usize::from(self.current.width()) {
                     cur_x = x;
@@ -625,13 +626,13 @@ mod tests {
         let backend = Headless::new(10, 10);
         let mut terminal = Terminal::new(backend);
 
-        assert_eq!(terminal.grid().get(0, 0).glyph(), ' ');
+        assert_eq!(terminal.grid()[Pos::new(0, 0)].glyph(), ' ');
 
         terminal
             .grid_mut()
-            .put(0, 0, Tile::new('X', Style::default()));
+            .put_tile(0, (0, 0), Tile::new('X', Style::default()));
 
-        assert_eq!(terminal.grid().get(0, 0).glyph(), 'X');
+        assert_eq!(terminal.grid()[Pos::new(0, 0)].glyph(), 'X');
     }
 
     #[test]
@@ -685,9 +686,9 @@ mod tests {
         term.layer(0).put(1, 0, '.');
         term.layer(1).put(1, 0, '@');
         term.present().expect("present failed");
-        assert_eq!(term.backend().grid().get(0, 0).glyph(), '.');
+        assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), '.');
         // Layer 1's glyph wins at (1, 0).
-        assert_eq!(term.backend().grid().get(1, 0).glyph(), '@');
+        assert_eq!(term.backend().grid()[Pos::new(1, 0)].glyph(), '@');
     }
 
     #[test]
@@ -700,7 +701,7 @@ mod tests {
         term.layer(1)
             .put_styled(0, 0, ' ', Style::new().bg(Color::RED));
         term.present().expect("present failed");
-        let cell = term.backend().grid().get(0, 0);
+        let cell = term.backend().grid()[Pos::new(0, 0)];
         assert_eq!(cell.glyph(), ' ');
         assert_eq!(cell.style().background(), Color::RED);
     }
@@ -712,21 +713,21 @@ mod tests {
         let mut term = Terminal::new(Headless::new(3, 1));
         term.put(0, 0, 'a');
         term.present().expect("present failed");
-        assert_eq!(term.backend().grid().get(0, 0).glyph(), 'a');
+        assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), 'a');
 
         // Immediate mode: redraw 'a' and add 'c'. The diff updates the new
         // cell while 'a' stays put.
         term.put(0, 0, 'a');
         term.put(2, 0, 'c');
         term.present().expect("present failed");
-        assert_eq!(term.backend().grid().get(0, 0).glyph(), 'a');
-        assert_eq!(term.backend().grid().get(2, 0).glyph(), 'c');
+        assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), 'a');
+        assert_eq!(term.backend().grid()[Pos::new(2, 0)].glyph(), 'c');
 
         // A cell that is not redrawn is erased (immediate mode).
         term.put(0, 0, 'a');
         term.present().expect("present failed");
-        assert_eq!(term.backend().grid().get(0, 0).glyph(), 'a');
-        assert_eq!(term.backend().grid().get(2, 0).glyph(), ' ');
+        assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), 'a');
+        assert_eq!(term.backend().grid()[Pos::new(2, 0)].glyph(), ' ');
     }
 
     #[test]
@@ -736,11 +737,11 @@ mod tests {
         let mut term = Terminal::new(Headless::new(3, 1));
         term.put(0, 0, 'a');
         term.present().expect("present failed");
-        assert_eq!(term.backend().grid().get(0, 0).glyph(), 'a');
+        assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), 'a');
 
         // Nothing drawn since the last present: this must be a no-op, not an erase.
         term.present().expect("present failed");
-        assert_eq!(term.backend().grid().get(0, 0).glyph(), 'a');
+        assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), 'a');
     }
 
     #[test]
@@ -750,11 +751,11 @@ mod tests {
         let mut term = Terminal::new(Headless::new(3, 1));
         term.put(0, 0, 'a');
         term.present().expect("present failed");
-        assert_eq!(term.backend().grid().get(0, 0).glyph(), 'a');
+        assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), 'a');
 
         term.clear();
         term.present().expect("present failed");
-        assert_eq!(term.backend().grid().get(0, 0).glyph(), ' ');
+        assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), ' ');
     }
 
     #[test]
@@ -771,8 +772,8 @@ mod tests {
         term.layer(0).put(1, 0, '.');
         term.layer(1).put(1, 0, '@');
         term.present().expect("present failed");
-        assert_eq!(term.backend().grid().get(0, 0).glyph(), '.');
-        assert_eq!(term.backend().grid().get(1, 0).glyph(), '@');
+        assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), '.');
+        assert_eq!(term.backend().grid()[Pos::new(1, 0)].glyph(), '@');
     }
 
     #[test]
@@ -784,7 +785,7 @@ mod tests {
         // Allocate layer 1 by writing elsewhere, leaving (0, 0) empty.
         term.layer(1).put(1, 0, 'y');
         term.present().expect("present failed");
-        assert_eq!(term.backend().grid().get(0, 0).glyph(), 'x');
+        assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), 'x');
     }
 
     #[test]
@@ -825,8 +826,8 @@ mod tests {
         let mut term = Terminal::new(Headless::new(10, 10));
         term.put(2, 2, 'X');
         term.resize(20, 20);
-        assert_eq!(term.grid().get(2, 2).glyph(), 'X');
-        assert_eq!(term.grid().get(15, 15).glyph(), ' ');
+        assert_eq!(term.grid()[Pos::new(2, 2)].glyph(), 'X');
+        assert_eq!(term.grid()[Pos::new(15, 15)].glyph(), ' ');
     }
 
     #[test]
@@ -857,9 +858,9 @@ mod tests {
         term.put(4, 4, 'B');
         term.present();
 
-        assert_eq!(term.backend().grid().get(4, 4).glyph(), 'B');
+        assert_eq!(term.backend().grid()[Pos::new(4, 4)].glyph(), 'B');
         // (0,0) was not redrawn this frame; backend retains 'A' from before resize.
-        assert_eq!(term.backend().grid().get(0, 0).glyph(), 'A');
+        assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), 'A');
     }
 
     // --- unicode width ---
@@ -868,50 +869,48 @@ mod tests {
     fn test_put_wide_char_sets_continuation() {
         let mut term = Terminal::new(Headless::new(10, 3));
         term.put(0, 0, '\u{4e2d}'); // '中', width 2
-        assert_eq!(term.grid().get(0, 0).glyph(), '\u{4e2d}');
+        assert_eq!(term.grid()[Pos::new(0, 0)].glyph(), '\u{4e2d}');
         // With egc: spacer uses WIDE_CHAR_SPACER flag, glyph is space.
         // Without egc: spacer is '\0'.
         #[cfg(feature = "egc")]
         {
             use crate::tile::TileFlags;
             assert!(
-                term.grid()
-                    .get(1, 0)
+                term.grid()[Pos::new(1, 0)]
                     .flags()
                     .contains(TileFlags::WIDE_CHAR_SPACER)
             );
-            assert_eq!(term.grid().get(1, 0).glyph(), ' ');
+            assert_eq!(term.grid()[Pos::new(1, 0)].glyph(), ' ');
         }
         #[cfg(not(feature = "egc"))]
-        assert_eq!(term.grid().get(1, 0).glyph(), '\0');
-        assert_eq!(term.grid().get(2, 0).glyph(), ' '); // untouched
+        assert_eq!(term.grid()[Pos::new(1, 0)].glyph(), '\0');
+        assert_eq!(term.grid()[Pos::new(2, 0)].glyph(), ' '); // untouched
     }
 
     #[test]
     fn test_print_advances_by_char_width() {
         let mut term = Terminal::new(Headless::new(10, 3));
         term.print(0, 0, "\u{4e2d}x"); // '中' (2) then 'x' at col 2
-        assert_eq!(term.grid().get(0, 0).glyph(), '\u{4e2d}');
+        assert_eq!(term.grid()[Pos::new(0, 0)].glyph(), '\u{4e2d}');
         #[cfg(feature = "egc")]
         {
             use crate::tile::TileFlags;
             assert!(
-                term.grid()
-                    .get(1, 0)
+                term.grid()[Pos::new(1, 0)]
                     .flags()
                     .contains(TileFlags::WIDE_CHAR_SPACER)
             );
         }
         #[cfg(not(feature = "egc"))]
-        assert_eq!(term.grid().get(1, 0).glyph(), '\0');
-        assert_eq!(term.grid().get(2, 0).glyph(), 'x');
+        assert_eq!(term.grid()[Pos::new(1, 0)].glyph(), '\0');
+        assert_eq!(term.grid()[Pos::new(2, 0)].glyph(), 'x');
     }
 
     #[test]
     fn test_put_at_matches_put() {
         let mut term = Terminal::new(Headless::new(10, 3));
         term.put_at(Pos::new(2, 1), 'X');
-        assert_eq!(term.grid().get(2, 1).glyph(), 'X');
+        assert_eq!(term.grid()[Pos::new(2, 1)].glyph(), 'X');
     }
 
     #[test]
@@ -920,7 +919,7 @@ mod tests {
         // write_grapheme silently refuses rather than leaving an orphan.
         let mut term = Terminal::new(Headless::new(4, 1));
         term.put(3, 0, '\u{4e2d}'); // col 3 is last; need col 4 for spacer
-        assert_eq!(term.grid().get(3, 0).glyph(), ' '); // nothing written
+        assert_eq!(term.grid()[Pos::new(3, 0)].glyph(), ' '); // nothing written
     }
 
     // --- styled spans ---
@@ -934,11 +933,11 @@ mod tests {
             Span::styled("100", Style::new().fg(Color::GREEN)),
         ]);
         term.print_styled(0, 0, &line);
-        assert_eq!(term.grid().get(0, 0).glyph(), 'H');
-        assert_eq!(term.grid().get(3, 0).glyph(), ' ');
-        assert_eq!(term.grid().get(4, 0).glyph(), '1');
-        assert_eq!(term.grid().get(4, 0).style.fg, Color::GREEN);
-        assert_eq!(term.grid().get(6, 0).glyph(), '0');
+        assert_eq!(term.grid()[Pos::new(0, 0)].glyph(), 'H');
+        assert_eq!(term.grid()[Pos::new(3, 0)].glyph(), ' ');
+        assert_eq!(term.grid()[Pos::new(4, 0)].glyph(), '1');
+        assert_eq!(term.grid()[Pos::new(4, 0)].style.fg, Color::GREEN);
+        assert_eq!(term.grid()[Pos::new(6, 0)].glyph(), '0');
     }
 
     #[test]
@@ -958,19 +957,18 @@ mod tests {
         let mut term = Terminal::new(Headless::new(10, 3));
         let line = Line::from(vec![Span::raw("\u{4e2d}x")]);
         term.print_styled(0, 0, &line);
-        assert_eq!(term.grid().get(0, 0).glyph(), '\u{4e2d}');
+        assert_eq!(term.grid()[Pos::new(0, 0)].glyph(), '\u{4e2d}');
         #[cfg(feature = "egc")]
         {
             use crate::tile::TileFlags;
             assert!(
-                term.grid()
-                    .get(1, 0)
+                term.grid()[Pos::new(1, 0)]
                     .flags()
                     .contains(TileFlags::WIDE_CHAR_SPACER)
             );
         }
         #[cfg(not(feature = "egc"))]
-        assert_eq!(term.grid().get(1, 0).glyph(), '\0');
-        assert_eq!(term.grid().get(2, 0).glyph(), 'x');
+        assert_eq!(term.grid()[Pos::new(1, 0)].glyph(), '\0');
+        assert_eq!(term.grid()[Pos::new(2, 0)].glyph(), 'x');
     }
 }

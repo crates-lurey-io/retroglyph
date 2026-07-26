@@ -91,7 +91,7 @@ impl Widget for Log<'_> {
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::Grid;
+    use retroglyph_core::{Grid, Pos};
 
     use super::*;
 
@@ -108,8 +108,8 @@ mod tests {
         let mut grid = Grid::new(20, 2);
         Log::new(&messages).render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(grid.get(0, 0).glyph(), 'c'); // "charlie"
-        assert_eq!(grid.get(0, 1).glyph(), 'd'); // "delta"
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), 'c'); // "charlie"
+        assert_eq!(grid[Pos::new(0, 1)].glyph(), 'd'); // "delta"
     }
 
     #[test]
@@ -122,8 +122,8 @@ mod tests {
             .offset(1)
             .render(area, &mut Surface::new(&mut grid, area, 0)); // one message back from the tail
 
-        assert_eq!(grid.get(0, 0).glyph(), 'b'); // "bravo"
-        assert_eq!(grid.get(0, 1).glyph(), 'c'); // "charlie"
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), 'b'); // "bravo"
+        assert_eq!(grid[Pos::new(0, 1)].glyph(), 'c'); // "charlie"
     }
 
     #[test]
@@ -137,8 +137,8 @@ mod tests {
             .render(area, &mut Surface::new(&mut grid, area, 0)); // scrolled back past the start
 
         // Nothing drawn; both rows stay whatever they were (default/empty).
-        assert_eq!(grid.get(0, 0).glyph(), ' ');
-        assert_eq!(grid.get(0, 1).glyph(), ' ');
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
+        assert_eq!(grid[Pos::new(0, 1)].glyph(), ' ');
     }
 
     #[test]
@@ -149,9 +149,9 @@ mod tests {
         let mut grid = Grid::new(20, 4);
         Log::new(&messages).render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(grid.get(0, 0).glyph(), 'o'); // "only"
-        assert_eq!(grid.get(0, 1).glyph(), ' '); // untouched
-        assert_eq!(grid.get(0, 2).glyph(), ' '); // untouched
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), 'o'); // "only"
+        assert_eq!(grid[Pos::new(0, 1)].glyph(), ' '); // untouched
+        assert_eq!(grid[Pos::new(0, 2)].glyph(), ' '); // untouched
     }
 
     #[test]
@@ -163,6 +163,6 @@ mod tests {
         Log::new(&messages).render(area, &mut Surface::new(&mut grid, area, 0));
 
         // "a much longer..." clipped to 5 columns is "a muc".
-        assert_eq!(grid.get(4, 0).glyph(), 'c');
+        assert_eq!(grid[Pos::new(4, 0)].glyph(), 'c');
     }
 }
