@@ -90,7 +90,7 @@ impl Theme {
     /// for contrast against a light background rather than just flipping
     /// each channel.
     ///
-    /// Contrast is deliberately higher than a typical OS light theme:
+    /// Contrast is higher than a typical OS light theme:
     /// retroglyph's pseudo-graphics (gauges, progress bars, log lines)
     /// draw with a 2-color paletted look where every panel-bg/border/text
     /// pair has to be distinct at a glance with no sub-pixel anti-aliasing

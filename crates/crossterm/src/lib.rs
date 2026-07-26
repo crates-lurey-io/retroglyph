@@ -139,7 +139,7 @@ static INSTANCE_LIVE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicB
 /// but before construction finished -- releases the flag, so a single failed construction attempt
 /// can never permanently wedge out all future construction.
 ///
-/// This is deliberately independent of `restore_terminal()`/the panic hook: `restore_terminal()`
+/// This is independent of `restore_terminal()`/the panic hook: `restore_terminal()`
 /// only clears `ALT_SCREEN_ACTIVE`/`RAW_MODE_ACTIVE` (idempotent swaps that are safe to call any
 /// number of times, including from both the panic hook and the eventual `Drop`). Ordinary Rust
 /// destructor semantics already guarantee this guard's `Drop` runs during an unwind (the panic

@@ -56,10 +56,10 @@ Up to 256 layers. Each cell carries a glyph, foreground/background color, and su
 offsets. Layer 0 is always allocated; layers 1+ are allocated on first write — single-layer games
 pay zero overhead.
 
-`Style` deliberately has no text modifiers (bold, italic, underline, ...): a pixel/bitmap-font
-renderer can't fake most of them without real per-style assets, so rather than work in a real
-terminal and silently do nothing in the software backend, they're not part of the API at all. See
-`Style`'s doc comment in `crates/core/src/style.rs` for the full rationale.
+`Style` has no text modifiers (bold, italic, underline, ...): a pixel/bitmap-font renderer can't
+fake most of them without real per-style assets, so rather than work in a real terminal and silently
+do nothing in the software backend, they're not part of the API at all. See `Style`'s doc comment in
+`crates/core/src/style.rs` for the full rationale.
 
 Colors cover the full spectrum: the terminal's default foreground/background, the 16 standard ANSI
 colors, the 256-color palette, and 24-bit RGB.
@@ -204,10 +204,10 @@ instead. A handful of things that are genuinely just functions (`fill_rect`,
 `thumb_geometry`/`offset_for_pos`) stay free functions rather than pretending to be widgets.
 Alongside the widgets is a constraint-based `Rect` splitter (`split_h`/`split_v`) with
 `Fixed`/`Percent`/`Fill`/`Min`/`Max` constraints and `Flex` alignment
-(`Start`/`End`/`Center`/`SpaceBetween`/`SpaceAround`) -- deliberately similar to
-[ratatui](https://ratatui.rs)'s layout system, for anyone coming from there. `Fill(weight)` claims a
-share of the leftover space proportional to `weight` relative to the other `Fill`/`Min`/`Max` panes
-in the same split (`Fill(1)` reproduces plain equal distribution).
+(`Start`/`End`/`Center`/`SpaceBetween`/`SpaceAround`) -- similar to [ratatui](https://ratatui.rs)'s
+layout system. `Fill(weight)` claims a share of the leftover space proportional to `weight` relative
+to the other `Fill`/`Min`/`Max` panes in the same split (`Fill(1)` reproduces plain equal
+distribution).
 
 Three more independent layers build on top:
 
@@ -294,10 +294,10 @@ two closest:
 
 - **[ratatui](https://ratatui.rs)** is the standard for terminal UIs, with a much larger widget
   ecosystem. It only draws to a real terminal (through `crossterm`/`termion`/`termwiz`), and has no
-  pixel or WASM backend. retroglyph's widget/layout crate deliberately borrows ratatui's
-  constraint-based layout ergonomics, but retroglyph's `Terminal<B>` also runs against a native
-  pixel-rendered window or a browser canvas without changing a line of game logic -- pick ratatui if
-  a real terminal is always the target and you want its wider widget catalog.
+  pixel or WASM backend. retroglyph's widget/layout crate borrows ratatui's constraint-based layout
+  ergonomics, but retroglyph's `Terminal<B>` also runs against a native pixel-rendered window or a
+  browser canvas without changing a line of game logic -- pick ratatui if a real terminal is always
+  the target and you want its wider widget catalog.
 - **[bracket-lib](https://github.com/amethyst/bracket-lib)** (the maintained successor to RLTK) is
   the closest match in spirit: one virtual ASCII terminal, several swappable backends including
   crossterm. Its non-terminal backends go through OpenGL or WebGPU, though, which pulls in a GPU
