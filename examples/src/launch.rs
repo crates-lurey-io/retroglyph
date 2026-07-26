@@ -216,11 +216,10 @@ impl<B: Backend, E: Example> App<B> for ExampleApp<E> {
             // exit, matching the old contract where `tick` presented only when it actually drew.
             return Flow::Exit;
         }
-        // The driver owns `present`, so the FPS overlay (a top layer) is stamped after the
-        // example's draw and survives to the flush.
+        // The driver presents automatically after `update` returns, so the FPS overlay (a top
+        // layer) is stamped after the example's draw and survives to the flush.
         self.fps.tick(frame.delta);
         self.fps.draw(term, self.backend_name);
-        term.present().ok();
         Flow::Continue
     }
 }
@@ -343,7 +342,8 @@ pub fn run_gl<E: Example>() {
 ///
 /// # Errors
 ///
-/// Returns an error if the terminal fails to initialize.
+/// Returns an error if the terminal fails to initialize, or if a frame present fails while `E` is
+/// running.
 #[cfg(feature = "crossterm")]
 pub fn run_crossterm<E: Example>() -> std::io::Result<()> {
     // Not `Crossterm::run`, which builds the `Terminal` itself: the backend has to be wrapped in
@@ -354,8 +354,7 @@ pub fn run_crossterm<E: Example>() -> std::io::Result<()> {
         retroglyph_crossterm::Crossterm::new()?,
         std::rc::Rc::clone(&app.filtered_toggles),
     );
-    retroglyph_core::run_blocking(Terminal::new(filter), app);
-    Ok(())
+    retroglyph_core::run_blocking(Terminal::new(filter), app)
 }
 
 // ── Headless (stdout) fallback ──────────────────────────────────────────────
