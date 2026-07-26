@@ -166,7 +166,18 @@ fn svg_snapshot() {
 #[test]
 fn svg_snapshot_light() {
     let bin = support::build_crossterm_example("17_theme_switch");
-    let raw = support::capture_pty(&bin, b"t", 25, 50, "toggles theme");
+    // Waits for the light theme's own title before quitting: `t` and the harness's quit key can
+    // otherwise be read in the same frame, which applies the switch but never renders it. See
+    // `support::capture_pty_until`.
+    let raw = support::capture_pty_until(
+        &bin,
+        b"t",
+        25,
+        50,
+        "toggles theme",
+        &[("RG_FPS", "0")],
+        &|screen| screen.contains("Theme: Light"),
+    );
     let svg = support::svg_snapshot(&raw, 25, 50);
     assert!(
         svg.contains("Alpha"),

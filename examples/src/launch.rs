@@ -147,6 +147,10 @@ struct ExampleApp<E> {
     /// Scratch buffer for [`intercept_overlay_keys`]'s pass-through events, reused across frames
     /// so the interception doesn't allocate on every frame that has input.
     passthrough: Vec<retroglyph_core::event::Event>,
+    /// Toggle presses swallowed at the source by a [`ToggleFilter`](crate::fps::ToggleFilter).
+    /// Always empty unless [`run_crossterm`] installed one; see that filter for why crossterm
+    /// needs it and the windowed backends don't.
+    filtered_toggles: crate::fps::TogglePresses,
 }
 
 #[cfg(any(feature = "crossterm", feature = "software", feature = "gl"))]
@@ -157,6 +161,7 @@ impl<E> ExampleApp<E> {
             backend_name,
             fps: crate::fps::Fps::new(crate::fps::starts_visible()),
             passthrough: Vec::new(),
+            filtered_toggles: crate::fps::TogglePresses::default(),
         }
     }
 
@@ -173,11 +178,16 @@ impl<E> ExampleApp<E> {
     /// This is why [`Input::push_event`](retroglyph_core::Input::push_event) has to actually work
     /// on every backend an example runs on. It didn't on crossterm until it grew a pushback queue
     /// of its own; the trait default silently drops, which here would have eaten every keystroke.
+    ///
+    /// Draining the queue only catches keys that were already waiting when the frame started,
+    /// which is every key the example can see on the windowed backends and *not* on crossterm --
+    /// [`ToggleFilter`](crate::fps::ToggleFilter) covers the difference, and this folds in what it
+    /// swallowed.
     fn intercept_overlay_keys<B: Backend>(&mut self, term: &mut Terminal<B>) {
         self.passthrough.clear();
         self.passthrough.extend(term.drain_events());
 
-        let mut toggles = 0usize;
+        let mut toggles = self.filtered_toggles.take();
         self.passthrough.retain(|event| {
             let is_toggle = crate::fps::is_toggle_key(event);
             toggles += usize::from(is_toggle);
@@ -336,7 +346,16 @@ pub fn run_gl<E: Example>() {
 /// Returns an error if the terminal fails to initialize.
 #[cfg(feature = "crossterm")]
 pub fn run_crossterm<E: Example>() -> std::io::Result<()> {
-    retroglyph_crossterm::Crossterm::run(ExampleApp::<E>::new("crossterm"))
+    // Not `Crossterm::run`, which builds the `Terminal` itself: the backend has to be wrapped in
+    // a `ToggleFilter` before the terminal sees it, or the overlay's toggle key races the
+    // example's own `drain_events` and gets swallowed. See `ToggleFilter`.
+    let app = ExampleApp::<E>::new("crossterm");
+    let filter = crate::fps::ToggleFilter::new(
+        retroglyph_crossterm::Crossterm::new()?,
+        std::rc::Rc::clone(&app.filtered_toggles),
+    );
+    retroglyph_core::run_blocking(Terminal::new(filter), app);
+    Ok(())
 }
 
 // ── Headless (stdout) fallback ──────────────────────────────────────────────
