@@ -87,8 +87,8 @@
 #[doc = include_str!("../README.md")]
 struct ReadmeDoctests;
 
+use retroglyph_core::DrawCell;
 use retroglyph_core::color::Color;
-use retroglyph_core::grid::Pos;
 use retroglyph_core::tile::Tile;
 use std::io::{self, Write};
 
@@ -305,7 +305,7 @@ impl<W: Write> TerminalRenderer<W> {
     /// Returns an error if the writer fails.
     pub fn draw<'a, I>(&mut self, content: I) -> io::Result<()>
     where
-        I: Iterator<Item = (Pos, &'a Tile, Option<&'a str>)>,
+        I: Iterator<Item = DrawCell<'a>>,
     {
         if self.plain {
             self.draw_plain(content)?;
@@ -323,9 +323,10 @@ impl<W: Write> TerminalRenderer<W> {
     #[allow(clippy::similar_names)]
     fn draw_escape<'a, I>(&mut self, content: I) -> io::Result<()>
     where
-        I: Iterator<Item = (Pos, &'a Tile, Option<&'a str>)>,
+        I: Iterator<Item = DrawCell<'a>>,
     {
-        for (pos, cell, extra) in content {
+        for draw_cell in content {
+            let (pos, cell, extra) = (draw_cell.pos, draw_cell.tile, draw_cell.grapheme);
             #[cfg(not(feature = "egc"))]
             let _ = extra;
 
@@ -395,9 +396,10 @@ impl<W: Write> TerminalRenderer<W> {
     /// escape-mode counterpart.
     fn draw_plain<'a, I>(&mut self, content: I) -> io::Result<()>
     where
-        I: Iterator<Item = (Pos, &'a Tile, Option<&'a str>)>,
+        I: Iterator<Item = DrawCell<'a>>,
     {
-        for (pos, cell, extra) in content {
+        for draw_cell in content {
+            let (pos, cell, extra) = (draw_cell.pos, draw_cell.tile, draw_cell.grapheme);
             #[cfg(not(feature = "egc"))]
             let _ = extra;
 
@@ -509,12 +511,14 @@ impl<W: Write + io::IsTerminal> TerminalRenderer<W> {
 mod tests {
     use super::*;
     use retroglyph_core::color::AnsiColor;
+    use retroglyph_core::grid::Pos;
     use retroglyph_core::style::Style;
+    use retroglyph_core::tile::Tile;
 
     fn render_one(tile: &Tile) -> String {
         let mut renderer = TerminalRenderer::new(Vec::new());
         renderer
-            .draw(core::iter::once((Pos { x: 0, y: 0 }, tile, None)))
+            .draw(core::iter::once(DrawCell::new(Pos { x: 0, y: 0 }, tile)))
             .unwrap();
         renderer.flush().unwrap();
         String::from_utf8(renderer.into_writer()).unwrap()
@@ -619,10 +623,10 @@ mod tests {
         );
         let mut renderer = TerminalRenderer::new(Vec::new());
         renderer
-            .draw(core::iter::once((Pos { x: 0, y: 0 }, &old, None)))
+            .draw(core::iter::once(DrawCell::new(Pos { x: 0, y: 0 }, &old)))
             .unwrap();
         renderer
-            .draw(core::iter::once((Pos { x: 0, y: 0 }, &new, None)))
+            .draw(core::iter::once(DrawCell::new(Pos { x: 0, y: 0 }, &new)))
             .unwrap();
         renderer.flush().unwrap();
         let out = String::from_utf8(renderer.into_writer()).unwrap();
@@ -654,10 +658,10 @@ mod tests {
         );
         let mut renderer = TerminalRenderer::new(Vec::new());
         renderer
-            .draw(core::iter::once((Pos { x: 0, y: 0 }, &old, None)))
+            .draw(core::iter::once(DrawCell::new(Pos { x: 0, y: 0 }, &old)))
             .unwrap();
         renderer
-            .draw(core::iter::once((Pos { x: 0, y: 0 }, &new, None)))
+            .draw(core::iter::once(DrawCell::new(Pos { x: 0, y: 0 }, &new)))
             .unwrap();
         renderer.flush().unwrap();
         let out = String::from_utf8(renderer.into_writer()).unwrap();
@@ -683,8 +687,8 @@ mod tests {
         renderer
             .draw(
                 [
-                    (Pos { x: 0, y: 0 }, &tile_a, None),
-                    (Pos { x: 1, y: 0 }, &tile_b, None),
+                    DrawCell::new(Pos { x: 0, y: 0 }, &tile_a),
+                    DrawCell::new(Pos { x: 1, y: 0 }, &tile_b),
                 ]
                 .into_iter(),
             )
@@ -700,11 +704,11 @@ mod tests {
         let tile = Tile::new('X', Style::default());
         let mut renderer = TerminalRenderer::new(Vec::new());
         renderer
-            .draw(core::iter::once((Pos { x: 0, y: 0 }, &tile, None)))
+            .draw(core::iter::once(DrawCell::new(Pos { x: 0, y: 0 }, &tile)))
             .unwrap();
         renderer.reset_state();
         renderer
-            .draw(core::iter::once((Pos { x: 0, y: 0 }, &tile, None)))
+            .draw(core::iter::once(DrawCell::new(Pos { x: 0, y: 0 }, &tile)))
             .unwrap();
         renderer.flush().unwrap();
         let out = String::from_utf8(renderer.into_writer()).unwrap();
@@ -740,7 +744,7 @@ mod tests {
         for plain in [false, true] {
             let mut renderer = TerminalRenderer::with_plain_mode(Vec::new(), plain);
             renderer
-                .draw(tiles.iter().map(|(pos, tile)| (*pos, tile, None)))
+                .draw(tiles.iter().map(|(pos, tile)| DrawCell::new(*pos, tile)))
                 .unwrap();
             renderer.flush().unwrap();
             let out = String::from_utf8(renderer.into_writer()).unwrap();
@@ -759,7 +763,7 @@ mod tests {
         let tile = Tile::new('X', style);
         let mut renderer = TerminalRenderer::with_plain_mode(Vec::new(), true);
         renderer
-            .draw(core::iter::once((Pos { x: 0, y: 0 }, &tile, None)))
+            .draw(core::iter::once(DrawCell::new(Pos { x: 0, y: 0 }, &tile)))
             .unwrap();
         renderer.flush().unwrap();
         let out = String::from_utf8(renderer.into_writer()).unwrap();
@@ -778,9 +782,9 @@ mod tests {
         renderer
             .draw(
                 [
-                    (Pos { x: 0, y: 0 }, &a, None),
-                    (Pos { x: 2, y: 0 }, &b, None),
-                    (Pos { x: 0, y: 1 }, &c, None),
+                    DrawCell::new(Pos { x: 0, y: 0 }, &a),
+                    DrawCell::new(Pos { x: 2, y: 0 }, &b),
+                    DrawCell::new(Pos { x: 0, y: 1 }, &c),
                 ]
                 .into_iter(),
             )
@@ -799,8 +803,8 @@ mod tests {
         renderer
             .draw(
                 [
-                    (Pos { x: 0, y: 0 }, &a, None),
-                    (Pos { x: 0, y: 2 }, &b, None),
+                    DrawCell::new(Pos { x: 0, y: 0 }, &a),
+                    DrawCell::new(Pos { x: 0, y: 2 }, &b),
                 ]
                 .into_iter(),
             )
@@ -825,8 +829,8 @@ mod tests {
         renderer
             .draw(
                 [
-                    (Pos { x: 5, y: 0 }, &a, None),
-                    (Pos { x: 2, y: 0 }, &b, None),
+                    DrawCell::new(Pos { x: 5, y: 0 }, &a),
+                    DrawCell::new(Pos { x: 2, y: 0 }, &b),
                 ]
                 .into_iter(),
             )
@@ -882,11 +886,9 @@ mod tests {
         let tile = Tile::new('e', Style::default());
         let mut renderer = TerminalRenderer::new(Vec::new());
         renderer
-            .draw(core::iter::once((
-                Pos { x: 0, y: 0 },
-                &tile,
-                Some("e\u{0301}"),
-            )))
+            .draw(core::iter::once(
+                DrawCell::new(Pos { x: 0, y: 0 }, &tile).with_grapheme(Some("e\u{0301}")),
+            ))
             .unwrap();
         renderer.flush().unwrap();
         let out = String::from_utf8(renderer.into_writer()).unwrap();

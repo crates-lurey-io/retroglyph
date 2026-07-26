@@ -29,6 +29,7 @@
 #![allow(missing_docs)]
 
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
+use retroglyph_core::DrawCell;
 use retroglyph_core::{Color, Output, Pos, Style, Tile};
 use retroglyph_software::SoftwareBackendBuilder;
 use retroglyph_window::font::unscii16;
@@ -57,10 +58,10 @@ fn frame(
     out
 }
 
-fn to_content(frame: &[(u8, Pos, Tile)]) -> impl Iterator<Item = (u8, Pos, &Tile, Option<&str>)> {
+fn to_content(frame: &[(u8, Pos, Tile)]) -> impl Iterator<Item = DrawCell<'_>> {
     frame
         .iter()
-        .map(|(layer, pos, tile)| (*layer, *pos, tile, None))
+        .map(|(layer, pos, tile)| DrawCell::on_layer(*layer, *pos, tile))
 }
 
 const BASE: Color = Color::Rgb {

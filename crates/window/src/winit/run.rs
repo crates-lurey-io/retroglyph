@@ -1802,10 +1802,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use retroglyph_core::DrawCell;
     use retroglyph_core::backend::Output;
     use retroglyph_core::event::{MouseButton, MouseEvent, MouseEventKind};
     use retroglyph_core::grid::{Pos, Size};
-    use retroglyph_core::tile::Tile;
     use std::cell::RefCell;
     use std::time::Duration;
 
@@ -2028,14 +2028,14 @@ mod tests {
 
         fn draw<'a, I>(&mut self, _content: I) -> Result<(), Self::Error>
         where
-            I: Iterator<Item = (Pos, &'a Tile, Option<&'a str>)>,
+            I: Iterator<Item = DrawCell<'a>>,
         {
             Ok(())
         }
 
         fn draw_layers<'a, I>(&mut self, _content: I) -> Result<(), Self::Error>
         where
-            I: Iterator<Item = (u8, Pos, &'a Tile, Option<&'a str>)>,
+            I: Iterator<Item = DrawCell<'a>>,
         {
             Ok(())
         }
@@ -2094,14 +2094,14 @@ mod tests {
 
         fn draw<'a, I>(&mut self, _content: I) -> Result<(), Self::Error>
         where
-            I: Iterator<Item = (Pos, &'a Tile, Option<&'a str>)>,
+            I: Iterator<Item = DrawCell<'a>>,
         {
             Ok(())
         }
 
         fn draw_layers<'a, I>(&mut self, _content: I) -> Result<(), Self::Error>
         where
-            I: Iterator<Item = (u8, Pos, &'a Tile, Option<&'a str>)>,
+            I: Iterator<Item = DrawCell<'a>>,
         {
             Ok(())
         }
@@ -2163,14 +2163,14 @@ mod tests {
 
         fn draw<'a, I>(&mut self, _content: I) -> Result<(), Self::Error>
         where
-            I: Iterator<Item = (Pos, &'a Tile, Option<&'a str>)>,
+            I: Iterator<Item = DrawCell<'a>>,
         {
             Ok(())
         }
 
         fn draw_layers<'a, I>(&mut self, _content: I) -> Result<(), Self::Error>
         where
-            I: Iterator<Item = (u8, Pos, &'a Tile, Option<&'a str>)>,
+            I: Iterator<Item = DrawCell<'a>>,
         {
             Ok(())
         }
@@ -2260,14 +2260,14 @@ mod tests {
 
         fn draw<'a, I>(&mut self, _content: I) -> Result<(), Self::Error>
         where
-            I: Iterator<Item = (Pos, &'a Tile, Option<&'a str>)>,
+            I: Iterator<Item = DrawCell<'a>>,
         {
             Ok(())
         }
 
         fn draw_layers<'a, I>(&mut self, _content: I) -> Result<(), Self::Error>
         where
-            I: Iterator<Item = (u8, Pos, &'a Tile, Option<&'a str>)>,
+            I: Iterator<Item = DrawCell<'a>>,
         {
             Ok(())
         }
@@ -3487,19 +3487,19 @@ mod tests {
 
         fn draw<'a, I>(&mut self, _content: I) -> Result<(), Self::Error>
         where
-            I: Iterator<Item = (Pos, &'a Tile, Option<&'a str>)>,
+            I: Iterator<Item = DrawCell<'a>>,
         {
             Ok(())
         }
 
         fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
         where
-            I: Iterator<Item = (u8, Pos, &'a Tile, Option<&'a str>)>,
+            I: Iterator<Item = DrawCell<'a>>,
         {
             self.draw_calls.set(self.draw_calls.get() + 1);
             let mut cells = self.cells.borrow_mut();
-            for (_layer, pos, tile, _extra) in content {
-                cells.insert((pos.x, pos.y), tile.glyph());
+            for cell in content {
+                cells.insert((cell.pos.x, cell.pos.y), cell.tile.glyph());
             }
             Ok(())
         }

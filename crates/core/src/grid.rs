@@ -115,6 +115,7 @@
 //! content and reserve high ids for rarely-touched overlays (e.g. a debug
 //! HUD pinned to layer 255).
 
+use crate::backend::DrawCell;
 use crate::color::Color;
 use crate::style::Style;
 use crate::tile::Tile;
@@ -1526,7 +1527,7 @@ impl Grid {
     /// the full frame on every draw (see [`crate::Output::needs_full_frame`]).
     ///
     /// This iterator is zero-allocation: it walks the layer buffers inline.
-    pub fn layers(&self) -> impl Iterator<Item = (u8, Pos, &Tile, Option<&str>)> + '_ {
+    pub fn layers(&self) -> impl Iterator<Item = DrawCell<'_>> + '_ {
         let width = usize::from(self.width);
         (0..=self.max_layer)
             .filter_map(move |id| self.layer(id).map(|lb| (id, lb)))
@@ -1536,7 +1537,13 @@ impl Grid {
                     let x = (i % width) as u16;
                     #[allow(clippy::cast_possible_truncation)]
                     let y = (i / width) as u16;
-                    (id, Pos::new(x, y), tile, lb.extra_for(i, tile))
+                    DrawCell {
+                        layer: id,
+                        pos: Pos::new(x, y),
+                        tile,
+                        grapheme: lb.extra_for(i, tile),
+                        tint: lb.tint_for(i, tile),
+                    }
                 })
             })
     }
@@ -1646,10 +1653,7 @@ impl Grid {
     ///   dimensions for this case; the crate never calls `diff` otherwise.
     ///
     /// This iterator is zero-allocation: it walks the layer buffers inline.
-    pub fn diff<'a>(
-        &'a self,
-        other: &'a Self,
-    ) -> impl Iterator<Item = (u8, Pos, &'a Tile, Option<&'a str>)> + 'a {
+    pub fn diff<'a>(&'a self, other: &'a Self) -> impl Iterator<Item = DrawCell<'a>> + 'a {
         let width = usize::from(self.width);
         let max = self.max_layer;
         (0..=max).flat_map(move |id| {
@@ -1668,7 +1672,13 @@ impl Grid {
                             let x = (i % width) as u16;
                             #[allow(clippy::cast_possible_truncation)]
                             let y = (i / width) as u16;
-                            (id, Pos::new(x, y), tile, cur_lb.extra_for(i, tile))
+                            DrawCell {
+                                layer: id,
+                                pos: Pos::new(x, y),
+                                tile,
+                                grapheme: cur_lb.extra_for(i, tile),
+                                tint: cur_lb.tint_for(i, tile),
+                            }
                         }),
                 ),
                 // Layer in both: only the differing cells. Compared by hand
@@ -1681,8 +1691,11 @@ impl Grid {
                     LayerDiff::Diff(cur_lb.buf.as_ref().iter().enumerate().filter_map(
                         move |(i, tile)| {
                             let prev_tile = &prev_lb.buf.as_ref()[i];
-                            let cur_extra = cur_lb.extra_for(i, tile);
-                            let prev_extra = prev_lb.extra_for(i, prev_tile);
+                            // The whole entry, not just its grapheme: a `Tile`-only comparison
+                            // cannot see a change to either member of the side table, and a
+                            // tint-only change is as real a redraw as a combining-mark change.
+                            let cur_extra = cur_lb.entry_for(i, tile);
+                            let prev_extra = prev_lb.entry_for(i, prev_tile);
                             if tile == prev_tile && cur_extra == prev_extra {
                                 return None;
                             }
@@ -1690,7 +1703,13 @@ impl Grid {
                             let x = (i % width) as u16;
                             #[allow(clippy::cast_possible_truncation)]
                             let y = (i / width) as u16;
-                            Some((id, Pos::new(x, y), tile, cur_extra))
+                            Some(DrawCell {
+                                layer: id,
+                                pos: Pos::new(x, y),
+                                tile,
+                                grapheme: cur_extra.and_then(|e| e.grapheme.as_deref()),
+                                tint: cur_extra.map_or(Tint::None, |e| e.tint),
+                            })
                         },
                     ))
                 }
@@ -1709,10 +1728,10 @@ enum LayerDiff<F, D> {
 
 impl<'a, F, D> Iterator for LayerDiff<F, D>
 where
-    F: Iterator<Item = (u8, Pos, &'a Tile, Option<&'a str>)>,
-    D: Iterator<Item = (u8, Pos, &'a Tile, Option<&'a str>)>,
+    F: Iterator<Item = DrawCell<'a>>,
+    D: Iterator<Item = DrawCell<'a>>,
 {
-    type Item = (u8, Pos, &'a Tile, Option<&'a str>);
+    type Item = DrawCell<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self {
@@ -1921,7 +1940,10 @@ mod tests {
 
         let diffs: Vec<_> = g1.diff(&g2).collect();
         assert_eq!(diffs.len(), 1);
-        assert_eq!(diffs[0], (0, Pos::new(0, 0), &g1[Pos::new(0, 0)], None));
+        assert_eq!(
+            diffs[0],
+            DrawCell::on_layer(0, Pos::new(0, 0), &g1[Pos::new(0, 0)])
+        );
     }
 
     #[test]
@@ -2223,9 +2245,9 @@ mod tests {
         cur.put_tile(0, (2, 3), Tile::new('X', Style::default()));
         let diffs: Vec<_> = cur.diff(&prev).collect();
         assert_eq!(diffs.len(), 1);
-        assert_eq!(diffs[0].0, 0);
-        assert_eq!(diffs[0].1, Pos::new(2, 3));
-        assert_eq!(diffs[0].2.glyph, 'X');
+        assert_eq!(diffs[0].layer, 0);
+        assert_eq!(diffs[0].pos, Pos::new(2, 3));
+        assert_eq!(diffs[0].tile.glyph, 'X');
     }
 
     #[test]
@@ -2236,7 +2258,7 @@ mod tests {
         let diffs: Vec<_> = cur.diff(&prev).collect();
         // All 12 cells of the newly allocated layer 1 are yielded.
         assert_eq!(diffs.len(), 12);
-        assert!(diffs.iter().all(|(l, _, _, _)| *l == 1));
+        assert!(diffs.iter().all(|c| c.layer == 1));
     }
 
     #[test]
@@ -2245,7 +2267,7 @@ mod tests {
         let prev = Grid::new(3, 3);
         cur.put_tile(2, (0, 0), Tile::new('B', Style::default()));
         cur.put_tile(0, (1, 0), Tile::new('A', Style::default()));
-        let layers: Vec<u8> = cur.diff(&prev).map(|(l, _, _, _)| l).collect();
+        let layers: Vec<u8> = cur.diff(&prev).map(|c| c.layer).collect();
         // Layer 0's change appears first, then all of layer 2.
         assert_eq!(layers[0], 0);
         assert!(layers[1..].iter().all(|&l| l == 2));
@@ -2526,8 +2548,8 @@ mod tests {
 
         let diffs: Vec<_> = cur.diff(&prev).collect();
         assert_eq!(diffs.len(), 1);
-        assert_eq!(diffs[0].1, Pos::new(0, 0));
-        assert_eq!(diffs[0].3, Some("e\u{0301}"));
+        assert_eq!(diffs[0].pos, Pos::new(0, 0));
+        assert_eq!(diffs[0].grapheme, Some("e\u{0301}"));
 
         // Identical grapheme text on both sides: no diff.
         let mut prev2 = Grid::new(2, 2);

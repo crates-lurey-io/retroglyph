@@ -36,6 +36,7 @@
 )]
 
 use crate::GlBackendBuilder;
+use retroglyph_core::DrawCell;
 use retroglyph_core::backend::Output as _;
 use retroglyph_core::color::Color;
 use retroglyph_core::grid::Pos;
@@ -176,7 +177,7 @@ async fn context_loss_is_recovered_by_rebuilding_on_restore() {
 
     let full_block = Tile::new('\u{2588}', Style::new().fg(rgb(RED)).bg(rgb(BLUE)));
     renderer
-        .draw(core::iter::once((Pos::new(0, 0), &full_block, None)))
+        .draw(core::iter::once(DrawCell::new(Pos::new(0, 0), &full_block)))
         .expect("draw is infallible");
 
     // The renderer got the context from the same canvas, so `getContext` hands back that very

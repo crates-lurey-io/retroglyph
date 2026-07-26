@@ -2,10 +2,10 @@
 //! windowed presenters.
 
 use crate::presenter::Presenter;
+use retroglyph_core::DrawCell;
 use retroglyph_core::backend::{Cursor, Input, Output};
 use retroglyph_core::event::{Event, MouseEvent, MouseEventKind};
-use retroglyph_core::grid::{Pos, Size};
-use retroglyph_core::tile::Tile;
+use retroglyph_core::grid::Size;
 use std::collections::VecDeque;
 use std::time::Duration;
 
@@ -49,7 +49,7 @@ use std::time::Duration;
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::{Backend, Event, Input, Output, Pos, Size, Terminal, Tile};
+/// use retroglyph_core::{Backend, DrawCell, Event, Input, Output, Pos, Size, Terminal, Tile};
 /// use retroglyph_window::{Presenter, WindowBackend, WindowHandle};
 /// use std::sync::Arc;
 /// use std::time::Duration;
@@ -61,14 +61,14 @@ use std::time::Duration;
 ///
 ///     fn draw<'a, I>(&mut self, _content: I) -> Result<(), Self::Error>
 ///     where
-///         I: Iterator<Item = (Pos, &'a Tile, Option<&'a str>)>,
+///         I: Iterator<Item = DrawCell<'a>>,
 ///     {
 ///         Ok(())
 ///     }
 ///
 ///     fn draw_layers<'a, I>(&mut self, _content: I) -> Result<(), Self::Error>
 ///     where
-///         I: Iterator<Item = (u8, Pos, &'a Tile, Option<&'a str>)>,
+///         I: Iterator<Item = DrawCell<'a>>,
 ///     {
 ///         Ok(())
 ///     }
@@ -165,14 +165,14 @@ impl<P: Presenter> Output for WindowBackend<P> {
 
     fn draw<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
-        I: Iterator<Item = (Pos, &'a Tile, Option<&'a str>)>,
+        I: Iterator<Item = DrawCell<'a>>,
     {
         self.presenter.draw(content)
     }
 
     fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
-        I: Iterator<Item = (u8, Pos, &'a Tile, Option<&'a str>)>,
+        I: Iterator<Item = DrawCell<'a>>,
     {
         self.presenter.draw_layers(content)
     }
@@ -242,6 +242,7 @@ mod tests {
     use super::*;
     use crate::presenter::WindowHandle;
     use retroglyph_core::event::{KeyModifiers, MouseButton};
+    use retroglyph_core::grid::Pos;
     use std::sync::Arc;
 
     struct NullPresenter;
@@ -251,14 +252,14 @@ mod tests {
 
         fn draw<'a, I>(&mut self, _content: I) -> Result<(), Self::Error>
         where
-            I: Iterator<Item = (Pos, &'a Tile, Option<&'a str>)>,
+            I: Iterator<Item = DrawCell<'a>>,
         {
             Ok(())
         }
 
         fn draw_layers<'a, I>(&mut self, _content: I) -> Result<(), Self::Error>
         where
-            I: Iterator<Item = (u8, Pos, &'a Tile, Option<&'a str>)>,
+            I: Iterator<Item = DrawCell<'a>>,
         {
             Ok(())
         }

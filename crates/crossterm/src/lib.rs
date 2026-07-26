@@ -80,10 +80,10 @@ struct ReadmeDoctests;
 struct WorkspaceReadmeDoctests;
 
 use core::time::Duration;
+use retroglyph_core::DrawCell;
 use retroglyph_core::backend::{Cursor, Input, Output};
 use retroglyph_core::event::Event;
 use retroglyph_core::grid::{Pos, Size};
-use retroglyph_core::tile::Tile;
 use retroglyph_terminal::TerminalRenderer;
 use std::collections::VecDeque;
 use std::io::{BufWriter, IsTerminal, Stdout};
@@ -686,7 +686,7 @@ impl<W: std::io::Write> Output for Crossterm<W> {
     #[cfg_attr(feature = "tracing", tracing::instrument(level = "debug", skip_all))]
     fn draw<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
-        I: Iterator<Item = (Pos, &'a Tile, Option<&'a str>)>,
+        I: Iterator<Item = DrawCell<'a>>,
     {
         // Begin synchronized update so the terminal holds rendering until
         // flush() sends the matching End marker.
@@ -994,6 +994,7 @@ pub fn from_crossterm_event(event: crossterm::event::Event) -> Option<Event> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use retroglyph_core::tile::Tile;
 
     // `cargo test` runs `#[test]` functions in this module across multiple threads by default.
     // Any test that actually constructs a `Crossterm`/acquires an `InstanceGuard` contends for
@@ -1132,7 +1133,7 @@ mod tests {
             .expect("building against a Vec<u8> writer with all TTY features disabled must not require a real terminal");
 
         let tile = Tile::new('X', retroglyph_core::style::Style::default());
-        term.draw(core::iter::once((Pos { x: 0, y: 0 }, &tile, None)))
+        term.draw(core::iter::once(DrawCell::new(Pos { x: 0, y: 0 }, &tile)))
             .unwrap();
         term.flush().unwrap();
 

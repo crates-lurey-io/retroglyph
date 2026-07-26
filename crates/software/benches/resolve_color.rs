@@ -21,6 +21,7 @@
 #![allow(missing_docs)]
 
 use criterion::{Criterion, criterion_group, criterion_main};
+use retroglyph_core::DrawCell;
 use retroglyph_core::{AnsiColor, Color, Output, Pos, Style, Tile};
 use retroglyph_software::SoftwareBackendBuilder;
 use retroglyph_window::font::unscii16;
@@ -38,10 +39,10 @@ fn frame(cols: u16, rows: u16, color: Color) -> Vec<(u8, Pos, Tile)> {
     out
 }
 
-fn to_content(frame: &[(u8, Pos, Tile)]) -> impl Iterator<Item = (u8, Pos, &Tile, Option<&str>)> {
+fn to_content(frame: &[(u8, Pos, Tile)]) -> impl Iterator<Item = DrawCell<'_>> {
     frame
         .iter()
-        .map(|(layer, pos, tile)| (*layer, *pos, tile, None))
+        .map(|(layer, pos, tile)| DrawCell::on_layer(*layer, *pos, tile))
 }
 
 fn resolve_color(c: &mut Criterion) {

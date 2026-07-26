@@ -19,6 +19,7 @@
 #![allow(missing_docs)]
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
+use retroglyph_core::DrawCell;
 use retroglyph_core::{Color, Grid, Style, Tile};
 use retroglyph_terminal::TerminalRenderer;
 use std::hint::black_box;
@@ -96,7 +97,7 @@ fn render_diff(old: &Grid, new: &Grid, plain: bool) -> Vec<u8> {
     renderer
         .draw(
             new.diff(old)
-                .map(|(_, pos, tile, extra)| (pos, tile, extra)),
+                .map(|cell| DrawCell::new(cell.pos, cell.tile).with_grapheme(cell.grapheme)),
         )
         .expect("Vec<u8> writes never fail");
     renderer.flush().expect("Vec<u8> flush never fails");

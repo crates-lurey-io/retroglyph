@@ -19,6 +19,7 @@
 #![allow(missing_docs)]
 
 use criterion::{Criterion, criterion_group, criterion_main};
+use retroglyph_core::DrawCell;
 use retroglyph_core::{Color, Output, Pos, Style, Tile};
 use retroglyph_software::SoftwareBackendBuilder;
 use retroglyph_window::font::unscii16;
@@ -118,7 +119,7 @@ fn bench_glyph(c: &mut Criterion, cols: u16, rows: u16, scale: u8) {
         b.iter(|| {
             let content = frame
                 .iter()
-                .map(|(layer, pos, tile)| (*layer, *pos, tile, None));
+                .map(|(layer, pos, tile)| DrawCell::on_layer(*layer, *pos, tile));
             renderer.draw_layers(content).unwrap();
         });
     });
@@ -149,7 +150,7 @@ fn bench_sprite(c: &mut Criterion, cols: u16, rows: u16, scale: u8) {
         b.iter(|| {
             let content = frame
                 .iter()
-                .map(|(layer, pos, tile)| (*layer, *pos, tile, None));
+                .map(|(layer, pos, tile)| DrawCell::on_layer(*layer, *pos, tile));
             renderer.draw_layers(content).unwrap();
         });
     });
