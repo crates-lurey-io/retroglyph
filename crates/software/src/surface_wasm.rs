@@ -39,6 +39,7 @@ pub(crate) struct WindowSurface {
 
 /// Error locating or using the backing `<canvas>` element.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum SurfaceError {
     /// Failed to locate or use the backing `<canvas>` element.
     Canvas(String),
