@@ -26,7 +26,7 @@ use retroglyph_core::event::{Event, KeyCode};
 use retroglyph_core::text::Line;
 use retroglyph_core::{AnsiColor, Backend, Color, Frame, Rect, Style, Terminal};
 use retroglyph_examples::Example;
-use retroglyph_widgets::{Log, Modal, Scrollbar, StatBar, Widget};
+use retroglyph_widgets::{Log, Modal, Scrollbar, StatBar, Surface, Widget};
 
 const PLAYER_MAX_HP: u32 = 30;
 const ENEMY_MAX_HP: u32 = 40;
@@ -119,18 +119,28 @@ impl CombatLog {
         // stat bars printed right below.
         term.print(1, 0, "a: attack  Up/Down: scroll  r: reset  q/Esc: quit");
 
-        StatBar::new("You  ", self.player_hp, PLAYER_MAX_HP).render(Rect::new(1, 1, 46, 1), term);
-        StatBar::new("Gob. ", self.enemy_hp, ENEMY_MAX_HP).render(Rect::new(1, 2, 46, 1), term);
+        let term_area = term.area();
+        StatBar::new("You  ", self.player_hp, PLAYER_MAX_HP).render(
+            Rect::new(1, 1, 46, 1),
+            &mut Surface::new(term.grid_mut(), term_area, 0),
+        );
+        StatBar::new("Gob. ", self.enemy_hp, ENEMY_MAX_HP).render(
+            Rect::new(1, 2, 46, 1),
+            &mut Surface::new(term.grid_mut(), term_area, 0),
+        );
 
         let log_area = Rect::new(1, 4, 47, 20);
         Log::new(&self.log)
             .offset(self.log_offset)
-            .render(log_area, term);
+            .render(log_area, &mut Surface::new(term.grid_mut(), term_area, 0));
         Scrollbar::new(self.log.len(), log_area.height_usize())
             .offset(self.log_offset)
             .track_style(Style::new().fg(Color::Ansi(AnsiColor::BrightBlack)))
             .thumb_style(Style::new().bg(Color::Ansi(AnsiColor::BrightBlack)))
-            .render(Rect::new(48, 4, 1, 20), term);
+            .render(
+                Rect::new(48, 4, 1, 20),
+                &mut Surface::new(term.grid_mut(), term_area, 0),
+            );
 
         if self.over {
             let title = if self.enemy_hp == 0 {
@@ -141,7 +151,10 @@ impl CombatLog {
             let inner = Modal::new(30, 6)
                 .title(title)
                 .border_style(Style::new().fg(Color::Ansi(AnsiColor::BrightYellow)))
-                .render(Rect::new(0, 0, 50, 25), term);
+                .render(
+                    Rect::new(0, 0, 50, 25),
+                    &mut Surface::new(term.grid_mut(), term_area, 0),
+                );
             term.print(
                 inner.left(),
                 inner.top(),

@@ -1,8 +1,9 @@
 //! [`Log`]: a scrolled-back tail of message lines.
+use retroglyph_core::Rect;
 use retroglyph_core::text::Line;
-use retroglyph_core::{Backend, Rect, Terminal};
 
 use super::{PrintLine, Widget};
+use crate::Surface;
 
 /// The tail of `messages` that fits in the area it's rendered into, oldest
 /// at top, newest at the bottom, each line clipped to `area.width()` via
@@ -16,8 +17,7 @@ use super::{PrintLine, Widget};
 /// lines rather than wrapping or panicking, and it's the caller's
 /// responsibility to stop incrementing `offset` past `messages.len()` if
 /// that's undesired. This is a different windowing direction than
-/// `Table`'s (anchored to the most recent entry and counting backward,
-/// rather than anchored to the start and counting forward), so it isn't
+/// `Table`'s (anchored to the start and counting forward), so it isn't
 /// expressed as the same shared helper.
 ///
 /// `messages` is a plain slice the caller owns and appends to (the same
@@ -29,13 +29,15 @@ use super::{PrintLine, Widget};
 /// # Examples
 ///
 /// ```
+/// use retroglyph_core::Rect;
 /// use retroglyph_core::text::Line;
-/// use retroglyph_core::{Headless, Rect, Terminal};
-/// use retroglyph_widgets::{Log, Widget};
+/// use retroglyph_core::Grid;
+/// use retroglyph_widgets::{Log, Surface, Widget};
 ///
 /// let messages = [Line::raw("connected"), Line::raw("joined #general")];
-/// let mut term = Terminal::new(Headless::new(20, 2));
-/// Log::new(&messages).render(Rect::new(0, 0, 20, 2), &mut term);
+/// let area = Rect::new(0, 0, 20, 2);
+/// let mut grid = Grid::new(20, 2);
+/// Log::new(&messages).render(area, &mut Surface::new(&mut grid, area, 0));
 /// ```
 #[derive(Clone, Copy, Debug)]
 pub struct Log<'a> {
@@ -61,8 +63,8 @@ impl<'a> Log<'a> {
     }
 }
 
-impl<B: Backend> Widget<B> for Log<'_> {
-    fn render(self, area: Rect, term: &mut Terminal<B>) {
+impl Widget for Log<'_> {
+    fn render(&self, area: Rect, surface: &mut Surface<'_>) {
         let visible_height = area.height_usize();
         if area.width() == 0 || visible_height == 0 {
             return;
@@ -82,14 +84,14 @@ impl<B: Backend> Widget<B> for Log<'_> {
         for (row, message) in self.messages[top..=bottom].iter().enumerate() {
             let y = area.top() + row as u16;
             let row_area = Rect::new(area.left(), y, area.width(), 1);
-            PrintLine::new(message).render(row_area, term);
+            PrintLine::new(message).render(row_area, surface);
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::Headless;
+    use retroglyph_core::Grid;
 
     use super::*;
 
@@ -103,11 +105,11 @@ mod tests {
         let area = Rect::new(0, 0, 20, 2);
         let messages = lines(&["alpha", "bravo", "charlie", "delta"]);
 
-        let mut term = Terminal::new(Headless::new(20, 2));
-        Log::new(&messages).render(area, &mut term);
+        let mut grid = Grid::new(20, 2);
+        Log::new(&messages).render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(term.grid().get(0, 0).glyph(), 'c'); // "charlie"
-        assert_eq!(term.grid().get(0, 1).glyph(), 'd'); // "delta"
+        assert_eq!(grid.get(0, 0).glyph(), 'c'); // "charlie"
+        assert_eq!(grid.get(0, 1).glyph(), 'd'); // "delta"
     }
 
     #[test]
@@ -115,11 +117,13 @@ mod tests {
         let area = Rect::new(0, 0, 20, 2);
         let messages = lines(&["alpha", "bravo", "charlie", "delta"]);
 
-        let mut term = Terminal::new(Headless::new(20, 2));
-        Log::new(&messages).offset(1).render(area, &mut term); // one message back from the tail
+        let mut grid = Grid::new(20, 2);
+        Log::new(&messages)
+            .offset(1)
+            .render(area, &mut Surface::new(&mut grid, area, 0)); // one message back from the tail
 
-        assert_eq!(term.grid().get(0, 0).glyph(), 'b'); // "bravo"
-        assert_eq!(term.grid().get(0, 1).glyph(), 'c'); // "charlie"
+        assert_eq!(grid.get(0, 0).glyph(), 'b'); // "bravo"
+        assert_eq!(grid.get(0, 1).glyph(), 'c'); // "charlie"
     }
 
     #[test]
@@ -127,12 +131,14 @@ mod tests {
         let area = Rect::new(0, 0, 20, 2);
         let messages = lines(&["alpha", "bravo"]);
 
-        let mut term = Terminal::new(Headless::new(20, 2));
-        Log::new(&messages).offset(5).render(area, &mut term); // scrolled back past the start
+        let mut grid = Grid::new(20, 2);
+        Log::new(&messages)
+            .offset(5)
+            .render(area, &mut Surface::new(&mut grid, area, 0)); // scrolled back past the start
 
         // Nothing drawn; both rows stay whatever they were (default/empty).
-        assert_eq!(term.grid().get(0, 0).glyph(), ' ');
-        assert_eq!(term.grid().get(0, 1).glyph(), ' ');
+        assert_eq!(grid.get(0, 0).glyph(), ' ');
+        assert_eq!(grid.get(0, 1).glyph(), ' ');
     }
 
     #[test]
@@ -140,12 +146,12 @@ mod tests {
         let area = Rect::new(0, 0, 20, 4);
         let messages = lines(&["only"]);
 
-        let mut term = Terminal::new(Headless::new(20, 4));
-        Log::new(&messages).render(area, &mut term);
+        let mut grid = Grid::new(20, 4);
+        Log::new(&messages).render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(term.grid().get(0, 0).glyph(), 'o'); // "only"
-        assert_eq!(term.grid().get(0, 1).glyph(), ' '); // untouched
-        assert_eq!(term.grid().get(0, 2).glyph(), ' '); // untouched
+        assert_eq!(grid.get(0, 0).glyph(), 'o'); // "only"
+        assert_eq!(grid.get(0, 1).glyph(), ' '); // untouched
+        assert_eq!(grid.get(0, 2).glyph(), ' '); // untouched
     }
 
     #[test]
@@ -153,10 +159,10 @@ mod tests {
         let area = Rect::new(0, 0, 5, 1);
         let messages = lines(&["a much longer message than fits"]);
 
-        let mut term = Terminal::new(Headless::new(5, 1));
-        Log::new(&messages).render(area, &mut term);
+        let mut grid = Grid::new(5, 1);
+        Log::new(&messages).render(area, &mut Surface::new(&mut grid, area, 0));
 
         // "a much longer..." clipped to 5 columns is "a muc".
-        assert_eq!(term.grid().get(4, 0).glyph(), 'c');
+        assert_eq!(grid.get(4, 0).glyph(), 'c');
     }
 }

@@ -24,8 +24,8 @@ use retroglyph_core::event::{Event, KeyCode};
 use retroglyph_core::{Backend, Frame, Rect, Terminal};
 use retroglyph_examples::Example;
 use retroglyph_widgets::{
-    Button, Interaction, List, ListState, Panel, ProgressBar, Sense, StatefulWidget, Tabs, Theme,
-    Widget,
+    Button, Interaction, List, ListState, Panel, ProgressBar, Sense, StatefulWidget, Surface, Tabs,
+    Theme, Widget,
 };
 
 /// Identifies the demo's one interactive widget for [`Interaction`]'s hit-testing and focus ring.
@@ -105,6 +105,7 @@ impl ThemeSwitch {
         );
         term.reset_style();
 
+        let term_area = term.area();
         let panel_area = Rect::new(0, 1, 50, 24);
         Panel::new()
             .title(if self.dark {
@@ -113,7 +114,7 @@ impl ThemeSwitch {
                 "Theme: Light"
             })
             .theme(theme)
-            .render(panel_area, term);
+            .render(panel_area, &mut Surface::new(term.grid_mut(), term_area, 0));
 
         // Panel's own interior inset -- one cell in from the border on every side, the same
         // math `Modal::render` uses to hand back its inner content rect.
@@ -127,18 +128,23 @@ impl ThemeSwitch {
         Tabs::new(&TABS)
             .select(Some(self.selected_tab))
             .theme(theme)
-            .render(Rect::new(inner.left(), inner.top(), inner.width(), 1), term);
+            .render(
+                Rect::new(inner.left(), inner.top(), inner.width(), 1),
+                &mut Surface::new(term.grid_mut(), term_area, 0),
+            );
 
         let list_area = Rect::new(inner.left(), inner.top() + 2, inner.width(), 4);
-        List::new(&ITEMS)
-            .theme(theme)
-            .render(list_area, term, &mut self.list_state);
+        List::new(&ITEMS).theme(theme).render(
+            list_area,
+            &mut Surface::new(term.grid_mut(), term_area, 0),
+            &mut self.list_state,
+        );
 
         self.draw_toggle_button(term, Rect::new(inner.left(), inner.top() + 7, 20, 1), theme);
 
         ProgressBar::new(7, 10).theme(theme).render(
             Rect::new(inner.left(), inner.top() + 9, inner.width(), 1),
-            term,
+            &mut Surface::new(term.grid_mut(), term_area, 0),
         );
     }
 
@@ -155,7 +161,10 @@ impl ThemeSwitch {
         } else {
             "Switch to Dark"
         };
-        Button::new(label, response).theme(theme).render(rect, term);
+        let term_area = term.area();
+        Button::new(label, response)
+            .theme(theme)
+            .render(rect, &mut Surface::new(term.grid_mut(), term_area, 0));
         if response.clicked() {
             self.dark = !self.dark;
         }

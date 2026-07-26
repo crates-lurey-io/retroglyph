@@ -1,7 +1,8 @@
 //! [`Sparkline`]: a single-row bar chart of recent samples.
-use retroglyph_core::{Backend, Rect, Style, Terminal};
+use retroglyph_core::{Rect, Style};
 
 use super::{Meter, Widget};
+use crate::Surface;
 
 /// Vertical block glyphs from empty to full, indexed 0..=8.
 const BLOCKS: [char; 9] = [' ', '▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
@@ -16,12 +17,13 @@ const BLOCKS: [char; 9] = [' ', '▁', '▂', '▃', '▄', '▅', '▆', '▇',
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::{Headless, Rect, Terminal};
-/// use retroglyph_widgets::{Sparkline, Widget};
+/// use retroglyph_core::{Grid, Rect};
+/// use retroglyph_widgets::{Surface, Sparkline, Widget};
 ///
 /// let samples = [1.0, 3.0, 2.0, 4.0, 1.5];
-/// let mut term = Terminal::new(Headless::new(10, 1));
-/// Sparkline::new(&samples).render(Rect::new(0, 0, 10, 1), &mut term);
+/// let mut grid = Grid::new(10, 1);
+/// let area = Rect::new(0, 0, 10, 1);
+/// Sparkline::new(&samples).render(area, &mut Surface::new(&mut grid, area, 0));
 /// ```
 #[derive(Clone, Copy, Debug)]
 pub struct Sparkline<'a> {
@@ -36,13 +38,12 @@ impl<'a> Sparkline<'a> {
     }
 }
 
-impl<B: Backend> Widget<B> for Sparkline<'_> {
-    fn render(self, area: Rect, term: &mut Terminal<B>) {
+impl Widget for Sparkline<'_> {
+    fn render(&self, area: Rect, surface: &mut Surface<'_>) {
         let width = area.width_usize();
         if width == 0 {
             return;
         }
-        let y = area.top();
         let max = self
             .samples
             .iter()
@@ -55,50 +56,50 @@ impl<B: Backend> Widget<B> for Sparkline<'_> {
         let recent = &self.samples[start..];
         let pad = width - recent.len();
 
+        let y = area.top();
         for i in 0..width {
             let x = area.left() + i as u16;
             if i < pad {
-                term.put_styled(x, y, ' ', Style::new());
+                surface.put(x, y, ' ', Style::new());
                 continue;
             }
             let ratio = (recent[i - pad] / max).clamp(0.0, 1.0);
             let level = (ratio * 8.0).round() as usize;
-            term.put_styled(
+            surface.put(
                 x,
                 y,
                 BLOCKS[level.min(8)],
                 Style::new().fg(Meter::new(ratio).color()),
             );
         }
-        term.reset_style();
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::Headless;
+    use retroglyph_core::Grid;
 
     use super::*;
 
     #[test]
     fn right_aligns_recent_samples_and_pads_the_rest() {
         let area = Rect::new(0, 0, 5, 1);
-        let mut term = Terminal::new(Headless::new(5, 1));
-        Sparkline::new(&[1.0, 2.0]).render(area, &mut term);
+        let mut grid = Grid::new(5, 1);
+        Sparkline::new(&[1.0, 2.0]).render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(term.grid().get(0, 0).glyph(), ' ');
-        assert_eq!(term.grid().get(2, 0).glyph(), ' ');
-        assert_eq!(term.grid().get(3, 0).glyph(), BLOCKS[4]); // 1.0 / 2.0 -> half
-        assert_eq!(term.grid().get(4, 0).glyph(), BLOCKS[8]); // 2.0 / 2.0 -> full
+        assert_eq!(grid.get(0, 0).glyph(), ' ');
+        assert_eq!(grid.get(2, 0).glyph(), ' ');
+        assert_eq!(grid.get(3, 0).glyph(), BLOCKS[4]); // 1.0 / 2.0 -> half
+        assert_eq!(grid.get(4, 0).glyph(), BLOCKS[8]); // 2.0 / 2.0 -> full
     }
 
     #[test]
     fn empty_samples_is_a_no_op_beyond_blank_padding() {
         let area = Rect::new(0, 0, 3, 1);
-        let mut term = Terminal::new(Headless::new(3, 1));
-        Sparkline::new(&[]).render(area, &mut term);
+        let mut grid = Grid::new(3, 1);
+        Sparkline::new(&[]).render(area, &mut Surface::new(&mut grid, area, 0));
         for x in 0..3 {
-            assert_eq!(term.grid().get(x, 0).glyph(), ' ');
+            assert_eq!(grid.get(x, 0).glyph(), ' ');
         }
     }
 }

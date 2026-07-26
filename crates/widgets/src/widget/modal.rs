@@ -1,7 +1,8 @@
 //! [`Modal`]: a bordered, filled box centered on screen.
-use retroglyph_core::{Backend, Color, Rect, Style, Terminal};
+use retroglyph_core::{Color, Rect, Style};
 
 use super::{Panel, Widget};
+use crate::Surface;
 use crate::layout::centered_rect;
 use crate::{Align, Theme};
 
@@ -26,12 +27,14 @@ use crate::{Align, Theme};
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::{Headless, Rect, Terminal};
-/// use retroglyph_widgets::Modal;
+/// use retroglyph_core::{Grid, Rect};
+/// use retroglyph_widgets::{Modal, Surface};
 ///
-/// let mut term = Terminal::new(Headless::new(20, 10));
 /// let screen = Rect::new(0, 0, 20, 10);
-/// let inner = Modal::new(10, 4).title("Confirm").render(screen, &mut term);
+/// let mut grid = Grid::new(20, 10);
+/// let inner = Modal::new(10, 4)
+///     .title("Confirm")
+///     .render(screen, &mut Surface::new(&mut grid, screen, 0));
 /// // `inner` is ready to hand to another widget, e.g. a `Log` or `Text`.
 /// assert_eq!(inner.width(), 8);
 /// ```
@@ -112,7 +115,7 @@ impl<'a> Modal<'a> {
 
     /// Draw the modal centered in `screen`, returning its inner content
     /// [`Rect`].
-    pub fn render<B: Backend>(self, screen: Rect, term: &mut Terminal<B>) -> Rect {
+    pub fn render(self, screen: Rect, surface: &mut Surface<'_>) -> Rect {
         let rect = centered_rect(screen, self.width, self.height);
         let mut panel = Panel::new()
             .border_style(self.border_style)
@@ -121,7 +124,7 @@ impl<'a> Modal<'a> {
         if let Some(title) = self.title {
             panel = panel.title(title);
         }
-        panel.render(rect, term);
+        panel.render(rect, surface);
         Rect::new(
             rect.left() + 1,
             rect.top() + 1,
@@ -133,73 +136,58 @@ impl<'a> Modal<'a> {
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::Headless;
+    use retroglyph_core::Grid;
 
     use super::*;
 
     #[test]
     fn centers_the_box_and_returns_the_inner_content_rect() {
         let screen = Rect::new(0, 0, 20, 10);
-        let mut term = Terminal::new(Headless::new(20, 10));
-        let inner = Modal::new(10, 4).render(screen, &mut term);
+        let mut grid = Grid::new(20, 10);
+        let inner = Modal::new(10, 4).render(screen, &mut Surface::new(&mut grid, screen, 0));
 
         // Box is centered_rect(screen, 10, 4) = Rect::new(5, 3, 10, 4);
         // the inner content rect is inset by the one-cell border.
         assert_eq!(inner, Rect::new(6, 4, 8, 2));
         // The border was actually drawn at the box's corners.
-        assert_eq!(term.grid().get(5, 3).glyph(), '┌');
-        assert_eq!(term.grid().get(14, 3).glyph(), '┐');
+        assert_eq!(grid.get(5, 3).glyph(), '┌');
+        assert_eq!(grid.get(14, 3).glyph(), '┐');
     }
 
     #[test]
     fn draws_only_the_box_leaving_the_rest_of_the_screen_untouched() {
         let screen = Rect::new(0, 0, 20, 10);
-        let mut term = Terminal::new(Headless::new(20, 10));
-        Modal::new(10, 4).render(screen, &mut term);
+        let mut grid = Grid::new(20, 10);
+        Modal::new(10, 4).render(screen, &mut Surface::new(&mut grid, screen, 0));
 
         // A corner of the screen far from the centered box is untouched.
-        assert_eq!(term.grid().get(0, 0).glyph(), ' ');
+        assert_eq!(grid.get(0, 0).glyph(), ' ');
     }
 
     #[test]
     fn theme_maps_named_roles_onto_border_and_fill() {
         let screen = Rect::new(0, 0, 20, 10);
-        let mut term = Terminal::new(Headless::new(20, 10));
+        let mut grid = Grid::new(20, 10);
         Modal::new(10, 4)
             .theme(Theme::DARK)
-            .render(screen, &mut term);
+            .render(screen, &mut Surface::new(&mut grid, screen, 0));
 
         // Box is centered_rect(screen, 10, 4) = Rect::new(5, 3, 10, 4).
-        assert_eq!(
-            term.grid().get(5, 3).style().foreground(),
-            Theme::DARK.border
-        );
-        assert_eq!(
-            term.grid().get(5, 3).style().background(),
-            Theme::DARK.title_bg
-        );
-        assert_eq!(
-            term.grid().get(6, 4).style().background(),
-            Theme::DARK.panel_bg
-        );
+        assert_eq!(grid.get(5, 3).style().foreground(), Theme::DARK.border);
+        assert_eq!(grid.get(5, 3).style().background(), Theme::DARK.title_bg);
+        assert_eq!(grid.get(6, 4).style().background(), Theme::DARK.panel_bg);
     }
 
     #[test]
     fn theme_on_uses_the_given_backdrop_instead_of_panel_bg() {
         let screen = Rect::new(0, 0, 20, 10);
-        let mut term = Terminal::new(Headless::new(20, 10));
+        let mut grid = Grid::new(20, 10);
         Modal::new(10, 4)
             .theme_on(Theme::DARK, Color::Default)
-            .render(screen, &mut term);
+            .render(screen, &mut Surface::new(&mut grid, screen, 0));
 
-        assert_eq!(
-            term.grid().get(5, 3).style().foreground(),
-            Theme::DARK.border
-        );
-        assert_eq!(
-            term.grid().get(5, 3).style().background(),
-            Theme::DARK.title_bg
-        );
-        assert_eq!(term.grid().get(6, 4).style().background(), Color::Default);
+        assert_eq!(grid.get(5, 3).style().foreground(), Theme::DARK.border);
+        assert_eq!(grid.get(5, 3).style().background(), Theme::DARK.title_bg);
+        assert_eq!(grid.get(6, 4).style().background(), Color::Default);
     }
 }

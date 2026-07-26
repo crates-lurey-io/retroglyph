@@ -1,8 +1,9 @@
 //! [`Button`]: a clickable label, styled from an already-resolved [`Response`].
-use retroglyph_core::{Backend, Color, Rect, Style, Terminal};
+use retroglyph_core::{Color, Rect, Style};
 
 use super::Widget;
 use crate::Response;
+use crate::Surface;
 use crate::Theme;
 use crate::draw::fill_rect;
 use crate::text::truncate as truncate_to_cols;
@@ -18,20 +19,20 @@ use crate::text::truncate as truncate_to_cols;
 /// `focused()` to pick a style") instead of leaving every call site to hand-roll it:
 ///
 /// ```
-/// use retroglyph_core::{Backend, Headless, Rect, Terminal};
-/// use retroglyph_widgets::{Button, Interaction, Sense, Widget};
+/// use retroglyph_core::{Grid, Rect};
+/// use retroglyph_widgets::{Button, Interaction, Sense, Surface, Widget};
 ///
 /// #[derive(Clone, Copy, PartialEq, Eq)]
 /// enum Id {
 ///     Save,
 /// }
 ///
-/// let mut term = Terminal::new(Headless::new(20, 10));
+/// let mut grid = Grid::new(20, 10);
 /// let mut interaction = Interaction::<Id>::new();
 /// interaction.begin_frame();
 /// let area = Rect::new(0, 0, 10, 1);
 /// let response = interaction.interact(area, Id::Save, Sense::click());
-/// Button::new("Save", response).render(area, &mut term);
+/// Button::new("Save", response).render(area, &mut Surface::new(&mut grid, area, 0));
 /// interaction.end_frame();
 /// ```
 ///
@@ -160,32 +161,28 @@ impl<'a> Button<'a> {
     }
 }
 
-impl<B: Backend> Widget<B> for Button<'_> {
-    fn render(self, area: Rect, term: &mut Terminal<B>) {
+impl Widget for Button<'_> {
+    fn render(&self, area: Rect, surface: &mut Surface<'_>) {
         if area.width() == 0 || area.height() == 0 {
             return;
         }
 
         let style = self.resolved_style();
-        fill_rect(term, area, ' ', style);
+        fill_rect(surface, area, ' ', style);
 
         let text = truncate_to_cols(self.label, area.width_usize());
         let text_width = text.chars().count() as u16;
         let x = area.left() + (area.width().saturating_sub(text_width)) / 2;
         let y = area.top() + area.height() / 2;
 
-        term.reset_style()
-            .fg(style.foreground())
-            .bg(style.background());
-        term.print(x, y, text);
-        term.reset_style();
+        surface.print(x, y, text, style);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use retroglyph_core::{
-        Event, Headless, KeyModifiers, MouseButton, MouseEvent, MouseEventKind, Pos,
+        Event, Grid, KeyModifiers, MouseButton, MouseEvent, MouseEventKind, Pos,
     };
 
     use super::*;
@@ -199,19 +196,19 @@ mod tests {
     #[test]
     fn draws_the_label_centered_in_the_idle_style() {
         let area = Rect::new(0, 0, 7, 1);
-        let mut term = Terminal::new(Headless::new(7, 1));
-        Button::new("Go", Response::default()).render(area, &mut term);
+        let mut grid = Grid::new(7, 1);
+        Button::new("Go", Response::default()).render(area, &mut Surface::new(&mut grid, area, 0));
 
         // "Go" (2 cols) centered in width 7 starts at column (7-2)/2 = 2.
-        assert_eq!(term.grid().get(2, 0).glyph(), 'G');
-        assert_eq!(term.grid().get(3, 0).glyph(), 'o');
+        assert_eq!(grid.get(2, 0).glyph(), 'G');
+        assert_eq!(grid.get(3, 0).glyph(), 'o');
     }
 
     #[test]
     fn fills_the_whole_area_with_the_background() {
         let area = Rect::new(0, 0, 7, 1);
-        let mut term = Terminal::new(Headless::new(7, 1));
-        Button::new("Go", Response::default()).render(area, &mut term);
+        let mut grid = Grid::new(7, 1);
+        Button::new("Go", Response::default()).render(area, &mut Surface::new(&mut grid, area, 0));
 
         let idle_bg = Style::new()
             .fg(Color::Rgb {
@@ -225,8 +222,8 @@ mod tests {
                 b: 58,
             })
             .background();
-        assert_eq!(term.grid().get(0, 0).style().background(), idle_bg);
-        assert_eq!(term.grid().get(6, 0).style().background(), idle_bg);
+        assert_eq!(grid.get(0, 0).style().background(), idle_bg);
+        assert_eq!(grid.get(6, 0).style().background(), idle_bg);
     }
 
     #[test]
@@ -328,16 +325,16 @@ mod tests {
             button.pressed_style.background()
         );
 
-        let mut term = Terminal::new(Headless::new(7, 1));
-        button.render(area, &mut term);
+        let mut grid = Grid::new(7, 1);
+        button.render(area, &mut Surface::new(&mut grid, area, 0));
     }
 
     #[test]
     fn zero_size_is_a_no_op() {
         let area = Rect::new(0, 0, 0, 1);
-        let mut term = Terminal::new(Headless::new(1, 1));
-        Button::new("Go", Response::default()).render(area, &mut term);
-        assert_eq!(term.grid().get(0, 0).glyph(), ' ');
+        let mut grid = Grid::new(1, 1);
+        Button::new("Go", Response::default()).render(area, &mut Surface::new(&mut grid, area, 0));
+        assert_eq!(grid.get(0, 0).glyph(), ' ');
     }
 
     #[test]

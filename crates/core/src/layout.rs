@@ -7,7 +7,7 @@
 //! Only available when the `egc` feature is enabled (requires `alloc`).
 
 use crate::backend::Backend;
-use crate::grid::Rect;
+use crate::grid::{Grid, Rect};
 use crate::style::Style;
 use crate::terminal::Terminal;
 use crate::text::Line;
@@ -242,6 +242,14 @@ impl<'a> TextLayout<'a> {
 
     /// Renders the text into `terminal`, clipping to the rect's bounds.
     pub fn render<B: Backend>(&self, terminal: &mut Terminal<B>) {
+        self.render_to_grid(terminal.grid_mut(), 0);
+    }
+
+    /// Renders the text into `grid` on `layer`, clipping to the rect's bounds.
+    ///
+    /// The [`Grid`]-level twin of [`render`](Self::render), for callers with no [`Terminal`] --
+    /// e.g. a widget rendering into a `Surface`.
+    pub fn render_to_grid(&self, grid: &mut Grid, layer: u8) {
         let lines = wrap_line(self.line, self.rect.width());
         let rect = self.rect;
 
@@ -269,9 +277,7 @@ impl<'a> TextLayout<'a> {
                 if cx >= rect.right() {
                     break;
                 }
-                terminal
-                    .grid_mut()
-                    .write_grapheme(0, cx, row, &glyph.grapheme, glyph.style);
+                grid.write_grapheme(layer, cx, row, &glyph.grapheme, glyph.style);
                 cx += glyph.width;
             }
         }

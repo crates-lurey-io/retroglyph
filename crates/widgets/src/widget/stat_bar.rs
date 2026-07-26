@@ -1,9 +1,10 @@
 //! [`StatBar`]: a labeled `current`/`max` stat bar.
 use core::fmt::Write as _;
 
-use retroglyph_core::{Backend, Color, Rect, Style, Terminal};
+use retroglyph_core::{Color, Rect, Style};
 
 use super::{Widget, bar};
+use crate::Surface;
 use crate::Theme;
 
 /// A labeled stat bar: `label`, a bar filling `current / max` of the
@@ -23,11 +24,12 @@ use crate::Theme;
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::{Headless, Rect, Terminal};
-/// use retroglyph_widgets::{StatBar, Widget};
+/// use retroglyph_core::{Grid, Rect};
+/// use retroglyph_widgets::{StatBar, Surface, Widget};
 ///
-/// let mut term = Terminal::new(Headless::new(20, 1));
-/// StatBar::new("HP", 45, 100).render(Rect::new(0, 0, 20, 1), &mut term);
+/// let area = Rect::new(0, 0, 20, 1);
+/// let mut grid = Grid::new(20, 1);
+/// StatBar::new("HP", 45, 100).render(area, &mut Surface::new(&mut grid, area, 0));
 /// ```
 #[derive(Clone, Copy, Debug)]
 pub struct StatBar<'a> {
@@ -78,8 +80,8 @@ impl<'a> StatBar<'a> {
     }
 }
 
-impl<B: Backend> Widget<B> for StatBar<'_> {
-    fn render(self, area: Rect, term: &mut Terminal<B>) {
+impl Widget for StatBar<'_> {
+    fn render(&self, area: Rect, surface: &mut Surface<'_>) {
         let ratio = if self.max == 0 {
             0.0
         } else {
@@ -89,7 +91,7 @@ impl<B: Backend> Widget<B> for StatBar<'_> {
         let mut readout = bar::ReadoutBuf::<24>::new();
         let _ = write!(readout, "{}/{}", self.current, self.max);
         bar::render(
-            term,
+            surface,
             area,
             self.label,
             self.label_style,
@@ -101,7 +103,7 @@ impl<B: Backend> Widget<B> for StatBar<'_> {
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::Headless;
+    use retroglyph_core::Grid;
 
     use super::*;
 
@@ -110,33 +112,33 @@ mod tests {
         // 1-char label "H" makes the bar's starting column predictable: it
         // begins right after "H" plus a one-column gap, i.e. at column 2.
         let area = Rect::new(0, 0, 20, 1);
-        let mut term = Terminal::new(Headless::new(20, 1));
-        StatBar::new("H", 0, 0).render(area, &mut term);
+        let mut grid = Grid::new(20, 1);
+        StatBar::new("H", 0, 0).render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(term.grid().get(2, 0).glyph(), '░'); // empty bar cell
-        assert_eq!(term.grid().get(19, 0).glyph(), '0'); // last char of "0/0"
+        assert_eq!(grid.get(2, 0).glyph(), '░'); // empty bar cell
+        assert_eq!(grid.get(19, 0).glyph(), '0'); // last char of "0/0"
     }
 
     #[test]
     fn normal_case_fills_proportionally_and_shows_current_over_max() {
         let area = Rect::new(0, 0, 20, 1);
-        let mut term = Terminal::new(Headless::new(20, 1));
-        StatBar::new("H", 45, 100).render(area, &mut term);
+        let mut grid = Grid::new(20, 1);
+        StatBar::new("H", 45, 100).render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(term.grid().get(2, 0).glyph(), '█'); // bar starts filled
-        assert_eq!(term.grid().get(19, 0).glyph(), '0'); // last char of "45/100"
+        assert_eq!(grid.get(2, 0).glyph(), '█'); // bar starts filled
+        assert_eq!(grid.get(19, 0).glyph(), '0'); // last char of "45/100"
     }
 
     #[test]
     fn over_max_caps_the_bar_but_shows_true_numbers_in_the_readout() {
         let area = Rect::new(0, 0, 20, 1);
-        let mut term = Terminal::new(Headless::new(20, 1));
-        StatBar::new("H", 150, 100).render(area, &mut term);
+        let mut grid = Grid::new(20, 1);
+        StatBar::new("H", 150, 100).render(area, &mut Surface::new(&mut grid, area, 0));
 
         // Bar's last cell before the gap+readout is fully filled (clamped
         // to 100%), but the readout still reads the true "150/100".
-        assert_eq!(term.grid().get(11, 0).glyph(), '█');
-        assert_eq!(term.grid().get(19, 0).glyph(), '0'); // last char of "150/100"
+        assert_eq!(grid.get(11, 0).glyph(), '█');
+        assert_eq!(grid.get(19, 0).glyph(), '0'); // last char of "150/100"
     }
 
     #[test]
@@ -144,38 +146,35 @@ mod tests {
         use retroglyph_core::Color;
 
         let area = Rect::new(0, 0, 20, 1);
-        let mut term = Terminal::new(Headless::new(20, 1));
+        let mut grid = Grid::new(20, 1);
         StatBar::new("H", 45, 100)
             .label_style(Style::new().fg(Color::WHITE))
-            .render(area, &mut term);
+            .render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(term.grid().get(0, 0).style().foreground(), Color::WHITE);
+        assert_eq!(grid.get(0, 0).style().foreground(), Color::WHITE);
     }
 
     #[test]
     fn theme_maps_dim_role_onto_label_style() {
         let area = Rect::new(0, 0, 20, 1);
-        let mut term = Terminal::new(Headless::new(20, 1));
+        let mut grid = Grid::new(20, 1);
         StatBar::new("H", 45, 100)
             .theme(Theme::DARK)
-            .render(area, &mut term);
+            .render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(term.grid().get(0, 0).style().foreground(), Theme::DARK.dim);
-        assert_eq!(
-            term.grid().get(0, 0).style().background(),
-            Theme::DARK.panel_bg
-        );
+        assert_eq!(grid.get(0, 0).style().foreground(), Theme::DARK.dim);
+        assert_eq!(grid.get(0, 0).style().background(), Theme::DARK.panel_bg);
     }
 
     #[test]
     fn theme_on_uses_the_given_backdrop_instead_of_panel_bg() {
         let area = Rect::new(0, 0, 20, 1);
-        let mut term = Terminal::new(Headless::new(20, 1));
+        let mut grid = Grid::new(20, 1);
         StatBar::new("H", 45, 100)
             .theme_on(Theme::DARK, Color::Default)
-            .render(area, &mut term);
+            .render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(term.grid().get(0, 0).style().foreground(), Theme::DARK.dim);
-        assert_eq!(term.grid().get(0, 0).style().background(), Color::Default);
+        assert_eq!(grid.get(0, 0).style().foreground(), Theme::DARK.dim);
+        assert_eq!(grid.get(0, 0).style().background(), Color::Default);
     }
 }

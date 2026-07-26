@@ -20,7 +20,7 @@
 use retroglyph_core::event::{Event, KeyCode, KeyModifiers};
 use retroglyph_core::{Backend, Color, Frame, Rect, Style, Terminal};
 use retroglyph_examples::Example;
-use retroglyph_widgets::{Button, Density, Interaction, Sense, Shortcuts, Theme, Widget};
+use retroglyph_widgets::{Button, Density, Interaction, Sense, Shortcuts, Surface, Theme, Widget};
 
 /// Identifies each button for [`Interaction`]'s hit-testing and focus ring.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -105,12 +105,13 @@ impl WidgetsInteraction {
         let response = self.interaction.interact(rect, id, Sense::click());
         let theme = Theme::DARK;
 
+        let term_area = term.area();
         Button::new(label, response)
             .style(Style::new().fg(theme.fg).bg(theme.panel_bg))
             .hovered_style(Style::new().fg(theme.fg).bg(theme.hover_bg))
             .pressed_style(Style::new().fg(theme.fg).bg(theme.press_bg))
             .focused_style(Style::new().fg(theme.accent).bg(theme.panel_bg))
-            .render(rect, term);
+            .render(rect, &mut Surface::new(term.grid_mut(), term_area, 0));
 
         match (id, response.clicked()) {
             (ButtonId::Increment, true) => self.count += 1,

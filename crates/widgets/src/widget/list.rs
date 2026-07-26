@@ -1,9 +1,10 @@
 //! [`List`]: a scrollable, single-column list with a [`ListState`]-driven highlighted item.
-use retroglyph_core::{Backend, Color, Rect, Style, Terminal};
+use retroglyph_core::{Color, Rect, Style};
 
 use super::StatefulWidget;
 use super::window::visible_window;
 use crate::ListState;
+use crate::Surface;
 use crate::Theme;
 use crate::draw::fill_rect;
 use crate::text::truncate as truncate_to_cols;
@@ -28,15 +29,16 @@ use crate::text::truncate as truncate_to_cols;
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::{Headless, Rect, Terminal};
-/// use retroglyph_widgets::{List, ListState, StatefulWidget};
+/// use retroglyph_core::{Grid, Rect};
+/// use retroglyph_widgets::{List, ListState, StatefulWidget, Surface};
 ///
 /// let items = ["Alpha", "Bravo", "Charlie"];
 /// let mut state = ListState::new();
 /// state.select(Some(1));
 ///
-/// let mut term = Terminal::new(Headless::new(20, 3));
-/// List::new(&items).render(Rect::new(0, 0, 20, 3), &mut term, &mut state);
+/// let area = Rect::new(0, 0, 20, 3);
+/// let mut grid = Grid::new(20, 3);
+/// List::new(&items).render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
 /// ```
 #[derive(Clone, Copy, Debug)]
 pub struct List<'a> {
@@ -107,10 +109,10 @@ impl<'a> List<'a> {
     }
 }
 
-impl<B: Backend> StatefulWidget<B> for List<'_> {
+impl StatefulWidget for List<'_> {
     type State = ListState;
 
-    fn render(self, area: Rect, term: &mut Terminal<B>, state: &mut Self::State) {
+    fn render(&self, area: Rect, surface: &mut Surface<'_>, state: &mut Self::State) {
         if area.width() == 0 || area.height() == 0 {
             return;
         }
@@ -121,7 +123,7 @@ impl<B: Backend> StatefulWidget<B> for List<'_> {
             let y = area.top() + (item_index - state.offset()) as u16;
             let style = if Some(item_index) == selected {
                 fill_rect(
-                    term,
+                    surface,
                     Rect::new(area.left(), y, area.width(), 1),
                     ' ',
                     Style::new().bg(self.selected_style.background()),
@@ -131,18 +133,14 @@ impl<B: Backend> StatefulWidget<B> for List<'_> {
                 self.item_style
             };
             let text = truncate_to_cols(item, area.width_usize());
-            term.reset_style()
-                .fg(style.foreground())
-                .bg(style.background());
-            term.print(area.left(), y, text);
+            surface.print(area.left(), y, text, style);
         }
-        term.reset_style();
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::Headless;
+    use retroglyph_core::Grid;
 
     use super::*;
 
@@ -152,13 +150,13 @@ mod tests {
         let items = ["Alpha", "Bravo"];
         let list = List::new(&items);
 
-        let mut term = Terminal::new(Headless::new(20, 2));
+        let mut grid = Grid::new(20, 2);
         let mut state = ListState::new();
         state.select(Some(1));
-        list.render(area, &mut term, &mut state);
+        list.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
 
-        let highlighted_bg = term.grid().get(0, 1).style().background();
-        let plain_bg = term.grid().get(0, 0).style().background();
+        let highlighted_bg = grid.get(0, 1).style().background();
+        let plain_bg = grid.get(0, 0).style().background();
         assert_ne!(highlighted_bg, plain_bg);
     }
 
@@ -168,12 +166,12 @@ mod tests {
         let items = ["Alpha", "Bravo"];
         let list = List::new(&items);
 
-        let mut term = Terminal::new(Headless::new(20, 2));
+        let mut grid = Grid::new(20, 2);
         let mut state = ListState::new();
-        list.render(area, &mut term, &mut state);
+        list.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
 
-        let row0_bg = term.grid().get(0, 0).style().background();
-        let row1_bg = term.grid().get(0, 1).style().background();
+        let row0_bg = grid.get(0, 0).style().background();
+        let row1_bg = grid.get(0, 1).style().background();
         assert_eq!(row0_bg, row1_bg);
     }
 
@@ -187,13 +185,13 @@ mod tests {
         let names = items(&["Alpha", "Bravo", "Charlie", "Delta"]);
         let list = List::new(&names);
 
-        let mut term = Terminal::new(Headless::new(20, 2));
+        let mut grid = Grid::new(20, 2);
         let mut state = ListState::new();
         state.set_offset(2); // window is [Charlie, Delta]
-        list.render(area, &mut term, &mut state);
+        list.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
 
-        assert_eq!(term.grid().get(0, 0).glyph(), 'C');
-        assert_eq!(term.grid().get(0, 1).glyph(), 'D');
+        assert_eq!(grid.get(0, 0).glyph(), 'C');
+        assert_eq!(grid.get(0, 1).glyph(), 'D');
     }
 
     #[test]
@@ -202,14 +200,14 @@ mod tests {
         let names = items(&["Alpha", "Bravo", "Charlie", "Delta"]);
         let list = List::new(&names);
 
-        let mut term = Terminal::new(Headless::new(20, 2));
+        let mut grid = Grid::new(20, 2);
         let mut state = ListState::new();
         state.select(Some(0)); // "Alpha"
         state.set_offset(2); // but the window starts at "Charlie"
-        list.render(area, &mut term, &mut state);
+        list.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
 
-        let row0_bg = term.grid().get(0, 0).style().background();
-        let row1_bg = term.grid().get(0, 1).style().background();
+        let row0_bg = grid.get(0, 0).style().background();
+        let row1_bg = grid.get(0, 1).style().background();
         assert_eq!(row0_bg, row1_bg); // neither visible row is highlighted
     }
 
@@ -220,11 +218,11 @@ mod tests {
         let custom = Style::new().fg(Color::RED);
         let list = List::new(&items).item_style(custom);
 
-        let mut term = Terminal::new(Headless::new(20, 1));
+        let mut grid = Grid::new(20, 1);
         let mut state = ListState::new();
-        list.render(area, &mut term, &mut state);
+        list.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
 
-        assert_eq!(term.grid().get(0, 0).style().foreground(), Color::RED);
+        assert_eq!(grid.get(0, 0).style().foreground(), Color::RED);
     }
 
     #[test]
@@ -234,13 +232,13 @@ mod tests {
         let custom = Style::new().fg(Color::GREEN).bg(Color::BLUE);
         let list = List::new(&items).selected_style(custom);
 
-        let mut term = Terminal::new(Headless::new(20, 1));
+        let mut grid = Grid::new(20, 1);
         let mut state = ListState::new();
         state.select(Some(0));
-        list.render(area, &mut term, &mut state);
+        list.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
 
-        assert_eq!(term.grid().get(0, 0).style().foreground(), Color::GREEN);
-        assert_eq!(term.grid().get(0, 0).style().background(), Color::BLUE);
+        assert_eq!(grid.get(0, 0).style().foreground(), Color::GREEN);
+        assert_eq!(grid.get(0, 0).style().background(), Color::BLUE);
     }
 
     #[test]
@@ -249,11 +247,11 @@ mod tests {
         let items = ["a much longer item than fits"];
         let list = List::new(&items);
 
-        let mut term = Terminal::new(Headless::new(5, 1));
+        let mut grid = Grid::new(5, 1);
         let mut state = ListState::new();
-        list.render(area, &mut term, &mut state);
+        list.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
 
-        assert_eq!(term.grid().get(4, 0).glyph(), 'c'); // "a muc"
+        assert_eq!(grid.get(4, 0).glyph(), 'c'); // "a muc"
     }
 
     #[test]
@@ -262,15 +260,15 @@ mod tests {
         let names = items(&["Alpha", "Bravo", "Charlie", "Delta"]);
         let list = List::new(&names);
 
-        let mut term = Terminal::new(Headless::new(20, 2));
+        let mut grid = Grid::new(20, 2);
         let mut state = ListState::new();
         state.select(Some(3)); // "Delta", off the front of the default window
         state.ensure_visible(2);
-        list.render(area, &mut term, &mut state);
+        list.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
 
-        assert_eq!(term.grid().get(0, 1).glyph(), 'D');
-        let highlighted_bg = term.grid().get(0, 1).style().background();
-        let plain_bg = term.grid().get(0, 0).style().background();
+        assert_eq!(grid.get(0, 1).glyph(), 'D');
+        let highlighted_bg = grid.get(0, 1).style().background();
+        let plain_bg = grid.get(0, 0).style().background();
         assert_ne!(highlighted_bg, plain_bg);
     }
 
@@ -280,11 +278,11 @@ mod tests {
         let items = ["Alpha"];
         let list = List::new(&items);
 
-        let mut term = Terminal::new(Headless::new(20, 1));
+        let mut grid = Grid::new(20, 1);
         let mut state = ListState::new();
-        list.render(area, &mut term, &mut state);
+        list.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
 
-        assert_eq!(term.grid().get(0, 0).glyph(), ' ');
+        assert_eq!(grid.get(0, 0).glyph(), ' ');
     }
 
     #[test]
@@ -293,21 +291,15 @@ mod tests {
         let items = ["Alpha", "Bravo"];
         let list = List::new(&items).theme(Theme::DARK);
 
-        let mut term = Terminal::new(Headless::new(20, 2));
+        let mut grid = Grid::new(20, 2);
         let mut state = ListState::new();
         state.select(Some(1));
-        list.render(area, &mut term, &mut state);
+        list.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
 
-        assert_eq!(term.grid().get(0, 0).style().foreground(), Theme::DARK.fg);
-        assert_eq!(
-            term.grid().get(0, 0).style().background(),
-            Theme::DARK.panel_bg
-        );
-        assert_eq!(term.grid().get(0, 1).style().foreground(), Theme::DARK.bg);
-        assert_eq!(
-            term.grid().get(0, 1).style().background(),
-            Theme::DARK.accent
-        );
+        assert_eq!(grid.get(0, 0).style().foreground(), Theme::DARK.fg);
+        assert_eq!(grid.get(0, 0).style().background(), Theme::DARK.panel_bg);
+        assert_eq!(grid.get(0, 1).style().foreground(), Theme::DARK.bg);
+        assert_eq!(grid.get(0, 1).style().background(), Theme::DARK.accent);
     }
 
     #[test]
@@ -316,11 +308,11 @@ mod tests {
         let items = ["Alpha"];
         let list = List::new(&items).theme_on(Theme::DARK, Color::Default);
 
-        let mut term = Terminal::new(Headless::new(20, 1));
+        let mut grid = Grid::new(20, 1);
         let mut state = ListState::new();
-        list.render(area, &mut term, &mut state);
+        list.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
 
-        assert_eq!(term.grid().get(0, 0).style().foreground(), Theme::DARK.fg);
-        assert_eq!(term.grid().get(0, 0).style().background(), Color::Default);
+        assert_eq!(grid.get(0, 0).style().foreground(), Theme::DARK.fg);
+        assert_eq!(grid.get(0, 0).style().background(), Color::Default);
     }
 }

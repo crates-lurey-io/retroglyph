@@ -34,7 +34,7 @@ use retroglyph_core::{
     AnsiColor, Backend, Color, Easing, Frame, Grid, Rect, Style, Terminal, Tile, Tween,
 };
 use retroglyph_examples::Example;
-use retroglyph_widgets::{Constraint, Panel, Widget, split_h, split_v};
+use retroglyph_widgets::{Constraint, Panel, Surface, Widget, split_h, split_v};
 
 /// The level, hand-designed to be solvable with the two boxes pushed one at a time: `#` wall,
 /// `.` floor, `o` goal, `$` a box (on plain floor), `@` the player's start. Both `o` cells are
@@ -311,7 +311,13 @@ impl Sokoban {
 
         let level_x = play_area.left() + 2;
         let level_y = play_area.top() + 2;
-        retroglyph_widgets::blit_into(term, &self.level, level_x, level_y);
+        let term_area = term.area();
+        retroglyph_widgets::blit_into(
+            &mut Surface::new(term.grid_mut(), term_area, 0),
+            &self.level,
+            level_x,
+            level_y,
+        );
 
         for b in &self.boxes {
             let on_goal = self.goals.contains(&b.pos);
@@ -333,7 +339,11 @@ impl Sokoban {
         term.put_offset(level_x + px, level_y + py, pdx, pdy, '@');
         term.reset_style();
 
-        Panel::new().title("Status").render(status_area, term);
+        let term_area = term.area();
+        Panel::new().title("Status").render(
+            status_area,
+            &mut Surface::new(term.grid_mut(), term_area, 0),
+        );
         let inner_x = status_area.left() + 2;
         let mut y = status_area.top() + 1;
         term.print(inner_x, y, &format!("Moves: {}", self.moves));

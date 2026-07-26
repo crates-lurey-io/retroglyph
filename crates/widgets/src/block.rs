@@ -2,10 +2,12 @@
 //!
 //! [`join_h`] and [`join_v`] concatenate several `Grid`s into one,
 //! side-by-side or stacked, via [`Grid::blit`]. `Grid` is constructible
-//! without a [`Backend`]/[`Terminal`], so composing widget output ahead of
-//! drawing it means composing `Grid`s directly, with no separate
-//! cell/buffer type.
-use retroglyph_core::{Backend, Grid, Rect, Terminal};
+//! without a [`Backend`](retroglyph_core::Backend)/[`Terminal`](retroglyph_core::Terminal), so
+//! composing widget output ahead of drawing it means composing `Grid`s directly, with no
+//! separate cell/buffer type.
+use retroglyph_core::{Grid, Rect};
+
+use crate::Surface;
 
 /// Concatenate `grids` left-to-right into one [`Grid`] (layer 0 only).
 ///
@@ -60,20 +62,21 @@ pub fn join_v(grids: &[Grid]) -> Grid {
     out
 }
 
-/// Stamp `grid`'s layer 0 onto `term`, with its top-left cell at `(x, y)`.
+/// Stamp `grid`'s layer 0 onto `surface`'s underlying grid, with its top-left cell at `(x, y)`.
 ///
-/// A thin convenience over [`Grid::blit`] (via
-/// [`Terminal::grid_mut`](retroglyph_core::Terminal::grid_mut)) so callers
-/// composing widget output with [`join_h`]/[`join_v`] don't need to reach
-/// into the terminal's grid by hand for the final copy.
-pub fn blit_into<B: Backend>(term: &mut Terminal<B>, grid: &Grid, x: u16, y: u16) {
+/// A thin convenience over [`Grid::blit`] (via [`Surface::grid_mut`]) so callers composing
+/// widget output with [`join_h`]/[`join_v`] don't need to reach into the surface's grid by hand
+/// for the final copy. Writes to `surface`'s own layer, but -- like [`Surface::grid_mut`] itself
+/// -- is not clipped to `surface`'s area: `(x, y)` and `grid`'s extent are trusted as given.
+pub fn blit_into(surface: &mut Surface<'_>, grid: &Grid, x: u16, y: u16) {
     let rect = Rect::new(0, 0, grid.width(), grid.height());
-    term.grid_mut().blit(0, grid, rect, x, y);
+    let layer = surface.layer();
+    surface.grid_mut().blit(layer, grid, rect, x, y);
 }
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::{Color, Headless, Style, Terminal, Tile};
+    use retroglyph_core::{Color, Style, Tile};
 
     use super::*;
 
@@ -129,17 +132,18 @@ mod tests {
     }
 
     #[test]
-    fn blit_into_stamps_a_grid_onto_a_terminal_at_an_offset() {
-        let mut grid = Grid::new(2, 2);
-        grid.put(0, 0, Tile::new('x', Style::new().fg(Color::GREEN)));
-        grid.put(1, 1, Tile::new('y', Style::default()));
+    fn blit_into_stamps_a_grid_onto_a_surface_at_an_offset() {
+        let mut src = Grid::new(2, 2);
+        src.put(0, 0, Tile::new('x', Style::new().fg(Color::GREEN)));
+        src.put(1, 1, Tile::new('y', Style::default()));
 
-        let mut term = Terminal::new(Headless::new(5, 5));
-        blit_into(&mut term, &grid, 2, 1);
+        let mut dst = Grid::new(5, 5);
+        let area = Rect::new(0, 0, 5, 5);
+        blit_into(&mut Surface::new(&mut dst, area, 0), &src, 2, 1);
 
-        assert_eq!(term.grid().get(2, 1).glyph(), 'x');
-        assert_eq!(term.grid().get(3, 2).glyph(), 'y');
-        // Untouched cells stay whatever the terminal started with.
-        assert_eq!(term.grid().get(0, 0).glyph(), ' ');
+        assert_eq!(dst.get(2, 1).glyph(), 'x');
+        assert_eq!(dst.get(3, 2).glyph(), 'y');
+        // Untouched cells stay whatever the destination started with.
+        assert_eq!(dst.get(0, 0).glyph(), ' ');
     }
 }

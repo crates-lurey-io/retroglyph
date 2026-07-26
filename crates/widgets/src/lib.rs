@@ -6,17 +6,19 @@
 //! alignment ([`layout`]).
 //!
 //! Every widget ([`widget`]) is a builder struct that draws itself into a
-//! [`Terminal`](retroglyph_core::Terminal) via [`Widget`]/[`StatefulWidget`]
-//! and retains no state of its own -- state that outlives one render call
-//! (a selection index, a scroll offset) lives in [`ListState`] instead. A
+//! [`Grid`](retroglyph_core::Grid) via [`Widget`]/[`StatefulWidget`] and
+//! retains no state of its own -- state that outlives one render call (a
+//! selection index, a scroll offset) lives in [`ListState`] instead. A
 //! handful of things that are genuinely just functions ([`fill_rect`],
 //! [`thumb_geometry`]/[`offset_for_pos`]) stay free functions in [`draw`]
 //! rather than pretending to be widgets. Three more independent layers
 //! build on top:
 //!
-//! - [`Widget`]/[`StatefulWidget`] ([`widget`]) let callers box or store
-//!   heterogeneous widgets, e.g. a `Vec<Box<dyn Widget<B>>>` of panes to
-//!   render each frame.
+//! - [`Widget`]/[`StatefulWidget`] ([`widget`]) render into a [`Surface`],
+//!   an area-relative, single-layer view over a [`Grid`](retroglyph_core::Grid), and let
+//!   callers box or store heterogeneous widgets, e.g. a `Vec<Box<dyn Widget>>` of panes to
+//!   render each frame -- with no `Backend` type parameter, since drawing touches nothing but
+//!   cells.
 //! - [`Interaction`] ([`interact`]) for hover/click/drag/focus tracking
 //!   without a retained widget tree -- the sibling of [`ListState`] for
 //!   widgets that don't have a natural selection index of their own.
@@ -54,6 +56,7 @@ pub mod interact;
 pub mod layout;
 pub mod state;
 pub mod style;
+pub mod surface;
 pub mod text;
 pub mod theme;
 pub mod widget;
@@ -71,6 +74,7 @@ pub use layout::{
 };
 pub use state::{ListState, ScrollPhysics, ScrollState, SelectionWrap};
 pub use style::{BoxStyle, Sides};
+pub use surface::Surface;
 pub use text::{truncate, truncate_owned};
 pub use theme::Theme;
 #[cfg(feature = "egc")]

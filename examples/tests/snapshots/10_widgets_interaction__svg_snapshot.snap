@@ -28,8 +28,7 @@ expression: svg
   <tspan fill="#bec0d0" x="327.2" style="background:#161620">     Reset  </tspan>
 </text>
 <text font-family="monospace" font-size="14" y="116.0" xml:space="preserve">
-  <tspan fill="#bec0d0" x="8.0" style="background:#161620">    </tspan>
-  <tspan fill="#cccccc" x="41.6">                                              </tspan>
+  <tspan fill="#cccccc" x="8.0">                                                  </tspan>
 </text>
 <text font-family="monospace" font-size="14" y="134.0" xml:space="preserve">
   <tspan fill="#cccccc" x="8.0">  </tspan>
