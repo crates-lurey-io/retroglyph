@@ -1,6 +1,6 @@
 //! Configuration, builder, and error types for the GL backend.
 //!
-//! [`GlBackendBuilder`] gathers grid size, integer scale, a [`BitmapFont`], and (with the
+//! [`GlBackendBuilder`] gathers grid size, integer scale, a [`FontChain`], and (with the
 //! `tilesets` feature) any PNG sprite tilesets, then [`build`](GlBackendBuilder::build) produces a
 //! [`GlRenderer`]. The renderer is created without a GL context; the context and GPU resources are
 //! created lazily when the windowing loop calls
@@ -8,7 +8,7 @@
 
 use crate::GlRenderer;
 use crate::glyphs::GlyphCache;
-use retroglyph_window::font::BitmapFont;
+use retroglyph_window::font::FontChain;
 #[cfg(feature = "tilesets")]
 use retroglyph_window::tileset::TilesetOptions;
 use std::fmt;
@@ -18,6 +18,10 @@ use std::fmt;
 pub enum GlBackendError {
     /// No font was provided and the `default-font` feature is not enabled.
     NoFont,
+    /// The fonts in the configured [`FontChain`] disagree on their glyph size.
+    MixedGlyphSizes,
+    /// The configured [`FontChain`] has more glyphs in total than the atlas can address.
+    FontChainTooLarge,
     /// `scale` was set to `0`, which would produce a zero-size surface.
     ZeroScale,
     /// The grid was configured with a zero column or row count.
@@ -34,6 +38,17 @@ impl fmt::Display for GlBackendError {
                 f,
                 "no bitmap font provided; supply one via GlBackendBuilder::font() or enable the \
                  `default-font` feature"
+            ),
+            Self::MixedGlyphSizes => write!(
+                f,
+                "every font in a chain must have the same glyph width and height; a grid has one \
+                 cell size"
+            ),
+            Self::FontChainTooLarge => write!(
+                f,
+                "a font chain may hold at most {} glyphs in total; the atlas addresses a glyph by \
+                 a 16-bit slot",
+                u32::from(u16::MAX) + 1
             ),
             Self::ZeroScale => write!(f, "scale must be non-zero"),
             Self::ZeroGrid => write!(f, "grid columns and rows must both be non-zero"),
@@ -73,7 +88,7 @@ impl std::error::Error for GlBackendError {}
 /// ```
 #[derive(Debug, Clone)]
 pub struct GlBackendBuilder {
-    font: Option<BitmapFont>,
+    fonts: Option<FontChain<'static>>,
     /// Registered tilesets, decoded into a sprite atlas at [`build`](Self::build) time (issue #366).
     #[cfg(feature = "tilesets")]
     tilesets: Vec<TilesetOptions>,
@@ -94,7 +109,7 @@ impl GlBackendBuilder {
     #[must_use]
     pub const fn new() -> Self {
         Self {
-            font: None,
+            fonts: None,
             #[cfg(feature = "tilesets")]
             tilesets: Vec::new(),
             cols: 80,
@@ -118,10 +133,41 @@ impl GlBackendBuilder {
         self
     }
 
-    /// Sets the bitmap font (overrides the `default-font` embedded font).
+    /// Sets the fonts glyphs are resolved through, overriding the `default-font` embedded font.
+    ///
+    /// Takes either a single [`BitmapFont`](retroglyph_window::font::BitmapFont) or a whole
+    /// [`FontChain`], since a lone font is a chain of one. A chain is how a grid draws characters
+    /// CP437 has no mapping for (quadrants, sextants, braille): the extra coverage comes from a
+    /// fallback font built with
+    /// [`BitmapFont::with_charset`](retroglyph_window::font::BitmapFont::with_charset), every font
+    /// in the chain is packed into the same glyph atlas, and the glyph is drawn from that atlas,
+    /// so it takes the cell's foreground color like any other glyph (unlike a tileset sprite,
+    /// which carries its own colors).
+    ///
+    /// Every font in a chain must agree on its glyph size, since that is the grid's cell size, and
+    /// the chain's glyphs must fit the atlas's 16-bit slot space; otherwise
+    /// [`build`](Self::build) fails.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use retroglyph_gl::GlBackendBuilder;
+    /// use retroglyph_window::font::{BitmapFont, FontChain, unscii16};
+    ///
+    /// // A fallback font declaring the quadrant glyphs CP437 has no mapping for.
+    /// static QUADRANTS: [u8; 3 * 16] = [0; 3 * 16];
+    /// const CHARSET: [(char, u8); 3] = [('▘', 0), ('▝', 1), ('▖', 2)];
+    /// static FALLBACKS: [BitmapFont; 1] =
+    ///     [BitmapFont::with_charset(&QUADRANTS, 8, 16, 3, &CHARSET)];
+    ///
+    /// let renderer = GlBackendBuilder::new()
+    ///     .font(FontChain::new(unscii16::FONT, &FALLBACKS))
+    ///     .build()
+    ///     .expect("gl backend init failed");
+    /// ```
     #[must_use]
-    pub const fn font(mut self, font: BitmapFont) -> Self {
-        self.font = Some(font);
+    pub fn font(mut self, fonts: impl Into<FontChain<'static>>) -> Self {
+        self.fonts = Some(fonts.into());
         self
     }
 
@@ -145,8 +191,10 @@ impl GlBackendBuilder {
     /// # Errors
     ///
     /// Returns [`GlBackendError::NoFont`] if no font was set and the `default-font` feature is
-    /// disabled, [`GlBackendError::ZeroScale`] if `scale` is 0, or [`GlBackendError::ZeroGrid`] if
-    /// either grid dimension is 0.
+    /// disabled, [`GlBackendError::MixedGlyphSizes`] if the configured chain's fonts disagree on
+    /// their glyph size, [`GlBackendError::FontChainTooLarge`] if the chain's glyphs overflow the
+    /// atlas's slot space, [`GlBackendError::ZeroScale`] if `scale` is 0, or
+    /// [`GlBackendError::ZeroGrid`] if either grid dimension is 0.
     pub fn build(self) -> Result<GlRenderer, GlBackendError> {
         if self.scale == 0 {
             return Err(GlBackendError::ZeroScale);
@@ -154,7 +202,14 @@ impl GlBackendBuilder {
         if self.cols == 0 || self.rows == 0 {
             return Err(GlBackendError::ZeroGrid);
         }
-        let glyphs = GlyphCache::bitmap(self.resolve_font()?);
+        let fonts = self.resolve_fonts()?;
+        let Some(glyph_size) = fonts.glyph_size() else {
+            return Err(GlBackendError::MixedGlyphSizes);
+        };
+        let glyphs = GlyphCache::bitmap(fonts, glyph_size);
+        if glyphs.slot_count() > u32::from(u16::MAX) + 1 {
+            return Err(GlBackendError::FontChainTooLarge);
+        }
         #[cfg_attr(not(feature = "tilesets"), allow(unused_mut))]
         let mut renderer = GlRenderer::new(glyphs, self.cols, self.rows, self.scale);
         #[cfg(feature = "tilesets")]
@@ -170,19 +225,19 @@ impl GlBackendBuilder {
         Ok(renderer)
     }
 
-    /// Resolves the font: the explicitly set one, else the embedded default (if the feature is on),
-    /// else [`GlBackendError::NoFont`].
+    /// Resolves the font chain: the explicitly set one, else the embedded default (if the feature
+    /// is on), else [`GlBackendError::NoFont`].
     // The `Result` is not always-`Ok`: without `default-font` the fallback arm returns `Err`.
     // clippy only sees one feature configuration at a time, so silence its feature-blind
     // `unnecessary_wraps`/`const` suggestions here.
     #[allow(clippy::unnecessary_wraps, clippy::missing_const_for_fn)]
-    fn resolve_font(&self) -> Result<BitmapFont, GlBackendError> {
-        if let Some(font) = self.font {
-            return Ok(font);
+    fn resolve_fonts(&self) -> Result<FontChain<'static>, GlBackendError> {
+        if let Some(fonts) = self.fonts {
+            return Ok(fonts);
         }
         #[cfg(feature = "default-font")]
         {
-            Ok(retroglyph_window::font::unscii16::FONT)
+            Ok(FontChain::from(retroglyph_window::font::unscii16::FONT))
         }
         #[cfg(not(feature = "default-font"))]
         {

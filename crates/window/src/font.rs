@@ -40,13 +40,13 @@ pub struct BitmapFont {
     pub glyph_height: u8,
     /// Total number of glyphs stored in `data`.
     glyph_count: u16,
-    /// The `char` -> glyph-index table used by [`try_char_to_index`](Self::try_char_to_index),
-    /// or `None` to use the built-in CP437 mapping.
+    /// The `char` -> glyph-index table used by [`glyph_index`](Self::glyph_index), or `None` to
+    /// use the built-in CP437 mapping.
     ///
     /// A font built with [`with_charset`](Self::with_charset) declares its own repertoire
     /// instead of being routed through the CP437 table every other font shares: this is what
-    /// lets a [`FallbackFontChain`] extend coverage past CP437 (e.g. quadrants, sextants,
-    /// braille) rather than every font in the chain answering the identical CP437 question.
+    /// lets a [`FontChain`] extend coverage past CP437 (e.g. quadrants, sextants, braille)
+    /// rather than every font in the chain answering the identical CP437 question.
     charset: Option<&'static [(char, u8)]>,
 }
 
@@ -74,10 +74,14 @@ impl BitmapFont {
     /// Constructs a bitmap font from a static byte slice, mapped through an explicit
     /// `char` -> glyph-index `charset` instead of the built-in CP437 encoding.
     ///
-    /// This is how a font extends coverage past CP437: [`try_char_to_index`](Self::try_char_to_index)
-    /// looks a `char` up in `charset` instead of the CP437 table, so a fallback font built this
-    /// way can answer for codepoints (quadrants, sextants, braille, ...) that CP437 has no
-    /// mapping for at all. `data` must contain exactly `glyph_count * glyph_height` bytes.
+    /// This is how a font extends coverage past CP437: [`glyph_index`](Self::glyph_index) looks a
+    /// `char` up in `charset` instead of the CP437 table, so a font built this way can answer for
+    /// codepoints (quadrants, sextants, braille, ...) that CP437 has no mapping for at all.
+    /// `data` must contain exactly `glyph_count * glyph_height` bytes.
+    ///
+    /// `charset` is scanned linearly, so it is meant for the focused repertoire a font actually
+    /// declares (a few dozen block or marker glyphs), not for a second general-purpose encoding
+    /// table.
     #[must_use]
     pub const fn with_charset(
         data: &'static [u8],
@@ -150,29 +154,22 @@ impl BitmapFont {
         self.glyph_count
     }
 
-    /// Maps a Unicode `char` to a glyph index in this font, falling back to a solid-block
-    /// glyph for unmapped characters.
-    ///
-    /// This is a CP437-only convenience: it always resolves through the built-in CP437 table,
-    /// even for a font built with [`with_charset`](Self::with_charset). A `with_charset` font's
-    /// full repertoire is only reachable through [`try_char_to_index`](Self::try_char_to_index)
-    /// directly, or through a [`FallbackFontChain`] the font is part of.
-    #[must_use]
-    pub const fn char_to_index(&self, ch: char) -> u8 {
-        unicode_to_cp437(ch)
-    }
-
-    /// Attempts to map a Unicode `char` to a glyph index in this font, returning `None`
-    /// instead of substituting the solid-block fallback glyph on a miss.
+    /// Maps a Unicode `char` to a glyph index in this font, or `None` if this font does not
+    /// cover `ch`.
     ///
     /// If this font was built with [`with_charset`](Self::with_charset), `ch` is looked up in
-    /// that explicit table instead of the CP437 mapping. Otherwise a miss is either `ch` not
-    /// being in the CP437 mapping table at all, or its mapped index falling outside this font's
-    /// `glyph_count` (e.g. a font built with fewer than 256 glyphs). [`FallbackFontChain::resolve`]
-    /// uses this to keep trying further fonts in the chain rather than settling for
-    /// [`char_to_index`](Self::char_to_index)'s unconditional solid-block substitution.
+    /// that explicit table; otherwise it goes through the built-in CP437 mapping. A miss is
+    /// either `ch` not being in this font's repertoire at all, or its mapped index falling
+    /// outside this font's `glyph_count` (e.g. a font built with fewer than 256 glyphs).
+    ///
+    /// A returned index is always `< glyph_count()`, so it is always a valid argument to
+    /// [`rows`](Self::rows) and [`glyph_pixels`](Self::glyph_pixels).
+    ///
+    /// Substituting something drawable for a miss is [`FontChain::resolve`]'s job, not this
+    /// one's: a font cannot answer for a character it has no glyph for, and pretending otherwise
+    /// is what hides a chain's later fonts from ever being consulted.
     #[must_use]
-    pub const fn try_char_to_index(&self, ch: char) -> Option<u8> {
+    pub const fn glyph_index(&self, ch: char) -> Option<u8> {
         if let Some(table) = self.charset {
             let mut i = 0;
             while i < table.len() {
@@ -205,14 +202,16 @@ impl PartialEq for BitmapFont {
 
 impl Eq for BitmapFont {}
 
-// ── Fallback font chain ─────────────────────────────────────────────────────
+// ── Font chain ──────────────────────────────────────────────────────────────
 
-/// A glyph resolved from a [`FallbackFontChain`]: the glyph index plus the specific
-/// [`BitmapFont`] it came from, since each font in a chain owns its own bitmap data.
+/// A glyph resolved from a [`FontChain`]: the glyph index plus the specific [`BitmapFont`] it
+/// came from, since each font in a chain owns its own bitmap data.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ResolvedGlyph {
     font: BitmapFont,
+    font_index: usize,
     index: u8,
+    notdef: bool,
 }
 
 impl ResolvedGlyph {
@@ -222,10 +221,29 @@ impl ResolvedGlyph {
         &self.font
     }
 
-    /// The glyph index within [`font`](Self::font).
+    /// The position of [`font`](Self::font) within the chain that resolved it: `0` is the
+    /// primary font, `1..` the fallbacks in order.
+    ///
+    /// A GPU backend packs every font in the chain into one atlas and addresses a glyph by a flat
+    /// slot, so it needs the font's position (a stable index into [`FontChain::fonts`]) rather
+    /// than the font value, which carries no identity of its own.
+    #[must_use]
+    pub const fn font_index(&self) -> usize {
+        self.font_index
+    }
+
+    /// The glyph index within [`font`](Self::font), always `< font().glyph_count()`.
     #[must_use]
     pub const fn index(&self) -> u8 {
         self.index
+    }
+
+    /// Whether this is the substituted "no glyph" box rather than a glyph for the character that
+    /// was asked for: `true` when no font in the chain covered that character and
+    /// [`FontChain::resolve`] fell back to the solid block.
+    #[must_use]
+    pub const fn is_notdef(&self) -> bool {
+        self.notdef
     }
 
     /// Returns the row bytes for this glyph; see [`BitmapFont::rows`].
@@ -235,66 +253,128 @@ impl ResolvedGlyph {
     }
 }
 
-/// Combines a primary [`BitmapFont`] with an ordered list of fallback fonts.
+/// The glyph source a backend draws from: a primary [`BitmapFont`] plus an ordered list of
+/// fallback fonts.
 ///
-/// [`resolve`](Self::resolve) tries the primary font's char mapping first; on a miss, it
-/// tries each fallback font in order; only if every font in the chain misses does it fall
-/// back to the primary font's solid-block glyph. This lets a caller layer, say, an ASCII
-/// or partial-coverage primary font with one or more broader fallback fonts, so a char
-/// missing from the primary doesn't automatically become a solid block if some other font
-/// in the chain actually has it.
+/// This is the only character-to-glyph path the bundled pixel backends have. A single font is a
+/// chain of one (`FontChain::from(font)`), so `SoftwareBackendBuilder::font` and
+/// `GlBackendBuilder::font` both take an `impl Into<FontChain<'static>>` and there is no second,
+/// chain-blind route that could quietly ignore a font's declared repertoire.
 ///
-/// This type ships **no bundled fallback font data**: every font in the chain, primary
-/// or fallback, is supplied by the caller. Bundling a ready-to-use Latin-1/Extended
-/// fallback font is a natural follow-up now that this mechanism exists, but is out of
-/// scope here.
+/// [`resolve`](Self::resolve) tries the primary font first, then each fallback in order, and only
+/// if every font misses substitutes the solid block (`'█'`) from the first font in the chain that
+/// has one. This lets a caller layer, say, an ASCII or partial-coverage primary font with one or
+/// more broader fallback fonts, so a char missing from the primary doesn't automatically become a
+/// solid block if some other font in the chain actually has it.
+///
+/// This type ships **no bundled fallback font data**: every font in the chain, primary or
+/// fallback, is supplied by the caller. Bundling a ready-to-use Latin-1/Extended or sub-cell
+/// (quadrant/sextant/braille) fallback font is a natural follow-up now that this mechanism is
+/// reachable end to end, but is out of scope here.
 ///
 /// A fallback font only extends the chain's repertoire if it declares coverage for the
 /// characters it is meant to answer for. A [`BitmapFont::new`] font is always resolved through
 /// the built-in CP437 table, so stacking several CP437 fonts in a chain never reaches past CP437:
 /// every font in the chain answers the identical question. To actually extend coverage (e.g.
 /// quadrants, sextants, braille, none of which CP437 has a mapping for), build the fallback font
-/// with [`BitmapFont::with_charset`] and an explicit table covering those codepoints. On the
-/// bundled pixel backends (`retroglyph-software`, `retroglyph-gl`), this means
-/// `retroglyph_core::subcell`'s `quantize_quadrant`/`quantize_sextant` glyphs render as a solid
-/// block until a font in the chain declares that coverage; see those functions' docs.
+/// with [`BitmapFont::with_charset`] and an explicit table covering those codepoints. Until a
+/// chain does, `retroglyph_core::subcell`'s `quantize_quadrant`/`quantize_sextant` glyphs render
+/// as a solid block on the pixel backends; see those functions' docs.
 ///
-/// Callers who don't need a fallback chain can keep using a bare [`BitmapFont`] and
-/// [`BitmapFont::char_to_index`]/[`BitmapFont::rows`] directly, exactly as before --
-/// this type is purely additive and opt-in.
-#[derive(Debug, Clone, Copy)]
-pub struct FallbackFontChain<'a> {
+/// # Examples
+///
+/// ```
+/// use retroglyph_window::font::{BitmapFont, FontChain};
+///
+/// static ASCII: [u8; 128 * 16] = [0; 128 * 16];
+/// static QUADRANTS: [u8; 3 * 16] = [0; 3 * 16];
+/// const QUADRANT_CHARSET: [(char, u8); 3] = [('▘', 0), ('▝', 1), ('▖', 2)];
+///
+/// const PRIMARY: BitmapFont = BitmapFont::new(&ASCII, 8, 16, 128);
+/// const SUBCELL: BitmapFont = BitmapFont::with_charset(&QUADRANTS, 8, 16, 3, &QUADRANT_CHARSET);
+/// static FALLBACKS: [BitmapFont; 1] = [SUBCELL];
+///
+/// let chain = FontChain::new(PRIMARY, &FALLBACKS);
+/// let quadrant = chain.resolve('▘').expect("covered by the fallback font");
+/// assert_eq!(quadrant.font_index(), 1);
+/// assert!(!quadrant.is_notdef());
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FontChain<'a> {
     primary: BitmapFont,
     fallbacks: &'a [BitmapFont],
 }
 
-impl<'a> FallbackFontChain<'a> {
+impl From<BitmapFont> for FontChain<'static> {
+    fn from(font: BitmapFont) -> Self {
+        Self::new(font, &[])
+    }
+}
+
+impl<'a> FontChain<'a> {
     /// Constructs a chain from a primary font and an ordered list of fallback fonts.
     #[must_use]
     pub const fn new(primary: BitmapFont, fallbacks: &'a [BitmapFont]) -> Self {
         Self { primary, fallbacks }
     }
 
-    /// Resolves `ch` to a glyph, trying the primary font first, then each fallback font
-    /// in order, only substituting the primary font's solid-block glyph if every font in
-    /// the chain misses.
+    /// The fonts in resolution order: the primary font first, then each fallback.
+    ///
+    /// The position of a font in this iterator is its [`ResolvedGlyph::font_index`].
+    pub fn fonts(&self) -> impl Iterator<Item = &BitmapFont> {
+        core::iter::once(&self.primary).chain(self.fallbacks.iter())
+    }
+
+    /// The number of fonts in the chain (always at least one).
     #[must_use]
-    pub fn resolve(&self, ch: char) -> ResolvedGlyph {
-        if let Some(index) = self.primary.try_char_to_index(ch) {
-            return ResolvedGlyph {
-                font: self.primary,
+    pub const fn font_count(&self) -> usize {
+        1 + self.fallbacks.len()
+    }
+
+    /// The glyph cell size (`(width, height)` in unscaled pixels) shared by every font in the
+    /// chain, or `None` if the fonts disagree.
+    ///
+    /// A grid has one cell size, so a chain whose fonts don't agree on theirs has no single
+    /// answer for how big a cell is; backends reject such a chain at build time rather than
+    /// picking one font's size and letting the others overflow or under-fill their cells.
+    #[must_use]
+    pub fn glyph_size(&self) -> Option<(u8, u8)> {
+        let size = (self.primary.glyph_width, self.primary.glyph_height);
+        self.fallbacks
+            .iter()
+            .all(|f| (f.glyph_width, f.glyph_height) == size)
+            .then_some(size)
+    }
+
+    /// Resolves `ch` to a drawable glyph, trying the primary font first, then each fallback font
+    /// in order.
+    ///
+    /// If no font covers `ch`, this substitutes the solid block (`'█'`) from the first font in
+    /// the chain that covers *it*, flagged as [`ResolvedGlyph::is_notdef`]. `None` means the
+    /// chain cannot draw `ch` at all, not even a substitute box, and the caller should draw
+    /// nothing: a chain of narrow `with_charset` fonts (say, braille only) legitimately has no
+    /// solid block to fall back to.
+    ///
+    /// A returned glyph is always in range for its font, so [`ResolvedGlyph::rows`] and
+    /// [`BitmapFont::glyph_pixels`] cannot panic on it.
+    #[must_use]
+    pub fn resolve(&self, ch: char) -> Option<ResolvedGlyph> {
+        self.lookup(ch, false).or_else(|| self.lookup(NOTDEF, true))
+    }
+
+    /// The first font in the chain covering `ch`, tagged with `notdef`.
+    fn lookup(&self, ch: char, notdef: bool) -> Option<ResolvedGlyph> {
+        self.fonts()
+            .enumerate()
+            .find_map(|(font_index, font)| {
+                font.glyph_index(ch).map(|index| (font_index, font, index))
+            })
+            .map(|(font_index, font, index)| ResolvedGlyph {
+                font: *font,
+                font_index,
                 index,
-            };
-        }
-        for font in self.fallbacks {
-            if let Some(index) = font.try_char_to_index(ch) {
-                return ResolvedGlyph { font: *font, index };
-            }
-        }
-        ResolvedGlyph {
-            font: self.primary,
-            index: FALLBACK,
-        }
+                notdef,
+            })
     }
 }
 
@@ -590,17 +670,13 @@ pub mod unscii16 {
 
 // ── Unicode → CP437 mapping ────────────────────────────────────────────────
 
-/// Solid block, the fallback for any unmapped character.
-const FALLBACK: u8 = 0xDB;
-
-/// Maps a Unicode scalar to its CP437 glyph index, falling back to a solid block
-/// (CP437 `0xDB`) for characters not covered by [`try_unicode_to_cp437`].
-pub(crate) const fn unicode_to_cp437(ch: char) -> u8 {
-    match try_unicode_to_cp437(ch) {
-        Some(index) => index,
-        None => FALLBACK,
-    }
-}
+/// The substitute drawn for a character no font in a chain covers: the solid block, whichever
+/// glyph index the font that has it stores it at.
+///
+/// Naming the substitute as a `char` rather than a fixed index is what keeps
+/// [`FontChain::resolve`] total: CP437's own `0xDB` is out of range for a font with fewer than
+/// 220 glyphs, so an index constant would resolve to a glyph that font does not have.
+const NOTDEF: char = '█';
 
 /// Attempts to map a Unicode scalar to its CP437 glyph index.
 ///
@@ -608,7 +684,7 @@ pub(crate) const fn unicode_to_cp437(ch: char) -> u8 {
 /// block-elements, and roguelike symbols are mapped explicitly.  Returns
 /// `None` for anything else, distinguishing "not in the CP437 table" from a
 /// character that legitimately maps to the solid-block glyph (`'█'`) --
-/// [`FallbackFontChain`] relies on that distinction to keep trying further
+/// [`FontChain`] relies on that distinction to keep trying further
 /// fonts on a miss instead of stopping at a false-positive solid-block hit.
 #[allow(clippy::too_many_lines)]
 const fn try_unicode_to_cp437(ch: char) -> Option<u8> {
@@ -795,7 +871,7 @@ const fn try_unicode_to_cp437(ch: char) -> Option<u8> {
 
 #[cfg(test)]
 mod tests {
-    use super::{BitmapFont, FALLBACK, FallbackFontChain, unicode_to_cp437};
+    use super::{BitmapFont, FontChain, try_unicode_to_cp437};
 
     /// The four codepoints patched into `unscii16`'s `DATA` (see that module's doc comment)
     /// must actually be reachable through the char-to-glyph path, not just present at their
@@ -803,10 +879,22 @@ mod tests {
     /// `BitmapFont::char_to_index`/`Surface::print`, which is every real caller.
     #[test]
     fn patched_glyphs_are_reachable_by_char() {
-        assert_eq!(unicode_to_cp437('⌂'), 0x7F, "U+2302 HOUSE");
-        assert_eq!(unicode_to_cp437('☼'), 0x0F, "U+263C WHITE SUN WITH RAYS");
-        assert_eq!(unicode_to_cp437('⌐'), 0xA9, "U+2310 REVERSED NOT SIGN");
-        assert_eq!(unicode_to_cp437('∙'), 0xF9, "U+2219 BULLET OPERATOR");
+        assert_eq!(try_unicode_to_cp437('⌂'), Some(0x7F), "U+2302 HOUSE");
+        assert_eq!(
+            try_unicode_to_cp437('☼'),
+            Some(0x0F),
+            "U+263C WHITE SUN WITH RAYS"
+        );
+        assert_eq!(
+            try_unicode_to_cp437('⌐'),
+            Some(0xA9),
+            "U+2310 REVERSED NOT SIGN"
+        );
+        assert_eq!(
+            try_unicode_to_cp437('∙'),
+            Some(0xF9),
+            "U+2219 BULLET OPERATOR"
+        );
     }
 
     /// A primary font that only covers the ASCII half of CP437 (glyph indices 0..128), so
@@ -822,31 +910,63 @@ mod tests {
     fn chain_resolves_char_present_only_in_fallback_font() {
         // 'Ç' maps to CP437 index 0x80, which is out of range for `PRIMARY`
         // (glyph_count == 128) but present in `FALLBACK_FONT` (glyph_count == 256).
-        let chain = FallbackFontChain::new(PRIMARY, &[FALLBACK_FONT]);
-        let resolved = chain.resolve('Ç');
+        let chain = FontChain::new(PRIMARY, &[FALLBACK_FONT]);
+        let resolved = chain.resolve('Ç').expect("covered by the fallback font");
         assert_eq!(*resolved.font(), FALLBACK_FONT);
+        assert_eq!(resolved.font_index(), 1);
         assert_eq!(resolved.index(), 0x80);
+        assert!(!resolved.is_notdef());
     }
 
     #[test]
     fn chain_falls_back_to_solid_block_when_every_font_misses() {
-        // 'あ' (U+3042 HIRAGANA LETTER A) isn't in the CP437 table at all, so both
-        // fonts in the chain miss and resolution must fall back to the documented
-        // solid-block glyph, taken from the primary font.
-        let chain = FallbackFontChain::new(PRIMARY, &[FALLBACK_FONT]);
-        let resolved = chain.resolve('あ');
-        assert_eq!(*resolved.font(), PRIMARY);
-        assert_eq!(resolved.index(), FALLBACK);
+        // 'あ' (U+3042 HIRAGANA LETTER A) isn't in the CP437 table at all, so both fonts in the
+        // chain miss and resolution must substitute the solid block. `PRIMARY` stops at glyph 128
+        // and so doesn't have one, which is exactly the case a fixed 0xDB fallback index used to
+        // resolve to an out-of-range glyph for.
+        let chain = FontChain::new(PRIMARY, &[FALLBACK_FONT]);
+        let resolved = chain.resolve('あ').expect("solid block substitute");
+        assert_eq!(*resolved.font(), FALLBACK_FONT);
+        assert_eq!(resolved.index(), 0xDB);
+        assert!(resolved.is_notdef());
     }
 
     #[test]
-    fn zero_fallback_chain_matches_plain_char_to_index() {
-        let chain = FallbackFontChain::new(FALLBACK_FONT, &[]);
-        for ch in ['A', ' ', '█', '│', 'Ç', 'あ', '☺'] {
-            let resolved = chain.resolve(ch);
+    fn chain_resolves_nothing_when_no_font_has_a_substitute() {
+        // A chain that covers braille and nothing else: an uncovered character has no solid block
+        // to fall back to anywhere in the chain, so resolution reports "undrawable" instead of
+        // pointing at a glyph the font doesn't have.
+        static DATA: [u8; 16] = [0; 16];
+        const CHARSET: [(char, u8); 1] = [('\u{2800}', 0)];
+        const BRAILLE: BitmapFont = BitmapFont::with_charset(&DATA, 8, 16, 1, &CHARSET);
+
+        let chain = FontChain::new(BRAILLE, &[]);
+        assert!(chain.resolve('\u{2800}').is_some());
+        assert!(chain.resolve('A').is_none());
+    }
+
+    #[test]
+    fn single_font_chain_resolves_that_font_directly() {
+        let chain = FontChain::from(FALLBACK_FONT);
+        assert_eq!(chain.font_count(), 1);
+        for ch in ['A', ' ', '█', '│', 'Ç', '☺'] {
+            let resolved = chain.resolve(ch).expect("CP437 coverage");
             assert_eq!(*resolved.font(), FALLBACK_FONT);
-            assert_eq!(resolved.index(), FALLBACK_FONT.char_to_index(ch));
+            assert_eq!(resolved.font_index(), 0);
+            assert_eq!(resolved.index(), FALLBACK_FONT.glyph_index(ch).unwrap());
         }
+    }
+
+    #[test]
+    fn glyph_size_is_none_for_a_chain_of_mismatched_fonts() {
+        static DATA: [u8; 8] = [0; 8];
+        const SHORT: BitmapFont = BitmapFont::new(&DATA, 8, 8, 1);
+
+        assert_eq!(
+            FontChain::new(PRIMARY, &[FALLBACK_FONT]).glyph_size(),
+            Some((8, 16))
+        );
+        assert_eq!(FontChain::new(PRIMARY, &[SHORT]).glyph_size(), None);
     }
 
     #[test]
@@ -881,7 +1001,7 @@ mod tests {
 
     /// Reproduces retroglyph#507: a fallback font built with [`BitmapFont::with_charset`] can
     /// declare coverage for a codepoint CP437 has no mapping for at all (here U+2800 BRAILLE
-    /// PATTERN BLANK), and a [`FallbackFontChain`] resolves it to that font's own distinct glyph
+    /// PATTERN BLANK), and a [`FontChain`] resolves it to that font's own distinct glyph
     /// index instead of colliding with CP437's solid-block fallback (`chain.resolve('\u{2588}')`,
     /// i.e. `'█'`).
     #[test]
@@ -892,13 +1012,13 @@ mod tests {
             BitmapFont::with_charset(&BRAILLE_DATA, 8, 16, 1, &BRAILLE_CHARSET);
 
         let primary = FALLBACK_FONT; // full CP437 coverage, glyph_count == 256
-        let chain = FallbackFontChain::new(primary, &[BRAILLE_FONT]);
+        let chain = FontChain::new(primary, &[BRAILLE_FONT]);
 
-        let braille = chain.resolve('\u{2800}');
+        let braille = chain.resolve('\u{2800}').expect("charset coverage");
         assert_eq!(*braille.font(), BRAILLE_FONT);
         assert_eq!(braille.index(), 0);
 
-        let full_block = chain.resolve('\u{2588}'); // '█', CP437 index 0xDB
+        let full_block = chain.resolve('\u{2588}').expect("CP437 coverage"); // '█', index 0xDB
         assert_eq!(*full_block.font(), primary);
         assert_eq!(full_block.index(), 0xDB);
 

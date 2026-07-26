@@ -8,7 +8,7 @@
 //! `(layer, column, row)` sub-rect (see `shaders.rs`).
 //!
 //! This module owns the CPU-side byte layout ([`AtlasGeometry`] plus the initial coverage buffer
-//! for the [`BitmapFont`]); the whole-texture GL upload lives in [`renderer`](crate::renderer),
+//! for the [`FontChain`]); the whole-texture GL upload lives in [`renderer`](crate::renderer),
 //! which owns the `glow` context.
 //!
 //! A set bit / non-zero coverage sample becomes up to `0xFF`; the fragment shader samples with
@@ -19,7 +19,7 @@
 // nursery `redundant_pub_crate` lint conflicts with keeping the module structure explicit.
 #![allow(clippy::redundant_pub_crate)]
 
-use retroglyph_window::font::BitmapFont;
+use retroglyph_window::font::{BitmapFont, FontChain};
 
 /// Glyph columns packed into one array layer.
 pub(crate) const ATLAS_COLS: u32 = 16;
@@ -27,6 +27,13 @@ pub(crate) const ATLAS_COLS: u32 = 16;
 pub(crate) const ATLAS_ROWS: u32 = 16;
 /// Glyph slots per array layer (`ATLAS_COLS * ATLAS_ROWS`).
 pub(crate) const SLOTS_PER_LAYER: u32 = ATLAS_COLS * ATLAS_ROWS;
+
+/// The number of atlas slots `font` occupies: its glyph count, capped at the 256 a `u8` glyph
+/// index can address (see [`BitmapFont::rows`]). A font that declares more glyphs than that has no
+/// way to name them, so the atlas doesn't reserve slots for them either.
+pub(crate) fn addressable_glyphs(font: &BitmapFont) -> u32 {
+    u32::from(font.glyph_count()).min(256)
+}
 
 /// The packing of glyph cells into a `TEXTURE_2D_ARRAY`: a fixed [`ATLAS_COLS`]x[`ATLAS_ROWS`] grid
 /// of `cell_w`x`cell_h` glyph cells per layer, across `layers` layers.
@@ -80,29 +87,38 @@ pub(crate) struct AtlasData {
 }
 
 impl AtlasData {
-    /// Builds a fully-populated, grid-packed atlas for every glyph in `font`, one slot per glyph
-    /// index (slot == glyph index), so the static bitmap path needs no runtime rasterization.
+    /// Builds a fully-populated, grid-packed atlas for every glyph of every font in `fonts`, one
+    /// slot per glyph, so the static bitmap path needs no runtime rasterization.
+    ///
+    /// The fonts are laid out back to back in chain order, so a font's slots start at the sum of
+    /// the glyph counts before it: the same base [`GlyphCache`](crate::glyphs::GlyphCache) adds to
+    /// a resolved glyph's own index. Every font in the chain shares the atlas cell size, which
+    /// `GlBackendBuilder::build` has already checked they agree on.
     #[allow(clippy::cast_possible_truncation)]
-    pub(crate) fn build(font: &BitmapFont) -> Self {
-        let cell_w = u32::from(font.glyph_width);
-        let cell_h = u32::from(font.glyph_height);
-        let count = u32::from(font.glyph_count());
+    pub(crate) fn build(fonts: &FontChain<'static>, cell_size: (u32, u32)) -> Self {
+        let (cell_w, cell_h) = cell_size;
+        let count: u32 = fonts.fonts().map(addressable_glyphs).sum();
         let geometry = AtlasGeometry::new(cell_w, cell_h, count);
 
         let tex_w = geometry.tex_w();
         let tex_h = geometry.tex_h();
         let mut coverage = vec![0u8; (tex_w * tex_h * geometry.layers) as usize];
 
-        for slot in 0..count {
-            let (layer, gcol, grow) = AtlasGeometry::locate(slot);
-            let (ox, oy) = (gcol * cell_w, grow * cell_h);
-            // `glyph_pixels` yields each set pixel `(x, y)` decoded MSB-first (the bit order lives
-            // in `retroglyph-window`'s font module, #164), so this stays width-agnostic.
-            for (x, y) in font.glyph_pixels(slot as u8) {
-                let px = ox + u32::from(x);
-                let py = oy + u32::from(y);
-                let idx = ((layer * tex_h + py) * tex_w + px) as usize;
-                coverage[idx] = 0xFF;
+        let mut slot = 0;
+        for font in fonts.fonts() {
+            for index in 0..addressable_glyphs(font) {
+                let (layer, gcol, grow) = AtlasGeometry::locate(slot);
+                let (ox, oy) = (gcol * cell_w, grow * cell_h);
+                // `glyph_pixels` yields each set pixel `(x, y)` decoded MSB-first (the bit order
+                // lives in `retroglyph-window`'s font module, #164), so this stays
+                // width-agnostic.
+                for (x, y) in font.glyph_pixels(index as u8) {
+                    let px = ox + u32::from(x);
+                    let py = oy + u32::from(y);
+                    let idx = ((layer * tex_h + py) * tex_w + px) as usize;
+                    coverage[idx] = 0xFF;
+                }
+                slot += 1;
             }
         }
 
@@ -113,6 +129,7 @@ impl AtlasData {
 #[cfg(test)]
 mod tests {
     use super::{ATLAS_COLS, AtlasData, AtlasGeometry, SLOTS_PER_LAYER};
+    use retroglyph_window::font::FontChain;
 
     #[test]
     fn geometry_layers_cover_capacity() {
@@ -141,11 +158,46 @@ mod tests {
         assert_eq!(g.layers, 1);
     }
 
+    /// Issue #539: every font in a chain is packed into the same atlas, back to back, so a
+    /// fallback font's glyphs occupy the slots after the primary font's and carry their own
+    /// coverage rather than the primary's.
+    #[test]
+    fn a_chain_packs_each_font_back_to_back() {
+        use retroglyph_window::font::BitmapFont;
+
+        // Primary: 256 blank glyphs. Fallback: one glyph with its top row fully set.
+        static PRIMARY_DATA: [u8; 256 * 2] = [0; 256 * 2];
+        const PRIMARY: BitmapFont = BitmapFont::new(&PRIMARY_DATA, 8, 2, 256);
+        static FALLBACK_DATA: [u8; 2] = [0xFF, 0x00];
+        const CHARSET: [(char, u8); 1] = [('▘', 0)];
+        static FALLBACKS: [BitmapFont; 1] =
+            [BitmapFont::with_charset(&FALLBACK_DATA, 8, 2, 1, &CHARSET)];
+
+        let atlas = AtlasData::build(&FontChain::new(PRIMARY, &FALLBACKS), (8, 2));
+
+        // 257 slots: the fallback font's only glyph is slot 256, the first cell of layer 1.
+        assert_eq!(atlas.geometry.layers, 2);
+        let (layer, gcol, grow) = AtlasGeometry::locate(256);
+        assert_eq!((layer, gcol, grow), (1, 0, 0));
+
+        let tex_w = atlas.geometry.tex_w();
+        let tex_h = atlas.geometry.tex_h();
+        let row0 = ((layer * tex_h) * tex_w) as usize;
+        assert!(
+            atlas.coverage[row0..row0 + 8].iter().all(|&c| c == 0xFF),
+            "the fallback glyph's top row is covered at its own slot"
+        );
+        assert!(
+            atlas.coverage[..row0].iter().all(|&c| c == 0),
+            "the primary font's blank glyphs are untouched"
+        );
+    }
+
     #[cfg(feature = "default-font")]
     #[test]
     fn unscii16_packs_into_one_layer() {
         use retroglyph_window::font::unscii16;
-        let atlas = AtlasData::build(&unscii16::FONT);
+        let atlas = AtlasData::build(&FontChain::from(unscii16::FONT), (8, 16));
         assert_eq!(atlas.geometry.cell_w, 8);
         assert_eq!(atlas.geometry.cell_h, 16);
         assert_eq!(atlas.geometry.layers, 1);
@@ -159,7 +211,7 @@ mod tests {
     #[test]
     fn space_is_blank_and_full_block_is_solid_in_their_cells() {
         use retroglyph_window::font::unscii16;
-        let atlas = AtlasData::build(&unscii16::FONT);
+        let atlas = AtlasData::build(&FontChain::from(unscii16::FONT), (8, 16));
         let g = atlas.geometry;
         let tex_w = g.tex_w();
 

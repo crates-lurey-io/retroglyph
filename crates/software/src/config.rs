@@ -7,7 +7,7 @@
 //! `retroglyph_window::winit::run_windowed` to open a window, or use it
 //! directly for in-memory rendering.
 
-use retroglyph_window::font::BitmapFont;
+use retroglyph_window::font::FontChain;
 #[cfg(feature = "tilesets")]
 use retroglyph_window::tileset::TilesetOptions;
 use std::fmt;
@@ -22,6 +22,8 @@ use std::fmt;
 pub enum SoftwareBackendError {
     /// No font was provided and the `default-font` feature is not enabled.
     NoFont,
+    /// The fonts in the configured [`FontChain`] disagree on their glyph size.
+    MixedGlyphSizes,
     /// `scale` was set to `0`, which would produce a zero-size pixel buffer.
     ZeroScale,
     /// Tileset loading failed.
@@ -38,6 +40,11 @@ impl fmt::Display for SoftwareBackendError {
                  SoftwareBackendBuilder::font() or enable the \
                  `default-font` feature"
             ),
+            Self::MixedGlyphSizes => write!(
+                f,
+                "every font in a chain must have the same glyph width and height; a grid has one \
+                 cell size"
+            ),
             Self::ZeroScale => write!(
                 f,
                 "scale must be non-zero; a scale of 0 would produce a zero-size pixel buffer"
@@ -51,7 +58,7 @@ impl fmt::Display for SoftwareBackendError {
 impl std::error::Error for SoftwareBackendError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Self::NoFont | Self::ZeroScale => None,
+            Self::NoFont | Self::MixedGlyphSizes | Self::ZeroScale => None,
             #[cfg(feature = "tilesets")]
             Self::Tileset(e) => Some(e),
         }
@@ -130,7 +137,7 @@ impl std::error::Error for SoftwareBackendError {
 /// See the `demo` example for a complete runnable program.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SoftwareBackend {
-    /// Bitmap font used to render glyphs.
+    /// The chain of bitmap fonts glyphs are resolved through.
     ///
     /// `None` only when `default-font` is disabled and no font has
     /// been supplied via [`SoftwareBackendBuilder::font`].
@@ -138,8 +145,8 @@ pub struct SoftwareBackend {
     /// Crate-private: the only way to reach [`run_headless`](super::SoftwareBackend::run_headless)
     /// with a `SoftwareBackend` is through [`SoftwareBackendBuilder`], which validates
     /// this invariant in [`build`](SoftwareBackendBuilder::build). Use
-    /// [`font`](SoftwareBackend::font) to read it back from outside the crate.
-    pub(crate) font: Option<BitmapFont>,
+    /// [`fonts`](SoftwareBackend::fonts) to read it back from outside the crate.
+    pub(crate) fonts: Option<FontChain<'static>>,
     /// Grid width in cells.
     pub cols: u16,
     /// Grid height in cells.
@@ -155,15 +162,15 @@ pub struct SoftwareBackend {
 }
 
 impl SoftwareBackend {
-    /// Returns the configured bitmap font, if any.
+    /// Returns the configured font chain, if any.
     ///
     /// `None` only when `default-font` is disabled and no font was supplied
     /// via [`SoftwareBackendBuilder::font`]; in that case
     /// [`SoftwareBackendBuilder::build`] fails with [`SoftwareBackendError::NoFont`]
     /// before a `SoftwareBackend` can be constructed at all.
     #[must_use]
-    pub const fn font(&self) -> Option<&BitmapFont> {
-        self.font.as_ref()
+    pub const fn fonts(&self) -> Option<&FontChain<'static>> {
+        self.fonts.as_ref()
     }
 
     /// Builder-internal defaults. Not exposed as `impl Default`: the only
@@ -173,9 +180,9 @@ impl SoftwareBackend {
     const fn defaults() -> Self {
         Self {
             #[cfg(feature = "default-font")]
-            font: Some(retroglyph_window::font::unscii16::FONT),
+            fonts: Some(FontChain::new(retroglyph_window::font::unscii16::FONT, &[])),
             #[cfg(not(feature = "default-font"))]
-            font: None,
+            fonts: None,
             cols: 80,
             rows: 25,
             scale: 1,
@@ -239,13 +246,40 @@ impl SoftwareBackendBuilder {
         self
     }
 
-    /// Overrides the bitmap font.
+    /// Overrides the fonts glyphs are resolved through.
     ///
-    /// The cell pixel size is derived from [`BitmapFont::glyph_width`] and
-    /// [`BitmapFont::glyph_height`] multiplied by [`scale`](Self::scale).
+    /// Takes either a single [`BitmapFont`](retroglyph_window::font::BitmapFont) or a whole
+    /// [`FontChain`], since a lone font is a chain of one. A chain is how a grid draws characters
+    /// CP437 has no mapping for (quadrants, sextants, braille): the extra coverage comes from a
+    /// fallback font built with
+    /// [`BitmapFont::with_charset`](retroglyph_window::font::BitmapFont::with_charset), and the
+    /// glyph is drawn from the bitmap font path, so it takes the cell's foreground color like any
+    /// other glyph (unlike a tileset sprite, which carries its own colors).
+    ///
+    /// The cell pixel size is derived from the chain's glyph size multiplied by
+    /// [`scale`](Self::scale); every font in a chain must therefore agree on its glyph size, or
+    /// [`build`](Self::build) fails with [`SoftwareBackendError::MixedGlyphSizes`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_software::SoftwareBackendBuilder;
+    /// use retroglyph_window::font::{BitmapFont, FontChain, unscii16};
+    ///
+    /// // A fallback font declaring the quadrant glyphs CP437 has no mapping for.
+    /// static QUADRANTS: [u8; 3 * 16] = [0; 3 * 16];
+    /// const CHARSET: [(char, u8); 3] = [('▘', 0), ('▝', 1), ('▖', 2)];
+    /// static FALLBACKS: [BitmapFont; 1] =
+    ///     [BitmapFont::with_charset(&QUADRANTS, 8, 16, 3, &CHARSET)];
+    ///
+    /// let backend = SoftwareBackendBuilder::new()
+    ///     .font(FontChain::new(unscii16::FONT, &FALLBACKS))
+    ///     .build()
+    ///     .expect("backend init failed");
+    /// ```
     #[must_use]
-    pub const fn font(mut self, font: BitmapFont) -> Self {
-        self.options.font = Some(font);
+    pub fn font(mut self, fonts: impl Into<FontChain<'static>>) -> Self {
+        self.options.fonts = Some(fonts.into());
         self
     }
 
@@ -274,10 +308,16 @@ impl SoftwareBackendBuilder {
     /// Returns [`SoftwareBackendError::NoFont`] if no font was set and the
     /// `default-font` feature is not enabled.
     ///
+    /// Returns [`SoftwareBackendError::MixedGlyphSizes`] if the configured chain's fonts disagree
+    /// on their glyph size.
+    ///
     /// Returns [`SoftwareBackendError::ZeroScale`] if `scale` was set to `0`.
     pub fn build(self) -> Result<SoftwareBackend, SoftwareBackendError> {
-        if self.options.font.is_none() {
+        let Some(fonts) = self.options.fonts else {
             return Err(SoftwareBackendError::NoFont);
+        };
+        if fonts.glyph_size().is_none() {
+            return Err(SoftwareBackendError::MixedGlyphSizes);
         }
         if self.options.scale == 0 {
             return Err(SoftwareBackendError::ZeroScale);
@@ -295,6 +335,7 @@ impl Default for SoftwareBackendBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use retroglyph_window::font::BitmapFont;
 
     fn test_font() -> BitmapFont {
         static DATA: [u8; 16] = [0; 16];
@@ -317,5 +358,16 @@ mod tests {
             .scale(2)
             .build();
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn build_rejects_a_chain_whose_fonts_disagree_on_glyph_size() {
+        static SHORT_DATA: [u8; 8] = [0; 8];
+        static FALLBACKS: [BitmapFont; 1] = [BitmapFont::new(&SHORT_DATA, 8, 8, 1)];
+
+        let result = SoftwareBackendBuilder::new()
+            .font(FontChain::new(test_font(), &FALLBACKS))
+            .build();
+        assert!(matches!(result, Err(SoftwareBackendError::MixedGlyphSizes)));
     }
 }
