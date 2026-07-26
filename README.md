@@ -192,6 +192,20 @@ Disable the `std` feature (requires an allocator). Useful for embedded or kernel
 </details>
 
 <details>
+<summary><strong>Diagnostics that ship nothing</strong> — development warnings compile out of release
+builds</summary>
+
+Warnings that only help while building a game (a sprite larger than the cells reserved for it, for
+instance) sit behind `retroglyph_core::dev_only!`, which gates on `BuildMode::CURRENT`. That
+resolves from `debug_assertions`, so `cargo run` reports and `cargo run --release` compiles the
+check, the message, and the bookkeeping that dedupes it away entirely. A profiling build inherits
+`release` and is treated as release, so what you profile is what you ship.
+
+For an optimized build that still reports, enable `retroglyph-core`'s `dev` feature.
+
+</details>
+
+<details>
 <summary><strong>Widgets</strong> (crate <code>retroglyph-widgets</code>) — panels, gauges, tables, and a
 layout splitter, built on <code>retroglyph-core</code></summary>
 

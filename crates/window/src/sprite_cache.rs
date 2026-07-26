@@ -5,6 +5,7 @@
 
 use crate::tileset::{SpriteAlign, TilesetError, TilesetOptions};
 use alpha_blend::rgba::U8x4Rgba;
+use retroglyph_core::dev_only;
 use std::collections::{BTreeMap, BTreeSet};
 
 /// A decoded, ready-to-blit sprite.
@@ -204,26 +205,32 @@ impl Default for SpriteCache {
 /// on both axes is silent. `seen` is caller-owned state so a redraw loop reports each offending
 /// glyph once rather than every frame; entries are only ever added.
 ///
-/// Returns whether a warning was emitted.
+/// Returns whether a warning was emitted, which is always `false` in a build that compiles
+/// diagnostics out: the size comparison, the `seen` bookkeeping, and the message all sit inside
+/// [`dev_only!`], so a release build does none of them. See
+/// [`BuildMode`](retroglyph_core::BuildMode).
 pub fn warn_sprite_needs_span(
     seen: &mut BTreeSet<char>,
     glyph: char,
     sprite: (u32, u32),
     cell: (u32, u32),
 ) -> bool {
-    let ((w, h), (cell_w, cell_h)) = (sprite, cell);
-    if w <= cell_w && h <= cell_h {
-        return false;
-    }
-    if !seen.insert(glyph) {
-        return false;
-    }
-    log::warn!(
-        "sprite for {glyph:?} is {w}x{h}px, larger than the {cell_w}x{cell_h}px cell, but was \
-         drawn without a span: neighbouring cells will paint over it. Reserve the cells it \
-         covers with `Surface::put_span`."
-    );
-    true
+    dev_only!({
+        let ((w, h), (cell_w, cell_h)) = (sprite, cell);
+        if w <= cell_w && h <= cell_h {
+            return false;
+        }
+        if !seen.insert(glyph) {
+            return false;
+        }
+        log::warn!(
+            "sprite for {glyph:?} is {w}x{h}px, larger than the {cell_w}x{cell_h}px cell, but was \
+             drawn without a span: neighbouring cells will paint over it. Reserve the cells it \
+             covers with `Surface::put_span`."
+        );
+        return true;
+    });
+    false
 }
 
 /// Blends `src` over `dst` using the Porter-Duff `SRC_OVER` operator for
@@ -461,5 +468,35 @@ mod tests {
         assert_eq!(result.g, 128);
         assert_eq!(result.b, 0);
         assert_eq!(result.a, 191);
+    }
+
+    // `warn_sprite_needs_span` reports only in a build that compiles diagnostics in, so every
+    // expectation below is written against `DEV` rather than a literal. Under `cargo test` that
+    // is `true`; the point of spelling it out is that a release-profile test run still passes.
+
+    #[test]
+    fn warn_sprite_needs_span_reports_an_oversized_sprite_once() {
+        let mut seen = BTreeSet::new();
+        assert_eq!(
+            warn_sprite_needs_span(&mut seen, '@', (32, 32), (16, 16)),
+            retroglyph_core::DEV
+        );
+        // Second call for the same glyph is silent even in a reporting build.
+        assert!(!warn_sprite_needs_span(&mut seen, '@', (32, 32), (16, 16)));
+    }
+
+    #[test]
+    fn warn_sprite_needs_span_is_silent_for_a_sprite_that_fits() {
+        let mut seen = BTreeSet::new();
+        assert!(!warn_sprite_needs_span(&mut seen, '@', (16, 16), (16, 16)));
+        assert!(seen.is_empty());
+    }
+
+    #[test]
+    fn warn_sprite_needs_span_touches_no_state_outside_a_reporting_build() {
+        let mut seen = BTreeSet::new();
+        warn_sprite_needs_span(&mut seen, '@', (32, 32), (16, 16));
+        // The dedup set is the allocation a release build should not be paying for.
+        assert_eq!(seen.is_empty(), !retroglyph_core::DEV);
     }
 }
