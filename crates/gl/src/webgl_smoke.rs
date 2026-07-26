@@ -107,6 +107,12 @@ impl Frame {
         let i = ((y * self.width + x) * 4) as usize;
         (self.rgba[i], self.rgba[i + 1], self.rgba[i + 2])
     }
+
+    /// The alpha at `(x, y)`.
+    fn alpha(&self, x: u32, y: u32) -> u8 {
+        let i = ((y * self.width + x) * 4) as usize;
+        self.rgba[i + 3]
+    }
 }
 
 /// Builds the renderer's resources, renders its current instance array into an RGBA8 offscreen
@@ -225,6 +231,56 @@ fn full_block_cell_is_all_foreground_blank_cell_is_all_background() {
             assert_eq!(frame.rgb(cw + x, y), GREEN, "blank pixel ({x},{y}) not bg");
         }
     }
+}
+
+/// A WebGL2 canvas is composited by the page (winit requests `alpha: true`), so the surface's
+/// alpha channel is load-bearing: a texel left at alpha 0 shows the document background rather
+/// than the cell background painted by the background pass. Glyph coverage is a mask for the color
+/// channels only, so the glyph pass must leave the destination alpha alone -- see the blend factors
+/// in `GlResources::draw_layer`.
+///
+/// A partially-covered glyph is the case that matters: the covered texels carry alpha 1 anyway, so
+/// only a cell mixing covered and uncovered texels can tell a coverage-into-alpha write apart from
+/// a correct one.
+#[wasm_bindgen_test]
+fn glyph_coverage_leaves_the_surface_opaque() {
+    let mut r = GlBackendBuilder::new()
+        .grid_size(1, 1)
+        .build()
+        .expect("default-font builds a renderer");
+    paint(
+        &mut r,
+        &[(
+            Pos::new(0, 0),
+            Tile::new('A', Style::new().fg(rgb(RED)).bg(rgb(BLUE))),
+        )],
+    );
+
+    let gl = webgl2_context(r.surface_size.0, r.surface_size.1);
+    let frame = render_to_frame(&gl, &r);
+    let (cw, ch) = r.geometry.cell_size();
+
+    let mut covered = 0_u32;
+    let mut uncovered = 0_u32;
+    for y in 0..ch {
+        for x in 0..cw {
+            match frame.rgb(x, y) {
+                RED => covered += 1,
+                BLUE => uncovered += 1,
+                other => panic!("pixel ({x},{y}) is neither fg nor bg: {other:?}"),
+            }
+            assert_eq!(
+                frame.alpha(x, y),
+                0xFF,
+                "pixel ({x},{y}) is transparent; the glyph pass wrote coverage into alpha"
+            );
+        }
+    }
+    assert!(covered > 0, "'A' rendered no foreground texels");
+    assert!(
+        uncovered > 0,
+        "'A' covered the whole cell; pick a sparser glyph"
+    );
 }
 
 #[wasm_bindgen_test]
