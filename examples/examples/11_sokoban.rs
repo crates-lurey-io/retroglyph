@@ -1,23 +1,22 @@
 //! 11: Sokoban
 //!
-//! Tier 3's pilot game: pure grid-and-core logic, no
-//! external dependencies, no field-of-view or pathfinding needed -- unlike the roguelike planned
-//! after it, sokoban's rules (push a box onto a goal, don't push it into a wall or another box)
-//! are a handful of `match` arms over a [`Grid::from_charmap`]-built level, not an algorithm.
-//! This is also the first example to compose a whole small game loop out of pieces every earlier
-//! example proved individually: `02_colors`' fg/bg vocabulary distinguishes walls, floors, goals,
-//! and boxes; `03_keyboard`'s arrow-key handling drives movement; `05_layout_grid`'s manual
-//! `Rect` math lays out the play field next to a status pane; `08_animation`'s `Tween`-driven
-//! [`Surface::put_offset`] slides the player (and any box it pushes) one cell at a time instead
-//! of snapping, generalized here from one axis to two; and `09_widgets_dashboard`'s
-//! `retroglyph-widgets` usage (`Panel`, `split_h`/`split_v`) frames the status pane.
+//! A small, complete game built from pure grid-and-core logic: no external dependencies, no
+//! field-of-view or pathfinding needed. The rules (push a box onto a goal, don't push it into a
+//! wall or another box) are a handful of `match` arms over a [`Grid::from_charmap`]-built level,
+//! not an algorithm. The game loop composes pieces earlier examples showed individually:
+//! `02_colors`' fg/bg vocabulary distinguishes walls, floors, goals, and boxes; `03_keyboard`'s
+//! arrow-key handling drives movement; `05_layout_grid`'s manual `Rect` math lays out the play
+//! field next to a status pane; `08_animation`'s `Tween`-driven [`Surface::put_offset`] slides
+//! the player (and any box it pushes) one cell at a time instead of snapping, generalized here
+//! from one axis to two; and `09_widgets_dashboard`'s `retroglyph-widgets` usage (`Panel`,
+//! `split_h`/`split_v`) frames the status pane.
 //!
 //! Sliding is a visual-only nicety, the same graceful degradation `08_animation` documents for
-//! `put_offset`: the software backend renders the true in-between position; crossterm and
+//! `put_offset`: the software backend renders the true in-between position, while crossterm and
 //! headless silently ignore the offset and redraw only the final cell, so a push looks like a
-//! discrete hop there instead of a slide -- no fallback code needed, and no gameplay logic
-//! depends on the animation ever finishing (a move's board state is applied instantly; the tween
-//! only decides how the *next present* draws it).
+//! discrete hop there instead of a slide. No fallback code is needed, and no gameplay logic
+//! depends on the animation ever finishing; a move's board state is applied instantly, and the
+//! tween only decides how the *next present* draws it.
 //!
 //! ```sh
 //! cargo run --example 11_sokoban --features crossterm
@@ -25,7 +24,8 @@
 //! cargo run --example 11_sokoban  # headless fallback, prints a few frames to stdout
 //! ```
 //!
-//! Arrow keys move (and push); `u` undoes the last move, `r` resets the level; `q`/`Escape` quits.
+//! Keys: arrow keys move (and push). `u` undoes the last move, `r` resets the level, `q` or
+//! `Escape` quits.
 
 use std::time::Duration;
 

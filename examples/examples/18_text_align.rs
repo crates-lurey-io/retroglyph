@@ -1,16 +1,12 @@
 //! 18: Text alignment
 //!
-//! Proves the shared [`Align`] builder knob (`Left`/`Center`/`Right`) that
-//! [`Text`], [`PrintLine`], [`Panel`] titles, and [`Modal`] titles all now
-//! carry. [`Text`] and [`PrintLine`] default to [`Align::Left`] (their
-//! long-standing behavior); [`Panel`]/[`Modal`] titles default to
-//! [`Align::Center`] (theirs). Each of the three stacked panels below aligns
-//! its own title one way and aligns a [`Text`] readout and a multi-span
-//! [`PrintLine`] the same way inside it, so the knob's effect is visible on
-//! all three widget types at once; the [`Modal`] at the bottom right-aligns
-//! its title, the one alignment panel titles could never take before. The
-//! bottom panel also shows the motivating case from the issue: a left-aligned
-//! label with a right-aligned readout on the same interior row.
+//! The shared [`Align`] builder knob (`Left`/`Center`/`Right`) that [`Text`], [`PrintLine`],
+//! [`Panel`] titles, and [`Modal`] titles all carry. [`Text`] and [`PrintLine`] default to
+//! [`Align::Left`]; [`Panel`]/[`Modal`] titles default to [`Align::Center`]. Each of the three
+//! stacked panels below aligns its own title one way and aligns a [`Text`] readout and a
+//! multi-span [`PrintLine`] the same way inside it, so the knob's effect is visible on all three
+//! widget types at once. The [`Modal`] at the bottom right-aligns its title. The bottom panel
+//! also shows a left-aligned label with a right-aligned readout on the same interior row.
 //!
 //! ```sh
 //! cargo run --example 18_text_align --features crossterm
@@ -18,7 +14,7 @@
 //! cargo run --example 18_text_align  # headless fallback, prints a few frames to stdout
 //! ```
 //!
-//! Static display; press `q` or `Escape` to quit, or close the window.
+//! Static display. Keys: `q` or `Escape` quits, or close the window.
 
 use retroglyph_core::event::{Event, KeyCode};
 use retroglyph_core::text::{Line, Span};

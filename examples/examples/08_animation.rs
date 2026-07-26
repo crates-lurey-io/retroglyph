@@ -1,26 +1,26 @@
 //! 08: Animation
 //!
 //! [`Tween`] plus [`FrameClock`] driving sub-cell [`Surface::put_offset`]. A ball travels once
-//! across the track and back: [`FrameClock`] fires at [`BOUNCE_HZ`], and its one reversal
-//! retargets a [`Tween`] toward the opposite end with [`Easing::EaseInOutCubic`], the same
-//! "fixed-rate logic step, continuously-interpolated visual" split `06_layers` uses for its
-//! discrete glyph steps -- except here the value in between two steps is what actually gets
+//! across the track and back. [`FrameClock`] fires at [`BOUNCE_HZ`], and its one reversal
+//! retargets a [`Tween`] toward the opposite end with [`Easing::EaseInOutCubic`]: the same
+//! fixed-rate logic step, continuously interpolated visual split that `06_layers` uses for its
+//! discrete glyph steps, except here the value in between two steps is what actually gets
 //! drawn, not just the step itself. The tween's fractional cell position, converted to a
 //! sub-cell pixel offset via [`Surface::put_offset`], is what makes the motion smooth on the
 //! software backend instead of visibly snapping from cell to cell.
 //!
 //! Sub-cell offsets are visual-only pixel nudges a backend may or may not represent (see
-//! [`Surface::put_offset`]'s own doc comment): the software backend renders the true
-//! in-between position; the crossterm and headless backends silently ignore the offset and
-//! only redraw the whole-cell position, so the same continuous motion looks like discrete
-//! per-cell hops there instead of true sliding -- graceful degradation with no example-side
-//! fallback code required, the same way `07_sprites_tileset`'s ASCII glyphs need none.
+//! [`Surface::put_offset`]'s own doc comment). The software backend renders the true
+//! in-between position; the crossterm and headless backends silently ignore the offset and only
+//! redraw the whole-cell position, so the same continuous motion looks like discrete per-cell
+//! hops there instead of true sliding. No example-side fallback code is needed, the same way
+//! `07_sprites_tileset`'s ASCII glyphs need none.
 //!
 //! Like `06_layers`, this parks rather than looping forever: after one full right-then-left
 //! round trip the tween is already finished (`Tween::update` is a no-op past its duration), so
-//! the ball settles at the left end and the frame stays put from then on -- a reproducible
-//! resting state for every capture (a screenshot, or this crate's own crossterm SVG snapshot
-//! test) to land on, instead of an arbitrary, machine-speed-dependent mid-bounce position.
+//! the ball settles at the left end and the frame stays put from then on. That gives every
+//! capture, a screenshot or this crate's own crossterm SVG snapshot test, a reproducible resting
+//! state to land on instead of an arbitrary, machine-speed-dependent mid-bounce position.
 //!
 //! ```sh
 //! cargo run --example 08_animation --features crossterm
@@ -28,7 +28,7 @@
 //! cargo run --example 08_animation  # headless fallback, prints a few frames to stdout
 //! ```
 //!
-//! The ball travels automatically; `q` or `Escape` quits, or close the window.
+//! The ball travels automatically. Keys: `q` or `Escape` quits, or close the window.
 
 use retroglyph_core::event::{Event, KeyCode};
 use retroglyph_core::{

@@ -1,17 +1,16 @@
 //! 19: Weighted fill
 //!
-//! Proves `Constraint::Fill(weight)`: `split_h`'s remainder now divides in proportion to each
-//! pane's weight instead of always splitting equally. Four static rows, stacked with
-//! `split_v`, each showing a different `split_h` call and labeling every pane with the
-//! constraint that produced it and its resulting width:
+//! `Constraint::Fill(weight)`: `split_h`'s remainder divides in proportion to each pane's
+//! weight instead of always splitting equally. Four static rows, stacked with `split_v`, each
+//! showing a different `split_h` call and labeling every pane with the constraint that produced
+//! it and its resulting width:
 //!
-//! - Row 1: `Fill(1)` three times -- the pre-weight behavior, unchanged: an equal three-way
-//!   split.
-//! - Row 2: `Fill(1)`, `Fill(2)`, `Fill(3)` -- a 1:2:3 ratio of the same 48 columns.
-//! - Row 3: `Fixed(10)` then `Fill(1)`/`Fill(3)` -- weighted fill only applies to the
-//!   remainder *after* the fixed pane is reserved.
-//! - Row 4: `Min(6)`, `Fill(2)`, `Max(12)` -- weighted `Fill` mixed with `Min`/`Max`, which
-//!   always weigh 1 regardless of their floor/cap value.
+//! - Row 1: `Fill(1)` three times, an equal three-way split.
+//! - Row 2: `Fill(1)`, `Fill(2)`, `Fill(3)`, a 1:2:3 ratio of the same 48 columns.
+//! - Row 3: `Fixed(10)` then `Fill(1)`/`Fill(3)`: weighted fill only applies to the remainder
+//!   *after* the fixed pane is reserved.
+//! - Row 4: `Min(6)`, `Fill(2)`, `Max(12)`: weighted `Fill` mixed with `Min`/`Max`, which always
+//!   weigh 1 regardless of their floor/cap value.
 //!
 //! ```sh
 //! cargo run --example 19_weighted_fill --features crossterm
@@ -19,7 +18,7 @@
 //! cargo run --example 19_weighted_fill  # headless fallback, prints a few frames to stdout
 //! ```
 //!
-//! Press `q` or `Escape` to quit on the interactive backends, or close the window.
+//! Static display. Keys: `q` or `Escape` quits, or close the window.
 
 use retroglyph_core::event::{Event, KeyCode};
 use retroglyph_core::{Backend, Rect, Style, Surface, Terminal};

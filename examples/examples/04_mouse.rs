@@ -1,12 +1,11 @@
 //! 04: Mouse
 //!
-//! [`Event::Mouse`]/[`MouseEventKind`] decode: button down/up, motion, and scroll, all
-//! reported in cell-grid coordinates. This is retroglyph's reference implementation of
-//! graceful per-backend fallback: free (button-less) mouse motion is a real-terminal
-//! capability, not something every backend can guarantee -- if no [`MouseEventKind::Moved`]
-//! event has arrived after a short grace period, the example assumes motion isn't being
-//! reported and shows "motion unavailable on this backend" instead of a frame that looks
-//! broken or blank. A click still updates the tracked position either way.
+//! [`Event::Mouse`]/[`MouseEventKind`] decode: button down/up, motion, and scroll, all reported
+//! in cell-grid coordinates. Free (button-less) mouse motion is a real-terminal capability, not
+//! something every backend can guarantee. If no [`MouseEventKind::Moved`] event has arrived
+//! after a short grace period, the example assumes motion isn't being reported and shows
+//! "motion unavailable on this backend" instead of a frame that looks broken or blank. A click
+//! still updates the tracked position either way.
 //!
 //! ```sh
 //! cargo run --example 04_mouse --features crossterm
@@ -14,7 +13,7 @@
 //! cargo run --example 04_mouse  # headless fallback, prints a few frames to stdout
 //! ```
 //!
-//! Move the mouse and click to see it tracked; `q` or `Escape` quits, or close the window.
+//! Keys: `q` or `Escape` quits. Move the mouse and click to see it tracked, or close the window.
 
 use retroglyph_core::event::{Event, KeyCode, MouseEventKind};
 use retroglyph_core::{Backend, Pos, Style, Surface, Terminal};

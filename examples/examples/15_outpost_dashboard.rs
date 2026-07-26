@@ -1,38 +1,27 @@
 //! 15: Outpost dashboard
 //!
-//! A deliberately larger flagship example -- an explicit exception to the ~300-line Tier
-//! ceiling the rest of this gallery follows, because the whole point here is a *composed* app
-//! rather than a single capability. It's the spiritual successor to `responsive_game_ui.rs`
-//! (merged as #50, deleted in #61's from-scratch `examples/` rebuild): same real ideas --
-//! animated stat readouts, accessible touch-sized controls, a layout that changes shape rather
-//! than just resizing -- but without the kingdom-map economy (quests, chat, gem shop, world
-//! generation) that made the original closer to a game mockup than a library demo.
+//! A larger, composed dashboard: a pannable outpost map, animated stat readouts, and a detail
+//! panel that opens as a bottom sheet on narrow terminals or a persistent sidebar on wide ones.
+//! Bigger than the other examples on purpose, because the point is how the pieces compose
+//! rather than any single capability.
 //!
-//! # What this actually proves
+//! Four stat readouts ([`Tween`]-driven, retargeted on a fixed schedule, deterministic, no RNG)
+//! count up or down toward a new value instead of jumping, the same easing `08_animation` uses
+//! for motion applied to numeric text instead. Every tappable control (nav tabs, header buttons,
+//! sheet actions) is sized to WCAG 2.2's SC 2.5.8 minimum touch target (at least 24x24 CSS px;
+//! this example enforces at least 6 columns by 3 rows, comfortably above that on every backend's
+//! worst-case cell size, see `touch_targets_meet_minimums`), shows a pressed state while held,
+//! and cancels if the pointer slides off before release. Every mouse action also has a
+//! keyboard-equivalent path (Tab, number keys, arrows, Enter), so nothing here is mouse-only.
 //!
-//! - **Animated stats**: four readouts ([`Tween`]-driven, retargeted on a fixed schedule --
-//!   deterministic, no RNG) count up/down toward a new value instead of jumping, the same
-//!   "ka-ching" feel `08_animation` uses for motion applied to numeric text instead.
-//! - **Accessible controls**: every tappable control (nav tabs, header buttons, sheet actions) is
-//!   sized to WCAG 2.2's SC 2.5.8 minimum touch target (at least 24x24 CSS px; this example
-//!   enforces at least 6 columns by 3 rows, comfortably above that on every backend's worst-case
-//!   cell size -- see `touch_targets_meet_minimums`), shows a pressed state while held, and
-//!   cancels if the pointer slides off before release -- plus a full keyboard-equivalent path
-//!   (Tab/number keys/arrows/Enter) for every mouse action, so it's never mouse-only.
-//! - **Genuine responsiveness**: below [`BP_WIDE`] the outpost detail opens as a bottom sheet
-//!   over the map; at or above it, a persistent sidebar replaces the sheet entirely -- a real
-//!   layout *decision*, not just the same shapes resized (that was `14_resize`'s job).
-//! - **[`Camera`]**, reused from `12_dungeon_scroll`: a genuinely pannable outpost grid, large
-//!   enough (see [`WORLD_W`]/[`WORLD_H`]) that it doesn't already fit in any reasonable terminal
-//!   or window -- an earlier draft used a 22x14 world, which fully fit on screen with room to
-//!   spare, so `Camera::center_on`'s edge-clamping left it permanently pinned at the origin no
-//!   matter how hard you dragged (verified by loading the WASM build in a real browser and
-//!   trying it: nothing moved). `Camera` itself has no notion of zoom -- only pan -- so this
-//!   proves scrolling, not scaling.
-//! - **Animated feedback**: `REPAIR`/`INSPECT` spawn a floating `+N` that rises and fades over
-//!   about a second, the same per-frame lerp/tween idea as the stat tiles applied to a one-shot
-//!   effect instead of a continuous readout -- the animated-acknowledgement pattern the original
-//!   mockup used for training troops/harvesting, without any actual economy behind it.
+//! Below [`BP_WIDE`] the outpost detail opens as a bottom sheet over the map; at or above it, a
+//! persistent sidebar replaces the sheet entirely. That's a real layout decision, not just the
+//! same shapes resized (`14_resize` covers resizing). [`Camera`], reused from `12_dungeon_scroll`,
+//! pans a world (see [`WORLD_W`]/[`WORLD_H`]) large enough that it doesn't already fit in any
+//! reasonable terminal or window; `Camera` itself has no notion of zoom, only pan, so this
+//! exercises scrolling, not scaling. `REPAIR`/`INSPECT` spawn a floating `+N` that rises and
+//! fades over about a second, the same per-frame lerp/tween idea as the stat tiles applied to a
+//! one-shot effect instead of a continuous readout.
 //!
 //! ```sh
 //! cargo run --example 15_outpost_dashboard --features crossterm
@@ -40,11 +29,11 @@
 //! cargo run --example 15_outpost_dashboard  # headless fallback, prints a few frames to stdout
 //! ```
 //!
-//! # Controls
+//! # Keys
 //!
 //! - Tap/click: nav tabs, header buttons, map tiles, sheet/sidebar actions
-//! - Drag on the map (or scroll wheel): pan the camera -- there's a lot of empty ground out
-//!   there; only a handful of world tiles hold a structure
+//! - Drag on the map (or scroll wheel): pan the camera; only a handful of world tiles hold a
+//!   structure, so most of the map is empty ground
 //! - Arrow keys: move the map cursor (also pans); Enter/Space: select the tile under it
 //! - Tab/Shift+Tab or 1-2: switch tabs
 //! - Escape: close an open sheet/settings panel, then quit; Q: quit

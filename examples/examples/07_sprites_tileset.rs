@@ -1,17 +1,14 @@
 //! 07: Sprites (tileset)
 //!
-//! `retroglyph-software`'s and `retroglyph-gl`'s `tilesets` feature: a PNG
-//! sprite sheet (`assets/tileset.png`, 4 tiles of 8x16 pixels -- matching
-//! the embedded default font's own cell size exactly, so no custom grid or
-//! scale is needed) loaded via [`TilesetOptions`](retroglyph_window::tileset::TilesetOptions)
-//! and registered on both graphical backends' builders. Each tile is keyed
-//! to an ASCII glyph via [`Codepage::Custom`](retroglyph_window::tileset::Codepage::Custom)
-//! -- `#` (wall), `.` (floor), `@` (player), `$` (coin) -- so the same glyph
-//! that looks up a sprite on a pixel backend also *is* the correct
-//! human-readable ASCII fallback everywhere else. Terminal and headless
-//! backends were never going to render a PNG, and they don't need a
-//! separate code path to degrade gracefully, because the glyphs were chosen
-//! to already be the right answer.
+//! `retroglyph-software`'s and `retroglyph-gl`'s `tilesets` feature: a PNG sprite sheet
+//! (`assets/tileset.png`, 4 tiles of 8x16 pixels, matching the embedded default font's own cell
+//! size exactly, so no custom grid or scale is needed) loaded via
+//! [`TilesetOptions`](retroglyph_window::tileset::TilesetOptions) and registered on both
+//! graphical backends' builders. Each tile is keyed to an ASCII glyph via
+//! [`Codepage::Custom`](retroglyph_window::tileset::Codepage::Custom): `#` (wall), `.` (floor),
+//! `@` (player), `$` (coin). The same glyph that looks up a sprite on a pixel backend is also
+//! the correct human-readable ASCII fallback everywhere else, so terminal and headless backends
+//! render the room correctly without any separate fallback code path.
 //!
 //! ## Multi-cell sprites
 //!
@@ -47,8 +44,8 @@
 //! cargo run --example 07_sprites_tileset  # headless fallback, prints a few frames to stdout
 //! ```
 //!
-//! Arrow keys move the player around the room, collecting coins and opening
-//! the chest; `q` or `Escape` quits, or close the window.
+//! Keys: arrow keys move the player around the room, collecting coins and opening the chest.
+//! `q` or `Escape` quits, or close the window.
 
 use retroglyph_core::event::{Event, KeyCode};
 use retroglyph_core::{Backend, Pos, Rect, Style, Terminal};

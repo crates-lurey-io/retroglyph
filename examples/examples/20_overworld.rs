@@ -9,20 +9,20 @@
 //! foam. Rivers carve downhill to the sea (pooling into lakes, widening into estuaries), lava
 //! spills from volcanoes, trade roads and bridges link procedurally named villages and cities,
 //! and named regions, dragon lairs, wizard spires, faerie rings, and dark spires round out the
-//! high fantasy. No RNG crate anywhere -- every value comes from an integer hash of its
+//! high fantasy. No RNG crate anywhere: every value comes from an integer hash of its
 //! coordinates, so the same seed always produces the same world (see the `noise`/`world`
 //! modules below).
 //!
 //! `T` cycles the main map through five views. Beyond the per-cell terrain above, two strategic
 //! "tiled" views (square provinces and a staggered hex honeycomb) aggregate each 16x8-cell
-//! block of the same world into one bevel-shaded tile -- majority biome, the most notable
-//! landmark, and road/river connections toward like neighbors survive the zoom-out; per-cell
-//! detail deliberately doesn't. That's the abstraction bargain a strategy game makes: a tile is
+//! block of the same world into one bevel-shaded tile: majority biome, the most notable
+//! landmark, and road/river connections toward like neighbors survive the zoom-out, while
+//! per-cell detail doesn't. That's the abstraction bargain a strategy game makes: a tile is
 //! "mostly forest, has a village, road east", not 128 individually animated cells. Two "grid"
 //! overlay views make the opposite bargain: they keep the terrain at full per-cell fidelity and
 //! draw the boundaries of the same square/hex provinces over it as background-tinted lines (one
 //! cell thick, hex edges as clean staircases), with the reticle's province outlined and its
-//! neighbors ringed -- the "detailed map with a hex grid" look. Hex layout and adjacency
+//! neighbors ringed, for a detailed map with a hex grid overlaid. Hex layout and adjacency
 //! (offset-to-axial conversion, the six neighbor directions for connectors, hex distance for
 //! the reticle's ring highlight) come from the `hexal` crate in all four.
 //!
@@ -39,7 +39,7 @@
 //! cargo run --example 20_overworld  # headless fallback, prints a few frames to stdout
 //! ```
 //!
-//! # Controls
+//! # Keys
 //!
 //! - Arrow keys / WASD: pan the camera one cell (one tile in the tile views); hold Shift to
 //!   pan 8 cells (4 tiles) at a time
