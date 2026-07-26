@@ -211,6 +211,13 @@ pub fn quantize_half_block(pixels: [Rgb; 2]) -> Glyph {
 ///
 /// Doubles both horizontal and vertical resolution over [`quantize_half_block`].
 ///
+/// On the bundled pixel backends (`retroglyph-software`, `retroglyph-gl`), rendering these
+/// glyphs correctly requires a font that actually declares coverage for the quadrant block
+/// characters -- CP437 has no mapping for them. A font built with `retroglyph_window`'s
+/// `BitmapFont::new` (CP437-only) renders every quadrant glyph as a solid block; supply a font
+/// with quadrant coverage, either as the primary font or as a fallback via
+/// `BitmapFont::with_charset`, to render them as intended.
+///
 /// # Example
 ///
 /// ```
@@ -233,6 +240,12 @@ pub fn quantize_quadrant(pixels: [Rgb; 4]) -> Glyph {
 /// and the newest/least universally supported: sextant glyphs come from a 2022 Unicode addition
 /// and need a font with "Symbols for Legacy Computing" coverage to render as blocks rather than
 /// tofu/replacement characters.
+///
+/// On the bundled pixel backends (`retroglyph-software`, `retroglyph-gl`), that coverage has to
+/// come from the font: CP437 has no mapping for sextant glyphs at all, so a font built with
+/// `retroglyph_window`'s `BitmapFont::new` (CP437-only) renders every sextant glyph as a solid
+/// block. Supply a font that declares sextant coverage, either as the primary font or as a
+/// fallback via `BitmapFont::with_charset`, to render them as intended.
 ///
 /// # Example
 ///
