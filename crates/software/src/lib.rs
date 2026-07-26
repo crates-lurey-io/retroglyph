@@ -1172,7 +1172,7 @@ fn blit_sprite(
             // Fast path: fully opaque pixels write directly, no blending.
             // Most roguelike sprites are opaque, so this skips U8x4Rgba
             // construction + source_over for the common case.
-            let rgb = u32::from(src.r) << 16 | u32::from(src.g) << 8 | u32::from(src.b);
+            let rgb = src.to_rgb_u32();
             if src.alpha() == 255 {
                 if in_bounds {
                     let x0 = origin_x as usize + src_x * scale;

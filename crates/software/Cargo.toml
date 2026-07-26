@@ -29,7 +29,7 @@ grixy = { version = "0.6.0-alpha.8", features = ["alloc", "buffer"] }
 log = "0.4"
 # PNG decode moved to retroglyph-window's shared `tileset` module (issue #366); the CPU sprite blit
 # here still needs alpha-blend for straight-alpha source-over.
-alpha-blend = { version = "0.2", optional = true, default-features = false, features = ["std"] }
+alpha-blend = { version = "0.3", optional = true, default-features = false, features = ["std"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 softbuffer = "0.4"
