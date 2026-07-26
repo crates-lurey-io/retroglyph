@@ -44,6 +44,12 @@ unicode-segmentation = { version = "1.13", default-features = false, optional = 
 default = ["std", "egc", "gem"]
 # `gem?/std`, `alpha-blend?/std`: only when gem is also enabled, prefer std float math over libm.
 std = ["gem?/std", "alpha-blend?/std"]
+# Forces `BuildMode::Dev` on in a build that would otherwise resolve to `Release`, so an
+# optimized build still reports development diagnostics (see the `dev` module). Off by default:
+# the default signal is `debug_assertions`, which already follows the consumer's own profile.
+# There is intentionally no feature for the reverse -- see the `dev` module docs on why a
+# `no-dev` feature cannot work under additive feature unification.
+dev = []
 egc = ["dep:unicode-segmentation"]
 gem = ["dep:gem", "gem/libm", "dep:alpha-blend", "alpha-blend/libm"]
 

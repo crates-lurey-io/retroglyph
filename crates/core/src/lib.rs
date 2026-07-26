@@ -77,6 +77,8 @@ pub mod backend;
 /// A scrolling viewport into a world larger than the screen.
 pub mod camera;
 pub mod color;
+/// Which diagnostics a build compiles in.
+pub mod dev;
 pub mod event;
 /// Fixed-timestep accumulator for game loops.
 pub mod frame_clock;
@@ -100,6 +102,7 @@ pub use app::{RunOptions, run_blocking, run_blocking_with};
 pub use backend::{Backend, Cursor, Headless, Input, Output};
 pub use camera::Camera;
 pub use color::{AnsiColor, Color, InvalidAnsiIndex};
+pub use dev::{BuildMode, DEV};
 pub use event::{
     Event, KeyCode, KeyEvent, KeyEventKind, KeyLocation, KeyModifiers, KeyState, MouseButton,
     MouseEvent, MouseEventKind, PhysicalPos, SystemTheme,

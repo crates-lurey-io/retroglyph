@@ -13,8 +13,15 @@ use crate::color::Color;
 /// knobs, in every backend.
 pub struct Style {
     /// Foreground color.
+    ///
+    /// Colors the cell's glyph. A cell that a pixel backend draws as a *sprite* is the one
+    /// exception: a sprite is composited from its own pixels and `fg` does not tint it. See
+    /// [`Surface::put_span`](crate::Surface::put_span).
     pub(crate) fg: Color,
     /// Background color.
+    ///
+    /// Fills the cell behind the glyph. Behind a sprite it is still painted, so it shows through
+    /// the sprite's transparent pixels.
     pub(crate) bg: Color,
 }
 
@@ -25,7 +32,13 @@ impl Style {
         Self::default()
     }
 
-    /// Sets the foreground color.
+    /// Sets the foreground color, which colors the cell's glyph.
+    ///
+    /// Does not tint a sprite: on a pixel backend, a cell whose glyph resolves to a sprite is
+    /// composited from the sprite's own pixels and ignores this color entirely. The same cell
+    /// drawn by a cell backend falls back to its glyph and *is* colored by it, so one value can
+    /// read very differently across backends. See
+    /// [`Surface::put_span`](crate::Surface::put_span).
     #[must_use]
     pub const fn fg(mut self, color: Color) -> Self {
         self.fg = color;
