@@ -73,7 +73,7 @@ pub trait App<B: Backend> {
     ///
     /// Draw via [`term.surface()`](Terminal::surface) or [`term.draw()`](Terminal::draw) (though
     /// `draw` presents itself, which usually conflicts with the driver's own automatic present
-    /// below -- prefer `surface()` inside `update`). Every driver ([`run_blocking`] and
+    /// below; prefer `surface()` inside `update`). Every driver ([`run_blocking`] and
     /// `retroglyph-window`'s windowed drivers) presents the frame automatically right after this
     /// method returns, unless it returned [`Flow::Idle`], in which case the driver skips
     /// [`present`](Terminal::present) entirely. Calling `present` yourself inside `update` remains

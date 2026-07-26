@@ -39,7 +39,7 @@ pub(crate) struct GlContext {
 /// whether a restore has happened since the renderer last rebuilt its GL objects.
 ///
 /// A WebGL2 context can be lost at any time (GPU reset, a backgrounded tab reclaiming resources)
-/// and every GL object -- program, buffers, atlas texture -- is invalidated when it is. The
+/// and every GL object (program, buffers, atlas texture) is invalidated when it is. The
 /// browser only fires `webglcontextrestored` (and hands back a usable context) if the page called
 /// `event.preventDefault()` on the matching `webglcontextlost`; without that the context stays lost
 /// forever. So `on_lost` exists purely to call `preventDefault`, and `on_restored` flips
@@ -154,7 +154,7 @@ impl GlContext {
     /// WebGL2 always uses the `300 es` GLSL flavor.
     //
     // `&self` is unused (the answer is constant on the web) but is kept to mirror the native
-    // `GlContext::flavor(&self)`, which does branch on the created context's API -- the renderer
+    // `GlContext::flavor(&self)`, which does branch on the created context's API: the renderer
     // calls `ctx.flavor()` generically across both, so the signatures must match.
     #[allow(clippy::unused_self)]
     pub(crate) const fn flavor(&self) -> GlslFlavor {

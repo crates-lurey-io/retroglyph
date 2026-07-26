@@ -32,7 +32,7 @@ pub(crate) struct WindowSurface {
     width: u32,
     height: u32,
     /// A [`resize`](Self::resize) that hasn't been applied to the DOM canvas
-    /// yet -- see `resize`'s doc comment for why applying it there
+    /// yet: see `resize`'s doc comment for why applying it there
     /// immediately caused visible flicker.
     pending_size: Option<(u32, u32)>,
 }
@@ -102,13 +102,13 @@ impl WindowSurface {
     /// [`present`](Self::present), rather than applying it here immediately.
     ///
     /// Setting the DOM `width`/`height` attributes on a `<canvas>` clears its
-    /// pixels there and then, synchronously -- per spec, even when the value
+    /// pixels there and then, synchronously, per spec, even when the value
     /// doesn't actually change. `on_resized` (in `retroglyph-window`) calls
     /// this on essentially every browser resize/reflow tick during a live
     /// window drag, which fires far more often than we repaint. Applying the
     /// resize (and the clear that comes with it) right here left the canvas
-    /// visibly blank until the next `present()` -- often a whole
-    /// `requestAnimationFrame` tick later -- flickering throughout the drag.
+    /// visibly blank until the next `present()` (often a whole
+    /// `requestAnimationFrame` tick later), flickering throughout the drag.
     /// Deferring the clear into `present()`, where the freshly cleared canvas
     /// is immediately repainted in the same call, means the blank state is
     /// never actually given a chance to be shown on screen. No-op if `width`
@@ -165,7 +165,7 @@ impl WindowSurface {
         {
             // `pixels` already matches the pending size, so the caller's
             // side of the resize (grid/backing-buffer) has caught up. Apply
-            // the DOM resize -- and the clear it causes -- right now, and
+            // the DOM resize (and the clear it causes) right now, and
             // repaint the *entire* canvas below in this same call, ignoring
             // whatever damage band was computed against the old size: the
             // clear never gets a chance to be the only thing painted for a

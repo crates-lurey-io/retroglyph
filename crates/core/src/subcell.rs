@@ -16,7 +16,7 @@
 //! Callers own the fallback chain: probe terminal/font support (or just take a caller-supplied
 //! capability flag) and call whichever function matches, sampling the source image at that
 //! function's pixel geometry. There's no single "auto-detect and degrade" entry point here,
-//! matching every other terminal-capability decision in retroglyph (e.g. `egc` support) --
+//! matching every other terminal-capability decision in retroglyph (e.g. `egc` support):
 //! detection policy lives with the backend, not with this pure geometry/color utility.
 //!
 //! # Algorithm
@@ -33,7 +33,7 @@
 //! lower-numbered pattern, matching the tie-break convention `retroglyph_core::color`'s own
 //! nearest-color search already uses. Two tie shapes come up often enough to call out: a flat,
 //! single-color block ties across every pattern (all give zero error) and always resolves to
-//! pattern `0`, the cheapest glyph -- a plain space colored by `bg`. And any block with exactly
+//! pattern `0`, the cheapest glyph, a plain space colored by `bg`. And any block with exactly
 //! two distinct pixel colors has exactly two zero-error patterns, one the bitwise complement of
 //! the other (swap which color is called `fg` and which is `bg` and the reconstruction is
 //! identical); the lower pattern number wins there too.
@@ -43,7 +43,7 @@
 //! The glyph tables ([`HALF_BLOCKS`], [`QUADRANTS`], [`SEXTANTS`]) are adapted from
 //! [ratatui-core's `symbols::pixel` module](https://github.com/ratatui/ratatui/blob/main/ratatui-core/src/symbols/pixel.rs)
 //! (MIT-licensed, like retroglyph), which lists them by bit pattern rather than by Unicode
-//! codepoint order -- the sextant block in particular is not contiguous or monotonic in Unicode
+//! codepoint order: the sextant block in particular is not contiguous or monotonic in Unicode
 //! (four combinations reuse the pre-existing Block Elements `' '`, `█`, `▌`, `▐` instead of
 //! having their own Legacy Computing codepoints), so a hand-rolled table is where subtle,
 //! hard-to-spot-in-review bugs live. Reusing a table already exercised by a widely-used library
@@ -216,7 +216,7 @@ pub fn quantize_half_block(pixels: [Rgb; 2]) -> Glyph {
 ///
 /// On the bundled pixel backends (`retroglyph-software`, `retroglyph-gl`), rendering these
 /// glyphs correctly requires a font that actually declares coverage for the quadrant block
-/// characters -- CP437 has no mapping for them. A font built with `retroglyph_window`'s
+/// characters: CP437 has no mapping for them. A font built with `retroglyph_window`'s
 /// `BitmapFont::new` (CP437-only) renders every quadrant glyph as a solid block; supply a font
 /// with quadrant coverage, either as the primary font or as a fallback via
 /// `BitmapFont::with_charset`, to render them as intended.
@@ -296,8 +296,8 @@ mod tests {
 
     #[test]
     fn half_block_uniform_color_picks_space_with_that_color() {
-        // A flat block ties across every pattern (all zero error); pattern 0 -- the cheapest
-        // glyph, a space -- always wins that tie. `fg` still comes back populated so a caller
+        // A flat block ties across every pattern (all zero error); pattern 0 (the cheapest
+        // glyph, a space) always wins that tie. `fg` still comes back populated so a caller
         // never has to special-case a uniform block before styling with it.
         let glyph = quantize_half_block([WHITE, WHITE]);
         assert_eq!(glyph.ch, ' ');

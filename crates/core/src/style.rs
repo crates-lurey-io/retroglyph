@@ -5,7 +5,7 @@ use crate::color::Color;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 /// A style consisting of foreground and background color.
 ///
-/// No text modifiers (bold, italic, underline, etc.) by design -- retroglyph is a spiritual
+/// No text modifiers (bold, italic, underline, etc.) by design: retroglyph is a spiritual
 /// remake of `BearLibTerminal`, which doesn't support them either. A pixel/bitmap-font renderer
 /// can't fake most of them (no bold font variant, no underline stroke) without real per-style
 /// assets, so rather than have them work in a real terminal and silently do nothing in the
@@ -57,7 +57,7 @@ impl Style {
     /// `Color::Default` is skipped, and `self`'s existing value for that field is kept. This
     /// mirrors ratatui's `Style::patch` convention, so `Style::new().fg(Color::Default)` is a
     /// no-op when patched onto anything, and there is no way to use `patch` to explicitly clear a
-    /// field back to `Color::Default` -- use [`Style::reset_fg`] or [`Style::reset_bg`] for that.
+    /// field back to `Color::Default`; use [`Style::reset_fg`] or [`Style::reset_bg`] for that.
     ///
     /// ```
     /// use retroglyph_core::{Color, Style};

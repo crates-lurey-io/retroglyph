@@ -36,7 +36,7 @@ pub struct Tween {
 
 impl Tween {
     /// [`duration`](Self::duration)'s default if never overridden: 200ms, a typical UI
-    /// micro-interaction length -- noticeable, but not sluggish.
+    /// micro-interaction length: noticeable, but not sluggish.
     pub const DEFAULT_DURATION: Duration = Duration::from_millis(200);
 
     /// A new tween animating from `from` to `to` over [`DEFAULT_DURATION`](Self::DEFAULT_DURATION)
@@ -67,7 +67,7 @@ impl Tween {
         self
     }
 
-    /// Advances the animation by `dt` -- call once per frame with
+    /// Advances the animation by `dt`: call once per frame with
     /// [`Frame::delta`](crate::Frame::delta). Clamped to `duration`: calling this after the
     /// animation has already finished is a no-op, not an overshoot into negative "time left."
     pub fn update(&mut self, dt: Duration) {
@@ -75,7 +75,7 @@ impl Tween {
     }
 
     /// Linear progress through the animation: `0.0` at the start, `1.0` once
-    /// [`is_finished`](Self::is_finished). Doesn't have the easing curve applied yet -- see
+    /// [`is_finished`](Self::is_finished). Doesn't have the easing curve applied yet; see
     /// [`value`](Self::value) for that.
     #[must_use]
     pub fn progress(&self) -> f32 {
@@ -103,8 +103,8 @@ impl Tween {
     /// [`value`](Self::value) becomes the new start, elapsed time resets to zero, and `target`
     /// becomes the new end. `duration`/`easing` are unchanged.
     ///
-    /// Calling this repeatedly -- e.g. once every time a pointer re-enters or leaves a hover
-    /// rect, faster than any single fade finishes -- never causes a visible snap to some earlier
+    /// Calling this repeatedly (e.g. once every time a pointer re-enters or leaves a hover
+    /// rect, faster than any single fade finishes) never causes a visible snap to some earlier
     /// value: each retarget starts from wherever the animation actually is *right now*, not from
     /// its original `from`.
     pub fn retarget(&mut self, target: f32) {

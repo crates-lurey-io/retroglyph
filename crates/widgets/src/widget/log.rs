@@ -12,8 +12,8 @@ use crate::Surface;
 /// `offset` (set via [`Log::offset`], default `0`) scrolls back through
 /// history: `0` shows the most recent messages, and each increment moves
 /// the window one message further into the past. Like
-/// [`Table`](super::Table)'s `state.offset()`, this does not clamp `offset`
-/// -- scrolling back past the start of `messages` shows fewer (or zero)
+/// [`Table`](super::Table)'s `state.offset()`, this does not clamp `offset`:
+/// scrolling back past the start of `messages` shows fewer (or zero)
 /// lines rather than wrapping or panicking, and it's the caller's
 /// responsibility to stop incrementing `offset` past `messages.len()` if
 /// that's undesired. This is a different windowing direction than
@@ -23,7 +23,7 @@ use crate::Surface;
 /// `messages` is a plain slice the caller owns and appends to (the same
 /// division of labor as [`ListState`](crate::ListState) for selection):
 /// this widget only reads it. Rows beyond the available messages are left
-/// untouched -- compose with [`fill_rect`](crate::draw::fill_rect) first
+/// untouched: compose with [`fill_rect`](crate::draw::fill_rect) first
 /// for a solid background if one is wanted.
 ///
 /// # Examples

@@ -1,9 +1,9 @@
 //! Headless offscreen render tests for the native GL pipeline (issue #376).
 //!
 //! The windowed [`GlContext`](crate::context) needs a real window handle, so it can't run in CI.
-//! This module creates a *surfaceless* GL context off the windowed path -- an EGL display built
+//! This module creates a *surfaceless* GL context off the windowed path (an EGL display built
 //! from an EGL device (`EGL_EXT_platform_device`) via glutin's `api::egl`, made current with no
-//! surface -- then runs the exact same pipeline the windowed backend does (shader compile/link,
+//! surface), then runs the exact same pipeline the windowed backend does (shader compile/link,
 //! atlas upload, instanced draw) into an offscreen framebuffer and reads the pixels back with
 //! `glReadPixels`. That is the whole point: exercise real GPU rendering, not just the CPU-side
 //! atlas/shader-string units the crate already tests.
@@ -20,7 +20,7 @@
 //! These tests render only when `RETROGLYPH_REQUIRE_GL` is set; otherwise they skip. That keeps
 //! the ordinary `test`/`coverage` jobs from depending on whatever GL a runner happens to expose
 //! (GitHub's stock `ubuntu-latest` ships llvmpipe, so "try if a context is available" would run
-//! these there against an uncontrolled driver -- exactly the pixel-fragility the issue warns
+//! these there against an uncontrolled driver: exactly the pixel-fragility the issue warns
 //! about). The dedicated CI job (`gl-headless`) sets the flag *and* forces Mesa's llvmpipe software
 //! rasterizer (`LIBGL_ALWAYS_SOFTWARE=1`, `GALLIUM_DRIVER=llvmpipe`), so rendering runs against one
 //! known-good software stack. With the flag set, a missing/broken headless context is a hard
@@ -217,7 +217,7 @@ fn render_to_frame(ctx: &HeadlessContext, renderer: &GlRenderer) -> Result<Frame
         }
 
         // `build_resources` set the viewport/projection; clear once, then composite every layer
-        // back-to-front (upload + two instanced passes each) into the bound framebuffer -- the same
+        // back-to-front (upload + two instanced passes each) into the bound framebuffer, the same
         // loop the windowed `present` runs.
         res.clear(gl);
         for l in 0..renderer.layers.len() {
@@ -355,7 +355,7 @@ fn full_block_cell_is_all_foreground_blank_cell_is_all_background() {
 }
 
 /// The rendered surface is opaque everywhere: glyph coverage is a mask for the color channels, so
-/// the glyph pass must leave the destination alpha alone -- see the blend factors in
+/// the glyph pass must leave the destination alpha alone: see the blend factors in
 /// `GlResources::draw_layer`. Only a cell mixing covered and uncovered texels can tell a
 /// coverage-into-alpha write apart from a correct one, since covered texels carry alpha 1 either
 /// way.
@@ -618,7 +618,7 @@ fn sprite_cells_render_their_tileset_colors() {
     };
 
     // 'A' -> tile 0 (red), 'B' -> tile 1 (green). Each 8x16 sprite exactly fills one cell at
-    // scale 1, so cell 0 must be all red and cell 1 all green -- proving tileset decode, the RGBA
+    // scale 1, so cell 0 must be all red and cell 1 all green: proving tileset decode, the RGBA
     // atlas upload, the sprite pass, and per-cell glyph -> sprite dispatch all work on real GL.
     let opts = TilesetOptions::from_bytes(two_tile_png())
         .tile_size(8, 16)
@@ -733,7 +733,7 @@ fn multicell_span_covers_every_cell_of_its_footprint() {
 /// The strongest guarantee available here: multi-cell spans must render pixel-for-pixel
 /// identically on the GPU and on `retroglyph-software`'s CPU rasterizer. Covers the covered-cell
 /// background, the suppressed fallback glyph, and a `Center`-aligned sprite in a span box larger
-/// than its art -- the three things retroglyph#412 adds -- in one scene.
+/// than its art (the three things retroglyph#412 adds) in one scene.
 #[cfg(feature = "tilesets")]
 #[test]
 fn matches_software_backend_for_multicell_spans() {

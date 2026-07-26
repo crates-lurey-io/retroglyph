@@ -10,10 +10,10 @@ use crate::draw::fill_rect;
 use crate::text::truncate as truncate_to_cols;
 
 /// A scrollable, single-column list of plain-text items with a [`ListState`]-driven highlighted
-/// item -- `Table`'s single-column sibling, sharing its windowing and selection story.
+/// item: `Table`'s single-column sibling, sharing its windowing and selection story.
 ///
 /// One `item` renders per line, top-aligned in the area it's rendered into and clipped to
-/// `area.width()`. `state.offset()` is the index of the first item drawn -- rendering draws
+/// `area.width()`. `state.offset()` is the index of the first item drawn: rendering draws
 /// whatever window `offset` names and does not clamp or auto-scroll it, matching
 /// [`Table`](super::Table)'s and [`ListState`]'s existing "only the caller knows the viewport
 /// height" design. Call [`state.ensure_visible(visible_item_count)`](ListState::ensure_visible)
@@ -85,7 +85,7 @@ impl<'a> List<'a> {
     ///
     /// `item_style` sets an explicit background rather than leaving it at [`Style::new()`]'s
     /// default: an unset background isn't "transparent" once a real backend draws it (a bare
-    /// `Color::Default` cell paints as solid black behind the glyph -- see
+    /// `Color::Default` cell paints as solid black behind the glyph; see
     /// `retroglyph-software`'s `DEFAULT_BG`), so this widget assumes it's drawn on
     /// `theme.panel_bg`, true when composed with a themed [`super::Panel`]/[`super::Modal`].
     /// Drawing this list directly on the raw screen background instead needs a manual

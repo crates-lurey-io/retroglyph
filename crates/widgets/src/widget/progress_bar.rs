@@ -63,7 +63,7 @@ impl ProgressBar {
     ///
     /// Both set an explicit background rather than leaving it at [`Style::new()`]'s default: an
     /// unset background isn't "transparent" once a real backend draws it (a bare `Color::Default`
-    /// cell paints as solid black behind the glyph -- see `retroglyph-software`'s `DEFAULT_BG`),
+    /// cell paints as solid black behind the glyph; see `retroglyph-software`'s `DEFAULT_BG`),
     /// which matters most for `empty_style`'s `'░'` glyph (it doesn't fully cover its cell the way
     /// `filled_style`'s `'█'` does, so its background actually shows). This widget assumes it's
     /// drawn on `theme.panel_bg`, true when composed with a themed [`super::Panel`]/
@@ -78,7 +78,7 @@ impl ProgressBar {
     }
 
     /// Same as [`ProgressBar::theme`], but `filled_style`/`empty_style` are drawn on `bg` instead
-    /// of `theme.panel_bg` -- for a bar drawn directly on a backdrop other than a themed
+    /// of `theme.panel_bg`: for a bar drawn directly on a backdrop other than a themed
     /// [`super::Panel`]/[`super::Modal`]'s fill. [`ProgressBar::theme`] is exactly
     /// `theme_on(theme, theme.panel_bg)`.
     #[must_use]

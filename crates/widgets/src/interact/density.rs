@@ -4,7 +4,7 @@ use retroglyph_core::Size;
 
 /// How much room an interactive widget's hit target should claim.
 ///
-/// Not itself consulted by anything in this crate -- there are no built-in
+/// Not itself consulted by anything in this crate: there are no built-in
 /// interactive widgets yet to apply it to; every widget here is a free
 /// function or a thin, stateless composition of one (see the crate's module
 /// docs). It exists so an app choosing between a phone-sized and a

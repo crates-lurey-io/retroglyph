@@ -31,7 +31,7 @@ use std::sync::Arc;
 ///
 /// `raw-window-handle` has no combined trait, and surface libraries need to *own* the handle
 /// (softbuffer stores it for the surface's lifetime), so presenters receive `Arc<dyn
-/// WindowHandle>` -- rwh implements the handle traits for `Arc<H: ?Sized>`, so the trait object
+/// WindowHandle>`: rwh implements the handle traits for `Arc<H: ?Sized>`, so the trait object
 /// passes straight into `softbuffer::Surface::new` / `wgpu::Instance::create_surface`.
 pub trait WindowHandle: HasWindowHandle + HasDisplayHandle {}
 
@@ -52,7 +52,7 @@ impl<T: HasWindowHandle + HasDisplayHandle + ?Sized> WindowHandle for T {}
 /// impossible for any concrete error type to override [`is_recoverable`](Self::is_recoverable) at
 /// all (a specific `impl` would conflict with the blanket one), defeating the point of the trait.
 /// Instead, each `SurfaceError` type needs one explicit (and usually empty) `impl
-/// RecoverableError for ...` block -- see `retroglyph_software`'s `SurfaceError` for the minimal
+/// RecoverableError for ...` block: see `retroglyph_software`'s `SurfaceError` for the minimal
 /// case that just inherits the default.
 pub trait RecoverableError: core::fmt::Debug + core::fmt::Display {
     /// Whether this error represents a transient failure worth retrying, as opposed to a fatal
@@ -70,8 +70,8 @@ pub trait RecoverableError: core::fmt::Debug + core::fmt::Display {
     }
 }
 
-// `Infallible` is uninhabited -- no value of it can ever exist, so `is_recoverable` can never
-// actually be called on one -- but a presenter that can't fail (e.g. a test mock) still needs
+// `Infallible` is uninhabited: no value of it can ever exist, so `is_recoverable` can never
+// actually be called on one, but a presenter that can't fail (e.g. a test mock) still needs
 // `type SurfaceError = core::convert::Infallible` to satisfy the `RecoverableError` bound, so
 // this impl exists purely for that convenience.
 impl RecoverableError for core::convert::Infallible {}
@@ -81,8 +81,8 @@ impl RecoverableError for core::convert::Infallible {}
 /// enum.
 ///
 /// Several presenter backends (e.g. `retroglyph-gl`'s native/wasm split, or a future softbuffer
-/// backend) need only two buckets -- "surface/context creation failed" (fatal) and "presenting a
-/// frame failed" (potentially recoverable) -- and would otherwise each hand-roll the same `enum {
+/// backend) need only two buckets ("surface/context creation failed" (fatal) and "presenting a
+/// frame failed" (potentially recoverable)) and would otherwise each hand-roll the same `enum {
 /// Init(String), Present(String) }` plus [`RecoverableError`] impl. This type is that common
 /// shape, provided once here so backends can reuse it directly instead of duplicating it.
 #[derive(Debug)]
@@ -134,7 +134,7 @@ impl RecoverableError for GenericSurfaceError {
 /// - The cell's **background fill is always the full, unshifted cell** rectangle. An offset moves
 ///   only the glyph, never the background.
 /// - An offset glyph **may spill past its cell edge into neighboring cells**, and that spill is
-///   **uniform in all four directions** -- a glyph pushed right/down onto a later neighbor spills
+///   **uniform in all four directions**: a glyph pushed right/down onto a later neighbor spills
 ///   the same way as one pushed left/up onto an earlier neighbor.
 /// - The mechanism that guarantees that uniformity is a **two-pass draw**: lay down *every* cell's
 ///   background first, then draw *every* cell's (offset) glyph over the result. Interleaving the
@@ -142,8 +142,8 @@ impl RecoverableError for GenericSurfaceError {
 ///   glyph, breaking spill in the right/down directions only.
 ///
 /// The offset *application* is deliberately not shared code: `retroglyph-gl` shifts a quad's vertex
-/// position in its vertex shader, `retroglyph-software` shifts `origin_x`/`origin_y` in a CPU blit
-/// -- irreducibly different mechanics that must nonetheless agree on the four points above.
+/// position in its vertex shader, `retroglyph-software` shifts `origin_x`/`origin_y` in a CPU blit:
+/// irreducibly different mechanics that must nonetheless agree on the four points above.
 pub trait Presenter: Output {
     /// Surface lifecycle error (context creation, buffer acquisition,
     /// present).
@@ -163,14 +163,14 @@ pub trait Presenter: Output {
     /// Resize the window surface to a new physical pixel size.
     ///
     /// Called on every window resize event with `width`/`height` already resolved by the
-    /// caller -- for the `winit` driver (see `winit::run::WindowApp::resize_to`), that means
+    /// caller: for the `winit` driver (see `winit::run::WindowApp::resize_to`), that means
     /// `cols * cell_w` x `rows * cell_h`, where `cols`/`rows` are the window's physical size
     /// divided down to whole cells. Any sub-cell remainder is truncated, not centered or
     /// cleared: when the window's physical size isn't an exact multiple of the cell size,
     /// `width`/`height` here are the largest whole-cell-multiple that fits, which can be
     /// smaller than the window's actual physical size. The OS window itself is never resized
     /// to compensate, so a non-exact-multiple resize leaves a thin strip at the window's
-    /// trailing edge outside the surface -- retroglyph does not paint or clear that strip;
+    /// trailing edge outside the surface: retroglyph does not paint or clear that strip;
     /// whatever the OS/windowing backend leaves there remains visible until a subsequent
     /// resize covers it.
     fn resize_surface(&mut self, width: u32, height: u32);
@@ -203,7 +203,7 @@ pub trait Presenter: Output {
     /// Cell size in physical pixels `(width, height)`.
     ///
     /// Physical pixels, not logical/DPI-scaled pixels, and never auto-scaled by this crate for
-    /// display DPI -- see the crate-level "DPI, scale, and the resize contract" docs. A presenter
+    /// display DPI: see the crate-level "DPI, scale, and the resize contract" docs. A presenter
     /// whose cells should grow on a `HiDPI` display must change what this returns itself (from
     /// [`resize`](Output::resize) or [`scale_factor_changed`](Self::scale_factor_changed)); absent
     /// that, it stays constant for the presenter's lifetime.

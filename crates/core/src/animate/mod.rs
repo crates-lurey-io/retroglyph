@@ -2,14 +2,14 @@
 //! periodic [`oscillate`] helper.
 //!
 //! [`FrameClock`](crate::FrameClock) answers "how many fixed logic steps has this frame's elapsed
-//! time earned"; this module answers a different question -- "what's this one `f32` value right
+//! time earned"; this module answers a different question: "what's this one `f32` value right
 //! now, partway through animating from A to B" (or, for [`oscillate`], partway through an
 //! ongoing wave with no start or end). Two tools for two different shapes of motion:
 //!
-//! - [`Tween`] -- a finite transition from one value to another over a fixed duration, reshaped
+//! - [`Tween`]: a finite transition from one value to another over a fixed duration, reshaped
 //!   by an [`Easing`] curve. Use it for things that start, run once, and stop: a fade-in, a
 //!   value settling toward a new target.
-//! - [`oscillate`] -- a continuous periodic wave with no start or end. Use it for things that
+//! - [`oscillate`]: a continuous periodic wave with no start or end. Use it for things that
 //!   just keep going: a pulsing indicator, a breathing effect, the demo signal in gallery example
 //!   11.
 //!

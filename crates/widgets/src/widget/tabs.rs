@@ -12,14 +12,14 @@ use crate::text::truncate as truncate_to_cols;
 /// Unlike [`Table`](super::Table)/[`List`](super::List), `Tabs` is a plain [`Widget`], not a
 /// [`StatefulWidget`](super::StatefulWidget): there is no scroll offset for a tab strip, only a
 /// selected index, so it takes `selected: Option<usize>` directly (set via [`Tabs::select`])
-/// rather than a [`ListState`](crate::ListState) -- the app is free to drive that index however
+/// rather than a [`ListState`](crate::ListState): the app is free to drive that index however
 /// it likes (a plain `usize` it owns, a [`FocusRing`](crate::FocusRing), whatever fits), the same
 /// "app- or interaction-machinery-driven, widget just reads it" division of labor as every other
 /// widget here.
 ///
 /// Titles render left to right, `column_spacing` blank columns apart (default `1`, matching
 /// [`Table::column_spacing`](super::Table::column_spacing)), with an optional single-character
-/// `divider` (default `None`, i.e. no divider) centered in that spacing -- set with
+/// `divider` (default `None`, i.e. no divider) centered in that spacing: set with
 /// [`Tabs::divider`]. Drawing stops once a title would start past the area's right edge; there is
 /// no horizontal scrolling.
 ///
@@ -101,7 +101,7 @@ impl<'a> Tabs<'a> {
     }
 
     /// Set a divider character drawn within the spacing between tabs. `None` (the default) draws
-    /// no divider -- just `column_spacing` blank columns.
+    /// no divider: just `column_spacing` blank columns.
     #[must_use]
     pub const fn divider(mut self, divider: Option<char>) -> Self {
         self.divider = divider;
@@ -114,7 +114,7 @@ impl<'a> Tabs<'a> {
     ///
     /// `style` sets an explicit background rather than leaving it at [`Style::new()`]'s default:
     /// an unset background isn't "transparent" once a real backend draws it (a bare
-    /// `Color::Default` cell paints as solid black behind the glyph -- see
+    /// `Color::Default` cell paints as solid black behind the glyph; see
     /// `retroglyph-software`'s `DEFAULT_BG`), so this widget assumes it's drawn on
     /// `theme.panel_bg`, true when composed with a themed [`super::Panel`]/[`super::Modal`].
     /// Drawing this tab strip directly on the raw screen background instead needs a manual
@@ -127,7 +127,7 @@ impl<'a> Tabs<'a> {
     }
 
     /// Same as [`Tabs::theme`], but `style`/`selected_style` are drawn on `bg` instead of
-    /// `theme.panel_bg` -- for a tab strip drawn directly on a backdrop other than a themed
+    /// `theme.panel_bg`: for a tab strip drawn directly on a backdrop other than a themed
     /// [`super::Panel`]/[`super::Modal`]'s fill. [`Tabs::theme`] is exactly
     /// `theme_on(theme, theme.panel_bg)`.
     #[must_use]

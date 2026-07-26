@@ -12,7 +12,7 @@ use core::fmt;
 ///
 /// Only observable when the reserved box is larger than the sprite's own pixels, i.e. when
 /// [`Surface::put_span`](retroglyph_core::Surface::put_span) declares more cells than the
-/// artwork fills. A sprite drawn into a box its art exactly fills -- the common case -- renders
+/// artwork fills. A sprite drawn into a box its art exactly fills (the common case) renders
 /// identically under every variant. Mirrors `BearLibTerminal`'s tileset `align=` option.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[non_exhaustive]

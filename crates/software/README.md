@@ -33,7 +33,7 @@ Most apps open a real window via `retroglyph-window`'s `run_app`/`run_windowed` 
 [workspace README](https://github.com/crates-lurey-io/retroglyph#readme) for that quick start).
 Without a window,
 [`run_headless`](https://docs.rs/retroglyph-software/latest/retroglyph_software/struct.SoftwareBackend.html#method.run_headless)
-renders straight into an in-memory pixel buffer -- useful for pixel-level tests:
+renders straight into an in-memory pixel buffer: useful for pixel-level tests:
 
 ```rust
 use retroglyph_core::{Backend, Color, Style, Terminal};
@@ -60,8 +60,8 @@ start.
 
 ## Frame rate and window title live on `WindowConfig`, not on this builder
 
-This builder configures the renderer -- font, grid, scale, tilesets -- and nothing else. Window
-title and frame rate are windowing concerns, so they belong to
+This builder configures the renderer (font, grid, scale, tilesets) and nothing else. Window title
+and frame rate are windowing concerns, so they belong to
 [`WindowConfig::fit`](https://docs.rs/retroglyph-window/latest/retroglyph_window/winit/struct.WindowConfig.html#method.fit),
 which takes both:
 
@@ -75,8 +75,8 @@ needs; `None` renders only in response to input, which is right for an event-dri
 sleep when idle but will look frozen under an animation.
 
 The number itself is only honored on native, where the event loop can sleep until the next frame
-deadline. On `wasm32` the browser owns frame pacing -- winit's web backend services each requested
-redraw on the next `requestAnimationFrame` -- so a `Some(_)` app always runs at the display refresh
+deadline. On `wasm32` the browser owns frame pacing (winit's web backend services each requested
+redraw on the next `requestAnimationFrame`), so a `Some(_)` app always runs at the display refresh
 rate, and a native app relying on `target_fps` to throttle below that will run uncapped once ported
 to the web.
 

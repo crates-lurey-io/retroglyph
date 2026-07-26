@@ -27,14 +27,14 @@
 //! input focus is reported as [`Event::FocusLost`]/[`Event::FocusGained`]. This is the only
 //! lifecycle signal this backend currently has: unlike a windowed backend, there's no separate
 //! "suspended"/"paused" notion here, and this crate maps every focus change the same way
-//! regardless of the underlying reason (window manager focus switch, terminal minimized, or --
-//! notably on Wayland compositors -- a terminal surface being hidden or unmapped without an
+//! regardless of the underlying reason (window manager focus switch, terminal minimized, or,
+//! notably on Wayland compositors, a terminal surface being hidden or unmapped without an
 //! accompanying resize).
 //!
 //! Terminal-side state (raw mode, the alternate screen, cursor position, last-written
 //! colors/attributes) is untouched by a focus change and is preserved across it: this backend
 //! does not react to [`Event::FocusLost`]/[`Event::FocusGained`] itself, so nothing is torn down
-//! or reinitialized. Rendering is not deferred automatically either -- [`Output::draw`] and
+//! or reinitialized. Rendering is not deferred automatically either: [`Output::draw`] and
 //! [`Output::flush`] keep writing escape sequences to stdout even while unfocused, since
 //! crossterm has no OS-level way to know whether that output is actually being presented while
 //! hidden. An app that wants to pause redraws while unfocused (e.g. to avoid wasted work on a
@@ -57,13 +57,13 @@
 //!
 //! # Content writer
 //!
-//! [`Crossterm`] is generic over its content writer -- `Crossterm<W>`, defaulting to
+//! [`Crossterm`] is generic over its content writer: `Crossterm<W>`, defaulting to
 //! `BufWriter<Stdout>` to match this type's historical, stdout-only behavior. Use
 //! [`Crossterm::with_writer`] or [`CrosstermOptions::build_with_writer`] to render into a file,
 //! a pipe, or an in-memory buffer instead, e.g. to capture and assert on the emitted ANSI/SGR
 //! bytes in a test without a real TTY. Only the rendered cell content goes through `W`; raw
 //! mode, the alternate screen, and the other terminal-protocol negotiation always target the
-//! real process stdout regardless of `W` -- see [`CrosstermOptions::build_with_writer`]'s docs
+//! real process stdout regardless of `W`: see [`CrosstermOptions::build_with_writer`]'s docs
 //! for the exact split.
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
@@ -104,8 +104,8 @@ fn keyboard_enhancement_flags() -> crossterm::event::KeyboardEnhancementFlags {
 
 // Tracks whether the currently-live `Crossterm` instance (there's normally at most one, since
 // each holds exclusive use of stdout/raw mode) actually entered the alternate screen / enabled
-// raw mode, so `restore_terminal` -- shared by `Drop` and the process-wide panic hook, neither of
-// which has access to a specific instance's `CrosstermOptions` -- only undoes what was actually
+// raw mode, so `restore_terminal` (shared by `Drop` and the process-wide panic hook, neither of
+// which has access to a specific instance's `CrosstermOptions`) only undoes what was actually
 // done. Unlike the other features (mouse capture, focus-change, bracketed paste, kitty protocol),
 // which are safe to unconditionally disable/pop even if never enabled (crossterm's own commands
 // are no-ops on a terminal that never received the matching enable sequence), unconditionally
@@ -126,17 +126,17 @@ static RAW_MODE_ACTIVE: std::sync::atomic::AtomicBool = std::sync::atomic::Atomi
 // Rather than trying to make concurrent instances safe (which would need real per-instance
 // state, not process-global statics, since stdout/raw-mode/the alternate screen are process-wide
 // OS resources with no instance-scoped handle), construction of a second live instance is
-// rejected outright -- see [`InstanceGuard`].
+// rejected outright: see [`InstanceGuard`].
 static INSTANCE_LIVE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// RAII guard enforcing the "at most one live [`Crossterm`] instance per process" invariant.
 ///
 /// [`InstanceGuard::acquire`] atomically claims [`INSTANCE_LIVE`] (returning an error if another
 /// instance already holds it) and stores the resulting guard as a field of [`Crossterm`], so it
-/// stays held for exactly as long as that `Crossterm` is alive. Dropping the guard -- whether via
+/// stays held for exactly as long as that `Crossterm` is alive. Dropping the guard (whether via
 /// the owning `Crossterm`'s normal `Drop`, or because a `?` inside
 /// [`Crossterm::build_from_options`] unwound out of the constructor after the guard was acquired
-/// but before construction finished -- releases the flag, so a single failed construction attempt
+/// but before construction finished) releases the flag, so a single failed construction attempt
 /// can never permanently wedge out all future construction.
 ///
 /// This is independent of `restore_terminal()`/the panic hook: `restore_terminal()`
@@ -332,7 +332,7 @@ impl CrosstermOptions {
     ///
     /// Returns an `std::io::Error` if raw mode or terminal commands fail. Also returns an
     /// `std::io::Error` with [`std::io::ErrorKind::ResourceBusy`] if another [`Crossterm`]
-    /// instance is already live in this process -- see the concurrency contract documented on
+    /// instance is already live in this process: see the concurrency contract documented on
     /// [`Crossterm`].
     pub fn build(self) -> Result<Crossterm, std::io::Error> {
         // Detect once, up front, whether the real process stdout is an interactive terminal so
@@ -353,9 +353,9 @@ impl CrosstermOptions {
     ///
     /// `writer` only receives the rendered cell content ([`Output::draw`]/[`Output::flush`]
     /// output, plus the runtime [`Output::clear`]/[`Cursor::set_cursor_visible`]/
-    /// [`Cursor::set_cursor_position`] escapes). Terminal-protocol setup/teardown -- raw mode,
+    /// [`Cursor::set_cursor_position`] escapes). Terminal-protocol setup/teardown (raw mode,
     /// the alternate screen, the initial cursor hide, mouse capture, focus-change reporting,
-    /// bracketed paste, and the kitty keyboard protocol -- always targets the real process
+    /// bracketed paste, and the kitty keyboard protocol) always targets the real process
     /// stdout regardless of `writer`, since those are properties of the actual controlling
     /// terminal, not of an arbitrary byte sink. Callers rendering to a non-terminal `writer`
     /// (a file, a pipe, an in-memory buffer) should disable the features they don't want
@@ -366,7 +366,7 @@ impl CrosstermOptions {
     ///
     /// Returns an `std::io::Error` if raw mode or terminal commands fail. Also returns an
     /// `std::io::Error` with [`std::io::ErrorKind::ResourceBusy`] if another [`Crossterm`]
-    /// instance is already live in this process -- see the concurrency contract documented on
+    /// instance is already live in this process: see the concurrency contract documented on
     /// [`Crossterm`].
     pub fn build_with_writer<W: std::io::Write>(
         self,
@@ -396,7 +396,7 @@ impl Default for CrosstermOptions {
 
 /// A terminal rendering backend powered by `crossterm`.
 ///
-/// Generic over the content writer `W` -- the sink that receives rendered cell output
+/// Generic over the content writer `W`: the sink that receives rendered cell output
 /// ([`Output::draw`]/[`Output::flush`], plus the runtime cursor/clear escapes). Defaults to
 /// `BufWriter<Stdout>`, matching this type's historical behavior; use
 /// [`Crossterm::with_writer`]/[`CrosstermOptions::build_with_writer`] to render to a file, a
@@ -413,7 +413,7 @@ impl Default for CrosstermOptions {
 /// live at a time in a process: constructing a second one while a first is still alive ([`new`],
 /// [`with_options`], [`with_writer`], and every [`CrosstermOptions::build`]/
 /// [`CrosstermOptions::build_with_writer`] call) returns an `std::io::Error` with
-/// [`std::io::ErrorKind::ResourceBusy`] instead of proceeding -- this is a documented error, not
+/// [`std::io::ErrorKind::ResourceBusy`] instead of proceeding: this is a documented error, not
 /// undefined behavior, and nothing is torn down or corrupted by the attempt. Sequential
 /// construct-drop-construct is fully supported: once the live instance is dropped, a new one can
 /// be constructed immediately.
@@ -425,12 +425,12 @@ pub struct Crossterm<W: std::io::Write = BufWriter<Stdout>> {
     renderer: TerminalRenderer<W>,
     // Held for exactly the lifetime of this instance; releases the process-wide "an instance is
     // live" flag when this value is dropped (see [`InstanceGuard`]). Never read after
-    // construction -- it's kept purely for its `Drop` side effect -- hence the leading
+    // construction (it's kept purely for its `Drop` side effect), hence the leading
     // underscore, which also suppresses the otherwise-applicable `dead_code` lint.
     _instance_guard: InstanceGuard,
     // Cached result of the last successful `crossterm::terminal::size()` query. Seeded once at
     // construction and refreshed only when `poll_event` observes a `crossterm::event::Event::
-    // Resize` -- the app already receives that event on every real terminal resize, so there's
+    // Resize`: the app already receives that event on every real terminal resize, so there's
     // no need to re-query on every `Output::size()` call (a `TIOCGWINSZ` ioctl), which used to
     // run once per frame. See retroglyph#279.
     //
@@ -442,7 +442,7 @@ pub struct Crossterm<W: std::io::Write = BufWriter<Stdout>> {
     // Events handed to `Input::push_event`, drained ahead of the real terminal by `poll_event`.
     //
     // Unlike the windowed backends, this one has its own event source, so nothing *has* to push
-    // into it -- but the `Input::push_event` contract is "queue this for `poll_event`", and a
+    // into it, but the `Input::push_event` contract is "queue this for `poll_event`", and a
     // silent no-op is a trap for the two callers that legitimately want it: a test harness
     // injecting synthetic input, and a driver that drains the queue to intercept a key and hands
     // the rest back (see `retroglyph-examples`' FPS overlay toggle). Both used to lose every
@@ -468,7 +468,7 @@ impl Crossterm {
     ///
     /// Returns an `std::io::Error` if raw mode or terminal commands fail. Also returns an
     /// `std::io::Error` with [`std::io::ErrorKind::ResourceBusy`] if another [`Crossterm`]
-    /// instance is already live in this process -- see the concurrency contract documented on
+    /// instance is already live in this process: see the concurrency contract documented on
     /// [`Crossterm`].
     pub fn new() -> Result<Self, std::io::Error> {
         Self::with_options(CrosstermOptions::default())
@@ -514,7 +514,7 @@ impl Crossterm {
     ///
     /// Returns an `std::io::Error` if raw mode or terminal commands fail. Also returns an
     /// `std::io::Error` with [`std::io::ErrorKind::ResourceBusy`] if another [`Crossterm`]
-    /// instance is already live in this process -- see the concurrency contract documented on
+    /// instance is already live in this process: see the concurrency contract documented on
     /// [`Crossterm`].
     pub fn with_options(options: CrosstermOptions) -> Result<Self, std::io::Error> {
         options.build()
@@ -552,7 +552,7 @@ impl<W: std::io::Write> Crossterm<W> {
     ///
     /// Returns an `std::io::Error` if raw mode or terminal commands fail. Also returns an
     /// `std::io::Error` with [`std::io::ErrorKind::ResourceBusy`] if another [`Crossterm`]
-    /// instance is already live in this process -- see the concurrency contract documented on
+    /// instance is already live in this process: see the concurrency contract documented on
     /// [`Crossterm`].
     pub fn with_writer(writer: W) -> Result<Self, std::io::Error> {
         CrosstermOptions::default().build_with_writer(writer)
@@ -660,7 +660,7 @@ impl<W: std::io::Write> Crossterm<W> {
 
         // Seed the cached size once, up front, so `size()` never has to query on the
         // per-frame path; kept fresh afterward by `poll_event` observing `Event::Resize` (see
-        // below). Fall back to 80x24 -- not the historical, and non-conventional, 80x25 -- if
+        // below). Fall back to 80x24 (not the historical, and non-conventional, 80x25) if
         // this initial query fails; there's no better "last known good" size to fall back to
         // yet, since none has been observed. See retroglyph#281.
         let (width, height) = crossterm::terminal::size().unwrap_or((80, 24));
@@ -999,8 +999,8 @@ mod tests {
     // Any test that actually constructs a `Crossterm`/acquires an `InstanceGuard` contends for
     // the same process-wide `INSTANCE_LIVE` flag, so without serializing them a legitimate
     // concurrent construction from an unrelated test in this file could spuriously trip the new
-    // "second live instance" rejection. This lock -- held only by tests that touch that shared
-    // state -- keeps those tests deterministic without disabling parallelism for the whole file.
+    // "second live instance" rejection. This lock (held only by tests that touch that shared
+    // state) keeps those tests deterministic without disabling parallelism for the whole file.
     static TEST_GUARD_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     fn key_code_of(ct_event: crossterm::event::Event) -> retroglyph_core::event::KeyCode {
@@ -1064,8 +1064,8 @@ mod tests {
     #[test]
     fn disabling_raw_mode_and_alt_screen_lets_build_succeed_without_a_tty() {
         // With both raw mode and the alternate screen opted out, `build()` no longer calls
-        // `enable_raw_mode()`/`EnterAlternateScreen` -- the two commands that fail outright
-        // without a real controlling terminal -- so construction can succeed even against a
+        // `enable_raw_mode()`/`EnterAlternateScreen` (the two commands that fail outright
+        // without a real controlling terminal), so construction can succeed even against a
         // fully redirected/piped stdout (as under `cargo test`). Skip the assertion (rather than
         // failing) on the rare environment where even the always-safe cursor-hide escape write
         // fails outright (e.g. a closed stdout), since that's not what this test is about.
@@ -1116,7 +1116,7 @@ mod tests {
         // The whole point of a generic content writer: draw/flush output lands in `writer`
         // (here a `Vec<u8>`) instead of stdout, with no real terminal required as long as the
         // real-terminal-only features (raw mode, alt screen, mouse/focus/paste/kitty) are
-        // disabled -- exactly the combination `CrosstermOptions::build_with_writer`'s docs
+        // disabled, exactly the combination `CrosstermOptions::build_with_writer`'s docs
         // recommend for a non-TTY sink.
         let _lock = TEST_GUARD_LOCK
             .lock()
@@ -1277,7 +1277,7 @@ mod tests {
     #[test]
     fn kitty_protocol_shift_tab_normalizes_to_backtab() {
         // Under DISAMBIGUATE_ESCAPE_CODES, kitty-protocol terminals report Shift+Tab as plain
-        // `Tab` plus a shift modifier rather than a distinct backtab code -- this is the case
+        // `Tab` plus a shift modifier rather than a distinct backtab code: this is the case
         // `from_crossterm_event` has to normalize.
         let ct_event = crossterm::event::Event::Key(crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::Tab,

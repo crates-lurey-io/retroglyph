@@ -41,13 +41,13 @@ use winit::window::{Window, WindowId};
 /// [`EventLoopProxy`](winit::event_loop::EventLoopProxy), which is `Send + Sync` for any
 /// `T: Send + 'static` payload.
 ///
-/// `T` defaults to `u64` -- the payload [`Event::Custom`] itself carries -- so existing code
+/// `T` defaults to `u64` (the payload [`Event::Custom`] itself carries), so existing code
 /// naming the bare `EventProxy` type (from before this type became generic) keeps compiling
 /// unchanged.
 pub struct EventProxy<T: Send + 'static = u64>(winit::event_loop::EventLoopProxy<T>);
 
 // Hand-written rather than `#[derive(Clone, Debug)]`: a derive would add `T: Clone`/`T: Debug`
-// bounds to the impl, but `winit::event_loop::EventLoopProxy<T>` itself needs neither -- cloning
+// bounds to the impl, but `winit::event_loop::EventLoopProxy<T>` itself needs neither: cloning
 // or formatting the proxy handle never touches a buffered `T` value (there isn't one; `T` is
 // only ever a transient argument to `send_event`).
 impl<T: Send + 'static> Clone for EventProxy<T> {
@@ -69,7 +69,7 @@ impl<T: Send + 'static> EventProxy<T> {
     /// payload surfaces through the app's normal `poll_event`/frame loop as
     /// [`Event::Custom(payload)`](Event::Custom), like any other [`Event`]. With a custom `T`
     /// (via [`run_windowed_with_typed_proxy`]/[`run_app_with_typed_proxy`]), the payload is
-    /// handed directly to that call's `on_custom_event` handler instead -- it never becomes an
+    /// handed directly to that call's `on_custom_event` handler instead: it never becomes an
     /// [`Event`], since [`Event::Custom`] is fixed to `u64`.
     ///
     /// # Errors
@@ -155,7 +155,7 @@ impl WindowConfig {
     ///
     /// The two combine independently: `(Some(fps), false)` is the common capped-animation shape
     /// (see [`Self::animated`] for a shorthand), `(None, true)` is the common idle-UI shape, and
-    /// `(None, false)` -- render every tick, uncapped -- is the one combination that was
+    /// `(None, false)` (render every tick, uncapped) is the one combination that was
     /// previously inexpressible, useful for e.g. measuring a render loop's raw throughput.
     ///
     /// On `wasm32` the browser owns frame pacing: winit's web backend delivers each requested
@@ -209,7 +209,7 @@ impl WindowConfig {
     }
 
     /// Shorthand for [`fit`](Self::fit) with continuous, non-event-driven, `fps`-capped
-    /// redraws -- the shape most animated apps want. Equivalent to
+    /// redraws: the shape most animated apps want. Equivalent to
     /// `Self::fit(presenter, title, Some(fps), false)`.
     #[must_use]
     pub fn animated<P: Presenter>(presenter: &P, title: impl Into<String>, fps: u32) -> Self {
@@ -217,7 +217,7 @@ impl WindowConfig {
     }
 
     /// The frame-rate cap passed to [`fit`](Self::fit), if any. `None` means uncapped: a frame
-    /// renders as fast as the loop reaches a redraw -- see [`event_driven`](Self::event_driven)
+    /// renders as fast as the loop reaches a redraw; see [`event_driven`](Self::event_driven)
     /// for whether that's every tick or only on demand.
     #[must_use]
     pub const fn target_fps(&self) -> Option<u32> {
@@ -233,7 +233,7 @@ impl WindowConfig {
     }
 
     /// Sets whether to size (and keep resizing) the canvas to fill the browser viewport on
-    /// `wasm32`, instead of the pixel size [`fit`](Self::fit) computed -- a full-screen,
+    /// `wasm32`, instead of the pixel size [`fit`](Self::fit) computed: a full-screen,
     /// mobile-web-app feel for games that want it. Has no effect on native, where the OS window
     /// is already sized by [`fit`](Self::fit) and the window manager owns further resizing
     /// either way.
@@ -251,7 +251,7 @@ impl WindowConfig {
     /// Sets whether the window can be resized by the user/window manager after creation.
     ///
     /// Defaults to `true` (winit's own default). Set to `false` for fixed-size retro windows
-    /// where the grid is meant to stay put -- resizing a pseudo-graphic UI usually means picking
+    /// where the grid is meant to stay put: resizing a pseudo-graphic UI usually means picking
     /// a new grid size, not stretching cells, and most callers that care already size the window
     /// to their content via [`fit`](Self::fit).
     ///
@@ -355,7 +355,7 @@ impl WindowConfig {
 /// # Presenting is automatic
 ///
 /// Unlike [`run_blocking`](retroglyph_core::run_blocking), this driver calls
-/// [`Terminal::present`] for you, once, right after `app_loop` returns each frame -- you no longer
+/// [`Terminal::present`] for you, once, right after `app_loop` returns each frame: you no longer
 /// need to (and, for a stale-content bug fixed by this behavior, should not rely on remembering
 /// to) call it yourself inside `app_loop`. Calling it yourself is still supported and has no ill
 /// effect (the driver detects it already ran and skips its own call), for example if you also want
@@ -387,13 +387,13 @@ where
 /// proxy off to that thread before the loop takes over the calling thread.
 ///
 /// The injected payload is always a `u64`, delivered as [`Event::Custom`] through the app's
-/// normal `poll_event`/frame loop -- see [`run_windowed_with_typed_proxy`] if a worker thread
+/// normal `poll_event`/frame loop; see [`run_windowed_with_typed_proxy`] if a worker thread
 /// needs to hand back a real payload (a loaded asset, a network response) instead of a
 /// correlation id into a side table.
 ///
 /// # Presenting is automatic
 ///
-/// See [`run_windowed`]'s "Presenting is automatic" section -- this function shares the same
+/// See [`run_windowed`]'s "Presenting is automatic" section: this function shares the same
 /// automatic-present behavior; `app_loop` no longer needs to call [`Terminal::present`] itself.
 ///
 /// # Examples
@@ -468,19 +468,19 @@ where
 /// `u64` (see its doc comment for why), so genericizing it would be a breaking change to
 /// [`retroglyph_core`] far larger than this API needs. Instead, each injected `T` is handed
 /// directly to `on_custom_event`, called synchronously from winit's `user_event` callback with
-/// the same `&mut Terminal<WindowBackend<P>>` `app_loop` receives on redraw -- so a handler that
+/// the same `&mut Terminal<WindowBackend<P>>` `app_loop` receives on redraw, so a handler that
 /// wants the result to affect the next frame just needs to record it in state the closures
 /// share, or push its own backend-agnostic event/marker for `app_loop` to notice.
 ///
 /// # Presenting is automatic
 ///
-/// See [`run_windowed`]'s "Presenting is automatic" section -- this function shares the same
+/// See [`run_windowed`]'s "Presenting is automatic" section: this function shares the same
 /// automatic-present behavior; `app_loop` no longer needs to call [`Terminal::present`] itself.
 ///
 /// This delivery is a side channel, not a queued [`Event`]: `on_custom_event` runs as soon as
 /// winit dispatches the `user_event`, which can be before `app_loop` next drains earlier-queued
 /// window/input events via [`poll`](retroglyph_core::Terminal::poll). Don't assume a `T` arrives
-/// interleaved with the `poll()` stream in send order relative to those events -- if that matters,
+/// interleaved with the `poll()` stream in send order relative to those events; if that matters,
 /// use [`run_windowed_with_proxy`]'s plain `u64`/[`Event::Custom`] path instead, which does
 /// interleave on the backend's own FIFO.
 ///
@@ -557,7 +557,7 @@ where
 }
 
 /// Delivers a `u64` payload injected through [`EventProxy::send_event`] as
-/// [`Event::Custom`] -- the fixed `on_custom_event` behind [`run_windowed_with_proxy`]/
+/// [`Event::Custom`]: the fixed `on_custom_event` behind [`run_windowed_with_proxy`]/
 /// [`run_app_with_proxy`], preserving the pre-generic behavior exactly.
 fn push_custom_event<P: Presenter>(id: u64, term: &mut Terminal<WindowBackend<P>>) {
     term.backend_mut().push_event(Event::Custom(id));
@@ -646,7 +646,7 @@ where
 /// into the app on each redraw, rather than the app owning a `while` loop.
 ///
 /// Each frame builds a [`Frame`](retroglyph_core::Frame) with a wall-clock
-/// `dt` measured via [`web_time::Instant`] -- a plain [`std::time::Instant`]
+/// `dt` measured via [`web_time::Instant`]: a plain [`std::time::Instant`]
 /// re-export on native, backed by the browser's `Performance.now()` on
 /// `wasm32` (where `std::time::Instant` itself is unavailable). Calls
 /// [`step`](retroglyph_core::step).
@@ -696,7 +696,7 @@ where
 /// one. The injected payload is always a `u64`, delivered as [`Event::Custom`]; see
 /// [`run_app_with_typed_proxy`] for injecting any `T: Send + 'static`.
 ///
-/// See [`run_app`]'s "Presenting is automatic" section -- this function shares the same
+/// See [`run_app`]'s "Presenting is automatic" section: this function shares the same
 /// automatic-present behavior.
 ///
 /// # Errors
@@ -724,7 +724,7 @@ where
 /// driver, including why a non-`u64` payload bypasses [`retroglyph_core::event::Event`] entirely
 /// and goes straight to `on_custom_event`.
 ///
-/// See [`run_app`]'s "Presenting is automatic" section -- this function shares the same
+/// See [`run_app`]'s "Presenting is automatic" section: this function shares the same
 /// automatic-present behavior.
 ///
 /// # Errors
@@ -849,7 +849,7 @@ struct WindowApp<P: Presenter, F, T, D> {
     app_loop: F,
     /// Delivers one injected `T` payload to the app; see [`handle_user_event`](Self::handle_user_event).
     on_custom_event: D,
-    /// `T` only ever appears as `D`'s argument, never stored directly -- see [`ApplicationHandler`]
+    /// `T` only ever appears as `D`'s argument, never stored directly: see [`ApplicationHandler`]
     /// for why `WindowApp` still needs to name it (winit dispatches `user_event` generically over
     /// the event-loop's payload type).
     _user_event: PhantomData<fn(T)>,
@@ -878,7 +878,7 @@ struct WindowApp<P: Presenter, F, T, D> {
     active_touch: Option<u64>,
     /// Frame-rate cap derived from [`WindowConfig::target_fps`]: `Some(interval)` paces redraws
     /// to no more than one per `interval`, `None` leaves them uncapped. Independent of
-    /// [`event_driven`](Self::event_driven) -- see [`WindowConfig::fit`].
+    /// [`event_driven`](Self::event_driven); see [`WindowConfig::fit`].
     ///
     /// Stored on `wasm32` too, where only the `Some`/`None` distinction is used: the browser's
     /// `requestAnimationFrame` already paces the loop, so there is no deadline to sleep until.
@@ -898,8 +898,8 @@ struct WindowApp<P: Presenter, F, T, D> {
     ///
     /// `app_loop` is a plain `FnMut(&mut Terminal<..>)` with no return value and no
     /// [`ActiveEventLoop`] handle, so it can't call `event_loop.exit()` itself; it can only flip
-    /// this shared flag. [`handle_window_event`](Self::handle_window_event) -- which runs
-    /// `app_loop` on [`WindowEvent::RedrawRequested`] -- deliberately takes no
+    /// this shared flag. [`handle_window_event`](Self::handle_window_event) (which runs
+    /// `app_loop` on [`WindowEvent::RedrawRequested`]) deliberately takes no
     /// [`ActiveEventLoop`] either, so unit tests can drive it without a live winit loop (see its
     /// doc comment). `ApplicationHandler::window_event`, which does have the `ActiveEventLoop`,
     /// checks this flag right after `handle_window_event` returns and calls `event_loop.exit()`
@@ -921,13 +921,13 @@ struct WindowApp<P: Presenter, F, T, D> {
     /// call.
     ///
     /// Retro/terminal-style apps are event-driven, not animation-driven, so "nothing happened"
-    /// should mean "render nothing new" -- see this field's use in `about_to_wait` for why that
+    /// should mean "render nothing new": see this field's use in `about_to_wait` for why that
     /// keeps the loop asleep (`ControlFlow::Wait`) instead of spinning at ~100% CPU redrawing an
     /// unchanged frame forever.
     ///
     /// Only consulted when [`event_driven`](Self::event_driven) is `true`, i.e. redraw-on-demand
     /// mode. An app that animates over time has no event to point at and would freeze under this
-    /// gate, which is what `event_driven: false` (continuous mode) is for -- see
+    /// gate, which is what `event_driven: false` (continuous mode) is for; see
     /// [`WindowConfig::fit`].
     needs_redraw: bool,
     /// Count of consecutive `present()` failures, reset to 0 on the next success. Drives
@@ -943,11 +943,11 @@ impl<P: Presenter, F, T, D> WindowApp<P, F, T, D> {
     fn create_window_and_surface(&mut self, event_loop: &ActiveEventLoop) -> Option<Arc<Window>> {
         // On native, size the window to fit the grid (`WindowConfig::fit`)
         // and let the OS window manager own further resizing. On wasm, if
-        // `fill_viewport` is set, there's no OS window to fit into -- the
-        // canvas *is* the page -- so size it to the browser viewport
+        // `fill_viewport` is set, there's no OS window to fit into (the
+        // canvas *is* the page), so size it to the browser viewport
         // instead, for a full-screen, mobile-web-app feel; otherwise it's
         // sized the same as native (`init_size`, the natural grid size),
-        // which is what most demos/examples want -- see
+        // which is what most demos/examples want; see
         // `WindowConfig::fill_viewport`'s doc comment. winit sets an inline
         // `width`/`height` style on the canvas matching whatever size we
         // request here; it does not derive that size from page CSS, so this
@@ -957,13 +957,13 @@ impl<P: Presenter, F, T, D> WindowApp<P, F, T, D> {
         // at the real (uncapped) device pixel ratio, not the DPR-capped size
         // used for the software backing store below. winit's wasm backend
         // converts whatever `PhysicalSize` we pass here back to a logical
-        // (CSS pixel) size using `window.devicePixelRatio()` -- the actual,
-        // uncapped ratio -- to set the canvas's inline `style.width`/
+        // (CSS pixel) size using `window.devicePixelRatio()` (the actual,
+        // uncapped ratio) to set the canvas's inline `style.width`/
         // `style.height`. Handing it a DPR-capped physical size makes it
         // divide by a *larger* real DPR than the one used to compute that
         // size, so the resulting CSS size comes out smaller than the
         // viewport (the higher the real DPR above the cap, the more the
-        // canvas visibly shrinks -- on a phone with DPR 3 and our 1.5 cap,
+        // canvas visibly shrinks, on a phone with DPR 3 and our 1.5 cap,
         // that's 50% of the screen). See `web::web_viewport_surface_physical_size`
         // for the separate, capped size used for the raster backing store.
         // On native, `init_size` is expressed in logical (1x) pixels --
@@ -1042,7 +1042,7 @@ impl<P: Presenter, F, T, D> WindowApp<P, F, T, D> {
         });
 
         // IME composition (`WindowEvent::Ime`) is opt-in per winit's own doc comment on that
-        // variant -- without this, platform input methods (Pinyin, Kana, dead-key accents, ...)
+        // variant: without this, platform input methods (Pinyin, Kana, dead-key accents, ...)
         // never surface composed text at all, silently limiting windowed-app text input to
         // whatever a bare `KeyboardInput` logical key can express. See `translate::translate_ime`
         // for how a committed composition is turned into an `Event`.
@@ -1073,7 +1073,7 @@ impl<P: Presenter, F, T, D> WindowApp<P, F, T, D> {
         // ourselves (`request_inner_size`), so a `resize` listener is
         // required to make this genuinely responsive rather than a
         // one-shot fit at startup. Only installed when `fill_viewport` is
-        // set -- otherwise the canvas should stay at its natural grid size
+        // set, otherwise the canvas should stay at its natural grid size
         // regardless of viewport changes.
         #[cfg(target_arch = "wasm32")]
         if self.fill_viewport {
@@ -1128,22 +1128,22 @@ const PRESENT_FAILURE_RECOVERY_THRESHOLD: u32 = 30;
 /// in response to the outcome of one `present()` call, given the running count of consecutive
 /// failures *before* this call.
 ///
-/// [`Presenter::SurfaceError`] is a generic associated type -- the software backend's
+/// [`Presenter::SurfaceError`] is a generic associated type: the software backend's
 /// `SurfaceError` just wraps `softbuffer::SoftBufferError`, a plain `#[non_exhaustive]` enum with
-/// no `Lost`/`Outdated`/`Timeout` discrimination the way `wgpu::SurfaceError` has -- so most
+/// no `Lost`/`Outdated`/`Timeout` discrimination the way `wgpu::SurfaceError` has, so most
 /// backends can't pattern-match on *why* a present failed to decide whether it's recoverable the
 /// way a wgpu-based app would. All they can generally observe is a bare `Display`able error and
 /// whether the failure is a one-off or persistent (via the consecutive-failure count), so the
 /// recovery strategy here is deliberately generic for that case: rate-limit logging so a
 /// persistent failure doesn't spam every frame, and after a run of failures long enough to rule
-/// out a one-off glitch, attempt the one backend-agnostic recovery available -- re-running
+/// out a one-off glitch, attempt the one backend-agnostic recovery available: re-running
 /// [`Presenter::init_surface`] to rebuild the surface from scratch, the same call
 /// [`create_window_and_surface`](WindowApp::create_window_and_surface) makes at startup.
 ///
 /// [`RecoverableError::is_recoverable`](crate::presenter::RecoverableError::is_recoverable) is
 /// the escape hatch for a presenter that *can* categorize its errors: when a failed `present()`
 /// reports `is_recoverable() == false`, that decision table is skipped entirely in favor of
-/// [`PresentFailureAction::Fatal`] -- retrying a failure the presenter itself already knows is
+/// [`PresentFailureAction::Fatal`]: retrying a failure the presenter itself already knows is
 /// unrecoverable can't help, so there's no reason to wait out the consecutive-failure threshold
 /// first.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1160,7 +1160,7 @@ enum PresentFailureAction {
     /// Presenting failed with an error the presenter reports as unrecoverable (see
     /// [`RecoverableError::is_recoverable`](crate::presenter::RecoverableError::is_recoverable)):
     /// log at `error!` immediately and skip the consecutive-failure/recovery bookkeeping
-    /// entirely -- rebuilding the surface via [`Presenter::init_surface`] cannot help a failure
+    /// entirely: rebuilding the surface via [`Presenter::init_surface`] cannot help a failure
     /// already classified as fatal.
     Fatal,
 }
@@ -1173,7 +1173,7 @@ enum PresentFailureAction {
 ///
 /// Pure decision table, kept separate from the live `RedrawRequested` handling (which needs a
 /// real `Terminal`/`Presenter`/`Window`) so the threshold and logging-level logic is unit
-/// -testable without any of those -- the same reasoning as [`physical_size_for`] and
+/// -testable without any of those, the same reasoning as [`physical_size_for`] and
 /// [`web::dpr_pointer_scale`] above.
 const fn present_failure_action(
     consecutive_failures: u32,
@@ -1207,13 +1207,13 @@ const fn present_failure_action(
 ///
 /// `advanced` is `next_frame + interval` clamped to `now`, so a frame that overran its budget (a
 /// stalled GPU, a descheduled thread) resumes from the present rather than firing a burst of
-/// catch-up renders to "make up" the lost time -- there is nothing to make up when every frame
+/// catch-up renders to "make up" the lost time: there is nothing to make up when every frame
 /// renders the current state.
 ///
 /// Pure function of the two instants and the interval, kept separate from the live `about_to_wait`
 /// handling (which needs an [`ActiveEventLoop`] no unit test can construct) for the same reason as
 /// [`present_failure_action`] and [`physical_size_for`] above. `wasm32` has no sleeping event loop
-/// to schedule against and never calls this -- see `about_to_wait`.
+/// to schedule against and never calls this; see `about_to_wait`.
 #[cfg(not(target_arch = "wasm32"))]
 fn next_frame_deadline(
     now: std::time::Instant,
@@ -1260,7 +1260,7 @@ where
     ) {
         self.handle_window_event(event);
         // `app_loop` (run on `RedrawRequested`, inside `handle_window_event`) can only signal
-        // exit by setting `exit_requested` -- see its doc comment for why. Check it here, where
+        // exit by setting `exit_requested`; see its doc comment for why. Check it here, where
         // an `ActiveEventLoop` is actually available, and ask winit to exit gracefully instead of
         // the caller force-exiting the process.
         if self.exit_requested.get() {
@@ -1281,7 +1281,7 @@ where
         // instead of spinning at ~100% CPU re-rendering an unchanged frame every iteration --
         // retro/terminal-style apps are idle most of the time and event-driven, so "nothing
         // happened" should mean "render nothing new". See `needs_redraw`'s doc comment. Not
-        // `event_driven` (continuous): always proceed, regardless of `needs_redraw` -- an app
+        // `event_driven` (continuous): always proceed, regardless of `needs_redraw`: an app
         // driving a tween off `Frame::delta` has something new to show every tick even though no
         // input event arrived, which is precisely what the `needs_redraw` gate cannot express.
         if self.event_driven && !self.needs_redraw {
@@ -1301,7 +1301,7 @@ where
         // `request_redraw` on the browser's next `requestAnimationFrame`, roughly one display
         // frame later, so sleeping out a full interval *before* asking would pay that latency on
         // top of it and halve the achieved frame rate. Ask on every iteration instead and let
-        // `requestAnimationFrame` do the pacing -- which is also what the browser wants, since it
+        // `requestAnimationFrame` do the pacing, which is also what the browser wants, since it
         // already throttles background tabs and matches the compositor's cadence.
         #[cfg(not(target_arch = "wasm32"))]
         match next_frame_deadline(std::time::Instant::now(), self.next_frame, interval) {
@@ -1340,7 +1340,7 @@ where
     /// Extracted from the `ApplicationHandler::user_event` impl for the same reason as
     /// [`handle_window_event`](Self::handle_window_event): so the drain logic can be exercised in
     /// unit tests without a live [`ActiveEventLoop`]. There is only ever one event to drain per
-    /// call -- winit calls `user_event` once per [`EventProxy::send_event`] -- so "drain" here
+    /// call (winit calls `user_event` once per [`EventProxy::send_event`]), so "drain" here
     /// means "push the one event this call carries", not draining a whole queue at once. For the
     /// `u64`/[`Event::Custom`] path, `on_custom_event` is [`push_custom_event`]; for a typed `T`,
     /// it's the caller-supplied `on_custom_event` handler passed to
@@ -1360,7 +1360,7 @@ where
     fn handle_window_event(&mut self, event: WindowEvent) {
         // Every branch below (other than `RedrawRequested`, which *is* the render this flag
         // exists to gate) represents something the app loop should get a chance to react to on
-        // the next frame -- see `needs_redraw`'s doc comment for why that matters for idle CPU.
+        // the next frame; see `needs_redraw`'s doc comment for why that matters for idle CPU.
         // Set unconditionally up front rather than per-arm: simpler, and the only event that must
         // *not* set it (`RedrawRequested`) already clears it again in `about_to_wait` right before
         // requesting this same redraw, so a same-tick `RedrawRequested` can't retrigger itself.
@@ -1517,7 +1517,7 @@ where
 
     fn on_resized(&mut self, size: winit::dpi::PhysicalSize<u32>) {
         // On wasm with `fill_viewport` set, `size` is whatever (uncapped)
-        // physical size we last handed winit for CSS layout purposes -- not
+        // physical size we last handed winit for CSS layout purposes, not
         // the backing store size. Recompute the DPR-capped surface size
         // independently so the raster buffer doesn't silently lose its cap
         // on every resize. Without `fill_viewport`, the canvas never resizes
@@ -1560,7 +1560,7 @@ where
     /// cell dimensions.
     ///
     /// This keeps `backend.size()` in sync with the surface immediately, but it does not
-    /// resize the [`Terminal`]'s own grid buffers -- that stays the app's responsibility,
+    /// resize the [`Terminal`]'s own grid buffers: that stays the app's responsibility,
     /// done by calling [`Terminal::resize`] in response to the pushed [`Event::Resize`].
     ///
     /// Shared by [`on_resized`](Self::on_resized) and
@@ -1585,8 +1585,8 @@ where
         // round down and the surface below is sized to exactly
         // `cols * cell_w` x `rows * cell_h`, which can be smaller than
         // `size` itself. The OS window stays at the full physical `size`
-        // the window manager gave it -- retroglyph never resizes the OS
-        // window to match -- so a non-exact-multiple resize leaves a thin
+        // the window manager gave it (retroglyph never resizes the OS
+        // window to match), so a non-exact-multiple resize leaves a thin
         // strip at the window's trailing (right/bottom) edge outside the
         // surface entirely. That strip is not cleared or painted by
         // retroglyph; whatever the OS/windowing backend leaves there (old
@@ -1603,7 +1603,7 @@ where
         // Update the backend's own reported size immediately so `backend.size()` agrees with
         // the surface without waiting for the app to react to `Event::Resize` below. This does
         // not touch the `Terminal`'s grid content (see `Terminal::resize`, which additionally
-        // resizes/clears both grids) -- that remains the app's job in response to the event.
+        // resizes/clears both grids): that remains the app's job in response to the event.
         term.backend_mut().resize(retroglyph_core::grid::Size {
             width: cols,
             height: rows,
@@ -1620,7 +1620,7 @@ where
         // native (no such cap exists there) *and* on wasm when
         // `fill_viewport` is off: `create_window_and_surface` only computes
         // a DPR-capped `surface_physical_size` when `fill_viewport` is set
-        // (see its branch above) -- without it, the backing store already
+        // (see its branch above); without it, the backing store already
         // matches the real, uncapped DPR 1:1, so applying the cap
         // correction anyway scales every reported position *down* toward
         // the origin for no reason, biasing every tap/click up-and-left of
@@ -1773,7 +1773,7 @@ where
     /// touch is released the same way a real lift is (see [`on_touch`](Self::on_touch)'s
     /// `Ended`/`Cancelled` arm): a left-button `Up` at the last known cursor position, so the app
     /// sees a normal, balanced Down/Up pair instead of a Down with no matching Up. No `Moved` is
-    /// synthesized first, unlike a real lift -- blur carries no new pointer location, and
+    /// synthesized first, unlike a real lift: blur carries no new pointer location, and
     /// `cursor_px` already holds the touch's last reported position from the `Started`/`Moved`
     /// arms that got it there.
     fn on_focus_changed(&mut self, gained: bool) {
@@ -1999,7 +1999,7 @@ mod tests {
     /// A dependency-free [`Presenter`] with fixed 8x16 cells.
     ///
     /// The `WindowApp` tests only exercise event translation, cell math, and the `WindowBackend`
-    /// queue -- no rasterization or surface is needed.
+    /// queue: no rasterization or surface is needed.
     struct MockPresenter {
         /// Records the last [`Presenter::scale_factor_changed`] argument, if any.
         last_scale_factor: Cell<Option<f64>>,
@@ -2875,7 +2875,7 @@ mod tests {
     // ── graceful exit (issue #157) ────────────────────────────────────────────
 
     /// A `WindowApp` whose `app_loop` is a boxed closure, so a test can capture and flip a
-    /// shared flag from inside it -- mirroring how `run_app_with_proxy`'s real closure sets
+    /// shared flag from inside it, mirroring how `run_app_with_proxy`'s real closure sets
     /// `exit_requested` on `Flow::Exit` (it can't return a value or reach `ActiveEventLoop`
     /// itself; see `exit_requested`'s doc comment).
     type BoxedAppLoop = Box<dyn FnMut(&mut Terminal<WindowBackend<MockPresenter>>)>;
@@ -2897,7 +2897,7 @@ mod tests {
     fn app_loop_setting_exit_requested_is_observed_after_redraw() {
         // Simulates `run_app_with_proxy`'s closure: on `Flow::Exit` it sets the shared flag
         // instead of calling `std::process::exit`. `handle_window_event` itself never calls
-        // `event_loop.exit()` (it can't -- no `ActiveEventLoop` -- see its doc comment); that
+        // `event_loop.exit()` (it can't: no `ActiveEventLoop`, see its doc comment); that
         // happens in `ApplicationHandler::window_event`, which this flag lets the test assert
         // on without a live winit event loop.
         let terminal = Terminal::new(WindowBackend::new(MockPresenter::default()));
@@ -3068,8 +3068,8 @@ mod tests {
         // `handle_window_event` can't be exercised directly here: winit's
         // `InnerSizeWriter::new` is `pub(crate)`, so a real
         // `WindowEvent::ScaleFactorChanged` can't be constructed outside the
-        // winit crate. `on_scale_factor_changed` is called directly instead
-        // -- it's the same code the `WindowEvent::ScaleFactorChanged` arm in
+        // winit crate. `on_scale_factor_changed` is called directly instead:
+        // it's the same code the `WindowEvent::ScaleFactorChanged` arm in
         // `handle_window_event` dispatches to.
         let mut app = test_window_app();
         app.on_scale_factor_changed(2.0);
@@ -3088,7 +3088,7 @@ mod tests {
     #[test]
     fn scale_factor_changed_without_a_window_is_a_no_op_resize() {
         // `test_window_app` has no real winit window (`window: None`), so
-        // there is no physical size to re-align the surface to -- this must
+        // there is no physical size to re-align the surface to: this must
         // not panic, and must not push a spurious `Event::Resize`.
         let mut app = test_window_app();
         app.on_scale_factor_changed(2.0);
@@ -3128,7 +3128,7 @@ mod tests {
                 height: 5,
             }
         );
-        // `Terminal::size` (the grid itself) is untouched -- that stays the app's job, done by
+        // `Terminal::size` (the grid itself) is untouched: that stays the app's job, done by
         // calling `Terminal::resize` in response to the `Event::Resize` this same call pushed.
         assert_eq!(
             app.terminal.as_ref().unwrap().size(),
@@ -3143,7 +3143,7 @@ mod tests {
     fn resized_below_one_cell_clamps_surface_and_event_to_1x1() {
         // Regression test for #140: an 8x16-cell presenter resized to a
         // window smaller than one cell (4x4 px) must not compute 0 cols/0
-        // rows -- that would ask `resize_surface` for a zero-size surface,
+        // rows: that would ask `resize_surface` for a zero-size surface,
         // which crashes softbuffer.
         type RecordingApp = WindowApp<
             RecordingPresenter,
@@ -3201,7 +3201,7 @@ mod tests {
 
     #[test]
     fn fresh_app_does_not_need_a_redraw() {
-        // `test_window_app` starts with `needs_redraw: false` -- unlike the real
+        // `test_window_app` starts with `needs_redraw: false`, unlike the real
         // `resumed()` path, which sets it `true` once the window/surface exists (a real winit
         // `ActiveEventLoop` can't be constructed in a unit test, so `resumed` itself isn't
         // exercised here; see `handle_window_event`/`handle_user_event` below for the parts of
@@ -3213,7 +3213,7 @@ mod tests {
     #[test]
     fn window_event_sets_needs_redraw() {
         // Any real window event (a mouse move here, but any arm other than `RedrawRequested`
-        // behaves the same -- see `handle_window_event`'s doc comment) should mark that the app
+        // behaves the same; see `handle_window_event`'s doc comment) should mark that the app
         // loop has something new to react to, so the next `about_to_wait` requests a redraw
         // instead of leaving the loop idle.
         let mut app = test_window_app();
@@ -3228,7 +3228,7 @@ mod tests {
     #[test]
     fn redraw_requested_does_not_itself_set_needs_redraw() {
         // `RedrawRequested` is the render this flag exists to gate, not a new event to redraw
-        // again for -- an idle app that gets exactly one `RedrawRequested` (e.g. right after
+        // again for: an idle app that gets exactly one `RedrawRequested` (e.g. right after
         // `resumed`) must not perpetually re-arm itself into another one forever.
         let mut app = test_window_app();
         app.handle_window_event(WindowEvent::RedrawRequested);
@@ -3410,7 +3410,7 @@ mod tests {
             PRESENT_FAILURE_RECOVERY_THRESHOLD - 1
         );
         // No window to recover from in this test app (`window: None`), but recovery should not
-        // even have been attempted yet regardless -- confirmed by `try_recover_surface`'s own
+        // even have been attempted yet regardless: confirmed by `try_recover_surface`'s own
         // no-window guard never being reached, i.e. `init_surface` was never called past the
         // initial 0.
         assert_eq!(init_calls.get(), 0);
@@ -3433,7 +3433,7 @@ mod tests {
     #[test]
     fn crossing_the_recovery_threshold_attempts_recovery_without_panicking() {
         // `test_window_app`/`failing_app` have no real winit `Window` (constructing one needs a
-        // live event loop, unavailable in a unit test -- the same limitation documented on
+        // live event loop, unavailable in a unit test, the same limitation documented on
         // `scale_factor_changed_without_a_window_is_a_no_op_resize` above), so this can't assert
         // `init_surface` actually re-runs; `try_recover_surface`'s own no-window guard is exercised
         // directly below instead. What this does verify: the threshold-crossing call does not
@@ -3593,7 +3593,7 @@ mod tests {
     #[test]
     fn app_loop_that_never_presents_is_still_drawn_by_the_automatic_present() {
         // Case (a): an `app_loop` that draws but never calls `term.present()` itself must still
-        // reach the backend -- that's the whole point of this driver-side automatic present.
+        // reach the backend: that's the whole point of this driver-side automatic present.
         let mut app = recording_app(|term| {
             term.surface()
                 .put((0, 0), '@', retroglyph_core::Style::default());
@@ -3612,7 +3612,7 @@ mod tests {
     #[test]
     fn app_loop_that_already_presents_itself_is_not_double_drawn() {
         // Case (b): an `app_loop` that still calls `term.present()` itself (the pre-fix pattern)
-        // must keep working -- and, crucially, must not have its frame blanked by a second,
+        // must keep working, and, crucially, must not have its frame blanked by a second,
         // driver-side `present()` call diffing an now-empty `current` against the just-drawn
         // `previous` (see `Terminal::present`'s doc comment for why that second call would
         // otherwise erase the frame).
@@ -3637,7 +3637,7 @@ mod tests {
         // Simulates an `App::update` returning `Flow::Idle`: `run_app_with_proxy`'s closure draws
         // nothing and sets `skip_present` from inside `app_loop`, the same point in the frame
         // `run_app_with_proxy`'s real closure sets it from. `handle_redraw_requested` must honor
-        // it -- `Terminal::present` always presents unconditionally (even on an untouched frame),
+        // it: `Terminal::present` always presents unconditionally (even on an untouched frame),
         // so without this explicit skip it would still run and erase whatever the previous frame
         // left on screen.
         let terminal = Terminal::new(WindowBackend::new(GridRecordingPresenter::default()));
@@ -3752,7 +3752,7 @@ mod tests {
     #[test]
     fn unrecoverable_present_failure_never_attempts_recovery_even_past_the_threshold() {
         // Unlike `FailingPresenter` (recoverable errors, generic threshold-based recovery), a
-        // `FatalPresenter` failure is fatal on every single call -- `present_failure_action`
+        // `FatalPresenter` failure is fatal on every single call: `present_failure_action`
         // returns `Fatal` immediately (see the pure-function tests above), so
         // `handle_redraw_requested` must never route it through `try_recover_surface`, no matter
         // how many consecutive failures accumulate past `PRESENT_FAILURE_RECOVERY_THRESHOLD`.

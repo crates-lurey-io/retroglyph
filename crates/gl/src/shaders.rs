@@ -35,7 +35,7 @@ pub(crate) enum GlslFlavor {
     Es300,
 }
 
-/// Vertex shader body (no `#version` line -- that is prepended by [`source`]).
+/// Vertex shader body (no `#version` line, that is prepended by [`source`]).
 const VERTEX_BODY: &str = r"
 layout(location = 0) in vec2  a_corner; // unit-quad corner in [0,1], also the in-cell glyph UV
 layout(location = 1) in uint  a_glyph;  // atlas layer (glyph id), per instance
@@ -80,7 +80,7 @@ void main() {
 }
 ";
 
-/// Fragment shader body (no `#version` line, no precision qualifiers -- both are prepended by
+/// Fragment shader body (no `#version` line, no precision qualifiers, both are prepended by
 /// [`source`] for the ES flavor).
 const FRAGMENT_BODY: &str = r"
 uniform highp sampler2DArray u_atlas;
@@ -127,7 +127,7 @@ void main() {
 
 /// Vertex shader body for the RGBA sprite pass (issue #366). Unlike the glyph shader, sprite
 /// instances carry an explicit grid cell (sprite cells are sparse, so `gl_InstanceID` can't derive
-/// it) and a sprite pixel size, so the quad scales to the sprite -- which may exceed one cell and
+/// it) and a sprite pixel size, so the quad scales to the sprite, which may exceed one cell and
 /// spill into neighbours, exactly like `retroglyph-software`'s sprite blit.
 // Integer attribute signedness must match the vertex-array data type or WebGL2/SwiftShader raises
 // INVALID_OPERATION at draw: `a_cell`/`a_layer`/`a_sprite` are fed UNSIGNED_SHORT so they are

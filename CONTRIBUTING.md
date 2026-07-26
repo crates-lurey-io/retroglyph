@@ -35,7 +35,7 @@ This repo is squash-merge only, and PR titles (not individual commits) must foll
 [Conventional Commits](https://www.conventionalcommits.org): `feat(widgets): add sparkline`,
 `fix(core): ...`, `docs(software): ...`. The squash-merge turns your PR title into the single commit
 on `main`, which is what drives per-crate version bumps and changelogs (via
-[release-plz](https://release-plz.dev)) -- see [`RELEASING.md`](RELEASING.md) for the full automated
+[release-plz](https://release-plz.dev)): see [`RELEASING.md`](RELEASING.md) for the full automated
 release flow. Commits inside your branch are unconstrained; only the PR title is checked (CI:
 `pr-title.yml`).
 
@@ -45,12 +45,12 @@ belong to one crate, use `workspace` (tooling, CI, docs, release config) or `dep
 bumps). A scopeless title is accepted but `workspace` is preferred.
 
 **Breaking changes:** don't add `!` for an ordinary API-breaking change (removing a public method,
-changing a signature, etc.) -- `cargo-semver-checks`, run automatically by release-plz, detects
-those and computes the correct version bump on its own, without any commit-message signal. Reserve
-`!` (`feat(core)!: ...`) or a `BREAKING CHANGE:` footer for the rarer case where the public API's
+changing a signature, etc.): `cargo-semver-checks`, run automatically by release-plz, detects those
+and computes the correct version bump on its own, without any commit-message signal. Reserve `!`
+(`feat(core)!: ...`) or a `BREAKING CHANGE:` footer for the rarer case where the public API's
 signatures don't change but runtime behavior does, which no tool can detect automatically. If you're
-not sure whether your change needs `!`, it almost certainly doesn't -- open the PR without it and
-let CI's semver check tell you.
+not sure whether your change needs `!`, it almost certainly doesn't: open the PR without it and let
+CI's semver check tell you.
 
 **Labels** are applied mostly automatically: `c:<crate>` (area, mirrors the Conventional Commit
 scopes above) plus a handful of standalone status/categorization labels (`breaking`, `benchmark`,
@@ -157,12 +157,12 @@ open tests/snapshots/demo.svg
 ## Benchmarking
 
 Performance benchmarks live per-crate, under each crate's own `crates/<name>/benches/` directory
-(e.g. `crates/core/benches/grid_diff.rs`) -- not in a shared top-level crate, and not under
+(e.g. `crates/core/benches/grid_diff.rs`): not in a shared top-level crate, and not under
 `examples/` (see `examples/AGENTS.md` for why perf work and the examples docs-gallery/regression-
 suite are kept separate). This mirrors Cargo's own convention for a package's benches and keeps each
 crate's `[[bench]]` targets next to the code they measure and its own dev-dependencies (e.g.
-`criterion`, `fastrand`), rather than accumulating every crate's benchmarks -- and their combined
-dev-dependency set -- in one ever-growing shared crate. Each `<name>.rs` file under a crate's
+`criterion`, `fastrand`), rather than accumulating every crate's benchmarks (and their combined
+dev-dependency set) in one ever-growing shared crate. Each `<name>.rs` file under a crate's
 `benches/` is a [criterion](https://github.com/bheisler/criterion.rs) benchmark, `harness = false`.
 
 | Command                                    | What it does                                                     |
@@ -183,7 +183,7 @@ flag/example list) for the mechanics. Both `just bench` and `tools/bench-compare
 crate owns it, as long as its name is unique across the workspace (`--all-features` matches
 `just test`'s convention and avoids feature-gated crates failing to build in isolation).
 
-Note: the comparison ref must already contain the bench target being compared -- you can't compare
+Note: the comparison ref must already contain the bench target being compared: you can't compare
 against a commit that predates that crate's `benches/` directory.
 
 ### CI
@@ -198,7 +198,7 @@ automatically once the workflow runs.
 ### Adding a new benchmark
 
 Add a `crates/<name>/benches/<bench-name>.rs` file (see `crates/core/benches/grid_diff.rs` for the
-pattern: build inputs deterministically -- fixed RNG seeds -- so `--save-baseline`/`--baseline`
+pattern: build inputs deterministically (fixed RNG seeds) so `--save-baseline`/`--baseline`
 comparisons are meaningful) and a matching `[[bench]]` entry plus any needed dev-dependencies (e.g.
 `criterion`, `fastrand`) in that crate's `Cargo.toml`. If you want it tracked in CI alongside
 `grid_diff`, add it to the `cargo bench` invocations in `bench.yml` too.

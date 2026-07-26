@@ -45,9 +45,9 @@ fn main() -> std::io::Result<()> {
 
 `Crossterm<W>` is generic over its content writer (default `BufWriter<Stdout>`). Use
 `Crossterm::with_writer`/`CrosstermOptions::build_with_writer` to render into a file, a pipe, or an
-in-memory buffer -- useful for capturing/asserting on the emitted ANSI output in tests without a
-real TTY. Terminal-protocol setup (raw mode, the alternate screen, mouse/focus/paste/kitty) still
-targets the real process stdout regardless of the writer; disable those via `CrosstermOptions` when
+in-memory buffer: useful for capturing/asserting on the emitted ANSI output in tests without a real
+TTY. Terminal-protocol setup (raw mode, the alternate screen, mouse/focus/paste/kitty) still targets
+the real process stdout regardless of the writer; disable those via `CrosstermOptions` when
 targeting a non-terminal sink:
 
 ```rust,no_run
@@ -69,7 +69,7 @@ drop(term);
 ## RGB colors on 256-color terminals
 
 `Color::Rgb` is written out as a truecolor SGR sequence with no quantization to a 256-color or
-16-color palette -- see
+16-color palette: see
 [`retroglyph-terminal`'s "RGB color fallback" docs](https://docs.rs/retroglyph-terminal) for the
 full contract. On terminals that don't support truecolor, the emitted color depends on the
 terminal/multiplexer's own handling of the extended SGR sequence; use `Color::Indexed` or

@@ -30,7 +30,7 @@ term.draw(|s| s.put((5, 5), '@', Style::new().fg(Color::GREEN)))?;
 # }
 ```
 
-`Headless` never touches a real terminal or window, so this runs anywhere -- including this README's
+`Headless` never touches a real terminal or window, so this runs anywhere: including this README's
 own doctest (see `src/lib.rs`'s `#[cfg(doctest)]` include). For a real backend, add
 [`retroglyph-crossterm`](https://crates.io/crates/retroglyph-crossterm) or
 [`retroglyph-software`](https://crates.io/crates/retroglyph-software) and see the

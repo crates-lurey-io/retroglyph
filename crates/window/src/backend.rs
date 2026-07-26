@@ -13,8 +13,8 @@ use std::time::Duration;
 ///
 /// [`Input`] and [`Output`] are independent facets of `Backend`, which does not fit a window as
 /// one type: some event loop owns input, while a per-renderer surface owns output.
-/// `WindowBackend` reunites the two -- implementing `Output` by delegating to `P`, `Input` via
-/// its own event queue, and the no-op default `Cursor` -- so [`Terminal`](retroglyph_core::Terminal)
+/// `WindowBackend` reunites the two (implementing `Output` by delegating to `P`, `Input` via
+/// its own event queue, and the no-op default `Cursor`), so [`Terminal`](retroglyph_core::Terminal)
 /// gets the full `Backend` it needs, while renderer crates implement only [`Presenter`]:
 ///
 /// ```text
@@ -107,7 +107,7 @@ use std::time::Duration;
 /// }
 ///
 /// // A caller driving its own loop (SDL2, tao, a hand-rolled driver) builds
-/// // `WindowBackend` directly -- no `winit` feature required.
+/// // `WindowBackend` directly, no `winit` feature required.
 /// let backend = WindowBackend::new(NullPresenter);
 /// let mut term = Terminal::new(backend);
 ///

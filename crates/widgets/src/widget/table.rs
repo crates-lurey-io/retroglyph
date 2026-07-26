@@ -125,15 +125,15 @@ impl<'a> Table<'a> {
     /// `theme.fg` (brighter, matching the header's original brighter-than-row default) on
     /// `theme.panel_bg`, `row_style` becomes `theme.dim` (the same de-emphasized role a plain
     /// body row already reads as) on `theme.panel_bg`, and `selected_style` becomes `theme.bg`
-    /// on `theme.accent` -- the same bright-on-accent highlight [`super::List::theme`] and
+    /// on `theme.accent`: the same bright-on-accent highlight [`super::List::theme`] and
     /// [`super::Button::theme`] use.
     ///
     /// `header_style`/`row_style` always set an explicit background rather than leaving it at
     /// [`Style::new()`]'s default: an unset background isn't "transparent" once a real backend
     /// draws it (a bare `Color::Default` cell paints as solid black behind the glyph, not
-    /// whatever was there before -- see `retroglyph-software`'s `DEFAULT_BG`), so this widget
-    /// assumes it's drawn on `theme.panel_bg` -- true when composed with a themed
-    /// [`super::Panel`]/[`super::Modal`], the common case -- rather than risk a black box behind
+    /// whatever was there before; see `retroglyph-software`'s `DEFAULT_BG`), so this widget
+    /// assumes it's drawn on `theme.panel_bg` (true when composed with a themed
+    /// [`super::Panel`]/[`super::Modal`], the common case) rather than risk a black box behind
     /// every row on a light [`Theme`]. Drawing this table directly on the raw screen background
     /// instead of inside a themed panel needs a manual `.header_style(...)`/`.row_style(...)`
     /// override afterwards.
@@ -146,7 +146,7 @@ impl<'a> Table<'a> {
     }
 
     /// Same as [`Table::theme`], but `header_style`/`row_style` are drawn on `bg` instead of
-    /// `theme.panel_bg` -- for a table drawn directly on a backdrop other than a themed
+    /// `theme.panel_bg`: for a table drawn directly on a backdrop other than a themed
     /// [`super::Panel`]/[`super::Modal`]'s fill, e.g. the raw screen background or a different
     /// panel's fill color. [`Table::theme`] is exactly `theme_on(theme, theme.panel_bg)`.
     #[must_use]

@@ -13,7 +13,7 @@
 //! widget in its own right, just the two widgets' common implementation.
 //!
 //! `label` and `readout` are both drawn via [`Text`], not hand-rolled char
-//! loops -- the same widget a caller would reach for on its own, used here
+//! loops: the same widget a caller would reach for on its own, used here
 //! internally for the same reason [`super::Panel`] composes
 //! [`super::BoxBorder`] rather than duplicating its drawing loop.
 

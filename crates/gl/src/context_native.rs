@@ -2,7 +2,7 @@
 //!
 //! Selected by `lib.rs` on every non-wasm target. Exposes the same
 //! `GlContext::new`/`resize`/`present`/`flavor` API as the wasm module
-//! (`context_wasm.rs`), so the renderer drives either without `cfg` in its body -- the same
+//! (`context_wasm.rs`), so the renderer drives either without `cfg` in its body, the same
 //! module-swap pattern `retroglyph-software` uses for its window surface.
 //!
 //! The GL context is created from the already-created window's raw window/display handles (glutin

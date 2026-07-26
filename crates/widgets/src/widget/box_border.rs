@@ -45,12 +45,12 @@ impl BoxBorder {
     ///
     /// The background is set explicitly rather than left at [`Style::new()`]'s default: an unset
     /// background isn't "transparent" once a real backend draws it (a bare `Color::Default` cell
-    /// paints as solid black behind the glyph, not whatever was there before -- see
+    /// paints as solid black behind the glyph, not whatever was there before; see
     /// `retroglyph-software`'s `DEFAULT_BG`), which would leave a visible black grid of border
     /// cells on a light [`Theme`] rather than a border blending into its surroundings. That means
     /// this widget has to assume *something* about what it's drawn over, even though (unlike
     /// [`super::Panel`], which also owns and fills its own interior) a standalone `BoxBorder`
-    /// genuinely doesn't know -- `theme.panel_bg` is the closest default, matching what a themed
+    /// genuinely doesn't know: `theme.panel_bg` is the closest default, matching what a themed
     /// [`super::Panel`]/[`super::Modal`] around it would use. Drawing this border directly on the
     /// raw screen background instead needs a manual [`BoxBorder::style`] override afterwards.
     ///

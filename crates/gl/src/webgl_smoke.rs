@@ -9,7 +9,7 @@
 //!
 //! It is the WebGL2 sibling of [`headless`](crate::headless) (the native EGL-surfaceless render
 //! test). Both build the resources with the same [`GlRenderer::build_resources`] the windowed
-//! `init_surface` uses, render into an offscreen framebuffer, and assert on the readback -- so a
+//! `init_surface` uses, render into an offscreen framebuffer, and assert on the readback, so a
 //! break in shader compile/link, atlas upload, or the instanced draw shows up in exactly one of
 //! the two on whichever platform regressed.
 //!
@@ -26,7 +26,7 @@
 //! The same driver-robust property checks the native headless module uses (never exact-pixel
 //! snapshots, which are fragile across GL stacks): a full-block cell is entirely its foreground
 //! color, and a blank (space) cell is entirely its background color. The full-block assertion is
-//! the load-bearing one for the atlas-upload bug -- with a failed atlas upload the glyph coverage
+//! the load-bearing one for the atlas-upload bug: with a failed atlas upload the glyph coverage
 //! is uniformly zero, so the full-block cell renders as its *background*, and this test fails.
 
 // GL wants `i32` dimensions from `u32` pixel sizes; these casts are all bounded (the test grid is
@@ -147,7 +147,7 @@ fn render_to_frame(gl: &glow::Context, renderer: &GlRenderer) -> Frame {
         );
 
         // `build_resources` set the viewport/projection; clear once, then composite every layer
-        // back-to-front (upload + two instanced passes each) -- the same loop the windowed
+        // back-to-front (upload + two instanced passes each), the same loop the windowed
         // `present` runs, so a single-layer frame and a multi-layer one both go through it.
         res.clear(gl);
         for l in 0..renderer.layers.len() {
@@ -236,7 +236,7 @@ fn full_block_cell_is_all_foreground_blank_cell_is_all_background() {
 /// A WebGL2 canvas is composited by the page (winit requests `alpha: true`), so the surface's
 /// alpha channel is load-bearing: a texel left at alpha 0 shows the document background rather
 /// than the cell background painted by the background pass. Glyph coverage is a mask for the color
-/// channels only, so the glyph pass must leave the destination alpha alone -- see the blend factors
+/// channels only, so the glyph pass must leave the destination alpha alone: see the blend factors
 /// in `GlResources::draw_layer`.
 ///
 /// A partially-covered glyph is the case that matters: the covered texels carry alpha 1 anyway, so

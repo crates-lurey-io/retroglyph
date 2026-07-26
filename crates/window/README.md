@@ -8,8 +8,8 @@
 A shared windowing layer for [retroglyph](https://github.com/crates-lurey-io/retroglyph)'s
 window-based backends (software today; GL/wgpu are future candidates). `Input` and `Output` are
 independent facets of `Backend`, which fits a terminal process (one type implements both) but not a
-window, where an event loop owns input and a renderer owns output separately -- this crate keeps
-that split (`Presenter` is an `Output` supertrait; `WindowBackend` owns its own `Input` queue) and
+window, where an event loop owns input and a renderer owns output separately: this crate keeps that
+split (`Presenter` is an `Output` supertrait; `WindowBackend` owns its own `Input` queue) and
 reassembles both into one `Backend` via `winit`.
 
 Most consumers don't depend on this crate directly; use
@@ -22,7 +22,7 @@ Most consumers don't depend on this crate directly; use
 retroglyph-window = "0.1"
 ```
 
-A game never implements [`Presenter`] itself -- that's `retroglyph-software`'s job -- but a new
+A game never implements [`Presenter`] itself (that's `retroglyph-software`'s job), but a new
 renderer backend does. This is the whole contract it implements, sized to fit a window from its own
 cell geometry via [`WindowConfig::fit`]:
 

@@ -13,7 +13,7 @@ use crate::Theme;
 ///
 /// Only the first row of `area` is used. Same layout and coloring as
 /// [`super::Gauge`], but for integer `current`/`max` pairs (health, mana,
-/// stamina) with a literal readout instead of a percentage -- `"45/100"`
+/// stamina) with a literal readout instead of a percentage: `"45/100"`
 /// reads as a stat, not a load. `max == 0` renders as an empty, unfilled bar
 /// with a `"0/0"` readout rather than a special-cased blank output. If
 /// `current` exceeds `max` (e.g. a temporarily buffed stat), the bar fill
@@ -59,7 +59,7 @@ impl<'a> StatBar<'a> {
     }
 
     /// Sets `label_style` to `theme.dim` on `theme.panel_bg`, the same mapping (and the same
-    /// "assumes it's drawn on `theme.panel_bg`" caveat) as [`super::Gauge::theme`] -- see its
+    /// "assumes it's drawn on `theme.panel_bg`" caveat) as [`super::Gauge::theme`]; see its
     /// doc comment for the full explanation, including why the bar's own load-colored fill stays
     /// outside `theme`'s role palette.
     ///
@@ -70,7 +70,7 @@ impl<'a> StatBar<'a> {
     }
 
     /// Same as [`StatBar::theme`], but `label_style` is drawn on `bg` instead of
-    /// `theme.panel_bg` -- for a stat bar drawn directly on a backdrop other than a themed
+    /// `theme.panel_bg`: for a stat bar drawn directly on a backdrop other than a themed
     /// [`super::Panel`]/[`super::Modal`]'s fill. [`StatBar::theme`] is exactly
     /// `theme_on(theme, theme.panel_bg)`.
     #[must_use]

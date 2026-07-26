@@ -14,8 +14,8 @@ carry the bulk of them). Pixel-level software-backend regressions live in
 `crates/gl/src/headless.rs` runs the real native GL pipeline (shader compile/link, atlas upload,
 instanced draw) and reads the result back with `glReadPixels`, so the GPU path is actually exercised
 instead of only its CPU-side units (atlas byte layout, shader-string generation). It creates an EGL
-_surfaceless_ context off the windowed path -- an EGL display built from an EGL device via glutin's
-`api::egl`, made current with no surface -- and renders into an offscreen framebuffer; the windowed
+_surfaceless_ context off the windowed path (an EGL display built from an EGL device via glutin's
+`api::egl`, made current with no surface) and renders into an offscreen framebuffer; the windowed
 `GlContext` needs a real window handle and can't run in CI.
 
 The module is `cfg(test, target_os = "linux")`: the EGL device platform is the portable CI-able
@@ -26,7 +26,7 @@ background, a glyph matches the font's own coverage bits) and pixel-for-pixel pa
 `retroglyph-software` CPU rasterizer, which shares the same `retroglyph-window` font. Parity is
 checked for both a single flattened frame and a full multi-layer frame (`draw_layers`), so the GPU's
 back-to-front layer compositing (issue #368) is verified to match the software backend's per-pixel
-occlusion -- including the opaque-space-erases-lower-glyph and inherited-background cases.
+occlusion: including the opaque-space-erases-lower-glyph and inherited-background cases.
 
 The render only runs when `RETROGLYPH_REQUIRE_GL` is set; otherwise the tests skip. That keeps the
 ordinary `test`/`coverage` jobs from depending on whatever GL a runner happens to expose (GitHub's
@@ -43,7 +43,7 @@ GL/EGL stack.
 `crates/gl/src/webgl_smoke.rs` is the browser sibling of `headless.rs`: a `wasm-bindgen-test` that
 builds a WebGL2 context from a `<canvas>`, runs the same `GlRenderer::build_resources` + instanced
 draw the windowed path uses, reads the pixels back, and asserts a full-block cell is entirely its
-foreground (an atlas that fails to upload -- the glow 0.16 `texImage3D` bug -- renders it as the
+foreground (an atlas that fails to upload, the glow 0.16 `texImage3D` bug, renders it as the
 background, failing the test). It runs in real headless Chrome via `just test-wasm-gl`
 (`wasm-pack test --headless --chrome`); CI runners have no GPU, so `crates/gl/webdriver.json`
 launches Chrome with `--enable-unsafe-swiftshader` for a software WebGL2 stack. The dedicated
@@ -55,7 +55,7 @@ fail to start).
 `crates/gl/src/webgl_smoke.rs` also carries `composites_two_layers_back_to_front`, which drives the
 GPU compositing path (issue #368) in the browser and asserts the three occlusion cases directly (a
 transparent empty overlay, an opaque occluding glyph, and an opaque space that erases the base glyph
-while inheriting its background) -- the runnable local counterpart to the Linux-only multi-layer
+while inheriting its background): the runnable local counterpart to the Linux-only multi-layer
 software-parity test above.
 
 The glyph atlas grid-packs slots into `TEXTURE_2D_ARRAY` layers (issue #367's grid-packing half,
@@ -75,7 +75,7 @@ the signed/unsigned vertex-attribute mismatch that SwiftShader rejects.
 `crates/gl/src/webgl_recovery.rs` is the companion context-loss test (issue #373). It drives the
 real windowed path (`Presenter::init_surface` then `present`), forces a lost/restored cycle with the
 `WEBGL_lose_context` extension, and asserts `present()` reports the recoverable error while lost and
-then renders the full-block cell correctly again after the restore -- which only holds if the
+then renders the full-block cell correctly again after the restore: which only holds if the
 invalidated program/atlas/buffers were rebuilt on the live context. It runs under the same
 `just test-wasm-gl` / `test-wasm-gl` CI job (both tests are in the crate, so `wasm-pack test` runs
 them together). The `WEBGL_lose_context` extension is implemented by the browser, not the GL driver,
@@ -99,10 +99,10 @@ cargo insta accept  # accept pending snapshots
 ## Driving `Headless` with synthetic events
 
 `Headless` doesn't just render; it also accepts input, via `Input::push_event` /
-`Headless::push_event`. That makes it possible to test a whole update-draw cycle -- inject a key or
-mouse event, drain it through your app's event handling, then snapshot the resulting grid -- without
-a real terminal, window, or PTY. This is the same technique used throughout this crate's own unit
-and integration tests (see `crates/core/src/terminal.rs`, `crates/core/src/app.rs`) and in
+`Headless::push_event`. That makes it possible to test a whole update-draw cycle (inject a key or
+mouse event, drain it through your app's event handling, then snapshot the resulting grid) without a
+real terminal, window, or PTY. This is the same technique used throughout this crate's own unit and
+integration tests (see `crates/core/src/terminal.rs`, `crates/core/src/app.rs`) and in
 `crates/core/examples/headless.rs`.
 
 ```rust
@@ -125,7 +125,7 @@ term.backend_mut().push_event(Event::Key(KeyEvent::new(
 
 // Drain the queued event(s) and let your app's update logic react to them, then redraw.
 for event in term.drain_events() {
-    // handle_input(event) -- move the `@`, etc.
+    // handle_input(event): move the `@`, etc.
     let _ = event;
 }
 term.put((1, 1), ' ');
@@ -162,8 +162,8 @@ The crossterm binary each `svg_snapshot` test spawns is built with its own `--ta
 (`target/pty-examples/`, see `support::build_crossterm_example`), separate from the workspace's
 normal `target/`. `cargo test --workspace --all-features` builds every example with the `software`
 feature (unusable in a PTY) before any test runs, so building the crossterm-only variant back into
-the same output path would force a relink -- and, on macOS, a real code-signature validation cost of
-roughly a second or two -- on every single test run. The isolated target dir keeps that binary
+the same output path would force a relink (and, on macOS, a real code-signature validation cost of
+roughly a second or two) on every single test run. The isolated target dir keeps that binary
 byte-identical (and already validated) across runs instead.
 
 Every example under `examples/examples/*.rs` is also auto-built to three WASM variants (headless /

@@ -54,8 +54,8 @@ bitflags::bitflags! {
         ///
         /// Unlike [`WIDE_CHAR_SPACER`](Self::WIDE_CHAR_SPACER), a covered tile keeps a real glyph
         /// and **is** rendered by cell backends: that glyph is the span artwork's text fallback.
-        /// Only a backend that actually draws the span's artwork -- a pixel backend blitting one
-        /// sprite across the whole footprint -- skips it. See the [`grid`](crate::grid) module
+        /// Only a backend that actually draws the span's artwork (a pixel backend blitting one
+        /// sprite across the whole footprint) skips it. See the [`grid`](crate::grid) module
         /// docs for the full contract.
         const SPAN_COVERED      = 0b0010_0000;
     }
@@ -290,8 +290,8 @@ impl Tile {
 
     /// Strips this tile's multi-cell span role, leaving its glyph and style alone.
     ///
-    /// Used by copy paths that cannot preserve a span's cross-cell invariant --
-    /// [`Grid::blit`](crate::grid::Grid::blit) can clip a footprint in half -- so the copy
+    /// Used by copy paths that cannot preserve a span's cross-cell invariant
+    /// ([`Grid::blit`](crate::grid::Grid::blit) can clip a footprint in half), so the copy
     /// degrades to exactly the span's text fallback instead of to a dangling anchor.
     pub(crate) fn clear_span(&mut self) {
         self.flags

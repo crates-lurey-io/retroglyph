@@ -7,7 +7,7 @@ use core::ops::{BitOr, BitOrAssign};
 /// [`Interaction::interact`](crate::Interaction::interact) should actually
 /// populate for a given widget call.
 ///
-/// A manual bitflag over `u8` -- mirrors
+/// A manual bitflag over `u8`: mirrors
 /// [`KeyModifiers`](retroglyph_core::KeyModifiers)'s shape rather than
 /// pulling in the `bitflags` crate for five bits. Combine raw flags with
 /// `|` (`Sense::HOVER | Sense::FOCUSABLE`), or reach for one of the named
@@ -31,17 +31,17 @@ impl Sense {
     /// Tab/Shift+Tab order and report
     /// [`Response::focused`](crate::Response::focused). Combined with
     /// [`CLICK`](Self::CLICK), Enter/Space also activate the widget while
-    /// it's focused -- terminals are frequently mouse-less.
+    /// it's focused: terminals are frequently mouse-less.
     pub const FOCUSABLE: Self = Self(1 << 3);
     /// Report [`Response::scroll_delta`](crate::Response::scroll_delta)
     /// whenever the pointer is within this widget's rect. Unlike the other
     /// pointer senses, this is deliberately *not* limited to the single
-    /// topmost widget under the pointer -- see [`Interaction::interact`](crate::Interaction::interact)'s
+    /// topmost widget under the pointer: see [`Interaction::interact`](crate::Interaction::interact)'s
     /// doc comment on `scroll_delta` for why.
     pub const SCROLL: Self = Self(1 << 4);
     /// Report [`Response::secondary_clicked`](crate::Response::secondary_clicked):
     /// the secondary (right) button pressed and released on this widget
-    /// while still hovered. Independent of [`CLICK`](Self::CLICK) -- combine
+    /// while still hovered. Independent of [`CLICK`](Self::CLICK): combine
     /// them (`Sense::click() | Sense::SECONDARY_CLICK`) for a widget that
     /// wants both a primary action and a secondary one (e.g. a context
     /// menu). Unlike [`CLICK`](Self::CLICK)/[`DRAG`](Self::DRAG), there's no
@@ -53,7 +53,7 @@ impl Sense {
     /// registers the id nowhere and returns [`Response::default`](crate::Response).
     pub const NONE: Self = Self(0);
 
-    /// A clickable, hoverable, focusable widget -- buttons, tabs, list
+    /// A clickable, hoverable, focusable widget: buttons, tabs, list
     /// rows. Equivalent to `HOVER | CLICK | FOCUSABLE`.
     #[must_use]
     pub const fn click() -> Self {

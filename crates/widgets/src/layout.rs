@@ -63,14 +63,14 @@ impl Constraint {
 
 /// Constraint counts at or below this stay on the stack in [`SmallBuf`]; larger splits fall back
 /// to a heap `Vec`. Chosen comfortably above a typical multi-panel layout (a header, a handful of
-/// flexible content panes, a status bar) while staying correct for arbitrarily many panes -- see
+/// flexible content panes, a status bar) while staying correct for arbitrarily many panes: see
 /// the `layout_solve` benchmark's 100-pane case, which exercises the heap fallback.
 const STACK_CAP: usize = 8;
 
 /// A small buffer that stays inline on the stack for up to `N` items and only allocates on the
 /// heap past that. `solve` uses this for its scratch buffers (pane sizes, the flexible-pane
 /// index/weight/cap list, and the largest-remainder distribution pass) so that the common case of
-/// a handful of panes per split -- called several times per frame by multi-panel UIs -- does not
+/// a handful of panes per split (called several times per frame by multi-panel UIs) does not
 /// pay for a heap allocation at all.
 enum SmallBuf<T: Copy + Default, const N: usize> {
     Stack([T; N], usize),
@@ -92,7 +92,7 @@ impl<T: Copy + Default, const N: usize> SmallBuf<T, N> {
     ///
     /// # Panics
     ///
-    /// Panics if the buffer is the `Stack` variant and already holds `N` items -- callers must
+    /// Panics if the buffer is the `Stack` variant and already holds `N` items: callers must
     /// size `with_capacity` to the true upper bound of pushes, as `solve` does.
     fn push(&mut self, value: T) {
         match self {
@@ -278,7 +278,7 @@ pub fn split_h(area: Rect, constraints: &[Constraint]) -> Vec<Rect> {
 
 /// Interleaves a `Constraint::Fixed(spacing)` gap between every pair of adjacent `constraints`.
 ///
-/// `[c0, c1, c2]` with `spacing` becomes `[c0, Fixed(spacing), c1, Fixed(spacing), c2]` -- the
+/// `[c0, c1, c2]` with `spacing` becomes `[c0, Fixed(spacing), c1, Fixed(spacing), c2]`: the
 /// same shape a caller would otherwise have to build (and then remember to filter back out) by
 /// hand. No-op with fewer than two constraints.
 fn interleave_gaps(constraints: &[Constraint], spacing: u16) -> Vec<Constraint> {
@@ -296,7 +296,7 @@ fn interleave_gaps(constraints: &[Constraint], spacing: u16) -> Vec<Constraint> 
 /// carved out between every adjacent pair of panes.
 ///
 /// Equivalent to interleaving `Constraint::Fixed(spacing)` between `constraints` and calling
-/// [`split_h`], then discarding the gap panes -- but the caller only ever sees the content panes,
+/// [`split_h`], then discarding the gap panes, but the caller only ever sees the content panes,
 /// with no gap indices to filter out themselves. `spacing` gaps come out of `area` before
 /// `constraints` are resolved, so [`Fill`](Constraint::Fill)/[`Percent`](Constraint::Percent) panes
 /// share only what's left after every gap is reserved. No-op (falls back to [`split_h`]) with
@@ -460,7 +460,7 @@ pub fn split_h_flex(area: Rect, constraints: &[Constraint], flex: Flex) -> Vec<R
 /// Compute a `width`×`height` [`Rect`] centered within `screen`.
 ///
 /// `width`/`height` are clamped down to `screen`'s own dimensions if larger,
-/// so the result never extends past `screen`'s edges -- a modal, dialog, or
+/// so the result never extends past `screen`'s edges: a modal, dialog, or
 /// tooltip box built from this is always fully on-screen, even on a
 /// terminal too small to fit the box's requested size. Pure layout math: no
 /// drawing, no `Terminal`. Pairs with `panel`/`modal` in `retroglyph-widgets`
@@ -632,7 +632,7 @@ mod tests {
         // Ideal shares are 30/7 ~= 4.29, 20/7 ~= 2.86, 20/7 ~= 2.86. Floors are
         // 4, 2, 2 (sum 8); the 2 leftover cells go to the panes with the
         // largest fractional remainder, in this case the two Fill(2)s tied
-        // ahead of Fill(3) -- not to the first pane in the slice.
+        // ahead of Fill(3), not to the first pane in the slice.
         let panes = split_h(
             area,
             &[

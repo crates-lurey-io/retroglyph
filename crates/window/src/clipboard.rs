@@ -47,7 +47,7 @@ pub trait Clipboard {
 /// An opaque, message-carrying wrapper rather than an enum of specific failure causes: the two
 /// implementations this crate ships (arboard on native, a test fake) fail for platform- or
 /// fake-specific reasons that don't share a meaningful common taxonomy, so the message is kept
-/// as the one thing that's actually useful across both -- surfacing it in logs/error messages.
+/// as the one thing that's actually useful across both: surfacing it in logs/error messages.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClipboardError(String);
 
@@ -72,7 +72,7 @@ impl std::error::Error for ClipboardError {}
 /// Not available on `wasm32`: the browser clipboard API
 /// (`navigator.clipboard`) is async-only (returns a `Promise`), which does not fit
 /// [`Clipboard`]'s synchronous methods, and `arboard` itself does not build for
-/// `wasm32-unknown-unknown` -- see this crate's `Cargo.toml` for the target-gating.
+/// `wasm32-unknown-unknown`: see this crate's `Cargo.toml` for the target-gating.
 #[cfg(not(target_arch = "wasm32"))]
 pub struct SystemClipboard(arboard::Clipboard);
 
