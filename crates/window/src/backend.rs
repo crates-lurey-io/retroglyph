@@ -48,7 +48,7 @@ use std::time::Duration;
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```
 /// use retroglyph_core::{Backend, Event, Input, Output, Pos, Size, Terminal, Tile};
 /// use retroglyph_window::{Presenter, WindowBackend, WindowHandle};
 /// use std::sync::Arc;

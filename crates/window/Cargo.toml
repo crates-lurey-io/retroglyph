@@ -64,6 +64,13 @@ web-sys = { version = "0.3", features = ["Window", "EventTarget", "Document", "E
 # retroglyph-software's own fastrand dev-dependency.
 criterion = "0.5"
 fastrand = "2"
+# `run.rs`'s doc examples build a real `SoftwareRenderer` to hand to `run_windowed_with_proxy`/
+# `run_windowed_with_typed_proxy`. `retroglyph-software` depends on this crate, not the other way
+# around, so this is a dev-only cycle: Cargo allows a dev-dependency to point back at a crate's own
+# dependent, since dev-deps are never part of the graph `retroglyph-software` itself builds with.
+retroglyph-software = { path = "../software", version = "0.4.0", default-features = false, features = [
+  "default-font",
+] }
 
 [[bench]]
 name = "pixel_to_cell"

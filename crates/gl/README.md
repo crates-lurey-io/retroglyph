@@ -15,7 +15,9 @@ Implements [`retroglyph_window::Presenter`], so it drops into the same winit win
 
 ## Quick start
 
-```rust,ignore
+```no_run
+# #[cfg(not(target_arch = "wasm32"))]
+# fn main() {
 use retroglyph_gl::GlBackendBuilder;
 use retroglyph_window::winit::{WindowConfig, run_windowed};
 use retroglyph_core::Style;
@@ -28,9 +30,13 @@ let renderer = GlBackendBuilder::new()
 
 let config = WindowConfig::fit(&renderer, "Hello, GL", None, true);
 run_windowed(config, renderer, move |term| {
-    term.surface().print((0, 0), "Hello from retroglyph-gl!", Style::default());
+    term.draw(|s| s.print((0, 0), "Hello from retroglyph-gl!", Style::default()))
+        .ok();
 })
 .expect("event loop failed");
+# }
+# #[cfg(target_arch = "wasm32")]
+# fn main() {}
 ```
 
 ## Features

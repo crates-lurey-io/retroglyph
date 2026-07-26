@@ -633,7 +633,7 @@ impl Color {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```
     /// use retroglyph_core::Color;
     ///
     /// let black = Color::Rgb { r: 0, g: 0, b: 0 };
@@ -666,7 +666,7 @@ impl Color {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```
     /// use retroglyph_core::{AnsiColor, Color};
     ///
     /// let pure_red = Color::Rgb { r: 255, g: 0, b: 0 };
@@ -694,7 +694,7 @@ impl Color {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```
     /// use retroglyph_core::Color;
     ///
     /// let gold = Color::from_named("gold");
@@ -861,7 +861,7 @@ impl Color {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```
     /// # fn main() {
     /// # fn run() -> Option<()> {
     /// use retroglyph_core::Color;
