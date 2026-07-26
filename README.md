@@ -157,6 +157,12 @@ it for free.
   Runs unchanged as a native window or a browser `<canvas>` (WASM).
 - **Terminal (WASM)** (`retroglyph-terminal-wasm`) — pushes ANSI output to a browser terminal
   emulator such as xterm.js instead of a native TTY.
+- **Font chains** (`FontChain`) — both pixel backends resolve every character through an ordered
+  chain of 1-bit bitmap fonts, so a fallback font built with `BitmapFont::with_charset` supplies
+  coverage CP437 has no mapping for (quadrants, sextants, braille). A chain glyph is drawn from the
+  same 1-bit mask path as any other glyph and takes the cell's foreground color, unlike a tileset
+  sprite, which carries the colors it was authored in. Both builders' `font()` takes either a single
+  `BitmapFont` or a whole chain.
 - **Sprite tilesets** (feature `tilesets` on `retroglyph-software` and `retroglyph-gl`) — PNG sprite
   sheets mapped to a codepage (CP437, Unicode range, or custom), rendered with RGBA alpha blending
   over bitmap font glyphs, on the CPU or the GPU.
