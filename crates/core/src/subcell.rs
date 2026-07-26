@@ -193,6 +193,9 @@ fn posterize(pixels: &[Rgb], table: &[char]) -> Glyph {
 /// This is the lowest-fidelity, most compatible option: plain Unicode Block Elements, supported
 /// by essentially every monospace terminal font.
 ///
+/// See the `16_subcell_image` example for `quantize_half_block` in action:
+/// <https://main.retroglyph.dev/examples/16_subcell_image/terminal/>.
+///
 /// # Examples
 ///
 /// ```
@@ -217,6 +220,9 @@ pub fn quantize_half_block(pixels: [Rgb; 2]) -> Glyph {
 /// `BitmapFont::new` (CP437-only) renders every quadrant glyph as a solid block; supply a font
 /// with quadrant coverage, either as the primary font or as a fallback via
 /// `BitmapFont::with_charset`, to render them as intended.
+///
+/// See the `16_subcell_image` example for `quantize_quadrant` in action:
+/// <https://main.retroglyph.dev/examples/16_subcell_image/terminal/>.
 ///
 /// # Examples
 ///
@@ -246,6 +252,9 @@ pub fn quantize_quadrant(pixels: [Rgb; 4]) -> Glyph {
 /// `retroglyph_window`'s `BitmapFont::new` (CP437-only) renders every sextant glyph as a solid
 /// block. Supply a font that declares sextant coverage, either as the primary font or as a
 /// fallback via `BitmapFont::with_charset`, to render them as intended.
+///
+/// See the `16_subcell_image` example for `quantize_sextant` in action:
+/// <https://main.retroglyph.dev/examples/16_subcell_image/terminal/>.
 ///
 /// # Examples
 ///

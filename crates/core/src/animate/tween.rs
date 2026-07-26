@@ -6,6 +6,9 @@ use core::time::Duration;
 /// A retargetable animation from one `f32` value to another over a fixed duration, reshaped by
 /// an [`Easing`] curve.
 ///
+/// See the `08_animation` example for `Tween` in action:
+/// <https://main.retroglyph.dev/examples/08_animation/terminal/>.
+///
 /// ```
 /// use core::time::Duration;
 /// use retroglyph_core::{Easing, Tween};
