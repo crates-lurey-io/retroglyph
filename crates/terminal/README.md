@@ -15,7 +15,7 @@ emulator such as xterm.js).
 
 ## Quick start
 
-Most consumers don't depend on this crate directly -- use `retroglyph-crossterm` or
+Most consumers don't depend on this crate directly: use `retroglyph-crossterm` or
 `retroglyph-terminal-wasm` instead, both of which re-export the pieces of a real app's quick start.
 This crate's own surface is the lower-level `Tile` -> ANSI bytes transform those two backends share:
 
@@ -31,7 +31,7 @@ use retroglyph_core::style::Style;
 use retroglyph_core::tile::Tile;
 use retroglyph_terminal::TerminalRenderer;
 
-// Any `std::io::Write` sink works -- a `Vec<u8>` here, `Stdout` in
+// Any `std::io::Write` sink works: a `Vec<u8>` here, `Stdout` in
 // `retroglyph-crossterm`, a `String` buffer in `retroglyph-terminal-wasm`.
 let mut renderer = TerminalRenderer::new(Vec::new());
 let tile = Tile::new('@', Style::default());
@@ -48,9 +48,9 @@ assert!(ansi.contains('@'));
 
 `TerminalRenderer::set_plain_mode`/`with_plain_mode` strip ANSI/CSI escape sequences (cursor moves,
 colors, synchronized-update markers) entirely, degrading `draw` output to plain text with row
-changes turned into `\n` and gaps padded with spaces -- modeled on Python's `blessed`, which does
-the same thing when its output stream isn't a TTY. `TerminalRenderer::auto` picks the mode
-automatically for any writer implementing `std::io::IsTerminal` (`Stdout`, `File`, ...):
+changes turned into `\n` and gaps padded with spaces, modeled on Python's `blessed`, which does the
+same thing when its output stream isn't a TTY. `TerminalRenderer::auto` picks the mode automatically
+for any writer implementing `std::io::IsTerminal` (`Stdout`, `File`, ...):
 
 ```rust
 use retroglyph_terminal::TerminalRenderer;
@@ -67,7 +67,7 @@ mode append each frame's diff as more text rather than overwriting prior output 
 ## RGB color fallback on 256-color terminals
 
 `Color::Rgb` tiles are written out as a 24-bit truecolor SGR sequence (`38;2;r;g;b`) with no
-quantization down to the 256-color or 16-color ANSI palettes -- neither this crate nor
+quantization down to the 256-color or 16-color ANSI palettes: neither this crate nor
 `retroglyph-core` guarantees a `to_indexed()`-style quantizer. This matches `crossterm`'s own
 color-writing behavior: the terminal (or an in-between multiplexer) is responsible for interpreting
 or degrading truecolor codes it doesn't natively support. See the crate-level docs for the full
