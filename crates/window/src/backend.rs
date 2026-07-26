@@ -46,7 +46,7 @@ use std::time::Duration;
 /// translated input event, and calls `Terminal::present` (which drives `Presenter::flush`) plus
 /// `presenter_mut().present()` once per frame.
 ///
-/// # Example: driving without `winit`
+/// # Examples
 ///
 /// ```rust
 /// use retroglyph_core::{Backend, Event, Input, Output, Pos, Size, Terminal, Tile};

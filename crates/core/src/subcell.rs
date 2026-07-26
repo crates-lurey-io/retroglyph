@@ -193,7 +193,7 @@ fn posterize(pixels: &[Rgb], table: &[char]) -> Glyph {
 /// This is the lowest-fidelity, most compatible option: plain Unicode Block Elements, supported
 /// by essentially every monospace terminal font.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```
 /// use retroglyph_core::subcell::quantize_half_block;
@@ -218,7 +218,7 @@ pub fn quantize_half_block(pixels: [Rgb; 2]) -> Glyph {
 /// with quadrant coverage, either as the primary font or as a fallback via
 /// `BitmapFont::with_charset`, to render them as intended.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```
 /// use retroglyph_core::subcell::quantize_quadrant;
@@ -247,7 +247,7 @@ pub fn quantize_quadrant(pixels: [Rgb; 4]) -> Glyph {
 /// block. Supply a font that declares sextant coverage, either as the primary font or as a
 /// fallback via `BitmapFont::with_charset`, to render them as intended.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```
 /// use retroglyph_core::subcell::quantize_sextant;

@@ -32,7 +32,7 @@ struct Binding<Id, Action> {
 /// [`FocusRing`](crate::FocusRing)'s -- a key combination either exists or
 /// it doesn't, regardless of what happened to be drawn this frame).
 ///
-/// # Example
+/// # Examples
 ///
 /// ```
 /// use retroglyph_core::{Event, KeyCode, KeyEvent, KeyModifiers};
