@@ -73,7 +73,7 @@
 //! [`Color::Indexed`] or [`Color::Ansi`] explicitly instead of [`Color::Rgb`]; both are passed
 //! through untranslated (`38;5;n` / plain ANSI codes) and have no ambiguity across terminal color
 //! depths. There is currently no capability-detection step in this crate (or
-//! `retroglyph-crossterm`) that would let it choose automatically -- adding one would require
+//! `retroglyph-crossterm`) that would let it choose automatically: adding one would require
 //! querying/guessing terminal color depth (`$COLORTERM`, `$TERM`, or a runtime query), which is
 //! out of scope for this shared renderer and left to callers or a future crate.
 
@@ -81,7 +81,7 @@
 
 // Compile the code blocks in this crate's own README as doctests so its quick start is
 // type-checked on every test run and cannot silently rot. The `cfg(doctest)` gate keeps this out
-// of the rendered crate documentation -- see `retroglyph-crossterm`'s matching include for the
+// of the rendered crate documentation: see `retroglyph-crossterm`'s matching include for the
 // same pattern applied to the workspace root README.
 #[cfg(doctest)]
 #[doc = include_str!("../README.md")]
@@ -145,7 +145,7 @@ fn write_sgr_color<W: Write>(out: &mut W, color: Color, base: u8, reset: u8) -> 
 /// the escape codes needed to move to changed cells and change state.
 ///
 /// This type has no knowledge of *how* its output bytes reach a display (stdout, a `String`
-/// buffer for JS, a test harness) or *how* input arrives -- it is a pure `Tile` stream -> ANSI
+/// buffer for JS, a test harness) or *how* input arrives: it is a pure `Tile` stream -> ANSI
 /// bytes transform, reused by every terminal-family
 /// [`Backend`](retroglyph_core::backend::Backend) implementor.
 #[derive(Debug)]
@@ -212,7 +212,7 @@ impl<W: Write> TerminalRenderer<W> {
     /// isn't a TTY: piping or redirecting output (`myapp > log.txt`) shouldn't leave a file full
     /// of unreadable escape codes. Because this renderer only ever draws *changed* cells, repeated
     /// [`draw`](Self::draw) calls in plain mode append each frame's diff as more plain text rather
-    /// than overwriting previous output in place -- there is no cursor-addressable terminal to
+    /// than overwriting previous output in place: there is no cursor-addressable terminal to
     /// overwrite when the sink is a file or pipe, so this is a lossy degradation intended for
     /// logging/debugging, not for reproducing the exact interactive frame sequence.
     pub const fn set_plain_mode(&mut self, plain: bool) {
@@ -419,7 +419,7 @@ impl<W: Write> TerminalRenderer<W> {
             // order, both just start a fresh line: plain mode has no cursor-addressing escape
             // codes to seek backward with, so there is no way to overwrite/insert at an
             // already-passed column without corrupting what was already written. Starting a new
-            // line is the least-surprising degradation available -- it reproduces the
+            // line is the least-surprising degradation available: it reproduces the
             // already-established backward-row behavior instead of silently misplacing the cell
             // right after the previous one at the wrong column (see retroglyph#273).
             let start_col = match self.cursor_y {
@@ -491,7 +491,7 @@ impl<W: Write + io::IsTerminal> TerminalRenderer<W> {
     /// `writer` is a TTY.
     ///
     /// Equivalent to `TerminalRenderer::with_plain_mode(writer, !writer.is_terminal())`. `W`
-    /// must implement [`std::io::IsTerminal`] for this to be callable -- `std::io::Stdout`,
+    /// must implement [`std::io::IsTerminal`] for this to be callable: `std::io::Stdout`,
     /// `std::io::Stdin`, `std::io::Stderr`, `std::fs::File`, and their `*Lock` variants all do;
     /// an in-memory sink like `Vec<u8>` does not, so use
     /// [`with_plain_mode`](Self::with_plain_mode) directly for those.
@@ -639,7 +639,7 @@ mod tests {
     #[test]
     fn only_fg_change_emits_single_channel_sequence() {
         // Background is unchanged between the two draws, so only the fg escape should be
-        // emitted -- no combined sequence, and no redundant bg re-emission.
+        // emitted: no combined sequence, and no redundant bg re-emission.
         let bg = Color::Rgb { r: 4, g: 5, b: 6 };
         let old = Tile::new('A', Style::new().fg(Color::Rgb { r: 1, g: 2, b: 3 }).bg(bg));
         let new = Tile::new(
@@ -816,8 +816,8 @@ mod tests {
         // ascending-x order (x=5 then x=2) used to compute an empty `start_col..pos.x` padding
         // range (5..2), silently appending the second cell right after the first with no
         // separator, misplacing it. Plain mode has no cursor-addressing escapes to seek
-        // backward with, so the fix starts a fresh line for the out-of-order cell instead --
-        // the same fallback already used for backward-row repeats -- rather than corrupting the
+        // backward with, so the fix starts a fresh line for the out-of-order cell instead
+        // (the same fallback already used for backward-row repeats) rather than corrupting the
         // column alignment of the first line.
         let a = Tile::new('A', Style::default());
         let b = Tile::new('B', Style::default());
