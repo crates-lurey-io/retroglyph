@@ -1,7 +1,7 @@
 //! 06: Layers
 //!
-//! Multi-layer compositing: [`Terminal::layer`] selects which layer subsequent draw calls
-//! write to. A background fill lives on layer 0; a single glyph that steps one cell to the
+//! Multi-layer compositing: [`Surface::on_layer`] scopes a view over a different layer for a
+//! block of draw calls. A background fill lives on layer 0; a single glyph that steps one cell to the
 //! right each tick lives on layer 1. Layer 1's untouched cells stay the default, empty
 //! [`Tile`](retroglyph_core::Tile), which is transparent -- so the layer-0 fill shows through
 //! everywhere the moving glyph currently isn't, proving both z-order (layer 1 draws over
@@ -72,8 +72,13 @@ impl Layers {
     /// Draws this frame (the driver presents): a layer-0 background fill, then a single
     /// layer-1 glyph at a column derived from `self.ticks`.
     fn draw<B: Backend>(&self, term: &mut Terminal<B>) {
-        term.print((1, 1), "Layer 0: background fill. Layer 1: moving glyph.");
-        term.print((1, 2), "q / Escape quits.");
+        let mut surface = term.surface();
+        surface.print(
+            (1, 1),
+            "Layer 0: background fill. Layer 1: moving glyph.",
+            Style::default(),
+        );
+        surface.print((1, 2), "q / Escape quits.", Style::default());
 
         // A non-space glyph (rather than a colored blank) so the layer-0 fill is
         // visible in the plain-text headless snapshot too, not just the PNG/SVG
@@ -82,9 +87,9 @@ impl Layers {
         let bg_style = Style::new()
             .fg(Color::Ansi(AnsiColor::BrightBlack))
             .bg(Color::Ansi(AnsiColor::Blue));
-        term.layer(0);
+        let mut layer0 = surface.on_layer(0);
         for x in 0..TRACK_WIDTH {
-            term.put_styled((1 + x, 10), '.', bg_style);
+            layer0.put((1 + x, 10), '.', bg_style);
         }
 
         // Parks at the last column instead of wrapping: an animation that loops
@@ -93,13 +98,13 @@ impl Layers {
         let step = self.ticks.min(u32::from(TRACK_WIDTH) - 1);
         let glyph_x = 1 + u16::try_from(step).expect("step is bounded by TRACK_WIDTH");
         if step == u32::from(TRACK_WIDTH) - 1 {
-            term.print((1, 12), "(parked at track end)");
+            surface.print((1, 12), "(parked at track end)", Style::default());
         }
         let glyph_style = Style::new()
             .fg(Color::Ansi(AnsiColor::BrightYellow))
             .bg(Color::Default);
-        term.layer(1);
-        term.put_styled((glyph_x, 10), '@', glyph_style);
+        let mut layer1 = surface.on_layer(1);
+        layer1.put((glyph_x, 10), '@', glyph_style);
     }
 }
 

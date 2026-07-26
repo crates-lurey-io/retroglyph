@@ -24,7 +24,7 @@
 
 use retroglyph_core::event::{Event, KeyCode};
 use retroglyph_core::subcell::{Rgb, quantize_half_block, quantize_quadrant, quantize_sextant};
-use retroglyph_core::{Backend, Style, Terminal};
+use retroglyph_core::{Backend, Style, Surface, Terminal};
 use retroglyph_examples::Example;
 
 /// Width/height (in cells) of each of the three panels.
@@ -101,7 +101,7 @@ impl SubcellImage {
     }
 
     /// Draws the half-block panel at `PANEL_X[0]`: one source pixel per cell column, two per row.
-    fn draw_half_block<B: Backend>(term: &mut Terminal<B>) {
+    fn draw_half_block(surface: &mut Surface<'_>) {
         let pixel_w = PANEL_W;
         let pixel_h = PANEL_H * 2;
         for cy in 0..PANEL_H {
@@ -110,13 +110,13 @@ impl SubcellImage {
                 let bottom = sample(cx, cy * 2 + 1, pixel_w, pixel_h);
                 let glyph = quantize_half_block([top, bottom]);
                 let style = Style::new().fg(glyph.fg).bg(glyph.bg);
-                term.put_styled((PANEL_X[0] + cx, PANEL_Y + cy), glyph.ch, style);
+                surface.put((PANEL_X[0] + cx, PANEL_Y + cy), glyph.ch, style);
             }
         }
     }
 
     /// Draws the quadrant panel at `PANEL_X[1]`: two source pixels per cell column and per row.
-    fn draw_quadrant<B: Backend>(term: &mut Terminal<B>) {
+    fn draw_quadrant(surface: &mut Surface<'_>) {
         let pixel_w = PANEL_W * 2;
         let pixel_h = PANEL_H * 2;
         for cy in 0..PANEL_H {
@@ -130,13 +130,13 @@ impl SubcellImage {
                 ];
                 let glyph = quantize_quadrant(pixels);
                 let style = Style::new().fg(glyph.fg).bg(glyph.bg);
-                term.put_styled((PANEL_X[1] + cx, PANEL_Y + cy), glyph.ch, style);
+                surface.put((PANEL_X[1] + cx, PANEL_Y + cy), glyph.ch, style);
             }
         }
     }
 
     /// Draws the sextant panel at `PANEL_X[2]`: two source pixels per cell column, three per row.
-    fn draw_sextant<B: Backend>(term: &mut Terminal<B>) {
+    fn draw_sextant(surface: &mut Surface<'_>) {
         let pixel_w = PANEL_W * 2;
         let pixel_h = PANEL_H * 3;
         for cy in 0..PANEL_H {
@@ -152,7 +152,7 @@ impl SubcellImage {
                 ];
                 let glyph = quantize_sextant(pixels);
                 let style = Style::new().fg(glyph.fg).bg(glyph.bg);
-                term.put_styled((PANEL_X[2] + cx, PANEL_Y + cy), glyph.ch, style);
+                surface.put((PANEL_X[2] + cx, PANEL_Y + cy), glyph.ch, style);
             }
         }
     }
@@ -160,20 +160,26 @@ impl SubcellImage {
     /// Draws this frame (the driver presents).
     #[allow(clippy::unused_self)]
     fn draw<B: Backend>(&self, term: &mut Terminal<B>) {
-        term.print((1, 1), "16: Subcell blit -- one scene, 3 fidelities");
-        term.print((PANEL_X[0], 2), "Half-block");
-        term.print((PANEL_X[1], 2), "Quadrant");
-        term.print((PANEL_X[2], 2), "Sextant");
+        let mut surface = term.surface();
+        surface.print(
+            (1, 1),
+            "16: Subcell blit -- one scene, 3 fidelities",
+            Style::default(),
+        );
+        surface.print((PANEL_X[0], 2), "Half-block", Style::default());
+        surface.print((PANEL_X[1], 2), "Quadrant", Style::default());
+        surface.print((PANEL_X[2], 2), "Sextant", Style::default());
 
-        Self::draw_half_block(term);
-        Self::draw_quadrant(term);
-        Self::draw_sextant(term);
+        Self::draw_half_block(&mut surface);
+        Self::draw_quadrant(&mut surface);
+        Self::draw_sextant(&mut surface);
 
-        term.print(
+        surface.print(
             (1, PANEL_Y + PANEL_H + 1),
             "No image file above -- generated on the fly. Software backend's \
              built-in font is CP437-only, so quadrant/sextant show as solid \
              colored blocks there; crossterm renders the real glyphs.",
+            Style::default(),
         );
     }
 }

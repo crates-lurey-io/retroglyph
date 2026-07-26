@@ -21,13 +21,12 @@ retroglyph-terminal-wasm = "0.1"
 ```
 
 ```rust
-use retroglyph_core::Terminal;
+use retroglyph_core::{Style, Terminal};
 use retroglyph_terminal_wasm::TerminalWasm;
 
 let backend = TerminalWasm::new(80, 24);
 let mut term = Terminal::new(backend);
-term.put((0, 0), '@');
-term.present().unwrap();
+term.draw(|s| s.put((0, 0), '@', Style::default())).unwrap();
 let ansi = term.backend_mut().take_output();
 assert!(ansi.contains('@'));
 ```

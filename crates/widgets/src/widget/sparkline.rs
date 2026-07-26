@@ -58,12 +58,17 @@ impl Widget for Sparkline<'_> {
 
         let y = area.top();
         for i in 0..width {
+            // `i` ranges over `0..width`, and `width` is `area.width_usize()`, itself widened
+            // from `area`'s own `u16` width, so narrowing it back is always exact.
+            #[allow(clippy::cast_possible_truncation)]
             let x = area.left() + i as u16;
             if i < pad {
                 surface.put((x, y), ' ', Style::new());
                 continue;
             }
             let ratio = (recent[i - pad] / max).clamp(0.0, 1.0);
+            // `ratio` is clamped to `0.0..=1.0`, so the rounded level always lands in `0..=8`.
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
             let level = (ratio * 8.0).round() as usize;
             surface.put(
                 (x, y),

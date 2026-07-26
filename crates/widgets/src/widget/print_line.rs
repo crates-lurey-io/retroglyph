@@ -46,6 +46,10 @@ impl Widget for PrintLine<'_> {
         let right = area.left() + max_width;
         // Align the whole line as a unit: sum the spans' display widths
         // (clamped to the area) and offset the start column accordingly.
+        // A single span wider than `u16::MAX` columns would already be unaddressable in this
+        // crate's `u16` coordinate space; the running total still saturates rather than
+        // overflowing even if one span's cast wraps.
+        #[allow(clippy::cast_possible_truncation)]
         let line_width = self
             .line
             .spans
@@ -60,7 +64,11 @@ impl Widget for PrintLine<'_> {
             let remaining = (right - x) as usize;
             let text = truncate_to_cols(&span.content, remaining);
             surface.print((x, area.top()), text, span.style);
-            x += text.width() as u16;
+            // `text` is bounded to `remaining` columns above, itself derived from the `u16`
+            // `right`/`x`, so narrowing its display width back is always exact.
+            #[allow(clippy::cast_possible_truncation)]
+            let text_w = text.width() as u16;
+            x += text_w;
         }
     }
 }

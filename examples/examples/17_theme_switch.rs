@@ -21,11 +21,11 @@
 //! or close the window.
 
 use retroglyph_core::event::{Event, KeyCode};
-use retroglyph_core::{Backend, Frame, Rect, Terminal};
+use retroglyph_core::{Backend, Frame, Rect, Style, Surface, Terminal};
 use retroglyph_examples::Example;
 use retroglyph_widgets::{
-    Button, Interaction, List, ListState, Panel, ProgressBar, Sense, StatefulWidget, Surface, Tabs,
-    Theme, Widget,
+    Button, Interaction, List, ListState, Panel, ProgressBar, Sense, StatefulWidget, Tabs, Theme,
+    Widget,
 };
 
 /// Identifies the demo's one interactive widget for [`Interaction`]'s hit-testing and focus ring.
@@ -96,13 +96,14 @@ impl ThemeSwitch {
     /// Draws this frame (the driver presents).
     fn draw<B: Backend>(&mut self, term: &mut Terminal<B>) {
         let theme = self.theme();
+        let mut surface = term.surface();
 
-        term.reset_style().fg(theme.accent);
-        term.print(
+        let accent_style = Style::new().fg(theme.accent);
+        surface.print(
             (1, 0),
             "t toggles theme, Left/Right tabs, Up/Down selects, q/Esc quits",
+            accent_style,
         );
-        term.reset_style();
 
         let term_area = term.area();
         let panel_area = Rect::new(0, 1, 50, 24);

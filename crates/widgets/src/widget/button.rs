@@ -171,6 +171,9 @@ impl Widget for Button<'_> {
         fill_rect(surface, area, ' ', style);
 
         let text = truncate_to_cols(self.label, area.width_usize());
+        // `truncate_to_cols` bounds `text` to `area.width_usize()` columns, which is itself a
+        // `u16` widened by `.width_usize()`, so narrowing the count back is always exact.
+        #[allow(clippy::cast_possible_truncation)]
         let text_width = text.chars().count() as u16;
         let x = area.left() + (area.width().saturating_sub(text_width)) / 2;
         let y = area.top() + area.height() / 2;

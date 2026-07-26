@@ -15,7 +15,7 @@
 #![allow(clippy::redundant_pub_crate)]
 
 use retroglyph_core::event::{Event, KeyCode, KeyEventKind};
-use retroglyph_core::{Backend, Color, Style, Terminal};
+use retroglyph_core::{Color, Style, Surface};
 #[cfg(feature = "crossterm")]
 use retroglyph_core::{Cursor, Input, Output, Pos, Size, Tile};
 use std::cell::Cell;
@@ -247,7 +247,7 @@ impl Fps {
     /// working grid after each frame, so simply not drawing leaves the overlay layer empty and the
     /// next present diffs the old readout away.
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    pub(crate) fn draw<B: Backend>(&self, term: &mut Terminal<B>, backend: &str) {
+    pub(crate) fn draw(&self, surface: &mut Surface<'_>, backend: &str) {
         if !self.visible {
             return;
         }
@@ -265,7 +265,7 @@ impl Fps {
             secs * 1000.0
         );
 
-        let width = term.backend().size().width;
+        let width = surface.width();
         let len = text.chars().count() as u16;
         if len > width {
             return;
@@ -284,12 +284,10 @@ impl Fps {
                 b: 0x14,
             });
 
-        term.layer(OVERLAY_LAYER);
+        let mut overlay = surface.on_layer(OVERLAY_LAYER);
         for (i, ch) in text.chars().enumerate() {
-            term.put_styled((x0 + i as u16, 0), ch, style);
+            overlay.put((x0 + i as u16, 0), ch, style);
         }
-        // Restore the base layer so the next example `tick` draws where it expects.
-        term.layer(0);
     }
 }
 
@@ -367,7 +365,7 @@ mod tests {
 
     fn rendered(fps: &Fps, backend: &str) -> String {
         let mut term = Terminal::new(Headless::new(40, 5));
-        fps.draw(&mut term, backend);
+        fps.draw(&mut term.surface(), backend);
         term.present().ok();
         term.backend().format_view()
     }

@@ -8,7 +8,7 @@
 //! example proved individually: `02_colors`' fg/bg vocabulary distinguishes walls, floors, goals,
 //! and boxes; `03_keyboard`'s arrow-key handling drives movement; `05_layout_grid`'s manual
 //! `Rect` math lays out the play field next to a status pane; `08_animation`'s `Tween`-driven
-//! [`Terminal::put_offset`] slides the player (and any box it pushes) one cell at a time instead
+//! [`Surface::put_offset`] slides the player (and any box it pushes) one cell at a time instead
 //! of snapping, generalized here from one axis to two; and `09_widgets_dashboard`'s
 //! `retroglyph-widgets` usage (`Panel`, `split_h`/`split_v`) frames the status pane.
 //!
@@ -34,7 +34,7 @@ use retroglyph_core::{
     AnsiColor, Backend, Color, Easing, Frame, Grid, Rect, Style, Terminal, Tile, Tween,
 };
 use retroglyph_examples::Example;
-use retroglyph_widgets::{Constraint, Panel, Surface, Widget, split_h, split_v};
+use retroglyph_widgets::{Constraint, Panel, Widget, split_h, split_v};
 
 /// The level, hand-designed to be solvable with the two boxes pushed one at a time: `#` wall,
 /// `.` floor, `o` goal, `$` a box (on plain floor), `@` the player's start. Both `o` cells are
@@ -301,13 +301,15 @@ impl Sokoban {
     }
 
     fn draw<B: Backend>(&self, term: &mut Terminal<B>) {
+        let mut surface = term.surface();
         let area = Rect::new(0, 0, 50, 25);
         let rows = split_v(area, &[Constraint::Fixed(1), Constraint::Fill(1)]);
         let (title_area, body_area) = (rows[0], rows[1]);
 
-        term.print(
+        surface.print(
             (title_area.left() + 1, title_area.top()),
             "Sokoban -- arrows move/push, u undoes, r resets, q/Escape quits",
+            Style::default(),
         );
 
         let cols = split_h(body_area, &[Constraint::Fixed(24), Constraint::Fill(1)]);
@@ -315,13 +317,7 @@ impl Sokoban {
 
         let level_x = play_area.left() + 2;
         let level_y = play_area.top() + 2;
-        let term_area = term.area();
-        retroglyph_widgets::blit_into(
-            &mut Surface::new(term.grid_mut(), term_area, 0),
-            &self.level,
-            level_x,
-            level_y,
-        );
+        retroglyph_widgets::blit_into(&mut surface, &self.level, level_x, level_y);
 
         for b in &self.boxes {
             let on_goal = self.goals.contains(&b.pos);
@@ -331,39 +327,39 @@ impl Sokoban {
             } else {
                 AnsiColor::BrightRed
             };
-            term.reset_style().fg(Color::Ansi(color)).bg(Color::Default);
+            let style = Style::new().fg(Color::Ansi(color)).bg(Color::Default);
             let glyph = if on_goal { '*' } else { '$' };
-            term.put_offset((level_x + cx, level_y + cy), (dx, dy), glyph);
+            surface.put_offset((level_x + cx, level_y + cy), (dx, dy), glyph, style);
         }
 
         let (px, py, pdx, pdy) = self.player.draw_pos();
-        term.reset_style()
+        let style = Style::new()
             .fg(Color::Ansi(AnsiColor::BrightCyan))
             .bg(Color::Default);
-        term.put_offset((level_x + px, level_y + py), (pdx, pdy), '@');
-        term.reset_style();
+        surface.put_offset((level_x + px, level_y + py), (pdx, pdy), '@', style);
 
-        let term_area = term.area();
-        Panel::new().title("Status").render(
-            status_area,
-            &mut Surface::new(term.grid_mut(), term_area, 0),
-        );
+        Panel::new()
+            .title("Status")
+            .render(status_area, &mut surface);
         let inner_x = status_area.left() + 2;
         let mut y = status_area.top() + 1;
-        term.print((inner_x, y), &format!("Moves: {}", self.moves));
+        surface.print(
+            (inner_x, y),
+            &format!("Moves: {}", self.moves),
+            Style::default(),
+        );
         y += 2;
-        term.print((inner_x, y), "Arrows: move / push");
+        surface.print((inner_x, y), "Arrows: move / push", Style::default());
         y += 1;
-        term.print((inner_x, y), "u: undo");
+        surface.print((inner_x, y), "u: undo", Style::default());
         y += 1;
-        term.print((inner_x, y), "r: reset level");
+        surface.print((inner_x, y), "r: reset level", Style::default());
         y += 1;
-        term.print((inner_x, y), "q / Esc: quit");
+        surface.print((inner_x, y), "q / Esc: quit", Style::default());
         if self.won {
             y += 2;
-            term.reset_style().fg(Color::Ansi(AnsiColor::BrightGreen));
-            term.print((inner_x, y), "*** Solved! ***");
-            term.reset_style();
+            let style = Style::new().fg(Color::Ansi(AnsiColor::BrightGreen));
+            surface.print((inner_x, y), "*** Solved! ***", style);
         }
     }
 }

@@ -78,9 +78,13 @@ impl TextAlign {
     /// example's draw step needs; this one has no state to read.
     #[allow(clippy::unused_self)]
     fn draw<B: Backend>(&self, term: &mut Terminal<B>) {
-        term.reset_style().fg(Color::WHITE);
-        term.print((1, 0), "Align: Left / Center / Right on titles and text");
-        term.reset_style();
+        let mut surface = term.surface();
+        let style = Style::new().fg(Color::WHITE);
+        surface.print(
+            (1, 0),
+            "Align: Left / Center / Right on titles and text",
+            style,
+        );
 
         Self::draw_panel(term, Rect::new(0, 1, 50, 5), "Left", Align::Left);
         Self::draw_panel(term, Rect::new(0, 6, 50, 5), "Center", Align::Center);

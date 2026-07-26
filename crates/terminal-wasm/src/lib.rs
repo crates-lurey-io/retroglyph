@@ -10,13 +10,12 @@
 //! # Usage from Rust
 //!
 //! ```
-//! use retroglyph_core::Terminal;
+//! use retroglyph_core::{Style, Terminal};
 //! use retroglyph_terminal_wasm::TerminalWasm;
 //!
 //! let backend = TerminalWasm::new(80, 24);
 //! let mut term = Terminal::new(backend);
-//! term.put((0, 0), '@');
-//! term.present().unwrap();
+//! term.draw(|s| s.put((0, 0), '@', Style::default())).unwrap();
 //! let ansi = term.backend_mut().take_output();
 //! assert!(ansi.contains('@'));
 //! ```
@@ -802,15 +801,14 @@ pub mod wasm {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use retroglyph_core::Terminal;
     use retroglyph_core::event::{Event, KeyCode, KeyModifiers};
+    use retroglyph_core::{Style, Terminal};
 
     #[test]
     fn renders_into_pullable_buffer() {
         let backend = TerminalWasm::new(10, 3);
         let mut term = Terminal::new(backend);
-        term.put((1, 1), 'H');
-        term.present().unwrap();
+        term.draw(|s| s.put((1, 1), 'H', Style::default())).unwrap();
         let out = term.backend_mut().take_output();
         assert!(out.contains('H'), "output: {out:?}");
         // Draining again returns nothing new until the next present().
@@ -823,12 +821,14 @@ mod tests {
         // to the outgoing buffer's capacity, not restart from zero every frame.
         let backend = TerminalWasm::new(40, 12);
         let mut term = Terminal::new(backend);
-        for y in 0..12 {
-            for x in 0..40 {
-                term.put((x, y), 'X');
+        term.draw(|s| {
+            for y in 0..12 {
+                for x in 0..40 {
+                    s.put((x, y), 'X', Style::default());
+                }
             }
-        }
-        term.present().unwrap();
+        })
+        .unwrap();
         let first = term.backend_mut().take_output();
         assert!(!first.is_empty());
 
@@ -847,8 +847,7 @@ mod tests {
     fn take_output_into_clears_and_fills_caller_buffer() {
         let backend = TerminalWasm::new(10, 3);
         let mut term = Terminal::new(backend);
-        term.put((1, 1), 'H');
-        term.present().unwrap();
+        term.draw(|s| s.put((1, 1), 'H', Style::default())).unwrap();
 
         let mut buf = String::from("stale contents");
         term.backend_mut().take_output_into(&mut buf);

@@ -23,15 +23,13 @@ retroglyph-crossterm = "0.1"
 ```
 
 ```rust,no_run
-use retroglyph_core::{Terminal, Color, event::{Event, KeyCode}};
+use retroglyph_core::{Terminal, Color, Style, event::{Event, KeyCode}};
 use retroglyph_crossterm::Crossterm;
 
 fn main() -> std::io::Result<()> {
     let mut term = Terminal::new(Crossterm::new()?);
     loop {
-        term.fg(Color::GREEN);
-        term.put((5, 5), '@');
-        term.present()?;
+        term.draw(|s| s.put((5, 5), '@', Style::new().fg(Color::GREEN)))?;
 
         if let Some(Event::Key(k)) = term.poll(std::time::Duration::from_secs(1)) {
             if k.code == KeyCode::Char('q') {

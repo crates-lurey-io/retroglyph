@@ -23,11 +23,11 @@
 //! focus, then Enter/Space) the "Ping" button; `q` or `Escape` quits, or close the window.
 
 use retroglyph_core::event::{Event, KeyCode};
-use retroglyph_core::{Backend, Frame, Rect, Style, Terminal};
+use retroglyph_core::{Backend, Frame, Rect, Style, Surface, Terminal};
 use retroglyph_examples::Example;
 use retroglyph_widgets::{
     BoxStyle, Button, Constraint, Gauge, Interaction, List, ListState, Sense, Sides, Sparkline,
-    StatefulWidget, Surface, Table, Tabs, Theme, Widget, blit_into, split_h, split_v,
+    StatefulWidget, Table, Tabs, Theme, Widget, blit_into, split_h, split_v,
 };
 
 /// Identifies the dashboard's one interactive widget for [`Interaction`]'s hit-testing and focus
@@ -137,16 +137,17 @@ impl Dashboard {
 
     /// Draws this frame (the driver presents).
     fn draw<B: Backend>(&mut self, term: &mut Terminal<B>) {
+        let mut surface = term.surface();
         let area = Rect::new(0, 0, 50, 25);
         let rows = split_v(area, &[Constraint::Fixed(1), Constraint::Fill(1)]);
         let (title_area, body_area) = (rows[0], rows[1]);
 
-        term.reset_style().fg(self.theme.accent);
-        term.print(
+        let title_style = Style::new().fg(self.theme.accent);
+        surface.print(
             (title_area.left() + 1, title_area.top()),
             "retroglyph dashboard -- tabs/select, q/Esc quits",
+            title_style,
         );
-        term.reset_style();
 
         let cols = split_h(body_area, &[Constraint::Percent(60), Constraint::Fill(1)]);
         let (left, right) = (cols[0], cols[1]);
@@ -158,10 +159,9 @@ impl Dashboard {
             .map(|&(name, status)| <[&str; 2]>::from((name, status)))
             .collect();
         let table_rows: Vec<&[&str]> = table_rows.iter().map(<[&str; 2]>::as_slice).collect();
-        let term_area = term.area();
         Table::new(&headers, &widths, &table_rows).render(
             left,
-            &mut Surface::new(term.grid_mut(), term_area, 0),
+            &mut surface,
             &mut self.table_state,
         );
 
@@ -179,26 +179,22 @@ impl Dashboard {
             .select(Some(self.selected_tab))
             .style(Style::new().fg(self.theme.dim))
             .selected_style(Style::new().fg(self.theme.accent).bg(self.theme.panel_bg))
-            .render(tabs_area, &mut Surface::new(term.grid_mut(), term_area, 0));
+            .render(tabs_area, &mut surface);
 
         if self.selected_tab == 0 {
-            self.draw_metrics(term, panel_area);
+            self.draw_metrics(&mut surface, panel_area);
         } else {
             List::new(&ALERTS)
                 .item_style(Style::new().fg(self.theme.fg))
                 .selected_style(Style::new().fg(self.theme.bg).bg(self.theme.accent))
-                .render(
-                    panel_area,
-                    &mut Surface::new(term.grid_mut(), term_area, 0),
-                    &mut self.alerts_state,
-                );
+                .render(panel_area, &mut surface, &mut self.alerts_state);
         }
     }
 
     /// Draws the "Metrics" tab's content: CPU/MEM gauges, a recent-history sparkline, the status
     /// legend, and a "Ping" [`Button`] -- the whole right panel before [`Tabs`]/[`List`] were
     /// added, plus the [`Button`] this dashboard now also showcases.
-    fn draw_metrics<B: Backend>(&mut self, term: &mut Terminal<B>, area: Rect) {
+    fn draw_metrics(&mut self, surface: &mut Surface<'_>, area: Rect) {
         let rows = split_v(
             area,
             &[
@@ -209,56 +205,45 @@ impl Dashboard {
                 Constraint::Fill(1),
             ],
         );
-        let term_area = term.area();
-        Gauge::new("CPU", self.cpu)
-            .render(rows[0], &mut Surface::new(term.grid_mut(), term_area, 0));
-        Gauge::new("MEM", self.mem)
-            .render(rows[1], &mut Surface::new(term.grid_mut(), term_area, 0));
-        term.reset_style().fg(self.theme.dim);
-        term.print((rows[2].left(), rows[2].top()), "History:");
-        term.reset_style();
-        Sparkline::new(&CPU_HISTORY)
-            .render(rows[3], &mut Surface::new(term.grid_mut(), term_area, 0));
+        Gauge::new("CPU", self.cpu).render(rows[0], surface);
+        Gauge::new("MEM", self.mem).render(rows[1], surface);
+        let history_style = Style::new().fg(self.theme.dim);
+        surface.print((rows[2].left(), rows[2].top()), "History:", history_style);
+        Sparkline::new(&CPU_HISTORY).render(rows[3], surface);
 
         let legend = BoxStyle::new(Style::new().fg(self.theme.fg).bg(self.theme.panel_bg))
             .padding(Sides::symmetric(0, 1))
             .border(true)
             .render("Legend\nOK / WARN / DOWN");
-        blit_into(
-            &mut Surface::new(term.grid_mut(), term_area, 0),
-            &legend,
-            rows[4].left(),
-            rows[4].top(),
-        );
+        blit_into(surface, &legend, rows[4].left(), rows[4].top());
 
-        self.draw_ping_button(term, Rect::new(rows[4].left(), rows[4].top() + 5, 8, 1));
+        self.draw_ping_button(surface, Rect::new(rows[4].left(), rows[4].top() + 5, 8, 1));
     }
 
     /// Draws the "Ping" [`Button`] and applies its click to `self.pings`. The app still calls
     /// [`Interaction::interact`] itself (it needs `response.clicked()` for the counter below);
     /// `Button` only turns the resulting `Response` into a styled, centered label -- see
     /// `10_widgets_interaction`'s `draw_button` for the same pattern applied to three buttons.
-    fn draw_ping_button<B: Backend>(&mut self, term: &mut Terminal<B>, rect: Rect) {
+    fn draw_ping_button(&mut self, surface: &mut Surface<'_>, rect: Rect) {
         let response = self
             .interaction
             .interact(rect, DashId::PingButton, Sense::click());
-        let term_area = term.area();
         Button::new("Ping", response)
             .style(Style::new().fg(self.theme.fg).bg(self.theme.panel_bg))
             .hovered_style(Style::new().fg(self.theme.fg).bg(self.theme.hover_bg))
             .pressed_style(Style::new().fg(self.theme.fg).bg(self.theme.press_bg))
             .focused_style(Style::new().fg(self.theme.accent).bg(self.theme.panel_bg))
-            .render(rect, &mut Surface::new(term.grid_mut(), term_area, 0));
+            .render(rect, surface);
         if response.clicked() {
             self.pings += 1;
         }
 
-        term.reset_style().fg(self.theme.dim);
-        term.print(
+        let pings_style = Style::new().fg(self.theme.dim);
+        surface.print(
             (rect.left() + rect.width() + 1, rect.top()),
             &format!("Pings: {}", self.pings),
+            pings_style,
         );
-        term.reset_style();
     }
 }
 

@@ -219,7 +219,7 @@ impl<B: Backend, E: Example> App<B> for ExampleApp<E> {
         // The driver presents automatically after `update` returns, so the FPS overlay (a top
         // layer) is stamped after the example's draw and survives to the flush.
         self.fps.tick(frame.delta);
-        self.fps.draw(term, self.backend_name);
+        self.fps.draw(&mut term.surface(), self.backend_name);
         Flow::Continue
     }
 }

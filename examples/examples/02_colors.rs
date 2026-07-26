@@ -20,7 +20,9 @@
 
 use retroglyph_core::event::{Event, KeyCode};
 use retroglyph_core::text::{Line, Span};
-use retroglyph_core::{AnsiColor, Backend, BlendMode, Color, Grid, Rect, Style, Terminal, Tile};
+use retroglyph_core::{
+    AnsiColor, Backend, BlendMode, Color, Grid, Rect, Style, Surface, Terminal, Tile,
+};
 use retroglyph_examples::Example;
 
 /// State for the colors example (none needed: the palette layout never changes).
@@ -47,8 +49,8 @@ impl Colors {
     ///
     /// `color_at` takes the swatch index as a `u8` (never more than 32 swatches wide on a 50-column
     /// grid), so every color computation below stays in `u8` without a truncating cast.
-    fn swatch_row<B: Backend>(
-        term: &mut Terminal<B>,
+    fn swatch_row(
+        surface: &mut Surface<'_>,
         x: u16,
         y: u16,
         count: u8,
@@ -56,7 +58,7 @@ impl Colors {
     ) {
         for i in 0..count {
             let style = Style::new().bg(color_at(i));
-            term.put_styled((x + u16::from(i), y), ' ', style);
+            surface.put((x + u16::from(i), y), ' ', style);
         }
     }
 
@@ -79,9 +81,9 @@ impl Colors {
     /// spanning `0.0..=1.0` left to right.
     ///
     /// Unlike [`swatch_row`](Self::swatch_row), which picks a `Color` outright per cell, this
-    /// goes through the real `blit_alpha` API (via [`Terminal::grid_mut`]) since blending, not
+    /// goes through the real `blit_alpha` API (via [`Surface::grid_mut`]) since blending, not
     /// color selection, is what this row demonstrates.
-    fn blend_row<B: Backend>(term: &mut Terminal<B>, x: u16, y: u16, count: u8, mode: BlendMode) {
+    fn blend_row(surface: &mut Surface<'_>, x: u16, y: u16, count: u8, mode: BlendMode) {
         let mut overlay = Grid::new(1, 1);
         overlay.put_tile(
             0,
@@ -91,11 +93,12 @@ impl Colors {
 
         for i in 0..count {
             let cx = x + u16::from(i);
-            term.put_styled((cx, y), ' ', Style::new().bg(Self::BLEND_DST));
+            surface.put((cx, y), ' ', Style::new().bg(Self::BLEND_DST));
             // `count` is always a small literal (16, see `draw`), never 0: no div-by-zero.
             #[allow(clippy::cast_precision_loss)]
             let t = f32::from(i) / f32::from(count - 1);
-            term.grid_mut()
+            surface
+                .grid_mut()
                 .blit_alpha(0, &overlay, Rect::new(0, 0, 1, 1), cx, y, mode, 1.0, t);
         }
     }
@@ -103,19 +106,24 @@ impl Colors {
     /// Draws this frame (the driver presents).
     #[allow(clippy::unused_self)]
     fn draw<B: Backend>(&self, term: &mut Terminal<B>) {
-        term.print((1, 1), "Ansi (16 standard colors):");
-        Self::swatch_row(term, 1, 2, 16, |i| {
+        let mut surface = term.surface();
+        surface.print((1, 1), "Ansi (16 standard colors):", Style::default());
+        Self::swatch_row(&mut surface, 1, 2, 16, |i| {
             Color::Ansi(AnsiColor::try_from(i).expect("0..16 is a valid AnsiColor index"))
         });
 
-        term.print((1, 4), "Indexed (sampled across 0..256):");
+        surface.print((1, 4), "Indexed (sampled across 0..256):", Style::default());
         // 32 swatches sampled evenly across the 256-value palette (every 8th index):
         // the full palette doesn't fit a 50-column grid, and a representative strip
         // is enough to prove the Indexed(u8) mapping is stable per backend.
-        Self::swatch_row(term, 1, 5, 32, |i| Color::Indexed(i * 8));
+        Self::swatch_row(&mut surface, 1, 5, 32, |i| Color::Indexed(i * 8));
 
-        term.print((1, 7), "Rgb (24-bit gradient, red channel 0..255):");
-        Self::swatch_row(term, 1, 8, 32, |i| Color::Rgb {
+        surface.print(
+            (1, 7),
+            "Rgb (24-bit gradient, red channel 0..255):",
+            Style::default(),
+        );
+        Self::swatch_row(&mut surface, 1, 8, 32, |i| Color::Rgb {
             // `u32` intermediate (`i * 255` up to 31 * 255 = 7905 doesn't fit `u8`), then
             // `try_from` back down: the `/ 31` bounds the result to 0..=255, so this never fails.
             r: u8::try_from(u32::from(i) * 255 / 31).expect("0..=31 * 255 / 31 fits in u8"),
@@ -123,23 +131,28 @@ impl Colors {
             b: 192,
         });
 
-        term.print((1, 10), "Default (backend's configured fg/bg):");
-        Self::swatch_row(term, 1, 11, 1, |_| Color::Default);
+        surface.print(
+            (1, 10),
+            "Default (backend's configured fg/bg):",
+            Style::default(),
+        );
+        Self::swatch_row(&mut surface, 1, 11, 1, |_| Color::Default);
 
-        term.print(
+        surface.print(
             (1, 13),
             "Inverse video (fg/bg swap is the only \"styled text\" retroglyph has):",
+            Style::default(),
         );
         let fg = Color::Ansi(AnsiColor::BrightYellow);
         let bg = Color::Ansi(AnsiColor::Blue);
-        term.print_styled(
+        surface.print_line(
             (1, 14),
             &Line::from(Span::styled(
                 "normal: yellow on blue",
                 Style::new().fg(fg).bg(bg),
             )),
         );
-        term.print_styled(
+        surface.print_line(
             (1, 15),
             &Line::from(Span::styled(
                 "inverse: blue on yellow",
@@ -148,9 +161,13 @@ impl Colors {
         );
 
         // Kept under 49 chars (the row's available width from x=1): `print` (unlike
-        // `print_styled`) wraps overflow onto the next row at the same `x` rather than clipping
+        // `print_line`) wraps overflow onto the next row at the same `x` rather than clipping
         // it, which would otherwise stomp the "Linear:" row right below.
-        term.print((1, 17), "Blend modes (blit_alpha, warm/cool, alpha 0..1):");
+        surface.print(
+            (1, 17),
+            "Blend modes (blit_alpha, warm/cool, alpha 0..1):",
+            Style::default(),
+        );
         for (i, (label, mode)) in [
             ("Linear:", BlendMode::Linear),
             ("Screen:", BlendMode::Screen),
@@ -163,8 +180,8 @@ impl Colors {
         {
             #[allow(clippy::cast_possible_truncation)]
             let row = 18 + i as u16;
-            term.print((1, row), label);
-            Self::blend_row(term, 10, row, 16, mode);
+            surface.print((1, row), label, Style::default());
+            Self::blend_row(&mut surface, 10, row, 16, mode);
         }
     }
 }

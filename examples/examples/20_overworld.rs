@@ -2405,22 +2405,22 @@ impl Overworld {
 
     // ── Drawing ──────────────────────────────────────────────────────────────
 
-    fn draw_map<B: Backend>(&mut self, term: &mut Terminal<B>, area: Rect) {
+    fn draw_map(&mut self, surface: &mut Surface<'_>, area: Rect) {
         if area.width() == 0 || area.height() == 0 {
             return;
         }
         self.last_map_rect = Some(area);
         match self.view {
-            View::Cells | View::SquareGrid | View::HexGrid => self.draw_cells(term, area),
-            View::Squares => self.draw_tiles(term, area, false),
-            View::Hexes => self.draw_tiles(term, area, true),
+            View::Cells | View::SquareGrid | View::HexGrid => self.draw_cells(surface, area),
+            View::Squares => self.draw_tiles(surface, area, false),
+            View::Hexes => self.draw_tiles(surface, area, true),
         }
     }
 
     /// The per-cell terrain view (see [`World::render_cell`]), which also serves the two grid
     /// overlays: those render every cell identically and then re-tint backgrounds along province
     /// boundaries (see [`grid_overlay`]).
-    fn draw_cells<B: Backend>(&mut self, term: &mut Terminal<B>, area: Rect) {
+    fn draw_cells(&mut self, surface: &mut Surface<'_>, area: Rect) {
         self.camera.set_viewport(area);
         self.camera.center_on(self.cam_center);
         self.visible_world = self.camera.visible_bounds();
@@ -2439,7 +2439,7 @@ impl Overworld {
             if let (Some(hex), Some(selected)) = (grid, selected) {
                 style = grid_overlay(style, hex, world_pos, selected);
             }
-            term.put_styled((screen_pos.x, screen_pos.y), glyph, style);
+            surface.put((screen_pos.x, screen_pos.y), glyph, style);
         }
 
         // The reticle: a soft highlight on the cell the sidebar/status line is describing, so
@@ -2447,13 +2447,13 @@ impl Overworld {
         if let Some(screen) = self.camera.world_to_screen(self.cam_center) {
             let (glyph, style) = self.world.render_cell(self.cam_center, self.time);
             let highlighted = style.bg(Color::lerp(style.background(), RETICLE, 0.55));
-            term.put_styled((screen.x, screen.y), glyph, highlighted);
+            surface.put((screen.x, screen.y), glyph, highlighted);
         }
     }
 
     /// Shared driver for both strategic tile views: refreshes the cached [`TileMap`] if the
     /// seed or stagger changed, then hands off to the mode's renderer.
-    fn draw_tiles<B: Backend>(&mut self, term: &mut Terminal<B>, area: Rect, hex: bool) {
+    fn draw_tiles(&mut self, surface: &mut Surface<'_>, area: Rect, hex: bool) {
         let key = (self.world.seed(), hex);
         if self.tile_cache.as_ref().is_none_or(|(k, _)| *k != key) {
             self.tile_cache = Some((key, self.world.tile_map(hex)));
@@ -2462,14 +2462,14 @@ impl Overworld {
             return;
         };
         let vis = if hex {
-            draw_hex_tiles(term, area, map, self.cam_center, self.time)
+            draw_hex_tiles(surface, area, map, self.cam_center, self.time)
         } else {
-            draw_square_tiles(term, area, map, self.cam_center, self.time)
+            draw_square_tiles(surface, area, map, self.cam_center, self.time)
         };
         self.visible_world = vis;
     }
 
-    fn draw_minimap<B: Backend>(&mut self, term: &mut Terminal<B>, area: Rect) {
+    fn draw_minimap(&mut self, surface: &mut Surface<'_>, area: Rect) {
         if area.width() == 0 || area.height() == 0 {
             return;
         }
@@ -2479,7 +2479,7 @@ impl Overworld {
                 let glyph = self
                     .world
                     .minimap_swatch(col, row, area.width(), area.height());
-                term.put_styled(
+                surface.put(
                     (area.left() + col, area.top() + row),
                     glyph.ch,
                     Style::new().fg(glyph.fg).bg(glyph.bg),
@@ -2491,7 +2491,6 @@ impl Overworld {
         // this is how much of the map fits on screen" indicator, whichever view drew the map.
         let vis = self.visible_world;
         if vis.width() == 0 || vis.height() == 0 {
-            term.reset_style();
             return;
         }
         let to_col = |x: u16| {
@@ -2512,26 +2511,24 @@ impl Overworld {
         );
         let style = Style::new().fg(ACCENT);
         for x in x0..=x1 {
-            term.put_styled((area.left() + x, area.top() + y0), '─', style);
-            term.put_styled((area.left() + x, area.top() + y1), '─', style);
+            surface.put((area.left() + x, area.top() + y0), '─', style);
+            surface.put((area.left() + x, area.top() + y1), '─', style);
         }
         for y in y0..=y1 {
-            term.put_styled((area.left() + x0, area.top() + y), '│', style);
-            term.put_styled((area.left() + x1, area.top() + y), '│', style);
+            surface.put((area.left() + x0, area.top() + y), '│', style);
+            surface.put((area.left() + x1, area.top() + y), '│', style);
         }
         for (x, y) in [(x0, y0), (x1, y0), (x0, y1), (x1, y1)] {
-            term.put_styled((area.left() + x, area.top() + y), '+', style);
+            surface.put((area.left() + x, area.top() + y), '+', style);
         }
-        term.reset_style();
     }
 
-    fn draw_sidebar<B: Backend>(&mut self, term: &mut Terminal<B>, area: Rect) {
-        let term_area = term.area();
+    fn draw_sidebar(&mut self, surface: &mut Surface<'_>, area: Rect) {
         Panel::new()
             .title(" OVERWORLD ")
             .border_style(Style::new().fg(BORDER).bg(PANEL_BG))
             .fill_style(Style::new().bg(PANEL_BG))
-            .render(area, &mut Surface::new(term.grid_mut(), term_area, 0));
+            .render(area, surface);
         let inner = Rect::new(
             area.left() + 1,
             area.top() + 1,
@@ -2544,8 +2541,8 @@ impl Overworld {
         let w = inner.width_usize();
         let mut y = inner.top();
 
-        term.reset_style().fg(DIM_FG).bg(PANEL_BG);
-        term.print(
+        let dim_style = Style::new().fg(DIM_FG).bg(PANEL_BG);
+        surface.print(
             (inner.left(), y),
             truncate(
                 &format!(
@@ -2556,78 +2553,96 @@ impl Overworld {
                 ),
                 w,
             ),
+            dim_style,
         );
         y += 1;
 
         let region = self.world.region_at(self.cam_center).to_owned();
-        term.reset_style().fg(FG).bg(PANEL_BG);
-        term.print((inner.left(), y), truncate(&region, w));
-        y += 1;
-
-        let label = self.world.label_at(self.cam_center);
-        term.reset_style().fg(ACCENT).bg(PANEL_BG);
-        term.print((inner.left(), y), truncate(&label, w));
-        y += 1;
-
-        let elev_pct = self.world.elevation_pct(self.cam_center);
-        term.reset_style().fg(DIM_FG).bg(PANEL_BG);
-        term.print(
+        surface.print(
             (inner.left(), y),
-            truncate(&format!("elevation ~{elev_pct:.0}%"), w),
+            truncate(&region, w),
+            Style::new().fg(FG).bg(PANEL_BG),
         );
         y += 1;
 
-        term.print(
+        let label = self.world.label_at(self.cam_center);
+        surface.print(
+            (inner.left(), y),
+            truncate(&label, w),
+            Style::new().fg(ACCENT).bg(PANEL_BG),
+        );
+        y += 1;
+
+        let elev_pct = self.world.elevation_pct(self.cam_center);
+        surface.print(
+            (inner.left(), y),
+            truncate(&format!("elevation ~{elev_pct:.0}%"), w),
+            dim_style,
+        );
+        y += 1;
+
+        surface.print(
             (inner.left(), y),
             truncate(&format!("view: {} [T]", self.view.label()), w),
+            dim_style,
         );
         y += 2;
 
         if inner.height() >= MINIMAP_H + 16 {
-            self.draw_minimap(term, Rect::new(inner.left(), y, inner.width(), MINIMAP_H));
+            self.draw_minimap(
+                surface,
+                Rect::new(inner.left(), y, inner.width(), MINIMAP_H),
+            );
             y += MINIMAP_H + 1;
         }
 
-        term.reset_style().fg(FG).bg(PANEL_BG);
-        term.print((inner.left(), y), truncate("Legend", w));
+        surface.print(
+            (inner.left(), y),
+            truncate("Legend", w),
+            Style::new().fg(FG).bg(PANEL_BG),
+        );
         y += 1;
         for (glyph, color, name) in World::legend() {
             if y >= inner.bottom() - 2 {
                 break;
             }
-            term.reset_style().fg(color).bg(PANEL_BG);
-            term.put((inner.left(), y), glyph);
-            term.reset_style().fg(DIM_FG).bg(PANEL_BG);
-            term.print((inner.left() + 2, y), truncate(name, w.saturating_sub(2)));
+            surface.put(
+                (inner.left(), y),
+                glyph,
+                Style::new().fg(color).bg(PANEL_BG),
+            );
+            surface.print(
+                (inner.left() + 2, y),
+                truncate(name, w.saturating_sub(2)),
+                dim_style,
+            );
             y += 1;
         }
 
-        term.reset_style().fg(DIM_FG).bg(PANEL_BG);
-        term.print(
+        surface.print(
             (inner.left(), inner.bottom() - 1),
             truncate("drag pans, T tiles, R reroll", w),
+            dim_style,
         );
-        term.reset_style();
     }
 
-    fn draw_status<B: Backend>(&self, term: &mut Terminal<B>, area: Rect) {
+    fn draw_status(&self, surface: &mut Surface<'_>, area: Rect) {
         if area.height() == 0 {
             return;
         }
         for x in area.left()..area.right() {
-            term.put_styled((x, area.top()), ' ', Style::new().bg(PANEL_BG));
+            surface.put((x, area.top()), ' ', Style::new().bg(PANEL_BG));
         }
         let label = self.world.label_at(self.cam_center);
         let text = format!(
             "({}, {})  {label}  -- arrows pan, T view, R rerolls, Q quits",
             self.cam_center.x, self.cam_center.y
         );
-        term.reset_style().fg(FG).bg(PANEL_BG);
-        term.print(
+        surface.print(
             (area.left() + 1, area.top()),
             truncate(&text, area.width_usize().saturating_sub(1)),
+            Style::new().fg(FG).bg(PANEL_BG),
         );
-        term.reset_style();
     }
 
     /// Draws this frame (the driver presents). `pub` (unlike this example's other `draw_*` helpers) so
@@ -2635,6 +2650,7 @@ impl Overworld {
     /// single draw before driving synthetic input at it.
     pub fn draw<B: Backend>(&mut self, term: &mut Terminal<B>) {
         let size = term.size();
+        let mut surface = term.surface();
         let screen = Rect::new(0, 0, size.width, size.height);
         // Cleared unconditionally and only re-set inside `draw_minimap` if it actually runs this
         // frame, so a resize that drops the sidebar (or just the minimap) can't leave a stale
@@ -2642,21 +2658,21 @@ impl Overworld {
         self.last_minimap_rect = None;
         for y in 0..size.height {
             for x in 0..size.width {
-                term.put_styled((x, y), ' ', Style::new().bg(BG));
+                surface.put((x, y), ' ', Style::new().bg(BG));
             }
         }
 
         let wide = size.width >= BP_SIDEBAR && size.height >= BP_TALL;
         if wide {
             let cols = split_h(screen, &[Constraint::Fill(1), Constraint::Fixed(SIDEBAR_W)]);
-            self.draw_map(term, cols[0]);
-            self.draw_sidebar(term, cols[1]);
+            self.draw_map(&mut surface, cols[0]);
+            self.draw_sidebar(&mut surface, cols[1]);
         } else if size.height >= 2 {
             let map_area = Rect::new(0, 1, size.width, size.height - 1);
-            self.draw_map(term, map_area);
-            self.draw_status(term, Rect::new(0, 0, size.width, 1));
+            self.draw_map(&mut surface, map_area);
+            self.draw_status(&mut surface, Rect::new(0, 0, size.width, 1));
         } else {
-            self.draw_map(term, screen);
+            self.draw_map(&mut surface, screen);
         }
     }
 }
@@ -2692,22 +2708,15 @@ const HEX_LINKS: [(Direction, MarkCell, MarkCell); 6] = [
     (Direction::SW, (2, 2), (3, 2)),
 ];
 
-/// [`Terminal::put_styled`] with clipping to `area`: tiles at the map edges legitimately hang
+/// [`Surface::put`] with clipping to `area`: tiles at the map edges legitimately hang
 /// partly outside the viewport, so every tile-view write funnels through this.
-fn put_clipped<B: Backend>(
-    term: &mut Terminal<B>,
-    area: Rect,
-    x: i32,
-    y: i32,
-    glyph: char,
-    style: Style,
-) {
+fn put_clipped(surface: &mut Surface<'_>, area: Rect, x: i32, y: i32, glyph: char, style: Style) {
     if x >= i32::from(area.left())
         && x < i32::from(area.right())
         && y >= i32::from(area.top())
         && y < i32::from(area.bottom())
     {
-        term.put_styled((x as u16, y as u16), glyph, style);
+        surface.put((x as u16, y as u16), glyph, style);
     }
 }
 
@@ -2876,8 +2885,8 @@ fn hex_bevel(face: Color, dx: i32, dy: i32) -> Color {
 /// Draws the square strategic-tile view into `area` and returns the visible world rect (for
 /// the minimap overlay). The reticle's tile gets a strong highlight and its 4-neighborhood a
 /// faint one -- the square counterpart of the hex view's adjacency ring.
-fn draw_square_tiles<B: Backend>(
-    term: &mut Terminal<B>,
+fn draw_square_tiles(
+    surface: &mut Surface<'_>,
     area: Rect,
     map: &TileMap,
     center: Pos,
@@ -2911,7 +2920,7 @@ fn draw_square_tiles<B: Backend>(
             for dy in 0..i32::from(SQ_H) {
                 for dx in 0..i32::from(SQ_W) {
                     let bg = square_bevel(face, dx, dy);
-                    put_clipped(term, area, sx + dx, sy + dy, ' ', Style::new().bg(bg));
+                    put_clipped(surface, area, sx + dx, sy + dy, ' ', Style::new().bg(bg));
                 }
             }
             let dim = Color::lerp(tile.glyph_color, face, 0.45);
@@ -2919,7 +2928,7 @@ fn draw_square_tiles<B: Backend>(
             for (bit, (dx, dy)) in [(1, 2), (6, 1)].into_iter().enumerate() {
                 if (hash >> bit) & 1 == 1 {
                     let style = Style::new().fg(dim).bg(square_bevel(face, dx, dy));
-                    put_clipped(term, area, sx + dx, sy + dy, tile.glyph, style);
+                    put_clipped(surface, area, sx + dx, sy + dy, tile.glyph, style);
                 }
             }
 
@@ -2931,27 +2940,27 @@ fn draw_square_tiles<B: Backend>(
                     let (dx, dy) = river_at;
                     let bg = Color::lerp(square_bevel(face, dx, dy), TILE_RIVER_FG, 0.40);
                     let style = Style::new().fg(TILE_RIVER_FG).bg(bg);
-                    put_clipped(term, area, sx + dx, sy + dy, '~', style);
+                    put_clipped(surface, area, sx + dx, sy + dy, '~', style);
                 }
                 if tile.road && neighbor.road {
                     let (dx, dy) = road_at;
                     let bg = Color::lerp(square_bevel(face, dx, dy), TILE_ROAD_FG, 0.40);
                     let style = Style::new().fg(TILE_ROAD_FG).bg(bg);
-                    put_clipped(term, area, sx + dx, sy + dy, '·', style);
+                    put_clipped(surface, area, sx + dx, sy + dy, '·', style);
                 }
             }
 
             let style = Style::new().fg(glyph_fg).bg(square_bevel(face, 3, 1));
-            put_clipped(term, area, sx + 3, sy + 1, tile.glyph, style);
+            put_clipped(surface, area, sx + 3, sy + 1, tile.glyph, style);
             if let Some(poi) = tile.poi {
                 let (glyph, color) = poi.glyph_color();
                 let style = Style::new().fg(color).bg(square_bevel(face, 4, 1));
-                put_clipped(term, area, sx + 4, sy + 1, glyph, style);
+                put_clipped(surface, area, sx + 4, sy + 1, glyph, style);
             } else if tile.road {
                 // A road tile with no landmark carries a center dot, so a route reads as a
                 // continuous line through the tile instead of stubs at its edges.
                 let style = Style::new().fg(TILE_ROAD_FG).bg(square_bevel(face, 4, 1));
-                put_clipped(term, area, sx + 4, sy + 1, '·', style);
+                put_clipped(surface, area, sx + 4, sy + 1, '·', style);
             }
         }
     }
@@ -2965,8 +2974,8 @@ fn draw_square_tiles<B: Backend>(
 /// `hexal`: each `(col, row)` converts to an axial [`hexal::Hex`] via the [`OddR`] offset
 /// scheme, road/river connectors probe the six [`Direction`] neighbors, and the reticle
 /// highlight is hex distance (the selected hex strong, its ring of six faint).
-fn draw_hex_tiles<B: Backend>(
-    term: &mut Terminal<B>,
+fn draw_hex_tiles(
+    surface: &mut Surface<'_>,
     area: Rect,
     map: &TileMap,
     center: Pos,
@@ -3010,7 +3019,7 @@ fn draw_hex_tiles<B: Backend>(
             // Footprint: taper rows above and below the 8-cell middle row (see [`HEX_ROW_H`]).
             for dx in 2..6 {
                 put_clipped(
-                    term,
+                    surface,
                     area,
                     sx + dx,
                     sy,
@@ -3018,18 +3027,18 @@ fn draw_hex_tiles<B: Backend>(
                     Style::new().bg(hex_bevel(face, dx, 0)),
                 );
                 let bottom = Style::new().bg(hex_bevel(face, dx, 2));
-                put_clipped(term, area, sx + dx, sy + 2, ' ', bottom);
+                put_clipped(surface, area, sx + dx, sy + 2, ' ', bottom);
             }
             for dx in 0..i32::from(HEX_W) {
                 let bg = hex_bevel(face, dx, 1);
-                put_clipped(term, area, sx + dx, sy + 1, ' ', Style::new().bg(bg));
+                put_clipped(surface, area, sx + dx, sy + 1, ' ', Style::new().bg(bg));
             }
             let dim = Color::lerp(tile.glyph_color, face, 0.45);
             let hash = tile_hash(col, row);
             for (bit, (dx, dy)) in [(1, 1), (6, 1)].into_iter().enumerate() {
                 if (hash >> bit) & 1 == 1 {
                     let style = Style::new().fg(dim).bg(hex_bevel(face, dx, dy));
-                    put_clipped(term, area, sx + dx, sy + dy, tile.glyph, style);
+                    put_clipped(surface, area, sx + dx, sy + dy, tile.glyph, style);
                 }
             }
 
@@ -3042,26 +3051,26 @@ fn draw_hex_tiles<B: Backend>(
                     let (dx, dy) = river_at;
                     let bg = Color::lerp(hex_bevel(face, dx, dy), TILE_RIVER_FG, 0.40);
                     let style = Style::new().fg(TILE_RIVER_FG).bg(bg);
-                    put_clipped(term, area, sx + dx, sy + dy, '~', style);
+                    put_clipped(surface, area, sx + dx, sy + dy, '~', style);
                 }
                 if tile.road && neighbor.road {
                     let (dx, dy) = road_at;
                     let bg = Color::lerp(hex_bevel(face, dx, dy), TILE_ROAD_FG, 0.40);
                     let style = Style::new().fg(TILE_ROAD_FG).bg(bg);
-                    put_clipped(term, area, sx + dx, sy + dy, '·', style);
+                    put_clipped(surface, area, sx + dx, sy + dy, '·', style);
                 }
             }
 
             let style = Style::new().fg(glyph_fg).bg(hex_bevel(face, 3, 1));
-            put_clipped(term, area, sx + 3, sy + 1, tile.glyph, style);
+            put_clipped(surface, area, sx + 3, sy + 1, tile.glyph, style);
             if let Some(poi) = tile.poi {
                 let (glyph, color) = poi.glyph_color();
                 let style = Style::new().fg(color).bg(hex_bevel(face, 4, 1));
-                put_clipped(term, area, sx + 4, sy + 1, glyph, style);
+                put_clipped(surface, area, sx + 4, sy + 1, glyph, style);
             } else if tile.road {
                 // Same center-dot trick as the square view: routes read as lines, not stubs.
                 let style = Style::new().fg(TILE_ROAD_FG).bg(hex_bevel(face, 4, 1));
-                put_clipped(term, area, sx + 4, sy + 1, '·', style);
+                put_clipped(surface, area, sx + 4, sy + 1, '·', style);
             }
         }
     }

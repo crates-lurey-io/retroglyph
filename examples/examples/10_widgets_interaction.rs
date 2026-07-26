@@ -18,9 +18,9 @@
 //! focus (a [`Shortcuts`] global binding); `q` or `Escape` quits, or close the window.
 
 use retroglyph_core::event::{Event, KeyCode, KeyModifiers};
-use retroglyph_core::{Backend, Color, Frame, Rect, Style, Terminal};
+use retroglyph_core::{Backend, Color, Frame, Rect, Style, Surface, Terminal};
 use retroglyph_examples::Example;
-use retroglyph_widgets::{Button, Density, Interaction, Sense, Shortcuts, Surface, Theme, Widget};
+use retroglyph_widgets::{Button, Density, Interaction, Sense, Shortcuts, Theme, Widget};
 
 /// Identifies each button for [`Interaction`]'s hit-testing and focus ring.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -95,23 +95,16 @@ impl WidgetsInteraction {
     /// click to `count`. The app still owns `interact`ing (it needs `response.clicked()` for the
     /// counter logic below); `Button` only turns the resulting `Response` into a styled label,
     /// replacing what used to be this method's own bg/fg-by-response wiring.
-    fn draw_button<B: Backend>(
-        &mut self,
-        term: &mut Terminal<B>,
-        rect: Rect,
-        id: ButtonId,
-        label: &str,
-    ) {
+    fn draw_button(&mut self, surface: &mut Surface<'_>, rect: Rect, id: ButtonId, label: &str) {
         let response = self.interaction.interact(rect, id, Sense::click());
         let theme = Theme::DARK;
 
-        let term_area = term.area();
         Button::new(label, response)
             .style(Style::new().fg(theme.fg).bg(theme.panel_bg))
             .hovered_style(Style::new().fg(theme.fg).bg(theme.hover_bg))
             .pressed_style(Style::new().fg(theme.fg).bg(theme.press_bg))
             .focused_style(Style::new().fg(theme.accent).bg(theme.panel_bg))
-            .render(rect, &mut Surface::new(term.grid_mut(), term_area, 0));
+            .render(rect, surface);
 
         match (id, response.clicked()) {
             (ButtonId::Increment, true) => self.count += 1,
@@ -124,24 +117,27 @@ impl WidgetsInteraction {
     /// Draws this frame (the driver presents). Must run between the frame's own
     /// [`Interaction::begin_frame`] and [`Interaction::end_frame`].
     fn draw<B: Backend>(&mut self, term: &mut Terminal<B>) {
-        term.reset_style().fg(Color::WHITE);
-        term.print(
+        let mut surface = term.surface();
+        let style_white = Style::new().fg(Color::WHITE);
+        surface.print(
             (1, 1),
             "Tab/Shift+Tab focuses, Enter/Space or click activates, r resets, q/Escape quits.",
+            style_white,
         );
-        term.reset_style();
 
         let btn_h = self.density.min_target_size().height;
         let btn_w = 16u16;
         let y = 4;
         for (i, &(id, label)) in BUTTONS.iter().enumerate() {
             let x = 2 + u16::try_from(i).expect("BUTTONS.len() fits u16") * (btn_w + 2);
-            self.draw_button(term, Rect::new(x, y, btn_w, btn_h), id, label);
+            self.draw_button(&mut surface, Rect::new(x, y, btn_w, btn_h), id, label);
         }
 
-        term.reset_style().fg(Color::WHITE);
-        term.print((2, y + btn_h + 1), &format!("Count: {}", self.count));
-        term.reset_style();
+        surface.print(
+            (2, y + btn_h + 1),
+            &format!("Count: {}", self.count),
+            style_white,
+        );
     }
 }
 

@@ -15,7 +15,7 @@
 //! Press `q` or `Escape` to quit on the interactive backends, or close the window.
 
 use retroglyph_core::event::{Event, KeyCode};
-use retroglyph_core::{Backend, Rect, Terminal};
+use retroglyph_core::{Backend, Rect, Style, Surface, Terminal};
 use retroglyph_examples::Example;
 
 /// State for the layout example (none needed: the pane layout never changes).
@@ -67,32 +67,34 @@ impl LayoutGrid {
     }
 
     /// Draws a box-drawing border around `rect`'s edges and a centered `label` inside it.
-    fn draw_pane<B: Backend>(term: &mut Terminal<B>, rect: Rect, label: &str) {
+    fn draw_pane(surface: &mut Surface<'_>, rect: Rect, label: &str) {
         let (l, t, r, b) = (rect.left(), rect.top(), rect.right() - 1, rect.bottom() - 1);
+        let style = Style::default();
 
-        term.put((l, t), '┌');
-        term.put((r, t), '┐');
-        term.put((l, b), '└');
-        term.put((r, b), '┘');
+        surface.put((l, t), '┌', style);
+        surface.put((r, t), '┐', style);
+        surface.put((l, b), '└', style);
+        surface.put((r, b), '┘', style);
         for x in (l + 1)..r {
-            term.put((x, t), '─');
-            term.put((x, b), '─');
+            surface.put((x, t), '─', style);
+            surface.put((x, b), '─', style);
         }
         for y in (t + 1)..b {
-            term.put((l, y), '│');
-            term.put((r, y), '│');
+            surface.put((l, y), '│', style);
+            surface.put((r, y), '│', style);
         }
 
         let interior_width = rect.width().saturating_sub(2);
         let label_len = u16::try_from(label.len()).expect("pane labels are short ASCII strings");
         let label_x = l + 1 + interior_width.saturating_sub(label_len) / 2;
         let label_y = t + rect.height() / 2;
-        term.print((label_x, label_y), label);
+        surface.print((label_x, label_y), label, style);
     }
 
     /// Draws this frame (the driver presents).
     #[allow(clippy::unused_self)]
     fn draw<B: Backend>(&self, term: &mut Terminal<B>) {
+        let mut surface = term.surface();
         let full = Rect::new(0, 0, 50, 25);
 
         // Top pane spans the full width; the remaining space splits into three
@@ -102,10 +104,10 @@ impl LayoutGrid {
         let (left, rest) = split_h(rest, 16);
         let (middle, right) = split_h(rest, 17);
 
-        Self::draw_pane(term, top, "Pane A");
-        Self::draw_pane(term, left, "Pane B");
-        Self::draw_pane(term, middle, "Pane C");
-        Self::draw_pane(term, right, "Pane D");
+        Self::draw_pane(&mut surface, top, "Pane A");
+        Self::draw_pane(&mut surface, left, "Pane B");
+        Self::draw_pane(&mut surface, middle, "Pane C");
+        Self::draw_pane(&mut surface, right, "Pane D");
     }
 }
 

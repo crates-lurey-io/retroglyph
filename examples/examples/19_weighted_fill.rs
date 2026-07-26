@@ -22,7 +22,7 @@
 //! Press `q` or `Escape` to quit on the interactive backends, or close the window.
 
 use retroglyph_core::event::{Event, KeyCode};
-use retroglyph_core::{Backend, Rect, Terminal};
+use retroglyph_core::{Backend, Rect, Style, Surface, Terminal};
 use retroglyph_examples::Example;
 use retroglyph_widgets::{Constraint, split_h, split_v};
 
@@ -48,23 +48,24 @@ impl WeightedFill {
 
     /// Draws a box-drawing border around `rect` and, if it's tall enough for both, a `label`
     /// on the first interior row and a `width` readout on the second.
-    fn draw_pane<B: Backend>(term: &mut Terminal<B>, rect: Rect, label: &str) {
+    fn draw_pane(surface: &mut Surface<'_>, rect: Rect, label: &str) {
         if rect.width() == 0 || rect.height() == 0 {
             return;
         }
         let (l, t, r, b) = (rect.left(), rect.top(), rect.right() - 1, rect.bottom() - 1);
 
-        term.put((l, t), '┌');
-        term.put((r, t), '┐');
-        term.put((l, b), '└');
-        term.put((r, b), '┘');
+        let style = Style::default();
+        surface.put((l, t), '┌', style);
+        surface.put((r, t), '┐', style);
+        surface.put((l, b), '└', style);
+        surface.put((r, b), '┘', style);
         for x in (l + 1)..r {
-            term.put((x, t), '─');
-            term.put((x, b), '─');
+            surface.put((x, t), '─', style);
+            surface.put((x, b), '─', style);
         }
         for y in (t + 1)..b {
-            term.put((l, y), '│');
-            term.put((r, y), '│');
+            surface.put((l, y), '│', style);
+            surface.put((r, y), '│', style);
         }
 
         let interior_width = rect.width().saturating_sub(2);
@@ -74,36 +75,42 @@ impl WeightedFill {
         };
         let width_readout = format!("w={}", rect.width());
         if rect.height() >= 4 {
-            term.print((center(label), t + 1), label);
-            term.print((center(&width_readout), t + 2), &width_readout);
+            surface.print((center(label), t + 1), label, style);
+            surface.print((center(&width_readout), t + 2), &width_readout, style);
         } else if rect.height() >= 2 {
-            term.print((center(label), t + rect.height() / 2), label);
+            surface.print((center(label), t + rect.height() / 2), label, style);
         }
     }
 
     /// Draws one demo row: a caption above a `split_h` of `row` using `constraints`, with each
     /// resulting pane labeled by the entry in `labels` at the same index.
-    fn draw_row<B: Backend>(
-        term: &mut Terminal<B>,
+    fn draw_row(
+        surface: &mut Surface<'_>,
         row: Rect,
         caption: &str,
         constraints: &[Constraint],
         labels: &[&str],
     ) {
-        term.reset_style();
-        term.print((row.left(), row.top()), caption);
+        let style = Style::default();
+        surface.print((row.left(), row.top()), caption, style);
         let body = Rect::new(row.left(), row.top() + 1, row.width(), row.height() - 1);
         let panes = split_h(body, constraints);
         for (pane, label) in panes.iter().zip(labels) {
-            Self::draw_pane(term, *pane, label);
+            Self::draw_pane(surface, *pane, label);
         }
     }
 
     /// Draws this frame (the driver presents).
     #[allow(clippy::unused_self)]
     fn draw<B: Backend>(&self, term: &mut Terminal<B>) {
+        let mut surface = term.surface();
+        let style = Style::default();
         let full = Rect::new(0, 0, 50, 25);
-        term.print((1, 0), "Constraint::Fill(weight): proportional splits");
+        surface.print(
+            (1, 0),
+            "Constraint::Fill(weight): proportional splits",
+            style,
+        );
 
         let rows = split_v(
             Rect::new(full.left(), full.top() + 1, full.width(), full.height() - 1),
@@ -111,7 +118,7 @@ impl WeightedFill {
         );
 
         Self::draw_row(
-            term,
+            &mut surface,
             rows[0],
             "Row 1: Fill(1) x3 -- equal thirds, unchanged",
             &[
@@ -122,7 +129,7 @@ impl WeightedFill {
             &["Fill(1)", "Fill(1)", "Fill(1)"],
         );
         Self::draw_row(
-            term,
+            &mut surface,
             rows[1],
             "Row 2: Fill(1):Fill(2):Fill(3) -- 1:2:3 ratio",
             &[
@@ -133,7 +140,7 @@ impl WeightedFill {
             &["Fill(1)", "Fill(2)", "Fill(3)"],
         );
         Self::draw_row(
-            term,
+            &mut surface,
             rows[2],
             "Row 3: Fixed(10) + Fill(1)/Fill(3) remainder",
             &[
@@ -144,7 +151,7 @@ impl WeightedFill {
             &["Fixed(10)", "Fill(1)", "Fill(3)"],
         );
         Self::draw_row(
-            term,
+            &mut surface,
             rows[3],
             "Row 4: Min(6), Fill(2), Max(12) -- Min/Max=1",
             &[Constraint::Min(6), Constraint::Fill(2), Constraint::Max(12)],

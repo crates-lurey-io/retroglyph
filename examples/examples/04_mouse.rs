@@ -17,7 +17,7 @@
 //! Move the mouse and click to see it tracked; `q` or `Escape` quits, or close the window.
 
 use retroglyph_core::event::{Event, KeyCode, MouseEventKind};
-use retroglyph_core::{Backend, Pos, Terminal};
+use retroglyph_core::{Backend, Pos, Style, Surface, Terminal};
 use retroglyph_examples::Example;
 
 /// Ticks with no [`MouseEventKind::Moved`] event before assuming this backend never
@@ -78,33 +78,45 @@ impl Mouse {
     }
 
     /// Draws this frame (the driver presents).
-    fn draw<B: Backend>(&self, term: &mut Terminal<B>) {
-        term.print((1, 1), "Move the mouse and click; q / Escape quits.");
+    fn draw(&self, surface: &mut Surface<'_>) {
+        surface.print(
+            (1, 1),
+            "Move the mouse and click; q / Escape quits.",
+            Style::default(),
+        );
 
         if self.motion_unavailable() {
-            term.print((1, 3), "motion unavailable on this backend");
-            term.print((1, 4), "(click tracking still works below)");
+            surface.print(
+                (1, 3),
+                "motion unavailable on this backend",
+                Style::default(),
+            );
+            surface.print(
+                (1, 4),
+                "(click tracking still works below)",
+                Style::default(),
+            );
         } else if !self.motion_seen {
-            term.print((1, 3), "waiting for mouse motion...");
+            surface.print((1, 3), "waiting for mouse motion...", Style::default());
         }
 
-        term.print((1, 6), "Position:");
+        surface.print((1, 6), "Position:", Style::default());
         let pos_text = self.position.map_or_else(
             || "(none yet)".to_owned(),
             |p| format!("({}, {})", p.x, p.y),
         );
-        term.print((11, 6), &pos_text);
+        surface.print((11, 6), &pos_text, Style::default());
 
-        term.print((1, 7), "Last event:");
+        surface.print((1, 7), "Last event:", Style::default());
         let event_text = if self.last_event.is_empty() {
             "(none yet)"
         } else {
             &self.last_event
         };
-        term.print((13, 7), event_text);
+        surface.print((13, 7), event_text, Style::default());
 
-        term.print((1, 8), "Clicks:");
-        term.print((9, 8), &self.click_count.to_string());
+        surface.print((1, 8), "Clicks:", Style::default());
+        surface.print((9, 8), &self.click_count.to_string(), Style::default());
     }
 }
 
@@ -120,7 +132,8 @@ impl Example for Mouse {
         if !self.handle_events(term) {
             return false;
         }
-        self.draw(term);
+        let mut surface = term.surface();
+        self.draw(&mut surface);
         true
     }
 }

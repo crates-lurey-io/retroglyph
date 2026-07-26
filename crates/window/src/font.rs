@@ -800,7 +800,7 @@ mod tests {
     /// The four codepoints patched into `unscii16`'s `DATA` (see that module's doc comment)
     /// must actually be reachable through the char-to-glyph path, not just present at their
     /// raw glyph index -- otherwise they're invisible to anything that goes through
-    /// `BitmapFont::char_to_index`/`term.print`, which is every real caller.
+    /// `BitmapFont::char_to_index`/`Surface::print`, which is every real caller.
     #[test]
     fn patched_glyphs_are_reachable_by_char() {
         assert_eq!(unicode_to_cp437('⌂'), 0x7F, "U+2302 HOUSE");

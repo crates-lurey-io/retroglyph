@@ -50,6 +50,7 @@ impl Constraint {
             Self::Fixed(n) | Self::Min(n) => n.min(total),
             Self::Percent(p) => {
                 let p = u32::from(p.min(100));
+                // `p` is clamped to `0..=100`, so `total * p / 100 <= total`, itself a `u16`.
                 #[allow(clippy::cast_possible_truncation)]
                 {
                     (u32::from(total) * p / 100) as u16
@@ -202,6 +203,8 @@ fn solve(total: u16, constraints: &[Constraint]) -> SmallBuf<u16, STACK_CAP> {
                 leftover -= 1;
             }
             for (k, &(i, _, cap)) in flexible.iter().enumerate() {
+                // `shares[k]` is an integer share of `remainder` (a `u16` widened to `u32`), so it
+                // can never exceed `remainder` itself and fits back in a `u16`.
                 #[allow(clippy::cast_possible_truncation)]
                 let share = shares[k] as u16;
                 let grown = sizes[i].saturating_add(share);
@@ -390,6 +393,8 @@ fn place(total: u16, sizes: &[u16], flex: Flex) -> Vec<u16> {
         Flex::End => offsets = packed_from(slack),
         Flex::Center => offsets = packed_from(slack / 2),
         Flex::SpaceBetween if n > 1 => {
+            // `n` is the number of panes in one layout split, nowhere near `u16::MAX` in any
+            // realistic UI.
             #[allow(clippy::cast_possible_truncation)]
             let gaps = n as u16 - 1;
             let gap = slack / gaps;
@@ -406,6 +411,8 @@ fn place(total: u16, sizes: &[u16], flex: Flex) -> Vec<u16> {
         }
         Flex::Start | Flex::SpaceBetween => offsets = packed_from(0),
         Flex::SpaceAround => {
+            // `n` is the number of panes in one layout split, nowhere near `u16::MAX` in any
+            // realistic UI.
             #[allow(clippy::cast_possible_truncation)]
             let gaps = n as u16 + 1;
             let unit = slack / gaps;
@@ -810,15 +817,17 @@ mod tests {
     /// requested size and the total exactly fills the area.
     #[test]
     fn split_beyond_stack_cap_matches_small_case_behavior() {
-        let panes = 20; // > STACK_CAP
-        let area = Rect::new(0, 0, panes as u16, 1);
+        let panes = 20; // > STACK_CAP, and far below u16::MAX
+        #[allow(clippy::cast_possible_truncation)]
+        let panes_u16 = panes as u16;
+        let area = Rect::new(0, 0, panes_u16, 1);
         let constraints = vec![Constraint::Fixed(1); panes];
         let widths: Vec<u16> = split_h(area, &constraints)
             .iter()
             .map(Rect::width)
             .collect();
         assert_eq!(widths, vec![1u16; panes]);
-        assert_eq!(widths.iter().sum::<u16>(), panes as u16);
+        assert_eq!(widths.iter().sum::<u16>(), panes_u16);
     }
 
     /// Same as above, but exercises the flexible-pane path (`flexible`/`shares`/`fracs`/`order`

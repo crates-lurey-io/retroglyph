@@ -16,7 +16,7 @@
 //! present), or close the window.
 
 use retroglyph_core::event::{Event, KeyCode, KeyModifiers};
-use retroglyph_core::{Backend, Terminal};
+use retroglyph_core::{Backend, Style, Terminal};
 use retroglyph_examples::Example;
 
 /// How many past key events to keep on screen, oldest at the top.
@@ -85,19 +85,21 @@ impl Keyboard {
 
     /// Draws this frame (the driver presents).
     fn draw<B: Backend>(&self, term: &mut Terminal<B>) {
-        term.print(
+        let mut surface = term.surface();
+        surface.print(
             (1, 1),
             "Press any key (arrows, modifiers, F-keys all decode).",
+            Style::default(),
         );
-        term.print((1, 2), "q / Escape quits.");
-        term.print((1, 4), "Last key:");
+        surface.print((1, 2), "q / Escape quits.", Style::default());
+        surface.print((1, 4), "Last key:", Style::default());
         let last = self.log.last().map_or("(none yet)", String::as_str);
-        term.print((11, 4), last);
+        surface.print((11, 4), last, Style::default());
 
-        term.print((1, 6), "Log (oldest first):");
+        surface.print((1, 6), "Log (oldest first):", Style::default());
         for (i, entry) in self.log.iter().enumerate() {
             let y = 7 + u16::try_from(i).expect("LOG_LEN fits in u16");
-            term.print((1, y), entry);
+            surface.print((1, y), entry, Style::default());
         }
     }
 }

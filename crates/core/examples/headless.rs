@@ -10,6 +10,7 @@
 //! Run with: `cargo run -p retroglyph-core --example headless`
 
 use retroglyph_core::Headless;
+use retroglyph_core::Style;
 use retroglyph_core::Terminal;
 use retroglyph_core::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 
@@ -18,8 +19,7 @@ fn main() {
     let mut term = Terminal::new(backend);
 
     // Frame 1: draw a lone `@` and present it.
-    term.put((1, 1), '@');
-    term.present().unwrap();
+    term.draw(|s| s.put((1, 1), '@', Style::default())).unwrap();
     println!("--- Frame 1 ---");
     println!("{}", term.backend().format_view());
 
@@ -35,9 +35,11 @@ fn main() {
     // shows the injection landing in the queue, then redraws one cell over
     // to keep the example self-contained.
     let _ = term.drain_events();
-    term.put((1, 1), ' ');
-    term.put((2, 1), '@');
-    term.present().unwrap();
+    term.draw(|s| {
+        s.put((1, 1), ' ', Style::default());
+        s.put((2, 1), '@', Style::default());
+    })
+    .unwrap();
     println!("--- Frame 2 (after injecting a move-right event) ---");
     println!("{}", term.backend().format_view());
 }

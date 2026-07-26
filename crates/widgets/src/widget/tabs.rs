@@ -157,6 +157,9 @@ impl Widget for Tabs<'_> {
             } else {
                 self.style
             };
+            // `text` is bounded to `avail` columns above, itself derived from the `u16`
+            // `area.right()`/`x`, so narrowing the char count back is always exact.
+            #[allow(clippy::cast_possible_truncation)]
             let text_width = text.chars().count() as u16;
             if Some(index) == self.selected && text_width > 0 {
                 fill_rect(

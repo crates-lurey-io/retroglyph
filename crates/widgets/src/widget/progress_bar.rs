@@ -94,6 +94,9 @@ impl Widget for ProgressBar {
         if area.width() == 0 || self.max == 0 {
             return;
         }
+        // `value.min(max) <= max`, so `(value.min(max) * width) / max <= width`, itself a `u16`:
+        // the result always narrows back exactly.
+        #[allow(clippy::cast_possible_truncation)]
         let filled_cells = ((u64::from(self.value.min(self.max)) * u64::from(area.width()))
             / u64::from(self.max)) as u16;
         let y = area.top();

@@ -86,7 +86,11 @@ impl Widget for Gauge<'_> {
         let ratio = self.ratio.clamp(0.0, 1.0);
         // "100%" is the longest possible output: 4 bytes.
         let mut pct = bar::ReadoutBuf::<4>::new();
-        let _ = write!(pct, "{:>3}%", (ratio * 100.0).round() as i32);
+        // `ratio` is clamped to `0.0..=1.0` above, so the rounded percentage always lands in
+        // `0..=100`, well within `i32`'s range.
+        #[allow(clippy::cast_possible_truncation)]
+        let pct_value = (ratio * 100.0).round() as i32;
+        let _ = write!(pct, "{pct_value:>3}%");
         bar::render(
             surface,
             area,

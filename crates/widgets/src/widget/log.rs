@@ -82,6 +82,9 @@ impl Widget for Log<'_> {
         let top = bottom.saturating_sub(visible_height - 1);
 
         for (row, message) in self.messages[top..=bottom].iter().enumerate() {
+            // `row` indexes a slice of at most `visible_height` messages, itself bounded by
+            // `area`'s `u16` height, so narrowing it back is always exact.
+            #[allow(clippy::cast_possible_truncation)]
             let y = area.top() + row as u16;
             let row_area = Rect::new(area.left(), y, area.width(), 1);
             PrintLine::new(message).render(row_area, surface);

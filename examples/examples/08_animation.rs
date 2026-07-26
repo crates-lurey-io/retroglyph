@@ -1,16 +1,16 @@
 //! 08: Animation
 //!
-//! [`Tween`] plus [`FrameClock`] driving sub-cell [`Terminal::put_offset`]. A ball travels once
+//! [`Tween`] plus [`FrameClock`] driving sub-cell [`Surface::put_offset`]. A ball travels once
 //! across the track and back: [`FrameClock`] fires at [`BOUNCE_HZ`], and its one reversal
 //! retargets a [`Tween`] toward the opposite end with [`Easing::EaseInOutCubic`], the same
 //! "fixed-rate logic step, continuously-interpolated visual" split `06_layers` uses for its
 //! discrete glyph steps -- except here the value in between two steps is what actually gets
 //! drawn, not just the step itself. The tween's fractional cell position, converted to a
-//! sub-cell pixel offset via [`Terminal::put_offset`], is what makes the motion smooth on the
+//! sub-cell pixel offset via [`Surface::put_offset`], is what makes the motion smooth on the
 //! software backend instead of visibly snapping from cell to cell.
 //!
 //! Sub-cell offsets are visual-only pixel nudges a backend may or may not represent (see
-//! [`Terminal::put_offset`]'s own doc comment): the software backend renders the true
+//! [`Surface::put_offset`]'s own doc comment): the software backend renders the true
 //! in-between position; the crossterm and headless backends silently ignore the offset and
 //! only redraw the whole-cell position, so the same continuous motion looks like discrete
 //! per-cell hops there instead of true sliding -- graceful degradation with no example-side
@@ -42,7 +42,7 @@ const TRACK_ROW: u16 = 12;
 const TRACK_LEFT: u16 = 1;
 const TRACK_RIGHT: u16 = 48;
 /// How wide one grid cell is in the software backend's default embedded font, in pixels --
-/// see `crates/window/src/font.rs`'s `FONT` constant. [`Terminal::put_offset`]'s
+/// see `crates/window/src/font.rs`'s `FONT` constant. [`Surface::put_offset`]'s
 /// `dx`/`dy` are raw pixel units at this scale, so a full cell of horizontal travel is exactly
 /// `CELL_W_PX` of offset.
 const CELL_W_PX: f32 = 8.0;
@@ -94,21 +94,23 @@ impl Animation {
     /// Draws this frame (the driver presents): the track, then the ball at its tweened position, with
     /// a sub-cell pixel offset for the fractional part of that position.
     fn draw<B: Backend>(&self, term: &mut Terminal<B>) {
-        term.print(
+        let mut surface = term.surface();
+        surface.print(
             (1, 1),
             "A ball travels the track below and back; q / Escape quits.",
+            Style::default(),
         );
         // `bounces == 1` is the moment the ball *reaches* the right end and starts heading
         // back -- not yet parked, still a full second of return travel left. The tween (and
         // the ball) only actually settles at TRACK_LEFT once the second clock fire completes
         // that return trip.
         if self.bounces >= 2 {
-            term.print((1, 2), "(parked at left end)");
+            surface.print((1, 2), "(parked at left end)", Style::default());
         }
 
         let track_style = Style::new().fg(Color::Ansi(AnsiColor::BrightBlack));
         for x in TRACK_LEFT..=TRACK_RIGHT {
-            term.put_styled((x, TRACK_ROW), '-', track_style);
+            surface.put((x, TRACK_ROW), '-', track_style);
         }
 
         let pos = self.position.value();
@@ -118,10 +120,10 @@ impl Animation {
         #[allow(clippy::cast_possible_truncation)]
         let dx = ((pos - cell) * CELL_W_PX) as i16;
 
-        term.reset_style()
+        let ball_style = Style::new()
             .fg(Color::Ansi(AnsiColor::BrightYellow))
             .bg(Color::Default);
-        term.put_offset((cell_x, TRACK_ROW), (dx, 0), 'o');
+        surface.put_offset((cell_x, TRACK_ROW), (dx, 0), 'o', ball_style);
     }
 }
 

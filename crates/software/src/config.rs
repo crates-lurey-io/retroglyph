@@ -75,6 +75,7 @@ impl std::error::Error for SoftwareBackendError {
 /// use retroglyph_software::SoftwareBackendBuilder;
 /// use retroglyph_window::winit::{WindowConfig, run_windowed};
 /// use retroglyph_core::event::{Event, KeyCode};
+/// use retroglyph_core::Style;
 /// use std::time::Duration;
 ///
 /// let renderer = SoftwareBackendBuilder::new()
@@ -87,9 +88,7 @@ impl std::error::Error for SoftwareBackendError {
 ///
 /// let config = WindowConfig::fit(&renderer, "My Game", None, true);
 /// run_windowed(config, renderer, move |term| {
-///     term.clear();
-///     term.print((0, 0), "Hello from rg!");
-///     term.present();
+///     term.draw(|s| s.print((0, 0), "Hello from rg!", Style::default())).ok();
 ///
 ///     if let Some(event) = term.poll(Duration::from_millis(16)) {
 ///         match event {

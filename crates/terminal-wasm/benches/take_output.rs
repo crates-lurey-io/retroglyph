@@ -19,7 +19,7 @@
 #![allow(missing_docs)]
 
 use criterion::{BatchSize, Criterion, Throughput, criterion_group, criterion_main};
-use retroglyph_core::Terminal;
+use retroglyph_core::{Style, Terminal};
 use retroglyph_terminal_wasm::TerminalWasm;
 use std::hint::black_box;
 
@@ -29,13 +29,14 @@ use std::hint::black_box;
 fn baseline(cols: u16, rows: u16) -> Terminal<TerminalWasm> {
     let backend = TerminalWasm::new(cols, rows);
     let mut term = Terminal::new(backend);
-    for y in 0..rows {
-        for x in 0..cols {
-            term.put((x, y), ' ');
+    term.draw(|s| {
+        for y in 0..rows {
+            for x in 0..cols {
+                s.put((x, y), ' ', Style::default());
+            }
         }
-    }
-    term.present()
-        .expect("in-memory TerminalWasm backend never fails to present");
+    })
+    .expect("in-memory TerminalWasm backend never fails to present");
     let _ = term.backend_mut().take_output();
     term
 }
@@ -44,13 +45,14 @@ fn baseline(cols: u16, rows: u16) -> Terminal<TerminalWasm> {
 /// case for `take_output`: every cell emits a cursor move plus a glyph.
 fn full_repaint_pending(cols: u16, rows: u16) -> Terminal<TerminalWasm> {
     let mut term = baseline(cols, rows);
-    for y in 0..rows {
-        for x in 0..cols {
-            term.put((x, y), 'X');
+    term.draw(|s| {
+        for y in 0..rows {
+            for x in 0..cols {
+                s.put((x, y), 'X', Style::default());
+            }
         }
-    }
-    term.present()
-        .expect("in-memory TerminalWasm backend never fails to present");
+    })
+    .expect("in-memory TerminalWasm backend never fails to present");
     term
 }
 
@@ -66,13 +68,14 @@ fn sparse_diff_pending(cols: u16, rows: u16, pct: u32) -> Terminal<TerminalWasm>
     let changes = total * pct / 100;
 
     let mut rng = fastrand::Rng::with_seed(42);
-    for _ in 0..changes {
-        let x = rng.u16(0..cols);
-        let y = rng.u16(0..rows);
-        term.put((x, y), 'X');
-    }
-    term.present()
-        .expect("in-memory TerminalWasm backend never fails to present");
+    term.draw(|s| {
+        for _ in 0..changes {
+            let x = rng.u16(0..cols);
+            let y = rng.u16(0..rows);
+            s.put((x, y), 'X', Style::default());
+        }
+    })
+    .expect("in-memory TerminalWasm backend never fails to present");
     term
 }
 

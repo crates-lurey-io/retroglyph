@@ -181,7 +181,11 @@ impl StatefulWidget for Table<'_> {
         let visible_rows = area.height_usize().saturating_sub(1);
         let selected = state.selected();
         for (row_index, row) in visible_window(self.rows, state.offset(), visible_rows) {
-            let y = area.top() + 1 + (row_index - state.offset()) as u16;
+            // `row_index - state.offset()` is a row within the visible window, so it never
+            // exceeds `visible_rows` (`area.height_usize()`, itself widened from a `u16` height).
+            #[allow(clippy::cast_possible_truncation)]
+            let row_offset = (row_index - state.offset()) as u16;
+            let y = area.top() + 1 + row_offset;
             let (style, bg) = if Some(row_index) == selected {
                 (self.selected_style, Some(self.selected_style.background()))
             } else {
