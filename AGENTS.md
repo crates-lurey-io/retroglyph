@@ -31,10 +31,6 @@ just docs-preview    # build docs and open in browser
 For a quick iterative loop: `just compile` to catch type errors fast, then `just check` before
 committing.
 
-**Known Justfile gaps:** `clippy` does not pass `--all-features`, so backend code is only linted in
-CI. The `doc` recipe swallows `cargo doc` failures due to `|| true` chaining. See
-`.matan/improve-justfile.md` for the full list.
-
 ## Key rules
 
 - **Comment/doc-comment line width: use the full ~100 cols, not ~80.** There's no `rustfmt.toml` in
