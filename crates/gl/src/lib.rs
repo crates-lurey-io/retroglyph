@@ -96,6 +96,8 @@ use retroglyph_core::color::Color;
 use retroglyph_core::grid::{Pos, Size};
 use retroglyph_core::tile::Tile;
 use retroglyph_window::palette::{DEFAULT_BG, DEFAULT_FG};
+#[cfg(feature = "tilesets")]
+use retroglyph_window::sprite_cache::SpriteTint;
 use retroglyph_window::{CellGeometry, Presenter, WindowHandle};
 use shaders::GlslFlavor;
 #[cfg(feature = "tilesets")]
@@ -340,6 +342,8 @@ impl Output for GlRenderer {
     {
         for draw_cell in content {
             let (pos, tile) = (draw_cell.pos, draw_cell.tile);
+            // No tint is read here: this path writes glyph instances only, and a sprite (the
+            // only thing a tint applies to) is emitted by `draw_layers`. See `write_tile`.
             self.write_tile(pos, tile);
         }
         Ok(())
@@ -461,6 +465,12 @@ impl Output for GlRenderer {
                         sprite.h,
                         tile.dx() + align.0,
                         tile.dy() + align.1,
+                        SpriteTint::resolve(
+                            sprite.color,
+                            tile.style().foreground(),
+                            draw_cell.tint,
+                            DEFAULT_FG,
+                        ),
                     ));
                     continue;
                 }
@@ -520,6 +530,12 @@ impl Output for GlRenderer {
                     sprite.h,
                     tile.dx() + align.0,
                     tile.dy() + align.1,
+                    SpriteTint::resolve(
+                        sprite.color,
+                        tile.style().foreground(),
+                        draw_cell.tint,
+                        DEFAULT_FG,
+                    ),
                 ));
                 continue;
             }

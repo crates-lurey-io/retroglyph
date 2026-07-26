@@ -93,6 +93,7 @@ use alpha_blend::rgba::U8x4Rgba;
 use grixy::buf::GridBuf;
 use grixy::ops::GridWrite;
 use grixy::ops::layout::RowMajor;
+use retroglyph_core::Tint;
 use retroglyph_core::event::Event;
 use retroglyph_core::grid::{Pos, Size};
 use retroglyph_core::tile::{Tile, TileFlags};
@@ -100,7 +101,7 @@ use retroglyph_window::WindowHandle;
 use retroglyph_window::geometry::CellGeometry;
 use retroglyph_window::palette::{DEFAULT_BG, DEFAULT_FG};
 #[cfg(feature = "tilesets")]
-use retroglyph_window::sprite_cache::{Sprite, SpriteCache, warn_sprite_needs_span};
+use retroglyph_window::sprite_cache::{Sprite, SpriteCache, SpriteTint, warn_sprite_needs_span};
 #[cfg(feature = "tilesets")]
 use std::collections::BTreeSet;
 use std::collections::VecDeque;
@@ -160,6 +161,13 @@ struct RenderContext {
     /// forcing a full repaint) whenever the grid is resized; grown (never shrunk) as new layer ids
     /// are seen.
     prev_tiles: Vec<Vec<Tile>>,
+    /// Per-cell tints from the last `draw_layers` call, indexed exactly as `prev_tiles`.
+    ///
+    /// A separate shadow copy because a `Tile` does not carry its tint (it lives in a side table
+    /// on `Grid`, see `retroglyph_core::Grid::tint`). Without it a tint-only change would compare
+    /// equal on every `Tile` field and never mark the cell dirty, so recolouring a sprite in
+    /// place would silently not repaint.
+    prev_tints: Vec<Vec<Tint>>,
     /// Reusable per-cell dirty scratch buffer, `true` at index `y * cols + x` when any layer's
     /// tile at that position changed this frame. Indexed the same way as each `prev_tiles` layer;
     /// resized alongside it.
@@ -196,6 +204,7 @@ impl SoftwareRenderer {
                 prev_pixels: vec![0u32; buf_w * buf_h],
                 damage_rows: None,
                 prev_tiles: Vec::new(),
+                prev_tints: Vec::new(),
                 dirty_mask: Vec::new(),
                 // Sentinel distinct from any real layer count (always < 256), so the very first
                 // `draw_layers` call is unconditionally treated as a layer-set change and takes
@@ -398,6 +407,7 @@ impl SoftwareRenderer {
     /// A sprite is additionally shifted by its alignment inside the tile's span box (see
     /// [`Sprite::align_offset`]), which is `(0, 0)` unless the span reserves more cells than the
     /// artwork fills.
+    #[allow(clippy::too_many_arguments)]
     fn blit_cell_glyph(
         &mut self,
         buf_w: usize,
@@ -406,6 +416,7 @@ impl SoftwareRenderer {
         scale: usize,
         pos: Pos,
         tile: Tile,
+        tint: Tint,
     ) {
         let px_x = usize::from(pos.x) * cell_w;
         let px_y = usize::from(pos.y) * cell_h;
@@ -418,6 +429,8 @@ impl SoftwareRenderer {
             if let Some(sprite) = self.sprite_cache.get(tile.glyph()) {
                 let (span_w, span_h) = tile.span();
                 let align = sprite.align_offset(span_w, span_h, glyph_w, glyph_h);
+                let recolour =
+                    SpriteTint::resolve(sprite.color, tile.style().foreground(), tint, DEFAULT_FG);
                 blit_sprite(
                     self.ctx.pixel_buf.as_mut(),
                     buf_w,
@@ -428,6 +441,7 @@ impl SoftwareRenderer {
                     tile.dy() + align.1,
                     sprite,
                     scale,
+                    recolour,
                 );
                 if tile.span() == (1, 1) {
                     warn_sprite_needs_span(
@@ -581,6 +595,8 @@ impl Output for SoftwareRenderer {
                 scale,
                 #[cfg(feature = "tilesets")]
                 sprite_cache,
+                #[cfg(feature = "tilesets")]
+                draw_cell.tint,
             );
         }
         Ok(())
@@ -679,16 +695,22 @@ impl Output for SoftwareRenderer {
                 self.ctx
                     .prev_tiles
                     .resize_with(layer_idx + 1, || vec![Tile::default(); cell_count]);
+                self.ctx
+                    .prev_tints
+                    .resize_with(layer_idx + 1, || vec![Tint::None; cell_count]);
             } else if self.ctx.prev_tiles[layer_idx].len() != cell_count {
                 self.ctx.prev_tiles[layer_idx] = vec![Tile::default(); cell_count];
+                self.ctx.prev_tints[layer_idx] = vec![Tint::None; cell_count];
             }
 
             let idx = usize::from(pos.y) * cols + usize::from(pos.x);
             let slot = &mut self.ctx.prev_tiles[layer_idx][idx];
-            if *slot != *tile {
+            let tint_slot = &mut self.ctx.prev_tints[layer_idx][idx];
+            if *slot != *tile || *tint_slot != draw_cell.tint {
                 self.ctx.dirty_mask[idx] = true;
                 any_dirty = true;
                 *slot = *tile;
+                *tint_slot = draw_cell.tint;
             }
             if tile.dx() != 0 || tile.dy() != 0 {
                 any_offset = true;
@@ -729,9 +751,10 @@ impl Output for SoftwareRenderer {
                 // offset/spill contract on `retroglyph_window::Presenter` (see its rustdoc).
                 for idx in 0..cell_count {
                     let tile = self.ctx.prev_tiles[layer_id as usize][idx];
+                    let tint = self.ctx.prev_tints[layer_id as usize][idx];
                     #[allow(clippy::cast_possible_truncation)]
                     let pos = Pos::new((idx % cols) as u16, (idx / cols) as u16);
-                    self.blit_cell_glyph(buf_w, cell_w, cell_h, scale, pos, tile);
+                    self.blit_cell_glyph(buf_w, cell_w, cell_h, scale, pos, tile, tint);
                 }
             }
         } else if any_dirty {
@@ -757,9 +780,10 @@ impl Output for SoftwareRenderer {
                         continue;
                     }
                     let tile = self.ctx.prev_tiles[usize::from(layer_id)][idx];
+                    let tint = self.ctx.prev_tints[usize::from(layer_id)][idx];
                     #[allow(clippy::cast_possible_truncation)]
                     let pos = Pos::new((idx % cols) as u16, (idx / cols) as u16);
-                    self.blit_cell_glyph(buf_w, cell_w, cell_h, scale, pos, tile);
+                    self.blit_cell_glyph(buf_w, cell_w, cell_h, scale, pos, tile, tint);
                 }
             }
         }
@@ -901,6 +925,7 @@ fn blit_cell(
     cell_h: usize,
     scale: usize,
     #[cfg(feature = "tilesets")] sprite_cache: Option<&SpriteCache>,
+    #[cfg(feature = "tilesets")] tint: Tint,
 ) {
     let px_x = pos.x as usize * cell_w;
     let px_y = pos.y as usize * cell_h;
@@ -926,6 +951,7 @@ fn blit_cell(
             cell.dy() + align.1,
             sprite,
             scale,
+            SpriteTint::resolve(sprite.color, cell.style().foreground(), tint, DEFAULT_FG),
         );
         return;
     }
@@ -1138,6 +1164,7 @@ fn blit_sprite(
     offset_y: i16,
     sprite: &Sprite,
     scale: usize,
+    recolour: SpriteTint,
 ) {
     let origin_x = cell_px_x as i64 + i64::from(offset_x) * scale as i64;
     let origin_y = cell_px_y as i64 + i64::from(offset_y) * scale as i64;
@@ -1157,6 +1184,7 @@ fn blit_sprite(
         && origin_y >= 0
         && origin_x as usize + glyph_w <= buf_w
         && origin_y as usize + glyph_h <= buf_h;
+    let identity = recolour.is_identity();
 
     for src_y in 0..src_h {
         for src_x in 0..src_w {
@@ -1171,6 +1199,17 @@ fn blit_sprite(
             if src.is_transparent() {
                 continue;
             }
+
+            // `identity` is loop-invariant, hoisted above by the compiler: an untinted sprite
+            // (the overwhelming majority) takes exactly the arithmetic it took before this
+            // branch existed. Alpha is deliberately untouched, so which pixels are opaque, and
+            // therefore the blending below and the background showing through, are unaffected.
+            let src = if identity {
+                src
+            } else {
+                let (r, g, b) = recolour.apply((src.r, src.g, src.b));
+                U8x4Rgba::new(r, g, b, src.a)
+            };
 
             // Fast path: fully opaque pixels write directly, no blending.
             // Most roguelike sprites are opaque, so this skips U8x4Rgba
@@ -2081,7 +2120,7 @@ mod span_tests {
     use retroglyph_core::color::Color;
     use retroglyph_core::grid::Pos;
     use retroglyph_core::style::Style;
-    use retroglyph_window::tileset::{Codepage, SpriteAlign, TilesetOptions};
+    use retroglyph_window::tileset::{Codepage, SheetColor, SpriteAlign, TilesetOptions};
 
     const RED: u32 = 0x00FF_0000;
     const BLUE: u32 = 0x0000_00FF;
@@ -2258,6 +2297,107 @@ mod span_tests {
         for y in 0..16 {
             assert_eq!(px(&r, 2, 8, y), BLUE, "covered cell pixel (8, {y})");
         }
+    }
+
+    /// `paint`, with `tint` applied to every cell's anchor.
+    fn paint_tinted(renderer: &mut SoftwareRenderer, grid: &Grid, tint: Tint) {
+        let tiles: Vec<(u8, Pos, Tile)> = (0..grid.height())
+            .flat_map(|y| (0..grid.width()).map(move |x| (x, y)))
+            .map(|(x, y)| (0u8, Pos::new(x, y), *grid.tile(0, (x, y)).unwrap()))
+            .collect();
+        renderer
+            .draw_layers(
+                tiles
+                    .iter()
+                    .map(|(l, pos, tile)| DrawCell::on_layer(*l, *pos, tile).with_tint(tint)),
+            )
+            .unwrap();
+    }
+
+    /// A 1x1 grid holding the fully opaque red sprite `'S'`, drawn with `fg` and `tint`.
+    ///
+    /// `transparent_from` is the x the sprite goes transparent at, so passing the sprite's own
+    /// width keeps every pixel opaque.
+    fn sprite_pixel(fg: Color, tint: Tint) -> u32 {
+        let mut r = renderer_with_sprite(1, 1, 8, 16, 8, SpriteAlign::TopLeft);
+        let mut grid = Grid::new(1, 1);
+        grid.write_span(0, 0, 0, &["S"], Style::new().fg(fg))
+            .unwrap();
+        paint_tinted(&mut r, &grid, tint);
+        px(&r, 1, 0, 0)
+    }
+
+    #[test]
+    fn an_art_sheet_ignores_fg_however_it_is_set() {
+        // The #537 regression guard: a full-colour sheet renders as authored, and a caller who
+        // sets `fg` hoping to tint it gets no silent change.
+        for fg in [
+            Color::Default,
+            Color::Rgb { r: 0, g: 255, b: 0 },
+            Color::Rgb { r: 0, g: 0, b: 255 },
+        ] {
+            assert_eq!(
+                sprite_pixel(fg, Tint::None),
+                RED,
+                "fg {fg:?} tinted an art sprite"
+            );
+        }
+    }
+
+    #[test]
+    fn multiply_darkens_the_sprite() {
+        let half = sprite_pixel(Color::Default, Tint::multiply(128, 128, 128));
+        assert_eq!(half, 0x0080_0000, "red scaled by 128/255 with rounding");
+    }
+
+    #[test]
+    fn mix_brightens_the_sprite_which_multiply_cannot() {
+        // Toward white: the red channel stays saturated and the other two come up off zero,
+        // which no multiply of an opaque red pixel can produce.
+        let flashed = sprite_pixel(Color::Default, Tint::mix(255, 255, 255, 128));
+        assert_eq!(flashed & 0x00FF_0000, 0x00FF_0000, "red stays saturated");
+        assert!(flashed & 0x0000_FF00 > 0, "green lifted off zero");
+        assert!(flashed & 0x0000_00FF > 0, "blue lifted off zero");
+    }
+
+    #[test]
+    fn the_software_blit_agrees_with_sprite_tint_apply() {
+        // The anchor for cross-backend agreement: the CPU rasteriser must produce exactly what
+        // `SpriteTint::apply` says, because the GL fragment shader mirrors that same function.
+        // If this drifts, the two backends have diverged (which is how #537 happened).
+        for tint in [
+            Tint::None,
+            Tint::multiply(128, 64, 32),
+            Tint::multiply(255, 255, 255),
+            Tint::mix(0, 255, 0, 200),
+            Tint::mix(255, 255, 255, 255),
+        ] {
+            let expected = SpriteTint::resolve(SheetColor::Art, Color::Default, tint, DEFAULT_FG)
+                .apply((255, 0, 0));
+            let want =
+                u32::from(expected.0) << 16 | u32::from(expected.1) << 8 | u32::from(expected.2);
+            assert_eq!(sprite_pixel(Color::Default, tint), want, "tint {tint:?}");
+        }
+    }
+
+    #[test]
+    fn a_tint_only_change_repaints_the_cell() {
+        // The tile is byte-identical across both frames; only the tint moves. Damage tracking
+        // compares `Tile`s, which cannot see a tint, so this would silently not repaint without
+        // the parallel `prev_tints` shadow copy.
+        let mut r = renderer_with_sprite(1, 1, 8, 16, 8, SpriteAlign::TopLeft);
+        let mut grid = Grid::new(1, 1);
+        grid.write_span(0, 0, 0, &["S"], Style::new()).unwrap();
+
+        paint_tinted(&mut r, &grid, Tint::None);
+        assert_eq!(px(&r, 1, 0, 0), RED);
+
+        paint_tinted(&mut r, &grid, Tint::multiply(128, 128, 128));
+        assert_eq!(
+            px(&r, 1, 0, 0),
+            0x0080_0000,
+            "a tint-only change must mark the cell dirty"
+        );
     }
 
     #[test]

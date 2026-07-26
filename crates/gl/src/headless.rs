@@ -311,6 +311,21 @@ fn paint_layers(out: &mut impl Output, cells: &[(u8, Pos, Tile)]) {
         .ok();
 }
 
+/// [`paint_layers`] with `tint` applied to every cell.
+#[cfg(feature = "tilesets")]
+fn paint_layers_tinted(
+    out: &mut impl Output,
+    cells: &[(u8, Pos, Tile)],
+    tint: retroglyph_core::Tint,
+) {
+    out.draw_layers(
+        cells
+            .iter()
+            .map(|(l, p, t)| DrawCell::on_layer(*l, *p, t).with_tint(tint)),
+    )
+    .ok();
+}
+
 const RED: (u8, u8, u8) = (0xFF, 0x00, 0x00);
 const GREEN: (u8, u8, u8) = (0x00, 0xFF, 0x00);
 const BLUE: (u8, u8, u8) = (0x00, 0x00, 0xFF);
@@ -661,6 +676,68 @@ fn sprite_cells_render_their_tileset_colors() {
                 GREEN,
                 "sprite 'B' cell pixel ({x},{y})"
             );
+        }
+    }
+}
+
+#[cfg(feature = "tilesets")]
+#[test]
+fn a_tinted_sprite_matches_what_sprite_tint_apply_computes() {
+    use retroglyph_core::Tint;
+    use retroglyph_window::palette::DEFAULT_FG;
+    use retroglyph_window::sprite_cache::SpriteTint;
+    use retroglyph_window::tileset::{Codepage, SheetColor, TilesetOptions};
+
+    let Some(ctx) = context_or_skip("a_tinted_sprite_matches_what_sprite_tint_apply_computes")
+    else {
+        return;
+    };
+
+    // The cross-backend contract from retroglyph#537. The CPU rasteriser calls
+    // `SpriteTint::apply` directly and the fragment shader reimplements its arithmetic from
+    // instance attributes, so the two can drift silently. This pins the GPU half to the same
+    // function the software half is pinned to, on real GL, per tint operation.
+    //
+    // Rendering one tint per pass rather than one grid of many keeps each assertion pointed at a
+    // single instance's attributes.
+    for tint in [
+        Tint::None,
+        Tint::multiply(128, 128, 128),
+        Tint::multiply(255, 0, 0),
+        Tint::mix(0, 0, 255, 128),
+        Tint::mix(255, 255, 255, 255),
+    ] {
+        let opts = TilesetOptions::from_bytes(two_tile_png())
+            .tile_size(8, 16)
+            .columns(2)
+            .codepage(Codepage::Custom(vec!['A', 'B']))
+            .build()
+            .expect("valid 2-tile tileset");
+        let mut r = GlBackendBuilder::new()
+            .grid_size(1, 1)
+            .scale(1)
+            .tileset(opts)
+            .build()
+            .expect("gl renderer with tileset");
+        paint_layers_tinted(
+            &mut r,
+            &[(
+                0,
+                Pos::new(0, 0),
+                Tile::new('A', Style::new().bg(rgb(BLUE))),
+            )],
+            tint,
+        );
+
+        let frame = render_to_frame(&ctx, &r).expect("render");
+        // Tile 0 of `two_tile_png` is opaque red.
+        let want =
+            SpriteTint::resolve(SheetColor::Art, Color::Default, tint, DEFAULT_FG).apply(RED);
+        let (cw, ch) = r.geometry.cell_size();
+        for y in 0..ch {
+            for x in 0..cw {
+                assert_eq!(frame.rgb(x, y), want, "tint {tint:?} at ({x},{y})");
+            }
         }
     }
 }

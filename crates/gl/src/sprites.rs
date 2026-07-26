@@ -11,8 +11,9 @@
 
 #![allow(clippy::redundant_pub_crate)]
 
-use retroglyph_window::sprite_cache::SpriteCache;
-use retroglyph_window::tileset::SpriteAlign;
+use retroglyph_core::Tint;
+use retroglyph_window::sprite_cache::{SpriteCache, SpriteTint};
+use retroglyph_window::tileset::{SheetColor, SpriteAlign};
 use std::collections::HashMap;
 
 /// Everything the draw path needs about one `char`'s sprite: where it lives in the atlas, how
@@ -26,6 +27,8 @@ pub(crate) struct SpriteSlot {
     pub h: u16,
     /// Placement within a span's cell box.
     pub align: SpriteAlign,
+    /// What the sheet this sprite came from declared its pixels to mean.
+    pub color: SheetColor,
 }
 
 impl SpriteSlot {
@@ -46,8 +49,9 @@ impl SpriteSlot {
 }
 
 /// One sprite instance for the sprite draw pass: which cell, which atlas layer, the sprite's pixel
-/// size, and the sub-cell offset. Matches the `a_cell`/`a_layer`/`a_sprite`/`a_offset` attributes
-/// in the sprite vertex shader (see `shaders.rs`). `#[repr(C)]`, 16 bytes.
+/// size, the sub-cell offset, and how the sprite is recoloured. Matches the
+/// `a_cell`/`a_layer`/`a_sprite`/`a_offset`/`a_mask`/`a_tint`/`a_tint_op` attributes in the
+/// sprite vertex shader (see `shaders.rs`). `#[repr(C)]`, 24 bytes.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub(crate) struct SpriteInstance {
@@ -62,11 +66,20 @@ pub(crate) struct SpriteInstance {
     /// Sub-cell offset in unscaled pixels (`a_offset`).
     pub dx: i16,
     pub dy: i16,
-    /// Pad to 16 bytes so the stride matches the shader's expectation.
-    pub _pad: u16,
+    /// Sheet stage (`a_mask`): RGB multiply factor, with `a` = 255 when the sheet is a mask and
+    /// 0 when it is art, so the shader can select without a branch.
+    pub mask: [u8; 4],
+    /// Cell stage (`a_tint`): RGB colour, with `a` carrying `Tint::Mix`'s amount.
+    pub tint: [u8; 4],
+    /// Which operation the cell stage is: 0 none, 1 multiply, 2 mix. Matches `Tint`'s variants.
+    ///
+    /// A `u16` rather than a `u8` so the struct lands on 24 bytes with no tail padding, which is
+    /// the stride `renderer.rs` declares to the vertex array.
+    pub tint_op: u16,
 }
 
 impl SpriteInstance {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) const fn new(
         col: u16,
         row: u16,
@@ -75,7 +88,20 @@ impl SpriteInstance {
         h: u16,
         dx: i16,
         dy: i16,
+        recolour: SpriteTint,
     ) -> Self {
+        let mask = match recolour.mask {
+            Tint::Multiply { r, g, b } => [r, g, b, 255],
+            _ => [255, 255, 255, 0],
+        };
+        let (tint, tint_op) = match recolour.tint {
+            Tint::Multiply { r, g, b } => ([r, g, b, 255], 1),
+            Tint::Mix { r, g, b, amount } => ([r, g, b, amount], 2),
+            // `Tint::None`, and any operation added to that `#[non_exhaustive]` enum after this
+            // renderer was written: dropped rather than guessed at, so the artwork renders as
+            // authored instead of being recoloured by a misread payload.
+            _ => ([0, 0, 0, 0], 0),
+        };
         Self {
             col,
             row,
@@ -84,7 +110,9 @@ impl SpriteInstance {
             h,
             dx,
             dy,
-            _pad: 0,
+            mask,
+            tint,
+            tint_op,
         }
     }
 }
@@ -97,6 +125,8 @@ pub(crate) struct SpriteSet {
     sizes: Vec<(u16, u16)>,
     /// Per-layer sprite placement within a span's cell box.
     aligns: Vec<SpriteAlign>,
+    /// Per-layer sheet colour mode, carried through so a mask sheet can be recoloured by `fg`.
+    colors: Vec<SheetColor>,
     /// One layer's texture size in texels: the max sprite `(w, h)` across the set.
     tex_w: u32,
     tex_h: u32,
@@ -133,11 +163,13 @@ impl SpriteSet {
         let mut slots = HashMap::new();
         let mut sizes = Vec::with_capacity(layers as usize);
         let mut aligns = Vec::with_capacity(layers as usize);
+        let mut colors = Vec::with_capacity(layers as usize);
 
         for (layer, (ch, sprite)) in cache.iter().enumerate() {
             slots.insert(ch, layer as u16);
             sizes.push((sprite.pixel_width as u16, sprite.pixel_height as u16));
             aligns.push(sprite.align);
+            colors.push(sprite.color);
 
             let base = layer * layer_texels;
             let src_row = (sprite.pixel_width * 4) as usize;
@@ -153,6 +185,7 @@ impl SpriteSet {
             slots,
             sizes,
             aligns,
+            colors,
             tex_w,
             tex_h,
             layers,
@@ -169,6 +202,7 @@ impl SpriteSet {
             w,
             h,
             align: self.aligns[layer as usize],
+            color: self.colors[layer as usize],
         })
     }
 
@@ -185,5 +219,71 @@ impl SpriteSet {
     /// The packed RGBA8 atlas bytes.
     pub(crate) fn rgba(&self) -> &[u8] {
         &self.rgba
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{SpriteInstance, SpriteTint};
+    use retroglyph_core::Tint;
+
+    /// The vertex-array setup in `renderer.rs` describes this struct to the GPU by hand: a byte
+    /// stride and a per-attribute offset. Nothing checks that description against the struct, so
+    /// a field added here without updating `SPRITE_STRIDE` would have every instance read from
+    /// the wrong offset and render garbage, with no compile error.
+    #[test]
+    fn layout_matches_the_stride_the_vertex_array_declares() {
+        assert_eq!(
+            size_of::<SpriteInstance>(),
+            crate::renderer::SPRITE_STRIDE as usize
+        );
+    }
+
+    fn inst(recolour: SpriteTint) -> SpriteInstance {
+        SpriteInstance::new(0, 0, 0, 8, 16, 0, 0, recolour)
+    }
+
+    #[test]
+    fn an_art_sheet_encodes_an_inert_mask_stage() {
+        let i = inst(SpriteTint::default());
+        // `a_mask.a` of 0 is what makes the shader's `mix(vec3(1.0), v_mask.rgb, v_mask.a)`
+        // resolve to white, i.e. multiply by one.
+        assert_eq!(i.mask[3], 0, "art sheets must not engage the mask stage");
+        assert_eq!(i.tint_op, 0);
+    }
+
+    #[test]
+    fn a_mask_sheet_encodes_its_multiply_with_the_stage_enabled() {
+        let recolour = SpriteTint {
+            mask: Tint::multiply(10, 20, 30),
+            tint: Tint::None,
+        };
+        assert_eq!(inst(recolour).mask, [10, 20, 30, 255]);
+    }
+
+    #[test]
+    fn each_tint_op_gets_its_own_discriminant() {
+        let mul = SpriteTint {
+            mask: Tint::None,
+            tint: Tint::multiply(1, 2, 3),
+        };
+        let mix = SpriteTint {
+            mask: Tint::None,
+            tint: Tint::mix(4, 5, 6, 7),
+        };
+        // The shader branches on these, so the numbers are a contract with `shaders.rs`.
+        assert_eq!((inst(mul).tint_op, inst(mul).tint), (1, [1, 2, 3, 255]));
+        assert_eq!((inst(mix).tint_op, inst(mix).tint), (2, [4, 5, 6, 7]));
+    }
+
+    #[test]
+    fn an_unknown_tint_op_renders_the_artwork_as_authored() {
+        // `Tint` is `#[non_exhaustive]`. A variant added after this renderer was written must
+        // fall through to "no recolour" rather than being encoded as a misread payload.
+        let none = SpriteTint {
+            mask: Tint::None,
+            tint: Tint::None,
+        };
+        assert_eq!(inst(none).tint_op, 0);
     }
 }
