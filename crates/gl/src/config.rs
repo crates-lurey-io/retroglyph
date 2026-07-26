@@ -58,7 +58,7 @@ impl std::error::Error for GlBackendError {}
 ///     .scale(2)
 ///     .build()
 ///     .expect("gl backend init failed");
-/// let config = WindowConfig::fit(&renderer, "My Game", None);
+/// let config = WindowConfig::fit(&renderer, "My Game", None, true);
 /// // run_app(config, renderer, app)?;
 /// ```
 #[derive(Debug, Clone)]

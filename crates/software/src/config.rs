@@ -85,7 +85,7 @@ impl std::error::Error for SoftwareBackendError {
 ///     .run_headless()
 ///     .expect("renderer init failed");
 ///
-/// let config = WindowConfig::fit(&renderer, "My Game", None);
+/// let config = WindowConfig::fit(&renderer, "My Game", None, true);
 /// run_windowed(config, renderer, move |term| {
 ///     term.clear();
 ///     term.print((0, 0), "Hello from rg!");

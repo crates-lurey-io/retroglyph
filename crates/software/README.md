@@ -66,7 +66,7 @@ title and frame rate are windowing concerns, so they belong to
 which takes both:
 
 ```rust,ignore
-let config = WindowConfig::fit(&renderer, "My Game", Some(60));
+let config = WindowConfig::fit(&renderer, "My Game", Some(60), false);
 ```
 
 `target_fps` there is a mode switch before it is a cap. `Some(_)` renders continuously, which is

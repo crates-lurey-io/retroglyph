@@ -86,7 +86,7 @@ impl Presenter for NullPresenter {
     }
 }
 
-let config = WindowConfig::fit(&NullPresenter, "demo", None);
+let config = WindowConfig::fit(&NullPresenter, "demo", None, true);
 assert_eq!((config.width(), config.height()), (80, 80));
 ```
 
