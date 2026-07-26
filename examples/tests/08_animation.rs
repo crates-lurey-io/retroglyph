@@ -41,8 +41,9 @@ fn svg_snapshot() {
     // frame, to capture deterministically): `08_animation` parks at the left end once its one
     // round trip finishes, so "(parked at left end)" is a marker that only ever appears once
     // the animation has genuinely settled.
+    // Same wall-clock exposure as `06_layers`, so the same fast-forward applies.
     let bin = support::build_crossterm_example("08_animation");
-    let raw = support::capture_pty(&bin, b"", 25, 50, "parked at left end");
+    let raw = support::capture_pty_animated(&bin, b"", 25, 50, "parked at left end");
     let svg = support::svg_snapshot(&raw, 25, 50);
     assert!(
         svg.contains("travels the track"),

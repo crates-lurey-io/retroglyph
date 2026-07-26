@@ -151,6 +151,45 @@ struct ExampleApp<E> {
     /// Always empty unless [`run_crossterm`] installed one; see that filter for why crossterm
     /// needs it and the windowed backends don't.
     filtered_toggles: crate::fps::TogglePresses,
+    /// Multiplier applied to [`Frame::delta`] before the example sees it, from
+    /// [`time_scale`]. `1.0` for an ordinary run.
+    time_scale: f64,
+}
+
+/// Multiplier applied to every [`Frame::delta`] handed to [`Example::tick`], read once from the
+/// `RG_TIME_SCALE` environment variable. Defaults to `1.0`, i.e. real time.
+///
+/// This exists for captures, not for viewers. An example that animates over real elapsed time
+/// takes real seconds to reach its end state, and the ones that deliberately park there
+/// (`06_layers`, `08_animation`) publish that parked state as the ready marker the PTY snapshot
+/// harness waits on -- so the marker cannot appear until the whole animation has played out. That
+/// makes the capture's wall-clock cost a property of the animation rather than of the terminal I/O
+/// it is actually there to test, and a
+/// [`FrameClock`](retroglyph_core::FrameClock)-driven one cannot make that time up afterwards:
+/// `advance` caps catch-up at five steps, so any stretch the child spends descheduled under a
+/// loaded test runner is animation time it never gets back (retroglyph#544). Scaling the delta
+/// keeps the marker meaning exactly what it meant before -- "the animation has settled" -- while
+/// removing the fixed wall-clock floor underneath it.
+///
+/// Applied by the driver rather than by each example so it covers the whole gallery uniformly
+/// (and so no example carries a test-only branch). Anything not parseable as a finite, positive
+/// number is ignored in favour of `1.0`: this is a debugging/capture aid, and a typo in it should
+/// not silently freeze or reverse an example's animation. Always `1.0` on `wasm32` (nothing sets
+/// environment variables there).
+#[cfg(any(feature = "crossterm", feature = "software", feature = "gl"))]
+fn time_scale() -> f64 {
+    scale_from_env(std::env::var("RG_TIME_SCALE").ok().as_deref())
+}
+
+/// [`time_scale`]'s parsing, split out so it's testable without mutating the process environment
+/// (`std::env::set_var` is `unsafe` in edition 2024, and `unsafe_code` is forbidden
+/// workspace-wide).
+#[cfg(any(feature = "crossterm", feature = "software", feature = "gl"))]
+fn scale_from_env(value: Option<&str>) -> f64 {
+    value
+        .and_then(|value| value.trim().parse::<f64>().ok())
+        .filter(|scale| scale.is_finite() && *scale > 0.0)
+        .unwrap_or(1.0)
 }
 
 #[cfg(any(feature = "crossterm", feature = "software", feature = "gl"))]
@@ -162,6 +201,7 @@ impl<E> ExampleApp<E> {
             fps: crate::fps::Fps::new(crate::fps::starts_visible()),
             passthrough: Vec::new(),
             filtered_toggles: crate::fps::TogglePresses::default(),
+            time_scale: time_scale(),
         }
     }
 
@@ -208,7 +248,13 @@ impl<B: Backend, E: Example> App<B> for ExampleApp<E> {
     fn update(&mut self, term: &mut Terminal<B>, frame: &Frame) -> Flow {
         self.intercept_overlay_keys(term);
         let state = self.state.get_or_insert_with(|| E::init(term));
-        let keep_going = state.tick(term, frame);
+        // Scaled for the example, real for the overlay below: the FPS readout reports how fast
+        // this loop is actually running, which `RG_TIME_SCALE` does not change.
+        let scaled = Frame {
+            delta: frame.delta.mul_f64(self.time_scale),
+            frame: frame.frame,
+        };
+        let keep_going = state.tick(term, &scaled);
         if !keep_going {
             // Quitting: `present` clears `current` each frame, so an example that returns without
             // drawing (it quit in its event handler before drawing) leaves `current` empty --
@@ -493,4 +539,32 @@ pub fn launch<E: Example>() {
 )))]
 pub fn launch<E: Example>() {
     run_headless_stdout::<E>();
+}
+
+#[cfg(all(test, any(feature = "crossterm", feature = "software", feature = "gl")))]
+mod tests {
+    use super::scale_from_env;
+
+    #[test]
+    fn unset_time_scale_is_real_time() {
+        assert!((scale_from_env(None) - 1.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn parses_a_positive_scale() {
+        assert!((scale_from_env(Some("20")) - 20.0).abs() < f64::EPSILON);
+        assert!((scale_from_env(Some(" 2.5 ")) - 2.5).abs() < f64::EPSILON);
+    }
+
+    /// A typo (or a deliberate zero/negative) must not freeze or reverse an example's animation,
+    /// and must not reach `Duration::mul_f64`, which panics on a non-finite or negative factor.
+    #[test]
+    fn rejects_values_that_are_not_a_usable_speed() {
+        for value in ["", "fast", "0", "-1", "inf", "NaN"] {
+            assert!(
+                (scale_from_env(Some(value)) - 1.0).abs() < f64::EPSILON,
+                "{value:?} should have fallen back to real time"
+            );
+        }
+    }
 }
