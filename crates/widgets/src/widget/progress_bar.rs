@@ -104,7 +104,7 @@ impl Widget for ProgressBar {
             } else {
                 self.empty_style
             };
-            surface.put(x, y, if is_filled { '█' } else { '░' }, style);
+            surface.put((x, y), if is_filled { '█' } else { '░' }, style);
         }
     }
 }

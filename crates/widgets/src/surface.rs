@@ -2,7 +2,7 @@
 #[cfg(not(feature = "egc"))]
 use retroglyph_core::Tile;
 use retroglyph_core::text::Line;
-use retroglyph_core::{Grid, Rect, Style};
+use retroglyph_core::{Grid, Pos, Rect, Style};
 use unicode_width::UnicodeWidthChar;
 
 /// The render target every [`Widget`](crate::Widget)/[`StatefulWidget`](crate::StatefulWidget)
@@ -79,36 +79,38 @@ impl<'a> Surface<'a> {
         self.area.contains(x, y)
     }
 
-    /// Place `ch` at `(x, y)` in `style`. A no-op if `(x, y)` is outside this surface's area.
-    pub fn put(&mut self, x: u16, y: u16, ch: char, style: Style) {
-        if !self.in_bounds(x, y) {
+    /// Place `ch` at `pos` in `style`. A no-op if `pos` is outside this surface's area.
+    pub fn put(&mut self, pos: impl Into<Pos>, ch: char, style: Style) {
+        let pos = pos.into();
+        if !self.in_bounds(pos.x, pos.y) {
             return;
         }
         #[cfg(feature = "egc")]
         {
             let mut buf = [0u8; 4];
             let s = ch.encode_utf8(&mut buf);
-            self.grid.write_grapheme(self.layer, x, y, s, style);
+            self.grid.write_grapheme(self.layer, pos.x, pos.y, s, style);
         }
         #[cfg(not(feature = "egc"))]
         {
             let tile = Tile::new(ch, style);
-            self.grid.put_tile(self.layer, (x, y), tile);
+            self.grid.put_tile(self.layer, pos, tile);
         }
     }
 
-    /// Print `text` starting at `(x, y)` in `style`.
+    /// Print `text` starting at `pos` in `style`.
     ///
-    /// `\n` advances to the next row at the original `x`. Text that would extend beyond this
-    /// surface's area wraps to the next row at the original `x`; cells outside the area (either
-    /// axis) are clipped, matching [`Terminal::print`](retroglyph_core::Terminal::print).
-    pub fn print(&mut self, x: u16, y: u16, text: &str, style: Style) {
+    /// `\n` advances to the next row at the original column. Text that would extend beyond this
+    /// surface's area wraps to the next row at the original column; cells outside the area
+    /// (either axis) are clipped, matching [`Terminal::print`](retroglyph_core::Terminal::print).
+    pub fn print(&mut self, pos: impl Into<Pos>, text: &str, style: Style) {
+        let pos = pos.into();
         let right = self.area.right();
-        let mut cx = x;
-        let mut cy = y;
+        let mut cx = pos.x;
+        let mut cy = pos.y;
         for ch in text.chars() {
             if ch == '\n' {
-                cx = x;
+                cx = pos.x;
                 cy = cy.saturating_add(1);
                 continue;
             }
@@ -117,27 +119,28 @@ impl<'a> Surface<'a> {
             if w == 0 {
                 continue;
             }
-            self.put(cx, cy, ch, style);
+            self.put((cx, cy), ch, style);
             cx = cx.saturating_add(w);
             if cx >= right {
-                cx = x;
+                cx = pos.x;
                 cy = cy.saturating_add(1);
             }
         }
     }
 
-    /// Print `line`'s styled spans starting at `(x, y)`, one row, each span in its own style.
+    /// Print `line`'s styled spans starting at `pos`, one row, each span in its own style.
     /// Stops once a span would start past this surface's area.
-    pub fn print_line(&mut self, x: u16, y: u16, line: &Line) {
+    pub fn print_line(&mut self, pos: impl Into<Pos>, line: &Line) {
         use unicode_width::UnicodeWidthStr;
 
+        let pos = pos.into();
         let right = self.area.right();
-        let mut cx = x;
+        let mut cx = pos.x;
         for span in &line.spans {
             if cx >= right {
                 break;
             }
-            self.print(cx, y, &span.content, span.style);
+            self.print((cx, pos.y), &span.content, span.style);
             cx = cx.saturating_add(UnicodeWidthStr::width(span.content.as_str()) as u16);
         }
     }
@@ -146,7 +149,7 @@ impl<'a> Surface<'a> {
     pub fn fill_rect(&mut self, rect: Rect, ch: char, style: Style) {
         for y in rect.top()..rect.bottom() {
             for x in rect.left()..rect.right() {
-                self.put(x, y, ch, style);
+                self.put((x, y), ch, style);
             }
         }
     }

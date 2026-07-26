@@ -59,7 +59,7 @@ impl Widget for PrintLine<'_> {
             }
             let remaining = (right - x) as usize;
             let text = truncate_to_cols(&span.content, remaining);
-            surface.print(x, area.top(), text, span.style);
+            surface.print((x, area.top()), text, span.style);
             x += text.width() as u16;
         }
     }

@@ -133,7 +133,7 @@ impl StatefulWidget for List<'_> {
                 self.item_style
             };
             let text = truncate_to_cols(item, area.width_usize());
-            surface.print(area.left(), y, text, style);
+            surface.print((area.left(), y), text, style);
         }
     }
 }

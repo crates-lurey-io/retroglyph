@@ -82,21 +82,21 @@ impl Widget for BoxBorder {
         let y1 = area.bottom().saturating_sub(1);
 
         // Corners
-        surface.put(x0, y0, TL, self.style);
-        surface.put(x1, y0, TR, self.style);
-        surface.put(x0, y1, BL, self.style);
-        surface.put(x1, y1, BR, self.style);
+        surface.put((x0, y0), TL, self.style);
+        surface.put((x1, y0), TR, self.style);
+        surface.put((x0, y1), BL, self.style);
+        surface.put((x1, y1), BR, self.style);
 
         // Horizontal edges
         for x in (x0 + 1)..x1 {
-            surface.put(x, y0, H, self.style);
-            surface.put(x, y1, H, self.style);
+            surface.put((x, y0), H, self.style);
+            surface.put((x, y1), H, self.style);
         }
 
         // Vertical edges
         for y in (y0 + 1)..y1 {
-            surface.put(x0, y, V, self.style);
-            surface.put(x1, y, V, self.style);
+            surface.put((x0, y), V, self.style);
+            surface.put((x1, y), V, self.style);
         }
     }
 }

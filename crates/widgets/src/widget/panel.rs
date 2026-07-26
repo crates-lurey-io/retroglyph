@@ -132,9 +132,9 @@ impl Widget for Panel<'_> {
             let padded = t_w + 2;
             let title_x = area.left() + 1 + self.title_align.offset(area.width() - 2, padded);
             let title_y = area.top();
-            surface.put(title_x, title_y, ' ', self.border_style);
-            surface.print(title_x + 1, title_y, t, self.border_style);
-            surface.put(title_x + 1 + t_w, title_y, ' ', self.border_style);
+            surface.put((title_x, title_y), ' ', self.border_style);
+            surface.print((title_x + 1, title_y), t, self.border_style);
+            surface.put((title_x + 1 + t_w, title_y), ' ', self.border_style);
         }
     }
 }

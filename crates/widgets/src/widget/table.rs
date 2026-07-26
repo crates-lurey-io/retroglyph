@@ -244,7 +244,7 @@ fn draw_row(
         }
         let avail = (area.right() - x).min(w) as usize;
         let text = truncate_to_cols(cell, avail);
-        surface.print(x, y, text, style);
+        surface.print((x, y), text, style);
         x = x.saturating_add(w.saturating_add(column_spacing));
     }
 }

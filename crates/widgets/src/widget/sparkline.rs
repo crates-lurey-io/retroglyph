@@ -60,14 +60,13 @@ impl Widget for Sparkline<'_> {
         for i in 0..width {
             let x = area.left() + i as u16;
             if i < pad {
-                surface.put(x, y, ' ', Style::new());
+                surface.put((x, y), ' ', Style::new());
                 continue;
             }
             let ratio = (recent[i - pad] / max).clamp(0.0, 1.0);
             let level = (ratio * 8.0).round() as usize;
             surface.put(
-                x,
-                y,
+                (x, y),
                 BLOCKS[level.min(8)],
                 Style::new().fg(Meter::new(ratio).color()),
             );

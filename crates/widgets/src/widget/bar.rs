@@ -120,7 +120,7 @@ pub(super) fn render(
         } else {
             ('░', empty_style)
         };
-        surface.put(x, y, ch, style);
+        surface.put((x, y), ch, style);
         x += 1;
     }
 
