@@ -3,13 +3,13 @@
 //!
 //! # Architecture
 //!
-//! [`SoftwareBackend`] holds configuration only (font, grid size, scale); it
+//! [`SoftwareBackend`] holds configuration only (font chain, grid size, scale); it
 //! does not implement [`Backend`](retroglyph_core::Backend). Call
 //! [`run_headless`](SoftwareBackend::run_headless) to build a
 //! [`SoftwareRenderer`], which does the actual rendering work:
 //!
 //! ```text
-//! SoftwareBackend (config: font, grid size, scale)
+//! SoftwareBackend (config: font chain, grid size, scale)
 //!   |  .run_headless()
 //!   v
 //! SoftwareRenderer
@@ -82,10 +82,10 @@ use retroglyph_core::color::Color;
 
 // The bitmap font lives in `retroglyph-window`'s winit-free `font` module (both graphical
 // backends already depend on that crate for `Presenter`), so `retroglyph-gl` shares the exact
-// same glyph source. Re-exported here for ergonomics (the builder's `font()` takes one);
-// `FallbackFontChain`, `unscii16`, etc. are reached through `retroglyph_window::font` directly.
+// same glyph source. Re-exported here for ergonomics (the builder's `font()` takes either);
+// `unscii16` etc. are reached through `retroglyph_window::font` directly.
 pub use config::{SoftwareBackend, SoftwareBackendBuilder, SoftwareBackendError};
-pub use retroglyph_window::font::BitmapFont;
+pub use retroglyph_window::font::{BitmapFont, FontChain};
 
 #[cfg(feature = "tilesets")]
 use alpha_blend::rgba::U8x4Rgba;
@@ -96,7 +96,6 @@ use retroglyph_core::event::Event;
 use retroglyph_core::grid::{Pos, Size};
 use retroglyph_core::tile::{Tile, TileFlags};
 use retroglyph_window::WindowHandle;
-use retroglyph_window::font::BitmapFont as Font;
 use retroglyph_window::geometry::CellGeometry;
 use retroglyph_window::palette::{DEFAULT_BG, DEFAULT_FG};
 #[cfg(feature = "tilesets")]
@@ -126,10 +125,10 @@ use std::time::Duration;
 /// configuration rather than mutating this one.
 pub struct SoftwareRenderer {
     options: SoftwareBackend,
-    /// The bitmap font, extracted from `options.font` at construction time.
-    /// Always present; the `Option` wrapper in `SoftwareBackend` is only for
-    /// the builder validation step.
-    font: BitmapFont,
+    /// The font chain glyphs are resolved through, extracted from `options.fonts` at construction
+    /// time. Always present; the `Option` wrapper in `SoftwareBackend` is only for the builder
+    /// validation step.
+    fonts: FontChain<'static>,
     ctx: RenderContext,
     #[cfg(feature = "tilesets")]
     sprite_cache: Arc<SpriteCache>,
@@ -179,7 +178,7 @@ impl SoftwareRenderer {
     /// Creates a new renderer with the given buffer and cell dimensions.
     pub(crate) fn create(
         options: SoftwareBackend,
-        font: BitmapFont,
+        fonts: FontChain<'static>,
         buf_w: usize,
         buf_h: usize,
         geometry: CellGeometry,
@@ -187,7 +186,7 @@ impl SoftwareRenderer {
     ) -> Self {
         Self {
             options,
-            font,
+            fonts,
             ctx: RenderContext {
                 event_buffer: VecDeque::new(),
                 pixel_buf: GridBuf::from_buffer(vec![0u32; buf_w * buf_h], buf_w),
@@ -414,7 +413,7 @@ impl SoftwareRenderer {
         #[cfg(feature = "tilesets")]
         {
             let buf_h = self.ctx.pixel_buf.as_ref().len() / buf_w;
-            let (glyph_w, glyph_h) = (self.font.glyph_width, self.font.glyph_height);
+            let (glyph_w, glyph_h) = (self.ctx.geometry.glyph_w, self.ctx.geometry.glyph_h);
             if let Some(sprite) = self.sprite_cache.get(tile.glyph()) {
                 let (span_w, span_h) = tile.span();
                 let align = sprite.align_offset(span_w, span_h, glyph_w, glyph_h);
@@ -447,7 +446,7 @@ impl SoftwareRenderer {
             px_x,
             px_y,
             &tile,
-            &self.font,
+            &self.fonts,
             cell_w,
             cell_h,
             scale,
@@ -499,8 +498,9 @@ impl SoftwareBackend {
     ///
     /// # Errors
     ///
-    /// Returns [`SoftwareBackendError::NoFont`] if no font is set (only reachable if
-    /// [`SoftwareBackendBuilder::build`] was bypassed) and
+    /// Returns [`SoftwareBackendError::NoFont`] if no font is set, or
+    /// [`SoftwareBackendError::MixedGlyphSizes`] if the font chain's fonts disagree on their
+    /// glyph size (both only reachable if [`SoftwareBackendBuilder::build`] was bypassed), and
     /// [`SoftwareBackendError::Tileset`] if a registered tileset fails to load.
     ///
     /// # Panics
@@ -509,12 +509,14 @@ impl SoftwareBackend {
     /// this crate supports (`usize` is at least 32 bits on every 32- and 64-bit
     /// platform), so this is not reachable in practice.
     pub fn run_headless(self) -> Result<SoftwareRenderer, SoftwareBackendError> {
-        let Some(font) = self.font else {
+        let Some(fonts) = self.fonts else {
             return Err(SoftwareBackendError::NoFont);
         };
+        let Some((glyph_w, glyph_h)) = fonts.glyph_size() else {
+            return Err(SoftwareBackendError::MixedGlyphSizes);
+        };
 
-        let geometry =
-            CellGeometry::new(font.glyph_width, font.glyph_height, u16::from(self.scale));
+        let geometry = CellGeometry::new(glyph_w, glyph_h, u16::from(self.scale));
         let (buf_w, buf_h) = geometry.surface_size(self.cols, self.rows);
         // u32 always fits in usize (all targets: 32- and 64-bit).
         let buf_w = usize::try_from(buf_w).unwrap();
@@ -533,7 +535,7 @@ impl SoftwareBackend {
 
         Ok(SoftwareRenderer::create(
             self,
-            font,
+            fonts,
             buf_w,
             buf_h,
             geometry,
@@ -552,11 +554,11 @@ impl Output for SoftwareRenderer {
     where
         I: Iterator<Item = (Pos, &'a Tile, Option<&'a str>)>,
     {
-        let font = &self.font;
+        let fonts = &self.fonts;
         let scale = usize::from(self.options.scale);
         let cols = self.options.cols;
-        let glyph_w = usize::from(font.glyph_width) * scale;
-        let glyph_h = usize::from(font.glyph_height) * scale;
+        let glyph_w = usize::from(self.ctx.geometry.glyph_w) * scale;
+        let glyph_h = usize::from(self.ctx.geometry.glyph_h) * scale;
         let buf_w = usize::from(cols) * glyph_w;
 
         #[cfg(feature = "tilesets")]
@@ -571,7 +573,7 @@ impl Output for SoftwareRenderer {
                 buf_w,
                 pos,
                 cell,
-                font,
+                fonts,
                 glyph_w,
                 glyph_h,
                 scale,
@@ -650,8 +652,8 @@ impl Output for SoftwareRenderer {
         let cols = usize::from(self.options.cols);
         let rows = usize::from(self.options.rows);
         let scale = usize::from(self.options.scale);
-        let cell_w = usize::from(self.font.glyph_width) * scale;
-        let cell_h = usize::from(self.font.glyph_height) * scale;
+        let cell_w = usize::from(self.ctx.geometry.glyph_w) * scale;
+        let cell_h = usize::from(self.ctx.geometry.glyph_h) * scale;
         let buf_w = cols * cell_w;
         let cell_count = cols * rows;
 
@@ -891,7 +893,7 @@ fn blit_cell(
     buf_w: usize,
     pos: Pos,
     cell: &Tile,
-    font: &Font,
+    fonts: &FontChain<'static>,
     cell_w: usize,
     cell_h: usize,
     scale: usize,
@@ -904,7 +906,13 @@ fn blit_cell(
     if let Some(sprite) = sprite_cache.and_then(|c| c.get(cell.glyph())) {
         let buf_h = buffer.len() / buf_w;
         let (span_w, span_h) = cell.span();
-        let align = sprite.align_offset(span_w, span_h, font.glyph_width, font.glyph_height);
+        // `align_offset` measures the glyph box in unscaled pixels; `cell_w`/`cell_h` are scaled.
+        let align = sprite.align_offset(
+            span_w,
+            span_h,
+            (cell_w / scale) as u8,
+            (cell_h / scale) as u8,
+        );
         blit_sprite(
             buffer,
             buf_w,
@@ -951,7 +959,11 @@ fn blit_cell(
     #[allow(clippy::cast_possible_wrap)]
     let origin_y = px_y as i64 + i64::from(cell.dy()) * scale as i64;
 
-    let glyph_index = font.char_to_index(cell.glyph());
+    // Nothing in the chain can draw this character, not even a substitute box: leave the cell at
+    // its background rather than pointing at a glyph index some font doesn't have.
+    let Some(glyph) = fonts.resolve(cell.glyph()) else {
+        return;
+    };
 
     blit_glyph_mask(
         buffer,
@@ -959,8 +971,8 @@ fn blit_cell(
         buf_h,
         origin_x,
         origin_y,
-        font,
-        glyph_index,
+        glyph.font(),
+        glyph.index(),
         scale,
         fg,
     );
@@ -989,7 +1001,7 @@ fn blit_glyph_mask(
     buf_h: usize,
     origin_x: i64,
     origin_y: i64,
-    font: &Font,
+    font: &BitmapFont,
     glyph_index: u8,
     scale: usize,
     color: u32,
@@ -1058,7 +1070,7 @@ fn blit_glyph(
     px_x: usize,
     px_y: usize,
     tile: &Tile,
-    font: &Font,
+    fonts: &FontChain<'static>,
     _cell_w: usize,
     _cell_h: usize,
     scale: usize,
@@ -1074,7 +1086,10 @@ fn blit_glyph(
     #[allow(clippy::cast_possible_wrap)]
     let origin_y = px_y as i64 + i64::from(tile.dy()) * scale as i64;
 
-    let glyph_index = font.char_to_index(tile.glyph());
+    // See `blit_cell`: an undrawable character paints nothing at all.
+    let Some(glyph) = fonts.resolve(tile.glyph()) else {
+        return;
+    };
     let buf_h = buffer.len() / buf_w;
 
     blit_glyph_mask(
@@ -1083,8 +1098,8 @@ fn blit_glyph(
         buf_h,
         origin_x,
         origin_y,
-        font,
-        glyph_index,
+        glyph.font(),
+        glyph.index(),
         scale,
         fg,
     );
@@ -2361,5 +2376,102 @@ mod span_tests {
 
         assert_eq!(px(&r, 2, 0, 0), GREEN, "the anchor's own glyph still draws");
         assert_ne!(px(&r, 2, 8, 0), GREEN, "the covered cell's glyph does not");
+    }
+}
+
+// ── Font chain tests (retroglyph#539) ───────────────────────────────────────
+
+#[cfg(all(test, feature = "default-font"))]
+mod font_chain_tests {
+    use super::*;
+    use retroglyph_core::color::Color;
+    use retroglyph_core::grid::Pos;
+    use retroglyph_core::style::Style;
+    use retroglyph_window::font::{BitmapFont, FontChain, unscii16};
+
+    const RED: Color = Color::Rgb { r: 255, g: 0, b: 0 };
+    const BLUE: Color = Color::Rgb { r: 0, g: 0, b: 255 };
+    const BLACK: Color = Color::Rgb { r: 0, g: 0, b: 0 };
+
+    const RED_PX: u32 = 0x00FF_0000;
+    const BLUE_PX: u32 = 0x0000_00FF;
+    const BLACK_PX: u32 = 0x0000_0000;
+
+    /// One 8x16 glyph with the upper-left quadrant filled: U+2598, which CP437 has no mapping for
+    /// at all, so it is only reachable through the charset table below.
+    static QUADRANT_DATA: [u8; 16] = [
+        0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0, 0, 0, 0, 0, 0, 0, 0,
+    ];
+    const QUADRANT_CHARSET: [(char, u8); 1] = [('▘', 0)];
+    const QUADRANT_FONT: BitmapFont =
+        BitmapFont::with_charset(&QUADRANT_DATA, 8, 16, 1, &QUADRANT_CHARSET);
+    static FALLBACKS: [BitmapFont; 1] = [QUADRANT_FONT];
+
+    /// Renders `ch` in `fg` on black, in a 1x1 grid drawn through `fonts`.
+    fn render(fonts: FontChain<'static>, ch: char, fg: Color) -> Vec<u32> {
+        let mut renderer = SoftwareBackendBuilder::new()
+            .font(fonts)
+            .grid_size(1, 1)
+            .scale(1)
+            .build()
+            .expect("chain builds")
+            .run_headless()
+            .expect("renderer builds");
+        let tile = Tile::new(ch, Style::new().fg(fg).bg(BLACK));
+        renderer
+            .draw_layers(core::iter::once((0, Pos::new(0, 0), &tile, None)))
+            .unwrap();
+        renderer.pixels().to_vec()
+    }
+
+    /// The bug: both pixel backends resolved every glyph through a CP437-only mapping, so a
+    /// `with_charset` fallback font's glyphs were unreachable and rendered as the solid block.
+    #[test]
+    fn charset_fallback_glyph_renders_its_own_shape() {
+        let pixels = render(FontChain::new(unscii16::FONT, &FALLBACKS), '▘', RED);
+
+        for y in 0..16 {
+            for x in 0..8 {
+                let expected = if x < 4 && y < 8 { RED_PX } else { BLACK_PX };
+                assert_eq!(pixels[y * 8 + x], expected, "pixel ({x},{y})");
+            }
+        }
+    }
+
+    /// The point of routing sub-cell glyphs through a font rather than a tileset: a font glyph is
+    /// a 1-bit mask painted in the cell's own foreground, so the same glyph serves every color,
+    /// while a tileset sprite carries the colors it was authored in (#537).
+    #[test]
+    fn charset_fallback_glyph_takes_the_cells_foreground_color() {
+        let chain = FontChain::new(unscii16::FONT, &FALLBACKS);
+        let red = render(chain, '▘', RED);
+        let blue = render(chain, '▘', BLUE);
+
+        assert_eq!(red[0], RED_PX);
+        assert_eq!(blue[0], BLUE_PX);
+    }
+
+    /// A character no font in the chain covers still gets the solid-block substitute, so the
+    /// chain is not a way to silently lose glyphs.
+    #[test]
+    fn uncovered_char_still_renders_the_solid_block() {
+        let pixels = render(FontChain::new(unscii16::FONT, &FALLBACKS), 'あ', RED);
+        assert!(
+            pixels.iter().all(|&p| p == RED_PX),
+            "every pixel of the solid block is foreground"
+        );
+    }
+
+    /// The panic reported in #539 (`glyph index 219 out of range (2)`): the CP437 solid block is
+    /// glyph 0xDB, which a small `with_charset` font doesn't have, so substituting it by index
+    /// indexed past the end of that font's data. A chain with nothing drawable for a character
+    /// now leaves the cell at its background instead.
+    #[test]
+    fn char_no_font_can_draw_leaves_the_cell_blank() {
+        let pixels = render(FontChain::from(QUADRANT_FONT), 'A', RED);
+        assert!(
+            pixels.iter().all(|&p| p == BLACK_PX),
+            "an undrawable character paints no foreground at all"
+        );
     }
 }

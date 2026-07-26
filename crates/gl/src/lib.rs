@@ -3,10 +3,11 @@
 //!
 //! # Architecture
 //!
-//! [`GlBackendBuilder`] holds configuration (font, grid size, integer scale) and
+//! [`GlBackendBuilder`] holds configuration (fonts, grid size, integer scale) and
 //! [`build`](GlBackendBuilder::build)s a [`GlRenderer`]. The glyph source is a static
-//! [`BitmapFont`]; glyphs are grid-packed into a `TEXTURE_2D_ARRAY` atlas and addressed by a flat
-//! slot id (issue #367's grid-packing half, lifting the 256-layer cap). The renderer maintains
+//! [`FontChain`] (a single [`BitmapFont`] is a chain of one); every font in the chain is
+//! grid-packed into one `TEXTURE_2D_ARRAY` atlas and addressed by a flat slot id (issue #367's
+//! grid-packing half, lifting the 256-layer cap). The renderer maintains
 //! per-layer CPU-side instance arrays (one entry per cell: glyph slot + fg/bg RGB + flags) and a GL
 //! context that is created lazily when the windowing loop calls
 //! [`Presenter::init_surface`]:
@@ -84,7 +85,7 @@ mod context;
 pub use config::{GlBackendBuilder, GlBackendError};
 pub use error::SurfaceError;
 // Re-export the font types so a consumer can build a custom atlas without a separate dependency.
-pub use retroglyph_window::font::{self as font, BitmapFont};
+pub use retroglyph_window::font::{self as font, BitmapFont, FontChain};
 
 use context::GlContext;
 use glyphs::GlyphCache;
@@ -170,7 +171,7 @@ impl GlRenderer {
     pub(crate) fn new(glyphs: GlyphCache, cols: u16, rows: u16, scale: u16) -> Self {
         let (cell_w, cell_h) = glyphs.cell_size();
         let geometry = CellGeometry::new(cell_w.min(255) as u8, cell_h.min(255) as u8, scale);
-        let space_glyph = glyphs.space_slot() as u16;
+        let space_glyph = glyphs.space_slot();
         let count = usize::from(cols) * usize::from(rows);
         let base = base_blank(space_glyph);
         let layers = vec![vec![base; count]];
@@ -241,8 +242,7 @@ impl GlRenderer {
             return;
         }
         let idx = y * cols + x;
-        #[allow(clippy::cast_possible_truncation)]
-        let slot = self.glyphs.resolve(tile.glyph()) as u16;
+        let slot = self.glyphs.resolve(tile.glyph());
         self.layers[0][idx] = base_instance(slot, tile);
     }
 
@@ -312,10 +312,17 @@ const fn base_blank(space_glyph: u16) -> Instance {
 /// Builds the base-layer (layer 0) [`Instance`] for `tile` at the already-resolved atlas `slot`:
 /// the background is always opaque (default-substituted), and the glyph is drawn only when the tile
 /// is non-empty.
-const fn base_instance(slot: u16, tile: &Tile) -> Instance {
+///
+/// A `slot` of `None` is a character no font in the chain can draw, not even as the substituted
+/// solid block; the cell keeps its background and draws no glyph, matching `retroglyph-software`.
+const fn base_instance(slot: Option<u16>, tile: &Tile) -> Instance {
     let fg = to_arr(tile.style().foreground().resolve_rgb(DEFAULT_FG));
     let bg = to_arr(tile.style().background().resolve_rgb(DEFAULT_BG));
-    let flags = FLAG_HAS_BG | if tile.is_empty() { 0 } else { FLAG_HAS_GLYPH };
+    let (slot, drawable) = match slot {
+        Some(slot) => (slot, FLAG_HAS_GLYPH),
+        None => (0, 0),
+    };
+    let flags = FLAG_HAS_BG | if tile.is_empty() { 0 } else { drawable };
     Instance::new(slot, fg, bg, tile.dx(), tile.dy(), flags)
 }
 
@@ -426,8 +433,7 @@ impl Output for GlRenderer {
             }
 
             if layer_id == 0 {
-                #[allow(clippy::cast_possible_truncation)]
-                let slot = self.glyphs.resolve(tile.glyph()) as u16;
+                let slot = self.glyphs.resolve(tile.glyph());
                 let inst = base_instance(slot, tile);
                 #[cfg(feature = "tilesets")]
                 if let Some(sprite) = self.sprite_set.as_ref().and_then(|s| s.slot(tile.glyph())) {
@@ -465,9 +471,15 @@ impl Output for GlRenderer {
                 continue;
             }
             // Occupied higher-layer tile: opaque background (own colour, or the inherited one when
-            // the tile's background is `Default`) plus its glyph.
-            #[allow(clippy::cast_possible_truncation)]
-            let glyph = self.glyphs.resolve(tile.glyph()) as u16;
+            // the tile's background is `Default`) plus its glyph, unless no font in the chain can
+            // draw that character at all (see `base_instance`).
+            let resolved = self.glyphs.resolve(tile.glyph());
+            let glyph = resolved.unwrap_or(0);
+            let has_glyph = if resolved.is_some() {
+                FLAG_HAS_GLYPH
+            } else {
+                0
+            };
             let fg = to_arr(tile.style().foreground().resolve_rgb(DEFAULT_FG));
             let bg_color = tile.style().background();
             let bg = if bg_color == Color::Default {
@@ -508,14 +520,8 @@ impl Output for GlRenderer {
                 ));
                 continue;
             }
-            self.layers[l][idx] = Instance::new(
-                glyph,
-                fg,
-                bg,
-                tile.dx(),
-                tile.dy(),
-                FLAG_HAS_BG | FLAG_HAS_GLYPH,
-            );
+            self.layers[l][idx] =
+                Instance::new(glyph, fg, bg, tile.dx(), tile.dy(), FLAG_HAS_BG | has_glyph);
         }
         Ok(())
     }
@@ -687,8 +693,7 @@ mod compositing_tests {
         let inst = r.layers[0][1];
         assert_eq!(inst.dx, -3);
         assert_eq!(inst.dy, 5);
-        #[allow(clippy::cast_possible_truncation)]
-        let a_slot = r.glyphs.resolve('A') as u16;
+        let a_slot = r.glyphs.resolve('A').expect("'A' is in CP437");
         assert_eq!(inst.glyph, a_slot);
         // A non-empty tile on the base layer draws both its glyph and its (base) background.
         assert_eq!(inst.flags, FLAG_HAS_BG | FLAG_HAS_GLYPH);

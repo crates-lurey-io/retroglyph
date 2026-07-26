@@ -217,9 +217,10 @@ pub fn quantize_half_block(pixels: [Rgb; 2]) -> Glyph {
 /// On the bundled pixel backends (`retroglyph-software`, `retroglyph-gl`), rendering these
 /// glyphs correctly requires a font that actually declares coverage for the quadrant block
 /// characters: CP437 has no mapping for them. A font built with `retroglyph_window`'s
-/// `BitmapFont::new` (CP437-only) renders every quadrant glyph as a solid block; supply a font
-/// with quadrant coverage, either as the primary font or as a fallback via
-/// `BitmapFont::with_charset`, to render them as intended.
+/// `BitmapFont::new` (CP437-only) renders every quadrant glyph as a solid block. Supply quadrant
+/// coverage by passing either a primary font or a `BitmapFont::with_charset` fallback in a
+/// `FontChain` to those backends' `font()` builder method; the glyph then takes the cell's
+/// foreground color, which a tileset sprite (the other way to draw a non-CP437 shape) does not.
 ///
 /// See the `16_subcell_image` example for `quantize_quadrant` in action:
 /// <https://main.retroglyph.dev/examples/16_subcell_image/terminal/>.
@@ -250,8 +251,10 @@ pub fn quantize_quadrant(pixels: [Rgb; 4]) -> Glyph {
 /// On the bundled pixel backends (`retroglyph-software`, `retroglyph-gl`), that coverage has to
 /// come from the font: CP437 has no mapping for sextant glyphs at all, so a font built with
 /// `retroglyph_window`'s `BitmapFont::new` (CP437-only) renders every sextant glyph as a solid
-/// block. Supply a font that declares sextant coverage, either as the primary font or as a
-/// fallback via `BitmapFont::with_charset`, to render them as intended.
+/// block. Supply sextant coverage by passing either a primary font or a `BitmapFont::with_charset`
+/// fallback in a `FontChain` to those backends' `font()` builder method; the glyph then takes the
+/// cell's foreground color, which a tileset sprite (the other way to draw a non-CP437 shape) does
+/// not.
 ///
 /// See the `16_subcell_image` example for `quantize_sextant` in action:
 /// <https://main.retroglyph.dev/examples/16_subcell_image/terminal/>.
