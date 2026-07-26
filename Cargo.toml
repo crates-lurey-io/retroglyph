@@ -4,7 +4,6 @@ resolver = "2"
 
 [workspace.metadata.bin]
 wasm-server-runner = { version = "1.0.1" }
-hk = { version = "1.48.0" }
 # Compares two `--save-baseline`-tagged criterion runs (e.g. `main` vs. the current working copy)
 # and prints a table of the delta. Used by `just bench-compare` / `tools/bench-compare.sh`; see
 # `crates/*/benches/` for the per-crate benchmark targets and criterion's baseline docs for why

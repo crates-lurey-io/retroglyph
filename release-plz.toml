@@ -1,31 +1,8 @@
-# release-plz configuration.
-# https://release-plz.dev/docs/config
-#
-# Flow (see RELEASING.md for the full picture):
-#   1. Land PRs on main. Each PR title is a Conventional Commit; squash-merge makes it the commit.
-#   2. release-plz's `release-pr` command keeps a standing Release PR open, bumping each changed
-#      crate's version + per-crate CHANGELOG.md from that conventional history.
-#   3. Merging the Release PR triggers `release-plz release`, which publishes the bumped crates to
-#      crates.io, tags them, and creates the GitHub releases.
-#
-# Versioning is per-crate: release-plz bumps only the crates that changed, cascading through the
-# retroglyph-core dependency graph. There is no lockstep and no single workspace changelog.
-
 [workspace]
-# Per-crate CHANGELOG.md (release-plz default: crates/<crate>/CHANGELOG.md). No changelog_path
-# override here, unlike the previous single-file setup.
 changelog_config = "cliff.toml"
 
-# Run cargo-semver-checks while computing the Release PR so the proposed bump is always large enough
-# for the API changes release-plz detects. This is the real backstop against an undeclared breaking
-# change shipping as a patch; the PR-time check-semver.yml job is only a fast reviewer signal.
 semver_check = true
 
 git_release_body = """
 {{ changelog | replace(from=" by @", to=" by ") }}
 """
-
-# retroglyph-gl now releases like every other crate. Its former blocker is resolved: window 0.3.1
-# is published on crates.io with the `default-font` (and `tilesets`) features, so gl's
-# `retroglyph-window/default-font` dependency resolves when `release-plz release` packages gl
-# against the registry. Trusted Publishing for retroglyph-gl is configured on crates.io.

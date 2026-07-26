@@ -22,17 +22,6 @@ ignore = [
   # adopted). Revisit when winit/sctk-adwaita moves off ab_glyph/ttf-parser, or when a
   # maintained fork appears.
   "RUSTSEC-2026-0192",
-  # quick-xml 0.39.4 has two DoS advisories (RUSTSEC-2026-0194 quadratic attribute-dedup scan,
-  # RUSTSEC-2026-0195 unbounded namespace-declaration allocation), both about parsing *untrusted*
-  # XML at runtime. It reaches this workspace only as a build-time proc-macro dependency of
-  # `wayland-scanner` (winit's Wayland backend, native/Linux only): wayland-scanner v0.31.10 pins
-  # `quick-xml = "^0.39"` and runs it at compile time over this workspace's own bundled,
-  # trusted Wayland protocol XML files, never over attacker-controlled input, so neither advisory
-  # is reachable here. No safe upgrade exists yet (0.41.0 fixes both, but wayland-scanner's own
-  # `^0.39` requirement blocks picking it up without an upstream release) -- revisit once
-  # wayland-scanner/smithay-client-toolkit bump their quick-xml requirement.
-  "RUSTSEC-2026-0194",
-  "RUSTSEC-2026-0195",
 ]
 
 [bans]
