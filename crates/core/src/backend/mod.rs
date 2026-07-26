@@ -136,12 +136,18 @@ pub trait Output {
     /// Returns an error if the backend cannot clear the display.
     fn clear(&mut self) -> Result<(), Self::Error>;
 
-    /// Notify the backend of a terminal resize.
+    /// Notify the backend of a resize to `size`, updating what [`size`](Self::size) reports.
     ///
     /// Called automatically by [`crate::Terminal::resize`] after both grids are resized.
     /// Backends that maintain internal state tied to terminal dimensions (such as
     /// [`Headless`]) should override this to update that state. The default
     /// implementation is a no-op.
+    ///
+    /// A driver may also call this directly, ahead of and independent from
+    /// [`crate::Terminal::resize`], to keep [`size`](Self::size) in sync with an underlying
+    /// surface the moment it changes (a windowed backend reacting to an OS resize, for
+    /// example) without waiting for the app to resize the terminal's grid content in
+    /// response. Doing so does not resize the grid; only [`crate::Terminal::resize`] does that.
     fn resize(&mut self, size: Size) {
         let _ = size;
     }
