@@ -176,9 +176,14 @@ pub fn build_crossterm_example(example_name: &str) -> PathBuf {
     target_dir.join("debug").join("examples").join(example_name)
 }
 
-/// Spawns `bin` in a PTY sized `rows`x`cols`, writes `input`, waits until the
-/// screen contains `ready_marker`, then closes the writer (EOF) and returns
-/// all captured output bytes.
+/// How often the PTY capture loops re-check the child's output. Short enough that the settle wait
+/// in [`capture_pty_until`] costs a test a few milliseconds rather than a visible pause, long
+/// enough that polling a live FPS overlay's byte stream isn't itself a busy loop.
+#[cfg(not(target_arch = "wasm32"))]
+const POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(5);
+
+/// Spawns `bin` in a PTY sized `rows`x`cols`, waits until the screen contains `ready_marker`,
+/// writes `input`, then quits the example and returns all captured output bytes.
 ///
 /// Runs the child with `RG_FPS=0`: the shared driver draws its FPS overlay by default (see
 /// `retroglyph_examples::fps`), and a live frame rate is not reproducible, so leaving it on would
@@ -197,6 +202,10 @@ pub fn capture_pty(bin: &Path, input: &[u8], rows: u16, cols: u16, ready_marker:
 
 /// [`capture_pty`] with an explicit child environment instead of its default `RG_FPS=0`.
 ///
+/// Only for captures that send no `input`, or whose `input` has no visible effect: anything that
+/// types a key the example reacts to has to say how to tell that key landed, which is what
+/// [`capture_pty_until`] is for. See that function for why.
+///
 /// # Panics
 ///
 /// Panics if the PTY can't be opened, or if `ready_marker` never appears
@@ -210,6 +219,40 @@ pub fn capture_pty_with_env(
     cols: u16,
     ready_marker: &str,
     env: &[(&str, &str)],
+) -> Vec<u8> {
+    capture_pty_until(bin, input, rows, cols, ready_marker, env, &|_| true)
+}
+
+/// [`capture_pty_with_env`], but waits for `settled` to accept the rendered screen after writing
+/// `input` and before sending the quit key.
+///
+/// **Every capture that sends input the example reacts to needs this.** The quit key is just more
+/// bytes in the same PTY input stream, so if the child happens to be descheduled between its first
+/// frame and the quit write -- routine on a loaded CI runner -- it reads `input` and `q` in the
+/// same frame's [`Terminal::drain_events`]. The shared driver deliberately does not present on the
+/// frame an example quits on (see `ExampleApp::update`: the example returns from its event handler
+/// without drawing, so the working grid is empty and presenting it would erase the last frame), so
+/// whatever `input` changed is applied to state and then never rendered. The capture ends up
+/// showing the pre-input screen, and the test fails claiming the key did nothing.
+///
+/// `settled` receives the screen as [`vt100::Screen::contents`] text and returns whether the key
+/// has visibly landed. It is a synchronization point, not the assertion: it buys the child a frame
+/// to render the change, and the test still asserts on the returned capture as usual.
+///
+/// # Panics
+///
+/// Panics if the PTY can't be opened, if `ready_marker` never appears within 10 seconds, or if
+/// `settled` never accepts within 10 seconds of `input` being written.
+#[cfg(not(target_arch = "wasm32"))]
+#[must_use]
+pub fn capture_pty_until(
+    bin: &Path,
+    input: &[u8],
+    rows: u16,
+    cols: u16,
+    ready_marker: &str,
+    env: &[(&str, &str)],
+    settled: &dyn Fn(&str) -> bool,
 ) -> Vec<u8> {
     use portable_pty::{CommandBuilder, PtySize, native_pty_system};
     use std::io::{Read, Write};
@@ -260,8 +303,9 @@ pub fn capture_pty_with_env(
         drop(reader);
     });
 
-    writer.write_all(input).expect("write input");
-
+    // Nothing is typed until the example has drawn a frame. Before that it hasn't enabled raw
+    // mode yet, so the line discipline would hold the bytes in its canonical-mode line buffer and
+    // echo them straight back into the capture.
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {
         if String::from_utf8_lossy(&output.lock().unwrap()).contains(ready_marker) {
@@ -271,7 +315,34 @@ pub fn capture_pty_with_env(
             Instant::now() <= deadline,
             "timed out waiting for {ready_marker:?} in PTY output"
         );
-        std::thread::sleep(Duration::from_millis(50));
+        std::thread::sleep(POLL_INTERVAL);
+    }
+
+    if !input.is_empty() {
+        writer.write_all(input).expect("write input");
+
+        // Feeds only the bytes that arrived since the last poll, so a capture that grows to
+        // megabytes (the crossterm driver is an unthrottled spin loop, and a visible FPS overlay
+        // redraws its readout every frame) stays linear instead of re-parsing from scratch.
+        let mut screen = vt100::Parser::new(rows, cols, 0);
+        let mut parsed = 0usize;
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            {
+                let raw = output.lock().unwrap();
+                screen.process(&raw[parsed..]);
+                parsed = raw.len();
+            }
+            if settled(&screen.screen().contents()) {
+                break;
+            }
+            assert!(
+                Instant::now() <= deadline,
+                "timed out waiting for {input:?} to land on screen; screen was:\n{}",
+                screen.screen().contents()
+            );
+            std::thread::sleep(POLL_INTERVAL);
+        }
     }
 
     writer.write_all(b"q").expect("write quit");
@@ -284,7 +355,7 @@ pub fn capture_pty_with_env(
             break;
         }
         assert!(Instant::now() <= deadline);
-        std::thread::sleep(Duration::from_millis(50));
+        std::thread::sleep(POLL_INTERVAL);
     }
     reader_handle.join().expect("reader thread panicked");
 
