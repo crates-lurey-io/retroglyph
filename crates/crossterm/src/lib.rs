@@ -66,6 +66,8 @@
 //! real process stdout regardless of `W` -- see [`CrosstermOptions::build_with_writer`]'s docs
 //! for the exact split.
 
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 // Compile the code blocks in both this crate's own README and the workspace root README as
 // doctests so the quick-start examples are type-checked on every test run and cannot silently
 // rot. The `cfg(doctest)` gate keeps these out of the rendered crate documentation.

@@ -45,6 +45,13 @@ doc:
     @cp -r docs/public/. target/doc/ 2>/dev/null || true
     @sed -i.bak "s/__GIT_SHA__/$(git rev-parse --short HEAD 2>/dev/null || echo unknown)/g" target/doc/index.html && rm -f target/doc/index.html.bak || true
 
+# Build docs the way docs.rs does, so feature-gated items pick up their "Available on `feature`
+# only" badges (requires nightly, since `doc_auto_cfg` is unstable). Verifies the docs.rs
+# `[package.metadata.docs.rs] rustdoc-args = ["--cfg", "docsrs"]` setup locally instead of finding
+# out on the next publish.
+doc-docsrs:
+    RUSTDOCFLAGS="--cfg docsrs" cargo +nightly doc --all-features --no-deps --open
+
 docs-preview: doc
     @if command -v xdg-open > /dev/null; then xdg-open target/doc/index.html; \
     elif command -v open > /dev/null; then open target/doc/index.html; \

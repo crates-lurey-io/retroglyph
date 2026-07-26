@@ -122,6 +122,8 @@
 //! <https://gist.github.com/christianparpart/d8a62cc1ab659194337d73e399004036> and implemented by
 //! xterm.js, kitty, iTerm2, and others.
 
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 // Compile the code blocks in this crate's own README as doctests so its quick start is
 // type-checked on every test run and cannot silently rot. The `cfg(doctest)` gate keeps this out
 // of the rendered crate documentation -- see `retroglyph-crossterm`'s matching include for the

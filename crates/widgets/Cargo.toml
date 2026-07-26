@@ -16,6 +16,7 @@ workspace = true
 
 [package.metadata.docs.rs]
 all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 # Forwards to retroglyph-core's egc feature. Paragraph (word-wrap) needs

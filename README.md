@@ -45,16 +45,21 @@ dependents, but a leaf-crate change bumps only that crate.
 | [`-window`](crates/window)               | Shared `winit` windowing layer for windowed backends                      | [![retroglyph-window version](https://img.shields.io/crates/v/retroglyph-window.svg)](https://docs.rs/retroglyph-window)                      |
 | [`-software`](crates/software)           | Pixel backend via `softbuffer`: native window or browser canvas           | [![retroglyph-software version](https://img.shields.io/crates/v/retroglyph-software.svg)](https://docs.rs/retroglyph-software)                |
 | [`-gl`](crates/gl)                       | GPU backend via `glow`: OpenGL 3.3 (native) and WebGL2 (wasm)             | [![retroglyph-gl version](https://img.shields.io/crates/v/retroglyph-gl.svg)](https://docs.rs/retroglyph-gl)                                  |
-| [`-widgets`](crates/widgets)             | Immediate-mode drawing: panels, gauges, tables, sparklines, layout        | [![retroglyph-widgets version](https://img.shields.io/crates/v/retroglyph-widgets.svg)](https://docs.rs/retroglyph-widgets)                   |
+| [`-widgets`](crates/widgets)             | Builder-struct widgets: panels, gauges, tables, sparklines, layout        | [![retroglyph-widgets version](https://img.shields.io/crates/v/retroglyph-widgets.svg)](https://docs.rs/retroglyph-widgets)                   |
 
 ## Features
 
 <details open>
 <summary><strong>Grid API</strong> — place styled characters on a multi-layer grid with full color support</summary>
 
-Up to 256 layers. Each cell carries a glyph, foreground/background color, text modifiers (bold,
-italic, underline, blink, reverse, dim, hidden, strikethrough), and sub-cell pixel offsets. Layer 0
-is always allocated; layers 1+ are allocated on first write — single-layer games pay zero overhead.
+Up to 256 layers. Each cell carries a glyph, foreground/background color, and sub-cell pixel
+offsets. Layer 0 is always allocated; layers 1+ are allocated on first write — single-layer games
+pay zero overhead.
+
+`Style` deliberately has no text modifiers (bold, italic, underline, ...): a pixel/bitmap-font
+renderer can't fake most of them without real per-style assets, so rather than work in a real
+terminal and silently do nothing in the software backend, they're not part of the API at all. See
+`Style`'s doc comment in `crates/core/src/style.rs` for the full rationale.
 
 Colors cover the full spectrum: the terminal's default foreground/background, the 16 standard ANSI
 colors, the 256-color palette, and 24-bit RGB.
@@ -73,11 +78,11 @@ sub-cell offsets can leave orphaned pixels from the previous frame.
 <details>
 <summary><strong>Stateful drawing API</strong> — chainable builder for everyday rendering</summary>
 
-Set the active style with `fg()`, `bg()`, `modifier()`, then place characters with `put()`. Print
-strings with `print()` (handles newlines and wide characters), render styled spans with
-`print_styled()`, or lay out text in a bounded rectangle with `print_box()`. Clear the active layer,
-all layers, or a rectangular region. Switch layers with `layer(id)`. Or bypass the builder and
-access the grid directly via `grid_mut()`.
+Set the active style with `fg()`, `bg()`, then place characters with `put()`. Print strings with
+`print()` (handles newlines and wide characters), render styled spans with `print_styled()`, or lay
+out text in a bounded rectangle with `print_box()`. Clear the active layer, all layers, or a
+rectangular region. Switch layers with `layer(id)`. Or bypass the builder and access the grid
+directly via `grid_mut()`.
 
 </details>
 
@@ -190,19 +195,25 @@ Disable the `std` feature (requires an allocator). Useful for embedded or kernel
 <summary><strong>Widgets</strong> (crate <code>retroglyph-widgets</code>) — panels, gauges, tables, and a
 layout splitter, built on <code>retroglyph-core</code></summary>
 
-An optional crate: games that draw manually depend only on `retroglyph-core`. Every widget is
-primarily a free function (`panel`, `gauge`, `table`, `sparkline`, `draw_box`, ...) that draws
-directly to a `Terminal` and retains no state, plus a constraint-based `Rect` splitter
-(`split_h`/`split_v`) with `Fixed`/`Percent`/`Fill`/`Min`/`Max` constraints and `Flex` alignment
+An optional crate: games that draw manually depend only on `retroglyph-core`. Every widget (`Panel`,
+`Gauge`, `Table`, `Sparkline`, `BoxBorder`, `List`, `Tabs`, `Button`, `Scrollbar`, `ProgressBar`,
+`Modal`, `StatBar`, `Meter`, `Log`, ...) is a builder struct that draws itself into a `Surface` (an
+area-relative view over a `Grid`) via `Widget`/`StatefulWidget` and retains no state of its own --
+state that outlives one render call (a selection index, a scroll offset) lives in `ListState`
+instead. A handful of things that are genuinely just functions (`fill_rect`,
+`thumb_geometry`/`offset_for_pos`) stay free functions rather than pretending to be widgets.
+Alongside the widgets is a constraint-based `Rect` splitter (`split_h`/`split_v`) with
+`Fixed`/`Percent`/`Fill`/`Min`/`Max` constraints and `Flex` alignment
 (`Start`/`End`/`Center`/`SpaceBetween`/`SpaceAround`) -- deliberately similar to
 [ratatui](https://ratatui.rs)'s layout system, for anyone coming from there. `Fill(weight)` claims a
 share of the leftover space proportional to `weight` relative to the other `Fill`/`Min`/`Max` panes
 in the same split (`Fill(1)` reproduces plain equal distribution).
 
-Three optional layers build on that free-function core:
+Three more independent layers build on top:
 
-- `Widget`/`StatefulWidget` traits for callers who want to box or store heterogeneous widgets,
-  backed by `ListState` for selection and scroll position.
+- `Widget`/`StatefulWidget` traits let callers box or store heterogeneous widgets, e.g. a
+  `Vec<Box<dyn Widget>>` of panes to render each frame, backed by `ListState` for selection and
+  scroll position.
 - `BoxStyle`, a Lip-Gloss-style box model (padding, border, margin) rendered into a standalone
   `Grid`. `Paragraph` (behind the `egc` feature) word-wraps text via `retroglyph-core`'s
   `TextLayout` and implements a `Measure` trait so a caller can size a pane to fit before rendering.

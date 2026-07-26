@@ -50,6 +50,7 @@
 //! headless`) for the smallest possible use of [`Headless`], depending on
 //! nothing but this crate.
 #![cfg_attr(not(feature = "std"), no_std)]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 extern crate alloc;
 
 // Compile the code blocks in this crate's own README as doctests so its quick start is

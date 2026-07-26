@@ -77,6 +77,8 @@
 //! querying/guessing terminal color depth (`$COLORTERM`, `$TERM`, or a runtime query), which is
 //! out of scope for this shared renderer and left to callers or a future crate.
 
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 // Compile the code blocks in this crate's own README as doctests so its quick start is
 // type-checked on every test run and cannot silently rot. The `cfg(doctest)` gate keeps this out
 // of the rendered crate documentation -- see `retroglyph-crossterm`'s matching include for the

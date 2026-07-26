@@ -34,6 +34,7 @@ module_name_repetitions = "allow"
 
 [package.metadata.docs.rs]
 all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 retroglyph-core = { path = "../core", version = "0.3.1", default-features = false, features = ["std"] }
