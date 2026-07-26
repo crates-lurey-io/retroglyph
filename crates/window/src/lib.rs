@@ -82,6 +82,8 @@
 //! and goes straight to a caller-supplied handler, since `Event::Custom` itself stays fixed to
 //! `u64`.
 
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 /// The generic [`Backend`](retroglyph_core::Backend) for windowed presenters.
 pub mod backend;
 /// System clipboard read/write ([`Clipboard`], [`SystemClipboard`] on native targets).

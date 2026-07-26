@@ -45,6 +45,8 @@
 //! window, and [`pixels`](SoftwareRenderer::pixels) gives direct access to the rendered
 //! buffer.
 
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 pub mod config;
 
 // The sprite/tileset decode + config now lives in `retroglyph-window` (winit-free), shared with

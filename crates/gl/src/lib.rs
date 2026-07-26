@@ -43,6 +43,8 @@
 //! (`context_wasm.rs`). Both expose the same internal `GlContext` API, so the renderer body has no
 //! `cfg`.
 
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 pub mod config;
 
 mod atlas;

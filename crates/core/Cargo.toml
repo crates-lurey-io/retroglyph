@@ -16,6 +16,7 @@ workspace = true
 
 [package.metadata.docs.rs]
 all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 # gem gets `libm` as its no_std float-math floor (see the `gem` feature); the

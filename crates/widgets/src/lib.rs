@@ -33,6 +33,7 @@
 //! This crate is itself optional: games that draw manually depend only on
 //! `retroglyph-core`.
 
+#![cfg_attr(docsrs, feature(doc_cfg))]
 #![allow(
     clippy::cast_possible_truncation,
     clippy::cast_lossless,
