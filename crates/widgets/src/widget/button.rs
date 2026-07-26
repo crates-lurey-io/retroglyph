@@ -175,7 +175,7 @@ impl Widget for Button<'_> {
         let x = area.left() + (area.width().saturating_sub(text_width)) / 2;
         let y = area.top() + area.height() / 2;
 
-        surface.print(x, y, text, style);
+        surface.print((x, y), text, style);
     }
 }
 

@@ -111,7 +111,7 @@ impl Widget for Scrollbar {
 
         for y in area.top()..area.bottom() {
             for x in area.left()..area.right() {
-                surface.put(x, y, ' ', self.track_style);
+                surface.put((x, y), ' ', self.track_style);
             }
         }
 
@@ -122,7 +122,7 @@ impl Widget for Scrollbar {
         };
         for y in (area.top() + start)..(area.top() + start + len) {
             for x in area.left()..area.right() {
-                surface.put(x, y, ' ', self.thumb_style);
+                surface.put((x, y), ' ', self.thumb_style);
             }
         }
     }

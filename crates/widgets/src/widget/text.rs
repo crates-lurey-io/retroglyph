@@ -71,7 +71,7 @@ impl Widget for Text<'_> {
         }
         let text = truncate_to_cols(self.content, area.width_usize());
         let x = area.left() + self.align.offset(area.width(), text.width() as u16);
-        surface.print(x, area.top(), text, self.style);
+        surface.print((x, area.top()), text, self.style);
     }
 }
 

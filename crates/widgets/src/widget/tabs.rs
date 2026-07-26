@@ -166,14 +166,14 @@ impl Widget for Tabs<'_> {
                     Style::new().bg(style.background()),
                 );
             }
-            surface.print(x, y, text, style);
+            surface.print((x, y), text, style);
             x = x.saturating_add(text_width);
 
             if index + 1 < self.titles.len() {
                 if let Some(divider) = self.divider {
                     let mid = x + self.column_spacing / 2;
                     if mid < area.right() {
-                        surface.put(mid, y, divider, Style::new());
+                        surface.put((mid, y), divider, Style::new());
                     }
                 }
                 x = x.saturating_add(self.column_spacing);
