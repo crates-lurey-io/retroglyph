@@ -71,7 +71,7 @@ use surface::WindowSurface;
 
 // Compile the code blocks in this crate's own README as doctests so its quick start is
 // type-checked on every test run and cannot silently rot. The `cfg(doctest)` gate keeps this out
-// of the rendered crate documentation -- see `retroglyph-crossterm`'s matching include for the
+// of the rendered crate documentation: see `retroglyph-crossterm`'s matching include for the
 // same pattern applied to the workspace root README.
 #[cfg(doctest)]
 #[doc = include_str!("../README.md")]
@@ -280,7 +280,7 @@ impl SoftwareRenderer {
     /// already known to match; when nothing changed, the copy is skipped
     /// entirely. `draw_layers` always repaints every cell (see
     /// [`Output::needs_full_frame`]), so `prev_pixels` still has to hold a
-    /// full previous-frame pixel buffer to diff against -- this only removes
+    /// full previous-frame pixel buffer to diff against: this only removes
     /// the copy's cost from being proportional to the whole buffer instead of
     /// the changed region, which is what actually dominates this function's
     /// cost on an unchanged or near-unchanged frame.
@@ -338,7 +338,7 @@ impl SoftwareRenderer {
     /// Whether `glyph` resolves to a registered sprite in the `tilesets` sprite cache.
     ///
     /// Sprites carry their own per-pixel alpha, so a tile that dispatches to one does not fit
-    /// [`resolve_bg_fill`]'s "an occupied tile is opaque" rule -- see its doc comment. Without the
+    /// [`resolve_bg_fill`]'s "an occupied tile is opaque" rule: see its doc comment. Without the
     /// `tilesets` feature there is no sprite cache at all, so this always returns `false`.
     #[cfg(feature = "tilesets")]
     fn has_sprite(&self, glyph: char) -> bool {
@@ -356,7 +356,7 @@ impl SoftwareRenderer {
     /// this cell is inside a multi-cell span whose *anchor* dispatches to a sprite. A covered
     /// cell holds the span's text fallback glyph (`'='`, `'['`, ...), which has no sprite of its
     /// own, so asking [`resolve_bg_fill`] about that glyph would make the covered cells paint an
-    /// opaque background while the anchor cell stays transparent -- one sprite, drawn over two
+    /// opaque background while the anchor cell stays transparent: one sprite, drawn over two
     /// different backdrops. Resolving the sprite question against the anchor keeps the whole
     /// footprint consistent.
     ///
@@ -587,7 +587,7 @@ impl Output for SoftwareRenderer {
     /// Layers arrive layer-major (0 first), so painting them in order gives the
     /// correct z-order. Layer 0 always fills its cell background; a higher layer's
     /// occupied (non-empty) tile always fills a background too, and an empty tile
-    /// never does -- see the private `resolve_bg_fill` helper for the exact color each of those
+    /// never does: see the private `resolve_bg_fill` helper for the exact color each of those
     /// cases paints (it is not always the tile's own background, to mirror
     /// `Grid::flatten_into`'s background-inheritance rule exactly). The `is_empty`
     /// guard matters because this receives the full frame (see
@@ -603,7 +603,7 @@ impl Output for SoftwareRenderer {
     /// # Dirty-cell repaint (retroglyph#302)
     ///
     /// `needs_full_frame` always returns `true` for this backend (see its docs), so this
-    /// receives every cell on every allocated layer on every call -- `Terminal::present`'s
+    /// receives every cell on every allocated layer on every call: `Terminal::present`'s
     /// diff-only path (used when a backend's `needs_full_frame` is `false`) never applies here,
     /// and changing that would be a `retroglyph-core` API change. Instead, this method keeps its
     /// own per-cell shadow copy of the last frame's tiles (see `RenderContext::prev_tiles`) and
@@ -619,7 +619,7 @@ impl Output for SoftwareRenderer {
     ///   of (or into) the frame can't be diffed against a shadow copy that no longer describes
     ///   this frame's layer set.
     ///
-    /// Both paths run two sub-passes per layer -- every background first, then every glyph -- so
+    /// Both paths run two sub-passes per layer (every background first, then every glyph), so
     /// artwork that lands outside its own cell spills onto the neighbor's already-painted
     /// background instead of being clobbered by that neighbor's later background fill. Spill is
     /// therefore uniform in all four directions: the two-pass mechanism of the "Sub-cell offsets
@@ -720,7 +720,7 @@ impl Output for SoftwareRenderer {
                 // Pass 2: blit every cell's glyph over those backgrounds. A glyph offset past its
                 // right/bottom edge now spills onto the neighbor's already-painted background
                 // instead of being clobbered by that neighbor's later background fill, so spill is
-                // uniform in all four directions -- the two-pass mechanism of the sub-cell
+                // uniform in all four directions: the two-pass mechanism of the sub-cell
                 // offset/spill contract on `retroglyph_window::Presenter` (see its rustdoc).
                 for idx in 0..cell_count {
                     let tile = self.ctx.prev_tiles[layer_id as usize][idx];
@@ -975,9 +975,9 @@ fn blit_cell(
 ///
 /// The glyph's top-left destination corner is `(origin_x, origin_y)`
 /// (already including any sub-cell `dx`/`dy` offset, scaled). When the whole
-/// glyph's destination bounding box fits inside `buffer` -- the overwhelmingly
+/// glyph's destination bounding box fits inside `buffer` (the overwhelmingly
 /// common case, since it only fails for cells with a nonzero `dx`/`dy` that
-/// pushes them past a buffer edge -- this takes a fast path with no per-pixel
+/// pushes them past a buffer edge), this takes a fast path with no per-pixel
 /// bounds check: it fills each `scale`-wide destination run in one slice
 /// `fill` call. Otherwise it falls back to a row-clamped path that clips
 /// each destination run to the buffer bounds once per row, rather than
@@ -1235,7 +1235,7 @@ fn blit_sprite(
 /// A span's artwork is drawn once, from its anchor, across the whole footprint, so repainting
 /// part of one is never right: the anchor has to be redrawn, and every cell it paints over has to
 /// have its background laid down again first. The diff that fills `dirty` cannot see this, because
-/// a covered cell's tile holds only the fallback glyph and the offset back to the anchor -- both
+/// a covered cell's tile holds only the fallback glyph and the offset back to the anchor: both
 /// unchanged while the anchor's artwork changes underneath it.
 ///
 /// Expansion always runs from the anchor outwards over its full declared footprint, so one pass
@@ -1286,7 +1286,7 @@ fn expand_dirty_spans(dirty: &mut [bool], layer: &[Tile], cols: usize, rows: usi
 /// - A higher layer's occupied (non-empty) tile with a non-[`Color::Default`] background paints
 ///   that color.
 /// - A higher layer's occupied tile with a [`Color::Default`] background still paints, *unless*
-///   `has_sprite` is `true` -- this is the fix for retroglyph#304: an occupied space is opaque and
+///   `has_sprite` is `true`: this is the fix for retroglyph#304, an occupied space is opaque and
 ///   erases whatever glyph a lower layer drew there, even though its own background is the
 ///   default one. What it paints with is *not* [`DEFAULT_BG`] though: matching `flatten_into`'s
 ///   `if tile.style.bg != Color::Default` guard, a `Color::Default` background never overwrites
@@ -1295,7 +1295,7 @@ fn expand_dirty_spans(dirty: &mut [bool], layer: &[Tile], cols: usize, rows: usi
 ///   repaints with that instead. `has_sprite` opts a tile out of this rule entirely: sprites
 ///   carry genuine per-pixel alpha (see [`SoftwareRenderer::has_sprite`]), so forcing an opaque
 ///   fill underneath one before it's blended would erase transparency the sprite's own pixels are
-///   supposed to let show through -- core's `Tile`/`Grid` model has no such per-pixel concept, so
+///   supposed to let show through: core's `Tile`/`Grid` model has no such per-pixel concept, so
 ///   the cell-backend-parity rule this function otherwise implements just doesn't apply to them.
 fn resolve_bg_fill(
     prev_tiles: &[Vec<Tile>],
@@ -1536,7 +1536,7 @@ mod tests {
             Style::new().fg(Color::Rgb { r: 0, g: 255, b: 0 }),
         )
         .with_offset(4, 0);
-        // Neighbor cell (1, 0): blank with an opaque blue background -- the fill that used to erase
+        // Neighbor cell (1, 0): blank with an opaque blue background, the fill that used to erase
         // the spill.
         let neighbor = Tile::new(' ', Style::new().bg(Color::Rgb { r: 0, g: 0, b: 255 }));
 
@@ -1954,7 +1954,7 @@ mod tests {
     fn sub_cell_offset_forces_full_frame_fallback_even_for_unchanged_cells() {
         // 2x1 grid. Frame 1: cell 0 has an offset glyph, cell 1 is plain. Frame 2: identical
         // content (nothing actually changed), but since a sub-cell offset is in play this frame,
-        // the fallback repaint path runs regardless of the dirty set -- assert the buffer is
+        // the fallback repaint path runs regardless of the dirty set; assert the buffer is
         // still correct (not that any particular code path ran).
         let mut r = damage_renderer(2, 1);
         let bg = Tile::new(' ', Style::new().bg(Color::Rgb { r: 5, g: 5, b: 5 }));
@@ -1995,7 +1995,7 @@ mod tests {
     #[test]
     fn layer_count_change_forces_full_frame_repaint() {
         // 1x1 grid. Frame 1: only layer 0. Frame 2: layer 0 unchanged, but layer 1 newly
-        // allocated with an opaque background -- the layer-set change must not be missed by the
+        // allocated with an opaque background: the layer-set change must not be missed by the
         // dirty-cell path (layer 0's own cell never changed, so a naive per-cell diff limited to
         // previously-seen layers would skip it).
         let mut r = damage_renderer(1, 1);
@@ -2223,7 +2223,7 @@ mod span_tests {
 
         assert_eq!(px(&r, 2, 0, 0), RED, "sprite's opaque half");
         // The transparent half lands in the covered cell, so what shows through there is the
-        // background the anchor established -- not the renderer's default, and not a fill of the
+        // background the anchor established, not the renderer's default, and not a fill of the
         // covered cell's own.
         for y in 0..16 {
             assert_eq!(px(&r, 2, 8, y), BLUE, "covered cell pixel (8, {y})");
@@ -2345,7 +2345,7 @@ mod span_tests {
 
     #[test]
     fn a_span_with_no_sprite_draws_only_its_anchor_glyph() {
-        // No tileset entry for 'X', so the anchor falls back to the bitmap font -- and the
+        // No tileset entry for 'X', so the anchor falls back to the bitmap font, and the
         // covered cells stay blank rather than each drawing their own fallback glyph.
         let mut r = renderer_with_sprite(2, 1, 8, 16, 8, SpriteAlign::TopLeft);
         let mut grid = Grid::new(2, 1);

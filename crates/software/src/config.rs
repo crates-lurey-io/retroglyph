@@ -15,8 +15,8 @@ use std::fmt;
 /// Errors that can occur when configuring the software backend.
 ///
 /// Windowing errors (window creation, event loop) are not represented here:
-/// this crate builds renderers, and the loop -- `retroglyph-window` or
-/// another windowing integration -- reports its own errors.
+/// this crate builds renderers, and the loop (`retroglyph-window` or
+/// another windowing integration) reports its own errors.
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum SoftwareBackendError {
