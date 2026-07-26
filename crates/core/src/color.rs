@@ -2,6 +2,7 @@
 
 #[cfg(feature = "color-space")]
 use gem::Mix as _;
+#[cfg(feature = "color-space")]
 use gem::space::Srgb;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -155,16 +156,6 @@ fn nearest_cube_step(value: u8) -> u8 {
     best_index
 }
 
-/// Squared euclidean distance between two RGB colors, as `u32` (no overflow risk for
-/// `u8` channel differences).
-#[cfg(any(not(feature = "color-space"), test))]
-const fn rgb_distance_sq(a: (u8, u8, u8), b: (u8, u8, u8)) -> u32 {
-    let dr = a.0.abs_diff(b.0) as u32;
-    let dg = a.1.abs_diff(b.1) as u32;
-    let db = a.2.abs_diff(b.2) as u32;
-    dr * dr + dg * dg + db * db
-}
-
 /// Quantizes `(r, g, b)` to the nearest 256-color palette index using the 6×6×6 RGB
 /// cube, grayscale ramp, and the 16 ANSI colors, breaking ties by preferring the
 /// lower index.
@@ -185,7 +176,7 @@ fn cube_map_to_indexed(r: u8, g: u8, b: u8) -> u8 {
 
     // Candidate group 1: the 16 ANSI colors (indices 0-15), lowest indices first.
     for (i, ansi) in ANSI_COLORS.iter().enumerate() {
-        let distance = rgb_distance_sq((r, g, b), ansi.to_rgb());
+        let distance = gem::rgb::distance_sq((r, g, b), ansi.to_rgb());
         if distance < best_distance {
             best_distance = distance;
             best_index = u8::try_from(i).unwrap_or(0);
@@ -202,7 +193,7 @@ fn cube_map_to_indexed(r: u8, g: u8, b: u8) -> u8 {
         CUBE_STEPS[cube_g as usize],
         CUBE_STEPS[cube_b as usize],
     );
-    let cube_distance = rgb_distance_sq((r, g, b), cube_rgb);
+    let cube_distance = gem::rgb::distance_sq((r, g, b), cube_rgb);
     if cube_distance < best_distance {
         best_distance = cube_distance;
         best_index = cube_index;
@@ -210,7 +201,7 @@ fn cube_map_to_indexed(r: u8, g: u8, b: u8) -> u8 {
 
     // Candidate group 3: nearest grayscale ramp entry (indices 232-255).
     for (i, &gray) in GRAYSCALE_RAMP.iter().enumerate() {
-        let distance = rgb_distance_sq((r, g, b), (gray, gray, gray));
+        let distance = gem::rgb::distance_sq((r, g, b), (gray, gray, gray));
         if distance < best_distance {
             best_distance = distance;
             best_index = 232 + u8::try_from(i).unwrap_or(0);
@@ -230,7 +221,7 @@ fn cube_map_to_ansi(r: u8, g: u8, b: u8) -> AnsiColor {
     let mut best = AnsiColor::Black;
     let mut best_distance = u32::MAX;
     for ansi in ANSI_COLORS {
-        let distance = rgb_distance_sq((r, g, b), ansi.to_rgb());
+        let distance = gem::rgb::distance_sq((r, g, b), ansi.to_rgb());
         if distance < best_distance {
             best_distance = distance;
             best = ansi;
@@ -1093,12 +1084,12 @@ mod tests {
     fn test_rgb_distance_sq_symmetry() {
         let a = (10, 20, 30);
         let b = (200, 100, 50);
-        assert_eq!(rgb_distance_sq(a, b), rgb_distance_sq(b, a));
+        assert_eq!(gem::rgb::distance_sq(a, b), gem::rgb::distance_sq(b, a));
     }
 
     #[test]
     fn test_rgb_distance_sq_zero_for_identical() {
-        assert_eq!(rgb_distance_sq((1, 2, 3), (1, 2, 3)), 0);
+        assert_eq!(gem::rgb::distance_sq((1, 2, 3), (1, 2, 3)), 0);
     }
 
     #[cfg(feature = "color-space")]
