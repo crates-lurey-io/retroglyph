@@ -16,6 +16,10 @@
 
 use retroglyph_core::event::{Event, KeyCode, KeyEventKind};
 use retroglyph_core::{Backend, Color, Style, Terminal};
+#[cfg(feature = "crossterm")]
+use retroglyph_core::{Cursor, Input, Output, Pos, Size, Tile};
+use std::cell::Cell;
+use std::rc::Rc;
 use std::time::Duration;
 
 /// Grid layer the overlay draws on. Above every layer the examples use (they only touch 0 and 1),
@@ -43,6 +47,129 @@ pub(crate) fn is_toggle_key(event: &Event) -> bool {
         return false;
     };
     key.kind == KeyEventKind::Press && matches!(key.code, KeyCode::Char('`') | KeyCode::F(1))
+}
+
+/// Toggle-key presses seen by a [`ToggleFilter`] and not yet applied to an [`Fps`].
+///
+/// Shared by clone: the filter wraps the backend, the driver owns the [`Fps`], and
+/// [`run_blocking`](retroglyph_core::run_blocking) takes both by value into separate owners, so
+/// the count has to live outside either of them. `Rc`/`Cell` rather than `Arc`/atomics because
+/// both ends are the same thread -- the blocking driver loop.
+pub(crate) type TogglePresses = Rc<Cell<usize>>;
+
+/// Wraps a [`Backend`] and swallows the overlay's [toggle key](is_toggle_key) on its way out of
+/// [`Input::poll_event`], counting each press into a shared [`TogglePresses`] for the driver.
+///
+/// The driver would rather do this itself, and on the windowed backends it does
+/// (`ExampleApp::intercept_overlay_keys`): drain the queue at the top of the frame, keep the
+/// toggles, hand the rest back. That works there because winit fills the backend's queue from the
+/// event loop, which cannot run while `App::update` is on the stack -- what the driver drains is
+/// every event the example can possibly see that frame.
+///
+/// Crossterm has no such queue. `poll_event` reads the OS directly, so an event that arrives
+/// *after* the driver's drain and *before* the example's own `drain_events` inside `tick` skips
+/// the driver entirely and lands in the example, which drops it on the floor (every example in
+/// the gallery ignores keys it doesn't bind). That window is microseconds wide but it is hit
+/// often: measured on a 50x25 PTY it swallowed roughly one backtick in eight, i.e. pressing the
+/// key visibly did nothing every so often. Filtering at the source is what makes the toggle
+/// arrive exactly once no matter when it is pressed.
+#[cfg(feature = "crossterm")]
+pub(crate) struct ToggleFilter<B> {
+    /// The real backend every non-toggle operation delegates to.
+    inner: B,
+    /// Presses swallowed so far, drained by the driver each frame.
+    presses: TogglePresses,
+}
+
+#[cfg(feature = "crossterm")]
+impl<B> ToggleFilter<B> {
+    /// Wraps `inner`, reporting swallowed toggle presses through `presses`.
+    pub(crate) const fn new(inner: B, presses: TogglePresses) -> Self {
+        Self { inner, presses }
+    }
+}
+
+#[cfg(feature = "crossterm")]
+impl<B: Output> Output for ToggleFilter<B> {
+    type Error = B::Error;
+
+    fn draw<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
+    where
+        I: Iterator<Item = (Pos, &'a Tile, Option<&'a str>)>,
+    {
+        self.inner.draw(content)
+    }
+
+    fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
+    where
+        I: Iterator<Item = (u8, Pos, &'a Tile, Option<&'a str>)>,
+    {
+        self.inner.draw_layers(content)
+    }
+
+    fn needs_full_frame(&self) -> bool {
+        self.inner.needs_full_frame()
+    }
+
+    fn composites_layers(&self) -> bool {
+        self.inner.composites_layers()
+    }
+
+    fn flush(&mut self) -> Result<(), Self::Error> {
+        self.inner.flush()
+    }
+
+    fn size(&self) -> Size {
+        self.inner.size()
+    }
+
+    fn clear(&mut self) -> Result<(), Self::Error> {
+        self.inner.clear()
+    }
+
+    fn resize(&mut self, size: Size) {
+        self.inner.resize(size);
+    }
+}
+
+#[cfg(feature = "crossterm")]
+impl<B: Input> Input for ToggleFilter<B> {
+    fn poll_event(&mut self, timeout: Duration) -> Option<Event> {
+        let start = std::time::Instant::now();
+        let mut remaining = timeout;
+        loop {
+            let event = self.inner.poll_event(remaining)?;
+            if !is_toggle_key(&event) {
+                return Some(event);
+            }
+            self.presses.set(self.presses.get().saturating_add(1));
+            // Zero timeout is the non-blocking drain: keep pulling so swallowing a toggle can't
+            // cut a `drain_events` short with events still waiting.
+            if timeout.is_zero() {
+                continue;
+            }
+            let elapsed = start.elapsed();
+            if elapsed >= timeout {
+                return None;
+            }
+            remaining = timeout.saturating_sub(elapsed);
+        }
+    }
+
+    fn push_event(&mut self, event: Event) {
+        self.inner.push_event(event);
+    }
+}
+
+#[cfg(feature = "crossterm")]
+impl<B: Cursor> Cursor for ToggleFilter<B> {
+    fn set_cursor_visible(&mut self, visible: bool) {
+        self.inner.set_cursor_visible(visible);
+    }
+
+    fn set_cursor_position(&mut self, position: Pos) {
+        self.inner.set_cursor_position(position);
+    }
 }
 
 /// Whether the overlay starts visible, from the `RG_FPS` environment variable.
@@ -333,5 +460,47 @@ mod tests {
         ] {
             assert!(!is_toggle_key(&event), "{event:?} should not toggle");
         }
+    }
+
+    /// Queues `events` behind a [`ToggleFilter`] and drains it the way a frame does, returning
+    /// what came through and how many toggles were swallowed.
+    #[cfg(feature = "crossterm")]
+    fn filtered(events: &[Event]) -> (Vec<Event>, usize) {
+        use super::{Rc, ToggleFilter, TogglePresses};
+        use retroglyph_core::Input as _;
+
+        let presses = TogglePresses::default();
+        let mut term = Terminal::new(ToggleFilter::new(Headless::new(10, 3), Rc::clone(&presses)));
+        for event in events {
+            term.backend_mut().push_event(event.clone());
+        }
+        let drained = term.drain_events().collect();
+        (drained, presses.take())
+    }
+
+    #[cfg(feature = "crossterm")]
+    #[test]
+    fn the_filter_swallows_toggles_and_passes_everything_else_through() {
+        let quit = Event::Key(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE));
+        let toggle = Event::Key(KeyEvent::new(KeyCode::Char('`'), KeyModifiers::NONE));
+
+        let (drained, presses) = filtered(&[quit.clone(), toggle, Event::Close]);
+        assert_eq!(presses, 1);
+        assert_eq!(drained, vec![quit, Event::Close]);
+    }
+
+    /// The regression the filter exists for: a toggle in the middle of a queue must not end the
+    /// drain early, or the events behind it sit there until the next frame -- and on crossterm,
+    /// swallowing an event with a zero timeout is exactly the "nothing left to read" signal
+    /// `drain_events` stops on.
+    #[cfg(feature = "crossterm")]
+    #[test]
+    fn a_swallowed_toggle_does_not_cut_the_drain_short() {
+        let toggle = Event::Key(KeyEvent::new(KeyCode::Char('`'), KeyModifiers::NONE));
+        let after = Event::Key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
+
+        let (drained, presses) = filtered(&[toggle.clone(), toggle, after.clone()]);
+        assert_eq!(presses, 2, "both toggles counted");
+        assert_eq!(drained, vec![after], "the event behind them still arrives");
     }
 }
