@@ -99,8 +99,7 @@ impl ThemeSwitch {
 
         term.reset_style().fg(theme.accent);
         term.print(
-            1,
-            0,
+            (1, 0),
             "t toggles theme, Left/Right tabs, Up/Down selects, q/Esc quits",
         );
         term.reset_style();

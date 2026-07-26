@@ -3,7 +3,7 @@
 use crate::backend::{Backend, Output};
 use crate::color::Color;
 use crate::event::Event;
-use crate::grid::{Grid, Pos, Rect, Size};
+use crate::grid::{Grid, Offset, Pos, Rect, Size};
 use crate::style::Style;
 use crate::text::Line;
 use crate::tile::Tile;
@@ -17,6 +17,14 @@ use unicode_width::UnicodeWidthChar;
 /// API (`put`, `print`, `layer`, ...). Call [`present`](Self::present) once
 /// per frame to diff against the previous frame and send only the changed
 /// cells to the backend.
+///
+/// # Out-of-bounds drawing
+///
+/// Drawing off the grid is a no-op, the same convention as drawing off-screen: every drawing
+/// method here ([`put`](Self::put), [`print`](Self::print), and the rest of the stateful API)
+/// silently clips any part of the write that falls outside the current [`size`](Self::size),
+/// rather than panicking. See [`Grid`]'s own "Out-of-bounds drawing" section for the underlying
+/// rule this stateful API is built on.
 pub struct Terminal<B: Backend> {
     current: Grid,
     previous: Grid,
@@ -143,37 +151,30 @@ impl<B: Backend> Terminal<B> {
         self.backend.resize(Size { width, height });
     }
 
-    /// Place a character at `(x, y)` on the active layer with the current style.
+    /// Place a character at `pos` on the active layer with the current style.
     ///
     /// If `ch` is a wide character (e.g. CJK or emoji) that occupies two columns,
-    /// the adjacent cell at `(x + 1, y)` is set to a zero-width continuation
+    /// the adjacent cell to the right is set to a zero-width continuation
     /// marker so it is not rendered independently.
     ///
     /// Sub-cell offsets are always visual only — use [`put_offset`](Self::put_offset)
     /// for offset writes.
-    pub fn put(&mut self, x: u16, y: u16, ch: char) {
+    pub fn put(&mut self, pos: impl Into<Pos>, ch: char) {
         self.dirty = true;
+        let pos = pos.into();
         let style = self.drawing_style;
         #[cfg(feature = "egc")]
         {
             let mut buf = [0u8; 4];
             let s = ch.encode_utf8(&mut buf);
             self.current
-                .write_grapheme(self.active_layer, x, y, s, style);
+                .write_grapheme(self.active_layer, pos.x, pos.y, s, style);
         }
         #[cfg(not(feature = "egc"))]
         {
             let tile = Tile::new(ch, style);
-            self.current.put_tile(self.active_layer, (x, y), tile);
+            self.current.put_tile(self.active_layer, pos, tile);
         }
-    }
-
-    /// Place a character at `pos` on the active layer with the current style.
-    ///
-    /// Equivalent to [`put`](Self::put), but takes a [`Pos`] to match the
-    /// `Rect`/`Size`-based drawing APIs elsewhere on `Terminal`.
-    pub fn put_at(&mut self, pos: Pos, ch: char) {
-        self.put(pos.x, pos.y, ch);
     }
 
     /// Returns a reference to the current grid.
@@ -235,19 +236,20 @@ impl<B: Backend> Terminal<B> {
     }
 
     /// Place a character on the active layer with an explicit style.
-    pub fn put_styled(&mut self, x: u16, y: u16, ch: char, style: Style) {
+    pub fn put_styled(&mut self, pos: impl Into<Pos>, ch: char, style: Style) {
         self.dirty = true;
+        let pos = pos.into();
         #[cfg(feature = "egc")]
         {
             let mut buf = [0u8; 4];
             let s = ch.encode_utf8(&mut buf);
             self.current
-                .write_grapheme(self.active_layer, x, y, s, style);
+                .write_grapheme(self.active_layer, pos.x, pos.y, s, style);
         }
         #[cfg(not(feature = "egc"))]
         {
             let tile = Tile::new(ch, style);
-            self.current.put_tile(self.active_layer, (x, y), tile);
+            self.current.put_tile(self.active_layer, pos, tile);
         }
     }
 
@@ -264,58 +266,67 @@ impl<B: Backend> Terminal<B> {
     /// # let mut term = Terminal::new(Headless::new(20, 10));
     /// // One 4x2 chest sprite on `retroglyph-software`/`retroglyph-gl`, eight glyphs on a real
     /// // terminal.
-    /// term.put_span(4, 2, &["[==]",
-    ///                       "|__|"]);
+    /// term.put_span((4, 2), &["[==]",
+    ///                         "|__|"]);
     /// ```
     ///
-    /// Silently writes nothing if `rows` is empty, ragged, or does not fit at `(x, y)`; see
+    /// Silently writes nothing if `rows` is empty, ragged, or does not fit at `pos`; see
     /// [`Grid::write_span`](crate::grid::Grid::write_span) for the full write semantics, and
     /// [`Grid::span_owner`](crate::grid::Grid::span_owner) to hit-test the whole footprint.
-    pub fn put_span(&mut self, x: u16, y: u16, rows: &[&str]) {
+    pub fn put_span(&mut self, pos: impl Into<Pos>, rows: &[&str]) {
         let style = self.drawing_style;
-        self.put_span_styled(x, y, rows, style);
+        self.put_span_styled(pos, rows, style);
     }
 
     /// [`put_span`](Self::put_span) with an explicit style instead of the terminal's current
     /// drawing style. The style applies to every cell of the span, anchor and fallback alike.
-    pub fn put_span_styled(&mut self, x: u16, y: u16, rows: &[&str], style: Style) {
+    pub fn put_span_styled(&mut self, pos: impl Into<Pos>, rows: &[&str], style: Style) {
         self.dirty = true;
+        let pos = pos.into();
         self.current
-            .write_span(self.active_layer, x, y, rows, style);
+            .write_span(self.active_layer, pos.x, pos.y, rows, style);
     }
 
-    /// Place a character at `(x, y)` with a sub-cell pixel offset `(dx, dy)`.
+    /// Place a character at `pos` with a sub-cell pixel `offset`.
     ///
     /// Uses the current style and active layer. Sub-cell offsets are visual
     /// only — they do not affect grid logic or hit-testing. Backends that
     /// cannot represent pixel offsets (e.g. `CrosstermBackend`) ignore them.
-    pub fn put_offset(&mut self, x: u16, y: u16, dx: i16, dy: i16, ch: char) {
+    ///
+    /// `pos` and `offset` are distinct types ([`Pos`] and [`Offset`]) precisely so a call like
+    /// `put_offset(pos, offset, ch)` can't have its arguments transposed by mistake the way two
+    /// bare `(i16, i16)` pairs could.
+    pub fn put_offset(&mut self, pos: impl Into<Pos>, offset: impl Into<Offset>, ch: char) {
         self.dirty = true;
-        let tile = Tile::new(ch, self.drawing_style).with_offset(dx, dy);
-        self.current.put_tile(self.active_layer, (x, y), tile);
+        let pos = pos.into();
+        let offset = offset.into();
+        let tile = Tile::new(ch, self.drawing_style).with_offset(offset.dx, offset.dy);
+        self.current.put_tile(self.active_layer, pos, tile);
     }
 
-    /// Print a string starting at `(x, y)` with the current style.
+    /// Print a string starting at `pos` with the current style.
     ///
-    /// `\n` advances to the next row at the original `x`. Wide characters
+    /// `\n` advances to the next row at the original column. Wide characters
     /// (CJK, emoji) advance the cursor by 2 columns. Characters that would
     /// extend beyond the grid width wrap to the next row.
-    pub fn print(&mut self, x: u16, y: u16, text: &str) {
+    pub fn print(&mut self, pos: impl Into<Pos>, text: &str) {
         self.dirty = true;
+        let pos = pos.into();
         let style = self.drawing_style;
         #[cfg(feature = "egc")]
-        self.print_str_egc(x, y, text, style);
+        self.print_str_egc(pos.x, pos.y, text, style);
         #[cfg(not(feature = "egc"))]
-        self.print_str_chars(x, y, text, style);
+        self.print_str_chars(pos.x, pos.y, text, style);
     }
 
-    /// Print a [`Line`] of styled spans starting at `(x, y)`.
+    /// Print a [`Line`] of styled spans starting at `pos`.
     ///
     /// Each span's style is applied independently. The terminal's current
     /// drawing style is not modified. Wide characters advance the cursor by
     /// 2 columns. Rendering stops at the grid boundary.
-    pub fn print_styled(&mut self, x: u16, y: u16, line: &Line) {
+    pub fn print_styled(&mut self, pos: impl Into<Pos>, line: &Line) {
         self.dirty = true;
+        let Pos { x, y } = pos.into();
         #[cfg(feature = "egc")]
         {
             use unicode_segmentation::UnicodeSegmentation;
@@ -682,9 +693,9 @@ mod tests {
         // A cell backend (Headless) must see layers 1+ composited, not
         // dropped. Terrain on layer 0, entity on layer 1.
         let mut term = Terminal::new(Headless::new(3, 1));
-        term.layer(0).put(0, 0, '.');
-        term.layer(0).put(1, 0, '.');
-        term.layer(1).put(1, 0, '@');
+        term.layer(0).put((0, 0), '.');
+        term.layer(0).put((1, 0), '.');
+        term.layer(1).put((1, 0), '@');
         term.present().expect("present failed");
         assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), '.');
         // Layer 1's glyph wins at (1, 0).
@@ -697,9 +708,9 @@ mod tests {
         // glyph beneath (erase) and applies its background. This is the
         // deliberate consequence of the explicit-EMPTY transparency model.
         let mut term = Terminal::new(Headless::new(2, 1));
-        term.layer(0).put(0, 0, 'x');
+        term.layer(0).put((0, 0), 'x');
         term.layer(1)
-            .put_styled(0, 0, ' ', Style::new().bg(Color::RED));
+            .put_styled((0, 0), ' ', Style::new().bg(Color::RED));
         term.present().expect("present failed");
         let cell = term.backend().grid()[Pos::new(0, 0)];
         assert_eq!(cell.glyph(), ' ');
@@ -711,20 +722,20 @@ mod tests {
         // Only layer 0 is ever touched: the fast path must still deliver the
         // correct cells to a cell backend across multiple frames.
         let mut term = Terminal::new(Headless::new(3, 1));
-        term.put(0, 0, 'a');
+        term.put((0, 0), 'a');
         term.present().expect("present failed");
         assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), 'a');
 
         // Immediate mode: redraw 'a' and add 'c'. The diff updates the new
         // cell while 'a' stays put.
-        term.put(0, 0, 'a');
-        term.put(2, 0, 'c');
+        term.put((0, 0), 'a');
+        term.put((2, 0), 'c');
         term.present().expect("present failed");
         assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), 'a');
         assert_eq!(term.backend().grid()[Pos::new(2, 0)].glyph(), 'c');
 
         // A cell that is not redrawn is erased (immediate mode).
-        term.put(0, 0, 'a');
+        term.put((0, 0), 'a');
         term.present().expect("present failed");
         assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), 'a');
         assert_eq!(term.backend().grid()[Pos::new(2, 0)].glyph(), ' ');
@@ -735,7 +746,7 @@ mod tests {
         // present() on a clean frame does not re-diff the empty current buffer against the
         // just-presented previous one, so the backend keeps showing the last real frame.
         let mut term = Terminal::new(Headless::new(3, 1));
-        term.put(0, 0, 'a');
+        term.put((0, 0), 'a');
         term.present().expect("present failed");
         assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), 'a');
 
@@ -749,7 +760,7 @@ mod tests {
         // clear() is itself a draw call: an intentional blank frame still presents (as blank),
         // rather than being treated as "nothing was drawn" and skipped.
         let mut term = Terminal::new(Headless::new(3, 1));
-        term.put(0, 0, 'a');
+        term.put((0, 0), 'a');
         term.present().expect("present failed");
         assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), 'a');
 
@@ -764,13 +775,13 @@ mod tests {
         // that adds the layer must composite correctly despite the fast path
         // having bypassed the flatten buffers.
         let mut term = Terminal::new(Headless::new(2, 1));
-        term.layer(0).put(0, 0, '.');
-        term.layer(0).put(1, 0, '.');
+        term.layer(0).put((0, 0), '.');
+        term.layer(0).put((1, 0), '.');
         term.present().expect("present failed");
 
-        term.layer(0).put(0, 0, '.');
-        term.layer(0).put(1, 0, '.');
-        term.layer(1).put(1, 0, '@');
+        term.layer(0).put((0, 0), '.');
+        term.layer(0).put((1, 0), '.');
+        term.layer(1).put((1, 0), '@');
         term.present().expect("present failed");
         assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), '.');
         assert_eq!(term.backend().grid()[Pos::new(1, 0)].glyph(), '@');
@@ -781,9 +792,9 @@ mod tests {
         // A higher layer that was allocated but not written at this cell must
         // not disturb the lower layer's glyph or background.
         let mut term = Terminal::new(Headless::new(2, 1));
-        term.layer(0).put(0, 0, 'x');
+        term.layer(0).put((0, 0), 'x');
         // Allocate layer 1 by writing elsewhere, leaving (0, 0) empty.
-        term.layer(1).put(1, 0, 'y');
+        term.layer(1).put((1, 0), 'y');
         term.present().expect("present failed");
         assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), 'x');
     }
@@ -824,7 +835,7 @@ mod tests {
     #[test]
     fn test_terminal_resize_preserves_current_content() {
         let mut term = Terminal::new(Headless::new(10, 10));
-        term.put(2, 2, 'X');
+        term.put((2, 2), 'X');
         term.resize(20, 20);
         assert_eq!(term.grid()[Pos::new(2, 2)].glyph(), 'X');
         assert_eq!(term.grid()[Pos::new(15, 15)].glyph(), ' ');
@@ -849,13 +860,13 @@ mod tests {
     fn test_terminal_resize_new_cells_accessible() {
         // Resize to a larger area, then draw in the newly created region.
         let mut term = Terminal::new(Headless::new(3, 3));
-        term.put(0, 0, 'A');
+        term.put((0, 0), 'A');
         term.present();
 
         term.resize(5, 5);
 
         // Draw into the expanded region and verify it reaches the backend.
-        term.put(4, 4, 'B');
+        term.put((4, 4), 'B');
         term.present();
 
         assert_eq!(term.backend().grid()[Pos::new(4, 4)].glyph(), 'B');
@@ -868,7 +879,7 @@ mod tests {
     #[test]
     fn test_put_wide_char_sets_continuation() {
         let mut term = Terminal::new(Headless::new(10, 3));
-        term.put(0, 0, '\u{4e2d}'); // '中', width 2
+        term.put((0, 0), '\u{4e2d}'); // '中', width 2
         assert_eq!(term.grid()[Pos::new(0, 0)].glyph(), '\u{4e2d}');
         // With egc: spacer uses WIDE_CHAR_SPACER flag, glyph is space.
         // Without egc: spacer is '\0'.
@@ -890,7 +901,7 @@ mod tests {
     #[test]
     fn test_print_advances_by_char_width() {
         let mut term = Terminal::new(Headless::new(10, 3));
-        term.print(0, 0, "\u{4e2d}x"); // '中' (2) then 'x' at col 2
+        term.print((0, 0), "\u{4e2d}x"); // '中' (2) then 'x' at col 2
         assert_eq!(term.grid()[Pos::new(0, 0)].glyph(), '\u{4e2d}');
         #[cfg(feature = "egc")]
         {
@@ -907,10 +918,31 @@ mod tests {
     }
 
     #[test]
-    fn test_put_at_matches_put() {
+    fn test_put_accepts_a_pos_or_a_tuple() {
+        // `put` takes `impl Into<Pos>`, so a `Pos` and an equivalent `(u16, u16)` tuple must
+        // write the same cell.
         let mut term = Terminal::new(Headless::new(10, 3));
-        term.put_at(Pos::new(2, 1), 'X');
+        term.put(Pos::new(2, 1), 'X');
         assert_eq!(term.grid()[Pos::new(2, 1)].glyph(), 'X');
+
+        term.put((3, 1), 'Y');
+        assert_eq!(term.grid()[Pos::new(3, 1)].glyph(), 'Y');
+    }
+
+    #[test]
+    fn test_put_offset_accepts_pos_and_offset_tuples() {
+        // `put_offset` takes `impl Into<Pos>` and `impl Into<Offset>`, so `Pos`/`Offset` values
+        // and equivalent tuples must produce the same tile.
+        let mut term = Terminal::new(Headless::new(4, 1));
+        term.put_offset(Pos::new(1, 0), Offset::new(3, -2), 'X');
+        assert_eq!(term.grid()[Pos::new(1, 0)].glyph(), 'X');
+        assert_eq!(term.grid()[Pos::new(1, 0)].dx(), 3);
+        assert_eq!(term.grid()[Pos::new(1, 0)].dy(), -2);
+
+        term.put_offset((2, 0), (-1, 4), 'Y');
+        assert_eq!(term.grid()[Pos::new(2, 0)].glyph(), 'Y');
+        assert_eq!(term.grid()[Pos::new(2, 0)].dx(), -1);
+        assert_eq!(term.grid()[Pos::new(2, 0)].dy(), 4);
     }
 
     #[test]
@@ -918,7 +950,7 @@ mod tests {
         // Wide char placed at the last column: can't place a spacer.
         // write_grapheme silently refuses rather than leaving an orphan.
         let mut term = Terminal::new(Headless::new(4, 1));
-        term.put(3, 0, '\u{4e2d}'); // col 3 is last; need col 4 for spacer
+        term.put((3, 0), '\u{4e2d}'); // col 3 is last; need col 4 for spacer
         assert_eq!(term.grid()[Pos::new(3, 0)].glyph(), ' '); // nothing written
     }
 
@@ -932,7 +964,7 @@ mod tests {
             Span::raw("HP: "),
             Span::styled("100", Style::new().fg(Color::GREEN)),
         ]);
-        term.print_styled(0, 0, &line);
+        term.print_styled((0, 0), &line);
         assert_eq!(term.grid()[Pos::new(0, 0)].glyph(), 'H');
         assert_eq!(term.grid()[Pos::new(3, 0)].glyph(), ' ');
         assert_eq!(term.grid()[Pos::new(4, 0)].glyph(), '1');
@@ -946,7 +978,7 @@ mod tests {
         let mut term = Terminal::new(Headless::new(20, 3));
         term.fg(Color::RED);
         let line = Line::from(vec![Span::styled("hi", Style::new().fg(Color::BLUE))]);
-        term.print_styled(0, 0, &line);
+        term.print_styled((0, 0), &line);
         // Drawing style must be unchanged.
         assert_eq!(term.style().fg, Color::RED);
     }
@@ -956,7 +988,7 @@ mod tests {
         use crate::text::{Line, Span};
         let mut term = Terminal::new(Headless::new(10, 3));
         let line = Line::from(vec![Span::raw("\u{4e2d}x")]);
-        term.print_styled(0, 0, &line);
+        term.print_styled((0, 0), &line);
         assert_eq!(term.grid()[Pos::new(0, 0)].glyph(), '\u{4e2d}');
         #[cfg(feature = "egc")]
         {

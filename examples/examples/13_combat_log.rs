@@ -117,7 +117,7 @@ impl CombatLog {
         // Kept short on purpose: this is a 50-column grid, and `Terminal::print` wraps text
         // that overflows the width onto the next row -- which would otherwise stomp on the
         // stat bars printed right below.
-        term.print(1, 0, "a: attack  Up/Down: scroll  r: reset  q/Esc: quit");
+        term.print((1, 0), "a: attack  Up/Down: scroll  r: reset  q/Esc: quit");
 
         let term_area = term.area();
         StatBar::new("You  ", self.player_hp, PLAYER_MAX_HP).render(
@@ -156,15 +156,14 @@ impl CombatLog {
                     &mut Surface::new(term.grid_mut(), term_area, 0),
                 );
             term.print(
-                inner.left(),
-                inner.top(),
+                (inner.left(), inner.top()),
                 &format!(
                     "You: {}/{PLAYER_MAX_HP}  Goblin: {}/{ENEMY_MAX_HP}",
                     self.player_hp, self.enemy_hp
                 ),
             );
-            term.print(inner.left(), inner.top() + 2, "r: reset");
-            term.print(inner.left(), inner.top() + 3, "q / Esc: quit");
+            term.print((inner.left(), inner.top() + 2), "r: reset");
+            term.print((inner.left(), inner.top() + 3), "q / Esc: quit");
         }
     }
 }

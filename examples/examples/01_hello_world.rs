@@ -55,7 +55,7 @@ impl HelloWorld {
     /// state.
     #[allow(clippy::unused_self)]
     fn draw<B: Backend>(&self, term: &mut Terminal<B>) {
-        term.print(18, 12, "Hello, world!");
+        term.print((18, 12), "Hello, world!");
     }
 }
 

@@ -25,7 +25,7 @@ use retroglyph_core::{Terminal, Color, backend::Headless};
 
 let mut term = Terminal::new(Headless::new(80, 24));
 term.fg(Color::GREEN);
-term.put(5, 5, '@');
+term.put((5, 5), '@');
 term.present().unwrap();
 ```
 

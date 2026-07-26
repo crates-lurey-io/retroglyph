@@ -86,19 +86,18 @@ impl Keyboard {
     /// Draws this frame (the driver presents).
     fn draw<B: Backend>(&self, term: &mut Terminal<B>) {
         term.print(
-            1,
-            1,
+            (1, 1),
             "Press any key (arrows, modifiers, F-keys all decode).",
         );
-        term.print(1, 2, "q / Escape quits.");
-        term.print(1, 4, "Last key:");
+        term.print((1, 2), "q / Escape quits.");
+        term.print((1, 4), "Last key:");
         let last = self.log.last().map_or("(none yet)", String::as_str);
-        term.print(11, 4, last);
+        term.print((11, 4), last);
 
-        term.print(1, 6, "Log (oldest first):");
+        term.print((1, 6), "Log (oldest first):");
         for (i, entry) in self.log.iter().enumerate() {
             let y = 7 + u16::try_from(i).expect("LOG_LEN fits in u16");
-            term.print(1, y, entry);
+            term.print((1, y), entry);
         }
     }
 }

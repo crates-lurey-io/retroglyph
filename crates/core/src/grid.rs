@@ -6,7 +6,7 @@
 //! A [`Grid`] holds up to 256 independent layers (`u8` ids `0..=255`), one
 //! [`Tile`] per cell on each. Layer 0 is always allocated; layers 1-255 are
 //! allocated lazily, on first write to that layer (see
-//! [`put_tile`](Grid::put_tile), [`cells_mut`](Grid::cells_mut)). This is the
+//! [`put_tile`](Grid::put_tile), [`cells_mut_or_alloc`](Grid::cells_mut_or_alloc)). This is the
 //! crate's most distinctive feature and the one most worth understanding
 //! before reaching for a second layer.
 //!
@@ -76,9 +76,10 @@
 //! ([`put_tile`](Grid::put_tile), [`write_grapheme`](Grid::write_grapheme))
 //! clears the entire span first, so an anchor can never be left claiming cells it no longer owns.
 //! The exceptions are the escape hatches that hand out a `&mut Tile` directly
-//! ([`tile_mut`](Grid::tile_mut), [`cells_mut`](Grid::cells_mut), `IndexMut`),
-//! which cannot intercept the write; use [`clear_span`](Grid::clear_span) first if you reach for
-//! one of those on a grid that uses spans.
+//! ([`tile_mut`](Grid::tile_mut), [`cells_mut`](Grid::cells_mut),
+//! [`cells_mut_or_alloc`](Grid::cells_mut_or_alloc), `IndexMut`), which cannot intercept the
+//! write; use [`clear_span`](Grid::clear_span) first if you reach for one of those on a grid
+//! that uses spans.
 //!
 //! ## No short-circuiting: every allocated layer is visited, for every cell
 //!
@@ -195,6 +196,40 @@ pub type Pos = ixy::Pos<u16>;
 /// Rectangle in the grid.
 pub type Rect = ixy::Rect<u16>;
 
+/// A sub-cell pixel offset `(dx, dy)`, distinct from [`Pos`] so a caller can't transpose a
+/// position and an offset in a call like [`Terminal::put_offset`](crate::terminal::Terminal::put_offset).
+///
+/// Visual only: an offset shifts where a glyph is painted within its cell on backends that
+/// support sub-cell placement (e.g. `retroglyph-software`); it never changes which cell a glyph
+/// occupies, and cell-mode backends (e.g. `retroglyph-crossterm`) ignore it entirely.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct Offset {
+    /// Horizontal pixel offset.
+    pub dx: i16,
+    /// Vertical pixel offset.
+    pub dy: i16,
+}
+
+impl Offset {
+    /// Creates a new offset from `(dx, dy)`.
+    #[must_use]
+    pub const fn new(dx: i16, dy: i16) -> Self {
+        Self { dx, dy }
+    }
+}
+
+impl From<(i16, i16)> for Offset {
+    fn from((dx, dy): (i16, i16)) -> Self {
+        Self { dx, dy }
+    }
+}
+
+impl From<Offset> for (i16, i16) {
+    fn from(offset: Offset) -> Self {
+        (offset.dx, offset.dy)
+    }
+}
+
 impl From<(u16, u16)> for Size {
     fn from((width, height): (u16, u16)) -> Self {
         Self { width, height }
@@ -277,7 +312,7 @@ pub(crate) struct LayerBuf {
     ///
     /// The `HAS_EXTRA` flag is authoritative: readers must check it before
     /// consulting this map, since some write paths (`put_tile`,
-    /// `IndexMut`, `cells_mut`) can leave a stale entry behind when they
+    /// `IndexMut`, `cells_mut`, `cells_mut_or_alloc`) can leave a stale entry behind when they
     /// overwrite a tile that used to carry extra text without an explicit
     /// cleanup call. Since those paths only ever hand out or store tiles
     /// with `HAS_EXTRA` clear, a stale entry is harmless: it is simply
@@ -328,6 +363,17 @@ impl LayerBuf {
 /// layer-table `Vec` up to that layer's id as needed (see [`Grid::new`]). Single-layer use pays
 /// no overhead: layers 1+ stay unallocated until used, and the layer table itself never grows
 /// past a single slot.
+///
+/// # Out-of-bounds drawing
+///
+/// Drawing off the grid is a no-op, the same convention as drawing off-screen: every write method
+/// that names a position or region (e.g. [`put_tile`](Self::put_tile), [`write_grapheme`](Self::write_grapheme),
+/// [`write_span`](Self::write_span), [`blit`](Self::blit)) silently discards any part of the
+/// write that falls outside `0..width` / `0..height`, rather than panicking. The one deliberate
+/// exception is indexing (`Index<Pos>`/`IndexMut<Pos>`, and by extension anything built on it),
+/// which panics on an out-of-bounds `Pos` the same way indexing a slice does. Read accessors
+/// that take a position (e.g. [`tile`](Self::tile)) report an out-of-bounds position as `None`,
+/// indistinguishable from an unallocated layer.
 ///
 /// Requires an allocator (backed by `alloc::vec::Vec`), so it is unavailable
 /// in strictly static, no-alloc environments.
@@ -528,8 +574,25 @@ impl Grid {
 
     /// Iterates all tiles on `layer` mutably with their `(x, y)` coordinates.
     ///
-    /// If the layer has not been written to yet, it is allocated first.
-    pub fn cells_mut(&mut self, layer: u8) -> CellsMut<'_> {
+    /// Returns `None` if the layer is unallocated, mirroring [`cells`](Self::cells)'s
+    /// fallibility. Use [`cells_mut_or_alloc`](Self::cells_mut_or_alloc) to allocate the layer
+    /// first instead of failing.
+    pub fn cells_mut(&mut self, layer: u8) -> Option<CellsMut<'_>> {
+        let width = usize::from(self.width);
+        let lb = self.layers.get_mut(usize::from(layer))?.as_mut()?;
+        Some(CellsMut {
+            iter: lb.buf.as_mut().iter_mut().enumerate(),
+            width,
+        })
+    }
+
+    /// Iterates all tiles on `layer` mutably with their `(x, y)` coordinates, allocating the
+    /// layer first if it has not been written to yet.
+    ///
+    /// Prefer [`cells_mut`](Self::cells_mut) unless an empty layer legitimately needs to exist
+    /// after this call returns; unlike that method, this one never fails, at the cost of always
+    /// allocating.
+    pub fn cells_mut_or_alloc(&mut self, layer: u8) -> CellsMut<'_> {
         let width = usize::from(self.width);
         let lb = self.layer_or_alloc(layer);
         CellsMut {
@@ -602,9 +665,8 @@ impl Grid {
     ///   layer's EGC side-table (see [`grapheme`](Self::grapheme)), capped at
     ///   8 codepoints total.
     ///
-    /// Does nothing if `(x, y)` is out of bounds, if the grapheme has zero
-    /// display width, or if a 2-column wide character would overflow the grid
-    /// (the last column needs both its own cell and a spacer).
+    /// Also does nothing if the grapheme has zero display width, or if a 2-column wide character
+    /// would overflow the grid (the last column needs both its own cell and a spacer).
     ///
     /// # Panics
     ///
@@ -1709,7 +1771,7 @@ mod tests {
     fn test_grid_cells_mut() {
         use crate::style::Style;
         let mut grid = Grid::new(2, 2);
-        for (x, y, tile) in grid.cells_mut(0) {
+        for (x, y, tile) in grid.cells_mut(0).unwrap() {
             #[allow(clippy::cast_possible_truncation)]
             let idx = (y * 2 + x) as u8;
             *tile = Tile::new(char::from(b'A' + idx), Style::default());
@@ -1718,6 +1780,28 @@ mod tests {
         assert_eq!(grid[Pos::new(1, 0)].glyph(), 'B');
         assert_eq!(grid[Pos::new(0, 1)].glyph(), 'C');
         assert_eq!(grid[Pos::new(1, 1)].glyph(), 'D');
+    }
+
+    #[test]
+    fn test_grid_cells_mut_unallocated_layer_is_none() {
+        // Mirrors `cells`: an unwritten layer is `None`, not an empty iterator, and critically
+        // it must not allocate the layer as a side effect of checking.
+        let mut grid = Grid::new(2, 2);
+        assert!(grid.cells_mut(3).is_none());
+        assert!(grid.tile(3, (0, 0)).is_none());
+    }
+
+    #[test]
+    fn test_grid_cells_mut_or_alloc_allocates_an_unwritten_layer() {
+        use crate::style::Style;
+        let mut grid = Grid::new(2, 2);
+        assert!(grid.cells_mut(2).is_none());
+        for (_, _, tile) in grid.cells_mut_or_alloc(2) {
+            *tile = Tile::new('x', Style::default());
+        }
+        // Now allocated: the non-allocating accessor finds it too.
+        assert!(grid.cells_mut(2).is_some());
+        assert_eq!(grid.tile(2, (0, 0)).unwrap().glyph(), 'x');
     }
 
     #[test]
@@ -1795,6 +1879,19 @@ mod tests {
         );
         let t: (u16, u16) = s.into();
         assert_eq!(t, (80, 25));
+    }
+
+    #[test]
+    fn test_offset_from_tuple() {
+        let o: Offset = (-3i16, 7i16).into();
+        assert_eq!(o, Offset::new(-3, 7));
+        let t: (i16, i16) = o.into();
+        assert_eq!(t, (-3, 7));
+    }
+
+    #[test]
+    fn test_offset_default_is_zero() {
+        assert_eq!(Offset::default(), Offset::new(0, 0));
     }
 
     #[test]

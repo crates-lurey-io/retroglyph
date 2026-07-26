@@ -126,8 +126,7 @@ impl WidgetsInteraction {
     fn draw<B: Backend>(&mut self, term: &mut Terminal<B>) {
         term.reset_style().fg(Color::WHITE);
         term.print(
-            1,
-            1,
+            (1, 1),
             "Tab/Shift+Tab focuses, Enter/Space or click activates, r resets, q/Escape quits.",
         );
         term.reset_style();
@@ -141,7 +140,7 @@ impl WidgetsInteraction {
         }
 
         term.reset_style().fg(Color::WHITE);
-        term.print(2, y + btn_h + 1, &format!("Count: {}", self.count));
+        term.print((2, y + btn_h + 1), &format!("Count: {}", self.count));
         term.reset_style();
     }
 }
