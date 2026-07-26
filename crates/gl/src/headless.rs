@@ -169,6 +169,12 @@ impl Frame {
         let i = ((y * self.width + x) * 4) as usize;
         (self.rgba[i], self.rgba[i + 1], self.rgba[i + 2])
     }
+
+    /// The alpha at `(x, y)` (top-left origin).
+    fn alpha(&self, x: u32, y: u32) -> u8 {
+        let i = ((y * self.width + x) * 4) as usize;
+        self.rgba[i + 3]
+    }
 }
 
 /// Renders `renderer`'s current instance array through the real pipeline into an offscreen FBO and
@@ -346,6 +352,56 @@ fn full_block_cell_is_all_foreground_blank_cell_is_all_background() {
             assert_eq!(frame.rgb(cw + x, y), GREEN, "blank pixel ({x},{y}) not bg");
         }
     }
+}
+
+/// The rendered surface is opaque everywhere: glyph coverage is a mask for the color channels, so
+/// the glyph pass must leave the destination alpha alone -- see the blend factors in
+/// `GlResources::draw_layer`. Only a cell mixing covered and uncovered texels can tell a
+/// coverage-into-alpha write apart from a correct one, since covered texels carry alpha 1 either
+/// way.
+///
+/// Native GL presents through an opaque default framebuffer, so this is invisible on the windowed
+/// desktop path; it is asserted here because this offscreen FBO is RGBA8, exactly like the WebGL2
+/// canvas the page composites.
+#[test]
+fn glyph_coverage_leaves_the_surface_opaque() {
+    let Some(ctx) = context_or_skip("glyph_coverage_leaves_the_surface_opaque") else {
+        return;
+    };
+
+    let mut r = gl_renderer(1, 1, 1);
+    paint(
+        &mut r,
+        &[(
+            Pos::new(0, 0),
+            Tile::new('A', Style::new().fg(rgb(RED)).bg(rgb(BLUE))),
+        )],
+    );
+
+    let frame = render_to_frame(&ctx, &r).expect("render");
+    let (cw, ch) = r.geometry.cell_size();
+
+    let mut covered = 0_u32;
+    let mut uncovered = 0_u32;
+    for y in 0..ch {
+        for x in 0..cw {
+            match frame.rgb(x, y) {
+                RED => covered += 1,
+                BLUE => uncovered += 1,
+                other => panic!("pixel ({x},{y}) is neither fg nor bg: {other:?}"),
+            }
+            assert_eq!(
+                frame.alpha(x, y),
+                0xFF,
+                "pixel ({x},{y}) is transparent; the glyph pass wrote coverage into alpha"
+            );
+        }
+    }
+    assert!(covered > 0, "'A' rendered no foreground texels");
+    assert!(
+        uncovered > 0,
+        "'A' covered the whole cell; pick a sparser glyph"
+    );
 }
 
 #[test]

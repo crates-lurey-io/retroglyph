@@ -358,15 +358,19 @@ impl GlResources {
             gl.draw_elements_instanced(glow::TRIANGLES, 6, glow::UNSIGNED_SHORT, 0, cell_count);
 
             // Pass 2: offset glyphs, coverage as alpha, blended over the backgrounds (discarded
-            // where FLAG_HAS_GLYPH is clear, i.e. an empty cell). Keep the framebuffer's alpha
-            // channel solid (`ONE`/`ZERO`) so a composited surface stays opaque regardless of
-            // glyph coverage.
+            // where FLAG_HAS_GLYPH is clear, i.e. an empty cell). The alpha factors are
+            // `ZERO`/`ONE` -- `A = src.a * 0 + dst.a * 1`, so the destination alpha survives
+            // untouched. Coverage must drive the color channels only: it is a glyph mask, not a
+            // surface transparency, and letting it reach the alpha channel would punch every
+            // non-glyph texel down to alpha 0. A WebGL2 canvas is composited by the page (winit
+            // requests `alpha: true`), so those texels would then show the document background
+            // instead of the cell background painted in pass 1.
             gl.enable(glow::BLEND);
             gl.blend_func_separate(
                 glow::SRC_ALPHA,
                 glow::ONE_MINUS_SRC_ALPHA,
-                glow::ONE,
                 glow::ZERO,
+                glow::ONE,
             );
             gl.uniform_1_i32(self.u_draw_glyph.as_ref(), 1);
             gl.draw_elements_instanced(glow::TRIANGLES, 6, glow::UNSIGNED_SHORT, 0, cell_count);
