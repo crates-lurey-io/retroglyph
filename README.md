@@ -165,8 +165,8 @@ gets it for free.
   graphical backend and as readable ASCII on a terminal, with no capability check:
 
   ```rust,ignore
-  term.put_span(x, y, &["[==]",
-                        "|__|"]);
+  term.put_span((x, y), &["[==]",
+                         "|__|"]);
   ```
 
   `Grid::span_owner` resolves any cell of a span to its anchor in O(1), so hit-testing multi-cell
@@ -249,7 +249,7 @@ fn main() -> std::io::Result<()> {
     let mut term = Terminal::new(Crossterm::new()?);
     loop {
         term.fg(Color::GREEN);
-        term.put(5, 5, '@');
+        term.put((5, 5), '@');
         term.present()?;
 
         if let Some(Event::Key(k)) = term.poll(std::time::Duration::from_secs(1)) {

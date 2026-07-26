@@ -26,7 +26,7 @@ use retroglyph_terminal_wasm::TerminalWasm;
 
 let backend = TerminalWasm::new(80, 24);
 let mut term = Terminal::new(backend);
-term.put(0, 0, '@');
+term.put((0, 0), '@');
 term.present().unwrap();
 let ansi = term.backend_mut().take_output();
 assert!(ansi.contains('@'));

@@ -70,24 +70,24 @@ impl LayoutGrid {
     fn draw_pane<B: Backend>(term: &mut Terminal<B>, rect: Rect, label: &str) {
         let (l, t, r, b) = (rect.left(), rect.top(), rect.right() - 1, rect.bottom() - 1);
 
-        term.put(l, t, '┌');
-        term.put(r, t, '┐');
-        term.put(l, b, '└');
-        term.put(r, b, '┘');
+        term.put((l, t), '┌');
+        term.put((r, t), '┐');
+        term.put((l, b), '└');
+        term.put((r, b), '┘');
         for x in (l + 1)..r {
-            term.put(x, t, '─');
-            term.put(x, b, '─');
+            term.put((x, t), '─');
+            term.put((x, b), '─');
         }
         for y in (t + 1)..b {
-            term.put(l, y, '│');
-            term.put(r, y, '│');
+            term.put((l, y), '│');
+            term.put((r, y), '│');
         }
 
         let interior_width = rect.width().saturating_sub(2);
         let label_len = u16::try_from(label.len()).expect("pane labels are short ASCII strings");
         let label_x = l + 1 + interior_width.saturating_sub(label_len) / 2;
         let label_y = t + rect.height() / 2;
-        term.print(label_x, label_y, label);
+        term.print((label_x, label_y), label);
     }
 
     /// Draws this frame (the driver presents).

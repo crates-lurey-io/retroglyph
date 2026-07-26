@@ -2439,7 +2439,7 @@ impl Overworld {
             if let (Some(hex), Some(selected)) = (grid, selected) {
                 style = grid_overlay(style, hex, world_pos, selected);
             }
-            term.put_styled(screen_pos.x, screen_pos.y, glyph, style);
+            term.put_styled((screen_pos.x, screen_pos.y), glyph, style);
         }
 
         // The reticle: a soft highlight on the cell the sidebar/status line is describing, so
@@ -2447,7 +2447,7 @@ impl Overworld {
         if let Some(screen) = self.camera.world_to_screen(self.cam_center) {
             let (glyph, style) = self.world.render_cell(self.cam_center, self.time);
             let highlighted = style.bg(Color::lerp(style.background(), RETICLE, 0.55));
-            term.put_styled(screen.x, screen.y, glyph, highlighted);
+            term.put_styled((screen.x, screen.y), glyph, highlighted);
         }
     }
 
@@ -2480,8 +2480,7 @@ impl Overworld {
                     .world
                     .minimap_swatch(col, row, area.width(), area.height());
                 term.put_styled(
-                    area.left() + col,
-                    area.top() + row,
+                    (area.left() + col, area.top() + row),
                     glyph.ch,
                     Style::new().fg(glyph.fg).bg(glyph.bg),
                 );
@@ -2513,15 +2512,15 @@ impl Overworld {
         );
         let style = Style::new().fg(ACCENT);
         for x in x0..=x1 {
-            term.put_styled(area.left() + x, area.top() + y0, '─', style);
-            term.put_styled(area.left() + x, area.top() + y1, '─', style);
+            term.put_styled((area.left() + x, area.top() + y0), '─', style);
+            term.put_styled((area.left() + x, area.top() + y1), '─', style);
         }
         for y in y0..=y1 {
-            term.put_styled(area.left() + x0, area.top() + y, '│', style);
-            term.put_styled(area.left() + x1, area.top() + y, '│', style);
+            term.put_styled((area.left() + x0, area.top() + y), '│', style);
+            term.put_styled((area.left() + x1, area.top() + y), '│', style);
         }
         for (x, y) in [(x0, y0), (x1, y0), (x0, y1), (x1, y1)] {
-            term.put_styled(area.left() + x, area.top() + y, '+', style);
+            term.put_styled((area.left() + x, area.top() + y), '+', style);
         }
         term.reset_style();
     }
@@ -2547,8 +2546,7 @@ impl Overworld {
 
         term.reset_style().fg(DIM_FG).bg(PANEL_BG);
         term.print(
-            inner.left(),
-            y,
+            (inner.left(), y),
             truncate(
                 &format!(
                     "seed {}  ({}, {})",
@@ -2563,26 +2561,24 @@ impl Overworld {
 
         let region = self.world.region_at(self.cam_center).to_owned();
         term.reset_style().fg(FG).bg(PANEL_BG);
-        term.print(inner.left(), y, truncate(&region, w));
+        term.print((inner.left(), y), truncate(&region, w));
         y += 1;
 
         let label = self.world.label_at(self.cam_center);
         term.reset_style().fg(ACCENT).bg(PANEL_BG);
-        term.print(inner.left(), y, truncate(&label, w));
+        term.print((inner.left(), y), truncate(&label, w));
         y += 1;
 
         let elev_pct = self.world.elevation_pct(self.cam_center);
         term.reset_style().fg(DIM_FG).bg(PANEL_BG);
         term.print(
-            inner.left(),
-            y,
+            (inner.left(), y),
             truncate(&format!("elevation ~{elev_pct:.0}%"), w),
         );
         y += 1;
 
         term.print(
-            inner.left(),
-            y,
+            (inner.left(), y),
             truncate(&format!("view: {} [T]", self.view.label()), w),
         );
         y += 2;
@@ -2593,23 +2589,22 @@ impl Overworld {
         }
 
         term.reset_style().fg(FG).bg(PANEL_BG);
-        term.print(inner.left(), y, truncate("Legend", w));
+        term.print((inner.left(), y), truncate("Legend", w));
         y += 1;
         for (glyph, color, name) in World::legend() {
             if y >= inner.bottom() - 2 {
                 break;
             }
             term.reset_style().fg(color).bg(PANEL_BG);
-            term.put(inner.left(), y, glyph);
+            term.put((inner.left(), y), glyph);
             term.reset_style().fg(DIM_FG).bg(PANEL_BG);
-            term.print(inner.left() + 2, y, truncate(name, w.saturating_sub(2)));
+            term.print((inner.left() + 2, y), truncate(name, w.saturating_sub(2)));
             y += 1;
         }
 
         term.reset_style().fg(DIM_FG).bg(PANEL_BG);
         term.print(
-            inner.left(),
-            inner.bottom() - 1,
+            (inner.left(), inner.bottom() - 1),
             truncate("drag pans, T tiles, R reroll", w),
         );
         term.reset_style();
@@ -2620,7 +2615,7 @@ impl Overworld {
             return;
         }
         for x in area.left()..area.right() {
-            term.put_styled(x, area.top(), ' ', Style::new().bg(PANEL_BG));
+            term.put_styled((x, area.top()), ' ', Style::new().bg(PANEL_BG));
         }
         let label = self.world.label_at(self.cam_center);
         let text = format!(
@@ -2629,8 +2624,7 @@ impl Overworld {
         );
         term.reset_style().fg(FG).bg(PANEL_BG);
         term.print(
-            area.left() + 1,
-            area.top(),
+            (area.left() + 1, area.top()),
             truncate(&text, area.width_usize().saturating_sub(1)),
         );
         term.reset_style();
@@ -2648,7 +2642,7 @@ impl Overworld {
         self.last_minimap_rect = None;
         for y in 0..size.height {
             for x in 0..size.width {
-                term.put_styled(x, y, ' ', Style::new().bg(BG));
+                term.put_styled((x, y), ' ', Style::new().bg(BG));
             }
         }
 
@@ -2713,7 +2707,7 @@ fn put_clipped<B: Backend>(
         && y >= i32::from(area.top())
         && y < i32::from(area.bottom())
     {
-        term.put_styled(x as u16, y as u16, glyph, style);
+        term.put_styled((x as u16, y as u16), glyph, style);
     }
 }
 

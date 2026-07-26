@@ -3454,7 +3454,7 @@ mod tests {
         // Case (a): an `app_loop` that draws but never calls `term.present()` itself must still
         // reach the backend -- that's the whole point of this driver-side automatic present.
         let mut app = recording_app(|term| {
-            term.put(0, 0, '@');
+            term.put((0, 0), '@');
         });
         app.handle_redraw_requested();
         let term = app.terminal.as_ref().unwrap();
@@ -3475,7 +3475,7 @@ mod tests {
         // `previous` (see `Terminal::present`'s doc comment for why that second call would
         // otherwise erase the frame).
         let mut app = recording_app(|term| {
-            term.put(0, 0, '@');
+            term.put((0, 0), '@');
             term.present().expect("app_loop's own present");
         });
         app.handle_redraw_requested();
@@ -3540,7 +3540,7 @@ mod tests {
         // `handle_redraw_requested` must reset `skip_present` before running `app_loop`, so a
         // stale `true` from a previous `Idle` frame can't suppress the next frame's present.
         let mut app = recording_app(|term| {
-            term.put(0, 0, '@');
+            term.put((0, 0), '@');
         });
         app.skip_present.set(true); // Stale value, as if left over from a prior Idle frame.
         app.handle_redraw_requested();

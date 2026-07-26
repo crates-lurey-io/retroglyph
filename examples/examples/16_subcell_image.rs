@@ -110,7 +110,7 @@ impl SubcellImage {
                 let bottom = sample(cx, cy * 2 + 1, pixel_w, pixel_h);
                 let glyph = quantize_half_block([top, bottom]);
                 let style = Style::new().fg(glyph.fg).bg(glyph.bg);
-                term.put_styled(PANEL_X[0] + cx, PANEL_Y + cy, glyph.ch, style);
+                term.put_styled((PANEL_X[0] + cx, PANEL_Y + cy), glyph.ch, style);
             }
         }
     }
@@ -130,7 +130,7 @@ impl SubcellImage {
                 ];
                 let glyph = quantize_quadrant(pixels);
                 let style = Style::new().fg(glyph.fg).bg(glyph.bg);
-                term.put_styled(PANEL_X[1] + cx, PANEL_Y + cy, glyph.ch, style);
+                term.put_styled((PANEL_X[1] + cx, PANEL_Y + cy), glyph.ch, style);
             }
         }
     }
@@ -152,7 +152,7 @@ impl SubcellImage {
                 ];
                 let glyph = quantize_sextant(pixels);
                 let style = Style::new().fg(glyph.fg).bg(glyph.bg);
-                term.put_styled(PANEL_X[2] + cx, PANEL_Y + cy, glyph.ch, style);
+                term.put_styled((PANEL_X[2] + cx, PANEL_Y + cy), glyph.ch, style);
             }
         }
     }
@@ -160,18 +160,17 @@ impl SubcellImage {
     /// Draws this frame (the driver presents).
     #[allow(clippy::unused_self)]
     fn draw<B: Backend>(&self, term: &mut Terminal<B>) {
-        term.print(1, 1, "16: Subcell blit -- one scene, 3 fidelities");
-        term.print(PANEL_X[0], 2, "Half-block");
-        term.print(PANEL_X[1], 2, "Quadrant");
-        term.print(PANEL_X[2], 2, "Sextant");
+        term.print((1, 1), "16: Subcell blit -- one scene, 3 fidelities");
+        term.print((PANEL_X[0], 2), "Half-block");
+        term.print((PANEL_X[1], 2), "Quadrant");
+        term.print((PANEL_X[2], 2), "Sextant");
 
         Self::draw_half_block(term);
         Self::draw_quadrant(term);
         Self::draw_sextant(term);
 
         term.print(
-            1,
-            PANEL_Y + PANEL_H + 1,
+            (1, PANEL_Y + PANEL_H + 1),
             "No image file above -- generated on the fly. Software backend's \
              built-in font is CP437-only, so quadrant/sextant show as solid \
              colored blocks there; crossterm renders the real glyphs.",

@@ -28,7 +28,7 @@ let renderer = GlBackendBuilder::new()
 let config = WindowConfig::fit(&renderer, "Hello, GL", None);
 run_windowed(config, renderer, move |term| {
     term.clear();
-    term.print(0, 0, "Hello from retroglyph-gl!");
+    term.print((0, 0), "Hello from retroglyph-gl!");
     true
 })
 .expect("event loop failed");

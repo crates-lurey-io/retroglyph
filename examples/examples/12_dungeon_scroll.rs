@@ -182,7 +182,7 @@ impl DungeonScroll {
     }
 
     fn draw<B: Backend>(&self, term: &mut Terminal<B>) {
-        term.print(1, 0, "Dungeon scroll -- arrows move, q/Escape quits");
+        term.print((1, 0), "Dungeon scroll -- arrows move, q/Escape quits");
 
         let viewport = self.camera.viewport();
         term.grid_mut().blit(
@@ -197,7 +197,7 @@ impl DungeonScroll {
             term.reset_style()
                 .fg(Color::Ansi(AnsiColor::BrightCyan))
                 .bg(Color::Default);
-            term.put(screen.x, screen.y, '@');
+            term.put((screen.x, screen.y), '@');
             term.reset_style();
         }
     }

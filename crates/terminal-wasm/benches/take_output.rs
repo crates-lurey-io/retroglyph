@@ -31,7 +31,7 @@ fn baseline(cols: u16, rows: u16) -> Terminal<TerminalWasm> {
     let mut term = Terminal::new(backend);
     for y in 0..rows {
         for x in 0..cols {
-            term.put(x, y, ' ');
+            term.put((x, y), ' ');
         }
     }
     term.present()
@@ -46,7 +46,7 @@ fn full_repaint_pending(cols: u16, rows: u16) -> Terminal<TerminalWasm> {
     let mut term = baseline(cols, rows);
     for y in 0..rows {
         for x in 0..cols {
-            term.put(x, y, 'X');
+            term.put((x, y), 'X');
         }
     }
     term.present()
@@ -69,7 +69,7 @@ fn sparse_diff_pending(cols: u16, rows: u16, pct: u32) -> Terminal<TerminalWasm>
     for _ in 0..changes {
         let x = rng.u16(0..cols);
         let y = rng.u16(0..rows);
-        term.put(x, y, 'X');
+        term.put((x, y), 'X');
     }
     term.present()
         .expect("in-memory TerminalWasm backend never fails to present");

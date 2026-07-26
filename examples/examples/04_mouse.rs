@@ -79,32 +79,32 @@ impl Mouse {
 
     /// Draws this frame (the driver presents).
     fn draw<B: Backend>(&self, term: &mut Terminal<B>) {
-        term.print(1, 1, "Move the mouse and click; q / Escape quits.");
+        term.print((1, 1), "Move the mouse and click; q / Escape quits.");
 
         if self.motion_unavailable() {
-            term.print(1, 3, "motion unavailable on this backend");
-            term.print(1, 4, "(click tracking still works below)");
+            term.print((1, 3), "motion unavailable on this backend");
+            term.print((1, 4), "(click tracking still works below)");
         } else if !self.motion_seen {
-            term.print(1, 3, "waiting for mouse motion...");
+            term.print((1, 3), "waiting for mouse motion...");
         }
 
-        term.print(1, 6, "Position:");
+        term.print((1, 6), "Position:");
         let pos_text = self.position.map_or_else(
             || "(none yet)".to_owned(),
             |p| format!("({}, {})", p.x, p.y),
         );
-        term.print(11, 6, &pos_text);
+        term.print((11, 6), &pos_text);
 
-        term.print(1, 7, "Last event:");
+        term.print((1, 7), "Last event:");
         let event_text = if self.last_event.is_empty() {
             "(none yet)"
         } else {
             &self.last_event
         };
-        term.print(13, 7, event_text);
+        term.print((13, 7), event_text);
 
-        term.print(1, 8, "Clicks:");
-        term.print(9, 8, &self.click_count.to_string());
+        term.print((1, 8), "Clicks:");
+        term.print((9, 8), &self.click_count.to_string());
     }
 }
 

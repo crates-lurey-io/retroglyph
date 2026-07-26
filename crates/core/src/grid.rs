@@ -195,6 +195,40 @@ pub type Pos = ixy::Pos<u16>;
 /// Rectangle in the grid.
 pub type Rect = ixy::Rect<u16>;
 
+/// A sub-cell pixel offset `(dx, dy)`, distinct from [`Pos`] so a caller can't transpose a
+/// position and an offset in a call like [`Terminal::put_offset`](crate::terminal::Terminal::put_offset).
+///
+/// Visual only: an offset shifts where a glyph is painted within its cell on backends that
+/// support sub-cell placement (e.g. `retroglyph-software`); it never changes which cell a glyph
+/// occupies, and cell-mode backends (e.g. `retroglyph-crossterm`) ignore it entirely.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct Offset {
+    /// Horizontal pixel offset.
+    pub dx: i16,
+    /// Vertical pixel offset.
+    pub dy: i16,
+}
+
+impl Offset {
+    /// Creates a new offset from `(dx, dy)`.
+    #[must_use]
+    pub const fn new(dx: i16, dy: i16) -> Self {
+        Self { dx, dy }
+    }
+}
+
+impl From<(i16, i16)> for Offset {
+    fn from((dx, dy): (i16, i16)) -> Self {
+        Self { dx, dy }
+    }
+}
+
+impl From<Offset> for (i16, i16) {
+    fn from(offset: Offset) -> Self {
+        (offset.dx, offset.dy)
+    }
+}
+
 impl From<(u16, u16)> for Size {
     fn from((width, height): (u16, u16)) -> Self {
         Self { width, height }
@@ -1795,6 +1829,19 @@ mod tests {
         );
         let t: (u16, u16) = s.into();
         assert_eq!(t, (80, 25));
+    }
+
+    #[test]
+    fn test_offset_from_tuple() {
+        let o: Offset = (-3i16, 7i16).into();
+        assert_eq!(o, Offset::new(-3, 7));
+        let t: (i16, i16) = o.into();
+        assert_eq!(t, (-3, 7));
+    }
+
+    #[test]
+    fn test_offset_default_is_zero() {
+        assert_eq!(Offset::default(), Offset::new(0, 0));
     }
 
     #[test]
