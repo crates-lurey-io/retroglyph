@@ -139,6 +139,9 @@ layout(location = 1) in uvec2 a_cell;   // grid (col, row) of the sprite's top-l
 layout(location = 2) in uint  a_layer;  // sprite atlas array layer
 layout(location = 3) in uvec2 a_sprite; // sprite size in unscaled pixels (may exceed a cell)
 layout(location = 4) in ivec2 a_offset; // sub-cell (dx, dy) in unscaled pixels
+layout(location = 5) in vec4  a_mask;   // sheet stage: rgb = multiply factor, a = 1 when active
+layout(location = 6) in vec4  a_tint;   // cell stage: rgb = colour, a = mix amount
+layout(location = 7) in uint  a_tint_op; // 0 none, 1 multiply, 2 mix
 
 uniform vec2 u_screen;     // surface size in physical pixels
 uniform vec2 u_cell;       // cell size in physical pixels (glyph size * scale)
@@ -148,6 +151,9 @@ uniform vec2 u_sprite_tex; // sprite atlas layer size in texels (the max sprite 
 out vec2 v_uv;
 flat out uint v_layer;
 flat out vec2 v_uv_scale; // maps the [0,1] quad onto the sprite's sub-rect within its layer
+flat out vec4 v_mask;
+flat out vec4 v_tint;
+flat out uint v_tint_op;
 
 void main() {
     vec2 scale = u_cell / u_glyph;
@@ -158,12 +164,25 @@ void main() {
     v_uv = a_corner;
     v_layer = a_layer;
     v_uv_scale = vec2(a_sprite) / u_sprite_tex;
+    v_mask = a_mask;
+    v_tint = a_tint;
+    v_tint_op = a_tint_op;
 }
 ";
 
 /// Fragment shader body for the RGBA sprite pass. Samples the sprite's sub-rect (top-left of its
-/// layer, the rest of the layer is transparent padding) and outputs straight-alpha RGBA; the caller
-/// enables source-over blending, so a sprite's transparent pixels let the layers below show through.
+/// layer, the rest of the layer is transparent padding), recolours it, and outputs straight-alpha
+/// RGBA; the caller enables source-over blending, so a sprite's transparent pixels let the layers
+/// below show through.
+///
+/// The recolour is two stages in the order `retroglyph_window::sprite_cache::SpriteTint::apply`
+/// defines: the sheet's own treatment (a multiply by the cell's foreground for a mask sheet),
+/// then the cell's tint. Alpha is never touched by either, so which pixels are opaque, and
+/// therefore the blending above, is identical tinted or not.
+///
+/// This mirrors `SpriteTint::apply` rather than reimplementing it: the CPU rasteriser calls that
+/// function directly, and a snapshot test renders the same sprite through both to keep them
+/// honest (retroglyph#537).
 #[cfg(feature = "tilesets")]
 const FRAGMENT_SPRITE_BODY: &str = r"
 uniform highp sampler2DArray u_sprites;
@@ -171,12 +190,28 @@ uniform highp sampler2DArray u_sprites;
 in vec2 v_uv;
 flat in uint v_layer;
 flat in vec2 v_uv_scale;
+flat in vec4 v_mask;
+flat in vec4 v_tint;
+flat in uint v_tint_op;
 
 out vec4 frag;
 
 void main() {
     vec2 uv = v_uv * v_uv_scale;
-    frag = texture(u_sprites, vec3(uv, float(v_layer)));
+    vec4 src = texture(u_sprites, vec3(uv, float(v_layer)));
+
+    // Stage 1: the sheet's own treatment. `v_mask.a` is 1.0 for a mask sheet and 0.0 for art,
+    // so an art sheet multiplies by white and costs one mix.
+    vec3 rgb = src.rgb * mix(vec3(1.0), v_mask.rgb, v_mask.a);
+
+    // Stage 2: the cell's tint.
+    if (v_tint_op == 1u) {
+        rgb = rgb * v_tint.rgb;
+    } else if (v_tint_op == 2u) {
+        rgb = mix(rgb, v_tint.rgb, v_tint.a);
+    }
+
+    frag = vec4(rgb, src.a);
 }
 ";
 

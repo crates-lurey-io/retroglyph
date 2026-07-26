@@ -224,14 +224,24 @@ pub struct SpriteTint {
 }
 
 impl SpriteTint {
-    /// Resolves what `sprite` should look like in a cell with foreground `fg` and tint `tint`.
+    /// Resolves what a sprite from a `sheet`-coloured tileset should look like in a cell with
+    /// foreground `fg` and tint `tint`.
+    ///
+    /// Takes the sheet's declaration rather than the [`Sprite`] itself, because that is all the
+    /// answer depends on: the GPU backend resolves against an atlas slot and never holds the
+    /// pixels at draw time.
     ///
     /// `default_fg` is the palette fallback for [`Color::Default`], which has no reading as a
     /// modulation value on its own (see [`Tint`]); [`palette::DEFAULT_FG`](crate::palette) is
     /// what both backends pass.
     #[must_use]
-    pub const fn resolve(sprite: &Sprite, fg: Color, tint: Tint, default_fg: (u8, u8, u8)) -> Self {
-        let mask = match sprite.color {
+    pub const fn resolve(
+        sheet: SheetColor,
+        fg: Color,
+        tint: Tint,
+        default_fg: (u8, u8, u8),
+    ) -> Self {
+        let mask = match sheet {
             SheetColor::Art => Tint::None,
             SheetColor::Mask => {
                 let (r, g, b) = fg.resolve_rgb(default_fg);
@@ -550,7 +560,7 @@ mod tests {
     #[test]
     fn art_sheet_ignores_fg_entirely() {
         let art = sprite_with(SheetColor::Art);
-        let resolved = SpriteTint::resolve(&art, Color::RED, Tint::None, DEFAULT_FG);
+        let resolved = SpriteTint::resolve(art.color, Color::RED, Tint::None, DEFAULT_FG);
 
         assert_eq!(resolved.mask, Tint::None);
         assert!(resolved.is_identity());
@@ -562,7 +572,7 @@ mod tests {
     fn mask_sheet_takes_its_colour_from_fg() {
         let mask = sprite_with(SheetColor::Mask);
         let (r, g, b) = Color::RED.resolve_rgb(DEFAULT_FG);
-        let resolved = SpriteTint::resolve(&mask, Color::RED, Tint::None, DEFAULT_FG);
+        let resolved = SpriteTint::resolve(mask.color, Color::RED, Tint::None, DEFAULT_FG);
 
         assert_eq!(resolved.mask, Tint::multiply(r, g, b));
         // A white mask pixel takes the foreground exactly.
@@ -573,7 +583,7 @@ mod tests {
     fn mask_sheet_shades_a_grey_pixel_proportionally() {
         let mask = sprite_with(SheetColor::Mask);
         let resolved = SpriteTint::resolve(
-            &mask,
+            mask.color,
             Color::Rgb {
                 r: 200,
                 g: 100,
@@ -592,7 +602,7 @@ mod tests {
     #[test]
     fn mask_sheet_resolves_default_fg_through_the_palette() {
         let mask = sprite_with(SheetColor::Mask);
-        let resolved = SpriteTint::resolve(&mask, Color::Default, Tint::None, DEFAULT_FG);
+        let resolved = SpriteTint::resolve(mask.color, Color::Default, Tint::None, DEFAULT_FG);
 
         // `Color::Default` has no reading as a modulation value on its own, so it goes through
         // the palette rather than being treated as white.
@@ -602,8 +612,12 @@ mod tests {
     #[test]
     fn the_cell_tint_applies_on_top_of_an_art_sheet() {
         let art = sprite_with(SheetColor::Art);
-        let resolved =
-            SpriteTint::resolve(&art, Color::RED, Tint::multiply(128, 128, 128), DEFAULT_FG);
+        let resolved = SpriteTint::resolve(
+            art.color,
+            Color::RED,
+            Tint::multiply(128, 128, 128),
+            DEFAULT_FG,
+        );
 
         assert!(!resolved.is_identity());
         assert_eq!(resolved.apply((200, 180, 60)), (100, 90, 30));
@@ -613,8 +627,12 @@ mod tests {
     fn both_stages_apply_in_order_on_a_mask_sheet() {
         let mask = sprite_with(SheetColor::Mask);
         let flash = Tint::mix(255, 255, 255, 255);
-        let resolved =
-            SpriteTint::resolve(&mask, Color::Rgb { r: 255, g: 0, b: 0 }, flash, DEFAULT_FG);
+        let resolved = SpriteTint::resolve(
+            mask.color,
+            Color::Rgb { r: 255, g: 0, b: 0 },
+            flash,
+            DEFAULT_FG,
+        );
 
         // Mask first would give red; the flash then takes it all the way to white. The other
         // order would give red, which is why the order is part of the contract.
@@ -624,10 +642,14 @@ mod tests {
     #[test]
     fn an_untouched_art_cell_is_identity_so_renderers_can_skip_the_work() {
         let art = sprite_with(SheetColor::Art);
-        assert!(SpriteTint::resolve(&art, Color::Default, Tint::None, DEFAULT_FG).is_identity());
+        assert!(
+            SpriteTint::resolve(art.color, Color::Default, Tint::None, DEFAULT_FG).is_identity()
+        );
         // A mask sheet is never identity: its colour always comes from somewhere.
         let mask = sprite_with(SheetColor::Mask);
-        assert!(!SpriteTint::resolve(&mask, Color::Default, Tint::None, DEFAULT_FG).is_identity());
+        assert!(
+            !SpriteTint::resolve(mask.color, Color::Default, Tint::None, DEFAULT_FG).is_identity()
+        );
     }
 
     // `warn_sprite_needs_span` reports only in a build that compiles diagnostics in, so every

@@ -562,7 +562,7 @@ const fn bytemuck_u16(data: &[u16]) -> &[u8] {
 
 /// Byte stride of one [`SpriteInstance`], as GL wants it (`i32`).
 #[cfg(feature = "tilesets")]
-const SPRITE_STRIDE: i32 = 16;
+pub(crate) const SPRITE_STRIDE: i32 = 24;
 
 /// Initial sprite-instance buffer capacity, in sprites. `draw` grows it when a layer needs more.
 #[cfg(feature = "tilesets")]
@@ -632,6 +632,16 @@ impl SpriteGpu {
             gl.vertex_attrib_pointer_i32(4, 2, glow::SHORT, SPRITE_STRIDE, 10);
             gl.enable_vertex_attrib_array(4);
             gl.vertex_attrib_divisor(4, 1);
+            // a_mask (4 u8 @14, normalized), a_tint (4 u8 @18, normalized), a_tint_op (1 u16 @22).
+            gl.vertex_attrib_pointer_f32(5, 4, glow::UNSIGNED_BYTE, true, SPRITE_STRIDE, 14);
+            gl.enable_vertex_attrib_array(5);
+            gl.vertex_attrib_divisor(5, 1);
+            gl.vertex_attrib_pointer_f32(6, 4, glow::UNSIGNED_BYTE, true, SPRITE_STRIDE, 18);
+            gl.enable_vertex_attrib_array(6);
+            gl.vertex_attrib_divisor(6, 1);
+            gl.vertex_attrib_pointer_i32(7, 1, glow::UNSIGNED_SHORT, SPRITE_STRIDE, 22);
+            gl.enable_vertex_attrib_array(7);
+            gl.vertex_attrib_divisor(7, 1);
             gl.bind_vertex_array(None);
 
             let atlas = upload_sprite_atlas(gl, set)?;
