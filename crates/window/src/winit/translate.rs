@@ -9,7 +9,7 @@ use retroglyph_core::grid::Pos;
 
 /// Maps a winit logical [`Key`](winit::keyboard::Key) plus modifiers to a [`KeyCode`].
 ///
-/// Split out from [`translate_key`] so this -- the actual key-identity logic -- is unit-testable
+/// Split out from [`translate_key`] so this (the actual key-identity logic) is unit-testable
 /// directly: `winit::event::KeyEvent` (the type `translate_key` takes) has a private
 /// platform-specific field in the pinned winit version, so it can't be constructed in test code,
 /// but `winit::keyboard::Key`/`NamedKey` are plain public enums a test can build directly.
@@ -31,7 +31,7 @@ fn key_code_from_logical(key: &winit::keyboard::Key, modifiers: KeyModifiers) ->
         Key::Named(NamedKey::Tab) => KeyCode::Tab,
         // winit 0.30 still reports the spacebar as `NamedKey::Space` (a later winit version is
         // expected to switch to `Key::Character(" ")` per the UI Events spec, but that hasn't
-        // shipped in the pinned 0.30 line) -- without this arm, every Space press silently falls
+        // shipped in the pinned 0.30 line): without this arm, every Space press silently falls
         // through to `_ => return None` and is dropped.
         Key::Named(NamedKey::Space) => KeyCode::Char(' '),
         Key::Named(NamedKey::ArrowUp) => KeyCode::Up,
@@ -61,14 +61,14 @@ fn key_code_from_logical(key: &winit::keyboard::Key, modifiers: KeyModifiers) ->
 
 /// Translates a winit [`Ime`](winit::event::Ime) event into an [`Event`].
 ///
-/// Only [`Ime::Commit`](winit::event::Ime) carries a complete, atomic block of text -- the same
+/// Only [`Ime::Commit`](winit::event::Ime) carries a complete, atomic block of text: the same
 /// shape as the crossterm backend's `Event::Paste` (see its handling of `crossterm::event::Event
 /// ::Paste` in `crates/crossterm/src/lib.rs`), so a commit is mapped to [`Event::Paste`] rather
 /// than adding a new `Event` variant: `Event` is `#[non_exhaustive]`, so a new variant would be
 /// backward-compatible for exhaustive-matching consumers (per issue #267), but there is no need
 /// for a new one when an existing variant already fits the shape of the data. `Ime::Enabled`,
 /// `Ime::Preedit` (in-progress composition, not yet committed), and `Ime::Disabled` have no
-/// existing-`Event` equivalent and are intentionally dropped -- an app that wants live preedit
+/// existing-`Event` equivalent and are intentionally dropped: an app that wants live preedit
 /// rendering is out of scope for this landable-sized change (see issue #296). An empty commit
 /// (`Ime::Commit(String::new())`) is also dropped: winit can send an empty commit as part of
 /// clearing composition state, and forwarding it would deliver a spurious empty paste.
@@ -110,7 +110,7 @@ pub const fn translate_key_location(location: winit::keyboard::KeyLocation) -> K
 /// Converts a raw f64 cursor position to a [`PhysicalPos`].
 ///
 /// `f64.max(0.0) as u32`: the `.max(0.0)` clamp makes sign loss intentional. Truncation of the
-/// fractional part is also intentional -- pixel coordinates are always integers.
+/// fractional part is also intentional: pixel coordinates are always integers.
 #[must_use]
 #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
 pub const fn physical_pos_from(x: f64, y: f64) -> PhysicalPos {
@@ -123,7 +123,7 @@ pub const fn physical_pos_from(x: f64, y: f64) -> PhysicalPos {
 /// Converts physical pixel coordinates to a grid cell [`Pos`].
 ///
 /// Clamps to `u16::MAX` so out-of-bounds cursor positions (negative or extremely large) don't
-/// panic -- the game loop is responsible for bounds-checking against the terminal size.
+/// panic: the game loop is responsible for bounds-checking against the terminal size.
 #[must_use]
 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 pub fn pixel_to_cell(px_x: f64, px_y: f64, cell_w: u32, cell_h: u32) -> Pos {
@@ -190,7 +190,7 @@ mod tests {
     #[test]
     fn space_maps_to_char_space() {
         // Regression test: winit 0.30 reports the spacebar as `NamedKey::Space`, not
-        // `Key::Character(" ")` -- without a dedicated arm this silently mapped to `None` and
+        // `Key::Character(" ")`: without a dedicated arm this silently mapped to `None` and
         // every Space press was dropped.
         let key = winit::keyboard::Key::Named(winit::keyboard::NamedKey::Space);
         assert_eq!(
@@ -201,7 +201,7 @@ mod tests {
 
     #[test]
     fn shift_tab_normalizes_to_backtab() {
-        // Regression test: winit has no distinct "Shift+Tab" key value -- it reports `Tab` with
+        // Regression test: winit has no distinct "Shift+Tab" key value: it reports `Tab` with
         // the shift modifier set instead, which has to be normalized to `KeyCode::BackTab` here
         // (matching the crossterm backend's legacy `ESC[Z` -> `BackTab` behavior) or every
         // consumer of the event stream sees indistinguishable plain-Tab and Shift+Tab presses.
@@ -264,7 +264,7 @@ mod tests {
 
     #[test]
     fn ime_preedit_produces_no_event() {
-        // In-progress composition text (not yet committed) has no `Event` equivalent -- only a
+        // In-progress composition text (not yet committed) has no `Event` equivalent; only a
         // completed `Commit` is forwarded.
         let ime = winit::event::Ime::Preedit("nihon".to_string(), Some((0, 5)));
         assert_eq!(translate_ime(ime), None);

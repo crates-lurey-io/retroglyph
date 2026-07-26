@@ -22,10 +22,10 @@ fn web_viewport_css_size() -> Option<(f64, f64)> {
     Some((width, height))
 }
 
-/// The browser viewport size in true physical (device) pixels -- i.e. at the real, uncapped
+/// The browser viewport size in true physical (device) pixels: i.e. at the real, uncapped
 /// `devicePixelRatio`.
 ///
-/// Pass this to winit's `with_inner_size`/`request_inner_size` (and *only* this -- never
+/// Pass this to winit's `with_inner_size`/`request_inner_size` (and *only* this, never
 /// [`web_viewport_surface_physical_size`]). winit's wasm backend always converts the
 /// `PhysicalSize` it's given back to a logical (CSS pixel) size by dividing by the real
 /// `devicePixelRatio` to set the canvas's inline style; handing it anything scaled by a
@@ -43,7 +43,7 @@ pub(super) fn web_viewport_layout_physical_size() -> Option<winit::dpi::Physical
 }
 
 /// Ratio to convert a pointer position winit reports (always in *real*, uncapped-DPR physical
-/// pixels -- see `to_physical(super::scale_factor)` in `winit`'s wasm `pointer.rs`) into the
+/// pixels: see `to_physical(super::scale_factor)` in `winit`'s wasm `pointer.rs`) into the
 /// raster-backing-store pixel space that
 /// [`Presenter::cell_size`](crate::presenter::Presenter::cell_size), and therefore
 /// [`pixel_to_cell`], are expressed in.
@@ -112,7 +112,7 @@ pub(super) fn install_viewport_resize_listener(window: &Arc<Window>) {
         .is_ok()
     {
         // Leaked deliberately: the listener, and the closure it wraps, need
-        // to live as long as the page does -- there's no window-teardown
+        // to live as long as the page does: there's no window-teardown
         // hook on wasm to drop it from.
         closure.forget();
     }

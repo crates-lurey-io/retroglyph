@@ -9,7 +9,7 @@
 //! rasterizer) and `retroglyph-gl` (GPU atlas) build on, so their text output stays
 //! pixel-identical. It lives here (rather than in a standalone crate) because both consumers
 //! already depend on `retroglyph-window` for [`Presenter`](crate::Presenter), and it needs none of
-//! winit -- it is available with `default-features = false`. Enable the `default-font` feature for
+//! winit: it is available with `default-features = false`. Enable the `default-font` feature for
 //! the embedded Unscii 16 font ([`unscii16::FONT`]); leave it off to supply your own via
 //! [`BitmapFont::new`].
 //!
@@ -44,7 +44,7 @@ pub struct BitmapFont {
     /// or `None` to use the built-in CP437 mapping.
     ///
     /// A font built with [`with_charset`](Self::with_charset) declares its own repertoire
-    /// instead of being routed through the CP437 table every other font shares -- this is what
+    /// instead of being routed through the CP437 table every other font shares: this is what
     /// lets a [`FallbackFontChain`] extend coverage past CP437 (e.g. quadrants, sextants,
     /// braille) rather than every font in the chain answering the identical CP437 question.
     charset: Option<&'static [(char, u8)]>,
@@ -117,8 +117,8 @@ impl BitmapFont {
     /// Iterates the set ("on") pixels of glyph `index` as `(x, y)` coordinates, row-major from the
     /// top: `x` in `0..glyph_width`, `y` in `0..glyph_height`.
     ///
-    /// This is the single place the 1-bit format's MSB-first bit order lives -- pixel `x` of a row
-    /// is bit `glyph_width - 1 - x` of that row's byte -- so consumers (the GL atlas builder, the
+    /// This is the single place the 1-bit format's MSB-first bit order lives (pixel `x` of a row
+    /// is bit `glyph_width - 1 - x` of that row's byte), so consumers (the GL atlas builder, the
     /// software rasterizer's glyph blit) decode through it instead of each re-deriving the shift
     /// and risking disagreement. It is also the one seam that has to change for wider-than-8px
     /// glyphs (multi-byte rows, #164): today a row is a single byte (`glyph_width <= 8`), so its
@@ -244,15 +244,15 @@ impl ResolvedGlyph {
 /// missing from the primary doesn't automatically become a solid block if some other font
 /// in the chain actually has it.
 ///
-/// This type ships **no bundled fallback font data** -- every font in the chain, primary
+/// This type ships **no bundled fallback font data**: every font in the chain, primary
 /// or fallback, is supplied by the caller. Bundling a ready-to-use Latin-1/Extended
 /// fallback font is a natural follow-up now that this mechanism exists, but is out of
 /// scope here.
 ///
 /// A fallback font only extends the chain's repertoire if it declares coverage for the
 /// characters it is meant to answer for. A [`BitmapFont::new`] font is always resolved through
-/// the built-in CP437 table, so stacking several CP437 fonts in a chain never reaches past CP437
-/// -- every font in the chain answers the identical question. To actually extend coverage (e.g.
+/// the built-in CP437 table, so stacking several CP437 fonts in a chain never reaches past CP437:
+/// every font in the chain answers the identical question. To actually extend coverage (e.g.
 /// quadrants, sextants, braille, none of which CP437 has a mapping for), build the fallback font
 /// with [`BitmapFont::with_charset`] and an explicit table covering those codepoints. On the
 /// bundled pixel backends (`retroglyph-software`, `retroglyph-gl`), this means
@@ -799,7 +799,7 @@ mod tests {
 
     /// The four codepoints patched into `unscii16`'s `DATA` (see that module's doc comment)
     /// must actually be reachable through the char-to-glyph path, not just present at their
-    /// raw glyph index -- otherwise they're invisible to anything that goes through
+    /// raw glyph index: otherwise they're invisible to anything that goes through
     /// `BitmapFont::char_to_index`/`Surface::print`, which is every real caller.
     #[test]
     fn patched_glyphs_are_reachable_by_char() {
