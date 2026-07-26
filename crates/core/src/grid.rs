@@ -798,7 +798,9 @@ impl Grid {
     /// cells rather than one.
     ///
     /// `rows` holds one string per row of the footprint, so the span is `rows.len()` cells tall
-    /// and `rows[0]`'s character count wide, and every row must be that same width. The first
+    /// and `rows[0]`'s character count wide, and every row must be that same width. Any
+    /// `AsRef<str>` row works, so a literal footprint (`&["[==]", "|__|"]`) and a computed one
+    /// (`&Vec<String>`) both pass without a borrowing pass over the rows. The first
     /// character goes to the **anchor** cell at `(x, y)` with [`TileFlags::SPAN_ANCHOR`]; each
     /// remaining character goes to its own cell with [`TileFlags::SPAN_COVERED`]. `style` applies
     /// to every cell.
@@ -821,6 +823,10 @@ impl Grid {
     /// Any existing span or wide character the footprint would partially overwrite is cleared
     /// first, in full, as [`write_grapheme`](Self::write_grapheme) does for its own 1- or 2-cell
     /// write.
+    ///
+    /// For the common sprite case (one runtime-chosen anchor glyph, blanks in every covered
+    /// cell), [`write_span_uniform`](Self::write_span_uniform) says the same thing without
+    /// building the rows.
     ///
     /// # Returns
     ///
@@ -847,25 +853,114 @@ impl Grid {
     /// # run().unwrap();
     /// # }
     /// ```
-    pub fn write_span(
+    pub fn write_span<S: AsRef<str>>(
         &mut self,
         layer: u8,
         x: u16,
         y: u16,
-        rows: &[&str],
+        rows: &[S],
         style: Style,
     ) -> Option<()> {
-        let cols = rows.first()?.chars().count();
-        if cols == 0 || rows.iter().any(|r| r.chars().count() != cols) {
+        let cols = rows.first()?.as_ref().chars().count();
+        if cols == 0 || rows.iter().any(|r| r.as_ref().chars().count() != cols) {
             return None;
         }
         // `Tile` stores a span's dimensions in one byte each (see `Tile::span_w`), so a span
         // wider or taller than 255 cells is not representable.
-        let footprint_w = u8::try_from(cols).ok()?;
-        let footprint_h = u8::try_from(rows.len()).ok()?;
+        let footprint = (u8::try_from(cols).ok()?, u8::try_from(rows.len()).ok()?);
+
+        self.write_span_cells(
+            layer,
+            Pos::new(x, y),
+            footprint,
+            style,
+            rows.iter().map(|row| row.as_ref().chars()),
+        )
+    }
+
+    /// Writes a `size` multi-cell span at `pos` on `layer`: `anchor` in the anchor cell, `fill`
+    /// in every other cell of the footprint.
+    ///
+    /// The uniform case of [`write_span`](Self::write_span), and the shape a sheet-driven
+    /// renderer usually wants: one sprite, chosen at runtime, with the cells it covers blanked so
+    /// nothing shows through its transparent pixels. Spelling that as an array of blank rows
+    /// carries no information and, for a computed anchor, has to be allocated per draw.
+    ///
+    /// `fill` is what a *cell* backend prints for the covered cells (a pixel backend skips them
+    /// and draws the sprite instead), so it is the span's text fallback: `' '` blanks them, and a
+    /// visible character keeps the footprint legible in a terminal. See
+    /// [`write_span`](Self::write_span) for the full write semantics.
+    ///
+    /// # Returns
+    ///
+    /// `Some(())` once the whole span is written, or `None` having written nothing at all when
+    /// either axis of `size` is `0` or exceeds 255 cells, or the footprint would not fit in the
+    /// grid at `pos`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # fn main() {
+    /// # fn run() -> Option<()> {
+    /// use retroglyph_core::{Grid, Pos, Style};
+    ///
+    /// let mut grid = Grid::new(8, 4);
+    /// let anchor = '\u{E000}'; // chosen at runtime from a tilesheet
+    /// grid.write_span_uniform(0, (1, 1), (2, 2), anchor, ' ', Style::default())?;
+    ///
+    /// assert_eq!(grid.tile(0, Pos::new(1, 1))?.span(), (2, 2));
+    /// assert_eq!(grid.span_owner(0, 2, 2), Some(Pos::new(1, 1)));
+    /// # Some(())
+    /// # }
+    /// # run().unwrap();
+    /// # }
+    /// ```
+    pub fn write_span_uniform(
+        &mut self,
+        layer: u8,
+        pos: impl Into<Pos>,
+        size: impl Into<Size>,
+        anchor: char,
+        fill: char,
+        style: Style,
+    ) -> Option<()> {
+        let size = size.into();
+        // `Tile` stores a span's dimensions in one byte each (see `Tile::span_w`), so a span
+        // wider or taller than 255 cells is not representable.
+        let footprint = (
+            u8::try_from(size.width).ok()?,
+            u8::try_from(size.height).ok()?,
+        );
+        if footprint.0 == 0 || footprint.1 == 0 {
+            return None;
+        }
+
+        let rows = (0..footprint.1).map(move |row| {
+            (0..footprint.0).map(move |col| if (row, col) == (0, 0) { anchor } else { fill })
+        });
+        self.write_span_cells(layer, pos.into(), footprint, style, rows)
+    }
+
+    /// Writes a `footprint` (`w`, `h`) span at `pos` on `layer`, taking its glyphs row by row.
+    ///
+    /// The shared body of [`write_span`](Self::write_span) and
+    /// [`write_span_uniform`](Self::write_span_uniform): both have already narrowed the footprint
+    /// to a `u8` per axis, so all that is left is the grid-fit check and the write itself.
+    /// `rows` must yield exactly `footprint.1` rows of exactly `footprint.0` glyphs.
+    fn write_span_cells<R: Iterator<Item = char>>(
+        &mut self,
+        layer: u8,
+        pos: Pos,
+        footprint: (u8, u8),
+        style: Style,
+        rows: impl Iterator<Item = R>,
+    ) -> Option<()> {
+        let (footprint_w, footprint_h) = footprint;
+        let (x, y) = (pos.x, pos.y);
 
         let grid_w = usize::from(self.width);
-        if usize::from(x) + cols > grid_w || usize::from(y) + rows.len() > usize::from(self.height)
+        if usize::from(x) + usize::from(footprint_w) > grid_w
+            || usize::from(y) + usize::from(footprint_h) > usize::from(self.height)
         {
             return None;
         }
@@ -881,8 +976,8 @@ impl Grid {
 
         self.has_spans = true;
         let lb = self.layer_or_alloc(layer);
-        for (row, line) in rows.iter().enumerate() {
-            for (col, ch) in line.chars().enumerate() {
+        for (row, line) in rows.enumerate() {
+            for (col, ch) in line.enumerate() {
                 let idx = (usize::from(y) + row) * grid_w + usize::from(x) + col;
                 let mut tile = Tile::new(ch, style);
                 if row == 0 && col == 0 {
@@ -2689,7 +2784,10 @@ mod tests {
     #[test]
     fn write_span_rejects_malformed_input_without_writing() {
         let mut grid = Grid::new(4, 4);
-        assert_eq!(grid.write_span(0, 0, 0, &[], Style::default()), None);
+        assert_eq!(
+            grid.write_span(0, 0, 0, &[] as &[&str], Style::default()),
+            None
+        );
         assert_eq!(grid.write_span(0, 0, 0, &[""], Style::default()), None);
         // Ragged rows.
         assert_eq!(
@@ -2703,6 +2801,95 @@ mod tests {
             None
         );
         // Nothing was written by any of the above.
+        for y in 0..4 {
+            for x in 0..4 {
+                assert!(
+                    grid[Pos::new(x, y)].is_empty(),
+                    "({x}, {y}) should be untouched"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn write_span_takes_any_as_ref_str_row() {
+        let mut grid = Grid::new(4, 4);
+        // A footprint computed at runtime: owned rows, no borrowing pass over them.
+        let rows: Vec<String> = (0..2)
+            .map(|row| {
+                (0..2)
+                    .map(|col| if (row, col) == (0, 0) { 'C' } else { ' ' })
+                    .collect()
+            })
+            .collect();
+
+        assert_eq!(grid.write_span(0, 0, 0, &rows, Style::default()), Some(()));
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), 'C');
+        assert_eq!(grid[Pos::new(0, 0)].span(), (2, 2));
+    }
+
+    #[test]
+    fn write_span_uniform_writes_the_anchor_once_and_fills_the_rest() {
+        let mut grid = Grid::new(4, 4);
+        assert_eq!(
+            grid.write_span_uniform(0, (1, 1), (2, 2), 'C', '.', Style::default()),
+            Some(())
+        );
+
+        assert_eq!(grid[Pos::new(1, 1)].glyph(), 'C');
+        assert_eq!(grid[Pos::new(1, 1)].span(), (2, 2));
+        for (x, y) in [(2, 1), (1, 2), (2, 2)] {
+            assert_eq!(grid[Pos::new(x, y)].glyph(), '.', "({x}, {y})");
+            assert_eq!(grid.span_owner(0, x, y), Some(Pos::new(1, 1)));
+        }
+    }
+
+    #[test]
+    fn write_span_uniform_matches_the_equivalent_write_span() {
+        let mut uniform = Grid::new(4, 4);
+        uniform
+            .write_span_uniform(0, (0, 0), (3, 2), 'C', ' ', Style::default())
+            .unwrap();
+
+        let mut rows = Grid::new(4, 4);
+        rows.write_span(0, 0, 0, &["C  ", "   "], Style::default())
+            .unwrap();
+
+        for y in 0..4 {
+            for x in 0..4 {
+                assert_eq!(
+                    uniform[Pos::new(x, y)],
+                    rows[Pos::new(x, y)],
+                    "({x}, {y}) differs"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn write_span_uniform_rejects_a_degenerate_or_oversized_footprint() {
+        let mut grid = Grid::new(4, 4);
+        let style = Style::default();
+
+        assert_eq!(
+            grid.write_span_uniform(0, (0, 0), (0, 2), 'C', ' ', style),
+            None
+        );
+        assert_eq!(
+            grid.write_span_uniform(0, (0, 0), (2, 0), 'C', ' ', style),
+            None
+        );
+        // A span's dimensions are one byte each.
+        assert_eq!(
+            grid.write_span_uniform(0, (0, 0), (256, 1), 'C', ' ', style),
+            None
+        );
+        // Does not fit the grid at this origin.
+        assert_eq!(
+            grid.write_span_uniform(0, (3, 0), (2, 1), 'C', ' ', style),
+            None
+        );
+
         for y in 0..4 {
             for x in 0..4 {
                 assert!(

@@ -187,8 +187,11 @@ mod tests {
         use crate::Terminal;
         let backend = Headless::new(6, 3);
         let mut term = Terminal::new(backend);
-        term.draw(|s| s.put_span((1, 0), &["C=", "[]"], crate::style::Style::default()))
-            .expect("draw failed");
+        term.draw(|s| {
+            s.put_span((1, 0), &["C=", "[]"], crate::style::Style::default())
+                .expect("span write");
+        })
+        .expect("draw failed");
         let view = term.backend().format_view();
         insta::assert_snapshot!(view, @r#"
         ·C=···

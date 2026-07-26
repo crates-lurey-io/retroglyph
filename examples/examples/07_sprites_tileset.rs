@@ -174,7 +174,9 @@ impl SpritesTileset {
             if self.chest_shut {
                 // One call for all eight cells: the anchor glyph drives the sprite lookup on pixel
                 // backends, and the whole block is readable ASCII art on cell backends.
-                layer_items.put_span((CHEST.x, CHEST.y), &CHEST_ART, style);
+                layer_items
+                    .put_span((CHEST.x, CHEST.y), &CHEST_ART, style)
+                    .expect("the chest art fits inside the room");
             }
         }
         // Drop surface here so we can access term.grid()
