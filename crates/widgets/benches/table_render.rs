@@ -17,8 +17,8 @@
 #![allow(missing_docs, clippy::cast_possible_truncation)]
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use retroglyph_core::{Headless, Rect, Terminal};
-use retroglyph_widgets::{ListState, StatefulWidget, Table};
+use retroglyph_core::{Grid, Rect};
+use retroglyph_widgets::{ListState, StatefulWidget, Surface, Table};
 use std::hint::black_box;
 
 /// Builds `rows x cols` of short, deterministic cell text -- long enough that some cells need
@@ -48,7 +48,7 @@ fn bench_size(c: &mut Criterion, rows_n: usize, cols_n: usize) {
     let widths: Vec<u16> = (0..cols_n).map(|_| 12u16).collect();
     let area = Rect::new(0, 0, (cols_n * 13) as u16, 24);
 
-    let mut term = Terminal::new(Headless::new(area.width(), area.height()));
+    let mut grid = Grid::new(area.width(), area.height());
     let mut state = ListState::new();
     state.select(Some(rows_n / 2));
     state.ensure_visible(area.height_usize().saturating_sub(1));
@@ -56,7 +56,7 @@ fn bench_size(c: &mut Criterion, rows_n: usize, cols_n: usize) {
     c.bench_function(&format!("table_render/{rows_n}x{cols_n}"), |b| {
         b.iter(|| {
             let table = Table::new(black_box(&headers), black_box(&widths), black_box(&data));
-            table.render(area, &mut term, &mut state);
+            table.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
         });
     });
 }

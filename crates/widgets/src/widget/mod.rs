@@ -14,7 +14,9 @@
 //! `egc` feature) additionally implements [`Measure`], since it needs
 //! `retroglyph_core::layout::TextLayout`'s grapheme-aware word-wrap to
 //! report a height before rendering.
-use retroglyph_core::{Backend, Rect, Terminal};
+use retroglyph_core::Rect;
+
+use crate::Surface;
 
 mod bar;
 mod box_border;
@@ -56,23 +58,24 @@ pub use table::Table;
 pub use tabs::Tabs;
 pub use text::Text;
 
-/// A type that draws itself into a terminal area, without retaining any
+/// A type that draws itself into a [`Surface`], without retaining any
 /// state — the minimal shape shared by every widget-like consumer.
-pub trait Widget<B: Backend> {
-    /// Draw this widget into `area`.
-    fn render(self, area: Rect, term: &mut Terminal<B>);
+pub trait Widget {
+    /// Draw this widget into `area`, via `surface` scoped to it.
+    fn render(&self, area: Rect, surface: &mut Surface<'_>);
 }
 
 /// Like [`Widget`], but for widgets that read (and may update) externally
 /// owned state — a selection index, a scroll offset — that outlives a
 /// single render call. See [`crate::ListState`].
-pub trait StatefulWidget<B: Backend> {
+pub trait StatefulWidget {
     /// The externally owned state this widget reads and/or updates while
     /// rendering.
     type State;
 
-    /// Draw this widget into `area`, using and/or updating `state`.
-    fn render(self, area: Rect, term: &mut Terminal<B>, state: &mut Self::State);
+    /// Draw this widget into `area`, via `surface` scoped to it, using
+    /// and/or updating `state`.
+    fn render(&self, area: Rect, surface: &mut Surface<'_>, state: &mut Self::State);
 }
 
 /// A widget that can report the height it needs for a given width, before
@@ -80,7 +83,7 @@ pub trait StatefulWidget<B: Backend> {
 ///
 /// Lets a caller size a pane to fit content (e.g. a wrapped `Paragraph`,
 /// behind the `egc` feature) instead of guessing a fixed height up front.
-/// Independent of any [`Backend`]: sizing is pure content math, not drawing.
+/// Sizing is pure content math, not drawing.
 pub trait Measure {
     /// The number of rows this widget would need to render at `width`
     /// columns.

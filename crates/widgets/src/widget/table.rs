@@ -1,9 +1,10 @@
 //! [`Table`]: a fixed-column, scrollable table with a highlighted row.
-use retroglyph_core::{Backend, Color, Rect, Style, Terminal};
+use retroglyph_core::{Color, Rect, Style};
 
 use super::StatefulWidget;
 use super::window::visible_window;
 use crate::ListState;
+use crate::Surface;
 use crate::Theme;
 use crate::draw::fill_rect;
 use crate::text::truncate as truncate_to_cols;
@@ -35,8 +36,8 @@ use crate::text::truncate as truncate_to_cols;
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::{Headless, Rect, Terminal};
-/// use retroglyph_widgets::{ListState, StatefulWidget, Table};
+/// use retroglyph_core::{Grid, Rect};
+/// use retroglyph_widgets::{ListState, StatefulWidget, Surface, Table};
 ///
 /// let headers = ["Name", "Score"];
 /// let widths = [10u16, 6];
@@ -45,8 +46,13 @@ use crate::text::truncate as truncate_to_cols;
 /// let mut state = ListState::new();
 /// state.select(Some(1));
 ///
-/// let mut term = Terminal::new(Headless::new(20, 3));
-/// Table::new(&headers, &widths, &rows).render(Rect::new(0, 0, 20, 3), &mut term, &mut state);
+/// let area = Rect::new(0, 0, 20, 3);
+/// let mut grid = Grid::new(20, 3);
+/// Table::new(&headers, &widths, &rows).render(
+///     area,
+///     &mut Surface::new(&mut grid, area, 0),
+///     &mut state,
+/// );
 /// ```
 #[derive(Clone, Copy, Debug)]
 pub struct Table<'a> {
@@ -152,15 +158,15 @@ impl<'a> Table<'a> {
     }
 }
 
-impl<B: Backend> StatefulWidget<B> for Table<'_> {
+impl StatefulWidget for Table<'_> {
     type State = ListState;
 
-    fn render(self, area: Rect, term: &mut Terminal<B>, state: &mut Self::State) {
+    fn render(&self, area: Rect, surface: &mut Surface<'_>, state: &mut Self::State) {
         if area.width() == 0 || area.height() == 0 {
             return;
         }
         draw_row(
-            term,
+            surface,
             area,
             area.top(),
             self.headers,
@@ -182,7 +188,7 @@ impl<B: Backend> StatefulWidget<B> for Table<'_> {
                 (self.row_style, None)
             };
             draw_row(
-                term,
+                surface,
                 area,
                 y,
                 row,
@@ -194,7 +200,6 @@ impl<B: Backend> StatefulWidget<B> for Table<'_> {
                 },
             );
         }
-        term.reset_style();
     }
 }
 
@@ -211,8 +216,8 @@ struct RowStyle {
 }
 
 /// Draw one table row of `column_spacing`-separated, per-column-clipped cells at row `y`.
-fn draw_row<B: Backend>(
-    term: &mut Terminal<B>,
+fn draw_row(
+    surface: &mut Surface<'_>,
     area: Rect,
     y: u16,
     cells: &[&str],
@@ -226,7 +231,7 @@ fn draw_row<B: Backend>(
     } = row_style;
     if let Some(bg) = bg {
         fill_rect(
-            term,
+            surface,
             Rect::new(area.left(), y, area.width(), 1),
             ' ',
             Style::new().bg(bg),
@@ -239,18 +244,14 @@ fn draw_row<B: Backend>(
         }
         let avail = (area.right() - x).min(w) as usize;
         let text = truncate_to_cols(cell, avail);
-        term.reset_style()
-            .fg(style.foreground())
-            .bg(style.background());
-        term.print(x, y, text);
+        surface.print(x, y, text, style);
         x = x.saturating_add(w.saturating_add(column_spacing));
     }
-    term.reset_style();
 }
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::Headless;
+    use retroglyph_core::Grid;
 
     use super::*;
 
@@ -262,14 +263,14 @@ mod tests {
         let rows: [&[&str]; 2] = [&["Alpha"], &["Bravo"]];
         let table = Table::new(&headers, &widths, &rows);
 
-        let mut term = Terminal::new(Headless::new(20, 3));
+        let mut grid = Grid::new(20, 3);
         let mut state = ListState::new();
         state.select(Some(1));
-        table.render(area, &mut term, &mut state);
+        table.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
 
         // Row 1 ("Bravo") is highlighted; row 0 ("Alpha") is not.
-        let highlighted_bg = term.grid().get(0, 2).style().background();
-        let plain_bg = term.grid().get(0, 1).style().background();
+        let highlighted_bg = grid.get(0, 2).style().background();
+        let plain_bg = grid.get(0, 1).style().background();
         assert_ne!(highlighted_bg, plain_bg);
     }
 
@@ -281,12 +282,12 @@ mod tests {
         let rows: [&[&str]; 2] = [&["Alpha"], &["Bravo"]];
         let table = Table::new(&headers, &widths, &rows);
 
-        let mut term = Terminal::new(Headless::new(20, 3));
+        let mut grid = Grid::new(20, 3);
         let mut state = ListState::new(); // nothing selected
-        table.render(area, &mut term, &mut state);
+        table.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
 
-        let row0_bg = term.grid().get(0, 1).style().background();
-        let row1_bg = term.grid().get(0, 2).style().background();
+        let row0_bg = grid.get(0, 1).style().background();
+        let row1_bg = grid.get(0, 2).style().background();
         assert_eq!(row0_bg, row1_bg);
     }
 
@@ -308,15 +309,15 @@ mod tests {
         let rows = row_refs(&rows);
         let table = Table::new(&headers, &widths, &rows);
 
-        let mut term = Terminal::new(Headless::new(20, 3));
+        let mut grid = Grid::new(20, 3);
         let mut state = ListState::new();
         state.set_offset(2); // window is [Charlie, Delta]
-        table.render(area, &mut term, &mut state);
+        table.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
 
         // Row 1 is "Charlie", row 2 is "Delta"; neither "Alpha" nor "Bravo"
         // (offset 0/1) are drawn anywhere.
-        assert_eq!(term.grid().get(0, 1).glyph(), 'C');
-        assert_eq!(term.grid().get(0, 2).glyph(), 'D');
+        assert_eq!(grid.get(0, 1).glyph(), 'C');
+        assert_eq!(grid.get(0, 2).glyph(), 'D');
     }
 
     #[test]
@@ -328,14 +329,14 @@ mod tests {
         let rows = row_refs(&rows);
         let table = Table::new(&headers, &widths, &rows);
 
-        let mut term = Terminal::new(Headless::new(20, 3));
+        let mut grid = Grid::new(20, 3);
         let mut state = ListState::new();
         state.select(Some(0)); // "Alpha"
         state.set_offset(2); // but the window starts at "Charlie"
-        table.render(area, &mut term, &mut state);
+        table.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
 
-        let row0_bg = term.grid().get(0, 1).style().background();
-        let row1_bg = term.grid().get(0, 2).style().background();
+        let row0_bg = grid.get(0, 1).style().background();
+        let row1_bg = grid.get(0, 2).style().background();
         assert_eq!(row0_bg, row1_bg); // neither visible row is highlighted
     }
 
@@ -347,16 +348,16 @@ mod tests {
         let rows: Vec<&[&str]> = vec![];
         let table = Table::new(&headers, &widths, &rows);
 
-        let mut term = Terminal::new(Headless::new(20, 2));
+        let mut grid = Grid::new(20, 2);
         let mut state = ListState::new();
-        table.render(area, &mut term, &mut state);
+        table.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
 
         let expected = Color::Rgb {
             r: 210,
             g: 210,
             b: 230,
         };
-        assert_eq!(term.grid().get(0, 0).style().foreground(), expected);
+        assert_eq!(grid.get(0, 0).style().foreground(), expected);
     }
 
     #[test]
@@ -368,11 +369,11 @@ mod tests {
         let custom = Style::new().fg(Color::RED);
         let table = Table::new(&headers, &widths, &rows).header_style(custom);
 
-        let mut term = Terminal::new(Headless::new(20, 2));
+        let mut grid = Grid::new(20, 2);
         let mut state = ListState::new();
-        table.render(area, &mut term, &mut state);
+        table.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
 
-        assert_eq!(term.grid().get(0, 0).style().foreground(), Color::RED);
+        assert_eq!(grid.get(0, 0).style().foreground(), Color::RED);
     }
 
     #[test]
@@ -384,13 +385,13 @@ mod tests {
         let custom = Style::new().fg(Color::GREEN).bg(Color::BLUE);
         let table = Table::new(&headers, &widths, &rows).selected_style(custom);
 
-        let mut term = Terminal::new(Headless::new(20, 3));
+        let mut grid = Grid::new(20, 3);
         let mut state = ListState::new();
         state.select(Some(1));
-        table.render(area, &mut term, &mut state);
+        table.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
 
-        assert_eq!(term.grid().get(0, 2).style().foreground(), Color::GREEN);
-        assert_eq!(term.grid().get(0, 2).style().background(), Color::BLUE);
+        assert_eq!(grid.get(0, 2).style().foreground(), Color::GREEN);
+        assert_eq!(grid.get(0, 2).style().background(), Color::BLUE);
     }
 
     #[test]
@@ -401,26 +402,17 @@ mod tests {
         let rows: [&[&str]; 2] = [&["Alpha"], &["Bravo"]];
         let table = Table::new(&headers, &widths, &rows).theme(Theme::DARK);
 
-        let mut term = Terminal::new(Headless::new(20, 3));
+        let mut grid = Grid::new(20, 3);
         let mut state = ListState::new();
         state.select(Some(1));
-        table.render(area, &mut term, &mut state);
+        table.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
 
-        assert_eq!(term.grid().get(0, 0).style().foreground(), Theme::DARK.fg);
-        assert_eq!(
-            term.grid().get(0, 0).style().background(),
-            Theme::DARK.panel_bg
-        );
-        assert_eq!(term.grid().get(0, 1).style().foreground(), Theme::DARK.dim);
-        assert_eq!(
-            term.grid().get(0, 1).style().background(),
-            Theme::DARK.panel_bg
-        );
-        assert_eq!(term.grid().get(0, 2).style().foreground(), Theme::DARK.bg);
-        assert_eq!(
-            term.grid().get(0, 2).style().background(),
-            Theme::DARK.accent
-        );
+        assert_eq!(grid.get(0, 0).style().foreground(), Theme::DARK.fg);
+        assert_eq!(grid.get(0, 0).style().background(), Theme::DARK.panel_bg);
+        assert_eq!(grid.get(0, 1).style().foreground(), Theme::DARK.dim);
+        assert_eq!(grid.get(0, 1).style().background(), Theme::DARK.panel_bg);
+        assert_eq!(grid.get(0, 2).style().foreground(), Theme::DARK.bg);
+        assert_eq!(grid.get(0, 2).style().background(), Theme::DARK.accent);
     }
 
     #[test]
@@ -431,14 +423,14 @@ mod tests {
         let rows: [&[&str]; 1] = [&["Alpha"]];
         let table = Table::new(&headers, &widths, &rows).theme_on(Theme::DARK, Color::Default);
 
-        let mut term = Terminal::new(Headless::new(20, 2));
+        let mut grid = Grid::new(20, 2);
         let mut state = ListState::new();
-        table.render(area, &mut term, &mut state);
+        table.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
 
-        assert_eq!(term.grid().get(0, 0).style().foreground(), Theme::DARK.fg);
-        assert_eq!(term.grid().get(0, 0).style().background(), Color::Default);
-        assert_eq!(term.grid().get(0, 1).style().foreground(), Theme::DARK.dim);
-        assert_eq!(term.grid().get(0, 1).style().background(), Color::Default);
+        assert_eq!(grid.get(0, 0).style().foreground(), Theme::DARK.fg);
+        assert_eq!(grid.get(0, 0).style().background(), Color::Default);
+        assert_eq!(grid.get(0, 1).style().foreground(), Theme::DARK.dim);
+        assert_eq!(grid.get(0, 1).style().background(), Color::Default);
     }
 
     #[test]
@@ -449,14 +441,14 @@ mod tests {
         let rows: Vec<&[&str]> = vec![];
         let table = Table::new(&headers, &widths, &rows).column_spacing(3);
 
-        let mut term = Terminal::new(Headless::new(20, 1));
+        let mut grid = Grid::new(20, 1);
         let mut state = ListState::new();
-        table.render(area, &mut term, &mut state);
+        table.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
 
         // Default spacing (1) would put "B" at column 2; spacing 3 pushes
         // it out to column 4.
-        assert_eq!(term.grid().get(0, 0).glyph(), 'A');
-        assert_eq!(term.grid().get(4, 0).glyph(), 'B');
+        assert_eq!(grid.get(0, 0).glyph(), 'A');
+        assert_eq!(grid.get(4, 0).glyph(), 'B');
     }
 
     #[test]
@@ -474,10 +466,17 @@ mod tests {
             column_spacing: 3,
         };
 
-        let mut term = Terminal::new(Headless::new(20, 1));
-        draw_row(&mut term, area, 0, &cells, &widths, row_style);
+        let mut grid = Grid::new(20, 1);
+        draw_row(
+            &mut Surface::new(&mut grid, area, 0),
+            area,
+            0,
+            &cells,
+            &widths,
+            row_style,
+        );
 
-        assert_eq!(term.grid().get(0, 0).glyph(), 'A');
+        assert_eq!(grid.get(0, 0).glyph(), 'A');
     }
 
     #[test]
@@ -489,17 +488,17 @@ mod tests {
         let rows = row_refs(&rows);
         let table = Table::new(&headers, &widths, &rows);
 
-        let mut term = Terminal::new(Headless::new(20, 3));
+        let mut grid = Grid::new(20, 3);
         let mut state = ListState::new();
         state.select(Some(3)); // "Delta", off the front of the default window
         state.ensure_visible(2);
-        table.render(area, &mut term, &mut state);
+        table.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
 
         // ensure_visible moved the window to [2, 4): "Charlie" then "Delta",
         // with "Delta" (the selection) highlighted on the last visible row.
-        assert_eq!(term.grid().get(0, 2).glyph(), 'D');
-        let highlighted_bg = term.grid().get(0, 2).style().background();
-        let plain_bg = term.grid().get(0, 1).style().background();
+        assert_eq!(grid.get(0, 2).glyph(), 'D');
+        let highlighted_bg = grid.get(0, 2).style().background();
+        let plain_bg = grid.get(0, 1).style().background();
         assert_ne!(highlighted_bg, plain_bg);
     }
 }

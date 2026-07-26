@@ -1,9 +1,10 @@
 //! [`Gauge`]: a labeled, load-colored progress bar.
 use core::fmt::Write as _;
 
-use retroglyph_core::{Backend, Color, Rect, Style, Terminal};
+use retroglyph_core::{Color, Rect, Style};
 
 use super::{Widget, bar};
+use crate::Surface;
 use crate::Theme;
 
 /// A labeled gauge: a `label`, then a bar filling `ratio` (0.0-1.0) of the
@@ -18,11 +19,12 @@ use crate::Theme;
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::{Headless, Rect, Terminal};
-/// use retroglyph_widgets::{Gauge, Widget};
+/// use retroglyph_core::{Grid, Rect};
+/// use retroglyph_widgets::{Gauge, Surface, Widget};
 ///
-/// let mut term = Terminal::new(Headless::new(20, 1));
-/// Gauge::new("CPU", 0.75).render(Rect::new(0, 0, 20, 1), &mut term);
+/// let area = Rect::new(0, 0, 20, 1);
+/// let mut grid = Grid::new(20, 1);
+/// Gauge::new("CPU", 0.75).render(area, &mut Surface::new(&mut grid, area, 0));
 /// ```
 #[derive(Clone, Copy, Debug)]
 pub struct Gauge<'a> {
@@ -79,14 +81,14 @@ impl<'a> Gauge<'a> {
     }
 }
 
-impl<B: Backend> Widget<B> for Gauge<'_> {
-    fn render(self, area: Rect, term: &mut Terminal<B>) {
+impl Widget for Gauge<'_> {
+    fn render(&self, area: Rect, surface: &mut Surface<'_>) {
         let ratio = self.ratio.clamp(0.0, 1.0);
         // "100%" is the longest possible output: 4 bytes.
         let mut pct = bar::ReadoutBuf::<4>::new();
         let _ = write!(pct, "{:>3}%", (ratio * 100.0).round() as i32);
         bar::render(
-            term,
+            surface,
             area,
             self.label,
             self.label_style,
@@ -98,18 +100,18 @@ impl<B: Backend> Widget<B> for Gauge<'_> {
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::Headless;
+    use retroglyph_core::Grid;
 
     use super::*;
 
     #[test]
     fn label_bar_and_percentage_readout() {
         let area = Rect::new(0, 0, 20, 1);
-        let mut term = Terminal::new(Headless::new(20, 1));
-        Gauge::new("H", 0.5).render(area, &mut term);
+        let mut grid = Grid::new(20, 1);
+        Gauge::new("H", 0.5).render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(term.grid().get(2, 0).glyph(), '█'); // bar starts filled
-        assert_eq!(term.grid().get(19, 0).glyph(), '%'); // "XX%"-style readout
+        assert_eq!(grid.get(2, 0).glyph(), '█'); // bar starts filled
+        assert_eq!(grid.get(19, 0).glyph(), '%'); // "XX%"-style readout
     }
 
     #[test]
@@ -117,27 +119,24 @@ mod tests {
         use retroglyph_core::Color;
 
         let area = Rect::new(0, 0, 20, 1);
-        let mut term = Terminal::new(Headless::new(20, 1));
+        let mut grid = Grid::new(20, 1);
         Gauge::new("H", 0.5)
             .label_style(Style::new().fg(Color::WHITE))
-            .render(area, &mut term);
+            .render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(term.grid().get(0, 0).style().foreground(), Color::WHITE);
+        assert_eq!(grid.get(0, 0).style().foreground(), Color::WHITE);
     }
 
     #[test]
     fn theme_maps_dim_role_onto_label_style() {
         let area = Rect::new(0, 0, 20, 1);
-        let mut term = Terminal::new(Headless::new(20, 1));
+        let mut grid = Grid::new(20, 1);
         Gauge::new("H", 0.5)
             .theme(Theme::DARK)
-            .render(area, &mut term);
+            .render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(term.grid().get(0, 0).style().foreground(), Theme::DARK.dim);
-        assert_eq!(
-            term.grid().get(0, 0).style().background(),
-            Theme::DARK.panel_bg
-        );
+        assert_eq!(grid.get(0, 0).style().foreground(), Theme::DARK.dim);
+        assert_eq!(grid.get(0, 0).style().background(), Theme::DARK.panel_bg);
     }
 
     #[test]
@@ -145,12 +144,12 @@ mod tests {
         use retroglyph_core::Color;
 
         let area = Rect::new(0, 0, 20, 1);
-        let mut term = Terminal::new(Headless::new(20, 1));
+        let mut grid = Grid::new(20, 1);
         Gauge::new("H", 0.5)
             .theme_on(Theme::DARK, Color::Default)
-            .render(area, &mut term);
+            .render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(term.grid().get(0, 0).style().foreground(), Theme::DARK.dim);
-        assert_eq!(term.grid().get(0, 0).style().background(), Color::Default);
+        assert_eq!(grid.get(0, 0).style().foreground(), Theme::DARK.dim);
+        assert_eq!(grid.get(0, 0).style().background(), Color::Default);
     }
 }

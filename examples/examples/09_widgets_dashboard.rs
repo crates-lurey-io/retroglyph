@@ -27,7 +27,7 @@ use retroglyph_core::{Backend, Frame, Rect, Style, Terminal};
 use retroglyph_examples::Example;
 use retroglyph_widgets::{
     BoxStyle, Button, Constraint, Gauge, Interaction, List, ListState, Sense, Sides, Sparkline,
-    StatefulWidget, Table, Tabs, Theme, Widget, blit_into, split_h, split_v,
+    StatefulWidget, Surface, Table, Tabs, Theme, Widget, blit_into, split_h, split_v,
 };
 
 /// Identifies the dashboard's one interactive widget for [`Interaction`]'s hit-testing and focus
@@ -159,7 +159,12 @@ impl Dashboard {
             .map(|&(name, status)| <[&str; 2]>::from((name, status)))
             .collect();
         let table_rows: Vec<&[&str]> = table_rows.iter().map(<[&str; 2]>::as_slice).collect();
-        Table::new(&headers, &widths, &table_rows).render(left, term, &mut self.table_state);
+        let term_area = term.area();
+        Table::new(&headers, &widths, &table_rows).render(
+            left,
+            &mut Surface::new(term.grid_mut(), term_area, 0),
+            &mut self.table_state,
+        );
 
         let right_rows = split_v(
             right,
@@ -175,7 +180,7 @@ impl Dashboard {
             .select(Some(self.selected_tab))
             .style(Style::new().fg(self.theme.dim))
             .selected_style(Style::new().fg(self.theme.accent).bg(self.theme.panel_bg))
-            .render(tabs_area, term);
+            .render(tabs_area, &mut Surface::new(term.grid_mut(), term_area, 0));
 
         if self.selected_tab == 0 {
             self.draw_metrics(term, panel_area);
@@ -183,7 +188,11 @@ impl Dashboard {
             List::new(&ALERTS)
                 .item_style(Style::new().fg(self.theme.fg))
                 .selected_style(Style::new().fg(self.theme.bg).bg(self.theme.accent))
-                .render(panel_area, term, &mut self.alerts_state);
+                .render(
+                    panel_area,
+                    &mut Surface::new(term.grid_mut(), term_area, 0),
+                    &mut self.alerts_state,
+                );
         }
     }
 
@@ -201,18 +210,27 @@ impl Dashboard {
                 Constraint::Fill(1),
             ],
         );
-        Gauge::new("CPU", self.cpu).render(rows[0], term);
-        Gauge::new("MEM", self.mem).render(rows[1], term);
+        let term_area = term.area();
+        Gauge::new("CPU", self.cpu)
+            .render(rows[0], &mut Surface::new(term.grid_mut(), term_area, 0));
+        Gauge::new("MEM", self.mem)
+            .render(rows[1], &mut Surface::new(term.grid_mut(), term_area, 0));
         term.reset_style().fg(self.theme.dim);
         term.print(rows[2].left(), rows[2].top(), "History:");
         term.reset_style();
-        Sparkline::new(&CPU_HISTORY).render(rows[3], term);
+        Sparkline::new(&CPU_HISTORY)
+            .render(rows[3], &mut Surface::new(term.grid_mut(), term_area, 0));
 
         let legend = BoxStyle::new(Style::new().fg(self.theme.fg).bg(self.theme.panel_bg))
             .padding(Sides::symmetric(0, 1))
             .border(true)
             .render("Legend\nOK / WARN / DOWN");
-        blit_into(term, &legend, rows[4].left(), rows[4].top());
+        blit_into(
+            &mut Surface::new(term.grid_mut(), term_area, 0),
+            &legend,
+            rows[4].left(),
+            rows[4].top(),
+        );
 
         self.draw_ping_button(term, Rect::new(rows[4].left(), rows[4].top() + 5, 8, 1));
     }
@@ -225,12 +243,13 @@ impl Dashboard {
         let response = self
             .interaction
             .interact(rect, DashId::PingButton, Sense::click());
+        let term_area = term.area();
         Button::new("Ping", response)
             .style(Style::new().fg(self.theme.fg).bg(self.theme.panel_bg))
             .hovered_style(Style::new().fg(self.theme.fg).bg(self.theme.hover_bg))
             .pressed_style(Style::new().fg(self.theme.fg).bg(self.theme.press_bg))
             .focused_style(Style::new().fg(self.theme.accent).bg(self.theme.panel_bg))
-            .render(rect, term);
+            .render(rect, &mut Surface::new(term.grid_mut(), term_area, 0));
         if response.clicked() {
             self.pings += 1;
         }

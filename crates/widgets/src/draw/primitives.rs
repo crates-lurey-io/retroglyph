@@ -1,10 +1,10 @@
 //! [`fill_rect`], plus the box-drawing codepoints shared by
 //! [`widget::BoxBorder`](crate::widget::BoxBorder) and [`style::BoxStyle`](crate::style::BoxStyle).
 
-use retroglyph_core::Backend;
 use retroglyph_core::Rect;
 use retroglyph_core::Style;
-use retroglyph_core::Terminal;
+
+use crate::Surface;
 
 // ── Box-drawing codepoints (single-line) ─────────────────────────────────────
 
@@ -33,36 +33,34 @@ pub(crate) const V: char = '│'; // vertical bar
 /// function rather than a widget: there's no configuration to build up
 /// beyond the two arguments already here, and it's a building block other
 /// widgets (`Panel`, `Table`, `Scrollbar`) call directly.
-pub fn fill_rect<B: Backend>(term: &mut Terminal<B>, rect: Rect, ch: char, style: Style) {
-    term.reset_style()
-        .fg(style.foreground())
-        .bg(style.background());
-    for y in rect.top()..rect.bottom() {
-        for x in rect.left()..rect.right() {
-            term.put(x, y, ch);
-        }
-    }
-    term.reset_style();
+pub fn fill_rect(surface: &mut Surface<'_>, rect: Rect, ch: char, style: Style) {
+    surface.fill_rect(rect, ch, style);
 }
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::Headless;
+    use retroglyph_core::Grid;
 
     use super::*;
 
     #[test]
     fn fill_rect_overwrites_the_whole_rectangle() {
-        let area = Rect::new(1, 1, 4, 2);
-        let mut term = Terminal::new(Headless::new(6, 4));
-        fill_rect(&mut term, area, '#', Style::new());
+        let area = Rect::new(0, 0, 6, 4);
+        let rect = Rect::new(1, 1, 4, 2);
+        let mut grid = Grid::new(6, 4);
+        fill_rect(
+            &mut Surface::new(&mut grid, area, 0),
+            rect,
+            '#',
+            Style::new(),
+        );
 
         for y in 1..3 {
             for x in 1..5 {
-                assert_eq!(term.grid().get(x, y).glyph(), '#');
+                assert_eq!(grid.get(x, y).glyph(), '#');
             }
         }
         // Untouched outside the rect.
-        assert_eq!(term.grid().get(0, 0).glyph(), ' ');
+        assert_eq!(grid.get(0, 0).glyph(), ' ');
     }
 }

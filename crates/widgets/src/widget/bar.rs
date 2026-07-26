@@ -19,10 +19,11 @@
 
 use core::fmt;
 
-use retroglyph_core::{Backend, Color, Rect, Style, Terminal};
+use retroglyph_core::{Color, Rect, Style};
 use unicode_width::UnicodeWidthStr;
 
 use super::{Meter, Text, Widget};
+use crate::Surface;
 
 /// A fixed-capacity, stack-allocated [`fmt::Write`] sink for a widget's short trailing
 /// `readout` text (a `"87%"` percentage for [`super::Gauge`], a `"45/100"` current/max pair for
@@ -80,8 +81,8 @@ pub(super) fn default_label_style() -> Style {
     })
 }
 
-pub(super) fn render<B: Backend>(
-    term: &mut Terminal<B>,
+pub(super) fn render(
+    surface: &mut Surface<'_>,
     area: Rect,
     label: &str,
     label_style: Style,
@@ -91,9 +92,9 @@ pub(super) fn render<B: Backend>(
     if area.width() < 4 {
         return;
     }
-    let y = area.top();
     let ratio = ratio.clamp(0.0, 1.0);
     let color = Meter::new(ratio).color();
+    let y = area.top();
 
     // Layout: "<label> [########----]  <readout>"
     let label_w = label.width().min(area.width_usize());
@@ -101,7 +102,9 @@ pub(super) fn render<B: Backend>(
     let bar_w = area.width_usize().saturating_sub(reserved);
 
     let label_area = Rect::new(area.left(), y, label_w as u16, 1);
-    Text::new(label).style(label_style).render(label_area, term);
+    Text::new(label)
+        .style(label_style)
+        .render(label_area, surface);
     let mut x = area.left() + label_w as u16 + 1; // gap after label
 
     let filled = (ratio * bar_w as f32).round() as usize;
@@ -117,7 +120,7 @@ pub(super) fn render<B: Backend>(
         } else {
             ('░', empty_style)
         };
-        term.put_styled(x, y, ch, style);
+        surface.put(x, y, ch, style);
         x += 1;
     }
 
@@ -125,17 +128,17 @@ pub(super) fn render<B: Backend>(
     let readout_area = Rect::new(x, y, area.right().saturating_sub(x), 1);
     Text::new(readout)
         .style(Style::new().fg(color))
-        .render(readout_area, term);
-    term.reset_style();
+        .render(readout_area, surface);
 }
 
 #[cfg(test)]
 mod tests {
     use core::fmt::Write as _;
 
-    use retroglyph_core::Headless;
+    use retroglyph_core::Grid;
 
     use super::*;
+    use crate::Surface;
 
     #[test]
     fn readout_buf_formats_without_allocating() {
@@ -160,11 +163,18 @@ mod tests {
         // `label_w` (the pre-fix bug) would reserve 3 columns for it and
         // push the bar's start one column later than it should be.
         let area = Rect::new(0, 0, 20, 1);
-        let mut term = Terminal::new(Headless::new(20, 1));
-        render(&mut term, area, "あ", default_label_style(), 0.5, "");
+        let mut grid = Grid::new(20, 1);
+        render(
+            &mut Surface::new(&mut grid, area, 0),
+            area,
+            "あ",
+            default_label_style(),
+            0.5,
+            "",
+        );
 
         // Bar starts right after the 2-column-wide label plus a 1-column
         // gap, i.e. at column 3, not column 4.
-        assert_eq!(term.grid().get(3, 0).glyph(), '█');
+        assert_eq!(grid.get(3, 0).glyph(), '█');
     }
 }

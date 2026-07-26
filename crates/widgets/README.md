@@ -9,9 +9,10 @@ Immediate-mode drawing helpers for [retroglyph](https://github.com/crates-lurey-
 borders, filled panels, gauges, tables, lists, tab strips, buttons, sparklines, and a small
 constraint-based layout splitter (`split_h`/`split_v` with ratatui-style
 `Fixed`/`Percent`/`Fill`/`Min`/`Max` constraints), plus hover/click/drag/focus interaction tracking.
-Every widget is a builder struct that draws itself into a `Terminal` and retains no state of its
-own; depends only on [`retroglyph-core`](https://crates.io/crates/retroglyph-core), so games that
-draw manually never pull it in.
+Every widget is a builder struct that draws itself into a `Surface` (an area-relative view over a
+`Grid`) and retains no state of its own; depends only on
+[`retroglyph-core`](https://crates.io/crates/retroglyph-core), so games that draw manually never
+pull it in.
 
 `Theme` (`Theme::DARK`/`Theme::LIGHT`, or a caller-built palette) is a set of named color roles --
 every widget with a style knob has a matching `.theme(Theme)` builder method that maps those roles
@@ -27,12 +28,12 @@ retroglyph-widgets = "0.1"
 ```
 
 ```rust
-use retroglyph_core::{Rect, Terminal, backend::Headless};
-use retroglyph_widgets::{Gauge, Widget};
+use retroglyph_core::{Grid, Rect};
+use retroglyph_widgets::{Gauge, Surface, Widget};
 
-let mut term = Terminal::new(Headless::new(20, 1));
-Gauge::new("HP", 0.75).render(Rect::new(0, 0, 20, 1), &mut term);
-term.present().unwrap();
+let area = Rect::new(0, 0, 20, 1);
+let mut grid = Grid::new(20, 1);
+Gauge::new("HP", 0.75).render(area, &mut Surface::new(&mut grid, area, 0));
 ```
 
 See [docs.rs](https://docs.rs/retroglyph-widgets) for the full API, or the

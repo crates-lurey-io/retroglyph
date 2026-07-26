@@ -1,7 +1,8 @@
 //! [`BoxBorder`]: a single-line box border.
-use retroglyph_core::{Backend, Color, Rect, Style, Terminal};
+use retroglyph_core::{Color, Rect, Style};
 
 use super::Widget;
+use crate::Surface;
 use crate::Theme;
 use crate::draw::{BL, BR, H, TL, TR, V};
 
@@ -14,11 +15,12 @@ use crate::draw::{BL, BR, H, TL, TR, V};
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::{Headless, Rect, Terminal};
-/// use retroglyph_widgets::{BoxBorder, Widget};
+/// use retroglyph_core::{Grid, Rect};
+/// use retroglyph_widgets::{BoxBorder, Surface, Widget};
 ///
-/// let mut term = Terminal::new(Headless::new(10, 4));
-/// BoxBorder::new().render(Rect::new(0, 0, 10, 4), &mut term);
+/// let area = Rect::new(0, 0, 10, 4);
+/// let mut grid = Grid::new(10, 4);
+/// BoxBorder::new().render(area, &mut Surface::new(&mut grid, area, 0));
 /// ```
 #[derive(Clone, Copy, Debug, Default)]
 pub struct BoxBorder {
@@ -68,8 +70,8 @@ impl BoxBorder {
     }
 }
 
-impl<B: Backend> Widget<B> for BoxBorder {
-    fn render(self, area: Rect, term: &mut Terminal<B>) {
+impl Widget for BoxBorder {
+    fn render(&self, area: Rect, surface: &mut Surface<'_>) {
         if area.width() < 2 || area.height() < 2 {
             return;
         }
@@ -79,92 +81,79 @@ impl<B: Backend> Widget<B> for BoxBorder {
         let x1 = area.right().saturating_sub(1);
         let y1 = area.bottom().saturating_sub(1);
 
-        term.reset_style()
-            .fg(self.style.foreground())
-            .bg(self.style.background());
-
         // Corners
-        term.put(x0, y0, TL);
-        term.put(x1, y0, TR);
-        term.put(x0, y1, BL);
-        term.put(x1, y1, BR);
+        surface.put(x0, y0, TL, self.style);
+        surface.put(x1, y0, TR, self.style);
+        surface.put(x0, y1, BL, self.style);
+        surface.put(x1, y1, BR, self.style);
 
         // Horizontal edges
         for x in (x0 + 1)..x1 {
-            term.put(x, y0, H);
-            term.put(x, y1, H);
+            surface.put(x, y0, H, self.style);
+            surface.put(x, y1, H, self.style);
         }
 
         // Vertical edges
         for y in (y0 + 1)..y1 {
-            term.put(x0, y, V);
-            term.put(x1, y, V);
+            surface.put(x0, y, V, self.style);
+            surface.put(x1, y, V, self.style);
         }
-
-        term.reset_style();
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::{Color, Headless};
+    use retroglyph_core::{Color, Grid};
 
     use super::*;
 
     #[test]
     fn draws_corners_and_edges() {
         let area = Rect::new(0, 0, 5, 3);
-        let mut term = Terminal::new(Headless::new(5, 3));
+        let mut grid = Grid::new(5, 3);
         BoxBorder::new()
             .style(Style::new().fg(Color::WHITE))
-            .render(area, &mut term);
+            .render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(term.grid().get(0, 0).glyph(), TL);
-        assert_eq!(term.grid().get(4, 0).glyph(), TR);
-        assert_eq!(term.grid().get(0, 2).glyph(), BL);
-        assert_eq!(term.grid().get(4, 2).glyph(), BR);
-        assert_eq!(term.grid().get(2, 0).glyph(), H);
-        assert_eq!(term.grid().get(0, 1).glyph(), V);
+        assert_eq!(grid.get(0, 0).glyph(), TL);
+        assert_eq!(grid.get(4, 0).glyph(), TR);
+        assert_eq!(grid.get(0, 2).glyph(), BL);
+        assert_eq!(grid.get(4, 2).glyph(), BR);
+        assert_eq!(grid.get(2, 0).glyph(), H);
+        assert_eq!(grid.get(0, 1).glyph(), V);
         // Interior untouched.
-        assert_eq!(term.grid().get(2, 1).glyph(), ' ');
+        assert_eq!(grid.get(2, 1).glyph(), ' ');
     }
 
     #[test]
     fn too_small_is_a_no_op() {
         let area = Rect::new(0, 0, 1, 1);
-        let mut term = Terminal::new(Headless::new(1, 1));
-        BoxBorder::new().render(area, &mut term);
-        assert_eq!(term.grid().get(0, 0).glyph(), ' ');
+        let mut grid = Grid::new(1, 1);
+        BoxBorder::new().render(area, &mut Surface::new(&mut grid, area, 0));
+        assert_eq!(grid.get(0, 0).glyph(), ' ');
     }
 
     #[test]
     fn theme_maps_border_role_onto_style() {
         let area = Rect::new(0, 0, 5, 3);
-        let mut term = Terminal::new(Headless::new(5, 3));
-        BoxBorder::new().theme(Theme::DARK).render(area, &mut term);
+        let mut grid = Grid::new(5, 3);
+        BoxBorder::new()
+            .theme(Theme::DARK)
+            .render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(
-            term.grid().get(0, 0).style().foreground(),
-            Theme::DARK.border
-        );
-        assert_eq!(
-            term.grid().get(0, 0).style().background(),
-            Theme::DARK.panel_bg
-        );
+        assert_eq!(grid.get(0, 0).style().foreground(), Theme::DARK.border);
+        assert_eq!(grid.get(0, 0).style().background(), Theme::DARK.panel_bg);
     }
 
     #[test]
     fn theme_on_uses_the_given_backdrop_instead_of_panel_bg() {
         let area = Rect::new(0, 0, 5, 3);
-        let mut term = Terminal::new(Headless::new(5, 3));
+        let mut grid = Grid::new(5, 3);
         BoxBorder::new()
             .theme_on(Theme::DARK, Color::Default)
-            .render(area, &mut term);
+            .render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(
-            term.grid().get(0, 0).style().foreground(),
-            Theme::DARK.border
-        );
-        assert_eq!(term.grid().get(0, 0).style().background(), Color::Default);
+        assert_eq!(grid.get(0, 0).style().foreground(), Theme::DARK.border);
+        assert_eq!(grid.get(0, 0).style().background(), Color::Default);
     }
 }

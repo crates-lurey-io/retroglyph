@@ -1,7 +1,8 @@
 //! [`ProgressBar`]: a horizontal progress bar.
-use retroglyph_core::{Backend, Color, Rect, Style, Terminal};
+use retroglyph_core::{Color, Rect, Style};
 
 use super::Widget;
+use crate::Surface;
 use crate::Theme;
 
 /// A horizontal progress bar that fills `value / max` of the area it's
@@ -14,11 +15,12 @@ use crate::Theme;
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::{Headless, Rect, Terminal};
-/// use retroglyph_widgets::{ProgressBar, Widget};
+/// use retroglyph_core::{Grid, Rect};
+/// use retroglyph_widgets::{ProgressBar, Surface, Widget};
 ///
-/// let mut term = Terminal::new(Headless::new(10, 1));
-/// ProgressBar::new(5, 10).render(Rect::new(0, 0, 10, 1), &mut term);
+/// let area = Rect::new(0, 0, 10, 1);
+/// let mut grid = Grid::new(10, 1);
+/// ProgressBar::new(5, 10).render(area, &mut Surface::new(&mut grid, area, 0));
 /// ```
 #[derive(Clone, Copy, Debug)]
 pub struct ProgressBar {
@@ -87,8 +89,8 @@ impl ProgressBar {
     }
 }
 
-impl<B: Backend> Widget<B> for ProgressBar {
-    fn render(self, area: Rect, term: &mut Terminal<B>) {
+impl Widget for ProgressBar {
+    fn render(&self, area: Rect, surface: &mut Surface<'_>) {
         if area.width() == 0 || self.max == 0 {
             return;
         }
@@ -102,41 +104,37 @@ impl<B: Backend> Widget<B> for ProgressBar {
             } else {
                 self.empty_style
             };
-            term.reset_style()
-                .fg(style.foreground())
-                .bg(style.background());
-            term.put(x, y, if is_filled { '█' } else { '░' });
+            surface.put(x, y, if is_filled { '█' } else { '░' }, style);
         }
-        term.reset_style();
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::Headless;
+    use retroglyph_core::Grid;
 
     use super::*;
 
     #[test]
     fn fills_proportionally() {
         let area = Rect::new(0, 0, 10, 1);
-        let mut term = Terminal::new(Headless::new(10, 1));
-        ProgressBar::new(5, 10).render(area, &mut term);
+        let mut grid = Grid::new(10, 1);
+        ProgressBar::new(5, 10).render(area, &mut Surface::new(&mut grid, area, 0));
 
         for x in 0..5 {
-            assert_eq!(term.grid().get(x, 0).glyph(), '█');
+            assert_eq!(grid.get(x, 0).glyph(), '█');
         }
         for x in 5..10 {
-            assert_eq!(term.grid().get(x, 0).glyph(), '░');
+            assert_eq!(grid.get(x, 0).glyph(), '░');
         }
     }
 
     #[test]
     fn zero_max_is_a_no_op() {
         let area = Rect::new(0, 0, 10, 1);
-        let mut term = Terminal::new(Headless::new(10, 1));
-        ProgressBar::new(0, 0).render(area, &mut term);
-        assert_eq!(term.grid().get(0, 0).glyph(), ' ');
+        let mut grid = Grid::new(10, 1);
+        ProgressBar::new(0, 0).render(area, &mut Surface::new(&mut grid, area, 0));
+        assert_eq!(grid.get(0, 0).glyph(), ' ');
     }
 
     #[test]
@@ -144,53 +142,41 @@ mod tests {
         use retroglyph_core::Color;
 
         let area = Rect::new(0, 0, 4, 1);
-        let mut term = Terminal::new(Headless::new(4, 1));
+        let mut grid = Grid::new(4, 1);
         ProgressBar::new(2, 4)
             .filled_style(Style::new().fg(Color::WHITE))
             .empty_style(Style::new().fg(Color::BLACK))
-            .render(area, &mut term);
+            .render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(term.grid().get(0, 0).style().foreground(), Color::WHITE);
-        assert_eq!(term.grid().get(3, 0).style().foreground(), Color::BLACK);
+        assert_eq!(grid.get(0, 0).style().foreground(), Color::WHITE);
+        assert_eq!(grid.get(3, 0).style().foreground(), Color::BLACK);
     }
 
     #[test]
     fn theme_maps_named_roles_onto_filled_and_empty_styles() {
         let area = Rect::new(0, 0, 4, 1);
-        let mut term = Terminal::new(Headless::new(4, 1));
+        let mut grid = Grid::new(4, 1);
         ProgressBar::new(2, 4)
             .theme(Theme::DARK)
-            .render(area, &mut term);
+            .render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(
-            term.grid().get(0, 0).style().foreground(),
-            Theme::DARK.accent
-        );
-        assert_eq!(
-            term.grid().get(0, 0).style().background(),
-            Theme::DARK.panel_bg
-        );
-        assert_eq!(term.grid().get(3, 0).style().foreground(), Theme::DARK.dim);
-        assert_eq!(
-            term.grid().get(3, 0).style().background(),
-            Theme::DARK.panel_bg
-        );
+        assert_eq!(grid.get(0, 0).style().foreground(), Theme::DARK.accent);
+        assert_eq!(grid.get(0, 0).style().background(), Theme::DARK.panel_bg);
+        assert_eq!(grid.get(3, 0).style().foreground(), Theme::DARK.dim);
+        assert_eq!(grid.get(3, 0).style().background(), Theme::DARK.panel_bg);
     }
 
     #[test]
     fn theme_on_uses_the_given_backdrop_instead_of_panel_bg() {
         let area = Rect::new(0, 0, 4, 1);
-        let mut term = Terminal::new(Headless::new(4, 1));
+        let mut grid = Grid::new(4, 1);
         ProgressBar::new(2, 4)
             .theme_on(Theme::DARK, Color::Default)
-            .render(area, &mut term);
+            .render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(
-            term.grid().get(0, 0).style().foreground(),
-            Theme::DARK.accent
-        );
-        assert_eq!(term.grid().get(0, 0).style().background(), Color::Default);
-        assert_eq!(term.grid().get(3, 0).style().foreground(), Theme::DARK.dim);
-        assert_eq!(term.grid().get(3, 0).style().background(), Color::Default);
+        assert_eq!(grid.get(0, 0).style().foreground(), Theme::DARK.accent);
+        assert_eq!(grid.get(0, 0).style().background(), Color::Default);
+        assert_eq!(grid.get(3, 0).style().foreground(), Theme::DARK.dim);
+        assert_eq!(grid.get(3, 0).style().background(), Color::Default);
     }
 }

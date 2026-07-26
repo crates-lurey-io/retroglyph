@@ -8,9 +8,10 @@
 //! removed.
 use retroglyph_core::layout::TextLayout;
 use retroglyph_core::text::{Line, Span};
-use retroglyph_core::{Backend, Rect, Style, Terminal};
+use retroglyph_core::{Rect, Style};
 
 use super::{Measure, Widget};
+use crate::Surface;
 
 /// Word-wrapped text in a single [`Style`].
 ///
@@ -23,14 +24,15 @@ use super::{Measure, Widget};
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::{Headless, Rect, Terminal};
-/// use retroglyph_widgets::{Measure, Paragraph, Widget};
+/// use retroglyph_core::{Grid, Rect};
+/// use retroglyph_widgets::{Measure, Paragraph, Surface, Widget};
 ///
 /// let p = Paragraph::new("the quick brown fox jumps");
 /// let height = p.height_for(10); // rows needed to wrap at 10 columns
 ///
-/// let mut term = Terminal::new(Headless::new(10, height));
-/// p.render(Rect::new(0, 0, 10, height), &mut term);
+/// let area = Rect::new(0, 0, 10, height);
+/// let mut grid = Grid::new(10, height);
+/// p.render(area, &mut Surface::new(&mut grid, area, 0));
 /// ```
 #[derive(Clone, Copy, Debug)]
 pub struct Paragraph<'a> {
@@ -70,16 +72,19 @@ impl Measure for Paragraph<'_> {
     }
 }
 
-impl<B: Backend> Widget<B> for Paragraph<'_> {
-    fn render(self, area: Rect, term: &mut Terminal<B>) {
+impl Widget for Paragraph<'_> {
+    fn render(&self, area: Rect, surface: &mut Surface<'_>) {
         let line = self.line();
-        TextLayout::new(&line).rect(area).render(term);
+        let layer = surface.layer();
+        TextLayout::new(&line)
+            .rect(area)
+            .render_to_grid(surface.grid_mut(), layer);
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::Headless;
+    use retroglyph_core::Grid;
 
     use super::*;
 
@@ -101,12 +106,13 @@ mod tests {
     #[test]
     fn render_draws_one_line_per_wrapped_row() {
         let area = Rect::new(0, 0, 10, 5);
-        let mut term = Terminal::new(Headless::new(10, 5));
-        Paragraph::new("the quick brown fox jumps").render(area, &mut term);
+        let mut grid = Grid::new(10, 5);
+        Paragraph::new("the quick brown fox jumps")
+            .render(area, &mut Surface::new(&mut grid, area, 0));
 
-        let row0: String = (0..10).map(|x| term.grid().get(x, 0).glyph()).collect();
-        let row1: String = (0..10).map(|x| term.grid().get(x, 1).glyph()).collect();
-        let row2: String = (0..10).map(|x| term.grid().get(x, 2).glyph()).collect();
+        let row0: String = (0..10).map(|x| grid.get(x, 0).glyph()).collect();
+        let row1: String = (0..10).map(|x| grid.get(x, 1).glyph()).collect();
+        let row2: String = (0..10).map(|x| grid.get(x, 2).glyph()).collect();
         assert!(row0.starts_with("the quick"));
         assert!(row1.starts_with("brown fox"));
         assert!(row2.starts_with("jumps"));
@@ -116,10 +122,11 @@ mod tests {
     fn render_stops_at_the_area_bottom() {
         // Only 1 row of height: only the first wrapped line should draw.
         let area = Rect::new(0, 0, 10, 1);
-        let mut term = Terminal::new(Headless::new(10, 2));
-        Paragraph::new("the quick brown fox jumps").render(area, &mut term);
+        let mut grid = Grid::new(10, 2);
+        Paragraph::new("the quick brown fox jumps")
+            .render(area, &mut Surface::new(&mut grid, area, 0));
 
-        let row1: String = (0..10).map(|x| term.grid().get(x, 1).glyph()).collect();
+        let row1: String = (0..10).map(|x| grid.get(x, 1).glyph()).collect();
         assert_eq!(row1.trim(), "");
     }
 }

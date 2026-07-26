@@ -1,7 +1,7 @@
 //! [`BoxStyle`]: a Lip-Gloss-style box model (padding, border, margin).
 //!
 //! Renders content into a standalone [`Grid`], independent of any
-//! [`Backend`]/[`Terminal`].
+//! [`Backend`](retroglyph_core::Backend)/[`Terminal`](retroglyph_core::Terminal).
 //!
 //! `BoxStyle` does not word-wrap: it lays out already-broken lines (only
 //! `'\n'` is treated specially).
@@ -11,9 +11,10 @@
 //! feature), then hand the wrapped result to `BoxStyle::render`. Keeping
 //! wrapping and box-model layout separate avoids tying every consumer of
 //! this module to the `egc` feature.
-use retroglyph_core::{Backend, Grid, Rect, Style, Terminal, Tile};
+use retroglyph_core::{Grid, Rect, Style, Tile};
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
+use crate::Surface;
 use crate::draw::{BL, BR, H, TL, TR, V};
 use crate::text::truncate;
 use crate::widget::Widget;
@@ -240,7 +241,6 @@ impl BoxStyle {
     #[cfg(feature = "egc")]
     #[must_use]
     pub fn render_wrapped(&self, text: &str) -> Grid {
-        use retroglyph_core::Headless;
         use retroglyph_core::layout::TextLayout;
         use retroglyph_core::text::{Line, Span};
 
@@ -262,18 +262,9 @@ impl BoxStyle {
         });
 
         let (mut grid, content_x, content_y) = self.scaffold(content_w, content_h);
-
-        // TextLayout::render only knows how to draw into a Terminal; render
-        // into a scratch headless one sized to the content area, then blit
-        // that (layer 0 only) onto the scaffold. This also gets
-        // wide-character placement right "for free", since TextLayout uses
-        // `Grid::write_grapheme` internally.
-        let mut scratch = Terminal::new(Headless::new(content_w.max(1), content_h.max(1)));
         TextLayout::new(&line)
-            .rect(Rect::new(0, 0, content_w, content_h))
-            .render(&mut scratch);
-        let content_rect = Rect::new(0, 0, content_w, content_h);
-        grid.blit(0, scratch.grid(), content_rect, content_x, content_y);
+            .rect(Rect::new(content_x, content_y, content_w, content_h))
+            .render_to_grid(&mut grid, 0);
 
         grid
     }
@@ -338,10 +329,10 @@ impl BoxStyle {
     }
 }
 
-impl<B: Backend> Widget<B> for Boxed<'_> {
-    fn render(self, area: Rect, term: &mut Terminal<B>) {
+impl Widget for Boxed<'_> {
+    fn render(&self, area: Rect, surface: &mut Surface<'_>) {
         let grid = self.style.render(self.text);
-        crate::block::blit_into(term, &grid, area.left(), area.top());
+        crate::block::blit_into(surface, &grid, area.left(), area.top());
     }
 }
 
@@ -545,17 +536,16 @@ mod tests {
 
     #[test]
     fn boxed_widget_places_the_box_at_the_areas_top_left() {
-        use retroglyph_core::Headless;
-
         let styled = BoxStyle::new(Style::default()).border(true).text("hi");
-        let mut term = Terminal::new(Headless::new(10, 6));
-        styled.render(Rect::new(2, 1, 10, 6), &mut term);
+        let area = Rect::new(2, 1, 10, 6);
+        let mut grid = Grid::new(12, 7);
+        styled.render(area, &mut Surface::new(&mut grid, area, 0));
 
         // 2 content cols + 2 border = 4 wide, 1 content row + 2 border = 3
         // tall, anchored at (2, 1) regardless of the much larger area.
-        assert_eq!(term.grid().get(2, 1).glyph(), '┌');
-        assert_eq!(term.grid().get(3, 2).glyph(), 'h');
-        assert_eq!(term.grid().get(4, 2).glyph(), 'i');
-        assert_eq!(term.grid().get(5, 3).glyph(), '┘');
+        assert_eq!(grid.get(2, 1).glyph(), '┌');
+        assert_eq!(grid.get(3, 2).glyph(), 'h');
+        assert_eq!(grid.get(4, 2).glyph(), 'i');
+        assert_eq!(grid.get(5, 3).glyph(), '┘');
     }
 }

@@ -1,7 +1,8 @@
 //! [`Tabs`]: a horizontal strip of tab labels with a highlighted selected index.
-use retroglyph_core::{Backend, Color, Rect, Style, Terminal};
+use retroglyph_core::{Color, Rect, Style};
 
 use super::Widget;
+use crate::Surface;
 use crate::Theme;
 use crate::draw::fill_rect;
 use crate::text::truncate as truncate_to_cols;
@@ -29,12 +30,15 @@ use crate::text::truncate as truncate_to_cols;
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::{Headless, Rect, Terminal};
-/// use retroglyph_widgets::{Tabs, Widget};
+/// use retroglyph_core::{Grid, Rect};
+/// use retroglyph_widgets::{Surface, Tabs, Widget};
 ///
 /// let titles = ["Overview", "Details", "Settings"];
-/// let mut term = Terminal::new(Headless::new(30, 1));
-/// Tabs::new(&titles).select(Some(0)).render(Rect::new(0, 0, 30, 1), &mut term);
+/// let area = Rect::new(0, 0, 30, 1);
+/// let mut grid = Grid::new(30, 1);
+/// Tabs::new(&titles)
+///     .select(Some(0))
+///     .render(area, &mut Surface::new(&mut grid, area, 0));
 /// ```
 #[derive(Clone, Copy, Debug)]
 pub struct Tabs<'a> {
@@ -134,8 +138,8 @@ impl<'a> Tabs<'a> {
     }
 }
 
-impl<B: Backend> Widget<B> for Tabs<'_> {
-    fn render(self, area: Rect, term: &mut Terminal<B>) {
+impl Widget for Tabs<'_> {
+    fn render(&self, area: Rect, surface: &mut Surface<'_>) {
         if area.width() == 0 || area.height() == 0 {
             return;
         }
@@ -156,36 +160,31 @@ impl<B: Backend> Widget<B> for Tabs<'_> {
             let text_width = text.chars().count() as u16;
             if Some(index) == self.selected && text_width > 0 {
                 fill_rect(
-                    term,
+                    surface,
                     Rect::new(x, y, text_width, 1),
                     ' ',
                     Style::new().bg(style.background()),
                 );
             }
-            term.reset_style()
-                .fg(style.foreground())
-                .bg(style.background());
-            term.print(x, y, text);
+            surface.print(x, y, text, style);
             x = x.saturating_add(text_width);
 
             if index + 1 < self.titles.len() {
                 if let Some(divider) = self.divider {
                     let mid = x + self.column_spacing / 2;
                     if mid < area.right() {
-                        term.reset_style();
-                        term.put(mid, y, divider);
+                        surface.put(mid, y, divider, Style::new());
                     }
                 }
                 x = x.saturating_add(self.column_spacing);
             }
         }
-        term.reset_style();
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::Headless;
+    use retroglyph_core::Grid;
 
     use super::*;
 
@@ -193,23 +192,25 @@ mod tests {
     fn draws_every_title_left_to_right() {
         let area = Rect::new(0, 0, 20, 1);
         let titles = ["One", "Two"];
-        let mut term = Terminal::new(Headless::new(20, 1));
-        Tabs::new(&titles).render(area, &mut term);
+        let mut grid = Grid::new(20, 1);
+        Tabs::new(&titles).render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(term.grid().get(0, 0).glyph(), 'O');
+        assert_eq!(grid.get(0, 0).glyph(), 'O');
         // "One" (3) + column_spacing (1) = tab 2 starts at column 4.
-        assert_eq!(term.grid().get(4, 0).glyph(), 'T');
+        assert_eq!(grid.get(4, 0).glyph(), 'T');
     }
 
     #[test]
     fn highlights_the_selected_tab() {
         let area = Rect::new(0, 0, 20, 1);
         let titles = ["One", "Two"];
-        let mut term = Terminal::new(Headless::new(20, 1));
-        Tabs::new(&titles).select(Some(1)).render(area, &mut term);
+        let mut grid = Grid::new(20, 1);
+        Tabs::new(&titles)
+            .select(Some(1))
+            .render(area, &mut Surface::new(&mut grid, area, 0));
 
-        let selected_bg = term.grid().get(4, 0).style().background();
-        let plain_bg = term.grid().get(0, 0).style().background();
+        let selected_bg = grid.get(4, 0).style().background();
+        let plain_bg = grid.get(0, 0).style().background();
         assert_ne!(selected_bg, plain_bg);
     }
 
@@ -217,11 +218,11 @@ mod tests {
     fn nothing_highlighted_when_unselected() {
         let area = Rect::new(0, 0, 20, 1);
         let titles = ["One", "Two"];
-        let mut term = Terminal::new(Headless::new(20, 1));
-        Tabs::new(&titles).render(area, &mut term);
+        let mut grid = Grid::new(20, 1);
+        Tabs::new(&titles).render(area, &mut Surface::new(&mut grid, area, 0));
 
-        let bg0 = term.grid().get(0, 0).style().background();
-        let bg1 = term.grid().get(4, 0).style().background();
+        let bg0 = grid.get(0, 0).style().background();
+        let bg1 = grid.get(4, 0).style().background();
         assert_eq!(bg0, bg1);
     }
 
@@ -229,122 +230,120 @@ mod tests {
     fn column_spacing_can_be_overridden() {
         let area = Rect::new(0, 0, 20, 1);
         let titles = ["A", "B"];
-        let mut term = Terminal::new(Headless::new(20, 1));
-        Tabs::new(&titles).column_spacing(3).render(area, &mut term);
+        let mut grid = Grid::new(20, 1);
+        Tabs::new(&titles)
+            .column_spacing(3)
+            .render(area, &mut Surface::new(&mut grid, area, 0));
 
         // Default spacing (1) would put "B" at column 2; spacing 3 pushes it to column 4.
-        assert_eq!(term.grid().get(0, 0).glyph(), 'A');
-        assert_eq!(term.grid().get(4, 0).glyph(), 'B');
+        assert_eq!(grid.get(0, 0).glyph(), 'A');
+        assert_eq!(grid.get(4, 0).glyph(), 'B');
     }
 
     #[test]
     fn divider_renders_between_tabs_when_set() {
         let area = Rect::new(0, 0, 20, 1);
         let titles = ["A", "B"];
-        let mut term = Terminal::new(Headless::new(20, 1));
+        let mut grid = Grid::new(20, 1);
         Tabs::new(&titles)
             .column_spacing(3)
             .divider(Some('|'))
-            .render(area, &mut term);
+            .render(area, &mut Surface::new(&mut grid, area, 0));
 
         // "A" at 0, spacing [1,3), midpoint at 1 + 3/2 = 2.
-        assert_eq!(term.grid().get(2, 0).glyph(), '|');
+        assert_eq!(grid.get(2, 0).glyph(), '|');
     }
 
     #[test]
     fn no_divider_by_default() {
         let area = Rect::new(0, 0, 20, 1);
         let titles = ["A", "B"];
-        let mut term = Terminal::new(Headless::new(20, 1));
-        Tabs::new(&titles).render(area, &mut term);
+        let mut grid = Grid::new(20, 1);
+        Tabs::new(&titles).render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(term.grid().get(1, 0).glyph(), ' ');
+        assert_eq!(grid.get(1, 0).glyph(), ' ');
     }
 
     #[test]
     fn stops_drawing_past_the_area_width_without_panicking() {
         let area = Rect::new(0, 0, 4, 1);
         let titles = ["Alpha", "Bravo", "Charlie"];
-        let mut term = Terminal::new(Headless::new(4, 1));
-        Tabs::new(&titles).render(area, &mut term); // must not panic
+        let mut grid = Grid::new(4, 1);
+        Tabs::new(&titles).render(area, &mut Surface::new(&mut grid, area, 0)); // must not panic
 
-        assert_eq!(term.grid().get(0, 0).glyph(), 'A');
+        assert_eq!(grid.get(0, 0).glyph(), 'A');
     }
 
     #[test]
     fn style_can_be_overridden() {
+        use retroglyph_core::Color;
+
         let area = Rect::new(0, 0, 20, 1);
         let titles = ["One"];
         let custom = Style::new().fg(Color::RED);
-        let mut term = Terminal::new(Headless::new(20, 1));
-        Tabs::new(&titles).style(custom).render(area, &mut term);
+        let mut grid = Grid::new(20, 1);
+        Tabs::new(&titles)
+            .style(custom)
+            .render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(term.grid().get(0, 0).style().foreground(), Color::RED);
+        assert_eq!(grid.get(0, 0).style().foreground(), Color::RED);
     }
 
     #[test]
     fn selected_style_can_be_overridden() {
+        use retroglyph_core::Color;
+
         let area = Rect::new(0, 0, 20, 1);
         let titles = ["One"];
         let custom = Style::new().fg(Color::GREEN).bg(Color::BLUE);
-        let mut term = Terminal::new(Headless::new(20, 1));
+        let mut grid = Grid::new(20, 1);
         Tabs::new(&titles)
             .selected_style(custom)
             .select(Some(0))
-            .render(area, &mut term);
+            .render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(term.grid().get(0, 0).style().foreground(), Color::GREEN);
-        assert_eq!(term.grid().get(0, 0).style().background(), Color::BLUE);
+        assert_eq!(grid.get(0, 0).style().foreground(), Color::GREEN);
+        assert_eq!(grid.get(0, 0).style().background(), Color::BLUE);
     }
 
     #[test]
     fn zero_width_is_a_no_op() {
         let area = Rect::new(0, 0, 0, 1);
         let titles = ["One"];
-        let mut term = Terminal::new(Headless::new(1, 1));
-        Tabs::new(&titles).render(area, &mut term);
-        assert_eq!(term.grid().get(0, 0).glyph(), ' ');
+        let mut grid = Grid::new(1, 1);
+        Tabs::new(&titles).render(area, &mut Surface::new(&mut grid, area, 0));
+        assert_eq!(grid.get(0, 0).glyph(), ' ');
     }
 
     #[test]
     fn theme_maps_named_roles_onto_style_and_selected_style() {
         let area = Rect::new(0, 0, 20, 1);
         let titles = ["One", "Two"];
-        let mut term = Terminal::new(Headless::new(20, 1));
+        let mut grid = Grid::new(20, 1);
         Tabs::new(&titles)
             .theme(Theme::DARK)
             .select(Some(1))
-            .render(area, &mut term);
+            .render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(term.grid().get(0, 0).style().foreground(), Theme::DARK.dim);
-        assert_eq!(
-            term.grid().get(0, 0).style().background(),
-            Theme::DARK.panel_bg
-        );
-        assert_eq!(
-            term.grid().get(4, 0).style().foreground(),
-            Theme::DARK.accent
-        );
-        assert_eq!(
-            term.grid().get(4, 0).style().background(),
-            Theme::DARK.panel_bg
-        );
+        assert_eq!(grid.get(0, 0).style().foreground(), Theme::DARK.dim);
+        assert_eq!(grid.get(0, 0).style().background(), Theme::DARK.panel_bg);
+        assert_eq!(grid.get(4, 0).style().foreground(), Theme::DARK.accent);
+        assert_eq!(grid.get(4, 0).style().background(), Theme::DARK.panel_bg);
     }
 
     #[test]
     fn theme_on_uses_the_given_backdrop_instead_of_panel_bg() {
+        use retroglyph_core::Color;
+
         let area = Rect::new(0, 0, 20, 1);
         let titles = ["One"];
-        let mut term = Terminal::new(Headless::new(20, 1));
+        let mut grid = Grid::new(20, 1);
         Tabs::new(&titles)
             .theme_on(Theme::DARK, Color::Default)
             .select(Some(0))
-            .render(area, &mut term);
+            .render(area, &mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(
-            term.grid().get(0, 0).style().foreground(),
-            Theme::DARK.accent
-        );
-        assert_eq!(term.grid().get(0, 0).style().background(), Color::Default);
+        assert_eq!(grid.get(0, 0).style().foreground(), Theme::DARK.accent);
+        assert_eq!(grid.get(0, 0).style().background(), Color::Default);
     }
 }

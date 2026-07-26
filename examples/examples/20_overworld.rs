@@ -2082,7 +2082,7 @@ use hexal::{Direction, OddR, OffsetHex};
 use retroglyph_core::event::{Event, KeyCode, KeyModifiers, MouseButton, MouseEventKind};
 use retroglyph_core::{Backend, Camera, Color, Frame, Pos, Rect, Size, Style, Terminal};
 use retroglyph_examples::Example;
-use retroglyph_widgets::{Constraint, Panel, Widget, split_h, truncate};
+use retroglyph_widgets::{Constraint, Panel, Surface, Widget, split_h, truncate};
 
 use world::{TILE_H, TILE_W, TileMap, World};
 pub use world::{WORLD_H, WORLD_W};
@@ -2527,11 +2527,12 @@ impl Overworld {
     }
 
     fn draw_sidebar<B: Backend>(&mut self, term: &mut Terminal<B>, area: Rect) {
+        let term_area = term.area();
         Panel::new()
             .title(" OVERWORLD ")
             .border_style(Style::new().fg(BORDER).bg(PANEL_BG))
             .fill_style(Style::new().bg(PANEL_BG))
-            .render(area, term);
+            .render(area, &mut Surface::new(term.grid_mut(), term_area, 0));
         let inner = Rect::new(
             area.left() + 1,
             area.top() + 1,

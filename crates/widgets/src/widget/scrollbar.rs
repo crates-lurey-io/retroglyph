@@ -1,7 +1,8 @@
 //! [`Scrollbar`]: a vertical track+thumb indicator.
-use retroglyph_core::{Backend, Color, Rect, Style, Terminal};
+use retroglyph_core::{Color, Rect, Style};
 
 use super::Widget;
+use crate::Surface;
 use crate::Theme;
 use crate::draw::thumb_geometry;
 
@@ -25,11 +26,14 @@ use crate::draw::thumb_geometry;
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::{Headless, Rect, Terminal};
-/// use retroglyph_widgets::{Scrollbar, Widget};
+/// use retroglyph_core::{Grid, Rect};
+/// use retroglyph_widgets::{Scrollbar, Surface, Widget};
 ///
-/// let mut term = Terminal::new(Headless::new(1, 10));
-/// Scrollbar::new(100, 10).offset(20).render(Rect::new(0, 0, 1, 10), &mut term);
+/// let area = Rect::new(0, 0, 1, 10);
+/// let mut grid = Grid::new(1, 10);
+/// Scrollbar::new(100, 10)
+///     .offset(20)
+///     .render(area, &mut Surface::new(&mut grid, area, 0));
 /// ```
 #[derive(Clone, Copy, Debug)]
 pub struct Scrollbar {
@@ -99,15 +103,15 @@ impl Scrollbar {
     }
 }
 
-impl<B: Backend> Widget<B> for Scrollbar {
-    fn render(self, area: Rect, term: &mut Terminal<B>) {
+impl Widget for Scrollbar {
+    fn render(&self, area: Rect, surface: &mut Surface<'_>) {
         if area.width() == 0 || area.height() == 0 {
             return;
         }
 
         for y in area.top()..area.bottom() {
             for x in area.left()..area.right() {
-                term.put_styled(x, y, ' ', self.track_style);
+                surface.put(x, y, ' ', self.track_style);
             }
         }
 
@@ -118,7 +122,7 @@ impl<B: Backend> Widget<B> for Scrollbar {
         };
         for y in (area.top() + start)..(area.top() + start + len) {
             for x in area.left()..area.right() {
-                term.put_styled(x, y, ' ', self.thumb_style);
+                surface.put(x, y, ' ', self.thumb_style);
             }
         }
     }
@@ -126,43 +130,41 @@ impl<B: Backend> Widget<B> for Scrollbar {
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::{Color, Headless};
+    use retroglyph_core::{Color, Grid};
 
     use super::*;
+    use crate::Surface;
 
     #[test]
     fn draws_a_plain_track_with_no_thumb_when_nothing_to_scroll() {
         let area = Rect::new(0, 0, 1, 5);
-        let mut term = Terminal::new(Headless::new(1, 5));
+        let mut grid = Grid::new(1, 5);
         let track = Style::new().bg(Color::Rgb { r: 1, g: 1, b: 1 });
         let thumb = Style::new().bg(Color::Rgb { r: 2, g: 2, b: 2 });
         Scrollbar::new(3, 5)
             .track_style(track)
             .thumb_style(thumb)
-            .render(area, &mut term);
+            .render(area, &mut Surface::new(&mut grid, area, 0));
         for y in 0..5 {
-            assert_eq!(
-                term.grid().get(0, y).style().background(),
-                track.background()
-            );
+            assert_eq!(grid.get(0, y).style().background(), track.background());
         }
     }
 
     #[test]
     fn draws_the_thumb_over_the_track() {
         let area = Rect::new(0, 0, 1, 10);
-        let mut term = Terminal::new(Headless::new(1, 10));
+        let mut grid = Grid::new(1, 10);
         let track = Style::new().bg(Color::Rgb { r: 1, g: 1, b: 1 });
         let thumb = Style::new().bg(Color::Rgb { r: 2, g: 2, b: 2 });
         Scrollbar::new(20, 5)
             .offset(0)
             .track_style(track)
             .thumb_style(thumb)
-            .render(area, &mut term);
+            .render(area, &mut Surface::new(&mut grid, area, 0));
 
         let (start, len) = thumb_geometry(area, 20, 5, 0).unwrap();
         for y in 0..10 {
-            let bg = term.grid().get(0, y).style().background();
+            let bg = grid.get(0, y).style().background();
             if y >= start && y < start + len {
                 assert_eq!(bg, thumb.background());
             } else {
@@ -174,14 +176,14 @@ mod tests {
     #[test]
     fn theme_maps_named_roles_onto_track_and_thumb() {
         let area = Rect::new(0, 0, 1, 10);
-        let mut term = Terminal::new(Headless::new(1, 10));
+        let mut grid = Grid::new(1, 10);
         Scrollbar::new(20, 5)
             .theme(Theme::DARK)
-            .render(area, &mut term);
+            .render(area, &mut Surface::new(&mut grid, area, 0));
 
         let (start, len) = thumb_geometry(area, 20, 5, 0).unwrap();
         for y in 0..10 {
-            let bg = term.grid().get(0, y).style().background();
+            let bg = grid.get(0, y).style().background();
             if y >= start && y < start + len {
                 assert_eq!(bg, Theme::DARK.border);
             } else {
@@ -193,14 +195,14 @@ mod tests {
     #[test]
     fn theme_on_uses_the_given_backdrop_instead_of_panel_bg() {
         let area = Rect::new(0, 0, 1, 10);
-        let mut term = Terminal::new(Headless::new(1, 10));
+        let mut grid = Grid::new(1, 10);
         Scrollbar::new(20, 5)
             .theme_on(Theme::DARK, Color::Default)
-            .render(area, &mut term);
+            .render(area, &mut Surface::new(&mut grid, area, 0));
 
         let (start, len) = thumb_geometry(area, 20, 5, 0).unwrap();
         for y in 0..10 {
-            let bg = term.grid().get(0, y).style().background();
+            let bg = grid.get(0, y).style().background();
             if y >= start && y < start + len {
                 assert_eq!(bg, Theme::DARK.border);
             } else {
@@ -212,13 +214,13 @@ mod tests {
     #[test]
     fn offset_defaults_to_zero() {
         let area = Rect::new(0, 0, 1, 10);
-        let mut term = Terminal::new(Headless::new(1, 10));
+        let mut grid = Grid::new(1, 10);
         let track = Style::new().bg(Color::Rgb { r: 1, g: 1, b: 1 });
         let thumb = Style::new().bg(Color::Rgb { r: 2, g: 2, b: 2 });
         Scrollbar::new(20, 5)
             .track_style(track)
             .thumb_style(thumb)
-            .render(area, &mut term);
+            .render(area, &mut Surface::new(&mut grid, area, 0));
 
         let (start, _) = thumb_geometry(area, 20, 5, 0).unwrap();
         assert_eq!(start, 0);

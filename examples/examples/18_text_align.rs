@@ -24,7 +24,7 @@ use retroglyph_core::event::{Event, KeyCode};
 use retroglyph_core::text::{Line, Span};
 use retroglyph_core::{Backend, Color, Rect, Style, Terminal};
 use retroglyph_examples::Example;
-use retroglyph_widgets::{Align, Modal, Panel, PrintLine, Text, Widget};
+use retroglyph_widgets::{Align, Modal, Panel, PrintLine, Surface, Text, Widget};
 
 /// State for the text-alignment example (none needed: the layout never changes).
 #[derive(Default)]
@@ -49,26 +49,29 @@ impl TextAlign {
     /// Draws a titled panel whose title, a [`Text`] readout, and a two-span
     /// [`PrintLine`] are all aligned by `align`, labelled `name`.
     fn draw_panel<B: Backend>(term: &mut Terminal<B>, area: Rect, name: &str, align: Align) {
+        let term_area = term.area();
         let border = Style::new().fg(Color::WHITE);
         Panel::new()
             .title(name)
             .title_align(align)
             .border_style(border)
-            .render(area, term);
+            .render(area, &mut Surface::new(term.grid_mut(), term_area, 0));
 
         // Interior: one cell in from the border on every side.
         let inner = Rect::new(area.left() + 1, area.top() + 1, area.width() - 2, 1);
         Text::new("Text widget")
             .style(Style::new().fg(Color::CYAN))
             .align(align)
-            .render(inner, term);
+            .render(inner, &mut Surface::new(term.grid_mut(), term_area, 0));
 
         let line = Line::from(vec![
             Span::styled("PrintLine ", Style::new().fg(Color::YELLOW)),
             Span::styled("spans", Style::new().fg(Color::GREEN)),
         ]);
         let below = Rect::new(inner.left(), inner.top() + 1, inner.width(), 1);
-        PrintLine::new(&line).align(align).render(below, term);
+        PrintLine::new(&line)
+            .align(align)
+            .render(below, &mut Surface::new(term.grid_mut(), term_area, 0));
     }
 
     /// Draws this frame (the driver presents). `&self` (unused) is the shape a real
@@ -86,22 +89,26 @@ impl TextAlign {
         // A right-aligned title -- the alignment panel titles could never take
         // before -- plus the motivating case: a left-aligned label alongside a
         // right-aligned readout on one interior row.
+        let term_area = term.area();
         let modal_region = Rect::new(0, 16, 50, 9);
         let inner = Modal::new(46, 7)
             .title("Modal: right title")
             .title_align(Align::Right)
             .border_style(Style::new().fg(Color::MAGENTA))
-            .render(modal_region, term);
+            .render(
+                modal_region,
+                &mut Surface::new(term.grid_mut(), term_area, 0),
+            );
 
         let row = Rect::new(inner.left(), inner.top() + 1, inner.width(), 1);
         Text::new("Left-aligned label")
             .style(Style::new().fg(Color::WHITE))
             .align(Align::Left)
-            .render(row, term);
+            .render(row, &mut Surface::new(term.grid_mut(), term_area, 0));
         Text::new("42 / 100")
             .style(Style::new().fg(Color::GREEN))
             .align(Align::Right)
-            .render(row, term);
+            .render(row, &mut Surface::new(term.grid_mut(), term_area, 0));
     }
 }
 

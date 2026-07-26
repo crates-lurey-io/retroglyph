@@ -1,10 +1,11 @@
 //! [`PrintLine`]: a single styled [`Line`].
+use retroglyph_core::Rect;
 use retroglyph_core::text::Line;
-use retroglyph_core::{Backend, Rect, Terminal};
 use unicode_width::UnicodeWidthStr;
 
 use super::Widget;
 use crate::Align;
+use crate::Surface;
 use crate::text::truncate as truncate_to_cols;
 
 /// A [`Line`], drawn on the first row of the area it's rendered into and
@@ -39,8 +40,8 @@ impl<'a> PrintLine<'a> {
     }
 }
 
-impl<B: Backend> Widget<B> for PrintLine<'_> {
-    fn render(self, area: Rect, term: &mut Terminal<B>) {
+impl Widget for PrintLine<'_> {
+    fn render(&self, area: Rect, surface: &mut Surface<'_>) {
         let max_width = area.width();
         let right = area.left() + max_width;
         // Align the whole line as a unit: sum the spans' display widths
@@ -58,19 +59,15 @@ impl<B: Backend> Widget<B> for PrintLine<'_> {
             }
             let remaining = (right - x) as usize;
             let text = truncate_to_cols(&span.content, remaining);
-            term.reset_style()
-                .fg(span.style.foreground())
-                .bg(span.style.background());
-            term.print(x, area.top(), text);
+            surface.print(x, area.top(), text, span.style);
             x += text.width() as u16;
         }
-        term.reset_style();
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::{Headless, text::Span};
+    use retroglyph_core::{Grid, text::Span};
 
     use super::*;
 
@@ -78,10 +75,10 @@ mod tests {
     fn prints_every_span() {
         let line = Line::from(vec![Span::raw("hi "), Span::raw("there")]);
         let area = Rect::new(0, 0, 20, 1);
-        let mut term = Terminal::new(Headless::new(20, 1));
-        PrintLine::new(&line).render(area, &mut term);
+        let mut grid = Grid::new(20, 1);
+        PrintLine::new(&line).render(area, &mut Surface::new(&mut grid, area, 0));
 
-        let row: String = (0..20).map(|x| term.grid().get(x, 0).glyph()).collect();
+        let row: String = (0..20).map(|x| grid.get(x, 0).glyph()).collect();
         assert!(row.starts_with("hi there"));
     }
 
@@ -89,13 +86,13 @@ mod tests {
     fn right_align_places_the_whole_line_against_the_right_edge() {
         let line = Line::from(vec![Span::raw("hi "), Span::raw("there")]);
         let area = Rect::new(0, 0, 20, 1);
-        let mut term = Terminal::new(Headless::new(20, 1));
+        let mut grid = Grid::new(20, 1);
         PrintLine::new(&line)
             .align(Align::Right)
-            .render(area, &mut term);
+            .render(area, &mut Surface::new(&mut grid, area, 0));
 
         // "hi there" is 8 cols; right-aligned in 20 it ends at column 19.
-        let row: String = (0..20).map(|x| term.grid().get(x, 0).glyph()).collect();
+        let row: String = (0..20).map(|x| grid.get(x, 0).glyph()).collect();
         assert!(row.ends_with("hi there"), "row was {row:?}");
     }
 
@@ -103,10 +100,10 @@ mod tests {
     fn clips_to_max_width() {
         let line = Line::raw("a much longer message than fits");
         let area = Rect::new(0, 0, 5, 1);
-        let mut term = Terminal::new(Headless::new(5, 1));
-        PrintLine::new(&line).render(area, &mut term);
+        let mut grid = Grid::new(5, 1);
+        PrintLine::new(&line).render(area, &mut Surface::new(&mut grid, area, 0));
 
         // "a much longer..." clipped to 5 columns is "a muc".
-        assert_eq!(term.grid().get(4, 0).glyph(), 'c');
+        assert_eq!(grid.get(4, 0).glyph(), 'c');
     }
 }
