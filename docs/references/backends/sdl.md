@@ -102,6 +102,11 @@ idiomatic for the Rust ecosystem.
    a white-on-transparent glyph atlas with arbitrary foreground colors without needing separate
    textures per color. This is the standard approach for colored text in SDL 2D games.
 
+   Note this applies to the _glyph_ atlas only. retroglyph's own pixel backends composite a sprite
+   from its own pixels and never modulate it by the cell's `fg` (see `TilesetOptions`), so an SDL
+   backend would color-mod the font atlas and leave the sprite atlas alone. Read this entry as a
+   description of what SDL offers, not as a technique this library adopts for tilesets.
+
 1. **Performance considerations:** SDL_Renderer is not a GPU draw-call powerhouse. For an 80x50
 
    grid (4000 cells), it is more than adequate. For very large grids (200x100+), the per-cell
