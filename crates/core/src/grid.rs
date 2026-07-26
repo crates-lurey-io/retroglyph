@@ -121,6 +121,7 @@ use crate::tile::Tile;
 use crate::tile::TileFlags;
 #[cfg(feature = "egc")]
 use crate::tile::cap_grapheme;
+use crate::tint::Tint;
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -305,20 +306,44 @@ impl<'a> Iterator for CellsMut<'a> {
 #[derive(Clone)]
 pub(crate) struct LayerBuf {
     pub(crate) buf: GridBuf<Tile, Vec<Tile>, RowMajor>,
-    /// Sparse EGC side-table: flat row-major index -> full grapheme text, for
-    /// tiles with [`TileFlags::HAS_EXTRA`] set. Empty unless the `egc`
-    /// feature is used to write a multi-codepoint grapheme, which is what
-    /// keeps [`Tile`] itself small (see [`Grid::grapheme`]).
+    /// Sparse side-table: flat row-major index -> the cell's out-of-line data, for tiles with
+    /// [`TileFlags::HAS_EXTRA`] set. Empty until something writes a multi-codepoint grapheme or
+    /// a tint, which is what keeps [`Tile`] itself small (see [`Grid::grapheme`] and
+    /// [`Grid::tint`]).
     ///
     /// The `HAS_EXTRA` flag is authoritative: readers must check it before
     /// consulting this map, since some write paths (`put_tile`,
     /// `IndexMut`, `cells_mut`, `cells_mut_or_alloc`) can leave a stale entry behind when they
-    /// overwrite a tile that used to carry extra text without an explicit
+    /// overwrite a tile that used to carry extra data without an explicit
     /// cleanup call. Since those paths only ever hand out or store tiles
     /// with `HAS_EXTRA` clear, a stale entry is harmless: it is simply
-    /// never looked up until the slot is reused by `write_grapheme`, which
-    /// always overwrites it.
-    extras: BTreeMap<usize, Arc<str>>,
+    /// never looked up until the slot is reused by `write_grapheme` or `set_tint`, which
+    /// always overwrite it.
+    extras: BTreeMap<usize, TileExtra>,
+}
+
+/// One cell's out-of-line data: everything that belongs to a tile but does not fit in one.
+///
+/// [`Tile`] is exactly 20 bytes with no padding to spare, and both members here are rare enough
+/// per cell that inlining either would grow every tile of every layer to pay for a minority of
+/// them. They share one table, one flag, and one set of rekeying paths rather than each bringing
+/// their own.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct TileExtra {
+    /// The full grapheme cluster, when [`Tile::glyph`] holds only its first codepoint.
+    pub(crate) grapheme: Option<Arc<str>>,
+    /// How a pixel backend recolours this cell's sprite.
+    pub(crate) tint: Tint,
+}
+
+impl TileExtra {
+    /// Whether this entry carries nothing, and so should be dropped rather than stored.
+    ///
+    /// Keeping the table free of empty entries is what lets `HAS_EXTRA` be set exactly when an
+    /// entry exists, instead of the flag and the table disagreeing about an all-default value.
+    fn is_empty(&self) -> bool {
+        self.grapheme.is_none() && self.tint == Tint::None
+    }
 }
 
 impl LayerBuf {
@@ -330,26 +355,34 @@ impl LayerBuf {
         }
     }
 
-    /// Returns the grapheme text for the tile at flat index `idx`, or `None`
-    /// if `tile` doesn't have [`TileFlags::HAS_EXTRA`] set.
-    fn extra_for(&self, idx: usize, tile: &Tile) -> Option<&str> {
+    /// Returns the side-table entry for the tile at flat index `idx`, or `None` if `tile`
+    /// doesn't have [`TileFlags::HAS_EXTRA`] set.
+    fn entry_for(&self, idx: usize, tile: &Tile) -> Option<&TileExtra> {
         if tile.flags.contains(TileFlags::HAS_EXTRA) {
-            self.extras.get(&idx).map(|s| &**s)
+            self.extras.get(&idx)
         } else {
             None
         }
     }
 
-    /// Returns a cloned `Arc` handle to the grapheme text at flat index
-    /// `idx`, or `None` if `tile` doesn't have [`TileFlags::HAS_EXTRA`] set.
-    /// Used to copy extras between grids (e.g. [`Grid::blit`]) without
-    /// re-allocating the string.
-    fn extra_arc_for(&self, idx: usize, tile: &Tile) -> Option<Arc<str>> {
-        if tile.flags.contains(TileFlags::HAS_EXTRA) {
-            self.extras.get(&idx).cloned()
-        } else {
-            None
-        }
+    /// Returns the grapheme text for the tile at flat index `idx`, or `None`
+    /// if `tile` doesn't have [`TileFlags::HAS_EXTRA`] set.
+    fn extra_for(&self, idx: usize, tile: &Tile) -> Option<&str> {
+        self.entry_for(idx, tile)?.grapheme.as_deref()
+    }
+
+    /// Returns the tint for the tile at flat index `idx`, or [`Tint::None`] if `tile` doesn't
+    /// have [`TileFlags::HAS_EXTRA`] set.
+    fn tint_for(&self, idx: usize, tile: &Tile) -> Tint {
+        self.entry_for(idx, tile).map_or(Tint::None, |e| e.tint)
+    }
+
+    /// Returns a clone of the side-table entry at flat index `idx`, or `None` if `tile` doesn't
+    /// have [`TileFlags::HAS_EXTRA`] set. Used to copy a cell's out-of-line data between grids
+    /// (e.g. [`Grid::blit`]); the grapheme rides along as an `Arc` clone rather than a fresh
+    /// allocation.
+    fn extra_entry_for(&self, idx: usize, tile: &Tile) -> Option<TileExtra> {
+        self.entry_for(idx, tile).cloned()
     }
 }
 
@@ -731,8 +764,17 @@ impl Grid {
         {
             lb.buf.as_mut()[idx].width = width as u8;
         }
+        // A fresh glyph write replaces the cell's out-of-line data outright rather than merging
+        // with it: a tint belongs to the artwork that was drawn here, not to the cell, so
+        // overwriting the glyph drops it. `Grid::set_tint` is the follow-up that puts one back.
         if has_extra {
-            lb.extras.insert(idx, Arc::from(cap_grapheme(grapheme)));
+            lb.extras.insert(
+                idx,
+                TileExtra {
+                    grapheme: Some(Arc::from(cap_grapheme(grapheme))),
+                    tint: Tint::None,
+                },
+            );
         } else {
             lb.extras.remove(&idx);
         }
@@ -1167,17 +1209,81 @@ impl Grid {
         Some(())
     }
 
-    /// Sets the extra grapheme text for an already-written tile at `(x, y)`
-    /// on `layer`, setting [`TileFlags::HAS_EXTRA`] to match. Does nothing if
-    /// out of bounds. Crate-private: the only external way to write EGC text
-    /// is [`write_grapheme`](Self::write_grapheme).
-    pub(crate) fn set_extra(&mut self, layer: u8, x: u16, y: u16, extra: Arc<str>) {
+    /// Sets the whole side-table entry for an already-written tile at `(x, y)` on `layer`,
+    /// setting [`TileFlags::HAS_EXTRA`] to match. Does nothing if out of bounds. Crate-private:
+    /// the external ways in are [`write_grapheme`](Self::write_grapheme) and
+    /// [`set_tint`](Self::set_tint).
+    ///
+    /// An empty entry is removed rather than stored, so the flag means exactly "an entry
+    /// exists".
+    pub(crate) fn set_extra(&mut self, layer: u8, x: u16, y: u16, extra: TileExtra) {
         let pos = to_grixy_pos(Pos::new(x, y));
         let idx = usize::from(y) * usize::from(self.width) + usize::from(x);
         let lb = self.layer_or_alloc(layer);
         if lb.buf.contains(pos) {
+            if extra.is_empty() {
+                lb.buf[pos].flags.remove(TileFlags::HAS_EXTRA);
+                lb.extras.remove(&idx);
+            } else {
+                lb.buf[pos].flags.insert(TileFlags::HAS_EXTRA);
+                lb.extras.insert(idx, extra);
+            }
+        }
+    }
+
+    /// How a pixel backend recolours the sprite drawn for the cell at `(x, y)` on `layer`.
+    ///
+    /// [`Tint::None`] for a cell that has never been tinted, for a cell whose glyph was
+    /// overwritten since (a glyph write drops the tint with the artwork it belonged to), and for
+    /// coordinates outside the grid or on an unallocated layer.
+    ///
+    /// A tint is grid state rather than [`Tile`] state, for the same reason a multi-codepoint
+    /// grapheme is (see [`grapheme`](Self::grapheme)): it is rare per cell and `Tile` has no room
+    /// left. So it is read here, not through [`Tile::style`].
+    ///
+    /// Cell backends have no sprite to recolour and ignore this entirely.
+    #[must_use]
+    pub fn tint(&self, layer: u8, x: u16, y: u16) -> Tint {
+        let Some(lb) = self.layer(layer) else {
+            return Tint::None;
+        };
+        let Some(tile) = lb.buf.get(to_grixy_pos(Pos::new(x, y))) else {
+            return Tint::None;
+        };
+        let idx = usize::from(y) * usize::from(self.width) + usize::from(x);
+        lb.tint_for(idx, tile)
+    }
+
+    /// Sets how a pixel backend recolours the sprite drawn for the cell at `(x, y)` on `layer`.
+    ///
+    /// Applies to the cell as it stands, so it belongs *after* the write that put the glyph
+    /// there: writing a glyph over a tinted cell drops the tint, on the grounds that a tint
+    /// describes the artwork rather than the position. For a multi-cell span, tint the anchor;
+    /// that is the cell a pixel backend draws the sprite from.
+    ///
+    /// Setting [`Tint::None`] clears the tint, and drops the cell's side-table entry entirely if
+    /// it held nothing else. Does nothing if `(x, y)` is out of bounds.
+    pub fn set_tint(&mut self, layer: u8, x: u16, y: u16, tint: Tint) {
+        let idx = usize::from(y) * usize::from(self.width) + usize::from(x);
+        let pos = to_grixy_pos(Pos::new(x, y));
+        let lb = self.layer_or_alloc(layer);
+        if !lb.buf.contains(pos) {
+            return;
+        }
+        // Preserve any grapheme already stored for this cell: the two members of the entry are
+        // written by separate calls and neither should clobber the other.
+        let grapheme = if lb.buf[pos].flags.contains(TileFlags::HAS_EXTRA) {
+            lb.extras.get(&idx).and_then(|e| e.grapheme.clone())
+        } else {
+            None
+        };
+        let entry = TileExtra { grapheme, tint };
+        if entry.is_empty() {
+            lb.buf[pos].flags.remove(TileFlags::HAS_EXTRA);
+            lb.extras.remove(&idx);
+        } else {
             lb.buf[pos].flags.insert(TileFlags::HAS_EXTRA);
-            lb.extras.insert(idx, extra);
+            lb.extras.insert(idx, entry);
         }
     }
 
@@ -1252,7 +1358,7 @@ impl Grid {
         let dst_width = usize::from(self.width);
         let dst_height = usize::from(self.height);
         let dst_lb = self.layer_or_alloc(layer);
-        let mut pending_extras: Vec<(usize, Arc<str>)> = Vec::new();
+        let mut pending_extras: Vec<(usize, TileExtra)> = Vec::new();
 
         // `dst_x`/`dst_y` saturate on overflow (retroglyph#268): a `u16::MAX`-adjacent origin
         // combined with a `src_rect` offset would otherwise wrap silently and either write to
@@ -1280,7 +1386,7 @@ impl Grid {
                 out_tile.clear_span();
                 dst_lb.buf.as_mut()[dst_idx] = out_tile;
                 if tile.flags.contains(TileFlags::HAS_EXTRA) {
-                    if let Some(extra) = src_lb.extra_arc_for(src_idx, tile) {
+                    if let Some(extra) = src_lb.extra_entry_for(src_idx, tile) {
                         pending_extras.push((dst_idx, extra));
                     }
                 } else {
@@ -1355,7 +1461,7 @@ impl Grid {
         let dst_width = usize::from(self.width);
         let dst_height = usize::from(self.height);
         let dst_lb = self.layer_or_alloc(layer);
-        let mut pending_extras: Vec<(usize, Arc<str>)> = Vec::new();
+        let mut pending_extras: Vec<(usize, TileExtra)> = Vec::new();
 
         // See `blit`'s matching comment (retroglyph#268): `saturating_add` here, paired with the
         // bounds checks below, prevents a `u16::MAX`-adjacent destination origin from wrapping.
@@ -1395,7 +1501,7 @@ impl Grid {
                 blended.clear_span();
                 dst_lb.buf.as_mut()[dst_idx] = blended;
                 if tile.flags.contains(TileFlags::HAS_EXTRA) {
-                    if let Some(extra) = src_lb.extra_arc_for(src_idx, tile) {
+                    if let Some(extra) = src_lb.extra_entry_for(src_idx, tile) {
                         pending_extras.push((dst_idx, extra));
                     }
                 } else {
@@ -1512,7 +1618,7 @@ impl Grid {
                         out.span_h = tile.span_h;
                     }
                     if tile.flags.contains(TileFlags::HAS_EXTRA) {
-                        if let Some(extra) = lb.extra_arc_for(idx, tile) {
+                        if let Some(extra) = lb.extra_entry_for(idx, tile) {
                             dst_layer0.extras.insert(idx, extra);
                         }
                     } else {
@@ -2259,6 +2365,153 @@ mod tests {
         // Shrinking past the cell drops its extras entry along with the tile.
         g.resize(2, 4);
         assert_eq!(g.grapheme(0, 3, 1), None);
+    }
+
+    // ── Tint storage ──────────────────────────────────────────────────────
+    //
+    // A tint lives in the same sparse side table as a grapheme, so it inherits every path that
+    // table already has to get right: rekeying on resize, copying on blit, and being dropped
+    // when the cell it belongs to is overwritten or cleared. These cover each of those, plus the
+    // interaction between the two members now sharing one entry and one flag.
+
+    #[test]
+    fn tint_round_trips_and_defaults_to_none() {
+        let mut g = Grid::new(4, 4);
+        assert_eq!(g.tint(0, 1, 1), Tint::None);
+
+        g.write_grapheme(0, 1, 1, "@", Style::default());
+        g.set_tint(0, 1, 1, Tint::multiply(128, 64, 32));
+        assert_eq!(g.tint(0, 1, 1), Tint::multiply(128, 64, 32));
+
+        // Setting None clears it again.
+        g.set_tint(0, 1, 1, Tint::None);
+        assert_eq!(g.tint(0, 1, 1), Tint::None);
+    }
+
+    #[test]
+    fn tint_is_per_layer_and_per_cell() {
+        let mut g = Grid::new(4, 4);
+        g.set_tint(0, 1, 1, Tint::multiply(10, 20, 30));
+        g.set_tint(3, 1, 1, Tint::mix(1, 2, 3, 4));
+
+        assert_eq!(g.tint(0, 1, 1), Tint::multiply(10, 20, 30));
+        assert_eq!(g.tint(3, 1, 1), Tint::mix(1, 2, 3, 4));
+        assert_eq!(g.tint(0, 1, 2), Tint::None);
+        assert_eq!(g.tint(1, 1, 1), Tint::None);
+    }
+
+    #[test]
+    fn tint_out_of_bounds_reads_none_and_writes_nothing() {
+        let mut g = Grid::new(2, 2);
+        g.set_tint(0, 9, 9, Tint::multiply(1, 2, 3));
+        assert_eq!(g.tint(0, 9, 9), Tint::None);
+        assert_eq!(g.tint(0, 0, 0), Tint::None);
+    }
+
+    #[test]
+    fn writing_a_glyph_over_a_tinted_cell_drops_the_tint() {
+        let mut g = Grid::new(4, 4);
+        g.write_grapheme(0, 1, 1, "@", Style::default());
+        g.set_tint(0, 1, 1, Tint::multiply(128, 128, 128));
+
+        // A tint describes the artwork that was drawn, not the position, so replacing the
+        // artwork drops it rather than silently recolouring whatever lands there next.
+        g.write_grapheme(0, 1, 1, "#", Style::default());
+        assert_eq!(g.tint(0, 1, 1), Tint::None);
+    }
+
+    #[test]
+    fn put_tile_drops_the_tint() {
+        let mut g = Grid::new(4, 4);
+        g.set_tint(0, 1, 1, Tint::multiply(128, 128, 128));
+        g.put_tile(0, Pos::new(1, 1), Tile::new('x', Style::default()));
+        assert_eq!(g.tint(0, 1, 1), Tint::None);
+    }
+
+    #[test]
+    fn clear_drops_every_tint_on_the_layer() {
+        let mut g = Grid::new(4, 4);
+        g.set_tint(0, 1, 1, Tint::multiply(1, 2, 3));
+        g.set_tint(1, 1, 1, Tint::multiply(4, 5, 6));
+
+        g.clear(0);
+        assert_eq!(g.tint(0, 1, 1), Tint::None);
+        assert_eq!(g.tint(1, 1, 1), Tint::multiply(4, 5, 6));
+    }
+
+    #[test]
+    fn resize_remaps_a_tint_to_the_new_stride() {
+        let mut g = Grid::new(4, 4);
+        g.write_grapheme(0, 3, 1, "@", Style::default());
+        g.set_tint(0, 3, 1, Tint::mix(200, 100, 50, 128));
+
+        // Widening changes the row stride, so (3, 1)'s flat index moves.
+        g.resize(8, 4);
+        assert_eq!(g.tint(0, 3, 1), Tint::mix(200, 100, 50, 128));
+        // No ghost entry landed on whatever cell now holds the old flat index.
+        assert_eq!(g.tint(0, 7, 0), Tint::None);
+
+        // Shrinking past the cell drops its entry with the tile.
+        g.resize(2, 4);
+        assert_eq!(g.tint(0, 3, 1), Tint::None);
+    }
+
+    #[test]
+    fn blit_carries_a_tint_across_grids() {
+        let mut src = Grid::new(4, 4);
+        src.write_grapheme(0, 1, 1, "@", Style::default());
+        src.set_tint(0, 1, 1, Tint::multiply(64, 128, 192));
+
+        let mut dst = Grid::new(4, 4);
+        // Pre-existing tint on the destination cell, to prove the copy replaces rather than
+        // merges with whatever was there.
+        dst.set_tint(0, 1, 1, Tint::mix(9, 9, 9, 9));
+        dst.blit(0, &src, Rect::new(0, 0, 4, 4), 0, 0);
+
+        assert_eq!(dst.tint(0, 1, 1), Tint::multiply(64, 128, 192));
+        assert_eq!(dst.tint(0, 0, 0), Tint::None);
+    }
+
+    #[test]
+    fn blit_clears_a_destination_tint_where_the_source_has_none() {
+        let mut src = Grid::new(2, 2);
+        src.write_grapheme(0, 0, 0, "@", Style::default());
+
+        let mut dst = Grid::new(2, 2);
+        dst.set_tint(0, 0, 0, Tint::multiply(1, 2, 3));
+        dst.blit(0, &src, Rect::new(0, 0, 2, 2), 0, 0);
+
+        assert_eq!(dst.tint(0, 0, 0), Tint::None);
+    }
+
+    #[cfg(feature = "egc")]
+    #[test]
+    fn a_tint_and_a_grapheme_share_one_entry_without_clobbering_each_other() {
+        let mut g = Grid::new(4, 4);
+        g.write_grapheme(0, 1, 1, "e\u{0301}", Style::default());
+        g.set_tint(0, 1, 1, Tint::multiply(128, 128, 128));
+
+        // Both members survive: `set_tint` preserves the grapheme already stored.
+        assert_eq!(g.grapheme(0, 1, 1), Some("e\u{0301}"));
+        assert_eq!(g.tint(0, 1, 1), Tint::multiply(128, 128, 128));
+
+        // Clearing the tint leaves the grapheme, and so leaves the entry in place.
+        g.set_tint(0, 1, 1, Tint::None);
+        assert_eq!(g.grapheme(0, 1, 1), Some("e\u{0301}"));
+        assert_eq!(g.tint(0, 1, 1), Tint::None);
+    }
+
+    #[cfg(feature = "egc")]
+    #[test]
+    fn a_tint_alone_keeps_grapheme_reads_answering_none() {
+        let mut g = Grid::new(4, 4);
+        g.write_grapheme(0, 1, 1, "@", Style::default());
+        g.set_tint(0, 1, 1, Tint::multiply(128, 128, 128));
+
+        // HAS_EXTRA is now set for a cell with no grapheme text. `grapheme` must still say None
+        // rather than reaching into the entry and finding an empty slot.
+        assert_eq!(g.grapheme(0, 1, 1), None);
+        assert_eq!(g.tint(0, 1, 1), Tint::multiply(128, 128, 128));
     }
 
     #[cfg(feature = "egc")]

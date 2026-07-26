@@ -93,8 +93,15 @@ impl Output for Headless {
         for (pos, cell, extra) in content {
             self.grid.put_tile(0, pos, *cell);
             if let Some(extra) = extra {
-                self.grid
-                    .set_extra(0, pos.x, pos.y, alloc::sync::Arc::from(extra));
+                self.grid.set_extra(
+                    0,
+                    pos.x,
+                    pos.y,
+                    crate::grid::TileExtra {
+                        grapheme: Some(alloc::sync::Arc::from(extra)),
+                        tint: crate::Tint::None,
+                    },
+                );
             }
         }
         Ok(())
