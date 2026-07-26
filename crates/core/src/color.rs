@@ -1,6 +1,7 @@
 //! Styling types for character cells.
 
 #[cfg(feature = "color-space")]
+use gem::Mix as _;
 use gem::space::Srgb;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -515,7 +516,7 @@ impl Color {
             f32::from(g2) / 255.0,
             f32::from(b2) / 255.0,
         );
-        Self::from_srgb(a_srgb.lerp(b_srgb, t))
+        Self::from_srgb(a_srgb.mix(b_srgb, t))
     }
 
     /// Lightens a color by `amount` (0.0 = no change, 1.0 = white).

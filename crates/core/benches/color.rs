@@ -91,6 +91,7 @@ fn blend_modes(c: &mut Criterion) {
         BlendMode::Dodge,
         BlendMode::Burn,
         BlendMode::Overlay,
+        BlendMode::Multiply,
     ] {
         group.bench_function(format!("{mode:?}"), |b| {
             let mut src = Grid::new(1, 1);

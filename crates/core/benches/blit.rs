@@ -77,6 +77,7 @@ fn bench_blit_alpha(c: &mut Criterion, cols: u16, rows: u16) {
         BlendMode::Dodge,
         BlendMode::Burn,
         BlendMode::Overlay,
+        BlendMode::Multiply,
     ] {
         group.bench_function(format!("{mode:?}"), |b| {
             b.iter_batched(
