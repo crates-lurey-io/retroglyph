@@ -494,45 +494,35 @@ impl Color {
         }
     }
 
-    /// Linearly interpolates between two `Rgb` colors.
+    /// Linearly interpolates between two colors, always returning a concrete `Rgb` result.
     ///
-    /// If either color is non-RGB, returns `a` (the first color) unchanged.
-    /// Both must be `Rgb` for interpolation to occur.
+    /// Both inputs are resolved to `(r, g, b)` via [`Color::resolve_rgb`] before blending, so
+    /// non-`Rgb` variants (`Ansi`, `Indexed`) contribute their real color rather than being
+    /// skipped. [`Color::Default`] has no intrinsic RGB value, so it falls back to
+    /// `(0, 0, 0)` when it appears as `a` and `(255, 255, 255)` when it appears as `b`.
     #[cfg(feature = "gem")]
     #[must_use]
     pub fn lerp(a: Self, b: Self, t: f32) -> Self {
-        match (a, b) {
-            (
-                Self::Rgb {
-                    r: r1,
-                    g: g1,
-                    b: b1,
-                },
-                Self::Rgb {
-                    r: r2,
-                    g: g2,
-                    b: b2,
-                },
-            ) => {
-                let a_srgb = Srgb::new(
-                    f32::from(r1) / 255.0,
-                    f32::from(g1) / 255.0,
-                    f32::from(b1) / 255.0,
-                );
-                let b_srgb = Srgb::new(
-                    f32::from(r2) / 255.0,
-                    f32::from(g2) / 255.0,
-                    f32::from(b2) / 255.0,
-                );
-                Self::from_srgb(a_srgb.lerp(b_srgb, t))
-            }
-            (a, _) => a,
-        }
+        let (r1, g1, b1) = a.resolve_rgb((0, 0, 0));
+        let (r2, g2, b2) = b.resolve_rgb((255, 255, 255));
+        let a_srgb = Srgb::new(
+            f32::from(r1) / 255.0,
+            f32::from(g1) / 255.0,
+            f32::from(b1) / 255.0,
+        );
+        let b_srgb = Srgb::new(
+            f32::from(r2) / 255.0,
+            f32::from(g2) / 255.0,
+            f32::from(b2) / 255.0,
+        );
+        Self::from_srgb(a_srgb.lerp(b_srgb, t))
     }
 
-    /// Lightens an `Rgb` color by `amount` (0.0 = no change, 1.0 = white).
+    /// Lightens a color by `amount` (0.0 = no change, 1.0 = white).
     ///
-    /// Non-RGB variants are returned unchanged.
+    /// Non-`Rgb` variants are resolved to `(r, g, b)` via [`Color::resolve_rgb`] before the
+    /// transform is applied, rather than being returned unchanged. [`Color::Default`] has no
+    /// intrinsic RGB value, so it resolves to `(0, 0, 0)`.
     #[cfg(feature = "gem")]
     #[must_use]
     pub fn lighten(self, amount: f32) -> Self {
@@ -544,15 +534,15 @@ impl Color {
             );
             Color::from_srgb(Srgb::from(gem::space::Hsl::from(srgb).lighten(amount)))
         }
-        match self {
-            Self::Rgb { r, g, b } => inner(r, g, b, amount),
-            other => other,
-        }
+        let (r, g, b) = self.resolve_rgb((0, 0, 0));
+        inner(r, g, b, amount)
     }
 
-    /// Darkens an `Rgb` color by `amount` (0.0 = no change, 1.0 = black).
+    /// Darkens a color by `amount` (0.0 = no change, 1.0 = black).
     ///
-    /// Non-RGB variants are returned unchanged.
+    /// Non-`Rgb` variants are resolved to `(r, g, b)` via [`Color::resolve_rgb`] before the
+    /// transform is applied, rather than being returned unchanged. [`Color::Default`] has no
+    /// intrinsic RGB value, so it resolves to `(0, 0, 0)`.
     #[cfg(feature = "gem")]
     #[must_use]
     pub fn darken(self, amount: f32) -> Self {
@@ -564,15 +554,15 @@ impl Color {
             );
             Color::from_srgb(Srgb::from(gem::space::Hsl::from(srgb).darken(amount)))
         }
-        match self {
-            Self::Rgb { r, g, b } => inner(r, g, b, amount),
-            other => other,
-        }
+        let (r, g, b) = self.resolve_rgb((0, 0, 0));
+        inner(r, g, b, amount)
     }
 
-    /// Increases saturation of an `Rgb` color by `amount` (0.0–1.0).
+    /// Increases saturation of a color by `amount` (0.0–1.0).
     ///
-    /// Non-RGB variants are returned unchanged.
+    /// Non-`Rgb` variants are resolved to `(r, g, b)` via [`Color::resolve_rgb`] before the
+    /// transform is applied, rather than being returned unchanged. [`Color::Default`] has no
+    /// intrinsic RGB value, so it resolves to `(0, 0, 0)`.
     #[cfg(feature = "gem")]
     #[must_use]
     pub fn saturate(self, amount: f32) -> Self {
@@ -584,15 +574,15 @@ impl Color {
             );
             Color::from_srgb(Srgb::from(gem::space::Hsl::from(srgb).saturate(amount)))
         }
-        match self {
-            Self::Rgb { r, g, b } => inner(r, g, b, amount),
-            other => other,
-        }
+        let (r, g, b) = self.resolve_rgb((0, 0, 0));
+        inner(r, g, b, amount)
     }
 
-    /// Decreases saturation of an `Rgb` color by `amount` (0.0–1.0).
+    /// Decreases saturation of a color by `amount` (0.0–1.0).
     ///
-    /// Non-RGB variants are returned unchanged.
+    /// Non-`Rgb` variants are resolved to `(r, g, b)` via [`Color::resolve_rgb`] before the
+    /// transform is applied, rather than being returned unchanged. [`Color::Default`] has no
+    /// intrinsic RGB value, so it resolves to `(0, 0, 0)`.
     #[cfg(feature = "gem")]
     #[must_use]
     pub fn desaturate(self, amount: f32) -> Self {
@@ -604,15 +594,15 @@ impl Color {
             );
             Color::from_srgb(Srgb::from(gem::space::Hsl::from(srgb).desaturate(amount)))
         }
-        match self {
-            Self::Rgb { r, g, b } => inner(r, g, b, amount),
-            other => other,
-        }
+        let (r, g, b) = self.resolve_rgb((0, 0, 0));
+        inner(r, g, b, amount)
     }
 
     /// Returns the complementary color (hue shifted by 180 degrees).
     ///
-    /// Non-RGB variants are returned unchanged.
+    /// Non-`Rgb` variants are resolved to `(r, g, b)` via [`Color::resolve_rgb`] before the
+    /// transform is applied, rather than being returned unchanged. [`Color::Default`] has no
+    /// intrinsic RGB value, so it resolves to `(0, 0, 0)`.
     #[cfg(feature = "gem")]
     #[must_use]
     pub fn complement(self) -> Self {
@@ -624,10 +614,8 @@ impl Color {
             );
             Color::from_srgb(Srgb::from(gem::space::Hsl::from(srgb).complement()))
         }
-        match self {
-            Self::Rgb { r, g, b } => inner(r, g, b),
-            other => other,
-        }
+        let (r, g, b) = self.resolve_rgb((0, 0, 0));
+        inner(r, g, b)
     }
 
     /// Quantizes an RGB color to the nearest entry in the standard 256-color palette.
@@ -1187,10 +1175,34 @@ mod tests {
 
     #[cfg(feature = "gem")]
     #[test]
-    fn test_lerp_non_rgb_passthrough() {
-        let default = Color::Default;
+    fn test_lerp_resolves_non_rgb() {
         let red = Color::Rgb { r: 255, g: 0, b: 0 };
-        assert_eq!(Color::lerp(default, red, 0.5), Color::Default);
+
+        // `Color::BLACK` (an `Ansi` variant) resolves to real black and blends normally, rather
+        // than short-circuiting to itself.
+        assert_eq!(Color::lerp(Color::BLACK, red, 1.0), red);
+        assert_eq!(
+            Color::lerp(Color::BLACK, red, 0.0),
+            Color::Rgb { r: 0, g: 0, b: 0 }
+        );
+
+        // `Color::Ansi(AnsiColor::Black)` behaves identically to `Color::BLACK` (they're the same
+        // variant).
+        assert_eq!(Color::lerp(Color::Ansi(AnsiColor::Black), red, 1.0), red);
+
+        // `Color::Default` resolves to `(0, 0, 0)` as `a` and `(255, 255, 255)` as `b`.
+        assert_eq!(
+            Color::lerp(Color::Default, red, 0.0),
+            Color::Rgb { r: 0, g: 0, b: 0 }
+        );
+        assert_eq!(
+            Color::lerp(red, Color::Default, 1.0),
+            Color::Rgb {
+                r: 255,
+                g: 255,
+                b: 255
+            }
+        );
     }
 
     #[cfg(feature = "gem")]
@@ -1207,12 +1219,13 @@ mod tests {
 
     #[cfg(feature = "gem")]
     #[test]
-    fn test_lighten_non_rgb_passthrough() {
-        assert_eq!(Color::Default.lighten(0.5), Color::Default);
-        assert_eq!(
-            Color::Ansi(AnsiColor::Red).lighten(0.5),
-            Color::Ansi(AnsiColor::Red)
+    fn test_lighten_resolves_non_rgb() {
+        assert_ne!(Color::Default.lighten(0.5), Color::Default);
+        assert_ne!(
+            Color::Ansi(AnsiColor::Black).lighten(0.5),
+            Color::Ansi(AnsiColor::Black)
         );
+        assert_ne!(Color::BLACK.lighten(0.5), Color::BLACK);
     }
 
     #[cfg(feature = "gem")]
@@ -1225,6 +1238,19 @@ mod tests {
         };
         let darker = c.darken(0.2);
         assert_ne!(darker, c);
+    }
+
+    #[cfg(feature = "gem")]
+    #[test]
+    fn test_darken_resolves_non_rgb() {
+        // `Color::Default` resolves to `(0, 0, 0)`, which darkening leaves at black.
+        assert_eq!(Color::Default.darken(0.5), Color::Rgb { r: 0, g: 0, b: 0 });
+        // `Color::Ansi(AnsiColor::Black)` (and `Color::BLACK`) resolve to real black too.
+        assert_eq!(
+            Color::Ansi(AnsiColor::Black).darken(0.5),
+            Color::Rgb { r: 0, g: 0, b: 0 }
+        );
+        assert_eq!(Color::BLACK.darken(0.5), Color::Rgb { r: 0, g: 0, b: 0 });
     }
 
     #[cfg(feature = "gem")]
@@ -1295,8 +1321,39 @@ mod tests {
 
     #[cfg(feature = "gem")]
     #[test]
-    fn test_complement_non_rgb_passthrough() {
-        assert_eq!(Color::Default.complement(), Color::Default);
+    fn test_saturate_desaturate_resolves_non_rgb() {
+        // Gray-ish ANSI colors have a saturation to increase/decrease; black (`Color::Default`'s
+        // resolved fallback and `Color::BLACK`) has none, but both must go through the same
+        // resolve-then-transform path rather than passing through unchanged.
+        assert_eq!(
+            Color::Default.saturate(0.5),
+            Color::Rgb { r: 0, g: 0, b: 0 }
+        );
+        assert_eq!(
+            Color::Ansi(AnsiColor::Black).desaturate(0.5),
+            Color::Rgb { r: 0, g: 0, b: 0 }
+        );
+        assert_eq!(Color::BLACK.saturate(0.5), Color::Rgb { r: 0, g: 0, b: 0 });
+
+        let red = Color::Ansi(AnsiColor::Red);
+        assert_ne!(red.desaturate(0.5), red);
+    }
+
+    #[cfg(feature = "gem")]
+    #[test]
+    fn test_complement_resolves_non_rgb() {
+        // Black's complement (in this HSL model) is still black, but it's computed through a
+        // real RGB resolution rather than being returned unchanged.
+        assert_eq!(Color::Default.complement(), Color::Rgb { r: 0, g: 0, b: 0 });
+        assert_eq!(
+            Color::Ansi(AnsiColor::Black).complement(),
+            Color::Rgb { r: 0, g: 0, b: 0 }
+        );
+        assert_eq!(Color::BLACK.complement(), Color::Rgb { r: 0, g: 0, b: 0 });
+
+        let red_via_ansi = Color::Ansi(AnsiColor::Red).complement();
+        assert!(red_via_ansi.to_srgb().is_some_and(|c| c.g > 0.5));
+        assert!(red_via_ansi.to_srgb().is_some_and(|c| c.b > 0.5));
     }
 
     #[cfg(feature = "gem")]
