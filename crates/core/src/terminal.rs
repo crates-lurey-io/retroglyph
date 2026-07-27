@@ -189,9 +189,11 @@ impl<B: Backend> Terminal<B> {
     ///
     /// # Errors
     ///
-    /// Propagates errors from the backend's
-    /// [`draw_layers`](crate::Output::draw_layers) or
-    /// [`flush`](crate::Output::flush) operations.
+    /// Propagates errors from the backend's [`draw_layers`](crate::Output::draw_layers) or
+    /// [`flush`](crate::Output::flush) operations. Either failure returns before the
+    /// current/previous buffers are swapped, so the cells from the failed frame stay marked
+    /// dirty and are resent the next time `present` succeeds; the caller doesn't need to
+    /// redraw anything to recover, just call `draw`/`present` again.
     pub fn present(&mut self) -> Result<(), <B as Output>::Error> {
         self.present_count = self.present_count.wrapping_add(1);
         if self.backend.composites_layers() {
