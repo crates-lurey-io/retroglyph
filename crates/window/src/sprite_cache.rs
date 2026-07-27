@@ -310,6 +310,42 @@ pub fn warn_sprite_needs_span(
     false
 }
 
+/// Warns, at most once per glyph, that `glyph` carries a tint but resolved to a bitmap font
+/// glyph rather than a sprite, so the tint was silently dropped.
+///
+/// This is #537's exact trap: a font glyph is `fg`-coloured, so a cell that falls back to one
+/// still visibly changes colour when a tint is set, and it is easy to conclude the tint took
+/// effect when in fact nothing read it. Both pixel backends call this from the branch that
+/// already knows the sprite cache missed for this glyph, so the diagnostic and the fix it names
+/// are identical on each.
+///
+/// `tint` is the cell's own tint; a tint whose [`is_identity`](Tint::is_identity) is `true`
+/// (including [`Tint::None`]) has nothing to drop and is silent. `seen` is caller-owned state so
+/// a redraw loop reports each offending glyph once rather than every frame; entries are only
+/// ever added.
+///
+/// Returns whether a warning was emitted, which is always `false` in a build that compiles
+/// diagnostics out: the identity check, the `seen` bookkeeping, and the message all sit inside
+/// [`dev_only!`], so a release build does none of them. See
+/// [`BuildMode`](retroglyph_core::BuildMode).
+pub fn warn_tint_needs_sprite(seen: &mut BTreeSet<char>, glyph: char, tint: Tint) -> bool {
+    dev_only!({
+        if tint.is_identity() {
+            return false;
+        }
+        if !seen.insert(glyph) {
+            return false;
+        }
+        log::warn!(
+            "cell for {glyph:?} has a tint but no sprite is registered for it, so it renders as \
+             the bitmap font glyph and the tint has no effect. Register a sprite for that \
+             codepoint, or clear the tint."
+        );
+        return true;
+    });
+    false
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -663,6 +699,48 @@ mod tests {
     fn warn_sprite_needs_span_touches_no_state_outside_a_reporting_build() {
         let mut seen = BTreeSet::new();
         warn_sprite_needs_span(&mut seen, '@', (32, 32), (16, 16));
+        // The dedup set is the allocation a release build should not be paying for.
+        assert_eq!(seen.is_empty(), !retroglyph_core::DEV);
+    }
+
+    // `warn_tint_needs_sprite` reports only in a build that compiles diagnostics in, so every
+    // expectation below is written against `DEV` rather than a literal, matching
+    // `warn_sprite_needs_span`'s tests above.
+
+    #[test]
+    fn warn_tint_needs_sprite_reports_a_dropped_tint_once() {
+        let mut seen = BTreeSet::new();
+        let tint = Tint::multiply(128, 128, 128);
+        assert_eq!(
+            warn_tint_needs_sprite(&mut seen, '@', tint),
+            retroglyph_core::DEV
+        );
+        // Second call for the same glyph is silent even in a reporting build.
+        assert!(!warn_tint_needs_sprite(&mut seen, '@', tint));
+    }
+
+    #[test]
+    fn warn_tint_needs_sprite_is_silent_for_tint_none() {
+        let mut seen = BTreeSet::new();
+        assert!(!warn_tint_needs_sprite(&mut seen, '@', Tint::None));
+        assert!(seen.is_empty());
+    }
+
+    #[test]
+    fn warn_tint_needs_sprite_is_silent_for_an_identity_tint() {
+        let mut seen = BTreeSet::new();
+        assert!(!warn_tint_needs_sprite(
+            &mut seen,
+            '@',
+            Tint::multiply(255, 255, 255)
+        ));
+        assert!(seen.is_empty());
+    }
+
+    #[test]
+    fn warn_tint_needs_sprite_touches_no_state_outside_a_reporting_build() {
+        let mut seen = BTreeSet::new();
+        warn_tint_needs_sprite(&mut seen, '@', Tint::multiply(128, 128, 128));
         // The dedup set is the allocation a release build should not be paying for.
         assert_eq!(seen.is_empty(), !retroglyph_core::DEV);
     }
