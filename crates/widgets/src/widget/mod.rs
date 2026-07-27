@@ -60,6 +60,25 @@ pub use text::Text;
 
 /// A type that draws itself into a [`Surface`], without retaining any
 /// state — the minimal shape shared by every widget-like consumer.
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::{Grid, Rect, Style};
+/// use retroglyph_widgets::{Surface, Widget};
+///
+/// struct Marker(char);
+///
+/// impl Widget for Marker {
+///     fn render(&self, _area: Rect, surface: &mut Surface<'_>) {
+///         surface.put((0, 0), self.0, Style::new());
+///     }
+/// }
+///
+/// let area = Rect::new(0, 0, 4, 1);
+/// let mut grid = Grid::new(4, 1);
+/// Marker('*').render(area, &mut Surface::new(&mut grid, area, 0));
+/// ```
 pub trait Widget {
     /// Draw this widget into `area`, via `surface` scoped to it.
     fn render(&self, area: Rect, surface: &mut Surface<'_>);
@@ -68,6 +87,30 @@ pub trait Widget {
 /// Like [`Widget`], but for widgets that read (and may update) externally
 /// owned state — a selection index, a scroll offset — that outlives a
 /// single render call. See [`crate::ListState`].
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::{Grid, Rect, Style};
+/// use retroglyph_widgets::{Surface, StatefulWidget};
+///
+/// struct Counter;
+///
+/// impl StatefulWidget for Counter {
+///     type State = u32;
+///
+///     fn render(&self, _area: Rect, surface: &mut Surface<'_>, state: &mut Self::State) {
+///         *state += 1;
+///         surface.put((0, 0), 'x', Style::new());
+///     }
+/// }
+///
+/// let area = Rect::new(0, 0, 4, 1);
+/// let mut grid = Grid::new(4, 1);
+/// let mut renders = 0;
+/// Counter.render(area, &mut Surface::new(&mut grid, area, 0), &mut renders);
+/// assert_eq!(renders, 1);
+/// ```
 pub trait StatefulWidget {
     /// The externally owned state this widget reads and/or updates while
     /// rendering.
@@ -84,6 +127,22 @@ pub trait StatefulWidget {
 /// Lets a caller size a pane to fit content (e.g. a wrapped `Paragraph`,
 /// behind the `egc` feature) instead of guessing a fixed height up front.
 /// Sizing is pure content math, not drawing.
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_widgets::Measure;
+///
+/// struct FixedHeight(u16);
+///
+/// impl Measure for FixedHeight {
+///     fn height_for(&self, _width: u16) -> u16 {
+///         self.0
+///     }
+/// }
+///
+/// assert_eq!(FixedHeight(3).height_for(80), 3);
+/// ```
 pub trait Measure {
     /// The number of rows this widget would need to render at `width`
     /// columns.
