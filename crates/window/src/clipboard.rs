@@ -25,6 +25,35 @@ use std::fmt;
 ///
 /// A trait rather than a single concrete type so callers can substitute a fake for testing --
 /// see this module's doc comment.
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_window::{Clipboard, ClipboardError};
+///
+/// #[derive(Default)]
+/// struct FakeClipboard {
+///     contents: Option<String>,
+/// }
+///
+/// impl Clipboard for FakeClipboard {
+///     fn get_text(&mut self) -> Result<String, ClipboardError> {
+///         self.contents
+///             .clone()
+///             .ok_or_else(|| ClipboardError::new("clipboard is empty"))
+///     }
+///
+///     fn set_text(&mut self, text: String) -> Result<(), ClipboardError> {
+///         self.contents = Some(text);
+///         Ok(())
+///     }
+/// }
+///
+/// let mut clip = FakeClipboard::default();
+/// clip.set_text("hello".to_string())?;
+/// assert_eq!(clip.get_text()?, "hello");
+/// # Ok::<(), ClipboardError>(())
+/// ```
 pub trait Clipboard {
     /// Returns the current clipboard contents as text.
     ///
