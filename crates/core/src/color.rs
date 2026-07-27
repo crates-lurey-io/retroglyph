@@ -12,6 +12,16 @@ use gem::space::Srgb;
 /// terminal color theme (e.g., Solarized, Nord, or custom themes).
 /// Use `Rgb` for fixed colors that must appear identical regardless of
 /// the user's terminal configuration.
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::{AnsiColor, Color};
+///
+/// let color = Color::Ansi(AnsiColor::Green);
+/// assert_eq!(AnsiColor::Green.to_index(), 2);
+/// assert_eq!(color, Color::GREEN);
+/// ```
 pub enum AnsiColor {
     #[default]
     /// Black.
@@ -358,6 +368,18 @@ impl TryFrom<u8> for AnsiColor {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 #[non_exhaustive]
 /// Represents a color in the terminal grid.
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::Color;
+///
+/// let named = Color::GREEN;
+/// let rgb = Color::Rgb { r: 255, g: 0, b: 0 };
+/// let indexed = Color::Indexed(42);
+/// assert_ne!(named, rgb);
+/// assert_ne!(rgb, indexed);
+/// ```
 pub enum Color {
     #[default]
     /// Backend's default foreground/background color.

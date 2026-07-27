@@ -17,6 +17,19 @@ use core::time::Duration;
 ///
 /// [`Surface`] clips any write that falls outside its own area rather than panicking; see
 /// [`Surface`]'s own "out-of-bounds drawing" documentation.
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::backend::Headless;
+/// use retroglyph_core::{Color, Terminal};
+///
+/// let mut term = Terminal::new(Headless::new(20, 5));
+/// term.draw(|surface| {
+///     surface.put((2, 1), '@', retroglyph_core::Style::new().fg(Color::GREEN));
+/// })
+/// .unwrap();
+/// ```
 pub struct Terminal<B: Backend> {
     current: Grid,
     previous: Grid,

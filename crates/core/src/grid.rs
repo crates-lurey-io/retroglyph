@@ -188,6 +188,18 @@ impl BlendMode {
 }
 
 /// Size of the grid.
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::Size;
+///
+/// let size = Size {
+///     width: 80,
+///     height: 24,
+/// };
+/// assert_eq!(size.width, 80);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, PartialOrd, Ord)]
 pub struct Size {
     /// Width.
@@ -201,9 +213,29 @@ pub struct Size {
 /// Implements [`Ord`] in row-major order (y primary, then x), which is the
 /// natural ordering for terminal rendering: top-to-bottom, left-to-right within
 /// each row.
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::Pos;
+///
+/// let pos = Pos::new(2, 1);
+/// assert_eq!(pos.x, 2);
+/// assert_eq!(pos.y, 1);
+/// ```
 pub type Pos = ixy::Pos<u16>;
 
 /// Rectangle in the grid.
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::Rect;
+///
+/// let rect = Rect::new(0, 0, 10, 4);
+/// assert_eq!(rect.width(), 10);
+/// assert_eq!(rect.height(), 4);
+/// ```
 pub type Rect = ixy::Rect<u16>;
 
 /// A sub-cell pixel offset `(dx, dy)`, distinct from [`Pos`] so a caller can't transpose a
@@ -212,6 +244,16 @@ pub type Rect = ixy::Rect<u16>;
 /// Visual only: an offset shifts where a glyph is painted within its cell on backends that
 /// support sub-cell placement (e.g. `retroglyph-software`); it never changes which cell a glyph
 /// occupies, and cell-mode backends (e.g. `retroglyph-crossterm`) ignore it entirely.
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::Offset;
+///
+/// let offset = Offset::new(3, -2);
+/// assert_eq!(offset.dx, 3);
+/// assert_eq!(offset.dy, -2);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct Offset {
     /// Horizontal pixel offset.
@@ -419,6 +461,16 @@ impl LayerBuf {
 ///
 /// Requires an allocator (backed by `alloc::vec::Vec`), so it is unavailable
 /// in strictly static, no-alloc environments.
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::{Color, Grid, Pos, Style};
+///
+/// let mut grid = Grid::new(10, 5);
+/// grid.put_tile(0, Pos::new(2, 1), retroglyph_core::Tile::new('@', Style::new().fg(Color::GREEN)));
+/// assert_eq!(grid[Pos::new(2, 1)].glyph(), '@');
+/// ```
 #[derive(Clone)]
 pub struct Grid {
     width: u16,
