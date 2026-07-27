@@ -922,7 +922,11 @@ const fn from_crossterm_modifier_key_code(
         CM::RightAlt => Some((M::Alt, L::Right)),
         CM::LeftSuper => Some((M::Super, L::Left)),
         CM::RightSuper => Some((M::Super, L::Right)),
-        CM::LeftHyper | CM::RightHyper | CM::LeftMeta | CM::RightMeta | CM::IsoLevel3Shift
+        CM::LeftHyper
+        | CM::RightHyper
+        | CM::LeftMeta
+        | CM::RightMeta
+        | CM::IsoLevel3Shift
         | CM::IsoLevel5Shift => None,
     }
 }
@@ -988,6 +992,10 @@ const fn from_crossterm_mouse_button(
 
 // Every `crossterm::event::MouseEventKind` variant now has a retroglyph equivalent (unlike
 // `from_crossterm_key_code`, which still has unmappable `KeyCode`s), so this is infallible.
+//
+// Crossterm's scroll variants are line-quantized with no magnitude of their own, so each is
+// synthesized as a `Scroll{dx,dy}` of magnitude 1.0 in the matching sign direction (see
+// `MouseEventKind::Scroll`'s docs for the sign convention this preserves).
 const fn from_crossterm_mouse_event_kind(
     kind: crossterm::event::MouseEventKind,
 ) -> retroglyph_core::event::MouseEventKind {
@@ -998,10 +1006,10 @@ const fn from_crossterm_mouse_event_kind(
         CM::Up(btn) => K::Up(from_crossterm_mouse_button(btn)),
         CM::Drag(btn) => K::Drag(from_crossterm_mouse_button(btn)),
         CM::Moved => K::Moved,
-        CM::ScrollUp => K::ScrollUp,
-        CM::ScrollDown => K::ScrollDown,
-        CM::ScrollLeft => K::ScrollLeft,
-        CM::ScrollRight => K::ScrollRight,
+        CM::ScrollUp => K::Scroll { dx: 0.0, dy: 1.0 },
+        CM::ScrollDown => K::Scroll { dx: 0.0, dy: -1.0 },
+        CM::ScrollLeft => K::Scroll { dx: -1.0, dy: 0.0 },
+        CM::ScrollRight => K::Scroll { dx: 1.0, dy: 0.0 },
     }
 }
 
@@ -1576,11 +1584,11 @@ mod tests {
         );
         assert_eq!(
             mouse_event_kind_of(crossterm::event::MouseEventKind::ScrollUp),
-            K::ScrollUp
+            K::Scroll { dx: 0.0, dy: 1.0 }
         );
         assert_eq!(
             mouse_event_kind_of(crossterm::event::MouseEventKind::ScrollDown),
-            K::ScrollDown
+            K::Scroll { dx: 0.0, dy: -1.0 }
         );
     }
 
@@ -1614,11 +1622,11 @@ mod tests {
 
         assert_eq!(
             mouse_event_kind_of(crossterm::event::MouseEventKind::ScrollLeft),
-            K::ScrollLeft
+            K::Scroll { dx: -1.0, dy: 0.0 }
         );
         assert_eq!(
             mouse_event_kind_of(crossterm::event::MouseEventKind::ScrollRight),
-            K::ScrollRight
+            K::Scroll { dx: 1.0, dy: 0.0 }
         );
     }
 }
