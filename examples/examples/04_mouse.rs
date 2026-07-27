@@ -58,8 +58,7 @@ impl Mouse {
                             self.motion_seen = true;
                             "Moved".to_owned()
                         }
-                        MouseEventKind::ScrollUp => "ScrollUp".to_owned(),
-                        MouseEventKind::ScrollDown => "ScrollDown".to_owned(),
+                        MouseEventKind::Scroll { dx, dy } => format!("Scroll(dx: {dx}, dy: {dy})"),
                         _ => "Unknown".to_owned(),
                     };
                 }

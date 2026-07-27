@@ -190,8 +190,10 @@ pub mod wasm_pointer {
             KIND_DOWN => MouseEventKind::Down(MouseButton::Left),
             KIND_UP => MouseEventKind::Up(MouseButton::Left),
             KIND_MOVE => MouseEventKind::Moved,
-            KIND_SCROLL_UP => MouseEventKind::ScrollUp,
-            KIND_SCROLL_DOWN => MouseEventKind::ScrollDown,
+            // The wire protocol has no scroll magnitude; synthesize a unit-magnitude `Scroll`
+            // matching the sign convention documented on `MouseEventKind::Scroll`.
+            KIND_SCROLL_UP => MouseEventKind::Scroll { dx: 0.0, dy: 1.0 },
+            KIND_SCROLL_DOWN => MouseEventKind::Scroll { dx: 0.0, dy: -1.0 },
             _ => return None,
         };
         Some(Event::Mouse(MouseEvent {
@@ -212,8 +214,11 @@ pub mod wasm_pointer {
                 (KIND_DOWN, MouseEventKind::Down(MouseButton::Left)),
                 (KIND_UP, MouseEventKind::Up(MouseButton::Left)),
                 (KIND_MOVE, MouseEventKind::Moved),
-                (KIND_SCROLL_UP, MouseEventKind::ScrollUp),
-                (KIND_SCROLL_DOWN, MouseEventKind::ScrollDown),
+                (KIND_SCROLL_UP, MouseEventKind::Scroll { dx: 0.0, dy: 1.0 }),
+                (
+                    KIND_SCROLL_DOWN,
+                    MouseEventKind::Scroll { dx: 0.0, dy: -1.0 },
+                ),
             ] {
                 let Some(Event::Mouse(m)) = decode_mouse(3, 4, kind) else {
                     panic!("kind {kind} should decode");
