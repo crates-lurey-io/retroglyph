@@ -81,7 +81,7 @@ struct WorkspaceReadmeDoctests;
 
 use core::time::Duration;
 use retroglyph_core::DrawCell;
-use retroglyph_core::backend::{Cursor, Input, Output};
+use retroglyph_core::backend::{Cursor, CursorStyle, Input, Output};
 use retroglyph_core::event::Event;
 use retroglyph_core::grid::{Pos, Size};
 use retroglyph_terminal::TerminalRenderer;
@@ -895,6 +895,29 @@ impl<W: std::io::Write> Cursor for Crossterm<W> {
         let writer = self.renderer.writer_mut();
         let _ = crossterm::queue!(writer, crossterm::cursor::MoveTo(position.x, position.y));
     }
+
+    /// Queues the `DECSCUSR` cursor-shape escape without flushing; see
+    /// [`set_cursor_visible`](Self::set_cursor_visible)'s docs for why this is deferred to the
+    /// next [`Output::flush`] instead of flushing here.
+    fn set_cursor_style(&mut self, style: CursorStyle) {
+        let writer = self.renderer.writer_mut();
+        let _ = crossterm::queue!(writer, from_cursor_style(style));
+    }
+}
+
+const fn from_cursor_style(style: CursorStyle) -> crossterm::cursor::SetCursorStyle {
+    use crossterm::cursor::SetCursorStyle as CS;
+    match style {
+        CursorStyle::BlinkingBlock => CS::BlinkingBlock,
+        CursorStyle::SteadyBlock => CS::SteadyBlock,
+        CursorStyle::BlinkingUnderline => CS::BlinkingUnderScore,
+        CursorStyle::SteadyUnderline => CS::SteadyUnderScore,
+        CursorStyle::BlinkingBar => CS::BlinkingBar,
+        CursorStyle::SteadyBar => CS::SteadyBar,
+        // `CursorStyle` is `#[non_exhaustive]`: a future shape added upstream falls back to the
+        // terminal's own default rather than failing to compile here.
+        _ => CS::DefaultUserShape,
+    }
 }
 
 const fn from_crossterm_key_code(
@@ -1591,5 +1614,27 @@ mod tests {
         term.ring_bell().unwrap();
 
         assert_eq!(term.writer().as_slice(), b"\x07");
+    }
+
+    #[test]
+    fn set_cursor_style_queues_the_matching_decscusr_escape() {
+        use retroglyph_core::backend::CursorStyle;
+
+        let _lock = TEST_GUARD_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut term = Crossterm::builder()
+            .raw_mode(false)
+            .alt_screen(false)
+            .mouse_capture(false)
+            .focus_change(false)
+            .bracketed_paste(false)
+            .kitty_protocol(false)
+            .build_with_writer(Vec::new())
+            .expect("building against a Vec<u8> writer with all TTY features disabled must not require a real terminal");
+
+        term.set_cursor_style(CursorStyle::BlinkingBar);
+
+        assert_eq!(term.writer().as_slice(), b"\x1b[5 q");
     }
 }
