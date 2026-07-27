@@ -123,8 +123,13 @@ pub trait Output {
     ///
     /// # Errors
     ///
-    /// Returns an error if the backend cannot write to the output surface
-    /// (e.g., a broken pipe or closed terminal).
+    /// `Self::Error` is implementation-defined (a broken pipe or closed terminal for a
+    /// process-backed display, a lost surface for a windowed one); implementations do not
+    /// roll back cells already written before the failure. Because
+    /// [`crate::Terminal::present`] only swaps its diff buffers into `previous` after the
+    /// call that reached this method succeeds, a failed draw leaves the same cells marked
+    /// dirty, so they are resent on the next successful present rather than silently
+    /// dropped.
     fn draw<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
         I: Iterator<Item = DrawCell<'a>>;
@@ -144,7 +149,11 @@ pub trait Output {
     ///
     /// # Errors
     ///
-    /// See [`draw`](Self::draw).
+    /// The default implementation forwards to [`draw`](Self::draw) and shares its error
+    /// contract. An override that composites layers itself should preserve the same
+    /// property: leave already-written cells in place on failure rather than rolling them
+    /// back, since [`crate::Terminal::present`] only advances its diff bookkeeping once this
+    /// call succeeds.
     fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
         I: Iterator<Item = DrawCell<'a>>,
@@ -181,7 +190,12 @@ pub trait Output {
     ///
     /// # Errors
     ///
-    /// Returns an error if the backend cannot flush (e.g., a broken pipe).
+    /// `Self::Error` is implementation-defined (a broken pipe, a closed terminal, a lost
+    /// surface). [`crate::Terminal::present`] calls this only after
+    /// [`draw`](Self::draw)/[`draw_layers`](Self::draw_layers) succeed, and swaps its diff
+    /// buffers only after `flush` also succeeds; a failed flush therefore leaves the
+    /// current frame's cells buffered but unconfirmed, and they are resent on the next
+    /// successful present.
     fn flush(&mut self) -> Result<(), Self::Error>;
 
     /// Return current display dimensions.
@@ -192,7 +206,12 @@ pub trait Output {
     ///
     /// # Errors
     ///
-    /// Returns an error if the backend cannot clear the display.
+    /// `Self::Error` is implementation-defined (a broken pipe, a closed terminal, a lost
+    /// surface). Unlike [`draw`](Self::draw)/[`flush`](Self::flush), this is not part of
+    /// [`crate::Terminal::present`]'s per-frame path; callers that invoke it directly
+    /// (some backends also call it internally on resize) should treat a failure as leaving
+    /// the display in an unknown, possibly partially cleared state and retry or tear down
+    /// rather than assume the previous contents are still intact.
     fn clear(&mut self) -> Result<(), Self::Error>;
 
     /// Notify the backend of a resize to `size`, updating what [`size`](Self::size) reports.
