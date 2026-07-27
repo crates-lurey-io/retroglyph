@@ -525,13 +525,18 @@ impl Grid {
     /// ```
     /// use retroglyph_core::{Grid, Pos, Style, Tile};
     ///
-    /// let grid = Grid::from_charmap("##\n#.", |c| match c {
+    /// // A ragged map: the second line is shorter than the first.
+    /// let grid = Grid::from_charmap("###\n#.", |c| match c {
     ///     '#' => Tile::new('#', Style::default()),
     ///     _ => Tile::default(),
     /// });
-    /// assert_eq!((grid.width(), grid.height()), (2, 2));
+    ///
+    /// // Width comes from the longest line; the shorter line is padded with the default
+    /// // tile rather than truncating the grid to the shortest line.
+    /// assert_eq!((grid.width(), grid.height()), (3, 2));
     /// assert_eq!(grid[Pos::new(0, 0)].glyph(), '#');
-    /// assert_eq!(grid[Pos::new(1, 1)].glyph(), ' ');
+    /// assert_eq!(grid[Pos::new(1, 1)].glyph(), ' '); // '.' maps to the default tile
+    /// assert_eq!(grid[Pos::new(2, 1)].glyph(), ' '); // padding past the short line's end
     /// ```
     #[must_use]
     pub fn from_charmap<F>(map: &str, mut f: F) -> Self
