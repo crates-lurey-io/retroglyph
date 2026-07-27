@@ -470,6 +470,19 @@ impl Crossterm {
     /// `std::io::Error` with [`std::io::ErrorKind::ResourceBusy`] if another [`Crossterm`]
     /// instance is already live in this process: see the concurrency contract documented on
     /// [`Crossterm`].
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use retroglyph_core::Terminal;
+    /// use retroglyph_crossterm::Crossterm;
+    ///
+    /// // Requires a real controlling terminal (raw mode, the alternate screen, and cursor
+    /// // hiding all target the actual process stdout), so this example is `no_run`.
+    /// let mut term = Terminal::new(Crossterm::new()?);
+    /// term.draw(|_surface| {})?;
+    /// # Ok::<(), std::io::Error>(())
+    /// ```
     pub fn new() -> Result<Self, std::io::Error> {
         Self::with_options(CrosstermOptions::default())
     }
@@ -554,6 +567,24 @@ impl<W: std::io::Write> Crossterm<W> {
     /// `std::io::Error` with [`std::io::ErrorKind::ResourceBusy`] if another [`Crossterm`]
     /// instance is already live in this process: see the concurrency contract documented on
     /// [`Crossterm`].
+    ///
+    /// # Examples
+    ///
+    /// Rendering into an in-memory buffer, to capture and assert on the emitted ANSI/SGR bytes
+    /// without a real TTY. Terminal-protocol setup (raw mode, the alternate screen, hiding the
+    /// cursor) still targets the real process stdout regardless of `writer` (see this method's
+    /// docs above), so this example is `no_run`: it requires an actual controlling terminal to
+    /// construct successfully, even though `writer` itself is just a `Vec<u8>`.
+    ///
+    /// ```no_run
+    /// use retroglyph_crossterm::Crossterm;
+    ///
+    /// let mut buffer: Vec<u8> = Vec::new();
+    /// let term = Crossterm::with_writer(&mut buffer)?;
+    /// drop(term);
+    /// assert!(buffer.is_empty());
+    /// # Ok::<(), std::io::Error>(())
+    /// ```
     pub fn with_writer(writer: W) -> Result<Self, std::io::Error> {
         CrosstermOptions::default().build_with_writer(writer)
     }
