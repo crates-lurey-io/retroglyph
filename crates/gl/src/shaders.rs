@@ -139,8 +139,8 @@ layout(location = 1) in uvec2 a_cell;   // grid (col, row) of the sprite's top-l
 layout(location = 2) in uint  a_layer;  // sprite atlas array layer
 layout(location = 3) in uvec2 a_sprite; // sprite size in unscaled pixels (may exceed a cell)
 layout(location = 4) in ivec2 a_offset; // sub-cell (dx, dy) in unscaled pixels
-layout(location = 5) in vec4  a_mask;   // sheet stage: rgb = multiply factor, a = 1 when active
-layout(location = 6) in vec4  a_tint;   // cell stage: rgb = colour, a = mix amount
+layout(location = 5) in uvec4 a_mask;   // sheet stage: rgb = multiply factor, a = 255 when active
+layout(location = 6) in uvec4 a_tint;   // cell stage: rgb = colour, a = mix amount
 layout(location = 7) in uint  a_tint_op; // 0 none, 1 multiply, 2 mix
 
 uniform vec2 u_screen;     // surface size in physical pixels
@@ -151,8 +151,8 @@ uniform vec2 u_sprite_tex; // sprite atlas layer size in texels (the max sprite 
 out vec2 v_uv;
 flat out uint v_layer;
 flat out vec2 v_uv_scale; // maps the [0,1] quad onto the sprite's sub-rect within its layer
-flat out vec4 v_mask;
-flat out vec4 v_tint;
+flat out uvec4 v_mask;
+flat out uvec4 v_tint;
 flat out uint v_tint_op;
 
 void main() {
@@ -180,9 +180,12 @@ void main() {
 /// then the cell's tint. Alpha is never touched by either, so which pixels are opaque, and
 /// therefore the blending above, is identical tinted or not.
 ///
-/// This mirrors `SpriteTint::apply` rather than reimplementing it: the CPU rasteriser calls that
-/// function directly, and a snapshot test renders the same sprite through both to keep them
-/// honest (retroglyph#537).
+/// The math is a bit-exact GLSL translation of `gem::channel::multiply_u8`/`mix_u8`, the two
+/// functions `retroglyph_core::Tint::apply` calls, done in `uint`/`int` on the source texel's
+/// reconstructed 0..255 channel values rather than in normalized float. This mirrors
+/// `SpriteTint::apply` exactly rather than merely approximating it: the CPU rasteriser calls that
+/// function directly, and a parity test renders the same sprite through both to keep them honest
+/// (retroglyph#537, retroglyph#555).
 #[cfg(feature = "tilesets")]
 const FRAGMENT_SPRITE_BODY: &str = r"
 uniform highp sampler2DArray u_sprites;
@@ -190,28 +193,58 @@ uniform highp sampler2DArray u_sprites;
 in vec2 v_uv;
 flat in uint v_layer;
 flat in vec2 v_uv_scale;
-flat in vec4 v_mask;
-flat in vec4 v_tint;
+flat in uvec4 v_mask;
+flat in uvec4 v_tint;
 flat in uint v_tint_op;
 
 out vec4 frag;
 
+// Mirrors `gem::channel::multiply_u8`: `((a * b + 127) / 255)` in 16-bit-safe integer math.
+uint multiply_u8(uint a, uint b) {
+    return (a * b + 127u) / 255u;
+}
+
+// Mirrors `gem::channel::mix_u8`. `b - a` can be negative, so this runs in `int`, matching the
+// round-half-away-from-zero behaviour of the Rust reference (`delta >= 0` rounds up, else down).
+int mix_u8(int a, int b, int t) {
+    int delta = (b - a) * t;
+    int rounded = delta >= 0 ? (delta + 127) / 255 : (delta - 127) / 255;
+    return a + rounded;
+}
+
 void main() {
     vec2 uv = v_uv * v_uv_scale;
     vec4 src = texture(u_sprites, vec3(uv, float(v_layer)));
+    // Reconstruct the exact 0..255 source channel. Exact for a nearest-filtered, non-mipmapped,
+    // non-sRGB UNORM8 texture (which is what the sprite atlas is), since every representable u8
+    // value round-trips through `/255.0` and back via `round()` with no rounding error.
+    uvec3 src_u8 = uvec3(round(src.rgb * 255.0));
 
-    // Stage 1: the sheet's own treatment. `v_mask.a` is 1.0 for a mask sheet and 0.0 for art,
-    // so an art sheet multiplies by white and costs one mix.
-    vec3 rgb = src.rgb * mix(vec3(1.0), v_mask.rgb, v_mask.a);
+    // Stage 1: the sheet's own treatment. `v_mask.a` is 255 for a mask sheet and 0 for art, so
+    // an art sheet multiplies by white (i.e. is a no-op).
+    uvec3 rgb = uvec3(
+        v_mask.a == 0u ? src_u8.r : multiply_u8(src_u8.r, v_mask.r),
+        v_mask.a == 0u ? src_u8.g : multiply_u8(src_u8.g, v_mask.g),
+        v_mask.a == 0u ? src_u8.b : multiply_u8(src_u8.b, v_mask.b)
+    );
 
     // Stage 2: the cell's tint.
     if (v_tint_op == 1u) {
-        rgb = rgb * v_tint.rgb;
+        rgb = uvec3(
+            multiply_u8(rgb.r, v_tint.r),
+            multiply_u8(rgb.g, v_tint.g),
+            multiply_u8(rgb.b, v_tint.b)
+        );
     } else if (v_tint_op == 2u) {
-        rgb = mix(rgb, v_tint.rgb, v_tint.a);
+        int t = int(v_tint.a);
+        rgb = uvec3(
+            mix_u8(int(rgb.r), int(v_tint.r), t),
+            mix_u8(int(rgb.g), int(v_tint.g), t),
+            mix_u8(int(rgb.b), int(v_tint.b), t)
+        );
     }
 
-    frag = vec4(rgb, src.a);
+    frag = vec4(vec3(rgb) / 255.0, src.a);
 }
 ";
 

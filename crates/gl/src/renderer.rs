@@ -632,11 +632,13 @@ impl SpriteGpu {
             gl.vertex_attrib_pointer_i32(4, 2, glow::SHORT, SPRITE_STRIDE, 10);
             gl.enable_vertex_attrib_array(4);
             gl.vertex_attrib_divisor(4, 1);
-            // a_mask (4 u8 @14, normalized), a_tint (4 u8 @18, normalized), a_tint_op (1 u16 @22).
-            gl.vertex_attrib_pointer_f32(5, 4, glow::UNSIGNED_BYTE, true, SPRITE_STRIDE, 14);
+            // a_mask (4 u8 @14, raw 0..255), a_tint (4 u8 @18, raw 0..255), a_tint_op (1 u16 @22).
+            // Unnormalized `IPointer` uploads so the fragment shader recolours in exact integer
+            // math (matching `Tint::apply`'s `u8` arithmetic) instead of lossy normalized floats.
+            gl.vertex_attrib_pointer_i32(5, 4, glow::UNSIGNED_BYTE, SPRITE_STRIDE, 14);
             gl.enable_vertex_attrib_array(5);
             gl.vertex_attrib_divisor(5, 1);
-            gl.vertex_attrib_pointer_f32(6, 4, glow::UNSIGNED_BYTE, true, SPRITE_STRIDE, 18);
+            gl.vertex_attrib_pointer_i32(6, 4, glow::UNSIGNED_BYTE, SPRITE_STRIDE, 18);
             gl.enable_vertex_attrib_array(6);
             gl.vertex_attrib_divisor(6, 1);
             gl.vertex_attrib_pointer_i32(7, 1, glow::UNSIGNED_SHORT, SPRITE_STRIDE, 22);
