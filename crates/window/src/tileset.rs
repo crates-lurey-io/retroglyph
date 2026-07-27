@@ -17,6 +17,12 @@ use core::fmt;
 ///
 /// Orthogonal to [`Tint`](retroglyph_core::Tint), which is per-cell and applies on top: see
 /// [`Surface::with_tint`](retroglyph_core::Surface::with_tint).
+///
+/// Open question (retroglyph#559): a sheet mixing mask tiles and full-colour art tiles has no
+/// way to say so today, since this is a sheet-wide setting. The likely answer is to split such a
+/// sheet into two `TilesetOptions` loads, one per `SheetColor`, rather than adding a per-tile
+/// escape hatch here -- but that is untested against a real mixed asset and not resolved by this
+/// type as written.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 #[non_exhaustive]
 pub enum SheetColor {

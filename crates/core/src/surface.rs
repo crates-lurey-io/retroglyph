@@ -102,6 +102,11 @@ impl<'a> Surface<'a> {
     /// Applies to sprites only. A cell backend has no sprite to recolour and draws the cell's
     /// glyph in its own [`Style`], tinted or not, so this is invisible there. See [`Tint`].
     ///
+    /// This tint composes with the sheet's own colour treatment; see
+    /// `retroglyph_window::tileset::SheetColor` and `retroglyph_window::sprite_cache::SpriteTint`
+    /// for the two-stage resolution (retroglyph-core has no dependency on retroglyph-window, so
+    /// these are plain names, not intra-doc links).
+    ///
     /// For a multi-cell span the tint lands on the anchor cell, which is where a pixel backend
     /// draws the sprite from.
     ///
