@@ -151,6 +151,10 @@ pub struct GlRenderer {
     /// every frame. See `retroglyph_window::sprite_cache::warn_sprite_needs_span`.
     #[cfg(feature = "tilesets")]
     warned_oversized: std::collections::BTreeSet<char>,
+    /// Glyphs already reported as having a dropped tint, so a redraw loop logs each one once
+    /// instead of every frame. See `retroglyph_window::sprite_cache::warn_tint_needs_sprite`.
+    #[cfg(feature = "tilesets")]
+    warned_dropped_tint: std::collections::BTreeSet<char>,
     /// The current surface size in physical pixels (set by [`resize_surface`](Presenter::resize_surface)).
     surface_size: (u32, u32),
     /// GL context + resources. `None` until [`init_surface`](Presenter::init_surface).
@@ -191,6 +195,8 @@ impl GlRenderer {
             sprite_layers: Vec::new(),
             #[cfg(feature = "tilesets")]
             warned_oversized: std::collections::BTreeSet::new(),
+            #[cfg(feature = "tilesets")]
+            warned_dropped_tint: std::collections::BTreeSet::new(),
             surface_size: geometry.surface_size(cols, rows),
             gpu: None,
         }
@@ -227,6 +233,22 @@ impl GlRenderer {
                 u32::from(self.geometry.glyph_w),
                 u32::from(self.geometry.glyph_h),
             ),
+        );
+    }
+
+    /// Reports a tint set on a cell whose glyph resolved to a bitmap font rather than a sprite, so
+    /// the tint was silently dropped (retroglyph#564).
+    ///
+    /// Shares `retroglyph-window`'s diagnostic with the software backend so both name the same
+    /// fix. Called from the branch that already knows the sprite atlas has no slot for this
+    /// glyph; a tint on a cell that does resolve to a sprite is handled, not dropped, and says
+    /// nothing here.
+    #[cfg(feature = "tilesets")]
+    fn warn_if_tint_needs_sprite(&mut self, glyph: char, tint: retroglyph_core::Tint) {
+        retroglyph_window::sprite_cache::warn_tint_needs_sprite(
+            &mut self.warned_dropped_tint,
+            glyph,
+            tint,
         );
     }
 
@@ -474,6 +496,8 @@ impl Output for GlRenderer {
                     ));
                     continue;
                 }
+                #[cfg(feature = "tilesets")]
+                self.warn_if_tint_needs_sprite(tile.glyph(), draw_cell.tint);
                 inherited_bg[idx] = inst.bg;
                 self.layers[0][idx] = inst;
                 continue;
@@ -539,6 +563,8 @@ impl Output for GlRenderer {
                 ));
                 continue;
             }
+            #[cfg(feature = "tilesets")]
+            self.warn_if_tint_needs_sprite(tile.glyph(), draw_cell.tint);
             self.layers[l][idx] =
                 Instance::new(glyph, fg, bg, tile.dx(), tile.dy(), FLAG_HAS_BG | has_glyph);
         }
@@ -868,5 +894,110 @@ mod compositing_tests {
 
         assert_eq!(r.layers[0][0].flags & FLAG_HAS_GLYPH, FLAG_HAS_GLYPH);
         assert_eq!(r.layers[0][1].flags & FLAG_HAS_GLYPH, 0);
+    }
+}
+
+/// Dropped-tint diagnostic (retroglyph#564): a tint set on a cell whose glyph resolved to a
+/// bitmap font rather than a sprite is silently dropped, the same trap retroglyph#537 fell into.
+/// These exercise `GlRenderer::draw_layers` directly (no GL context needed: only the CPU-side
+/// `warned_dropped_tint` set and instance arrays are inspected).
+#[cfg(all(test, feature = "default-font", feature = "tilesets"))]
+mod dropped_tint_tests {
+    use crate::GlBackendBuilder;
+    use retroglyph_core::DrawCell;
+    use retroglyph_core::Tint;
+    use retroglyph_core::backend::Output;
+    use retroglyph_core::grid::Pos;
+    use retroglyph_core::style::Style;
+    use retroglyph_core::tile::Tile;
+    use retroglyph_window::tileset::{Codepage, TilesetOptions};
+
+    /// A single 8x16 opaque red tile mapped to `'S'`, the Unscii cell size.
+    ///
+    /// A hardcoded byte literal rather than built with the `image` crate: unlike
+    /// `retroglyph-software`, this crate only pulls `image` in as a dev-dependency on Linux and
+    /// wasm32 (see `headless.rs`/`webgl_smoke.rs`), so a test that must build on every platform
+    /// (this one; it needs no GL context) cannot depend on it being present to encode a PNG.
+    fn one_tile_png() -> Vec<u8> {
+        vec![
+            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48,
+            0x44, 0x52, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x10, 0x08, 0x06, 0x00, 0x00,
+            0x00, 0x2B, 0x8A, 0x3E, 0x7D, 0x00, 0x00, 0x00, 0x15, 0x49, 0x44, 0x41, 0x54, 0x78,
+            0xDA, 0x63, 0xF8, 0xCF, 0xC0, 0xF0, 0x1F, 0x1F, 0x66, 0x18, 0x55, 0x30, 0x92, 0x14,
+            0x00, 0x00, 0x09, 0x79, 0xFF, 0x01, 0x4F, 0x5C, 0x4F, 0x78, 0x00, 0x00, 0x00, 0x00,
+            0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+        ]
+    }
+
+    fn renderer_with_sprite(cols: u16, rows: u16) -> crate::GlRenderer {
+        let opts = TilesetOptions::from_bytes(one_tile_png())
+            .tile_size(8, 16)
+            .codepage(Codepage::Custom(vec!['S']))
+            .build()
+            .expect("valid single-tile tileset");
+        GlBackendBuilder::new()
+            .grid_size(cols, rows)
+            .tileset(opts)
+            .build()
+            .expect("default-font builds")
+    }
+
+    #[test]
+    fn layer_0_reports_a_tint_on_a_glyph_without_a_sprite() {
+        // 'X' has no tileset entry, so it falls back to the bitmap font, and any tint on it is
+        // dropped.
+        let mut r = renderer_with_sprite(1, 1);
+        let tile = Tile::new('X', Style::new());
+        r.draw_layers(core::iter::once(
+            DrawCell::on_layer(0, Pos::new(0, 0), &tile).with_tint(Tint::multiply(128, 128, 128)),
+        ))
+        .expect("draw_layers is infallible");
+
+        assert_eq!(r.warned_dropped_tint.contains(&'X'), retroglyph_core::DEV);
+    }
+
+    #[test]
+    fn layer_0_does_not_report_a_tint_on_a_glyph_that_has_a_sprite() {
+        let mut r = renderer_with_sprite(1, 1);
+        let tile = Tile::new('S', Style::new());
+        r.draw_layers(core::iter::once(
+            DrawCell::on_layer(0, Pos::new(0, 0), &tile).with_tint(Tint::multiply(128, 128, 128)),
+        ))
+        .expect("draw_layers is infallible");
+
+        assert!(!r.warned_dropped_tint.contains(&'S'));
+    }
+
+    #[test]
+    fn a_higher_layer_reports_a_tint_on_a_glyph_without_a_sprite() {
+        // The `layer_id != 0` branch is a separate code path from layer 0's; it must report the
+        // same thing.
+        let mut r = renderer_with_sprite(1, 1);
+        let base = Tile::new(' ', Style::new());
+        let tile = Tile::new('X', Style::new());
+        r.draw_layers(
+            [
+                DrawCell::on_layer(0, Pos::new(0, 0), &base),
+                DrawCell::on_layer(1, Pos::new(0, 0), &tile).with_tint(Tint::multiply(1, 1, 1)),
+            ]
+            .into_iter(),
+        )
+        .expect("draw_layers is infallible");
+
+        assert_eq!(r.warned_dropped_tint.contains(&'X'), retroglyph_core::DEV);
+    }
+
+    #[test]
+    fn tint_none_is_never_reported() {
+        let mut r = renderer_with_sprite(1, 1);
+        let tile = Tile::new('X', Style::new());
+        r.draw_layers(core::iter::once(DrawCell::on_layer(
+            0,
+            Pos::new(0, 0),
+            &tile,
+        )))
+        .expect("draw_layers is infallible");
+
+        assert!(r.warned_dropped_tint.is_empty());
     }
 }

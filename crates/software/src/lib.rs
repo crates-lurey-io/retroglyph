@@ -101,7 +101,9 @@ use retroglyph_window::WindowHandle;
 use retroglyph_window::geometry::CellGeometry;
 use retroglyph_window::palette::{DEFAULT_BG, DEFAULT_FG};
 #[cfg(feature = "tilesets")]
-use retroglyph_window::sprite_cache::{Sprite, SpriteCache, SpriteTint, warn_sprite_needs_span};
+use retroglyph_window::sprite_cache::{
+    Sprite, SpriteCache, SpriteTint, warn_sprite_needs_span, warn_tint_needs_sprite,
+};
 #[cfg(feature = "tilesets")]
 use std::collections::BTreeSet;
 use std::collections::VecDeque;
@@ -181,6 +183,10 @@ struct RenderContext {
     /// loop logs each one once instead of every frame.
     #[cfg(feature = "tilesets")]
     warned_oversized: BTreeSet<char>,
+    /// Glyphs already reported by [`warn_tint_needs_sprite`] as having a dropped tint, so a 60fps
+    /// redraw loop logs each one once instead of every frame.
+    #[cfg(feature = "tilesets")]
+    warned_dropped_tint: BTreeSet<char>,
 }
 
 impl SoftwareRenderer {
@@ -212,6 +218,8 @@ impl SoftwareRenderer {
                 prev_layer_count: usize::MAX,
                 #[cfg(feature = "tilesets")]
                 warned_oversized: BTreeSet::new(),
+                #[cfg(feature = "tilesets")]
+                warned_dropped_tint: BTreeSet::new(),
             },
             #[cfg(feature = "tilesets")]
             sprite_cache,
@@ -453,6 +461,10 @@ impl SoftwareRenderer {
                 }
                 return;
             }
+            // No sprite for this glyph: it falls back to the bitmap font below, which is
+            // `fg`-coloured, so a tint that would otherwise recolour a sprite silently has no
+            // effect here (retroglyph#564, #537's exact trap).
+            warn_tint_needs_sprite(&mut self.ctx.warned_dropped_tint, tile.glyph(), tint);
         }
 
         blit_glyph(
@@ -597,6 +609,8 @@ impl Output for SoftwareRenderer {
                 sprite_cache,
                 #[cfg(feature = "tilesets")]
                 draw_cell.tint,
+                #[cfg(feature = "tilesets")]
+                &mut self.ctx.warned_dropped_tint,
             );
         }
         Ok(())
@@ -926,6 +940,7 @@ fn blit_cell(
     scale: usize,
     #[cfg(feature = "tilesets")] sprite_cache: Option<&SpriteCache>,
     #[cfg(feature = "tilesets")] tint: Tint,
+    #[cfg(feature = "tilesets")] warned_dropped_tint: &mut BTreeSet<char>,
 ) {
     let px_x = pos.x as usize * cell_w;
     let px_y = pos.y as usize * cell_h;
@@ -955,6 +970,11 @@ fn blit_cell(
         );
         return;
     }
+    // No sprite for this glyph: it falls back to the bitmap font below, which is `fg`-coloured,
+    // so a tint that would otherwise recolour a sprite silently has no effect here
+    // (retroglyph#564, #537's exact trap).
+    #[cfg(feature = "tilesets")]
+    warn_tint_needs_sprite(warned_dropped_tint, cell.glyph(), tint);
 
     let fg = resolve_color(cell.style().foreground(), DEFAULT_FG);
     let bg = resolve_color(cell.style().background(), DEFAULT_BG);
@@ -2535,6 +2555,62 @@ mod span_tests {
 
         assert_eq!(px(&r, 2, 0, 0), GREEN, "the anchor's own glyph still draws");
         assert_ne!(px(&r, 2, 8, 0), GREEN, "the covered cell's glyph does not");
+    }
+
+    // ── Dropped-tint diagnostic (retroglyph#564) ───────────────────────────
+
+    #[test]
+    fn draw_layers_reports_a_tint_on_a_glyph_without_a_sprite() {
+        // 'X' has no tileset entry, so it falls back to the bitmap font and any tint on it is
+        // silently dropped: exactly the trap retroglyph#537 fell into.
+        let mut r = renderer_with_sprite(1, 1, 8, 16, 8, SpriteAlign::TopLeft);
+        let mut grid = Grid::new(1, 1);
+        grid.write_span(0, 0, 0, &["X"], Style::new()).unwrap();
+        paint_tinted(&mut r, &grid, Tint::multiply(128, 128, 128));
+
+        assert_eq!(
+            r.ctx.warned_dropped_tint.contains(&'X'),
+            retroglyph_core::DEV
+        );
+    }
+
+    #[test]
+    fn draw_layers_does_not_report_a_tint_on_a_glyph_that_has_a_sprite() {
+        // 'S' does resolve to a sprite, so its tint is applied, not dropped, and must not be
+        // reported.
+        let mut r = renderer_with_sprite(1, 1, 8, 16, 8, SpriteAlign::TopLeft);
+        let mut grid = Grid::new(1, 1);
+        grid.write_span(0, 0, 0, &["S"], Style::new()).unwrap();
+        paint_tinted(&mut r, &grid, Tint::multiply(128, 128, 128));
+
+        assert!(!r.ctx.warned_dropped_tint.contains(&'S'));
+    }
+
+    #[test]
+    fn draw_layers_does_not_report_tint_none() {
+        let mut r = renderer_with_sprite(1, 1, 8, 16, 8, SpriteAlign::TopLeft);
+        let mut grid = Grid::new(1, 1);
+        grid.write_span(0, 0, 0, &["X"], Style::new()).unwrap();
+        paint(&mut r, &grid);
+
+        assert!(r.ctx.warned_dropped_tint.is_empty());
+    }
+
+    #[test]
+    fn draw_reports_a_tint_on_a_glyph_without_a_sprite() {
+        // The single-layer `Output::draw` path (`blit_cell`) must report the same thing as
+        // `draw_layers` (`blit_cell_glyph`).
+        let mut r = renderer_with_sprite(1, 1, 8, 16, 8, SpriteAlign::TopLeft);
+        let tile = Tile::new('X', Style::new());
+        r.draw(core::iter::once(
+            DrawCell::new(Pos::new(0, 0), &tile).with_tint(Tint::multiply(128, 128, 128)),
+        ))
+        .unwrap();
+
+        assert_eq!(
+            r.ctx.warned_dropped_tint.contains(&'X'),
+            retroglyph_core::DEV
+        );
     }
 }
 
