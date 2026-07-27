@@ -837,6 +837,43 @@ impl<W: std::io::Write> Input for Crossterm<W> {
     }
 }
 
+impl<W: std::io::Write> Crossterm<W> {
+    /// Sets the terminal window/tab title.
+    ///
+    /// Queues `crossterm::terminal::SetTitle` and flushes immediately (unlike
+    /// [`Cursor::set_cursor_visible`]/[`Cursor::set_cursor_position`], this is not expected to be
+    /// called every frame, so there is no deferred-flush benefit to chase). Not every terminal
+    /// emulator honors this OSC sequence; on ones that don't, this is silently a no-op from the
+    /// caller's perspective.
+    ///
+    /// # Errors
+    ///
+    /// Returns an `std::io::Error` if writing or flushing the escape sequence fails (e.g. a
+    /// closed terminal or disconnected pipe).
+    pub fn set_title(&mut self, title: &str) -> std::io::Result<()> {
+        let writer = self.renderer.writer_mut();
+        crossterm::queue!(writer, crossterm::terminal::SetTitle(title))?;
+        writer.flush()
+    }
+
+    /// Rings the terminal bell (writes the `BEL` control character, `\x07`).
+    ///
+    /// Crossterm has no dedicated `Command` type for this (unlike [`Self::set_title`]'s
+    /// `SetTitle`), so this writes the raw byte directly. Whether the terminal actually makes a
+    /// sound, flashes, or does nothing at all is entirely up to the terminal emulator/user
+    /// configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an `std::io::Error` if writing or flushing the byte fails (e.g. a closed terminal
+    /// or disconnected pipe).
+    pub fn ring_bell(&mut self) -> std::io::Result<()> {
+        let writer = self.renderer.writer_mut();
+        writer.write_all(b"\x07")?;
+        writer.flush()
+    }
+}
+
 impl<W: std::io::Write> Cursor for Crossterm<W> {
     /// Queues the show/hide escape without flushing; the next [`Output::flush`] call drains it
     /// along with everything else. A caller that hides the cursor and moves it in the same frame
@@ -1513,5 +1550,46 @@ mod tests {
             mouse_event_kind_of(crossterm::event::MouseEventKind::ScrollRight),
             K::ScrollRight
         );
+    }
+
+    #[test]
+    fn set_title_writes_the_osc_title_escape() {
+        let _lock = TEST_GUARD_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut term = Crossterm::builder()
+            .raw_mode(false)
+            .alt_screen(false)
+            .mouse_capture(false)
+            .focus_change(false)
+            .bracketed_paste(false)
+            .kitty_protocol(false)
+            .build_with_writer(Vec::new())
+            .expect("building against a Vec<u8> writer with all TTY features disabled must not require a real terminal");
+
+        term.set_title("my title").unwrap();
+
+        let written = String::from_utf8(term.writer().clone()).unwrap();
+        assert_eq!(written, "\x1B]0;my title\x07");
+    }
+
+    #[test]
+    fn ring_bell_writes_the_bel_byte() {
+        let _lock = TEST_GUARD_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut term = Crossterm::builder()
+            .raw_mode(false)
+            .alt_screen(false)
+            .mouse_capture(false)
+            .focus_change(false)
+            .bracketed_paste(false)
+            .kitty_protocol(false)
+            .build_with_writer(Vec::new())
+            .expect("building against a Vec<u8> writer with all TTY features disabled must not require a real terminal");
+
+        term.ring_bell().unwrap();
+
+        assert_eq!(term.writer().as_slice(), b"\x07");
     }
 }
