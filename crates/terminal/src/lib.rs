@@ -49,17 +49,12 @@
 //!
 //! # RGB color fallback on 256-color terminals
 //!
-//! [`Color::Rgb`] tiles are written out verbatim as a 24-bit truecolor SGR sequence (`38;2;r;g;b` /
-//! `48;2;r;g;b`, one of the codes this crate's internal SGR-color writer emits). This crate does
-//! **not** quantize RGB down to the 256-color or 16-color ANSI palettes, and neither does
-//! `retroglyph-core`: there is no `Color::to_indexed()`-style guarantee anywhere in this workspace.
-//! The bytes this renderer emits are the same regardless of what the receiving terminal actually
-//! supports.
-//!
-//! This mirrors `crossterm`'s own `SetForegroundColor`/`SetBackgroundColor` behavior (and that of
-//! most Rust terminal-UI crates): truecolor codes are written unconditionally, and it is left to
-//! the terminal emulator (or a multiplexer like `tmux`/`screen` sitting in between) to interpret
-//! or degrade them. In practice:
+//! By default ([`ColorSupport::Truecolor`]), [`Color::Rgb`] tiles are written out verbatim as a
+//! 24-bit truecolor SGR sequence (`38;2;r;g;b` / `48;2;r;g;b`, one of the codes this crate's
+//! internal SGR-color writer emits), with no quantization. This mirrors `crossterm`'s own
+//! `SetForegroundColor`/`SetBackgroundColor` behavior (and that of most Rust terminal-UI crates):
+//! truecolor codes are written unconditionally, and it is left to the terminal emulator (or a
+//! multiplexer like `tmux`/`screen` sitting in between) to interpret or degrade them. In practice:
 //!
 //! - Terminals that advertise truecolor support (`$COLORTERM=truecolor` or `24bit`) render the
 //!   exact color.
@@ -69,13 +64,21 @@
 //! - A minority of older/limited terminals may render truecolor sequences incorrectly (wrong color,
 //!   or no color at all) if they don't recognize the extended `;2;` SGR form.
 //!
-//! Callers that need a specific, correct color on a known-limited terminal should use
+//! Callers that know the receiving terminal is more limited (or that `$NO_COLOR` is set) can set
+//! [`TerminalRenderer::with_color_support`]/[`TerminalRenderer::set_color_support`] to
+//! [`ColorSupport::Indexed256`], [`ColorSupport::Ansi16`], or [`ColorSupport::None`] instead:
+//! [`draw`](TerminalRenderer::draw) then quantizes every [`Color::Rgb`] tile through
+//! [`Color::to_indexed`]/[`Color::to_ansi`] (or forces [`Color::Default`]) before writing its SGR
+//! sequence, so the emitted bytes match what was actually requested rather than relying on the
+//! terminal to downsample. This crate does not auto-detect terminal capabilities itself (that
+//! belongs to a backend that actually has access to `$TERM`/`$COLORTERM`/`$NO_COLOR`, e.g.
+//! `retroglyph-crossterm`'s `CrosstermOptions`); [`ColorSupport::Truecolor`] remains the default.
+//!
+//! Callers that need a specific, correct color regardless of `ColorSupport` should use
 //! [`Color::Indexed`] or [`Color::Ansi`] explicitly instead of [`Color::Rgb`]; both are passed
-//! through untranslated (`38;5;n` / plain ANSI codes) and have no ambiguity across terminal color
-//! depths. There is currently no capability-detection step in this crate (or
-//! `retroglyph-crossterm`) that would let it choose automatically: adding one would require
-//! querying/guessing terminal color depth (`$COLORTERM`, `$TERM`, or a runtime query), which is
-//! out of scope for this shared renderer and left to callers or a future crate.
+//! through untranslated (`38;5;n` / plain ANSI codes) at every `ColorSupport` level except
+//! [`ColorSupport::None`] (which forces [`Color::Default`] regardless of the requested color) and
+//! have no ambiguity across terminal color depths.
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
@@ -91,6 +94,53 @@ use retroglyph_core::DrawCell;
 use retroglyph_core::color::Color;
 use retroglyph_core::tile::Tile;
 use std::io::{self, Write};
+
+/// How aggressively [`TerminalRenderer`] quantizes [`Color`] before emitting an SGR sequence.
+///
+/// Applied as a final degradation step at draw time, on top of whatever [`Color`] a [`Tile`]
+/// already carries: [`Color::Ansi`]/[`Color::Indexed`] are passed through untranslated at every
+/// level except [`ColorSupport::None`]; only [`Color::Rgb`] is actually downgraded (via
+/// [`Color::to_indexed`]/[`Color::to_ansi`]), since it is the only variant with more precision
+/// than a limited terminal can display. See the crate-level "RGB color fallback on 256-color
+/// terminals" doc section for the full contract and [`TerminalRenderer::with_color_support`]/
+/// [`TerminalRenderer::set_color_support`] to configure it.
+///
+/// This crate does not detect terminal capabilities itself; see
+/// [`retroglyph-crossterm`](https://docs.rs/retroglyph-crossterm)'s `CrosstermOptions` for a
+/// backend that auto-detects this from `$NO_COLOR`/`$COLORTERM`/`$TERM` and passes the result
+/// through.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[non_exhaustive]
+pub enum ColorSupport {
+    /// No quantization: [`Color::Rgb`] tiles are written out verbatim as a 24-bit truecolor SGR
+    /// sequence. The default, matching this renderer's historical behavior.
+    #[default]
+    Truecolor,
+    /// [`Color::Rgb`] tiles are quantized to the nearest of the 256 indexed-color palette entries
+    /// via [`Color::to_indexed`] before being written.
+    Indexed256,
+    /// [`Color::Rgb`] tiles are quantized to the nearest of the 16 standard ANSI colors via
+    /// [`Color::to_ansi`] before being written.
+    Ansi16,
+    /// Every [`Color`] is forced to [`Color::Default`]: no SGR color codes are emitted at all.
+    None,
+}
+
+impl ColorSupport {
+    /// Applies this degradation level to `color`, returning the [`Color`] that should actually be
+    /// written as an SGR sequence.
+    fn apply(self, color: Color) -> Color {
+        match self {
+            Self::Truecolor => color,
+            Self::Indexed256 => color.to_indexed(),
+            Self::Ansi16 => color.to_ansi(),
+            // `ColorSupport` is `#[non_exhaustive]`: an unrecognized future level degrades to
+            // the most conservative, always-safe choice (no color at all) rather than failing to
+            // compile or accidentally passing a color through unquantized.
+            _ => Color::Default,
+        }
+    }
+}
 
 /// Writes a [`Color`]'s SGR parameter list (no `\x1b[`/`m` wrapper) for `SetForegroundColor`
 /// (`38;...`) or `SetBackgroundColor` (`48;...`) to `out`.
@@ -187,6 +237,7 @@ pub struct TerminalRenderer<W> {
     cursor_x: Option<u16>,
     cursor_y: Option<u16>,
     plain: bool,
+    color_support: ColorSupport,
 }
 
 impl<W: Write> TerminalRenderer<W> {
@@ -200,6 +251,7 @@ impl<W: Write> TerminalRenderer<W> {
             cursor_x: None,
             cursor_y: None,
             plain: false,
+            color_support: ColorSupport::Truecolor,
         }
     }
 
@@ -217,12 +269,33 @@ impl<W: Write> TerminalRenderer<W> {
             cursor_x: None,
             cursor_y: None,
             plain,
+            color_support: ColorSupport::Truecolor,
         }
     }
 
     /// Returns whether plain mode is enabled. See [`set_plain_mode`](Self::set_plain_mode).
     pub const fn plain_mode(&self) -> bool {
         self.plain
+    }
+
+    /// Returns the configured [`ColorSupport`] level. See
+    /// [`set_color_support`](Self::set_color_support).
+    pub const fn color_support(&self) -> ColorSupport {
+        self.color_support
+    }
+
+    /// Sets the [`ColorSupport`] level, controlling how [`Color::Rgb`] tiles are quantized before
+    /// being written. See the crate-level "RGB color fallback on 256-color terminals" doc
+    /// section for the full contract.
+    pub const fn set_color_support(&mut self, color_support: ColorSupport) {
+        self.color_support = color_support;
+    }
+
+    /// This renderer with `color_support` set. See [`set_color_support`](Self::set_color_support).
+    #[must_use]
+    pub const fn with_color_support(mut self, color_support: ColorSupport) -> Self {
+        self.color_support = color_support;
+        self
     }
 
     /// Enables or disables plain mode.
@@ -369,8 +442,11 @@ impl<W: Write> TerminalRenderer<W> {
                 continue;
             }
 
-            let fg = cell.style().foreground();
-            let bg = cell.style().background();
+            // Applied here (last-known-state comparisons and the SGR sequences below both use
+            // the degraded color), not on `Tile::style` itself: `ColorSupport` degrades what is
+            // *emitted*, not the tile's own requested color.
+            let fg = self.color_support.apply(cell.style().foreground());
+            let bg = self.color_support.apply(cell.style().background());
 
             // Only emit a cursor move when the cursor isn't already at the
             // right position (adjacent cells advance the cursor by printing).
@@ -619,6 +695,89 @@ mod tests {
         assert!(
             !out.contains("38;5;"),
             "expected no indexed fallback, got: {out:?}"
+        );
+    }
+
+    fn render_one_with_color_support(tile: &Tile, color_support: ColorSupport) -> String {
+        let mut renderer = TerminalRenderer::new(Vec::new()).with_color_support(color_support);
+        renderer
+            .draw(core::iter::once(DrawCell::new(Pos { x: 0, y: 0 }, tile)))
+            .unwrap();
+        renderer.flush().unwrap();
+        String::from_utf8(renderer.into_writer()).unwrap()
+    }
+
+    #[test]
+    fn color_support_defaults_to_truecolor() {
+        let renderer = TerminalRenderer::new(Vec::new());
+        assert_eq!(renderer.color_support(), ColorSupport::Truecolor);
+    }
+
+    #[test]
+    fn with_color_support_sets_the_configured_level() {
+        let renderer = TerminalRenderer::new(Vec::new()).with_color_support(ColorSupport::Ansi16);
+        assert_eq!(renderer.color_support(), ColorSupport::Ansi16);
+    }
+
+    #[test]
+    fn color_support_truecolor_passes_rgb_through_unquantized() {
+        let style = Style::new().fg(Color::Rgb {
+            r: 91,
+            g: 142,
+            b: 217,
+        });
+        let tile = Tile::new('X', style);
+        let out = render_one_with_color_support(&tile, ColorSupport::Truecolor);
+        assert!(out.contains("\x1b[38;2;91;142;217;49m"), "output: {out:?}");
+    }
+
+    #[test]
+    fn color_support_indexed256_quantizes_rgb_to_the_256_color_palette() {
+        let style = Style::new().fg(Color::Rgb { r: 1, g: 2, b: 3 });
+        let tile = Tile::new('X', style);
+        let out = render_one_with_color_support(&tile, ColorSupport::Indexed256);
+        assert!(
+            out.contains("38;5;"),
+            "expected an indexed SGR sequence, got: {out:?}"
+        );
+        assert!(
+            !out.contains("38;2;"),
+            "expected no truecolor sequence, got: {out:?}"
+        );
+    }
+
+    #[test]
+    fn color_support_ansi16_quantizes_rgb_to_the_standard_ansi_range() {
+        let style = Style::new().fg(Color::Rgb {
+            r: 255,
+            g: 0,
+            b: 0,
+        });
+        let tile = Tile::new('X', style);
+        let out = render_one_with_color_support(&tile, ColorSupport::Ansi16);
+        assert!(
+            !out.contains("38;2;") && !out.contains("38;5;"),
+            "expected a plain ANSI SGR code, got: {out:?}"
+        );
+        // Pure red quantizes to bright red (index 9 -> bright base 90 + 1 = 91).
+        assert!(out.contains("\x1b[91;49m"), "output: {out:?}");
+    }
+
+    #[test]
+    fn color_support_none_forces_every_color_to_default() {
+        let style = Style::new()
+            .fg(Color::Rgb {
+                r: 91,
+                g: 142,
+                b: 217,
+            })
+            .bg(Color::Ansi(AnsiColor::Red));
+        let tile = Tile::new('X', style);
+        let out = render_one_with_color_support(&tile, ColorSupport::None);
+        assert!(out.contains("\x1b[39;49m"), "output: {out:?}");
+        assert!(
+            !out.contains("38;") && !out.contains("48;") && !out.contains("31;"),
+            "expected no color codes at all, got: {out:?}"
         );
     }
 

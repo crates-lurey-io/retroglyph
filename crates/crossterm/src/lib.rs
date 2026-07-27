@@ -102,6 +102,49 @@ fn keyboard_enhancement_flags() -> crossterm::event::KeyboardEnhancementFlags {
         | crossterm::event::KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
 }
 
+/// Chooses a [`ColorSupport`](retroglyph_terminal::ColorSupport) level from the de facto
+/// `$NO_COLOR`/`$COLORTERM`/`$TERM` conventions, as a pure function of their values so it's
+/// testable without mutating real process environment variables.
+///
+/// - `no_color` any non-empty value (per <https://no-color.org>) forces
+///   [`ColorSupport::None`](retroglyph_terminal::ColorSupport::None), overriding everything else.
+/// - Otherwise, `colorterm` containing `"truecolor"` or `"24bit"` (case-insensitive) selects
+///   [`ColorSupport::Truecolor`](retroglyph_terminal::ColorSupport::Truecolor).
+/// - Otherwise, `term` containing `"256color"` selects
+///   [`ColorSupport::Indexed256`](retroglyph_terminal::ColorSupport::Indexed256).
+/// - Otherwise, [`ColorSupport::Ansi16`](retroglyph_terminal::ColorSupport::Ansi16): a
+///   conservative fallback for an unrecognized or absent `$TERM`.
+fn detect_color_support(
+    no_color: Option<&str>,
+    colorterm: Option<&str>,
+    term: Option<&str>,
+) -> retroglyph_terminal::ColorSupport {
+    use retroglyph_terminal::ColorSupport;
+
+    if no_color.is_some_and(|value| !value.is_empty()) {
+        return ColorSupport::None;
+    }
+    if colorterm.is_some_and(|value| {
+        let value = value.to_ascii_lowercase();
+        value.contains("truecolor") || value.contains("24bit")
+    }) {
+        return ColorSupport::Truecolor;
+    }
+    if term.is_some_and(|value| value.contains("256color")) {
+        return ColorSupport::Indexed256;
+    }
+    ColorSupport::Ansi16
+}
+
+/// Thin env-reading wrapper around [`detect_color_support`]; reads the real process environment.
+fn detect_color_support_from_env() -> retroglyph_terminal::ColorSupport {
+    detect_color_support(
+        std::env::var("NO_COLOR").ok().as_deref(),
+        std::env::var("COLORTERM").ok().as_deref(),
+        std::env::var("TERM").ok().as_deref(),
+    )
+}
+
 // Tracks whether the currently-live `Crossterm` instance (there's normally at most one, since
 // each holds exclusive use of stdout/raw mode) actually entered the alternate screen / enabled
 // raw mode, so `restore_terminal` (shared by `Drop` and the process-wide panic hook, neither of
@@ -251,6 +294,12 @@ pub struct CrosstermOptions {
     bracketed_paste: bool,
     alt_screen: bool,
     raw_mode: bool,
+    // `None` means auto-detect from `$NO_COLOR`/`$COLORTERM`/`$TERM` at build time (see
+    // `detect_color_support_from_env`); `Some` is an explicit caller override that skips
+    // detection entirely. Unlike the six booleans above, this can't default to a plain `bool`
+    // (or even a bare `ColorSupport`) without losing the ability to tell "caller explicitly
+    // wants `Truecolor`" apart from "caller didn't say, go detect it".
+    color_support: Option<retroglyph_terminal::ColorSupport>,
 }
 
 impl CrosstermOptions {
@@ -321,6 +370,17 @@ impl CrosstermOptions {
         self
     }
 
+    /// Overrides the [`ColorSupport`](retroglyph_terminal::ColorSupport) level, skipping this
+    /// crate's own `$NO_COLOR`/`$COLORTERM`/`$TERM` auto-detection (see
+    /// [`Crossterm::color_support`] for the auto-detected default and how it's chosen).
+    /// Use this when a caller knows the receiving terminal's actual color depth (or wants to
+    /// force it) rather than trusting the environment.
+    #[must_use]
+    pub const fn color_support(mut self, color_support: retroglyph_terminal::ColorSupport) -> Self {
+        self.color_support = Some(color_support);
+        self
+    }
+
     /// Builds the [`Crossterm`] backend with these options, rendering to standard output.
     ///
     /// Equivalent to [`Crossterm::with_options`]; this is the terminal step of the
@@ -381,7 +441,9 @@ impl CrosstermOptions {
 }
 
 impl Default for CrosstermOptions {
-    /// Every feature enabled; matches [`Crossterm::new`]'s historical behavior.
+    /// Every feature enabled; matches [`Crossterm::new`]'s historical behavior. `color_support`
+    /// defaults to `None` (auto-detect from the environment at build time; see
+    /// [`CrosstermOptions::color_support`]).
     fn default() -> Self {
         Self {
             mouse_capture: true,
@@ -390,6 +452,7 @@ impl Default for CrosstermOptions {
             bracketed_paste: true,
             alt_screen: true,
             raw_mode: true,
+            color_support: None,
         }
     }
 }
@@ -606,6 +669,15 @@ impl<W: std::io::Write> Crossterm<W> {
         self.renderer.plain_mode()
     }
 
+    /// Returns the configured [`ColorSupport`](retroglyph_terminal::ColorSupport) level.
+    ///
+    /// Set explicitly via [`CrosstermOptions::color_support`], or auto-detected from
+    /// `$NO_COLOR`/`$COLORTERM`/`$TERM` if not overridden; see that method's docs for the
+    /// detection rules.
+    pub const fn color_support(&self) -> retroglyph_terminal::ColorSupport {
+        self.renderer.color_support()
+    }
+
     /// Returns a mutable reference to the content writer.
     pub const fn writer_mut(&mut self) -> &mut W {
         self.renderer.writer_mut()
@@ -696,8 +768,18 @@ impl<W: std::io::Write> Crossterm<W> {
         // yet, since none has been observed. See retroglyph#281.
         let (width, height) = crossterm::terminal::size().unwrap_or((80, 24));
 
+        // Use the caller's explicit override if given; otherwise detect from
+        // `$NO_COLOR`/`$COLORTERM`/`$TERM`. Unlike `plain` above (which needs `writer`'s own
+        // `IsTerminal` status and so can't be detected for an arbitrary `build_with_writer`
+        // sink), these are process environment variables independent of `writer`, so detection
+        // applies the same way regardless of which `build*` method was called.
+        let color_support = options
+            .color_support
+            .unwrap_or_else(detect_color_support_from_env);
+
         Ok(Self {
-            renderer: TerminalRenderer::with_plain_mode(writer, plain),
+            renderer: TerminalRenderer::with_plain_mode(writer, plain)
+                .with_color_support(color_support),
             _instance_guard: instance_guard,
             cached_size: Size { width, height },
             pushed_events: VecDeque::new(),
@@ -1573,6 +1655,91 @@ mod tests {
             mouse_event_kind_of(crossterm::event::MouseEventKind::ScrollRight),
             K::ScrollRight
         );
+    }
+
+    #[test]
+    fn detect_color_support_no_color_wins_over_everything_else() {
+        use retroglyph_terminal::ColorSupport;
+
+        assert_eq!(
+            detect_color_support(Some("1"), Some("truecolor"), Some("xterm-256color")),
+            ColorSupport::None
+        );
+        // Any non-empty value counts, per https://no-color.org.
+        assert_eq!(
+            detect_color_support(Some("anything"), None, None),
+            ColorSupport::None
+        );
+    }
+
+    #[test]
+    fn detect_color_support_empty_no_color_does_not_count() {
+        use retroglyph_terminal::ColorSupport;
+
+        assert_eq!(
+            detect_color_support(Some(""), Some("truecolor"), None),
+            ColorSupport::Truecolor
+        );
+    }
+
+    #[test]
+    fn detect_color_support_colorterm_truecolor_or_24bit() {
+        use retroglyph_terminal::ColorSupport;
+
+        assert_eq!(
+            detect_color_support(None, Some("truecolor"), None),
+            ColorSupport::Truecolor
+        );
+        assert_eq!(
+            detect_color_support(None, Some("24bit"), None),
+            ColorSupport::Truecolor
+        );
+        assert_eq!(
+            detect_color_support(None, Some("TrueColor"), None),
+            ColorSupport::Truecolor
+        );
+    }
+
+    #[test]
+    fn detect_color_support_term_256color_without_colorterm() {
+        use retroglyph_terminal::ColorSupport;
+
+        assert_eq!(
+            detect_color_support(None, None, Some("xterm-256color")),
+            ColorSupport::Indexed256
+        );
+    }
+
+    #[test]
+    fn detect_color_support_falls_back_to_ansi16() {
+        use retroglyph_terminal::ColorSupport;
+
+        assert_eq!(detect_color_support(None, None, None), ColorSupport::Ansi16);
+        assert_eq!(
+            detect_color_support(None, None, Some("xterm")),
+            ColorSupport::Ansi16
+        );
+    }
+
+    #[test]
+    fn crossterm_options_color_support_override_is_used_verbatim() {
+        use retroglyph_terminal::ColorSupport;
+
+        let _lock = TEST_GUARD_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let term = Crossterm::builder()
+            .raw_mode(false)
+            .alt_screen(false)
+            .mouse_capture(false)
+            .focus_change(false)
+            .bracketed_paste(false)
+            .kitty_protocol(false)
+            .color_support(ColorSupport::Indexed256)
+            .build_with_writer(Vec::new())
+            .expect("building against a Vec<u8> writer with all TTY features disabled must not require a real terminal");
+
+        assert_eq!(term.color_support(), ColorSupport::Indexed256);
     }
 
     #[test]
