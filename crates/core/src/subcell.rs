@@ -195,6 +195,9 @@ fn posterize(pixels: &[Rgb], table: &[char]) -> Glyph {
 /// let glyph = quantize_half_block([(255, 255, 255), (0, 0, 0)]);
 /// assert_eq!(glyph.ch, '▀'); // top half set, bottom clear
 /// ```
+///
+/// Never panics: `pixels` is a fixed-size 2-element array, so there is no length to validate
+/// and no index into it that can be out of bounds.
 #[must_use]
 pub fn quantize_half_block(pixels: [Rgb; 2]) -> Glyph {
     posterize(&pixels, &HALF_BLOCKS)
@@ -226,6 +229,9 @@ pub fn quantize_half_block(pixels: [Rgb; 2]) -> Glyph {
 /// let glyph = quantize_quadrant([black, white, black, black]);
 /// assert_eq!(glyph.ch, '▝'); // top-right quadrant
 /// ```
+///
+/// Never panics: `pixels` is a fixed-size 4-element array, so there is no length to validate
+/// and no index into it that can be out of bounds.
 #[must_use]
 pub fn quantize_quadrant(pixels: [Rgb; 4]) -> Glyph {
     posterize(&pixels, &QUADRANTS)
@@ -260,6 +266,9 @@ pub fn quantize_quadrant(pixels: [Rgb; 4]) -> Glyph {
 /// let glyph = quantize_sextant([white, black, black, black, black, black]);
 /// assert_eq!(glyph.ch, '🬀'); // top-left sextant only
 /// ```
+///
+/// Never panics: `pixels` is a fixed-size 6-element array, so there is no length to validate
+/// and no index into it that can be out of bounds.
 #[must_use]
 pub fn quantize_sextant(pixels: [Rgb; 6]) -> Glyph {
     posterize(&pixels, &SEXTANTS)

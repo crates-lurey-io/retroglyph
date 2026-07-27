@@ -1898,12 +1898,27 @@ fn blend_bg(mode: BlendMode, src: Color, dst: Color, t: f32) -> Color {
 impl Index<Pos> for Grid {
     type Output = Tile;
 
+    /// Reads the tile on layer 0 at `pos`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `pos` is outside the grid's `0..width` x `0..height` bounds. This is the
+    /// unchecked, layer-0-only counterpart to [`tile`](Self::tile), which instead returns `None`
+    /// on either an out-of-bounds `pos` or an unallocated layer; reach for `tile` when `pos`
+    /// isn't already known to be in bounds.
     fn index(&self, pos: Pos) -> &Tile {
         &self.layer0().buf[to_grixy_pos(pos)]
     }
 }
 
 impl IndexMut<Pos> for Grid {
+    /// Mutably borrows the tile on layer 0 at `pos`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `pos` is outside the grid's `0..width` x `0..height` bounds, the same bound as
+    /// [`Index`]'s `index`. Reach for [`tile_mut`](Self::tile_mut) when `pos` isn't already known
+    /// to be in bounds; it returns `None` instead of panicking.
     fn index_mut(&mut self, pos: Pos) -> &mut Tile {
         let pos = to_grixy_pos(pos);
         &mut self.layer0_mut().buf[pos]
