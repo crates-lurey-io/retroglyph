@@ -12,6 +12,16 @@ use retroglyph_core::Color;
 /// [`Event::ThemeChanged`](retroglyph_core::Event::ThemeChanged), or just
 /// always the same one): it only owns the two palettes themselves, so an
 /// app doesn't have to invent one from scratch.
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_widgets::Theme;
+///
+/// let theme = Theme::DARK;
+/// assert_eq!(theme.fg, Theme::DARK.fg);
+/// assert_ne!(theme.bg, Theme::LIGHT.bg);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Theme {
     /// The window/screen background, behind every panel.

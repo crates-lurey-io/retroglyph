@@ -12,6 +12,15 @@ use retroglyph_core::Color;
 /// struct rather than a free function so [`Gauge`](super::Gauge),
 /// [`StatBar`](super::StatBar), and [`Sparkline`](super::Sparkline) share
 /// one place that owns the ramp.
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_widgets::Meter;
+///
+/// let meter = Meter::new(0.9);
+/// assert_ne!(meter.color(), Meter::new(0.1).color());
+/// ```
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Meter {
     ratio: f32,
