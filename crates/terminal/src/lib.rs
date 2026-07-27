@@ -748,11 +748,7 @@ mod tests {
 
     #[test]
     fn color_support_ansi16_quantizes_rgb_to_the_standard_ansi_range() {
-        let style = Style::new().fg(Color::Rgb {
-            r: 255,
-            g: 0,
-            b: 0,
-        });
+        let style = Style::new().fg(Color::Rgb { r: 255, g: 0, b: 0 });
         let tile = Tile::new('X', style);
         let out = render_one_with_color_support(&tile, ColorSupport::Ansi16);
         assert!(

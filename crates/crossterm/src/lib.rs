@@ -511,6 +511,11 @@ pub struct Crossterm<W: std::io::Write = BufWriter<Stdout>> {
     // the rest back (see `retroglyph-examples`' FPS overlay toggle). Both used to lose every
     // event they pushed here.
     pushed_events: VecDeque<Event>,
+    // The options this instance was built with, retained so `suspend`/`SuspendGuard::resume` can
+    // redo the exact enable sequence [`build_from_options`](Self::build_from_options) ran at
+    // construction (raw mode, the alternate screen, mouse capture, focus-change reporting,
+    // bracketed paste, the kitty keyboard protocol) rather than guessing which features were on.
+    options: CrosstermOptions,
 }
 
 impl Crossterm {
@@ -699,8 +704,6 @@ impl<W: std::io::Write> Crossterm<W> {
         writer: W,
         plain: bool,
     ) -> Result<Self, std::io::Error> {
-        use std::sync::atomic::Ordering;
-
         // Setup panic hook on first backend creation
         static PANIC_HOOK: std::sync::Once = std::sync::Once::new();
         PANIC_HOOK.call_once(|| {
@@ -717,49 +720,7 @@ impl<W: std::io::Write> Crossterm<W> {
         // a failed construction attempt never permanently wedges out future construction.
         let instance_guard = InstanceGuard::acquire()?;
 
-        if options.raw_mode {
-            crossterm::terminal::enable_raw_mode()?;
-            RAW_MODE_ACTIVE.store(true, Ordering::Release);
-        }
-
-        // Terminal-protocol setup always targets the real process stdout, independent of
-        // `writer`: these are properties of the actual controlling terminal (raw mode, the
-        // alternate screen, mouse/focus/paste/kitty negotiation), not of the content sink a
-        // caller may have swapped in via `build_with_writer`. See that method's docs.
-        let mut stdout = std::io::stdout();
-
-        if options.alt_screen {
-            crossterm::execute!(stdout, crossterm::terminal::EnterAlternateScreen)?;
-            ALT_SCREEN_ACTIVE.store(true, Ordering::Release);
-        }
-
-        crossterm::execute!(stdout, crossterm::cursor::Hide)?;
-
-        if options.mouse_capture {
-            crossterm::execute!(stdout, crossterm::event::EnableMouseCapture)?;
-        }
-
-        if options.focus_change {
-            crossterm::execute!(stdout, crossterm::event::EnableFocusChange)?;
-        }
-
-        if options.bracketed_paste {
-            crossterm::execute!(stdout, crossterm::event::EnableBracketedPaste)?;
-        }
-
-        if options.kitty_protocol {
-            // Opt into the kitty keyboard protocol so we receive key repeat and
-            // release events. We push optimistically rather than gating on
-            // `supports_keyboard_enhancement()`: that query blocks for the
-            // terminal's response (seconds on terminals that never answer, e.g.
-            // pipes and CI), stalling startup. Terminals that don't implement the
-            // protocol silently ignore the CSI sequence, and we map whatever key
-            // events they do send. The matching pop happens on restore.
-            crossterm::execute!(
-                stdout,
-                crossterm::event::PushKeyboardEnhancementFlags(keyboard_enhancement_flags())
-            )?;
-        }
+        enable_terminal_features(options)?;
 
         // Seed the cached size once, up front, so `size()` never has to query on the
         // per-frame path; kept fresh afterward by `poll_event` observing `Event::Resize` (see
@@ -783,13 +744,152 @@ impl<W: std::io::Write> Crossterm<W> {
             _instance_guard: instance_guard,
             cached_size: Size { width, height },
             pushed_events: VecDeque::new(),
+            options,
         })
     }
+}
+
+/// Enables the terminal-protocol features `options` selects, targeting the real process stdout.
+///
+/// Shared by [`Crossterm::build_from_options`] (initial construction) and
+/// [`SuspendGuard`]'s resume path (undoing a [`Crossterm::suspend`]), since both need to redo the
+/// exact same enable sequence against the same set of options.
+fn enable_terminal_features(options: CrosstermOptions) -> std::io::Result<()> {
+    use std::sync::atomic::Ordering;
+
+    if options.raw_mode {
+        crossterm::terminal::enable_raw_mode()?;
+        RAW_MODE_ACTIVE.store(true, Ordering::Release);
+    }
+
+    // Terminal-protocol setup always targets the real process stdout, independent of any content
+    // writer a `Crossterm<W>` may be rendering to: these are properties of the actual controlling
+    // terminal (raw mode, the alternate screen, mouse/focus/paste/kitty negotiation), not of the
+    // content sink a caller may have swapped in via `build_with_writer`. See that method's docs.
+    let mut stdout = std::io::stdout();
+
+    if options.alt_screen {
+        crossterm::execute!(stdout, crossterm::terminal::EnterAlternateScreen)?;
+        ALT_SCREEN_ACTIVE.store(true, Ordering::Release);
+    }
+
+    crossterm::execute!(stdout, crossterm::cursor::Hide)?;
+
+    if options.mouse_capture {
+        crossterm::execute!(stdout, crossterm::event::EnableMouseCapture)?;
+    }
+
+    if options.focus_change {
+        crossterm::execute!(stdout, crossterm::event::EnableFocusChange)?;
+    }
+
+    if options.bracketed_paste {
+        crossterm::execute!(stdout, crossterm::event::EnableBracketedPaste)?;
+    }
+
+    if options.kitty_protocol {
+        // Opt into the kitty keyboard protocol so we receive key repeat and
+        // release events. We push optimistically rather than gating on
+        // `supports_keyboard_enhancement()`: that query blocks for the
+        // terminal's response (seconds on terminals that never answer, e.g.
+        // pipes and CI), stalling startup. Terminals that don't implement the
+        // protocol silently ignore the CSI sequence, and we map whatever key
+        // events they do send. The matching pop happens on restore.
+        crossterm::execute!(
+            stdout,
+            crossterm::event::PushKeyboardEnhancementFlags(keyboard_enhancement_flags())
+        )?;
+    }
+
+    Ok(())
 }
 
 impl<W: std::io::Write> Drop for Crossterm<W> {
     fn drop(&mut self) {
         restore_terminal();
+    }
+}
+
+impl<W: std::io::Write> Crossterm<W> {
+    /// Temporarily hands the real terminal back to the OS/shell, for shelling out to `$EDITOR`,
+    /// a pager, or a debugger.
+    ///
+    /// Exits raw mode, leaves the alternate screen, and shows the cursor -- only undoing whichever
+    /// of those this instance actually has active, using the same "only undo what was actually
+    /// done" bookkeeping this instance's `Drop` and the process-wide panic hook already share --
+    /// leaving the terminal in the state a normal shell command expects. Mouse capture,
+    /// focus-change reporting, bracketed paste, and the kitty keyboard protocol are also
+    /// disabled, matching what a normal process exit/panic already does.
+    ///
+    /// Returns a [`SuspendGuard`] borrowing `self`: while it's alive, no other `Crossterm` method
+    /// can be called (the borrow checker enforces this), and dropping the guard (or calling
+    /// [`SuspendGuard::resume`] explicitly) restores every option this instance was originally
+    /// built with and forces a full redraw on the next [`Output::draw`], since whatever ran while
+    /// suspended may have written arbitrary content to the real screen that this backend's diff
+    /// state doesn't know about.
+    ///
+    /// Does not handle `Ctrl+Z`/`SIGTSTP`: this is an explicit API for the common case (a key
+    /// binding that shells out deliberately), not a signal handler. An app that also wants to
+    /// suspend on `SIGTSTP` needs to install its own signal handler and call this method (and
+    /// [`SuspendGuard::resume`]) from it.
+    ///
+    /// # Errors
+    ///
+    /// Returns an `std::io::Error` if any of the terminal-restoring commands fail (e.g. a closed
+    /// terminal or disconnected pipe).
+    pub fn suspend(&mut self) -> std::io::Result<SuspendGuard<'_, W>> {
+        restore_terminal();
+        Ok(SuspendGuard {
+            crossterm: self,
+            resumed: false,
+        })
+    }
+}
+
+/// RAII guard returned by [`Crossterm::suspend`]; see that method's docs for the full contract.
+///
+/// Borrows the suspended [`Crossterm`] mutably for its whole lifetime, so no other method on it
+/// can be called (accidentally drawing, polling, or moving the cursor) while the real terminal is
+/// handed back to the OS/shell.
+pub struct SuspendGuard<'a, W: std::io::Write> {
+    crossterm: &'a mut Crossterm<W>,
+    // Set once `resume`/`Drop` has actually run the restore sequence, so a caller who calls
+    // `resume()` explicitly doesn't pay for (or risk double-applying) a second restore when the
+    // guard is then dropped.
+    resumed: bool,
+}
+
+impl<W: std::io::Write> SuspendGuard<'_, W> {
+    /// Restores every option the suspended [`Crossterm`] was originally built with and forces a
+    /// full redraw on the next [`Output::draw`]. Equivalent to letting the guard drop, but lets a
+    /// caller observe the `std::io::Error` a dropped guard would otherwise discard.
+    ///
+    /// # Errors
+    ///
+    /// Returns an `std::io::Error` if any of the terminal-restoring commands fail (e.g. a closed
+    /// terminal or disconnected pipe).
+    pub fn resume(mut self) -> std::io::Result<()> {
+        self.resume_inner()
+    }
+
+    fn resume_inner(&mut self) -> std::io::Result<()> {
+        if self.resumed {
+            return Ok(());
+        }
+        self.resumed = true;
+        enable_terminal_features(self.crossterm.options)?;
+        // The shelled-out program may have written arbitrary content to the real screen; forget
+        // the tracked cursor/style state so the next `draw` re-emits full escape sequences
+        // instead of skipping them under the assumption the terminal is still in the last-known
+        // state (mirrors what `Output::clear` already does for the same reason).
+        self.crossterm.renderer.reset_state();
+        Ok(())
+    }
+}
+
+impl<W: std::io::Write> Drop for SuspendGuard<'_, W> {
+    fn drop(&mut self) {
+        let _ = self.resume_inner();
     }
 }
 
@@ -1253,6 +1353,79 @@ mod tests {
         {
             drop(term);
         }
+    }
+
+    #[test]
+    fn suspend_resume_forces_a_full_redraw() {
+        // With every TTY-only feature disabled (the same combination other `build_with_writer`
+        // tests use to run without a real terminal), `suspend`/resuming a dropped `SuspendGuard`
+        // still exercise the shared restore/`enable_terminal_features` machinery -- both only
+        // touch process stdout via always-safe commands (cursor show/hide, disabling features
+        // that were never enabled) when raw mode/the alternate screen are off, so this succeeds
+        // under `cargo test`'s non-TTY stdout.
+        let _lock = TEST_GUARD_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut term = Crossterm::builder()
+            .raw_mode(false)
+            .alt_screen(false)
+            .mouse_capture(false)
+            .focus_change(false)
+            .bracketed_paste(false)
+            .kitty_protocol(false)
+            .build_with_writer(Vec::new())
+            .expect("building against a Vec<u8> writer with all TTY features disabled must not require a real terminal");
+
+        let tile = Tile::new('X', retroglyph_core::style::Style::default());
+
+        // Establish tracked cursor state at (0, 0): a second draw at the same position would
+        // normally skip the `MoveTo` escape since the cursor is already tracked as being there.
+        term.draw(core::iter::once(DrawCell::new(Pos { x: 0, y: 0 }, &tile)))
+            .unwrap();
+        term.flush().unwrap();
+
+        {
+            let guard = term.suspend().expect("suspend must succeed without a real terminal once all TTY-only features are disabled");
+            drop(guard);
+        }
+
+        // `resume` (run here via `Drop`) must have called `reset_state`, so this draw at the same
+        // position re-emits the cursor-move escape instead of skipping it.
+        term.draw(core::iter::once(DrawCell::new(Pos { x: 0, y: 0 }, &tile)))
+            .unwrap();
+        term.flush().unwrap();
+
+        let written = String::from_utf8(term.writer().clone()).unwrap();
+        assert_eq!(
+            written.matches("\x1b[1;1H").count(),
+            2,
+            "expected the cursor-move escape to be re-emitted after resume: {written:?}"
+        );
+    }
+
+    #[test]
+    fn suspend_resume_is_idempotent_when_resume_is_called_explicitly() {
+        let _lock = TEST_GUARD_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut term = Crossterm::builder()
+            .raw_mode(false)
+            .alt_screen(false)
+            .mouse_capture(false)
+            .focus_change(false)
+            .bracketed_paste(false)
+            .kitty_protocol(false)
+            .build_with_writer(Vec::new())
+            .expect("building against a Vec<u8> writer with all TTY features disabled must not require a real terminal");
+
+        let guard = term.suspend().expect(
+            "suspend must succeed without a real terminal once all TTY-only features are disabled",
+        );
+        guard.resume().expect(
+            "resume must succeed without a real terminal once all TTY-only features are disabled",
+        );
+        // The guard is consumed by `resume`, so there's no double-restore on drop to assert
+        // against directly; this test's real assertion is that `resume()` itself returns `Ok`.
     }
 
     #[test]
