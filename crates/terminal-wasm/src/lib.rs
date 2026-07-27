@@ -208,6 +208,33 @@ const EVENT_QUEUE_CAP: usize = 4096;
 
 impl TerminalWasm {
     /// Creates a new backend with the given initial size in cells.
+    ///
+    /// # Examples
+    ///
+    /// The push-input/pull-ANSI cycle this backend is built around: push a synthetic key event
+    /// via [`Input::push_event`], draw a frame, then pull the rendered ANSI bytes back out with
+    /// [`take_output`](Self::take_output).
+    ///
+    /// ```
+    /// use retroglyph_core::backend::Input;
+    /// use retroglyph_core::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+    /// use retroglyph_core::{Style, Terminal};
+    /// use retroglyph_terminal_wasm::TerminalWasm;
+    ///
+    /// let mut backend = TerminalWasm::new(10, 3);
+    /// backend.push_event(Event::Key(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE)));
+    ///
+    /// let mut term = Terminal::new(backend);
+    /// assert_eq!(
+    ///     term.poll(std::time::Duration::ZERO),
+    ///     Some(Event::Key(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE)))
+    /// );
+    ///
+    /// term.draw(|s| s.put((0, 0), '@', Style::default()))?;
+    /// let ansi = term.backend_mut().take_output();
+    /// assert!(ansi.contains('@'), "output: {ansi:?}");
+    /// # Ok::<(), std::io::Error>(())
+    /// ```
     #[must_use]
     pub const fn new(width: u16, height: u16) -> Self {
         Self {
@@ -290,6 +317,22 @@ impl TerminalWasm {
     /// buffer across frames (e.g. a JS-side driver reusing the same `String` every animation
     /// frame) instead of receiving a fresh allocation from [`take_output`](Self::take_output)
     /// each time.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_core::{Style, Terminal};
+    /// use retroglyph_terminal_wasm::TerminalWasm;
+    ///
+    /// let mut term = Terminal::new(TerminalWasm::new(10, 3));
+    /// term.draw(|s| s.put((0, 0), '@', Style::default()))?;
+    ///
+    /// let mut buf = String::from("stale contents");
+    /// term.backend_mut().take_output_into(&mut buf);
+    /// assert!(buf.contains('@'), "buf: {buf:?}");
+    /// assert!(!buf.contains("stale"));
+    /// # Ok::<(), std::io::Error>(())
+    /// ```
     pub fn take_output_into(&mut self, buf: &mut String) {
         buf.clear();
         let sink = &mut self.renderer.writer_mut().0;
@@ -411,6 +454,25 @@ fn write_cursor_position(
 /// - `mods`: a bitmask matching [`retroglyph_core::event::KeyModifiers`]'s
 ///   layout (`SHIFT = 1`, `CONTROL = 2`, `ALT = 4`, `SUPER = 8`). `SUPER` maps to the
 ///   JS `metaKey` (Cmd on macOS, the Windows/Super key elsewhere).
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::event::KeyCode;
+/// use retroglyph_terminal_wasm::{decode_key_event, key_codes};
+///
+/// // A printable character: `code` is its Unicode scalar value.
+/// let key = decode_key_event(u32::from('a'), 0).unwrap();
+/// assert_eq!(key.code, KeyCode::Char('a'));
+///
+/// // A named key, with the Control modifier bit (0b010) set.
+/// let key = decode_key_event(key_codes::LEFT, 0b010).unwrap();
+/// assert_eq!(key.code, KeyCode::Left);
+/// assert!(key.modifiers.contains(retroglyph_core::event::KeyModifiers::CONTROL));
+///
+/// // A lone UTF-16 surrogate half is neither a named key nor a valid `char`.
+/// assert!(decode_key_event(0xD800, 0).is_none());
+/// ```
 #[must_use]
 pub fn decode_key_event(code: u32, mods: u8) -> Option<retroglyph_core::event::KeyEvent> {
     use key_codes as kc;
@@ -498,6 +560,24 @@ fn decode_key_modifiers(mods: u8) -> retroglyph_core::event::KeyModifiers {
 /// Returns `None` if `action` doesn't match a known [`mouse_actions`]
 /// constant, or if `action` is `DOWN`/`UP` and `button` doesn't match a known
 /// [`mouse_buttons`] constant.
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::event::{MouseButton, MouseEventKind};
+/// use retroglyph_terminal_wasm::{decode_mouse_event, mouse_actions, mouse_buttons};
+///
+/// let mouse = decode_mouse_event(3, 4, mouse_actions::DOWN, mouse_buttons::LEFT, 0).unwrap();
+/// assert_eq!(mouse.kind, MouseEventKind::Down(MouseButton::Left));
+/// assert_eq!(mouse.position, retroglyph_core::grid::Pos { x: 3, y: 4 });
+///
+/// // `button` is ignored for `MOVED`; an out-of-range value doesn't fail decoding.
+/// let mouse = decode_mouse_event(1, 1, mouse_actions::MOVED, 0xFF, 0).unwrap();
+/// assert_eq!(mouse.kind, MouseEventKind::Moved);
+///
+/// // An unknown `action` fails to decode.
+/// assert!(decode_mouse_event(0, 0, 0xFF, mouse_buttons::LEFT, 0).is_none());
+/// ```
 #[must_use]
 pub fn decode_mouse_event(
     x: u16,
