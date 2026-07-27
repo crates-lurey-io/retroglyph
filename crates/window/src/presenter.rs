@@ -33,6 +33,36 @@ use std::sync::Arc;
 /// (softbuffer stores it for the surface's lifetime), so presenters receive `Arc<dyn
 /// WindowHandle>`: rwh implements the handle traits for `Arc<H: ?Sized>`, so the trait object
 /// passes straight into `softbuffer::Surface::new` / `wgpu::Instance::create_surface`.
+///
+/// # Examples
+///
+/// Blanket-implemented for any type implementing both `raw-window-handle` traits; there is
+/// nothing to implement directly on `WindowHandle` itself.
+///
+/// ```
+/// use raw_window_handle::{
+///     DisplayHandle, HandleError, HasDisplayHandle, HasWindowHandle,
+///     WindowHandle as RawWindowHandle,
+/// };
+/// use retroglyph_window::WindowHandle;
+///
+/// struct NoWindow;
+///
+/// impl HasWindowHandle for NoWindow {
+///     fn window_handle(&self) -> Result<RawWindowHandle<'_>, HandleError> {
+///         Err(HandleError::NotSupported)
+///     }
+/// }
+///
+/// impl HasDisplayHandle for NoWindow {
+///     fn display_handle(&self) -> Result<DisplayHandle<'_>, HandleError> {
+///         Err(HandleError::NotSupported)
+///     }
+/// }
+///
+/// fn assert_is_window_handle<T: WindowHandle>(_handle: &T) {}
+/// assert_is_window_handle(&NoWindow);
+/// ```
 pub trait WindowHandle: HasWindowHandle + HasDisplayHandle {}
 
 impl<T: HasWindowHandle + HasDisplayHandle + ?Sized> WindowHandle for T {}
@@ -54,6 +84,38 @@ impl<T: HasWindowHandle + HasDisplayHandle + ?Sized> WindowHandle for T {}
 /// Instead, each `SurfaceError` type needs one explicit (and usually empty) `impl
 /// RecoverableError for ...` block: see `retroglyph_software`'s `SurfaceError` for the minimal
 /// case that just inherits the default.
+///
+/// # Examples
+///
+/// ```
+/// use core::fmt;
+/// use retroglyph_window::RecoverableError;
+///
+/// #[derive(Debug)]
+/// enum MySurfaceError {
+///     Init,
+///     Lost,
+/// }
+///
+/// impl fmt::Display for MySurfaceError {
+///     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+///         match self {
+///             Self::Init => write!(f, "surface init failed"),
+///             Self::Lost => write!(f, "surface lost"),
+///         }
+///     }
+/// }
+///
+/// impl RecoverableError for MySurfaceError {
+///     fn is_recoverable(&self) -> bool {
+///         // Init failures are fatal; a lost surface may come back.
+///         matches!(self, Self::Lost)
+///     }
+/// }
+///
+/// assert!(!MySurfaceError::Init.is_recoverable());
+/// assert!(MySurfaceError::Lost.is_recoverable());
+/// ```
 pub trait RecoverableError: core::fmt::Debug + core::fmt::Display {
     /// Whether this error represents a transient failure worth retrying, as opposed to a fatal
     /// one.
@@ -144,6 +206,61 @@ impl RecoverableError for GenericSurfaceError {
 /// The offset *application* is deliberately not shared code: `retroglyph-gl` shifts a quad's vertex
 /// position in its vertex shader, `retroglyph-software` shifts `origin_x`/`origin_y` in a CPU blit:
 /// irreducibly different mechanics that must nonetheless agree on the four points above.
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::backend::{DrawCell, Output};
+/// use retroglyph_core::grid::Size;
+/// use retroglyph_window::{Presenter, WindowHandle};
+/// use std::sync::Arc;
+///
+/// struct NullPresenter;
+///
+/// impl Output for NullPresenter {
+///     type Error = core::convert::Infallible;
+///
+///     fn draw<'a, I>(&mut self, _content: I) -> Result<(), Self::Error>
+///     where
+///         I: Iterator<Item = DrawCell<'a>>,
+///     {
+///         Ok(())
+///     }
+///
+///     fn flush(&mut self) -> Result<(), Self::Error> {
+///         Ok(())
+///     }
+///
+///     fn size(&self) -> Size {
+///         Size {
+///             width: 4,
+///             height: 2,
+///         }
+///     }
+///
+///     fn clear(&mut self) -> Result<(), Self::Error> {
+///         Ok(())
+///     }
+/// }
+///
+/// impl Presenter for NullPresenter {
+///     type SurfaceError = core::convert::Infallible;
+///
+///     fn init_surface(&mut self, _window: Arc<dyn WindowHandle>) -> Result<(), Self::SurfaceError> {
+///         Ok(())
+///     }
+///
+///     fn resize_surface(&mut self, _width: u32, _height: u32) {}
+///
+///     fn present(&mut self) -> Result<(), Self::SurfaceError> {
+///         Ok(())
+///     }
+///
+///     fn cell_size(&self) -> (u32, u32) {
+///         (8, 16)
+///     }
+/// }
+/// ```
 pub trait Presenter: Output {
     /// Surface lifecycle error (context creation, buffer acquisition,
     /// present).
