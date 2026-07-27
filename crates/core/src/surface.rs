@@ -236,6 +236,21 @@ impl<'a> Surface<'a> {
     /// If a pixel backend resolves `ch` to a sprite, that sprite is composited from its own
     /// pixels: [`style.fg`](Style::fg) does not tint it, and `style.bg` shows through only where
     /// the sprite is transparent. See [`put_span`](Self::put_span).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_core::{Grid, Pos, Rect, Style, Surface};
+    ///
+    /// let mut grid = Grid::new(4, 4);
+    /// let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 4, 4), 0);
+    ///
+    /// surface.put((1, 1), 'X', Style::default());
+    /// // Outside the surface's area: silently dropped, not a panic.
+    /// surface.put((10, 10), 'X', Style::default());
+    ///
+    /// assert_eq!(grid[Pos::new(1, 1)].glyph(), 'X');
+    /// ```
     pub fn put(&mut self, pos: impl Into<Pos>, ch: char, style: Style) {
         let pos = pos.into();
         #[cfg(feature = "egc")]
@@ -262,6 +277,24 @@ impl<'a> Surface<'a> {
     /// (either axis) are clipped. When the `egc` feature is enabled, `text` is split into
     /// extended grapheme clusters (so combining marks and ZWJ sequences write as one cell each);
     /// otherwise it is split by `char`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_core::backend::Headless;
+    /// use retroglyph_core::{Style, Terminal};
+    ///
+    /// let mut term = Terminal::new(Headless::new(6, 3));
+    /// term.draw(|s| s.print((0, 0), "hello wrapped world", Style::default()))
+    ///     .unwrap();
+    ///
+    /// // Wraps back to column 0 every 6 cells; the surface is only 3 rows tall, so
+    /// // the remainder past row 2 is clipped rather than growing the grid.
+    /// assert_eq!(
+    ///     term.backend().format_view(),
+    ///     "hello·\nwrappe\nd·worl\n",
+    /// );
+    /// ```
     pub fn print(&mut self, pos: impl Into<Pos>, text: &str, style: Style) {
         let pos = pos.into();
         #[cfg(feature = "egc")]
@@ -332,6 +365,23 @@ impl<'a> Surface<'a> {
 
     /// Print `line`'s styled spans starting at `pos`, one row, each span in its own style.
     /// Stops once a span would start past this surface's area.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_core::backend::Headless;
+    /// use retroglyph_core::text::{Line, Span};
+    /// use retroglyph_core::Terminal;
+    ///
+    /// let mut term = Terminal::new(Headless::new(5, 2));
+    /// let line = Line::from(vec![Span::raw("hello"), Span::raw("world")]);
+    /// term.draw(|s| s.print_line((0, 0), &line)).unwrap();
+    ///
+    /// // The first span exactly fills the one-row area. The second span would start at
+    /// // column 5, past the area, so it is skipped entirely rather than wrapped onto the
+    /// // next row the way `print` would wrap.
+    /// assert_eq!(term.backend().format_view(), "hello\n·····\n");
+    /// ```
     pub fn print_line(&mut self, pos: impl Into<Pos>, line: &Line) {
         use unicode_width::UnicodeWidthStr;
 
@@ -353,6 +403,22 @@ impl<'a> Surface<'a> {
     }
 
     /// Fill `rect` (clipped to this surface's own area) with `ch` in `style`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_core::{Grid, Pos, Rect, Style, Surface};
+    ///
+    /// let mut grid = Grid::new(4, 4);
+    /// let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 4, 4), 0);
+    ///
+    /// // `rect` extends well past the grid on both axes; only the cells inside the
+    /// // surface's own area are touched, the rest is silently clipped.
+    /// surface.fill_rect(Rect::new(2, 2, 10, 10), '#', Style::default());
+    ///
+    /// assert_eq!(grid[Pos::new(3, 3)].glyph(), '#');
+    /// assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
+    /// ```
     pub fn fill_rect(&mut self, rect: Rect, ch: char, style: Style) {
         for y in rect.top()..rect.bottom() {
             for x in rect.left()..rect.right() {
@@ -487,6 +553,23 @@ impl<'a> Surface<'a> {
     /// Sub-cell offsets are visual only: they do not affect grid logic or hit-testing.
     /// Backends that cannot represent pixel offsets (e.g. `CrosstermBackend`) ignore them. A
     /// no-op if `pos` is outside this surface's area.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_core::{Grid, Offset, Pos, Rect, Style, Surface};
+    ///
+    /// let mut grid = Grid::new(4, 4);
+    /// let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 4, 4), 0);
+    ///
+    /// // A large offset still lands the glyph in cell (1, 1): the offset is a pixel nudge
+    /// // for a pixel backend, never a coordinate shift.
+    /// surface.put_offset((1, 1), Offset::new(12, -12), 'X', Style::default());
+    /// // Outside the surface's area: silently dropped, matching `put`.
+    /// surface.put_offset((10, 10), Offset::default(), 'X', Style::default());
+    ///
+    /// assert_eq!(grid[Pos::new(1, 1)].glyph(), 'X');
+    /// ```
     pub fn put_offset(
         &mut self,
         pos: impl Into<Pos>,
@@ -515,6 +598,22 @@ impl<'a> Surface<'a> {
 
     /// Clears `rect` (clipped to this surface's own area, on its own layer) back to
     /// [`Tile::default`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_core::{Grid, Pos, Rect, Style, Surface};
+    ///
+    /// let mut grid = Grid::new(4, 4);
+    /// let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 4, 4), 0);
+    /// surface.fill_rect(Rect::new(0, 0, 4, 4), '#', Style::default());
+    ///
+    /// // `rect` extends past the surface's own area; only the overlap is cleared.
+    /// surface.clear_region(Rect::new(2, 2, 10, 10));
+    ///
+    /// assert_eq!(grid[Pos::new(2, 2)].glyph(), ' ');
+    /// assert_eq!(grid[Pos::new(1, 1)].glyph(), '#');
+    /// ```
     pub fn clear_region(&mut self, rect: Rect) {
         let rect = rect.intersect(self.area);
         for y in rect.top()..rect.bottom() {
