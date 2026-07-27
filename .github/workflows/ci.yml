@@ -156,7 +156,7 @@ jobs:
       # meant to avoid.
       - name: Upload test results to Codecov (core)
         if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           files: target/nextest/ci/flags/core.xml
           flags: core
@@ -165,7 +165,7 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
       - name: Upload test results to Codecov (terminal)
         if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           files: target/nextest/ci/flags/terminal.xml
           flags: terminal
@@ -174,7 +174,7 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
       - name: Upload test results to Codecov (crossterm)
         if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           files: target/nextest/ci/flags/crossterm.xml
           flags: crossterm
@@ -183,7 +183,7 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
       - name: Upload test results to Codecov (terminal-wasm)
         if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           files: target/nextest/ci/flags/terminal-wasm.xml
           flags: terminal-wasm
@@ -192,7 +192,7 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
       - name: Upload test results to Codecov (software)
         if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           files: target/nextest/ci/flags/software.xml
           flags: software
@@ -201,7 +201,7 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
       - name: Upload test results to Codecov (gl)
         if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           files: target/nextest/ci/flags/gl.xml
           flags: gl
@@ -210,7 +210,7 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
       - name: Upload test results to Codecov (window)
         if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           files: target/nextest/ci/flags/window.xml
           flags: window
@@ -219,7 +219,7 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
       - name: Upload test results to Codecov (widgets)
         if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           files: target/nextest/ci/flags/widgets.xml
           flags: widgets
@@ -228,7 +228,7 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
       - name: Upload test results to Codecov (unflagged)
         if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           files: target/nextest/ci/flags/unflagged.xml
           report_type: test_results
@@ -356,7 +356,7 @@ jobs:
           tool: just
       - name: Generate coverage
         run: just coverage-ci
-      - uses: codecov/codecov-action@v5
+      - uses: codecov/codecov-action@v7
         with:
           files: lcov.info
           # One combined workspace lcov.info, attributed per crate: each flag below is
