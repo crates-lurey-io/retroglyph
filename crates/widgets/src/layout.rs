@@ -221,6 +221,11 @@ fn solve(total: u16, constraints: &[Constraint]) -> SmallBuf<u16, STACK_CAP> {
 /// Returns one [`Rect`] per constraint; empty panes (zero height) are still
 /// returned so indices line up with `constraints`.
 ///
+/// Never panics: a degenerate `area` (zero height, zero width, or both) resolves every
+/// constraint to a zero-height pane via [`saturating_sub`](u16::saturating_sub) arithmetic
+/// rather than under/overflowing, and an empty `constraints` slice simply returns an empty
+/// `Vec`.
+///
 /// # Examples
 ///
 /// ```
@@ -250,6 +255,10 @@ pub fn split_v(area: Rect, constraints: &[Constraint]) -> Vec<Rect> {
 ///
 /// Returns one [`Rect`] per constraint; empty panes (zero width) are still
 /// returned so indices line up with `constraints`.
+///
+/// Never panics, for the same reason as [`split_v`]: a degenerate `area` resolves every
+/// constraint to a zero-width pane instead of under/overflowing, and an empty `constraints`
+/// slice returns an empty `Vec`.
 ///
 /// # Examples
 ///
@@ -433,6 +442,9 @@ fn place(total: u16, sizes: &[u16], flex: Flex) -> Vec<u16> {
 
 /// Split `area` into stacked rows top-to-bottom, like [`split_v`], but with
 /// explicit control over how leftover space is placed via [`Flex`].
+///
+/// Never panics, for the same reason as [`split_v`]: every offset is computed with
+/// [`saturating_add`](u16::saturating_add)/[`saturating_sub`](u16::saturating_sub).
 #[must_use]
 pub fn split_v_flex(area: Rect, constraints: &[Constraint], flex: Flex) -> Vec<Rect> {
     let sizes = solve(area.height(), constraints);
@@ -446,6 +458,9 @@ pub fn split_v_flex(area: Rect, constraints: &[Constraint], flex: Flex) -> Vec<R
 
 /// Split `area` into columns left-to-right, like [`split_h`], but with
 /// explicit control over how leftover space is placed via [`Flex`].
+///
+/// Never panics, for the same reason as [`split_h`]: every offset is computed with
+/// [`saturating_add`](u16::saturating_add)/[`saturating_sub`](u16::saturating_sub).
 #[must_use]
 pub fn split_h_flex(area: Rect, constraints: &[Constraint], flex: Flex) -> Vec<Rect> {
     let sizes = solve(area.width(), constraints);
@@ -465,6 +480,10 @@ pub fn split_h_flex(area: Rect, constraints: &[Constraint], flex: Flex) -> Vec<R
 /// terminal too small to fit the box's requested size. Pure layout math: no
 /// drawing, no `Terminal`. Pairs with `panel`/`modal` in `retroglyph-widgets`
 /// (the `draw` module) for a centered, bordered box.
+///
+/// Never panics: the clamp and centering offsets are computed with saturating arithmetic, so a
+/// zero-size `screen`, `width`, or `height` resolves to a zero-size or edge-pinned rect instead
+/// of under/overflowing.
 #[must_use]
 pub fn centered_rect(screen: Rect, width: u16, height: u16) -> Rect {
     let width = width.min(screen.width());

@@ -72,6 +72,9 @@ impl Camera {
 
     /// Replace the viewport (for example after a terminal resize), keeping the
     /// world unchanged and re-clamping the origin so it stays in bounds.
+    ///
+    /// Never panics: a `viewport` larger than `world` re-clamps the origin to `(0, 0)` via
+    /// [`saturating_sub`](u16::saturating_sub) rather than underflowing.
     pub fn set_viewport(&mut self, viewport: Rect) {
         self.viewport = viewport;
         self.origin = Pos::new(
@@ -86,6 +89,9 @@ impl Camera {
 
     /// Center the view on `target` (world coords), clamped to the world edges so
     /// the viewport never scrolls past `[0, world)`.
+    ///
+    /// Never panics, even for a `target` outside `[0, world)`: the offset and clamp are both
+    /// computed with saturating arithmetic.
     pub fn center_on(&mut self, target: Pos) {
         self.origin = Pos::new(
             center_axis(target.x, self.viewport.width(), self.world.width),
@@ -94,6 +100,10 @@ impl Camera {
     }
 
     /// The world rectangle currently visible, clamped to world bounds.
+    ///
+    /// Never panics: the clamp against `world` uses
+    /// [`saturating_sub`](u16::saturating_sub), so it cannot underflow even if `origin` is
+    /// somehow past `world`'s edge.
     ///
     /// # Examples
     ///
