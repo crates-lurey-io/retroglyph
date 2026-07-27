@@ -14,6 +14,22 @@ use crate::text::truncate as truncate_to_cols;
 /// `align` defaults to [`Align::Left`] (drawn at the left edge); set it with
 /// [`PrintLine::align`] to right-align or center the whole line's spans as a
 /// unit within `area.width()` columns.
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::backend::Headless;
+/// use retroglyph_core::text::Line;
+/// use retroglyph_core::{Rect, Terminal};
+/// use retroglyph_widgets::{PrintLine, Widget};
+///
+/// let mut term = Terminal::new(Headless::new(20, 1));
+/// let line = Line::raw("hello");
+/// term.draw(|surface| {
+///     PrintLine::new(&line).render(Rect::new(0, 0, 20, 1), surface);
+/// })
+/// .unwrap();
+/// ```
 #[derive(Clone, Copy, Debug)]
 pub struct PrintLine<'a> {
     line: &'a Line,

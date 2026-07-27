@@ -11,6 +11,16 @@ use crate::color::Color;
 /// assets, so rather than have them work in a real terminal and silently do nothing in the
 /// software backend, they're not part of the API at all. Color and glyph choice are the only two
 /// knobs, in every backend.
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::{Color, Style};
+///
+/// let style = Style::new().fg(Color::GREEN).bg(Color::BLACK);
+/// assert_eq!(style.foreground(), Color::GREEN);
+/// assert_eq!(style.background(), Color::BLACK);
+/// ```
 pub struct Style {
     /// Foreground color.
     ///

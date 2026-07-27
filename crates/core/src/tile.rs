@@ -74,6 +74,16 @@ bitflags::bitflags! {
 /// [`Grid`](crate::grid::Grid), keeping every `Tile` a small, fully `Copy`
 /// value regardless of whether the `egc` feature is enabled. Read it back via
 /// [`Grid::grapheme`](crate::grid::Grid::grapheme).
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::{Color, Style, Tile};
+///
+/// let tile = Tile::new('@', Style::new().fg(Color::GREEN));
+/// assert_eq!(tile.glyph(), '@');
+/// assert_eq!(tile.style().foreground(), Color::GREEN);
+/// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Tile {
     /// Primary codepoint. For ASCII and most Unicode this is the whole story.
