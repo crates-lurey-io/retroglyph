@@ -571,6 +571,60 @@ impl<'a> Surface<'a> {
         }
     }
 
+    /// [`print`](Self::print), horizontally aligned within `rect` (clipped to this surface's own
+    /// area) and measured in display columns (via `unicode_width`), not bytes.
+    ///
+    /// Wants a per-frame redrawn UI label (a status line, a centred title bar) that should not
+    /// allocate: unlike [`TextLayout`](crate::layout::TextLayout), which only accepts a
+    /// [`Line`] (forcing an allocation to build one for every call), this
+    /// takes `&str` directly.
+    ///
+    /// The starting column is computed with saturating arithmetic, so `text` wider than `rect`
+    /// does not panic or underflow: it simply left-aligns and lets [`print`](Self::print) clip
+    /// the overflow, for every [`HAlign`](crate::layout::HAlign) (matching how
+    /// [`HAlign::Center`](crate::layout::HAlign::Center) itself saturates in
+    /// [`TextLayout`](crate::layout::TextLayout)).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_core::backend::Headless;
+    /// use retroglyph_core::layout::HAlign;
+    /// use retroglyph_core::{Rect, Style, Terminal};
+    ///
+    /// let mut term = Terminal::new(Headless::new(6, 1));
+    /// term.draw(|s| {
+    ///     s.print_aligned(Rect::new(0, 0, 6, 1), "hi", HAlign::Center, Style::default())
+    /// })
+    /// .unwrap();
+    ///
+    /// // "hi" is 2 columns wide in a 6-column rect: (6 - 2) / 2 == 2 columns of left padding.
+    /// assert_eq!(term.backend().format_view(), "··hi··\n");
+    /// ```
+    #[cfg(feature = "egc")]
+    pub fn print_aligned(
+        &mut self,
+        rect: Rect,
+        text: &str,
+        align: crate::layout::HAlign,
+        style: Style,
+    ) {
+        use crate::layout::HAlign;
+        use unicode_width::UnicodeWidthStr;
+
+        // A single line's display width is never anywhere near `u16::MAX` (see `print_line`'s
+        // own use of this same cast for a single span).
+        #[allow(clippy::cast_possible_truncation)]
+        let text_width = UnicodeWidthStr::width(text) as u16;
+        let x_offset = match align {
+            HAlign::Left => 0,
+            HAlign::Center => rect.width().saturating_sub(text_width) / 2,
+            HAlign::Right => rect.width().saturating_sub(text_width),
+        };
+        let pos = (rect.left().saturating_add(x_offset), rect.top());
+        self.clip(rect).print(pos, text, style);
+    }
+
     /// Fill `rect` (clipped to this surface's own area) with `ch` in `style`.
     ///
     /// # Examples
@@ -1340,10 +1394,7 @@ mod tests {
         {
             let mut surface = screen(&mut grid);
             let mut view = surface.translate((4, 4));
-            assert_eq!(
-                view.put_span((4, 4), &["ab"], Style::default()),
-                Some(())
-            );
+            assert_eq!(view.put_span((4, 4), &["ab"], Style::default()), Some(()));
             assert_eq!(
                 view.put_span_uniform((6, 4), (2, 1), 'C', ' ', Style::default()),
                 Some(())
@@ -1398,6 +1449,102 @@ mod tests {
 
         assert_eq!(surface.background((1, 1)), Some(Color::RED));
         assert_eq!(surface.background((10, 10)), None);
+    }
+
+    #[test]
+    #[cfg(feature = "egc")]
+    fn print_aligned_left_aligns_by_default() {
+        let mut grid = Grid::new(8, 1);
+        {
+            let mut surface = screen(&mut grid);
+            surface.print_aligned(
+                Rect::new(0, 0, 8, 1),
+                "hi",
+                crate::layout::HAlign::Left,
+                Style::default(),
+            );
+        }
+
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), 'h');
+        assert_eq!(grid[Pos::new(1, 0)].glyph(), 'i');
+        assert_eq!(grid[Pos::new(2, 0)].glyph(), ' ');
+    }
+
+    #[test]
+    #[cfg(feature = "egc")]
+    fn print_aligned_centers_matching_text_layouts_own_saturating_formula() {
+        let mut grid = Grid::new(6, 1);
+        {
+            let mut surface = screen(&mut grid);
+            surface.print_aligned(
+                Rect::new(0, 0, 6, 1),
+                "hi",
+                crate::layout::HAlign::Center,
+                Style::default(),
+            );
+        }
+
+        // (6 - 2) / 2 == 2 columns of left padding, matching `HAlign::Center` in `layout.rs`.
+        assert_eq!(grid[Pos::new(2, 0)].glyph(), 'h');
+        assert_eq!(grid[Pos::new(3, 0)].glyph(), 'i');
+    }
+
+    #[test]
+    #[cfg(feature = "egc")]
+    fn print_aligned_right_aligns_flush_to_the_rects_right_edge() {
+        let mut grid = Grid::new(6, 1);
+        {
+            let mut surface = screen(&mut grid);
+            surface.print_aligned(
+                Rect::new(0, 0, 6, 1),
+                "hi",
+                crate::layout::HAlign::Right,
+                Style::default(),
+            );
+        }
+
+        assert_eq!(grid[Pos::new(4, 0)].glyph(), 'h');
+        assert_eq!(grid[Pos::new(5, 0)].glyph(), 'i');
+    }
+
+    #[test]
+    #[cfg(feature = "egc")]
+    fn print_aligned_does_not_panic_or_underflow_on_text_wider_than_the_rect() {
+        let mut grid = Grid::new(4, 1);
+        {
+            let mut surface = screen(&mut grid);
+            // "hello" is wider than the 4-column rect on every alignment: this must not panic
+            // (a plain `rect.width() - text_width` would underflow) and instead left-aligns and
+            // lets `print` clip the overflow.
+            surface.print_aligned(
+                Rect::new(0, 0, 4, 1),
+                "hello",
+                crate::layout::HAlign::Center,
+                Style::default(),
+            );
+        }
+
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), 'h');
+        assert_eq!(grid[Pos::new(3, 0)].glyph(), 'l');
+    }
+
+    #[test]
+    #[cfg(feature = "egc")]
+    fn print_aligned_clips_to_this_surfaces_own_area_as_well_as_rect() {
+        let mut grid = Grid::new(4, 1);
+        {
+            let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 2, 1), 0);
+            // `rect` extends past this surface's own area; the write is still clipped to it.
+            surface.print_aligned(
+                Rect::new(0, 0, 4, 1),
+                "hi",
+                crate::layout::HAlign::Right,
+                Style::default(),
+            );
+        }
+
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
+        assert_eq!(grid[Pos::new(1, 0)].glyph(), ' ');
     }
 
     #[test]
