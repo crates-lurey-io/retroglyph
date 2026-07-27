@@ -28,6 +28,10 @@ fastrand = "2"
 [features]
 # Forwards to retroglyph-core's egc feature; this crate has EGC-aware and
 # non-EGC-aware code paths gated on the same flag name.
+# Forwards `retroglyph-core`'s `dev` feature, which forces development diagnostics on in a build
+# that would otherwise compile them out (see `retroglyph_core::dev`). Forwarded so a consumer of
+# this crate can turn them on without adding a direct dependency on core just to reach the flag.
+dev = ["retroglyph-core/dev"]
 egc = ["retroglyph-core/egc"]
 
 [[bench]]

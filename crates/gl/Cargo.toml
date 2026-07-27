@@ -123,6 +123,10 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 # Embeds the Unscii 16 default font so a caller can build a renderer with no font of its own.
 # Off by default, mirroring `retroglyph-software`: a caller supplying its own `BitmapFont` pays
 # nothing for the embedded atlas.
+# Forwards `retroglyph-core`'s `dev` feature, which forces development diagnostics on in a build
+# that would otherwise compile them out (see `retroglyph_core::dev`). Forwarded so a consumer of
+# this crate can turn them on without adding a direct dependency on core just to reach the flag.
+dev = ["retroglyph-core/dev"]
 default-font = ["retroglyph-window/default-font"]
 # PNG sprite/tileset support (issue #366): an RGBA TEXTURE_2D_ARRAY atlas + a second draw pass.
 # Forwards to retroglyph-window's shared tileset decode (Codepage, TilesetOptions, SpriteCache).

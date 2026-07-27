@@ -68,6 +68,10 @@ wasm-bindgen-test = "=0.3.76"
 
 [features]
 # Forwards to retroglyph-terminal's egc feature.
+# Forwards `retroglyph-core`'s `dev` feature, which forces development diagnostics on in a build
+# that would otherwise compile them out (see `retroglyph_core::dev`). Forwarded so a consumer of
+# this crate can turn them on without adding a direct dependency on core just to reach the flag.
+dev = ["retroglyph-core/dev"]
 egc = ["retroglyph-terminal/egc", "retroglyph-core/egc"]
 
 [[bench]]

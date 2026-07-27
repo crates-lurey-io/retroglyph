@@ -19,6 +19,7 @@ warning that's promoted to a hard failure via `-D warnings` in `just clippy`.
 
 ```sh
 just check          # full gate -- must pass before committing
+just check-targets   # also required when touching Output/DrawCell/a backend impl (see below)
 just fmt             # auto-fix Rust + Markdown/JSON formatting
 just test            # cargo test --all-features
 just test-v          # same but with stdout (useful for snapshot review)
@@ -30,6 +31,12 @@ just docs-preview    # build docs and open in browser
 
 For a quick iterative loop: `just compile` to catch type errors fast, then `just check` before
 committing.
+
+**`just check` only compiles the host target.** `retroglyph-gl` gates three test modules to other
+targets (`headless.rs` to Linux, `webgl_smoke.rs` and `webgl_recovery.rs` to wasm32), and all three
+drive the `Output` trait. On any other host they are invisible to the gate, so a change to the
+backend draw contract can be locally green and fail CI. Run `just check-targets` as well when
+touching `Output`, `DrawCell`, or a backend implementation (retroglyph#552).
 
 ## Key rules
 
