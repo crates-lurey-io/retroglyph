@@ -270,6 +270,52 @@ impl<'a> Surface<'a> {
         }
     }
 
+    /// [`put`](Self::put), in coordinates relative to this surface's own area origin, where a
+    /// negative coordinate is expressible and simply falls outside (a no-op, matching `put`'s
+    /// out-of-bounds behavior).
+    ///
+    /// Scrolling/camera code (e.g. a viewport over a wider world) computes positions in a
+    /// coordinate space that can go negative relative to the viewport, which [`Pos`] (backed by
+    /// `u16`) cannot even express. `put_signed` takes that arithmetic directly, so a caller no
+    /// longer clip-tests by hand before calling `put`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_core::{Grid, Pos, Rect, Style, Surface};
+    ///
+    /// let mut grid = Grid::new(4, 4);
+    /// let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 4, 4), 0);
+    ///
+    /// // Negative in either axis: outside this surface's area, silently dropped.
+    /// surface.put_signed((-1, 1), 'X', Style::default());
+    /// // Non-negative and within bounds: lands like `put`.
+    /// surface.put_signed((1, 1), 'X', Style::default());
+    ///
+    /// assert_eq!(grid[Pos::new(1, 1)].glyph(), 'X');
+    /// assert_eq!(grid[Pos::new(0, 1)].glyph(), ' ');
+    /// ```
+    pub fn put_signed(&mut self, pos: (i32, i32), ch: char, style: Style) {
+        let (x, y) = pos;
+        if x < 0 || y < 0 {
+            return;
+        }
+        let Ok(x) = u16::try_from(x) else {
+            return;
+        };
+        let Ok(y) = u16::try_from(y) else {
+            return;
+        };
+        if x >= self.width() || y >= self.height() {
+            return;
+        }
+        let abs_x = self.area.left() + x;
+        let abs_y = self.area.top() + y;
+        let tile = Tile::new(ch, style);
+        self.grid.put_tile(self.layer, (abs_x, abs_y), tile);
+        self.apply_tint(abs_x, abs_y);
+    }
+
     /// Print `text` starting at `pos` in `style`.
     ///
     /// `\n` advances to the next row at the original column. Text that would extend beyond this
@@ -1029,6 +1075,43 @@ mod tests {
         }
 
         assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
+    }
+
+    #[test]
+    fn put_signed_drops_a_negative_coordinate() {
+        let mut grid = Grid::new(4, 4);
+        let mut surface = screen(&mut grid);
+
+        surface.put_signed((-1, 0), 'X', Style::default());
+        surface.put_signed((0, -1), 'X', Style::default());
+
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
+    }
+
+    #[test]
+    fn put_signed_lands_a_valid_coordinate_at_the_area_origin() {
+        let mut grid = Grid::new(4, 4);
+        let area = Rect::new(1, 1, 2, 2);
+        let mut surface = Surface::new(&mut grid, area, 0);
+
+        // (0, 0) relative to the area's own origin is grid position (1, 1).
+        surface.put_signed((0, 0), 'X', Style::default());
+
+        assert_eq!(grid[Pos::new(1, 1)].glyph(), 'X');
+    }
+
+    #[test]
+    fn put_signed_drops_a_coordinate_past_this_surfaces_width_or_height() {
+        let mut grid = Grid::new(4, 4);
+        let area = Rect::new(0, 0, 2, 2);
+        let mut surface = Surface::new(&mut grid, area, 0);
+
+        // Fits the grid, but not this surface's own (relative) width/height.
+        surface.put_signed((2, 0), 'X', Style::default());
+        surface.put_signed((0, 2), 'X', Style::default());
+
+        assert_eq!(grid[Pos::new(2, 0)].glyph(), ' ');
+        assert_eq!(grid[Pos::new(0, 2)].glyph(), ' ');
     }
 
     #[test]
