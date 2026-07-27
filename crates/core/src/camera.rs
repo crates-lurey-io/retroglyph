@@ -94,6 +94,25 @@ impl Camera {
     }
 
     /// The world rectangle currently visible, clamped to world bounds.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_core::{Camera, Pos, Rect, Size};
+    ///
+    /// // A 10x10 viewport near the bottom-right corner of a 12x12 world: the origin clamps
+    /// // to (2, 2), so the visible rect is narrower than the viewport rather than reading
+    /// // past the world edge.
+    /// let mut cam = Camera::new(Rect::new(0, 0, 10, 10), Size { width: 12, height: 12 });
+    /// cam.center_on(Pos::new(11, 11));
+    /// assert_eq!(cam.origin(), Pos::new(2, 2));
+    /// assert_eq!(cam.visible_bounds(), Rect::new(2, 2, 10, 10));
+    ///
+    /// // A world smaller than the viewport: the visible rect is the whole world, not the
+    /// // full viewport size.
+    /// let small = Camera::new(Rect::new(0, 0, 20, 20), Size { width: 5, height: 5 });
+    /// assert_eq!(small.visible_bounds(), Rect::new(0, 0, 5, 5));
+    /// ```
     #[must_use]
     pub fn visible_bounds(&self) -> Rect {
         let w = self
@@ -127,6 +146,21 @@ impl Camera {
 
     /// Map a screen position back to a world position, or `None` if it is
     /// outside the viewport or beyond the world (useful for mouse picking).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_core::{Camera, Pos, Rect, Size};
+    ///
+    /// let mut cam = Camera::new(Rect::new(5, 5, 10, 10), Size { width: 100, height: 100 });
+    /// cam.center_on(Pos::new(50, 50));
+    ///
+    /// // Inside the viewport: maps back to the world cell under it.
+    /// assert_eq!(cam.screen_to_world(Pos::new(5, 5)), Some(Pos::new(45, 45)));
+    ///
+    /// // Off the viewport entirely (the viewport starts at x = 5): `None`, not a clamp.
+    /// assert_eq!(cam.screen_to_world(Pos::new(0, 0)), None);
+    /// ```
     #[must_use]
     pub fn screen_to_world(&self, screen: Pos) -> Option<Pos> {
         if !self.viewport.contains_pos(screen) {
