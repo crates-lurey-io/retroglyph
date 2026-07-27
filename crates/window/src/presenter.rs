@@ -157,7 +157,12 @@ pub trait Presenter: Output {
     ///
     /// # Errors
     ///
-    /// Returns [`Self::SurfaceError`] if surface or context creation fails.
+    /// Returns [`Self::SurfaceError`] if surface or context creation from `window` fails (an
+    /// unsupported display/window system connection, a missing graphics API, or, on wasm32,
+    /// a canvas element that can't be located). Unlike a failed [`present`](Self::present),
+    /// the `winit` driver treats this as fatal rather than retryable: it logs the error and
+    /// exits the event loop immediately, since there is no surface to draw into and no later
+    /// hook that calls `init_surface` again.
     fn init_surface(&mut self, window: Arc<dyn WindowHandle>) -> Result<(), Self::SurfaceError>;
 
     /// Resize the window surface to a new physical pixel size.
