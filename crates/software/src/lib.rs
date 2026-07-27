@@ -435,8 +435,14 @@ impl SoftwareRenderer {
         scale: usize,
         pos: Pos,
         tile: Tile,
+        // Only ever read inside the `tilesets`-gated sprite path below: a bitmap-font glyph is
+        // always drawn in the cell's own foreground colour, never tinted (tints apply to
+        // sprites only, per `Surface::with_tint`), so a `tilesets`-off build has no use for it.
         tint: Tint,
     ) {
+        #[cfg(not(feature = "tilesets"))]
+        let _ = tint;
+
         let px_x = usize::from(pos.x) * cell_w;
         let px_y = usize::from(pos.y) * cell_h;
 
