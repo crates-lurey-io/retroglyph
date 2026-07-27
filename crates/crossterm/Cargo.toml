@@ -32,6 +32,10 @@ tracing = { version = "0.1", optional = true, default-features = false, features
 # lives in retroglyph-terminal; this crate has no code of its own gated on
 # this flag, but still exposes it so callers don't need to know which crate
 # in the terminal family actually implements it.
+# Forwards `retroglyph-core`'s `dev` feature, which forces development diagnostics on in a build
+# that would otherwise compile them out (see `retroglyph_core::dev`). Forwarded so a consumer of
+# this crate can turn them on without adding a direct dependency on core just to reach the flag.
+dev = ["retroglyph-core/dev"]
 egc = ["retroglyph-terminal/egc", "retroglyph-core/egc"]
 # Instruments `Backend::draw`, `Backend::flush`, and `Backend::poll_event` with `tracing` spans
 # (`debug` level for draw/flush, `trace` for poll_event, since the latter is called every game-loop

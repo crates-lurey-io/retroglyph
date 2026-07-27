@@ -97,6 +97,10 @@ winit = ["dep:winit", "dep:log"]
 # Embeds the Unscii 16 default font (`font::unscii16`). Off by default so a consumer that supplies
 # its own bitmap font pays nothing for the ~4 KB atlas; the graphical backends' own `default-font`
 # features forward to this one.
+# Forwards `retroglyph-core`'s `dev` feature, which forces development diagnostics on in a build
+# that would otherwise compile them out (see `retroglyph_core::dev`). Forwarded so a consumer of
+# this crate can turn them on without adding a direct dependency on core just to reach the flag.
+dev = ["retroglyph-core/dev"]
 default-font = []
 # Shared PNG sprite/tileset support (`tileset` + `sprite_cache` modules, issue #366). Off by
 # default; both graphical backends' own `tilesets` features forward to this one.

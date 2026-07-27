@@ -27,13 +27,19 @@
 //! Same runner as `webgl_smoke`: `just test-wasm-gl` (`wasm-pack test --headless --chrome
 //! crates/gl`), with `webdriver.json`'s `--enable-unsafe-swiftshader` for a GPU-less WebGL2. The
 //! `WEBGL_lose_context` extension is implemented by the browser (not the GL driver), so it works
-//! under SwiftShader.
+//! under `SwiftShader`.
 
 #![allow(
     clippy::cast_possible_truncation,
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss
 )]
+// `clippy::future_not_send` fires on every `async fn` here. These are `wasm_bindgen_test`s: they
+// run on the browser's single-threaded event loop, and the futures they await (`JsFuture` over a
+// `Promise`) hold `JsValue`s, which are `!Send` by construction because a JS value cannot cross
+// an agent boundary. There is no `Send` bound to satisfy -- `wasm_bindgen_test` never requires
+// one -- so the lint is reporting a fact that has no consequence on this target.
+#![allow(clippy::future_not_send)]
 
 use crate::GlBackendBuilder;
 use retroglyph_core::DrawCell;

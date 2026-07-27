@@ -21,6 +21,10 @@ rustdoc-args = ["--cfg", "docsrs"]
 [features]
 # Forwards to retroglyph-core's egc feature. Paragraph (word-wrap) needs
 # grapheme-cluster-aware TextLayout, which only exists when egc is on.
+# Forwards `retroglyph-core`'s `dev` feature, which forces development diagnostics on in a build
+# that would otherwise compile them out (see `retroglyph_core::dev`). Forwarded so a consumer of
+# this crate can turn them on without adding a direct dependency on core just to reach the flag.
+dev = ["retroglyph-core/dev"]
 egc = ["retroglyph-core/egc"]
 
 [dependencies]

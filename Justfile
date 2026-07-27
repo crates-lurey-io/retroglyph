@@ -29,6 +29,24 @@ fmt-check: rustfmt prettier
 clippy:
     cargo clippy --workspace --all-targets --all-features -- -D warnings
 
+# Typecheck the modules the host build skips (retroglyph#552).
+#
+# `retroglyph-gl` gates three test modules to other targets -- `headless.rs` to Linux,
+# `webgl_smoke.rs` and `webgl_recovery.rs` to wasm32 -- so on any other host `just check` compiles
+# none of them and can be green while they are broken. They are not incidental: all three drive
+# the `Output` trait, so a change to the backend draw contract touches them. This is how #551 was
+# locally green and failed five CI jobs.
+#
+# Deliberately not a dependency of `check`: it cold-compiles the workspace a second and third
+# time, which would roughly triple the composite for a case most changes never hit. Run it when
+# touching `Output`, `DrawCell`, or a backend implementation.
+#
+# wasm32 is scoped to `-p retroglyph-gl` because `crossterm` does not build for that target, which
+# is also effectively what CI's `test-wasm-gl` job covers.
+check-targets:
+    cargo clippy --target x86_64-unknown-linux-gnu --workspace --all-targets --all-features -- -D warnings
+    cargo clippy --target wasm32-unknown-unknown -p retroglyph-gl --all-targets --all-features -- -D warnings
+
 lint: clippy markdown
 
 # ── Build ────────────────────────────────────────────────────────────────────

@@ -54,6 +54,10 @@ web-sys = { version = "0.3", features = [
 [features]
 # Sprite tileset support. The decode/config lives in retroglyph-window's shared `tileset` +
 # `sprite_cache` modules (issue #366); this crate adds the CPU blit on top (hence alpha-blend).
+# Forwards `retroglyph-core`'s `dev` feature, which forces development diagnostics on in a build
+# that would otherwise compile them out (see `retroglyph_core::dev`). Forwarded so a consumer of
+# this crate can turn them on without adding a direct dependency on core just to reach the flag.
+dev = ["retroglyph-core/dev"]
 tilesets = ["dep:alpha-blend", "retroglyph-window/tilesets"]
 default-font = ["retroglyph-window/default-font"]
 
