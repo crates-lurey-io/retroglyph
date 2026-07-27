@@ -3,7 +3,8 @@
 //! Pure functions, unit-testable without a window.
 
 use retroglyph_core::event::{
-    Event, KeyCode, KeyEvent, KeyEventKind, KeyLocation, KeyModifiers, MouseButton, PhysicalPos,
+    Event, KeyCode, KeyEvent, KeyEventKind, KeyLocation, KeyModifiers, ModifierKey, MouseButton,
+    PhysicalPos,
 };
 use retroglyph_core::grid::Pos;
 
@@ -54,6 +55,19 @@ fn key_code_from_logical(key: &winit::keyboard::Key, modifiers: KeyModifiers) ->
         Key::Named(NamedKey::F10) => KeyCode::F(10),
         Key::Named(NamedKey::F11) => KeyCode::F(11),
         Key::Named(NamedKey::F12) => KeyCode::F(12),
+        // Bare modifier presses. Side (left/right) is not carried here: it comes from winit's
+        // own `KeyLocation` on the surrounding event, consulted once in `translate_key` via
+        // `translate_key_location` rather than re-derived per key.
+        Key::Named(NamedKey::Shift) => KeyCode::Modifier(ModifierKey::Shift),
+        Key::Named(NamedKey::Control) => KeyCode::Modifier(ModifierKey::Control),
+        Key::Named(NamedKey::Alt) => KeyCode::Modifier(ModifierKey::Alt),
+        Key::Named(NamedKey::Super) => KeyCode::Modifier(ModifierKey::Super),
+        Key::Named(NamedKey::CapsLock) => KeyCode::CapsLock,
+        Key::Named(NamedKey::ScrollLock) => KeyCode::ScrollLock,
+        Key::Named(NamedKey::NumLock) => KeyCode::NumLock,
+        Key::Named(NamedKey::PrintScreen) => KeyCode::PrintScreen,
+        Key::Named(NamedKey::Pause) => KeyCode::Pause,
+        Key::Named(NamedKey::ContextMenu) => KeyCode::Menu,
         Key::Character(s) => KeyCode::Char(s.chars().next()?),
         _ => return None,
     })
@@ -227,6 +241,31 @@ mod tests {
         assert_eq!(
             key_code_from_logical(&key, KeyModifiers::SHIFT),
             Some(KeyCode::Char('a'))
+        );
+    }
+
+    #[test]
+    fn left_shift_alone_maps_to_modifier_shift_with_left_location() {
+        // `translate_key` itself can't be constructed directly in tests (see this module's doc
+        // comment on `key_code_from_logical`), so the round trip is exercised as its two parts:
+        // the key-identity mapping here, and `translate_key_location` below.
+        let key = winit::keyboard::Key::Named(winit::keyboard::NamedKey::Shift);
+        assert_eq!(
+            key_code_from_logical(&key, KeyModifiers::SHIFT),
+            Some(KeyCode::Modifier(ModifierKey::Shift))
+        );
+        assert_eq!(
+            translate_key_location(winit::keyboard::KeyLocation::Left),
+            KeyLocation::Left
+        );
+    }
+
+    #[test]
+    fn caps_lock_maps_straight_through() {
+        let key = winit::keyboard::Key::Named(winit::keyboard::NamedKey::CapsLock);
+        assert_eq!(
+            key_code_from_logical(&key, KeyModifiers::NONE),
+            Some(KeyCode::CapsLock)
         );
     }
 

@@ -80,6 +80,29 @@ impl Not for KeyModifiers {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
+/// A modifier key pressed as a standalone key event, independent of the [`KeyModifiers`] flags
+/// carried on non-modifier key events.
+///
+/// This is flat (no per-side variants) because side is conveyed separately: pair this with the
+/// surrounding [`KeyEvent`]'s [`KeyLocation::Left`]/[`KeyLocation::Right`] rather than duplicating
+/// left/right into `ModifierKey` itself.
+///
+/// Reporting a bare modifier press as a [`KeyCode::Modifier`] event is backend-dependent: the
+/// crossterm backend requires the terminal to support the kitty keyboard protocol with the
+/// `REPORT_ALL_KEYS_AS_ESCAPE_CODES` enhancement flag enabled; plain terminals never report these.
+pub enum ModifierKey {
+    /// Shift.
+    Shift,
+    /// Control.
+    Control,
+    /// Alt.
+    Alt,
+    /// Super/Meta (macOS Cmd, Windows/Super key).
+    Super,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 /// Keyboard key codes.
 pub enum KeyCode {
     /// A character key.
@@ -116,6 +139,21 @@ pub enum KeyCode {
     Insert,
     /// Escape.
     Escape,
+    /// A modifier key pressed on its own, without another key. See [`ModifierKey`] for the
+    /// backend-availability caveat.
+    Modifier(ModifierKey),
+    /// Caps Lock.
+    CapsLock,
+    /// Scroll Lock.
+    ScrollLock,
+    /// Num Lock.
+    NumLock,
+    /// Print Screen.
+    PrintScreen,
+    /// Pause.
+    Pause,
+    /// Menu (context menu key).
+    Menu,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
