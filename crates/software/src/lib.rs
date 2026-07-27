@@ -243,7 +243,13 @@ impl SoftwareRenderer {
     ///
     /// # Errors
     ///
-    /// Returns [`SurfaceError`] if the platform surface cannot be created.
+    /// On native, returns [`SurfaceError::Context`]/[`SurfaceError::Surface`] if softbuffer
+    /// cannot create a graphics context or surface from `window` (for example, the handle's
+    /// display or window system connection is invalid). On wasm32, returns
+    /// `SurfaceError::Canvas` if winit's `<canvas>` element or its 2D rendering context
+    /// cannot be located in the DOM. Either way, `self` is left without a surface, so
+    /// [`present`](Self::present) keeps behaving as headless (a no-op) until `init_surface`
+    /// is called again successfully.
     pub fn init_surface(&mut self, window: Arc<dyn WindowHandle>) -> Result<(), SurfaceError> {
         self.ctx.window_surface = Some(WindowSurface::new(window)?);
         Ok(())
@@ -262,7 +268,12 @@ impl SoftwareRenderer {
     ///
     /// # Errors
     ///
-    /// Returns [`SurfaceError`] if the platform surface fails to present.
+    /// On native, returns [`SurfaceError::Surface`] if softbuffer cannot acquire or present
+    /// its buffer (for example, the window was destroyed or the platform surface was lost).
+    /// On wasm32, returns `SurfaceError::Canvas` if building the damaged-row `ImageData` or
+    /// the canvas 2D context's `put_image_data` call fails. The pixel buffer and damage
+    /// tracking are unaffected by a failed present, so the next successful present resends
+    /// the current frame rather than a stale one.
     pub fn present(&mut self) -> Result<(), SurfaceError> {
         let Some(surface) = self.ctx.window_surface.as_mut() else {
             return Ok(()); // headless mode, nothing to present
