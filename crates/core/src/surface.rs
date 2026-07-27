@@ -5,6 +5,7 @@
 //! scoped to the whole grid, and `retroglyph-widgets` renders every widget into a `Surface`
 //! scoped to a sub-[`Rect`]: there is no separate stateful drawing API on `Terminal` itself.
 
+use crate::color::Color;
 use crate::grid::{Grid, Offset, Pos, Rect, Size};
 use crate::style::Style;
 use crate::text::Line;
@@ -261,6 +262,60 @@ impl<'a> Surface<'a> {
     /// [`clip`](Self::clip) narrows a surface without handing out the unclipped grid to do it.
     pub const fn grid_mut(&mut self) -> &mut Grid {
         self.grid
+    }
+
+    /// Read-only counterpart of [`grid_mut`](Self::grid_mut).
+    #[must_use]
+    pub const fn grid(&self) -> &Grid {
+        self.grid
+    }
+
+    /// The tile at `pos` on this surface's layer, if any.
+    ///
+    /// Respects this surface's layer but not its area clip, mirroring [`grid_mut`](Self::grid_mut)
+    /// in that sense: a caller wanting an area-clipped read should check
+    /// [`self.area().contains(...)`](Rect::contains) first.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_core::{Grid, Rect, Style, Surface};
+    ///
+    /// let mut grid = Grid::new(4, 4);
+    /// let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 4, 4), 0);
+    /// surface.put((1, 1), 'X', Style::default());
+    ///
+    /// assert_eq!(surface.tile((1, 1)).map(|t| t.glyph()), Some('X'));
+    /// assert_eq!(surface.tile((0, 0)).map(|t| t.glyph()), Some(' '));
+    /// ```
+    #[must_use]
+    pub fn tile(&self, pos: impl Into<Pos>) -> Option<&Tile> {
+        self.grid.tile(self.layer, pos.into())
+    }
+
+    /// The background colour at `pos` on this surface's layer, or `None` if there's no tile
+    /// there.
+    ///
+    /// A read-only read of a cell's own background lets a caller blend a new draw with what's
+    /// already there (e.g. `surface.background(pos).unwrap_or(default)`) without the mutable
+    /// borrow [`grid_mut`](Self::grid_mut) would otherwise force.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_core::{Color, Grid, Rect, Style, Surface};
+    ///
+    /// let mut grid = Grid::new(4, 4);
+    /// let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 4, 4), 0);
+    /// surface.put((1, 1), 'X', Style::new().bg(Color::RED));
+    ///
+    /// assert_eq!(surface.background((1, 1)), Some(Color::RED));
+    /// // Out of the grid entirely: no tile there to read a background from.
+    /// assert_eq!(surface.background((10, 10)), None);
+    /// ```
+    #[must_use]
+    pub fn background(&self, pos: impl Into<Pos>) -> Option<Color> {
+        self.tile(pos).map(|t| t.style().background())
     }
 
     /// Shifts `(x, y)` by this surface's translate offset (see [`translate`](Self::translate)),
@@ -907,15 +962,15 @@ mod tests {
         let mut grid = Grid::new(4, 4);
         {
             let mut surface = screen(&mut grid);
-            let mut styled = surface.with_style(Style::new().fg(crate::Color::RED));
+            let mut styled = surface.with_style(Style::new().fg(Color::RED));
             styled.put_span((0, 0), &["ab"]).expect("span write");
             styled
                 .put_span_uniform((0, 1), (2, 1), 'C', ' ')
                 .expect("span write");
         }
 
-        assert_eq!(grid[Pos::new(0, 0)].style().foreground(), crate::Color::RED);
-        assert_eq!(grid[Pos::new(0, 1)].style().foreground(), crate::Color::RED);
+        assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Color::RED);
+        assert_eq!(grid[Pos::new(0, 1)].style().foreground(), Color::RED);
         assert_eq!(grid[Pos::new(0, 1)].span(), (2, 1));
     }
 
@@ -1313,6 +1368,36 @@ mod tests {
 
         assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
         assert_eq!(grid[Pos::new(3, 3)].glyph(), ' ');
+    }
+
+    #[test]
+    fn grid_is_the_read_only_counterpart_of_grid_mut() {
+        let mut grid = Grid::new(4, 4);
+        let mut surface = screen(&mut grid);
+        surface.put((1, 1), 'X', Style::default());
+
+        assert_eq!(surface.grid()[Pos::new(1, 1)].glyph(), 'X');
+    }
+
+    #[test]
+    fn tile_reads_a_written_cell_without_a_mutable_borrow() {
+        let mut grid = Grid::new(4, 4);
+        let mut surface = screen(&mut grid);
+        surface.put((1, 1), 'X', Style::default());
+
+        assert_eq!(surface.tile((1, 1)).map(Tile::glyph), Some('X'));
+        assert_eq!(surface.tile((0, 0)).map(Tile::glyph), Some(' '));
+        assert_eq!(surface.tile((10, 10)), None);
+    }
+
+    #[test]
+    fn background_reads_the_styles_background_colour() {
+        let mut grid = Grid::new(4, 4);
+        let mut surface = screen(&mut grid);
+        surface.put((1, 1), 'X', Style::new().bg(Color::RED));
+
+        assert_eq!(surface.background((1, 1)), Some(Color::RED));
+        assert_eq!(surface.background((10, 10)), None);
     }
 
     #[test]
