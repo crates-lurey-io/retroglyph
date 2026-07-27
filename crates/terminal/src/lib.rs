@@ -148,6 +148,31 @@ fn write_sgr_color<W: Write>(out: &mut W, color: Color, base: u8, reset: u8) -> 
 /// buffer for JS, a test harness) or *how* input arrives: it is a pure `Tile` stream -> ANSI
 /// bytes transform, reused by every terminal-family
 /// [`Backend`](retroglyph_core::backend::Backend) implementor.
+///
+/// # Examples
+///
+/// Driving the renderer over a `Vec<u8>` sink and asserting on the emitted ANSI bytes: no real
+/// terminal is needed, since `W` here is just an in-memory buffer.
+///
+/// ```
+/// use retroglyph_core::DrawCell;
+/// use retroglyph_core::color::{AnsiColor, Color};
+/// use retroglyph_core::grid::Pos;
+/// use retroglyph_core::style::Style;
+/// use retroglyph_core::tile::Tile;
+/// use retroglyph_terminal::TerminalRenderer;
+///
+/// let mut renderer = TerminalRenderer::new(Vec::new());
+/// let tile = Tile::new('X', Style::new().fg(Color::Ansi(AnsiColor::Red)));
+/// renderer.draw(core::iter::once(DrawCell::new(Pos { x: 0, y: 0 }, &tile)))?;
+/// renderer.flush()?;
+///
+/// let out = String::from_utf8(renderer.into_writer()).expect("renderer only writes ASCII/UTF-8");
+/// // `\x1b[1;1H` moves the cursor to row 1, col 1 (1-indexed); `\x1b[31;49m` sets red
+/// // foreground with the default background.
+/// assert_eq!(out, "\x1b[1;1H\x1b[31;49mX");
+/// # Ok::<(), std::io::Error>(())
+/// ```
 #[derive(Debug)]
 pub struct TerminalRenderer<W> {
     writer: W,
