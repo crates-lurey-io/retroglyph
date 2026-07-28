@@ -68,7 +68,14 @@ fastrand = "2"
 # `run_windowed_with_typed_proxy`. `retroglyph-software` depends on this crate, not the other way
 # around, so this is a dev-only cycle: Cargo allows a dev-dependency to point back at a crate's own
 # dependent, since dev-deps are never part of the graph `retroglyph-software` itself builds with.
-retroglyph-software = { path = "../software", version = "0.5.0", default-features = false, features = [
+# Deliberately no `version` key: `retroglyph-software`'s own (non-dev) dependency on this crate
+# already pins a version, so this back-edge only needs the workspace `path` for local builds/
+# doctests. A `path` dev-dependency without `version` is dropped from the published manifest
+# instead of being resolved against the registry (see the Cargo reference's "Multiple locations"
+# section) -- with a `version` here, releasing both crates in the same batch deadlocks: packaging
+# this crate would require `retroglyph-software`'s new version to already be on crates.io, and
+# packaging `retroglyph-software` requires this crate's new version to already be there.
+retroglyph-software = { path = "../software", default-features = false, features = [
   "default-font",
 ] }
 
