@@ -141,7 +141,7 @@ impl<'a> DrawCell<'a> {
 /// impl Output for NullOutput {
 ///     type Error = core::convert::Infallible;
 ///
-///     fn draw<'a, I>(&mut self, _content: I) -> Result<(), Self::Error>
+///     fn draw_layers<'a, I>(&mut self, _content: I) -> Result<(), Self::Error>
 ///     where
 ///         I: Iterator<Item = DrawCell<'a>>,
 ///     {
@@ -168,31 +168,42 @@ pub trait Output {
     /// Error type returned by fallible operations.
     type Error: BackendError;
 
-    /// Draw changed cells to the output surface.
+    /// Draw changed cells to the output surface, layer 0 only.
     ///
     /// Every cell arrives as a [`DrawCell`], which carries the out-of-line state a [`Tile`]
     /// cannot: its full grapheme cluster and its tint. Both live in a side table on
     /// [`Grid`](crate::grid::Grid)
     /// rather than in the tile, so a backend that needs either must read it from here.
     ///
+    /// The default implementation forwards to [`draw_layers`](Self::draw_layers), which every
+    /// backend implements. [`crate::Terminal::present`] never calls this method directly (it
+    /// always goes through `draw_layers`, pre-flattened onto layer 0 for a backend that doesn't
+    /// composite; see [`composites_layers`](Self::composites_layers)), so overriding this is
+    /// only worthwhile if a backend has a cheaper direct path for the known-single-layer case
+    /// than its own `draw_layers` would take.
+    ///
     /// # Errors
     ///
-    /// `Self::Error` is implementation-defined (a broken pipe or closed terminal for a
-    /// process-backed display, a lost surface for a windowed one); implementations do not
-    /// roll back cells already written before the failure. Because
-    /// [`crate::Terminal::present`] only swaps its diff buffers into `previous` after the
-    /// call that reached this method succeeds, a failed draw leaves the same cells marked
-    /// dirty, so they are resent on the next successful present rather than silently
-    /// dropped.
+    /// See [`draw_layers`](Self::draw_layers), which this forwards to by default and shares
+    /// its error contract with.
     fn draw<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
-        I: Iterator<Item = DrawCell<'a>>;
+        I: Iterator<Item = DrawCell<'a>>,
+    {
+        self.draw_layers(content)
+    }
 
     /// Draw changed cells across all layers.
     ///
-    /// The default implementation forwards layer-0 tiles to [`draw`](Self::draw)
-    /// and ignores higher layers. Override this to support multi-layer
-    /// compositing, sub-cell offsets, or transparency.
+    /// [`crate::Terminal::present`] always calls this method, never [`draw`](Self::draw)
+    /// directly, for every backend. A backend that renders one glyph per cell and returns
+    /// `false` from [`composites_layers`](Self::composites_layers) (the default) receives a
+    /// stream `present` has already pre-flattened onto layer 0 (all allocated layers
+    /// composited into one frame first, so layers 1+ still appear on every backend, not only
+    /// pixel ones); implementing this is no different from what implementing single-layer
+    /// `draw` used to mean. A pixel/GPU backend that returns `true` from `composites_layers`
+    /// receives the real, multi-layer stream here and does its own compositing (per-pixel or
+    /// per-quad, plus sub-cell offsets and transparency as needed).
     ///
     /// When [`needs_full_frame`](Self::needs_full_frame) returns `true`, this
     /// receives **all** cells from every allocated layer, and the backend
@@ -203,17 +214,16 @@ pub trait Output {
     ///
     /// # Errors
     ///
-    /// The default implementation forwards to [`draw`](Self::draw) and shares its error
-    /// contract. An override that composites layers itself should preserve the same
-    /// property: leave already-written cells in place on failure rather than rolling them
-    /// back, since [`crate::Terminal::present`] only advances its diff bookkeeping once this
-    /// call succeeds.
+    /// `Self::Error` is implementation-defined (a broken pipe or closed terminal for a
+    /// process-backed display, a lost surface for a windowed one); implementations do not
+    /// roll back cells already written before the failure. Because
+    /// [`crate::Terminal::present`] only swaps its diff buffers into `previous` after the
+    /// call that reached this method succeeds, a failed draw leaves the same cells marked
+    /// dirty, so they are resent on the next successful present rather than silently
+    /// dropped.
     fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
-        I: Iterator<Item = DrawCell<'a>>,
-    {
-        self.draw(content.filter(|cell| cell.layer == 0))
-    }
+        I: Iterator<Item = DrawCell<'a>>;
 
     /// Returns `true` if the backend needs the **entire** frame (all cells on
     /// all layers) on every call to [`draw_layers`](Self::draw_layers), rather
@@ -385,7 +395,7 @@ pub trait Cursor {
 /// impl Output for NullBackend {
 ///     type Error = core::convert::Infallible;
 ///
-///     fn draw<'a, I>(&mut self, _content: I) -> Result<(), Self::Error>
+///     fn draw_layers<'a, I>(&mut self, _content: I) -> Result<(), Self::Error>
 ///     where
 ///         I: Iterator<Item = DrawCell<'a>>,
 ///     {

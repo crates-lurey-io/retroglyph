@@ -613,44 +613,9 @@ impl SoftwareBackend {
 impl Output for SoftwareRenderer {
     type Error = core::convert::Infallible;
 
-    fn draw<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
-    where
-        I: Iterator<Item = DrawCell<'a>>,
-    {
-        let fonts = &self.fonts;
-        let scale = usize::from(self.options.scale);
-        let cols = self.options.cols;
-        let glyph_w = usize::from(self.ctx.geometry.glyph_w) * scale;
-        let glyph_h = usize::from(self.ctx.geometry.glyph_h) * scale;
-        let buf_w = usize::from(cols) * glyph_w;
-
-        #[cfg(feature = "tilesets")]
-        let sprite_cache = Some(&*self.sprite_cache);
-
-        // This bitmap/sprite renderer keys everything off `Tile::glyph`, not
-        // the full grapheme cluster: sprite lookup, ligature-free bitmap
-        // fonts, and sub-cell offsets are all single-codepoint concepts here.
-        for draw_cell in content {
-            let (pos, cell) = (draw_cell.pos, draw_cell.tile);
-            blit_cell(
-                self.ctx.pixel_buf.as_mut(),
-                buf_w,
-                pos,
-                cell,
-                fonts,
-                glyph_w,
-                glyph_h,
-                scale,
-                #[cfg(feature = "tilesets")]
-                sprite_cache,
-                #[cfg(feature = "tilesets")]
-                draw_cell.tint,
-                #[cfg(feature = "tilesets")]
-                &mut self.ctx.warned_dropped_tint,
-            );
-        }
-        Ok(())
-    }
+    // No `draw` override: this backend always composites (`composites_layers` returns `true`
+    // below), so `Terminal::present` never calls single-layer `draw` and the default
+    // implementation (forwards to `draw_layers`) is exactly right. See retroglyph#561.
 
     /// Composite the raw layer stream into the pixel buffer.
     ///
@@ -939,120 +904,6 @@ impl retroglyph_window::Presenter for SoftwareRenderer {
 
 // ── Grid compositing ──────────────────────────────────────────────────────────
 
-/// Renders one grid cell into `buffer` using 1-bit bitmap glyph data.
-///
-/// Each set bit in the font row maps to `fg`; each clear bit maps to `bg`.
-/// No alpha blending is needed: bitmap fonts are 1-bit. The glyph is shifted
-/// by `cell.dx()/dy()` sub-cell pixel offset (scaled by `scale`), matching
-/// [`blit_glyph`]; the background fill always covers the full, unshifted
-/// cell rectangle. When `scale > 1` each source pixel becomes a `scale×scale`
-/// block.
-///
-/// If `sprite_cache` contains a sprite for the cell's glyph, the bitmap font
-/// path is skipped in favor of [`blit_sprite`].
-///
-/// A cell covered by a multi-cell span ([`TileFlags::SPAN_COVERED`]) paints its background but
-/// not its glyph: that glyph is the span's text fallback, and the span's anchor already drew a
-/// sprite over this cell.
-#[allow(clippy::cast_possible_truncation, clippy::too_many_arguments)]
-fn blit_cell(
-    buffer: &mut [u32],
-    buf_w: usize,
-    pos: Pos,
-    cell: &Tile,
-    fonts: &FontChain<'static>,
-    cell_w: usize,
-    cell_h: usize,
-    scale: usize,
-    #[cfg(feature = "tilesets")] sprite_cache: Option<&SpriteCache>,
-    #[cfg(feature = "tilesets")] tint: Tint,
-    #[cfg(feature = "tilesets")] warned_dropped_tint: &mut BTreeSet<char>,
-) {
-    let px_x = pos.x as usize * cell_w;
-    let px_y = pos.y as usize * cell_h;
-
-    #[cfg(feature = "tilesets")]
-    if let Some(sprite) = sprite_cache.and_then(|c| c.get(cell.glyph())) {
-        let buf_h = buffer.len() / buf_w;
-        let (span_w, span_h) = cell.span();
-        // `align_offset` measures the glyph box in unscaled pixels; `cell_w`/`cell_h` are scaled.
-        let align = sprite.align_offset(
-            span_w,
-            span_h,
-            (cell_w / scale) as u8,
-            (cell_h / scale) as u8,
-        );
-        blit_sprite(
-            buffer,
-            buf_w,
-            buf_h,
-            px_x,
-            px_y,
-            cell.dx() + align.0,
-            cell.dy() + align.1,
-            sprite,
-            scale,
-            SpriteTint::resolve(sprite.color, cell.style().foreground(), tint, DEFAULT_FG),
-        );
-        return;
-    }
-    // No sprite for this glyph: it falls back to the bitmap font below, which is `fg`-coloured,
-    // so a tint that would otherwise recolour a sprite silently has no effect here
-    // (retroglyph#564, #537's exact trap).
-    #[cfg(feature = "tilesets")]
-    warn_tint_needs_sprite(warned_dropped_tint, cell.glyph(), tint);
-
-    let fg = resolve_color(cell.style().foreground(), DEFAULT_FG);
-    let bg = resolve_color(cell.style().background(), DEFAULT_BG);
-
-    let buf_h = buffer.len() / buf_w;
-
-    // Fill the entire cell rectangle with background first: the glyph is
-    // painted on top, offset by `dx`/`dy`, so it may not cover the whole
-    // cell (or may spill into neighboring cells). The background fill is
-    // never sub-cell-offset, so the only clipping needed is against the
-    // buffer edges (for a partial cell at the grid boundary); precompute the
-    // clamped range once and fill whole rows instead of checking every pixel.
-    if px_y < buf_h && px_x < buf_w {
-        let y_end = (px_y + cell_h).min(buf_h);
-        let x_end = (px_x + cell_w).min(buf_w);
-        for y in px_y..y_end {
-            let row_start = y * buf_w + px_x;
-            let row_end = y * buf_w + x_end;
-            buffer[row_start..row_end].fill(bg);
-        }
-    }
-
-    // The span's anchor already blitted a sprite across this cell; its glyph is the text
-    // fallback, for backends that can't draw that sprite.
-    if cell.flags().contains(TileFlags::SPAN_COVERED) {
-        return;
-    }
-
-    #[allow(clippy::cast_possible_wrap)]
-    let origin_x = px_x as i64 + i64::from(cell.dx()) * scale as i64;
-    #[allow(clippy::cast_possible_wrap)]
-    let origin_y = px_y as i64 + i64::from(cell.dy()) * scale as i64;
-
-    // Nothing in the chain can draw this character, not even a substitute box: leave the cell at
-    // its background rather than pointing at a glyph index some font doesn't have.
-    let Some(glyph) = fonts.resolve(cell.glyph()) else {
-        return;
-    };
-
-    blit_glyph_mask(
-        buffer,
-        buf_w,
-        buf_h,
-        origin_x,
-        origin_y,
-        glyph.font(),
-        glyph.index(),
-        scale,
-        fg,
-    );
-}
-
 /// Paints the set ("on") pixels of glyph `glyph_index` in `font` into `buffer` as `color`, with
 /// each source pixel scaled to a `scale x scale` destination block.
 ///
@@ -1161,7 +1012,8 @@ fn blit_glyph(
     #[allow(clippy::cast_possible_wrap)]
     let origin_y = px_y as i64 + i64::from(tile.dy()) * scale as i64;
 
-    // See `blit_cell`: an undrawable character paints nothing at all.
+    // Nothing in the chain can draw this character, not even a substitute box: leave the cell
+    // at its background rather than pointing at a glyph index some font doesn't have.
     let Some(glyph) = fonts.resolve(tile.glyph()) else {
         return;
     };
@@ -1599,9 +1451,11 @@ mod tests {
     }
 
     #[test]
-    fn blit_cell_respects_sub_cell_offset() {
-        // `Output::draw` (the non-layered path used by `blit_cell`) must
-        // apply `tile.dx()/dy()` the same way `draw_layers` does.
+    fn output_draw_respects_sub_cell_offset_via_draw_layers() {
+        // `Output::draw` has no body of its own (retroglyph#561): it forwards to `draw_layers`,
+        // tagged onto layer 0. This exercises that forwarding end to end rather than a
+        // separately-maintained single-layer blit path, which is what used to make it possible
+        // for the two to silently disagree.
         let mut renderer = test_renderer();
 
         let fg =
@@ -2640,8 +2494,8 @@ mod span_tests {
 
     #[test]
     fn draw_reports_a_tint_on_a_glyph_without_a_sprite() {
-        // The single-layer `Output::draw` path (`blit_cell`) must report the same thing as
-        // `draw_layers` (`blit_cell_glyph`).
+        // `Output::draw` forwards to `draw_layers` (retroglyph#561), so this is really exercising
+        // that the forwarding preserves per-cell tint data rather than dropping it along the way.
         let mut r = renderer_with_sprite(1, 1, 8, 16, 8, SpriteAlign::TopLeft);
         let tile = Tile::new('X', Style::new());
         r.draw(core::iter::once(
