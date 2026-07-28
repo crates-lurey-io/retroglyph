@@ -7,6 +7,227 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 
+## [0.2.0+retroglyph-terminal-wasm](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-wasm-v0.1.4...retroglyph-terminal-wasm-v0.2.0) - 2026-07-28
+
+### Features
+
+- [ca05c57](
+https://github.com/crates-lurey-io/retroglyph/commit/ca05c576dadeee641276205ab091c4d57c1d6bb0) *(core)* Give backends a named DrawCell instead of a widening tuple by `@matanlurey` in [#551](
+https://github.com/crates-lurey-io/retroglyph/pull/551)
+
+  > A cell's draw-time payload has been a tuple growing an element at a time:
+  > (Pos, &Tile, Option<&str>) for draw, (u8, Pos, &Tile, Option<&str>) for
+  > draw_layers. Delivering a tint would make it five unnamed elements, and each
+  > addition breaks every backend's signature again.
+  >
+  > DrawCell names them once. Its layer field also collapses the two shapes into
+  > one, so draw and draw_layers no longer differ in item type.
+  >
+  > Refs #537
+
+- [090eeb3](
+https://github.com/crates-lurey-io/retroglyph/commit/090eeb3f26a88c399847640f4205045f1705a81d) *(core)* Take impl Into<Pos> everywhere a cell is named, retire _at suffix by `@matanlurey` in [#505](
+https://github.com/crates-lurey-io/retroglyph/pull/505)
+
+  > * api(core): drop panicking Grid::get/get_mut, add Option-returning tile/tile_mut and Index
+  >
+  > Grid::put/get panicked on out-of-bounds coordinates; checked_put/checked_get/
+  > checked_get_mut existed as Option-returning twins but only for the implicit
+  > layer-0 shorthands, while put_tile/get_tile (explicit layer) were already
+  > Option-returning. Removes the panicking layer-0 put/get and the whole
+  > checked_ family in favor of one accessor shape across every layer:
+  >
+  > - Grid::tile(layer, pos) -> Option<&Tile> (renamed from get_tile, now takes
+  >   impl Into<Pos> instead of separate x/y)
+  > - Grid::tile_mut(layer, pos) -> Option<&mut Tile>, new: a non-allocating
+  >   mutable counterpart: get_tile had no mutable twin before this
+  > - Grid::put_tile(layer, pos, tile) -> Option<()>, now also takes impl
+  >   Into<Pos>
+  >
+  > Grid already implements Index<Pos>/IndexMut<Pos> for panicking layer-0
+  > access, which is the Rust-conventional home for a panic and stays as the one
+  > ergonomic panicking accessor.
+  >
+  > Updates every call site across the workspace (core, widgets, gl, software,
+  > terminal, examples, benches).
+  >
+  > * api(core): take impl Into<Pos> everywhere a cell is named, retire _at suffix
+  >
+  > Terminal's single-cell drawing methods (put, put_styled, put_span,
+  > put_span_styled, print, print_styled) took (x: u16, y: u16) pairs; put_at
+  > existed purely to bridge to a Pos-based call. Every one of these now takes
+  > impl Into<Pos>, so term.put((5, 5), '@') and term.put(pos, '@') both work
+  > through the same method, and put_at is gone (merged into put).
+  >
+  > put_offset(x, y, dx, dy, ch) becomes put_offset(pos, offset, ch), taking a
+  > new Offset type (dx: i16, dy: i16) instead of a second bare (i16, i16) pair,
+  > so a position and a sub-cell pixel offset can't be transposed at a call
+  > site. Offset gets the same From<(i16, i16)> round-trip as Pos/Size.
+  >
+  > Updates every call site across the workspace (core, widgets, examples,
+  > benches, READMEs, docs/testing.md).
+
+- [14aff2f](
+https://github.com/crates-lurey-io/retroglyph/commit/14aff2fcb5b4f4119bf565b6a1ffdabb5cc0fbf6) *(core, crossterm, window, widgets)* Add KeyCode::Modifier/lock keys and pixel-precise Scroll by `@matanlurey` in [#584](
+https://github.com/crates-lurey-io/retroglyph/pull/584)
+
+  > * feat(core): add KeyCode::Modifier and lock/menu key variants
+  >
+  > Adds retroglyph_core::event::KeyCode::Modifier(ModifierKey) for reporting a bare
+  > modifier press as its own key event, plus CapsLock/ScrollLock/NumLock/PrintScreen/
+  > Pause/Menu variants. ModifierKey is flat (Shift/Control/Alt/Super); side is
+  > conveyed by the existing KeyEvent::location (KeyLocation::Left/Right), not
+  > duplicated inside ModifierKey.
+  >
+  > Wires both backends:
+  > - crossterm: enables KeyboardEnhancementFlags::REPORT_ALL_KEYS_AS_ESCAPE_CODES
+  >   (required for KeyCode::Modifier to be reported at all) and maps
+  >   crossterm::event::ModifierKeyCode's Left/Right variants down to ModifierKey +
+  >   KeyLocation. Hyper/Meta/IsoLevel3Shift/IsoLevel5Shift have no retroglyph
+  >   equivalent and fall through to None like any other unmapped key.
+  > - winit: maps NamedKey::Shift/Control/Alt/Super and the lock/menu NamedKeys to
+  >   the new KeyCode variants, reusing the existing KeyLocation translation path
+  >   for side disambiguation.
+  >
+  > * feat(core): replace line-quantized scroll variants with pixel-precise Scroll{dx,dy}
+  >
+  > Replaces MouseEventKind::{ScrollUp,ScrollDown,ScrollLeft,ScrollRight} with a
+  > single Scroll { dx: f32, dy: f32 } variant. Sign convention preserved from the
+  > winit implementation being replaced: dy > 0 is up, dy < 0 is down, dx > 0 is
+  > right, dx < 0 is left; a delta of exactly zero on both axes still emits no
+  > event.
+  >
+  > Magnitude is backend-dependent: winit reports the platform's exact
+  > pixel/line delta, crossterm and the wasm terminal backend (both line-
+  > quantized, no source of real magnitude) synthesize a fixed step of 1.0 per
+  > tick in the matching sign direction.
+  >
+  > MouseEventKind/MouseEvent/Event drop their Eq/Hash derives (kept PartialEq):
+  > f32 implements neither, and the derive is on the enclosing types too since
+  > MouseEventKind is nested inside them.
+  >
+  > * feat(widgets): consume pixel-precise Scroll{dx,dy} events by sign
+  >
+  > Updates the interact module's scroll-delta accumulator and the widgets/
+  > examples call sites that matched MouseEventKind::ScrollUp/ScrollDown to match
+  > Scroll{dx,dy} by sign instead, preserving the exact prior unit-step behavior.
+  > Magnitude is intentionally not consumed yet (mixing winit's PixelDelta-scale
+  > values with crossterm's synthesized 1.0-per-tick values needs a normalization
+  > pass outside this change's scope); see retroglyph#445.
+
+### Bug Fixes
+
+- [b2568bd](
+https://github.com/crates-lurey-io/retroglyph/commit/b2568bdc37e0994de01759ba932974d592680f79) *(core, software, gl)* Make Output::draw_layers required, default draw to forward to it by `@matanlurey` in [#579](
+https://github.com/crates-lurey-io/retroglyph/pull/579)
+
+  > fix(core, software, gl): make draw_layers required, default draw onto it
+  >
+  > Output::draw was a required trait method that a compositing backend
+  > (composites_layers() == true) can never actually reach: Terminal::present
+  > always calls draw_layers, so software's and gl's own draw bodies were
+  > dead code that nothing exercised, and they had already drifted (gl's
+  > write_tile never read a cell's tint at all).
+  >
+  > Flips which method is the primitive: draw_layers is now required, and
+  > draw defaults to forwarding to it tagged as layer 0. Cell backends
+  > (Headless, Crossterm, TerminalWasm) rename their existing draw body to
+  > draw_layers with no logic change, since Terminal::present already
+  > pre-flattens onto a single conceptual layer for them before calling
+  > draw_layers. software and gl delete their now-redundant draw/blit_cell
+  > and draw/write_tile bodies entirely and pick up the shared default.
+  >
+  > Existing tests that called Output::draw directly (blit_cell_respects_sub_cell_offset,
+  > draw_reports_a_tint_on_a_glyph_without_a_sprite, draw_records_sub_cell_offset_and_flags_in_the_base_layer)
+  > keep passing unchanged, now exercising the default forward instead of a
+  > second hand-written implementation.
+  >
+  > Refs #561
+
+- [c279a47](
+https://github.com/crates-lurey-io/retroglyph/commit/c279a478947c98f2f02a6fad4d258ffdedcb1a90) *(workspace)* Correct README architecture/style claims, add docs.rs feature badges by `@matanlurey` in [#499](
+https://github.com/crates-lurey-io/retroglyph/pull/499)
+
+  > - README's Widgets section and crate table described retroglyph-widgets'
+  >   old free-function architecture (panel/gauge/table/sparkline/draw_box);
+  >   rewrite to describe the current builder-struct widgets.
+  > - README claimed Style has text modifiers and a modifier() method; neither
+  >   exists. Remove the claims and point at Style's own no-modifier rationale.
+  > - Add rustdoc-args = ["--cfg", "docsrs"] to every publishable crate's
+  >   [package.metadata.docs.rs], plus #![cfg_attr(docsrs, feature(doc_cfg))]
+  >   to every crate's lib.rs, so docs.rs renders feature-gate badges instead
+  >   of showing gated items as unconditionally available. doc_auto_cfg was
+  >   merged into doc_cfg upstream, so doc_cfg (which now auto-infers cfg
+  >   badges) is used instead of the now-removed doc_auto_cfg feature name.
+  >   Adds a just doc-docsrs recipe to verify the docs.rs build locally.
+
+### Refactor
+
+- [1328409](
+https://github.com/crates-lurey-io/retroglyph/commit/1328409db38baf52ce79c588f2d928d58bac3d02) *(core)* Surface-centric drawing, Terminal loses its own drawing API by `@matanlurey` in [#522](
+https://github.com/crates-lurey-io/retroglyph/pull/522) [**breaking**]
+
+  > refactor(core): surface-centric drawing
+
+### Documentation
+
+- [3579210](
+https://github.com/crates-lurey-io/retroglyph/commit/35792107e4b4281ae716f1f6022897cdadf3e266) *(crossterm, terminal, terminal-wasm)* Add examples to the three crates with zero # Examples by `@matanlurey` in [#573](
+https://github.com/crates-lurey-io/retroglyph/pull/573)
+
+  > * docs(crossterm): add Examples sections to Crossterm::new and with_writer
+  >
+  > * docs(terminal): add Examples section to TerminalRenderer
+  >
+  > * docs(terminal-wasm): add Examples sections to public items
+
+- [123c590](
+https://github.com/crates-lurey-io/retroglyph/commit/123c59072d9de4a051ecddd76be67342cddf45ae) *(workspace, core, widgets)* Clean up the " -- " clause-joiner habit by `@matanlurey` in [#532](
+https://github.com/crates-lurey-io/retroglyph/pull/532)
+
+  > * docs(core): clean up " -- " clause-joiner usage
+  >
+  > * docs(terminal): clean up " -- " clause-joiner usage
+  >
+  > * docs(crossterm): clean up " -- " clause-joiner usage
+  >
+  > * docs(software): clean up " -- " clause-joiner usage
+  >
+  > * docs(gl): clean up " -- " clause-joiner usage
+  >
+  > * docs(window): clean up " -- " clause-joiner usage
+  >
+  > * docs(terminal-wasm): clean up " -- " clause-joiner usage
+  >
+  > * docs(widgets): clean up " -- " clause-joiner usage
+  >
+  > * docs(workspace): clean up " -- " clause-joiner usage in top-level docs
+
+### Miscellaneous Tasks
+
+- [e878716](
+https://github.com/crates-lurey-io/retroglyph/commit/e878716b24e6191d5849a4dd5377cfdac74376de) *(workspace)* Add just check-targets, fix wasm32 lint drift, forward the dev feature by `@matanlurey` in [#560](
+https://github.com/crates-lurey-io/retroglyph/pull/560)
+
+  > chore(workspace): add just check-targets, fix the wasm32 lint drift, forward the dev feature
+  >
+  > The local gate only ever compiled the host target, so three retroglyph-gl
+  > test modules gated to Linux and wasm32 were invisible to it -- which is how
+  > #551 was locally green and failed five CI jobs. Adds a recipe that covers
+  > them, and fixes the wasm32 lint failures that would have made its second leg
+  > red on main.
+  >
+  > Also forwards retroglyph-core's dev feature from every crate that depends on
+  > it, so a consumer can enable development diagnostics without adding a direct
+  > core dependency to reach the flag.
+  >
+  > Closes #552
+  >
+  > Closes #553
+
+**Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-wasm-v0.1.4...retroglyph-terminal-wasm-v0.2.0
+
+
 ## [0.1.4+retroglyph-terminal-wasm](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-wasm-v0.1.3...retroglyph-terminal-wasm-v0.1.4) - 2026-07-25
 
 ### Documentation
