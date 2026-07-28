@@ -81,7 +81,7 @@ struct WorkspaceReadmeDoctests;
 
 use core::time::Duration;
 use retroglyph_core::DrawCell;
-use retroglyph_core::backend::{Cursor, Input, Output};
+use retroglyph_core::backend::{Cursor, CursorStyle, Input, Output};
 use retroglyph_core::event::Event;
 use retroglyph_core::grid::{Pos, Size};
 use retroglyph_terminal::TerminalRenderer;
@@ -105,6 +105,59 @@ fn keyboard_enhancement_flags() -> crossterm::event::KeyboardEnhancementFlags {
     crossterm::event::KeyboardEnhancementFlags::REPORT_EVENT_TYPES
         | crossterm::event::KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
         | crossterm::event::KeyboardEnhancementFlags::REPORT_ALL_KEYS_AS_ESCAPE_CODES
+}
+
+/// Chooses a [`ColorSupport`](retroglyph_terminal::ColorSupport) level from the de facto
+/// `$NO_COLOR`/`$TERM` conventions, as a pure function of their values so it's testable without
+/// mutating real process environment variables.
+///
+/// - `no_color` any non-empty value (per <https://no-color.org>) forces
+///   [`ColorSupport::None`](retroglyph_terminal::ColorSupport::None).
+/// - `term` equal to `"dumb"` (the canonical "assume nothing" signal used by Emacs' shell mode,
+///   some CI systems, and similar) also forces `ColorSupport::None`. A bare `"dumb"` is never
+///   emitted by a terminal that actually supports color, so this carries no false-positive risk,
+///   unlike the heuristic described next.
+/// - Otherwise, [`ColorSupport::Truecolor`](retroglyph_terminal::ColorSupport::Truecolor):
+///   matches [`TerminalRenderer`](retroglyph_terminal::TerminalRenderer)'s own default and this
+///   crate's pre-existing behavior (always pass `Color::Rgb` through verbatim). Degrading below
+///   this is opt-in on one of the two positive signals above; their absence is not itself a
+///   signal of anything narrower.
+///
+/// This deliberately does **not** try to infer [`ColorSupport::Indexed256`] or
+/// [`ColorSupport::Ansi16`] from `$TERM`/`$COLORTERM` text (an earlier version of this function
+/// selected `Indexed256` for any `$TERM` containing `"256color"`, and `Truecolor` only for an
+/// explicit `$COLORTERM=truecolor`/`24bit`). Both heuristics look reasonable in isolation and
+/// both have the same failure mode: `xterm-256color` is the single most common `$TERM` value in
+/// existence, including on terminals that also fully support truecolor, and plenty of genuinely
+/// truecolor-capable environments never set `$COLORTERM` at all (this workspace's own PTY test
+/// harness is one: `portable-pty` sets `$TERM=xterm-256color` unconditionally for the child it
+/// spawns and never sets `$COLORTERM`, which silently downgraded every snapshot test's rendered
+/// colors and broke them all -- retroglyph#585 CI). Requiring an unambiguous signal before
+/// degrading, rather than guessing from `$TERM`'s text, is what avoids repeating that. Both
+/// narrower levels remain fully available as an explicit choice via
+/// [`CrosstermOptions::color_support`](CrosstermOptions::color_support); they just aren't guessed
+/// at automatically.
+fn detect_color_support(
+    no_color: Option<&str>,
+    term: Option<&str>,
+) -> retroglyph_terminal::ColorSupport {
+    use retroglyph_terminal::ColorSupport;
+
+    if no_color.is_some_and(|value| !value.is_empty()) {
+        return ColorSupport::None;
+    }
+    if term == Some("dumb") {
+        return ColorSupport::None;
+    }
+    ColorSupport::Truecolor
+}
+
+/// Thin env-reading wrapper around [`detect_color_support`]; reads the real process environment.
+fn detect_color_support_from_env() -> retroglyph_terminal::ColorSupport {
+    detect_color_support(
+        std::env::var("NO_COLOR").ok().as_deref(),
+        std::env::var("TERM").ok().as_deref(),
+    )
 }
 
 // Tracks whether the currently-live `Crossterm` instance (there's normally at most one, since
@@ -256,6 +309,12 @@ pub struct CrosstermOptions {
     bracketed_paste: bool,
     alt_screen: bool,
     raw_mode: bool,
+    // `None` means auto-detect from `$NO_COLOR`/`$TERM` at build time (see
+    // `detect_color_support_from_env`); `Some` is an explicit caller override that skips
+    // detection entirely. Unlike the six booleans above, this can't default to a plain `bool`
+    // (or even a bare `ColorSupport`) without losing the ability to tell "caller explicitly
+    // wants `Truecolor`" apart from "caller didn't say, go detect it".
+    color_support: Option<retroglyph_terminal::ColorSupport>,
 }
 
 impl CrosstermOptions {
@@ -326,6 +385,17 @@ impl CrosstermOptions {
         self
     }
 
+    /// Overrides the [`ColorSupport`](retroglyph_terminal::ColorSupport) level, skipping this
+    /// crate's own `$NO_COLOR`/`$TERM` auto-detection (see
+    /// [`Crossterm::color_support`] for the auto-detected default and how it's chosen).
+    /// Use this when a caller knows the receiving terminal's actual color depth (or wants to
+    /// force it) rather than trusting the environment.
+    #[must_use]
+    pub const fn color_support(mut self, color_support: retroglyph_terminal::ColorSupport) -> Self {
+        self.color_support = Some(color_support);
+        self
+    }
+
     /// Builds the [`Crossterm`] backend with these options, rendering to standard output.
     ///
     /// Equivalent to [`Crossterm::with_options`]; this is the terminal step of the
@@ -386,7 +456,9 @@ impl CrosstermOptions {
 }
 
 impl Default for CrosstermOptions {
-    /// Every feature enabled; matches [`Crossterm::new`]'s historical behavior.
+    /// Every feature enabled; matches [`Crossterm::new`]'s historical behavior. `color_support`
+    /// defaults to `None` (auto-detect from the environment at build time; see
+    /// [`CrosstermOptions::color_support`]).
     fn default() -> Self {
         Self {
             mouse_capture: true,
@@ -395,6 +467,7 @@ impl Default for CrosstermOptions {
             bracketed_paste: true,
             alt_screen: true,
             raw_mode: true,
+            color_support: None,
         }
     }
 }
@@ -453,6 +526,11 @@ pub struct Crossterm<W: std::io::Write = BufWriter<Stdout>> {
     // the rest back (see `retroglyph-examples`' FPS overlay toggle). Both used to lose every
     // event they pushed here.
     pushed_events: VecDeque<Event>,
+    // The options this instance was built with, retained so `suspend`/`SuspendGuard::resume` can
+    // redo the exact enable sequence [`build_from_options`](Self::build_from_options) ran at
+    // construction (raw mode, the alternate screen, mouse capture, focus-change reporting,
+    // bracketed paste, the kitty keyboard protocol) rather than guessing which features were on.
+    options: CrosstermOptions,
 }
 
 impl Crossterm {
@@ -611,6 +689,14 @@ impl<W: std::io::Write> Crossterm<W> {
         self.renderer.plain_mode()
     }
 
+    /// Returns the configured [`ColorSupport`](retroglyph_terminal::ColorSupport) level.
+    ///
+    /// Set explicitly via [`CrosstermOptions::color_support`], or auto-detected from
+    /// `$NO_COLOR`/`$TERM` if not overridden; see that method's docs for the detection rules.
+    pub const fn color_support(&self) -> retroglyph_terminal::ColorSupport {
+        self.renderer.color_support()
+    }
+
     /// Returns a mutable reference to the content writer.
     pub const fn writer_mut(&mut self) -> &mut W {
         self.renderer.writer_mut()
@@ -632,8 +718,6 @@ impl<W: std::io::Write> Crossterm<W> {
         writer: W,
         plain: bool,
     ) -> Result<Self, std::io::Error> {
-        use std::sync::atomic::Ordering;
-
         // Setup panic hook on first backend creation
         static PANIC_HOOK: std::sync::Once = std::sync::Once::new();
         PANIC_HOOK.call_once(|| {
@@ -650,49 +734,7 @@ impl<W: std::io::Write> Crossterm<W> {
         // a failed construction attempt never permanently wedges out future construction.
         let instance_guard = InstanceGuard::acquire()?;
 
-        if options.raw_mode {
-            crossterm::terminal::enable_raw_mode()?;
-            RAW_MODE_ACTIVE.store(true, Ordering::Release);
-        }
-
-        // Terminal-protocol setup always targets the real process stdout, independent of
-        // `writer`: these are properties of the actual controlling terminal (raw mode, the
-        // alternate screen, mouse/focus/paste/kitty negotiation), not of the content sink a
-        // caller may have swapped in via `build_with_writer`. See that method's docs.
-        let mut stdout = std::io::stdout();
-
-        if options.alt_screen {
-            crossterm::execute!(stdout, crossterm::terminal::EnterAlternateScreen)?;
-            ALT_SCREEN_ACTIVE.store(true, Ordering::Release);
-        }
-
-        crossterm::execute!(stdout, crossterm::cursor::Hide)?;
-
-        if options.mouse_capture {
-            crossterm::execute!(stdout, crossterm::event::EnableMouseCapture)?;
-        }
-
-        if options.focus_change {
-            crossterm::execute!(stdout, crossterm::event::EnableFocusChange)?;
-        }
-
-        if options.bracketed_paste {
-            crossterm::execute!(stdout, crossterm::event::EnableBracketedPaste)?;
-        }
-
-        if options.kitty_protocol {
-            // Opt into the kitty keyboard protocol so we receive key repeat and
-            // release events. We push optimistically rather than gating on
-            // `supports_keyboard_enhancement()`: that query blocks for the
-            // terminal's response (seconds on terminals that never answer, e.g.
-            // pipes and CI), stalling startup. Terminals that don't implement the
-            // protocol silently ignore the CSI sequence, and we map whatever key
-            // events they do send. The matching pop happens on restore.
-            crossterm::execute!(
-                stdout,
-                crossterm::event::PushKeyboardEnhancementFlags(keyboard_enhancement_flags())
-            )?;
-        }
+        enable_terminal_features(options)?;
 
         // Seed the cached size once, up front, so `size()` never has to query on the
         // per-frame path; kept fresh afterward by `poll_event` observing `Event::Resize` (see
@@ -701,18 +743,167 @@ impl<W: std::io::Write> Crossterm<W> {
         // yet, since none has been observed. See retroglyph#281.
         let (width, height) = crossterm::terminal::size().unwrap_or((80, 24));
 
+        // Use the caller's explicit override if given; otherwise detect from
+        // `$NO_COLOR`/`$TERM`. Unlike `plain` above (which needs `writer`'s own
+        // `IsTerminal` status and so can't be detected for an arbitrary `build_with_writer`
+        // sink), these are process environment variables independent of `writer`, so detection
+        // applies the same way regardless of which `build*` method was called.
+        let color_support = options
+            .color_support
+            .unwrap_or_else(detect_color_support_from_env);
+
         Ok(Self {
-            renderer: TerminalRenderer::with_plain_mode(writer, plain),
+            renderer: TerminalRenderer::with_plain_mode(writer, plain)
+                .with_color_support(color_support),
             _instance_guard: instance_guard,
             cached_size: Size { width, height },
             pushed_events: VecDeque::new(),
+            options,
         })
     }
+}
+
+/// Enables the terminal-protocol features `options` selects, targeting the real process stdout.
+///
+/// Shared by [`Crossterm::build_from_options`] (initial construction) and
+/// [`SuspendGuard`]'s resume path (undoing a [`Crossterm::suspend`]), since both need to redo the
+/// exact same enable sequence against the same set of options.
+fn enable_terminal_features(options: CrosstermOptions) -> std::io::Result<()> {
+    use std::sync::atomic::Ordering;
+
+    if options.raw_mode {
+        crossterm::terminal::enable_raw_mode()?;
+        RAW_MODE_ACTIVE.store(true, Ordering::Release);
+    }
+
+    // Terminal-protocol setup always targets the real process stdout, independent of any content
+    // writer a `Crossterm<W>` may be rendering to: these are properties of the actual controlling
+    // terminal (raw mode, the alternate screen, mouse/focus/paste/kitty negotiation), not of the
+    // content sink a caller may have swapped in via `build_with_writer`. See that method's docs.
+    let mut stdout = std::io::stdout();
+
+    if options.alt_screen {
+        crossterm::execute!(stdout, crossterm::terminal::EnterAlternateScreen)?;
+        ALT_SCREEN_ACTIVE.store(true, Ordering::Release);
+    }
+
+    crossterm::execute!(stdout, crossterm::cursor::Hide)?;
+
+    if options.mouse_capture {
+        crossterm::execute!(stdout, crossterm::event::EnableMouseCapture)?;
+    }
+
+    if options.focus_change {
+        crossterm::execute!(stdout, crossterm::event::EnableFocusChange)?;
+    }
+
+    if options.bracketed_paste {
+        crossterm::execute!(stdout, crossterm::event::EnableBracketedPaste)?;
+    }
+
+    if options.kitty_protocol {
+        // Opt into the kitty keyboard protocol so we receive key repeat and
+        // release events. We push optimistically rather than gating on
+        // `supports_keyboard_enhancement()`: that query blocks for the
+        // terminal's response (seconds on terminals that never answer, e.g.
+        // pipes and CI), stalling startup. Terminals that don't implement the
+        // protocol silently ignore the CSI sequence, and we map whatever key
+        // events they do send. The matching pop happens on restore.
+        crossterm::execute!(
+            stdout,
+            crossterm::event::PushKeyboardEnhancementFlags(keyboard_enhancement_flags())
+        )?;
+    }
+
+    Ok(())
 }
 
 impl<W: std::io::Write> Drop for Crossterm<W> {
     fn drop(&mut self) {
         restore_terminal();
+    }
+}
+
+impl<W: std::io::Write> Crossterm<W> {
+    /// Temporarily hands the real terminal back to the OS/shell, for shelling out to `$EDITOR`,
+    /// a pager, or a debugger.
+    ///
+    /// Exits raw mode, leaves the alternate screen, and shows the cursor -- only undoing whichever
+    /// of those this instance actually has active, using the same "only undo what was actually
+    /// done" bookkeeping this instance's `Drop` and the process-wide panic hook already share --
+    /// leaving the terminal in the state a normal shell command expects. Mouse capture,
+    /// focus-change reporting, bracketed paste, and the kitty keyboard protocol are also
+    /// disabled, matching what a normal process exit/panic already does.
+    ///
+    /// Returns a [`SuspendGuard`] borrowing `self`: while it's alive, no other `Crossterm` method
+    /// can be called (the borrow checker enforces this), and dropping the guard (or calling
+    /// [`SuspendGuard::resume`] explicitly) restores every option this instance was originally
+    /// built with and forces a full redraw on the next [`Output::draw`], since whatever ran while
+    /// suspended may have written arbitrary content to the real screen that this backend's diff
+    /// state doesn't know about.
+    ///
+    /// Does not handle `Ctrl+Z`/`SIGTSTP`: this is an explicit API for the common case (a key
+    /// binding that shells out deliberately), not a signal handler. An app that also wants to
+    /// suspend on `SIGTSTP` needs to install its own signal handler and call this method (and
+    /// [`SuspendGuard::resume`]) from it.
+    ///
+    /// # Errors
+    ///
+    /// Returns an `std::io::Error` if any of the terminal-restoring commands fail (e.g. a closed
+    /// terminal or disconnected pipe).
+    pub fn suspend(&mut self) -> std::io::Result<SuspendGuard<'_, W>> {
+        restore_terminal();
+        Ok(SuspendGuard {
+            crossterm: self,
+            resumed: false,
+        })
+    }
+}
+
+/// RAII guard returned by [`Crossterm::suspend`]; see that method's docs for the full contract.
+///
+/// Borrows the suspended [`Crossterm`] mutably for its whole lifetime, so no other method on it
+/// can be called (accidentally drawing, polling, or moving the cursor) while the real terminal is
+/// handed back to the OS/shell.
+pub struct SuspendGuard<'a, W: std::io::Write> {
+    crossterm: &'a mut Crossterm<W>,
+    // Set once `resume`/`Drop` has actually run the restore sequence, so a caller who calls
+    // `resume()` explicitly doesn't pay for (or risk double-applying) a second restore when the
+    // guard is then dropped.
+    resumed: bool,
+}
+
+impl<W: std::io::Write> SuspendGuard<'_, W> {
+    /// Restores every option the suspended [`Crossterm`] was originally built with and forces a
+    /// full redraw on the next [`Output::draw`]. Equivalent to letting the guard drop, but lets a
+    /// caller observe the `std::io::Error` a dropped guard would otherwise discard.
+    ///
+    /// # Errors
+    ///
+    /// Returns an `std::io::Error` if any of the terminal-restoring commands fail (e.g. a closed
+    /// terminal or disconnected pipe).
+    pub fn resume(mut self) -> std::io::Result<()> {
+        self.resume_inner()
+    }
+
+    fn resume_inner(&mut self) -> std::io::Result<()> {
+        if self.resumed {
+            return Ok(());
+        }
+        self.resumed = true;
+        enable_terminal_features(self.crossterm.options)?;
+        // The shelled-out program may have written arbitrary content to the real screen; forget
+        // the tracked cursor/style state so the next `draw` re-emits full escape sequences
+        // instead of skipping them under the assumption the terminal is still in the last-known
+        // state (mirrors what `Output::clear` already does for the same reason).
+        self.crossterm.renderer.reset_state();
+        Ok(())
+    }
+}
+
+impl<W: std::io::Write> Drop for SuspendGuard<'_, W> {
+    fn drop(&mut self) {
+        let _ = self.resume_inner();
     }
 }
 
@@ -842,6 +1033,43 @@ impl<W: std::io::Write> Input for Crossterm<W> {
     }
 }
 
+impl<W: std::io::Write> Crossterm<W> {
+    /// Sets the terminal window/tab title.
+    ///
+    /// Queues `crossterm::terminal::SetTitle` and flushes immediately (unlike
+    /// [`Cursor::set_cursor_visible`]/[`Cursor::set_cursor_position`], this is not expected to be
+    /// called every frame, so there is no deferred-flush benefit to chase). Not every terminal
+    /// emulator honors this OSC sequence; on ones that don't, this is silently a no-op from the
+    /// caller's perspective.
+    ///
+    /// # Errors
+    ///
+    /// Returns an `std::io::Error` if writing or flushing the escape sequence fails (e.g. a
+    /// closed terminal or disconnected pipe).
+    pub fn set_title(&mut self, title: &str) -> std::io::Result<()> {
+        let writer = self.renderer.writer_mut();
+        crossterm::queue!(writer, crossterm::terminal::SetTitle(title))?;
+        writer.flush()
+    }
+
+    /// Rings the terminal bell (writes the `BEL` control character, `\x07`).
+    ///
+    /// Crossterm has no dedicated `Command` type for this (unlike [`Self::set_title`]'s
+    /// `SetTitle`), so this writes the raw byte directly. Whether the terminal actually makes a
+    /// sound, flashes, or does nothing at all is entirely up to the terminal emulator/user
+    /// configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an `std::io::Error` if writing or flushing the byte fails (e.g. a closed terminal
+    /// or disconnected pipe).
+    pub fn ring_bell(&mut self) -> std::io::Result<()> {
+        let writer = self.renderer.writer_mut();
+        writer.write_all(b"\x07")?;
+        writer.flush()
+    }
+}
+
 impl<W: std::io::Write> Cursor for Crossterm<W> {
     /// Queues the show/hide escape without flushing; the next [`Output::flush`] call drains it
     /// along with everything else. A caller that hides the cursor and moves it in the same frame
@@ -862,6 +1090,29 @@ impl<W: std::io::Write> Cursor for Crossterm<W> {
     fn set_cursor_position(&mut self, position: Pos) {
         let writer = self.renderer.writer_mut();
         let _ = crossterm::queue!(writer, crossterm::cursor::MoveTo(position.x, position.y));
+    }
+
+    /// Queues the `DECSCUSR` cursor-shape escape without flushing; see
+    /// [`set_cursor_visible`](Self::set_cursor_visible)'s docs for why this is deferred to the
+    /// next [`Output::flush`] instead of flushing here.
+    fn set_cursor_style(&mut self, style: CursorStyle) {
+        let writer = self.renderer.writer_mut();
+        let _ = crossterm::queue!(writer, from_cursor_style(style));
+    }
+}
+
+const fn from_cursor_style(style: CursorStyle) -> crossterm::cursor::SetCursorStyle {
+    use crossterm::cursor::SetCursorStyle as CS;
+    match style {
+        CursorStyle::BlinkingBlock => CS::BlinkingBlock,
+        CursorStyle::SteadyBlock => CS::SteadyBlock,
+        CursorStyle::BlinkingUnderline => CS::BlinkingUnderScore,
+        CursorStyle::SteadyUnderline => CS::SteadyUnderScore,
+        CursorStyle::BlinkingBar => CS::BlinkingBar,
+        CursorStyle::SteadyBar => CS::SteadyBar,
+        // `CursorStyle` is `#[non_exhaustive]`: a future shape added upstream falls back to the
+        // terminal's own default rather than failing to compile here.
+        _ => CS::DefaultUserShape,
     }
 }
 
@@ -1226,6 +1477,79 @@ mod tests {
         {
             drop(term);
         }
+    }
+
+    #[test]
+    fn suspend_resume_forces_a_full_redraw() {
+        // With every TTY-only feature disabled (the same combination other `build_with_writer`
+        // tests use to run without a real terminal), `suspend`/resuming a dropped `SuspendGuard`
+        // still exercise the shared restore/`enable_terminal_features` machinery -- both only
+        // touch process stdout via always-safe commands (cursor show/hide, disabling features
+        // that were never enabled) when raw mode/the alternate screen are off, so this succeeds
+        // under `cargo test`'s non-TTY stdout.
+        let _lock = TEST_GUARD_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut term = Crossterm::builder()
+            .raw_mode(false)
+            .alt_screen(false)
+            .mouse_capture(false)
+            .focus_change(false)
+            .bracketed_paste(false)
+            .kitty_protocol(false)
+            .build_with_writer(Vec::new())
+            .expect("building against a Vec<u8> writer with all TTY features disabled must not require a real terminal");
+
+        let tile = Tile::new('X', retroglyph_core::style::Style::default());
+
+        // Establish tracked cursor state at (0, 0): a second draw at the same position would
+        // normally skip the `MoveTo` escape since the cursor is already tracked as being there.
+        term.draw(core::iter::once(DrawCell::new(Pos { x: 0, y: 0 }, &tile)))
+            .unwrap();
+        term.flush().unwrap();
+
+        {
+            let guard = term.suspend().expect("suspend must succeed without a real terminal once all TTY-only features are disabled");
+            drop(guard);
+        }
+
+        // `resume` (run here via `Drop`) must have called `reset_state`, so this draw at the same
+        // position re-emits the cursor-move escape instead of skipping it.
+        term.draw(core::iter::once(DrawCell::new(Pos { x: 0, y: 0 }, &tile)))
+            .unwrap();
+        term.flush().unwrap();
+
+        let written = String::from_utf8(term.writer().clone()).unwrap();
+        assert_eq!(
+            written.matches("\x1b[1;1H").count(),
+            2,
+            "expected the cursor-move escape to be re-emitted after resume: {written:?}"
+        );
+    }
+
+    #[test]
+    fn suspend_resume_is_idempotent_when_resume_is_called_explicitly() {
+        let _lock = TEST_GUARD_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut term = Crossterm::builder()
+            .raw_mode(false)
+            .alt_screen(false)
+            .mouse_capture(false)
+            .focus_change(false)
+            .bracketed_paste(false)
+            .kitty_protocol(false)
+            .build_with_writer(Vec::new())
+            .expect("building against a Vec<u8> writer with all TTY features disabled must not require a real terminal");
+
+        let guard = term.suspend().expect(
+            "suspend must succeed without a real terminal once all TTY-only features are disabled",
+        );
+        guard.resume().expect(
+            "resume must succeed without a real terminal once all TTY-only features are disabled",
+        );
+        // The guard is consumed by `resume`, so there's no double-restore on drop to assert
+        // against directly; this test's real assertion is that `resume()` itself returns `Ok`.
     }
 
     #[test]
@@ -1628,5 +1952,147 @@ mod tests {
             mouse_event_kind_of(crossterm::event::MouseEventKind::ScrollRight),
             K::Scroll { dx: 1.0, dy: 0.0 }
         );
+    }
+
+    #[test]
+    fn detect_color_support_no_color_wins_over_everything_else() {
+        use retroglyph_terminal::ColorSupport;
+
+        assert_eq!(
+            detect_color_support(Some("1"), Some("dumb")),
+            ColorSupport::None
+        );
+        // Any non-empty value counts, per https://no-color.org.
+        assert_eq!(
+            detect_color_support(Some("anything"), None),
+            ColorSupport::None
+        );
+    }
+
+    #[test]
+    fn detect_color_support_empty_no_color_does_not_count() {
+        use retroglyph_terminal::ColorSupport;
+
+        assert_eq!(
+            detect_color_support(Some(""), None),
+            ColorSupport::Truecolor
+        );
+    }
+
+    #[test]
+    fn detect_color_support_dumb_term_forces_none() {
+        // The one $TERM value that's an unambiguous "assume nothing" signal -- never emitted by
+        // a terminal that actually supports color, unlike a "...256color" suffix (see the next
+        // test).
+        use retroglyph_terminal::ColorSupport;
+
+        assert_eq!(detect_color_support(None, Some("dumb")), ColorSupport::None);
+    }
+
+    #[test]
+    fn detect_color_support_falls_back_to_truecolor_with_no_signal() {
+        // No `$NO_COLOR` and a `$TERM` that isn't the unambiguous "dumb" (or no `$TERM` at all,
+        // as in a minimal CI/test harness): this must not be read as evidence of a limited
+        // terminal, so it matches `TerminalRenderer`'s own `ColorSupport::default()` and this
+        // crate's pre-existing always-truecolor behavior.
+        use retroglyph_terminal::ColorSupport;
+
+        assert_eq!(detect_color_support(None, None), ColorSupport::Truecolor);
+        assert_eq!(
+            detect_color_support(None, Some("xterm")),
+            ColorSupport::Truecolor
+        );
+        // retroglyph#585 CI: this workspace's own PTY test harness spawns every example with
+        // exactly this $TERM and no $COLORTERM. A `$TERM`-text heuristic that read "256color" as
+        // a limit (rather than the common, often truecolor-capable default it is) silently
+        // downgraded every snapshot test's rendered colors and broke all of them at once.
+        assert_eq!(
+            detect_color_support(None, Some("xterm-256color")),
+            ColorSupport::Truecolor
+        );
+    }
+
+    #[test]
+    fn crossterm_options_color_support_override_is_used_verbatim() {
+        use retroglyph_terminal::ColorSupport;
+
+        let _lock = TEST_GUARD_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let term = Crossterm::builder()
+            .raw_mode(false)
+            .alt_screen(false)
+            .mouse_capture(false)
+            .focus_change(false)
+            .bracketed_paste(false)
+            .kitty_protocol(false)
+            .color_support(ColorSupport::Indexed256)
+            .build_with_writer(Vec::new())
+            .expect("building against a Vec<u8> writer with all TTY features disabled must not require a real terminal");
+
+        assert_eq!(term.color_support(), ColorSupport::Indexed256);
+    }
+
+    #[test]
+    fn set_title_writes_the_osc_title_escape() {
+        let _lock = TEST_GUARD_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut term = Crossterm::builder()
+            .raw_mode(false)
+            .alt_screen(false)
+            .mouse_capture(false)
+            .focus_change(false)
+            .bracketed_paste(false)
+            .kitty_protocol(false)
+            .build_with_writer(Vec::new())
+            .expect("building against a Vec<u8> writer with all TTY features disabled must not require a real terminal");
+
+        term.set_title("my title").unwrap();
+
+        let written = String::from_utf8(term.writer().clone()).unwrap();
+        assert_eq!(written, "\x1B]0;my title\x07");
+    }
+
+    #[test]
+    fn ring_bell_writes_the_bel_byte() {
+        let _lock = TEST_GUARD_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut term = Crossterm::builder()
+            .raw_mode(false)
+            .alt_screen(false)
+            .mouse_capture(false)
+            .focus_change(false)
+            .bracketed_paste(false)
+            .kitty_protocol(false)
+            .build_with_writer(Vec::new())
+            .expect("building against a Vec<u8> writer with all TTY features disabled must not require a real terminal");
+
+        term.ring_bell().unwrap();
+
+        assert_eq!(term.writer().as_slice(), b"\x07");
+    }
+
+    #[test]
+    fn set_cursor_style_queues_the_matching_decscusr_escape() {
+        use retroglyph_core::backend::CursorStyle;
+
+        let _lock = TEST_GUARD_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut term = Crossterm::builder()
+            .raw_mode(false)
+            .alt_screen(false)
+            .mouse_capture(false)
+            .focus_change(false)
+            .bracketed_paste(false)
+            .kitty_protocol(false)
+            .build_with_writer(Vec::new())
+            .expect("building against a Vec<u8> writer with all TTY features disabled must not require a real terminal");
+
+        term.set_cursor_style(CursorStyle::BlinkingBar);
+
+        assert_eq!(term.writer().as_slice(), b"\x1b[5 q");
     }
 }

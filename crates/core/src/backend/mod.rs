@@ -370,6 +370,37 @@ pub trait Cursor {
 
     /// Move the cursor to a position.
     fn set_cursor_position(&mut self, _position: Pos) {}
+
+    /// Set the cursor's shape (and blink behavior).
+    ///
+    /// Defaults to a no-op, matching [`set_cursor_visible`](Self::set_cursor_visible)/
+    /// [`set_cursor_position`](Self::set_cursor_position): backends with no text cursor to
+    /// manage, or that render on a terminal emulator with no shape-changing escape sequence,
+    /// can ignore this via the default `impl Cursor for X {}`.
+    fn set_cursor_style(&mut self, _style: CursorStyle) {}
+}
+
+/// The text cursor's visual shape and blink behavior.
+///
+/// Mirrors the six shapes a DEC-compatible terminal's `DECSCUSR` escape (`CSI Ps SP q`)
+/// supports: block, underline, and bar, each either blinking or steady. `#[non_exhaustive]`
+/// leaves room for a future shape (e.g. a hollow/outline block) without a breaking change.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[non_exhaustive]
+pub enum CursorStyle {
+    /// A blinking solid block (`█`). The default terminal cursor shape on most emulators.
+    #[default]
+    BlinkingBlock,
+    /// A steady (non-blinking) solid block.
+    SteadyBlock,
+    /// A blinking underscore (`_`).
+    BlinkingUnderline,
+    /// A steady (non-blinking) underscore.
+    SteadyUnderline,
+    /// A blinking vertical bar (`|`), as commonly used for text-insertion cursors.
+    BlinkingBar,
+    /// A steady (non-blinking) vertical bar.
+    SteadyBar,
 }
 
 /// A rendering backend that presents grid content to a display and provides input events.
