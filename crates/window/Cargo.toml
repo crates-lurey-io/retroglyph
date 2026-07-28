@@ -105,3 +105,10 @@ default-font = []
 # Shared PNG sprite/tileset support (`tileset` + `sprite_cache` modules, issue #366). Off by
 # default; both graphical backends' own `tilesets` features forward to this one.
 tilesets = ["dep:image", "dep:alpha-blend", "dep:log"]
+# Embeds a generated block-elements/braille fallback font (`font::legacy_computing`): the 10
+# quadrant, 60 sextant, and 256 braille glyphs CP437 (and so `unscii16`) has no mapping for. A
+# separate opt-in from `default-font` rather than folded into it: this repertoire is a much more
+# niche/specialized addition (subcell image rendering, braille density tricks) than the base text
+# font, so a consumer that only wants CP437 text shouldn't pay for it. Computed at compile time by
+# a `const fn`, so this adds no font asset and no new dependency.
+legacy-computing = []
