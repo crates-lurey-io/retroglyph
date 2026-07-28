@@ -378,6 +378,25 @@ impl SoftwareRenderer {
         false
     }
 
+    /// Grows `prev_tiles`/`prev_tints` to cover `layer_idx` if this is the first time it has been
+    /// seen, or re-allocates both to `cell_count` if a previous grid size left them stale (a
+    /// desync between the two would index one out of bounds; see retroglyph#567).
+    fn ensure_layer_shadow(&mut self, layer_idx: usize, cell_count: usize) {
+        if layer_idx >= self.ctx.prev_tiles.len() {
+            self.ctx
+                .prev_tiles
+                .resize_with(layer_idx + 1, || vec![Tile::default(); cell_count]);
+            self.ctx
+                .prev_tints
+                .resize_with(layer_idx + 1, || vec![Tint::None; cell_count]);
+        } else if self.ctx.prev_tiles[layer_idx].len() != cell_count
+            || self.ctx.prev_tints[layer_idx].len() != cell_count
+        {
+            self.ctx.prev_tiles[layer_idx] = vec![Tile::default(); cell_count];
+            self.ctx.prev_tints[layer_idx] = vec![Tint::None; cell_count];
+        }
+    }
+
     /// Determines the background `layer_id`'s cell at flat index `idx` should paint, if any.
     ///
     /// Wraps [`resolve_bg_fill`] with the one thing that function cannot see on its own: whether
@@ -435,8 +454,14 @@ impl SoftwareRenderer {
         scale: usize,
         pos: Pos,
         tile: Tile,
+        // Only ever read inside the `tilesets`-gated sprite path below: a bitmap-font glyph is
+        // always drawn in the cell's own foreground colour, never tinted (tints apply to
+        // sprites only, per `Surface::with_tint`), so a `tilesets`-off build has no use for it.
         tint: Tint,
     ) {
+        #[cfg(not(feature = "tilesets"))]
+        let _ = tint;
+
         let px_x = usize::from(pos.x) * cell_w;
         let px_y = usize::from(pos.y) * cell_h;
 
@@ -715,18 +740,7 @@ impl Output for SoftwareRenderer {
             let (layer_id, pos, tile) = (draw_cell.layer, draw_cell.pos, draw_cell.tile);
             let layer_idx = usize::from(layer_id);
             max_layer_seen = max_layer_seen.max(i32::from(layer_id));
-
-            if layer_idx >= self.ctx.prev_tiles.len() {
-                self.ctx
-                    .prev_tiles
-                    .resize_with(layer_idx + 1, || vec![Tile::default(); cell_count]);
-                self.ctx
-                    .prev_tints
-                    .resize_with(layer_idx + 1, || vec![Tint::None; cell_count]);
-            } else if self.ctx.prev_tiles[layer_idx].len() != cell_count {
-                self.ctx.prev_tiles[layer_idx] = vec![Tile::default(); cell_count];
-                self.ctx.prev_tints[layer_idx] = vec![Tint::None; cell_count];
-            }
+            self.ensure_layer_shadow(layer_idx, cell_count);
 
             let idx = usize::from(pos.y) * cols + usize::from(pos.x);
             let slot = &mut self.ctx.prev_tiles[layer_idx][idx];
@@ -842,11 +856,12 @@ impl Output for SoftwareRenderer {
         // so drop it and force a full-frame damage rect on the next present.
         self.ctx.prev_pixels.clear();
         self.ctx.prev_pixels.resize(new_w * new_h, 0);
-        // The per-cell tile shadow is keyed by the old grid dimensions; drop it too so the next
-        // `draw_layers` call can't misread stale entries against the new layout, and force that
-        // call onto the full-repaint path (`prev_layer_count` back to its initial value never
-        // matches a real frame's layer count).
+        // The per-cell tile and tint shadows are keyed by the old grid dimensions; drop both so
+        // the next `draw_layers` call can't misread stale entries against the new layout, and
+        // force that call onto the full-repaint path (`prev_layer_count` back to its initial
+        // value never matches a real frame's layer count).
         self.ctx.prev_tiles.clear();
+        self.ctx.prev_tints.clear();
         self.ctx.dirty_mask.clear();
         self.ctx.prev_layer_count = usize::MAX;
         self.ctx.damage_rows = if new_h == 0 {
@@ -1909,6 +1924,22 @@ mod tests {
             width: 4,
             height: 5,
         });
+        assert_eq!(r.ctx.damage_rows, Some((0, 5 * CELL_H_PX)));
+    }
+
+    #[test]
+    fn resize_to_a_larger_grid_does_not_panic_on_the_next_draw() {
+        // retroglyph#567: `resize` cleared `prev_tiles` but left the parallel `prev_tints`
+        // shadow at its old (smaller) length, so the next `draw_layers` indexed it out of
+        // bounds. Draw at the original size, resize larger, and draw again; this must not panic.
+        let mut r = damage_renderer(2, 3);
+        let red = bg_tile(200, 0, 0);
+        draw_fill(&mut r, 2, 3, &red, None);
+        r.resize(Size {
+            width: 4,
+            height: 5,
+        });
+        draw_fill(&mut r, 4, 5, &red, None);
         assert_eq!(r.ctx.damage_rows, Some((0, 5 * CELL_H_PX)));
     }
 

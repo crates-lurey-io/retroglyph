@@ -700,13 +700,27 @@ fn a_tinted_sprite_matches_what_sprite_tint_apply_computes() {
     //
     // Rendering one tint per pass rather than one grid of many keeps each assertion pointed at a
     // single instance's attributes.
-    for tint in [
-        Tint::None,
-        Tint::multiply(128, 128, 128),
-        Tint::multiply(255, 0, 0),
-        Tint::mix(0, 0, 255, 128),
-        Tint::mix(255, 255, 255, 255),
-    ] {
+    //
+    // The value set below is a boundary-focused sweep (retroglyph#555), not just a handful of
+    // round numbers: 0/1/127/128/129/254/255 are exactly the inputs where `multiply_u8`'s
+    // `(a*b+127)/255` and `mix_u8`'s `(delta +/- 127)/255` rounding can disagree with a naive
+    // float `/255.0` normalize -> GPU multiply/mix -> `*255.0` round-trip (the bug this shader
+    // rework fixes: the old `vec4`/`mix()` float path used the GPU's own float rounding, which
+    // does not reproduce `(a*b+127)/255` integer rounding at these boundary values). Keeping the
+    // sweep here (rather than deleting it once the fix lands) documents exactly which inputs the
+    // float path used to get wrong.
+    let boundary = [0u8, 1, 63, 64, 127, 128, 129, 191, 192, 254, 255];
+    let mut tints: Vec<Tint> = vec![Tint::None];
+    for &v in &boundary {
+        tints.push(Tint::multiply(v, v, v));
+        tints.push(Tint::multiply(v, 255 - v, v / 2));
+    }
+    for &amount in &boundary {
+        tints.push(Tint::mix(0, 0, 255, amount));
+        tints.push(Tint::mix(255, 255, 255, amount));
+        tints.push(Tint::mix(64, 200, 32, amount));
+    }
+    for tint in tints {
         let opts = TilesetOptions::from_bytes(two_tile_png())
             .tile_size(8, 16)
             .columns(2)
