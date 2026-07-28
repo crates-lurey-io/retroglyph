@@ -90,8 +90,11 @@ impl Pointer {
                     slot.released = true;
                 }
             }
-            MouseEventKind::ScrollUp => self.scroll_delta -= 1,
-            MouseEventKind::ScrollDown => self.scroll_delta += 1,
+            // Ignores magnitude for now, treating every `Scroll` event as one unit step,
+            // matching pre-#445 behavior; see retroglyph#445 for why magnitude exists but isn't
+            // consumed here yet.
+            MouseEventKind::Scroll { dy, .. } if dy > 0.0 => self.scroll_delta -= 1,
+            MouseEventKind::Scroll { dy, .. } if dy < 0.0 => self.scroll_delta += 1,
             // Moved, plus future MouseEventKind/MouseButton variants (both
             // #[non_exhaustive]): ignored until this crate is updated to track them.
             _ => {}
@@ -217,9 +220,11 @@ mod tests {
     #[test]
     fn scroll_accumulates_within_a_frame_and_clears_on_end_frame() {
         let mut p = Pointer::new();
-        p.handle_event(&mouse(MouseEventKind::ScrollDown, Pos::new(0, 0)));
-        p.handle_event(&mouse(MouseEventKind::ScrollDown, Pos::new(0, 0)));
-        p.handle_event(&mouse(MouseEventKind::ScrollUp, Pos::new(0, 0)));
+        let scroll_down = MouseEventKind::Scroll { dx: 0.0, dy: -1.0 };
+        let scroll_up = MouseEventKind::Scroll { dx: 0.0, dy: 1.0 };
+        p.handle_event(&mouse(scroll_down, Pos::new(0, 0)));
+        p.handle_event(&mouse(scroll_down, Pos::new(0, 0)));
+        p.handle_event(&mouse(scroll_up, Pos::new(0, 0)));
         assert_eq!(p.scroll_delta(), 1);
 
         p.end_frame();

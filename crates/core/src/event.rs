@@ -80,6 +80,29 @@ impl Not for KeyModifiers {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
+/// A modifier key pressed as a standalone key event, independent of the [`KeyModifiers`] flags
+/// carried on non-modifier key events.
+///
+/// This is flat (no per-side variants) because side is conveyed separately: pair this with the
+/// surrounding [`KeyEvent`]'s [`KeyLocation::Left`]/[`KeyLocation::Right`] rather than duplicating
+/// left/right into `ModifierKey` itself.
+///
+/// Reporting a bare modifier press as a [`KeyCode::Modifier`] event is backend-dependent: the
+/// crossterm backend requires the terminal to support the kitty keyboard protocol with the
+/// `REPORT_ALL_KEYS_AS_ESCAPE_CODES` enhancement flag enabled; plain terminals never report these.
+pub enum ModifierKey {
+    /// Shift.
+    Shift,
+    /// Control.
+    Control,
+    /// Alt.
+    Alt,
+    /// Super/Meta (macOS Cmd, Windows/Super key).
+    Super,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 /// Keyboard key codes.
 pub enum KeyCode {
     /// A character key.
@@ -116,6 +139,21 @@ pub enum KeyCode {
     Insert,
     /// Escape.
     Escape,
+    /// A modifier key pressed on its own, without another key. See [`ModifierKey`] for the
+    /// backend-availability caveat.
+    Modifier(ModifierKey),
+    /// Caps Lock.
+    CapsLock,
+    /// Scroll Lock.
+    ScrollLock,
+    /// Num Lock.
+    NumLock,
+    /// Print Screen.
+    PrintScreen,
+    /// Pause.
+    Pause,
+    /// Menu (context menu key).
+    Menu,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -238,9 +276,11 @@ pub enum MouseButton {
     Middle,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 #[non_exhaustive]
 /// Kinds of mouse events.
+///
+/// Does not derive `Eq`/`Hash`: [`Scroll`](Self::Scroll)'s `f32` fields implement neither.
 pub enum MouseEventKind {
     /// Mouse button pressed.
     Down(MouseButton),
@@ -250,18 +290,25 @@ pub enum MouseEventKind {
     Drag(MouseButton),
     /// Mouse moved.
     Moved,
-    /// Mouse wheel scrolled up.
-    ScrollUp,
-    /// Mouse wheel scrolled down.
-    ScrollDown,
-    /// Mouse wheel scrolled left (mostly on a laptop touchpad).
-    ScrollLeft,
-    /// Mouse wheel scrolled right (mostly on a laptop touchpad).
-    ScrollRight,
+    /// Mouse wheel/touchpad scroll.
+    ///
+    /// `dy > 0.0` is scroll up, `dy < 0.0` is scroll down; `dx > 0.0` is scroll right, `dx < 0.0`
+    /// is scroll left (mostly from a laptop touchpad). Magnitude is backend-dependent: the winit
+    /// backend reports the exact pixel/line delta from the platform, while the crossterm backend
+    /// synthesizes a fixed step of `1.0` per tick since terminals can't report scroll precision.
+    Scroll {
+        /// Horizontal delta. See the variant docs for the sign convention.
+        dx: f32,
+        /// Vertical delta. See the variant docs for the sign convention.
+        dy: f32,
+    },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 /// Mouse input event.
+///
+/// Does not derive `Eq`/`Hash`: [`MouseEventKind`] does not (its `Scroll` variant's `f32`
+/// fields implement neither).
 pub struct MouseEvent {
     /// The kind of mouse event.
     pub kind: MouseEventKind,
@@ -295,9 +342,12 @@ pub enum SystemTheme {
     Dark,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 /// Terminal input event.
+///
+/// Does not derive `Eq`/`Hash`: [`MouseEvent`] does not (its `MouseEventKind::Scroll` variant's
+/// `f32` fields implement neither).
 pub enum Event {
     /// Keyboard event.
     Key(KeyEvent),

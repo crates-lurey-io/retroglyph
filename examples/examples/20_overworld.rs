@@ -2381,8 +2381,12 @@ impl Overworld {
                 }
                 None => {}
             },
-            MouseEventKind::ScrollUp if on_map => self.pan(0, -2 * self.view.pan_scale().1),
-            MouseEventKind::ScrollDown if on_map => self.pan(0, 2 * self.view.pan_scale().1),
+            MouseEventKind::Scroll { dy, .. } if on_map && dy > 0.0 => {
+                self.pan(0, -2 * self.view.pan_scale().1);
+            }
+            MouseEventKind::Scroll { dy, .. } if on_map && dy < 0.0 => {
+                self.pan(0, 2 * self.view.pan_scale().1);
+            }
             _ => {}
         }
     }

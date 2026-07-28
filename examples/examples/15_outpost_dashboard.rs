@@ -671,8 +671,12 @@ impl OutpostDashboard {
                     MouseEventKind::Down(MouseButton::Left) => self.on_pointer_down(m.position),
                     MouseEventKind::Moved => self.on_pointer_move(m.position),
                     MouseEventKind::Up(MouseButton::Left) => self.on_pointer_up(m.position),
-                    MouseEventKind::ScrollUp => self.on_scroll(m.position, -1),
-                    MouseEventKind::ScrollDown => self.on_scroll(m.position, 1),
+                    MouseEventKind::Scroll { dy, .. } if dy > 0.0 => {
+                        self.on_scroll(m.position, -1);
+                    }
+                    MouseEventKind::Scroll { dy, .. } if dy < 0.0 => {
+                        self.on_scroll(m.position, 1);
+                    }
                     _ => {}
                 },
                 Event::Close => return false,

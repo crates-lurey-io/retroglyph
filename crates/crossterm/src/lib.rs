@@ -96,10 +96,15 @@ use std::io::{BufWriter, IsTerminal, Stdout};
 /// Keyboard enhancement flags requested when the terminal supports the kitty
 /// keyboard protocol. `REPORT_EVENT_TYPES` is what upgrades us from press-only
 /// to press/repeat/release; `DISAMBIGUATE_ESCAPE_CODES` makes modified keys
-/// unambiguous.
+/// unambiguous and is also what unlocks `CapsLock`/`ScrollLock`/`NumLock`/
+/// `PrintScreen`/`Pause`/`Menu` reporting at all. `REPORT_ALL_KEYS_AS_ESCAPE_CODES` is what
+/// additionally unlocks a bare modifier press (`crossterm::event::KeyCode::Modifier`, mapped to
+/// [`retroglyph_core::event::KeyCode::Modifier`]) being reported as its own key event instead of
+/// being silently absorbed into the modifiers field of the next non-modifier key.
 fn keyboard_enhancement_flags() -> crossterm::event::KeyboardEnhancementFlags {
     crossterm::event::KeyboardEnhancementFlags::REPORT_EVENT_TYPES
         | crossterm::event::KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
+        | crossterm::event::KeyboardEnhancementFlags::REPORT_ALL_KEYS_AS_ESCAPE_CODES
 }
 
 // Tracks whether the currently-live `Crossterm` instance (there's normally at most one, since
@@ -883,7 +888,46 @@ const fn from_crossterm_key_code(
         CK::Delete => Some(K::Delete),
         CK::Insert => Some(K::Insert),
         CK::Esc => Some(K::Escape),
+        CK::CapsLock => Some(K::CapsLock),
+        CK::ScrollLock => Some(K::ScrollLock),
+        CK::NumLock => Some(K::NumLock),
+        CK::PrintScreen => Some(K::PrintScreen),
+        CK::Pause => Some(K::Pause),
+        CK::Menu => Some(K::Menu),
         _ => None,
+    }
+}
+
+/// Maps a bare modifier keypress reported under
+/// [`crossterm::event::KeyboardEnhancementFlags::REPORT_ALL_KEYS_AS_ESCAPE_CODES`] to retroglyph's
+/// flat [`ModifierKey`](retroglyph_core::event::ModifierKey) plus the side it came from.
+///
+/// Crossterm's `Hyper`/`Meta`/`IsoLevel3Shift`/`IsoLevel5Shift` variants have no retroglyph
+/// equivalent and fall through to `None`, same as any other unmapped key.
+const fn from_crossterm_modifier_key_code(
+    code: crossterm::event::ModifierKeyCode,
+) -> Option<(
+    retroglyph_core::event::ModifierKey,
+    retroglyph_core::event::KeyLocation,
+)> {
+    use crossterm::event::ModifierKeyCode as CM;
+    use retroglyph_core::event::KeyLocation as L;
+    use retroglyph_core::event::ModifierKey as M;
+    match code {
+        CM::LeftShift => Some((M::Shift, L::Left)),
+        CM::RightShift => Some((M::Shift, L::Right)),
+        CM::LeftControl => Some((M::Control, L::Left)),
+        CM::RightControl => Some((M::Control, L::Right)),
+        CM::LeftAlt => Some((M::Alt, L::Left)),
+        CM::RightAlt => Some((M::Alt, L::Right)),
+        CM::LeftSuper => Some((M::Super, L::Left)),
+        CM::RightSuper => Some((M::Super, L::Right)),
+        CM::LeftHyper
+        | CM::RightHyper
+        | CM::LeftMeta
+        | CM::RightMeta
+        | CM::IsoLevel3Shift
+        | CM::IsoLevel5Shift => None,
     }
 }
 
@@ -899,9 +943,12 @@ const fn from_crossterm_key_kind(
     }
 }
 
-// Crossterm only ever reports a key as originating from the keypad (`KeyEventState::KEYPAD`,
-// set under the kitty keyboard protocol); it has no notion of a left/right pair for a single
-// symbolic key, so `Left`/`Right` are unreachable from this backend.
+// `KeyEventState::KEYPAD` (set under the kitty keyboard protocol) is the only thing this
+// state-flags-only mapping can report; it has no notion of a left/right pair for a single
+// symbolic key on its own. `Left`/`Right` locations ARE reachable from this backend, but only via
+// `crossterm::event::ModifierKeyCode`'s own Left/Right variants (see
+// `from_crossterm_modifier_key_code`), which `from_crossterm_event` consults instead of this
+// function for `KeyCode::Modifier` events.
 const fn from_crossterm_key_state(
     state: crossterm::event::KeyEventState,
 ) -> retroglyph_core::event::KeyLocation {
@@ -945,6 +992,10 @@ const fn from_crossterm_mouse_button(
 
 // Every `crossterm::event::MouseEventKind` variant now has a retroglyph equivalent (unlike
 // `from_crossterm_key_code`, which still has unmappable `KeyCode`s), so this is infallible.
+//
+// Crossterm's scroll variants are line-quantized with no magnitude of their own, so each is
+// synthesized as a `Scroll{dx,dy}` of magnitude 1.0 in the matching sign direction (see
+// `MouseEventKind::Scroll`'s docs for the sign convention this preserves).
 const fn from_crossterm_mouse_event_kind(
     kind: crossterm::event::MouseEventKind,
 ) -> retroglyph_core::event::MouseEventKind {
@@ -955,10 +1006,10 @@ const fn from_crossterm_mouse_event_kind(
         CM::Up(btn) => K::Up(from_crossterm_mouse_button(btn)),
         CM::Drag(btn) => K::Drag(from_crossterm_mouse_button(btn)),
         CM::Moved => K::Moved,
-        CM::ScrollUp => K::ScrollUp,
-        CM::ScrollDown => K::ScrollDown,
-        CM::ScrollLeft => K::ScrollLeft,
-        CM::ScrollRight => K::ScrollRight,
+        CM::ScrollUp => K::Scroll { dx: 0.0, dy: 1.0 },
+        CM::ScrollDown => K::Scroll { dx: 0.0, dy: -1.0 },
+        CM::ScrollLeft => K::Scroll { dx: -1.0, dy: 0.0 },
+        CM::ScrollRight => K::Scroll { dx: 1.0, dy: 0.0 },
     }
 }
 
@@ -994,6 +1045,19 @@ pub fn from_crossterm_event(event: crossterm::event::Event) -> Option<Event> {
     use crossterm::event::Event as CE;
     match event {
         CE::Key(k) => {
+            // A bare modifier press takes a separate path: `ModifierKeyCode` carries the
+            // left/right side itself, which overrides whatever `from_crossterm_key_state` would
+            // otherwise report (it only ever detects `Numpad` from the `KEYPAD` state flag).
+            if let crossterm::event::KeyCode::Modifier(mkc) = k.code {
+                let (modifier, location) = from_crossterm_modifier_key_code(mkc)?;
+                return Some(Event::Key(retroglyph_core::event::KeyEvent::with_location(
+                    retroglyph_core::event::KeyCode::Modifier(modifier),
+                    from_crossterm_key_modifiers(k.modifiers),
+                    from_crossterm_key_kind(k.kind),
+                    location,
+                )));
+            }
+
             // With `DISAMBIGUATE_ESCAPE_CODES` enabled (see `keyboard_enhancement_flags`),
             // terminals that support the kitty keyboard protocol report Shift+Tab as `Tab` plus
             // a shift modifier (CSI-u always encodes Tab's base codepoint, never a separate
@@ -1067,6 +1131,57 @@ mod tests {
             panic!("expected Some(Event::Key(_))");
         };
         assert_eq!(key.location, retroglyph_core::event::KeyLocation::Standard);
+    }
+
+    #[test]
+    fn left_shift_modifier_key_maps_to_modifier_with_left_location() {
+        use retroglyph_core::event::{KeyCode, KeyLocation, ModifierKey};
+
+        let ct_event = crossterm::event::Event::Key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Modifier(crossterm::event::ModifierKeyCode::LeftShift),
+            crossterm::event::KeyModifiers::SHIFT,
+        ));
+        let Some(Event::Key(key)) = from_crossterm_event(ct_event) else {
+            panic!("expected Some(Event::Key(_))");
+        };
+        assert_eq!(key.code, KeyCode::Modifier(ModifierKey::Shift));
+        assert_eq!(key.location, KeyLocation::Left);
+    }
+
+    #[test]
+    fn right_alt_modifier_key_maps_to_modifier_with_right_location() {
+        use retroglyph_core::event::{KeyCode, KeyLocation, ModifierKey};
+
+        let ct_event = crossterm::event::Event::Key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Modifier(crossterm::event::ModifierKeyCode::RightAlt),
+            crossterm::event::KeyModifiers::ALT,
+        ));
+        let Some(Event::Key(key)) = from_crossterm_event(ct_event) else {
+            panic!("expected Some(Event::Key(_))");
+        };
+        assert_eq!(key.code, KeyCode::Modifier(ModifierKey::Alt));
+        assert_eq!(key.location, KeyLocation::Right);
+    }
+
+    #[test]
+    fn hyper_modifier_key_has_no_retroglyph_equivalent() {
+        let ct_event = crossterm::event::Event::Key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Modifier(crossterm::event::ModifierKeyCode::LeftHyper),
+            crossterm::event::KeyModifiers::NONE,
+        ));
+        assert_eq!(from_crossterm_event(ct_event), None);
+    }
+
+    #[test]
+    fn caps_lock_maps_straight_through() {
+        let ct_event = crossterm::event::Event::Key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::CapsLock,
+            crossterm::event::KeyModifiers::NONE,
+        ));
+        assert_eq!(
+            key_code_of(ct_event),
+            retroglyph_core::event::KeyCode::CapsLock
+        );
     }
 
     #[test]
@@ -1469,11 +1584,11 @@ mod tests {
         );
         assert_eq!(
             mouse_event_kind_of(crossterm::event::MouseEventKind::ScrollUp),
-            K::ScrollUp
+            K::Scroll { dx: 0.0, dy: 1.0 }
         );
         assert_eq!(
             mouse_event_kind_of(crossterm::event::MouseEventKind::ScrollDown),
-            K::ScrollDown
+            K::Scroll { dx: 0.0, dy: -1.0 }
         );
     }
 
@@ -1507,11 +1622,11 @@ mod tests {
 
         assert_eq!(
             mouse_event_kind_of(crossterm::event::MouseEventKind::ScrollLeft),
-            K::ScrollLeft
+            K::Scroll { dx: -1.0, dy: 0.0 }
         );
         assert_eq!(
             mouse_event_kind_of(crossterm::event::MouseEventKind::ScrollRight),
-            K::ScrollRight
+            K::Scroll { dx: 1.0, dy: 0.0 }
         );
     }
 }

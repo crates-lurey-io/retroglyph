@@ -672,7 +672,7 @@ mod tests {
             modifiers: KeyModifiers::NONE,
         }));
         interaction.handle_event(&Event::Mouse(MouseEvent {
-            kind: MouseEventKind::ScrollDown,
+            kind: MouseEventKind::Scroll { dx: 0.0, dy: -1.0 },
             position: Pos::new(2, 0),
             pixel_position: None,
             modifiers: KeyModifiers::NONE,
@@ -711,7 +711,7 @@ mod tests {
         interaction.end_frame();
 
         interaction.handle_event(&Event::Mouse(MouseEvent {
-            kind: MouseEventKind::ScrollDown,
+            kind: MouseEventKind::Scroll { dx: 0.0, dy: -1.0 },
             position: Pos::new(2, 0),
             pixel_position: None,
             modifiers: KeyModifiers::NONE,

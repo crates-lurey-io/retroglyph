@@ -593,8 +593,10 @@ pub fn decode_mouse_event(
         ma::DOWN => MouseEventKind::Down(decode_mouse_button(button)?),
         ma::UP => MouseEventKind::Up(decode_mouse_button(button)?),
         ma::MOVED => MouseEventKind::Moved,
-        ma::SCROLL_UP => MouseEventKind::ScrollUp,
-        ma::SCROLL_DOWN => MouseEventKind::ScrollDown,
+        // Wire protocol has no scroll magnitude; synthesize a unit-magnitude `Scroll` matching
+        // the sign convention documented on `MouseEventKind::Scroll`.
+        ma::SCROLL_UP => MouseEventKind::Scroll { dx: 0.0, dy: 1.0 },
+        ma::SCROLL_DOWN => MouseEventKind::Scroll { dx: 0.0, dy: -1.0 },
         _ => return None,
     };
 
@@ -1162,10 +1164,10 @@ mod tests {
         use retroglyph_core::event::MouseEventKind;
 
         let up = decode_mouse_event(0, 0, mouse_actions::SCROLL_UP, 0, 0).unwrap();
-        assert_eq!(up.kind, MouseEventKind::ScrollUp);
+        assert_eq!(up.kind, MouseEventKind::Scroll { dx: 0.0, dy: 1.0 });
 
         let down = decode_mouse_event(0, 0, mouse_actions::SCROLL_DOWN, 0, 0).unwrap();
-        assert_eq!(down.kind, MouseEventKind::ScrollDown);
+        assert_eq!(down.kind, MouseEventKind::Scroll { dx: 0.0, dy: -1.0 });
     }
 
     #[test]
