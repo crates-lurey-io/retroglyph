@@ -42,6 +42,28 @@ use gem::rgb::Rgb888;
 /// never which of them are opaque. Compositing and the cell background showing through
 /// transparent pixels behave identically tinted or not.
 ///
+/// # Scope: what `Tint` is not for
+///
+/// `Tint` is deliberately per-cell and per-draw, not per-sheet or per-frame. "Is this sheet art
+/// or a mask" is a different, fixed-at-load-time question, answered once by
+/// `retroglyph_window::tileset::SheetColor` rather than by this type. The two compose instead of
+/// collapsing into one flag (see `retroglyph_window::sprite_cache::SpriteTint`, which resolves
+/// both in one place), because "is this sheet art or a mask" (fixed when the asset is authored)
+/// and "what colour to flash this cell right now" (fixed per frame) are different questions that
+/// would conflict if merged into a single `modulate(bool)`-style flag: a sheet declared
+/// art-not-mask still needs to be flashable.
+///
+/// Frame- or layer-level colour transforms -- day/night cycles, fog of war, a "remembered" map
+/// render -- are not a use case for `Tint` either. Those apply to everything already drawn,
+/// every frame, so routing them through per-cell `Tint` would mean writing the same value into a
+/// side-table entry for every cell of every layer, every frame: the wrong lever for a
+/// screen-wide effect. That is tracked as its own, not-yet-designed concern in retroglyph#562;
+/// it is out of scope here.
+///
+/// `Tint` is `#[non_exhaustive]` so more operations (add, screen, replace) can be added later
+/// without breaking either backend: the GL encoder already falls through to "no recolour" on an
+/// operation it does not recognize.
+///
 /// # Examples
 ///
 /// ```
