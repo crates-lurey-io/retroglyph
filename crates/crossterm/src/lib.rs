@@ -112,8 +112,14 @@ fn keyboard_enhancement_flags() -> crossterm::event::KeyboardEnhancementFlags {
 ///   [`ColorSupport::Truecolor`](retroglyph_terminal::ColorSupport::Truecolor).
 /// - Otherwise, `term` containing `"256color"` selects
 ///   [`ColorSupport::Indexed256`](retroglyph_terminal::ColorSupport::Indexed256).
-/// - Otherwise, [`ColorSupport::Ansi16`](retroglyph_terminal::ColorSupport::Ansi16): a
-///   conservative fallback for an unrecognized or absent `$TERM`.
+/// - Otherwise, [`ColorSupport::Truecolor`](retroglyph_terminal::ColorSupport::Truecolor):
+///   matches [`TerminalRenderer`](retroglyph_terminal::TerminalRenderer)'s own default and this
+///   crate's pre-existing behavior (always pass `Color::Rgb` through verbatim) for an
+///   unrecognized or absent `$TERM`/`$COLORTERM`, rather than guessing downward. Degrading is
+///   opt-in on a positive signal (`$NO_COLOR`, or a `$TERM` that specifically names a narrower
+///   palette); the absence of a signal is not itself a signal, and a minimal environment with
+///   neither variable set (common in CI/test harnesses, and not unheard of over a raw SSH
+///   session) is not evidence the terminal can't handle truecolor.
 fn detect_color_support(
     no_color: Option<&str>,
     colorterm: Option<&str>,
@@ -133,7 +139,7 @@ fn detect_color_support(
     if term.is_some_and(|value| value.contains("256color")) {
         return ColorSupport::Indexed256;
     }
-    ColorSupport::Ansi16
+    ColorSupport::Truecolor
 }
 
 /// Thin env-reading wrapper around [`detect_color_support`]; reads the real process environment.
@@ -1884,13 +1890,22 @@ mod tests {
     }
 
     #[test]
-    fn detect_color_support_falls_back_to_ansi16() {
+    fn detect_color_support_falls_back_to_truecolor_with_no_signal() {
+        // No `$NO_COLOR`, no `$COLORTERM`, and a `$TERM` that doesn't name a narrower palette
+        // (or no `$TERM` at all, as in a minimal CI/test harness): this must not be read as
+        // evidence of a limited terminal, so it matches `TerminalRenderer`'s own
+        // `ColorSupport::default()` and this crate's pre-existing always-truecolor behavior
+        // (retroglyph#585: defaulting downward here broke every `Color::Rgb` snapshot test that
+        // doesn't happen to run with `$COLORTERM` set).
         use retroglyph_terminal::ColorSupport;
 
-        assert_eq!(detect_color_support(None, None, None), ColorSupport::Ansi16);
+        assert_eq!(
+            detect_color_support(None, None, None),
+            ColorSupport::Truecolor
+        );
         assert_eq!(
             detect_color_support(None, None, Some("xterm")),
-            ColorSupport::Ansi16
+            ColorSupport::Truecolor
         );
     }
 
