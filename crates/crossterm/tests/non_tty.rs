@@ -59,8 +59,8 @@ fn repeated_construction_does_not_panic() {
 fn size_falls_back_instead_of_panicking() {
     if let Ok(mut term) = Crossterm::new() {
         let size = term.size();
-        assert!(size.width > 0, "fallback width must be nonzero");
-        assert!(size.height > 0, "fallback height must be nonzero");
+        assert!(size.width() > 0, "fallback width must be nonzero");
+        assert!(size.height() > 0, "fallback height must be nonzero");
         // Drawing an empty iterator must be a no-op, not a panic, even in a context where the
         // underlying terminal is unusual (e.g. a pipe masquerading as a TTY under `script`/`pty`
         // test harnesses). Reaching this line at all (rather than unwinding) is the assertion;

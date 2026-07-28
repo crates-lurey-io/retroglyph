@@ -803,17 +803,14 @@ impl Output for SoftwareRenderer {
     }
 
     fn size(&self) -> Size {
-        Size {
-            width: self.options.cols,
-            height: self.options.rows,
-        }
+        Size::new(self.options.cols, self.options.rows)
     }
 
     fn resize(&mut self, size: Size) {
-        self.options.cols = size.width;
-        self.options.rows = size.height;
+        self.options.cols = size.width();
+        self.options.rows = size.height();
         // Cell size is constant (glyph x scale); only the surface size changes with the grid.
-        let (new_w, new_h) = self.ctx.geometry.surface_size(size.width, size.height);
+        let (new_w, new_h) = self.ctx.geometry.surface_size(size.width(), size.height());
         let new_w = usize::try_from(new_w).expect("surface width fits usize");
         let new_h = usize::try_from(new_h).expect("surface height fits usize");
         self.ctx.pixel_buf.resize(new_w, new_h);
@@ -1774,10 +1771,7 @@ mod tests {
         assert_eq!(r.ctx.damage_rows, None);
         // A resize invalidates the shadow buffer and forces a full repaint so
         // no stale pixels survive at the new size.
-        r.resize(Size {
-            width: 4,
-            height: 5,
-        });
+        r.resize(Size::new(4, 5));
         assert_eq!(r.ctx.damage_rows, Some((0, 5 * CELL_H_PX)));
     }
 
@@ -1789,10 +1783,7 @@ mod tests {
         let mut r = damage_renderer(2, 3);
         let red = bg_tile(200, 0, 0);
         draw_fill(&mut r, 2, 3, &red, None);
-        r.resize(Size {
-            width: 4,
-            height: 5,
-        });
+        r.resize(Size::new(4, 5));
         draw_fill(&mut r, 4, 5, &red, None);
         assert_eq!(r.ctx.damage_rows, Some((0, 5 * CELL_H_PX)));
     }

@@ -432,13 +432,7 @@ pub struct OutpostDashboard {
 
 impl Default for OutpostDashboard {
     fn default() -> Self {
-        let camera = Camera::new(
-            Rect::new(0, 0, 10, 6),
-            Size {
-                width: WORLD_W,
-                height: WORLD_H,
-            },
-        );
+        let camera = Camera::new(Rect::new(0, 0, 10, 6), Size::new(WORLD_W, WORLD_H));
         Self {
             time: 0.0,
             retarget_every: 2.4,
@@ -1041,14 +1035,14 @@ impl OutpostDashboard {
         let size = term.size();
         let mut surface = term.surface();
         self.hitboxes.clear();
-        let screen = Rect::new(0, 0, size.width, size.height);
-        for y in 0..size.height {
-            for x in 0..size.width {
+        let screen = Rect::new(0, 0, size.width(), size.height());
+        for y in 0..size.height() {
+            for x in 0..size.width() {
                 surface.put((x, y), ' ', Style::new().bg(BG));
             }
         }
 
-        let short = size.height < BP_SHORT;
+        let short = size.height() < BP_SHORT;
         let header_h = if short { 1 } else { 4 };
         let nav_h = if short { 1 } else { 3 };
         let rows = split_v(
@@ -1063,7 +1057,7 @@ impl OutpostDashboard {
 
         self.draw_header(&mut surface, header_area);
 
-        let wide = size.width >= BP_WIDE;
+        let wide = size.width() >= BP_WIDE;
         let (main_area, sidebar_area) = if wide && self.tab == Tab::Overview {
             let cols = split_h(body_area, &[Constraint::Fill(1), Constraint::Fixed(30)]);
             (cols[0], Some(cols[1]))

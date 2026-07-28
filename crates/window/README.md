@@ -58,7 +58,7 @@ impl Output for NullPresenter {
     }
 
     fn size(&self) -> Size {
-        Size { width: 10, height: 5 }
+        Size::new(10, 5)
     }
 
     fn clear(&mut self) -> Result<(), Self::Error> {

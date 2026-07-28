@@ -11,8 +11,13 @@ const BLOCKS: [char; 9] = [' ', '▁', '▂', '▃', '▄', '▅', '▆', '▇',
 /// eight vertical block glyphs `▁▂▃▄▅▆▇█`.
 ///
 /// The most recent samples are right-aligned so the graph scrolls left as
-/// new data arrives. Bar height (and color) tracks each sample's fraction
-/// of the max via [`Meter`]. Only the first row of `area` is drawn.
+/// new data arrives. By default, bar height *and color* track each sample's
+/// fraction of the max via [`Meter`] (a green-to-red load ramp); call
+/// [`Sparkline::style`] to draw every bar in one fixed color instead, height
+/// only -- the right choice once the color channel would otherwise imply
+/// something the data doesn't mean (e.g. a frame-time graph, where "tallest
+/// bar in view" isn't the same thing as "bad": [`super::PerfOverlay`] does
+/// this). Only the first row of `area` is drawn.
 ///
 /// # Examples
 ///
@@ -28,13 +33,26 @@ const BLOCKS: [char; 9] = [' ', '▁', '▂', '▃', '▄', '▅', '▆', '▇',
 #[derive(Clone, Copy, Debug)]
 pub struct Sparkline<'a> {
     samples: &'a [f32],
+    style: Option<Style>,
 }
 
 impl<'a> Sparkline<'a> {
-    /// A sparkline of `samples`.
+    /// A sparkline of `samples`, colored by [`Meter`] (green-to-red load ramp) unless overridden
+    /// with [`style`](Self::style).
     #[must_use]
     pub const fn new(samples: &'a [f32]) -> Self {
-        Self { samples }
+        Self {
+            samples,
+            style: None,
+        }
+    }
+
+    /// Draws every bar in `style`'s foreground color instead of the default [`Meter`] ramp.
+    /// Height still tracks each sample's fraction of the max; only the color stops varying.
+    #[must_use]
+    pub const fn style(mut self, style: Style) -> Self {
+        self.style = Some(style);
+        self
     }
 }
 
@@ -70,11 +88,10 @@ impl Widget for Sparkline<'_> {
             // `ratio` is clamped to `0.0..=1.0`, so the rounded level always lands in `0..=8`.
             #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
             let level = (ratio * 8.0).round() as usize;
-            surface.put(
-                (x, y),
-                BLOCKS[level.min(8)],
-                Style::new().fg(Meter::new(ratio).color()),
-            );
+            let style = self
+                .style
+                .unwrap_or_else(|| Style::new().fg(Meter::new(ratio).color()));
+            surface.put((x, y), BLOCKS[level.min(8)], style);
         }
     }
 }
@@ -104,6 +121,31 @@ mod tests {
         Sparkline::new(&[]).render(area, &mut Surface::new(&mut grid, area, 0));
         for x in 0..3 {
             assert_eq!(grid[Pos::new(x, 0)].glyph(), ' ');
+        }
+    }
+
+    #[test]
+    fn style_overrides_the_default_meter_ramp_with_one_fixed_color() {
+        use retroglyph_core::Color;
+
+        let area = Rect::new(0, 0, 3, 1);
+        let mut grid = Grid::new(3, 1);
+        let accent = Style::new().fg(Color::Rgb {
+            r: 90,
+            g: 170,
+            b: 250,
+        });
+        Sparkline::new(&[1.0, 4.0, 2.0])
+            .style(accent)
+            .render(area, &mut Surface::new(&mut grid, area, 0));
+
+        // Height still tracks the ratio (the low, high, mid samples land on different block
+        // levels)...
+        assert_ne!(grid[Pos::new(0, 0)].glyph(), grid[Pos::new(1, 0)].glyph());
+        // ...but every bar shares the one fixed color, not a ramp that would color the tallest
+        // bar (here, `4.0`, the max) differently from the shortest.
+        for x in 0..3 {
+            assert_eq!(grid[Pos::new(x, 0)].style(), accent);
         }
     }
 }

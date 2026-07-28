@@ -125,7 +125,7 @@ impl WidgetsInteraction {
             style_white,
         );
 
-        let btn_h = self.density.min_target_size().height;
+        let btn_h = self.density.min_target_size().height();
         let btn_w = 16u16;
         let y = 4;
         for (i, &(id, label)) in BUTTONS.iter().enumerate() {

@@ -758,7 +758,7 @@ impl<'a> Surface<'a> {
         let (x, y) = self.shift(pos.x, pos.y)?;
         let pos = Pos::new(x, y);
         let size = size.into();
-        if !self.span_fits(pos, size.width, size.height) {
+        if !self.span_fits(pos, size.width(), size.height()) {
             return None;
         }
         self.grid

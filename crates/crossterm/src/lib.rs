@@ -709,7 +709,7 @@ impl<W: std::io::Write> Crossterm<W> {
     /// requiring a real terminal event source. See retroglyph#279.
     const fn refresh_cached_size_on_resize(&mut self, event: &crossterm::event::Event) {
         if let crossterm::event::Event::Resize(width, height) = *event {
-            self.cached_size = Size { width, height };
+            self.cached_size = Size::new(width, height);
         }
     }
 
@@ -756,7 +756,7 @@ impl<W: std::io::Write> Crossterm<W> {
             renderer: TerminalRenderer::with_plain_mode(writer, plain)
                 .with_color_support(color_support),
             _instance_guard: instance_guard,
-            cached_size: Size { width, height },
+            cached_size: Size::new(width, height),
             pushed_events: VecDeque::new(),
             options,
         })
@@ -1801,10 +1801,7 @@ mod tests {
             .build_with_writer(Vec::new())
             .expect("building against a Vec<u8> writer with all TTY features disabled must not require a real terminal");
 
-        let sentinel = Size {
-            width: 4321,
-            height: 1234,
-        };
+        let sentinel = Size::new(4321, 1234);
         term.cached_size = sentinel;
 
         assert_eq!(
@@ -1834,23 +1831,11 @@ mod tests {
             .expect("building against a Vec<u8> writer with all TTY features disabled must not require a real terminal");
 
         term.refresh_cached_size_on_resize(&crossterm::event::Event::Resize(120, 40));
-        assert_eq!(
-            term.size(),
-            Size {
-                width: 120,
-                height: 40
-            }
-        );
+        assert_eq!(term.size(), Size::new(120, 40));
 
         // Non-resize events must not disturb the cached size.
         term.refresh_cached_size_on_resize(&crossterm::event::Event::FocusGained);
-        assert_eq!(
-            term.size(),
-            Size {
-                width: 120,
-                height: 40
-            }
-        );
+        assert_eq!(term.size(), Size::new(120, 40));
     }
 
     #[test]

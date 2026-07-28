@@ -59,10 +59,10 @@ impl<B: Backend> Terminal<B> {
     #[must_use]
     pub fn new(backend: B) -> Self {
         let size = backend.size();
-        let current = Grid::new(size.width, size.height);
-        let previous = Grid::new(size.width, size.height);
-        let flattened_current = Grid::new(size.width, size.height);
-        let flattened_previous = Grid::new(size.width, size.height);
+        let current = Grid::new(size.width(), size.height());
+        let previous = Grid::new(size.width(), size.height());
+        let flattened_current = Grid::new(size.width(), size.height());
+        let flattened_previous = Grid::new(size.width(), size.height());
         Self {
             current,
             previous,
@@ -106,10 +106,7 @@ impl<B: Backend> Terminal<B> {
     /// Returns the current grid dimensions.
     #[must_use]
     pub const fn size(&self) -> Size {
-        Size {
-            width: self.current.width(),
-            height: self.current.height(),
-        }
+        Size::new(self.current.width(), self.current.height())
     }
 
     /// Returns the full drawing surface as a [`Rect`] at the origin.
@@ -135,7 +132,7 @@ impl<B: Backend> Terminal<B> {
         // stale cells bleed into the resized layout.
         self.previous.clear_all();
         self.flattened_previous.clear_all();
-        self.backend.resize(Size { width, height });
+        self.backend.resize(Size::new(width, height));
     }
 
     /// Returns a reference to the current grid.
@@ -488,13 +485,7 @@ mod tests {
     #[test]
     fn test_terminal_size() {
         let term = Terminal::new(Headless::new(40, 20));
-        assert_eq!(
-            term.size(),
-            Size {
-                width: 40,
-                height: 20
-            }
-        );
+        assert_eq!(term.size(), Size::new(40, 20));
     }
 
     #[test]
@@ -507,13 +498,7 @@ mod tests {
     fn test_terminal_resize_changes_dimensions() {
         let mut term = Terminal::new(Headless::new(10, 10));
         term.resize(30, 15);
-        assert_eq!(
-            term.size(),
-            Size {
-                width: 30,
-                height: 15
-            }
-        );
+        assert_eq!(term.size(), Size::new(30, 15));
         assert_eq!(term.grid().width(), 30);
         assert_eq!(term.grid().height(), 15);
     }
@@ -536,13 +521,7 @@ mod tests {
         term.backend_mut().push_event(Event::Resize(80, 25));
         let event = term.poll(Duration::ZERO);
         assert_eq!(event, Some(Event::Resize(80, 25)));
-        assert_eq!(
-            term.size(),
-            Size {
-                width: 80,
-                height: 25
-            }
-        );
+        assert_eq!(term.size(), Size::new(80, 25));
     }
 
     #[test]

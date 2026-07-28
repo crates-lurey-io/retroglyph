@@ -104,7 +104,7 @@ impl Output for Headless {
     }
 
     fn resize(&mut self, size: Size) {
-        self.grid.resize(size.width, size.height);
+        self.grid.resize(size.width(), size.height());
     }
 
     fn flush(&mut self) -> Result<(), Self::Error> {
@@ -112,10 +112,7 @@ impl Output for Headless {
     }
 
     fn size(&self) -> Size {
-        Size {
-            width: self.grid.width(),
-            height: self.grid.height(),
-        }
+        Size::new(self.grid.width(), self.grid.height())
     }
 
     fn clear(&mut self) -> Result<(), Self::Error> {

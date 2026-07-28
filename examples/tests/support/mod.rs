@@ -96,8 +96,20 @@ pub fn png_snapshot<E: Example>(cols: u16, rows: u16, scale: u8) -> Vec<u8> {
         rgb.push((p & 0xff) as u8);
     }
 
-    let img: image::RgbImage =
-        image::ImageBuffer::from_raw(width, height, rgb).expect("pixel buffer matches dimensions");
+    encode_png(width, height, &rgb)
+}
+
+/// PNG-encodes `width x height` interleaved RGB bytes (as produced by [`png_snapshot`] and
+/// `retroglyph_examples::render_perf_overlay_rgb`).
+///
+/// # Panics
+///
+/// Panics if `rgb`'s length doesn't match `width * height * 3`, or if PNG encoding fails.
+#[cfg(all(feature = "software", not(target_arch = "wasm32")))]
+#[must_use]
+pub fn encode_png(width: u32, height: u32, rgb: &[u8]) -> Vec<u8> {
+    let img: image::RgbImage = image::ImageBuffer::from_raw(width, height, rgb.to_vec())
+        .expect("pixel buffer matches dimensions");
     let mut out = Vec::new();
     img.write_to(&mut std::io::Cursor::new(&mut out), image::ImageFormat::Png)
         .expect("PNG encode");

@@ -20,7 +20,7 @@
 //! use retroglyph_core::{Camera, Pos, Rect, Size};
 //!
 //! // A 10x10 viewport onto a 100x100 world.
-//! let mut cam = Camera::new(Rect::new(0, 0, 10, 10), Size { width: 100, height: 100 });
+//! let mut cam = Camera::new(Rect::new(0, 0, 10, 10), Size::new(100, 100));
 //! cam.center_on(Pos::new(50, 50));
 //! assert_eq!(cam.origin(), Pos::new(45, 45));
 //! assert_eq!(cam.world_to_screen(Pos::new(50, 50)), Some(Pos::new(5, 5)));
@@ -80,10 +80,10 @@ impl Camera {
         self.origin = Pos::new(
             self.origin
                 .x
-                .min(max_origin(viewport.width(), self.world.width)),
+                .min(max_origin(viewport.width(), self.world.width())),
             self.origin
                 .y
-                .min(max_origin(viewport.height(), self.world.height)),
+                .min(max_origin(viewport.height(), self.world.height())),
         );
     }
 
@@ -94,8 +94,8 @@ impl Camera {
     /// computed with saturating arithmetic.
     pub fn center_on(&mut self, target: Pos) {
         self.origin = Pos::new(
-            center_axis(target.x, self.viewport.width(), self.world.width),
-            center_axis(target.y, self.viewport.height(), self.world.height),
+            center_axis(target.x, self.viewport.width(), self.world.width()),
+            center_axis(target.y, self.viewport.height(), self.world.height()),
         );
     }
 
@@ -113,14 +113,14 @@ impl Camera {
     /// // A 10x10 viewport near the bottom-right corner of a 12x12 world: the origin clamps
     /// // to (2, 2), so the visible rect is narrower than the viewport rather than reading
     /// // past the world edge.
-    /// let mut cam = Camera::new(Rect::new(0, 0, 10, 10), Size { width: 12, height: 12 });
+    /// let mut cam = Camera::new(Rect::new(0, 0, 10, 10), Size::new(12, 12));
     /// cam.center_on(Pos::new(11, 11));
     /// assert_eq!(cam.origin(), Pos::new(2, 2));
     /// assert_eq!(cam.visible_bounds(), Rect::new(2, 2, 10, 10));
     ///
     /// // A world smaller than the viewport: the visible rect is the whole world, not the
     /// // full viewport size.
-    /// let small = Camera::new(Rect::new(0, 0, 20, 20), Size { width: 5, height: 5 });
+    /// let small = Camera::new(Rect::new(0, 0, 20, 20), Size::new(5, 5));
     /// assert_eq!(small.visible_bounds(), Rect::new(0, 0, 5, 5));
     /// ```
     #[must_use]
@@ -128,11 +128,11 @@ impl Camera {
         let w = self
             .viewport
             .width()
-            .min(self.world.width.saturating_sub(self.origin.x));
+            .min(self.world.width().saturating_sub(self.origin.x));
         let h = self
             .viewport
             .height()
-            .min(self.world.height.saturating_sub(self.origin.y));
+            .min(self.world.height().saturating_sub(self.origin.y));
         Rect::new(self.origin.x, self.origin.y, w, h)
     }
 
@@ -162,7 +162,7 @@ impl Camera {
     /// ```
     /// use retroglyph_core::{Camera, Pos, Rect, Size};
     ///
-    /// let mut cam = Camera::new(Rect::new(5, 5, 10, 10), Size { width: 100, height: 100 });
+    /// let mut cam = Camera::new(Rect::new(5, 5, 10, 10), Size::new(100, 100));
     /// cam.center_on(Pos::new(50, 50));
     ///
     /// // Inside the viewport: maps back to the world cell under it.
@@ -178,7 +178,7 @@ impl Camera {
         }
         let wx = self.origin.x + (screen.x - self.viewport.left());
         let wy = self.origin.y + (screen.y - self.viewport.top());
-        if wx >= self.world.width || wy >= self.world.height {
+        if wx >= self.world.width() || wy >= self.world.height() {
             return None;
         }
         Some(Pos::new(wx, wy))
@@ -217,13 +217,7 @@ mod tests {
     use super::*;
 
     fn cam() -> Camera {
-        Camera::new(
-            Rect::new(0, 0, 10, 10),
-            Size {
-                width: 100,
-                height: 100,
-            },
-        )
+        Camera::new(Rect::new(0, 0, 10, 10), Size::new(100, 100))
     }
 
     #[test]
@@ -262,13 +256,7 @@ mod tests {
 
     #[test]
     fn world_smaller_than_viewport_pins_origin() {
-        let mut c = Camera::new(
-            Rect::new(2, 2, 20, 20),
-            Size {
-                width: 5,
-                height: 5,
-            },
-        );
+        let mut c = Camera::new(Rect::new(2, 2, 20, 20), Size::new(5, 5));
         c.center_on(Pos::new(3, 3));
         assert_eq!(c.origin(), Pos::new(0, 0));
         let visible = c.visible_bounds();

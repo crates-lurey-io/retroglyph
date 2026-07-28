@@ -232,10 +232,7 @@ impl RecoverableError for GenericSurfaceError {
 ///     }
 ///
 ///     fn size(&self) -> Size {
-///         Size {
-///             width: 4,
-///             height: 2,
-///         }
+///         Size::new(4, 2)
 ///     }
 ///
 ///     fn clear(&mut self) -> Result<(), Self::Error> {

@@ -153,10 +153,7 @@ impl<'a> DrawCell<'a> {
 ///     }
 ///
 ///     fn size(&self) -> Size {
-///         Size {
-///             width: 4,
-///             height: 2,
-///         }
+///         Size::new(4, 2)
 ///     }
 ///
 ///     fn clear(&mut self) -> Result<(), Self::Error> {
@@ -438,10 +435,7 @@ pub enum CursorStyle {
 ///     }
 ///
 ///     fn size(&self) -> Size {
-///         Size {
-///             width: 1,
-///             height: 1,
-///         }
+///         Size::new(1, 1)
 ///     }
 ///
 ///     fn clear(&mut self) -> Result<(), Self::Error> {
