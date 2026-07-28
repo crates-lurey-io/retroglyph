@@ -1,6 +1,6 @@
 [package]
 name = "retroglyph-terminal"
-version = "0.1.4"
+version = "0.1.5"
 description = "Shared ANSI/SGR cell-diff renderer for retroglyph's terminal-family backends"
 readme = "README.md"
 edition.workspace = true
@@ -19,7 +19,7 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-retroglyph-core = { path = "../core", version = "0.3.1", default-features = false, features = ["std"] }
+retroglyph-core = { path = "../core", version = "0.4.0", default-features = false, features = ["std"] }
 
 [dev-dependencies]
 criterion = "0.5"
