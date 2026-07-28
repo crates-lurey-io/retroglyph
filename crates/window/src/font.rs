@@ -668,6 +668,518 @@ pub mod unscii16 {
     ];
 }
 
+// ── Generated block/braille fallback font ──────────────────────────────────
+
+/// Generated fallback [`BitmapFont`]s, embedded when the `legacy-computing` feature is enabled.
+///
+/// Covers the 10 quadrant block characters, the 60 addressable Unicode "Symbols for Legacy
+/// Computing" sextant characters, and the full 256-glyph Braille Patterns block
+/// (U+2800–U+28FF). None of these are covered by CP437 (and so not by [`unscii16`] either): quadrants and
+/// sextants exist to give [`retroglyph_core::subcell::quantize_quadrant`] and
+/// [`retroglyph_core::subcell::quantize_sextant`] a font that actually renders their glyphs as
+/// blocks instead of a CP437 solid-block substitute, and braille is a common terminal-UI density
+/// trick with no CP437 equivalent at all. All three repertoires are pure geometry -- rectangular
+/// quadrants, banded sextants, a 2x4 dot grid -- so both fonts below are computed at compile time
+/// by a `const fn` rather than transcribed from an external font file; there is no font asset
+/// backing this module and no `image`/build-script dependency.
+///
+/// This is two [`BitmapFont`]s ([`legacy_computing::blocks::FONT`] and
+/// [`legacy_computing::braille::FONT`]), not one: a [`BitmapFont`] addresses its glyphs with a
+/// `u8` index (see [`BitmapFont::rows`], [`BitmapFont::glyph_index`]), capping any single font at
+/// 256 glyphs. Braille alone needs the full 256, so folding quadrants and sextants into the same
+/// font would silently wrap their indices mod 256 and collide with braille glyphs. Splitting at
+/// the geometry boundary (block elements vs. braille) keeps every font within that limit with
+/// room to spare (70 for [`legacy_computing::blocks::FONT`]) instead of splitting mid-repertoire.
+///
+/// Add either or both as [`FontChain`] fallbacks alongside a primary CP437 font (e.g.
+/// [`unscii16`]) to extend a chain's coverage past CP437:
+///
+/// ```
+/// # #[cfg(feature = "legacy-computing")]
+/// # {
+/// use retroglyph_window::font::{FontChain, legacy_computing, unscii16};
+///
+/// static FALLBACKS: [retroglyph_window::font::BitmapFont; 2] =
+///     [legacy_computing::blocks::FONT, legacy_computing::braille::FONT];
+/// let chain = FontChain::new(unscii16::FONT, &FALLBACKS);
+/// let quadrant = chain.resolve('▘').expect("covered by legacy_computing::blocks");
+/// assert_eq!(quadrant.font_index(), 1);
+/// let braille = chain.resolve('\u{2837}').expect("covered by legacy_computing::braille");
+/// assert_eq!(braille.font_index(), 2);
+/// # }
+/// ```
+#[cfg(feature = "legacy-computing")]
+pub mod legacy_computing {
+    /// The 10 quadrant block glyphs and 60 addressable sextant glyphs CP437 has no mapping for.
+    ///
+    /// See [`super::legacy_computing`]'s module docs for why this is a separate [`BitmapFont`]
+    /// from [`super::legacy_computing::braille`] rather than one combined font.
+    ///
+    /// [`BitmapFont`]: crate::font::BitmapFont
+    pub mod blocks {
+        use crate::font::BitmapFont;
+
+        /// Number of quadrant block glyphs (the 10 not already covered by CP437).
+        const QUADRANT_COUNT: usize = 10;
+        /// Number of sextant glyphs (the 60 addressable masks not already covered by CP437).
+        const SEXTANT_COUNT: usize = 60;
+        /// Total glyph count: quadrants, then sextants, in that index order.
+        const TOTAL: usize = QUADRANT_COUNT + SEXTANT_COUNT;
+
+        /// A [`BitmapFont`] backed by the generated quadrant/sextant glyph data.
+        ///
+        /// Built with [`BitmapFont::with_charset`] (not [`BitmapFont::new`]): none of these
+        /// codepoints are in the CP437 table this crate's default mapping uses, so this font
+        /// declares its own explicit `char` -> glyph-index table instead.
+        #[allow(clippy::cast_possible_truncation)]
+        pub const FONT: BitmapFont = BitmapFont::with_charset(&DATA, 8, 16, TOTAL as u16, &CHARSET);
+
+        /// The 10 quadrant block glyphs not already covered by CP437, as `(mask, char)` pairs.
+        ///
+        /// `mask` is a 4-bit pattern, bit 0 = top-left, bit 1 = top-right, bit 2 = bottom-left,
+        /// bit 3 = bottom-right (matching `retroglyph_core::subcell::QUADRANTS`'s own bit
+        /// order), skipping the 6 masks CP437 already serves (`0` space, `3` `▀`, `5` `▌`,
+        /// `10` `▐`, `12` `▄`, `15` `█`).
+        #[rustfmt::skip]
+        const QUADRANTS: [(u8, char); QUADRANT_COUNT] = [
+            (1, '▘'), (2, '▝'), (4, '▖'), (6, '▞'), (7, '▛'),
+            (8, '▗'), (9, '▚'), (11, '▜'), (13, '▙'), (14, '▟'),
+        ];
+
+        /// The 60 addressable sextant masks, in ascending order: every 6-bit pattern `1..=62`
+        /// (`0` and `63` would be space/full-block, already CP437) except `21` and `42` (a fully
+        /// filled left/right column respectively -- CP437's own `▌`/`▐` -- which have no
+        /// codepoint of their own in the Sextants block).
+        ///
+        /// Bit order: 0 = top-left, 1 = top-right, 2 = mid-left, 3 = mid-right, 4 = bottom-left,
+        /// 5 = bottom-right (matching `retroglyph_core::subcell::SEXTANTS`'s own bit order).
+        const fn sextant_masks() -> [u8; SEXTANT_COUNT] {
+            let mut masks = [0u8; SEXTANT_COUNT];
+            let mut m: u16 = 1;
+            let mut i = 0;
+            while m <= 62 {
+                if m != 21 && m != 42 {
+                    #[allow(clippy::cast_possible_truncation)]
+                    {
+                        masks[i] = m as u8;
+                    }
+                    i += 1;
+                }
+                m += 1;
+            }
+            masks
+        }
+
+        /// Maps a sextant `mask` (`1..=62`, excluding `21`/`42`) to its codepoint in the
+        /// Symbols for Legacy Computing block.
+        ///
+        /// Sextant codepoints are not `0x1FB00 + mask`: masks `21` and `42` are gaps (see
+        /// [`QUADRANTS`] -- they're CP437's `▌`/`▐` instead), so every mask above each gap
+        /// shifts its codepoint down by one relative to a naive offset. Mask `1` -> U+1FB00;
+        /// mask `22` (one gap below it, at `21`) -> U+1FB00 + 21 - 1 = U+1FB14.
+        const fn sextant_codepoint(mask: u8) -> u32 {
+            let gaps_below = if mask > 21 { 1 } else { 0 } + if mask > 42 { 1 } else { 0 };
+            0x1_FB00 + (mask as u32 - 1) - gaps_below
+        }
+
+        /// Sets pixel `(x, y)` of glyph `index` in `data` (a full `[u8; TOTAL * 16]` glyph
+        /// table).
+        const fn set_pixel(data: &mut [u8; TOTAL * 16], index: usize, x: u8, y: u8) {
+            let row = index * 16 + y as usize;
+            data[row] |= 1 << (7 - x);
+        }
+
+        /// Computes the full glyph bitmap table: quadrants, then sextants, matching
+        /// [`CHARSET`]'s glyph-index order.
+        const fn build_data() -> [u8; TOTAL * 16] {
+            let mut data = [0u8; TOTAL * 16];
+
+            // Quadrants: each glyph is one quarter-rectangle of the 8x16 cell (mx=4, my=8
+            // split).
+            let mut qi = 0;
+            while qi < QUADRANT_COUNT {
+                let (mask, _) = QUADRANTS[qi];
+                let mut y = 0u8;
+                while y < 16 {
+                    let mut x = 0u8;
+                    while x < 8 {
+                        let bit = if x < 4 {
+                            if y < 8 { 0 } else { 2 }
+                        } else if y < 8 {
+                            1
+                        } else {
+                            3
+                        };
+                        if (mask >> bit) & 1 == 1 {
+                            set_pixel(&mut data, qi, x, y);
+                        }
+                        x += 1;
+                    }
+                    y += 1;
+                }
+                qi += 1;
+            }
+
+            // Sextants: 2 columns (mx=4) x 3 row bands (y=0,5,11,16 -- uneven, to avoid a 1px
+            // seam between vertically stacked filled cells).
+            let masks = sextant_masks();
+            let mut si = 0;
+            while si < SEXTANT_COUNT {
+                let mask = masks[si];
+                let index = QUADRANT_COUNT + si;
+                let mut y = 0u8;
+                while y < 16 {
+                    let row = if y < 5 {
+                        0
+                    } else if y < 11 {
+                        1
+                    } else {
+                        2
+                    };
+                    let mut x = 0u8;
+                    while x < 8 {
+                        let col: usize = if x >= 4 { 1 } else { 0 };
+                        let bit = row * 2 + col;
+                        if (mask >> bit) & 1 == 1 {
+                            set_pixel(&mut data, index, x, y);
+                        }
+                        x += 1;
+                    }
+                    y += 1;
+                }
+                si += 1;
+            }
+
+            data
+        }
+
+        /// Computes the `char` -> glyph-index charset table, matching [`build_data`]'s glyph
+        /// order.
+        const fn build_charset() -> [(char, u8); TOTAL] {
+            let mut charset = [('\0', 0u8); TOTAL];
+
+            let mut qi = 0;
+            while qi < QUADRANT_COUNT {
+                let (_, ch) = QUADRANTS[qi];
+                #[allow(clippy::cast_possible_truncation)]
+                {
+                    charset[qi] = (ch, qi as u8);
+                }
+                qi += 1;
+            }
+
+            let masks = sextant_masks();
+            let mut si = 0;
+            while si < SEXTANT_COUNT {
+                let cp = sextant_codepoint(masks[si]);
+                let Some(ch) = char::from_u32(cp) else {
+                    panic!("sextant codepoint is not a valid char")
+                };
+                let index = QUADRANT_COUNT + si;
+                #[allow(clippy::cast_possible_truncation)]
+                {
+                    charset[index] = (ch, index as u8);
+                }
+                si += 1;
+            }
+
+            charset
+        }
+
+        /// Glyph bitmap data for [`FONT`]: `TOTAL` glyphs, 16 bytes each, computed at compile
+        /// time.
+        static DATA: [u8; TOTAL * 16] = build_data();
+
+        /// The `char` -> glyph-index table for [`FONT`], computed at compile time.
+        static CHARSET: [(char, u8); TOTAL] = build_charset();
+
+        #[cfg(test)]
+        mod tests {
+            use super::{CHARSET, FONT, SEXTANT_COUNT, TOTAL, sextant_codepoint, sextant_masks};
+            use crate::font::FontChain;
+            use std::collections::HashSet;
+
+            #[test]
+            fn total_glyph_count_matches_quadrants_plus_sextants() {
+                assert_eq!(TOTAL, 10 + 60);
+                assert_eq!(FONT.glyph_count(), u16::try_from(TOTAL).unwrap());
+            }
+
+            #[test]
+            fn no_charset_entry_duplicates_a_codepoint_cp437_already_serves() {
+                // Space, the 4 CP437 half/quadrant blocks, the full block, and the shade ramp
+                // are all already reachable through `unscii16`/CP437; this font must not
+                // re-supply them.
+                let already_cp437: HashSet<char> = [' ', '▀', '▄', '▌', '▐', '█', '░', '▒', '▓']
+                    .into_iter()
+                    .collect();
+                for &(ch, _) in &CHARSET {
+                    assert!(
+                        !already_cp437.contains(&ch),
+                        "{ch:?} (U+{:04X}) duplicates existing CP437 coverage",
+                        ch as u32
+                    );
+                }
+            }
+
+            #[test]
+            fn every_charset_character_appears_exactly_once() {
+                let mut seen = HashSet::with_capacity(TOTAL);
+                for &(ch, _) in &CHARSET {
+                    assert!(seen.insert(ch), "{ch:?} appears more than once in CHARSET");
+                }
+                assert_eq!(seen.len(), TOTAL);
+            }
+
+            #[test]
+            fn sextant_masks_skip_21_and_42() {
+                let masks = sextant_masks();
+                assert_eq!(masks.len(), SEXTANT_COUNT);
+                assert!(!masks.contains(&21));
+                assert!(!masks.contains(&42));
+                assert_eq!(masks[0], 1);
+                assert_eq!(masks[SEXTANT_COUNT - 1], 62);
+            }
+
+            #[test]
+            fn sextant_codepoint_shifts_down_after_each_gap() {
+                assert_eq!(sextant_codepoint(1), 0x1FB00);
+                // One gap below (mask 21) has already been skipped by the time mask 22 is
+                // reached.
+                assert_eq!(sextant_codepoint(22), 0x1FB00 + 21 - 1);
+                // Two gaps below (masks 21 and 42) have been skipped by mask 43.
+                assert_eq!(sextant_codepoint(43), 0x1FB00 + 42 - 2);
+            }
+
+            /// Every quadrant glyph's set pixels fall in the correct quarter of the 8x16 cell.
+            #[test]
+            fn quadrant_top_left_mask_only_fills_the_top_left_quarter() {
+                let index = FONT.glyph_index('▘').expect("U+2598 is covered");
+                for (x, y) in FONT.glyph_pixels(index) {
+                    assert!(x < 4 && y < 8, "({x}, {y}) outside the top-left quarter");
+                }
+            }
+
+            #[test]
+            fn font_chain_resolves_quadrant_via_blocks_fallback() {
+                static PRIMARY_DATA: [u8; 256 * 16] = [0; 256 * 16];
+                const PRIMARY: crate::font::BitmapFont =
+                    crate::font::BitmapFont::new(&PRIMARY_DATA, 8, 16, 256);
+
+                static FALLBACKS: [crate::font::BitmapFont; 1] = [FONT];
+                let chain = FontChain::new(PRIMARY, &FALLBACKS);
+
+                let quadrant = chain
+                    .resolve('▘')
+                    .expect("covered by legacy_computing::blocks");
+                assert_eq!(quadrant.font_index(), 1);
+                assert!(!quadrant.is_notdef());
+            }
+        }
+    }
+
+    /// The full 256-glyph Braille Patterns block (U+2800–U+28FF) CP437 has no mapping for.
+    ///
+    /// See [`super::legacy_computing`]'s module docs for why this is a separate [`BitmapFont`]
+    /// from [`super::legacy_computing::blocks`] rather than one combined font.
+    ///
+    /// [`BitmapFont`]: crate::font::BitmapFont
+    pub mod braille {
+        use crate::font::BitmapFont;
+
+        /// Total glyph count: the full U+2800..=U+28FF block.
+        const TOTAL: usize = 256;
+
+        /// A [`BitmapFont`] backed by the generated braille glyph data.
+        ///
+        /// Built with [`BitmapFont::with_charset`] (not [`BitmapFont::new`]): braille
+        /// codepoints are not in the CP437 table this crate's default mapping uses, so this
+        /// font declares its own explicit `char` -> glyph-index table instead.
+        #[allow(clippy::cast_possible_truncation)]
+        pub const FONT: BitmapFont = BitmapFont::with_charset(&DATA, 8, 16, TOTAL as u16, &CHARSET);
+
+        /// Dot-column pixel centers for braille glyphs (`x`), in cell-pixel coordinates.
+        const COL_X: [u8; 2] = [1, 4];
+        /// Dot-row pixel centers for braille glyphs (`y`), in cell-pixel coordinates.
+        const ROW_Y: [u8; 4] = [1, 5, 9, 13];
+
+        /// Maps a braille dot's `(col, row)` position (`col` in `0..2`, `row` in `0..4`) to its
+        /// bit index in the U+2800 block's `u8` payload, per historical braille dot numbering:
+        /// column 0 is dots 1,2,3,7 (bit indices 0,1,2,6), column 1 is dots 4,5,6,8 (bit indices
+        /// 3,4,5,7).
+        const fn bit_index(col: usize, row: usize) -> u32 {
+            match (col, row) {
+                (0, 0) => 0,
+                (0, 1) => 1,
+                (0, 2) => 2,
+                (0, 3) => 6,
+                (1, 0) => 3,
+                (1, 1) => 4,
+                (1, 2) => 5,
+                (1, 3) => 7,
+                _ => panic!("braille dot position out of range"),
+            }
+        }
+
+        /// Sets pixel `(x, y)` of glyph `index` in `data` (a full `[u8; TOTAL * 16]` glyph
+        /// table).
+        const fn set_pixel(data: &mut [u8; TOTAL * 16], index: usize, x: u8, y: u8) {
+            let row = index * 16 + y as usize;
+            data[row] |= 1 << (7 - x);
+        }
+
+        /// Computes the full glyph bitmap table: 2 columns x 4 rows of dots per glyph, each dot
+        /// a 3x3 filled square, matching [`CHARSET`]'s glyph-index order.
+        const fn build_data() -> [u8; TOTAL * 16] {
+            #[allow(clippy::cast_possible_truncation)]
+            const TOTAL_U32: u32 = TOTAL as u32;
+
+            let mut data = [0u8; TOTAL * 16];
+
+            let mut bits: u32 = 0;
+            while bits < TOTAL_U32 {
+                let index = bits as usize;
+                let mut col = 0usize;
+                while col < 2 {
+                    let mut row = 0usize;
+                    while row < 4 {
+                        let bit = bit_index(col, row);
+                        if (bits >> bit) & 1 == 1 {
+                            let cx = COL_X[col];
+                            let cy = ROW_Y[row];
+                            let mut dy: i32 = -1;
+                            while dy <= 1 {
+                                let mut dx: i32 = -1;
+                                while dx <= 1 {
+                                    let px = cx as i32 + dx;
+                                    let py = cy as i32 + dy;
+                                    if px >= 0 && px < 8 && py >= 0 && py < 16 {
+                                        #[allow(
+                                            clippy::cast_sign_loss,
+                                            clippy::cast_possible_truncation
+                                        )]
+                                        set_pixel(&mut data, index, px as u8, py as u8);
+                                    }
+                                    dx += 1;
+                                }
+                                dy += 1;
+                            }
+                        }
+                        row += 1;
+                    }
+                    col += 1;
+                }
+                bits += 1;
+            }
+
+            data
+        }
+
+        /// Computes the `char` -> glyph-index charset table, matching [`build_data`]'s glyph
+        /// order: `CHARSET[i] == (char::from_u32(0x2800 + i).unwrap(), i as u8)`.
+        const fn build_charset() -> [(char, u8); TOTAL] {
+            #[allow(clippy::cast_possible_truncation)]
+            const TOTAL_U32: u32 = TOTAL as u32;
+
+            let mut charset = [('\0', 0u8); TOTAL];
+
+            let mut bits: u32 = 0;
+            while bits < TOTAL_U32 {
+                let cp = 0x2800 + bits;
+                let Some(ch) = char::from_u32(cp) else {
+                    panic!("braille codepoint is not a valid char")
+                };
+                let index = bits as usize;
+                #[allow(clippy::cast_possible_truncation)]
+                {
+                    charset[index] = (ch, index as u8);
+                }
+                bits += 1;
+            }
+
+            charset
+        }
+
+        /// Glyph bitmap data for [`FONT`]: `TOTAL` glyphs, 16 bytes each, computed at compile
+        /// time.
+        static DATA: [u8; TOTAL * 16] = build_data();
+
+        /// The `char` -> glyph-index table for [`FONT`], computed at compile time.
+        static CHARSET: [(char, u8); TOTAL] = build_charset();
+
+        #[cfg(test)]
+        mod tests {
+            use super::{CHARSET, FONT, TOTAL};
+            use crate::font::FontChain;
+            use std::collections::HashSet;
+
+            #[test]
+            fn total_glyph_count_is_256() {
+                assert_eq!(TOTAL, 256);
+                assert_eq!(FONT.glyph_count(), 256);
+            }
+
+            #[test]
+            fn every_charset_character_appears_exactly_once() {
+                let mut seen = HashSet::with_capacity(TOTAL);
+                for &(ch, _) in &CHARSET {
+                    assert!(seen.insert(ch), "{ch:?} appears more than once in CHARSET");
+                }
+                assert_eq!(seen.len(), TOTAL);
+            }
+
+            #[test]
+            fn covers_the_full_u2800_block() {
+                for bits in 0u32..u32::try_from(TOTAL).unwrap() {
+                    let ch = char::from_u32(0x2800 + bits).unwrap();
+                    assert_eq!(CHARSET[bits as usize].0, ch);
+                    assert_eq!(CHARSET[bits as usize].1, u8::try_from(bits).unwrap());
+                }
+            }
+
+            #[test]
+            fn blank_glyph_is_all_zero_bits() {
+                let index = FONT.glyph_index('\u{2800}').expect("U+2800 is covered");
+                assert!(FONT.rows(index).iter().all(|&b| b == 0));
+            }
+
+            #[test]
+            fn full_glyph_has_all_dot_positions_set() {
+                let index = FONT.glyph_index('\u{28FF}').expect("U+28FF is covered");
+                let pixel_count = FONT.glyph_pixels(index).count();
+                // 8 dots, 3x3 each, none clipped by the 8x16 cell at these centers: 8 * 9 = 72
+                // lit pixels.
+                assert_eq!(pixel_count, 72);
+            }
+
+            /// Mirrors `FontChain`'s own doc example: a chain resolving a character none of
+            /// CP437 has a mapping for at all through this generated fallback font.
+            #[test]
+            fn font_chain_resolves_via_braille_fallback() {
+                static PRIMARY_DATA: [u8; 256 * 16] = [0; 256 * 16];
+                const PRIMARY: crate::font::BitmapFont =
+                    crate::font::BitmapFont::new(&PRIMARY_DATA, 8, 16, 256);
+
+                static FALLBACKS: [crate::font::BitmapFont; 1] = [FONT];
+                let chain = FontChain::new(PRIMARY, &FALLBACKS);
+
+                // A mid-range braille char: not reachable through CP437 at all.
+                let braille = chain
+                    .resolve('\u{2837}')
+                    .expect("covered by legacy_computing::braille");
+                assert_eq!(braille.font_index(), 1);
+                assert!(!braille.is_notdef());
+
+                // The primary font's own CP437 coverage answers directly for the solid block;
+                // this chain never needs to fall back to `notdef` for it.
+                let full_block = chain.resolve('█').expect("CP437 coverage");
+                assert_eq!(*full_block.font(), PRIMARY);
+                assert!(!full_block.is_notdef());
+            }
+        }
+    }
+}
+
 // ── Unicode → CP437 mapping ────────────────────────────────────────────────
 
 /// The substitute drawn for a character no font in a chain covers: the solid block, whichever
