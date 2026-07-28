@@ -103,26 +103,37 @@ fn keyboard_enhancement_flags() -> crossterm::event::KeyboardEnhancementFlags {
 }
 
 /// Chooses a [`ColorSupport`](retroglyph_terminal::ColorSupport) level from the de facto
-/// `$NO_COLOR`/`$COLORTERM`/`$TERM` conventions, as a pure function of their values so it's
-/// testable without mutating real process environment variables.
+/// `$NO_COLOR`/`$TERM` conventions, as a pure function of their values so it's testable without
+/// mutating real process environment variables.
 ///
 /// - `no_color` any non-empty value (per <https://no-color.org>) forces
-///   [`ColorSupport::None`](retroglyph_terminal::ColorSupport::None), overriding everything else.
-/// - Otherwise, `colorterm` containing `"truecolor"` or `"24bit"` (case-insensitive) selects
-///   [`ColorSupport::Truecolor`](retroglyph_terminal::ColorSupport::Truecolor).
-/// - Otherwise, `term` containing `"256color"` selects
-///   [`ColorSupport::Indexed256`](retroglyph_terminal::ColorSupport::Indexed256).
+///   [`ColorSupport::None`](retroglyph_terminal::ColorSupport::None).
+/// - `term` equal to `"dumb"` (the canonical "assume nothing" signal used by Emacs' shell mode,
+///   some CI systems, and similar) also forces `ColorSupport::None`. A bare `"dumb"` is never
+///   emitted by a terminal that actually supports color, so this carries no false-positive risk,
+///   unlike the heuristic described next.
 /// - Otherwise, [`ColorSupport::Truecolor`](retroglyph_terminal::ColorSupport::Truecolor):
 ///   matches [`TerminalRenderer`](retroglyph_terminal::TerminalRenderer)'s own default and this
-///   crate's pre-existing behavior (always pass `Color::Rgb` through verbatim) for an
-///   unrecognized or absent `$TERM`/`$COLORTERM`, rather than guessing downward. Degrading is
-///   opt-in on a positive signal (`$NO_COLOR`, or a `$TERM` that specifically names a narrower
-///   palette); the absence of a signal is not itself a signal, and a minimal environment with
-///   neither variable set (common in CI/test harnesses, and not unheard of over a raw SSH
-///   session) is not evidence the terminal can't handle truecolor.
+///   crate's pre-existing behavior (always pass `Color::Rgb` through verbatim). Degrading below
+///   this is opt-in on one of the two positive signals above; their absence is not itself a
+///   signal of anything narrower.
+///
+/// This deliberately does **not** try to infer [`ColorSupport::Indexed256`] or
+/// [`ColorSupport::Ansi16`] from `$TERM`/`$COLORTERM` text (an earlier version of this function
+/// selected `Indexed256` for any `$TERM` containing `"256color"`, and `Truecolor` only for an
+/// explicit `$COLORTERM=truecolor`/`24bit`). Both heuristics look reasonable in isolation and
+/// both have the same failure mode: `xterm-256color` is the single most common `$TERM` value in
+/// existence, including on terminals that also fully support truecolor, and plenty of genuinely
+/// truecolor-capable environments never set `$COLORTERM` at all (this workspace's own PTY test
+/// harness is one: `portable-pty` sets `$TERM=xterm-256color` unconditionally for the child it
+/// spawns and never sets `$COLORTERM`, which silently downgraded every snapshot test's rendered
+/// colors and broke them all -- retroglyph#585 CI). Requiring an unambiguous signal before
+/// degrading, rather than guessing from `$TERM`'s text, is what avoids repeating that. Both
+/// narrower levels remain fully available as an explicit choice via
+/// [`CrosstermOptions::color_support`](CrosstermOptions::color_support); they just aren't guessed
+/// at automatically.
 fn detect_color_support(
     no_color: Option<&str>,
-    colorterm: Option<&str>,
     term: Option<&str>,
 ) -> retroglyph_terminal::ColorSupport {
     use retroglyph_terminal::ColorSupport;
@@ -130,14 +141,8 @@ fn detect_color_support(
     if no_color.is_some_and(|value| !value.is_empty()) {
         return ColorSupport::None;
     }
-    if colorterm.is_some_and(|value| {
-        let value = value.to_ascii_lowercase();
-        value.contains("truecolor") || value.contains("24bit")
-    }) {
-        return ColorSupport::Truecolor;
-    }
-    if term.is_some_and(|value| value.contains("256color")) {
-        return ColorSupport::Indexed256;
+    if term == Some("dumb") {
+        return ColorSupport::None;
     }
     ColorSupport::Truecolor
 }
@@ -146,7 +151,6 @@ fn detect_color_support(
 fn detect_color_support_from_env() -> retroglyph_terminal::ColorSupport {
     detect_color_support(
         std::env::var("NO_COLOR").ok().as_deref(),
-        std::env::var("COLORTERM").ok().as_deref(),
         std::env::var("TERM").ok().as_deref(),
     )
 }
@@ -300,7 +304,7 @@ pub struct CrosstermOptions {
     bracketed_paste: bool,
     alt_screen: bool,
     raw_mode: bool,
-    // `None` means auto-detect from `$NO_COLOR`/`$COLORTERM`/`$TERM` at build time (see
+    // `None` means auto-detect from `$NO_COLOR`/`$TERM` at build time (see
     // `detect_color_support_from_env`); `Some` is an explicit caller override that skips
     // detection entirely. Unlike the six booleans above, this can't default to a plain `bool`
     // (or even a bare `ColorSupport`) without losing the ability to tell "caller explicitly
@@ -377,7 +381,7 @@ impl CrosstermOptions {
     }
 
     /// Overrides the [`ColorSupport`](retroglyph_terminal::ColorSupport) level, skipping this
-    /// crate's own `$NO_COLOR`/`$COLORTERM`/`$TERM` auto-detection (see
+    /// crate's own `$NO_COLOR`/`$TERM` auto-detection (see
     /// [`Crossterm::color_support`] for the auto-detected default and how it's chosen).
     /// Use this when a caller knows the receiving terminal's actual color depth (or wants to
     /// force it) rather than trusting the environment.
@@ -683,8 +687,7 @@ impl<W: std::io::Write> Crossterm<W> {
     /// Returns the configured [`ColorSupport`](retroglyph_terminal::ColorSupport) level.
     ///
     /// Set explicitly via [`CrosstermOptions::color_support`], or auto-detected from
-    /// `$NO_COLOR`/`$COLORTERM`/`$TERM` if not overridden; see that method's docs for the
-    /// detection rules.
+    /// `$NO_COLOR`/`$TERM` if not overridden; see that method's docs for the detection rules.
     pub const fn color_support(&self) -> retroglyph_terminal::ColorSupport {
         self.renderer.color_support()
     }
@@ -736,7 +739,7 @@ impl<W: std::io::Write> Crossterm<W> {
         let (width, height) = crossterm::terminal::size().unwrap_or((80, 24));
 
         // Use the caller's explicit override if given; otherwise detect from
-        // `$NO_COLOR`/`$COLORTERM`/`$TERM`. Unlike `plain` above (which needs `writer`'s own
+        // `$NO_COLOR`/`$TERM`. Unlike `plain` above (which needs `writer`'s own
         // `IsTerminal` status and so can't be detected for an arbitrary `build_with_writer`
         // sink), these are process environment variables independent of `writer`, so detection
         // applies the same way regardless of which `build*` method was called.
@@ -1841,12 +1844,12 @@ mod tests {
         use retroglyph_terminal::ColorSupport;
 
         assert_eq!(
-            detect_color_support(Some("1"), Some("truecolor"), Some("xterm-256color")),
+            detect_color_support(Some("1"), Some("dumb")),
             ColorSupport::None
         );
         // Any non-empty value counts, per https://no-color.org.
         assert_eq!(
-            detect_color_support(Some("anything"), None, None),
+            detect_color_support(Some("anything"), None),
             ColorSupport::None
         );
     }
@@ -1856,55 +1859,40 @@ mod tests {
         use retroglyph_terminal::ColorSupport;
 
         assert_eq!(
-            detect_color_support(Some(""), Some("truecolor"), None),
+            detect_color_support(Some(""), None),
             ColorSupport::Truecolor
         );
     }
 
     #[test]
-    fn detect_color_support_colorterm_truecolor_or_24bit() {
+    fn detect_color_support_dumb_term_forces_none() {
+        // The one $TERM value that's an unambiguous "assume nothing" signal -- never emitted by
+        // a terminal that actually supports color, unlike a "...256color" suffix (see the next
+        // test).
         use retroglyph_terminal::ColorSupport;
 
-        assert_eq!(
-            detect_color_support(None, Some("truecolor"), None),
-            ColorSupport::Truecolor
-        );
-        assert_eq!(
-            detect_color_support(None, Some("24bit"), None),
-            ColorSupport::Truecolor
-        );
-        assert_eq!(
-            detect_color_support(None, Some("TrueColor"), None),
-            ColorSupport::Truecolor
-        );
-    }
-
-    #[test]
-    fn detect_color_support_term_256color_without_colorterm() {
-        use retroglyph_terminal::ColorSupport;
-
-        assert_eq!(
-            detect_color_support(None, None, Some("xterm-256color")),
-            ColorSupport::Indexed256
-        );
+        assert_eq!(detect_color_support(None, Some("dumb")), ColorSupport::None);
     }
 
     #[test]
     fn detect_color_support_falls_back_to_truecolor_with_no_signal() {
-        // No `$NO_COLOR`, no `$COLORTERM`, and a `$TERM` that doesn't name a narrower palette
-        // (or no `$TERM` at all, as in a minimal CI/test harness): this must not be read as
-        // evidence of a limited terminal, so it matches `TerminalRenderer`'s own
-        // `ColorSupport::default()` and this crate's pre-existing always-truecolor behavior
-        // (retroglyph#585: defaulting downward here broke every `Color::Rgb` snapshot test that
-        // doesn't happen to run with `$COLORTERM` set).
+        // No `$NO_COLOR` and a `$TERM` that isn't the unambiguous "dumb" (or no `$TERM` at all,
+        // as in a minimal CI/test harness): this must not be read as evidence of a limited
+        // terminal, so it matches `TerminalRenderer`'s own `ColorSupport::default()` and this
+        // crate's pre-existing always-truecolor behavior.
         use retroglyph_terminal::ColorSupport;
 
+        assert_eq!(detect_color_support(None, None), ColorSupport::Truecolor);
         assert_eq!(
-            detect_color_support(None, None, None),
+            detect_color_support(None, Some("xterm")),
             ColorSupport::Truecolor
         );
+        // retroglyph#585 CI: this workspace's own PTY test harness spawns every example with
+        // exactly this $TERM and no $COLORTERM. A `$TERM`-text heuristic that read "256color" as
+        // a limit (rather than the common, often truecolor-capable default it is) silently
+        // downgraded every snapshot test's rendered colors and broke all of them at once.
         assert_eq!(
-            detect_color_support(None, None, Some("xterm")),
+            detect_color_support(None, Some("xterm-256color")),
             ColorSupport::Truecolor
         );
     }

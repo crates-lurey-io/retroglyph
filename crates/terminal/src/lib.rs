@@ -71,7 +71,7 @@
 //! [`Color::to_indexed`]/[`Color::to_ansi`] (or forces [`Color::Default`]) before writing its SGR
 //! sequence, so the emitted bytes match what was actually requested rather than relying on the
 //! terminal to downsample. This crate does not auto-detect terminal capabilities itself (that
-//! belongs to a backend that actually has access to `$TERM`/`$COLORTERM`/`$NO_COLOR`, e.g.
+//! belongs to a backend that actually has access to `$TERM`/`$NO_COLOR`, e.g.
 //! `retroglyph-crossterm`'s `CrosstermOptions`); [`ColorSupport::Truecolor`] remains the default.
 //!
 //! Callers that need a specific, correct color regardless of `ColorSupport` should use
