@@ -77,7 +77,12 @@ retroglyph-window = { path = "../window", version = "0.4.0", features = ["winit"
 # backends share `retroglyph-window`'s font, so the comparison is a real pixel-identity check.
 [target.'cfg(target_os = "linux")'.dev-dependencies]
 # `tilesets` so the sprite/span parity tests can build the same tileset on both backends.
-retroglyph-software = { path = "../software", version = "0.5.0", default-features = false, features = [
+# Deliberately no `version` key (see the equivalent dev-dependency in crates/window/Cargo.toml):
+# release-plz doesn't order publishing by dev-dependency edges, only real ones, so a version pin
+# here would make packaging this crate require `retroglyph-software` to already be on crates.io
+# even though nothing else establishes that ordering. Dropping `version` drops the entry from the
+# published manifest instead of resolving it against the registry.
+retroglyph-software = { path = "../software", default-features = false, features = [
   "default-font",
   "tilesets",
 ] }
