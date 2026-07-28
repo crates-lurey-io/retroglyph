@@ -17,7 +17,9 @@ use crate::backend::WindowBackend;
 use crate::presenter::Presenter;
 use retroglyph_core::Terminal;
 use retroglyph_core::backend::{Input, Output};
-use retroglyph_core::event::{Event, KeyModifiers, MouseEvent, MouseEventKind, PhysicalPos};
+use retroglyph_core::event::{
+    Event, KeyModifiers, MouseButton, MouseEvent, MouseEventKind, PhysicalPos,
+};
 use std::cell::Cell;
 use std::fmt;
 use std::marker::PhantomData;
@@ -617,6 +619,7 @@ where
         current_modifiers: KeyModifiers::NONE,
         cursor_px: (0.0, 0.0),
         active_touch: None,
+        held_buttons: 0,
         frame_interval,
         event_driven: config.event_driven,
         #[cfg(not(target_arch = "wasm32"))]
@@ -838,6 +841,25 @@ impl Default for WindowAttrs {
     }
 }
 
+/// Bitmask for [`MouseButton::Left`] in [`WindowApp::held_buttons`].
+const BUTTON_MASK_LEFT: u8 = 1 << 0;
+/// Bitmask for [`MouseButton::Right`] in [`WindowApp::held_buttons`].
+const BUTTON_MASK_RIGHT: u8 = 1 << 1;
+/// Bitmask for [`MouseButton::Middle`] in [`WindowApp::held_buttons`].
+const BUTTON_MASK_MIDDLE: u8 = 1 << 2;
+
+/// Maps a [`MouseButton`] to its bit in [`WindowApp::held_buttons`].
+const fn button_mask(button: MouseButton) -> u8 {
+    match button {
+        MouseButton::Left => BUTTON_MASK_LEFT,
+        MouseButton::Right => BUTTON_MASK_RIGHT,
+        MouseButton::Middle => BUTTON_MASK_MIDDLE,
+        // `MouseButton` is `#[non_exhaustive]`; treat any future variant as unmasked (never
+        // drives a `Drag`) rather than failing to compile when one is added upstream.
+        _ => 0,
+    }
+}
+
 /// The winit `ApplicationHandler`: owns the window, the terminal, and the
 /// per-frame closure.
 ///
@@ -878,6 +900,13 @@ struct WindowApp<P: Presenter, F, T, D> {
     /// ignored until it lifts, so a stray second finger can't teleport the
     /// cursor mid-drag.
     active_touch: Option<u64>,
+    /// Bitmask of currently held mouse buttons, built from [`button_mask`]. Updated by
+    /// [`on_mouse_input`](Self::on_mouse_input) and consulted by
+    /// [`on_cursor_moved`](Self::on_cursor_moved) to decide between [`MouseEventKind::Moved`] and
+    /// [`MouseEventKind::Drag`]. A bitmask (rather than tracking only the most recent button)
+    /// because more than one button can be held at once, and each needs its own accurate
+    /// press/release accounting.
+    held_buttons: u8,
     /// Frame-rate cap derived from [`WindowConfig::target_fps`]: `Some(interval)` paces redraws
     /// to no more than one per `interval`, `None` leaves them uncapped. Independent of
     /// [`event_driven`](Self::event_driven); see [`WindowConfig::fit`].
@@ -1644,8 +1673,20 @@ where
         };
         let (cell_w, cell_h) = term.backend().presenter().cell_size();
         let pos = pixel_to_cell(x, y, cell_w, cell_h);
+        // Report a drag (rather than a plain move) while any button is held. Left takes
+        // priority over Right over Middle when more than one is held at once: an arbitrary but
+        // deterministic choice, matching the order the buttons are declared in `MouseButton`.
+        let kind = if self.held_buttons & BUTTON_MASK_LEFT != 0 {
+            MouseEventKind::Drag(MouseButton::Left)
+        } else if self.held_buttons & BUTTON_MASK_RIGHT != 0 {
+            MouseEventKind::Drag(MouseButton::Right)
+        } else if self.held_buttons & BUTTON_MASK_MIDDLE != 0 {
+            MouseEventKind::Drag(MouseButton::Middle)
+        } else {
+            MouseEventKind::Moved
+        };
         term.backend_mut().push_event(Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Moved,
+            kind,
             position: pos,
             pixel_position: Some(px),
             modifiers: self.current_modifiers,
@@ -1667,8 +1708,10 @@ where
         let (cell_w, cell_h) = term.backend().presenter().cell_size();
         let pos = pixel_to_cell(self.cursor_px.0, self.cursor_px.1, cell_w, cell_h);
         let kind = if state.is_pressed() {
+            self.held_buttons |= button_mask(btn);
             MouseEventKind::Down(btn)
         } else {
+            self.held_buttons &= !button_mask(btn);
             MouseEventKind::Up(btn)
         };
         term.backend_mut().push_event(Event::Mouse(MouseEvent {
@@ -1778,6 +1821,12 @@ where
     /// synthesized first, unlike a real lift: blur carries no new pointer location, and
     /// `cursor_px` already holds the touch's last reported position from the `Started`/`Moved`
     /// arms that got it there.
+    ///
+    /// The same problem applies to `held_buttons`: a mouse button released while the window is
+    /// unfocused never delivers `MouseInput`, so without this it would stay marked "held" and
+    /// every move after refocus would keep reporting a stale `Drag` instead of `Moved`. It's
+    /// force-cleared directly (not via a synthesized `Up`, since there's no single button, or
+    /// combination of buttons, that unambiguously round-trips through `on_mouse_input`).
     fn on_focus_changed(&mut self, gained: bool) {
         if let Some(term) = self.terminal.as_mut() {
             let event = if gained {
@@ -1795,6 +1844,7 @@ where
                     winit::event::MouseButton::Left,
                 );
             }
+            self.held_buttons = 0;
         }
     }
 }
@@ -2343,6 +2393,7 @@ mod tests {
             current_modifiers: KeyModifiers::NONE,
             cursor_px: (0.0, 0.0),
             active_touch: None,
+            held_buttons: 0,
             frame_interval: None,
             event_driven: true,
             #[cfg(not(target_arch = "wasm32"))]
@@ -2511,10 +2562,12 @@ mod tests {
         ));
 
         app.handle_window_event(touch(7, TouchPhase::Ended, 20.0, 18.0));
+        // The synthesized move fires while the touch's `Left` button is still held (the release
+        // hasn't been synthesized yet), so it's reported as a drag, not a plain move.
         assert!(matches!(
             poll(&mut app),
             Some(Event::Mouse(MouseEvent {
-                kind: MouseEventKind::Moved,
+                kind: MouseEventKind::Drag(MouseButton::Left),
                 ..
             }))
         ));
@@ -2538,17 +2591,18 @@ mod tests {
         poll(&mut app); // Down
 
         app.handle_window_event(touch(1, TouchPhase::Moved, 40.0, 32.0));
+        // Held Left button since Started: this is a drag, not a plain move.
         assert!(matches!(
             poll(&mut app),
             Some(Event::Mouse(MouseEvent {
-                kind: MouseEventKind::Moved,
+                kind: MouseEventKind::Drag(MouseButton::Left),
                 position: Pos { x: 5, y: 2 },
                 ..
             }))
         ));
 
         app.handle_window_event(touch(1, TouchPhase::Cancelled, 40.0, 32.0));
-        poll(&mut app); // Moved
+        poll(&mut app); // Drag (button still held until the synthesized Up just below)
         assert!(matches!(
             poll(&mut app),
             Some(Event::Mouse(MouseEvent {
@@ -2717,6 +2771,183 @@ mod tests {
         ));
     }
 
+    // ── mouse drag (retroglyph#554) ───────────────────────────────────────────
+
+    #[test]
+    fn cursor_moved_with_no_button_held_emits_moved() {
+        let mut app = test_window_app();
+        app.handle_window_event(WindowEvent::CursorMoved {
+            device_id: winit::event::DeviceId::dummy(),
+            position: winit::dpi::PhysicalPosition::new(8.0_f64, 16.0_f64),
+        });
+        assert!(matches!(
+            poll(&mut app),
+            Some(Event::Mouse(MouseEvent {
+                kind: MouseEventKind::Moved,
+                ..
+            }))
+        ));
+    }
+
+    #[test]
+    fn cursor_moved_while_button_held_emits_drag_not_moved() {
+        let mut app = test_window_app();
+        app.handle_window_event(WindowEvent::MouseInput {
+            device_id: winit::event::DeviceId::dummy(),
+            state: winit::event::ElementState::Pressed,
+            button: winit::event::MouseButton::Left,
+        });
+        let _ = poll(&mut app); // Down
+
+        app.handle_window_event(WindowEvent::CursorMoved {
+            device_id: winit::event::DeviceId::dummy(),
+            position: winit::dpi::PhysicalPosition::new(40.0_f64, 32.0_f64),
+        });
+        assert!(matches!(
+            poll(&mut app),
+            Some(Event::Mouse(MouseEvent {
+                kind: MouseEventKind::Drag(MouseButton::Left),
+                ..
+            }))
+        ));
+    }
+
+    #[test]
+    fn cursor_moved_after_button_release_goes_back_to_moved() {
+        let mut app = test_window_app();
+        app.handle_window_event(WindowEvent::MouseInput {
+            device_id: winit::event::DeviceId::dummy(),
+            state: winit::event::ElementState::Pressed,
+            button: winit::event::MouseButton::Left,
+        });
+        let _ = poll(&mut app); // Down
+        app.handle_window_event(WindowEvent::MouseInput {
+            device_id: winit::event::DeviceId::dummy(),
+            state: winit::event::ElementState::Released,
+            button: winit::event::MouseButton::Left,
+        });
+        let _ = poll(&mut app); // Up
+
+        app.handle_window_event(WindowEvent::CursorMoved {
+            device_id: winit::event::DeviceId::dummy(),
+            position: winit::dpi::PhysicalPosition::new(40.0_f64, 32.0_f64),
+        });
+        assert!(matches!(
+            poll(&mut app),
+            Some(Event::Mouse(MouseEvent {
+                kind: MouseEventKind::Moved,
+                ..
+            }))
+        ));
+    }
+
+    #[test]
+    fn right_button_drag_reports_right_not_left() {
+        let mut app = test_window_app();
+        app.handle_window_event(WindowEvent::MouseInput {
+            device_id: winit::event::DeviceId::dummy(),
+            state: winit::event::ElementState::Pressed,
+            button: winit::event::MouseButton::Right,
+        });
+        let _ = poll(&mut app); // Down
+
+        app.handle_window_event(WindowEvent::CursorMoved {
+            device_id: winit::event::DeviceId::dummy(),
+            position: winit::dpi::PhysicalPosition::new(40.0_f64, 32.0_f64),
+        });
+        assert!(matches!(
+            poll(&mut app),
+            Some(Event::Mouse(MouseEvent {
+                kind: MouseEventKind::Drag(MouseButton::Right),
+                ..
+            }))
+        ));
+    }
+
+    #[test]
+    fn left_button_takes_priority_over_right_when_both_are_held() {
+        // Deterministic tie-break documented on `on_cursor_moved`: Left wins when more than one
+        // button is held at once.
+        let mut app = test_window_app();
+        app.handle_window_event(WindowEvent::MouseInput {
+            device_id: winit::event::DeviceId::dummy(),
+            state: winit::event::ElementState::Pressed,
+            button: winit::event::MouseButton::Right,
+        });
+        let _ = poll(&mut app); // Down
+        app.handle_window_event(WindowEvent::MouseInput {
+            device_id: winit::event::DeviceId::dummy(),
+            state: winit::event::ElementState::Pressed,
+            button: winit::event::MouseButton::Left,
+        });
+        let _ = poll(&mut app); // Down
+
+        app.handle_window_event(WindowEvent::CursorMoved {
+            device_id: winit::event::DeviceId::dummy(),
+            position: winit::dpi::PhysicalPosition::new(40.0_f64, 32.0_f64),
+        });
+        assert!(matches!(
+            poll(&mut app),
+            Some(Event::Mouse(MouseEvent {
+                kind: MouseEventKind::Drag(MouseButton::Left),
+                ..
+            }))
+        ));
+    }
+
+    #[test]
+    fn touch_drag_produces_drag_left_not_moved() {
+        // Regression test for retroglyph#554: `on_touch` synthesizes a left-button `Down` before
+        // its `Moved` phase forwards to `on_cursor_moved`, so a touch drag must fall out of the
+        // same `held_buttons` tracking a real mouse drag uses, with no touch-specific code.
+        use winit::event::TouchPhase;
+        let mut app = test_window_app();
+        app.handle_window_event(touch(1, TouchPhase::Started, 0.0, 0.0));
+        poll(&mut app); // Moved
+        poll(&mut app); // Down
+
+        app.handle_window_event(touch(1, TouchPhase::Moved, 40.0, 32.0));
+        assert!(matches!(
+            poll(&mut app),
+            Some(Event::Mouse(MouseEvent {
+                kind: MouseEventKind::Drag(MouseButton::Left),
+                ..
+            }))
+        ));
+    }
+
+    #[test]
+    fn focus_lost_clears_held_button_so_refocus_move_is_not_a_stale_drag() {
+        // Regression test for retroglyph#554: a button released while the window is unfocused
+        // never delivers `MouseInput`, so `held_buttons` must be force-cleared on blur or every
+        // move after refocus keeps reporting a `Drag` for a button that's actually up.
+        let mut app = test_window_app();
+        app.handle_window_event(WindowEvent::MouseInput {
+            device_id: winit::event::DeviceId::dummy(),
+            state: winit::event::ElementState::Pressed,
+            button: winit::event::MouseButton::Left,
+        });
+        let _ = poll(&mut app); // Down
+
+        app.handle_window_event(WindowEvent::Focused(false));
+        assert_eq!(poll(&mut app), Some(Event::FocusLost));
+        assert_eq!(app.held_buttons, 0);
+
+        app.handle_window_event(WindowEvent::Focused(true));
+        assert_eq!(poll(&mut app), Some(Event::FocusGained));
+        app.handle_window_event(WindowEvent::CursorMoved {
+            device_id: winit::event::DeviceId::dummy(),
+            position: winit::dpi::PhysicalPosition::new(40.0_f64, 32.0_f64),
+        });
+        assert!(matches!(
+            poll(&mut app),
+            Some(Event::Mouse(MouseEvent {
+                kind: MouseEventKind::Moved,
+                ..
+            }))
+        ));
+    }
+
     // ── user events (EventProxy) ─────────────────────────────────────────────
 
     #[test]
@@ -2792,6 +3023,7 @@ mod tests {
             current_modifiers: KeyModifiers::NONE,
             cursor_px: (0.0, 0.0),
             active_touch: None,
+            held_buttons: 0,
             frame_interval: None,
             event_driven: true,
             #[cfg(not(target_arch = "wasm32"))]
@@ -2921,6 +3153,7 @@ mod tests {
             current_modifiers: KeyModifiers::NONE,
             cursor_px: (0.0, 0.0),
             active_touch: None,
+            held_buttons: 0,
             frame_interval: None,
             event_driven: true,
             #[cfg(not(target_arch = "wasm32"))]
@@ -3173,6 +3406,7 @@ mod tests {
             current_modifiers: KeyModifiers::NONE,
             cursor_px: (0.0, 0.0),
             active_touch: None,
+            held_buttons: 0,
             frame_interval: None,
             event_driven: true,
             #[cfg(not(target_arch = "wasm32"))]
@@ -3379,6 +3613,7 @@ mod tests {
             current_modifiers: KeyModifiers::NONE,
             cursor_px: (0.0, 0.0),
             active_touch: None,
+            held_buttons: 0,
             frame_interval: None,
             event_driven: true,
             #[cfg(not(target_arch = "wasm32"))]
@@ -3581,6 +3816,7 @@ mod tests {
             current_modifiers: KeyModifiers::NONE,
             cursor_px: (0.0, 0.0),
             active_touch: None,
+            held_buttons: 0,
             frame_interval: None,
             event_driven: true,
             #[cfg(not(target_arch = "wasm32"))]
@@ -3662,6 +3898,7 @@ mod tests {
             current_modifiers: KeyModifiers::NONE,
             cursor_px: (0.0, 0.0),
             active_touch: None,
+            held_buttons: 0,
             frame_interval: None,
             event_driven: true,
             #[cfg(not(target_arch = "wasm32"))]
@@ -3739,6 +3976,7 @@ mod tests {
             current_modifiers: KeyModifiers::NONE,
             cursor_px: (0.0, 0.0),
             active_touch: None,
+            held_buttons: 0,
             frame_interval: None,
             event_driven: true,
             #[cfg(not(target_arch = "wasm32"))]
