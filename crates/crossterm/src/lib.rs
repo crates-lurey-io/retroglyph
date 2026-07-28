@@ -715,7 +715,7 @@ impl<W: std::io::Write> Output for Crossterm<W> {
     type Error = std::io::Error;
 
     #[cfg_attr(feature = "tracing", tracing::instrument(level = "debug", skip_all))]
-    fn draw<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
+    fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
         I: Iterator<Item = DrawCell<'a>>,
     {

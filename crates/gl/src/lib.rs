@@ -93,7 +93,7 @@ use renderer::{FLAG_HAS_BG, FLAG_HAS_GLYPH, GlResources, Instance};
 use retroglyph_core::DrawCell;
 use retroglyph_core::backend::Output;
 use retroglyph_core::color::Color;
-use retroglyph_core::grid::{Pos, Size};
+use retroglyph_core::grid::Size;
 use retroglyph_core::tile::Tile;
 use retroglyph_window::palette::{DEFAULT_BG, DEFAULT_FG};
 #[cfg(feature = "tilesets")]
@@ -257,20 +257,6 @@ impl GlRenderer {
         usize::from(self.cols) * usize::from(self.rows)
     }
 
-    /// Writes one tile into the base layer's instance array at `pos`, if in bounds. Used by the
-    /// single-layer [`Output::draw`] path; the multi-layer compositing path goes through
-    /// [`draw_layers`](Output::draw_layers).
-    fn write_tile(&mut self, pos: Pos, tile: &Tile) {
-        let (x, y) = (usize::from(pos.x), usize::from(pos.y));
-        let cols = usize::from(self.cols);
-        if x >= cols || y >= usize::from(self.rows) {
-            return;
-        }
-        let idx = y * cols + x;
-        let slot = self.glyphs.resolve(tile.glyph());
-        self.layers[0][idx] = base_instance(slot, tile);
-    }
-
     /// Builds the GL resources for the current instance array on an already-current context:
     /// compiles the program, uploads the glyph atlas and the full instance buffer, and sets the
     /// glyph-size and projection uniforms.
@@ -358,19 +344,12 @@ impl Output for GlRenderer {
     // through `Presenter::present`'s `SurfaceError` instead.
     type Error = core::convert::Infallible;
 
-    fn draw<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
-    where
-        I: Iterator<Item = DrawCell<'a>>,
-    {
-        for draw_cell in content {
-            let (pos, tile) = (draw_cell.pos, draw_cell.tile);
-            // No tint is read here: this path writes glyph instances only, and a sprite (the
-            // only thing a tint applies to) is emitted by `draw_layers`. See `write_tile`.
-            self.write_tile(pos, tile);
-        }
-        Ok(())
-    }
-
+    // No `draw` override: this backend always composites (`composites_layers` returns `true`
+    // below), so `Terminal::present` never calls single-layer `draw` and the default
+    // implementation (forwards to `draw_layers`) is exactly right. See retroglyph#561; this used
+    // to have its own `write_tile`-based body that wrote glyph instances only and silently never
+    // read a cell's tint, which is exactly the kind of drift a dead, hand-maintained second
+    // implementation invites.
     #[allow(clippy::too_many_lines)]
     fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
@@ -733,6 +712,8 @@ mod compositing_tests {
             .build()
             .expect("default-font builds");
         let tile = Tile::new('A', Style::new()).with_offset(-3, 5);
+        // `Output::draw` has no override on this backend (retroglyph#561): this exercises the
+        // trait's default, which forwards to `draw_layers` tagged onto layer 0.
         r.draw(core::iter::once(DrawCell::new(Pos::new(1, 0), &tile)))
             .expect("draw is infallible");
 

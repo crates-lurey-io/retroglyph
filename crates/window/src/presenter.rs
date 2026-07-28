@@ -220,7 +220,7 @@ impl RecoverableError for GenericSurfaceError {
 /// impl Output for NullPresenter {
 ///     type Error = core::convert::Infallible;
 ///
-///     fn draw<'a, I>(&mut self, _content: I) -> Result<(), Self::Error>
+///     fn draw_layers<'a, I>(&mut self, _content: I) -> Result<(), Self::Error>
 ///     where
 ///         I: Iterator<Item = DrawCell<'a>>,
 ///     {

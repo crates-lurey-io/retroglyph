@@ -85,7 +85,7 @@ impl Headless {
 impl Output for Headless {
     type Error = core::convert::Infallible;
 
-    fn draw<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
+    fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
         I: Iterator<Item = crate::backend::DrawCell<'a>>,
     {

@@ -344,7 +344,7 @@ impl TerminalWasm {
 impl Output for TerminalWasm {
     type Error = io::Error;
 
-    fn draw<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
+    fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
         I: Iterator<Item = DrawCell<'a>>,
     {
