@@ -7,6 +7,11 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 
+## [0.1.6+retroglyph-terminal](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-v0.1.5...retroglyph-terminal-v0.1.6) - 2026-07-31
+
+**Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-v0.1.5...retroglyph-terminal-v0.1.6
+
+
 ## [0.1.5+retroglyph-terminal](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-v0.1.4...retroglyph-terminal-v0.1.5) - 2026-07-28
 
 ### Features
