@@ -2275,13 +2275,7 @@ pub struct Overworld {
 impl Default for Overworld {
     fn default() -> Self {
         let world = World::generate(DEFAULT_SEED);
-        let camera = Camera::new(
-            Rect::new(0, 0, 10, 6),
-            Size {
-                width: WORLD_W,
-                height: WORLD_H,
-            },
-        );
+        let camera = Camera::new(Rect::new(0, 0, 10, 6), Size::new(WORLD_W, WORLD_H));
         let cam_center = world.starting_view();
         Self {
             world,
@@ -2655,26 +2649,26 @@ impl Overworld {
     pub fn draw<B: Backend>(&mut self, term: &mut Terminal<B>) {
         let size = term.size();
         let mut surface = term.surface();
-        let screen = Rect::new(0, 0, size.width, size.height);
+        let screen = Rect::new(0, 0, size.width(), size.height());
         // Cleared unconditionally and only re-set inside `draw_minimap` if it actually runs this
         // frame, so a resize that drops the sidebar (or just the minimap) can't leave a stale
         // rect around for `jump_to_minimap` to misfire against.
         self.last_minimap_rect = None;
-        for y in 0..size.height {
-            for x in 0..size.width {
+        for y in 0..size.height() {
+            for x in 0..size.width() {
                 surface.put((x, y), ' ', Style::new().bg(BG));
             }
         }
 
-        let wide = size.width >= BP_SIDEBAR && size.height >= BP_TALL;
+        let wide = size.width() >= BP_SIDEBAR && size.height() >= BP_TALL;
         if wide {
             let cols = split_h(screen, &[Constraint::Fill(1), Constraint::Fixed(SIDEBAR_W)]);
             self.draw_map(&mut surface, cols[0]);
             self.draw_sidebar(&mut surface, cols[1]);
-        } else if size.height >= 2 {
-            let map_area = Rect::new(0, 1, size.width, size.height - 1);
+        } else if size.height() >= 2 {
+            let map_area = Rect::new(0, 1, size.width(), size.height() - 1);
             self.draw_map(&mut surface, map_area);
-            self.draw_status(&mut surface, Rect::new(0, 0, size.width, 1));
+            self.draw_status(&mut surface, Rect::new(0, 0, size.width(), 1));
         } else {
             self.draw_map(&mut surface, screen);
         }

@@ -177,8 +177,8 @@ impl WindowConfig {
         let (cell_w, cell_h) = presenter.cell_size();
         Self {
             title: title.into(),
-            width: u32::from(grid.width) * cell_w,
-            height: u32::from(grid.height) * cell_h,
+            width: u32::from(grid.width()) * cell_w,
+            height: u32::from(grid.height()) * cell_h,
             target_fps,
             event_driven,
             fill_viewport: false,
@@ -1635,10 +1635,8 @@ where
         // the surface without waiting for the app to react to `Event::Resize` below. This does
         // not touch the `Terminal`'s grid content (see `Terminal::resize`, which additionally
         // resizes/clears both grids): that remains the app's job in response to the event.
-        term.backend_mut().resize(retroglyph_core::grid::Size {
-            width: cols,
-            height: rows,
-        });
+        term.backend_mut()
+            .resize(retroglyph_core::grid::Size::new(cols, rows));
         term.backend_mut().push_event(Event::Resize(cols, rows));
     }
 
@@ -2057,10 +2055,7 @@ mod tests {
         fn default() -> Self {
             Self {
                 last_scale_factor: Cell::new(None),
-                size: Cell::new(Size {
-                    width: 10,
-                    height: 5,
-                }),
+                size: Cell::new(Size::new(10, 5)),
             }
         }
     }
@@ -2153,10 +2148,7 @@ mod tests {
         }
 
         fn size(&self) -> Size {
-            Size {
-                width: 10,
-                height: 5,
-            }
+            Size::new(10, 5)
         }
 
         fn clear(&mut self) -> Result<(), Self::Error> {
@@ -2222,10 +2214,7 @@ mod tests {
         }
 
         fn size(&self) -> Size {
-            Size {
-                width: 10,
-                height: 5,
-            }
+            Size::new(10, 5)
         }
 
         fn clear(&mut self) -> Result<(), Self::Error> {
@@ -2319,10 +2308,7 @@ mod tests {
         }
 
         fn size(&self) -> Size {
-            Size {
-                width: 10,
-                height: 5,
-            }
+            Size::new(10, 5)
         }
 
         fn clear(&mut self) -> Result<(), Self::Error> {
@@ -3343,28 +3329,16 @@ mod tests {
         let mut app = test_window_app();
         assert_eq!(
             app.terminal.as_ref().unwrap().backend().size(),
-            Size {
-                width: 10,
-                height: 5,
-            }
+            Size::new(10, 5)
         );
         app.resize_to(winit::dpi::PhysicalSize::new(90, 81));
         assert_eq!(
             app.terminal.as_ref().unwrap().backend().size(),
-            Size {
-                width: 11,
-                height: 5,
-            }
+            Size::new(11, 5)
         );
         // `Terminal::size` (the grid itself) is untouched: that stays the app's job, done by
         // calling `Terminal::resize` in response to the `Event::Resize` this same call pushed.
-        assert_eq!(
-            app.terminal.as_ref().unwrap().size(),
-            Size {
-                width: 10,
-                height: 5,
-            }
-        );
+        assert_eq!(app.terminal.as_ref().unwrap().size(), Size::new(10, 5));
     }
 
     #[test]
@@ -3737,10 +3711,7 @@ mod tests {
         }
 
         fn size(&self) -> Size {
-            Size {
-                width: 10,
-                height: 5,
-            }
+            Size::new(10, 5)
         }
 
         fn clear(&mut self) -> Result<(), Self::Error> {

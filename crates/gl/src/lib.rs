@@ -568,10 +568,7 @@ impl Output for GlRenderer {
     }
 
     fn size(&self) -> Size {
-        Size {
-            width: self.cols,
-            height: self.rows,
-        }
+        Size::new(self.cols, self.rows)
     }
 
     fn clear(&mut self) -> Result<(), Self::Error> {
@@ -584,8 +581,8 @@ impl Output for GlRenderer {
     }
 
     fn resize(&mut self, size: Size) {
-        self.cols = size.width;
-        self.rows = size.height;
+        self.cols = size.width();
+        self.rows = size.height();
         let base = self.base_blank();
         self.layers = vec![vec![base; self.cell_count()]];
     }

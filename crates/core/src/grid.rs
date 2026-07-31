@@ -194,18 +194,33 @@ impl BlendMode {
 /// ```
 /// use retroglyph_core::Size;
 ///
-/// let size = Size {
-///     width: 80,
-///     height: 24,
-/// };
-/// assert_eq!(size.width, 80);
+/// let size = Size::new(80, 24);
+/// assert_eq!(size.width(), 80);
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, PartialOrd, Ord)]
 pub struct Size {
-    /// Width.
-    pub width: u16,
-    /// Height.
-    pub height: u16,
+    width: u16,
+    height: u16,
+}
+
+impl Size {
+    /// A size of `width` columns by `height` rows.
+    #[must_use]
+    pub const fn new(width: u16, height: u16) -> Self {
+        Self { width, height }
+    }
+
+    /// The width, in columns.
+    #[must_use]
+    pub const fn width(self) -> u16 {
+        self.width
+    }
+
+    /// The height, in rows.
+    #[must_use]
+    pub const fn height(self) -> u16 {
+        self.height
+    }
 }
 
 /// Pos in the grid, in (x = column, y = row) order.
@@ -284,13 +299,13 @@ impl From<Offset> for (i16, i16) {
 
 impl From<(u16, u16)> for Size {
     fn from((width, height): (u16, u16)) -> Self {
-        Self { width, height }
+        Self::new(width, height)
     }
 }
 
 impl From<Size> for (u16, u16) {
     fn from(s: Size) -> Self {
-        (s.width, s.height)
+        (s.width(), s.height())
     }
 }
 
@@ -1036,8 +1051,8 @@ impl Grid {
         // `Tile` stores a span's dimensions in one byte each (see `Tile::span_w`), so a span
         // wider or taller than 255 cells is not representable.
         let footprint = (
-            u8::try_from(size.width).ok()?,
-            u8::try_from(size.height).ok()?,
+            u8::try_from(size.width()).ok()?,
+            u8::try_from(size.height()).ok()?,
         );
         if footprint.0 == 0 || footprint.1 == 0 {
             return None;
@@ -2187,13 +2202,7 @@ mod tests {
     #[test]
     fn test_size_from_tuple() {
         let s: Size = (80u16, 25u16).into();
-        assert_eq!(
-            s,
-            Size {
-                width: 80,
-                height: 25
-            }
-        );
+        assert_eq!(s, Size::new(80, 25));
         let t: (u16, u16) = s.into();
         assert_eq!(t, (80, 25));
     }
@@ -2223,15 +2232,7 @@ mod tests {
 
     #[test]
     fn test_size_ord() {
-        assert!(
-            Size {
-                width: 1,
-                height: 2
-            } < Size {
-                width: 2,
-                height: 1
-            }
-        );
+        assert!(Size::new(1, 2) < Size::new(2, 1));
     }
 
     // --- New tests for multi-layer API ---

@@ -14,8 +14,12 @@
 //! can't produce. See [`wasm_entry!`](crate::wasm_entry) for that part.
 
 #[cfg(any(feature = "crossterm", feature = "software", feature = "gl"))]
-use retroglyph_core::{App, Flow};
+use retroglyph_core::{App, Flow, PerfOverlayApp};
 use retroglyph_core::{Backend, Frame, Terminal};
+#[cfg(any(feature = "crossterm", feature = "software", feature = "gl"))]
+use retroglyph_widgets::Widget as _;
+#[cfg(feature = "crossterm")]
+use std::rc::Rc;
 use std::time::Duration;
 
 /// A runnable example: `init` builds the state once, `tick` advances and
@@ -119,7 +123,8 @@ pub trait Example: Default + Sized + 'static {
     /// instead of counting raw `tick` calls -- see `06_layers.rs`.
     ///
     /// Draws only -- it does **not** call [`Terminal::present`]. The shared driver presents after
-    /// `tick` returns, so it can stamp the [FPS overlay](crate::fps) on top first. Mirrors
+    /// `tick` returns, so it can stamp the perf overlay (a [`PerfOverlayApp`] wrapping this
+    /// adapter) on top first. Mirrors
     /// [`App::update`](retroglyph_core::App::update)'s combined
     /// input-then-draw shape deliberately (rather than splitting into
     /// separate `handle_events`/`draw` trait methods) so `Example` stays a
@@ -135,22 +140,14 @@ pub trait Example: Default + Sized + 'static {
 /// first frame so the same adapter works for both the blocking (crossterm)
 /// driver and the inverted (software) driver.
 ///
-/// Only referenced by [`run_software`]/[`run_crossterm`]; with neither
-/// feature enabled (the headless-stdout fallback), nothing constructs one.
+/// Carries no perf-overlay state of its own: every [`run_software`]/[`run_gl`]/[`run_crossterm`]
+/// wraps this in a [`PerfOverlayApp`], which owns the toggle key, the frame-time bookkeeping, and
+/// drawing the readout on top -- generically, the same way on every backend. See that type's docs
+/// for why this needed no bespoke per-backend plumbing here beyond the wasm floating button (see
+/// [`WasmToggleApp`]).
 #[cfg(any(feature = "crossterm", feature = "software", feature = "gl"))]
 struct ExampleApp<E> {
     state: Option<E>,
-    /// Backend label for the FPS overlay ("software"/"gl"/"crossterm").
-    backend_name: &'static str,
-    /// Smoothed frame-timing state and visibility for the FPS overlay.
-    fps: crate::fps::Fps,
-    /// Scratch buffer for [`intercept_overlay_keys`]'s pass-through events, reused across frames
-    /// so the interception doesn't allocate on every frame that has input.
-    passthrough: Vec<retroglyph_core::event::Event>,
-    /// Toggle presses swallowed at the source by a [`ToggleFilter`](crate::fps::ToggleFilter).
-    /// Always empty unless [`run_crossterm`] installed one; see that filter for why crossterm
-    /// needs it and the windowed backends don't.
-    filtered_toggles: crate::fps::TogglePresses,
     /// Multiplier applied to [`Frame::delta`] before the example sees it, from
     /// [`time_scale`]. `1.0` for an ordinary run.
     time_scale: f64,
@@ -194,51 +191,10 @@ fn scale_from_env(value: Option<&str>) -> f64 {
 
 #[cfg(any(feature = "crossterm", feature = "software", feature = "gl"))]
 impl<E> ExampleApp<E> {
-    fn new(backend_name: &'static str) -> Self {
+    fn new() -> Self {
         Self {
             state: None,
-            backend_name,
-            fps: crate::fps::Fps::new(crate::fps::starts_visible()),
-            passthrough: Vec::new(),
-            filtered_toggles: crate::fps::TogglePresses::default(),
             time_scale: time_scale(),
-        }
-    }
-
-    /// Consumes the [FPS overlay's toggle key](crate::fps::is_toggle_key) out of this frame's
-    /// pending input, and hands everything else straight back.
-    ///
-    /// The overlay is the driver's, not the example's, so its key has to be handled here -- but
-    /// there's no non-destructive way to look at the queue ([`Terminal`] buffers exactly one
-    /// event and won't hand it back, and [`App`] has no event hook), so "look at it" means drain
-    /// it and re-push what wasn't ours. Order is preserved: the drain empties both the terminal's
-    /// one-event buffer and the backend's queue, so re-pushing to the back of an empty queue puts
-    /// everything back in the order it arrived, still ahead of anything that lands later.
-    ///
-    /// This is why [`Input::push_event`](retroglyph_core::Input::push_event) has to actually work
-    /// on every backend an example runs on. It didn't on crossterm until it grew a pushback queue
-    /// of its own; the trait default silently drops, which here would have eaten every keystroke.
-    ///
-    /// Draining the queue only catches keys that were already waiting when the frame started,
-    /// which is every key the example can see on the windowed backends and *not* on crossterm --
-    /// [`ToggleFilter`](crate::fps::ToggleFilter) covers the difference, and this folds in what it
-    /// swallowed.
-    fn intercept_overlay_keys<B: Backend>(&mut self, term: &mut Terminal<B>) {
-        self.passthrough.clear();
-        self.passthrough.extend(term.drain_events());
-
-        let mut toggles = self.filtered_toggles.take();
-        self.passthrough.retain(|event| {
-            let is_toggle = crate::fps::is_toggle_key(event);
-            toggles += usize::from(is_toggle);
-            !is_toggle
-        });
-        for _ in 0..toggles {
-            self.fps.toggle();
-        }
-
-        for event in self.passthrough.drain(..) {
-            term.backend_mut().push_event(event);
         }
     }
 }
@@ -246,10 +202,9 @@ impl<E> ExampleApp<E> {
 #[cfg(any(feature = "crossterm", feature = "software", feature = "gl"))]
 impl<B: Backend, E: Example> App<B> for ExampleApp<E> {
     fn update(&mut self, term: &mut Terminal<B>, frame: &Frame) -> Flow {
-        self.intercept_overlay_keys(term);
         let state = self.state.get_or_insert_with(|| E::init(term));
-        // Scaled for the example, real for the overlay below: the FPS readout reports how fast
-        // this loop is actually running, which `RG_TIME_SCALE` does not change.
+        // Scaled for the example; the `PerfOverlayApp` wrapping this reports on real time, which
+        // `RG_TIME_SCALE` does not change.
         let scaled = Frame {
             delta: frame.delta.mul_f64(self.time_scale),
             frame: frame.frame,
@@ -262,11 +217,81 @@ impl<B: Backend, E: Example> App<B> for ExampleApp<E> {
             // exit, matching the old contract where `tick` presented only when it actually drew.
             return Flow::Exit;
         }
-        // The driver presents automatically after `update` returns, so the FPS overlay (a top
-        // layer) is stamped after the example's draw and survives to the flush.
-        self.fps.tick(frame.delta);
-        self.fps.draw(&mut term.surface(), self.backend_name);
         Flow::Continue
+    }
+}
+
+/// Wraps `inner` in a [`PerfOverlayApp`] configured the same way for every backend: visible per
+/// `RG_FPS` (see [`crate::fps::starts_visible`]), and cycling into a richer
+/// `retroglyph-widgets`-composed [`Full`](retroglyph_core::PerfOverlayMode::Full) mode -- a
+/// bordered panel with a frame-time sparkline, via [`retroglyph_widgets::PerfOverlay`] -- on top
+/// of the built-in [`Compact`](retroglyph_core::PerfOverlayMode::Compact) readout. One toggle key
+/// press now cycles `Off -> Compact -> Full -> Off` for every example in the gallery; see
+/// [`PerfOverlayApp::cycle_with`] for why this needs no per-example wiring.
+#[cfg(any(feature = "crossterm", feature = "software", feature = "gl"))]
+fn perf_overlay_app<E: Example>(
+    inner: ExampleApp<E>,
+    backend: &'static str,
+) -> PerfOverlayApp<ExampleApp<E>> {
+    PerfOverlayApp::new(inner, backend)
+        .visible(crate::fps::starts_visible())
+        .cycle_with(
+            retroglyph_core::Size::new(46, 6),
+            |stats, backend, area, surface| {
+                retroglyph_widgets::PerfOverlay::new(stats)
+                    .backend(backend)
+                    .render(area, surface);
+            },
+        )
+}
+
+/// Adds the wasm floating toggle button on top of a [`PerfOverlayApp`]-wrapped [`ExampleApp`] --
+/// the browser counterpart to the overlay's built-in backtick/F1 key, for the windowed backends
+/// (a real key the page reliably owns doesn't exist on wasm the way it does natively).
+///
+/// A plain pass-through everywhere else: the click-detection body below only compiles in on
+/// `wasm32` with a windowed backend enabled, so this wrapper costs nothing on native or on the
+/// crossterm/headless backends (neither of which uses it).
+#[cfg(any(feature = "software", feature = "gl"))]
+struct WasmToggleApp<E: Example> {
+    inner: PerfOverlayApp<ExampleApp<E>>,
+}
+
+#[cfg(any(feature = "software", feature = "gl"))]
+impl<B: Backend, E: Example> App<B> for WasmToggleApp<E> {
+    fn update(&mut self, term: &mut Terminal<B>, frame: &Frame) -> Flow {
+        #[cfg(target_arch = "wasm32")]
+        {
+            crate::fps::wasm_toggle::ensure_button();
+            if crate::fps::wasm_toggle::take_toggle_request() {
+                self.inner.toggle();
+            }
+        }
+        self.inner.update(term, frame)
+    }
+}
+
+/// Applies [`ToggleFilter`](crate::fps::ToggleFilter)-swallowed toggle presses to a
+/// [`PerfOverlayApp`]-wrapped [`ExampleApp`], for crossterm.
+///
+/// The [`ToggleFilter`](crate::fps::ToggleFilter) itself intercepts the toggle key one layer
+/// below `Terminal` (inside the raw backend's `Input::poll_event`) to avoid a race with the
+/// example's own `drain_events` -- see that type's docs. It can only *count* presses, not flip
+/// `PerfOverlayApp`'s visibility directly (it wraps the backend, not the app), so this applies
+/// whatever it counted each frame before delegating.
+#[cfg(feature = "crossterm")]
+struct CrosstermToggleApp<E: Example> {
+    inner: PerfOverlayApp<ExampleApp<E>>,
+    presses: crate::fps::TogglePresses,
+}
+
+#[cfg(feature = "crossterm")]
+impl<B: Backend, E: Example> App<B> for CrosstermToggleApp<E> {
+    fn update(&mut self, term: &mut Terminal<B>, frame: &Frame) -> Flow {
+        for _ in 0..self.presses.take() {
+            self.inner.toggle();
+        }
+        self.inner.update(term, frame)
     }
 }
 
@@ -345,7 +370,9 @@ pub fn run_software_with<E: Example>(builder: retroglyph_software::SoftwareBacke
         .expect("failed to build headless renderer");
     let config = retroglyph_window::winit::WindowConfig::fit(&renderer, E::NAME, TARGET_FPS, false)
         .fill_viewport(E::fill_viewport());
-    let app = ExampleApp::<E>::new("software");
+    let app = WasmToggleApp::<E> {
+        inner: perf_overlay_app(ExampleApp::<E>::new(), "software"),
+    };
     retroglyph_window::winit::run_app(config, renderer, app).expect("event loop failed");
 }
 
@@ -378,7 +405,9 @@ pub fn run_gl<E: Example>() {
     .expect("failed to initialize gl backend");
     let config = retroglyph_window::winit::WindowConfig::fit(&renderer, E::NAME, TARGET_FPS, false)
         .fill_viewport(E::fill_viewport());
-    let app = ExampleApp::<E>::new("gl");
+    let app = WasmToggleApp::<E> {
+        inner: perf_overlay_app(ExampleApp::<E>::new(), "gl"),
+    };
     retroglyph_window::winit::run_app(config, renderer, app).expect("event loop failed");
 }
 
@@ -392,14 +421,17 @@ pub fn run_gl<E: Example>() {
 /// running.
 #[cfg(feature = "crossterm")]
 pub fn run_crossterm<E: Example>() -> std::io::Result<()> {
-    // Not `Crossterm::run`, which builds the `Terminal` itself: the backend has to be wrapped in
-    // a `ToggleFilter` before the terminal sees it, or the overlay's toggle key races the
-    // example's own `drain_events` and gets swallowed. See `ToggleFilter`.
-    let app = ExampleApp::<E>::new("crossterm");
-    let filter = crate::fps::ToggleFilter::new(
-        retroglyph_crossterm::Crossterm::new()?,
-        std::rc::Rc::clone(&app.filtered_toggles),
-    );
+    // The backend has to be wrapped in a `ToggleFilter` before the `Terminal` sees it, or the
+    // overlay's toggle key races the example's own `drain_events` and gets swallowed -- see
+    // `ToggleFilter`'s docs for why crossterm specifically needs this and the windowed backends
+    // don't.
+    let presses = crate::fps::TogglePresses::default();
+    let filter =
+        crate::fps::ToggleFilter::new(retroglyph_crossterm::Crossterm::new()?, Rc::clone(&presses));
+    let app = CrosstermToggleApp {
+        inner: perf_overlay_app(ExampleApp::<E>::new(), "crossterm"),
+        presses,
+    };
     retroglyph_core::run_blocking(Terminal::new(filter), app)
 }
 
@@ -451,6 +483,94 @@ pub fn render_headless_frames<E: Example>(frames: u32) -> Vec<String> {
         views.push(term.backend().format_view());
     }
     views
+}
+
+/// Test-only: drives `E` through the [`PerfOverlayApp`]-wrapped harness.
+///
+/// Runs against a headless (no window) software renderer, so a caller can snapshot the perf
+/// overlay exactly as the real harness (the same one [`run_software`] uses) draws it -- unlike
+/// [`render_headless_frames`]/`support::png_snapshot`, which both drive `E::tick` directly and so
+/// never show the overlay at all.
+///
+/// Runs `settle_frames` plain frames first (so [`retroglyph_core::FrameStats`] has real samples
+/// for a sparkline-drawing renderer to show), then one synthetic toggle-key press per frame for
+/// `toggles` more frames (`PerfOverlayApp`'s toggle key cycles `Off -> Compact -> Full -> Off`;
+/// see [`retroglyph_core::PerfOverlayMode`]), then presents once. Returns `(width, height,
+/// interleaved RGB bytes)`, the same shape `support::png_snapshot` PNG-encodes -- this function
+/// stays free of an `image` dependency (a dev-dependency of the `tests/` binaries, not of this
+/// library) by leaving the actual encoding to the caller.
+///
+/// # Panics
+///
+/// Panics if the software backend fails to initialize.
+#[cfg(all(feature = "software", not(target_arch = "wasm32")))]
+#[must_use]
+pub fn render_perf_overlay_rgb<E: Example>(
+    cols: u16,
+    rows: u16,
+    scale: u8,
+    settle_frames: u32,
+    toggles: u32,
+) -> (u32, u32, Vec<u8>) {
+    use retroglyph_core::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+    use retroglyph_window::Presenter;
+
+    let renderer = E::configure_software(
+        retroglyph_software::SoftwareBackendBuilder::new()
+            .grid_size(cols, rows)
+            .scale(scale),
+    )
+    .build()
+    .expect("software backend init")
+    .run_headless()
+    .expect("headless renderer init");
+
+    // Read the pixel-buffer geometry before handing `renderer` to `Terminal` (which owns it from
+    // here): cols/rows in cells x the presenter's own reported cell size in pixels -- the same
+    // approach `support::png_snapshot` uses.
+    let (cell_w, cell_h) = renderer.cell_size();
+    let width = u32::from(cols) * cell_w;
+    let height = u32::from(rows) * cell_h;
+
+    let mut term = Terminal::new(renderer);
+    let mut app = perf_overlay_app(ExampleApp::<E>::new(), "software");
+
+    let mut frame_n = 0u64;
+    let mut tick = |app: &mut PerfOverlayApp<ExampleApp<E>>, term: &mut Terminal<_>| {
+        // A varying synthetic delta, not a flat constant like `HEADLESS_FRAME_DELTA`: every
+        // sample landing at the same value would give a sparkline-drawing renderer nothing to
+        // show (every bar the same maxed-out height and color) and a static fps/min/max readout,
+        // neither of which is representative of what this overlay looks like in a real run.
+        #[allow(clippy::cast_precision_loss)] // `frame_n` is display-jitter phase, not a count.
+        let phase = frame_n as f64 * 0.35;
+        let millis = 10.0f64.mul_add(phase.sin(), 16.0);
+        let frame = Frame {
+            delta: Duration::from_secs_f64(millis / 1000.0),
+            frame: frame_n,
+        };
+        frame_n += 1;
+        let _ = App::update(app, term, &frame);
+    };
+
+    for _ in 0..settle_frames {
+        tick(&mut app, &mut term);
+    }
+    for _ in 0..toggles {
+        term.backend_mut().push_event(Event::Key(KeyEvent::new(
+            KeyCode::Char('`'),
+            KeyModifiers::NONE,
+        )));
+        tick(&mut app, &mut term);
+    }
+    term.present().ok();
+
+    let mut rgb = Vec::with_capacity(term.backend().pixels().len() * 3);
+    for &p in term.backend().pixels() {
+        rgb.push(((p >> 16) & 0xff) as u8);
+        rgb.push(((p >> 8) & 0xff) as u8);
+        rgb.push((p & 0xff) as u8);
+    }
+    (width, height, rgb)
 }
 
 /// Fallback `main` body when neither `crossterm` nor `software` is enabled:

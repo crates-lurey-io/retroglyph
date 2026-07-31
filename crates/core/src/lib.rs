@@ -82,9 +82,13 @@ pub mod dev;
 pub mod event;
 /// Fixed-timestep accumulator for game loops.
 pub mod frame_clock;
+/// Rolling frame-time statistics for a live perf/FPS overlay.
+pub mod frame_stats;
 pub mod grid;
 #[cfg(feature = "egc")]
 pub mod layout;
+/// A live frame-time/FPS overlay: [`PerfOverlayApp`] wraps any [`App`] with one, on any [`Backend`].
+pub mod perf_overlay;
 pub mod style;
 pub mod subcell;
 /// The one grid-drawing primitive: an area-clipped, single-layer view over a [`Grid`].
@@ -109,11 +113,16 @@ pub use event::{
     MouseEvent, MouseEventKind, PhysicalPos, SystemTheme,
 };
 pub use frame_clock::FrameClock;
+pub use frame_stats::FrameStats;
 #[cfg(feature = "color-space")]
 pub use grid::BlendMode;
 pub use grid::{Grid, Offset, Pos, Rect, Size};
 #[cfg(feature = "egc")]
 pub use layout::{HAlign, TextLayout, TextMetrics, VAlign};
+pub use perf_overlay::{
+    DEFAULT_LAYER, DefaultPerfRenderer, FRAME_HISTORY, PerfOverlayApp, PerfOverlayMode,
+    PerfRenderer, default_is_toggle_key,
+};
 pub use style::Style;
 pub use subcell::{Glyph, quantize_half_block, quantize_quadrant, quantize_sextant};
 pub use surface::{StyledSurface, Surface};

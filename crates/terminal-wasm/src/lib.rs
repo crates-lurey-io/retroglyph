@@ -239,7 +239,7 @@ impl TerminalWasm {
     pub const fn new(width: u16, height: u16) -> Self {
         Self {
             renderer: TerminalRenderer::new(Utf8Sink(String::new())),
-            size: Size { width, height },
+            size: Size::new(width, height),
             event_queue: VecDeque::new(),
         }
     }
@@ -750,7 +750,7 @@ pub mod wasm {
         use retroglyph_core::grid::Size;
         INSTANCES.with_borrow_mut(|instances| {
             if let Some(term) = instances.get_mut(&handle) {
-                term.resize(Size { width, height });
+                term.resize(Size::new(width, height));
             } else {
                 log::warn!("wasm_terminal_resize: unknown handle {handle}");
             }
@@ -1005,24 +1005,9 @@ mod tests {
     #[test]
     fn size_is_set_externally_not_queried() {
         let mut backend = TerminalWasm::new(80, 24);
-        assert_eq!(
-            backend.size(),
-            Size {
-                width: 80,
-                height: 24
-            }
-        );
-        backend.resize(Size {
-            width: 40,
-            height: 12,
-        });
-        assert_eq!(
-            backend.size(),
-            Size {
-                width: 40,
-                height: 12
-            }
-        );
+        assert_eq!(backend.size(), Size::new(80, 24));
+        backend.resize(Size::new(40, 12));
+        assert_eq!(backend.size(), Size::new(40, 12));
     }
 
     #[test]

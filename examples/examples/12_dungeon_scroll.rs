@@ -124,13 +124,7 @@ pub struct DungeonScroll {
 impl Default for DungeonScroll {
     fn default() -> Self {
         let player = Pos::new(START.0, START.1);
-        let mut camera = Camera::new(
-            Rect::new(0, 1, 50, 24),
-            Size {
-                width: WORLD_W,
-                height: WORLD_H,
-            },
-        );
+        let mut camera = Camera::new(Rect::new(0, 1, 50, 24), Size::new(WORLD_W, WORLD_H));
         camera.center_on(player);
         Self {
             world: build_world(),

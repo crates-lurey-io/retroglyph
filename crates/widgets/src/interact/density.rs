@@ -39,14 +39,8 @@ impl Density {
     #[must_use]
     pub const fn min_target_size(self) -> Size {
         match self {
-            Self::Compact => Size {
-                width: 6,
-                height: 3,
-            },
-            Self::Relaxed => Size {
-                width: 6,
-                height: 1,
-            },
+            Self::Compact => Size::new(6, 3),
+            Self::Relaxed => Size::new(6, 1),
         }
     }
 }
@@ -59,12 +53,12 @@ mod tests {
     fn compact_rows_are_taller_than_relaxed_for_touch_targets() {
         let compact = Density::Compact.min_target_size();
         let relaxed = Density::Relaxed.min_target_size();
-        assert!(compact.height > relaxed.height);
+        assert!(compact.height() > relaxed.height());
     }
 
     #[test]
     fn relaxed_still_claims_more_than_a_single_cell_wide() {
         let size = Density::Relaxed.min_target_size();
-        assert!(size.width > 1);
+        assert!(size.width() > 1);
     }
 }

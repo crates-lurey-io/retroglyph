@@ -45,6 +45,8 @@ mod wasm_entry;
 pub use launch::{Example, HEADLESS_FRAME_DELTA, render_headless_frames};
 
 pub use launch::launch;
+#[cfg(all(feature = "software", not(target_arch = "wasm32")))]
+pub use launch::render_perf_overlay_rgb;
 #[cfg(feature = "crossterm")]
 pub use launch::run_crossterm;
 #[cfg(feature = "gl")]

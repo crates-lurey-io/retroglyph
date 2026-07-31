@@ -29,6 +29,7 @@ mod modal;
 mod panel;
 #[cfg(feature = "egc")]
 mod paragraph;
+mod perf_overlay;
 mod print_line;
 mod progress_bar;
 mod scrollbar;
@@ -49,6 +50,7 @@ pub use modal::Modal;
 pub use panel::Panel;
 #[cfg(feature = "egc")]
 pub use paragraph::Paragraph;
+pub use perf_overlay::PerfOverlay;
 pub use print_line::PrintLine;
 pub use progress_bar::ProgressBar;
 pub use scrollbar::Scrollbar;
