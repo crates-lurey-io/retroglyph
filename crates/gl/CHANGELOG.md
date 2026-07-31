@@ -11,38 +11,33 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 ### Features
 
-- [f28b8a5](
-https://github.com/crates-lurey-io/retroglyph/commit/f28b8a557c404021cfbb6d8916edc14ad6e9cfcc) *(workspace)* Add a reusable, toggleable perf/FPS overlay across every backend by `@matanlurey` in [#589](
-https://github.com/crates-lurey-io/retroglyph/pull/589)
+- [f28b8a5](https://github.com/crates-lurey-io/retroglyph/commit/f28b8a557c404021cfbb6d8916edc14ad6e9cfcc)
+  _(workspace)_ Add a reusable, toggleable perf/FPS overlay across every backend by `@matanlurey` in
+  [#589](https://github.com/crates-lurey-io/retroglyph/pull/589)
 
-  > Replaces per-backend, per-example FPS overlay plumbing with a generic
-  > PerfOverlayApp<A> decorator (retroglyph-core) that wraps any App<B> and
-  > draws itself on top, on any Backend, with no per-backend code from the
-  > wrapped app. Toggling a key cycles Off -> Compact -> Full -> Off
-  > (PerfOverlayMode); Compact is a built-in dependency-free text readout
-  > (DefaultPerfRenderer), Full is pluggable via a closure or a type
-  > implementing PerfRenderer.
+  > Replaces per-backend, per-example FPS overlay plumbing with a generic PerfOverlayApp<A>
+  > decorator (retroglyph-core) that wraps any App<B> and draws itself on top, on any Backend, with
+  > no per-backend code from the wrapped app. Toggling a key cycles Off -> Compact -> Full -> Off
+  > (PerfOverlayMode); Compact is a built-in dependency-free text readout (DefaultPerfRenderer),
+  > Full is pluggable via a closure or a type implementing PerfRenderer.
   >
   > - retroglyph-core: FrameStats<N> (a fixed-size Duration ring buffer with
-  >   current/avg/min/max/fps), PerfOverlayApp/PerfOverlayMode/PerfRenderer/
-  >   DefaultPerfRenderer, and Size gets a proper constructor + width()/
-  >   height() accessors (its fields are now private).
-  > - retroglyph-widgets: PerfOverlay, a bordered panel composed from Panel/
-  >   Sparkline/Text with a frame-time sparkline and caller-supplied metric
-  >   rows; Sparkline gains an optional fixed .style() override so a
-  >   scrolling frame-time graph doesn't get colored by a relative-to-window
+  >   current/avg/min/max/fps), PerfOverlayApp/PerfOverlayMode/PerfRenderer/ DefaultPerfRenderer,
+  >   and Size gets a proper constructor + width()/ height() accessors (its fields are now private).
+  > - retroglyph-widgets: PerfOverlay, a bordered panel composed from Panel/ Sparkline/Text with a
+  >   frame-time sparkline and caller-supplied metric rows; Sparkline gains an optional fixed
+  >   .style() override so a scrolling frame-time graph doesn't get colored by a relative-to-window
   >   ramp that would misrepresent it.
-  > - retroglyph-examples: the shared harness (launch.rs) now wraps every
-  >   example's App in PerfOverlayApp, replacing the old bespoke per-backend
-  >   Fps/ToggleFilter plumbing (examples/src/fps.rs slimmed down to just the
-  >   RG_FPS env var and the wasm floating toggle button). Every example in
-  >   the gallery gets the overlay for free.
-  > - Tests: unit tests for FrameStats/PerfOverlayApp/PerfOverlay/Sparkline,
-  >   plus examples/tests/fps_overlay.rs end-to-end PTY coverage and
-  >   deterministic PNG snapshots of both Compact and Full mode.
+  > - retroglyph-examples: the shared harness (launch.rs) now wraps every example's App in
+  >   PerfOverlayApp, replacing the old bespoke per-backend Fps/ToggleFilter plumbing
+  >   (examples/src/fps.rs slimmed down to just the RG_FPS env var and the wasm floating toggle
+  >   button). Every example in the gallery gets the overlay for free.
+  > - Tests: unit tests for FrameStats/PerfOverlayApp/PerfOverlay/Sparkline, plus
+  >   examples/tests/fps_overlay.rs end-to-end PTY coverage and deterministic PNG snapshots of both
+  >   Compact and Full mode.
 
-**Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-gl-v0.2.0...retroglyph-gl-v0.2.1
-
+**Full Changelog**:
+https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-gl-v0.2.0...retroglyph-gl-v0.2.1
 
 ## [0.2.0+retroglyph-gl](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-gl-v0.1.0...retroglyph-gl-v0.2.0) - 2026-07-28
 
