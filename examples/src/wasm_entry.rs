@@ -258,7 +258,7 @@ macro_rules! __wasm_terminal_entry {
                     if let ::std::option::Option::Some(s) = cell.borrow_mut().as_mut() {
                         ::retroglyph_core::backend::Output::resize(
                             s.term.backend_mut(),
-                            ::retroglyph_core::grid::Size { width, height },
+                            ::retroglyph_core::grid::Size::new(width, height),
                         );
                     }
                 });
