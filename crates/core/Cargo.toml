@@ -34,6 +34,10 @@ gem = { version = "0.2", default-features = false }
 # what's one capability to callers.
 alpha-blend = { version = "0.3", optional = true, default-features = false }
 ixy = "0.6.0-alpha.9"
+# `Color`'s `serde` impls (see color.rs) are hand-written against its own `Display`/`FromStr`, so
+# they need only the `derive` feature for `Style`/`Size`'s plain `#[derive(Serialize, Deserialize)]`
+# below -- no `alloc` feature, since nothing here deserializes into an owned `String`/`Vec`.
+serde = { version = "1", default-features = false, features = ["derive"], optional = true }
 # Pure-Rust sin/cos/pow for `animate`'s trig-based easing curves and its oscillator -- unlike
 # `gem`'s libm usage (internal to its own color-space math, not reusable here), this is a plain,
 # always-on dependency: no_std-compatible on its own, so no std/libm feature split is needed the
@@ -70,6 +74,14 @@ color-space = ["gem/libm", "dep:alpha-blend", "alpha-blend/libm"]
 # + `alloc` compatible (no `std` dependency), off by default so it never ships in a release build
 # by accident.
 testing = []
+# `Serialize`/`Deserialize` for `Color`, `Style`, `Size`, and (via `ixy`, which already ships its
+# own `serde` feature) `Pos`/`Rect` -- so a config file can round-trip a saved camera position,
+# window geometry, or theme color without an app hand-rolling a mirror type first (retroglyph#609).
+# `Color` serializes through its `Display`/`FromStr` round trip (e.g. `"bright-red"`, `"#ff8000"`)
+# rather than a derived structural form, so hand-edited TOML/JSON stays legible and isn't coupled
+# to the enum's variant shape. Off by default: most consumers never persist these types, and this
+# keeps `serde` out of the dependency tree until they do.
+serde = ["dep:serde", "ixy/serde"]
 
 [dev-dependencies]
 unicode-width = "0.2"
@@ -77,6 +89,10 @@ insta = { version = "1.34", features = ["yaml"] }
 proptest = "1"
 criterion = "0.5"
 fastrand = "2"
+# `Color`'s `#[cfg(feature = "serde")]` round-trip tests in color.rs. A plain dev-dependency (not
+# gated on the `serde` feature) is fine: dev-dependencies never reach the published dependency
+# tree, and the tests that use it are themselves `#[cfg(feature = "serde")]`.
+serde_json = "1"
 # Non-optional here even though it's also an optional normal dependency (Cargo unifies the two):
 # `tests/rounding_conformance.rs` checks gem and alpha-blend agree on the shared round-to-nearest
 # invariant (retroglyph#547), and needs to run on every CI invocation regardless of which features
