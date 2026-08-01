@@ -283,26 +283,36 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
     /// what happened to it, resolved from *last* frame's input: see the
     /// [`Interaction`] docs for the frame lifecycle this implies.
     pub fn interact(&mut self, rect: Rect, id: Id, sense: Sense) -> Response {
+        // `DISABLED` is a modifier, not a capability: it never changes what
+        // gets hit-tested (so `hovered` keeps working), only what gets
+        // registered with `FocusRing` and what `Response` reports back.
+        let disabled = sense.is_disabled();
+
         if sense.wants_pointer() {
             self.hits.push(rect, id);
         }
-        if sense.contains(Sense::FOCUSABLE) {
+        if sense.contains(Sense::FOCUSABLE) && !disabled {
             self.focus.register(id);
         }
 
         let hovered = sense.wants_pointer() && self.resolved_hover == Some(id);
         let is_active = self.active == Some(id);
-        let senses_click = sense.contains(Sense::CLICK);
-        let key_activated = senses_click
-            && sense.contains(Sense::FOCUSABLE)
-            && self.focus.is_focused(id)
-            && self.activate_focused;
-        let released_here = is_active && self.resolved_release;
+        let senses_click = sense.contains(Sense::CLICK) && !disabled;
+        let is_focused = !disabled && self.focus.is_focused(id);
+        let key_activated =
+            senses_click && sense.contains(Sense::FOCUSABLE) && is_focused && self.activate_focused;
+        // `is_active` is assigned from `resolved_hover` alone in `begin_frame`,
+        // independent of `sense`, so a disabled widget can still become
+        // "active" merely by being topmost at press time even though it
+        // never asked for `CLICK`: `!disabled` is threaded through explicitly
+        // here rather than relying on `senses_click` alone.
+        let released_here = is_active && self.resolved_release && !disabled;
         // Deliberately not gated on `self.pointer.is_down()`: the release
         // frame (where `is_down` just went false) must still see `dragging
         // == true` so `clicked` below correctly stays suppressed for a
         // drag's terminating release, not just the frames in between.
-        let dragging = is_active && sense.contains(Sense::DRAG) && self.past_drag_threshold();
+        let dragging =
+            is_active && sense.contains(Sense::DRAG) && !disabled && self.past_drag_threshold();
 
         // Live re-check, deliberately not gated on `hovered`/`resolved_hover` the way `pressed`
         // is: those are resolved from *last* frame's hit-test snapshot (see the `Interaction`
@@ -341,19 +351,21 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
         // comment).
         let secondary_is_active = self.secondary_active == Some(id);
         let secondary_clicked = sense.contains(Sense::SECONDARY_CLICK)
+            && !disabled
             && secondary_is_active
             && self.resolved_secondary_release
             && hovered;
 
         Response {
             hovered,
-            pressed: (is_active && self.resolved_press) || key_activated,
+            pressed: (is_active && self.resolved_press && !disabled) || key_activated,
             released: released_here || key_activated,
             clicked: (senses_click && released_here && hovered && !dragging) || key_activated,
             held,
             dragging,
-            focused: self.focus.is_focused(id),
+            focused: is_focused,
             secondary_clicked,
+            disabled,
             scroll_delta: if scrollable_here {
                 self.resolved_scroll
             } else {
@@ -791,5 +803,138 @@ mod tests {
 
         let (save, _) = frame(&mut interaction);
         assert!(!save.secondary_clicked()); // not sensed, so never reported
+    }
+
+    fn frame_disabled(interaction: &mut Interaction<Id>) -> Response {
+        interaction.begin_frame();
+        let save = interaction.interact(
+            Rect::new(0, 0, 5, 1),
+            Id::Save,
+            Sense::click() | Sense::SECONDARY_CLICK | Sense::DISABLED,
+        );
+        interaction.end_frame();
+        save
+    }
+
+    #[test]
+    fn disabled_widget_never_reports_click_press_or_held() {
+        let mut interaction = Interaction::<Id>::new();
+        let _ = frame_disabled(&mut interaction); // frame 1: registers Save
+
+        interaction.handle_event(&Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            position: Pos::new(2, 0), // over Save
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        }));
+        let save = frame_disabled(&mut interaction); // frame 2: press resolves
+        assert!(!save.pressed());
+        assert!(!save.held());
+
+        interaction.handle_event(&Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Up(MouseButton::Left),
+            position: Pos::new(2, 0),
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        }));
+        let save = frame_disabled(&mut interaction); // frame 3: release resolves
+        assert!(!save.released());
+        assert!(!save.clicked());
+    }
+
+    #[test]
+    fn disabled_widget_still_reports_hover() {
+        let mut interaction = Interaction::<Id>::new();
+        let _ = frame_disabled(&mut interaction);
+
+        interaction.handle_event(&Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Moved,
+            position: Pos::new(2, 0), // over Save
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        }));
+
+        let save = frame_disabled(&mut interaction);
+        assert!(save.hovered()); // hit-testing keeps working while disabled
+    }
+
+    #[test]
+    fn disabled_widget_never_reports_secondary_click() {
+        let mut interaction = Interaction::<Id>::new();
+        let _ = frame_disabled(&mut interaction);
+        right_click_at(&mut interaction, Pos::new(2, 0));
+
+        let save = frame_disabled(&mut interaction);
+        assert!(!save.secondary_clicked());
+    }
+
+    #[test]
+    fn disabled_widget_is_skipped_by_focus_ring() {
+        let mut interaction = Interaction::<Id>::new();
+
+        // Frame 1: register Save (disabled) and Cancel (enabled) for the
+        // *next* frame's Tab order, mirroring `tab_focuses_then_enter_activates_without_any_pointer`.
+        interaction.begin_frame();
+        let _ = interaction.interact(
+            Rect::new(0, 0, 5, 1),
+            Id::Save,
+            Sense::click() | Sense::DISABLED,
+        );
+        let _ = interaction.interact(Rect::new(6, 0, 5, 1), Id::Cancel, Sense::click());
+        interaction.end_frame();
+
+        let tab = Event::Key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+        interaction.begin_frame(); // finalizes frame 1's registrations into the Tab order
+        interaction.handle_event(&tab);
+        // Save is registered nowhere in that order while disabled, so the
+        // first Tab lands directly on Cancel.
+        assert_eq!(interaction.focus().focused(), Some(Id::Cancel));
+    }
+
+    #[test]
+    fn disabling_a_focused_widget_clears_its_response_and_self_heals_on_the_next_tab() {
+        let mut interaction = Interaction::<Id>::new();
+        let _ = frame(&mut interaction); // frame 1: registers Save/Cancel, both focusable
+
+        let tab = Event::Key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+        let (save, _) = frame_with_events(&mut interaction, &[tab]);
+        assert!(save.focused()); // Save now holds focus
+
+        // frame 3: Save becomes disabled without focus moving anywhere else.
+        interaction.begin_frame();
+        let save = interaction.interact(
+            Rect::new(0, 0, 5, 1),
+            Id::Save,
+            Sense::click() | Sense::DISABLED,
+        );
+        let _ = interaction.interact(Rect::new(6, 0, 5, 1), Id::Cancel, Sense::click());
+        interaction.end_frame();
+        assert!(!save.focused()); // Response no longer claims focus...
+
+        // ...and the next Tab moves cleanly onto Cancel, exactly like any
+        // other stale-focus-not-in-order recovery.
+        let tab = Event::Key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+        let (_, cancel) = frame_with_events(&mut interaction, &[tab]);
+        assert!(cancel.focused());
+    }
+
+    #[test]
+    fn disabled_bit_reports_via_response_even_on_a_hover_only_sense() {
+        // `Sense::hover()` never granted click/drag/focus in the first
+        // place, so `DISABLED` here changes nothing about what's reported
+        // except `Response::disabled` itself.
+        let mut interaction = Interaction::<Id>::new();
+        interaction.begin_frame();
+        let disabled = interaction.interact(
+            Rect::new(0, 0, 5, 1),
+            Id::Save,
+            Sense::hover() | Sense::DISABLED,
+        );
+        let plain = interaction.interact(Rect::new(6, 0, 5, 1), Id::Cancel, Sense::hover());
+        interaction.end_frame();
+
+        assert!(disabled.disabled());
+        assert!(!plain.disabled());
+        assert_eq!(disabled.hovered(), plain.hovered()); // both unhovered, same either way
     }
 }

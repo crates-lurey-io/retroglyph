@@ -9,10 +9,12 @@ use core::ops::{BitOr, BitOrAssign};
 ///
 /// A manual bitflag over `u8`: mirrors
 /// [`KeyModifiers`](retroglyph_core::KeyModifiers)'s shape rather than
-/// pulling in the `bitflags` crate for five bits. Combine raw flags with
-/// `|` (`Sense::HOVER | Sense::FOCUSABLE`), or reach for one of the named
-/// constructors ([`click`](Self::click), [`drag`](Self::drag),
+/// pulling in the `bitflags` crate for a handful of bits. Combine raw flags
+/// with `|` (`Sense::HOVER | Sense::FOCUSABLE`), or reach for one of the
+/// named constructors ([`click`](Self::click), [`drag`](Self::drag),
 /// [`hover`](Self::hover), [`scroll`](Self::scroll)) for the common cases.
+/// [`DISABLED`](Self::DISABLED) is the exception: it's a modifier over an
+/// existing sense, not a capability of its own.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct Sense(u8);
 
@@ -49,6 +51,24 @@ impl Sense {
     /// press-and-release on the same widget always counts, since
     /// secondary-button drags aren't a gesture this module resolves.
     pub const SECONDARY_CLICK: Self = Self(1 << 5);
+    /// Keeps this call's hit-testing (so [`Response::hovered`](crate::Response::hovered)
+    /// still works -- most of the value of showing a disabled control at
+    /// all) but suppresses everything else this sense would otherwise
+    /// register or report: no [`FocusRing`](crate::FocusRing) registration,
+    /// and [`Response::pressed`](crate::Response::pressed),
+    /// [`released`](crate::Response::released), [`clicked`](crate::Response::clicked),
+    /// [`held`](crate::Response::held), [`dragging`](crate::Response::dragging),
+    /// [`focused`](crate::Response::focused), and
+    /// [`secondary_clicked`](crate::Response::secondary_clicked) all report
+    /// `false`, even if the gesture would otherwise satisfy them.
+    /// [`SCROLL`](Self::SCROLL) is unaffected: a disabled row inside a
+    /// scrollable list shouldn't block the list from scrolling through it.
+    ///
+    /// A modifier, not a capability of its own: combine it with an existing
+    /// sense rather than using it alone, e.g. `Sense::click() |
+    /// Sense::DISABLED`. See [`disabled_if`](Self::disabled_if) for the
+    /// common call-site shape.
+    pub const DISABLED: Self = Self(1 << 6);
     /// Senses nothing: [`interact`](crate::Interaction::interact) still
     /// registers the id nowhere and returns [`Response::default`](crate::Response).
     pub const NONE: Self = Self(0);
@@ -90,10 +110,29 @@ impl Sense {
         Self(Self::HOVER.0 | Self::SECONDARY_CLICK.0)
     }
 
+    /// `self` with [`DISABLED`](Self::DISABLED) set if `disabled` is
+    /// `true`, unchanged otherwise: the common call-site shape,
+    /// `Sense::click().disabled_if(!save_available)`, replacing what would
+    /// otherwise be a branch between two `Sense` literals.
+    #[must_use]
+    pub const fn disabled_if(self, disabled: bool) -> Self {
+        if disabled {
+            Self(self.0 | Self::DISABLED.0)
+        } else {
+            self
+        }
+    }
+
     /// `true` if every bit set in `other` is also set in `self`.
     #[must_use]
     pub const fn contains(self, other: Self) -> bool {
         (self.0 & other.0) == other.0
+    }
+
+    /// `true` if [`DISABLED`](Self::DISABLED) is set.
+    #[must_use]
+    pub const fn is_disabled(self) -> bool {
+        self.contains(Self::DISABLED)
     }
 
     /// `true` if this sense wants pointer hit-testing at all ([`HOVER`](Self::HOVER),
@@ -162,5 +201,20 @@ mod tests {
     #[test]
     fn default_is_none() {
         assert_eq!(Sense::default(), Sense::NONE);
+    }
+
+    #[test]
+    fn disabled_if_sets_the_bit_only_when_true() {
+        assert_eq!(
+            Sense::click().disabled_if(true),
+            Sense::click() | Sense::DISABLED
+        );
+        assert_eq!(Sense::click().disabled_if(false), Sense::click());
+    }
+
+    #[test]
+    fn is_disabled_reads_the_bit() {
+        assert!(!Sense::click().is_disabled());
+        assert!((Sense::click() | Sense::DISABLED).is_disabled());
     }
 }

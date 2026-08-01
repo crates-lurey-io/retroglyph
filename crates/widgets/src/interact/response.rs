@@ -25,6 +25,7 @@ pub struct Response {
     pub(crate) dragging: bool,
     pub(crate) focused: bool,
     pub(crate) secondary_clicked: bool,
+    pub(crate) disabled: bool,
     pub(crate) scroll_delta: i32,
 }
 
@@ -115,6 +116,18 @@ impl Response {
     pub const fn scroll_delta(&self) -> i32 {
         self.scroll_delta
     }
+
+    /// This widget was interacted with via a [`Sense`](crate::Sense) that
+    /// had [`Sense::DISABLED`](crate::Sense::DISABLED) set.
+    /// [`hovered`](Self::hovered) still works, so a disabled control can
+    /// show a tooltip explaining why; every other field above is `false`
+    /// (or `0`) regardless of what the pointer/keyboard did. Widgets should
+    /// read this instead of threading a parallel `enabled` bool into their
+    /// own draw call.
+    #[must_use]
+    pub const fn disabled(&self) -> bool {
+        self.disabled
+    }
 }
 
 #[cfg(test)]
@@ -132,6 +145,7 @@ mod tests {
         assert!(!r.dragging());
         assert!(!r.focused());
         assert!(!r.secondary_clicked());
+        assert!(!r.disabled());
         assert_eq!(r.scroll_delta(), 0);
     }
 }
