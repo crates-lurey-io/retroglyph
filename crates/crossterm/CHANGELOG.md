@@ -7,6 +7,28 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 
+## [0.2.2+retroglyph-crossterm](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-crossterm-v0.2.1...retroglyph-crossterm-v0.2.2) - 2026-08-01
+
+### Bug Fixes
+
+- [e02aab3](https://github.com/crates-lurey-io/retroglyph/commit/e02aab3d79b24e78831230e20eb55366d514d360)
+  _(crossterm)_ Reset SGR attributes on terminal restore by `@matanlurey` in
+  [#592](https://github.com/crates-lurey-io/retroglyph/pull/592)
+
+  > restore_terminal (shared by Drop, the panic hook, and suspend) never emitted a full SGR reset
+  > before leaving the alternate screen/disabling raw mode. The last frame's fg/bg colors and
+  > attributes stayed active as the terminal's pen state, leaking into the shell and into whatever
+  > the terminal used to paint newly erased cells the next time this process entered the alternate
+  > screen (background color erase). A per-frame blend against Color::Default compounded a little
+  > darker on every subsequent launch as a result.
+  >
+  > Adds SetAttribute(Attribute::Reset) to the always-safe part of the restore sequence, and splits
+  > that part out into write_restore_sequence<W: Write> so it's testable against an in-memory buffer
+  > instead of only observable on real stdout.
+
+**Full Changelog**:
+https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-crossterm-v0.2.1...retroglyph-crossterm-v0.2.2
+
 ## [0.2.1+retroglyph-crossterm](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-crossterm-v0.2.0...retroglyph-crossterm-v0.2.1) - 2026-07-31
 
 ### Features
