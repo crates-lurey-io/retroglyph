@@ -268,10 +268,8 @@ keypress, or `19_weighted_fill` for `Fill(weight)`'s proportional splits.
 The library is split into a `no_std` core plus per-backend crates. For a terminal app you need the
 core and the crossterm backend:
 
-```toml
-[dependencies]
-retroglyph-core = "0.1"
-retroglyph-crossterm = "0.1"
+```sh
+cargo add retroglyph-core retroglyph-crossterm
 ```
 
 ```rust,no_run
