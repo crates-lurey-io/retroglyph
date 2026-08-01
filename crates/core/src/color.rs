@@ -1,9 +1,9 @@
 //! Styling types for character cells.
 
 use alloc::string::String;
-#[cfg(feature = "color-space")]
+#[cfg(feature = "indexed-quant")]
 use gem::Mix as _;
-#[cfg(feature = "color-space")]
+#[cfg(feature = "indexed-quant")]
 use gem::space::Srgb;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -130,7 +130,7 @@ const GRAYSCALE_RAMP: [u8; 24] = [
 /// 232–255 are the grayscale ramp.
 ///
 /// Not feature-gated: [`Color::resolve_rgb`] calls it on every build, so it must always compile
-/// regardless of the `color-space` feature (the `to_indexed`-family callers below are `gem`-gated, but
+/// regardless of the `indexed-quant` feature (the `to_indexed`-family callers below are `gem`-gated, but
 /// this table lookup itself has no `gem` dependency).
 const fn indexed_to_rgb(index: u8) -> (u8, u8, u8) {
     if index < 16 {
@@ -152,7 +152,7 @@ const fn indexed_to_rgb(index: u8) -> (u8, u8, u8) {
 ///
 /// Ties (exactly halfway between two steps) round to the higher step, matching
 /// standard "round half up" arithmetic rounding on the midpoint distance.
-#[cfg(any(not(feature = "color-space"), test))]
+#[cfg(any(not(feature = "indexed-quant"), test))]
 fn nearest_cube_step(value: u8) -> u8 {
     let value = i32::from(value);
     let mut best_index = 0u8;
@@ -171,7 +171,7 @@ fn nearest_cube_step(value: u8) -> u8 {
 /// cube, grayscale ramp, and the 16 ANSI colors, breaking ties by preferring the
 /// lower index.
 ///
-/// This is the fallback used by [`Color::to_indexed`] without the `color-space` feature, and
+/// This is the fallback used by [`Color::to_indexed`] without the `indexed-quant` feature, and
 /// is always available regardless of feature flags.
 ///
 /// Checks the 16 ANSI colors, the cube's single nearest point (found by rounding each
@@ -180,7 +180,7 @@ fn nearest_cube_step(value: u8) -> u8 {
 /// finds the cube's closest point, and likewise for the single-channel grayscale ramp.
 /// Candidates are checked in ascending index order and only replace the current best
 /// on strictly smaller distance, so ties naturally resolve to the lower index.
-#[cfg(any(not(feature = "color-space"), test))]
+#[cfg(any(not(feature = "indexed-quant"), test))]
 fn cube_map_to_indexed(r: u8, g: u8, b: u8) -> u8 {
     let mut best_index = 0u8;
     let mut best_distance = u32::MAX;
@@ -225,9 +225,9 @@ fn cube_map_to_indexed(r: u8, g: u8, b: u8) -> u8 {
 /// Quantizes `(r, g, b)` to the nearest of the 16 standard ANSI colors, using
 /// euclidean RGB distance and breaking ties by preferring the lower index.
 ///
-/// This is the fallback used by [`Color::to_ansi`] without the `color-space` feature, and is
+/// This is the fallback used by [`Color::to_ansi`] without the `indexed-quant` feature, and is
 /// always available regardless of feature flags.
-#[cfg(any(not(feature = "color-space"), test))]
+#[cfg(any(not(feature = "indexed-quant"), test))]
 fn cube_map_to_ansi(r: u8, g: u8, b: u8) -> AnsiColor {
     let mut best = AnsiColor::Black;
     let mut best_distance = u32::MAX;
@@ -247,7 +247,7 @@ fn cube_map_to_ansi(r: u8, g: u8, b: u8) -> AnsiColor {
 /// Used instead of raw RGB distance because Oklab distance correlates far better with
 /// human perception of color difference (the same premise as CIEDE2000, without its
 /// extra complexity).
-#[cfg(feature = "color-space")]
+#[cfg(feature = "indexed-quant")]
 fn oklab_distance_sq(a: gem::space::Oklab, b: gem::space::Oklab) -> f32 {
     let dl = a.l - b.l;
     let da = a.a - b.a;
@@ -256,7 +256,7 @@ fn oklab_distance_sq(a: gem::space::Oklab, b: gem::space::Oklab) -> f32 {
 }
 
 /// Converts an 8-bit RGB channel triplet to Oklab.
-#[cfg(feature = "color-space")]
+#[cfg(feature = "indexed-quant")]
 fn rgb_to_oklab(r: u8, g: u8, b: u8) -> gem::space::Oklab {
     gem::space::Oklab::from(Srgb::new(
         f32::from(r) / 255.0,
@@ -267,7 +267,7 @@ fn rgb_to_oklab(r: u8, g: u8, b: u8) -> gem::space::Oklab {
 
 /// Quantizes `(r, g, b)` to the nearest 256-color palette index using perceptual
 /// (Oklab) distance, breaking ties by preferring the lower index.
-#[cfg(feature = "color-space")]
+#[cfg(feature = "indexed-quant")]
 fn perceptual_to_indexed(r: u8, g: u8, b: u8) -> u8 {
     let target = rgb_to_oklab(r, g, b);
     let mut best_index = 0u8;
@@ -286,7 +286,7 @@ fn perceptual_to_indexed(r: u8, g: u8, b: u8) -> u8 {
 
 /// Quantizes `(r, g, b)` to the nearest of the 16 standard ANSI colors using
 /// perceptual (Oklab) distance, breaking ties by preferring the lower index.
-#[cfg(feature = "color-space")]
+#[cfg(feature = "indexed-quant")]
 fn perceptual_to_ansi(r: u8, g: u8, b: u8) -> AnsiColor {
     let target = rgb_to_oklab(r, g, b);
     let mut best = AnsiColor::Black;
@@ -303,28 +303,28 @@ fn perceptual_to_ansi(r: u8, g: u8, b: u8) -> AnsiColor {
 }
 
 /// Quantizes `(r, g, b)` to the nearest 256-color palette index, using perceptual
-/// (Oklab) distance when the `color-space` feature is enabled, or euclidean RGB
+/// (Oklab) distance when the `indexed-quant` feature is enabled, or euclidean RGB
 /// cube-mapping otherwise.
 fn rgb_to_indexed(r: u8, g: u8, b: u8) -> u8 {
-    #[cfg(feature = "color-space")]
+    #[cfg(feature = "indexed-quant")]
     {
         perceptual_to_indexed(r, g, b)
     }
-    #[cfg(not(feature = "color-space"))]
+    #[cfg(not(feature = "indexed-quant"))]
     {
         cube_map_to_indexed(r, g, b)
     }
 }
 
 /// Quantizes `(r, g, b)` to the nearest of the 16 standard ANSI colors, using
-/// perceptual (Oklab) distance when the `color-space` feature is enabled, or euclidean RGB
+/// perceptual (Oklab) distance when the `indexed-quant` feature is enabled, or euclidean RGB
 /// distance otherwise.
 fn rgb_to_ansi(r: u8, g: u8, b: u8) -> AnsiColor {
-    #[cfg(feature = "color-space")]
+    #[cfg(feature = "indexed-quant")]
     {
         perceptual_to_ansi(r, g, b)
     }
-    #[cfg(not(feature = "color-space"))]
+    #[cfg(not(feature = "indexed-quant"))]
     {
         cube_map_to_ansi(r, g, b)
     }
@@ -477,7 +477,7 @@ impl Color {
     /// Converts an `Rgb` variant to `gem::space::Srgb`.
     ///
     /// Returns `None` for non-RGB variants (`Default`, `Ansi`, `Indexed`).
-    #[cfg(feature = "color-space")]
+    #[cfg(feature = "indexed-quant")]
     #[must_use]
     pub fn to_srgb(self) -> Option<Srgb> {
         match self {
@@ -493,7 +493,7 @@ impl Color {
     /// Constructs an `Rgb` variant from a `gem::space::Srgb` color.
     ///
     /// Channels are clamped to `[0.0, 1.0]` before converting to `u8`.
-    #[cfg(feature = "color-space")]
+    #[cfg(feature = "indexed-quant")]
     #[must_use]
     #[allow(
         clippy::cast_possible_truncation,
@@ -515,7 +515,7 @@ impl Color {
     /// non-`Rgb` variants (`Ansi`, `Indexed`) contribute their real color rather than being
     /// skipped. [`Color::Default`] has no intrinsic RGB value, so it falls back to
     /// `(0, 0, 0)` when it appears as `a` and `(255, 255, 255)` when it appears as `b`.
-    #[cfg(feature = "color-space")]
+    #[cfg(feature = "indexed-quant")]
     #[must_use]
     pub fn lerp(a: Self, b: Self, t: f32) -> Self {
         let (r1, g1, b1) = a.resolve_rgb((0, 0, 0));
@@ -538,7 +538,7 @@ impl Color {
     /// Non-`Rgb` variants are resolved to `(r, g, b)` via [`Color::resolve_rgb`] before the
     /// transform is applied, rather than being returned unchanged. [`Color::Default`] has no
     /// intrinsic RGB value, so it resolves to `(0, 0, 0)`.
-    #[cfg(feature = "color-space")]
+    #[cfg(feature = "indexed-quant")]
     #[must_use]
     pub fn lighten(self, amount: f32) -> Self {
         fn inner(r: u8, g: u8, b: u8, amount: f32) -> Color {
@@ -558,7 +558,7 @@ impl Color {
     /// Non-`Rgb` variants are resolved to `(r, g, b)` via [`Color::resolve_rgb`] before the
     /// transform is applied, rather than being returned unchanged. [`Color::Default`] has no
     /// intrinsic RGB value, so it resolves to `(0, 0, 0)`.
-    #[cfg(feature = "color-space")]
+    #[cfg(feature = "indexed-quant")]
     #[must_use]
     pub fn darken(self, amount: f32) -> Self {
         fn inner(r: u8, g: u8, b: u8, amount: f32) -> Color {
@@ -578,7 +578,7 @@ impl Color {
     /// Non-`Rgb` variants are resolved to `(r, g, b)` via [`Color::resolve_rgb`] before the
     /// transform is applied, rather than being returned unchanged. [`Color::Default`] has no
     /// intrinsic RGB value, so it resolves to `(0, 0, 0)`.
-    #[cfg(feature = "color-space")]
+    #[cfg(feature = "indexed-quant")]
     #[must_use]
     pub fn saturate(self, amount: f32) -> Self {
         fn inner(r: u8, g: u8, b: u8, amount: f32) -> Color {
@@ -598,7 +598,7 @@ impl Color {
     /// Non-`Rgb` variants are resolved to `(r, g, b)` via [`Color::resolve_rgb`] before the
     /// transform is applied, rather than being returned unchanged. [`Color::Default`] has no
     /// intrinsic RGB value, so it resolves to `(0, 0, 0)`.
-    #[cfg(feature = "color-space")]
+    #[cfg(feature = "indexed-quant")]
     #[must_use]
     pub fn desaturate(self, amount: f32) -> Self {
         fn inner(r: u8, g: u8, b: u8, amount: f32) -> Color {
@@ -618,7 +618,7 @@ impl Color {
     /// Non-`Rgb` variants are resolved to `(r, g, b)` via [`Color::resolve_rgb`] before the
     /// transform is applied, rather than being returned unchanged. [`Color::Default`] has no
     /// intrinsic RGB value, so it resolves to `(0, 0, 0)`.
-    #[cfg(feature = "color-space")]
+    #[cfg(feature = "indexed-quant")]
     #[must_use]
     pub fn complement(self) -> Self {
         fn inner(r: u8, g: u8, b: u8) -> Color {
@@ -636,7 +636,7 @@ impl Color {
     /// Quantizes an RGB color to the nearest entry in the standard 256-color palette.
     ///
     /// - `Color::Rgb` inputs are converted to the nearest 256-color palette index (0–255).
-    ///   With the `color-space` feature (default), perceptual distance in the Oklab color space is
+    ///   With the `indexed-quant` feature (default), perceptual distance in the Oklab color space is
     ///   used, which better matches human color perception than raw RGB distance. Without
     ///   `gem`, euclidean RGB distance is used instead, computed against the 6×6×6 color
     ///   cube (indices 16–231), supplemented by the grayscale ramp (232–255) and the 16
@@ -672,7 +672,7 @@ impl Color {
     /// Quantizes an RGB color to the nearest of the 16 standard ANSI palette colors.
     ///
     /// - `Color::Rgb` inputs are converted to the nearest of the 16 standard ANSI colors.
-    ///   With the `color-space` feature (default), perceptual distance in the Oklab color space is
+    ///   With the `indexed-quant` feature (default), perceptual distance in the Oklab color space is
     ///   used. Without `gem`, euclidean RGB distance is used instead.
     /// - `Color::Default`, `Color::Ansi`, and `Color::Indexed` are returned unchanged: this
     ///   method only downgrades `Rgb` colors.
@@ -717,7 +717,7 @@ impl Color {
     ///
     /// assert_eq!(Color::from_named("not-a-color"), None);
     /// ```
-    #[cfg(feature = "color-space")]
+    #[cfg(feature = "indexed-quant")]
     #[must_use]
     #[allow(clippy::too_many_lines)]
     pub fn from_named(name: &str) -> Option<Self> {
@@ -890,7 +890,7 @@ impl Color {
     /// # run().unwrap();
     /// # }
     /// ```
-    #[cfg(feature = "color-space")]
+    #[cfg(feature = "indexed-quant")]
     #[must_use]
     pub fn from_hex(hex: &str) -> Option<Self> {
         Srgb::from_hex(hex).map(Self::from_srgb)
@@ -947,7 +947,7 @@ fn parse_ansi_name(name: &str) -> Option<AnsiColor> {
 ///
 /// Self-contained rather than routed through [`Color::from_hex`], so [`Color`]'s
 /// [`FromStr`](core::str::FromStr) impl -- and the `serde` feature built on it -- works
-/// regardless of whether the `color-space` feature (which `from_hex` needs for its
+/// regardless of whether the `indexed-quant` feature (which `from_hex` needs for its
 /// [`gem::space::Srgb`] parsing) is enabled.
 fn parse_hex(s: &str) -> Option<(u8, u8, u8)> {
     let hex = s.strip_prefix('#')?;
@@ -1252,7 +1252,7 @@ mod tests {
         assert!(matches!(gray.to_indexed(), Color::Indexed(_)));
     }
 
-    // ── cube-mapping fallback (always tested, regardless of `color-space` feature) ─
+    // ── cube-mapping fallback (always tested, regardless of `indexed-quant` feature) ─
 
     #[test]
     fn test_nearest_cube_step_boundaries() {
@@ -1319,7 +1319,7 @@ mod tests {
         assert_eq!(gem::rgb::distance_sq((1, 2, 3), (1, 2, 3)), 0);
     }
 
-    #[cfg(feature = "color-space")]
+    #[cfg(feature = "indexed-quant")]
     #[test]
     fn test_from_named_color() {
         let gold = Color::from_named("gold").expect("gold is a named color");
@@ -1333,20 +1333,20 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "color-space")]
+    #[cfg(feature = "indexed-quant")]
     #[test]
     fn test_from_named_color_case_insensitive() {
         let red = Color::from_named("RED").expect("should match uppercase");
         assert_eq!(red, Color::Rgb { r: 255, g: 0, b: 0 });
     }
 
-    #[cfg(feature = "color-space")]
+    #[cfg(feature = "indexed-quant")]
     #[test]
     fn test_from_named_color_invalid() {
         assert_eq!(Color::from_named("not-a-color"), None);
     }
 
-    #[cfg(feature = "color-space")]
+    #[cfg(feature = "indexed-quant")]
     #[test]
     fn test_from_hex_full() {
         let c = Color::from_hex("#ff8000").expect("valid hex");
@@ -1360,7 +1360,7 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "color-space")]
+    #[cfg(feature = "indexed-quant")]
     #[test]
     fn test_from_hex_short() {
         let c = Color::from_hex("#f80").expect("valid short hex");
@@ -1374,14 +1374,14 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "color-space")]
+    #[cfg(feature = "indexed-quant")]
     #[test]
     fn test_from_hex_invalid() {
         assert_eq!(Color::from_hex("xyz"), None);
         assert_eq!(Color::from_hex("#xyz"), None);
     }
 
-    #[cfg(feature = "color-space")]
+    #[cfg(feature = "indexed-quant")]
     #[test]
     fn test_lerp() {
         let red = Color::Rgb { r: 255, g: 0, b: 0 };
@@ -1398,7 +1398,7 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "color-space")]
+    #[cfg(feature = "indexed-quant")]
     #[test]
     fn test_lerp_resolves_non_rgb() {
         let red = Color::Rgb { r: 255, g: 0, b: 0 };
@@ -1430,7 +1430,7 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "color-space")]
+    #[cfg(feature = "indexed-quant")]
     #[test]
     fn test_lighten_rgb() {
         let c = Color::Rgb {
@@ -1442,7 +1442,7 @@ mod tests {
         assert_ne!(lighter, c);
     }
 
-    #[cfg(feature = "color-space")]
+    #[cfg(feature = "indexed-quant")]
     #[test]
     fn test_lighten_resolves_non_rgb() {
         assert_ne!(Color::Default.lighten(0.5), Color::Default);
@@ -1453,7 +1453,7 @@ mod tests {
         assert_ne!(Color::BLACK.lighten(0.5), Color::BLACK);
     }
 
-    #[cfg(feature = "color-space")]
+    #[cfg(feature = "indexed-quant")]
     #[test]
     fn test_darken_rgb() {
         let c = Color::Rgb {
@@ -1465,7 +1465,7 @@ mod tests {
         assert_ne!(darker, c);
     }
 
-    #[cfg(feature = "color-space")]
+    #[cfg(feature = "indexed-quant")]
     #[test]
     fn test_darken_resolves_non_rgb() {
         // `Color::Default` resolves to `(0, 0, 0)`, which darkening leaves at black.
@@ -1478,7 +1478,7 @@ mod tests {
         assert_eq!(Color::BLACK.darken(0.5), Color::Rgb { r: 0, g: 0, b: 0 });
     }
 
-    #[cfg(feature = "color-space")]
+    #[cfg(feature = "indexed-quant")]
     #[test]
     fn test_complement_red() {
         let red = Color::Rgb { r: 255, g: 0, b: 0 };
@@ -1487,7 +1487,7 @@ mod tests {
         assert!(cyan.to_srgb().is_some_and(|c| c.b > 0.9));
     }
 
-    #[cfg(feature = "color-space")]
+    #[cfg(feature = "indexed-quant")]
     #[test]
     fn test_to_srgb_conversion() {
         let c = Color::Rgb {
@@ -1501,7 +1501,7 @@ mod tests {
         assert!((srgb.b - 50.0 / 255.0).abs() < 1e-6);
     }
 
-    #[cfg(feature = "color-space")]
+    #[cfg(feature = "indexed-quant")]
     #[test]
     fn test_to_srgb_non_rgb_returns_none() {
         assert_eq!(Color::Default.to_srgb(), None);
@@ -1509,7 +1509,7 @@ mod tests {
         assert_eq!(Color::Indexed(42).to_srgb(), None);
     }
 
-    #[cfg(feature = "color-space")]
+    #[cfg(feature = "indexed-quant")]
     #[test]
     fn test_from_srgb_roundtrip() {
         let srgb = Srgb::new(0.8, 0.4, 0.2);
@@ -1520,7 +1520,7 @@ mod tests {
         assert!((back.b - 0.2).abs() < 1.1 / 255.0);
     }
 
-    #[cfg(feature = "color-space")]
+    #[cfg(feature = "indexed-quant")]
     #[test]
     fn test_saturate_desaturate() {
         let c = Color::Rgb {
@@ -1544,7 +1544,7 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "color-space")]
+    #[cfg(feature = "indexed-quant")]
     #[test]
     fn test_saturate_desaturate_resolves_non_rgb() {
         // Gray-ish ANSI colors have a saturation to increase/decrease; black (`Color::Default`'s
@@ -1564,7 +1564,7 @@ mod tests {
         assert_ne!(red.desaturate(0.5), red);
     }
 
-    #[cfg(feature = "color-space")]
+    #[cfg(feature = "indexed-quant")]
     #[test]
     fn test_complement_resolves_non_rgb() {
         // Black's complement (in this HSL model) is still black, but it's computed through a
@@ -1581,7 +1581,7 @@ mod tests {
         assert!(red_via_ansi.to_srgb().is_some_and(|c| c.b > 0.5));
     }
 
-    #[cfg(feature = "color-space")]
+    #[cfg(feature = "indexed-quant")]
     #[test]
     fn test_lerp_endpoints() {
         let red = Color::Rgb { r: 255, g: 0, b: 0 };
@@ -1590,14 +1590,14 @@ mod tests {
         assert_eq!(Color::lerp(red, blue, 1.0), blue);
     }
 
-    #[cfg(feature = "color-space")]
+    #[cfg(feature = "indexed-quant")]
     #[test]
     fn test_darken_black_is_black() {
         let black = Color::Rgb { r: 0, g: 0, b: 0 };
         assert_eq!(black.darken(0.5), black);
     }
 
-    #[cfg(feature = "color-space")]
+    #[cfg(feature = "indexed-quant")]
     #[test]
     fn test_gray_grey_synonyms() {
         assert_eq!(Color::from_named("gray"), Color::from_named("grey"));

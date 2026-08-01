@@ -19,9 +19,16 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-default = ["std", "egc", "color-space"]
-# Gates perceptual color-space math: `gem/libm`, `alpha-blend` (W3C separable blend modes on `BlendMode`), and its own `libm`.
-color-space = ["gem/libm", "dep:alpha-blend", "alpha-blend/libm"]
+default = ["std", "egc", "indexed-quant", "blend-modes"]
+# Gates perceptual (Oklab) quantization: `Color::to_indexed`/`Color::to_ansi` use it instead of
+# their always-available euclidean cube-mapping fallback, and `Color::to_srgb`/`Color::from_srgb`/
+# `Color::lerp`/`Color::from_hex` require it outright. Forwards to `gem/libm` for its math backend.
+indexed-quant = ["gem/libm"]
+# Gates the four W3C separable `BlendMode` variants (`Screen`/`Dodge`/`Burn`/`Overlay`/`Multiply`)
+# and pulls in the optional `alpha-blend` dependency. `BlendMode::Linear` and `Grid::blit_alpha`
+# are always available regardless of this feature: `Linear` only needs `gem::Mix`/
+# `gem::rgb::Rgb888::mix_u8`, not `alpha-blend` or float math.
+blend-modes = ["dep:alpha-blend", "alpha-blend/libm"]
 # Forces development diagnostics on even in an optimized build (see the `dev` module); off by default since `debug_assertions` already covers the common case.
 dev = []
 # Enables grapheme-cluster-aware text handling (via `unicode-segmentation`) for EGC-correct cell diffing and layout.
@@ -40,12 +47,12 @@ testing = []
 # (perceptual color spaces, the named-color table, its blend helpers) only compile in once
 # `gem/std` or `gem/libm` turns on -- gem prefers std's float intrinsics over libm when both are
 # present, so a `std` build gets std math with libm sitting inert. This dependency being
-# unconditional does not itself enable that float-math cost; see the `color-space` feature for
+# unconditional does not itself enable that float-math cost; see the `indexed-quant` feature for
 # what does.
 gem = { version = "0.2", default-features = false }
 # SCREEN/DODGE/BURN/OVERLAY blend modes for `Grid::blit_alpha` (see `BlendMode`); linear blending
-# stays on `gem::Mix`/`gem::rgb::Rgb888::mix_u8` above. Gated behind the `color-space` feature --
-# one flag for one capability, rather than a second flag for what's a single thing to callers.
+# stays on `gem::Mix`/`gem::rgb::Rgb888::mix_u8` above and needs no math backend. Gated behind the
+# `blend-modes` feature, separately from `indexed-quant`: unrelated capability, unrelated flag.
 alpha-blend = { version = "0.3", optional = true, default-features = false }
 ixy = "0.6.0-alpha.9"
 # `Color`'s `serde` impls (see color.rs) are hand-written against its own `Display`/`FromStr`, so
@@ -75,7 +82,7 @@ serde_json = "1"
 # Non-optional here even though it's also an optional normal dependency (Cargo unifies the two):
 # `tests/rounding_conformance.rs` checks gem and alpha-blend agree on the shared round-to-nearest
 # invariant (retroglyph#547), and needs to run on every CI invocation regardless of which features
-# are on, not just when `color-space` happens to be enabled.
+# are on, not just when `blend-modes` happens to be enabled.
 alpha-blend = { version = "0.3", default-features = false, features = ["libm"] }
 
 [[bench]]

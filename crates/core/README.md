@@ -41,15 +41,16 @@ real backend quick start.
 
 ## Features
 
-Default features: `std`, `egc`, `color-space`.
+Default features: `std`, `egc`, `indexed-quant`, `blend-modes`.
 
-### `color-space`
+### `blend-modes`
 
 🟢 Enabled by default.
 
-Gates perceptual color-space math: `gem/libm`, `alpha-blend` (the W3C separable blend modes on
-`BlendMode`), and its own `libm`. gem's pixel-format layer (`rgb`/`gray`/`alpha`/`channel`) is
-always available regardless of this feature.
+Gates the four W3C separable `BlendMode` variants (`Screen`/`Dodge`/`Burn`/`Overlay`/`Multiply`) and
+pulls in the optional `alpha-blend` dependency (`alpha-blend/libm`). `BlendMode::Linear` and
+`Grid::blit_alpha` are always available regardless of this feature: `Linear` only needs `gem::Mix`,
+not `alpha-blend`.
 
 ### `dev`
 
@@ -64,6 +65,14 @@ Can be used so an optimized build still reports development diagnostics (see the
 🟢 Enabled by default.
 
 Enables grapheme-cluster-aware text handling for EGC-correct cell diffing and layout.
+
+### `indexed-quant`
+
+🟢 Enabled by default.
+
+Gates perceptual (Oklab) RGB → Indexed/ANSI quantization (`gem/libm`) and `Color`'s `gem`-space
+conversions (`to_srgb`/`from_srgb`/`lerp`/`from_hex`). Without it, `Color::to_indexed`/
+`Color::to_ansi` fall back to euclidean RGB cube-mapping instead of failing to compile.
 
 ### `serde`
 
