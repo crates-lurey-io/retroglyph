@@ -343,14 +343,37 @@ impl<B: Backend> Terminal<B> {
     /// with zero timeout. If the backend returns an event, it is stored in the internal
     /// buffer and `true` is returned; otherwise, returns `false`.
     pub fn has_input(&mut self) -> bool {
+        self.wait_for_input(Duration::ZERO)
+    }
+
+    /// Blocks until an input event is available or `timeout` elapses, without consuming it.
+    ///
+    /// Like [`has_input`](Self::has_input), a discovered event is buffered internally so a
+    /// subsequent [`poll`](Self::poll), [`has_input`](Self::has_input), or
+    /// [`drain_events`](Self::drain_events) call still observes it -- this method only answers
+    /// "did something happen", it never hands the event to the caller. That's what lets a driver
+    /// loop block between frames without stealing the event the app's own `update` reads; see
+    /// [`run_blocking_with`](crate::run_blocking_with)'s use of this for [`Flow::Idle`](crate::Flow::Idle).
+    ///
+    /// Returns `true` if an event arrived within `timeout`, `false` if `timeout` elapsed with
+    /// nothing pending. Pass [`Duration::MAX`] to block indefinitely.
+    ///
+    /// Backends that never block (e.g. [`Headless`](crate::backend::Headless), which returns
+    /// immediately regardless of `timeout`; see [`Input::poll_event`](crate::backend::Input::poll_event))
+    /// return promptly rather than actually waiting -- this method is a real wait only on
+    /// backends that genuinely block (crossterm, window).
+    pub fn wait_for_input(&mut self, timeout: Duration) -> bool {
         if self.queued_event.is_some() {
-            true
-        } else if let Some(event) = self.backend.poll_event(Duration::ZERO) {
-            self.queued_event = Some(event);
-            true
-        } else {
-            false
+            return true;
         }
+        let Some(event) = self.backend.poll_event(timeout) else {
+            return false;
+        };
+        if let Event::Resize(w, h) = event {
+            self.resize(w, h);
+        }
+        self.queued_event = Some(event);
+        true
     }
 }
 
@@ -427,6 +450,39 @@ mod tests {
         // Draining again with nothing pending clears the buffer.
         terminal.drain_events_into(&mut buf);
         assert!(buf.is_empty());
+    }
+
+    #[test]
+    fn test_terminal_wait_for_input_buffers_the_event_instead_of_consuming_it() {
+        let backend = Headless::new(10, 10);
+        let mut terminal = Terminal::new(backend);
+
+        // Nothing queued: returns false rather than blocking (`Headless` ignores the timeout).
+        assert!(!terminal.wait_for_input(Duration::from_millis(1)));
+
+        terminal.backend_mut().push_event(Event::Close);
+        assert!(terminal.wait_for_input(Duration::MAX));
+        // Repeated calls stay true: the event was buffered, not handed out and lost.
+        assert!(terminal.wait_for_input(Duration::MAX));
+        assert!(terminal.has_input());
+
+        // A caller reading through the normal input API (as an app's own `update` would) still
+        // observes the exact event `wait_for_input` woke up for.
+        assert_eq!(terminal.poll(Duration::ZERO), Some(Event::Close));
+        assert!(!terminal.has_input());
+    }
+
+    #[test]
+    fn test_terminal_wait_for_input_applies_pending_resize() {
+        let backend = Headless::new(10, 10);
+        let mut terminal = Terminal::new(backend);
+
+        terminal.backend_mut().push_event(Event::Resize(4, 2));
+        assert!(terminal.wait_for_input(Duration::MAX));
+        // The grid resizes immediately, same as `poll`, even though the event is still buffered
+        // rather than consumed.
+        assert_eq!(terminal.size(), Size::new(4, 2));
+        assert_eq!(terminal.poll(Duration::ZERO), Some(Event::Resize(4, 2)));
     }
 
     #[test]

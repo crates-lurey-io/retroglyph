@@ -103,11 +103,14 @@ Implement the `App` trait (the update-side dual of `Backend`) and run it with a 
 feature-selected entry point. Terminal backends use the generic `run_blocking`/`run_blocking_with`
 drivers; the software/winit backend uses its inverted driver; both present automatically after
 `update` returns and share the same `App`, `Frame`, and `Flow` types, including `Flow::Idle` for
-skipping a redraw on an unchanged frame. `run_blocking_with(term, app, RunOptions::paced(60))` caps
-the loop at a fixed rate using a `FrameClock` internally, rather than the zero-config
-`run_blocking`'s unpaced spin. `FrameClock` is a pure fixed-timestep accumulator (fed elapsed `dt`,
-so it is `no_std`-clean). The low-level `poll`/`present` API remains for turn-based games and
-headless tests.
+skipping a redraw on an unchanged frame. The zero-config `run_blocking` is event-driven by default:
+on `Flow::Idle` it blocks on input via `Terminal::wait_for_input` instead of calling `update` again,
+so a turn-based app that's idle most of the time costs approximately nothing.
+`run_blocking_with(term, app, RunOptions::animated(60))` switches to a continuously-rendering loop
+capped at a fixed rate using a `FrameClock` internally, for apps that animate from `Frame::delta`
+and need `update` called every tick regardless of input. `FrameClock` is a pure fixed-timestep
+accumulator (fed elapsed `dt`, so it is `no_std`-clean). The low-level `poll`/`present` API remains
+for turn-based games and headless tests.
 
 </details>
 
