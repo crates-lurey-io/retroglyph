@@ -1,7 +1,7 @@
 //! [`PerfOverlay`]: a bordered live frame-time/FPS panel with a sparkline.
-use retroglyph_core::{Color, FrameStats, Rect, Style};
+use retroglyph_core::{Color, Frame, FrameStats, Rect, Style};
 
-use super::{Panel, Sparkline, Text, Widget};
+use super::{AnimatedWidget, Panel, Sparkline, Text, Widget};
 use crate::Surface;
 use crate::Theme;
 
@@ -51,6 +51,16 @@ const DEFAULT_SPARKLINE_COLOR: Color = Color::Rgb {
 /// `N` must match the [`FrameStats`] window it's built from; `retroglyph-core`'s
 /// [`PerfOverlayApp`](retroglyph_core::PerfOverlayApp) always uses 120 samples
 /// ([`FRAME_HISTORY`](retroglyph_core::perf_overlay::FRAME_HISTORY)), the default here too.
+///
+/// # As an [`AnimatedWidget`]
+///
+/// This type is read-only: it borrows an already-updated [`FrameStats`] (`new(stats)`), which is
+/// exactly what [`Widget`] rendering wants but is the wrong shape for [`AnimatedWidget`], whose
+/// `state: &mut FrameStats` argument needs to *record into* the same data a draw call reads --
+/// an immutable borrow baked into `self` and a mutable one for `state` can't coexist. Use
+/// [`AnimatedPerfOverlay`] instead for a call site that owns one [`FrameStats`] field and wants to
+/// record and draw in a single call, with no [`PerfOverlayApp`](retroglyph_core::PerfOverlayApp)
+/// decorator wrapping the app.
 ///
 /// Rows beyond the panel's available interior height are silently dropped: the readout row
 /// draws first, then one row per [`metrics`](Self::metrics) entry, then the sparkline, each only
@@ -223,6 +233,164 @@ fn millis(duration: core::time::Duration) -> f32 {
     duration.as_secs_f32() * 1000.0
 }
 
+/// [`PerfOverlay`]'s [`AnimatedWidget`] counterpart.
+///
+/// The same readout, extra metric rows, and frame-time sparkline, but reading its [`FrameStats`]
+/// from `state` at render time instead of borrowing one up front.
+///
+/// [`PerfOverlay::new`] takes `stats: &'a FrameStats<N>`, which [`Widget`] rendering (a pure read
+/// of already-current data) wants but [`AnimatedWidget::render`] can't offer: its `state: &mut
+/// FrameStats<N>` needs to record a fresh sample into the same data a draw call then reads, and an
+/// immutable borrow baked into `self` can't coexist with a mutable one passed as `state` in the
+/// same call. `AnimatedPerfOverlay` holds no stats reference of its own -- only the same
+/// backend/title/metrics/style knobs [`PerfOverlay`] has -- so there's nothing to alias.
+///
+/// Replaces routing a `Duration` through [`PerfOverlayApp`](retroglyph_core::PerfOverlayApp) just
+/// to reach this widget: an app that owns one [`FrameStats`] field can record into it and draw in
+/// a single call, no decorator wrapping the app at all. [`PerfOverlayApp`](retroglyph_core::PerfOverlayApp)
+/// remains the right choice for an app that also wants its toggle-key handling, mode cycling, and
+/// event draining done generically, across any wrapped [`App`](retroglyph_core::App) -- this is
+/// only for the (now unblocked) case that doesn't need any of that.
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::{App, Backend, Flow, Frame, FrameStats, Headless, Rect, Terminal};
+/// use retroglyph_widgets::{AnimatedPerfOverlay, AnimatedWidget};
+///
+/// struct MyGame {
+///     stats: FrameStats,
+/// }
+///
+/// impl<B: Backend> App<B> for MyGame {
+///     fn update(&mut self, term: &mut Terminal<B>, frame: &Frame) -> Flow {
+///         let area = Rect::new(0, 0, 34, 8);
+///         let mut surface = term.surface();
+///         AnimatedPerfOverlay::new()
+///             .backend("software")
+///             .render(area, &mut surface, &mut self.stats, frame);
+///         if frame.frame >= 1 { Flow::Exit } else { Flow::Continue }
+///     }
+/// }
+///
+/// let term = Terminal::new(Headless::new(60, 12));
+/// let app = MyGame { stats: FrameStats::new() };
+/// retroglyph_core::run_blocking(term, app).expect("run_blocking");
+/// ```
+#[derive(Clone, Copy, Debug)]
+pub struct AnimatedPerfOverlay<'a, const N: usize = 120> {
+    backend: &'a str,
+    title: &'a str,
+    metrics: &'a [(&'a str, &'a str)],
+    border_style: Style,
+    fill_style: Style,
+    text_style: Style,
+    sparkline_style: Style,
+}
+
+impl<const N: usize> Default for AnimatedPerfOverlay<'_, N> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<'a, const N: usize> AnimatedPerfOverlay<'a, N> {
+    /// An animated perf overlay titled `"perf"`, with no backend label and no extra metrics --
+    /// the same defaults as [`PerfOverlay::new`]. `N` must match the [`FrameStats`] window this
+    /// is driven by -- the default, 120, matches [`PerfOverlay`]'s and
+    /// [`FrameStats`]'s own defaults.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            backend: "",
+            title: "perf",
+            metrics: &[],
+            border_style: Style::new(),
+            fill_style: Style::new(),
+            text_style: Style::new(),
+            sparkline_style: Style::new().fg(DEFAULT_SPARKLINE_COLOR),
+        }
+    }
+
+    /// See [`PerfOverlay::backend`].
+    #[must_use]
+    pub const fn backend(mut self, backend: &'a str) -> Self {
+        self.backend = backend;
+        self
+    }
+
+    /// See [`PerfOverlay::title`].
+    #[must_use]
+    pub const fn title(mut self, title: &'a str) -> Self {
+        self.title = title;
+        self
+    }
+
+    /// See [`PerfOverlay::metrics`].
+    #[must_use]
+    pub const fn metrics(mut self, metrics: &'a [(&'a str, &'a str)]) -> Self {
+        self.metrics = metrics;
+        self
+    }
+
+    /// See [`PerfOverlay::text_style`].
+    #[must_use]
+    pub const fn text_style(mut self, style: Style) -> Self {
+        self.text_style = style;
+        self
+    }
+
+    /// See [`PerfOverlay::sparkline_style`].
+    #[must_use]
+    pub const fn sparkline_style(mut self, style: Style) -> Self {
+        self.sparkline_style = style;
+        self
+    }
+
+    /// See [`PerfOverlay::theme`].
+    #[must_use]
+    pub fn theme(mut self, theme: Theme) -> Self {
+        self.border_style = Style::new().fg(theme.border).bg(theme.title_bg);
+        self.fill_style = Style::new().bg(theme.panel_bg);
+        self.text_style = Style::new().fg(theme.fg).bg(theme.panel_bg);
+        self.sparkline_style = Style::new().fg(theme.accent);
+        self
+    }
+}
+
+impl<const N: usize> AnimatedWidget for AnimatedPerfOverlay<'_, N> {
+    type State = FrameStats<N>;
+
+    /// Records a sample into `state` via [`FrameStats::record`], then draws [`PerfOverlay::new`]
+    /// built from the result (plus this type's own backend/title/metrics/style knobs) -- both in
+    /// one call, so there's exactly one place, not two independently ordered ones, where the
+    /// stats window advances.
+    fn render(
+        &self,
+        area: Rect,
+        surface: &mut Surface<'_>,
+        state: &mut Self::State,
+        frame: &Frame,
+    ) {
+        state.record(frame.delta);
+
+        // A direct struct literal, not the public builder chain: `PerfOverlay` has no public
+        // `border_style`/`fill_style` setters of its own (only `theme()` sets them together), but
+        // both types live in this module, so their private fields are visible to each other here.
+        let overlay = PerfOverlay {
+            stats: &*state,
+            backend: self.backend,
+            title: self.title,
+            metrics: self.metrics,
+            border_style: self.border_style,
+            fill_style: self.fill_style,
+            text_style: self.text_style,
+            sparkline_style: self.sparkline_style,
+        };
+        Widget::render(&overlay, area, surface);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use core::time::Duration;
@@ -330,5 +498,91 @@ mod tests {
             Theme::DARK.border
         );
         assert_eq!(grid[Pos::new(1, 1)].style().foreground(), Theme::DARK.fg);
+    }
+
+    fn frame(delta_ms: u64) -> Frame {
+        Frame {
+            delta: Duration::from_millis(delta_ms),
+            frame: 0,
+        }
+    }
+
+    #[test]
+    fn animated_render_records_before_drawing() {
+        let area = Rect::new(0, 0, 40, 5);
+        let mut grid = Grid::new(40, 5);
+        let mut stats = FrameStats::<120>::new();
+        assert_eq!(stats.frame_count(), 0, "nothing recorded yet");
+
+        AnimatedPerfOverlay::new().render(
+            area,
+            &mut Surface::new(&mut grid, area, 0),
+            &mut stats,
+            &frame(16),
+        );
+
+        assert_eq!(
+            stats.frame_count(),
+            1,
+            "render should have recorded a sample"
+        );
+        // Drawn from the *post-record* stats, not a stale empty window: the readout row shows an
+        // fps/ms reading rather than the "no frames yet" no-op PerfOverlay::render otherwise
+        // takes (see too_small_is_a_no_op).
+        let readout_row: String = (0..40).map(|x| grid[Pos::new(x, 1)].glyph()).collect();
+        assert!(readout_row.contains("fps"), "{readout_row}");
+    }
+
+    #[test]
+    fn animated_render_matches_perf_overlay_drawn_from_the_same_post_record_stats() {
+        let area = Rect::new(0, 0, 60, 6);
+
+        let mut animated_grid = Grid::new(60, 6);
+        let mut stats = FrameStats::<120>::new();
+        AnimatedPerfOverlay::new()
+            .backend("software")
+            .metrics(&[("res", "80x24")])
+            .render(
+                area,
+                &mut Surface::new(&mut animated_grid, area, 0),
+                &mut stats,
+                &frame(16),
+            );
+
+        // `stats` now holds the one recorded sample; a plain `PerfOverlay` built from it (with
+        // the same knobs) should draw byte-for-byte identically.
+        let mut expected_grid = Grid::new(60, 6);
+        PerfOverlay::new(&stats)
+            .backend("software")
+            .metrics(&[("res", "80x24")])
+            .render(area, &mut Surface::new(&mut expected_grid, area, 0));
+
+        for y in 0..6 {
+            let animated_row: String = (0..60)
+                .map(|x| animated_grid[Pos::new(x, y)].glyph())
+                .collect();
+            let expected_row: String = (0..60)
+                .map(|x| expected_grid[Pos::new(x, y)].glyph())
+                .collect();
+            assert_eq!(animated_row, expected_row, "row {y}");
+        }
+    }
+
+    #[test]
+    fn animated_render_records_a_sample_every_call() {
+        let area = Rect::new(0, 0, 40, 5);
+        let mut grid = Grid::new(40, 5);
+        let mut stats = FrameStats::<120>::new();
+
+        for _ in 0..5 {
+            AnimatedPerfOverlay::new().render(
+                area,
+                &mut Surface::new(&mut grid, area, 0),
+                &mut stats,
+                &frame(16),
+            );
+        }
+
+        assert_eq!(stats.frame_count(), 5);
     }
 }

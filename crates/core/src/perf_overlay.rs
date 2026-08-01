@@ -39,6 +39,15 @@
 //! [`PerfOverlayApp::with_renderer`], only for a named, reusable renderer type instead of a
 //! closure.
 //!
+//! This whole wrapper exists in large part because [`FrameStats::record`] needs a [`Frame`],
+//! which a plain widget draw call had no way to reach: [`PerfOverlayApp::update`] is what
+//! intercepts `Frame` on the way through and calls [`FrameStats::record`] for the widget that
+//! otherwise couldn't. An app that doesn't need this wrapper's other job (generic toggle-key
+//! handling across any wrapped [`App`], on every backend) no longer needs it just for that:
+//! `retroglyph-widgets`' [`AnimatedPerfOverlay`](https://docs.rs/retroglyph-widgets/latest/retroglyph_widgets/struct.AnimatedPerfOverlay.html)
+//! reaches `Frame` directly, so an app that already owns a [`FrameStats`] field can record and
+//! draw it in a single call, with no decorator at all.
+//!
 //! # Toggling
 //!
 //! [`PerfOverlayApp::update`] drains every event out of the wrapped [`Terminal`] before handing
