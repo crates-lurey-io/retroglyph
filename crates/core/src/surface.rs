@@ -250,6 +250,44 @@ impl<'a> Surface<'a> {
         }
     }
 
+    /// [`clip`](Self::clip) to `area`, then [`translate`](Self::translate) by `origin`, in one
+    /// call.
+    ///
+    /// Chaining `clip(...).translate(...)` directly works when the result is used right where
+    /// it's produced (both `clip` and `translate` return a `Surface<'_>` borrowing the previous
+    /// step for exactly that call), but a helper that hands the composed view back to its own
+    /// caller -- for example [`Camera::surface`](crate::Camera::surface) -- needs the two
+    /// narrowings applied against a single `&mut self` borrow instead, so the returned surface
+    /// can outlive the call. This does that.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_core::{Grid, Pos, Rect, Style, Surface};
+    ///
+    /// let mut grid = Grid::new(10, 10);
+    /// let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 10, 10), 0);
+    ///
+    /// let mut view = surface.clip_translate(Rect::new(5, 5, 4, 4), (-5, -5));
+    /// assert_eq!(view.area(), Rect::new(5, 5, 4, 4));
+    ///
+    /// view.put_signed((-5, -5), 'X', Style::default());
+    /// assert_eq!(grid[Pos::new(5, 5)].glyph(), 'X');
+    /// ```
+    #[must_use]
+    pub fn clip_translate(&mut self, area: Rect, origin: (i32, i32)) -> Surface<'_> {
+        Surface {
+            area: self.area.intersect(area),
+            grid: self.grid,
+            layer: self.layer,
+            tint: self.tint,
+            origin_offset: (
+                self.origin_offset.0.saturating_add(origin.0),
+                self.origin_offset.1.saturating_add(origin.1),
+            ),
+        }
+    }
+
     /// A styled view over this surface: same area and layer, but every draw call uses `style`
     /// without needing to pass it each time. Handy for a run of same-styled writes (e.g. filling
     /// in a wall glyph over many cells) without repeating the [`Style`] at every call site.
@@ -1370,8 +1408,7 @@ mod tests {
         let mut grid = Grid::new(20, 20);
         {
             let mut surface = screen(&mut grid);
-            let mut clipped = surface.clip(Rect::new(5, 5, 10, 10));
-            let mut view = clipped.translate((45, 45));
+            let mut view = surface.clip_translate(Rect::new(5, 5, 10, 10), (45, 45));
 
             // (50, 50) minus the origin (45, 45) is (5, 5): the clipped area's local (5, 5),
             // landing at absolute grid (10, 10) -- not at (5, 5), which is what the pre-fix
