@@ -1,26 +1,28 @@
 //! [`Button`]: a clickable label, styled from an already-resolved [`Response`].
 use retroglyph_core::{Color, Rect, Style};
 
-use super::Widget;
+use super::{InteractiveWidget, Widget};
 use crate::Response;
+use crate::Sense;
 use crate::Surface;
 use crate::Theme;
 use crate::draw::fill_rect;
 use crate::text::truncate as truncate_to_cols;
 
-/// A filled, centered `label`, styled by a [`Response`] the caller already resolved via
-/// [`Interaction::interact`](crate::Interaction::interact).
+/// A filled, centered `label`, styled by a [`Response`] the caller resolves via
+/// [`Interaction::interact`](crate::Interaction::interact) (or, through [`InteractiveWidget`],
+/// has resolved automatically).
 ///
 /// `Button` is pure presentation, not a new source of truth: it never calls `interact` itself and
 /// has no `Id` type parameter, unlike `Interaction<Id>`. The app still owns the `Interaction<Id>`
-/// context and decides the button's id/[`Sense`](crate::Sense): the same division of labor as
-/// every other widget here (state lives outside; the widget only reads it), applied to the
-/// `interact` module's own doctest pattern ("draw the button, using `response.hovered()`/
-/// `focused()` to pick a style") instead of leaving every call site to hand-roll it:
+/// context and decides the button's id: the same division of labor as every other widget here
+/// (state lives outside; the widget only reads it). [`InteractiveWidget::sense`] fixes the
+/// [`Sense`](crate::Sense) this button needs ([`Sense::click`](crate::Sense::click)), so a call
+/// site can't mismatch it:
 ///
 /// ```
 /// use retroglyph_core::{Grid, Rect};
-/// use retroglyph_widgets::{Button, Interaction, Sense, Surface, Widget};
+/// use retroglyph_widgets::{Button, InteractiveWidget, Interaction, Surface};
 ///
 /// #[derive(Clone, Copy, PartialEq, Eq)]
 /// enum Id {
@@ -31,38 +33,39 @@ use crate::text::truncate as truncate_to_cols;
 /// let mut interaction = Interaction::<Id>::new();
 /// interaction.begin_frame();
 /// let area = Rect::new(0, 0, 10, 1);
-/// let response = interaction.interact(area, Id::Save, Sense::click());
-/// Button::new("Save", response).render(area, &mut Surface::new(&mut grid, area, 0));
+/// let button = Button::new("Save");
+/// let response = interaction.interact(area, Id::Save, button.sense());
+/// InteractiveWidget::render(&button, &mut Surface::new(&mut grid, area, 0), &mut (), response);
 /// interaction.end_frame();
 /// ```
 ///
 /// Precedence when more than one [`Response`] flag is set at once:
-/// [`pressed`](Response::pressed) &gt; [`hovered`](Response::hovered) &gt;
-/// [`focused`](Response::focused) &gt; the default `style`: matching the conventional
-/// `:active` &gt; `:hover` &gt; `:focus` ordering, so a press always reads as pressed even while
-/// still hovered, and a keyboard-focused-but-not-hovered button still shows something distinct
-/// from idle.
+/// [`disabled`](Response::disabled) &gt; [`pressed`](Response::pressed) &gt;
+/// [`hovered`](Response::hovered) &gt; [`focused`](Response::focused) &gt; the default `style`:
+/// matching the conventional `:disabled` &gt; `:active` &gt; `:hover` &gt; `:focus` ordering, so a
+/// disabled button always reads as muted regardless of a stale hover/press, a press always reads
+/// as pressed even while still hovered, and a keyboard-focused-but-not-hovered button still shows
+/// something distinct from idle.
 ///
-/// `style`, `hovered_style`, `pressed_style`, and `focused_style` each default to a fixed
-/// palette; set them with [`Button::style`]/[`Button::hovered_style`]/[`Button::pressed_style`]/
-/// [`Button::focused_style`].
+/// `style`, `hovered_style`, `pressed_style`, `focused_style`, and `disabled_style` each default
+/// to a fixed palette; set them with [`Button::style`]/[`Button::hovered_style`]/
+/// [`Button::pressed_style`]/[`Button::focused_style`]/[`Button::disabled_style`].
 #[derive(Clone, Copy, Debug)]
 pub struct Button<'a> {
     label: &'a str,
-    response: Response,
     style: Style,
     hovered_style: Style,
     pressed_style: Style,
     focused_style: Style,
+    disabled_style: Style,
 }
 
 impl<'a> Button<'a> {
-    /// A button labeled `label`, styled from `response`.
+    /// A button labeled `label`.
     #[must_use]
-    pub fn new(label: &'a str, response: Response) -> Self {
+    pub fn new(label: &'a str) -> Self {
         Self {
             label,
-            response,
             style: Style::new()
                 .fg(Color::Rgb {
                     r: 170,
@@ -88,6 +91,11 @@ impl<'a> Button<'a> {
                 r: 55,
                 g: 55,
                 b: 70,
+            }),
+            disabled_style: Style::new().fg(Color::Rgb {
+                r: 110,
+                g: 112,
+                b: 130,
             }),
         }
     }
@@ -121,6 +129,14 @@ impl<'a> Button<'a> {
         self
     }
 
+    /// Set the style used while [`Response::disabled`] is `true`, regardless of any other
+    /// [`Response`] flag.
+    #[must_use]
+    pub const fn disabled_style(mut self, style: Style) -> Self {
+        self.disabled_style = style;
+        self
+    }
+
     /// Applies `theme`'s named roles to all four of this button's states: idle becomes
     /// `theme.fg` on `theme.panel_bg`; hovered/pressed swap in `theme.hover_bg`/`theme.press_bg`
     /// for the background; focused becomes `theme.accent` on `theme.panel_bg`. The same mapping
@@ -131,6 +147,12 @@ impl<'a> Button<'a> {
     pub fn theme(self, theme: Theme) -> Self {
         self.theme_on(theme, theme.panel_bg)
     }
+
+    // `theme`/`theme_on` intentionally leave `disabled_style` untouched: `Theme` has one `dim`
+    // role, already used for de-emphasized text elsewhere, and this button's default
+    // `disabled_style` (set in `new`) already matches it. A themed button that wants a different
+    // disabled treatment can still call `disabled_style` after `theme`/`theme_on`, same as any
+    // other override.
 
     /// Same as [`Button::theme`], but the idle and focused states are drawn on `bg` instead of
     /// `theme.panel_bg` (`hovered_style`/`pressed_style` still use `theme.hover_bg`/
@@ -143,17 +165,20 @@ impl<'a> Button<'a> {
         self.hovered_style = Style::new().fg(theme.fg).bg(theme.hover_bg);
         self.pressed_style = Style::new().fg(theme.fg).bg(theme.press_bg);
         self.focused_style = Style::new().fg(theme.accent).bg(bg);
+        self.disabled_style = Style::new().fg(theme.dim).bg(bg);
         self
     }
 
-    /// The style this button draws with this frame, per the
-    /// pressed &gt; hovered &gt; focused &gt; default precedence documented on [`Button`].
-    const fn resolved_style(&self) -> Style {
-        if self.response.pressed() {
+    /// The style this button draws with this frame, per the disabled &gt; pressed &gt; hovered
+    /// &gt; focused &gt; default precedence documented on [`Button`], given `response`.
+    const fn resolved_style(&self, response: Response) -> Style {
+        if response.disabled() {
+            self.disabled_style
+        } else if response.pressed() {
             self.pressed_style
-        } else if self.response.hovered() {
+        } else if response.hovered() {
             self.hovered_style
-        } else if self.response.focused() {
+        } else if response.focused() {
             self.focused_style
         } else {
             self.style
@@ -161,35 +186,51 @@ impl<'a> Button<'a> {
     }
 }
 
-impl Widget for Button<'_> {
-    fn render(&self, area: Rect, surface: &mut Surface<'_>) {
-        if area.width() == 0 || area.height() == 0 {
+impl InteractiveWidget for Button<'_> {
+    type State = ();
+
+    fn sense(&self) -> Sense {
+        Sense::click()
+    }
+
+    fn render(&self, surface: &mut Surface<'_>, (): &mut Self::State, response: Response) {
+        let (width, height) = (surface.width(), surface.height());
+        if width == 0 || height == 0 {
             return;
         }
 
-        let style = self.resolved_style();
-        fill_rect(surface, area, ' ', style);
+        let style = self.resolved_style(response);
+        fill_rect(surface, Rect::new(0, 0, width, height), ' ', style);
 
-        let text = truncate_to_cols(self.label, area.width_usize());
-        // `truncate_to_cols` bounds `text` to `area.width_usize()` columns, which is itself a
-        // `u16` widened by `.width_usize()`, so narrowing the count back is always exact.
+        let text = truncate_to_cols(self.label, usize::from(width));
+        // `truncate_to_cols` bounds `text` to `width` columns, so narrowing the count back is
+        // always exact.
         #[allow(clippy::cast_possible_truncation)]
         let text_width = text.chars().count() as u16;
-        let x = area.left() + (area.width().saturating_sub(text_width)) / 2;
-        let y = area.top() + area.height() / 2;
+        let x = width.saturating_sub(text_width) / 2;
+        let y = height / 2;
 
         surface.print((x, y), text, style);
+    }
+}
+
+impl Widget for Button<'_> {
+    /// Draws this button in its idle style: the non-interactive counterpart to
+    /// [`InteractiveWidget::render`], sharing the same drawing routine with
+    /// [`Response::default`] standing in for "nothing happened".
+    fn render(&self, surface: &mut Surface<'_>) {
+        InteractiveWidget::render(self, surface, &mut (), Response::default());
     }
 }
 
 #[cfg(test)]
 mod tests {
     use retroglyph_core::{
-        Event, Grid, KeyModifiers, MouseButton, MouseEvent, MouseEventKind, Pos,
+        Event, Grid, KeyModifiers, MouseButton, MouseEvent, MouseEventKind, Pos, Rect,
     };
 
     use super::*;
-    use crate::{Interaction, Sense};
+    use crate::Interaction;
 
     #[derive(Clone, Copy, PartialEq, Eq)]
     enum Id {
@@ -200,7 +241,7 @@ mod tests {
     fn draws_the_label_centered_in_the_idle_style() {
         let area = Rect::new(0, 0, 7, 1);
         let mut grid = Grid::new(7, 1);
-        Button::new("Go", Response::default()).render(area, &mut Surface::new(&mut grid, area, 0));
+        Widget::render(&Button::new("Go"), &mut Surface::new(&mut grid, area, 0));
 
         // "Go" (2 cols) centered in width 7 starts at column (7-2)/2 = 2.
         assert_eq!(grid[Pos::new(2, 0)].glyph(), 'G');
@@ -211,7 +252,7 @@ mod tests {
     fn fills_the_whole_area_with_the_background() {
         let area = Rect::new(0, 0, 7, 1);
         let mut grid = Grid::new(7, 1);
-        Button::new("Go", Response::default()).render(area, &mut Surface::new(&mut grid, area, 0));
+        Widget::render(&Button::new("Go"), &mut Surface::new(&mut grid, area, 0));
 
         let idle_bg = Style::new()
             .fg(Color::Rgb {
@@ -236,9 +277,9 @@ mod tests {
             pressed: true,
             ..Response::default()
         };
-        let button = Button::new("Go", response);
+        let button = Button::new("Go");
         assert_eq!(
-            button.resolved_style().background(),
+            button.resolved_style(response).background(),
             button.pressed_style.background()
         );
     }
@@ -250,9 +291,9 @@ mod tests {
             focused: true,
             ..Response::default()
         };
-        let button = Button::new("Go", response);
+        let button = Button::new("Go");
         assert_eq!(
-            button.resolved_style().background(),
+            button.resolved_style(response).background(),
             button.hovered_style.background()
         );
     }
@@ -263,18 +304,18 @@ mod tests {
             focused: true,
             ..Response::default()
         };
-        let button = Button::new("Go", response);
+        let button = Button::new("Go");
         assert_eq!(
-            button.resolved_style().background(),
+            button.resolved_style(response).background(),
             button.focused_style.background()
         );
     }
 
     #[test]
     fn idle_by_default() {
-        let button = Button::new("Go", Response::default());
+        let button = Button::new("Go");
         assert_eq!(
-            button.resolved_style().background(),
+            button.resolved_style(Response::default()).background(),
             button.style.background()
         );
     }
@@ -286,26 +327,27 @@ mod tests {
             pressed: true,
             ..Response::default()
         };
-        let button = Button::new("Go", response).pressed_style(custom);
-        assert_eq!(button.resolved_style().background(), Color::GREEN);
+        let button = Button::new("Go").pressed_style(custom);
+        assert_eq!(button.resolved_style(response).background(), Color::GREEN);
     }
 
     #[test]
     fn integrates_with_interaction_and_reflects_a_real_click() {
         let mut interaction = Interaction::<Id>::new();
         let area = Rect::new(0, 0, 7, 1);
+        let button = Button::new("Go");
 
         interaction.begin_frame();
-        let _ = interaction.interact(area, Id::Save, Sense::click());
+        let _ = interaction.interact(area, Id::Save, button.sense());
         interaction.end_frame();
 
-        interaction.handle_event(&Event::Mouse(MouseEvent {
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
             kind: MouseEventKind::Down(MouseButton::Left),
             position: Pos::new(2, 0),
             pixel_position: None,
             modifiers: KeyModifiers::NONE,
         }));
-        interaction.handle_event(&Event::Mouse(MouseEvent {
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
             kind: MouseEventKind::Up(MouseButton::Left),
             position: Pos::new(2, 0),
             pixel_position: None,
@@ -313,7 +355,7 @@ mod tests {
         }));
 
         interaction.begin_frame();
-        let response = interaction.interact(area, Id::Save, Sense::click());
+        let response = interaction.interact(area, Id::Save, button.sense());
         interaction.end_frame();
         assert!(response.clicked());
 
@@ -322,21 +364,65 @@ mod tests {
         // the same frame `clicked` resolves: `Button` renders with `pressed_style` here, not
         // idle. Confirms end-to-end wiring (a real click drives a real style pick), not just that
         // `resolved_style` matches its own precedence rules in isolation (the other tests above).
-        let button = Button::new("Go", response);
         assert_eq!(
-            button.resolved_style().background(),
+            button.resolved_style(response).background(),
             button.pressed_style.background()
         );
 
         let mut grid = Grid::new(7, 1);
-        button.render(area, &mut Surface::new(&mut grid, area, 0));
+        InteractiveWidget::render(
+            &button,
+            &mut Surface::new(&mut grid, area, 0),
+            &mut (),
+            response,
+        );
+    }
+
+    #[test]
+    fn scoped_into_a_narrower_clip_still_centers_against_the_full_area() {
+        let mut grid = Grid::new(10, 1);
+        let full = Rect::new(0, 0, 10, 1);
+        let mut surface = Surface::new(&mut grid, full, 0);
+        // Clip to the right-hand half before scoping: mirrors a caller drawing this button
+        // inside an already-clipped ancestor (e.g. a scrolled panel), then handing it a
+        // sub-surface via `scope` for its own (unclipped-by-that-call) area.
+        let mut clipped = surface.clip(Rect::new(6, 0, 4, 1));
+        Widget::render(&Button::new("Save"), &mut clipped.scope(full));
+
+        // "Save" (4 cols) centered in the full 10-col area starts at column 3, so only its
+        // last column (6) falls inside the narrower clip. A widget that recentered itself
+        // against the clip instead of `area` would draw the whole label starting at column
+        // 6, showing 'S' there instead.
+        assert_eq!(grid[Pos::new(6, 0)].glyph(), 'e');
+        assert_eq!(grid[Pos::new(7, 0)].glyph(), ' ');
+    }
+
+    #[test]
+    fn disabled_style_takes_precedence_over_pressed_and_hovered() {
+        let response = Response {
+            hovered: true,
+            pressed: true,
+            disabled: true,
+            ..Response::default()
+        };
+        let button = Button::new("Go");
+        assert_eq!(button.resolved_style(response), button.disabled_style);
+    }
+
+    #[test]
+    fn theme_on_maps_dim_onto_disabled_style() {
+        use crate::Theme;
+
+        let button = Button::new("Go").theme_on(Theme::DARK, Color::Default);
+        assert_eq!(button.disabled_style.foreground(), Theme::DARK.dim);
+        assert_eq!(button.disabled_style.background(), Color::Default);
     }
 
     #[test]
     fn zero_size_is_a_no_op() {
         let area = Rect::new(0, 0, 0, 1);
         let mut grid = Grid::new(1, 1);
-        Button::new("Go", Response::default()).render(area, &mut Surface::new(&mut grid, area, 0));
+        Widget::render(&Button::new("Go"), &mut Surface::new(&mut grid, area, 0));
         assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
     }
 
@@ -348,21 +434,24 @@ mod tests {
             hovered: true,
             ..Response::default()
         };
-        let button = Button::new("Go", response).theme(Theme::DARK);
+        let button = Button::new("Go").theme(Theme::DARK);
 
         assert_eq!(button.style.foreground(), Theme::DARK.fg);
         assert_eq!(button.style.background(), Theme::DARK.panel_bg);
         assert_eq!(button.hovered_style.background(), Theme::DARK.hover_bg);
         assert_eq!(button.pressed_style.background(), Theme::DARK.press_bg);
         assert_eq!(button.focused_style.foreground(), Theme::DARK.accent);
-        assert_eq!(button.resolved_style().background(), Theme::DARK.hover_bg);
+        assert_eq!(
+            button.resolved_style(response).background(),
+            Theme::DARK.hover_bg
+        );
     }
 
     #[test]
     fn theme_on_uses_the_given_backdrop_instead_of_panel_bg() {
         use crate::Theme;
 
-        let button = Button::new("Go", Response::default()).theme_on(Theme::DARK, Color::Default);
+        let button = Button::new("Go").theme_on(Theme::DARK, Color::Default);
 
         assert_eq!(button.style.foreground(), Theme::DARK.fg);
         assert_eq!(button.style.background(), Color::Default);

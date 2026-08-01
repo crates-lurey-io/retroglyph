@@ -1,11 +1,13 @@
 //! [`Scrollbar`]: a vertical track+thumb indicator.
 use retroglyph_core::{Color, Frame, Rect, Style};
 
-use super::{AnimatedWidget, Widget};
+use super::{AnimatedWidget, InteractiveWidget, Widget};
+use crate::Response;
 use crate::ScrollState;
+use crate::Sense;
 use crate::Surface;
 use crate::Theme;
-use crate::draw::thumb_geometry;
+use crate::draw::{offset_for_pos, thumb_geometry};
 
 /// A vertical scrollbar (typically one cell wide) covering `total_len`
 /// items in a `visible_len`-row viewport.
@@ -19,10 +21,14 @@ use crate::draw::thumb_geometry;
 /// track, with no thumb, if there's nothing to scroll: see
 /// [`crate::draw::thumb_geometry`].
 ///
-/// Deliberately independent of [`crate::interact`]: see
-/// [`crate::draw::thumb_geometry`] and
-/// [`crate::draw::offset_for_pos`]'s own doc comments for how to make this
-/// draggable using [`Interaction`](crate::Interaction) instead.
+/// As a plain [`Widget`], `Scrollbar` is purely a display: `offset` is whatever the caller last
+/// set, unaffected by the pointer. [`InteractiveWidget`]'s `type State = ScrollState` makes it
+/// draggable and wheel-scrollable instead: `sense()` is
+/// <code>[Sense::drag]() | [Sense::CLICK](crate::Sense::CLICK) |
+/// [Sense::SCROLL](crate::Sense::SCROLL)</code>, and its `render` reads the thumb's position from
+/// `state.integer_offset()`, drives a drag via [`offset_for_pos`]/[`ScrollState::update_drag`]/
+/// [`ScrollState::end_drag`] using [`Response::pointer_pos`], and applies wheel input via
+/// [`ScrollState::apply`].
 ///
 /// # Examples
 ///
@@ -32,9 +38,8 @@ use crate::draw::thumb_geometry;
 ///
 /// let area = Rect::new(0, 0, 1, 10);
 /// let mut grid = Grid::new(1, 10);
-/// Scrollbar::new(100, 10)
-///     .offset(20)
-///     .render(area, &mut Surface::new(&mut grid, area, 0));
+/// let scrollbar = Scrollbar::new(100, 10).offset(20);
+/// Widget::render(&scrollbar, &mut Surface::new(&mut grid, area, 0));
 /// ```
 #[derive(Clone, Copy, Debug)]
 pub struct Scrollbar {
@@ -104,28 +109,91 @@ impl Scrollbar {
     }
 }
 
-impl Widget for Scrollbar {
-    fn render(&self, area: Rect, surface: &mut Surface<'_>) {
-        if area.width() == 0 || area.height() == 0 {
+impl Scrollbar {
+    /// The shared drawing routine both [`Widget::render`] and [`InteractiveWidget::render`] use,
+    /// parameterized on the offset to draw the thumb at: the display-only [`Widget`] impl passes
+    /// `self.offset`, the interactive one passes `state.integer_offset()`.
+    fn draw(&self, surface: &mut Surface<'_>, offset: usize) {
+        let (w, h) = (surface.width(), surface.height());
+        if w == 0 || h == 0 {
             return;
         }
 
-        for y in area.top()..area.bottom() {
-            for x in area.left()..area.right() {
+        for y in 0..h {
+            for x in 0..w {
                 surface.put((x, y), ' ', self.track_style);
             }
         }
 
-        let Some((start, len)) =
-            thumb_geometry(area, self.total_len, self.visible_len, self.offset)
+        let local = Rect::new(0, 0, w, h);
+        let Some((start, len)) = thumb_geometry(local, self.total_len, self.visible_len, offset)
         else {
             return;
         };
-        for y in (area.top() + start)..(area.top() + start + len) {
-            for x in area.left()..area.right() {
+        for y in start..(start + len) {
+            for x in 0..w {
                 surface.put((x, y), ' ', self.thumb_style);
             }
         }
+    }
+
+    /// This scrollbar's maximum offset: `0` if everything already fits (`total_len <=
+    /// visible_len`), otherwise `total_len - visible_len`, widened to `f32` for
+    /// [`ScrollState`]'s fractional-offset math.
+    #[allow(clippy::cast_precision_loss)]
+    const fn max_offset(&self) -> f32 {
+        self.total_len.saturating_sub(self.visible_len) as f32
+    }
+}
+
+impl Widget for Scrollbar {
+    fn render(&self, surface: &mut Surface<'_>) {
+        self.draw(surface, self.offset);
+    }
+}
+
+impl InteractiveWidget for Scrollbar {
+    type State = ScrollState;
+
+    /// Draggable (thumb or track, click-to-jump then continues as a smooth drag) and
+    /// wheel-scrollable.
+    fn sense(&self) -> Sense {
+        Sense::drag() | Sense::CLICK | Sense::SCROLL
+    }
+
+    fn render(&self, surface: &mut Surface<'_>, state: &mut Self::State, response: Response) {
+        let area = surface.area();
+        let max_offset = self.max_offset();
+
+        // `ScrollState::update_drag` follows a content-drag convention (dragging up, i.e.
+        // decreasing `y`, increases the offset, matching a touch-scroll gesture). A scrollbar
+        // thumb needs the opposite: dragging *down* increases the offset, so `y` is negated
+        // before it's fed in, flipping that convention to match `offset_for_pos`'s own
+        // top-to-bottom-is-increasing mapping.
+        if response.pressed() {
+            // Click-to-jump: land the thumb under the pointer immediately, then let the drag
+            // below continue smoothly from there.
+            if let Some(pos) = response.pointer_pos() {
+                if let Some(target) = offset_for_pos(area, self.total_len, self.visible_len, pos) {
+                    // `target` is bounded to `total_len - visible_len` by `offset_for_pos`, the
+                    // same quantity `max_offset` widens to `f32` above.
+                    #[allow(clippy::cast_precision_loss)]
+                    state.set_offset(target as f32, max_offset);
+                }
+                state.begin_drag(-f32::from(pos.y));
+            }
+        }
+        if response.held()
+            && let Some(pos) = response.pointer_pos()
+        {
+            state.update_drag(-f32::from(pos.y), max_offset);
+        }
+        if response.released() {
+            state.end_drag();
+        }
+        state.apply(&response);
+
+        self.draw(surface, state.integer_offset());
     }
 }
 
@@ -139,18 +207,12 @@ impl AnimatedWidget for Scrollbar {
     /// already has, just with `self.offset` replaced by `state`'s current one. `max_offset` is
     /// `total_len - visible_len` (floored at `0`), matching [`thumb_geometry`]'s own definition, so
     /// the physics and the drawn thumb position are always in terms of the same bound.
-    fn render(
-        &self,
-        area: Rect,
-        surface: &mut Surface<'_>,
-        state: &mut Self::State,
-        frame: &Frame,
-    ) {
+    fn render(&self, surface: &mut Surface<'_>, state: &mut Self::State, frame: &Frame) {
         let max_offset = self.total_len.saturating_sub(self.visible_len);
         #[allow(clippy::cast_precision_loss)] // scroll extents stay well under 2^24 items
         state.tick(frame.delta, max_offset as f32);
 
-        Widget::render(&self.offset(state.integer_offset()), area, surface);
+        self.draw(surface, state.integer_offset());
     }
 }
 
@@ -158,7 +220,7 @@ impl AnimatedWidget for Scrollbar {
 #[allow(clippy::float_cmp)] // ScrollState offsets under test here are exact 0.0 sentinels, not
 // accumulated float results, so exact equality is the correct check, not a bug.
 mod tests {
-    use retroglyph_core::{Color, Grid, Pos};
+    use retroglyph_core::{Color, Grid, Pos, Rect};
 
     use super::*;
     use crate::Surface;
@@ -170,7 +232,7 @@ mod tests {
         let track = Style::new().bg(Color::Rgb { r: 1, g: 1, b: 1 });
         let thumb = Style::new().bg(Color::Rgb { r: 2, g: 2, b: 2 });
         let scrollbar = Scrollbar::new(3, 5).track_style(track).thumb_style(thumb);
-        Widget::render(&scrollbar, area, &mut Surface::new(&mut grid, area, 0));
+        Widget::render(&scrollbar, &mut Surface::new(&mut grid, area, 0));
         for y in 0..5 {
             assert_eq!(
                 grid[Pos::new(0, y)].style().background(),
@@ -189,7 +251,7 @@ mod tests {
             .offset(0)
             .track_style(track)
             .thumb_style(thumb);
-        Widget::render(&scrollbar, area, &mut Surface::new(&mut grid, area, 0));
+        Widget::render(&scrollbar, &mut Surface::new(&mut grid, area, 0));
 
         let (start, len) = thumb_geometry(area, 20, 5, 0).unwrap();
         for y in 0..10 {
@@ -207,7 +269,7 @@ mod tests {
         let area = Rect::new(0, 0, 1, 10);
         let mut grid = Grid::new(1, 10);
         let scrollbar = Scrollbar::new(20, 5).theme(Theme::DARK);
-        Widget::render(&scrollbar, area, &mut Surface::new(&mut grid, area, 0));
+        Widget::render(&scrollbar, &mut Surface::new(&mut grid, area, 0));
 
         let (start, len) = thumb_geometry(area, 20, 5, 0).unwrap();
         for y in 0..10 {
@@ -225,7 +287,7 @@ mod tests {
         let area = Rect::new(0, 0, 1, 10);
         let mut grid = Grid::new(1, 10);
         let scrollbar = Scrollbar::new(20, 5).theme_on(Theme::DARK, Color::Default);
-        Widget::render(&scrollbar, area, &mut Surface::new(&mut grid, area, 0));
+        Widget::render(&scrollbar, &mut Surface::new(&mut grid, area, 0));
 
         let (start, len) = thumb_geometry(area, 20, 5, 0).unwrap();
         for y in 0..10 {
@@ -245,7 +307,7 @@ mod tests {
         let track = Style::new().bg(Color::Rgb { r: 1, g: 1, b: 1 });
         let thumb = Style::new().bg(Color::Rgb { r: 2, g: 2, b: 2 });
         let scrollbar = Scrollbar::new(20, 5).track_style(track).thumb_style(thumb);
-        Widget::render(&scrollbar, area, &mut Surface::new(&mut grid, area, 0));
+        Widget::render(&scrollbar, &mut Surface::new(&mut grid, area, 0));
 
         let (start, _) = thumb_geometry(area, 20, 5, 0).unwrap();
         assert_eq!(start, 0);
@@ -268,7 +330,6 @@ mod tests {
 
         AnimatedWidget::render(
             &Scrollbar::new(20, 5),
-            area,
             &mut Surface::new(&mut grid, area, 0),
             &mut state,
             &frame(100),
@@ -284,7 +345,7 @@ mod tests {
         let (start, _) = thumb_geometry(area, 20, 5, state.integer_offset()).unwrap();
         let mut expected = Grid::new(1, 10);
         let scrollbar = Scrollbar::new(20, 5).offset(state.integer_offset());
-        Widget::render(&scrollbar, area, &mut Surface::new(&mut expected, area, 0));
+        Widget::render(&scrollbar, &mut Surface::new(&mut expected, area, 0));
         for y in 0..10 {
             assert_eq!(
                 grid[Pos::new(0, y)].style().background(),
@@ -304,12 +365,113 @@ mod tests {
 
         AnimatedWidget::render(
             &Scrollbar::new(20, 5),
-            area,
             &mut Surface::new(&mut grid, area, 0),
             &mut state,
             &frame(100),
         );
 
         assert_eq!(state.offset(), 0.0, "tick is a no-op while dragging");
+    }
+
+    #[test]
+    fn drag_moves_scroll_state() {
+        use retroglyph_core::{Event, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+
+        use crate::Interaction;
+
+        #[derive(Clone, Copy, PartialEq, Eq)]
+        enum Id {
+            Bar,
+        }
+
+        let area = Rect::new(0, 0, 1, 10); // total=40, visible=10 -> max_offset = 30
+        let scrollbar = Scrollbar::new(40, 10);
+        let mut state = ScrollState::new();
+        let mut interaction = Interaction::<Id>::new();
+        let mut grid = Grid::new(1, 10);
+
+        // Frame 1: register the rect for next frame's hit-test.
+        interaction.begin_frame();
+        let response = interaction.interact(area, Id::Bar, scrollbar.sense());
+        InteractiveWidget::render(
+            &scrollbar,
+            &mut Surface::new(&mut grid, area, 0),
+            &mut state,
+            response,
+        );
+        interaction.end_frame();
+        assert!((state.offset() - 0.0).abs() < f32::EPSILON);
+
+        // Press at the top of the track: resolves against frame 1's registration.
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            position: Pos::new(0, 0),
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        }));
+        interaction.begin_frame();
+        let response = interaction.interact(area, Id::Bar, scrollbar.sense());
+        InteractiveWidget::render(
+            &scrollbar,
+            &mut Surface::new(&mut grid, area, 0),
+            &mut state,
+            response,
+        );
+        interaction.end_frame();
+        assert!((state.offset() - 0.0).abs() < f32::EPSILON); // clicked at the top: no jump needed
+
+        // Drag down to the bottom of the track while still held.
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Moved,
+            position: Pos::new(0, 9),
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        }));
+        interaction.begin_frame();
+        let response = interaction.interact(area, Id::Bar, scrollbar.sense());
+        InteractiveWidget::render(
+            &scrollbar,
+            &mut Surface::new(&mut grid, area, 0),
+            &mut state,
+            response,
+        );
+        interaction.end_frame();
+        assert!(state.offset() > 0.0); // dragged toward the bottom: offset increased
+
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Up(MouseButton::Left),
+            position: Pos::new(0, 9),
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        }));
+        interaction.begin_frame();
+        let response = interaction.interact(area, Id::Bar, scrollbar.sense());
+        InteractiveWidget::render(
+            &scrollbar,
+            &mut Surface::new(&mut grid, area, 0),
+            &mut state,
+            response,
+        );
+        interaction.end_frame();
+        assert!(!state.dragging());
+    }
+
+    #[test]
+    fn wheel_scroll_applies_velocity() {
+        let area = Rect::new(0, 0, 1, 10);
+        let scrollbar = Scrollbar::new(40, 10);
+        let mut state = ScrollState::new();
+        let response = Response {
+            scroll_delta: 2,
+            ..Response::default()
+        };
+        let mut grid = Grid::new(1, 10);
+        InteractiveWidget::render(
+            &scrollbar,
+            &mut Surface::new(&mut grid, area, 0),
+            &mut state,
+            response,
+        );
+        assert!(state.velocity() > 0.0);
     }
 }

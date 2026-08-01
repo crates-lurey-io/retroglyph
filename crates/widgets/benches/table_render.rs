@@ -56,7 +56,7 @@ fn bench_size(c: &mut Criterion, rows_n: usize, cols_n: usize) {
     c.bench_function(&format!("table_render/{rows_n}x{cols_n}"), |b| {
         b.iter(|| {
             let table = Table::new(black_box(&headers), black_box(&widths), black_box(&data));
-            table.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
+            table.render(&mut Surface::new(&mut grid, area, 0), &mut state);
         });
     });
 }

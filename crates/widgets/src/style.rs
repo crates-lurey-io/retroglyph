@@ -11,7 +11,10 @@
 //! feature), then hand the wrapped result to `BoxStyle::render`. Keeping
 //! wrapping and box-model layout separate avoids tying every consumer of
 //! this module to the `egc` feature.
-use retroglyph_core::{Grid, Rect, Style, Tile};
+use retroglyph_core::{Grid, Style, Tile};
+// `Rect` is only named by the `egc` content-measuring path below and by this module's tests.
+#[cfg(feature = "egc")]
+use retroglyph_core::Rect;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use crate::Surface;
@@ -334,7 +337,8 @@ impl BoxStyle {
 }
 
 impl Widget for Boxed<'_> {
-    fn render(&self, area: Rect, surface: &mut Surface<'_>) {
+    fn render(&self, surface: &mut Surface<'_>) {
+        let area = surface.area();
         let grid = self.style.render(self.text);
         crate::block::blit_into(surface, &grid, area.left(), area.top());
     }
@@ -372,7 +376,7 @@ fn draw_border(grid: &mut Grid, x: u16, y: u16, w: u16, h: u16, style: Style) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use retroglyph_core::Pos;
+    use retroglyph_core::{Pos, Rect};
 
     fn glyphs(grid: &Grid) -> Vec<String> {
         (0..grid.height())
@@ -548,7 +552,7 @@ mod tests {
         let styled = BoxStyle::new(Style::default()).border(true).text("hi");
         let area = Rect::new(2, 1, 10, 6);
         let mut grid = Grid::new(12, 7);
-        styled.render(area, &mut Surface::new(&mut grid, area, 0));
+        styled.render(&mut Surface::new(&mut grid, area, 0));
 
         // 2 content cols + 2 border = 4 wide, 1 content row + 2 border = 3
         // tall, anchored at (2, 1) regardless of the much larger area.

@@ -132,7 +132,7 @@ impl<'a> Modal<'a> {
         if let Some(title) = self.title {
             panel = panel.title(title);
         }
-        panel.render(rect, surface);
+        panel.render(&mut surface.scope(rect));
         Rect::new(
             rect.left() + 1,
             rect.top() + 1,

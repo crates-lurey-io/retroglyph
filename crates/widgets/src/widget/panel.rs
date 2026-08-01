@@ -27,7 +27,7 @@ use crate::{Align, Theme};
 /// let mut grid = Grid::new(20, 5);
 /// Panel::new()
 ///     .title("Status")
-///     .render(area, &mut Surface::new(&mut grid, area, 0));
+///     .render(&mut Surface::new(&mut grid, area, 0));
 /// ```
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Panel<'a> {
@@ -100,44 +100,37 @@ impl<'a> Panel<'a> {
 }
 
 impl Widget for Panel<'_> {
-    fn render(&self, area: Rect, surface: &mut Surface<'_>) {
-        if area.width() < 2 || area.height() < 2 {
+    fn render(&self, surface: &mut Surface<'_>) {
+        let (width, height) = (surface.width(), surface.height());
+        if width < 2 || height < 2 {
             return;
         }
 
-        // Fill interior (inside the border).
-        let inner = Rect::new(
-            area.left() + 1,
-            area.top() + 1,
-            area.width().saturating_sub(2),
-            area.height().saturating_sub(2),
-        );
+        // Fill interior (inside the border), in this surface's own local coordinates.
+        let inner = Rect::new(1, 1, width.saturating_sub(2), height.saturating_sub(2));
         fill_rect(surface, inner, ' ', self.fill_style);
 
-        BoxBorder::new()
-            .style(self.border_style)
-            .render(area, surface);
+        BoxBorder::new().style(self.border_style).render(surface);
 
         // Render the title into the top border if one was provided.
         if let Some(t) = self.title {
-            let max_title_w = area.width().saturating_sub(4) as usize; // 2 border + 2 spaces
+            let max_title_w = width.saturating_sub(4) as usize; // 2 border + 2 spaces
             if max_title_w == 0 {
                 return;
             }
             // Truncate to fit.
             let t = truncate_to_cols(t, max_title_w);
-            // `truncate_to_cols` bounds `t` to `max_title_w` columns, itself derived from `area`'s
-            // `u16` width, so narrowing the display width back is always exact.
+            // `truncate_to_cols` bounds `t` to `max_title_w` columns, itself derived from this
+            // surface's own `u16` width, so narrowing the display width back is always exact.
             #[allow(clippy::cast_possible_truncation)]
             let t_w = t.width() as u16;
             // The padded title (a space either side of the text) is aligned
-            // within the region between the two corners (`area.width() - 2`).
+            // within the region between the two corners (`width - 2`).
             let padded = t_w + 2;
-            let title_x = area.left() + 1 + self.title_align.offset(area.width() - 2, padded);
-            let title_y = area.top();
-            surface.put((title_x, title_y), ' ', self.border_style);
-            surface.print((title_x + 1, title_y), t, self.border_style);
-            surface.put((title_x + 1 + t_w, title_y), ' ', self.border_style);
+            let title_x = 1 + self.title_align.offset(width - 2, padded);
+            surface.put((title_x, 0), ' ', self.border_style);
+            surface.print((title_x + 1, 0), t, self.border_style);
+            surface.put((title_x + 1 + t_w, 0), ' ', self.border_style);
         }
     }
 }
@@ -159,7 +152,7 @@ mod tests {
             .border_style(border)
             .fill_style(fill)
             .title("hi")
-            .render(area, &mut Surface::new(&mut grid, area, 0));
+            .render(&mut Surface::new(&mut grid, area, 0));
 
         assert_eq!(grid[Pos::new(0, 0)].glyph(), '┌');
         assert_eq!(grid[Pos::new(1, 1)].glyph(), ' '); // interior filled
@@ -174,7 +167,7 @@ mod tests {
         let mut grid = Grid::new(8, 3);
         Panel::new()
             .title("a very long title")
-            .render(area, &mut Surface::new(&mut grid, area, 0));
+            .render(&mut Surface::new(&mut grid, area, 0));
 
         let top_row: String = (0..8).map(|x| grid[Pos::new(x, 0)].glyph()).collect();
         assert!(!top_row.contains("a very long title"));
@@ -186,7 +179,7 @@ mod tests {
         let mut grid = Grid::new(10, 4);
         Panel::new()
             .theme(Theme::DARK)
-            .render(area, &mut Surface::new(&mut grid, area, 0));
+            .render(&mut Surface::new(&mut grid, area, 0));
 
         assert_eq!(
             grid[Pos::new(0, 0)].style().foreground(),
@@ -208,7 +201,7 @@ mod tests {
         let mut grid = Grid::new(10, 4);
         Panel::new()
             .theme_on(Theme::DARK, Color::Default)
-            .render(area, &mut Surface::new(&mut grid, area, 0));
+            .render(&mut Surface::new(&mut grid, area, 0));
 
         assert_eq!(
             grid[Pos::new(0, 0)].style().foreground(),
@@ -228,7 +221,7 @@ mod tests {
         Panel::new()
             .title("hi")
             .title_align(Align::Left)
-            .render(area, &mut Surface::new(&mut grid, area, 0));
+            .render(&mut Surface::new(&mut grid, area, 0));
 
         // Padded title " hi " starts at column 1 (just inside the corner):
         // space at 1, text at 2..4, trailing space at 4.
@@ -244,7 +237,7 @@ mod tests {
         Panel::new()
             .title("hi")
             .title_align(Align::Right)
-            .render(area, &mut Surface::new(&mut grid, area, 0));
+            .render(&mut Surface::new(&mut grid, area, 0));
 
         // Padded title " hi " (4 cols) ends against the right corner at
         // column 11: trailing space at 10, text at 8..10.
@@ -257,7 +250,7 @@ mod tests {
     fn too_small_is_a_no_op() {
         let area = Rect::new(0, 0, 1, 1);
         let mut grid = Grid::new(1, 1);
-        Panel::new().render(area, &mut Surface::new(&mut grid, area, 0));
+        Panel::new().render(&mut Surface::new(&mut grid, area, 0));
         assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
     }
 
@@ -271,7 +264,7 @@ mod tests {
         let mut grid = Grid::new(10, 3);
         Panel::new()
             .title("あ")
-            .render(area, &mut Surface::new(&mut grid, area, 0));
+            .render(&mut Surface::new(&mut grid, area, 0));
 
         // title_x = 0 + (10 - 2 - 2) / 2 = 3; title glyph at 4, trailing
         // space at 5. With the pre-fix byte-length bug (width 3) this would

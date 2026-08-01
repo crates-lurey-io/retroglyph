@@ -1,0 +1,440 @@
+//! [`Ui`]: a per-frame context pairing a [`Surface`] with an [`Interaction`].
+
+use retroglyph_core::{Rect, Surface};
+
+use crate::interact::{Interaction, Response, Sense};
+use crate::widget::{InteractiveWidget, StatefulWidget, Widget};
+
+/// One frame's drawing surface and interaction state, together, so a call site names an
+/// `area`/`id` once and gets both hit-testing and drawing from it: see [`show`](Self::show).
+///
+/// # Why two lifetimes
+///
+/// `Surface<'g>` holds a `&'g mut Grid`, which makes `Surface` invariant in `'g`: nothing can
+/// shrink or otherwise reinterpret that lifetime once it is fixed. The surface borrow and the
+/// grid borrow are therefore kept as two separate lifetime parameters here, `'s` (how long this
+/// `Ui` itself, and the `&'s mut Surface` it holds, lives) and `'g` (how long the underlying grid
+/// is borrowed for). Collapsing them into one, e.g. writing the field as `&'a mut Surface<'a>`,
+/// forces `'a` to cover both uses at once: the invariance in `'g` then makes the borrow of the
+/// surface last exactly as long as the grid borrow it is invariant over, so the surface (and the
+/// grid behind it) stay borrowed, and therefore unusable, for the rest of `'a` even after the
+/// `Ui` that held them is dropped. Two parameters let `'s` end (releasing the `Ui`'s borrow of
+/// the surface) while `'g` keeps going, which is exactly what [`Interaction::frame`] relies on:
+/// the surface passed in is usable again once the closure returns.
+pub struct Ui<'s, 'g, Id> {
+    surface: &'s mut Surface<'g>,
+    interaction: &'s mut Interaction<Id>,
+    enabled: bool,
+}
+
+impl<'s, 'g, Id> Ui<'s, 'g, Id> {
+    /// A `Ui` pairing `surface` with `interaction` for one frame, enabled.
+    #[must_use]
+    pub const fn new(surface: &'s mut Surface<'g>, interaction: &'s mut Interaction<Id>) -> Self {
+        Self {
+            surface,
+            interaction,
+            enabled: true,
+        }
+    }
+
+    /// Whether [`show`](Ui::show)/[`show_stateful`](Ui::show_stateful)/[`region`](Ui::region)
+    /// calls through this context report their widgets as enabled: `retroglyph#602`.
+    #[must_use]
+    pub const fn is_enabled(&self) -> bool {
+        self.enabled
+    }
+
+    /// The surface, for drawing that no widget in this crate covers.
+    #[must_use]
+    pub const fn surface(&mut self) -> &mut Surface<'g> {
+        self.surface
+    }
+
+    /// The interaction context, for hit-testing/focus queries no method here covers.
+    #[must_use]
+    pub const fn interaction(&mut self) -> &mut Interaction<Id> {
+        self.interaction
+    }
+
+    /// The region this `Ui`'s surface represents; see [`Surface::area`].
+    #[must_use]
+    pub const fn area(&self) -> Rect {
+        self.surface.area()
+    }
+}
+
+impl<'g, Id: Copy + PartialEq> Ui<'_, 'g, Id> {
+    /// A child context whose [`show`](Self::show)/[`show_stateful`](Self::show_stateful)/
+    /// [`region`](Self::region) calls report `enabled`: `retroglyph#602`.
+    ///
+    /// Nesting only ever tightens: a child of a context already disabled via `enabled(false)`
+    /// stays disabled regardless of what `enabled` this call passes, matching how egui's and
+    /// `Dear ImGui`'s disabled scopes compose.
+    #[must_use]
+    pub const fn enabled(&mut self, enabled: bool) -> Ui<'_, 'g, Id> {
+        Ui {
+            surface: self.surface,
+            interaction: self.interaction,
+            enabled: self.enabled && enabled,
+        }
+    }
+
+    /// Hit-test `area` for `id` with `widget`'s own [`Sense`], then draw `widget` into `area`.
+    ///
+    /// This is the one-`id`-one-`area` guarantee the [`InteractiveWidget`]/[`Ui`] split exists
+    /// for: `area` is registered for hit-testing and used to scope the surface the widget draws
+    /// into from the same value, so the two cannot disagree.
+    ///
+    /// If this context is [`disabled`](Self::enabled), the returned [`Response`] still reports
+    /// [`hovered`](Response::hovered) but never an activation: see
+    /// [`Sense::DISABLED`](crate::Sense::DISABLED).
+    #[must_use]
+    pub fn show(
+        &mut self,
+        area: Rect,
+        id: Id,
+        widget: &impl InteractiveWidget<State = ()>,
+    ) -> Response {
+        self.show_stateful(area, id, widget, &mut ())
+    }
+
+    /// Like [`show`](Self::show), for an [`InteractiveWidget`] with externally owned `state`.
+    #[must_use]
+    pub fn show_stateful<W: InteractiveWidget + ?Sized>(
+        &mut self,
+        area: Rect,
+        id: Id,
+        widget: &W,
+        state: &mut W::State,
+    ) -> Response {
+        let sense = widget.sense().disabled_if(!self.enabled);
+        let response = self.interaction.interact(area, id, sense);
+        widget.render(&mut self.surface.scope(area), state, response);
+        response
+    }
+
+    /// Draw a non-interactive `widget` into `area`.
+    pub fn draw(&mut self, area: Rect, widget: &impl Widget) {
+        widget.render(&mut self.surface.scope(area));
+    }
+
+    /// Like [`draw`](Self::draw), for a [`StatefulWidget`] with externally owned `state`.
+    pub fn draw_stateful<W: StatefulWidget + ?Sized>(
+        &mut self,
+        area: Rect,
+        widget: &W,
+        state: &mut W::State,
+    ) {
+        widget.render(&mut self.surface.scope(area), state);
+    }
+
+    /// Register `area` for `id` with `sense`, and hand back both the resolved [`Response`] and a
+    /// surface scoped to `area`, for drawing this crate has no widget for.
+    ///
+    /// Like [`show`](Self::show), `area` is committed once, by this call, for both hit-testing
+    /// and drawing, so the two cannot disagree.
+    #[must_use]
+    pub fn region(&mut self, area: Rect, id: Id, sense: Sense) -> (Response, Surface<'_>) {
+        let sense = sense.disabled_if(!self.enabled);
+        let response = self.interaction.interact(area, id, sense);
+        (response, self.surface.scope(area))
+    }
+
+    /// Run `f` with a [`Ui`] whose widgets sit above everything shown so far, and whose pointer
+    /// hits inside `area` never reach a widget registered *before* `f` (a menu bar, the screen
+    /// behind a dropdown, ...), so an app doesn't have to answer "is the thing under this overlay
+    /// still supposed to see this event" with its own bookkeeping. A widget registered *after*
+    /// `f` still wins inside `area`, so an overlay has to be shown after the content it covers,
+    /// not before it.
+    ///
+    /// The barrier is scoped to `area`: a pointer *outside* it reaches whatever's registered
+    /// outside `f` exactly as if `modal` hadn't been called. A modal claims the region it covers,
+    /// not the whole screen; pass a full-screen `area` for a blocking overlay. Drawing is
+    /// unaffected either way, `f`'s `Ui` still draws to this `Ui`'s full surface unless it also
+    /// narrows with [`show`](Self::show)/[`draw`](Self::draw)/[`scope`](retroglyph_core::Surface::scope)
+    /// itself: `modal` only changes hit-testing.
+    pub fn modal<R>(&mut self, area: Rect, f: impl FnOnce(&mut Ui<'_, 'g, Id>) -> R) -> R {
+        self.interaction.push_barrier(area);
+        let mut inner = Ui {
+            surface: self.surface,
+            interaction: self.interaction,
+            enabled: self.enabled,
+        };
+        f(&mut inner)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use retroglyph_core::{Event, Grid, KeyModifiers, MouseEvent, MouseEventKind, Pos, Style};
+
+    use super::*;
+    use crate::widget::Widget;
+
+    fn move_pointer(interaction: &mut Interaction<Id>, pos: Pos) {
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Moved,
+            position: pos,
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        }));
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum Id {
+        Button,
+        Behind,
+        InModal,
+    }
+
+    struct Dot;
+
+    impl InteractiveWidget for Dot {
+        type State = ();
+
+        fn sense(&self) -> Sense {
+            Sense::click()
+        }
+
+        fn render(&self, surface: &mut Surface<'_>, _state: &mut Self::State, response: Response) {
+            let glyph = if response.hovered() { '*' } else { '.' };
+            surface.put((0, 0), glyph, Style::new());
+        }
+    }
+
+    struct Fill(char);
+
+    impl Widget for Fill {
+        fn render(&self, surface: &mut Surface<'_>) {
+            let area = surface.area();
+            for y in 0..area.height() {
+                for x in 0..area.width() {
+                    surface.put((x, y), self.0, Style::new());
+                }
+            }
+        }
+    }
+
+    /// `Ui::show` registers the same rect it draws into: a pointer landing inside the shown area
+    /// hits it on the *next* frame's hit-test, one outside it does not.
+    #[test]
+    fn show_registers_the_area_it_draws_into() {
+        let mut grid = Grid::new(10, 10);
+        let mut interaction = Interaction::<Id>::new();
+        let area = Rect::new(2, 2, 3, 3);
+
+        // Frame 1 registers `area` for `Id::Button`.
+        interaction.frame(
+            &mut Surface::new(&mut grid, Rect::new(0, 0, 10, 10), 0),
+            |ui| {
+                let _ = ui.show(area, Id::Button, &Dot);
+            },
+        );
+
+        // The pointer moves inside `area` between frames.
+        move_pointer(&mut interaction, Pos::new(3, 3));
+
+        // Frame 2 resolves hover against frame 1's registration.
+        let response = interaction.frame(
+            &mut Surface::new(&mut grid, Rect::new(0, 0, 10, 10), 0),
+            |ui| ui.show(area, Id::Button, &Dot),
+        );
+        assert!(response.hovered());
+
+        // The pointer moves outside `area` between frames.
+        move_pointer(&mut interaction, Pos::new(8, 8));
+        let response = interaction.frame(
+            &mut Surface::new(&mut grid, Rect::new(0, 0, 10, 10), 0),
+            |ui| ui.show(area, Id::Button, &Dot),
+        );
+        assert!(!response.hovered());
+    }
+
+    /// `Ui::region` likewise commits one rect for both hit-testing and the surface it hands
+    /// back.
+    #[test]
+    fn region_registers_the_area_it_scopes_the_surface_to() {
+        let mut grid = Grid::new(10, 10);
+        let mut interaction = Interaction::<Id>::new();
+        let area = Rect::new(2, 2, 3, 3);
+
+        interaction.frame(
+            &mut Surface::new(&mut grid, Rect::new(0, 0, 10, 10), 0),
+            |ui| {
+                let (_response, mut surface) = ui.region(area, Id::Button, Sense::hover());
+                assert_eq!(surface.area(), area);
+                // `put` addresses this surface's own local coordinates: (0, 0) is `area`'s own
+                // top-left, grid-absolute (2, 2).
+                surface.put((0, 0), 'x', Style::new());
+            },
+        );
+
+        assert_eq!(grid[Pos::new(2, 2)].glyph(), 'x');
+
+        move_pointer(&mut interaction, Pos::new(3, 3));
+        let response = interaction.frame(
+            &mut Surface::new(&mut grid, Rect::new(0, 0, 10, 10), 0),
+            |ui| ui.region(area, Id::Button, Sense::hover()).0,
+        );
+        assert!(response.hovered());
+    }
+
+    /// `Interaction::frame` calls `begin_frame`/`end_frame` exactly once around the closure.
+    #[test]
+    fn frame_calls_begin_and_end_exactly_once() {
+        let mut grid = Grid::new(4, 4);
+        let mut interaction = Interaction::<Id>::new();
+        let area = Rect::new(0, 0, 4, 4);
+
+        // Frame 1 registers `area` for `Id::Button`.
+        interaction.frame(&mut Surface::new(&mut grid, area, 0), |ui| {
+            let _ = ui.show(area, Id::Button, &Dot);
+        });
+
+        // A press-then-release inside `area`, fed in between frames.
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Down(retroglyph_core::MouseButton::Left),
+            position: Pos::new(1, 1),
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        }));
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Up(retroglyph_core::MouseButton::Left),
+            position: Pos::new(1, 1),
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        }));
+
+        // Frame 2, if `frame` ran begin/end exactly once, resolves the click against frame 1's
+        // registration and reports it.
+        let clicked = interaction.frame(&mut Surface::new(&mut grid, area, 0), |ui| {
+            ui.show(area, Id::Button, &Dot).clicked()
+        });
+        assert!(clicked);
+    }
+
+    /// `Ui::enabled` only ever tightens: an `enabled(true)` child of an `enabled(false)`
+    /// context stays disabled, matching egui's/Dear `ImGui`'s disabled-scope composition.
+    #[test]
+    fn enabled_nesting_only_tightens() {
+        let mut grid = Grid::new(4, 4);
+        let mut interaction = Interaction::<Id>::new();
+        let area = Rect::new(0, 0, 4, 4);
+        move_pointer(&mut interaction, Pos::new(0, 0));
+
+        // Register once so the second frame has something to resolve against.
+        interaction.frame(&mut Surface::new(&mut grid, area, 0), |ui| {
+            let mut disabled = ui.enabled(false);
+            let mut re_enabled = disabled.enabled(true);
+            assert!(!re_enabled.is_enabled());
+            let _ = re_enabled.show(area, Id::Button, &Dot);
+        });
+
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Down(retroglyph_core::MouseButton::Left),
+            position: Pos::new(0, 0),
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        }));
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Up(retroglyph_core::MouseButton::Left),
+            position: Pos::new(0, 0),
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        }));
+
+        let response = interaction.frame(&mut Surface::new(&mut grid, area, 0), |ui| {
+            let mut disabled = ui.enabled(false);
+            let mut re_enabled = disabled.enabled(true);
+            re_enabled.show(area, Id::Button, &Dot)
+        });
+        assert!(response.disabled());
+        assert!(!response.clicked());
+        assert!(response.hovered());
+    }
+
+    /// A `Ui` borrow released at the end of `Interaction::frame` leaves the surface usable
+    /// afterwards: this is the two-lifetime property `Ui` exists for, checked at compile time by
+    /// the fact that this test compiles at all.
+    #[test]
+    fn surface_is_usable_after_frame_returns() {
+        let mut grid = Grid::new(4, 4);
+        let mut interaction = Interaction::<Id>::new();
+        let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 4, 4), 0);
+
+        interaction.frame(&mut surface, |ui| {
+            ui.draw(Rect::new(0, 0, 4, 4), &Fill('.'));
+        });
+
+        // `surface` is still a live `&mut Surface` here, not moved or borrowed by `frame`.
+        surface.put((0, 0), 'x', Style::new());
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), 'x');
+    }
+
+    /// A widget shown inside `Ui::modal` wins a hit over a widget registered earlier at the same
+    /// position, even though the earlier one alone would otherwise win by being drawn under the
+    /// pointer (the usual topmost-wins rule): the modal's barrier makes the earlier registration
+    /// unreachable at that position for the rest of this frame.
+    #[test]
+    fn modal_wins_a_hit_over_an_earlier_widget_at_the_same_position() {
+        let mut grid = Grid::new(10, 10);
+        let mut interaction = Interaction::<Id>::new();
+        let area = Rect::new(2, 2, 3, 3);
+
+        interaction.frame(
+            &mut Surface::new(&mut grid, Rect::new(0, 0, 10, 10), 0),
+            |ui| {
+                let _ = ui.show(area, Id::Behind, &Dot);
+                ui.modal(area, |ui| {
+                    let _ = ui.show(area, Id::InModal, &Dot);
+                });
+            },
+        );
+
+        move_pointer(&mut interaction, Pos::new(3, 3));
+
+        let (behind, in_modal) = interaction.frame(
+            &mut Surface::new(&mut grid, Rect::new(0, 0, 10, 10), 0),
+            |ui| {
+                let behind = ui.show(area, Id::Behind, &Dot);
+                let in_modal = ui.modal(area, |ui| ui.show(area, Id::InModal, &Dot));
+                (behind, in_modal)
+            },
+        );
+        assert!(!behind.hovered()); // the barrier shadows it
+        assert!(in_modal.hovered());
+    }
+
+    /// A widget registered outside `Ui::modal`'s `area` is unaffected by the barrier and still
+    /// wins hits at its own position: a modal claims the region it covers, not the whole screen.
+    #[test]
+    fn a_widget_outside_the_modal_area_still_wins_hits_at_its_own_position() {
+        let mut grid = Grid::new(10, 10);
+        let mut interaction = Interaction::<Id>::new();
+        let modal_area = Rect::new(2, 2, 3, 3);
+        let outside_area = Rect::new(7, 7, 2, 2);
+
+        interaction.frame(
+            &mut Surface::new(&mut grid, Rect::new(0, 0, 10, 10), 0),
+            |ui| {
+                let _ = ui.show(outside_area, Id::Behind, &Dot);
+                ui.modal(modal_area, |ui| {
+                    let _ = ui.show(modal_area, Id::InModal, &Dot);
+                });
+            },
+        );
+
+        move_pointer(&mut interaction, Pos::new(7, 7));
+
+        let behind = interaction.frame(
+            &mut Surface::new(&mut grid, Rect::new(0, 0, 10, 10), 0),
+            |ui| {
+                let behind = ui.show(outside_area, Id::Behind, &Dot);
+                let _ = ui.modal(modal_area, |ui| ui.show(modal_area, Id::InModal, &Dot));
+                behind
+            },
+        );
+        assert!(behind.hovered()); // outside the modal's own rect: unaffected by its barrier
+    }
+}

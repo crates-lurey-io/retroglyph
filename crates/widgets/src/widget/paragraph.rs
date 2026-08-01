@@ -32,7 +32,7 @@ use crate::Surface;
 ///
 /// let area = Rect::new(0, 0, 10, height);
 /// let mut grid = Grid::new(10, height);
-/// p.render(area, &mut Surface::new(&mut grid, area, 0));
+/// p.render(&mut Surface::new(&mut grid, area, 0));
 /// ```
 #[derive(Clone, Copy, Debug)]
 pub struct Paragraph<'a> {
@@ -73,7 +73,8 @@ impl Measure for Paragraph<'_> {
 }
 
 impl Widget for Paragraph<'_> {
-    fn render(&self, area: Rect, surface: &mut Surface<'_>) {
+    fn render(&self, surface: &mut Surface<'_>) {
+        let area = surface.area();
         let line = self.line();
         let layer = surface.layer();
         TextLayout::new(&line)
@@ -107,8 +108,7 @@ mod tests {
     fn render_draws_one_line_per_wrapped_row() {
         let area = Rect::new(0, 0, 10, 5);
         let mut grid = Grid::new(10, 5);
-        Paragraph::new("the quick brown fox jumps")
-            .render(area, &mut Surface::new(&mut grid, area, 0));
+        Paragraph::new("the quick brown fox jumps").render(&mut Surface::new(&mut grid, area, 0));
 
         let row0: String = (0..10).map(|x| grid[Pos::new(x, 0)].glyph()).collect();
         let row1: String = (0..10).map(|x| grid[Pos::new(x, 1)].glyph()).collect();
@@ -123,8 +123,7 @@ mod tests {
         // Only 1 row of height: only the first wrapped line should draw.
         let area = Rect::new(0, 0, 10, 1);
         let mut grid = Grid::new(10, 2);
-        Paragraph::new("the quick brown fox jumps")
-            .render(area, &mut Surface::new(&mut grid, area, 0));
+        Paragraph::new("the quick brown fox jumps").render(&mut Surface::new(&mut grid, area, 0));
 
         let row1: String = (0..10).map(|x| grid[Pos::new(x, 1)].glyph()).collect();
         assert_eq!(row1.trim(), "");

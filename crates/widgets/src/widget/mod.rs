@@ -14,8 +14,10 @@
 //! `egc` feature) additionally implements [`Measure`], since it needs
 //! `retroglyph_core::layout::TextLayout`'s grapheme-aware word-wrap to
 //! report a height before rendering.
-use retroglyph_core::{Frame, Rect};
+use retroglyph_core::Frame;
 
+use crate::Response;
+use crate::Sense;
 use crate::Surface;
 
 mod bar;
@@ -72,18 +74,18 @@ pub use text::Text;
 /// struct Marker(char);
 ///
 /// impl Widget for Marker {
-///     fn render(&self, _area: Rect, surface: &mut Surface<'_>) {
+///     fn render(&self, surface: &mut Surface<'_>) {
 ///         surface.put((0, 0), self.0, Style::new());
 ///     }
 /// }
 ///
 /// let area = Rect::new(0, 0, 4, 1);
 /// let mut grid = Grid::new(4, 1);
-/// Marker('*').render(area, &mut Surface::new(&mut grid, area, 0));
+/// Marker('*').render(&mut Surface::new(&mut grid, area, 0));
 /// ```
 pub trait Widget {
-    /// Draw this widget into `area`, via `surface` scoped to it.
-    fn render(&self, area: Rect, surface: &mut Surface<'_>);
+    /// Draw this widget into `surface`, filling `surface.area()`.
+    fn render(&self, surface: &mut Surface<'_>);
 }
 
 /// Like [`Widget`], but for widgets that read (and may update) externally
@@ -101,7 +103,7 @@ pub trait Widget {
 /// impl StatefulWidget for Counter {
 ///     type State = u32;
 ///
-///     fn render(&self, _area: Rect, surface: &mut Surface<'_>, state: &mut Self::State) {
+///     fn render(&self, surface: &mut Surface<'_>, state: &mut Self::State) {
 ///         *state += 1;
 ///         surface.put((0, 0), 'x', Style::new());
 ///     }
@@ -110,7 +112,7 @@ pub trait Widget {
 /// let area = Rect::new(0, 0, 4, 1);
 /// let mut grid = Grid::new(4, 1);
 /// let mut renders = 0;
-/// Counter.render(area, &mut Surface::new(&mut grid, area, 0), &mut renders);
+/// Counter.render(&mut Surface::new(&mut grid, area, 0), &mut renders);
 /// assert_eq!(renders, 1);
 /// ```
 pub trait StatefulWidget {
@@ -118,9 +120,9 @@ pub trait StatefulWidget {
     /// rendering.
     type State;
 
-    /// Draw this widget into `area`, via `surface` scoped to it, using
+    /// Draw this widget into `surface`, filling `surface.area()`, using
     /// and/or updating `state`.
-    fn render(&self, area: Rect, surface: &mut Surface<'_>, state: &mut Self::State);
+    fn render(&self, surface: &mut Surface<'_>, state: &mut Self::State);
 }
 
 /// A widget that can report the height it needs for a given width, before
@@ -184,7 +186,7 @@ pub trait Measure {
 /// impl AnimatedWidget for Blinker {
 ///     type State = Duration;
 ///
-///     fn render(&self, _area: Rect, surface: &mut Surface<'_>, state: &mut Self::State, frame: &Frame) {
+///     fn render(&self, surface: &mut Surface<'_>, state: &mut Self::State, frame: &Frame) {
 ///         *state += frame.delta;
 ///         let on = state.as_millis() / 500 % 2 == 0;
 ///         surface.put((0, 0), if on { '*' } else { ' ' }, retroglyph_core::Style::new());
@@ -195,7 +197,7 @@ pub trait Measure {
 /// let mut grid = Grid::new(4, 1);
 /// let mut state = Duration::ZERO;
 /// let frame = Frame { delta: Duration::from_millis(100), frame: 0 };
-/// Blinker.render(area, &mut Surface::new(&mut grid, area, 0), &mut state, &frame);
+/// Blinker.render(&mut Surface::new(&mut grid, area, 0), &mut state, &frame);
 /// assert_eq!(state, Duration::from_millis(100));
 /// ```
 pub trait AnimatedWidget {
@@ -203,8 +205,107 @@ pub trait AnimatedWidget {
     /// rendering -- e.g. [`crate::ScrollState`].
     type State;
 
-    /// Advances `state` by `frame.delta`, then draws this widget into `area`, via `surface`
-    /// scoped to it, at the result -- both in the same call, so there's exactly one place, not
-    /// two independently ordered ones, where time-based state moves forward.
-    fn render(&self, area: Rect, surface: &mut Surface<'_>, state: &mut Self::State, frame: &Frame);
+    /// Advances `state` by `frame.delta`, then draws this widget into `surface.area()`, both in
+    /// the same call, so there's exactly one place, not two independently ordered ones, where
+    /// time-based state moves forward.
+    fn render(&self, surface: &mut Surface<'_>, state: &mut Self::State, frame: &Frame);
+}
+
+/// A widget that renders itself styled by an already-resolved [`Response`], with the [`Sense`]
+/// it needs fixed by the widget rather than chosen at the call site.
+///
+/// A composite widget like [`Button`], [`Scrollbar`], [`List`], or [`Tabs`] needs to know what
+/// happened to it this frame (hovered, pressed, clicked, dragged) to pick its style and resolve
+/// its own hit-testing, but never calls
+/// [`Interaction::interact`](crate::Interaction::interact) itself: doing so would let it register
+/// the wrong rect, or let a call site register it with a [`Sense`] its presentation doesn't
+/// match (a click handler drawn without ever showing a hover state, say). [`sense`](Self::sense)
+/// fixes what the widget needs so a call site can't get that pairing wrong, and
+/// [`render`](Self::render) takes the resulting [`Response`] as a plain argument rather than
+/// calling `interact` itself: the widget never receives an
+/// [`Interaction`](crate::Interaction), and has no `Id` type parameter, so it can't call
+/// `interact` with the wrong rect because it has nothing to call `interact` on.
+///
+/// `type State` covers widgets with no state ([`Button`], [`Tabs`]: `()`), a scroll position
+/// ([`Scrollbar`]: [`ScrollState`](crate::ScrollState)), or a selection/scroll index ([`List`]:
+/// [`ListState`](crate::ListState)), the same [`Widget`]/[`StatefulWidget`] split applied to
+/// interactive widgets rather than a separate `InteractiveStatefulWidget` trait.
+///
+/// Deliberately has no generic method, so `dyn InteractiveWidget<State = ()>` is object-safe,
+/// e.g. a `Vec<Box<dyn InteractiveWidget<State = ()>>>` of heterogeneous stateless widgets.
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::{Grid, Rect, Style};
+/// use retroglyph_widgets::{InteractiveWidget, Response, Sense, Surface};
+///
+/// struct Marker(char);
+///
+/// impl InteractiveWidget for Marker {
+///     type State = ();
+///
+///     fn sense(&self) -> Sense {
+///         Sense::click()
+///     }
+///
+///     fn render(&self, surface: &mut Surface<'_>, _state: &mut Self::State, response: Response) {
+///         let style = if response.hovered() { Style::new().bg(retroglyph_core::Color::RED) } else { Style::new() };
+///         surface.put((0, 0), self.0, style);
+///     }
+/// }
+/// ```
+pub trait InteractiveWidget {
+    /// State that outlives one render call, e.g. a selection index or scroll offset. `()` for
+    /// widgets that have none.
+    type State;
+
+    /// What this widget needs from the pointer and keyboard, fixed by the widget: a call site
+    /// cannot register it with a [`Sense`] its presentation doesn't match.
+    fn sense(&self) -> Sense;
+
+    /// Draw into `surface`, styled by `response`, which the caller already resolved (via
+    /// [`Interaction::interact`](crate::Interaction::interact)) for `surface.area()` and
+    /// [`sense`](Self::sense).
+    fn render(&self, surface: &mut Surface<'_>, state: &mut Self::State, response: Response);
+}
+
+#[cfg(test)]
+mod interactive_widget_tests {
+    use retroglyph_core::{Grid, Rect};
+
+    use super::{InteractiveWidget, Response, Sense, Surface};
+
+    struct Dot;
+
+    impl InteractiveWidget for Dot {
+        type State = ();
+
+        fn sense(&self) -> Sense {
+            Sense::click()
+        }
+
+        fn render(&self, surface: &mut Surface<'_>, _state: &mut Self::State, response: Response) {
+            let glyph = if response.hovered() { '*' } else { '.' };
+            surface.put((0, 0), glyph, retroglyph_core::Style::new());
+        }
+    }
+
+    /// `InteractiveWidget<State = ()>` must be object-safe: no generic method, no `Id` parameter.
+    #[test]
+    fn is_object_safe() {
+        let widgets: Vec<Box<dyn InteractiveWidget<State = ()>>> =
+            vec![Box::new(Dot), Box::new(Dot)];
+
+        let area = Rect::new(0, 0, 1, 1);
+        let mut grid = Grid::new(1, 1);
+        for widget in &widgets {
+            widget.render(
+                &mut Surface::new(&mut grid, area, 0),
+                &mut (),
+                Response::default(),
+            );
+        }
+        assert_eq!(grid[retroglyph_core::Pos::new(0, 0)].glyph(), '.');
+    }
 }

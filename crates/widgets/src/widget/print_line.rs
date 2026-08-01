@@ -1,5 +1,4 @@
 //! [`PrintLine`]: a single styled [`Line`].
-use retroglyph_core::Rect;
 use retroglyph_core::text::Line;
 use unicode_width::UnicodeWidthStr;
 
@@ -20,13 +19,13 @@ use crate::text::truncate as truncate_to_cols;
 /// ```
 /// use retroglyph_core::backend::Headless;
 /// use retroglyph_core::text::Line;
-/// use retroglyph_core::{Rect, Terminal};
+/// use retroglyph_core::Terminal;
 /// use retroglyph_widgets::{PrintLine, Widget};
 ///
 /// let mut term = Terminal::new(Headless::new(20, 1));
 /// let line = Line::raw("hello");
 /// term.draw(|surface| {
-///     PrintLine::new(&line).render(Rect::new(0, 0, 20, 1), surface);
+///     PrintLine::new(&line).render(surface);
 /// })
 /// .unwrap();
 /// ```
@@ -57,9 +56,9 @@ impl<'a> PrintLine<'a> {
 }
 
 impl Widget for PrintLine<'_> {
-    fn render(&self, area: Rect, surface: &mut Surface<'_>) {
-        let max_width = area.width();
-        let right = area.left() + max_width;
+    fn render(&self, surface: &mut Surface<'_>) {
+        let max_width = surface.width();
+        let right = max_width;
         // Align the whole line as a unit: sum the spans' display widths
         // (clamped to the area) and offset the start column accordingly.
         // A single span wider than `u16::MAX` columns would already be unaddressable in this
@@ -72,14 +71,14 @@ impl Widget for PrintLine<'_> {
             .iter()
             .fold(0u16, |acc, s| acc.saturating_add(s.content.width() as u16))
             .min(max_width);
-        let mut x = area.left() + self.align.offset(max_width, line_width);
+        let mut x = self.align.offset(max_width, line_width);
         for span in &self.line.spans {
             if x >= right {
                 break;
             }
             let remaining = (right - x) as usize;
             let text = truncate_to_cols(&span.content, remaining);
-            surface.print((x, area.top()), text, span.style);
+            surface.print((x, 0), text, span.style);
             // `text` is bounded to `remaining` columns above, itself derived from the `u16`
             // `right`/`x`, so narrowing its display width back is always exact.
             #[allow(clippy::cast_possible_truncation)]
@@ -92,7 +91,7 @@ impl Widget for PrintLine<'_> {
 #[cfg(test)]
 mod tests {
     use retroglyph_core::text::Span;
-    use retroglyph_core::{Grid, Pos};
+    use retroglyph_core::{Grid, Pos, Rect};
 
     use super::*;
 
@@ -101,7 +100,7 @@ mod tests {
         let line = Line::from(vec![Span::raw("hi "), Span::raw("there")]);
         let area = Rect::new(0, 0, 20, 1);
         let mut grid = Grid::new(20, 1);
-        PrintLine::new(&line).render(area, &mut Surface::new(&mut grid, area, 0));
+        PrintLine::new(&line).render(&mut Surface::new(&mut grid, area, 0));
 
         let row: String = (0..20).map(|x| grid[Pos::new(x, 0)].glyph()).collect();
         assert!(row.starts_with("hi there"));
@@ -114,7 +113,7 @@ mod tests {
         let mut grid = Grid::new(20, 1);
         PrintLine::new(&line)
             .align(Align::Right)
-            .render(area, &mut Surface::new(&mut grid, area, 0));
+            .render(&mut Surface::new(&mut grid, area, 0));
 
         // "hi there" is 8 cols; right-aligned in 20 it ends at column 19.
         let row: String = (0..20).map(|x| grid[Pos::new(x, 0)].glyph()).collect();
@@ -126,7 +125,7 @@ mod tests {
         let line = Line::raw("a much longer message than fits");
         let area = Rect::new(0, 0, 5, 1);
         let mut grid = Grid::new(5, 1);
-        PrintLine::new(&line).render(area, &mut Surface::new(&mut grid, area, 0));
+        PrintLine::new(&line).render(&mut Surface::new(&mut grid, area, 0));
 
         // "a much longer..." clipped to 5 columns is "a muc".
         assert_eq!(grid[Pos::new(4, 0)].glyph(), 'c');

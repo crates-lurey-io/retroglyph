@@ -1,5 +1,5 @@
 //! [`Sparkline`]: a single-row bar chart of recent samples.
-use retroglyph_core::{Rect, Style};
+use retroglyph_core::Style;
 
 use super::{Meter, Widget};
 use crate::Surface;
@@ -28,7 +28,7 @@ const BLOCKS: [char; 9] = [' ', '▁', '▂', '▃', '▄', '▅', '▆', '▇',
 /// let samples = [1.0, 3.0, 2.0, 4.0, 1.5];
 /// let mut grid = Grid::new(10, 1);
 /// let area = Rect::new(0, 0, 10, 1);
-/// Sparkline::new(&samples).render(area, &mut Surface::new(&mut grid, area, 0));
+/// Sparkline::new(&samples).render(&mut Surface::new(&mut grid, area, 0));
 /// ```
 #[derive(Clone, Copy, Debug)]
 pub struct Sparkline<'a> {
@@ -57,8 +57,8 @@ impl<'a> Sparkline<'a> {
 }
 
 impl Widget for Sparkline<'_> {
-    fn render(&self, area: Rect, surface: &mut Surface<'_>) {
-        let width = area.width_usize();
+    fn render(&self, surface: &mut Surface<'_>) {
+        let width = usize::from(surface.width());
         if width == 0 {
             return;
         }
@@ -74,14 +74,13 @@ impl Widget for Sparkline<'_> {
         let recent = &self.samples[start..];
         let pad = width - recent.len();
 
-        let y = area.top();
         for i in 0..width {
-            // `i` ranges over `0..width`, and `width` is `area.width_usize()`, itself widened
-            // from `area`'s own `u16` width, so narrowing it back is always exact.
+            // `i` ranges over `0..width`, itself widened from this surface's own `u16` width, so
+            // narrowing it back is always exact.
             #[allow(clippy::cast_possible_truncation)]
-            let x = area.left() + i as u16;
+            let x = i as u16;
             if i < pad {
-                surface.put((x, y), ' ', Style::new());
+                surface.put((x, 0), ' ', Style::new());
                 continue;
             }
             let ratio = (recent[i - pad] / max).clamp(0.0, 1.0);
@@ -91,14 +90,14 @@ impl Widget for Sparkline<'_> {
             let style = self
                 .style
                 .unwrap_or_else(|| Style::new().fg(Meter::new(ratio).color()));
-            surface.put((x, y), BLOCKS[level.min(8)], style);
+            surface.put((x, 0), BLOCKS[level.min(8)], style);
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::{Grid, Pos};
+    use retroglyph_core::{Grid, Pos, Rect};
 
     use super::*;
 
@@ -106,7 +105,7 @@ mod tests {
     fn right_aligns_recent_samples_and_pads_the_rest() {
         let area = Rect::new(0, 0, 5, 1);
         let mut grid = Grid::new(5, 1);
-        Sparkline::new(&[1.0, 2.0]).render(area, &mut Surface::new(&mut grid, area, 0));
+        Sparkline::new(&[1.0, 2.0]).render(&mut Surface::new(&mut grid, area, 0));
 
         assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
         assert_eq!(grid[Pos::new(2, 0)].glyph(), ' ');
@@ -118,7 +117,7 @@ mod tests {
     fn empty_samples_is_a_no_op_beyond_blank_padding() {
         let area = Rect::new(0, 0, 3, 1);
         let mut grid = Grid::new(3, 1);
-        Sparkline::new(&[]).render(area, &mut Surface::new(&mut grid, area, 0));
+        Sparkline::new(&[]).render(&mut Surface::new(&mut grid, area, 0));
         for x in 0..3 {
             assert_eq!(grid[Pos::new(x, 0)].glyph(), ' ');
         }
@@ -137,7 +136,7 @@ mod tests {
         });
         Sparkline::new(&[1.0, 4.0, 2.0])
             .style(accent)
-            .render(area, &mut Surface::new(&mut grid, area, 0));
+            .render(&mut Surface::new(&mut grid, area, 0));
 
         // Height still tracks the ratio (the low, high, mid samples land on different block
         // levels)...

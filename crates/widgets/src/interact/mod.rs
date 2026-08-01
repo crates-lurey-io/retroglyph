@@ -47,6 +47,7 @@
 //! assert!(!saved); // nothing clicked yet: no input was fed in
 //! ```
 
+mod consumed;
 mod density;
 mod focus;
 mod hit;
@@ -55,6 +56,7 @@ mod response;
 mod sense;
 mod shortcuts;
 
+pub use consumed::Consumed;
 pub use density::Density;
 pub use focus::FocusRing;
 pub use hit::HitTester;
@@ -63,7 +65,9 @@ pub use response::Response;
 pub use sense::Sense;
 pub use shortcuts::Shortcuts;
 
-use retroglyph_core::{Event, KeyCode, MouseButton, Pos, Rect};
+use retroglyph_core::{Event, KeyCode, MouseButton, Pos, Rect, Surface};
+
+use crate::Ui;
 
 /// Default [`Interaction::with_drag_threshold`].
 ///
@@ -76,6 +80,34 @@ pub const DEFAULT_DRAG_THRESHOLD: u16 = 1;
 /// piece of state a draw pass needs to make its widgets interactive.
 ///
 /// # Frame lifecycle
+///
+/// [`frame`](Self::frame) is the documented way to drive one frame: it wraps a closure with
+/// [`begin_frame`](Self::begin_frame) and [`end_frame`](Self::end_frame), and hands the closure a
+/// [`Ui`] pairing the surface passed in with `self`.
+///
+/// ```
+/// use retroglyph_core::{Backend, Headless, Rect, Terminal};
+/// use retroglyph_widgets::{Interaction, Sense};
+///
+/// #[derive(Clone, Copy, PartialEq, Eq)]
+/// enum WidgetId {
+///     SaveButton,
+/// }
+///
+/// let mut term = Terminal::new(Headless::new(20, 10));
+/// let mut interaction = Interaction::<WidgetId>::new();
+/// let clicked = interaction.frame(&mut term.surface(), |ui| {
+///     let area = Rect::new(0, 0, 10, 1);
+///     let response = ui.interaction().interact(area, WidgetId::SaveButton, Sense::click());
+///     // ... draw the button, using response.hovered()/focused() to pick a style ...
+///     response.clicked()
+/// });
+/// assert!(!clicked); // nothing clicked yet: no input was fed in
+/// ```
+///
+/// `begin_frame`/`handle_event`/`end_frame` stay public for callers driving the lifecycle
+/// themselves (e.g. to interleave event handling between frames rather than all at once), but
+/// `frame` is what each step below describes:
 ///
 /// ```text
 /// interaction.begin_frame();                 // 1
@@ -106,8 +138,11 @@ pub const DEFAULT_DRAG_THRESHOLD: u16 = 1;
 ///    exception: [`Response::focused`] and Enter/Space activation read [`FocusRing`]'s `current`
 ///    live, since it's plain level state with no hit-testing involved: no staleness to trade
 ///    off.
-/// 2. [`handle_event`](Self::handle_event) updates pointer position/buttons
-///    and, by default, cycles focus on Tab/Shift+Tab.
+/// 2. [`handle_event`](Self::handle_event) updates pointer position/buttons and, by default,
+///    cycles focus on Tab/Shift+Tab, then reports whether this interaction [claimed the
+///    event](Consumed), resolved against the same last-frame registrations step 1 just read: an
+///    app juggling more than one [`Interaction`] can stop routing an event the moment one of them
+///    claims it, without waiting for step 3 to run.
 /// 3. Each widget calls [`interact`](Self::interact) with its rect, a
 ///    caller-chosen id, and a [`Sense`] describing what it cares about; it
 ///    gets back a [`Response`] and, as a side effect, registers itself for
@@ -153,6 +188,13 @@ pub const DEFAULT_DRAG_THRESHOLD: u16 = 1;
 pub struct Interaction<Id> {
     pointer: Pointer,
     hits: HitTester<Id>,
+    // A copy of last frame's finalized `hits`, taken in `begin_frame` before `hits` is cleared
+    // for this frame's `interact` calls. `handle_event` and `wants_pointer` read this rather than
+    // `hits`: `hits` itself is empty for most of a frame (from `begin_frame` until the first
+    // `interact` call resolves in step 3), but a pointer event delivered any time between
+    // `begin_frame` and that first `interact` call still needs a hit-test target, and the only
+    // complete one available yet is last frame's.
+    prev_hits: HitTester<Id>,
     focus: FocusRing<Id>,
     resolved_hover: Option<Id>,
     // The pointer position `resolved_hover` was computed from, kept
@@ -194,6 +236,7 @@ impl<Id> Interaction<Id> {
         Self {
             pointer: Pointer::new(),
             hits: HitTester::new(),
+            prev_hits: HitTester::new(),
             focus: FocusRing::new(),
             resolved_hover: None,
             resolved_pos: None,
@@ -242,6 +285,23 @@ impl<Id> Interaction<Id> {
 }
 
 impl<Id: Copy + PartialEq> Interaction<Id> {
+    /// Run one frame: [`begin_frame`](Self::begin_frame), then `f` (given a [`Ui`] pairing
+    /// `surface` with `self`), then [`end_frame`](Self::end_frame).
+    ///
+    /// This is the documented way to drive the [frame lifecycle](Self#frame-lifecycle): the three
+    /// calls are easy to get right once and easy to forget (particularly `end_frame`) when spread
+    /// across a caller's own draw loop by hand.
+    pub fn frame<R>(
+        &mut self,
+        surface: &mut Surface<'_>,
+        f: impl FnOnce(&mut Ui<'_, '_, Id>) -> R,
+    ) -> R {
+        self.begin_frame();
+        let result = f(&mut Ui::new(surface, self));
+        self.end_frame();
+        result
+    }
+
     /// Resolve hover/press against last frame's registrations, finalize the
     /// focus order, and clear the hit registry for this frame's
     /// [`interact`](Self::interact) calls. Call once per frame, before
@@ -263,6 +323,11 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
             self.secondary_active = self.resolved_hover;
         }
 
+        // `prev_hits` becomes last frame's finalized registrations (what `hits` held coming into
+        // this call, used above to compute `resolved_hover`), and `hits` is left holding
+        // whatever `prev_hits` held before, immediately cleared below: this reuses that buffer's
+        // capacity for this frame's `interact` calls rather than allocating a fresh one.
+        core::mem::swap(&mut self.hits, &mut self.prev_hits);
         self.hits.clear();
         self.focus.begin_frame();
         // Now that this frame's snapshot is taken, clear the one-shot flags
@@ -270,13 +335,99 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
         self.pointer.end_frame();
     }
 
-    /// Feed a raw input event: updates the pointer, and (by default) Tab
-    /// cycles focus: see [`FocusRing::handle_event`] if you need to
-    /// override that.
-    pub fn handle_event(&mut self, event: &Event) {
+    /// Feed a raw input event: updates the pointer, and (by default) Tab cycles focus (see
+    /// [`FocusRing::handle_event`] if you need to override that), then reports whether this
+    /// interaction claimed it.
+    ///
+    /// Resolved against *last* frame's registrations, the same snapshot
+    /// [`wants_pointer`](Self::wants_pointer)/[`wants_keyboard`](Self::wants_keyboard) read: this
+    /// frame's [`interact`](Self::interact) calls haven't run yet (they're step 3 of the [frame
+    /// lifecycle](Self#frame-lifecycle); `handle_event` is step 2), so `self`'s hit/focus
+    /// registrations at the time this runs are still whatever the previous frame left behind.
+    ///
+    /// A pointer event ([`Event::Mouse`]) is claimed if its position lands on a registered rect,
+    /// regardless of that rect's [`Sense`] (even a [`Sense::hover`]-only widget still owns the
+    /// pointer at its own position; a wheel event over it shouldn't fall through to whatever's
+    /// behind it either). `Tab`/`Shift+Tab` are claimed whenever anything is registered as
+    /// focusable, matching [`FocusRing::advance`]/[`retreat`](FocusRing::retreat)'s own condition
+    /// for actually moving focus. `Enter`/`Space` are claimed only when they double as
+    /// [`Sense::CLICK`] activation, i.e. a [`Sense::FOCUSABLE`] widget currently holds focus:
+    /// otherwise the same keys reach an app's own text input or other key handling unclaimed.
+    /// Everything else -- [`Event::Resize`], [`Event::Paste`], [`Event::FocusGained`]/
+    /// [`Event::FocusLost`], and any key this interaction doesn't bind -- is never claimed, even
+    /// while a widget is focused and active: those need to reach whatever's behind an open
+    /// overlay (a resize still has to reflow the screen under a dropdown), which a coarser "is
+    /// the overlay open" gate cannot express without also swallowing them.
+    #[must_use]
+    pub fn handle_event(&mut self, event: &Event) -> Consumed {
+        let claimed = match event {
+            Event::Mouse(mouse) => self.prev_hits.topmost_at(mouse.position).is_some(),
+            Event::Key(key)
+                if key.is_down() && matches!(key.code, KeyCode::Tab | KeyCode::BackTab) =>
+            {
+                self.focus.has_order()
+            }
+            // A widget's `Sense` (whether Enter/Space double as its activation, per
+            // `Sense::FOCUSABLE`/`Sense::CLICK`) isn't visible here, only per-`interact` call: the
+            // same approximation `activate_focused` below makes, conservative in the same
+            // direction (a focused non-activating widget makes this report claimed even though
+            // no `interact` call will actually consume the key as a click).
+            Event::Key(_) => is_activation_key(event) && self.focus.focused().is_some(),
+            // `Resize`/`Paste`/`FocusGained`/`FocusLost`, plus any future variant: never claimed.
+            Event::Resize(..) | Event::Paste(_) | Event::FocusGained | Event::FocusLost | _ => {
+                false
+            }
+        };
+
         self.pointer.handle_event(event);
         self.focus.handle_event(event);
         self.activate_focused |= is_activation_key(event);
+
+        claimed.into()
+    }
+
+    /// Whether the pointer is over a rect registered last frame, so a pointer event delivered
+    /// right now would land on a widget rather than fall through to whatever's behind this
+    /// interaction.
+    ///
+    /// Answerable before this frame has drawn anything: [`interact`](Self::interact) registers
+    /// each rect for the *next* frame's hit test (see the [frame lifecycle](Self#frame-lifecycle)),
+    /// so last frame's registrations, and therefore this answer, are already complete the moment
+    /// [`begin_frame`](Self::begin_frame) returns. An app with more than one [`Interaction`] (a
+    /// menu bar above a screen stack, say) can call this on the frontmost one before routing a
+    /// pointer event anywhere, the same role `io.WantCaptureMouse` plays in Dear `ImGui`.
+    ///
+    /// Reads the pointer's *live* position, not a frame-stale snapshot: unlike
+    /// [`Response::hovered`], which only updates once a frame via `begin_frame`, this is meant to
+    /// be called right after [`handle_event`](Self::handle_event) to decide where to route the
+    /// event that was just fed in, so it has to reflect that event's effect on the pointer
+    /// immediately, not wait for the next `begin_frame`.
+    #[must_use]
+    pub fn wants_pointer(&self) -> bool {
+        self.pointer
+            .pos()
+            .is_some_and(|pos| self.prev_hits.topmost_at(pos).is_some())
+    }
+
+    /// Whether a widget currently holds keyboard focus, so a key event delivered right now is
+    /// likely to be consumed rather than fall through.
+    ///
+    /// Unlike [`wants_pointer`](Self::wants_pointer), this reads live, not a frame-stale
+    /// snapshot: focus is plain level state that persists across frames until
+    /// [`FocusRing::request`]/[`clear`](FocusRing::clear) moves it, the same reasoning
+    /// [`Response::focused`] documents.
+    #[must_use]
+    pub const fn wants_keyboard(&self) -> bool {
+        self.focus.focused().is_some()
+    }
+
+    /// Register `rect` as a barrier: a pointer inside it never resolves to anything registered by
+    /// an earlier [`interact`](Self::interact) call, no matter how the two overlap.
+    ///
+    /// [`Ui::modal`](crate::Ui::modal) is the documented way to use this; call it directly only
+    /// when driving [`interact`](Self::interact) without a [`Ui`].
+    pub fn push_barrier(&mut self, rect: Rect) {
+        self.hits.push_barrier(rect);
     }
 
     /// Register `id`'s `rect` for whatever `sense` asks for, and report
@@ -340,7 +491,8 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
         // what's drawn on top of it, matching how wheel input behaves in
         // most real UIs (it reaches the nearest scrollable ancestor, not
         // just whatever's topmost at the exact pixel).
-        let scrollable_here = sense.wants_pointer()
+        let scrollable_here = !disabled
+            && sense.wants_pointer()
             && sense.contains(Sense::SCROLL)
             && self.resolved_pos.is_some_and(|pos| rect.contains_pos(pos));
 
@@ -349,7 +501,7 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
         // a gesture this module tracks), and it doesn't drive focus the way
         // a primary click does (see `Response::secondary_clicked`'s doc
         // comment).
-        let secondary_is_active = self.secondary_active == Some(id);
+        let secondary_is_active = !disabled && self.secondary_active == Some(id);
         let secondary_clicked = sense.contains(Sense::SECONDARY_CLICK)
             && !disabled
             && secondary_is_active
@@ -371,6 +523,15 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
             } else {
                 0
             },
+            // Resolved from the same `resolved_pos`/`resolved_hover` snapshot `hovered` comes
+            // from above, so the two stay consistent (one frame stale together) rather than
+            // mixing a stale hover flag with a live position.
+            pointer_pos: hovered.then_some(self.resolved_pos).flatten(),
+            // `drag_origin` is set once, in `begin_frame`, when a press lands on `active`, and
+            // cleared in `end_frame` on release: live state, not part of the per-`interact`
+            // resolved-snapshot fields above, matching how `held` reads `active` directly rather
+            // than a snapshot of it.
+            press_origin: is_active.then_some(self.drag_origin).flatten(),
         }
     }
 
@@ -422,13 +583,13 @@ mod tests {
     }
 
     fn click_at(interaction: &mut Interaction<Id>, pos: Pos) {
-        interaction.handle_event(&Event::Mouse(MouseEvent {
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
             kind: MouseEventKind::Down(MouseButton::Left),
             position: pos,
             pixel_position: None,
             modifiers: KeyModifiers::NONE,
         }));
-        interaction.handle_event(&Event::Mouse(MouseEvent {
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
             kind: MouseEventKind::Up(MouseButton::Left),
             position: pos,
             pixel_position: None,
@@ -449,7 +610,7 @@ mod tests {
     ) -> (Response, Response) {
         interaction.begin_frame();
         for event in events {
-            interaction.handle_event(event);
+            let _ = interaction.handle_event(event);
         }
         let save = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, Sense::click());
         let cancel = interaction.interact(Rect::new(6, 0, 5, 1), Id::Cancel, Sense::click());
@@ -526,7 +687,7 @@ mod tests {
         let mut interaction = Interaction::<Id>::new();
         let _ = frame(&mut interaction);
 
-        interaction.handle_event(&Event::Mouse(MouseEvent {
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
             kind: MouseEventKind::Moved,
             position: Pos::new(7, 0),
             pixel_position: None,
@@ -560,7 +721,7 @@ mod tests {
         let mut interaction = Interaction::<Id>::new().with_drag_threshold(1);
         let _ = frame(&mut interaction);
 
-        interaction.handle_event(&Event::Mouse(MouseEvent {
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
             kind: MouseEventKind::Down(MouseButton::Left),
             position: Pos::new(2, 0),
             pixel_position: None,
@@ -571,7 +732,7 @@ mod tests {
         assert!(!save.dragging()); // hasn't moved yet
         interaction.end_frame();
 
-        interaction.handle_event(&Event::Mouse(MouseEvent {
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
             kind: MouseEventKind::Moved,
             position: Pos::new(4, 0), // 2 cells from the press origin
             pixel_position: None,
@@ -582,7 +743,7 @@ mod tests {
         assert!(save.dragging());
         interaction.end_frame();
 
-        interaction.handle_event(&Event::Mouse(MouseEvent {
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
             kind: MouseEventKind::Up(MouseButton::Left),
             position: Pos::new(4, 0),
             pixel_position: None,
@@ -599,7 +760,7 @@ mod tests {
         let mut interaction = Interaction::<Id>::new();
         let _ = frame(&mut interaction); // frame 1: registers Save/Cancel
 
-        interaction.handle_event(&Event::Mouse(MouseEvent {
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
             kind: MouseEventKind::Down(MouseButton::Left),
             position: Pos::new(2, 0), // over Save
             pixel_position: None,
@@ -610,7 +771,7 @@ mod tests {
         let (save, _) = frame(&mut interaction);
         assert!(save.held());
 
-        interaction.handle_event(&Event::Mouse(MouseEvent {
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
             kind: MouseEventKind::Moved,
             position: Pos::new(20, 0), // outside Save's rect, still held down
             pixel_position: None,
@@ -622,7 +783,7 @@ mod tests {
         interaction.end_frame();
         assert!(!save.held()); // slid off before release: cancels immediately
 
-        interaction.handle_event(&Event::Mouse(MouseEvent {
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
             kind: MouseEventKind::Moved,
             position: Pos::new(2, 0), // back over Save, still held down, before release
             pixel_position: None,
@@ -634,7 +795,7 @@ mod tests {
         interaction.end_frame();
         assert!(save.held()); // back inside: held again
 
-        interaction.handle_event(&Event::Mouse(MouseEvent {
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
             kind: MouseEventKind::Up(MouseButton::Left),
             position: Pos::new(2, 0),
             pixel_position: None,
@@ -656,7 +817,7 @@ mod tests {
         let _ = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, Sense::hover());
         interaction.end_frame();
 
-        interaction.handle_event(&Event::Mouse(MouseEvent {
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
             kind: MouseEventKind::Down(MouseButton::Left),
             position: Pos::new(2, 0), // over Save
             pixel_position: None,
@@ -673,17 +834,65 @@ mod tests {
     }
 
     #[test]
-    fn scroll_reports_only_while_hovered_and_sensed() {
+    fn pointer_pos_matches_hover_and_is_none_elsewhere() {
         let mut interaction = Interaction::<Id>::new();
         let _ = frame(&mut interaction);
 
-        interaction.handle_event(&Event::Mouse(MouseEvent {
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
             kind: MouseEventKind::Moved,
             position: Pos::new(2, 0),
             pixel_position: None,
             modifiers: KeyModifiers::NONE,
         }));
-        interaction.handle_event(&Event::Mouse(MouseEvent {
+
+        let (save, cancel) = frame(&mut interaction);
+        assert_eq!(save.pointer_pos(), Some(Pos::new(2, 0)));
+        assert_eq!(cancel.pointer_pos(), None);
+    }
+
+    #[test]
+    fn press_origin_stays_put_for_the_duration_of_a_drag() {
+        let mut interaction = Interaction::<Id>::new().with_drag_threshold(1);
+        let _ = frame(&mut interaction);
+
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            position: Pos::new(2, 0),
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        }));
+        interaction.begin_frame();
+        let save = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, Sense::drag());
+        let cancel = interaction.interact(Rect::new(6, 0, 5, 1), Id::Cancel, Sense::drag());
+        interaction.end_frame();
+        assert_eq!(save.press_origin(), Some(Pos::new(2, 0)));
+        assert_eq!(cancel.press_origin(), None); // press never landed on Cancel
+
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Moved,
+            position: Pos::new(4, 0),
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        }));
+        interaction.begin_frame();
+        let save = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, Sense::drag());
+        interaction.end_frame();
+        // Still the original press position, not the pointer's current one.
+        assert_eq!(save.press_origin(), Some(Pos::new(2, 0)));
+    }
+
+    #[test]
+    fn scroll_reports_only_while_hovered_and_sensed() {
+        let mut interaction = Interaction::<Id>::new();
+        let _ = frame(&mut interaction);
+
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Moved,
+            position: Pos::new(2, 0),
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        }));
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
             kind: MouseEventKind::Scroll { dx: 0.0, dy: -1.0 },
             position: Pos::new(2, 0),
             pixel_position: None,
@@ -722,7 +931,7 @@ mod tests {
         );
         interaction.end_frame();
 
-        interaction.handle_event(&Event::Mouse(MouseEvent {
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
             kind: MouseEventKind::Scroll { dx: 0.0, dy: -1.0 },
             position: Pos::new(2, 0),
             pixel_position: None,
@@ -757,13 +966,13 @@ mod tests {
     }
 
     fn right_click_at(interaction: &mut Interaction<Id>, pos: Pos) {
-        interaction.handle_event(&Event::Mouse(MouseEvent {
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
             kind: MouseEventKind::Down(MouseButton::Right),
             position: pos,
             pixel_position: None,
             modifiers: KeyModifiers::NONE,
         }));
-        interaction.handle_event(&Event::Mouse(MouseEvent {
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
             kind: MouseEventKind::Up(MouseButton::Right),
             position: pos,
             pixel_position: None,
@@ -821,7 +1030,7 @@ mod tests {
         let mut interaction = Interaction::<Id>::new();
         let _ = frame_disabled(&mut interaction); // frame 1: registers Save
 
-        interaction.handle_event(&Event::Mouse(MouseEvent {
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
             kind: MouseEventKind::Down(MouseButton::Left),
             position: Pos::new(2, 0), // over Save
             pixel_position: None,
@@ -831,7 +1040,7 @@ mod tests {
         assert!(!save.pressed());
         assert!(!save.held());
 
-        interaction.handle_event(&Event::Mouse(MouseEvent {
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
             kind: MouseEventKind::Up(MouseButton::Left),
             position: Pos::new(2, 0),
             pixel_position: None,
@@ -843,11 +1052,54 @@ mod tests {
     }
 
     #[test]
+    fn disabled_widget_never_reports_dragging_or_scroll() {
+        // The `!disabled` guards on `dragging` and `scrollable_here` in `interact` are otherwise
+        // never exercised, since `frame_disabled` above only senses `CLICK`/`SECONDARY_CLICK`.
+        let mut interaction = Interaction::<Id>::new().with_drag_threshold(1);
+        let sense = Sense::drag() | Sense::SCROLL | Sense::DISABLED;
+
+        interaction.begin_frame();
+        let _ = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, sense);
+        interaction.end_frame();
+
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            position: Pos::new(2, 0), // over Save
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        }));
+        interaction.begin_frame();
+        let _ = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, sense);
+        interaction.end_frame();
+
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Moved,
+            position: Pos::new(4, 0), // 2 cells from the press origin, past the threshold
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        }));
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Scroll { dx: 0.0, dy: -1.0 },
+            position: Pos::new(4, 0),
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        }));
+
+        interaction.begin_frame();
+        let save = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, sense);
+        interaction.end_frame();
+
+        assert!(!save.dragging());
+        assert_eq!(save.scroll_delta(), 0);
+        assert!(save.hovered()); // hit-testing keeps working while disabled
+    }
+
+    #[test]
     fn disabled_widget_still_reports_hover() {
         let mut interaction = Interaction::<Id>::new();
         let _ = frame_disabled(&mut interaction);
 
-        interaction.handle_event(&Event::Mouse(MouseEvent {
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
             kind: MouseEventKind::Moved,
             position: Pos::new(2, 0), // over Save
             pixel_position: None,
@@ -885,7 +1137,7 @@ mod tests {
 
         let tab = Event::Key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
         interaction.begin_frame(); // finalizes frame 1's registrations into the Tab order
-        interaction.handle_event(&tab);
+        let _ = interaction.handle_event(&tab);
         // Save is registered nowhere in that order while disabled, so the
         // first Tab lands directly on Cancel.
         assert_eq!(interaction.focus().focused(), Some(Id::Cancel));
@@ -936,5 +1188,105 @@ mod tests {
         assert!(disabled.disabled());
         assert!(!plain.disabled());
         assert_eq!(disabled.hovered(), plain.hovered()); // both unhovered, same either way
+    }
+    #[test]
+    fn wants_pointer_is_false_before_any_frame_has_registered_anything() {
+        let interaction = Interaction::<Id>::new();
+        assert!(!interaction.wants_pointer());
+    }
+
+    #[test]
+    fn a_pointer_event_on_a_registered_rect_is_consumed() {
+        let mut interaction = Interaction::<Id>::new();
+        let _ = frame(&mut interaction); // frame 1: registers Save/Cancel
+        let _ = frame(&mut interaction); // frame 2: frame 1's registrations become `prev_hits`
+
+        let consumed = interaction.handle_event(&Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Moved,
+            position: Pos::new(2, 0), // over Save
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        }));
+        assert_eq!(consumed, Consumed::Yes);
+        assert!(interaction.wants_pointer());
+    }
+
+    #[test]
+    fn a_pointer_event_on_empty_space_is_not_consumed() {
+        let mut interaction = Interaction::<Id>::new();
+        let _ = frame(&mut interaction); // frame 1: registers Save/Cancel
+        let _ = frame(&mut interaction); // frame 2: frame 1's registrations become `prev_hits`
+
+        let consumed = interaction.handle_event(&Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Moved,
+            position: Pos::new(20, 20), // outside both Save and Cancel
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        }));
+        assert_eq!(consumed, Consumed::No);
+        assert!(!interaction.wants_pointer());
+    }
+
+    /// Regression case for the #598 defect: a coarse "is a widget focused and active" gate would
+    /// wrongly swallow events a focused/active widget has no business claiming, starving whatever
+    /// needed them: `Resize`/`Paste`/`FocusLost`/`FocusGained`, and any key that isn't an
+    /// activation key. `Consumed` must report `No` for all of them even while a widget holds
+    /// focus and is mid-press, so a caller routing by [`Consumed`] doesn't reproduce that bug.
+    #[test]
+    fn unclaimed_events_are_never_consumed_even_while_focused_and_active() {
+        let mut interaction = Interaction::<Id>::new();
+        let _ = frame(&mut interaction); // frame 1: registers Save/Cancel as focusable
+
+        let tab = Event::Key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+        let (save, _) = frame_with_events(&mut interaction, &[tab]); // frame 2: Tab focuses Save
+        assert!(save.focused());
+
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            position: Pos::new(2, 0), // over Save, now active and mid-press
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        }));
+
+        assert_eq!(
+            interaction.handle_event(&Event::Resize(80, 24)),
+            Consumed::No
+        );
+        assert_eq!(
+            interaction.handle_event(&Event::Paste("hello".to_owned())),
+            Consumed::No
+        );
+        assert_eq!(interaction.handle_event(&Event::FocusLost), Consumed::No);
+
+        // A non-activation key and `FocusGained` also aren't claimed by a focused/active widget:
+        // only an activation key while focused, or a pointer event while active, is consumed.
+        assert_eq!(
+            interaction.handle_event(&Event::Key(KeyEvent::new(
+                KeyCode::Char('a'),
+                KeyModifiers::NONE
+            ))),
+            Consumed::No
+        );
+        assert_eq!(
+            interaction.handle_event(&Event::Key(KeyEvent::new(
+                KeyCode::Escape,
+                KeyModifiers::NONE
+            ))),
+            Consumed::No
+        );
+        assert_eq!(interaction.handle_event(&Event::FocusGained), Consumed::No);
+    }
+
+    #[test]
+    fn tab_is_consumed_only_when_something_is_registered_as_focusable() {
+        let mut interaction = Interaction::<Id>::new();
+        let tab = Event::Key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+
+        // Nothing has ever been registered yet.
+        assert_eq!(interaction.handle_event(&tab), Consumed::No);
+
+        let _ = frame(&mut interaction); // frame 1: registers Save/Cancel as focusable
+        let _ = frame(&mut interaction); // frame 2: frame 1's registrations finalize the order
+        assert_eq!(interaction.handle_event(&tab), Consumed::Yes);
     }
 }

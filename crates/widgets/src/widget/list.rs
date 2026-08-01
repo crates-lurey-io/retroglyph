@@ -1,9 +1,11 @@
 //! [`List`]: a scrollable, single-column list with a [`ListState`]-driven highlighted item.
 use retroglyph_core::{Color, Rect, Style};
 
-use super::StatefulWidget;
 use super::window::visible_window;
+use super::{InteractiveWidget, StatefulWidget};
 use crate::ListState;
+use crate::Response;
+use crate::Sense;
 use crate::Surface;
 use crate::Theme;
 use crate::draw::fill_rect;
@@ -26,6 +28,11 @@ use crate::text::truncate as truncate_to_cols;
 /// a bright-white-on-dark-blue highlight for the selected one); set them with
 /// [`List::item_style`]/[`List::selected_style`].
 ///
+/// As an [`InteractiveWidget`], a single id covers the whole list: a click selects the row under
+/// [`Response::pointer_pos`], resolved from this list's own row geometry (`state.offset()` plus
+/// the pointer's row within `surface.area()`) rather than from a separate id per row, and the
+/// wheel scrolls it via [`Response::scroll_delta`]/[`ListState::scroll_by`].
+///
 /// # Examples
 ///
 /// ```
@@ -38,7 +45,7 @@ use crate::text::truncate as truncate_to_cols;
 ///
 /// let area = Rect::new(0, 0, 20, 3);
 /// let mut grid = Grid::new(20, 3);
-/// List::new(&items).render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
+/// List::new(&items).render(&mut Surface::new(&mut grid, area, 0), &mut state);
 /// ```
 #[derive(Clone, Copy, Debug)]
 pub struct List<'a> {
@@ -109,27 +116,26 @@ impl<'a> List<'a> {
     }
 }
 
-impl StatefulWidget for List<'_> {
-    type State = ListState;
-
-    fn render(&self, area: Rect, surface: &mut Surface<'_>, state: &mut Self::State) {
-        if area.width() == 0 || area.height() == 0 {
+impl List<'_> {
+    /// The shared drawing routine both [`StatefulWidget::render`] and
+    /// [`InteractiveWidget::render`] use.
+    fn draw(&self, surface: &mut Surface<'_>, state: &ListState) {
+        let (width, height) = (surface.width(), surface.height());
+        if width == 0 || height == 0 {
             return;
         }
 
-        let visible_items = area.height_usize();
+        let visible_items = usize::from(height);
         let selected = state.selected();
         for (item_index, &item) in visible_window(self.items, state.offset(), visible_items) {
             // `item_index - state.offset()` is a row within the visible window, so it never
-            // exceeds `visible_items` (`area.height_usize()`, itself widened from `area`'s `u16`
-            // height).
+            // exceeds `visible_items` (this surface's own `u16` height).
             #[allow(clippy::cast_possible_truncation)]
-            let row = (item_index - state.offset()) as u16;
-            let y = area.top() + row;
+            let y = (item_index - state.offset()) as u16;
             let style = if Some(item_index) == selected {
                 fill_rect(
                     surface,
-                    Rect::new(area.left(), y, area.width(), 1),
+                    Rect::new(0, y, width, 1),
                     ' ',
                     Style::new().bg(self.selected_style.background()),
                 );
@@ -137,9 +143,55 @@ impl StatefulWidget for List<'_> {
             } else {
                 self.item_style
             };
-            let text = truncate_to_cols(item, area.width_usize());
-            surface.print((area.left(), y), text, style);
+            let text = truncate_to_cols(item, usize::from(width));
+            surface.print((0, y), text, style);
         }
+    }
+
+    /// The item index at `pos`, given `state`'s current scroll offset, or `None` if `pos` falls
+    /// past the last item (not clamped to the last item).
+    fn index_at(&self, area: Rect, state: &ListState, pos: retroglyph_core::Pos) -> Option<usize> {
+        let row = pos.y.checked_sub(area.top())?;
+        let index = state.offset() + usize::from(row);
+        (index < self.items.len()).then_some(index)
+    }
+}
+
+impl StatefulWidget for List<'_> {
+    type State = ListState;
+
+    fn render(&self, surface: &mut Surface<'_>, state: &mut Self::State) {
+        self.draw(surface, state);
+    }
+}
+
+impl InteractiveWidget for List<'_> {
+    type State = ListState;
+
+    /// A single id covers the whole list: clicking resolves which row via
+    /// [`Response::pointer_pos`] and this list's own row geometry, rather than each row
+    /// registering its own id.
+    fn sense(&self) -> Sense {
+        Sense::click() | Sense::SCROLL | Sense::HOVER
+    }
+
+    fn render(&self, surface: &mut Surface<'_>, state: &mut Self::State, response: Response) {
+        let area = surface.area();
+
+        // A click past the last row selects nothing: it's neither clamped to the last item nor
+        // left as whatever was selected before.
+        if response.clicked()
+            && let Some(pos) = response.pointer_pos()
+            && let Some(index) = self.index_at(area, state, pos)
+        {
+            state.select(Some(index));
+        }
+        let scroll_delta = response.scroll_delta();
+        if scroll_delta != 0 {
+            state.scroll_by(scroll_delta);
+        }
+
+        self.draw(surface, state);
     }
 }
 
@@ -158,7 +210,7 @@ mod tests {
         let mut grid = Grid::new(20, 2);
         let mut state = ListState::new();
         state.select(Some(1));
-        list.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
+        StatefulWidget::render(&list, &mut Surface::new(&mut grid, area, 0), &mut state);
 
         let highlighted_bg = grid[Pos::new(0, 1)].style().background();
         let plain_bg = grid[Pos::new(0, 0)].style().background();
@@ -173,7 +225,7 @@ mod tests {
 
         let mut grid = Grid::new(20, 2);
         let mut state = ListState::new();
-        list.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
+        StatefulWidget::render(&list, &mut Surface::new(&mut grid, area, 0), &mut state);
 
         let row0_bg = grid[Pos::new(0, 0)].style().background();
         let row1_bg = grid[Pos::new(0, 1)].style().background();
@@ -193,7 +245,7 @@ mod tests {
         let mut grid = Grid::new(20, 2);
         let mut state = ListState::new();
         state.set_offset(2); // window is [Charlie, Delta]
-        list.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
+        StatefulWidget::render(&list, &mut Surface::new(&mut grid, area, 0), &mut state);
 
         assert_eq!(grid[Pos::new(0, 0)].glyph(), 'C');
         assert_eq!(grid[Pos::new(0, 1)].glyph(), 'D');
@@ -209,7 +261,7 @@ mod tests {
         let mut state = ListState::new();
         state.select(Some(0)); // "Alpha"
         state.set_offset(2); // but the window starts at "Charlie"
-        list.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
+        StatefulWidget::render(&list, &mut Surface::new(&mut grid, area, 0), &mut state);
 
         let row0_bg = grid[Pos::new(0, 0)].style().background();
         let row1_bg = grid[Pos::new(0, 1)].style().background();
@@ -225,7 +277,7 @@ mod tests {
 
         let mut grid = Grid::new(20, 1);
         let mut state = ListState::new();
-        list.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
+        StatefulWidget::render(&list, &mut Surface::new(&mut grid, area, 0), &mut state);
 
         assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Color::RED);
     }
@@ -240,7 +292,7 @@ mod tests {
         let mut grid = Grid::new(20, 1);
         let mut state = ListState::new();
         state.select(Some(0));
-        list.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
+        StatefulWidget::render(&list, &mut Surface::new(&mut grid, area, 0), &mut state);
 
         assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Color::GREEN);
         assert_eq!(grid[Pos::new(0, 0)].style().background(), Color::BLUE);
@@ -254,7 +306,7 @@ mod tests {
 
         let mut grid = Grid::new(5, 1);
         let mut state = ListState::new();
-        list.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
+        StatefulWidget::render(&list, &mut Surface::new(&mut grid, area, 0), &mut state);
 
         assert_eq!(grid[Pos::new(4, 0)].glyph(), 'c'); // "a muc"
     }
@@ -269,7 +321,7 @@ mod tests {
         let mut state = ListState::new();
         state.select(Some(3)); // "Delta", off the front of the default window
         state.ensure_visible(2);
-        list.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
+        StatefulWidget::render(&list, &mut Surface::new(&mut grid, area, 0), &mut state);
 
         assert_eq!(grid[Pos::new(0, 1)].glyph(), 'D');
         let highlighted_bg = grid[Pos::new(0, 1)].style().background();
@@ -285,7 +337,7 @@ mod tests {
 
         let mut grid = Grid::new(20, 1);
         let mut state = ListState::new();
-        list.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
+        StatefulWidget::render(&list, &mut Surface::new(&mut grid, area, 0), &mut state);
 
         assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
     }
@@ -299,7 +351,7 @@ mod tests {
         let mut grid = Grid::new(20, 2);
         let mut state = ListState::new();
         state.select(Some(1));
-        list.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
+        StatefulWidget::render(&list, &mut Surface::new(&mut grid, area, 0), &mut state);
 
         assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Theme::DARK.fg);
         assert_eq!(
@@ -321,9 +373,77 @@ mod tests {
 
         let mut grid = Grid::new(20, 1);
         let mut state = ListState::new();
-        list.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
+        StatefulWidget::render(&list, &mut Surface::new(&mut grid, area, 0), &mut state);
 
         assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Theme::DARK.fg);
         assert_eq!(grid[Pos::new(0, 0)].style().background(), Color::Default);
+    }
+
+    #[test]
+    fn click_selects_the_row_under_the_pointer() {
+        let area = Rect::new(0, 0, 20, 3);
+        let names = items(&["Alpha", "Bravo", "Charlie"]);
+        let list = List::new(&names);
+        let mut state = ListState::new();
+
+        let response = Response {
+            hovered: true,
+            clicked: true,
+            pointer_pos: Some(Pos::new(2, 1)), // row 1 -> "Bravo"
+            ..Response::default()
+        };
+        let mut grid = Grid::new(20, 3);
+        InteractiveWidget::render(
+            &list,
+            &mut Surface::new(&mut grid, area, 0),
+            &mut state,
+            response,
+        );
+        assert_eq!(state.selected(), Some(1));
+    }
+
+    #[test]
+    fn click_selects_the_row_under_the_pointer_with_a_scroll_offset() {
+        let area = Rect::new(0, 0, 20, 2); // 2 visible rows
+        let names = items(&["Alpha", "Bravo", "Charlie", "Delta"]);
+        let list = List::new(&names);
+        let mut state = ListState::new();
+        state.set_offset(2); // window is [Charlie, Delta]
+
+        let response = Response {
+            hovered: true,
+            clicked: true,
+            pointer_pos: Some(Pos::new(2, 1)), // row 1 of the window -> "Delta" (index 3)
+            ..Response::default()
+        };
+        let mut grid = Grid::new(20, 2);
+        InteractiveWidget::render(
+            &list,
+            &mut Surface::new(&mut grid, area, 0),
+            &mut state,
+            response,
+        );
+        assert_eq!(state.selected(), Some(3));
+    }
+
+    #[test]
+    fn wheel_scroll_moves_the_offset() {
+        let area = Rect::new(0, 0, 20, 2);
+        let names = items(&["Alpha", "Bravo", "Charlie", "Delta"]);
+        let list = List::new(&names);
+        let mut state = ListState::new();
+
+        let response = Response {
+            scroll_delta: 2,
+            ..Response::default()
+        };
+        let mut grid = Grid::new(20, 2);
+        InteractiveWidget::render(
+            &list,
+            &mut Surface::new(&mut grid, area, 0),
+            &mut state,
+            response,
+        );
+        assert_eq!(state.offset(), 2);
     }
 }

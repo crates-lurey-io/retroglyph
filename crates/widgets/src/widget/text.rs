@@ -1,5 +1,5 @@
 //! [`Text`]: a single line of plain text in one [`Style`].
-use retroglyph_core::{Rect, Style};
+use retroglyph_core::Style;
 use unicode_width::UnicodeWidthStr;
 
 use super::Widget;
@@ -29,7 +29,7 @@ use crate::text::truncate as truncate_to_cols;
 /// let mut grid = Grid::new(10, 1);
 /// Text::new("OK")
 ///     .align(Align::Right)
-///     .render(area, &mut Surface::new(&mut grid, area, 0));
+///     .render(&mut Surface::new(&mut grid, area, 0));
 /// ```
 #[derive(Clone, Copy, Debug)]
 pub struct Text<'a> {
@@ -65,23 +65,24 @@ impl<'a> Text<'a> {
 }
 
 impl Widget for Text<'_> {
-    fn render(&self, area: Rect, surface: &mut Surface<'_>) {
-        if area.width() == 0 {
+    fn render(&self, surface: &mut Surface<'_>) {
+        let width = surface.width();
+        if width == 0 {
             return;
         }
-        let text = truncate_to_cols(self.content, area.width_usize());
-        // `text` is bounded to `area.width_usize()` columns above, itself widened from `area`'s
-        // own `u16` width, so narrowing the display width back is always exact.
+        let text = truncate_to_cols(self.content, usize::from(width));
+        // `text` is bounded to `width` columns above, so narrowing the display width back is
+        // always exact.
         #[allow(clippy::cast_possible_truncation)]
         let text_width = text.width() as u16;
-        let x = area.left() + self.align.offset(area.width(), text_width);
-        surface.print((x, area.top()), text, self.style);
+        let x = self.align.offset(width, text_width);
+        surface.print((x, 0), text, self.style);
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::{Color, Grid, Pos};
+    use retroglyph_core::{Color, Grid, Pos, Rect};
 
     use super::*;
 
@@ -91,7 +92,7 @@ mod tests {
         let mut grid = Grid::new(10, 1);
         Text::new("hi")
             .style(Style::new().fg(Color::WHITE))
-            .render(area, &mut Surface::new(&mut grid, area, 0));
+            .render(&mut Surface::new(&mut grid, area, 0));
 
         assert_eq!(grid[Pos::new(0, 0)].glyph(), 'h');
         assert_eq!(grid[Pos::new(1, 0)].glyph(), 'i');
@@ -102,8 +103,7 @@ mod tests {
     fn clips_to_area_width() {
         let area = Rect::new(0, 0, 5, 1);
         let mut grid = Grid::new(5, 1);
-        Text::new("a much longer message than fits")
-            .render(area, &mut Surface::new(&mut grid, area, 0));
+        Text::new("a much longer message than fits").render(&mut Surface::new(&mut grid, area, 0));
 
         assert_eq!(grid[Pos::new(4, 0)].glyph(), 'c'); // "a muc"
     }
@@ -114,7 +114,7 @@ mod tests {
         let mut grid = Grid::new(10, 1);
         Text::new("hi")
             .align(Align::Right)
-            .render(area, &mut Surface::new(&mut grid, area, 0));
+            .render(&mut Surface::new(&mut grid, area, 0));
 
         // "hi" (2 cols) in 10 cols, right-aligned: starts at column 8.
         assert_eq!(grid[Pos::new(8, 0)].glyph(), 'h');
@@ -128,7 +128,7 @@ mod tests {
         let mut grid = Grid::new(10, 1);
         Text::new("hi")
             .align(Align::Center)
-            .render(area, &mut Surface::new(&mut grid, area, 0));
+            .render(&mut Surface::new(&mut grid, area, 0));
 
         // 8 cols slack, 4 on the left: "hi" starts at column 4.
         assert_eq!(grid[Pos::new(4, 0)].glyph(), 'h');
@@ -139,7 +139,7 @@ mod tests {
     fn zero_width_is_a_no_op() {
         let area = Rect::new(0, 0, 0, 1);
         let mut grid = Grid::new(1, 1);
-        Text::new("hi").render(area, &mut Surface::new(&mut grid, area, 0));
+        Text::new("hi").render(&mut Surface::new(&mut grid, area, 0));
         assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
     }
 }

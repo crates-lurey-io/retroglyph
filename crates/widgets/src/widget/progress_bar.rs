@@ -1,5 +1,5 @@
 //! [`ProgressBar`]: a horizontal progress bar.
-use retroglyph_core::{Color, Rect, Style};
+use retroglyph_core::{Color, Style};
 
 use super::Widget;
 use crate::Surface;
@@ -20,7 +20,7 @@ use crate::Theme;
 ///
 /// let area = Rect::new(0, 0, 10, 1);
 /// let mut grid = Grid::new(10, 1);
-/// ProgressBar::new(5, 10).render(area, &mut Surface::new(&mut grid, area, 0));
+/// ProgressBar::new(5, 10).render(&mut Surface::new(&mut grid, area, 0));
 /// ```
 #[derive(Clone, Copy, Debug)]
 pub struct ProgressBar {
@@ -90,31 +90,31 @@ impl ProgressBar {
 }
 
 impl Widget for ProgressBar {
-    fn render(&self, area: Rect, surface: &mut Surface<'_>) {
-        if area.width() == 0 || self.max == 0 {
+    fn render(&self, surface: &mut Surface<'_>) {
+        let width = surface.width();
+        if width == 0 || self.max == 0 {
             return;
         }
         // `value.min(max) <= max`, so `(value.min(max) * width) / max <= width`, itself a `u16`:
         // the result always narrows back exactly.
         #[allow(clippy::cast_possible_truncation)]
-        let filled_cells = ((u64::from(self.value.min(self.max)) * u64::from(area.width()))
-            / u64::from(self.max)) as u16;
-        let y = area.top();
-        for x in area.left()..area.right() {
-            let is_filled = x < area.left() + filled_cells;
+        let filled_cells =
+            ((u64::from(self.value.min(self.max)) * u64::from(width)) / u64::from(self.max)) as u16;
+        for x in 0..width {
+            let is_filled = x < filled_cells;
             let style = if is_filled {
                 self.filled_style
             } else {
                 self.empty_style
             };
-            surface.put((x, y), if is_filled { '█' } else { '░' }, style);
+            surface.put((x, 0), if is_filled { '█' } else { '░' }, style);
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::{Grid, Pos};
+    use retroglyph_core::{Grid, Pos, Rect};
 
     use super::*;
 
@@ -122,7 +122,7 @@ mod tests {
     fn fills_proportionally() {
         let area = Rect::new(0, 0, 10, 1);
         let mut grid = Grid::new(10, 1);
-        ProgressBar::new(5, 10).render(area, &mut Surface::new(&mut grid, area, 0));
+        ProgressBar::new(5, 10).render(&mut Surface::new(&mut grid, area, 0));
 
         for x in 0..5 {
             assert_eq!(grid[Pos::new(x, 0)].glyph(), '█');
@@ -136,7 +136,7 @@ mod tests {
     fn zero_max_is_a_no_op() {
         let area = Rect::new(0, 0, 10, 1);
         let mut grid = Grid::new(10, 1);
-        ProgressBar::new(0, 0).render(area, &mut Surface::new(&mut grid, area, 0));
+        ProgressBar::new(0, 0).render(&mut Surface::new(&mut grid, area, 0));
         assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
     }
 
@@ -149,7 +149,7 @@ mod tests {
         ProgressBar::new(2, 4)
             .filled_style(Style::new().fg(Color::WHITE))
             .empty_style(Style::new().fg(Color::BLACK))
-            .render(area, &mut Surface::new(&mut grid, area, 0));
+            .render(&mut Surface::new(&mut grid, area, 0));
 
         assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Color::WHITE);
         assert_eq!(grid[Pos::new(3, 0)].style().foreground(), Color::BLACK);
@@ -161,7 +161,7 @@ mod tests {
         let mut grid = Grid::new(4, 1);
         ProgressBar::new(2, 4)
             .theme(Theme::DARK)
-            .render(area, &mut Surface::new(&mut grid, area, 0));
+            .render(&mut Surface::new(&mut grid, area, 0));
 
         assert_eq!(
             grid[Pos::new(0, 0)].style().foreground(),
@@ -184,7 +184,7 @@ mod tests {
         let mut grid = Grid::new(4, 1);
         ProgressBar::new(2, 4)
             .theme_on(Theme::DARK, Color::Default)
-            .render(area, &mut Surface::new(&mut grid, area, 0));
+            .render(&mut Surface::new(&mut grid, area, 0));
 
         assert_eq!(
             grid[Pos::new(0, 0)].style().foreground(),

@@ -42,7 +42,7 @@ const DEFAULT_SPARKLINE_COLOR: Color = Color::Rgb {
 ///     PerfOverlay::new(stats)
 ///         .backend(backend)
 ///         .metrics(&[("res", "1920x1080"), ("vsync", "on")])
-///         .render(area, surface);
+///         .render(&mut surface.scope(area));
 /// })
 /// .size(Size::new(34, 8));
 /// retroglyph_core::run_blocking(term, app).expect("run_blocking");
@@ -154,7 +154,8 @@ impl<'a, const N: usize> PerfOverlay<'a, N> {
 }
 
 impl<const N: usize> Widget for PerfOverlay<'_, N> {
-    fn render(&self, area: Rect, surface: &mut Surface<'_>) {
+    fn render(&self, surface: &mut Surface<'_>) {
+        let area = surface.area();
         if area.width() < 4 || area.height() < 3 {
             return;
         }
@@ -163,7 +164,7 @@ impl<const N: usize> Widget for PerfOverlay<'_, N> {
             .title(self.title)
             .border_style(self.border_style)
             .fill_style(self.fill_style)
-            .render(area, surface);
+            .render(surface);
 
         let inner = Rect::new(
             area.left() + 1,
@@ -195,7 +196,7 @@ impl<const N: usize> Widget for PerfOverlay<'_, N> {
             };
             Text::new(&readout)
                 .style(self.text_style)
-                .render(row(y), surface);
+                .render(&mut surface.scope(row(y)));
             y += 1;
         }
 
@@ -206,7 +207,7 @@ impl<const N: usize> Widget for PerfOverlay<'_, N> {
             let line = format!("{label}: {value}");
             Text::new(&line)
                 .style(self.text_style)
-                .render(row(y), surface);
+                .render(&mut surface.scope(row(y)));
             y += 1;
         }
 
@@ -222,7 +223,7 @@ impl<const N: usize> Widget for PerfOverlay<'_, N> {
             }
             Sparkline::new(&samples[..len])
                 .style(self.sparkline_style)
-                .render(row(y), surface);
+                .render(&mut surface.scope(row(y)));
         }
     }
 }
@@ -268,7 +269,7 @@ fn millis(duration: core::time::Duration) -> f32 {
 ///         let mut surface = term.surface();
 ///         AnimatedPerfOverlay::new()
 ///             .backend("software")
-///             .render(area, &mut surface, &mut self.stats, frame);
+///             .render(&mut surface.scope(area), &mut self.stats, frame);
 ///         if frame.frame >= 1 { Flow::Exit } else { Flow::Continue }
 ///     }
 /// }
@@ -365,13 +366,7 @@ impl<const N: usize> AnimatedWidget for AnimatedPerfOverlay<'_, N> {
     /// built from the result (plus this type's own backend/title/metrics/style knobs) -- both in
     /// one call, so there's exactly one place, not two independently ordered ones, where the
     /// stats window advances.
-    fn render(
-        &self,
-        area: Rect,
-        surface: &mut Surface<'_>,
-        state: &mut Self::State,
-        frame: &Frame,
-    ) {
+    fn render(&self, surface: &mut Surface<'_>, state: &mut Self::State, frame: &Frame) {
         state.record(frame.delta);
 
         // A direct struct literal, not the public builder chain: `PerfOverlay` has no public
@@ -387,7 +382,7 @@ impl<const N: usize> AnimatedWidget for AnimatedPerfOverlay<'_, N> {
             text_style: self.text_style,
             sparkline_style: self.sparkline_style,
         };
-        Widget::render(&overlay, area, surface);
+        Widget::render(&overlay, surface);
     }
 }
 
@@ -412,7 +407,7 @@ mod tests {
         let stats = settled::<120>(16, 5);
         let area = Rect::new(0, 0, 40, 5);
         let mut grid = Grid::new(40, 5);
-        PerfOverlay::new(&stats).render(area, &mut Surface::new(&mut grid, area, 0));
+        PerfOverlay::new(&stats).render(&mut Surface::new(&mut grid, area, 0));
 
         assert_eq!(grid[Pos::new(0, 0)].glyph(), '┌');
         let title_row: String = (0..40).map(|x| grid[Pos::new(x, 0)].glyph()).collect();
@@ -430,7 +425,7 @@ mod tests {
         let mut grid = Grid::new(70, 5);
         PerfOverlay::new(&stats)
             .backend("software")
-            .render(area, &mut Surface::new(&mut grid, area, 0));
+            .render(&mut Surface::new(&mut grid, area, 0));
 
         let readout_row: String = (0..70).map(|x| grid[Pos::new(x, 1)].glyph()).collect();
         assert!(readout_row.contains("software"));
@@ -441,7 +436,7 @@ mod tests {
         let stats = settled::<120>(16, 5);
         let area = Rect::new(0, 0, 40, 5);
         let mut grid = Grid::new(40, 5);
-        PerfOverlay::new(&stats).render(area, &mut Surface::new(&mut grid, area, 0));
+        PerfOverlay::new(&stats).render(&mut Surface::new(&mut grid, area, 0));
 
         let readout_row: String = (0..40).map(|x| grid[Pos::new(x, 1)].glyph()).collect();
         assert!(!readout_row.contains("softw"));
@@ -454,7 +449,7 @@ mod tests {
         let mut grid = Grid::new(40, 6);
         PerfOverlay::new(&stats)
             .metrics(&[("res", "80x24"), ("vsync", "on")])
-            .render(area, &mut Surface::new(&mut grid, area, 0));
+            .render(&mut Surface::new(&mut grid, area, 0));
 
         let row2: String = (0..40).map(|x| grid[Pos::new(x, 2)].glyph()).collect();
         let row3: String = (0..40).map(|x| grid[Pos::new(x, 3)].glyph()).collect();
@@ -470,7 +465,7 @@ mod tests {
         let mut grid = Grid::new(40, 3);
         PerfOverlay::new(&stats)
             .metrics(&[("res", "80x24")])
-            .render(area, &mut Surface::new(&mut grid, area, 0));
+            .render(&mut Surface::new(&mut grid, area, 0));
 
         assert_eq!(grid[Pos::new(0, 2)].glyph(), '└', "bottom border intact");
     }
@@ -480,7 +475,7 @@ mod tests {
         let stats = settled::<120>(16, 5);
         let area = Rect::new(0, 0, 2, 2);
         let mut grid = Grid::new(2, 2);
-        PerfOverlay::new(&stats).render(area, &mut Surface::new(&mut grid, area, 0));
+        PerfOverlay::new(&stats).render(&mut Surface::new(&mut grid, area, 0));
         assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
     }
 
@@ -491,7 +486,7 @@ mod tests {
         let mut grid = Grid::new(40, 5);
         PerfOverlay::new(&stats)
             .theme(Theme::DARK)
-            .render(area, &mut Surface::new(&mut grid, area, 0));
+            .render(&mut Surface::new(&mut grid, area, 0));
 
         assert_eq!(
             grid[Pos::new(0, 0)].style().foreground(),
@@ -515,7 +510,6 @@ mod tests {
         assert_eq!(stats.frame_count(), 0, "nothing recorded yet");
 
         AnimatedPerfOverlay::new().render(
-            area,
             &mut Surface::new(&mut grid, area, 0),
             &mut stats,
             &frame(16),
@@ -543,7 +537,6 @@ mod tests {
             .backend("software")
             .metrics(&[("res", "80x24")])
             .render(
-                area,
                 &mut Surface::new(&mut animated_grid, area, 0),
                 &mut stats,
                 &frame(16),
@@ -555,7 +548,7 @@ mod tests {
         PerfOverlay::new(&stats)
             .backend("software")
             .metrics(&[("res", "80x24")])
-            .render(area, &mut Surface::new(&mut expected_grid, area, 0));
+            .render(&mut Surface::new(&mut expected_grid, area, 0));
 
         for y in 0..6 {
             let animated_row: String = (0..60)
@@ -576,7 +569,6 @@ mod tests {
 
         for _ in 0..5 {
             AnimatedPerfOverlay::new().render(
-                area,
                 &mut Surface::new(&mut grid, area, 0),
                 &mut stats,
                 &frame(16),

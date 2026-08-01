@@ -2,7 +2,8 @@
 //!
 //! [`Interaction`] (composing [`HitTester`] and [`FocusRing`] internally; see their own doc
 //! comments for the pieces this ties together), [`Shortcuts`] (a global keyboard binding
-//! independent of focus), [`Density`] (sizing the buttons' hit targets), and [`Button`] (the
+//! independent of focus), [`Density`] (sizing the buttons' hit targets), [`Ui`] (pairing a
+//! frame's surface with `Interaction`, via [`Interaction::frame`]), and [`Button`] (the
 //! style-by-[`Response`] widget). `04_mouse` proves raw pointer decode; this example shows what
 //! a real widget does with it: hover, click, drag-suppressed-click, and Tab/Shift+Tab keyboard
 //! focus with Enter/Space activation, all through one [`Interaction`] context, on three
@@ -18,9 +19,9 @@
 //! of focus (a [`Shortcuts`] global binding). `q` or `Escape` quits, or close the window.
 
 use retroglyph_core::event::{Event, KeyCode, KeyModifiers};
-use retroglyph_core::{Backend, Color, Frame, Rect, Style, Surface, Terminal};
+use retroglyph_core::{Backend, Color, Frame, Rect, Style, Terminal};
 use retroglyph_examples::Example;
-use retroglyph_widgets::{Button, Density, Interaction, Sense, Shortcuts, Theme, Widget};
+use retroglyph_widgets::{Button, Density, Interaction, Shortcuts, Theme, Ui};
 
 /// Identifies each button for [`Interaction`]'s hit-testing and focus ring.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -65,94 +66,81 @@ impl Default for WidgetsInteraction {
     }
 }
 
-impl WidgetsInteraction {
-    /// Feeds every event to [`Interaction`]/[`Shortcuts`] and reports whether the user asked to
-    /// quit. Must run between [`Interaction::begin_frame`] and the draw pass's
-    /// [`Interaction::interact`] calls -- see [`Interaction`]'s own doc comment for the frame
-    /// lifecycle this follows.
-    fn handle_events<B: Backend>(&mut self, term: &mut Terminal<B>) -> bool {
-        for event in term.drain_events() {
-            self.interaction.handle_event(&event);
-            if self
-                .shortcuts
-                .resolve(&event, self.interaction.focus().focused())
-                == Some(Action::Reset)
-            {
-                self.count = 0;
-            }
-            match event {
-                Event::Key(key) if matches!(key.code, KeyCode::Char('q') | KeyCode::Escape) => {
-                    return false;
-                }
-                Event::Close => return false,
-                _ => {}
-            }
-        }
-        true
-    }
-
-    /// Draws one button, colored by hover/press/focus state via [`Button`], and applies its
-    /// click to `count`. The app still owns `interact`ing (it needs `response.clicked()` for the
-    /// counter logic below); `Button` only turns the resulting `Response` into a styled label,
-    /// replacing what used to be this method's own bg/fg-by-response wiring.
-    fn draw_button(&mut self, surface: &mut Surface<'_>, rect: Rect, id: ButtonId, label: &str) {
-        let response = self.interaction.interact(rect, id, Sense::click());
-        let theme = Theme::DARK;
-
-        Button::new(label, response)
-            .style(Style::new().fg(theme.fg).bg(theme.panel_bg))
-            .hovered_style(Style::new().fg(theme.fg).bg(theme.hover_bg))
-            .pressed_style(Style::new().fg(theme.fg).bg(theme.press_bg))
-            .focused_style(Style::new().fg(theme.accent).bg(theme.panel_bg))
-            .render(rect, surface);
-
-        match (id, response.clicked()) {
-            (ButtonId::Increment, true) => self.count += 1,
-            (ButtonId::Decrement, true) => self.count -= 1,
-            (ButtonId::Reset, true) => self.count = 0,
-            (ButtonId::Increment | ButtonId::Decrement | ButtonId::Reset, false) => {}
-        }
-    }
-
-    /// Draws this frame (the driver presents). Must run between the frame's own
-    /// [`Interaction::begin_frame`] and [`Interaction::end_frame`].
-    fn draw<B: Backend>(&mut self, term: &mut Terminal<B>) {
-        let mut surface = term.surface();
-        let style_white = Style::new().fg(Color::WHITE);
-        surface.print(
-            (1, 1),
-            "Tab/Shift+Tab focuses, Enter/Space or click activates, r resets, q/Escape quits.",
-            style_white,
-        );
-
-        let btn_h = self.density.min_target_size().height();
-        let btn_w = 16u16;
-        let y = 4;
-        for (i, &(id, label)) in BUTTONS.iter().enumerate() {
-            let x = 2 + u16::try_from(i).expect("BUTTONS.len() fits u16") * (btn_w + 2);
-            self.draw_button(&mut surface, Rect::new(x, y, btn_w, btn_h), id, label);
-        }
-
-        surface.print(
-            (2, y + btn_h + 1),
-            &format!("Count: {}", self.count),
-            style_white,
-        );
-    }
+/// Draws one button, colored by hover/press/focus state via [`Button`], and applies its click to
+/// `count`. `ui.show` resolves the click and draws the button from the one `rect`; the caller
+/// only needs `response.clicked()` for the counter logic below.
+fn draw_button(ui: &mut Ui<'_, '_, ButtonId>, rect: Rect, id: ButtonId, label: &str) -> bool {
+    let theme = Theme::DARK;
+    let button = Button::new(label)
+        .style(Style::new().fg(theme.fg).bg(theme.panel_bg))
+        .hovered_style(Style::new().fg(theme.fg).bg(theme.hover_bg))
+        .pressed_style(Style::new().fg(theme.fg).bg(theme.press_bg))
+        .focused_style(Style::new().fg(theme.accent).bg(theme.panel_bg));
+    ui.show(rect, id, &button).clicked()
 }
 
 impl Example for WidgetsInteraction {
     const NAME: &'static str = "10_widgets_interaction";
 
     fn tick<B: Backend>(&mut self, term: &mut Terminal<B>, _frame: &Frame) -> bool {
-        self.interaction.begin_frame();
-        if !self.handle_events(term) {
-            self.interaction.end_frame();
-            return false;
-        }
-        self.draw(term);
-        self.interaction.end_frame();
-        true
+        let events: Vec<Event> = term.drain_events().collect();
+        let mut surface = term.surface();
+        let Self {
+            interaction,
+            shortcuts,
+            density,
+            count,
+        } = self;
+
+        let mut quit = false;
+        interaction.frame(&mut surface, |ui| {
+            // Feeds every event to `ui`'s `Interaction`/`shortcuts`. Every `Response` `ui`
+            // resolves below already reflects these events -- see `Interaction`'s own doc
+            // comment for the frame lifecycle this follows.
+            for event in &events {
+                let _ = ui.interaction().handle_event(event);
+                if shortcuts.resolve(event, ui.interaction().focus().focused())
+                    == Some(Action::Reset)
+                {
+                    *count = 0;
+                }
+                match event {
+                    Event::Key(key) if matches!(key.code, KeyCode::Char('q') | KeyCode::Escape) => {
+                        quit = true;
+                    }
+                    Event::Close => quit = true,
+                    _ => {}
+                }
+            }
+            if quit {
+                return;
+            }
+
+            let style_white = Style::new().fg(Color::WHITE);
+            ui.surface().print(
+                (1, 1),
+                "Tab/Shift+Tab focuses, Enter/Space or click activates, r resets, q/Escape quits.",
+                style_white,
+            );
+
+            let btn_h = density.min_target_size().height();
+            let btn_w = 16u16;
+            let y = 4;
+            for (i, &(id, label)) in BUTTONS.iter().enumerate() {
+                let x = 2 + u16::try_from(i).expect("BUTTONS.len() fits u16") * (btn_w + 2);
+                if draw_button(ui, Rect::new(x, y, btn_w, btn_h), id, label) {
+                    match id {
+                        ButtonId::Increment => *count += 1,
+                        ButtonId::Decrement => *count -= 1,
+                        ButtonId::Reset => *count = 0,
+                    }
+                }
+            }
+
+            ui.surface()
+                .print((2, y + btn_h + 1), &format!("Count: {count}"), style_white);
+        });
+        !quit
     }
 }
 

@@ -1,7 +1,7 @@
 //! [`Gauge`]: a labeled, load-colored progress bar.
 use core::fmt::Write as _;
 
-use retroglyph_core::{Color, Rect, Style};
+use retroglyph_core::{Color, Style};
 
 use super::{Widget, bar};
 use crate::Surface;
@@ -24,7 +24,7 @@ use crate::Theme;
 ///
 /// let area = Rect::new(0, 0, 20, 1);
 /// let mut grid = Grid::new(20, 1);
-/// Gauge::new("CPU", 0.75).render(area, &mut Surface::new(&mut grid, area, 0));
+/// Gauge::new("CPU", 0.75).render(&mut Surface::new(&mut grid, area, 0));
 /// ```
 #[derive(Clone, Copy, Debug)]
 pub struct Gauge<'a> {
@@ -82,7 +82,7 @@ impl<'a> Gauge<'a> {
 }
 
 impl Widget for Gauge<'_> {
-    fn render(&self, area: Rect, surface: &mut Surface<'_>) {
+    fn render(&self, surface: &mut Surface<'_>) {
         let ratio = self.ratio.clamp(0.0, 1.0);
         // "100%" is the longest possible output: 4 bytes.
         let mut pct = bar::ReadoutBuf::<4>::new();
@@ -91,20 +91,13 @@ impl Widget for Gauge<'_> {
         #[allow(clippy::cast_possible_truncation)]
         let pct_value = (ratio * 100.0).round() as i32;
         let _ = write!(pct, "{pct_value:>3}%");
-        bar::render(
-            surface,
-            area,
-            self.label,
-            self.label_style,
-            ratio,
-            pct.as_str(),
-        );
+        bar::render(surface, self.label, self.label_style, ratio, pct.as_str());
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::{Grid, Pos};
+    use retroglyph_core::{Grid, Pos, Rect};
 
     use super::*;
 
@@ -112,7 +105,7 @@ mod tests {
     fn label_bar_and_percentage_readout() {
         let area = Rect::new(0, 0, 20, 1);
         let mut grid = Grid::new(20, 1);
-        Gauge::new("H", 0.5).render(area, &mut Surface::new(&mut grid, area, 0));
+        Gauge::new("H", 0.5).render(&mut Surface::new(&mut grid, area, 0));
 
         assert_eq!(grid[Pos::new(2, 0)].glyph(), '█'); // bar starts filled
         assert_eq!(grid[Pos::new(19, 0)].glyph(), '%'); // "XX%"-style readout
@@ -126,7 +119,7 @@ mod tests {
         let mut grid = Grid::new(20, 1);
         Gauge::new("H", 0.5)
             .label_style(Style::new().fg(Color::WHITE))
-            .render(area, &mut Surface::new(&mut grid, area, 0));
+            .render(&mut Surface::new(&mut grid, area, 0));
 
         assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Color::WHITE);
     }
@@ -137,7 +130,7 @@ mod tests {
         let mut grid = Grid::new(20, 1);
         Gauge::new("H", 0.5)
             .theme(Theme::DARK)
-            .render(area, &mut Surface::new(&mut grid, area, 0));
+            .render(&mut Surface::new(&mut grid, area, 0));
 
         assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Theme::DARK.dim);
         assert_eq!(
@@ -154,7 +147,7 @@ mod tests {
         let mut grid = Grid::new(20, 1);
         Gauge::new("H", 0.5)
             .theme_on(Theme::DARK, Color::Default)
-            .render(area, &mut Surface::new(&mut grid, area, 0));
+            .render(&mut Surface::new(&mut grid, area, 0));
 
         assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Theme::DARK.dim);
         assert_eq!(grid[Pos::new(0, 0)].style().background(), Color::Default);

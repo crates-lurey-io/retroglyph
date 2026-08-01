@@ -240,7 +240,7 @@ fn perf_overlay_app<E: Example>(
             |stats, backend, area, surface| {
                 retroglyph_widgets::PerfOverlay::new(stats)
                     .backend(backend)
-                    .render(area, surface);
+                    .render(&mut surface.scope(area));
             },
         )
 }

@@ -1,12 +1,12 @@
 //! [`BoxBorder`]: a single-line box border.
-use retroglyph_core::{Color, Rect, Style};
+use retroglyph_core::{Color, Style};
 
 use super::Widget;
 use crate::Surface;
 use crate::Theme;
 use crate::draw::{BL, BR, H, TL, TR, V};
 
-/// A single-line box border drawn around a [`Rect`].
+/// A single-line box border drawn around a [`Rect`](retroglyph_core::Rect).
 ///
 /// The interior of the rectangle is not touched. `area` must be at least
 /// 2×2, or [`Widget::render`] is a no-op. `style` defaults to
@@ -20,7 +20,7 @@ use crate::draw::{BL, BR, H, TL, TR, V};
 ///
 /// let area = Rect::new(0, 0, 10, 4);
 /// let mut grid = Grid::new(10, 4);
-/// BoxBorder::new().render(area, &mut Surface::new(&mut grid, area, 0));
+/// BoxBorder::new().render(&mut Surface::new(&mut grid, area, 0));
 /// ```
 #[derive(Clone, Copy, Debug, Default)]
 pub struct BoxBorder {
@@ -71,31 +71,30 @@ impl BoxBorder {
 }
 
 impl Widget for BoxBorder {
-    fn render(&self, area: Rect, surface: &mut Surface<'_>) {
-        if area.width() < 2 || area.height() < 2 {
+    fn render(&self, surface: &mut Surface<'_>) {
+        let (w, h) = (surface.width(), surface.height());
+        if w < 2 || h < 2 {
             return;
         }
 
-        let x0 = area.left();
-        let y0 = area.top();
-        let x1 = area.right().saturating_sub(1);
-        let y1 = area.bottom().saturating_sub(1);
+        let x1 = w - 1;
+        let y1 = h - 1;
 
         // Corners
-        surface.put((x0, y0), TL, self.style);
-        surface.put((x1, y0), TR, self.style);
-        surface.put((x0, y1), BL, self.style);
+        surface.put((0, 0), TL, self.style);
+        surface.put((x1, 0), TR, self.style);
+        surface.put((0, y1), BL, self.style);
         surface.put((x1, y1), BR, self.style);
 
         // Horizontal edges
-        for x in (x0 + 1)..x1 {
-            surface.put((x, y0), H, self.style);
+        for x in 1..x1 {
+            surface.put((x, 0), H, self.style);
             surface.put((x, y1), H, self.style);
         }
 
         // Vertical edges
-        for y in (y0 + 1)..y1 {
-            surface.put((x0, y), V, self.style);
+        for y in 1..y1 {
+            surface.put((0, y), V, self.style);
             surface.put((x1, y), V, self.style);
         }
     }
@@ -103,7 +102,7 @@ impl Widget for BoxBorder {
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::{Color, Grid, Pos};
+    use retroglyph_core::{Color, Grid, Pos, Rect};
 
     use super::*;
 
@@ -113,7 +112,7 @@ mod tests {
         let mut grid = Grid::new(5, 3);
         BoxBorder::new()
             .style(Style::new().fg(Color::WHITE))
-            .render(area, &mut Surface::new(&mut grid, area, 0));
+            .render(&mut Surface::new(&mut grid, area, 0));
 
         assert_eq!(grid[Pos::new(0, 0)].glyph(), TL);
         assert_eq!(grid[Pos::new(4, 0)].glyph(), TR);
@@ -129,7 +128,7 @@ mod tests {
     fn too_small_is_a_no_op() {
         let area = Rect::new(0, 0, 1, 1);
         let mut grid = Grid::new(1, 1);
-        BoxBorder::new().render(area, &mut Surface::new(&mut grid, area, 0));
+        BoxBorder::new().render(&mut Surface::new(&mut grid, area, 0));
         assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
     }
 
@@ -139,7 +138,7 @@ mod tests {
         let mut grid = Grid::new(5, 3);
         BoxBorder::new()
             .theme(Theme::DARK)
-            .render(area, &mut Surface::new(&mut grid, area, 0));
+            .render(&mut Surface::new(&mut grid, area, 0));
 
         assert_eq!(
             grid[Pos::new(0, 0)].style().foreground(),
@@ -157,7 +156,7 @@ mod tests {
         let mut grid = Grid::new(5, 3);
         BoxBorder::new()
             .theme_on(Theme::DARK, Color::Default)
-            .render(area, &mut Surface::new(&mut grid, area, 0));
+            .render(&mut Surface::new(&mut grid, area, 0));
 
         assert_eq!(
             grid[Pos::new(0, 0)].style().foreground(),
