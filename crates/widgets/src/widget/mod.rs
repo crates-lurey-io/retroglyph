@@ -14,7 +14,7 @@
 //! `egc` feature) additionally implements [`Measure`], since it needs
 //! `retroglyph_core::layout::TextLayout`'s grapheme-aware word-wrap to
 //! report a height before rendering.
-use retroglyph_core::{Frame, Rect};
+use retroglyph_core::Frame;
 
 use crate::Surface;
 
@@ -72,18 +72,18 @@ pub use text::Text;
 /// struct Marker(char);
 ///
 /// impl Widget for Marker {
-///     fn render(&self, _area: Rect, surface: &mut Surface<'_>) {
+///     fn render(&self, surface: &mut Surface<'_>) {
 ///         surface.put((0, 0), self.0, Style::new());
 ///     }
 /// }
 ///
 /// let area = Rect::new(0, 0, 4, 1);
 /// let mut grid = Grid::new(4, 1);
-/// Marker('*').render(area, &mut Surface::new(&mut grid, area, 0));
+/// Marker('*').render(&mut Surface::new(&mut grid, area, 0));
 /// ```
 pub trait Widget {
-    /// Draw this widget into `area`, via `surface` scoped to it.
-    fn render(&self, area: Rect, surface: &mut Surface<'_>);
+    /// Draw this widget into `surface`, filling `surface.area()`.
+    fn render(&self, surface: &mut Surface<'_>);
 }
 
 /// Like [`Widget`], but for widgets that read (and may update) externally
@@ -101,7 +101,7 @@ pub trait Widget {
 /// impl StatefulWidget for Counter {
 ///     type State = u32;
 ///
-///     fn render(&self, _area: Rect, surface: &mut Surface<'_>, state: &mut Self::State) {
+///     fn render(&self, surface: &mut Surface<'_>, state: &mut Self::State) {
 ///         *state += 1;
 ///         surface.put((0, 0), 'x', Style::new());
 ///     }
@@ -110,7 +110,7 @@ pub trait Widget {
 /// let area = Rect::new(0, 0, 4, 1);
 /// let mut grid = Grid::new(4, 1);
 /// let mut renders = 0;
-/// Counter.render(area, &mut Surface::new(&mut grid, area, 0), &mut renders);
+/// Counter.render(&mut Surface::new(&mut grid, area, 0), &mut renders);
 /// assert_eq!(renders, 1);
 /// ```
 pub trait StatefulWidget {
@@ -118,9 +118,9 @@ pub trait StatefulWidget {
     /// rendering.
     type State;
 
-    /// Draw this widget into `area`, via `surface` scoped to it, using
+    /// Draw this widget into `surface`, filling `surface.area()`, using
     /// and/or updating `state`.
-    fn render(&self, area: Rect, surface: &mut Surface<'_>, state: &mut Self::State);
+    fn render(&self, surface: &mut Surface<'_>, state: &mut Self::State);
 }
 
 /// A widget that can report the height it needs for a given width, before
@@ -184,7 +184,7 @@ pub trait Measure {
 /// impl AnimatedWidget for Blinker {
 ///     type State = Duration;
 ///
-///     fn render(&self, _area: Rect, surface: &mut Surface<'_>, state: &mut Self::State, frame: &Frame) {
+///     fn render(&self, surface: &mut Surface<'_>, state: &mut Self::State, frame: &Frame) {
 ///         *state += frame.delta;
 ///         let on = state.as_millis() / 500 % 2 == 0;
 ///         surface.put((0, 0), if on { '*' } else { ' ' }, retroglyph_core::Style::new());
@@ -195,7 +195,7 @@ pub trait Measure {
 /// let mut grid = Grid::new(4, 1);
 /// let mut state = Duration::ZERO;
 /// let frame = Frame { delta: Duration::from_millis(100), frame: 0 };
-/// Blinker.render(area, &mut Surface::new(&mut grid, area, 0), &mut state, &frame);
+/// Blinker.render(&mut Surface::new(&mut grid, area, 0), &mut state, &frame);
 /// assert_eq!(state, Duration::from_millis(100));
 /// ```
 pub trait AnimatedWidget {
@@ -203,8 +203,8 @@ pub trait AnimatedWidget {
     /// rendering -- e.g. [`crate::ScrollState`].
     type State;
 
-    /// Advances `state` by `frame.delta`, then draws this widget into `area`, via `surface`
-    /// scoped to it, at the result -- both in the same call, so there's exactly one place, not
-    /// two independently ordered ones, where time-based state moves forward.
-    fn render(&self, area: Rect, surface: &mut Surface<'_>, state: &mut Self::State, frame: &Frame);
+    /// Advances `state` by `frame.delta`, then draws this widget into `surface.area()`, both in
+    /// the same call, so there's exactly one place, not two independently ordered ones, where
+    /// time-based state moves forward.
+    fn render(&self, surface: &mut Surface<'_>, state: &mut Self::State, frame: &Frame);
 }

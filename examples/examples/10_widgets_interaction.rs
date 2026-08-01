@@ -104,7 +104,7 @@ impl WidgetsInteraction {
             .hovered_style(Style::new().fg(theme.fg).bg(theme.hover_bg))
             .pressed_style(Style::new().fg(theme.fg).bg(theme.press_bg))
             .focused_style(Style::new().fg(theme.accent).bg(theme.panel_bg))
-            .render(rect, surface);
+            .render(&mut surface.scope(rect));
 
         match (id, response.clicked()) {
             (ButtonId::Increment, true) => self.count += 1,

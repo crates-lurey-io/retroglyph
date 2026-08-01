@@ -37,7 +37,7 @@ use crate::Surface;
 /// let messages = [Line::raw("connected"), Line::raw("joined #general")];
 /// let area = Rect::new(0, 0, 20, 2);
 /// let mut grid = Grid::new(20, 2);
-/// Log::new(&messages).render(area, &mut Surface::new(&mut grid, area, 0));
+/// Log::new(&messages).render(&mut Surface::new(&mut grid, area, 0));
 /// ```
 #[derive(Clone, Copy, Debug)]
 pub struct Log<'a> {
@@ -64,9 +64,10 @@ impl<'a> Log<'a> {
 }
 
 impl Widget for Log<'_> {
-    fn render(&self, area: Rect, surface: &mut Surface<'_>) {
-        let visible_height = area.height_usize();
-        if area.width() == 0 || visible_height == 0 {
+    fn render(&self, surface: &mut Surface<'_>) {
+        let (width, height) = (surface.width(), surface.height());
+        let visible_height = usize::from(height);
+        if width == 0 || visible_height == 0 {
             return;
         }
 
@@ -81,13 +82,16 @@ impl Widget for Log<'_> {
         };
         let top = bottom.saturating_sub(visible_height - 1);
 
+        // `scope`, unlike `put`, addresses the same grid-space `surface.area()` does, so each
+        // row's rect is built from `area`'s own top-left.
+        let area = surface.area();
         for (row, message) in self.messages[top..=bottom].iter().enumerate() {
-            // `row` indexes a slice of at most `visible_height` messages, itself bounded by
-            // `area`'s `u16` height, so narrowing it back is always exact.
+            // `row` indexes a slice of at most `visible_height` messages, itself bounded by this
+            // surface's own `u16` height, so narrowing it back is always exact.
             #[allow(clippy::cast_possible_truncation)]
             let y = area.top() + row as u16;
-            let row_area = Rect::new(area.left(), y, area.width(), 1);
-            PrintLine::new(message).render(row_area, surface);
+            let row_area = Rect::new(area.left(), y, width, 1);
+            PrintLine::new(message).render(&mut surface.scope(row_area));
         }
     }
 }
@@ -109,7 +113,7 @@ mod tests {
         let messages = lines(&["alpha", "bravo", "charlie", "delta"]);
 
         let mut grid = Grid::new(20, 2);
-        Log::new(&messages).render(area, &mut Surface::new(&mut grid, area, 0));
+        Log::new(&messages).render(&mut Surface::new(&mut grid, area, 0));
 
         assert_eq!(grid[Pos::new(0, 0)].glyph(), 'c'); // "charlie"
         assert_eq!(grid[Pos::new(0, 1)].glyph(), 'd'); // "delta"
@@ -123,7 +127,7 @@ mod tests {
         let mut grid = Grid::new(20, 2);
         Log::new(&messages)
             .offset(1)
-            .render(area, &mut Surface::new(&mut grid, area, 0)); // one message back from the tail
+            .render(&mut Surface::new(&mut grid, area, 0)); // one message back from the tail
 
         assert_eq!(grid[Pos::new(0, 0)].glyph(), 'b'); // "bravo"
         assert_eq!(grid[Pos::new(0, 1)].glyph(), 'c'); // "charlie"
@@ -137,7 +141,7 @@ mod tests {
         let mut grid = Grid::new(20, 2);
         Log::new(&messages)
             .offset(5)
-            .render(area, &mut Surface::new(&mut grid, area, 0)); // scrolled back past the start
+            .render(&mut Surface::new(&mut grid, area, 0)); // scrolled back past the start
 
         // Nothing drawn; both rows stay whatever they were (default/empty).
         assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
@@ -150,7 +154,7 @@ mod tests {
         let messages = lines(&["only"]);
 
         let mut grid = Grid::new(20, 4);
-        Log::new(&messages).render(area, &mut Surface::new(&mut grid, area, 0));
+        Log::new(&messages).render(&mut Surface::new(&mut grid, area, 0));
 
         assert_eq!(grid[Pos::new(0, 0)].glyph(), 'o'); // "only"
         assert_eq!(grid[Pos::new(0, 1)].glyph(), ' '); // untouched
@@ -163,7 +167,7 @@ mod tests {
         let messages = lines(&["a much longer message than fits"]);
 
         let mut grid = Grid::new(5, 1);
-        Log::new(&messages).render(area, &mut Surface::new(&mut grid, area, 0));
+        Log::new(&messages).render(&mut Surface::new(&mut grid, area, 0));
 
         // "a much longer..." clipped to 5 columns is "a muc".
         assert_eq!(grid[Pos::new(4, 0)].glyph(), 'c');

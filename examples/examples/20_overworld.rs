@@ -2526,7 +2526,7 @@ impl Overworld {
             .title(" OVERWORLD ")
             .border_style(Style::new().fg(BORDER).bg(PANEL_BG))
             .fill_style(Style::new().bg(PANEL_BG))
-            .render(area, surface);
+            .render(&mut surface.scope(area));
         let inner = Rect::new(
             area.left() + 1,
             area.top() + 1,

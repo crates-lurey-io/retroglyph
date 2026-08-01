@@ -38,7 +38,7 @@ use crate::text::truncate as truncate_to_cols;
 ///
 /// let area = Rect::new(0, 0, 20, 3);
 /// let mut grid = Grid::new(20, 3);
-/// List::new(&items).render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
+/// List::new(&items).render(&mut Surface::new(&mut grid, area, 0), &mut state);
 /// ```
 #[derive(Clone, Copy, Debug)]
 pub struct List<'a> {
@@ -112,24 +112,23 @@ impl<'a> List<'a> {
 impl StatefulWidget for List<'_> {
     type State = ListState;
 
-    fn render(&self, area: Rect, surface: &mut Surface<'_>, state: &mut Self::State) {
-        if area.width() == 0 || area.height() == 0 {
+    fn render(&self, surface: &mut Surface<'_>, state: &mut Self::State) {
+        let (width, height) = (surface.width(), surface.height());
+        if width == 0 || height == 0 {
             return;
         }
 
-        let visible_items = area.height_usize();
+        let visible_items = usize::from(height);
         let selected = state.selected();
         for (item_index, &item) in visible_window(self.items, state.offset(), visible_items) {
             // `item_index - state.offset()` is a row within the visible window, so it never
-            // exceeds `visible_items` (`area.height_usize()`, itself widened from `area`'s `u16`
-            // height).
+            // exceeds `visible_items` (this surface's own `u16` height).
             #[allow(clippy::cast_possible_truncation)]
-            let row = (item_index - state.offset()) as u16;
-            let y = area.top() + row;
+            let y = (item_index - state.offset()) as u16;
             let style = if Some(item_index) == selected {
                 fill_rect(
                     surface,
-                    Rect::new(area.left(), y, area.width(), 1),
+                    Rect::new(0, y, width, 1),
                     ' ',
                     Style::new().bg(self.selected_style.background()),
                 );
@@ -137,8 +136,8 @@ impl StatefulWidget for List<'_> {
             } else {
                 self.item_style
             };
-            let text = truncate_to_cols(item, area.width_usize());
-            surface.print((area.left(), y), text, style);
+            let text = truncate_to_cols(item, usize::from(width));
+            surface.print((0, y), text, style);
         }
     }
 }
@@ -158,7 +157,7 @@ mod tests {
         let mut grid = Grid::new(20, 2);
         let mut state = ListState::new();
         state.select(Some(1));
-        list.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
+        list.render(&mut Surface::new(&mut grid, area, 0), &mut state);
 
         let highlighted_bg = grid[Pos::new(0, 1)].style().background();
         let plain_bg = grid[Pos::new(0, 0)].style().background();
@@ -173,7 +172,7 @@ mod tests {
 
         let mut grid = Grid::new(20, 2);
         let mut state = ListState::new();
-        list.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
+        list.render(&mut Surface::new(&mut grid, area, 0), &mut state);
 
         let row0_bg = grid[Pos::new(0, 0)].style().background();
         let row1_bg = grid[Pos::new(0, 1)].style().background();
@@ -193,7 +192,7 @@ mod tests {
         let mut grid = Grid::new(20, 2);
         let mut state = ListState::new();
         state.set_offset(2); // window is [Charlie, Delta]
-        list.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
+        list.render(&mut Surface::new(&mut grid, area, 0), &mut state);
 
         assert_eq!(grid[Pos::new(0, 0)].glyph(), 'C');
         assert_eq!(grid[Pos::new(0, 1)].glyph(), 'D');
@@ -209,7 +208,7 @@ mod tests {
         let mut state = ListState::new();
         state.select(Some(0)); // "Alpha"
         state.set_offset(2); // but the window starts at "Charlie"
-        list.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
+        list.render(&mut Surface::new(&mut grid, area, 0), &mut state);
 
         let row0_bg = grid[Pos::new(0, 0)].style().background();
         let row1_bg = grid[Pos::new(0, 1)].style().background();
@@ -225,7 +224,7 @@ mod tests {
 
         let mut grid = Grid::new(20, 1);
         let mut state = ListState::new();
-        list.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
+        list.render(&mut Surface::new(&mut grid, area, 0), &mut state);
 
         assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Color::RED);
     }
@@ -240,7 +239,7 @@ mod tests {
         let mut grid = Grid::new(20, 1);
         let mut state = ListState::new();
         state.select(Some(0));
-        list.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
+        list.render(&mut Surface::new(&mut grid, area, 0), &mut state);
 
         assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Color::GREEN);
         assert_eq!(grid[Pos::new(0, 0)].style().background(), Color::BLUE);
@@ -254,7 +253,7 @@ mod tests {
 
         let mut grid = Grid::new(5, 1);
         let mut state = ListState::new();
-        list.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
+        list.render(&mut Surface::new(&mut grid, area, 0), &mut state);
 
         assert_eq!(grid[Pos::new(4, 0)].glyph(), 'c'); // "a muc"
     }
@@ -269,7 +268,7 @@ mod tests {
         let mut state = ListState::new();
         state.select(Some(3)); // "Delta", off the front of the default window
         state.ensure_visible(2);
-        list.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
+        list.render(&mut Surface::new(&mut grid, area, 0), &mut state);
 
         assert_eq!(grid[Pos::new(0, 1)].glyph(), 'D');
         let highlighted_bg = grid[Pos::new(0, 1)].style().background();
@@ -285,7 +284,7 @@ mod tests {
 
         let mut grid = Grid::new(20, 1);
         let mut state = ListState::new();
-        list.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
+        list.render(&mut Surface::new(&mut grid, area, 0), &mut state);
 
         assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
     }
@@ -299,7 +298,7 @@ mod tests {
         let mut grid = Grid::new(20, 2);
         let mut state = ListState::new();
         state.select(Some(1));
-        list.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
+        list.render(&mut Surface::new(&mut grid, area, 0), &mut state);
 
         assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Theme::DARK.fg);
         assert_eq!(
@@ -321,7 +320,7 @@ mod tests {
 
         let mut grid = Grid::new(20, 1);
         let mut state = ListState::new();
-        list.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
+        list.render(&mut Surface::new(&mut grid, area, 0), &mut state);
 
         assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Theme::DARK.fg);
         assert_eq!(grid[Pos::new(0, 0)].style().background(), Color::Default);

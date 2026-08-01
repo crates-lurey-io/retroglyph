@@ -1,7 +1,7 @@
 //! [`StatBar`]: a labeled `current`/`max` stat bar.
 use core::fmt::Write as _;
 
-use retroglyph_core::{Color, Rect, Style};
+use retroglyph_core::{Color, Style};
 
 use super::{Widget, bar};
 use crate::Surface;
@@ -29,7 +29,7 @@ use crate::Theme;
 ///
 /// let area = Rect::new(0, 0, 20, 1);
 /// let mut grid = Grid::new(20, 1);
-/// StatBar::new("HP", 45, 100).render(area, &mut Surface::new(&mut grid, area, 0));
+/// StatBar::new("HP", 45, 100).render(&mut Surface::new(&mut grid, area, 0));
 /// ```
 #[derive(Clone, Copy, Debug)]
 pub struct StatBar<'a> {
@@ -81,7 +81,7 @@ impl<'a> StatBar<'a> {
 }
 
 impl Widget for StatBar<'_> {
-    fn render(&self, area: Rect, surface: &mut Surface<'_>) {
+    fn render(&self, surface: &mut Surface<'_>) {
         let ratio = if self.max == 0 {
             0.0
         } else {
@@ -98,7 +98,6 @@ impl Widget for StatBar<'_> {
         let _ = write!(readout, "{}/{}", self.current, self.max);
         bar::render(
             surface,
-            area,
             self.label,
             self.label_style,
             ratio,
@@ -109,7 +108,7 @@ impl Widget for StatBar<'_> {
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::{Grid, Pos};
+    use retroglyph_core::{Grid, Pos, Rect};
 
     use super::*;
 
@@ -119,7 +118,7 @@ mod tests {
         // begins right after "H" plus a one-column gap, i.e. at column 2.
         let area = Rect::new(0, 0, 20, 1);
         let mut grid = Grid::new(20, 1);
-        StatBar::new("H", 0, 0).render(area, &mut Surface::new(&mut grid, area, 0));
+        StatBar::new("H", 0, 0).render(&mut Surface::new(&mut grid, area, 0));
 
         assert_eq!(grid[Pos::new(2, 0)].glyph(), '░'); // empty bar cell
         assert_eq!(grid[Pos::new(19, 0)].glyph(), '0'); // last char of "0/0"
@@ -129,7 +128,7 @@ mod tests {
     fn normal_case_fills_proportionally_and_shows_current_over_max() {
         let area = Rect::new(0, 0, 20, 1);
         let mut grid = Grid::new(20, 1);
-        StatBar::new("H", 45, 100).render(area, &mut Surface::new(&mut grid, area, 0));
+        StatBar::new("H", 45, 100).render(&mut Surface::new(&mut grid, area, 0));
 
         assert_eq!(grid[Pos::new(2, 0)].glyph(), '█'); // bar starts filled
         assert_eq!(grid[Pos::new(19, 0)].glyph(), '0'); // last char of "45/100"
@@ -139,7 +138,7 @@ mod tests {
     fn over_max_caps_the_bar_but_shows_true_numbers_in_the_readout() {
         let area = Rect::new(0, 0, 20, 1);
         let mut grid = Grid::new(20, 1);
-        StatBar::new("H", 150, 100).render(area, &mut Surface::new(&mut grid, area, 0));
+        StatBar::new("H", 150, 100).render(&mut Surface::new(&mut grid, area, 0));
 
         // Bar's last cell before the gap+readout is fully filled (clamped
         // to 100%), but the readout still reads the true "150/100".
@@ -155,7 +154,7 @@ mod tests {
         let mut grid = Grid::new(20, 1);
         StatBar::new("H", 45, 100)
             .label_style(Style::new().fg(Color::WHITE))
-            .render(area, &mut Surface::new(&mut grid, area, 0));
+            .render(&mut Surface::new(&mut grid, area, 0));
 
         assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Color::WHITE);
     }
@@ -166,7 +165,7 @@ mod tests {
         let mut grid = Grid::new(20, 1);
         StatBar::new("H", 45, 100)
             .theme(Theme::DARK)
-            .render(area, &mut Surface::new(&mut grid, area, 0));
+            .render(&mut Surface::new(&mut grid, area, 0));
 
         assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Theme::DARK.dim);
         assert_eq!(
@@ -181,7 +180,7 @@ mod tests {
         let mut grid = Grid::new(20, 1);
         StatBar::new("H", 45, 100)
             .theme_on(Theme::DARK, Color::Default)
-            .render(area, &mut Surface::new(&mut grid, area, 0));
+            .render(&mut Surface::new(&mut grid, area, 0));
 
         assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Theme::DARK.dim);
         assert_eq!(grid[Pos::new(0, 0)].style().background(), Color::Default);

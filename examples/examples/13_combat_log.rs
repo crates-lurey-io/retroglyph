@@ -155,14 +155,10 @@ impl CombatLog {
         }
 
         let term_area = term.area();
-        StatBar::new("You  ", self.player_hp, PLAYER_MAX_HP).render(
-            Rect::new(1, 1, 46, 1),
-            &mut Surface::new(term.grid_mut(), term_area, 0),
-        );
-        StatBar::new("Gob. ", self.enemy_hp, ENEMY_MAX_HP).render(
-            Rect::new(1, 2, 46, 1),
-            &mut Surface::new(term.grid_mut(), term_area, 0),
-        );
+        StatBar::new("You  ", self.player_hp, PLAYER_MAX_HP)
+            .render(&mut Surface::new(term.grid_mut(), term_area, 0).scope(Rect::new(1, 1, 46, 1)));
+        StatBar::new("Gob. ", self.enemy_hp, ENEMY_MAX_HP)
+            .render(&mut Surface::new(term.grid_mut(), term_area, 0).scope(Rect::new(1, 2, 46, 1)));
 
         let log_area = Rect::new(1, 4, 47, 20);
 
@@ -182,7 +178,7 @@ impl CombatLog {
 
         Log::new(&self.log)
             .offset(log_offset)
-            .render(log_area, &mut Surface::new(term.grid_mut(), term_area, 0));
+            .render(&mut Surface::new(term.grid_mut(), term_area, 0).scope(log_area));
         let scrollbar = Scrollbar::new(self.log.len(), log_area.height_usize())
             .offset(log_offset)
             .track_style(Style::new().fg(Color::Ansi(AnsiColor::BrightBlack)))
@@ -191,8 +187,7 @@ impl CombatLog {
         // doc comment), so a bare `.render(...)` call is ambiguous between the two traits.
         Widget::render(
             &scrollbar,
-            Rect::new(48, 4, 1, 20),
-            &mut Surface::new(term.grid_mut(), term_area, 0),
+            &mut Surface::new(term.grid_mut(), term_area, 0).scope(Rect::new(48, 4, 1, 20)),
         );
 
         if self.over {

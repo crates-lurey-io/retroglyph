@@ -51,14 +51,14 @@ impl TextAlign {
             .title(name)
             .title_align(align)
             .border_style(border)
-            .render(area, &mut Surface::new(term.grid_mut(), term_area, 0));
+            .render(&mut Surface::new(term.grid_mut(), term_area, 0).scope(area));
 
         // Interior: one cell in from the border on every side.
         let inner = Rect::new(area.left() + 1, area.top() + 1, area.width() - 2, 1);
         Text::new("Text widget")
             .style(Style::new().fg(Color::CYAN))
             .align(align)
-            .render(inner, &mut Surface::new(term.grid_mut(), term_area, 0));
+            .render(&mut Surface::new(term.grid_mut(), term_area, 0).scope(inner));
 
         let line = Line::from(vec![
             Span::styled("PrintLine ", Style::new().fg(Color::YELLOW)),
@@ -67,7 +67,7 @@ impl TextAlign {
         let below = Rect::new(inner.left(), inner.top() + 1, inner.width(), 1);
         PrintLine::new(&line)
             .align(align)
-            .render(below, &mut Surface::new(term.grid_mut(), term_area, 0));
+            .render(&mut Surface::new(term.grid_mut(), term_area, 0).scope(below));
     }
 
     /// Draws this frame (the driver presents). `&self` (unused) is the shape a real
@@ -104,11 +104,11 @@ impl TextAlign {
         Text::new("Left-aligned label")
             .style(Style::new().fg(Color::WHITE))
             .align(Align::Left)
-            .render(row, &mut Surface::new(term.grid_mut(), term_area, 0));
+            .render(&mut Surface::new(term.grid_mut(), term_area, 0).scope(row));
         Text::new("42 / 100")
             .style(Style::new().fg(Color::GREEN))
             .align(Align::Right)
-            .render(row, &mut Surface::new(term.grid_mut(), term_area, 0));
+            .render(&mut Surface::new(term.grid_mut(), term_area, 0).scope(row));
     }
 }
 

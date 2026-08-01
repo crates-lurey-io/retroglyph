@@ -83,33 +83,37 @@ pub(super) fn default_label_style() -> Style {
 
 pub(super) fn render(
     surface: &mut Surface<'_>,
-    area: Rect,
     label: &str,
     label_style: Style,
     ratio: f32,
     readout: &str,
 ) {
-    if area.width() < 4 {
+    let width = surface.width();
+    if width < 4 {
         return;
     }
     let ratio = ratio.clamp(0.0, 1.0);
     let color = Meter::new(ratio).color();
-    let y = area.top();
 
-    // Layout: "<label> [########----]  <readout>"
-    let label_w = label.width().min(area.width_usize());
+    // Layout: "<label> [########----]  <readout>". Direct `put` calls below address this
+    // surface's own local (0, 0)..(width, 1) row; sub-widgets are handed a `scope`d rect
+    // instead, which -- unlike `put` -- addresses the same grid-space `surface.area()` does, so
+    // those rects are built from `area`'s own top-left.
+    let area = surface.area();
+    let width_usize = usize::from(width);
+    let label_w = label.width().min(width_usize);
     let reserved = label_w + 1 + readout.width() + 1; // label + space + gap + readout
-    let bar_w = area.width_usize().saturating_sub(reserved);
+    let bar_w = width_usize.saturating_sub(reserved);
 
-    // `label_w` is `label.width().min(area.width_usize())`, so it never exceeds `area`'s own
+    // `label_w` is `label.width().min(width_usize)`, so it never exceeds this surface's own
     // `u16` width: narrowing it back is always exact.
     #[allow(clippy::cast_possible_truncation)]
     let label_w_u16 = label_w as u16;
-    let label_area = Rect::new(area.left(), y, label_w_u16, 1);
+    let label_area = Rect::new(area.left(), area.top(), label_w_u16, 1);
     Text::new(label)
         .style(label_style)
-        .render(label_area, surface);
-    let mut x = area.left() + label_w_u16 + 1; // gap after label
+        .render(&mut surface.scope(label_area));
+    let mut x = label_w_u16 + 1; // gap after label, in this surface's own local coordinates
 
     // `bar_w` is bounded by the terminal's column count (well under f32's 2^24 exact-integer
     // range), `ratio` is clamped to `0.0..=1.0`, so `filled` always lands in `0..=bar_w`.
@@ -131,15 +135,15 @@ pub(super) fn render(
         } else {
             ('░', empty_style)
         };
-        surface.put((x, y), ch, style);
+        surface.put((x, 0), ch, style);
         x += 1;
     }
 
     x += 1; // gap before readout
-    let readout_area = Rect::new(x, y, area.right().saturating_sub(x), 1);
+    let readout_area = Rect::new(area.left() + x, area.top(), width.saturating_sub(x), 1);
     Text::new(readout)
         .style(Style::new().fg(color))
-        .render(readout_area, surface);
+        .render(&mut surface.scope(readout_area));
 }
 
 #[cfg(test)]
@@ -177,7 +181,6 @@ mod tests {
         let mut grid = Grid::new(20, 1);
         render(
             &mut Surface::new(&mut grid, area, 0),
-            area,
             "あ",
             default_label_style(),
             0.5,

@@ -31,7 +31,7 @@ use retroglyph_widgets::{Gauge, Surface, Widget};
 
 let area = Rect::new(0, 0, 20, 1);
 let mut grid = Grid::new(20, 1);
-Gauge::new("HP", 0.75).render(area, &mut Surface::new(&mut grid, area, 0));
+Gauge::new("HP", 0.75).render(&mut Surface::new(&mut grid, area, 0));
 ```
 
 ## Features

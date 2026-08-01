@@ -48,11 +48,7 @@ use crate::text::truncate as truncate_to_cols;
 ///
 /// let area = Rect::new(0, 0, 20, 3);
 /// let mut grid = Grid::new(20, 3);
-/// Table::new(&headers, &widths, &rows).render(
-///     area,
-///     &mut Surface::new(&mut grid, area, 0),
-///     &mut state,
-/// );
+/// Table::new(&headers, &widths, &rows).render(&mut Surface::new(&mut grid, area, 0), &mut state);
 /// ```
 #[derive(Clone, Copy, Debug)]
 pub struct Table<'a> {
@@ -161,14 +157,15 @@ impl<'a> Table<'a> {
 impl StatefulWidget for Table<'_> {
     type State = ListState;
 
-    fn render(&self, area: Rect, surface: &mut Surface<'_>, state: &mut Self::State) {
-        if area.width() == 0 || area.height() == 0 {
+    fn render(&self, surface: &mut Surface<'_>, state: &mut Self::State) {
+        let (width, height) = (surface.width(), surface.height());
+        if width == 0 || height == 0 {
             return;
         }
         draw_row(
             surface,
-            area,
-            area.top(),
+            width,
+            0,
             self.headers,
             self.widths,
             RowStyle {
@@ -178,14 +175,14 @@ impl StatefulWidget for Table<'_> {
             },
         );
 
-        let visible_rows = area.height_usize().saturating_sub(1);
+        let visible_rows = usize::from(height).saturating_sub(1);
         let selected = state.selected();
         for (row_index, row) in visible_window(self.rows, state.offset(), visible_rows) {
             // `row_index - state.offset()` is a row within the visible window, so it never
-            // exceeds `visible_rows` (`area.height_usize()`, itself widened from a `u16` height).
+            // exceeds `visible_rows` (this surface's own `u16` height).
             #[allow(clippy::cast_possible_truncation)]
             let row_offset = (row_index - state.offset()) as u16;
-            let y = area.top() + 1 + row_offset;
+            let y = 1 + row_offset;
             let (style, bg) = if Some(row_index) == selected {
                 (self.selected_style, Some(self.selected_style.background()))
             } else {
@@ -193,7 +190,7 @@ impl StatefulWidget for Table<'_> {
             };
             draw_row(
                 surface,
-                area,
+                width,
                 y,
                 row,
                 self.widths,
@@ -219,10 +216,11 @@ struct RowStyle {
     column_spacing: u16,
 }
 
-/// Draw one table row of `column_spacing`-separated, per-column-clipped cells at row `y`.
+/// Draw one table row of `column_spacing`-separated, per-column-clipped cells at row `y`, in
+/// this surface's own local coordinates (`width` columns starting at `0`).
 fn draw_row(
     surface: &mut Surface<'_>,
-    area: Rect,
+    width: u16,
     y: u16,
     cells: &[&str],
     widths: &[u16],
@@ -234,19 +232,14 @@ fn draw_row(
         column_spacing,
     } = row_style;
     if let Some(bg) = bg {
-        fill_rect(
-            surface,
-            Rect::new(area.left(), y, area.width(), 1),
-            ' ',
-            Style::new().bg(bg),
-        );
+        fill_rect(surface, Rect::new(0, y, width, 1), ' ', Style::new().bg(bg));
     }
-    let mut x = area.left();
+    let mut x = 0u16;
     for (cell, &w) in cells.iter().zip(widths) {
-        if x >= area.right() {
+        if x >= width {
             break;
         }
-        let avail = (area.right() - x).min(w) as usize;
+        let avail = (width - x).min(w) as usize;
         let text = truncate_to_cols(cell, avail);
         surface.print((x, y), text, style);
         x = x.saturating_add(w.saturating_add(column_spacing));
@@ -270,7 +263,7 @@ mod tests {
         let mut grid = Grid::new(20, 3);
         let mut state = ListState::new();
         state.select(Some(1));
-        table.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
+        table.render(&mut Surface::new(&mut grid, area, 0), &mut state);
 
         // Row 1 ("Bravo") is highlighted; row 0 ("Alpha") is not.
         let highlighted_bg = grid[Pos::new(0, 2)].style().background();
@@ -288,7 +281,7 @@ mod tests {
 
         let mut grid = Grid::new(20, 3);
         let mut state = ListState::new(); // nothing selected
-        table.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
+        table.render(&mut Surface::new(&mut grid, area, 0), &mut state);
 
         let row0_bg = grid[Pos::new(0, 1)].style().background();
         let row1_bg = grid[Pos::new(0, 2)].style().background();
@@ -316,7 +309,7 @@ mod tests {
         let mut grid = Grid::new(20, 3);
         let mut state = ListState::new();
         state.set_offset(2); // window is [Charlie, Delta]
-        table.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
+        table.render(&mut Surface::new(&mut grid, area, 0), &mut state);
 
         // Row 1 is "Charlie", row 2 is "Delta"; neither "Alpha" nor "Bravo"
         // (offset 0/1) are drawn anywhere.
@@ -337,7 +330,7 @@ mod tests {
         let mut state = ListState::new();
         state.select(Some(0)); // "Alpha"
         state.set_offset(2); // but the window starts at "Charlie"
-        table.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
+        table.render(&mut Surface::new(&mut grid, area, 0), &mut state);
 
         let row0_bg = grid[Pos::new(0, 1)].style().background();
         let row1_bg = grid[Pos::new(0, 2)].style().background();
@@ -354,7 +347,7 @@ mod tests {
 
         let mut grid = Grid::new(20, 2);
         let mut state = ListState::new();
-        table.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
+        table.render(&mut Surface::new(&mut grid, area, 0), &mut state);
 
         let expected = Color::Rgb {
             r: 210,
@@ -375,7 +368,7 @@ mod tests {
 
         let mut grid = Grid::new(20, 2);
         let mut state = ListState::new();
-        table.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
+        table.render(&mut Surface::new(&mut grid, area, 0), &mut state);
 
         assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Color::RED);
     }
@@ -392,7 +385,7 @@ mod tests {
         let mut grid = Grid::new(20, 3);
         let mut state = ListState::new();
         state.select(Some(1));
-        table.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
+        table.render(&mut Surface::new(&mut grid, area, 0), &mut state);
 
         assert_eq!(grid[Pos::new(0, 2)].style().foreground(), Color::GREEN);
         assert_eq!(grid[Pos::new(0, 2)].style().background(), Color::BLUE);
@@ -409,7 +402,7 @@ mod tests {
         let mut grid = Grid::new(20, 3);
         let mut state = ListState::new();
         state.select(Some(1));
-        table.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
+        table.render(&mut Surface::new(&mut grid, area, 0), &mut state);
 
         assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Theme::DARK.fg);
         assert_eq!(
@@ -438,7 +431,7 @@ mod tests {
 
         let mut grid = Grid::new(20, 2);
         let mut state = ListState::new();
-        table.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
+        table.render(&mut Surface::new(&mut grid, area, 0), &mut state);
 
         assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Theme::DARK.fg);
         assert_eq!(grid[Pos::new(0, 0)].style().background(), Color::Default);
@@ -456,7 +449,7 @@ mod tests {
 
         let mut grid = Grid::new(20, 1);
         let mut state = ListState::new();
-        table.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
+        table.render(&mut Surface::new(&mut grid, area, 0), &mut state);
 
         // Default spacing (1) would put "B" at column 2; spacing 3 pushes
         // it out to column 4.
@@ -482,7 +475,7 @@ mod tests {
         let mut grid = Grid::new(20, 1);
         draw_row(
             &mut Surface::new(&mut grid, area, 0),
-            area,
+            area.width(),
             0,
             &cells,
             &widths,
@@ -505,7 +498,7 @@ mod tests {
         let mut state = ListState::new();
         state.select(Some(3)); // "Delta", off the front of the default window
         state.ensure_visible(2);
-        table.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
+        table.render(&mut Surface::new(&mut grid, area, 0), &mut state);
 
         // ensure_visible moved the window to [2, 4): "Charlie" then "Delta",
         // with "Delta" (the selection) highlighted on the last visible row.

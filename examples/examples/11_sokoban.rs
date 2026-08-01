@@ -340,7 +340,7 @@ impl Sokoban {
 
         Panel::new()
             .title("Status")
-            .render(status_area, &mut surface);
+            .render(&mut surface.scope(status_area));
         let inner_x = status_area.left() + 2;
         let mut y = status_area.top() + 1;
         surface.print(

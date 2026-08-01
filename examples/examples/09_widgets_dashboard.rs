@@ -159,11 +159,8 @@ impl Dashboard {
             .map(|&(name, status)| <[&str; 2]>::from((name, status)))
             .collect();
         let table_rows: Vec<&[&str]> = table_rows.iter().map(<[&str; 2]>::as_slice).collect();
-        Table::new(&headers, &widths, &table_rows).render(
-            left,
-            &mut surface,
-            &mut self.table_state,
-        );
+        Table::new(&headers, &widths, &table_rows)
+            .render(&mut surface.scope(left), &mut self.table_state);
 
         let right_rows = split_v(
             right,
@@ -179,7 +176,7 @@ impl Dashboard {
             .select(Some(self.selected_tab))
             .style(Style::new().fg(self.theme.dim))
             .selected_style(Style::new().fg(self.theme.accent).bg(self.theme.panel_bg))
-            .render(tabs_area, &mut surface);
+            .render(&mut surface.scope(tabs_area));
 
         if self.selected_tab == 0 {
             self.draw_metrics(&mut surface, panel_area);
@@ -187,7 +184,7 @@ impl Dashboard {
             List::new(&ALERTS)
                 .item_style(Style::new().fg(self.theme.fg))
                 .selected_style(Style::new().fg(self.theme.bg).bg(self.theme.accent))
-                .render(panel_area, &mut surface, &mut self.alerts_state);
+                .render(&mut surface.scope(panel_area), &mut self.alerts_state);
         }
     }
 
@@ -205,11 +202,11 @@ impl Dashboard {
                 Constraint::Fill(1),
             ],
         );
-        Gauge::new("CPU", self.cpu).render(rows[0], surface);
-        Gauge::new("MEM", self.mem).render(rows[1], surface);
+        Gauge::new("CPU", self.cpu).render(&mut surface.scope(rows[0]));
+        Gauge::new("MEM", self.mem).render(&mut surface.scope(rows[1]));
         let history_style = Style::new().fg(self.theme.dim);
         surface.print((rows[2].left(), rows[2].top()), "History:", history_style);
-        Sparkline::new(&CPU_HISTORY).render(rows[3], surface);
+        Sparkline::new(&CPU_HISTORY).render(&mut surface.scope(rows[3]));
 
         let legend = BoxStyle::new(Style::new().fg(self.theme.fg).bg(self.theme.panel_bg))
             .padding(Sides::symmetric(0, 1))
@@ -233,7 +230,7 @@ impl Dashboard {
             .hovered_style(Style::new().fg(self.theme.fg).bg(self.theme.hover_bg))
             .pressed_style(Style::new().fg(self.theme.fg).bg(self.theme.press_bg))
             .focused_style(Style::new().fg(self.theme.accent).bg(self.theme.panel_bg))
-            .render(rect, surface);
+            .render(&mut surface.scope(rect));
         if response.clicked() {
             self.pings += 1;
         }

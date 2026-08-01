@@ -40,7 +40,7 @@ fn bench_list(c: &mut Criterion, n: usize) {
     c.bench_function(&format!("list_render/{n}_items"), |b| {
         b.iter(|| {
             let list = List::new(black_box(&refs));
-            list.render(area, &mut Surface::new(&mut grid, area, 0), &mut state);
+            list.render(&mut Surface::new(&mut grid, area, 0), &mut state);
         });
     });
 }
@@ -62,7 +62,7 @@ fn bench_sparkline(c: &mut Criterion, width: u16, sample_count: usize) {
         |b| {
             b.iter(|| {
                 let spark = Sparkline::new(black_box(&data));
-                spark.render(area, &mut Surface::new(&mut grid, area, 0));
+                spark.render(&mut Surface::new(&mut grid, area, 0));
             });
         },
     );

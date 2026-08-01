@@ -32,7 +32,7 @@ use crate::text::truncate as truncate_to_cols;
 /// interaction.begin_frame();
 /// let area = Rect::new(0, 0, 10, 1);
 /// let response = interaction.interact(area, Id::Save, Sense::click());
-/// Button::new("Save", response).render(area, &mut Surface::new(&mut grid, area, 0));
+/// Button::new("Save", response).render(&mut Surface::new(&mut grid, area, 0));
 /// interaction.end_frame();
 /// ```
 ///
@@ -162,21 +162,22 @@ impl<'a> Button<'a> {
 }
 
 impl Widget for Button<'_> {
-    fn render(&self, area: Rect, surface: &mut Surface<'_>) {
-        if area.width() == 0 || area.height() == 0 {
+    fn render(&self, surface: &mut Surface<'_>) {
+        let (width, height) = (surface.width(), surface.height());
+        if width == 0 || height == 0 {
             return;
         }
 
         let style = self.resolved_style();
-        fill_rect(surface, area, ' ', style);
+        fill_rect(surface, Rect::new(0, 0, width, height), ' ', style);
 
-        let text = truncate_to_cols(self.label, area.width_usize());
-        // `truncate_to_cols` bounds `text` to `area.width_usize()` columns, which is itself a
-        // `u16` widened by `.width_usize()`, so narrowing the count back is always exact.
+        let text = truncate_to_cols(self.label, usize::from(width));
+        // `truncate_to_cols` bounds `text` to `width` columns, so narrowing the count back is
+        // always exact.
         #[allow(clippy::cast_possible_truncation)]
         let text_width = text.chars().count() as u16;
-        let x = area.left() + (area.width().saturating_sub(text_width)) / 2;
-        let y = area.top() + area.height() / 2;
+        let x = width.saturating_sub(text_width) / 2;
+        let y = height / 2;
 
         surface.print((x, y), text, style);
     }
@@ -185,7 +186,7 @@ impl Widget for Button<'_> {
 #[cfg(test)]
 mod tests {
     use retroglyph_core::{
-        Event, Grid, KeyModifiers, MouseButton, MouseEvent, MouseEventKind, Pos,
+        Event, Grid, KeyModifiers, MouseButton, MouseEvent, MouseEventKind, Pos, Rect,
     };
 
     use super::*;
@@ -200,7 +201,7 @@ mod tests {
     fn draws_the_label_centered_in_the_idle_style() {
         let area = Rect::new(0, 0, 7, 1);
         let mut grid = Grid::new(7, 1);
-        Button::new("Go", Response::default()).render(area, &mut Surface::new(&mut grid, area, 0));
+        Button::new("Go", Response::default()).render(&mut Surface::new(&mut grid, area, 0));
 
         // "Go" (2 cols) centered in width 7 starts at column (7-2)/2 = 2.
         assert_eq!(grid[Pos::new(2, 0)].glyph(), 'G');
@@ -211,7 +212,7 @@ mod tests {
     fn fills_the_whole_area_with_the_background() {
         let area = Rect::new(0, 0, 7, 1);
         let mut grid = Grid::new(7, 1);
-        Button::new("Go", Response::default()).render(area, &mut Surface::new(&mut grid, area, 0));
+        Button::new("Go", Response::default()).render(&mut Surface::new(&mut grid, area, 0));
 
         let idle_bg = Style::new()
             .fg(Color::Rgb {
@@ -329,14 +330,33 @@ mod tests {
         );
 
         let mut grid = Grid::new(7, 1);
-        button.render(area, &mut Surface::new(&mut grid, area, 0));
+        button.render(&mut Surface::new(&mut grid, area, 0));
+    }
+
+    #[test]
+    fn scoped_into_a_narrower_clip_still_centers_against_the_full_area() {
+        let mut grid = Grid::new(10, 1);
+        let full = Rect::new(0, 0, 10, 1);
+        let mut surface = Surface::new(&mut grid, full, 0);
+        // Clip to the right-hand half before scoping: mirrors a caller drawing this button
+        // inside an already-clipped ancestor (e.g. a scrolled panel), then handing it a
+        // sub-surface via `scope` for its own (unclipped-by-that-call) area.
+        let mut clipped = surface.clip(Rect::new(6, 0, 4, 1));
+        Button::new("Save", Response::default()).render(&mut clipped.scope(full));
+
+        // "Save" (4 cols) centered in the full 10-col area starts at column 3, so only its
+        // last column (6) falls inside the narrower clip. A widget that recentered itself
+        // against the clip instead of `area` would draw the whole label starting at column
+        // 6, showing 'S' there instead.
+        assert_eq!(grid[Pos::new(6, 0)].glyph(), 'e');
+        assert_eq!(grid[Pos::new(7, 0)].glyph(), ' ');
     }
 
     #[test]
     fn zero_size_is_a_no_op() {
         let area = Rect::new(0, 0, 0, 1);
         let mut grid = Grid::new(1, 1);
-        Button::new("Go", Response::default()).render(area, &mut Surface::new(&mut grid, area, 0));
+        Button::new("Go", Response::default()).render(&mut Surface::new(&mut grid, area, 0));
         assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
     }
 

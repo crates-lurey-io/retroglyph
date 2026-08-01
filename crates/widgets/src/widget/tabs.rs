@@ -38,7 +38,7 @@ use crate::text::truncate as truncate_to_cols;
 /// let mut grid = Grid::new(30, 1);
 /// Tabs::new(&titles)
 ///     .select(Some(0))
-///     .render(area, &mut Surface::new(&mut grid, area, 0));
+///     .render(&mut Surface::new(&mut grid, area, 0));
 /// ```
 #[derive(Clone, Copy, Debug)]
 pub struct Tabs<'a> {
@@ -139,44 +139,44 @@ impl<'a> Tabs<'a> {
 }
 
 impl Widget for Tabs<'_> {
-    fn render(&self, area: Rect, surface: &mut Surface<'_>) {
-        if area.width() == 0 || area.height() == 0 {
+    fn render(&self, surface: &mut Surface<'_>) {
+        let (width, height) = (surface.width(), surface.height());
+        if width == 0 || height == 0 {
             return;
         }
 
-        let y = area.top();
-        let mut x = area.left();
+        let mut x = 0u16;
         for (index, &title) in self.titles.iter().enumerate() {
-            if x >= area.right() {
+            if x >= width {
                 break;
             }
-            let avail = (area.right() - x) as usize;
+            let avail = (width - x) as usize;
             let text = truncate_to_cols(title, avail);
             let style = if Some(index) == self.selected {
                 self.selected_style
             } else {
                 self.style
             };
-            // `text` is bounded to `avail` columns above, itself derived from the `u16`
-            // `area.right()`/`x`, so narrowing the char count back is always exact.
+            // `text` is bounded to `avail` columns above, itself derived from this surface's own
+            // `u16` width/`x`, so narrowing the char count back is always exact.
             #[allow(clippy::cast_possible_truncation)]
             let text_width = text.chars().count() as u16;
             if Some(index) == self.selected && text_width > 0 {
                 fill_rect(
                     surface,
-                    Rect::new(x, y, text_width, 1),
+                    Rect::new(x, 0, text_width, 1),
                     ' ',
                     Style::new().bg(style.background()),
                 );
             }
-            surface.print((x, y), text, style);
+            surface.print((x, 0), text, style);
             x = x.saturating_add(text_width);
 
             if index + 1 < self.titles.len() {
                 if let Some(divider) = self.divider {
                     let mid = x + self.column_spacing / 2;
-                    if mid < area.right() {
-                        surface.put((mid, y), divider, Style::new());
+                    if mid < width {
+                        surface.put((mid, 0), divider, Style::new());
                     }
                 }
                 x = x.saturating_add(self.column_spacing);
@@ -196,7 +196,7 @@ mod tests {
         let area = Rect::new(0, 0, 20, 1);
         let titles = ["One", "Two"];
         let mut grid = Grid::new(20, 1);
-        Tabs::new(&titles).render(area, &mut Surface::new(&mut grid, area, 0));
+        Tabs::new(&titles).render(&mut Surface::new(&mut grid, area, 0));
 
         assert_eq!(grid[Pos::new(0, 0)].glyph(), 'O');
         // "One" (3) + column_spacing (1) = tab 2 starts at column 4.
@@ -210,7 +210,7 @@ mod tests {
         let mut grid = Grid::new(20, 1);
         Tabs::new(&titles)
             .select(Some(1))
-            .render(area, &mut Surface::new(&mut grid, area, 0));
+            .render(&mut Surface::new(&mut grid, area, 0));
 
         let selected_bg = grid[Pos::new(4, 0)].style().background();
         let plain_bg = grid[Pos::new(0, 0)].style().background();
@@ -222,7 +222,7 @@ mod tests {
         let area = Rect::new(0, 0, 20, 1);
         let titles = ["One", "Two"];
         let mut grid = Grid::new(20, 1);
-        Tabs::new(&titles).render(area, &mut Surface::new(&mut grid, area, 0));
+        Tabs::new(&titles).render(&mut Surface::new(&mut grid, area, 0));
 
         let bg0 = grid[Pos::new(0, 0)].style().background();
         let bg1 = grid[Pos::new(4, 0)].style().background();
@@ -236,7 +236,7 @@ mod tests {
         let mut grid = Grid::new(20, 1);
         Tabs::new(&titles)
             .column_spacing(3)
-            .render(area, &mut Surface::new(&mut grid, area, 0));
+            .render(&mut Surface::new(&mut grid, area, 0));
 
         // Default spacing (1) would put "B" at column 2; spacing 3 pushes it to column 4.
         assert_eq!(grid[Pos::new(0, 0)].glyph(), 'A');
@@ -251,7 +251,7 @@ mod tests {
         Tabs::new(&titles)
             .column_spacing(3)
             .divider(Some('|'))
-            .render(area, &mut Surface::new(&mut grid, area, 0));
+            .render(&mut Surface::new(&mut grid, area, 0));
 
         // "A" at 0, spacing [1,3), midpoint at 1 + 3/2 = 2.
         assert_eq!(grid[Pos::new(2, 0)].glyph(), '|');
@@ -262,7 +262,7 @@ mod tests {
         let area = Rect::new(0, 0, 20, 1);
         let titles = ["A", "B"];
         let mut grid = Grid::new(20, 1);
-        Tabs::new(&titles).render(area, &mut Surface::new(&mut grid, area, 0));
+        Tabs::new(&titles).render(&mut Surface::new(&mut grid, area, 0));
 
         assert_eq!(grid[Pos::new(1, 0)].glyph(), ' ');
     }
@@ -272,7 +272,7 @@ mod tests {
         let area = Rect::new(0, 0, 4, 1);
         let titles = ["Alpha", "Bravo", "Charlie"];
         let mut grid = Grid::new(4, 1);
-        Tabs::new(&titles).render(area, &mut Surface::new(&mut grid, area, 0)); // must not panic
+        Tabs::new(&titles).render(&mut Surface::new(&mut grid, area, 0)); // must not panic
 
         assert_eq!(grid[Pos::new(0, 0)].glyph(), 'A');
     }
@@ -287,7 +287,7 @@ mod tests {
         let mut grid = Grid::new(20, 1);
         Tabs::new(&titles)
             .style(custom)
-            .render(area, &mut Surface::new(&mut grid, area, 0));
+            .render(&mut Surface::new(&mut grid, area, 0));
 
         assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Color::RED);
     }
@@ -303,7 +303,7 @@ mod tests {
         Tabs::new(&titles)
             .selected_style(custom)
             .select(Some(0))
-            .render(area, &mut Surface::new(&mut grid, area, 0));
+            .render(&mut Surface::new(&mut grid, area, 0));
 
         assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Color::GREEN);
         assert_eq!(grid[Pos::new(0, 0)].style().background(), Color::BLUE);
@@ -314,7 +314,7 @@ mod tests {
         let area = Rect::new(0, 0, 0, 1);
         let titles = ["One"];
         let mut grid = Grid::new(1, 1);
-        Tabs::new(&titles).render(area, &mut Surface::new(&mut grid, area, 0));
+        Tabs::new(&titles).render(&mut Surface::new(&mut grid, area, 0));
         assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
     }
 
@@ -326,7 +326,7 @@ mod tests {
         Tabs::new(&titles)
             .theme(Theme::DARK)
             .select(Some(1))
-            .render(area, &mut Surface::new(&mut grid, area, 0));
+            .render(&mut Surface::new(&mut grid, area, 0));
 
         assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Theme::DARK.dim);
         assert_eq!(
@@ -353,7 +353,7 @@ mod tests {
         Tabs::new(&titles)
             .theme_on(Theme::DARK, Color::Default)
             .select(Some(0))
-            .render(area, &mut Surface::new(&mut grid, area, 0));
+            .render(&mut Surface::new(&mut grid, area, 0));
 
         assert_eq!(
             grid[Pos::new(0, 0)].style().foreground(),

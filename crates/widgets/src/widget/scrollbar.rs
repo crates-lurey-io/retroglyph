@@ -34,7 +34,7 @@ use crate::draw::thumb_geometry;
 /// let mut grid = Grid::new(1, 10);
 /// Scrollbar::new(100, 10)
 ///     .offset(20)
-///     .render(area, &mut Surface::new(&mut grid, area, 0));
+///     .render(&mut Surface::new(&mut grid, area, 0));
 /// ```
 #[derive(Clone, Copy, Debug)]
 pub struct Scrollbar {
@@ -105,24 +105,26 @@ impl Scrollbar {
 }
 
 impl Widget for Scrollbar {
-    fn render(&self, area: Rect, surface: &mut Surface<'_>) {
-        if area.width() == 0 || area.height() == 0 {
+    fn render(&self, surface: &mut Surface<'_>) {
+        let (w, h) = (surface.width(), surface.height());
+        if w == 0 || h == 0 {
             return;
         }
 
-        for y in area.top()..area.bottom() {
-            for x in area.left()..area.right() {
+        for y in 0..h {
+            for x in 0..w {
                 surface.put((x, y), ' ', self.track_style);
             }
         }
 
+        let local = Rect::new(0, 0, w, h);
         let Some((start, len)) =
-            thumb_geometry(area, self.total_len, self.visible_len, self.offset)
+            thumb_geometry(local, self.total_len, self.visible_len, self.offset)
         else {
             return;
         };
-        for y in (area.top() + start)..(area.top() + start + len) {
-            for x in area.left()..area.right() {
+        for y in start..(start + len) {
+            for x in 0..w {
                 surface.put((x, y), ' ', self.thumb_style);
             }
         }
@@ -139,18 +141,12 @@ impl AnimatedWidget for Scrollbar {
     /// already has, just with `self.offset` replaced by `state`'s current one. `max_offset` is
     /// `total_len - visible_len` (floored at `0`), matching [`thumb_geometry`]'s own definition, so
     /// the physics and the drawn thumb position are always in terms of the same bound.
-    fn render(
-        &self,
-        area: Rect,
-        surface: &mut Surface<'_>,
-        state: &mut Self::State,
-        frame: &Frame,
-    ) {
+    fn render(&self, surface: &mut Surface<'_>, state: &mut Self::State, frame: &Frame) {
         let max_offset = self.total_len.saturating_sub(self.visible_len);
         #[allow(clippy::cast_precision_loss)] // scroll extents stay well under 2^24 items
         state.tick(frame.delta, max_offset as f32);
 
-        Widget::render(&self.offset(state.integer_offset()), area, surface);
+        Widget::render(&self.offset(state.integer_offset()), surface);
     }
 }
 
@@ -158,7 +154,7 @@ impl AnimatedWidget for Scrollbar {
 #[allow(clippy::float_cmp)] // ScrollState offsets under test here are exact 0.0 sentinels, not
 // accumulated float results, so exact equality is the correct check, not a bug.
 mod tests {
-    use retroglyph_core::{Color, Grid, Pos};
+    use retroglyph_core::{Color, Grid, Pos, Rect};
 
     use super::*;
     use crate::Surface;
@@ -170,7 +166,7 @@ mod tests {
         let track = Style::new().bg(Color::Rgb { r: 1, g: 1, b: 1 });
         let thumb = Style::new().bg(Color::Rgb { r: 2, g: 2, b: 2 });
         let scrollbar = Scrollbar::new(3, 5).track_style(track).thumb_style(thumb);
-        Widget::render(&scrollbar, area, &mut Surface::new(&mut grid, area, 0));
+        Widget::render(&scrollbar, &mut Surface::new(&mut grid, area, 0));
         for y in 0..5 {
             assert_eq!(
                 grid[Pos::new(0, y)].style().background(),
@@ -189,7 +185,7 @@ mod tests {
             .offset(0)
             .track_style(track)
             .thumb_style(thumb);
-        Widget::render(&scrollbar, area, &mut Surface::new(&mut grid, area, 0));
+        Widget::render(&scrollbar, &mut Surface::new(&mut grid, area, 0));
 
         let (start, len) = thumb_geometry(area, 20, 5, 0).unwrap();
         for y in 0..10 {
@@ -207,7 +203,7 @@ mod tests {
         let area = Rect::new(0, 0, 1, 10);
         let mut grid = Grid::new(1, 10);
         let scrollbar = Scrollbar::new(20, 5).theme(Theme::DARK);
-        Widget::render(&scrollbar, area, &mut Surface::new(&mut grid, area, 0));
+        Widget::render(&scrollbar, &mut Surface::new(&mut grid, area, 0));
 
         let (start, len) = thumb_geometry(area, 20, 5, 0).unwrap();
         for y in 0..10 {
@@ -225,7 +221,7 @@ mod tests {
         let area = Rect::new(0, 0, 1, 10);
         let mut grid = Grid::new(1, 10);
         let scrollbar = Scrollbar::new(20, 5).theme_on(Theme::DARK, Color::Default);
-        Widget::render(&scrollbar, area, &mut Surface::new(&mut grid, area, 0));
+        Widget::render(&scrollbar, &mut Surface::new(&mut grid, area, 0));
 
         let (start, len) = thumb_geometry(area, 20, 5, 0).unwrap();
         for y in 0..10 {
@@ -245,7 +241,7 @@ mod tests {
         let track = Style::new().bg(Color::Rgb { r: 1, g: 1, b: 1 });
         let thumb = Style::new().bg(Color::Rgb { r: 2, g: 2, b: 2 });
         let scrollbar = Scrollbar::new(20, 5).track_style(track).thumb_style(thumb);
-        Widget::render(&scrollbar, area, &mut Surface::new(&mut grid, area, 0));
+        Widget::render(&scrollbar, &mut Surface::new(&mut grid, area, 0));
 
         let (start, _) = thumb_geometry(area, 20, 5, 0).unwrap();
         assert_eq!(start, 0);
@@ -268,7 +264,6 @@ mod tests {
 
         AnimatedWidget::render(
             &Scrollbar::new(20, 5),
-            area,
             &mut Surface::new(&mut grid, area, 0),
             &mut state,
             &frame(100),
@@ -284,7 +279,7 @@ mod tests {
         let (start, _) = thumb_geometry(area, 20, 5, state.integer_offset()).unwrap();
         let mut expected = Grid::new(1, 10);
         let scrollbar = Scrollbar::new(20, 5).offset(state.integer_offset());
-        Widget::render(&scrollbar, area, &mut Surface::new(&mut expected, area, 0));
+        Widget::render(&scrollbar, &mut Surface::new(&mut expected, area, 0));
         for y in 0..10 {
             assert_eq!(
                 grid[Pos::new(0, y)].style().background(),
@@ -304,7 +299,6 @@ mod tests {
 
         AnimatedWidget::render(
             &Scrollbar::new(20, 5),
-            area,
             &mut Surface::new(&mut grid, area, 0),
             &mut state,
             &frame(100),

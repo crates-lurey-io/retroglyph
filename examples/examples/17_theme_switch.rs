@@ -113,7 +113,7 @@ impl ThemeSwitch {
                 "Theme: Light"
             })
             .theme(theme)
-            .render(panel_area, &mut Surface::new(term.grid_mut(), term_area, 0));
+            .render(&mut Surface::new(term.grid_mut(), term_area, 0).scope(panel_area));
 
         // Panel's own interior inset -- one cell in from the border on every side, the same
         // math `Modal::render` uses to hand back its inner content rect.
@@ -128,22 +128,29 @@ impl ThemeSwitch {
             .select(Some(self.selected_tab))
             .theme(theme)
             .render(
-                Rect::new(inner.left(), inner.top(), inner.width(), 1),
-                &mut Surface::new(term.grid_mut(), term_area, 0),
+                &mut Surface::new(term.grid_mut(), term_area, 0).scope(Rect::new(
+                    inner.left(),
+                    inner.top(),
+                    inner.width(),
+                    1,
+                )),
             );
 
         let list_area = Rect::new(inner.left(), inner.top() + 2, inner.width(), 4);
         List::new(&ITEMS).theme(theme).render(
-            list_area,
-            &mut Surface::new(term.grid_mut(), term_area, 0),
+            &mut Surface::new(term.grid_mut(), term_area, 0).scope(list_area),
             &mut self.list_state,
         );
 
         self.draw_toggle_button(term, Rect::new(inner.left(), inner.top() + 7, 20, 1), theme);
 
         ProgressBar::new(7, 10).theme(theme).render(
-            Rect::new(inner.left(), inner.top() + 9, inner.width(), 1),
-            &mut Surface::new(term.grid_mut(), term_area, 0),
+            &mut Surface::new(term.grid_mut(), term_area, 0).scope(Rect::new(
+                inner.left(),
+                inner.top() + 9,
+                inner.width(),
+                1,
+            )),
         );
     }
 
@@ -163,7 +170,7 @@ impl ThemeSwitch {
         let term_area = term.area();
         Button::new(label, response)
             .theme(theme)
-            .render(rect, &mut Surface::new(term.grid_mut(), term_area, 0));
+            .render(&mut Surface::new(term.grid_mut(), term_area, 0).scope(rect));
         if response.clicked() {
             self.dark = !self.dark;
         }
