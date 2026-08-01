@@ -59,7 +59,7 @@ impl Default for WidgetsInteraction {
         Self {
             interaction: Interaction::new(),
             shortcuts,
-            density: Density::Relaxed,
+            density: Density::Mouse,
             count: 0,
         }
     }
