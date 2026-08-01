@@ -15,6 +15,7 @@ use retroglyph_core::Size;
 /// this crate (a checkbox, say) would read [`min_target_size`](Self::min_target_size)
 /// the same way it would read [`Sense`](crate::Sense).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Density {
     /// Smaller interactive targets, for narrow or short terminals, or touch
     /// input where every cell of screen space is scarce.
@@ -60,5 +61,16 @@ mod tests {
     fn relaxed_still_claims_more_than_a_single_cell_wide() {
         let size = Density::Relaxed.min_target_size();
         assert!(size.width() > 1);
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn serializes_as_a_plain_string() {
+        let json = serde_json::to_string(&Density::Compact).expect("serialize");
+        assert_eq!(json, "\"Compact\"");
+        assert_eq!(
+            serde_json::from_str::<Density>(&json).expect("deserialize"),
+            Density::Compact
+        );
     }
 }

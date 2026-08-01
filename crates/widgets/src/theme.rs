@@ -23,6 +23,7 @@ use retroglyph_core::Color;
 /// assert_ne!(theme.bg, Theme::LIGHT.bg);
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Theme {
     /// The window/screen background, behind every panel.
     pub bg: Color,
@@ -161,6 +162,14 @@ mod tests {
     #[test]
     fn dark_and_light_are_distinct() {
         assert_ne!(Theme::DARK, Theme::LIGHT);
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn serializes_and_deserializes() {
+        let json = serde_json::to_string(&Theme::DARK).expect("serialize");
+        let round_tripped: Theme = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(round_tripped, Theme::DARK);
     }
 
     #[test]
