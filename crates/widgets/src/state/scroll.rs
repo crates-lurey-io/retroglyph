@@ -1,3 +1,5 @@
+use crate::Response;
+
 /// Configurable physics constants for [`ScrollState`].
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ScrollPhysics {
@@ -33,6 +35,13 @@ impl Default for ScrollPhysics {
 /// drag-to-scroll gestures. Completely separate from drawing, and generic over
 /// time: takes a time delta step to decay velocity or animate snap-back,
 /// making it deterministic and suitable for unit tests.
+///
+/// For a *row*-based viewport (a menu, a list of fixed-height items) where content scrolls a
+/// whole row at a time and there's no momentum to animate, reach for [`crate::ListState`]
+/// instead: its `offset` is a plain `usize`, clamped only at zero, with no velocity or physics
+/// step. The two don't compose into one type on purpose (see [`crate::ListState`]'s own doc
+/// comment) -- pick whichever one matches what's actually scrolling: continuous/pixel-ish
+/// content reaches for `ScrollState`, a discrete item list reaches for `ListState`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ScrollState {
     offset: f32,
@@ -264,6 +273,49 @@ impl ScrollState {
         }
     }
 
+    /// Feeds a frame's resolved [`Response::scroll_delta`] straight into
+    /// [`scroll_by_wheel`](Self::scroll_by_wheel), so a widget wires wheel input by calling
+    /// [`Interaction::interact`](crate::Interaction::interact) with [`Sense::SCROLL`](crate::Sense::SCROLL)
+    /// and handing the [`Response`] here, instead of re-deriving it from raw
+    /// [`MouseEventKind::Scroll`](retroglyph_core::MouseEventKind::Scroll) events the way a widget
+    /// with no route to `ScrollState` has to.
+    ///
+    /// A no-op if nothing scrolled this frame (`scroll_delta` is `0`), which also makes this safe
+    /// to call unconditionally every frame rather than gating it on a dirty check first. Drag-to-scroll
+    /// isn't covered here: `Response` reports only *whether* a drag is in progress
+    /// ([`Response::dragging`]), not a pointer position, so that gesture still goes through
+    /// [`begin_drag`](Self::begin_drag)/[`update_drag`](Self::update_drag)/[`end_drag`](Self::end_drag)
+    /// directly, using [`Interaction::pointer`](crate::Interaction::pointer)'s position alongside
+    /// this `Response`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_core::Rect;
+    /// use retroglyph_widgets::{Interaction, ScrollState, Sense};
+    ///
+    /// #[derive(Clone, Copy, PartialEq, Eq)]
+    /// struct Id;
+    ///
+    /// let mut interaction = Interaction::new();
+    /// let mut scroll = ScrollState::new();
+    ///
+    /// interaction.begin_frame();
+    /// let response = interaction.interact(Rect::new(0, 0, 10, 5), Id, Sense::scroll());
+    /// scroll.apply(&response); // a no-op here: nothing scrolled this frame
+    /// interaction.end_frame();
+    ///
+    /// assert_eq!(scroll.velocity(), 0.0);
+    /// ```
+    pub fn apply(&mut self, response: &Response) {
+        let delta = response.scroll_delta();
+        if delta != 0 {
+            #[allow(clippy::cast_precision_loss)] // scroll deltas stay tiny: a handful of wheel
+            // notches per frame, nowhere near f32's 24-bit exact-integer range.
+            self.scroll_by_wheel(delta as f32);
+        }
+    }
+
     const fn record_sample(&mut self, time: f32, y: f32) {
         self.samples[self.samples_idx] = Some((time, y));
         self.samples_idx = (self.samples_idx + 1) % self.samples.len();
@@ -403,5 +455,48 @@ mod tests {
         assert!(s.velocity() > 0.0);
         s.tick(core::time::Duration::from_millis(100), 10.0);
         assert!(s.offset() > 0.0);
+    }
+
+    fn response_with_scroll_delta(scroll_delta: i32) -> Response {
+        Response {
+            scroll_delta,
+            ..Response::default()
+        }
+    }
+
+    #[test]
+    fn apply_feeds_scroll_delta_into_the_wheel_impulse() {
+        let mut applied = ScrollState::new();
+        applied.apply(&response_with_scroll_delta(2));
+
+        let mut direct = ScrollState::new();
+        direct.scroll_by_wheel(2.0);
+
+        assert_eq!(applied.velocity(), direct.velocity());
+        assert!(applied.velocity() > 0.0);
+    }
+
+    #[test]
+    fn apply_is_a_no_op_when_nothing_scrolled() {
+        let mut s = ScrollState::new();
+        s.apply(&response_with_scroll_delta(0));
+        assert_eq!(s.velocity(), 0.0);
+        assert_eq!(s.offset(), 0.0);
+    }
+
+    #[test]
+    fn apply_negative_delta_scrolls_backward() {
+        let mut s = ScrollState::new();
+        s.set_offset(5.0, 10.0);
+        s.apply(&response_with_scroll_delta(-1));
+        assert!(s.velocity() < 0.0);
+    }
+
+    #[test]
+    fn apply_is_ignored_while_dragging_like_scroll_by_wheel() {
+        let mut s = ScrollState::new();
+        s.begin_drag(0.0);
+        s.apply(&response_with_scroll_delta(3));
+        assert_eq!(s.velocity(), 0.0);
     }
 }
