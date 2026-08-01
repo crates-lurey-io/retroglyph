@@ -24,17 +24,25 @@ use crate::{Align, Theme};
 /// [`Widget`]: [`Widget::render`] can't return a value, and the inner
 /// content rect is part of this type's contract.
 ///
+/// [`Modal::render`] draws through whatever [`Surface`] it's given, on whatever layer that
+/// surface is already scoped to -- it has no layer of its own to default. A modal painted over
+/// an active screen should be given a surface on [`Layer::Overlay`](retroglyph_core::Layer::Overlay)
+/// (`surface.on_tier(Layer::Overlay)`), so it paints on top regardless of whether the screen or
+/// the modal renders first this frame; see [`Layer`](retroglyph_core::Layer)'s docs for why that
+/// beats ordering the two draw calls.
+///
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::{Grid, Rect};
+/// use retroglyph_core::{Grid, Layer, Rect};
 /// use retroglyph_widgets::{Modal, Surface};
 ///
 /// let screen = Rect::new(0, 0, 20, 10);
 /// let mut grid = Grid::new(20, 10);
+/// let mut surface = Surface::new(&mut grid, screen, Layer::World.as_u8());
 /// let inner = Modal::new(10, 4)
 ///     .title("Confirm")
-///     .render(screen, &mut Surface::new(&mut grid, screen, 0));
+///     .render(screen, &mut surface.on_tier(Layer::Overlay));
 /// // `inner` is ready to hand to another widget, e.g. a `Log` or `Text`.
 /// assert_eq!(inner.width(), 8);
 /// ```
