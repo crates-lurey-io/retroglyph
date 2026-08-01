@@ -19,6 +19,11 @@
 //! terrain, 1 for items, 2 for actors, 3+ for UI/effects, but the crate
 //! enforces nothing; any id can hold any content.
 //!
+//! For overlapping *UI* specifically (chrome, popups, debug overlays, as opposed to a tile map's
+//! own terrain/items/actors split), see [`crate::surface::Layer`] and
+//! [`Surface::on_tier`](crate::surface::Surface::on_tier) for a small named convention and why
+//! it beats ordering draw calls.
+//!
 //! Compositing itself happens in one of two places, chosen by the backend
 //! (see [`crate::Output::composites_layers`]):
 //!
