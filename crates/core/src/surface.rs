@@ -15,20 +15,29 @@ use crate::tint::Tint;
 use unicode_width::UnicodeWidthChar;
 
 /// The render target for every drawing call in the workspace: a mutable reference to a
-/// [`Grid`] plus a fixed `layer`, scoped to one area.
+/// [`Grid`] plus a fixed `layer`, scoped to an `area` and clipped to a `clip` rect.
 ///
 /// A `Surface` is typically created once per frame, scoped to the whole drawing surface (e.g.
 /// via [`Terminal::draw`](crate::Terminal::draw)), and handed to every subsystem/widget in turn;
 /// each caller's own `area: Rect` (a sub-rect of the surface's own area, e.g. one produced by a
-/// layout split) is in the same coordinate space as [`Surface::area`] itself.
-/// [`Surface::put`]/[`Surface::print`]/... take coordinates in that same space and silently clip
-/// any write that falls outside [`Surface::area`], matching the rest of the workspace's
-/// clip-on-draw policy for out-of-bounds drawing.
+/// layout split) is relative to this surface's own `area` origin, not to the underlying grid.
+/// [`Surface::put`]/[`Surface::print`]/... take coordinates in that same local space, where
+/// `(0, 0)` is `area`'s top-left corner, and silently drop any write that falls outside
+/// [`Surface::clip_rect`], matching the rest of the workspace's clip-on-draw policy for
+/// out-of-bounds drawing.
 ///
-/// [`Surface::clip`] turns a sub-rect into a surface of its own, so a subsystem that should not
-/// draw outside one is bounded by the type rather than trusted to respect an `area` handed to it
-/// alongside a wider surface. The clip is intersected, never substituted, so narrowing only ever
-/// tightens.
+/// `area` and `clip_rect` answer two different questions. `area` is the region this surface
+/// *represents*: what a widget lays itself out in, and what [`width`](Self::width)/
+/// [`height`](Self::height) report. `clip_rect` is the subset of `area` that is actually
+/// *visible*: what every write is bounds-checked against. The two start out equal (see
+/// [`Surface::new`]) and diverge once [`Surface::clip`] or [`Surface::scope`] is used.
+///
+/// [`Surface::clip`] narrows what is visible without changing what this surface represents:
+/// `clip_rect` is intersected with the given rect, `area` is untouched. [`Surface::scope`] does
+/// both: `area` becomes the given rect and `clip_rect` is intersected with it, which is what a
+/// widget's own sub-surface needs when it should be laid out against a new rect but still bounded
+/// by whatever was already visible. Both narrow monotonically: neither can widen `clip_rect`
+/// beyond what the parent surface already allowed.
 ///
 /// A caller that genuinely needs more than one layer at once (e.g. a modal dimming layer 0 while
 /// drawing its own content on layer 1) switches layers with [`Surface::on_layer`]/[`Surface::on_tier`]
@@ -36,6 +45,7 @@ use unicode_width::UnicodeWidthChar;
 pub struct Surface<'a> {
     grid: &'a mut Grid,
     area: Rect,
+    clip: Rect,
     layer: u8,
     tint: Tint,
     origin_offset: (i32, i32),
@@ -117,21 +127,37 @@ impl From<Layer> for u8 {
 }
 
 impl<'a> Surface<'a> {
-    /// A surface over `grid`, scoped to `area` on `layer`, tinting nothing.
+    /// A surface over `grid`, scoped to `area` on `layer`, tinting nothing. `area` starts out
+    /// fully visible: [`area`](Self::area) and [`clip_rect`](Self::clip_rect) are equal until
+    /// [`clip`](Self::clip) or [`scope`](Self::scope) narrows the latter.
     pub const fn new(grid: &'a mut Grid, area: Rect, layer: u8) -> Self {
         Self {
             grid,
             area,
+            clip: area,
             layer,
             tint: Tint::None,
             origin_offset: (0, 0),
         }
     }
 
-    /// The area this surface clips writes to.
+    /// The region this surface represents, e.g. for a widget to lay itself out in.
+    ///
+    /// Unlike [`clip_rect`](Self::clip_rect), this is never narrowed by [`clip`](Self::clip): it
+    /// only changes when [`scope`](Self::scope) sets a new one. A widget that reads its own area
+    /// off the surface after being clipped (e.g. while partially offscreen) sees the region it
+    /// was given, not the visible sliver of it, so it can still center itself correctly and let
+    /// the clip take care of what actually lands.
     #[must_use]
     pub const fn area(&self) -> Rect {
         self.area
+    }
+
+    /// The visible subset of [`area`](Self::area). Every write this surface accepts is
+    /// bounds-checked against this rect, not `area`.
+    #[must_use]
+    pub const fn clip_rect(&self) -> Rect {
+        self.clip
     }
 
     /// The width of this surface's area, in columns.
@@ -152,12 +178,13 @@ impl<'a> Surface<'a> {
         self.layer
     }
 
-    /// A new surface over the same grid and area, but writing to `layer` instead.
+    /// A new surface over the same grid, area, and clip, but writing to `layer` instead.
     #[must_use]
     pub const fn on_layer(&mut self, layer: u8) -> Surface<'_> {
         Surface {
             grid: self.grid,
             area: self.area,
+            clip: self.clip,
             layer,
             tint: self.tint,
             origin_offset: self.origin_offset,
@@ -226,29 +253,35 @@ impl<'a> Surface<'a> {
         Surface {
             grid: self.grid,
             area: self.area,
+            clip: self.clip,
             layer: self.layer,
             tint,
             origin_offset: self.origin_offset,
         }
     }
 
-    /// A new surface over the same grid and layer, clipped to `area` intersected with this
-    /// surface's own area.
+    /// A new surface over the same grid, layer, and [`area`](Self::area), whose
+    /// [`clip_rect`](Self::clip_rect) is narrowed to `rect` intersected with this surface's own
+    /// clip. What this surface *represents* is unchanged; only what is visible shrinks.
     ///
     /// Coordinates are unchanged: the sub-surface addresses the same space this one does, so a
     /// sub-rect computed against [`Surface::area`] (e.g. by a [`layout`](crate::layout) split)
-    /// can be passed straight in. Because `area` is intersected rather than substituted,
+    /// can be passed straight in. Because the clip is intersected rather than substituted,
     /// narrowing is monotonic: handing a surface down a layout tree can only ever tighten what a
-    /// callee is able to touch.
+    /// callee is able to draw into, never widen it.
     ///
-    /// Clipping is also how the area-sensitive calls are told what they are drawing into:
+    /// Clipping is also how the clip-sensitive calls are told what they are drawing into:
     ///
     /// - [`print`](Self::print) wraps overflow onto the next row. Clipped to a one-row bar, the
-    ///   wrapped remainder falls outside the area and is dropped, which is what a single-line
+    ///   wrapped remainder falls outside the clip and is dropped, which is what a single-line
     ///   bar wants.
     /// - [`put_span`](Self::put_span) and [`put_span_uniform`](Self::put_span_uniform) refuse a
-    ///   footprint that leaves the area. Clipped to a content rect, "fits" stops meaning "fits
+    ///   footprint that leaves the clip. Clipped to a content rect, "fits" stops meaning "fits
     ///   the screen" and starts meaning "does not reserve cells in the status bar below".
+    ///
+    /// A sub-surface that should instead *represent* `rect` (e.g. a widget's own region, laid out
+    /// and centered against `rect` rather than the parent's wider area) wants
+    /// [`scope`](Self::scope), not this.
     ///
     /// # Examples
     ///
@@ -268,9 +301,52 @@ impl<'a> Surface<'a> {
     /// assert_eq!(grid[Pos::new(0, 1)].glyph(), ' ');
     /// ```
     #[must_use]
-    pub fn clip(&mut self, area: Rect) -> Surface<'_> {
+    pub fn clip(&mut self, rect: Rect) -> Surface<'_> {
         Surface {
-            area: self.area.intersect(area),
+            area: self.area,
+            clip: self.clip.intersect(rect),
+            grid: self.grid,
+            layer: self.layer,
+            tint: self.tint,
+            origin_offset: self.origin_offset,
+        }
+    }
+
+    /// A new surface over the same grid and layer, that *represents* `rect`: its
+    /// [`area`](Self::area) becomes `rect`, and its [`clip_rect`](Self::clip_rect) is narrowed to
+    /// `rect` intersected with this surface's own clip.
+    ///
+    /// This is the primitive a widget's own region is built from: a sub-widget laid out against
+    /// `rect` should center, align, and measure itself against `rect` (via [`area`](Self::area)),
+    /// while still being unable to draw outside whatever was already visible in the parent. A
+    /// clip alone cannot do this, because [`clip`](Self::clip) leaves `area` untouched; `scope`
+    /// is what a caller reaches for when handing a sub-rect down to something that is going to
+    /// read that rect back off the surface.
+    ///
+    /// Like [`clip`](Self::clip), the clip narrows monotonically: a `rect` that reaches outside
+    /// this surface's own clip only ever tightens what the returned surface can draw into, never
+    /// widens it, even though `area` itself becomes exactly `rect`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_core::{Grid, Rect, Surface};
+    ///
+    /// let mut grid = Grid::new(8, 4);
+    /// let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 8, 4), 0);
+    ///
+    /// let mut clipped = surface.clip(Rect::new(0, 0, 4, 4));
+    /// // `scope` widens `area` to a rect the parent's clip does not fully cover...
+    /// let scoped = clipped.scope(Rect::new(2, 0, 4, 4));
+    /// assert_eq!(scoped.area(), Rect::new(2, 0, 4, 4));
+    /// // ...but the visible region still cannot exceed the parent's own clip.
+    /// assert_eq!(scoped.clip_rect(), Rect::new(2, 0, 2, 4));
+    /// ```
+    #[must_use]
+    pub fn scope(&mut self, rect: Rect) -> Surface<'_> {
+        Surface {
+            area: rect,
+            clip: self.clip.intersect(rect),
             grid: self.grid,
             layer: self.layer,
             tint: self.tint,
@@ -291,13 +367,14 @@ impl<'a> Surface<'a> {
     /// [`clear`](Self::clear), which takes no coordinate and always clears this surface's whole
     /// area, is unaffected.
     ///
-    /// This does not touch [`area`](Self::area), so [`area`](Self::area), [`width`](Self::width),
-    /// and [`height`](Self::height) keep reporting the same thing before and after translating:
-    /// only the coordinate a caller must pass to land a write shifts, never what the surface
-    /// itself covers. This composes with [`clip`](Self::clip) the same order it is called in:
-    /// `clip(...).translate(...)` first narrows the area, then shifts the coordinate space that
-    /// still-narrowed area is addressed in, so a coordinate that goes negative after the shift can
-    /// land inside the pre-narrowed area.
+    /// This does not touch [`area`](Self::area) or [`clip_rect`](Self::clip_rect), so both, along
+    /// with [`width`](Self::width) and [`height`](Self::height), keep reporting the same thing
+    /// before and after translating: only the coordinate a caller must pass to land a write
+    /// shifts, never what the surface itself covers or what is visible in it. This composes with
+    /// [`scope`](Self::scope) the same order it is called in: `scope(...).translate(...)` first
+    /// narrows the area and clip, then shifts the coordinate space that still-narrowed area is
+    /// addressed in, so a coordinate that goes negative after the shift can land inside the
+    /// pre-narrowed area.
     ///
     /// # Examples
     ///
@@ -309,8 +386,8 @@ impl<'a> Surface<'a> {
     ///
     /// // Narrow to a 4x4 viewport, then shift its coordinate space by (-5, -5): translating
     /// // does not move or resize the viewport itself.
-    /// let mut clipped = surface.clip(Rect::new(5, 5, 4, 4));
-    /// let mut view = clipped.translate((-5, -5));
+    /// let mut scoped = surface.scope(Rect::new(5, 5, 4, 4));
+    /// let mut view = scoped.translate((-5, -5));
     /// assert_eq!(view.area(), Rect::new(5, 5, 4, 4));
     ///
     /// // (-5, -5) minus the translate offset (-5, -5) is (0, 0): the viewport's own local
@@ -324,6 +401,7 @@ impl<'a> Surface<'a> {
         Surface {
             grid: self.grid,
             area: self.area,
+            clip: self.clip,
             layer: self.layer,
             tint: self.tint,
             origin_offset: (
@@ -359,8 +437,10 @@ impl<'a> Surface<'a> {
     /// ```
     #[must_use]
     pub fn clip_translate(&mut self, area: Rect, origin: (i32, i32)) -> Surface<'_> {
+        let area = self.area.intersect(area);
         Surface {
-            area: self.area.intersect(area),
+            area,
+            clip: self.clip.intersect(area),
             grid: self.grid,
             layer: self.layer,
             tint: self.tint,
@@ -385,7 +465,8 @@ impl<'a> Surface<'a> {
     ///
     /// Escape hatch for multi-layer or whole-grid operations (e.g. [`Grid::blit`]) that don't fit
     /// this surface's clipped, single-layer model. Drawing into a sub-rect is not one of those:
-    /// [`clip`](Self::clip) narrows a surface without handing out the unclipped grid to do it.
+    /// [`clip`](Self::clip) and [`scope`](Self::scope) narrow a surface without handing out the
+    /// unclipped grid to do it.
     pub const fn grid_mut(&mut self) -> &mut Grid {
         self.grid
     }
@@ -398,9 +479,9 @@ impl<'a> Surface<'a> {
 
     /// The tile at `pos` on this surface's layer, if any.
     ///
-    /// Respects this surface's layer but not its area clip, mirroring [`grid_mut`](Self::grid_mut)
-    /// in that sense: a caller wanting an area-clipped read should check
-    /// [`self.area().contains(...)`](Rect::contains) first.
+    /// Respects this surface's layer but not its clip, mirroring [`grid_mut`](Self::grid_mut) in
+    /// that sense: a caller wanting a clipped read should check
+    /// [`self.clip_rect().contains(...)`](Rect::contains) first.
     ///
     /// # Examples
     ///
@@ -446,14 +527,16 @@ impl<'a> Surface<'a> {
 
     /// Shifts `(x, y)` by this surface's translate offset (see [`translate`](Self::translate)),
     /// returning the coordinate to actually write at if the shift still lands inside this
-    /// surface's own area, or `None` otherwise.
+    /// surface's own clip, or `None` otherwise.
     ///
     /// The subtracted result is a coordinate local to this surface's area (`(0, 0)` is the
     /// area's own top-left, matching [`put_signed`](Self::put_signed)'s convention), not an
     /// absolute grid coordinate: a local check against `(0, 0)..(width, height)` here, followed
     /// by re-adding [`area`](Self::area)'s own top-left, so a clipped area that does not itself
     /// start at grid `(0, 0)` (e.g. [`Camera::surface`](crate::Camera::surface)'s
-    /// `clip(viewport)`) still resolves to the right absolute cell.
+    /// `clip_translate`) still resolves to the right absolute cell. The result is then checked
+    /// against [`clip_rect`](Self::clip_rect), not `area`, since the clip -- never the area -- is
+    /// what decides whether a write lands.
     fn shift(&self, x: u16, y: u16) -> Option<(u16, u16)> {
         let sx = i32::from(x).checked_sub(self.origin_offset.0)?;
         let sy = i32::from(y).checked_sub(self.origin_offset.1)?;
@@ -462,10 +545,12 @@ impl<'a> Surface<'a> {
         }
         let sx = u16::try_from(sx).ok()?;
         let sy = u16::try_from(sy).ok()?;
-        if sx >= self.width() || sy >= self.height() {
+        if sx >= self.area.width() || sy >= self.area.height() {
             return None;
         }
-        Some((self.area.left() + sx, self.area.top() + sy))
+        let gx = self.area.left() + sx;
+        let gy = self.area.top() + sy;
+        self.clip.contains(gx, gy).then_some((gx, gy))
     }
 
     /// Applies this surface's tint to the cell just written at `(x, y)`.
@@ -481,7 +566,7 @@ impl<'a> Surface<'a> {
     }
 
     /// Writes `grapheme` (already a single extended grapheme cluster) at `(x, y)`. A no-op if
-    /// out of this surface's area.
+    /// out of this surface's clip.
     #[cfg(feature = "egc")]
     fn put_grapheme(&mut self, x: u16, y: u16, grapheme: &str, style: Style) {
         let Some((x, y)) = self.shift(x, y) else {
@@ -491,7 +576,7 @@ impl<'a> Surface<'a> {
         self.apply_tint(x, y);
     }
 
-    /// Place `ch` at `pos` in `style`. A no-op if `pos` is outside this surface's area.
+    /// Place `ch` at `pos` in `style`. A no-op if `pos` is outside this surface's clip.
     ///
     /// If a pixel backend resolves `ch` to a sprite, that sprite is composited from its own
     /// pixels: [`style.fg`](Style::fg) does not tint it, and `style.bg` shows through only where
@@ -506,7 +591,7 @@ impl<'a> Surface<'a> {
     /// let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 4, 4), 0);
     ///
     /// surface.put((1, 1), 'X', Style::default());
-    /// // Outside the surface's area: silently dropped, not a panic.
+    /// // Outside the surface's clip: silently dropped, not a panic.
     /// surface.put((10, 10), 'X', Style::default());
     ///
     /// assert_eq!(grid[Pos::new(1, 1)].glyph(), 'X');
@@ -573,6 +658,9 @@ impl<'a> Surface<'a> {
         }
         let abs_x = self.area.left() + x;
         let abs_y = self.area.top() + y;
+        if !self.clip.contains(abs_x, abs_y) {
+            return;
+        }
         let tile = Tile::new(ch, style);
         self.grid.put_tile(self.layer, (abs_x, abs_y), tile);
         self.apply_tint(abs_x, abs_y);
@@ -581,8 +669,8 @@ impl<'a> Surface<'a> {
     /// Print `text` starting at `pos` in `style`.
     ///
     /// `\n` advances to the next row at the original column. Text that would extend beyond this
-    /// surface's area wraps to the next row at the original column; cells outside the area
-    /// (either axis) are clipped. When the `egc` feature is enabled, `text` is split into
+    /// surface's clip wraps to the next row at the original column; cells outside the clip
+    /// (either axis) are dropped. When the `egc` feature is enabled, `text` is split into
     /// extended grapheme clusters (so combining marks and ZWJ sequences write as one cell each);
     /// otherwise it is split by `char`.
     ///
@@ -618,7 +706,7 @@ impl<'a> Surface<'a> {
         use unicode_segmentation::UnicodeSegmentation;
         use unicode_width::UnicodeWidthStr;
 
-        let right = self.area.right();
+        let right = self.clip.right();
         let mut cx = pos.x;
         let mut cy = pos.y;
         for grapheme in text.graphemes(true) {
@@ -646,7 +734,7 @@ impl<'a> Surface<'a> {
     /// [`print`](Self::print) implementation used when `egc` is disabled: splits on `char`.
     #[cfg(not(feature = "egc"))]
     fn print_chars(&mut self, pos: Pos, text: &str, style: Style) {
-        let right = self.area.right();
+        let right = self.clip.right();
         let mut cx = pos.x;
         let mut cy = pos.y;
         for ch in text.chars() {
@@ -672,7 +760,7 @@ impl<'a> Surface<'a> {
     }
 
     /// Print `line`'s styled spans starting at `pos`, one row, each span in its own style.
-    /// Stops once a span would start past this surface's area.
+    /// Stops once a span would start past this surface's clip.
     ///
     /// # Examples
     ///
@@ -694,7 +782,7 @@ impl<'a> Surface<'a> {
         use unicode_width::UnicodeWidthStr;
 
         let pos = pos.into();
-        let right = self.area.right();
+        let right = self.clip.right();
         let mut cx = pos.x;
         for span in &line.spans {
             if cx >= right {
@@ -711,7 +799,7 @@ impl<'a> Surface<'a> {
     }
 
     /// [`print`](Self::print), horizontally aligned within `rect` (clipped to this surface's own
-    /// area) and measured in display columns (via `unicode_width`), not bytes.
+    /// clip) and measured in display columns (via `unicode_width`), not bytes.
     ///
     /// Wants a per-frame redrawn UI label (a status line, a centred title bar) that should not
     /// allocate: unlike [`TextLayout`](crate::layout::TextLayout), which only accepts a
@@ -764,7 +852,7 @@ impl<'a> Surface<'a> {
         self.clip(rect).print(pos, text, style);
     }
 
-    /// Fill `rect` (clipped to this surface's own area) with `ch` in `style`.
+    /// Fill `rect` (clipped to this surface's own clip) with `ch` in `style`.
     ///
     /// # Examples
     ///
@@ -775,7 +863,7 @@ impl<'a> Surface<'a> {
     /// let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 4, 4), 0);
     ///
     /// // `rect` extends well past the grid on both axes; only the cells inside the
-    /// // surface's own area are touched, the rest is silently clipped.
+    /// // surface's own clip are touched, the rest is silently clipped.
     /// surface.fill_rect(Rect::new(2, 2, 10, 10), '#', Style::default());
     ///
     /// assert_eq!(grid[Pos::new(3, 3)].glyph(), '#');
@@ -819,7 +907,7 @@ impl<'a> Surface<'a> {
     ///
     /// `Some(())` once the whole span is written, or `None` having written nothing at all when
     /// `rows` is empty or ragged, either axis exceeds 255 cells, or the footprint does not fit
-    /// entirely within this surface's own area (not just the grid) at `pos`. The surface has
+    /// entirely within this surface's own clip (not just the grid) at `pos`. The surface has
     /// strictly more ways to refuse a span than [`Grid::write_span`] does, so a sprite that did
     /// not draw is answered here rather than in the backend.
     pub fn put_span<S: AsRef<str>>(
@@ -860,7 +948,7 @@ impl<'a> Surface<'a> {
     ///
     /// `Some(())` once the whole span is written, or `None` having written nothing at all when
     /// either axis of `size` is `0` or exceeds 255 cells, or the footprint does not fit entirely
-    /// within this surface's own area at `pos`.
+    /// within this surface's own clip at `pos`.
     ///
     /// # Examples
     ///
@@ -901,22 +989,22 @@ impl<'a> Surface<'a> {
         Some(())
     }
 
-    /// `true` if a `w` x `h` footprint at `pos` lies entirely within this surface's area.
+    /// `true` if a `w` x `h` footprint at `pos` lies entirely within this surface's clip.
     ///
     /// A span is all-or-nothing rather than clipped like the per-cell writes, because a
-    /// footprint half outside the area would reserve cells the caller does not own.
+    /// footprint half outside the clip would reserve cells the caller does not own.
     fn span_fits(&self, pos: Pos, w: u16, h: u16) -> bool {
-        pos.x >= self.area.left()
-            && pos.y >= self.area.top()
-            && pos.x.saturating_add(w) <= self.area.right()
-            && pos.y.saturating_add(h) <= self.area.bottom()
+        pos.x >= self.clip.left()
+            && pos.y >= self.clip.top()
+            && pos.x.saturating_add(w) <= self.clip.right()
+            && pos.y.saturating_add(h) <= self.clip.bottom()
     }
 
     /// Place `ch` at `pos` with a sub-cell pixel `offset`, in `style`.
     ///
     /// Sub-cell offsets are visual only: they do not affect grid logic or hit-testing.
     /// Backends that cannot represent pixel offsets (e.g. `CrosstermBackend`) ignore them. A
-    /// no-op if `pos` is outside this surface's area.
+    /// no-op if `pos` is outside this surface's clip.
     ///
     /// # Examples
     ///
@@ -929,7 +1017,7 @@ impl<'a> Surface<'a> {
     /// // A large offset still lands the glyph in cell (1, 1): the offset is a pixel nudge
     /// // for a pixel backend, never a coordinate shift.
     /// surface.put_offset((1, 1), Offset::new(12, -12), 'X', Style::default());
-    /// // Outside the surface's area: silently dropped, matching `put`.
+    /// // Outside the surface's clip: silently dropped, matching `put`.
     /// surface.put_offset((10, 10), Offset::default(), 'X', Style::default());
     ///
     /// assert_eq!(grid[Pos::new(1, 1)].glyph(), 'X');
@@ -950,17 +1038,18 @@ impl<'a> Surface<'a> {
         self.grid.put_tile(self.layer, (x, y), tile);
     }
 
-    /// Clears this surface's entire area (on its own layer) back to [`Tile::default`].
+    /// Clears this surface's own area, intersected with its clip (on its own layer), back to
+    /// [`Tile::default`].
     pub fn clear(&mut self) {
-        let area = self.area;
-        for y in area.top()..area.bottom() {
-            for x in area.left()..area.right() {
+        let region = self.area.intersect(self.clip);
+        for y in region.top()..region.bottom() {
+            for x in region.left()..region.right() {
                 self.grid.put_tile(self.layer, (x, y), Tile::default());
             }
         }
     }
 
-    /// Clears `rect` (clipped to this surface's own area, on its own layer) back to
+    /// Clears `rect` (clipped to this surface's own clip, on its own layer) back to
     /// [`Tile::default`].
     ///
     /// # Examples
@@ -972,7 +1061,7 @@ impl<'a> Surface<'a> {
     /// let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 4, 4), 0);
     /// surface.fill_rect(Rect::new(0, 0, 4, 4), '#', Style::default());
     ///
-    /// // `rect` extends past the surface's own area; only the overlap is cleared.
+    /// // `rect` extends past the surface's own clip; only the overlap is cleared.
     /// surface.clear_region(Rect::new(2, 2, 10, 10));
     ///
     /// assert_eq!(grid[Pos::new(2, 2)].glyph(), ' ');
@@ -1277,14 +1366,17 @@ mod tests {
     }
 
     #[test]
-    fn clip_narrows_the_area_and_keeps_the_coordinate_space() {
+    fn clip_narrows_the_visible_rect_but_not_the_area() {
         let mut grid = Grid::new(8, 4);
+        let area = Rect::new(0, 0, 8, 4);
         let mut surface = screen(&mut grid);
         let sub = surface.clip(Rect::new(2, 1, 4, 2));
 
-        assert_eq!(sub.area(), Rect::new(2, 1, 4, 2));
-        assert_eq!(sub.width(), 4);
-        assert_eq!(sub.height(), 2);
+        assert_eq!(sub.clip_rect(), Rect::new(2, 1, 4, 2));
+        // `area` reports what the surface represents, unaffected by `clip`.
+        assert_eq!(sub.area(), area);
+        assert_eq!(sub.width(), 8);
+        assert_eq!(sub.height(), 4);
     }
 
     #[test]
@@ -1356,12 +1448,68 @@ mod tests {
         let area = Rect::new(2, 1, 4, 2);
         let mut surface = Surface::new(&mut grid, area, 0);
 
-        // A rect reaching outside the surface's own area only ever tightens it.
-        assert_eq!(surface.clip(Rect::new(0, 0, 8, 4)).area(), area);
+        // A rect reaching outside the surface's own clip only ever tightens it.
+        assert_eq!(surface.clip(Rect::new(0, 0, 8, 4)).clip_rect(), area);
         assert_eq!(
-            surface.clip(Rect::new(0, 0, 4, 4)).area(),
+            surface.clip(Rect::new(0, 0, 4, 4)).clip_rect(),
             Rect::new(2, 1, 2, 2)
         );
+    }
+
+    #[test]
+    fn clip_does_not_widen_the_visible_region_after_scope_narrows_it() {
+        let mut grid = Grid::new(8, 4);
+        let mut surface = screen(&mut grid);
+        let mut scoped = surface.scope(Rect::new(1, 1, 2, 2));
+
+        // `clip` on an already-scoped surface can only tighten what was already visible, even
+        // when asked for a rect that reaches back out past it.
+        assert_eq!(
+            scoped.clip(Rect::new(0, 0, 8, 4)).clip_rect(),
+            Rect::new(1, 1, 2, 2)
+        );
+    }
+
+    #[test]
+    fn scope_sets_the_area_and_intersects_the_clip() {
+        let mut grid = Grid::new(8, 4);
+        let mut surface = screen(&mut grid);
+        let mut clipped = surface.clip(Rect::new(0, 0, 4, 4));
+
+        // `scope` widens `area` to a rect the parent's clip does not fully cover...
+        let scoped = clipped.scope(Rect::new(2, 0, 4, 4));
+        assert_eq!(scoped.area(), Rect::new(2, 0, 4, 4));
+        // ...but the visible region still cannot exceed the parent's own clip.
+        assert_eq!(scoped.clip_rect(), Rect::new(2, 0, 2, 4));
+    }
+
+    #[test]
+    fn scope_inside_a_clipped_surface_cannot_widen_the_visible_region() {
+        let mut grid = Grid::new(8, 4);
+        let mut surface = screen(&mut grid);
+        let mut clipped = surface.clip(Rect::new(2, 1, 2, 2));
+
+        // Even a `scope` rect that reaches well outside the parent's clip only ever tightens
+        // what is visible; `area` still becomes exactly the requested rect.
+        let scoped = clipped.scope(Rect::new(0, 0, 8, 4));
+        assert_eq!(scoped.area(), Rect::new(0, 0, 8, 4));
+        assert_eq!(scoped.clip_rect(), Rect::new(2, 1, 2, 2));
+    }
+
+    #[test]
+    fn scope_writes_outside_the_inherited_clip_are_dropped() {
+        let mut grid = Grid::new(8, 4);
+        {
+            let mut surface = screen(&mut grid);
+            let mut clipped = surface.clip(Rect::new(0, 0, 4, 4));
+            let mut scoped = clipped.scope(Rect::new(0, 0, 8, 4));
+            // Inside the requested `area`, outside the inherited clip.
+            scoped.put((5, 0), 'a', Style::default());
+            scoped.put((1, 0), 'b', Style::default());
+        }
+
+        assert_eq!(grid[Pos::new(5, 0)].glyph(), ' ');
+        assert_eq!(grid[Pos::new(1, 0)].glyph(), 'b');
     }
 
     #[test]
@@ -1443,7 +1591,7 @@ mod tests {
         {
             let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 4, 4), 0);
             let mut sub = surface.clip(Rect::new(4, 0, 4, 4));
-            assert_eq!(sub.area(), Rect::EMPTY);
+            assert_eq!(sub.clip_rect(), Rect::EMPTY);
             sub.print((0, 0), "abc", Style::default());
         }
 
@@ -1491,12 +1639,27 @@ mod tests {
     fn translate_does_not_change_area_width_or_height() {
         let mut grid = Grid::new(10, 10);
         let mut surface = screen(&mut grid);
-        let mut clipped = surface.clip(Rect::new(5, 5, 4, 4));
-        let view = clipped.translate((-5, -5));
+        let mut scoped = surface.scope(Rect::new(5, 5, 4, 4));
+        let view = scoped.translate((-5, -5));
 
         assert_eq!(view.area(), Rect::new(5, 5, 4, 4));
+        assert_eq!(view.clip_rect(), Rect::new(5, 5, 4, 4));
         assert_eq!(view.width(), 4);
         assert_eq!(view.height(), 4);
+    }
+
+    #[test]
+    fn translate_composes_with_scope_and_clip_rect() {
+        let mut grid = Grid::new(10, 10);
+        let mut surface = screen(&mut grid);
+        let mut clipped = surface.clip(Rect::new(0, 0, 6, 6));
+        // `scope` widens `area` past the parent's clip; `translate` on top must not change
+        // either `area` or the still-narrower `clip_rect` it composed with.
+        let mut scoped = clipped.scope(Rect::new(4, 4, 4, 4));
+        let view = scoped.translate((-4, -4));
+
+        assert_eq!(view.area(), Rect::new(4, 4, 4, 4));
+        assert_eq!(view.clip_rect(), Rect::new(4, 4, 2, 2));
     }
 
     #[test]
@@ -1517,15 +1680,15 @@ mod tests {
     }
 
     #[test]
-    fn translate_composes_with_clip_and_lets_a_negative_signed_coordinate_land() {
+    fn translate_composes_with_scope_and_lets_a_negative_signed_coordinate_land() {
         let mut grid = Grid::new(10, 10);
         {
             let mut surface = screen(&mut grid);
-            let mut clipped = surface.clip(Rect::new(5, 5, 4, 4));
-            let mut view = clipped.translate((-5, -5));
+            let mut scoped = surface.scope(Rect::new(5, 5, 4, 4));
+            let mut view = scoped.translate((-5, -5));
 
             // -5 minus the translate origin (-5) is 0: the viewport's own local origin, landing
-            // at the clipped area's top-left grid cell.
+            // at the scoped area's top-left grid cell.
             view.put_signed((-5, -5), 'X', Style::default());
             // -6 minus -5 is still -1: still negative, so still out of bounds.
             view.put_signed((-6, -6), 'Y', Style::default());
@@ -1770,6 +1933,6 @@ mod tests {
         let mut outer = surface.clip(Rect::new(1, 1, 4, 2));
         let inner = outer.clip(Rect::new(0, 0, 8, 4));
 
-        assert_eq!(inner.area(), Rect::new(1, 1, 4, 2));
+        assert_eq!(inner.clip_rect(), Rect::new(1, 1, 4, 2));
     }
 }
