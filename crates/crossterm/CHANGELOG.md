@@ -7,6 +7,35 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 
+## [0.2.3+retroglyph-crossterm](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-crossterm-v0.2.2...retroglyph-crossterm-v0.2.3) - 2026-08-01
+
+### Bug Fixes
+
+- [256108c](
+https://github.com/crates-lurey-io/retroglyph/commit/256108cb43ff65bbb562cf0cb8017f72e3ab2719) *(crossterm)* Reset SGR attributes before Clear(ClearType::All) by `@matanlurey` in [#594](
+https://github.com/crates-lurey-io/retroglyph/pull/594)
+  >
+  > Output::clear (also called by Output::resize on every terminal resize)
+  > issued Clear(ClearType::All) without resetting the SGR pen first. Most
+  > terminals implement erase-display via background color erase (BCE):
+  > erased cells are painted with whatever background is currently active in
+  > the pen, not the terminal's true default.
+  >
+  > That's merely cosmetic for a single frame, except this path also backs
+  > every resize: Terminal::resize (retroglyph-core) wipes the diff's
+  > previous grid to default tiles, so any current cell that's also still at
+  > its default (e.g. anything the app hasn't drawn into the newly grown
+  > area yet) never differs from previous and is never resent by the diff in
+  > present(). That leaves the BCE-tinted patch on screen permanently --
+  > reported as misdraw gaps and a background that doesn't fully clear on
+  > resize -- since nothing ever draws over it again.
+  >
+  > Adds SetAttribute(Attribute::Reset) ahead of the Clear command so BCE
+  > always paints with the terminal's real default background.
+
+**Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-crossterm-v0.2.2...retroglyph-crossterm-v0.2.3
+
+
 ## [0.2.2+retroglyph-crossterm](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-crossterm-v0.2.1...retroglyph-crossterm-v0.2.2) - 2026-08-01
 
 ### Bug Fixes

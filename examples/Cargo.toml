@@ -18,7 +18,7 @@ retroglyph-core = { path = "../crates/core", version = "0.5.0" }
 # on), and every Tier 2 example that uses it (09_widgets_dashboard, 10_widgets_interaction) needs
 # it on every backend feature combination this crate builds.
 retroglyph-widgets = { path = "../crates/widgets", version = "0.4.1" }
-retroglyph-crossterm = { path = "../crates/crossterm", version = "0.2.2", optional = true }
+retroglyph-crossterm = { path = "../crates/crossterm", version = "0.2.3", optional = true }
 retroglyph-software = { path = "../crates/software", version = "0.5.1", optional = true }
 retroglyph-gl = { path = "../crates/gl", version = "0.2.1", optional = true }
 retroglyph-window = { path = "../crates/window", version = "0.4.1", optional = true }
