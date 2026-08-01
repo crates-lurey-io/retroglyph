@@ -8,32 +8,53 @@
 //! kind of thing a real game built on this library needs, and libraries like ratatui treat them
 //! as must-have gallery entries.
 //!
+//! The log also scrolls by mouse wheel, via [`ScrollState`] and [`Interaction`]: wheel input
+//! over the log resolves to a `Response`, and [`ScrollState::apply`] feeds its
+//! `scroll_delta` straight into momentum, instead of the log re-deriving wheel handling from
+//! raw `MouseEventKind::Scroll` events itself (retroglyph#605). `Up`/`Down` still move the log
+//! by exactly one message, instantly, via [`ScrollState::set_offset`] -- only the wheel path
+//! gets momentum.
+//!
+//! `Scrollbar` also implements `AnimatedWidget`, ticking a `ScrollState`'s physics against
+//! `total_len - visible_len` before drawing -- the right bound for a top-anchored, `List`-style
+//! window. `Log`'s own offset means something different (how far back from the newest message,
+//! unbounded by the viewport), so that bound doesn't fit it: this example ticks `scroll`
+//! directly against the log's own bound instead of going through `AnimatedWidget` here.
+//!
 //! ```sh
 //! cargo run --example 13_combat_log --features crossterm
 //! cargo run --example 13_combat_log --features software
 //! cargo run --example 13_combat_log  # headless fallback, prints a few frames to stdout
 //! ```
 //!
-//! Keys: `a` attacks. `Up`/`Down` scroll the log. `r` resets after the fight ends. `q` or
-//! `Escape` quits at any time.
+//! Keys: `a` attacks. `Up`/`Down`, or the mouse wheel over the log, scroll it. `r` resets after
+//! the fight ends. `q` or `Escape` quits at any time.
 
 use retroglyph_core::event::{Event, KeyCode};
 use retroglyph_core::text::Line;
 use retroglyph_core::{AnsiColor, Backend, Color, Frame, Rect, Style, Surface, Terminal};
 use retroglyph_examples::Example;
-use retroglyph_widgets::{Log, Modal, Scrollbar, StatBar, Widget};
+use retroglyph_widgets::{Interaction, Log, Modal, ScrollState, Scrollbar, Sense, StatBar, Widget};
 
 const PLAYER_MAX_HP: u32 = 30;
 const ENEMY_MAX_HP: u32 = 40;
 const PLAYER_DAMAGE: u32 = 7;
 const ENEMY_DAMAGE: u32 = 5;
 
+/// Identifies the scrollable log region for [`Interaction`]'s hit-testing. The only widget in
+/// this example that senses anything, so a single variant is enough.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Id {
+    Log,
+}
+
 /// State for the combat-log example.
 pub struct CombatLog {
     player_hp: u32,
     enemy_hp: u32,
     log: Vec<Line>,
-    log_offset: usize,
+    scroll: ScrollState,
+    interaction: Interaction<Id>,
     over: bool,
 }
 
@@ -43,7 +64,8 @@ impl Default for CombatLog {
             player_hp: PLAYER_MAX_HP,
             enemy_hp: ENEMY_MAX_HP,
             log: vec![Line::raw("A goblin blocks your path!")],
-            log_offset: 0,
+            scroll: ScrollState::new(),
+            interaction: Interaction::new(),
             over: false,
         }
     }
@@ -78,12 +100,22 @@ impl CombatLog {
         }
     }
 
+    /// The highest offset [`Log::offset`] usefully reaches: scrolling back further than the log
+    /// is long shows fewer (or zero) messages (see `Log`'s own doc comment), a legitimate but
+    /// useless state to land in via a key press or a wheel notch, so both cap here instead.
+    #[allow(clippy::cast_precision_loss)] // combat logs stay well under 2^24 messages
+    const fn max_log_offset(&self) -> f32 {
+        self.log.len().saturating_sub(1) as f32
+    }
+
+    /// Moves the log by exactly `delta` messages, instantly (no momentum): `ScrollState::set_offset`
+    /// zeroes velocity, so a key press always lands exactly where pressed, cutting off any wheel
+    /// fling still decaying from before.
+    #[allow(clippy::cast_precision_loss)] // see max_log_offset
     fn scroll(&mut self, delta: i32) {
-        let max = self.log.len().saturating_sub(1);
-        self.log_offset = self
-            .log_offset
-            .saturating_add_signed(delta as isize)
-            .min(max);
+        let max = self.max_log_offset();
+        let current = self.scroll.integer_offset() as f32;
+        self.scroll.set_offset(current + delta as f32, max);
     }
 
     fn reset(&mut self) {
@@ -92,6 +124,7 @@ impl CombatLog {
 
     fn handle_events<B: Backend>(&mut self, term: &mut Terminal<B>) -> bool {
         for event in term.drain_events() {
+            self.interaction.handle_event(&event);
             match event {
                 Event::Key(key) if key.is_down() => match key.code {
                     KeyCode::Char('q') | KeyCode::Escape => return false,
@@ -108,7 +141,7 @@ impl CombatLog {
         true
     }
 
-    fn draw<B: Backend>(&self, term: &mut Terminal<B>) {
+    fn draw<B: Backend>(&mut self, term: &mut Terminal<B>, frame: &Frame) {
         // Kept short on purpose: this is a 50-column grid, and `Surface::print` wraps text
         // that overflows the width onto the next row -- which would otherwise stomp on the
         // stat bars printed right below.
@@ -132,17 +165,35 @@ impl CombatLog {
         );
 
         let log_area = Rect::new(1, 4, 47, 20);
+
+        // `Sense::scroll()` reaches this rect regardless of what's drawn on top of it (see
+        // `Interaction::interact`'s own doc comment on `scroll_delta`), so this feeds wheel
+        // input into `scroll`'s momentum the same way a real scrollable widget would, instead of
+        // matching raw `MouseEventKind::Scroll` events by hand.
+        let response = self
+            .interaction
+            .interact(log_area, Id::Log, Sense::scroll());
+        self.scroll.apply(&response);
+
+        // Not `AnimatedWidget::render`: see this module's doc comment for why `Log`'s own bound
+        // doesn't match `Scrollbar`'s built-in `total_len - visible_len` one.
+        self.scroll.tick(frame.delta, self.max_log_offset());
+        let log_offset = self.scroll.integer_offset();
+
         Log::new(&self.log)
-            .offset(self.log_offset)
+            .offset(log_offset)
             .render(log_area, &mut Surface::new(term.grid_mut(), term_area, 0));
-        Scrollbar::new(self.log.len(), log_area.height_usize())
-            .offset(self.log_offset)
+        let scrollbar = Scrollbar::new(self.log.len(), log_area.height_usize())
+            .offset(log_offset)
             .track_style(Style::new().fg(Color::Ansi(AnsiColor::BrightBlack)))
-            .thumb_style(Style::new().bg(Color::Ansi(AnsiColor::BrightBlack)))
-            .render(
-                Rect::new(48, 4, 1, 20),
-                &mut Surface::new(term.grid_mut(), term_area, 0),
-            );
+            .thumb_style(Style::new().bg(Color::Ansi(AnsiColor::BrightBlack)));
+        // UFCS: `Scrollbar` also implements `AnimatedWidget` (not used here, see this module's
+        // doc comment), so a bare `.render(...)` call is ambiguous between the two traits.
+        Widget::render(
+            &scrollbar,
+            Rect::new(48, 4, 1, 20),
+            &mut Surface::new(term.grid_mut(), term_area, 0),
+        );
 
         if self.over {
             let title = if self.enemy_hp == 0 {
@@ -183,11 +234,14 @@ impl CombatLog {
 impl Example for CombatLog {
     const NAME: &'static str = "13_combat_log";
 
-    fn tick<B: Backend>(&mut self, term: &mut Terminal<B>, _frame: &Frame) -> bool {
+    fn tick<B: Backend>(&mut self, term: &mut Terminal<B>, frame: &Frame) -> bool {
+        self.interaction.begin_frame();
         if !self.handle_events(term) {
+            self.interaction.end_frame();
             return false;
         }
-        self.draw(term);
+        self.draw(term, frame);
+        self.interaction.end_frame();
         true
     }
 }
