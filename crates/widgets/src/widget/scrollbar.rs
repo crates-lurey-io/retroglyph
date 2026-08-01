@@ -1,7 +1,8 @@
 //! [`Scrollbar`]: a vertical track+thumb indicator.
-use retroglyph_core::{Color, Rect, Style};
+use retroglyph_core::{Color, Frame, Rect, Style};
 
-use super::Widget;
+use super::{AnimatedWidget, Widget};
+use crate::ScrollState;
 use crate::Surface;
 use crate::Theme;
 use crate::draw::thumb_geometry;
@@ -128,7 +129,34 @@ impl Widget for Scrollbar {
     }
 }
 
+impl AnimatedWidget for Scrollbar {
+    type State = ScrollState;
+
+    /// Ticks `state`'s momentum/rubber-band physics forward by `frame.delta` (a no-op while
+    /// [`ScrollState::dragging`](crate::ScrollState::dragging) is `true`, per [`ScrollState::tick`]'s
+    /// own docs), then draws the thumb at the resulting
+    /// [`integer_offset`](crate::ScrollState::integer_offset) -- the [`Widget::render`] this type
+    /// already has, just with `self.offset` replaced by `state`'s current one. `max_offset` is
+    /// `total_len - visible_len` (floored at `0`), matching [`thumb_geometry`]'s own definition, so
+    /// the physics and the drawn thumb position are always in terms of the same bound.
+    fn render(
+        &self,
+        area: Rect,
+        surface: &mut Surface<'_>,
+        state: &mut Self::State,
+        frame: &Frame,
+    ) {
+        let max_offset = self.total_len.saturating_sub(self.visible_len);
+        #[allow(clippy::cast_precision_loss)] // scroll extents stay well under 2^24 items
+        state.tick(frame.delta, max_offset as f32);
+
+        Widget::render(&self.offset(state.integer_offset()), area, surface);
+    }
+}
+
 #[cfg(test)]
+#[allow(clippy::float_cmp)] // ScrollState offsets under test here are exact 0.0 sentinels, not
+// accumulated float results, so exact equality is the correct check, not a bug.
 mod tests {
     use retroglyph_core::{Color, Grid, Pos};
 
@@ -141,10 +169,8 @@ mod tests {
         let mut grid = Grid::new(1, 5);
         let track = Style::new().bg(Color::Rgb { r: 1, g: 1, b: 1 });
         let thumb = Style::new().bg(Color::Rgb { r: 2, g: 2, b: 2 });
-        Scrollbar::new(3, 5)
-            .track_style(track)
-            .thumb_style(thumb)
-            .render(area, &mut Surface::new(&mut grid, area, 0));
+        let scrollbar = Scrollbar::new(3, 5).track_style(track).thumb_style(thumb);
+        Widget::render(&scrollbar, area, &mut Surface::new(&mut grid, area, 0));
         for y in 0..5 {
             assert_eq!(
                 grid[Pos::new(0, y)].style().background(),
@@ -159,11 +185,11 @@ mod tests {
         let mut grid = Grid::new(1, 10);
         let track = Style::new().bg(Color::Rgb { r: 1, g: 1, b: 1 });
         let thumb = Style::new().bg(Color::Rgb { r: 2, g: 2, b: 2 });
-        Scrollbar::new(20, 5)
+        let scrollbar = Scrollbar::new(20, 5)
             .offset(0)
             .track_style(track)
-            .thumb_style(thumb)
-            .render(area, &mut Surface::new(&mut grid, area, 0));
+            .thumb_style(thumb);
+        Widget::render(&scrollbar, area, &mut Surface::new(&mut grid, area, 0));
 
         let (start, len) = thumb_geometry(area, 20, 5, 0).unwrap();
         for y in 0..10 {
@@ -180,9 +206,8 @@ mod tests {
     fn theme_maps_named_roles_onto_track_and_thumb() {
         let area = Rect::new(0, 0, 1, 10);
         let mut grid = Grid::new(1, 10);
-        Scrollbar::new(20, 5)
-            .theme(Theme::DARK)
-            .render(area, &mut Surface::new(&mut grid, area, 0));
+        let scrollbar = Scrollbar::new(20, 5).theme(Theme::DARK);
+        Widget::render(&scrollbar, area, &mut Surface::new(&mut grid, area, 0));
 
         let (start, len) = thumb_geometry(area, 20, 5, 0).unwrap();
         for y in 0..10 {
@@ -199,9 +224,8 @@ mod tests {
     fn theme_on_uses_the_given_backdrop_instead_of_panel_bg() {
         let area = Rect::new(0, 0, 1, 10);
         let mut grid = Grid::new(1, 10);
-        Scrollbar::new(20, 5)
-            .theme_on(Theme::DARK, Color::Default)
-            .render(area, &mut Surface::new(&mut grid, area, 0));
+        let scrollbar = Scrollbar::new(20, 5).theme_on(Theme::DARK, Color::Default);
+        Widget::render(&scrollbar, area, &mut Surface::new(&mut grid, area, 0));
 
         let (start, len) = thumb_geometry(area, 20, 5, 0).unwrap();
         for y in 0..10 {
@@ -220,12 +244,72 @@ mod tests {
         let mut grid = Grid::new(1, 10);
         let track = Style::new().bg(Color::Rgb { r: 1, g: 1, b: 1 });
         let thumb = Style::new().bg(Color::Rgb { r: 2, g: 2, b: 2 });
-        Scrollbar::new(20, 5)
-            .track_style(track)
-            .thumb_style(thumb)
-            .render(area, &mut Surface::new(&mut grid, area, 0));
+        let scrollbar = Scrollbar::new(20, 5).track_style(track).thumb_style(thumb);
+        Widget::render(&scrollbar, area, &mut Surface::new(&mut grid, area, 0));
 
         let (start, _) = thumb_geometry(area, 20, 5, 0).unwrap();
         assert_eq!(start, 0);
+    }
+
+    fn frame(delta_ms: u64) -> Frame {
+        Frame {
+            delta: core::time::Duration::from_millis(delta_ms),
+            frame: 0,
+        }
+    }
+
+    #[test]
+    fn animated_render_ticks_state_before_drawing_the_thumb() {
+        let area = Rect::new(0, 0, 1, 10);
+        let mut grid = Grid::new(1, 10);
+        let mut state = ScrollState::new();
+        state.scroll_by_wheel(4.0); // gives the state some velocity to integrate
+        assert_eq!(state.offset(), 0.0, "no physics has run yet");
+
+        AnimatedWidget::render(
+            &Scrollbar::new(20, 5),
+            area,
+            &mut Surface::new(&mut grid, area, 0),
+            &mut state,
+            &frame(100),
+        );
+
+        assert!(
+            state.offset() > 0.0,
+            "tick should have advanced the offset before drawing"
+        );
+
+        // The thumb was drawn at the *post-tick* offset, not the stale offset from before the
+        // call: proves render() and tick() ran in the order the trait promises, in one call.
+        let (start, _) = thumb_geometry(area, 20, 5, state.integer_offset()).unwrap();
+        let mut expected = Grid::new(1, 10);
+        let scrollbar = Scrollbar::new(20, 5).offset(state.integer_offset());
+        Widget::render(&scrollbar, area, &mut Surface::new(&mut expected, area, 0));
+        for y in 0..10 {
+            assert_eq!(
+                grid[Pos::new(0, y)].style().background(),
+                expected[Pos::new(0, y)].style().background(),
+                "row {y}, thumb starting at {start}"
+            );
+        }
+    }
+
+    #[test]
+    fn animated_render_does_not_tick_while_dragging() {
+        let area = Rect::new(0, 0, 1, 10);
+        let mut grid = Grid::new(1, 10);
+        let mut state = ScrollState::new();
+        state.begin_drag(5.0);
+        state.scroll_by_wheel(4.0); // ignored while dragging, per ScrollState::scroll_by_wheel
+
+        AnimatedWidget::render(
+            &Scrollbar::new(20, 5),
+            area,
+            &mut Surface::new(&mut grid, area, 0),
+            &mut state,
+            &frame(100),
+        );
+
+        assert_eq!(state.offset(), 0.0, "tick is a no-op while dragging");
     }
 }

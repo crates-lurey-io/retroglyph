@@ -18,7 +18,9 @@
 //!   an area-relative, single-layer view over a [`Grid`](retroglyph_core::Grid), and let
 //!   callers box or store heterogeneous widgets, e.g. a `Vec<Box<dyn Widget>>` of panes to
 //!   render each frame, with no `Backend` type parameter, since drawing touches nothing but
-//!   cells.
+//!   cells. [`AnimatedWidget`] is `StatefulWidget`'s sibling for state that evolves with
+//!   wall-clock time (e.g. [`ScrollState`]'s momentum physics) instead of only in response to
+//!   input -- see its own docs.
 //! - [`Interaction`] ([`interact`]) for hover/click/drag/focus tracking
 //!   without a retained widget tree: the sibling of [`ListState`] for
 //!   widgets that don't have a natural selection index of their own.
@@ -73,6 +75,7 @@ pub use theme::Theme;
 #[cfg(feature = "egc")]
 pub use widget::Paragraph;
 pub use widget::{
-    BoxBorder, Button, Gauge, List, Log, Measure, Meter, Modal, Panel, PerfOverlay, PrintLine,
-    ProgressBar, Scrollbar, Sparkline, StatBar, StatefulWidget, Table, Tabs, Text, Widget,
+    AnimatedWidget, BoxBorder, Button, Gauge, List, Log, Measure, Meter, Modal, Panel, PerfOverlay,
+    PrintLine, ProgressBar, Scrollbar, Sparkline, StatBar, StatefulWidget, Table, Tabs, Text,
+    Widget,
 };

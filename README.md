@@ -236,7 +236,11 @@ Three more independent layers build on top:
 
 - `Widget`/`StatefulWidget` traits let callers box or store heterogeneous widgets, e.g. a
   `Vec<Box<dyn Widget>>` of panes to render each frame, backed by `ListState` for selection and
-  scroll position.
+  scroll position. `AnimatedWidget`, a sibling of `StatefulWidget`, is for state that evolves with
+  wall-clock time instead -- `ScrollState`'s momentum/rubber-band physics, a `Tween`-driven
+  transition -- taking a `Frame` (the same one `App::update` already receives) alongside the state,
+  so advancing and drawing happen in one call instead of two independently ordered ones. `Scrollbar`
+  implements it directly, ticking `ScrollState` before drawing the thumb at the result.
 - `BoxStyle`, a Lip-Gloss-style box model (padding, border, margin) rendered into a standalone
   `Grid`. `Paragraph` (behind the `egc` feature) word-wraps text via `retroglyph-core`'s
   `TextLayout` and implements a `Measure` trait so a caller can size a pane to fit before rendering.

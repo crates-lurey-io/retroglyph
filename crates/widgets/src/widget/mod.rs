@@ -14,7 +14,7 @@
 //! `egc` feature) additionally implements [`Measure`], since it needs
 //! `retroglyph_core::layout::TextLayout`'s grapheme-aware word-wrap to
 //! report a height before rendering.
-use retroglyph_core::Rect;
+use retroglyph_core::{Frame, Rect};
 
 use crate::Surface;
 
@@ -149,4 +149,62 @@ pub trait Measure {
     /// The number of rows this widget would need to render at `width`
     /// columns.
     fn height_for(&self, width: u16) -> u16;
+}
+
+/// Like [`StatefulWidget`], but for widgets whose state evolves with wall-clock time.
+///
+/// Covers state like [`crate::ScrollState`]'s momentum/rubber-band physics or a
+/// [`Tween`](retroglyph_core::Tween)-driven transition, which advance on their own rather than
+/// only in response to input.
+///
+/// [`StatefulWidget`] has no way to reach the [`Frame`] an [`App`](retroglyph_core::App) already
+/// receives every frame, so a widget with time-based state has nowhere to advance it: not in
+/// `render` (no `Frame` parameter), and not in a second, app-defined call, because nothing
+/// enforces that call happening before `render` rather than after it -- the two orders differ by
+/// one frame of animation, silently. `AnimatedWidget` closes that gap with a single call that both
+/// advances and draws, so the ordering question doesn't arise. See [`Scrollbar`]'s impl for a
+/// worked example: it ticks [`crate::ScrollState`]'s physics forward by `frame.delta`, then draws
+/// the thumb at the resulting offset, in one call.
+///
+/// A sibling of [`StatefulWidget`], not a replacement: a widget with no time-based state (a
+/// selection index that only moves on a keypress, say) has no use for `frame` and should keep
+/// implementing [`StatefulWidget`] instead. Nothing stops a widget from implementing both, the way
+/// [`Scrollbar`] implements [`Widget`] (a plain, offset-at-a-fixed-value track+thumb) alongside
+/// this trait (an animated one driven by [`crate::ScrollState`]).
+///
+/// # Examples
+///
+/// ```
+/// use core::time::Duration;
+/// use retroglyph_core::{Frame, Grid, Rect};
+/// use retroglyph_widgets::{AnimatedWidget, Surface};
+///
+/// struct Blinker;
+///
+/// impl AnimatedWidget for Blinker {
+///     type State = Duration;
+///
+///     fn render(&self, _area: Rect, surface: &mut Surface<'_>, state: &mut Self::State, frame: &Frame) {
+///         *state += frame.delta;
+///         let on = state.as_millis() / 500 % 2 == 0;
+///         surface.put((0, 0), if on { '*' } else { ' ' }, retroglyph_core::Style::new());
+///     }
+/// }
+///
+/// let area = Rect::new(0, 0, 4, 1);
+/// let mut grid = Grid::new(4, 1);
+/// let mut state = Duration::ZERO;
+/// let frame = Frame { delta: Duration::from_millis(100), frame: 0 };
+/// Blinker.render(area, &mut Surface::new(&mut grid, area, 0), &mut state, &frame);
+/// assert_eq!(state, Duration::from_millis(100));
+/// ```
+pub trait AnimatedWidget {
+    /// The externally owned, time-evolving state this widget reads and/or updates while
+    /// rendering -- e.g. [`crate::ScrollState`].
+    type State;
+
+    /// Advances `state` by `frame.delta`, then draws this widget into `area`, via `surface`
+    /// scoped to it, at the result -- both in the same call, so there's exactly one place, not
+    /// two independently ordered ones, where time-based state moves forward.
+    fn render(&self, area: Rect, surface: &mut Surface<'_>, state: &mut Self::State, frame: &Frame);
 }
