@@ -965,6 +965,19 @@ impl<W: std::io::Write> Output for Crossterm<W> {
     fn clear(&mut self) -> Result<(), Self::Error> {
         crossterm::queue!(
             self.renderer.writer_mut(),
+            // Reset SGR attributes *before* erasing: most terminals implement "erase display"
+            // via background color erase (BCE), painting the erased cells with whatever
+            // background is currently active in the pen, not the terminal's true default. Left
+            // un-reset, a cell colored by the last frame (a themed panel, a highlighted tile)
+            // becomes the color `Clear` paints the whole screen with. That would be merely
+            // cosmetic for one frame, except every cell here is a `resize()` call too (see
+            // `Output::resize` above): `Terminal::resize` wipes `previous` to default tiles, so
+            // any `current` cell that's also still at its default (e.g. anything the app hasn't
+            // drawn into the newly grown area yet) never differs from `previous` and is never
+            // resent by the diff in `present()`. That leaves the BCE-tinted patch on screen
+            // permanently -- exactly the "gaps where the background doesn't clear" symptom after
+            // a resize -- since nothing ever draws over it again.
+            crossterm::style::SetAttribute(crossterm::style::Attribute::Reset),
             crossterm::terminal::Clear(crossterm::terminal::ClearType::All)
         )?;
         self.renderer.writer_mut().flush()?;
@@ -1657,6 +1670,58 @@ mod tests {
         assert!(
             !term.plain_mode(),
             "build_with_writer must not auto-detect plain mode for an arbitrary writer"
+        );
+    }
+
+    #[test]
+    fn clear_resets_sgr_attributes_before_erasing() {
+        // Regression test: `Output::clear` (also called by `Output::resize` on every terminal
+        // resize) used to issue `Clear(ClearType::All)` without resetting the SGR pen first.
+        // Terminals that implement erase-display via background color erase (BCE) paint erased
+        // cells with whatever background is currently active, not the terminal's true default,
+        // so a colored cell drawn just before a resize left a stale tint across the whole
+        // screen -- and since `Terminal::resize` (in `retroglyph-core`) wipes the diff's
+        // `previous` grid to default tiles, nothing ever draws over that tint again in areas
+        // that stay at their default value. `clear` must emit a full SGR reset ahead of the
+        // erase so BCE always paints with the terminal's real default background.
+        let _lock = TEST_GUARD_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut term = Crossterm::builder()
+            .raw_mode(false)
+            .alt_screen(false)
+            .mouse_capture(false)
+            .focus_change(false)
+            .bracketed_paste(false)
+            .kitty_protocol(false)
+            .build_with_writer(Vec::new())
+            .expect("building against a Vec<u8> writer with all TTY features disabled must not require a real terminal");
+
+        // Draw a colored cell first so the SGR pen is left non-default, mirroring the last
+        // frame drawn before a real resize.
+        let style = retroglyph_core::style::Style::new().bg(retroglyph_core::color::Color::Rgb {
+            r: 200,
+            g: 0,
+            b: 0,
+        });
+        let tile = Tile::new('X', style);
+        term.draw(core::iter::once(DrawCell::new(Pos { x: 0, y: 0 }, &tile)))
+            .unwrap();
+        term.flush().unwrap();
+
+        term.clear().unwrap();
+
+        let written = String::from_utf8(term.writer().clone()).unwrap();
+        let clear_pos = written
+            .rfind("\x1b[2J")
+            .unwrap_or_else(|| panic!("clear() must emit Clear(ClearType::All), got: {written:?}"));
+        let reset_pos = written
+            .rfind("\x1b[0m")
+            .unwrap_or_else(|| panic!("clear() must emit a full SGR reset, got: {written:?}"));
+        assert!(
+            reset_pos < clear_pos,
+            "SGR reset must precede the erase so background color erase paints with the \
+             terminal's true default, not the last frame's color; output: {written:?}"
         );
     }
 
