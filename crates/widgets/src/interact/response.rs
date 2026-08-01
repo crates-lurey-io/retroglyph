@@ -1,6 +1,8 @@
 //! [`Response`]: what [`Interaction::interact`](crate::Interaction::interact)
 //! hands back to a widget call site.
 
+use retroglyph_core::Pos;
+
 /// What happened to a widget this frame, as reported by
 /// [`Interaction::interact`](crate::Interaction::interact).
 ///
@@ -27,6 +29,8 @@ pub struct Response {
     pub(crate) secondary_clicked: bool,
     pub(crate) disabled: bool,
     pub(crate) scroll_delta: i32,
+    pub(crate) pointer_pos: Option<Pos>,
+    pub(crate) press_origin: Option<Pos>,
 }
 
 impl Response {
@@ -128,6 +132,27 @@ impl Response {
     pub const fn disabled(&self) -> bool {
         self.disabled
     }
+
+    /// Where the pointer is, in grid coordinates, resolved from the same last-frame snapshot
+    /// [`hovered`](Self::hovered) is computed from: `Some` exactly when this widget's rect
+    /// contains the pointer, `None` when it's elsewhere or this widget wasn't sensed with a
+    /// pointer-registering [`Sense`](crate::Sense). Lets a composite widget shown under a single
+    /// id (a list of rows, a strip of tabs) resolve which of its own parts the pointer is over,
+    /// without needing a distinct id per part.
+    #[must_use]
+    pub const fn pointer_pos(&self) -> Option<Pos> {
+        self.pointer_pos
+    }
+
+    /// Where the pointer was when the press currently active on this widget landed. Unlike
+    /// [`pointer_pos`](Self::pointer_pos), this stays put for the duration of a press or drag
+    /// rather than tracking the pointer's current position: useful for a composite widget (e.g.
+    /// a scrollbar thumb) that needs to measure a drag's total displacement from where it
+    /// started. `None` unless this widget is the one a press is currently active on.
+    #[must_use]
+    pub const fn press_origin(&self) -> Option<Pos> {
+        self.press_origin
+    }
 }
 
 #[cfg(test)]
@@ -147,5 +172,7 @@ mod tests {
         assert!(!r.secondary_clicked());
         assert!(!r.disabled());
         assert_eq!(r.scroll_delta(), 0);
+        assert_eq!(r.pointer_pos(), None);
+        assert_eq!(r.press_origin(), None);
     }
 }

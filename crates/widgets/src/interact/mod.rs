@@ -371,6 +371,15 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
             } else {
                 0
             },
+            // Resolved from the same `resolved_pos`/`resolved_hover` snapshot `hovered` comes
+            // from above, so the two stay consistent (one frame stale together) rather than
+            // mixing a stale hover flag with a live position.
+            pointer_pos: hovered.then_some(self.resolved_pos).flatten(),
+            // `drag_origin` is set once, in `begin_frame`, when a press lands on `active`, and
+            // cleared in `end_frame` on release: live state, not part of the per-`interact`
+            // resolved-snapshot fields above, matching how `held` reads `active` directly rather
+            // than a snapshot of it.
+            press_origin: is_active.then_some(self.drag_origin).flatten(),
         }
     }
 
@@ -670,6 +679,54 @@ mod tests {
         let save = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, Sense::hover());
         interaction.end_frame();
         assert!(!save.held());
+    }
+
+    #[test]
+    fn pointer_pos_matches_hover_and_is_none_elsewhere() {
+        let mut interaction = Interaction::<Id>::new();
+        let _ = frame(&mut interaction);
+
+        interaction.handle_event(&Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Moved,
+            position: Pos::new(2, 0),
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        }));
+
+        let (save, cancel) = frame(&mut interaction);
+        assert_eq!(save.pointer_pos(), Some(Pos::new(2, 0)));
+        assert_eq!(cancel.pointer_pos(), None);
+    }
+
+    #[test]
+    fn press_origin_stays_put_for_the_duration_of_a_drag() {
+        let mut interaction = Interaction::<Id>::new().with_drag_threshold(1);
+        let _ = frame(&mut interaction);
+
+        interaction.handle_event(&Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            position: Pos::new(2, 0),
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        }));
+        interaction.begin_frame();
+        let save = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, Sense::drag());
+        let cancel = interaction.interact(Rect::new(6, 0, 5, 1), Id::Cancel, Sense::drag());
+        interaction.end_frame();
+        assert_eq!(save.press_origin(), Some(Pos::new(2, 0)));
+        assert_eq!(cancel.press_origin(), None); // press never landed on Cancel
+
+        interaction.handle_event(&Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Moved,
+            position: Pos::new(4, 0),
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        }));
+        interaction.begin_frame();
+        let save = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, Sense::drag());
+        interaction.end_frame();
+        // Still the original press position, not the pointer's current one.
+        assert_eq!(save.press_origin(), Some(Pos::new(2, 0)));
     }
 
     #[test]
