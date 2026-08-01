@@ -244,22 +244,45 @@ impl Drop for InstanceGuard {
     }
 }
 
+/// Writes the escape sequence that's always safe to emit during terminal restore -- popping the
+/// kitty keyboard enhancement flags, disabling bracketed paste/focus-change/mouse capture,
+/// resetting every SGR attribute, and showing the cursor -- to `w`.
+///
+/// Split out of [`restore_terminal`] so these exact bytes can be asserted on directly against an
+/// in-memory `Vec<u8>` in tests, since `restore_terminal` itself always targets the real process
+/// stdout and so can't otherwise be observed from a unit test.
+///
+/// `SetAttribute(Attribute::Reset)` (`\x1b[0m`) clears every SGR attribute -- colors, bold,
+/// underline, etc. -- back to the terminal's own default. The SGR "pen" is terminal-global state,
+/// independent of which screen buffer is active, so without this the last color the app drew with
+/// (e.g. a tinted background) survives `LeaveAlternateScreen`/raw mode exit and leaks into the
+/// shell. Left unreset, that leftover pen state is also what many terminals use to paint newly
+/// erased/blank cells ("background color erase") the next time this app enters the alternate
+/// screen, so any per-frame blend against `Color::Default` compounds a little darker on every
+/// subsequent run instead of starting from a clean slate. Unlike `LeaveAlternateScreen`/raw mode,
+/// every command written here is always safe to emit (just an escape sequence, no visible glyph),
+/// so it doesn't need to be gated on whether this process actually entered/enabled those.
+fn write_restore_sequence<W: std::io::Write>(w: &mut W) -> std::io::Result<()> {
+    // Pop the keyboard enhancement flags pushed in `Crossterm::new`. Terminals
+    // that never understood the push ignore the pop just the same.
+    crossterm::execute!(w, crossterm::event::PopKeyboardEnhancementFlags)?;
+    crossterm::execute!(
+        w,
+        crossterm::event::DisableBracketedPaste,
+        crossterm::event::DisableFocusChange,
+        crossterm::event::DisableMouseCapture,
+        crossterm::style::SetAttribute(crossterm::style::Attribute::Reset),
+        crossterm::cursor::Show
+    )
+}
+
 /// Helper function to restore the terminal to its normal state.
 /// This is called during drops and emergency panic hooks.
 fn restore_terminal() {
     use std::sync::atomic::Ordering;
 
     let mut stdout = std::io::stdout();
-    // Pop the keyboard enhancement flags pushed in `Crossterm::new`. Terminals
-    // that never understood the push ignore the pop just the same.
-    let _ = crossterm::execute!(stdout, crossterm::event::PopKeyboardEnhancementFlags);
-    let _ = crossterm::execute!(
-        stdout,
-        crossterm::event::DisableBracketedPaste,
-        crossterm::event::DisableFocusChange,
-        crossterm::event::DisableMouseCapture,
-        crossterm::cursor::Show
-    );
+    let _ = write_restore_sequence(&mut stdout);
     if ALT_SCREEN_ACTIVE.swap(false, Ordering::AcqRel) {
         let _ = crossterm::execute!(stdout, crossterm::terminal::LeaveAlternateScreen);
     }
@@ -1355,6 +1378,25 @@ mod tests {
             Some(Event::Key(key)) => key.code,
             other => panic!("expected Some(Event::Key(_)), got {other:?}"),
         }
+    }
+
+    #[test]
+    fn restore_sequence_resets_all_sgr_attributes() {
+        // Regression test: `restore_terminal` (shared by `Drop`, the panic hook, and `suspend`)
+        // used to leave the last frame's SGR colors/attributes active on exit. That leftover
+        // "pen" state leaked into the shell, and into whatever a terminal uses to paint newly
+        // erased cells the next time this process entered the alternate screen, so a background
+        // that blended against `Color::Default` got a little darker on every subsequent launch
+        // instead of starting from a clean slate. `write_restore_sequence` must always emit a
+        // full SGR reset (`\x1b[0m`) so every restore leaves the terminal's pen at its own
+        // default, regardless of whatever color/attribute state the app last drew with.
+        let mut buf = Vec::new();
+        write_restore_sequence(&mut buf).unwrap();
+        let out = String::from_utf8(buf).unwrap();
+        assert!(
+            out.contains("\x1b[0m"),
+            "restore sequence must reset all SGR attributes, got: {out:?}"
+        );
     }
 
     #[test]
