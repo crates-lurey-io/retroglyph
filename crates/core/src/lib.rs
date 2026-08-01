@@ -94,6 +94,9 @@ pub mod subcell;
 /// The one grid-drawing primitive: an area-clipped, single-layer view over a [`Grid`].
 pub mod surface;
 pub mod terminal;
+/// Headless test harness driving an `App` with synthetic input.
+#[cfg(feature = "testing")]
+pub mod testing;
 pub mod text;
 /// The atomic drawable unit (glyph, style, sub-cell offsets).
 pub mod tile;
@@ -127,6 +130,8 @@ pub use style::Style;
 pub use subcell::{Glyph, quantize_half_block, quantize_quadrant, quantize_sextant};
 pub use surface::{StyledSurface, Surface};
 pub use terminal::Terminal;
+#[cfg(feature = "testing")]
+pub use testing::{RunError, TestHarness};
 pub use text::{Line, Span};
 pub use tile::Tile;
 pub use tint::Tint;

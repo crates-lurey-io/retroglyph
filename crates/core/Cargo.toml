@@ -65,6 +65,11 @@ egc = ["dep:unicode-segmentation"]
 # actually gates is `alpha-blend` (the W3C separable blend modes on `BlendMode`) plus `libm` for
 # gem's float math in a `no_std` build -- i.e. perceptual color-space cost, not gem's presence.
 color-space = ["gem/libm", "dep:alpha-blend", "alpha-blend/libm"]
+# `retroglyph_core::testing`'s `TestHarness`: drives an `App` against `Headless` for tests, with
+# synthetic input queuing and frame-settling helpers (retroglyph#612). Test-only surface, `no_std`
+# + `alloc` compatible (no `std` dependency), off by default so it never ships in a release build
+# by accident.
+testing = []
 
 [dev-dependencies]
 unicode-width = "0.2"

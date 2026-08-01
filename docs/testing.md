@@ -141,6 +141,47 @@ assert!(view.contains('@'));
 Run `cargo run -p retroglyph-core --example headless` to see this end to end, including the
 before/after `format_view()` output printed to stdout.
 
+## Driving an `App` with `TestHarness`
+
+The manual `push_event`/`drain_events`/`present` sequence above is what `TestHarness`
+(`retroglyph_core::testing`, behind the `testing` feature) wraps for apps implementing the `App`
+trait, so tests stop rewriting that loop by hand:
+
+```rust
+use retroglyph_core::testing::TestHarness;
+use retroglyph_core::event::KeyCode;
+use retroglyph_core::{App, Backend, Flow, Frame, Style, Terminal};
+
+struct MyApp;
+
+impl<B: Backend> App<B> for MyApp {
+    fn update(&mut self, term: &mut Terminal<B>, _frame: &Frame) -> Flow {
+        for event in term.drain_events() {
+            // handle_input(event): move a cursor, etc.
+            let _ = event;
+        }
+        term.surface().put((0, 0), '@', Style::default());
+        Flow::Continue
+    }
+}
+
+let mut harness = TestHarness::new(10, 3);
+let mut app = MyApp;
+
+harness.key(KeyCode::Right);
+harness.run(&mut app); // steps until the queue drains, presenting each frame automatically
+
+let view = harness.view();
+assert!(view.contains('@'));
+```
+
+`click`/`key`/`mouse_move` only _queue_ events; `run`/`settle` are what actually step frames until
+the queue drains (or `Flow::Exit`). A single `step()` after queuing input is not enough for a press
+and release to resolve: see `TestHarness`'s own "two-frame rule" doc section for why (the same
+single-frame-stale hit-testing snapshot that `retroglyph-widgets`' `Interaction` documents). Prefer
+the manual technique above only for tests that don't have an `App` to drive (e.g. testing
+`Interaction` or a widget directly, outside the frame-loop contract).
+
 ## Example-driven snapshots (examples crate)
 
 `examples/tests/support/` drives every `Example` implementation through three snapshot types from

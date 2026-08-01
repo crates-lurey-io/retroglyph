@@ -144,7 +144,10 @@ it for free.
   tests. Provides `format_view()` for snapshot testing with insta and `push_event()` for synthetic
   input; see
   ["Driving `Headless` with synthetic events"](docs/testing.md#driving-headless-with-synthetic-events)
-  for the full workflow.
+  for the full workflow. For apps implementing `App`, the `testing` feature adds `TestHarness`
+  (`retroglyph_core::testing`): queues synthetic input, steps frames, and presents automatically, so
+  tests stop rewriting that loop by hand; see
+  ["Driving an `App` with `TestHarness`"](docs/testing.md#driving-an-app-with-testharness).
 - **Crossterm** (`retroglyph-crossterm`) — full terminal with raw mode, alternate screen, and mouse
   capture. Registers a panic hook to safely restore the terminal on crashes. Feature `tracing`
   instruments `draw`/`flush`/`poll_event` with spans for profiling. Generic over its content writer
