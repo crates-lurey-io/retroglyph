@@ -92,7 +92,7 @@ pub fn step<B: Backend, A: App<B>>(term: &mut Terminal<B>, app: &mut A, frame: &
     app.update(term, frame)
 }
 
-/// Drive an [`App`] with an unpaced blocking loop until it returns [`Flow::Exit`].
+/// Drive an [`App`] with a blocking, event-driven loop until it returns [`Flow::Exit`].
 ///
 /// Generic over the backend, so it powers every non-inverted backend
 /// (`Crossterm` in `retroglyph-crossterm`, [`Headless`](crate::backend::Headless))
@@ -104,8 +104,11 @@ pub fn step<B: Backend, A: App<B>>(term: &mut Terminal<B>, app: &mut A, frame: &
 ///
 /// Presents automatically after [`App::update`] returns, the same as `retroglyph-window`'s
 /// windowed drivers: skipped entirely on [`Flow::Idle`], and skipped as a redundant no-op if
-/// `update` already presented itself. This loop runs as fast as `update` allows, with no frame
-/// rate cap; use [`run_blocking_with`] and [`RunOptions::max_fps`] for a paced loop.
+/// `update` already presented itself. Equivalent to `run_blocking_with(term, app,
+/// RunOptions::default())`: on [`Flow::Idle`], blocks on input rather than calling `update`
+/// again immediately, so a turn-based app that's idle most of the time costs approximately
+/// nothing. Use [`run_blocking_with`] with [`RunOptions::animated`] for a continuously-rendering
+/// app instead.
 ///
 /// # Errors
 ///
@@ -120,22 +123,60 @@ where
     run_blocking_with(term, app, RunOptions::default())
 }
 
-/// Options controlling [`run_blocking_with`]'s pacing.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+/// Options controlling [`run_blocking_with`]'s pacing and idle behavior.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct RunOptions {
-    /// Caps the loop at this many [`App::update`] calls per second, using a
-    /// [`FrameClock`](crate::frame_clock::FrameClock) internally to pace them evenly. `None` (the
-    /// default) runs unpaced, as fast as `update` allows.
-    pub max_fps: Option<u32>,
+    /// Caps the loop at this many [`App::update`] calls per second whenever a frame actually
+    /// runs, using a [`FrameClock`](crate::frame_clock::FrameClock) internally to pace them
+    /// evenly. `None` (the default) runs uncapped: as fast as `update` allows for back-to-back
+    /// [`Flow::Continue`] frames, or immediately after whatever woke an
+    /// [`event_driven`](Self::event_driven) loop from [`Flow::Idle`].
+    pub target_fps: Option<u32>,
+    /// On [`Flow::Idle`], block on input instead of calling `update` again immediately.
+    ///
+    /// `true` (the default) is right for turn-based, event-driven apps that are idle most of the
+    /// time: an idle frame costs approximately nothing, blocked in the backend's input read
+    /// rather than spinning `update` as fast as the host can manage. `false` keeps `Flow::Idle`
+    /// non-blocking (skip `present`, keep looping at whatever rate
+    /// [`target_fps`](Self::target_fps) allows) -- right for apps that animate from
+    /// [`Frame::delta`] and only return `Idle` between animation-driven `Continue` frames, where
+    /// blocking would freeze the animation until the next stray input event. See
+    /// [`RunOptions::animated`] for that shape.
+    pub event_driven: bool,
+    /// When [`event_driven`](Self::event_driven) is `true`, the longest an idle loop blocks
+    /// before calling `update` again anyway, even with no input. `None` (the default) blocks
+    /// indefinitely -- right for apps with nothing to redraw until input arrives. `Some(d)`
+    /// additionally wakes the loop every `d`, for apps that need a periodic idle redraw (a
+    /// blinking cursor, a clock) without paying full frame-rate cost. Ignored when
+    /// [`event_driven`](Self::event_driven) is `false`.
+    pub idle_wake: Option<Duration>,
 }
 
 impl RunOptions {
-    /// Options requesting a paced loop capped at `max_fps` updates per second.
+    /// Options for a continuously-rendering, [`target_fps`](Self::target_fps)-paced loop.
+    ///
+    /// [`event_driven`](Self::event_driven) is `false`: [`Flow::Idle`] only skips `present`, it
+    /// never blocks. Use this for apps that drive a [`Tween`](crate::animate::Tween)/
+    /// [`FrameClock`](crate::frame_clock::FrameClock) from [`Frame::delta`] and need `update`
+    /// called every tick regardless of input.
     #[must_use]
-    pub const fn paced(max_fps: u32) -> Self {
+    pub const fn animated(target_fps: u32) -> Self {
         Self {
-            max_fps: Some(max_fps),
+            target_fps: Some(target_fps),
+            event_driven: false,
+            idle_wake: None,
+        }
+    }
+}
+
+impl Default for RunOptions {
+    /// Event-driven, uncapped, blocks indefinitely on [`Flow::Idle`]: see [`run_blocking`].
+    fn default() -> Self {
+        Self {
+            target_fps: None,
+            event_driven: true,
+            idle_wake: None,
         }
     }
 }
@@ -143,14 +184,17 @@ impl RunOptions {
 /// Drive an [`App`] with a blocking loop until it returns [`Flow::Exit`], paced by `options`.
 ///
 /// The zero-config [`run_blocking`] is equivalent to `run_blocking_with(term, app,
-/// RunOptions::default())`: unpaced, spinning as fast as `update` allows. Pass
-/// [`RunOptions::paced`] to cap the loop at a fixed rate instead, using a
-/// [`FrameClock`](crate::frame_clock::FrameClock) internally so `update` is called at even
-/// intervals rather than however fast the host can spin.
+/// RunOptions::default())`. Pass [`RunOptions::animated`] for a continuously-rendering loop
+/// capped at a fixed rate instead, using a [`FrameClock`](crate::frame_clock::FrameClock)
+/// internally so `update` is called at even intervals rather than however fast the host can
+/// spin.
 ///
-/// On [`Flow::Idle`], the paced loop still waits out the remainder of the current frame interval
-/// before calling `update` again, rather than looping immediately: an idle app has nothing new to
-/// show, so there is no reason to burn CPU polling it faster than the configured rate.
+/// With [`RunOptions::event_driven`] `true` (the default), [`Flow::Idle`] blocks the loop on
+/// input -- via [`Terminal::wait_for_input`] -- instead of calling `update` again immediately:
+/// an idle app has nothing new to show, so there is no reason to burn CPU polling it at all,
+/// let alone faster than any configured rate. With `event_driven` `false`, an idle loop still
+/// waits out the remainder of the current `target_fps` interval (if set) before calling `update`
+/// again, rather than looping immediately, but never blocks on input.
 ///
 /// # Errors
 ///
@@ -166,13 +210,13 @@ where
     B: Backend,
     A: App<B>,
 {
-    let mut clock = options.max_fps.map(crate::frame_clock::FrameClock::new);
+    let mut clock = options.target_fps.map(crate::frame_clock::FrameClock::new);
     let mut frame_count = 0u64;
     let mut last = std::time::Instant::now();
     loop {
         if let Some(clock) = clock.as_mut() {
             // Block out the rest of this frame's budget before ticking `update` again, so a
-            // paced loop doesn't busy-spin between updates the way the unpaced loop does.
+            // paced loop doesn't busy-spin between updates the way an uncapped one does.
             let elapsed = last.elapsed();
             if let Some(remaining) = clock.step().checked_sub(elapsed) {
                 std::thread::sleep(remaining);
@@ -206,6 +250,16 @@ where
         }
         // `Flow` is `#[non_exhaustive]`; treat any variant other than `Exit`/`Idle` the same as
         // `Continue` (keep looping and presenting) rather than exiting on an unknown future value.
+        if flow == Flow::Idle && options.event_driven {
+            // The heart of the fix for retroglyph#603: block here instead of immediately
+            // re-entering the loop, so an idle frame costs approximately nothing rather than
+            // spinning `update` as fast as the host allows. `wait_for_input` buffers any event it
+            // finds rather than consuming it, so the app's own `update` still observes it on the
+            // next iteration -- this call only answers "did something happen", it doesn't steal
+            // the event. A `target_fps` clock (if set) still gets its top-of-loop sleep on the
+            // next iteration; it isn't bypassed by waking early.
+            term.wait_for_input(options.idle_wake.unwrap_or(Duration::MAX));
+        }
     }
 }
 
@@ -332,20 +386,114 @@ mod tests {
     }
 
     #[test]
-    fn run_blocking_with_paced_options_runs_to_completion() {
+    fn run_blocking_with_animated_options_runs_to_completion() {
         let term = Terminal::new(Headless::new(2, 1));
         let app = DrawsAndExits {
             frames: 0,
             exit_at: 2,
         };
         // A high cap keeps this test fast; the point is that a paced loop still terminates on
-        // `Flow::Exit` and delivers the same number of updates as the unpaced loop would.
-        run_blocking_with(term, app, RunOptions::paced(1000)).expect("run_blocking_with");
+        // `Flow::Exit` and delivers the same number of updates as an uncapped loop would.
+        run_blocking_with(term, app, RunOptions::animated(1000)).expect("run_blocking_with");
     }
 
     #[test]
-    fn run_options_paced_sets_max_fps() {
-        assert_eq!(RunOptions::paced(30).max_fps, Some(30));
-        assert_eq!(RunOptions::default().max_fps, None);
+    fn run_options_animated_sets_fields() {
+        let animated = RunOptions::animated(30);
+        assert_eq!(animated.target_fps, Some(30));
+        assert!(!animated.event_driven);
+        assert_eq!(animated.idle_wake, None);
+
+        let default = RunOptions::default();
+        assert_eq!(default.target_fps, None);
+        assert!(default.event_driven);
+        assert_eq!(default.idle_wake, None);
+    }
+
+    /// An app that returns `Idle` for its first frame, then `Exit`. The queued key is only
+    /// pushed into the backend *after* the driver would have already woken from the idle wait
+    /// (`Headless::poll_event` ignores its timeout and returns immediately either way), so this
+    /// mainly documents the contract at the type level: `event_driven: false` is accepted and the
+    /// loop still terminates, i.e. the non-blocking `Idle` shape from before this change remains
+    /// available for animated apps. Real blocking behavior (`event_driven: true` actually parking
+    /// the thread) can only be observed on a backend that genuinely blocks, like crossterm --
+    /// see that crate's own tests.
+    struct IdleThenExit {
+        frames: u64,
+    }
+
+    impl App<Headless> for IdleThenExit {
+        fn update(&mut self, _term: &mut Terminal<Headless>, frame: &Frame) -> Flow {
+            self.frames += 1;
+            if frame.frame == 0 {
+                Flow::Idle
+            } else {
+                Flow::Exit
+            }
+        }
+    }
+
+    #[test]
+    fn run_blocking_with_non_event_driven_options_does_not_block_on_idle() {
+        let term = Terminal::new(Headless::new(2, 1));
+        let app = IdleThenExit { frames: 0 };
+        let options = RunOptions {
+            target_fps: None,
+            event_driven: false,
+            idle_wake: None,
+        };
+        run_blocking_with(term, app, options).expect("run_blocking_with");
+    }
+
+    /// Proves the driver's idle wait doesn't swallow the event it woke up for: `update` is only
+    /// ever called again *after* `wait_for_input` observed something, so the app's own `has_input`
+    /// must still see the same event on the next frame rather than the driver having consumed it.
+    struct ObservesQueuedEventAfterIdle {
+        frames: u64,
+        saw_input_after_idle: bool,
+    }
+
+    impl App<Headless> for ObservesQueuedEventAfterIdle {
+        fn update(&mut self, term: &mut Terminal<Headless>, frame: &Frame) -> Flow {
+            self.frames += 1;
+            if frame.frame == 0 {
+                return Flow::Idle;
+            }
+            self.saw_input_after_idle = term.has_input();
+            Flow::Exit
+        }
+    }
+
+    #[test]
+    fn run_blocking_event_driven_idle_wait_does_not_consume_the_waking_event() {
+        let mut backend = Headless::new(2, 1);
+        backend.push_event(Event::Key(KeyEvent::new(
+            KeyCode::Char('x'),
+            KeyModifiers::NONE,
+        )));
+        let term = Terminal::new(backend);
+        let mut app = ObservesQueuedEventAfterIdle {
+            frames: 0,
+            saw_input_after_idle: false,
+        };
+        // Can't recover `app` through `run_blocking` (it takes the app by value and drops it with
+        // the terminal), so drive the loop by hand via `step`, mirroring what `run_blocking_with`
+        // does around the `Flow::Idle` branch.
+        let mut term = term;
+        let frame0 = Frame {
+            delta: Duration::ZERO,
+            frame: 0,
+        };
+        assert_eq!(step(&mut term, &mut app, &frame0), Flow::Idle);
+        // This is the exact call `run_blocking_with` makes on `Flow::Idle` when `event_driven` is
+        // `true`: it must buffer the event, not return/consume it, so `update`'s own `has_input`
+        // still finds it below.
+        assert!(term.wait_for_input(Duration::MAX));
+        let frame1 = Frame {
+            delta: Duration::ZERO,
+            frame: 1,
+        };
+        assert_eq!(step(&mut term, &mut app, &frame1), Flow::Exit);
+        assert!(app.saw_input_after_idle);
     }
 }
