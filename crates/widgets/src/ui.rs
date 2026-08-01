@@ -140,6 +140,29 @@ impl<'g, Id: Copy + PartialEq> Ui<'_, 'g, Id> {
         let response = self.interaction.interact(area, id, sense);
         (response, self.surface.scope(area))
     }
+
+    /// Run `f` with a [`Ui`] whose widgets sit above everything shown so far, and whose pointer
+    /// hits inside `area` never reach a widget registered *before* `f` (a menu bar, the screen
+    /// behind a dropdown, ...), so an app doesn't have to answer "is the thing under this overlay
+    /// still supposed to see this event" with its own bookkeeping. A widget registered *after*
+    /// `f` still wins inside `area`, so an overlay has to be shown after the content it covers,
+    /// not before it.
+    ///
+    /// The barrier is scoped to `area`: a pointer *outside* it reaches whatever's registered
+    /// outside `f` exactly as if `modal` hadn't been called. A modal claims the region it covers,
+    /// not the whole screen; pass a full-screen `area` for a blocking overlay. Drawing is
+    /// unaffected either way, `f`'s `Ui` still draws to this `Ui`'s full surface unless it also
+    /// narrows with [`show`](Self::show)/[`draw`](Self::draw)/[`scope`](retroglyph_core::Surface::scope)
+    /// itself: `modal` only changes hit-testing.
+    pub fn modal<R>(&mut self, area: Rect, f: impl FnOnce(&mut Ui<'_, 'g, Id>) -> R) -> R {
+        self.interaction.push_barrier(area);
+        let mut inner = Ui {
+            surface: self.surface,
+            interaction: self.interaction,
+            enabled: self.enabled,
+        };
+        f(&mut inner)
+    }
 }
 
 #[cfg(test)]
@@ -150,7 +173,7 @@ mod tests {
     use crate::widget::Widget;
 
     fn move_pointer(interaction: &mut Interaction<Id>, pos: Pos) {
-        interaction.handle_event(&Event::Mouse(MouseEvent {
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
             kind: MouseEventKind::Moved,
             position: pos,
             pixel_position: None,
@@ -161,6 +184,8 @@ mod tests {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     enum Id {
         Button,
+        Behind,
+        InModal,
     }
 
     struct Dot;
@@ -268,13 +293,13 @@ mod tests {
         });
 
         // A press-then-release inside `area`, fed in between frames.
-        interaction.handle_event(&Event::Mouse(MouseEvent {
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
             kind: MouseEventKind::Down(retroglyph_core::MouseButton::Left),
             position: Pos::new(1, 1),
             pixel_position: None,
             modifiers: KeyModifiers::NONE,
         }));
-        interaction.handle_event(&Event::Mouse(MouseEvent {
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
             kind: MouseEventKind::Up(retroglyph_core::MouseButton::Left),
             position: Pos::new(1, 1),
             pixel_position: None,
@@ -306,13 +331,13 @@ mod tests {
             let _ = re_enabled.show(area, Id::Button, &Dot);
         });
 
-        interaction.handle_event(&Event::Mouse(MouseEvent {
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
             kind: MouseEventKind::Down(retroglyph_core::MouseButton::Left),
             position: Pos::new(0, 0),
             pixel_position: None,
             modifiers: KeyModifiers::NONE,
         }));
-        interaction.handle_event(&Event::Mouse(MouseEvent {
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
             kind: MouseEventKind::Up(retroglyph_core::MouseButton::Left),
             position: Pos::new(0, 0),
             pixel_position: None,
@@ -345,5 +370,71 @@ mod tests {
         // `surface` is still a live `&mut Surface` here, not moved or borrowed by `frame`.
         surface.put((0, 0), 'x', Style::new());
         assert_eq!(grid[Pos::new(0, 0)].glyph(), 'x');
+    }
+
+    /// A widget shown inside `Ui::modal` wins a hit over a widget registered earlier at the same
+    /// position, even though the earlier one alone would otherwise win by being drawn under the
+    /// pointer (the usual topmost-wins rule): the modal's barrier makes the earlier registration
+    /// unreachable at that position for the rest of this frame.
+    #[test]
+    fn modal_wins_a_hit_over_an_earlier_widget_at_the_same_position() {
+        let mut grid = Grid::new(10, 10);
+        let mut interaction = Interaction::<Id>::new();
+        let area = Rect::new(2, 2, 3, 3);
+
+        interaction.frame(
+            &mut Surface::new(&mut grid, Rect::new(0, 0, 10, 10), 0),
+            |ui| {
+                let _ = ui.show(area, Id::Behind, &Dot);
+                ui.modal(area, |ui| {
+                    let _ = ui.show(area, Id::InModal, &Dot);
+                });
+            },
+        );
+
+        move_pointer(&mut interaction, Pos::new(3, 3));
+
+        let (behind, in_modal) = interaction.frame(
+            &mut Surface::new(&mut grid, Rect::new(0, 0, 10, 10), 0),
+            |ui| {
+                let behind = ui.show(area, Id::Behind, &Dot);
+                let in_modal = ui.modal(area, |ui| ui.show(area, Id::InModal, &Dot));
+                (behind, in_modal)
+            },
+        );
+        assert!(!behind.hovered()); // the barrier shadows it
+        assert!(in_modal.hovered());
+    }
+
+    /// A widget registered outside `Ui::modal`'s `area` is unaffected by the barrier and still
+    /// wins hits at its own position: a modal claims the region it covers, not the whole screen.
+    #[test]
+    fn a_widget_outside_the_modal_area_still_wins_hits_at_its_own_position() {
+        let mut grid = Grid::new(10, 10);
+        let mut interaction = Interaction::<Id>::new();
+        let modal_area = Rect::new(2, 2, 3, 3);
+        let outside_area = Rect::new(7, 7, 2, 2);
+
+        interaction.frame(
+            &mut Surface::new(&mut grid, Rect::new(0, 0, 10, 10), 0),
+            |ui| {
+                let _ = ui.show(outside_area, Id::Behind, &Dot);
+                ui.modal(modal_area, |ui| {
+                    let _ = ui.show(modal_area, Id::InModal, &Dot);
+                });
+            },
+        );
+
+        move_pointer(&mut interaction, Pos::new(7, 7));
+
+        let behind = interaction.frame(
+            &mut Surface::new(&mut grid, Rect::new(0, 0, 10, 10), 0),
+            |ui| {
+                let behind = ui.show(outside_area, Id::Behind, &Dot);
+                let _ = ui.modal(modal_area, |ui| ui.show(modal_area, Id::InModal, &Dot));
+                behind
+            },
+        );
+        assert!(behind.hovered()); // outside the modal's own rect: unaffected by its barrier
     }
 }

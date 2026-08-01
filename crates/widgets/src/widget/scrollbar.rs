@@ -403,7 +403,7 @@ mod tests {
         assert!((state.offset() - 0.0).abs() < f32::EPSILON);
 
         // Press at the top of the track: resolves against frame 1's registration.
-        interaction.handle_event(&Event::Mouse(MouseEvent {
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
             kind: MouseEventKind::Down(MouseButton::Left),
             position: Pos::new(0, 0),
             pixel_position: None,
@@ -421,7 +421,7 @@ mod tests {
         assert!((state.offset() - 0.0).abs() < f32::EPSILON); // clicked at the top: no jump needed
 
         // Drag down to the bottom of the track while still held.
-        interaction.handle_event(&Event::Mouse(MouseEvent {
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
             kind: MouseEventKind::Moved,
             position: Pos::new(0, 9),
             pixel_position: None,
@@ -438,7 +438,7 @@ mod tests {
         interaction.end_frame();
         assert!(state.offset() > 0.0); // dragged toward the bottom: offset increased
 
-        interaction.handle_event(&Event::Mouse(MouseEvent {
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
             kind: MouseEventKind::Up(MouseButton::Left),
             position: Pos::new(0, 9),
             pixel_position: None,

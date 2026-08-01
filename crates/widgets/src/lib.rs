@@ -74,8 +74,8 @@ pub use align::Align;
 pub use block::{blit_into, join_h, join_v};
 pub use draw::{fill_rect, offset_for_pos, thumb_geometry};
 pub use interact::{
-    DEFAULT_DRAG_THRESHOLD, Density, FocusRing, HitTester, Interaction, Pointer, Response, Sense,
-    Shortcuts,
+    Consumed, DEFAULT_DRAG_THRESHOLD, Density, FocusRing, HitTester, Interaction, Pointer,
+    Response, Sense, Shortcuts,
 };
 pub use layout::{
     Constraint, Flex, centered_rect, split_h, split_h_flex, split_h_spaced, split_v, split_v_flex,

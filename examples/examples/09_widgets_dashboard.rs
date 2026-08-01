@@ -273,7 +273,7 @@ impl Example for Dashboard {
         let mut keep_going = true;
         interaction.frame(&mut surface, |ui| {
             for event in &events {
-                ui.interaction().handle_event(event);
+                let _ = ui.interaction().handle_event(event);
                 if !handle_event(event, selected_tab, table_state, alerts_state) {
                     keep_going = false;
                 }

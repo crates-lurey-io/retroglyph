@@ -124,7 +124,7 @@ impl CombatLog {
 
     fn handle_events<B: Backend>(&mut self, term: &mut Terminal<B>) -> bool {
         for event in term.drain_events() {
-            self.interaction.handle_event(&event);
+            let _ = self.interaction.handle_event(&event);
             match event {
                 Event::Key(key) if key.is_down() => match key.code {
                     KeyCode::Char('q') | KeyCode::Escape => return false,

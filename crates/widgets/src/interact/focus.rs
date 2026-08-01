@@ -68,6 +68,14 @@ impl<Id: Copy + PartialEq> FocusRing<Id> {
         self.current == Some(id)
     }
 
+    /// `true` if last frame registered at least one focusable id, i.e. the next
+    /// [`advance`](Self::advance)/[`retreat`](Self::retreat) would actually move focus rather
+    /// than being a no-op.
+    #[must_use]
+    pub const fn has_order(&self) -> bool {
+        !self.order.is_empty()
+    }
+
     /// Explicitly focus `id`, e.g. in response to a click.
     pub const fn request(&mut self, id: Id) {
         self.current = Some(id);

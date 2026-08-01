@@ -40,7 +40,7 @@ use crate::text::truncate as truncate_to_cols;
 /// ```
 ///
 /// Precedence when more than one [`Response`] flag is set at once:
-/// [`disabled`](Response::enabled) &gt; [`pressed`](Response::pressed) &gt;
+/// [`disabled`](Response::disabled) &gt; [`pressed`](Response::pressed) &gt;
 /// [`hovered`](Response::hovered) &gt; [`focused`](Response::focused) &gt; the default `style`:
 /// matching the conventional `:disabled` &gt; `:active` &gt; `:hover` &gt; `:focus` ordering, so a
 /// disabled button always reads as muted regardless of a stale hover/press, a press always reads
@@ -129,7 +129,7 @@ impl<'a> Button<'a> {
         self
     }
 
-    /// Set the style used while [`Response::enabled`] is `false`, regardless of any other
+    /// Set the style used while [`Response::disabled`] is `true`, regardless of any other
     /// [`Response`] flag.
     #[must_use]
     pub const fn disabled_style(mut self, style: Style) -> Self {
@@ -341,13 +341,13 @@ mod tests {
         let _ = interaction.interact(area, Id::Save, button.sense());
         interaction.end_frame();
 
-        interaction.handle_event(&Event::Mouse(MouseEvent {
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
             kind: MouseEventKind::Down(MouseButton::Left),
             position: Pos::new(2, 0),
             pixel_position: None,
             modifiers: KeyModifiers::NONE,
         }));
-        interaction.handle_event(&Event::Mouse(MouseEvent {
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
             kind: MouseEventKind::Up(MouseButton::Left),
             position: Pos::new(2, 0),
             pixel_position: None,

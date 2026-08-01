@@ -98,7 +98,7 @@ impl Example for WidgetsInteraction {
             // resolves below already reflects these events -- see `Interaction`'s own doc
             // comment for the frame lifecycle this follows.
             for event in &events {
-                ui.interaction().handle_event(event);
+                let _ = ui.interaction().handle_event(event);
                 if shortcuts.resolve(event, ui.interaction().focus().focused())
                     == Some(Action::Reset)
                 {

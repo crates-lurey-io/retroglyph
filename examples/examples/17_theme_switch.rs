@@ -171,7 +171,7 @@ impl Example for ThemeSwitch {
         let mut keep_going = true;
         interaction.frame(&mut surface, |ui| {
             for event in &events {
-                ui.interaction().handle_event(event);
+                let _ = ui.interaction().handle_event(event);
                 if !handle_event(event, dark, selected_tab, list_state) {
                     keep_going = false;
                 }
