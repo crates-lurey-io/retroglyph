@@ -3,6 +3,7 @@
 use crate::color::Color;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 /// A style consisting of foreground and background color.
 ///
 /// No text modifiers (bold, italic, underline, etc.) by design: retroglyph is a spiritual
@@ -158,5 +159,17 @@ mod tests {
         let s = Style::new().fg(Color::RED).bg(Color::BLUE);
         assert_eq!(s.reset_fg().foreground(), Color::Default);
         assert_eq!(s.reset_bg().background(), Color::Default);
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn test_serializes_and_deserializes() {
+        let style = Style::new().fg(Color::RED).bg(Color::Indexed(200));
+        let json = serde_json::to_string(&style).expect("serialize");
+        assert_eq!(json, r#"{"fg":"red","bg":"200"}"#);
+        assert_eq!(
+            serde_json::from_str::<Style>(&json).expect("deserialize"),
+            style
+        );
     }
 }

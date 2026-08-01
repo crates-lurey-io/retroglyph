@@ -203,6 +203,7 @@ impl BlendMode {
 /// assert_eq!(size.width(), 80);
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, PartialOrd, Ord)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Size {
     width: u16,
     height: u16,
@@ -243,6 +244,9 @@ impl Size {
 /// assert_eq!(pos.x, 2);
 /// assert_eq!(pos.y, 1);
 /// ```
+///
+/// This crate's `serde` feature forwards to [`ixy`]'s own `serde` feature, so `Pos` gains
+/// `Serialize`/`Deserialize` from its upstream definition rather than one defined here.
 pub type Pos = ixy::Pos<u16>;
 
 /// Rectangle in the grid.
@@ -256,6 +260,9 @@ pub type Pos = ixy::Pos<u16>;
 /// assert_eq!(rect.width(), 10);
 /// assert_eq!(rect.height(), 4);
 /// ```
+///
+/// This crate's `serde` feature forwards to [`ixy`]'s own `serde` feature, so `Rect` gains
+/// `Serialize`/`Deserialize` from its upstream definition rather than one defined here.
 pub type Rect = ixy::Rect<u16>;
 
 /// A sub-cell pixel offset `(dx, dy)`, distinct from [`Pos`] so a caller can't transpose a
@@ -2238,6 +2245,35 @@ mod tests {
     #[test]
     fn test_size_ord() {
         assert!(Size::new(1, 2) < Size::new(2, 1));
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn test_size_serializes_and_deserializes() {
+        let size = Size::new(80, 25);
+        let json = serde_json::to_string(&size).expect("serialize");
+        assert_eq!(
+            serde_json::from_str::<Size>(&json).expect("deserialize"),
+            size
+        );
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn test_pos_and_rect_serialize_via_ixy() {
+        let pos = Pos::new(2, 1);
+        let json = serde_json::to_string(&pos).expect("serialize");
+        assert_eq!(
+            serde_json::from_str::<Pos>(&json).expect("deserialize"),
+            pos
+        );
+
+        let rect = Rect::new(0, 0, 10, 4);
+        let json = serde_json::to_string(&rect).expect("serialize");
+        assert_eq!(
+            serde_json::from_str::<Rect>(&json).expect("deserialize"),
+            rect
+        );
     }
 
     // --- New tests for multi-layer API ---

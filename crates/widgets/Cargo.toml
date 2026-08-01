@@ -26,6 +26,10 @@ rustdoc-args = ["--cfg", "docsrs"]
 # this crate can turn them on without adding a direct dependency on core just to reach the flag.
 dev = ["retroglyph-core/dev"]
 egc = ["retroglyph-core/egc"]
+# `Serialize`/`Deserialize` for `Theme` and `Density`, e.g. a saved theme pick or a density
+# preference (retroglyph#609). Forwards to `retroglyph-core/serde` since `Theme` is nine
+# `Color` fields, which round-trip through `Color`'s own `serde` impl.
+serde = ["dep:serde", "retroglyph-core/serde"]
 
 [dependencies]
 # `color-space` (renamed from `gem`, retroglyph#547): retroglyph-core/Color::lerp (used by
@@ -33,10 +37,17 @@ egc = ["retroglyph-core/egc"]
 # ramping is non-optional composite-tier functionality, not an opt-in extra like `egc`.
 retroglyph-core = { path = "../core", version = "0.5.0", default-features = false, features = ["std", "color-space"] }
 unicode-width = "0.2"
+# `Theme`/`Density`'s `serde` feature below. A separate optional dependency from
+# `retroglyph-core`'s own (rather than re-exported), matching how each crate here already
+# depends on `retroglyph-core` independently.
+serde = { version = "1", default-features = false, features = ["derive"], optional = true }
 
 [dev-dependencies]
 criterion = "0.5"
 fastrand = "2"
+# `Theme`/`Density`'s `#[cfg(feature = "serde")]` round-trip tests. See retroglyph-core's
+# Cargo.toml for why this is unconditional despite only being used behind that feature.
+serde_json = "1"
 
 [[bench]]
 name = "table_render"
