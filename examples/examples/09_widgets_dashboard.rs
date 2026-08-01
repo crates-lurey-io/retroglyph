@@ -7,9 +7,10 @@
 //! [`Interaction`]-resolved `Response` the same way `10_widgets_interaction` demonstrates in
 //! more depth), [`Gauge`] (load-colored bars for CPU/memory), [`Sparkline`] (a recent-history
 //! graph), [`BoxStyle`] (a bordered legend box, rendered into a standalone [`Grid`] and blitted
-//! in), [`split_h`]/[`split_v`] (the whole layout), and [`Theme`] (every color in this example
-//! comes from [`Theme::DARK`], not a hand-picked one-off). `retroglyph-widgets` is
-//! backend-generic: nothing here is software, crossterm, or headless specific.
+//! in), [`split_h`]/[`split_v`] (the whole layout), [`Ui`] (pairing the frame's surface with
+//! `Interaction`, via [`Interaction::frame`]), and [`Theme`] (every color in this example comes
+//! from [`Theme::DARK`], not a hand-picked one-off). `retroglyph-widgets` is backend-generic:
+//! nothing here is software, crossterm, or headless specific.
 //!
 //! ```sh
 //! cargo run --example 09_widgets_dashboard --features crossterm
@@ -23,11 +24,11 @@
 //! window.
 
 use retroglyph_core::event::{Event, KeyCode};
-use retroglyph_core::{Backend, Frame, Rect, Style, Surface, Terminal};
+use retroglyph_core::{Backend, Frame, Rect, Style, Terminal};
 use retroglyph_examples::Example;
 use retroglyph_widgets::{
-    BoxStyle, Button, Constraint, Gauge, Interaction, InteractiveWidget, List, ListState, Sides,
-    Sparkline, StatefulWidget, Table, Tabs, Theme, Widget, blit_into, split_h, split_v,
+    BoxStyle, Button, Constraint, Gauge, Interaction, List, ListState, Sides, Sparkline, Table,
+    Tabs, Theme, Ui, blit_into, split_h, split_v,
 };
 
 /// Identifies the dashboard's one interactive widget for [`Interaction`]'s hit-testing and focus
@@ -94,157 +95,161 @@ impl Default for Dashboard {
     }
 }
 
-impl Dashboard {
-    /// Drains pending input: Left/Right switch the active tab; Up/Down move whichever list the
-    /// active tab shows; `q`/`Escape` quits.
-    ///
-    /// Gated on [`KeyEvent::is_down`](retroglyph_core::event::KeyEvent::is_down) -- see
-    /// `07_sprites_tileset.rs`'s `handle_events` doc comment for why: without it, a backend that
-    /// reports both press and release as separate events would move the selection twice per key
-    /// tap.
-    fn handle_events<B: Backend>(&mut self, term: &mut Terminal<B>) -> bool {
-        for event in term.drain_events() {
-            self.interaction.handle_event(&event);
-            match event {
-                Event::Key(key) if key.is_down() => match key.code {
-                    KeyCode::Char('q') | KeyCode::Escape => return false,
-                    KeyCode::Left => {
-                        self.selected_tab = self.selected_tab.saturating_sub(1);
-                    }
-                    KeyCode::Right => {
-                        self.selected_tab = (self.selected_tab + 1).min(TABS.len() - 1);
-                    }
-                    KeyCode::Down if self.selected_tab == 0 => {
-                        self.table_state.select_next(SERVICES.len());
-                    }
-                    KeyCode::Up if self.selected_tab == 0 => {
-                        self.table_state.select_previous(SERVICES.len());
-                    }
-                    KeyCode::Down if self.selected_tab == 1 => {
-                        self.alerts_state.select_next(ALERTS.len());
-                    }
-                    KeyCode::Up if self.selected_tab == 1 => {
-                        self.alerts_state.select_previous(ALERTS.len());
-                    }
-                    _ => {}
-                },
-                Event::Close => return false,
-                _ => {}
-            }
-        }
-        true
+/// Handles one already-drained event: Left/Right switch the active tab; Up/Down move whichever
+/// list the active tab shows; `q`/`Escape` quits.
+///
+/// Gated on [`KeyEvent::is_down`](retroglyph_core::event::KeyEvent::is_down) -- see
+/// `07_sprites_tileset.rs`'s `handle_events` doc comment for why: without it, a backend that
+/// reports both press and release as separate events would move the selection twice per key tap.
+fn handle_event(
+    event: &Event,
+    selected_tab: &mut usize,
+    table_state: &mut ListState,
+    alerts_state: &mut ListState,
+) -> bool {
+    match event {
+        Event::Key(key) if key.is_down() => match key.code {
+            KeyCode::Char('q') | KeyCode::Escape => return false,
+            KeyCode::Left => *selected_tab = selected_tab.saturating_sub(1),
+            KeyCode::Right => *selected_tab = (*selected_tab + 1).min(TABS.len() - 1),
+            KeyCode::Down if *selected_tab == 0 => table_state.select_next(SERVICES.len()),
+            KeyCode::Up if *selected_tab == 0 => table_state.select_previous(SERVICES.len()),
+            KeyCode::Down if *selected_tab == 1 => alerts_state.select_next(ALERTS.len()),
+            KeyCode::Up if *selected_tab == 1 => alerts_state.select_previous(ALERTS.len()),
+            _ => {}
+        },
+        Event::Close => return false,
+        _ => {}
+    }
+    true
+}
+
+/// Draws the "Metrics" tab's content: CPU/MEM gauges, a recent-history sparkline, the status
+/// legend, and a "Ping" [`Button`] -- the whole right panel before [`Tabs`]/[`List`] were added,
+/// plus the [`Button`] this dashboard now also showcases.
+fn draw_metrics(
+    ui: &mut Ui<'_, '_, DashId>,
+    area: Rect,
+    theme: Theme,
+    cpu: f32,
+    mem: f32,
+    pings: &mut u32,
+) {
+    let rows = split_v(
+        area,
+        &[
+            Constraint::Fixed(1),
+            Constraint::Fixed(1),
+            Constraint::Fixed(1),
+            Constraint::Fixed(1),
+            Constraint::Fill(1),
+        ],
+    );
+    ui.draw(rows[0], &Gauge::new("CPU", cpu));
+    ui.draw(rows[1], &Gauge::new("MEM", mem));
+    let history_style = Style::new().fg(theme.dim);
+    ui.surface()
+        .print((rows[2].left(), rows[2].top()), "History:", history_style);
+    ui.draw(rows[3], &Sparkline::new(&CPU_HISTORY));
+
+    let legend = BoxStyle::new(Style::new().fg(theme.fg).bg(theme.panel_bg))
+        .padding(Sides::symmetric(0, 1))
+        .border(true)
+        .render("Legend\nOK / WARN / DOWN");
+    blit_into(ui.surface(), &legend, rows[4].left(), rows[4].top());
+
+    draw_ping_button(
+        ui,
+        Rect::new(rows[4].left(), rows[4].top() + 5, 8, 1),
+        theme,
+        pings,
+    );
+}
+
+/// Draws the "Ping" [`Button`] and applies its click to `pings`. `ui.show` resolves the click
+/// and draws the button from the one `rect`; the caller only needs `response.clicked()` for the
+/// counter below -- see `10_widgets_interaction`'s `draw_button` for the same pattern applied to
+/// three buttons.
+fn draw_ping_button(ui: &mut Ui<'_, '_, DashId>, rect: Rect, theme: Theme, pings: &mut u32) {
+    let button = Button::new("Ping")
+        .style(Style::new().fg(theme.fg).bg(theme.panel_bg))
+        .hovered_style(Style::new().fg(theme.fg).bg(theme.hover_bg))
+        .pressed_style(Style::new().fg(theme.fg).bg(theme.press_bg))
+        .focused_style(Style::new().fg(theme.accent).bg(theme.panel_bg));
+    if ui.show(rect, DashId::PingButton, &button).clicked() {
+        *pings += 1;
     }
 
-    /// Draws this frame (the driver presents).
-    fn draw<B: Backend>(&mut self, term: &mut Terminal<B>) {
-        let mut surface = term.surface();
-        let area = Rect::new(0, 0, 50, 25);
-        let rows = split_v(area, &[Constraint::Fixed(1), Constraint::Fill(1)]);
-        let (title_area, body_area) = (rows[0], rows[1]);
+    let pings_style = Style::new().fg(theme.dim);
+    ui.surface().print(
+        (rect.left() + rect.width() + 1, rect.top()),
+        &format!("Pings: {pings}"),
+        pings_style,
+    );
+}
 
-        let title_style = Style::new().fg(self.theme.accent);
-        surface.print(
-            (title_area.left() + 1, title_area.top()),
-            "retroglyph dashboard -- tabs/select, q/Esc quits",
-            title_style,
-        );
+/// Draws one frame.
+#[allow(clippy::too_many_arguments)]
+fn draw(
+    ui: &mut Ui<'_, '_, DashId>,
+    theme: Theme,
+    table_state: &mut ListState,
+    alerts_state: &mut ListState,
+    selected_tab: usize,
+    cpu: f32,
+    mem: f32,
+    pings: &mut u32,
+) {
+    let area = Rect::new(0, 0, 50, 25);
+    let rows = split_v(area, &[Constraint::Fixed(1), Constraint::Fill(1)]);
+    let (title_area, body_area) = (rows[0], rows[1]);
 
-        let cols = split_h(body_area, &[Constraint::Percent(60), Constraint::Fill(1)]);
-        let (left, right) = (cols[0], cols[1]);
+    let title_style = Style::new().fg(theme.accent);
+    ui.surface().print(
+        (title_area.left() + 1, title_area.top()),
+        "retroglyph dashboard -- tabs/select, q/Esc quits",
+        title_style,
+    );
 
-        let headers = ["Service", "Status"];
-        let widths = [18u16, 8u16];
-        let table_rows: Vec<[&str; 2]> = SERVICES
-            .iter()
-            .map(|&(name, status)| <[&str; 2]>::from((name, status)))
-            .collect();
-        let table_rows: Vec<&[&str]> = table_rows.iter().map(<[&str; 2]>::as_slice).collect();
-        Table::new(&headers, &widths, &table_rows)
-            .render(&mut surface.scope(left), &mut self.table_state);
+    let cols = split_h(body_area, &[Constraint::Percent(60), Constraint::Fill(1)]);
+    let (left, right) = (cols[0], cols[1]);
 
-        let right_rows = split_v(
-            right,
-            &[
-                Constraint::Fixed(1),
-                Constraint::Fixed(1),
-                Constraint::Fill(1),
-            ],
-        );
-        let (tabs_area, panel_area) = (right_rows[0], right_rows[2]);
+    let headers = ["Service", "Status"];
+    let widths = [18u16, 8u16];
+    let table_rows: Vec<[&str; 2]> = SERVICES
+        .iter()
+        .map(|&(name, status)| <[&str; 2]>::from((name, status)))
+        .collect();
+    let table_rows: Vec<&[&str]> = table_rows.iter().map(<[&str; 2]>::as_slice).collect();
+    ui.draw_stateful(
+        left,
+        &Table::new(&headers, &widths, &table_rows),
+        table_state,
+    );
 
-        let tabs = Tabs::new(&TABS)
-            .select(Some(self.selected_tab))
-            .style(Style::new().fg(self.theme.dim))
-            .selected_style(Style::new().fg(self.theme.accent).bg(self.theme.panel_bg));
-        Widget::render(&tabs, &mut surface.scope(tabs_area));
+    let right_rows = split_v(
+        right,
+        &[
+            Constraint::Fixed(1),
+            Constraint::Fixed(1),
+            Constraint::Fill(1),
+        ],
+    );
+    let (tabs_area, panel_area) = (right_rows[0], right_rows[2]);
 
-        if self.selected_tab == 0 {
-            self.draw_metrics(&mut surface, panel_area);
-        } else {
-            let list = List::new(&ALERTS)
-                .item_style(Style::new().fg(self.theme.fg))
-                .selected_style(Style::new().fg(self.theme.bg).bg(self.theme.accent));
-            StatefulWidget::render(
-                &list,
-                &mut surface.scope(panel_area),
-                &mut self.alerts_state,
-            );
-        }
-    }
+    let tabs = Tabs::new(&TABS)
+        .select(Some(selected_tab))
+        .style(Style::new().fg(theme.dim))
+        .selected_style(Style::new().fg(theme.accent).bg(theme.panel_bg));
+    ui.draw(tabs_area, &tabs);
 
-    /// Draws the "Metrics" tab's content: CPU/MEM gauges, a recent-history sparkline, the status
-    /// legend, and a "Ping" [`Button`] -- the whole right panel before [`Tabs`]/[`List`] were
-    /// added, plus the [`Button`] this dashboard now also showcases.
-    fn draw_metrics(&mut self, surface: &mut Surface<'_>, area: Rect) {
-        let rows = split_v(
-            area,
-            &[
-                Constraint::Fixed(1),
-                Constraint::Fixed(1),
-                Constraint::Fixed(1),
-                Constraint::Fixed(1),
-                Constraint::Fill(1),
-            ],
-        );
-        Gauge::new("CPU", self.cpu).render(&mut surface.scope(rows[0]));
-        Gauge::new("MEM", self.mem).render(&mut surface.scope(rows[1]));
-        let history_style = Style::new().fg(self.theme.dim);
-        surface.print((rows[2].left(), rows[2].top()), "History:", history_style);
-        Sparkline::new(&CPU_HISTORY).render(&mut surface.scope(rows[3]));
-
-        let legend = BoxStyle::new(Style::new().fg(self.theme.fg).bg(self.theme.panel_bg))
-            .padding(Sides::symmetric(0, 1))
-            .border(true)
-            .render("Legend\nOK / WARN / DOWN");
-        blit_into(surface, &legend, rows[4].left(), rows[4].top());
-
-        self.draw_ping_button(surface, Rect::new(rows[4].left(), rows[4].top() + 5, 8, 1));
-    }
-
-    /// Draws the "Ping" [`Button`] and applies its click to `self.pings`. The app still calls
-    /// [`Interaction::interact`] itself (it needs `response.clicked()` for the counter below);
-    /// `Button` only turns the resulting `Response` into a styled, centered label -- see
-    /// `10_widgets_interaction`'s `draw_button` for the same pattern applied to three buttons.
-    fn draw_ping_button(&mut self, surface: &mut Surface<'_>, rect: Rect) {
-        let button = Button::new("Ping")
-            .style(Style::new().fg(self.theme.fg).bg(self.theme.panel_bg))
-            .hovered_style(Style::new().fg(self.theme.fg).bg(self.theme.hover_bg))
-            .pressed_style(Style::new().fg(self.theme.fg).bg(self.theme.press_bg))
-            .focused_style(Style::new().fg(self.theme.accent).bg(self.theme.panel_bg));
-        let response = self
-            .interaction
-            .interact(rect, DashId::PingButton, button.sense());
-        InteractiveWidget::render(&button, &mut surface.scope(rect), &mut (), response);
-        if response.clicked() {
-            self.pings += 1;
-        }
-
-        let pings_style = Style::new().fg(self.theme.dim);
-        surface.print(
-            (rect.left() + rect.width() + 1, rect.top()),
-            &format!("Pings: {}", self.pings),
-            pings_style,
-        );
+    if selected_tab == 0 {
+        draw_metrics(ui, panel_area, theme, cpu, mem, pings);
+    } else {
+        let list = List::new(&ALERTS)
+            .item_style(Style::new().fg(theme.fg))
+            .selected_style(Style::new().fg(theme.bg).bg(theme.accent));
+        ui.draw_stateful(panel_area, &list, alerts_state);
     }
 }
 
@@ -252,14 +257,41 @@ impl Example for Dashboard {
     const NAME: &'static str = "09_widgets_dashboard";
 
     fn tick<B: Backend>(&mut self, term: &mut Terminal<B>, _frame: &Frame) -> bool {
-        self.interaction.begin_frame();
-        if !self.handle_events(term) {
-            self.interaction.end_frame();
-            return false;
-        }
-        self.draw(term);
-        self.interaction.end_frame();
-        true
+        let events: Vec<Event> = term.drain_events().collect();
+        let mut surface = term.surface();
+        let Self {
+            interaction,
+            theme,
+            table_state,
+            alerts_state,
+            selected_tab,
+            cpu,
+            mem,
+            pings,
+        } = self;
+
+        let mut keep_going = true;
+        interaction.frame(&mut surface, |ui| {
+            for event in &events {
+                ui.interaction().handle_event(event);
+                if !handle_event(event, selected_tab, table_state, alerts_state) {
+                    keep_going = false;
+                }
+            }
+            if keep_going {
+                draw(
+                    ui,
+                    *theme,
+                    table_state,
+                    alerts_state,
+                    *selected_tab,
+                    *cpu,
+                    *mem,
+                    pings,
+                );
+            }
+        });
+        keep_going
     }
 }
 

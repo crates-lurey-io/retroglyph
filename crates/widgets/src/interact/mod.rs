@@ -63,7 +63,9 @@ pub use response::Response;
 pub use sense::Sense;
 pub use shortcuts::Shortcuts;
 
-use retroglyph_core::{Event, KeyCode, MouseButton, Pos, Rect};
+use retroglyph_core::{Event, KeyCode, MouseButton, Pos, Rect, Surface};
+
+use crate::Ui;
 
 /// Default [`Interaction::with_drag_threshold`].
 ///
@@ -76,6 +78,34 @@ pub const DEFAULT_DRAG_THRESHOLD: u16 = 1;
 /// piece of state a draw pass needs to make its widgets interactive.
 ///
 /// # Frame lifecycle
+///
+/// [`frame`](Self::frame) is the documented way to drive one frame: it wraps a closure with
+/// [`begin_frame`](Self::begin_frame) and [`end_frame`](Self::end_frame), and hands the closure a
+/// [`Ui`] pairing the surface passed in with `self`.
+///
+/// ```
+/// use retroglyph_core::{Backend, Headless, Rect, Terminal};
+/// use retroglyph_widgets::{Interaction, Sense};
+///
+/// #[derive(Clone, Copy, PartialEq, Eq)]
+/// enum WidgetId {
+///     SaveButton,
+/// }
+///
+/// let mut term = Terminal::new(Headless::new(20, 10));
+/// let mut interaction = Interaction::<WidgetId>::new();
+/// let clicked = interaction.frame(&mut term.surface(), |ui| {
+///     let area = Rect::new(0, 0, 10, 1);
+///     let response = ui.interaction().interact(area, WidgetId::SaveButton, Sense::click());
+///     // ... draw the button, using response.hovered()/focused() to pick a style ...
+///     response.clicked()
+/// });
+/// assert!(!clicked); // nothing clicked yet: no input was fed in
+/// ```
+///
+/// `begin_frame`/`handle_event`/`end_frame` stay public for callers driving the lifecycle
+/// themselves (e.g. to interleave event handling between frames rather than all at once), but
+/// `frame` is what each step below describes:
 ///
 /// ```text
 /// interaction.begin_frame();                 // 1
@@ -242,6 +272,23 @@ impl<Id> Interaction<Id> {
 }
 
 impl<Id: Copy + PartialEq> Interaction<Id> {
+    /// Run one frame: [`begin_frame`](Self::begin_frame), then `f` (given a [`Ui`] pairing
+    /// `surface` with `self`), then [`end_frame`](Self::end_frame).
+    ///
+    /// This is the documented way to drive the [frame lifecycle](Self#frame-lifecycle): the three
+    /// calls are easy to get right once and easy to forget (particularly `end_frame`) when spread
+    /// across a caller's own draw loop by hand.
+    pub fn frame<R>(
+        &mut self,
+        surface: &mut Surface<'_>,
+        f: impl FnOnce(&mut Ui<'_, '_, Id>) -> R,
+    ) -> R {
+        self.begin_frame();
+        let result = f(&mut Ui::new(surface, self));
+        self.end_frame();
+        result
+    }
+
     /// Resolve hover/press against last frame's registrations, finalize the
     /// focus order, and clear the hit registry for this frame's
     /// [`interact`](Self::interact) calls. Call once per frame, before

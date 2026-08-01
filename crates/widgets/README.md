@@ -34,6 +34,27 @@ let mut grid = Grid::new(20, 1);
 Gauge::new("HP", 0.75).render(&mut Surface::new(&mut grid, area, 0));
 ```
 
+A clickable widget (`Button`, `Scrollbar`, `List`, `Tabs`, or any `InteractiveWidget`) is shown
+through `Ui`, which pairs one frame's `Surface` with an `Interaction<Id>` so a call site names an
+area and an id once and gets both hit-testing and drawing from it:
+
+```rust
+use retroglyph_core::{Grid, Rect, Surface};
+use retroglyph_widgets::{Button, Interaction};
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum WidgetId {
+    Save,
+}
+
+let mut grid = Grid::new(20, 1);
+let mut interaction = Interaction::<WidgetId>::new();
+let clicked = interaction.frame(&mut Surface::new(&mut grid, Rect::new(0, 0, 20, 1), 0), |ui| {
+    ui.show(Rect::new(0, 0, 10, 1), WidgetId::Save, &Button::new("Save")).clicked()
+});
+assert!(!clicked); // nothing clicked yet: no input was fed in
+```
+
 ## Features
 
 ### `dev`

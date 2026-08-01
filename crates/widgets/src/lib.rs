@@ -20,10 +20,13 @@
 //!   render each frame, with no `Backend` type parameter, since drawing touches nothing but
 //!   cells. [`AnimatedWidget`] is `StatefulWidget`'s sibling for state that evolves with
 //!   wall-clock time (e.g. [`ScrollState`]'s momentum physics) instead of only in response to
-//!   input -- see its own docs.
+//!   input -- see its own docs. [`InteractiveWidget`] is the sibling trait for widgets that also
+//!   read a [`Response`] (`Button`, `Scrollbar`, `List`, `Tabs`).
 //! - [`Interaction`] ([`interact`]) for hover/click/drag/focus tracking
 //!   without a retained widget tree: the sibling of [`ListState`] for
-//!   widgets that don't have a natural selection index of their own.
+//!   widgets that don't have a natural selection index of their own. [`Ui`] pairs one frame's
+//!   [`Surface`] with an `Interaction`, via [`Interaction::frame`]: [`Ui::show`] is how an
+//!   [`InteractiveWidget`] gets hit-tested and drawn from the one area/id a call site names.
 //! - [`BoxStyle`] ([`style`]) for a Lip-Gloss-style box model (padding,
 //!   border, margin) rendered into a standalone `Grid`.
 //! - [`join_h`]/[`join_v`] ([`block`]) to compose several `Grid`s (e.g.
@@ -64,6 +67,7 @@ pub mod state;
 pub mod style;
 pub mod text;
 pub mod theme;
+pub mod ui;
 pub mod widget;
 
 pub use align::Align;
@@ -82,6 +86,7 @@ pub use state::{ListState, ScrollPhysics, ScrollState, SelectionWrap};
 pub use style::{BoxStyle, Sides};
 pub use text::{truncate, truncate_owned};
 pub use theme::Theme;
+pub use ui::Ui;
 #[cfg(feature = "egc")]
 pub use widget::Paragraph;
 pub use widget::{
