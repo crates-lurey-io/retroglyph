@@ -18,6 +18,17 @@ workspace = true
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[features]
+# Forwards `retroglyph-core`'s `dev` feature, forcing development diagnostics on in a build that
+# would otherwise compile them out (see `retroglyph_core::dev`).
+dev = ["retroglyph-core/dev"]
+# Embeds the Unscii 16 bitmap font (forwards to `retroglyph-window/default-font`) as a ready-to-use
+# default `FontChain`.
+default-font = ["retroglyph-window/default-font"]
+# PNG sprite sheet tilesets with alpha-blended CPU blit support (adds `alpha-blend` and forwards to
+# `retroglyph-window/tilesets` for decode/config).
+tilesets = ["dep:alpha-blend", "retroglyph-window/tilesets"]
+
 [dependencies]
 retroglyph-core = { path = "../core", version = "0.5.0", default-features = false, features = ["std"] }
 # Seam only (Presenter/WindowBackend/WindowHandle): no winit. The loop is the
@@ -50,16 +61,6 @@ web-sys = { version = "0.3", features = [
   "CanvasRenderingContext2d",
   "ImageData",
 ] }
-
-[features]
-# Sprite tileset support. The decode/config lives in retroglyph-window's shared `tileset` +
-# `sprite_cache` modules (issue #366); this crate adds the CPU blit on top (hence alpha-blend).
-# Forwards `retroglyph-core`'s `dev` feature, which forces development diagnostics on in a build
-# that would otherwise compile them out (see `retroglyph_core::dev`). Forwarded so a consumer of
-# this crate can turn them on without adding a direct dependency on core just to reach the flag.
-dev = ["retroglyph-core/dev"]
-tilesets = ["dep:alpha-blend", "retroglyph-window/tilesets"]
-default-font = ["retroglyph-window/default-font"]
 
 [dev-dependencies]
 insta = { version = "1.34", features = ["yaml"] }

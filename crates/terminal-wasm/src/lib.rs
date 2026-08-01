@@ -58,6 +58,13 @@
 #![doc = include_str!("../js/xterm-driver.js")]
 //! ```
 //!
+//! # Features
+//!
+//! - `dev`: optional. Forwards `retroglyph-core`'s `dev` feature, forcing development
+//!   diagnostics on in a build that would otherwise compile them out.
+//! - `egc`: optional. Forwards to `retroglyph-terminal`'s (and `retroglyph-core`'s) `egc` feature
+//!   for grapheme-cluster-aware cell diffing.
+//!
 //! # ANSI sequences emitted
 //!
 //! [`TerminalWasm`] renders through [`retroglyph_terminal::TerminalRenderer`] (see that crate's

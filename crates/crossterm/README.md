@@ -11,15 +11,10 @@ specific parts (raw mode, the alternate screen, the Kitty keyboard protocol, inp
 diffing and ANSI/SGR output are delegated to
 [`retroglyph-terminal`](https://crates.io/crates/retroglyph-terminal).
 
-Optional feature: `tracing` (instruments `draw`, `flush`, and `poll_event` with `tracing` spans for
-profiling render/input time).
-
 ## Quick start
 
-```toml
-[dependencies]
-retroglyph-core = "0.1"
-retroglyph-crossterm = "0.1"
+```sh
+cargo add retroglyph-core retroglyph-crossterm
 ```
 
 ```rust,no_run
@@ -40,6 +35,26 @@ fn main() -> std::io::Result<()> {
     Ok(())
 }
 ```
+
+## Features
+
+### `dev`
+
+⚪ Optional. Forwards `retroglyph-core`'s `dev` feature, forcing on development diagnostics in a
+build that would otherwise compile them out.
+
+### `egc`
+
+⚪ Optional. Forwards to `retroglyph-terminal`'s `egc` feature (which forwards to
+`retroglyph-core`'s), enabling grapheme-cluster-aware cell diffing. This crate has no code of its
+own gated on the flag; it exposes it so callers don't need to know which crate in the terminal
+family actually implements it.
+
+### `tracing`
+
+⚪ Optional. Instruments `draw`, `flush`, and `poll_event` with `tracing` spans for profiling
+render/input time, so callers can see where time is spent with any `tracing` subscriber (e.g.
+`tracing-subscriber`'s fmt layer, or a flamegraph via `tracing-flame`).
 
 ## Rendering to a non-stdout sink
 

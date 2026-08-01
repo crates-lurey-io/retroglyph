@@ -14,10 +14,8 @@ ANSI bytes and push back any input it collected.
 
 ## Quick start
 
-```toml
-[dependencies]
-retroglyph-core = "0.1"
-retroglyph-terminal-wasm = "0.1"
+```sh
+cargo add retroglyph-core retroglyph-terminal-wasm
 ```
 
 ```rust
@@ -30,6 +28,18 @@ term.draw(|s| s.put((0, 0), '@', Style::default())).unwrap();
 let ansi = term.backend_mut().take_output();
 assert!(ansi.contains('@'));
 ```
+
+## Features
+
+### `dev`
+
+⚪ Optional. Forwards `retroglyph-core`'s `dev` feature, forcing development diagnostics on in a
+build that would otherwise compile them out.
+
+### `egc`
+
+⚪ Optional. Forwards to `retroglyph-terminal`'s (and `retroglyph-core`'s) `egc` feature for
+grapheme-cluster-aware cell diffing.
 
 ## Usage from JS
 

@@ -17,10 +17,40 @@ Most consumers don't depend on this crate directly; use
 
 ## Quick start
 
-```toml
-[dependencies]
-retroglyph-window = "0.1"
+```sh
+cargo add retroglyph-window
 ```
+
+## Features
+
+### `winit`
+
+🟢 Enabled by default. The winit event loop and event translation (the `winit` module: `run`,
+`translate`, `run_windowed`/`run_app`). Renderer crates that only implement `Presenter` can disable
+this and depend solely on `raw-window-handle`; loops other than winit (SDL2, tao, custom) bring
+their own driver against `Presenter` + `WindowBackend`.
+
+### `default-font`
+
+⚪ Optional. Embeds the Unscii 16 default font (`font::unscii16`). Off by default so a consumer that
+supplies its own bitmap font pays nothing for the ~4 KB atlas; the graphical backends' own
+`default-font` features forward to this one.
+
+### `legacy-computing`
+
+⚪ Optional. Embeds a generated block-elements/braille fallback font (`font::legacy_computing`): the
+10 quadrant, 60 sextant, and 256 braille glyphs CP437 (and so `unscii16`) has no mapping for.
+Computed at compile time by a `const fn`, so this adds no font asset and no new dependency.
+
+### `tilesets`
+
+⚪ Optional (issue #366). Shared PNG sprite/tileset support: the `tileset` and `sprite_cache`
+modules. Both graphical backends' own `tilesets` features forward to this one.
+
+### `dev`
+
+⚪ Optional. Forwards `retroglyph-core`'s `dev` feature, which forces development diagnostics on in
+a build that would otherwise compile them out.
 
 A game never implements [`Presenter`] itself (that's `retroglyph-software`'s job), but a new
 renderer backend does. This is the whole contract it implements, sized to fit a window from its own

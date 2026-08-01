@@ -43,6 +43,16 @@
 //! (`context_native.rs`); wasm builds acquire a WebGL2 context from the winit `<canvas>`
 //! (`context_wasm.rs`). Both expose the same internal `GlContext` API, so the renderer body has no
 //! `cfg`.
+//!
+//! # Features
+//!
+//! - `default-font`: optional. Embeds the Unscii 16 bitmap font so a renderer can be built with
+//!   no font of its own. Forwards to `retroglyph-window`'s `default-font` feature.
+//! - `dev`: optional. Forces development diagnostics on in a build that would otherwise compile
+//!   them out (see [`retroglyph_core::dev`]). Forwards to `retroglyph-core`'s `dev` feature.
+//! - `tilesets`: optional. PNG sprite/tileset support (issue #366): decodes sprite sheets into an
+//!   RGBA `TEXTURE_2D_ARRAY` atlas and draws them in a second, source-over blended pass. Forwards
+//!   to `retroglyph-window`'s shared tileset decode.
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
 

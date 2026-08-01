@@ -18,20 +18,34 @@ workspace = true
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[features]
+default = ["std", "egc", "color-space"]
+# Gates perceptual color-space math: `gem/libm`, `alpha-blend` (W3C separable blend modes on `BlendMode`), and its own `libm`.
+color-space = ["gem/libm", "dep:alpha-blend", "alpha-blend/libm"]
+# Forces development diagnostics on even in an optimized build (see the `dev` module); off by default since `debug_assertions` already covers the common case.
+dev = []
+# Enables grapheme-cluster-aware text handling (via `unicode-segmentation`) for EGC-correct cell diffing and layout.
+egc = ["dep:unicode-segmentation"]
+# `Serialize`/`Deserialize` impls for `Color`, `Style`, `Size`, `Pos`, and `Rect`, so config/theme values can round-trip through TOML/JSON.
+serde = ["dep:serde", "ixy/serde"]
+# Enables std support (`gem/std`, `alpha-blend?/std`); disabling it builds this crate `no_std`.
+std = ["gem/std", "alpha-blend?/std"]
+# Enables `testing::TestHarness`, a headless test harness that drives an `App` with synthetic input.
+testing = []
+
 [dependencies]
-# gem's pixel-format layer (`rgb`/`gray`/`alpha`/`channel`) needs no math backend at all, so this
-# is unconditional: every retroglyph-core build, including `--no-default-features`, gets const
-# integer channel math and the 8-bit color formats. `gem`'s own `space`/`named`/`blend` modules
-# (perceptual color spaces, the named-color table, its blend helpers) are cfg-gated behind a math
-# backend on gem's side, and only compile in here once `std` or `color-space` turns on `gem/std`
-# or `gem/libm` below -- so this dependency being unconditional does not itself turn on gem's
-# float-math cost. See the `color-space` feature for what actually gates that.
+# gem's pixel-format layer (`rgb`/`gray`/`alpha`/`channel`) needs no math backend, so this is
+# unconditional: every retroglyph-core build, including `--no-default-features`, gets const
+# integer channel math and the 8-bit color formats. gem's `space`/`named`/`blend` modules
+# (perceptual color spaces, the named-color table, its blend helpers) only compile in once
+# `gem/std` or `gem/libm` turns on -- gem prefers std's float intrinsics over libm when both are
+# present, so a `std` build gets std math with libm sitting inert. This dependency being
+# unconditional does not itself enable that float-math cost; see the `color-space` feature for
+# what does.
 gem = { version = "0.2", default-features = false }
 # SCREEN/DODGE/BURN/OVERLAY blend modes for `Grid::blit_alpha` (see `BlendMode`); linear blending
-# stays on `gem::Mix`/`gem::rgb::Rgb888::mix_u8` above. Same std/libm split as `gem` (see the
-# `color-space`/`std` features below) and gated behind the `color-space` feature -- one crate
-# feature covers all of blit_alpha's blend modes rather than splitting into a second flag for
-# what's one capability to callers.
+# stays on `gem::Mix`/`gem::rgb::Rgb888::mix_u8` above. Gated behind the `color-space` feature --
+# one flag for one capability, rather than a second flag for what's a single thing to callers.
 alpha-blend = { version = "0.3", optional = true, default-features = false }
 ixy = "0.6.0-alpha.9"
 # `Color`'s `serde` impls (see color.rs) are hand-written against its own `Display`/`FromStr`, so
@@ -47,41 +61,6 @@ grixy = { version = "0.6.0-alpha.8", features = ["alloc", "buffer"] }
 unicode-width = "0.2"
 bitflags = "2.4"
 unicode-segmentation = { version = "1.13", default-features = false, optional = true }
-
-[features]
-default = ["std", "egc", "color-space"]
-# `gem/std` is unconditional (gem is no longer optional, see the dependency above); `alpha-blend?/std`
-# only applies once `color-space` has pulled alpha-blend in. gem prefers std float intrinsics over
-# libm when both are present, so a std build that also enables `color-space` gets std math with
-# libm sitting inert -- no code change in retroglyph-core either way.
-std = ["gem/std", "alpha-blend?/std"]
-# Forces `BuildMode::Dev` on in a build that would otherwise resolve to `Release`, so an
-# optimized build still reports development diagnostics (see the `dev` module). Off by default:
-# the default signal is `debug_assertions`, which already follows the consumer's own profile.
-# There is intentionally no feature for the reverse -- see the `dev` module docs on why a
-# `no-dev` feature cannot work under additive feature unification.
-dev = []
-egc = ["dep:unicode-segmentation"]
-# Renamed from `gem` (retroglyph#547 phase 3): with gem now an unconditional dependency (see
-# above), a feature called `gem` no longer gated `dep:gem` itself -- its pixel-format layer is
-# always available, and its `space`/`named` modules already compile in any build that turns on
-# `gem/std` or `gem/libm`, including a plain `std` build with this feature off. What this feature
-# actually gates is `alpha-blend` (the W3C separable blend modes on `BlendMode`) plus `libm` for
-# gem's float math in a `no_std` build -- i.e. perceptual color-space cost, not gem's presence.
-color-space = ["gem/libm", "dep:alpha-blend", "alpha-blend/libm"]
-# `retroglyph_core::testing`'s `TestHarness`: drives an `App` against `Headless` for tests, with
-# synthetic input queuing and frame-settling helpers (retroglyph#612). Test-only surface, `no_std`
-# + `alloc` compatible (no `std` dependency), off by default so it never ships in a release build
-# by accident.
-testing = []
-# `Serialize`/`Deserialize` for `Color`, `Style`, `Size`, and (via `ixy`, which already ships its
-# own `serde` feature) `Pos`/`Rect` -- so a config file can round-trip a saved camera position,
-# window geometry, or theme color without an app hand-rolling a mirror type first (retroglyph#609).
-# `Color` serializes through its `Display`/`FromStr` round trip (e.g. `"bright-red"`, `"#ff8000"`)
-# rather than a derived structural form, so hand-edited TOML/JSON stays legible and isn't coupled
-# to the enum's variant shape. Off by default: most consumers never persist these types, and this
-# keeps `serde` out of the dependency tree until they do.
-serde = ["dep:serde", "ixy/serde"]
 
 [dev-dependencies]
 unicode-width = "0.2"

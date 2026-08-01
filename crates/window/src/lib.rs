@@ -39,6 +39,25 @@
 //! - The `winit` module (feature-gated, see below) drives the event loop that fills that queue
 //!   and calls `Presenter::present` each frame.
 //!
+//! # Features
+//!
+//! - `winit` (🟢 default): the winit event loop and event translation (the `winit` module: `run`,
+//!   `translate`, `run_windowed`/`run_app`). Renderer crates that only implement `Presenter` can
+//!   disable this and depend solely on `raw-window-handle`; loops other than winit (SDL2, tao,
+//!   custom) bring their own driver against `Presenter` + `WindowBackend`.
+//! - `default-font` (⚪ optional): embeds the Unscii 16 default font (`font::unscii16`). Off by
+//!   default so a consumer that supplies its own bitmap font pays nothing for the ~4 KB atlas; the
+//!   graphical backends' own `default-font` features forward to this one.
+//! - `legacy-computing` (⚪ optional): embeds a generated block-elements/braille fallback font
+//!   (`font::legacy_computing`): the 10 quadrant, 60 sextant, and 256 braille glyphs CP437 (and so
+//!   `unscii16`) has no mapping for. Computed at compile time by a `const fn`, so this adds no
+//!   font asset and no new dependency.
+//! - `tilesets` (⚪ optional): shared PNG sprite/tileset support (the `tileset` and
+//!   `sprite_cache` modules, issue #366). Both graphical backends' own `tilesets` features forward
+//!   to this one.
+//! - `dev` (⚪ optional): forwards `retroglyph-core`'s `dev` feature, which forces development
+//!   diagnostics on in a build that would otherwise compile them out.
+//!
 //! # Feature flags
 //!
 //! [`Presenter`], [`WindowBackend`], and [`WindowHandle`] depend only on

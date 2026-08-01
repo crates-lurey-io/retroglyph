@@ -34,6 +34,16 @@
 //!
 //! This crate is itself optional: games that draw manually depend only on
 //! `retroglyph-core`.
+//!
+//! # Features
+//!
+//! - `dev` (⚪ optional): forwards `retroglyph-core`'s `dev` feature, forcing development
+//!   diagnostics on in a build that would otherwise compile them out.
+//! - `egc` (⚪ optional): forwards to `retroglyph-core`'s `egc` feature; enables `Paragraph`'s
+//!   grapheme-cluster-aware word-wrap.
+//! - `serde` (⚪ optional): `Serialize`/`Deserialize` impls for [`Theme`] and `Density`, forwarding
+//!   to `retroglyph-core`'s `serde` feature ([`Theme`] round-trips through `Color`'s own `serde`
+//!   impl).
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
