@@ -19,8 +19,8 @@ mod support;
 mod combat_log;
 
 use combat_log::CombatLog;
-use retroglyph_core::event::{Event, KeyCode, KeyEvent, KeyModifiers};
-use retroglyph_core::{Frame, Headless, Terminal};
+use retroglyph_core::event::{Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind};
+use retroglyph_core::{Frame, Headless, Pos, Terminal};
 use retroglyph_examples::{Example, HEADLESS_FRAME_DELTA};
 
 /// A plain, unmodified key press.
@@ -97,6 +97,89 @@ fn scrolling_the_log_shows_earlier_messages() {
     assert!(
         !last_frame.contains("The goblin falls"),
         "expected scrolling back to move the newest message out of view:\n{last_frame}"
+    );
+}
+
+/// A mouse wheel "notch" over `pos`, in the direction that scrolls the log back into history
+/// (see `Pointer::handle_event`'s `dy` sign convention: negative `dy` accumulates a positive
+/// `Response::scroll_delta`, which `ScrollState::apply` feeds into `scroll_by_wheel` as-is).
+const fn wheel_scroll(x: u16, y: u16) -> Event {
+    Event::Mouse(MouseEvent {
+        kind: MouseEventKind::Scroll { dx: 0.0, dy: -1.0 },
+        position: Pos { x, y },
+        pixel_position: None,
+        modifiers: KeyModifiers::NONE,
+    })
+}
+
+/// A harmless pointer-move at `pos`: advances a frame without adding any new wheel input, so a
+/// run of these isolates however much of `ScrollState`'s momentum is still decaying on its own.
+const fn idle_at(x: u16, y: u16) -> Event {
+    Event::Mouse(MouseEvent {
+        kind: MouseEventKind::Moved,
+        position: Pos { x, y },
+        pixel_position: None,
+        modifiers: KeyModifiers::NONE,
+    })
+}
+
+/// Proves the wheel path end to end: `Interaction` resolves the wheel input into a `Response`,
+/// `ScrollState::apply` turns it into velocity, and `ScrollState::tick` (called every frame,
+/// unconditionally, from `CombatLog::draw`) keeps integrating that velocity forward even once the
+/// wheel itself goes quiet -- the momentum `scrolling_the_log_shows_earlier_messages` doesn't
+/// exercise, since a key press moves the log with `set_offset` (velocity always zero) instead.
+///
+/// Two attacks, not six: enough log lines to scroll, but short of the fight-ending sixth attack,
+/// so the win `Modal` never covers the log -- important here since several of the log's own
+/// messages repeat verbatim ("You strike the goblin for 7."), so a narrow sliver of visible log
+/// column left uncovered by a modal can't reliably distinguish one scroll position from another.
+#[test]
+fn mouse_wheel_scrolls_the_log_with_momentum() {
+    // A point inside the log's rect (`Rect::new(1, 4, 47, 20)` in the example itself).
+    const LOG_X: u16 = 5;
+    const LOG_Y: u16 = 10;
+
+    let mut events: Vec<Event> = std::iter::repeat_n(key(KeyCode::Char('a')), 2).collect();
+    events.push(wheel_scroll(LOG_X, LOG_Y));
+    events.push(wheel_scroll(LOG_X, LOG_Y));
+    for _ in 0..30 {
+        events.push(idle_at(LOG_X, LOG_Y));
+    }
+
+    let view = drive::<CombatLog>(&events);
+    let frames: Vec<String> = view
+        .split("--- frame ---")
+        .map(|f| normalize(f.trim()))
+        .collect();
+    // Two attack frames (offset still 0, nothing scrolled yet), then two wheel-notch frames,
+    // then thirty idle frames -- comfortably past how long the physics take to settle (a few
+    // hundred ms; see ScrollPhysics::DEFAULT).
+    let baseline = &frames[1];
+    let after_wheel = &frames[4..];
+
+    // The wheel scrolled the log at all: some frame after it differs from the pre-scroll
+    // baseline. A whole-frame comparison, not a specific-message substring check, since several
+    // of the log's own messages repeat verbatim ("You strike the goblin for 7."), so a substring
+    // present/absent check can't reliably tell one scroll position from another here.
+    assert!(
+        after_wheel.iter().any(|f| f != baseline),
+        "expected the wheel to change the log's view at some point:\n{view}"
+    );
+
+    // Momentum, not an instant jump to a resting position: some consecutive pair of frames after
+    // the wheel went quiet still differs (offset kept advancing under its own velocity, with no
+    // new wheel input to explain the change).
+    assert!(
+        after_wheel.windows(2).any(|pair| pair[0] != pair[1]),
+        "expected the log to keep scrolling for at least one frame after the last wheel input:\n{view}"
+    );
+
+    // ...and it settles rather than scrolling forever: the last few idle frames agree once
+    // friction/the rubber-band spring has fully decayed velocity to zero.
+    let tail = &frames[frames.len() - 3..];
+    assert!(
+        tail.windows(2).all(|pair| pair[0] == pair[1]),
+        "expected the log to have settled by the last few idle frames:\n{view}"
     );
 }
 

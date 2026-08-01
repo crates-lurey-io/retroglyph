@@ -241,6 +241,9 @@ Three more independent layers build on top:
   transition -- taking a `Frame` (the same one `App::update` already receives) alongside the state,
   so advancing and drawing happen in one call instead of two independently ordered ones. `Scrollbar`
   implements it directly, ticking `ScrollState` before drawing the thumb at the result.
+  `ScrollState::apply` feeds a frame's resolved `Response::scroll_delta` straight into the wheel
+  impulse, so a scrollable widget doesn't have to re-derive wheel handling from raw mouse events
+  (see `13_combat_log`, which wires wheel scrolling into its `Log`/`Scrollbar` pair this way).
 - `BoxStyle`, a Lip-Gloss-style box model (padding, border, margin) rendered into a standalone
   `Grid`. `Paragraph` (behind the `egc` feature) word-wraps text via `retroglyph-core`'s
   `TextLayout` and implements a `Measure` trait so a caller can size a pane to fit before rendering.

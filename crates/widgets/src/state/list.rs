@@ -26,6 +26,12 @@ pub enum SelectionWrap {
 /// [`ListState::set_wrap`]) to switch to wraparound instead. Scrolling is a separate,
 /// unbounded-above counter (clamped only at zero) since only the caller knows the content length
 /// and viewport height needed to clamp it from above.
+///
+/// `offset` is always a whole row: there's no momentum, velocity, or sub-row position here. For
+/// continuous/pixel-ish scrolling with momentum and rubber-banding (a smoothly-scrolled log or
+/// panel, not a discrete item list), reach for [`crate::ScrollState`] instead, and drive this
+/// type's `offset` from [`crate::ScrollState::integer_offset`] if a list needs both a selection
+/// cursor and smooth scrolling together.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ListState {
     selected: Option<usize>,
