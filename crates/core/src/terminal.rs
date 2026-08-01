@@ -4,6 +4,7 @@ use crate::backend::{Backend, Output};
 use crate::event::Event;
 use crate::grid::{Grid, Rect, Size};
 use crate::surface::Surface;
+use alloc::vec::Vec;
 use core::time::Duration;
 
 /// A double-buffered terminal generic over a [`Backend`].
@@ -291,6 +292,16 @@ impl<B: Backend> Terminal<B> {
     ///
     /// Crossterm and headless backends can also use this, but the single-event `poll`
     /// pattern works for them because their loops aren't frame-capped.
+    ///
+    /// # One-shot semantics
+    ///
+    /// The returned iterator borrows `self` and drains the queue as it is consumed: the
+    /// first caller to iterate it gets every pending event, and a second, independent
+    /// call to `drain_events` afterward gets nothing. If more than one subsystem needs
+    /// this frame's input (e.g. persistent chrome and an active screen), collect once
+    /// and share the collected events by reference, or use
+    /// [`drain_events_into`](Self::drain_events_into) to drain into a reusable buffer
+    /// instead of allocating a fresh `Vec` every frame.
     pub fn drain_events(&mut self) -> impl Iterator<Item = Event> + use<'_, B> {
         struct DrainEvents<'a, B: Backend> {
             terminal: &'a mut Terminal<B>,
@@ -307,6 +318,23 @@ impl<B: Backend> Terminal<B> {
         impl<B: Backend> core::iter::FusedIterator for DrainEvents<'_, B> {}
 
         DrainEvents { terminal: self }
+    }
+
+    /// Drains all available events without blocking, appending them to `buf`.
+    ///
+    /// `buf` is cleared first, then filled with every pending event in the same order
+    /// [`drain_events`](Self::drain_events) would yield them. Unlike `drain_events`, the
+    /// borrow of `self` ends when this call returns, so the terminal is free to draw or
+    /// be polled again afterward, and the caller can hand `buf` to multiple consumers by
+    /// shared reference without materializing a new `Vec` every frame.
+    ///
+    /// This is the same shape as `std::io::Read::read_to_end`: allocate the buffer once
+    /// at startup, reuse it every frame, and let this method manage its contents.
+    pub fn drain_events_into(&mut self, buf: &mut Vec<Event>) {
+        buf.clear();
+        while let Some(event) = self.poll(Duration::ZERO) {
+            buf.push(event);
+        }
     }
 
     /// Checks if a pending input event is available without blocking.
@@ -379,6 +407,26 @@ mod tests {
 
         // After taking, it should be false again
         assert!(!terminal.has_input());
+    }
+
+    #[test]
+    fn test_terminal_drain_events_into() {
+        let backend = Headless::new(10, 10);
+        let mut terminal = Terminal::new(backend);
+
+        terminal.backend_mut().push_event(Event::Close);
+        terminal.backend_mut().push_event(Event::Resize(80, 25));
+
+        let mut buf = vec![Event::Close]; // pre-existing contents must be cleared
+        terminal.drain_events_into(&mut buf);
+        assert_eq!(buf, [Event::Close, Event::Resize(80, 25)]);
+
+        // The borrow ends at the call, so the terminal is immediately usable again.
+        assert_eq!(terminal.area(), Rect::new(0, 0, 80, 25));
+
+        // Draining again with nothing pending clears the buffer.
+        terminal.drain_events_into(&mut buf);
+        assert!(buf.is_empty());
     }
 
     #[test]
