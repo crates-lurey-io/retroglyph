@@ -1,4 +1,4 @@
-//! [`Density`]: compact vs. relaxed sizing for interactive widgets.
+//! [`Density`]: touch vs. mouse sizing for interactive widgets.
 
 use retroglyph_core::Size;
 
@@ -17,31 +17,23 @@ use retroglyph_core::Size;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Density {
-    /// Smaller interactive targets, for narrow or short terminals, or touch
-    /// input where every cell of screen space is scarce.
-    Compact,
-    /// Larger interactive targets, comfortable to hit with a mouse on a
-    /// normal desktop-sized terminal.
-    Relaxed,
+    /// Larger interactive targets, for a fingertip on a phone-width terminal
+    /// or other touch input, at the cost of showing fewer rows at once.
+    Touch,
+    /// Dense, single-line interactive targets, for a mouse on a normal
+    /// desktop-sized terminal, where precise clicking doesn't need extra
+    /// height.
+    Mouse,
 }
 
 impl Density {
     /// The minimum size, in cells, an interactive target should claim at
     /// this density.
-    ///
-    /// Counter-intuitively, [`Compact`](Self::Compact) targets are *taller*
-    /// than [`Relaxed`](Self::Relaxed) ones, not shorter: "compact" here
-    /// means a narrow, likely touch-driven layout (a phone-width terminal,
-    /// say), where a fingertip needs a noticeably taller row than a mouse
-    /// pointer does, at the cost of showing fewer rows at once.
-    /// [`Relaxed`](Self::Relaxed) assumes a normal desktop terminal with a
-    /// mouse, where dense, single-line rows are both legible and easy to
-    /// click precisely.
     #[must_use]
     pub const fn min_target_size(self) -> Size {
         match self {
-            Self::Compact => Size::new(6, 3),
-            Self::Relaxed => Size::new(6, 1),
+            Self::Touch => Size::new(6, 3),
+            Self::Mouse => Size::new(6, 1),
         }
     }
 }
@@ -51,26 +43,26 @@ mod tests {
     use super::*;
 
     #[test]
-    fn compact_rows_are_taller_than_relaxed_for_touch_targets() {
-        let compact = Density::Compact.min_target_size();
-        let relaxed = Density::Relaxed.min_target_size();
-        assert!(compact.height() > relaxed.height());
+    fn touch_rows_are_taller_than_mouse_for_fingertip_targets() {
+        let touch = Density::Touch.min_target_size();
+        let mouse = Density::Mouse.min_target_size();
+        assert!(touch.height() > mouse.height());
     }
 
     #[test]
-    fn relaxed_still_claims_more_than_a_single_cell_wide() {
-        let size = Density::Relaxed.min_target_size();
+    fn mouse_still_claims_more_than_a_single_cell_wide() {
+        let size = Density::Mouse.min_target_size();
         assert!(size.width() > 1);
     }
 
     #[cfg(feature = "serde")]
     #[test]
     fn serializes_as_a_plain_string() {
-        let json = serde_json::to_string(&Density::Compact).expect("serialize");
-        assert_eq!(json, "\"Compact\"");
+        let json = serde_json::to_string(&Density::Touch).expect("serialize");
+        assert_eq!(json, "\"Touch\"");
         assert_eq!(
             serde_json::from_str::<Density>(&json).expect("deserialize"),
-            Density::Compact
+            Density::Touch
         );
     }
 }
