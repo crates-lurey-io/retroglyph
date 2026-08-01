@@ -1,6 +1,6 @@
 [package]
 name = "retroglyph-crossterm"
-version = "0.2.2"
+version = "0.2.3"
 description = "Crossterm terminal backend for retroglyph"
 readme = "README.md"
 edition.workspace = true
