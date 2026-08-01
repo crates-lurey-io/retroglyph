@@ -55,6 +55,31 @@ let clicked = interaction.frame(&mut Surface::new(&mut grid, Rect::new(0, 0, 20,
 assert!(!clicked); // nothing clicked yet: no input was fed in
 ```
 
+A control that exists but can't be used right now ("Save" with no game loaded, say) disables a whole
+`Ui` subtree via `Ui::enabled`, not a per-widget flag: the returned `Response` still reports
+`hovered`, so a call site can explain why, but never an activation:
+
+```rust
+use retroglyph_core::{Grid, Rect, Surface};
+use retroglyph_widgets::{Button, Interaction};
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum WidgetId {
+    Save,
+}
+
+let has_unsaved_changes = false;
+let mut grid = Grid::new(20, 1);
+let mut interaction = Interaction::<WidgetId>::new();
+interaction.frame(&mut Surface::new(&mut grid, Rect::new(0, 0, 20, 1), 0), |ui| {
+    let mut ui = ui.enabled(has_unsaved_changes);
+    let response = ui.show(Rect::new(0, 0, 10, 1), WidgetId::Save, &Button::new("Save"));
+    if response.hovered() && response.disabled() {
+        // draw a tooltip: "Nothing to save"
+    }
+});
+```
+
 ## Features
 
 ### `dev`

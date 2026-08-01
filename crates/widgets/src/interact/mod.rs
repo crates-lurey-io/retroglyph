@@ -387,7 +387,8 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
         // what's drawn on top of it, matching how wheel input behaves in
         // most real UIs (it reaches the nearest scrollable ancestor, not
         // just whatever's topmost at the exact pixel).
-        let scrollable_here = sense.wants_pointer()
+        let scrollable_here = !disabled
+            && sense.wants_pointer()
             && sense.contains(Sense::SCROLL)
             && self.resolved_pos.is_some_and(|pos| rect.contains_pos(pos));
 
@@ -396,7 +397,7 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
         // a gesture this module tracks), and it doesn't drive focus the way
         // a primary click does (see `Response::secondary_clicked`'s doc
         // comment).
-        let secondary_is_active = self.secondary_active == Some(id);
+        let secondary_is_active = !disabled && self.secondary_active == Some(id);
         let secondary_clicked = sense.contains(Sense::SECONDARY_CLICK)
             && !disabled
             && secondary_is_active
@@ -944,6 +945,49 @@ mod tests {
         let save = frame_disabled(&mut interaction); // frame 3: release resolves
         assert!(!save.released());
         assert!(!save.clicked());
+    }
+
+    #[test]
+    fn disabled_widget_never_reports_dragging_or_scroll() {
+        // The `!disabled` guards on `dragging` and `scrollable_here` in `interact` are otherwise
+        // never exercised, since `frame_disabled` above only senses `CLICK`/`SECONDARY_CLICK`.
+        let mut interaction = Interaction::<Id>::new().with_drag_threshold(1);
+        let sense = Sense::drag() | Sense::SCROLL | Sense::DISABLED;
+
+        interaction.begin_frame();
+        let _ = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, sense);
+        interaction.end_frame();
+
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            position: Pos::new(2, 0), // over Save
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        }));
+        interaction.begin_frame();
+        let _ = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, sense);
+        interaction.end_frame();
+
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Moved,
+            position: Pos::new(4, 0), // 2 cells from the press origin, past the threshold
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        }));
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Scroll { dx: 0.0, dy: -1.0 },
+            position: Pos::new(4, 0),
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        }));
+
+        interaction.begin_frame();
+        let save = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, sense);
+        interaction.end_frame();
+
+        assert!(!save.dragging());
+        assert_eq!(save.scroll_delta(), 0);
+        assert!(save.hovered()); // hit-testing keeps working while disabled
     }
 
     #[test]

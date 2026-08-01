@@ -24,16 +24,25 @@ use crate::widget::{InteractiveWidget, StatefulWidget, Widget};
 pub struct Ui<'s, 'g, Id> {
     surface: &'s mut Surface<'g>,
     interaction: &'s mut Interaction<Id>,
+    enabled: bool,
 }
 
 impl<'s, 'g, Id> Ui<'s, 'g, Id> {
-    /// A `Ui` pairing `surface` with `interaction` for one frame.
+    /// A `Ui` pairing `surface` with `interaction` for one frame, enabled.
     #[must_use]
     pub const fn new(surface: &'s mut Surface<'g>, interaction: &'s mut Interaction<Id>) -> Self {
         Self {
             surface,
             interaction,
+            enabled: true,
         }
+    }
+
+    /// Whether [`show`](Ui::show)/[`show_stateful`](Ui::show_stateful)/[`region`](Ui::region)
+    /// calls through this context report their widgets as enabled: `retroglyph#602`.
+    #[must_use]
+    pub const fn is_enabled(&self) -> bool {
+        self.enabled
     }
 
     /// The surface, for drawing that no widget in this crate covers.
@@ -55,12 +64,31 @@ impl<'s, 'g, Id> Ui<'s, 'g, Id> {
     }
 }
 
-impl<Id: Copy + PartialEq> Ui<'_, '_, Id> {
+impl<'g, Id: Copy + PartialEq> Ui<'_, 'g, Id> {
+    /// A child context whose [`show`](Self::show)/[`show_stateful`](Self::show_stateful)/
+    /// [`region`](Self::region) calls report `enabled`: `retroglyph#602`.
+    ///
+    /// Nesting only ever tightens: a child of a context already disabled via `enabled(false)`
+    /// stays disabled regardless of what `enabled` this call passes, matching how egui's and
+    /// `Dear ImGui`'s disabled scopes compose.
+    #[must_use]
+    pub const fn enabled(&mut self, enabled: bool) -> Ui<'_, 'g, Id> {
+        Ui {
+            surface: self.surface,
+            interaction: self.interaction,
+            enabled: self.enabled && enabled,
+        }
+    }
+
     /// Hit-test `area` for `id` with `widget`'s own [`Sense`], then draw `widget` into `area`.
     ///
     /// This is the one-`id`-one-`area` guarantee the [`InteractiveWidget`]/[`Ui`] split exists
     /// for: `area` is registered for hit-testing and used to scope the surface the widget draws
     /// into from the same value, so the two cannot disagree.
+    ///
+    /// If this context is [`disabled`](Self::enabled), the returned [`Response`] still reports
+    /// [`hovered`](Response::hovered) but never an activation: see
+    /// [`Sense::DISABLED`](crate::Sense::DISABLED).
     #[must_use]
     pub fn show(
         &mut self,
@@ -68,9 +96,7 @@ impl<Id: Copy + PartialEq> Ui<'_, '_, Id> {
         id: Id,
         widget: &impl InteractiveWidget<State = ()>,
     ) -> Response {
-        let response = self.interaction.interact(area, id, widget.sense());
-        widget.render(&mut self.surface.scope(area), &mut (), response);
-        response
+        self.show_stateful(area, id, widget, &mut ())
     }
 
     /// Like [`show`](Self::show), for an [`InteractiveWidget`] with externally owned `state`.
@@ -82,7 +108,8 @@ impl<Id: Copy + PartialEq> Ui<'_, '_, Id> {
         widget: &W,
         state: &mut W::State,
     ) -> Response {
-        let response = self.interaction.interact(area, id, widget.sense());
+        let sense = widget.sense().disabled_if(!self.enabled);
+        let response = self.interaction.interact(area, id, sense);
         widget.render(&mut self.surface.scope(area), state, response);
         response
     }
@@ -109,6 +136,7 @@ impl<Id: Copy + PartialEq> Ui<'_, '_, Id> {
     /// and drawing, so the two cannot disagree.
     #[must_use]
     pub fn region(&mut self, area: Rect, id: Id, sense: Sense) -> (Response, Surface<'_>) {
+        let sense = sense.disabled_if(!self.enabled);
         let response = self.interaction.interact(area, id, sense);
         (response, self.surface.scope(area))
     }
@@ -259,6 +287,46 @@ mod tests {
             ui.show(area, Id::Button, &Dot).clicked()
         });
         assert!(clicked);
+    }
+
+    /// `Ui::enabled` only ever tightens: an `enabled(true)` child of an `enabled(false)`
+    /// context stays disabled, matching egui's/Dear `ImGui`'s disabled-scope composition.
+    #[test]
+    fn enabled_nesting_only_tightens() {
+        let mut grid = Grid::new(4, 4);
+        let mut interaction = Interaction::<Id>::new();
+        let area = Rect::new(0, 0, 4, 4);
+        move_pointer(&mut interaction, Pos::new(0, 0));
+
+        // Register once so the second frame has something to resolve against.
+        interaction.frame(&mut Surface::new(&mut grid, area, 0), |ui| {
+            let mut disabled = ui.enabled(false);
+            let mut re_enabled = disabled.enabled(true);
+            assert!(!re_enabled.is_enabled());
+            let _ = re_enabled.show(area, Id::Button, &Dot);
+        });
+
+        interaction.handle_event(&Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Down(retroglyph_core::MouseButton::Left),
+            position: Pos::new(0, 0),
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        }));
+        interaction.handle_event(&Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Up(retroglyph_core::MouseButton::Left),
+            position: Pos::new(0, 0),
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        }));
+
+        let response = interaction.frame(&mut Surface::new(&mut grid, area, 0), |ui| {
+            let mut disabled = ui.enabled(false);
+            let mut re_enabled = disabled.enabled(true);
+            re_enabled.show(area, Id::Button, &Dot)
+        });
+        assert!(response.disabled());
+        assert!(!response.clicked());
+        assert!(response.hovered());
     }
 
     /// A `Ui` borrow released at the end of `Interaction::frame` leaves the surface usable

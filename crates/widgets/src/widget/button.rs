@@ -40,15 +40,16 @@ use crate::text::truncate as truncate_to_cols;
 /// ```
 ///
 /// Precedence when more than one [`Response`] flag is set at once:
-/// [`pressed`](Response::pressed) &gt; [`hovered`](Response::hovered) &gt;
-/// [`focused`](Response::focused) &gt; the default `style`: matching the conventional
-/// `:active` &gt; `:hover` &gt; `:focus` ordering, so a press always reads as pressed even while
-/// still hovered, and a keyboard-focused-but-not-hovered button still shows something distinct
-/// from idle.
+/// [`disabled`](Response::enabled) &gt; [`pressed`](Response::pressed) &gt;
+/// [`hovered`](Response::hovered) &gt; [`focused`](Response::focused) &gt; the default `style`:
+/// matching the conventional `:disabled` &gt; `:active` &gt; `:hover` &gt; `:focus` ordering, so a
+/// disabled button always reads as muted regardless of a stale hover/press, a press always reads
+/// as pressed even while still hovered, and a keyboard-focused-but-not-hovered button still shows
+/// something distinct from idle.
 ///
-/// `style`, `hovered_style`, `pressed_style`, and `focused_style` each default to a fixed
-/// palette; set them with [`Button::style`]/[`Button::hovered_style`]/[`Button::pressed_style`]/
-/// [`Button::focused_style`].
+/// `style`, `hovered_style`, `pressed_style`, `focused_style`, and `disabled_style` each default
+/// to a fixed palette; set them with [`Button::style`]/[`Button::hovered_style`]/
+/// [`Button::pressed_style`]/[`Button::focused_style`]/[`Button::disabled_style`].
 #[derive(Clone, Copy, Debug)]
 pub struct Button<'a> {
     label: &'a str,
@@ -56,6 +57,7 @@ pub struct Button<'a> {
     hovered_style: Style,
     pressed_style: Style,
     focused_style: Style,
+    disabled_style: Style,
 }
 
 impl<'a> Button<'a> {
@@ -90,6 +92,11 @@ impl<'a> Button<'a> {
                 g: 55,
                 b: 70,
             }),
+            disabled_style: Style::new().fg(Color::Rgb {
+                r: 110,
+                g: 112,
+                b: 130,
+            }),
         }
     }
 
@@ -122,6 +129,14 @@ impl<'a> Button<'a> {
         self
     }
 
+    /// Set the style used while [`Response::enabled`] is `false`, regardless of any other
+    /// [`Response`] flag.
+    #[must_use]
+    pub const fn disabled_style(mut self, style: Style) -> Self {
+        self.disabled_style = style;
+        self
+    }
+
     /// Applies `theme`'s named roles to all four of this button's states: idle becomes
     /// `theme.fg` on `theme.panel_bg`; hovered/pressed swap in `theme.hover_bg`/`theme.press_bg`
     /// for the background; focused becomes `theme.accent` on `theme.panel_bg`. The same mapping
@@ -132,6 +147,12 @@ impl<'a> Button<'a> {
     pub fn theme(self, theme: Theme) -> Self {
         self.theme_on(theme, theme.panel_bg)
     }
+
+    // `theme`/`theme_on` intentionally leave `disabled_style` untouched: `Theme` has one `dim`
+    // role, already used for de-emphasized text elsewhere, and this button's default
+    // `disabled_style` (set in `new`) already matches it. A themed button that wants a different
+    // disabled treatment can still call `disabled_style` after `theme`/`theme_on`, same as any
+    // other override.
 
     /// Same as [`Button::theme`], but the idle and focused states are drawn on `bg` instead of
     /// `theme.panel_bg` (`hovered_style`/`pressed_style` still use `theme.hover_bg`/
@@ -144,14 +165,16 @@ impl<'a> Button<'a> {
         self.hovered_style = Style::new().fg(theme.fg).bg(theme.hover_bg);
         self.pressed_style = Style::new().fg(theme.fg).bg(theme.press_bg);
         self.focused_style = Style::new().fg(theme.accent).bg(bg);
+        self.disabled_style = Style::new().fg(theme.dim).bg(bg);
         self
     }
 
-    /// The style this button draws with this frame, per the
-    /// pressed &gt; hovered &gt; focused &gt; default precedence documented on [`Button`], given
-    /// `response`.
+    /// The style this button draws with this frame, per the disabled &gt; pressed &gt; hovered
+    /// &gt; focused &gt; default precedence documented on [`Button`], given `response`.
     const fn resolved_style(&self, response: Response) -> Style {
-        if response.pressed() {
+        if response.disabled() {
+            self.disabled_style
+        } else if response.pressed() {
             self.pressed_style
         } else if response.hovered() {
             self.hovered_style
@@ -372,6 +395,27 @@ mod tests {
         // 6, showing 'S' there instead.
         assert_eq!(grid[Pos::new(6, 0)].glyph(), 'e');
         assert_eq!(grid[Pos::new(7, 0)].glyph(), ' ');
+    }
+
+    #[test]
+    fn disabled_style_takes_precedence_over_pressed_and_hovered() {
+        let response = Response {
+            hovered: true,
+            pressed: true,
+            disabled: true,
+            ..Response::default()
+        };
+        let button = Button::new("Go");
+        assert_eq!(button.resolved_style(response), button.disabled_style);
+    }
+
+    #[test]
+    fn theme_on_maps_dim_onto_disabled_style() {
+        use crate::Theme;
+
+        let button = Button::new("Go").theme_on(Theme::DARK, Color::Default);
+        assert_eq!(button.disabled_style.foreground(), Theme::DARK.dim);
+        assert_eq!(button.disabled_style.background(), Color::Default);
     }
 
     #[test]
