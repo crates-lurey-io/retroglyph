@@ -19,16 +19,11 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-# Forwards to retroglyph-core's egc feature. Paragraph (word-wrap) needs
-# grapheme-cluster-aware TextLayout, which only exists when egc is on.
-# Forwards `retroglyph-core`'s `dev` feature, which forces development diagnostics on in a build
-# that would otherwise compile them out (see `retroglyph_core::dev`). Forwarded so a consumer of
-# this crate can turn them on without adding a direct dependency on core just to reach the flag.
+# Forwards `retroglyph-core`'s `dev` feature to force development diagnostics on in this crate too.
 dev = ["retroglyph-core/dev"]
+# Forwards to retroglyph-core's egc feature; enables Paragraph's grapheme-cluster-aware word-wrap.
 egc = ["retroglyph-core/egc"]
-# `Serialize`/`Deserialize` for `Theme` and `Density`, e.g. a saved theme pick or a density
-# preference (retroglyph#609). Forwards to `retroglyph-core/serde` since `Theme` is nine
-# `Color` fields, which round-trip through `Color`'s own `serde` impl.
+# `Serialize`/`Deserialize` for `Theme` and `Density`, forwarding to `retroglyph-core/serde`.
 serde = ["dep:serde", "retroglyph-core/serde"]
 
 [dependencies]

@@ -18,6 +18,17 @@ workspace = true
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[features]
+# Forwards retroglyph-core's dev feature, forcing on development diagnostics in a build that
+# would otherwise compile them out.
+dev = ["retroglyph-core/dev"]
+# Forwards to retroglyph-terminal's egc feature (which forwards to retroglyph-core's), enabling
+# grapheme-cluster-aware cell diffing (this crate has no code of its own gated on the flag).
+egc = ["retroglyph-terminal/egc", "retroglyph-core/egc"]
+# Instruments draw/flush/poll_event with `tracing` spans so callers can profile render and
+# input-polling time with any `tracing` subscriber.
+tracing = ["dep:tracing"]
+
 [dependencies]
 retroglyph-core = { path = "../core", version = "0.5.0", default-features = false, features = ["std"] }
 retroglyph-terminal = { path = "../terminal", version = "0.1.6" }
@@ -25,24 +36,6 @@ crossterm = "0.28"
 # Only pulled in behind the `tracing` feature (see below); the `draw`/`flush`/`poll_event`
 # spans this enables are the only code in this crate that references it.
 tracing = { version = "0.1", optional = true, default-features = false, features = ["std", "attributes"] }
-
-[features]
-# Forwards to retroglyph-terminal's egc feature (which forwards to
-# retroglyph-core's). All the EGC-aware/non-EGC-aware cell-diffing code now
-# lives in retroglyph-terminal; this crate has no code of its own gated on
-# this flag, but still exposes it so callers don't need to know which crate
-# in the terminal family actually implements it.
-# Forwards `retroglyph-core`'s `dev` feature, which forces development diagnostics on in a build
-# that would otherwise compile them out (see `retroglyph_core::dev`). Forwarded so a consumer of
-# this crate can turn them on without adding a direct dependency on core just to reach the flag.
-dev = ["retroglyph-core/dev"]
-egc = ["retroglyph-terminal/egc", "retroglyph-core/egc"]
-# Instruments `Backend::draw`, `Backend::flush`, and `Backend::poll_event` with `tracing` spans
-# (`debug` level for draw/flush, `trace` for poll_event, since the latter is called every game-loop
-# iteration by `drain_events`) so callers can profile where time is spent with any `tracing`
-# subscriber (e.g. `tracing-subscriber`'s fmt layer, or a flamegraph via `tracing-flame`). A no-op,
-# and this dependency entirely absent from the build, unless enabled.
-tracing = ["dep:tracing"]
 
 [dev-dependencies]
 criterion = "0.5"

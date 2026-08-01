@@ -32,6 +32,15 @@
 //!   terminal emulator (e.g. xterm.js) from WASM: no TTY, no polling, output collected into a
 //!   `String` for JS to pull each frame, input pushed in from JS callbacks.
 //!
+//! # Features
+//!
+//! This crate has no default features; both are optional and off unless enabled.
+//!
+//! - `dev`: forwards `retroglyph-core`'s `dev` feature, forcing development diagnostics on in a
+//!   build that would otherwise compile them out.
+//! - `egc`: forwards to `retroglyph-core`'s `egc` feature; this crate has EGC-aware and
+//!   non-EGC-aware code paths gated on the same flag name.
+//!
 //! # Why not part of `retroglyph-window`
 //!
 //! `retroglyph-window` splits input (winit event loop) from output (`Presenter`) because every

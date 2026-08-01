@@ -55,6 +55,25 @@
 //! `tracing-subscriber`'s fmt layer, or a flamegraph via `tracing-flame`) can show where render
 //! and input-polling time actually goes. The feature adds no code and no dependency when disabled.
 //!
+//! # Features
+//!
+//! ### `dev`
+//!
+//! Optional. Forwards `retroglyph-core`'s `dev` feature, forcing on development diagnostics in a
+//! build that would otherwise compile them out.
+//!
+//! ### `egc`
+//!
+//! Optional. Forwards to `retroglyph-terminal`'s `egc` feature (which forwards to
+//! `retroglyph-core`'s), enabling grapheme-cluster-aware cell diffing. This crate has no code of
+//! its own gated on the flag; it exposes it so callers don't need to know which crate in the
+//! terminal family actually implements it.
+//!
+//! ### `tracing`
+//!
+//! Optional. Instruments `draw`, `flush`, and `poll_event` with `tracing` spans for profiling
+//! render/input time; see the "Tracing" section above for the full contract.
+//!
 //! # Content writer
 //!
 //! [`Crossterm`] is generic over its content writer: `Crossterm<W>`, defaulting to

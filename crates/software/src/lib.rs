@@ -44,6 +44,14 @@
 //! as [`Backend`](retroglyph_core::Backend)), so `Terminal<SoftwareRenderer>` works without a
 //! window, and [`pixels`](SoftwareRenderer::pixels) gives direct access to the rendered
 //! buffer.
+//!
+//! # Features
+//!
+//! - `dev` -- optional. Forwards `retroglyph-core`'s `dev` feature, forcing development
+//!   diagnostics on in a build that would otherwise compile them out.
+//! - `default-font` -- optional. Embeds the Unscii 16 bitmap font as a ready-to-use default
+//!   `FontChain`.
+//! - `tilesets` -- optional. PNG sprite sheet tilesets with alpha-blended CPU blit support.
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
 

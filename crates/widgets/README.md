@@ -21,10 +21,8 @@ after `.theme(...)` still wins.
 
 ## Quick start
 
-```toml
-[dependencies]
-retroglyph-core = "0.1"
-retroglyph-widgets = "0.1"
+```sh
+cargo add retroglyph-core retroglyph-widgets
 ```
 
 ```rust
@@ -35,6 +33,23 @@ let area = Rect::new(0, 0, 20, 1);
 let mut grid = Grid::new(20, 1);
 Gauge::new("HP", 0.75).render(area, &mut Surface::new(&mut grid, area, 0));
 ```
+
+## Features
+
+### `dev`
+
+⚪ Optional. Forwards `retroglyph-core`'s `dev` feature, forcing development diagnostics on in a
+build that would otherwise compile them out.
+
+### `egc`
+
+⚪ Optional. Forwards to `retroglyph-core`'s `egc` feature; enables `Paragraph`'s
+grapheme-cluster-aware word-wrap.
+
+### `serde`
+
+⚪ Optional. `Serialize`/`Deserialize` impls for `Theme` and `Density`, forwarding to
+`retroglyph-core`'s `serde` feature (`Theme` round-trips through `Color`'s own `serde` impl).
 
 See [docs.rs](https://docs.rs/retroglyph-widgets) for the full API, or the
 [workspace README](https://github.com/crates-lurey-io/retroglyph#readme) for the crate list.

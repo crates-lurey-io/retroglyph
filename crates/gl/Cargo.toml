@@ -44,6 +44,15 @@ unescaped_backticks = "warn"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[features]
+# Embeds the Unscii 16 default font so a caller can build a renderer with no font of its own.
+default-font = ["retroglyph-window/default-font"]
+# Forwards `retroglyph-core`'s `dev` feature, which forces development diagnostics on in a build
+# that would otherwise compile them out (see `retroglyph_core::dev`).
+dev = ["retroglyph-core/dev"]
+# PNG sprite/tileset support (issue #366): an RGBA TEXTURE_2D_ARRAY atlas + a second draw pass.
+tilesets = ["retroglyph-window/tilesets"]
+
 [dependencies]
 retroglyph-core = { path = "../core", version = "0.5.0", default-features = false, features = ["std"] }
 # The glyph source (BitmapFont + unscii16) lives in retroglyph-window's winit-free `font` module,
@@ -123,16 +132,3 @@ js-sys = "0.3"
 wasm-bindgen-futures = "0.4"
 # Generates a tiny in-memory PNG tileset for the sprite render smoke test (issue #366).
 image = { version = "0.25", default-features = false, features = ["png"] }
-
-[features]
-# Embeds the Unscii 16 default font so a caller can build a renderer with no font of its own.
-# Off by default, mirroring `retroglyph-software`: a caller supplying its own `BitmapFont` pays
-# nothing for the embedded atlas.
-# Forwards `retroglyph-core`'s `dev` feature, which forces development diagnostics on in a build
-# that would otherwise compile them out (see `retroglyph_core::dev`). Forwarded so a consumer of
-# this crate can turn them on without adding a direct dependency on core just to reach the flag.
-dev = ["retroglyph-core/dev"]
-default-font = ["retroglyph-window/default-font"]
-# PNG sprite/tileset support (issue #366): an RGBA TEXTURE_2D_ARRAY atlas + a second draw pass.
-# Forwards to retroglyph-window's shared tileset decode (Codepage, TilesetOptions, SpriteCache).
-tilesets = ["retroglyph-window/tilesets"]

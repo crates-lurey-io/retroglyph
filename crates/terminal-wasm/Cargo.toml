@@ -18,6 +18,12 @@ workspace = true
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[features]
+# Forwards retroglyph-core's dev feature, forcing development diagnostics on in a release build.
+dev = ["retroglyph-core/dev"]
+# Forwards to retroglyph-terminal's egc feature (grapheme-cluster-aware cell diffing).
+egc = ["retroglyph-terminal/egc", "retroglyph-core/egc"]
+
 [dependencies]
 retroglyph-core = { path = "../core", version = "0.5.0", default-features = false, features = ["std"] }
 retroglyph-terminal = { path = "../terminal", version = "0.1.6" }
@@ -65,14 +71,6 @@ log = "0.4"
 # FFI has no DOM/xterm.js dependency to exercise, only the handle registry and event decoding --
 # see that test file's own doc comment for what is and isn't reachable through this FFI).
 wasm-bindgen-test = "=0.3.76"
-
-[features]
-# Forwards to retroglyph-terminal's egc feature.
-# Forwards `retroglyph-core`'s `dev` feature, which forces development diagnostics on in a build
-# that would otherwise compile them out (see `retroglyph_core::dev`). Forwarded so a consumer of
-# this crate can turn them on without adding a direct dependency on core just to reach the flag.
-dev = ["retroglyph-core/dev"]
-egc = ["retroglyph-terminal/egc", "retroglyph-core/egc"]
 
 [[bench]]
 name = "take_output"

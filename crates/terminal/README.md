@@ -19,10 +19,8 @@ Most consumers don't depend on this crate directly: use `retroglyph-crossterm` o
 `retroglyph-terminal-wasm` instead, both of which re-export the pieces of a real app's quick start.
 This crate's own surface is the lower-level `Tile` -> ANSI bytes transform those two backends share:
 
-```toml
-[dependencies]
-retroglyph-terminal = "0.1"
-retroglyph-core = "0.1"
+```sh
+cargo add retroglyph-terminal retroglyph-core
 ```
 
 ```rust
@@ -44,6 +42,20 @@ renderer.flush().unwrap();
 let ansi = String::from_utf8(renderer.into_writer()).unwrap();
 assert!(ansi.contains('@'));
 ```
+
+## Features
+
+This crate has no default features; both are optional and off unless enabled.
+
+### `dev`
+
+⚪ Optional. Forwards `retroglyph-core`'s `dev` feature, forcing development diagnostics on in a
+build that would otherwise compile them out.
+
+### `egc`
+
+⚪ Optional. Forwards to `retroglyph-core`'s `egc` feature; this crate has EGC-aware and
+non-EGC-aware code paths gated on the same flag name.
 
 ## Plain mode for non-TTY output
 

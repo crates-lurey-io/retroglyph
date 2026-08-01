@@ -6,6 +6,59 @@
 //! Platform backends (`retroglyph-crossterm`, `retroglyph-software`) and drawing helpers
 //! (`retroglyph-widgets`) are separate crates that depend on this one.
 //!
+//! # Features
+//!
+//! Default features: `std`, `egc`, `color-space`.
+//!
+//! ### `color-space`
+//!
+//! 🟢 Enabled by default.
+//!
+//! Gates perceptual color-space math: `gem/libm`, `alpha-blend` (the W3C separable blend modes on
+//! `BlendMode`), and its own `libm`. gem's pixel-format layer (`rgb`/`gray`/`alpha`/`channel`) is
+//! always available regardless of this feature.
+//!
+//! ### `dev`
+//!
+//! ⚪ Optional.
+//!
+//! Forces `BuildMode::Dev` on in a build that would otherwise resolve to `Release`, so an
+//! optimized build still reports development diagnostics (see the [`dev`] module). Off by
+//! default: the default signal is `debug_assertions`, which already follows the consumer's own
+//! profile.
+//!
+//! ### `egc`
+//!
+//! 🟢 Enabled by default.
+//!
+//! Enables grapheme-cluster-aware text handling (via `unicode-segmentation`) for EGC-correct cell
+//! diffing and layout.
+//!
+//! ### `serde`
+//!
+//! ⚪ Optional.
+//!
+//! Adds `Serialize`/`Deserialize` impls for [`Color`], [`Style`], `Size`, and (via `ixy`)
+//! `Pos`/`Rect`, so a config file can round-trip a saved camera position, window geometry, or
+//! theme color. [`Color`] serializes through its `Display`/`FromStr` round trip (e.g.
+//! `"bright-red"`, `"#ff8000"`) rather than a derived structural form, so hand-edited TOML/JSON
+//! stays legible.
+//!
+//! ### `std`
+//!
+//! 🟢 Enabled by default.
+//!
+//! Enables `gem/std` and `alpha-blend?/std`. Disabling this feature (`--no-default-features`)
+//! builds this crate `no_std`.
+//!
+//! ### `testing`
+//!
+//! ⚪ Optional.
+//!
+//! Enables `testing`'s `TestHarness`, which drives an [`App`] against [`Headless`] for tests,
+//! with synthetic input queuing and frame-settling helpers. Test-only surface, `no_std` + `alloc`
+//! compatible, off by default so it never ships in a release build by accident.
+//!
 //! # Architecture
 //!
 //! [`Terminal<B>`](Terminal) owns a double-buffered [`Grid`] and the [`Backend`] lifecycle

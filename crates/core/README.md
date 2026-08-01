@@ -15,9 +15,8 @@ depend on this one.
 
 ## Quick start
 
-```toml
-[dependencies]
-retroglyph-core = "0.1"
+```sh
+cargo add retroglyph-core
 ```
 
 ```rust
@@ -39,3 +38,51 @@ own doctest (see `src/lib.rs`'s `#[cfg(doctest)]` include). For a real backend, 
 See [docs.rs](https://docs.rs/retroglyph-core) for the full API, or the
 [workspace README](https://github.com/crates-lurey-io/retroglyph#readme) for the crate list and a
 real backend quick start.
+
+## Features
+
+Default features: `std`, `egc`, `color-space`.
+
+### `color-space`
+
+🟢 Enabled by default.
+
+Gates perceptual color-space math: `gem/libm`, `alpha-blend` (the W3C separable blend modes on
+`BlendMode`), and its own `libm`. gem's pixel-format layer (`rgb`/`gray`/`alpha`/`channel`) is
+always available regardless of this feature.
+
+### `dev`
+
+⚪ Optional.
+
+Forces `BuildMode::Dev` on in a build that would otherwise resolve to `Release`.
+
+Can be used so an optimized build still reports development diagnostics (see the `dev` module).
+
+### `egc`
+
+🟢 Enabled by default.
+
+Enables grapheme-cluster-aware text handling for EGC-correct cell diffing and layout.
+
+### `serde`
+
+⚪ Optional.
+
+Adds `Serialize`/`Deserialize` impls for `Color`, `Style`, `Size`, and other structs.
+
+### `std`
+
+🟢 Enabled by default.
+
+Enables `gem/std` and `alpha-blend?/std`.
+
+Disabling this feature (`--no-default-features`) builds this crate `no_std`.
+
+### `testing`
+
+⚪ Optional.
+
+Enables `::testing`'s `TestHarness`, which drives an `App` against `Headless` for tests.
+
+Includes synthetic input queuing and frame-settling helpers.

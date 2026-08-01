@@ -22,11 +22,9 @@ box larger than itself.
 
 ## Quick start
 
-```toml
-[dependencies]
-retroglyph-core = "0.1"
-retroglyph-software = { version = "0.1", features = ["default-font"] }
-retroglyph-window = "0.1"
+```sh
+cargo add retroglyph-core retroglyph-window
+cargo add retroglyph-software --features default-font
 ```
 
 Most apps open a real window via `retroglyph-window`'s `run_app`/`run_windowed` (see the
@@ -57,6 +55,21 @@ assert!(term.backend().pixels().iter().all(|&p| p == 0x00FF_0000));
 See [docs.rs](https://docs.rs/retroglyph-software) for the full API, or the
 [workspace README](https://github.com/crates-lurey-io/retroglyph#readme) for a real backend quick
 start.
+
+## Features
+
+### `dev`
+
+⚪ Optional. Forwards `retroglyph-core`'s `dev` feature, forcing development diagnostics on in a
+build that would otherwise compile them out.
+
+### `default-font`
+
+⚪ Optional. Embeds the Unscii 16 bitmap font as a ready-to-use default `FontChain`.
+
+### `tilesets`
+
+⚪ Optional. PNG sprite sheet tilesets with alpha-blended CPU blit support.
 
 ## Frame rate and window title live on `WindowConfig`, not on this builder
 

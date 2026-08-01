@@ -15,6 +15,11 @@ Implements [`retroglyph_window::Presenter`], so it drops into the same winit win
 
 ## Quick start
 
+```sh
+cargo add retroglyph-core retroglyph-window
+cargo add retroglyph-gl --features default-font
+```
+
 ```no_run
 # #[cfg(not(target_arch = "wasm32"))]
 # fn main() {
@@ -41,9 +46,21 @@ run_windowed(config, renderer, move |term| {
 
 ## Features
 
-| Feature        | Effect                                                                 |
-| -------------- | ---------------------------------------------------------------------- |
-| `default-font` | Embeds the Unscii 16 font so a renderer can be built with no own font. |
+### `default-font`
+
+⚪ Optional. Embeds the Unscii 16 bitmap font so a renderer can be built with no font of its own.
+Forwards to `retroglyph-window`'s `default-font` feature.
+
+### `dev`
+
+⚪ Optional. Forces development diagnostics on in a build that would otherwise compile them out (see
+`retroglyph_core::dev`). Forwards to `retroglyph-core`'s `dev` feature.
+
+### `tilesets`
+
+⚪ Optional. PNG sprite/tileset support (issue #366): decodes sprite sheets into an RGBA
+`TEXTURE_2D_ARRAY` atlas and draws them in a second, source-over blended pass. Forwards to
+`retroglyph-window`'s shared tileset decode.
 
 ## Status
 
