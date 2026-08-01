@@ -3,29 +3,24 @@
 //! For word-wrapping multi-line text, see `retroglyph_core::layout::TextLayout`
 //! (behind the `egc` feature) rather than reimplementing wrapping here: it
 //! already handles grapheme clusters, hard newlines, and per-span styling.
-use unicode_width::UnicodeWidthChar;
+use retroglyph_core::text::split_at_width;
 
 /// Truncate `s` so its display width is at most `max_cols` terminal columns.
 ///
 /// Truncates on a whole-character boundary; a character that would push the
-/// total over `max_cols` is dropped along with the rest of the string.
+/// total over `max_cols` is dropped along with the rest of the string. A
+/// thin wrapper over `retroglyph_core::text::split_at_width`; `max_cols` is
+/// saturated to `u16::MAX` before splitting, matching that function's own
+/// saturation.
 ///
 /// Returns a borrowed slice of `s`, so this allocates nothing. See
 /// [`truncate_owned`] if you need an owned `String` (e.g. to store past the
 /// lifetime of `s`).
 #[must_use]
 pub fn truncate(s: &str, max_cols: usize) -> &str {
-    let mut cols = 0usize;
-    let mut end = 0usize;
-    for ch in s.chars() {
-        let w = ch.width().unwrap_or(0);
-        if cols + w > max_cols {
-            break;
-        }
-        cols += w;
-        end += ch.len_utf8();
-    }
-    &s[..end]
+    #[allow(clippy::cast_possible_truncation)] // clamped to u16::MAX above
+    let max_cols = max_cols.min(usize::from(u16::MAX)) as u16;
+    split_at_width(s, max_cols).0
 }
 
 /// Owned variant of [`truncate`]: truncate `s` to `max_cols` display columns and copy the

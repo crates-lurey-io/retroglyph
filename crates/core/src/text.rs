@@ -3,7 +3,92 @@
 use crate::style::Style;
 use alloc::string::String;
 use alloc::vec::Vec;
-use unicode_width::UnicodeWidthStr;
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
+
+/// The number of terminal cells `s` occupies, saturating at `u16::MAX`.
+///
+/// Wide characters (CJK, most emoji) count as two columns; combining marks
+/// and most control characters count as zero. [`Span::width`] and
+/// [`Line::width`] are built on this function; reach for it directly to
+/// measure a borrowed `&str` without constructing either type first.
+///
+/// See [`width_usize`] for the unsaturated measurement.
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::text::width;
+///
+/// assert_eq!(width("hello"), 5);
+/// assert_eq!(width("中文"), 4); // each CJK char is 2 columns
+/// ```
+#[must_use]
+pub fn width(s: &str) -> u16 {
+    #[allow(clippy::cast_possible_truncation)] // clamped to u16::MAX above
+    let w = width_usize(s).min(usize::from(u16::MAX)) as u16;
+    w
+}
+
+/// The number of terminal cells `s` occupies, without saturating to `u16`.
+///
+/// Prefer [`width`] when the result feeds a `u16`-based geometry type such
+/// as `Rect`/`Size`; use this when the raw `unicode-width` measurement is
+/// needed instead.
+#[must_use]
+pub fn width_usize(s: &str) -> usize {
+    s.width()
+}
+
+/// The number of terminal cells a single character occupies.
+///
+/// Returns `0` for combining marks and most control characters, `1` for
+/// most characters, and `2` for wide characters (CJK, most emoji).
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::text::char_width;
+///
+/// assert_eq!(char_width('a'), 1);
+/// assert_eq!(char_width('中'), 2);
+/// ```
+#[must_use]
+pub fn char_width(c: char) -> u16 {
+    #[allow(clippy::cast_possible_truncation)] // unicode-width never returns > 2
+    let w = c.width().unwrap_or(0) as u16;
+    w
+}
+
+/// Splits `s` at the byte index where its display width reaches `max_cols`.
+///
+/// Splits on a whole-character boundary; a character that would push the
+/// total over `max_cols` is left in the second half along with the rest of
+/// `s`. Returns `(prefix, rest)` such that `width(prefix) <= max_cols` and
+/// `prefix` is the longest prefix of `s` for which that holds.
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::text::split_at_width;
+///
+/// assert_eq!(split_at_width("hello world", 5), ("hello", " world"));
+/// assert_eq!(split_at_width("hi", 10), ("hi", ""));
+/// ```
+#[must_use]
+pub fn split_at_width(s: &str, max_cols: u16) -> (&str, &str) {
+    let max_cols = usize::from(max_cols);
+    let mut cols = 0usize;
+    let mut end = 0usize;
+    for ch in s.chars() {
+        let w = usize::from(char_width(ch));
+        if cols + w > max_cols {
+            break;
+        }
+        cols += w;
+        end += ch.len_utf8();
+    }
+    s.split_at(end)
+}
 
 /// A string with an associated [`Style`].
 ///
@@ -50,7 +135,7 @@ impl Span {
     /// Returns the display width of this span in terminal columns.
     #[must_use]
     pub fn width(&self) -> usize {
-        self.content.as_str().width()
+        width_usize(&self.content)
     }
 }
 
@@ -164,6 +249,45 @@ macro_rules! spans {
 mod tests {
     use super::*;
     use crate::color::Color;
+
+    #[test]
+    fn width_matches_span_width() {
+        assert_eq!(width("hello"), 5);
+        assert_eq!(width(""), 0);
+    }
+
+    #[test]
+    fn width_counts_wide_characters_as_two_columns() {
+        assert_eq!(width("中文"), 4);
+    }
+
+    #[test]
+    fn width_saturates_at_u16_max() {
+        let s = "a".repeat(usize::from(u16::MAX) + 100);
+        assert_eq!(width(&s), u16::MAX);
+        assert_eq!(width_usize(&s), s.len());
+    }
+
+    #[test]
+    fn char_width_matches_unicode_width() {
+        assert_eq!(char_width('a'), 1);
+        assert_eq!(char_width('中'), 2);
+        assert_eq!(char_width('\u{0301}'), 0); // combining acute accent
+    }
+
+    #[test]
+    fn split_at_width_stops_at_the_column_budget() {
+        assert_eq!(split_at_width("hello world", 5), ("hello", " world"));
+        assert_eq!(split_at_width("hi", 10), ("hi", ""));
+        assert_eq!(split_at_width("hi", 0), ("", "hi"));
+    }
+
+    #[test]
+    fn split_at_width_counts_wide_characters_as_two_columns() {
+        assert_eq!(split_at_width("aあb", 2), ("a", "あb"));
+        assert_eq!(split_at_width("aあb", 3), ("aあ", "b"));
+        assert_eq!(split_at_width("ああ", 3), ("あ", "あ"));
+    }
 
     #[test]
     fn test_span_raw() {
