@@ -64,6 +64,7 @@ doc:
     RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features --exclude retroglyph-examples --exclude cargo-bin
     ./tools/gen-llms-txt.sh target/doc
     @cp -r docs/public/. target/doc/ 2>/dev/null || true
+    ./tools/gen-crates-index.sh target/doc
     @sed -i.bak "s/__GIT_SHA__/$(git rev-parse --short HEAD 2>/dev/null || echo unknown)/g" target/doc/index.html && rm -f target/doc/index.html.bak
 
 # Build docs the way docs.rs does, so feature-gated items pick up their "Available on `feature`
