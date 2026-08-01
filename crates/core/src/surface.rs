@@ -31,14 +31,89 @@ use unicode_width::UnicodeWidthChar;
 /// tightens.
 ///
 /// A caller that genuinely needs more than one layer at once (e.g. a modal dimming layer 0 while
-/// drawing its own content on layer 1) switches layers with [`Surface::on_layer`] rather than
-/// being restricted to the layer it was constructed with.
+/// drawing its own content on layer 1) switches layers with [`Surface::on_layer`]/[`Surface::on_tier`]
+/// rather than being restricted to the layer it was constructed with.
 pub struct Surface<'a> {
     grid: &'a mut Grid,
     area: Rect,
     layer: u8,
     tint: Tint,
     origin_offset: (i32, i32),
+}
+
+/// A named z-order tier for [`Surface::on_tier`], covering the split most apps with overlapping
+/// UI actually need.
+///
+/// Layers are how overlapping UI avoids depending on draw order: a caller who paints a dropdown
+/// on [`Layer::Overlay`] gets it on top of the active screen regardless of whether the screen or
+/// the dropdown drew first this frame, so the two don't have to agree on an ordering (contrast
+/// with painting both through the same layer, where whichever call happens to run last wins).
+///
+/// `Layer` derives [`Ord`] over its declaration order, so `Layer::World < Layer::Hud <
+/// Layer::Overlay < Layer::Debug` holds without spelling out the underlying grid layer ids --
+/// the same relationship [`Surface::on_tier`] relies on to keep `Layer::Debug` the top-most tier
+/// no matter what else is open.
+///
+/// This is a convention, not a restriction: [`Surface::on_layer`] still accepts any `u8`, and a
+/// tile map or sprite-heavy app with its own multi-layer scheme (terrain/items/actors/...) has no
+/// reason to route through `Layer` at all. `Layer` exists for the overlapping-*UI* case --
+/// chrome, popups, debug HUDs -- where a small, shared, named split is worth more than 256 open
+/// numeric ids.
+///
+/// # Examples
+///
+/// A persistent HUD bar and a dropdown that must paint over it, in either order, because they're
+/// on different tiers rather than racing to draw last:
+///
+/// ```
+/// use retroglyph_core::{Grid, Layer, Rect, Style, Surface};
+///
+/// let area = Rect::new(0, 0, 20, 5);
+/// let mut grid = Grid::new(20, 5);
+/// let mut surface = Surface::new(&mut grid, area, Layer::World.as_u8());
+///
+/// // The active screen draws on `World`.
+/// surface.print((0, 0), "screen content", Style::default());
+///
+/// // Chrome draws on `Hud`, above the screen.
+/// surface.on_tier(Layer::Hud).print((0, 0), "File  Edit  View", Style::default());
+///
+/// // A dropdown draws on `Overlay`, above the HUD -- painting it before or after the two calls
+/// // above makes no difference, because it's on a higher tier, not drawn later.
+/// surface.on_tier(Layer::Overlay).print((0, 1), "New", Style::default());
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
+pub enum Layer {
+    /// The active screen: terrain, entities, game/app content. Grid layer 0.
+    #[default]
+    World,
+    /// Persistent chrome: menu bars, status lines, HUD. Grid layer 1.
+    Hud,
+    /// Popups, dropdowns, modals -- painted over [`Layer::World`] and [`Layer::Hud`] regardless
+    /// of draw order. Grid layer 2.
+    Overlay,
+    /// Debug and dev tooling. Always the top-most tier, so it stays visible over an open
+    /// [`Layer::Overlay`] rather than being hidden underneath one. Grid layer 3.
+    ///
+    /// [`crate::perf_overlay::DEFAULT_LAYER`] is defined as `Layer::Debug.as_u8()` for exactly
+    /// this reason: a perf HUD that a popup could paint over would be useless whenever an app
+    /// actually has a popup open.
+    Debug,
+}
+
+impl Layer {
+    /// This tier's underlying grid layer id, for [`Surface::on_layer`]/[`Grid`] APIs that take a
+    /// raw `u8`.
+    #[must_use]
+    pub const fn as_u8(self) -> u8 {
+        self as u8
+    }
+}
+
+impl From<Layer> for u8 {
+    fn from(layer: Layer) -> Self {
+        layer.as_u8()
+    }
 }
 
 impl<'a> Surface<'a> {
@@ -87,6 +162,14 @@ impl<'a> Surface<'a> {
             tint: self.tint,
             origin_offset: self.origin_offset,
         }
+    }
+
+    /// Equivalent to [`self.on_layer(tier.as_u8())`](Surface::on_layer), for switching to one of
+    /// the workspace's named [`Layer`] tiers instead of a raw layer id. See [`Layer`]'s docs for
+    /// when to reach for this over a numeric [`Surface::on_layer`] call.
+    #[must_use]
+    pub const fn on_tier(&mut self, tier: Layer) -> Surface<'_> {
+        self.on_layer(tier.as_u8())
     }
 
     /// The tint every sprite drawn through this surface is recoloured by.
@@ -1160,6 +1243,60 @@ mod tests {
         let mut layer1 = surface.on_layer(1);
 
         assert_eq!(layer1.clip(Rect::new(0, 0, 2, 2)).layer(), 1);
+    }
+
+    #[test]
+    fn layer_variants_order_low_to_high() {
+        assert!(Layer::World < Layer::Hud);
+        assert!(Layer::Hud < Layer::Overlay);
+        assert!(Layer::Overlay < Layer::Debug);
+    }
+
+    #[test]
+    fn layer_as_u8_matches_the_documented_grid_layer_ids() {
+        assert_eq!(Layer::World.as_u8(), 0);
+        assert_eq!(Layer::Hud.as_u8(), 1);
+        assert_eq!(Layer::Overlay.as_u8(), 2);
+        assert_eq!(Layer::Debug.as_u8(), 3);
+    }
+
+    #[test]
+    fn layer_default_is_world() {
+        assert_eq!(Layer::default(), Layer::World);
+    }
+
+    #[test]
+    fn layer_into_u8_matches_as_u8() {
+        assert_eq!(u8::from(Layer::Overlay), Layer::Overlay.as_u8());
+    }
+
+    #[test]
+    fn on_tier_matches_on_layer_with_the_tiers_u8() {
+        let mut grid = Grid::new(4, 4);
+        let mut surface = screen(&mut grid);
+
+        assert_eq!(surface.on_tier(Layer::Overlay).layer(), 2);
+        assert_eq!(
+            surface.on_layer(2).layer(),
+            surface.on_tier(Layer::Overlay).layer()
+        );
+    }
+
+    #[test]
+    fn on_tier_writes_land_on_the_tiers_grid_layer() {
+        let mut grid = Grid::new(4, 4);
+        {
+            let mut surface = screen(&mut grid);
+            surface
+                .on_tier(Layer::Overlay)
+                .put((0, 0), '@', Style::default());
+        }
+
+        assert_eq!(grid.tile(2, Pos::new(0, 0)).map(Tile::glyph), Some('@'));
+        // Untouched on lower tiers: `on_tier` switches layers, it doesn't also write there.
+        // Layer 0 is always allocated (empty), layer 1 was never written so stays unallocated.
+        assert_eq!(grid.tile(0, Pos::new(0, 0)).map(Tile::glyph), Some(' '));
+        assert_eq!(grid.tile(1, Pos::new(0, 0)), None);
     }
 
     #[test]

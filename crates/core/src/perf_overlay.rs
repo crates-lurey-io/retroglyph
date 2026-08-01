@@ -64,7 +64,7 @@ use crate::event::{Event, KeyCode, KeyEventKind};
 use crate::frame_stats::FrameStats;
 use crate::grid::{Rect, Size};
 use crate::style::Style;
-use crate::surface::Surface;
+use crate::surface::{Layer, Surface};
 use crate::terminal::Terminal;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
@@ -77,14 +77,13 @@ use core::fmt::{self, Write as _};
 /// of [`PerfOverlayApp`], if a specific app genuinely needs one.
 pub const FRAME_HISTORY: usize = 120;
 
-/// [`PerfOverlayApp`]'s default overlay layer.
+/// [`PerfOverlayApp`]'s default overlay layer: [`Layer::Debug`].
 ///
-/// Above every layer a typical app uses (0 and, occasionally, 1), so it composites on top on
-/// backends that layer at all, and stays low because a GPU backend allocates every layer up to
-/// the highest one referenced -- a large default here would cost several empty layer draws per
-/// frame for every app that never overrides it. Override with [`PerfOverlayApp::layer`] if an
-/// app's own content already reaches this layer.
-pub const DEFAULT_LAYER: u8 = 2;
+/// The workspace's named top-most UI tier, so a perf HUD stays visible over whatever else is on
+/// screen -- including an open [`Layer::Overlay`] popup -- rather than risking a lower,
+/// app-chosen layer hiding it. Override with [`PerfOverlayApp::layer`] if an app's own content
+/// already reaches this layer.
+pub const DEFAULT_LAYER: u8 = Layer::Debug.as_u8();
 
 /// Draws a [`PerfOverlayApp`]'s stats into a rectangular area of a [`Surface`].
 ///

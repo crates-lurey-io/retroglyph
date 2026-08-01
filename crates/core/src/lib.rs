@@ -125,7 +125,7 @@ pub use perf_overlay::{
 };
 pub use style::Style;
 pub use subcell::{Glyph, quantize_half_block, quantize_quadrant, quantize_sextant};
-pub use surface::{StyledSurface, Surface};
+pub use surface::{Layer, StyledSurface, Surface};
 pub use terminal::Terminal;
 pub use text::{Line, Span};
 pub use tile::Tile;
