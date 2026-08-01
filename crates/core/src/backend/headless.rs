@@ -2,10 +2,14 @@
 //! and allows injecting synthetic events.
 
 use crate::backend::{Cursor, Input, Output};
+use crate::color::Color;
 use crate::event::Event;
 use crate::grid::{Grid, Pos, Size};
+use crate::style::Style;
+use crate::tile::Tile;
 use alloc::collections::VecDeque;
 use alloc::string::String;
+use core::fmt::Write as _;
 use core::time::Duration;
 
 /// In-memory backend for testing. Stores presented content
@@ -61,24 +65,117 @@ impl Headless {
         for y in 0..self.grid.height() {
             for x in 0..self.grid.width() {
                 let cell = &self.grid[Pos::new(x, y)];
-                #[cfg(feature = "egc")]
-                let is_spacer = cell
-                    .flags()
-                    .contains(crate::tile::TileFlags::WIDE_CHAR_SPACER);
-                #[cfg(not(feature = "egc"))]
-                let is_spacer = cell.glyph() == '\0';
-                let c = if is_spacer {
-                    ' '
-                } else if cell.glyph() == ' ' {
-                    '·'
-                } else {
-                    cell.glyph()
-                };
-                out.push(c);
+                let (glyph, is_spacer) = Self::display_glyph(cell);
+                out.push(if is_spacer { ' ' } else { glyph });
             }
             out.push('\n');
         }
         out
+    }
+
+    /// `format_view`, with each cell's colors emitted as SGR (ANSI) escape sequences.
+    ///
+    /// Suitable for `insta::assert_snapshot!`, which renders ANSI in its terminal diff output:
+    /// a color regression that `format_view` can't see (two styles that share a glyph) shows up
+    /// as a snapshot diff here. Spacer cells (the trailing half of a wide glyph) are blanked the
+    /// same way `format_view` blanks them, with no style of their own.
+    ///
+    /// Each run of cells that share a [`Style`] is wrapped in a `\x1b[0m` reset followed by the
+    /// SGR codes for that style's non-default foreground/background; a bare `Style::default()`
+    /// run only gets the reset. This keeps every row self-contained (no state leaks across rows
+    /// or into terminals that render the snapshot directly).
+    ///
+    /// [`Color::Ansi`] and [`Color::Indexed`] map to their standard SGR codes (30-37/90-97 and
+    /// `38;5;n`/`48;5;n`); [`Color::Rgb`] maps to 24-bit SGR (`38;2;r;g;b`/`48;2;r;g;b`) rather
+    /// than being downgraded, so this reflects the style as authored, not as a particular
+    /// terminal would render it.
+    #[must_use]
+    pub fn format_styled(&self) -> String {
+        let mut out = String::new();
+        for y in 0..self.grid.height() {
+            let mut current: Option<Style> = None;
+            for x in 0..self.grid.width() {
+                let cell = &self.grid[Pos::new(x, y)];
+                let (glyph, is_spacer) = Self::display_glyph(cell);
+                let style = if is_spacer {
+                    Style::default()
+                } else {
+                    cell.style()
+                };
+                if current != Some(style) {
+                    out.push_str("\x1b[0m");
+                    Self::push_sgr(&mut out, style);
+                    current = Some(style);
+                }
+                out.push(if is_spacer { ' ' } else { glyph });
+            }
+            if current.is_some_and(|s| s != Style::default()) {
+                out.push_str("\x1b[0m");
+            }
+            out.push('\n');
+        }
+        out
+    }
+
+    /// The glyph `format_view`/`format_styled` render for `cell`, and whether it's a wide-glyph
+    /// spacer (rendered blank in both, with no style in `format_styled`).
+    const fn display_glyph(cell: &Tile) -> (char, bool) {
+        #[cfg(feature = "egc")]
+        let is_spacer = cell
+            .flags()
+            .contains(crate::tile::TileFlags::WIDE_CHAR_SPACER);
+        #[cfg(not(feature = "egc"))]
+        let is_spacer = cell.glyph() == '\0';
+        let glyph = if cell.glyph() == ' ' {
+            '·'
+        } else {
+            cell.glyph()
+        };
+        (glyph, is_spacer)
+    }
+
+    /// Appends the SGR codes for `style`'s non-default foreground/background to `out`, as a
+    /// single `\x1b[...m` sequence.
+    ///
+    /// A `Color::Default` channel is left unset, relying on the caller's preceding `\x1b[0m`
+    /// reset rather than emitting an explicit `39`/`49` reset code. Emits nothing at all when
+    /// both channels are `Color::Default`.
+    fn push_sgr(out: &mut String, style: Style) {
+        let mut params = alloc::string::String::new();
+        if let Some(code) = Self::sgr_color(style.foreground(), false) {
+            let _ = write!(params, "{code}");
+        }
+        if let Some(code) = Self::sgr_color(style.background(), true) {
+            if !params.is_empty() {
+                params.push(';');
+            }
+            let _ = write!(params, "{code}");
+        }
+        if !params.is_empty() {
+            let _ = write!(out, "\x1b[{params}m");
+        }
+    }
+
+    /// The SGR parameter string for `color` in the foreground (`bg: false`) or background
+    /// (`bg: true`) slot, or `None` for `Color::Default` (nothing to emit).
+    fn sgr_color(color: Color, bg: bool) -> Option<alloc::string::String> {
+        match color {
+            Color::Default => None,
+            Color::Ansi(ansi) => {
+                let index = ansi.to_index();
+                let base = match (index < 8, bg) {
+                    (true, false) => 30,
+                    (true, true) => 40,
+                    (false, false) => 90,
+                    (false, true) => 100,
+                };
+                Some(alloc::format!("{}", base + index % 8))
+            }
+            Color::Indexed(index) => Some(alloc::format!("{};5;{index}", if bg { 48 } else { 38 })),
+            Color::Rgb { r, g, b } => {
+                Some(alloc::format!("{};2;{r};{g};{b}", if bg { 48 } else { 38 }))
+            }
+        }
     }
 }
 
@@ -167,8 +264,8 @@ mod tests {
         let backend = Headless::new(10, 3);
         let mut term = Terminal::new(backend);
         term.draw(|s| {
-            s.put((1, 1), 'H', crate::style::Style::default());
-            s.put((2, 1), 'i', crate::style::Style::default());
+            s.put((1, 1), 'H', Style::default());
+            s.put((2, 1), 'i', Style::default());
         })
         .expect("draw failed");
         let view = term.backend().format_view();
@@ -188,7 +285,7 @@ mod tests {
         let backend = Headless::new(6, 3);
         let mut term = Terminal::new(backend);
         term.draw(|s| {
-            s.put_span((1, 0), &["C=", "[]"], crate::style::Style::default())
+            s.put_span((1, 0), &["C=", "[]"], Style::default())
                 .expect("span write");
         })
         .expect("draw failed");
@@ -198,5 +295,85 @@ mod tests {
         ·[]···
         ······
         "#);
+    }
+
+    #[test]
+    fn test_format_styled_unstyled_matches_format_view_text() {
+        use crate::Terminal;
+        let backend = Headless::new(6, 2);
+        let mut term = Terminal::new(backend);
+        term.draw(|s| {
+            s.put((1, 0), 'H', Style::default());
+        })
+        .expect("draw failed");
+        // No non-default color anywhere, so this is just format_view with a reset per row.
+        assert_eq!(
+            term.backend().format_styled(),
+            "\x1b[0m·H····\n\x1b[0m······\n"
+        );
+    }
+
+    #[test]
+    fn test_format_styled_emits_fg_and_bg_sgr_on_change() {
+        use crate::Terminal;
+        let backend = Headless::new(3, 1);
+        let mut term = Terminal::new(backend);
+        term.draw(|s| {
+            let style = Style::new().fg(Color::RED).bg(Color::BLUE);
+            s.put((1, 0), 'x', style);
+        })
+        .expect("draw failed");
+        assert_eq!(
+            term.backend().format_styled(),
+            "\x1b[0m·\x1b[0m\x1b[31;44mx\x1b[0m·\n"
+        );
+    }
+
+    #[test]
+    fn test_format_styled_rgb_and_indexed() {
+        use crate::Terminal;
+        let backend = Headless::new(2, 1);
+        let mut term = Terminal::new(backend);
+        term.draw(|s| {
+            s.put(
+                (0, 0),
+                'a',
+                Style::new().fg(Color::Rgb { r: 1, g: 2, b: 3 }),
+            );
+            s.put((1, 0), 'b', Style::new().bg(Color::Indexed(200)));
+        })
+        .expect("draw failed");
+        assert_eq!(
+            term.backend().format_styled(),
+            "\x1b[0m\x1b[38;2;1;2;3ma\x1b[0m\x1b[48;5;200mb\x1b[0m\n"
+        );
+    }
+
+    #[test]
+    fn test_format_styled_spacer_cells_carry_no_style() {
+        use crate::Terminal;
+        let backend = Headless::new(4, 1);
+        let mut term = Terminal::new(backend);
+        term.draw(|s| {
+            s.put_span((0, 0), &["[]"], Style::new().fg(Color::GREEN))
+                .expect("span write");
+        })
+        .expect("draw failed");
+        // Both cells of the span share the styled glyph fallback (see
+        // `test_format_view_renders_span_fallback_glyphs`); this asserts a real spacer, produced
+        // by a wide EGC grapheme, drops style instead of inheriting the lead cell's.
+        #[cfg(feature = "egc")]
+        {
+            let mut term = Terminal::new(Headless::new(4, 1));
+            term.draw(|s| {
+                s.put((0, 0), 'あ', Style::new().fg(Color::GREEN));
+            })
+            .expect("draw failed");
+            let styled = term.backend().format_styled();
+            assert!(styled.contains("\x1b[32mあ"));
+            // The spacer cell after the wide glyph is blank and resets rather than repeating
+            // the green foreground.
+            assert!(!styled.contains("\x1b[32m "));
+        }
     }
 }
