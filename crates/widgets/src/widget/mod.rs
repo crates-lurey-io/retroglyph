@@ -50,7 +50,7 @@ pub use modal::Modal;
 pub use panel::Panel;
 #[cfg(feature = "egc")]
 pub use paragraph::Paragraph;
-pub use perf_overlay::PerfOverlay;
+pub use perf_overlay::{AnimatedPerfOverlay, PerfOverlay};
 pub use print_line::PrintLine;
 pub use progress_bar::ProgressBar;
 pub use scrollbar::Scrollbar;

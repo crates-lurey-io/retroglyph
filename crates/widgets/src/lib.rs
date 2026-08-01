@@ -75,7 +75,7 @@ pub use theme::Theme;
 #[cfg(feature = "egc")]
 pub use widget::Paragraph;
 pub use widget::{
-    AnimatedWidget, BoxBorder, Button, Gauge, List, Log, Measure, Meter, Modal, Panel, PerfOverlay,
-    PrintLine, ProgressBar, Scrollbar, Sparkline, StatBar, StatefulWidget, Table, Tabs, Text,
-    Widget,
+    AnimatedPerfOverlay, AnimatedWidget, BoxBorder, Button, Gauge, List, Log, Measure, Meter,
+    Modal, Panel, PerfOverlay, PrintLine, ProgressBar, Scrollbar, Sparkline, StatBar,
+    StatefulWidget, Table, Tabs, Text, Widget,
 };
