@@ -20,7 +20,7 @@
 use retroglyph_core::event::{Event, KeyCode, KeyModifiers};
 use retroglyph_core::{Backend, Color, Frame, Rect, Style, Surface, Terminal};
 use retroglyph_examples::Example;
-use retroglyph_widgets::{Button, Density, Interaction, Sense, Shortcuts, Theme, Widget};
+use retroglyph_widgets::{Button, Density, Interaction, InteractiveWidget, Shortcuts, Theme};
 
 /// Identifies each button for [`Interaction`]'s hit-testing and focus ring.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -96,15 +96,14 @@ impl WidgetsInteraction {
     /// counter logic below); `Button` only turns the resulting `Response` into a styled label,
     /// replacing what used to be this method's own bg/fg-by-response wiring.
     fn draw_button(&mut self, surface: &mut Surface<'_>, rect: Rect, id: ButtonId, label: &str) {
-        let response = self.interaction.interact(rect, id, Sense::click());
         let theme = Theme::DARK;
-
-        Button::new(label, response)
+        let button = Button::new(label)
             .style(Style::new().fg(theme.fg).bg(theme.panel_bg))
             .hovered_style(Style::new().fg(theme.fg).bg(theme.hover_bg))
             .pressed_style(Style::new().fg(theme.fg).bg(theme.press_bg))
-            .focused_style(Style::new().fg(theme.accent).bg(theme.panel_bg))
-            .render(&mut surface.scope(rect));
+            .focused_style(Style::new().fg(theme.accent).bg(theme.panel_bg));
+        let response = self.interaction.interact(rect, id, button.sense());
+        InteractiveWidget::render(&button, &mut surface.scope(rect), &mut (), response);
 
         match (id, response.clicked()) {
             (ButtonId::Increment, true) => self.count += 1,

@@ -26,8 +26,8 @@ use retroglyph_core::event::{Event, KeyCode};
 use retroglyph_core::{Backend, Frame, Rect, Style, Surface, Terminal};
 use retroglyph_examples::Example;
 use retroglyph_widgets::{
-    BoxStyle, Button, Constraint, Gauge, Interaction, List, ListState, Sense, Sides, Sparkline,
-    StatefulWidget, Table, Tabs, Theme, Widget, blit_into, split_h, split_v,
+    BoxStyle, Button, Constraint, Gauge, Interaction, InteractiveWidget, List, ListState, Sides,
+    Sparkline, StatefulWidget, Table, Tabs, Theme, Widget, blit_into, split_h, split_v,
 };
 
 /// Identifies the dashboard's one interactive widget for [`Interaction`]'s hit-testing and focus
@@ -172,19 +172,23 @@ impl Dashboard {
         );
         let (tabs_area, panel_area) = (right_rows[0], right_rows[2]);
 
-        Tabs::new(&TABS)
+        let tabs = Tabs::new(&TABS)
             .select(Some(self.selected_tab))
             .style(Style::new().fg(self.theme.dim))
-            .selected_style(Style::new().fg(self.theme.accent).bg(self.theme.panel_bg))
-            .render(&mut surface.scope(tabs_area));
+            .selected_style(Style::new().fg(self.theme.accent).bg(self.theme.panel_bg));
+        Widget::render(&tabs, &mut surface.scope(tabs_area));
 
         if self.selected_tab == 0 {
             self.draw_metrics(&mut surface, panel_area);
         } else {
-            List::new(&ALERTS)
+            let list = List::new(&ALERTS)
                 .item_style(Style::new().fg(self.theme.fg))
-                .selected_style(Style::new().fg(self.theme.bg).bg(self.theme.accent))
-                .render(&mut surface.scope(panel_area), &mut self.alerts_state);
+                .selected_style(Style::new().fg(self.theme.bg).bg(self.theme.accent));
+            StatefulWidget::render(
+                &list,
+                &mut surface.scope(panel_area),
+                &mut self.alerts_state,
+            );
         }
     }
 
@@ -222,15 +226,15 @@ impl Dashboard {
     /// `Button` only turns the resulting `Response` into a styled, centered label -- see
     /// `10_widgets_interaction`'s `draw_button` for the same pattern applied to three buttons.
     fn draw_ping_button(&mut self, surface: &mut Surface<'_>, rect: Rect) {
-        let response = self
-            .interaction
-            .interact(rect, DashId::PingButton, Sense::click());
-        Button::new("Ping", response)
+        let button = Button::new("Ping")
             .style(Style::new().fg(self.theme.fg).bg(self.theme.panel_bg))
             .hovered_style(Style::new().fg(self.theme.fg).bg(self.theme.hover_bg))
             .pressed_style(Style::new().fg(self.theme.fg).bg(self.theme.press_bg))
-            .focused_style(Style::new().fg(self.theme.accent).bg(self.theme.panel_bg))
-            .render(&mut surface.scope(rect));
+            .focused_style(Style::new().fg(self.theme.accent).bg(self.theme.panel_bg));
+        let response = self
+            .interaction
+            .interact(rect, DashId::PingButton, button.sense());
+        InteractiveWidget::render(&button, &mut surface.scope(rect), &mut (), response);
         if response.clicked() {
             self.pings += 1;
         }

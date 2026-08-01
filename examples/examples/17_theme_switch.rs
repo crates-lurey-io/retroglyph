@@ -23,8 +23,8 @@ use retroglyph_core::event::{Event, KeyCode};
 use retroglyph_core::{Backend, Frame, Rect, Style, Surface, Terminal};
 use retroglyph_examples::Example;
 use retroglyph_widgets::{
-    Button, Interaction, List, ListState, Panel, ProgressBar, Sense, StatefulWidget, Tabs, Theme,
-    Widget,
+    Button, Interaction, InteractiveWidget, List, ListState, Panel, ProgressBar, StatefulWidget,
+    Tabs, Theme, Widget,
 };
 
 /// Identifies the demo's one interactive widget for [`Interaction`]'s hit-testing and focus ring.
@@ -124,20 +124,23 @@ impl ThemeSwitch {
             panel_area.height() - 2,
         );
 
-        Tabs::new(&TABS)
+        let tabs = Tabs::new(&TABS)
             .select(Some(self.selected_tab))
-            .theme(theme)
-            .render(
-                &mut Surface::new(term.grid_mut(), term_area, 0).scope(Rect::new(
-                    inner.left(),
-                    inner.top(),
-                    inner.width(),
-                    1,
-                )),
-            );
+            .theme(theme);
+        Widget::render(
+            &tabs,
+            &mut Surface::new(term.grid_mut(), term_area, 0).scope(Rect::new(
+                inner.left(),
+                inner.top(),
+                inner.width(),
+                1,
+            )),
+        );
 
         let list_area = Rect::new(inner.left(), inner.top() + 2, inner.width(), 4);
-        List::new(&ITEMS).theme(theme).render(
+        let list = List::new(&ITEMS).theme(theme);
+        StatefulWidget::render(
+            &list,
             &mut Surface::new(term.grid_mut(), term_area, 0).scope(list_area),
             &mut self.list_state,
         );
@@ -159,18 +162,22 @@ impl ThemeSwitch {
     /// except the four hand-threaded `theme.*` style calls those examples make are replaced here
     /// by the one `.theme(theme)` call this whole feature exists to add.
     fn draw_toggle_button<B: Backend>(&mut self, term: &mut Terminal<B>, rect: Rect, theme: Theme) {
-        let response = self
-            .interaction
-            .interact(rect, WidgetId::ToggleButton, Sense::click());
         let label = if self.dark {
             "Switch to Light"
         } else {
             "Switch to Dark"
         };
+        let button = Button::new(label).theme(theme);
+        let response = self
+            .interaction
+            .interact(rect, WidgetId::ToggleButton, button.sense());
         let term_area = term.area();
-        Button::new(label, response)
-            .theme(theme)
-            .render(&mut Surface::new(term.grid_mut(), term_area, 0).scope(rect));
+        InteractiveWidget::render(
+            &button,
+            &mut Surface::new(term.grid_mut(), term_area, 0).scope(rect),
+            &mut (),
+            response,
+        );
         if response.clicked() {
             self.dark = !self.dark;
         }

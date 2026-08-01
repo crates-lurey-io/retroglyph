@@ -1,7 +1,9 @@
 //! [`Tabs`]: a horizontal strip of tab labels with a highlighted selected index.
 use retroglyph_core::{Color, Rect, Style};
 
-use super::Widget;
+use super::{InteractiveWidget, Widget};
+use crate::Response;
+use crate::Sense;
 use crate::Surface;
 use crate::Theme;
 use crate::draw::fill_rect;
@@ -26,6 +28,12 @@ use crate::text::truncate as truncate_to_cols;
 /// `style` and `selected_style` each default to the same fixed palette as
 /// [`Table`](super::Table)'s `row_style`/`selected_style`; set them with [`Tabs::style`]/
 /// [`Tabs::selected_style`].
+///
+/// As an [`InteractiveWidget`], `type State = usize` (the same index a caller already threads
+/// into [`Tabs::select`] for the plain [`Widget`] path): a single id covers the whole strip, and
+/// a click selects the tab whose column range contains [`Response::pointer_pos`], resolved
+/// against the very same per-tab column layout the drawing routine uses, so the two can't
+/// diverge.
 ///
 /// # Examples
 ///
@@ -138,30 +146,58 @@ impl<'a> Tabs<'a> {
     }
 }
 
-impl Widget for Tabs<'_> {
-    fn render(&self, surface: &mut Surface<'_>) {
-        let (width, height) = (surface.width(), surface.height());
-        if width == 0 || height == 0 {
+impl Tabs<'_> {
+    /// Each drawn tab's `(index, start_x, text_width)`, left to right, stopping once a title
+    /// would start past `area`'s right edge -- the same layout [`Tabs::draw`] paints and
+    /// [`Tabs::tab_at`] hit-tests against, computed once here so the two can't diverge. `x`
+    /// values are absolute grid coordinates (matching `area`'s own space), the same space
+    /// [`Response::pointer_pos`] reports in, since [`Tabs::tab_at`] compares them directly.
+    fn tab_columns(&self, area: Rect) -> Vec<(usize, u16, u16)> {
+        let mut columns = Vec::with_capacity(self.titles.len());
+        let mut x = area.left();
+        for (index, &title) in self.titles.iter().enumerate() {
+            if x >= area.right() {
+                break;
+            }
+            let avail = (area.right() - x) as usize;
+            let text = truncate_to_cols(title, avail);
+            // `text` is bounded to `avail` columns above, itself derived from the `u16`
+            // `area.right()`/`x`, so narrowing the char count back is always exact.
+            #[allow(clippy::cast_possible_truncation)]
+            let text_width = text.chars().count() as u16;
+            columns.push((index, x, text_width));
+            x = x.saturating_add(text_width);
+
+            if index + 1 < self.titles.len() {
+                x = x.saturating_add(self.column_spacing);
+            }
+        }
+        columns
+    }
+
+    /// The shared drawing routine both [`Widget::render`] and [`InteractiveWidget::render`] use,
+    /// parameterized on which tab (if any) is highlighted as selected.
+    fn draw(&self, surface: &mut Surface<'_>, selected: Option<usize>) {
+        let area = surface.area();
+        if area.width() == 0 || area.height() == 0 {
             return;
         }
 
-        let mut x = 0u16;
-        for (index, &title) in self.titles.iter().enumerate() {
-            if x >= width {
-                break;
-            }
-            let avail = (width - x) as usize;
-            let text = truncate_to_cols(title, avail);
-            let style = if Some(index) == self.selected {
+        // `tab_columns` reports absolute `x`, matching `area`'s own space (needed so
+        // `Tabs::tab_at` can compare it directly against an absolute pointer position); `put`/
+        // `print`/`fill_rect` below address this surface's own local coordinates instead, so
+        // `area.left()` is subtracted back out at the point of drawing.
+        let columns = self.tab_columns(area);
+        for &(index, abs_x, text_width) in &columns {
+            let x = abs_x - area.left();
+            let title = self.titles[index];
+            let text = truncate_to_cols(title, usize::from(text_width));
+            let style = if Some(index) == selected {
                 self.selected_style
             } else {
                 self.style
             };
-            // `text` is bounded to `avail` columns above, itself derived from this surface's own
-            // `u16` width/`x`, so narrowing the char count back is always exact.
-            #[allow(clippy::cast_possible_truncation)]
-            let text_width = text.chars().count() as u16;
-            if Some(index) == self.selected && text_width > 0 {
+            if Some(index) == selected && text_width > 0 {
                 fill_rect(
                     surface,
                     Rect::new(x, 0, text_width, 1),
@@ -170,18 +206,59 @@ impl Widget for Tabs<'_> {
                 );
             }
             surface.print((x, 0), text, style);
-            x = x.saturating_add(text_width);
 
-            if index + 1 < self.titles.len() {
-                if let Some(divider) = self.divider {
-                    let mid = x + self.column_spacing / 2;
-                    if mid < width {
-                        surface.put((mid, 0), divider, Style::new());
-                    }
+            if let Some(divider) = self.divider
+                && index + 1 < self.titles.len()
+            {
+                let mid = x + text_width + self.column_spacing / 2;
+                if mid < area.width() {
+                    surface.put((mid, 0), divider, Style::new());
                 }
-                x = x.saturating_add(self.column_spacing);
             }
         }
+    }
+
+    /// The index of the tab whose column range contains `pos`, or `None` if `pos` falls in the
+    /// spacing between tabs, past the last drawn tab, or outside `area` entirely: a click there
+    /// selects nothing rather than clamping to the nearest tab.
+    fn tab_at(&self, area: Rect, pos: retroglyph_core::Pos) -> Option<usize> {
+        if !area.contains_pos(pos) {
+            return None;
+        }
+        self.tab_columns(area)
+            .into_iter()
+            .find(|&(_, x, width)| pos.x >= x && pos.x < x + width)
+            .map(|(index, _, _)| index)
+    }
+}
+
+impl Widget for Tabs<'_> {
+    fn render(&self, surface: &mut Surface<'_>) {
+        self.draw(surface, self.selected);
+    }
+}
+
+impl InteractiveWidget for Tabs<'_> {
+    type State = usize;
+
+    /// A single id covers the whole strip: clicking resolves which tab via
+    /// [`Response::pointer_pos`] and this strip's own column layout, rather than each tab
+    /// registering its own id.
+    fn sense(&self) -> Sense {
+        Sense::click() | Sense::HOVER
+    }
+
+    fn render(&self, surface: &mut Surface<'_>, state: &mut Self::State, response: Response) {
+        let area = surface.area();
+
+        if response.clicked()
+            && let Some(pos) = response.pointer_pos()
+            && let Some(index) = self.tab_at(area, pos)
+        {
+            *state = index;
+        }
+
+        self.draw(surface, Some(*state));
     }
 }
 
@@ -196,7 +273,8 @@ mod tests {
         let area = Rect::new(0, 0, 20, 1);
         let titles = ["One", "Two"];
         let mut grid = Grid::new(20, 1);
-        Tabs::new(&titles).render(&mut Surface::new(&mut grid, area, 0));
+        let tabs = Tabs::new(&titles);
+        Widget::render(&tabs, &mut Surface::new(&mut grid, area, 0));
 
         assert_eq!(grid[Pos::new(0, 0)].glyph(), 'O');
         // "One" (3) + column_spacing (1) = tab 2 starts at column 4.
@@ -208,9 +286,8 @@ mod tests {
         let area = Rect::new(0, 0, 20, 1);
         let titles = ["One", "Two"];
         let mut grid = Grid::new(20, 1);
-        Tabs::new(&titles)
-            .select(Some(1))
-            .render(&mut Surface::new(&mut grid, area, 0));
+        let tabs = Tabs::new(&titles).select(Some(1));
+        Widget::render(&tabs, &mut Surface::new(&mut grid, area, 0));
 
         let selected_bg = grid[Pos::new(4, 0)].style().background();
         let plain_bg = grid[Pos::new(0, 0)].style().background();
@@ -222,7 +299,8 @@ mod tests {
         let area = Rect::new(0, 0, 20, 1);
         let titles = ["One", "Two"];
         let mut grid = Grid::new(20, 1);
-        Tabs::new(&titles).render(&mut Surface::new(&mut grid, area, 0));
+        let tabs = Tabs::new(&titles);
+        Widget::render(&tabs, &mut Surface::new(&mut grid, area, 0));
 
         let bg0 = grid[Pos::new(0, 0)].style().background();
         let bg1 = grid[Pos::new(4, 0)].style().background();
@@ -234,9 +312,8 @@ mod tests {
         let area = Rect::new(0, 0, 20, 1);
         let titles = ["A", "B"];
         let mut grid = Grid::new(20, 1);
-        Tabs::new(&titles)
-            .column_spacing(3)
-            .render(&mut Surface::new(&mut grid, area, 0));
+        let tabs = Tabs::new(&titles).column_spacing(3);
+        Widget::render(&tabs, &mut Surface::new(&mut grid, area, 0));
 
         // Default spacing (1) would put "B" at column 2; spacing 3 pushes it to column 4.
         assert_eq!(grid[Pos::new(0, 0)].glyph(), 'A');
@@ -248,10 +325,8 @@ mod tests {
         let area = Rect::new(0, 0, 20, 1);
         let titles = ["A", "B"];
         let mut grid = Grid::new(20, 1);
-        Tabs::new(&titles)
-            .column_spacing(3)
-            .divider(Some('|'))
-            .render(&mut Surface::new(&mut grid, area, 0));
+        let tabs = Tabs::new(&titles).column_spacing(3).divider(Some('|'));
+        Widget::render(&tabs, &mut Surface::new(&mut grid, area, 0));
 
         // "A" at 0, spacing [1,3), midpoint at 1 + 3/2 = 2.
         assert_eq!(grid[Pos::new(2, 0)].glyph(), '|');
@@ -262,7 +337,8 @@ mod tests {
         let area = Rect::new(0, 0, 20, 1);
         let titles = ["A", "B"];
         let mut grid = Grid::new(20, 1);
-        Tabs::new(&titles).render(&mut Surface::new(&mut grid, area, 0));
+        let tabs = Tabs::new(&titles);
+        Widget::render(&tabs, &mut Surface::new(&mut grid, area, 0));
 
         assert_eq!(grid[Pos::new(1, 0)].glyph(), ' ');
     }
@@ -272,7 +348,8 @@ mod tests {
         let area = Rect::new(0, 0, 4, 1);
         let titles = ["Alpha", "Bravo", "Charlie"];
         let mut grid = Grid::new(4, 1);
-        Tabs::new(&titles).render(&mut Surface::new(&mut grid, area, 0)); // must not panic
+        let tabs = Tabs::new(&titles);
+        Widget::render(&tabs, &mut Surface::new(&mut grid, area, 0)); // must not panic
 
         assert_eq!(grid[Pos::new(0, 0)].glyph(), 'A');
     }
@@ -285,9 +362,8 @@ mod tests {
         let titles = ["One"];
         let custom = Style::new().fg(Color::RED);
         let mut grid = Grid::new(20, 1);
-        Tabs::new(&titles)
-            .style(custom)
-            .render(&mut Surface::new(&mut grid, area, 0));
+        let tabs = Tabs::new(&titles).style(custom);
+        Widget::render(&tabs, &mut Surface::new(&mut grid, area, 0));
 
         assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Color::RED);
     }
@@ -300,10 +376,8 @@ mod tests {
         let titles = ["One"];
         let custom = Style::new().fg(Color::GREEN).bg(Color::BLUE);
         let mut grid = Grid::new(20, 1);
-        Tabs::new(&titles)
-            .selected_style(custom)
-            .select(Some(0))
-            .render(&mut Surface::new(&mut grid, area, 0));
+        let tabs = Tabs::new(&titles).selected_style(custom).select(Some(0));
+        Widget::render(&tabs, &mut Surface::new(&mut grid, area, 0));
 
         assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Color::GREEN);
         assert_eq!(grid[Pos::new(0, 0)].style().background(), Color::BLUE);
@@ -314,7 +388,8 @@ mod tests {
         let area = Rect::new(0, 0, 0, 1);
         let titles = ["One"];
         let mut grid = Grid::new(1, 1);
-        Tabs::new(&titles).render(&mut Surface::new(&mut grid, area, 0));
+        let tabs = Tabs::new(&titles);
+        Widget::render(&tabs, &mut Surface::new(&mut grid, area, 0));
         assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
     }
 
@@ -323,10 +398,8 @@ mod tests {
         let area = Rect::new(0, 0, 20, 1);
         let titles = ["One", "Two"];
         let mut grid = Grid::new(20, 1);
-        Tabs::new(&titles)
-            .theme(Theme::DARK)
-            .select(Some(1))
-            .render(&mut Surface::new(&mut grid, area, 0));
+        let tabs = Tabs::new(&titles).theme(Theme::DARK).select(Some(1));
+        Widget::render(&tabs, &mut Surface::new(&mut grid, area, 0));
 
         assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Theme::DARK.dim);
         assert_eq!(
@@ -350,15 +423,61 @@ mod tests {
         let area = Rect::new(0, 0, 20, 1);
         let titles = ["One"];
         let mut grid = Grid::new(20, 1);
-        Tabs::new(&titles)
+        let tabs = Tabs::new(&titles)
             .theme_on(Theme::DARK, Color::Default)
-            .select(Some(0))
-            .render(&mut Surface::new(&mut grid, area, 0));
+            .select(Some(0));
+        Widget::render(&tabs, &mut Surface::new(&mut grid, area, 0));
 
         assert_eq!(
             grid[Pos::new(0, 0)].style().foreground(),
             Theme::DARK.accent
         );
         assert_eq!(grid[Pos::new(0, 0)].style().background(), Color::Default);
+    }
+
+    #[test]
+    fn click_selects_the_tab_under_the_pointer() {
+        let area = Rect::new(0, 0, 20, 1);
+        let titles = ["One", "Two"];
+        let tabs = Tabs::new(&titles);
+        let mut state = 0usize;
+
+        let response = Response {
+            hovered: true,
+            clicked: true,
+            pointer_pos: Some(Pos::new(4, 0)), // over "Two"
+            ..Response::default()
+        };
+        let mut grid = Grid::new(20, 1);
+        InteractiveWidget::render(
+            &tabs,
+            &mut Surface::new(&mut grid, area, 0),
+            &mut state,
+            response,
+        );
+        assert_eq!(state, 1);
+    }
+
+    #[test]
+    fn click_past_the_last_tab_selects_nothing() {
+        let area = Rect::new(0, 0, 20, 1);
+        let titles = ["One", "Two"];
+        let tabs = Tabs::new(&titles);
+        let mut state = 0usize;
+
+        let response = Response {
+            hovered: true,
+            clicked: true,
+            pointer_pos: Some(Pos::new(10, 0)), // past "Two", still inside the wide area
+            ..Response::default()
+        };
+        let mut grid = Grid::new(20, 1);
+        InteractiveWidget::render(
+            &tabs,
+            &mut Surface::new(&mut grid, area, 0),
+            &mut state,
+            response,
+        );
+        assert_eq!(state, 0); // unchanged: not clamped to the last tab
     }
 }
