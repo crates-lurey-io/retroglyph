@@ -30,6 +30,7 @@
 //! ```
 
 use crate::grid::{Pos, Rect, Size};
+use crate::surface::Surface;
 
 /// A rectangular viewport onto a larger world, with world/screen conversions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -154,6 +155,83 @@ impl Camera {
         ))
     }
 
+    /// Map a world position to its screen position, without culling: the result may fall
+    /// outside the viewport (negative, or past its far edge) instead of coming back `None`.
+    ///
+    /// [`world_to_screen`](Self::world_to_screen) is the right call when the only question is
+    /// "is this single cell visible" (a minimap dot, a cursor). It falls short for anything
+    /// wider than one cell -- a hex, an iso diamond, a multi-cell sprite -- where the *anchor*
+    /// can be off-viewport while part of the content is still visible. This is the signed
+    /// sibling for that case: it hands back the same math `world_to_screen` computes, minus the
+    /// culling, ready for [`Surface::put_signed`] to clip.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_core::{Camera, Pos, Rect, Size};
+    ///
+    /// let mut cam = Camera::new(Rect::new(0, 0, 10, 10), Size::new(100, 100));
+    /// cam.center_on(Pos::new(50, 50));
+    ///
+    /// // Inside the viewport: matches `world_to_screen`.
+    /// assert_eq!(cam.world_to_offset(Pos::new(50, 50)), (5, 5));
+    ///
+    /// // A multi-cell sprite's top-left anchor two cells left of the viewport: negative, not
+    /// // `None`, so a caller can still hand this to `Surface::put_signed` and let the visible
+    /// // half draw.
+    /// assert_eq!(cam.world_to_offset(Pos::new(43, 50)), (-2, 5));
+    /// ```
+    #[must_use]
+    pub const fn world_to_offset(&self, world: Pos) -> (i32, i32) {
+        let dx = world.x as i32 - self.origin.x as i32;
+        let dy = world.y as i32 - self.origin.y as i32;
+        (
+            self.viewport.left() as i32 + dx,
+            self.viewport.top() as i32 + dy,
+        )
+    }
+
+    /// A view of `surface` in this camera's world coordinate space, clipped to
+    /// [`viewport`](Self::viewport): [`Surface::clip_translate`] to the viewport, by
+    /// [`origin`](Self::origin).
+    ///
+    /// The returned surface's `put`, `put_signed`, `print`, and the rest of `Surface`'s
+    /// coordinate-taking methods all take world coordinates directly, and anything that lands
+    /// outside the current viewport -- including a multi-cell draw anchored off-screen -- is
+    /// dropped by the surface's own bounds check, the same way [`world_to_offset`] composes with
+    /// [`Surface::put_signed`] by hand. This is that composition done once instead of at every
+    /// call site.
+    ///
+    /// [`world_to_offset`]: Self::world_to_offset
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_core::{Camera, Grid, Pos, Rect, Size, Style, Surface};
+    ///
+    /// let mut grid = Grid::new(20, 20);
+    /// let mut root = Surface::new(&mut grid, Rect::new(0, 0, 20, 20), 0);
+    ///
+    /// let mut cam = Camera::new(Rect::new(5, 5, 10, 10), Size::new(100, 100));
+    /// cam.center_on(Pos::new(50, 50));
+    ///
+    /// let mut world = cam.surface(&mut root);
+    /// // Drawn in world coordinates: (50, 50) is the centered target, landing at the
+    /// // viewport's center cell (10, 10) in grid space.
+    /// world.put(Pos::new(50, 50), '@', Style::default());
+    /// // A world position outside the viewport is dropped, not a panic or a manual guard.
+    /// world.put(Pos::new(0, 0), 'X', Style::default());
+    ///
+    /// assert_eq!(grid[Pos::new(10, 10)].glyph(), '@');
+    /// ```
+    #[must_use]
+    pub fn surface<'a>(&self, surface: &'a mut Surface<'_>) -> Surface<'a> {
+        surface.clip_translate(
+            self.viewport,
+            (i32::from(self.origin.x), i32::from(self.origin.y)),
+        )
+    }
+
     /// Map a screen position back to a world position, or `None` if it is
     /// outside the viewport or beyond the world (useful for mouse picking).
     ///
@@ -273,5 +351,62 @@ mod tests {
         assert_eq!(pairs.len(), 100); // 10x10 viewport, world larger
         assert_eq!(pairs[0], (Pos::new(45, 45), Pos::new(0, 0)));
         assert_eq!(pairs[99], (Pos::new(54, 54), Pos::new(9, 9)));
+    }
+
+    #[test]
+    fn world_to_offset_matches_world_to_screen_when_visible() {
+        let mut c = cam();
+        c.center_on(Pos::new(50, 50));
+        assert_eq!(c.world_to_offset(Pos::new(50, 50)), (5, 5));
+        assert_eq!(c.world_to_screen(Pos::new(50, 50)), Some(Pos::new(5, 5)));
+    }
+
+    #[test]
+    fn world_to_offset_goes_negative_past_the_low_edge_instead_of_culling() {
+        let mut c = cam();
+        c.center_on(Pos::new(50, 50)); // shows world [45, 55).
+        assert_eq!(c.world_to_offset(Pos::new(44, 50)), (-1, 5));
+        // The same position through `world_to_screen`: culled, not negative.
+        assert_eq!(c.world_to_screen(Pos::new(44, 50)), None);
+    }
+
+    #[test]
+    fn world_to_offset_goes_past_the_far_edge_instead_of_culling() {
+        let mut c = cam();
+        c.center_on(Pos::new(50, 50)); // shows world [45, 55).
+        assert_eq!(c.world_to_offset(Pos::new(55, 50)), (10, 5));
+        assert_eq!(c.world_to_screen(Pos::new(55, 50)), None);
+    }
+
+    #[test]
+    fn world_to_offset_includes_a_non_zero_viewport_origin() {
+        let mut c = Camera::new(Rect::new(5, 5, 10, 10), Size::new(100, 100));
+        c.center_on(Pos::new(50, 50));
+        assert_eq!(c.world_to_offset(Pos::new(50, 50)), (10, 10));
+    }
+
+    #[test]
+    fn surface_draws_a_multi_cell_anchor_that_is_off_viewport() {
+        use crate::grid::Grid;
+        use crate::style::Style;
+
+        // The scenario retroglyph#614 could not express: a two-cell-wide sprite whose anchor
+        // sits one world column left of the visible range, so only its right half is on screen.
+        let mut grid = Grid::new(20, 20);
+        let mut root = Surface::new(&mut grid, Rect::new(0, 0, 20, 20), 0);
+
+        let mut c = cam(); // viewport (0, 0, 10, 10), world 100x100.
+        c.center_on(Pos::new(50, 50)); // shows world [45, 55).
+
+        let mut view = c.surface(&mut root);
+        // The anchor: one column left of the visible world range. `world_to_screen` would cull
+        // this entirely, so a caller stuck with it could not draw the sprite's visible half
+        // either. Drawn in world coordinates through `Camera::surface`, it is just off-grid and
+        // silently dropped, like any other out-of-bounds `put`.
+        view.put(Pos::new(44, 50), '[', Style::default());
+        // The sprite's other half: the viewport's own leftmost visible column.
+        view.put(Pos::new(45, 50), ']', Style::default());
+
+        assert_eq!(grid[Pos::new(0, 5)].glyph(), ']');
     }
 }

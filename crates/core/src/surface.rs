@@ -333,6 +333,44 @@ impl<'a> Surface<'a> {
         }
     }
 
+    /// [`clip`](Self::clip) to `area`, then [`translate`](Self::translate) by `origin`, in one
+    /// call.
+    ///
+    /// Chaining `clip(...).translate(...)` directly works when the result is used right where
+    /// it's produced (both `clip` and `translate` return a `Surface<'_>` borrowing the previous
+    /// step for exactly that call), but a helper that hands the composed view back to its own
+    /// caller -- for example [`Camera::surface`](crate::Camera::surface) -- needs the two
+    /// narrowings applied against a single `&mut self` borrow instead, so the returned surface
+    /// can outlive the call. This does that.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_core::{Grid, Pos, Rect, Style, Surface};
+    ///
+    /// let mut grid = Grid::new(10, 10);
+    /// let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 10, 10), 0);
+    ///
+    /// let mut view = surface.clip_translate(Rect::new(5, 5, 4, 4), (-5, -5));
+    /// assert_eq!(view.area(), Rect::new(5, 5, 4, 4));
+    ///
+    /// view.put_signed((-5, -5), 'X', Style::default());
+    /// assert_eq!(grid[Pos::new(5, 5)].glyph(), 'X');
+    /// ```
+    #[must_use]
+    pub fn clip_translate(&mut self, area: Rect, origin: (i32, i32)) -> Surface<'_> {
+        Surface {
+            area: self.area.intersect(area),
+            grid: self.grid,
+            layer: self.layer,
+            tint: self.tint,
+            origin_offset: (
+                self.origin_offset.0.saturating_add(origin.0),
+                self.origin_offset.1.saturating_add(origin.1),
+            ),
+        }
+    }
+
     /// A styled view over this surface: same area and layer, but every draw call uses `style`
     /// without needing to pass it each time. Handy for a run of same-styled writes (e.g. filling
     /// in a wall glyph over many cells) without repeating the [`Style`] at every call site.
@@ -409,12 +447,25 @@ impl<'a> Surface<'a> {
     /// Shifts `(x, y)` by this surface's translate offset (see [`translate`](Self::translate)),
     /// returning the coordinate to actually write at if the shift still lands inside this
     /// surface's own area, or `None` otherwise.
+    ///
+    /// The subtracted result is a coordinate local to this surface's area (`(0, 0)` is the
+    /// area's own top-left, matching [`put_signed`](Self::put_signed)'s convention), not an
+    /// absolute grid coordinate: a local check against `(0, 0)..(width, height)` here, followed
+    /// by re-adding [`area`](Self::area)'s own top-left, so a clipped area that does not itself
+    /// start at grid `(0, 0)` (e.g. [`Camera::surface`](crate::Camera::surface)'s
+    /// `clip(viewport)`) still resolves to the right absolute cell.
     fn shift(&self, x: u16, y: u16) -> Option<(u16, u16)> {
         let sx = i32::from(x).checked_sub(self.origin_offset.0)?;
         let sy = i32::from(y).checked_sub(self.origin_offset.1)?;
+        if sx < 0 || sy < 0 {
+            return None;
+        }
         let sx = u16::try_from(sx).ok()?;
         let sy = u16::try_from(sy).ok()?;
-        self.area.contains(sx, sy).then_some((sx, sy))
+        if sx >= self.width() || sy >= self.height() {
+            return None;
+        }
+        Some((self.area.left() + sx, self.area.top() + sy))
     }
 
     /// Applies this surface's tint to the cell just written at `(x, y)`.
@@ -1482,6 +1533,29 @@ mod tests {
 
         assert_eq!(grid[Pos::new(5, 5)].glyph(), 'X');
         assert_eq!(grid[Pos::new(4, 4)].glyph(), ' ');
+    }
+
+    #[test]
+    fn translate_composes_with_clip_and_shifts_put_the_same_way_as_put_signed() {
+        // A regression test for a `shift` bug: `clip`'s area does not start at the grid's own
+        // `(0, 0)` (unlike every other `clip` + `translate` test above), and the translate origin
+        // is not simply `-area.left()`, so `put` must re-derive the same absolute cell
+        // `put_signed` already did rather than landing on the clipped area's raw absolute
+        // coordinates.
+        let mut grid = Grid::new(20, 20);
+        {
+            let mut surface = screen(&mut grid);
+            let mut view = surface.clip_translate(Rect::new(5, 5, 10, 10), (45, 45));
+
+            // (50, 50) minus the origin (45, 45) is (5, 5): the clipped area's local (5, 5),
+            // landing at absolute grid (10, 10) -- not at (5, 5), which is what the pre-fix
+            // `shift` incorrectly produced by using the clip's raw absolute bounds instead of
+            // re-adding the area's own top-left.
+            view.put((50, 50), '@', Style::default());
+        }
+
+        assert_eq!(grid[Pos::new(10, 10)].glyph(), '@');
+        assert_eq!(grid[Pos::new(5, 5)].glyph(), ' ');
     }
 
     #[test]
