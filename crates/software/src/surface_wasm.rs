@@ -55,7 +55,7 @@ impl core::fmt::Display for SurfaceError {
 
 // Inherits the default `is_recoverable() -> true`: this crate's `SurfaceError` has no
 // recoverable/fatal distinction of its own, so every present failure is treated as potentially
-// transient, matching this crate's existing (pre-trait) behavior.
+// transient.
 impl retroglyph_window::RecoverableError for SurfaceError {}
 
 impl std::error::Error for SurfaceError {}

@@ -43,9 +43,8 @@ use winit::window::{Window, WindowId};
 /// [`EventLoopProxy`](winit::event_loop::EventLoopProxy), which is `Send + Sync` for any
 /// `T: Send + 'static` payload.
 ///
-/// `T` defaults to `u64` (the payload [`Event::Custom`] itself carries), so existing code
-/// naming the bare `EventProxy` type (from before this type became generic) keeps compiling
-/// unchanged.
+/// `T` defaults to `u64` (the payload [`Event::Custom`] itself carries), so `EventProxy` names
+/// the common case without a type argument.
 pub struct EventProxy<T: Send + 'static = u64>(winit::event_loop::EventLoopProxy<T>);
 
 // Hand-written rather than `#[derive(Clone, Debug)]`: a derive would add `T: Clone`/`T: Debug`

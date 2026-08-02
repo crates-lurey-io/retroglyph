@@ -41,11 +41,6 @@
 //! backgrounded Wayland surface) should track [`Event::FocusLost`]/[`Event::FocusGained`] itself
 //! and skip its own draw calls in between.
 //!
-//! If `retroglyph-core` later adds a dedicated `Event::Suspended` (or similar) distinct from
-//! plain focus loss, this crate would need coordinated changes with `retroglyph-window` (which
-//! shares the `Event` enum) before mapping anything to it; no such variant exists today, so there
-//! is nothing for this backend to emit.
-//!
 //! # Tracing
 //!
 //! With the optional `tracing` feature enabled, [`Output::draw`], [`Output::flush`], and
@@ -491,16 +486,14 @@ impl CrosstermOptions {
     ) -> Result<Crossterm<W>, std::io::Error> {
         // Unlike `build`, `writer` here is an arbitrary caller-supplied sink with no `IsTerminal`
         // bound (a `Vec<u8>` in tests, for instance, doesn't implement it), so there's no way to
-        // auto-detect plain mode; default to `false` (ANSI/SGR escapes on), matching this
-        // method's historical behavior.
+        // auto-detect plain mode; defaults to `false` (ANSI/SGR escapes on).
         Crossterm::build_from_options(self, writer, false)
     }
 }
 
 impl Default for CrosstermOptions {
-    /// Every feature enabled; matches [`Crossterm::new`]'s historical behavior. `color_support`
-    /// defaults to `None` (auto-detect from the environment at build time; see
-    /// [`CrosstermOptions::color_support`]).
+    /// Every feature enabled. `color_support` defaults to `None` (auto-detect from the
+    /// environment at build time; see [`CrosstermOptions::color_support`]).
     fn default() -> Self {
         Self {
             mouse_capture: true,
@@ -518,7 +511,7 @@ impl Default for CrosstermOptions {
 ///
 /// Generic over the content writer `W`: the sink that receives rendered cell output
 /// ([`Output::draw`]/[`Output::flush`], plus the runtime cursor/clear escapes). Defaults to
-/// `BufWriter<Stdout>`, matching this type's historical behavior; use
+/// `BufWriter<Stdout>`; use
 /// [`Crossterm::with_writer`]/[`CrosstermOptions::build_with_writer`] to render to a file, a
 /// pipe, or an in-memory buffer instead (e.g. for tests that want to inspect the emitted ANSI
 /// bytes without a real TTY). See [`CrosstermOptions::build_with_writer`] for exactly which

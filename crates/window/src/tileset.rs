@@ -172,9 +172,6 @@ impl fmt::Display for TilesetError {
 impl std::error::Error for TilesetError {}
 
 /// Maps row-major tile indices in a sprite sheet to Unicode codepoints.
-///
-/// `#[non_exhaustive]` allows adding new variants (e.g. `Cp1252`) without a
-/// semver break.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Codepage {

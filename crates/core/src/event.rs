@@ -337,9 +337,7 @@ pub struct MouseEvent {
 /// (winit's `Theme`, the browser's `prefers-color-scheme` media query) only
 /// ever resolves to one of exactly these two, and a backend that can't
 /// determine a preference simply never emits [`Event::ThemeChanged`] rather
-/// than emitting a third "unknown" case for callers to handle. Marked
-/// `#[non_exhaustive]` for consistency with sibling public enums, in case a
-/// future source (e.g. a `HighContrast` case) needs to be added.
+/// than emitting a third "unknown" case for callers to handle.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum SystemTheme {

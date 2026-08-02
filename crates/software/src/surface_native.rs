@@ -51,8 +51,7 @@ impl core::fmt::Display for SurfaceError {
 
 // Inherits the default `is_recoverable() -> true`: softbuffer's error enum has no
 // `Lost`/`Outdated`/`Timeout` discrimination the way `wgpu::SurfaceError` does, so every present
-// failure here is treated as potentially transient, matching this crate's existing (pre-trait)
-// behavior.
+// failure here is treated as potentially transient.
 impl retroglyph_window::RecoverableError for SurfaceError {}
 
 impl std::error::Error for SurfaceError {

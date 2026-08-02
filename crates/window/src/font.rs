@@ -13,17 +13,10 @@
 //! the embedded Unscii 16 font ([`unscii16::FONT`]); leave it off to supply your own via
 //! [`BitmapFont::new`].
 //!
-//! # Future work
+//! # Limitations
 //!
-//! - **Expanded glyph cache:** For wider fonts (>8px), consider pre-computing expanded scanlines
-//!   to avoid per-frame bit extraction. Currently the bit extraction loop is not a bottleneck
-//!   for 8px-wide fonts at typical grid sizes, but wider fonts (10px, 16px) would benefit from
-//!   caching.
-//!
-//! - **Wider glyphs:** To support glyphs wider than 8px, change [`BitmapFont::rows`] to return
-//!   `ceil(glyph_width / 8)` bytes per row and update the consumers' bit extraction to index
-//!   across bytes. Tracked in retroglyph issue #164; deferred until a second, non-8px-wide font
-//!   is actually needed.
+//! Glyphs wider than 8px are not supported: [`BitmapFont::rows`] returns one byte per row,
+//! covering exactly 8 pixels. Tracked in retroglyph issue #164.
 
 // ── BitmapFont ─────────────────────────────────────────────────────────────
 

@@ -122,7 +122,7 @@ use std::io::{self, Write};
 #[non_exhaustive]
 pub enum ColorSupport {
     /// No quantization: [`Color::Rgb`] tiles are written out verbatim as a 24-bit truecolor SGR
-    /// sequence. The default, matching this renderer's historical behavior.
+    /// sequence. The default.
     #[default]
     Truecolor,
     /// [`Color::Rgb`] tiles are quantized to the nearest of the 256 indexed-color palette entries

@@ -88,8 +88,7 @@ impl<B: Backend> Terminal<B> {
     /// whether anything changed calls this once per frame. A caller that only wants to redraw
     /// when its own state changed should gate the call to `draw` itself (e.g. `if
     /// state.changed() { term.draw(|s| render(s, &state))?; }`) rather than rely on `draw`/
-    /// [`present`](Self::present) to no-op. Unlike some earlier revisions of this API, presenting
-    /// is unconditional here.
+    /// [`present`](Self::present) to no-op. Presenting is unconditional here.
     ///
     /// # Errors
     ///

@@ -197,8 +197,7 @@ pub trait Output {
     /// `false` from [`composites_layers`](Self::composites_layers) (the default) receives a
     /// stream `present` has already pre-flattened onto layer 0 (all allocated layers
     /// composited into one frame first, so layers 1+ still appear on every backend, not only
-    /// pixel ones); implementing this is no different from what implementing single-layer
-    /// `draw` used to mean. A pixel/GPU backend that returns `true` from `composites_layers`
+    /// pixel ones). A pixel/GPU backend that returns `true` from `composites_layers`
     /// receives the real, multi-layer stream here and does its own compositing (per-pixel or
     /// per-quad, plus sub-cell offsets and transparency as needed).
     ///
@@ -380,8 +379,7 @@ pub trait Cursor {
 /// The text cursor's visual shape and blink behavior.
 ///
 /// Mirrors the six shapes a DEC-compatible terminal's `DECSCUSR` escape (`CSI Ps SP q`)
-/// supports: block, underline, and bar, each either blinking or steady. `#[non_exhaustive]`
-/// leaves room for a future shape (e.g. a hollow/outline block) without a breaking change.
+/// supports: block, underline, and bar, each either blinking or steady.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 #[non_exhaustive]
 pub enum CursorStyle {
