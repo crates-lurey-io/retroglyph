@@ -117,6 +117,11 @@
 //!   renderer's tracked cursor/color state, so the *next* `draw` call re-emits a full CUP and
 //!   color codes for every cell instead of (incorrectly) assuming the emulator remembers the old
 //!   state through the erase.
+//! - **`clear` resets SGR attributes before erasing.** [`clear`](Output::clear) emits `CSI 0 m`
+//!   ahead of `CSI 2J`, because most terminals implement erase-display via background color erase
+//!   (BCE) and paint the erased cells with whatever background is currently active in the pen, not
+//!   the emulator's true default. Without the reset, a cell colored by the last frame leaves its
+//!   tint across the whole screen after `clear`.
 //! - **Every `draw` is wrapped in its own synchronized-update pair.** [`draw`](Output::draw)
 //!   itself emits `CSI ?2026 h` before drawing, and the paired [`flush`](Output::flush) call
 //!   emits `CSI ?2026 l` after. An emulator that doesn't recognize DEC private mode 2026 ignores
@@ -420,11 +425,15 @@ impl Output for TerminalWasm {
     }
 
     fn clear(&mut self) -> Result<(), Self::Error> {
-        // Standard "clear screen, cursor home" CSI sequence: this backend has
-        // no direct handle to the emulator, so clearing is just more ANSI
-        // bytes for JS to forward, same as every other draw call.
+        // Reset SGR attributes *before* erasing: most terminals implement "erase display" via
+        // background color erase (BCE), painting the erased cells with whatever background is
+        // currently active in the pen, not the terminal's true default. Left un-reset, a cell
+        // colored by the last frame (a themed panel, a highlighted tile) becomes the color the
+        // erase paints the whole screen with. This backend has no direct handle to the emulator,
+        // so both the reset and the "clear screen, cursor home" CSI sequence that follows it are
+        // just more ANSI bytes for JS to forward, same as every other draw call.
         use std::io::Write as _;
-        write!(self.renderer.writer_mut(), "\x1b[2J\x1b[H")?;
+        write!(self.renderer.writer_mut(), "\x1b[0m\x1b[2J\x1b[H")?;
         self.renderer.reset_state();
         Ok(())
     }
@@ -993,6 +1002,38 @@ mod tests {
         // Draining again with nothing new pending clears the caller's buffer to empty.
         term.backend_mut().take_output_into(&mut buf);
         assert_eq!(buf, "");
+    }
+
+    #[test]
+    fn clear_resets_sgr_attributes_before_erasing() {
+        // Regression test: `Output::clear` used to issue `CSI 2J` without resetting the SGR pen
+        // first. Terminals that implement erase-display via background color erase (BCE) paint
+        // erased cells with whatever background is currently active, not the terminal's true
+        // default, so a colored cell drawn just before a `clear()` left a stale tint across the
+        // whole screen. `clear` must emit a full SGR reset ahead of the erase so BCE always
+        // paints with the terminal's real default background. See retroglyph#715.
+        use retroglyph_core::color::Color;
+
+        let backend = TerminalWasm::new(10, 3);
+        let mut term = Terminal::new(backend);
+        let style = Style::default().bg(Color::Rgb { r: 200, g: 0, b: 0 });
+        term.draw(|s| s.put((0, 0), 'X', style)).unwrap();
+        let _ = term.backend_mut().take_output();
+
+        Output::clear(term.backend_mut()).unwrap();
+
+        let out = term.backend_mut().take_output();
+        let clear_pos = out
+            .rfind("\x1b[2J")
+            .unwrap_or_else(|| panic!("clear() must emit CSI 2J, got: {out:?}"));
+        let reset_pos = out
+            .rfind("\x1b[0m")
+            .unwrap_or_else(|| panic!("clear() must emit a full SGR reset, got: {out:?}"));
+        assert!(
+            reset_pos < clear_pos,
+            "SGR reset must precede the erase so background color erase paints with the \
+             terminal's true default, not the last frame's color; output: {out:?}"
+        );
     }
 
     #[test]
