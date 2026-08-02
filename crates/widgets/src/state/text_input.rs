@@ -1,5 +1,5 @@
 use retroglyph_core::text::{char_width, width_usize};
-use retroglyph_core::{Event, KeyCode};
+use retroglyph_core::{Event, KeyCode, KeyModifiers};
 
 /// A `String` value, a byte cursor into it, and a horizontal scroll offset.
 ///
@@ -131,7 +131,11 @@ impl TextInputState {
     pub fn handle_event(&mut self, event: &Event) -> bool {
         match event {
             Event::Key(key) if key.is_down() => match key.code {
-                KeyCode::Char(c) => {
+                KeyCode::Char(c)
+                    if (key.modifiers
+                        & (KeyModifiers::CONTROL | KeyModifiers::ALT | KeyModifiers::SUPER))
+                        .is_empty() =>
+                {
                     self.insert(c);
                     true
                 }
@@ -243,7 +247,7 @@ impl TextInputState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use retroglyph_core::{KeyEvent, KeyEventKind, KeyModifiers};
+    use retroglyph_core::{KeyEvent, KeyEventKind};
 
     #[test]
     fn insert_and_backspace_move_the_byte_cursor() {
@@ -314,6 +318,26 @@ mod tests {
 
         // Not consumed: this widget has no opinion on Enter/Escape/Tab.
         assert!(!state.handle_event(&key(KeyCode::Enter)));
+    }
+
+    #[test]
+    fn text_input_handle_event_does_not_type_ctrl_shortcut_characters() {
+        let mut state = TextInputState::new();
+        let ctrl_s = Event::Key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL));
+        let consumed = state.handle_event(&ctrl_s);
+
+        assert_eq!(state.value(), "");
+        assert!(!consumed);
+    }
+
+    #[test]
+    fn handle_event_still_types_shifted_characters() {
+        let mut state = TextInputState::new();
+        let shift_s = Event::Key(KeyEvent::new(KeyCode::Char('S'), KeyModifiers::SHIFT));
+        let consumed = state.handle_event(&shift_s);
+
+        assert_eq!(state.value(), "S");
+        assert!(consumed);
     }
 
     #[test]
