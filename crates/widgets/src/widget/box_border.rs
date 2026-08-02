@@ -1,10 +1,9 @@
 //! [`BoxBorder`]: a single-line box border.
 use retroglyph_core::{Color, Style};
 
-use super::Widget;
+use super::{BorderType, Widget};
 use crate::Surface;
 use crate::Theme;
-use crate::draw::{BL, BR, H, TL, TR, V};
 
 /// A single-line box border drawn around a [`Rect`](retroglyph_core::Rect).
 ///
@@ -25,6 +24,7 @@ use crate::draw::{BL, BR, H, TL, TR, V};
 #[derive(Clone, Copy, Debug, Default)]
 pub struct BoxBorder {
     style: Style,
+    border_type: BorderType,
 }
 
 impl BoxBorder {
@@ -38,6 +38,14 @@ impl BoxBorder {
     #[must_use]
     pub const fn style(mut self, style: Style) -> Self {
         self.style = style;
+        self
+    }
+
+    /// Set which box-drawing glyphs the border is drawn with. Defaults to
+    /// [`BorderType::Plain`].
+    #[must_use]
+    pub const fn border_type(mut self, border_type: BorderType) -> Self {
+        self.border_type = border_type;
         self
     }
 
@@ -79,23 +87,24 @@ impl Widget for BoxBorder {
 
         let x1 = w - 1;
         let y1 = h - 1;
+        let (tl, tr, bl, br, h, v) = self.border_type.glyphs();
 
         // Corners
-        surface.put((0, 0), TL, self.style);
-        surface.put((x1, 0), TR, self.style);
-        surface.put((0, y1), BL, self.style);
-        surface.put((x1, y1), BR, self.style);
+        surface.put((0, 0), tl, self.style);
+        surface.put((x1, 0), tr, self.style);
+        surface.put((0, y1), bl, self.style);
+        surface.put((x1, y1), br, self.style);
 
         // Horizontal edges
         for x in 1..x1 {
-            surface.put((x, 0), H, self.style);
-            surface.put((x, y1), H, self.style);
+            surface.put((x, 0), h, self.style);
+            surface.put((x, y1), h, self.style);
         }
 
         // Vertical edges
         for y in 1..y1 {
-            surface.put((0, y), V, self.style);
-            surface.put((x1, y), V, self.style);
+            surface.put((0, y), v, self.style);
+            surface.put((x1, y), v, self.style);
         }
     }
 }
@@ -105,6 +114,7 @@ mod tests {
     use retroglyph_core::{Color, Grid, Pos, Rect};
 
     use super::*;
+    use crate::draw::{BL, BR, H, TL, TR, V};
 
     #[test]
     fn draws_corners_and_edges() {
@@ -122,6 +132,63 @@ mod tests {
         assert_eq!(grid[Pos::new(0, 1)].glyph(), V);
         // Interior untouched.
         assert_eq!(grid[Pos::new(2, 1)].glyph(), ' ');
+    }
+
+    #[test]
+    fn border_type_defaults_to_plain() {
+        let area = Rect::new(0, 0, 5, 3);
+        let mut grid = Grid::new(5, 3);
+        BoxBorder::new().render(&mut Surface::new(&mut grid, area, 0));
+
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), TL);
+    }
+
+    #[test]
+    fn border_type_selects_the_glyph_set() {
+        let area = Rect::new(0, 0, 5, 3);
+        let mut grid = Grid::new(5, 3);
+        BoxBorder::new()
+            .border_type(BorderType::Rounded)
+            .render(&mut Surface::new(&mut grid, area, 0));
+
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), '╭');
+        assert_eq!(grid[Pos::new(4, 0)].glyph(), '╮');
+        assert_eq!(grid[Pos::new(0, 2)].glyph(), '╰');
+        assert_eq!(grid[Pos::new(4, 2)].glyph(), '╯');
+        assert_eq!(grid[Pos::new(2, 0)].glyph(), '─');
+        assert_eq!(grid[Pos::new(0, 1)].glyph(), '│');
+    }
+
+    #[test]
+    fn border_type_double() {
+        let area = Rect::new(0, 0, 5, 3);
+        let mut grid = Grid::new(5, 3);
+        BoxBorder::new()
+            .border_type(BorderType::Double)
+            .render(&mut Surface::new(&mut grid, area, 0));
+
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), '╔');
+        assert_eq!(grid[Pos::new(4, 0)].glyph(), '╗');
+        assert_eq!(grid[Pos::new(0, 2)].glyph(), '╚');
+        assert_eq!(grid[Pos::new(4, 2)].glyph(), '╝');
+        assert_eq!(grid[Pos::new(2, 0)].glyph(), '═');
+        assert_eq!(grid[Pos::new(0, 1)].glyph(), '║');
+    }
+
+    #[test]
+    fn border_type_thick() {
+        let area = Rect::new(0, 0, 5, 3);
+        let mut grid = Grid::new(5, 3);
+        BoxBorder::new()
+            .border_type(BorderType::Thick)
+            .render(&mut Surface::new(&mut grid, area, 0));
+
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), '┏');
+        assert_eq!(grid[Pos::new(4, 0)].glyph(), '┓');
+        assert_eq!(grid[Pos::new(0, 2)].glyph(), '┗');
+        assert_eq!(grid[Pos::new(4, 2)].glyph(), '┛');
+        assert_eq!(grid[Pos::new(2, 0)].glyph(), '━');
+        assert_eq!(grid[Pos::new(0, 1)].glyph(), '┃');
     }
 
     #[test]
