@@ -1,6 +1,18 @@
 use crate::Response;
 
 /// Configurable physics constants for [`ScrollState`].
+///
+/// Not `#[non_exhaustive]`: unlike this crate's enums, this type's whole point is direct struct-
+/// literal construction, which `#[non_exhaustive]` would forbid for external crates (including
+/// via functional update syntax). Construct a custom value off [`ScrollPhysics::DEFAULT`] with
+/// functional update syntax instead of naming every field, so a field added here later needs at
+/// most a call-site addition rather than a rewrite:
+///
+/// ```
+/// use retroglyph_widgets::ScrollPhysics;
+///
+/// let physics = ScrollPhysics { friction: 6.0, ..ScrollPhysics::DEFAULT };
+/// ```
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ScrollPhysics {
     /// Exponential friction decay constant. Higher means faster deceleration.

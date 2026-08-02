@@ -76,6 +76,12 @@ use crate::Ui;
 /// a click-in-progress.
 pub const DEFAULT_DRAG_THRESHOLD: u16 = 1;
 
+/// Default [`Interaction::with_double_click_window`].
+///
+/// A second [`Response::clicked`] within this many [`begin_frame`](Interaction::begin_frame)
+/// calls of the first counts as [`Response::double_clicked`].
+pub const DEFAULT_DOUBLE_CLICK_WINDOW: u16 = 30;
+
 /// Ties [`Pointer`], [`HitTester`], and [`FocusRing`] together into the one
 /// piece of state a draw pass needs to make its widgets interactive.
 ///
@@ -227,6 +233,22 @@ pub struct Interaction<Id> {
     drag_origin: Option<Pos>,
     drag_threshold: u16,
     activate_focused: bool,
+    // Counts `begin_frame` calls, used as a frame-count clock for double-click windowing: this
+    // module otherwise has no notion of wall-clock time (see the `no_std`-friendly habits
+    // documented on `Pointer`), so `double_click_window` is measured in frames rather than a
+    // `Duration`, matching how `drag_threshold` is measured in cells rather than pixels.
+    frame_count: u64,
+    // The id and `frame_count` of the most recent click not yet paired into a double-click. Only
+    // one slot is needed: like `active`/`secondary_active`, a click can only resolve on one
+    // widget per frame, and a second click within the window immediately consumes this (see
+    // `interact`), so there's never more than one pending single-click to remember.
+    last_click: Option<(Id, u64)>,
+    double_click_window: u16,
+    // `focus.focused()` as of the end of the *previous* frame, snapshotted in `begin_frame`
+    // before this frame's `handle_event` (Tab cycling) or `interact` (click-to-focus) calls can
+    // move it: `gained_focus`/`lost_focus` need last frame's answer to diff against, the same
+    // role `resolved_hover`'s pointer-snapshot fields play for hover/press/release.
+    prev_focused: Option<Id>,
 }
 
 impl<Id> Interaction<Id> {
@@ -250,6 +272,10 @@ impl<Id> Interaction<Id> {
             drag_origin: None,
             drag_threshold: DEFAULT_DRAG_THRESHOLD,
             activate_focused: false,
+            frame_count: 0,
+            last_click: None,
+            double_click_window: DEFAULT_DOUBLE_CLICK_WINDOW,
+            prev_focused: None,
         }
     }
 
@@ -260,6 +286,15 @@ impl<Id> Interaction<Id> {
     #[must_use]
     pub const fn with_drag_threshold(mut self, cells: u16) -> Self {
         self.drag_threshold = cells;
+        self
+    }
+
+    /// Override how many [`begin_frame`](Self::begin_frame) calls may separate two clicks on the
+    /// same widget for the second to report [`Response::double_clicked`]. Defaults to
+    /// [`DEFAULT_DOUBLE_CLICK_WINDOW`].
+    #[must_use]
+    pub const fn with_double_click_window(mut self, frames: u16) -> Self {
+        self.double_click_window = frames;
         self
     }
 
@@ -307,6 +342,10 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
     /// [`interact`](Self::interact) calls. Call once per frame, before
     /// processing input or drawing.
     pub fn begin_frame(&mut self) {
+        self.frame_count += 1;
+        // Taken before `focus.begin_frame` (a no-op on `current`) and before this frame's own
+        // `handle_event`/`interact` calls can move focus: see the field comment on `prev_focused`.
+        self.prev_focused = self.focus.focused();
         self.resolved_pos = self.pointer.pos();
         self.resolved_hover = self.resolved_pos.and_then(|pos| self.hits.topmost_at(pos));
         self.resolved_press = self.pointer.pressed(MouseButton::Left);
@@ -508,14 +547,55 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
             && self.resolved_secondary_release
             && hovered;
 
+        let clicked = (senses_click && released_here && hovered && !dragging) || key_activated;
+        // A click pairs with the *previous* click only if it landed on this same `id` within
+        // `double_click_window` frames: checked and consumed here, per `id`, rather than as a
+        // single crate-wide "last click" slot, so two widgets clicked in quick succession don't
+        // spuriously pair with each other. Consuming the pairing (resetting to `None` instead of
+        // leaving it set) means a third click starts counting fresh: each pair of qualifying
+        // clicks reports exactly one `double_clicked` frame, not one on every click after the
+        // second.
+        let double_clicked = clicked
+            && self.last_click.is_some_and(|(last_id, last_frame)| {
+                last_id == id
+                    && self.frame_count.saturating_sub(last_frame)
+                        <= u64::from(self.double_click_window)
+            });
+        if clicked {
+            self.last_click = if double_clicked {
+                None
+            } else {
+                Some((id, self.frame_count))
+            };
+        }
+
+        // `is_active.then_some(self.drag_origin).flatten()`, matching `press_origin` below: not
+        // gated on `resolved_pos`/`hovered`, deliberately live, matching `held`/`dragging` above,
+        // so a drag that has moved outside this widget's own rect still keeps reporting.
+        let press_origin = is_active.then_some(self.drag_origin).flatten();
+        let drag_delta = press_origin.zip(self.pointer.pos()).map(|(origin, pos)| {
+            (
+                i32::from(pos.x) - i32::from(origin.x),
+                i32::from(pos.y) - i32::from(origin.y),
+            )
+        });
+
+        // Diffed against `prev_focused`, snapshotted in `begin_frame` before this frame's own
+        // Tab-cycling/click-to-focus could move it: see that field's doc comment.
+        let gained_focus = is_focused && self.prev_focused != Some(id);
+        let lost_focus = !is_focused && self.prev_focused == Some(id);
+
         Response {
             hovered,
             pressed: (is_active && self.resolved_press && !disabled) || key_activated,
             released: released_here || key_activated,
-            clicked: (senses_click && released_here && hovered && !dragging) || key_activated,
+            clicked,
+            double_clicked,
             held,
             dragging,
             focused: is_focused,
+            gained_focus,
+            lost_focus,
             secondary_clicked,
             disabled,
             scroll_delta: if scrollable_here {
@@ -531,7 +611,9 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
             // cleared in `end_frame` on release: live state, not part of the per-`interact`
             // resolved-snapshot fields above, matching how `held` reads `active` directly rather
             // than a snapshot of it.
-            press_origin: is_active.then_some(self.drag_origin).flatten(),
+            press_origin,
+            drag_delta,
+            rect,
         }
     }
 
@@ -879,6 +961,39 @@ mod tests {
         interaction.end_frame();
         // Still the original press position, not the pointer's current one.
         assert_eq!(save.press_origin(), Some(Pos::new(2, 0)));
+    }
+
+    #[test]
+    fn drag_delta_keeps_reporting_once_the_pointer_leaves_the_rect() {
+        let mut interaction = Interaction::<Id>::new().with_drag_threshold(1);
+        let _ = frame(&mut interaction);
+
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            position: Pos::new(2, 0),
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        }));
+        interaction.begin_frame();
+        let save = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, Sense::drag());
+        let cancel = interaction.interact(Rect::new(6, 0, 5, 1), Id::Cancel, Sense::drag());
+        interaction.end_frame();
+        assert_eq!(save.drag_delta(), Some((0, 0))); // press just landed, hasn't moved yet
+        assert_eq!(cancel.drag_delta(), None); // press never landed on Cancel
+
+        // Move far past Save's own rect (5 cells wide): drag_delta must keep tracking the full
+        // displacement from the press origin, unlike `pointer_pos`, which would go `None` here.
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Moved,
+            position: Pos::new(20, 3),
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        }));
+        interaction.begin_frame();
+        let save = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, Sense::drag());
+        interaction.end_frame();
+        assert_eq!(save.pointer_pos(), None); // outside Save's rect now
+        assert_eq!(save.drag_delta(), Some((18, 3)));
     }
 
     #[test]
@@ -1288,5 +1403,94 @@ mod tests {
         let _ = frame(&mut interaction); // frame 1: registers Save/Cancel as focusable
         let _ = frame(&mut interaction); // frame 2: frame 1's registrations finalize the order
         assert_eq!(interaction.handle_event(&tab), Consumed::Yes);
+    }
+
+    #[test]
+    fn rect_echoes_back_this_frames_area() {
+        let mut interaction = Interaction::<Id>::new();
+        interaction.begin_frame();
+        let save = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, Sense::hover());
+        interaction.end_frame();
+        assert_eq!(save.rect(), Rect::new(0, 0, 5, 1));
+    }
+
+    #[test]
+    fn a_second_click_within_the_window_reports_double_clicked() {
+        let mut interaction = Interaction::<Id>::new().with_double_click_window(5);
+        let _ = frame(&mut interaction); // frame 1: registers Save/Cancel
+
+        click_at(&mut interaction, Pos::new(2, 0));
+        let (save, _) = frame(&mut interaction); // frame 2: first click resolves
+        assert!(save.clicked());
+        assert!(!save.double_clicked());
+
+        click_at(&mut interaction, Pos::new(2, 0));
+        let (save, _) = frame(&mut interaction); // frame 3: second click, well within the window
+        assert!(save.clicked());
+        assert!(save.double_clicked());
+
+        // A third click starts counting fresh rather than pairing with the second again.
+        click_at(&mut interaction, Pos::new(2, 0));
+        let (save, _) = frame(&mut interaction);
+        assert!(save.clicked());
+        assert!(!save.double_clicked());
+    }
+
+    #[test]
+    fn a_second_click_outside_the_window_does_not_pair() {
+        let mut interaction = Interaction::<Id>::new().with_double_click_window(1);
+        let _ = frame(&mut interaction); // frame 1: registers Save/Cancel
+
+        click_at(&mut interaction, Pos::new(2, 0));
+        let _ = frame(&mut interaction); // frame 2: first click resolves
+        let _ = frame(&mut interaction); // frame 3: window (1 frame) already elapsed
+
+        click_at(&mut interaction, Pos::new(2, 0));
+        let (save, _) = frame(&mut interaction); // frame 4: too late to pair with frame 2's click
+        assert!(save.clicked());
+        assert!(!save.double_clicked());
+    }
+
+    #[test]
+    fn a_second_click_on_a_different_widget_does_not_pair() {
+        let mut interaction = Interaction::<Id>::new().with_double_click_window(5);
+        let _ = frame(&mut interaction);
+
+        click_at(&mut interaction, Pos::new(2, 0)); // Save
+        let _ = frame(&mut interaction);
+
+        click_at(&mut interaction, Pos::new(7, 0)); // Cancel, not Save
+        let (save, cancel) = frame(&mut interaction);
+        assert!(!save.double_clicked());
+        assert!(cancel.clicked());
+        assert!(!cancel.double_clicked());
+    }
+
+    #[test]
+    fn gained_and_lost_focus_are_one_shot_edges_around_level_focused() {
+        let mut interaction = Interaction::<Id>::new();
+        let _ = frame(&mut interaction); // registers Save/Cancel as focusable for the *next* frame
+
+        let tab = Event::Key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+        let (save, cancel) = frame_with_events(&mut interaction, core::slice::from_ref(&tab));
+        assert!(save.focused());
+        assert!(save.gained_focus()); // just became focused this frame
+        assert!(!save.lost_focus());
+        assert!(!cancel.gained_focus());
+
+        // Still focused next frame, with nothing moving focus: level state stays true, but the
+        // one-shot edge does not re-fire.
+        let (save, _) = frame(&mut interaction);
+        assert!(save.focused());
+        assert!(!save.gained_focus());
+        assert!(!save.lost_focus());
+
+        // Tab moves focus off Save and onto Cancel.
+        let (save, cancel) = frame_with_events(&mut interaction, core::slice::from_ref(&tab));
+        assert!(!save.focused());
+        assert!(save.lost_focus());
+        assert!(!save.gained_focus());
+        assert!(cancel.focused());
+        assert!(cancel.gained_focus());
     }
 }

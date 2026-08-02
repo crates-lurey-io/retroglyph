@@ -918,7 +918,7 @@ mod dropped_tint_tests {
     }
 
     fn renderer_with_sprite(cols: u16, rows: u16) -> crate::GlRenderer {
-        let opts = TilesetOptions::from_bytes(one_tile_png())
+        let opts = TilesetOptions::builder(one_tile_png())
             .tile_size(8, 16)
             .codepage(Codepage::Custom(vec!['S']))
             .build()

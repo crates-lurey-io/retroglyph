@@ -25,9 +25,8 @@ use crate::text::truncate as truncate_to_cols;
 /// [`Tabs::divider`]. Drawing stops once a title would start past the area's right edge; there is
 /// no horizontal scrolling.
 ///
-/// `style` and `selected_style` each default to the same fixed palette as
-/// [`Table`](super::Table)'s `row_style`/`selected_style`; set them with [`Tabs::style`]/
-/// [`Tabs::selected_style`].
+/// `style` and `selected_style` default to [`Theme::DARK`] (as if [`Tabs::theme`] had been
+/// called); set them with [`Tabs::style`]/[`Tabs::selected_style`].
 ///
 /// As an [`InteractiveWidget`], `type State = usize` (the same index a caller already threads
 /// into [`Tabs::select`] for the plain [`Widget`] path): a single id covers the whole strip, and
@@ -59,25 +58,19 @@ pub struct Tabs<'a> {
 }
 
 impl<'a> Tabs<'a> {
-    /// A tab strip over `titles`, with nothing selected and the default style.
+    /// A tab strip over `titles`, with nothing selected, styled from [`Theme::DARK`] (as if
+    /// [`Tabs::theme`] had been called).
     #[must_use]
     pub fn new(titles: &'a [&'a str]) -> Self {
         Self {
             titles,
             selected: None,
-            style: Style::new().fg(Color::Rgb {
-                r: 170,
-                g: 175,
-                b: 190,
-            }),
-            selected_style: Style::new().fg(Color::BRIGHT_WHITE).bg(Color::Rgb {
-                r: 40,
-                g: 60,
-                b: 90,
-            }),
+            style: Style::new(),
+            selected_style: Style::new(),
             column_spacing: 1,
             divider: None,
         }
+        .theme(Theme::DARK)
     }
 
     /// Select tab `index` (or clear the selection with `None`).
@@ -289,9 +282,11 @@ mod tests {
         let tabs = Tabs::new(&titles).select(Some(1));
         Widget::render(&tabs, &mut Surface::new(&mut grid, area, 0));
 
-        let selected_bg = grid[Pos::new(4, 0)].style().background();
-        let plain_bg = grid[Pos::new(0, 0)].style().background();
-        assert_ne!(selected_bg, plain_bg);
+        // Themed tabs (the `new()` default) distinguish the selected tab by foreground color
+        // (`theme.accent` vs `theme.dim`), not background: both share `theme.panel_bg`.
+        let selected_fg = grid[Pos::new(4, 0)].style().foreground();
+        let plain_fg = grid[Pos::new(0, 0)].style().foreground();
+        assert_ne!(selected_fg, plain_fg);
     }
 
     #[test]

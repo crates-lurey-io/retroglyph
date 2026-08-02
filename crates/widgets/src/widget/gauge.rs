@@ -13,8 +13,9 @@ use crate::Theme;
 /// Only the first row of `area` is used. Generalizes
 /// [`ProgressBar`](super::ProgressBar) with a load-colored fill and inline
 /// label/readout. For a `current`/`max` integer stat (health, mana) rather
-/// than a `0.0..=1.0` load ratio, see [`super::StatBar`]. `label_style`
-/// defaults to a neutral gray-blue; set it with [`Gauge::label_style`].
+/// than a `0.0..=1.0` load ratio, see [`super::StatBar`]. `label_style` defaults to
+/// [`Theme::DARK`]'s `dim` role (as if [`Gauge::theme`] had been called); set it with
+/// [`Gauge::label_style`].
 ///
 /// # Examples
 ///
@@ -34,14 +35,16 @@ pub struct Gauge<'a> {
 }
 
 impl<'a> Gauge<'a> {
-    /// A gauge for `label`, filled to `ratio` (0.0-1.0).
+    /// A gauge for `label`, filled to `ratio` (0.0-1.0), with `label_style` styled from
+    /// [`Theme::DARK`] (as if [`Gauge::theme`] had been called).
     #[must_use]
     pub fn new(label: &'a str, ratio: f32) -> Self {
         Self {
             label,
             ratio,
-            label_style: bar::default_label_style(),
+            label_style: Style::new(),
         }
+        .theme(Theme::DARK)
     }
 
     /// Set the label's style.

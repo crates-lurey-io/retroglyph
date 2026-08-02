@@ -15,19 +15,19 @@ expression: svg
 <text font-family="monospace" font-size="14" y="62.0" xml:space="preserve">
   <tspan fill="#c0c0c0" x="8.0">│</tspan>
   <tspan fill="#008080" x="16.4">Text widget</tspan>
-  <tspan fill="#cccccc" x="108.8">                                     </tspan>
+  <tspan fill="#cccccc" x="108.8" style="background:#161620">                                     </tspan>
   <tspan fill="#c0c0c0" x="419.6">│</tspan>
 </text>
 <text font-family="monospace" font-size="14" y="80.0" xml:space="preserve">
   <tspan fill="#c0c0c0" x="8.0">│</tspan>
   <tspan fill="#808000" x="16.4">PrintLine </tspan>
   <tspan fill="#008000" x="100.4">spans</tspan>
-  <tspan fill="#cccccc" x="142.4">                                 </tspan>
+  <tspan fill="#cccccc" x="142.4" style="background:#161620">                                 </tspan>
   <tspan fill="#c0c0c0" x="419.6">│</tspan>
 </text>
 <text font-family="monospace" font-size="14" y="98.0" xml:space="preserve">
   <tspan fill="#c0c0c0" x="8.0">│</tspan>
-  <tspan fill="#cccccc" x="16.4">                                                </tspan>
+  <tspan fill="#cccccc" x="16.4" style="background:#161620">                                                </tspan>
   <tspan fill="#c0c0c0" x="419.6">│</tspan>
 </text>
 <text font-family="monospace" font-size="14" y="116.0" xml:space="preserve">
@@ -38,22 +38,22 @@ expression: svg
 </text>
 <text font-family="monospace" font-size="14" y="152.0" xml:space="preserve">
   <tspan fill="#c0c0c0" x="8.0">│</tspan>
-  <tspan fill="#cccccc" x="16.4">                  </tspan>
+  <tspan fill="#cccccc" x="16.4" style="background:#161620">                  </tspan>
   <tspan fill="#008080" x="167.6">Text widget</tspan>
-  <tspan fill="#cccccc" x="260.0">                   </tspan>
+  <tspan fill="#cccccc" x="260.0" style="background:#161620">                   </tspan>
   <tspan fill="#c0c0c0" x="419.6">│</tspan>
 </text>
 <text font-family="monospace" font-size="14" y="170.0" xml:space="preserve">
   <tspan fill="#c0c0c0" x="8.0">│</tspan>
-  <tspan fill="#cccccc" x="16.4">                </tspan>
+  <tspan fill="#cccccc" x="16.4" style="background:#161620">                </tspan>
   <tspan fill="#808000" x="150.8">PrintLine </tspan>
   <tspan fill="#008000" x="234.8">spans</tspan>
-  <tspan fill="#cccccc" x="276.8">                 </tspan>
+  <tspan fill="#cccccc" x="276.8" style="background:#161620">                 </tspan>
   <tspan fill="#c0c0c0" x="419.6">│</tspan>
 </text>
 <text font-family="monospace" font-size="14" y="188.0" xml:space="preserve">
   <tspan fill="#c0c0c0" x="8.0">│</tspan>
-  <tspan fill="#cccccc" x="16.4">                                                </tspan>
+  <tspan fill="#cccccc" x="16.4" style="background:#161620">                                                </tspan>
   <tspan fill="#c0c0c0" x="419.6">│</tspan>
 </text>
 <text font-family="monospace" font-size="14" y="206.0" xml:space="preserve">
@@ -64,20 +64,20 @@ expression: svg
 </text>
 <text font-family="monospace" font-size="14" y="242.0" xml:space="preserve">
   <tspan fill="#c0c0c0" x="8.0">│</tspan>
-  <tspan fill="#cccccc" x="16.4">                                     </tspan>
+  <tspan fill="#cccccc" x="16.4" style="background:#161620">                                     </tspan>
   <tspan fill="#008080" x="327.2">Text widget</tspan>
   <tspan fill="#c0c0c0" x="419.6">│</tspan>
 </text>
 <text font-family="monospace" font-size="14" y="260.0" xml:space="preserve">
   <tspan fill="#c0c0c0" x="8.0">│</tspan>
-  <tspan fill="#cccccc" x="16.4">                                 </tspan>
+  <tspan fill="#cccccc" x="16.4" style="background:#161620">                                 </tspan>
   <tspan fill="#808000" x="293.6">PrintLine </tspan>
   <tspan fill="#008000" x="377.6">spans</tspan>
   <tspan fill="#c0c0c0" x="419.6">│</tspan>
 </text>
 <text font-family="monospace" font-size="14" y="278.0" xml:space="preserve">
   <tspan fill="#c0c0c0" x="8.0">│</tspan>
-  <tspan fill="#cccccc" x="16.4">                                                </tspan>
+  <tspan fill="#cccccc" x="16.4" style="background:#161620">                                                </tspan>
   <tspan fill="#c0c0c0" x="419.6">│</tspan>
 </text>
 <text font-family="monospace" font-size="14" y="296.0" xml:space="preserve">
@@ -94,7 +94,7 @@ expression: svg
 <text font-family="monospace" font-size="14" y="350.0" xml:space="preserve">
   <tspan fill="#cccccc" x="8.0">  </tspan>
   <tspan fill="#800080" x="24.8">│</tspan>
-  <tspan fill="#cccccc" x="33.2">                                            </tspan>
+  <tspan fill="#cccccc" x="33.2" style="background:#161620">                                            </tspan>
   <tspan fill="#800080" x="402.8">│</tspan>
   <tspan fill="#cccccc" x="411.2">  </tspan>
 </text>
@@ -102,7 +102,7 @@ expression: svg
   <tspan fill="#cccccc" x="8.0">  </tspan>
   <tspan fill="#800080" x="24.8">│</tspan>
   <tspan fill="#c0c0c0" x="33.2">Left-aligned label</tspan>
-  <tspan fill="#cccccc" x="184.4">                  </tspan>
+  <tspan fill="#cccccc" x="184.4" style="background:#161620">                  </tspan>
   <tspan fill="#008000" x="335.6">42 / 100</tspan>
   <tspan fill="#800080" x="402.8">│</tspan>
   <tspan fill="#cccccc" x="411.2">  </tspan>
@@ -110,21 +110,21 @@ expression: svg
 <text font-family="monospace" font-size="14" y="386.0" xml:space="preserve">
   <tspan fill="#cccccc" x="8.0">  </tspan>
   <tspan fill="#800080" x="24.8">│</tspan>
-  <tspan fill="#cccccc" x="33.2">                                            </tspan>
+  <tspan fill="#cccccc" x="33.2" style="background:#161620">                                            </tspan>
   <tspan fill="#800080" x="402.8">│</tspan>
   <tspan fill="#cccccc" x="411.2">  </tspan>
 </text>
 <text font-family="monospace" font-size="14" y="404.0" xml:space="preserve">
   <tspan fill="#cccccc" x="8.0">  </tspan>
   <tspan fill="#800080" x="24.8">│</tspan>
-  <tspan fill="#cccccc" x="33.2">                                            </tspan>
+  <tspan fill="#cccccc" x="33.2" style="background:#161620">                                            </tspan>
   <tspan fill="#800080" x="402.8">│</tspan>
   <tspan fill="#cccccc" x="411.2">  </tspan>
 </text>
 <text font-family="monospace" font-size="14" y="422.0" xml:space="preserve">
   <tspan fill="#cccccc" x="8.0">  </tspan>
   <tspan fill="#800080" x="24.8">│</tspan>
-  <tspan fill="#cccccc" x="33.2">                                            </tspan>
+  <tspan fill="#cccccc" x="33.2" style="background:#161620">                                            </tspan>
   <tspan fill="#800080" x="402.8">│</tspan>
   <tspan fill="#cccccc" x="411.2">  </tspan>
 </text>

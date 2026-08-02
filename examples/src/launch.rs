@@ -366,7 +366,7 @@ pub fn run_software_with<E: Example>(builder: retroglyph_software::SoftwareBacke
     let renderer = builder
         .build()
         .expect("failed to initialize software backend")
-        .run_headless()
+        .into_renderer()
         .expect("failed to build headless renderer");
     let config = retroglyph_window::winit::WindowConfig::fit(&renderer, E::NAME, TARGET_FPS, false)
         .fill_viewport(E::fill_viewport());
@@ -522,7 +522,7 @@ pub fn render_perf_overlay_rgb<E: Example>(
     )
     .build()
     .expect("software backend init")
-    .run_headless()
+    .into_renderer()
     .expect("headless renderer init");
 
     // Read the pixel-buffer geometry before handing `renderer` to `Terminal` (which owns it from

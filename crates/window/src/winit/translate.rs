@@ -101,7 +101,7 @@ pub fn translate_ime(ime: winit::event::Ime) -> Option<Event> {
 #[must_use]
 #[allow(clippy::needless_pass_by_value)]
 pub fn translate_key(input: winit::event::KeyEvent, modifiers: KeyModifiers) -> Option<Event> {
-    let kind = key_event_kind(input.state, input.repeat);
+    let kind = translate_key_event_kind(input.state, input.repeat);
     let code = key_code_from_logical(&input.logical_key, modifiers)?;
     let location = translate_key_location(input.location);
     Some(Event::Key(KeyEvent::with_location(
@@ -127,7 +127,7 @@ pub const fn translate_key_location(location: winit::keyboard::KeyLocation) -> K
 /// fractional part is also intentional: pixel coordinates are always integers.
 #[must_use]
 #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
-pub const fn physical_pos_from(x: f64, y: f64) -> PhysicalPos {
+pub const fn translate_physical_pos(x: f64, y: f64) -> PhysicalPos {
     PhysicalPos {
         x: x.max(0.0) as u32,
         y: y.max(0.0) as u32,
@@ -140,7 +140,7 @@ pub const fn physical_pos_from(x: f64, y: f64) -> PhysicalPos {
 /// panic: the game loop is responsible for bounds-checking against the terminal size.
 #[must_use]
 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-pub fn pixel_to_cell(px_x: f64, px_y: f64, cell_w: u32, cell_h: u32) -> Pos {
+pub fn translate_pixel_to_cell(px_x: f64, px_y: f64, cell_w: u32, cell_h: u32) -> Pos {
     // .max(0.0) guards against negatives before the f64→u32 cast.
     // .min(u16::MAX as u32) guarantees the u32→u16 cast never truncates.
     let col =
@@ -167,7 +167,10 @@ pub const fn translate_mouse_button(button: winit::event::MouseButton) -> Option
 
 /// Maps a winit key `state`/`repeat` pair to a [`KeyEventKind`].
 #[must_use]
-pub const fn key_event_kind(state: winit::event::ElementState, repeat: bool) -> KeyEventKind {
+pub const fn translate_key_event_kind(
+    state: winit::event::ElementState,
+    repeat: bool,
+) -> KeyEventKind {
     use winit::event::ElementState;
     match (state, repeat) {
         (ElementState::Pressed, false) => KeyEventKind::Press,
@@ -314,34 +317,34 @@ mod tests {
     #[test]
     fn pixel_to_cell_basic() {
         // 8×16 cells: pixel (20, 48) → col 2, row 3
-        let pos = pixel_to_cell(20.0, 48.0, 8, 16);
+        let pos = translate_pixel_to_cell(20.0, 48.0, 8, 16);
         assert_eq!(pos, Pos { x: 2, y: 3 });
     }
 
     #[test]
     fn pixel_to_cell_origin() {
-        let pos = pixel_to_cell(0.0, 0.0, 8, 16);
+        let pos = translate_pixel_to_cell(0.0, 0.0, 8, 16);
         assert_eq!(pos, Pos { x: 0, y: 0 });
     }
 
     #[test]
     fn pixel_to_cell_negative_coords_clamp_to_zero() {
         // Cursor briefly outside the window can produce negative physical coords.
-        let pos = pixel_to_cell(-5.0, -10.0, 8, 16);
+        let pos = translate_pixel_to_cell(-5.0, -10.0, 8, 16);
         assert_eq!(pos, Pos { x: 0, y: 0 });
     }
 
     #[test]
     fn pixel_to_cell_zero_cell_size_returns_origin() {
         // Degenerate case: backend not yet initialised with a valid cell size.
-        let pos = pixel_to_cell(100.0, 200.0, 0, 0);
+        let pos = translate_pixel_to_cell(100.0, 200.0, 0, 0);
         assert_eq!(pos, Pos { x: 0, y: 0 });
     }
 
     #[test]
     fn pixel_to_cell_clamps_to_u16_max() {
         // A huge pixel coordinate must not overflow u16.
-        let pos = pixel_to_cell(f64::from(u32::MAX), f64::from(u32::MAX), 1, 1);
+        let pos = translate_pixel_to_cell(f64::from(u32::MAX), f64::from(u32::MAX), 1, 1);
         assert_eq!(
             pos,
             Pos {
@@ -405,20 +408,20 @@ mod tests {
     fn key_event_kind_press_repeat_release() {
         use winit::event::ElementState;
         assert_eq!(
-            key_event_kind(ElementState::Pressed, false),
+            translate_key_event_kind(ElementState::Pressed, false),
             KeyEventKind::Press
         );
         assert_eq!(
-            key_event_kind(ElementState::Pressed, true),
+            translate_key_event_kind(ElementState::Pressed, true),
             KeyEventKind::Repeat
         );
         assert_eq!(
-            key_event_kind(ElementState::Released, false),
+            translate_key_event_kind(ElementState::Released, false),
             KeyEventKind::Release
         );
         // A release is a release regardless of the repeat flag.
         assert_eq!(
-            key_event_kind(ElementState::Released, true),
+            translate_key_event_kind(ElementState::Released, true),
             KeyEventKind::Release
         );
     }

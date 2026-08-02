@@ -38,6 +38,14 @@ without a conscious decision to change the defaults.
 - Comment and doc-comment prose wraps at ~100 cols, not ~80. `wrap_comments` is `false` by default,
   so rustfmt never rewraps prose for you; hand-wrapping to ~80 out of habit just leaves ragged
   lines.
+- A doc comment's first line is one sentence, third-person present indicative: "Returns the width",
+  not "Return the width" or "This function returns the width". It becomes the summary in every
+  listing, so keep it under ~15 words.
+- Item-level headings, in this order when several apply: `# Examples`, `# Panics`, `# Errors`.
+  Always plural, never a bespoke title. Use `##` subheadings inside `# Examples` if you need to
+  distinguish two examples.
+- Doc-comment code blocks: no language tag (rust is the default). Never `ignore`; use `no_run`,
+  `compile_fail`, `should_panic`, or `text` instead. Hide setup lines with a `#` prefix.
 - Comment the why, not the what. No banners, section dividers, or decorative comment blocks.
 - Write from the reader's point of view, not the diff's. A doc comment describes the API as it is,
   in the present tense; it never narrates the change that produced it. No "this used to be X", no
@@ -49,8 +57,9 @@ without a conscious decision to change the defaults.
   an issue for design context (`retroglyph#304`) is fine; narrating the edit is not.
 - Omit doc comments on functions where the name and signature already say it all. Every public item
   still needs _something_ because of `missing_docs`, but that something can be one line.
-- Every fallible public function needs a `# Errors` section (clippy `missing_errors_doc`); every
-  panicking public function needs a `# Panics` section (clippy `missing_panics_doc`).
+- Every fallible public function needs a `# Errors` section that names the conditions that produce
+  each error, not the error type (clippy `missing_errors_doc`); every public function that can panic
+  on caller input needs a `# Panics` section (clippy `missing_panics_doc`).
 - Internal-only docs (design notes, roadmap, personal `.matan/` scratch) are never cited by path,
   number, or title from doc comments, rustdoc, or anything else that ends up in published API docs.
   Those readers have no access to the file and the reference is dead weight. If a doc comment needs

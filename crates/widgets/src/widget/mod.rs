@@ -22,10 +22,13 @@ use crate::Sense;
 use crate::Surface;
 
 mod bar;
+mod border_type;
 mod box_border;
 mod button;
 mod gauge;
+mod highlight_spacing;
 mod list;
+mod list_direction;
 mod log;
 mod meter;
 mod modal;
@@ -40,12 +43,16 @@ mod stat_bar;
 mod table;
 mod tabs;
 mod text;
+mod text_input;
 mod window;
 
+pub use border_type::BorderType;
 pub use box_border::BoxBorder;
 pub use button::Button;
 pub use gauge::Gauge;
+pub use highlight_spacing::HighlightSpacing;
 pub use list::List;
+pub use list_direction::ListDirection;
 pub use log::Log;
 pub use meter::Meter;
 pub use modal::Modal;
@@ -60,6 +67,7 @@ pub use stat_bar::StatBar;
 pub use table::Table;
 pub use tabs::Tabs;
 pub use text::Text;
+pub use text_input::TextInput;
 
 /// A type that draws itself into a [`Surface`], without retaining any
 /// state — the minimal shape shared by every widget-like consumer.

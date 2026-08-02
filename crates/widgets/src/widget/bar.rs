@@ -71,16 +71,6 @@ impl<const N: usize> fmt::Write for ReadoutBuf<N> {
     }
 }
 
-/// The default label color, used when a caller doesn't set one via
-/// [`super::Gauge::label_style`]/[`super::StatBar::label_style`].
-pub(super) fn default_label_style() -> Style {
-    Style::new().fg(Color::Rgb {
-        r: 180,
-        g: 180,
-        b: 200,
-    })
-}
-
 pub(super) fn render(
     surface: &mut Surface<'_>,
     label: &str,
@@ -182,7 +172,7 @@ mod tests {
         render(
             &mut Surface::new(&mut grid, area, 0),
             "あ",
-            default_label_style(),
+            Style::new(),
             0.5,
             "",
         );

@@ -1,7 +1,7 @@
 //! [`Response`]: what [`Interaction::interact`](crate::Interaction::interact)
 //! hands back to a widget call site.
 
-use retroglyph_core::Pos;
+use retroglyph_core::{Pos, Rect};
 
 /// What happened to a widget this frame, as reported by
 /// [`Interaction::interact`](crate::Interaction::interact).
@@ -13,9 +13,9 @@ use retroglyph_core::Pos;
 /// [`Sense`](crate::Sense) are always `false`/`0`: a widget sensed with
 /// only [`Sense::HOVER`](crate::Sense::HOVER) never reports
 /// [`clicked`](Self::clicked), for instance.
-// Eight flat, independent fields by design: `Response` is a per-frame
-// report card, not a state machine: collapsing it into enums would only
-// make `interact`'s construction of it more awkward for no reader benefit.
+// Flat, independent fields by design: `Response` is a per-frame report card, not a state
+// machine: collapsing it into enums would only make `interact`'s construction of it more
+// awkward for no reader benefit.
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Response {
@@ -23,14 +23,19 @@ pub struct Response {
     pub(crate) pressed: bool,
     pub(crate) released: bool,
     pub(crate) clicked: bool,
+    pub(crate) double_clicked: bool,
     pub(crate) held: bool,
     pub(crate) dragging: bool,
     pub(crate) focused: bool,
+    pub(crate) gained_focus: bool,
+    pub(crate) lost_focus: bool,
     pub(crate) secondary_clicked: bool,
     pub(crate) disabled: bool,
     pub(crate) scroll_delta: i32,
     pub(crate) pointer_pos: Option<Pos>,
     pub(crate) press_origin: Option<Pos>,
+    pub(crate) drag_delta: Option<(i32, i32)>,
+    pub(crate) rect: Rect,
 }
 
 impl Response {
@@ -69,6 +74,17 @@ impl Response {
         self.clicked
     }
 
+    /// A second [`clicked`](Self::clicked) landed on this widget within
+    /// [`Interaction::with_double_click_window`](crate::Interaction::with_double_click_window)
+    /// frames of the first, e.g. to open a file on double-click while a single click just
+    /// selects it. Implies [`clicked`](Self::clicked) is also `true` this frame. A third click
+    /// starts counting fresh rather than re-firing every frame after the second: each pair of
+    /// qualifying clicks reports exactly one `double_clicked` frame.
+    #[must_use]
+    pub const fn double_clicked(&self) -> bool {
+        self.double_clicked
+    }
+
     /// The primary pointer button is down *and* the pointer is currently over this widget's
     /// rect, re-checked live every frame, unlike [`pressed`](Self::pressed), which fires
     /// once on the down edge and never re-checks position. Automatically cancels (goes
@@ -96,6 +112,23 @@ impl Response {
     #[must_use]
     pub const fn focused(&self) -> bool {
         self.focused
+    }
+
+    /// This widget just became [`focused`](Self::focused) this frame, having not been focused
+    /// last frame: a one-shot edge for a widget that wants to react only on the transition (e.g.
+    /// select-all-on-focus for a text input), rather than every frame [`focused`](Self::focused)
+    /// happens to be `true`.
+    #[must_use]
+    pub const fn gained_focus(&self) -> bool {
+        self.gained_focus
+    }
+
+    /// This widget was [`focused`](Self::focused) last frame but isn't anymore: the mirror of
+    /// [`gained_focus`](Self::gained_focus), e.g. to commit a text input's edits when focus
+    /// moves away.
+    #[must_use]
+    pub const fn lost_focus(&self) -> bool {
+        self.lost_focus
     }
 
     /// The secondary (right) mouse button pressed and released on this
@@ -153,6 +186,28 @@ impl Response {
     pub const fn press_origin(&self) -> Option<Pos> {
         self.press_origin
     }
+
+    /// How far the pointer has moved from [`press_origin`](Self::press_origin), signed and in
+    /// grid cells: `(pointer.x - press_origin.x, pointer.y - press_origin.y)`. Unlike
+    /// [`pointer_pos`](Self::pointer_pos), this keeps reporting once the pointer slides outside
+    /// this widget's own rect, which is the common case for a [`Sense::DRAG`](crate::Sense::DRAG)
+    /// widget like a scrollbar thumb or a resizable pane divider: both need the drag's full
+    /// displacement, not just the part of it that stayed over the thumb. `None` under the same
+    /// condition [`press_origin`](Self::press_origin) is `None`: no press is currently active on
+    /// this widget.
+    #[must_use]
+    pub const fn drag_delta(&self) -> Option<(i32, i32)> {
+        self.drag_delta
+    }
+
+    /// The `area` this widget was shown at, as passed to
+    /// [`Interaction::interact`](crate::Interaction::interact) this frame. Useful for anything
+    /// that draws relative to where this widget landed, e.g. a tooltip anchored under its
+    /// trigger.
+    #[must_use]
+    pub const fn rect(&self) -> Rect {
+        self.rect
+    }
 }
 
 #[cfg(test)]
@@ -166,13 +221,18 @@ mod tests {
         assert!(!r.pressed());
         assert!(!r.released());
         assert!(!r.clicked());
+        assert!(!r.double_clicked());
         assert!(!r.held());
         assert!(!r.dragging());
         assert!(!r.focused());
+        assert!(!r.gained_focus());
+        assert!(!r.lost_focus());
         assert!(!r.secondary_clicked());
         assert!(!r.disabled());
         assert_eq!(r.scroll_delta(), 0);
         assert_eq!(r.pointer_pos(), None);
         assert_eq!(r.press_origin(), None);
+        assert_eq!(r.drag_delta(), None);
+        assert_eq!(r.rect(), Rect::default());
     }
 }

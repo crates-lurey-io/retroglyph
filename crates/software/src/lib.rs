@@ -5,12 +5,12 @@
 //!
 //! [`SoftwareBackend`] holds configuration only (font chain, grid size, scale); it
 //! does not implement [`Backend`](retroglyph_core::Backend). Call
-//! [`run_headless`](SoftwareBackend::run_headless) to build a
+//! [`into_renderer`](SoftwareBackend::into_renderer) to build a
 //! [`SoftwareRenderer`], which does the actual rendering work:
 //!
 //! ```text
 //! SoftwareBackend (config: font chain, grid size, scale)
-//!   |  .run_headless()
+//!   |  .into_renderer()
 //!   v
 //! SoftwareRenderer
 //!   implements retroglyph_core::{Output, Input, Cursor} (= Backend)
@@ -120,7 +120,7 @@ use std::time::Duration;
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
-/// A running software renderer, produced by [`SoftwareBackend::run_headless`].
+/// A running software renderer, produced by [`SoftwareBackend::into_renderer`].
 ///
 /// Unlike [`SoftwareBackend`] (which is just configuration), this type
 /// always has an active rendering context: its pixel buffer is always
@@ -131,7 +131,7 @@ use std::time::Duration;
 /// [`Output::draw`] and [`Output::draw_layers`] to render into it.
 ///
 /// If the `tilesets` feature is enabled, the sprite tileset is loaded once, at
-/// [`run_headless`](SoftwareBackend::run_headless) time, into an internal
+/// [`into_renderer`](SoftwareBackend::into_renderer) time, into an internal
 /// [`SpriteCache`]. That cache has no reload/hot-swap support (see its
 /// docs); to pick up a changed tileset, rebuild the renderer via a fresh [`SoftwareBackend`]
 /// configuration rather than mutating this one.
@@ -528,17 +528,13 @@ impl SoftwareRenderer {
 // ── Renderer construction ────────────────────────────────────────────────────────────
 
 impl SoftwareBackend {
-    /// Creates a headless renderer that renders into an internal buffer
-    /// without opening a window.
+    /// Builds a [`SoftwareRenderer`] from this configuration.
     ///
     /// This does not block: it returns a [`SoftwareRenderer`] immediately.
     /// The renderer's pixel buffer can be inspected via
-    /// [`SoftwareRenderer::pixels`], or the renderer can be handed to
-    /// `retroglyph_window::winit::run_windowed` to drive a window.  Flushing
+    /// [`SoftwareRenderer::pixels`] for headless / pixel-level use, or the renderer can be
+    /// handed to `retroglyph_window::winit::run_windowed` to drive a window. Flushing
     /// is a no-op (the buffer stays in memory).
-    ///
-    /// This is primarily useful for testing pixel-level output without
-    /// needing a window or event loop.
     ///
     /// # Examples
     ///
@@ -555,7 +551,7 @@ impl SoftwareBackend {
     ///     .scale(1)
     ///     .build()
     ///     .unwrap()
-    ///     .run_headless()
+    ///     .into_renderer()
     ///     .unwrap();
     ///
     /// // Render a red cell on layer 0.
@@ -571,7 +567,9 @@ impl SoftwareBackend {
     ///
     /// Returns [`SoftwareBackendError::NoFont`] if no font is set, or
     /// [`SoftwareBackendError::MixedGlyphSizes`] if the font chain's fonts disagree on their
-    /// glyph size (both only reachable if [`SoftwareBackendBuilder::build`] was bypassed), and
+    /// glyph size (both only reachable if [`SoftwareBackendBuilder::build`] was bypassed),
+    /// [`SoftwareBackendError::ZeroScale`] if `scale` is `0` (likewise only reachable if `build`
+    /// was bypassed, since a caller mutated the field after construction), and
     /// [`SoftwareBackendError::Tileset`] if a registered tileset fails to load.
     ///
     /// # Panics
@@ -579,19 +577,22 @@ impl SoftwareBackend {
     /// Panics only on a `u32`-to-`usize` conversion that cannot fail on any target
     /// this crate supports (`usize` is at least 32 bits on every 32- and 64-bit
     /// platform), so this is not reachable in practice.
-    pub fn run_headless(self) -> Result<SoftwareRenderer, SoftwareBackendError> {
+    pub fn into_renderer(self) -> Result<SoftwareRenderer, SoftwareBackendError> {
         let Some(fonts) = self.fonts else {
             return Err(SoftwareBackendError::NoFont);
         };
         let Some((glyph_w, glyph_h)) = fonts.glyph_size() else {
             return Err(SoftwareBackendError::MixedGlyphSizes);
         };
+        if self.scale == 0 {
+            return Err(SoftwareBackendError::ZeroScale);
+        }
 
         let geometry = CellGeometry::new(glyph_w, glyph_h, u16::from(self.scale));
         let (buf_w, buf_h) = geometry.surface_size(self.cols, self.rows);
         // u32 always fits in usize (all targets: 32- and 64-bit).
-        let buf_w = usize::try_from(buf_w).unwrap();
-        let buf_h = usize::try_from(buf_h).unwrap();
+        let buf_w = usize::try_from(buf_w).expect("surface width fits usize");
+        let buf_h = usize::try_from(buf_h).expect("surface height fits usize");
 
         #[cfg(feature = "tilesets")]
         let sprite_cache = if self.tilesets.is_empty() {
@@ -643,49 +644,12 @@ impl Output for SoftwareRenderer {
     /// background (see the private `resolve_bg_fill` helper) even though the occupied tile's own
     /// background is the default one.
     ///
-    /// # Dirty-cell repaint (retroglyph#302)
-    ///
-    /// `needs_full_frame` always returns `true` for this backend (see its docs), so this
-    /// receives every cell on every allocated layer on every call: `Terminal::present`'s
-    /// diff-only path (used when a backend's `needs_full_frame` is `false`) never applies here,
-    /// and changing that would be a `retroglyph-core` API change. Instead, this method keeps its
-    /// own per-cell shadow copy of the last frame's tiles (see `RenderContext::prev_tiles`) and
-    /// diffs incoming cells against it here, entirely internally: cells whose tile is unchanged
-    /// since the last call are skipped instead of being cleared and repainted.
-    ///
-    /// This falls back to a full clear-and-repaint of every cell when either:
-    /// - any tile this frame has a nonzero sub-cell offset ([`Tile::dx`]/[`Tile::dy`]): offsets
-    ///   can spill glyph pixels into neighboring cells by an amount `Tile` does not bound, so
-    ///   containing the repaint to a neighborhood around the changed cells isn't possible without
-    ///   a magnitude cap core doesn't provide; or
-    /// - the number of allocated layers changed since the last call: a layer's cells falling out
-    ///   of (or into) the frame can't be diffed against a shadow copy that no longer describes
-    ///   this frame's layer set.
-    ///
-    /// Both paths run two sub-passes per layer (every background first, then every glyph), so
-    /// artwork that lands outside its own cell spills onto the neighbor's already-painted
-    /// background instead of being clobbered by that neighbor's later background fill. Spill is
-    /// therefore uniform in all four directions: the two-pass mechanism of the "Sub-cell offsets
-    /// and spill" contract documented on [`Presenter`](retroglyph_window::Presenter), shared with
-    /// `retroglyph-gl`. A multi-cell span's sprite relies on the same ordering, since it is drawn
-    /// once from the anchor and covers cells that paint backgrounds of their own.
-    ///
-    /// When neither applies, a changed cell at a given position also forces every *other* layer
-    /// at that same position to be repainted (even if unchanged there), because a lower layer's
-    /// background fill covers the whole cell rect and would otherwise erase an unchanged higher
-    /// layer's already-composited glyph pixels on top of it.
-    ///
-    /// # Multi-cell spans (retroglyph#412)
-    ///
-    /// A [`TileFlags::SPAN_COVERED`] cell paints its background but not its glyph: the span's
-    /// anchor already drew one sprite across the whole footprint, and the covered cell's glyph is
-    /// that sprite's text fallback, for backends that cannot draw it. The sprite-transparency
-    /// rule that decides whether a background is painted at all is resolved against the *anchor*
-    /// (see `resolve_cell_bg`), so one span never sits on two different backdrops.
-    ///
-    /// A covered cell's tile does not change when only the anchor's artwork does, so a dirty cell
-    /// anywhere in a span dirties the whole span (see `expand_dirty_spans`); without that, the
-    /// previous sprite's pixels would survive in cells the diff considers unchanged.
+    /// A [`TileFlags::SPAN_COVERED`] cell (retroglyph#412) paints its background but not its
+    /// glyph: the span's anchor already drew one sprite across the whole footprint, and the
+    /// covered cell's glyph is that sprite's text fallback, for backends that cannot draw it. The
+    /// sprite-transparency rule that decides whether a background is painted at all is resolved
+    /// against the *anchor* (see `resolve_cell_bg`), so one span never sits on two different
+    /// backdrops.
     fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
         I: Iterator<Item = DrawCell<'a>>,
@@ -698,6 +662,13 @@ impl Output for SoftwareRenderer {
         let buf_w = cols * cell_w;
         let cell_count = cols * rows;
 
+        // `needs_full_frame` always returns `true` for this backend, so this receives every cell
+        // on every allocated layer on every call: `Terminal::present`'s diff-only path (used when
+        // a backend's `needs_full_frame` is `false`) never applies here, and changing that would
+        // be a `retroglyph-core` API change (retroglyph#302). Instead, this method keeps its own
+        // per-cell shadow copy of the last frame's tiles (`RenderContext::prev_tiles`) and diffs
+        // incoming cells against it below, entirely internally: cells whose tile is unchanged
+        // since the last call are skipped instead of being cleared and repainted.
         if self.ctx.dirty_mask.len() == cell_count {
             self.ctx.dirty_mask.iter_mut().for_each(|d| *d = false);
         } else {
@@ -719,6 +690,11 @@ impl Output for SoftwareRenderer {
             let slot = &mut self.ctx.prev_tiles[layer_idx][idx];
             let tint_slot = &mut self.ctx.prev_tints[layer_idx][idx];
             if *slot != *tile || *tint_slot != draw_cell.tint {
+                // `dirty_mask` is a single array shared across layers, not one per layer: marking
+                // an index dirty here forces every layer to repaint that cell below, even ones
+                // unchanged at this position, because a lower layer's background fill covers the
+                // whole cell rect and would otherwise erase an unchanged higher layer's
+                // already-composited glyph pixels on top of it.
                 self.ctx.dirty_mask[idx] = true;
                 any_dirty = true;
                 *slot = *tile;
@@ -731,7 +707,10 @@ impl Output for SoftwareRenderer {
 
         if any_dirty {
             // Runs after the whole stream, so every layer's shadow copy is current: a span's
-            // footprint has to be read off an anchor this frame actually wrote.
+            // footprint has to be read off an anchor this frame actually wrote. A covered cell's
+            // tile does not change when only the anchor's artwork does, so a dirty cell anywhere
+            // in a span has to dirty the whole span here; without that, the previous sprite's
+            // pixels would survive in cells the diff considers unchanged.
             for layer in &self.ctx.prev_tiles {
                 expand_dirty_spans(&mut self.ctx.dirty_mask, layer, cols, rows);
             }
@@ -742,6 +721,14 @@ impl Output for SoftwareRenderer {
         let layers_changed = layer_count_now != self.ctx.prev_layer_count;
         self.ctx.prev_layer_count = layer_count_now;
 
+        // Falls back to a full clear-and-repaint of every cell when either:
+        // - any tile this frame has a nonzero sub-cell offset (`Tile::dx`/`Tile::dy`): offsets can
+        //   spill glyph pixels into neighboring cells by an amount `Tile` does not bound, so
+        //   containing the repaint to a neighborhood around the changed cells isn't possible
+        //   without a magnitude cap core doesn't provide; or
+        // - the number of allocated layers changed since the last call: a layer's cells falling
+        //   out of (or into) the frame can't be diffed against a shadow copy that no longer
+        //   describes this frame's layer set.
         let full_repaint = any_offset || layers_changed;
 
         if full_repaint {
@@ -937,8 +924,8 @@ fn blit_glyph_mask(
     scale: usize,
     color: u32,
 ) {
-    let glyph_w = usize::from(font.glyph_width) * scale;
-    let glyph_h = usize::from(font.glyph_height) * scale;
+    let glyph_w = usize::from(font.glyph_width()) * scale;
+    let glyph_h = usize::from(font.glyph_height()) * scale;
 
     #[allow(clippy::cast_sign_loss)]
     let in_bounds = origin_x >= 0
@@ -1030,7 +1017,7 @@ fn blit_glyph(
         buf_h,
         origin_x,
         origin_y,
-        glyph.font(),
+        &glyph.font(),
         glyph.index(),
         scale,
         fg,
@@ -1315,7 +1302,7 @@ mod tests {
             .scale(1)
             .build()
             .unwrap()
-            .run_headless()
+            .into_renderer()
             .unwrap()
     }
 
@@ -1492,7 +1479,7 @@ mod tests {
             .scale(1)
             .build()
             .unwrap()
-            .run_headless()
+            .into_renderer()
             .unwrap();
 
         // Full block (all 8x16 pixels set), green, shifted right by 4px (half a cell): its left
@@ -1552,7 +1539,7 @@ mod tests {
             .scale(1)
             .build()
             .unwrap();
-        let mut renderer = opts.run_headless().unwrap();
+        let mut renderer = opts.into_renderer().unwrap();
 
         // Layer 0: dark background, ':' at (0,0) in dim blue, '.' at (1,0) in dim gray.
         let bg = Tile::new(
@@ -1635,7 +1622,7 @@ mod tests {
             .scale(1)
             .build()
             .unwrap();
-        let mut renderer = opts.run_headless().unwrap();
+        let mut renderer = opts.into_renderer().unwrap();
 
         let base = Tile::new(
             ' ',
@@ -1685,7 +1672,7 @@ mod tests {
             .scale(1)
             .build()
             .unwrap()
-            .run_headless()
+            .into_renderer()
             .unwrap()
     }
 
@@ -2074,7 +2061,7 @@ mod span_tests {
         align: SpriteAlign,
     ) -> SoftwareRenderer {
         #[allow(clippy::cast_possible_truncation)]
-        let opts = TilesetOptions::from_bytes(sprite_png(w, h, transparent_from))
+        let opts = TilesetOptions::builder(sprite_png(w, h, transparent_from))
             .tile_size(w as u16, h as u16)
             .columns(1)
             .codepage(Codepage::Custom(vec!['S']))
@@ -2088,7 +2075,7 @@ mod span_tests {
             .tileset(opts)
             .build()
             .unwrap()
-            .run_headless()
+            .into_renderer()
             .unwrap()
     }
 
@@ -2351,7 +2338,7 @@ mod span_tests {
     ///   or the covered cell's own background fill erases the sprite the anchor spilled into it.
     #[test]
     fn changing_only_a_span_anchor_repaints_its_covered_cells() {
-        let opts = TilesetOptions::from_bytes(wide_and_narrow_png())
+        let opts = TilesetOptions::builder(wide_and_narrow_png())
             .tile_size(16, 16)
             .columns(2)
             .codepage(Codepage::Custom(vec!['S', 'T']))
@@ -2364,7 +2351,7 @@ mod span_tests {
             .tileset(opts)
             .build()
             .unwrap()
-            .run_headless()
+            .into_renderer()
             .unwrap();
 
         let bg = Style::new().bg(Color::Rgb { r: 0, g: 0, b: 255 });
@@ -2545,7 +2532,7 @@ mod font_chain_tests {
             .scale(1)
             .build()
             .expect("chain builds")
-            .run_headless()
+            .into_renderer()
             .expect("renderer builds");
         let tile = Tile::new(ch, Style::new().fg(fg).bg(BLACK));
         renderer

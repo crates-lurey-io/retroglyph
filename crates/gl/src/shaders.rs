@@ -17,8 +17,8 @@
 //!   the same shader composites multiple grid layers back-to-front: a transparent background or an
 //!   empty glyph in a higher layer is discarded and the layer beneath shows through (issue #368).
 
-// `pub(crate)` items in this private module are the crate-internal shader API; the nursery
-// `redundant_pub_crate` lint conflicts with keeping the module boundary explicit.
+// `redundant_pub_crate` fires on `pub(crate)` items in this private module; the module boundary
+// is intentional, so it's allowed crate-locally.
 #![allow(clippy::redundant_pub_crate)]
 
 /// Whether to emit a WebGL2 / GL ES 3.0 header (`#version 300 es` + precision qualifiers) or a

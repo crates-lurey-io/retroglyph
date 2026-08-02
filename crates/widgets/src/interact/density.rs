@@ -5,17 +5,15 @@ use retroglyph_core::Size;
 /// How much room an interactive widget's hit target should claim.
 ///
 /// Not itself consulted by anything in this crate: there are no built-in
-/// interactive widgets yet to apply it to; every widget here is a free
-/// function or a thin, stateless composition of one (see the crate's module
-/// docs). It exists so an app choosing between a phone-sized and a
-/// desktop-sized layout has one place to ask "how big should this
-/// button/row/slider be", rather than inventing its own ad hoc breakpoint
-/// constants per widget (as e.g. `responsive_game_ui`'s own
-/// `MIN_TARGET_W`/`MIN_TARGET_H` do today). A future interactive widget in
-/// this crate (a checkbox, say) would read [`min_target_size`](Self::min_target_size)
+/// interactive widgets yet to apply it to (see the crate's module docs).
+/// It exists so an app choosing between a phone-sized and a desktop-sized
+/// layout has one place to ask "how big should this button/row/slider be",
+/// rather than inventing its own ad hoc breakpoint constants per widget. A future interactive
+/// widget in this crate (a checkbox, say) would read [`min_target_size`](Self::min_target_size)
 /// the same way it would read [`Sense`](crate::Sense).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[non_exhaustive]
 pub enum Density {
     /// Larger interactive targets, for a fingertip on a phone-width terminal
     /// or other touch input, at the cost of showing fewer rows at once.

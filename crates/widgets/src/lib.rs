@@ -8,7 +8,8 @@
 //! Every widget ([`widget`]) is a builder struct that draws itself into a
 //! [`Grid`](retroglyph_core::Grid) via [`Widget`]/[`StatefulWidget`] and
 //! retains no state of its own: state that outlives one render call (a
-//! selection index, a scroll offset) lives in [`ListState`] instead. A
+//! selection index, a scroll offset, a text field's value and cursor)
+//! lives in [`ListState`]/[`TextInputState`] instead. A
 //! handful of things that are genuinely just functions ([`fill_rect`],
 //! [`thumb_geometry`]/[`offset_for_pos`] in [`draw`]; [`truncate`]/[`truncate_owned`] in
 //! [`text`]) stay free functions rather than pretending to be widgets. Three more independent
@@ -83,13 +84,14 @@ pub use layout::{
     split_v_n_flex, split_v_n_spaced, split_v_spaced,
 };
 pub use retroglyph_core::{Layer, StyledSurface, Surface};
-pub use state::{ListState, ScrollPhysics, ScrollState, SelectionWrap};
+pub use state::{ListState, ScrollPhysics, ScrollState, SelectionWrap, TextInputState};
 pub use style::{BoxStyle, Sides};
 pub use text::{truncate, truncate_owned};
 pub use theme::Theme;
 pub use ui::Ui;
 pub use widget::{
-    AnimatedPerfOverlay, AnimatedWidget, BoxBorder, Button, Gauge, InteractiveWidget, List, Log,
-    Measure, Meter, Modal, Panel, Paragraph, PerfOverlay, PrintLine, ProgressBar, Scrollbar,
-    Sparkline, StatBar, StatefulWidget, Table, Tabs, Text, Widget,
+    AnimatedPerfOverlay, AnimatedWidget, BorderType, BoxBorder, Button, Gauge, HighlightSpacing,
+    InteractiveWidget, List, ListDirection, Log, Measure, Meter, Modal, Panel, Paragraph,
+    PerfOverlay, PrintLine, ProgressBar, Scrollbar, Sparkline, StatBar, StatefulWidget, Table,
+    Tabs, Text, TextInput, Widget,
 };

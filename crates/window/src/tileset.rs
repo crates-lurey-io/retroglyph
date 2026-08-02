@@ -136,14 +136,13 @@ impl SpriteAlign {
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum TilesetError {
-    /// PNG decode failed.
-    PngDecode(String),
+    /// Image decode failed: the bytes are not a sprite sheet in a format the `image` crate
+    /// supports.
+    ImageDecode(String),
     /// The image dimensions are not evenly divisible by the declared tile size.
     InvalidDimensions(u32, u32, u16, u16),
     /// The codepage mapping table has zero entries.
     EmptyCodepage,
-    /// The pixel format is not RGBA8 or RGB8.
-    UnsupportedPixelFormat(String),
     /// `tile_width` or `tile_height` is zero.
     ZeroTileSize,
 }
@@ -151,17 +150,11 @@ pub enum TilesetError {
 impl fmt::Display for TilesetError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::PngDecode(e) => write!(f, "png decode failed: {e}"),
+            Self::ImageDecode(e) => write!(f, "image decode failed: {e}"),
             Self::InvalidDimensions(iw, ih, tw, th) => {
                 write!(f, "image {iw}x{ih} is not divisible by tile size {tw}x{th}")
             }
             Self::EmptyCodepage => write!(f, "codepage mapping has no entries"),
-            Self::UnsupportedPixelFormat(fmt_name) => {
-                write!(
-                    f,
-                    "unsupported pixel format: {fmt_name}; expected RGBA8 or RGB8"
-                )
-            }
             Self::ZeroTileSize => {
                 write!(f, "tile_width and tile_height must be non-zero")
             }
@@ -285,8 +278,9 @@ pub const CP437_TO_UNICODE: [char; 256] = [
 /// decision rather than a sheet-wide one, and goes through
 /// [`Surface::with_tint`](retroglyph_core::Surface::with_tint).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct TilesetOptions {
-    /// Raw bytes of the PNG file.
+    /// Raw bytes of the sprite sheet image (any format the `image` crate supports).
     pub bytes: Vec<u8>,
     /// Width of a single tile in pixels.
     pub tile_width: u16,
@@ -312,12 +306,12 @@ pub struct TilesetOptions {
 }
 
 impl TilesetOptions {
-    /// Starts building a tileset from raw PNG bytes.
+    /// Starts building a tileset from raw sprite sheet bytes.
     ///
     /// Pass `include_bytes!("...").to_vec()` to embed the asset at compile
     /// time, or `std::fs::read(path)?` to load it at runtime.
     #[must_use]
-    pub const fn from_bytes(bytes: Vec<u8>) -> TilesetBuilder {
+    pub const fn builder(bytes: Vec<u8>) -> TilesetBuilder {
         TilesetBuilder {
             bytes,
             tile_width: 0,
@@ -333,7 +327,7 @@ impl TilesetOptions {
 
 /// Builder for [`TilesetOptions`].
 ///
-/// Construct via [`TilesetOptions::from_bytes`].
+/// Construct via [`TilesetOptions::builder`].
 ///
 /// [`columns`](TilesetBuilder::columns) defaults to `image_width / tile_width`,
 /// so you usually don't need to set it explicitly. [`codepage`](TilesetBuilder::codepage)
@@ -347,7 +341,7 @@ impl TilesetOptions {
 /// use retroglyph_window::tileset::TilesetOptions;
 ///
 /// let png: Vec<u8> = std::fs::read("assets/cp437_16x16.png").unwrap();
-/// let opts = TilesetOptions::from_bytes(png)
+/// let opts = TilesetOptions::builder(png)
 ///     .tile_size(16, 16) // codepage defaults to Cp437
 ///     .build()
 ///     .unwrap();
@@ -359,7 +353,7 @@ impl TilesetOptions {
 /// use retroglyph_window::tileset::{Codepage, SpriteAlign, TilesetOptions};
 ///
 /// let png: Vec<u8> = std::fs::read("assets/sprites.png").unwrap();
-/// let opts = TilesetOptions::from_bytes(png)
+/// let opts = TilesetOptions::builder(png)
 ///     .tile_size(32, 32)
 ///     .codepage(Codepage::Identity)  // tile 0 = '\0', tile 1 = '\x01', …
 ///     .align(SpriteAlign::Center)
@@ -376,7 +370,7 @@ impl TilesetOptions {
 /// use retroglyph_window::tileset::TilesetOptions;
 ///
 /// let png: Vec<u8> = std::fs::read("assets/monsters.png").unwrap();
-/// let opts = TilesetOptions::from_bytes(png)
+/// let opts = TilesetOptions::builder(png)
 ///     .tile_size(16, 16)
 ///     .start_codepoint('\u{E000}') // maps to Unicode PUA starting at U+E000
 ///     .build()
@@ -500,13 +494,13 @@ mod tests {
 
     #[test]
     fn tileset_builder_rejects_zero_tile_size() {
-        let opts = TilesetOptions::from_bytes(vec![]).tile_size(0, 16).build();
+        let opts = TilesetOptions::builder(vec![]).tile_size(0, 16).build();
         assert!(matches!(opts, Err(TilesetError::ZeroTileSize)));
     }
 
     #[test]
     fn tileset_builder_rejects_empty_custom_codepage() {
-        let opts = TilesetOptions::from_bytes(vec![])
+        let opts = TilesetOptions::builder(vec![])
             .tile_size(16, 16)
             .codepage(Codepage::Custom(vec![]))
             .build();
@@ -515,7 +509,7 @@ mod tests {
 
     #[test]
     fn tileset_builder_valid() {
-        let opts = TilesetOptions::from_bytes(vec![0u8; 64])
+        let opts = TilesetOptions::builder(vec![0u8; 64])
             .tile_size(16, 16)
             .start_codepoint('\u{E000}')
             .align(SpriteAlign::Center)
@@ -531,7 +525,7 @@ mod tests {
 
     #[test]
     fn tileset_builder_defaults_to_top_left_alignment() {
-        let opts = TilesetOptions::from_bytes(vec![0u8; 64])
+        let opts = TilesetOptions::builder(vec![0u8; 64])
             .tile_size(16, 16)
             .build()
             .unwrap();

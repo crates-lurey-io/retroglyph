@@ -70,7 +70,7 @@ fn resolve_color(c: &mut Criterion) {
             .scale(1)
             .build()
             .unwrap()
-            .run_headless()
+            .into_renderer()
             .unwrap();
 
         group.bench_function(name, |b| {

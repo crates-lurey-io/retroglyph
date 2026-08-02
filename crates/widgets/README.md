@@ -11,13 +11,14 @@ constraint-based layout splitter (`split_h`/`split_v` with ratatui-style
 `Fixed`/`Percent`/`Fill`/`Min`/`Max` constraints, plus const-generic `split_h_n`/`split_v_n`
 siblings that return `[Rect; N]` instead of allocating a `Vec`), plus hover/click/drag/focus
 interaction tracking. Every widget (`Panel`, `Gauge`, `Table`, `Sparkline`, `BoxBorder`, `List`,
-`Tabs`, `Button`, `Scrollbar`, `ProgressBar`, `Modal`, `StatBar`, `Meter`, `Log`, ...) is a builder
-struct that draws itself into a `Surface` (an area-relative view over a `Grid`) via
+`Tabs`, `Button`, `Scrollbar`, `ProgressBar`, `Modal`, `StatBar`, `Meter`, `Log`, `TextInput`, ...)
+is a builder struct that draws itself into a `Surface` (an area-relative view over a `Grid`) via
 `Widget`/`StatefulWidget` and retains no state of its own -- state that outlives one render call (a
-selection index, a scroll offset) lives in `ListState` instead. A handful of things that are
-genuinely just functions (`fill_rect`, `thumb_geometry`/`offset_for_pos`,
-`truncate`/`truncate_owned`) stay free functions rather than pretending to be widgets. Depends only
-on [`retroglyph-core`](https://crates.io/crates/retroglyph-core), so games that draw manually never
+selection index, a scroll offset, a text field's value and cursor) lives in
+`ListState`/`TextInputState` instead. A handful of things that are genuinely just functions
+(`fill_rect`, `thumb_geometry`/`offset_for_pos`, `truncate`/`truncate_owned`) stay free functions
+rather than pretending to be widgets. Depends only on
+[`retroglyph-core`](https://crates.io/crates/retroglyph-core), so games that draw manually never
 pull it in.
 
 Alongside the widgets is the constraint-based `Rect` splitter above, with `Flex` alignment

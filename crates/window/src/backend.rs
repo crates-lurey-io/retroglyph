@@ -15,20 +15,8 @@ use std::time::Duration;
 /// one type: some event loop owns input, while a per-renderer surface owns output.
 /// `WindowBackend` reunites the two (implementing `Output` by delegating to `P`, `Input` via
 /// its own event queue, and the no-op default `Cursor`), so [`Terminal`](retroglyph_core::Terminal)
-/// gets the full `Backend` it needs, while renderer crates implement only [`Presenter`]:
-///
-/// ```text
-/// event loop.push_event(e) ──> VecDeque<Event> ──> app.poll_event()
-///                                                        │
-///                                                        v
-///                                             Terminal<WindowBackend<P>>
-///                                                        │
-///                              draw / flush / resize     v
-///                              ◄────────────────────  WindowBackend
-///                                                        │
-///                                                        v
-///                                                 P: Presenter (output)
-/// ```
+/// gets the full `Backend` it needs, while renderer crates implement only [`Presenter`]. See the
+/// crate-level [Architecture](crate#architecture) section for the data-flow diagram.
 ///
 /// Because `WindowBackend` owns input, a [`Presenter`] should **not** implement [`Input`] or
 /// [`Cursor`] itself for windowed use: those impls would be dead (the event loop pushes to
@@ -127,6 +115,7 @@ use std::time::Duration;
 ///
 /// [`poll_event`](Input::poll_event) never blocks: frame timing is owned by the event loop, not
 /// by input waits.
+#[derive(Debug)]
 pub struct WindowBackend<P: Presenter> {
     presenter: P,
     events: VecDeque<Event>,

@@ -46,7 +46,7 @@ pub(super) fn web_viewport_layout_physical_size() -> Option<winit::dpi::Physical
 /// pixels: see `to_physical(super::scale_factor)` in `winit`'s wasm `pointer.rs`) into the
 /// raster-backing-store pixel space that
 /// [`Presenter::cell_size`](crate::presenter::Presenter::cell_size), and therefore
-/// [`pixel_to_cell`], are expressed in.
+/// [`translate_pixel_to_cell`](super::translate::translate_pixel_to_cell), are expressed in.
 ///
 /// `1.0` whenever `real_dpr` is already at or below `capped_dpr` (desktop, non-Retina): no
 /// correction needed. Below that, taps/clicks land scaled past their true position --

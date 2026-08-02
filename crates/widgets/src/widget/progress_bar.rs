@@ -8,8 +8,8 @@ use crate::Theme;
 /// A horizontal progress bar that fills `value / max` of the area it's
 /// rendered into.
 ///
-/// `filled_style`/`empty_style` default to [`Style::new()`]; set them with
-/// [`ProgressBar::filled_style`]/[`ProgressBar::empty_style`].
+/// `filled_style`/`empty_style` default to [`Theme::DARK`] (as if [`ProgressBar::theme`] had been
+/// called); set them with [`ProgressBar::filled_style`]/[`ProgressBar::empty_style`].
 /// `area.height()` is ignored; only the first row is drawn.
 ///
 /// # Examples
@@ -31,7 +31,8 @@ pub struct ProgressBar {
 }
 
 impl ProgressBar {
-    /// A bar filling `value / max`, in the default style.
+    /// A bar filling `value / max`, styled from [`Theme::DARK`] (as if [`ProgressBar::theme`] had
+    /// been called).
     #[must_use]
     pub fn new(value: u32, max: u32) -> Self {
         Self {
@@ -40,6 +41,7 @@ impl ProgressBar {
             filled_style: Style::new(),
             empty_style: Style::new(),
         }
+        .theme(Theme::DARK)
     }
 
     /// Set the style of the filled portion.
