@@ -1,4 +1,9 @@
 //! Stateful terminal lifecycle and double-buffering.
+//!
+//! [`Terminal::present`] compares the current frame against the previous one and forwards only
+//! the changed cells to the [`Backend`]. Pixel-based backends request full frames instead (see
+//! [`Output::needs_full_frame`]) because sub-cell offsets can leave orphaned pixels from the
+//! previous frame.
 
 use crate::backend::{Backend, Output};
 use crate::event::Event;

@@ -4,7 +4,9 @@
 //! gives a test a backend and [`Headless::push_event`]; everything between that and an assertion
 //! used to be the consumer's own problem. Feature-gated (`testing`), no effect on release builds.
 //! Not a UI-testing framework: no assertions, no matchers, no fixtures, just the loop and the
-//! input synthesis that otherwise gets rewritten per consumer.
+//! input synthesis that otherwise gets rewritten per consumer. See ["Driving an `App` with
+//! `TestHarness`"](https://github.com/crates-lurey-io/retroglyph/blob/main/docs/testing.md#driving-an-app-with-testharness)
+//! for the full workflow.
 
 use crate::app::{App, Flow, Frame};
 use crate::backend::Headless;

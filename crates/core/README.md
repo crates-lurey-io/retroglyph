@@ -39,6 +39,24 @@ See [docs.rs](https://docs.rs/retroglyph-core) for the full API, or the
 [workspace README](https://github.com/crates-lurey-io/retroglyph#readme) for the crate list and a
 real backend quick start.
 
+## Grid, drawing, and double buffering
+
+`Grid` holds up to 256 layers, each cell carrying a glyph, foreground/background color, and sub-cell
+pixel offsets; layer 0 is always allocated, layers 1+ are allocated on first write, so a
+single-layer game pays zero overhead. See the
+[`grid`](https://docs.rs/retroglyph-core/latest/retroglyph_core/grid/index.html) module docs for the
+full layering/compositing model.
+
+Draw through `Surface` (handed out by `Terminal::draw`/`Terminal::surface`): place characters with
+`put()`, print strings with `print()`, or style a whole run at once with `with_style()`. See the
+[`surface`](https://docs.rs/retroglyph-core/latest/retroglyph_core/surface/index.html) module docs.
+`Terminal::present()` diffs the current frame against the previous one and forwards only the changed
+cells to the backend; pixel backends request full frames instead, since sub-cell offsets can leave
+orphaned pixels behind otherwise.
+
+This crate is `no_std`-compatible: disable the `std` feature (requires an allocator). Useful for
+embedded or kernel-space roguelikes; see the `std` feature below.
+
 ## Features
 
 Default features: `std`, `egc`, `indexed-quant`, `blend-modes`.

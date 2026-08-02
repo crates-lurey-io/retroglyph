@@ -1,8 +1,9 @@
 //! Text layout: measurement, word wrapping, and bounded alignment.
 //!
-//! The entry point is [`TextLayout`], a builder that accepts a [`Line`] and
-//! layout parameters, then either measures the result or renders it into a
-//! [`Surface`].
+//! [`crate::text::Span`] and [`Line`] provide styled text primitives. The entry point here is
+//! [`TextLayout`], a builder that word-wraps a [`Line`] to a bounded [`Rect`], then positions it
+//! with independent horizontal ([`HAlign`]) and vertical ([`VAlign`]) alignment. Measure the
+//! result before rendering with [`TextLayout::measure`].
 //!
 //! Only available when the `egc` feature is enabled (requires `alloc`).
 

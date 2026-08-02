@@ -14,6 +14,12 @@
 //! See the `12_dungeon_scroll` example for `Camera` in action:
 //! <https://main.retroglyph.dev/examples/12_dungeon_scroll/terminal/>.
 //!
+//! [`Grid::from_charmap`](crate::Grid::from_charmap) builds a styled grid from an ASCII map or
+//! level string, one tile per character; combined with a [`Camera`] and multi-layer compositing,
+//! this is how a scrolling roguelike loads and follows a map larger than the screen (see the
+//! `11_sokoban` example for `from_charmap` itself, and `15_outpost_dashboard` for a `Camera` used
+//! alongside a UI).
+//!
 //! # Example
 //!
 //! ```

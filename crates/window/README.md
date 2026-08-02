@@ -15,6 +15,14 @@ reassembles both into one `Backend` via `winit`.
 Most consumers don't depend on this crate directly; use
 [`retroglyph-software`](https://crates.io/crates/retroglyph-software) instead, which depends on it.
 
+Both graphical backends resolve every character through an ordered `FontChain` of 1-bit bitmap
+fonts, so a fallback font built with `BitmapFont::with_charset` supplies coverage the primary font
+has no mapping for (e.g. `unscii16` has no quadrants, sextants, or braille; the `legacy-computing`
+feature below fills that gap). A chain glyph is drawn from the same 1-bit mask path as any other
+glyph and takes the cell's foreground color, unlike a tileset sprite, which carries the colors it
+was authored in. A single `BitmapFont` converts into a `FontChain` of one, so callers configuring
+just one font never construct a chain explicitly.
+
 ## Quick start
 
 ```sh

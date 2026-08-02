@@ -10,9 +10,9 @@
 //! retains no state of its own: state that outlives one render call (a
 //! selection index, a scroll offset) lives in [`ListState`] instead. A
 //! handful of things that are genuinely just functions ([`fill_rect`],
-//! [`thumb_geometry`]/[`offset_for_pos`]) stay free functions in [`draw`]
-//! rather than pretending to be widgets. Three more independent layers
-//! build on top:
+//! [`thumb_geometry`]/[`offset_for_pos`] in [`draw`]; [`truncate`]/[`truncate_owned`] in
+//! [`text`]) stay free functions rather than pretending to be widgets. Three more independent
+//! layers build on top:
 //!
 //! - [`Widget`]/[`StatefulWidget`] ([`widget`]) render into a [`Surface`],
 //!   an area-relative, single-layer view over a [`Grid`](retroglyph_core::Grid), and let
@@ -29,8 +29,8 @@
 //!   [`InteractiveWidget`] gets hit-tested and drawn from the one area/id a call site names.
 //! - [`BoxStyle`] ([`style`]) for a Lip-Gloss-style box model (padding,
 //!   border, margin) rendered into a standalone `Grid`.
-//! - [`join_h`]/[`join_v`] ([`block`]) to compose several `Grid`s (e.g.
-//!   `BoxStyle::render` output) into one before drawing it.
+//! - [`join_h`]/[`join_v`]/[`blit_into`] ([`block`]) to compose several `Grid`s (e.g.
+//!   `BoxStyle::render` output) into one, or blit one directly onto another at an offset.
 //! - [`Theme`] ([`theme`]) for named color roles (an app picks
 //!   [`Theme::DARK`]/[`Theme::LIGHT`], or builds its own), independent of
 //!   how the app decides which one is active.

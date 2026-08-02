@@ -6,9 +6,16 @@
 //! A [`Grid`] holds up to 256 independent layers (`u8` ids `0..=255`), one
 //! [`Tile`] per cell on each. Layer 0 is always allocated; layers 1-255 are
 //! allocated lazily, on first write to that layer (see
-//! [`put_tile`](Grid::put_tile), [`cells_mut_or_alloc`](Grid::cells_mut_or_alloc)). This is the
+//! [`put_tile`](Grid::put_tile), [`cells_mut_or_alloc`](Grid::cells_mut_or_alloc)): a
+//! single-layer game pays zero overhead for layers it never writes to. This is the
 //! crate's most distinctive feature and the one most worth understanding
 //! before reaching for a second layer.
+//!
+//! Each cell carries a glyph, foreground/background [`Color`], and sub-cell pixel
+//! offsets. [`Color`] covers the full spectrum: the terminal's default
+//! foreground/background, the 16 standard ANSI colors, the 256-color palette, and 24-bit RGB.
+//! [`Style`] intentionally has no text modifiers (bold, italic, underline, ...);
+//! see its own doc comment for the full rationale.
 //!
 //! ## Draw order
 //!
