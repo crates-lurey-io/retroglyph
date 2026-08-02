@@ -230,8 +230,7 @@ pub fn quantize_half_block(pixels: [Rgb; 2]) -> Glyph {
 /// assert_eq!(glyph.ch, '▝'); // top-right quadrant
 /// ```
 ///
-/// Never panics: `pixels` is a fixed-size 4-element array, so there is no length to validate
-/// and no index into it that can be out of bounds.
+/// See [`quantize_half_block`] for why this never panics.
 #[must_use]
 pub fn quantize_quadrant(pixels: [Rgb; 4]) -> Glyph {
     posterize(&pixels, &QUADRANTS)
@@ -245,13 +244,8 @@ pub fn quantize_quadrant(pixels: [Rgb; 4]) -> Glyph {
 /// and need a font with "Symbols for Legacy Computing" coverage to render as blocks rather than
 /// tofu/replacement characters.
 ///
-/// On the bundled pixel backends (`retroglyph-software`, `retroglyph-gl`), that coverage has to
-/// come from the font: CP437 has no mapping for sextant glyphs at all, so a font built with
-/// `retroglyph_window`'s `BitmapFont::new` (CP437-only) renders every sextant glyph as a solid
-/// block. Supply sextant coverage by passing either a primary font or a `BitmapFont::with_charset`
-/// fallback in a `FontChain` to those backends' `font()` builder method; the glyph then takes the
-/// cell's foreground color, which a tileset sprite (the other way to draw a non-CP437 shape) does
-/// not.
+/// Font coverage works the same way as [`quantize_quadrant`]'s: CP437 has no mapping for sextant
+/// glyphs either, so see that function's docs for the `FontChain` setup needed to render them.
 ///
 /// See the `16_subcell_image` example for `quantize_sextant` in action:
 /// <https://main.retroglyph.dev/examples/16_subcell_image/terminal/>.
@@ -267,8 +261,7 @@ pub fn quantize_quadrant(pixels: [Rgb; 4]) -> Glyph {
 /// assert_eq!(glyph.ch, '🬀'); // top-left sextant only
 /// ```
 ///
-/// Never panics: `pixels` is a fixed-size 6-element array, so there is no length to validate
-/// and no index into it that can be out of bounds.
+/// See [`quantize_half_block`] for why this never panics.
 #[must_use]
 pub fn quantize_sextant(pixels: [Rgb; 6]) -> Glyph {
     posterize(&pixels, &SEXTANTS)

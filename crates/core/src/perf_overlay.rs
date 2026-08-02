@@ -340,11 +340,10 @@ where
 
 impl<A, R: PerfRenderer> PerfOverlayApp<A, R> {
     /// Wraps `inner`, drawing with a custom [`PerfRenderer`] instead of [`DefaultPerfRenderer`].
-    /// For a bare closure, prefer [`PerfOverlayApp::with_closure`] instead -- it lets Rust infer
-    /// the closure's parameter types; a closure passed here needs them spelled out by hand. This
-    /// constructor is for a named type that implements [`PerfRenderer`] directly (there is no
+    /// This constructor is for a named type that implements [`PerfRenderer`] directly (there is no
     /// stable way for a plain struct to implement `FnMut` itself, which is why the trait exists
-    /// at all -- see the [module docs](self)).
+    /// at all -- see the [module docs](self)). See [`PerfOverlayApp::with_closure`] for why a bare
+    /// closure should go through that constructor instead.
     ///
     /// Defaults: visible, [`DEFAULT_LAYER`], a `64x1` area (wide enough for
     /// [`DefaultPerfRenderer`]'s single-row readout with a short backend label), and
@@ -379,9 +378,9 @@ impl<A, R: PerfRenderer> PerfOverlayApp<A, R> {
     where
         F: FnMut(&FrameStats<FRAME_HISTORY>, &str, Rect, &mut Surface<'_>) + 'static,
     {
-        // Bound as `FnMut(...)` directly, not `PerfRenderer`, for the same reason
-        // `with_closure` is: it lets Rust infer a bare closure's parameter types from context.
-        // `F: FnMut(...)` still satisfies `PerfRenderer` via its blanket impl, so this boxes fine.
+        // Bound as `FnMut(...)` directly for the same reason `with_closure` is; see its doc
+        // comment. `F: FnMut(...)` still satisfies `PerfRenderer` via its blanket impl, so this
+        // boxes fine.
         self.full = Some(FullMode {
             renderer: Box::new(renderer),
             size,
