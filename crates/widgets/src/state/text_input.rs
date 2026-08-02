@@ -19,8 +19,7 @@ use retroglyph_core::{Event, KeyCode};
 /// contains a double-width character.
 ///
 /// Handles typed characters (`Event::Key(KeyCode::Char(c))`) and pasted text (`Event::Paste`)
-/// only. IME/text composition and multi-line editing are out of scope for this crate; see
-/// `docs/ROADMAP.md` for why.
+/// only, not IME/text composition or multi-line editing.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct TextInputState {
     value: String,
