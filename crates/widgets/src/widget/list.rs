@@ -216,6 +216,7 @@ impl List<'_> {
                 } else {
                     ""
                 };
+                let marker = truncate_to_cols(marker, marker_width.min(width));
                 surface.print((0, y), marker, style);
             }
             let text = truncate_to_cols(item, text_width);
@@ -558,6 +559,23 @@ mod tests {
         // Unselected row's marker column is blank, and its text still starts past it.
         assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
         assert_eq!(grid[Pos::new(2, 0)].glyph(), 'A');
+    }
+
+    #[test]
+    fn list_highlight_symbol_does_not_bleed_onto_the_next_row() {
+        let area = Rect::new(0, 0, 2, 2);
+        let names = items(&["A", "B"]);
+        let list = List::new(&names).highlight_symbol(">>>"); // marker is wider than the list
+
+        let mut grid = Grid::new(2, 2);
+        let mut state = ListState::new();
+        state.select(Some(0));
+        StatefulWidget::render(&list, &mut Surface::new(&mut grid, area, 0), &mut state);
+
+        // Row 1 belongs to "B", so it must not show any spillover from row 0's marker (the
+        // marker is wider than the whole list, so there's no room left for item text either).
+        assert_eq!(grid[Pos::new(0, 1)].glyph(), ' ');
+        assert_eq!(grid[Pos::new(1, 1)].glyph(), ' ');
     }
 
     #[test]
