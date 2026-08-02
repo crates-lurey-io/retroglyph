@@ -21,6 +21,7 @@ use retroglyph_core::{Rect, Size};
 
 /// How a single pane claims space along the split axis.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Constraint {
     /// An exact number of cells.
     Fixed(u16),
@@ -359,6 +360,7 @@ pub fn split_v_spaced(area: Rect, constraints: &[Constraint], spacing: u16) -> V
 /// leftover space trails after the last pane, unclaimed. This matches their
 /// existing documented behavior, so adding `Flex` does not change them.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Flex {
     /// Panes are packed at the start of the area; leftover space trails
     /// after the last pane. The default, and what [`split_v`]/[`split_h`] use.

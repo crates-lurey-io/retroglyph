@@ -148,6 +148,7 @@ impl RecoverableError for core::convert::Infallible {}
 /// Init(String), Present(String) }` plus [`RecoverableError`] impl. This type is that common
 /// shape, provided once here so backends can reuse it directly instead of duplicating it.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum GenericSurfaceError {
     /// Creating the surface or its underlying context failed. Treated as fatal (not
     /// recoverable): a presenter cannot proceed without a surface, and retrying the same
