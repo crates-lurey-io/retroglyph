@@ -223,13 +223,13 @@ layout splitter, built on <code>retroglyph-core</code></summary>
 
 An optional crate: games that draw manually depend only on `retroglyph-core`. Every widget (`Panel`,
 `Gauge`, `Table`, `Sparkline`, `BoxBorder`, `List`, `Tabs`, `Button`, `Scrollbar`, `ProgressBar`,
-`Modal`, `StatBar`, `Meter`, `Log`, ...) is a builder struct that draws itself into a `Surface` (an
-area-relative view over a `Grid`) via `Widget`/`StatefulWidget` and retains no state of its own --
-state that outlives one render call (a selection index, a scroll offset) lives in `ListState`
-instead. A handful of things that are genuinely just functions (`fill_rect`,
-`thumb_geometry`/`offset_for_pos`) stay free functions rather than pretending to be widgets.
-Alongside the widgets is a constraint-based `Rect` splitter (`split_h`/`split_v`) with
-`Fixed`/`Percent`/`Fill`/`Min`/`Max` constraints and `Flex` alignment
+`Modal`, `StatBar`, `Meter`, `Log`, `TextInput`, ...) is a builder struct that draws itself into a
+`Surface` (an area-relative view over a `Grid`) via `Widget`/`StatefulWidget` and retains no state
+of its own -- state that outlives one render call (a selection index, a scroll offset, a text
+field's value and cursor) lives in `ListState`/`TextInputState` instead. A handful of things that
+are genuinely just functions (`fill_rect`, `thumb_geometry`/`offset_for_pos`) stay free functions
+rather than pretending to be widgets. Alongside the widgets is a constraint-based `Rect` splitter
+(`split_h`/`split_v`) with `Fixed`/`Percent`/`Fill`/`Min`/`Max` constraints and `Flex` alignment
 (`Start`/`End`/`Center`/`SpaceBetween`/`SpaceAround`): similar to [ratatui](https://ratatui.rs)'s
 layout system. `Fill(weight)` claims a share of the leftover space proportional to `weight` relative
 to the other `Fill`/`Min`/`Max` panes in the same split (`Fill(1)` reproduces plain equal

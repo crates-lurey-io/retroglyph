@@ -82,7 +82,7 @@ pub use layout::{
     split_v_spaced,
 };
 pub use retroglyph_core::{Layer, StyledSurface, Surface};
-pub use state::{ListState, ScrollPhysics, ScrollState, SelectionWrap};
+pub use state::{ListState, ScrollPhysics, ScrollState, SelectionWrap, TextInputState};
 pub use style::{BoxStyle, Sides};
 pub use text::{truncate, truncate_owned};
 pub use theme::Theme;
@@ -92,5 +92,5 @@ pub use widget::Paragraph;
 pub use widget::{
     AnimatedPerfOverlay, AnimatedWidget, BoxBorder, Button, Gauge, InteractiveWidget, List, Log,
     Measure, Meter, Modal, Panel, PerfOverlay, PrintLine, ProgressBar, Scrollbar, Sparkline,
-    StatBar, StatefulWidget, Table, Tabs, Text, Widget,
+    StatBar, StatefulWidget, Table, Tabs, Text, TextInput, Widget,
 };
