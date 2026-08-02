@@ -47,11 +47,11 @@
 //!
 //! # Features
 //!
-//! - `dev` -- optional. Forwards `retroglyph-core`'s `dev` feature, forcing development
+//! - `dev`: optional. Forwards `retroglyph-core`'s `dev` feature, forcing development
 //!   diagnostics on in a build that would otherwise compile them out.
-//! - `default-font` -- optional. Embeds the Unscii 16 bitmap font as a ready-to-use default
+//! - `default-font`: optional. Embeds the Unscii 16 bitmap font as a ready-to-use default
 //!   `FontChain`.
-//! - `tilesets` -- optional. PNG sprite sheet tilesets with alpha-blended CPU blit support.
+//! - `tilesets`: optional. PNG sprite sheet tilesets with alpha-blended CPU blit support.
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
@@ -1106,7 +1106,7 @@ fn blit_sprite(
 
             // `identity` is loop-invariant, hoisted above by the compiler: an untinted sprite
             // (the overwhelming majority) takes exactly the arithmetic it took before this
-            // branch existed. Alpha is deliberately untouched, so which pixels are opaque, and
+            // branch existed. Alpha is untouched, so which pixels are opaque, and
             // therefore the blending below and the background showing through, are unaffected.
             let src = if identity {
                 src

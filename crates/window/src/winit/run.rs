@@ -107,7 +107,7 @@ impl<T: fmt::Debug> std::error::Error for EventProxyClosed<T> {}
 
 /// Window configuration for [`run_windowed`] / [`run_app`].
 ///
-/// Deliberately renderer-agnostic: pixel dimensions, not grid/font/scale.
+/// Renderer-agnostic: pixel dimensions, not grid/font/scale.
 /// Use [`fit`](Self::fit) to derive the pixel size from a presenter's own
 /// cell geometry.
 // Five independent window attribute toggles (`fill_viewport`, `resizable`, `decorations`,
@@ -930,8 +930,8 @@ struct WindowApp<P: Presenter, F, T, D> {
     /// `app_loop` is a plain `FnMut(&mut Terminal<..>)` with no return value and no
     /// [`ActiveEventLoop`] handle, so it can't call `event_loop.exit()` itself; it can only flip
     /// this shared flag. [`handle_window_event`](Self::handle_window_event) (which runs
-    /// `app_loop` on [`WindowEvent::RedrawRequested`]) deliberately takes no
-    /// [`ActiveEventLoop`] either, so unit tests can drive it without a live winit loop (see its
+    /// `app_loop` on [`WindowEvent::RedrawRequested`]) also takes no
+    /// [`ActiveEventLoop`], so unit tests can drive it without a live winit loop (see its
     /// doc comment). `ApplicationHandler::window_event`, which does have the `ActiveEventLoop`,
     /// checks this flag right after `handle_window_event` returns and calls `event_loop.exit()`
     /// if it's set, letting the stack unwind normally (`Drop` impls run) instead of
@@ -1088,8 +1088,8 @@ impl<P: Presenter, F, T, D> WindowApp<P, F, T, D> {
                 event_loop.exit();
                 return None;
             }
-            // Set the initial surface size (required on WASM before first present).
-            // Deliberately `surface_physical_size`, not `physical_size`: the
+            // Set the initial surface size (required on WASM before first present), using
+            // `surface_physical_size`, not `physical_size`: the
             // raster backing store stays DPR-capped for present() cost even
             // though the canvas's CSS size (driven by `physical_size` via
             // winit above) matches the full, uncapped viewport.
@@ -1165,7 +1165,7 @@ const PRESENT_FAILURE_RECOVERY_THRESHOLD: u32 = 30;
 /// backends can't pattern-match on *why* a present failed to decide whether it's recoverable the
 /// way a wgpu-based app would. All they can generally observe is a bare `Display`able error and
 /// whether the failure is a one-off or persistent (via the consecutive-failure count), so the
-/// recovery strategy here is deliberately generic for that case: rate-limit logging so a
+/// recovery strategy here is generic for that case: rate-limit logging so a
 /// persistent failure doesn't spam every frame, and after a run of failures long enough to rule
 /// out a one-off glitch, attempt the one backend-agnostic recovery available: re-running
 /// [`Presenter::init_surface`] to rebuild the surface from scratch, the same call

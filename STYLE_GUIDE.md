@@ -101,7 +101,7 @@ story: hand-rolled error enums, not a derive-macro crate.
 - **New public error types should be `#[non_exhaustive]`.** The existing error enums predate this as
   an explicit rule and aren't marked that way yet; new ones should be, so adding a variant later
   isn't a breaking change. (This is a forward-looking addition, not a description of code that
-  already exists everywhere -- flagging it as such rather than implying it's already universal.)
+  already exists everywhere, so it's flagged as such rather than implying it's already universal.)
 - **No `eprintln!` in library code.** Use the `log` crate, feature-gated. Fatal backend
   initialization errors: `log::error!` + `event_loop.exit()`, not `panic!`. `log`'s scope today is
   narrow and should stay that way: backend init/runtime failure reporting (`retroglyph-software`,
@@ -131,42 +131,40 @@ none of these are re-explained here.
 
 ### Canonical / official
 
-- [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/) -- the closest thing to a
-  formal spec for public API shape (naming, the C-\* checklist). Read before designing a new public
-  type.
-- [Official Rust Style Guide](https://doc.rust-lang.org/style-guide/) -- what rustfmt enforces by
+- [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/): the closest thing to a formal
+  spec for public API shape (naming, the C-\* checklist). Read before designing a new public type.
+- [Official Rust Style Guide](https://doc.rust-lang.org/style-guide/): what rustfmt enforces by
   default. Read only if you're confused about why rustfmt formatted something a certain way.
-- [Rust Design Patterns](https://rust-unofficial.github.io/patterns/) -- idioms/anti-patterns
+- [Rust Design Patterns](https://rust-unofficial.github.io/patterns/): idioms/anti-patterns
   catalogue. Good for "is there a name for this pattern" lookups.
-- [The Rust Performance Book](https://nnethercote.github.io/perf-book/) -- read before a perf pass,
+- [The Rust Performance Book](https://nnethercote.github.io/perf-book/): read before a perf pass,
   not everyday reading.
 
 ### Books / courses
 
-- [Effective Rust](https://effective-rust.com/) -- item-based format, easy to reference by number in
+- [Effective Rust](https://effective-rust.com/): item-based format, easy to reference by number in
   review comments.
-- [Google Comprehensive Rust](https://google.github.io/comprehensive-rust/) -- teaching material,
-  more useful for onboarding someone new to Rust than to this project specifically.
-- [Ferrous Systems: Elements of Rust](https://github.com/ferrous-systems/elements-of-rust) --
+- [Google Comprehensive Rust](https://google.github.io/comprehensive-rust/): teaching material, more
+  useful for onboarding someone new to Rust than to this project specifically.
+- [Ferrous Systems: Elements of Rust](https://github.com/ferrous-systems/elements-of-rust):
   practical de-nesting/clarity techniques; a good code-review reference for "how do I simplify this
   match."
-- [Microsoft Rust Patterns book](https://microsoft.github.io/RustTraining/rust-patterns-book/) --
+- [Microsoft Rust Patterns book](https://microsoft.github.io/RustTraining/rust-patterns-book/):
   intermediate-to-advanced design pattern deep dives (type-state, newtype, macros).
 
 ### Company/team guidelines
 
-- [Microsoft Pragmatic Rust Guidelines](https://microsoft.github.io/rust-guidelines/) -- large,
+- [Microsoft Pragmatic Rust Guidelines](https://microsoft.github.io/rust-guidelines/): large,
   versioned guideline set with rationale per rule; useful when justifying adopting or rejecting a
   specific "must"/"should."
-- [Embark Studios guidelines](https://github.com/EmbarkStudios/rust-ecosystem/blob/main/guidelines.md)
-  -- minimal, short enough to skim.
-- [Apollo GraphQL Rust best practices](https://github.com/apollographql/rust-best-practices) --
-  strong opinions on error hierarchies; useful reading given retroglyph's own error-handling stance
-  above.
-- [Sentry Rust guidelines](https://develop.sentry.dev/engineering-practices/rust/) -- iterator
-  design (`FusedIterator`/`DoubleEndedIterator`/`ExactSizeIterator` conventions), relevant to
-  retroglyph's own grid-iteration types.
-- [Linux kernel Rust coding guidelines](https://docs.kernel.org/rust/coding-guidelines.html) --
+- [Embark Studios guidelines](https://github.com/EmbarkStudios/rust-ecosystem/blob/main/guidelines.md):
+  minimal, short enough to skim.
+- [Apollo GraphQL Rust best practices](https://github.com/apollographql/rust-best-practices): strong
+  opinions on error hierarchies; useful reading given retroglyph's own error-handling stance above.
+- [Sentry Rust guidelines](https://develop.sentry.dev/engineering-practices/rust/): iterator design
+  (`FusedIterator`/`DoubleEndedIterator`/`ExactSizeIterator` conventions), relevant to retroglyph's
+  own grid-iteration types.
+- [Linux kernel Rust coding guidelines](https://docs.kernel.org/rust/coding-guidelines.html):
   extreme end of the spectrum (near-total panic prohibition, mandatory SAFETY comments). Useful
   contrast reading, not a rulebook this project follows, since it forbids `unsafe` entirely.
 

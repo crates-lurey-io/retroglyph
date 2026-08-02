@@ -58,7 +58,7 @@ impl<'a> Gauge<'a> {
     /// `09_widgets_dashboard` already uses for the plain-text label next to this gauge's
     /// sparkline. The bar's own fill stays load-colored via [`super::Meter`] regardless of
     /// `theme`, matching every other gauge/meter-backed widget here (see [`super::Sparkline`]'s
-    /// doc comment for why that coloring is deliberately not part of the [`Theme`] role palette).
+    /// doc comment for why that coloring is not part of the [`Theme`] role palette).
     ///
     /// `label_style` sets an explicit background rather than leaving it at [`Style::new()`]'s
     /// default: an unset background isn't "transparent" once a real backend draws it (a bare

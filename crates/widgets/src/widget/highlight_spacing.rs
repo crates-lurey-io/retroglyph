@@ -6,8 +6,8 @@
 /// `None`.
 ///
 /// [`HighlightSpacing::WhenSelected`] is the default: with nothing selected, the list renders no
-/// marker column at all, and one only appears -- shifting every item's text right by the
-/// symbol's width -- the moment something becomes selected. [`HighlightSpacing::Always`] reserves
+/// marker column at all, and one only appears (shifting every item's text right by the
+/// symbol's width) the moment something becomes selected. [`HighlightSpacing::Always`] reserves
 /// the column unconditionally, so item text never shifts as selection comes and goes.
 /// [`HighlightSpacing::Never`] never reserves it, so the symbol never renders even while
 /// something is selected.

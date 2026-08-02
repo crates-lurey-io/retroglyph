@@ -5,7 +5,7 @@ use retroglyph_core::symbols::border;
 /// The box-drawing glyph set [`BoxBorder`](super::BoxBorder), [`Panel`](super::Panel), and
 /// [`Modal`](super::Modal) draw their corners and edges with.
 ///
-/// [`BorderType::Plain`] is the default -- the single-line set every one of these widgets drew
+/// [`BorderType::Plain`] is the default: the single-line set every one of these widgets drew
 /// before this type existed, so adding it is purely additive. The other three variants exist to
 /// make nested or stateful boxes visually distinct at a glance: an outer [`BorderType::Double`]
 /// around an inner [`BorderType::Plain`] reads instantly, where two identical single lines don't,

@@ -1,6 +1,6 @@
 //! Benchmarks for layer compositing (`Grid::flatten_into`), the per-frame step
 //! `Terminal::present` runs for every backend that doesn't composite layers itself (see
-//! `crate::backend::Output::composites_layers`) -- currently `Headless` and `retroglyph-crossterm`.
+//! `crate::backend::Output::composites_layers`): currently `Headless` and `retroglyph-crossterm`.
 //!
 //! retroglyph#269 asks for coverage of this hot path across 1/4/16 layers: `flatten_into` walks
 //! every allocated layer for every cell unconditionally (see `grid.rs`'s module doc, "No
@@ -12,7 +12,7 @@
 //! `composites_layers`, so it takes the flatten path) with `n` layers populated, calling
 //! `present()` once per iteration. `present()` also diffs the flattened frame against the
 //! previous one, but that diff cost is invariant across the layer counts compared here, while the
-//! flatten cost is not -- so the scaling this benchmark reports is attributable to `flatten_into`.
+//! flatten cost is not, so the scaling this benchmark reports is attributable to `flatten_into`.
 
 // `criterion_group!`/`criterion_main!` below expand to an undocumented `pub fn benches(..)`; this
 // bench binary isn't a published API surface for `missing_docs` to usefully gate.
@@ -27,7 +27,7 @@ use std::hint::black_box;
 /// fg, offsets, flags, and conditionally bg) all do real work rather than short-circuiting.
 ///
 /// Uses a fixed RNG seed so cell content (and therefore the benchmark) is deterministic across
-/// runs -- required for `--save-baseline`/`--baseline` comparisons to be meaningful.
+/// runs, required for `--save-baseline`/`--baseline` comparisons to be meaningful.
 fn terminal_with_layers(cols: u16, rows: u16, layers: u8) -> Terminal<Headless> {
     let mut term = Terminal::new(Headless::new(cols, rows));
     let mut rng = fastrand::Rng::with_seed(42);

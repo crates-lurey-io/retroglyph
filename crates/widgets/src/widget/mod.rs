@@ -70,7 +70,7 @@ pub use text::Text;
 pub use text_input::TextInput;
 
 /// A type that draws itself into a [`Surface`], without retaining any
-/// state — the minimal shape shared by every widget-like consumer.
+/// state: the minimal shape shared by every widget-like consumer.
 ///
 /// # Examples
 ///
@@ -96,7 +96,7 @@ pub trait Widget {
 }
 
 /// Like [`Widget`], but for widgets that read (and may update) externally
-/// owned state — a selection index, a scroll offset — that outlives a
+/// owned state (a selection index, a scroll offset) that outlives a
 /// single render call. See [`crate::ListState`].
 ///
 /// # Examples
@@ -169,7 +169,7 @@ pub trait Measure {
 /// [`StatefulWidget`] has no way to reach the [`Frame`] an [`App`](retroglyph_core::App) already
 /// receives every frame, so a widget with time-based state has nowhere to advance it: not in
 /// `render` (no `Frame` parameter), and not in a second, app-defined call, because nothing
-/// enforces that call happening before `render` rather than after it -- the two orders differ by
+/// enforces that call happening before `render` rather than after it: the two orders differ by
 /// one frame of animation, silently. `AnimatedWidget` closes that gap with a single call that both
 /// advances and draws, so the ordering question doesn't arise. See [`Scrollbar`]'s impl for a
 /// worked example: it ticks [`crate::ScrollState`]'s physics forward by `frame.delta`, then draws
@@ -209,7 +209,7 @@ pub trait Measure {
 /// ```
 pub trait AnimatedWidget {
     /// The externally owned, time-evolving state this widget reads and/or updates while
-    /// rendering -- e.g. [`crate::ScrollState`].
+    /// rendering, e.g. [`crate::ScrollState`].
     type State;
 
     /// Advances `state` by `frame.delta`, then draws this widget into `surface.area()`, both in
@@ -238,7 +238,7 @@ pub trait AnimatedWidget {
 /// [`ListState`](crate::ListState)), the same [`Widget`]/[`StatefulWidget`] split applied to
 /// interactive widgets rather than a separate `InteractiveStatefulWidget` trait.
 ///
-/// Deliberately has no generic method, so `dyn InteractiveWidget<State = ()>` is object-safe,
+/// Has no generic method, so `dyn InteractiveWidget<State = ()>` is object-safe,
 /// e.g. a `Vec<Box<dyn InteractiveWidget<State = ()>>>` of heterogeneous stateless widgets.
 ///
 /// # Examples

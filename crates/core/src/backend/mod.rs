@@ -52,7 +52,7 @@ impl BackendError for std::io::Error {}
 
 /// One cell handed to a backend at draw time: the tile, plus the state that does not fit in one.
 ///
-/// [`Tile`] is deliberately compact (20 bytes, no padding to spare), so a cell's rarer members
+/// [`Tile`] is compact (20 bytes, no padding to spare), so a cell's rarer members
 /// live in a sparse side table on [`Grid`](crate::grid::Grid) instead. A backend cannot reach
 /// that table, so they are delivered here.
 ///
@@ -227,7 +227,7 @@ pub trait Output {
     /// than just the changed cells.
     ///
     /// Pixel-based backends (e.g. `SoftwareRenderer`) need this because
-    /// sub-cell offsets can spill glyph pixels into adjacent cells — without
+    /// sub-cell offsets can spill glyph pixels into adjacent cells: without
     /// a full redraw, orphaned pixels from the previous frame linger.
     ///
     /// The default implementation returns `false`.

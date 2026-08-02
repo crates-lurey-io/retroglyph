@@ -24,7 +24,7 @@
 //! draw are all backend-agnostic: [`PerfOverlayApp::update`](App::update) only ever talks to
 //! [`Terminal`]/[`Surface`], which every [`Backend`] implements identically. The one thing every
 //! caller still supplies by hand is the `backend` label string (there is no portable way to ask a
-//! `Backend` what to call itself) -- everything else, including toggling the overlay on and off,
+//! `Backend` what to call itself); everything else, including toggling the overlay on and off,
 //! works unmodified on crossterm, a native window, or a browser tab.
 //!
 //! # Rendering
@@ -33,7 +33,7 @@
 //! minMM.M maxMM.M <backend>` readout, compact enough to fit an 80-column terminal alongside a
 //! long backend label, with no dependencies beyond this crate. For a richer
 //! overlay (a bordered panel, a frame-time sparkline, extra app-supplied metrics like
-//! resolution or vsync state), pass a closure to [`PerfOverlayApp::with_closure`] -- composing
+//! resolution or vsync state), pass a closure to [`PerfOverlayApp::with_closure`]: composing
 //! `retroglyph-widgets`' `Panel`/`Sparkline` widgets requires no glue code beyond the closure
 //! itself. Implement [`PerfRenderer`] directly, and construct with
 //! [`PerfOverlayApp::with_renderer`], only for a named, reusable renderer type instead of a
@@ -52,13 +52,13 @@
 //!
 //! [`PerfOverlayApp::update`] drains every event out of the wrapped [`Terminal`] before handing
 //! control to the inner [`App`], keeps any that match the toggle key (backtick, or F1 as an
-//! alias, by default -- see [`default_is_toggle_key`]), and re-queues the rest via
+//! alias, by default; see [`default_is_toggle_key`]), and re-queues the rest via
 //! [`Input::push_event`](crate::backend::Input::push_event) so the inner app sees exactly the
 //! input it would have without the overlay, minus the toggle presses. This works identically on
 //! every backend because it only goes through [`Terminal`]'s own event queue, never a
 //! backend-specific input path.
 //!
-//! The toggle key doesn't just flip visibility -- it cycles through [`PerfOverlayMode`]:
+//! The toggle key doesn't just flip visibility: it cycles through [`PerfOverlayMode`]:
 //! [`Off`](PerfOverlayMode::Off) -> [`Compact`](PerfOverlayMode::Compact) ->
 //! [`Full`](PerfOverlayMode::Full) -> back to `Off`. `Full` only exists once
 //! [`PerfOverlayApp::cycle_with`] registers a second, richer [`PerfRenderer`] (typically one
@@ -81,7 +81,7 @@ use core::fmt::{self, Write as _};
 
 /// How many frames [`PerfOverlayApp`]'s internal [`FrameStats`] remembers.
 ///
-/// About two seconds at 60fps. Not configurable per instance -- pick a bigger window by building
+/// About two seconds at 60fps. Not configurable per instance: pick a bigger window by building
 /// a [`FrameStats`] directly and rendering it through a custom [`PerfRenderer`] closure instead
 /// of [`PerfOverlayApp`], if a specific app genuinely needs one.
 pub const FRAME_HISTORY: usize = 120;
@@ -89,7 +89,7 @@ pub const FRAME_HISTORY: usize = 120;
 /// [`PerfOverlayApp`]'s default overlay layer: [`Layer::Debug`].
 ///
 /// The workspace's named top-most UI tier, so a perf HUD stays visible over whatever else is on
-/// screen -- including an open [`Layer::Overlay`] popup -- rather than risking a lower,
+/// screen (including an open [`Layer::Overlay`] popup) rather than risking a lower,
 /// app-chosen layer hiding it. Override with [`PerfOverlayApp::layer`] if an app's own content
 /// already reaches this layer.
 pub const DEFAULT_LAYER: u8 = Layer::Debug.as_u8();
@@ -97,7 +97,7 @@ pub const DEFAULT_LAYER: u8 = Layer::Debug.as_u8();
 /// Draws a [`PerfOverlayApp`]'s stats into a rectangular area of a [`Surface`].
 ///
 /// Implemented for any `FnMut(&FrameStats<FRAME_HISTORY>, &str, Rect, &mut Surface<'_>)` (pass
-/// such a closure to [`PerfOverlayApp::with_closure`] -- see its docs for why that constructor
+/// such a closure to [`PerfOverlayApp::with_closure`]; see its docs for why that constructor
 /// exists instead of just accepting `impl PerfRenderer` everywhere), so a plain closure is enough
 /// for a custom overlay; see the [module docs](self) for composing one out of
 /// `retroglyph-widgets` widgets. [`DefaultPerfRenderer`] is the built-in implementation, used by
@@ -264,7 +264,7 @@ pub enum PerfOverlayMode {
     Off,
     /// [`PerfOverlayApp`]'s primary [`PerfRenderer`] (e.g. [`DefaultPerfRenderer`]) renders.
     Compact,
-    /// The renderer registered via [`PerfOverlayApp::cycle_with`] renders, if any -- otherwise
+    /// The renderer registered via [`PerfOverlayApp::cycle_with`] renders, if any; otherwise
     /// equivalent to `Off` (this mode is unreachable through the toggle key alone in that case,
     /// but [`PerfOverlayApp::set_mode`] can still be called with it directly).
     Full,
@@ -306,8 +306,8 @@ pub struct PerfOverlayApp<A, R = DefaultPerfRenderer> {
     size: Size,
     toggle_key: fn(&Event) -> bool,
     /// Scratch buffer for [`update`](App::update)'s pass-through events, reused across frames (via
-    /// `clear` rather than a fresh `Vec` each call) so draining an event-free frame -- the common
-    /// case in an unpaced game loop calling this many times a second -- never allocates.
+    /// `clear` rather than a fresh `Vec` each call) so draining an event-free frame (the common
+    /// case in an unpaced game loop calling this many times a second) never allocates.
     passthrough: Vec<Event>,
 }
 
@@ -330,7 +330,7 @@ where
     /// Prefer this over [`with_renderer`](Self::with_renderer) for a closure: writing the bound
     /// directly as `FnMut(...)` here (rather than the [`PerfRenderer`] trait `with_renderer`
     /// takes) is what lets Rust infer a bare closure's parameter types from context, the same way
-    /// it does for any other `Fn`-bounded API -- a closure passed to `with_renderer` needs its
+    /// it does for any other `Fn`-bounded API: a closure passed to `with_renderer` needs its
     /// parameters annotated by hand, or type inference has nothing to pin them down to.
     #[must_use]
     pub fn with_closure(inner: A, backend: &'static str, renderer: F) -> Self {
@@ -340,15 +340,15 @@ where
 
 impl<A, R: PerfRenderer> PerfOverlayApp<A, R> {
     /// Wraps `inner`, drawing with a custom [`PerfRenderer`] instead of [`DefaultPerfRenderer`].
-    /// For a bare closure, prefer [`PerfOverlayApp::with_closure`] instead -- it lets Rust infer
+    /// For a bare closure, prefer [`PerfOverlayApp::with_closure`] instead: it lets Rust infer
     /// the closure's parameter types; a closure passed here needs them spelled out by hand. This
     /// constructor is for a named type that implements [`PerfRenderer`] directly (there is no
     /// stable way for a plain struct to implement `FnMut` itself, which is why the trait exists
-    /// at all -- see the [module docs](self)).
+    /// at all; see the [module docs](self)).
     ///
     /// Defaults: visible, [`DEFAULT_LAYER`], a `64x1` area (wide enough for
     /// [`DefaultPerfRenderer`]'s single-row readout with a short backend label), and
-    /// [`default_is_toggle_key`] -- override any of these with the chainable methods below before
+    /// [`default_is_toggle_key`]; override any of these with the chainable methods below before
     /// the wrapped app first runs.
     #[must_use]
     pub fn with_renderer(inner: A, backend: &'static str, renderer: R) -> Self {
@@ -372,7 +372,7 @@ impl<A, R: PerfRenderer> PerfOverlayApp<A, R> {
     /// -> Full -> Off` instead of just `Off -> Compact -> Off`.
     ///
     /// A natural pairing is [`DefaultPerfRenderer`] (or a closure) at [`Compact`](PerfOverlayMode::Compact)
-    /// and a `retroglyph-widgets`-composed panel with a frame-time sparkline at `Full` -- see the
+    /// and a `retroglyph-widgets`-composed panel with a frame-time sparkline at `Full`; see the
     /// [module docs](self).
     #[must_use]
     pub fn cycle_with<F>(mut self, size: Size, renderer: F) -> Self
@@ -391,7 +391,7 @@ impl<A, R: PerfRenderer> PerfOverlayApp<A, R> {
 
     /// Sets whether the overlay starts visible: `true` starts at [`PerfOverlayMode::Compact`],
     /// `false` at [`PerfOverlayMode::Off`]. Defaults to `true`; the toggle key cycles through
-    /// every registered mode at runtime regardless -- see [`set_mode`](Self::set_mode) to start
+    /// every registered mode at runtime regardless; see [`set_mode`](Self::set_mode) to start
     /// directly at [`PerfOverlayMode::Full`] instead.
     #[must_use]
     pub const fn visible(mut self, visible: bool) -> Self {
@@ -414,7 +414,7 @@ impl<A, R: PerfRenderer> PerfOverlayApp<A, R> {
     /// Sets [`Compact`](PerfOverlayMode::Compact)'s area size, placed flush against the
     /// top-right corner of the terminal (clamped to its actual size). Defaults to `64x1`, sized
     /// for [`DefaultPerfRenderer`]'s single-row readout; a custom [`PerfRenderer`] that draws a
-    /// panel or a sparkline at `Compact` needs a taller (and often wider) area -- size it to fit,
+    /// panel or a sparkline at `Compact` needs a taller (and often wider) area: size it to fit,
     /// or register it as the richer [`Full`](PerfOverlayMode::Full) mode via
     /// [`cycle_with`](Self::cycle_with) instead, which takes its own size.
     #[must_use]

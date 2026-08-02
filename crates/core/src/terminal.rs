@@ -286,7 +286,7 @@ impl<B: Backend> Terminal<B> {
 
     /// Drains all available events without blocking.
     ///
-    /// Returns an iterator that yields every pending event — the internal queued event
+    /// Returns an iterator that yields every pending event: the internal queued event
     /// followed by all events buffered in the backend. The iterator polls the backend
     /// with zero timeout repeatedly until `None` is returned.
     ///
@@ -355,7 +355,7 @@ impl<B: Backend> Terminal<B> {
     ///
     /// Like [`has_input`](Self::has_input), a discovered event is buffered internally so a
     /// subsequent [`poll`](Self::poll), [`has_input`](Self::has_input), or
-    /// [`drain_events`](Self::drain_events) call still observes it -- this method only answers
+    /// [`drain_events`](Self::drain_events) call still observes it: this method only answers
     /// "did something happen", it never hands the event to the caller. That's what lets a driver
     /// loop block between frames without stealing the event the app's own `update` reads; see
     /// [`run_blocking_with`](crate::run_blocking_with)'s use of this for [`Flow::Idle`](crate::Flow::Idle).
@@ -365,7 +365,7 @@ impl<B: Backend> Terminal<B> {
     ///
     /// Backends that never block (e.g. [`Headless`](crate::backend::Headless), which returns
     /// immediately regardless of `timeout`; see [`Input::poll_event`](crate::backend::Input::poll_event))
-    /// return promptly rather than actually waiting -- this method is a real wait only on
+    /// return promptly rather than actually waiting; this method is a real wait only on
     /// backends that genuinely block (crossterm, window).
     pub fn wait_for_input(&mut self, timeout: Duration) -> bool {
         if self.queued_event.is_some() {

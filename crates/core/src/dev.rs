@@ -63,7 +63,7 @@
 //!
 //! # Turning diagnostics off in a dev build
 //!
-//! There is deliberately no feature for this. Cargo features are additive, so a `no-dev` feature
+//! There is no feature for this. Cargo features are additive, so a `no-dev` feature
 //! would be silently defeated by any other crate in the graph that wanted diagnostics.
 //!
 //! Every diagnostic in this workspace goes through the `log` crate, so the two working controls

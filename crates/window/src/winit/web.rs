@@ -71,7 +71,7 @@ pub(super) fn wasm_pointer_scale() -> f64 {
 /// The physical pixel size of the software renderer's raster backing store, capped at
 /// [`MAX_DEVICE_PIXEL_RATIO`] for `present()` cost.
 ///
-/// Deliberately *not* the size passed to winit (see [`web_viewport_layout_physical_size`]):
+/// Not the size passed to winit (see [`web_viewport_layout_physical_size`]):
 /// winit's `Resized` event always reports back whatever physical size we last requested, so if
 /// this capped size were also used for `request_inner_size`, the canvas's CSS size would shrink
 /// below the viewport on any device whose real DPR exceeds the cap (i.e. almost every phone).
@@ -111,7 +111,7 @@ pub(super) fn install_viewport_resize_listener(window: &Arc<Window>) {
         .add_event_listener_with_callback("resize", closure.as_ref().unchecked_ref())
         .is_ok()
     {
-        // Leaked deliberately: the listener, and the closure it wraps, need
+        // Leaked: the listener, and the closure it wraps, need
         // to live as long as the page does: there's no window-teardown
         // hook on wasm to drop it from.
         closure.forget();

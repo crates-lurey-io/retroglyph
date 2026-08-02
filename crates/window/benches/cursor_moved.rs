@@ -5,7 +5,7 @@
 //! position matters once the queue is next drained, so `push_event` collapses a run of `Moved`
 //! events into the single most recent one instead of growing the queue unbounded. This
 //! benchmarks pushing a burst of `Moved` events (as `handle_window_event`'s `CursorMoved` arm
-//! would produce) directly through the crate's public `Input::push_event` surface -- see
+//! would produce) directly through the crate's public `Input::push_event` surface. See
 //! `WindowBackend`'s own `#[cfg(test)]` module for the companion assertion that the queue length
 //! after such a burst stays at 1, not `burst size`.
 

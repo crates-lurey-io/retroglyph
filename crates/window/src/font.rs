@@ -678,8 +678,8 @@ pub mod unscii16 {
 /// sextants exist to give [`retroglyph_core::subcell::quantize_quadrant`] and
 /// [`retroglyph_core::subcell::quantize_sextant`] a font that actually renders their glyphs as
 /// blocks instead of a CP437 solid-block substitute, and braille is a common terminal-UI density
-/// trick with no CP437 equivalent at all. All three repertoires are pure geometry -- rectangular
-/// quadrants, banded sextants, a 2x4 dot grid -- so both fonts below are computed at compile time
+/// trick with no CP437 equivalent at all. All three repertoires are pure geometry (rectangular
+/// quadrants, banded sextants, a 2x4 dot grid), so both fonts below are computed at compile time
 /// by a `const fn` rather than transcribed from an external font file; there is no font asset
 /// backing this module and no `image`/build-script dependency.
 ///
@@ -748,7 +748,7 @@ pub mod legacy_computing {
 
         /// The 60 addressable sextant masks, in ascending order: every 6-bit pattern `1..=62`
         /// (`0` and `63` would be space/full-block, already CP437) except `21` and `42` (a fully
-        /// filled left/right column respectively -- CP437's own `▌`/`▐` -- which have no
+        /// filled left/right column respectively, CP437's own `▌`/`▐`, which have no
         /// codepoint of their own in the Sextants block).
         ///
         /// Bit order: 0 = top-left, 1 = top-right, 2 = mid-left, 3 = mid-right, 4 = bottom-left,
@@ -774,7 +774,7 @@ pub mod legacy_computing {
         /// Symbols for Legacy Computing block.
         ///
         /// Sextant codepoints are not `0x1FB00 + mask`: masks `21` and `42` are gaps (see
-        /// [`QUADRANTS`] -- they're CP437's `▌`/`▐` instead), so every mask above each gap
+        /// [`QUADRANTS`], they're CP437's `▌`/`▐` instead), so every mask above each gap
         /// shifts its codepoint down by one relative to a naive offset. Mask `1` -> U+1FB00;
         /// mask `22` (one gap below it, at `21`) -> U+1FB00 + 21 - 1 = U+1FB14.
         const fn sextant_codepoint(mask: u8) -> u32 {
@@ -820,7 +820,7 @@ pub mod legacy_computing {
                 qi += 1;
             }
 
-            // Sextants: 2 columns (mx=4) x 3 row bands (y=0,5,11,16 -- uneven, to avoid a 1px
+            // Sextants: 2 columns (mx=4) x 3 row bands (y=0,5,11,16, uneven, to avoid a 1px
             // seam between vertically stacked filled cells).
             let masks = sextant_masks();
             let mut si = 0;

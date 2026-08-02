@@ -52,7 +52,7 @@ impl Default for ScrollPhysics {
 /// whole row at a time and there's no momentum to animate, reach for [`crate::ListState`]
 /// instead: its `offset` is a plain `usize`, clamped only at zero, with no velocity or physics
 /// step. The two don't compose into one type on purpose (see [`crate::ListState`]'s own doc
-/// comment) -- pick whichever one matches what's actually scrolling: continuous/pixel-ish
+/// comment): pick whichever one matches what's actually scrolling: continuous/pixel-ish
 /// content reaches for `ScrollState`, a discrete item list reaches for `ListState`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ScrollState {

@@ -1,7 +1,7 @@
 //! Glyph source + slot map: maps characters to grid-packed atlas slots.
 //!
 //! The backend renders a static [`FontChain`]: every glyph of every font in the chain is uploaded
-//! once at init, and a character maps to a flat *slot* -- the font's base offset in the atlas plus
+//! once at init, and a character maps to a flat *slot*: the font's base offset in the atlas plus
 //! that font's own glyph index. Slots are packed into a `TEXTURE_2D_ARRAY` in a fixed `NxM` grid
 //! per layer (issue #367's grid-packing half), so a chain with more than 256 glyphs in total is no
 //! longer capped by `GL_MAX_ARRAY_TEXTURE_LAYERS`. The bundled Unscii 16 font is 256 glyphs, so

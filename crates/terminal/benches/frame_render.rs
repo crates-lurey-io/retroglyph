@@ -5,13 +5,13 @@
 //! sparse-diff cost (since `draw` only walks *changed* cells, a sparse diff should be
 //! proportionally cheaper), the cost of fg/bg "SGR churn" (every cell forcing a fresh color
 //! escape vs a frame that coalesces to one color for the whole draw), and plain-mode vs
-//! escape-mode output on the same frame (plain mode strips all ANSI/CSI codes -- see
+//! escape-mode output on the same frame (plain mode strips all ANSI/CSI codes, see
 //! [`TerminalRenderer::set_plain_mode`]). Bytes emitted are reported alongside wall time via
 //! `Throughput::Bytes`: for `retroglyph-terminal-wasm` the string size pulled into JS each frame
 //! matters as much as CPU, so time-only numbers would miss half of what this issue asks for.
 //!
 //! All benchmarks measure a full render (build the output, don't inspect it) at 200x50, "a large
-//! terminal / roguelike viewport" per `grid_diff`'s bench sizing -- large enough that per-cell
+//! terminal / roguelike viewport" per `grid_diff`'s bench sizing: large enough that per-cell
 //! escape-sequence overhead dominates over fixed setup cost.
 
 // `criterion_group!`/`criterion_main!` below expand to an undocumented `pub fn benches(..)`; this
@@ -41,7 +41,7 @@ fn filled(cols: u16, rows: u16, glyph: char, style: Style) -> Grid {
 /// Builds two same-sized grids differing in exactly `pct` percent of their cells.
 ///
 /// Uses a fixed RNG seed so the change set (and therefore the benchmark) is deterministic across
-/// runs -- required for `--save-baseline`/`--baseline` comparisons to be meaningful. Mirrors
+/// runs, required for `--save-baseline`/`--baseline` comparisons to be meaningful. Mirrors
 /// `retroglyph-core`'s `grid_diff` bench helper of the same name.
 fn sparse_pair(cols: u16, rows: u16, pct: u32) -> (Grid, Grid) {
     let old = filled(cols, rows, ' ', Style::default());
@@ -89,7 +89,7 @@ fn checkerboard(cols: u16, rows: u16) -> Grid {
 /// from `other` (see the real call site in `retroglyph-core`'s `Terminal::render`:
 /// `self.current.diff(&self.previous)`, current-diffed-against-previous, tiles taken from
 /// current). This helper used to call it backwards (`old.diff(new)`), which yielded `old`'s own
-/// (blank/default-styled) tiles at every changed position instead of `new`'s -- every group in
+/// (blank/default-styled) tiles at every changed position instead of `new`'s: every group in
 /// this file was silently rendering blank frames rather than the intended colored/glyph content,
 /// so none of the `Throughput::Bytes` numbers reflected real output.
 fn render_diff(old: &Grid, new: &Grid, plain: bool) -> Vec<u8> {

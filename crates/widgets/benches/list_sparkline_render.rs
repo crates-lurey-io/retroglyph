@@ -18,7 +18,7 @@ use retroglyph_core::{Grid, Rect};
 use retroglyph_widgets::{List, ListState, Sparkline, StatefulWidget, Surface, Widget};
 use std::hint::black_box;
 
-/// Builds `n` deterministic, variable-length item strings -- long enough that some need
+/// Builds `n` deterministic, variable-length item strings, long enough that some need
 /// truncation against the render area's width.
 fn items(n: usize) -> Vec<String> {
     let mut rng = fastrand::Rng::with_seed(42);

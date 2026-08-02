@@ -1,11 +1,11 @@
 //! Conformance test for two upstream crates that retroglyph merely happens to be the meeting
 //! point for. It lives here because there is no dependency edge between gem and alpha-blend,
 //! so this is the only place the shared invariant can be mechanically enforced.
-//! Do not "move it where it belongs" -- there is nowhere else it would run.
+//! Do not "move it where it belongs": there is nowhere else it would run.
 //!
 //! Every integer channel operation in gem and alpha-blend is round-to-nearest, ties away from
 //! zero, rounded exactly once from a widened intermediate (retroglyph#547 SS0). This does not
-//! just check the two crates agree with each other -- that's retroglyph#537, where two backends
+//! just check the two crates agree with each other: that's retroglyph#537, where two backends
 //! agreed by accident and the agreement read as intent. It checks both independently against an
 //! `i64` rational reference that uses no `/255` shortcuts and no shifts.
 //!

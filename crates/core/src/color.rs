@@ -946,7 +946,7 @@ fn parse_ansi_name(name: &str) -> Option<AnsiColor> {
 /// Parses `#rgb` or `#rrggbb` (case-insensitive) into an `(r, g, b)` triple.
 ///
 /// Self-contained rather than routed through [`Color::from_hex`], so [`Color`]'s
-/// [`FromStr`](core::str::FromStr) impl -- and the `serde` feature built on it -- works
+/// [`FromStr`](core::str::FromStr) impl (and the `serde` feature built on it) works
 /// regardless of whether the `indexed-quant` feature (which `from_hex` needs for its
 /// [`gem::space::Srgb`] parsing) is enabled.
 fn parse_hex(s: &str) -> Option<(u8, u8, u8)> {
@@ -1057,7 +1057,7 @@ impl core::str::FromStr for Color {
 #[cfg(feature = "serde")]
 impl serde::Serialize for Color {
     /// Serializes through the [`Display`](core::fmt::Display) round trip, e.g. `"bright-red"` or
-    /// `"#ff8000"`, rather than deriving a structural form -- so a hand-edited TOML/JSON theme
+    /// `"#ff8000"`, rather than deriving a structural form: a hand-edited TOML/JSON theme
     /// file stays legible and isn't coupled to this (`#[non_exhaustive]`) enum's variant shape.
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where

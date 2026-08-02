@@ -123,7 +123,7 @@ struct ReadmeDoctests;
 /// [`WindowBackend`](retroglyph_window::WindowBackend) to form a full
 /// [`Backend`](retroglyph_core::Backend) for the windowing loop.
 ///
-/// It deliberately does not implement [`Input`](retroglyph_core::backend::Input) or
+/// It does not implement [`Input`](retroglyph_core::backend::Input) or
 /// [`Cursor`](retroglyph_core::backend::Cursor) itself: a GL renderer cannot present without a
 /// live context, so there is no headless-with-input use for a bare `Terminal<GlRenderer>`. In
 /// windowed use `WindowBackend` owns the input queue (with its `Mouse(Moved)` coalescing) and the

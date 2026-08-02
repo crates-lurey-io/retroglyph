@@ -2,7 +2,7 @@
 //!
 //! `translate_key` itself (the `run.rs` call site) takes `winit::event::KeyEvent`, which has a
 //! private platform-specific field in the pinned winit version and so can't be constructed
-//! outside the crate -- the same constraint documented on `key_code_from_logical` in
+//! outside the crate: the same constraint documented on `key_code_from_logical` in
 //! `translate.rs`, which is why that crate's own unit tests bypass `translate_key` too. This
 //! benchmarks the two pieces of that same per-key hot path that *are* public and constructible:
 //! `key_event_kind` (state/repeat -> `KeyEventKind`) and `translate_modifiers` (winit modifier

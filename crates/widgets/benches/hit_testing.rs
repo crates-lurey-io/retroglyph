@@ -37,7 +37,7 @@ fn populated_hit_tester(n: usize) -> HitTester<usize> {
 fn bench_hit_tester(c: &mut Criterion, n: usize) {
     let hits = populated_hit_tester(n);
     // A miss (past every registered rect) forces `topmost_at`'s backward scan to walk every
-    // entry -- the worst case for the linear scan, and the one that scales with `n`.
+    // entry, the worst case for the linear scan, and the one that scales with `n`.
     let miss_pos = Pos::new(0, n as u16 + 10);
 
     c.bench_function(&format!("hit_tester_topmost_at_miss/{n}_rects"), |b| {

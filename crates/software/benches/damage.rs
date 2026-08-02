@@ -17,8 +17,8 @@
 //!
 //! `present()` is a documented no-op in headless mode (no window surface, see
 //! `SoftwareRenderer::present`), so the "end to end" group below cannot
-//! exercise the real pixel-upload cost -- that requires a live window, which
-//! criterion cannot drive. It still benchmarks `draw_layers` + `present`
+//! exercise the real pixel-upload cost (that requires a live window, which
+//! criterion cannot drive). It still benchmarks `draw_layers` + `present`
 //! together for parity with how frames are actually driven, with the
 //! understanding that `present`'s own contribution is ~0 here; the numbers
 //! are dominated by `draw_layers` (raster + diff).
@@ -37,7 +37,7 @@ use std::cell::RefCell;
 
 /// Builds a `cols x rows` frame with every layer-0 cell set to the same
 /// background color, with cell `(ox, oy)` overridden (if given) to a
-/// different color -- used to construct "no change", "one cell changed", and
+/// different color. Used to construct "no change", "one cell changed", and
 /// "all cells changed" frames relative to a shared baseline.
 fn frame(
     cols: u16,

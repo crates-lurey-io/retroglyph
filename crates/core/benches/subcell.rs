@@ -4,7 +4,7 @@
 //!
 //! retroglyph#269 asks for coverage of all three quantizers. Each does an exhaustive search over
 //! `2^N` foreground/background splits (see `subcell.rs`'s module doc, "Algorithm"), so cost grows
-//! with the pixel count `N` (2 for half-block, 4 for quadrant, 6 for sextant) -- this benchmark
+//! with the pixel count `N` (2 for half-block, 4 for quadrant, 6 for sextant); this benchmark
 //! makes that growth visible, reporting blocks-quantized throughput alongside time.
 
 // `criterion_group!`/`criterion_main!` below expand to an undocumented `pub fn benches(..)`; this
@@ -22,8 +22,8 @@ const BLOCKS: usize = 4096;
 
 /// Builds `BLOCKS` random pixel blocks of `N` pixels each.
 ///
-/// Uses a fixed RNG seed so the input (and therefore the benchmark) is deterministic across runs
-/// -- required for `--save-baseline`/`--baseline` comparisons to be meaningful.
+/// Uses a fixed RNG seed so the input (and therefore the benchmark) is deterministic across runs,
+/// required for `--save-baseline`/`--baseline` comparisons to be meaningful.
 fn random_blocks<const N: usize>(seed: u64) -> Vec<[Rgb; N]> {
     let mut rng = fastrand::Rng::with_seed(seed);
     (0..BLOCKS)
