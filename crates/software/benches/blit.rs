@@ -95,7 +95,7 @@ fn sprite_renderer(alpha: u8) -> retroglyph_software::SoftwareRenderer {
         .tileset(tileset)
         .build()
         .unwrap()
-        .run_headless()
+        .into_renderer()
         .unwrap()
 }
 
@@ -109,7 +109,7 @@ fn blit(c: &mut Criterion) {
         .scale(1)
         .build()
         .unwrap()
-        .run_headless()
+        .into_renderer()
         .unwrap();
     group.bench_function("blit_glyph", |b| {
         b.iter(|| renderer.draw_layers(to_content(&frame)).unwrap());

@@ -43,8 +43,8 @@ pub enum SurfaceError {
 impl core::fmt::Display for SurfaceError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::Context(e) => write!(f, "softbuffer context: {e}"),
-            Self::Surface(e) => write!(f, "softbuffer surface: {e}"),
+            Self::Context(_) => write!(f, "softbuffer context creation failed"),
+            Self::Surface(_) => write!(f, "softbuffer surface creation or presentation failed"),
         }
     }
 }

@@ -411,7 +411,7 @@ where
 ///     .scale(2)
 ///     .build()
 ///     .expect("backend init failed")
-///     .run_headless()
+///     .into_renderer()
 ///     .expect("renderer init failed");
 /// let config = WindowConfig::fit(&renderer, "My Game", None, true);
 ///
@@ -503,7 +503,7 @@ where
 ///     .scale(2)
 ///     .build()
 ///     .expect("backend init failed")
-///     .run_headless()
+///     .into_renderer()
 ///     .expect("renderer init failed");
 /// let config = WindowConfig::fit(&renderer, "My Game", None, true);
 ///

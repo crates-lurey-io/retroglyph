@@ -112,7 +112,7 @@ fn bench_glyph(c: &mut Criterion, cols: u16, rows: u16, scale: u8) {
         .scale(scale)
         .build()
         .unwrap()
-        .run_headless()
+        .into_renderer()
         .unwrap();
 
     group.bench_function("draw_layers", |b| {
@@ -143,7 +143,7 @@ fn bench_sprite(c: &mut Criterion, cols: u16, rows: u16, scale: u8) {
         .tileset(tileset)
         .build()
         .unwrap()
-        .run_headless()
+        .into_renderer()
         .unwrap();
 
     group.bench_function("draw_layers", |b| {

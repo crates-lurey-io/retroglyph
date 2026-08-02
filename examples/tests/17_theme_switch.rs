@@ -114,7 +114,7 @@ fn png_snapshot_light() {
         .scale(scale)
         .build()
         .expect("software backend init")
-        .run_headless()
+        .into_renderer()
         .expect("headless renderer init");
     let (cell_w, cell_h) = renderer.cell_size();
     let (width, height) = (u32::from(cols) * cell_w, u32::from(rows) * cell_h);
