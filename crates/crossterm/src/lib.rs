@@ -885,6 +885,13 @@ fn enable_terminal_features(options: CrosstermOptions) -> std::io::Result<()> {
 
 impl<W: std::io::Write> Drop for Crossterm<W> {
     fn drop(&mut self) {
+        // Flush whatever `draw`/cursor calls left buffered in `renderer` *before* `restore_
+        // terminal` runs: `restore_terminal` writes straight to `std::io::stdout()` and knows
+        // nothing about this instance's writer. Without this, a `BufWriter` writer (the default)
+        // would only flush once this whole `drop` returns and Rust drops `renderer` for real,
+        // dumping any still-queued escape bytes onto the shell *after* the alternate screen has
+        // already been left. See retroglyph#716.
+        let _ = self.renderer.flush();
         restore_terminal();
     }
 }
@@ -914,9 +921,15 @@ impl<W: std::io::Write> Crossterm<W> {
     ///
     /// # Errors
     ///
-    /// Returns an `std::io::Error` if any of the terminal-restoring commands fail (e.g. a closed
-    /// terminal or disconnected pipe).
+    /// Returns an `std::io::Error` if flushing the pending frame fails, or if any of the
+    /// terminal-restoring commands fail (e.g. a closed terminal or disconnected pipe).
     pub fn suspend(&mut self) -> std::io::Result<SuspendGuard<'_, W>> {
+        // Flush before handing the terminal back: `restore_terminal` writes straight to
+        // `std::io::stdout()`, not `self.renderer`'s writer, so without this a still-buffered
+        // `draw`/cursor call's escape bytes (possibly including an unterminated synchronized-
+        // update start) would land on whatever program `suspend` hands the terminal to. See
+        // retroglyph#716.
+        self.renderer.flush()?;
         restore_terminal();
         Ok(SuspendGuard {
             crossterm: self,
@@ -1641,6 +1654,43 @@ mod tests {
         );
         // The guard is consumed by `resume`, so there's no double-restore on drop to assert
         // against directly; this test's real assertion is that `resume()` itself returns `Ok`.
+    }
+
+    #[test]
+    fn restore_does_not_flush_pending_content_before_giving_the_terminal_back() {
+        // Regression test for retroglyph#716: `suspend` (and `Crossterm::drop`, exercised the
+        // same way here since both share `restore_terminal`) must flush whatever `draw` left
+        // buffered in the renderer before handing control back, not after.
+        let _lock = TEST_GUARD_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut term = Crossterm::builder()
+            .raw_mode(false)
+            .alt_screen(false)
+            .mouse_capture(false)
+            .focus_change(false)
+            .bracketed_paste(false)
+            .kitty_protocol(false)
+            .build_with_writer(Vec::new())
+            .expect("building against a Vec<u8> writer with all TTY features disabled must not require a real terminal");
+
+        let tile = Tile::new('X', retroglyph_core::style::Style::default());
+        // Drawn but deliberately *not* flushed: this is the buffered content `suspend` must not
+        // strand behind the restore sequence.
+        term.draw(core::iter::once(DrawCell::new(Pos { x: 0, y: 0 }, &tile)))
+            .unwrap();
+
+        let guard = term.suspend().expect(
+            "suspend must succeed without a real terminal once all TTY-only features are disabled",
+        );
+        // Once `suspend` has returned, the pending frame must already be visible in the writer,
+        // not still sitting in `renderer`'s internal buffer waiting on a later flush.
+        let written = String::from_utf8(guard.crossterm.writer().clone()).unwrap();
+        assert!(
+            written.contains('X'),
+            "expected the drawn cell to have been flushed to the writer before suspend returned: {written:?}"
+        );
+        drop(guard);
     }
 
     #[test]
