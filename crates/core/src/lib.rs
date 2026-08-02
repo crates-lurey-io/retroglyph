@@ -170,7 +170,6 @@ pub mod tint;
 pub use animate::{Easing, Tween, oscillate};
 pub use app::{App, Flow, Frame, step};
 #[cfg(feature = "std")]
-#[cfg(feature = "std")]
 pub use app::{RunOptions, run_blocking, run_blocking_with};
 pub use backend::{Backend, Cursor, CursorStyle, DrawCell, Headless, Input, Output};
 pub use camera::Camera;
