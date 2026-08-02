@@ -289,4 +289,26 @@ mod tests {
             grid[Pos::new(0, 0)].style().background()
         );
     }
+
+    #[test]
+    fn text_input_caret_does_not_write_past_the_field() {
+        // retroglyph#712: `ensure_visible` used to leave `scroll` inside a wide character's own
+        // cell (scroll == 1 for "ああ"), which `split_at_width` can't honor, so the caret's
+        // spacer cell was printed one column past the field's own 4-wide area, clobbering a
+        // neighbor drawn at column 4. The same mechanism as #9.
+        let mut grid = Grid::new(6, 1);
+        let mut state = TextInputState::new();
+        state.set_value("ああ"); // two 2-column characters, 4 columns
+        state.ensure_visible(4);
+
+        // A neighbor widget occupies columns 4..6, to the right of the 4-wide text field.
+        Surface::new(&mut grid, Rect::new(0, 0, 6, 1), 0).print((4, 0), "Z", Style::default());
+
+        TextInput::new().render(
+            &mut Surface::new(&mut grid, Rect::new(0, 0, 4, 1), 0),
+            &mut state,
+        );
+
+        assert_eq!(grid[Pos::new(4, 0)].glyph(), 'Z');
+    }
 }
