@@ -285,6 +285,7 @@ pub const CP437_TO_UNICODE: [char; 256] = [
 /// decision rather than a sheet-wide one, and goes through
 /// [`Surface::with_tint`](retroglyph_core::Surface::with_tint).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct TilesetOptions {
     /// Raw bytes of the PNG file.
     pub bytes: Vec<u8>,

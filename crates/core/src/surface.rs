@@ -102,6 +102,7 @@ pub struct Surface<'a> {
 /// surface.on_tier(Layer::Overlay).print((0, 1), "New", Style::default());
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
+#[non_exhaustive]
 pub enum Layer {
     /// The active screen: terrain, entities, game/app content. Grid layer 0.
     #[default]

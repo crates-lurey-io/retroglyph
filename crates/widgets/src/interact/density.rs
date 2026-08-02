@@ -16,6 +16,7 @@ use retroglyph_core::Size;
 /// the same way it would read [`Sense`](crate::Sense).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[non_exhaustive]
 pub enum Density {
     /// Larger interactive targets, for a fingertip on a phone-width terminal
     /// or other touch input, at the cost of showing fewer rows at once.
