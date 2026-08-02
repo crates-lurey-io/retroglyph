@@ -5,6 +5,7 @@ use unicode_width::UnicodeWidthStr;
 use super::{BorderType, BoxBorder, Widget};
 use crate::Surface;
 use crate::draw::fill_rect;
+use crate::style::Sides;
 use crate::text::truncate as truncate_to_cols;
 use crate::{Align, Theme};
 
@@ -36,6 +37,7 @@ pub struct Panel<'a> {
     border_style: Style,
     fill_style: Style,
     border_type: BorderType,
+    padding: Sides,
 }
 
 impl<'a> Panel<'a> {
@@ -83,6 +85,48 @@ impl<'a> Panel<'a> {
     pub const fn border_type(mut self, border_type: BorderType) -> Self {
         self.border_type = border_type;
         self
+    }
+
+    /// Reserve `padding` between the border and the rect [`Panel::inner`] returns.
+    ///
+    /// Padding is not painted specially: [`Panel::render`] still fills the whole area inside the
+    /// border with `fill_style` (padding cells included), the same as [`Panel::inner`]'s caller
+    /// would see if they filled `area` themselves before drawing into the smaller inner rect.
+    /// Defaults to [`Sides::ZERO`] (no padding beyond the 1-cell border).
+    #[must_use]
+    pub const fn padding(mut self, padding: Sides) -> Self {
+        self.padding = padding;
+        self
+    }
+
+    /// The content rect inside `area`'s border and padding, ready to hand to another widget.
+    ///
+    /// Derived from the same 1-cell border inset [`Panel::render`] uses plus this panel's
+    /// [`Panel::padding`], so the two can't drift. Saturates to a zero-sized rect (at `area`'s
+    /// origin) rather than underflowing when `area` is too small to hold the border and padding.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_core::Rect;
+    /// use retroglyph_widgets::{Panel, Sides};
+    ///
+    /// let panel = Panel::new().padding(Sides::symmetric(0, 1));
+    /// let area = Rect::new(0, 0, 20, 5);
+    /// assert_eq!(panel.inner(area), Rect::new(2, 1, 16, 3));
+    /// ```
+    #[must_use]
+    pub const fn inner(&self, area: Rect) -> Rect {
+        let left = 1 + self.padding.left;
+        let top = 1 + self.padding.top;
+        let horizontal = 2 + self.padding.left + self.padding.right;
+        let vertical = 2 + self.padding.top + self.padding.bottom;
+        Rect::new(
+            area.left().saturating_add(left),
+            area.top().saturating_add(top),
+            area.width().saturating_sub(horizontal),
+            area.height().saturating_sub(vertical),
+        )
     }
 
     /// Applies `theme`'s named roles to this panel's border and fill: `border_style` becomes
@@ -256,6 +300,26 @@ mod tests {
         assert_eq!(grid[Pos::new(8, 0)].glyph(), 'h');
         assert_eq!(grid[Pos::new(9, 0)].glyph(), 'i');
         assert_eq!(grid[Pos::new(10, 0)].glyph(), ' ');
+    }
+
+    #[test]
+    fn inner_insets_by_the_one_cell_border() {
+        let area = Rect::new(0, 0, 20, 5);
+        assert_eq!(Panel::new().inner(area), Rect::new(1, 1, 18, 3));
+    }
+
+    #[test]
+    fn inner_also_insets_by_padding() {
+        let area = Rect::new(0, 0, 20, 5);
+        let panel = Panel::new().padding(Sides::symmetric(0, 1));
+        assert_eq!(panel.inner(area), Rect::new(2, 1, 16, 3));
+    }
+
+    #[test]
+    fn inner_saturates_instead_of_underflowing_when_area_is_too_small() {
+        let area = Rect::new(3, 4, 1, 1);
+        let panel = Panel::new().padding(Sides::all(2));
+        assert_eq!(panel.inner(area), Rect::new(6, 7, 0, 0));
     }
 
     #[test]

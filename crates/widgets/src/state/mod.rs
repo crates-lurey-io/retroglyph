@@ -9,6 +9,8 @@
 
 mod list;
 mod scroll;
+mod text_input;
 
 pub use list::{ListState, SelectionWrap};
 pub use scroll::{ScrollPhysics, ScrollState};
+pub use text_input::TextInputState;

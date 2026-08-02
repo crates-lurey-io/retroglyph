@@ -47,14 +47,15 @@ impl TextAlign {
     fn draw_panel<B: Backend>(term: &mut Terminal<B>, area: Rect, name: &str, align: Align) {
         let term_area = term.area();
         let border = Style::new().fg(Color::WHITE);
-        Panel::new()
+        let panel = Panel::new()
             .title(name)
             .title_align(align)
-            .border_style(border)
-            .render(&mut Surface::new(term.grid_mut(), term_area, 0).scope(area));
+            .border_style(border);
+        panel.render(&mut Surface::new(term.grid_mut(), term_area, 0).scope(area));
 
         // Interior: one cell in from the border on every side.
-        let inner = Rect::new(area.left() + 1, area.top() + 1, area.width() - 2, 1);
+        let inner = panel.inner(area);
+        let inner = Rect::new(inner.left(), inner.top(), inner.width(), 1);
         Text::new("Text widget")
             .style(Style::new().fg(Color::CYAN))
             .align(align)

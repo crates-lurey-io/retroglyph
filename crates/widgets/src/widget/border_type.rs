@@ -1,5 +1,6 @@
 //! [`BorderType`]: which box-drawing glyph set a bordered widget draws with.
-use crate::draw::{BL, BR, H, TL, TR, V};
+use retroglyph_core::symbols::BorderSet;
+use retroglyph_core::symbols::border;
 
 /// The box-drawing glyph set [`BoxBorder`](super::BoxBorder), [`Panel`](super::Panel), and
 /// [`Modal`](super::Modal) draw their corners and edges with.
@@ -12,7 +13,9 @@ use crate::draw::{BL, BR, H, TL, TR, V};
 /// where [`Theme`](crate::Theme) alone can't carry that distinction.
 ///
 /// Covers four of ratatui's six `BorderType` variants (`Plain`, `Rounded`, `Double`, `Thick`);
-/// `QuadrantInside`/`QuadrantOutside` are omitted since nothing here has a use for them yet.
+/// `QuadrantInside`/`QuadrantOutside` are omitted since nothing here has a use for them yet. Each
+/// variant maps directly to a [`BorderSet`](retroglyph_core::symbols::BorderSet) in
+/// [`retroglyph_core::symbols::border`], the shared glyph tables every crate draws borders from.
 ///
 /// # Examples
 ///
@@ -35,14 +38,15 @@ pub enum BorderType {
 }
 
 impl BorderType {
-    /// This variant's `(top_left, top_right, bottom_left, bottom_right, horizontal, vertical)`
-    /// box-drawing glyphs.
-    pub(crate) const fn glyphs(self) -> (char, char, char, char, char, char) {
+    /// This variant's [`BorderSet`](retroglyph_core::symbols::BorderSet): the six corner/edge
+    /// glyphs to draw a border with.
+    #[must_use]
+    pub(crate) const fn glyphs(self) -> BorderSet {
         match self {
-            Self::Plain => (TL, TR, BL, BR, H, V),
-            Self::Rounded => ('╭', '╮', '╰', '╯', '─', '│'),
-            Self::Double => ('╔', '╗', '╚', '╝', '═', '║'),
-            Self::Thick => ('┏', '┓', '┗', '┛', '━', '┃'),
+            Self::Plain => border::PLAIN,
+            Self::Rounded => border::ROUNDED,
+            Self::Double => border::DOUBLE,
+            Self::Thick => border::THICK,
         }
     }
 }

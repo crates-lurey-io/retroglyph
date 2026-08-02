@@ -87,34 +87,34 @@ impl Widget for BoxBorder {
 
         let x1 = w - 1;
         let y1 = h - 1;
-        let (tl, tr, bl, br, h, v) = self.border_type.glyphs();
+        let glyphs = self.border_type.glyphs();
 
         // Corners
-        surface.put((0, 0), tl, self.style);
-        surface.put((x1, 0), tr, self.style);
-        surface.put((0, y1), bl, self.style);
-        surface.put((x1, y1), br, self.style);
+        surface.put((0, 0), glyphs.top_left, self.style);
+        surface.put((x1, 0), glyphs.top_right, self.style);
+        surface.put((0, y1), glyphs.bottom_left, self.style);
+        surface.put((x1, y1), glyphs.bottom_right, self.style);
 
         // Horizontal edges
         for x in 1..x1 {
-            surface.put((x, 0), h, self.style);
-            surface.put((x, y1), h, self.style);
+            surface.put((x, 0), glyphs.horizontal, self.style);
+            surface.put((x, y1), glyphs.horizontal, self.style);
         }
 
         // Vertical edges
         for y in 1..y1 {
-            surface.put((0, y), v, self.style);
-            surface.put((x1, y), v, self.style);
+            surface.put((0, y), glyphs.vertical, self.style);
+            surface.put((x1, y), glyphs.vertical, self.style);
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use retroglyph_core::symbols::border::PLAIN;
     use retroglyph_core::{Color, Grid, Pos, Rect};
 
     use super::*;
-    use crate::draw::{BL, BR, H, TL, TR, V};
 
     #[test]
     fn draws_corners_and_edges() {
@@ -124,12 +124,12 @@ mod tests {
             .style(Style::new().fg(Color::WHITE))
             .render(&mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(grid[Pos::new(0, 0)].glyph(), TL);
-        assert_eq!(grid[Pos::new(4, 0)].glyph(), TR);
-        assert_eq!(grid[Pos::new(0, 2)].glyph(), BL);
-        assert_eq!(grid[Pos::new(4, 2)].glyph(), BR);
-        assert_eq!(grid[Pos::new(2, 0)].glyph(), H);
-        assert_eq!(grid[Pos::new(0, 1)].glyph(), V);
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), PLAIN.top_left);
+        assert_eq!(grid[Pos::new(4, 0)].glyph(), PLAIN.top_right);
+        assert_eq!(grid[Pos::new(0, 2)].glyph(), PLAIN.bottom_left);
+        assert_eq!(grid[Pos::new(4, 2)].glyph(), PLAIN.bottom_right);
+        assert_eq!(grid[Pos::new(2, 0)].glyph(), PLAIN.horizontal);
+        assert_eq!(grid[Pos::new(0, 1)].glyph(), PLAIN.vertical);
         // Interior untouched.
         assert_eq!(grid[Pos::new(2, 1)].glyph(), ' ');
     }
@@ -140,7 +140,7 @@ mod tests {
         let mut grid = Grid::new(5, 3);
         BoxBorder::new().render(&mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(grid[Pos::new(0, 0)].glyph(), TL);
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), PLAIN.top_left);
     }
 
     #[test]

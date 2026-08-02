@@ -1,4 +1,11 @@
 //! Input event system.
+//!
+//! [`Terminal::poll`](crate::Terminal::poll) returns an optional [`Event`] with support for
+//! keyboard ([`KeyEvent`], all standard keys plus [`KeyModifiers`]), mouse ([`MouseEvent`]:
+//! buttons, movement, scroll), touch (synthesized into the same mouse events on the
+//! software/WASM backend), window resize, and close events.
+//! [`has_input`](crate::Terminal::has_input) checks for a pending event without blocking. Resize
+//! events are applied to the grid automatically, before the event reaches your code.
 
 use crate::grid::Pos;
 use alloc::string::String;

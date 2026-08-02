@@ -18,7 +18,9 @@ Artwork larger than one cell is drawn as a multi-cell span (`Surface::put_span`)
 blits one sprite across the whole footprint, and the cells it covers draw no glyph of their own and
 take the anchor's background, so the sprite sits on one uniform backdrop. Their glyphs are the
 span's text fallback, which cell backends print instead. `SpriteAlign` positions art inside a span
-box larger than itself.
+box larger than itself. `Grid::span_owner` resolves any cell of a span to its anchor in O(1), so
+hit-testing multi-cell artwork is one comparison, with no capability check needed: the same call
+renders as one sprite here and as readable ASCII on a terminal backend.
 
 ## Quick start
 
