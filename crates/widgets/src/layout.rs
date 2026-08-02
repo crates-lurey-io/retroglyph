@@ -17,7 +17,7 @@
 //! pane that is capped below its share does not redistribute the excess to other panes, so
 //! leftover space can remain unclaimed (see [`Flex`] for how that leftover is placed via
 //! [`split_v_flex`]/[`split_h_flex`]).
-use retroglyph_core::Rect;
+use retroglyph_core::{Rect, Size};
 
 /// How a single pane claims space along the split axis.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -493,6 +493,138 @@ pub fn centered_rect(screen: Rect, width: u16, height: u16) -> Rect {
     Rect::new(x, y, width, height)
 }
 
+/// Which side of an anchor rect a panel prefers to open on, for [`anchored_rect`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Side {
+    /// Open above the anchor (panel's bottom edge touches the anchor's top edge).
+    Above,
+    /// Open below the anchor (panel's top edge touches the anchor's bottom edge). The usual
+    /// choice for a dropdown under a menu label or a field.
+    Below,
+    /// Open to the left of the anchor (panel's right edge touches the anchor's left edge).
+    Left,
+    /// Open to the right of the anchor (panel's left edge touches the anchor's right edge).
+    Right,
+}
+
+impl Side {
+    /// The side to fall back to when this side doesn't have room, per [`anchored_rect`].
+    const fn opposite(self) -> Self {
+        match self {
+            Self::Above => Self::Below,
+            Self::Below => Self::Above,
+            Self::Left => Self::Right,
+            Self::Right => Self::Left,
+        }
+    }
+}
+
+/// Place a `size` panel adjacent to `anchor`, preferring `side`, flipping to the opposite side
+/// when there isn't room, and clamped to stay within `bounds`.
+///
+/// `side` decides which edge of `anchor` the panel opens from: [`Side::Below`]/[`Side::Above`]
+/// place the panel's left edge at `anchor`'s left edge and stack it vertically off `anchor`'s
+/// bottom/top edge; [`Side::Right`]/[`Side::Left`] place the panel's top edge at `anchor`'s top
+/// edge and lay it out horizontally off `anchor`'s right/left edge. If the preferred side doesn't
+/// have enough room within `bounds` (the panel's far edge would fall outside `bounds` on that
+/// axis) but the opposite side does, the panel opens on the opposite side instead; if neither
+/// side has room, the preferred side is kept and clamped like the fitting case. Once a side is
+/// chosen, the panel is clamped along the perpendicular axis so it never runs past `bounds`'
+/// edges: this is the three-line clamp a hand-rolled dropdown would otherwise repeat
+/// (`x.min(bounds.right() - width).max(bounds.left())`), applied to whichever axis `side` didn't
+/// already pin.
+///
+/// `size` is clamped down to `bounds`' own dimensions if larger, so the result is always fully
+/// within `bounds`, the same guarantee [`centered_rect`] makes for a centered box.
+///
+/// Pure layout math: no drawing, no `Terminal`. Callers still own sizing (deciding `size` from
+/// content, with a floor/ceiling) and overflow (scrolling when content is taller than the
+/// resulting rect); this only answers where the rect goes.
+///
+/// Never panics: every offset is computed with saturating arithmetic, so a degenerate `anchor`,
+/// `size`, or `bounds` (zero width/height, or `anchor` outside `bounds`) resolves to a clamped,
+/// zero-size-or-larger rect instead of under/overflowing.
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::{Rect, Size};
+/// use retroglyph_widgets::{Side, anchored_rect};
+///
+/// let bounds = Rect::new(0, 0, 40, 20);
+/// let anchor = Rect::new(5, 5, 10, 1); // e.g. a menu label
+/// let rect = anchored_rect(anchor, Size::new(12, 4), Side::Below, bounds);
+/// assert_eq!(rect, Rect::new(5, 6, 12, 4));
+/// ```
+#[must_use]
+pub fn anchored_rect(anchor: Rect, size: Size, preferred: Side, bounds: Rect) -> Rect {
+    let width = size.width().min(bounds.width());
+    let height = size.height().min(bounds.height());
+
+    // `checked_sub` (not `saturating_sub`): a saturated 0 would make an anchor too close to
+    // `bounds`' start edge for `height`/`width` look like it fits with room to spare.
+    let fits = |candidate: Side| match candidate {
+        Side::Above => anchor
+            .top()
+            .checked_sub(height)
+            .is_some_and(|t| t >= bounds.top()),
+        Side::Below => anchor.bottom().saturating_add(height) <= bounds.bottom(),
+        Side::Left => anchor
+            .left()
+            .checked_sub(width)
+            .is_some_and(|l| l >= bounds.left()),
+        Side::Right => anchor.right().saturating_add(width) <= bounds.right(),
+    };
+    let resolved = if fits(preferred) || !fits(preferred.opposite()) {
+        preferred
+    } else {
+        preferred.opposite()
+    };
+
+    let (x, y) = match resolved {
+        Side::Above => {
+            let x = anchor
+                .left()
+                .min(bounds.right().saturating_sub(width))
+                .max(bounds.left());
+            let y = anchor.top().saturating_sub(height).max(bounds.top());
+            (x, y)
+        }
+        Side::Below => {
+            let x = anchor
+                .left()
+                .min(bounds.right().saturating_sub(width))
+                .max(bounds.left());
+            let y = anchor
+                .bottom()
+                .min(bounds.bottom().saturating_sub(height))
+                .max(bounds.top());
+            (x, y)
+        }
+        Side::Left => {
+            let x = anchor.left().saturating_sub(width).max(bounds.left());
+            let y = anchor
+                .top()
+                .min(bounds.bottom().saturating_sub(height))
+                .max(bounds.top());
+            (x, y)
+        }
+        Side::Right => {
+            let x = anchor
+                .right()
+                .min(bounds.right().saturating_sub(width))
+                .max(bounds.left());
+            let y = anchor
+                .top()
+                .min(bounds.bottom().saturating_sub(height))
+                .max(bounds.top());
+            (x, y)
+        }
+    };
+
+    Rect::new(x, y, width, height)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -827,6 +959,107 @@ mod tests {
         let screen = Rect::new(5, 5, 20, 10);
         let r = centered_rect(screen, 10, 4);
         assert_eq!(r, Rect::new(10, 8, 10, 4));
+    }
+
+    #[test]
+    fn anchored_rect_opens_below_when_preferred() {
+        let bounds = Rect::new(0, 0, 40, 20);
+        let anchor = Rect::new(5, 5, 10, 1);
+        let r = anchored_rect(anchor, Size::new(12, 4), Side::Below, bounds);
+        assert_eq!(r, Rect::new(5, 6, 12, 4));
+    }
+
+    #[test]
+    fn anchored_rect_opens_above_when_preferred() {
+        let bounds = Rect::new(0, 0, 40, 20);
+        let anchor = Rect::new(5, 10, 10, 1);
+        let r = anchored_rect(anchor, Size::new(12, 4), Side::Above, bounds);
+        assert_eq!(r, Rect::new(5, 6, 12, 4));
+    }
+
+    #[test]
+    fn anchored_rect_flips_below_to_above_when_there_is_no_room_below() {
+        let bounds = Rect::new(0, 0, 40, 20);
+        // Anchor near the bottom: no room for a 4-tall panel below, but there is above.
+        let anchor = Rect::new(5, 18, 10, 1);
+        let r = anchored_rect(anchor, Size::new(12, 4), Side::Below, bounds);
+        assert_eq!(r, Rect::new(5, 14, 12, 4));
+    }
+
+    #[test]
+    fn anchored_rect_flips_above_to_below_when_there_is_no_room_above() {
+        let bounds = Rect::new(0, 0, 40, 20);
+        // Anchor near the top: no room for a 4-tall panel above, but there is below.
+        let anchor = Rect::new(5, 1, 10, 1);
+        let r = anchored_rect(anchor, Size::new(12, 4), Side::Above, bounds);
+        assert_eq!(r, Rect::new(5, 2, 12, 4));
+    }
+
+    #[test]
+    fn anchored_rect_keeps_preferred_side_when_neither_side_has_room() {
+        let bounds = Rect::new(0, 0, 40, 3);
+        let anchor = Rect::new(5, 1, 10, 1);
+        // Neither above nor below fits the panel (bounds is only 3 rows tall); the panel's
+        // height is itself first clamped down to bounds.height() (3), stays on the preferred
+        // Below side, and its clamped-height rect is then pulled up to fit inside bounds.
+        let r = anchored_rect(anchor, Size::new(12, 4), Side::Below, bounds);
+        assert_eq!(r, Rect::new(5, 0, 12, 3));
+    }
+
+    #[test]
+    fn anchored_rect_clamps_to_the_right_bounds_edge() {
+        let bounds = Rect::new(0, 0, 20, 20);
+        // Anchor near the right edge: a 12-wide panel starting at anchor.left() (15) would run
+        // past bounds.right() (20), so it's pulled left to stay inside.
+        let anchor = Rect::new(15, 5, 4, 1);
+        let r = anchored_rect(anchor, Size::new(12, 4), Side::Below, bounds);
+        assert_eq!(r, Rect::new(8, 6, 12, 4));
+    }
+
+    #[test]
+    fn anchored_rect_clamps_to_the_left_bounds_edge() {
+        // A non-origin bounds so an anchor can sit to the left of bounds.left() itself.
+        let bounds = Rect::new(5, 0, 20, 20);
+        let anchor = Rect::new(2, 5, 2, 1);
+        let r = anchored_rect(anchor, Size::new(12, 4), Side::Below, bounds);
+        assert_eq!(r, Rect::new(5, 6, 12, 4));
+    }
+
+    #[test]
+    fn anchored_rect_opens_to_the_right_and_clamps_vertically() {
+        let bounds = Rect::new(0, 0, 40, 10);
+        // Anchor near the bottom: a 6-tall panel starting at anchor.top() would run past
+        // bounds.bottom(), so it's pulled up to stay inside.
+        let anchor = Rect::new(5, 8, 6, 1);
+        let r = anchored_rect(anchor, Size::new(8, 6), Side::Right, bounds);
+        assert_eq!(r, Rect::new(11, 4, 8, 6));
+    }
+
+    #[test]
+    fn anchored_rect_opens_to_the_left() {
+        let bounds = Rect::new(0, 0, 40, 10);
+        let anchor = Rect::new(20, 2, 6, 1);
+        let r = anchored_rect(anchor, Size::new(8, 4), Side::Left, bounds);
+        assert_eq!(r, Rect::new(12, 2, 8, 4));
+    }
+
+    #[test]
+    fn anchored_rect_clamps_size_down_to_bounds() {
+        let bounds = Rect::new(0, 0, 10, 10);
+        let anchor = Rect::new(2, 2, 2, 1);
+        let r = anchored_rect(anchor, Size::new(100, 100), Side::Below, bounds);
+        assert_eq!(r.width(), 10);
+        assert_eq!(r.height(), 10);
+        assert!(r.left() >= bounds.left() && r.right() <= bounds.right());
+        assert!(r.top() >= bounds.top() && r.bottom() <= bounds.bottom());
+    }
+
+    #[test]
+    fn anchored_rect_handles_a_zero_size_bounds() {
+        let bounds = Rect::new(3, 3, 0, 0);
+        let anchor = Rect::new(3, 3, 0, 0);
+        let r = anchored_rect(anchor, Size::new(5, 5), Side::Below, bounds);
+        assert_eq!(r, Rect::new(3, 3, 0, 0));
     }
 
     /// `solve`'s internal `SmallBuf` scratch buffers stay on the stack for up to `STACK_CAP`
