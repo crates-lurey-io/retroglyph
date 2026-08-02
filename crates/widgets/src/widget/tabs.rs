@@ -184,7 +184,7 @@ impl Tabs<'_> {
         for &(index, abs_x, text_width) in &columns {
             let x = abs_x - area.left();
             let title = self.titles[index];
-            let text = truncate_to_cols(title, usize::from(text_width));
+            let text = truncate_to_cols(title, text_width);
             let style = if Some(index) == selected {
                 self.selected_style
             } else {

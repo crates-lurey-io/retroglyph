@@ -70,7 +70,7 @@ impl Widget for Text<'_> {
         if width == 0 {
             return;
         }
-        let text = truncate_to_cols(self.content, usize::from(width));
+        let text = truncate_to_cols(self.content, width);
         // `text` is bounded to `width` columns above, so narrowing the display width back is
         // always exact.
         #[allow(clippy::cast_possible_truncation)]
