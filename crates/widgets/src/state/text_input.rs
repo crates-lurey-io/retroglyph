@@ -18,8 +18,9 @@ use retroglyph_core::{Event, KeyCode};
 /// `retroglyph_core::text::width_usize`: a byte or char count is the wrong unit once the value
 /// contains a double-width character.
 ///
-/// No IME/text composition support (`Event::Key(KeyCode::Char(c))` and `Event::Paste` only) and
-/// no multi-line editing: see `docs/ROADMAP.md` for why those are out of scope for this crate.
+/// Handles typed characters (`Event::Key(KeyCode::Char(c))`) and pasted text (`Event::Paste`)
+/// only. IME/text composition and multi-line editing are out of scope for this crate; see
+/// `docs/ROADMAP.md` for why.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct TextInputState {
     value: String,
@@ -28,7 +29,7 @@ pub struct TextInputState {
 }
 
 impl TextInputState {
-    /// An empty field: no text, cursor at the start, no scroll.
+    /// An empty field: empty value, cursor at `0`, scroll at `0`.
     #[must_use]
     pub const fn new() -> Self {
         Self {
@@ -126,8 +127,8 @@ impl TextInputState {
     ///
     /// Key releases and auto-repeats other than presses are ignored except that auto-repeat
     /// presses are treated the same as a press (matches [`FocusRing`](crate::FocusRing)/
-    /// [`Shortcuts`](crate::Shortcuts)'s own `is_down` gating). No IME/composition events exist
-    /// in [`Event`](retroglyph_core::Event) to handle -- see the crate-level non-goal.
+    /// [`Shortcuts`](crate::Shortcuts)'s own `is_down` gating). [`Event`](retroglyph_core::Event)
+    /// has no IME/composition variant to begin with -- see the scope note above.
     pub fn handle_event(&mut self, event: &Event) -> bool {
         match event {
             Event::Key(key) if key.is_down() => match key.code {

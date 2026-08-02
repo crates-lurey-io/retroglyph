@@ -11,10 +11,10 @@ use crate::text::truncate as truncate_to_cols;
 /// A single-line editable text field: the stateless drawing half of [`TextInputState`], the
 /// same split [`List`](super::List) has with [`ListState`](crate::ListState).
 ///
-/// Draws `state.value()` (or `mask`-repeated characters over it, or `placeholder` when empty and
-/// unfocused... there's no focus concept here, see below), scrolled horizontally by
-/// `state.scroll()` and clipped to `surface.area()`'s width, with a caret cell at the cursor's
-/// display column. Neither scrolling nor the caret's column is byte- or char-based: both go
+/// Draws `state.value()` (masked with `mask` if set, or `placeholder` while `state.value()` is
+/// empty), scrolled horizontally by `state.scroll()` and clipped to `surface.area()`'s width,
+/// with a caret cell at the cursor's display column. Neither scrolling nor the caret's column is
+/// byte- or char-based: both go
 /// through `retroglyph_core::text::width_usize`, the same display-width measurement
 /// [`truncate`](crate::text::truncate) uses, so a value containing a double-width character
 /// (CJK, most emoji) still puts the caret in the right screen column.
@@ -30,9 +30,9 @@ use crate::text::truncate as truncate_to_cols;
 /// -- on every backend. An app that wants a blinking, backend-native caret instead can position
 /// one itself from `state.cursor()`/`state.scroll()` alongside this widget.
 ///
-/// No focus handling, validation, submission, or layout: an app decides which field is focused
-/// (only routing input to it while it is) and what happens on Enter. No IME/text composition and
-/// no multi-line editing -- see `docs/ROADMAP.md`.
+/// This widget draws one field, nothing more: which field is focused (and therefore routed
+/// input), what Enter does, validation, and layout are all the app's job. IME/text composition
+/// and multi-line editing are out of scope for this crate entirely; see `docs/ROADMAP.md`.
 ///
 /// # Examples
 ///
@@ -57,7 +57,13 @@ pub struct TextInput<'a> {
 }
 
 impl<'a> TextInput<'a> {
-    /// An empty-placeholder, unmasked text input in the default style.
+    /// An empty-placeholder, unmasked text input in [`List`](super::List)'s own default palette:
+    /// `style`/`placeholder_style` match `List::item_style`'s dim gray-blue, and `caret_style`
+    /// matches `List::selected_style`'s highlight, since both mark "the thing the user is
+    /// currently on". Not derived from a [`Theme`] -- like every other widget in this crate
+    /// (see [`List::new`](super::List::new), [`Button::new`](super::Button::new)), the default
+    /// is a fixed palette that works with no `Theme` in play at all; call [`TextInput::theme`]
+    /// for the themed palette instead.
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -73,17 +79,11 @@ impl<'a> TextInput<'a> {
                 g: 95,
                 b: 110,
             }),
-            caret_style: Style::new()
-                .fg(Color::Rgb {
-                    r: 16,
-                    g: 16,
-                    b: 24,
-                })
-                .bg(Color::Rgb {
-                    r: 90,
-                    g: 170,
-                    b: 250,
-                }),
+            caret_style: Style::new().fg(Color::BRIGHT_WHITE).bg(Color::Rgb {
+                r: 40,
+                g: 60,
+                b: 90,
+            }),
         }
     }
 
