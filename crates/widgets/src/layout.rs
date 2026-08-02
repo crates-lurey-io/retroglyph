@@ -6,8 +6,9 @@
 //! caller having to interleave `Constraint::Fixed(spacing)` gap constraints and filter them back
 //! out by hand.
 //!
-//! The solver sums the [`Fixed`](Constraint::Fixed) and [`Percent`](Constraint::Percent)
-//! amounts, then distributes whatever remains across the [`Fill`](Constraint::Fill),
+//! The solver sums the [`Fixed`](Constraint::Fixed), [`Percent`](Constraint::Percent), and
+//! [`Ratio`](Constraint::Ratio) amounts, then distributes whatever remains across the
+//! [`Fill`](Constraint::Fill),
 //! [`Min`](Constraint::Min), and [`Max`](Constraint::Max) panes in proportion to their
 //! weight: a `Fill(w)` pane claims a share proportional to `w` relative
 //! to the other flexible panes, while [`Min`](Constraint::Min) and [`Max`](Constraint::Max)
@@ -21,11 +22,17 @@ use retroglyph_core::{Rect, Size};
 
 /// How a single pane claims space along the split axis.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Constraint {
     /// An exact number of cells.
     Fixed(u16),
     /// A percentage (0–100) of the axis length.
     Percent(u16),
+    /// A proportional share of the axis length, `numerator / denominator`, without picking
+    /// an arbitrary [`Fill`](Self::Fill) weight. Resolves like [`Percent`](Self::Percent): a
+    /// fixed size computed up front, not a weighted share of the remainder. A zero
+    /// `denominator` resolves to zero rather than panicking.
+    Ratio(u16, u16),
     /// Claim a share of whatever space the fixed/percent panes leave, proportional to
     /// `weight` relative to the other [`Fill`](Self::Fill)/[`Min`](Self::Min)/[`Max`](Self::Max)
     /// panes in the same split ([`Min`](Self::Min)/[`Max`](Self::Max) panes always weigh 1).
@@ -54,6 +61,19 @@ impl Constraint {
                 #[allow(clippy::cast_possible_truncation)]
                 {
                     (u32::from(total) * p / 100) as u16
+                }
+            }
+            Self::Ratio(num, den) => {
+                if den == 0 {
+                    0
+                } else {
+                    // `num / den` can exceed 1 (e.g. `Ratio(3, 2)`), so the result is clamped to
+                    // `total` rather than relying on the ratio alone to stay in range.
+                    #[allow(clippy::cast_possible_truncation)]
+                    {
+                        (u32::from(total) * u32::from(num) / u32::from(den)).min(u32::from(total))
+                            as u16
+                    }
                 }
             }
             Self::Fill(_) | Self::Max(_) => 0,
@@ -167,7 +187,7 @@ fn solve(total: u16, constraints: &[Constraint]) -> SmallBuf<u16, STACK_CAP> {
             Constraint::Fill(weight) => flexible.push((i, *weight, None)),
             Constraint::Min(_) => flexible.push((i, 1, None)),
             Constraint::Max(cap) => flexible.push((i, 1, Some(*cap))),
-            Constraint::Fixed(_) | Constraint::Percent(_) => {}
+            Constraint::Fixed(_) | Constraint::Percent(_) | Constraint::Ratio(_, _) => {}
         }
     }
     if !flexible.is_empty() {
@@ -359,6 +379,7 @@ pub fn split_v_spaced(area: Rect, constraints: &[Constraint], spacing: u16) -> V
 /// leftover space trails after the last pane, unclaimed. This matches their
 /// existing documented behavior, so adding `Flex` does not change them.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Flex {
     /// Panes are packed at the start of the area; leftover space trails
     /// after the last pane. The default, and what [`split_v`]/[`split_h`] use.
@@ -665,6 +686,29 @@ mod tests {
         assert_eq!(panes[0].left(), 0);
         assert_eq!(panes[1].left(), 30);
         assert_eq!(panes[1].right(), area.right());
+    }
+
+    #[test]
+    fn horizontal_ratio_and_fill() {
+        let area = Rect::new(0, 0, 100, 5);
+        let panes = split_h(area, &[Constraint::Ratio(3, 10), Constraint::Fill(1)]);
+        assert_eq!(panes[0].width(), 30);
+        assert_eq!(panes[1].width(), 70);
+    }
+
+    #[test]
+    fn ratio_zero_denominator_resolves_to_zero() {
+        let area = Rect::new(0, 0, 100, 5);
+        let panes = split_h(area, &[Constraint::Ratio(1, 0), Constraint::Fill(1)]);
+        assert_eq!(panes[0].width(), 0);
+        assert_eq!(panes[1].width(), 100);
+    }
+
+    #[test]
+    fn ratio_over_one_clamps_to_total() {
+        let area = Rect::new(0, 0, 100, 5);
+        let panes = split_h(area, &[Constraint::Ratio(3, 2)]);
+        assert_eq!(panes[0].width(), 100);
     }
 
     #[test]

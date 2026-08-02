@@ -2,7 +2,7 @@
 use retroglyph_core::{Color, Rect, Style};
 
 use super::window::visible_window;
-use super::{InteractiveWidget, Measure, StatefulWidget};
+use super::{HighlightSpacing, InteractiveWidget, ListDirection, Measure, StatefulWidget};
 use crate::ListState;
 use crate::Response;
 use crate::Sense;
@@ -23,15 +23,22 @@ use crate::text::truncate as truncate_to_cols;
 /// falls within the visible window, that item is drawn with an inverted highlight background; if
 /// it has scrolled out of view, nothing is highlighted.
 ///
-/// `item_style` and `selected_style` each default to the same fixed palette as
-/// [`Table`](super::Table)'s `row_style`/`selected_style` (a dim gray-blue for unselected items,
-/// a bright-white-on-dark-blue highlight for the selected one); set them with
-/// [`List::item_style`]/[`List::selected_style`].
+/// `item_style` and `selected_style` default to [`Theme::DARK`], as if [`List::theme`] had been
+/// called; set a different [`Theme`] with [`List::theme`]/[`List::theme_on`] or override a single
+/// field with [`List::item_style`]/[`List::selected_style`].
 ///
 /// As an [`InteractiveWidget`], a single id covers the whole list: a click selects the row under
 /// [`Response::pointer_pos`], resolved from this list's own row geometry (`state.offset()` plus
 /// the pointer's row within `surface.area()`) rather than from a separate id per row, and the
 /// wheel scrolls it via [`Response::scroll_delta`]/[`ListState::scroll_by`].
+///
+/// Selection is style-only by default (a swap to `selected_style`), the same as before
+/// [`List::highlight_symbol`] existed. Set it to prefix the selected item with a marker like
+/// `"> "` -- the one selection signal that survives `set_plain_mode`'s style stripping, or that
+/// reads clearly on a 16-color backend where `selected_style`'s background isn't distinct enough.
+/// [`List::highlight_spacing`] controls whether that marker column reserves width even when
+/// nothing is selected, and [`List::direction`] draws the same windowed items from the bottom of
+/// the area upward instead of the top downward, for a chat/log-style list that grows upward.
 ///
 /// # Examples
 ///
@@ -52,25 +59,26 @@ pub struct List<'a> {
     items: &'a [&'a str],
     item_style: Style,
     selected_style: Style,
+    highlight_symbol: &'a str,
+    highlight_spacing: HighlightSpacing,
+    direction: ListDirection,
 }
 
 impl<'a> List<'a> {
-    /// A list of `items` in the default style.
+    /// A list of `items`, styled from [`Theme::DARK`] (as if [`List::theme`] had been called); set
+    /// [`List::theme`]/[`List::theme_on`] for a different [`Theme`] or
+    /// [`List::item_style`]/[`List::selected_style`] for a one-off override.
     #[must_use]
     pub fn new(items: &'a [&'a str]) -> Self {
         Self {
             items,
-            item_style: Style::new().fg(Color::Rgb {
-                r: 170,
-                g: 175,
-                b: 190,
-            }),
-            selected_style: Style::new().fg(Color::BRIGHT_WHITE).bg(Color::Rgb {
-                r: 40,
-                g: 60,
-                b: 90,
-            }),
+            item_style: Style::new(),
+            selected_style: Style::new(),
+            highlight_symbol: "",
+            highlight_spacing: HighlightSpacing::WhenSelected,
+            direction: ListDirection::TopToBottom,
         }
+        .theme(Theme::DARK)
     }
 
     /// Set the style of unselected items.
@@ -84,6 +92,36 @@ impl<'a> List<'a> {
     #[must_use]
     pub const fn selected_style(mut self, style: Style) -> Self {
         self.selected_style = style;
+        self
+    }
+
+    /// Prefix the selected item with `symbol`, e.g. `"> "`. Empty by default (no marker column,
+    /// the same style-only highlight as before this method existed).
+    ///
+    /// While the marker column is reserved (see [`List::highlight_spacing`]), unselected items'
+    /// text still starts one column past it, so every item's text lines up regardless of which
+    /// row is selected; that reserved column itself is left untouched (not filled) on unselected
+    /// rows, the same "caller's backdrop shows through" behavior [`List::item_style`] already has
+    /// for any unset background.
+    #[must_use]
+    pub const fn highlight_symbol(mut self, symbol: &'a str) -> Self {
+        self.highlight_symbol = symbol;
+        self
+    }
+
+    /// Whether the marker column [`List::highlight_symbol`] draws into reserves width even when
+    /// nothing is selected. Defaults to [`HighlightSpacing::WhenSelected`].
+    #[must_use]
+    pub const fn highlight_spacing(mut self, spacing: HighlightSpacing) -> Self {
+        self.highlight_spacing = spacing;
+        self
+    }
+
+    /// Which end of the area this list's items render from. Defaults to
+    /// [`ListDirection::TopToBottom`].
+    #[must_use]
+    pub const fn direction(mut self, direction: ListDirection) -> Self {
+        self.direction = direction;
         self
     }
 
@@ -117,6 +155,27 @@ impl<'a> List<'a> {
 }
 
 impl List<'_> {
+    /// The marker column's width in this render: [`List::highlight_symbol`]'s display width if
+    /// [`List::highlight_spacing`] says to reserve it right now, `0` otherwise (including when
+    /// `highlight_symbol` is empty -- there's nothing to reserve room for).
+    fn marker_width(&self, has_selection: bool) -> u16 {
+        let symbol_width = retroglyph_core::text::width(self.highlight_symbol);
+        if symbol_width == 0 {
+            return 0;
+        }
+        match self.highlight_spacing {
+            HighlightSpacing::Always => symbol_width,
+            HighlightSpacing::WhenSelected => {
+                if has_selection {
+                    symbol_width
+                } else {
+                    0
+                }
+            }
+            HighlightSpacing::Never => 0,
+        }
+    }
+
     /// The shared drawing routine both [`StatefulWidget::render`] and
     /// [`InteractiveWidget::render`] use.
     fn draw(&self, surface: &mut Surface<'_>, state: &ListState) {
@@ -127,12 +186,20 @@ impl List<'_> {
 
         let visible_items = usize::from(height);
         let selected = state.selected();
+        let marker_width = self.marker_width(selected.is_some());
+        let text_width = width.saturating_sub(marker_width);
         for (item_index, &item) in visible_window(self.items, state.offset(), visible_items) {
             // `item_index - state.offset()` is a row within the visible window, so it never
             // exceeds `visible_items` (this surface's own `u16` height).
             #[allow(clippy::cast_possible_truncation)]
-            let y = (item_index - state.offset()) as u16;
-            let style = if Some(item_index) == selected {
+            let row_in_window = (item_index - state.offset()) as u16;
+            let y = match self.direction {
+                ListDirection::TopToBottom => row_in_window,
+                // `row_in_window < visible_items <= height`, so this never underflows.
+                ListDirection::BottomToTop => height - 1 - row_in_window,
+            };
+            let is_selected = Some(item_index) == selected;
+            let style = if is_selected {
                 fill_rect(
                     surface,
                     Rect::new(0, y, width, 1),
@@ -143,15 +210,27 @@ impl List<'_> {
             } else {
                 self.item_style
             };
-            let text = truncate_to_cols(item, usize::from(width));
-            surface.print((0, y), text, style);
+            if marker_width > 0 {
+                let marker = if is_selected {
+                    self.highlight_symbol
+                } else {
+                    ""
+                };
+                surface.print((0, y), marker, style);
+            }
+            let text = truncate_to_cols(item, usize::from(text_width));
+            surface.print((marker_width, y), text, style);
         }
     }
 
-    /// The item index at `pos`, given `state`'s current scroll offset, or `None` if `pos` falls
-    /// past the last item (not clamped to the last item).
+    /// The item index at `pos`, given `state`'s current scroll offset and [`List::direction`], or
+    /// `None` if `pos` falls past the last item (not clamped to the last item).
     fn index_at(&self, area: Rect, state: &ListState, pos: retroglyph_core::Pos) -> Option<usize> {
         let row = pos.y.checked_sub(area.top())?;
+        let row = match self.direction {
+            ListDirection::TopToBottom => row,
+            ListDirection::BottomToTop => area.height().checked_sub(1)?.checked_sub(row)?,
+        };
         let index = state.offset() + usize::from(row);
         (index < self.items.len()).then_some(index)
     }
@@ -460,5 +539,137 @@ mod tests {
             response,
         );
         assert_eq!(state.offset(), 2);
+    }
+
+    #[test]
+    fn highlight_symbol_prefixes_only_the_selected_item() {
+        let area = Rect::new(0, 0, 20, 2);
+        let items = ["Alpha", "Bravo"];
+        let list = List::new(&items).highlight_symbol("> ");
+
+        let mut grid = Grid::new(20, 2);
+        let mut state = ListState::new();
+        state.select(Some(1));
+        StatefulWidget::render(&list, &mut Surface::new(&mut grid, area, 0), &mut state);
+
+        assert_eq!(grid[Pos::new(0, 1)].glyph(), '>');
+        assert_eq!(grid[Pos::new(1, 1)].glyph(), ' ');
+        assert_eq!(grid[Pos::new(2, 1)].glyph(), 'B');
+        // Unselected row's marker column is blank, and its text still starts past it.
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
+        assert_eq!(grid[Pos::new(2, 0)].glyph(), 'A');
+    }
+
+    #[test]
+    fn no_highlight_symbol_is_the_default_style_only_behavior() {
+        let area = Rect::new(0, 0, 20, 1);
+        let items = ["Alpha"];
+        let list = List::new(&items);
+
+        let mut grid = Grid::new(20, 1);
+        let mut state = ListState::new();
+        state.select(Some(0));
+        StatefulWidget::render(&list, &mut Surface::new(&mut grid, area, 0), &mut state);
+
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), 'A');
+    }
+
+    #[test]
+    fn highlight_spacing_when_selected_reserves_no_column_until_something_is_selected() {
+        let area = Rect::new(0, 0, 20, 1);
+        let items = ["Alpha"];
+        let list = List::new(&items).highlight_symbol("> ");
+
+        let mut grid = Grid::new(20, 1);
+        let mut state = ListState::new();
+        StatefulWidget::render(&list, &mut Surface::new(&mut grid, area, 0), &mut state);
+
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), 'A');
+    }
+
+    #[test]
+    fn highlight_spacing_always_reserves_the_column_even_when_unselected() {
+        let area = Rect::new(0, 0, 20, 1);
+        let items = ["Alpha"];
+        let list = List::new(&items)
+            .highlight_symbol("> ")
+            .highlight_spacing(HighlightSpacing::Always);
+
+        let mut grid = Grid::new(20, 1);
+        let mut state = ListState::new();
+        StatefulWidget::render(&list, &mut Surface::new(&mut grid, area, 0), &mut state);
+
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
+        assert_eq!(grid[Pos::new(2, 0)].glyph(), 'A');
+    }
+
+    #[test]
+    fn highlight_spacing_never_suppresses_the_symbol_even_when_selected() {
+        let area = Rect::new(0, 0, 20, 1);
+        let items = ["Alpha"];
+        let list = List::new(&items)
+            .highlight_symbol("> ")
+            .highlight_spacing(HighlightSpacing::Never);
+
+        let mut grid = Grid::new(20, 1);
+        let mut state = ListState::new();
+        state.select(Some(0));
+        StatefulWidget::render(&list, &mut Surface::new(&mut grid, area, 0), &mut state);
+
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), 'A');
+    }
+
+    #[test]
+    fn bottom_to_top_direction_draws_the_first_visible_item_at_the_bottom_row() {
+        let area = Rect::new(0, 0, 20, 3);
+        let names = items(&["Alpha", "Bravo", "Charlie"]);
+        let list = List::new(&names).direction(ListDirection::BottomToTop);
+
+        let mut grid = Grid::new(20, 3);
+        let mut state = ListState::new();
+        StatefulWidget::render(&list, &mut Surface::new(&mut grid, area, 0), &mut state);
+
+        assert_eq!(grid[Pos::new(0, 2)].glyph(), 'A');
+        assert_eq!(grid[Pos::new(0, 1)].glyph(), 'B');
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), 'C');
+    }
+
+    #[test]
+    fn bottom_to_top_direction_highlights_the_selected_row_in_its_flipped_position() {
+        let area = Rect::new(0, 0, 20, 3);
+        let names = items(&["Alpha", "Bravo", "Charlie"]);
+        let list = List::new(&names).direction(ListDirection::BottomToTop);
+
+        let mut grid = Grid::new(20, 3);
+        let mut state = ListState::new();
+        state.select(Some(0)); // "Alpha" draws at the bottom row under this direction
+        StatefulWidget::render(&list, &mut Surface::new(&mut grid, area, 0), &mut state);
+
+        let highlighted_bg = grid[Pos::new(0, 2)].style().background();
+        let plain_bg = grid[Pos::new(0, 1)].style().background();
+        assert_ne!(highlighted_bg, plain_bg);
+    }
+
+    #[test]
+    fn bottom_to_top_direction_click_selects_the_flipped_row() {
+        let area = Rect::new(0, 0, 20, 3);
+        let names = items(&["Alpha", "Bravo", "Charlie"]);
+        let list = List::new(&names).direction(ListDirection::BottomToTop);
+        let mut state = ListState::new();
+
+        let response = Response {
+            hovered: true,
+            clicked: true,
+            pointer_pos: Some(Pos::new(2, 2)), // bottom row -> "Alpha" under this direction
+            ..Response::default()
+        };
+        let mut grid = Grid::new(20, 3);
+        InteractiveWidget::render(
+            &list,
+            &mut Surface::new(&mut grid, area, 0),
+            &mut state,
+            response,
+        );
+        assert_eq!(state.selected(), Some(0));
     }
 }

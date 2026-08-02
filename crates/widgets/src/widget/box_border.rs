@@ -8,8 +8,8 @@ use crate::Theme;
 /// A single-line box border drawn around a [`Rect`](retroglyph_core::Rect).
 ///
 /// The interior of the rectangle is not touched. `area` must be at least
-/// 2×2, or [`Widget::render`] is a no-op. `style` defaults to
-/// [`Style::new()`]; set it with [`BoxBorder::style`].
+/// 2×2, or [`Widget::render`] is a no-op. `style` defaults to [`Theme::DARK`] (as if
+/// [`BoxBorder::theme`] had been called); set it with [`BoxBorder::style`].
 ///
 /// # Examples
 ///
@@ -28,10 +28,11 @@ pub struct BoxBorder {
 }
 
 impl BoxBorder {
-    /// A plain box border; see [`BoxBorder::style`] to color it.
+    /// A box border styled from [`Theme::DARK`] (as if [`BoxBorder::theme`] had been called); see
+    /// [`BoxBorder::style`] to override it.
     #[must_use]
     pub fn new() -> Self {
-        Self::default()
+        Self::default().theme(Theme::DARK)
     }
 
     /// Set the border's style.
@@ -51,16 +52,13 @@ impl BoxBorder {
 
     /// Sets `style` to `theme.border` on `theme.panel_bg`.
     ///
-    /// The background is set explicitly rather than left at [`Style::new()`]'s default: an unset
-    /// background isn't "transparent" once a real backend draws it (a bare `Color::Default` cell
-    /// paints as solid black behind the glyph, not whatever was there before; see
-    /// `retroglyph-software`'s `DEFAULT_BG`), which would leave a visible black grid of border
-    /// cells on a light [`Theme`] rather than a border blending into its surroundings. That means
-    /// this widget has to assume *something* about what it's drawn over, even though (unlike
-    /// [`super::Panel`], which also owns and fills its own interior) a standalone `BoxBorder`
-    /// genuinely doesn't know: `theme.panel_bg` is the closest default, matching what a themed
-    /// [`super::Panel`]/[`super::Modal`] around it would use. Drawing this border directly on the
-    /// raw screen background instead needs a manual [`BoxBorder::style`] override afterwards.
+    /// The background is set explicitly for the same reason, and with the same caveat, as
+    /// [`super::Gauge::theme`]; see its doc comment for the full explanation. Unlike
+    /// [`super::Panel`], which also owns and fills its own interior, a standalone `BoxBorder`
+    /// genuinely doesn't know what it's drawn over: `theme.panel_bg` is the closest default,
+    /// matching what a themed [`super::Panel`]/[`super::Modal`] around it would use. Drawing this
+    /// border directly on the raw screen background instead needs a manual [`BoxBorder::style`]
+    /// override afterwards.
     ///
     /// Call before any manual [`BoxBorder::style`] override you want to keep.
     #[must_use]

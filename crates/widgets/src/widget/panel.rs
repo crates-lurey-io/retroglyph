@@ -13,8 +13,8 @@ use crate::{Align, Theme};
 /// title in the top edge.
 ///
 /// `border_style` (the box outline and title) and `fill_style` (the
-/// interior background) both default to [`Style::new()`]; there is no
-/// title by default, and the title (if any) defaults to [`Align::Center`].
+/// interior background) both default to [`Theme::DARK`] (as if [`Panel::theme`] had been called);
+/// there is no title by default, and the title (if any) defaults to [`Align::Center`].
 /// Set whichever of these a caller needs via
 /// [`Panel::border_style`]/[`Panel::fill_style`]/[`Panel::title`]/[`Panel::title_align`].
 ///
@@ -41,13 +41,15 @@ pub struct Panel<'a> {
 }
 
 impl<'a> Panel<'a> {
-    /// A plain, untitled panel in the default style.
+    /// A plain, untitled panel, styled from [`Theme::DARK`] (as if [`Panel::theme`] had been
+    /// called).
     #[must_use]
     pub fn new() -> Self {
         Self {
             title_align: Align::Center,
             ..Self::default()
         }
+        .theme(Theme::DARK)
     }
 
     /// Set the panel's title.

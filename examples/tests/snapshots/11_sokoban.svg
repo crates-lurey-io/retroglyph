@@ -4,22 +4,36 @@
   <tspan fill="#cccccc" x="8.0"> Sokoban -- arrows move/push, u undoes, r resets, </tspan>
 </text>
 <text font-family="monospace" font-size="14" y="44.0" xml:space="preserve">
-  <tspan fill="#cccccc" x="8.0"> q/Escape quits         ┌──────── Status ────────┐</tspan>
+  <tspan fill="#cccccc" x="8.0"> q/Escape quits         </tspan>
+  <tspan fill="#464a60" x="209.6" style="background:#1e2030">┌──────── Status ────────┐</tspan>
 </text>
 <text font-family="monospace" font-size="14" y="62.0" xml:space="preserve">
-  <tspan fill="#cccccc" x="8.0">                        │ Moves: 0               │</tspan>
+  <tspan fill="#cccccc" x="8.0">                        </tspan>
+  <tspan fill="#464a60" x="209.6" style="background:#1e2030">│</tspan>
+  <tspan fill="#cccccc" x="218.0" style="background:#161620"> </tspan>
+  <tspan fill="#cccccc" x="226.4">Moves: 0</tspan>
+  <tspan fill="#cccccc" x="293.6" style="background:#161620">               </tspan>
+  <tspan fill="#464a60" x="419.6" style="background:#1e2030">│</tspan>
 </text>
 <text font-family="monospace" font-size="14" y="80.0" xml:space="preserve">
   <tspan fill="#cccccc" x="8.0">  </tspan>
   <tspan fill="#c0c0c0" x="24.8">###########</tspan>
-  <tspan fill="#cccccc" x="117.2">           │                        │</tspan>
+  <tspan fill="#cccccc" x="117.2">           </tspan>
+  <tspan fill="#464a60" x="209.6" style="background:#1e2030">│</tspan>
+  <tspan fill="#cccccc" x="218.0" style="background:#161620">                        </tspan>
+  <tspan fill="#464a60" x="419.6" style="background:#1e2030">│</tspan>
 </text>
 <text font-family="monospace" font-size="14" y="98.0" xml:space="preserve">
   <tspan fill="#cccccc" x="8.0">  </tspan>
   <tspan fill="#c0c0c0" x="24.8">#</tspan>
   <tspan fill="#808080" x="33.2">.........</tspan>
   <tspan fill="#c0c0c0" x="108.8">#</tspan>
-  <tspan fill="#cccccc" x="117.2">           │ Arrows: move / push    │</tspan>
+  <tspan fill="#cccccc" x="117.2">           </tspan>
+  <tspan fill="#464a60" x="209.6" style="background:#1e2030">│</tspan>
+  <tspan fill="#cccccc" x="218.0" style="background:#161620"> </tspan>
+  <tspan fill="#cccccc" x="226.4">Arrows: move / push</tspan>
+  <tspan fill="#cccccc" x="386.0" style="background:#161620">    </tspan>
+  <tspan fill="#464a60" x="419.6" style="background:#1e2030">│</tspan>
 </text>
 <text font-family="monospace" font-size="14" y="116.0" xml:space="preserve">
   <tspan fill="#cccccc" x="8.0">  </tspan>
@@ -30,7 +44,12 @@
   <tspan fill="#ffff55" x="83.6">o</tspan>
   <tspan fill="#808080" x="92.0">..</tspan>
   <tspan fill="#c0c0c0" x="108.8">#</tspan>
-  <tspan fill="#cccccc" x="117.2">           │ u: undo                │</tspan>
+  <tspan fill="#cccccc" x="117.2">           </tspan>
+  <tspan fill="#464a60" x="209.6" style="background:#1e2030">│</tspan>
+  <tspan fill="#cccccc" x="218.0" style="background:#161620"> </tspan>
+  <tspan fill="#cccccc" x="226.4">u: undo</tspan>
+  <tspan fill="#cccccc" x="285.2" style="background:#161620">                </tspan>
+  <tspan fill="#464a60" x="419.6" style="background:#1e2030">│</tspan>
 </text>
 <text font-family="monospace" font-size="14" y="134.0" xml:space="preserve">
   <tspan fill="#cccccc" x="8.0">  </tspan>
@@ -41,7 +60,12 @@
   <tspan fill="#ff5555" x="83.6">$</tspan>
   <tspan fill="#808080" x="92.0">..</tspan>
   <tspan fill="#c0c0c0" x="108.8">#</tspan>
-  <tspan fill="#cccccc" x="117.2">           │ r: reset level         │</tspan>
+  <tspan fill="#cccccc" x="117.2">           </tspan>
+  <tspan fill="#464a60" x="209.6" style="background:#1e2030">│</tspan>
+  <tspan fill="#cccccc" x="218.0" style="background:#161620"> </tspan>
+  <tspan fill="#cccccc" x="226.4">r: reset level</tspan>
+  <tspan fill="#cccccc" x="344.0" style="background:#161620">         </tspan>
+  <tspan fill="#464a60" x="419.6" style="background:#1e2030">│</tspan>
 </text>
 <text font-family="monospace" font-size="14" y="152.0" xml:space="preserve">
   <tspan fill="#cccccc" x="8.0">  </tspan>
@@ -50,63 +74,117 @@
   <tspan fill="#55ffff" x="66.8">@</tspan>
   <tspan fill="#808080" x="75.2">....</tspan>
   <tspan fill="#c0c0c0" x="108.8">#</tspan>
-  <tspan fill="#cccccc" x="117.2">           │ q / Esc: quit          │</tspan>
+  <tspan fill="#cccccc" x="117.2">           </tspan>
+  <tspan fill="#464a60" x="209.6" style="background:#1e2030">│</tspan>
+  <tspan fill="#cccccc" x="218.0" style="background:#161620"> </tspan>
+  <tspan fill="#cccccc" x="226.4">q / Esc: quit</tspan>
+  <tspan fill="#cccccc" x="335.6" style="background:#161620">          </tspan>
+  <tspan fill="#464a60" x="419.6" style="background:#1e2030">│</tspan>
 </text>
 <text font-family="monospace" font-size="14" y="170.0" xml:space="preserve">
   <tspan fill="#cccccc" x="8.0">  </tspan>
   <tspan fill="#c0c0c0" x="24.8">#</tspan>
   <tspan fill="#808080" x="33.2">.........</tspan>
   <tspan fill="#c0c0c0" x="108.8">#</tspan>
-  <tspan fill="#cccccc" x="117.2">           │                        │</tspan>
+  <tspan fill="#cccccc" x="117.2">           </tspan>
+  <tspan fill="#464a60" x="209.6" style="background:#1e2030">│</tspan>
+  <tspan fill="#cccccc" x="218.0" style="background:#161620">                        </tspan>
+  <tspan fill="#464a60" x="419.6" style="background:#1e2030">│</tspan>
 </text>
 <text font-family="monospace" font-size="14" y="188.0" xml:space="preserve">
   <tspan fill="#cccccc" x="8.0">  </tspan>
   <tspan fill="#c0c0c0" x="24.8">###########</tspan>
-  <tspan fill="#cccccc" x="117.2">           │                        │</tspan>
+  <tspan fill="#cccccc" x="117.2">           </tspan>
+  <tspan fill="#464a60" x="209.6" style="background:#1e2030">│</tspan>
+  <tspan fill="#cccccc" x="218.0" style="background:#161620">                        </tspan>
+  <tspan fill="#464a60" x="419.6" style="background:#1e2030">│</tspan>
 </text>
 <text font-family="monospace" font-size="14" y="206.0" xml:space="preserve">
-  <tspan fill="#cccccc" x="8.0">                        │                        │</tspan>
+  <tspan fill="#cccccc" x="8.0">                        </tspan>
+  <tspan fill="#464a60" x="209.6" style="background:#1e2030">│</tspan>
+  <tspan fill="#cccccc" x="218.0" style="background:#161620">                        </tspan>
+  <tspan fill="#464a60" x="419.6" style="background:#1e2030">│</tspan>
 </text>
 <text font-family="monospace" font-size="14" y="224.0" xml:space="preserve">
-  <tspan fill="#cccccc" x="8.0">                        │                        │</tspan>
+  <tspan fill="#cccccc" x="8.0">                        </tspan>
+  <tspan fill="#464a60" x="209.6" style="background:#1e2030">│</tspan>
+  <tspan fill="#cccccc" x="218.0" style="background:#161620">                        </tspan>
+  <tspan fill="#464a60" x="419.6" style="background:#1e2030">│</tspan>
 </text>
 <text font-family="monospace" font-size="14" y="242.0" xml:space="preserve">
-  <tspan fill="#cccccc" x="8.0">                        │                        │</tspan>
+  <tspan fill="#cccccc" x="8.0">                        </tspan>
+  <tspan fill="#464a60" x="209.6" style="background:#1e2030">│</tspan>
+  <tspan fill="#cccccc" x="218.0" style="background:#161620">                        </tspan>
+  <tspan fill="#464a60" x="419.6" style="background:#1e2030">│</tspan>
 </text>
 <text font-family="monospace" font-size="14" y="260.0" xml:space="preserve">
-  <tspan fill="#cccccc" x="8.0">                        │                        │</tspan>
+  <tspan fill="#cccccc" x="8.0">                        </tspan>
+  <tspan fill="#464a60" x="209.6" style="background:#1e2030">│</tspan>
+  <tspan fill="#cccccc" x="218.0" style="background:#161620">                        </tspan>
+  <tspan fill="#464a60" x="419.6" style="background:#1e2030">│</tspan>
 </text>
 <text font-family="monospace" font-size="14" y="278.0" xml:space="preserve">
-  <tspan fill="#cccccc" x="8.0">                        │                        │</tspan>
+  <tspan fill="#cccccc" x="8.0">                        </tspan>
+  <tspan fill="#464a60" x="209.6" style="background:#1e2030">│</tspan>
+  <tspan fill="#cccccc" x="218.0" style="background:#161620">                        </tspan>
+  <tspan fill="#464a60" x="419.6" style="background:#1e2030">│</tspan>
 </text>
 <text font-family="monospace" font-size="14" y="296.0" xml:space="preserve">
-  <tspan fill="#cccccc" x="8.0">                        │                        │</tspan>
+  <tspan fill="#cccccc" x="8.0">                        </tspan>
+  <tspan fill="#464a60" x="209.6" style="background:#1e2030">│</tspan>
+  <tspan fill="#cccccc" x="218.0" style="background:#161620">                        </tspan>
+  <tspan fill="#464a60" x="419.6" style="background:#1e2030">│</tspan>
 </text>
 <text font-family="monospace" font-size="14" y="314.0" xml:space="preserve">
-  <tspan fill="#cccccc" x="8.0">                        │                        │</tspan>
+  <tspan fill="#cccccc" x="8.0">                        </tspan>
+  <tspan fill="#464a60" x="209.6" style="background:#1e2030">│</tspan>
+  <tspan fill="#cccccc" x="218.0" style="background:#161620">                        </tspan>
+  <tspan fill="#464a60" x="419.6" style="background:#1e2030">│</tspan>
 </text>
 <text font-family="monospace" font-size="14" y="332.0" xml:space="preserve">
-  <tspan fill="#cccccc" x="8.0">                        │                        │</tspan>
+  <tspan fill="#cccccc" x="8.0">                        </tspan>
+  <tspan fill="#464a60" x="209.6" style="background:#1e2030">│</tspan>
+  <tspan fill="#cccccc" x="218.0" style="background:#161620">                        </tspan>
+  <tspan fill="#464a60" x="419.6" style="background:#1e2030">│</tspan>
 </text>
 <text font-family="monospace" font-size="14" y="350.0" xml:space="preserve">
-  <tspan fill="#cccccc" x="8.0">                        │                        │</tspan>
+  <tspan fill="#cccccc" x="8.0">                        </tspan>
+  <tspan fill="#464a60" x="209.6" style="background:#1e2030">│</tspan>
+  <tspan fill="#cccccc" x="218.0" style="background:#161620">                        </tspan>
+  <tspan fill="#464a60" x="419.6" style="background:#1e2030">│</tspan>
 </text>
 <text font-family="monospace" font-size="14" y="368.0" xml:space="preserve">
-  <tspan fill="#cccccc" x="8.0">                        │                        │</tspan>
+  <tspan fill="#cccccc" x="8.0">                        </tspan>
+  <tspan fill="#464a60" x="209.6" style="background:#1e2030">│</tspan>
+  <tspan fill="#cccccc" x="218.0" style="background:#161620">                        </tspan>
+  <tspan fill="#464a60" x="419.6" style="background:#1e2030">│</tspan>
 </text>
 <text font-family="monospace" font-size="14" y="386.0" xml:space="preserve">
-  <tspan fill="#cccccc" x="8.0">                        │                        │</tspan>
+  <tspan fill="#cccccc" x="8.0">                        </tspan>
+  <tspan fill="#464a60" x="209.6" style="background:#1e2030">│</tspan>
+  <tspan fill="#cccccc" x="218.0" style="background:#161620">                        </tspan>
+  <tspan fill="#464a60" x="419.6" style="background:#1e2030">│</tspan>
 </text>
 <text font-family="monospace" font-size="14" y="404.0" xml:space="preserve">
-  <tspan fill="#cccccc" x="8.0">                        │                        │</tspan>
+  <tspan fill="#cccccc" x="8.0">                        </tspan>
+  <tspan fill="#464a60" x="209.6" style="background:#1e2030">│</tspan>
+  <tspan fill="#cccccc" x="218.0" style="background:#161620">                        </tspan>
+  <tspan fill="#464a60" x="419.6" style="background:#1e2030">│</tspan>
 </text>
 <text font-family="monospace" font-size="14" y="422.0" xml:space="preserve">
-  <tspan fill="#cccccc" x="8.0">                        │                        │</tspan>
+  <tspan fill="#cccccc" x="8.0">                        </tspan>
+  <tspan fill="#464a60" x="209.6" style="background:#1e2030">│</tspan>
+  <tspan fill="#cccccc" x="218.0" style="background:#161620">                        </tspan>
+  <tspan fill="#464a60" x="419.6" style="background:#1e2030">│</tspan>
 </text>
 <text font-family="monospace" font-size="14" y="440.0" xml:space="preserve">
-  <tspan fill="#cccccc" x="8.0">                        │                        │</tspan>
+  <tspan fill="#cccccc" x="8.0">                        </tspan>
+  <tspan fill="#464a60" x="209.6" style="background:#1e2030">│</tspan>
+  <tspan fill="#cccccc" x="218.0" style="background:#161620">                        </tspan>
+  <tspan fill="#464a60" x="419.6" style="background:#1e2030">│</tspan>
 </text>
 <text font-family="monospace" font-size="14" y="458.0" xml:space="preserve">
-  <tspan fill="#cccccc" x="8.0">                        └────────────────────────┘</tspan>
+  <tspan fill="#cccccc" x="8.0">                        </tspan>
+  <tspan fill="#464a60" x="209.6" style="background:#1e2030">└────────────────────────┘</tspan>
 </text>
 </svg>

@@ -106,6 +106,13 @@ impl std::error::Error for ClipboardError {}
 pub struct SystemClipboard(arboard::Clipboard);
 
 #[cfg(not(target_arch = "wasm32"))]
+impl fmt::Debug for SystemClipboard {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SystemClipboard").finish_non_exhaustive()
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 impl SystemClipboard {
     /// Opens a handle to the platform clipboard.
     ///

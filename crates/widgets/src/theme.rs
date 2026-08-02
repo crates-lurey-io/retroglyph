@@ -1,6 +1,6 @@
 //! [`Theme`]: named color roles for a light/dark-aware app.
 
-use retroglyph_core::Color;
+use retroglyph_core::{Color, Style};
 
 use crate::Response;
 
@@ -218,6 +218,55 @@ impl Theme {
             self.dim
         }
     }
+
+    /// The resolved [`Style`] for an interactive widget in `response`'s current state, over
+    /// `base` when idle. Precedence: [`disabled`](Response::disabled), then
+    /// [`pressed`](Response::pressed), then [`focused`](Response::focused), then
+    /// [`hovered`](Response::hovered), then idle.
+    ///
+    /// Unlike [`bg_for`](Self::bg_for)/[`fg_for`](Self::fg_for), which resolve each channel
+    /// independently, `style_for` resolves both at once against a single, shared precedence
+    /// order: that's the only place `disabled` can cleanly take priority over everything else,
+    /// and the only place a press (`accent` on `press_bg`) and a focus ring (`accent` on `base`,
+    /// no background change) can be told apart instead of both collapsing into the same `accent`
+    /// foreground.
+    ///
+    /// `base` is caller-supplied for the same reason as [`bg_for`](Self::bg_for): so this
+    /// composes with widgets that already have their own backdrop.
+    ///
+    /// This uses [`dim`](Self::dim) for the disabled foreground, same as idle; retroglyph has
+    /// no separate disabled color role yet.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_widgets::Theme;
+    /// use retroglyph_widgets::Interaction;
+    /// use retroglyph_core::{Pos, Rect};
+    ///
+    /// let theme = Theme::DARK;
+    /// let mut interaction = Interaction::<u32>::default();
+    /// let response = interaction.interact(Rect::new(0, 0, 1, 1), 1, Default::default());
+    /// let style = theme.style_for(&response, theme.panel_bg);
+    /// assert_eq!(style.foreground(), theme.dim);
+    /// assert_eq!(style.background(), theme.panel_bg);
+    /// ```
+    #[must_use]
+    pub fn style_for(&self, response: &Response, base: Color) -> Style {
+        if response.disabled() {
+            return Style::new().fg(self.dim).bg(base);
+        }
+        if response.pressed() {
+            return Style::new().fg(self.accent).bg(self.press_bg);
+        }
+        if response.focused() {
+            return Style::new().fg(self.accent).bg(base);
+        }
+        if response.hovered() {
+            return Style::new().fg(self.fg).bg(self.hover_bg);
+        }
+        Style::new().fg(self.dim).bg(base)
+    }
 }
 
 #[cfg(test)]
@@ -302,6 +351,81 @@ mod tests {
             ..Response::default()
         };
         assert_eq!(theme.fg_for(&response), theme.accent);
+    }
+
+    #[test]
+    fn style_for_is_dim_on_base_when_idle() {
+        let theme = Theme::DARK;
+        let response = Response::default();
+        let style = theme.style_for(&response, theme.panel_bg);
+        assert_eq!(style.foreground(), theme.dim);
+        assert_eq!(style.background(), theme.panel_bg);
+    }
+
+    #[test]
+    fn style_for_is_fg_on_hover_bg_when_hovered() {
+        let theme = Theme::DARK;
+        let response = Response {
+            hovered: true,
+            ..Response::default()
+        };
+        let style = theme.style_for(&response, theme.panel_bg);
+        assert_eq!(style.foreground(), theme.fg);
+        assert_eq!(style.background(), theme.hover_bg);
+    }
+
+    #[test]
+    fn style_for_is_accent_on_base_when_focused_and_not_hovered() {
+        let theme = Theme::DARK;
+        let response = Response {
+            focused: true,
+            ..Response::default()
+        };
+        let style = theme.style_for(&response, theme.panel_bg);
+        assert_eq!(style.foreground(), theme.accent);
+        assert_eq!(style.background(), theme.panel_bg);
+    }
+
+    #[test]
+    fn style_for_prefers_focused_over_hovered() {
+        let theme = Theme::DARK;
+        let response = Response {
+            hovered: true,
+            focused: true,
+            ..Response::default()
+        };
+        let style = theme.style_for(&response, theme.panel_bg);
+        assert_eq!(style.foreground(), theme.accent);
+        assert_eq!(style.background(), theme.panel_bg);
+    }
+
+    #[test]
+    fn style_for_is_accent_on_press_bg_when_pressed() {
+        let theme = Theme::DARK;
+        let response = Response {
+            pressed: true,
+            focused: true,
+            hovered: true,
+            ..Response::default()
+        };
+        let style = theme.style_for(&response, theme.panel_bg);
+        assert_eq!(style.foreground(), theme.accent);
+        assert_eq!(style.background(), theme.press_bg);
+    }
+
+    #[test]
+    fn style_for_prefers_disabled_over_everything_else() {
+        let theme = Theme::DARK;
+        let response = Response {
+            disabled: true,
+            pressed: true,
+            focused: true,
+            hovered: true,
+            ..Response::default()
+        };
+        let style = theme.style_for(&response, theme.panel_bg);
+        assert_eq!(style.foreground(), theme.dim);
+        assert_eq!(style.background(), theme.panel_bg);
     }
 
     #[test]

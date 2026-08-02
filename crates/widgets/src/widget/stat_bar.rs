@@ -18,8 +18,9 @@ use crate::Theme;
 /// with a `"0/0"` readout rather than a special-cased blank output. If
 /// `current` exceeds `max` (e.g. a temporarily buffed stat), the bar fill
 /// still caps at 100%, but the readout shows the true, uncapped numbers
-/// (`"120/100"`) so the overflow stays visible in text. `label_style`
-/// defaults to a neutral gray-blue; set it with [`StatBar::label_style`].
+/// (`"120/100"`) so the overflow stays visible in text. `label_style` defaults to
+/// [`Theme::DARK`]'s `dim` role (as if [`StatBar::theme`] had been called); set it with
+/// [`StatBar::label_style`].
 ///
 /// # Examples
 ///
@@ -40,15 +41,17 @@ pub struct StatBar<'a> {
 }
 
 impl<'a> StatBar<'a> {
-    /// A stat bar for `label`, reading `current` out of `max`.
+    /// A stat bar for `label`, reading `current` out of `max`, with `label_style` styled from
+    /// [`Theme::DARK`] (as if [`StatBar::theme`] had been called).
     #[must_use]
     pub fn new(label: &'a str, current: u32, max: u32) -> Self {
         Self {
             label,
             current,
             max,
-            label_style: bar::default_label_style(),
+            label_style: Style::new(),
         }
+        .theme(Theme::DARK)
     }
 
     /// Set the label's style.

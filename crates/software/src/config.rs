@@ -2,7 +2,7 @@
 //!
 //! The main type is [`SoftwareBackend`], which holds grid and font
 //! configuration.  Construct it via [`SoftwareBackendBuilder`], then call
-//! [`run_headless`](SoftwareBackend::run_headless) to produce a
+//! [`into_renderer`](SoftwareBackend::into_renderer) to produce a
 //! [`SoftwareRenderer`](crate::SoftwareRenderer). Hand that renderer to
 //! `retroglyph_window::winit::run_windowed` to open a window, or use it
 //! directly for in-memory rendering.
@@ -50,7 +50,7 @@ impl fmt::Display for SoftwareBackendError {
                 "scale must be non-zero; a scale of 0 would produce a zero-size pixel buffer"
             ),
             #[cfg(feature = "tilesets")]
-            Self::Tileset(e) => write!(f, "tileset error: {e}"),
+            Self::Tileset(_) => write!(f, "tileset load failed"),
         }
     }
 }
@@ -68,7 +68,7 @@ impl std::error::Error for SoftwareBackendError {
 /// Configuration and entry point for the software rendering backend.
 ///
 /// Construct this via [`SoftwareBackendBuilder`], then call
-/// [`run_headless`](SoftwareBackend::run_headless) to obtain a
+/// [`into_renderer`](SoftwareBackend::into_renderer) to obtain a
 /// [`SoftwareRenderer`](crate::SoftwareRenderer) (which implements
 /// [`Backend`](retroglyph_core::backend::Backend) for in-memory use, and
 /// `retroglyph_window::Presenter` for windowed use).
@@ -90,7 +90,7 @@ impl std::error::Error for SoftwareBackendError {
 ///     .scale(2)
 ///     .build()
 ///     .expect("backend init failed")
-///     .run_headless()
+///     .into_renderer()
 ///     .expect("renderer init failed");
 ///
 /// let config = WindowConfig::fit(&renderer, "My Game", None, true);
@@ -121,7 +121,7 @@ impl std::error::Error for SoftwareBackendError {
 ///     .build()
 ///     .unwrap();
 ///
-/// let mut renderer: SoftwareRenderer = opts.run_headless().unwrap();
+/// let mut renderer: SoftwareRenderer = opts.into_renderer().unwrap();
 ///
 /// // Draw a red cell on layer 0.
 /// use retroglyph_core::tile::Tile;
@@ -142,10 +142,11 @@ pub struct SoftwareBackend {
     /// `None` only when `default-font` is disabled and no font has
     /// been supplied via [`SoftwareBackendBuilder::font`].
     ///
-    /// Crate-private: the only way to reach [`run_headless`](super::SoftwareBackend::run_headless)
-    /// with a `SoftwareBackend` is through [`SoftwareBackendBuilder`], which validates
-    /// this invariant in [`build`](SoftwareBackendBuilder::build). Use
-    /// [`fonts`](SoftwareBackend::fonts) to read it back from outside the crate.
+    /// Crate-private: the only way to reach
+    /// [`into_renderer`](super::SoftwareBackend::into_renderer) with a `SoftwareBackend` is
+    /// through [`SoftwareBackendBuilder`], which validates this invariant in
+    /// [`build`](SoftwareBackendBuilder::build). Use [`fonts`](SoftwareBackend::fonts) to read it
+    /// back from outside the crate.
     pub(crate) fonts: Option<FontChain<'static>>,
     /// Grid width in cells.
     pub cols: u16,
@@ -156,7 +157,8 @@ pub struct SoftwareBackend {
     /// A scale of 2 renders each 1-bit font pixel as a 2×2 block, making
     /// the Unscii 16 font display at 16×32 pixels per cell. Default is 1.
     pub scale: u8,
-    /// Registered tileset options, loaded at [`run_headless`](SoftwareBackend::run_headless) time.
+    /// Registered tileset options, loaded at
+    /// [`into_renderer`](SoftwareBackend::into_renderer) time.
     #[cfg(feature = "tilesets")]
     pub tilesets: Vec<TilesetOptions>,
 }
@@ -211,6 +213,7 @@ impl SoftwareBackend {
 ///     .build()
 ///     .expect("backend init failed");
 /// ```
+#[derive(Debug)]
 pub struct SoftwareBackendBuilder {
     options: SoftwareBackend,
 }
@@ -286,7 +289,7 @@ impl SoftwareBackendBuilder {
     /// Registers a tileset for loading when the backend starts.
     ///
     /// Multiple tilesets can be registered; they are all loaded when
-    /// [`run_headless`](SoftwareBackend::run_headless) is called. Later
+    /// [`into_renderer`](SoftwareBackend::into_renderer) is called. Later
     /// registrations win on codepoint collision.
     ///
     /// Available only when the `tilesets` feature is enabled.
@@ -299,7 +302,7 @@ impl SoftwareBackendBuilder {
 
     /// Validates options and returns the backend configuration.
     ///
-    /// Call [`run_headless`](SoftwareBackend::run_headless) on the result to
+    /// Call [`into_renderer`](SoftwareBackend::into_renderer) on the result to
     /// obtain the renderer (hand it to `retroglyph_window::winit::run_windowed`
     /// to open a window).
     ///

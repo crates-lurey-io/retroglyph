@@ -83,7 +83,7 @@ fn sprite_frame(cols: u16, rows: u16) -> Vec<(u8, Pos, Tile)> {
 
 #[cfg(feature = "tilesets")]
 fn sprite_renderer(alpha: u8) -> retroglyph_software::SoftwareRenderer {
-    let tileset = TilesetOptions::from_bytes(make_sprite_sheet_png(alpha))
+    let tileset = TilesetOptions::builder(make_sprite_sheet_png(alpha))
         .tile_size(16, 16)
         .codepage(Codepage::Unicode { start: 'A' })
         .build()
@@ -95,7 +95,7 @@ fn sprite_renderer(alpha: u8) -> retroglyph_software::SoftwareRenderer {
         .tileset(tileset)
         .build()
         .unwrap()
-        .run_headless()
+        .into_renderer()
         .unwrap()
 }
 
@@ -109,7 +109,7 @@ fn blit(c: &mut Criterion) {
         .scale(1)
         .build()
         .unwrap()
-        .run_headless()
+        .into_renderer()
         .unwrap();
     group.bench_function("blit_glyph", |b| {
         b.iter(|| renderer.draw_layers(to_content(&frame)).unwrap());

@@ -15,8 +15,8 @@
 //! `NEAREST` and blends foreground over background by coverage, so glyphs stay crisp at any integer
 //! scale.
 
-// `pub(crate)` on items in this private module is intentional (crate-internal API surface); the
-// nursery `redundant_pub_crate` lint conflicts with keeping the module structure explicit.
+// `redundant_pub_crate` fires on `pub(crate)` items in this private module; the module boundary
+// is intentional, so it's allowed crate-locally.
 #![allow(clippy::redundant_pub_crate)]
 
 use retroglyph_window::font::{BitmapFont, FontChain};
