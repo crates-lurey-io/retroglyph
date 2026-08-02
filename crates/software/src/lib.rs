@@ -189,6 +189,13 @@ struct RenderContext {
     /// full repaint next frame, since the dirty-cell path can only compare cells within layers
     /// present in both frames.
     prev_layer_count: usize,
+    /// Whether any tile in the last `draw_layers` call had a nonzero sub-cell offset
+    /// (`Tile::dx`/`Tile::dy`). A frame that removes the last offset needs a full repaint just as
+    /// much as one that introduces one: the spilled pixels it painted into a neighbor cell live
+    /// outside that neighbor's own tile, so a neighbor whose own tile is unchanged is never
+    /// revisited by the dirty-cell path and the stale spill survives unless this frame's
+    /// `full_repaint` also accounts for what the *previous* frame offset.
+    prev_offset: bool,
     /// Glyphs already reported by [`warn_oversized_sprite`] as needing a span, so a 60fps redraw
     /// loop logs each one once instead of every frame.
     #[cfg(feature = "tilesets")]
@@ -226,6 +233,7 @@ impl SoftwareRenderer {
                 // `draw_layers` call is unconditionally treated as a layer-set change and takes
                 // the full-repaint path once, seeding `prev_tiles` for every subsequent frame.
                 prev_layer_count: usize::MAX,
+                prev_offset: false,
                 #[cfg(feature = "tilesets")]
                 warned_oversized: BTreeSet::new(),
                 #[cfg(feature = "tilesets")]
@@ -751,14 +759,19 @@ impl Output for SoftwareRenderer {
         self.ctx.prev_layer_count = layer_count_now;
 
         // Falls back to a full clear-and-repaint of every cell when either:
-        // - any tile this frame has a nonzero sub-cell offset (`Tile::dx`/`Tile::dy`): offsets can
-        //   spill glyph pixels into neighboring cells by an amount `Tile` does not bound, so
-        //   containing the repaint to a neighborhood around the changed cells isn't possible
-        //   without a magnitude cap core doesn't provide; or
+        // - any tile this frame or the last one has a nonzero sub-cell offset (`Tile::dx`/`dy`):
+        //   offsets can spill glyph pixels into neighboring cells by an amount `Tile` does not
+        //   bound, so containing the repaint to a neighborhood around the changed cells isn't
+        //   possible without a magnitude cap core doesn't provide. The previous frame's offsets
+        //   matter just as much as this frame's: a frame that removes the last offset can leave a
+        //   neighbor cell's own tile byte-identical to last frame, so the dirty-cell path never
+        //   revisits it to clear the spill that landed there, exactly like `layers_changed` below
+        //   already compares against last frame's state instead of only this frame's; or
         // - the number of allocated layers changed since the last call: a layer's cells falling
         //   out of (or into) the frame can't be diffed against a shadow copy that no longer
         //   describes this frame's layer set.
-        let full_repaint = any_offset || layers_changed;
+        let full_repaint = any_offset || self.ctx.prev_offset || layers_changed;
+        self.ctx.prev_offset = any_offset;
 
         if full_repaint {
             self.ctx.pixel_buf.clear();
@@ -850,6 +863,7 @@ impl Output for SoftwareRenderer {
         self.ctx.prev_tints.clear();
         self.ctx.dirty_mask.clear();
         self.ctx.prev_layer_count = usize::MAX;
+        self.ctx.prev_offset = false;
         self.ctx.damage_rows = if new_h == 0 {
             None
         } else {
@@ -867,6 +881,7 @@ impl Output for SoftwareRenderer {
         self.ctx.prev_tints.clear();
         self.ctx.dirty_mask.clear();
         self.ctx.prev_layer_count = usize::MAX;
+        self.ctx.prev_offset = false;
         Ok(())
     }
 
@@ -1588,6 +1603,61 @@ mod tests {
         assert!(
             has_green_at_x(4),
             "block still occupies x=4 in its own cell"
+        );
+    }
+
+    #[test]
+    fn removing_an_offset_leaves_stale_spill_in_the_neighbor_cell() {
+        // retroglyph#717: `full_repaint` used to OR in only the *current* frame's offsets, so the
+        // frame that removes the last offset took the incremental repaint path. That path only
+        // repaints cells whose own tile changed, and the neighbor cell's tile here is untouched
+        // (still blue background, byte-identical to the previous frame), so it was never
+        // revisited to clear the spill the previous frame's offset glyph had painted into it.
+        let mut renderer = SoftwareBackendBuilder::new()
+            .font(retroglyph_window::font::unscii16::FONT)
+            .grid_size(2, 1)
+            .scale(1)
+            .build()
+            .unwrap()
+            .into_renderer()
+            .unwrap();
+
+        let green = 0x0000_FF00_u32;
+        let blue = 0x0000_00FF_u32;
+        let block_at = |dx: i16| {
+            Tile::new(
+                '\u{2588}',
+                Style::new().fg(Color::Rgb { r: 0, g: 255, b: 0 }),
+            )
+            .with_offset(dx, 0)
+        };
+        let neighbor = Tile::new(' ', Style::new().bg(Color::Rgb { r: 0, g: 0, b: 255 }));
+
+        // Frame 1: block offset right by half a cell, spills green into cell 1's left half.
+        renderer.draw_layers(
+            [
+                DrawCell::on_layer(0, Pos::new(0, 0), &block_at(4)),
+                DrawCell::on_layer(0, Pos::new(1, 0), &neighbor),
+            ]
+            .into_iter(),
+        );
+        let buf = renderer.pixels();
+        assert_eq!(buf[8], green, "spill into cell 1 should be confirmed first");
+
+        // Frame 2: offset removed entirely; cell 1's tile is byte-identical to frame 1.
+        renderer.draw_layers(
+            [
+                DrawCell::on_layer(0, Pos::new(0, 0), &block_at(0)),
+                DrawCell::on_layer(0, Pos::new(1, 0), &neighbor),
+            ]
+            .into_iter(),
+        );
+        let buf = renderer.pixels();
+        assert!(
+            buf[8..16].iter().all(|&p| p == blue),
+            "cell 1 must be fully blue again once the offset spilling into it is gone, but got: \
+             {:?}",
+            &buf[8..16]
         );
     }
 
