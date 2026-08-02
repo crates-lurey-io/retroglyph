@@ -3,14 +3,16 @@
 //! [`crate::text::Span`] and [`Line`] provide styled text primitives. The entry point here is
 //! [`TextLayout`], a builder that word-wraps a [`Line`] to a bounded [`Rect`], then positions it
 //! with independent horizontal ([`HAlign`]) and vertical ([`VAlign`]) alignment. Measure the
-//! result before rendering with [`TextLayout::measure`].
+//! result before rendering with [`TextLayout::measure`]. [`wrap`] exposes that same word-wrap
+//! pass standalone, for callers that need the broken-apart [`Line`]s rather than a rendered
+//! surface.
 //!
 //! Only available when the `egc` feature is enabled (requires `alloc`).
 
 use crate::grid::{Grid, Rect};
 use crate::style::Style;
 use crate::surface::Surface;
-use crate::text::Line;
+use crate::text::{Line, Span};
 use alloc::string::String;
 use alloc::vec::Vec;
 use unicode_segmentation::UnicodeSegmentation;
@@ -155,6 +157,50 @@ fn wrap_line(line: &Line, max_width: u16) -> Vec<WrappedLine> {
     }
 
     lines
+}
+
+/// Word-wraps `line` to `max_width` columns, returning the broken-apart [`Line`]s.
+///
+/// This is the same greedy, grapheme-cluster-aware wrap pass [`TextLayout`] runs internally on
+/// every render (breaking on ASCII space, honoring hard `\n`s, force-breaking an overlong word
+/// at the column boundary); it's exposed standalone for callers that need the wrapped pieces
+/// themselves rather than having them written straight to a surface, such as a scrollback log
+/// that wraps each message into rows while still addressing its window in whole messages.
+///
+/// Each returned `Line` is a single unstyled or uniformly-styled run per source span that
+/// survived onto that row; adjacent graphemes carrying the same [`Style`] are coalesced back
+/// into one [`Span`], so wrapping a plain [`Line::raw`] round-trips to plain `Line::raw` rows.
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::layout::wrap;
+/// use retroglyph_core::text::Line;
+///
+/// let line = Line::raw("hello world");
+/// let rows = wrap(&line, 7);
+/// assert_eq!(rows.len(), 2);
+/// assert_eq!(rows[0].spans[0].content, "hello");
+/// assert_eq!(rows[1].spans[0].content, "world");
+/// ```
+#[must_use]
+pub fn wrap(line: &Line, max_width: u16) -> Vec<Line> {
+    wrap_line(line, max_width)
+        .into_iter()
+        .map(|wrapped| {
+            let mut spans: Vec<Span> = Vec::new();
+            for glyph in wrapped.glyphs {
+                if let Some(last) = spans.last_mut()
+                    && last.style == glyph.style
+                {
+                    last.content.push_str(&glyph.grapheme);
+                    continue;
+                }
+                spans.push(Span::styled(glyph.grapheme, glyph.style));
+            }
+            Line { spans }
+        })
+        .collect()
 }
 
 // ---------------------------------------------------------------------------
