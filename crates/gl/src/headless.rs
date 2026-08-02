@@ -28,8 +28,8 @@
 //!
 //! # What is asserted
 //!
-//! Exact-pixel snapshots are fragile across driver versions, so this uses the two robust
-//! strategies from the issue instead:
+//! Exact-pixel snapshots are fragile across driver versions, so this uses the two strategies
+//! from the issue instead, chosen to hold up across drivers:
 //!
 //! - Property assertions: a full-block cell is entirely its foreground; a blank cell is entirely
 //!   its background; a real glyph matches the font's own coverage bits fg-vs-bg.

@@ -23,11 +23,12 @@
 //!
 //! # What is asserted
 //!
-//! The same driver-robust property checks the native headless module uses (never exact-pixel
-//! snapshots, which are fragile across GL stacks): a full-block cell is entirely its foreground
-//! color, and a blank (space) cell is entirely its background color. The full-block assertion is
-//! the load-bearing one for the atlas-upload bug: with a failed atlas upload the glyph coverage
-//! is uniformly zero, so the full-block cell renders as its *background*, and this test fails.
+//! The same driver-independent property checks the native headless module uses (never
+//! exact-pixel snapshots, which are fragile across GL stacks): a full-block cell is entirely its
+//! foreground color, and a blank (space) cell is entirely its background color. The full-block
+//! assertion is the load-bearing one for the atlas-upload bug: with a failed atlas upload the
+//! glyph coverage is uniformly zero, so the full-block cell renders as its *background*, and this
+//! test fails.
 
 // GL wants `i32` dimensions from `u32` pixel sizes; these casts are all bounded (the test grid is
 // tiny) and pervasive, exactly as in `renderer.rs` and `headless.rs`. Allow the family
