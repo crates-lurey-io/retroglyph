@@ -93,9 +93,10 @@ For an optimized build that still reports, enable `retroglyph-core`'s `dev` feat
 
 See [`crates/core`](crates/core) for the Grid API, double buffering, stateful drawing, text
 layout/word wrapping, scrolling camera/map loading, input handling, and `no_std` support, and
-[`crates/widgets`](crates/widgets) for panels, gauges, tables, and layout splitting. Every backend
-in the [crates table](#crates) above links to its own README for what it adds over the `Backend`
-trait (font chains, sprite tilesets, panic-safe raw mode, WASM bridging, ...).
+[`crates/widgets`](crates/widgets) for panels, gauges, tables, layout splitting, and the
+`TextInput`/`TextInputState` single-line text field. Every backend in the [crates table](#crates)
+above links to its own README for what it adds over the `Backend` trait (font chains, sprite
+tilesets, panic-safe raw mode, WASM bridging, ...).
 
 ## Quick start
 

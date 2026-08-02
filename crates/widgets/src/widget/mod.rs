@@ -40,6 +40,7 @@ mod stat_bar;
 mod table;
 mod tabs;
 mod text;
+mod text_input;
 mod window;
 
 pub use box_border::BoxBorder;
@@ -60,6 +61,7 @@ pub use stat_bar::StatBar;
 pub use table::Table;
 pub use tabs::Tabs;
 pub use text::Text;
+pub use text_input::TextInput;
 
 /// A type that draws itself into a [`Surface`], without retaining any
 /// state — the minimal shape shared by every widget-like consumer.
