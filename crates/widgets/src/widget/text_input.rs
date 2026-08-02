@@ -57,34 +57,19 @@ pub struct TextInput<'a> {
 }
 
 impl<'a> TextInput<'a> {
-    /// An empty-placeholder, unmasked text input in [`List`](super::List)'s own default palette:
-    /// `style`/`placeholder_style` match `List::item_style`'s dim gray-blue, and `caret_style`
-    /// matches `List::selected_style`'s highlight, since both mark "the thing the user is
-    /// currently on". Not derived from a [`Theme`] -- like every other widget in this crate
-    /// (see [`List::new`](super::List::new), [`Button::new`](super::Button::new)), the default
-    /// is a fixed palette that works with no `Theme` in play at all; call [`TextInput::theme`]
-    /// for the themed palette instead.
+    /// An empty-placeholder, unmasked text input, styled from [`Theme::DARK`] (as if
+    /// [`TextInput::theme`] had been called); call [`TextInput::theme`]/[`TextInput::theme_on`]
+    /// for a different [`Theme`].
     #[must_use]
     pub fn new() -> Self {
         Self {
             placeholder: None,
             mask: None,
-            style: Style::new().fg(Color::Rgb {
-                r: 170,
-                g: 175,
-                b: 190,
-            }),
-            placeholder_style: Style::new().fg(Color::Rgb {
-                r: 90,
-                g: 95,
-                b: 110,
-            }),
-            caret_style: Style::new().fg(Color::BRIGHT_WHITE).bg(Color::Rgb {
-                r: 40,
-                g: 60,
-                b: 90,
-            }),
+            style: Style::new(),
+            placeholder_style: Style::new(),
+            caret_style: Style::new(),
         }
+        .theme(Theme::DARK)
     }
 
     /// Text shown, in [`placeholder_style`](Self::placeholder_style), when `state.value()` is

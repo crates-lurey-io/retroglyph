@@ -8,8 +8,8 @@ use crate::Theme;
 /// A single-line box border drawn around a [`Rect`](retroglyph_core::Rect).
 ///
 /// The interior of the rectangle is not touched. `area` must be at least
-/// 2×2, or [`Widget::render`] is a no-op. `style` defaults to
-/// [`Style::new()`]; set it with [`BoxBorder::style`].
+/// 2×2, or [`Widget::render`] is a no-op. `style` defaults to [`Theme::DARK`] (as if
+/// [`BoxBorder::theme`] had been called); set it with [`BoxBorder::style`].
 ///
 /// # Examples
 ///
@@ -28,10 +28,11 @@ pub struct BoxBorder {
 }
 
 impl BoxBorder {
-    /// A plain box border; see [`BoxBorder::style`] to color it.
+    /// A box border styled from [`Theme::DARK`] (as if [`BoxBorder::theme`] had been called); see
+    /// [`BoxBorder::style`] to override it.
     #[must_use]
     pub fn new() -> Self {
-        Self::default()
+        Self::default().theme(Theme::DARK)
     }
 
     /// Set the border's style.

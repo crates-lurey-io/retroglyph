@@ -26,12 +26,10 @@ use crate::text::truncate as truncate_to_cols;
 /// with an inverted highlight background; if it has scrolled out of view,
 /// no row is highlighted.
 ///
-/// `header_style`, `row_style`, and `selected_style` each default to a fixed
-/// palette (a light blue-gray header, a dim gray-blue for unselected rows,
-/// and a bright-white-on-dark-blue highlight for the selected row); set them
-/// with [`Table::header_style`], [`Table::row_style`], and
-/// [`Table::selected_style`]. `column_spacing` defaults to `1` (a single
-/// blank column between cells); set it with [`Table::column_spacing`].
+/// `header_style`, `row_style`, and `selected_style` default to [`Theme::DARK`] (as if
+/// [`Table::theme`] had been called); set them with [`Table::header_style`],
+/// [`Table::row_style`], and [`Table::selected_style`]. `column_spacing` defaults to `1` (a
+/// single blank column between cells); set it with [`Table::column_spacing`].
 ///
 /// # Examples
 ///
@@ -62,31 +60,20 @@ pub struct Table<'a> {
 }
 
 impl<'a> Table<'a> {
-    /// A table with the given header labels, column widths, and rows, in the
-    /// default style.
+    /// A table with the given header labels, column widths, and rows, styled from
+    /// [`Theme::DARK`] (as if [`Table::theme`] had been called).
     #[must_use]
     pub fn new(headers: &'a [&'a str], widths: &'a [u16], rows: &'a [&'a [&'a str]]) -> Self {
         Self {
             headers,
             widths,
             rows,
-            header_style: Style::new().fg(Color::Rgb {
-                r: 210,
-                g: 210,
-                b: 230,
-            }),
-            row_style: Style::new().fg(Color::Rgb {
-                r: 170,
-                g: 175,
-                b: 190,
-            }),
-            selected_style: Style::new().fg(Color::BRIGHT_WHITE).bg(Color::Rgb {
-                r: 40,
-                g: 60,
-                b: 90,
-            }),
+            header_style: Style::new(),
+            row_style: Style::new(),
+            selected_style: Style::new(),
             column_spacing: 1,
         }
+        .theme(Theme::DARK)
     }
 
     /// Set the header row's style.
@@ -338,7 +325,7 @@ mod tests {
     }
 
     #[test]
-    fn default_header_style_matches_previous_hardcoded_color() {
+    fn default_header_style_matches_theme_dark() {
         let area = Rect::new(0, 0, 20, 2);
         let headers = ["Name"];
         let widths = [10u16];
@@ -349,12 +336,11 @@ mod tests {
         let mut state = ListState::new();
         table.render(&mut Surface::new(&mut grid, area, 0), &mut state);
 
-        let expected = Color::Rgb {
-            r: 210,
-            g: 210,
-            b: 230,
-        };
-        assert_eq!(grid[Pos::new(0, 0)].style().foreground(), expected);
+        assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Theme::DARK.fg);
+        assert_eq!(
+            grid[Pos::new(0, 0)].style().background(),
+            Theme::DARK.panel_bg
+        );
     }
 
     #[test]

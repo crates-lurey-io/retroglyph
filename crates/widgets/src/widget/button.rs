@@ -47,9 +47,10 @@ use crate::text::truncate as truncate_to_cols;
 /// as pressed even while still hovered, and a keyboard-focused-but-not-hovered button still shows
 /// something distinct from idle.
 ///
-/// `style`, `hovered_style`, `pressed_style`, `focused_style`, and `disabled_style` each default
-/// to a fixed palette; set them with [`Button::style`]/[`Button::hovered_style`]/
-/// [`Button::pressed_style`]/[`Button::focused_style`]/[`Button::disabled_style`].
+/// `style`, `hovered_style`, `pressed_style`, `focused_style`, and `disabled_style` default to
+/// [`Theme::DARK`], as if [`Button::theme`] had been called; set them with
+/// [`Button::style`]/[`Button::hovered_style`]/[`Button::pressed_style`]/
+/// [`Button::focused_style`]/[`Button::disabled_style`].
 #[derive(Clone, Copy, Debug)]
 pub struct Button<'a> {
     label: &'a str,
@@ -61,43 +62,20 @@ pub struct Button<'a> {
 }
 
 impl<'a> Button<'a> {
-    /// A button labeled `label`.
+    /// A button labeled `label`, styled from [`Theme::DARK`] (as if [`Button::theme`] had been
+    /// called); set [`Button::theme`]/[`Button::theme_on`] for a different [`Theme`] or one of the
+    /// `_style` setters for a one-off override.
     #[must_use]
     pub fn new(label: &'a str) -> Self {
         Self {
             label,
-            style: Style::new()
-                .fg(Color::Rgb {
-                    r: 170,
-                    g: 175,
-                    b: 190,
-                })
-                .bg(Color::Rgb {
-                    r: 45,
-                    g: 48,
-                    b: 58,
-                }),
-            hovered_style: Style::new().fg(Color::BRIGHT_WHITE).bg(Color::Rgb {
-                r: 60,
-                g: 65,
-                b: 80,
-            }),
-            pressed_style: Style::new().fg(Color::BRIGHT_WHITE).bg(Color::Rgb {
-                r: 40,
-                g: 60,
-                b: 90,
-            }),
-            focused_style: Style::new().fg(Color::BRIGHT_WHITE).bg(Color::Rgb {
-                r: 55,
-                g: 55,
-                b: 70,
-            }),
-            disabled_style: Style::new().fg(Color::Rgb {
-                r: 110,
-                g: 112,
-                b: 130,
-            }),
+            style: Style::new(),
+            hovered_style: Style::new(),
+            pressed_style: Style::new(),
+            focused_style: Style::new(),
+            disabled_style: Style::new(),
         }
+        .theme(Theme::DARK)
     }
 
     /// Set the default (idle) style.
@@ -254,18 +232,7 @@ mod tests {
         let mut grid = Grid::new(7, 1);
         Widget::render(&Button::new("Go"), &mut Surface::new(&mut grid, area, 0));
 
-        let idle_bg = Style::new()
-            .fg(Color::Rgb {
-                r: 170,
-                g: 175,
-                b: 190,
-            })
-            .bg(Color::Rgb {
-                r: 45,
-                g: 48,
-                b: 58,
-            })
-            .background();
+        let idle_bg = Theme::DARK.panel_bg;
         assert_eq!(grid[Pos::new(0, 0)].style().background(), idle_bg);
         assert_eq!(grid[Pos::new(6, 0)].style().background(), idle_bg);
     }

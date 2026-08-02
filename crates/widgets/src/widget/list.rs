@@ -23,10 +23,9 @@ use crate::text::truncate as truncate_to_cols;
 /// falls within the visible window, that item is drawn with an inverted highlight background; if
 /// it has scrolled out of view, nothing is highlighted.
 ///
-/// `item_style` and `selected_style` each default to the same fixed palette as
-/// [`Table`](super::Table)'s `row_style`/`selected_style` (a dim gray-blue for unselected items,
-/// a bright-white-on-dark-blue highlight for the selected one); set them with
-/// [`List::item_style`]/[`List::selected_style`].
+/// `item_style` and `selected_style` default to [`Theme::DARK`], as if [`List::theme`] had been
+/// called; set a different [`Theme`] with [`List::theme`]/[`List::theme_on`] or override a single
+/// field with [`List::item_style`]/[`List::selected_style`].
 ///
 /// As an [`InteractiveWidget`], a single id covers the whole list: a click selects the row under
 /// [`Response::pointer_pos`], resolved from this list's own row geometry (`state.offset()` plus
@@ -66,25 +65,20 @@ pub struct List<'a> {
 }
 
 impl<'a> List<'a> {
-    /// A list of `items` in the default style.
+    /// A list of `items`, styled from [`Theme::DARK`] (as if [`List::theme`] had been called); set
+    /// [`List::theme`]/[`List::theme_on`] for a different [`Theme`] or
+    /// [`List::item_style`]/[`List::selected_style`] for a one-off override.
     #[must_use]
     pub fn new(items: &'a [&'a str]) -> Self {
         Self {
             items,
-            item_style: Style::new().fg(Color::Rgb {
-                r: 170,
-                g: 175,
-                b: 190,
-            }),
-            selected_style: Style::new().fg(Color::BRIGHT_WHITE).bg(Color::Rgb {
-                r: 40,
-                g: 60,
-                b: 90,
-            }),
+            item_style: Style::new(),
+            selected_style: Style::new(),
             highlight_symbol: "",
             highlight_spacing: HighlightSpacing::WhenSelected,
             direction: ListDirection::TopToBottom,
         }
+        .theme(Theme::DARK)
     }
 
     /// Set the style of unselected items.
