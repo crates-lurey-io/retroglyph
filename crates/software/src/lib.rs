@@ -644,49 +644,12 @@ impl Output for SoftwareRenderer {
     /// background (see the private `resolve_bg_fill` helper) even though the occupied tile's own
     /// background is the default one.
     ///
-    /// # Dirty-cell repaint (retroglyph#302)
-    ///
-    /// `needs_full_frame` always returns `true` for this backend (see its docs), so this
-    /// receives every cell on every allocated layer on every call: `Terminal::present`'s
-    /// diff-only path (used when a backend's `needs_full_frame` is `false`) never applies here,
-    /// and changing that would be a `retroglyph-core` API change. Instead, this method keeps its
-    /// own per-cell shadow copy of the last frame's tiles (see `RenderContext::prev_tiles`) and
-    /// diffs incoming cells against it here, entirely internally: cells whose tile is unchanged
-    /// since the last call are skipped instead of being cleared and repainted.
-    ///
-    /// This falls back to a full clear-and-repaint of every cell when either:
-    /// - any tile this frame has a nonzero sub-cell offset ([`Tile::dx`]/[`Tile::dy`]): offsets
-    ///   can spill glyph pixels into neighboring cells by an amount `Tile` does not bound, so
-    ///   containing the repaint to a neighborhood around the changed cells isn't possible without
-    ///   a magnitude cap core doesn't provide; or
-    /// - the number of allocated layers changed since the last call: a layer's cells falling out
-    ///   of (or into) the frame can't be diffed against a shadow copy that no longer describes
-    ///   this frame's layer set.
-    ///
-    /// Both paths run two sub-passes per layer (every background first, then every glyph), so
-    /// artwork that lands outside its own cell spills onto the neighbor's already-painted
-    /// background instead of being clobbered by that neighbor's later background fill. Spill is
-    /// therefore uniform in all four directions: the two-pass mechanism of the "Sub-cell offsets
-    /// and spill" contract documented on [`Presenter`](retroglyph_window::Presenter), shared with
-    /// `retroglyph-gl`. A multi-cell span's sprite relies on the same ordering, since it is drawn
-    /// once from the anchor and covers cells that paint backgrounds of their own.
-    ///
-    /// When neither applies, a changed cell at a given position also forces every *other* layer
-    /// at that same position to be repainted (even if unchanged there), because a lower layer's
-    /// background fill covers the whole cell rect and would otherwise erase an unchanged higher
-    /// layer's already-composited glyph pixels on top of it.
-    ///
-    /// # Multi-cell spans (retroglyph#412)
-    ///
-    /// A [`TileFlags::SPAN_COVERED`] cell paints its background but not its glyph: the span's
-    /// anchor already drew one sprite across the whole footprint, and the covered cell's glyph is
-    /// that sprite's text fallback, for backends that cannot draw it. The sprite-transparency
-    /// rule that decides whether a background is painted at all is resolved against the *anchor*
-    /// (see `resolve_cell_bg`), so one span never sits on two different backdrops.
-    ///
-    /// A covered cell's tile does not change when only the anchor's artwork does, so a dirty cell
-    /// anywhere in a span dirties the whole span (see `expand_dirty_spans`); without that, the
-    /// previous sprite's pixels would survive in cells the diff considers unchanged.
+    /// A [`TileFlags::SPAN_COVERED`] cell (retroglyph#412) paints its background but not its
+    /// glyph: the span's anchor already drew one sprite across the whole footprint, and the
+    /// covered cell's glyph is that sprite's text fallback, for backends that cannot draw it. The
+    /// sprite-transparency rule that decides whether a background is painted at all is resolved
+    /// against the *anchor* (see `resolve_cell_bg`), so one span never sits on two different
+    /// backdrops.
     fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
         I: Iterator<Item = DrawCell<'a>>,
@@ -699,6 +662,13 @@ impl Output for SoftwareRenderer {
         let buf_w = cols * cell_w;
         let cell_count = cols * rows;
 
+        // `needs_full_frame` always returns `true` for this backend, so this receives every cell
+        // on every allocated layer on every call: `Terminal::present`'s diff-only path (used when
+        // a backend's `needs_full_frame` is `false`) never applies here, and changing that would
+        // be a `retroglyph-core` API change (retroglyph#302). Instead, this method keeps its own
+        // per-cell shadow copy of the last frame's tiles (`RenderContext::prev_tiles`) and diffs
+        // incoming cells against it below, entirely internally: cells whose tile is unchanged
+        // since the last call are skipped instead of being cleared and repainted.
         if self.ctx.dirty_mask.len() == cell_count {
             self.ctx.dirty_mask.iter_mut().for_each(|d| *d = false);
         } else {
@@ -720,6 +690,11 @@ impl Output for SoftwareRenderer {
             let slot = &mut self.ctx.prev_tiles[layer_idx][idx];
             let tint_slot = &mut self.ctx.prev_tints[layer_idx][idx];
             if *slot != *tile || *tint_slot != draw_cell.tint {
+                // `dirty_mask` is a single array shared across layers, not one per layer: marking
+                // an index dirty here forces every layer to repaint that cell below, even ones
+                // unchanged at this position, because a lower layer's background fill covers the
+                // whole cell rect and would otherwise erase an unchanged higher layer's
+                // already-composited glyph pixels on top of it.
                 self.ctx.dirty_mask[idx] = true;
                 any_dirty = true;
                 *slot = *tile;
@@ -732,7 +707,10 @@ impl Output for SoftwareRenderer {
 
         if any_dirty {
             // Runs after the whole stream, so every layer's shadow copy is current: a span's
-            // footprint has to be read off an anchor this frame actually wrote.
+            // footprint has to be read off an anchor this frame actually wrote. A covered cell's
+            // tile does not change when only the anchor's artwork does, so a dirty cell anywhere
+            // in a span has to dirty the whole span here; without that, the previous sprite's
+            // pixels would survive in cells the diff considers unchanged.
             for layer in &self.ctx.prev_tiles {
                 expand_dirty_spans(&mut self.ctx.dirty_mask, layer, cols, rows);
             }
@@ -743,6 +721,14 @@ impl Output for SoftwareRenderer {
         let layers_changed = layer_count_now != self.ctx.prev_layer_count;
         self.ctx.prev_layer_count = layer_count_now;
 
+        // Falls back to a full clear-and-repaint of every cell when either:
+        // - any tile this frame has a nonzero sub-cell offset (`Tile::dx`/`Tile::dy`): offsets can
+        //   spill glyph pixels into neighboring cells by an amount `Tile` does not bound, so
+        //   containing the repaint to a neighborhood around the changed cells isn't possible
+        //   without a magnitude cap core doesn't provide; or
+        // - the number of allocated layers changed since the last call: a layer's cells falling
+        //   out of (or into) the frame can't be diffed against a shadow copy that no longer
+        //   describes this frame's layer set.
         let full_repaint = any_offset || layers_changed;
 
         if full_repaint {

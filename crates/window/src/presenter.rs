@@ -260,15 +260,13 @@ impl RecoverableError for GenericSurfaceError {
 /// }
 /// ```
 pub trait Presenter: Output {
-    /// Surface lifecycle error (context creation, buffer acquisition,
-    /// present).
+    /// Surface lifecycle error (context creation, buffer acquisition, present).
     type SurfaceError: RecoverableError;
 
     /// Initialize the window surface.
     ///
-    /// Called once from the loop's `resumed` handler. The presenter creates
-    /// its platform surface (softbuffer surface, wgpu device+surface, GL
-    /// context) from the raw window/display handles.
+    /// Called once from the loop's `resumed` handler. The presenter creates its platform surface
+    /// (softbuffer surface, wgpu device+surface, GL context) from the raw window/display handles.
     ///
     /// # Errors
     ///
@@ -310,14 +308,13 @@ pub trait Presenter: Output {
 
     /// Present the rasterized frame to the window surface.
     ///
-    /// Called after each app tick. A lost frame is not fatal; the caller
-    /// logs the error and continues.
+    /// Called after each app tick. A lost frame is not fatal; the caller logs the error and
+    /// continues.
     ///
     /// # Errors
     ///
-    /// Returns [`Self::SurfaceError`] if the surface buffer can't be acquired
-    /// or presented (e.g. context lost on wasm, page flip pending on
-    /// DRI/KMS).
+    /// Returns [`Self::SurfaceError`] if the surface buffer can't be acquired or presented (e.g.
+    /// context lost on wasm, page flip pending on DRI/KMS).
     fn present(&mut self) -> Result<(), Self::SurfaceError>;
 
     /// Cell size in physical pixels `(width, height)`.
