@@ -516,7 +516,8 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
             && self.pointer.is_down(MouseButton::Left)
             && self.pointer.pos().is_some_and(|pos| rect.contains_pos(pos));
 
-        if senses_click && released_here && hovered && !dragging {
+        if senses_click && sense.contains(Sense::FOCUSABLE) && released_here && hovered && !dragging
+        {
             self.focus.request(id);
         }
 
@@ -1492,5 +1493,51 @@ mod tests {
         assert!(!save.gained_focus());
         assert!(cancel.focused());
         assert!(cancel.gained_focus());
+    }
+
+    /// Regression test for retroglyph#704: clicking a `Sense::CLICK` widget that never asked for
+    /// `Sense::FOCUSABLE` (e.g. a hoverable-but-not-Tab-stoppable row) used to call
+    /// `FocusRing::request` unconditionally, silently stealing focus from whatever *was* actually
+    /// in the Tab ring, without ever removing that widget from the ring itself.
+    #[test]
+    fn clicking_a_non_focusable_widget_must_not_steal_focus() {
+        let mut interaction = Interaction::<Id>::new();
+
+        // frame 1: Save is focusable (Sense::click()), Cancel is clickable but not focusable.
+        interaction.begin_frame();
+        let _ = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, Sense::click());
+        let _ = interaction.interact(
+            Rect::new(6, 0, 5, 1),
+            Id::Cancel,
+            Sense::HOVER | Sense::CLICK,
+        );
+        interaction.end_frame();
+
+        // Tab focuses Save, the only widget registered with FOCUSABLE.
+        let tab = Event::Key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+        interaction.begin_frame();
+        let _ = interaction.handle_event(&tab);
+        let save = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, Sense::click());
+        let _ = interaction.interact(
+            Rect::new(6, 0, 5, 1),
+            Id::Cancel,
+            Sense::HOVER | Sense::CLICK,
+        );
+        interaction.end_frame();
+        assert!(save.focused());
+
+        // Click Cancel, which never asked for FOCUSABLE.
+        click_at(&mut interaction, Pos::new(7, 0));
+        interaction.begin_frame();
+        let save = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, Sense::click());
+        let cancel = interaction.interact(
+            Rect::new(6, 0, 5, 1),
+            Id::Cancel,
+            Sense::HOVER | Sense::CLICK,
+        );
+        interaction.end_frame();
+        assert!(cancel.clicked());
+        assert!(!cancel.focused()); // never registered as focusable: must not report focus either
+        assert!(save.focused()); // focus must stay put, not get silently stolen
     }
 }
