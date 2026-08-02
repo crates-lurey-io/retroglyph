@@ -1019,4 +1019,46 @@ mod dropped_tint_tests {
 
         assert!(r.warned_dropped_tint.is_empty());
     }
+
+    /// Draws a sprite on two layers, so `sprite_layers` has more than the (always present) base
+    /// layer entry to be reset (issue #727).
+    fn renderer_with_a_sprite_on_two_layers() -> crate::GlRenderer {
+        let mut r = renderer_with_sprite(1, 1);
+        let sprite = Tile::new('S', Style::new());
+        r.draw_layers(
+            [
+                DrawCell::on_layer(0, Pos::new(0, 0), &sprite),
+                DrawCell::on_layer(1, Pos::new(0, 0), &sprite),
+            ]
+            .into_iter(),
+        )
+        .expect("draw_layers is infallible");
+        r
+    }
+
+    #[test]
+    fn clear_resets_sprite_layers_to_a_single_empty_layer() {
+        let mut r = renderer_with_a_sprite_on_two_layers();
+        assert_eq!(r.sprite_layers.len(), 2);
+        assert!(!r.sprite_layers[0].is_empty());
+
+        r.clear().expect("clear is infallible");
+
+        assert_eq!(r.sprite_layers.len(), 1);
+        assert!(r.sprite_layers[0].is_empty());
+    }
+
+    #[test]
+    fn resize_resets_sprite_layers_to_a_single_empty_layer() {
+        use retroglyph_core::grid::Size;
+
+        let mut r = renderer_with_a_sprite_on_two_layers();
+        assert_eq!(r.sprite_layers.len(), 2);
+        assert!(!r.sprite_layers[0].is_empty());
+
+        r.resize(Size::new(2, 2));
+
+        assert_eq!(r.sprite_layers.len(), 1);
+        assert!(r.sprite_layers[0].is_empty());
+    }
 }
