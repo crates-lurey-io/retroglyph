@@ -1463,6 +1463,38 @@ impl Grid {
 
         let dst_width = usize::from(self.width);
         let dst_height = usize::from(self.height);
+
+        // A blit writes straight into the destination buffer below, bypassing `put_tile`, so it
+        // has to do `put_tile`'s `clear_span_overlap` call itself or a cell that used to anchor
+        // (or be covered by) a multi-cell span would keep claiming cells this blit just
+        // overwrote (retroglyph#710). Only the cells actually being overwritten (in bounds,
+        // non-empty source tile) are cleared: an empty source tile is transparent and leaves the
+        // destination untouched, so clearing a whole row's footprint up front would wipe out
+        // spans the blit never actually touches. Gated on `has_spans` so a grid that never uses
+        // spans pays only the one `bool` check.
+        if self.has_spans {
+            for sy in sy0..sy1 {
+                let dy = dst_y.saturating_add(sy - src_rect.top());
+                if usize::from(dy) >= dst_height {
+                    continue;
+                }
+                for sx in sx0..sx1 {
+                    let dx = dst_x.saturating_add(sx - src_rect.left());
+                    if usize::from(dx) >= dst_width {
+                        continue;
+                    }
+                    let src_idx = usize::from(sy) * src_width + usize::from(sx);
+                    if src_lb.buf.as_ref()[src_idx]
+                        .flags
+                        .contains(TileFlags::EMPTY)
+                    {
+                        continue;
+                    }
+                    self.clear_span_overlap(layer, dx, dy, 1);
+                }
+            }
+        }
+
         let dst_lb = self.layer_or_alloc(layer);
         let mut pending_extras: Vec<(usize, TileExtra)> = Vec::new();
 
@@ -1566,6 +1598,33 @@ impl Grid {
 
         let dst_width = usize::from(self.width);
         let dst_height = usize::from(self.height);
+
+        // See `blit`'s matching comment (retroglyph#710): clear any span this blit is about to
+        // partially overwrite before the copy pass below borrows the destination layer
+        // mutably, so an anchor never survives a cell it no longer owns.
+        if self.has_spans {
+            for sy in sy0..sy1 {
+                let dy = dst_y.saturating_add(sy - src_rect.top());
+                if usize::from(dy) >= dst_height {
+                    continue;
+                }
+                for sx in sx0..sx1 {
+                    let dx = dst_x.saturating_add(sx - src_rect.left());
+                    if usize::from(dx) >= dst_width {
+                        continue;
+                    }
+                    let src_idx = usize::from(sy) * src_width + usize::from(sx);
+                    if src_lb.buf.as_ref()[src_idx]
+                        .flags
+                        .contains(TileFlags::EMPTY)
+                    {
+                        continue;
+                    }
+                    self.clear_span_overlap(layer, dx, dy, 1);
+                }
+            }
+        }
+
         let dst_lb = self.layer_or_alloc(layer);
         let mut pending_extras: Vec<(usize, TileExtra)> = Vec::new();
 
@@ -3505,6 +3564,52 @@ mod tests {
             assert!(!flags.contains(TileFlags::SPAN_ANCHOR), "({x}, {y})");
             assert!(!flags.contains(TileFlags::SPAN_COVERED), "({x}, {y})");
         }
+    }
+
+    #[test]
+    fn blit_leaves_a_dangling_span_anchor_in_the_destination() {
+        // retroglyph#710: `blit` writes straight into the destination buffer, bypassing
+        // `put_tile`'s `clear_span_overlap` call, so overwriting a span's covered cell used to
+        // leave the anchor still claiming a cell the blit had just replaced.
+        let mut dst = Grid::new(4, 1);
+        dst.write_span(0, 0, 0, &["ab"], Style::default()).unwrap();
+
+        let mut src = Grid::new(4, 1);
+        src.put_tile(0, (1, 0), Tile::new('X', Style::default()));
+        dst.blit(0, &src, Rect::new(1, 0, 1, 1), 1, 0);
+
+        assert_eq!(dst[Pos::new(1, 0)].glyph(), 'X');
+        assert_eq!(dst.tile(0, Pos::new(0, 0)).map(Tile::span), Some((1, 1)));
+        assert!(!dst[Pos::new(0, 0)].flags().contains(TileFlags::SPAN_ANCHOR));
+        assert!(
+            !dst[Pos::new(1, 0)]
+                .flags()
+                .contains(TileFlags::SPAN_COVERED)
+        );
+    }
+
+    #[test]
+    fn blit_alpha_leaves_a_dangling_span_anchor_in_the_destination() {
+        // Same bug as `blit_leaves_a_dangling_span_anchor_in_the_destination`, but through
+        // `blit_alpha`'s separate copy path.
+        let mut dst = Grid::new(4, 1);
+        dst.write_span(0, 0, 0, &["ab"], Style::default()).unwrap();
+
+        let mut src = Grid::new(4, 1);
+        src.put_tile(0, (1, 0), Tile::new('X', Style::default()));
+        dst.blit_alpha(
+            0,
+            &src,
+            Rect::new(1, 0, 1, 1),
+            1,
+            0,
+            BlendMode::Linear,
+            1.0,
+            1.0,
+        );
+
+        assert_eq!(dst[Pos::new(1, 0)].glyph(), 'X');
+        assert_eq!(dst.tile(0, Pos::new(0, 0)).map(Tile::span), Some((1, 1)));
     }
 
     #[test]
