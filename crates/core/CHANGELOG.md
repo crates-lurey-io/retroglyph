@@ -15,27 +15,6 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
   _(workspace)_ Add a reusable, toggleable perf/FPS overlay across every backend by `@matanlurey` in
   [#589](https://github.com/crates-lurey-io/retroglyph/pull/589)
 
-  > Replaces per-backend, per-example FPS overlay plumbing with a generic PerfOverlayApp<A>
-  > decorator (retroglyph-core) that wraps any App<B> and draws itself on top, on any Backend, with
-  > no per-backend code from the wrapped app. Toggling a key cycles Off -> Compact -> Full -> Off
-  > (PerfOverlayMode); Compact is a built-in dependency-free text readout (DefaultPerfRenderer),
-  > Full is pluggable via a closure or a type implementing PerfRenderer.
-  >
-  > - retroglyph-core: FrameStats<N> (a fixed-size Duration ring buffer with
-  >   current/avg/min/max/fps), PerfOverlayApp/PerfOverlayMode/PerfRenderer/ DefaultPerfRenderer,
-  >   and Size gets a proper constructor + width()/ height() accessors (its fields are now private).
-  > - retroglyph-widgets: PerfOverlay, a bordered panel composed from Panel/ Sparkline/Text with a
-  >   frame-time sparkline and caller-supplied metric rows; Sparkline gains an optional fixed
-  >   .style() override so a scrolling frame-time graph doesn't get colored by a relative-to-window
-  >   ramp that would misrepresent it.
-  > - retroglyph-examples: the shared harness (launch.rs) now wraps every example's App in
-  >   PerfOverlayApp, replacing the old bespoke per-backend Fps/ToggleFilter plumbing
-  >   (examples/src/fps.rs slimmed down to just the RG_FPS env var and the wasm floating toggle
-  >   button). Every example in the gallery gets the overlay for free.
-  > - Tests: unit tests for FrameStats/PerfOverlayApp/PerfOverlay/Sparkline, plus
-  >   examples/tests/fps_overlay.rs end-to-end PTY coverage and deterministic PNG snapshots of both
-  >   Compact and Full mode.
-
 **Full Changelog**:
 https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.4.0...retroglyph-core-v0.5.0
 
@@ -47,90 +26,25 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.4.0...r
   _(core)_ Add Surface::put_signed, translate, tile/grid/background reads, and print_aligned by
   `@matanlurey` in [#580](https://github.com/crates-lurey-io/retroglyph/pull/580)
 
-  > - feat(core): add Surface::put_signed for signed, clip-aware coordinates
-  > - feat(core): add Surface::translate for a signed-origin sub-surface
-  > - feat(core): add Surface::tile, Surface::grid, and Surface::background read accessors
-  > - feat(core): add Surface::print_aligned for byte-free-count text alignment
-
 - [ca05c57](https://github.com/crates-lurey-io/retroglyph/commit/ca05c576dadeee641276205ab091c4d57c1d6bb0)
   _(core)_ Give backends a named DrawCell instead of a widening tuple by `@matanlurey` in
   [#551](https://github.com/crates-lurey-io/retroglyph/pull/551)
-
-  > A cell's draw-time payload has been a tuple growing an element at a time: (Pos, &Tile,
-  > Option<&str>) for draw, (u8, Pos, &Tile, Option<&str>) for draw_layers. Delivering a tint would
-  > make it five unnamed elements, and each addition breaks every backend's signature again.
-  >
-  > DrawCell names them once. Its layer field also collapses the two shapes into one, so draw and
-  > draw_layers no longer differ in item type.
-  >
-  > Refs #537
 
 - [3faedee](https://github.com/crates-lurey-io/retroglyph/commit/3faedeebea02269d21ecf9fa92fe4f87fd8de333)
   _(core)_ Store a per-cell Tint in the tile side table by `@matanlurey` in
   [#546](https://github.com/crates-lurey-io/retroglyph/pull/546)
 
-  > A Tint has the same shape as a multi-codepoint grapheme: rare, per-tile, and too big to inline
-  > into Tile without growing every cell of every layer (Tile is exactly 20 bytes with no tail
-  > padding left). Graphemes already solve this with a sparse per-layer side table keyed by flat
-  > index and flagged by HAS_EXTRA, so a tint joins that table rather than opening a second one with
-  > its own flag bit, rekeying path, and blit/clear/scroll plumbing to keep in sync.
-  >
-  > The table's value type generalizes from Arc<str> to TileExtra, and HAS_EXTRA comes to mean 'has
-  > a side-table entry' rather than 'has grapheme text'.
-  >
-  > Refs #537
-
 - [2c8df1d](https://github.com/crates-lurey-io/retroglyph/commit/2c8df1d6ccbed227bf90d9c7ef7893c90b1827f0)
   _(core)_ Add Tint, the sprite colour-modulation vocabulary by `@matanlurey` in
   [#545](https://github.com/crates-lurey-io/retroglyph/pull/545)
-
-  > A sprite is composited from its own pixels, so recolouring one piece of artwork per cell had no
-  > expression at all: the answer was to author every variant as its own tile.
-  >
-  > `Tint` names the two operations that cover the cases a tileset actually needs. `Multiply`
-  > darkens and shades (biome variants, shadow, fog); `Mix` blends toward a colour, which multiply
-  > cannot do and which a caller cannot hand-roll because it does not have the sprite's pixels
-  > (damage flashes, fades). `Tint::apply` is the single reference implementation both pixel
-  > backends will call, so the two cannot drift the way they did in #537.
-  >
-  > Refs #537
 
 - [c4dc5bd](https://github.com/crates-lurey-io/retroglyph/commit/c4dc5bd7b3c51835c61fc3caad05c301437a0807)
   _(core)_ Add Surface::clip, a narrowing sub-rect constructor by `@matanlurey` in
   [#541](https://github.com/crates-lurey-io/retroglyph/pull/541)
 
-  > Producing a surface narrower than the one you were handed had to go through grid_mut(), which is
-  > unclipped: building a narrower capability required handing out a strictly wider one, and every
-  > caller re-derived the same three lines. Surface::clip intersects the requested rect with the
-  > surface's own area, so narrowing is monotonic and a surface passed down a layout tree can only
-  > ever tighten what a callee can touch.
-  >
-  > It also gives the two area-sensitive calls the right question to ask: print wraps its overflow
-  > out of a one-row bar instead of onto the row below, and put_span measures its footprint against
-  > the content rect rather than the whole screen.
-  >
-  > Closes #535
-
 - [011d45d](https://github.com/crates-lurey-io/retroglyph/commit/011d45d8dcf24a0ef4f27b001504ee78e84b993d)
   _(core)_ Generalize span rows to AsRef<str>, add the uniform-footprint span by `@matanlurey` in
   [#543](https://github.com/crates-lurey-io/retroglyph/pull/543)
-
-  > put_span/write_span took rows: &[&str], which is right for a literal footprint and awkward for a
-  > computed one: a runtime-chosen anchor glyph meant building a Vec<String> and then a Vec<&str>
-  > borrowing it, two allocations per tile in the inner loop of a map draw. Both now take &[S] where
-  > S: AsRef<str>, so &["[==]", "|\_\_|"] and &Vec<String> both pass.
-  >
-  > The uniform case (one anchor glyph, blanks in the cells it covers) is what a sheet-driven
-  > renderer actually draws, and spelling it as an array of blank rows is all ceremony and no
-  > information. write_span_uniform/put_span_uniform take the footprint size, an anchor, and a fill
-  > instead, and write the same tiles the equivalent rows would; both share write_span's body via a
-  > private row-iterator helper, so no rows are built at all.
-  >
-  > Surface::put_span now returns Option<()> like Grid::write_span. The surface has strictly more
-  > ways to refuse a span than the grid does (it also rejects a footprint that leaves its area), so
-  > "my sprite did not draw" is answerable at the call site instead of in the backend.
-  >
-  > Closes #536
 
 - [8d835ce](https://github.com/crates-lurey-io/retroglyph/commit/8d835ce9e3c47a4488bbf878c7ff7441405103f8)
   _(core)_ Add Terminal::print_str_styled for single-style &str printing by `@matanlurey` in
@@ -140,388 +54,34 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.4.0...r
   _(core)_ Take impl Into<Pos> everywhere a cell is named, retire \_at suffix by `@matanlurey` in
   [#505](https://github.com/crates-lurey-io/retroglyph/pull/505)
 
-  > - api(core): drop panicking Grid::get/get_mut, add Option-returning tile/tile_mut and Index
-  >
-  > Grid::put/get panicked on out-of-bounds coordinates; checked*put/checked_get/ checked_get_mut
-  > existed as Option-returning twins but only for the implicit layer-0 shorthands, while
-  > put_tile/get_tile (explicit layer) were already Option-returning. Removes the panicking layer-0
-  > put/get and the whole checked* family in favor of one accessor shape across every layer:
-  >
-  > - Grid::tile(layer, pos) -> Option<&Tile> (renamed from get_tile, now takes impl Into<Pos>
-  >   instead of separate x/y)
-  > - Grid::tile_mut(layer, pos) -> Option<&mut Tile>, new: a non-allocating mutable counterpart:
-  >   get_tile had no mutable twin before this
-  > - Grid::put_tile(layer, pos, tile) -> Option<()>, now also takes impl Into<Pos>
-  >
-  > Grid already implements Index<Pos>/IndexMut<Pos> for panicking layer-0 access, which is the
-  > Rust-conventional home for a panic and stays as the one ergonomic panicking accessor.
-  >
-  > Updates every call site across the workspace (core, widgets, gl, software, terminal, examples,
-  > benches).
-  >
-  > - api(core): take impl Into<Pos> everywhere a cell is named, retire \_at suffix
-  >
-  > Terminal's single-cell drawing methods (put, put_styled, put_span, put_span_styled, print,
-  > print_styled) took (x: u16, y: u16) pairs; put_at existed purely to bridge to a Pos-based call.
-  > Every one of these now takes impl Into<Pos>, so term.put((5, 5), '@') and term.put(pos, '@')
-  > both work through the same method, and put_at is gone (merged into put).
-  >
-  > put_offset(x, y, dx, dy, ch) becomes put_offset(pos, offset, ch), taking a new Offset type (dx:
-  > i16, dy: i16) instead of a second bare (i16, i16) pair, so a position and a sub-cell pixel
-  > offset can't be transposed at a call site. Offset gets the same From<(i16, i16)> round-trip as
-  > Pos/Size.
-  >
-  > Updates every call site across the workspace (core, widgets, examples, benches, READMEs,
-  > docs/testing.md).
-
 - [e5a5f8c](https://github.com/crates-lurey-io/retroglyph/commit/e5a5f8c6cf1959e89b874a4c2bd5c59028cb690e)
   _(core)_ Drop panicking Grid::get/get_mut, add Option-returning tile/tile_mut and Index by
   `@matanlurey` in [#503](https://github.com/crates-lurey-io/retroglyph/pull/503)
 
-  > api(core): drop panicking Grid::get/get_mut, add Option-returning tile/tile_mut and Index
-  >
-  > Grid::put/get panicked on out-of-bounds coordinates; checked*put/checked_get/ checked_get_mut
-  > existed as Option-returning twins but only for the implicit layer-0 shorthands, while
-  > put_tile/get_tile (explicit layer) were already Option-returning. Removes the panicking layer-0
-  > put/get and the whole checked* family in favor of one accessor shape across every layer:
-  >
-  > - Grid::tile(layer, pos) -> Option<&Tile> (renamed from get_tile, now takes impl Into<Pos>
-  >   instead of separate x/y)
-  > - Grid::tile_mut(layer, pos) -> Option<&mut Tile>, new: a non-allocating mutable counterpart:
-  >   get_tile had no mutable twin before this
-  > - Grid::put_tile(layer, pos, tile) -> Option<()>, now also takes impl Into<Pos>
-  >
-  > Grid already implements Index<Pos>/IndexMut<Pos> for panicking layer-0 access, which is the
-  > Rust-conventional home for a panic and stays as the one ergonomic panicking accessor.
-  >
-  > Updates every call site across the workspace (core, widgets, gl, software, terminal, examples,
-  > benches).
-
 - [d4d6e76](https://github.com/crates-lurey-io/retroglyph/commit/d4d6e76aebb00d3f238ff41791b0f0dd800aa517)
   _(core)_ Add KeyLocation to KeyEvent for numpad/left-right disambiguation by `@matanlurey` in
   [#501](https://github.com/crates-lurey-io/retroglyph/pull/501)
-
-  > KeyEvent gains a location: KeyLocation field (Standard/Left/Right/Numpad, mirroring winit's
-  > KeyLocation) so a numpad key can be told apart from the same symbolic key on the main block. The
-  > crossterm backend derives it from the kitty keyboard protocol's KeyEventState::KEYPAD bit; the
-  > winit backend maps its own KeyLocation 1:1. Backends with no source of truth (terminal-wasm,
-  > headless) default to Standard.
-  >
-  > KeyState::held is now (KeyCode, KeyLocation)-keyed instead of KeyCode-keyed, so a held Numpad8
-  > and a held digit-row 8 are tracked independently; is_held and held() take/yield the pair
-  > accordingly.
-  >
-  > No non_exhaustive-first decoupling step: this lands the field directly as a breaking change,
-  > since pre-1.0 is the intended window for it.
 
 - [7d7cfb2](https://github.com/crates-lurey-io/retroglyph/commit/7d7cfb26918e2563653bb58cdb016b18328f0de0)
   _(core)_ Settle present ownership -- driver-owned present, idempotent dirty-flag present,
   Flow::Idle, error propagation, frame pacing by `@matanlurey` in
   [#500](https://github.com/crates-lurey-io/retroglyph/pull/500)
 
-  > feat(core): settle present ownership across drivers with Flow::Idle and paced run_blocking
-  >
-  > - run_blocking presents once after App::update returns, matching the windowed drivers' contract
-  >   instead of requiring update to call present() itself.
-  > - Flow gains an Idle variant: skip the redraw for a frame with nothing new to show. Both
-  >   run_blocking and the windowed winit driver handle it explicitly.
-  > - Terminal::present is idempotent: a dirty flag set by every draw call (put, print, clear,
-  >   grid_mut, ...) makes present() on a clean frame a no-op instead of erasing the just-presented
-  >   frame.
-  > - run_blocking/run_blocking_with return Result<(), B::Error>, so a failed automatic present
-  >   stops the loop and surfaces the error instead of being silently discarded.
-  > - run_blocking_with + RunOptions::paced(max_fps) adds a FrameClock -backed paced loop on top of
-  >   the unpaced, zero-config run_blocking.
-  >
-  > Fixes #420, #421, #422, #423, #424, #419.
-
 - [4e587a0](https://github.com/crates-lurey-io/retroglyph/commit/4e587a0432301c26cf20be97d75d6ad6a03a2a70)
   _(core)_ Multi-cell tile spans, replacing the inert tileset spacing option by `@matanlurey` in
   [#414](https://github.com/crates-lurey-io/retroglyph/pull/414)
-
-  > - feat(core): multi-cell tile spans with O(1) occupancy queries
-  >
-  > `Grid::write_span` writes one piece of artwork across a `w x h` block of cells: a `SPAN_ANCHOR`
-  > tile carrying the footprint, plus `SPAN_COVERED` tiles carrying their offset back to it.
-  > `Grid::span_owner` resolves any covered cell to its anchor in O(1) -- a lookup and a
-  > subtraction, not a scan -- so hit-testing multi-cell artwork is one comparison for the whole
-  > footprint.
-  >
-  > Covered cells keep real glyphs, and that is the point: they are the span's text fallback.
-  > `term.put_span(x, y, &["C=", "[]"])` renders as one sprite on a pixel backend and as four glyphs
-  > on a terminal, with no capability check in the caller. That is the deliberate difference from
-  > `WIDE_CHAR_SPACER`, which every backend skips; a spacer has no content of its own, a covered
-  > cell does.
-  >
-  > The two new `u8` fields fit in `Tile`'s existing tail padding, so `size_of::<Tile>()` stays 20.
-  > They are overloaded by role (footprint on an anchor, back-offset on a covered cell), which is
-  > what buys the O(1) lookup.
-  >
-  > Spans are written and cleared whole: every ordinary write path clears a span it would partially
-  > overwrite, guarded by a one-way `has_spans` flag so a grid that never uses one pays a single
-  > bool test per put. `blit` can clip a footprint in half, which is not representable, so it
-  > degrades a span to exactly its fallback glyphs.
-  >
-  > Refs #412.
-  >
-  > - docs(workspace): forbid change-narrating doc comments
-  >
-  > A doc comment describes the API as it is, in the present tense. It never narrates the change
-  > that produced it: no "this used to be X", no "the only behaviour available before Y existed", no
-  > "kept for backwards compatibility", and no attribute rationale like "#[non_exhaustive] so adding
-  > a variant isn't a breaking change". Someone reading cargo doc has never seen the previous
-  > version, so that framing is noise to them, and it rots as soon as the next change lands. History
-  > is for the commit message, the PR body, and the changelog, which are addressed to reviewers
-  > instead.
-  >
-  > Adds the rule to AGENTS.md and STYLE_GUIDE.md, and fixes the doc comments in retroglyph-core
-  > that break it.
-  >
-  > - feat(window): sprite alignment; drop the inert tileset spacing option
-  >
-  > `TilesetBuilder::spacing` was never read by any backend: the values landed on `Sprite` and
-  > stopped there, so `spacing(2, 2)` on a 16x16 sprite in 16x16 cells changed nothing. It is
-  > removed rather than wired up. How many cells a sprite occupies is a per-write fact, not a
-  > tileset-wide one -- one sheet can hold both 1x1 and 2x2 artwork, and the same sprite can want a
-  > different footprint on different cells -- so it belongs at the draw call, where
-  > `Terminal::put_span` now declares it.
-  >
-  > Its second job, reserving a box larger than the art so the art can be positioned inside it,
-  > moves to the new `SpriteAlign` (`TilesetBuilder::align`), which is what BearLibTerminal's
-  > tileset `align=` does. `Sprite::align_offset` resolves it against a span's cell box in unscaled
-  > pixels, so both pixel backends can add it straight to a tile's dx/dy.
-  >
-  > Migration:delete the `.spacing(w, h)` call and declare the footprint at the draw call with
-  > `term.put_span(x, y, rows)` instead. `TilesetError::ZeroSpacing` is gone with it.
-  > `TilesetOptions`, `Sprite`, and `TilesetError` are now `#[non_exhaustive]`.
-  >
-  > Refs #412.
-  >
-  > - feat(software): render multi-cell tile spans with sprite alignment
-  >
-  > A `SPAN_COVERED` cell paints its background but not its glyph: the span's anchor already blitted
-  > one sprite across the whole footprint, and the covered cell's glyph is that sprite's text
-  > fallback for backends that cannot draw it. Which background it paints is resolved against the
-  > _anchor_, not the covered cell -- a covered cell holds the fallback glyph, which has no sprite
-  > of its own, so asking about that glyph would put an opaque backdrop under half a sprite and a
-  > transparent one under the other half.
-  >
-  > Sprite alignment (`Sprite::align_offset`) is added to the tile's own dx/dy before blitting, so a
-  > sprite whose art doesn't fill the box its span reserves can sit centred or flush to any edge
-  > instead of always pinned top-left.
-  >
-  > Also fixes a latent stale-pixel bug this feature makes reachable. The incremental repaint path
-  > only touches cells whose own tile changed, but a covered cell's tile is byte-identical while the
-  > anchor's artwork changes underneath it, so its pixels went stale. A change at an anchor now
-  > marks its whole footprint dirty, and the incremental path runs the same background-then-glyph
-  > two-pass split the full repaint already did, so a sprite spilling out of its anchor cell isn't
-  > erased by the neighbour's background fill landing after it. Both directions are covered by
-  > `changing_only_a_span_anchor_repaints_its_covered_cells`, which fails if either half is removed.
-  >
-  > A sprite larger than a cell drawn without a span still spills and is overdrawn by its
-  > neighbours; that now logs once per glyph naming `Terminal::put_span`, rather than silently
-  > rendering wrong.
-  >
-  > Refs #412.
-  >
-  > - feat(gl): render multi-cell tile spans on the GPU sprite pass
-  >
-  > Mirrors the software backend's span rules so the two stay pixel-comparable: a `SPAN_COVERED`
-  > cell clears `FLAG_HAS_GLYPH` and takes the anchor instance's background and `FLAG_HAS_BG`, so
-  > one sprite covers the footprint on one uniform backdrop, and higher layers inherit the right
-  > background from it. The layer stream is row-major, so an anchor's instance is always already
-  > written when its covered cells arrive; no second pass and no scratch buffer are needed.
-  >
-  > Sprite alignment is folded into the existing per-instance `a_offset`, in unscaled pixels, which
-  > the vertex shader already scales by `u_cell / u_glyph`. No shader change and no vertex-stride
-  > change; `sprite_vertex_applies_the_scaled_sub_cell_offset` pins that so a future shader edit
-  > can't silently break alignment.
-  >
-  > The oversized-sprite diagnostic moves to `retroglyph_window::sprite_cache` so both graphical
-  > backends emit the identical message and name the identical fix.
-  >
-  > Adds a headless GL parity test covering the covered-cell background, the suppressed fallback
-  > glyph, and a `Center`-aligned sprite in an oversized span box, asserted pixel-for-pixel against
-  > `retroglyph-software`'s CPU rasterizer.
-  >
-  > Refs #412.
-  >
-  > - feat(examples): thread tileset config through to the GL backend
-  >
-  > `run_gl` had no customization hook, so an example that registered a tileset through
-  >
-  > `Example::configure_software` rendered sprites on the software backend and bitmap glyphs on the
-  > GL one -- including in the docs gallery, which builds a WebGL2 variant of every example.
-  > `Example::configure_gl` is the GL counterpart; it is a separate method because the two builders
-  > are different types from different crates, while the `TilesetOptions` they take are shared, so
-  > an example describes its sheet once and registers it twice.
-  >
-  > The examples crate's `gl` feature now enables `retroglyph-gl/tilesets` for the same reason
-  > `software` enables the software one: `tools/build-wasm-example.sh` picks a single feature per
-  > variant for the whole crate, so the one example that needs sprite sheets cannot opt in on its
-  > own.
-  >
-  > - feat(examples): a multi-cell chest span with an ASCII text fallback
-  >
-  > Adds `assets/chest.png`, one 32x32 sprite covering four 8x16 cells across and two down, drawn
-  > with a single `Terminal::put_span` call that carries its own text fallback:
-  >
-  >     [==]   one chest sprite on the software and GL backends,
-  >     |__|   these eight glyphs on a terminal
-  >
-  > The anchor glyph '[' is what the sprite cache is keyed on; the other seven are printed by cell
-  > backends and suppressed by pixel backends, which blit one sprite over the whole footprint
-  > instead. One call, no capability check, no cfg -- the same story 07 already told for its
-  > single-cell tiles, extended to artwork that doesn't fit in a cell.
-  >
-  > Opening the chest hit-tests with `Grid::span_owner`, so stepping on any of the eight cells
-  > counts and the example never encodes the footprint's shape; `Grid::clear_span` then removes all
-  > eight at once. The headless snapshot deliberately walks onto a _covered_ cell rather than the
-  > anchor, so it fails if hit testing degenerates to the one cell the sprite is keyed to.
-  >
-  > The three snapshots now double as the cross-backend fallback check: headless and SVG must show
-  > the eight ASCII glyphs, the PNG must show one chest sprite covering them.
-  >
-  > Refs #412.
-  >
-  > - fix(software): expand a dirty span from its anchor, not from the changed cell
-  >
-  > Dirtying the box between a covered cell and its anchor covers the anchor, but not the rest of
-  > the footprint when the span extends further right or down. Any cell of the span left undirtied
-  > keeps its background from the previous frame while the anchor re-blits its sprite over it, which
-  > double-blends a semi-transparent sprite against itself.
-  >
-  > Expanding from the anchor over its full declared footprint reaches every cell in one pass
-  > regardless of which one was dirty. It runs after the whole layer stream instead of inline,
-  > because reading an anchor's footprint requires the shadow copy this frame actually wrote.
-  >
-  > - docs(workspace): document the multi-cell span model
-  >
-  > Covers the span model where each reader will look for it: the `grid` module docs own the model
-  > itself (anchor/covered roles, the text-fallback contract, the difference from a wide-character
-  > spacer), the crate READMEs describe what each backend does with it, and the root README shows
-  > the one call that makes it work everywhere.
-  >
-  > Also an api-doc-comments pass over the new public surface: present-tense summaries, `# Examples`
-  > doctests on `Grid::write_span`, `Grid::span_owner`, and
-  >
-  > `SpriteAlign::offset`, and stated contracts for the edges each function actually handles (ragged
-  > input, out-of-range spans, degenerate cell sizes, saturation).
 
 - [9eaf088](https://github.com/crates-lurey-io/retroglyph/commit/9eaf0885a8b62b2c5f9db77ad85636d4714b7529)
   _(core, crossterm, terminal)_ Add cursor styles, colour degradation, suspend/resume, and
   title/bell by `@matanlurey` in [#585](https://github.com/crates-lurey-io/retroglyph/pull/585)
 
-  > - feat(crossterm): add terminal title and bell support
-  > - feat(core, crossterm): add Cursor::set_cursor_style and CursorStyle
-  > - feat(terminal, crossterm): add ColorSupport degradation with NO_COLOR support
-  > - feat(crossterm): add suspend/resume to hand the terminal back to the OS
-  > - fix(crossterm): default to Truecolor, not Ansi16, when detection has no signal
-  >
-  > detect_color_support's bottom-of-the-ladder fallback was ColorSupport::Ansi16 for any
-  > $TERM/$COLORTERM combination that didn't positively identify a truecolor or 256-color terminal,
-  > including no $TERM/$COLORTERM at all. That silently degraded every Color::Rgb render in an
-  > environment with nothing set (CI runners, minimal PTY test harnesses, some raw SSH sessions),
-  > changing this crate's pre-existing behavior of always passing RGB through unquantized. Broke 8
-  > svg_snapshot golden tests across the example gallery (retroglyph#585 CI).
-  >
-  > The absence of a signal is not itself a signal. Degrading is now opt-in on a positive one
-  > ($NO_COLOR, or a $TERM that specifically names a narrower palette); everything else falls back
-  > to Truecolor, matching TerminalRenderer::ColorSupport's own #[default].
-  >
-  > - fix(crossterm): stop guessing ColorSupport from $TERM text, only $NO_COLOR/dumb
-  >
-  > The previous commit's fix (defaulting the bottom of the ladder to Truecolor instead of Ansi16)
-  > was incomplete: it never got exercised by CI, because CI never reaches that fallback.
-  > examples/tests/support/mod.rs's PTY harness sets
-  > $TERM=xterm-256color unconditionally for every spawned example and
-  > never sets $COLORTERM, which hit the *next* rung up ($TERM
-  > contains "256color" -> Indexed256) instead -- a branch the previous commit didn't touch.
-  >
-  > Reproduced locally:
-  > `env -u COLORTERM -u NO_COLOR -u TERM cargo test -p retroglyph-examples --test 02_colors svg_snapshot`
-  > fails identically to CI regardless of the parent shell's own TERM/COLORTERM, because the PTY
-  > child's environment is what matters, not the test process's.
-  >
-  > Root cause is the heuristic itself, not just its fallback: xterm-256color is the single most
-  > common
-  > $TERM value in existence, including on terminals that also fully support truecolor.
-  > Reading it as evidence of a _limit_ was wrong in general, not just wrong in this test harness --
-  > this workspace's own PTY setup just happened to make it immediately, deterministically visible.
-  > $COLORTERM=truecolor
-  > never added information a Truecolor default didn't already have (nothing beneath it could have
-  > been reached without this heuristic anyway), so it's dropped from detect_color_support too
-  > rather than left as dead weight.
-  >
-  > detect_color_support now recognizes exactly two auto-degrade signals, both unambiguous:
-  > $NO_COLOR (explicit opt-out) and $TERM=dumb (never emitted by a color-capable terminal).
-  > Everything else defaults to Truecolor, matching this crate's pre-existing, already-documented
-  > behavior. Indexed256/Ansi16 remain fully available via an explicit
-  > CrosstermOptions::color_support(...) override.
-  >
-  > Refs #585
-
 - [14aff2f](https://github.com/crates-lurey-io/retroglyph/commit/14aff2fcb5b4f4119bf565b6a1ffdabb5cc0fbf6)
   _(core, crossterm, window, widgets)_ Add KeyCode::Modifier/lock keys and pixel-precise Scroll by
   `@matanlurey` in [#584](https://github.com/crates-lurey-io/retroglyph/pull/584)
 
-  > - feat(core): add KeyCode::Modifier and lock/menu key variants
-  >
-  > Adds retroglyph_core::event::KeyCode::Modifier(ModifierKey) for reporting a bare modifier press
-  > as its own key event, plus CapsLock/ScrollLock/NumLock/PrintScreen/ Pause/Menu variants.
-  > ModifierKey is flat (Shift/Control/Alt/Super); side is conveyed by the existing
-  > KeyEvent::location (KeyLocation::Left/Right), not duplicated inside ModifierKey.
-  >
-  > Wires both backends:
-  >
-  > - crossterm: enables KeyboardEnhancementFlags::REPORT_ALL_KEYS_AS_ESCAPE_CODES (required for
-  >   KeyCode::Modifier to be reported at all) and maps crossterm::event::ModifierKeyCode's
-  >   Left/Right variants down to ModifierKey + KeyLocation.
-  >   Hyper/Meta/IsoLevel3Shift/IsoLevel5Shift have no retroglyph equivalent and fall through to
-  >   None like any other unmapped key.
-  > - winit: maps NamedKey::Shift/Control/Alt/Super and the lock/menu NamedKeys to the new KeyCode
-  >   variants, reusing the existing KeyLocation translation path for side disambiguation.
-  >
-  > * feat(core): replace line-quantized scroll variants with pixel-precise Scroll{dx,dy}
-  >
-  > Replaces MouseEventKind::{ScrollUp,ScrollDown,ScrollLeft,ScrollRight} with a single Scroll { dx:
-  > f32, dy: f32 } variant. Sign convention preserved from the winit implementation being replaced:
-  > dy > 0 is up, dy < 0 is down, dx > 0 is right, dx < 0 is left; a delta of exactly zero on both
-  > axes still emits no event.
-  >
-  > Magnitude is backend-dependent: winit reports the platform's exact pixel/line delta, crossterm
-  > and the wasm terminal backend (both line- quantized, no source of real magnitude) synthesize a
-  > fixed step of 1.0 per tick in the matching sign direction.
-  >
-  > MouseEventKind/MouseEvent/Event drop their Eq/Hash derives (kept PartialEq): f32 implements
-  > neither, and the derive is on the enclosing types too since MouseEventKind is nested inside
-  > them.
-  >
-  > - feat(widgets): consume pixel-precise Scroll{dx,dy} events by sign
-  >
-  > Updates the interact module's scroll-delta accumulator and the widgets/ examples call sites that
-  > matched MouseEventKind::ScrollUp/ScrollDown to match Scroll{dx,dy} by sign instead, preserving
-  > the exact prior unit-step behavior. Magnitude is intentionally not consumed yet (mixing winit's
-  > PixelDelta-scale values with crossterm's synthesized 1.0-per-tick values needs a normalization
-  > pass outside this change's scope); see retroglyph#445.
-
 - [a122a6e](https://github.com/crates-lurey-io/retroglyph/commit/a122a6e91db40a067336fd594002d8b8e47829ff)
   _(widgets)_ Render into Grid/Surface instead of Terminal<B> by `@matanlurey` in
   [#502](https://github.com/crates-lurey-io/retroglyph/pull/502)
-
-  > Widget and StatefulWidget drop their Backend type parameter and render into a new Surface type
-  > (an area-relative, single-layer view over a Grid) instead of Terminal<B>. Widgets no longer
-  > depend on retroglyph-core's Backend or Terminal for drawing.
-  >
-  > Surface clips every write to the area it was constructed with, so a widget can no longer draw
-  > outside the Rect it was given -- previously nothing enforced that. render() takes &self instead
-  > of self, so builders stay consuming/fluent but render calls borrow.
-  >
-  > TextLayout (retroglyph-core) gains render_to_grid, a Grid+layer twin of its existing
-  > Terminal-based render, so Paragraph and BoxStyle's render_wrapped no longer need to build a
-  > scratch Terminal<Headless> just to reach TextLayout's wrapping logic.
-  >
-  > Fixes #425
 
 - [c2c2f24](https://github.com/crates-lurey-io/retroglyph/commit/c2c2f24426902791776684d8bebd1013c8e7d22e)
   _(window)_ Let BitmapFont declare a custom char-to-glyph charset by `@matanlurey` in
@@ -541,27 +101,6 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.4.0...r
   _(core, software, gl)_ Make Output::draw_layers required, default draw to forward to it by
   `@matanlurey` in [#579](https://github.com/crates-lurey-io/retroglyph/pull/579)
 
-  > fix(core, software, gl): make draw_layers required, default draw onto it
-  >
-  > Output::draw was a required trait method that a compositing backend (composites_layers() ==
-  > true) can never actually reach: Terminal::present always calls draw_layers, so software's and
-  > gl's own draw bodies were dead code that nothing exercised, and they had already drifted (gl's
-  > write_tile never read a cell's tint at all).
-  >
-  > Flips which method is the primitive: draw_layers is now required, and draw defaults to
-  > forwarding to it tagged as layer 0. Cell backends (Headless, Crossterm, TerminalWasm) rename
-  > their existing draw body to draw_layers with no logic change, since Terminal::present already
-  > pre-flattens onto a single conceptual layer for them before calling draw_layers. software and gl
-  > delete their now-redundant draw/blit_cell and draw/write_tile bodies entirely and pick up the
-  > shared default.
-  >
-  > Existing tests that called Output::draw directly (blit_cell_respects_sub_cell_offset,
-  > draw_reports_a_tint_on_a_glyph_without_a_sprite,
-  > draw_records_sub_cell_offset_and_flags_in_the_base_layer) keep passing unchanged, now exercising
-  > the default forward instead of a second hand-written implementation.
-  >
-  > Refs #561
-
 - [960c156](https://github.com/crates-lurey-io/retroglyph/commit/960c1562b448a40e91c0255c9b9b8a598259aea8)
   _(window)_ Keep backend size in sync with the resized surface by `@matanlurey` in
   [#519](https://github.com/crates-lurey-io/retroglyph/pull/519)
@@ -570,31 +109,15 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.4.0...r
   _(workspace)_ Correct README architecture/style claims, add docs.rs feature badges by
   `@matanlurey` in [#499](https://github.com/crates-lurey-io/retroglyph/pull/499)
 
-  > - README's Widgets section and crate table described retroglyph-widgets' old free-function
-  >   architecture (panel/gauge/table/sparkline/draw_box); rewrite to describe the current
-  >   builder-struct widgets.
-  > - README claimed Style has text modifiers and a modifier() method; neither exists. Remove the
-  >   claims and point at Style's own no-modifier rationale.
-  > - Add rustdoc-args = ["--cfg", "docsrs"] to every publishable crate's
-  >   [package.metadata.docs.rs], plus #![cfg_attr(docsrs, feature(doc_cfg))] to every crate's
-  >   lib.rs, so docs.rs renders feature-gate badges instead of showing gated items as
-  >   unconditionally available. doc_auto_cfg was merged into doc_cfg upstream, so doc_cfg (which
-  >   now auto-infers cfg badges) is used instead of the now-removed doc_auto_cfg feature name. Adds
-  >   a just doc-docsrs recipe to verify the docs.rs build locally.
-
 ### Refactor
 
 - [1328409](https://github.com/crates-lurey-io/retroglyph/commit/1328409db38baf52ce79c588f2d928d58bac3d02)
   _(core)_ Surface-centric drawing, Terminal loses its own drawing API by `@matanlurey` in
   [#522](https://github.com/crates-lurey-io/retroglyph/pull/522) [**breaking**]
 
-  > refactor(core): surface-centric drawing
-
 - [83b4c8a](https://github.com/crates-lurey-io/retroglyph/commit/83b4c8af9ab4fff0fd1d32fa2bcc18c2c2ae7405)
   _(core)_ Require core::error::Error for BackendError, mark error enums non_exhaustive by
   `@matanlurey` in [#497](https://github.com/crates-lurey-io/retroglyph/pull/497)
-
-  > api(core): require core::error::Error for BackendError, mark error enums non_exhaustive
 
 ### Documentation
 
@@ -602,241 +125,53 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.4.0...r
   _(core)_ Add examples to functions that clip, wrap, saturate, or set a coordinate convention by
   `@matanlurey` in [#574](https://github.com/crates-lurey-io/retroglyph/pull/574)
 
-  > - docs(core): document Surface draw methods' clip/wrap/no-op edge cases
-  > - docs(core): document Grid::from_charmap and Camera edge-case behavior with examples
-  >
-  > Adds #Examples to Grid::from_charmap showing ragged-line padding, and to
-  >
-  > Camera::visible_bounds/screen_to_world showing the clamped-viewport and off-camera cases.
-
 - [11e9465](https://github.com/crates-lurey-io/retroglyph/commit/11e9465c9c125303075d62ada75f0085e179fe1d)
   _(core)_ Link Camera, Tween, FrameClock, and quantize\_\* back to their gallery demos by
   `@matanlurey` in [#526](https://github.com/crates-lurey-io/retroglyph/pull/526)
-
-  > Adds a short rustdoc pointer from Camera, Tween, FrameClock, and the three quantize\_\* subcell
-  > functions to the WASM gallery demo that exercises them, satisfying C-EXAMPLE via a link to a
-  > running demo rather than a doctest.
-  >
-  > Closes #493
 
 - [4ed630a](https://github.com/crates-lurey-io/retroglyph/commit/4ed630af85171af20b9202101f9e7411d64f724c)
   _(core, crossterm)_ Sweep .unwrap() out of copyable rustdoc examples by `@matanlurey` in
   [#528](https://github.com/crates-lurey-io/retroglyph/pull/528)
 
-  > docs(core): sweep .unwrap() out of copyable rustdoc examples
-  >
-  > Rewrite the .unwrap()-using doctest examples in crates/core (Color::from_hex, Grid::write_span,
-  > Grid::span_owner, and the crates/core README quick start, which is itself run as a doctest via
-  > src/lib.rs include_str!) so a verbatim paste of the example no longer ships a panic. Each site
-  > now uses the doctest-friendly hidden-wrapper pattern (# fn main() ... # }) with ? in the visible
-  > body; the two Option-returning cases use a hidden helper fn plus a hidden .unwrap() on its
-  > result, since fn main() -> Option<()> is not a stable Termination impl. crates/crossterm had no
-  > doctest .unwrap() sites to fix.
-  >
-  > Closes #481
-
 - [6bf83aa](https://github.com/crates-lurey-io/retroglyph/commit/6bf83aa0484d60653270e68a7e49162ace8ea296)
   _(core, crossterm, software, window)_ Audit # Errors sections to name failure conditions, not just
   error types by `@matanlurey` in [#575](https://github.com/crates-lurey-io/retroglyph/pull/575)
-
-  > - docs(core): name Output/Terminal error conditions and recovery, not just error types
-  > - docs(software): name init_surface/present error conditions per platform
-  > - docs(window): name Presenter::init_surface error conditions and driver behavior on failure
 
 - [57cf7cd](https://github.com/crates-lurey-io/retroglyph/commit/57cf7cdd021a95153862ffa8f6701adfede6b561)
   _(core, widgets)_ Audit and document panic conditions for index, coordinate, Rect, and layer-id
   arguments by `@matanlurey` in [#571](https://github.com/crates-lurey-io/retroglyph/pull/571)
 
-  > - docs(core, widgets): extend panics audit to Camera and layout splits
-  >
-  > Documents that Camera::set_viewport/center_on/visible_bounds and the widgets
-  > split_h/split_v/split_h_flex/split_v_flex/centered_rect family never panic on degenerate input
-  > (empty rects, empty constraint slices, out-of-world targets): all of them clamp via saturating
-  > arithmetic instead. Extends the panics audit in the previous commit to the widgets crate named
-  > in the issue's own scope.
-  >
-  > Part of retroglyph#473.
-  >
-  > - docs(core): document Grid Index/IndexMut panics and subcell quantize panic-freedom
-  >
-  > Audits #473's core scope for index/coordinate/Rect/layer-id arguments that can panic on
-  > caller-supplied input without saying so.
-  >
-  > - Grid's Index<Pos>/IndexMut<Pos> impls (layer 0 only) panic on an out-of-bounds pos; document
-  >   that, pointing at the fallible tile/tile_mut as the checked alternative.
-  > - subcell::quantize_half_block/quantize_quadrant/quantize_sextant take fixed-size pixel arrays
-  >   and are genuinely panic-free; say so explicitly since a reader used to slice-indexing panics
-  >   might otherwise assume otherwise.
-  >
-  > Surface, Grid's other index/layer/Rect-taking methods, Camera, AnsiColor, and every
-  > widgets-crate index/Rect-taking function already document their out-of-bounds/degenerate-input
-  > behavior (Option/no-op/clip-on-draw), so no further core or widgets changes were needed for this
-  > audit.
-  >
-  > Fixes #473
-
 - [d274c56](https://github.com/crates-lurey-io/retroglyph/commit/d274c56c219677405ada4b56e47f83d5bbfdaa04)
   _(core, widgets)_ Add examples to every user-constructible public struct and enum by `@matanlurey`
   in [#576](https://github.com/crates-lurey-io/retroglyph/pull/576)
-
-  > - docs(core): add construction examples to user-constructible public types
-  > - docs(widgets): add construction examples to user-constructible public types
 
 - [2808311](https://github.com/crates-lurey-io/retroglyph/commit/2808311494fbefdcbb6df6626ccceebf321cf9dc)
   _(core, window)_ Document Tint's per-cell scope and SheetColor's per-tile question by
   `@matanlurey` in [#581](https://github.com/crates-lurey-io/retroglyph/pull/581)
 
-  > docs(core, window): document Tint's per-cell scope and SheetColor's open per-tile question
-  >
-  > Captures the reasoning from retroglyph#559 as doc comments rather than a standalone
-  > design-record file: Tint::doc gains a 'Scope: what Tint is not for' section distinguishing it
-  > from SheetColor (a different, load-time question) and from frame-/layer-level colour transforms,
-  > which are a separate, not-yet-designed concern tracked in retroglyph#562. SheetColor's doc
-  > comment gains an open question noted in #559: whether a sheet mixing mask and art tiles needs a
-  > per-tile escape hatch. Surface's with_tint doc gains a one-sentence cross-reference to
-  > SpriteTint's two-stage composition, phrased as plain code-span names since retroglyph-core has
-  > no dependency on retroglyph-window.
-
 - [85b24c7](https://github.com/crates-lurey-io/retroglyph/commit/85b24c77d393131a92bb6a207f09bc67d8e5ed4a)
   _(core, window)_ A sprite ignores fg; bg only shows through its transparent pixels by
   `@matanlurey` in [#540](https://github.com/crates-lurey-io/retroglyph/pull/540)
-
-  > - docs(core, window): state that a sprite ignores fg, and that bg only shows through its
-  >   transparent pixels
-  >
-  > Both pixel backends composite a sprite from its own pixels and never read the cell's `fg`, but
-  > nothing said so: `Surface::put`, `Surface::put_span` and `Style::fg` all described `fg` as the
-  > glyph's colour unconditionally, and `TilesetOptions`/`SpriteAlign` documented geometry and
-  > stayed silent on colour. The failure mode is quiet: a tint silently does nothing on the pixel
-  > backends and appears to work on the cell backends and on any glyph that misses the sprite cache.
-  >
-  > Also drops the `set_color_mod` paragraph in the SDL reference that reads as an endorsement of a
-  > technique this library does not implement.
-  >
-  > Refs #537
-  >
-  > - feat(core): a BuildMode vocabulary so development diagnostics compile out of release builds
-  >
-  > feat(core): add a BuildMode vocabulary so diagnostics compile out of release builds
-  >
-  > Diagnostics that only help during development were unconditional: the shared sprite-span warning
-  > kept a `BTreeSet<char>` of already-reported glyphs and formatted its message in every build, so
-  > a shipped game paid for a log line that a release consumer never sees.
-  >
-  > Adds `BuildMode`, the `DEV` const it resolves to, and the `dev_only!` macro that gates a block
-  > on it, then ports the sprite-span warning onto them.
-  >
-  > Refs #537
 
 - [5b29016](https://github.com/crates-lurey-io/retroglyph/commit/5b290162aef82b84b82cbc89c8c9777622990400)
   _(core, window, widgets)_ Add an implementation example to every pub trait by `@matanlurey` in
   [#577](https://github.com/crates-lurey-io/retroglyph/pull/577)
 
-  > - docs(core): add implementation examples to backend traits
-  >
-  > Adds an implementing '# Examples' section to each pub trait in crates/core/src/backend/mod.rs
-  > (BackendError, Output, Input, Cursor, Backend), showing a minimal impl for each rather than a
-  > call site.
-  >
-  > Part of retroglyph#478.
-  >
-  > - docs(window): add implementation examples to window traits
-  >
-  > Adds an implementing '# Examples' section to each pub trait (WindowHandle, RecoverableError,
-  > Presenter in presenter.rs; Clipboard in clipboard.rs) not already covered by an attached
-  > example.
-  >
-  > Part of retroglyph#478.
-  >
-  > - docs(widgets): add implementation examples to widget traits
-  >
-  > Adds an implementing '# Examples' section to each pub trait in crates/widgets/src/widget/mod.rs
-  > (Widget, StatefulWidget, Measure), showing a minimal impl for each rather than a call site.
-  >
-  > Part of retroglyph#478.
-
 - [232d37c](https://github.com/crates-lurey-io/retroglyph/commit/232d37c50eac3511472afd2da8e133b438b1e1dd)
   _(gl, software, window)_ Nine ```ignore doctests are never compiled or run by `@matanlurey` in
   [#530](https://github.com/crates-lurey-io/retroglyph/pull/530)
-
-  > Nine
-  > `\`\`\`ignore`code blocks across crates/gl, crates/software, and crates/window (plus a mirrored quick start in crates/gl/README.md) were never compiled or run by`cargo
-  > test --doc`. Give each the strongest attribute that still holds:
-  >
-  > - crates/gl/src/config.rs and crates/gl/README.md quick start: `no_run` (needs a GPU/window at
-  >   runtime, but the types and call shape are real; catches API drift at compile time).
-  > - crates/software/src/config.rs windowed example: `no_run` (needs a window).
-  > - crates/software/src/config.rs headless example: now a real, executable doctest (no external
-  >   resources needed).
-  > - crates/software/src/config.rs builder example: now a real, executable doctest; also drops a
-  >   call to a `.title()` method that does not exist on `SoftwareBackendBuilder`.
-  > - crates/window/src/tileset.rs (x3): `no_run` (reads a PNG file from disk that is not present in
-  >   the doctest sandbox).
-  > - crates/window/src/winit/run.rs (x2): `no_run` (opens a real window/event loop); also add a
-  >   missing `.expect(...)` after `run_headless()` so the example actually compiles.
-  >
-  > Making these compile required a few supporting fixes:
-  >
-  > - retroglyph-gl and retroglyph-software both depend on retroglyph-window with its `winit`
-  >   feature disabled (they only need `Presenter`); their doc examples reach into
-  >   `retroglyph_window::winit`, so both crates gain a dev-only dependency edge turning that
-  >   feature back on for doctests.
-  > - retroglyph-window gains a dev-dependency on retroglyph-software (a dev-only cycle, which Cargo
-  >   permits) so its own doc examples can build a real `SoftwareRenderer`.
-  >
-  > Also drops the redundant `rust` tag from five ` ```rust ` fences in doc comments
-  > (crates/core/src/color.rs x4, crates/window/src/backend.rs x1): rustdoc treats a fenced block as
-  > Rust by default, so the explicit tag was dead weight (RFC 1574).
-  >
-  > Closes #472.
 
 - [9240929](https://github.com/crates-lurey-io/retroglyph/commit/9240929b1e1ecfbbf11a2b2a9c104fed27f1c33c)
   _(window)_ Bespoke doc-comment heading titles instead of plain `# Examples` by `@matanlurey` in
   [#525](https://github.com/crates-lurey-io/retroglyph/pull/525)
 
-  > RFC 1574 specifies `# Examples` (plural) as the doc-comment heading for example sections, and
-  > rustdoc renders headings into the page sidebar, so a bespoke title makes a page's sidebar
-  > inconsistent with every other page.
-  >
-  > Replace the bespoke
-  > `# Example: driving without \`winit\``heading in`crates/window/src/backend.rs`with`#
-  > Examples`, and fix the same non-conformant singular`#
-  > Example`heading found by a repo-wide grep in`crates/core/src/layout.rs`,`crates/core/src/subcell.rs`(three sites),`crates/core/src/grid.rs`, and`crates/widgets/src/interact/shortcuts.rs`.
-  >
-  > Closes #471
-
 - [26bc065](https://github.com/crates-lurey-io/retroglyph/commit/26bc065c9bfb6ae3b8ce94dbcab2ac95aee918f5)
   _(workspace)_ "deliberately" appears 9 times, defending decisions nobody questioned by
   `@matanlurey` in [#527](https://github.com/crates-lurey-io/retroglyph/pull/527)
 
-  > docs(workspace): drop pre-emptive "deliberately" hedging from prose
-  >
-  > Cuts "deliberately" from sites where it only pre-emptively defends a design choice nobody is
-  > questioning (README.md ratatui-similarity notes, the `Event::Custom(u64)` payload rationale,
-  > `InstanceGuard`'s independence from `restore_terminal()`, the light theme's contrast note, and
-  > the `egc`-feature note in `Paragraph::render`). Also drops the sibling "for anyone coming from
-  > there" hedge next to the ratatui layout comparison.
-  >
-  > Keeps "deliberately" at the three sites where removing it would make the passage read as an
-  > oversight rather than a documented choice: `GlBackend`/ `GlRenderer` not implementing
-  > `Input`/`Cursor`, `CrosstermOptions` not auto-detecting terminal capabilities, and `Presenter`'s
-  > offset application not being shared code between backends.
-  >
-  > Closes #485.
-
 - [123c590](https://github.com/crates-lurey-io/retroglyph/commit/123c59072d9de4a051ecddd76be67342cddf45ae)
   _(workspace, core, widgets)_ Clean up the " -- " clause-joiner habit by `@matanlurey` in
   [#532](https://github.com/crates-lurey-io/retroglyph/pull/532)
-
-  > - docs(core): clean up " -- " clause-joiner usage
-  > - docs(terminal): clean up " -- " clause-joiner usage
-  > - docs(crossterm): clean up " -- " clause-joiner usage
-  > - docs(software): clean up " -- " clause-joiner usage
-  > - docs(gl): clean up " -- " clause-joiner usage
-  > - docs(window): clean up " -- " clause-joiner usage
-  > - docs(terminal-wasm): clean up " -- " clause-joiner usage
-  > - docs(widgets): clean up " -- " clause-joiner usage
-  > - docs(workspace): clean up " -- " clause-joiner usage in top-level docs
 
 ### Miscellaneous Tasks
 
@@ -844,161 +179,6 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.4.0...r
   _(core)_ Upgrade to gem 0.2.0 + alpha-blend 0.3.0, dedupe channel rounding (retroglyph#547
   phase 3) by `@matanlurey` in [#556](https://github.com/crates-lurey-io/retroglyph/pull/556)
   [**breaking**]
-
-  > - chore(core)!: bump gem to 0.2, alpha-blend to 0.3; feature surgery
-  >
-  > Both crates round to nearest now (retroglyph#547): gem's a\*b/255 helpers and alpha-blend's
-  > U8x4Rgba::source_over both switched from floor to round-half- away-from-zero. This commit only
-  > lands the dependency/feature surgery; the call-site migrations and the arithmetic-duplication
-  > cleanup are separate commits.
-  >
-  > - gem is no longer optional: its pixel-format layer (rgb/gray/alpha/channel) needs no math
-  >   backend, so retroglyph-core can depend on it unconditionally, including in
-  >   --no-default-features builds. gem 0.2.0 cfg-gates space/named behind a math backend instead of
-  >   erroring without one, which is what makes this possible (0.1.0-alpha.6 needed default-features
-  >   = ["libm"] as a workaround).
-  > - Renamed the gem feature to color-space. With dep:gem unconditional, a feature named gem no
-  >   longer gates gem's presence at all -- it now only gates alpha-blend plus gem's own perceptual
-  >   (space/named) modules in a no_std build. That's exactly the name-vs-reality drift #547 is
-  >   about, so the name changes with it rather than shipping stale.
-  > - alpha-blend stays optional, bumped 0.2 -> 0.3, added as a non-optional dev-dependency too so
-  >   tests/rounding_conformance.rs (added in a later commit) runs on every CI invocation regardless
-  >   of the feature matrix.
-  > - gem?/std -> gem/std (gem/std cannot use the optional-dep ?/ syntax once gem is non-optional);
-  >   alpha-blend?/std unchanged.
-  > - crates/widgets/Cargo.toml follows the rename (gem -> color-space).
-  >
-  > This does not yet compile: grid.rs and color.rs still reference gem 0.1's Lerp trait and
-  > alpha-blend 0.2's BlendMode/SeparableBlendMode names, fixed in the next two commits.
-  >
-  > - refactor(core): migrate alpha-blend 0.2 -> 0.3 rename + BlendMode::Multiply
-  >
-  > alpha-blend 0.3.0 renamed blend_modes::SeparableBlendMode to a top-level BlendMode. This crate
-  > already defines its own BlendMode enum (for Grid::blit_alpha), so the import is aliased back to
-  > its old name -- use alpha_blend::BlendMode as SeparableBlendMode -- rather than colliding two
-  > types under one name. Doc links at grid.rs updated to point at the new path.
-  >
-  > Also adds BlendMode::Multiply, mapping to alpha-blend's own Multiply mode (dst \* src).
-  > alpha-blend 0.3 added Multiply to its separable set; this crate's local enum was missing the
-  > equivalent variant even though the underlying capability was one match arm away. Covered by the
-  > existing exhaustive-mode test and both blend benchmarks.
-  >
-  > software's, window's, and gl's alpha_blend usages (U8x4Rgba, source_over) are unaffected by this
-  > rename -- those are addressed in later commits.
-  >
-  > - fix(core): import alloc::string::String for no_std Event::Paste
-  >
-  > Pre-existing bug, unrelated to gem/alpha-blend: Event::Paste(String) resolves String from std's
-  > prelude, which no_std builds don't have. Blocks the new --no-default-features CI check this PR
-  > adds (retroglyph#547 phase 3 SS7.4) -- --no-default-features already failed on main before this
-  > change, for this same reason, so this isn't a regression, just a gate that was never previously
-  > exercised.
-  >
-  > - refactor(core): dedupe rgb_distance_sq / subcell::distance_sq into gem::rgb::distance_sq
-  >
-  > color.rs's byte-for-byte fallback distance function and subcell.rs's own copy (retroglyph#547)
-  > are both the same squared-euclidean-distance formula gem 0.2.0 now ships as a const free
-  > function with an identical signature: (u8, u8, u8) x2 -> u32. Both call sites are unconditional
-  > (used by the non-color-space cube-mapping fallback and by the always-on subcell posterizer),
-  > matching gem::rgb being part of gem's featureless base layer.
-  >
-  > Kept the local unit tests (symmetry, zero-for-identical, matches-manual- euclidean) pointed at
-  > gem::rgb::distance_sq directly rather than deleting them: they document the properties this
-  > crate's callers actually rely on, even though gem's own test suite already covers the function
-  > itself.
-  >
-  > - refactor(core): dedupe Tint::{scale,lerp} into gem::channel; add const
-  >   apply_rgb888/multiply_color
-  >
-  > Tint's private scale/lerp helpers (retroglyph#547) were a third, independently maintained copy
-  > of the same round-to-nearest a\*b/255 and mix formulas gem 0.2.0 and alpha-blend 0.3.0 now both
-  > ship. Replaced with gem::channel::multiply_u8 and gem::channel::mix_u8 directly; the existing 12
-  > tint tests pass unchanged (verified: if any needed its expected value edited, that would mean
-  > the rounding actually differs, and it doesn't).
-  >
-  > Also adds two const methods gem 0.2.0's Rgb::to_rgb (a const inherent method, unlike the
-  > HasRed-family trait methods) newly makes possible:
-  >
-  > - Tint::apply_rgb888(Rgb888) -> Rgb888: the channel-order-safe counterpart of apply((u8,u8,u8)),
-  >   for callers already holding an Rgb888.
-  > - Tint::multiply_color(Color, default) -> Self: a Multiply tint from a resolved Color, for
-  >   retroglyph-window's SheetColor::Mask recolouring.
-  >
-  > retroglyph#547 phase 3 asserted apply_rgb888 could not be const because HasRed::red is a trait
-  > method; that's no longer true as of gem 0.2.0.
-  >
-  > - refactor(window)!: delete sprite_cache::source_over, use the inherent U8x4Rgba method
-  >
-  > sprite_cache::source_over took the same U8x4Rgba src/dst pair as
-  >
-  > alpha_blend::rgba::U8x4Rgba's own inherent source_over and round-tripped through F32x4Rgba +
-  > BlendMode::SourceOver to get there -- a shadow of a method that already exists on the type, for
-  > no reason beyond having been written before alpha-blend grew that inherent method. Deleted; its
-  > three tests are ported onto U8x4Rgba::source_over directly.
-  >
-  > Breaking change scoped to retroglyph-window only (source_over was a public free function in the
-  > public sprite_cache module): the ! is on this commit, not on the workspace-wide gem/alpha-blend
-  > bump commits, per this repo's per-crate ! scoping rule.
-  >
-  > source_over_half_alpha_blends needed a new expected value: alpha-blend 0.3.0 rounds (127.5,
-  > 127.5, 0) to (127, 128, 0) instead of flooring to (127, 127, 0) -- this is the exact
-  > rounding-direction bug retroglyph#547 exists to fix, verified against the real alpha-blend 0.3.0
-  > crate rather than hand-derived. The other two tests (opaque, transparent) are exact at their
-  > endpoints and are unaffected.
-  >
-  > Bumps retroglyph-window's own alpha-blend dependency to 0.3 (it pins its own copy for the
-  > tilesets feature, separate from retroglyph-core's).
-  >
-  > - refactor(software): pack the sprite blit fast path through U8x4Rgba::to_rgb_u32
-  >
-  > blit_sprite's opaque fast path hand-rolled its 0x00RRGGBB pack (u32::from(r) << 16 | ...) right
-  > next to the blended path a few lines below, which already called U8x4Rgba::to_rgb_u32 for the
-  > same format -- one path used the type's own method, the other reimplemented it. Now both do.
-  >
-  > resolve_color's own pack is left as-is: it has no U8x4Rgba/Rgb888 available without adding a new
-  > non-optional dependency (alpha-blend is feature-gated behind tilesets here, and gem isn't a
-  > dependency of this crate at all), and unlike blit_sprite's sprite-pixel path there's no
-  > channel-order hazard to guard against -- it's a single, already-tested pack/unpack pair
-  > (resolve_color_matches_core_for_all_ansi_variants) with no second implementation of the same
-  > shift-and-mask anywhere nearby to drift from.
-  >
-  > Bumps retroglyph-software's own alpha-blend dependency to 0.3, matching core's and window's.
-  >
-  > - test(core): three-way rounding conformance + no-drift + --no-default-features gates
-  >   (retroglyph#547)
-  >
-  > Three of the four SS7 acceptance gates that don't require new rendering infrastructure (see this
-  > PR's description for why the GL/sprite-tint gate is out of scope here):
-  >
-  > - tests/rounding_conformance.rs: gem::channel::{multiply_u8, mix_u8} and
-  >   alpha_blend::channel::Channel::{scale, lerp} each independently checked against an i64
-  >   round-half-away reference, not just against each other (retroglyph#537 is exactly two backends
-  >   agreeing by accident and reading that as intent). multiply_u8/scale over all 65536 (a, b)
-  >   pairs; mix_u8/lerp over all 16,777,216 (a, b, t) triples, un-sampled and not gated to release
-  >   (~0.65s in debug here).
-  > - tests/no_drift.rs: composites the same translucent pixel onto the same destination 64 times
-  >   without clearing between passes (a trailing/ghosting accumulation pattern, not an unusual
-  >   thing for a renderer to do), and checks it converges to the source's own exact color -- not
-  >   one LSB darker from repeated floor rounding, and not stuck at a non-opaque alpha (the separate
-  >   translucent-destination bug fixed in the same alpha-blend 0.3.0 release). Verified against the
-  >   pre-0.3.0 crate directly: it settles at alpha 128, never reaching opaque.
-  > - Justfile's compile recipe: cargo check -p retroglyph-core --no-default-features, the actual CI
-  >   line SS7.4 asks for. dep:gem is unconditional now, so this must compile with zero features,
-  >   not just fewer.
-  >
-  > Both test files are non-optional dev-dependency tests (alpha-blend is a dev-dependency of
-  > retroglyph-core independent of the color-space feature -- see Cargo.toml), so they run on every
-  > CI invocation regardless of the feature matrix.
-  >
-  > Software-vs-GL sprite tint pixel parity (SS7.1) is not buildable at all yet: see the PR
-  > description for why that gate is deferred to a follow-up issue.
-  >
-  > - test(examples): accept 07_sprites_tileset PNG snapshot after alpha-blend 0.3.0 rounding fix
-  >
-  > U8x4Rgba::source_over now rounds to nearest instead of flooring (retroglyph#547), so a handful
-  > of translucent sprite-edge pixels in this scene are up to one LSB lighter than the old
-  > floor-biased snapshot. Verified visually: the two images are indistinguishable at normal viewing
-  > size, as expected for a sub-1-LSB rounding-direction change.
 
 **Full Changelog**:
 https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.3.1...retroglyph-core-v0.4.0
@@ -1011,71 +191,6 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.3.1...r
   _(gl)_ Add GPU rendering backend (OpenGL 3.3 native, WebGL2 wasm) by `@matanlurey` in
   [#377](https://github.com/crates-lurey-io/retroglyph/pull/377)
 
-  > - feat(font): extract BitmapFont and unscii16 into retroglyph-font crate
-  >
-  > Move the 1-bit BitmapFont, FallbackFontChain, CP437 mapping, and embedded unscii16 default font
-  > out of retroglyph-software into a new no_std, zero-dep retroglyph-font crate, so retroglyph-gl
-  > can share the exact same glyph source and render pixel-identical text.
-  >
-  > Breaking:the retroglyph_software::bitmap_font module path is removed. BitmapFont is still
-  > re-exported from the retroglyph_software crate root for ergonomics (the builder's font() takes
-  > one); FallbackFontChain, unscii16, etc. now live at
-  >
-  > retroglyph_font::. default-font forwards to the new crate's feature.
-  >
-  > Also add Color::resolve_rgb to retroglyph-core as the canonical color-to-RGB resolution
-  > (ANSI/indexed/rgb, with a caller-supplied default for Color::Default) and refactor software's
-  > private resolve_color to delegate to it, so every graphical backend resolves colors identically.
-  >
-  > - feat(gl): add retroglyph-gl GPU backend (OpenGL 3.3 + WebGL2 via glow)
-  >
-  > New crate implementing retroglyph_window::Presenter with a single instanced draw call per frame
-  > (the beamterm/alacritty/xterm.js model): a unit quad instanced cols\*rows times, each instance
-  > carrying a glyph id + fg/bg color, sampling an R8 glyph-atlas TEXTURE_2D_ARRAY and blending
-  > mix(bg, fg, coverage).
-  >
-  > One glow codebase drives both native OpenGL 3.3 core (context created from the window's raw
-  > handles via glutin, no window-crate changes) and browser WebGL2 (context from the winit canvas),
-  > swapped by a context_native/context_wasm module split mirroring retroglyph-software's surface
-  > split. Layers are flattened by the core Terminal (composites_layers=false); the GPU redraws
-  > every cell each frame so no full-frame request is needed. v1 renders a fixed CP437 bitmap atlas;
-  > sub-cell offsets, sprites, dynamic atlases, and GPU compositing are tracked as follow-up issues
-  > (#365-375).
-  >
-  > - feat(examples): wire retroglyph-gl backend into the example runner
-  >
-  > Add a gl feature and run_gl (native OpenGL/WebGL2), dispatched by launch::<E>() below software
-  > in the backend priority chain. GL is a windowed Presenter like software, so it reuses the same
-  > winit run_app driver.
-  >
-  > - ci(workspace): add gl/font to CI, codecov, and labels
-  >
-  > Add a compile-wasm-gl job that build-checks retroglyph-gl for wasm32/WebGL2 (a live headless run
-  > is deferred, tracked in #370), wire it into required. Add gl/font Codecov flags + components,
-  > test-results uploads, and the split-junit crate list. Add c:gl/c:font labels + labeler globs and
-  > the gl/font PR-title scopes.
-  >
-  > - chore(workspace): prettier-ignore agent scratch dirs (.pi, .pi-subagents)
-  >
-  > Mirror the existing .matan/ ignore so agent tooling scratch files (which are git-ignored
-  > already) don't fail 'just prettier' / 'just check' in agent sessions.
-  >
-  > - docs(workspace): record retroglyph-gl and retroglyph-font
-  >
-  > Add both crates to the README crate table and llms.txt, note the shipped GPU backend in ROADMAP
-  > (with follow-up issue links) and mark post-processing shaders enabled by it, update the
-  > Presenter doc table to list GlRenderer as real (glutin native / WebGL2 wasm), and add gl/font to
-  > AGENTS.md commit scopes.
-  >
-  > - refactor(workspace): fold retroglyph-font into retroglyph-window, drop the separate crate
-  >
-  > Both font consumers (retroglyph-software, retroglyph-gl) already depend on retroglyph-window
-  > (with default-features=false, so no winit), so the font's glyph data lives there as a winit-free
-  > module instead of a standalone crate. retroglyph-font is removed;
-  > BitmapFont/FallbackFontChain/unscii16 now live at
-  >
-  > retroglyph_window::font, gated by retroglyph-window's default-font feature.
-
 **Full Changelog**:
 https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.3.0...retroglyph-core-v0.3.1
 
@@ -1087,70 +202,13 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.3.0...r
   _(core)_ Mark Color, SystemTheme, and Flow #[non_exhaustive] for consistency with sibling enums by
   `@matanlurey` in [#361](https://github.com/crates-lurey-io/retroglyph/pull/361)
 
-  > Color, SystemTheme, and Flow were the only public enums lacking #[non_exhaustive], unlike their
-  > siblings (KeyCode, MouseButton, MouseEventKind, Event, BlendMode). Color in particular is widely
-  > matched downstream, and a future variant (a named/theme color, a 256-palette split) would
-  > otherwise be a breaking change to add.
-  >
-  > Internal exhaustive matches on Color that needed a wildcard arm to keep compiling:
-  >
-  > - crates/software/src/lib.rs: resolve_color (falls back to default_rgb)
-  > - crates/terminal/src/lib.rs: write_sgr_params (falls back to the reset code, same as
-  >   Color::Default)
-  >
-  > crates/core/src/app.rs's run loop's match on Flow was converted to an equality check against
-  > Flow::Exit (clippy single_match), so any future Flow variant is treated as Flow::Continue rather
-  > than exiting.
-  >
-  > SystemTheme's doc comment previously argued for staying exhaustive (exactly two variants can
-  > ever be reported by winit/browser APIs); it's been updated to note the #[non_exhaustive] marker
-  > is for consistency with sibling enums rather than an expectation of a near-term third variant.
-  >
-  > Per AGENTS.md's breaking-change policy, no ! on this commit -- these are ordinary API-signature
-  > breaks that cargo-semver-checks/release-plz detect and version-bump on their own.
-  >
-  > Closes #267
-
 - [678298e](https://github.com/crates-lurey-io/retroglyph/commit/678298e0fee4bb73d701491b32d0ee92ecca5c58)
   _(core)_ Saturating add for blit destination coordinates by `@matanlurey` in
   [#351](https://github.com/crates-lurey-io/retroglyph/pull/351)
 
-  > blit/blit_alpha computed the destination coordinate as dst_x/dst_y + (offset from src_rect
-  > origin), where the subtraction saturated but the addition did not. A destination origin near
-  > u16::MAX could wrap the addition, either landing on the wrong cell (if the wrapped value
-  > happened to be in-bounds) or being rejected by put_tile's bounds check only by luck.
-  >
-  > Switch both computations (in blit and blit_alpha) to saturating_add, matching the
-  > saturating-math convention already used elsewhere in this crate (from_charmap's
-  > height.saturating_add(1), write_grapheme's x.saturating_add(1)). Saturating to u16::MAX is
-  > always caught by the existing >= dst_width/dst_height bounds check, since a valid index must be
-  > strictly less than a u16-derived dimension.
-  >
-  > Adds unit tests for both blit and blit_alpha with a destination origin near u16::MAX chosen so
-  > the unfixed wrapping add would land in-bounds, asserting the write is skipped instead, plus a
-  > sanity test that ordinary non-overflowing blits are unaffected.
-  >
-  > Closes #268.
-
 - [1ec40a8](https://github.com/crates-lurey-io/retroglyph/commit/1ec40a835bdb571e1ae0a207fc933e6d54cc2ad6)
   _(examples)_ Fix wasm-terminal entry macro after Backend/Output/Input/Cursor split by
   `@matanlurey` in [#339](https://github.com/crates-lurey-io/retroglyph/pull/339)
-
-  > fix(examples, core): fix wasm-terminal example entry macro and stale Backend doc refs
-  >
-  > The #265 Backend/Output/Input/Cursor trait split left two call sites in
-  > examples/src/wasm_entry.rs using UFCS `Backend::set_cursor_visible` / `Backend::resize`, which
-  > no longer compile since `Backend` now has no methods of its own (it's a pure Output+Input+Cursor
-  > bundle). This path is gated on the wasm-terminal example feature + wasm32 target, so
-  > `cargo test --all-features --workspace` on a host target never compiled it; only the Docs
-  > workflow's WASM example build caught it, breaking main's Docs job after PR #337 merged.
-  >
-  > Also updates three remaining doc-comment mentions of `Backend::draw_layers`/
-  >
-  > `Backend::composites_layers` in software/core bench file docs that the #265 docs sweep missed.
-  >
-  > Verified with tools/build-wasm-examples.sh (all examples, all three Headless/Terminal/Software
-  > WASM variants) and `just check`.
 
 - [fda7303](https://github.com/crates-lurey-io/retroglyph/commit/fda7303d7e2031d607635848b9ad0823302b04b3)
   _(window)_ Automatically present the terminal after each windowed frame by `@matanlurey` in
@@ -1162,80 +220,6 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.3.0...r
   _(core)_ Split Backend into Output/Input/Cursor facets by `@matanlurey` in
   [#331](https://github.com/crates-lurey-io/retroglyph/pull/331)
 
-  > - refactor(core): split Backend into Output/Input/Cursor facets
-  >
-  > Splits the fused Backend trait into three independent sibling traits with no supertrait
-  > relationship: Output (draw/draw_layers/flush/size/clear/resize, the only fallible facet), Input
-  > (poll_event/push_event, push_event defaults to a no-op), and Cursor
-  > (set_cursor_visible/set_cursor_position, both default to a no-op). Backend becomes a pure
-  > ergonomic bundle:
-  >
-  >     pub trait Backend: Output + Input + Cursor {}
-  >     impl<T: Output + Input + Cursor> Backend for T {}
-  >
-  > so every existing B: Backend generic call site (Terminal<B>, App<B>::step, layout::render, every
-  > widget) keeps compiling unchanged. Headless now implements Output/Input/Cursor separately
-  > instead of one impl Backend.
-  >
-  > Also fixes stray doc/grid/terminal references to crate::Backend::\* methods that moved to
-  > Output/Input, and updates the workspace README's backend overview.
-  >
-  > - refactor(crossterm): implement Output/Input/Cursor instead of fused Backend
-  >
-  > Crossterm now implements Output (draw/flush/size/clear/resize, propagating std::io::Error),
-  > Input (real poll_event; push_event uses the new trait default since crossterm reads its own
-  > event stream), and Cursor (real escape-code-based show/hide and move) instead of one impl
-  > Backend. Updates crate docs, tests, and benches that referenced Backend::\* methods directly on
-  > a concrete Crossterm<W> to import Output/Input instead (bundle-trait method resolution only
-  > works through a generic B: Backend bound, not a concrete type).
-  >
-  > - refactor(window): fold Presenter into an Output supertrait
-  >
-  > Presenter is now `pub trait Presenter: Output`, dropping its duplicated
-  > draw/draw_layers/needs_full_frame/composites_layers/flush/size/clear/resize signatures
-  > (inherited from Output) and its own Error associated type (also inherited); Presenter keeps only
-  > SurfaceError plus the surface lifecycle (init_surface/resize_surface/present/cell_size).
-  > WindowBackend<P: Presenter> now implements Output by delegating to P, Input via its own event
-  > queue, and Cursor via the trait's no-op default (confirmed this matches the prior fused-Backend
-  > impl's cursor methods, which were already no-ops for the windowed family -- a straight split,
-  > not a behavior change). Updates crate docs (lib.rs architecture diagram, presenter.rs's stale
-  > "mirrors the output half" doc comment, README) and the winit test/doctest presenter stubs to
-  > implement Output + Presenter separately.
-  >
-  > - refactor(software): implement Output/Input/Cursor, drop duplicate Presenter forwarding
-  >
-  > SoftwareRenderer now implements Output, Input, and Cursor directly instead of one impl Backend.
-  > Since retroglyph-window's Presenter is now an Output supertrait, SoftwareRenderer's own Output
-  > impl already satisfies Presenter: Output, so the old impl retroglyph_window::Presenter block
-  > (which duplicated draw/draw_layers/flush/size/clear/resize by forwarding through
-  > <Self as Backend>::method, specifically to keep Presenter out of scope and avoid
-  > method-resolution ambiguity) is deleted; the new Presenter impl only defines SurfaceError,
-  > init_surface, resize_surface, present, and cell_size. Updates crate/module docs and the benches
-  > that called draw/draw_layers directly on a concrete SoftwareRenderer to import Output instead of
-  > Backend.
-  >
-  > - refactor(terminal-wasm): implement Output/Input/Cursor instead of fused Backend
-  >
-  > TerminalWasm now implements Output (ANSI-emitting draw/flush/clear/resize), Input (real
-  > push*event/poll_event, since this backend is entirely push-driven), and Cursor (real escape-code
-  > cursor show/hide/move) instead of one impl Backend. Updates doc comment links
-  > (Backend::draw/clear/etc. -> Output::/Input::/Cursor::) and the event-throughput bench's Backend
-  > as * import to Input as \_.
-  >
-  > - fix(terminal-wasm): import Output for wasm32-gated resize call
-  >
-  > The wasm32-only wasm_terminal_resize FFI export imported the old fused Backend trait to call
-  > resize(); after the Output/Input/Cursor split that method lives on Output. This module
-  > is #[cfg(target_arch = "wasm32")], so cargo test --all-features never compiled it -- only just
-  > test-wasm (wasm-pack test) exercises this path, and CI caught it as a build failure on PR #331.
-  >
-  > - docs(workspace): update Backend/Presenter references after the trait split
-  >
-  > Sweeps remaining prose describing Backend as a single fused output+input+cursor trait: the
-  > workspace README's backend overview, the retroglyph-terminal crate's doc comment linking to the
-  > old Backend::draw method (now Output::draw), and docs/testing.md's reference to
-  > Backend::push_event (now Input::push_event).
-
 - [98b5f3a](https://github.com/crates-lurey-io/retroglyph/commit/98b5f3a6ef11ef1854e29dfbb280ee93b1bc4006)
   _(crossterm)_ Option-based event conversion, fix mouse drag/scroll mapping by `@matanlurey` in
   [#337](https://github.com/crates-lurey-io/retroglyph/pull/337)
@@ -1243,22 +227,6 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.3.0...r
 - [9187baf](https://github.com/crates-lurey-io/retroglyph/commit/9187baf83c3a4e4decc3f05e644730c6ac97ac35)
   _(workspace)_ Move benchmarks to per-crate crates/\*/benches directories by `@matanlurey` in
   [#317](https://github.com/crates-lurey-io/retroglyph/pull/317)
-
-  > Replaces the single top-level retroglyph-benches crate with Cargo's standard per-crate benches/
-  > convention (starting with crates/core/benches/grid_diff.rs). We're about to add benchmarks for
-  > every backend/widgets crate (issues #269, #275, #285, #292, #307, #316); a shared crate would
-  > otherwise accumulate every crate's dev-dependencies and bench targets in one place instead of
-  > living next to the code each bench measures.
-  >
-  > - Move benches/benches/grid_diff.rs -> crates/core/benches/grid_diff.rs and its [[bench]]
-  >   entry + dev-dependencies (criterion, fastrand) into crates/core/Cargo.toml. Drop the now-empty
-  >   retroglyph-benches crate and its workspace member entry.
-  > - just bench, tools/bench-compare.sh, and .github/workflows/bench.yml now run
-  >   `cargo bench --workspace --all-features` (no -p), so a uniquely-named bench target resolves
-  >   regardless of which crate owns it. --all-features matches just test's convention and avoids a
-  >   pre-existing retroglyph-software default-features gap (missing default-font) that only
-  >   surfaces once the whole workspace builds in bench/test profile together.
-  > - Update CONTRIBUTING.md, codecov.yml's ignore globs, and Cargo.toml's comments to match.
 
 ### Documentation
 
@@ -1271,28 +239,6 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.3.0...r
 - [8b7cc7a](https://github.com/crates-lurey-io/retroglyph/commit/8b7cc7a88e37ec6f159f05bb1cecd95d7fd33737)
   _(core)_ Reduce Grid's layer-table footprint for typical single/few-layer use by `@matanlurey` in
   [#359](https://github.com/crates-lurey-io/retroglyph/pull/359)
-
-  > perf(core): lazily grow Grid's layer table instead of pre-allocating all 256 slots
-  >
-  > Grid::new previously called layers.resize_with(256, || None) unconditionally, so every Grid
-  > carried a 256-element Vec<Option<LayerBuf>> (16,384 bytes -- 256 \* 64 bytes per
-  > Option<LayerBuf>, measured via size_of) even for single-layer use. Terminal holds up to four
-  > Grids (current, previous, flattened_current, flattened_previous), so this was 65,536 bytes of
-  > always-allocated, mostly-null layer table per Terminal.
-  >
-  > Grid::new now starts the layer table at a single slot (layer 0, always allocated).
-  > layer_or_alloc grows the Vec via resize_with up to id + 1 only when a layer is first written to.
-  > Reads of an id beyond the table's current length return None via a bounds check (Vec::get)
-  > instead of indexing directly, with identical semantics to an in-bounds None slot. max_layer
-  > tracking, clear, clear_all, diff, and flatten_into are unaffected: they already walk
-  > 0..=max_layer or self.layers.iter_mut().flatten(), both of which are correct over a shorter Vec.
-  >
-  > Added crates/core/benches/grid_construct.rs to measure Grid::new's construction cost
-  > before/after (see PR body for numbers), and unit tests covering lazy growth to the written id,
-  > monotonic growth across writes, and out-of-bounds reads/ clears behaving like in-bounds None
-  > slots.
-  >
-  > Closes #264
 
 - [d30b1c1](https://github.com/crates-lurey-io/retroglyph/commit/d30b1c1281f0f64639293d8e7942fa366a575844)
   _(core)_ Flat-iteration flatten_into and blit/blit_alpha by `@matanlurey` in
@@ -1308,26 +254,6 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.3.0...r
   _(core)_ Add benchmarks for flatten/blit/subcell/color hot paths by `@matanlurey` in
   [#322](https://github.com/crates-lurey-io/retroglyph/pull/322)
 
-  > Adds criterion benches for the remaining per-frame hot paths flagged in #269 (grid_diff.rs
-  > already covered Grid::diff):
-  >
-  > - flatten.rs: Grid::flatten_into at 1/4/16 layers, driven through Terminal::present
-  >   (flatten_into is crate-private) since Headless never overrides composites_layers.
-  > - blit.rs: Grid::blit and Grid::blit_alpha (each BlendMode) over a large rect (80x24 and
-  >   200x60).
-  > - subcell.rs: quantize_half_block/quantize_quadrant/quantize_sextant over batches of random
-  >   pixel blocks.
-  > - color.rs: Color::to_indexed (the gem 256-color quantizer), Color::lerp, and the non-Linear
-  >   BlendModes via blit_alpha on a 1x1 grid (blend_color itself is crate-private, so blit_alpha is
-  >   the only public entry point that reaches it).
-  >
-  > All inputs use fastrand::Rng::with_seed(42) (or another fixed seed) for deterministic,
-  > --baseline-comparable runs, following grid_diff.rs's existing style. Each bench group sets
-  > criterion::Throughput::Elements to report cells/blocks/colors-touched alongside time, per the
-  > issue's ask for regressions in output size (not just speed) to stay visible.
-  >
-  > Closes #269
-
 **Full Changelog**:
 https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.2.1...retroglyph-core-v0.3.0
 
@@ -1338,23 +264,6 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.2.1...r
 - [b43e553](https://github.com/crates-lurey-io/retroglyph/commit/b43e5539812dfff9703a9eab99f424b7ce03a755)
   _(workspace)_ Per-crate test analytics flags + self-hosted coverage report by `@matanlurey` in
   [#254](https://github.com/crates-lurey-io/retroglyph/pull/254)
-
-  > - Split the workspace nextest JUnit report per crate flag before uploading to Codecov Test
-  >   Analytics (tools/split-junit-flags.py): a single combined-workspace upload can only carry one
-  >   flag before misattributing every crate's tests to every other crate's flag, so upload once per
-  >   flag instead of once for the whole workspace. Fixes the empty Flags filter on
-  >   https://app.codecov.io/gh/crates-lurey-io/retroglyph/tests.
-  > - disable_search: true on every one of those uploads: the Codecov CLI auto-discovers any
-  >   \*junit.xml on disk in addition to the explicit files: input, and the pre-split combined
-  >   junit.xml sits right next to the split files it came from. Caught this live in run 29653543638
-  >   (test job, "Upload test results to Codecov (unflagged)" step logged "Found 2 test_results
-  >   files to report") before merging -- without disable_search, every flag upload would have
-  >   silently re-included all 669 tests too.
-  > - Point each crate README's coverage badge at the repo's Flags tab instead of the generic
-  >   overview page (query-param deep links like ?flags[0]=x do not work against the current Codecov
-  >   app, verified live).
-  > - docs.yml: publish a self-hosted `cargo llvm-cov --html` report at
-  >   https://main.retroglyph.dev/coverage/ alongside the rustdocs, rebuilt on every push to main.
 
 **Full Changelog**:
 https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.2.0...retroglyph-core-v0.2.1
@@ -1371,177 +280,32 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.2.0...r
   _(core)_ Add SCREEN/DODGE/BURN/OVERLAY blend modes to blit_alpha by `@matanlurey` in
   [#234](https://github.com/crates-lurey-io/retroglyph/pull/234)
 
-  > - feat(core): add SCREEN/DODGE/BURN/OVERLAY blend modes to blit_alpha
-  >
-  > Adds BlendMode (Linear/Screen/Dodge/Burn/Overlay) as a new required parameter on
-  > Grid::blit_alpha, closing crates-lurey-io/retroglyph#112. The non-Linear modes delegate their
-  > per-channel math to alpha-blend's new blend_modes::SeparableBlendMode
-  > (crates-lurey-io/alpha-blend, branch blend-modes-112, pending crates.io publish -- pinned via a
-  > workspace [patch.crates-io] entry until then, removable once 0.2.2+ ships), converting u8 <->
-  > f32 at the boundary; Linear keeps its existing gem::rgb::Lerp path.
-  >
-  > Also fixes a bug found while building this: blit_alpha's Linear mode had src/dst swapped in its
-  > gem::rgb::Lerp call, so t=0.0 returned src and t=1.0 returned dst -- backwards from the doc
-  > comment's own '0.0 = keep destination, 1.0 = replace with src' contract. No prior tests covered
-  > blit_alpha, so this shipped unnoticed. Fixed to lerp dst -> src, matching both the doc and the
-  > new modes' shared t convention. Also fixes blit_alpha/blend_color's t==1.0 fast path, which used
-  > to skip straight to the raw source color for every mode; that's only valid for Linear (identity
-  > at t=1), so non-Linear modes now always run their mix formula.
-  >
-  > examples/examples/02_colors.rs gets a new blend-mode swatch section (warm source over cool
-  > destination, 16 alpha steps per mode); all three 02_colors snapshots (headless text, PNG, SVG)
-  > are regenerated.
-  >
-  > - chore(workspace): drop the alpha-blend git patch now that 0.2.2 is on crates.io
-
 - [d6ab3b1](https://github.com/crates-lurey-io/retroglyph/commit/d6ab3b18d5ec45ed210a8bd8de14b2ac84f324b1)
   _(core)_ Add subcell image-to-glyph blit utility by `@matanlurey` in
   [#232](https://github.com/crates-lurey-io/retroglyph/pull/232)
-
-  > Posterizes small pixel blocks to the best-matching Unicode block-element glyph
-  > (half-block/quadrant/sextant), per doryen-rs's blit_2x, libtcod, and notcurses's blitter chain
-  > -- closes crates-lurey-io/retroglyph#106.
-  >
-  > retroglyph_core::subcell adds quantize_half_block/quantize_quadrant/
-  >
-  > quantize_sextant:exhaustive search over every way to split an N-pixel block into a
-  > foreground/background set, scored by total squared color error, picking whichever glyph+colors
-  > best reconstruct the block. The glyph tables (indexed by row-major bit pattern rather than
-  > Unicode codepoint order) are adapted from ratatui-core's symbols::pixel module (MIT), since the
-  > sextant block in particular is not contiguous in Unicode and a hand-rolled table is exactly
-  > where subtle bugs hide.
-  >
-  > Adds examples/examples/16_subcell_image.rs: a procedurally generated concentric-ring scene
-  > rendered through all three fidelities side by side (no image file or tileset dependency), with
-  > headless/PNG/SVG snapshots. Notes the software backend's CP437-only embedded font renders
-  > quadrant/ sextant glyphs as solid blocks (a real, documented capability gap); the crossterm/SVG
-  > path renders the actual glyphs.
-  >
-  > Marks the roadmap item done in docs/ROADMAP.md.
 
 - [e6fc7ff](https://github.com/crates-lurey-io/retroglyph/commit/e6fc7ff098c6e28d56818bcefd8856a2448bb3b2)
   _(core)_ Implement Grid::clone and shrink Tile via an EGC side-table by `@matanlurey` in
   [#225](https://github.com/crates-lurey-io/retroglyph/pull/225)
 
-  > Closes #130.
-  >
-  > - Grid::clone: derive Clone on LayerBuf and Grid now that ixy 0.6.0-alpha.8+ implements
-  >   Clone/Copy for the RowMajor layout marker, removing the upstream-blocked TODO in grid.rs.
-  > - Tile layout shrink: move the (rare) multi-codepoint EGC grapheme text out of Tile and into a
-  >   sparse per-layer side-table on Grid (LayerBuf::extras), gated by a new TileFlags::HAS_EXTRA
-  >   bit. Tile drops from 32 to 20 bytes and becomes Copy. Tile::extra()/grapheme() are replaced by
-  >   Grid::grapheme(), since a bare Tile can no longer answer that on its own.
-  >
-  >   This requires widening Backend::draw/draw_layers items from (Pos, &Tile) to (Pos, &Tile,
-  >   Option<&str>) (and the layered equivalent) so backends that render the full grapheme cluster
-  >   (retroglyph-terminal, shared by crossterm and terminal-wasm) still can. Grid::layers()/diff()
-  >   are widened to match, and diff() is now hand-rolled instead of delegating to grixy's GridDiff,
-  >   so a grapheme-only change (same glyph/style/flags, different combining mark) is still detected
-  >   as a diff.
-  >
-  >   Both TODOs were tracked together in #130; the Backend-trait widening was previously deferred
-  >   pending 'a Backend-trait change already on the table for another reason' -- this is that
-  >   reason.
-
 - [e073dd9](https://github.com/crates-lurey-io/retroglyph/commit/e073dd9db007988f0cb4378de1989a643215b01b)
   _(core)_ Add Event::Paste and FocusGained/FocusLost variants by `@matanlurey` in
   [#190](https://github.com/crates-lurey-io/retroglyph/pull/190)
-
-  > Adds Event::Paste(String), Event::FocusGained, and Event::FocusLost to retroglyph-core, made
-  > possible by the existing #[non_exhaustive] on Event. Removes Copy from Event's derives since
-  > String is not Copy; all existing consumers already clone or borrow, and the fallout is fixed
-  > here (a handful of test call sites that relied on Event: Copy now clone explicitly).
-  >
-  > Wires the new variants into both existing backends:
-  >
-  > - crossterm: from_crossterm_event now maps CE::Paste/FocusGained/FocusLost. Since crossterm only
-  >   emits these when the terminal has been sent EnableBracketedPaste/EnableFocusChange,
-  >   CrosstermOptions gains matching focus_change/bracketed_paste toggles (default true) alongside
-  >   the existing mouse_capture/kitty_protocol pattern, so the new Event variants are reachable
-  >   rather than dead code.
-  > - winit: WindowEvent::Focused(bool) now pushes FocusGained/FocusLost. Winit has no native paste
-  >   event (Ime::Commit is IME composition, not clipboard paste), so windowed paste support is left
-  >   for a follow-up.
-  >
-  > Removes the now-implemented Paste/FocusGained/FocusLost rows from docs/ROADMAP.md's Adopt table.
-  >
-  > Fixes #107.
 
 - [f1ffa31](https://github.com/crates-lurey-io/retroglyph/commit/f1ffa315dcc0817656cd6a7ca5990219eeeff4cc)
   _(core)_ Add RGB to indexed/ANSI downgrade helper by `@matanlurey` in
   [#188](https://github.com/crates-lurey-io/retroglyph/pull/188)
 
-  > Adds Color::to_indexed() and Color::to_ansi(), which quantize an RGB color down to the 256-color
-  > palette or the 16-color ANSI palette.
-  >
-  > With the gem feature (default), quantization uses perceptual distance in the Oklab color space,
-  > which correlates much better with human color perception than raw RGB distance. Without gem,
-  > quantization falls back to euclidean RGB distance against the 6x6x6 color cube, grayscale ramp,
-  > and 16 ANSI colors. Both methods are unconditionally public regardless of feature flags; only
-  > the underlying distance metric changes.
-  >
-  > Non-RGB colors (Default, Ansi, Indexed) pass through unchanged. Ties are resolved by preferring
-  > the lower palette index.
-  >
-  > retroglyph-core and retroglyph-terminal still do not quantize colors on their own; backends opt
-  > in by calling these methods explicitly.
-
 - [d600806](https://github.com/crates-lurey-io/retroglyph/commit/d600806d827fdfa7d76eeaab51cc156807714a46)
   _(core)_ Mark evolving input/event enums non_exhaustive by `@matanlurey`
-
-  > Event, KeyCode, MouseButton, and MouseEventKind are all expected to gain variants as backend
-  > input coverage grows (Event::Paste/FocusGained/FocusLost are already planned;
-  > KeyCode/MouseButton/MouseEventKind each lag real upstream data winit/crossterm already expose,
-  > e.g. side mouse buttons and horizontal scroll). Without #[non_exhaustive] each future addition
-  > would be a breaking change and force a major bump for a purely additive change.
-  >
-  > SystemTheme and Flow were considered and deliberately left exhaustive: SystemTheme's own doc
-  > comment already argues no third state should exist, and a hypothetical Flow::Paused would need
-  > new driver-loop semantics anyway (a redesign, not an additive case), so a major bump is the
-  > right signal for either rather than something #[non_exhaustive] should paper over.
-  >
-  > Color, AnsiColor, HAlign, and VAlign stay exhaustive as genuinely closed encodings (unchanged
-  > from before this commit).
-  >
-  > Fixes required by the two enums that do change:
-  >
-  > - widgets::interact::pointer::button_slot now returns Option<usize> instead of aliasing an
-  >   unknown future MouseButton onto an existing slot, which would have silently misreported that
-  >   button's state.
-  > - 04_mouse example's match on MouseEventKind gains a wildcard arm.
-  >
-  > No longer marked as a Conventional Commits breaking change (dropped the !): cargo-semver-checks
-  > / release-plz's semver_check independently detects and correctly per-crate-scopes this exact
-  > class of break (verified: retroglyph-core still computes 0.2.0 from the
-  > enum_marked_non_exhaustive finding alone, while retroglyph-widgets -- whose own API is
-  > unaffected -- correctly gets only a 0.1.1 patch instead of being dragged to 0.2.0 by a
-  > commit-message marker that doesn't distinguish which crate it applies to). See RELEASING.md's
-  > revised breaking-change policy.
 
 - [55f97ae](https://github.com/crates-lurey-io/retroglyph/commit/55f97ae7bf3938739cb8d9d450f1f467c6e823fb)
   _(terminal-wasm)_ Support paste/clipboard events by `@matanlurey` in
   [#229](https://github.com/crates-lurey-io/retroglyph/pull/229)
 
-  > Adds wasm*terminal_push_paste(handle, text), pushing Event::Paste directly -- unlike
-  > push_key/push_mouse there's no decode*\* step needed since String is already
-  > wasm-bindgen-FFI-safe, so a paste can't be misread as N individual keystrokes triggering
-  > single-key game commands.
-  >
-  > Closes #98.
-  >
-  > Also simplifies Event::Paste's doc comment, which previously hardcoded an enumerated list of
-  > emitting backends that's now out of date; it just notes paste isn't emitted by all backends and
-  > points to each backend's own docs.
-  >
-  > Filed #228 to track the same support for the windowed (winit) backend, which has no native
-  > paste/clipboard event and needs a real dependency decision (e.g. arboard) plus a separate wasm32
-  > web-canvas-listener path -- out of scope here.
-
 - [6d5ba48](https://github.com/crates-lurey-io/retroglyph/commit/6d5ba48fd8292bf3ce7eb65ffa90aff286217ba4)
   _(window)_ Expose EventLoopProxy for cross-thread event injection by `@matanlurey` in
   [#199](https://github.com/crates-lurey-io/retroglyph/pull/199)
-
-  > feat(window): expose EventLoopProxy for cross-thread event injection
 
 - [b8563f4](https://github.com/crates-lurey-io/retroglyph/commit/b8563f4e0fa68067f5087cbfad0d876630ec5b77)
   _(window)_ Add Super/Meta modifier support to KeyModifiers by `@matanlurey` in
@@ -1553,32 +317,9 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.2.0...r
   _(core)_ Rename Terminal::read to read_blocking by `@matanlurey` in
   [#221](https://github.com/crates-lurey-io/retroglyph/pull/221)
 
-  > Terminal::read() panicked when called on drained non-blocking backends (e.g. Headless) with no
-  > signal in the name that this could happen. Rename to read_blocking() so the contract is
-  > explicit; poll() and drain_events() remain the non-panicking alternatives.
-  >
-  > Closes #113
-
 - [50b274f](https://github.com/crates-lurey-io/retroglyph/commit/50b274f07527c62bd5af9a46c90cc7a6f03f081c)
   _(workspace)_ Squash 3+ blank lines and allow MD037 in generated changelogs by `@matanlurey` in
   [#247](https://github.com/crates-lurey-io/retroglyph/pull/247)
-
-  > release-plz's per-crate CHANGELOG.md is prepended above the hand-written 0.1.0 entry using
-  > cliff.toml's body template. The tail block that renders the `**Full Changelog**: ...` link can't
-  > be trimmed with Tera's `-` whitespace markers without also swallowing the blank line that's
-  > supposed to separate it from the next heading -- that separator has to come from literal
-  > template text sitting between nested {% if %} blocks -- so it leaves 3 blank lines at that
-  > boundary instead of 1. Add a postprocessor that squashes any run of 3+ newlines down to a single
-  > blank line, matching Keep a Changelog / prettier / markdownlint's MD012 expectation.
-  >
-  > Also extend the per-changelog markdownlint-disable comment (both the already-checked-in header
-  > on all 7 crates' CHANGELOG.md, and cliff.toml's header template for any crate whose changelog
-  > doesn't exist yet) with no-space-in-emphasis: commit bodies are freeform prose and can contain a
-  > literal _ or \* adjacent to other text (e.g. `wasm_terminal_\* FFI`, `manual \_style override`)
-  > that markdownlint's MD037 misreads as unbalanced emphasis markers. That's not something a
-  > template fix can prevent, since it depends on historical commit message content.
-  >
-  > Fixes the release-plz standing PR's format/lint CI failure .
 
 ### Documentation
 
@@ -1589,47 +330,12 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.2.0...r
 - [51f9637](https://github.com/crates-lurey-io/retroglyph/commit/51f9637350293b52bc72e044c5076a5ac3a01077)
   _(core)_ Document grid multi-layer draw order and compositing semantics by `@matanlurey` in
   [#208](https://github.com/crates-lurey-io/retroglyph/pull/208)
-  > Closes #99. Expands the grid module doc to cover:
-  >
-  > - layer draw order (ascending id, layer 0 first) and where compositing happens for cell vs.
-  >   pixel backends
-  > - the EMPTY flag: untouched cells are transparent, an explicit space is opaque and erases
-  >   content beneath it; background follows a separate non-Default rule
-  > - no short-circuiting: flatten_into and the software backend's per-pixel compositor always walk
-  >   every allocated layer, O(max_layer) per cell
-  > - allocation cost is identical regardless of layer id (one width x height buffer per written
-  >   layer); the layer id only affects steady-state iteration cost via max_layer, which never
-  >   shrinks
 
 ### Continuous Integration
 
 - [1d81906](https://github.com/crates-lurey-io/retroglyph/commit/1d81906ea8e380d64de0e05345f103627ef49406)
   _(workspace)_ Automated per-crate release-plz workflow by `@matanlurey` in
   [#80](https://github.com/crates-lurey-io/retroglyph/pull/80)
-
-  > - ci(release): adopt per-crate release-plz flow with PR-title enforcement
-  >
-  > Re-enable release-plz's standing Release PR (release-pr + release jobs) so version bumps and
-  > per-crate changelogs are computed from conventional PR-title history and published on Release-PR
-  > merge; developers never push tags.
-  >
-  > - release-plz.toml: per-crate changelogs (drop changelog_path), semver_check=true
-  > - cliff.toml: skip-changelog via github.pr_labels label + changelog: ignore footer
-  > - release-plz.yml: two-job release-pr/release, concurrency guards, trusted publishing
-  > - check-semver.yml: gate only undeclared breaks (skip on title ! or semver-override)
-  > - pr-title.yml: enforce Conventional Commit PR titles + scope list
-  >
-  > * docs(changelog): split workspace changelog into per-crate files
-  >
-  > Per-crate release-plz needs a CHANGELOG.md per crate. Seed each with its hand-written 0.1.0
-  > entry; the root CHANGELOG.md becomes an index.
-  >
-  > - docs: rewrite RELEASING.md for the automated release flow
-  >
-  > Document the per-crate, release-plz-driven flow: conventional PR titles, squash-merge, standing
-  > Release PR as the single approval gate, breaking declared via title !, cargo-semver-checks
-  > roles, PR labels, and no pre-1.0 prerelease channel. Update AGENTS.md's commit-message section:
-  > enforcement now lives in pr-title.yml, not local hooks.
 
 **Full Changelog**:
 https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.1.0...retroglyph-core-v0.2.0
