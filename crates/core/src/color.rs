@@ -955,6 +955,9 @@ fn parse_hex(s: &str) -> Option<(u8, u8, u8)> {
             Some((r * 17, g * 17, b * 17))
         }
         6 => {
+            if !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+                return None;
+            }
             let r = u8::from_str_radix(hex.get(0..2)?, 16).ok()?;
             let g = u8::from_str_radix(hex.get(2..4)?, 16).ok()?;
             let b = u8::from_str_radix(hex.get(4..6)?, 16).ok()?;
@@ -1039,7 +1042,10 @@ impl core::str::FromStr for Color {
         if let Some(color) = parse_ansi_name(&normalized) {
             return Ok(Self::Ansi(color));
         }
-        if let Ok(index) = normalized.parse::<u8>() {
+        if normalized.bytes().all(|b| b.is_ascii_digit())
+            && !normalized.is_empty()
+            && let Ok(index) = normalized.parse::<u8>()
+        {
             return Ok(Self::Indexed(index));
         }
         if let Some((r, g, b)) = parse_hex(trimmed) {
@@ -1673,6 +1679,14 @@ mod tests {
         assert!("#gg0000".parse::<Color>().is_err());
         assert!("#12345".parse::<Color>().is_err());
         assert!("256".parse::<Color>().is_err());
+    }
+
+    #[test]
+    fn from_str_rejects_plus_signed_index_and_hex() {
+        // `-` is a documented separator (stripped like `_`/` `), so `"-5"` legitimately
+        // normalizes to `"5"`; only `+`, which isn't a separator, must be rejected.
+        assert!("+5".parse::<Color>().is_err());
+        assert!("#+f0000".parse::<Color>().is_err());
     }
 
     #[cfg(feature = "serde")]
