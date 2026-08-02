@@ -9,6 +9,8 @@
 //! Unlike the `R8` glyph atlas (one coverage byte, grid-packed 16x16 per layer), sprites are full
 //! RGBA and variable-sized, so they get their own layer each and their own draw pass.
 
+// `redundant_pub_crate` fires on `pub(crate)` items in this private module; the module boundary
+// is intentional, so it's allowed crate-locally.
 #![allow(clippy::redundant_pub_crate)]
 
 use retroglyph_core::Tint;

@@ -78,7 +78,8 @@ pub trait App<B: Backend> {
     /// method returns, unless it returned [`Flow::Idle`], in which case the driver skips
     /// [`present`](Terminal::present) entirely. Calling `present` yourself inside `update` remains
     /// fine (the driver detects it already ran via [`present_count`](Terminal::present_count) and
-    /// skips its own call) but is never required.
+    /// skips its own call) but is never required. [`run_blocking`] and [`run_blocking_with`] link
+    /// back here rather than restating this contract.
     fn update(&mut self, term: &mut Terminal<B>, frame: &Frame) -> Flow;
 }
 
@@ -102,13 +103,11 @@ pub fn step<B: Backend, A: App<B>>(term: &mut Terminal<B>, app: &mut A, frame: &
 /// The terminal is owned and dropped when the loop exits, so backend teardown
 /// (for example crossterm's terminal restore) runs on the way out.
 ///
-/// Presents automatically after [`App::update`] returns, the same as `retroglyph-window`'s
-/// windowed drivers: skipped entirely on [`Flow::Idle`], and skipped as a redundant no-op if
-/// `update` already presented itself. Equivalent to `run_blocking_with(term, app,
-/// RunOptions::default())`: on [`Flow::Idle`], blocks on input rather than calling `update`
-/// again immediately, so a turn-based app that's idle most of the time costs approximately
-/// nothing. Use [`run_blocking_with`] with [`RunOptions::animated`] for a continuously-rendering
-/// app instead.
+/// See [`App::update`] for the present/idle contract this and every other driver follows.
+/// Equivalent to `run_blocking_with(term, app, RunOptions::default())`: on [`Flow::Idle`], blocks
+/// on input rather than calling `update` again immediately, so a turn-based app that's idle most
+/// of the time costs approximately nothing. Use [`run_blocking_with`] with [`RunOptions::animated`]
+/// for a continuously-rendering app instead.
 ///
 /// # Errors
 ///

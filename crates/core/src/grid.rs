@@ -99,33 +99,12 @@
 //! layer. Both `flatten_into` (crate-private) and the software
 //! backend's per-pixel compositor walk layers `0..=max_layer` in order for
 //! *every* cell, unconditionally, even if a fully opaque tile on layer 5
-//! makes layers 6-50 invisible at that position. Cost is `O(max_layer)` per
-//! cell, not `O(topmost opaque layer)`. Painting one fully opaque layer 250
-//! over the whole grid still walks (and `EMPTY`-checks) layers 1-249 on
-//! every present.
-//!
-//! ## Allocation cost: layer 1 vs. layer 200
-//!
-//! Writing to a layer for the first time allocates one `width x height`
-//! buffer of [`Tile`]s, the same cost regardless of the layer's id, plus a
-//! one-time growth of the layer table's `Vec<Option<LayerBuf>>` up to that
-//! layer's id (see [`Grid::new`]): the table starts at a single slot (layer
-//! 0) and only grows as far as the highest layer id ever written, so a
-//! single/few-layer `Grid` never pays for slots it never touches. Writing to
-//! layer 200 first grows the table to 201 slots, then allocates layer 200's
-//! buffer; the untouched slots 1-199 in between are a cheap `None`.
-//!
-//! What the layer id *does* affect is steady-state iteration cost, via
-//! [`max_layer`](Grid::max_layer): every present, diff, and full-grid
-//! iteration walks `0..=max_layer`, skipping unallocated slots with an O(1)
-//! `None` check. `max_layer` only grows. Clearing a layer
-//! ([`clear`](Grid::clear)) does not deallocate it or lower `max_layer`. So
-//! writing once to layer 200 and never touching layers 1-199 means every
-//! future frame's compositing pass walks past 199 unallocated slots to reach
-//! it. That walk is cheap (a pointer-sized `None` check per skipped layer)
-//! but not free; prefer low, contiguous layer ids for frequently-updated
-//! content and reserve high ids for rarely-touched overlays (e.g. a debug
-//! HUD pinned to layer 255).
+//! makes layers 6-50 invisible at that position. An opaque high layer hides
+//! the layers below it visually but never occludes them from the pass, so
+//! prefer low, contiguous layer ids for frequently-updated content and
+//! reserve high ids for rarely-touched overlays (e.g. a debug HUD pinned to
+//! layer 255). See [`max_layer`](Grid::max_layer) for the iteration cost this
+//! implies and [`Grid::new`] for the allocation cost of a first write.
 
 use crate::backend::DrawCell;
 use crate::color::Color;
@@ -559,6 +538,12 @@ impl Grid {
     /// Grows the layer-table `Vec` up to `id + 1` slots on demand, rather than the table always
     /// holding all 256 possible slots (see retroglyph#264): a `Grid` that only ever writes to
     /// layer 0, or a handful of low ids, never pays for the 250+ slots it never touches.
+    ///
+    /// A first write allocates one `width x height` buffer of [`Tile`]s, the same cost regardless
+    /// of the layer's id, plus that one-time table growth up to `id + 1`. Writing to layer 200
+    /// first grows the table to 201 slots and allocates layer 200's buffer; the untouched slots
+    /// 1-199 in between are a cheap `None`. What the id costs afterward is steady-state iteration,
+    /// not allocation: see [`max_layer`](Self::max_layer).
     fn layer_or_alloc(&mut self, id: u8) -> &mut LayerBuf {
         let idx = usize::from(id);
         if idx >= self.layers.len() {
@@ -676,8 +661,17 @@ impl Grid {
     /// Returns the highest layer id that has ever been allocated.
     ///
     /// Always at least 0 (layer 0 is always allocated). This only grows:
-    /// clearing a layer does not deallocate it, so the value does not shrink
-    /// once a higher layer has been written.
+    /// clearing a layer ([`clear`](Self::clear)) does not deallocate it, so
+    /// the value does not shrink once a higher layer has been written.
+    ///
+    /// This is the layer id's steady-state cost: every present, diff, and
+    /// full-grid iteration walks `0..=max_layer`, skipping unallocated slots
+    /// with an O(1) `None` check, so compositing is `O(max_layer)` per cell
+    /// rather than `O(topmost opaque layer)`. Writing once to layer 200 and
+    /// never touching layers 1-199 means every future frame walks past 199
+    /// `None` slots to reach it: cheap per skipped layer, but not free, which
+    /// is why low, contiguous ids are preferred for frequently-updated
+    /// content.
     #[must_use]
     pub const fn max_layer(&self) -> u8 {
         self.max_layer

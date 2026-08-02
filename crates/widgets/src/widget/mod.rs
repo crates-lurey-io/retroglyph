@@ -10,11 +10,16 @@
 //!
 //! A few widgets share logic: [`Gauge`] and [`StatBar`] both delegate to a
 //! crate-private `bar` module, and [`Sparkline`]/[`Gauge`]/[`StatBar`] all
-//! use [`Meter`] for their ratio-to-color ramp. [`Paragraph`] additionally
-//! implements [`Measure`], so a caller can report a height before
-//! rendering; with the `egc` feature enabled it reports that height via
+//! use [`Meter`] for their ratio-to-color ramp. [`Paragraph`], [`List`],
+//! [`Table`], [`Log`], and [`Panel`] additionally implement [`Measure`], so
+//! a caller can report a height before rendering instead of guessing a
+//! fixed height or a full-remaining-space fill: [`Paragraph`] reports its
+//! wrapped line count (with the `egc` feature enabled, via
 //! `retroglyph_core::layout::TextLayout`'s grapheme-aware word-wrap,
-//! otherwise via its own `char`-boundary-safe fallback.
+//! otherwise via its own `char`-boundary-safe fallback); [`List`]/[`Table`]/
+//! [`Log`] report their item/row/message count directly, since none of them
+//! wrap; [`Panel`] reports its border-plus-padding chrome height, since it
+//! owns no content of its own to measure.
 use retroglyph_core::Frame;
 
 use crate::Response;

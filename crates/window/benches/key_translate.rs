@@ -5,13 +5,13 @@
 //! outside the crate: the same constraint documented on `key_code_from_logical` in
 //! `translate.rs`, which is why that crate's own unit tests bypass `translate_key` too. This
 //! benchmarks the two pieces of that same per-key hot path that *are* public and constructible:
-//! `key_event_kind` (state/repeat -> `KeyEventKind`) and `translate_modifiers` (winit modifier
+//! `translate_key_event_kind` (state/repeat -> `KeyEventKind`) and `translate_modifiers` (winit modifier
 //! state -> `KeyModifiers`), both called once per key event in `handle_window_event`.
 
 #![allow(missing_docs)]
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use retroglyph_window::winit::translate::{key_event_kind, translate_modifiers};
+use retroglyph_window::winit::translate::{translate_key_event_kind, translate_modifiers};
 use std::hint::black_box;
 use winit::event::ElementState;
 use winit::keyboard::ModifiersState;
@@ -61,7 +61,10 @@ fn bench_key_event_kind(c: &mut Criterion) {
     c.bench_function("key_event_kind/10k_keys", |b| {
         b.iter(|| {
             for &(state, repeat) in &states {
-                black_box(key_event_kind(black_box(state), black_box(repeat)));
+                black_box(translate_key_event_kind(
+                    black_box(state),
+                    black_box(repeat),
+                ));
             }
         });
     });

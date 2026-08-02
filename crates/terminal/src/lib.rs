@@ -106,18 +106,9 @@ use std::io::{self, Write};
 
 /// How aggressively [`TerminalRenderer`] quantizes [`Color`] before emitting an SGR sequence.
 ///
-/// Applied as a final degradation step at draw time, on top of whatever [`Color`] a [`Tile`]
-/// already carries: [`Color::Ansi`]/[`Color::Indexed`] are passed through untranslated at every
-/// level except [`ColorSupport::None`]; only [`Color::Rgb`] is actually downgraded (via
-/// [`Color::to_indexed`]/[`Color::to_ansi`]), since it is the only variant with more precision
-/// than a limited terminal can display. See the crate-level "RGB color fallback on 256-color
-/// terminals" doc section for the full contract and [`TerminalRenderer::with_color_support`]/
-/// [`TerminalRenderer::set_color_support`] to configure it.
-///
-/// This crate does not detect terminal capabilities itself; see
-/// [`retroglyph-crossterm`](https://docs.rs/retroglyph-crossterm)'s `CrosstermOptions` for a
-/// backend that auto-detects this from `$NO_COLOR`/`$COLORTERM`/`$TERM` and passes the result
-/// through.
+/// See the crate-level "RGB color fallback on 256-color terminals" doc section for the full
+/// contract, and [`TerminalRenderer::with_color_support`]/[`TerminalRenderer::set_color_support`]
+/// to configure it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 #[non_exhaustive]
 pub enum ColorSupport {
@@ -293,9 +284,8 @@ impl<W: Write> TerminalRenderer<W> {
         self.color_support
     }
 
-    /// Sets the [`ColorSupport`] level, controlling how [`Color::Rgb`] tiles are quantized before
-    /// being written. See the crate-level "RGB color fallback on 256-color terminals" doc
-    /// section for the full contract.
+    /// Sets the [`ColorSupport`] level. See the crate-level "RGB color fallback on 256-color
+    /// terminals" doc section for the full contract.
     pub const fn set_color_support(&mut self, color_support: ColorSupport) {
         self.color_support = color_support;
     }
@@ -396,16 +386,7 @@ impl<W: Write> TerminalRenderer<W> {
     /// a stream of `(Pos, &Tile, Option<&str>)` items to render, the last being the tile's full
     /// grapheme text when it has one. As with `Output::draw`, that trailing `Option<&str>` is
     /// only ever `Some` when this crate's `egc` feature is enabled; without `egc` it is always
-    /// `None` and is ignored here (see the `let _ = extra;` below). Does not flush; call
-    /// [`flush`](Self::flush) after.
-    ///
-    /// Whether [plain mode](Self::set_plain_mode) is on is checked once here, not once per cell --
-    /// it dispatches once to one of two internal, disjoint code paths for the rest of the call.
-    /// The whole call is rendered into an internal scratch buffer first, then written to `writer`
-    /// with a single [`Write::write_all`], rather than up to four small `write!` calls per cell
-    /// (see retroglyph#271); this also means `writer` no longer needs to be pre-wrapped in a
-    /// `BufWriter` for reasonable syscall behavior, though nothing stops a caller from still doing
-    /// so.
+    /// `None`. Does not flush; call [`flush`](Self::flush) after.
     ///
     /// # Errors
     ///
@@ -414,6 +395,12 @@ impl<W: Write> TerminalRenderer<W> {
     where
         I: Iterator<Item = DrawCell<'a>>,
     {
+        // Dispatch once here to one of two disjoint code paths, rather than re-checking `plain`
+        // per cell. Both paths render into `self.buf` first and this writes it out with a single
+        // `Write::write_all`, rather than up to four small `write!` calls per cell (see
+        // retroglyph#271); this also means `writer` no longer needs to be pre-wrapped in a
+        // `BufWriter` for reasonable syscall behavior, though nothing stops a caller from still
+        // doing so.
         if self.plain {
             self.draw_plain(content)?;
         } else {

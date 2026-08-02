@@ -11,6 +11,8 @@
 //! The renderer never sees characters: [`GlyphCache::resolve`] hands back a `u16` atlas slot that
 //! goes straight into the instance buffer.
 
+// `redundant_pub_crate` fires on `pub(crate)` items in this private module; the module boundary
+// is intentional, so it's allowed crate-locally.
 #![allow(clippy::redundant_pub_crate)]
 
 use crate::atlas::{AtlasData, addressable_glyphs};

@@ -340,6 +340,8 @@ impl core::fmt::Display for InvalidAnsiIndex {
     }
 }
 
+impl core::error::Error for InvalidAnsiIndex {}
+
 impl TryFrom<u8> for AnsiColor {
     type Error = InvalidAnsiIndex;
 
@@ -555,9 +557,7 @@ impl Color {
 
     /// Darkens a color by `amount` (0.0 = no change, 1.0 = black).
     ///
-    /// Non-`Rgb` variants are resolved to `(r, g, b)` via [`Color::resolve_rgb`] before the
-    /// transform is applied, rather than being returned unchanged. [`Color::Default`] has no
-    /// intrinsic RGB value, so it resolves to `(0, 0, 0)`.
+    /// See [`Color::lighten`] for how non-`Rgb` variants are resolved before the transform.
     #[cfg(feature = "indexed-quant")]
     #[must_use]
     pub fn darken(self, amount: f32) -> Self {
@@ -575,9 +575,7 @@ impl Color {
 
     /// Increases saturation of a color by `amount` (0.0–1.0).
     ///
-    /// Non-`Rgb` variants are resolved to `(r, g, b)` via [`Color::resolve_rgb`] before the
-    /// transform is applied, rather than being returned unchanged. [`Color::Default`] has no
-    /// intrinsic RGB value, so it resolves to `(0, 0, 0)`.
+    /// See [`Color::lighten`] for how non-`Rgb` variants are resolved before the transform.
     #[cfg(feature = "indexed-quant")]
     #[must_use]
     pub fn saturate(self, amount: f32) -> Self {
@@ -595,9 +593,7 @@ impl Color {
 
     /// Decreases saturation of a color by `amount` (0.0–1.0).
     ///
-    /// Non-`Rgb` variants are resolved to `(r, g, b)` via [`Color::resolve_rgb`] before the
-    /// transform is applied, rather than being returned unchanged. [`Color::Default`] has no
-    /// intrinsic RGB value, so it resolves to `(0, 0, 0)`.
+    /// See [`Color::lighten`] for how non-`Rgb` variants are resolved before the transform.
     #[cfg(feature = "indexed-quant")]
     #[must_use]
     pub fn desaturate(self, amount: f32) -> Self {
@@ -615,9 +611,7 @@ impl Color {
 
     /// Returns the complementary color (hue shifted by 180 degrees).
     ///
-    /// Non-`Rgb` variants are resolved to `(r, g, b)` via [`Color::resolve_rgb`] before the
-    /// transform is applied, rather than being returned unchanged. [`Color::Default`] has no
-    /// intrinsic RGB value, so it resolves to `(0, 0, 0)`.
+    /// See [`Color::lighten`] for how non-`Rgb` variants are resolved before the transform.
     #[cfg(feature = "indexed-quant")]
     #[must_use]
     pub fn complement(self) -> Self {

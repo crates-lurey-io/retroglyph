@@ -1,12 +1,12 @@
 //! Benchmarks for `winit::translate`'s pixel/cell conversion helpers
 //! (retroglyph#299): `on_cursor_moved`/`on_mouse_input`/`on_mouse_wheel` (`run.rs`) call
-//! `pixel_to_cell` and `physical_pos_from` on every pointer event, so both are on the same hot
+//! `translate_pixel_to_cell` and `translate_physical_pos` on every pointer event, so both are on the same hot
 //! path the #294 cursor-moved coalescing fix targets.
 
 #![allow(missing_docs)]
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use retroglyph_window::winit::translate::{physical_pos_from, pixel_to_cell};
+use retroglyph_window::winit::translate::{translate_physical_pos, translate_pixel_to_cell};
 use std::hint::black_box;
 
 /// A deterministic stream of pointer positions, seeded so results are stable across runs.
@@ -30,7 +30,7 @@ fn bench_pixel_to_cell(c: &mut Criterion) {
     c.bench_function("pixel_to_cell/10k_positions", |b| {
         b.iter(|| {
             for &(x, y) in &positions {
-                black_box(pixel_to_cell(black_box(x), black_box(y), 8, 16));
+                black_box(translate_pixel_to_cell(black_box(x), black_box(y), 8, 16));
             }
         });
     });
@@ -41,7 +41,7 @@ fn bench_physical_pos_from(c: &mut Criterion) {
     c.bench_function("physical_pos_from/10k_positions", |b| {
         b.iter(|| {
             for &(x, y) in &positions {
-                black_box(physical_pos_from(black_box(x), black_box(y)));
+                black_box(translate_physical_pos(black_box(x), black_box(y)));
             }
         });
     });

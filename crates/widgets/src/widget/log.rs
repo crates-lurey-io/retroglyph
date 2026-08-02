@@ -2,7 +2,7 @@
 use retroglyph_core::Rect;
 use retroglyph_core::text::Line;
 
-use super::{PrintLine, Widget};
+use super::{Measure, PrintLine, Widget};
 use crate::Surface;
 
 /// The tail of `messages` that fits in the area it's rendered into, oldest
@@ -63,6 +63,16 @@ impl<'a> Log<'a> {
     }
 }
 
+impl Measure for Log<'_> {
+    /// One row per message; `width` is ignored, since lines are truncated rather than wrapped.
+    /// This is the height needed to show the full backlog, not just the current `offset` window.
+    fn height_for(&self, _width: u16) -> u16 {
+        #[allow(clippy::cast_possible_truncation)]
+        let height = self.messages.len().min(usize::from(u16::MAX)) as u16;
+        height
+    }
+}
+
 impl Widget for Log<'_> {
     fn render(&self, surface: &mut Surface<'_>) {
         let (width, height) = (surface.width(), surface.height());
@@ -117,6 +127,12 @@ mod tests {
 
         assert_eq!(grid[Pos::new(0, 0)].glyph(), 'c'); // "charlie"
         assert_eq!(grid[Pos::new(0, 1)].glyph(), 'd'); // "delta"
+    }
+
+    #[test]
+    fn height_for_is_the_message_count() {
+        let messages = lines(&["alpha", "bravo", "charlie", "delta"]);
+        assert_eq!(Log::new(&messages).height_for(80), 4);
     }
 
     #[test]

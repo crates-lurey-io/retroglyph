@@ -1,8 +1,8 @@
 //! [`Table`]: a fixed-column, scrollable table with a highlighted row.
 use retroglyph_core::{Color, Rect, Style};
 
-use super::StatefulWidget;
 use super::window::visible_window;
+use super::{Measure, StatefulWidget};
 use crate::ListState;
 use crate::Surface;
 use crate::Theme;
@@ -111,15 +111,10 @@ impl<'a> Table<'a> {
     /// on `theme.accent`: the same bright-on-accent highlight [`super::List::theme`] and
     /// [`super::Button::theme`] use.
     ///
-    /// `header_style`/`row_style` always set an explicit background rather than leaving it at
-    /// [`Style::new()`]'s default: an unset background isn't "transparent" once a real backend
-    /// draws it (a bare `Color::Default` cell paints as solid black behind the glyph, not
-    /// whatever was there before; see `retroglyph-software`'s `DEFAULT_BG`), so this widget
-    /// assumes it's drawn on `theme.panel_bg` (true when composed with a themed
-    /// [`super::Panel`]/[`super::Modal`], the common case) rather than risk a black box behind
-    /// every row on a light [`Theme`]. Drawing this table directly on the raw screen background
-    /// instead of inside a themed panel needs a manual `.header_style(...)`/`.row_style(...)`
-    /// override afterwards.
+    /// `header_style`/`row_style` always set an explicit background for the same reason, and with
+    /// the same caveat, as [`super::Gauge::theme`]; see its doc comment for the full explanation.
+    /// Drawing this table directly on the raw screen background instead of inside a themed panel
+    /// needs a manual `.header_style(...)`/`.row_style(...)` override afterwards.
     ///
     /// Call before any manual [`Table::header_style`]/[`Table::row_style`]/
     /// [`Table::selected_style`] override you want to keep.
@@ -188,6 +183,16 @@ impl StatefulWidget for Table<'_> {
                 },
             );
         }
+    }
+}
+
+impl Measure for Table<'_> {
+    /// One row per data row, plus the always-drawn header row; `width` is ignored, since cells
+    /// are truncated per column rather than wrapped.
+    fn height_for(&self, _width: u16) -> u16 {
+        #[allow(clippy::cast_possible_truncation)]
+        let rows = self.rows.len().min(usize::from(u16::MAX)) as u16;
+        rows.saturating_add(1)
     }
 }
 
@@ -322,6 +327,17 @@ mod tests {
         let row0_bg = grid[Pos::new(0, 1)].style().background();
         let row1_bg = grid[Pos::new(0, 2)].style().background();
         assert_eq!(row0_bg, row1_bg); // neither visible row is highlighted
+    }
+
+    #[test]
+    fn height_for_is_row_count_plus_the_header_row() {
+        let headers = ["Name"];
+        let widths = [10u16];
+        let rows = rows(&["Alpha", "Bravo", "Charlie"]);
+        let rows = row_refs(&rows);
+        let table = Table::new(&headers, &widths, &rows);
+
+        assert_eq!(table.height_for(80), 4); // 3 rows + 1 header
     }
 
     #[test]

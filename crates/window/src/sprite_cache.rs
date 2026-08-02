@@ -1,4 +1,4 @@
-//! Decoded sprite cache: PNG decoding, tile extraction, and runtime lookup.
+//! Decoded sprite cache: sprite sheet decoding, tile extraction, and runtime lookup.
 //!
 //! The [`SpriteCache`] is built from [`TilesetOptions`]
 //! and provides O(1) lookup of decoded RGBA8 sprites by codepoint.
@@ -112,21 +112,21 @@ impl SpriteCache {
         self.sprites.is_empty()
     }
 
-    /// Loads a tileset, decoding the PNG and inserting all sprites.
+    /// Loads a tileset, decoding the sprite sheet and inserting all sprites.
     ///
     /// On codepoint collision, the new sprite replaces the old one and a
     /// message is logged via `log::warn`.
     ///
     /// # Errors
     ///
-    /// Returns [`TilesetError::PngDecode`] if the bytes are not a valid PNG,
+    /// Returns [`TilesetError::ImageDecode`] if the bytes are not a valid image,
     /// [`TilesetError::ZeroTileSize`] if `opts.tile_width` or `opts.tile_height`
     /// is 0, or [`TilesetError::InvalidDimensions`] if the decoded image
     /// dimensions are not evenly divisible by the tile size.
     #[allow(clippy::cast_possible_truncation, clippy::cast_lossless)]
     pub fn load(&mut self, opts: &TilesetOptions) -> Result<(), TilesetError> {
         let img = image::load_from_memory(&opts.bytes)
-            .map_err(|e| TilesetError::PngDecode(e.to_string()))?
+            .map_err(|e| TilesetError::ImageDecode(e.to_string()))?
             .into_rgba8();
 
         let img_w = img.width();
@@ -391,7 +391,7 @@ mod tests {
     #[test]
     fn sprite_cache_load_cp437_sheet() {
         let png = make_test_png(16, 16, 16, 16); // 256 tiles
-        let opts = TilesetOptions::from_bytes(png)
+        let opts = TilesetOptions::builder(png)
             .tile_size(16, 16)
             .codepage(Codepage::Cp437)
             .build()
@@ -407,7 +407,7 @@ mod tests {
     #[test]
     fn sprite_cache_rejects_bad_dimensions() {
         let png = make_test_png(17, 16, 1, 1);
-        let opts = TilesetOptions::from_bytes(png)
+        let opts = TilesetOptions::builder(png)
             .tile_size(16, 16)
             .build()
             .unwrap();
@@ -421,24 +421,27 @@ mod tests {
 
     #[test]
     fn sprite_cache_load_empty_bytes_errors() {
-        let opts = TilesetOptions::from_bytes(vec![])
+        let opts = TilesetOptions::builder(vec![])
             .tile_size(16, 16)
             .build()
             .unwrap();
         let mut cache = SpriteCache::new();
-        assert!(matches!(cache.load(&opts), Err(TilesetError::PngDecode(_))));
+        assert!(matches!(
+            cache.load(&opts),
+            Err(TilesetError::ImageDecode(_))
+        ));
     }
 
     #[test]
     fn sprite_cache_last_registration_wins_on_collision() {
         let png1 = make_test_png(16, 16, 1, 1);
         let png2 = make_test_png(8, 8, 1, 1);
-        let opts1 = TilesetOptions::from_bytes(png1)
+        let opts1 = TilesetOptions::builder(png1)
             .tile_size(16, 16)
             .start_codepoint('A')
             .build()
             .unwrap();
-        let opts2 = TilesetOptions::from_bytes(png2)
+        let opts2 = TilesetOptions::builder(png2)
             .tile_size(8, 8)
             .start_codepoint('A')
             .build()
@@ -453,7 +456,7 @@ mod tests {
     #[test]
     fn sprite_cache_load_identity_codepage() {
         let png = make_test_png(16, 16, 4, 1); // 4 tiles: index 0..3
-        let opts = TilesetOptions::from_bytes(png)
+        let opts = TilesetOptions::builder(png)
             .tile_size(16, 16)
             .codepage(Codepage::Identity)
             .build()
@@ -470,7 +473,7 @@ mod tests {
     #[test]
     fn sprite_cache_custom_codepage_stops_at_table_end() {
         let png = make_test_png(16, 16, 4, 1); // 4 tiles
-        let opts = TilesetOptions::from_bytes(png)
+        let opts = TilesetOptions::builder(png)
             .tile_size(16, 16)
             .codepage(Codepage::Custom(vec!['A', 'B'])) // only 2 entries
             .build()
@@ -488,7 +491,7 @@ mod tests {
     fn one_sprite(tile_w: u32, tile_h: u32, align: SpriteAlign) -> Sprite {
         let png = make_test_png(tile_w, tile_h, 1, 1);
         #[allow(clippy::cast_possible_truncation)]
-        let opts = TilesetOptions::from_bytes(png)
+        let opts = TilesetOptions::builder(png)
             .tile_size(tile_w as u16, tile_h as u16)
             .codepage(Codepage::Custom(vec!['A']))
             .align(align)
