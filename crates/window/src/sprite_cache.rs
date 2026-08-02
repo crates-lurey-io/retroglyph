@@ -154,7 +154,7 @@ impl SpriteCache {
 
         for tile_idx in 0..total_tiles {
             let Some(codepoint) = opts.codepage.codepoint(tile_idx) else {
-                break;
+                continue;
             };
 
             let tile_col = (tile_idx as u32) % columns;
@@ -468,6 +468,24 @@ mod tests {
         assert!(cache.get('\x01').is_some());
         assert!(cache.get('\x03').is_some());
         assert!(cache.get('\x04').is_none()); // only 4 tiles
+    }
+
+    #[test]
+    fn sprite_cache_surrogate_tile_index_stops_load_instead_of_skipping() {
+        // 2050 tiles starting at U+D7FF: tile 0 -> U+D7FF (valid), tiles 1..=2048 fall in the
+        // surrogate range U+D800..=U+DFFF (documented as skipped, not fatal), tile 2049 ->
+        // U+E000 (valid again, just past the surrogate range).
+        let png = make_test_png(1, 1, 2050, 1);
+        let opts = TilesetOptions::builder(png)
+            .tile_size(1, 1)
+            .columns(2050)
+            .start_codepoint('\u{D7FF}')
+            .build()
+            .unwrap();
+        let mut cache = SpriteCache::new();
+        cache.load(&opts).unwrap();
+        assert!(cache.get('\u{D7FF}').is_some());
+        assert!(cache.get('\u{E000}').is_some());
     }
 
     #[test]
