@@ -110,6 +110,13 @@ impl<T: fmt::Debug> std::error::Error for EventProxyClosed<T> {}
 /// Deliberately renderer-agnostic: pixel dimensions, not grid/font/scale.
 /// Use [`fit`](Self::fit) to derive the pixel size from a presenter's own
 /// cell geometry.
+///
+/// Several builder methods below ([`resizable`](Self::resizable), [`decorations`](Self::decorations),
+/// [`transparency`](Self::transparency), [`fullscreen`](Self::fullscreen)) target an OS-level
+/// window control that a `wasm32` canvas doesn't have; on that target winit's web backend either
+/// ignores the value outright or can't reliably apply it (see each method for which, and why).
+/// The value is still applied for source-level parity with native either way, so the same call
+/// chain compiles and runs on both targets, it just may not visibly do anything in the browser.
 // Five independent window attribute toggles (`fill_viewport`, `resizable`, `decorations`,
 // `fullscreen`, `transparency`), not a state machine in disguise: each maps to one winit
 // `WindowAttributes` builder call and is meaningful on its own.
@@ -218,17 +225,15 @@ impl WindowConfig {
         Self::fit(presenter, title, Some(fps), false)
     }
 
-    /// The frame-rate cap passed to [`fit`](Self::fit), if any. `None` means uncapped: a frame
-    /// renders as fast as the loop reaches a redraw; see [`event_driven`](Self::event_driven)
-    /// for whether that's every tick or only on demand.
+    /// The frame-rate cap passed to [`fit`](Self::fit); see its doc comment for what `None` vs.
+    /// `Some(fps)` means and how it combines with [`event_driven`](Self::event_driven).
     #[must_use]
     pub const fn target_fps(&self) -> Option<u32> {
         self.target_fps
     }
 
-    /// Whether the loop only redraws after an input/window event or injected
-    /// [`Event::Custom`] (`true`), or every tick regardless (`false`), as passed to
-    /// [`fit`](Self::fit).
+    /// The redraw-triggering mode passed to [`fit`](Self::fit); see its doc comment for what
+    /// `true` vs. `false` means and how it combines with [`target_fps`](Self::target_fps).
     #[must_use]
     pub const fn event_driven(&self) -> bool {
         self.event_driven
@@ -257,8 +262,8 @@ impl WindowConfig {
     /// a new grid size, not stretching cells, and most callers that care already size the window
     /// to their content via [`fit`](Self::fit).
     ///
-    /// On `wasm32`, winit's web backend ignores this (there is no OS-level resize grip on a
-    /// canvas); it's still applied for source-level parity with native, it just has no effect.
+    /// On `wasm32`, winit's web backend ignores this: there is no OS-level resize grip on a
+    /// canvas.
     #[must_use]
     pub const fn resizable(mut self, resizable: bool) -> Self {
         self.resizable = resizable;
@@ -271,8 +276,7 @@ impl WindowConfig {
     /// Defaults to `true` (winit's own default). Set to `false` for a borderless window
     /// (custom-drawn title bars, retro full-bleed layouts).
     ///
-    /// On `wasm32`, winit's web backend ignores this (a canvas has no OS chrome to begin with);
-    /// it's still applied for source-level parity with native, it just has no effect.
+    /// On `wasm32`, winit's web backend ignores this: a canvas has no OS chrome to begin with.
     #[must_use]
     pub const fn decorations(mut self, decorations: bool) -> Self {
         self.decorations = decorations;
@@ -323,7 +327,7 @@ impl WindowConfig {
     /// On `wasm32`, winit's web backend maps this to the browser's Fullscreen API
     /// (`Element.requestFullscreen`), which most browsers refuse to grant without a user
     /// gesture; requesting it unconditionally at window-creation time (before any gesture) is
-    /// liable to silently fail there. Still applied for source-level parity with native.
+    /// liable to silently fail there.
     #[must_use]
     pub const fn fullscreen(mut self, fullscreen: bool) -> Self {
         self.fullscreen = fullscreen;
@@ -335,9 +339,8 @@ impl WindowConfig {
     ///
     /// Defaults to `false` (winit's own default).
     ///
-    /// On `wasm32`, winit's web backend ignores this (a canvas is already alpha-blended with the
-    /// page behind it via normal CSS compositing); it's still applied for source-level parity
-    /// with native, it just has no effect.
+    /// On `wasm32`, winit's web backend ignores this: a canvas is already alpha-blended with the
+    /// page behind it via normal CSS compositing.
     #[must_use]
     pub const fn transparency(mut self, transparency: bool) -> Self {
         self.transparency = transparency;
@@ -392,8 +395,6 @@ where
 /// normal `poll_event`/frame loop; see [`run_windowed_with_typed_proxy`] if a worker thread
 /// needs to hand back a real payload (a loaded asset, a network response) instead of a
 /// correlation id into a side table.
-///
-/// # Presenting is automatic
 ///
 /// See [`run_windowed`]'s "Presenting is automatic" section: this function shares the same
 /// automatic-present behavior; `app_loop` no longer needs to call [`Terminal::present`] itself.
@@ -474,8 +475,6 @@ where
 /// the same `&mut Terminal<WindowBackend<P>>` `app_loop` receives on redraw, so a handler that
 /// wants the result to affect the next frame just needs to record it in state the closures
 /// share, or push its own backend-agnostic event/marker for `app_loop` to notice.
-///
-/// # Presenting is automatic
 ///
 /// See [`run_windowed`]'s "Presenting is automatic" section: this function shares the same
 /// automatic-present behavior; `app_loop` no longer needs to call [`Terminal::present`] itself.
@@ -664,13 +663,11 @@ where
 /// `ActiveEventLoop::exit` by stopping its `requestAnimationFrame`-driven
 /// runner rather than leaving it a no-op.
 ///
-/// # Presenting is automatic
-///
-/// [`App::update`](retroglyph_core::App::update) no longer needs to call [`Terminal::present`]
-/// itself here: this driver presents automatically after each call, the same as [`run_windowed`]
-/// (see its "Presenting is automatic" section), except on
-/// [`Flow::Idle`](retroglyph_core::Flow::Idle), where the present is skipped entirely and the
-/// previous frame stays on screen.
+/// See [`run_windowed`]'s "Presenting is automatic" section: the app's
+/// [`update`](retroglyph_core::App::update) implementation no longer needs to call
+/// [`Terminal::present`] itself here either, this driver presents automatically after each call,
+/// except on [`Flow::Idle`](retroglyph_core::Flow::Idle), where the present is skipped entirely
+/// and the previous frame stays on screen.
 ///
 /// # Resizing is not automatic
 ///
