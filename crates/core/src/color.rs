@@ -580,9 +580,9 @@ impl Color {
     pub fn from_srgb(srgb: Srgb) -> Self {
         let clamped = srgb.clamp();
         Self::Rgb {
-            r: (clamped.r * 255.0) as u8,
-            g: (clamped.g * 255.0) as u8,
-            b: (clamped.b * 255.0) as u8,
+            r: (clamped.r * 255.0).round() as u8,
+            g: (clamped.g * 255.0).round() as u8,
+            b: (clamped.b * 255.0).round() as u8,
         }
     }
 
@@ -1462,13 +1462,13 @@ mod tests {
         let red = Color::Rgb { r: 255, g: 0, b: 0 };
         let blue = Color::Rgb { r: 0, g: 0, b: 255 };
         let purple = Color::lerp(red, blue, 0.5);
-        // 127.5 truncates to 127 in u8
+        // 127.5 rounds to 128 (round-to-nearest, ties away from zero).
         assert_eq!(
             purple,
             Color::Rgb {
-                r: 127,
+                r: 128,
                 g: 0,
-                b: 127
+                b: 128
             }
         );
     }
