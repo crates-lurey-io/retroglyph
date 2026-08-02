@@ -2,6 +2,8 @@
 
 use retroglyph_core::Color;
 
+use crate::Response;
+
 /// A palette of named color roles, rather than a CSS-style cascade: draw
 /// code picks the role it means (`theme.accent`, `theme.border`) and the
 /// active [`Theme`] decides what color that resolves to.
@@ -153,6 +155,69 @@ impl Theme {
             b: 150,
         },
     };
+
+    /// The background for an interactive widget in `response`'s current state, over `base`
+    /// when idle. Precedence: [`pressed`](Response::pressed), then
+    /// [`hovered`](Response::hovered), then `base`.
+    ///
+    /// `base` is caller-supplied rather than defaulted to [`panel_bg`](Self::panel_bg) so this
+    /// composes with widgets that already take a backdrop, e.g. a bar drawn over
+    /// [`title_bg`](Self::title_bg) instead of a panel.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_widgets::Theme;
+    /// use retroglyph_widgets::Interaction;
+    /// use retroglyph_core::{Pos, Rect};
+    ///
+    /// let theme = Theme::DARK;
+    /// let mut interaction = Interaction::<u32>::default();
+    /// let response = interaction.interact(Rect::new(0, 0, 1, 1), 1, Default::default());
+    /// assert_eq!(theme.bg_for(&response, theme.panel_bg), theme.panel_bg);
+    /// ```
+    #[must_use]
+    pub const fn bg_for(&self, response: &Response, base: Color) -> Color {
+        if response.pressed() {
+            self.press_bg
+        } else if response.hovered() {
+            self.hover_bg
+        } else {
+            base
+        }
+    }
+
+    /// The foreground for an interactive widget in `response`'s current state. Precedence:
+    /// [`pressed`](Response::pressed) or [`focused`](Response::focused), then
+    /// [`hovered`](Response::hovered), then [`dim`](Self::dim).
+    ///
+    /// Idle interactive text reads as [`dim`](Self::dim) rather than [`fg`](Self::fg): an
+    /// interactive widget that looks identical to static text at rest gives no visual hint
+    /// that it's interactive at all, so the state that actually needs [`fg`](Self::fg)'s full
+    /// contrast is hover, not idle.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_widgets::Theme;
+    /// use retroglyph_widgets::Interaction;
+    /// use retroglyph_core::{Pos, Rect};
+    ///
+    /// let theme = Theme::DARK;
+    /// let mut interaction = Interaction::<u32>::default();
+    /// let response = interaction.interact(Rect::new(0, 0, 1, 1), 1, Default::default());
+    /// assert_eq!(theme.fg_for(&response), theme.dim);
+    /// ```
+    #[must_use]
+    pub const fn fg_for(&self, response: &Response) -> Color {
+        if response.pressed() || response.focused() {
+            self.accent
+        } else if response.hovered() {
+            self.fg
+        } else {
+            self.dim
+        }
+    }
 }
 
 #[cfg(test)]
@@ -170,6 +235,73 @@ mod tests {
         let json = serde_json::to_string(&Theme::DARK).expect("serialize");
         let round_tripped: Theme = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(round_tripped, Theme::DARK);
+    }
+
+    #[test]
+    fn bg_for_is_base_when_idle() {
+        let theme = Theme::DARK;
+        let response = Response::default();
+        assert_eq!(theme.bg_for(&response, theme.panel_bg), theme.panel_bg);
+    }
+
+    #[test]
+    fn bg_for_is_hover_bg_when_hovered() {
+        let theme = Theme::DARK;
+        let response = Response {
+            hovered: true,
+            ..Response::default()
+        };
+        assert_eq!(theme.bg_for(&response, theme.panel_bg), theme.hover_bg);
+    }
+
+    #[test]
+    fn bg_for_prefers_press_bg_over_hover_bg() {
+        let theme = Theme::DARK;
+        let response = Response {
+            hovered: true,
+            pressed: true,
+            ..Response::default()
+        };
+        assert_eq!(theme.bg_for(&response, theme.panel_bg), theme.press_bg);
+    }
+
+    #[test]
+    fn fg_for_is_dim_when_idle() {
+        let theme = Theme::DARK;
+        let response = Response::default();
+        assert_eq!(theme.fg_for(&response), theme.dim);
+    }
+
+    #[test]
+    fn fg_for_is_fg_when_hovered() {
+        let theme = Theme::DARK;
+        let response = Response {
+            hovered: true,
+            ..Response::default()
+        };
+        assert_eq!(theme.fg_for(&response), theme.fg);
+    }
+
+    #[test]
+    fn fg_for_prefers_accent_over_hover_when_focused() {
+        let theme = Theme::DARK;
+        let response = Response {
+            hovered: true,
+            focused: true,
+            ..Response::default()
+        };
+        assert_eq!(theme.fg_for(&response), theme.accent);
+    }
+
+    #[test]
+    fn fg_for_prefers_accent_over_hover_when_pressed() {
+        let theme = Theme::DARK;
+        let response = Response {
+            hovered: true,
+            pressed: true,
+            ..Response::default()
+        };
+        assert_eq!(theme.fg_for(&response), theme.accent);
     }
 
     #[test]
