@@ -587,6 +587,17 @@ impl Output for GlRenderer {
         for cell in &mut self.layers[0] {
             *cell = base;
         }
+        // Sprite instances are collected per layer in lockstep with `self.layers` (issue #366);
+        // a stale, larger `sprite_layers` would otherwise survive the clear and get redrawn by
+        // `present` (issue #727).
+        #[cfg(feature = "tilesets")]
+        {
+            self.sprite_layers.truncate(1);
+            if self.sprite_layers.is_empty() {
+                self.sprite_layers.push(Vec::new());
+            }
+            self.sprite_layers[0].clear();
+        }
         Ok(())
     }
 
@@ -595,6 +606,12 @@ impl Output for GlRenderer {
         self.rows = size.height();
         let base = self.base_blank();
         self.layers = vec![vec![base; self.cell_count()]];
+        // See the comment in `clear`: `sprite_layers` must stay in lockstep with `layers` so
+        // `present` doesn't redraw sprites left over from before the resize (issue #727).
+        #[cfg(feature = "tilesets")]
+        {
+            self.sprite_layers = vec![Vec::new()];
+        }
     }
 }
 
