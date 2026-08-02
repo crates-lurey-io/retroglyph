@@ -2522,17 +2522,12 @@ impl Overworld {
     }
 
     fn draw_sidebar(&mut self, surface: &mut Surface<'_>, area: Rect) {
-        Panel::new()
+        let panel = Panel::new()
             .title(" OVERWORLD ")
             .border_style(Style::new().fg(BORDER).bg(PANEL_BG))
-            .fill_style(Style::new().bg(PANEL_BG))
-            .render(&mut surface.scope(area));
-        let inner = Rect::new(
-            area.left() + 1,
-            area.top() + 1,
-            area.width().saturating_sub(2),
-            area.height().saturating_sub(2),
-        );
+            .fill_style(Style::new().bg(PANEL_BG));
+        panel.render(&mut surface.scope(area));
+        let inner = panel.inner(area);
         if inner.width() == 0 || inner.height() == 0 {
             return;
         }

@@ -4,6 +4,7 @@ use retroglyph_core::{Color, Rect, Style};
 use super::{Panel, Widget};
 use crate::Surface;
 use crate::layout::centered_rect;
+use crate::style::Sides;
 use crate::{Align, Theme};
 
 /// A bordered, filled box centered in a screen [`Rect`].
@@ -14,9 +15,8 @@ use crate::{Align, Theme};
 /// caller needs via [`Modal::border_style`]/[`Modal::fill_style`]/[`Modal::title`],
 /// the same as [`Panel`].
 ///
-/// [`Modal::render`] returns the inner content [`Rect`] (inside the
-/// border, the same implicit one-cell inset [`Panel`] uses for its own
-/// interior) ready to hand to another widget (e.g. [`super::Log`]).
+/// [`Modal::render`] returns the inner content [`Rect`] (via [`Panel::inner`], the border inset
+/// plus this modal's [`Modal::padding`]) ready to hand to another widget (e.g. [`super::Log`]).
 ///
 /// Draws only the box itself; everything outside it is left untouched (no
 /// dimming or backdrop fill, that would need to read and blend existing
@@ -54,6 +54,7 @@ pub struct Modal<'a> {
     title_align: Align,
     border_style: Style,
     fill_style: Style,
+    padding: Sides,
 }
 
 impl<'a> Modal<'a> {
@@ -67,6 +68,7 @@ impl<'a> Modal<'a> {
             title_align: Align::Center,
             border_style: Style::new(),
             fill_style: Style::new(),
+            padding: Sides::ZERO,
         }
     }
 
@@ -99,6 +101,14 @@ impl<'a> Modal<'a> {
         self
     }
 
+    /// Reserve `padding` between the border and the rect [`Modal::render`] returns, the same as
+    /// [`Panel::padding`] (a [`Modal`] is just a centered [`Panel`]). Defaults to [`Sides::ZERO`].
+    #[must_use]
+    pub const fn padding(mut self, padding: Sides) -> Self {
+        self.padding = padding;
+        self
+    }
+
     /// Applies `theme`'s named roles to this modal's border and fill, the same mapping as
     /// [`Panel::theme`] (a [`Modal`] is just a centered [`Panel`]): `border_style` becomes
     /// `theme.border` on `theme.title_bg`, and `fill_style` becomes `theme.panel_bg`.
@@ -128,17 +138,13 @@ impl<'a> Modal<'a> {
         let mut panel = Panel::new()
             .border_style(self.border_style)
             .fill_style(self.fill_style)
-            .title_align(self.title_align);
+            .title_align(self.title_align)
+            .padding(self.padding);
         if let Some(title) = self.title {
             panel = panel.title(title);
         }
         panel.render(&mut surface.scope(rect));
-        Rect::new(
-            rect.left() + 1,
-            rect.top() + 1,
-            rect.width().saturating_sub(2),
-            rect.height().saturating_sub(2),
-        )
+        panel.inner(rect)
     }
 }
 
@@ -160,6 +166,19 @@ mod tests {
         // The border was actually drawn at the box's corners.
         assert_eq!(grid[Pos::new(5, 3)].glyph(), '┌');
         assert_eq!(grid[Pos::new(14, 3)].glyph(), '┐');
+    }
+
+    #[test]
+    fn padding_shrinks_the_returned_inner_rect() {
+        let screen = Rect::new(0, 0, 20, 10);
+        let mut grid = Grid::new(20, 10);
+        let inner = Modal::new(10, 4)
+            .padding(Sides::symmetric(0, 1))
+            .render(screen, &mut Surface::new(&mut grid, screen, 0));
+
+        // Box is centered_rect(screen, 10, 4) = Rect::new(5, 3, 10, 4); the border inset is
+        // Rect::new(6, 4, 8, 2), and symmetric(0, 1) padding trims 1 more cell off each side.
+        assert_eq!(inner, Rect::new(7, 4, 6, 2));
     }
 
     #[test]
