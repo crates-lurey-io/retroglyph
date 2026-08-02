@@ -20,7 +20,9 @@ use crate::Theme;
 /// still caps at 100%, but the readout shows the true, uncapped numbers
 /// (`"120/100"`) so the overflow stays visible in text. `label_style` defaults to
 /// [`Theme::DARK`]'s `dim` role (as if [`StatBar::theme`] had been called); set it with
-/// [`StatBar::label_style`].
+/// [`StatBar::label_style`]. The fill (and readout) color defaults to [`super::Meter`]'s
+/// green→yellow→red load ramp, which reads backwards for a health/mana/stamina stat (full
+/// renders as danger, not safe); override it with [`StatBar::fill_color`].
 ///
 /// # Examples
 ///
@@ -38,6 +40,7 @@ pub struct StatBar<'a> {
     current: u32,
     max: u32,
     label_style: Style,
+    fill_color: fn(f32) -> Color,
 }
 
 impl<'a> StatBar<'a> {
@@ -50,6 +53,7 @@ impl<'a> StatBar<'a> {
             current,
             max,
             label_style: Style::new(),
+            fill_color: bar::meter_fill_color,
         }
         .theme(Theme::DARK)
     }
@@ -61,10 +65,25 @@ impl<'a> StatBar<'a> {
         self
     }
 
+    /// Overrides the bar's fill (and readout text) color from [`super::Meter`]'s default
+    /// green→yellow→red load ramp to `fill_color`, called with `current / max` clamped to
+    /// `0.0..=1.0`.
+    ///
+    /// The default ramp reads backwards for a descending stat like health: full renders as
+    /// danger (red), not safe. Supply a ramp that fits instead, e.g.
+    /// `|r| Color::lerp(Color::RED, Color::GREEN, r)`. A plain `fn` pointer rather than a
+    /// boxed closure, so `StatBar` stays `Copy`; a non-capturing closure like the one above
+    /// coerces to it automatically.
+    #[must_use]
+    pub const fn fill_color(mut self, fill_color: fn(f32) -> Color) -> Self {
+        self.fill_color = fill_color;
+        self
+    }
+
     /// Sets `label_style` to `theme.dim` on `theme.panel_bg`, the same mapping (and the same
     /// "assumes it's drawn on `theme.panel_bg`" caveat) as [`super::Gauge::theme`]; see its
     /// doc comment for the full explanation, including why the bar's own load-colored fill stays
-    /// outside `theme`'s role palette.
+    /// outside `theme`'s role palette, unless overridden separately with [`StatBar::fill_color`].
     ///
     /// Call before any manual [`StatBar::label_style`] override you want to keep.
     #[must_use]
@@ -105,6 +124,7 @@ impl Widget for StatBar<'_> {
             self.label_style,
             ratio,
             readout.as_str(),
+            self.fill_color,
         );
     }
 }
@@ -160,6 +180,23 @@ mod tests {
             .render(&mut Surface::new(&mut grid, area, 0));
 
         assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Color::WHITE);
+    }
+
+    #[test]
+    fn fill_color_overrides_the_default_meter_ramp() {
+        fn white_to_red(ratio: f32) -> Color {
+            Color::lerp(Color::WHITE, Color::RED, ratio)
+        }
+
+        let area = Rect::new(0, 0, 20, 1);
+        let mut grid = Grid::new(20, 1);
+        StatBar::new("H", 100, 100)
+            .fill_color(white_to_red)
+            .render(&mut Surface::new(&mut grid, area, 0));
+
+        // Full ratio: the default ramp would also be red-ish here, so assert against the
+        // custom ramp's own output rather than a color literal that might coincide.
+        assert_eq!(grid[Pos::new(2, 0)].style().foreground(), white_to_red(1.0));
     }
 
     #[test]
