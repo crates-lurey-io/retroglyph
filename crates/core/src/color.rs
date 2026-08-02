@@ -150,8 +150,9 @@ const fn indexed_to_rgb(index: u8) -> (u8, u8, u8) {
 /// Rounds `value` to the nearest of the 6 [`CUBE_STEPS`], returning the step's index
 /// (0–5).
 ///
-/// Ties (exactly halfway between two steps) round to the higher step, matching
-/// standard "round half up" arithmetic rounding on the midpoint distance.
+/// Ties (exactly halfway between two steps) round to the lower step: steps are
+/// scanned in ascending order and only a strictly closer step replaces the
+/// current best, so an equal-distance higher step never wins.
 #[cfg(any(not(feature = "indexed-quant"), test))]
 fn nearest_cube_step(value: u8) -> u8 {
     let value = i32::from(value);
