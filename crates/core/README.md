@@ -52,7 +52,9 @@ Draw through `Surface` (handed out by `Terminal::draw`/`Terminal::surface`): pla
 [`surface`](https://docs.rs/retroglyph-core/latest/retroglyph_core/surface/index.html) module docs.
 `Terminal::present()` diffs the current frame against the previous one and forwards only the changed
 cells to the backend; pixel backends request full frames instead, since sub-cell offsets can leave
-orphaned pixels behind otherwise.
+orphaned pixels behind otherwise. `Terminal::retain_layer()` skips both that diff _and_ the app's
+own redraw for one layer for the next frame, for content (e.g. a scrolled map) that's known
+unchanged.
 
 This crate is `no_std`-compatible: disable the `std` feature (requires an allocator). Useful for
 embedded or kernel-space roguelikes; see the `std` feature below.
