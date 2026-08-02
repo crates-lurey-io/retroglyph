@@ -109,8 +109,8 @@ impl ListState {
         }
         if selected < self.offset {
             self.offset = selected;
-        } else if selected >= self.offset + visible_height {
-            self.offset = selected + 1 - visible_height;
+        } else if selected >= self.offset.saturating_add(visible_height) {
+            self.offset = selected.saturating_add(1).saturating_sub(visible_height);
         }
     }
 
@@ -282,6 +282,17 @@ mod tests {
         s.set_offset(5);
         s.ensure_visible(3); // window is [5, 8); 1 is above it
         assert_eq!(s.offset(), 1);
+    }
+
+    #[test]
+    fn ensure_visible_does_not_overflow_at_usize_max_selection() {
+        // retroglyph#729: `selected + 1 - visible_height` used to overflow on the add for a
+        // selection near `usize::MAX`.
+        let mut s = ListState::new();
+        s.select(Some(usize::MAX));
+        s.set_offset(0);
+        s.ensure_visible(4);
+        assert_eq!(s.offset(), usize::MAX - 4);
     }
 
     #[test]

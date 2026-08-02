@@ -832,8 +832,8 @@ pub fn split_h_n_flex<const N: usize>(
 pub fn centered_rect(screen: Rect, width: u16, height: u16) -> Rect {
     let width = width.min(screen.width());
     let height = height.min(screen.height());
-    let x = screen.left() + (screen.width() - width) / 2;
-    let y = screen.top() + (screen.height() - height) / 2;
+    let x = screen.left().saturating_add((screen.width() - width) / 2);
+    let y = screen.top().saturating_add((screen.height() - height) / 2);
     Rect::new(x, y, width, height)
 }
 
@@ -1326,6 +1326,15 @@ mod tests {
         let screen = Rect::new(5, 5, 20, 10);
         let r = centered_rect(screen, 10, 4);
         assert_eq!(r, Rect::new(10, 8, 10, 4));
+    }
+
+    #[test]
+    fn centered_rect_does_not_overflow_on_a_far_off_screen() {
+        // retroglyph#729: `screen.left() + (screen.width() - width) / 2` used to overflow `u16`
+        // once `screen.left()` was large enough, even though `width`/`height` themselves fit.
+        let screen = Rect::new(50_000, 0, 40_000, 10);
+        let r = centered_rect(screen, 10, 4);
+        assert_eq!(r, Rect::new(u16::MAX, 3, 10, 4));
     }
 
     #[test]

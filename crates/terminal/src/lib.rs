@@ -448,8 +448,13 @@ impl<W: Write> TerminalRenderer<W> {
             // right position (adjacent cells advance the cursor by printing).
             let needs_move = self.cursor_y != Some(pos.y) || self.cursor_x != Some(pos.x);
             if needs_move {
-                // CSI row;col H is 1-indexed.
-                write!(self.buf, "\x1b[{};{}H", pos.y + 1, pos.x + 1)?;
+                // CSI row;col H is 1-indexed; saturate rather than wrap at u16::MAX.
+                write!(
+                    self.buf,
+                    "\x1b[{};{}H",
+                    pos.y.saturating_add(1),
+                    pos.x.saturating_add(1)
+                )?;
             }
 
             let fg_changed = self.last_fg != Some(fg);
@@ -480,7 +485,7 @@ impl<W: Write> TerminalRenderer<W> {
 
             // After printing, the terminal cursor advances by the cell's
             // display width. Track that so the next cell can skip the move.
-            self.cursor_x = Some(pos.x + cell_width);
+            self.cursor_x = Some(pos.x.saturating_add(cell_width));
             self.cursor_y = Some(pos.y);
         }
         Ok(())
@@ -545,7 +550,7 @@ impl<W: Write> TerminalRenderer<W> {
 
             let cell_width = Self::write_glyph(&mut self.buf, cell, extra)?;
 
-            self.cursor_x = Some(pos.x + cell_width);
+            self.cursor_x = Some(pos.x.saturating_add(cell_width));
             self.cursor_y = Some(pos.y);
         }
         Ok(())
@@ -613,9 +618,13 @@ mod tests {
     use retroglyph_core::tile::Tile;
 
     fn render_one(tile: &Tile) -> String {
+        render_one_at(Pos { x: 0, y: 0 }, tile)
+    }
+
+    fn render_one_at(pos: Pos, tile: &Tile) -> String {
         let mut renderer = TerminalRenderer::new(Vec::new());
         renderer
-            .draw(core::iter::once(DrawCell::new(Pos { x: 0, y: 0 }, tile)))
+            .draw(core::iter::once(DrawCell::new(pos, tile)))
             .unwrap();
         renderer.flush().unwrap();
         String::from_utf8(renderer.into_writer()).unwrap()
@@ -626,6 +635,22 @@ mod tests {
         let tile = Tile::new('X', Style::default());
         let out = render_one(&tile);
         assert!(out.contains("\x1b[1;1H"), "output: {out:?}");
+        assert!(out.contains('X'));
+    }
+
+    #[test]
+    fn does_not_overflow_at_the_maximum_position() {
+        // retroglyph#729: the 1-based CUP computation (`pos.x + 1`/`pos.y + 1`) and the
+        // `cursor_x` advance (`pos.x + cell_width`) used plain `u16` arithmetic that overflowed at
+        // `u16::MAX`.
+        let tile = Tile::new('X', Style::default());
+        let out = render_one_at(
+            Pos {
+                x: u16::MAX,
+                y: u16::MAX,
+            },
+            &tile,
+        );
         assert!(out.contains('X'));
     }
 
@@ -944,6 +969,22 @@ mod tests {
         renderer.flush().unwrap();
         let out = String::from_utf8(renderer.into_writer()).unwrap();
         assert_eq!(out, "X");
+    }
+
+    #[test]
+    fn plain_mode_does_not_overflow_the_cursor_x_advance_at_the_maximum_column() {
+        // retroglyph#729: `cursor_x = pos.x + cell_width` overflowed for a cell at `x: u16::MAX`.
+        let tile = Tile::new('X', Style::default());
+        let mut renderer = TerminalRenderer::with_plain_mode(Vec::new(), true);
+        renderer
+            .draw(core::iter::once(DrawCell::new(
+                Pos { x: u16::MAX, y: 0 },
+                &tile,
+            )))
+            .unwrap();
+        renderer.flush().unwrap();
+        let out = String::from_utf8(renderer.into_writer()).unwrap();
+        assert!(out.ends_with('X'), "output: {out:?}");
     }
 
     #[test]

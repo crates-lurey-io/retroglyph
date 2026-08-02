@@ -734,6 +734,20 @@ mod compositing_tests {
     }
 
     #[test]
+    fn build_rejects_a_grid_and_scale_that_overflow_the_surface_size() {
+        // retroglyph#729: `CellGeometry::surface_size` multiplied cols/rows/scale as plain `u32`,
+        // which overflows for a `u16` scale this large (unlike the software backend's `u8` scale).
+        let result = GlBackendBuilder::new()
+            .grid_size(u16::MAX, 1)
+            .scale(u16::MAX)
+            .build();
+        assert!(matches!(
+            result,
+            Err(crate::GlBackendError::SurfaceTooLarge)
+        ));
+    }
+
+    #[test]
     fn base_layer_blank_cells_are_opaque_background_only() {
         let r = GlBackendBuilder::new()
             .grid_size(3, 3)

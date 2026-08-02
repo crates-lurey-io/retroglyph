@@ -145,6 +145,9 @@ pub enum TilesetError {
     EmptyCodepage,
     /// `tile_width` or `tile_height` is zero.
     ZeroTileSize,
+    /// [`TilesetBuilder::columns`] declared more columns than the image actually has at the given
+    /// `tile_width`: honoring it would read tile pixels from past the end of the decoded buffer.
+    TooManyColumns(u16, u32),
 }
 
 impl fmt::Display for TilesetError {
@@ -158,6 +161,10 @@ impl fmt::Display for TilesetError {
             Self::ZeroTileSize => {
                 write!(f, "tile_width and tile_height must be non-zero")
             }
+            Self::TooManyColumns(declared, actual) => write!(
+                f,
+                "declared {declared} columns but the image only has {actual} at this tile_width"
+            ),
         }
     }
 }

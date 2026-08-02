@@ -569,7 +569,8 @@ impl SoftwareBackend {
     /// [`SoftwareBackendError::MixedGlyphSizes`] if the font chain's fonts disagree on their
     /// glyph size (both only reachable if [`SoftwareBackendBuilder::build`] was bypassed),
     /// [`SoftwareBackendError::ZeroScale`] if `scale` is `0` (likewise only reachable if `build`
-    /// was bypassed, since a caller mutated the field after construction), and
+    /// was bypassed, since a caller mutated the field after construction),
+    /// [`SoftwareBackendError::ZeroGrid`] if `cols` or `rows` is `0`, and
     /// [`SoftwareBackendError::Tileset`] if a registered tileset fails to load.
     ///
     /// # Panics
@@ -586,6 +587,9 @@ impl SoftwareBackend {
         };
         if self.scale == 0 {
             return Err(SoftwareBackendError::ZeroScale);
+        }
+        if self.cols == 0 || self.rows == 0 {
+            return Err(SoftwareBackendError::ZeroGrid);
         }
 
         let geometry = CellGeometry::new(glyph_w, glyph_h, u16::from(self.scale));
@@ -682,6 +686,12 @@ impl Output for SoftwareRenderer {
 
         for draw_cell in content {
             let (layer_id, pos, tile) = (draw_cell.layer, draw_cell.pos, draw_cell.tile);
+            // Silently drop cells positioned outside the grid, the same as `Headless`'s
+            // `put_tile` (which bounds-checks internally): a caller-supplied `pos` is not
+            // trusted input, and indexing it unchecked below would panic instead.
+            if usize::from(pos.x) >= cols || usize::from(pos.y) >= rows {
+                continue;
+            }
             let layer_idx = usize::from(layer_id);
             max_layer_seen = max_layer_seen.max(i32::from(layer_id));
             self.ensure_layer_shadow(layer_idx, cell_count);
@@ -1466,6 +1476,30 @@ mod tests {
         };
         assert!(!has_green(0), "x=0 should have no green pixels with dx=1");
         assert!(has_green(1), "x=1 should have green pixels with dx=1");
+    }
+
+    #[test]
+    fn draw_layers_ignores_a_cell_positioned_outside_the_grid() {
+        // retroglyph#729: a `DrawCell` positioned outside `size()` used to index the shadow
+        // buffer out of bounds and panic; `Headless` already silently drops such cells, so this
+        // backend should too instead of disagreeing on the input.
+        let mut renderer = SoftwareBackendBuilder::new()
+            .font(retroglyph_window::font::unscii16::FONT)
+            .grid_size(2, 2)
+            .scale(1)
+            .build()
+            .unwrap()
+            .into_renderer()
+            .unwrap();
+
+        let tile = Tile::new('X', Style::new());
+        renderer
+            .draw_layers(core::iter::once(DrawCell::on_layer(
+                0,
+                Pos::new(5, 5),
+                &tile,
+            )))
+            .expect("out-of-range cells are silently dropped, not a panic");
     }
 
     #[test]

@@ -184,7 +184,7 @@ impl TextInputState {
         if caret_col < self.scroll {
             self.scroll = caret_col;
         } else if caret_col >= self.scroll.saturating_add(width) {
-            self.scroll = caret_col + 1 - width;
+            self.scroll = caret_col.saturating_add(1).saturating_sub(width);
         }
     }
 
@@ -326,6 +326,16 @@ mod tests {
         state.set_value("aああ"); // columns: a=1, あ=2, あ=2 -> caret at end is column 5
         state.ensure_visible(3);
         assert_eq!(state.scroll(), 5 + 1 - 3);
+    }
+
+    #[test]
+    fn ensure_visible_does_not_overflow_when_the_caret_column_saturates() {
+        // retroglyph#729: `caret_col + 1 - width` used to overflow on the add once a long enough
+        // paste saturated `caret_column()` at `u16::MAX`.
+        let mut state = TextInputState::new();
+        state.insert_str(&"a".repeat(70_000));
+        state.ensure_visible(5);
+        assert_eq!(state.scroll(), u16::MAX - 5);
     }
 
     #[test]

@@ -121,8 +121,10 @@ impl SpriteCache {
     ///
     /// Returns [`TilesetError::ImageDecode`] if the bytes are not a valid image,
     /// [`TilesetError::ZeroTileSize`] if `opts.tile_width` or `opts.tile_height`
-    /// is 0, or [`TilesetError::InvalidDimensions`] if the decoded image
-    /// dimensions are not evenly divisible by the tile size.
+    /// is 0, [`TilesetError::InvalidDimensions`] if the decoded image
+    /// dimensions are not evenly divisible by the tile size, or
+    /// [`TilesetError::TooManyColumns`] if `opts.columns` declares more columns
+    /// than the image actually has at `opts.tile_width`.
     #[allow(clippy::cast_possible_truncation, clippy::cast_lossless)]
     pub fn load(&mut self, opts: &TilesetOptions) -> Result<(), TilesetError> {
         let img = image::load_from_memory(&opts.bytes)
@@ -146,7 +148,14 @@ impl SpriteCache {
             ));
         }
 
-        let columns = opts.columns.map_or(img_w / tile_w, u32::from);
+        let natural_columns = img_w / tile_w;
+        let columns = opts.columns.map_or(natural_columns, u32::from);
+        if columns > natural_columns {
+            return Err(TilesetError::TooManyColumns(
+                opts.columns.unwrap_or(0),
+                natural_columns,
+            ));
+        }
         let rows = img_h / tile_h;
         let total_tiles = (columns * rows) as usize;
 
@@ -417,6 +426,21 @@ mod tests {
             err,
             TilesetError::InvalidDimensions(17, 16, 16, 16)
         ));
+    }
+
+    #[test]
+    fn sprite_cache_rejects_columns_wider_than_the_image() {
+        // retroglyph#729: `.columns(8)` on a sheet that only actually has 4 columns used to read
+        // tile pixels from past the end of the decoded raw buffer instead of being rejected.
+        let png = make_test_png(8, 16, 4, 1);
+        let opts = TilesetOptions::builder(png)
+            .tile_size(8, 16)
+            .columns(8)
+            .build()
+            .unwrap();
+        let mut cache = SpriteCache::new();
+        let err = cache.load(&opts).unwrap_err();
+        assert!(matches!(err, TilesetError::TooManyColumns(8, 4)));
     }
 
     #[test]
