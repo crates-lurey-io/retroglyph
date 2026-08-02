@@ -2145,6 +2145,17 @@ mod tests {
     }
 
     #[test]
+    fn test_grid_display_wide_char_spacer() {
+        // A wide char's right-half spacer cell prints as a plain space, not the wide
+        // char's own glyph repeated.
+        let mut grid = Grid::new(3, 1);
+        grid.write_grapheme(0, 0, 0, "\u{4e2d}", Style::default()); // wide (CJK)
+
+        let s = alloc::format!("{grid}");
+        assert_eq!(s, "\u{4e2d} \u{b7}\n");
+    }
+
+    #[test]
     fn test_grid_cells_count() {
         let grid = Grid::new(4, 3);
         assert_eq!(grid.cells(0).unwrap().count(), 12);
