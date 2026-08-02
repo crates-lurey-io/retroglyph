@@ -141,7 +141,7 @@ impl<'a> Tabs<'a> {
 
 impl Tabs<'_> {
     /// Each drawn tab's `(index, start_x, text_width)`, left to right, stopping once a title
-    /// would start past `area`'s right edge -- the same layout [`Tabs::draw`] paints and
+    /// would start past `area`'s right edge: the same layout [`Tabs::draw`] paints and
     /// [`Tabs::tab_at`] hit-tests against, computed once here so the two can't diverge. `x`
     /// values are absolute grid coordinates (matching `area`'s own space), the same space
     /// [`Response::pointer_pos`] reports in, since [`Tabs::tab_at`] compares them directly.

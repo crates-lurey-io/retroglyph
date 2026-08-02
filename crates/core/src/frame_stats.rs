@@ -96,7 +96,7 @@ impl<const N: usize> FrameStats<N> {
         if self.len < N { 0 } else { self.head }
     }
 
-    /// Recorded frame durations, oldest first (so the most recent frame is last) -- the order a
+    /// Recorded frame durations, oldest first (so the most recent frame is last): the order a
     /// sparkline/histogram wants so new data enters on the right.
     #[must_use]
     pub fn samples(&self) -> impl ExactSizeIterator<Item = Duration> + '_ {

@@ -12,7 +12,7 @@
 //!
 //! Each iteration uses `iter_batched` to build a fresh [`Terminal<TerminalWasm>`] with the change
 //! set already `present`ed but not yet drained, so the timed routine measures only the
-//! `take_output` call itself (the drain), not the `present`/diff work that produced it -- that
+//! `take_output` call itself (the drain), not the `present`/diff work that produced it. That
 //! diff cost is already covered by `crates/core/benches/grid_diff.rs`.
 
 // See `crates/core/benches/grid_diff.rs` for why this bench binary is exempted from `missing_docs`.
@@ -41,8 +41,8 @@ fn baseline(cols: u16, rows: u16) -> Terminal<TerminalWasm> {
     term
 }
 
-/// Builds a terminal with every cell changed and `present`ed, but not yet drained -- the worst
-/// case for `take_output`: every cell emits a cursor move plus a glyph.
+/// Builds a terminal with every cell changed and `present`ed, but not yet drained: the worst
+/// case for `take_output`. Every cell emits a cursor move plus a glyph.
 fn full_repaint_pending(cols: u16, rows: u16) -> Terminal<TerminalWasm> {
     let mut term = baseline(cols, rows);
     term.draw(|s| {
@@ -57,7 +57,7 @@ fn full_repaint_pending(cols: u16, rows: u16) -> Terminal<TerminalWasm> {
 }
 
 /// Builds a terminal with `pct` percent of its cells changed and `present`ed, but not yet
-/// drained -- the typical case: a small, scattered edit.
+/// drained: the typical case, a small scattered edit.
 ///
 /// Uses a fixed RNG seed so the change set is deterministic across runs, matching
 /// `crates/core/benches/grid_diff.rs`'s `sparse_pair`.

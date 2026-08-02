@@ -12,7 +12,7 @@ use crate::Surface;
 /// new data arrives. By default, bar height *and color* track each sample's
 /// fraction of the max via [`Meter`] (a green-to-red load ramp); call
 /// [`Sparkline::style`] to draw every bar in one fixed color instead, height
-/// only -- the right choice once the color channel would otherwise imply
+/// only, the right choice once the color channel would otherwise imply
 /// something the data doesn't mean (e.g. a frame-time graph, where "tallest
 /// bar in view" isn't the same thing as "bad": [`super::PerfOverlay`] does
 /// this). Only the first row of `area` is drawn.

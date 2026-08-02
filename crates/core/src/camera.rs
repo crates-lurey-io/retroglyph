@@ -166,7 +166,7 @@ impl Camera {
     ///
     /// [`world_to_screen`](Self::world_to_screen) is the right call when the only question is
     /// "is this single cell visible" (a minimap dot, a cursor). It falls short for anything
-    /// wider than one cell -- a hex, an iso diamond, a multi-cell sprite -- where the *anchor*
+    /// wider than one cell (a hex, an iso diamond, a multi-cell sprite) where the *anchor*
     /// can be off-viewport while part of the content is still visible. This is the signed
     /// sibling for that case: it hands back the same math `world_to_screen` computes, minus the
     /// culling, ready for [`Surface::put_signed`] to clip.
@@ -203,7 +203,7 @@ impl Camera {
     ///
     /// The returned surface's `put`, `put_signed`, `print`, and the rest of `Surface`'s
     /// coordinate-taking methods all take world coordinates directly, and anything that lands
-    /// outside the current viewport -- including a multi-cell draw anchored off-screen -- is
+    /// outside the current viewport (including a multi-cell draw anchored off-screen) is
     /// dropped by the surface's own bounds check, the same way [`world_to_offset`] composes with
     /// [`Surface::put_signed`] by hand. This is that composition done once instead of at every
     /// call site.

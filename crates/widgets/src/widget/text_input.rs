@@ -26,8 +26,8 @@ use crate::text::truncate as truncate_to_cols;
 ///
 /// The caret always renders as an inverted-color cell (`caret_style`), not by driving a real
 /// terminal cursor via a backend's `Cursor` facet: `render` only has a [`Surface`], not a
-/// `Backend`, and a cell-drawn caret renders identically -- including in headless snapshot tests
-/// -- on every backend. An app that wants a blinking, backend-native caret instead can position
+/// `Backend`, and a cell-drawn caret renders identically (including in headless snapshot tests)
+/// on every backend. An app that wants a blinking, backend-native caret instead can position
 /// one itself from `state.cursor()`/`state.scroll()` alongside this widget.
 ///
 /// This widget draws one field, nothing more: which field is focused (and therefore routed
@@ -82,7 +82,7 @@ impl<'a> TextInput<'a> {
 
     /// Render every character of `state.value()` as `mask` instead of its real glyph, e.g. `'*'`
     /// for a password field. Column math (scrolling, caret position) still uses the real value's
-    /// display width, not the mask's -- masking only ever substitutes one fixed-width glyph, so
+    /// display width, not the mask's: masking only ever substitutes one fixed-width glyph, so
     /// this is exact as long as `mask` itself is a single-column character.
     #[must_use]
     pub const fn mask(mut self, mask: char) -> Self {
@@ -157,7 +157,7 @@ impl StatefulWidget for TextInput<'_> {
             )
         } else {
             // Skip the scrolled-past prefix (by display width, not bytes) before truncating
-            // what remains to the field width -- the same `split_at_width`/`truncate` split
+            // what remains to the field width, the same `split_at_width`/`truncate` split
             // `retroglyph-widgets::text` documents for exactly this "windowed" reason.
             let (_, visible) = split_at_width(value, state.scroll());
             let visible = self
@@ -281,7 +281,7 @@ mod tests {
         TextInput::new().render(&mut Surface::new(&mut grid, area, 0), &mut state);
 
         // Caret is at column 1 (display width of "a"), not column 1 by char count coincidentally
-        // matching -- column 2 would be wrong if this used byte/char counting for a value with a
+        // matching: column 2 would be wrong if this used byte/char counting for a value with a
         // wider first character.
         assert_eq!(grid[Pos::new(1, 0)].glyph(), 'あ');
         assert_ne!(

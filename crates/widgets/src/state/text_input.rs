@@ -10,7 +10,7 @@ use retroglyph_core::{Event, KeyCode};
 /// across a resized field) the way `ListState` is reused across a resized list.
 ///
 /// `cursor` is a byte index into `value`, not a char or display-column index, and every mutating
-/// method here maintains the invariant that it always lands on a char boundary -- `insert`/
+/// method here maintains the invariant that it always lands on a char boundary: `insert`/
 /// `insert_str`/`backspace`/`delete` never split a multi-byte character, and `move_left`/
 /// `move_right` step by whole `char`s. Display-column math (where the caret actually draws, and
 /// how far the field has scrolled) is a separate concern handled by
@@ -45,7 +45,7 @@ impl TextInputState {
     }
 
     /// Replace the entire content and move the cursor to its end. Resets the scroll offset to
-    /// zero -- call [`ensure_visible`](Self::ensure_visible) afterward if the new value should
+    /// zero. Call [`ensure_visible`](Self::ensure_visible) afterward if the new value should
     /// scroll to keep the cursor (still at the end) in view.
     pub fn set_value(&mut self, s: impl Into<String>) {
         self.value = s.into();
@@ -127,7 +127,7 @@ impl TextInputState {
     /// Key releases and auto-repeats other than presses are ignored except that auto-repeat
     /// presses are treated the same as a press (matches [`FocusRing`](crate::FocusRing)/
     /// [`Shortcuts`](crate::Shortcuts)'s own `is_down` gating). [`Event`](retroglyph_core::Event)
-    /// has no IME/composition variant to begin with -- see the scope note above.
+    /// has no IME/composition variant to begin with; see the scope note above.
     pub fn handle_event(&mut self, event: &Event) -> bool {
         match event {
             Event::Key(key) if key.is_down() => match key.code {

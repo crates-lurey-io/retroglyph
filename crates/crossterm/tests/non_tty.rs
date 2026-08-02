@@ -51,9 +51,9 @@ fn repeated_construction_does_not_panic() {
 /// This exercises the fallback directly against a constructed backend when one is available;
 /// on a restricted context where construction itself fails, this test is skipped since there's no
 /// `Output` instance to query (covered instead by `new_does_not_panic_when_terminal_unavailable`
-/// above). As of retroglyph#279, `size()` itself never queries the terminal at all -- it
+/// above). As of retroglyph#279, `size()` itself never queries the terminal at all: it
 /// returns a size cached at construction time (seeded from `crossterm::terminal::size()`,
-/// falling back to 80x24 -- not the previous, non-conventional, 80x25 -- if that initial query
+/// falling back to 80x24, not the previous, non-conventional, 80x25, if that initial query
 /// fails, per retroglyph#281) and refreshed only on `Event::Resize`.
 #[test]
 fn size_falls_back_instead_of_panicking() {
@@ -74,7 +74,7 @@ fn size_falls_back_instead_of_panicking() {
 /// an interactive terminal, rather than always leaving ANSI/SGR escapes on. Under `cargo test`
 /// (default, captured) this process's real stdout is a pipe, not a TTY, so `plain_mode()` should
 /// be `true`; run with `--nocapture` on a machine with a real controlling terminal still
-/// reachable, it could observe the other outcome instead -- either way, the assertion compares
+/// reachable, it could observe the other outcome instead; either way, the assertion compares
 /// against a fresh, independent `is_terminal()` check so it holds under both.
 #[test]
 fn build_auto_detects_plain_mode_from_real_stdout() {

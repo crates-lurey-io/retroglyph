@@ -904,7 +904,7 @@ mod tests {
     }
 
     /// A multi-cell span's covered cells carry that span's text fallback, so a terminal must
-    /// print all of them. Deliberately unlike `WIDE_CHAR_SPACER`, which both draw paths skip.
+    /// print all of them. Unlike `WIDE_CHAR_SPACER`, which both draw paths skip.
     #[test]
     fn span_covered_cells_are_printed_as_the_text_fallback() {
         use retroglyph_core::Grid;

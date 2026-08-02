@@ -204,7 +204,7 @@ impl AnimatedWidget for Scrollbar {
     /// Ticks `state`'s momentum/rubber-band physics forward by `frame.delta` (a no-op while
     /// [`ScrollState::dragging`](crate::ScrollState::dragging) is `true`, per [`ScrollState::tick`]'s
     /// own docs), then draws the thumb at the resulting
-    /// [`integer_offset`](crate::ScrollState::integer_offset) -- the [`Widget::render`] this type
+    /// [`integer_offset`](crate::ScrollState::integer_offset): the [`Widget::render`] this type
     /// already has, just with `self.offset` replaced by `state`'s current one. `max_offset` is
     /// `total_len - visible_len` (floored at `0`), matching [`thumb_geometry`]'s own definition, so
     /// the physics and the drawn thumb position are always in terms of the same bound.

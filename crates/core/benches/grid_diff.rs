@@ -31,7 +31,7 @@ fn filled(cols: u16, rows: u16, glyph: char, fg: Color) -> Grid {
 /// Builds two same-sized grids differing in exactly `pct` percent of their cells.
 ///
 /// Uses a fixed RNG seed so the change set (and therefore the benchmark) is deterministic across
-/// runs -- required for `--save-baseline`/`--baseline` comparisons to be meaningful.
+/// runs, required for `--save-baseline`/`--baseline` comparisons to be meaningful.
 fn sparse_pair(cols: u16, rows: u16, pct: u32) -> (Grid, Grid) {
     let old = filled(cols, rows, ' ', Color::Default);
     let mut new = filled(cols, rows, ' ', Color::Default);

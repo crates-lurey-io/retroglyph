@@ -135,7 +135,7 @@ fn wrap_line(line: &Line, max_width: u16) -> Vec<WrappedLine> {
                         width: 0,
                     });
                     col = 0;
-                    // Drop the space that triggered this break — it would just be
+                    // Drop the space that triggered this break: it would just be
                     // leading whitespace on the new line.
                     if grapheme == " " {
                         continue;
@@ -334,7 +334,7 @@ mod tests {
         let line = Line::raw("hello world");
         let lines = wrap_line(&line, 7);
         assert_eq!(lines.len(), 2);
-        assert_eq!(lines[0].width, 5); // "hello" — space consumed
+        assert_eq!(lines[0].width, 5); // "hello", space consumed
         assert_eq!(lines[1].width, 5); // "world"
     }
 

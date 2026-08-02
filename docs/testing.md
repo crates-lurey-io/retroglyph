@@ -187,11 +187,11 @@ the manual technique above only for tests that don't have an `App` to drive (e.g
 `examples/tests/support/` drives every `Example` implementation through three snapshot types from
 one source of truth:
 
-- **Headless text** (insta) — the same `format_view()` mechanism as unit tests, run against the
+- **Headless text** (insta): the same `format_view()` mechanism as unit tests, run against the
   example's actual `update()` logic.
-- **Software PNG** — a pixel buffer capture of the software backend's rendered output.
-- **Crossterm SVG** — a real PTY capture, parsed via the `vt100` crate, verifying the ANSI/SGR
-  output an actual terminal would receive.
+- **Software PNG**: a pixel buffer capture of the software backend's rendered output.
+- **Crossterm SVG**: a real PTY capture, parsed via the `vt100` crate, verifying the ANSI/SGR output
+  an actual terminal would receive.
 
 `support::capture_pty` spawns those crossterm binaries with `RG_FPS=0`, because the shared example
 driver draws its FPS overlay by default and a live frame rate is not reproducible. The one place
@@ -202,7 +202,7 @@ way ever saw it) and drives its `` ` `` toggle through the PTY in both direction
 Two examples need more than `RG_FPS=0`. `06_layers` and `08_animation` animate to a parked end state
 and use _that_ as their ready marker, because an animation that loops forever never settles into a
 single frame a snapshot can pin. Waiting on those markers is therefore waiting on real elapsed time
-(4.7s and 2.3s respectively), and `FrameClock::advance` caps catch-up at five steps -- so whenever a
+(4.7s and 2.3s respectively), and `FrameClock::advance` caps catch-up at five steps: whenever a
 loaded test runner deschedules the child for longer than that cap, the lost wall time is animation
 time it never gets back and the capture stretches without bound. Measured on a 12-core machine,
 freezing the child for 1.5s five times pushed `06_layers` from 4.7s to 9.9s, past the harness's old

@@ -561,7 +561,7 @@ mod tests {
         // A fully opaque destination always yields a fully opaque result.
         //
         // Before 0.3.0, source_over used the `(v + (v >> 8) + 1) >> 8` shift trick, which is
-        // exactly `floor`, and gave (127, 127, 0, 255) here -- one LSB darker on the green
+        // exactly `floor`, and gave (127, 127, 0, 255) here: one LSB darker on the green
         // channel. That downward bias, applied every frame a sprite is composited, is the bug
         // this crate depends on alpha-blend 0.3.0 to fix.
         assert_eq!(result, U8x4Rgba::new(127, 128, 0, 255));

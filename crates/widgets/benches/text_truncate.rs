@@ -4,7 +4,7 @@
 //! `s.chars()` accumulating a display-width budget via `unicode_width::UnicodeWidthChar` and
 //! copies the surviving prefix into a new `String`. A future rewrite that returns a borrowed
 //! `&str` slice instead of an owned `String` should show up here as a real allocation-cost win,
-//! not just a signature change -- these three input shapes exercise the width accounting
+//! not just a signature change: these three input shapes exercise the width accounting
 //! differently: ASCII is the width-1-per-char fast path, wide CJK-style characters are width-2
 //! (so the walk terminates roughly twice as early per column budget), and zero-width combining
 //! marks contribute 0 width each, forcing the walk all the way to the end of the string before
@@ -39,7 +39,7 @@ fn wide(len: usize) -> String {
 
 /// Builds a `len`-character-long string of zero-width combining marks (U+0301 COMBINING ACUTE
 /// ACCENT) around a single leading `'a'`, so a width-based truncation walks the *entire* string
-/// before ever exceeding a realistic column budget -- the pathological case for a naive
+/// before ever exceeding a realistic column budget, the pathological case for a naive
 /// per-character loop, since every zero-width char still costs a `chars()` step and a
 /// `UnicodeWidthChar::width` call.
 fn zero_width(len: usize) -> String {

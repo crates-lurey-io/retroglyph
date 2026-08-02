@@ -87,7 +87,7 @@ pub(super) fn render(
 
     // Layout: "<label> [########----]  <readout>". Direct `put` calls below address this
     // surface's own local (0, 0)..(width, 1) row; sub-widgets are handed a `scope`d rect
-    // instead, which -- unlike `put` -- addresses the same grid-space `surface.area()` does, so
+    // instead, which (unlike `put`) addresses the same grid-space `surface.area()` does, so
     // those rects are built from `area`'s own top-left.
     let area = surface.area();
     let width_usize = usize::from(width);

@@ -1068,7 +1068,7 @@ mod tests {
     fn no_fill_leaves_gap() {
         let area = Rect::new(0, 0, 10, 4);
         let panes = split_v(area, &[Constraint::Fixed(2), Constraint::Fixed(2)]);
-        // Only 4 of 10 rows consumed; that is fine — panes still fit.
+        // Only 4 of 10 rows consumed; that is fine, panes still fit.
         assert_eq!(panes[0].height(), 2);
         assert_eq!(panes[1].height(), 2);
         assert_eq!(panes[1].bottom(), 4);

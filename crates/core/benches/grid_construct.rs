@@ -3,7 +3,7 @@
 //! retroglyph#264 flags that `Grid::new` pre-allocates a 256-element `Vec<Option<LayerBuf>>` up
 //! front, and that `Terminal` holds up to four `Grid`s (`current`, `previous`,
 //! `flattened_current`, `flattened_previous`), multiplying that cost. This benchmark measures the
-//! cost of constructing a single `Grid` -- the dominant cost is the layer-table `Vec` itself, not
+//! cost of constructing a single `Grid`: the dominant cost is the layer-table `Vec` itself, not
 //! the grid content, so a range of grid sizes is included to confirm the construction cost is flat
 //! with respect to `width`/`height` (only layer 0's `LayerBuf` scales with cell count; the other
 //! 255 slots are a fixed-size `Vec` regardless of grid dimensions).

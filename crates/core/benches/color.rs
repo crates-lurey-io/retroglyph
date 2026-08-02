@@ -1,6 +1,6 @@
 //! Benchmarks for the `Color` conversions on `retroglyph-core`'s per-frame paths: linear
 //! blending (`Color::lerp`), the `gem` perceptual 256-color quantizer (`Color::to_indexed`), and
-//! -- since `blend_color` itself is crate-private -- the non-linear `BlendMode`s exercised through
+//! (since `blend_color` itself is crate-private) the non-linear `BlendMode`s exercised through
 //! `Grid::blit_alpha`, the only public entry point that reaches them.
 //!
 //! retroglyph#269 asks for coverage of `blend_color` per `BlendMode` and the `gem` 256-color
@@ -23,8 +23,8 @@ const SAMPLES: usize = 4096;
 
 /// Builds `SAMPLES` random RGB colors.
 ///
-/// Uses a fixed RNG seed so the input (and therefore the benchmark) is deterministic across runs
-/// -- required for `--save-baseline`/`--baseline` comparisons to be meaningful.
+/// Uses a fixed RNG seed so the input (and therefore the benchmark) is deterministic across runs,
+/// required for `--save-baseline`/`--baseline` comparisons to be meaningful.
 fn random_colors(seed: u64) -> Vec<Color> {
     let mut rng = fastrand::Rng::with_seed(seed);
     (0..SAMPLES)
@@ -73,7 +73,7 @@ fn lerp(c: &mut Criterion) {
 }
 
 /// Benchmarks each non-`Linear` [`BlendMode`] via `Grid::blit_alpha` on a 1x1 grid, batching
-/// `SAMPLES` calls per iteration -- see this file's module doc for why `blit_alpha` (rather than
+/// `SAMPLES` calls per iteration; see this file's module doc for why `blit_alpha` (rather than
 /// `blend_color` directly) is the entry point used.
 #[cfg(feature = "blend-modes")]
 fn blend_modes(c: &mut Criterion) {

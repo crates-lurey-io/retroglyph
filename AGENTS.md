@@ -18,7 +18,7 @@ test, and doc. All clippy lints (including `pedantic` and `nursery`) are errors;
 warning that's promoted to a hard failure via `-D warnings` in `just clippy`.
 
 ```sh
-just check          # full gate -- must pass before committing
+just check          # full gate: must pass before committing
 just check-targets   # also required when touching Output/DrawCell/a backend impl (see below)
 just fmt             # auto-fix Rust + Markdown/JSON formatting
 just test            # cargo test --all-features
@@ -91,19 +91,19 @@ PR-title CI is where enforcement lives; there's no local commit-msg hook for thi
 
 **Do not mark an ordinary API-signature breaking change with `!`.** `release-plz`'s own
 `semver_check` (via `cargo-semver-checks`) independently detects and correctly per-crate-scopes that
-kind of break while computing the Release PR -- verified concretely on this repo: adding
+kind of break while computing the Release PR. Verified concretely on this repo: adding
 `#[non_exhaustive]` to a public enum computed the correct `0.1.0 -> 0.2.0` bump from
 `cargo-semver-checks` alone, with no `!` anywhere in the commit.
 
 **Why it matters in this monorepo:** release-plz attributes a commit's Conventional Commit
-classification -- including a `!` -- to every crate whose packaged files that commit touches, by
-file path, not by the commit's stated `type(scope)`. A single atomic commit that changes
-`crates/core/` (a real break) and also touches `crates/widgets/` (a companion, non-breaking,
-mechanical fix needed only because of the core change) will have its `!` applied to **both** crates,
-even though widgets' own API is untouched -- this happened for real on this repo and required
-rewriting an already-merged commit to fix (see `RELEASING.md`'s "Known gotcha" section). Since
-atomic, cross-crate commits are the whole point of this being a monorepo, don't try to avoid this by
-splitting commits; avoid it by not putting `!` on commits that don't need it.
+classification (including a `!`) to every crate whose packaged files that commit touches, by file
+path, not by the commit's stated `type(scope)`. A single atomic commit that changes `crates/core/`
+(a real break) and also touches `crates/widgets/` (a companion, non-breaking, mechanical fix needed
+only because of the core change) will have its `!` applied to **both** crates, even though widgets'
+own API is untouched. This happened for real on this repo and required rewriting an already-merged
+commit to fix (see `RELEASING.md`'s "Known gotcha" section). Since atomic, cross-crate commits are
+the whole point of this being a monorepo, don't try to avoid this by splitting commits; avoid it by
+not putting `!` on commits that don't need it.
 
 **Reserve `!` / a `BREAKING CHANGE:` footer for the narrow case `cargo-semver-checks` can't see:** a
 behavioral break with unchanged public signatures (same types, same function shapes, different
@@ -112,10 +112,10 @@ only the crate(s) actually experiencing the break.
 
 ### PR labels
 
-| Label            | Effect                                                                                                        |
-| ---------------- | ------------------------------------------------------------------------------------------------------------- |
-| `skip-changelog` | Keep this PR out of the generated per-crate changelog (chore/CI/typo noise).                                  |
-| `no-release`     | Annotation only, marking a Release PR you intend to hold. Not enforced -- the real control is not merging it. |
+| Label            | Effect                                                                                                      |
+| ---------------- | ----------------------------------------------------------------------------------------------------------- |
+| `skip-changelog` | Keep this PR out of the generated per-crate changelog (chore/CI/typo noise).                                |
+| `no-release`     | Annotation only, marking a Release PR you intend to hold. Not enforced: the real control is not merging it. |
 
 The `breaking` label (`.github/labels.yml`) is a plain categorization label synced automatically by
 `check-semver.yml` from its own `cargo-semver-checks` finding; it never drives release-plz's version
@@ -123,15 +123,15 @@ bump. There is no `semver-override` label; see `RELEASING.md` for why.
 
 ## Docs
 
-- `README.md` -- project overview, features, crate list, quick start.
-- `STYLE_GUIDE.md` -- Rust API and code style conventions.
-- `docs/testing.md` -- testing architecture and commands.
-- `docs/ROADMAP.md` -- ideas considered and their adopt/defer/reject verdicts.
-- `RELEASING.md` -- the crates.io publish process.
-- `llms.txt` / `llms-full.txt` -- generated machine-readable per-crate API summaries. `just doc`
+- `README.md`: project overview, features, crate list, quick start.
+- `STYLE_GUIDE.md`: Rust API and code style conventions.
+- `docs/testing.md`: testing architecture and commands.
+- `docs/ROADMAP.md`: ideas considered and their adopt/defer/reject verdicts.
+- `RELEASING.md`: the crates.io publish process.
+- `llms.txt` / `llms-full.txt`: generated machine-readable per-crate API summaries. `just doc`
   generates a pair under `target/doc/<crate>/` for each publishable crate; the full version includes
   all public type signatures and doc comments.
-- `docs/references/` -- deep-dive research for topics an ADR flagged as open or deferred (future
+- `docs/references/`: deep-dive research for topics an ADR flagged as open or deferred (future
   GPU/SDL backends, accessibility, font rendering, benchmarking, packaging/distribution). Not a
   general reference library; if a topic here is fully implemented, the code and its rustdoc are the
   reference, not this directory.

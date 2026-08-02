@@ -147,7 +147,7 @@ fn keyboard_enhancement_flags() -> crossterm::event::KeyboardEnhancementFlags {
 ///   this is opt-in on one of the two positive signals above; their absence is not itself a
 ///   signal of anything narrower.
 ///
-/// This deliberately does **not** try to infer [`ColorSupport::Indexed256`] or
+/// This does **not** try to infer [`ColorSupport::Indexed256`] or
 /// [`ColorSupport::Ansi16`] from `$TERM`/`$COLORTERM` text (an earlier version of this function
 /// selected `Indexed256` for any `$TERM` containing `"256color"`, and `Truecolor` only for an
 /// explicit `$COLORTERM=truecolor`/`24bit`). Both heuristics look reasonable in isolation and
@@ -156,7 +156,7 @@ fn keyboard_enhancement_flags() -> crossterm::event::KeyboardEnhancementFlags {
 /// truecolor-capable environments never set `$COLORTERM` at all (this workspace's own PTY test
 /// harness is one: `portable-pty` sets `$TERM=xterm-256color` unconditionally for the child it
 /// spawns and never sets `$COLORTERM`, which silently downgraded every snapshot test's rendered
-/// colors and broke them all -- retroglyph#585 CI). Requiring an unambiguous signal before
+/// colors and broke them all: retroglyph#585 CI). Requiring an unambiguous signal before
 /// degrading, rather than guessing from `$TERM`'s text, is what avoids repeating that. Both
 /// narrower levels remain fully available as an explicit choice via
 /// [`CrosstermOptions::color_support`](CrosstermOptions::color_support); they just aren't guessed
@@ -268,16 +268,16 @@ impl Drop for InstanceGuard {
     }
 }
 
-/// Writes the escape sequence that's always safe to emit during terminal restore -- popping the
+/// Writes the escape sequence that's always safe to emit during terminal restore (popping the
 /// kitty keyboard enhancement flags, disabling bracketed paste/focus-change/mouse capture,
-/// resetting every SGR attribute, and showing the cursor -- to `w`.
+/// resetting every SGR attribute, and showing the cursor) to `w`.
 ///
 /// Split out of [`restore_terminal`] so these exact bytes can be asserted on directly against an
 /// in-memory `Vec<u8>` in tests, since `restore_terminal` itself always targets the real process
 /// stdout and so can't otherwise be observed from a unit test.
 ///
-/// `SetAttribute(Attribute::Reset)` (`\x1b[0m`) clears every SGR attribute -- colors, bold,
-/// underline, etc. -- back to the terminal's own default. The SGR "pen" is terminal-global state,
+/// `SetAttribute(Attribute::Reset)` (`\x1b[0m`) clears every SGR attribute (colors, bold,
+/// underline, etc.) back to the terminal's own default. The SGR "pen" is terminal-global state,
 /// independent of which screen buffer is active, so without this the last color the app drew with
 /// (e.g. a tinted background) survives `LeaveAlternateScreen`/raw mode exit and leaks into the
 /// shell. Left unreset, that leftover pen state is also what many terminals use to paint newly
@@ -333,7 +333,7 @@ fn restore_terminal() {
 /// better at a call site than `CrosstermOptions::new()` but the two are
 /// otherwise identical (`builder()` just calls `Self::new()`).
 ///
-/// This crate deliberately does not attempt to auto-detect terminal
+/// This crate does not attempt to auto-detect terminal
 /// capabilities (no `TERM` parsing, no `supports_keyboard_enhancement()`
 /// query): those queries can block for seconds on terminals that never
 /// respond. `CrosstermOptions` is the opt-out mechanism instead: callers who
@@ -893,9 +893,9 @@ impl<W: std::io::Write> Crossterm<W> {
     /// Temporarily hands the real terminal back to the OS/shell, for shelling out to `$EDITOR`,
     /// a pager, or a debugger.
     ///
-    /// Exits raw mode, leaves the alternate screen, and shows the cursor -- only undoing whichever
+    /// Exits raw mode, leaves the alternate screen, and shows the cursor, only undoing whichever
     /// of those this instance actually has active, using the same "only undo what was actually
-    /// done" bookkeeping this instance's `Drop` and the process-wide panic hook already share --
+    /// done" bookkeeping this instance's `Drop` and the process-wide panic hook already share,
     /// leaving the terminal in the state a normal shell command expects. Mouse capture,
     /// focus-change reporting, bracketed paste, and the kitty keyboard protocol are also
     /// disabled, matching what a normal process exit/panic already does.
@@ -908,7 +908,7 @@ impl<W: std::io::Write> Crossterm<W> {
     /// state doesn't know about.
     ///
     /// Does not handle `Ctrl+Z`/`SIGTSTP`: this is an explicit API for the common case (a key
-    /// binding that shells out deliberately), not a signal handler. An app that also wants to
+    /// binding that shells out), not a signal handler. An app that also wants to
     /// suspend on `SIGTSTP` needs to install its own signal handler and call this method (and
     /// [`SuspendGuard::resume`]) from it.
     ///
@@ -1017,8 +1017,8 @@ impl<W: std::io::Write> Output for Crossterm<W> {
             // any `current` cell that's also still at its default (e.g. anything the app hasn't
             // drawn into the newly grown area yet) never differs from `previous` and is never
             // resent by the diff in `present()`. That leaves the BCE-tinted patch on screen
-            // permanently -- exactly the "gaps where the background doesn't clear" symptom after
-            // a resize -- since nothing ever draws over it again.
+            // permanently: exactly the "gaps where the background doesn't clear" symptom after
+            // a resize, since nothing ever draws over it again.
             crossterm::style::SetAttribute(crossterm::style::Attribute::Reset),
             crossterm::terminal::Clear(crossterm::terminal::ClearType::All)
         )?;
@@ -1574,7 +1574,7 @@ mod tests {
     fn suspend_resume_forces_a_full_redraw() {
         // With every TTY-only feature disabled (the same combination other `build_with_writer`
         // tests use to run without a real terminal), `suspend`/resuming a dropped `SuspendGuard`
-        // still exercise the shared restore/`enable_terminal_features` machinery -- both only
+        // still exercise the shared restore/`enable_terminal_features` machinery: both only
         // touch process stdout via always-safe commands (cursor show/hide, disabling features
         // that were never enabled) when raw mode/the alternate screen are off, so this succeeds
         // under `cargo test`'s non-TTY stdout.
@@ -1716,7 +1716,7 @@ mod tests {
         // Terminals that implement erase-display via background color erase (BCE) paint erased
         // cells with whatever background is currently active, not the terminal's true default,
         // so a colored cell drawn just before a resize left a stale tint across the whole
-        // screen -- and since `Terminal::resize` (in `retroglyph-core`) wipes the diff's
+        // screen, and since `Terminal::resize` (in `retroglyph-core`) wipes the diff's
         // `previous` grid to default tiles, nothing ever draws over that tint again in areas
         // that stay at their default value. `clear` must emit a full SGR reset ahead of the
         // erase so BCE always paints with the terminal's real default background.
@@ -1857,7 +1857,7 @@ mod tests {
         // Compile-level/API-shape check: building a `CrosstermOptions` with all flags disabled
         // via the builder type-checks and round-trips its fields. Exercising the actual terminal
         // commands (`with_options`/`build` itself) requires a real TTY, which isn't available in
-        // CI, so this is intentionally not a full integration test (see tests/non_tty.rs for the
+        // CI, so this is not a full integration test (see tests/non_tty.rs for the
         // non-TTY integration coverage that is possible without one).
         let options = CrosstermOptions::new()
             .mouse_capture(false)
@@ -2109,7 +2109,7 @@ mod tests {
 
     #[test]
     fn detect_color_support_dumb_term_forces_none() {
-        // The one $TERM value that's an unambiguous "assume nothing" signal -- never emitted by
+        // The one $TERM value that's an unambiguous "assume nothing" signal: never emitted by
         // a terminal that actually supports color, unlike a "...256color" suffix (see the next
         // test).
         use retroglyph_terminal::ColorSupport;

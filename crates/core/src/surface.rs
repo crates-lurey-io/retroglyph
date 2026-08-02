@@ -75,8 +75,8 @@ pub struct Surface<'a> {
 ///
 /// This is a convention, not a restriction: [`Surface::on_layer`] still accepts any `u8`, and a
 /// tile map or sprite-heavy app with its own multi-layer scheme (terrain/items/actors/...) has no
-/// reason to route through `Layer` at all. `Layer` exists for the overlapping-*UI* case --
-/// chrome, popups, debug HUDs -- where a small, shared, named split is worth more than 256 open
+/// reason to route through `Layer` at all. `Layer` exists for the overlapping-*UI* case:
+/// chrome, popups, debug HUDs, where a small, shared, named split is worth more than 256 open
 /// numeric ids.
 ///
 /// # Examples
@@ -97,7 +97,7 @@ pub struct Surface<'a> {
 /// // Chrome draws on `Hud`, above the screen.
 /// surface.on_tier(Layer::Hud).print((0, 0), "File  Edit  View", Style::default());
 ///
-/// // A dropdown draws on `Overlay`, above the HUD -- painting it before or after the two calls
+/// // A dropdown draws on `Overlay`, above the HUD: painting it before or after the two calls
 /// // above makes no difference, because it's on a higher tier, not drawn later.
 /// surface.on_tier(Layer::Overlay).print((0, 1), "New", Style::default());
 /// ```
@@ -109,7 +109,7 @@ pub enum Layer {
     World,
     /// Persistent chrome: menu bars, status lines, HUD. Grid layer 1.
     Hud,
-    /// Popups, dropdowns, modals -- painted over [`Layer::World`] and [`Layer::Hud`] regardless
+    /// Popups, dropdowns, modals, painted over [`Layer::World`] and [`Layer::Hud`] regardless
     /// of draw order. Grid layer 2.
     Overlay,
     /// Debug and dev tooling. Always the top-most tier, so it stays visible over an open
@@ -368,11 +368,11 @@ impl<'a> Surface<'a> {
     /// a caller can draw in a shifted (e.g. world/camera) coordinate space and let the surface do
     /// the clipping, rather than subtracting `origin` from every coordinate by hand.
     ///
-    /// Every coordinate-taking method on the returned surface -- [`put`](Self::put),
+    /// Every coordinate-taking method on the returned surface ([`put`](Self::put),
     /// [`put_signed`](Self::put_signed), [`print`](Self::print), [`print_line`](Self::print_line),
     /// [`fill_rect`](Self::fill_rect), [`put_offset`](Self::put_offset),
     /// [`put_span`](Self::put_span), [`put_span_uniform`](Self::put_span_uniform), and
-    /// [`clear_region`](Self::clear_region) -- subtracts `origin` (composed with any outstanding
+    /// [`clear_region`](Self::clear_region)) subtracts `origin` (composed with any outstanding
     /// translate) from the coordinate it is given before applying its usual bounds check. Only
     /// [`clear`](Self::clear), which takes no coordinate and always clears this surface's whole
     /// area, is unaffected.
@@ -427,7 +427,7 @@ impl<'a> Surface<'a> {
     /// Chaining `clip(...).translate(...)` directly works when the result is used right where
     /// it's produced (both `clip` and `translate` return a `Surface<'_>` borrowing the previous
     /// step for exactly that call), but a helper that hands the composed view back to its own
-    /// caller -- for example [`Camera::surface`](crate::Camera::surface) -- needs the two
+    /// caller (for example [`Camera::surface`](crate::Camera::surface)) needs the two
     /// narrowings applied against a single `&mut self` borrow instead, so the returned surface
     /// can outlive the call. This does that.
     ///
@@ -545,7 +545,7 @@ impl<'a> Surface<'a> {
     /// by re-adding [`area`](Self::area)'s own top-left, so a clipped area that does not itself
     /// start at grid `(0, 0)` (e.g. [`Camera::surface`](crate::Camera::surface)'s
     /// `clip_translate`) still resolves to the right absolute cell. The result is then checked
-    /// against [`clip_rect`](Self::clip_rect), not `area`, since the clip -- never the area -- is
+    /// against [`clip_rect`](Self::clip_rect), not `area`, since the clip, never the area, is
     /// what decides whether a write lands.
     fn shift(&self, x: u16, y: u16) -> Option<(u16, u16)> {
         let sx = i32::from(x).checked_sub(self.origin_offset.0)?;
@@ -1721,7 +1721,7 @@ mod tests {
             let mut view = surface.clip_translate(Rect::new(5, 5, 10, 10), (45, 45));
 
             // (50, 50) minus the origin (45, 45) is (5, 5): the clipped area's local (5, 5),
-            // landing at absolute grid (10, 10) -- not at (5, 5), which is what the pre-fix
+            // landing at absolute grid (10, 10), not at (5, 5), which is what the pre-fix
             // `shift` incorrectly produced by using the clip's raw absolute bounds instead of
             // re-adding the area's own top-left.
             view.put((50, 50), '@', Style::default());

@@ -78,7 +78,7 @@ impl<T: HasWindowHandle + HasDisplayHandle + ?Sized> WindowHandle for T {}
 /// exists in this crate today) can implement this trait with an empty body and inherit the
 /// default `true`.
 ///
-/// Deliberately not blanket-implemented for every `Debug + Display` type: that would make it
+/// Not blanket-implemented for every `Debug + Display` type: that would make it
 /// impossible for any concrete error type to override [`is_recoverable`](Self::is_recoverable) at
 /// all (a specific `impl` would conflict with the blanket one), defeating the point of the trait.
 /// Instead, each `SurfaceError` type needs one explicit (and usually empty) `impl
@@ -204,7 +204,7 @@ impl RecoverableError for GenericSurfaceError {
 ///   two per cell would let a later cell's background overwrite an earlier neighbor's spilled
 ///   glyph, breaking spill in the right/down directions only.
 ///
-/// The offset *application* is deliberately not shared code: `retroglyph-gl` shifts a quad's vertex
+/// The offset *application* is not shared code: `retroglyph-gl` shifts a quad's vertex
 /// position in its vertex shader, `retroglyph-software` shifts `origin_x`/`origin_y` in a CPU blit:
 /// irreducibly different mechanics that must nonetheless agree on the four points above.
 ///

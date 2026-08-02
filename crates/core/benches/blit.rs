@@ -19,7 +19,7 @@ use std::hint::black_box;
 /// `blit_alpha`'s blend runs against varied (rather than uniform, easily-branch-predicted) input.
 ///
 /// Uses a fixed RNG seed so the source content (and therefore the benchmark) is deterministic
-/// across runs -- required for `--save-baseline`/`--baseline` comparisons to be meaningful.
+/// across runs, required for `--save-baseline`/`--baseline` comparisons to be meaningful.
 fn filled(cols: u16, rows: u16, seed: u64) -> Grid {
     let mut rng = fastrand::Rng::with_seed(seed);
     let mut grid = Grid::new(cols, rows);

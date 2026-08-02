@@ -50,7 +50,7 @@ dependents, but a leaf-crate change bumps only that crate.
 ## Features
 
 <details open>
-<summary><strong>Game loop</strong> — implement <code>App</code> once, run on every backend</summary>
+<summary><strong>Game loop</strong>: implement <code>App</code> once, run on every backend</summary>
 
 Implement the `App` trait (the update-side dual of `Backend`) and run it with a single
 feature-selected entry point. Terminal backends use the generic `run_blocking`/`run_blocking_with`
@@ -68,7 +68,7 @@ for turn-based games and headless tests.
 </details>
 
 <details>
-<summary><strong>Extended grapheme cluster support</strong> — combining marks, emoji, and CJK wide chars</summary>
+<summary><strong>Extended grapheme cluster support</strong>: combining marks, emoji, and CJK wide chars</summary>
 
 With the `egc` feature (enabled by default), the library handles full Unicode grapheme clusters:
 combining marks, ZWJ emoji sequences, and multi-codepoint characters. CJK characters and emoji
@@ -78,7 +78,7 @@ Multi-codepoint graphemes are capped at 8 codepoints to prevent combining-mark b
 </details>
 
 <details>
-<summary><strong>Diagnostics that ship nothing</strong> — development warnings compile out of release
+<summary><strong>Diagnostics that ship nothing</strong>: development warnings compile out of release
 builds</summary>
 
 Warnings that only help while building a game (a sprite larger than the cells reserved for it, for
@@ -151,12 +151,12 @@ floating `FPS` button. Set `RG_FPS=0` to start with it hidden.
 
 Examples that animate over real elapsed time also honour `RG_TIME_SCALE`, a multiplier on the frame
 delta they're handed (`RG_TIME_SCALE=20` runs an example twenty times faster, `0.25` a quarter
-speed). It's a debugging and capture aid -- the PTY snapshot tests use it so a capture that waits on
+speed). It's a debugging and capture aid: the PTY snapshot tests use it so a capture that waits on
 an animation to settle doesn't have to spend real seconds waiting.
 
 Every example is also built for WASM (Headless/Terminal/Software/WebGL variants) and published as an
-interactive gallery at **[main.retroglyph.dev/examples](https://main.retroglyph.dev/examples/)** --
-no local toolchain required to try one in a browser.
+interactive gallery at **[main.retroglyph.dev/examples](https://main.retroglyph.dev/examples/)**: no
+local toolchain required to try one in a browser.
 
 ## How retroglyph compares
 

@@ -44,7 +44,7 @@ use gem::rgb::Rgb888;
 ///
 /// # Scope: what `Tint` is not for
 ///
-/// `Tint` is deliberately per-cell and per-draw, not per-sheet or per-frame. "Is this sheet art
+/// `Tint` is per-cell and per-draw, not per-sheet or per-frame. "Is this sheet art
 /// or a mask" is a different, fixed-at-load-time question, answered once by
 /// `retroglyph_window::tileset::SheetColor` rather than by this type. The two compose instead of
 /// collapsing into one flag (see `retroglyph_window::sprite_cache::SpriteTint`, which resolves
@@ -53,8 +53,8 @@ use gem::rgb::Rgb888;
 /// would conflict if merged into a single `modulate(bool)`-style flag: a sheet declared
 /// art-not-mask still needs to be flashable.
 ///
-/// Frame- or layer-level colour transforms -- day/night cycles, fog of war, a "remembered" map
-/// render -- are not a use case for `Tint` either. Those apply to everything already drawn,
+/// Frame- or layer-level colour transforms (day/night cycles, fog of war, a "remembered" map
+/// render) are not a use case for `Tint` either. Those apply to everything already drawn,
 /// every frame, so routing them through per-cell `Tint` would mean writing the same value into a
 /// side-table entry for every cell of every layer, every frame: the wrong lever for a
 /// screen-wide effect. That is tracked as its own, not-yet-designed concern in retroglyph#562;

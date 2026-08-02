@@ -10,7 +10,7 @@
 //! with content engineered so every cell takes exactly one path: an
 //! all-glyph frame for `blit_glyph`, and all-sprite frames (fully opaque vs
 //! fully alpha-blended) for `blit_sprite`. `blit_glyph` has no alpha
-//! concept -- bitmap fonts are 1-bit, so there is only one `blit_glyph`
+//! concept: bitmap fonts are 1-bit, so there is only one `blit_glyph`
 //! variant here, not an opaque/alpha pair.
 //!
 //! Requires `--all-features` (`default-font` for the font, `tilesets` for

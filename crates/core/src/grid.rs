@@ -14,7 +14,7 @@
 //! Each cell carries a glyph, foreground/background [`Color`], and sub-cell pixel
 //! offsets. [`Color`] covers the full spectrum: the terminal's default
 //! foreground/background, the 16 standard ANSI colors, the 256-color palette, and 24-bit RGB.
-//! [`Style`] intentionally has no text modifiers (bold, italic, underline, ...);
+//! [`Style`] has no text modifiers (bold, italic, underline, ...);
 //! see its own doc comment for the full rationale.
 //!
 //! ## Draw order
@@ -372,7 +372,7 @@ impl<'a> Iterator for CellsMut<'a> {
 }
 
 // ---------------------------------------------------------------------------
-// LayerBuf — a single layer's flat buffer
+// LayerBuf: a single layer's flat buffer
 // ---------------------------------------------------------------------------
 
 /// A single layer in the grid: a flat 2D buffer of one tile per cell.
@@ -571,7 +571,7 @@ impl Grid {
 }
 
 // ---------------------------------------------------------------------------
-// Grid — public API (all forward to layer 0)
+// Grid: public API (all forward to layer 0)
 // ---------------------------------------------------------------------------
 
 impl Grid {
@@ -786,7 +786,7 @@ impl Grid {
     }
 
     // ------------------------------------------------------------------
-    // Write grapheme — layer 0 only
+    // Write grapheme: layer 0 only
     // ------------------------------------------------------------------
 
     /// Write a grapheme cluster at `(x, y)` on layer 0, enforcing wide-
@@ -938,7 +938,7 @@ impl Grid {
 }
 
 // ---------------------------------------------------------------------------
-// Grid — multi-cell spans
+// Grid: multi-cell spans
 // ---------------------------------------------------------------------------
 
 impl Grid {
@@ -1282,7 +1282,7 @@ impl Grid {
 }
 
 // ---------------------------------------------------------------------------
-// Grid — multi-layer API
+// Grid: multi-layer API
 // ---------------------------------------------------------------------------
 
 impl Grid {
@@ -1968,7 +1968,7 @@ fn blend_bg(mode: BlendMode, src: Color, dst: Color, t: f32) -> Color {
 }
 
 // ---------------------------------------------------------------------------
-// Index / IndexMut — layer 0
+// Index / IndexMut: layer 0
 // ---------------------------------------------------------------------------
 
 impl Index<Pos> for Grid {
@@ -2002,7 +2002,7 @@ impl IndexMut<Pos> for Grid {
 }
 
 // ---------------------------------------------------------------------------
-// Display / Debug — layer 0
+// Display / Debug: layer 0
 // ---------------------------------------------------------------------------
 
 impl fmt::Display for Grid {
@@ -2015,7 +2015,7 @@ impl fmt::Display for Grid {
                 #[cfg(not(feature = "egc"))]
                 let is_spacer = tile.glyph == '\0';
                 let c = if is_spacer {
-                    ' ' // right half of a wide char — don't print twice
+                    ' ' // right half of a wide char, don't print twice
                 } else if tile.glyph == ' ' {
                     '·' // empty cell marker
                 } else {
@@ -2142,6 +2142,17 @@ mod tests {
 
         let s = alloc::format!("{grid}");
         assert_eq!(s, "A··\n···\n");
+    }
+
+    #[test]
+    fn test_grid_display_wide_char_spacer() {
+        // A wide char's right-half spacer cell prints as a plain space, not the wide
+        // char's own glyph repeated.
+        let mut grid = Grid::new(3, 1);
+        grid.write_grapheme(0, 0, 0, "\u{4e2d}", Style::default()); // wide (CJK)
+
+        let s = alloc::format!("{grid}");
+        assert_eq!(s, "\u{4e2d} \u{b7}\n");
     }
 
     #[test]
@@ -3513,8 +3524,8 @@ mod tests {
 
 /// Property tests for the wide-character (EGC) grid invariants.
 ///
-/// These exercise the trickiest code in the crate — `write_grapheme` and its
-/// `clear_overlap` helper — by hammering a small grid with random sequences of
+/// These exercise the trickiest code in the crate (`write_grapheme` and its
+/// `clear_overlap` helper) by hammering a small grid with random sequences of
 /// narrow, wide, combining, and emoji graphemes and checking that the
 /// wide-character bookkeeping never desyncs.
 #[cfg(all(test, feature = "egc"))]
@@ -3578,7 +3589,7 @@ mod egc_proptests {
             for (x, y, gi) in ops {
                 grid.write_grapheme(0, x, y, GRAPHEMES[gi], Style::default());
                 // The invariant must hold after every single write, not just
-                // at the end — an intermediate orphan would be a real bug.
+                // at the end: an intermediate orphan would be a real bug.
                 assert_wide_invariants(&grid);
             }
         }

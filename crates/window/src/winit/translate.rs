@@ -82,7 +82,7 @@ fn key_code_from_logical(key: &winit::keyboard::Key, modifiers: KeyModifiers) ->
 /// backward-compatible for exhaustive-matching consumers (per issue #267), but there is no need
 /// for a new one when an existing variant already fits the shape of the data. `Ime::Enabled`,
 /// `Ime::Preedit` (in-progress composition, not yet committed), and `Ime::Disabled` have no
-/// existing-`Event` equivalent and are intentionally dropped: an app that wants live preedit
+/// existing-`Event` equivalent and are dropped: an app that wants live preedit
 /// rendering is out of scope for this landable-sized change (see issue #296). An empty commit
 /// (`Ime::Commit(String::new())`) is also dropped: winit can send an empty commit as part of
 /// clearing composition state, and forwarding it would deliver a spurious empty paste.

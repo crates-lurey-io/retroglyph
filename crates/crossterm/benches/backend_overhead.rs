@@ -1,7 +1,7 @@
 //! Benchmarks `Output::size()`'s per-call cost against a headless `Crossterm<Vec<u8>>`.
 //!
 //! retroglyph#285 asked for this number to justify (or not) caching `size()` instead of calling
-//! `crossterm::terminal::size()` -- an ioctl-backed syscall -- on every call; retroglyph#279 did
+//! `crossterm::terminal::size()` (an ioctl-backed syscall) on every call; retroglyph#279 did
 //! exactly that, so `size()` now just returns a field cached at construction (seeded from
 //! `crossterm::terminal::size()`, falling back to 80x24 if that initial query fails, per
 //! retroglyph#281) and refreshed only on `Event::Resize`, never re-querying the terminal per

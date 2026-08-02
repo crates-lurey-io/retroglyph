@@ -392,8 +392,8 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
     /// for actually moving focus. `Enter`/`Space` are claimed only when they double as
     /// [`Sense::CLICK`] activation, i.e. a [`Sense::FOCUSABLE`] widget currently holds focus:
     /// otherwise the same keys reach an app's own text input or other key handling unclaimed.
-    /// Everything else -- [`Event::Resize`], [`Event::Paste`], [`Event::FocusGained`]/
-    /// [`Event::FocusLost`], and any key this interaction doesn't bind -- is never claimed, even
+    /// Everything else ([`Event::Resize`], [`Event::Paste`], [`Event::FocusGained`]/
+    /// [`Event::FocusLost`], and any key this interaction doesn't bind) is never claimed, even
     /// while a widget is focused and active: those need to reach whatever's behind an open
     /// overlay (a resize still has to reflow the screen under a dropdown), which a coarser "is
     /// the overlay open" gate cannot express without also swallowing them.
@@ -497,14 +497,14 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
         // never asked for `CLICK`: `!disabled` is threaded through explicitly
         // here rather than relying on `senses_click` alone.
         let released_here = is_active && self.resolved_release && !disabled;
-        // Deliberately not gated on `self.pointer.is_down()`: the release
+        // Not gated on `self.pointer.is_down()`: the release
         // frame (where `is_down` just went false) must still see `dragging
         // == true` so `clicked` below correctly stays suppressed for a
         // drag's terminating release, not just the frames in between.
         let dragging =
             is_active && sense.contains(Sense::DRAG) && !disabled && self.past_drag_threshold();
 
-        // Live re-check, deliberately not gated on `hovered`/`resolved_hover` the way `pressed`
+        // Live re-check, not gated on `hovered`/`resolved_hover` the way `pressed`
         // is: those are resolved from *last* frame's hit-test snapshot (see the `Interaction`
         // frame-lifecycle docs), but a slide-off cancellation needs to see the pointer's
         // *current* position the instant it leaves this rect, not one frame later. Mirrors how
@@ -520,7 +520,7 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
             self.focus.request(id);
         }
 
-        // Scroll deliberately isn't gated on `hovered` (single topmost
+        // Scroll isn't gated on `hovered` (single topmost
         // winner) the way click/press/release/drag are: a scrollable
         // container's own rect is usually fully covered by its rows/items
         // (each independently sensing HOVER | CLICK so they're individually
@@ -570,7 +570,7 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
         }
 
         // `is_active.then_some(self.drag_origin).flatten()`, matching `press_origin` below: not
-        // gated on `resolved_pos`/`hovered`, deliberately live, matching `held`/`dragging` above,
+        // gated on `resolved_pos`/`hovered`, live, matching `held`/`dragging` above,
         // so a drag that has moved outside this widget's own rect still keeps reporting.
         let press_origin = is_active.then_some(self.drag_origin).flatten();
         let drag_delta = press_origin.zip(self.pointer.pos()).map(|(origin, pos)| {

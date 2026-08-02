@@ -2,7 +2,7 @@
 //!
 //! Shows the smallest possible use of [`Headless`]: build a `Terminal`,
 //! draw a frame, inject a synthetic key event, tick, and print the grid
-//! before/after via [`Headless::format_view`] -- the same technique used in
+//! before/after via [`Headless::format_view`]: the same technique used in
 //! this crate's own unit and integration tests. No terminal or window is
 //! required; this only depends on `retroglyph-core` itself, so it's the
 //! right starting point if you haven't picked a backend crate yet.

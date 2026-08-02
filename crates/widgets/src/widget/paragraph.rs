@@ -28,7 +28,7 @@ use crate::Surface;
 /// defaults to [`Style::new()`]; set it with [`Paragraph::style`].
 ///
 /// Without the `egc` feature, wrapping is `char`-boundary-safe and breaks
-/// on ASCII whitespace only -- no grapheme-cluster segmentation, so a
+/// on ASCII whitespace only: no grapheme-cluster segmentation, so a
 /// combining mark or wide CJK run can land on either side of a wrap point.
 /// Enabling `egc` upgrades wrapping to [`retroglyph_core::layout::TextLayout`],
 /// which is grapheme-cluster-aware; every other text-bearing widget in this

@@ -126,7 +126,7 @@ impl<'a> Button<'a> {
         self.theme_on(theme, theme.panel_bg)
     }
 
-    // `theme`/`theme_on` intentionally leave `disabled_style` untouched: `Theme` has one `dim`
+    // `theme`/`theme_on` leave `disabled_style` untouched: `Theme` has one `dim`
     // role, already used for de-emphasized text elsewhere, and this button's default
     // `disabled_style` (set in `new`) already matches it. A themed button that wants a different
     // disabled treatment can still call `disabled_style` after `theme`/`theme_on`, same as any
