@@ -844,6 +844,13 @@ impl Output for SoftwareRenderer {
 
     fn clear(&mut self) -> Result<(), Self::Error> {
         self.ctx.pixel_buf.clear();
+        // The per-cell shadow is now stale versus what's actually on screen (blank); forget it,
+        // mirroring `resize` above, so the next `draw_layers` call can't diff against pre-clear
+        // state and takes the full-repaint path instead of painting nothing.
+        self.ctx.prev_tiles.clear();
+        self.ctx.prev_tints.clear();
+        self.ctx.dirty_mask.clear();
+        self.ctx.prev_layer_count = usize::MAX;
         Ok(())
     }
 
@@ -1818,6 +1825,27 @@ mod tests {
         r.resize(Size::new(4, 5));
         draw_fill(&mut r, 4, 5, &red, None);
         assert_eq!(r.ctx.damage_rows, Some((0, 5 * CELL_H_PX)));
+    }
+
+    #[test]
+    fn clear_then_redrawing_the_same_frame_leaves_the_buffer_blank() {
+        // retroglyph#694: `clear` zeroed `pixel_buf` but left the per-cell shadow (`prev_tiles`,
+        // `prev_tints`, `prev_layer_count`) untouched, so redrawing the exact same frame after a
+        // `clear` diffed against stale-but-identical shadow state, found nothing changed, and
+        // painted nothing: the buffer stayed all zero instead of showing the redrawn content.
+        let mut r = damage_renderer(2, 1);
+        let red = bg_tile(200, 0, 0);
+        draw_fill(&mut r, 2, 1, &red, None);
+        assert!(r.pixels().iter().all(|&p| p == 0x00C8_0000));
+
+        r.clear().unwrap();
+        assert!(r.pixels().iter().all(|&p| p == 0));
+
+        draw_fill(&mut r, 2, 1, &red, None);
+        assert!(
+            r.pixels().iter().all(|&p| p == 0x00C8_0000),
+            "redrawing the same frame after clear() must repaint, not stay blank"
+        );
     }
 
     // ── Dirty-cell repaint (retroglyph#302) ──────────────────────────────
