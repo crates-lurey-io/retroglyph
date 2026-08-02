@@ -2,7 +2,7 @@
 use retroglyph_core::{Color, Rect, Style};
 
 use super::window::visible_window;
-use super::{InteractiveWidget, StatefulWidget};
+use super::{InteractiveWidget, Measure, StatefulWidget};
 use crate::ListState;
 use crate::Response;
 use crate::Sense;
@@ -162,6 +162,15 @@ impl StatefulWidget for List<'_> {
 
     fn render(&self, surface: &mut Surface<'_>, state: &mut Self::State) {
         self.draw(surface, state);
+    }
+}
+
+impl Measure for List<'_> {
+    /// One row per item; `width` is ignored, since items are truncated rather than wrapped.
+    fn height_for(&self, _width: u16) -> u16 {
+        #[allow(clippy::cast_possible_truncation)]
+        let height = self.items.len().min(usize::from(u16::MAX)) as u16;
+        height
     }
 }
 
@@ -327,6 +336,12 @@ mod tests {
         let highlighted_bg = grid[Pos::new(0, 1)].style().background();
         let plain_bg = grid[Pos::new(0, 0)].style().background();
         assert_ne!(highlighted_bg, plain_bg);
+    }
+
+    #[test]
+    fn height_for_is_the_item_count() {
+        let items = ["Alpha", "Bravo", "Charlie"];
+        assert_eq!(List::new(&items).height_for(80), 3);
     }
 
     #[test]

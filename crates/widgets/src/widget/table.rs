@@ -1,8 +1,8 @@
 //! [`Table`]: a fixed-column, scrollable table with a highlighted row.
 use retroglyph_core::{Color, Rect, Style};
 
-use super::StatefulWidget;
 use super::window::visible_window;
+use super::{Measure, StatefulWidget};
 use crate::ListState;
 use crate::Surface;
 use crate::Theme;
@@ -204,6 +204,16 @@ impl StatefulWidget for Table<'_> {
     }
 }
 
+impl Measure for Table<'_> {
+    /// One row per data row, plus the always-drawn header row; `width` is ignored, since cells
+    /// are truncated per column rather than wrapped.
+    fn height_for(&self, _width: u16) -> u16 {
+        #[allow(clippy::cast_possible_truncation)]
+        let rows = self.rows.len().min(usize::from(u16::MAX)) as u16;
+        rows.saturating_add(1)
+    }
+}
+
 /// The style and layout options for drawing one [`Table`] row, grouped to keep [`draw_row`]'s
 /// argument count within clippy's limit.
 #[derive(Clone, Copy)]
@@ -335,6 +345,17 @@ mod tests {
         let row0_bg = grid[Pos::new(0, 1)].style().background();
         let row1_bg = grid[Pos::new(0, 2)].style().background();
         assert_eq!(row0_bg, row1_bg); // neither visible row is highlighted
+    }
+
+    #[test]
+    fn height_for_is_row_count_plus_the_header_row() {
+        let headers = ["Name"];
+        let widths = [10u16];
+        let rows = rows(&["Alpha", "Bravo", "Charlie"]);
+        let rows = row_refs(&rows);
+        let table = Table::new(&headers, &widths, &rows);
+
+        assert_eq!(table.height_for(80), 4); // 3 rows + 1 header
     }
 
     #[test]
