@@ -577,11 +577,23 @@ impl<'a> Surface<'a> {
 
     /// Writes `grapheme` (already a single extended grapheme cluster) at `(x, y)`. A no-op if
     /// out of this surface's clip.
+    ///
+    /// A 2-column grapheme also needs its spacer cell (`x + 1`) inside the clip: `shift` only
+    /// checks the primary cell, and `Grid::write_grapheme` only refuses the spacer at the
+    /// *grid*'s own edge, not the clip's, so without this the spacer would land one column past
+    /// the clip. Refusing the whole write here (rather than writing a primary cell with no
+    /// spacer) matches [`span_fits`](Self::span_fits)'s reasoning: a footprint half outside the
+    /// clip would reserve a cell the caller does not own.
     #[cfg(feature = "egc")]
     fn put_grapheme(&mut self, x: u16, y: u16, grapheme: &str, style: Style) {
+        use unicode_width::UnicodeWidthStr;
+
         let Some((x, y)) = self.shift(x, y) else {
             return;
         };
+        if grapheme.width() == 2 && !self.clip.contains(x.saturating_add(1), y) {
+            return;
+        }
         self.grid.write_grapheme(self.layer, x, y, grapheme, style);
         self.apply_tint(x, y);
     }
@@ -1450,6 +1462,27 @@ mod tests {
         // Layer 0 is always allocated (empty), layer 1 was never written so stays unallocated.
         assert_eq!(grid.tile(0, Pos::new(0, 0)).map(Tile::glyph), Some(' '));
         assert_eq!(grid.tile(1, Pos::new(0, 0)), None);
+    }
+
+    #[test]
+    #[cfg(feature = "egc")]
+    fn a_wide_char_at_the_clip_edge_writes_its_spacer_outside_the_clip() {
+        let mut grid = Grid::new(8, 1);
+        let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 8, 1), 0);
+
+        // Clip is columns 0..4; the wide char's primary cell (column 3) is inside the clip, but
+        // its spacer would land at column 4, outside it. The whole write is refused.
+        surface
+            .clip(Rect::new(0, 0, 4, 1))
+            .put((3, 0), '\u{6f22}', Style::default());
+
+        assert_eq!(grid.tile(0, Pos::new(3, 0)).map(Tile::glyph), Some(' '));
+        assert!(
+            !grid
+                .tile(0, Pos::new(4, 0))
+                .is_some_and(|t| t.flags().contains(crate::tile::TileFlags::WIDE_CHAR_SPACER)),
+            "spacer must not be written outside the clip"
+        );
     }
 
     #[test]
