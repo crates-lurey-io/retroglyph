@@ -22,6 +22,7 @@ use crate::Sense;
 use crate::Surface;
 
 mod bar;
+mod border_type;
 mod box_border;
 mod button;
 mod gauge;
@@ -43,6 +44,7 @@ mod text;
 mod text_input;
 mod window;
 
+pub use border_type::BorderType;
 pub use box_border::BoxBorder;
 pub use button::Button;
 pub use gauge::Gauge;

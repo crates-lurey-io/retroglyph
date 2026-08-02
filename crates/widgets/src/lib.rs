@@ -89,7 +89,7 @@ pub use text::{truncate, truncate_owned};
 pub use theme::Theme;
 pub use ui::Ui;
 pub use widget::{
-    AnimatedPerfOverlay, AnimatedWidget, BoxBorder, Button, Gauge, InteractiveWidget, List, Log,
-    Measure, Meter, Modal, Panel, Paragraph, PerfOverlay, PrintLine, ProgressBar, Scrollbar,
-    Sparkline, StatBar, StatefulWidget, Table, Tabs, Text, TextInput, Widget,
+    AnimatedPerfOverlay, AnimatedWidget, BorderType, BoxBorder, Button, Gauge, InteractiveWidget,
+    List, Log, Measure, Meter, Modal, Panel, Paragraph, PerfOverlay, PrintLine, ProgressBar,
+    Scrollbar, Sparkline, StatBar, StatefulWidget, Table, Tabs, Text, TextInput, Widget,
 };

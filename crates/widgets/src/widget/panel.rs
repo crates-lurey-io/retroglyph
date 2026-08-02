@@ -2,7 +2,7 @@
 use retroglyph_core::{Color, Rect, Style};
 use unicode_width::UnicodeWidthStr;
 
-use super::{BoxBorder, Widget};
+use super::{BorderType, BoxBorder, Widget};
 use crate::Surface;
 use crate::draw::fill_rect;
 use crate::style::Sides;
@@ -36,6 +36,7 @@ pub struct Panel<'a> {
     title_align: Align,
     border_style: Style,
     fill_style: Style,
+    border_type: BorderType,
     padding: Sides,
 }
 
@@ -75,6 +76,14 @@ impl<'a> Panel<'a> {
     #[must_use]
     pub const fn fill_style(mut self, style: Style) -> Self {
         self.fill_style = style;
+        self
+    }
+
+    /// Set which box-drawing glyphs the border is drawn with. Defaults to
+    /// [`BorderType::Plain`], the same as [`BoxBorder::border_type`].
+    #[must_use]
+    pub const fn border_type(mut self, border_type: BorderType) -> Self {
+        self.border_type = border_type;
         self
     }
 
@@ -154,7 +163,10 @@ impl Widget for Panel<'_> {
         let inner = Rect::new(1, 1, width.saturating_sub(2), height.saturating_sub(2));
         fill_rect(surface, inner, ' ', self.fill_style);
 
-        BoxBorder::new().style(self.border_style).render(surface);
+        BoxBorder::new()
+            .style(self.border_style)
+            .border_type(self.border_type)
+            .render(surface);
 
         // Render the title into the top border if one was provided.
         if let Some(t) = self.title {
@@ -316,6 +328,20 @@ mod tests {
         let mut grid = Grid::new(1, 1);
         Panel::new().render(&mut Surface::new(&mut grid, area, 0));
         assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
+    }
+
+    #[test]
+    fn border_type_selects_the_glyph_set() {
+        let area = Rect::new(0, 0, 10, 4);
+        let mut grid = Grid::new(10, 4);
+        Panel::new()
+            .border_type(BorderType::Double)
+            .render(&mut Surface::new(&mut grid, area, 0));
+
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), '╔');
+        assert_eq!(grid[Pos::new(9, 0)].glyph(), '╗');
+        assert_eq!(grid[Pos::new(0, 3)].glyph(), '╚');
+        assert_eq!(grid[Pos::new(9, 3)].glyph(), '╝');
     }
 
     #[test]

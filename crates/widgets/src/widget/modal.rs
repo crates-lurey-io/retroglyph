@@ -1,7 +1,7 @@
 //! [`Modal`]: a bordered, filled box centered on screen.
 use retroglyph_core::{Color, Rect, Style};
 
-use super::{Panel, Widget};
+use super::{BorderType, Panel, Widget};
 use crate::Surface;
 use crate::layout::centered_rect;
 use crate::style::Sides;
@@ -54,6 +54,7 @@ pub struct Modal<'a> {
     title_align: Align,
     border_style: Style,
     fill_style: Style,
+    border_type: BorderType,
     padding: Sides,
 }
 
@@ -68,6 +69,7 @@ impl<'a> Modal<'a> {
             title_align: Align::Center,
             border_style: Style::new(),
             fill_style: Style::new(),
+            border_type: BorderType::default(),
             padding: Sides::ZERO,
         }
     }
@@ -98,6 +100,14 @@ impl<'a> Modal<'a> {
     #[must_use]
     pub const fn fill_style(mut self, style: Style) -> Self {
         self.fill_style = style;
+        self
+    }
+
+    /// Set which box-drawing glyphs the border is drawn with. Defaults to
+    /// [`BorderType::Plain`], the same as [`Panel::border_type`].
+    #[must_use]
+    pub const fn border_type(mut self, border_type: BorderType) -> Self {
+        self.border_type = border_type;
         self
     }
 
@@ -139,6 +149,7 @@ impl<'a> Modal<'a> {
             .border_style(self.border_style)
             .fill_style(self.fill_style)
             .title_align(self.title_align)
+            .border_type(self.border_type)
             .padding(self.padding);
         if let Some(title) = self.title {
             panel = panel.title(title);
@@ -231,5 +242,18 @@ mod tests {
             Theme::DARK.title_bg
         );
         assert_eq!(grid[Pos::new(6, 4)].style().background(), Color::Default);
+    }
+
+    #[test]
+    fn border_type_selects_the_glyph_set() {
+        let screen = Rect::new(0, 0, 20, 10);
+        let mut grid = Grid::new(20, 10);
+        Modal::new(10, 4)
+            .border_type(BorderType::Thick)
+            .render(screen, &mut Surface::new(&mut grid, screen, 0));
+
+        // Box is centered_rect(screen, 10, 4) = Rect::new(5, 3, 10, 4).
+        assert_eq!(grid[Pos::new(5, 3)].glyph(), '┏');
+        assert_eq!(grid[Pos::new(14, 3)].glyph(), '┓');
     }
 }
