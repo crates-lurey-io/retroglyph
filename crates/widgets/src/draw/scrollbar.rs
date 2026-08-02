@@ -67,7 +67,8 @@ pub fn thumb_geometry(
 /// [`thumb_geometry`]) there's nothing to scroll.
 #[must_use]
 pub fn offset_for_pos(area: Rect, total_len: usize, visible_len: usize, pos: Pos) -> Option<usize> {
-    if !area.contains_pos(pos) || total_len <= visible_len {
+    if !area.contains_pos(pos) || area.height() == 0 || visible_len == 0 || total_len <= visible_len
+    {
         return None;
     }
 
@@ -139,5 +140,12 @@ mod tests {
     fn offset_for_pos_outside_the_area_is_none() {
         let area = Rect::new(5, 5, 1, 10);
         assert_eq!(offset_for_pos(area, 40, 10, Pos::new(0, 0)), None);
+    }
+
+    #[test]
+    fn offset_for_pos_mirrors_thumb_geometry_for_a_zero_height_viewport() {
+        let area = Rect::new(0, 0, 1, 10);
+        assert_eq!(thumb_geometry(area, 40, 0, 0), None); // visible_len == 0: nothing to scroll
+        assert_eq!(offset_for_pos(area, 40, 0, Pos::new(0, 5)), None);
     }
 }
