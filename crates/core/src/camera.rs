@@ -9,7 +9,12 @@
 //! Centering clamps to the world edges (the "scrolling map" convention): the
 //! viewport never scrolls past `[0, world)`, so the target stays centered
 //! except near the edges, where it drifts toward the corner. A world smaller
-//! than the viewport pins the origin at `(0, 0)`.
+//! than the viewport pins the origin at `(0, 0)`, with all the slack on the
+//! right and bottom of the given viewport rect; use
+//! [`set_viewport_fitted`](Camera::set_viewport_fitted) instead of
+//! [`set_viewport`](Camera::set_viewport) when a world that may be smaller
+//! than its viewport (a fixed board, a generated map, a minimap) should be
+//! letterboxed and centered instead.
 //!
 //! See the `12_dungeon_scroll` example for `Camera` in action:
 //! <https://main.retroglyph.dev/examples/12_dungeon_scroll/terminal/>.
@@ -92,6 +97,51 @@ impl Camera {
                 .y
                 .min(max_origin(viewport.height(), self.world.height())),
         );
+    }
+
+    /// Replace the viewport like [`set_viewport`](Self::set_viewport), but shrink it to the
+    /// world's size on any axis where the world is smaller, and center the shrunk rect within
+    /// `viewport` rather than pinning it to the top-left.
+    ///
+    /// A viewport at least as large as the world on both axes lands exactly on the world with no
+    /// slack, so `origin` is `(0, 0)` and [`viewport`](Self::viewport) reports that centered
+    /// rect, not `viewport` itself; hit-testing via [`screen_to_world`](Self::screen_to_world)
+    /// therefore only recognizes screen positions actually over the world, not the letterboxed
+    /// margin. This is the fix for the pinned-to-the-corner behaviour
+    /// [`set_viewport`](Self::set_viewport) has for a world smaller than the viewport: a fixed
+    /// board, a generated map of fixed dimensions, or a minimap drawn into a terminal whose size
+    /// the app does not control.
+    ///
+    /// Odd leftover slack rounds down, the same way [`center_on`](Self::center_on) rounds: any
+    /// extra cell of margin lands on the right or bottom, not the left or top.
+    ///
+    /// Never panics: all arithmetic is saturating, so a `viewport` narrower than it is tall (or
+    /// vice versa) relative to `world` cannot underflow.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_core::{Camera, Pos, Rect, Size};
+    ///
+    /// // A 20x20 viewport at (2, 2) over a 5x5 world: the effective viewport shrinks to 5x5
+    /// // and centers within the given rect, instead of pinning to (2, 2).
+    /// let mut cam = Camera::new(Rect::new(0, 0, 1, 1), Size::new(5, 5));
+    /// cam.set_viewport_fitted(Rect::new(2, 2, 20, 20));
+    /// assert_eq!(cam.viewport(), Rect::new(9, 9, 5, 5));
+    /// assert_eq!(cam.origin(), Pos::new(0, 0));
+    ///
+    /// // A viewport already no larger than the world on both axes behaves like `set_viewport`:
+    /// // no shrinking, no centering.
+    /// let mut cam = Camera::new(Rect::new(0, 0, 1, 1), Size::new(100, 100));
+    /// cam.set_viewport_fitted(Rect::new(0, 0, 10, 10));
+    /// assert_eq!(cam.viewport(), Rect::new(0, 0, 10, 10));
+    /// ```
+    pub fn set_viewport_fitted(&mut self, viewport: Rect) {
+        let width = viewport.width().min(self.world.width());
+        let height = viewport.height().min(self.world.height());
+        let x = viewport.left() + (viewport.width() - width) / 2;
+        let y = viewport.top() + (viewport.height() - height) / 2;
+        self.set_viewport(Rect::new(x, y, width, height));
     }
 
     /// Center the view on `target` (world coords), clamped to the world edges so
@@ -347,6 +397,44 @@ mod tests {
         assert_eq!((visible.width(), visible.height()), (5, 5));
         // Cells map into the viewport, offset by its top-left.
         assert_eq!(c.world_to_screen(Pos::new(0, 0)), Some(Pos::new(2, 2)));
+    }
+
+    #[test]
+    fn set_viewport_fitted_shrinks_and_centers_a_world_smaller_on_both_axes() {
+        let mut c = Camera::new(Rect::new(0, 0, 1, 1), Size::new(5, 5));
+        c.set_viewport_fitted(Rect::new(2, 2, 20, 20));
+        assert_eq!(c.viewport(), Rect::new(9, 9, 5, 5));
+        assert_eq!(c.origin(), Pos::new(0, 0));
+        assert_eq!(c.visible_bounds(), Rect::new(0, 0, 5, 5));
+        assert_eq!(c.world_to_screen(Pos::new(0, 0)), Some(Pos::new(9, 9)));
+    }
+
+    #[test]
+    fn set_viewport_fitted_shrinks_only_the_axis_that_is_smaller() {
+        // World is smaller than the viewport on x only.
+        let mut c = Camera::new(Rect::new(0, 0, 1, 1), Size::new(5, 100));
+        c.set_viewport_fitted(Rect::new(0, 0, 20, 10));
+        assert_eq!(c.viewport(), Rect::new(7, 0, 5, 10));
+    }
+
+    #[test]
+    fn set_viewport_fitted_rounds_odd_slack_toward_the_right_and_bottom() {
+        let mut c = Camera::new(Rect::new(0, 0, 1, 1), Size::new(4, 4));
+        c.set_viewport_fitted(Rect::new(0, 0, 9, 9));
+        // 9 - 4 = 5 of slack, split 2/3: two columns/rows left and top, three right and bottom.
+        assert_eq!(c.viewport(), Rect::new(2, 2, 4, 4));
+    }
+
+    #[test]
+    fn set_viewport_fitted_matches_set_viewport_when_the_world_is_not_smaller() {
+        let mut a = Camera::new(Rect::new(0, 0, 1, 1), Size::new(100, 100));
+        a.set_viewport_fitted(Rect::new(0, 0, 10, 10));
+
+        let mut b = Camera::new(Rect::new(0, 0, 1, 1), Size::new(100, 100));
+        b.set_viewport(Rect::new(0, 0, 10, 10));
+
+        assert_eq!(a.viewport(), b.viewport());
+        assert_eq!(a.origin(), b.origin());
     }
 
     #[test]
