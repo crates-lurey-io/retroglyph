@@ -1,14 +1,20 @@
 //! [`Paragraph`]: word-wrapped text, implementing both [`Widget`] and
 //! [`Measure`] so a caller can size a pane to fit before rendering.
 //!
-//! Requires the `egc` feature: wrapping is delegated entirely to
-//! [`retroglyph_core::layout::TextLayout`], which handles grapheme clusters
-//! and hard newlines correctly. This module adds no wrapping logic of its
-//! own: see `crates/widgets/src/text.rs` for why that duplication was
-//! removed.
+//! Always available: wrapping falls back to a `char`-boundary-safe,
+//! ASCII-whitespace word wrap with no grapheme-cluster correctness (a
+//! combining mark, ZWJ sequence, or wide CJK run may land on the wrong
+//! side of a wrap point). Enabling the `egc` feature upgrades this same
+//! type to route through [`retroglyph_core::layout::TextLayout`] instead,
+//! which handles grapheme clusters and hard newlines correctly; there is
+//! no second, egc-only `Paragraph` type to migrate to.
+#[cfg(feature = "egc")]
+use retroglyph_core::Rect;
+use retroglyph_core::Style;
+#[cfg(feature = "egc")]
 use retroglyph_core::layout::TextLayout;
+#[cfg(feature = "egc")]
 use retroglyph_core::text::{Line, Span};
-use retroglyph_core::{Rect, Style};
 
 use super::{Measure, Widget};
 use crate::Surface;
@@ -20,6 +26,14 @@ use crate::Surface;
 /// given width without rendering (via [`Measure::height_for`]) so a caller
 /// can size its pane to fit instead of guessing a fixed height. `style`
 /// defaults to [`Style::new()`]; set it with [`Paragraph::style`].
+///
+/// Without the `egc` feature, wrapping is `char`-boundary-safe and breaks
+/// on ASCII whitespace only -- no grapheme-cluster segmentation, so a
+/// combining mark or wide CJK run can land on either side of a wrap point.
+/// Enabling `egc` upgrades wrapping to [`retroglyph_core::layout::TextLayout`],
+/// which is grapheme-cluster-aware; every other text-bearing widget in this
+/// crate (`List`, `Table`, `Log`) already has this same gap regardless of
+/// `egc`.
 ///
 /// # Examples
 ///
@@ -57,11 +71,66 @@ impl<'a> Paragraph<'a> {
         self
     }
 
+    #[cfg(feature = "egc")]
     fn line(&self) -> Line {
         Line::from(Span::styled(self.text, self.style))
     }
 }
 
+/// Greedy, `char`-boundary-safe word wrap used when the `egc` feature is off.
+///
+/// Breaks on ASCII space (`' '`, consumed at the break point, not placed) and on `'\n'` (a hard
+/// break, regardless of width); an overlong word with no space to break at is force-broken at a
+/// `char` boundary once it would exceed `max_width`. Zero-width `char`s (e.g. combining marks)
+/// are dropped rather than measured, since without `egc` there is no grapheme-cluster pass to
+/// attach them to the `char` before them. This mirrors
+/// [`retroglyph_core::layout::TextLayout`]'s own wrap algorithm one abstraction level down
+/// (`char` instead of grapheme cluster), so plain-ASCII input wraps identically either way.
+#[cfg(not(feature = "egc"))]
+fn wrap(text: &str, max_width: u16) -> Vec<String> {
+    use retroglyph_core::text::char_width;
+
+    let mut lines: Vec<String> = vec![String::new()];
+    let mut col: u16 = 0;
+
+    for ch in text.chars() {
+        if ch == '\n' {
+            lines.push(String::new());
+            col = 0;
+            continue;
+        }
+
+        let cw = char_width(ch);
+        if cw == 0 {
+            continue; // zero-width char with no grapheme pass to attach it to; drop it.
+        }
+
+        if col + cw > max_width && col > 0 {
+            let current = lines.last_mut().expect("always at least one line");
+            if let Some(space_idx) = current.rfind(' ') {
+                let remainder = current[space_idx + 1..].to_string();
+                current.truncate(space_idx); // also drops the space itself
+                col = remainder.chars().map(char_width).sum();
+                lines.push(remainder);
+            } else {
+                // No space on the line: force-break (overlong word).
+                lines.push(String::new());
+                col = 0;
+                if ch == ' ' {
+                    // Would just be leading whitespace on the new line.
+                    continue;
+                }
+            }
+        }
+
+        lines.last_mut().expect("always at least one line").push(ch);
+        col += cw;
+    }
+
+    lines
+}
+
+#[cfg(feature = "egc")]
 impl Measure for Paragraph<'_> {
     fn height_for(&self, width: u16) -> u16 {
         let line = self.line();
@@ -72,6 +141,17 @@ impl Measure for Paragraph<'_> {
     }
 }
 
+#[cfg(not(feature = "egc"))]
+impl Measure for Paragraph<'_> {
+    fn height_for(&self, width: u16) -> u16 {
+        let lines = wrap(self.text, width);
+        #[allow(clippy::cast_possible_truncation)]
+        let height = lines.len().min(usize::from(u16::MAX)) as u16;
+        height
+    }
+}
+
+#[cfg(feature = "egc")]
 impl Widget for Paragraph<'_> {
     fn render(&self, surface: &mut Surface<'_>) {
         let area = surface.area();
@@ -83,9 +163,22 @@ impl Widget for Paragraph<'_> {
     }
 }
 
+#[cfg(not(feature = "egc"))]
+impl Widget for Paragraph<'_> {
+    fn render(&self, surface: &mut Surface<'_>) {
+        let width = surface.area().width();
+        let height = surface.area().height();
+        let lines = wrap(self.text, width);
+        for (row, line) in lines.into_iter().take(usize::from(height)).enumerate() {
+            #[allow(clippy::cast_possible_truncation)] // `row < height`, a `u16`
+            surface.print((0, row as u16), &line, self.style);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::{Grid, Pos};
+    use retroglyph_core::{Grid, Pos, Rect};
 
     use super::*;
 
@@ -99,7 +192,7 @@ mod tests {
     #[test]
     fn height_for_respects_hard_newlines() {
         // A naive whitespace-based wrap would flatten this to one paragraph;
-        // TextLayout treats "\n" as a hard break regardless of width.
+        // both wrap paths treat "\n" as a hard break regardless of width.
         let p = Paragraph::new("first\nsecond\nthird");
         assert_eq!(p.height_for(100), 3);
     }

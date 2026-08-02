@@ -50,53 +50,6 @@ dependents, but a leaf-crate change bumps only that crate.
 ## Features
 
 <details open>
-<summary><strong>Grid API</strong> — place styled characters on a multi-layer grid with full color support</summary>
-
-Up to 256 layers. Each cell carries a glyph, foreground/background color, and sub-cell pixel
-offsets. Layer 0 is always allocated; layers 1+ are allocated on first write — single-layer games
-pay zero overhead.
-
-`Style` has no text modifiers (bold, italic, underline, ...): a pixel/bitmap-font renderer can't
-fake most of them without real per-style assets, so rather than work in a real terminal and silently
-do nothing in the software backend, they're not part of the API at all. See `Style`'s doc comment in
-`crates/core/src/style.rs` for the full rationale.
-
-Colors cover the full spectrum: the terminal's default foreground/background, the 16 standard ANSI
-colors, the 256-color palette, and 24-bit RGB.
-
-</details>
-
-<details>
-<summary><strong>Double buffering</strong> — diff-based presentation sends only changed cells</summary>
-
-`Terminal::present()` compares the current frame against the previous one and forwards only the
-changed cells to the backend. Pixel-based backends (software renderer) request full frames because
-sub-cell offsets can leave orphaned pixels from the previous frame.
-
-</details>
-
-<details>
-<summary><strong>Stateful drawing API</strong> — chainable builder for everyday rendering</summary>
-
-Set the active style with `fg()`, `bg()`, then place characters with `put()`. Print strings with
-`print()` (handles newlines and wide characters), render styled spans with `print_styled()`, or lay
-out text in a bounded rectangle with `print_box()`. Clear the active layer, all layers, or a
-rectangular region. Switch layers with `layer(id)`. Or bypass the builder and access the grid
-directly via `grid_mut()`.
-
-</details>
-
-<details>
-<summary><strong>Text layout and word wrapping</strong> — styled spans with configurable alignment</summary>
-
-`Span` and `Line` provide styled text primitives. `TextLayout` is a builder that word-wraps a `Line`
-to a bounded rectangle, then positions it with independent horizontal and vertical alignment
-(left/center/right, top/middle/bottom). Measure the result before rendering with
-`TextLayout::measure()`.
-
-</details>
-
-<details>
 <summary><strong>Game loop</strong> — implement <code>App</code> once, run on every backend</summary>
 
 Implement the `App` trait (the update-side dual of `Backend`) and run it with a single
@@ -115,91 +68,12 @@ for turn-based games and headless tests.
 </details>
 
 <details>
-<summary><strong>Scrolling camera and map loading</strong> — worlds larger than the screen</summary>
-
-`Camera` is a viewport onto a larger world: it converts between world and screen coordinates, clamps
-to the map edges while following a target, and iterates the visible cells as `(world, screen)`
-pairs. `Grid::from_charmap` builds a styled grid from an ASCII map or level string, one tile per
-character. Combined with multi-layer compositing, this drives scrolling roguelikes (see the
-`12_dungeon_scroll` and `15_outpost_dashboard` examples).
-
-</details>
-
-<details>
 <summary><strong>Extended grapheme cluster support</strong> — combining marks, emoji, and CJK wide chars</summary>
 
 With the `egc` feature (enabled by default), the library handles full Unicode grapheme clusters:
 combining marks, ZWJ emoji sequences, and multi-codepoint characters. CJK characters and emoji
 automatically occupy two grid columns with a transparent spacer in the adjacent cell.
 Multi-codepoint graphemes are capped at 8 codepoints to prevent combining-mark bombs.
-
-</details>
-
-<details>
-<summary><strong>Pluggable backends</strong> — swap rendering targets without touching game logic</summary>
-
-The `Backend` trait bundles three independent facets: `Output` (draw cells, flush, resize), `Input`
-(poll/push events), and `Cursor` (show/hide, move). A backend implements whichever facets it
-actually needs: `Backend` itself has no methods of its own, and any type implementing all three gets
-it for free.
-
-- **Headless** (`retroglyph-core`) — in-memory with no I/O. The workhorse for unit and integration
-  tests. Provides `format_view()` for snapshot testing with insta and `push_event()` for synthetic
-  input; see
-  ["Driving `Headless` with synthetic events"](docs/testing.md#driving-headless-with-synthetic-events)
-  for the full workflow. For apps implementing `App`, the `testing` feature adds `TestHarness`
-  (`retroglyph_core::testing`): queues synthetic input, steps frames, and presents automatically, so
-  tests stop rewriting that loop by hand; see
-  ["Driving an `App` with `TestHarness`"](docs/testing.md#driving-an-app-with-testharness).
-- **Crossterm** (`retroglyph-crossterm`) — full terminal with raw mode, alternate screen, and mouse
-  capture. Registers a panic hook to safely restore the terminal on crashes. Feature `tracing`
-  instruments `draw`/`flush`/`poll_event` with spans for profiling. Generic over its content writer
-  (`Crossterm<W>`, default `BufWriter<Stdout>`) — `Crossterm::with_writer` renders to a file, a
-  pipe, or an in-memory buffer instead, useful for tests that want to inspect the emitted ANSI
-  output without a real TTY.
-- **Software** (`retroglyph-software`) — pixel-based rendering via winit + softbuffer. Uses a 1-bit
-  bitmap font (embedded Unscii 16 with feature `default-font`), with sub-cell pixel offsets,
-  multi-layer compositing, a configurable scale factor, and a headless mode for pixel-level testing.
-  Runs unchanged as a native window or a browser `<canvas>` (WASM).
-- **Terminal (WASM)** (`retroglyph-terminal-wasm`) — pushes ANSI output to a browser terminal
-  emulator such as xterm.js instead of a native TTY.
-- **Font chains** (`FontChain`) — both pixel backends resolve every character through an ordered
-  chain of 1-bit bitmap fonts, so a fallback font built with `BitmapFont::with_charset` supplies
-  coverage CP437 has no mapping for (quadrants, sextants, braille). A chain glyph is drawn from the
-  same 1-bit mask path as any other glyph and takes the cell's foreground color, unlike a tileset
-  sprite, which carries the colors it was authored in. Both builders' `font()` takes either a single
-  `BitmapFont` or a whole chain.
-- **Sprite tilesets** (feature `tilesets` on `retroglyph-software` and `retroglyph-gl`) — PNG sprite
-  sheets mapped to a codepage (CP437, Unicode range, or custom), rendered with RGBA alpha blending
-  over bitmap font glyphs, on the CPU or the GPU.
-- **Multi-cell sprites** — `Surface::put_span` writes one piece of artwork across a `w × h` block of
-  cells and carries its own text fallback with it, so the same call renders as one sprite on a
-  graphical backend and as readable ASCII on a terminal, with no capability check:
-
-  ```rust,ignore
-  surface.put_span((x, y), &["[==]",
-                         "|__|"], style);
-  ```
-
-  `Grid::span_owner` resolves any cell of a span to its anchor in O(1), so hit-testing multi-cell
-  artwork is one comparison; `SpriteAlign` positions art inside a span box larger than itself.
-
-</details>
-
-<details>
-<summary><strong>Input handling</strong> — keyboard, mouse, resize, and close events</summary>
-
-`Terminal::poll(timeout)` returns `Option<Event>` with support for keyboard (all standard keys +
-modifier flags), mouse (buttons, movement, scroll), touch (synthesized into the same mouse events on
-the software/WASM backend), window resize, and close events. `has_input()` checks for events without
-blocking. Resize events are automatically applied to the grid before the event reaches your code.
-
-</details>
-
-<details>
-<summary><strong><code>no_std</code> compatible</strong> — core crate compiles without <code>std</code></summary>
-
-Disable the `std` feature (requires an allocator). Useful for embedded or kernel-space roguelikes.
 
 </details>
 
@@ -217,51 +91,12 @@ For an optimized build that still reports, enable `retroglyph-core`'s `dev` feat
 
 </details>
 
-<details>
-<summary><strong>Widgets</strong> (crate <code>retroglyph-widgets</code>) — panels, gauges, tables, and a
-layout splitter, built on <code>retroglyph-core</code></summary>
-
-An optional crate: games that draw manually depend only on `retroglyph-core`. Every widget (`Panel`,
-`Gauge`, `Table`, `Sparkline`, `BoxBorder`, `List`, `Tabs`, `Button`, `Scrollbar`, `ProgressBar`,
-`Modal`, `StatBar`, `Meter`, `Log`, `TextInput`, ...) is a builder struct that draws itself into a
-`Surface` (an area-relative view over a `Grid`) via `Widget`/`StatefulWidget` and retains no state
-of its own -- state that outlives one render call (a selection index, a scroll offset, a text
-field's value and cursor) lives in `ListState`/`TextInputState` instead. A handful of things that
-are genuinely just functions (`fill_rect`, `thumb_geometry`/`offset_for_pos`) stay free functions
-rather than pretending to be widgets. Alongside the widgets is a constraint-based `Rect` splitter
-(`split_h`/`split_v`) with `Fixed`/`Percent`/`Fill`/`Min`/`Max` constraints and `Flex` alignment
-(`Start`/`End`/`Center`/`SpaceBetween`/`SpaceAround`): similar to [ratatui](https://ratatui.rs)'s
-layout system. `Fill(weight)` claims a share of the leftover space proportional to `weight` relative
-to the other `Fill`/`Min`/`Max` panes in the same split (`Fill(1)` reproduces plain equal
-distribution).
-
-Three more independent layers build on top:
-
-- `Widget`/`StatefulWidget` traits let callers box or store heterogeneous widgets, e.g. a
-  `Vec<Box<dyn Widget>>` of panes to render each frame, backed by `ListState` for selection and
-  scroll position. `AnimatedWidget`, a sibling of `StatefulWidget`, is for state that evolves with
-  wall-clock time instead -- `ScrollState`'s momentum/rubber-band physics, a `Tween`-driven
-  transition -- taking a `Frame` (the same one `App::update` already receives) alongside the state,
-  so advancing and drawing happen in one call instead of two independently ordered ones. `Scrollbar`
-  implements it directly, ticking `ScrollState` before drawing the thumb at the result.
-  `ScrollState::apply` feeds a frame's resolved `Response::scroll_delta` straight into the wheel
-  impulse, so a scrollable widget doesn't have to re-derive wheel handling from raw mouse events
-  (see `13_combat_log`, which wires wheel scrolling into its `Log`/`Scrollbar` pair this way).
-- `BoxStyle`, a Lip-Gloss-style box model (padding, border, margin) rendered into a standalone
-  `Grid`. `Paragraph` (behind the `egc` feature) word-wraps text via `retroglyph-core`'s
-  `TextLayout` and implements a `Measure` trait so a caller can size a pane to fit before rendering.
-- `join_h`/`join_v` to compose several `Grid`s (e.g. `BoxStyle::render` output) into one before
-  drawing it.
-- `Theme` (`Theme::DARK`/`Theme::LIGHT`, or a caller-built palette): named color roles (`border`,
-  `accent`, `hover_bg`, ...) that every widget with a style knob can pick up via a `.theme(Theme)`
-  builder method, optionally: a manual `.border_style(...)`/etc. call after `.theme(...)` still
-  wins, and nothing requires a `Theme` at all.
-
-See the `09_widgets_dashboard` and `15_outpost_dashboard` examples for all of the above wired
-together in one UI, `17_theme_switch` for `Theme::DARK`/`Theme::LIGHT` switched live at runtime by a
-keypress, or `19_weighted_fill` for `Fill(weight)`'s proportional splits.
-
-</details>
+See [`crates/core`](crates/core) for the Grid API, double buffering, stateful drawing, text
+layout/word wrapping, scrolling camera/map loading, input handling, and `no_std` support, and
+[`crates/widgets`](crates/widgets) for panels, gauges, tables, layout splitting, and the
+`TextInput`/`TextInputState` single-line text field. Every backend in the [crates table](#crates)
+above links to its own README for what it adds over the `Backend` trait (font chains, sprite
+tilesets, panic-safe raw mode, WASM bridging, ...).
 
 ## Quick start
 

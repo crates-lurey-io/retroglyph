@@ -9,15 +9,48 @@ Immediate-mode drawing helpers for [retroglyph](https://github.com/crates-lurey-
 borders, filled panels, gauges, tables, lists, tab strips, buttons, sparklines, and a small
 constraint-based layout splitter (`split_h`/`split_v` with ratatui-style
 `Fixed`/`Percent`/`Fill`/`Min`/`Max` constraints), plus hover/click/drag/focus interaction tracking.
-Every widget is a builder struct that draws itself into a `Surface` (an area-relative view over a
-`Grid`) and retains no state of its own; depends only on
+Every widget (`Panel`, `Gauge`, `Table`, `Sparkline`, `BoxBorder`, `List`, `Tabs`, `Button`,
+`Scrollbar`, `ProgressBar`, `Modal`, `StatBar`, `Meter`, `Log`, `TextInput`, ...) is a builder
+struct that draws itself into a `Surface` (an area-relative view over a `Grid`) via
+`Widget`/`StatefulWidget` and retains no state of its own -- state that outlives one render call (a
+selection index, a scroll offset, a text field's value and cursor) lives in
+`ListState`/`TextInputState` instead. A handful of things that are genuinely just functions
+(`fill_rect`, `thumb_geometry`/`offset_for_pos`, `truncate`/`truncate_owned`) stay free functions
+rather than pretending to be widgets. Depends only on
 [`retroglyph-core`](https://crates.io/crates/retroglyph-core), so games that draw manually never
 pull it in.
 
-`Theme` (`Theme::DARK`/`Theme::LIGHT`, or a caller-built palette) is a set of named color roles --
-every widget with a style knob has a matching `.theme(Theme)` builder method that maps those roles
-onto it, optionally: nothing requires a `Theme` at all, and a manual `.border_style(...)`/etc. call
-after `.theme(...)` still wins.
+Alongside the widgets is the constraint-based `Rect` splitter above, with `Flex` alignment
+(`Start`/`End`/`Center`/`SpaceBetween`/`SpaceAround`), similar to [ratatui](https://ratatui.rs)'s
+layout system. `Fill(weight)` claims a share of the leftover space proportional to `weight` relative
+to the other `Fill`/`Min`/`Max` panes in the same split (`Fill(1)` reproduces plain equal
+distribution).
+
+Three more independent layers build on top:
+
+- `Widget`/`StatefulWidget` traits let callers box or store heterogeneous widgets, e.g. a
+  `Vec<Box<dyn Widget>>` of panes to render each frame, backed by `ListState` for selection and
+  scroll position. `AnimatedWidget`, a sibling of `StatefulWidget`, is for state that evolves with
+  wall-clock time instead -- `ScrollState`'s momentum/rubber-band physics, a `Tween`-driven
+  transition -- taking a `Frame` (the same one `App::update` already receives) alongside the state,
+  so advancing and drawing happen in one call instead of two independently ordered ones. `Scrollbar`
+  implements it directly, ticking `ScrollState` before drawing the thumb at the result.
+  `ScrollState::apply` feeds a frame's resolved `Response::scroll_delta` straight into the wheel
+  impulse, so a scrollable widget doesn't have to re-derive wheel handling from raw mouse events
+  (see `13_combat_log`, which wires wheel scrolling into its `Log`/`Scrollbar` pair this way).
+- `BoxStyle`, a Lip-Gloss-style box model (padding, border, margin) rendered into a standalone
+  `Grid`. `Paragraph` (behind the `egc` feature) word-wraps text via `retroglyph-core`'s
+  `TextLayout` and implements a `Measure` trait so a caller can size a pane to fit before rendering.
+- `join_h`/`join_v`/`blit_into` to compose several `Grid`s (e.g. `BoxStyle::render` output) into
+  one, or blit one directly onto another at an offset.
+- `Theme` (`Theme::DARK`/`Theme::LIGHT`, or a caller-built palette): named color roles (`border`,
+  `accent`, `hover_bg`, ...) that every widget with a style knob can pick up via a `.theme(Theme)`
+  builder method, optionally: a manual `.border_style(...)`/etc. call after `.theme(...)` still
+  wins, and nothing requires a `Theme` at all.
+
+See the `09_widgets_dashboard` and `15_outpost_dashboard` examples for all of the above wired
+together in one UI, `17_theme_switch` for `Theme::DARK`/`Theme::LIGHT` switched live at runtime by a
+keypress, or `19_weighted_fill` for `Fill(weight)`'s proportional splits.
 
 ## Quick start
 
@@ -89,8 +122,8 @@ build that would otherwise compile them out.
 
 ### `egc`
 
-⚪ Optional. Forwards to `retroglyph-core`'s `egc` feature; enables `Paragraph`'s
-grapheme-cluster-aware word-wrap.
+⚪ Optional. Forwards to `retroglyph-core`'s `egc` feature; upgrades `Paragraph`'s word-wrap (always
+available) to grapheme-cluster-aware correctness.
 
 ### `serde`
 

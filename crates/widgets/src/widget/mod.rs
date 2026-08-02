@@ -10,10 +10,11 @@
 //!
 //! A few widgets share logic: [`Gauge`] and [`StatBar`] both delegate to a
 //! crate-private `bar` module, and [`Sparkline`]/[`Gauge`]/[`StatBar`] all
-//! use [`Meter`] for their ratio-to-color ramp. [`Paragraph`] (behind the
-//! `egc` feature) additionally implements [`Measure`], since it needs
-//! `retroglyph_core::layout::TextLayout`'s grapheme-aware word-wrap to
-//! report a height before rendering.
+//! use [`Meter`] for their ratio-to-color ramp. [`Paragraph`] additionally
+//! implements [`Measure`], so a caller can report a height before
+//! rendering; with the `egc` feature enabled it reports that height via
+//! `retroglyph_core::layout::TextLayout`'s grapheme-aware word-wrap,
+//! otherwise via its own `char`-boundary-safe fallback.
 use retroglyph_core::Frame;
 
 use crate::Response;
@@ -29,7 +30,6 @@ mod log;
 mod meter;
 mod modal;
 mod panel;
-#[cfg(feature = "egc")]
 mod paragraph;
 mod perf_overlay;
 mod print_line;
@@ -51,7 +51,6 @@ pub use log::Log;
 pub use meter::Meter;
 pub use modal::Modal;
 pub use panel::Panel;
-#[cfg(feature = "egc")]
 pub use paragraph::Paragraph;
 pub use perf_overlay::{AnimatedPerfOverlay, PerfOverlay};
 pub use print_line::PrintLine;
@@ -130,8 +129,8 @@ pub trait StatefulWidget {
 /// A widget that can report the height it needs for a given width, before
 /// ever being rendered.
 ///
-/// Lets a caller size a pane to fit content (e.g. a wrapped `Paragraph`,
-/// behind the `egc` feature) instead of guessing a fixed height up front.
+/// Lets a caller size a pane to fit content (e.g. a wrapped `Paragraph`)
+/// instead of guessing a fixed height up front.
 /// Sizing is pure content math, not drawing.
 ///
 /// # Examples

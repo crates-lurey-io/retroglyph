@@ -8,11 +8,12 @@
 //! Every widget ([`widget`]) is a builder struct that draws itself into a
 //! [`Grid`](retroglyph_core::Grid) via [`Widget`]/[`StatefulWidget`] and
 //! retains no state of its own: state that outlives one render call (a
-//! selection index, a scroll offset) lives in [`ListState`] instead. A
+//! selection index, a scroll offset, a text field's value and cursor)
+//! lives in [`ListState`]/[`TextInputState`] instead. A
 //! handful of things that are genuinely just functions ([`fill_rect`],
-//! [`thumb_geometry`]/[`offset_for_pos`]) stay free functions in [`draw`]
-//! rather than pretending to be widgets. Three more independent layers
-//! build on top:
+//! [`thumb_geometry`]/[`offset_for_pos`] in [`draw`]; [`truncate`]/[`truncate_owned`] in
+//! [`text`]) stay free functions rather than pretending to be widgets. Three more independent
+//! layers build on top:
 //!
 //! - [`Widget`]/[`StatefulWidget`] ([`widget`]) render into a [`Surface`],
 //!   an area-relative, single-layer view over a [`Grid`](retroglyph_core::Grid), and let
@@ -29,8 +30,8 @@
 //!   [`InteractiveWidget`] gets hit-tested and drawn from the one area/id a call site names.
 //! - [`BoxStyle`] ([`style`]) for a Lip-Gloss-style box model (padding,
 //!   border, margin) rendered into a standalone `Grid`.
-//! - [`join_h`]/[`join_v`] ([`block`]) to compose several `Grid`s (e.g.
-//!   `BoxStyle::render` output) into one before drawing it.
+//! - [`join_h`]/[`join_v`]/[`blit_into`] ([`block`]) to compose several `Grid`s (e.g.
+//!   `BoxStyle::render` output) into one, or blit one directly onto another at an offset.
 //! - [`Theme`] ([`theme`]) for named color roles (an app picks
 //!   [`Theme::DARK`]/[`Theme::LIGHT`], or builds its own), independent of
 //!   how the app decides which one is active.
@@ -42,8 +43,8 @@
 //!
 //! - `dev` (⚪ optional): forwards `retroglyph-core`'s `dev` feature, forcing development
 //!   diagnostics on in a build that would otherwise compile them out.
-//! - `egc` (⚪ optional): forwards to `retroglyph-core`'s `egc` feature; enables `Paragraph`'s
-//!   grapheme-cluster-aware word-wrap.
+//! - `egc` (⚪ optional): forwards to `retroglyph-core`'s `egc` feature; upgrades `Paragraph`'s
+//!   word-wrap (always available) to grapheme-cluster-aware correctness.
 //! - `serde` (⚪ optional): `Serialize`/`Deserialize` impls for [`Theme`] and `Density`, forwarding
 //!   to `retroglyph-core`'s `serde` feature ([`Theme`] round-trips through `Color`'s own `serde`
 //!   impl).
@@ -78,8 +79,8 @@ pub use interact::{
     Response, Sense, Shortcuts,
 };
 pub use layout::{
-    Constraint, Flex, centered_rect, split_h, split_h_flex, split_h_spaced, split_v, split_v_flex,
-    split_v_spaced,
+    Constraint, Flex, Side, anchored_rect, centered_rect, split_h, split_h_flex, split_h_spaced,
+    split_v, split_v_flex, split_v_spaced,
 };
 pub use retroglyph_core::{Layer, StyledSurface, Surface};
 pub use state::{ListState, ScrollPhysics, ScrollState, SelectionWrap, TextInputState};
@@ -87,10 +88,8 @@ pub use style::{BoxStyle, Sides};
 pub use text::{truncate, truncate_owned};
 pub use theme::Theme;
 pub use ui::Ui;
-#[cfg(feature = "egc")]
-pub use widget::Paragraph;
 pub use widget::{
     AnimatedPerfOverlay, AnimatedWidget, BoxBorder, Button, Gauge, InteractiveWidget, List, Log,
-    Measure, Meter, Modal, Panel, PerfOverlay, PrintLine, ProgressBar, Scrollbar, Sparkline,
-    StatBar, StatefulWidget, Table, Tabs, Text, TextInput, Widget,
+    Measure, Meter, Modal, Panel, Paragraph, PerfOverlay, PrintLine, ProgressBar, Scrollbar,
+    Sparkline, StatBar, StatefulWidget, Table, Tabs, Text, TextInput, Widget,
 };

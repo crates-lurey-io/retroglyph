@@ -1,10 +1,10 @@
 //! [`BoxBorder`]: a single-line box border.
+use retroglyph_core::symbols::border::PLAIN;
 use retroglyph_core::{Color, Style};
 
 use super::Widget;
 use crate::Surface;
 use crate::Theme;
-use crate::draw::{BL, BR, H, TL, TR, V};
 
 /// A single-line box border drawn around a [`Rect`](retroglyph_core::Rect).
 ///
@@ -81,21 +81,21 @@ impl Widget for BoxBorder {
         let y1 = h - 1;
 
         // Corners
-        surface.put((0, 0), TL, self.style);
-        surface.put((x1, 0), TR, self.style);
-        surface.put((0, y1), BL, self.style);
-        surface.put((x1, y1), BR, self.style);
+        surface.put((0, 0), PLAIN.top_left, self.style);
+        surface.put((x1, 0), PLAIN.top_right, self.style);
+        surface.put((0, y1), PLAIN.bottom_left, self.style);
+        surface.put((x1, y1), PLAIN.bottom_right, self.style);
 
         // Horizontal edges
         for x in 1..x1 {
-            surface.put((x, 0), H, self.style);
-            surface.put((x, y1), H, self.style);
+            surface.put((x, 0), PLAIN.horizontal, self.style);
+            surface.put((x, y1), PLAIN.horizontal, self.style);
         }
 
         // Vertical edges
         for y in 1..y1 {
-            surface.put((0, y), V, self.style);
-            surface.put((x1, y), V, self.style);
+            surface.put((0, y), PLAIN.vertical, self.style);
+            surface.put((x1, y), PLAIN.vertical, self.style);
         }
     }
 }
@@ -114,12 +114,12 @@ mod tests {
             .style(Style::new().fg(Color::WHITE))
             .render(&mut Surface::new(&mut grid, area, 0));
 
-        assert_eq!(grid[Pos::new(0, 0)].glyph(), TL);
-        assert_eq!(grid[Pos::new(4, 0)].glyph(), TR);
-        assert_eq!(grid[Pos::new(0, 2)].glyph(), BL);
-        assert_eq!(grid[Pos::new(4, 2)].glyph(), BR);
-        assert_eq!(grid[Pos::new(2, 0)].glyph(), H);
-        assert_eq!(grid[Pos::new(0, 1)].glyph(), V);
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), PLAIN.top_left);
+        assert_eq!(grid[Pos::new(4, 0)].glyph(), PLAIN.top_right);
+        assert_eq!(grid[Pos::new(0, 2)].glyph(), PLAIN.bottom_left);
+        assert_eq!(grid[Pos::new(4, 2)].glyph(), PLAIN.bottom_right);
+        assert_eq!(grid[Pos::new(2, 0)].glyph(), PLAIN.horizontal);
+        assert_eq!(grid[Pos::new(0, 1)].glyph(), PLAIN.vertical);
         // Interior untouched.
         assert_eq!(grid[Pos::new(2, 1)].glyph(), ' ');
     }

@@ -1,5 +1,10 @@
 //! In-memory backend for testing. Stores presented content
 //! and allows injecting synthetic events.
+//!
+//! [`Headless::format_view`] renders the current frame for snapshot testing (e.g. with `insta`)
+//! and [`Headless::push_event`] queues synthetic input; see ["Driving `Headless` with synthetic
+//! events"](https://github.com/crates-lurey-io/retroglyph/blob/main/docs/testing.md#driving-headless-with-synthetic-events)
+//! for the full workflow.
 
 use crate::backend::{Cursor, Input, Output};
 use crate::color::Color;

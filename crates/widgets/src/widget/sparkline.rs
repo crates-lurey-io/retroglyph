@@ -1,11 +1,9 @@
 //! [`Sparkline`]: a single-row bar chart of recent samples.
 use retroglyph_core::Style;
+use retroglyph_core::symbols::bar::NINE_LEVELS;
 
 use super::{Meter, Widget};
 use crate::Surface;
-
-/// Vertical block glyphs from empty to full, indexed 0..=8.
-const BLOCKS: [char; 9] = [' ', '▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
 
 /// A single-row sparkline of `samples`, scaled to the sample max, using the
 /// eight vertical block glyphs `▁▂▃▄▅▆▇█`.
@@ -90,7 +88,7 @@ impl Widget for Sparkline<'_> {
             let style = self
                 .style
                 .unwrap_or_else(|| Style::new().fg(Meter::new(ratio).color()));
-            surface.put((x, 0), BLOCKS[level.min(8)], style);
+            surface.put((x, 0), NINE_LEVELS[level.min(8)], style);
         }
     }
 }
@@ -109,8 +107,8 @@ mod tests {
 
         assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
         assert_eq!(grid[Pos::new(2, 0)].glyph(), ' ');
-        assert_eq!(grid[Pos::new(3, 0)].glyph(), BLOCKS[4]); // 1.0 / 2.0 -> half
-        assert_eq!(grid[Pos::new(4, 0)].glyph(), BLOCKS[8]); // 2.0 / 2.0 -> full
+        assert_eq!(grid[Pos::new(3, 0)].glyph(), NINE_LEVELS[4]); // 1.0 / 2.0 -> half
+        assert_eq!(grid[Pos::new(4, 0)].glyph(), NINE_LEVELS[8]); // 2.0 / 2.0 -> full
     }
 
     #[test]

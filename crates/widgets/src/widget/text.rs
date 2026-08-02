@@ -13,7 +13,7 @@ use crate::text::truncate as truncate_to_cols;
 /// The plain-content cousin of [`PrintLine`](super::PrintLine) (which
 /// prints a multi-span [`Line`](retroglyph_core::text::Line), for mixed
 /// styling within one line) and [`Paragraph`](super::Paragraph) (which
-/// word-wraps across multiple lines, and needs the `egc` feature): reach
+/// word-wraps across multiple lines): reach
 /// for `Text` for a single already-one-line label or readout in a single
 /// style, with no wrapping and no per-span styling. `style` defaults to
 /// [`Style::new()`] and `align` to [`Align::Left`]; set them with
