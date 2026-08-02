@@ -896,7 +896,17 @@ impl<'a> Surface<'a> {
             HAlign::Center => rect.width().saturating_sub(text_width) / 2,
             HAlign::Right => rect.width().saturating_sub(text_width),
         };
-        let pos = (rect.left().saturating_add(x_offset), rect.top());
+        // `clip` treats `rect` as absolute (it intersects `self.clip`, itself absolute), but
+        // `print` treats its `pos` as local to `self.area` (see `shift`). Compute the aligned
+        // start column in `rect`'s absolute space, then translate it into `self.area`-local
+        // space before handing it to `print`, or it silently clips away on any surface whose
+        // `area` doesn't start at grid column/row 0.
+        let pos = (
+            rect.left()
+                .saturating_add(x_offset)
+                .saturating_sub(self.area.left()),
+            rect.top().saturating_sub(self.area.top()),
+        );
         self.clip(rect).print(pos, text, style);
     }
 
@@ -2081,6 +2091,47 @@ mod tests {
 
         assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
         assert_eq!(grid[Pos::new(1, 0)].glyph(), ' ');
+    }
+
+    #[test]
+    #[cfg(feature = "egc")]
+    fn print_aligned_right_on_an_offset_surface_drops_the_text() {
+        let mut grid = Grid::new(8, 1);
+        {
+            // `area` starts at column 2, not 0: local and absolute coordinates now differ.
+            let mut surface = Surface::new(&mut grid, Rect::new(2, 0, 6, 1), 0);
+            surface.print_aligned(
+                Rect::new(0, 0, 6, 1),
+                "hi",
+                crate::layout::HAlign::Right,
+                Style::default(),
+            );
+        }
+
+        // `rect` (0, 0, 6, 1) intersected with the surface's own clip (2, 0, 6, 1) leaves
+        // columns 2..6 visible; right-aligning "hi" within `rect` puts it at columns 4..6.
+        assert_eq!(grid[Pos::new(4, 0)].glyph(), 'h');
+        assert_eq!(grid[Pos::new(5, 0)].glyph(), 'i');
+    }
+
+    #[test]
+    #[cfg(feature = "egc")]
+    fn print_aligned_center_on_an_offset_surface_drops_the_text() {
+        let mut grid = Grid::new(8, 1);
+        {
+            let mut surface = Surface::new(&mut grid, Rect::new(2, 0, 6, 1), 0);
+            surface.print_aligned(
+                Rect::new(0, 0, 6, 1),
+                "hi",
+                crate::layout::HAlign::Center,
+                Style::default(),
+            );
+        }
+
+        // (6 - 2) / 2 == 2 columns of left padding within `rect`, so "hi" lands at absolute
+        // columns 2..4, which is inside the surface's own visible columns 2..6.
+        assert_eq!(grid[Pos::new(2, 0)].glyph(), 'h');
+        assert_eq!(grid[Pos::new(3, 0)].glyph(), 'i');
     }
 
     #[test]
