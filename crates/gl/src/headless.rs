@@ -441,8 +441,8 @@ fn glyph_matches_font_coverage_fg_vs_bg() {
     let frame = render_to_frame(&ctx, &r).expect("render");
 
     let glyph = r.glyphs.font_chain().resolve('A').expect("'A' is in CP437");
-    let gw = u32::from(glyph.font().glyph_width);
-    let gh = u32::from(glyph.font().glyph_height);
+    let gw = u32::from(glyph.font().glyph_width());
+    let gh = u32::from(glyph.font().glyph_height());
     let rows = glyph.rows();
     for y in 0..gh {
         let mask = rows[y as usize];
@@ -636,7 +636,7 @@ fn sprite_cells_render_their_tileset_colors() {
     // 'A' -> tile 0 (red), 'B' -> tile 1 (green). Each 8x16 sprite exactly fills one cell at
     // scale 1, so cell 0 must be all red and cell 1 all green: proving tileset decode, the RGBA
     // atlas upload, the sprite pass, and per-cell glyph -> sprite dispatch all work on real GL.
-    let opts = TilesetOptions::from_bytes(two_tile_png())
+    let opts = TilesetOptions::builder(two_tile_png())
         .tile_size(8, 16)
         .columns(2)
         .codepage(Codepage::Custom(vec!['A', 'B']))
@@ -721,7 +721,7 @@ fn a_tinted_sprite_matches_what_sprite_tint_apply_computes() {
         tints.push(Tint::mix(64, 200, 32, amount));
     }
     for tint in tints {
-        let opts = TilesetOptions::from_bytes(two_tile_png())
+        let opts = TilesetOptions::builder(two_tile_png())
             .tile_size(8, 16)
             .columns(2)
             .codepage(Codepage::Custom(vec!['A', 'B']))
@@ -795,7 +795,7 @@ fn multicell_span_covers_every_cell_of_its_footprint() {
 
     // A 16x16 sprite is two 8x16 cells wide, declared as a 2x1 span. Every pixel of both cells
     // must be the sprite, with no trace of the covered cell's fallback glyph or background.
-    let opts = TilesetOptions::from_bytes(wide_tile_png(16, 16))
+    let opts = TilesetOptions::builder(wide_tile_png(16, 16))
         .tile_size(16, 16)
         .columns(1)
         .codepage(Codepage::Custom(vec!['S']))
@@ -840,7 +840,7 @@ fn matches_software_backend_for_multicell_spans() {
     // An 8x16 sprite is exactly one cell, so every span below reserves more cells than the art
     // fills and alignment is observable.
     let tileset = || {
-        TilesetOptions::from_bytes(wide_tile_png(8, 16))
+        TilesetOptions::builder(wide_tile_png(8, 16))
             .tile_size(8, 16)
             .columns(1)
             .codepage(Codepage::Custom(vec!['S']))

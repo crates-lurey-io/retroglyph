@@ -35,9 +35,9 @@ pub struct BitmapFont {
     /// Glyph bitmap data: `glyph_count * glyph_height` bytes.
     data: &'static [u8],
     /// Width of each glyph in pixels (≤ 8 for single-byte rows).
-    pub glyph_width: u8,
+    glyph_width: u8,
     /// Height of each glyph in pixels; also bytes per glyph.
-    pub glyph_height: u8,
+    glyph_height: u8,
     /// Total number of glyphs stored in `data`.
     glyph_count: u16,
     /// The `char` -> glyph-index table used by [`glyph_index`](Self::glyph_index), or `None` to
@@ -145,6 +145,18 @@ impl BitmapFont {
             })
     }
 
+    /// The width of each glyph in pixels (≤ 8 for single-byte rows).
+    #[must_use]
+    pub const fn glyph_width(&self) -> u8 {
+        self.glyph_width
+    }
+
+    /// The height of each glyph in pixels; also bytes per glyph.
+    #[must_use]
+    pub const fn glyph_height(&self) -> u8 {
+        self.glyph_height
+    }
+
     /// The total number of glyphs stored in this font.
     ///
     /// Glyph indices `0..glyph_count()` are valid arguments to [`rows`](Self::rows). A GPU
@@ -217,8 +229,8 @@ pub struct ResolvedGlyph {
 impl ResolvedGlyph {
     /// The font this glyph was resolved from.
     #[must_use]
-    pub const fn font(&self) -> &BitmapFont {
-        &self.font
+    pub const fn font(&self) -> BitmapFont {
+        self.font
     }
 
     /// The position of [`font`](Self::font) within the chain that resolved it: `0` is the
@@ -1173,7 +1185,7 @@ pub mod legacy_computing {
                 // The primary font's own CP437 coverage answers directly for the solid block;
                 // this chain never needs to fall back to `notdef` for it.
                 let full_block = chain.resolve('█').expect("CP437 coverage");
-                assert_eq!(*full_block.font(), PRIMARY);
+                assert_eq!(full_block.font(), PRIMARY);
                 assert!(!full_block.is_notdef());
             }
         }
@@ -1424,7 +1436,7 @@ mod tests {
         // (glyph_count == 128) but present in `FALLBACK_FONT` (glyph_count == 256).
         let chain = FontChain::new(PRIMARY, &[FALLBACK_FONT]);
         let resolved = chain.resolve('Ç').expect("covered by the fallback font");
-        assert_eq!(*resolved.font(), FALLBACK_FONT);
+        assert_eq!(resolved.font(), FALLBACK_FONT);
         assert_eq!(resolved.font_index(), 1);
         assert_eq!(resolved.index(), 0x80);
         assert!(!resolved.is_notdef());
@@ -1438,7 +1450,7 @@ mod tests {
         // resolve to an out-of-range glyph for.
         let chain = FontChain::new(PRIMARY, &[FALLBACK_FONT]);
         let resolved = chain.resolve('あ').expect("solid block substitute");
-        assert_eq!(*resolved.font(), FALLBACK_FONT);
+        assert_eq!(resolved.font(), FALLBACK_FONT);
         assert_eq!(resolved.index(), 0xDB);
         assert!(resolved.is_notdef());
     }
@@ -1463,7 +1475,7 @@ mod tests {
         assert_eq!(chain.font_count(), 1);
         for ch in ['A', ' ', '█', '│', 'Ç', '☺'] {
             let resolved = chain.resolve(ch).expect("CP437 coverage");
-            assert_eq!(*resolved.font(), FALLBACK_FONT);
+            assert_eq!(resolved.font(), FALLBACK_FONT);
             assert_eq!(resolved.font_index(), 0);
             assert_eq!(resolved.index(), FALLBACK_FONT.glyph_index(ch).unwrap());
         }
@@ -1527,11 +1539,11 @@ mod tests {
         let chain = FontChain::new(primary, &[BRAILLE_FONT]);
 
         let braille = chain.resolve('\u{2800}').expect("charset coverage");
-        assert_eq!(*braille.font(), BRAILLE_FONT);
+        assert_eq!(braille.font(), BRAILLE_FONT);
         assert_eq!(braille.index(), 0);
 
         let full_block = chain.resolve('\u{2588}').expect("CP437 coverage"); // '█', index 0xDB
-        assert_eq!(*full_block.font(), primary);
+        assert_eq!(full_block.font(), primary);
         assert_eq!(full_block.index(), 0xDB);
 
         assert_ne!(braille.index(), full_block.index());
