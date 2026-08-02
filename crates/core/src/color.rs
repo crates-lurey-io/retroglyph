@@ -266,17 +266,91 @@ fn rgb_to_oklab(r: u8, g: u8, b: u8) -> gem::space::Oklab {
     ))
 }
 
+/// Builds the 256-entry table of [`gem::space::Oklab`] values for the 256-color palette
+/// (`indexed_to_rgb(0..256)` converted to Oklab), in index order.
+#[cfg(feature = "indexed-quant")]
+fn build_indexed_oklab_table() -> [gem::space::Oklab; 256] {
+    core::array::from_fn(|i| {
+        let (r, g, b) = indexed_to_rgb(u8::try_from(i).unwrap_or(u8::MAX));
+        rgb_to_oklab(r, g, b)
+    })
+}
+
+/// Builds the 16-entry table of [`gem::space::Oklab`] values for the 16 standard ANSI
+/// colors ([`ANSI_COLORS`] converted to Oklab), in index order.
+#[cfg(feature = "indexed-quant")]
+fn build_ansi_oklab_table() -> [gem::space::Oklab; 16] {
+    core::array::from_fn(|i| {
+        let (r, g, b) = ANSI_COLORS[i].to_rgb();
+        rgb_to_oklab(r, g, b)
+    })
+}
+
+/// The 256-color palette's Oklab table, as returned by [`indexed_oklab_table`]: a cached
+/// `'static` reference when `std` is enabled, or an owned array rebuilt per call otherwise.
+#[cfg(all(feature = "indexed-quant", feature = "std"))]
+type IndexedOklabTable = &'static [gem::space::Oklab; 256];
+#[cfg(all(feature = "indexed-quant", not(feature = "std")))]
+type IndexedOklabTable = [gem::space::Oklab; 256];
+
+/// The 16-color ANSI palette's Oklab table, as returned by [`ansi_oklab_table`]: a cached
+/// `'static` reference when `std` is enabled, or an owned array rebuilt per call otherwise.
+#[cfg(all(feature = "indexed-quant", feature = "std"))]
+type AnsiOklabTable = &'static [gem::space::Oklab; 16];
+#[cfg(all(feature = "indexed-quant", not(feature = "std")))]
+type AnsiOklabTable = [gem::space::Oklab; 16];
+
+/// Returns the 256-color palette's Oklab table.
+///
+/// `indexed_to_rgb` is a pure function of a compile-time-constant palette, but its Oklab
+/// conversion (`powf`/`cbrt`) isn't `const`-evaluable, so the table can't be a plain `const`.
+/// When the `std` feature is enabled, this caches the table behind a `OnceLock` so the
+/// conversion only ever runs once for all 256 entries, no matter how many times
+/// [`Color::to_indexed`] is called -- the hot path this feeds ([`ColorSupport::Indexed256`] in
+/// `retroglyph-terminal`'s draw loop) calls it once per cell, per frame.
+///
+/// `no_std` builds (this crate's `std` feature off) have no safe way to back a lazily
+/// initialized `static` without `unsafe` (forbidden workspace-wide), so they rebuild the table
+/// on every call instead; that path is expected to be cold.
+#[cfg(feature = "indexed-quant")]
+fn indexed_oklab_table() -> IndexedOklabTable {
+    #[cfg(feature = "std")]
+    {
+        static TABLE: std::sync::OnceLock<[gem::space::Oklab; 256]> = std::sync::OnceLock::new();
+        TABLE.get_or_init(build_indexed_oklab_table)
+    }
+    #[cfg(not(feature = "std"))]
+    {
+        build_indexed_oklab_table()
+    }
+}
+
+/// Returns the 16-color ANSI palette's Oklab table. See [`indexed_oklab_table`] for the
+/// caching rationale and the `no_std` fallback.
+#[cfg(feature = "indexed-quant")]
+fn ansi_oklab_table() -> AnsiOklabTable {
+    #[cfg(feature = "std")]
+    {
+        static TABLE: std::sync::OnceLock<[gem::space::Oklab; 16]> = std::sync::OnceLock::new();
+        TABLE.get_or_init(build_ansi_oklab_table)
+    }
+    #[cfg(not(feature = "std"))]
+    {
+        build_ansi_oklab_table()
+    }
+}
+
 /// Quantizes `(r, g, b)` to the nearest 256-color palette index using perceptual
 /// (Oklab) distance, breaking ties by preferring the lower index.
 #[cfg(feature = "indexed-quant")]
 fn perceptual_to_indexed(r: u8, g: u8, b: u8) -> u8 {
     let target = rgb_to_oklab(r, g, b);
+    let table = indexed_oklab_table();
     let mut best_index = 0u8;
     let mut best_distance = f32::MAX;
     for index in 0u16..256 {
         let index = u8::try_from(index).unwrap_or(u8::MAX);
-        let (pr, pg, pb) = indexed_to_rgb(index);
-        let distance = oklab_distance_sq(target, rgb_to_oklab(pr, pg, pb));
+        let distance = oklab_distance_sq(target, table[index as usize]);
         if distance < best_distance {
             best_distance = distance;
             best_index = index;
@@ -290,14 +364,14 @@ fn perceptual_to_indexed(r: u8, g: u8, b: u8) -> u8 {
 #[cfg(feature = "indexed-quant")]
 fn perceptual_to_ansi(r: u8, g: u8, b: u8) -> AnsiColor {
     let target = rgb_to_oklab(r, g, b);
+    let table = ansi_oklab_table();
     let mut best = AnsiColor::Black;
     let mut best_distance = f32::MAX;
-    for ansi in ANSI_COLORS {
-        let (pr, pg, pb) = ansi.to_rgb();
-        let distance = oklab_distance_sq(target, rgb_to_oklab(pr, pg, pb));
+    for (i, ansi) in ANSI_COLORS.iter().enumerate() {
+        let distance = oklab_distance_sq(target, table[i]);
         if distance < best_distance {
             best_distance = distance;
-            best = ansi;
+            best = *ansi;
         }
     }
     best
