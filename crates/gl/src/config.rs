@@ -15,6 +15,7 @@ use std::fmt;
 
 /// Errors from configuring the GL backend.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum GlBackendError {
     /// No font was provided and the `default-font` feature is not enabled.
     NoFont,
@@ -58,7 +59,15 @@ impl fmt::Display for GlBackendError {
     }
 }
 
-impl std::error::Error for GlBackendError {}
+impl std::error::Error for GlBackendError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            #[cfg(feature = "tilesets")]
+            Self::Tileset(e) => Some(e),
+            _ => None,
+        }
+    }
+}
 
 /// Builder for the GL backend.
 ///

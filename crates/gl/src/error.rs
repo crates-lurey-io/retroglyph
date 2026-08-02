@@ -10,6 +10,7 @@ use std::fmt;
 /// ([`retroglyph_window`]'s event loop) only needs a message plus the recoverable/fatal signal
 /// from [`RecoverableError`](retroglyph_window::RecoverableError).
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum SurfaceError {
     /// Creating the GL display, config, context, or surface failed. Treated as fatal (not
     /// recoverable): a game cannot proceed without a context, and retrying the same creation

@@ -6,9 +6,8 @@
 //! once per frame: [`upload`](GlResources::upload) pushes changed cells, [`draw`](GlResources::draw)
 //! issues a single `draw_elements_instanced`.
 
-// `pub(crate)` items in this private module are the crate-internal renderer API, and the GL enum
-// constants are `u32` that GL wants as `i32`; the nursery/pedantic lints for those conflict with
-// idiomatic GL code, so they're allowed crate-locally here.
+// `redundant_pub_crate` fires on `pub(crate)` items in this private module; the module boundary
+// is intentional, so it's allowed crate-locally.
 #![allow(clippy::redundant_pub_crate)]
 
 use crate::atlas::{ATLAS_COLS, ATLAS_ROWS, AtlasData};
