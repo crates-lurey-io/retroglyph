@@ -66,6 +66,13 @@ pub fn char_width(c: char) -> u16 {
 /// `s`. Returns `(prefix, rest)` such that `width(prefix) <= max_cols` and
 /// `prefix` is the longest prefix of `s` for which that holds.
 ///
+/// Each candidate prefix is measured with [`width_usize`] (the same
+/// `UnicodeWidthStr` logic behind the postcondition above), not a sum of
+/// individual [`char_width`]s: `UnicodeWidthStr` measures some multi-codepoint
+/// clusters (emoji presentation/ZWJ/modifier sequences) as a unit whose width
+/// differs from the sum of its parts, and per-char summing would let such a
+/// cluster violate the postcondition in either direction.
+///
 /// # Examples
 ///
 /// ```
@@ -77,15 +84,13 @@ pub fn char_width(c: char) -> u16 {
 #[must_use]
 pub fn split_at_width(s: &str, max_cols: u16) -> (&str, &str) {
     let max_cols = usize::from(max_cols);
-    let mut cols = 0usize;
     let mut end = 0usize;
-    for ch in s.chars() {
-        let w = usize::from(char_width(ch));
-        if cols + w > max_cols {
+    for (i, ch) in s.char_indices() {
+        let candidate_end = i + ch.len_utf8();
+        if width_usize(&s[..candidate_end]) > max_cols {
             break;
         }
-        cols += w;
-        end += ch.len_utf8();
+        end = candidate_end;
     }
     s.split_at(end)
 }
@@ -287,6 +292,25 @@ mod tests {
         assert_eq!(split_at_width("aあb", 2), ("a", "あb"));
         assert_eq!(split_at_width("aあb", 3), ("aあ", "b"));
         assert_eq!(split_at_width("ああ", 3), ("あ", "あ"));
+    }
+
+    #[test]
+    fn split_at_width_prefix_can_exceed_max_cols() {
+        // "❤️" (U+2764 heart + U+FE0F variation selector-16): unicode-width
+        // measures the pair as 2 columns even though the per-char widths are
+        // 1 + 0 = 1, so the whole cluster must not slip through a 1-column
+        // budget.
+        let (prefix, _rest) = split_at_width("\u{2764}\u{FE0F}", 1);
+        assert!(width(prefix) <= 1);
+    }
+
+    #[test]
+    fn split_at_width_returns_the_longest_prefix_that_fits() {
+        // "👍🏽" (U+1F44D thumbs-up + U+1F3FD skin-tone modifier): unicode-width
+        // measures the pair as 2 columns, so the whole string fits a 2-column
+        // budget intact, even though the per-char widths sum to 2 + 2 = 4.
+        let thumbs = "\u{1F44D}\u{1F3FD}";
+        assert_eq!(split_at_width(thumbs, width(thumbs)), (thumbs, ""));
     }
 
     #[test]
