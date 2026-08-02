@@ -608,6 +608,13 @@ impl Presenter for GlRenderer {
     type SurfaceError = SurfaceError;
 
     fn init_surface(&mut self, window: Arc<dyn WindowHandle>) -> Result<(), SurfaceError> {
+        // Re-entry (surface-loss recovery, issue #728): a previous `Gpu` may still be installed,
+        // e.g. from `try_recover_surface` re-calling this after repeated present failures. Delete
+        // its GL objects and drop its context before building the replacement, the same cleanup
+        // `impl Drop for GlRenderer` does, so nothing from the old context is orphaned.
+        if let Some(gpu) = self.gpu.take() {
+            gpu.res.delete(&gpu.ctx.gl);
+        }
         let (w, h) = self.surface_size;
         let ctx = GlContext::new(&window, w, h)?;
         let res = self.build_resources(&ctx.gl, ctx.flavor())?;
