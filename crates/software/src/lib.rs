@@ -160,8 +160,10 @@ struct RenderContext {
     /// marked damaged) whenever the buffer is resized.
     prev_pixels: Vec<u32>,
     /// Row range `[y0, y1)` changed since the last present, computed in
-    /// `draw_layers` by diffing against `prev_pixels`. `None` means no rows
-    /// changed (nothing to present).
+    /// `draw_layers` by diffing against `prev_pixels` and unioned into any
+    /// existing band, since `draw_layers` may be called more than once
+    /// between two `present()` calls. `None` means no rows changed
+    /// (nothing to present).
     damage_rows: Option<(u32, u32)>,
     /// Shadow copy of every allocated layer's tiles from the last `draw_layers` call, indexed by
     /// `[layer_id][y * cols + x]`. Used to find dirty cells without touching core's diff model:
@@ -311,8 +313,16 @@ impl SoftwareRenderer {
     }
 
     /// Diffs `pixel_buf` against `prev_pixels` row by row to find the
-    /// smallest contiguous `[y0, y1)` band that changed and stores it as
+    /// smallest contiguous `[y0, y1)` band that changed and unions it into
     /// `damage_rows`.
+    ///
+    /// The newly diffed band is unioned with (not overwritten onto) any
+    /// existing `damage_rows`, since `draw_layers` can be called more than
+    /// once between two `present()` calls: `present()` is the only place
+    /// that clears `damage_rows`, so a band from an earlier `draw_layers`
+    /// call in the same present cycle must survive a later call that
+    /// touches a disjoint set of rows, or those earlier rows would never
+    /// reach the window surface (see retroglyph#724).
     ///
     /// Only the `[y0, y1)` band (not the whole buffer) is copied from
     /// `pixel_buf` into `prev_pixels` afterwards, since every other row is
@@ -326,7 +336,8 @@ impl SoftwareRenderer {
     ///
     /// If the buffers differ in length (a resize raced with this call)
     /// the whole frame is marked damaged and `prev_pixels` is resized to
-    /// match.
+    /// match; that already covers any previously pending band, so it's an
+    /// overwrite rather than a union.
     fn update_damage(&mut self, buf_w: usize) {
         let pixels = self.ctx.pixel_buf.as_ref();
         if self.ctx.prev_pixels.len() != pixels.len() {
@@ -358,10 +369,15 @@ impl SoftwareRenderer {
             }
         }
 
-        self.ctx.damage_rows = y0.map(|y0| {
+        let new_band = y0.map(|y0| {
             #[allow(clippy::cast_possible_truncation)]
             (y0 as u32, y1 as u32)
         });
+        self.ctx.damage_rows = match (self.ctx.damage_rows, new_band) {
+            (Some((py0, py1)), Some((ny0, ny1))) => Some((py0.min(ny0), py1.max(ny1))),
+            (existing, None) => existing,
+            (None, new) => new,
+        };
 
         // Only the changed band needs copying: every row outside `[y0, y1)`
         // already matched `pixels` in the loop above, so re-copying it would
@@ -1760,10 +1776,13 @@ mod tests {
         let mut r = damage_renderer(2, 3);
         let red = bg_tile(200, 0, 0);
         draw_fill(&mut r, 2, 3, &red, None); // first frame: full damage
+        // Headless present() is a no-op (nothing to upload without a window surface), so it
+        // never touches damage_rows; a real present() is what would clear the pending band
+        // here (retroglyph#724), so clear it directly to simulate that for this test.
+        assert!(r.present().is_ok());
+        r.ctx.damage_rows = None;
         draw_fill(&mut r, 2, 3, &red, None); // identical redraw: nothing changed
         assert_eq!(r.ctx.damage_rows, None);
-        // Headless present() is a no-op and must still succeed.
-        assert!(r.present().is_ok());
     }
 
     #[test]
@@ -1771,6 +1790,9 @@ mod tests {
         let mut r = damage_renderer(2, 3);
         let red = bg_tile(200, 0, 0);
         draw_fill(&mut r, 2, 3, &red, None); // baseline
+        // Simulate the present() that would normally clear the baseline's damage before the
+        // next frame (headless present() is a no-op with no surface to clear it through).
+        r.ctx.damage_rows = None;
         // Change only cell (0, 1); its pixels live in rows [16, 32).
         draw_fill(&mut r, 2, 3, &red, Some((0, 1, &bg_tile(0, 0, 200))));
         assert_eq!(r.ctx.damage_rows, Some((CELL_H_PX, 2 * CELL_H_PX)));
@@ -1802,10 +1824,51 @@ mod tests {
     }
 
     #[test]
+    fn damage_bands_union_across_draw_layers_calls_before_present() {
+        // Regression test for retroglyph#724: `present()` is the only thing that clears
+        // `damage_rows`, so two `draw_layers` calls touching disjoint rows before a single
+        // `present()` must union their bands rather than the second overwriting the first.
+        let mut r = damage_renderer(2, 3);
+        let red = bg_tile(200, 0, 0);
+        draw_fill(&mut r, 2, 3, &red, None); // baseline frame
+        // Simulate the present() that would normally clear this baseline's damage (headless
+        // present() is a no-op with no surface to clear it through).
+        assert!(r.present().is_ok());
+        r.ctx.damage_rows = None;
+
+        let blue = bg_tile(0, 0, 200);
+        // First draw_layers call: change only cell-row 0, pixel rows [0, 16).
+        draw_fill(&mut r, 2, 3, &red, Some((0, 0, &blue)));
+        assert_eq!(r.ctx.damage_rows, Some((0, CELL_H_PX)));
+
+        // Second draw_layers call, with no present() in between: keep (0, 0) as it already
+        // is (still blue, so it does not itself register as changed) and change only cell
+        // (1, 2), pixel rows [32, 48), disjoint from the first change.
+        let mut items: Vec<DrawCell<'_>> = Vec::new();
+        for y in 0..3u16 {
+            for x in 0..2u16 {
+                let t = match (x, y) {
+                    (0, 0) | (1, 2) => &blue,
+                    _ => &red,
+                };
+                items.push(DrawCell::on_layer(0, Pos::new(x, y), t));
+            }
+        }
+        r.draw_layers(items.into_iter()).unwrap();
+
+        // Both bands must still be reflected: the first call's rows [0, 16) must not have
+        // been dropped in favor of the second call's [32, 48).
+        assert_eq!(r.ctx.damage_rows, Some((0, 3 * CELL_H_PX)));
+    }
+
+    #[test]
     fn resize_marks_full_frame_damage() {
         let mut r = damage_renderer(2, 3);
         let red = bg_tile(200, 0, 0);
         draw_fill(&mut r, 2, 3, &red, None);
+        // Simulate the present() that would normally clear this baseline's damage (headless
+        // present() is a no-op with no surface to clear it through).
+        r.ctx.damage_rows = None;
         draw_fill(&mut r, 2, 3, &red, None);
         assert_eq!(r.ctx.damage_rows, None);
         // A resize invalidates the shadow buffer and forces a full repaint so
