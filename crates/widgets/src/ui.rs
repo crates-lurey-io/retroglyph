@@ -810,6 +810,31 @@ mod tests {
         assert_eq!(glyphs_in_row(&grid, 3, 4), "ab  ");
     }
 
+    /// `Ui::horizontal_sized` claims only `width` columns of this `Ui`'s own cursor (here, a
+    /// vertical one), leaving the rest for whatever comes after it -- the mirror image of
+    /// `vertical_sized`'s own test.
+    #[test]
+    fn horizontal_sized_claims_only_its_own_width_from_the_outer_cursor() {
+        let mut grid = Grid::new(4, 4);
+        let mut interaction = Interaction::<Id>::new();
+
+        interaction.frame(
+            &mut Surface::new(&mut grid, Rect::new(0, 0, 4, 4), 0),
+            |ui| {
+                ui.horizontal(|ui| {
+                    // Claims 2 columns from the outer cursor regardless of how much of them
+                    // this nested flow itself draws into.
+                    ui.horizontal_sized(2, |ui| {
+                        ui.draw_sized(&Fill('a'), 2);
+                    });
+                    ui.draw_sized(&Fill('b'), 1);
+                });
+            },
+        );
+
+        assert_eq!(glyphs_in_row(&grid, 0, 4), "aab ");
+    }
+
     /// A cursor clips content that overflows its remaining space, the same way `split_v` clips a
     /// pane that overflows `area`: the third row here would run past the 2-row-tall area, so it
     /// gets zero height instead of drawing out of bounds.
@@ -889,6 +914,51 @@ mod tests {
         assert_eq!(glyphs_in_row(&grid, 2, 4), "xxxx");
     }
 
+    /// `Ui::show_auto` sizes by `Measure::height_for` like `draw_auto`, and, like `show_sized`,
+    /// commits the same allocated rect for both hit-testing and drawing.
+    #[test]
+    fn show_auto_sizes_by_measure_and_registers_the_area_it_allocates() {
+        let mut grid = Grid::new(4, 4);
+        let mut interaction = Interaction::<Id>::new();
+
+        interaction.frame(
+            &mut Surface::new(&mut grid, Rect::new(0, 0, 4, 4), 0),
+            |ui| {
+                ui.vertical(|ui| {
+                    let _ = ui.show_auto(Id::Button, &FixedHeight(2));
+                });
+            },
+        );
+
+        assert_eq!(glyphs_in_row(&grid, 0, 4), "####");
+        assert_eq!(glyphs_in_row(&grid, 1, 4), "####");
+        assert_eq!(glyphs_in_row(&grid, 2, 4), "    "); // untouched: past the 2-row-tall widget
+
+        // `show_auto`'s row is (0, 0)-(4, 2): the pointer inside it hits.
+        move_pointer(&mut interaction, Pos::new(1, 1));
+        let response = interaction.frame(
+            &mut Surface::new(&mut grid, Rect::new(0, 0, 4, 4), 0),
+            |ui| ui.vertical(|ui| ui.show_auto(Id::Button, &FixedHeight(2))),
+        );
+        assert!(response.hovered());
+    }
+
+    /// `Ui::show_auto`/`Ui::draw_auto` panic when called on a `Ui` with no active cursor at all
+    /// (not just the wrong axis; see `draw_auto_on_a_horizontal_cursor_panics`).
+    #[test]
+    #[should_panic(expected = "require an active cursor")]
+    fn draw_auto_without_an_active_cursor_panics() {
+        let mut grid = Grid::new(4, 4);
+        let mut interaction = Interaction::<Id>::new();
+
+        interaction.frame(
+            &mut Surface::new(&mut grid, Rect::new(0, 0, 4, 4), 0),
+            |ui| {
+                ui.draw_auto(&FixedHeight(1));
+            },
+        );
+    }
+
     /// `vertical`/`horizontal` nest: a `horizontal` row started inside a `vertical` column is
     /// scoped to that column's remaining area (its full width, whatever height is left), and
     /// stacking within it advances a cursor along the other axis.
@@ -915,6 +985,32 @@ mod tests {
         assert_eq!(glyphs_in_row(&grid, 0, 4), "tttt");
         assert_eq!(glyphs_in_row(&grid, 1, 4), "ab  ");
         assert_eq!(glyphs_in_row(&grid, 2, 4), "    "); // untouched: nothing claimed it
+    }
+
+    /// The other direction of nesting: a `vertical` claiming everything left of a `horizontal`
+    /// cursor gets that row's remaining width, not the whole screen.
+    #[test]
+    fn vertical_nested_in_horizontal_claims_the_outer_cursors_remaining_width() {
+        let mut grid = Grid::new(4, 4);
+        let mut interaction = Interaction::<Id>::new();
+
+        interaction.frame(
+            &mut Surface::new(&mut grid, Rect::new(0, 0, 4, 4), 0),
+            |ui| {
+                ui.horizontal(|ui| {
+                    ui.draw_sized(&Fill('l'), 1); // a left-hand column
+                    ui.vertical(|ui| {
+                        ui.draw_sized(&Fill('a'), 1);
+                        ui.draw_sized(&Fill('b'), 1);
+                    });
+                });
+            },
+        );
+
+        // The left-hand column spans the full height (a `draw_sized` on a horizontal cursor
+        // claims the whole remaining height), so `l` persists into both rows.
+        assert_eq!(glyphs_in_row(&grid, 0, 4), "laaa");
+        assert_eq!(glyphs_in_row(&grid, 1, 4), "lbbb");
     }
 
     /// `Ui::show_sized` panics with a clear message when called on a `Ui` with no active cursor
