@@ -293,6 +293,7 @@ impl<B: Backend> Terminal<B> {
                 *retained = false;
             }
         }
+        let mut swap_flattened = false;
         if self.backend.composites_layers() {
             // Pixel/GPU backends composite the raw layered stream themselves.
             if self.backend.needs_full_frame() {
@@ -321,9 +322,16 @@ impl<B: Backend> Terminal<B> {
             self.current.flatten_into(&mut self.flattened_current);
             let diff = self.flattened_current.diff(&self.flattened_previous);
             self.backend.draw_layers(diff)?;
-            core::mem::swap(&mut self.flattened_current, &mut self.flattened_previous);
+            swap_flattened = true;
         }
         self.backend.flush()?;
+        // Both swaps happen only after `flush` succeeds: if `draw_layers` or `flush` above
+        // fails and returns early, `previous`/`flattened_previous` still hold the last
+        // confirmed frame, so the next `present`'s diff against them resends the cells that
+        // never actually reached the backend instead of silently dropping them.
+        if swap_flattened {
+            core::mem::swap(&mut self.flattened_current, &mut self.flattened_previous);
+        }
         core::mem::swap(&mut self.current, &mut self.previous);
         self.current.clear_all();
         Ok(())
@@ -466,11 +474,76 @@ impl<B: Backend> Terminal<B> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::Headless;
+    use crate::backend::{Cursor, DrawCell, Headless, Input, Output};
     use crate::color::Color;
     use crate::grid::Pos;
     use crate::style::Style;
     use crate::tile::Tile;
+
+    /// Wraps [`Headless`] and fails the next [`flush`](Output::flush) call once, then
+    /// forwards everything (including the failed call's `draw_layers`, which already
+    /// reached the inner backend) as normal. Used to exercise `present`'s documented
+    /// error-recovery contract: a failed `flush` must leave the frame's cells marked dirty
+    /// so they are resent on the next successful `present`.
+    struct FlushOnceFailing {
+        inner: Headless,
+        fail_next_flush: bool,
+        /// Number of cells received by the most recent `draw_layers` call, so tests can
+        /// tell whether a frame's diff was actually sent, independent of `Headless`'s
+        /// applied grid (which a real backend might not update until well after `flush`).
+        last_draw_len: usize,
+    }
+
+    impl FlushOnceFailing {
+        fn new(width: u16, height: u16) -> Self {
+            Self {
+                inner: Headless::new(width, height),
+                fail_next_flush: false,
+                last_draw_len: 0,
+            }
+        }
+    }
+
+    impl Output for FlushOnceFailing {
+        type Error = std::io::Error;
+
+        fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
+        where
+            I: Iterator<Item = DrawCell<'a>>,
+        {
+            let content: Vec<_> = content.collect();
+            self.last_draw_len = content.len();
+            // Infallible in `Headless`; map its error type to ours to keep the wrapper's
+            // error type consistent across all `Output` methods.
+            self.inner
+                .draw_layers(content.into_iter())
+                .map_err(|e| match e {})
+        }
+
+        fn flush(&mut self) -> Result<(), Self::Error> {
+            if self.fail_next_flush {
+                self.fail_next_flush = false;
+                return Err(std::io::Error::other("simulated flush failure"));
+            }
+            self.inner.flush().map_err(|e| match e {})
+        }
+
+        fn size(&self) -> Size {
+            self.inner.size()
+        }
+
+        fn clear(&mut self) -> Result<(), Self::Error> {
+            self.inner.clear().map_err(|e| match e {})
+        }
+    }
+
+    impl Input for FlushOnceFailing {
+        fn poll_event(&mut self, timeout: Duration) -> Option<Event> {
+            self.inner.poll_event(timeout)
+        }
+    }
+
+    impl Cursor for FlushOnceFailing {}
 
     #[test]
     fn test_terminal_grid_mut() {
@@ -656,6 +729,40 @@ mod tests {
         .expect("draw failed");
         assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), '.');
         assert_eq!(term.backend().grid()[Pos::new(1, 0)].glyph(), '@');
+    }
+
+    #[test]
+    fn present_resends_cells_after_a_failed_flush_on_the_multi_layer_path() {
+        // Two-layer terminal so `present` takes the flatten-buffer path (not the
+        // single-layer fast path, which already handled this correctly).
+        let mut term = Terminal::new(FlushOnceFailing::new(2, 1));
+
+        term.backend_mut().fail_next_flush = true;
+        let result = term.draw(|s| {
+            s.put((0, 0), 'a', Style::default());
+            s.on_layer(1).put((1, 0), 'b', Style::default());
+        });
+        assert!(result.is_err(), "flush was expected to fail this frame");
+        assert_eq!(
+            term.backend().last_draw_len,
+            2,
+            "the failed frame's diff should still have been sent to draw_layers"
+        );
+
+        // Same content, flush succeeds this time. If the flatten buffers had already been
+        // swapped on the failed attempt, this diff would see "no change" and send nothing.
+        term.draw(|s| {
+            s.put((0, 0), 'a', Style::default());
+            s.on_layer(1).put((1, 0), 'b', Style::default());
+        })
+        .expect("draw failed");
+        assert_eq!(
+            term.backend().last_draw_len,
+            2,
+            "both cells must be resent since neither ever reached the screen"
+        );
+        assert_eq!(term.backend().inner.grid()[Pos::new(0, 0)].glyph(), 'a');
+        assert_eq!(term.backend().inner.grid()[Pos::new(1, 0)].glyph(), 'b');
     }
 
     #[test]
