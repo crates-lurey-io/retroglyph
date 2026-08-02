@@ -111,15 +111,10 @@ impl<'a> Table<'a> {
     /// on `theme.accent`: the same bright-on-accent highlight [`super::List::theme`] and
     /// [`super::Button::theme`] use.
     ///
-    /// `header_style`/`row_style` always set an explicit background rather than leaving it at
-    /// [`Style::new()`]'s default: an unset background isn't "transparent" once a real backend
-    /// draws it (a bare `Color::Default` cell paints as solid black behind the glyph, not
-    /// whatever was there before; see `retroglyph-software`'s `DEFAULT_BG`), so this widget
-    /// assumes it's drawn on `theme.panel_bg` (true when composed with a themed
-    /// [`super::Panel`]/[`super::Modal`], the common case) rather than risk a black box behind
-    /// every row on a light [`Theme`]. Drawing this table directly on the raw screen background
-    /// instead of inside a themed panel needs a manual `.header_style(...)`/`.row_style(...)`
-    /// override afterwards.
+    /// `header_style`/`row_style` always set an explicit background for the same reason, and with
+    /// the same caveat, as [`super::Gauge::theme`]; see its doc comment for the full explanation.
+    /// Drawing this table directly on the raw screen background instead of inside a themed panel
+    /// needs a manual `.header_style(...)`/`.row_style(...)` override afterwards.
     ///
     /// Call before any manual [`Table::header_style`]/[`Table::row_style`]/
     /// [`Table::selected_style`] override you want to keep.
