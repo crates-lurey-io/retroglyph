@@ -1,8 +1,9 @@
 //! Shared core of [`super::Gauge`] and [`super::StatBar`]: `label`, then a
 //! bar filling `ratio` (clamped here to `0.0..=1.0` for the fill width and
 //! color, so an out-of-range `ratio` just caps the bar rather than
-//! under/overflowing it) of the remaining width colored by [`super::Meter`],
-//! then a caller-formatted trailing `readout` string.
+//! under/overflowing it) of the remaining width colored by a caller-supplied
+//! `fill_color` ramp (defaulting to [`super::Meter`]'s), then a
+//! caller-formatted trailing `readout` string.
 //!
 //! Only the first row of `area` is used. [`super::Gauge`] and
 //! [`super::StatBar`] differ only in how they compute `ratio` and format
@@ -24,6 +25,13 @@ use unicode_width::UnicodeWidthStr;
 
 use super::{Meter, Text, Widget};
 use crate::Surface;
+
+/// The default `fill_color` for [`super::Gauge`] and [`super::StatBar`]: [`Meter`]'s
+/// green→yellow→red load ramp. A plain fn item (not a closure) so it coerces to the
+/// `fn(f32) -> Color` type both widgets store, keeping them `Copy`.
+pub(super) fn meter_fill_color(ratio: f32) -> Color {
+    Meter::new(ratio).color()
+}
 
 /// A fixed-capacity, stack-allocated [`fmt::Write`] sink for a widget's short trailing
 /// `readout` text (a `"87%"` percentage for [`super::Gauge`], a `"45/100"` current/max pair for
@@ -77,13 +85,14 @@ pub(super) fn render(
     label_style: Style,
     ratio: f32,
     readout: &str,
+    fill_color: fn(f32) -> Color,
 ) {
     let width = surface.width();
     if width < 4 {
         return;
     }
     let ratio = ratio.clamp(0.0, 1.0);
-    let color = Meter::new(ratio).color();
+    let color = fill_color(ratio);
 
     // Layout: "<label> [########----]  <readout>". Direct `put` calls below address this
     // surface's own local (0, 0)..(width, 1) row; sub-widgets are handed a `scope`d rect
@@ -175,6 +184,7 @@ mod tests {
             Style::new(),
             0.5,
             "",
+            meter_fill_color,
         );
 
         // Bar starts right after the 2-column-wide label plus a 1-column

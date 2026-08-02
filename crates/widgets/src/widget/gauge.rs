@@ -15,7 +15,9 @@ use crate::Theme;
 /// label/readout. For a `current`/`max` integer stat (health, mana) rather
 /// than a `0.0..=1.0` load ratio, see [`super::StatBar`]. `label_style` defaults to
 /// [`Theme::DARK`]'s `dim` role (as if [`Gauge::theme`] had been called); set it with
-/// [`Gauge::label_style`].
+/// [`Gauge::label_style`]. The fill (and readout) color defaults to [`super::Meter`]'s
+/// green→yellow→red load ramp; override it with [`Gauge::fill_color`] for a gauge that isn't
+/// load-shaped (e.g. a health bar, where full should read as safe, not danger).
 ///
 /// # Examples
 ///
@@ -32,6 +34,7 @@ pub struct Gauge<'a> {
     label: &'a str,
     ratio: f32,
     label_style: Style,
+    fill_color: fn(f32) -> Color,
 }
 
 impl<'a> Gauge<'a> {
@@ -43,6 +46,7 @@ impl<'a> Gauge<'a> {
             label,
             ratio,
             label_style: Style::new(),
+            fill_color: bar::meter_fill_color,
         }
         .theme(Theme::DARK)
     }
@@ -54,11 +58,26 @@ impl<'a> Gauge<'a> {
         self
     }
 
+    /// Overrides the bar's fill (and readout text) color from [`super::Meter`]'s default
+    /// green→yellow→red load ramp to `fill_color`, called with the clamped `0.0..=1.0` ratio.
+    ///
+    /// For gauges that aren't load-shaped, where the default ramp would read backwards (a full
+    /// health bar reading as danger rather than safe): supply a ramp that fits, e.g.
+    /// `|r| Color::lerp(Color::RED, Color::GREEN, r)`. A plain `fn` pointer rather than a
+    /// boxed closure, so `Gauge` stays `Copy`; a non-capturing closure like the one above
+    /// coerces to it automatically.
+    #[must_use]
+    pub const fn fill_color(mut self, fill_color: fn(f32) -> Color) -> Self {
+        self.fill_color = fill_color;
+        self
+    }
+
     /// Sets `label_style` to `theme.dim` on `theme.panel_bg`: the same de-emphasized role
     /// `09_widgets_dashboard` already uses for the plain-text label next to this gauge's
     /// sparkline. The bar's own fill stays load-colored via [`super::Meter`] regardless of
-    /// `theme`, matching every other gauge/meter-backed widget here (see [`super::Sparkline`]'s
-    /// doc comment for why that coloring is not part of the [`Theme`] role palette).
+    /// `theme` (matching every other gauge/meter-backed widget here; see [`super::Sparkline`]'s
+    /// doc comment for why that coloring is not part of the [`Theme`] role palette), unless
+    /// overridden separately with [`Gauge::fill_color`].
     ///
     /// `label_style` sets an explicit background rather than leaving it at [`Style::new()`]'s
     /// default: an unset background isn't "transparent" once a real backend draws it (a bare
@@ -94,7 +113,14 @@ impl Widget for Gauge<'_> {
         #[allow(clippy::cast_possible_truncation)]
         let pct_value = (ratio * 100.0).round() as i32;
         let _ = write!(pct, "{pct_value:>3}%");
-        bar::render(surface, self.label, self.label_style, ratio, pct.as_str());
+        bar::render(
+            surface,
+            self.label,
+            self.label_style,
+            ratio,
+            pct.as_str(),
+            self.fill_color,
+        );
     }
 }
 
@@ -125,6 +151,23 @@ mod tests {
             .render(&mut Surface::new(&mut grid, area, 0));
 
         assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Color::WHITE);
+    }
+
+    #[test]
+    fn fill_color_overrides_the_default_meter_ramp() {
+        fn white_to_red(ratio: f32) -> Color {
+            Color::lerp(Color::WHITE, Color::RED, ratio)
+        }
+
+        let area = Rect::new(0, 0, 20, 1);
+        let mut grid = Grid::new(20, 1);
+        Gauge::new("H", 1.0)
+            .fill_color(white_to_red)
+            .render(&mut Surface::new(&mut grid, area, 0));
+
+        // Full ratio: the default ramp would also be red-ish here, so assert against the
+        // custom ramp's own output rather than a color literal that might coincide.
+        assert_eq!(grid[Pos::new(2, 0)].style().foreground(), white_to_red(1.0));
     }
 
     #[test]
