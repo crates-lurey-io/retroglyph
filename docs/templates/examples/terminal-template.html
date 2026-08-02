@@ -86,79 +86,15 @@
         wasm_terminal_example_push_mouse,
         wasm_terminal_example_tick,
       } from './__EXAMPLE__.js';
+      // The xterm.js onData -> key_codes mapping is retroglyph_terminal_wasm's own
+      // js/key-table.js (retroglyph#684), not re-derived here: every consumer of this crate's
+      // wasm32 build gets the same table instead of hand-rolling a subset of it.
+      import { decodeKeyFromXtermData } from './key-table.js';
 
-      // Mirrors the FFI encoding documented on
-      // retroglyph_terminal_wasm::decode_key_event: printable characters
-      // pass through as their Unicode codepoint; named keys use codepoints
-      // above the valid `char` range (0x110000+). Only a first-pass subset of
-      // named keys is wired up here (arrows, Enter, Backspace, Escape,
-      // Tab) — xterm.js's `onData` already hands us the *decoded* key as a
-      // short string (not a raw keyboard event), so extending this to the
-      // rest of decode_key_event's named keys (Home/End/PageUp/PageDown/
-      // Insert/Delete/BackTab/F1-F24) means matching more of xterm.js's
-      // documented key-sequence strings below — left for a follow-up since
-      // this covers what dungeon_room and similar keyboard-driven demos need.
-      const NAMED_KEY_BASE = 0x00110000;
-      const NAMED_KEY = {
-        backspace: NAMED_KEY_BASE,
-        enter: NAMED_KEY_BASE + 1,
-        left: NAMED_KEY_BASE + 2,
-        right: NAMED_KEY_BASE + 3,
-        up: NAMED_KEY_BASE + 4,
-        down: NAMED_KEY_BASE + 5,
-        tab: NAMED_KEY_BASE + 10,
-        escape: NAMED_KEY_BASE + 14,
-      };
-      const MOD_SHIFT = 0b001;
-      const MOD_CONTROL = 0b010;
-      const MOD_ALT = 0b100;
-
-      // xterm.js's `onData` reports keys as the literal bytes/escape
-      // sequences a real terminal would receive on stdin (not structured key
-      // events), since that's what a terminal emulator's data model is.
-      // These are the standard xterm/VT100 sequences for the keys covered
-      // above; `Terminal` is configured in application-cursor-keys-off mode
-      // (the default), so arrows send the ANSI (not SS3) form.
-      const SEQUENCE_TO_KEY = {
-        '\r': { code: NAMED_KEY.enter, mods: 0 },
-        '\x7f': { code: NAMED_KEY.backspace, mods: 0 },
-        '\x1b': { code: NAMED_KEY.escape, mods: 0 },
-        '\t': { code: NAMED_KEY.tab, mods: 0 },
-        '\x1b[A': { code: NAMED_KEY.up, mods: 0 },
-        '\x1b[B': { code: NAMED_KEY.down, mods: 0 },
-        '\x1b[C': { code: NAMED_KEY.right, mods: 0 },
-        '\x1b[D': { code: NAMED_KEY.left, mods: 0 },
-        // Common WASD fallback some demos also accept — passed through as
-        // plain printable characters below, not special-cased here.
-      };
-
-      function pushKey(code, mods = 0) {
-        wasm_terminal_example_push_key(code >>> 0, mods & 0xff);
-      }
 
       function handleTerminalData(data) {
-        const mapped = SEQUENCE_TO_KEY[data];
-        if (mapped) {
-          pushKey(mapped.code, mapped.mods);
-          return;
-        }
-        // A single printable character (including Ctrl/Shift combos xterm.js
-        // already resolved to a codepoint) is forwarded as-is; anything else
-        // (unrecognized multi-byte escape sequences, e.g. function keys not
-        // covered above) is silently dropped rather than mis-decoded.
-        if (data.length === 1) {
-          const code = data.codePointAt(0);
-          // xterm.js sends Ctrl+<letter> as the corresponding C0 control
-          // code (0x01-0x1a); surface that as the plain letter + CONTROL
-          // modifier instead of an unmapped control character.
-          if (code >= 0x01 && code <= 0x1a && code !== 0x09 && code !== 0x0d) {
-            pushKey(code - 0x01 + 'a'.codePointAt(0), MOD_CONTROL);
-            return;
-          }
-          // No modifier bits to set here: Shift is already baked into the
-          // codepoint xterm.js hands us (e.g. 'A' vs 'a').
-          pushKey(code);
-        }
+        const key = decodeKeyFromXtermData(data);
+        if (key) wasm_terminal_example_push_key(key.code >>> 0, key.mods & 0xff);
       }
 
       // ── Pointer input (tap, drag, scroll) ──────────────────────────────
