@@ -455,31 +455,14 @@ pub fn split_h_n<const N: usize>(area: Rect, constraints: [Constraint; N]) -> [R
     })
 }
 
-/// Interleaves a `Constraint::Fixed(spacing)` gap between every pair of adjacent `constraints`.
-///
-/// `[c0, c1, c2]` with `spacing` becomes `[c0, Fixed(spacing), c1, Fixed(spacing), c2]`: the
-/// same shape a caller would otherwise have to build (and then remember to filter back out) by
-/// hand. No-op with fewer than two constraints.
-fn interleave_gaps(constraints: &[Constraint], spacing: u16) -> Vec<Constraint> {
-    let mut out = Vec::with_capacity(constraints.len().saturating_mul(2).saturating_sub(1));
-    for (i, &c) in constraints.iter().enumerate() {
-        if i > 0 {
-            out.push(Constraint::Fixed(spacing));
-        }
-        out.push(c);
-    }
-    out
-}
-
 /// Split `area` into columns left-to-right, like [`split_h`], but with a fixed `spacing`-cell gap
 /// carved out between every adjacent pair of panes.
 ///
-/// Equivalent to interleaving `Constraint::Fixed(spacing)` between `constraints` and calling
-/// [`split_h`], then discarding the gap panes, but the caller only ever sees the content panes,
-/// with no gap indices to filter out themselves. `spacing` gaps come out of `area` before
-/// `constraints` are resolved, so [`Fill`](Constraint::Fill)/[`Percent`](Constraint::Percent) panes
-/// share only what's left after every gap is reserved. No-op (falls back to [`split_h`]) with
-/// fewer than two panes or zero spacing.
+/// Reserves `spacing * (constraints.len() - 1)` cells from `area` up front and resolves
+/// `constraints` against what's left, then places the panes with a `spacing`-cell gap between
+/// each pair, so [`Fill`](Constraint::Fill)/[`Percent`](Constraint::Percent) panes share only
+/// what's left after every gap is reserved. No-op (falls back to [`split_h`]) with fewer than
+/// two panes or zero spacing.
 ///
 /// # Examples
 ///
@@ -497,9 +480,20 @@ pub fn split_h_spaced(area: Rect, constraints: &[Constraint], spacing: u16) -> V
     if spacing == 0 || constraints.len() < 2 {
         return split_h(area, constraints);
     }
-    split_h(area, &interleave_gaps(constraints, spacing))
-        .into_iter()
-        .step_by(2)
+    // `constraints.len()` is the number of panes in one layout split, nowhere near `u16::MAX`
+    // in any realistic UI, and `constraints.len() >= 2` here so the subtraction cannot underflow.
+    #[allow(clippy::cast_possible_truncation)]
+    let total_spacing = spacing.saturating_mul(constraints.len() as u16 - 1);
+    let sizes = solve(area.width().saturating_sub(total_spacing), constraints);
+    let mut x = area.left();
+    sizes
+        .iter()
+        .copied()
+        .map(|w| {
+            let rect = Rect::new(x, area.top(), w, area.height());
+            x = x.saturating_add(w).saturating_add(spacing);
+            rect
+        })
         .collect()
 }
 
@@ -513,9 +507,20 @@ pub fn split_v_spaced(area: Rect, constraints: &[Constraint], spacing: u16) -> V
     if spacing == 0 || constraints.len() < 2 {
         return split_v(area, constraints);
     }
-    split_v(area, &interleave_gaps(constraints, spacing))
-        .into_iter()
-        .step_by(2)
+    // `constraints.len()` is the number of panes in one layout split, nowhere near `u16::MAX`
+    // in any realistic UI, and `constraints.len() >= 2` here so the subtraction cannot underflow.
+    #[allow(clippy::cast_possible_truncation)]
+    let total_spacing = spacing.saturating_mul(constraints.len() as u16 - 1);
+    let sizes = solve(area.height().saturating_sub(total_spacing), constraints);
+    let mut y = area.top();
+    sizes
+        .iter()
+        .copied()
+        .map(|h| {
+            let rect = Rect::new(area.left(), y, area.width(), h);
+            y = y.saturating_add(h).saturating_add(spacing);
+            rect
+        })
         .collect()
 }
 
@@ -1275,6 +1280,26 @@ mod tests {
         // Adjacent panes are separated by exactly one gap cell, not touching.
         assert_eq!(panes[1].left(), panes[0].right() + 1);
         assert_eq!(panes[2].left(), panes[1].right() + 1);
+    }
+
+    #[test]
+    fn spaced_split_resolves_percent_against_the_post_gap_axis() {
+        let area = Rect::new(0, 0, 100, 1);
+        let panes = split_h_spaced(
+            area,
+            &[Constraint::Percent(50), Constraint::Percent(50)],
+            10,
+        );
+        let widths: Vec<u16> = panes.iter().map(Rect::width).collect();
+        assert_eq!(widths, vec![45, 45]);
+
+        let panes = split_h_spaced(
+            area,
+            &[Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)],
+            10,
+        );
+        let widths: Vec<u16> = panes.iter().map(Rect::width).collect();
+        assert_eq!(widths, vec![45, 45]);
     }
 
     #[test]
