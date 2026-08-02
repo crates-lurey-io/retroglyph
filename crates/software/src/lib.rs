@@ -300,10 +300,13 @@ impl SoftwareRenderer {
             return Ok(());
         };
         let result = surface.present(self.ctx.pixel_buf.as_ref(), damage);
-        // Damage has been presented (or the attempt is done); drop it so a
-        // later present() with no new draw_layers() call is a no-op instead of
-        // re-presenting stale damage.
-        self.ctx.damage_rows = None;
+        // Only drop the damage once it's actually been presented, so a later
+        // present() with no new draw_layers() call is a no-op instead of
+        // re-presenting stale damage. On failure, leave it set so the next
+        // present() attempt retries the same band instead of losing it.
+        if result.is_ok() {
+            self.ctx.damage_rows = None;
+        }
         result
     }
 
