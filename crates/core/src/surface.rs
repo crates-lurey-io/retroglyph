@@ -716,7 +716,9 @@ impl<'a> Surface<'a> {
         use unicode_segmentation::UnicodeSegmentation;
         use unicode_width::UnicodeWidthStr;
 
-        let right = self.clip.right();
+        // `cx` is area-local (it starts at `pos.x`, which `shift()` treats as local), so the
+        // wrap threshold must be too: translate `clip.right()` out of absolute grid space.
+        let right = self.clip.right().saturating_sub(self.area.left());
         let mut cx = pos.x;
         let mut cy = pos.y;
         for grapheme in text.graphemes(true) {
@@ -744,7 +746,9 @@ impl<'a> Surface<'a> {
     /// [`print`](Self::print) implementation used when `egc` is disabled: splits on `char`.
     #[cfg(not(feature = "egc"))]
     fn print_chars(&mut self, pos: Pos, text: &str, style: Style) {
-        let right = self.clip.right();
+        // `cx` is area-local (it starts at `pos.x`, which `shift()` treats as local), so the
+        // wrap threshold must be too: translate `clip.right()` out of absolute grid space.
+        let right = self.clip.right().saturating_sub(self.area.left());
         let mut cx = pos.x;
         let mut cy = pos.y;
         for ch in text.chars() {
@@ -1550,6 +1554,20 @@ mod tests {
         assert_eq!(grid[Pos::new(3, 0)].glyph(), 'd');
         // "ef" wrapped onto row 1, which the clip excludes.
         assert_eq!(grid[Pos::new(0, 1)].glyph(), ' ');
+    }
+
+    #[test]
+    fn print_wraps_at_the_surfaces_own_width_not_at_clip_right() {
+        // `area` starts at column 4, so the surface-local wrap column (4) is smaller than the
+        // absolute grid column `clip.right()` resolves to (8). Wrapping must use the former.
+        let mut grid = Grid::new(8, 2);
+        let mut surface = Surface::new(&mut grid, Rect::new(4, 0, 4, 2), 0);
+        surface.print((0, 0), "abcdef", Style::default());
+
+        assert_eq!(grid[Pos::new(4, 0)].glyph(), 'a');
+        assert_eq!(grid[Pos::new(7, 0)].glyph(), 'd');
+        assert_eq!(grid[Pos::new(4, 1)].glyph(), 'e');
+        assert_eq!(grid[Pos::new(5, 1)].glyph(), 'f');
     }
 
     #[test]
