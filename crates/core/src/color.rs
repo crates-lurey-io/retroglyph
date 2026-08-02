@@ -340,6 +340,8 @@ impl core::fmt::Display for InvalidAnsiIndex {
     }
 }
 
+impl core::error::Error for InvalidAnsiIndex {}
+
 impl TryFrom<u8> for AnsiColor {
     type Error = InvalidAnsiIndex;
 
