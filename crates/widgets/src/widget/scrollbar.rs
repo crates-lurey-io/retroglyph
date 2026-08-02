@@ -12,8 +12,8 @@ use crate::draw::{offset_for_pos, thumb_geometry};
 /// A vertical scrollbar (typically one cell wide) covering `total_len`
 /// items in a `visible_len`-row viewport.
 ///
-/// `offset` defaults to `0`; `track_style`/`thumb_style` default to
-/// [`Style::new()`]. Set whichever a caller needs via
+/// `offset` defaults to `0`; `track_style`/`thumb_style` default to [`Theme::DARK`] (as if
+/// [`Scrollbar::theme`] had been called). Set whichever a caller needs via
 /// [`Scrollbar::offset`]/[`Scrollbar::track_style`]/[`Scrollbar::thumb_style`].
 ///
 /// `track_style` fills the whole strip, then [`crate::draw::thumb_geometry`]'s
@@ -51,8 +51,8 @@ pub struct Scrollbar {
 }
 
 impl Scrollbar {
-    /// A scrollbar covering `total_len` items in a `visible_len`-row
-    /// viewport, starting at offset `0` in the default style.
+    /// A scrollbar covering `total_len` items in a `visible_len`-row viewport, starting at offset
+    /// `0`, styled from [`Theme::DARK`] (as if [`Scrollbar::theme`] had been called).
     #[must_use]
     pub fn new(total_len: usize, visible_len: usize) -> Self {
         Self {
@@ -62,6 +62,7 @@ impl Scrollbar {
             track_style: Style::new(),
             thumb_style: Style::new(),
         }
+        .theme(Theme::DARK)
     }
 
     /// Set the scroll offset the thumb is drawn at.

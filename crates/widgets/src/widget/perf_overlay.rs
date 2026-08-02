@@ -1,18 +1,9 @@
 //! [`PerfOverlay`]: a bordered live frame-time/FPS panel with a sparkline.
-use retroglyph_core::{Color, Frame, FrameStats, Rect, Style};
+use retroglyph_core::{Frame, FrameStats, Rect, Style};
 
 use super::{AnimatedWidget, Panel, Sparkline, Text, Widget};
 use crate::Surface;
 use crate::Theme;
-
-/// [`PerfOverlay::sparkline_style`]'s default: a fixed accent, matching [`Theme::DARK`]'s
-/// `accent`. See that method's docs for why it's a fixed color, not [`Sparkline`]'s own default
-/// [`Meter`](super::Meter) ramp.
-const DEFAULT_SPARKLINE_COLOR: Color = Color::Rgb {
-    r: 90,
-    g: 170,
-    b: 250,
-};
 
 /// A bordered panel showing live [`FrameStats`].
 ///
@@ -80,7 +71,7 @@ pub struct PerfOverlay<'a, const N: usize = 120> {
 
 impl<'a, const N: usize> PerfOverlay<'a, N> {
     /// A perf overlay reading `stats`, titled `"perf"`, with no backend label and no extra
-    /// metrics.
+    /// metrics, styled from [`Theme::DARK`] (as if [`PerfOverlay::theme`] had been called).
     #[must_use]
     pub fn new(stats: &'a FrameStats<N>) -> Self {
         Self {
@@ -91,8 +82,9 @@ impl<'a, const N: usize> PerfOverlay<'a, N> {
             border_style: Style::new(),
             fill_style: Style::new(),
             text_style: Style::new(),
-            sparkline_style: Style::new().fg(DEFAULT_SPARKLINE_COLOR),
+            sparkline_style: Style::new(),
         }
+        .theme(Theme::DARK)
     }
 
     /// Sets the backend label appended to the readout row (e.g. `"crossterm"`, `"software"`).
@@ -118,7 +110,7 @@ impl<'a, const N: usize> PerfOverlay<'a, N> {
         self
     }
 
-    /// Sets the readout/metric text's style. Defaults to [`Style::new()`].
+    /// Sets the readout/metric text's style. Defaults to [`Theme::DARK`]'s `fg` role.
     #[must_use]
     pub const fn text_style(mut self, style: Style) -> Self {
         self.text_style = style;
@@ -297,8 +289,9 @@ impl<const N: usize> Default for AnimatedPerfOverlay<'_, N> {
 
 impl<'a, const N: usize> AnimatedPerfOverlay<'a, N> {
     /// An animated perf overlay titled `"perf"`, with no backend label and no extra metrics --
-    /// the same defaults as [`PerfOverlay::new`]. `N` must match the [`FrameStats`] window this
-    /// is driven by -- the default, 120, matches [`PerfOverlay`]'s and
+    /// the same defaults as [`PerfOverlay::new`], styled from [`Theme::DARK`] (as if
+    /// [`AnimatedPerfOverlay::theme`] had been called). `N` must match the [`FrameStats`] window
+    /// this is driven by -- the default, 120, matches [`PerfOverlay`]'s and
     /// [`FrameStats`]'s own defaults.
     #[must_use]
     pub fn new() -> Self {
@@ -309,8 +302,9 @@ impl<'a, const N: usize> AnimatedPerfOverlay<'a, N> {
             border_style: Style::new(),
             fill_style: Style::new(),
             text_style: Style::new(),
-            sparkline_style: Style::new().fg(DEFAULT_SPARKLINE_COLOR),
+            sparkline_style: Style::new(),
         }
+        .theme(Theme::DARK)
     }
 
     /// See [`PerfOverlay::backend`].

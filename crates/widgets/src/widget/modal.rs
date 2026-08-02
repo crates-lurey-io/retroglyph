@@ -11,8 +11,8 @@ use crate::{Align, Theme};
 ///
 /// Shorthand for a [`Panel`] sized `width` x `height` and centered via
 /// [`centered_rect`]. `border_style`/`fill_style` default to
-/// [`Style::new()`] and there is no title by default: set whichever a
-/// caller needs via [`Modal::border_style`]/[`Modal::fill_style`]/[`Modal::title`],
+/// [`Theme::DARK`] (as if [`Modal::theme`] had been called) and there is no title by default: set
+/// whichever a caller needs via [`Modal::border_style`]/[`Modal::fill_style`]/[`Modal::title`],
 /// the same as [`Panel`].
 ///
 /// [`Modal::render`] returns the inner content [`Rect`] (via [`Panel::inner`], the border inset
@@ -59,7 +59,8 @@ pub struct Modal<'a> {
 }
 
 impl<'a> Modal<'a> {
-    /// A `width` x `height` modal in the default style, with no title.
+    /// A `width` x `height` modal with no title, styled from [`Theme::DARK`] (as if
+    /// [`Modal::theme`] had been called).
     #[must_use]
     pub fn new(width: u16, height: u16) -> Self {
         Self {
@@ -72,6 +73,7 @@ impl<'a> Modal<'a> {
             border_type: BorderType::default(),
             padding: Sides::ZERO,
         }
+        .theme(Theme::DARK)
     }
 
     /// Set the modal's title.
