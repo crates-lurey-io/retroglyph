@@ -9,7 +9,9 @@ A `Backend` implementation for [retroglyph](https://github.com/crates-lurey-io/r
 renders to a real terminal via [`crossterm`](https://crates.io/crates/crossterm). Owns the OS/TTY-
 specific parts (raw mode, the alternate screen, the Kitty keyboard protocol, input polling); cell
 diffing and ANSI/SGR output are delegated to
-[`retroglyph-terminal`](https://crates.io/crates/retroglyph-terminal).
+[`retroglyph-terminal`](https://crates.io/crates/retroglyph-terminal). Registers a process-wide
+panic hook (once, across all instances) to safely restore the terminal if the app panics while raw
+mode/the alternate screen is active.
 
 ## Quick start
 

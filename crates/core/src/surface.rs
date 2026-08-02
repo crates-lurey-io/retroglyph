@@ -4,6 +4,15 @@
 //! [`draw`](crate::Terminal::draw)/[`surface`](crate::Terminal::surface) hand out a `Surface`
 //! scoped to the whole grid, and `retroglyph-widgets` renders every widget into a `Surface`
 //! scoped to a sub-[`Rect`]: there is no separate stateful drawing API on `Terminal` itself.
+//!
+//! Place characters directly with [`put`](Surface::put) (or [`print`](Surface::print) for a
+//! string, which handles newlines and wide characters), style-aware spans with
+//! [`print_line`](Surface::print_line), or a whole styled run with
+//! [`with_style`](Surface::with_style) so repeated calls don't need to pass the same [`Style`]
+//! each time. [`clear`](Surface::clear)/[`clear_region`](Surface::clear_region) blank the active
+//! layer (in full, or a rectangular region); switch layers with
+//! [`on_layer`](Surface::on_layer). Or bypass the builder entirely and reach the [`Grid`]
+//! directly via [`grid_mut`](Surface::grid_mut).
 
 use crate::color::Color;
 use crate::grid::{Grid, Offset, Pos, Rect, Size};
