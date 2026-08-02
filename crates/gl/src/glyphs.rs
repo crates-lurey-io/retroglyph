@@ -73,7 +73,7 @@ impl GlyphCache {
 
     /// The backing font chain (used by the Linux headless render test to compare against the
     /// chain's own coverage bits).
-    #[cfg(all(test, target_os = "linux"))]
+    #[cfg(all(test, target_os = "linux", feature = "default-font"))]
     pub(crate) const fn font_chain(&self) -> &FontChain<'static> {
         &self.fonts
     }

@@ -61,8 +61,9 @@ impl Sense {
     /// [`focused`](crate::Response::focused), and
     /// [`secondary_clicked`](crate::Response::secondary_clicked) all report
     /// `false`, even if the gesture would otherwise satisfy them.
-    /// [`SCROLL`](Self::SCROLL) is unaffected: a disabled row inside a
-    /// scrollable list shouldn't block the list from scrolling through it.
+    /// [`SCROLL`](Self::SCROLL) is suppressed too: a disabled row's own
+    /// [`Sense::SCROLL`] never fires, though this doesn't stop an enclosing
+    /// scrollable list (a separate widget) from scrolling past it.
     ///
     /// A modifier, not a capability of its own: combine it with an existing
     /// sense rather than using it alone, e.g. `Sense::click() |
