@@ -17,6 +17,12 @@ use crate::Surface;
 /// bar in view" isn't the same thing as "bad": [`super::PerfOverlay`] does
 /// this). Only the first row of `area` is drawn.
 ///
+/// Unlike [`super::BoxBorder`], [`super::Gauge`], [`super::StatBar`],
+/// [`super::Table`], and [`super::Button`], `Sparkline` has no `theme()`/
+/// `theme_on()` pair: [`Meter`] already gives its bars a semantic
+/// green-to-red color, and a fixed [`Sparkline::style`] override has no
+/// single [`Theme`](crate::Theme) role to map onto either.
+///
 /// # Examples
 ///
 /// ```

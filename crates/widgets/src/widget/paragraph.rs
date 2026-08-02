@@ -35,6 +35,11 @@ use crate::Surface;
 /// crate (`List`, `Table`, `Log`) already has this same gap regardless of
 /// `egc`.
 ///
+/// Unlike [`super::BoxBorder`], [`super::Gauge`], [`super::StatBar`],
+/// [`super::Table`], and [`super::Button`], `Paragraph` has no `theme()`/
+/// `theme_on()` pair: word-wrapped text has no single semantic
+/// [`Theme`](crate::Theme) role to map onto, so callers set `style` directly.
+///
 /// # Examples
 ///
 /// ```
