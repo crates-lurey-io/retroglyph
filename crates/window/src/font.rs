@@ -128,12 +128,16 @@ impl BitmapFont {
     /// glyphs (multi-byte rows, #164): today a row is a single byte (`glyph_width <= 8`), so its
     /// bits are read straight out of that byte.
     ///
+    /// A `glyph_width` above 8 is out of this format's contract (rows are one byte, so only bits
+    /// 0..8 exist); it is clamped to 8 here rather than shifting past the byte's width, so columns
+    /// 8.. of an oversized font are simply never yielded instead of panicking.
+    ///
     /// # Panics
     ///
     /// Panics if `index as u16 >= self.glyph_count` (via [`rows`](Self::rows)).
     #[must_use = "iterators are lazy and do nothing unless consumed"]
     pub fn glyph_pixels(&self, index: u8) -> impl Iterator<Item = (u8, u8)> + '_ {
-        let width = self.glyph_width;
+        let width = self.glyph_width.min(8);
         self.rows(index)
             .iter()
             .enumerate()
@@ -1521,6 +1525,16 @@ mod tests {
         let font = BitmapFont::new(&DATA, 5, 1, 1);
         let pixels: Vec<(u8, u8)> = font.glyph_pixels(0).collect();
         assert_eq!(pixels, [(0, 0), (4, 0)]);
+    }
+
+    #[test]
+    fn glyph_pixels_does_not_overflow_the_shift_for_width_above_8() {
+        // retroglyph#729: `row >> (width - 1 - x)` used to shift past the byte's width once
+        // `glyph_width` exceeded 8, which this 1-bit-per-row format never actually supports.
+        static DATA: [u8; 1] = [0b1111_1111];
+        let font = BitmapFont::new(&DATA, 12, 1, 1);
+        let pixels: Vec<(u8, u8)> = font.glyph_pixels(0).collect();
+        assert_eq!(pixels, (0..8).map(|x| (x, 0)).collect::<Vec<_>>());
     }
 
     /// Reproduces retroglyph#507: a fallback font built with [`BitmapFont::with_charset`] can

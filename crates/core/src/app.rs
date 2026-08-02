@@ -159,6 +159,11 @@ impl RunOptions {
     /// never blocks. Use this for apps that drive a [`Tween`](crate::animate::Tween)/
     /// [`FrameClock`](crate::frame_clock::FrameClock) from [`Frame::delta`] and need `update`
     /// called every tick regardless of input.
+    ///
+    /// `target_fps` becomes [`RunOptions::target_fps`] verbatim, including `0`: passing `0` here
+    /// builds without panicking, but [`run_blocking_with`] panics once it constructs the
+    /// [`FrameClock`](crate::frame_clock::FrameClock) that paces it (see that function's
+    /// `# Panics` section).
     #[must_use]
     pub const fn animated(target_fps: u32) -> Self {
         Self {
@@ -199,6 +204,11 @@ impl Default for RunOptions {
 ///
 /// Returns the backend's error if the automatic `present()` call fails. The loop stops and the
 /// terminal is dropped (running backend teardown) before the error is returned.
+///
+/// # Panics
+///
+/// Panics if `options.target_fps` is `Some(0)`: pacing at a `FrameClock` internally, which
+/// requires a non-zero rate (see [`FrameClock::new`](crate::frame_clock::FrameClock::new)).
 #[cfg(feature = "std")]
 pub fn run_blocking_with<B, A>(
     mut term: Terminal<B>,

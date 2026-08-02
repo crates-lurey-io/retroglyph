@@ -597,8 +597,11 @@ where
     let event_loop = EventLoop::<T>::with_user_event().build()?;
     on_proxy(EventProxy(event_loop.create_proxy()));
 
+    // `Some(0)` has no finite pacing interval to express, so it falls back to uncapped rather
+    // than computing `Duration::from_secs_f64(f64::INFINITY)` (which panics).
     let frame_interval = config
         .target_fps
+        .filter(|&fps| fps != 0)
         .map(|fps| Duration::from_secs_f64(1.0 / f64::from(fps)));
 
     let attrs = WindowAttrs::from(&config);

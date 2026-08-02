@@ -26,6 +26,9 @@ pub enum SoftwareBackendError {
     MixedGlyphSizes,
     /// `scale` was set to `0`, which would produce a zero-size pixel buffer.
     ZeroScale,
+    /// The grid was configured with a zero column or row count, which would produce a zero-size
+    /// pixel buffer.
+    ZeroGrid,
     /// Tileset loading failed.
     #[cfg(feature = "tilesets")]
     Tileset(retroglyph_window::tileset::TilesetError),
@@ -49,6 +52,7 @@ impl fmt::Display for SoftwareBackendError {
                 f,
                 "scale must be non-zero; a scale of 0 would produce a zero-size pixel buffer"
             ),
+            Self::ZeroGrid => write!(f, "grid columns and rows must both be non-zero"),
             #[cfg(feature = "tilesets")]
             Self::Tileset(_) => write!(f, "tileset load failed"),
         }
@@ -58,7 +62,7 @@ impl fmt::Display for SoftwareBackendError {
 impl std::error::Error for SoftwareBackendError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Self::NoFont | Self::MixedGlyphSizes | Self::ZeroScale => None,
+            Self::NoFont | Self::MixedGlyphSizes | Self::ZeroScale | Self::ZeroGrid => None,
             #[cfg(feature = "tilesets")]
             Self::Tileset(e) => Some(e),
         }
@@ -315,6 +319,8 @@ impl SoftwareBackendBuilder {
     /// on their glyph size.
     ///
     /// Returns [`SoftwareBackendError::ZeroScale`] if `scale` was set to `0`.
+    ///
+    /// Returns [`SoftwareBackendError::ZeroGrid`] if `cols` or `rows` was set to `0`.
     pub fn build(self) -> Result<SoftwareBackend, SoftwareBackendError> {
         let Some(fonts) = self.options.fonts else {
             return Err(SoftwareBackendError::NoFont);
@@ -324,6 +330,9 @@ impl SoftwareBackendBuilder {
         }
         if self.options.scale == 0 {
             return Err(SoftwareBackendError::ZeroScale);
+        }
+        if self.options.cols == 0 || self.options.rows == 0 {
+            return Err(SoftwareBackendError::ZeroGrid);
         }
         Ok(self.options)
     }
@@ -352,6 +361,15 @@ mod tests {
             .scale(0)
             .build();
         assert!(matches!(result, Err(SoftwareBackendError::ZeroScale)));
+    }
+
+    #[test]
+    fn build_rejects_a_zero_grid_dimension() {
+        let result = SoftwareBackendBuilder::new()
+            .font(test_font())
+            .grid_size(0, 25)
+            .build();
+        assert!(matches!(result, Err(SoftwareBackendError::ZeroGrid)));
     }
 
     #[test]
