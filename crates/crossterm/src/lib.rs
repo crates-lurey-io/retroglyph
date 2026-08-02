@@ -1315,6 +1315,9 @@ fn from_crossterm_key_modifiers(
     if mods.contains(crossterm::event::KeyModifiers::ALT) {
         result |= M::ALT;
     }
+    if mods.contains(crossterm::event::KeyModifiers::SUPER) {
+        result |= M::SUPER;
+    }
     result
 }
 
@@ -2030,6 +2033,46 @@ mod tests {
         assert_eq!(
             key_code_of(ct_event),
             retroglyph_core::event::KeyCode::Char('a')
+        );
+    }
+
+    #[test]
+    fn crossterm_super_modifier_is_mapped_on_key_events() {
+        // Under DISAMBIGUATE_ESCAPE_CODES (the default kitty flag negotiated by
+        // `Crossterm::builder()`), a compliant terminal reports the Super/Cmd bit, and
+        // crossterm's own `parse_modifiers` already maps it to `KeyModifiers::SUPER`. This
+        // translation layer must not drop it (retroglyph#714).
+        let ct_event = crossterm::event::Event::Key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char('s'),
+            crossterm::event::KeyModifiers::SUPER,
+        ));
+        let Some(Event::Key(key)) = from_crossterm_event(ct_event) else {
+            panic!("expected a key event")
+        };
+        assert!(
+            key.modifiers
+                .contains(retroglyph_core::event::KeyModifiers::SUPER)
+        );
+        assert_eq!(key.code, retroglyph_core::event::KeyCode::Char('s'));
+    }
+
+    #[test]
+    fn crossterm_super_modifier_is_mapped_on_mouse_events() {
+        // The same translation function backs mouse events, so the gap in
+        // `from_crossterm_key_modifiers` affected Cmd-modified clicks identically (retroglyph#714).
+        let ct_event = crossterm::event::Event::Mouse(crossterm::event::MouseEvent {
+            kind: crossterm::event::MouseEventKind::Down(crossterm::event::MouseButton::Left),
+            column: 0,
+            row: 0,
+            modifiers: crossterm::event::KeyModifiers::SUPER,
+        });
+        let Some(Event::Mouse(mouse)) = from_crossterm_event(ct_event) else {
+            panic!("expected a mouse event")
+        };
+        assert!(
+            mouse
+                .modifiers
+                .contains(retroglyph_core::event::KeyModifiers::SUPER)
         );
     }
 
