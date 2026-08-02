@@ -180,7 +180,7 @@ impl InteractiveWidget for Button<'_> {
         let style = self.resolved_style(response);
         fill_rect(surface, Rect::new(0, 0, width, height), ' ', style);
 
-        let text = truncate_to_cols(self.label, usize::from(width));
+        let text = truncate_to_cols(self.label, width);
         // `truncate_to_cols` bounds `text` to `width` columns, so narrowing the count back is
         // always exact.
         #[allow(clippy::cast_possible_truncation)]

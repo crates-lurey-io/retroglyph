@@ -218,7 +218,7 @@ impl List<'_> {
                 };
                 surface.print((0, y), marker, style);
             }
-            let text = truncate_to_cols(item, usize::from(text_width));
+            let text = truncate_to_cols(item, text_width);
             surface.print((marker_width, y), text, style);
         }
     }

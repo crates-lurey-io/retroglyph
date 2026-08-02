@@ -165,7 +165,7 @@ impl StatefulWidget for TextInput<'_> {
                 .map_or_else(|| visible.to_owned(), |mask| masked(visible, mask));
             (visible, self.style)
         };
-        let text = truncate_to_cols(&text, usize::from(width));
+        let text = truncate_to_cols(&text, width);
         surface.print((0, 0), text, style);
 
         if caret_col < usize::from(width) {
