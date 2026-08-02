@@ -78,8 +78,8 @@ pub use interact::{
     Response, Sense, Shortcuts,
 };
 pub use layout::{
-    Constraint, Flex, centered_rect, split_h, split_h_flex, split_h_spaced, split_v, split_v_flex,
-    split_v_spaced,
+    Constraint, Flex, Side, anchored_rect, centered_rect, split_h, split_h_flex, split_h_spaced,
+    split_v, split_v_flex, split_v_spaced,
 };
 pub use retroglyph_core::{Layer, StyledSurface, Surface};
 pub use state::{ListState, ScrollPhysics, ScrollState, SelectionWrap};
