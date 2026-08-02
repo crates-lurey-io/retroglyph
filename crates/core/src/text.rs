@@ -59,6 +59,13 @@ pub fn char_width(c: char) -> u16 {
     w
 }
 
+/// The number of trailing characters [`split_at_width`] re-measures with [`width_usize`] when
+/// deciding whether the next character extends the current display cluster. Generous headroom
+/// over any real `UnicodeWidthStr` boundary effect (the longest are ZWJ emoji sequences and
+/// flag/tag runs of well under a dozen codepoints), chosen to keep that re-measurement bounded
+/// instead of rescanning the whole prefix on every character.
+const CLUSTER_LOOKBACK: usize = 32;
+
 /// Splits `s` at the byte index where its display width reaches `max_cols`.
 ///
 /// Splits on a whole-character boundary; a character that would push the
@@ -73,6 +80,14 @@ pub fn char_width(c: char) -> u16 {
 /// differs from the sum of its parts, and per-char summing would let such a
 /// cluster violate the postcondition in either direction.
 ///
+/// That re-measurement is bounded to a trailing window of the last `CLUSTER_LOOKBACK`
+/// characters rather than the whole prefix seen so far:
+/// `UnicodeWidthStr`'s boundary effects never reach further back than a
+/// handful of codepoints (variation selectors, a single ZWJ join, an emoji
+/// modifier, or a short flag/tag run), so a bounded window reproduces the
+/// same result as re-measuring from byte `0` while keeping this function
+/// linear in `s`'s length instead of quadratic.
+///
 /// # Examples
 ///
 /// ```
@@ -85,11 +100,21 @@ pub fn char_width(c: char) -> u16 {
 pub fn split_at_width(s: &str, max_cols: u16) -> (&str, &str) {
     let max_cols = usize::from(max_cols);
     let mut end = 0usize;
+    let mut cols = 0usize;
     for (i, ch) in s.char_indices() {
         let candidate_end = i + ch.len_utf8();
-        if width_usize(&s[..candidate_end]) > max_cols {
+        let window_start = s[..end]
+            .char_indices()
+            .rev()
+            .nth(CLUSTER_LOOKBACK - 1)
+            .map_or(0, |(idx, _)| idx);
+        let committed = width_usize(&s[window_start..end]);
+        let extended = width_usize(&s[window_start..candidate_end]);
+        let delta = extended.saturating_sub(committed);
+        if cols + delta > max_cols {
             break;
         }
+        cols += delta;
         end = candidate_end;
     }
     s.split_at(end)
