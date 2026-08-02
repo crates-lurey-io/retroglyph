@@ -4,13 +4,13 @@ use retroglyph_core::Size;
 
 /// How much room an interactive widget's hit target should claim.
 ///
-/// Not itself consulted by anything in this crate: there are no built-in
-/// interactive widgets yet to apply it to (see the crate's module docs).
 /// It exists so an app choosing between a phone-sized and a desktop-sized
 /// layout has one place to ask "how big should this button/row/slider be",
-/// rather than inventing its own ad hoc breakpoint constants per widget. A future interactive
-/// widget in this crate (a checkbox, say) would read [`min_target_size`](Self::min_target_size)
-/// the same way it would read [`Sense`](crate::Sense).
+/// rather than inventing its own ad hoc breakpoint constants per widget. An
+/// [`InteractiveWidget`](crate::InteractiveWidget) reads
+/// [`min_target_size`](Self::min_target_size) the same way it reads
+/// [`sense`](crate::InteractiveWidget::sense); [`for_width`](Self::for_width) is the other
+/// half, turning a terminal width into a `Density` in the first place.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
@@ -25,6 +25,12 @@ pub enum Density {
 }
 
 impl Density {
+    /// Below this width, in cells, [`for_width`](Self::for_width) picks [`Density::Touch`]; at
+    /// or above it, [`Density::Mouse`]. An app that wants a different breakpoint states it
+    /// relative to this default (e.g. `if width < Density::DEFAULT_BREAKPOINT_WIDTH - 4 { .. }`)
+    /// rather than inventing an unrelated constant from scratch.
+    pub const DEFAULT_BREAKPOINT_WIDTH: u16 = 64;
+
     /// The minimum size, in cells, an interactive target should claim at
     /// this density.
     #[must_use]
@@ -32,6 +38,20 @@ impl Density {
         match self {
             Self::Touch => Size::new(6, 3),
             Self::Mouse => Size::new(6, 1),
+        }
+    }
+
+    /// Picks a density from a terminal (or pane) width, in cells, against
+    /// [`DEFAULT_BREAKPOINT_WIDTH`](Self::DEFAULT_BREAKPOINT_WIDTH).
+    ///
+    /// A one-line replacement for the ad hoc `if width < N { .. }` every consumer of this crate
+    /// has otherwise had to write for itself, with a different `N` each time.
+    #[must_use]
+    pub const fn for_width(width: u16) -> Self {
+        if width < Self::DEFAULT_BREAKPOINT_WIDTH {
+            Self::Touch
+        } else {
+            Self::Mouse
         }
     }
 }
@@ -51,6 +71,26 @@ mod tests {
     fn mouse_still_claims_more_than_a_single_cell_wide() {
         let size = Density::Mouse.min_target_size();
         assert!(size.width() > 1);
+    }
+
+    #[test]
+    fn for_width_picks_touch_below_the_default_breakpoint() {
+        assert_eq!(
+            Density::for_width(Density::DEFAULT_BREAKPOINT_WIDTH - 1),
+            Density::Touch
+        );
+    }
+
+    #[test]
+    fn for_width_picks_mouse_at_or_above_the_default_breakpoint() {
+        assert_eq!(
+            Density::for_width(Density::DEFAULT_BREAKPOINT_WIDTH),
+            Density::Mouse
+        );
+        assert_eq!(
+            Density::for_width(Density::DEFAULT_BREAKPOINT_WIDTH + 1),
+            Density::Mouse
+        );
     }
 
     #[cfg(feature = "serde")]
