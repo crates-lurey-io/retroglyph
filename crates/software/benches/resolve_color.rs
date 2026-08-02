@@ -13,7 +13,7 @@
 //! background, isolating the color-resolution branch: `Color::Default` (a
 //! constant lookup), `Color::Rgb` (already-packed, cheapest real case),
 //! `Color::Ansi` (16-entry match in `ansi_to_rgb`), and `Color::Indexed`
-//! (256-color cube/greyscale-ramp math in `indexed_to_rgb`).
+//! (256-color cube/grayscale-ramp math in `indexed_to_rgb`).
 //!
 //! Requires `--all-features` (`default-font`; see the crate-level note in
 //! `AGENTS.md`).

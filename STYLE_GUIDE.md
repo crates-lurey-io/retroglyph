@@ -64,6 +64,9 @@ without a conscious decision to change the defaults.
   number, or title from doc comments, rustdoc, or anything else that ends up in published API docs.
   Those readers have no access to the file and the reference is dead weight. If a doc comment needs
   the rationale, restate the relevant part of it inline instead of pointing at an internal doc.
+- Spelling is en-US: "color", "initialization", "centered", "grayscale", not "colour",
+  "initialisation", "centred", "greyscale". Applies to identifiers as well as prose
+  (retroglyph#687).
 
 ### Prose style
 

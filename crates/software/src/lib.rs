@@ -125,7 +125,7 @@ use std::time::Duration;
 /// Unlike [`SoftwareBackend`] (which is just configuration), this type
 /// always has an active rendering context: its pixel buffer is always
 /// available, and the `ctx` field is never `None`, so [`Output`] methods
-/// never panic for missing initialisation.
+/// never panic for missing initialization.
 ///
 /// Call [`pixels`](Self::pixels) to inspect the rendered output, or use
 /// [`Output::draw`] and [`Output::draw_layers`] to render into it.
@@ -175,7 +175,7 @@ struct RenderContext {
     ///
     /// A separate shadow copy because a `Tile` does not carry its tint (it lives in a side table
     /// on `Grid`, see `retroglyph_core::Grid::tint`). Without it a tint-only change would compare
-    /// equal on every `Tile` field and never mark the cell dirty, so recolouring a sprite in
+    /// equal on every `Tile` field and never mark the cell dirty, so recoloring a sprite in
     /// place would silently not repaint.
     prev_tints: Vec<Vec<Tint>>,
     /// Reusable per-cell dirty scratch buffer, `true` at index `y * cols + x` when any layer's
@@ -466,7 +466,7 @@ impl SoftwareRenderer {
         pos: Pos,
         tile: Tile,
         // Only ever read inside the `tilesets`-gated sprite path below: a bitmap-font glyph is
-        // always drawn in the cell's own foreground colour, never tinted (tints apply to
+        // always drawn in the cell's own foreground color, never tinted (tints apply to
         // sprites only, per `Surface::with_tint`), so a `tilesets`-off build has no use for it.
         tint: Tint,
     ) {
@@ -484,7 +484,7 @@ impl SoftwareRenderer {
             if let Some(sprite) = self.sprite_cache.get(tile.glyph()) {
                 let (span_w, span_h) = tile.span();
                 let align = sprite.align_offset(span_w, span_h, glyph_w, glyph_h);
-                let recolour =
+                let recolor =
                     SpriteTint::resolve(sprite.color, tile.style().foreground(), tint, DEFAULT_FG);
                 blit_sprite(
                     self.ctx.pixel_buf.as_mut(),
@@ -496,7 +496,7 @@ impl SoftwareRenderer {
                     tile.dy() + align.1,
                     sprite,
                     scale,
-                    recolour,
+                    recolor,
                 );
                 if tile.span() == (1, 1) {
                     warn_sprite_needs_span(
@@ -509,7 +509,7 @@ impl SoftwareRenderer {
                 return;
             }
             // No sprite for this glyph: it falls back to the bitmap font below, which is
-            // `fg`-coloured, so a tint that would otherwise recolour a sprite silently has no
+            // `fg`-colored, so a tint that would otherwise recolor a sprite silently has no
             // effect here (retroglyph#564, #537's exact trap).
             warn_tint_needs_sprite(&mut self.ctx.warned_dropped_tint, tile.glyph(), tint);
         }
@@ -1067,7 +1067,7 @@ fn blit_sprite(
     offset_y: i16,
     sprite: &Sprite,
     scale: usize,
-    recolour: SpriteTint,
+    recolor: SpriteTint,
 ) {
     let origin_x = cell_px_x as i64 + i64::from(offset_x) * scale as i64;
     let origin_y = cell_px_y as i64 + i64::from(offset_y) * scale as i64;
@@ -1087,7 +1087,7 @@ fn blit_sprite(
         && origin_y >= 0
         && origin_x as usize + glyph_w <= buf_w
         && origin_y as usize + glyph_h <= buf_h;
-    let identity = recolour.is_identity();
+    let identity = recolor.is_identity();
 
     for src_y in 0..src_h {
         for src_x in 0..src_w {
@@ -1110,7 +1110,7 @@ fn blit_sprite(
             let src = if identity {
                 src
             } else {
-                let (r, g, b) = recolour.apply((src.r, src.g, src.b));
+                let (r, g, b) = recolor.apply((src.r, src.g, src.b));
                 U8x4Rgba::new(r, g, b, src.a)
             };
 
@@ -2268,7 +2268,7 @@ mod span_tests {
 
     #[test]
     fn an_art_sheet_ignores_fg_however_it_is_set() {
-        // The #537 regression guard: a full-colour sheet renders as authored, and a caller who
+        // The #537 regression guard: a full-color sheet renders as authored, and a caller who
         // sets `fg` hoping to tint it gets no silent change.
         for fg in [
             Color::Default,
@@ -2341,7 +2341,7 @@ mod span_tests {
 
     #[test]
     fn sprite_align_center_shifts_the_blit_within_the_span_box() {
-        // An 8x16 sprite centred in a 2x1 span of 8x16 cells: 8px of slack, so it starts at x=4.
+        // An 8x16 sprite centered in a 2x1 span of 8x16 cells: 8px of slack, so it starts at x=4.
         let mut r = renderer_with_sprite(2, 1, 8, 16, 8, SpriteAlign::Center);
         let mut grid = Grid::new(2, 1);
         grid.write_span(
@@ -2354,10 +2354,10 @@ mod span_tests {
         .unwrap();
         paint(&mut r, &grid);
 
-        assert_eq!(px(&r, 2, 3, 0), BLUE, "left of the centred sprite");
-        assert_eq!(px(&r, 2, 4, 0), RED, "centred sprite starts at x=4");
-        assert_eq!(px(&r, 2, 11, 0), RED, "centred sprite ends at x=11");
-        assert_eq!(px(&r, 2, 12, 0), BLUE, "right of the centred sprite");
+        assert_eq!(px(&r, 2, 3, 0), BLUE, "left of the centered sprite");
+        assert_eq!(px(&r, 2, 4, 0), RED, "centered sprite starts at x=4");
+        assert_eq!(px(&r, 2, 11, 0), RED, "centered sprite ends at x=11");
+        assert_eq!(px(&r, 2, 12, 0), BLUE, "right of the centered sprite");
     }
 
     /// Regression guard for the stale-pixel half of retroglyph#412.
