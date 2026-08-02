@@ -269,7 +269,7 @@ impl SoftwareRenderer {
     ///
     /// # Errors
     ///
-    /// On native, returns [`SurfaceError::Context`]/[`SurfaceError::Surface`] if softbuffer
+    /// On native, returns `SurfaceError::Context`/`SurfaceError::Surface` if softbuffer
     /// cannot create a graphics context or surface from `window` (for example, the handle's
     /// display or window system connection is invalid). On wasm32, returns
     /// `SurfaceError::Canvas` if winit's `<canvas>` element or its 2D rendering context
@@ -294,7 +294,7 @@ impl SoftwareRenderer {
     ///
     /// # Errors
     ///
-    /// On native, returns [`SurfaceError::Surface`] if softbuffer cannot acquire or present
+    /// On native, returns `SurfaceError::Surface` if softbuffer cannot acquire or present
     /// its buffer (for example, the window was destroyed or the platform surface was lost).
     /// On wasm32, returns `SurfaceError::Canvas` if building the damaged-row `ImageData` or
     /// the canvas 2D context's `put_image_data` call fails. The pixel buffer and damage
