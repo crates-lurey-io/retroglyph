@@ -40,9 +40,9 @@ use crate::text::truncate as truncate_to_cols;
 /// ```
 ///
 /// Precedence when more than one [`Response`] flag is set at once:
-/// [`disabled`](Response::disabled) &gt; [`pressed`](Response::pressed) &gt;
-/// [`hovered`](Response::hovered) &gt; [`focused`](Response::focused) &gt; the default `style`:
-/// matching the conventional `:disabled` &gt; `:active` &gt; `:hover` &gt; `:focus` ordering, so a
+/// [`disabled`](Response::disabled) > [`pressed`](Response::pressed) >
+/// [`hovered`](Response::hovered) > [`focused`](Response::focused) > the default `style`:
+/// matching the conventional `:disabled` > `:active` > `:hover` > `:focus` ordering, so a
 /// disabled button always reads as muted regardless of a stale hover/press, a press always reads
 /// as pressed even while still hovered, and a keyboard-focused-but-not-hovered button still shows
 /// something distinct from idle.
@@ -147,8 +147,8 @@ impl<'a> Button<'a> {
         self
     }
 
-    /// The style this button draws with this frame, per the disabled &gt; pressed &gt; hovered
-    /// &gt; focused &gt; default precedence documented on [`Button`], given `response`.
+    /// The style this button draws with this frame, per the disabled > pressed > hovered
+    /// > focused > default precedence documented on [`Button`], given `response`.
     const fn resolved_style(&self, response: Response) -> Style {
         if response.disabled() {
             self.disabled_style
