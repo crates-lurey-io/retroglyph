@@ -451,6 +451,10 @@ impl Cursor for TerminalWasm {
 
     fn set_cursor_position(&mut self, position: Pos) {
         let _ = write_cursor_position(&mut self.renderer, position);
+        // The real cursor is now wherever `position` says, not wherever the last drawn glyph
+        // left it; forget the tracked position so the next `draw()` doesn't skip a `MoveTo` for a
+        // changed cell that happens to match the stale tracked coordinates. See retroglyph#713.
+        self.renderer.reset_state();
     }
 }
 
@@ -1054,6 +1058,58 @@ mod tests {
 
         Cursor::set_cursor_position(&mut backend, Pos { x: 4, y: 2 });
         assert_eq!(backend.take_output(), "\x1b[3;5H");
+    }
+
+    #[test]
+    fn set_cursor_position_desyncs_the_renderers_tracked_cursor() {
+        // Regression test for retroglyph#713: `set_cursor_position` wrote its CUP escape
+        // straight into the writer without telling the shared `TerminalRenderer` the cursor had
+        // moved, so `cursor_x`/`cursor_y` kept whatever position the last *drawn glyph* left them
+        // at. A subsequent `draw()` whose first changed cell happened to match that stale tracked
+        // position then skipped its own CUP entirely, painting wherever the real cursor was
+        // actually left (by `set_cursor_position`) instead of the intended cell.
+        use retroglyph_core::DrawCell;
+        use retroglyph_core::backend::Output;
+
+        let mut backend = TerminalWasm::new(10, 3);
+        let tile_a = retroglyph_core::tile::Tile::new('A', Style::default());
+        let tile_b = retroglyph_core::tile::Tile::new('B', Style::default());
+
+        // Drawing at (0, 0) leaves the renderer tracking the cursor at (1, 0), right after the
+        // glyph it just wrote.
+        Output::draw_layers(
+            &mut backend,
+            core::iter::once(DrawCell::new(Pos { x: 0, y: 0 }, &tile_a)),
+        )
+        .unwrap();
+        Output::flush(&mut backend).unwrap();
+
+        // The app parks the caret elsewhere, e.g. a text field or status line, once per frame: a
+        // common pattern that must not corrupt the next frame's diff.
+        Cursor::set_cursor_position(&mut backend, Pos { x: 7, y: 3 });
+        Output::flush(&mut backend).unwrap();
+
+        // The first (and only) changed cell in this frame is exactly (1, 0): the position
+        // `set_cursor_position` desynced the tracked cursor from.
+        Output::draw_layers(
+            &mut backend,
+            core::iter::once(DrawCell::new(Pos { x: 1, y: 0 }, &tile_b)),
+        )
+        .unwrap();
+        Output::flush(&mut backend).unwrap();
+
+        let written = backend.take_output();
+        let cup_1_0 = "\x1b[1;2H"; // 1-indexed CUP for (x=1, y=0)
+        let b_pos = written
+            .rfind('B')
+            .unwrap_or_else(|| panic!("expected 'B' in output: {written:?}"));
+        let cup_pos = written.rfind(cup_1_0).unwrap_or_else(|| {
+            panic!("expected a CUP back to (1, 0) before drawing 'B', got: {written:?}")
+        });
+        assert!(
+            cup_pos < b_pos,
+            "CUP to (1, 0) must precede 'B': {written:?}"
+        );
     }
 
     #[test]
