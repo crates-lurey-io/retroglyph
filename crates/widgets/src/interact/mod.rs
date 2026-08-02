@@ -492,11 +492,13 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
         let key_activated =
             senses_click && sense.contains(Sense::FOCUSABLE) && is_focused && self.activate_focused;
         // `is_active` is assigned from `resolved_hover` alone in `begin_frame`,
-        // independent of `sense`, so a disabled widget can still become
-        // "active" merely by being topmost at press time even though it
-        // never asked for `CLICK`: `!disabled` is threaded through explicitly
-        // here rather than relying on `senses_click` alone.
-        let released_here = is_active && self.resolved_release && !disabled;
+        // independent of `sense`, so a disabled (or non-`CLICK`-sensing,
+        // e.g. hover-only or `NONE`) widget can still become "active"
+        // merely by being topmost at press time even though it never asked
+        // for `CLICK`: gated on `senses_click` (which already folds in
+        // `!disabled`) the same way `held`/`clicked` below are, rather than
+        // relying on `is_active` alone.
+        let released_here = senses_click && is_active && self.resolved_release;
         // Not gated on `self.pointer.is_down()`: the release
         // frame (where `is_down` just went false) must still see `dragging
         // == true` so `clicked` below correctly stays suppressed for a
@@ -572,8 +574,12 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
 
         // `is_active.then_some(self.drag_origin).flatten()`, matching `press_origin` below: not
         // gated on `resolved_pos`/`hovered`, live, matching `held`/`dragging` above,
-        // so a drag that has moved outside this widget's own rect still keeps reporting.
-        let press_origin = is_active.then_some(self.drag_origin).flatten();
+        // so a drag that has moved outside this widget's own rect still keeps reporting. Gated on
+        // `senses_click` for the same reason `released_here`/`held` are above: `is_active` alone
+        // says nothing about whether this widget ever asked for `CLICK`.
+        let press_origin = (senses_click && is_active)
+            .then_some(self.drag_origin)
+            .flatten();
         let drag_delta = press_origin.zip(self.pointer.pos()).map(|(origin, pos)| {
             (
                 i32::from(pos.x) - i32::from(origin.x),
@@ -588,7 +594,7 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
 
         Response {
             hovered,
-            pressed: (is_active && self.resolved_press && !disabled) || key_activated,
+            pressed: (senses_click && is_active && self.resolved_press) || key_activated,
             released: released_here || key_activated,
             clicked,
             double_clicked,
@@ -914,6 +920,58 @@ mod tests {
         let save = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, Sense::hover());
         interaction.end_frame();
         assert!(!save.held());
+    }
+
+    #[test]
+    fn hover_only_sense_must_not_report_pressed_or_released() {
+        let mut interaction = Interaction::<Id>::new();
+        let _ = frame(&mut interaction); // frame 1: Save/Cancel registered with Sense::click()
+        click_at(&mut interaction, Pos::new(2, 0)); // full press+release cycle over Save's rect
+
+        interaction.begin_frame();
+        // Save is `is_active` here, same as `held_requires_click_sense` above, but this call
+        // only senses `HOVER`: `pressed`/`released`/`press_origin`/`drag_delta` must all stay at
+        // their not-asked-for defaults, matching `held`'s existing guard.
+        let save = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, Sense::hover());
+        interaction.end_frame();
+
+        assert!(save.hovered());
+        assert!(!save.pressed());
+        assert!(!save.released());
+        assert_eq!(save.press_origin(), None);
+        assert_eq!(save.drag_delta(), None);
+    }
+
+    #[test]
+    fn sense_none_returns_response_default() {
+        let mut interaction = Interaction::<Id>::new();
+        let _ = frame(&mut interaction); // frame 1: Save/Cancel registered with Sense::click()
+        click_at(&mut interaction, Pos::new(2, 0)); // full press+release cycle over Save's rect
+
+        interaction.begin_frame();
+        let save = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, Sense::NONE);
+        interaction.end_frame();
+
+        // Per `Sense::NONE`'s own doc, `interact` registers the id nowhere and reports nothing it
+        // never asked for. `rect` is the one exception: it always echoes back this frame's
+        // `interact` area regardless of `Sense` (see `rect_echoes_back_this_frames_area`), so it's
+        // deliberately not asserted here.
+        assert!(!save.hovered());
+        assert!(!save.pressed());
+        assert!(!save.released());
+        assert!(!save.clicked());
+        assert!(!save.double_clicked());
+        assert!(!save.held());
+        assert!(!save.dragging());
+        assert!(!save.focused());
+        assert!(!save.gained_focus());
+        assert!(!save.lost_focus());
+        assert!(!save.secondary_clicked());
+        assert!(!save.disabled());
+        assert_eq!(save.scroll_delta(), 0);
+        assert_eq!(save.pointer_pos(), None);
+        assert_eq!(save.press_origin(), None);
+        assert_eq!(save.drag_delta(), None);
     }
 
     #[test]
