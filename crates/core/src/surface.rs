@@ -586,11 +586,24 @@ impl<'a> Surface<'a> {
     /// clip would reserve a cell the caller does not own.
     #[cfg(feature = "egc")]
     fn put_grapheme(&mut self, x: u16, y: u16, grapheme: &str, style: Style) {
-        use unicode_width::UnicodeWidthStr;
-
         let Some((x, y)) = self.shift(x, y) else {
             return;
         };
+        self.write_grapheme_at(x, y, grapheme, style);
+    }
+
+    /// Writes `grapheme` at the already-*absolute* grid coordinate `(x, y)` (post-[`shift`],
+    /// or an equivalent translation a caller had to do by hand): the width-2 spacer-in-clip
+    /// check, [`Grid::write_grapheme`]'s wide-char bookkeeping, and this surface's tint.
+    ///
+    /// Shared by [`put_grapheme`](Self::put_grapheme) and [`put_signed`](Self::put_signed),
+    /// which cannot just call `put_grapheme` with its own local coordinates: `put_signed`
+    /// already subtracts `origin_offset` itself (see its doc), so routing through `shift` again
+    /// would subtract it twice.
+    #[cfg(feature = "egc")]
+    fn write_grapheme_at(&mut self, x: u16, y: u16, grapheme: &str, style: Style) {
+        use unicode_width::UnicodeWidthStr;
+
         if grapheme.width() == 2 && !self.clip.contains(x.saturating_add(1), y) {
             return;
         }
@@ -683,9 +696,18 @@ impl<'a> Surface<'a> {
         if !self.clip.contains(abs_x, abs_y) {
             return;
         }
-        let tile = Tile::new(ch, style);
-        self.grid.put_tile(self.layer, (abs_x, abs_y), tile);
-        self.apply_tint(abs_x, abs_y);
+        #[cfg(feature = "egc")]
+        {
+            let mut buf = [0u8; 4];
+            let s = ch.encode_utf8(&mut buf);
+            self.write_grapheme_at(abs_x, abs_y, s, style);
+        }
+        #[cfg(not(feature = "egc"))]
+        {
+            let tile = Tile::new(ch, style);
+            self.grid.put_tile(self.layer, (abs_x, abs_y), tile);
+            self.apply_tint(abs_x, abs_y);
+        }
     }
 
     /// Print `text` starting at `pos` in `style`.
@@ -1060,8 +1082,25 @@ impl<'a> Surface<'a> {
             return;
         };
         let offset = offset.into();
-        let tile = Tile::new(ch, style).with_offset(offset.dx, offset.dy);
-        self.grid.put_tile(self.layer, (x, y), tile);
+        #[cfg(feature = "egc")]
+        {
+            let mut buf = [0u8; 4];
+            let s = ch.encode_utf8(&mut buf);
+            self.write_grapheme_at(x, y, s, style);
+        }
+        #[cfg(not(feature = "egc"))]
+        {
+            let tile = Tile::new(ch, style);
+            self.grid.put_tile(self.layer, (x, y), tile);
+            self.apply_tint(x, y);
+        }
+        // The offset is a pixel nudge on the tile the write above just landed, not part of
+        // `write_grapheme`'s contract (it has no offset parameter): set it directly via
+        // `tile_mut` rather than widening `Grid`'s public write API for a `Surface`-only concern.
+        if let Some(tile) = self.grid.tile_mut(self.layer, (x, y)) {
+            tile.dx = offset.dx;
+            tile.dy = offset.dy;
+        }
     }
 
     /// Clears this surface's own area, intersected with its clip (on its own layer), back to
@@ -1694,6 +1733,63 @@ mod tests {
 
         assert_eq!(grid[Pos::new(2, 0)].glyph(), ' ');
         assert_eq!(grid[Pos::new(0, 2)].glyph(), ' ');
+    }
+
+    #[test]
+    #[cfg(feature = "egc")]
+    fn put_signed_does_wide_char_bookkeeping_like_put() {
+        use crate::tile::TileFlags;
+
+        let mut grid = Grid::new(8, 2);
+        {
+            let mut surface = screen(&mut grid);
+
+            // A wide char via `put`: primary at (0, 0), spacer at (1, 0).
+            surface.put((0, 0), '\u{6f22}', Style::default());
+            // Overwriting the primary cell via `put_signed` must clear the orphaned spacer too.
+            surface.put_signed((0, 0), 'a', Style::default());
+        }
+        assert!(
+            !grid[Pos::new(1, 0)]
+                .flags()
+                .contains(TileFlags::WIDE_CHAR_SPACER)
+        );
+
+        // Writing a wide char via `put_signed` must set the flags and spacer `put` would.
+        screen(&mut grid).put_signed((3, 0), '\u{6f22}', Style::default());
+        assert!(grid[Pos::new(3, 0)].flags().contains(TileFlags::WIDE_CHAR));
+        assert!(
+            grid[Pos::new(4, 0)]
+                .flags()
+                .contains(TileFlags::WIDE_CHAR_SPACER)
+        );
+    }
+
+    #[test]
+    fn put_offset_applies_the_surfaces_tint() {
+        let mut grid = Grid::new(4, 4);
+        {
+            let mut surface = screen(&mut grid);
+            surface.with_tint(Tint::multiply(128, 64, 32)).put_offset(
+                (1, 1),
+                Offset::new(2, -2),
+                'X',
+                Style::default(),
+            );
+        }
+
+        assert_eq!(grid.tint(0, 1, 1), Tint::multiply(128, 64, 32));
+    }
+
+    #[test]
+    fn put_offset_still_carries_the_pixel_offset() {
+        let mut grid = Grid::new(4, 4);
+        let mut surface = screen(&mut grid);
+
+        surface.put_offset((1, 1), Offset::new(2, -2), 'X', Style::default());
+
+        let tile = grid.tile(0, Pos::new(1, 1)).unwrap();
+        assert_eq!((tile.dx(), tile.dy()), (2, -2));
     }
 
     #[test]
