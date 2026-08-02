@@ -2,7 +2,7 @@
 use retroglyph_core::{Color, Rect, Style};
 use unicode_width::UnicodeWidthStr;
 
-use super::{BorderType, BoxBorder, Widget};
+use super::{BorderType, BoxBorder, Measure, Widget};
 use crate::Surface;
 use crate::draw::fill_rect;
 use crate::style::Sides;
@@ -154,6 +154,19 @@ impl<'a> Panel<'a> {
     }
 }
 
+impl Measure for Panel<'_> {
+    /// The 1-cell border on each edge plus this panel's [`Panel::padding`] -- the height a
+    /// zero-height inner content area would need, matching [`Panel::inner`]'s own vertical inset.
+    /// The title (if any) is drawn into the top border row rather than adding one of its own, so
+    /// it does not add to this count. `width` is unused: `Panel` never wraps content of its own,
+    /// only whatever a caller renders into [`Panel::inner`], so it has nothing to measure against
+    /// `width` yet.
+    fn height_for(&self, _width: u16) -> u16 {
+        2u16.saturating_add(self.padding.top)
+            .saturating_add(self.padding.bottom)
+    }
+}
+
 impl Widget for Panel<'_> {
     fn render(&self, surface: &mut Surface<'_>) {
         let (width, height) = (surface.width(), surface.height());
@@ -302,6 +315,13 @@ mod tests {
         assert_eq!(grid[Pos::new(8, 0)].glyph(), 'h');
         assert_eq!(grid[Pos::new(9, 0)].glyph(), 'i');
         assert_eq!(grid[Pos::new(10, 0)].glyph(), ' ');
+    }
+
+    #[test]
+    fn height_for_is_the_border_plus_padding() {
+        assert_eq!(Panel::new().height_for(80), 2);
+        let padded = Panel::new().padding(Sides::symmetric(1, 0));
+        assert_eq!(padded.height_for(80), 4); // 2 border + 1 top + 1 bottom
     }
 
     #[test]
