@@ -14,7 +14,7 @@
 //! Each cell carries a glyph, foreground/background [`Color`], and sub-cell pixel
 //! offsets. [`Color`] covers the full spectrum: the terminal's default
 //! foreground/background, the 16 standard ANSI colors, the 256-color palette, and 24-bit RGB.
-//! [`Style`] intentionally has no text modifiers (bold, italic, underline, ...);
+//! [`Style`] has no text modifiers (bold, italic, underline, ...);
 //! see its own doc comment for the full rationale.
 //!
 //! ## Draw order
@@ -372,7 +372,7 @@ impl<'a> Iterator for CellsMut<'a> {
 }
 
 // ---------------------------------------------------------------------------
-// LayerBuf — a single layer's flat buffer
+// LayerBuf: a single layer's flat buffer
 // ---------------------------------------------------------------------------
 
 /// A single layer in the grid: a flat 2D buffer of one tile per cell.
@@ -571,7 +571,7 @@ impl Grid {
 }
 
 // ---------------------------------------------------------------------------
-// Grid — public API (all forward to layer 0)
+// Grid: public API (all forward to layer 0)
 // ---------------------------------------------------------------------------
 
 impl Grid {
@@ -786,7 +786,7 @@ impl Grid {
     }
 
     // ------------------------------------------------------------------
-    // Write grapheme — layer 0 only
+    // Write grapheme: layer 0 only
     // ------------------------------------------------------------------
 
     /// Write a grapheme cluster at `(x, y)` on layer 0, enforcing wide-
@@ -938,7 +938,7 @@ impl Grid {
 }
 
 // ---------------------------------------------------------------------------
-// Grid — multi-cell spans
+// Grid: multi-cell spans
 // ---------------------------------------------------------------------------
 
 impl Grid {
@@ -1282,7 +1282,7 @@ impl Grid {
 }
 
 // ---------------------------------------------------------------------------
-// Grid — multi-layer API
+// Grid: multi-layer API
 // ---------------------------------------------------------------------------
 
 impl Grid {
@@ -1463,6 +1463,38 @@ impl Grid {
 
         let dst_width = usize::from(self.width);
         let dst_height = usize::from(self.height);
+
+        // A blit writes straight into the destination buffer below, bypassing `put_tile`, so it
+        // has to do `put_tile`'s `clear_span_overlap` call itself or a cell that used to anchor
+        // (or be covered by) a multi-cell span would keep claiming cells this blit just
+        // overwrote (retroglyph#710). Only the cells actually being overwritten (in bounds,
+        // non-empty source tile) are cleared: an empty source tile is transparent and leaves the
+        // destination untouched, so clearing a whole row's footprint up front would wipe out
+        // spans the blit never actually touches. Gated on `has_spans` so a grid that never uses
+        // spans pays only the one `bool` check.
+        if self.has_spans {
+            for sy in sy0..sy1 {
+                let dy = dst_y.saturating_add(sy - src_rect.top());
+                if usize::from(dy) >= dst_height {
+                    continue;
+                }
+                for sx in sx0..sx1 {
+                    let dx = dst_x.saturating_add(sx - src_rect.left());
+                    if usize::from(dx) >= dst_width {
+                        continue;
+                    }
+                    let src_idx = usize::from(sy) * src_width + usize::from(sx);
+                    if src_lb.buf.as_ref()[src_idx]
+                        .flags
+                        .contains(TileFlags::EMPTY)
+                    {
+                        continue;
+                    }
+                    self.clear_span_overlap(layer, dx, dy, 1);
+                }
+            }
+        }
+
         let dst_lb = self.layer_or_alloc(layer);
         let mut pending_extras: Vec<(usize, TileExtra)> = Vec::new();
 
@@ -1566,6 +1598,33 @@ impl Grid {
 
         let dst_width = usize::from(self.width);
         let dst_height = usize::from(self.height);
+
+        // See `blit`'s matching comment (retroglyph#710): clear any span this blit is about to
+        // partially overwrite before the copy pass below borrows the destination layer
+        // mutably, so an anchor never survives a cell it no longer owns.
+        if self.has_spans {
+            for sy in sy0..sy1 {
+                let dy = dst_y.saturating_add(sy - src_rect.top());
+                if usize::from(dy) >= dst_height {
+                    continue;
+                }
+                for sx in sx0..sx1 {
+                    let dx = dst_x.saturating_add(sx - src_rect.left());
+                    if usize::from(dx) >= dst_width {
+                        continue;
+                    }
+                    let src_idx = usize::from(sy) * src_width + usize::from(sx);
+                    if src_lb.buf.as_ref()[src_idx]
+                        .flags
+                        .contains(TileFlags::EMPTY)
+                    {
+                        continue;
+                    }
+                    self.clear_span_overlap(layer, dx, dy, 1);
+                }
+            }
+        }
+
         let dst_lb = self.layer_or_alloc(layer);
         let mut pending_extras: Vec<(usize, TileExtra)> = Vec::new();
 
@@ -1968,7 +2027,7 @@ fn blend_bg(mode: BlendMode, src: Color, dst: Color, t: f32) -> Color {
 }
 
 // ---------------------------------------------------------------------------
-// Index / IndexMut — layer 0
+// Index / IndexMut: layer 0
 // ---------------------------------------------------------------------------
 
 impl Index<Pos> for Grid {
@@ -2002,7 +2061,7 @@ impl IndexMut<Pos> for Grid {
 }
 
 // ---------------------------------------------------------------------------
-// Display / Debug — layer 0
+// Display / Debug: layer 0
 // ---------------------------------------------------------------------------
 
 impl fmt::Display for Grid {
@@ -2015,7 +2074,7 @@ impl fmt::Display for Grid {
                 #[cfg(not(feature = "egc"))]
                 let is_spacer = tile.glyph == '\0';
                 let c = if is_spacer {
-                    ' ' // right half of a wide char — don't print twice
+                    ' ' // right half of a wide char, don't print twice
                 } else if tile.glyph == ' ' {
                     '·' // empty cell marker
                 } else {
@@ -2142,6 +2201,17 @@ mod tests {
 
         let s = alloc::format!("{grid}");
         assert_eq!(s, "A··\n···\n");
+    }
+
+    #[test]
+    fn test_grid_display_wide_char_spacer() {
+        // A wide char's right-half spacer cell prints as a plain space, not the wide
+        // char's own glyph repeated.
+        let mut grid = Grid::new(3, 1);
+        grid.write_grapheme(0, 0, 0, "\u{4e2d}", Style::default()); // wide (CJK)
+
+        let s = alloc::format!("{grid}");
+        assert_eq!(s, "\u{4e2d} \u{b7}\n");
     }
 
     #[test]
@@ -3497,6 +3567,52 @@ mod tests {
     }
 
     #[test]
+    fn blit_leaves_a_dangling_span_anchor_in_the_destination() {
+        // retroglyph#710: `blit` writes straight into the destination buffer, bypassing
+        // `put_tile`'s `clear_span_overlap` call, so overwriting a span's covered cell used to
+        // leave the anchor still claiming a cell the blit had just replaced.
+        let mut dst = Grid::new(4, 1);
+        dst.write_span(0, 0, 0, &["ab"], Style::default()).unwrap();
+
+        let mut src = Grid::new(4, 1);
+        src.put_tile(0, (1, 0), Tile::new('X', Style::default()));
+        dst.blit(0, &src, Rect::new(1, 0, 1, 1), 1, 0);
+
+        assert_eq!(dst[Pos::new(1, 0)].glyph(), 'X');
+        assert_eq!(dst.tile(0, Pos::new(0, 0)).map(Tile::span), Some((1, 1)));
+        assert!(!dst[Pos::new(0, 0)].flags().contains(TileFlags::SPAN_ANCHOR));
+        assert!(
+            !dst[Pos::new(1, 0)]
+                .flags()
+                .contains(TileFlags::SPAN_COVERED)
+        );
+    }
+
+    #[test]
+    fn blit_alpha_leaves_a_dangling_span_anchor_in_the_destination() {
+        // Same bug as `blit_leaves_a_dangling_span_anchor_in_the_destination`, but through
+        // `blit_alpha`'s separate copy path.
+        let mut dst = Grid::new(4, 1);
+        dst.write_span(0, 0, 0, &["ab"], Style::default()).unwrap();
+
+        let mut src = Grid::new(4, 1);
+        src.put_tile(0, (1, 0), Tile::new('X', Style::default()));
+        dst.blit_alpha(
+            0,
+            &src,
+            Rect::new(1, 0, 1, 1),
+            1,
+            0,
+            BlendMode::Linear,
+            1.0,
+            1.0,
+        );
+
+        assert_eq!(dst[Pos::new(1, 0)].glyph(), 'X');
+        assert_eq!(dst.tile(0, Pos::new(0, 0)).map(Tile::span), Some((1, 1)));
+    }
+
+    #[test]
     fn clear_region_clears_a_span_it_only_partly_covers() {
         let mut grid = Grid::new(4, 4);
         grid.write_span(0, 0, 0, &["C=", "[]"], Style::default())
@@ -3513,8 +3629,8 @@ mod tests {
 
 /// Property tests for the wide-character (EGC) grid invariants.
 ///
-/// These exercise the trickiest code in the crate — `write_grapheme` and its
-/// `clear_overlap` helper — by hammering a small grid with random sequences of
+/// These exercise the trickiest code in the crate (`write_grapheme` and its
+/// `clear_overlap` helper) by hammering a small grid with random sequences of
 /// narrow, wide, combining, and emoji graphemes and checking that the
 /// wide-character bookkeeping never desyncs.
 #[cfg(all(test, feature = "egc"))]
@@ -3578,7 +3694,7 @@ mod egc_proptests {
             for (x, y, gi) in ops {
                 grid.write_grapheme(0, x, y, GRAPHEMES[gi], Style::default());
                 // The invariant must hold after every single write, not just
-                // at the end — an intermediate orphan would be a real bug.
+                // at the end: an intermediate orphan would be a real bug.
                 assert_wide_invariants(&grid);
             }
         }

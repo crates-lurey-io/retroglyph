@@ -1,7 +1,7 @@
 //! Benchmarks for [`Table::render`] at realistic row/column counts.
 //!
 //! retroglyph#316 flags `Table::render` as the highest-value widget benchmark in the crate: it
-//! exercises per-row truncation (`text::truncate`) and column-by-column formatting -- per-frame
+//! exercises per-row truncation (`text::truncate`) and column-by-column formatting: per-frame
 //! traffic that's easy to regress silently without a number to compare against. This benchmark
 //! measures full-table renders at a handful of representative sizes (a compact status table, a
 //! wide multi-column dashboard, a long scrolling log-like table) so future changes to the
@@ -21,7 +21,7 @@ use retroglyph_core::{Grid, Rect};
 use retroglyph_widgets::{ListState, StatefulWidget, Surface, Table};
 use std::hint::black_box;
 
-/// Builds `rows x cols` of short, deterministic cell text -- long enough that some cells need
+/// Builds `rows x cols` of short, deterministic cell text, long enough that some cells need
 /// truncation against the column widths used below, short enough to look like realistic table
 /// data (not a worst-case stress string).
 fn rows(rows: usize, cols: usize) -> Vec<Vec<String>> {
@@ -62,7 +62,7 @@ fn bench_size(c: &mut Criterion, rows_n: usize, cols_n: usize) {
 }
 
 fn table_render(c: &mut Criterion) {
-    // A compact status table, a wide dashboard, and a long scrolling table -- the viewport
+    // A compact status table, a wide dashboard, and a long scrolling table: the viewport
     // (24 rows) only ever shows a slice, so `rows_n` past the viewport also exercises the
     // `visible_window` scroll-offset path, not just raw per-row formatting cost.
     bench_size(c, 20, 4);

@@ -102,7 +102,7 @@ impl<'a, const N: usize> PerfOverlay<'a, N> {
         self
     }
 
-    /// Sets extra `(label, value)` metric rows drawn below the readout -- resolution, `VSync`
+    /// Sets extra `(label, value)` metric rows drawn below the readout: resolution, `VSync`
     /// state, render backend details, or anything else an app wants visible. Defaults to none.
     #[must_use]
     pub const fn metrics(mut self, metrics: &'a [(&'a str, &'a str)]) -> Self {
@@ -117,11 +117,11 @@ impl<'a, const N: usize> PerfOverlay<'a, N> {
         self
     }
 
-    /// Sets the frame-time sparkline's bar color (every bar, uniformly -- see
+    /// Sets the frame-time sparkline's bar color (every bar, uniformly; see
     /// [`Sparkline::style`]).
     ///
     /// Defaults to a fixed accent color, not [`Sparkline`]'s own green-to-red ramp: the sparkline
-    /// scrolls, so "tallest bar in the visible window" isn't the same thing as "a slow frame" --
+    /// scrolls, so "tallest bar in the visible window" isn't the same thing as "a slow frame":
     /// the same absolute frame time reads as short one moment and tall the next as the window's
     /// own max shifts. A ramp keyed to that relative height would tell a story the data doesn't
     /// support; one fixed color makes height the only signal, which is the honest one.
@@ -235,14 +235,14 @@ fn millis(duration: core::time::Duration) -> f32 {
 /// of already-current data) wants but [`AnimatedWidget::render`] can't offer: its `state: &mut
 /// FrameStats<N>` needs to record a fresh sample into the same data a draw call then reads, and an
 /// immutable borrow baked into `self` can't coexist with a mutable one passed as `state` in the
-/// same call. `AnimatedPerfOverlay` holds no stats reference of its own -- only the same
-/// backend/title/metrics/style knobs [`PerfOverlay`] has -- so there's nothing to alias.
+/// same call. `AnimatedPerfOverlay` holds no stats reference of its own, only the same
+/// backend/title/metrics/style knobs [`PerfOverlay`] has, so there's nothing to alias.
 ///
 /// Replaces routing a `Duration` through [`PerfOverlayApp`](retroglyph_core::PerfOverlayApp) just
 /// to reach this widget: an app that owns one [`FrameStats`] field can record into it and draw in
 /// a single call, no decorator wrapping the app at all. [`PerfOverlayApp`](retroglyph_core::PerfOverlayApp)
 /// remains the right choice for an app that also wants its toggle-key handling, mode cycling, and
-/// event draining done generically, across any wrapped [`App`](retroglyph_core::App) -- this is
+/// event draining done generically, across any wrapped [`App`](retroglyph_core::App). This is
 /// only for the (now unblocked) case that doesn't need any of that.
 ///
 /// # Examples
@@ -288,10 +288,10 @@ impl<const N: usize> Default for AnimatedPerfOverlay<'_, N> {
 }
 
 impl<'a, const N: usize> AnimatedPerfOverlay<'a, N> {
-    /// An animated perf overlay titled `"perf"`, with no backend label and no extra metrics --
+    /// An animated perf overlay titled `"perf"`, with no backend label and no extra metrics:
     /// the same defaults as [`PerfOverlay::new`], styled from [`Theme::DARK`] (as if
     /// [`AnimatedPerfOverlay::theme`] had been called). `N` must match the [`FrameStats`] window
-    /// this is driven by -- the default, 120, matches [`PerfOverlay`]'s and
+    /// this is driven by; the default, 120, matches [`PerfOverlay`]'s and
     /// [`FrameStats`]'s own defaults.
     #[must_use]
     pub fn new() -> Self {
@@ -357,7 +357,7 @@ impl<const N: usize> AnimatedWidget for AnimatedPerfOverlay<'_, N> {
     type State = FrameStats<N>;
 
     /// Records a sample into `state` via [`FrameStats::record`], then draws [`PerfOverlay::new`]
-    /// built from the result (plus this type's own backend/title/metrics/style knobs) -- both in
+    /// built from the result (plus this type's own backend/title/metrics/style knobs), both in
     /// one call, so there's exactly one place, not two independently ordered ones, where the
     /// stats window advances.
     fn render(&self, surface: &mut Surface<'_>, state: &mut Self::State, frame: &Frame) {

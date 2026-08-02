@@ -392,8 +392,8 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
     /// for actually moving focus. `Enter`/`Space` are claimed only when they double as
     /// [`Sense::CLICK`] activation, i.e. a [`Sense::FOCUSABLE`] widget currently holds focus:
     /// otherwise the same keys reach an app's own text input or other key handling unclaimed.
-    /// Everything else -- [`Event::Resize`], [`Event::Paste`], [`Event::FocusGained`]/
-    /// [`Event::FocusLost`], and any key this interaction doesn't bind -- is never claimed, even
+    /// Everything else ([`Event::Resize`], [`Event::Paste`], [`Event::FocusGained`]/
+    /// [`Event::FocusLost`], and any key this interaction doesn't bind) is never claimed, even
     /// while a widget is focused and active: those need to reach whatever's behind an open
     /// overlay (a resize still has to reflow the screen under a dropdown), which a coarser "is
     /// the overlay open" gate cannot express without also swallowing them.
@@ -492,19 +492,21 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
         let key_activated =
             senses_click && sense.contains(Sense::FOCUSABLE) && is_focused && self.activate_focused;
         // `is_active` is assigned from `resolved_hover` alone in `begin_frame`,
-        // independent of `sense`, so a disabled widget can still become
-        // "active" merely by being topmost at press time even though it
-        // never asked for `CLICK`: `!disabled` is threaded through explicitly
-        // here rather than relying on `senses_click` alone.
-        let released_here = is_active && self.resolved_release && !disabled;
-        // Deliberately not gated on `self.pointer.is_down()`: the release
+        // independent of `sense`, so a disabled (or non-`CLICK`-sensing,
+        // e.g. hover-only or `NONE`) widget can still become "active"
+        // merely by being topmost at press time even though it never asked
+        // for `CLICK`: gated on `senses_click` (which already folds in
+        // `!disabled`) the same way `held`/`clicked` below are, rather than
+        // relying on `is_active` alone.
+        let released_here = senses_click && is_active && self.resolved_release;
+        // Not gated on `self.pointer.is_down()`: the release
         // frame (where `is_down` just went false) must still see `dragging
         // == true` so `clicked` below correctly stays suppressed for a
         // drag's terminating release, not just the frames in between.
         let dragging =
             is_active && sense.contains(Sense::DRAG) && !disabled && self.past_drag_threshold();
 
-        // Live re-check, deliberately not gated on `hovered`/`resolved_hover` the way `pressed`
+        // Live re-check, not gated on `hovered`/`resolved_hover` the way `pressed`
         // is: those are resolved from *last* frame's hit-test snapshot (see the `Interaction`
         // frame-lifecycle docs), but a slide-off cancellation needs to see the pointer's
         // *current* position the instant it leaves this rect, not one frame later. Mirrors how
@@ -516,11 +518,12 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
             && self.pointer.is_down(MouseButton::Left)
             && self.pointer.pos().is_some_and(|pos| rect.contains_pos(pos));
 
-        if senses_click && released_here && hovered && !dragging {
+        if senses_click && sense.contains(Sense::FOCUSABLE) && released_here && hovered && !dragging
+        {
             self.focus.request(id);
         }
 
-        // Scroll deliberately isn't gated on `hovered` (single topmost
+        // Scroll isn't gated on `hovered` (single topmost
         // winner) the way click/press/release/drag are: a scrollable
         // container's own rect is usually fully covered by its rows/items
         // (each independently sensing HOVER | CLICK so they're individually
@@ -570,9 +573,13 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
         }
 
         // `is_active.then_some(self.drag_origin).flatten()`, matching `press_origin` below: not
-        // gated on `resolved_pos`/`hovered`, deliberately live, matching `held`/`dragging` above,
-        // so a drag that has moved outside this widget's own rect still keeps reporting.
-        let press_origin = is_active.then_some(self.drag_origin).flatten();
+        // gated on `resolved_pos`/`hovered`, live, matching `held`/`dragging` above,
+        // so a drag that has moved outside this widget's own rect still keeps reporting. Gated on
+        // `senses_click` for the same reason `released_here`/`held` are above: `is_active` alone
+        // says nothing about whether this widget ever asked for `CLICK`.
+        let press_origin = (senses_click && is_active)
+            .then_some(self.drag_origin)
+            .flatten();
         let drag_delta = press_origin.zip(self.pointer.pos()).map(|(origin, pos)| {
             (
                 i32::from(pos.x) - i32::from(origin.x),
@@ -587,7 +594,7 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
 
         Response {
             hovered,
-            pressed: (is_active && self.resolved_press && !disabled) || key_activated,
+            pressed: (senses_click && is_active && self.resolved_press) || key_activated,
             released: released_here || key_activated,
             clicked,
             double_clicked,
@@ -913,6 +920,58 @@ mod tests {
         let save = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, Sense::hover());
         interaction.end_frame();
         assert!(!save.held());
+    }
+
+    #[test]
+    fn hover_only_sense_must_not_report_pressed_or_released() {
+        let mut interaction = Interaction::<Id>::new();
+        let _ = frame(&mut interaction); // frame 1: Save/Cancel registered with Sense::click()
+        click_at(&mut interaction, Pos::new(2, 0)); // full press+release cycle over Save's rect
+
+        interaction.begin_frame();
+        // Save is `is_active` here, same as `held_requires_click_sense` above, but this call
+        // only senses `HOVER`: `pressed`/`released`/`press_origin`/`drag_delta` must all stay at
+        // their not-asked-for defaults, matching `held`'s existing guard.
+        let save = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, Sense::hover());
+        interaction.end_frame();
+
+        assert!(save.hovered());
+        assert!(!save.pressed());
+        assert!(!save.released());
+        assert_eq!(save.press_origin(), None);
+        assert_eq!(save.drag_delta(), None);
+    }
+
+    #[test]
+    fn sense_none_returns_response_default() {
+        let mut interaction = Interaction::<Id>::new();
+        let _ = frame(&mut interaction); // frame 1: Save/Cancel registered with Sense::click()
+        click_at(&mut interaction, Pos::new(2, 0)); // full press+release cycle over Save's rect
+
+        interaction.begin_frame();
+        let save = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, Sense::NONE);
+        interaction.end_frame();
+
+        // Per `Sense::NONE`'s own doc, `interact` registers the id nowhere and reports nothing it
+        // never asked for. `rect` is the one exception: it always echoes back this frame's
+        // `interact` area regardless of `Sense` (see `rect_echoes_back_this_frames_area`), so it's
+        // deliberately not asserted here.
+        assert!(!save.hovered());
+        assert!(!save.pressed());
+        assert!(!save.released());
+        assert!(!save.clicked());
+        assert!(!save.double_clicked());
+        assert!(!save.held());
+        assert!(!save.dragging());
+        assert!(!save.focused());
+        assert!(!save.gained_focus());
+        assert!(!save.lost_focus());
+        assert!(!save.secondary_clicked());
+        assert!(!save.disabled());
+        assert_eq!(save.scroll_delta(), 0);
+        assert_eq!(save.pointer_pos(), None);
+        assert_eq!(save.press_origin(), None);
+        assert_eq!(save.drag_delta(), None);
     }
 
     #[test]
@@ -1492,5 +1551,51 @@ mod tests {
         assert!(!save.gained_focus());
         assert!(cancel.focused());
         assert!(cancel.gained_focus());
+    }
+
+    /// Regression test for retroglyph#704: clicking a `Sense::CLICK` widget that never asked for
+    /// `Sense::FOCUSABLE` (e.g. a hoverable-but-not-Tab-stoppable row) used to call
+    /// `FocusRing::request` unconditionally, silently stealing focus from whatever *was* actually
+    /// in the Tab ring, without ever removing that widget from the ring itself.
+    #[test]
+    fn clicking_a_non_focusable_widget_must_not_steal_focus() {
+        let mut interaction = Interaction::<Id>::new();
+
+        // frame 1: Save is focusable (Sense::click()), Cancel is clickable but not focusable.
+        interaction.begin_frame();
+        let _ = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, Sense::click());
+        let _ = interaction.interact(
+            Rect::new(6, 0, 5, 1),
+            Id::Cancel,
+            Sense::HOVER | Sense::CLICK,
+        );
+        interaction.end_frame();
+
+        // Tab focuses Save, the only widget registered with FOCUSABLE.
+        let tab = Event::Key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+        interaction.begin_frame();
+        let _ = interaction.handle_event(&tab);
+        let save = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, Sense::click());
+        let _ = interaction.interact(
+            Rect::new(6, 0, 5, 1),
+            Id::Cancel,
+            Sense::HOVER | Sense::CLICK,
+        );
+        interaction.end_frame();
+        assert!(save.focused());
+
+        // Click Cancel, which never asked for FOCUSABLE.
+        click_at(&mut interaction, Pos::new(7, 0));
+        interaction.begin_frame();
+        let save = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, Sense::click());
+        let cancel = interaction.interact(
+            Rect::new(6, 0, 5, 1),
+            Id::Cancel,
+            Sense::HOVER | Sense::CLICK,
+        );
+        interaction.end_frame();
+        assert!(cancel.clicked());
+        assert!(!cancel.focused()); // never registered as focusable: must not report focus either
+        assert!(save.focused()); // focus must stay put, not get silently stolen
     }
 }

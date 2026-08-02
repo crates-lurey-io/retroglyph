@@ -2,9 +2,9 @@
 //! writing into an in-memory `Vec<u8>` via `CrosstermOptions::build_with_writer` instead of a
 //! real terminal.
 //!
-//! retroglyph#285 asks for this to isolate the crossterm layer's own overhead --
+//! retroglyph#285 asks for this to isolate the crossterm layer's own overhead:
 //! `begin_synchronized_update`/`end_synchronized_update` plus the delegation into
-//! `retroglyph_terminal::TerminalRenderer` -- on top of the renderer this crate wraps. All
+//! `retroglyph_terminal::TerminalRenderer`, on top of the renderer this crate wraps. All
 //! optional real-terminal features (raw mode, alt screen, mouse capture, focus-change reporting,
 //! bracketed paste, kitty protocol) are disabled via `CrosstermOptions`, matching the existing
 //! `build_with_writer_renders_cell_content_into_a_custom_sink` unit test's pattern for

@@ -3,14 +3,16 @@
 //! [`crate::text::Span`] and [`Line`] provide styled text primitives. The entry point here is
 //! [`TextLayout`], a builder that word-wraps a [`Line`] to a bounded [`Rect`], then positions it
 //! with independent horizontal ([`HAlign`]) and vertical ([`VAlign`]) alignment. Measure the
-//! result before rendering with [`TextLayout::measure`].
+//! result before rendering with [`TextLayout::measure`]. [`wrap`] exposes that same word-wrap
+//! pass standalone, for callers that need the broken-apart [`Line`]s rather than a rendered
+//! surface.
 //!
 //! Only available when the `egc` feature is enabled (requires `alloc`).
 
 use crate::grid::{Grid, Rect};
 use crate::style::Style;
 use crate::surface::Surface;
-use crate::text::Line;
+use crate::text::{Line, Span};
 use alloc::string::String;
 use alloc::vec::Vec;
 use unicode_segmentation::UnicodeSegmentation;
@@ -135,7 +137,7 @@ fn wrap_line(line: &Line, max_width: u16) -> Vec<WrappedLine> {
                         width: 0,
                     });
                     col = 0;
-                    // Drop the space that triggered this break — it would just be
+                    // Drop the space that triggered this break: it would just be
                     // leading whitespace on the new line.
                     if grapheme == " " {
                         continue;
@@ -155,6 +157,50 @@ fn wrap_line(line: &Line, max_width: u16) -> Vec<WrappedLine> {
     }
 
     lines
+}
+
+/// Word-wraps `line` to `max_width` columns, returning the broken-apart [`Line`]s.
+///
+/// This is the same greedy, grapheme-cluster-aware wrap pass [`TextLayout`] runs internally on
+/// every render (breaking on ASCII space, honoring hard `\n`s, force-breaking an overlong word
+/// at the column boundary); it's exposed standalone for callers that need the wrapped pieces
+/// themselves rather than having them written straight to a surface, such as a scrollback log
+/// that wraps each message into rows while still addressing its window in whole messages.
+///
+/// Each returned `Line` is a single unstyled or uniformly-styled run per source span that
+/// survived onto that row; adjacent graphemes carrying the same [`Style`] are coalesced back
+/// into one [`Span`], so wrapping a plain [`Line::raw`] round-trips to plain `Line::raw` rows.
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::layout::wrap;
+/// use retroglyph_core::text::Line;
+///
+/// let line = Line::raw("hello world");
+/// let rows = wrap(&line, 7);
+/// assert_eq!(rows.len(), 2);
+/// assert_eq!(rows[0].spans[0].content, "hello");
+/// assert_eq!(rows[1].spans[0].content, "world");
+/// ```
+#[must_use]
+pub fn wrap(line: &Line, max_width: u16) -> Vec<Line> {
+    wrap_line(line, max_width)
+        .into_iter()
+        .map(|wrapped| {
+            let mut spans: Vec<Span> = Vec::new();
+            for glyph in wrapped.glyphs {
+                if let Some(last) = spans.last_mut()
+                    && last.style == glyph.style
+                {
+                    last.content.push_str(&glyph.grapheme);
+                    continue;
+                }
+                spans.push(Span::styled(glyph.grapheme, glyph.style));
+            }
+            Line { spans }
+        })
+        .collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -241,12 +287,12 @@ impl<'a> TextLayout<'a> {
     }
 
     /// Renders the text into `surface`, clipping to both the rect's bounds and `surface`'s own
-    /// area (the rect is intersected with [`Surface::area`] first, so text can never escape the
-    /// surface it was given even if `rect` extends past it).
+    /// clip (the rect is intersected with [`Surface::clip_rect`] first, so text can never escape
+    /// whatever clip the caller applied even if `rect` extends past it).
     pub fn render_to_surface(&self, surface: &mut Surface<'_>) {
         let clipped = Self {
             line: self.line,
-            rect: self.rect.intersect(surface.area()),
+            rect: self.rect.intersect(surface.clip_rect()),
             h_align: self.h_align,
             v_align: self.v_align,
         };
@@ -283,7 +329,7 @@ impl<'a> TextLayout<'a> {
             let mut cx = rect.left() + x_offset;
 
             for glyph in wrapped.glyphs {
-                if cx >= rect.right() {
+                if cx + glyph.width > rect.right() {
                     break;
                 }
                 grid.write_grapheme(layer, cx, row, &glyph.grapheme, glyph.style);
@@ -334,7 +380,7 @@ mod tests {
         let line = Line::raw("hello world");
         let lines = wrap_line(&line, 7);
         assert_eq!(lines.len(), 2);
-        assert_eq!(lines[0].width, 5); // "hello" — space consumed
+        assert_eq!(lines[0].width, 5); // "hello", space consumed
         assert_eq!(lines[1].width, 5); // "world"
     }
 
@@ -489,5 +535,50 @@ mod tests {
         assert_eq!(term.grid()[Pos::new(0, 0)].glyph(), 'a');
         assert_eq!(term.grid()[Pos::new(0, 1)].glyph(), 'b');
         assert_eq!(term.grid()[Pos::new(0, 2)].glyph(), ' '); // clipped
+    }
+
+    #[test]
+    fn text_layout_render_to_surface_escapes_the_surface_clip() {
+        use crate::backend::Headless;
+        use crate::terminal::Terminal;
+
+        // The rect (10x4) extends well past the surface's one-row clip: "hello world"
+        // wraps to "hello" / "world" at word boundaries, and the wrapped remainder
+        // ("world") must not be painted on row 1, outside the clip.
+        let mut term = Terminal::new(Headless::new(20, 5));
+        {
+            let mut surface = term.surface();
+            let mut bar = surface.clip(Rect::new(0, 0, 10, 1));
+            let line = Line::raw("hello world");
+            TextLayout::new(&line)
+                .rect(Rect::new(0, 0, 10, 4))
+                .render_to_surface(&mut bar);
+        }
+
+        let row0: String = (0..10)
+            .map(|x| term.grid()[Pos::new(x, 0)].glyph())
+            .collect();
+        assert_eq!(row0.trim_end(), "hello");
+        for x in 0..10 {
+            assert_eq!(term.grid()[Pos::new(x, 1)].glyph(), ' ');
+        }
+    }
+
+    #[test]
+    fn text_layout_wide_glyph_stays_inside_the_rect() {
+        use crate::backend::Headless;
+        use crate::terminal::Terminal;
+
+        // A single wide (2-column) glyph in a rect one column too narrow for it: neither
+        // the primary cell nor its spacer may be written, since the spacer would land at
+        // column 1, outside the 1-wide rect.
+        let mut term = Terminal::new(Headless::new(10, 5));
+        let line = Line::raw("\u{3042}"); // 'あ', a wide CJK glyph
+        TextLayout::new(&line)
+            .rect(Rect::new(0, 0, 1, 1))
+            .render_to_surface(&mut term.surface());
+
+        assert_eq!(term.grid()[Pos::new(0, 0)].glyph(), ' ');
+        assert_eq!(term.grid()[Pos::new(1, 0)].glyph(), ' ');
     }
 }

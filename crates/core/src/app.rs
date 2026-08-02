@@ -138,14 +138,14 @@ pub struct RunOptions {
     /// time: an idle frame costs approximately nothing, blocked in the backend's input read
     /// rather than spinning `update` as fast as the host can manage. `false` keeps `Flow::Idle`
     /// non-blocking (skip `present`, keep looping at whatever rate
-    /// [`target_fps`](Self::target_fps) allows) -- right for apps that animate from
+    /// [`target_fps`](Self::target_fps) allows): right for apps that animate from
     /// [`Frame::delta`] and only return `Idle` between animation-driven `Continue` frames, where
     /// blocking would freeze the animation until the next stray input event. See
     /// [`RunOptions::animated`] for that shape.
     pub event_driven: bool,
     /// When [`event_driven`](Self::event_driven) is `true`, the longest an idle loop blocks
     /// before calling `update` again anyway, even with no input. `None` (the default) blocks
-    /// indefinitely -- right for apps with nothing to redraw until input arrives. `Some(d)`
+    /// indefinitely: right for apps with nothing to redraw until input arrives. `Some(d)`
     /// additionally wakes the loop every `d`, for apps that need a periodic idle redraw (a
     /// blinking cursor, a clock) without paying full frame-rate cost. Ignored when
     /// [`event_driven`](Self::event_driven) is `false`.
@@ -159,6 +159,11 @@ impl RunOptions {
     /// never blocks. Use this for apps that drive a [`Tween`](crate::animate::Tween)/
     /// [`FrameClock`](crate::frame_clock::FrameClock) from [`Frame::delta`] and need `update`
     /// called every tick regardless of input.
+    ///
+    /// `target_fps` becomes [`RunOptions::target_fps`] verbatim, including `0`: passing `0` here
+    /// builds without panicking, but [`run_blocking_with`] panics once it constructs the
+    /// [`FrameClock`](crate::frame_clock::FrameClock) that paces it (see that function's
+    /// `# Panics` section).
     #[must_use]
     pub const fn animated(target_fps: u32) -> Self {
         Self {
@@ -189,7 +194,7 @@ impl Default for RunOptions {
 /// spin.
 ///
 /// With [`RunOptions::event_driven`] `true` (the default), [`Flow::Idle`] blocks the loop on
-/// input -- via [`Terminal::wait_for_input`] -- instead of calling `update` again immediately:
+/// input (via [`Terminal::wait_for_input`]) instead of calling `update` again immediately:
 /// an idle app has nothing new to show, so there is no reason to burn CPU polling it at all,
 /// let alone faster than any configured rate. With `event_driven` `false`, an idle loop still
 /// waits out the remainder of the current `target_fps` interval (if set) before calling `update`
@@ -199,6 +204,11 @@ impl Default for RunOptions {
 ///
 /// Returns the backend's error if the automatic `present()` call fails. The loop stops and the
 /// terminal is dropped (running backend teardown) before the error is returned.
+///
+/// # Panics
+///
+/// Panics if `options.target_fps` is `Some(0)`: pacing at a `FrameClock` internally, which
+/// requires a non-zero rate (see [`FrameClock::new`](crate::frame_clock::FrameClock::new)).
 #[cfg(feature = "std")]
 pub fn run_blocking_with<B, A>(
     mut term: Terminal<B>,
@@ -254,7 +264,7 @@ where
             // re-entering the loop, so an idle frame costs approximately nothing rather than
             // spinning `update` as fast as the host allows. `wait_for_input` buffers any event it
             // finds rather than consuming it, so the app's own `update` still observes it on the
-            // next iteration -- this call only answers "did something happen", it doesn't steal
+            // next iteration; this call only answers "did something happen", it doesn't steal
             // the event. A `target_fps` clock (if set) still gets its top-of-loop sleep on the
             // next iteration; it isn't bypassed by waking early.
             term.wait_for_input(options.idle_wake.unwrap_or(Duration::MAX));

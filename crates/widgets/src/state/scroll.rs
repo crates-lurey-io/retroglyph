@@ -52,7 +52,7 @@ impl Default for ScrollPhysics {
 /// whole row at a time and there's no momentum to animate, reach for [`crate::ListState`]
 /// instead: its `offset` is a plain `usize`, clamped only at zero, with no velocity or physics
 /// step. The two don't compose into one type on purpose (see [`crate::ListState`]'s own doc
-/// comment) -- pick whichever one matches what's actually scrolling: continuous/pixel-ish
+/// comment): pick whichever one matches what's actually scrolling: continuous/pixel-ish
 /// content reaches for `ScrollState`, a discrete item list reaches for `ListState`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ScrollState {
@@ -348,7 +348,9 @@ impl ScrollState {
             return 0.0;
         }
 
-        let newest = valid[count - 1].unwrap();
+        // `count >= 2` was just checked above, so `valid[count - 1]` was written by the loop
+        // above (which fills `valid[0..count]` in order) and is always `Some`.
+        let newest = valid[count - 1].expect("valid[count - 1] is populated for count >= 2");
 
         // If latest sample is older than 100ms, drag paused (no fling)
         if self.time_accumulator - newest.0 > 0.1 {
@@ -358,7 +360,8 @@ impl ScrollState {
         // Look back for oldest sample within 150ms of newest
         let mut oldest = newest;
         for i in (0..count - 1).rev() {
-            let sample = valid[i].unwrap();
+            // `i` ranges over `0..count - 1`, all populated by the loop above.
+            let sample = valid[i].expect("valid[i] is populated for i < count");
             if newest.0 - sample.0 <= 0.15 {
                 oldest = sample;
             } else {

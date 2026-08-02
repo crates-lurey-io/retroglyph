@@ -216,7 +216,7 @@ impl BoxStyle {
         let (mut grid, content_x, content_y) = self.scaffold(content_w, content_h);
         for (row, line) in lines.iter().take(usize::from(content_h)).enumerate() {
             let Ok(row) = u16::try_from(row) else { break };
-            let clipped = truncate(line, usize::from(content_w));
+            let clipped = truncate(line, content_w);
             let mut col = 0u16;
             for ch in clipped.chars() {
                 let w = u16::try_from(ch.width().unwrap_or(0)).unwrap_or(u16::MAX);
@@ -225,7 +225,7 @@ impl BoxStyle {
                 }
                 grid.put_tile(
                     0,
-                    (content_x + col, content_y + row),
+                    (content_x.saturating_add(col), content_y.saturating_add(row)),
                     Tile::new(ch, self.style),
                 );
                 col = col.saturating_add(w);
@@ -451,6 +451,17 @@ mod tests {
         assert_eq!((grid.width(), grid.height()), (3, 3));
         assert_eq!(grid[Pos::new(1, 1)].glyph(), 'x');
         assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
+    }
+
+    #[test]
+    fn render_does_not_overflow_on_a_near_u16_max_line_with_padding() {
+        // retroglyph#729: `content_x + col` used to overflow `u16` once padding pushed the write
+        // position past `u16::MAX` for a line wide enough to fill the content area to its edge.
+        let text = "a".repeat(65_535);
+        let grid = BoxStyle::new(Style::default())
+            .padding(Sides::all(2))
+            .render(&text);
+        assert_eq!(grid[Pos::new(2, 2)].glyph(), 'a');
     }
 
     #[test]

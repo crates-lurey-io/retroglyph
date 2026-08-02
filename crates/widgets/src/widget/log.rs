@@ -1,5 +1,7 @@
 //! [`Log`]: a scrolled-back tail of message lines.
 use retroglyph_core::Rect;
+#[cfg(feature = "egc")]
+use retroglyph_core::layout::wrap;
 use retroglyph_core::text::Line;
 
 use super::{Measure, PrintLine, Widget};
@@ -26,6 +28,15 @@ use crate::Surface;
 /// untouched: compose with [`fill_rect`](crate::draw::fill_rect) first
 /// for a solid background if one is wanted.
 ///
+/// By default each message is truncated to one row via [`PrintLine`], which clips anything
+/// past `area.width()`. [`Log::wrap`] (requires the `egc` feature) switches to word-wrapping
+/// each message across as many rows as it needs, via [`retroglyph_core::layout::wrap`], while
+/// keeping `offset` counting messages rather than rows: the window still fills from the newest
+/// message backward, but a message is only included if all of its wrapped rows fit in what's
+/// left of the surface, since there's no supported way to render only the bottom rows of an
+/// overflowing wrapped message. A message that doesn't fully fit is left out entirely, the same
+/// "rows beyond the available messages are left untouched" behavior as running out of messages.
+///
 /// # Examples
 ///
 /// ```
@@ -43,6 +54,8 @@ use crate::Surface;
 pub struct Log<'a> {
     messages: &'a [Line],
     offset: usize,
+    #[cfg(feature = "egc")]
+    wrap: bool,
 }
 
 impl<'a> Log<'a> {
@@ -52,6 +65,8 @@ impl<'a> Log<'a> {
         Self {
             messages,
             offset: 0,
+            #[cfg(feature = "egc")]
+            wrap: false,
         }
     }
 
@@ -61,12 +76,32 @@ impl<'a> Log<'a> {
         self.offset = offset;
         self
     }
+
+    /// Word-wraps each message across as many rows as it needs instead of clipping it to one
+    /// row, via [`retroglyph_core::layout::wrap`]. See the struct docs for how this interacts
+    /// with `offset`. Requires the `egc` feature.
+    #[cfg(feature = "egc")]
+    #[must_use]
+    pub const fn wrap(mut self, wrap: bool) -> Self {
+        self.wrap = wrap;
+        self
+    }
 }
 
 impl Measure for Log<'_> {
-    /// One row per message; `width` is ignored, since lines are truncated rather than wrapped.
-    /// This is the height needed to show the full backlog, not just the current `offset` window.
-    fn height_for(&self, _width: u16) -> u16 {
+    /// One row per message when not wrapped (`width` ignored); with [`Log::wrap`] set, the sum
+    /// of each message's wrapped row count at `width`. This is the height needed to show the
+    /// full backlog, not just the current `offset` window.
+    fn height_for(&self, width: u16) -> u16 {
+        #[cfg(feature = "egc")]
+        if self.wrap {
+            let total: usize = self.messages.iter().map(|m| wrap(m, width).len()).sum();
+            #[allow(clippy::cast_possible_truncation)]
+            let height = total.min(usize::from(u16::MAX)) as u16;
+            return height;
+        }
+        #[cfg(not(feature = "egc"))]
+        let _ = width;
         #[allow(clippy::cast_possible_truncation)]
         let height = self.messages.len().min(usize::from(u16::MAX)) as u16;
         height
@@ -90,6 +125,13 @@ impl Widget for Log<'_> {
         else {
             return;
         };
+
+        #[cfg(feature = "egc")]
+        if self.wrap {
+            self.render_wrapped(surface, bottom, visible_height, width);
+            return;
+        }
+
         let top = bottom.saturating_sub(visible_height - 1);
 
         // `scope`, unlike `put`, addresses the same grid-space `surface.area()` does, so each
@@ -102,6 +144,44 @@ impl Widget for Log<'_> {
             let y = area.top() + row as u16;
             let row_area = Rect::new(area.left(), y, width, 1);
             PrintLine::new(message).render(&mut surface.scope(row_area));
+        }
+    }
+}
+
+#[cfg(feature = "egc")]
+impl Log<'_> {
+    /// The [`Log::wrap`] render path: walks backward from `bottom` (the newest visible message)
+    /// wrapping each message at `width` and accumulating its row count, until the row budget
+    /// (`visible_height`) would be exceeded or `messages` is exhausted. A message whose wrapped
+    /// rows would overflow the remaining budget is left out entirely rather than rendering only
+    /// part of it (see the struct docs for why), so fewer than `visible_height` rows can end up
+    /// drawn even with more history available.
+    fn render_wrapped(
+        &self,
+        surface: &mut Surface<'_>,
+        bottom: usize,
+        visible_height: usize,
+        width: u16,
+    ) {
+        let mut included: Vec<Vec<Line>> = Vec::new();
+        let mut used = 0usize;
+        for message in self.messages[..=bottom].iter().rev() {
+            let rows = wrap(message, width);
+            if used + rows.len() > visible_height {
+                break;
+            }
+            used += rows.len();
+            included.push(rows);
+        }
+
+        let area = surface.area();
+        let mut y = area.top();
+        for rows in included.into_iter().rev() {
+            for row in rows {
+                let row_area = Rect::new(area.left(), y, width, 1);
+                PrintLine::new(&row).render(&mut surface.scope(row_area));
+                y += 1;
+            }
         }
     }
 }
@@ -187,5 +267,66 @@ mod tests {
 
         // "a much longer..." clipped to 5 columns is "a muc".
         assert_eq!(grid[Pos::new(4, 0)].glyph(), 'c');
+    }
+
+    #[cfg(feature = "egc")]
+    #[test]
+    fn wrap_word_wraps_a_long_message_across_rows() {
+        let area = Rect::new(0, 0, 7, 3);
+        let messages = lines(&["hello world"]);
+
+        let mut grid = Grid::new(7, 3);
+        Log::new(&messages)
+            .wrap(true)
+            .render(&mut Surface::new(&mut grid, area, 0));
+
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), 'h'); // "hello"
+        assert_eq!(grid[Pos::new(0, 1)].glyph(), 'w'); // "world"
+        assert_eq!(grid[Pos::new(0, 2)].glyph(), ' '); // untouched
+    }
+
+    #[cfg(feature = "egc")]
+    #[test]
+    fn height_for_sums_wrapped_rows_when_wrap_is_set() {
+        let messages = lines(&["hello world", "hi"]);
+        assert_eq!(Log::new(&messages).wrap(true).height_for(7), 3); // 2 rows + 1 row
+        assert_eq!(Log::new(&messages).height_for(7), 2); // unwrapped: one row per message
+    }
+
+    #[cfg(feature = "egc")]
+    #[test]
+    fn wrap_keeps_offset_counting_whole_messages_not_rows() {
+        // "hello world" wraps to 2 rows; offset(1) should skip the whole newer message
+        // ("hi", 1 row) rather than 1 row of it.
+        let area = Rect::new(0, 0, 7, 4);
+        let messages = lines(&["hello world", "hi"]);
+
+        let mut grid = Grid::new(7, 4);
+        Log::new(&messages)
+            .wrap(true)
+            .offset(1)
+            .render(&mut Surface::new(&mut grid, area, 0));
+
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), 'h'); // "hello"
+        assert_eq!(grid[Pos::new(0, 1)].glyph(), 'w'); // "world"
+        assert_eq!(grid[Pos::new(0, 2)].glyph(), ' '); // "hi" scrolled out entirely
+    }
+
+    #[cfg(feature = "egc")]
+    #[test]
+    fn wrap_leaves_out_a_message_that_would_only_partially_fit() {
+        // Only 1 row of budget left after "hi" (the newest message); "hello world" needs 2 rows,
+        // so it's left out entirely rather than showing only its bottom row.
+        let area = Rect::new(0, 0, 7, 2);
+        let messages = lines(&["hello world", "hi"]);
+
+        let mut grid = Grid::new(7, 2);
+        Log::new(&messages)
+            .wrap(true)
+            .render(&mut Surface::new(&mut grid, area, 0));
+
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), 'h'); // "hi"
+        assert_eq!(grid[Pos::new(1, 0)].glyph(), 'i');
+        assert_eq!(grid[Pos::new(0, 1)].glyph(), ' '); // untouched
     }
 }

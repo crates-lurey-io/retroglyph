@@ -21,7 +21,7 @@ use core::fmt;
 /// Open question (retroglyph#559): a sheet mixing mask tiles and full-colour art tiles has no
 /// way to say so today, since this is a sheet-wide setting. The likely answer is to split such a
 /// sheet into two `TilesetOptions` loads, one per `SheetColor`, rather than adding a per-tile
-/// escape hatch here -- but that is untested against a real mixed asset and not resolved by this
+/// escape hatch here. That is untested against a real mixed asset and not resolved by this
 /// type as written.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 #[non_exhaustive]
@@ -145,6 +145,9 @@ pub enum TilesetError {
     EmptyCodepage,
     /// `tile_width` or `tile_height` is zero.
     ZeroTileSize,
+    /// [`TilesetBuilder::columns`] declared more columns than the image actually has at the given
+    /// `tile_width`: honoring it would read tile pixels from past the end of the decoded buffer.
+    TooManyColumns(u16, u32),
 }
 
 impl fmt::Display for TilesetError {
@@ -158,6 +161,10 @@ impl fmt::Display for TilesetError {
             Self::ZeroTileSize => {
                 write!(f, "tile_width and tile_height must be non-zero")
             }
+            Self::TooManyColumns(declared, actual) => write!(
+                f,
+                "declared {declared} columns but the image only has {actual} at this tile_width"
+            ),
         }
     }
 }
@@ -202,15 +209,15 @@ impl Codepage {
     /// Returns the codepoint for tile index `i`, or `None` if out of range
     /// or invalid (surrogates, indices past `char::MAX`).
     #[must_use]
-    #[allow(clippy::cast_possible_truncation)]
     pub fn codepoint(&self, i: usize) -> Option<char> {
         match self {
             Self::Cp437 => CP437_TO_UNICODE.get(i).copied(),
             Self::Unicode { start } => {
-                let scalar = (*start as u32).checked_add(i as u32)?;
+                let i = u32::try_from(i).ok()?;
+                let scalar = (*start as u32).checked_add(i)?;
                 char::from_u32(scalar)
             }
-            Self::Identity => char::from_u32(i as u32),
+            Self::Identity => char::from_u32(u32::try_from(i).ok()?),
             Self::Custom(table) => table.get(i).copied(),
         }
     }
@@ -610,5 +617,17 @@ mod tests {
         assert_eq!(cp.codepoint(0), Some('A'));
         assert_eq!(cp.codepoint(2), Some('C'));
         assert_eq!(cp.codepoint(3), None);
+    }
+
+    #[test]
+    fn codepage_codepoint_index_past_u32_is_not_reported_out_of_range() {
+        // Regression test for retroglyph#731: an index at or beyond u32::MAX must not
+        // wrap around and land on an unrelated valid codepoint.
+        let huge = 0x1_0000_0041usize; // 2^32 + 0x41 ('A' + 2^32)
+        assert_eq!(Codepage::Identity.codepoint(huge), None);
+        assert_eq!(
+            Codepage::Unicode { start: 'A' }.codepoint(0x1_0000_0000usize),
+            None
+        );
     }
 }

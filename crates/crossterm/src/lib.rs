@@ -147,7 +147,7 @@ fn keyboard_enhancement_flags() -> crossterm::event::KeyboardEnhancementFlags {
 ///   this is opt-in on one of the two positive signals above; their absence is not itself a
 ///   signal of anything narrower.
 ///
-/// This deliberately does **not** try to infer [`ColorSupport::Indexed256`] or
+/// This does **not** try to infer [`ColorSupport::Indexed256`] or
 /// [`ColorSupport::Ansi16`] from `$TERM`/`$COLORTERM` text (an earlier version of this function
 /// selected `Indexed256` for any `$TERM` containing `"256color"`, and `Truecolor` only for an
 /// explicit `$COLORTERM=truecolor`/`24bit`). Both heuristics look reasonable in isolation and
@@ -156,7 +156,7 @@ fn keyboard_enhancement_flags() -> crossterm::event::KeyboardEnhancementFlags {
 /// truecolor-capable environments never set `$COLORTERM` at all (this workspace's own PTY test
 /// harness is one: `portable-pty` sets `$TERM=xterm-256color` unconditionally for the child it
 /// spawns and never sets `$COLORTERM`, which silently downgraded every snapshot test's rendered
-/// colors and broke them all -- retroglyph#585 CI). Requiring an unambiguous signal before
+/// colors and broke them all: retroglyph#585 CI). Requiring an unambiguous signal before
 /// degrading, rather than guessing from `$TERM`'s text, is what avoids repeating that. Both
 /// narrower levels remain fully available as an explicit choice via
 /// [`CrosstermOptions::color_support`](CrosstermOptions::color_support); they just aren't guessed
@@ -268,16 +268,16 @@ impl Drop for InstanceGuard {
     }
 }
 
-/// Writes the escape sequence that's always safe to emit during terminal restore -- popping the
+/// Writes the escape sequence that's always safe to emit during terminal restore (popping the
 /// kitty keyboard enhancement flags, disabling bracketed paste/focus-change/mouse capture,
-/// resetting every SGR attribute, and showing the cursor -- to `w`.
+/// resetting every SGR attribute, and showing the cursor) to `w`.
 ///
 /// Split out of [`restore_terminal`] so these exact bytes can be asserted on directly against an
 /// in-memory `Vec<u8>` in tests, since `restore_terminal` itself always targets the real process
 /// stdout and so can't otherwise be observed from a unit test.
 ///
-/// `SetAttribute(Attribute::Reset)` (`\x1b[0m`) clears every SGR attribute -- colors, bold,
-/// underline, etc. -- back to the terminal's own default. The SGR "pen" is terminal-global state,
+/// `SetAttribute(Attribute::Reset)` (`\x1b[0m`) clears every SGR attribute (colors, bold,
+/// underline, etc.) back to the terminal's own default. The SGR "pen" is terminal-global state,
 /// independent of which screen buffer is active, so without this the last color the app drew with
 /// (e.g. a tinted background) survives `LeaveAlternateScreen`/raw mode exit and leaks into the
 /// shell. Left unreset, that leftover pen state is also what many terminals use to paint newly
@@ -333,7 +333,7 @@ fn restore_terminal() {
 /// better at a call site than `CrosstermOptions::new()` but the two are
 /// otherwise identical (`builder()` just calls `Self::new()`).
 ///
-/// This crate deliberately does not attempt to auto-detect terminal
+/// This crate does not attempt to auto-detect terminal
 /// capabilities (no `TERM` parsing, no `supports_keyboard_enhancement()`
 /// query): those queries can block for seconds on terminals that never
 /// respond. `CrosstermOptions` is the opt-out mechanism instead: callers who
@@ -885,6 +885,13 @@ fn enable_terminal_features(options: CrosstermOptions) -> std::io::Result<()> {
 
 impl<W: std::io::Write> Drop for Crossterm<W> {
     fn drop(&mut self) {
+        // Flush whatever `draw`/cursor calls left buffered in `renderer` *before* `restore_
+        // terminal` runs: `restore_terminal` writes straight to `std::io::stdout()` and knows
+        // nothing about this instance's writer. Without this, a `BufWriter` writer (the default)
+        // would only flush once this whole `drop` returns and Rust drops `renderer` for real,
+        // dumping any still-queued escape bytes onto the shell *after* the alternate screen has
+        // already been left. See retroglyph#716.
+        let _ = self.renderer.flush();
         restore_terminal();
     }
 }
@@ -893,9 +900,9 @@ impl<W: std::io::Write> Crossterm<W> {
     /// Temporarily hands the real terminal back to the OS/shell, for shelling out to `$EDITOR`,
     /// a pager, or a debugger.
     ///
-    /// Exits raw mode, leaves the alternate screen, and shows the cursor -- only undoing whichever
+    /// Exits raw mode, leaves the alternate screen, and shows the cursor, only undoing whichever
     /// of those this instance actually has active, using the same "only undo what was actually
-    /// done" bookkeeping this instance's `Drop` and the process-wide panic hook already share --
+    /// done" bookkeeping this instance's `Drop` and the process-wide panic hook already share,
     /// leaving the terminal in the state a normal shell command expects. Mouse capture,
     /// focus-change reporting, bracketed paste, and the kitty keyboard protocol are also
     /// disabled, matching what a normal process exit/panic already does.
@@ -908,15 +915,21 @@ impl<W: std::io::Write> Crossterm<W> {
     /// state doesn't know about.
     ///
     /// Does not handle `Ctrl+Z`/`SIGTSTP`: this is an explicit API for the common case (a key
-    /// binding that shells out deliberately), not a signal handler. An app that also wants to
+    /// binding that shells out), not a signal handler. An app that also wants to
     /// suspend on `SIGTSTP` needs to install its own signal handler and call this method (and
     /// [`SuspendGuard::resume`]) from it.
     ///
     /// # Errors
     ///
-    /// Returns an `std::io::Error` if any of the terminal-restoring commands fail (e.g. a closed
-    /// terminal or disconnected pipe).
+    /// Returns an `std::io::Error` if flushing the pending frame fails, or if any of the
+    /// terminal-restoring commands fail (e.g. a closed terminal or disconnected pipe).
     pub fn suspend(&mut self) -> std::io::Result<SuspendGuard<'_, W>> {
+        // Flush before handing the terminal back: `restore_terminal` writes straight to
+        // `std::io::stdout()`, not `self.renderer`'s writer, so without this a still-buffered
+        // `draw`/cursor call's escape bytes (possibly including an unterminated synchronized-
+        // update start) would land on whatever program `suspend` hands the terminal to. See
+        // retroglyph#716.
+        self.renderer.flush()?;
         restore_terminal();
         Ok(SuspendGuard {
             crossterm: self,
@@ -1017,8 +1030,8 @@ impl<W: std::io::Write> Output for Crossterm<W> {
             // any `current` cell that's also still at its default (e.g. anything the app hasn't
             // drawn into the newly grown area yet) never differs from `previous` and is never
             // resent by the diff in `present()`. That leaves the BCE-tinted patch on screen
-            // permanently -- exactly the "gaps where the background doesn't clear" symptom after
-            // a resize -- since nothing ever draws over it again.
+            // permanently: exactly the "gaps where the background doesn't clear" symptom after
+            // a resize, since nothing ever draws over it again.
             crossterm::style::SetAttribute(crossterm::style::Attribute::Reset),
             crossterm::terminal::Clear(crossterm::terminal::ClearType::All)
         )?;
@@ -1162,6 +1175,10 @@ impl<W: std::io::Write> Cursor for Crossterm<W> {
     fn set_cursor_position(&mut self, position: Pos) {
         let writer = self.renderer.writer_mut();
         let _ = crossterm::queue!(writer, crossterm::cursor::MoveTo(position.x, position.y));
+        // The real cursor is now wherever `position` says, not wherever the last drawn glyph
+        // left it; forget the tracked position so the next `draw()` doesn't skip a `MoveTo` for a
+        // changed cell that happens to match the stale tracked coordinates. See retroglyph#713.
+        self.renderer.reset_state();
     }
 
     /// Queues the `DECSCUSR` cursor-shape escape without flushing; see
@@ -1297,6 +1314,9 @@ fn from_crossterm_key_modifiers(
     }
     if mods.contains(crossterm::event::KeyModifiers::ALT) {
         result |= M::ALT;
+    }
+    if mods.contains(crossterm::event::KeyModifiers::SUPER) {
+        result |= M::SUPER;
     }
     result
 }
@@ -1574,7 +1594,7 @@ mod tests {
     fn suspend_resume_forces_a_full_redraw() {
         // With every TTY-only feature disabled (the same combination other `build_with_writer`
         // tests use to run without a real terminal), `suspend`/resuming a dropped `SuspendGuard`
-        // still exercise the shared restore/`enable_terminal_features` machinery -- both only
+        // still exercise the shared restore/`enable_terminal_features` machinery: both only
         // touch process stdout via always-safe commands (cursor show/hide, disabling features
         // that were never enabled) when raw mode/the alternate screen are off, so this succeeds
         // under `cargo test`'s non-TTY stdout.
@@ -1619,6 +1639,61 @@ mod tests {
     }
 
     #[test]
+    fn set_cursor_position_desyncs_the_renderers_tracked_cursor() {
+        // Regression test for retroglyph#713: `set_cursor_position` queued its `MoveTo` escape
+        // straight into the writer without telling the shared `TerminalRenderer` the cursor had
+        // moved, so `cursor_x`/`cursor_y` kept whatever position the last *drawn glyph* left them
+        // at. A subsequent `draw()` whose first changed cell happened to match that stale tracked
+        // position then skipped its own `MoveTo` entirely, painting wherever the real cursor was
+        // actually left (by `set_cursor_position`) instead of the intended cell.
+        let _lock = TEST_GUARD_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut term = Crossterm::builder()
+            .raw_mode(false)
+            .alt_screen(false)
+            .mouse_capture(false)
+            .focus_change(false)
+            .bracketed_paste(false)
+            .kitty_protocol(false)
+            .build_with_writer(Vec::new())
+            .expect("building against a Vec<u8> writer with all TTY features disabled must not require a real terminal");
+
+        let tile_a = Tile::new('A', retroglyph_core::style::Style::default());
+        let tile_b = Tile::new('B', retroglyph_core::style::Style::default());
+
+        // Drawing at (0, 0) leaves the renderer tracking the cursor at (1, 0), right after the
+        // glyph it just wrote.
+        term.draw(core::iter::once(DrawCell::new(Pos { x: 0, y: 0 }, &tile_a)))
+            .unwrap();
+        term.flush().unwrap();
+
+        // The app parks the caret elsewhere, e.g. a text field or status line, once per frame: a
+        // common pattern that must not corrupt the next frame's diff.
+        Cursor::set_cursor_position(&mut term, Pos { x: 7, y: 3 });
+        term.flush().unwrap();
+
+        // The first (and only) changed cell in this frame is exactly (1, 0): the position
+        // `set_cursor_position` desynced the tracked cursor from.
+        term.draw(core::iter::once(DrawCell::new(Pos { x: 1, y: 0 }, &tile_b)))
+            .unwrap();
+        term.flush().unwrap();
+
+        let written = String::from_utf8(term.writer().clone()).unwrap();
+        let cup_1_0 = "\x1b[1;2H"; // 1-indexed CUP for (x=1, y=0)
+        let b_pos = written
+            .rfind('B')
+            .unwrap_or_else(|| panic!("expected 'B' in output: {written:?}"));
+        let cup_pos = written.rfind(cup_1_0).unwrap_or_else(|| {
+            panic!("expected a CUP back to (1, 0) before drawing 'B', got: {written:?}")
+        });
+        assert!(
+            cup_pos < b_pos,
+            "CUP to (1, 0) must precede 'B': {written:?}"
+        );
+    }
+
+    #[test]
     fn suspend_resume_is_idempotent_when_resume_is_called_explicitly() {
         let _lock = TEST_GUARD_LOCK
             .lock()
@@ -1641,6 +1716,43 @@ mod tests {
         );
         // The guard is consumed by `resume`, so there's no double-restore on drop to assert
         // against directly; this test's real assertion is that `resume()` itself returns `Ok`.
+    }
+
+    #[test]
+    fn restore_does_not_flush_pending_content_before_giving_the_terminal_back() {
+        // Regression test for retroglyph#716: `suspend` (and `Crossterm::drop`, exercised the
+        // same way here since both share `restore_terminal`) must flush whatever `draw` left
+        // buffered in the renderer before handing control back, not after.
+        let _lock = TEST_GUARD_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut term = Crossterm::builder()
+            .raw_mode(false)
+            .alt_screen(false)
+            .mouse_capture(false)
+            .focus_change(false)
+            .bracketed_paste(false)
+            .kitty_protocol(false)
+            .build_with_writer(Vec::new())
+            .expect("building against a Vec<u8> writer with all TTY features disabled must not require a real terminal");
+
+        let tile = Tile::new('X', retroglyph_core::style::Style::default());
+        // Drawn but deliberately *not* flushed: this is the buffered content `suspend` must not
+        // strand behind the restore sequence.
+        term.draw(core::iter::once(DrawCell::new(Pos { x: 0, y: 0 }, &tile)))
+            .unwrap();
+
+        let guard = term.suspend().expect(
+            "suspend must succeed without a real terminal once all TTY-only features are disabled",
+        );
+        // Once `suspend` has returned, the pending frame must already be visible in the writer,
+        // not still sitting in `renderer`'s internal buffer waiting on a later flush.
+        let written = String::from_utf8(guard.crossterm.writer().clone()).unwrap();
+        assert!(
+            written.contains('X'),
+            "expected the drawn cell to have been flushed to the writer before suspend returned: {written:?}"
+        );
+        drop(guard);
     }
 
     #[test]
@@ -1716,7 +1828,7 @@ mod tests {
         // Terminals that implement erase-display via background color erase (BCE) paint erased
         // cells with whatever background is currently active, not the terminal's true default,
         // so a colored cell drawn just before a resize left a stale tint across the whole
-        // screen -- and since `Terminal::resize` (in `retroglyph-core`) wipes the diff's
+        // screen, and since `Terminal::resize` (in `retroglyph-core`) wipes the diff's
         // `previous` grid to default tiles, nothing ever draws over that tint again in areas
         // that stay at their default value. `clear` must emit a full SGR reset ahead of the
         // erase so BCE always paints with the terminal's real default background.
@@ -1857,7 +1969,7 @@ mod tests {
         // Compile-level/API-shape check: building a `CrosstermOptions` with all flags disabled
         // via the builder type-checks and round-trips its fields. Exercising the actual terminal
         // commands (`with_options`/`build` itself) requires a real TTY, which isn't available in
-        // CI, so this is intentionally not a full integration test (see tests/non_tty.rs for the
+        // CI, so this is not a full integration test (see tests/non_tty.rs for the
         // non-TTY integration coverage that is possible without one).
         let options = CrosstermOptions::new()
             .mouse_capture(false)
@@ -1921,6 +2033,46 @@ mod tests {
         assert_eq!(
             key_code_of(ct_event),
             retroglyph_core::event::KeyCode::Char('a')
+        );
+    }
+
+    #[test]
+    fn crossterm_super_modifier_is_mapped_on_key_events() {
+        // Under DISAMBIGUATE_ESCAPE_CODES (the default kitty flag negotiated by
+        // `Crossterm::builder()`), a compliant terminal reports the Super/Cmd bit, and
+        // crossterm's own `parse_modifiers` already maps it to `KeyModifiers::SUPER`. This
+        // translation layer must not drop it (retroglyph#714).
+        let ct_event = crossterm::event::Event::Key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char('s'),
+            crossterm::event::KeyModifiers::SUPER,
+        ));
+        let Some(Event::Key(key)) = from_crossterm_event(ct_event) else {
+            panic!("expected a key event")
+        };
+        assert!(
+            key.modifiers
+                .contains(retroglyph_core::event::KeyModifiers::SUPER)
+        );
+        assert_eq!(key.code, retroglyph_core::event::KeyCode::Char('s'));
+    }
+
+    #[test]
+    fn crossterm_super_modifier_is_mapped_on_mouse_events() {
+        // The same translation function backs mouse events, so the gap in
+        // `from_crossterm_key_modifiers` affected Cmd-modified clicks identically (retroglyph#714).
+        let ct_event = crossterm::event::Event::Mouse(crossterm::event::MouseEvent {
+            kind: crossterm::event::MouseEventKind::Down(crossterm::event::MouseButton::Left),
+            column: 0,
+            row: 0,
+            modifiers: crossterm::event::KeyModifiers::SUPER,
+        });
+        let Some(Event::Mouse(mouse)) = from_crossterm_event(ct_event) else {
+            panic!("expected a mouse event")
+        };
+        assert!(
+            mouse
+                .modifiers
+                .contains(retroglyph_core::event::KeyModifiers::SUPER)
         );
     }
 
@@ -2109,7 +2261,7 @@ mod tests {
 
     #[test]
     fn detect_color_support_dumb_term_forces_none() {
-        // The one $TERM value that's an unambiguous "assume nothing" signal -- never emitted by
+        // The one $TERM value that's an unambiguous "assume nothing" signal: never emitted by
         // a terminal that actually supports color, unlike a "...256color" suffix (see the next
         // test).
         use retroglyph_terminal::ColorSupport;

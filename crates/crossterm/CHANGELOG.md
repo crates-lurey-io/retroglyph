@@ -14,20 +14,6 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 - [256108c](https://github.com/crates-lurey-io/retroglyph/commit/256108cb43ff65bbb562cf0cb8017f72e3ab2719)
   _(crossterm)_ Reset SGR attributes before Clear(ClearType::All) by `@matanlurey` in
   [#594](https://github.com/crates-lurey-io/retroglyph/pull/594)
-  > Output::clear (also called by Output::resize on every terminal resize) issued
-  > Clear(ClearType::All) without resetting the SGR pen first. Most terminals implement
-  > erase-display via background color erase (BCE): erased cells are painted with whatever
-  > background is currently active in the pen, not the terminal's true default.
-  >
-  > That's merely cosmetic for a single frame, except this path also backs every resize:
-  > Terminal::resize (retroglyph-core) wipes the diff's previous grid to default tiles, so any
-  > current cell that's also still at its default (e.g. anything the app hasn't drawn into the newly
-  > grown area yet) never differs from previous and is never resent by the diff in present(). That
-  > leaves the BCE-tinted patch on screen permanently -- reported as misdraw gaps and a background
-  > that doesn't fully clear on resize -- since nothing ever draws over it again.
-  >
-  > Adds SetAttribute(Attribute::Reset) ahead of the Clear command so BCE always paints with the
-  > terminal's real default background.
 
 **Full Changelog**:
 https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-crossterm-v0.2.2...retroglyph-crossterm-v0.2.3
@@ -40,17 +26,6 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-crossterm-v0.2.
   _(crossterm)_ Reset SGR attributes on terminal restore by `@matanlurey` in
   [#592](https://github.com/crates-lurey-io/retroglyph/pull/592)
 
-  > restore_terminal (shared by Drop, the panic hook, and suspend) never emitted a full SGR reset
-  > before leaving the alternate screen/disabling raw mode. The last frame's fg/bg colors and
-  > attributes stayed active as the terminal's pen state, leaking into the shell and into whatever
-  > the terminal used to paint newly erased cells the next time this process entered the alternate
-  > screen (background color erase). A per-frame blend against Color::Default compounded a little
-  > darker on every subsequent launch as a result.
-  >
-  > Adds SetAttribute(Attribute::Reset) to the always-safe part of the restore sequence, and splits
-  > that part out into write_restore_sequence<W: Write> so it's testable against an in-memory buffer
-  > instead of only observable on real stdout.
-
 **Full Changelog**:
 https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-crossterm-v0.2.1...retroglyph-crossterm-v0.2.2
 
@@ -61,27 +36,6 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-crossterm-v0.2.
 - [f28b8a5](https://github.com/crates-lurey-io/retroglyph/commit/f28b8a557c404021cfbb6d8916edc14ad6e9cfcc)
   _(workspace)_ Add a reusable, toggleable perf/FPS overlay across every backend by `@matanlurey` in
   [#589](https://github.com/crates-lurey-io/retroglyph/pull/589)
-
-  > Replaces per-backend, per-example FPS overlay plumbing with a generic PerfOverlayApp<A>
-  > decorator (retroglyph-core) that wraps any App<B> and draws itself on top, on any Backend, with
-  > no per-backend code from the wrapped app. Toggling a key cycles Off -> Compact -> Full -> Off
-  > (PerfOverlayMode); Compact is a built-in dependency-free text readout (DefaultPerfRenderer),
-  > Full is pluggable via a closure or a type implementing PerfRenderer.
-  >
-  > - retroglyph-core: FrameStats<N> (a fixed-size Duration ring buffer with
-  >   current/avg/min/max/fps), PerfOverlayApp/PerfOverlayMode/PerfRenderer/ DefaultPerfRenderer,
-  >   and Size gets a proper constructor + width()/ height() accessors (its fields are now private).
-  > - retroglyph-widgets: PerfOverlay, a bordered panel composed from Panel/ Sparkline/Text with a
-  >   frame-time sparkline and caller-supplied metric rows; Sparkline gains an optional fixed
-  >   .style() override so a scrolling frame-time graph doesn't get colored by a relative-to-window
-  >   ramp that would misrepresent it.
-  > - retroglyph-examples: the shared harness (launch.rs) now wraps every example's App in
-  >   PerfOverlayApp, replacing the old bespoke per-backend Fps/ToggleFilter plumbing
-  >   (examples/src/fps.rs slimmed down to just the RG_FPS env var and the wasm floating toggle
-  >   button). Every example in the gallery gets the overlay for free.
-  > - Tests: unit tests for FrameStats/PerfOverlayApp/PerfOverlay/Sparkline, plus
-  >   examples/tests/fps_overlay.rs end-to-end PTY coverage and deterministic PNG snapshots of both
-  >   Compact and Full mode.
 
 **Full Changelog**:
 https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-crossterm-v0.2.0...retroglyph-crossterm-v0.2.1
@@ -94,229 +48,30 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-crossterm-v0.2.
   _(core)_ Give backends a named DrawCell instead of a widening tuple by `@matanlurey` in
   [#551](https://github.com/crates-lurey-io/retroglyph/pull/551)
 
-  > A cell's draw-time payload has been a tuple growing an element at a time: (Pos, &Tile,
-  > Option<&str>) for draw, (u8, Pos, &Tile, Option<&str>) for draw_layers. Delivering a tint would
-  > make it five unnamed elements, and each addition breaks every backend's signature again.
-  >
-  > DrawCell names them once. Its layer field also collapses the two shapes into one, so draw and
-  > draw_layers no longer differ in item type.
-  >
-  > Refs #537
-
 - [090eeb3](https://github.com/crates-lurey-io/retroglyph/commit/090eeb3f26a88c399847640f4205045f1705a81d)
   _(core)_ Take impl Into<Pos> everywhere a cell is named, retire \_at suffix by `@matanlurey` in
   [#505](https://github.com/crates-lurey-io/retroglyph/pull/505)
 
-  > - api(core): drop panicking Grid::get/get_mut, add Option-returning tile/tile_mut and Index
-  >
-  > Grid::put/get panicked on out-of-bounds coordinates; checked*put/checked_get/ checked_get_mut
-  > existed as Option-returning twins but only for the implicit layer-0 shorthands, while
-  > put_tile/get_tile (explicit layer) were already Option-returning. Removes the panicking layer-0
-  > put/get and the whole checked* family in favor of one accessor shape across every layer:
-  >
-  > - Grid::tile(layer, pos) -> Option<&Tile> (renamed from get_tile, now takes impl Into<Pos>
-  >   instead of separate x/y)
-  > - Grid::tile_mut(layer, pos) -> Option<&mut Tile>, new: a non-allocating mutable counterpart:
-  >   get_tile had no mutable twin before this
-  > - Grid::put_tile(layer, pos, tile) -> Option<()>, now also takes impl Into<Pos>
-  >
-  > Grid already implements Index<Pos>/IndexMut<Pos> for panicking layer-0 access, which is the
-  > Rust-conventional home for a panic and stays as the one ergonomic panicking accessor.
-  >
-  > Updates every call site across the workspace (core, widgets, gl, software, terminal, examples,
-  > benches).
-  >
-  > - api(core): take impl Into<Pos> everywhere a cell is named, retire \_at suffix
-  >
-  > Terminal's single-cell drawing methods (put, put_styled, put_span, put_span_styled, print,
-  > print_styled) took (x: u16, y: u16) pairs; put_at existed purely to bridge to a Pos-based call.
-  > Every one of these now takes impl Into<Pos>, so term.put((5, 5), '@') and term.put(pos, '@')
-  > both work through the same method, and put_at is gone (merged into put).
-  >
-  > put_offset(x, y, dx, dy, ch) becomes put_offset(pos, offset, ch), taking a new Offset type (dx:
-  > i16, dy: i16) instead of a second bare (i16, i16) pair, so a position and a sub-cell pixel
-  > offset can't be transposed at a call site. Offset gets the same From<(i16, i16)> round-trip as
-  > Pos/Size.
-  >
-  > Updates every call site across the workspace (core, widgets, examples, benches, READMEs,
-  > docs/testing.md).
-
 - [d4d6e76](https://github.com/crates-lurey-io/retroglyph/commit/d4d6e76aebb00d3f238ff41791b0f0dd800aa517)
   _(core)_ Add KeyLocation to KeyEvent for numpad/left-right disambiguation by `@matanlurey` in
   [#501](https://github.com/crates-lurey-io/retroglyph/pull/501)
-
-  > KeyEvent gains a location: KeyLocation field (Standard/Left/Right/Numpad, mirroring winit's
-  > KeyLocation) so a numpad key can be told apart from the same symbolic key on the main block. The
-  > crossterm backend derives it from the kitty keyboard protocol's KeyEventState::KEYPAD bit; the
-  > winit backend maps its own KeyLocation 1:1. Backends with no source of truth (terminal-wasm,
-  > headless) default to Standard.
-  >
-  > KeyState::held is now (KeyCode, KeyLocation)-keyed instead of KeyCode-keyed, so a held Numpad8
-  > and a held digit-row 8 are tracked independently; is_held and held() take/yield the pair
-  > accordingly.
-  >
-  > No non_exhaustive-first decoupling step: this lands the field directly as a breaking change,
-  > since pre-1.0 is the intended window for it.
 
 - [7d7cfb2](https://github.com/crates-lurey-io/retroglyph/commit/7d7cfb26918e2563653bb58cdb016b18328f0de0)
   _(core)_ Settle present ownership -- driver-owned present, idempotent dirty-flag present,
   Flow::Idle, error propagation, frame pacing by `@matanlurey` in
   [#500](https://github.com/crates-lurey-io/retroglyph/pull/500)
 
-  > feat(core): settle present ownership across drivers with Flow::Idle and paced run_blocking
-  >
-  > - run_blocking presents once after App::update returns, matching the windowed drivers' contract
-  >   instead of requiring update to call present() itself.
-  > - Flow gains an Idle variant: skip the redraw for a frame with nothing new to show. Both
-  >   run_blocking and the windowed winit driver handle it explicitly.
-  > - Terminal::present is idempotent: a dirty flag set by every draw call (put, print, clear,
-  >   grid_mut, ...) makes present() on a clean frame a no-op instead of erasing the just-presented
-  >   frame.
-  > - run_blocking/run_blocking_with return Result<(), B::Error>, so a failed automatic present
-  >   stops the loop and surfaces the error instead of being silently discarded.
-  > - run_blocking_with + RunOptions::paced(max_fps) adds a FrameClock -backed paced loop on top of
-  >   the unpaced, zero-config run_blocking.
-  >
-  > Fixes #420, #421, #422, #423, #424, #419.
-
 - [9eaf088](https://github.com/crates-lurey-io/retroglyph/commit/9eaf0885a8b62b2c5f9db77ad85636d4714b7529)
   _(core, crossterm, terminal)_ Add cursor styles, colour degradation, suspend/resume, and
   title/bell by `@matanlurey` in [#585](https://github.com/crates-lurey-io/retroglyph/pull/585)
-
-  > - feat(crossterm): add terminal title and bell support
-  > - feat(core, crossterm): add Cursor::set_cursor_style and CursorStyle
-  > - feat(terminal, crossterm): add ColorSupport degradation with NO_COLOR support
-  > - feat(crossterm): add suspend/resume to hand the terminal back to the OS
-  > - fix(crossterm): default to Truecolor, not Ansi16, when detection has no signal
-  >
-  > detect_color_support's bottom-of-the-ladder fallback was ColorSupport::Ansi16 for any
-  > $TERM/$COLORTERM combination that didn't positively identify a truecolor or 256-color terminal,
-  > including no $TERM/$COLORTERM at all. That silently degraded every Color::Rgb render in an
-  > environment with nothing set (CI runners, minimal PTY test harnesses, some raw SSH sessions),
-  > changing this crate's pre-existing behavior of always passing RGB through unquantized. Broke 8
-  > svg_snapshot golden tests across the example gallery (retroglyph#585 CI).
-  >
-  > The absence of a signal is not itself a signal. Degrading is now opt-in on a positive one
-  > ($NO_COLOR, or a $TERM that specifically names a narrower palette); everything else falls back
-  > to Truecolor, matching TerminalRenderer::ColorSupport's own #[default].
-  >
-  > - fix(crossterm): stop guessing ColorSupport from $TERM text, only $NO_COLOR/dumb
-  >
-  > The previous commit's fix (defaulting the bottom of the ladder to Truecolor instead of Ansi16)
-  > was incomplete: it never got exercised by CI, because CI never reaches that fallback.
-  > examples/tests/support/mod.rs's PTY harness sets
-  > $TERM=xterm-256color unconditionally for every spawned example and
-  > never sets $COLORTERM, which hit the *next* rung up ($TERM
-  > contains "256color" -> Indexed256) instead -- a branch the previous commit didn't touch.
-  >
-  > Reproduced locally:
-  > `env -u COLORTERM -u NO_COLOR -u TERM cargo test -p retroglyph-examples --test 02_colors svg_snapshot`
-  > fails identically to CI regardless of the parent shell's own TERM/COLORTERM, because the PTY
-  > child's environment is what matters, not the test process's.
-  >
-  > Root cause is the heuristic itself, not just its fallback: xterm-256color is the single most
-  > common
-  > $TERM value in existence, including on terminals that also fully support truecolor.
-  > Reading it as evidence of a _limit_ was wrong in general, not just wrong in this test harness --
-  > this workspace's own PTY setup just happened to make it immediately, deterministically visible.
-  > $COLORTERM=truecolor
-  > never added information a Truecolor default didn't already have (nothing beneath it could have
-  > been reached without this heuristic anyway), so it's dropped from detect_color_support too
-  > rather than left as dead weight.
-  >
-  > detect_color_support now recognizes exactly two auto-degrade signals, both unambiguous:
-  > $NO_COLOR (explicit opt-out) and $TERM=dumb (never emitted by a color-capable terminal).
-  > Everything else defaults to Truecolor, matching this crate's pre-existing, already-documented
-  > behavior. Indexed256/Ansi16 remain fully available via an explicit
-  > CrosstermOptions::color_support(...) override.
-  >
-  > Refs #585
 
 - [14aff2f](https://github.com/crates-lurey-io/retroglyph/commit/14aff2fcb5b4f4119bf565b6a1ffdabb5cc0fbf6)
   _(core, crossterm, window, widgets)_ Add KeyCode::Modifier/lock keys and pixel-precise Scroll by
   `@matanlurey` in [#584](https://github.com/crates-lurey-io/retroglyph/pull/584)
 
-  > - feat(core): add KeyCode::Modifier and lock/menu key variants
-  >
-  > Adds retroglyph_core::event::KeyCode::Modifier(ModifierKey) for reporting a bare modifier press
-  > as its own key event, plus CapsLock/ScrollLock/NumLock/PrintScreen/ Pause/Menu variants.
-  > ModifierKey is flat (Shift/Control/Alt/Super); side is conveyed by the existing
-  > KeyEvent::location (KeyLocation::Left/Right), not duplicated inside ModifierKey.
-  >
-  > Wires both backends:
-  >
-  > - crossterm: enables KeyboardEnhancementFlags::REPORT_ALL_KEYS_AS_ESCAPE_CODES (required for
-  >   KeyCode::Modifier to be reported at all) and maps crossterm::event::ModifierKeyCode's
-  >   Left/Right variants down to ModifierKey + KeyLocation.
-  >   Hyper/Meta/IsoLevel3Shift/IsoLevel5Shift have no retroglyph equivalent and fall through to
-  >   None like any other unmapped key.
-  > - winit: maps NamedKey::Shift/Control/Alt/Super and the lock/menu NamedKeys to the new KeyCode
-  >   variants, reusing the existing KeyLocation translation path for side disambiguation.
-  >
-  > * feat(core): replace line-quantized scroll variants with pixel-precise Scroll{dx,dy}
-  >
-  > Replaces MouseEventKind::{ScrollUp,ScrollDown,ScrollLeft,ScrollRight} with a single Scroll { dx:
-  > f32, dy: f32 } variant. Sign convention preserved from the winit implementation being replaced:
-  > dy > 0 is up, dy < 0 is down, dx > 0 is right, dx < 0 is left; a delta of exactly zero on both
-  > axes still emits no event.
-  >
-  > Magnitude is backend-dependent: winit reports the platform's exact pixel/line delta, crossterm
-  > and the wasm terminal backend (both line- quantized, no source of real magnitude) synthesize a
-  > fixed step of 1.0 per tick in the matching sign direction.
-  >
-  > MouseEventKind/MouseEvent/Event drop their Eq/Hash derives (kept PartialEq): f32 implements
-  > neither, and the derive is on the enclosing types too since MouseEventKind is nested inside
-  > them.
-  >
-  > - feat(widgets): consume pixel-precise Scroll{dx,dy} events by sign
-  >
-  > Updates the interact module's scroll-delta accumulator and the widgets/ examples call sites that
-  > matched MouseEventKind::ScrollUp/ScrollDown to match Scroll{dx,dy} by sign instead, preserving
-  > the exact prior unit-step behavior. Magnitude is intentionally not consumed yet (mixing winit's
-  > PixelDelta-scale values with crossterm's synthesized 1.0-per-tick values needs a normalization
-  > pass outside this change's scope); see retroglyph#445.
-
 - [b837b90](https://github.com/crates-lurey-io/retroglyph/commit/b837b900b6d8321364b58a9d393b74e0f87107ce)
   _(examples)_ Toggle the FPS overlay at runtime with backtick/F1 by `@matanlurey` in
   [#495](https://github.com/crates-lurey-io/retroglyph/pull/495)
-
-  > - feat(crossterm): honor `Input::push_event` instead of dropping it
-  >
-  > The trait default is a no-op, and this backend kept it on the grounds that it reads from
-  > crossterm's own event stream rather than an externally pushed queue. But the contract is "queue
-  > this event for `poll_event`", and silently dropping it is a trap for the two callers that
-  > legitimately want it: a test harness injecting synthetic input, and a driver that drains the
-  > queue to intercept one key and hands the rest back. Both lost every event they pushed.
-  >
-  > Add a pushback `VecDeque` that `poll_event` drains before consulting the real terminal. Pushed
-  > events are always older than whatever crossterm still has waiting -- they were either injected
-  > up front or already read off the terminal and handed back -- so jumping the queue preserves
-  > arrival order.
-  >
-  > Needed by the next commit: the examples' FPS overlay toggle intercepts its own key that way, and
-  > would otherwise eat every keystroke on crossterm.
-  >
-  > - feat(examples): toggle the FPS overlay at runtime with backtick/F1
-  >
-  > The overlay had no live control on native: the previous commit's RG_FPS env var picks a starting
-  > state, which is fine for a snapshot harness and useless for someone who wants the readout out of
-  > the way for ten seconds. wasm already had a floating toggle button; native had nothing.
-  >
-  > Intercept the key in the shared driver, since the overlay is the driver's and not the example's.
-  > There's no non-destructive way to look at the queue -- `Terminal` buffers exactly one event and
-  > won't hand it back, and `App` has no event hook -- so `ExampleApp::update` drains what's
-  > pending, takes its own key, and re-pushes the rest before `tick` runs. Order survives: the drain
-  > empties both the terminal's one-event buffer and the backend's queue, so re-pushing to the back
-  > of an empty queue restores arrival order.
-  >
-  > Backtick is the primary binding because it survives everywhere this runs unmodified; macOS maps
-  > F1 to screen brightness unless the user opted into standard function keys, and browsers claim
-  > much of the function row. F1 is accepted as an alias. Neither is bound by any example in the
-  > gallery. Only `KeyEventKind::Press` counts -- the windowed backends and crossterm-under-kitty
-  > report releases too, so matching the key alone would flip twice per press and look like a no-op.
-  >
-  > RG_FPS survives as the starting state only, which is what the PTY harness needs: a live frame
-  > rate is not reproducible, so the committed SVG snapshots would churn every run otherwise.
 
 ### Bug Fixes
 
@@ -324,42 +79,9 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-crossterm-v0.2.
   _(core, software, gl)_ Make Output::draw_layers required, default draw to forward to it by
   `@matanlurey` in [#579](https://github.com/crates-lurey-io/retroglyph/pull/579)
 
-  > fix(core, software, gl): make draw_layers required, default draw onto it
-  >
-  > Output::draw was a required trait method that a compositing backend (composites_layers() ==
-  > true) can never actually reach: Terminal::present always calls draw_layers, so software's and
-  > gl's own draw bodies were dead code that nothing exercised, and they had already drifted (gl's
-  > write_tile never read a cell's tint at all).
-  >
-  > Flips which method is the primitive: draw_layers is now required, and draw defaults to
-  > forwarding to it tagged as layer 0. Cell backends (Headless, Crossterm, TerminalWasm) rename
-  > their existing draw body to draw_layers with no logic change, since Terminal::present already
-  > pre-flattens onto a single conceptual layer for them before calling draw_layers. software and gl
-  > delete their now-redundant draw/blit_cell and draw/write_tile bodies entirely and pick up the
-  > shared default.
-  >
-  > Existing tests that called Output::draw directly (blit_cell_respects_sub_cell_offset,
-  > draw_reports_a_tint_on_a_glyph_without_a_sprite,
-  > draw_records_sub_cell_offset_and_flags_in_the_base_layer) keep passing unchanged, now exercising
-  > the default forward instead of a second hand-written implementation.
-  >
-  > Refs #561
-
 - [c279a47](https://github.com/crates-lurey-io/retroglyph/commit/c279a478947c98f2f02a6fad4d258ffdedcb1a90)
   _(workspace)_ Correct README architecture/style claims, add docs.rs feature badges by
   `@matanlurey` in [#499](https://github.com/crates-lurey-io/retroglyph/pull/499)
-
-  > - README's Widgets section and crate table described retroglyph-widgets' old free-function
-  >   architecture (panel/gauge/table/sparkline/draw_box); rewrite to describe the current
-  >   builder-struct widgets.
-  > - README claimed Style has text modifiers and a modifier() method; neither exists. Remove the
-  >   claims and point at Style's own no-modifier rationale.
-  > - Add rustdoc-args = ["--cfg", "docsrs"] to every publishable crate's
-  >   [package.metadata.docs.rs], plus #![cfg_attr(docsrs, feature(doc_cfg))] to every crate's
-  >   lib.rs, so docs.rs renders feature-gate badges instead of showing gated items as
-  >   unconditionally available. doc_auto_cfg was merged into doc_cfg upstream, so doc_cfg (which
-  >   now auto-infers cfg badges) is used instead of the now-removed doc_auto_cfg feature name. Adds
-  >   a just doc-docsrs recipe to verify the docs.rs build locally.
 
 ### Refactor
 
@@ -367,70 +89,25 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-crossterm-v0.2.
   _(core)_ Surface-centric drawing, Terminal loses its own drawing API by `@matanlurey` in
   [#522](https://github.com/crates-lurey-io/retroglyph/pull/522) [**breaking**]
 
-  > refactor(core): surface-centric drawing
-
 ### Documentation
 
 - [3579210](https://github.com/crates-lurey-io/retroglyph/commit/35792107e4b4281ae716f1f6022897cdadf3e266)
   _(crossterm, terminal, terminal-wasm)_ Add examples to the three crates with zero # Examples by
   `@matanlurey` in [#573](https://github.com/crates-lurey-io/retroglyph/pull/573)
 
-  > - docs(crossterm): add Examples sections to Crossterm::new and with_writer
-  > - docs(terminal): add Examples section to TerminalRenderer
-  > - docs(terminal-wasm): add Examples sections to public items
-
 - [26bc065](https://github.com/crates-lurey-io/retroglyph/commit/26bc065c9bfb6ae3b8ce94dbcab2ac95aee918f5)
   _(workspace)_ "deliberately" appears 9 times, defending decisions nobody questioned by
   `@matanlurey` in [#527](https://github.com/crates-lurey-io/retroglyph/pull/527)
 
-  > docs(workspace): drop pre-emptive "deliberately" hedging from prose
-  >
-  > Cuts "deliberately" from sites where it only pre-emptively defends a design choice nobody is
-  > questioning (README.md ratatui-similarity notes, the `Event::Custom(u64)` payload rationale,
-  > `InstanceGuard`'s independence from `restore_terminal()`, the light theme's contrast note, and
-  > the `egc`-feature note in `Paragraph::render`). Also drops the sibling "for anyone coming from
-  > there" hedge next to the ratatui layout comparison.
-  >
-  > Keeps "deliberately" at the three sites where removing it would make the passage read as an
-  > oversight rather than a documented choice: `GlBackend`/ `GlRenderer` not implementing
-  > `Input`/`Cursor`, `CrosstermOptions` not auto-detecting terminal capabilities, and `Presenter`'s
-  > offset application not being shared code between backends.
-  >
-  > Closes #485.
-
 - [123c590](https://github.com/crates-lurey-io/retroglyph/commit/123c59072d9de4a051ecddd76be67342cddf45ae)
   _(workspace, core, widgets)_ Clean up the " -- " clause-joiner habit by `@matanlurey` in
   [#532](https://github.com/crates-lurey-io/retroglyph/pull/532)
-
-  > - docs(core): clean up " -- " clause-joiner usage
-  > - docs(terminal): clean up " -- " clause-joiner usage
-  > - docs(crossterm): clean up " -- " clause-joiner usage
-  > - docs(software): clean up " -- " clause-joiner usage
-  > - docs(gl): clean up " -- " clause-joiner usage
-  > - docs(window): clean up " -- " clause-joiner usage
-  > - docs(terminal-wasm): clean up " -- " clause-joiner usage
-  > - docs(widgets): clean up " -- " clause-joiner usage
-  > - docs(workspace): clean up " -- " clause-joiner usage in top-level docs
 
 ### Miscellaneous Tasks
 
 - [e878716](https://github.com/crates-lurey-io/retroglyph/commit/e878716b24e6191d5849a4dd5377cfdac74376de)
   _(workspace)_ Add just check-targets, fix wasm32 lint drift, forward the dev feature by
   `@matanlurey` in [#560](https://github.com/crates-lurey-io/retroglyph/pull/560)
-
-  > chore(workspace): add just check-targets, fix the wasm32 lint drift, forward the dev feature
-  >
-  > The local gate only ever compiled the host target, so three retroglyph-gl test modules gated to
-  > Linux and wasm32 were invisible to it -- which is how #551 was locally green and failed five CI
-  > jobs. Adds a recipe that covers them, and fixes the wasm32 lint failures that would have made
-  > its second leg red on main.
-  >
-  > Also forwards retroglyph-core's dev feature from every crate that depends on it, so a consumer
-  > can enable development diagnostics without adding a direct core dependency to reach the flag.
-  >
-  > Closes #552
-  >
-  > Closes #553
 
 **Full Changelog**:
 https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-crossterm-v0.1.4...retroglyph-crossterm-v0.2.0
@@ -447,22 +124,6 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-crossterm-v0.1.
 - [63533bd](https://github.com/crates-lurey-io/retroglyph/commit/63533bdff04be0b5691d228d248e3e4300fd38e4)
   _(crossterm)_ Wire pipe-safe plain mode into the default stdout build path by `@matanlurey` in
   [#325](https://github.com/crates-lurey-io/retroglyph/pull/325)
-  > CrosstermOptions::build() (and Crossterm::new()) always constructed
-  >
-  > TerminalRenderer::new(writer), never TerminalRenderer::auto(writer), so the pipe-safe plain-text
-  > mode retroglyph-terminal already implements was unreachable through this backend even when
-  > stdout is a file or pipe.
-  >
-  > build() now checks std::io::stdout().is_terminal() once up front (on the un-wrapped Stdout
-  > handle, since the buffered BufWriter<Stdout> writer type this backend renders through doesn't
-  > implement IsTerminal) and threads the resulting plain flag through to
-  > TerminalRenderer::with_plain_mode, which is what TerminalRenderer::auto does internally.
-  > build_with_writer keeps its historical behavior (plain mode off) unconditionally, since an
-  > arbitrary caller-supplied writer has no IsTerminal bound to auto-detect from.
-  >
-  > Also expose Crossterm::plain_mode() so callers/tests can introspect the result, and mark
-  > docs/ROADMAP.md's non-alternate-screen inline rendering entry as shipped (already implemented
-  > via CrosstermOptions::alt_screen(false)).
 
 ### Bug Fixes
 
@@ -470,102 +131,11 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-crossterm-v0.1.
   _(crossterm)_ Reject constructing a second live Crossterm instance by `@matanlurey` in
   [#327](https://github.com/crates-lurey-io/retroglyph/pull/327)
 
-  > ALT_SCREEN_ACTIVE/RAW_MODE_ACTIVE are process-global statics shared by Drop and the panic hook;
-  > constructing a second Crossterm while a first is still live corrupts that shared bookkeeping
-  > (dropping one instance disables raw mode / clears the flag out from under the other, which then
-  > silently receives line-buffered, echoed input).
-  >
-  > Reject the second construction outright instead: build_from_options now acquires a process-wide
-  > InstanceGuard (an AtomicBool compare_exchange) before touching any terminal state, returning
-  > std::io::ErrorKind::ResourceBusy if another instance is already live. The guard is stored on
-  > Crossterm and released by its Drop impl, so it naturally releases on early-return (a failed ?
-  > mid-construction) as well as on normal/panicking teardown, with no manual cleanup threading and
-  > no double-release hazard versus the existing restore_terminal()/panic-hook path (which it
-  > deliberately does not touch).
-  >
-  > Adds regression tests (both against the internal guard type and through the public Crossterm
-  > API) and documents the new one-instance-per-process contract on Crossterm and each fallible
-  > constructor.
-
 ### Refactor
 
 - [c6f36d7](https://github.com/crates-lurey-io/retroglyph/commit/c6f36d7bdf320b10cca5d3df9d71d97620852297)
   _(core)_ Split Backend into Output/Input/Cursor facets by `@matanlurey` in
   [#331](https://github.com/crates-lurey-io/retroglyph/pull/331)
-
-  > - refactor(core): split Backend into Output/Input/Cursor facets
-  >
-  > Splits the fused Backend trait into three independent sibling traits with no supertrait
-  > relationship: Output (draw/draw_layers/flush/size/clear/resize, the only fallible facet), Input
-  > (poll_event/push_event, push_event defaults to a no-op), and Cursor
-  > (set_cursor_visible/set_cursor_position, both default to a no-op). Backend becomes a pure
-  > ergonomic bundle:
-  >
-  >     pub trait Backend: Output + Input + Cursor {}
-  >     impl<T: Output + Input + Cursor> Backend for T {}
-  >
-  > so every existing B: Backend generic call site (Terminal<B>, App<B>::step, layout::render, every
-  > widget) keeps compiling unchanged. Headless now implements Output/Input/Cursor separately
-  > instead of one impl Backend.
-  >
-  > Also fixes stray doc/grid/terminal references to crate::Backend::\* methods that moved to
-  > Output/Input, and updates the workspace README's backend overview.
-  >
-  > - refactor(crossterm): implement Output/Input/Cursor instead of fused Backend
-  >
-  > Crossterm now implements Output (draw/flush/size/clear/resize, propagating std::io::Error),
-  > Input (real poll_event; push_event uses the new trait default since crossterm reads its own
-  > event stream), and Cursor (real escape-code-based show/hide and move) instead of one impl
-  > Backend. Updates crate docs, tests, and benches that referenced Backend::\* methods directly on
-  > a concrete Crossterm<W> to import Output/Input instead (bundle-trait method resolution only
-  > works through a generic B: Backend bound, not a concrete type).
-  >
-  > - refactor(window): fold Presenter into an Output supertrait
-  >
-  > Presenter is now `pub trait Presenter: Output`, dropping its duplicated
-  > draw/draw_layers/needs_full_frame/composites_layers/flush/size/clear/resize signatures
-  > (inherited from Output) and its own Error associated type (also inherited); Presenter keeps only
-  > SurfaceError plus the surface lifecycle (init_surface/resize_surface/present/cell_size).
-  > WindowBackend<P: Presenter> now implements Output by delegating to P, Input via its own event
-  > queue, and Cursor via the trait's no-op default (confirmed this matches the prior fused-Backend
-  > impl's cursor methods, which were already no-ops for the windowed family -- a straight split,
-  > not a behavior change). Updates crate docs (lib.rs architecture diagram, presenter.rs's stale
-  > "mirrors the output half" doc comment, README) and the winit test/doctest presenter stubs to
-  > implement Output + Presenter separately.
-  >
-  > - refactor(software): implement Output/Input/Cursor, drop duplicate Presenter forwarding
-  >
-  > SoftwareRenderer now implements Output, Input, and Cursor directly instead of one impl Backend.
-  > Since retroglyph-window's Presenter is now an Output supertrait, SoftwareRenderer's own Output
-  > impl already satisfies Presenter: Output, so the old impl retroglyph_window::Presenter block
-  > (which duplicated draw/draw_layers/flush/size/clear/resize by forwarding through
-  > <Self as Backend>::method, specifically to keep Presenter out of scope and avoid
-  > method-resolution ambiguity) is deleted; the new Presenter impl only defines SurfaceError,
-  > init_surface, resize_surface, present, and cell_size. Updates crate/module docs and the benches
-  > that called draw/draw_layers directly on a concrete SoftwareRenderer to import Output instead of
-  > Backend.
-  >
-  > - refactor(terminal-wasm): implement Output/Input/Cursor instead of fused Backend
-  >
-  > TerminalWasm now implements Output (ANSI-emitting draw/flush/clear/resize), Input (real
-  > push*event/poll_event, since this backend is entirely push-driven), and Cursor (real escape-code
-  > cursor show/hide/move) instead of one impl Backend. Updates doc comment links
-  > (Backend::draw/clear/etc. -> Output::/Input::/Cursor::) and the event-throughput bench's Backend
-  > as * import to Input as \_.
-  >
-  > - fix(terminal-wasm): import Output for wasm32-gated resize call
-  >
-  > The wasm32-only wasm_terminal_resize FFI export imported the old fused Backend trait to call
-  > resize(); after the Output/Input/Cursor split that method lives on Output. This module
-  > is #[cfg(target_arch = "wasm32")], so cargo test --all-features never compiled it -- only just
-  > test-wasm (wasm-pack test) exercises this path, and CI caught it as a build failure on PR #331.
-  >
-  > - docs(workspace): update Backend/Presenter references after the trait split
-  >
-  > Sweeps remaining prose describing Backend as a single fused output+input+cursor trait: the
-  > workspace README's backend overview, the retroglyph-terminal crate's doc comment linking to the
-  > old Backend::draw method (now Output::draw), and docs/testing.md's reference to
-  > Backend::push_event (now Input::push_event).
 
 - [98b5f3a](https://github.com/crates-lurey-io/retroglyph/commit/98b5f3a6ef11ef1854e29dfbb280ee93b1bc4006)
   _(crossterm)_ Option-based event conversion, fix mouse drag/scroll mapping by `@matanlurey` in
@@ -587,30 +157,6 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-crossterm-v0.1.
   _(crossterm)_ Add benchmarks for event translation and draw overhead by `@matanlurey` in
   [#324](https://github.com/crates-lurey-io/retroglyph/pull/324)
 
-  > Adds crates/crossterm/benches/ covering the highest-value gaps flagged in #285:
-  >
-  > - event_translation.rs: from_crossterm_event throughput over a representative mix of
-  >   key/mouse/resize/paste/focus events, plus one unmappable-event case (KeyCode::Media)
-  >   exercising the Err(()) branch poll_event's retry loop depends on.
-  > - draw_overhead.rs: a full draw()+flush() frame into an in-memory Vec<u8> via
-  >   CrosstermOptions::build_with_writer, at 80x24 and 200x60, to isolate this crate's overhead on
-  >   top of retroglyph-terminal's renderer.
-  > - backend_overhead.rs: Backend::size() per-call cost.
-  >
-  > from_crossterm_event was private; it's now exposed as #[doc(hidden)] pub (with a doc comment
-  > explaining it's not a supported public API) solely so these benches -- compiled as separate
-  > crates, same restriction as integration tests -- can call it directly.
-  >
-  > poll_event's retry-on-unmappable-event path (lib.rs:778-786) is not benchmarked: crossterm reads
-  > events from the real stdin/TTY fd with no injectable mock source, so there's no headless way to
-  > hand it a queue of unmappable events without misrepresenting what's actually being measured.
-  > Documented in backend_overhead.rs instead of faked.
-  >
-  > Adds criterion/fastrand dev-dependencies to crates/crossterm/Cargo.toml, version-pinned to match
-  > crates/core/Cargo.toml.
-  >
-  > Closes #285
-
 **Full Changelog**:
 https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-crossterm-v0.1.2...retroglyph-crossterm-v0.1.3
 
@@ -621,23 +167,6 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-crossterm-v0.1.
 - [b43e553](https://github.com/crates-lurey-io/retroglyph/commit/b43e5539812dfff9703a9eab99f424b7ce03a755)
   _(workspace)_ Per-crate test analytics flags + self-hosted coverage report by `@matanlurey` in
   [#254](https://github.com/crates-lurey-io/retroglyph/pull/254)
-
-  > - Split the workspace nextest JUnit report per crate flag before uploading to Codecov Test
-  >   Analytics (tools/split-junit-flags.py): a single combined-workspace upload can only carry one
-  >   flag before misattributing every crate's tests to every other crate's flag, so upload once per
-  >   flag instead of once for the whole workspace. Fixes the empty Flags filter on
-  >   https://app.codecov.io/gh/crates-lurey-io/retroglyph/tests.
-  > - disable_search: true on every one of those uploads: the Codecov CLI auto-discovers any
-  >   \*junit.xml on disk in addition to the explicit files: input, and the pre-split combined
-  >   junit.xml sits right next to the split files it came from. Caught this live in run 29653543638
-  >   (test job, "Upload test results to Codecov (unflagged)" step logged "Found 2 test_results
-  >   files to report") before merging -- without disable_search, every flag upload would have
-  >   silently re-included all 669 tests too.
-  > - Point each crate README's coverage badge at the repo's Flags tab instead of the generic
-  >   overview page (query-param deep links like ?flags[0]=x do not work against the current Codecov
-  >   app, verified live).
-  > - docs.yml: publish a self-hosted `cargo llvm-cov --html` report at
-  >   https://main.retroglyph.dev/coverage/ alongside the rustdocs, rebuilt on every push to main.
 
 **Full Changelog**:
 https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-crossterm-v0.1.1...retroglyph-crossterm-v0.1.2
@@ -650,175 +179,26 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-crossterm-v0.1.
   _(core)_ Implement Grid::clone and shrink Tile via an EGC side-table by `@matanlurey` in
   [#225](https://github.com/crates-lurey-io/retroglyph/pull/225)
 
-  > Closes #130.
-  >
-  > - Grid::clone: derive Clone on LayerBuf and Grid now that ixy 0.6.0-alpha.8+ implements
-  >   Clone/Copy for the RowMajor layout marker, removing the upstream-blocked TODO in grid.rs.
-  > - Tile layout shrink: move the (rare) multi-codepoint EGC grapheme text out of Tile and into a
-  >   sparse per-layer side-table on Grid (LayerBuf::extras), gated by a new TileFlags::HAS_EXTRA
-  >   bit. Tile drops from 32 to 20 bytes and becomes Copy. Tile::extra()/grapheme() are replaced by
-  >   Grid::grapheme(), since a bare Tile can no longer answer that on its own.
-  >
-  >   This requires widening Backend::draw/draw_layers items from (Pos, &Tile) to (Pos, &Tile,
-  >   Option<&str>) (and the layered equivalent) so backends that render the full grapheme cluster
-  >   (retroglyph-terminal, shared by crossterm and terminal-wasm) still can. Grid::layers()/diff()
-  >   are widened to match, and diff() is now hand-rolled instead of delegating to grixy's GridDiff,
-  >   so a grapheme-only change (same glyph/style/flags, different combining mark) is still detected
-  >   as a diff.
-  >
-  >   Both TODOs were tracked together in #130; the Backend-trait widening was previously deferred
-  >   pending 'a Backend-trait change already on the table for another reason' -- this is that
-  >   reason.
-
 - [e073dd9](https://github.com/crates-lurey-io/retroglyph/commit/e073dd9db007988f0cb4378de1989a643215b01b)
   _(core)_ Add Event::Paste and FocusGained/FocusLost variants by `@matanlurey` in
   [#190](https://github.com/crates-lurey-io/retroglyph/pull/190)
-
-  > Adds Event::Paste(String), Event::FocusGained, and Event::FocusLost to retroglyph-core, made
-  > possible by the existing #[non_exhaustive] on Event. Removes Copy from Event's derives since
-  > String is not Copy; all existing consumers already clone or borrow, and the fallout is fixed
-  > here (a handful of test call sites that relied on Event: Copy now clone explicitly).
-  >
-  > Wires the new variants into both existing backends:
-  >
-  > - crossterm: from_crossterm_event now maps CE::Paste/FocusGained/FocusLost. Since crossterm only
-  >   emits these when the terminal has been sent EnableBracketedPaste/EnableFocusChange,
-  >   CrosstermOptions gains matching focus_change/bracketed_paste toggles (default true) alongside
-  >   the existing mouse_capture/kitty_protocol pattern, so the new Event variants are reachable
-  >   rather than dead code.
-  > - winit: WindowEvent::Focused(bool) now pushes FocusGained/FocusLost. Winit has no native paste
-  >   event (Ime::Commit is IME composition, not clipboard paste), so windowed paste support is left
-  >   for a follow-up.
-  >
-  > Removes the now-implemented Paste/FocusGained/FocusLost rows from docs/ROADMAP.md's Adopt table.
-  >
-  > Fixes #107.
 
 - [07f9e88](https://github.com/crates-lurey-io/retroglyph/commit/07f9e88ad836583bf7b35aa0bf5c8753d9a10911)
   _(crossterm)_ Generic content writer instead of hardwired Stdout by `@matanlurey` in
   [#220](https://github.com/crates-lurey-io/retroglyph/pull/220)
 
-  > Makes `Crossterm<W: Write = BufWriter<Stdout>>` generic over its content writer, so callers can
-  > render into a file, a pipe, or an in-memory buffer instead of stdout -- useful for tests that
-  > want to assert on the emitted ANSI/SGR bytes without a real TTY.
-  >
-  > - New `Crossterm::with_writer`/`CrosstermOptions::build_with_writer` entry points alongside the
-  >   existing stdout-only `Crossterm::new`/ `with_options`.
-  > - Only rendered cell content (draw/flush, plus the runtime clear/cursor escapes) goes through
-  >   `W`. Terminal-protocol setup/teardown (raw mode, the alternate screen, mouse/focus/paste/kitty
-  >   negotiation, the initial cursor hide) always targets the real process stdout regardless of
-  >   `W`, since those are properties of the actual controlling terminal, not of an arbitrary byte
-  >   sink. Callers targeting a non-terminal writer disable those via the existing
-  >   `CrosstermOptions` toggles.
-  > - Added `Crossterm::writer`/`writer_mut` accessors.
-  > - The async (`AsyncWrite`) variant mentioned in the issue is deferred: it would require
-  >   threading async through `retroglyph-terminal`'s renderer too, a materially larger change than
-  >   this sync generalization.
-  >
-  > Closes #123
-
 - [2b54447](https://github.com/crates-lurey-io/retroglyph/commit/2b5444767fb903ee4b1c690e5d94b46fe91c65ac)
   _(crossterm)_ Add optional tracing spans for draw/flush/poll_event by `@matanlurey` in
   [#219](https://github.com/crates-lurey-io/retroglyph/pull/219)
-
-  > Adds an opt-in `tracing` feature to retroglyph-crossterm that instruments Backend::draw,
-  > Backend::flush, and Backend::poll_event with tracing spans (debug level for draw/flush, trace
-  > for poll_event since it's called every game-loop iteration by drain_events), so callers can
-  > profile where render and input-polling time goes with any tracing subscriber.
-  >
-  > No new dependency and no code when the feature is disabled.
-  >
-  > Closes #122
 
 - [d6cea4d](https://github.com/crates-lurey-io/retroglyph/commit/d6cea4ddab0c4a502b12af12a87f01e53a2cae72)
   _(crossterm)_ CPU-cost docs, Wayland lifecycle docs, non-TTY tests, and a builder for
   alt_screen/raw_mode by `@matanlurey` in
   [#202](https://github.com/crates-lurey-io/retroglyph/pull/202)
 
-  > - docs(crossterm): document CPU cost and tradeoff of zero-timeout poll() in drain_events
-  >
-  > poll_event() with a zero timeout (the case Terminal::drain_events uses to drain everything
-  > buffered without blocking) was undocumented: the issue's premise was that it 'spins the event
-  > loop as fast as the CPU allows'. Clarify what actually happens: a zero timeout is a single
-  > non-blocking crossterm::event::poll(Duration::ZERO) syscall per call, not a busy loop inside
-  > this method -- it returns None immediately once the OS reports no data. The real
-  > CPU-vs-responsiveness tradeoff lives one level up, in an uncapped caller loop that calls
-  > drain_events() every iteration with no frame limiter; document that and point callers wanting a
-  > cap at adding their own sleep/tick budget around drain_events().
-  >
-  > - docs(crossterm): document Wayland focus/suspend lifecycle contract
-  >
-  > Event::FocusGained/FocusLost already exist in retroglyph-core and this crate already maps
-  > crossterm's focus-change events to them (predates this issue); no core changes are needed yet
-  > since there's no separate Event::Suspended to coordinate around. What was missing is the
-  > contract: document that terminal-side state (raw mode, alt screen, cursor, last colors/attrs) is
-  > preserved across a focus change, that this backend does not defer rendering on its own
-  > (draw()/flush() keep writing regardless of focus), and that an app wanting to pause redraws
-  > while unfocused (e.g. a hidden Wayland surface) needs to track FocusLost/FocusGained itself.
-  > Also notes that adding a dedicated Event::Suspended later would need coordinating with
-  > retroglyph-window, which shares the Event enum.
-  >
-  > No code change: this issue was scoped to documentation/forward-compat notes only.
-  >
-  > - test(crossterm): add integration tests for restricted/non-TTY terminal contexts
-  >
-  > Adds crates/crossterm/tests/non_tty.rs covering the non-TTY/restricted-terminal scenarios this
-  > issue calls out (pipes, CI, ssh-via-pipe, Nix sandboxes): cargo test's own process already runs
-  > with non-TTY stdio, so these run unmodified in CI without a separate harness.
-  >
-  > - Crossterm::new() must never panic when the terminal can't be initialized (raw mode / alternate
-  >   screen setup failing on a restricted context); it must return a clean Err instead. Verified
-  >   locally: in a shell session with no controlling terminal reachable via /dev/tty, construction
-  >   returns Err(Os { code: 6, .. }) rather than panicking.
-  > - The process-wide panic hook (registered via std::sync::Once on first construction) doesn't
-  >   misbehave across repeated construction attempts in the same process.
-  > - Backend::size() falls back to a sane nonzero default instead of panicking when the underlying
-  >   crossterm::terminal::size() query fails, and draw() with an empty iterator returns cleanly
-  >   rather than panicking.
-  >
-  > Tests degrade gracefully on a machine where a controlling terminal is still reachable via
-  > /dev/tty despite this test process's own redirected stdio (common when running tests from an
-  > interactive shell): construction succeeding is an accepted outcome too, since the only invariant
-  > under test is 'no panic', not a specific Ok/Err split.
-  >
-  > - feat(crossterm): add alt_screen/raw_mode toggles and a Crossterm::builder() entry point
-  >
-  > CrosstermOptions already covered mouse capture, the kitty protocol, focus-change, and bracketed
-  > paste (added in #181 for #96), but the two other unconditional setup steps this issue calls out
-  > -- entering the alternate screen and enabling raw mode -- had no opt-out, and there was no
-  > builder()-named entry point, only CrosstermOptions::new()/with_options().
-  >
-  > - CrosstermOptions gains alt_screen and raw_mode (both default true, matching Crossterm::new()'s
-  >   historical behavior) alongside a new CrosstermOptions::build() that replaces with_options's
-  >   body (with_options now just forwards to it).
-  > - Crossterm::builder() is an alias for CrosstermOptions::new(), giving the
-  >   Crossterm::builder().mouse_capture(false)...build() chain the issue asked for, without
-  >   introducing a second, parallel builder type alongside CrosstermOptions.
-  > - restore_terminal (shared by Drop and the process-wide panic hook, neither of which has access
-  >   to a specific instance's options) now only emits LeaveAlternateScreen/ disable_raw_mode() if
-  >   this process actually entered/enabled them, tracked via two process-wide AtomicBools set on
-  >   successful construction. Unlike the other four features, unconditionally undoing these two
-  >   when never applied risked corrupting a cooked-mode terminal or writing a stray escape into the
-  >   caller's normal scrollback buffer -- unlike mouse capture/kitty
-  >   protocol/focus-change/bracketed paste, which are safe to unconditionally disable/pop even when
-  >   never enabled.
-  >
-  > Verified with alt_screen(false) + raw_mode(false) that Crossterm::build() can now succeed
-  > against a fully redirected/piped stdout (the two calls that fail outright without a real
-  > controlling terminal are the ones now skippable), which a new unit test covers.
-  >
-  > Backward compatible: Crossterm::new(), Crossterm::with_options(), and CrosstermOptions's
-  > existing methods/Default are all unchanged in behavior; existing callers see no difference.
-
 - [c21b0a1](https://github.com/crates-lurey-io/retroglyph/commit/c21b0a1ff97af851f4109b8790055df9785cb53c)
   _(crossterm)_ Make mouse capture and kitty protocol opt-in via a builder by `@matanlurey` in
   [#181](https://github.com/crates-lurey-io/retroglyph/pull/181)
-
-  > Replace CrosstermOptions's public struct-literal fields with a chainable builder API
-  > (CrosstermOptions::new().mouse_capture(bool).kitty_protocol(bool)), matching the rest of the
-  > workspace's configuration convention (e.g. retroglyph_core::style::Style,
-  > SoftwareBackendBuilder). Fields are now private; Default is preserved so Crossterm::new() and
-  > with_options() are unaffected.
 
 ### Bug Fixes
 
@@ -826,74 +206,17 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-crossterm-v0.1.
   _(workspace)_ Squash 3+ blank lines and allow MD037 in generated changelogs by `@matanlurey` in
   [#247](https://github.com/crates-lurey-io/retroglyph/pull/247)
 
-  > release-plz's per-crate CHANGELOG.md is prepended above the hand-written 0.1.0 entry using
-  > cliff.toml's body template. The tail block that renders the `**Full Changelog**: ...` link can't
-  > be trimmed with Tera's `-` whitespace markers without also swallowing the blank line that's
-  > supposed to separate it from the next heading -- that separator has to come from literal
-  > template text sitting between nested {% if %} blocks -- so it leaves 3 blank lines at that
-  > boundary instead of 1. Add a postprocessor that squashes any run of 3+ newlines down to a single
-  > blank line, matching Keep a Changelog / prettier / markdownlint's MD012 expectation.
-  >
-  > Also extend the per-changelog markdownlint-disable comment (both the already-checked-in header
-  > on all 7 crates' CHANGELOG.md, and cliff.toml's header template for any crate whose changelog
-  > doesn't exist yet) with no-space-in-emphasis: commit bodies are freeform prose and can contain a
-  > literal _ or \* adjacent to other text (e.g. `wasm_terminal_\* FFI`, `manual \_style override`)
-  > that markdownlint's MD037 misreads as unbalanced emphasis markers. That's not something a
-  > template fix can prevent, since it depends on historical commit message content.
-  >
-  > Fixes the release-plz standing PR's format/lint CI failure .
-
 ### Documentation
 
 - [6c3a096](https://github.com/crates-lurey-io/retroglyph/commit/6c3a0964c593d88ba5f2221a67526e5946c993cb)
   _(crossterm)_ Document RGB color fallback contract on 256-color terminals by `@matanlurey` in
   [#184](https://github.com/crates-lurey-io/retroglyph/pull/184)
 
-  > Neither retroglyph-core nor retroglyph-terminal guarantees a to_indexed()-style RGB quantizer
-  > (grepped the workspace for to_indexed/quantiz -- no hits). TerminalRenderer::write_sgr_color,
-  > shared by retroglyph-crossterm and retroglyph-terminal-wasm, writes Color::Rgb straight through
-  > as a 24-bit truecolor SGR sequence (38;2;r;g;b) with no downsampling, mirroring crossterm's own
-  > truecolor-writing behavior. This is a documentation-first fix: the existing pass-through
-  > behavior matches the rest of the Rust terminal-UI ecosystem and terminals/multiplexers generally
-  > handle degrading truecolor themselves, so no new quantization code was added.
-  >
-  > Documents the contract in retroglyph-terminal's crate-level docs (with the
-  > 256-color/older-terminal caveats and a pointer to Color::Indexed/Color::Ansi as the unambiguous
-  > alternative), and links to it from both retroglyph-terminal's and retroglyph-crossterm's
-  > READMEs. Adds a regression test (rgb_color_is_passed_through_without_quantization) asserting a
-  > non-palette-aligned RGB value is emitted verbatim rather than snapped to an indexed color.
-  >
-  > Fixes #94
-
 ### Continuous Integration
 
 - [1d81906](https://github.com/crates-lurey-io/retroglyph/commit/1d81906ea8e380d64de0e05345f103627ef49406)
   _(workspace)_ Automated per-crate release-plz workflow by `@matanlurey` in
   [#80](https://github.com/crates-lurey-io/retroglyph/pull/80)
-
-  > - ci(release): adopt per-crate release-plz flow with PR-title enforcement
-  >
-  > Re-enable release-plz's standing Release PR (release-pr + release jobs) so version bumps and
-  > per-crate changelogs are computed from conventional PR-title history and published on Release-PR
-  > merge; developers never push tags.
-  >
-  > - release-plz.toml: per-crate changelogs (drop changelog_path), semver_check=true
-  > - cliff.toml: skip-changelog via github.pr_labels label + changelog: ignore footer
-  > - release-plz.yml: two-job release-pr/release, concurrency guards, trusted publishing
-  > - check-semver.yml: gate only undeclared breaks (skip on title ! or semver-override)
-  > - pr-title.yml: enforce Conventional Commit PR titles + scope list
-  >
-  > * docs(changelog): split workspace changelog into per-crate files
-  >
-  > Per-crate release-plz needs a CHANGELOG.md per crate. Seed each with its hand-written 0.1.0
-  > entry; the root CHANGELOG.md becomes an index.
-  >
-  > - docs: rewrite RELEASING.md for the automated release flow
-  >
-  > Document the per-crate, release-plz-driven flow: conventional PR titles, squash-merge, standing
-  > Release PR as the single approval gate, breaking declared via title !, cargo-semver-checks
-  > roles, PR labels, and no pre-1.0 prerelease channel. Update AGENTS.md's commit-message section:
-  > enforcement now lives in pr-title.yml, not local hooks.
 
 **Full Changelog**:
 https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-crossterm-v0.1.0...retroglyph-crossterm-v0.1.1

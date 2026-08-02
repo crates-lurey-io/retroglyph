@@ -6,7 +6,7 @@
 //! module fills that gap with a small [`Clipboard`] trait plus a native, `arboard`-backed
 //! [`SystemClipboard`] implementation.
 //!
-//! Deliberately kept out of [`retroglyph_core::Backend`]: clipboard access has no notion in the
+//! Kept out of [`retroglyph_core::Backend`]: clipboard access has no notion in the
 //! terminal backends this workspace also supports (`crossterm`, `software`'s headless test
 //! paths), and a windowed app that wants it can reach for this trait directly from its own
 //! update loop instead of threading it through every `Backend` implementation.

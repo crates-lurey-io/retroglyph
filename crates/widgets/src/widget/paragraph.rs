@@ -28,12 +28,17 @@ use crate::Surface;
 /// defaults to [`Style::new()`]; set it with [`Paragraph::style`].
 ///
 /// Without the `egc` feature, wrapping is `char`-boundary-safe and breaks
-/// on ASCII whitespace only -- no grapheme-cluster segmentation, so a
+/// on ASCII whitespace only: no grapheme-cluster segmentation, so a
 /// combining mark or wide CJK run can land on either side of a wrap point.
 /// Enabling `egc` upgrades wrapping to [`retroglyph_core::layout::TextLayout`],
 /// which is grapheme-cluster-aware; every other text-bearing widget in this
 /// crate (`List`, `Table`, `Log`) already has this same gap regardless of
 /// `egc`.
+///
+/// Unlike [`super::BoxBorder`], [`super::Gauge`], [`super::StatBar`],
+/// [`super::Table`], and [`super::Button`], `Paragraph` has no `theme()`/
+/// `theme_on()` pair: word-wrapped text has no single semantic
+/// [`Theme`](crate::Theme) role to map onto, so callers set `style` directly.
 ///
 /// # Examples
 ///
@@ -156,10 +161,7 @@ impl Widget for Paragraph<'_> {
     fn render(&self, surface: &mut Surface<'_>) {
         let area = surface.area();
         let line = self.line();
-        let layer = surface.layer();
-        TextLayout::new(&line)
-            .rect(area)
-            .render_to_grid(surface.grid_mut(), layer);
+        TextLayout::new(&line).rect(area).render_to_surface(surface);
     }
 }
 
@@ -220,5 +222,27 @@ mod tests {
 
         let row1: String = (0..10).map(|x| grid[Pos::new(x, 1)].glyph()).collect();
         assert_eq!(row1.trim(), "");
+    }
+
+    #[cfg(feature = "egc")]
+    #[test]
+    fn paragraph_honours_the_surface_clip() {
+        // Clip out rows 1-2: the wrapped remainder ("cccc") must not be drawn there,
+        // even though the `egc` render path used to write through `grid_mut()` and
+        // bypass the clip entirely.
+        let area = Rect::new(0, 0, 10, 3);
+        let mut grid = Grid::new(10, 3);
+        {
+            let mut surface = Surface::new(&mut grid, area, 0);
+            let mut clipped = surface.clip(Rect::new(0, 0, 10, 1));
+            Paragraph::new("aaaa bbbb cccc").render(&mut clipped);
+        }
+
+        let row0: String = (0..10).map(|x| grid[Pos::new(x, 0)].glyph()).collect();
+        assert_eq!(row0.trim_end(), "aaaa bbbb");
+        for row in 1..3 {
+            let r: String = (0..10).map(|x| grid[Pos::new(x, row)].glyph()).collect();
+            assert_eq!(r.trim(), "");
+        }
     }
 }

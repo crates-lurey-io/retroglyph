@@ -27,6 +27,9 @@ pub enum GlBackendError {
     ZeroScale,
     /// The grid was configured with a zero column or row count.
     ZeroGrid,
+    /// `cols`, `rows`, and `scale` combine to a surface wider or taller than `u32::MAX` physical
+    /// pixels.
+    SurfaceTooLarge,
     /// A registered tileset failed to decode (issue #366).
     #[cfg(feature = "tilesets")]
     Tileset(retroglyph_window::tileset::TilesetError),
@@ -53,6 +56,12 @@ impl fmt::Display for GlBackendError {
             ),
             Self::ZeroScale => write!(f, "scale must be non-zero"),
             Self::ZeroGrid => write!(f, "grid columns and rows must both be non-zero"),
+            Self::SurfaceTooLarge => {
+                write!(
+                    f,
+                    "grid_size and scale combine to a surface over u32::MAX pixels wide or tall"
+                )
+            }
             #[cfg(feature = "tilesets")]
             Self::Tileset(e) => write!(f, "tileset error: {e}"),
         }
@@ -202,8 +211,10 @@ impl GlBackendBuilder {
     /// Returns [`GlBackendError::NoFont`] if no font was set and the `default-font` feature is
     /// disabled, [`GlBackendError::MixedGlyphSizes`] if the configured chain's fonts disagree on
     /// their glyph size, [`GlBackendError::FontChainTooLarge`] if the chain's glyphs overflow the
-    /// atlas's slot space, [`GlBackendError::ZeroScale`] if `scale` is 0, or
-    /// [`GlBackendError::ZeroGrid`] if either grid dimension is 0.
+    /// atlas's slot space, [`GlBackendError::ZeroScale`] if `scale` is 0,
+    /// [`GlBackendError::ZeroGrid`] if either grid dimension is 0, or
+    /// [`GlBackendError::SurfaceTooLarge`] if `cols`/`rows`/`scale` combine to a surface wider or
+    /// taller than `u32::MAX` physical pixels.
     pub fn build(self) -> Result<GlRenderer, GlBackendError> {
         if self.scale == 0 {
             return Err(GlBackendError::ZeroScale);
@@ -215,6 +226,16 @@ impl GlBackendBuilder {
         let Some(glyph_size) = fonts.glyph_size() else {
             return Err(GlBackendError::MixedGlyphSizes);
         };
+        // `CellGeometry::surface_size` multiplies as plain `u32`; check for overflow here, in
+        // `u64`, before it can happen there (`scale` is `u16` on this backend, unlike the
+        // software backend's `u8`, so the product is not overflow-free by construction).
+        let cell_w = u64::from(glyph_size.0) * u64::from(self.scale);
+        let cell_h = u64::from(glyph_size.1) * u64::from(self.scale);
+        let surface_w = u64::from(self.cols) * cell_w;
+        let surface_h = u64::from(self.rows) * cell_h;
+        if surface_w > u64::from(u32::MAX) || surface_h > u64::from(u32::MAX) {
+            return Err(GlBackendError::SurfaceTooLarge);
+        }
         let glyphs = GlyphCache::bitmap(fonts, glyph_size);
         if glyphs.slot_count() > u32::from(u16::MAX) + 1 {
             return Err(GlBackendError::FontChainTooLarge);

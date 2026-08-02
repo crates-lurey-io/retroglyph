@@ -77,12 +77,12 @@ src/
     mod.rs          Backend trait
     headless.rs     In-memory backend (testing)
     crossterm.rs    Crossterm backend (feature-gated)
-  cell.rs           Cell — a glyph + Style
+  cell.rs           Cell: a glyph + Style
   color.rs          Color enum (Default / ANSI / Indexed / RGB)
-  grid.rs           Grid — 2-D cell buffer, diff iterator
+  grid.rs           Grid: 2-D cell buffer, diff iterator
   style.rs          Style
   event.rs          Event, KeyEvent, MouseEvent
-  terminal.rs       Terminal<B> — stateful drawing API, double buffering
+  terminal.rs       Terminal<B>: stateful drawing API, double buffering
 ```
 
 ## Testing
@@ -122,7 +122,7 @@ cargo insta accept          # accept all pending snapshots
 ```
 
 Snapshot files live in `tests/snapshots/` and are committed to version control. A failing snapshot
-test means visible output changed — review the diff before accepting.
+test means visible output changed: review the diff before accepting.
 
 ### E2E visual snapshots (crossterm backend)
 
@@ -141,10 +141,10 @@ cargo test --test e2e_snapshots --all-features
 
 Two files are written to `tests/snapshots/` on each run:
 
-| File                                | Purpose                                                 |
-| ----------------------------------- | ------------------------------------------------------- |
-| `e2e_snapshots__demo_snapshot.snap` | Insta snapshot (authoritative, diffed by CI)            |
-| `demo.svg`                          | Rendered SVG — open directly in a browser or Quick Look |
+| File                                | Purpose                                                |
+| ----------------------------------- | ------------------------------------------------------ |
+| `e2e_snapshots__demo_snapshot.snap` | Insta snapshot (authoritative, diffed by CI)           |
+| `demo.svg`                          | Rendered SVG: open directly in a browser or Quick Look |
 
 GitHub renders `.svg` files, so PR diffs show a visual before/after when the snapshot changes.
 

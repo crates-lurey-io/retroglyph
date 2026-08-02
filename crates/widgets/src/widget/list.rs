@@ -34,7 +34,7 @@ use crate::text::truncate as truncate_to_cols;
 ///
 /// Selection is style-only by default (a swap to `selected_style`), the same as before
 /// [`List::highlight_symbol`] existed. Set it to prefix the selected item with a marker like
-/// `"> "` -- the one selection signal that survives `set_plain_mode`'s style stripping, or that
+/// `"> "`, the one selection signal that survives `set_plain_mode`'s style stripping, or that
 /// reads clearly on a 16-color backend where `selected_style`'s background isn't distinct enough.
 /// [`List::highlight_spacing`] controls whether that marker column reserves width even when
 /// nothing is selected, and [`List::direction`] draws the same windowed items from the bottom of
@@ -157,7 +157,7 @@ impl<'a> List<'a> {
 impl List<'_> {
     /// The marker column's width in this render: [`List::highlight_symbol`]'s display width if
     /// [`List::highlight_spacing`] says to reserve it right now, `0` otherwise (including when
-    /// `highlight_symbol` is empty -- there's nothing to reserve room for).
+    /// `highlight_symbol` is empty: there's nothing to reserve room for).
     fn marker_width(&self, has_selection: bool) -> u16 {
         let symbol_width = retroglyph_core::text::width(self.highlight_symbol);
         if symbol_width == 0 {
@@ -216,9 +216,10 @@ impl List<'_> {
                 } else {
                     ""
                 };
+                let marker = truncate_to_cols(marker, marker_width.min(width));
                 surface.print((0, y), marker, style);
             }
-            let text = truncate_to_cols(item, usize::from(text_width));
+            let text = truncate_to_cols(item, text_width);
             surface.print((marker_width, y), text, style);
         }
     }
@@ -558,6 +559,23 @@ mod tests {
         // Unselected row's marker column is blank, and its text still starts past it.
         assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
         assert_eq!(grid[Pos::new(2, 0)].glyph(), 'A');
+    }
+
+    #[test]
+    fn list_highlight_symbol_does_not_bleed_onto_the_next_row() {
+        let area = Rect::new(0, 0, 2, 2);
+        let names = items(&["A", "B"]);
+        let list = List::new(&names).highlight_symbol(">>>"); // marker is wider than the list
+
+        let mut grid = Grid::new(2, 2);
+        let mut state = ListState::new();
+        state.select(Some(0));
+        StatefulWidget::render(&list, &mut Surface::new(&mut grid, area, 0), &mut state);
+
+        // Row 1 belongs to "B", so it must not show any spillover from row 0's marker (the
+        // marker is wider than the whole list, so there's no room left for item text either).
+        assert_eq!(grid[Pos::new(0, 1)].glyph(), ' ');
+        assert_eq!(grid[Pos::new(1, 1)].glyph(), ' ');
     }
 
     #[test]

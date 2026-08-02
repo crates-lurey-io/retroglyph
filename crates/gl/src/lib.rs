@@ -123,7 +123,7 @@ struct ReadmeDoctests;
 /// [`WindowBackend`](retroglyph_window::WindowBackend) to form a full
 /// [`Backend`](retroglyph_core::Backend) for the windowing loop.
 ///
-/// It deliberately does not implement [`Input`](retroglyph_core::backend::Input) or
+/// It does not implement [`Input`](retroglyph_core::backend::Input) or
 /// [`Cursor`](retroglyph_core::backend::Cursor) itself: a GL renderer cannot present without a
 /// live context, so there is no headless-with-input use for a bare `Terminal<GlRenderer>`. In
 /// windowed use `WindowBackend` owns the input queue (with its `Mouse(Moved)` coalescing) and the
@@ -587,6 +587,17 @@ impl Output for GlRenderer {
         for cell in &mut self.layers[0] {
             *cell = base;
         }
+        // Sprite instances are collected per layer in lockstep with `self.layers` (issue #366);
+        // a stale, larger `sprite_layers` would otherwise survive the clear and get redrawn by
+        // `present` (issue #727).
+        #[cfg(feature = "tilesets")]
+        {
+            self.sprite_layers.truncate(1);
+            if self.sprite_layers.is_empty() {
+                self.sprite_layers.push(Vec::new());
+            }
+            self.sprite_layers[0].clear();
+        }
         Ok(())
     }
 
@@ -595,6 +606,12 @@ impl Output for GlRenderer {
         self.rows = size.height();
         let base = self.base_blank();
         self.layers = vec![vec![base; self.cell_count()]];
+        // See the comment in `clear`: `sprite_layers` must stay in lockstep with `layers` so
+        // `present` doesn't redraw sprites left over from before the resize (issue #727).
+        #[cfg(feature = "tilesets")]
+        {
+            self.sprite_layers = vec![Vec::new()];
+        }
     }
 }
 
@@ -608,6 +625,13 @@ impl Presenter for GlRenderer {
     type SurfaceError = SurfaceError;
 
     fn init_surface(&mut self, window: Arc<dyn WindowHandle>) -> Result<(), SurfaceError> {
+        // Re-entry (surface-loss recovery, issue #728): a previous `Gpu` may still be installed,
+        // e.g. from `try_recover_surface` re-calling this after repeated present failures. Delete
+        // its GL objects and drop its context before building the replacement, the same cleanup
+        // `impl Drop for GlRenderer` does, so nothing from the old context is orphaned.
+        if let Some(gpu) = self.gpu.take() {
+            gpu.res.delete(&gpu.ctx.gl);
+        }
         let (w, h) = self.surface_size;
         let ctx = GlContext::new(&window, w, h)?;
         let res = self.build_resources(&ctx.gl, ctx.flavor())?;
@@ -731,6 +755,20 @@ mod compositing_tests {
         assert_eq!(inst.glyph, a_slot);
         // A non-empty tile on the base layer draws both its glyph and its (base) background.
         assert_eq!(inst.flags, FLAG_HAS_BG | FLAG_HAS_GLYPH);
+    }
+
+    #[test]
+    fn build_rejects_a_grid_and_scale_that_overflow_the_surface_size() {
+        // retroglyph#729: `CellGeometry::surface_size` multiplied cols/rows/scale as plain `u32`,
+        // which overflows for a `u16` scale this large (unlike the software backend's `u8` scale).
+        let result = GlBackendBuilder::new()
+            .grid_size(u16::MAX, 1)
+            .scale(u16::MAX)
+            .build();
+        assert!(matches!(
+            result,
+            Err(crate::GlBackendError::SurfaceTooLarge)
+        ));
     }
 
     #[test]
@@ -987,5 +1025,47 @@ mod dropped_tint_tests {
         .expect("draw_layers is infallible");
 
         assert!(r.warned_dropped_tint.is_empty());
+    }
+
+    /// Draws a sprite on two layers, so `sprite_layers` has more than the (always present) base
+    /// layer entry to be reset (issue #727).
+    fn renderer_with_a_sprite_on_two_layers() -> crate::GlRenderer {
+        let mut r = renderer_with_sprite(1, 1);
+        let sprite = Tile::new('S', Style::new());
+        r.draw_layers(
+            [
+                DrawCell::on_layer(0, Pos::new(0, 0), &sprite),
+                DrawCell::on_layer(1, Pos::new(0, 0), &sprite),
+            ]
+            .into_iter(),
+        )
+        .expect("draw_layers is infallible");
+        r
+    }
+
+    #[test]
+    fn clear_resets_sprite_layers_to_a_single_empty_layer() {
+        let mut r = renderer_with_a_sprite_on_two_layers();
+        assert_eq!(r.sprite_layers.len(), 2);
+        assert!(!r.sprite_layers[0].is_empty());
+
+        r.clear().expect("clear is infallible");
+
+        assert_eq!(r.sprite_layers.len(), 1);
+        assert!(r.sprite_layers[0].is_empty());
+    }
+
+    #[test]
+    fn resize_resets_sprite_layers_to_a_single_empty_layer() {
+        use retroglyph_core::grid::Size;
+
+        let mut r = renderer_with_a_sprite_on_two_layers();
+        assert_eq!(r.sprite_layers.len(), 2);
+        assert!(!r.sprite_layers[0].is_empty());
+
+        r.resize(Size::new(2, 2));
+
+        assert_eq!(r.sprite_layers.len(), 1);
+        assert!(r.sprite_layers[0].is_empty());
     }
 }

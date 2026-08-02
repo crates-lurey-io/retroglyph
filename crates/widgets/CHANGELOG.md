@@ -15,27 +15,6 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
   _(workspace)_ Add a reusable, toggleable perf/FPS overlay across every backend by `@matanlurey` in
   [#589](https://github.com/crates-lurey-io/retroglyph/pull/589)
 
-  > Replaces per-backend, per-example FPS overlay plumbing with a generic PerfOverlayApp<A>
-  > decorator (retroglyph-core) that wraps any App<B> and draws itself on top, on any Backend, with
-  > no per-backend code from the wrapped app. Toggling a key cycles Off -> Compact -> Full -> Off
-  > (PerfOverlayMode); Compact is a built-in dependency-free text readout (DefaultPerfRenderer),
-  > Full is pluggable via a closure or a type implementing PerfRenderer.
-  >
-  > - retroglyph-core: FrameStats<N> (a fixed-size Duration ring buffer with
-  >   current/avg/min/max/fps), PerfOverlayApp/PerfOverlayMode/PerfRenderer/ DefaultPerfRenderer,
-  >   and Size gets a proper constructor + width()/ height() accessors (its fields are now private).
-  > - retroglyph-widgets: PerfOverlay, a bordered panel composed from Panel/ Sparkline/Text with a
-  >   frame-time sparkline and caller-supplied metric rows; Sparkline gains an optional fixed
-  >   .style() override so a scrolling frame-time graph doesn't get colored by a relative-to-window
-  >   ramp that would misrepresent it.
-  > - retroglyph-examples: the shared harness (launch.rs) now wraps every example's App in
-  >   PerfOverlayApp, replacing the old bespoke per-backend Fps/ToggleFilter plumbing
-  >   (examples/src/fps.rs slimmed down to just the RG_FPS env var and the wasm floating toggle
-  >   button). Every example in the gallery gets the overlay for free.
-  > - Tests: unit tests for FrameStats/PerfOverlayApp/PerfOverlay/Sparkline, plus
-  >   examples/tests/fps_overlay.rs end-to-end PTY coverage and deterministic PNG snapshots of both
-  >   Compact and Full mode.
-
 **Full Changelog**:
 https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-widgets-v0.4.0...retroglyph-widgets-v0.4.1
 
@@ -47,86 +26,13 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-widgets-v0.4.0.
   _(core)_ Drop panicking Grid::get/get_mut, add Option-returning tile/tile_mut and Index by
   `@matanlurey` in [#503](https://github.com/crates-lurey-io/retroglyph/pull/503)
 
-  > api(core): drop panicking Grid::get/get_mut, add Option-returning tile/tile_mut and Index
-  >
-  > Grid::put/get panicked on out-of-bounds coordinates; checked*put/checked_get/ checked_get_mut
-  > existed as Option-returning twins but only for the implicit layer-0 shorthands, while
-  > put_tile/get_tile (explicit layer) were already Option-returning. Removes the panicking layer-0
-  > put/get and the whole checked* family in favor of one accessor shape across every layer:
-  >
-  > - Grid::tile(layer, pos) -> Option<&Tile> (renamed from get_tile, now takes impl Into<Pos>
-  >   instead of separate x/y)
-  > - Grid::tile_mut(layer, pos) -> Option<&mut Tile>, new: a non-allocating mutable counterpart:
-  >   get_tile had no mutable twin before this
-  > - Grid::put_tile(layer, pos, tile) -> Option<()>, now also takes impl Into<Pos>
-  >
-  > Grid already implements Index<Pos>/IndexMut<Pos> for panicking layer-0 access, which is the
-  > Rust-conventional home for a panic and stays as the one ergonomic panicking accessor.
-  >
-  > Updates every call site across the workspace (core, widgets, gl, software, terminal, examples,
-  > benches).
-
 - [14aff2f](https://github.com/crates-lurey-io/retroglyph/commit/14aff2fcb5b4f4119bf565b6a1ffdabb5cc0fbf6)
   _(core, crossterm, window, widgets)_ Add KeyCode::Modifier/lock keys and pixel-precise Scroll by
   `@matanlurey` in [#584](https://github.com/crates-lurey-io/retroglyph/pull/584)
 
-  > - feat(core): add KeyCode::Modifier and lock/menu key variants
-  >
-  > Adds retroglyph_core::event::KeyCode::Modifier(ModifierKey) for reporting a bare modifier press
-  > as its own key event, plus CapsLock/ScrollLock/NumLock/PrintScreen/ Pause/Menu variants.
-  > ModifierKey is flat (Shift/Control/Alt/Super); side is conveyed by the existing
-  > KeyEvent::location (KeyLocation::Left/Right), not duplicated inside ModifierKey.
-  >
-  > Wires both backends:
-  >
-  > - crossterm: enables KeyboardEnhancementFlags::REPORT_ALL_KEYS_AS_ESCAPE_CODES (required for
-  >   KeyCode::Modifier to be reported at all) and maps crossterm::event::ModifierKeyCode's
-  >   Left/Right variants down to ModifierKey + KeyLocation.
-  >   Hyper/Meta/IsoLevel3Shift/IsoLevel5Shift have no retroglyph equivalent and fall through to
-  >   None like any other unmapped key.
-  > - winit: maps NamedKey::Shift/Control/Alt/Super and the lock/menu NamedKeys to the new KeyCode
-  >   variants, reusing the existing KeyLocation translation path for side disambiguation.
-  >
-  > * feat(core): replace line-quantized scroll variants with pixel-precise Scroll{dx,dy}
-  >
-  > Replaces MouseEventKind::{ScrollUp,ScrollDown,ScrollLeft,ScrollRight} with a single Scroll { dx:
-  > f32, dy: f32 } variant. Sign convention preserved from the winit implementation being replaced:
-  > dy > 0 is up, dy < 0 is down, dx > 0 is right, dx < 0 is left; a delta of exactly zero on both
-  > axes still emits no event.
-  >
-  > Magnitude is backend-dependent: winit reports the platform's exact pixel/line delta, crossterm
-  > and the wasm terminal backend (both line- quantized, no source of real magnitude) synthesize a
-  > fixed step of 1.0 per tick in the matching sign direction.
-  >
-  > MouseEventKind/MouseEvent/Event drop their Eq/Hash derives (kept PartialEq): f32 implements
-  > neither, and the derive is on the enclosing types too since MouseEventKind is nested inside
-  > them.
-  >
-  > - feat(widgets): consume pixel-precise Scroll{dx,dy} events by sign
-  >
-  > Updates the interact module's scroll-delta accumulator and the widgets/ examples call sites that
-  > matched MouseEventKind::ScrollUp/ScrollDown to match Scroll{dx,dy} by sign instead, preserving
-  > the exact prior unit-step behavior. Magnitude is intentionally not consumed yet (mixing winit's
-  > PixelDelta-scale values with crossterm's synthesized 1.0-per-tick values needs a normalization
-  > pass outside this change's scope); see retroglyph#445.
-
 - [a122a6e](https://github.com/crates-lurey-io/retroglyph/commit/a122a6e91db40a067336fd594002d8b8e47829ff)
   _(widgets)_ Render into Grid/Surface instead of Terminal<B> by `@matanlurey` in
   [#502](https://github.com/crates-lurey-io/retroglyph/pull/502)
-
-  > Widget and StatefulWidget drop their Backend type parameter and render into a new Surface type
-  > (an area-relative, single-layer view over a Grid) instead of Terminal<B>. Widgets no longer
-  > depend on retroglyph-core's Backend or Terminal for drawing.
-  >
-  > Surface clips every write to the area it was constructed with, so a widget can no longer draw
-  > outside the Rect it was given -- previously nothing enforced that. render() takes &self instead
-  > of self, so builders stay consuming/fluent but render calls borrow.
-  >
-  > TextLayout (retroglyph-core) gains render_to_grid, a Grid+layer twin of its existing
-  > Terminal-based render, so Paragraph and BoxStyle's render_wrapped no longer need to build a
-  > scratch Terminal<Headless> just to reach TextLayout's wrapping logic.
-  >
-  > Fixes #425
 
 ### Bug Fixes
 
@@ -134,25 +40,11 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-widgets-v0.4.0.
   _(workspace)_ Correct README architecture/style claims, add docs.rs feature badges by
   `@matanlurey` in [#499](https://github.com/crates-lurey-io/retroglyph/pull/499)
 
-  > - README's Widgets section and crate table described retroglyph-widgets' old free-function
-  >   architecture (panel/gauge/table/sparkline/draw_box); rewrite to describe the current
-  >   builder-struct widgets.
-  > - README claimed Style has text modifiers and a modifier() method; neither exists. Remove the
-  >   claims and point at Style's own no-modifier rationale.
-  > - Add rustdoc-args = ["--cfg", "docsrs"] to every publishable crate's
-  >   [package.metadata.docs.rs], plus #![cfg_attr(docsrs, feature(doc_cfg))] to every crate's
-  >   lib.rs, so docs.rs renders feature-gate badges instead of showing gated items as
-  >   unconditionally available. doc_auto_cfg was merged into doc_cfg upstream, so doc_cfg (which
-  >   now auto-infers cfg badges) is used instead of the now-removed doc_auto_cfg feature name. Adds
-  >   a just doc-docsrs recipe to verify the docs.rs build locally.
-
 ### Refactor
 
 - [1328409](https://github.com/crates-lurey-io/retroglyph/commit/1328409db38baf52ce79c588f2d928d58bac3d02)
   _(core)_ Surface-centric drawing, Terminal loses its own drawing API by `@matanlurey` in
   [#522](https://github.com/crates-lurey-io/retroglyph/pull/522) [**breaking**]
-
-  > refactor(core): surface-centric drawing
 
 ### Documentation
 
@@ -160,115 +52,25 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-widgets-v0.4.0.
   _(core, widgets)_ Audit and document panic conditions for index, coordinate, Rect, and layer-id
   arguments by `@matanlurey` in [#571](https://github.com/crates-lurey-io/retroglyph/pull/571)
 
-  > - docs(core, widgets): extend panics audit to Camera and layout splits
-  >
-  > Documents that Camera::set_viewport/center_on/visible_bounds and the widgets
-  > split_h/split_v/split_h_flex/split_v_flex/centered_rect family never panic on degenerate input
-  > (empty rects, empty constraint slices, out-of-world targets): all of them clamp via saturating
-  > arithmetic instead. Extends the panics audit in the previous commit to the widgets crate named
-  > in the issue's own scope.
-  >
-  > Part of retroglyph#473.
-  >
-  > - docs(core): document Grid Index/IndexMut panics and subcell quantize panic-freedom
-  >
-  > Audits #473's core scope for index/coordinate/Rect/layer-id arguments that can panic on
-  > caller-supplied input without saying so.
-  >
-  > - Grid's Index<Pos>/IndexMut<Pos> impls (layer 0 only) panic on an out-of-bounds pos; document
-  >   that, pointing at the fallible tile/tile_mut as the checked alternative.
-  > - subcell::quantize_half_block/quantize_quadrant/quantize_sextant take fixed-size pixel arrays
-  >   and are genuinely panic-free; say so explicitly since a reader used to slice-indexing panics
-  >   might otherwise assume otherwise.
-  >
-  > Surface, Grid's other index/layer/Rect-taking methods, Camera, AnsiColor, and every
-  > widgets-crate index/Rect-taking function already document their out-of-bounds/degenerate-input
-  > behavior (Option/no-op/clip-on-draw), so no further core or widgets changes were needed for this
-  > audit.
-  >
-  > Fixes #473
-
 - [d274c56](https://github.com/crates-lurey-io/retroglyph/commit/d274c56c219677405ada4b56e47f83d5bbfdaa04)
   _(core, widgets)_ Add examples to every user-constructible public struct and enum by `@matanlurey`
   in [#576](https://github.com/crates-lurey-io/retroglyph/pull/576)
-
-  > - docs(core): add construction examples to user-constructible public types
-  > - docs(widgets): add construction examples to user-constructible public types
 
 - [5b29016](https://github.com/crates-lurey-io/retroglyph/commit/5b290162aef82b84b82cbc89c8c9777622990400)
   _(core, window, widgets)_ Add an implementation example to every pub trait by `@matanlurey` in
   [#577](https://github.com/crates-lurey-io/retroglyph/pull/577)
 
-  > - docs(core): add implementation examples to backend traits
-  >
-  > Adds an implementing '# Examples' section to each pub trait in crates/core/src/backend/mod.rs
-  > (BackendError, Output, Input, Cursor, Backend), showing a minimal impl for each rather than a
-  > call site.
-  >
-  > Part of retroglyph#478.
-  >
-  > - docs(window): add implementation examples to window traits
-  >
-  > Adds an implementing '# Examples' section to each pub trait (WindowHandle, RecoverableError,
-  > Presenter in presenter.rs; Clipboard in clipboard.rs) not already covered by an attached
-  > example.
-  >
-  > Part of retroglyph#478.
-  >
-  > - docs(widgets): add implementation examples to widget traits
-  >
-  > Adds an implementing '# Examples' section to each pub trait in crates/widgets/src/widget/mod.rs
-  > (Widget, StatefulWidget, Measure), showing a minimal impl for each rather than a call site.
-  >
-  > Part of retroglyph#478.
-
 - [9240929](https://github.com/crates-lurey-io/retroglyph/commit/9240929b1e1ecfbbf11a2b2a9c104fed27f1c33c)
   _(window)_ Bespoke doc-comment heading titles instead of plain `# Examples` by `@matanlurey` in
   [#525](https://github.com/crates-lurey-io/retroglyph/pull/525)
-
-  > RFC 1574 specifies `# Examples` (plural) as the doc-comment heading for example sections, and
-  > rustdoc renders headings into the page sidebar, so a bespoke title makes a page's sidebar
-  > inconsistent with every other page.
-  >
-  > Replace the bespoke
-  > `# Example: driving without \`winit\``heading in`crates/window/src/backend.rs`with`#
-  > Examples`, and fix the same non-conformant singular`#
-  > Example`heading found by a repo-wide grep in`crates/core/src/layout.rs`,`crates/core/src/subcell.rs`(three sites),`crates/core/src/grid.rs`, and`crates/widgets/src/interact/shortcuts.rs`.
-  >
-  > Closes #471
 
 - [26bc065](https://github.com/crates-lurey-io/retroglyph/commit/26bc065c9bfb6ae3b8ce94dbcab2ac95aee918f5)
   _(workspace)_ "deliberately" appears 9 times, defending decisions nobody questioned by
   `@matanlurey` in [#527](https://github.com/crates-lurey-io/retroglyph/pull/527)
 
-  > docs(workspace): drop pre-emptive "deliberately" hedging from prose
-  >
-  > Cuts "deliberately" from sites where it only pre-emptively defends a design choice nobody is
-  > questioning (README.md ratatui-similarity notes, the `Event::Custom(u64)` payload rationale,
-  > `InstanceGuard`'s independence from `restore_terminal()`, the light theme's contrast note, and
-  > the `egc`-feature note in `Paragraph::render`). Also drops the sibling "for anyone coming from
-  > there" hedge next to the ratatui layout comparison.
-  >
-  > Keeps "deliberately" at the three sites where removing it would make the passage read as an
-  > oversight rather than a documented choice: `GlBackend`/ `GlRenderer` not implementing
-  > `Input`/`Cursor`, `CrosstermOptions` not auto-detecting terminal capabilities, and `Presenter`'s
-  > offset application not being shared code between backends.
-  >
-  > Closes #485.
-
 - [123c590](https://github.com/crates-lurey-io/retroglyph/commit/123c59072d9de4a051ecddd76be67342cddf45ae)
   _(workspace, core, widgets)_ Clean up the " -- " clause-joiner habit by `@matanlurey` in
   [#532](https://github.com/crates-lurey-io/retroglyph/pull/532)
-
-  > - docs(core): clean up " -- " clause-joiner usage
-  > - docs(terminal): clean up " -- " clause-joiner usage
-  > - docs(crossterm): clean up " -- " clause-joiner usage
-  > - docs(software): clean up " -- " clause-joiner usage
-  > - docs(gl): clean up " -- " clause-joiner usage
-  > - docs(window): clean up " -- " clause-joiner usage
-  > - docs(terminal-wasm): clean up " -- " clause-joiner usage
-  > - docs(widgets): clean up " -- " clause-joiner usage
-  > - docs(workspace): clean up " -- " clause-joiner usage in top-level docs
 
 ### Miscellaneous Tasks
 
@@ -277,178 +79,9 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-widgets-v0.4.0.
   phase 3) by `@matanlurey` in [#556](https://github.com/crates-lurey-io/retroglyph/pull/556)
   [**breaking**]
 
-  > - chore(core)!: bump gem to 0.2, alpha-blend to 0.3; feature surgery
-  >
-  > Both crates round to nearest now (retroglyph#547): gem's a\*b/255 helpers and alpha-blend's
-  > U8x4Rgba::source_over both switched from floor to round-half- away-from-zero. This commit only
-  > lands the dependency/feature surgery; the call-site migrations and the arithmetic-duplication
-  > cleanup are separate commits.
-  >
-  > - gem is no longer optional: its pixel-format layer (rgb/gray/alpha/channel) needs no math
-  >   backend, so retroglyph-core can depend on it unconditionally, including in
-  >   --no-default-features builds. gem 0.2.0 cfg-gates space/named behind a math backend instead of
-  >   erroring without one, which is what makes this possible (0.1.0-alpha.6 needed default-features
-  >   = ["libm"] as a workaround).
-  > - Renamed the gem feature to color-space. With dep:gem unconditional, a feature named gem no
-  >   longer gates gem's presence at all -- it now only gates alpha-blend plus gem's own perceptual
-  >   (space/named) modules in a no_std build. That's exactly the name-vs-reality drift #547 is
-  >   about, so the name changes with it rather than shipping stale.
-  > - alpha-blend stays optional, bumped 0.2 -> 0.3, added as a non-optional dev-dependency too so
-  >   tests/rounding_conformance.rs (added in a later commit) runs on every CI invocation regardless
-  >   of the feature matrix.
-  > - gem?/std -> gem/std (gem/std cannot use the optional-dep ?/ syntax once gem is non-optional);
-  >   alpha-blend?/std unchanged.
-  > - crates/widgets/Cargo.toml follows the rename (gem -> color-space).
-  >
-  > This does not yet compile: grid.rs and color.rs still reference gem 0.1's Lerp trait and
-  > alpha-blend 0.2's BlendMode/SeparableBlendMode names, fixed in the next two commits.
-  >
-  > - refactor(core): migrate alpha-blend 0.2 -> 0.3 rename + BlendMode::Multiply
-  >
-  > alpha-blend 0.3.0 renamed blend_modes::SeparableBlendMode to a top-level BlendMode. This crate
-  > already defines its own BlendMode enum (for Grid::blit_alpha), so the import is aliased back to
-  > its old name -- use alpha_blend::BlendMode as SeparableBlendMode -- rather than colliding two
-  > types under one name. Doc links at grid.rs updated to point at the new path.
-  >
-  > Also adds BlendMode::Multiply, mapping to alpha-blend's own Multiply mode (dst \* src).
-  > alpha-blend 0.3 added Multiply to its separable set; this crate's local enum was missing the
-  > equivalent variant even though the underlying capability was one match arm away. Covered by the
-  > existing exhaustive-mode test and both blend benchmarks.
-  >
-  > software's, window's, and gl's alpha_blend usages (U8x4Rgba, source_over) are unaffected by this
-  > rename -- those are addressed in later commits.
-  >
-  > - fix(core): import alloc::string::String for no_std Event::Paste
-  >
-  > Pre-existing bug, unrelated to gem/alpha-blend: Event::Paste(String) resolves String from std's
-  > prelude, which no_std builds don't have. Blocks the new --no-default-features CI check this PR
-  > adds (retroglyph#547 phase 3 SS7.4) -- --no-default-features already failed on main before this
-  > change, for this same reason, so this isn't a regression, just a gate that was never previously
-  > exercised.
-  >
-  > - refactor(core): dedupe rgb_distance_sq / subcell::distance_sq into gem::rgb::distance_sq
-  >
-  > color.rs's byte-for-byte fallback distance function and subcell.rs's own copy (retroglyph#547)
-  > are both the same squared-euclidean-distance formula gem 0.2.0 now ships as a const free
-  > function with an identical signature: (u8, u8, u8) x2 -> u32. Both call sites are unconditional
-  > (used by the non-color-space cube-mapping fallback and by the always-on subcell posterizer),
-  > matching gem::rgb being part of gem's featureless base layer.
-  >
-  > Kept the local unit tests (symmetry, zero-for-identical, matches-manual- euclidean) pointed at
-  > gem::rgb::distance_sq directly rather than deleting them: they document the properties this
-  > crate's callers actually rely on, even though gem's own test suite already covers the function
-  > itself.
-  >
-  > - refactor(core): dedupe Tint::{scale,lerp} into gem::channel; add const
-  >   apply_rgb888/multiply_color
-  >
-  > Tint's private scale/lerp helpers (retroglyph#547) were a third, independently maintained copy
-  > of the same round-to-nearest a\*b/255 and mix formulas gem 0.2.0 and alpha-blend 0.3.0 now both
-  > ship. Replaced with gem::channel::multiply_u8 and gem::channel::mix_u8 directly; the existing 12
-  > tint tests pass unchanged (verified: if any needed its expected value edited, that would mean
-  > the rounding actually differs, and it doesn't).
-  >
-  > Also adds two const methods gem 0.2.0's Rgb::to_rgb (a const inherent method, unlike the
-  > HasRed-family trait methods) newly makes possible:
-  >
-  > - Tint::apply_rgb888(Rgb888) -> Rgb888: the channel-order-safe counterpart of apply((u8,u8,u8)),
-  >   for callers already holding an Rgb888.
-  > - Tint::multiply_color(Color, default) -> Self: a Multiply tint from a resolved Color, for
-  >   retroglyph-window's SheetColor::Mask recolouring.
-  >
-  > retroglyph#547 phase 3 asserted apply_rgb888 could not be const because HasRed::red is a trait
-  > method; that's no longer true as of gem 0.2.0.
-  >
-  > - refactor(window)!: delete sprite_cache::source_over, use the inherent U8x4Rgba method
-  >
-  > sprite_cache::source_over took the same U8x4Rgba src/dst pair as
-  >
-  > alpha_blend::rgba::U8x4Rgba's own inherent source_over and round-tripped through F32x4Rgba +
-  > BlendMode::SourceOver to get there -- a shadow of a method that already exists on the type, for
-  > no reason beyond having been written before alpha-blend grew that inherent method. Deleted; its
-  > three tests are ported onto U8x4Rgba::source_over directly.
-  >
-  > Breaking change scoped to retroglyph-window only (source_over was a public free function in the
-  > public sprite_cache module): the ! is on this commit, not on the workspace-wide gem/alpha-blend
-  > bump commits, per this repo's per-crate ! scoping rule.
-  >
-  > source_over_half_alpha_blends needed a new expected value: alpha-blend 0.3.0 rounds (127.5,
-  > 127.5, 0) to (127, 128, 0) instead of flooring to (127, 127, 0) -- this is the exact
-  > rounding-direction bug retroglyph#547 exists to fix, verified against the real alpha-blend 0.3.0
-  > crate rather than hand-derived. The other two tests (opaque, transparent) are exact at their
-  > endpoints and are unaffected.
-  >
-  > Bumps retroglyph-window's own alpha-blend dependency to 0.3 (it pins its own copy for the
-  > tilesets feature, separate from retroglyph-core's).
-  >
-  > - refactor(software): pack the sprite blit fast path through U8x4Rgba::to_rgb_u32
-  >
-  > blit_sprite's opaque fast path hand-rolled its 0x00RRGGBB pack (u32::from(r) << 16 | ...) right
-  > next to the blended path a few lines below, which already called U8x4Rgba::to_rgb_u32 for the
-  > same format -- one path used the type's own method, the other reimplemented it. Now both do.
-  >
-  > resolve_color's own pack is left as-is: it has no U8x4Rgba/Rgb888 available without adding a new
-  > non-optional dependency (alpha-blend is feature-gated behind tilesets here, and gem isn't a
-  > dependency of this crate at all), and unlike blit_sprite's sprite-pixel path there's no
-  > channel-order hazard to guard against -- it's a single, already-tested pack/unpack pair
-  > (resolve_color_matches_core_for_all_ansi_variants) with no second implementation of the same
-  > shift-and-mask anywhere nearby to drift from.
-  >
-  > Bumps retroglyph-software's own alpha-blend dependency to 0.3, matching core's and window's.
-  >
-  > - test(core): three-way rounding conformance + no-drift + --no-default-features gates
-  >   (retroglyph#547)
-  >
-  > Three of the four SS7 acceptance gates that don't require new rendering infrastructure (see this
-  > PR's description for why the GL/sprite-tint gate is out of scope here):
-  >
-  > - tests/rounding_conformance.rs: gem::channel::{multiply_u8, mix_u8} and
-  >   alpha_blend::channel::Channel::{scale, lerp} each independently checked against an i64
-  >   round-half-away reference, not just against each other (retroglyph#537 is exactly two backends
-  >   agreeing by accident and reading that as intent). multiply_u8/scale over all 65536 (a, b)
-  >   pairs; mix_u8/lerp over all 16,777,216 (a, b, t) triples, un-sampled and not gated to release
-  >   (~0.65s in debug here).
-  > - tests/no_drift.rs: composites the same translucent pixel onto the same destination 64 times
-  >   without clearing between passes (a trailing/ghosting accumulation pattern, not an unusual
-  >   thing for a renderer to do), and checks it converges to the source's own exact color -- not
-  >   one LSB darker from repeated floor rounding, and not stuck at a non-opaque alpha (the separate
-  >   translucent-destination bug fixed in the same alpha-blend 0.3.0 release). Verified against the
-  >   pre-0.3.0 crate directly: it settles at alpha 128, never reaching opaque.
-  > - Justfile's compile recipe: cargo check -p retroglyph-core --no-default-features, the actual CI
-  >   line SS7.4 asks for. dep:gem is unconditional now, so this must compile with zero features,
-  >   not just fewer.
-  >
-  > Both test files are non-optional dev-dependency tests (alpha-blend is a dev-dependency of
-  > retroglyph-core independent of the color-space feature -- see Cargo.toml), so they run on every
-  > CI invocation regardless of the feature matrix.
-  >
-  > Software-vs-GL sprite tint pixel parity (SS7.1) is not buildable at all yet: see the PR
-  > description for why that gate is deferred to a follow-up issue.
-  >
-  > - test(examples): accept 07_sprites_tileset PNG snapshot after alpha-blend 0.3.0 rounding fix
-  >
-  > U8x4Rgba::source_over now rounds to nearest instead of flooring (retroglyph#547), so a handful
-  > of translucent sprite-edge pixels in this scene are up to one LSB lighter than the old
-  > floor-biased snapshot. Verified visually: the two images are indistinguishable at normal viewing
-  > size, as expected for a sub-1-LSB rounding-direction change.
-
 - [e878716](https://github.com/crates-lurey-io/retroglyph/commit/e878716b24e6191d5849a4dd5377cfdac74376de)
   _(workspace)_ Add just check-targets, fix wasm32 lint drift, forward the dev feature by
   `@matanlurey` in [#560](https://github.com/crates-lurey-io/retroglyph/pull/560)
-
-  > chore(workspace): add just check-targets, fix the wasm32 lint drift, forward the dev feature
-  >
-  > The local gate only ever compiled the host target, so three retroglyph-gl test modules gated to
-  > Linux and wasm32 were invisible to it -- which is how #551 was locally green and failed five CI
-  > jobs. Adds a recipe that covers them, and fixes the wasm32 lint failures that would have made
-  > its second leg red on main.
-  >
-  > Also forwards retroglyph-core's dev feature from every crate that depends on it, so a consumer
-  > can enable development diagnostics without adding a direct core dependency to reach the flag.
-  >
-  > Closes #552
-  >
-  > Closes #553
 
 ### Api
 
@@ -466,35 +99,6 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-widgets-v0.3.1.
 - [c1ffba1](https://github.com/crates-lurey-io/retroglyph/commit/c1ffba1341271c8543021d10fb6e30f53612c809)
   _(workspace)_ Refactor doc comments across all crates by `@matanlurey` in
   [#363](https://github.com/crates-lurey-io/retroglyph/pull/363)
-
-  > - docs(software): rewrap module docs and fix broken doctest examples
-  >
-  > Rewrap module/doc-comment prose to the ~100-col budget instead of ~80, and fix
-  > run_headless()/draw_layers() doctest examples in config.rs that no longer matched the current
-  > fallible signatures.
-  >
-  > - docs(terminal): rewrap module and item docs to the 100-col budget
-  >
-  > No content changes; re-wraps existing crate-level and item doc comments that were hand-wrapped
-  > near ~80 cols instead of rustfmt's 100-col default.
-  >
-  > - docs(terminal-wasm): clean up wasm-bindgen export doc comments
-  >
-  > Rewrap prose to ~100 cols and use proper intra-doc links for Event::FocusGained/FocusLost
-  > instead of unresolvable bare paths.
-  >
-  > - docs(widgets): add # Examples sections to widget doc comments
-  >
-  > Every widget's main struct now has a runnable rustdoc example (construction, builder chaining,
-  > and rendering via Headless/Terminal) except Button, interact, Shortcuts, and layout::split\_\*,
-  > which already had one. No logic changes; verified by cargo test --doc.
-  >
-  > - docs(window): rewrap doc comments and fix a stale internal-doc citation
-  >
-  > Rewrap module/item doc prose to the ~100-col budget across backend.rs, presenter.rs, lib.rs, and
-  > the winit submodules. clipboard.rs also drops a citation of the crate README/PR description for
-  > SystemClipboard's lack of automated coverage, per STYLE_GUIDE's rule against pointing published
-  > docs at internal-only references; the rationale is restated inline instead.
 
 **Full Changelog**:
 https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-widgets-v0.3.0...retroglyph-widgets-v0.3.1
@@ -519,115 +123,25 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-widgets-v0.3.0.
   _(widgets)_ Table borrows &str rows instead of owning Vec<Vec<String>>, drop draw_row's per-row
   Vec collect by `@matanlurey` in [#350](https://github.com/crates-lurey-io/retroglyph/pull/350)
 
-  > refactor(widgets): Table borrows &str rows instead of owning Vec<Vec<String>>
-  >
-  > Table::new's rows parameter changes from &[Vec<String>] to &[&[&str]], matching List's existing
-  > &[&str] borrowed-input convention in this crate rather than introducing ratatui-style Row/Cell
-  > wrapper types. Callers with &'static str or numeric data no longer need to materialize an owned
-  > Vec<Vec<String>> just to call Table::new; callers that do have owned Strings borrow &str out of
-  > them instead of the table taking ownership.
-  >
-  > draw_row's per-row-per-frame `let cells: Vec<&str> = row.iter().map(String::as_str).collect();`
-  > is now unnecessary and removed, since rows are already &[&str] once inside render's per-row
-  > loop.
-  >
-  > Updates the 09_widgets_dashboard example and the table_render bench to the new signature. Re-ran
-  > the bench before/after: results are noise-dominated at this scale
-  > (single-digit-to-tens-of-microseconds full-table renders where terminal grid writes dominate),
-  > with no consistent directional improvement across the three sized cases -- the removed per-row
-  > Vec allocation is real but too small relative to total render cost to show up cleanly in
-  > wall-clock bench numbers at these sizes.
-  >
-  > Closes #310, Closes #312
-
 ### Performance
 
 - [dfd9c0f](https://github.com/crates-lurey-io/retroglyph/commit/dfd9c0fd7b43163f45af40ee1782e259460de8f5)
   _(widgets)_ Avoid per-call Vec allocation in layout::solve by `@matanlurey` in
   [#357](https://github.com/crates-lurey-io/retroglyph/pull/357)
 
-  > layout::solve built four separate heap-allocated Vecs on every call (sizes, plus the
-  > flexible/shares/fracs/order scratch buffers used by the largest-remainder Fill/Min/Max
-  > distribution pass), even though real callers (split_h/split_v and friends) invoke it several
-  > times per frame for multi-panel UIs with only a handful of panes.
-  >
-  > Introduce a small internal SmallBuf<T, N> type (stack array for up to N = STACK_CAP (8) items,
-  > falling back to a heap Vec past that) and use it for every scratch buffer inside solve. This is
-  > purely internal to solve -- the public split_h/split_v/split_v_flex/split_h_flex signatures are
-  > unchanged, still returning Vec<Rect> as before. No unsafe code: SmallBuf's stack variant only
-  > works with Copy + Default element types (u16, u32, usize, and the (usize, u16, Option<u16>)
-  > flexible-pane tuple), which lets every element be initialized up front without MaybeUninit.
-  >
-  > Benchmark (cargo bench -p retroglyph-widgets --bench layout_solve), split_h, before -> after:
-  >
-  > - 5 panes: ~139 ns -> ~95 ns (~32% faster; heap allocs eliminated)
-  > - 25 panes: ~354 ns -> ~361 ns (unchanged; above STACK_CAP, heap path same as before)
-  > - 100 panes: ~1.05 us -> ~2.6 us (within noise/outliers of this run; same heap path as before)
-  >
-  > The win is concentrated in the common small-pane case (well under STACK_CAP), which is exactly
-  > the per-frame multi-panel-UI workload the issue describes; larger constraint counts fall back to
-  > the heap and are unaffected.
-  >
-  > Added split_beyond_stack_cap_matches_small_case_behavior and
-  > weighted_fill_beyond_stack_cap_matches_small_case_proportions unit tests covering both the
-  > Fixed-only and Fill/Min/Max-mixed paths past STACK_CAP, confirming solve's output is unchanged
-  > for large constraint counts.
-  >
-  > Closes #314
-
 - [8155db5](https://github.com/crates-lurey-io/retroglyph/commit/8155db5049170e757257cca6c2a5c870ec3ff402)
   _(widgets)_ Stack-buffer readout formatting for gauge/progress/stat_bar widgets by `@matanlurey`
   in [#349](https://github.com/crates-lurey-io/retroglyph/pull/349)
 
-  > Gauge::render and StatBar::render each format!()'d their trailing readout string (a "87%"
-  > percentage, a "45/100" current/max pair) into a heap-allocated String every frame. Factor a
-  > small ReadoutBuf<const N: usize> stack buffer (implementing
-  >
-  > fmt::Write) into the shared bar module -- the same module the two widgets already share their
-  > label/bar/readout layout through -- so both widgets write! into a fixed [u8; N] buffer instead.
-  >
-  > Closes #311.
-
 - [676c803](https://github.com/crates-lurey-io/retroglyph/commit/676c803e9cc8e9660664487780e36f0d1c4ef6cc)
   _(widgets)_ Return &str from text::truncate instead of allocating by `@matanlurey` in
   [#326](https://github.com/crates-lurey-io/retroglyph/pull/326) [**breaking**]
-  > text::truncate walked s.chars() to find a char-boundary byte offset within the display-width
-  > budget, then always copied the surviving prefix into a new String even though s[..end] is
-  > already a valid borrowed &str. This is a hot path (Table::draw_row calls it per column per
-  > visible row per frame), so every truncated cell paid for a throwaway allocation.
-  >
-  > truncate now returns &str, borrowing from its input. Added truncate_owned for callers who need
-  > an owned String. Updated all internal call sites (table.rs, button.rs, tabs.rs, list.rs,
-  > print_line.rs, panel.rs, widget/text.rs, style.rs) to use the borrowed &str directly instead of
-  > re-borrowing/allocating, and the examples crate's needless-borrow call sites accordingly.
-  >
-  > BREAKING CHANGE:text::truncate (re-exported as retroglyph_widgets::truncate) now returns &str
-  > instead of String. Callers needing an owned String should call the new
-  > retroglyph_widgets::truncate_owned instead.
 
 ### Testing
 
 - [28913a3](https://github.com/crates-lurey-io/retroglyph/commit/28913a384f8eb82133fda17f49b4f7e777813f93)
   _(widgets)_ Add benchmarks for table/list/sparkline render, layout, and hit-testing by
   `@matanlurey` in [#321](https://github.com/crates-lurey-io/retroglyph/pull/321)
-
-  > Adds criterion benchmarks (harness = false, following crates/core/benches/grid_diff.rs's style:
-  > deterministic fastrand::Rng::with_seed(42) inputs, black_box, doc comments explaining why each
-  > case exists) for the widgets this crate had no per-frame cost numbers for:
-  >
-  > - table_render: Table::render at realistic row/column counts (a compact status table, a wide
-  >   multi-column dashboard, a long scrolling table), including the highlighted-row and
-  >   scroll-window paths.
-  > - list_sparkline_render: List::render over long lists, and Sparkline::render's per-cell Meter
-  >   color ramp across recent-history and long-history sample buffers.
-  > - layout_solve: split_h/split_v (layout::solve's public entry points) with a mix of every
-  >   Constraint kind, at a range of pane counts.
-  > - text_truncate: text::truncate on ASCII, wide-char, and zero-width input, to guard a future
-  >   borrowing rewrite of its allocation.
-  > - hit_testing: HitTester::topmost_at and a full Interaction frame (register + resolve every
-  >   widget) at a range of registered-widget counts.
-  >
-  > Closes #316.
 
 **Full Changelog**:
 https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-widgets-v0.2.1...retroglyph-widgets-v0.3.0
@@ -640,23 +154,6 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-widgets-v0.2.1.
   _(workspace)_ Per-crate test analytics flags + self-hosted coverage report by `@matanlurey` in
   [#254](https://github.com/crates-lurey-io/retroglyph/pull/254)
 
-  > - Split the workspace nextest JUnit report per crate flag before uploading to Codecov Test
-  >   Analytics (tools/split-junit-flags.py): a single combined-workspace upload can only carry one
-  >   flag before misattributing every crate's tests to every other crate's flag, so upload once per
-  >   flag instead of once for the whole workspace. Fixes the empty Flags filter on
-  >   https://app.codecov.io/gh/crates-lurey-io/retroglyph/tests.
-  > - disable_search: true on every one of those uploads: the Codecov CLI auto-discovers any
-  >   \*junit.xml on disk in addition to the explicit files: input, and the pre-split combined
-  >   junit.xml sits right next to the split files it came from. Caught this live in run 29653543638
-  >   (test job, "Upload test results to Codecov (unflagged)" step logged "Found 2 test_results
-  >   files to report") before merging -- without disable_search, every flag upload would have
-  >   silently re-included all 669 tests too.
-  > - Point each crate README's coverage badge at the repo's Flags tab instead of the generic
-  >   overview page (query-param deep links like ?flags[0]=x do not work against the current Codecov
-  >   app, verified live).
-  > - docs.yml: publish a self-hosted `cargo llvm-cov --html` report at
-  >   https://main.retroglyph.dev/coverage/ alongside the rustdocs, rebuilt on every push to main.
-
 **Full Changelog**:
 https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-widgets-v0.2.0...retroglyph-widgets-v0.2.1
 
@@ -667,35 +164,6 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-widgets-v0.2.0.
 - [d600806](https://github.com/crates-lurey-io/retroglyph/commit/d600806d827fdfa7d76eeaab51cc156807714a46)
   _(core)_ Mark evolving input/event enums non_exhaustive by `@matanlurey`
 
-  > Event, KeyCode, MouseButton, and MouseEventKind are all expected to gain variants as backend
-  > input coverage grows (Event::Paste/FocusGained/FocusLost are already planned;
-  > KeyCode/MouseButton/MouseEventKind each lag real upstream data winit/crossterm already expose,
-  > e.g. side mouse buttons and horizontal scroll). Without #[non_exhaustive] each future addition
-  > would be a breaking change and force a major bump for a purely additive change.
-  >
-  > SystemTheme and Flow were considered and deliberately left exhaustive: SystemTheme's own doc
-  > comment already argues no third state should exist, and a hypothetical Flow::Paused would need
-  > new driver-loop semantics anyway (a redesign, not an additive case), so a major bump is the
-  > right signal for either rather than something #[non_exhaustive] should paper over.
-  >
-  > Color, AnsiColor, HAlign, and VAlign stay exhaustive as genuinely closed encodings (unchanged
-  > from before this commit).
-  >
-  > Fixes required by the two enums that do change:
-  >
-  > - widgets::interact::pointer::button_slot now returns Option<usize> instead of aliasing an
-  >   unknown future MouseButton onto an existing slot, which would have silently misreported that
-  >   button's state.
-  > - 04_mouse example's match on MouseEventKind gains a wildcard arm.
-  >
-  > No longer marked as a Conventional Commits breaking change (dropped the !): cargo-semver-checks
-  > / release-plz's semver_check independently detects and correctly per-crate-scopes this exact
-  > class of break (verified: retroglyph-core still computes 0.2.0 from the
-  > enum_marked_non_exhaustive finding alone, while retroglyph-widgets -- whose own API is
-  > unaffected -- correctly gets only a 0.1.1 patch instead of being dragged to 0.2.0 by a
-  > commit-message marker that doesn't distinguish which crate it applies to). See RELEASING.md's
-  > revised breaking-change policy.
-
 - [17e1728](https://github.com/crates-lurey-io/retroglyph/commit/17e17285f1f7d921ce23e0c47470373ba9586fb5)
   _(widgets)_ Add Response::held for live press/hover re-check by `@matanlurey` in
   [#245](https://github.com/crates-lurey-io/retroglyph/pull/245)
@@ -704,142 +172,21 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-widgets-v0.2.0.
   _(widgets)_ Weighted Constraint::Fill for proportional space distribution by `@matanlurey` in
   [#241](https://github.com/crates-lurey-io/retroglyph/pull/241)
 
-  > Constraint::Fill becomes Fill(u16): a weight, not a unit variant. solve() now distributes the
-  > Fill/Min/Max remainder in proportion to each pane's weight (Fill(w) weighs w; Min/Max always
-  > weigh 1) via the largest-remainder method, instead of always splitting equally. Fill(1)
-  > reproduces the old equal-distribution behavior exactly -- for uniform weights the new solver
-  > reduces to the same round-robin-from-the-front assignment the old one used, so every existing
-  > test in the file passes unchanged with only the s/Fill/Fill(1)/ mechanical update.
-  >
-  > Adds weighted*fill*\* test cases covering proportional splits, the largest-remainder tie-break,
-  > weight-0 panes, and mixing weighted Fill with Min/Max. Adds the 18_weighted_fill example (plus
-  > its three snapshots) as a visual proof: four split_h rows showing equal thirds, a 1:2:3 ratio, a
-  > fixed pane eating into the weighted remainder, and Min/Fill/Max mixed together.
-  >
-  > Closes #148
-
 - [5bcef82](https://github.com/crates-lurey-io/retroglyph/commit/5bcef82fc1614ae05a2287920504e0095e91710e)
   _(widgets)_ Text alignment knob for Text/PrintLine/Panel/Modal titles by `@matanlurey` in
   [#240](https://github.com/crates-lurey-io/retroglyph/pull/240)
-
-  > - feat(widgets): shared Align enum for Text/PrintLine/Panel/Modal titles
-  >
-  > Adds a shared Align enum (Left/Center/Right) as a builder knob. Text and PrintLine gain .align()
-  > (default Left, their prior behavior); Panel and Modal gain .title_align() (default Center, their
-  > prior behavior). Closes the gap where Text/PrintLine were left-only and panel/modal titles were
-  > hardcoded center-only.
-  >
-  > Closes #146
-  >
-  > - docs(examples): add 18_text_align example with snapshots
-  >
-  > New 18_text_align example demonstrates the Align knob across Text, PrintLine, Panel titles, and
-  > a Modal title, with the three snapshot artifacts (headless text, software PNG, crossterm SVG).
-  > Bumps the README example count.
 
 - [ecd72ce](https://github.com/crates-lurey-io/retroglyph/commit/ecd72cebb1d158225dfa0e9b7f5425079839d41a)
   _(widgets)_ Theme-mapping .theme() builder method + runtime switch demo by `@matanlurey` in
   [#238](https://github.com/crates-lurey-io/retroglyph/pull/238)
 
-  > - feat(widgets): add a Theme-mapping .theme() builder method to every widget
-  >
-  > Every widget with at least one style knob (Panel, Modal, BoxBorder, Table, Tabs, Button, List,
-  > Gauge, StatBar, ProgressBar, Scrollbar) gets a .theme(Theme) builder method that maps Theme's
-  > named color roles onto that widget's existing \_style fields, mirroring the mapping
-  > 09_widgets_dashboard and 10_widgets_interaction already hand-thread at each call site
-  > (border/fill, header/row/selected, style/hovered/pressed/focused, item/selected, track/thumb,
-  > filled/empty). Theme stays fully optional: .theme() is additive sugar over the individual
-  > setters, and any manual \_style override called after .theme() still wins, same as every other
-  > builder method in this crate.
-  >
-  > Widgets with no natural Theme-role mapping are left alone on purpose: Log/
-  > PrintLine/Text/Paragraph's one style knob is used for too many different purposes by different
-  > callers to have a single canonical role, and Sparkline/ Meter/Gauge's-and-StatBar's bar fill are
-  > deliberately load-colored rather than palette-colored.
-  >
-  > Each new method has its own unit test asserting the mapped colors, and crates/widgets/README.md
-  > gains a short mention of the feature.
-  >
-  > - feat(examples): add 17_theme_switch, a runtime Theme::DARK/LIGHT toggle demo
-  >
-  > No existing example showed Theme switching at runtime -- 09*widgets_dashboard and
-  > 10_widgets_interaction both pick a single fixed Theme::DARK and hand-thread theme.* into each
-  > style knob. 17*theme_switch adds the 'manual toggle key' scenario Theme's own doc comment names
-  > as one way an app might pick between the two palettes: pressing t (or clicking/focusing a
-  > button) flips Theme::DARK/Theme::LIGHT, and every widget on screen (Panel, Tabs, List, Button,
-  > ProgressBar) re-derives its styling from the active theme via the new .theme() builder method
-  > added in the previous commit, replacing the hand-threaded theme.* calls those two existing
-  > examples still use.
-  >
-  > Includes the standard three committed snapshots (insta headless text, software PNG, crossterm
-  > SVG) plus a sibling examples/tests/17_theme_switch.rs per examples/AGENTS.md conventions, and
-  > updates the workspace README to mention Theme/.theme() and point at the new example.
-
 - [e06cf4b](https://github.com/crates-lurey-io/retroglyph/commit/e06cf4b9a2d6049d2ecdfc20ae9544c1c1eeb4a5)
   _(widgets)_ Add List, Tabs, and Button widgets by `@matanlurey` in
   [#203](https://github.com/crates-lurey-io/retroglyph/pull/203)
 
-  > - refactor(widgets): extract shared Table/List windowing helper
-  >
-  > Move Table's private visible_window helper into a new crate-private widget/window.rs module
-  > (pub(super), same visibility shape as bar.rs/ meter.rs's cross-widget sharing), in preparation
-  > for the List widget reusing the same offset-anchored windowing math. No behavior change.
-  >
-  > - feat(widgets): add List widget
-  >
-  > A scrollable, single-column list of plain-text items with a ListState-driven highlighted item --
-  > Table's single-column sibling. Reuses the shared windowing helper extracted in the previous
-  > commit, and Table's row_style/selected_style default palette. Closes #137.
-  >
-  > - feat(widgets): add Tabs widget
-  >
-  > A horizontal strip of tab labels with a highlighted selected index. Unlike Table/List, Tabs is a
-  > plain Widget (not StatefulWidget): there is no scroll offset for a tab strip, only a selected
-  > index, taken directly as selected: Option<usize> via .select() rather than a ListState --
-  > matching ratatui's Tabs (also non-stateful), the closest analog among the libraries surveyed for
-  > this issue. column_spacing matches Table's knob of the same name; divider is optional and off by
-  > default. Closes #138.
-  >
-  > - feat(widgets): add Button widget
-  >
-  > A filled, centered label styled from an already-resolved Response (interaction.interact(...)
-  > called by the app, same as the interact module's own doctest). No Id type parameter and no
-  > interact() call of its own -- pure presentation, consistent with every other widget here (state
-  > lives outside; the widget only reads it). Four style knobs
-  > (style/hovered_style/pressed_style/focused_style) with pressed > hovered > focused > default
-  > precedence. Closes #141.
-  >
-  > - feat(examples): use List and Tabs in 09_widgets_dashboard
-  >
-  > Adds a Tabs strip switching the right panel between "Metrics" (the existing
-  > gauges/sparkline/legend content, now in draw_metrics) and a new "Alerts" tab backed by
-  > List/ListState. Left/Right switches the active tab; Up/Down now moves whichever list the active
-  > tab shows. Regenerated all three committed snapshots (headless/PNG/SVG).
-  >
-  > - feat(examples): use Button widget in 10_widgets_interaction
-  >
-  > Replaces draw_button's hand-rolled bg/fg-by-Response wiring with the new Button widget -- the
-  > exact boilerplate #141 was written to remove. The app still calls interaction.interact(...)
-  > itself (it needs response.clicked() for the counter logic); Button only turns the result into a
-  > styled, centered label. Drops the '>' focus marker now that focused_style gives focus its own
-  > distinct look. Regenerated all committed snapshots.
-  >
-  > - feat(examples): showcase Button in 09_widgets_dashboard too
-  >
-  > Adds a "Ping" Button to the Metrics tab, wired through a new Interaction<DashId> field, so every
-  > widget this crate ships (Table, List, Tabs, Button, Gauge, Sparkline, BoxStyle) is represented
-  > in the one dashboard example, not split across 09/10. Click (or Tab-focus + Enter/Space) the
-  > button to increment the on-screen "Pings: N" counter. Regenerated all three snapshots and added
-  > a new headless test (headless_snapshot_ping_button_click) proving the click resolves and
-  > increments the counter, mirroring 10_widgets_interaction's own click-resolution proof.
-
 - [b523f70](https://github.com/crates-lurey-io/retroglyph/commit/b523f709e047142ca0004ddf70fa87a79f80f819)
   _(widgets)_ Add builder overrides for Table styles by `@matanlurey` in
   [#183](https://github.com/crates-lurey-io/retroglyph/pull/183)
-  > Table::render hardcoded header_style, selection background, and base foreground with no
-  > override, violating the crate's no-hardcoded-styles design principle. Adds chainable
-  > header_style(), row_style(), selected_style(), and column_spacing() builder methods, each
-  > defaulting to the previous hardcoded values, so this is additive and backward compatible.
 
 ### Bug Fixes
 
@@ -847,38 +194,13 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-widgets-v0.2.0.
   _(widgets)_ Make .theme() text/border styles opaque, not Color::Default by `@matanlurey` in
   [#239](https://github.com/crates-lurey-io/retroglyph/pull/239)
 
-  > - fix(widgets): make .theme() text/border styles opaque, not Color::Default
-  > - test(examples): add light-theme PNG/SVG snapshots for 17_theme_switch
-
 - [c016b38](https://github.com/crates-lurey-io/retroglyph/commit/c016b384a6276aedf2ebac801c133f3330f82ee5)
   _(widgets)_ Use unicode display width for bar/panel label and title positioning by `@matanlurey`
   in [#178](https://github.com/crates-lurey-io/retroglyph/pull/178)
 
-  > bar.rs and panel.rs computed label/title width via .len() (byte length) instead of display
-  > width, unlike the rest of the crate which correctly uses unicode-width. Multi-byte or
-  > wide-character labels/titles were misaligned; ASCII-only content was unaffected. Switches both
-  > to UnicodeWidthStr::width() and adds regression tests.
-
 - [50b274f](https://github.com/crates-lurey-io/retroglyph/commit/50b274f07527c62bd5af9a46c90cc7a6f03f081c)
   _(workspace)_ Squash 3+ blank lines and allow MD037 in generated changelogs by `@matanlurey` in
   [#247](https://github.com/crates-lurey-io/retroglyph/pull/247)
-
-  > release-plz's per-crate CHANGELOG.md is prepended above the hand-written 0.1.0 entry using
-  > cliff.toml's body template. The tail block that renders the `**Full Changelog**: ...` link can't
-  > be trimmed with Tera's `-` whitespace markers without also swallowing the blank line that's
-  > supposed to separate it from the next heading -- that separator has to come from literal
-  > template text sitting between nested {% if %} blocks -- so it leaves 3 blank lines at that
-  > boundary instead of 1. Add a postprocessor that squashes any run of 3+ newlines down to a single
-  > blank line, matching Keep a Changelog / prettier / markdownlint's MD012 expectation.
-  >
-  > Also extend the per-changelog markdownlint-disable comment (both the already-checked-in header
-  > on all 7 crates' CHANGELOG.md, and cliff.toml's header template for any crate whose changelog
-  > doesn't exist yet) with no-space-in-emphasis: commit bodies are freeform prose and can contain a
-  > literal _ or \* adjacent to other text (e.g. `wasm_terminal_\* FFI`, `manual \_style override`)
-  > that markdownlint's MD037 misreads as unbalanced emphasis markers. That's not something a
-  > template fix can prevent, since it depends on historical commit message content.
-  >
-  > Fixes the release-plz standing PR's format/lint CI failure .
 
 ### Documentation
 
@@ -886,39 +208,11 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-widgets-v0.2.0.
   _(widgets)_ Fix docs/code drift for unshipped List and Tabs widgets by `@matanlurey` in
   [#182](https://github.com/crates-lurey-io/retroglyph/pull/182)
 
-  > src/lib.rs's module doc and Cargo.toml's description both listed List and Tabs as shipped
-  > widgets; neither exists under src/widget/. Fixes the prose to match the actual shipped surface
-  > regardless of whether List/Tabs ship later (tracked in separate issues).
-
 ### Continuous Integration
 
 - [1d81906](https://github.com/crates-lurey-io/retroglyph/commit/1d81906ea8e380d64de0e05345f103627ef49406)
   _(workspace)_ Automated per-crate release-plz workflow by `@matanlurey` in
   [#80](https://github.com/crates-lurey-io/retroglyph/pull/80)
-
-  > - ci(release): adopt per-crate release-plz flow with PR-title enforcement
-  >
-  > Re-enable release-plz's standing Release PR (release-pr + release jobs) so version bumps and
-  > per-crate changelogs are computed from conventional PR-title history and published on Release-PR
-  > merge; developers never push tags.
-  >
-  > - release-plz.toml: per-crate changelogs (drop changelog_path), semver_check=true
-  > - cliff.toml: skip-changelog via github.pr_labels label + changelog: ignore footer
-  > - release-plz.yml: two-job release-pr/release, concurrency guards, trusted publishing
-  > - check-semver.yml: gate only undeclared breaks (skip on title ! or semver-override)
-  > - pr-title.yml: enforce Conventional Commit PR titles + scope list
-  >
-  > * docs(changelog): split workspace changelog into per-crate files
-  >
-  > Per-crate release-plz needs a CHANGELOG.md per crate. Seed each with its hand-written 0.1.0
-  > entry; the root CHANGELOG.md becomes an index.
-  >
-  > - docs: rewrite RELEASING.md for the automated release flow
-  >
-  > Document the per-crate, release-plz-driven flow: conventional PR titles, squash-merge, standing
-  > Release PR as the single approval gate, breaking declared via title !, cargo-semver-checks
-  > roles, PR labels, and no pre-1.0 prerelease channel. Update AGENTS.md's commit-message section:
-  > enforcement now lives in pr-title.yml, not local hooks.
 
 **Full Changelog**:
 https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-widgets-v0.1.0...retroglyph-widgets-v0.2.0

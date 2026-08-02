@@ -97,7 +97,7 @@ fn decode_throughput(c: &mut Criterion) {
 }
 
 /// Benchmarks pushing a burst of mouse-move events onto [`TerminalWasm`]'s event queue and then
-/// fully draining it via `poll_event`, at a few burst sizes -- e.g. simulating a fast mouse drag
+/// fully draining it via `poll_event`, at a few burst sizes: e.g. simulating a fast mouse drag
 /// firing many `mousemove` events within a single animation frame before JS's next
 /// `take_output`/drain cycle.
 fn queue_drain_throughput(c: &mut Criterion) {
@@ -141,8 +141,8 @@ fn queue_drain_throughput(c: &mut Criterion) {
 }
 
 /// Benchmarks pushing a burst of *consecutive* mouse-move events (no interleaved clicks/keys, the
-/// worst case for a stalled consumer -- e.g. a fast drag or a high-polling-rate pointer while the
-/// Rust game loop is paused/backgrounded) -- demonstrating that retroglyph#286's `Moved`
+/// worst case for a stalled consumer, e.g. a fast drag or a high-polling-rate pointer while the
+/// Rust game loop is paused/backgrounded), demonstrating that retroglyph#286's `Moved`
 /// coalescing keeps the queue at a single entry throughout the burst, rather than growing
 /// unboundedly like `queue_drain_throughput`'s burst above (which mixes in occasional non-`Moved`
 /// events, so it still grows with burst size).

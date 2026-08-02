@@ -47,11 +47,11 @@
 //!
 //! # Features
 //!
-//! - `dev` -- optional. Forwards `retroglyph-core`'s `dev` feature, forcing development
+//! - `dev`: optional. Forwards `retroglyph-core`'s `dev` feature, forcing development
 //!   diagnostics on in a build that would otherwise compile them out.
-//! - `default-font` -- optional. Embeds the Unscii 16 bitmap font as a ready-to-use default
+//! - `default-font`: optional. Embeds the Unscii 16 bitmap font as a ready-to-use default
 //!   `FontChain`.
-//! - `tilesets` -- optional. PNG sprite sheet tilesets with alpha-blended CPU blit support.
+//! - `tilesets`: optional. PNG sprite sheet tilesets with alpha-blended CPU blit support.
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
@@ -125,7 +125,7 @@ use std::time::Duration;
 /// Unlike [`SoftwareBackend`] (which is just configuration), this type
 /// always has an active rendering context: its pixel buffer is always
 /// available, and the `ctx` field is never `None`, so [`Output`] methods
-/// never panic for missing initialisation.
+/// never panic for missing initialization.
 ///
 /// Call [`pixels`](Self::pixels) to inspect the rendered output, or use
 /// [`Output::draw`] and [`Output::draw_layers`] to render into it.
@@ -160,8 +160,10 @@ struct RenderContext {
     /// marked damaged) whenever the buffer is resized.
     prev_pixels: Vec<u32>,
     /// Row range `[y0, y1)` changed since the last present, computed in
-    /// `draw_layers` by diffing against `prev_pixels`. `None` means no rows
-    /// changed (nothing to present).
+    /// `draw_layers` by diffing against `prev_pixels` and unioned into any
+    /// existing band, since `draw_layers` may be called more than once
+    /// between two `present()` calls. `None` means no rows changed
+    /// (nothing to present).
     damage_rows: Option<(u32, u32)>,
     /// Shadow copy of every allocated layer's tiles from the last `draw_layers` call, indexed by
     /// `[layer_id][y * cols + x]`. Used to find dirty cells without touching core's diff model:
@@ -175,7 +177,7 @@ struct RenderContext {
     ///
     /// A separate shadow copy because a `Tile` does not carry its tint (it lives in a side table
     /// on `Grid`, see `retroglyph_core::Grid::tint`). Without it a tint-only change would compare
-    /// equal on every `Tile` field and never mark the cell dirty, so recolouring a sprite in
+    /// equal on every `Tile` field and never mark the cell dirty, so recoloring a sprite in
     /// place would silently not repaint.
     prev_tints: Vec<Vec<Tint>>,
     /// Reusable per-cell dirty scratch buffer, `true` at index `y * cols + x` when any layer's
@@ -187,6 +189,13 @@ struct RenderContext {
     /// full repaint next frame, since the dirty-cell path can only compare cells within layers
     /// present in both frames.
     prev_layer_count: usize,
+    /// Whether any tile in the last `draw_layers` call had a nonzero sub-cell offset
+    /// (`Tile::dx`/`Tile::dy`). A frame that removes the last offset needs a full repaint just as
+    /// much as one that introduces one: the spilled pixels it painted into a neighbor cell live
+    /// outside that neighbor's own tile, so a neighbor whose own tile is unchanged is never
+    /// revisited by the dirty-cell path and the stale spill survives unless this frame's
+    /// `full_repaint` also accounts for what the *previous* frame offset.
+    prev_offset: bool,
     /// Glyphs already reported by [`warn_oversized_sprite`] as needing a span, so a 60fps redraw
     /// loop logs each one once instead of every frame.
     #[cfg(feature = "tilesets")]
@@ -224,6 +233,7 @@ impl SoftwareRenderer {
                 // `draw_layers` call is unconditionally treated as a layer-set change and takes
                 // the full-repaint path once, seeding `prev_tiles` for every subsequent frame.
                 prev_layer_count: usize::MAX,
+                prev_offset: false,
                 #[cfg(feature = "tilesets")]
                 warned_oversized: BTreeSet::new(),
                 #[cfg(feature = "tilesets")]
@@ -300,16 +310,27 @@ impl SoftwareRenderer {
             return Ok(());
         };
         let result = surface.present(self.ctx.pixel_buf.as_ref(), damage);
-        // Damage has been presented (or the attempt is done); drop it so a
-        // later present() with no new draw_layers() call is a no-op instead of
-        // re-presenting stale damage.
-        self.ctx.damage_rows = None;
+        // Only drop the damage once it's actually been presented, so a later
+        // present() with no new draw_layers() call is a no-op instead of
+        // re-presenting stale damage. On failure, leave it set so the next
+        // present() attempt retries the same band instead of losing it.
+        if result.is_ok() {
+            self.ctx.damage_rows = None;
+        }
         result
     }
 
     /// Diffs `pixel_buf` against `prev_pixels` row by row to find the
-    /// smallest contiguous `[y0, y1)` band that changed and stores it as
+    /// smallest contiguous `[y0, y1)` band that changed and unions it into
     /// `damage_rows`.
+    ///
+    /// The newly diffed band is unioned with (not overwritten onto) any
+    /// existing `damage_rows`, since `draw_layers` can be called more than
+    /// once between two `present()` calls: `present()` is the only place
+    /// that clears `damage_rows`, so a band from an earlier `draw_layers`
+    /// call in the same present cycle must survive a later call that
+    /// touches a disjoint set of rows, or those earlier rows would never
+    /// reach the window surface (see retroglyph#724).
     ///
     /// Only the `[y0, y1)` band (not the whole buffer) is copied from
     /// `pixel_buf` into `prev_pixels` afterwards, since every other row is
@@ -323,7 +344,8 @@ impl SoftwareRenderer {
     ///
     /// If the buffers differ in length (a resize raced with this call)
     /// the whole frame is marked damaged and `prev_pixels` is resized to
-    /// match.
+    /// match; that already covers any previously pending band, so it's an
+    /// overwrite rather than a union.
     fn update_damage(&mut self, buf_w: usize) {
         let pixels = self.ctx.pixel_buf.as_ref();
         if self.ctx.prev_pixels.len() != pixels.len() {
@@ -355,10 +377,15 @@ impl SoftwareRenderer {
             }
         }
 
-        self.ctx.damage_rows = y0.map(|y0| {
+        let new_band = y0.map(|y0| {
             #[allow(clippy::cast_possible_truncation)]
             (y0 as u32, y1 as u32)
         });
+        self.ctx.damage_rows = match (self.ctx.damage_rows, new_band) {
+            (Some((py0, py1)), Some((ny0, ny1))) => Some((py0.min(ny0), py1.max(ny1))),
+            (existing, None) => existing,
+            (None, new) => new,
+        };
 
         // Only the changed band needs copying: every row outside `[y0, y1)`
         // already matched `pixels` in the loop above, so re-copying it would
@@ -463,7 +490,7 @@ impl SoftwareRenderer {
         pos: Pos,
         tile: Tile,
         // Only ever read inside the `tilesets`-gated sprite path below: a bitmap-font glyph is
-        // always drawn in the cell's own foreground colour, never tinted (tints apply to
+        // always drawn in the cell's own foreground color, never tinted (tints apply to
         // sprites only, per `Surface::with_tint`), so a `tilesets`-off build has no use for it.
         tint: Tint,
     ) {
@@ -481,7 +508,7 @@ impl SoftwareRenderer {
             if let Some(sprite) = self.sprite_cache.get(tile.glyph()) {
                 let (span_w, span_h) = tile.span();
                 let align = sprite.align_offset(span_w, span_h, glyph_w, glyph_h);
-                let recolour =
+                let recolor =
                     SpriteTint::resolve(sprite.color, tile.style().foreground(), tint, DEFAULT_FG);
                 blit_sprite(
                     self.ctx.pixel_buf.as_mut(),
@@ -493,7 +520,7 @@ impl SoftwareRenderer {
                     tile.dy() + align.1,
                     sprite,
                     scale,
-                    recolour,
+                    recolor,
                 );
                 if tile.span() == (1, 1) {
                     warn_sprite_needs_span(
@@ -506,7 +533,7 @@ impl SoftwareRenderer {
                 return;
             }
             // No sprite for this glyph: it falls back to the bitmap font below, which is
-            // `fg`-coloured, so a tint that would otherwise recolour a sprite silently has no
+            // `fg`-colored, so a tint that would otherwise recolor a sprite silently has no
             // effect here (retroglyph#564, #537's exact trap).
             warn_tint_needs_sprite(&mut self.ctx.warned_dropped_tint, tile.glyph(), tint);
         }
@@ -569,7 +596,8 @@ impl SoftwareBackend {
     /// [`SoftwareBackendError::MixedGlyphSizes`] if the font chain's fonts disagree on their
     /// glyph size (both only reachable if [`SoftwareBackendBuilder::build`] was bypassed),
     /// [`SoftwareBackendError::ZeroScale`] if `scale` is `0` (likewise only reachable if `build`
-    /// was bypassed, since a caller mutated the field after construction), and
+    /// was bypassed, since a caller mutated the field after construction),
+    /// [`SoftwareBackendError::ZeroGrid`] if `cols` or `rows` is `0`, and
     /// [`SoftwareBackendError::Tileset`] if a registered tileset fails to load.
     ///
     /// # Panics
@@ -586,6 +614,9 @@ impl SoftwareBackend {
         };
         if self.scale == 0 {
             return Err(SoftwareBackendError::ZeroScale);
+        }
+        if self.cols == 0 || self.rows == 0 {
+            return Err(SoftwareBackendError::ZeroGrid);
         }
 
         let geometry = CellGeometry::new(glyph_w, glyph_h, u16::from(self.scale));
@@ -682,6 +713,12 @@ impl Output for SoftwareRenderer {
 
         for draw_cell in content {
             let (layer_id, pos, tile) = (draw_cell.layer, draw_cell.pos, draw_cell.tile);
+            // Silently drop cells positioned outside the grid, the same as `Headless`'s
+            // `put_tile` (which bounds-checks internally): a caller-supplied `pos` is not
+            // trusted input, and indexing it unchecked below would panic instead.
+            if usize::from(pos.x) >= cols || usize::from(pos.y) >= rows {
+                continue;
+            }
             let layer_idx = usize::from(layer_id);
             max_layer_seen = max_layer_seen.max(i32::from(layer_id));
             self.ensure_layer_shadow(layer_idx, cell_count);
@@ -722,14 +759,19 @@ impl Output for SoftwareRenderer {
         self.ctx.prev_layer_count = layer_count_now;
 
         // Falls back to a full clear-and-repaint of every cell when either:
-        // - any tile this frame has a nonzero sub-cell offset (`Tile::dx`/`Tile::dy`): offsets can
-        //   spill glyph pixels into neighboring cells by an amount `Tile` does not bound, so
-        //   containing the repaint to a neighborhood around the changed cells isn't possible
-        //   without a magnitude cap core doesn't provide; or
+        // - any tile this frame or the last one has a nonzero sub-cell offset (`Tile::dx`/`dy`):
+        //   offsets can spill glyph pixels into neighboring cells by an amount `Tile` does not
+        //   bound, so containing the repaint to a neighborhood around the changed cells isn't
+        //   possible without a magnitude cap core doesn't provide. The previous frame's offsets
+        //   matter just as much as this frame's: a frame that removes the last offset can leave a
+        //   neighbor cell's own tile byte-identical to last frame, so the dirty-cell path never
+        //   revisits it to clear the spill that landed there, exactly like `layers_changed` below
+        //   already compares against last frame's state instead of only this frame's; or
         // - the number of allocated layers changed since the last call: a layer's cells falling
         //   out of (or into) the frame can't be diffed against a shadow copy that no longer
         //   describes this frame's layer set.
-        let full_repaint = any_offset || layers_changed;
+        let full_repaint = any_offset || self.ctx.prev_offset || layers_changed;
+        self.ctx.prev_offset = any_offset;
 
         if full_repaint {
             self.ctx.pixel_buf.clear();
@@ -821,6 +863,7 @@ impl Output for SoftwareRenderer {
         self.ctx.prev_tints.clear();
         self.ctx.dirty_mask.clear();
         self.ctx.prev_layer_count = usize::MAX;
+        self.ctx.prev_offset = false;
         self.ctx.damage_rows = if new_h == 0 {
             None
         } else {
@@ -831,6 +874,14 @@ impl Output for SoftwareRenderer {
 
     fn clear(&mut self) -> Result<(), Self::Error> {
         self.ctx.pixel_buf.clear();
+        // The per-cell shadow is now stale versus what's actually on screen (blank); forget it,
+        // mirroring `resize` above, so the next `draw_layers` call can't diff against pre-clear
+        // state and takes the full-repaint path instead of painting nothing.
+        self.ctx.prev_tiles.clear();
+        self.ctx.prev_tints.clear();
+        self.ctx.dirty_mask.clear();
+        self.ctx.prev_layer_count = usize::MAX;
+        self.ctx.prev_offset = false;
         Ok(())
     }
 
@@ -1054,7 +1105,7 @@ fn blit_sprite(
     offset_y: i16,
     sprite: &Sprite,
     scale: usize,
-    recolour: SpriteTint,
+    recolor: SpriteTint,
 ) {
     let origin_x = cell_px_x as i64 + i64::from(offset_x) * scale as i64;
     let origin_y = cell_px_y as i64 + i64::from(offset_y) * scale as i64;
@@ -1074,7 +1125,7 @@ fn blit_sprite(
         && origin_y >= 0
         && origin_x as usize + glyph_w <= buf_w
         && origin_y as usize + glyph_h <= buf_h;
-    let identity = recolour.is_identity();
+    let identity = recolor.is_identity();
 
     for src_y in 0..src_h {
         for src_x in 0..src_w {
@@ -1092,12 +1143,12 @@ fn blit_sprite(
 
             // `identity` is loop-invariant, hoisted above by the compiler: an untinted sprite
             // (the overwhelming majority) takes exactly the arithmetic it took before this
-            // branch existed. Alpha is deliberately untouched, so which pixels are opaque, and
+            // branch existed. Alpha is untouched, so which pixels are opaque, and
             // therefore the blending below and the background showing through, are unaffected.
             let src = if identity {
                 src
             } else {
-                let (r, g, b) = recolour.apply((src.r, src.g, src.b));
+                let (r, g, b) = recolor.apply((src.r, src.g, src.b));
                 U8x4Rgba::new(r, g, b, src.a)
             };
 
@@ -1469,6 +1520,30 @@ mod tests {
     }
 
     #[test]
+    fn draw_layers_ignores_a_cell_positioned_outside_the_grid() {
+        // retroglyph#729: a `DrawCell` positioned outside `size()` used to index the shadow
+        // buffer out of bounds and panic; `Headless` already silently drops such cells, so this
+        // backend should too instead of disagreeing on the input.
+        let mut renderer = SoftwareBackendBuilder::new()
+            .font(retroglyph_window::font::unscii16::FONT)
+            .grid_size(2, 2)
+            .scale(1)
+            .build()
+            .unwrap()
+            .into_renderer()
+            .unwrap();
+
+        let tile = Tile::new('X', Style::new());
+        renderer
+            .draw_layers(core::iter::once(DrawCell::on_layer(
+                0,
+                Pos::new(5, 5),
+                &tile,
+            )))
+            .expect("out-of-range cells are silently dropped, not a panic");
+    }
+
+    #[test]
     fn draw_layers_spills_glyph_right_into_the_neighbor_cell() {
         // Regression guard for uniform spill: a glyph offset past its right edge must land on the
         // neighbor's already-painted background, not be clobbered by the neighbor's background
@@ -1528,6 +1603,61 @@ mod tests {
         assert!(
             has_green_at_x(4),
             "block still occupies x=4 in its own cell"
+        );
+    }
+
+    #[test]
+    fn removing_an_offset_leaves_stale_spill_in_the_neighbor_cell() {
+        // retroglyph#717: `full_repaint` used to OR in only the *current* frame's offsets, so the
+        // frame that removes the last offset took the incremental repaint path. That path only
+        // repaints cells whose own tile changed, and the neighbor cell's tile here is untouched
+        // (still blue background, byte-identical to the previous frame), so it was never
+        // revisited to clear the spill the previous frame's offset glyph had painted into it.
+        let mut renderer = SoftwareBackendBuilder::new()
+            .font(retroglyph_window::font::unscii16::FONT)
+            .grid_size(2, 1)
+            .scale(1)
+            .build()
+            .unwrap()
+            .into_renderer()
+            .unwrap();
+
+        let green = 0x0000_FF00_u32;
+        let blue = 0x0000_00FF_u32;
+        let block_at = |dx: i16| {
+            Tile::new(
+                '\u{2588}',
+                Style::new().fg(Color::Rgb { r: 0, g: 255, b: 0 }),
+            )
+            .with_offset(dx, 0)
+        };
+        let neighbor = Tile::new(' ', Style::new().bg(Color::Rgb { r: 0, g: 0, b: 255 }));
+
+        // Frame 1: block offset right by half a cell, spills green into cell 1's left half.
+        renderer.draw_layers(
+            [
+                DrawCell::on_layer(0, Pos::new(0, 0), &block_at(4)),
+                DrawCell::on_layer(0, Pos::new(1, 0), &neighbor),
+            ]
+            .into_iter(),
+        );
+        let buf = renderer.pixels();
+        assert_eq!(buf[8], green, "spill into cell 1 should be confirmed first");
+
+        // Frame 2: offset removed entirely; cell 1's tile is byte-identical to frame 1.
+        renderer.draw_layers(
+            [
+                DrawCell::on_layer(0, Pos::new(0, 0), &block_at(0)),
+                DrawCell::on_layer(0, Pos::new(1, 0), &neighbor),
+            ]
+            .into_iter(),
+        );
+        let buf = renderer.pixels();
+        assert!(
+            buf[8..16].iter().all(|&p| p == blue),
+            "cell 1 must be fully blue again once the offset spilling into it is gone, but got: \
+             {:?}",
+            &buf[8..16]
         );
     }
 
@@ -1716,10 +1846,13 @@ mod tests {
         let mut r = damage_renderer(2, 3);
         let red = bg_tile(200, 0, 0);
         draw_fill(&mut r, 2, 3, &red, None); // first frame: full damage
+        // Headless present() is a no-op (nothing to upload without a window surface), so it
+        // never touches damage_rows; a real present() is what would clear the pending band
+        // here (retroglyph#724), so clear it directly to simulate that for this test.
+        assert!(r.present().is_ok());
+        r.ctx.damage_rows = None;
         draw_fill(&mut r, 2, 3, &red, None); // identical redraw: nothing changed
         assert_eq!(r.ctx.damage_rows, None);
-        // Headless present() is a no-op and must still succeed.
-        assert!(r.present().is_ok());
     }
 
     #[test]
@@ -1727,6 +1860,9 @@ mod tests {
         let mut r = damage_renderer(2, 3);
         let red = bg_tile(200, 0, 0);
         draw_fill(&mut r, 2, 3, &red, None); // baseline
+        // Simulate the present() that would normally clear the baseline's damage before the
+        // next frame (headless present() is a no-op with no surface to clear it through).
+        r.ctx.damage_rows = None;
         // Change only cell (0, 1); its pixels live in rows [16, 32).
         draw_fill(&mut r, 2, 3, &red, Some((0, 1, &bg_tile(0, 0, 200))));
         assert_eq!(r.ctx.damage_rows, Some((CELL_H_PX, 2 * CELL_H_PX)));
@@ -1758,10 +1894,51 @@ mod tests {
     }
 
     #[test]
+    fn damage_bands_union_across_draw_layers_calls_before_present() {
+        // Regression test for retroglyph#724: `present()` is the only thing that clears
+        // `damage_rows`, so two `draw_layers` calls touching disjoint rows before a single
+        // `present()` must union their bands rather than the second overwriting the first.
+        let mut r = damage_renderer(2, 3);
+        let red = bg_tile(200, 0, 0);
+        draw_fill(&mut r, 2, 3, &red, None); // baseline frame
+        // Simulate the present() that would normally clear this baseline's damage (headless
+        // present() is a no-op with no surface to clear it through).
+        assert!(r.present().is_ok());
+        r.ctx.damage_rows = None;
+
+        let blue = bg_tile(0, 0, 200);
+        // First draw_layers call: change only cell-row 0, pixel rows [0, 16).
+        draw_fill(&mut r, 2, 3, &red, Some((0, 0, &blue)));
+        assert_eq!(r.ctx.damage_rows, Some((0, CELL_H_PX)));
+
+        // Second draw_layers call, with no present() in between: keep (0, 0) as it already
+        // is (still blue, so it does not itself register as changed) and change only cell
+        // (1, 2), pixel rows [32, 48), disjoint from the first change.
+        let mut items: Vec<DrawCell<'_>> = Vec::new();
+        for y in 0..3u16 {
+            for x in 0..2u16 {
+                let t = match (x, y) {
+                    (0, 0) | (1, 2) => &blue,
+                    _ => &red,
+                };
+                items.push(DrawCell::on_layer(0, Pos::new(x, y), t));
+            }
+        }
+        r.draw_layers(items.into_iter()).unwrap();
+
+        // Both bands must still be reflected: the first call's rows [0, 16) must not have
+        // been dropped in favor of the second call's [32, 48).
+        assert_eq!(r.ctx.damage_rows, Some((0, 3 * CELL_H_PX)));
+    }
+
+    #[test]
     fn resize_marks_full_frame_damage() {
         let mut r = damage_renderer(2, 3);
         let red = bg_tile(200, 0, 0);
         draw_fill(&mut r, 2, 3, &red, None);
+        // Simulate the present() that would normally clear this baseline's damage (headless
+        // present() is a no-op with no surface to clear it through).
+        r.ctx.damage_rows = None;
         draw_fill(&mut r, 2, 3, &red, None);
         assert_eq!(r.ctx.damage_rows, None);
         // A resize invalidates the shadow buffer and forces a full repaint so
@@ -1781,6 +1958,27 @@ mod tests {
         r.resize(Size::new(4, 5));
         draw_fill(&mut r, 4, 5, &red, None);
         assert_eq!(r.ctx.damage_rows, Some((0, 5 * CELL_H_PX)));
+    }
+
+    #[test]
+    fn clear_then_redrawing_the_same_frame_leaves_the_buffer_blank() {
+        // retroglyph#694: `clear` zeroed `pixel_buf` but left the per-cell shadow (`prev_tiles`,
+        // `prev_tints`, `prev_layer_count`) untouched, so redrawing the exact same frame after a
+        // `clear` diffed against stale-but-identical shadow state, found nothing changed, and
+        // painted nothing: the buffer stayed all zero instead of showing the redrawn content.
+        let mut r = damage_renderer(2, 1);
+        let red = bg_tile(200, 0, 0);
+        draw_fill(&mut r, 2, 1, &red, None);
+        assert!(r.pixels().iter().all(|&p| p == 0x00C8_0000));
+
+        r.clear().unwrap();
+        assert!(r.pixels().iter().all(|&p| p == 0));
+
+        draw_fill(&mut r, 2, 1, &red, None);
+        assert!(
+            r.pixels().iter().all(|&p| p == 0x00C8_0000),
+            "redrawing the same frame after clear() must repaint, not stay blank"
+        );
     }
 
     // ── Dirty-cell repaint (retroglyph#302) ──────────────────────────────
@@ -2231,7 +2429,7 @@ mod span_tests {
 
     #[test]
     fn an_art_sheet_ignores_fg_however_it_is_set() {
-        // The #537 regression guard: a full-colour sheet renders as authored, and a caller who
+        // The #537 regression guard: a full-color sheet renders as authored, and a caller who
         // sets `fg` hoping to tint it gets no silent change.
         for fg in [
             Color::Default,
@@ -2304,7 +2502,7 @@ mod span_tests {
 
     #[test]
     fn sprite_align_center_shifts_the_blit_within_the_span_box() {
-        // An 8x16 sprite centred in a 2x1 span of 8x16 cells: 8px of slack, so it starts at x=4.
+        // An 8x16 sprite centered in a 2x1 span of 8x16 cells: 8px of slack, so it starts at x=4.
         let mut r = renderer_with_sprite(2, 1, 8, 16, 8, SpriteAlign::Center);
         let mut grid = Grid::new(2, 1);
         grid.write_span(
@@ -2317,10 +2515,10 @@ mod span_tests {
         .unwrap();
         paint(&mut r, &grid);
 
-        assert_eq!(px(&r, 2, 3, 0), BLUE, "left of the centred sprite");
-        assert_eq!(px(&r, 2, 4, 0), RED, "centred sprite starts at x=4");
-        assert_eq!(px(&r, 2, 11, 0), RED, "centred sprite ends at x=11");
-        assert_eq!(px(&r, 2, 12, 0), BLUE, "right of the centred sprite");
+        assert_eq!(px(&r, 2, 3, 0), BLUE, "left of the centered sprite");
+        assert_eq!(px(&r, 2, 4, 0), RED, "centered sprite starts at x=4");
+        assert_eq!(px(&r, 2, 11, 0), RED, "centered sprite ends at x=11");
+        assert_eq!(px(&r, 2, 12, 0), BLUE, "right of the centered sprite");
     }
 
     /// Regression guard for the stale-pixel half of retroglyph#412.

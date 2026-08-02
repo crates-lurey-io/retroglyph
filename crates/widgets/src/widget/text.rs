@@ -19,6 +19,11 @@ use crate::text::truncate as truncate_to_cols;
 /// [`Style::new()`] and `align` to [`Align::Left`]; set them with
 /// [`Text::style`]/[`Text::align`].
 ///
+/// Unlike [`super::BoxBorder`], [`super::Gauge`], [`super::StatBar`],
+/// [`super::Table`], and [`super::Button`], `Text` has no `theme()`/
+/// `theme_on()` pair: a line of plain text has no single semantic
+/// [`Theme`](crate::Theme) role to map onto, so callers set `style` directly.
+///
 /// # Examples
 ///
 /// ```
@@ -70,7 +75,7 @@ impl Widget for Text<'_> {
         if width == 0 {
             return;
         }
-        let text = truncate_to_cols(self.content, usize::from(width));
+        let text = truncate_to_cols(self.content, width);
         // `text` is bounded to `width` columns above, so narrowing the display width back is
         // always exact.
         #[allow(clippy::cast_possible_truncation)]

@@ -46,13 +46,18 @@ impl FrameClock {
     /// Catch-up is capped at five steps per frame to avoid a "spiral of death"
     /// when logic temporarily runs slower than real time.
     ///
+    /// `hz` above roughly 1e9 rounds `1.0 / hz` below `Duration`'s 1ns resolution; the step is
+    /// floored at 1ns instead of letting it round down to zero, which would otherwise make
+    /// [`tick`](Self::tick) return `true` forever (nothing is ever deducted from the accumulator)
+    /// and [`alpha`](Self::alpha) divide by zero.
+    ///
     /// # Panics
     ///
     /// Panics if `hz` is zero.
     #[must_use]
     pub fn new(hz: u32) -> Self {
         assert!(hz > 0, "FrameClock hz must be non-zero");
-        let step = Duration::from_secs_f64(1.0 / f64::from(hz));
+        let step = Duration::from_secs_f64(1.0 / f64::from(hz)).max(Duration::from_nanos(1));
         Self {
             step,
             accumulator: Duration::ZERO,
@@ -146,6 +151,21 @@ mod tests {
             steps += 1;
         }
         assert_eq!(steps, 5); // clamped to max_accumulate (5 steps)
+    }
+
+    #[test]
+    fn a_huge_hz_does_not_produce_a_zero_step() {
+        // retroglyph#729: `1.0 / hz` used to round below `Duration`'s 1ns resolution for `hz`
+        // above ~1e9, giving a zero step that made `tick()` loop forever and `alpha()` return NaN.
+        let mut clock = FrameClock::new(u32::MAX);
+        assert!(clock.step() > Duration::ZERO);
+        clock.advance(Duration::from_millis(1));
+        let mut steps = 0;
+        while clock.tick() {
+            steps += 1;
+            assert!(steps < 10_000_000, "tick() did not terminate");
+        }
+        assert!(clock.alpha().is_finite());
     }
 
     #[test]

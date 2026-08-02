@@ -37,7 +37,7 @@ impl Sense {
     pub const FOCUSABLE: Self = Self(1 << 3);
     /// Report [`Response::scroll_delta`](crate::Response::scroll_delta)
     /// whenever the pointer is within this widget's rect. Unlike the other
-    /// pointer senses, this is deliberately *not* limited to the single
+    /// pointer senses, this is *not* limited to the single
     /// topmost widget under the pointer: see [`Interaction::interact`](crate::Interaction::interact)'s
     /// doc comment on `scroll_delta` for why.
     pub const SCROLL: Self = Self(1 << 4);
@@ -52,7 +52,7 @@ impl Sense {
     /// secondary-button drags aren't a gesture this module resolves.
     pub const SECONDARY_CLICK: Self = Self(1 << 5);
     /// Keeps this call's hit-testing (so [`Response::hovered`](crate::Response::hovered)
-    /// still works -- most of the value of showing a disabled control at
+    /// still works, most of the value of showing a disabled control at
     /// all) but suppresses everything else this sense would otherwise
     /// register or report: no [`FocusRing`](crate::FocusRing) registration,
     /// and [`Response::pressed`](crate::Response::pressed),
@@ -61,8 +61,9 @@ impl Sense {
     /// [`focused`](crate::Response::focused), and
     /// [`secondary_clicked`](crate::Response::secondary_clicked) all report
     /// `false`, even if the gesture would otherwise satisfy them.
-    /// [`SCROLL`](Self::SCROLL) is unaffected: a disabled row inside a
-    /// scrollable list shouldn't block the list from scrolling through it.
+    /// [`SCROLL`](Self::SCROLL) is suppressed too: a disabled row's own
+    /// [`Sense::SCROLL`] never fires, though this doesn't stop an enclosing
+    /// scrollable list (a separate widget) from scrolling past it.
     ///
     /// A modifier, not a capability of its own: combine it with an existing
     /// sense rather than using it alone, e.g. `Sense::click() |

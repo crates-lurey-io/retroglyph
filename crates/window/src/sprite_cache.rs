@@ -121,8 +121,10 @@ impl SpriteCache {
     ///
     /// Returns [`TilesetError::ImageDecode`] if the bytes are not a valid image,
     /// [`TilesetError::ZeroTileSize`] if `opts.tile_width` or `opts.tile_height`
-    /// is 0, or [`TilesetError::InvalidDimensions`] if the decoded image
-    /// dimensions are not evenly divisible by the tile size.
+    /// is 0, [`TilesetError::InvalidDimensions`] if the decoded image
+    /// dimensions are not evenly divisible by the tile size, or
+    /// [`TilesetError::TooManyColumns`] if `opts.columns` declares more columns
+    /// than the image actually has at `opts.tile_width`.
     #[allow(clippy::cast_possible_truncation, clippy::cast_lossless)]
     pub fn load(&mut self, opts: &TilesetOptions) -> Result<(), TilesetError> {
         let img = image::load_from_memory(&opts.bytes)
@@ -146,7 +148,14 @@ impl SpriteCache {
             ));
         }
 
-        let columns = opts.columns.map_or(img_w / tile_w, u32::from);
+        let natural_columns = img_w / tile_w;
+        let columns = opts.columns.map_or(natural_columns, u32::from);
+        if columns > natural_columns {
+            return Err(TilesetError::TooManyColumns(
+                opts.columns.unwrap_or(0),
+                natural_columns,
+            ));
+        }
         let rows = img_h / tile_h;
         let total_tiles = (columns * rows) as usize;
 
@@ -154,7 +163,7 @@ impl SpriteCache {
 
         for tile_idx in 0..total_tiles {
             let Some(codepoint) = opts.codepage.codepoint(tile_idx) else {
-                break;
+                continue;
             };
 
             let tile_col = (tile_idx as u32) % columns;
@@ -420,6 +429,21 @@ mod tests {
     }
 
     #[test]
+    fn sprite_cache_rejects_columns_wider_than_the_image() {
+        // retroglyph#729: `.columns(8)` on a sheet that only actually has 4 columns used to read
+        // tile pixels from past the end of the decoded raw buffer instead of being rejected.
+        let png = make_test_png(8, 16, 4, 1);
+        let opts = TilesetOptions::builder(png)
+            .tile_size(8, 16)
+            .columns(8)
+            .build()
+            .unwrap();
+        let mut cache = SpriteCache::new();
+        let err = cache.load(&opts).unwrap_err();
+        assert!(matches!(err, TilesetError::TooManyColumns(8, 4)));
+    }
+
+    #[test]
     fn sprite_cache_load_empty_bytes_errors() {
         let opts = TilesetOptions::builder(vec![])
             .tile_size(16, 16)
@@ -468,6 +492,24 @@ mod tests {
         assert!(cache.get('\x01').is_some());
         assert!(cache.get('\x03').is_some());
         assert!(cache.get('\x04').is_none()); // only 4 tiles
+    }
+
+    #[test]
+    fn sprite_cache_surrogate_tile_index_stops_load_instead_of_skipping() {
+        // 2050 tiles starting at U+D7FF: tile 0 -> U+D7FF (valid), tiles 1..=2048 fall in the
+        // surrogate range U+D800..=U+DFFF (documented as skipped, not fatal), tile 2049 ->
+        // U+E000 (valid again, just past the surrogate range).
+        let png = make_test_png(1, 1, 2050, 1);
+        let opts = TilesetOptions::builder(png)
+            .tile_size(1, 1)
+            .columns(2050)
+            .start_codepoint('\u{D7FF}')
+            .build()
+            .unwrap();
+        let mut cache = SpriteCache::new();
+        cache.load(&opts).unwrap();
+        assert!(cache.get('\u{D7FF}').is_some());
+        assert!(cache.get('\u{E000}').is_some());
     }
 
     #[test]
@@ -561,7 +603,7 @@ mod tests {
         // A fully opaque destination always yields a fully opaque result.
         //
         // Before 0.3.0, source_over used the `(v + (v >> 8) + 1) >> 8` shift trick, which is
-        // exactly `floor`, and gave (127, 127, 0, 255) here -- one LSB darker on the green
+        // exactly `floor`, and gave (127, 127, 0, 255) here: one LSB darker on the green
         // channel. That downward bias, applied every frame a sprite is composited, is the bug
         // this crate depends on alpha-blend 0.3.0 to fix.
         assert_eq!(result, U8x4Rgba::new(127, 128, 0, 255));

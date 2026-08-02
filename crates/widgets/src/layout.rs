@@ -904,8 +904,8 @@ pub fn split_h_n_flex<const N: usize>(
 pub fn centered_rect(screen: Rect, width: u16, height: u16) -> Rect {
     let width = width.min(screen.width());
     let height = height.min(screen.height());
-    let x = screen.left() + (screen.width() - width) / 2;
-    let y = screen.top() + (screen.height() - height) / 2;
+    let x = screen.left().saturating_add((screen.width() - width) / 2);
+    let y = screen.top().saturating_add((screen.height() - height) / 2);
     Rect::new(x, y, width, height)
 }
 
@@ -1140,7 +1140,7 @@ mod tests {
     fn no_fill_leaves_gap() {
         let area = Rect::new(0, 0, 10, 4);
         let panes = split_v(area, &[Constraint::Fixed(2), Constraint::Fixed(2)]);
-        // Only 4 of 10 rows consumed; that is fine — panes still fit.
+        // Only 4 of 10 rows consumed; that is fine, panes still fit.
         assert_eq!(panes[0].height(), 2);
         assert_eq!(panes[1].height(), 2);
         assert_eq!(panes[1].bottom(), 4);
@@ -1350,6 +1350,26 @@ mod tests {
     }
 
     #[test]
+    fn spaced_split_resolves_percent_against_the_post_gap_axis() {
+        let area = Rect::new(0, 0, 100, 1);
+        let panes = split_h_spaced(
+            area,
+            &[Constraint::Percent(50), Constraint::Percent(50)],
+            10,
+        );
+        let widths: Vec<u16> = panes.iter().map(Rect::width).collect();
+        assert_eq!(widths, vec![45, 45]);
+
+        let panes = split_h_spaced(
+            area,
+            &[Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)],
+            10,
+        );
+        let widths: Vec<u16> = panes.iter().map(Rect::width).collect();
+        assert_eq!(widths, vec![45, 45]);
+    }
+
+    #[test]
     fn spaced_split_falls_back_with_one_pane_or_no_spacing() {
         let area = Rect::new(0, 0, 10, 1);
         assert_eq!(
@@ -1450,6 +1470,15 @@ mod tests {
         let screen = Rect::new(5, 5, 20, 10);
         let r = centered_rect(screen, 10, 4);
         assert_eq!(r, Rect::new(10, 8, 10, 4));
+    }
+
+    #[test]
+    fn centered_rect_does_not_overflow_on_a_far_off_screen() {
+        // retroglyph#729: `screen.left() + (screen.width() - width) / 2` used to overflow `u16`
+        // once `screen.left()` was large enough, even though `width`/`height` themselves fit.
+        let screen = Rect::new(50_000, 0, 40_000, 10);
+        let r = centered_rect(screen, 10, 4);
+        assert_eq!(r, Rect::new(u16::MAX, 3, 10, 4));
     }
 
     #[test]

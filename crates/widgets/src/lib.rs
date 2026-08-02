@@ -21,7 +21,7 @@
 //!   render each frame, with no `Backend` type parameter, since drawing touches nothing but
 //!   cells. [`AnimatedWidget`] is `StatefulWidget`'s sibling for state that evolves with
 //!   wall-clock time (e.g. [`ScrollState`]'s momentum physics) instead of only in response to
-//!   input -- see its own docs. [`InteractiveWidget`] is the sibling trait for widgets that also
+//!   input; see its own docs. [`InteractiveWidget`] is the sibling trait for widgets that also
 //!   read a [`Response`] (`Button`, `Scrollbar`, `List`, `Tabs`).
 //! - [`Interaction`] ([`interact`]) for hover/click/drag/focus tracking
 //!   without a retained widget tree: the sibling of [`ListState`] for

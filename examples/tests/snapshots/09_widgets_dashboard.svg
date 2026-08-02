@@ -41,10 +41,10 @@
   <tspan fill="#cccccc" x="201.2">       </tspan>
   <tspan fill="#6e7082" x="260.0" style="background:#161620">MEM</tspan>
   <tspan fill="#cccccc" x="285.2"> </tspan>
-  <tspan fill="#c2c85f" x="293.6">█████</tspan>
+  <tspan fill="#c3c85f" x="293.6">█████</tspan>
   <tspan fill="#32323c" x="335.6">░░░░░░</tspan>
   <tspan fill="#cccccc" x="386.0"> </tspan>
-  <tspan fill="#c2c85f" x="394.4"> 41%</tspan>
+  <tspan fill="#c3c85f" x="394.4"> 41%</tspan>
 </text>
 <text font-family="monospace" font-size="14" y="116.0" xml:space="preserve">
   <tspan fill="#6e7082" x="8.0" style="background:#161620">search</tspan>
@@ -59,22 +59,22 @@
   <tspan fill="#cccccc" x="108.8">       </tspan>
   <tspan fill="#6e7082" x="167.6" style="background:#161620">DOWN</tspan>
   <tspan fill="#cccccc" x="201.2">           </tspan>
-  <tspan fill="#a4c865" x="293.6">▂</tspan>
-  <tspan fill="#b5c862" x="302.0">▃</tspan>
-  <tspan fill="#d3c85b" x="310.4">▄</tspan>
-  <tspan fill="#c6c85e" x="318.8">▃</tspan>
+  <tspan fill="#a5c866" x="293.6">▂</tspan>
+  <tspan fill="#b6c862" x="302.0">▃</tspan>
+  <tspan fill="#d4c85c" x="310.4">▄</tspan>
+  <tspan fill="#c7c85f" x="318.8">▃</tspan>
   <tspan fill="#dcc15a" x="327.2">▄</tspan>
   <tspan fill="#dcaa5a" x="335.6">▅</tspan>
   <tspan fill="#dcb45a" x="344.0">▅</tspan>
-  <tspan fill="#dc7e5a" x="352.4">▇</tspan>
-  <tspan fill="#dc6a5a" x="360.8">▇</tspan>
-  <tspan fill="#dc745a" x="369.2">▇</tspan>
+  <tspan fill="#dc7f5a" x="352.4">▇</tspan>
+  <tspan fill="#dc6b5a" x="360.8">▇</tspan>
+  <tspan fill="#dc755a" x="369.2">▇</tspan>
   <tspan fill="#dc995a" x="377.6">▆</tspan>
-  <tspan fill="#dc885a" x="386.0">▆</tspan>
-  <tspan fill="#dc6d5a" x="394.4">▇</tspan>
+  <tspan fill="#dc895a" x="386.0">▆</tspan>
+  <tspan fill="#dc6e5a" x="394.4">▇</tspan>
   <tspan fill="#dc5a5a" x="402.8">█</tspan>
   <tspan fill="#dc675a" x="411.2">█</tspan>
-  <tspan fill="#dc745a" x="419.6">▇</tspan>
+  <tspan fill="#dc755a" x="419.6">▇</tspan>
 </text>
 <text font-family="monospace" font-size="14" y="152.0" xml:space="preserve">
   <tspan fill="#6e7082" x="8.0" style="background:#161620">cache</tspan>

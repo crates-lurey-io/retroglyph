@@ -75,8 +75,8 @@ pub struct Surface<'a> {
 ///
 /// This is a convention, not a restriction: [`Surface::on_layer`] still accepts any `u8`, and a
 /// tile map or sprite-heavy app with its own multi-layer scheme (terrain/items/actors/...) has no
-/// reason to route through `Layer` at all. `Layer` exists for the overlapping-*UI* case --
-/// chrome, popups, debug HUDs -- where a small, shared, named split is worth more than 256 open
+/// reason to route through `Layer` at all. `Layer` exists for the overlapping-*UI* case:
+/// chrome, popups, debug HUDs, where a small, shared, named split is worth more than 256 open
 /// numeric ids.
 ///
 /// # Examples
@@ -97,7 +97,7 @@ pub struct Surface<'a> {
 /// // Chrome draws on `Hud`, above the screen.
 /// surface.on_tier(Layer::Hud).print((0, 0), "File  Edit  View", Style::default());
 ///
-/// // A dropdown draws on `Overlay`, above the HUD -- painting it before or after the two calls
+/// // A dropdown draws on `Overlay`, above the HUD: painting it before or after the two calls
 /// // above makes no difference, because it's on a higher tier, not drawn later.
 /// surface.on_tier(Layer::Overlay).print((0, 1), "New", Style::default());
 /// ```
@@ -109,7 +109,7 @@ pub enum Layer {
     World,
     /// Persistent chrome: menu bars, status lines, HUD. Grid layer 1.
     Hud,
-    /// Popups, dropdowns, modals -- painted over [`Layer::World`] and [`Layer::Hud`] regardless
+    /// Popups, dropdowns, modals, painted over [`Layer::World`] and [`Layer::Hud`] regardless
     /// of draw order. Grid layer 2.
     Overlay,
     /// Debug and dev tooling. Always the top-most tier, so it stays visible over an open
@@ -368,11 +368,11 @@ impl<'a> Surface<'a> {
     /// a caller can draw in a shifted (e.g. world/camera) coordinate space and let the surface do
     /// the clipping, rather than subtracting `origin` from every coordinate by hand.
     ///
-    /// Every coordinate-taking method on the returned surface -- [`put`](Self::put),
+    /// Every coordinate-taking method on the returned surface ([`put`](Self::put),
     /// [`put_signed`](Self::put_signed), [`print`](Self::print), [`print_line`](Self::print_line),
     /// [`fill_rect`](Self::fill_rect), [`put_offset`](Self::put_offset),
     /// [`put_span`](Self::put_span), [`put_span_uniform`](Self::put_span_uniform), and
-    /// [`clear_region`](Self::clear_region) -- subtracts `origin` (composed with any outstanding
+    /// [`clear_region`](Self::clear_region)) subtracts `origin` (composed with any outstanding
     /// translate) from the coordinate it is given before applying its usual bounds check. Only
     /// [`clear`](Self::clear), which takes no coordinate and always clears this surface's whole
     /// area, is unaffected.
@@ -427,7 +427,7 @@ impl<'a> Surface<'a> {
     /// Chaining `clip(...).translate(...)` directly works when the result is used right where
     /// it's produced (both `clip` and `translate` return a `Surface<'_>` borrowing the previous
     /// step for exactly that call), but a helper that hands the composed view back to its own
-    /// caller -- for example [`Camera::surface`](crate::Camera::surface) -- needs the two
+    /// caller (for example [`Camera::surface`](crate::Camera::surface)) needs the two
     /// narrowings applied against a single `&mut self` borrow instead, so the returned surface
     /// can outlive the call. This does that.
     ///
@@ -545,7 +545,7 @@ impl<'a> Surface<'a> {
     /// by re-adding [`area`](Self::area)'s own top-left, so a clipped area that does not itself
     /// start at grid `(0, 0)` (e.g. [`Camera::surface`](crate::Camera::surface)'s
     /// `clip_translate`) still resolves to the right absolute cell. The result is then checked
-    /// against [`clip_rect`](Self::clip_rect), not `area`, since the clip -- never the area -- is
+    /// against [`clip_rect`](Self::clip_rect), not `area`, since the clip, never the area, is
     /// what decides whether a write lands.
     fn shift(&self, x: u16, y: u16) -> Option<(u16, u16)> {
         let sx = i32::from(x).checked_sub(self.origin_offset.0)?;
@@ -577,11 +577,36 @@ impl<'a> Surface<'a> {
 
     /// Writes `grapheme` (already a single extended grapheme cluster) at `(x, y)`. A no-op if
     /// out of this surface's clip.
+    ///
+    /// A 2-column grapheme also needs its spacer cell (`x + 1`) inside the clip: `shift` only
+    /// checks the primary cell, and `Grid::write_grapheme` only refuses the spacer at the
+    /// *grid*'s own edge, not the clip's, so without this the spacer would land one column past
+    /// the clip. Refusing the whole write here (rather than writing a primary cell with no
+    /// spacer) matches [`span_fits`](Self::span_fits)'s reasoning: a footprint half outside the
+    /// clip would reserve a cell the caller does not own.
     #[cfg(feature = "egc")]
     fn put_grapheme(&mut self, x: u16, y: u16, grapheme: &str, style: Style) {
         let Some((x, y)) = self.shift(x, y) else {
             return;
         };
+        self.write_grapheme_at(x, y, grapheme, style);
+    }
+
+    /// Writes `grapheme` at the already-*absolute* grid coordinate `(x, y)` (post-[`shift`],
+    /// or an equivalent translation a caller had to do by hand): the width-2 spacer-in-clip
+    /// check, [`Grid::write_grapheme`]'s wide-char bookkeeping, and this surface's tint.
+    ///
+    /// Shared by [`put_grapheme`](Self::put_grapheme) and [`put_signed`](Self::put_signed),
+    /// which cannot just call `put_grapheme` with its own local coordinates: `put_signed`
+    /// already subtracts `origin_offset` itself (see its doc), so routing through `shift` again
+    /// would subtract it twice.
+    #[cfg(feature = "egc")]
+    fn write_grapheme_at(&mut self, x: u16, y: u16, grapheme: &str, style: Style) {
+        use unicode_width::UnicodeWidthStr;
+
+        if grapheme.width() == 2 && !self.clip.contains(x.saturating_add(1), y) {
+            return;
+        }
         self.grid.write_grapheme(self.layer, x, y, grapheme, style);
         self.apply_tint(x, y);
     }
@@ -671,9 +696,18 @@ impl<'a> Surface<'a> {
         if !self.clip.contains(abs_x, abs_y) {
             return;
         }
-        let tile = Tile::new(ch, style);
-        self.grid.put_tile(self.layer, (abs_x, abs_y), tile);
-        self.apply_tint(abs_x, abs_y);
+        #[cfg(feature = "egc")]
+        {
+            let mut buf = [0u8; 4];
+            let s = ch.encode_utf8(&mut buf);
+            self.write_grapheme_at(abs_x, abs_y, s, style);
+        }
+        #[cfg(not(feature = "egc"))]
+        {
+            let tile = Tile::new(ch, style);
+            self.grid.put_tile(self.layer, (abs_x, abs_y), tile);
+            self.apply_tint(abs_x, abs_y);
+        }
     }
 
     /// Print `text` starting at `pos` in `style`.
@@ -716,7 +750,9 @@ impl<'a> Surface<'a> {
         use unicode_segmentation::UnicodeSegmentation;
         use unicode_width::UnicodeWidthStr;
 
-        let right = self.clip.right();
+        // `cx` is area-local (it starts at `pos.x`, which `shift()` treats as local), so the
+        // wrap threshold must be too: translate `clip.right()` out of absolute grid space.
+        let right = self.clip.right().saturating_sub(self.area.left());
         let mut cx = pos.x;
         let mut cy = pos.y;
         for grapheme in text.graphemes(true) {
@@ -744,7 +780,9 @@ impl<'a> Surface<'a> {
     /// [`print`](Self::print) implementation used when `egc` is disabled: splits on `char`.
     #[cfg(not(feature = "egc"))]
     fn print_chars(&mut self, pos: Pos, text: &str, style: Style) {
-        let right = self.clip.right();
+        // `cx` is area-local (it starts at `pos.x`, which `shift()` treats as local), so the
+        // wrap threshold must be too: translate `clip.right()` out of absolute grid space.
+        let right = self.clip.right().saturating_sub(self.area.left());
         let mut cx = pos.x;
         let mut cy = pos.y;
         for ch in text.chars() {
@@ -858,7 +896,17 @@ impl<'a> Surface<'a> {
             HAlign::Center => rect.width().saturating_sub(text_width) / 2,
             HAlign::Right => rect.width().saturating_sub(text_width),
         };
-        let pos = (rect.left().saturating_add(x_offset), rect.top());
+        // `clip` treats `rect` as absolute (it intersects `self.clip`, itself absolute), but
+        // `print` treats its `pos` as local to `self.area` (see `shift`). Compute the aligned
+        // start column in `rect`'s absolute space, then translate it into `self.area`-local
+        // space before handing it to `print`, or it silently clips away on any surface whose
+        // `area` doesn't start at grid column/row 0.
+        let pos = (
+            rect.left()
+                .saturating_add(x_offset)
+                .saturating_sub(self.area.left()),
+            rect.top().saturating_sub(self.area.top()),
+        );
         self.clip(rect).print(pos, text, style);
     }
 
@@ -1044,8 +1092,25 @@ impl<'a> Surface<'a> {
             return;
         };
         let offset = offset.into();
-        let tile = Tile::new(ch, style).with_offset(offset.dx, offset.dy);
-        self.grid.put_tile(self.layer, (x, y), tile);
+        #[cfg(feature = "egc")]
+        {
+            let mut buf = [0u8; 4];
+            let s = ch.encode_utf8(&mut buf);
+            self.write_grapheme_at(x, y, s, style);
+        }
+        #[cfg(not(feature = "egc"))]
+        {
+            let tile = Tile::new(ch, style);
+            self.grid.put_tile(self.layer, (x, y), tile);
+            self.apply_tint(x, y);
+        }
+        // The offset is a pixel nudge on the tile the write above just landed, not part of
+        // `write_grapheme`'s contract (it has no offset parameter): set it directly via
+        // `tile_mut` rather than widening `Grid`'s public write API for a `Surface`-only concern.
+        if let Some(tile) = self.grid.tile_mut(self.layer, (x, y)) {
+            tile.dx = offset.dx;
+            tile.dy = offset.dy;
+        }
     }
 
     /// Clears this surface's own area, intersected with its clip (on its own layer), back to
@@ -1453,6 +1518,27 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "egc")]
+    fn a_wide_char_at_the_clip_edge_writes_its_spacer_outside_the_clip() {
+        let mut grid = Grid::new(8, 1);
+        let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 8, 1), 0);
+
+        // Clip is columns 0..4; the wide char's primary cell (column 3) is inside the clip, but
+        // its spacer would land at column 4, outside it. The whole write is refused.
+        surface
+            .clip(Rect::new(0, 0, 4, 1))
+            .put((3, 0), '\u{6f22}', Style::default());
+
+        assert_eq!(grid.tile(0, Pos::new(3, 0)).map(Tile::glyph), Some(' '));
+        assert!(
+            !grid
+                .tile(0, Pos::new(4, 0))
+                .is_some_and(|t| t.flags().contains(crate::tile::TileFlags::WIDE_CHAR_SPACER)),
+            "spacer must not be written outside the clip"
+        );
+    }
+
+    #[test]
     fn clip_intersects_rather_than_replaces_so_it_cannot_widen() {
         let mut grid = Grid::new(8, 4);
         let area = Rect::new(2, 1, 4, 2);
@@ -1553,6 +1639,20 @@ mod tests {
     }
 
     #[test]
+    fn print_wraps_at_the_surfaces_own_width_not_at_clip_right() {
+        // `area` starts at column 4, so the surface-local wrap column (4) is smaller than the
+        // absolute grid column `clip.right()` resolves to (8). Wrapping must use the former.
+        let mut grid = Grid::new(8, 2);
+        let mut surface = Surface::new(&mut grid, Rect::new(4, 0, 4, 2), 0);
+        surface.print((0, 0), "abcdef", Style::default());
+
+        assert_eq!(grid[Pos::new(4, 0)].glyph(), 'a');
+        assert_eq!(grid[Pos::new(7, 0)].glyph(), 'd');
+        assert_eq!(grid[Pos::new(4, 1)].glyph(), 'e');
+        assert_eq!(grid[Pos::new(5, 1)].glyph(), 'f');
+    }
+
+    #[test]
     fn clip_makes_put_span_measure_its_footprint_against_the_sub_rect() {
         let mut grid = Grid::new(4, 3);
         {
@@ -1646,6 +1746,63 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "egc")]
+    fn put_signed_does_wide_char_bookkeeping_like_put() {
+        use crate::tile::TileFlags;
+
+        let mut grid = Grid::new(8, 2);
+        {
+            let mut surface = screen(&mut grid);
+
+            // A wide char via `put`: primary at (0, 0), spacer at (1, 0).
+            surface.put((0, 0), '\u{6f22}', Style::default());
+            // Overwriting the primary cell via `put_signed` must clear the orphaned spacer too.
+            surface.put_signed((0, 0), 'a', Style::default());
+        }
+        assert!(
+            !grid[Pos::new(1, 0)]
+                .flags()
+                .contains(TileFlags::WIDE_CHAR_SPACER)
+        );
+
+        // Writing a wide char via `put_signed` must set the flags and spacer `put` would.
+        screen(&mut grid).put_signed((3, 0), '\u{6f22}', Style::default());
+        assert!(grid[Pos::new(3, 0)].flags().contains(TileFlags::WIDE_CHAR));
+        assert!(
+            grid[Pos::new(4, 0)]
+                .flags()
+                .contains(TileFlags::WIDE_CHAR_SPACER)
+        );
+    }
+
+    #[test]
+    fn put_offset_applies_the_surfaces_tint() {
+        let mut grid = Grid::new(4, 4);
+        {
+            let mut surface = screen(&mut grid);
+            surface.with_tint(Tint::multiply(128, 64, 32)).put_offset(
+                (1, 1),
+                Offset::new(2, -2),
+                'X',
+                Style::default(),
+            );
+        }
+
+        assert_eq!(grid.tint(0, 1, 1), Tint::multiply(128, 64, 32));
+    }
+
+    #[test]
+    fn put_offset_still_carries_the_pixel_offset() {
+        let mut grid = Grid::new(4, 4);
+        let mut surface = screen(&mut grid);
+
+        surface.put_offset((1, 1), Offset::new(2, -2), 'X', Style::default());
+
+        let tile = grid.tile(0, Pos::new(1, 1)).unwrap();
+        assert_eq!((tile.dx(), tile.dy()), (2, -2));
+    }
+
+    #[test]
     fn translate_does_not_change_area_width_or_height() {
         let mut grid = Grid::new(10, 10);
         let mut surface = screen(&mut grid);
@@ -1721,7 +1878,7 @@ mod tests {
             let mut view = surface.clip_translate(Rect::new(5, 5, 10, 10), (45, 45));
 
             // (50, 50) minus the origin (45, 45) is (5, 5): the clipped area's local (5, 5),
-            // landing at absolute grid (10, 10) -- not at (5, 5), which is what the pre-fix
+            // landing at absolute grid (10, 10), not at (5, 5), which is what the pre-fix
             // `shift` incorrectly produced by using the clip's raw absolute bounds instead of
             // re-adding the area's own top-left.
             view.put((50, 50), '@', Style::default());
@@ -1934,6 +2091,47 @@ mod tests {
 
         assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
         assert_eq!(grid[Pos::new(1, 0)].glyph(), ' ');
+    }
+
+    #[test]
+    #[cfg(feature = "egc")]
+    fn print_aligned_right_on_an_offset_surface_drops_the_text() {
+        let mut grid = Grid::new(8, 1);
+        {
+            // `area` starts at column 2, not 0: local and absolute coordinates now differ.
+            let mut surface = Surface::new(&mut grid, Rect::new(2, 0, 6, 1), 0);
+            surface.print_aligned(
+                Rect::new(0, 0, 6, 1),
+                "hi",
+                crate::layout::HAlign::Right,
+                Style::default(),
+            );
+        }
+
+        // `rect` (0, 0, 6, 1) intersected with the surface's own clip (2, 0, 6, 1) leaves
+        // columns 2..6 visible; right-aligning "hi" within `rect` puts it at columns 4..6.
+        assert_eq!(grid[Pos::new(4, 0)].glyph(), 'h');
+        assert_eq!(grid[Pos::new(5, 0)].glyph(), 'i');
+    }
+
+    #[test]
+    #[cfg(feature = "egc")]
+    fn print_aligned_center_on_an_offset_surface_drops_the_text() {
+        let mut grid = Grid::new(8, 1);
+        {
+            let mut surface = Surface::new(&mut grid, Rect::new(2, 0, 6, 1), 0);
+            surface.print_aligned(
+                Rect::new(0, 0, 6, 1),
+                "hi",
+                crate::layout::HAlign::Center,
+                Style::default(),
+            );
+        }
+
+        // (6 - 2) / 2 == 2 columns of left padding within `rect`, so "hi" lands at absolute
+        // columns 2..4, which is inside the surface's own visible columns 2..6.
+        assert_eq!(grid[Pos::new(2, 0)].glyph(), 'h');
+        assert_eq!(grid[Pos::new(3, 0)].glyph(), 'i');
     }
 
     #[test]

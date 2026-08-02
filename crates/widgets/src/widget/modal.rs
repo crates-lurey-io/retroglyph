@@ -25,7 +25,7 @@ use crate::{Align, Theme};
 /// content rect is part of this type's contract.
 ///
 /// [`Modal::render`] draws through whatever [`Surface`] it's given, on whatever layer that
-/// surface is already scoped to -- it has no layer of its own to default. A modal painted over
+/// surface is already scoped to: it has no layer of its own to default. A modal painted over
 /// an active screen should be given a surface on [`Layer::Overlay`](retroglyph_core::Layer::Overlay)
 /// (`surface.on_tier(Layer::Overlay)`), so it paints on top regardless of whether the screen or
 /// the modal renders first this frame; see [`Layer`](retroglyph_core::Layer)'s docs for why that

@@ -110,8 +110,9 @@ impl<'a> Tabs<'a> {
     }
 
     /// Applies `theme`'s named roles to this tab strip: `style` becomes `theme.dim` (unselected
-    /// tabs read as de-emphasized) on `theme.panel_bg`, and `selected_style` becomes
-    /// `theme.accent` on `theme.panel_bg`.
+    /// tabs read as de-emphasized) on `theme.panel_bg`, and `selected_style` becomes `theme.bg`
+    /// on `theme.accent`: the same bright-on-accent highlight [`super::List::theme`] and
+    /// [`super::Table::theme`] give their own selected state.
     ///
     /// `style` sets an explicit background rather than leaving it at [`Style::new()`]'s default:
     /// an unset background isn't "transparent" once a real backend draws it (a bare
@@ -127,21 +128,21 @@ impl<'a> Tabs<'a> {
         self.theme_on(theme, theme.panel_bg)
     }
 
-    /// Same as [`Tabs::theme`], but `style`/`selected_style` are drawn on `bg` instead of
-    /// `theme.panel_bg`: for a tab strip drawn directly on a backdrop other than a themed
-    /// [`super::Panel`]/[`super::Modal`]'s fill. [`Tabs::theme`] is exactly
-    /// `theme_on(theme, theme.panel_bg)`.
+    /// Same as [`Tabs::theme`], but `style` is drawn on `bg` instead of `theme.panel_bg`: for a
+    /// tab strip drawn directly on a backdrop other than a themed [`super::Panel`]/
+    /// [`super::Modal`]'s fill. `selected_style` still uses `theme.accent` as its background,
+    /// unaffected by `bg`. [`Tabs::theme`] is exactly `theme_on(theme, theme.panel_bg)`.
     #[must_use]
     pub fn theme_on(mut self, theme: Theme, bg: Color) -> Self {
         self.style = Style::new().fg(theme.dim).bg(bg);
-        self.selected_style = Style::new().fg(theme.accent).bg(bg);
+        self.selected_style = Style::new().fg(theme.bg).bg(theme.accent);
         self
     }
 }
 
 impl Tabs<'_> {
     /// Each drawn tab's `(index, start_x, text_width)`, left to right, stopping once a title
-    /// would start past `area`'s right edge -- the same layout [`Tabs::draw`] paints and
+    /// would start past `area`'s right edge: the same layout [`Tabs::draw`] paints and
     /// [`Tabs::tab_at`] hit-tests against, computed once here so the two can't diverge. `x`
     /// values are absolute grid coordinates (matching `area`'s own space), the same space
     /// [`Response::pointer_pos`] reports in, since [`Tabs::tab_at`] compares them directly.
@@ -184,7 +185,7 @@ impl Tabs<'_> {
         for &(index, abs_x, text_width) in &columns {
             let x = abs_x - area.left();
             let title = self.titles[index];
-            let text = truncate_to_cols(title, usize::from(text_width));
+            let text = truncate_to_cols(title, text_width);
             let style = if Some(index) == selected {
                 self.selected_style
             } else {
@@ -282,11 +283,12 @@ mod tests {
         let tabs = Tabs::new(&titles).select(Some(1));
         Widget::render(&tabs, &mut Surface::new(&mut grid, area, 0));
 
-        // Themed tabs (the `new()` default) distinguish the selected tab by foreground color
-        // (`theme.accent` vs `theme.dim`), not background: both share `theme.panel_bg`.
-        let selected_fg = grid[Pos::new(4, 0)].style().foreground();
-        let plain_fg = grid[Pos::new(0, 0)].style().foreground();
-        assert_ne!(selected_fg, plain_fg);
+        // Themed tabs (the `new()` default) distinguish the selected tab by both foreground and
+        // background color: `theme.bg` on `theme.accent` vs `theme.dim` on `theme.panel_bg`.
+        let selected_style = grid[Pos::new(4, 0)].style();
+        let unselected_style = grid[Pos::new(0, 0)].style();
+        assert_ne!(selected_style.foreground(), unselected_style.foreground());
+        assert_ne!(selected_style.background(), unselected_style.background());
     }
 
     #[test]
@@ -297,6 +299,8 @@ mod tests {
         let tabs = Tabs::new(&titles);
         Widget::render(&tabs, &mut Surface::new(&mut grid, area, 0));
 
+        // With nothing selected, both tabs use the same unselected `style`, so their backgrounds
+        // match (unlike a selected tab, which gets `theme.accent` instead).
         let bg0 = grid[Pos::new(0, 0)].style().background();
         let bg1 = grid[Pos::new(4, 0)].style().background();
         assert_eq!(bg0, bg1);
@@ -401,13 +405,10 @@ mod tests {
             grid[Pos::new(0, 0)].style().background(),
             Theme::DARK.panel_bg
         );
-        assert_eq!(
-            grid[Pos::new(4, 0)].style().foreground(),
-            Theme::DARK.accent
-        );
+        assert_eq!(grid[Pos::new(4, 0)].style().foreground(), Theme::DARK.bg);
         assert_eq!(
             grid[Pos::new(4, 0)].style().background(),
-            Theme::DARK.panel_bg
+            Theme::DARK.accent
         );
     }
 
@@ -423,11 +424,13 @@ mod tests {
             .select(Some(0));
         Widget::render(&tabs, &mut Surface::new(&mut grid, area, 0));
 
+        // `selected_style` uses `theme.accent` as its background regardless of `bg`: only the
+        // unselected `style` picks up the custom backdrop.
+        assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Theme::DARK.bg);
         assert_eq!(
-            grid[Pos::new(0, 0)].style().foreground(),
+            grid[Pos::new(0, 0)].style().background(),
             Theme::DARK.accent
         );
-        assert_eq!(grid[Pos::new(0, 0)].style().background(), Color::Default);
     }
 
     #[test]

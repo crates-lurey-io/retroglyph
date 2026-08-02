@@ -128,12 +128,16 @@ impl BitmapFont {
     /// glyphs (multi-byte rows, #164): today a row is a single byte (`glyph_width <= 8`), so its
     /// bits are read straight out of that byte.
     ///
+    /// A `glyph_width` above 8 is out of this format's contract (rows are one byte, so only bits
+    /// 0..8 exist); it is clamped to 8 here rather than shifting past the byte's width, so columns
+    /// 8.. of an oversized font are simply never yielded instead of panicking.
+    ///
     /// # Panics
     ///
     /// Panics if `index as u16 >= self.glyph_count` (via [`rows`](Self::rows)).
     #[must_use = "iterators are lazy and do nothing unless consumed"]
     pub fn glyph_pixels(&self, index: u8) -> impl Iterator<Item = (u8, u8)> + '_ {
-        let width = self.glyph_width;
+        let width = self.glyph_width.min(8);
         self.rows(index)
             .iter()
             .enumerate()
@@ -690,8 +694,8 @@ pub mod unscii16 {
 /// sextants exist to give [`retroglyph_core::subcell::quantize_quadrant`] and
 /// [`retroglyph_core::subcell::quantize_sextant`] a font that actually renders their glyphs as
 /// blocks instead of a CP437 solid-block substitute, and braille is a common terminal-UI density
-/// trick with no CP437 equivalent at all. All three repertoires are pure geometry -- rectangular
-/// quadrants, banded sextants, a 2x4 dot grid -- so both fonts below are computed at compile time
+/// trick with no CP437 equivalent at all. All three repertoires are pure geometry (rectangular
+/// quadrants, banded sextants, a 2x4 dot grid), so both fonts below are computed at compile time
 /// by a `const fn` rather than transcribed from an external font file; there is no font asset
 /// backing this module and no `image`/build-script dependency.
 ///
@@ -760,7 +764,7 @@ pub mod legacy_computing {
 
         /// The 60 addressable sextant masks, in ascending order: every 6-bit pattern `1..=62`
         /// (`0` and `63` would be space/full-block, already CP437) except `21` and `42` (a fully
-        /// filled left/right column respectively -- CP437's own `▌`/`▐` -- which have no
+        /// filled left/right column respectively, CP437's own `▌`/`▐`, which have no
         /// codepoint of their own in the Sextants block).
         ///
         /// Bit order: 0 = top-left, 1 = top-right, 2 = mid-left, 3 = mid-right, 4 = bottom-left,
@@ -786,7 +790,7 @@ pub mod legacy_computing {
         /// Symbols for Legacy Computing block.
         ///
         /// Sextant codepoints are not `0x1FB00 + mask`: masks `21` and `42` are gaps (see
-        /// [`QUADRANTS`] -- they're CP437's `▌`/`▐` instead), so every mask above each gap
+        /// [`QUADRANTS`], they're CP437's `▌`/`▐` instead), so every mask above each gap
         /// shifts its codepoint down by one relative to a naive offset. Mask `1` -> U+1FB00;
         /// mask `22` (one gap below it, at `21`) -> U+1FB00 + 21 - 1 = U+1FB14.
         const fn sextant_codepoint(mask: u8) -> u32 {
@@ -832,7 +836,7 @@ pub mod legacy_computing {
                 qi += 1;
             }
 
-            // Sextants: 2 columns (mx=4) x 3 row bands (y=0,5,11,16 -- uneven, to avoid a 1px
+            // Sextants: 2 columns (mx=4) x 3 row bands (y=0,5,11,16, uneven, to avoid a 1px
             // seam between vertically stacked filled cells).
             let masks = sextant_masks();
             let mut si = 0;
@@ -1252,6 +1256,7 @@ const fn try_unicode_to_cp437(ch: char) -> Option<u8> {
         '¢' => Some(0x9B),
         '£' => Some(0x9C),
         '¥' => Some(0x9D),
+        '₧' => Some(0x9E),
         'ƒ' => Some(0x9F),
         'á' => Some(0xA0),
         'í' => Some(0xA1),
@@ -1263,6 +1268,7 @@ const fn try_unicode_to_cp437(ch: char) -> Option<u8> {
         'º' => Some(0xA7),
         '¿' => Some(0xA8),
         '⌐' => Some(0xA9),
+        '¬' => Some(0xAA),
         '½' => Some(0xAB),
         '¼' => Some(0xAC),
         '¡' => Some(0xAD),
@@ -1349,11 +1355,13 @@ const fn try_unicode_to_cp437(ch: char) -> Option<u8> {
         '÷' => Some(0xF6),
         '≈' => Some(0xF7),
         '°' => Some(0xF8),
-        '·' | '∙' => Some(0xF9),
+        '∙' => Some(0xF9),
+        '·' => Some(0xFA),
         '√' => Some(0xFB),
         'ⁿ' => Some(0xFC),
         '²' => Some(0xFD),
         '■' => Some(0xFE),
+        '\u{00A0}' => Some(0xFF),
 
         // ── Roguelike / Unicode symbols ───────────────────────────────────
         '☺' => Some(0x01),
@@ -1419,6 +1427,31 @@ mod tests {
             Some(0xF9),
             "U+2219 BULLET OPERATOR"
         );
+        assert_eq!(
+            try_unicode_to_cp437('\u{00A0}'),
+            Some(0xFF),
+            "U+00A0 NO-BREAK SPACE"
+        );
+        assert_eq!(try_unicode_to_cp437('¬'), Some(0xAA), "U+00AC NOT SIGN");
+        assert_eq!(try_unicode_to_cp437('₧'), Some(0x9E), "U+20A7 PESETA SIGN");
+        assert_eq!(try_unicode_to_cp437('·'), Some(0xFA), "U+00B7 MIDDLE DOT");
+    }
+
+    /// Every entry in [`crate::tileset::CP437_TO_UNICODE`] must round-trip back through
+    /// [`try_unicode_to_cp437`] to its own index: the reverse map is supposed to be a clean
+    /// inverse of the crate's own canonical forward table.
+    #[cfg(feature = "tilesets")]
+    #[test]
+    fn cp437_to_unicode_round_trips_through_try_unicode_to_cp437() {
+        for (i, &ch) in crate::tileset::CP437_TO_UNICODE.iter().enumerate() {
+            #[allow(clippy::cast_possible_truncation)]
+            let expected = i as u8;
+            assert_eq!(
+                try_unicode_to_cp437(ch),
+                Some(expected),
+                "0x{i:02X} {ch:?} did not round-trip"
+            );
+        }
     }
 
     /// A primary font that only covers the ASCII half of CP437 (glyph indices 0..128), so
@@ -1521,6 +1554,16 @@ mod tests {
         let font = BitmapFont::new(&DATA, 5, 1, 1);
         let pixels: Vec<(u8, u8)> = font.glyph_pixels(0).collect();
         assert_eq!(pixels, [(0, 0), (4, 0)]);
+    }
+
+    #[test]
+    fn glyph_pixels_does_not_overflow_the_shift_for_width_above_8() {
+        // retroglyph#729: `row >> (width - 1 - x)` used to shift past the byte's width once
+        // `glyph_width` exceeded 8, which this 1-bit-per-row format never actually supports.
+        static DATA: [u8; 1] = [0b1111_1111];
+        let font = BitmapFont::new(&DATA, 12, 1, 1);
+        let pixels: Vec<(u8, u8)> = font.glyph_pixels(0).collect();
+        assert_eq!(pixels, (0..8).map(|x| (x, 0)).collect::<Vec<_>>());
     }
 
     /// Reproduces retroglyph#507: a fallback font built with [`BitmapFont::with_charset`] can

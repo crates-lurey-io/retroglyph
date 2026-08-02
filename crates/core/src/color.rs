@@ -150,8 +150,9 @@ const fn indexed_to_rgb(index: u8) -> (u8, u8, u8) {
 /// Rounds `value` to the nearest of the 6 [`CUBE_STEPS`], returning the step's index
 /// (0–5).
 ///
-/// Ties (exactly halfway between two steps) round to the higher step, matching
-/// standard "round half up" arithmetic rounding on the midpoint distance.
+/// Ties (exactly halfway between two steps) round to the lower step: steps are
+/// scanned in ascending order and only a strictly closer step replaces the
+/// current best, so an equal-distance higher step never wins.
 #[cfg(any(not(feature = "indexed-quant"), test))]
 fn nearest_cube_step(value: u8) -> u8 {
     let value = i32::from(value);
@@ -265,17 +266,91 @@ fn rgb_to_oklab(r: u8, g: u8, b: u8) -> gem::space::Oklab {
     ))
 }
 
+/// Builds the 256-entry table of [`gem::space::Oklab`] values for the 256-color palette
+/// (`indexed_to_rgb(0..256)` converted to Oklab), in index order.
+#[cfg(feature = "indexed-quant")]
+fn build_indexed_oklab_table() -> [gem::space::Oklab; 256] {
+    core::array::from_fn(|i| {
+        let (r, g, b) = indexed_to_rgb(u8::try_from(i).unwrap_or(u8::MAX));
+        rgb_to_oklab(r, g, b)
+    })
+}
+
+/// Builds the 16-entry table of [`gem::space::Oklab`] values for the 16 standard ANSI
+/// colors ([`ANSI_COLORS`] converted to Oklab), in index order.
+#[cfg(feature = "indexed-quant")]
+fn build_ansi_oklab_table() -> [gem::space::Oklab; 16] {
+    core::array::from_fn(|i| {
+        let (r, g, b) = ANSI_COLORS[i].to_rgb();
+        rgb_to_oklab(r, g, b)
+    })
+}
+
+/// The 256-color palette's Oklab table, as returned by [`indexed_oklab_table`]: a cached
+/// `'static` reference when `std` is enabled, or an owned array rebuilt per call otherwise.
+#[cfg(all(feature = "indexed-quant", feature = "std"))]
+type IndexedOklabTable = &'static [gem::space::Oklab; 256];
+#[cfg(all(feature = "indexed-quant", not(feature = "std")))]
+type IndexedOklabTable = [gem::space::Oklab; 256];
+
+/// The 16-color ANSI palette's Oklab table, as returned by [`ansi_oklab_table`]: a cached
+/// `'static` reference when `std` is enabled, or an owned array rebuilt per call otherwise.
+#[cfg(all(feature = "indexed-quant", feature = "std"))]
+type AnsiOklabTable = &'static [gem::space::Oklab; 16];
+#[cfg(all(feature = "indexed-quant", not(feature = "std")))]
+type AnsiOklabTable = [gem::space::Oklab; 16];
+
+/// Returns the 256-color palette's Oklab table.
+///
+/// `indexed_to_rgb` is a pure function of a compile-time-constant palette, but its Oklab
+/// conversion (`powf`/`cbrt`) isn't `const`-evaluable, so the table can't be a plain `const`.
+/// When the `std` feature is enabled, this caches the table behind a `OnceLock` so the
+/// conversion only ever runs once for all 256 entries, no matter how many times
+/// [`Color::to_indexed`] is called -- the hot path this feeds ([`ColorSupport::Indexed256`] in
+/// `retroglyph-terminal`'s draw loop) calls it once per cell, per frame.
+///
+/// `no_std` builds (this crate's `std` feature off) have no safe way to back a lazily
+/// initialized `static` without `unsafe` (forbidden workspace-wide), so they rebuild the table
+/// on every call instead; that path is expected to be cold.
+#[cfg(feature = "indexed-quant")]
+fn indexed_oklab_table() -> IndexedOklabTable {
+    #[cfg(feature = "std")]
+    {
+        static TABLE: std::sync::OnceLock<[gem::space::Oklab; 256]> = std::sync::OnceLock::new();
+        TABLE.get_or_init(build_indexed_oklab_table)
+    }
+    #[cfg(not(feature = "std"))]
+    {
+        build_indexed_oklab_table()
+    }
+}
+
+/// Returns the 16-color ANSI palette's Oklab table. See [`indexed_oklab_table`] for the
+/// caching rationale and the `no_std` fallback.
+#[cfg(feature = "indexed-quant")]
+fn ansi_oklab_table() -> AnsiOklabTable {
+    #[cfg(feature = "std")]
+    {
+        static TABLE: std::sync::OnceLock<[gem::space::Oklab; 16]> = std::sync::OnceLock::new();
+        TABLE.get_or_init(build_ansi_oklab_table)
+    }
+    #[cfg(not(feature = "std"))]
+    {
+        build_ansi_oklab_table()
+    }
+}
+
 /// Quantizes `(r, g, b)` to the nearest 256-color palette index using perceptual
 /// (Oklab) distance, breaking ties by preferring the lower index.
 #[cfg(feature = "indexed-quant")]
 fn perceptual_to_indexed(r: u8, g: u8, b: u8) -> u8 {
     let target = rgb_to_oklab(r, g, b);
+    let table = indexed_oklab_table();
     let mut best_index = 0u8;
     let mut best_distance = f32::MAX;
     for index in 0u16..256 {
         let index = u8::try_from(index).unwrap_or(u8::MAX);
-        let (pr, pg, pb) = indexed_to_rgb(index);
-        let distance = oklab_distance_sq(target, rgb_to_oklab(pr, pg, pb));
+        let distance = oklab_distance_sq(target, table[index as usize]);
         if distance < best_distance {
             best_distance = distance;
             best_index = index;
@@ -289,14 +364,14 @@ fn perceptual_to_indexed(r: u8, g: u8, b: u8) -> u8 {
 #[cfg(feature = "indexed-quant")]
 fn perceptual_to_ansi(r: u8, g: u8, b: u8) -> AnsiColor {
     let target = rgb_to_oklab(r, g, b);
+    let table = ansi_oklab_table();
     let mut best = AnsiColor::Black;
     let mut best_distance = f32::MAX;
-    for ansi in ANSI_COLORS {
-        let (pr, pg, pb) = ansi.to_rgb();
-        let distance = oklab_distance_sq(target, rgb_to_oklab(pr, pg, pb));
+    for (i, ansi) in ANSI_COLORS.iter().enumerate() {
+        let distance = oklab_distance_sq(target, table[i]);
         if distance < best_distance {
             best_distance = distance;
-            best = ansi;
+            best = *ansi;
         }
     }
     best
@@ -505,9 +580,9 @@ impl Color {
     pub fn from_srgb(srgb: Srgb) -> Self {
         let clamped = srgb.clamp();
         Self::Rgb {
-            r: (clamped.r * 255.0) as u8,
-            g: (clamped.g * 255.0) as u8,
-            b: (clamped.b * 255.0) as u8,
+            r: (clamped.r * 255.0).round() as u8,
+            g: (clamped.g * 255.0).round() as u8,
+            b: (clamped.b * 255.0).round() as u8,
         }
     }
 
@@ -940,7 +1015,7 @@ fn parse_ansi_name(name: &str) -> Option<AnsiColor> {
 /// Parses `#rgb` or `#rrggbb` (case-insensitive) into an `(r, g, b)` triple.
 ///
 /// Self-contained rather than routed through [`Color::from_hex`], so [`Color`]'s
-/// [`FromStr`](core::str::FromStr) impl -- and the `serde` feature built on it -- works
+/// [`FromStr`](core::str::FromStr) impl (and the `serde` feature built on it) works
 /// regardless of whether the `indexed-quant` feature (which `from_hex` needs for its
 /// [`gem::space::Srgb`] parsing) is enabled.
 fn parse_hex(s: &str) -> Option<(u8, u8, u8)> {
@@ -954,6 +1029,9 @@ fn parse_hex(s: &str) -> Option<(u8, u8, u8)> {
             Some((r * 17, g * 17, b * 17))
         }
         6 => {
+            if !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+                return None;
+            }
             let r = u8::from_str_radix(hex.get(0..2)?, 16).ok()?;
             let g = u8::from_str_radix(hex.get(2..4)?, 16).ok()?;
             let b = u8::from_str_radix(hex.get(4..6)?, 16).ok()?;
@@ -1038,7 +1116,10 @@ impl core::str::FromStr for Color {
         if let Some(color) = parse_ansi_name(&normalized) {
             return Ok(Self::Ansi(color));
         }
-        if let Ok(index) = normalized.parse::<u8>() {
+        if normalized.bytes().all(|b| b.is_ascii_digit())
+            && !normalized.is_empty()
+            && let Ok(index) = normalized.parse::<u8>()
+        {
             return Ok(Self::Indexed(index));
         }
         if let Some((r, g, b)) = parse_hex(trimmed) {
@@ -1051,7 +1132,7 @@ impl core::str::FromStr for Color {
 #[cfg(feature = "serde")]
 impl serde::Serialize for Color {
     /// Serializes through the [`Display`](core::fmt::Display) round trip, e.g. `"bright-red"` or
-    /// `"#ff8000"`, rather than deriving a structural form -- so a hand-edited TOML/JSON theme
+    /// `"#ff8000"`, rather than deriving a structural form: a hand-edited TOML/JSON theme
     /// file stays legible and isn't coupled to this (`#[non_exhaustive]`) enum's variant shape.
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -1381,13 +1462,13 @@ mod tests {
         let red = Color::Rgb { r: 255, g: 0, b: 0 };
         let blue = Color::Rgb { r: 0, g: 0, b: 255 };
         let purple = Color::lerp(red, blue, 0.5);
-        // 127.5 truncates to 127 in u8
+        // 127.5 rounds to 128 (round-to-nearest, ties away from zero).
         assert_eq!(
             purple,
             Color::Rgb {
-                r: 127,
+                r: 128,
                 g: 0,
-                b: 127
+                b: 128
             }
         );
     }
@@ -1672,6 +1753,14 @@ mod tests {
         assert!("#gg0000".parse::<Color>().is_err());
         assert!("#12345".parse::<Color>().is_err());
         assert!("256".parse::<Color>().is_err());
+    }
+
+    #[test]
+    fn from_str_rejects_plus_signed_index_and_hex() {
+        // `-` is a documented separator (stripped like `_`/` `), so `"-5"` legitimately
+        // normalizes to `"5"`; only `+`, which isn't a separator, must be rejected.
+        assert!("+5".parse::<Color>().is_err());
+        assert!("#+f0000".parse::<Color>().is_err());
     }
 
     #[cfg(feature = "serde")]

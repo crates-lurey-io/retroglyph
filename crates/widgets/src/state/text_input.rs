@@ -1,5 +1,5 @@
-use retroglyph_core::text::width_usize;
-use retroglyph_core::{Event, KeyCode};
+use retroglyph_core::text::{char_width, width_usize};
+use retroglyph_core::{Event, KeyCode, KeyModifiers};
 
 /// A `String` value, a byte cursor into it, and a horizontal scroll offset.
 ///
@@ -10,7 +10,7 @@ use retroglyph_core::{Event, KeyCode};
 /// across a resized field) the way `ListState` is reused across a resized list.
 ///
 /// `cursor` is a byte index into `value`, not a char or display-column index, and every mutating
-/// method here maintains the invariant that it always lands on a char boundary -- `insert`/
+/// method here maintains the invariant that it always lands on a char boundary: `insert`/
 /// `insert_str`/`backspace`/`delete` never split a multi-byte character, and `move_left`/
 /// `move_right` step by whole `char`s. Display-column math (where the caret actually draws, and
 /// how far the field has scrolled) is a separate concern handled by
@@ -45,7 +45,7 @@ impl TextInputState {
     }
 
     /// Replace the entire content and move the cursor to its end. Resets the scroll offset to
-    /// zero -- call [`ensure_visible`](Self::ensure_visible) afterward if the new value should
+    /// zero. Call [`ensure_visible`](Self::ensure_visible) afterward if the new value should
     /// scroll to keep the cursor (still at the end) in view.
     pub fn set_value(&mut self, s: impl Into<String>) {
         self.value = s.into();
@@ -127,11 +127,15 @@ impl TextInputState {
     /// Key releases and auto-repeats other than presses are ignored except that auto-repeat
     /// presses are treated the same as a press (matches [`FocusRing`](crate::FocusRing)/
     /// [`Shortcuts`](crate::Shortcuts)'s own `is_down` gating). [`Event`](retroglyph_core::Event)
-    /// has no IME/composition variant to begin with -- see the scope note above.
+    /// has no IME/composition variant to begin with; see the scope note above.
     pub fn handle_event(&mut self, event: &Event) -> bool {
         match event {
             Event::Key(key) if key.is_down() => match key.code {
-                KeyCode::Char(c) => {
+                KeyCode::Char(c)
+                    if (key.modifiers
+                        & (KeyModifiers::CONTROL | KeyModifiers::ALT | KeyModifiers::SUPER))
+                        .is_empty() =>
+                {
                     self.insert(c);
                     true
                 }
@@ -182,10 +186,31 @@ impl TextInputState {
         }
         let caret_col = self.caret_column();
         if caret_col < self.scroll {
-            self.scroll = caret_col;
+            self.scroll = self.snap_to_char_boundary(caret_col);
         } else if caret_col >= self.scroll.saturating_add(width) {
-            self.scroll = caret_col + 1 - width;
+            let target = caret_col.saturating_add(1).saturating_sub(width);
+            self.scroll = self.snap_to_char_boundary(target);
         }
+    }
+
+    /// The largest display column `<= col` at which some character in `value` starts, so that
+    /// `retroglyph_core::text::split_at_width(value, that_column)` never has to refuse to split a
+    /// wide character's own cell (see issue #712).
+    ///
+    /// Mirrors `split_at_width`'s own column-accumulation walk: a column is only ever a valid
+    /// split point if it lines up with a char boundary, not the right half of a double-width
+    /// glyph's footprint.
+    #[must_use]
+    fn snap_to_char_boundary(&self, col: u16) -> u16 {
+        let mut cols = 0u16;
+        for ch in self.value.chars() {
+            let next = cols.saturating_add(char_width(ch));
+            if next > col {
+                break;
+            }
+            cols = next;
+        }
+        cols
     }
 
     /// The cursor's position in display columns from the start of `value`, saturating at
@@ -222,7 +247,7 @@ impl TextInputState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use retroglyph_core::{KeyEvent, KeyEventKind, KeyModifiers};
+    use retroglyph_core::{KeyEvent, KeyEventKind};
 
     #[test]
     fn insert_and_backspace_move_the_byte_cursor() {
@@ -296,6 +321,26 @@ mod tests {
     }
 
     #[test]
+    fn text_input_handle_event_does_not_type_ctrl_shortcut_characters() {
+        let mut state = TextInputState::new();
+        let ctrl_s = Event::Key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL));
+        let consumed = state.handle_event(&ctrl_s);
+
+        assert_eq!(state.value(), "");
+        assert!(!consumed);
+    }
+
+    #[test]
+    fn handle_event_still_types_shifted_characters() {
+        let mut state = TextInputState::new();
+        let shift_s = Event::Key(KeyEvent::new(KeyCode::Char('S'), KeyModifiers::SHIFT));
+        let consumed = state.handle_event(&shift_s);
+
+        assert_eq!(state.value(), "S");
+        assert!(consumed);
+    }
+
+    #[test]
     fn handle_event_ignores_key_releases() {
         let mut state = TextInputState::new();
         let release = Event::Key(KeyEvent::with_kind(
@@ -329,10 +374,31 @@ mod tests {
     }
 
     #[test]
+    fn ensure_visible_does_not_overflow_when_the_caret_column_saturates() {
+        // retroglyph#729: `caret_col + 1 - width` used to overflow on the add once a long enough
+        // paste saturated `caret_column()` at `u16::MAX`.
+        let mut state = TextInputState::new();
+        state.insert_str(&"a".repeat(70_000));
+        state.ensure_visible(5);
+        assert_eq!(state.scroll(), u16::MAX - 5);
+    }
+
+    #[test]
     fn ensure_visible_is_a_noop_for_zero_width() {
         let mut state = TextInputState::new();
         state.set_value("hello");
         state.ensure_visible(0);
+        assert_eq!(state.scroll(), 0);
+    }
+
+    #[test]
+    fn text_input_ensure_visible_scroll_does_not_split_a_wide_character() {
+        // retroglyph#712: naive column arithmetic (caret_col + 1 - width) landed scroll == 1,
+        // inside "あ"'s own two-column cell, which `split_at_width` refuses to split. Snapping
+        // down to the nearest char boundary keeps scroll at 0, the start of the first "あ".
+        let mut state = TextInputState::new();
+        state.set_value("ああ"); // two 2-column characters, caret at end is column 4
+        state.ensure_visible(4);
         assert_eq!(state.scroll(), 0);
     }
 }
