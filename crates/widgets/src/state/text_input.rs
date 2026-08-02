@@ -1,4 +1,4 @@
-use retroglyph_core::text::width_usize;
+use retroglyph_core::text::{char_width, width_usize};
 use retroglyph_core::{Event, KeyCode};
 
 /// A `String` value, a byte cursor into it, and a horizontal scroll offset.
@@ -182,10 +182,31 @@ impl TextInputState {
         }
         let caret_col = self.caret_column();
         if caret_col < self.scroll {
-            self.scroll = caret_col;
+            self.scroll = self.snap_to_char_boundary(caret_col);
         } else if caret_col >= self.scroll.saturating_add(width) {
-            self.scroll = caret_col.saturating_add(1).saturating_sub(width);
+            let target = caret_col.saturating_add(1).saturating_sub(width);
+            self.scroll = self.snap_to_char_boundary(target);
         }
+    }
+
+    /// The largest display column `<= col` at which some character in `value` starts, so that
+    /// `retroglyph_core::text::split_at_width(value, that_column)` never has to refuse to split a
+    /// wide character's own cell (see issue #712).
+    ///
+    /// Mirrors `split_at_width`'s own column-accumulation walk: a column is only ever a valid
+    /// split point if it lines up with a char boundary, not the right half of a double-width
+    /// glyph's footprint.
+    #[must_use]
+    fn snap_to_char_boundary(&self, col: u16) -> u16 {
+        let mut cols = 0u16;
+        for ch in self.value.chars() {
+            let next = cols.saturating_add(char_width(ch));
+            if next > col {
+                break;
+            }
+            cols = next;
+        }
+        cols
     }
 
     /// The cursor's position in display columns from the start of `value`, saturating at
@@ -343,6 +364,17 @@ mod tests {
         let mut state = TextInputState::new();
         state.set_value("hello");
         state.ensure_visible(0);
+        assert_eq!(state.scroll(), 0);
+    }
+
+    #[test]
+    fn text_input_ensure_visible_scroll_does_not_split_a_wide_character() {
+        // retroglyph#712: naive column arithmetic (caret_col + 1 - width) landed scroll == 1,
+        // inside "あ"'s own two-column cell, which `split_at_width` refuses to split. Snapping
+        // down to the nearest char boundary keeps scroll at 0, the start of the first "あ".
+        let mut state = TextInputState::new();
+        state.set_value("ああ"); // two 2-column characters, caret at end is column 4
+        state.ensure_visible(4);
         assert_eq!(state.scroll(), 0);
     }
 }
