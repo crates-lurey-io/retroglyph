@@ -1256,6 +1256,7 @@ const fn try_unicode_to_cp437(ch: char) -> Option<u8> {
         '¢' => Some(0x9B),
         '£' => Some(0x9C),
         '¥' => Some(0x9D),
+        '₧' => Some(0x9E),
         'ƒ' => Some(0x9F),
         'á' => Some(0xA0),
         'í' => Some(0xA1),
@@ -1267,6 +1268,7 @@ const fn try_unicode_to_cp437(ch: char) -> Option<u8> {
         'º' => Some(0xA7),
         '¿' => Some(0xA8),
         '⌐' => Some(0xA9),
+        '¬' => Some(0xAA),
         '½' => Some(0xAB),
         '¼' => Some(0xAC),
         '¡' => Some(0xAD),
@@ -1353,11 +1355,13 @@ const fn try_unicode_to_cp437(ch: char) -> Option<u8> {
         '÷' => Some(0xF6),
         '≈' => Some(0xF7),
         '°' => Some(0xF8),
-        '·' | '∙' => Some(0xF9),
+        '∙' => Some(0xF9),
+        '·' => Some(0xFA),
         '√' => Some(0xFB),
         'ⁿ' => Some(0xFC),
         '²' => Some(0xFD),
         '■' => Some(0xFE),
+        '\u{00A0}' => Some(0xFF),
 
         // ── Roguelike / Unicode symbols ───────────────────────────────────
         '☺' => Some(0x01),
@@ -1423,6 +1427,31 @@ mod tests {
             Some(0xF9),
             "U+2219 BULLET OPERATOR"
         );
+        assert_eq!(
+            try_unicode_to_cp437('\u{00A0}'),
+            Some(0xFF),
+            "U+00A0 NO-BREAK SPACE"
+        );
+        assert_eq!(try_unicode_to_cp437('¬'), Some(0xAA), "U+00AC NOT SIGN");
+        assert_eq!(try_unicode_to_cp437('₧'), Some(0x9E), "U+20A7 PESETA SIGN");
+        assert_eq!(try_unicode_to_cp437('·'), Some(0xFA), "U+00B7 MIDDLE DOT");
+    }
+
+    /// Every entry in [`crate::tileset::CP437_TO_UNICODE`] must round-trip back through
+    /// [`try_unicode_to_cp437`] to its own index: the reverse map is supposed to be a clean
+    /// inverse of the crate's own canonical forward table.
+    #[cfg(feature = "tilesets")]
+    #[test]
+    fn cp437_to_unicode_round_trips_through_try_unicode_to_cp437() {
+        for (i, &ch) in crate::tileset::CP437_TO_UNICODE.iter().enumerate() {
+            #[allow(clippy::cast_possible_truncation)]
+            let expected = i as u8;
+            assert_eq!(
+                try_unicode_to_cp437(ch),
+                Some(expected),
+                "0x{i:02X} {ch:?} did not round-trip"
+            );
+        }
     }
 
     /// A primary font that only covers the ASCII half of CP437 (glyph indices 0..128), so
