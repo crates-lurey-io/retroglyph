@@ -1,31 +1,10 @@
-//! [`fill_rect`], plus the box-drawing codepoints shared by
-//! [`widget::BoxBorder`](crate::widget::BoxBorder) and [`style::BoxStyle`](crate::style::BoxStyle).
+//! [`fill_rect`]. The box-drawing codepoints previously here moved to
+//! [`retroglyph_core::symbols::border`], reachable by any crate rather than just this one.
 
 use retroglyph_core::Rect;
 use retroglyph_core::Style;
 
 use crate::Surface;
-
-// ── Box-drawing codepoints (single-line) ─────────────────────────────────────
-
-// `pub(crate)`, not private: reused by `style.rs`'s `BoxStyle` border
-// rendering and `widget::BoxBorder`, but not part of the public API. The
-// enclosing `primitives` module is itself `pub(crate)` for the same reason,
-// which is what makes clippy's redundant-pub-crate lint fire here: allowed
-// rather than restructured, since `pub(crate)` is the accurate, intentional
-// visibility.
-#[allow(clippy::redundant_pub_crate)]
-pub(crate) const TL: char = '┌'; // top-left corner
-#[allow(clippy::redundant_pub_crate)]
-pub(crate) const TR: char = '┐'; // top-right corner
-#[allow(clippy::redundant_pub_crate)]
-pub(crate) const BL: char = '└'; // bottom-left corner
-#[allow(clippy::redundant_pub_crate)]
-pub(crate) const BR: char = '┘'; // bottom-right corner
-#[allow(clippy::redundant_pub_crate)]
-pub(crate) const H: char = '─'; // horizontal bar
-#[allow(clippy::redundant_pub_crate)]
-pub(crate) const V: char = '│'; // vertical bar
 
 /// Fill `rect` with `ch` in the given `style`.
 ///

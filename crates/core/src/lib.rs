@@ -156,6 +156,8 @@ pub mod style;
 pub mod subcell;
 /// The one grid-drawing primitive: an area-clipped, single-layer view over a [`Grid`].
 pub mod surface;
+/// Border, gridline, and partial-block `char` data shared by widgets and backends.
+pub mod symbols;
 pub mod terminal;
 /// Headless test harness driving an `App` with synthetic input.
 #[cfg(feature = "testing")]

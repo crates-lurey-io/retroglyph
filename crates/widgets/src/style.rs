@@ -17,9 +17,9 @@ use retroglyph_core::Rect;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use crate::Surface;
-use crate::draw::{BL, BR, H, TL, TR, V};
 use crate::text::truncate;
 use crate::widget::Widget;
+use retroglyph_core::symbols::border::PLAIN;
 
 /// CSS-style box-model sides: top/right/bottom/left, in terminal cells.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -358,17 +358,17 @@ fn draw_border(grid: &mut Grid, x: u16, y: u16, w: u16, h: u16, style: Style) {
     let right = x + w - 1;
     let bottom = y + h - 1;
 
-    grid.put_tile(0, (x, y), Tile::new(TL, style));
-    grid.put_tile(0, (right, y), Tile::new(TR, style));
-    grid.put_tile(0, (x, bottom), Tile::new(BL, style));
-    grid.put_tile(0, (right, bottom), Tile::new(BR, style));
+    grid.put_tile(0, (x, y), Tile::new(PLAIN.top_left, style));
+    grid.put_tile(0, (right, y), Tile::new(PLAIN.top_right, style));
+    grid.put_tile(0, (x, bottom), Tile::new(PLAIN.bottom_left, style));
+    grid.put_tile(0, (right, bottom), Tile::new(PLAIN.bottom_right, style));
     for cx in (x + 1)..right {
-        grid.put_tile(0, (cx, y), Tile::new(H, style));
-        grid.put_tile(0, (cx, bottom), Tile::new(H, style));
+        grid.put_tile(0, (cx, y), Tile::new(PLAIN.horizontal, style));
+        grid.put_tile(0, (cx, bottom), Tile::new(PLAIN.horizontal, style));
     }
     for cy in (y + 1)..bottom {
-        grid.put_tile(0, (x, cy), Tile::new(V, style));
-        grid.put_tile(0, (right, cy), Tile::new(V, style));
+        grid.put_tile(0, (x, cy), Tile::new(PLAIN.vertical, style));
+        grid.put_tile(0, (right, cy), Tile::new(PLAIN.vertical, style));
     }
 }
 
