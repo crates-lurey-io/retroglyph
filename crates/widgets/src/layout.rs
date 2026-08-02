@@ -541,12 +541,6 @@ impl Side {
 /// content, with a floor/ceiling) and overflow (scrolling when content is taller than the
 /// resulting rect); this only answers where the rect goes.
 ///
-/// Lives here rather than in [`ixy`](https://docs.rs/ixy) (which `Rect` itself is a type alias
-/// into): `ixy` is a minimal, generic 2D-geometry crate (`intersect`, `union`, `contains`,
-/// `inflate`) with no notion of "anchor a floating panel to another rect, preferring a side, with
-/// a fallback side" -- that's UI placement policy, not geometry, the same reason [`centered_rect`]
-/// (also policy, not geometry) lives here rather than upstream.
-///
 /// Never panics: every offset is computed with saturating arithmetic, so a degenerate `anchor`,
 /// `size`, or `bounds` (zero width/height, or `anchor` outside `bounds`) resolves to a clamped,
 /// zero-size-or-larger rect instead of under/overflowing.
