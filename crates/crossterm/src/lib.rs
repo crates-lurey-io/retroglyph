@@ -1175,6 +1175,10 @@ impl<W: std::io::Write> Cursor for Crossterm<W> {
     fn set_cursor_position(&mut self, position: Pos) {
         let writer = self.renderer.writer_mut();
         let _ = crossterm::queue!(writer, crossterm::cursor::MoveTo(position.x, position.y));
+        // The real cursor is now wherever `position` says, not wherever the last drawn glyph
+        // left it; forget the tracked position so the next `draw()` doesn't skip a `MoveTo` for a
+        // changed cell that happens to match the stale tracked coordinates. See retroglyph#713.
+        self.renderer.reset_state();
     }
 
     /// Queues the `DECSCUSR` cursor-shape escape without flushing; see
@@ -1628,6 +1632,61 @@ mod tests {
             written.matches("\x1b[1;1H").count(),
             2,
             "expected the cursor-move escape to be re-emitted after resume: {written:?}"
+        );
+    }
+
+    #[test]
+    fn set_cursor_position_desyncs_the_renderers_tracked_cursor() {
+        // Regression test for retroglyph#713: `set_cursor_position` queued its `MoveTo` escape
+        // straight into the writer without telling the shared `TerminalRenderer` the cursor had
+        // moved, so `cursor_x`/`cursor_y` kept whatever position the last *drawn glyph* left them
+        // at. A subsequent `draw()` whose first changed cell happened to match that stale tracked
+        // position then skipped its own `MoveTo` entirely, painting wherever the real cursor was
+        // actually left (by `set_cursor_position`) instead of the intended cell.
+        let _lock = TEST_GUARD_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut term = Crossterm::builder()
+            .raw_mode(false)
+            .alt_screen(false)
+            .mouse_capture(false)
+            .focus_change(false)
+            .bracketed_paste(false)
+            .kitty_protocol(false)
+            .build_with_writer(Vec::new())
+            .expect("building against a Vec<u8> writer with all TTY features disabled must not require a real terminal");
+
+        let tile_a = Tile::new('A', retroglyph_core::style::Style::default());
+        let tile_b = Tile::new('B', retroglyph_core::style::Style::default());
+
+        // Drawing at (0, 0) leaves the renderer tracking the cursor at (1, 0), right after the
+        // glyph it just wrote.
+        term.draw(core::iter::once(DrawCell::new(Pos { x: 0, y: 0 }, &tile_a)))
+            .unwrap();
+        term.flush().unwrap();
+
+        // The app parks the caret elsewhere, e.g. a text field or status line, once per frame: a
+        // common pattern that must not corrupt the next frame's diff.
+        Cursor::set_cursor_position(&mut term, Pos { x: 7, y: 3 });
+        term.flush().unwrap();
+
+        // The first (and only) changed cell in this frame is exactly (1, 0): the position
+        // `set_cursor_position` desynced the tracked cursor from.
+        term.draw(core::iter::once(DrawCell::new(Pos { x: 1, y: 0 }, &tile_b)))
+            .unwrap();
+        term.flush().unwrap();
+
+        let written = String::from_utf8(term.writer().clone()).unwrap();
+        let cup_1_0 = "\x1b[1;2H"; // 1-indexed CUP for (x=1, y=0)
+        let b_pos = written
+            .rfind('B')
+            .unwrap_or_else(|| panic!("expected 'B' in output: {written:?}"));
+        let cup_pos = written.rfind(cup_1_0).unwrap_or_else(|| {
+            panic!("expected a CUP back to (1, 0) before drawing 'B', got: {written:?}")
+        });
+        assert!(
+            cup_pos < b_pos,
+            "CUP to (1, 0) must precede 'B': {written:?}"
         );
     }
 
