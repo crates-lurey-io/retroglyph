@@ -475,7 +475,7 @@ fn matches_software_backend_pixel_for_pixel() {
         .scale(scale as u8)
         .build()
         .expect("default-font builds")
-        .run_headless()
+        .into_renderer()
         .expect("headless software renderer");
     paint(&mut sw, &cells);
     let sw_pixels = sw.pixels();
@@ -503,7 +503,7 @@ fn matches_software_backend_with_layers_pixel_for_pixel() {
         .scale(scale as u8)
         .build()
         .expect("default-font builds")
-        .run_headless()
+        .into_renderer()
         .expect("headless software renderer");
     paint_layers(&mut sw, &layered);
     let sw_pixels = sw.pixels();
@@ -879,7 +879,7 @@ fn matches_software_backend_for_multicell_spans() {
         .tileset(tileset())
         .build()
         .expect("default-font builds")
-        .run_headless()
+        .into_renderer()
         .expect("headless software renderer");
     paint_layers(&mut sw, &scene);
 

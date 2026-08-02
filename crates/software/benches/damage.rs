@@ -93,7 +93,7 @@ fn bench_size(c: &mut Criterion, cols: u16, rows: u16) {
                 .scale(1)
                 .build()
                 .unwrap()
-                .run_headless()
+                .into_renderer()
                 .unwrap(),
         );
 

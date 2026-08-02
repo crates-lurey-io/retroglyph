@@ -5,12 +5,12 @@
 //!
 //! [`SoftwareBackend`] holds configuration only (font chain, grid size, scale); it
 //! does not implement [`Backend`](retroglyph_core::Backend). Call
-//! [`run_headless`](SoftwareBackend::run_headless) to build a
+//! [`into_renderer`](SoftwareBackend::into_renderer) to build a
 //! [`SoftwareRenderer`], which does the actual rendering work:
 //!
 //! ```text
 //! SoftwareBackend (config: font chain, grid size, scale)
-//!   |  .run_headless()
+//!   |  .into_renderer()
 //!   v
 //! SoftwareRenderer
 //!   implements retroglyph_core::{Output, Input, Cursor} (= Backend)
@@ -120,7 +120,7 @@ use std::time::Duration;
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
-/// A running software renderer, produced by [`SoftwareBackend::run_headless`].
+/// A running software renderer, produced by [`SoftwareBackend::into_renderer`].
 ///
 /// Unlike [`SoftwareBackend`] (which is just configuration), this type
 /// always has an active rendering context: its pixel buffer is always
@@ -131,7 +131,7 @@ use std::time::Duration;
 /// [`Output::draw`] and [`Output::draw_layers`] to render into it.
 ///
 /// If the `tilesets` feature is enabled, the sprite tileset is loaded once, at
-/// [`run_headless`](SoftwareBackend::run_headless) time, into an internal
+/// [`into_renderer`](SoftwareBackend::into_renderer) time, into an internal
 /// [`SpriteCache`]. That cache has no reload/hot-swap support (see its
 /// docs); to pick up a changed tileset, rebuild the renderer via a fresh [`SoftwareBackend`]
 /// configuration rather than mutating this one.
@@ -528,17 +528,13 @@ impl SoftwareRenderer {
 // ── Renderer construction ────────────────────────────────────────────────────────────
 
 impl SoftwareBackend {
-    /// Creates a headless renderer that renders into an internal buffer
-    /// without opening a window.
+    /// Builds a [`SoftwareRenderer`] from this configuration.
     ///
     /// This does not block: it returns a [`SoftwareRenderer`] immediately.
     /// The renderer's pixel buffer can be inspected via
-    /// [`SoftwareRenderer::pixels`], or the renderer can be handed to
-    /// `retroglyph_window::winit::run_windowed` to drive a window.  Flushing
+    /// [`SoftwareRenderer::pixels`] for headless / pixel-level use, or the renderer can be
+    /// handed to `retroglyph_window::winit::run_windowed` to drive a window. Flushing
     /// is a no-op (the buffer stays in memory).
-    ///
-    /// This is primarily useful for testing pixel-level output without
-    /// needing a window or event loop.
     ///
     /// # Examples
     ///
@@ -555,7 +551,7 @@ impl SoftwareBackend {
     ///     .scale(1)
     ///     .build()
     ///     .unwrap()
-    ///     .run_headless()
+    ///     .into_renderer()
     ///     .unwrap();
     ///
     /// // Render a red cell on layer 0.
@@ -571,7 +567,9 @@ impl SoftwareBackend {
     ///
     /// Returns [`SoftwareBackendError::NoFont`] if no font is set, or
     /// [`SoftwareBackendError::MixedGlyphSizes`] if the font chain's fonts disagree on their
-    /// glyph size (both only reachable if [`SoftwareBackendBuilder::build`] was bypassed), and
+    /// glyph size (both only reachable if [`SoftwareBackendBuilder::build`] was bypassed),
+    /// [`SoftwareBackendError::ZeroScale`] if `scale` is `0` (likewise only reachable if `build`
+    /// was bypassed, since a caller mutated the field after construction), and
     /// [`SoftwareBackendError::Tileset`] if a registered tileset fails to load.
     ///
     /// # Panics
@@ -579,19 +577,22 @@ impl SoftwareBackend {
     /// Panics only on a `u32`-to-`usize` conversion that cannot fail on any target
     /// this crate supports (`usize` is at least 32 bits on every 32- and 64-bit
     /// platform), so this is not reachable in practice.
-    pub fn run_headless(self) -> Result<SoftwareRenderer, SoftwareBackendError> {
+    pub fn into_renderer(self) -> Result<SoftwareRenderer, SoftwareBackendError> {
         let Some(fonts) = self.fonts else {
             return Err(SoftwareBackendError::NoFont);
         };
         let Some((glyph_w, glyph_h)) = fonts.glyph_size() else {
             return Err(SoftwareBackendError::MixedGlyphSizes);
         };
+        if self.scale == 0 {
+            return Err(SoftwareBackendError::ZeroScale);
+        }
 
         let geometry = CellGeometry::new(glyph_w, glyph_h, u16::from(self.scale));
         let (buf_w, buf_h) = geometry.surface_size(self.cols, self.rows);
         // u32 always fits in usize (all targets: 32- and 64-bit).
-        let buf_w = usize::try_from(buf_w).unwrap();
-        let buf_h = usize::try_from(buf_h).unwrap();
+        let buf_w = usize::try_from(buf_w).expect("surface width fits usize");
+        let buf_h = usize::try_from(buf_h).expect("surface height fits usize");
 
         #[cfg(feature = "tilesets")]
         let sprite_cache = if self.tilesets.is_empty() {
@@ -1315,7 +1316,7 @@ mod tests {
             .scale(1)
             .build()
             .unwrap()
-            .run_headless()
+            .into_renderer()
             .unwrap()
     }
 
@@ -1492,7 +1493,7 @@ mod tests {
             .scale(1)
             .build()
             .unwrap()
-            .run_headless()
+            .into_renderer()
             .unwrap();
 
         // Full block (all 8x16 pixels set), green, shifted right by 4px (half a cell): its left
@@ -1552,7 +1553,7 @@ mod tests {
             .scale(1)
             .build()
             .unwrap();
-        let mut renderer = opts.run_headless().unwrap();
+        let mut renderer = opts.into_renderer().unwrap();
 
         // Layer 0: dark background, ':' at (0,0) in dim blue, '.' at (1,0) in dim gray.
         let bg = Tile::new(
@@ -1635,7 +1636,7 @@ mod tests {
             .scale(1)
             .build()
             .unwrap();
-        let mut renderer = opts.run_headless().unwrap();
+        let mut renderer = opts.into_renderer().unwrap();
 
         let base = Tile::new(
             ' ',
@@ -1685,7 +1686,7 @@ mod tests {
             .scale(1)
             .build()
             .unwrap()
-            .run_headless()
+            .into_renderer()
             .unwrap()
     }
 
@@ -2088,7 +2089,7 @@ mod span_tests {
             .tileset(opts)
             .build()
             .unwrap()
-            .run_headless()
+            .into_renderer()
             .unwrap()
     }
 
@@ -2364,7 +2365,7 @@ mod span_tests {
             .tileset(opts)
             .build()
             .unwrap()
-            .run_headless()
+            .into_renderer()
             .unwrap();
 
         let bg = Style::new().bg(Color::Rgb { r: 0, g: 0, b: 255 });
@@ -2545,7 +2546,7 @@ mod font_chain_tests {
             .scale(1)
             .build()
             .expect("chain builds")
-            .run_headless()
+            .into_renderer()
             .expect("renderer builds");
         let tile = Tile::new(ch, Style::new().fg(fg).bg(BLACK));
         renderer
