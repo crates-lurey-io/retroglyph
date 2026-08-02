@@ -97,6 +97,14 @@ pub use text_input::TextInput;
 /// ```
 pub trait Widget {
     /// Draw this widget into `surface`, filling `surface.area()`.
+    ///
+    /// Coordinates on every `Surface` drawing method are local to `surface` itself, where
+    /// `(0, 0)` is `surface.area()`'s own top-left corner, not the underlying grid's. Placement
+    /// should therefore be built from [`Surface::width`]/[`Surface::height`] (or
+    /// [`Surface::local_area`] for a rect), never from `surface.area()`'s own
+    /// [`left`](retroglyph_core::Rect::left)/[`top`](retroglyph_core::Rect::top): those are
+    /// absolute grid coordinates, and passing them straight to a drawing call only lands
+    /// correctly for a surface whose area happens to start at the grid origin.
     fn render(&self, surface: &mut Surface<'_>);
 }
 
@@ -134,6 +142,10 @@ pub trait StatefulWidget {
 
     /// Draw this widget into `surface`, filling `surface.area()`, using
     /// and/or updating `state`.
+    ///
+    /// See [`Widget::render`]'s doc for why placement should come from
+    /// [`Surface::width`]/[`Surface::height`]/[`Surface::local_area`], not `surface.area()`'s own
+    /// [`left`](retroglyph_core::Rect::left)/[`top`](retroglyph_core::Rect::top).
     fn render(&self, surface: &mut Surface<'_>, state: &mut Self::State);
 }
 

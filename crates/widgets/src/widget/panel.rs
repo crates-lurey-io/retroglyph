@@ -385,4 +385,40 @@ mod tests {
         assert_eq!(grid[Pos::new(4, 0)].glyph(), 'あ');
         assert_eq!(grid[Pos::new(5, 0)].glyph(), ' ');
     }
+
+    #[test]
+    fn renders_identically_at_the_origin_and_at_a_scoped_offset() {
+        // #738: a widget correct only by not touching `surface.area()`'s absolute `left()`/
+        // `top()` should draw the same relative to its own area regardless of where that area
+        // sits on the grid. `Panel::render` is written that way (`surface.width()`/`height()`,
+        // never `area().left()`/`top()`), so this must hold for it already.
+        let (width, height) = (10, 4);
+        let mut origin_grid = Grid::new(width, height);
+        Panel::new().title("hi").render(&mut Surface::new(
+            &mut origin_grid,
+            Rect::new(0, 0, width, height),
+            0,
+        ));
+
+        let (ox, oy) = (3, 2);
+        let mut offset_grid = Grid::new(width + ox, height + oy);
+        let mut root = Surface::new(
+            &mut offset_grid,
+            Rect::new(0, 0, width + ox, height + oy),
+            0,
+        );
+        Panel::new()
+            .title("hi")
+            .render(&mut root.scope(Rect::new(ox, oy, width, height)));
+
+        for y in 0..height {
+            for x in 0..width {
+                assert_eq!(
+                    origin_grid[Pos::new(x, y)].glyph(),
+                    offset_grid[Pos::new(x + ox, y + oy)].glyph(),
+                    "mismatch at local ({x}, {y})"
+                );
+            }
+        }
+    }
 }

@@ -163,6 +163,36 @@ impl<'a> Surface<'a> {
         self.area
     }
 
+    /// [`area`](Self::area), translated to this surface's own coordinate space: always
+    /// `Rect::new(0, 0, width, height)`.
+    ///
+    /// Every drawing method on this surface ([`put`](Self::put), [`print`](Self::print),
+    /// [`fill_rect`](Self::fill_rect), ...) takes coordinates local to this surface, where
+    /// `(0, 0)` is this area's own top-left corner, not the underlying grid's. [`area`](Self::area)
+    /// itself is absolute grid space, so `surface.put((surface.area().left(), ...), ...)` only
+    /// lands correctly for a surface whose area happens to start at the grid origin; anywhere
+    /// else it silently misses. A widget that wants to place itself relative to its own bounds
+    /// (e.g. a label in a corner) should reach for `local_area()`, or just [`width`](Self::width)/
+    /// [`height`](Self::height) directly, and never for `area()`'s own [`left`](Rect::left)/
+    /// [`top`](Rect::top).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_core::{Grid, Rect, Surface};
+    ///
+    /// let mut grid = Grid::new(10, 10);
+    /// let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 10, 10), 0);
+    /// let mut scoped = surface.scope(Rect::new(3, 3, 4, 4));
+    ///
+    /// assert_eq!(scoped.area(), Rect::new(3, 3, 4, 4));
+    /// assert_eq!(scoped.local_area(), Rect::new(0, 0, 4, 4));
+    /// ```
+    #[must_use]
+    pub const fn local_area(&self) -> Rect {
+        Rect::new(0, 0, self.area.width(), self.area.height())
+    }
+
     /// The visible subset of [`area`](Self::area). Every write this surface accepts is
     /// bounds-checked against this rect, not `area`.
     #[must_use]
@@ -1222,6 +1252,46 @@ mod tests {
     fn screen(grid: &mut Grid) -> Surface<'_> {
         let area = Rect::new(0, 0, grid.width(), grid.height());
         Surface::new(grid, area, 0)
+    }
+
+    /// Renders a `'w' x 'h'` block of `ch` at this surface's own local top-left corner, i.e.
+    /// the way a widget written against `local_area()`/`width()`/`height()` (rather than
+    /// `area()`'s absolute `left()`/`top()`) is supposed to place itself: correctly regardless
+    /// of where this surface's own `area` sits on the underlying grid.
+    fn render_local_top_left(surface: &mut Surface<'_>, ch: char) {
+        let local = surface.local_area();
+        surface.put((local.left(), local.top()), ch, Style::default());
+    }
+
+    #[test]
+    fn local_area_is_always_zero_origin_regardless_of_where_area_sits() {
+        let mut grid = Grid::new(10, 10);
+        let mut surface = screen(&mut grid);
+        let scoped = surface.scope(Rect::new(3, 4, 5, 6));
+
+        assert_eq!(scoped.area(), Rect::new(3, 4, 5, 6));
+        assert_eq!(scoped.local_area(), Rect::new(0, 0, 5, 6));
+    }
+
+    #[test]
+    fn a_widget_placed_via_local_area_lands_the_same_way_at_the_origin_and_at_an_offset() {
+        // At the grid origin, local and absolute coordinates coincide: this is the case #697
+        // warned degenerates into never exercising the mismatch.
+        let mut grid_origin = Grid::new(4, 4);
+        render_local_top_left(&mut screen(&mut grid_origin), 'X');
+
+        // Scoped away from the origin: a widget built on `local_area()`/`put`'s local coordinate
+        // space should draw identically relative to its own area, unlike one built on
+        // `area().left()`/`area().top()`, which would silently miss here.
+        let mut grid_offset = Grid::new(10, 10);
+        {
+            let mut surface = screen(&mut grid_offset);
+            let mut scoped = surface.scope(Rect::new(3, 3, 4, 4));
+            render_local_top_left(&mut scoped, 'X');
+        }
+
+        assert_eq!(grid_origin[Pos::new(0, 0)].glyph(), 'X');
+        assert_eq!(grid_offset[Pos::new(3, 3)].glyph(), 'X');
     }
 
     #[test]
