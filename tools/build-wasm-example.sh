@@ -63,3 +63,9 @@ if [ "$variant" = software ]; then
     "$templates_dir/software-template.manifest.webmanifest" \
     > "$dest/manifest.webmanifest"
 fi
+if [ "$variant" = terminal ]; then
+  # terminal-template.html imports this for its xterm.js onData -> key_codes mapping, instead of
+  # re-deriving its own (retroglyph#684): ship the crate's own copy alongside the packaged demo
+  # rather than duplicating it in docs/templates/.
+  cp "$repo_root/crates/terminal-wasm/js/key-table.js" "$dest/key-table.js"
+fi

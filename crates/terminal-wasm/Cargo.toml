@@ -54,6 +54,15 @@ wasm-bindgen = "=0.2.126"
 # Only used to warn on invalid `wasm_terminal_*` handles (see the `wasm` module below); this
 # crate's non-wasm32 API surface has no fallible operations and stays log-free.
 log = "0.4"
+# A portable `std::time::Instant`-alike, backed by the browser's `Performance.now()` on
+# `wasm32-unknown-unknown`: gives `app_entry!`'s generated tick path delta-time bookkeeping
+# without a native `Instant`, which doesn't exist on this target. Same crate/version examples/
+# Cargo.toml already pulls in for the same reason.
+web-time = "1"
+# Installs a panic hook that forwards Rust panics to the browser console instead of a silent
+# abort with no message. `app_entry!`'s generated `wasm_app_init` calls `set_once()`, matching
+# `examples/src/wasm_entry.rs`'s equivalent entry points.
+console_error_panic_hook = "0.1"
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 # Exercises the `wasm` module's FFI surface (tests/wasm_ffi.rs) under an actual wasm32 build --
