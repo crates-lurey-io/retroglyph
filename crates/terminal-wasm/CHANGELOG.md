@@ -15,27 +15,6 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
   _(workspace)_ Add a reusable, toggleable perf/FPS overlay across every backend by `@matanlurey` in
   [#589](https://github.com/crates-lurey-io/retroglyph/pull/589)
 
-  > Replaces per-backend, per-example FPS overlay plumbing with a generic PerfOverlayApp<A>
-  > decorator (retroglyph-core) that wraps any App<B> and draws itself on top, on any Backend, with
-  > no per-backend code from the wrapped app. Toggling a key cycles Off -> Compact -> Full -> Off
-  > (PerfOverlayMode); Compact is a built-in dependency-free text readout (DefaultPerfRenderer),
-  > Full is pluggable via a closure or a type implementing PerfRenderer.
-  >
-  > - retroglyph-core: FrameStats<N> (a fixed-size Duration ring buffer with
-  >   current/avg/min/max/fps), PerfOverlayApp/PerfOverlayMode/PerfRenderer/ DefaultPerfRenderer,
-  >   and Size gets a proper constructor + width()/ height() accessors (its fields are now private).
-  > - retroglyph-widgets: PerfOverlay, a bordered panel composed from Panel/ Sparkline/Text with a
-  >   frame-time sparkline and caller-supplied metric rows; Sparkline gains an optional fixed
-  >   .style() override so a scrolling frame-time graph doesn't get colored by a relative-to-window
-  >   ramp that would misrepresent it.
-  > - retroglyph-examples: the shared harness (launch.rs) now wraps every example's App in
-  >   PerfOverlayApp, replacing the old bespoke per-backend Fps/ToggleFilter plumbing
-  >   (examples/src/fps.rs slimmed down to just the RG_FPS env var and the wasm floating toggle
-  >   button). Every example in the gallery gets the overlay for free.
-  > - Tests: unit tests for FrameStats/PerfOverlayApp/PerfOverlay/Sparkline, plus
-  >   examples/tests/fps_overlay.rs end-to-end PTY coverage and deterministic PNG snapshots of both
-  >   Compact and Full mode.
-
 **Full Changelog**:
 https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-wasm-v0.2.0...retroglyph-terminal-wasm-v0.2.1
 
@@ -47,96 +26,13 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-wasm-v
   _(core)_ Give backends a named DrawCell instead of a widening tuple by `@matanlurey` in
   [#551](https://github.com/crates-lurey-io/retroglyph/pull/551)
 
-  > A cell's draw-time payload has been a tuple growing an element at a time: (Pos, &Tile,
-  > Option<&str>) for draw, (u8, Pos, &Tile, Option<&str>) for draw_layers. Delivering a tint would
-  > make it five unnamed elements, and each addition breaks every backend's signature again.
-  >
-  > DrawCell names them once. Its layer field also collapses the two shapes into one, so draw and
-  > draw_layers no longer differ in item type.
-  >
-  > Refs #537
-
 - [090eeb3](https://github.com/crates-lurey-io/retroglyph/commit/090eeb3f26a88c399847640f4205045f1705a81d)
   _(core)_ Take impl Into<Pos> everywhere a cell is named, retire \_at suffix by `@matanlurey` in
   [#505](https://github.com/crates-lurey-io/retroglyph/pull/505)
 
-  > - api(core): drop panicking Grid::get/get_mut, add Option-returning tile/tile_mut and Index
-  >
-  > Grid::put/get panicked on out-of-bounds coordinates; checked*put/checked_get/ checked_get_mut
-  > existed as Option-returning twins but only for the implicit layer-0 shorthands, while
-  > put_tile/get_tile (explicit layer) were already Option-returning. Removes the panicking layer-0
-  > put/get and the whole checked* family in favor of one accessor shape across every layer:
-  >
-  > - Grid::tile(layer, pos) -> Option<&Tile> (renamed from get_tile, now takes impl Into<Pos>
-  >   instead of separate x/y)
-  > - Grid::tile_mut(layer, pos) -> Option<&mut Tile>, new: a non-allocating mutable counterpart:
-  >   get_tile had no mutable twin before this
-  > - Grid::put_tile(layer, pos, tile) -> Option<()>, now also takes impl Into<Pos>
-  >
-  > Grid already implements Index<Pos>/IndexMut<Pos> for panicking layer-0 access, which is the
-  > Rust-conventional home for a panic and stays as the one ergonomic panicking accessor.
-  >
-  > Updates every call site across the workspace (core, widgets, gl, software, terminal, examples,
-  > benches).
-  >
-  > - api(core): take impl Into<Pos> everywhere a cell is named, retire \_at suffix
-  >
-  > Terminal's single-cell drawing methods (put, put_styled, put_span, put_span_styled, print,
-  > print_styled) took (x: u16, y: u16) pairs; put_at existed purely to bridge to a Pos-based call.
-  > Every one of these now takes impl Into<Pos>, so term.put((5, 5), '@') and term.put(pos, '@')
-  > both work through the same method, and put_at is gone (merged into put).
-  >
-  > put_offset(x, y, dx, dy, ch) becomes put_offset(pos, offset, ch), taking a new Offset type (dx:
-  > i16, dy: i16) instead of a second bare (i16, i16) pair, so a position and a sub-cell pixel
-  > offset can't be transposed at a call site. Offset gets the same From<(i16, i16)> round-trip as
-  > Pos/Size.
-  >
-  > Updates every call site across the workspace (core, widgets, examples, benches, READMEs,
-  > docs/testing.md).
-
 - [14aff2f](https://github.com/crates-lurey-io/retroglyph/commit/14aff2fcb5b4f4119bf565b6a1ffdabb5cc0fbf6)
   _(core, crossterm, window, widgets)_ Add KeyCode::Modifier/lock keys and pixel-precise Scroll by
   `@matanlurey` in [#584](https://github.com/crates-lurey-io/retroglyph/pull/584)
-
-  > - feat(core): add KeyCode::Modifier and lock/menu key variants
-  >
-  > Adds retroglyph_core::event::KeyCode::Modifier(ModifierKey) for reporting a bare modifier press
-  > as its own key event, plus CapsLock/ScrollLock/NumLock/PrintScreen/ Pause/Menu variants.
-  > ModifierKey is flat (Shift/Control/Alt/Super); side is conveyed by the existing
-  > KeyEvent::location (KeyLocation::Left/Right), not duplicated inside ModifierKey.
-  >
-  > Wires both backends:
-  >
-  > - crossterm: enables KeyboardEnhancementFlags::REPORT_ALL_KEYS_AS_ESCAPE_CODES (required for
-  >   KeyCode::Modifier to be reported at all) and maps crossterm::event::ModifierKeyCode's
-  >   Left/Right variants down to ModifierKey + KeyLocation.
-  >   Hyper/Meta/IsoLevel3Shift/IsoLevel5Shift have no retroglyph equivalent and fall through to
-  >   None like any other unmapped key.
-  > - winit: maps NamedKey::Shift/Control/Alt/Super and the lock/menu NamedKeys to the new KeyCode
-  >   variants, reusing the existing KeyLocation translation path for side disambiguation.
-  >
-  > * feat(core): replace line-quantized scroll variants with pixel-precise Scroll{dx,dy}
-  >
-  > Replaces MouseEventKind::{ScrollUp,ScrollDown,ScrollLeft,ScrollRight} with a single Scroll { dx:
-  > f32, dy: f32 } variant. Sign convention preserved from the winit implementation being replaced:
-  > dy > 0 is up, dy < 0 is down, dx > 0 is right, dx < 0 is left; a delta of exactly zero on both
-  > axes still emits no event.
-  >
-  > Magnitude is backend-dependent: winit reports the platform's exact pixel/line delta, crossterm
-  > and the wasm terminal backend (both line- quantized, no source of real magnitude) synthesize a
-  > fixed step of 1.0 per tick in the matching sign direction.
-  >
-  > MouseEventKind/MouseEvent/Event drop their Eq/Hash derives (kept PartialEq): f32 implements
-  > neither, and the derive is on the enclosing types too since MouseEventKind is nested inside
-  > them.
-  >
-  > - feat(widgets): consume pixel-precise Scroll{dx,dy} events by sign
-  >
-  > Updates the interact module's scroll-delta accumulator and the widgets/ examples call sites that
-  > matched MouseEventKind::ScrollUp/ScrollDown to match Scroll{dx,dy} by sign instead, preserving
-  > the exact prior unit-step behavior. Magnitude is intentionally not consumed yet (mixing winit's
-  > PixelDelta-scale values with crossterm's synthesized 1.0-per-tick values needs a normalization
-  > pass outside this change's scope); see retroglyph#445.
 
 ### Bug Fixes
 
@@ -144,42 +40,9 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-wasm-v
   _(core, software, gl)_ Make Output::draw_layers required, default draw to forward to it by
   `@matanlurey` in [#579](https://github.com/crates-lurey-io/retroglyph/pull/579)
 
-  > fix(core, software, gl): make draw_layers required, default draw onto it
-  >
-  > Output::draw was a required trait method that a compositing backend (composites_layers() ==
-  > true) can never actually reach: Terminal::present always calls draw_layers, so software's and
-  > gl's own draw bodies were dead code that nothing exercised, and they had already drifted (gl's
-  > write_tile never read a cell's tint at all).
-  >
-  > Flips which method is the primitive: draw_layers is now required, and draw defaults to
-  > forwarding to it tagged as layer 0. Cell backends (Headless, Crossterm, TerminalWasm) rename
-  > their existing draw body to draw_layers with no logic change, since Terminal::present already
-  > pre-flattens onto a single conceptual layer for them before calling draw_layers. software and gl
-  > delete their now-redundant draw/blit_cell and draw/write_tile bodies entirely and pick up the
-  > shared default.
-  >
-  > Existing tests that called Output::draw directly (blit_cell_respects_sub_cell_offset,
-  > draw_reports_a_tint_on_a_glyph_without_a_sprite,
-  > draw_records_sub_cell_offset_and_flags_in_the_base_layer) keep passing unchanged, now exercising
-  > the default forward instead of a second hand-written implementation.
-  >
-  > Refs #561
-
 - [c279a47](https://github.com/crates-lurey-io/retroglyph/commit/c279a478947c98f2f02a6fad4d258ffdedcb1a90)
   _(workspace)_ Correct README architecture/style claims, add docs.rs feature badges by
   `@matanlurey` in [#499](https://github.com/crates-lurey-io/retroglyph/pull/499)
-
-  > - README's Widgets section and crate table described retroglyph-widgets' old free-function
-  >   architecture (panel/gauge/table/sparkline/draw_box); rewrite to describe the current
-  >   builder-struct widgets.
-  > - README claimed Style has text modifiers and a modifier() method; neither exists. Remove the
-  >   claims and point at Style's own no-modifier rationale.
-  > - Add rustdoc-args = ["--cfg", "docsrs"] to every publishable crate's
-  >   [package.metadata.docs.rs], plus #![cfg_attr(docsrs, feature(doc_cfg))] to every crate's
-  >   lib.rs, so docs.rs renders feature-gate badges instead of showing gated items as
-  >   unconditionally available. doc_auto_cfg was merged into doc_cfg upstream, so doc_cfg (which
-  >   now auto-infers cfg badges) is used instead of the now-removed doc_auto_cfg feature name. Adds
-  >   a just doc-docsrs recipe to verify the docs.rs build locally.
 
 ### Refactor
 
@@ -187,51 +50,21 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-wasm-v
   _(core)_ Surface-centric drawing, Terminal loses its own drawing API by `@matanlurey` in
   [#522](https://github.com/crates-lurey-io/retroglyph/pull/522) [**breaking**]
 
-  > refactor(core): surface-centric drawing
-
 ### Documentation
 
 - [3579210](https://github.com/crates-lurey-io/retroglyph/commit/35792107e4b4281ae716f1f6022897cdadf3e266)
   _(crossterm, terminal, terminal-wasm)_ Add examples to the three crates with zero # Examples by
   `@matanlurey` in [#573](https://github.com/crates-lurey-io/retroglyph/pull/573)
 
-  > - docs(crossterm): add Examples sections to Crossterm::new and with_writer
-  > - docs(terminal): add Examples section to TerminalRenderer
-  > - docs(terminal-wasm): add Examples sections to public items
-
 - [123c590](https://github.com/crates-lurey-io/retroglyph/commit/123c59072d9de4a051ecddd76be67342cddf45ae)
   _(workspace, core, widgets)_ Clean up the " -- " clause-joiner habit by `@matanlurey` in
   [#532](https://github.com/crates-lurey-io/retroglyph/pull/532)
-
-  > - docs(core): clean up " -- " clause-joiner usage
-  > - docs(terminal): clean up " -- " clause-joiner usage
-  > - docs(crossterm): clean up " -- " clause-joiner usage
-  > - docs(software): clean up " -- " clause-joiner usage
-  > - docs(gl): clean up " -- " clause-joiner usage
-  > - docs(window): clean up " -- " clause-joiner usage
-  > - docs(terminal-wasm): clean up " -- " clause-joiner usage
-  > - docs(widgets): clean up " -- " clause-joiner usage
-  > - docs(workspace): clean up " -- " clause-joiner usage in top-level docs
 
 ### Miscellaneous Tasks
 
 - [e878716](https://github.com/crates-lurey-io/retroglyph/commit/e878716b24e6191d5849a4dd5377cfdac74376de)
   _(workspace)_ Add just check-targets, fix wasm32 lint drift, forward the dev feature by
   `@matanlurey` in [#560](https://github.com/crates-lurey-io/retroglyph/pull/560)
-
-  > chore(workspace): add just check-targets, fix the wasm32 lint drift, forward the dev feature
-  >
-  > The local gate only ever compiled the host target, so three retroglyph-gl test modules gated to
-  > Linux and wasm32 were invisible to it -- which is how #551 was locally green and failed five CI
-  > jobs. Adds a recipe that covers them, and fixes the wasm32 lint failures that would have made
-  > its second leg red on main.
-  >
-  > Also forwards retroglyph-core's dev feature from every crate that depends on it, so a consumer
-  > can enable development diagnostics without adding a direct core dependency to reach the flag.
-  >
-  > Closes #552
-  >
-  > Closes #553
 
 **Full Changelog**:
 https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-wasm-v0.1.4...retroglyph-terminal-wasm-v0.2.0
@@ -244,35 +77,6 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-wasm-v
   _(workspace)_ Refactor doc comments across all crates by `@matanlurey` in
   [#363](https://github.com/crates-lurey-io/retroglyph/pull/363)
 
-  > - docs(software): rewrap module docs and fix broken doctest examples
-  >
-  > Rewrap module/doc-comment prose to the ~100-col budget instead of ~80, and fix
-  > run_headless()/draw_layers() doctest examples in config.rs that no longer matched the current
-  > fallible signatures.
-  >
-  > - docs(terminal): rewrap module and item docs to the 100-col budget
-  >
-  > No content changes; re-wraps existing crate-level and item doc comments that were hand-wrapped
-  > near ~80 cols instead of rustfmt's 100-col default.
-  >
-  > - docs(terminal-wasm): clean up wasm-bindgen export doc comments
-  >
-  > Rewrap prose to ~100 cols and use proper intra-doc links for Event::FocusGained/FocusLost
-  > instead of unresolvable bare paths.
-  >
-  > - docs(widgets): add # Examples sections to widget doc comments
-  >
-  > Every widget's main struct now has a runnable rustdoc example (construction, builder chaining,
-  > and rendering via Headless/Terminal) except Button, interact, Shortcuts, and layout::split\_\*,
-  > which already had one. No logic changes; verified by cargo test --doc.
-  >
-  > - docs(window): rewrap doc comments and fix a stale internal-doc citation
-  >
-  > Rewrap module/item doc prose to the ~100-col budget across backend.rs, presenter.rs, lib.rs, and
-  > the winit submodules. clipboard.rs also drops a citation of the crate README/PR description for
-  > SystemClipboard's lack of automated coverage, per STYLE_GUIDE's rule against pointing published
-  > docs at internal-only references; the rationale is restated inline instead.
-
 **Full Changelog**:
 https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-wasm-v0.1.3...retroglyph-terminal-wasm-v0.1.4
 
@@ -284,36 +88,11 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-wasm-v
   _(terminal-wasm)_ Add focus/blur FFI push entry point by `@matanlurey` in
   [#340](https://github.com/crates-lurey-io/retroglyph/pull/340)
 
-  > Adds wasm_terminal_push_focus(handle, focused) to the wasm-bindgen FFI surface, pushing
-  > Event::FocusGained/Event::FocusLost -- mirroring the crossterm backend's focus-change mapping so
-  > a browser terminal element's focus/blur DOM events can drive the same 'pause when unfocused'
-  > pattern.
-  >
-  > Closes #289.
-
 ### Bug Fixes
 
 - [f8e5766](https://github.com/crates-lurey-io/retroglyph/commit/f8e57661e87dfbd08b878bd3647754d2614242a6)
   _(terminal-wasm)_ Bound event_queue and coalesce pointer-move events by `@matanlurey` in
   [#342](https://github.com/crates-lurey-io/retroglyph/pull/342)
-
-  > The event_queue VecDeque had no cap, drained only by poll_event. If the Rust game loop stalls
-  > (backgrounded tab, throttled requestAnimationFrame) while JS keeps forwarding high-frequency
-  > mousemove events, the queue could grow unbounded -- unlike native backends, where crossterm's OS
-  > input buffer applies backpressure.
-  >
-  > push_event now:
-  >
-  > - coalesces consecutive MouseEventKind::Moved events by replacing the queue's back entry in
-  >   place instead of growing the queue
-  > - caps the queue at EVENT_QUEUE_CAP (4096) events, dropping the oldest entry and logging via
-  >   log::warn! once at capacity
-  >
-  > Adds unit tests for the cap, Moved coalescing, and that non-Moved events (keys, clicks, paste)
-  > are never dropped or coalesced, plus a new event_queue_coalesce_moved_burst criterion bench
-  > demonstrating the fix under a high-frequency Moved burst.
-  >
-  > Closes #286
 
 ### Refactor
 
@@ -321,89 +100,9 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-wasm-v
   _(core)_ Split Backend into Output/Input/Cursor facets by `@matanlurey` in
   [#331](https://github.com/crates-lurey-io/retroglyph/pull/331)
 
-  > - refactor(core): split Backend into Output/Input/Cursor facets
-  >
-  > Splits the fused Backend trait into three independent sibling traits with no supertrait
-  > relationship: Output (draw/draw_layers/flush/size/clear/resize, the only fallible facet), Input
-  > (poll_event/push_event, push_event defaults to a no-op), and Cursor
-  > (set_cursor_visible/set_cursor_position, both default to a no-op). Backend becomes a pure
-  > ergonomic bundle:
-  >
-  >     pub trait Backend: Output + Input + Cursor {}
-  >     impl<T: Output + Input + Cursor> Backend for T {}
-  >
-  > so every existing B: Backend generic call site (Terminal<B>, App<B>::step, layout::render, every
-  > widget) keeps compiling unchanged. Headless now implements Output/Input/Cursor separately
-  > instead of one impl Backend.
-  >
-  > Also fixes stray doc/grid/terminal references to crate::Backend::\* methods that moved to
-  > Output/Input, and updates the workspace README's backend overview.
-  >
-  > - refactor(crossterm): implement Output/Input/Cursor instead of fused Backend
-  >
-  > Crossterm now implements Output (draw/flush/size/clear/resize, propagating std::io::Error),
-  > Input (real poll_event; push_event uses the new trait default since crossterm reads its own
-  > event stream), and Cursor (real escape-code-based show/hide and move) instead of one impl
-  > Backend. Updates crate docs, tests, and benches that referenced Backend::\* methods directly on
-  > a concrete Crossterm<W> to import Output/Input instead (bundle-trait method resolution only
-  > works through a generic B: Backend bound, not a concrete type).
-  >
-  > - refactor(window): fold Presenter into an Output supertrait
-  >
-  > Presenter is now `pub trait Presenter: Output`, dropping its duplicated
-  > draw/draw_layers/needs_full_frame/composites_layers/flush/size/clear/resize signatures
-  > (inherited from Output) and its own Error associated type (also inherited); Presenter keeps only
-  > SurfaceError plus the surface lifecycle (init_surface/resize_surface/present/cell_size).
-  > WindowBackend<P: Presenter> now implements Output by delegating to P, Input via its own event
-  > queue, and Cursor via the trait's no-op default (confirmed this matches the prior fused-Backend
-  > impl's cursor methods, which were already no-ops for the windowed family -- a straight split,
-  > not a behavior change). Updates crate docs (lib.rs architecture diagram, presenter.rs's stale
-  > "mirrors the output half" doc comment, README) and the winit test/doctest presenter stubs to
-  > implement Output + Presenter separately.
-  >
-  > - refactor(software): implement Output/Input/Cursor, drop duplicate Presenter forwarding
-  >
-  > SoftwareRenderer now implements Output, Input, and Cursor directly instead of one impl Backend.
-  > Since retroglyph-window's Presenter is now an Output supertrait, SoftwareRenderer's own Output
-  > impl already satisfies Presenter: Output, so the old impl retroglyph_window::Presenter block
-  > (which duplicated draw/draw_layers/flush/size/clear/resize by forwarding through
-  > <Self as Backend>::method, specifically to keep Presenter out of scope and avoid
-  > method-resolution ambiguity) is deleted; the new Presenter impl only defines SurfaceError,
-  > init_surface, resize_surface, present, and cell_size. Updates crate/module docs and the benches
-  > that called draw/draw_layers directly on a concrete SoftwareRenderer to import Output instead of
-  > Backend.
-  >
-  > - refactor(terminal-wasm): implement Output/Input/Cursor instead of fused Backend
-  >
-  > TerminalWasm now implements Output (ANSI-emitting draw/flush/clear/resize), Input (real
-  > push*event/poll_event, since this backend is entirely push-driven), and Cursor (real escape-code
-  > cursor show/hide/move) instead of one impl Backend. Updates doc comment links
-  > (Backend::draw/clear/etc. -> Output::/Input::/Cursor::) and the event-throughput bench's Backend
-  > as * import to Input as \_.
-  >
-  > - fix(terminal-wasm): import Output for wasm32-gated resize call
-  >
-  > The wasm32-only wasm_terminal_resize FFI export imported the old fused Backend trait to call
-  > resize(); after the Output/Input/Cursor split that method lives on Output. This module
-  > is #[cfg(target_arch = "wasm32")], so cargo test --all-features never compiled it -- only just
-  > test-wasm (wasm-pack test) exercises this path, and CI caught it as a build failure on PR #331.
-  >
-  > - docs(workspace): update Backend/Presenter references after the trait split
-  >
-  > Sweeps remaining prose describing Backend as a single fused output+input+cursor trait: the
-  > workspace README's backend overview, the retroglyph-terminal crate's doc comment linking to the
-  > old Backend::draw method (now Output::draw), and docs/testing.md's reference to
-  > Backend::push_event (now Input::push_event).
-
 - [f6f35da](https://github.com/crates-lurey-io/retroglyph/commit/f6f35da518d9491bd34b981f8dfded9af75dec50)
   _(terminal-wasm)_ Make TerminalWasm's inherent push_event pub(crate) by `@matanlurey` in
   [#341](https://github.com/crates-lurey-io/retroglyph/pull/341)
-  > Input::push_event is now the sole public way to push an event onto a TerminalWasm; the inherent
-  > method is pub(crate), used internally by the wasm-bindgen FFI functions and the crate's own
-  > tests. External callers that called .push_event(...) on a bare TerminalWasm without importing
-  > the Input trait now need it in scope, or a fully-qualified call.
-  >
-  > Closes #291.
 
 ### Performance
 
@@ -411,43 +110,11 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-wasm-v
   _(terminal-wasm)_ Avoid per-frame reallocation and UTF-8 revalidation in take_output by
   `@matanlurey` in [#344](https://github.com/crates-lurey-io/retroglyph/pull/344)
 
-  > - Replace TerminalWasm's TerminalRenderer<Vec<u8>> writer with a new Utf8Sink, a std::io::Write
-  >   sink backed by a String. TerminalRenderer only ever writes complete, already-valid-UTF-8
-  >   fragments into its writer, so take_output no longer has to re-validate the drained buffer as
-  >   UTF-8 via String::from_utf8 every frame (retroglyph#288).
-  > - take_output now replaces the drained buffer with one pre-sized to the outgoing buffer's
-  >   capacity instead of an empty Vec::new()/String::new(), so a steady frame rate converges to one
-  >   right-sized allocation per frame instead of regrowing from empty every time (retroglyph#287).
-  > - Add TerminalWasm::take_output_into(&mut String), an allocation-free alternative for callers
-  >   holding a long-lived buffer across frames (retroglyph#290).
-  > - Add unit tests for take_output's capacity retention and take_output_into's clear+fill
-  >   behavior.
-
 ### Testing
 
 - [424e466](https://github.com/crates-lurey-io/retroglyph/commit/424e4662f410294683686b31948bdab0f3509b66)
   _(terminal-wasm)_ Add benchmarks for take_output and event-decode throughput by `@matanlurey` in
   [#319](https://github.com/crates-lurey-io/retroglyph/pull/319)
-
-  > Adds two criterion bench targets, following crates/core/benches/grid_diff.rs's style
-  > (deterministic fastrand-seeded inputs, doc comments explaining why, #![allow(missing_docs)]):
-  >
-  > - benches/take_output.rs: TerminalWasm::take_output on a full-repaint vs sparse-diff (1%/5%)
-  >   frame at three grid sizes (40x12, 80x24, 200x60), reporting both wall time and output byte
-  >   length via Criterion::benchmark_group's Throughput::Bytes -- the marshalled string size
-  >   matters as much as CPU time since take_output crosses the WASM/JS boundary once per animation
-  >   frame.
-  > - benches/event_throughput.rs: decode_key_event/decode_mouse_event throughput over a
-  >   representative 10k-event stream (Throughput::Elements), plus event queue drain
-  >   throughput/growth under a burst of pushed mouse-move events at a few burst sizes.
-  >
-  > criterion and fastrand are added as non-wasm32 dev-dependencies (merged into the existing
-  > [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies] table alongside proptest), matching
-  > this crate's existing target-gating convention for the decode_key_event_proptests module:
-  > criterion benches only ever run on the host, and wasm-pack's just test-wasm only builds --tests,
-  > not --benches, so no additional gating was needed.
-  >
-  > Closes #292
 
 **Full Changelog**:
 https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-wasm-v0.1.2...retroglyph-terminal-wasm-v0.1.3
@@ -460,23 +127,6 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-wasm-v
   _(workspace)_ Per-crate test analytics flags + self-hosted coverage report by `@matanlurey` in
   [#254](https://github.com/crates-lurey-io/retroglyph/pull/254)
 
-  > - Split the workspace nextest JUnit report per crate flag before uploading to Codecov Test
-  >   Analytics (tools/split-junit-flags.py): a single combined-workspace upload can only carry one
-  >   flag before misattributing every crate's tests to every other crate's flag, so upload once per
-  >   flag instead of once for the whole workspace. Fixes the empty Flags filter on
-  >   https://app.codecov.io/gh/crates-lurey-io/retroglyph/tests.
-  > - disable_search: true on every one of those uploads: the Codecov CLI auto-discovers any
-  >   \*junit.xml on disk in addition to the explicit files: input, and the pre-split combined
-  >   junit.xml sits right next to the split files it came from. Caught this live in run 29653543638
-  >   (test job, "Upload test results to Codecov (unflagged)" step logged "Found 2 test_results
-  >   files to report") before merging -- without disable_search, every flag upload would have
-  >   silently re-included all 669 tests too.
-  > - Point each crate README's coverage badge at the repo's Flags tab instead of the generic
-  >   overview page (query-param deep links like ?flags[0]=x do not work against the current Codecov
-  >   app, verified live).
-  > - docs.yml: publish a self-hosted `cargo llvm-cov --html` report at
-  >   https://main.retroglyph.dev/coverage/ alongside the rustdocs, rebuilt on every push to main.
-
 **Full Changelog**:
 https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-wasm-v0.1.1...retroglyph-terminal-wasm-v0.1.2
 
@@ -488,67 +138,13 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-wasm-v
   _(core)_ Implement Grid::clone and shrink Tile via an EGC side-table by `@matanlurey` in
   [#225](https://github.com/crates-lurey-io/retroglyph/pull/225)
 
-  > Closes #130.
-  >
-  > - Grid::clone: derive Clone on LayerBuf and Grid now that ixy 0.6.0-alpha.8+ implements
-  >   Clone/Copy for the RowMajor layout marker, removing the upstream-blocked TODO in grid.rs.
-  > - Tile layout shrink: move the (rare) multi-codepoint EGC grapheme text out of Tile and into a
-  >   sparse per-layer side-table on Grid (LayerBuf::extras), gated by a new TileFlags::HAS_EXTRA
-  >   bit. Tile drops from 32 to 20 bytes and becomes Copy. Tile::extra()/grapheme() are replaced by
-  >   Grid::grapheme(), since a bare Tile can no longer answer that on its own.
-  >
-  >   This requires widening Backend::draw/draw_layers items from (Pos, &Tile) to (Pos, &Tile,
-  >   Option<&str>) (and the layered equivalent) so backends that render the full grapheme cluster
-  >   (retroglyph-terminal, shared by crossterm and terminal-wasm) still can. Grid::layers()/diff()
-  >   are widened to match, and diff() is now hand-rolled instead of delegating to grixy's GridDiff,
-  >   so a grapheme-only change (same glyph/style/flags, different combining mark) is still detected
-  >   as a diff.
-  >
-  >   Both TODOs were tracked together in #130; the Backend-trait widening was previously deferred
-  >   pending 'a Backend-trait change already on the table for another reason' -- this is that
-  >   reason.
-
 - [55f97ae](https://github.com/crates-lurey-io/retroglyph/commit/55f97ae7bf3938739cb8d9d450f1f467c6e823fb)
   _(terminal-wasm)_ Support paste/clipboard events by `@matanlurey` in
   [#229](https://github.com/crates-lurey-io/retroglyph/pull/229)
 
-  > Adds wasm*terminal_push_paste(handle, text), pushing Event::Paste directly -- unlike
-  > push_key/push_mouse there's no decode*\* step needed since String is already
-  > wasm-bindgen-FFI-safe, so a paste can't be misread as N individual keystrokes triggering
-  > single-key game commands.
-  >
-  > Closes #98.
-  >
-  > Also simplifies Event::Paste's doc comment, which previously hardcoded an enumerated list of
-  > emitting backends that's now out of date; it just notes paste isn't emitted by all backends and
-  > points to each backend's own docs.
-  >
-  > Filed #228 to track the same support for the windowed (winit) backend, which has no native
-  > paste/clipboard event and needs a real dependency decision (e.g. arboard) plus a separate wasm32
-  > web-canvas-listener path -- out of scope here.
-
 - [9288322](https://github.com/crates-lurey-io/retroglyph/commit/9288322695aa0fc7e948c3410ce26f879851b0ed)
   _(terminal-wasm)_ Add mouse event support (decode_mouse_event) by `@matanlurey` in
   [#222](https://github.com/crates-lurey-io/retroglyph/pull/222)
-
-  > feat(terminal-wasm): add decode_mouse_event and wasm_terminal_push_mouse
-  >
-  > Mirrors decode_key_event's pattern for mouse input: JS crosses the wasm-bindgen boundary with
-  > plain integers (x, y, action, button, mods) since MouseEvent/MouseEventKind/MouseButton aren't
-  > wasm-bindgen FFI-safe types.
-  >
-  > - decode_mouse_event(x, y, action, button, mods) decodes into a
-  >   retroglyph_core::event::MouseEvent, with mouse_actions and mouse_buttons constant modules
-  >   (button follows the DOM MouseEvent.button convention: 0 = left, 1 = middle, 2 = right).
-  > - wasm_terminal_push_mouse(handle, x, y, action, button, mods) is the new wasm32-only FFI entry
-  >   point, following the same unknown-handle/undecodable-input no-op contract as
-  >   wasm_terminal_push_key.
-  > - Factored the shared SHIFT/CONTROL/ALT/SUPER mods bitmask decoding out of decode_key_event into
-  >   decode_key_modifiers, reused by both decoders.
-  > - Position is cell-grid only (pixel_position: None); JS is responsible for converting a raw
-  >   pixel position into cell coordinates the same way it already tracks cols/rows for resize.
-  >
-  > Closes #92.
 
 - [a4bff8a](https://github.com/crates-lurey-io/retroglyph/commit/a4bff8a8a59220ab7ff4d104126c10ebdbb05e17)
   _(terminal-wasm)_ Add Super/Meta modifier support by `@matanlurey` in
@@ -560,43 +156,13 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-wasm-v
   _(terminal-wasm)_ Validate and document CUP cursor-position CSI format by `@matanlurey` in
   [#207](https://github.com/crates-lurey-io/retroglyph/pull/207)
 
-  > write_cursor_position emits CSI row;col H (CUP), 1-indexed and absolute. Verified against
-  > xterm.js (InputHandler::cursorPosition) and hterm/Terminalemulator's ControlSequences reference,
-  > both of which match ECMA-48/VT100 exactly -- no 0-indexed or alternate escape code found in
-  > either, so no dual-emission fallback is needed. Documented the sequence and its cross-emulator
-  > compatibility on write_cursor_position, and added a regression test pinning the exact byte
-  > output for two positions.
-  >
-  > Closes #104
-
 - [97d7ad3](https://github.com/crates-lurey-io/retroglyph/commit/97d7ad37958ac1c7ddcaecea70271f2db366ecaa)
   _(terminal-wasm)_ Robustness and docs fixes for the WASM backend by `@matanlurey` in
   [#201](https://github.com/crates-lurey-io/retroglyph/pull/201)
 
-  > - fix(terminal-wasm): clarify UTF-8 invariant panic message in take_output
-  > - fix(terminal-wasm): log a warning on invalid wasm-bindgen handles
-  > - docs(terminal-wasm): replace pseudo-code JS example with a working xterm.js driver
-
 - [50b274f](https://github.com/crates-lurey-io/retroglyph/commit/50b274f07527c62bd5af9a46c90cc7a6f03f081c)
   _(workspace)_ Squash 3+ blank lines and allow MD037 in generated changelogs by `@matanlurey` in
   [#247](https://github.com/crates-lurey-io/retroglyph/pull/247)
-
-  > release-plz's per-crate CHANGELOG.md is prepended above the hand-written 0.1.0 entry using
-  > cliff.toml's body template. The tail block that renders the `**Full Changelog**: ...` link can't
-  > be trimmed with Tera's `-` whitespace markers without also swallowing the blank line that's
-  > supposed to separate it from the next heading -- that separator has to come from literal
-  > template text sitting between nested {% if %} blocks -- so it leaves 3 blank lines at that
-  > boundary instead of 1. Add a postprocessor that squashes any run of 3+ newlines down to a single
-  > blank line, matching Keep a Changelog / prettier / markdownlint's MD012 expectation.
-  >
-  > Also extend the per-changelog markdownlint-disable comment (both the already-checked-in header
-  > on all 7 crates' CHANGELOG.md, and cliff.toml's header template for any crate whose changelog
-  > doesn't exist yet) with no-space-in-emphasis: commit bodies are freeform prose and can contain a
-  > literal _ or \* adjacent to other text (e.g. `wasm_terminal_\* FFI`, `manual \_style override`)
-  > that markdownlint's MD037 misreads as unbalanced emphasis markers. That's not something a
-  > template fix can prevent, since it depends on historical commit message content.
-  >
-  > Fixes the release-plz standing PR's format/lint CI failure .
 
 ### Documentation
 
@@ -608,80 +174,17 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-wasm-v
   _(terminal-wasm)_ Dedupe JS driver example + FFI robustness tests by `@matanlurey` in
   [#206](https://github.com/crates-lurey-io/retroglyph/pull/206)
 
-  > docs(terminal-wasm): dedupe JS driver example + FFI robustness tests
-  >
-  > - Extract the xterm.js driver example (already made real/working by #201) into a single
-  >   canonical crates/terminal-wasm/js/xterm-driver.js, included verbatim into the crate's rustdoc
-  >   via include_str! and mirrored in README.md. A new readme_js_example_matches_canonical_driver
-  >   test guards the README copy against drifting from the canonical file, since crates.io/GitHub
-  >   render README.md as plain markdown and can't include_str! it the way rustdoc can.
-  > - Note in both docs that this handle-based wasm*terminal*_ FFI differs from the examples/
-  >   crate's deployed demo gallery, which uses a separate single-instance wasm*terminal_example*_
-  >   FFI built on the same TerminalWasm backend.
-  > - Add crates/terminal-wasm/tests/wasm*ffi.rs: wasm-bindgen-test coverage of the wasm module's
-  >   exported wasm_terminal*\* functions themselves (handle uniqueness, safe no-ops on
-  >   freed/unknown handles, undecodable key codes silently dropped), run via wasm-pack test --node
-  >   (new just test-wasm recipe + CI job). This is the only place those #[wasm_bindgen] functions
-  >   actually run under cargo test, since the wasm module is cfg(target_arch = "wasm32")-gated and
-  >   doesn't exist in a host-target build.
-  > - Pin wasm-pack (workspace tool) and wasm-bindgen-test (=0.3.56, the release built against
-  >   wasm-bindgen 0.2.106, matching this workspace's existing wasm-bindgen pin) plus
-  >   wasm-bindgen-test-runner (bundled in the already-pinned wasm-bindgen-cli package).
-
 ### Testing
 
 - [f2aaa54](https://github.com/crates-lurey-io/retroglyph/commit/f2aaa54e20183359f95230a06d43049216573efe)
   _(terminal-wasm)_ Fuzz decode_key_event with proptest by `@matanlurey` in
   [#236](https://github.com/crates-lurey-io/retroglyph/pull/236)
 
-  > Adds a proptest property-based module (decode_key_event_proptests) that generates arbitrary
-  > (code: u32, mods: u8) pairs and asserts:
-  >
-  > - no panics for any input
-  > - the Some/None split and resulting KeyCode is always explained by exactly one of: a named
-  >   control key, the contiguous F1-F24 range, or a valid printable char
-  > - F-key indices always land in the documented 1..=24 range (guards the `as u8` cast from ever
-  >   wrapping)
-  > - modifier decoding is independent of the key code
-  >
-  > Also adds targeted regression tests for the edge cases called out in the issue: every named key
-  > constant, the F24 boundary, lone UTF-16 surrogate halves, u32::MAX, the unnamed gap between the
-  > control-key and F-key blocks, and the null char.
-  >
-  > Adds proptest as a host-target dev-dependency (matching retroglyph-core's existing use), so
-  > cargo-fuzz/quickcheck are not needed for this crate.
-  >
-  > Closes #121.
-
 ### Continuous Integration
 
 - [1d81906](https://github.com/crates-lurey-io/retroglyph/commit/1d81906ea8e380d64de0e05345f103627ef49406)
   _(workspace)_ Automated per-crate release-plz workflow by `@matanlurey` in
   [#80](https://github.com/crates-lurey-io/retroglyph/pull/80)
-
-  > - ci(release): adopt per-crate release-plz flow with PR-title enforcement
-  >
-  > Re-enable release-plz's standing Release PR (release-pr + release jobs) so version bumps and
-  > per-crate changelogs are computed from conventional PR-title history and published on Release-PR
-  > merge; developers never push tags.
-  >
-  > - release-plz.toml: per-crate changelogs (drop changelog_path), semver_check=true
-  > - cliff.toml: skip-changelog via github.pr_labels label + changelog: ignore footer
-  > - release-plz.yml: two-job release-pr/release, concurrency guards, trusted publishing
-  > - check-semver.yml: gate only undeclared breaks (skip on title ! or semver-override)
-  > - pr-title.yml: enforce Conventional Commit PR titles + scope list
-  >
-  > * docs(changelog): split workspace changelog into per-crate files
-  >
-  > Per-crate release-plz needs a CHANGELOG.md per crate. Seed each with its hand-written 0.1.0
-  > entry; the root CHANGELOG.md becomes an index.
-  >
-  > - docs: rewrite RELEASING.md for the automated release flow
-  >
-  > Document the per-crate, release-plz-driven flow: conventional PR titles, squash-merge, standing
-  > Release PR as the single approval gate, breaking declared via title !, cargo-semver-checks
-  > roles, PR labels, and no pre-1.0 prerelease channel. Update AGENTS.md's commit-message section:
-  > enforcement now lives in pr-title.yml, not local hooks.
 
 **Full Changelog**:
 https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-wasm-v0.1.0...retroglyph-terminal-wasm-v0.1.1
