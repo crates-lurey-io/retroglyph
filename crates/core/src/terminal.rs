@@ -57,6 +57,14 @@ pub struct Terminal<B: Backend> {
     /// Lets embedding drivers detect whether application code already presented during a frame,
     /// so they can skip a redundant driver-side present.
     present_count: u64,
+    /// Layers marked by [`retain_layer`](Self::retain_layer) to be re-synced from `previous`
+    /// instead of diffed as a real redraw on the next [`present`](Self::present).
+    ///
+    /// Indexed by layer id; `retained_layers[id]` is `true` if that layer's `previous` content
+    /// should be copied into `current` before diffing. Reset to all `false` once consumed at the
+    /// start of `present` (it's a one-shot opt-in, not a sticky mode) and on
+    /// [`resize`](Self::resize).
+    retained_layers: Vec<bool>,
 }
 
 impl<B: Backend> Terminal<B> {
@@ -78,6 +86,7 @@ impl<B: Backend> Terminal<B> {
             queued_event: None,
             flattened_stale: false,
             present_count: 0,
+            retained_layers: Vec::new(),
         }
     }
 
@@ -138,6 +147,10 @@ impl<B: Backend> Terminal<B> {
         // stale cells bleed into the resized layout.
         self.previous.clear_all();
         self.flattened_previous.clear_all();
+        // Defensive: `resize` already clears `previous` unconditionally, so the next `present`
+        // would just copy empty content forward for a still-marked layer. Dropping pending
+        // retention here too keeps that a non-event rather than relying on it.
+        self.retained_layers.clear();
         self.backend.resize(Size::new(width, height));
     }
 
@@ -179,6 +192,51 @@ impl<B: Backend> Terminal<B> {
         self.present_count
     }
 
+    /// Marks `layer` so the next [`present`](Self::present) treats it as unchanged instead of
+    /// requiring the app to have redrawn it: `present` copies `layer`'s last-presented content
+    /// back into `current` before diffing, so the diff (and thus the backend) sees no change on
+    /// it, whatever the app did or didn't draw into it this frame.
+    ///
+    /// Call this before [`draw`](Self::draw)/[`present`](Self::present) on a frame where a
+    /// layer's content is known not to have changed (e.g. the camera didn't move since the last
+    /// frame, so a cached map layer is still correct) and skip drawing it that frame. This is
+    /// the actual point of the method: [`present`](Self::present)'s diff already keeps the
+    /// *backend* from re-receiving unchanged cells, but the *app* still has to regenerate them
+    /// every frame to produce a buffer worth diffing. Marking a layer retained lets the app skip
+    /// that regeneration too, at the cost of a per-cell copy handled internally (a flat blit, far
+    /// cheaper than most real content generation).
+    ///
+    /// This is a one-shot opt-in, not a sticky mode: it only affects the very next `present`, so
+    /// a caller that wants a layer retained for several frames in a row must call this again
+    /// before each of them. [`resize`](Self::resize) also clears any pending retention.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_core::backend::Headless;
+    /// use retroglyph_core::{Layer, Terminal};
+    ///
+    /// let mut term = Terminal::new(Headless::new(10, 5));
+    /// let camera_moved = false;
+    ///
+    /// if camera_moved {
+    ///     term.draw(|s| s.on_tier(Layer::World).print((0, 0), "map", Default::default()))
+    ///         .unwrap();
+    /// } else {
+    ///     // The camera didn't move this frame: skip regenerating the map layer.
+    ///     term.retain_layer(Layer::World);
+    ///     term.draw(|s| s.on_tier(Layer::Hud).print((0, 1), "HP: 10", Default::default()))
+    ///         .unwrap();
+    /// }
+    /// ```
+    pub fn retain_layer(&mut self, layer: impl Into<u8>) {
+        let idx = usize::from(layer.into());
+        if self.retained_layers.len() <= idx {
+            self.retained_layers.resize(idx + 1, false);
+        }
+        self.retained_layers[idx] = true;
+    }
+
     /// Present the current frame: computes the diff against the previous frame, sends changed
     /// cells to the backend, flushes, then swaps buffers. Always presents unconditionally, even
     /// if nothing was drawn since the last call; most callers want [`draw`](Self::draw) instead
@@ -197,9 +255,11 @@ impl<B: Backend> Terminal<B> {
     ///
     /// This is an immediate-mode API (the same trade [ratatui] makes): the
     /// current buffer is wiped after every present, so each frame must redraw
-    /// its entire scene from scratch. Cells are **not** retained between
-    /// frames. The diff only bounds what is sent to the backend (terminal or
-    /// pixel I/O); it does not bound the CPU cost of your redraw.
+    /// its entire scene from scratch by default. [`retain_layer`](Self::retain_layer) is the
+    /// escape hatch: it makes one specific layer's last-presented content stand in for a redraw,
+    /// so the app can skip regenerating it. The diff only bounds what is sent to the backend
+    /// (terminal or pixel I/O); it does not bound the CPU cost of your redraw, except for a
+    /// layer marked via `retain_layer`.
     ///
     /// [ratatui]: https://docs.rs/ratatui
     ///
@@ -212,6 +272,27 @@ impl<B: Backend> Terminal<B> {
     /// redraw anything to recover, just call `draw`/`present` again.
     pub fn present(&mut self) -> Result<(), <B as Output>::Error> {
         self.present_count = self.present_count.wrapping_add(1);
+        if self.retained_layers.iter().any(|&retained| retained) {
+            // Overwrite each retained layer's (empty, never-drawn-this-frame) content in
+            // `current` with `previous`'s, so the diff below finds no change on it: the backend
+            // gets nothing to redraw, and the copy (a flat per-cell blit) is far cheaper than
+            // whatever the app would have spent regenerating identical content. See
+            // `retain_layer`'s doc for why this has to run before the diff rather than skip the
+            // post-swap clear: `current` and `previous` alternate buffers every present, so
+            // anything short of re-syncing from the authoritative `previous` here would desync
+            // them again after a second consecutive retained frame.
+            let area = Rect::new(0, 0, self.previous.width(), self.previous.height());
+            for (id, &retained) in self.retained_layers.iter().enumerate() {
+                if retained {
+                    #[allow(clippy::cast_possible_truncation)]
+                    let id = id as u8;
+                    self.current.blit(id, &self.previous, area, 0, 0);
+                }
+            }
+            for retained in &mut self.retained_layers {
+                *retained = false;
+            }
+        }
         if self.backend.composites_layers() {
             // Pixel/GPU backends composite the raw layered stream themselves.
             if self.backend.needs_full_frame() {
@@ -648,6 +729,81 @@ mod tests {
 
         assert_eq!(term.backend().grid()[Pos::new(4, 4)].glyph(), 'B');
         // (0,0) was not redrawn this frame; backend retains 'A' from before resize.
+        assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), 'A');
+    }
+
+    // --- retain_layer ---
+
+    #[test]
+    fn test_retain_layer_skips_redraw_and_keeps_backend_content() {
+        use crate::surface::Layer;
+
+        let mut term = Terminal::new(Headless::new(3, 1));
+        term.draw(|s| s.on_tier(Layer::World).put((0, 0), 'W', Style::default()))
+            .expect("draw failed");
+
+        // Retain `World`, then draw a frame that only touches `Hud`.
+        term.retain_layer(Layer::World);
+        term.draw(|s| s.on_tier(Layer::Hud).put((1, 0), 'H', Style::default()))
+            .expect("draw failed");
+
+        // `World` was never redrawn this frame, but the backend still shows it composited under
+        // the new `Hud` cell: `present` re-synced it from `previous` before diffing.
+        assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), 'W');
+        assert_eq!(term.backend().grid()[Pos::new(1, 0)].glyph(), 'H');
+    }
+
+    #[test]
+    fn test_retain_layer_survives_repeated_retention_without_desync() {
+        use crate::surface::Layer;
+
+        // Retaining a layer for several frames in a row (never redrawing it) must not desync
+        // `current`/`previous`: each present re-syncs the retained layer from `previous`, so the
+        // backend keeps showing it correctly across any number of consecutive retains.
+        let mut term = Terminal::new(Headless::new(3, 1));
+        term.draw(|s| s.on_tier(Layer::World).put((0, 0), 'W', Style::default()))
+            .expect("draw failed");
+
+        for _ in 0..3 {
+            term.retain_layer(Layer::World);
+            term.draw(|_| {}).expect("draw failed");
+            assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), 'W');
+        }
+    }
+
+    #[test]
+    fn test_retain_layer_is_one_shot() {
+        use crate::surface::Layer;
+
+        let mut term = Terminal::new(Headless::new(3, 1));
+        term.draw(|s| s.on_tier(Layer::World).put((0, 0), 'W', Style::default()))
+            .expect("draw failed");
+
+        term.retain_layer(Layer::World);
+        term.draw(|_| {}).expect("draw failed"); // Retained: the backend keeps showing 'W'.
+        assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), 'W');
+
+        // Retention was one-shot: the next present, with `World` still undrawn, clears it from
+        // the backend like any ordinary immediate-mode frame.
+        term.draw(|_| {}).expect("draw failed");
+        assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), ' ');
+    }
+
+    #[test]
+    fn test_retain_layer_accepts_raw_u8_and_layer() {
+        use crate::surface::Layer;
+
+        // `retain_layer` takes `impl Into<u8>`, so a raw layer id and the `Layer` enum both work.
+        let mut term = Terminal::new(Headless::new(1, 1));
+        term.draw(|s| s.put((0, 0), 'A', Style::default()))
+            .expect("draw failed");
+
+        term.retain_layer(0u8);
+        term.draw(|_| {}).expect("draw failed");
+        assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), 'A');
+
+        term.retain_layer(Layer::World);
+        term.draw(|_| {}).expect("draw failed");
         assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), 'A');
     }
 
