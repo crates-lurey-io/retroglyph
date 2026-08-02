@@ -42,8 +42,8 @@
 //!
 //! - `dev` (⚪ optional): forwards `retroglyph-core`'s `dev` feature, forcing development
 //!   diagnostics on in a build that would otherwise compile them out.
-//! - `egc` (⚪ optional): forwards to `retroglyph-core`'s `egc` feature; enables `Paragraph`'s
-//!   grapheme-cluster-aware word-wrap.
+//! - `egc` (⚪ optional): forwards to `retroglyph-core`'s `egc` feature; upgrades `Paragraph`'s
+//!   word-wrap (always available) to grapheme-cluster-aware correctness.
 //! - `serde` (⚪ optional): `Serialize`/`Deserialize` impls for [`Theme`] and `Density`, forwarding
 //!   to `retroglyph-core`'s `serde` feature ([`Theme`] round-trips through `Color`'s own `serde`
 //!   impl).
@@ -87,10 +87,8 @@ pub use style::{BoxStyle, Sides};
 pub use text::{truncate, truncate_owned};
 pub use theme::Theme;
 pub use ui::Ui;
-#[cfg(feature = "egc")]
-pub use widget::Paragraph;
 pub use widget::{
     AnimatedPerfOverlay, AnimatedWidget, BoxBorder, Button, Gauge, InteractiveWidget, List, Log,
-    Measure, Meter, Modal, Panel, PerfOverlay, PrintLine, ProgressBar, Scrollbar, Sparkline,
-    StatBar, StatefulWidget, Table, Tabs, Text, Widget,
+    Measure, Meter, Modal, Panel, Paragraph, PerfOverlay, PrintLine, ProgressBar, Scrollbar,
+    Sparkline, StatBar, StatefulWidget, Table, Tabs, Text, Widget,
 };
