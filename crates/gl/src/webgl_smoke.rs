@@ -388,7 +388,7 @@ fn sprite_cells_render_their_tileset_colors() {
     // each 8x16 sprite filling one cell. Proves tileset decode, the RGBA atlas upload, the sprite
     // pass, and glyph -> sprite dispatch all work in the browser.
     use retroglyph_window::tileset::{Codepage, TilesetOptions};
-    let opts = TilesetOptions::from_bytes(two_tile_png())
+    let opts = TilesetOptions::builder(two_tile_png())
         .tile_size(8, 16)
         .columns(2)
         .codepage(Codepage::Custom(vec!['A', 'B']))

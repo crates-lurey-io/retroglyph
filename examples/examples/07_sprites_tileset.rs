@@ -322,13 +322,13 @@ fn tilesets() -> [retroglyph_window::tileset::TilesetOptions; 2] {
     let room = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/tileset.png")).to_vec();
     let chest = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/chest.png")).to_vec();
     [
-        TilesetOptions::from_bytes(room)
+        TilesetOptions::builder(room)
             .tile_size(8, 16)
             .columns(2)
             .codepage(Codepage::Custom(vec!['#', '.', '@', '$']))
             .build()
             .expect("room asset is a valid 16x32 PNG, evenly divisible into 8x16 tiles"),
-        TilesetOptions::from_bytes(chest)
+        TilesetOptions::builder(chest)
             .tile_size(32, 32)
             .columns(1)
             .codepage(Codepage::Custom(vec!['[']))

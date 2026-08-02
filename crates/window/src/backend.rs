@@ -115,6 +115,7 @@ use std::time::Duration;
 ///
 /// [`poll_event`](Input::poll_event) never blocks: frame timing is owned by the event loop, not
 /// by input waits.
+#[derive(Debug)]
 pub struct WindowBackend<P: Presenter> {
     presenter: P,
     events: VecDeque<Event>,

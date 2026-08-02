@@ -131,7 +131,7 @@ fn bench_glyph(c: &mut Criterion, cols: u16, rows: u16, scale: u8) {
 fn bench_sprite(c: &mut Criterion, cols: u16, rows: u16, scale: u8) {
     let mut group = c.benchmark_group(format!("raster/sprite/{cols}x{rows}@scale{scale}"));
     let frame = sprite_frame(cols, rows);
-    let tileset = TilesetOptions::from_bytes(make_sprite_sheet_png())
+    let tileset = TilesetOptions::builder(make_sprite_sheet_png())
         .tile_size(16, 16)
         .codepage(Codepage::Cp437)
         .build()

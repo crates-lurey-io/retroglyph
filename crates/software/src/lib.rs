@@ -924,8 +924,8 @@ fn blit_glyph_mask(
     scale: usize,
     color: u32,
 ) {
-    let glyph_w = usize::from(font.glyph_width) * scale;
-    let glyph_h = usize::from(font.glyph_height) * scale;
+    let glyph_w = usize::from(font.glyph_width()) * scale;
+    let glyph_h = usize::from(font.glyph_height()) * scale;
 
     #[allow(clippy::cast_sign_loss)]
     let in_bounds = origin_x >= 0
@@ -1017,7 +1017,7 @@ fn blit_glyph(
         buf_h,
         origin_x,
         origin_y,
-        glyph.font(),
+        &glyph.font(),
         glyph.index(),
         scale,
         fg,
@@ -2061,7 +2061,7 @@ mod span_tests {
         align: SpriteAlign,
     ) -> SoftwareRenderer {
         #[allow(clippy::cast_possible_truncation)]
-        let opts = TilesetOptions::from_bytes(sprite_png(w, h, transparent_from))
+        let opts = TilesetOptions::builder(sprite_png(w, h, transparent_from))
             .tile_size(w as u16, h as u16)
             .columns(1)
             .codepage(Codepage::Custom(vec!['S']))
@@ -2338,7 +2338,7 @@ mod span_tests {
     ///   or the covered cell's own background fill erases the sprite the anchor spilled into it.
     #[test]
     fn changing_only_a_span_anchor_repaints_its_covered_cells() {
-        let opts = TilesetOptions::from_bytes(wide_and_narrow_png())
+        let opts = TilesetOptions::builder(wide_and_narrow_png())
             .tile_size(16, 16)
             .columns(2)
             .codepage(Codepage::Custom(vec!['S', 'T']))

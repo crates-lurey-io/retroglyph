@@ -173,7 +173,7 @@ impl GlBackendBuilder {
 
     /// Registers a PNG sprite tileset (issue #366). Glyphs a tileset maps override the bitmap font
     /// for those codepoints; register multiple and later ones win on codepoint collision. Build
-    /// the options with [`TilesetOptions::from_bytes`](retroglyph_window::tileset::TilesetOptions::from_bytes).
+    /// the options with [`TilesetOptions::builder`](retroglyph_window::tileset::TilesetOptions::builder).
     ///
     /// Available only with the `tilesets` feature.
     #[cfg(feature = "tilesets")]
