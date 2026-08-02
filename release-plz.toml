@@ -3,6 +3,12 @@ changelog_config = "cliff.toml"
 
 semver_check = true
 
+# Each tag here is a per-crate release, not a single project version, so GitHub's repo-wide
+# "Latest" badge (picked from whichever release has the newest date) is meaningless -- it just
+# ends up pinned to whatever crate happened to publish most recently. Don't let release-plz mark
+# any of them latest.
+git_release_latest = false
+
 git_release_body = """
 {{ changelog | replace(from=" by @", to=" by ") }}
 """
