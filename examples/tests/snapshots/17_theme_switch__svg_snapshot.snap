@@ -13,7 +13,7 @@ expression: svg
 </text>
 <text font-family="monospace" font-size="14" y="62.0" xml:space="preserve">
   <tspan fill="#464a60" x="8.0" style="background:#1e2030">│</tspan>
-  <tspan fill="#5aaafa" x="16.4" style="background:#161620">Info</tspan>
+  <tspan fill="#101018" x="16.4" style="background:#5aaafa">Info</tspan>
   <tspan fill="#cccccc" x="50.0" style="background:#161620"> </tspan>
   <tspan fill="#6e7082" x="58.4" style="background:#161620">Settings</tspan>
   <tspan fill="#cccccc" x="125.6" style="background:#161620">                                   </tspan>
