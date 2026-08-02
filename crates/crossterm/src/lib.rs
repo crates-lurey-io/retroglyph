@@ -15,11 +15,16 @@
 //!
 //! # Event polling and CPU cost
 //!
-//! [`poll_event`](Input::poll_event) wraps a single `crossterm::event::poll()` syscall per
-//! call; a zero timeout (as used by
-//! [`Terminal::drain_events`](retroglyph_core::Terminal::drain_events)) is one non-blocking OS
-//! poll, not a busy loop. See that method's docs for the responsiveness/CPU tradeoff this implies
-//! for uncapped game loops.
+//! [`poll_event`](Input::poll_event) wraps a single `crossterm::event::poll()` syscall per call.
+//! A zero timeout (as used by
+//! [`Terminal::drain_events`](retroglyph_core::Terminal::drain_events) to drain everything
+//! buffered without blocking) performs one non-blocking `crossterm::event::poll(Duration::ZERO)`
+//! syscall (`select`/`epoll` under the hood), not a busy spin inside `poll_event` itself: once
+//! the OS reports no data waiting, it returns `None` immediately rather than looping. The actual
+//! CPU cost lives one level up, in the caller's game loop: an uncapped loop that calls
+//! `drain_events()` every iteration with no frame limiter (no `sleep`, no vsync wait) will issue
+//! that non-blocking syscall as fast as the CPU allows, trading power/CPU usage for input
+//! latency.
 //!
 //! # Focus and lifecycle events
 //!
@@ -591,10 +596,7 @@ impl Crossterm {
     ///
     /// # Errors
     ///
-    /// Returns an `std::io::Error` if raw mode or terminal commands fail. Also returns an
-    /// `std::io::Error` with [`std::io::ErrorKind::ResourceBusy`] if another [`Crossterm`]
-    /// instance is already live in this process: see the concurrency contract documented on
-    /// [`Crossterm`].
+    /// Same as [`CrosstermOptions::build`].
     ///
     /// # Examples
     ///
@@ -650,10 +652,7 @@ impl Crossterm {
     ///
     /// # Errors
     ///
-    /// Returns an `std::io::Error` if raw mode or terminal commands fail. Also returns an
-    /// `std::io::Error` with [`std::io::ErrorKind::ResourceBusy`] if another [`Crossterm`]
-    /// instance is already live in this process: see the concurrency contract documented on
-    /// [`Crossterm`].
+    /// Same as [`CrosstermOptions::build`].
     pub fn with_options(options: CrosstermOptions) -> Result<Self, std::io::Error> {
         options.build()
     }
@@ -715,10 +714,7 @@ impl<W: std::io::Write> Crossterm<W> {
     ///
     /// # Errors
     ///
-    /// Returns an `std::io::Error` if raw mode or terminal commands fail. Also returns an
-    /// `std::io::Error` with [`std::io::ErrorKind::ResourceBusy`] if another [`Crossterm`]
-    /// instance is already live in this process: see the concurrency contract documented on
-    /// [`Crossterm`].
+    /// Same as [`CrosstermOptions::build`].
     ///
     /// # Examples
     ///
@@ -1036,19 +1032,13 @@ impl<W: std::io::Write> Output for Crossterm<W> {
 }
 
 impl<W: std::io::Write> Input for Crossterm<W> {
-    /// Polls for the next input event, blocking up to `timeout`.
+    /// Polls for the next input event, blocking up to `timeout`. See the crate-level "Event
+    /// polling and CPU cost" doc section for what a zero `timeout` costs and where the actual CPU
+    /// cost of an uncapped game loop comes from.
     ///
-    /// A zero `timeout` (the case [`Terminal::drain_events`](retroglyph_core::Terminal::drain_events)
-    /// uses to drain everything buffered without blocking) performs one non-blocking
-    /// `crossterm::event::poll(Duration::ZERO)` syscall (`select`/`epoll` under the hood) per
-    /// call, not a busy spin inside this method: once the OS reports no data waiting, this
-    /// returns `None` immediately rather than looping. The CPU cost this issue is actually about
-    /// lives one level up, in the caller's game loop: an uncapped loop that calls
-    /// `drain_events()` every iteration with no frame limiter (no `sleep`, no vsync wait) will
-    /// issue that non-blocking syscall as fast as the CPU allows, trading power/CPU usage for
-    /// input latency. Backends and examples in this workspace that need a frame cap (e.g.
-    /// software + WASM, gated on `requestAnimationFrame`) already throttle themselves upstream of
-    /// this call; a crossterm-driven loop wanting the same tradeoff should add its own
+    /// Backends and examples in this workspace that need a frame cap (e.g. software + WASM,
+    /// gated on `requestAnimationFrame`) already throttle themselves upstream of this call; a
+    /// crossterm-driven loop wanting the same tradeoff should add its own
     /// `std::thread::sleep`/tick budget around `drain_events()` rather than expecting this method
     /// to throttle on its behalf.
     #[cfg_attr(feature = "tracing", tracing::instrument(level = "trace", skip(self)))]

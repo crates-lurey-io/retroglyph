@@ -50,8 +50,7 @@
 //! same `TerminalWasm` backend rather than the handle-based `wasm_terminal_*`
 //! functions shown here.
 //!
-//! This file (kept in sync with the copy in `README.md` by
-//! `readme_js_example_matches_canonical_driver` below) is
+//! This file (kept in sync with the copy in `README.md` by a test) is
 //! `crates/terminal-wasm/js/xterm-driver.js` in the source tree:
 //!
 //! ```js
@@ -708,6 +707,10 @@ pub mod key_codes {
 /// `crates/examples/src/util/mod.rs`'s `rg_run!` for the software
 /// equivalent); this module only owns the terminal instance registry and
 /// event decoding that every such entry point would otherwise duplicate.
+///
+/// Every `wasm_terminal_*` function taking a `handle` logs a warning (via the `log` crate) and
+/// otherwise does nothing if `handle` is unknown, e.g. because the terminal was already freed via
+/// [`wasm_terminal_free`].
 #[cfg(target_arch = "wasm32")]
 pub mod wasm {
     use super::{TerminalWasm, decode_key_event, decode_mouse_event};
@@ -747,10 +750,6 @@ pub mod wasm {
 
     /// Reports a new size (in cells) for the terminal identified by
     /// `handle`, e.g. after xterm.js's `fit` addon recomputes `cols`/`rows`.
-    ///
-    /// Logs a warning (via the `log` crate) and otherwise does nothing if
-    /// `handle` is unknown, e.g. because the terminal was already freed via
-    /// [`wasm_terminal_free`].
     #[wasm_bindgen]
     pub fn wasm_terminal_resize(handle: u32, width: u16, height: u16) {
         use retroglyph_core::backend::Output;
@@ -768,10 +767,7 @@ pub mod wasm {
     /// [`decode_key_event`] for the `code`/`mods` encoding.
     ///
     /// Silently ignores codes that don't decode to a known key (e.g. a lone
-    /// Unicode combining mark with no assigned scalar meaning here). Logs a
-    /// warning (via the `log` crate) and otherwise does nothing if `handle`
-    /// is unknown, e.g. because the terminal was already freed via
-    /// [`wasm_terminal_free`].
+    /// Unicode combining mark with no assigned scalar meaning here).
     #[wasm_bindgen]
     pub fn wasm_terminal_push_key(handle: u32, code: u32, mods: u8) {
         use retroglyph_core::event::Event;
@@ -792,9 +788,7 @@ pub mod wasm {
     /// encoding.
     ///
     /// Silently ignores an `action`/`button` combination that doesn't decode
-    /// to a known mouse event. Logs a warning (via the `log` crate) and
-    /// otherwise does nothing if `handle` is unknown, e.g. because the
-    /// terminal was already freed via [`wasm_terminal_free`].
+    /// to a known mouse event.
     #[wasm_bindgen]
     pub fn wasm_terminal_push_mouse(handle: u32, x: u16, y: u16, action: u8, button: u8, mods: u8) {
         use retroglyph_core::event::Event;
@@ -825,9 +819,7 @@ pub mod wasm {
     /// `paste` event's `event.clipboardData.getData('text/plain')`, read
     /// synchronously and without an Async Clipboard API permission prompt.
     /// This crate has no opinion on *how* JS obtains the text, only that it
-    /// arrives here as one call per paste. Logs a warning (via the `log`
-    /// crate) and otherwise does nothing if `handle` is unknown, e.g.
-    /// because the terminal was already freed via [`wasm_terminal_free`].
+    /// arrives here as one call per paste.
     #[wasm_bindgen]
     pub fn wasm_terminal_push_paste(handle: u32, text: String) {
         use retroglyph_core::event::Event;
@@ -847,9 +839,6 @@ pub mod wasm {
     /// [`Event::FocusLost`](retroglyph_core::event::Event::FocusLost). Mirrors the crossterm
     /// backend's `EnableFocusChange`-driven focus-event mapping, so a browser terminal element's
     /// native `focus`/`blur` DOM events can drive the same "pause when unfocused" pattern.
-    ///
-    /// Logs a warning (via the `log` crate) and otherwise does nothing if `handle` is unknown,
-    /// e.g. because the terminal was already freed via [`wasm_terminal_free`].
     #[wasm_bindgen]
     pub fn wasm_terminal_push_focus(handle: u32, focused: bool) {
         use retroglyph_core::event::Event;
@@ -870,10 +859,6 @@ pub mod wasm {
     /// Drains and returns the ANSI bytes rendered since the last call for the
     /// terminal identified by `handle`. Returns an empty string if `handle`
     /// is unknown or nothing has been drawn since the last call.
-    ///
-    /// Logs a warning (via the `log` crate) in the unknown-`handle` case;
-    /// callers that only ever pass handles from [`wasm_terminal_new`] and
-    /// stop using them after [`wasm_terminal_free`] should never see one.
     #[wasm_bindgen]
     #[must_use]
     pub fn wasm_terminal_take_output(handle: u32) -> String {
