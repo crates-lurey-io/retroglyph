@@ -6,11 +6,10 @@
 //! `BoxStyle` does not word-wrap: it lays out already-broken lines (only
 //! `'\n'` is treated specially).
 //!
-//! For word-wrapping text to a width first, use
-//! `Paragraph`/`retroglyph_core::layout::TextLayout` (behind the `egc`
-//! feature), then hand the wrapped result to `BoxStyle::render`. Keeping
-//! wrapping and box-model layout separate avoids tying every consumer of
-//! this module to the `egc` feature.
+//! For word-wrapping text to a width first, use `Paragraph`, then hand the
+//! wrapped result to `BoxStyle::render`. Keeping wrapping and box-model
+//! layout separate avoids tying every consumer of this module to `Paragraph`
+//! or the `egc` feature.
 use retroglyph_core::{Grid, Style, Tile};
 // `Rect` is only named by the `egc` content-measuring path below and by this module's tests.
 #[cfg(feature = "egc")]

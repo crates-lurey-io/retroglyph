@@ -89,8 +89,8 @@ build that would otherwise compile them out.
 
 ### `egc`
 
-⚪ Optional. Forwards to `retroglyph-core`'s `egc` feature; enables `Paragraph`'s
-grapheme-cluster-aware word-wrap.
+⚪ Optional. Forwards to `retroglyph-core`'s `egc` feature; upgrades `Paragraph`'s word-wrap (always
+available) to grapheme-cluster-aware correctness.
 
 ### `serde`
 
