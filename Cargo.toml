@@ -45,12 +45,6 @@ lychee = { version = "0.24.2" }
 # upstream (see its README) but still the simplest tool for this; re-evaluate against
 # `cargo-clean-all` if it ever stops working.
 cargo-sweep = { version = "0.8.0" }
-# Drives the `cargo hack check --each-feature` line in `just compile` (retroglyph#886): checks
-# every crate feature in isolation (plus zero and all), which is what would have caught
-# `indexed-quant` needing a float backend of its own -- a depth-1 combination `--all-features`/
-# `--no-default-features` alone never exercises. `--no-dev-deps` keeps it to a plain `cargo check`
-# per feature rather than also resolving/building dev-dependencies for each one.
-cargo-hack = { version = "0.6.45" }
 # cargo-llms-txt is intentionally not managed here: it has no prebuilt
 # binstall/quickinstall binaries, and cargo-run-bin's source-install fallback
 # is broken (https://github.com/dustinblackman/cargo-run-bin/issues/39).

@@ -108,7 +108,7 @@ extern crate alloc;
 // error deep in a call site. `libm-arch` counts too: it only forwards to
 // `retroglyph-core/libm-arch` (this crate has no `libm` feature of its own turned on by it), so
 // without it here a lone `--features libm-arch` build would trip this check despite
-// `retroglyph-core` actually having a real backend (`cargo hack --each-feature` caught this).
+// `retroglyph-core` actually having a real backend.
 #[cfg(not(any(feature = "std", feature = "libm", feature = "libm-arch")))]
 compile_error!("retroglyph-widgets needs a float backend: enable `std` or `libm`.");
 
