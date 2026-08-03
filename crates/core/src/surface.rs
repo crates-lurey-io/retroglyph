@@ -21,7 +21,6 @@ use crate::text::Line;
 use crate::tile::Tile;
 use crate::tint::Tint;
 use ixy::HasSize;
-#[cfg(not(feature = "egc"))]
 use unicode_width::UnicodeWidthChar;
 
 /// The render target for every drawing call in the workspace: a mutable reference to a
@@ -987,17 +986,11 @@ impl<'a> Surface<'a> {
     /// ```
     pub fn fill_rect(&mut self, rect: Rect, ch: char, style: Style) {
         // The batch path below writes a plain `Tile::new(ch, style)` per cell, which matches
-        // `put`'s own per-cell write only when there's no tint to apply and (under `egc`) `ch`
-        // is a single-column glyph, so `put`'s wide-char spacer bookkeeping never triggers.
+        // `put`'s own per-cell write only when there's no tint to apply and `ch` is a
+        // single-column glyph, so `put`'s wide-char spacer bookkeeping never triggers.
         // Anything else (tinted surface, zero/double-width glyph) falls back to the per-cell
         // loop, unchanged from before this method had a fast path.
-        #[cfg(feature = "egc")]
-        let single_width = {
-            use unicode_width::UnicodeWidthChar;
-            UnicodeWidthChar::width(ch) == Some(1)
-        };
-        #[cfg(not(feature = "egc"))]
-        let single_width = true;
+        let single_width = UnicodeWidthChar::width(ch) == Some(1);
 
         if self.tint == Tint::None
             && single_width
@@ -1719,7 +1712,6 @@ mod tests {
     /// fall back to the same per-cell `put` loop used before this method had a fast path, not the
     /// batch `Tile::new` write (which carries no wide-char bookkeeping at all).
     #[test]
-    #[cfg(feature = "egc")]
     fn fill_rect_with_a_wide_glyph_falls_back_to_the_put_loop() {
         let rect = Rect::new(0, 0, 6, 1);
 

@@ -46,11 +46,16 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 # Embeds the Unscii 16 default font so a caller can build a renderer with no font of its own.
+#
+# Forwards to `retroglyph-window`'s `default-font` feature.
 default-font = ["retroglyph-window/default-font"]
 # Forwards `retroglyph-core`'s `dev` feature, which forces development diagnostics on in a build
-# that would otherwise compile them out (see `retroglyph_core::dev`).
+# that would otherwise compile them out (see [`retroglyph_core::dev`]).
 dev = ["retroglyph-core/dev"]
-# PNG sprite/tileset support (issue #366): an RGBA TEXTURE_2D_ARRAY atlas + a second draw pass.
+# PNG sprite/tileset support (issue #366): decodes sprite sheets into an RGBA `TEXTURE_2D_ARRAY`
+# atlas and draws them in a second, source-over blended pass.
+#
+# Forwards to `retroglyph-window`'s shared tileset decode.
 tilesets = ["retroglyph-window/tilesets"]
 
 [dependencies]

@@ -1,0 +1,17 @@
+extends: existence
+message: "'%s' reads like AI-generated marketing copy; say what it does plainly instead."
+level: warning
+ignorecase: true
+tokens:
+  - robust
+  - powerful
+  - elegant
+  - seamless
+  - comprehensive
+  - leverage
+  - utilize
+  - facilitate
+  - delve
+  - it's worth noting
+  - in summary
+  - let's dive

@@ -13,7 +13,7 @@ siblings that return `[Rect; N]` instead of allocating a `Vec`), plus hover/clic
 interaction tracking. Every widget (`Panel`, `Gauge`, `Table`, `Sparkline`, `BoxBorder`, `List`,
 `Tabs`, `Button`, `Scrollbar`, `ProgressBar`, `Modal`, `StatBar`, `Meter`, `Log`, `TextInput`, ...)
 is a builder struct that draws itself into a `Surface` (an area-relative view over a `Grid`) via
-`Widget`/`StatefulWidget` and retains no state of its own -- state that outlives one render call (a
+`Widget`/`StatefulWidget` and retains no state of its own; state that outlives one render call (a
 selection index, a scroll offset, a text field's value and cursor) lives in
 `ListState`/`TextInputState` instead. A handful of things that are genuinely just functions
 (`fill_rect`, `thumb_geometry`/`offset_for_pos`, `truncate`/`truncate_owned`) stay free functions
@@ -32,8 +32,8 @@ Three more independent layers build on top:
 - `Widget`/`StatefulWidget` traits let callers box or store heterogeneous widgets, e.g. a
   `Vec<Box<dyn Widget>>` of panes to render each frame, backed by `ListState` for selection and
   scroll position. `AnimatedWidget`, a sibling of `StatefulWidget`, is for state that evolves with
-  wall-clock time instead -- `ScrollState`'s momentum/rubber-band physics, a `Tween`-driven
-  transition -- taking a `Frame` (the same one `App::update` already receives) alongside the state,
+  wall-clock time instead (`ScrollState`'s momentum/rubber-band physics, a `Tween`-driven
+  transition), taking a `Frame` (the same one `App::update` already receives) alongside the state,
   so advancing and drawing happen in one call instead of two independently ordered ones. `Scrollbar`
   implements it directly, ticking `ScrollState` before drawing the thumb at the result.
   `ScrollState::apply` feeds a frame's resolved `Response::scroll_delta` straight into the wheel
@@ -116,20 +116,35 @@ interaction.frame(&mut Surface::new(&mut grid, Rect::new(0, 0, 20, 1), 0), |ui| 
 
 ## Features
 
+<!-- gen-features:start -->
+
+This crate has no default features; every feature below is optional and off unless enabled.
+
 ### `dev`
 
-⚪ Optional. Forwards `retroglyph-core`'s `dev` feature, forcing development diagnostics on in a
-build that would otherwise compile them out.
+⚪ Optional.
+
+Forwards `retroglyph-core`'s `dev` feature, which forces development diagnostics on in a build that
+would otherwise compile them out (see `retroglyph_core::dev`).
 
 ### `egc`
 
-⚪ Optional. Forwards to `retroglyph-core`'s `egc` feature; upgrades `Paragraph`'s word-wrap (always
-available) to grapheme-cluster-aware correctness.
+⚪ Optional.
+
+Forwards to `retroglyph-core`'s `egc` feature.
+
+Upgrades `Paragraph`'s word-wrap (always available) to grapheme-cluster-aware correctness.
 
 ### `serde`
 
-⚪ Optional. `Serialize`/`Deserialize` impls for `Theme` and `Density`, forwarding to
-`retroglyph-core`'s `serde` feature (`Theme` round-trips through `Color`'s own `serde` impl).
+⚪ Optional.
+
+Adds `Serialize`/`Deserialize` impls for `Theme` and `Density`, forwarding to `retroglyph-core`'s
+`serde` feature.
+
+`Theme` round-trips through `Color`'s own `serde` impl.
+
+<!-- gen-features:end -->
 
 See [docs.rs](https://docs.rs/retroglyph-widgets) for the full API, or the
 [workspace README](https://github.com/crates-lurey-io/retroglyph#readme) for the crate list.

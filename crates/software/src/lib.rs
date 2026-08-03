@@ -47,11 +47,32 @@
 //!
 //! # Features
 //!
-//! - `dev`: optional. Forwards `retroglyph-core`'s `dev` feature, forcing development
-//!   diagnostics on in a build that would otherwise compile them out.
-//! - `default-font`: optional. Embeds the Unscii 16 bitmap font as a ready-to-use default
-//!   `FontChain`.
-//! - `tilesets`: optional. PNG sprite sheet tilesets with alpha-blended CPU blit support.
+//! <!-- gen-features:start -->
+//! This crate has no default features; every feature below is optional and off unless enabled.
+//!
+//! ### `default-font`
+//!
+//! ⚪ Optional.
+//!
+//! Embeds the Unscii 16 bitmap font as a ready-to-use default `FontChain`.
+//!
+//! Forwards to `retroglyph-window`'s `default-font` feature.
+//!
+//! ### `dev`
+//!
+//! ⚪ Optional.
+//!
+//! Forwards `retroglyph-core`'s `dev` feature, which forces development diagnostics on in a build
+//! that would otherwise compile them out (see [`retroglyph_core::dev`]).
+//!
+//! ### `tilesets`
+//!
+//! ⚪ Optional.
+//!
+//! PNG sprite sheet tilesets with alpha-blended CPU blit support.
+//!
+//! Adds `alpha-blend` and forwards to `retroglyph-window`'s `tilesets` feature for decode/config.
+//! <!-- gen-features:end -->
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
 

@@ -63,10 +63,23 @@
 //!
 //! # Features
 //!
-//! - `dev`: optional. Forwards `retroglyph-core`'s `dev` feature, forcing development
-//!   diagnostics on in a build that would otherwise compile them out.
-//! - `egc`: optional. Forwards to `retroglyph-terminal`'s (and `retroglyph-core`'s) `egc` feature
-//!   for grapheme-cluster-aware cell diffing.
+//! <!-- gen-features:start -->
+//! This crate has no default features; every feature below is optional and off unless enabled.
+//!
+//! ### `dev`
+//!
+//! ⚪ Optional.
+//!
+//! Forwards `retroglyph-core`'s `dev` feature, which forces development diagnostics on in a build
+//! that would otherwise compile them out (see [`retroglyph_core::dev`]).
+//!
+//! ### `egc`
+//!
+//! ⚪ Optional.
+//!
+//! Forwards to `retroglyph-terminal`'s (and `retroglyph-core`'s) `egc` feature for
+//! grapheme-cluster-aware cell diffing.
+//! <!-- gen-features:end -->
 //!
 //! # ANSI sequences emitted
 //!

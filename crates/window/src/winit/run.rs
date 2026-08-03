@@ -999,7 +999,7 @@ impl<P: Presenter, F, T, D> WindowApp<P, F, T, D> {
         // that's 50% of the screen). See `web::web_viewport_surface_physical_size`
         // for the separate, capped size used for the raster backing store.
         // On native, `init_size` is already expressed in true physical
-        // pixels -- `WindowConfig::fit` derives it from
+        // pixels; `WindowConfig::fit` derives it from
         // `Presenter::cell_size()`, which is documented to return physical
         // (not logical/DPI-scaled) pixels. Requesting that count directly
         // as a `PhysicalSize` is therefore already correct on a HiDPI
@@ -1277,19 +1277,22 @@ where
         self.handle_user_event(event);
     }
 
-    fn about_to_wait(
-        &mut self,
-        #[cfg_attr(target_arch = "wasm32", allow(unused_variables))] event_loop: &ActiveEventLoop,
-    ) {
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         // `event_driven` (redraw-on-demand): only proceed if something actually happened since
-        // the last redraw. Otherwise leave `ControlFlow` at its default `Wait` so the loop sleeps
-        // instead of spinning at ~100% CPU re-rendering an unchanged frame every iteration --
-        // retro/terminal-style apps are idle most of the time and event-driven, so "nothing
-        // happened" should mean "render nothing new". See `needs_redraw`'s doc comment. Not
-        // `event_driven` (continuous): always proceed, regardless of `needs_redraw`: an app
-        // driving a tween off `Frame::delta` has something new to show every tick even though no
-        // input event arrived, which is precisely what the `needs_redraw` gate cannot express.
+        // the last redraw. Otherwise park the loop at `ControlFlow::Wait` so it sleeps instead of
+        // spinning at ~100% CPU re-rendering an unchanged frame every iteration -- retro/terminal-
+        // style apps are idle most of the time and event-driven, so "nothing happened" should mean
+        // "render nothing new". The reset must be explicit: winit's `ControlFlow` is sticky (a
+        // `Cell` that persists across iterations; "Defaults to `Wait`" describes only the value
+        // before the loop's first iteration, not a per-iteration reset), so once the paced branch
+        // below has parked it at a `WaitUntil` deadline, that deadline stays live -- once it
+        // elapses with `ControlFlow` never reset, the loop wakes again immediately, every
+        // iteration, forever. See `needs_redraw`'s doc comment. Not `event_driven` (continuous):
+        // always proceed, regardless of `needs_redraw`: an app driving a tween off `Frame::delta`
+        // has something new to show every tick even though no input event arrived, which is
+        // precisely what the `needs_redraw` gate cannot express.
         if self.event_driven && !self.needs_redraw {
+            event_loop.set_control_flow(winit::event_loop::ControlFlow::Wait);
             return;
         }
 
@@ -2422,7 +2425,7 @@ mod tests {
 
     #[test]
     fn cursor_moved_caches_position_for_subsequent_click() {
-        // Move to pixel (16, 16) = col 2, row 1, then click — button event
+        // Move to pixel (16, 16) = col 2, row 1, then click; button event
         // must reuse the cached position.
         let mut app = test_window_app();
         app.handle_window_event(WindowEvent::CursorMoved {

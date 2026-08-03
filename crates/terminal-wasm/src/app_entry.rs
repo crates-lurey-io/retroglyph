@@ -55,12 +55,12 @@
 /// - `wasm_app_push_focus(focused)`: queues `Event::FocusGained`/`Event::FocusLost`.
 /// - `wasm_app_tick() -> String`: runs one `App::update`, presents unless it returned
 ///   `Flow::Idle` (or already presented itself), and returns the ANSI bytes rendered since the
-///   last call -- the same contract [`TerminalWasm::take_output`](crate::TerminalWasm::take_output)
+///   last call, the same contract [`TerminalWasm::take_output`](crate::TerminalWasm::take_output)
 ///   documents. `Frame::delta` is wall-clock time since the previous tick, clamped to
 ///   `MAX_TICK_DELTA` (250ms): a backgrounded tab can starve `requestAnimationFrame` for seconds
 ///   or minutes, and an uncapped delta handed straight to an animation/physics step would try to
-///   simulate that entire gap in one frame -- the same "spiral of death" concern
-///   [`FrameClock`](retroglyph_core::FrameClock) caps steps-per-frame to avoid, just on the raw
+///   simulate that entire gap in one frame (the same "spiral of death" concern
+///   [`FrameClock`](retroglyph_core::FrameClock) caps steps-per-frame to avoid), just on the raw
 ///   delta feeding into `Frame` instead. All FFI functions are no-ops (returning an empty string
 ///   for `wasm_app_tick`) if called before `wasm_app_init`.
 /// - `wasm_app_exited() -> bool`: `true` once `$A::update` has returned `Flow::Exit` at least
@@ -240,7 +240,7 @@ macro_rules! app_entry {
             }
 
             // Required symbol for the wasm32 binary target; JS never calls it directly in this
-            // entry mode (no event loop to kick off at module-load time -- everything is pushed
+            // entry mode (no event loop to kick off at module-load time; everything is pushed
             // in from JS instead). Matches the equivalent comment on
             // `examples::__wasm_terminal_entry!`.
             fn main() {}

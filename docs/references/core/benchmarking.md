@@ -61,7 +61,7 @@ power.
 
 Key features:
 
-- `#[divan::bench]` attribute, similar to `#[test]` -- register benchmarks anywhere
+- `#[divan::bench]` attribute, similar to `#[test]`: register benchmarks anywhere
 - Module tree hierarchy reflected in output formatting
 - Generic benchmarks: `#[divan::bench(types = [Vec<i32>, HashMap<i32, i32>])]`
 - Const generic benchmarks: `#[divan::bench(consts = [64, 128, 256])]`
@@ -1182,8 +1182,8 @@ cargo test --release --features dhat-heap -- test_grid_allocation
 
   -- simple API, allocation profiling, generic benchmarks, thread contention
 
-- [dhat crate](https://docs.rs/dhat) -- heap profiling and allocation testing for Rust
-- [cargo-flamegraph](https://github.com/flamegraph-rs/flamegraph) -- flamegraph SVG generation,
+- [dhat crate](https://docs.rs/dhat): heap profiling and allocation testing for Rust
+- [cargo-flamegraph](https://github.com/flamegraph-rs/flamegraph): flamegraph SVG generation,
 
   perf/dtrace/xctrace backends
 
@@ -1195,15 +1195,15 @@ cargo test --release --features dhat-heap -- test_grid_allocation
 
   -- per-pass GPU timing
 
-- [vtebench](https://github.com/alacritty/vtebench) -- PTY read performance benchmarking for
+- [vtebench](https://github.com/alacritty/vtebench): PTY read performance benchmarking for
 
   terminals
 
-- [github-action-benchmark](https://github.com/benchmark-action/github-action-benchmark) -- GitHub
+- [github-action-benchmark](https://github.com/benchmark-action/github-action-benchmark): GitHub
 
   Action for CI regression detection
 
-- [Bencher](https://bencher.dev) / [repo](https://github.com/bencherdev/bencher) -- continuous
+- [Bencher](https://bencher.dev) / [repo](https://github.com/bencherdev/bencher): continuous
 
   benchmarking platform with bare-metal runners
 

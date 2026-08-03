@@ -1,0 +1,8 @@
+extends: existence
+message: "'%s' is internal planning jargon; rewrite for a reader outside the project."
+level: error
+ignorecase: true
+tokens:
+  - '[Tt]ier \d+'
+  - 'PR campaign'
+  - 'milestone \d+'

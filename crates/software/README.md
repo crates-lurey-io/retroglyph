@@ -60,18 +60,34 @@ start.
 
 ## Features
 
-### `dev`
+<!-- gen-features:start -->
 
-⚪ Optional. Forwards `retroglyph-core`'s `dev` feature, forcing development diagnostics on in a
-build that would otherwise compile them out.
+This crate has no default features; every feature below is optional and off unless enabled.
 
 ### `default-font`
 
-⚪ Optional. Embeds the Unscii 16 bitmap font as a ready-to-use default `FontChain`.
+⚪ Optional.
+
+Embeds the Unscii 16 bitmap font as a ready-to-use default `FontChain`.
+
+Forwards to `retroglyph-window`'s `default-font` feature.
+
+### `dev`
+
+⚪ Optional.
+
+Forwards `retroglyph-core`'s `dev` feature, which forces development diagnostics on in a build that
+would otherwise compile them out (see `retroglyph_core::dev`).
 
 ### `tilesets`
 
-⚪ Optional. PNG sprite sheet tilesets with alpha-blended CPU blit support.
+⚪ Optional.
+
+PNG sprite sheet tilesets with alpha-blended CPU blit support.
+
+Adds `alpha-blend` and forwards to `retroglyph-window`'s `tilesets` feature for decode/config.
+
+<!-- gen-features:end -->
 
 ## Frame rate and window title live on `WindowConfig`, not on this builder
 

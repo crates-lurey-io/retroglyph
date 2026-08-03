@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/*", "examples", "tools/cargo-bin"]
+members = ["crates/*", "examples", "tools/cargo-bin", "tools/gen-features"]
 resolver = "2"
 
 [workspace.metadata.bin]
@@ -35,6 +35,11 @@ wasm-pack = { version = "0.15.0" }
 # the WASM examples' .wasm module from) without depending on Python or any
 # other tool outside the Rust toolchain.
 miniserve = { version = "0.35.0" }
+# Link checker for `just link-check` (Justfile) and its CI job (.github/workflows/link-check.yml,
+# retroglyph#469): pinned here like every other CLI tool in this table, instead of assuming a
+# manually-installed `lychee` on PATH. CI runs the identical `cargo bin`-resolved binary via `just
+# link-check`, so local and CI runs can never disagree on version or flags.
+lychee = { version = "0.24.2" }
 # Drives `just sweep`: prunes stale `target/` build artifacts (old incremental-compile variants,
 # artifacts from toolchains no longer installed) without a full `cargo clean`. Unmaintained
 # upstream (see its README) but still the simplest tool for this; re-evaluate against
