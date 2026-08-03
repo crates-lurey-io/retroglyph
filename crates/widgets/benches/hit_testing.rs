@@ -6,7 +6,7 @@
 //! for focusable widgets, its position in the [`FocusRing`](retroglyph_widgets::FocusRing)) once
 //! per [`Interaction::interact`] call. Both are deliberately O(n) by design (see `HitTester`'s
 //! doc comment on why a plain draw-ordered `Vec` beats a spatial index at typical per-frame
-//! widget counts), but "deliberately O(n)" still needs a number: this benchmarks
+//! widget counts), but an intentional O(n) still needs a number: this benchmarks
 //! [`HitTester::topmost_at`] directly, and a full `Interaction` frame (register + resolve every
 //! widget), across a range of registered-widget counts from a small dialog up through a long
 //! virtualized list's worth of rows.

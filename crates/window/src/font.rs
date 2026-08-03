@@ -1829,8 +1829,8 @@ mod tests {
 /// `core::symbols` promises a repertoire that no font is required to actually draw; nothing
 /// checked, before this, that any bundled font could render a given entry (retroglyph#769). This
 /// only records the gap (asserting each entry is either drawable or a documented exception): the
-/// fix -- generating the missing eighth-block glyphs and adding "falls back to notdef" doc notes
-/// for the rest -- is tracked as a follow-up, deliberately out of scope here.
+/// fix (generating the missing eighth-block glyphs and adding "falls back to notdef" doc notes
+/// for the rest) is tracked as a follow-up, deliberately out of scope here.
 #[cfg(all(test, feature = "default-font", feature = "legacy-computing"))]
 mod symbols_coverage {
     use crate::font::{BitmapFont, FontChain, legacy_computing, unscii16};
@@ -1856,7 +1856,7 @@ mod symbols_coverage {
     /// `line::THICK`'s tees/cross need real glyph art rather than a mechanical eighth-block
     /// generator (see their own doc comments in `retroglyph_core::symbols` for the same note).
     /// This list exists so a *regression* (a currently-covered glyph losing coverage) fails
-    /// loudly, and so this test starts failing -- forcing the list to shrink -- the moment a
+    /// loudly, and so this test starts failing (forcing the list to shrink) the moment a
     /// future change closes any of these gaps.
     fn known_notdef_gaps() -> HashSet<char> {
         [

@@ -6,6 +6,7 @@ Prerequisites:
 
 - Rust (latest stable)
 - Node.js (v22.12.0 LTS via `.nvmrc`)
+- [Vale](https://vale.sh) (`brew install vale`), for `just prose`
 
 ### Workflow
 
@@ -25,7 +26,8 @@ a wiki summary rather than one engineer telling another how something works, rew
 | `just doc`             | Generate private rustdocs, regenerate per-crate `llms.txt` / `llms-full.txt` |
 | `just fmt`             | Format Rust + Markdown/JSON/YAML files                                       |
 | `just fmt-check`       | Verify formatting without modifying (for CI)                                 |
-| `just lint`            | Clippy + markdownlint                                                        |
+| `just lint`            | Clippy + markdownlint + prose                                                |
+| `just prose`           | Vale prose-style checks (`README.md`, `CONTRIBUTING.md`, `docs/`, `crates/`) |
 | `just test`            | Run all tests with all features                                              |
 | `just test-v`          | Run all tests with stdout visible                                            |
 

@@ -301,7 +301,7 @@ type AnsiOklabTable = [gem::space::Oklab; 16];
 /// conversion (`powf`/`cbrt`) isn't `const`-evaluable, so the table can't be a plain `const`.
 /// When the `std` feature is enabled, this caches the table behind a `OnceLock` so the
 /// conversion only ever runs once for all 256 entries, no matter how many times
-/// [`Color::to_indexed`] is called -- the hot path this feeds ([`ColorSupport::Indexed256`] in
+/// [`Color::to_indexed`] is called; the hot path this feeds ([`ColorSupport::Indexed256`] in
 /// `retroglyph-terminal`'s draw loop) calls it once per cell, per frame.
 ///
 /// `no_std` builds (this crate's `std` feature off) have no safe way to back a lazily
@@ -561,7 +561,7 @@ impl Color {
     /// Constructs an `Rgb` variant from a `gem::space::Srgb` color.
     ///
     /// Channels are clamped to `[0.0, 1.0]` and rounded to the nearest `u8` (ties away from
-    /// zero), via `gem::rgb::Rgb888`'s own `Srgb` conversion -- the same round-to-nearest rule
+    /// zero), via `gem::rgb::Rgb888`'s own `Srgb` conversion, the same round-to-nearest rule
     /// every other integer channel operation in this crate follows (see
     /// `tests/rounding_conformance.rs`).
     #[cfg(feature = "indexed-quant")]
