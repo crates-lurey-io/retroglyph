@@ -693,7 +693,12 @@ mod tests {
         let mut g = Grid::new(4, 1);
         // Lead lands at (2, 0), spacer at (3, 0).
         g.put_tile(0, (2, 0), Tile::new('\u{4e2d}', Style::default()));
-        assert!(g.tile(0, (2, 0)).unwrap().flags().contains(TileFlags::WIDE_CHAR));
+        assert!(
+            g.tile(0, (2, 0))
+                .unwrap()
+                .flags()
+                .contains(TileFlags::WIDE_CHAR)
+        );
 
         // Drops column 3, which held the spacer: the lead can no longer be paired, so it must be
         // reset rather than survive unpaired in the new last column.
