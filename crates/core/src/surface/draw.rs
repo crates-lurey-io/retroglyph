@@ -257,9 +257,14 @@ impl Surface<'_> {
         use unicode_segmentation::UnicodeSegmentation;
         use unicode_width::UnicodeWidthStr;
 
-        // `cx` is area-local (it starts at `pos.x`, which `shift()` treats as local), so the
-        // wrap threshold must be too: translate `clip.right()` out of absolute grid space.
-        let right = self.clip.right().saturating_sub(self.area.left());
+        // `cx` is in the same (possibly translated) space as `pos.x` itself, since `shift()`
+        // subtracts `origin_offset` from incoming coordinates before checking them against the
+        // area (see `shift`'s doc). The wrap threshold has to live in that same space too, or a
+        // translated surface (any `Camera::surface`, or a plain `translate`) wraps early by
+        // exactly the offset: fold `origin_offset.0` back in alongside translating
+        // `clip.right()` out of absolute grid space.
+        let right = i64::from(self.clip.right()) - i64::from(self.area.left())
+            + i64::from(self.origin_offset.0);
         let mut cx = pos.x;
         let mut cy = pos.y;
         for grapheme in text.graphemes(true) {
@@ -277,7 +282,7 @@ impl Surface<'_> {
             }
             self.put_grapheme(cx, cy, grapheme, style);
             cx = cx.saturating_add(w);
-            if cx >= right {
+            if i64::from(cx) >= right {
                 cx = pos.x;
                 cy = cy.saturating_add(1);
             }
@@ -287,9 +292,14 @@ impl Surface<'_> {
     /// [`print`](Self::print) implementation used when `egc` is disabled: splits on `char`.
     #[cfg(not(feature = "egc"))]
     fn print_chars(&mut self, pos: Pos, text: &str, style: Style) {
-        // `cx` is area-local (it starts at `pos.x`, which `shift()` treats as local), so the
-        // wrap threshold must be too: translate `clip.right()` out of absolute grid space.
-        let right = self.clip.right().saturating_sub(self.area.left());
+        // `cx` is in the same (possibly translated) space as `pos.x` itself, since `shift()`
+        // subtracts `origin_offset` from incoming coordinates before checking them against the
+        // area (see `shift`'s doc). The wrap threshold has to live in that same space too, or a
+        // translated surface (any `Camera::surface`, or a plain `translate`) wraps early by
+        // exactly the offset: fold `origin_offset.0` back in alongside translating
+        // `clip.right()` out of absolute grid space.
+        let right = i64::from(self.clip.right()) - i64::from(self.area.left())
+            + i64::from(self.origin_offset.0);
         let mut cx = pos.x;
         let mut cy = pos.y;
         for ch in text.chars() {
@@ -307,7 +317,7 @@ impl Surface<'_> {
             }
             self.put((cx, cy), ch, style);
             cx = cx.saturating_add(w);
-            if cx >= right {
+            if i64::from(cx) >= right {
                 cx = pos.x;
                 cy = cy.saturating_add(1);
             }
@@ -337,12 +347,17 @@ impl Surface<'_> {
         use unicode_width::UnicodeWidthStr;
 
         let pos = pos.into();
-        // `cx` is area-local (it starts at `pos.x`, which `shift()` treats as local), so the
-        // span-skip threshold must be too: translate `clip.right()` out of absolute grid space.
-        let right = self.clip.right().saturating_sub(self.area.left());
+        // `cx` is in the same (possibly translated) space as `pos.x` itself, since `shift()`
+        // subtracts `origin_offset` from incoming coordinates before checking them against the
+        // area (see `shift`'s doc). The span-skip threshold has to live in that same space too,
+        // or a translated surface (any `Camera::surface`, or a plain `translate`) skips every
+        // span immediately: fold `origin_offset.0` back in alongside translating `clip.right()`
+        // out of absolute grid space.
+        let right = i64::from(self.clip.right()) - i64::from(self.area.left())
+            + i64::from(self.origin_offset.0);
         let mut cx = pos.x;
         for span in &line.spans {
-            if cx >= right {
+            if i64::from(cx) >= right {
                 break;
             }
             self.print((cx, pos.y), &span.content, span.style);

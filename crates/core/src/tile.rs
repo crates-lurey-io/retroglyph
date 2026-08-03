@@ -1,18 +1,17 @@
 //! Fundamental unit of the grid: a single drawable tile.
 
 use crate::color::Style;
+use crate::text::char_width;
 #[cfg(feature = "egc")]
 use alloc::string::String;
-use unicode_width::UnicodeWidthChar;
 
-/// Computes the display (column) width of a single glyph, capped to what fits in a `u8`
-/// (`unicode_width` only ever returns 0, 1, or 2 for a single `char`, well within range).
-/// Unassigned/control-character widths (`None`) are treated as 1, matching this crate's prior
-/// per-cell fallback behavior.
+/// Computes the display (column) width of a single glyph, capped to what fits in a `u8`.
+///
+/// Delegates to [`char_width`], so a control character occupies the one column
+/// [`Surface`](crate::Surface) actually draws it in, and `Tile::width`'s value can never drift
+/// from what that function documents and tests.
 fn glyph_width(glyph: char) -> u8 {
-    #[allow(clippy::cast_possible_truncation)]
-    let width = glyph.width().unwrap_or(1) as u8;
-    width
+    u8::try_from(char_width(glyph)).unwrap_or(1)
 }
 
 bitflags::bitflags! {
@@ -97,9 +96,10 @@ pub struct Tile {
     /// `unicode_width` on every cell of every frame is pure waste since a glyph's width never
     /// changes between frames. It is computed once, here, whenever the glyph is written (see
     /// [`with_glyph`](Self::with_glyph) and [`Grid::write_grapheme`](crate::grid::Grid::write_grapheme)),
-    /// and just read back afterward. Almost always 0, 1, or 2 (control characters/combining
-    /// marks are 0; a handful of grapheme clusters can report other values via
-    /// `unicode_width`, but `u8` comfortably covers every value that crate returns).
+    /// and just read back afterward. Almost always 0, 1, or 2 (combining marks are 0; control
+    /// characters are 1, matching [`char_width`](crate::text::char_width); a handful of grapheme
+    /// clusters can report other values via `unicode_width`, but `u8` comfortably covers every
+    /// value that crate returns).
     pub(crate) width: u8,
     /// Pixel offset from the cell's left edge. Negative shifts left.
     ///
@@ -206,7 +206,8 @@ impl Tile {
         self.dy
     }
 
-    /// Returns the wide-character flags for this tile.
+    /// Returns the role and occupancy flags for this tile: emptiness, wide-character halves,
+    /// EGC side-table presence, and multi-cell span roles (see [`TileFlags`]).
     #[must_use]
     pub const fn flags(&self) -> TileFlags {
         self.flags
