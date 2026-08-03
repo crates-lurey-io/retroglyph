@@ -1057,6 +1057,34 @@ mod tests {
     }
 
     #[test]
+    fn test_terminal_resize_after_flatten_buffers_allocated() {
+        // Draw to layer 1 first so `present` takes the flatten path and lazily allocates
+        // `flattened_current`/`flattened_previous` (see their field docs). `resize` must then
+        // resize and clear those buffers too, not just `current`/`previous`, or a later present
+        // would diff against stale, wrongly-sized flattened content.
+        let mut term = Terminal::new(Headless::new(3, 3));
+        term.draw(|s| {
+            s.put((0, 0), 'A', Style::default());
+            s.on_layer(1).put((1, 1), 'B', Style::default());
+        })
+        .expect("draw failed");
+
+        term.resize(5, 5);
+        assert_eq!(term.size(), Size::new(5, 5));
+
+        // A full redraw is expected after resize; if the flattened buffers weren't resized and
+        // cleared alongside `current`/`previous`, this would panic on mismatched grid sizes or
+        // silently under-diff instead of redrawing everything.
+        term.draw(|s| {
+            s.put((0, 0), 'A', Style::default());
+            s.on_layer(1).put((1, 1), 'B', Style::default());
+        })
+        .expect("draw failed");
+        assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), 'A');
+        assert_eq!(term.backend().grid()[Pos::new(1, 1)].glyph(), 'B');
+    }
+
+    #[test]
     fn test_terminal_resize_new_cells_accessible() {
         // Resize to a larger area, then draw into the newly created region.
         let mut term = Terminal::new(Headless::new(3, 3));
