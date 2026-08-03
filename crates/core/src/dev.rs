@@ -88,7 +88,6 @@
 /// to gate a block on it. See the [module docs](self) for how a mode is chosen and why there are
 /// two of them rather than three.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[non_exhaustive]
 pub enum BuildMode {
     /// Development diagnostics are compiled in.
     ///
@@ -117,6 +116,12 @@ impl BuildMode {
     pub const fn is_dev(self) -> bool {
         matches!(self, Self::Dev)
     }
+
+    /// Whether this is [`Release`](Self::Release).
+    #[must_use]
+    pub const fn is_release(self) -> bool {
+        matches!(self, Self::Release)
+    }
 }
 
 /// Whether this build compiles in development diagnostics: [`BuildMode::CURRENT`] as a `bool`.
@@ -135,6 +140,12 @@ pub const DEV: bool = BuildMode::CURRENT.is_dev();
 /// `body` is type-checked in every mode. That is the point: a diagnostic that only compiles on
 /// one profile rots, and the rot surfaces as a broken release build. The cost is that `body` may
 /// not reference items that themselves exist only in a dev build.
+///
+/// Control flow escapes the block on one profile only. A `return`, `?`, `break`, or `continue`
+/// inside `body` runs in a dev build and is skipped entirely in a release build, so the
+/// surrounding function must be correct when the block does nothing. Confine `body` to
+/// diagnostics and their bookkeeping; if the enclosing function's result depends on it, the
+/// profiles disagree.
 ///
 /// # Examples
 ///
@@ -177,6 +188,18 @@ mod tests {
         assert_eq!(BuildMode::CURRENT.is_dev(), DEV);
     }
 
+    #[test]
+    fn is_dev_discriminates_variants() {
+        assert!(BuildMode::Dev.is_dev());
+        assert!(!BuildMode::Release.is_dev());
+    }
+
+    #[test]
+    fn is_release_discriminates_variants() {
+        assert!(BuildMode::Release.is_release());
+        assert!(!BuildMode::Dev.is_release());
+    }
+
     // Tests build with `debug_assertions` on unless someone deliberately runs them under a
     // release profile, in which case the `dev` feature is what keeps this true.
     #[test]
@@ -202,5 +225,20 @@ mod tests {
         let mut n = 0;
         dev_only!(n += 1;);
         assert_eq!(n, i32::from(DEV));
+    }
+
+    /// Mirrors the `warn_sprite_needs_span`-style shape: a `dev_only!` body that returns early.
+    /// Pins that the early return only happens in a dev build, and that a release build falls
+    /// through to the caller's own trailing value instead.
+    fn returns_early_in_dev() -> bool {
+        dev_only!({
+            return true;
+        });
+        false
+    }
+
+    #[test]
+    fn dev_only_early_return_runs_iff_dev() {
+        assert_eq!(returns_early_in_dev(), DEV);
     }
 }
