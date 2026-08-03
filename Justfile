@@ -116,6 +116,7 @@ build-pty-examples:
 test: build-pty-examples
     cargo bin cargo-nextest run --workspace --all-features
     cargo test --workspace --all-features --doc
+    just test-default-features
 
 # CI variant: assumes `nextest` is already on PATH as a prebuilt binary (e.g. installed via
 # taiki-e/install-action) instead of being compiled from source through `cargo bin`, which is
@@ -127,6 +128,28 @@ test: build-pty-examples
 test-ci: build-pty-examples
     cargo nextest run --workspace --all-features --profile ci
     cargo test --workspace --all-features --doc
+    just test-default-features
+
+# Every downstream crate pins `retroglyph-core = { default-features = false }`, so a plain
+# `cargo test -p <crate>` (as the README's quick start does, and as any fresh clone would run)
+# builds with `egc` off -- the opposite of every `--all-features` run above (retroglyph#757).
+# `--all-features`/`--workspace` never exercises that half, so CI could stay green while the
+# plain command failed on a clean clone (as it did for the `panel` title test until this fix).
+#
+# Deliberately not `cargo test --workspace` (no flags): a `--workspace` build unifies feature
+# resolution across every member compiled in the same command, and `examples/Cargo.toml` depends
+# on `retroglyph-core` with its own full defaults (`egc` on), which would silently turn `egc` back
+# on for every crate here too. Naming packages instead avoids that.
+#
+# Deliberately excludes `retroglyph-core` itself: selecting it directly as a primary package
+# (rather than only as a transitive dependency) makes cargo apply *its own* declared defaults
+# (`egc` on) regardless of what its consumers pin, so testing it here would need its own
+# `--no-default-features` command -- and core's own test module isn't `egc`-cfg-clean yet (several
+# of its tests call the egc-only `Grid::write_grapheme` unconditionally), so that command doesn't
+# even compile today. `compile`'s existing `cargo check -p retroglyph-core --no-default-features`
+# already covers core's own `--no-default-features` compile; fixing its tests is a separate task.
+test-default-features:
+    cargo test -p retroglyph-widgets -p retroglyph-terminal -p retroglyph-crossterm -p retroglyph-window -p retroglyph-gl
 
 test-v: build-pty-examples
     cargo bin cargo-nextest run --workspace --all-features --no-capture
