@@ -64,7 +64,7 @@ serde = { version = "1", default-features = false, features = ["derive"], option
 # always-on dependency: no_std-compatible on its own, so no std/libm feature split is needed the
 # way `gem` needs one.
 libm = "0.2"
-grixy = { version = "0.6.0-alpha.8", features = ["alloc", "buffer"] }
+grixy = { version = "0.6.2", features = ["alloc", "buffer"] }
 unicode-width = "0.2"
 bitflags = "2.4"
 unicode-segmentation = { version = "1.13", default-features = false, optional = true }
