@@ -737,7 +737,7 @@ impl OutpostDashboard {
         }
 
         // Four animated stat tiles, side by side.
-        let cols = split_h_spaced(
+        let (cols, _) = split_h_spaced(
             Rect::new(
                 area.left(),
                 area.top() + 1,
