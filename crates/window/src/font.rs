@@ -739,10 +739,19 @@ pub mod legacy_computing {
         const QUADRANT_COUNT: usize = 10;
         /// Number of sextant glyphs (the 60 addressable masks not already covered by CP437).
         const SEXTANT_COUNT: usize = 60;
-        /// Total glyph count: quadrants, then sextants, in that index order.
-        const TOTAL: usize = QUADRANT_COUNT + SEXTANT_COUNT;
+        /// Number of `retroglyph_core::symbols::bar` eighth-fraction glyphs not already covered
+        /// by CP437 (`ONE_EIGHTH`, `ONE_QUARTER`, `THREE_EIGHTHS`, `FIVE_EIGHTHS`,
+        /// `THREE_QUARTERS`, `SEVEN_EIGHTHS`; `HALF` and `FULL` are CP437's own `▄`/`█`).
+        const BAR_COUNT: usize = 6;
+        /// Number of `retroglyph_core::symbols::block` eighth-fraction glyphs not already
+        /// covered by CP437 (`ONE_EIGHTH`, `ONE_QUARTER`, `THREE_EIGHTHS`, `FIVE_EIGHTHS`,
+        /// `THREE_QUARTERS`, `SEVEN_EIGHTHS`; `HALF` and `FULL` are CP437's own `▌`/`█`).
+        const BLOCK_COUNT: usize = 6;
+        /// Total glyph count: quadrants, then sextants, then bar levels, then block levels, in
+        /// that index order.
+        const TOTAL: usize = QUADRANT_COUNT + SEXTANT_COUNT + BAR_COUNT + BLOCK_COUNT;
 
-        /// A [`BitmapFont`] backed by the generated quadrant/sextant glyph data.
+        /// A [`BitmapFont`] backed by the generated quadrant/sextant/bar/block glyph data.
         ///
         /// Built with [`BitmapFont::with_charset`] (not [`BitmapFont::new`]): none of these
         /// codepoints are in the CP437 table this crate's default mapping uses, so this font
@@ -760,6 +769,22 @@ pub mod legacy_computing {
         const QUADRANTS: [(u8, char); QUADRANT_COUNT] = [
             (1, '▘'), (2, '▝'), (4, '▖'), (6, '▞'), (7, '▛'),
             (8, '▗'), (9, '▚'), (11, '▜'), (13, '▙'), (14, '▟'),
+        ];
+
+        /// `retroglyph_core::symbols::bar`'s 6 eighth-fraction levels CP437 doesn't cover, as
+        /// `(eighths, char)` pairs: a bottom-anchored vertical fill, `eighths` rows out of 8
+        /// filled from the bottom of the cell (matching `bar::NINE_LEVELS`'s ordering).
+        #[rustfmt::skip]
+        const BAR_LEVELS: [(u8, char); BAR_COUNT] = [
+            (1, '▁'), (2, '▂'), (3, '▃'), (5, '▅'), (6, '▆'), (7, '▇'),
+        ];
+
+        /// `retroglyph_core::symbols::block`'s 6 eighth-fraction levels CP437 doesn't cover, as
+        /// `(eighths, char)` pairs: a left-anchored horizontal fill, `eighths` columns out of 8
+        /// filled from the left of the cell.
+        #[rustfmt::skip]
+        const BLOCK_LEVELS: [(u8, char); BLOCK_COUNT] = [
+            (1, '▏'), (2, '▎'), (3, '▍'), (5, '▋'), (6, '▊'), (7, '▉'),
         ];
 
         /// The 60 addressable sextant masks, in ascending order: every 6-bit pattern `1..=62`
@@ -805,8 +830,8 @@ pub mod legacy_computing {
             data[row] |= 1 << (7 - x);
         }
 
-        /// Computes the full glyph bitmap table: quadrants, then sextants, matching
-        /// [`CHARSET`]'s glyph-index order.
+        /// Computes the full glyph bitmap table: quadrants, then sextants, then bar levels,
+        /// then block levels, matching [`CHARSET`]'s glyph-index order.
         const fn build_data() -> [u8; TOTAL * 16] {
             let mut data = [0u8; TOTAL * 16];
 
@@ -866,6 +891,43 @@ pub mod legacy_computing {
                 si += 1;
             }
 
+            // Bar levels: bottom-anchored, `eighths` rows out of 16 (2px per eighth) filled
+            // from the bottom of the cell.
+            let mut bi = 0;
+            while bi < BAR_COUNT {
+                let (eighths, _) = BAR_LEVELS[bi];
+                let index = QUADRANT_COUNT + SEXTANT_COUNT + bi;
+                let fill_from = 16 - eighths * 2;
+                let mut y = fill_from;
+                while y < 16 {
+                    let mut x = 0u8;
+                    while x < 8 {
+                        set_pixel(&mut data, index, x, y);
+                        x += 1;
+                    }
+                    y += 1;
+                }
+                bi += 1;
+            }
+
+            // Block levels: left-anchored, `eighths` columns out of 8 (1px per eighth) filled
+            // from the left of the cell.
+            let mut bli = 0;
+            while bli < BLOCK_COUNT {
+                let (eighths, _) = BLOCK_LEVELS[bli];
+                let index = QUADRANT_COUNT + SEXTANT_COUNT + BAR_COUNT + bli;
+                let mut y = 0u8;
+                while y < 16 {
+                    let mut x = 0u8;
+                    while x < eighths {
+                        set_pixel(&mut data, index, x, y);
+                        x += 1;
+                    }
+                    y += 1;
+                }
+                bli += 1;
+            }
+
             data
         }
 
@@ -899,6 +961,28 @@ pub mod legacy_computing {
                 si += 1;
             }
 
+            let mut bi = 0;
+            while bi < BAR_COUNT {
+                let (_, ch) = BAR_LEVELS[bi];
+                let index = QUADRANT_COUNT + SEXTANT_COUNT + bi;
+                #[allow(clippy::cast_possible_truncation)]
+                {
+                    charset[index] = (ch, index as u8);
+                }
+                bi += 1;
+            }
+
+            let mut bli = 0;
+            while bli < BLOCK_COUNT {
+                let (_, ch) = BLOCK_LEVELS[bli];
+                let index = QUADRANT_COUNT + SEXTANT_COUNT + BAR_COUNT + bli;
+                #[allow(clippy::cast_possible_truncation)]
+                {
+                    charset[index] = (ch, index as u8);
+                }
+                bli += 1;
+            }
+
             charset
         }
 
@@ -912,14 +996,15 @@ pub mod legacy_computing {
         #[cfg(test)]
         mod tests {
             use super::{
-                CHARSET, FONT, QUADRANTS, SEXTANT_COUNT, TOTAL, sextant_codepoint, sextant_masks,
+                BAR_LEVELS, BLOCK_LEVELS, CHARSET, FONT, QUADRANTS, SEXTANT_COUNT, TOTAL,
+                sextant_codepoint, sextant_masks,
             };
             use crate::font::FontChain;
             use std::collections::HashSet;
 
             #[test]
-            fn total_glyph_count_matches_quadrants_plus_sextants() {
-                assert_eq!(TOTAL, 10 + 60);
+            fn total_glyph_count_matches_quadrants_plus_sextants_plus_bar_plus_block() {
+                assert_eq!(TOTAL, 10 + 60 + 6 + 6);
                 assert_eq!(FONT.glyph_count(), u16::try_from(TOTAL).unwrap());
             }
 
@@ -1056,6 +1141,68 @@ pub mod legacy_computing {
                     .expect("covered by legacy_computing::blocks");
                 assert_eq!(quadrant.font_index(), 1);
                 assert!(!quadrant.is_notdef());
+            }
+
+            /// Every `bar`/`block` eighth-fraction glyph this module generates is reachable by
+            /// its own `char` and resolves to a non-empty, non-`notdef` glyph through a
+            /// [`FontChain`] (retroglyph#832).
+            #[test]
+            fn bar_and_block_levels_are_covered_and_non_empty() {
+                static PRIMARY_DATA: [u8; 256 * 16] = [0; 256 * 16];
+                const PRIMARY: crate::font::BitmapFont =
+                    crate::font::BitmapFont::new(&PRIMARY_DATA, 8, 16, 256);
+
+                static FALLBACKS: [crate::font::BitmapFont; 1] = [FONT];
+                let chain = FontChain::new(PRIMARY, &FALLBACKS);
+
+                for &(_, ch) in BAR_LEVELS.iter().chain(BLOCK_LEVELS.iter()) {
+                    let resolved = chain
+                        .resolve(ch)
+                        .unwrap_or_else(|| panic!("{ch:?} covered by legacy_computing::blocks"));
+                    assert_eq!(resolved.font_index(), 1);
+                    assert!(!resolved.is_notdef(), "{ch:?} resolved to notdef");
+                    assert!(
+                        FONT.glyph_pixels(resolved.index()).count() > 0,
+                        "{ch:?} has no set pixels"
+                    );
+                }
+            }
+
+            /// `BAR_LEVELS`' fill grows monotonically with `eighths`: level `n` must be a strict
+            /// pixel-count superset of level `n - 1` (bottom-anchored), matching
+            /// `bar::NINE_LEVELS`' intended ramp semantics.
+            #[test]
+            fn bar_levels_fill_monotonically_from_the_bottom() {
+                let mut last_count = 0usize;
+                for &(eighths, ch) in &BAR_LEVELS {
+                    let index = FONT.glyph_index(ch).unwrap();
+                    let pixels: Vec<(u8, u8)> = FONT.glyph_pixels(index).collect();
+                    assert!(
+                        pixels.iter().all(|&(_, y)| y >= 16 - eighths * 2),
+                        "{ch:?} has a filled pixel above its {eighths}/8 fill line"
+                    );
+                    assert_eq!(pixels.len(), usize::from(eighths) * 2 * 8);
+                    assert!(pixels.len() > last_count);
+                    last_count = pixels.len();
+                }
+            }
+
+            /// `BLOCK_LEVELS`' fill grows monotonically with `eighths`: level `n` must be a
+            /// strict pixel-count superset of level `n - 1` (left-anchored).
+            #[test]
+            fn block_levels_fill_monotonically_from_the_left() {
+                let mut last_count = 0usize;
+                for &(eighths, ch) in &BLOCK_LEVELS {
+                    let index = FONT.glyph_index(ch).unwrap();
+                    let pixels: Vec<(u8, u8)> = FONT.glyph_pixels(index).collect();
+                    assert!(
+                        pixels.iter().all(|&(x, _)| x < eighths),
+                        "{ch:?} has a filled pixel past its {eighths}/8 fill line"
+                    );
+                    assert_eq!(pixels.len(), usize::from(eighths) * 16);
+                    assert!(pixels.len() > last_count);
+                    last_count = pixels.len();
+                }
             }
         }
     }
@@ -1702,33 +1849,17 @@ mod symbols_coverage {
 
     /// Every `core::symbols` entry that currently falls back to the notdef substitute through
     /// [`chain`] (or that no font in the chain can draw at all), as found by retroglyph#769's
-    /// audit: 6 of `bar::NINE_LEVELS`, 6 of the `block` eighths, 4 of `border::ROUNDED`, all 6
-    /// of `border::THICK`, and 5 of `line::THICK`.
+    /// audit and narrowed by retroglyph#832's fix for the `bar`/`block` eighth-fraction gaps: 4
+    /// of `border::ROUNDED`, all 6 of `border::THICK`, and 5 of `line::THICK`.
     ///
-    /// None of these are fixed here (test-only scope; see retroglyph#769's follow-up for the
-    /// eighth-block glyph generation and doc-note work). This list exists so a *regression* (a
-    /// currently-covered glyph losing coverage) fails loudly, and so this test starts failing --
-    /// forcing the list to shrink -- the moment the follow-up closes any of these gaps.
+    /// None of these are fixed here: `border::ROUNDED`'s corners, `border::THICK`, and
+    /// `line::THICK`'s tees/cross need real glyph art rather than a mechanical eighth-block
+    /// generator (see their own doc comments in `retroglyph_core::symbols` for the same note).
+    /// This list exists so a *regression* (a currently-covered glyph losing coverage) fails
+    /// loudly, and so this test starts failing -- forcing the list to shrink -- the moment a
+    /// future change closes any of these gaps.
     fn known_notdef_gaps() -> HashSet<char> {
         [
-            // bar::NINE_LEVELS: 6 of 9. `' '`, `bar::HALF`, and `bar::FULL` are covered (CP437);
-            // the other 6 eighth-fraction levels have no bundled-font glyph. `bar::ONE_EIGHTH`
-            // (U+2581) in particular renders as a near-invisible sliver, which is what the issue
-            // that found this gap described as looking like a blank space.
-            bar::ONE_EIGHTH,
-            bar::ONE_QUARTER,
-            bar::THREE_EIGHTHS,
-            bar::FIVE_EIGHTHS,
-            bar::THREE_QUARTERS,
-            bar::SEVEN_EIGHTHS,
-            // block eighths: 6 of 8. `block::FULL` and `block::HALF` are covered (CP437); the
-            // other 6 eighth-fraction levels are not.
-            block::SEVEN_EIGHTHS,
-            block::THREE_QUARTERS,
-            block::FIVE_EIGHTHS,
-            block::THREE_EIGHTHS,
-            block::ONE_QUARTER,
-            block::ONE_EIGHTH,
             // border::ROUNDED: 4 of 6 (the corners; horizontal/vertical are shared with PLAIN).
             border::ROUNDED.top_left,
             border::ROUNDED.top_right,

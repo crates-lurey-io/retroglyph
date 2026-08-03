@@ -244,20 +244,6 @@ fn cube_map_to_ansi(r: u8, g: u8, b: u8) -> AnsiColor {
     best
 }
 
-/// Squared euclidean distance between two colors in the Oklab perceptually-uniform
-/// color space.
-///
-/// Used instead of raw RGB distance because Oklab distance correlates far better with
-/// human perception of color difference (the same premise as CIEDE2000, without its
-/// extra complexity).
-#[cfg(feature = "indexed-quant")]
-fn oklab_distance_sq(a: gem::space::Oklab, b: gem::space::Oklab) -> f32 {
-    let dl = a.l - b.l;
-    let da = a.a - b.a;
-    let db = a.b - b.b;
-    db.mul_add(db, da.mul_add(da, dl * dl))
-}
-
 /// Converts an 8-bit RGB channel triplet to `gem::space::Srgb`, the shared conversion behind
 /// every `Srgb::new(f32::from(r) / 255.0, ...)` call site in this module.
 #[cfg(feature = "indexed-quant")]
@@ -359,7 +345,7 @@ fn perceptual_to_indexed(r: u8, g: u8, b: u8) -> u8 {
     let mut best_distance = f32::MAX;
     for index in 0u16..256 {
         let index = u8::try_from(index).unwrap_or(u8::MAX);
-        let distance = oklab_distance_sq(target, table[index as usize]);
+        let distance = target.distance_sq(table[index as usize]);
         if distance < best_distance {
             best_distance = distance;
             best_index = index;
@@ -377,7 +363,7 @@ fn perceptual_to_ansi(r: u8, g: u8, b: u8) -> AnsiColor {
     let mut best = AnsiColor::Black;
     let mut best_distance = f32::MAX;
     for (i, ansi) in ANSI_COLORS.iter().enumerate() {
-        let distance = oklab_distance_sq(target, table[i]);
+        let distance = target.distance_sq(table[i]);
         if distance < best_distance {
             best_distance = distance;
             best = *ansi;

@@ -30,8 +30,8 @@
 //!   [`InteractiveWidget`] gets hit-tested and drawn from the one area/id a call site names.
 //! - [`BoxStyle`] ([`style`]) for a Lip-Gloss-style box model (padding,
 //!   border, margin) rendered into a standalone `Grid`.
-//! - [`join_h`]/[`join_v`]/[`blit_into`] ([`block`]) to compose several `Grid`s (e.g.
-//!   `BoxStyle::render` output) into one, or blit one directly onto another at an offset.
+//! - [`join_h`]/[`join_v`] ([`block`]) to compose several `Grid`s (e.g. `BoxStyle::render`
+//!   output) into one; `retroglyph_core::Surface::blit` stamps the result onto a surface.
 //! - [`Theme`] ([`theme`]) for named color roles (an app picks
 //!   [`Theme::DARK`]/[`Theme::LIGHT`], or builds its own), independent of
 //!   how the app decides which one is active.
@@ -72,7 +72,7 @@ pub mod ui;
 pub mod widget;
 
 pub use align::Align;
-pub use block::{blit_into, join_h, join_v};
+pub use block::{join_h, join_v};
 pub use draw::{fill_rect, offset_for_pos, thumb_geometry};
 pub use interact::{
     Consumed, DEFAULT_DRAG_THRESHOLD, Density, FocusRing, HitTester, Interaction, Pointer,

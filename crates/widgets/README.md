@@ -42,8 +42,8 @@ Three more independent layers build on top:
 - `BoxStyle`, a Lip-Gloss-style box model (padding, border, margin) rendered into a standalone
   `Grid`. `Paragraph` (behind the `egc` feature) word-wraps text via `retroglyph-core`'s
   `TextLayout` and implements a `Measure` trait so a caller can size a pane to fit before rendering.
-- `join_h`/`join_v`/`blit_into` to compose several `Grid`s (e.g. `BoxStyle::render` output) into
-  one, or blit one directly onto another at an offset.
+- `join_h`/`join_v` to compose several `Grid`s (e.g. `BoxStyle::render` output) into one;
+  `retroglyph-core`'s `Surface::blit` stamps the result onto a surface.
 - `Theme` (`Theme::DARK`/`Theme::LIGHT`, or a caller-built palette): named color roles (`border`,
   `accent`, `hover_bg`, ...) that every widget with a style knob can pick up via a `.theme(Theme)`
   builder method, optionally: a manual `.border_style(...)`/etc. call after `.theme(...)` still

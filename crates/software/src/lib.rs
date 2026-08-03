@@ -100,7 +100,7 @@ pub use retroglyph_window::font::{BitmapFont, FontChain};
 use alpha_blend::rgba::U8x4Rgba;
 use grixy::buf::GridBuf;
 use grixy::ops::GridWrite;
-use grixy::ops::layout::RowMajor;
+use grixy::ops::layout::{LinearLayout, RowMajor};
 use retroglyph_core::Tint;
 use retroglyph_core::event::Event;
 use retroglyph_core::grid::{Pos, Size};
@@ -793,8 +793,8 @@ impl Output for SoftwareRenderer {
                 // Pass 1: lay down every cell's background on this layer first.
                 for idx in 0..cell_count {
                     let bg_fill = self.resolve_cell_bg(layer_id, idx, cols);
-                    #[allow(clippy::cast_possible_truncation)]
-                    let pos = Pos::new((idx % cols) as u16, (idx / cols) as u16);
+                    let (x, y) = flat_index_to_xy(idx, cols);
+                    let pos = Pos::new(x, y);
                     self.fill_cell_bg(cell_w, cell_h, pos, bg_fill);
                 }
                 // Pass 2: blit every cell's glyph over those backgrounds. A glyph offset past its
@@ -805,8 +805,8 @@ impl Output for SoftwareRenderer {
                 for idx in 0..cell_count {
                     let tile = self.ctx.prev_tiles[layer_id as usize].as_ref()[idx];
                     let tint = self.ctx.prev_tints[layer_id as usize].as_ref()[idx];
-                    #[allow(clippy::cast_possible_truncation)]
-                    let pos = Pos::new((idx % cols) as u16, (idx / cols) as u16);
+                    let (x, y) = flat_index_to_xy(idx, cols);
+                    let pos = Pos::new(x, y);
                     self.blit_cell_glyph(buf_w, cell_w, cell_h, scale, pos, tile, tint);
                 }
             }
@@ -824,8 +824,8 @@ impl Output for SoftwareRenderer {
                         continue;
                     }
                     let bg_fill = self.resolve_cell_bg(layer_id, idx, cols);
-                    #[allow(clippy::cast_possible_truncation)]
-                    let pos = Pos::new((idx % cols) as u16, (idx / cols) as u16);
+                    let (x, y) = flat_index_to_xy(idx, cols);
+                    let pos = Pos::new(x, y);
                     self.fill_cell_bg(cell_w, cell_h, pos, bg_fill);
                 }
                 for idx in 0..cell_count {
@@ -834,8 +834,8 @@ impl Output for SoftwareRenderer {
                     }
                     let tile = self.ctx.prev_tiles[usize::from(layer_id)].as_ref()[idx];
                     let tint = self.ctx.prev_tints[usize::from(layer_id)].as_ref()[idx];
-                    #[allow(clippy::cast_possible_truncation)]
-                    let pos = Pos::new((idx % cols) as u16, (idx / cols) as u16);
+                    let (x, y) = flat_index_to_xy(idx, cols);
+                    let pos = Pos::new(x, y);
                     self.blit_cell_glyph(buf_w, cell_w, cell_h, scale, pos, tile, tint);
                 }
             }
@@ -977,6 +977,16 @@ impl retroglyph_window::Presenter for SoftwareRenderer {
 /// `fill` call. Otherwise it falls back to a row-clamped path that clips
 /// each destination run to the buffer bounds once per row, rather than
 /// checking every pixel.
+/// Decodes a flat row-major cell index into `(x, y)`, given the grid's `cols`.
+///
+/// Delegates to [`RowMajor`]'s [`LinearLayout::index_to_pos`] instead of hand-rolling
+/// `idx % cols` / `idx / cols` at each flat-buffer call site below.
+fn flat_index_to_xy(idx: usize, cols: usize) -> (u16, u16) {
+    let pos = RowMajor::index_to_pos(idx, cols);
+    #[allow(clippy::cast_possible_truncation)]
+    (pos.x as u16, pos.y as u16)
+}
+
 #[allow(clippy::too_many_arguments, clippy::cast_possible_truncation)]
 fn blit_glyph_mask(
     buffer: &mut [u32],
@@ -1273,7 +1283,8 @@ fn expand_dirty_spans(dirty: &mut [bool], layer: &[Tile], cols: usize, rows: usi
             continue;
         };
         let (span_w, span_h) = anchor.span();
-        let (ax, ay) = (anchor_idx % cols, anchor_idx / cols);
+        let ixy_pos = RowMajor::index_to_pos(anchor_idx, cols);
+        let (ax, ay) = (ixy_pos.x, ixy_pos.y);
         for row in ay..(ay + usize::from(span_h)).min(rows) {
             for col in ax..(ax + usize::from(span_w)).min(cols) {
                 dirty[row * cols + col] = true;
@@ -2220,6 +2231,110 @@ mod tests {
                 "{ansi:?}: resolve_color no longer matches retroglyph-core's Color::resolve_rgb"
             );
         }
+    }
+
+    // ── Output/Cursor conformance (retroglyph#763) ──────────────────────────────────────────
+
+    fn conformance_renderer(size: Size) -> SoftwareRenderer {
+        SoftwareBackendBuilder::new()
+            .font(retroglyph_window::font::unscii16::FONT)
+            .grid_size(size.width(), size.height())
+            .scale(1)
+            .build()
+            .unwrap()
+            .into_renderer()
+            .unwrap()
+    }
+
+    /// Wraps [`SoftwareRenderer`] so [`Observable::snapshot`] hashes only the pixels that changed
+    /// since the previous call, per that trait's docs: this backend's observable state is its
+    /// pixel buffer (framebuffer-shaped, not a log), so this remembers the previous call's pixels
+    /// and hashes only the `(index, pixel)` pairs that differ from it.
+    struct SoftwareObserver {
+        renderer: SoftwareRenderer,
+        previous: Vec<u32>,
+    }
+
+    impl SoftwareObserver {
+        fn new(size: Size) -> Self {
+            let renderer = conformance_renderer(size);
+            let previous = renderer.pixels().to_vec();
+            Self { renderer, previous }
+        }
+    }
+
+    impl Output for SoftwareObserver {
+        type Error = core::convert::Infallible;
+
+        fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
+        where
+            I: Iterator<Item = DrawCell<'a>>,
+        {
+            self.renderer.draw_layers(content)
+        }
+
+        fn flush(&mut self) -> Result<(), Self::Error> {
+            self.renderer.flush()
+        }
+
+        fn size(&self) -> Size {
+            Output::size(&self.renderer)
+        }
+
+        fn clear(&mut self) -> Result<(), Self::Error> {
+            Output::clear(&mut self.renderer)?;
+            self.settle()
+        }
+
+        fn resize(&mut self, size: Size) {
+            Output::resize(&mut self.renderer, size);
+            // This backend always reports `needs_full_frame() == true` (see its `Output` impl):
+            // its pixel buffer is only actually repainted (and so only meaningfully
+            // observable) on the next `draw_layers` call, which `Terminal::present` always
+            // supplies in real use. `snapshot()` reads pixels directly instead, so settle it
+            // here with an empty full-repaint pass rather than let a caller observe whatever
+            // `resize`'s own buffer growth left behind.
+            let _ = self.settle();
+        }
+    }
+
+    impl SoftwareObserver {
+        fn settle(&mut self) -> Result<(), core::convert::Infallible> {
+            self.renderer.draw_layers(core::iter::empty())?;
+            self.renderer.flush()
+        }
+    }
+
+    impl Cursor for SoftwareObserver {}
+
+    impl retroglyph_core::testing::conformance::Observable for SoftwareObserver {
+        fn snapshot(&mut self) -> u64 {
+            let current = self.renderer.pixels();
+            let mut hash = retroglyph_core::testing::conformance::fnv1a(b"software-diff");
+            for (index, (&was, &now)) in self.previous.iter().zip(current.iter()).enumerate() {
+                if was != now {
+                    hash ^=
+                        retroglyph_core::testing::conformance::fnv1a(&(index as u64).to_ne_bytes());
+                    hash ^= retroglyph_core::testing::conformance::fnv1a(&now.to_ne_bytes());
+                }
+            }
+            self.previous = current.to_vec();
+            hash
+        }
+    }
+
+    #[test]
+    fn satisfies_the_output_contract() {
+        retroglyph_core::testing::conformance::assert_output_contract(SoftwareObserver::new);
+    }
+
+    #[test]
+    fn satisfies_the_cursor_contract() {
+        // `SoftwareRenderer`'s `Cursor` impl is a no-op (no hardware cursor in software mode),
+        // so this is expected to pass trivially: included anyway so a future change that gives
+        // this backend real cursor tracking is checked against the same contract as the terminal
+        // backends are.
+        retroglyph_core::testing::conformance::assert_cursor_contract(SoftwareObserver::new);
     }
 
     /// `expand_dirty_spans` reads a shadow buffer that can lag a resize by a frame (see its doc
