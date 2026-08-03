@@ -26,7 +26,7 @@ cargo add retroglyph-terminal retroglyph-core
 ```rust
 use retroglyph_core::DrawCell;
 use retroglyph_core::grid::Pos;
-use retroglyph_core::style::Style;
+use retroglyph_core::color::Style;
 use retroglyph_core::tile::Tile;
 use retroglyph_terminal::TerminalRenderer;
 

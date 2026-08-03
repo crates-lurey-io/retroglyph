@@ -4,10 +4,10 @@
 #[cfg(feature = "egc")]
 use super::TileExtra;
 use super::{Cells, CellsMut, Grid, LayerBuf, Pos, Rect, Size, to_grixy_pos};
+#[cfg(feature = "egc")]
+use crate::color::Style;
 #[cfg(any(test, feature = "egc"))]
 use crate::color::Tint;
-#[cfg(feature = "egc")]
-use crate::style::Style;
 #[cfg(feature = "egc")]
 use crate::tile::cap_grapheme;
 use crate::tile::{Tile, TileFlags};
@@ -460,7 +460,7 @@ mod tests {
 
     #[test]
     fn test_grid_cells_mut() {
-        use crate::style::Style;
+        use crate::color::Style;
         let mut grid = Grid::new(2, 2);
         for (x, y, tile) in grid.cells_mut(0).unwrap() {
             #[allow(clippy::cast_possible_truncation)]
@@ -484,7 +484,7 @@ mod tests {
 
     #[test]
     fn test_grid_cells_mut_or_alloc_allocates_an_unwritten_layer() {
-        use crate::style::Style;
+        use crate::color::Style;
         let mut grid = Grid::new(2, 2);
         assert!(grid.cells_mut(2).is_none());
         for (_, _, tile) in grid.cells_mut_or_alloc(2) {
@@ -602,7 +602,7 @@ mod tests {
     #[cfg(all(test, feature = "egc"))]
     mod egc_proptests {
         use super::*;
-        use crate::style::Style;
+        use crate::color::Style;
         use proptest::prelude::*;
 
         const W: u16 = 8;

@@ -115,7 +115,7 @@ impl std::error::Error for SoftwareBackendError {
 ///
 /// ```
 /// use retroglyph_software::{SoftwareBackendBuilder, SoftwareRenderer};
-/// use retroglyph_core::style::Style;
+/// use retroglyph_core::color::Style;
 /// use retroglyph_core::grid::Pos;
 /// use retroglyph_core::{Color, DrawCell, Output};
 ///

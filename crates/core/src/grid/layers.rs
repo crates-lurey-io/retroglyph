@@ -9,9 +9,9 @@
 use super::{BlendMode, Grid, Pos, Rect, TileExtra, flat_index_to_xy, to_grixy_pos};
 use crate::backend::DrawCell;
 use crate::color::Color;
-use crate::color::Tint;
 #[cfg(test)]
-use crate::style::Style;
+use crate::color::Style;
+use crate::color::Tint;
 use crate::tile::{Tile, TileFlags};
 use alloc::vec::Vec;
 #[cfg(feature = "blend-modes")]
@@ -900,7 +900,7 @@ mod tests {
 
     #[test]
     fn test_grid_put_and_get_on_layer_2() {
-        use crate::style::Style;
+        use crate::color::Style;
         let mut g = Grid::new(5, 5);
         g.put_tile(2, (1, 1), Tile::new('Z', Style::default()));
         assert_eq!(g.tile(2, (1, 1)).unwrap().glyph, 'Z');

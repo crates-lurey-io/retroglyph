@@ -1,6 +1,6 @@
 //! Fundamental unit of the grid: a single drawable tile.
 
-use crate::style::Style;
+use crate::color::Style;
 #[cfg(feature = "egc")]
 use alloc::string::String;
 use unicode_width::UnicodeWidthChar;
