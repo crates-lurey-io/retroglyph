@@ -1,7 +1,65 @@
 # Testing
 
-How retroglyph is tested, and where each kind of test lives. For the exact commands to run, see
-`AGENTS.md`'s Correctness gate section, which stays the single source of truth for the command list.
+How retroglyph is tested, and where each kind of test lives. Commands live in `AGENTS.md`'s
+Correctness gate section, the single source of truth for the command list; this file links to them
+rather than restating them, so the two can't drift apart.
+
+## Test runner (nextest) and doctests
+
+`cargo bin cargo-nextest run --workspace --all-features` is the actual test runner behind `just
+test`/`just check`/`just test-ci`, not plain `cargo test`. It gives every `[[test]]` binary (each
+file under a crate's `tests/`, plus each of the examples crate's per-example `svg_snapshot` files)
+its own process, run in parallel, rather than `cargo test`'s one-binary-at-a-time model. That's why
+those PTY-spawning tests can race each other over the shared `target/pty-examples/` build dir if it
+isn't pre-built first (retroglyph#976; see `build-pty-examples` below). `.config/nextest.toml` sets
+`slow-timeout = { period = "20s", terminate-after = 2 }`, workspace-wide.
+
+Nextest can't run doctests at all ([a stated upstream limitation](https://nexte.st/docs/running/)),
+so `just test` runs `cargo test --workspace --all-features --doc` as its own separate line. Every
+crate's `README.md` is included into `src/lib.rs` via `#[doc = include_str!("../README.md")]`, so
+those README code samples are themselves doctests: they compile (and, where written as runnable
+examples rather than `text`/`ignore` blocks, execute) as part of the gate, not just as documentation.
+
+## Default-features and no_std builds
+
+Every downstream crate pins `retroglyph-core = { default-features = false }`, so a plain `cargo test
+-p <crate>` (what the README's quick start runs, and what any fresh clone would run) builds with the
+`egc` feature off, the opposite of every `--all-features` run above it. Because `--all-features`
+never exercises that path, CI stayed green while the plain command failed on a clean clone
+(retroglyph#757). `just test-default-features` is the recipe that exists to cover it, and it's a
+separate line in `just test`/`just check` rather than folded into `--workspace`, because a
+`--workspace` build unifies feature resolution across every member compiled together, which would
+silently turn `egc` back on everywhere via `examples/Cargo.toml`'s own dependency on `retroglyph-core`.
+
+`retroglyph-core` and `retroglyph-widgets` are mandatory-float-backend crates (see their crate-level
+`compile_error!`s), so each also gets a dedicated `--no-default-features --features libm` line: the
+`no_std` build, exercising the `libm`-backed float dispatch path instead of `std`'s
+(retroglyph#843, #882, #886). The same three lines are mirrored in `compile` (plain `cargo check`)
+and `clippy`, so a `no_std`-only lint or type error can't land on `main` invisibly either
+(retroglyph#887, #903).
+
+## Feature-matrix builds (cargo-hack)
+
+`compile`'s `cargo bin cargo-hack check --each-feature` lines build every feature flag in isolation,
+one at a time, rather than only at zero or all features. The all-or-nothing builds above can stay
+green for a break in a single feature and only surface it once another PR happens to combine that
+feature with something else; `--each-feature` catches it directly (retroglyph#894).
+`retroglyph-core` and `retroglyph-widgets` get their own `--features libm` runs (a float backend is
+mandatory for both, so every one of their features would otherwise fail alone), the rest of the
+workspace runs with no extra flags, and none of the three lines needs an `--exclude-features` list:
+every feature is expected to build standalone (retroglyph#886).
+
+## `just check-targets`
+
+`just check`/`just compile` only ever compile the host target, but `retroglyph-gl` gates three test
+modules to other targets: `headless.rs` to `cfg(test, target_os = "linux")`, `webgl_smoke.rs` and
+`webgl_recovery.rs` to wasm32 (both documented below). All three drive the `Output` trait, so a
+change to the backend draw contract can be locally green under `just check` on a non-Linux,
+non-wasm host and still break every one of them; that's how retroglyph#552 stayed green locally
+while failing five CI jobs. `just check-targets` cross-compiles those modules (`--target
+x86_64-unknown-linux-gnu` and `--target wasm32-unknown-unknown -p retroglyph-gl`) without needing
+the actual OS/browser to run them; it's not part of `just check` itself (see that recipe's own
+comment for why), so run it by hand whenever touching `Output`, `DrawCell`, or a backend impl.
 
 ## Unit tests
 
@@ -80,6 +138,17 @@ invalidated program/atlas/buffers were rebuilt on the live context. It runs unde
 `just test-wasm-gl` / `test-wasm-gl` CI job (both tests are in the crate, so `wasm-pack test` runs
 them together). The `WEBGL_lose_context` extension is implemented by the browser, not the GL driver,
 so it works under SwiftShader.
+
+## WASM FFI tests (retroglyph-terminal-wasm)
+
+`crates/terminal-wasm/tests/wasm_ffi.rs` is the only place the `#[wasm_bindgen]`-exported
+`wasm_terminal_*` FFI surface actually runs: it's `cfg(target_arch = "wasm32")`, so a host-target
+`cargo test` never compiles it in the first place. `just test-wasm` runs it via `wasm-pack test
+--node crates/terminal-wasm`; `--node` rather than `--chrome`/`--firefox` because this FFI has no
+DOM/xterm.js dependency to exercise, so Node is enough and avoids needing a browser + webdriver in
+CI. It has its own gated `test-wasm` CI job (guarded by a `dorny/paths-filter` check on
+`crates/terminal-wasm` and its dependencies) in the required-checks set, separate from
+`test-wasm-gl` above.
 
 ## Snapshot tests (insta)
 
@@ -242,9 +311,38 @@ xterm.js terminal / software canvas / WebGL) and deployed to the docs gallery by
 a one-time snapshot.
 
 ```sh
+just build-pty-examples  # pre-builds the crossterm example binaries; skip this and svg_snapshot fails
 cargo test -p retroglyph-examples --all-features
 ```
 
 See `examples/AGENTS.md` for the per-example validation checklist a new example must satisfy before
 it's considered complete (all three snapshot types, all four WASM variants, graceful backend
 degradation, etc.).
+
+## Benchmarks
+
+Seven crates (`core`, `crossterm`, `software`, `terminal`, `terminal-wasm`, `widgets`, `window`)
+have their own `benches/`, each a `harness = false` criterion suite. `.github/workflows/bench.yml`
+tracks results to [Bencher](https://bencher.dev) on every push to `main` and checks a labeled PR
+(`benchmark` label) for a statistically significant regression against that history. See
+`CONTRIBUTING.md`'s Benchmarking section for `just bench`/`just bench-compare` and the full CI
+mechanics; this file only tracks that benchmarks exist as a category, since they measure
+performance rather than correctness.
+
+## Coverage
+
+`just coverage` (opens an HTML report) and `just coverage-ci` (writes `lcov.info`) both run
+`cargo llvm-cov --workspace --lib --all-features`, `--lib` only: integration tests are excluded
+because `examples/tests/*.rs`'s PTY tests shell out to `cargo build --example`, which lands in the
+default `target/` dir rather than llvm-cov's own instrumented `--target-dir`, so those binaries
+wouldn't be found under coverage anyway; unit tests are what's measured. The `coverage` CI job runs
+`coverage-ci` and uploads `lcov.info` to Codecov, scoped per crate via the `flags:`/`paths:` mapping
+in `codecov.yml` so one combined upload still yields per-crate numbers. It's in the required-checks
+set alongside `test`/`test-wasm`/`test-wasm-gl`/`gl-headless`.
+
+Separately, the `test` CI job (which runs `just test-ci`) writes JUnit XML via the `ci` nextest
+profile (`.config/nextest.toml`, to `target/nextest/ci/junit.xml`). `tools/split-junit-flags.py`
+splits that single workspace-wide file into one file per crate flag, since Codecov Test Analytics'
+`flags` filter is set per upload, not per `<testsuite>`; each split file is then uploaded with
+`codecov/codecov-action`'s `report_type: test_results`. That's test pass/fail/flake history,
+distinct from the `lcov.info` line-coverage upload above.
