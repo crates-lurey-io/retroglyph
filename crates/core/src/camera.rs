@@ -372,6 +372,21 @@ mod tests {
     }
 
     #[test]
+    fn screen_to_world_is_none_outside_the_viewport_or_past_the_world_edge() {
+        let mut c = cam();
+        c.center_on(Pos::new(50, 50)); // shows world [45, 55).
+        // Off the viewport entirely: the viewport starts at x = 0, so a negative screen
+        // position never reaches `contains_pos`.
+        assert_eq!(c.screen_to_world(Pos::new(20, 20)), None);
+
+        // Inside the viewport, but the mapped world position is past the world edge: a 5x5
+        // world with a 10x10 viewport pinned to (0, 0) leaves the bottom-right quadrant of
+        // the viewport mapping past `world`.
+        let small = Camera::new(Rect::new(0, 0, 10, 10), Size::new(5, 5));
+        assert_eq!(small.screen_to_world(Pos::new(9, 9)), None);
+    }
+
+    #[test]
     fn clamps_at_the_low_edge() {
         let mut c = cam();
         c.center_on(Pos::new(1, 1));
