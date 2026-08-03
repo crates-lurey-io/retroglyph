@@ -426,9 +426,12 @@ impl<B: Backend> Terminal<B> {
     /// If an event was previously buffered by [`has_input`](Self::has_input), it is
     /// returned immediately. Otherwise, the backend is polled for a new event.
     ///
-    /// [`Event::Resize`] events are automatically applied: both grids are resized
-    /// before the event is returned to the caller, so the game loop can immediately
-    /// redraw at the new size.
+    /// [`Event::Resize`] events arriving from the backend are automatically applied: both
+    /// grids are resized before the event is returned to the caller, so the game loop can
+    /// immediately redraw at the new size. An event coming back off this terminal's own queue
+    /// (from [`requeue_events`](Self::requeue_events), or buffered by
+    /// [`wait_for_input`](Self::wait_for_input)) was already applied when it first entered, so
+    /// it is returned as-is rather than resized again. See `poll_backend`.
     pub fn poll(&mut self, timeout: Duration) -> Option<Event> {
         if let Some(event) = self.queued_events.pop_front() {
             // Already passed through `poll_backend` (or was requeued from an event that did),
@@ -755,22 +758,43 @@ mod tests {
     }
 
     #[test]
-    fn test_terminal_drain_events_into_applies_a_queued_resize() {
+    fn test_terminal_drain_events_into_applies_a_backend_resize() {
         use alloc::vec::Vec;
 
         let backend = Headless::new(10, 10);
         let mut terminal = Terminal::new(backend);
 
-        // Queue a Resize through `requeue_events` (Terminal's own queue) rather than pushing
-        // straight to the backend, so this covers the queued path `drain_events_into` documents.
-        terminal.requeue_events([Event::Close, Event::Resize(4, 2)]);
+        terminal.backend_mut().push_event(Event::Close);
+        terminal.backend_mut().push_event(Event::Resize(4, 2));
 
         let mut buf = Vec::new();
         terminal.drain_events_into(&mut buf);
         assert_eq!(buf, [Event::Close, Event::Resize(4, 2)]);
-        // The resize was applied immediately, same as `poll`/`drain_events`, not just handed
+        // The resize was applied on the way in, same as `poll`/`drain_events`, not just handed
         // back as an inert event for the caller to notice and apply itself.
         assert_eq!(terminal.size(), Size::new(4, 2));
+    }
+
+    #[test]
+    fn test_terminal_drain_events_into_does_not_reapply_a_requeued_resize() {
+        use alloc::vec::Vec;
+
+        let backend = ResizeCounting::new(10, 10);
+        let mut terminal = Terminal::new(backend);
+
+        terminal.backend_mut().inner.push_event(Event::Resize(4, 2));
+
+        let mut buf = Vec::new();
+        terminal.drain_events_into(&mut buf);
+        assert_eq!(buf, [Event::Resize(4, 2)]);
+        assert_eq!(terminal.backend().resize_calls, 1);
+
+        // A wrapper that drained the event and handed it back gets it again, but the resize is
+        // not applied a second time for the one logical event. See `poll_backend`.
+        terminal.requeue_events(buf.iter().cloned());
+        terminal.drain_events_into(&mut buf);
+        assert_eq!(buf, [Event::Resize(4, 2)]);
+        assert_eq!(terminal.backend().resize_calls, 1);
     }
 
     #[test]
