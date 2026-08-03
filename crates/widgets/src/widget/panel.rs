@@ -388,7 +388,20 @@ mod tests {
         // compute title_x = (10 - 3 - 2) / 2 = 2, off by one.
         assert_eq!(grid[Pos::new(3, 0)].glyph(), ' ');
         assert_eq!(grid[Pos::new(4, 0)].glyph(), 'あ');
+
+        // Column 5 is where a wide char's spacer column would sit. Reserving it is an `egc`-only
+        // guarantee (see README's "Extended grapheme cluster support" section): with `egc`,
+        // `print` writes a real spacer there, so it reads back as the trailing pad space this
+        // widget wrote. Without `egc`, `print` only ever touches one cell per `char` regardless of
+        // its display width, so column 5 is left holding whatever the border already drew there,
+        // and the pad space this widget writes lands one column further out instead.
+        #[cfg(feature = "egc")]
         assert_eq!(grid[Pos::new(5, 0)].glyph(), ' ');
+        #[cfg(not(feature = "egc"))]
+        {
+            assert_eq!(grid[Pos::new(5, 0)].glyph(), '─');
+            assert_eq!(grid[Pos::new(6, 0)].glyph(), ' ');
+        }
     }
 
     #[test]
