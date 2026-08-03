@@ -295,6 +295,35 @@ fn styled_surface_forwards_both_span_calls() {
 }
 
 #[test]
+fn styled_surface_forwards_put_print_fill_rect_and_put_offset() {
+    let style = Style::new().fg(Color::RED);
+    let mut grid = Grid::new(6, 4);
+    {
+        let mut surface = screen(&mut grid);
+        let mut styled = surface.with_style(style);
+        assert_eq!(styled.style(), style);
+
+        styled.put((0, 0), 'a');
+        styled.print((1, 0), "bc");
+        styled.fill_rect(Rect::new(0, 1, 2, 1), '#');
+        styled.put_offset((0, 2), Offset::new(3, -3), 'x');
+        // `surface()` reaches back to the underlying `Surface` for a call `StyledSurface`
+        // doesn't expose, e.g. `print_line`'s per-span styles.
+        styled.surface().print_line((0, 3), &Line::from("d"));
+    }
+
+    assert_eq!(grid[Pos::new(0, 0)].glyph(), 'a');
+    assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Color::RED);
+    assert_eq!(grid[Pos::new(1, 0)].glyph(), 'b');
+    assert_eq!(grid[Pos::new(2, 0)].glyph(), 'c');
+    assert_eq!(grid[Pos::new(0, 1)].glyph(), '#');
+    assert_eq!(grid[Pos::new(1, 1)].glyph(), '#');
+    let tile = grid.tile(0, Pos::new(0, 2)).unwrap();
+    assert_eq!((tile.dx(), tile.dy()), (3, -3));
+    assert_eq!(grid[Pos::new(0, 3)].glyph(), 'd');
+}
+
+#[test]
 fn with_tint_applies_to_the_cell_it_writes() {
     let mut grid = Grid::new(4, 4);
     {
