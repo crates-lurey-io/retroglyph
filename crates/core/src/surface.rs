@@ -967,6 +967,91 @@ impl<'a> Surface<'a> {
         }
     }
 
+    /// Stamps `grid`'s layer 0 onto this surface's own layer, with its top-left cell at `(x, y)`
+    /// (local to this surface's area, matching [`put`](Self::put)'s convention), clipped to this
+    /// surface's clip.
+    ///
+    /// Always reads `grid`'s layer 0, regardless of which layer this surface itself is currently
+    /// writing to: `grid` is typically a standalone buffer composed elsewhere (e.g.
+    /// `BoxStyle::render`'s output, or `retroglyph-widgets`' `join_h`/`join_v`), and per their own
+    /// docs those only ever populate layer 0. Reading this surface's own layer off `grid` instead
+    /// (what [`Grid::blit`]'s single `layer` parameter would do if called directly) finds nothing
+    /// there whenever this surface isn't on layer 0, and the copy silently does nothing.
+    ///
+    /// Unlike a single-cell [`put`](Self::put), a write that starts outside this surface's clip is
+    /// not necessarily dropped whole: the part of `grid` that does land inside the clip is copied,
+    /// matching [`fill_rect`](Self::fill_rect)'s per-cell clipping rather than
+    /// [`put_span`](Self::put_span)'s all-or-nothing footprint check, since `grid` is arbitrary
+    /// composed content rather than one indivisible sprite.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_core::{Grid, Layer, Rect, Style, Surface, Tile};
+    ///
+    /// let mut src = Grid::new(2, 2);
+    /// src.put_tile(0, (0, 0), Tile::new('x', Style::default()));
+    ///
+    /// let mut dst = Grid::new(4, 4);
+    /// let mut surface = Surface::new(&mut dst, Rect::new(0, 0, 4, 4), Layer::World.as_u8());
+    ///
+    /// // `surface` is on the overlay tier; `src` only ever has layer 0, but `blit` reads that
+    /// // layer regardless, so the copy still lands (unlike `Grid::blit(surface.layer(), ...)`).
+    /// surface.on_tier(Layer::Overlay).blit(&src, 1, 1);
+    ///
+    /// assert_eq!(dst.tile(Layer::Overlay.as_u8(), (1, 1)).map(Tile::glyph), Some('x'));
+    /// ```
+    pub fn blit(&mut self, grid: &Grid, x: u16, y: u16) {
+        let w = grid.width();
+        let h = grid.height();
+        if w == 0 || h == 0 {
+            return;
+        }
+
+        // Local `(x, y)` shifted by this surface's translate offset, same subtraction `shift`
+        // does for a single cell, but a footprint that starts left of/above the origin crops its
+        // near edge instead of being dropped whole (there is no single `(x, y)` for `shift` to
+        // reject: only part of the footprint may be off-screen).
+        let sx = i64::from(x) - i64::from(self.origin_offset.0);
+        let sy = i64::from(y) - i64::from(self.origin_offset.1);
+        let crop_left = u16::try_from(sx.min(0).unsigned_abs()).unwrap_or(u16::MAX);
+        let crop_top = u16::try_from(sy.min(0).unsigned_abs()).unwrap_or(u16::MAX);
+        if crop_left >= w || crop_top >= h {
+            return;
+        }
+        let Ok(local_x) = u16::try_from(sx.max(0)) else {
+            return;
+        };
+        let Ok(local_y) = u16::try_from(sy.max(0)) else {
+            return;
+        };
+
+        let abs_x = self.area.left().saturating_add(local_x);
+        let abs_y = self.area.top().saturating_add(local_y);
+        let visible_w = (w - crop_left).min(u16::MAX - abs_x);
+        let visible_h = (h - crop_top).min(u16::MAX - abs_y);
+
+        let dst_rect = Rect::new(abs_x, abs_y, visible_w, visible_h).intersect(self.clip);
+        if dst_rect.is_empty() {
+            return;
+        }
+
+        let src_rect = Rect::new(
+            crop_left + (dst_rect.left() - abs_x),
+            crop_top + (dst_rect.top() - abs_y),
+            dst_rect.width(),
+            dst_rect.height(),
+        );
+        self.grid.blit_cross_layer(
+            self.layer,
+            grid,
+            0,
+            src_rect,
+            dst_rect.left(),
+            dst_rect.top(),
+        );
+    }
+
     /// Writes a multi-cell span at `pos` on this surface's layer in `style`: one piece of
     /// artwork occupying a block of cells rather than one, the [`Surface`] twin of
     /// [`Grid::write_span`].
@@ -1294,6 +1379,71 @@ mod tests {
 
         assert_eq!(grid_origin[Pos::new(0, 0)].glyph(), 'X');
         assert_eq!(grid_offset[Pos::new(3, 3)].glyph(), 'X');
+    }
+
+    #[test]
+    fn blit_reads_the_sources_layer_0_even_when_this_surface_is_on_a_different_layer() {
+        // The retroglyph#824 regression: `src` (a standalone, layer-0-only `Grid`, like
+        // `BoxStyle::render`'s output) must still land when the destination surface is on a
+        // layer other than 0.
+        let mut src = Grid::new(2, 2);
+        src.put_tile(0, (0, 0), Tile::new('x', Style::default()));
+
+        let mut dst = Grid::new(4, 4);
+        let mut surface = Surface::new(&mut dst, Rect::new(0, 0, 4, 4), 0);
+        surface.on_layer(3).blit(&src, 1, 1);
+
+        assert_eq!(dst.tile(3, (1, 1)).map(Tile::glyph), Some('x'));
+        // Never touched layer 0 (always allocated, but untouched cells stay their default).
+        assert_eq!(dst.tile(0, (1, 1)).map(Tile::glyph), Some(' '));
+    }
+
+    #[test]
+    fn blit_stamps_a_grid_at_a_local_offset() {
+        let mut src = Grid::new(2, 2);
+        src.put_tile(0, (0, 0), Tile::new('x', Style::default()));
+        src.put_tile(0, (1, 1), Tile::new('y', Style::default()));
+
+        let mut dst = Grid::new(5, 5);
+        screen(&mut dst).blit(&src, 2, 1);
+
+        assert_eq!(dst[Pos::new(2, 1)].glyph(), 'x');
+        assert_eq!(dst[Pos::new(3, 2)].glyph(), 'y');
+        // Untouched cells stay whatever the destination started with.
+        assert_eq!(dst[Pos::new(0, 0)].glyph(), ' ');
+    }
+
+    #[test]
+    fn blit_clips_to_this_surfaces_clip_instead_of_skipping_the_whole_call() {
+        let mut src = Grid::new(3, 3);
+        for y in 0..3 {
+            for x in 0..3 {
+                src.put_tile(0, (x, y), Tile::new('#', Style::default()));
+            }
+        }
+
+        let mut dst = Grid::new(5, 5);
+        {
+            let mut surface = screen(&mut dst);
+            // Clip to a 2x2 window starting at (1, 1): only the top-left quadrant of `src`'s
+            // footprint at (0, 0) is visible.
+            surface.clip(Rect::new(1, 1, 2, 2)).blit(&src, 0, 0);
+        }
+
+        assert_eq!(dst[Pos::new(1, 1)].glyph(), '#');
+        assert_eq!(dst[Pos::new(2, 2)].glyph(), '#');
+        // Outside the clip: never written, even though it's inside `src`'s own footprint.
+        assert_eq!(dst[Pos::new(2, 0)].glyph(), ' ');
+        assert_eq!(dst[Pos::new(0, 2)].glyph(), ' ');
+    }
+
+    #[test]
+    fn blit_is_a_no_op_for_a_zero_sized_grid() {
+        let src = Grid::new(1, 0);
+        let mut dst = Grid::new(4, 4);
+        screen(&mut dst).blit(&src, 0, 0);
+
+        assert_eq!(dst[Pos::new(0, 0)].glyph(), ' ');
     }
 
     #[test]

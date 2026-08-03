@@ -315,8 +315,8 @@ impl BoxStyle {
 /// the style's own explicit-or-content-fit dimensions: it does not stretch
 /// or clip to fill `area`. It always uses [`BoxStyle::render`] (not
 /// `BoxStyle::render_wrapped`, behind the `egc` feature); for wrapped
-/// content, call `render_wrapped` directly and [`crate::blit_into`] the
-/// result yourself.
+/// content, call `render_wrapped` directly and
+/// [`Surface::blit`](retroglyph_core::Surface::blit) the result yourself.
 #[derive(Clone, Copy, Debug)]
 pub struct Boxed<'a> {
     style: BoxStyle,
@@ -333,9 +333,9 @@ impl BoxStyle {
 
 impl Widget for Boxed<'_> {
     fn render(&self, surface: &mut Surface<'_>) {
-        let area = surface.area();
         let grid = self.style.render(self.text);
-        crate::block::blit_into(surface, &grid, area.left(), area.top());
+        // `(0, 0)` in this surface's own local coordinates is its area's own top-left corner.
+        surface.blit(&grid, 0, 0);
     }
 }
 
@@ -381,6 +381,29 @@ mod tests {
                     .collect()
             })
             .collect()
+    }
+
+    #[test]
+    fn boxed_render_draws_on_a_surface_that_is_not_on_layer_zero() {
+        // The retroglyph#824 regression: `Boxed` renders its `BoxStyle` into a standalone,
+        // layer-0-only `Grid` and stamps it onto the caller's surface, which must still work
+        // when that surface is on a non-zero layer (e.g. `surface.on_tier(Layer::Overlay)`, as
+        // `Modal`'s own docs recommend for overlay content).
+        use retroglyph_core::{Layer, Surface};
+
+        let mut grid = Grid::new(6, 3);
+        let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 6, 3), Layer::World.as_u8());
+        let boxed = BoxStyle::new(Style::default()).text("hi");
+        boxed.render(&mut surface.on_tier(Layer::Overlay));
+
+        assert_eq!(
+            grid.tile(Layer::Overlay.as_u8(), (0, 0)).map(Tile::glyph),
+            Some('h')
+        );
+        assert_eq!(
+            grid.tile(Layer::Overlay.as_u8(), (1, 0)).map(Tile::glyph),
+            Some('i')
+        );
     }
 
     #[test]
