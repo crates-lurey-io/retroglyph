@@ -125,7 +125,7 @@ use alpha_blend::BlendMode as SeparableBlendMode;
 use core::fmt;
 use core::ops::{Index, IndexMut};
 use grixy::buf::GridBuf;
-use grixy::ops::layout::RowMajor;
+use grixy::ops::layout::{LinearLayout, RowMajor};
 use grixy::ops::{ExactSizeGrid, GridRead, GridWrite};
 
 /// Blend mode for [`Grid::blit_alpha`], selecting how source and destination colors combine
@@ -327,6 +327,16 @@ fn to_grixy_pos(pos: Pos) -> grixy::core::Pos {
     grixy::core::Pos::new(usize::from(pos.x), usize::from(pos.y))
 }
 
+/// Decodes a flat row-major buffer index into `(x, y)`, given the buffer's `width`.
+///
+/// Delegates to [`RowMajor`]'s [`LinearLayout::index_to_pos`](grixy::ops::layout::LinearLayout)
+/// instead of hand-rolling `i % width` / `i / width` at each flat-buffer iterator below.
+fn flat_index_to_xy(i: usize, width: usize) -> (u16, u16) {
+    let pos = RowMajor::index_to_pos(i, width);
+    #[allow(clippy::cast_possible_truncation)]
+    (pos.x as u16, pos.y as u16)
+}
+
 // ---------------------------------------------------------------------------
 // Grid iterators
 // ---------------------------------------------------------------------------
@@ -342,10 +352,7 @@ impl<'a> Iterator for Cells<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next().map(|(i, tile)| {
-            #[allow(clippy::cast_possible_truncation)]
-            let x = (i % self.width) as u16;
-            #[allow(clippy::cast_possible_truncation)]
-            let y = (i / self.width) as u16;
+            let (x, y) = flat_index_to_xy(i, self.width);
             (x, y, tile)
         })
     }
@@ -362,10 +369,7 @@ impl<'a> Iterator for CellsMut<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next().map(|(i, tile)| {
-            #[allow(clippy::cast_possible_truncation)]
-            let x = (i % self.width) as u16;
-            #[allow(clippy::cast_possible_truncation)]
-            let y = (i / self.width) as u16;
+            let (x, y) = flat_index_to_xy(i, self.width);
             (x, y, tile)
         })
     }
@@ -1619,10 +1623,7 @@ impl Grid {
             .filter_map(move |id| self.layer(id).map(|lb| (id, lb)))
             .flat_map(move |(id, lb)| {
                 lb.buf.as_ref().iter().enumerate().map(move |(i, tile)| {
-                    #[allow(clippy::cast_possible_truncation)]
-                    let x = (i % width) as u16;
-                    #[allow(clippy::cast_possible_truncation)]
-                    let y = (i / width) as u16;
+                    let (x, y) = flat_index_to_xy(i, width);
                     DrawCell {
                         layer: id,
                         pos: Pos::new(x, y),
@@ -1754,10 +1755,7 @@ impl Grid {
                         .iter()
                         .enumerate()
                         .map(move |(i, tile)| {
-                            #[allow(clippy::cast_possible_truncation)]
-                            let x = (i % width) as u16;
-                            #[allow(clippy::cast_possible_truncation)]
-                            let y = (i / width) as u16;
+                            let (x, y) = flat_index_to_xy(i, width);
                             DrawCell {
                                 layer: id,
                                 pos: Pos::new(x, y),
@@ -1785,10 +1783,7 @@ impl Grid {
                             if tile == prev_tile && cur_extra == prev_extra {
                                 return None;
                             }
-                            #[allow(clippy::cast_possible_truncation)]
-                            let x = (i % width) as u16;
-                            #[allow(clippy::cast_possible_truncation)]
-                            let y = (i / width) as u16;
+                            let (x, y) = flat_index_to_xy(i, width);
                             Some(DrawCell {
                                 layer: id,
                                 pos: Pos::new(x, y),
