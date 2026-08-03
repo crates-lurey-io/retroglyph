@@ -150,7 +150,7 @@ impl<'a> Button<'a> {
 
     /// The style this button draws with this frame, per the disabled > pressed > hovered
     /// > focused > default precedence documented on [`Button`], given `response`.
-    const fn resolved_style<Id: Copy>(&self, response: Response<Id>) -> Style {
+    const fn resolved_style<Id>(&self, response: &Response<Id>) -> Style {
         if response.disabled() {
             self.disabled_style
         } else if response.pressed() {
@@ -165,7 +165,7 @@ impl<'a> Button<'a> {
     }
 }
 
-impl<Id: Copy> InteractiveWidget<Id> for Button<'_> {
+impl<Id> InteractiveWidget<Id> for Button<'_> {
     type State = ();
 
     fn sense(&self) -> Sense {
@@ -178,7 +178,7 @@ impl<Id: Copy> InteractiveWidget<Id> for Button<'_> {
             return;
         }
 
-        let style = self.resolved_style(response);
+        let style = self.resolved_style(&response);
         fill_rect(surface, Rect::new(0, 0, width, height), ' ', style);
 
         let y = height / 2;
@@ -240,7 +240,7 @@ mod tests {
         };
         let button = Button::new("Go");
         assert_eq!(
-            button.resolved_style(response).background(),
+            button.resolved_style(&response).background(),
             button.pressed_style.background()
         );
     }
@@ -254,7 +254,7 @@ mod tests {
         };
         let button = Button::new("Go");
         assert_eq!(
-            button.resolved_style(response).background(),
+            button.resolved_style(&response).background(),
             button.hovered_style.background()
         );
     }
@@ -267,7 +267,7 @@ mod tests {
         };
         let button = Button::new("Go");
         assert_eq!(
-            button.resolved_style(response).background(),
+            button.resolved_style(&response).background(),
             button.focused_style.background()
         );
     }
@@ -277,7 +277,7 @@ mod tests {
         let button = Button::new("Go");
         assert_eq!(
             button
-                .resolved_style(Response::<Id>::default())
+                .resolved_style(&Response::<Id>::default())
                 .background(),
             button.style.background()
         );
@@ -291,7 +291,7 @@ mod tests {
             ..Response::default()
         };
         let button = Button::new("Go").pressed_style(custom);
-        assert_eq!(button.resolved_style(response).background(), Color::GREEN);
+        assert_eq!(button.resolved_style(&response).background(), Color::GREEN);
     }
 
     #[test]
@@ -329,7 +329,7 @@ mod tests {
         // idle. Confirms end-to-end wiring (a real click drives a real style pick), not just that
         // `resolved_style` matches its own precedence rules in isolation (the other tests above).
         assert_eq!(
-            button.resolved_style(response).background(),
+            button.resolved_style(&response).background(),
             button.pressed_style.background()
         );
 
@@ -370,7 +370,7 @@ mod tests {
             ..Response::default()
         };
         let button = Button::new("Go");
-        assert_eq!(button.resolved_style(response), button.disabled_style);
+        assert_eq!(button.resolved_style(&response), button.disabled_style);
     }
 
     #[test]
@@ -406,7 +406,7 @@ mod tests {
         assert_eq!(button.pressed_style.background(), Theme::DARK.press_bg);
         assert_eq!(button.focused_style.foreground(), Theme::DARK.accent);
         assert_eq!(
-            button.resolved_style(response).background(),
+            button.resolved_style(&response).background(),
             Theme::DARK.hover_bg
         );
     }
