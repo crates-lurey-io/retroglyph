@@ -1681,11 +1681,7 @@ mod tests {
         dst.replace_layer(0, &src);
 
         assert_eq!(dst[Pos::new(0, 0)].span(), (2, 2));
-        assert!(
-            dst[Pos::new(0, 0)]
-                .flags()
-                .contains(TileFlags::SPAN_ANCHOR)
-        );
+        assert!(dst[Pos::new(0, 0)].flags().contains(TileFlags::SPAN_ANCHOR));
         assert_eq!(dst.span_owner(0, 1, 1), Some(Pos::new(0, 0)));
         assert_eq!(dst[Pos::new(1, 1)].glyph(), ']');
     }
