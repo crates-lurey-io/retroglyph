@@ -5,7 +5,7 @@
 //! without a [`Backend`](retroglyph_core::Backend)/[`Terminal`](retroglyph_core::Terminal), so
 //! composing widget output ahead of drawing it means composing `Grid`s directly, with no
 //! separate cell/buffer type.
-use retroglyph_core::{Grid, Rect};
+use retroglyph_core::Grid;
 
 /// Concatenate `grids` left-to-right into one [`Grid`] (layer 0 only).
 ///
@@ -28,7 +28,7 @@ pub fn join_h(grids: &[Grid]) -> Grid {
 
     let mut x_offset = 0u16;
     for g in grids {
-        out.blit(0, g, Rect::new(0, 0, g.width(), g.height()), x_offset, 0);
+        out.blit(0, g, g.rect(), x_offset, 0);
         x_offset = x_offset.saturating_add(g.width());
     }
     out
@@ -54,7 +54,7 @@ pub fn join_v(grids: &[Grid]) -> Grid {
 
     let mut y_offset = 0u16;
     for g in grids {
-        out.blit(0, g, Rect::new(0, 0, g.width(), g.height()), 0, y_offset);
+        out.blit(0, g, g.rect(), 0, y_offset);
         y_offset = y_offset.saturating_add(g.height());
     }
     out

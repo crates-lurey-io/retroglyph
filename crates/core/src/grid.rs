@@ -664,6 +664,21 @@ impl Grid {
         self.height
     }
 
+    /// Returns the grid's dimensions.
+    #[must_use]
+    pub const fn size(&self) -> Size {
+        Size::new(self.width, self.height)
+    }
+
+    /// Returns the full grid as a [`Rect`] at the origin.
+    ///
+    /// Equivalent to `Rect::new(0, 0, width, height)`. Handy for passing the whole grid to
+    /// layout helpers or `blit`'s `src_rect`.
+    #[must_use]
+    pub const fn rect(&self) -> Rect {
+        Rect::new(0, 0, self.width, self.height)
+    }
+
     /// Returns the highest layer id that has ever been allocated.
     ///
     /// Always at least 0 (layer 0 is always allocated). This only grows:
