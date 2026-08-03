@@ -25,7 +25,7 @@ fn thumb_len(track: u16, total_len: usize, visible_len: usize) -> u16 {
     // Explicitly clamped to `1.0..=track_f`, itself derived from `area`'s `u16` height, so the
     // result always narrows back exactly and is never negative.
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    let len = crate::mathf::round(track_f * ratio).clamp(1.0, track_f) as u16;
+    let len = retroglyph_core::math::round(track_f * ratio).clamp(1.0, track_f) as u16;
 
     len
 }
@@ -66,7 +66,7 @@ impl TrackMap {
             clippy::cast_possible_truncation,
             clippy::cast_sign_loss
         )]
-        let row = crate::mathf::round(
+        let row = retroglyph_core::math::round(
             (offset as f32 / self.max_offset as f32) * f32::from(self.max_start),
         ) as u16;
         row.min(self.max_start)
@@ -84,7 +84,7 @@ impl TrackMap {
             clippy::cast_possible_truncation,
             clippy::cast_sign_loss
         )]
-        let offset = crate::mathf::round(
+        let offset = retroglyph_core::math::round(
             (f32::from(row) / f32::from(self.max_start)) * self.max_offset as f32,
         ) as usize;
         offset.min(self.max_offset)

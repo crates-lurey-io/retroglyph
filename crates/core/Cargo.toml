@@ -21,11 +21,12 @@ rustdoc-args = ["--cfg", "docsrs"]
 [features]
 default = ["std", "egc", "indexed-quant", "blend-modes"]
 # Gates the four W3C separable [`BlendMode`] variants (`Screen`/`Dodge`/`Burn`/`Overlay`/
-# `Multiply`) and pulls in the optional `alpha-blend` dependency.
+# `Multiply`) and pulls in the optional `alpha-blend` dependency. Needs a float backend (`std` or
+# `libm`) for its per-channel blend math, so this also turns on `__float`.
 #
 # [`BlendMode::Linear`] and [`Grid::blit_alpha`] are always available regardless of this feature:
 # `Linear` only needs `gem::Mix`, not `alpha-blend`.
-blend-modes = ["dep:alpha-blend", "alpha-blend/libm"]
+blend-modes = ["__float", "dep:alpha-blend", "alpha-blend/libm", "alpha-blend/libm-arch"]
 # Forces `BuildMode::Dev` on in a build that would otherwise resolve to `Release`.
 #
 # Can be used so an optimized build still reports development diagnostics (see the [`dev`]
@@ -34,13 +35,34 @@ dev = []
 # Enables grapheme-cluster-aware text handling (via `unicode-segmentation`) for EGC-correct cell
 # diffing and layout.
 egc = ["dep:unicode-segmentation"]
-# Gates perceptual (Oklab) RGB → Indexed/ANSI quantization (`gem/libm`) and [`Color`]'s
+# Gates perceptual (Oklab) RGB → Indexed/ANSI quantization (`gem/space`) and [`Color`]'s
 # `gem`-space conversions (`to_srgb`/`from_srgb`/`lerp`/`from_hex`).
 #
 # Without it, [`Color::to_indexed`](color::Color::to_indexed)/
 # [`Color::to_ansi`](color::Color::to_ansi) fall back to euclidean RGB cube-mapping instead of
 # failing to compile.
-indexed-quant = ["gem/libm"]
+#
+# This is a capability flag, not a backend: it only turns on `gem`'s `space` module, and needs
+# `std` or `libm` (below) enabled separately to actually supply that module's float math -- see
+# the `compile_error!` in `src/lib.rs` for what happens if neither is on.
+indexed-quant = ["gem/space"]
+# Uses `libm`'s software float implementation (`roundf`/`fmaf`/`sinf`/`cosf`/`powf`) for
+# `animate`'s easing curves and `blend-modes`' separable channel math, via this crate's own `math`
+# shim -- the `no_std` side of that split. Turns on `__float`. See `std` above for the alternative
+# that prefers the platform's own float intrinsics when available.
+libm = [
+    "__float",
+    "dep:libm",
+    "gem/libm",
+    "gem/libm-arch",
+    "alpha-blend?/libm",
+    "alpha-blend?/libm-arch",
+]
+# Alias for `libm`, matching `gem`'s and `alpha-blend`'s own `libm-arch` feature name so a reader
+# following their docs finds the name they expect. Already implied by `libm` above (which always
+# requests the `arch`-intrinsified `libm` dependency; see the `[dependencies.libm]` comment
+# below), so this exists purely for discoverability and never needs to be enabled on its own.
+libm-arch = ["libm"]
 # Adds `Serialize`/`Deserialize` impls for [`Color`], [`Style`], `Size`, and (via `ixy`)
 # `Pos`/`Rect`, so a config file can round-trip a saved camera position, window geometry, or theme
 # color.
@@ -48,16 +70,28 @@ indexed-quant = ["gem/libm"]
 # [`Color`] serializes through its `Display`/`FromStr` round trip (e.g. `"bright-red"`,
 # `"#ff8000"`) rather than a derived structural form, so hand-edited TOML/JSON stays legible.
 serde = ["dep:serde", "ixy/serde"]
-# Enables `gem/std` and `alpha-blend?/std`.
+# Enables `gem/std` and `alpha-blend?/std`, and uses `std`'s float intrinsics (via this crate's
+# `math` shim) instead of `libm`'s software implementation for `animate` and `blend-modes`. Turns
+# on `__float`.
 #
 # Disabling this feature (`--no-default-features`) builds this crate `no_std`.
-std = ["gem/std", "alpha-blend?/std"]
+std = ["__float", "gem/std", "alpha-blend?/std"]
 # Enables `testing`'s `TestHarness`, which drives an [`App`] against [`Headless`] for tests, with
 # synthetic input queuing and frame-settling helpers.
 #
 # Test-only surface, `no_std` + `alloc` compatible, off by default so it never ships in a release
 # build by accident.
 testing = []
+# Internal marker: some float backend (`std` or `libm`) is available. Turned on by `std` and
+# `libm` below; gates [`animate`] and this crate's own `math` shim. Never enable directly.
+__float = []
+# Internal: exposes this crate's `math` shim (std-or-libm float dispatch) to `retroglyph-widgets`
+# as `#[doc(hidden)] pub mod math`, so both crates share one dispatch point instead of each
+# vendoring their own. No stability guarantee; not meant to be enabled by anyone but
+# `retroglyph-widgets`. Deliberately does not imply `__float`: a lone `--features __math` build
+# has no `math` module at all, so this feature stays meaningful (and compiles) on its own rather
+# than silently pulling in a backend nobody asked for.
+__math = []
 
 [dependencies]
 # gem's pixel-format layer (`rgb`/`gray`/`alpha`/`channel`) needs no math backend, so this is
@@ -78,11 +112,20 @@ ixy = "0.7.0"
 # they need only the `derive` feature for `Style`/`Size`'s plain `#[derive(Serialize, Deserialize)]`
 # below -- no `alloc` feature, since nothing here deserializes into an owned `String`/`Vec`.
 serde = { version = "1", default-features = false, features = ["derive"], optional = true }
-# Pure-Rust sin/cos/pow for `animate`'s trig-based easing curves and its oscillator -- unlike
-# `gem`'s libm usage (internal to its own color-space math, not reusable here), this is a plain,
-# always-on dependency: no_std-compatible on its own, so no std/libm feature split is needed the
-# way `gem` needs one.
-libm = "0.2"
+# Pure-Rust sin/cos/round/pow for `animate`'s trig-based easing curves, its oscillator, and
+# `blend-modes`' separable channel math, via this crate's own `math` shim (see `src/math.rs`) --
+# the `no_std` side of the `std`/`libm` split those call sites need (see the `libm` feature
+# above).
+#
+# `default-features` is deliberately left on: `libm`'s `arch` feature is what lowers `fmaf`/`sqrtf`
+# to a single hardware instruction (`fmadd`/`fsqrt` on aarch64) instead of a software fallback,
+# and that's the fast path this crate's `libm` feature exists to guarantee. `gem` and
+# `alpha-blend` both set `default-features = false` here and re-add `arch` through their own
+# `libm-arch` feature, which means a consumer who enables `libm` but forgets `libm-arch` silently
+# gets the slow path on those two. Don't copy that asymmetry onto this dependency: making `arch`
+# unconditional here and `libm-arch` (above) a redundant alias means the fast path can't be lost
+# by omission, which is the whole point (retroglyph#886).
+libm = { version = "0.2", optional = true }
 grixy = { version = "0.7.0", features = ["alloc", "buffer"] }
 unicode-width = "0.2"
 bitflags = "2.4"
