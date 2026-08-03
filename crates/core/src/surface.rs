@@ -888,15 +888,19 @@ impl<'a> Surface<'a> {
     ///
     /// The starting column is computed with saturating arithmetic, so `text` wider than `rect`
     /// does not panic or underflow: it simply left-aligns and lets [`print`](Self::print) clip
-    /// the overflow, for every [`HAlign`](crate::layout::HAlign) (matching how
-    /// [`HAlign::Center`](crate::layout::HAlign::Center) itself saturates in
+    /// the overflow, for every [`HAlign`](crate::align::HAlign) (matching how
+    /// [`HAlign::Center`](crate::align::HAlign::Center) itself saturates in
     /// [`TextLayout`](crate::layout::TextLayout)).
+    ///
+    /// Not gated behind the `egc` feature: unlike `TextLayout`, this needs nothing from it, so
+    /// it's reachable from any crate that only measures with `unicode-width`, including
+    /// `retroglyph-widgets` without opting into `egc`.
     ///
     /// # Examples
     ///
     /// ```
     /// use retroglyph_core::backend::Headless;
-    /// use retroglyph_core::layout::HAlign;
+    /// use retroglyph_core::align::HAlign;
     /// use retroglyph_core::{Rect, Style, Terminal};
     ///
     /// let mut term = Terminal::new(Headless::new(6, 1));
@@ -908,26 +912,20 @@ impl<'a> Surface<'a> {
     /// // "hi" is 2 columns wide in a 6-column rect: (6 - 2) / 2 == 2 columns of left padding.
     /// assert_eq!(term.backend().format_view(), "··hi··\n");
     /// ```
-    #[cfg(feature = "egc")]
     pub fn print_aligned(
         &mut self,
         rect: Rect,
         text: &str,
-        align: crate::layout::HAlign,
+        align: crate::align::HAlign,
         style: Style,
     ) {
-        use crate::layout::HAlign;
         use unicode_width::UnicodeWidthStr;
 
         // A single line's display width is never anywhere near `u16::MAX` (see `print_line`'s
         // own use of this same cast for a single span).
         #[allow(clippy::cast_possible_truncation)]
         let text_width = UnicodeWidthStr::width(text) as u16;
-        let x_offset = match align {
-            HAlign::Left => 0,
-            HAlign::Center => rect.width().saturating_sub(text_width) / 2,
-            HAlign::Right => rect.width().saturating_sub(text_width),
-        };
+        let x_offset = align.offset(rect.width(), text_width);
         // `clip` treats `rect` as absolute (it intersects `self.clip`, itself absolute), but
         // `print` treats its `pos` as local to `self.area` (see `shift`). Compute the aligned
         // start column in `rect`'s absolute space, then translate it into `self.area`-local
@@ -2088,7 +2086,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "egc")]
     fn print_aligned_left_aligns_by_default() {
         let mut grid = Grid::new(8, 1);
         {
@@ -2096,7 +2093,7 @@ mod tests {
             surface.print_aligned(
                 Rect::new(0, 0, 8, 1),
                 "hi",
-                crate::layout::HAlign::Left,
+                crate::align::HAlign::Left,
                 Style::default(),
             );
         }
@@ -2107,7 +2104,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "egc")]
     fn print_aligned_centers_matching_text_layouts_own_saturating_formula() {
         let mut grid = Grid::new(6, 1);
         {
@@ -2115,18 +2111,17 @@ mod tests {
             surface.print_aligned(
                 Rect::new(0, 0, 6, 1),
                 "hi",
-                crate::layout::HAlign::Center,
+                crate::align::HAlign::Center,
                 Style::default(),
             );
         }
 
-        // (6 - 2) / 2 == 2 columns of left padding, matching `HAlign::Center` in `layout.rs`.
+        // (6 - 2) / 2 == 2 columns of left padding, matching `HAlign::Center` in `align.rs`.
         assert_eq!(grid[Pos::new(2, 0)].glyph(), 'h');
         assert_eq!(grid[Pos::new(3, 0)].glyph(), 'i');
     }
 
     #[test]
-    #[cfg(feature = "egc")]
     fn print_aligned_right_aligns_flush_to_the_rects_right_edge() {
         let mut grid = Grid::new(6, 1);
         {
@@ -2134,7 +2129,7 @@ mod tests {
             surface.print_aligned(
                 Rect::new(0, 0, 6, 1),
                 "hi",
-                crate::layout::HAlign::Right,
+                crate::align::HAlign::Right,
                 Style::default(),
             );
         }
@@ -2144,7 +2139,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "egc")]
     fn print_aligned_does_not_panic_or_underflow_on_text_wider_than_the_rect() {
         let mut grid = Grid::new(4, 1);
         {
@@ -2155,7 +2149,7 @@ mod tests {
             surface.print_aligned(
                 Rect::new(0, 0, 4, 1),
                 "hello",
-                crate::layout::HAlign::Center,
+                crate::align::HAlign::Center,
                 Style::default(),
             );
         }
@@ -2165,7 +2159,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "egc")]
     fn print_aligned_clips_to_this_surfaces_own_area_as_well_as_rect() {
         let mut grid = Grid::new(4, 1);
         {
@@ -2174,7 +2167,7 @@ mod tests {
             surface.print_aligned(
                 Rect::new(0, 0, 4, 1),
                 "hi",
-                crate::layout::HAlign::Right,
+                crate::align::HAlign::Right,
                 Style::default(),
             );
         }
@@ -2184,7 +2177,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "egc")]
     fn print_aligned_right_on_an_offset_surface_drops_the_text() {
         let mut grid = Grid::new(8, 1);
         {
@@ -2193,7 +2185,7 @@ mod tests {
             surface.print_aligned(
                 Rect::new(0, 0, 6, 1),
                 "hi",
-                crate::layout::HAlign::Right,
+                crate::align::HAlign::Right,
                 Style::default(),
             );
         }
@@ -2205,7 +2197,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "egc")]
     fn print_aligned_center_on_an_offset_surface_drops_the_text() {
         let mut grid = Grid::new(8, 1);
         {
@@ -2213,7 +2204,7 @@ mod tests {
             surface.print_aligned(
                 Rect::new(0, 0, 6, 1),
                 "hi",
-                crate::layout::HAlign::Center,
+                crate::align::HAlign::Center,
                 Style::default(),
             );
         }
