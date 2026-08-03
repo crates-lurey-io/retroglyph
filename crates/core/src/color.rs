@@ -4,6 +4,8 @@ use alloc::string::String;
 #[cfg(feature = "indexed-quant")]
 use gem::Mix as _;
 #[cfg(feature = "indexed-quant")]
+use gem::rgb::Rgb888;
+#[cfg(feature = "indexed-quant")]
 use gem::space::Srgb;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -242,28 +244,21 @@ fn cube_map_to_ansi(r: u8, g: u8, b: u8) -> AnsiColor {
     best
 }
 
-/// Squared euclidean distance between two colors in the Oklab perceptually-uniform
-/// color space.
-///
-/// Used instead of raw RGB distance because Oklab distance correlates far better with
-/// human perception of color difference (the same premise as CIEDE2000, without its
-/// extra complexity).
+/// Converts an 8-bit RGB channel triplet to `gem::space::Srgb`, the shared conversion behind
+/// every `Srgb::new(f32::from(r) / 255.0, ...)` call site in this module.
 #[cfg(feature = "indexed-quant")]
-fn oklab_distance_sq(a: gem::space::Oklab, b: gem::space::Oklab) -> f32 {
-    let dl = a.l - b.l;
-    let da = a.a - b.a;
-    let db = a.b - b.b;
-    db.mul_add(db, da.mul_add(da, dl * dl))
+fn rgb_to_srgb(r: u8, g: u8, b: u8) -> Srgb {
+    Srgb::new(
+        f32::from(r) / 255.0,
+        f32::from(g) / 255.0,
+        f32::from(b) / 255.0,
+    )
 }
 
 /// Converts an 8-bit RGB channel triplet to Oklab.
 #[cfg(feature = "indexed-quant")]
 fn rgb_to_oklab(r: u8, g: u8, b: u8) -> gem::space::Oklab {
-    gem::space::Oklab::from(Srgb::new(
-        f32::from(r) / 255.0,
-        f32::from(g) / 255.0,
-        f32::from(b) / 255.0,
-    ))
+    gem::space::Oklab::from(rgb_to_srgb(r, g, b))
 }
 
 /// Builds the 256-entry table of [`gem::space::Oklab`] values for the 256-color palette
@@ -350,7 +345,7 @@ fn perceptual_to_indexed(r: u8, g: u8, b: u8) -> u8 {
     let mut best_distance = f32::MAX;
     for index in 0u16..256 {
         let index = u8::try_from(index).unwrap_or(u8::MAX);
-        let distance = oklab_distance_sq(target, table[index as usize]);
+        let distance = target.distance_sq(table[index as usize]);
         if distance < best_distance {
             best_distance = distance;
             best_index = index;
@@ -368,7 +363,7 @@ fn perceptual_to_ansi(r: u8, g: u8, b: u8) -> AnsiColor {
     let mut best = AnsiColor::Black;
     let mut best_distance = f32::MAX;
     for (i, ansi) in ANSI_COLORS.iter().enumerate() {
-        let distance = oklab_distance_sq(target, table[i]);
+        let distance = target.distance_sq(table[i]);
         if distance < best_distance {
             best_distance = distance;
             best = *ansi;
@@ -558,32 +553,22 @@ impl Color {
     #[must_use]
     pub fn to_srgb(self) -> Option<Srgb> {
         match self {
-            Self::Rgb { r, g, b } => Some(Srgb::new(
-                f32::from(r) / 255.0,
-                f32::from(g) / 255.0,
-                f32::from(b) / 255.0,
-            )),
+            Self::Rgb { r, g, b } => Some(rgb_to_srgb(r, g, b)),
             _ => None,
         }
     }
 
     /// Constructs an `Rgb` variant from a `gem::space::Srgb` color.
     ///
-    /// Channels are clamped to `[0.0, 1.0]` before converting to `u8`.
+    /// Channels are clamped to `[0.0, 1.0]` and rounded to the nearest `u8` (ties away from
+    /// zero), via `gem::rgb::Rgb888`'s own `Srgb` conversion -- the same round-to-nearest rule
+    /// every other integer channel operation in this crate follows (see
+    /// `tests/rounding_conformance.rs`).
     #[cfg(feature = "indexed-quant")]
     #[must_use]
-    #[allow(
-        clippy::cast_possible_truncation,
-        clippy::cast_sign_loss,
-        clippy::use_self
-    )]
     pub fn from_srgb(srgb: Srgb) -> Self {
-        let clamped = srgb.clamp();
-        Self::Rgb {
-            r: (clamped.r * 255.0).round() as u8,
-            g: (clamped.g * 255.0).round() as u8,
-            b: (clamped.b * 255.0).round() as u8,
-        }
+        let (r, g, b) = Rgb888::from(srgb).to_rgb();
+        Self::Rgb { r, g, b }
     }
 
     /// Linearly interpolates between two colors, always returning a concrete `Rgb` result.
@@ -597,17 +582,23 @@ impl Color {
     pub fn lerp(a: Self, b: Self, t: f32) -> Self {
         let (r1, g1, b1) = a.resolve_rgb((0, 0, 0));
         let (r2, g2, b2) = b.resolve_rgb((255, 255, 255));
-        let a_srgb = Srgb::new(
-            f32::from(r1) / 255.0,
-            f32::from(g1) / 255.0,
-            f32::from(b1) / 255.0,
-        );
-        let b_srgb = Srgb::new(
-            f32::from(r2) / 255.0,
-            f32::from(g2) / 255.0,
-            f32::from(b2) / 255.0,
-        );
+        let a_srgb = rgb_to_srgb(r1, g1, b1);
+        let b_srgb = rgb_to_srgb(r2, g2, b2);
         Self::from_srgb(a_srgb.mix(b_srgb, t))
+    }
+
+    /// Applies `f` to this color's HSL representation and converts the result back to `Rgb`.
+    ///
+    /// Shared by [`Color::lighten`], [`Color::darken`], [`Color::saturate`],
+    /// [`Color::desaturate`], and [`Color::complement`], which differ only in which
+    /// `gem::space::Hsl` method `f` calls. Non-`Rgb` variants are resolved to `(r, g, b)` via
+    /// [`Color::resolve_rgb`] before the transform is applied, rather than being returned
+    /// unchanged. [`Color::Default`] has no intrinsic RGB value, so it resolves to `(0, 0, 0)`.
+    #[cfg(feature = "indexed-quant")]
+    fn map_hsl(self, f: impl FnOnce(gem::space::Hsl) -> gem::space::Hsl) -> Self {
+        let (r, g, b) = self.resolve_rgb((0, 0, 0));
+        let hsl = gem::space::Hsl::from(rgb_to_srgb(r, g, b));
+        Self::from_srgb(Srgb::from(f(hsl)))
     }
 
     /// Lightens a color by `amount` (0.0 = no change, 1.0 = white).
@@ -618,88 +609,51 @@ impl Color {
     #[cfg(feature = "indexed-quant")]
     #[must_use]
     pub fn lighten(self, amount: f32) -> Self {
-        fn inner(r: u8, g: u8, b: u8, amount: f32) -> Color {
-            let srgb = Srgb::new(
-                f32::from(r) / 255.0,
-                f32::from(g) / 255.0,
-                f32::from(b) / 255.0,
-            );
-            Color::from_srgb(Srgb::from(gem::space::Hsl::from(srgb).lighten(amount)))
-        }
-        let (r, g, b) = self.resolve_rgb((0, 0, 0));
-        inner(r, g, b, amount)
+        self.map_hsl(|hsl| hsl.lighten(amount))
     }
 
     /// Darkens a color by `amount` (0.0 = no change, 1.0 = black).
     ///
-    /// See [`Color::lighten`] for how non-`Rgb` variants are resolved before the transform.
+    /// Non-`Rgb` variants are resolved to `(r, g, b)` via [`Color::resolve_rgb`] before the
+    /// transform is applied, rather than being returned unchanged. [`Color::Default`] has no
+    /// intrinsic RGB value, so it resolves to `(0, 0, 0)`.
     #[cfg(feature = "indexed-quant")]
     #[must_use]
     pub fn darken(self, amount: f32) -> Self {
-        fn inner(r: u8, g: u8, b: u8, amount: f32) -> Color {
-            let srgb = Srgb::new(
-                f32::from(r) / 255.0,
-                f32::from(g) / 255.0,
-                f32::from(b) / 255.0,
-            );
-            Color::from_srgb(Srgb::from(gem::space::Hsl::from(srgb).darken(amount)))
-        }
-        let (r, g, b) = self.resolve_rgb((0, 0, 0));
-        inner(r, g, b, amount)
+        self.map_hsl(|hsl| hsl.darken(amount))
     }
 
     /// Increases saturation of a color by `amount` (0.0–1.0).
     ///
-    /// See [`Color::lighten`] for how non-`Rgb` variants are resolved before the transform.
+    /// Non-`Rgb` variants are resolved to `(r, g, b)` via [`Color::resolve_rgb`] before the
+    /// transform is applied, rather than being returned unchanged. [`Color::Default`] has no
+    /// intrinsic RGB value, so it resolves to `(0, 0, 0)`.
     #[cfg(feature = "indexed-quant")]
     #[must_use]
     pub fn saturate(self, amount: f32) -> Self {
-        fn inner(r: u8, g: u8, b: u8, amount: f32) -> Color {
-            let srgb = Srgb::new(
-                f32::from(r) / 255.0,
-                f32::from(g) / 255.0,
-                f32::from(b) / 255.0,
-            );
-            Color::from_srgb(Srgb::from(gem::space::Hsl::from(srgb).saturate(amount)))
-        }
-        let (r, g, b) = self.resolve_rgb((0, 0, 0));
-        inner(r, g, b, amount)
+        self.map_hsl(|hsl| hsl.saturate(amount))
     }
 
     /// Decreases saturation of a color by `amount` (0.0–1.0).
     ///
-    /// See [`Color::lighten`] for how non-`Rgb` variants are resolved before the transform.
+    /// Non-`Rgb` variants are resolved to `(r, g, b)` via [`Color::resolve_rgb`] before the
+    /// transform is applied, rather than being returned unchanged. [`Color::Default`] has no
+    /// intrinsic RGB value, so it resolves to `(0, 0, 0)`.
     #[cfg(feature = "indexed-quant")]
     #[must_use]
     pub fn desaturate(self, amount: f32) -> Self {
-        fn inner(r: u8, g: u8, b: u8, amount: f32) -> Color {
-            let srgb = Srgb::new(
-                f32::from(r) / 255.0,
-                f32::from(g) / 255.0,
-                f32::from(b) / 255.0,
-            );
-            Color::from_srgb(Srgb::from(gem::space::Hsl::from(srgb).desaturate(amount)))
-        }
-        let (r, g, b) = self.resolve_rgb((0, 0, 0));
-        inner(r, g, b, amount)
+        self.map_hsl(|hsl| hsl.desaturate(amount))
     }
 
     /// Returns the complementary color (hue shifted by 180 degrees).
     ///
-    /// See [`Color::lighten`] for how non-`Rgb` variants are resolved before the transform.
+    /// Non-`Rgb` variants are resolved to `(r, g, b)` via [`Color::resolve_rgb`] before the
+    /// transform is applied, rather than being returned unchanged. [`Color::Default`] has no
+    /// intrinsic RGB value, so it resolves to `(0, 0, 0)`.
     #[cfg(feature = "indexed-quant")]
     #[must_use]
     pub fn complement(self) -> Self {
-        fn inner(r: u8, g: u8, b: u8) -> Color {
-            let srgb = Srgb::new(
-                f32::from(r) / 255.0,
-                f32::from(g) / 255.0,
-                f32::from(b) / 255.0,
-            );
-            Color::from_srgb(Srgb::from(gem::space::Hsl::from(srgb).complement()))
-        }
-        let (r, g, b) = self.resolve_rgb((0, 0, 0));
-        inner(r, g, b)
+        self.map_hsl(gem::space::Hsl::complement)
     }
 
     /// Quantizes an RGB color to the nearest entry in the standard 256-color palette.

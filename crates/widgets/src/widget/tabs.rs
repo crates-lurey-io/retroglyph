@@ -1,5 +1,5 @@
 //! [`Tabs`]: a horizontal strip of tab labels with a highlighted selected index.
-use retroglyph_core::text::width as measured_width;
+use retroglyph_core::text::truncate_measured;
 use retroglyph_core::{Color, Rect, Style};
 
 use super::{InteractiveWidget, Widget};
@@ -9,7 +9,7 @@ use crate::Sense;
 use crate::Surface;
 use crate::Theme;
 use crate::draw::fill_rect;
-use crate::text::{draw_clipped, truncate as truncate_to_cols};
+use crate::text::draw_clipped;
 
 /// A horizontal strip of `titles` with the tab at `selected` highlighted.
 ///
@@ -155,9 +155,9 @@ impl Tabs<'_> {
             if x >= area.right() {
                 break;
             }
-            let avail = (area.right() - x) as usize;
-            let text = truncate_to_cols(title, avail);
-            let text_width = measured_width(text);
+            // x < area.right() per the break check above, so this subtraction fits a u16.
+            let avail = area.right() - x;
+            let (_text, text_width) = truncate_measured(title, avail);
             columns.push((index, x, text_width));
             x = x.saturating_add(text_width);
 

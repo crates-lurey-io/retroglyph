@@ -3,7 +3,7 @@
 //! For word-wrapping multi-line text, see `retroglyph_core::layout::TextLayout`
 //! (behind the `egc` feature) rather than reimplementing wrapping here: it
 //! already handles grapheme clusters, hard newlines, and per-span styling.
-use retroglyph_core::text::{split_at_width, width as measured_width};
+use retroglyph_core::text::{split_at_width, truncate_measured};
 use retroglyph_core::{Pos, Style};
 
 use crate::{Align, Surface};
@@ -43,13 +43,13 @@ pub fn truncate_owned(s: &str, max_cols: impl Into<usize>) -> String {
 /// Truncate `text` to `width` columns, align it within those columns per `align`, and print it
 /// into `surface` at `at`. Returns the printed text's display width in columns.
 ///
-/// This is the measure -> truncate -> align -> print sequence every single-line widget in this
-/// crate needs, collapsed to one call: [`truncate`] to fit `width`, re-measure what survived (a
-/// wide character can make the truncated text narrower than `width`, never wider), then
-/// [`Align::offset`] to place it before printing. Reach for this instead of re-deriving the
-/// sequence by hand, the same way [`fill_rect`](crate::fill_rect) is reached for instead of a
-/// hand-rolled fill loop; see [`Text`](crate::Text)'s and [`PrintLine`](crate::PrintLine)'s own
-/// `render` for the base case.
+/// This is the truncate -> align -> print sequence every single-line widget in this crate needs,
+/// collapsed to one call: [`truncate_measured`] to fit `width` and get its own display width back
+/// in the same pass (a wide character can make the truncated text narrower than `width`, never
+/// wider, so that width isn't just `width` itself), then [`Align::offset`] to place it before
+/// printing. Reach for this instead of re-deriving the sequence by hand, the same way
+/// [`fill_rect`](crate::fill_rect) is reached for instead of a hand-rolled fill loop; see
+/// [`Text`](crate::Text)'s and [`PrintLine`](crate::PrintLine)'s own `render` for the base case.
 #[must_use]
 pub fn draw_clipped(
     surface: &mut Surface<'_>,
@@ -60,8 +60,7 @@ pub fn draw_clipped(
     style: Style,
 ) -> u16 {
     let at = at.into();
-    let clipped = truncate(text, width);
-    let clipped_width = measured_width(clipped);
+    let (clipped, clipped_width) = truncate_measured(text, width);
     let x = align.offset(width, clipped_width);
     surface.print((at.x.saturating_add(x), at.y), clipped, style);
     clipped_width

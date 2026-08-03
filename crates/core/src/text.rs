@@ -41,8 +41,11 @@ pub fn width_usize(s: &str) -> usize {
 
 /// The number of terminal cells a single character occupies.
 ///
-/// Returns `0` for combining marks and most control characters, `1` for
-/// most characters, and `2` for wide characters (CJK, most emoji).
+/// Returns `1` for most characters, including control characters (`unicode-width` reports no
+/// width for these; `1` matches what [`Surface`](crate::Surface) actually draws and what
+/// [`Tile::width`](crate::Tile::width) tells the terminal to advance by, so this function agrees
+/// with the rest of the crate instead of undercounting), `2` for wide characters (CJK, most
+/// emoji), and `0` for combining marks (these genuinely occupy no column of their own).
 ///
 /// # Examples
 ///
@@ -51,11 +54,13 @@ pub fn width_usize(s: &str) -> usize {
 ///
 /// assert_eq!(char_width('a'), 1);
 /// assert_eq!(char_width('中'), 2);
+/// assert_eq!(char_width('\u{0301}'), 0); // combining acute accent
+/// assert_eq!(char_width('\u{7}'), 1); // BEL: a control character, not a combining mark
 /// ```
 #[must_use]
 pub fn char_width(c: char) -> u16 {
     #[allow(clippy::cast_possible_truncation)] // unicode-width never returns > 2
-    let w = c.width().unwrap_or(0) as u16;
+    let w = c.width().unwrap_or(1) as u16;
     w
 }
 
@@ -98,6 +103,16 @@ const CLUSTER_LOOKBACK: usize = 32;
 /// ```
 #[must_use]
 pub fn split_at_width(s: &str, max_cols: u16) -> (&str, &str) {
+    let (end, _cols) = split_at_width_indexed(s, max_cols);
+    s.split_at(end)
+}
+
+/// The shared scan behind [`split_at_width`] and [`truncate_measured`]: walks `s` once and
+/// returns the byte index where its display width reaches `max_cols`, alongside the prefix's own
+/// display width up to that index (always `<= max_cols`). Both callers need this same walk;
+/// [`truncate_measured`] hands the `cols` half back to its caller instead of re-measuring the
+/// prefix with a second `width` pass over it.
+fn split_at_width_indexed(s: &str, max_cols: u16) -> (usize, usize) {
     let max_cols = usize::from(max_cols);
     let mut end = 0usize;
     let mut cols = 0usize;
@@ -117,7 +132,32 @@ pub fn split_at_width(s: &str, max_cols: u16) -> (&str, &str) {
         cols += delta;
         end = candidate_end;
     }
-    s.split_at(end)
+    (end, cols)
+}
+
+/// Splits `s` at the byte index where its display width reaches `max_cols`, returning the
+/// prefix's own measured width alongside it.
+///
+/// Equivalent to `let (prefix, _) = split_at_width(s, max_cols); (prefix, width(prefix))`, except
+/// the width is read back from [`split_at_width`]'s own internal accounting instead of
+/// re-measuring `prefix` with a second pass over it: reach for this instead of that pair whenever
+/// the caller needs the truncated width right after truncating (which is every truncate call in
+/// this crate's own callers), rather than only the truncated text.
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::text::truncate_measured;
+///
+/// assert_eq!(truncate_measured("hello world", 5), ("hello", 5));
+/// assert_eq!(truncate_measured("a\u{4e2d}b", 2), ("a", 1)); // "\u{4e2d}" (CJK) doesn't fit
+/// ```
+#[must_use]
+pub fn truncate_measured(s: &str, max_cols: u16) -> (&str, u16) {
+    let (end, cols) = split_at_width_indexed(s, max_cols);
+    #[allow(clippy::cast_possible_truncation)] // cols <= max_cols, a u16
+    let cols = cols as u16;
+    (&s[..end], cols)
 }
 
 /// A string with an associated [`Style`].
@@ -277,6 +317,8 @@ macro_rules! spans {
 
 #[cfg(test)]
 mod tests {
+    use proptest::prelude::*;
+
     use super::*;
     use crate::color::Color;
 
@@ -303,6 +345,16 @@ mod tests {
         assert_eq!(char_width('a'), 1);
         assert_eq!(char_width('中'), 2);
         assert_eq!(char_width('\u{0301}'), 0); // combining acute accent
+    }
+
+    #[test]
+    fn char_width_treats_control_characters_as_one_column() {
+        // `unicode-width` reports no width for control characters (`None`), but `Surface` and
+        // `Tile::width` both already advance the cursor by 1 column when one is drawn; `char_width`
+        // agrees with them instead of the combining-mark case above.
+        assert_eq!(char_width('\u{7}'), 1); // BEL
+        assert_eq!(char_width('\n'), 1);
+        assert_eq!(char_width('\t'), 1);
     }
 
     #[test]
@@ -336,6 +388,33 @@ mod tests {
         // budget intact, even though the per-char widths sum to 2 + 2 = 4.
         let thumbs = "\u{1F44D}\u{1F3FD}";
         assert_eq!(split_at_width(thumbs, width(thumbs)), (thumbs, ""));
+    }
+
+    #[test]
+    fn truncate_measured_matches_split_at_width_plus_a_separate_measurement() {
+        assert_eq!(truncate_measured("hello world", 5), ("hello", 5));
+        assert_eq!(truncate_measured("hi", 10), ("hi", 2));
+        assert_eq!(truncate_measured("aあb", 2), ("a", 1));
+        assert_eq!(truncate_measured("aあb", 3), ("aあ", 3));
+    }
+
+    proptest! {
+        /// `split_at_width`'s own documented postcondition: the returned prefix's display width
+        /// never exceeds the requested budget, across arbitrary input strings and budgets (not
+        /// just the handful of hand-picked cases above).
+        #[test]
+        fn split_at_width_prefix_never_exceeds_max_cols(s in ".*", max_cols in 0u16..64) {
+            let (prefix, _rest) = split_at_width(&s, max_cols);
+            prop_assert!(width(prefix) <= max_cols);
+        }
+
+        /// [`truncate_measured`] reports the same width its returned prefix actually measures at,
+        /// i.e. it isn't taking a shortcut that quietly drifts from a real `width` call.
+        #[test]
+        fn truncate_measured_width_matches_a_direct_measurement(s in ".*", max_cols in 0u16..64) {
+            let (prefix, reported) = truncate_measured(&s, max_cols);
+            prop_assert_eq!(reported, width(prefix));
+        }
     }
 
     #[test]

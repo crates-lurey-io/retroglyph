@@ -593,6 +593,33 @@ impl<'a> Surface<'a> {
         self.clip.contains(gx, gy).then_some((gx, gy))
     }
 
+    /// The whole-rect counterpart to [`shift`](Self::shift): translates a local `rect` (same
+    /// convention as `fill_rect`/`clear_region`, and as `shift`'s own `x`/`y`) into the absolute
+    /// grid rect it covers under this surface's own clip, or `None` if none of it lands.
+    ///
+    /// Only handles `origin_offset == (0, 0)` (true of every surface except one produced by
+    /// [`clip_translate`](Self::clip_translate)): with any other offset `shift` still refuses a
+    /// negative post-offset coordinate per cell, which a single rect-wide translation can't
+    /// reproduce without re-deriving per-cell bounds, so callers fall back to `shift` itself
+    /// instead.
+    fn local_rect_to_absolute(&self, rect: Rect) -> Option<Rect> {
+        if self.origin_offset != (0, 0) {
+            return None;
+        }
+        let local = rect.intersect(Rect::new(0, 0, self.area.width(), self.area.height()));
+        if local.is_empty() {
+            return None;
+        }
+        let abs = Rect::new(
+            self.area.left() + local.left(),
+            self.area.top() + local.top(),
+            local.width(),
+            local.height(),
+        )
+        .intersect(self.clip);
+        (!abs.is_empty()).then_some(abs)
+    }
+
     /// Applies this surface's tint to the cell just written at `(x, y)`.
     ///
     /// Called after a write rather than as part of one, because a glyph write drops whatever
@@ -860,7 +887,9 @@ impl<'a> Surface<'a> {
         use unicode_width::UnicodeWidthStr;
 
         let pos = pos.into();
-        let right = self.clip.right();
+        // `cx` is area-local (it starts at `pos.x`, which `shift()` treats as local), so the
+        // span-skip threshold must be too: translate `clip.right()` out of absolute grid space.
+        let right = self.clip.right().saturating_sub(self.area.left());
         let mut cx = pos.x;
         for span in &line.spans {
             if cx >= right {
@@ -886,15 +915,19 @@ impl<'a> Surface<'a> {
     ///
     /// The starting column is computed with saturating arithmetic, so `text` wider than `rect`
     /// does not panic or underflow: it simply left-aligns and lets [`print`](Self::print) clip
-    /// the overflow, for every [`HAlign`](crate::layout::HAlign) (matching how
-    /// [`HAlign::Center`](crate::layout::HAlign::Center) itself saturates in
+    /// the overflow, for every [`HAlign`](crate::align::HAlign) (matching how
+    /// [`HAlign::Center`](crate::align::HAlign::Center) itself saturates in
     /// [`TextLayout`](crate::layout::TextLayout)).
+    ///
+    /// Not gated behind the `egc` feature: unlike `TextLayout`, this needs nothing from it, so
+    /// it's reachable from any crate that only measures with `unicode-width`, including
+    /// `retroglyph-widgets` without opting into `egc`.
     ///
     /// # Examples
     ///
     /// ```
     /// use retroglyph_core::backend::Headless;
-    /// use retroglyph_core::layout::HAlign;
+    /// use retroglyph_core::align::HAlign;
     /// use retroglyph_core::{Rect, Style, Terminal};
     ///
     /// let mut term = Terminal::new(Headless::new(6, 1));
@@ -906,26 +939,20 @@ impl<'a> Surface<'a> {
     /// // "hi" is 2 columns wide in a 6-column rect: (6 - 2) / 2 == 2 columns of left padding.
     /// assert_eq!(term.backend().format_view(), "··hi··\n");
     /// ```
-    #[cfg(feature = "egc")]
     pub fn print_aligned(
         &mut self,
         rect: Rect,
         text: &str,
-        align: crate::layout::HAlign,
+        align: crate::align::HAlign,
         style: Style,
     ) {
-        use crate::layout::HAlign;
         use unicode_width::UnicodeWidthStr;
 
         // A single line's display width is never anywhere near `u16::MAX` (see `print_line`'s
         // own use of this same cast for a single span).
         #[allow(clippy::cast_possible_truncation)]
         let text_width = UnicodeWidthStr::width(text) as u16;
-        let x_offset = match align {
-            HAlign::Left => 0,
-            HAlign::Center => rect.width().saturating_sub(text_width) / 2,
-            HAlign::Right => rect.width().saturating_sub(text_width),
-        };
+        let x_offset = align.offset(rect.width(), text_width);
         // `clip` treats `rect` as absolute (it intersects `self.clip`, itself absolute), but
         // `print` treats its `pos` as local to `self.area` (see `shift`). Compute the aligned
         // start column in `rect`'s absolute space, then translate it into `self.area`-local
@@ -958,11 +985,117 @@ impl<'a> Surface<'a> {
     /// assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
     /// ```
     pub fn fill_rect(&mut self, rect: Rect, ch: char, style: Style) {
+        // The batch path below writes a plain `Tile::new(ch, style)` per cell, which matches
+        // `put`'s own per-cell write only when there's no tint to apply and (under `egc`) `ch`
+        // is a single-column glyph, so `put`'s wide-char spacer bookkeeping never triggers.
+        // Anything else (tinted surface, zero/double-width glyph) falls back to the per-cell
+        // loop, unchanged from before this method had a fast path.
+        #[cfg(feature = "egc")]
+        let single_width = {
+            use unicode_width::UnicodeWidthChar;
+            UnicodeWidthChar::width(ch) == Some(1)
+        };
+        #[cfg(not(feature = "egc"))]
+        let single_width = true;
+
+        if self.tint == Tint::None
+            && single_width
+            && let Some(abs) = self.local_rect_to_absolute(rect)
+        {
+            self.grid.fill_region(self.layer, abs, Tile::new(ch, style));
+            return;
+        }
+
         for y in rect.top()..rect.bottom() {
             for x in rect.left()..rect.right() {
                 self.put((x, y), ch, style);
             }
         }
+    }
+
+    /// Stamps `grid`'s layer 0 onto this surface's own layer, with its top-left cell at `(x, y)`
+    /// (local to this surface's area, matching [`put`](Self::put)'s convention), clipped to this
+    /// surface's clip.
+    ///
+    /// Always reads `grid`'s layer 0, regardless of which layer this surface itself is currently
+    /// writing to: `grid` is typically a standalone buffer composed elsewhere (e.g.
+    /// `BoxStyle::render`'s output, or `retroglyph-widgets`' `join_h`/`join_v`), and per their own
+    /// docs those only ever populate layer 0. Reading this surface's own layer off `grid` instead
+    /// (what [`Grid::blit`]'s single `layer` parameter would do if called directly) finds nothing
+    /// there whenever this surface isn't on layer 0, and the copy silently does nothing.
+    ///
+    /// Unlike a single-cell [`put`](Self::put), a write that starts outside this surface's clip is
+    /// not necessarily dropped whole: the part of `grid` that does land inside the clip is copied,
+    /// matching [`fill_rect`](Self::fill_rect)'s per-cell clipping rather than
+    /// [`put_span`](Self::put_span)'s all-or-nothing footprint check, since `grid` is arbitrary
+    /// composed content rather than one indivisible sprite.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_core::{Grid, Layer, Rect, Style, Surface, Tile};
+    ///
+    /// let mut src = Grid::new(2, 2);
+    /// src.put_tile(0, (0, 0), Tile::new('x', Style::default()));
+    ///
+    /// let mut dst = Grid::new(4, 4);
+    /// let mut surface = Surface::new(&mut dst, Rect::new(0, 0, 4, 4), Layer::World.as_u8());
+    ///
+    /// // `surface` is on the overlay tier; `src` only ever has layer 0, but `blit` reads that
+    /// // layer regardless, so the copy still lands (unlike `Grid::blit(surface.layer(), ...)`).
+    /// surface.on_tier(Layer::Overlay).blit(&src, 1, 1);
+    ///
+    /// assert_eq!(dst.tile(Layer::Overlay.as_u8(), (1, 1)).map(Tile::glyph), Some('x'));
+    /// ```
+    pub fn blit(&mut self, grid: &Grid, x: u16, y: u16) {
+        let w = grid.width();
+        let h = grid.height();
+        if w == 0 || h == 0 {
+            return;
+        }
+
+        // Local `(x, y)` shifted by this surface's translate offset, same subtraction `shift`
+        // does for a single cell, but a footprint that starts left of/above the origin crops its
+        // near edge instead of being dropped whole (there is no single `(x, y)` for `shift` to
+        // reject: only part of the footprint may be off-screen).
+        let sx = i64::from(x) - i64::from(self.origin_offset.0);
+        let sy = i64::from(y) - i64::from(self.origin_offset.1);
+        let crop_left = u16::try_from(sx.min(0).unsigned_abs()).unwrap_or(u16::MAX);
+        let crop_top = u16::try_from(sy.min(0).unsigned_abs()).unwrap_or(u16::MAX);
+        if crop_left >= w || crop_top >= h {
+            return;
+        }
+        let Ok(local_x) = u16::try_from(sx.max(0)) else {
+            return;
+        };
+        let Ok(local_y) = u16::try_from(sy.max(0)) else {
+            return;
+        };
+
+        let abs_x = self.area.left().saturating_add(local_x);
+        let abs_y = self.area.top().saturating_add(local_y);
+        let visible_w = (w - crop_left).min(u16::MAX - abs_x);
+        let visible_h = (h - crop_top).min(u16::MAX - abs_y);
+
+        let dst_rect = Rect::new(abs_x, abs_y, visible_w, visible_h).intersect(self.clip);
+        if dst_rect.is_empty() {
+            return;
+        }
+
+        let src_rect = Rect::new(
+            crop_left + (dst_rect.left() - abs_x),
+            crop_top + (dst_rect.top() - abs_y),
+            dst_rect.width(),
+            dst_rect.height(),
+        );
+        self.grid.blit_cross_layer(
+            self.layer,
+            grid,
+            0,
+            src_rect,
+            dst_rect.left(),
+            dst_rect.top(),
+        );
     }
 
     /// Writes a multi-cell span at `pos` on this surface's layer in `style`: one piece of
@@ -1147,11 +1280,7 @@ impl<'a> Surface<'a> {
     /// [`Tile::default`].
     pub fn clear(&mut self) {
         let region = self.area.intersect(self.clip);
-        for y in region.top()..region.bottom() {
-            for x in region.left()..region.right() {
-                self.grid.put_tile(self.layer, (x, y), Tile::default());
-            }
-        }
+        self.grid.fill_region(self.layer, region, Tile::default());
     }
 
     /// Clears `rect` (clipped to this surface's own clip, on its own layer) back to
@@ -1173,6 +1302,11 @@ impl<'a> Surface<'a> {
     /// assert_eq!(grid[Pos::new(1, 1)].glyph(), '#');
     /// ```
     pub fn clear_region(&mut self, rect: Rect) {
+        if let Some(abs) = self.local_rect_to_absolute(rect) {
+            self.grid.fill_region(self.layer, abs, Tile::default());
+            return;
+        }
+
         for y in rect.top()..rect.bottom() {
             for x in rect.left()..rect.right() {
                 if let Some((x, y)) = self.shift(x, y) {
@@ -1292,6 +1426,139 @@ mod tests {
 
         assert_eq!(grid_origin[Pos::new(0, 0)].glyph(), 'X');
         assert_eq!(grid_offset[Pos::new(3, 3)].glyph(), 'X');
+    }
+
+    #[test]
+    fn blit_reads_the_sources_layer_0_even_when_this_surface_is_on_a_different_layer() {
+        // The retroglyph#824 regression: `src` (a standalone, layer-0-only `Grid`, like
+        // `BoxStyle::render`'s output) must still land when the destination surface is on a
+        // layer other than 0.
+        let mut src = Grid::new(2, 2);
+        src.put_tile(0, (0, 0), Tile::new('x', Style::default()));
+
+        let mut dst = Grid::new(4, 4);
+        let mut surface = Surface::new(&mut dst, Rect::new(0, 0, 4, 4), 0);
+        surface.on_layer(3).blit(&src, 1, 1);
+
+        assert_eq!(dst.tile(3, (1, 1)).map(Tile::glyph), Some('x'));
+        // Never touched layer 0 (always allocated, but untouched cells stay their default).
+        assert_eq!(dst.tile(0, (1, 1)).map(Tile::glyph), Some(' '));
+    }
+
+    #[test]
+    fn blit_stamps_a_grid_at_a_local_offset() {
+        let mut src = Grid::new(2, 2);
+        src.put_tile(0, (0, 0), Tile::new('x', Style::default()));
+        src.put_tile(0, (1, 1), Tile::new('y', Style::default()));
+
+        let mut dst = Grid::new(5, 5);
+        screen(&mut dst).blit(&src, 2, 1);
+
+        assert_eq!(dst[Pos::new(2, 1)].glyph(), 'x');
+        assert_eq!(dst[Pos::new(3, 2)].glyph(), 'y');
+        // Untouched cells stay whatever the destination started with.
+        assert_eq!(dst[Pos::new(0, 0)].glyph(), ' ');
+    }
+
+    #[test]
+    fn blit_clips_to_this_surfaces_clip_instead_of_skipping_the_whole_call() {
+        let mut src = Grid::new(3, 3);
+        for y in 0..3 {
+            for x in 0..3 {
+                src.put_tile(0, (x, y), Tile::new('#', Style::default()));
+            }
+        }
+
+        let mut dst = Grid::new(5, 5);
+        {
+            let mut surface = screen(&mut dst);
+            // Clip to a 2x2 window starting at (1, 1): only the top-left quadrant of `src`'s
+            // footprint at (0, 0) is visible.
+            surface.clip(Rect::new(1, 1, 2, 2)).blit(&src, 0, 0);
+        }
+
+        assert_eq!(dst[Pos::new(1, 1)].glyph(), '#');
+        assert_eq!(dst[Pos::new(2, 2)].glyph(), '#');
+        // Outside the clip: never written, even though it's inside `src`'s own footprint.
+        assert_eq!(dst[Pos::new(2, 0)].glyph(), ' ');
+        assert_eq!(dst[Pos::new(0, 2)].glyph(), ' ');
+    }
+
+    #[test]
+    fn blit_is_a_no_op_for_a_zero_sized_grid() {
+        let src = Grid::new(1, 0);
+        let mut dst = Grid::new(4, 4);
+        screen(&mut dst).blit(&src, 0, 0);
+
+        assert_eq!(dst[Pos::new(0, 0)].glyph(), ' ');
+    }
+
+    #[test]
+    fn blit_is_a_no_op_when_the_whole_footprint_is_cropped_before_the_translated_origin() {
+        let mut src = Grid::new(2, 2);
+        src.put_tile(0, (0, 0), Tile::new('x', Style::default()));
+
+        let mut dst = Grid::new(4, 4);
+        {
+            let mut surface = screen(&mut dst);
+            // Translating by +100 columns shifts `(0, 0)` to local `-100`: the whole 2-wide
+            // footprint falls left of the origin, so `crop_left` (100) reaches past `w` (2).
+            let mut view = surface.translate((100, 0));
+            view.blit(&src, 0, 0);
+        }
+
+        assert_eq!(dst[Pos::new(0, 0)].glyph(), ' ');
+    }
+
+    #[test]
+    fn blit_is_a_no_op_when_the_shifted_x_origin_overflows_u16() {
+        let mut src = Grid::new(2, 2);
+        src.put_tile(0, (0, 0), Tile::new('x', Style::default()));
+
+        let mut dst = Grid::new(4, 4);
+        {
+            let mut surface = screen(&mut dst);
+            // Translating by -100_000 pushes the shifted local x past `u16::MAX`, which
+            // `u16::try_from` refuses (distinct from the ordinary negative-crop path above).
+            let mut view = surface.translate((-100_000, 0));
+            view.blit(&src, 0, 0);
+        }
+
+        assert_eq!(dst[Pos::new(0, 0)].glyph(), ' ');
+    }
+
+    #[test]
+    fn blit_is_a_no_op_when_the_shifted_y_origin_overflows_u16() {
+        let mut src = Grid::new(2, 2);
+        src.put_tile(0, (0, 0), Tile::new('x', Style::default()));
+
+        let mut dst = Grid::new(4, 4);
+        {
+            let mut surface = screen(&mut dst);
+            // Same as the x-overflow case above, but on the y axis, which `blit` checks
+            // separately (only after the x shift already succeeded).
+            let mut view = surface.translate((0, -100_000));
+            view.blit(&src, 0, 0);
+        }
+
+        assert_eq!(dst[Pos::new(0, 0)].glyph(), ' ');
+    }
+
+    #[test]
+    fn blit_is_a_no_op_when_the_destination_footprint_misses_the_clip_entirely() {
+        let mut src = Grid::new(2, 2);
+        src.put_tile(0, (0, 0), Tile::new('x', Style::default()));
+
+        let mut dst = Grid::new(5, 5);
+        {
+            let mut surface = screen(&mut dst);
+            // Clipped to the top-left cell only; the blit lands at (3, 3), whose footprint
+            // doesn't overlap the clip at all (unlike the partial-overlap case tested above).
+            let mut clipped = surface.clip(Rect::new(0, 0, 1, 1));
+            clipped.blit(&src, 3, 3);
+        }
+
+        assert_eq!(dst[Pos::new(3, 3)].glyph(), ' ');
     }
 
     #[test]
@@ -1421,6 +1688,104 @@ mod tests {
         screen(&mut grid).put((1, 1), '@', Style::default());
 
         assert_eq!(grid.tint(0, 1, 1), Tint::None);
+    }
+
+    /// `fill_rect`'s batch fast path only applies when the surface is untinted: a tinted surface
+    /// must fall back to the per-cell loop, or every cell `fill_rect` touches would silently lose
+    /// its tint.
+    #[test]
+    fn with_tint_applies_to_every_cell_fill_rect_touches() {
+        let mut grid = Grid::new(4, 4);
+        {
+            let mut surface = screen(&mut grid);
+            surface.with_tint(Tint::multiply(128, 64, 32)).fill_rect(
+                Rect::new(1, 1, 2, 2),
+                '#',
+                Style::default(),
+            );
+        }
+
+        for (x, y) in [(1, 1), (2, 1), (1, 2), (2, 2)] {
+            assert_eq!(grid[Pos::new(x, y)].glyph(), '#');
+            assert_eq!(grid.tint(0, x, y), Tint::multiply(128, 64, 32));
+        }
+    }
+
+    /// `fill_rect`'s batch fast path only applies to a single-column glyph: a wide glyph must
+    /// fall back to the same per-cell `put` loop used before this method had a fast path, not the
+    /// batch `Tile::new` write (which carries no wide-char bookkeeping at all).
+    #[test]
+    #[cfg(feature = "egc")]
+    fn fill_rect_with_a_wide_glyph_falls_back_to_the_put_loop() {
+        let rect = Rect::new(0, 0, 6, 1);
+
+        let mut via_fill_rect = Grid::new(8, 1);
+        screen(&mut via_fill_rect).fill_rect(rect, '\u{6f22}', Style::default());
+
+        let mut via_put = Grid::new(8, 1);
+        {
+            let mut surface = screen(&mut via_put);
+            for y in rect.top()..rect.bottom() {
+                for x in rect.left()..rect.right() {
+                    surface.put((x, y), '\u{6f22}', Style::default());
+                }
+            }
+        }
+
+        for x in 0..8 {
+            assert_eq!(
+                via_fill_rect[Pos::new(x, 0)],
+                via_put[Pos::new(x, 0)],
+                "cell ({x}, 0)"
+            );
+        }
+    }
+
+    /// `fill_rect`, `clear`, and `clear_region` all route through `Grid::fill_region`, which must
+    /// clear any span the fill partially overwrites the same way the per-cell loop it replaced
+    /// did, or the surviving span's anchor would keep claiming cells the fill just overwrote.
+    #[test]
+    fn fill_rect_clears_a_span_it_partially_overwrites() {
+        use crate::tile::TileFlags;
+
+        let mut grid = Grid::new(4, 4);
+        {
+            let mut surface = screen(&mut grid);
+            surface
+                .put_span((0, 0), &["C=", "[]"], Style::default())
+                .expect("2x2 span fits in a 4x4 grid");
+            surface.fill_rect(Rect::new(1, 0, 3, 3), '#', Style::default());
+        }
+
+        assert!(
+            !grid
+                .tile(0, (0, 0))
+                .unwrap()
+                .flags()
+                .contains(TileFlags::SPAN_ANCHOR)
+        );
+    }
+
+    #[test]
+    fn clear_region_clears_a_span_it_partially_overwrites() {
+        use crate::tile::TileFlags;
+
+        let mut grid = Grid::new(4, 4);
+        {
+            let mut surface = screen(&mut grid);
+            surface
+                .put_span((0, 0), &["C=", "[]"], Style::default())
+                .expect("2x2 span fits in a 4x4 grid");
+            surface.clear_region(Rect::new(1, 0, 3, 3));
+        }
+
+        assert!(
+            !grid
+                .tile(0, (0, 0))
+                .unwrap()
+                .flags()
+                .contains(TileFlags::SPAN_ANCHOR)
+        );
     }
 
     #[test]
@@ -1720,6 +2085,24 @@ mod tests {
         assert_eq!(grid[Pos::new(7, 0)].glyph(), 'd');
         assert_eq!(grid[Pos::new(4, 1)].glyph(), 'e');
         assert_eq!(grid[Pos::new(5, 1)].glyph(), 'f');
+    }
+
+    #[test]
+    fn print_line_measures_its_span_skip_threshold_against_the_surfaces_own_width() {
+        // `area` starts at column 4, so the surface-local skip column (4) is smaller than the
+        // absolute grid column `clip.right()` resolves to (8). The second span starts at local
+        // column 3, which is inside the 4-wide area, so it must still print.
+        use crate::text::Span;
+
+        let mut grid = Grid::new(8, 1);
+        let mut surface = Surface::new(&mut grid, Rect::new(4, 0, 4, 1), 0);
+        let line = Line::from(vec![Span::raw("ab"), Span::raw("cd")]);
+        surface.print_line((0, 0), &line);
+
+        assert_eq!(grid[Pos::new(4, 0)].glyph(), 'a');
+        assert_eq!(grid[Pos::new(5, 0)].glyph(), 'b');
+        assert_eq!(grid[Pos::new(6, 0)].glyph(), 'c');
+        assert_eq!(grid[Pos::new(7, 0)].glyph(), 'd');
     }
 
     #[test]
@@ -2068,7 +2451,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "egc")]
     fn print_aligned_left_aligns_by_default() {
         let mut grid = Grid::new(8, 1);
         {
@@ -2076,7 +2458,7 @@ mod tests {
             surface.print_aligned(
                 Rect::new(0, 0, 8, 1),
                 "hi",
-                crate::layout::HAlign::Left,
+                crate::align::HAlign::Left,
                 Style::default(),
             );
         }
@@ -2087,7 +2469,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "egc")]
     fn print_aligned_centers_matching_text_layouts_own_saturating_formula() {
         let mut grid = Grid::new(6, 1);
         {
@@ -2095,18 +2476,17 @@ mod tests {
             surface.print_aligned(
                 Rect::new(0, 0, 6, 1),
                 "hi",
-                crate::layout::HAlign::Center,
+                crate::align::HAlign::Center,
                 Style::default(),
             );
         }
 
-        // (6 - 2) / 2 == 2 columns of left padding, matching `HAlign::Center` in `layout.rs`.
+        // (6 - 2) / 2 == 2 columns of left padding, matching `HAlign::Center` in `align.rs`.
         assert_eq!(grid[Pos::new(2, 0)].glyph(), 'h');
         assert_eq!(grid[Pos::new(3, 0)].glyph(), 'i');
     }
 
     #[test]
-    #[cfg(feature = "egc")]
     fn print_aligned_right_aligns_flush_to_the_rects_right_edge() {
         let mut grid = Grid::new(6, 1);
         {
@@ -2114,7 +2494,7 @@ mod tests {
             surface.print_aligned(
                 Rect::new(0, 0, 6, 1),
                 "hi",
-                crate::layout::HAlign::Right,
+                crate::align::HAlign::Right,
                 Style::default(),
             );
         }
@@ -2124,7 +2504,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "egc")]
     fn print_aligned_does_not_panic_or_underflow_on_text_wider_than_the_rect() {
         let mut grid = Grid::new(4, 1);
         {
@@ -2135,7 +2514,7 @@ mod tests {
             surface.print_aligned(
                 Rect::new(0, 0, 4, 1),
                 "hello",
-                crate::layout::HAlign::Center,
+                crate::align::HAlign::Center,
                 Style::default(),
             );
         }
@@ -2145,7 +2524,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "egc")]
     fn print_aligned_clips_to_this_surfaces_own_area_as_well_as_rect() {
         let mut grid = Grid::new(4, 1);
         {
@@ -2154,7 +2532,7 @@ mod tests {
             surface.print_aligned(
                 Rect::new(0, 0, 4, 1),
                 "hi",
-                crate::layout::HAlign::Right,
+                crate::align::HAlign::Right,
                 Style::default(),
             );
         }
@@ -2164,7 +2542,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "egc")]
     fn print_aligned_right_on_an_offset_surface_drops_the_text() {
         let mut grid = Grid::new(8, 1);
         {
@@ -2173,7 +2550,7 @@ mod tests {
             surface.print_aligned(
                 Rect::new(0, 0, 6, 1),
                 "hi",
-                crate::layout::HAlign::Right,
+                crate::align::HAlign::Right,
                 Style::default(),
             );
         }
@@ -2185,7 +2562,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "egc")]
     fn print_aligned_center_on_an_offset_surface_drops_the_text() {
         let mut grid = Grid::new(8, 1);
         {
@@ -2193,7 +2569,7 @@ mod tests {
             surface.print_aligned(
                 Rect::new(0, 0, 6, 1),
                 "hi",
-                crate::layout::HAlign::Center,
+                crate::align::HAlign::Center,
                 Style::default(),
             );
         }

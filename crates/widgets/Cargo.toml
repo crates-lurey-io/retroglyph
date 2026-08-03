@@ -31,7 +31,6 @@ serde = ["dep:serde", "retroglyph-core/serde"]
 # by meter_ramp's color ramp) is gated behind it. Not a separate widgets-level feature -- color
 # ramping is non-optional composite-tier functionality, not an opt-in extra like `egc`.
 retroglyph-core = { path = "../core", version = "0.5.0", default-features = false, features = ["std", "indexed-quant"] }
-unicode-width = "0.2"
 # `Theme`/`Density`'s `serde` feature below. A separate optional dependency from
 # `retroglyph-core`'s own (rather than re-exported), matching how each crate here already
 # depends on `retroglyph-core` independently.

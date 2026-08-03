@@ -822,6 +822,64 @@ fn multicell_span_covers_every_cell_of_its_footprint() {
     }
 }
 
+/// Regression guard for retroglyph#762: a span's covered cell holds the text-fallback glyph as
+/// its own `Tile::glyph`, and that glyph can independently have its own registered sprite (the
+/// default `Codepage::Cp437` registers one for every codepoint, so this is the common case, not
+/// an edge case). The covered cell must draw nothing of its own, not that sprite.
+///
+/// Unlike `multicell_span_covers_every_cell_of_its_footprint` (whose one-tile `Custom(['S'])`
+/// sheet leaves the fallback character unregistered, so it can never collide), this registers
+/// both the anchor glyph and the fallback glyph as distinct, same-size single-cell sprites, so
+/// the covered cell painting its own sprite instead of staying reserved is unambiguous.
+#[cfg(feature = "tilesets")]
+#[test]
+fn multicell_span_covered_cells_fallback_sprite_does_not_paint_over_the_anchor() {
+    use retroglyph_core::Grid;
+    use retroglyph_window::tileset::{Codepage, TilesetOptions};
+
+    let Some(ctx) = context_or_skip(
+        "multicell_span_covered_cells_fallback_sprite_does_not_paint_over_the_anchor",
+    ) else {
+        return;
+    };
+
+    // 'S' -> tile 0 (red), the anchor's own sprite, exactly one cell (so it reserves but does not
+    // fill cell 1). '#' -> tile 1 (green) is the covered cell's own text-fallback glyph, also
+    // registered as a sprite.
+    let opts = TilesetOptions::builder(two_tile_png())
+        .tile_size(8, 16)
+        .columns(2)
+        .codepage(Codepage::Custom(vec!['S', '#']))
+        .build()
+        .expect("valid 2-tile tileset");
+    let mut r = GlBackendBuilder::new()
+        .grid_size(2, 1)
+        .scale(1)
+        .tileset(opts)
+        .build()
+        .expect("gl renderer with tileset");
+
+    let mut grid = Grid::new(2, 1);
+    grid.write_span(0, 0, 0, &["S#"], Style::default())
+        .expect("2x1 span fits");
+    paint_layers(&mut r, &span_scene(&grid));
+
+    let frame = render_to_frame(&ctx, &r).expect("render");
+    let (cw, ch) = r.geometry.cell_size();
+    for y in 0..ch {
+        for x in 0..cw {
+            assert_eq!(frame.rgb(x, y), RED, "anchor cell pixel ({x},{y})");
+        }
+        for x in cw..cw * 2 {
+            assert_ne!(
+                frame.rgb(x, y),
+                GREEN,
+                "covered cell pixel ({x},{y}) must not draw '#''s own sprite"
+            );
+        }
+    }
+}
+
 /// The strongest guarantee available here: multi-cell spans must render pixel-for-pixel
 /// identically on the GPU and on `retroglyph-software`'s CPU rasterizer. Covers the covered-cell
 /// background, the suppressed fallback glyph, and a `Center`-aligned sprite in a span box larger
@@ -877,6 +935,56 @@ fn matches_software_backend_for_multicell_spans() {
         .grid_size(cols, rows)
         .scale(scale as u8)
         .tileset(tileset())
+        .build()
+        .expect("default-font builds")
+        .into_renderer()
+        .expect("headless software renderer");
+    paint_layers(&mut sw, &scene);
+
+    assert_frames_match(&frame, sw.pixels());
+}
+
+/// retroglyph#726: a `Color::Default`-background span on a higher layer resolves each covered
+/// cell's inherited background at *that cell's own column*, not the anchor's. Layer 0 alternates
+/// red/green per column so the two backends would visibly disagree if either smeared the anchor's
+/// column across the span's footprint; a uniform layer 0 (as in
+/// `matches_software_backend_for_multicell_spans`) can't catch that, since every column would
+/// already agree.
+#[test]
+fn matches_software_backend_for_a_span_covered_cells_default_background() {
+    use retroglyph_core::Grid;
+
+    let Some(ctx) =
+        context_or_skip("matches_software_backend_for_a_span_covered_cells_default_background")
+    else {
+        return;
+    };
+
+    let (cols, rows, scale) = (4u16, 1u16, 4u16);
+    let mut grid = Grid::new(cols, rows);
+    for x in 0..cols {
+        let bg = if x % 2 == 0 { RED } else { GREEN };
+        grid.put_tile(0, (x, 0), Tile::new('.', Style::new().bg(rgb(bg))));
+    }
+    // A 2-wide span with a `Default` background over columns 0 (red) and 1 (green).
+    grid.write_span(1, 0, 0, &["C="], Style::new())
+        .expect("2x1 span fits");
+    let scene: Vec<(u8, Pos, Tile)> = grid
+        .layers()
+        .map(|cell| (cell.layer, cell.pos, *cell.tile))
+        .collect();
+
+    let mut gl = GlBackendBuilder::new()
+        .grid_size(cols, rows)
+        .scale(scale)
+        .build()
+        .expect("default-font builds");
+    paint_layers(&mut gl, &scene);
+    let frame = render_to_frame(&ctx, &gl).expect("render");
+
+    let mut sw = retroglyph_software::SoftwareBackendBuilder::new()
+        .grid_size(cols, rows)
+        .scale(scale as u8)
         .build()
         .expect("default-font builds")
         .into_renderer()

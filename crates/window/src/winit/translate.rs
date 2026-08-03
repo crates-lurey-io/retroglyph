@@ -134,22 +134,23 @@ pub const fn translate_physical_pos(x: f64, y: f64) -> PhysicalPos {
     }
 }
 
-/// Converts physical pixel coordinates to a grid cell [`Pos`].
+/// Converts physical pixel coordinates to a grid cell [`Pos`], given a raw `cell_w`/`cell_h`
+/// pixel size.
 ///
 /// Clamps to `u16::MAX` so out-of-bounds cursor positions (negative or extremely large) don't
 /// panic: the game loop is responsible for bounds-checking against the terminal size.
+///
+/// Kept as a free function (rather than being replaced outright by
+/// [`CellGeometry::pixel_to_cell`](crate::geometry::CellGeometry::pixel_to_cell)) because
+/// `run.rs`'s call sites only have a raw `(u32, u32)` from `Presenter::cell_size`, not a
+/// `CellGeometry`, to pass; both share the same private clamp/divide helper so the two can't
+/// drift apart (see retroglyph#821).
 #[must_use]
-#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 pub fn translate_pixel_to_cell(px_x: f64, px_y: f64, cell_w: u32, cell_h: u32) -> Pos {
-    // .max(0.0) guards against negatives before the f64→u32 cast.
-    // .min(u16::MAX as u32) guarantees the u32→u16 cast never truncates.
-    let col =
-        u32::checked_div(px_x.max(0.0) as u32, cell_w).map_or(0, |v| v.min(u32::from(u16::MAX)));
-    let col = u16::try_from(col).unwrap_or(u16::MAX);
-    let row =
-        u32::checked_div(px_y.max(0.0) as u32, cell_h).map_or(0, |v| v.min(u32::from(u16::MAX)));
-    let row = u16::try_from(row).unwrap_or(u16::MAX);
-    Pos { x: col, y: row }
+    Pos {
+        x: crate::geometry::pixel_to_cell_axis(px_x, cell_w),
+        y: crate::geometry::pixel_to_cell_axis(px_y, cell_h),
+    }
 }
 
 /// Translates a winit [`winit::event::MouseButton`] into our [`MouseButton`].
@@ -182,20 +183,12 @@ pub const fn translate_key_event_kind(
 /// Translates winit modifier state into our [`KeyModifiers`].
 #[must_use]
 pub fn translate_modifiers(state: winit::keyboard::ModifiersState) -> KeyModifiers {
-    let mut m = KeyModifiers::NONE;
-    if state.shift_key() {
-        m |= KeyModifiers::SHIFT;
-    }
-    if state.control_key() {
-        m |= KeyModifiers::CONTROL;
-    }
-    if state.alt_key() {
-        m |= KeyModifiers::ALT;
-    }
-    if state.super_key() {
-        m |= KeyModifiers::SUPER;
-    }
-    m
+    KeyModifiers::from_parts(
+        state.shift_key(),
+        state.control_key(),
+        state.alt_key(),
+        state.super_key(),
+    )
 }
 
 #[cfg(test)]

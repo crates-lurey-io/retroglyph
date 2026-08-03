@@ -22,9 +22,9 @@ pub type PhysicalPos = ixy::Pos<u32>;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 /// Keyboard modifier flags.
 ///
-/// Implemented as a manual bitflag over `u8` rather than using the
-/// [`bitflags`](https://crates.io/crates/bitflags) crate to keep the
-/// dependency surface minimal for `no_std` environments. Combine with `|`.
+/// Implemented as a manual bitflag over `u8` (`SHIFT = 1`, `CONTROL = 2`, `ALT = 4`,
+/// `SUPER = 8`) rather than a [`bitflags`](https://crates.io/crates/bitflags)-generated type, so
+/// this stays a plain value type with no macro-generated API surface. Combine with `|`.
 pub struct KeyModifiers(u8);
 
 impl KeyModifiers {
@@ -38,6 +38,28 @@ impl KeyModifiers {
     pub const ALT: Self = Self(1 << 2);
     /// Super/Meta key (macOS Cmd, Windows/Super key).
     pub const SUPER: Self = Self(1 << 3);
+
+    /// Builds modifiers from a raw bitmask, silently ignoring any bits above `SUPER` (`0b1111`).
+    ///
+    /// Bitmask layout: `SHIFT = 1`, `CONTROL = 2`, `ALT = 4`, `SUPER = 8`. This is the wire format
+    /// shared by backends that encode modifiers as a single byte (for example the WASM backend's
+    /// JS/Rust boundary).
+    #[must_use]
+    pub const fn from_bits_truncate(bits: u8) -> Self {
+        Self(bits & 0b1111)
+    }
+
+    /// Builds modifiers from four independent flags, one per platform modifier key.
+    ///
+    /// Naming all four as separate parameters (rather than taking a platform-specific modifiers
+    /// type) makes the modifier set exhaustive by function signature: a backend that gains a
+    /// fifth modifier fails to compile at every call site instead of silently dropping it.
+    #[must_use]
+    // Four bools is the point: it makes the modifier set exhaustive by signature (see above).
+    #[allow(clippy::fn_params_excessive_bools)]
+    pub const fn from_parts(shift: bool, control: bool, alt: bool, super_: bool) -> Self {
+        Self((shift as u8) | (control as u8) << 1 | (alt as u8) << 2 | (super_ as u8) << 3)
+    }
 
     /// Returns `true` if all bits in `other` are set in `self`.
     #[must_use]
@@ -545,6 +567,52 @@ mod tests {
         assert!(all.contains(KeyModifiers::SHIFT));
         assert!(all.contains(KeyModifiers::CONTROL));
         assert!(all.contains(KeyModifiers::ALT));
+    }
+
+    #[test]
+    fn test_key_modifiers_from_bits_truncate() {
+        assert_eq!(KeyModifiers::from_bits_truncate(0), KeyModifiers::NONE);
+        assert_eq!(KeyModifiers::from_bits_truncate(1), KeyModifiers::SHIFT);
+        assert_eq!(KeyModifiers::from_bits_truncate(2), KeyModifiers::CONTROL);
+        assert_eq!(KeyModifiers::from_bits_truncate(4), KeyModifiers::ALT);
+        assert_eq!(KeyModifiers::from_bits_truncate(8), KeyModifiers::SUPER);
+        assert_eq!(
+            KeyModifiers::from_bits_truncate(0b1111),
+            KeyModifiers::SHIFT | KeyModifiers::CONTROL | KeyModifiers::ALT | KeyModifiers::SUPER
+        );
+        // Bits above SUPER are silently truncated.
+        assert_eq!(
+            KeyModifiers::from_bits_truncate(0xFF),
+            KeyModifiers::SHIFT | KeyModifiers::CONTROL | KeyModifiers::ALT | KeyModifiers::SUPER
+        );
+    }
+
+    #[test]
+    fn test_key_modifiers_from_parts() {
+        assert_eq!(
+            KeyModifiers::from_parts(false, false, false, false),
+            KeyModifiers::NONE
+        );
+        assert_eq!(
+            KeyModifiers::from_parts(true, false, false, false),
+            KeyModifiers::SHIFT
+        );
+        assert_eq!(
+            KeyModifiers::from_parts(false, true, false, false),
+            KeyModifiers::CONTROL
+        );
+        assert_eq!(
+            KeyModifiers::from_parts(false, false, true, false),
+            KeyModifiers::ALT
+        );
+        assert_eq!(
+            KeyModifiers::from_parts(false, false, false, true),
+            KeyModifiers::SUPER
+        );
+        assert_eq!(
+            KeyModifiers::from_parts(true, true, true, true),
+            KeyModifiers::SHIFT | KeyModifiers::CONTROL | KeyModifiers::ALT | KeyModifiers::SUPER
+        );
     }
 
     #[test]

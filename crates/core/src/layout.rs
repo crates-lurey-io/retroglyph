@@ -18,29 +18,9 @@ use alloc::vec::Vec;
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
-/// Horizontal alignment within a bounded rectangle.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub enum HAlign {
-    /// Align text to the left edge (default).
-    #[default]
-    Left,
-    /// Centre text horizontally.
-    Center,
-    /// Align text to the right edge.
-    Right,
-}
-
-/// Vertical alignment within a bounded rectangle.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub enum VAlign {
-    /// Align text to the top edge (default).
-    #[default]
-    Top,
-    /// Centre text vertically.
-    Middle,
-    /// Align text to the bottom edge.
-    Bottom,
-}
+// `HAlign`/`VAlign` live in the ungated `crate::align` module (they need nothing from `egc`)
+// and are re-exported here for callers already importing them from `crate::layout`.
+pub use crate::align::{HAlign, VAlign};
 
 /// The display dimensions of a laid-out block of text.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -311,18 +291,10 @@ impl<'a> TextLayout<'a> {
         #[allow(clippy::cast_possible_truncation)]
         let total_lines = lines.len().min(usize::from(rect.height())) as u16;
 
-        let y_offset = match self.v_align {
-            VAlign::Top => 0,
-            VAlign::Middle => rect.height().saturating_sub(total_lines) / 2,
-            VAlign::Bottom => rect.height().saturating_sub(total_lines),
-        };
+        let y_offset = self.v_align.offset(rect.height(), total_lines);
 
         for (line_idx, wrapped) in lines.into_iter().take(total_lines as usize).enumerate() {
-            let x_offset = match self.h_align {
-                HAlign::Left => 0,
-                HAlign::Center => rect.width().saturating_sub(wrapped.width) / 2,
-                HAlign::Right => rect.width().saturating_sub(wrapped.width),
-            };
+            let x_offset = self.h_align.offset(rect.width(), wrapped.width);
 
             #[allow(clippy::cast_possible_truncation)]
             let row = rect.top() + y_offset + line_idx as u16;

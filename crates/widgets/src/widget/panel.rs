@@ -1,12 +1,12 @@
 //! [`Panel`]: a bordered, titled panel.
-use retroglyph_core::text::width as measured_width;
+use retroglyph_core::text::truncate_measured;
 use retroglyph_core::{Color, Rect, Style};
 
 use super::{BorderType, BoxBorder, Measure, Widget};
 use crate::Surface;
 use crate::draw::fill_rect;
 use crate::style::Sides;
-use crate::text::{draw_clipped, truncate as truncate_to_cols};
+use crate::text::draw_clipped;
 use crate::{Align, Theme};
 
 /// A bordered panel: a filled background with a box border and an optional
@@ -192,8 +192,7 @@ impl Widget for Panel<'_> {
             // Truncate and measure up front: the padding spaces flank the title, so their
             // position depends on the truncated title's own width, not the other way around
             // (unlike the widgets that hand this whole sequence to `draw_clipped` in one call).
-            let t = truncate_to_cols(t, max_title_w);
-            let t_w = measured_width(t);
+            let (t, t_w) = truncate_measured(t, max_title_w);
             // The padded title (a space either side of the text) is aligned
             // within the region between the two corners (`width - 2`).
             let padded = t_w + 2;
@@ -389,7 +388,20 @@ mod tests {
         // compute title_x = (10 - 3 - 2) / 2 = 2, off by one.
         assert_eq!(grid[Pos::new(3, 0)].glyph(), ' ');
         assert_eq!(grid[Pos::new(4, 0)].glyph(), 'あ');
+
+        // Column 5 is where a wide char's spacer column would sit. Reserving it is an `egc`-only
+        // guarantee (see README's "Extended grapheme cluster support" section): with `egc`,
+        // `print` writes a real spacer there, so it reads back as the trailing pad space this
+        // widget wrote. Without `egc`, `print` only ever touches one cell per `char` regardless of
+        // its display width, so column 5 is left holding whatever the border already drew there,
+        // and the pad space this widget writes lands one column further out instead.
+        #[cfg(feature = "egc")]
         assert_eq!(grid[Pos::new(5, 0)].glyph(), ' ');
+        #[cfg(not(feature = "egc"))]
+        {
+            assert_eq!(grid[Pos::new(5, 0)].glyph(), '─');
+            assert_eq!(grid[Pos::new(6, 0)].glyph(), ' ');
+        }
     }
 
     #[test]

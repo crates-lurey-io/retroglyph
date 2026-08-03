@@ -43,10 +43,14 @@ impl SpriteSlot {
         glyph_w: u8,
         glyph_h: u8,
     ) -> (i16, i16) {
-        let box_w = u32::from(span_w) * u32::from(glyph_w.max(1));
-        let box_h = u32::from(span_h) * u32::from(glyph_h.max(1));
-        self.align
-            .offset(u32::from(self.w), u32::from(self.h), box_w, box_h)
+        self.align.offset_in_span(
+            u32::from(self.w),
+            u32::from(self.h),
+            span_w,
+            span_h,
+            glyph_w,
+            glyph_h,
+        )
     }
 }
 

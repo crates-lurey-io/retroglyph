@@ -121,7 +121,7 @@ impl<B: Backend> Terminal<B> {
     /// Returns the current grid dimensions.
     #[must_use]
     pub const fn size(&self) -> Size {
-        Size::new(self.current.width(), self.current.height())
+        self.current.size()
     }
 
     /// Returns the full drawing surface as a [`Rect`] at the origin.
@@ -130,7 +130,7 @@ impl<B: Backend> Terminal<B> {
     /// whole terminal to layout helpers or region-based drawing.
     #[must_use]
     pub const fn area(&self) -> Rect {
-        Rect::new(0, 0, self.current.width(), self.current.height())
+        self.current.rect()
     }
 
     /// Resize both grids to `width` × `height` cells.
@@ -281,7 +281,7 @@ impl<B: Backend> Terminal<B> {
             // post-swap clear: `current` and `previous` alternate buffers every present, so
             // anything short of re-syncing from the authoritative `previous` here would desync
             // them again after a second consecutive retained frame.
-            let area = Rect::new(0, 0, self.previous.width(), self.previous.height());
+            let area = self.previous.rect();
             for (id, &retained) in self.retained_layers.iter().enumerate() {
                 if retained {
                     #[allow(clippy::cast_possible_truncation)]
