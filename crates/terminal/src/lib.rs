@@ -100,7 +100,9 @@
 struct ReadmeDoctests;
 
 use retroglyph_core::DrawCell;
+use retroglyph_core::backend::CursorStyle;
 use retroglyph_core::color::Color;
+use retroglyph_core::grid::Pos;
 use retroglyph_core::tile::Tile;
 use std::io::{self, Write};
 
@@ -587,6 +589,114 @@ impl<W: Write> TerminalRenderer<W> {
     /// Returns an error if the writer fails to flush.
     pub fn flush(&mut self) -> io::Result<()> {
         self.writer.flush()
+    }
+
+    /// Begins a synchronized update and draws `content`, without flushing.
+    ///
+    /// Combines [`begin_synchronized_update`](Self::begin_synchronized_update) and
+    /// [`draw`](Self::draw) into the single call every `Output::draw_layers` implementor in this
+    /// workspace needs: call [`end_frame`](Self::end_frame) afterward to close the synchronized
+    /// update and flush.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the writer fails.
+    pub fn draw_frame<'a, I>(&mut self, content: I) -> io::Result<()>
+    where
+        I: Iterator<Item = DrawCell<'a>>,
+    {
+        self.begin_synchronized_update()?;
+        self.draw(content)
+    }
+
+    /// Ends a synchronized update and flushes the underlying writer.
+    ///
+    /// Combines [`end_synchronized_update`](Self::end_synchronized_update) and
+    /// [`flush`](Self::flush) into the single call every `Output::flush` implementor in this
+    /// workspace needs; pairs with [`draw_frame`](Self::draw_frame).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the writer fails.
+    pub fn end_frame(&mut self) -> io::Result<()> {
+        self.end_synchronized_update()?;
+        self.flush()
+    }
+
+    /// Erases the whole screen and resets tracked state.
+    ///
+    /// Emits a full SGR reset (`\x1b[0m`) before the erase (`\x1b[2J`): most terminals implement
+    /// erase-display via background color erase (BCE), painting erased cells with whatever
+    /// background is currently active in the pen rather than the terminal's true default, so a
+    /// colored cell drawn just before this call would otherwise leave a stale tint across the
+    /// whole screen. Also homes the cursor (`\x1b[H`) and, after writing, flushes the underlying
+    /// writer and calls [`reset_state`](Self::reset_state): the terminal-side state (cursor
+    /// position, last color/attrs) is now stale versus what's actually on screen, so the next
+    /// [`draw`](Self::draw) must re-emit full escape sequences instead of skipping them under the
+    /// assumption the terminal is still in the last-known state.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the writer fails to write or flush.
+    pub fn clear_screen(&mut self) -> io::Result<()> {
+        write!(self.writer, "\x1b[0m\x1b[2J\x1b[H")?;
+        self.writer.flush()?;
+        self.reset_state();
+        Ok(())
+    }
+
+    /// Moves the cursor to `position` (CUP, `CSI row;col H`, 1-indexed), without flushing.
+    ///
+    /// The real cursor is now wherever `position` says, not wherever the last drawn glyph left
+    /// it, so this also calls [`reset_state`](Self::reset_state): otherwise the next
+    /// [`draw`](Self::draw) could skip a move for a changed cell that happens to match the now-
+    /// stale tracked coordinates. See retroglyph#713.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the writer fails.
+    pub fn move_cursor_to(&mut self, position: Pos) -> io::Result<()> {
+        write!(
+            self.writer,
+            "\x1b[{};{}H",
+            position.y.saturating_add(1),
+            position.x.saturating_add(1)
+        )?;
+        self.reset_state();
+        Ok(())
+    }
+
+    /// Shows or hides the cursor (DECTCEM, `CSI ?25 h`/`CSI ?25 l`), without flushing.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the writer fails.
+    pub fn set_cursor_visible(&mut self, visible: bool) -> io::Result<()> {
+        if visible {
+            write!(self.writer, "\x1b[?25h")
+        } else {
+            write!(self.writer, "\x1b[?25l")
+        }
+    }
+
+    /// Sets the cursor's shape (DECSCUSR, `CSI Ps SP q`), without flushing.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the writer fails.
+    pub fn set_cursor_style(&mut self, style: CursorStyle) -> io::Result<()> {
+        // `CursorStyle` is `#[non_exhaustive]`: a future shape added upstream falls back to the
+        // terminal's own default (`Ps` 0) rather than failing to compile here.
+        let ps = match style {
+            CursorStyle::BlinkingBlock => 1,
+            CursorStyle::SteadyBlock => 2,
+            CursorStyle::BlinkingUnderline => 3,
+            CursorStyle::SteadyUnderline => 4,
+            CursorStyle::BlinkingBar => 5,
+            CursorStyle::SteadyBar => 6,
+            _ => 0,
+        };
+        write!(self.writer, "\x1b[{ps} q")
     }
 }
 
