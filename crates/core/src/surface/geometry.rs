@@ -175,7 +175,11 @@ impl<'a> Surface<'a> {
     /// [`clip_rect`](Self::clip_rect) is narrowed to `rect` intersected with this surface's own
     /// clip. What this surface *represents* is unchanged; only what is visible shrinks.
     ///
-    /// Coordinates are unchanged: the sub-surface addresses the same space this one does, so a
+    /// `rect` is in absolute grid coordinates (it intersects [`clip_rect`](Self::clip_rect),
+    /// itself absolute), not local to this surface's own [`area`](Self::area) the way
+    /// [`fill_rect`](Self::fill_rect), [`clear_region`](Self::clear_region), and
+    /// [`print_aligned`](Self::print_aligned)'s own `rect` are. Coordinates are otherwise
+    /// unchanged: the sub-surface addresses the same space this one does, so a
     /// sub-rect computed against [`Surface::area`] (e.g. by a [`layout`](crate::layout) split)
     /// can be passed straight in. Because the clip is intersected rather than substituted,
     /// narrowing is monotonic: handing a surface down a layout tree can only ever tighten what a

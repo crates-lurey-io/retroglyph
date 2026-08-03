@@ -1234,7 +1234,7 @@ fn print_aligned_clips_to_this_surfaces_own_area_as_well_as_rect() {
 }
 
 #[test]
-fn print_aligned_right_on_an_offset_surface_drops_the_text() {
+fn print_aligned_right_on_an_offset_surface_uses_area_local_coordinates() {
     let mut grid = Grid::new(8, 1);
     {
         // `area` starts at column 2, not 0: local and absolute coordinates now differ.
@@ -1247,14 +1247,14 @@ fn print_aligned_right_on_an_offset_surface_drops_the_text() {
         );
     }
 
-    // `rect` (0, 0, 6, 1) intersected with the surface's own clip (2, 0, 6, 1) leaves
-    // columns 2..6 visible; right-aligning "hi" within `rect` puts it at columns 4..6.
-    assert_eq!(grid[Pos::new(4, 0)].glyph(), 'h');
-    assert_eq!(grid[Pos::new(5, 0)].glyph(), 'i');
+    // `rect` (0, 0, 6, 1) is local to `area`, spanning it exactly; right-aligning "hi"
+    // within it puts it at local columns 4..6, i.e. absolute columns 6..8.
+    assert_eq!(grid[Pos::new(6, 0)].glyph(), 'h');
+    assert_eq!(grid[Pos::new(7, 0)].glyph(), 'i');
 }
 
 #[test]
-fn print_aligned_center_on_an_offset_surface_drops_the_text() {
+fn print_aligned_center_on_an_offset_surface_uses_area_local_coordinates() {
     let mut grid = Grid::new(8, 1);
     {
         let mut surface = Surface::new(&mut grid, Rect::new(2, 0, 6, 1), 0);
@@ -1266,10 +1266,30 @@ fn print_aligned_center_on_an_offset_surface_drops_the_text() {
         );
     }
 
-    // (6 - 2) / 2 == 2 columns of left padding within `rect`, so "hi" lands at absolute
-    // columns 2..4, which is inside the surface's own visible columns 2..6.
-    assert_eq!(grid[Pos::new(2, 0)].glyph(), 'h');
-    assert_eq!(grid[Pos::new(3, 0)].glyph(), 'i');
+    // (6 - 2) / 2 == 2 columns of left padding within `rect`, local columns 2..4, i.e.
+    // absolute columns 4..6.
+    assert_eq!(grid[Pos::new(4, 0)].glyph(), 'h');
+    assert_eq!(grid[Pos::new(5, 0)].glyph(), 'i');
+}
+
+#[test]
+fn print_aligned_ignores_translate_and_still_lands_at_the_plain_local_position() {
+    let mut grid = Grid::new(10, 1);
+    {
+        let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 10, 1), 0);
+        // `rect` is local to `area` and deliberately independent of any outstanding
+        // `translate`: without cancelling `origin_offset` before delegating to `print`,
+        // this would drop the text entirely (see issue #993).
+        surface.translate((5, 0)).print_aligned(
+            Rect::new(0, 0, 10, 1),
+            "hi",
+            crate::layout::HAlign::Left,
+            Style::default(),
+        );
+    }
+
+    assert_eq!(grid[Pos::new(0, 0)].glyph(), 'h');
+    assert_eq!(grid[Pos::new(1, 0)].glyph(), 'i');
 }
 
 #[test]
