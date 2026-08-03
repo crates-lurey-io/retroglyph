@@ -125,6 +125,12 @@ pub const DEV: bool = BuildMode::CURRENT.is_dev();
 /// one profile rots, and the rot surfaces as a broken release build. The cost is that `body` may
 /// not reference items that themselves exist only in a dev build.
 ///
+/// Control flow escapes the block on one profile only. A `return`, `?`, `break`, or `continue`
+/// inside `body` runs in a dev build and is skipped entirely in a release build, so the
+/// surrounding function must be correct when the block does nothing. Confine `body` to
+/// diagnostics and their bookkeeping; if the enclosing function's result depends on it, the
+/// profiles disagree.
+///
 /// # Examples
 ///
 /// ```
@@ -191,5 +197,20 @@ mod tests {
         let mut n = 0;
         dev_only!(n += 1;);
         assert_eq!(n, i32::from(DEV));
+    }
+
+    /// Mirrors the `warn_sprite_needs_span`-style shape: a `dev_only!` body that returns early.
+    /// Pins that the early return only happens in a dev build, and that a release build falls
+    /// through to the caller's own trailing value instead.
+    fn returns_early_in_dev() -> bool {
+        dev_only!({
+            return true;
+        });
+        false
+    }
+
+    #[test]
+    fn dev_only_early_return_runs_iff_dev() {
+        assert_eq!(returns_early_in_dev(), DEV);
     }
 }
