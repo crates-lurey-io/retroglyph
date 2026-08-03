@@ -434,9 +434,9 @@ impl Output for GlRenderer {
             // is that sprite's text fallback, for backends that can't draw it. It takes the
             // anchor's background so the footprint sits on one uniform backdrop. The stream is
             // row-major within a layer, so the anchor's instance is always already written.
-            if let Some((back_x, back_y)) = tile.span_offset() {
-                let anchor = idx
-                    .checked_sub(usize::from(back_y) * cols + usize::from(back_x))
+            if tile.span_offset().is_some() {
+                let anchor = tile
+                    .span_anchor_index(idx, cols)
                     .and_then(|anchor_idx| self.layers[l].get(anchor_idx).copied());
                 if let Some(anchor) = anchor {
                     let covered = Instance::new(

@@ -447,17 +447,14 @@ impl SoftwareRenderer {
     /// resolved per cell rather than smeared from the anchor's column.
     fn resolve_cell_bg(&self, layer_id: u8, idx: usize, cols: usize) -> Option<u32> {
         let tile = self.ctx.prev_tiles[usize::from(layer_id)][idx];
-        let anchor_glyph = match tile.span_offset() {
-            Some((dx, dy)) => {
-                let back = usize::from(dy) * cols + usize::from(dx);
-                idx.checked_sub(back)
-                    .and_then(|anchor_idx| {
-                        self.ctx.prev_tiles[usize::from(layer_id)].get(anchor_idx)
-                    })
+        let anchor_glyph = tile.span_anchor_index(idx, cols).map_or_else(
+            || tile.glyph(),
+            |anchor_idx| {
+                self.ctx.prev_tiles[usize::from(layer_id)]
+                    .get(anchor_idx)
                     .map_or_else(|| tile.glyph(), Tile::glyph)
-            }
-            None => tile.glyph(),
-        };
+            },
+        );
         let has_sprite = self.has_sprite(anchor_glyph);
         resolve_bg_fill(&self.ctx.prev_tiles, layer_id, idx, has_sprite)
     }
@@ -1253,13 +1250,15 @@ fn expand_dirty_spans(dirty: &mut [bool], layer: &[Tile], cols: usize, rows: usi
             continue;
         }
         let tile = layer[idx];
-        let anchor_idx = match tile.span_offset() {
-            Some((dx, dy)) => match idx.checked_sub(usize::from(dy) * cols + usize::from(dx)) {
-                Some(anchor_idx) => anchor_idx,
-                None => continue,
-            },
-            None if tile.span() != (1, 1) => idx,
-            None => continue,
+        let anchor_idx = if tile.span_offset().is_some() {
+            let Some(anchor_idx) = tile.span_anchor_index(idx, cols) else {
+                continue;
+            };
+            anchor_idx
+        } else if tile.span() != (1, 1) {
+            idx
+        } else {
+            continue;
         };
         let Some(anchor) = layer.get(anchor_idx) else {
             continue;
