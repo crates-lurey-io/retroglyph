@@ -122,7 +122,13 @@ impl Grid {
     /// never legitimately carry [`TileFlags::HAS_EXTRA`] (the flag is crate-private), so every
     /// cell's own extras entry, if any, is dropped rather than orphaned.
     ///
-    /// # Examples
+    /// Also a no-op if `tile.width() != 1`: unlike `put_tile`, this does not synthesize
+    /// [`TileFlags::WIDE_CHAR`]/[`TileFlags::WIDE_CHAR_SPACER`] lead/spacer pairs across the
+    /// region, so a wide `tile` (or a zero-width one) would otherwise leave every cell in `rect`
+    /// carrying the same glyph with no spacer, desyncing any cursor-advancing consumer that
+    /// trusts `Tile::width`/`TileFlags::WIDE_CHAR_SPACER` to track column position. Callers with a
+    /// wide glyph need a per-cell [`put_tile`](Self::put_tile) loop instead; see
+    /// [`Surface::fill_rect`](crate::surface::Surface::fill_rect)'s own fallback.
     ///
     /// ```
     /// use retroglyph_core::{Grid, Pos, Rect, Style, Tile};
@@ -141,12 +147,18 @@ impl Grid {
             return;
         }
 
-        // Clear every span (and, under `egc`, every wide-char cell) this fill would partially
-        // overwrite, one row at a time rather than one cell at a time: still O(rows), and a no-op
-        // on a grid that has never used spans (see `clear_span_overlap`).
+        // See this method's own doc comment: a wide `tile` would need a lead/spacer pair
+        // synthesized per cell, which this batch path does not do. Refuse rather than write a
+        // row of look-alike wide glyphs with no spacers.
+        if tile.width() != 1 {
+            return;
+        }
+
+        // Clear every span and every wide-char cell this fill would partially overwrite, one row
+        // at a time rather than one cell at a time: still O(rows), and a no-op on a grid that has
+        // never used spans (see `clear_span_overlap`).
         for y in rect.top()..rect.bottom() {
             self.clear_span_overlap(layer, rect.left(), y, rect.width());
-            #[cfg(feature = "egc")]
             self.clear_overlap(layer, rect.left(), y, rect.width());
         }
 
@@ -1105,6 +1117,37 @@ mod tests {
         let anchor = g.tile(0, (0, 0)).unwrap();
         assert!(!anchor.flags().contains(TileFlags::SPAN_ANCHOR));
         assert_eq!(anchor.glyph(), ' ');
+    }
+
+    /// `clear_overlap` runs regardless of `egc` (see its own doc comment): `fill_region` gated it
+    /// behind the feature until retroglyph#1014, so a wide pair written by `put_tile` (which is
+    /// not itself `egc`-gated) kept a stale `WIDE_CHAR` flag after a fill partially overwrote it
+    /// with `egc` off.
+    #[test]
+    fn fill_region_clears_a_wide_char_it_partially_overwrites() {
+        let mut g = Grid::new(4, 1);
+        g.put_tile(0, (0, 0), Tile::new('\u{4e2d}', Style::default()));
+        assert!(g.tile(0, (0, 0)).unwrap().flags().contains(TileFlags::WIDE_CHAR));
+
+        g.fill_region(0, Rect::new(1, 0, 3, 1), Tile::new('#', Style::default()));
+
+        assert!(!g.tile(0, (0, 0)).unwrap().flags().contains(TileFlags::WIDE_CHAR));
+    }
+
+    /// `fill_region` writing a wide `tile` raw (no lead/spacer synthesis) would desync any
+    /// cursor-advancing consumer that trusts `Tile::width`/`WIDE_CHAR_SPACER` to track column
+    /// position (retroglyph#1014). It refuses instead, leaving the region untouched.
+    #[test]
+    fn fill_region_refuses_a_wide_tile() {
+        let mut g = Grid::new(4, 1);
+
+        g.fill_region(0, Rect::new(0, 0, 4, 1), Tile::new('\u{4e2d}', Style::default()));
+
+        for x in 0..4 {
+            let tile = g.tile(0, (x, 0)).unwrap();
+            assert_eq!(tile.glyph(), ' ');
+            assert_eq!(tile.flags(), TileFlags::EMPTY);
+        }
     }
 
     /// `fill_region` writes a caller-constructed `Tile`, which (like `put_tile`) can never
