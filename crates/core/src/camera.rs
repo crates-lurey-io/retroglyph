@@ -170,8 +170,12 @@ impl Camera {
     pub fn set_viewport_fitted(&mut self, viewport: Rect) {
         let width = viewport.width().min(self.world.width());
         let height = viewport.height().min(self.world.height());
-        let x = viewport.left().saturating_add((viewport.width() - width) / 2);
-        let y = viewport.top().saturating_add((viewport.height() - height) / 2);
+        let x = viewport
+            .left()
+            .saturating_add((viewport.width() - width) / 2);
+        let y = viewport
+            .top()
+            .saturating_add((viewport.height() - height) / 2);
         self.set_viewport(Rect::new(x, y, width, height));
     }
 
@@ -814,7 +818,10 @@ mod tests {
     #[test]
     fn world_to_screen_saturates_instead_of_overflowing() {
         let c = Camera::new(Rect::new(65_530, 0, 10, 10), Size::new(100, 100));
-        assert_eq!(c.world_to_screen(Pos::new(9, 0)), Some(Pos::new(u16::MAX, 0)));
+        assert_eq!(
+            c.world_to_screen(Pos::new(9, 0)),
+            Some(Pos::new(u16::MAX, 0))
+        );
     }
 
     #[test]
