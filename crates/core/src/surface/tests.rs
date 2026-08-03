@@ -669,8 +669,7 @@ fn on_tier_writes_land_on_the_tiers_grid_layer() {
 }
 
 #[test]
-#[cfg(feature = "egc")]
-fn a_wide_char_at_the_clip_edge_does_not_write_its_spacer_outside_the_clip() {
+fn a_wide_char_at_the_clip_edge_refuses_to_write_its_spacer_outside_the_clip() {
     let mut grid = Grid::new(8, 1);
     let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 8, 1), 0);
 
@@ -686,34 +685,6 @@ fn a_wide_char_at_the_clip_edge_does_not_write_its_spacer_outside_the_clip() {
             .tile(0, Pos::new(4, 0))
             .is_some_and(|t| t.flags().contains(crate::tile::TileFlags::WIDE_CHAR_SPACER)),
         "spacer must not be written outside the clip"
-    );
-}
-
-/// The `not(egc)` twin of the test above: `put`'s `not(egc)` path (unlike `write_grapheme_at`,
-/// used when `egc` is enabled) has no check that a wide char's spacer cell is also inside this
-/// surface's clip before writing, so the spacer still escapes here. Documented rather than
-/// asserted as fixed (see retroglyph#1007's follow-up) so a future fix has a red test to turn
-/// green instead of this gap silently staying uncovered under `--no-default-features`.
-#[test]
-#[cfg(not(feature = "egc"))]
-fn a_wide_char_at_the_clip_edge_writes_its_spacer_outside_the_clip_without_egc() {
-    let mut grid = Grid::new(8, 1);
-    let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 8, 1), 0);
-
-    // Same setup as the `egc` test above: clip is columns 0..4, the wide char's primary cell
-    // (column 3) is inside the clip, but its spacer would land at column 4, outside it.
-    surface
-        .clip(Rect::new(0, 0, 4, 1))
-        .put((3, 0), '\u{6f22}', Style::default());
-
-    assert_eq!(
-        grid.tile(0, Pos::new(3, 0)).map(Tile::glyph),
-        Some('\u{6f22}')
-    );
-    assert!(
-        grid.tile(0, Pos::new(4, 0))
-            .is_some_and(|t| t.flags().contains(crate::tile::TileFlags::WIDE_CHAR_SPACER)),
-        "not(egc) put still writes the spacer past the clip edge"
     );
 }
 
@@ -1360,25 +1331,11 @@ fn translate_shifts_print_line() {
     assert_eq!(grid[Pos::new(3, 0)].glyph(), 'd');
 }
 
-#[test]
-fn translate_shifts_print_aligned() {
-    let mut grid = Grid::new(8, 1);
-    {
-        let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 6, 1), 0);
-        let mut view = surface.translate((2, 0));
-        // Without the translate, centering "hi" in a 6-wide rect lands it at columns 2..4;
-        // shifted by (2, 0), it lands 2 columns earlier instead.
-        view.print_aligned(
-            Rect::new(0, 0, 6, 1),
-            "hi",
-            crate::layout::HAlign::Center,
-            Style::default(),
-        );
-    }
-
-    assert_eq!(grid[Pos::new(0, 0)].glyph(), 'h');
-    assert_eq!(grid[Pos::new(1, 0)].glyph(), 'i');
-}
+// `print_aligned` x `translate` is covered by
+// `print_aligned_ignores_translate_and_still_lands_at_the_plain_local_position` above:
+// retroglyph#993 made `print_aligned`'s `rect` deliberately ignore any outstanding
+// `translate`, so this file's own translate-composition test for it was superseded by that
+// fix rather than merged alongside it.
 
 #[test]
 fn translate_composes_with_with_style() {
@@ -1591,7 +1548,7 @@ fn print_aligned_clips_to_this_surfaces_own_area_as_well_as_rect() {
 }
 
 #[test]
-fn print_aligned_right_on_an_offset_surface_lands_within_the_visible_columns() {
+fn print_aligned_right_on_an_offset_surface_uses_area_local_coordinates() {
     let mut grid = Grid::new(8, 1);
     {
         // `area` starts at column 2, not 0: local and absolute coordinates now differ.
@@ -1604,14 +1561,14 @@ fn print_aligned_right_on_an_offset_surface_lands_within_the_visible_columns() {
         );
     }
 
-    // `rect` (0, 0, 6, 1) intersected with the surface's own clip (2, 0, 6, 1) leaves
-    // columns 2..6 visible; right-aligning "hi" within `rect` puts it at columns 4..6.
-    assert_eq!(grid[Pos::new(4, 0)].glyph(), 'h');
-    assert_eq!(grid[Pos::new(5, 0)].glyph(), 'i');
+    // `rect` (0, 0, 6, 1) is local to `area`, spanning it exactly; right-aligning "hi"
+    // within it puts it at local columns 4..6, i.e. absolute columns 6..8.
+    assert_eq!(grid[Pos::new(6, 0)].glyph(), 'h');
+    assert_eq!(grid[Pos::new(7, 0)].glyph(), 'i');
 }
 
 #[test]
-fn print_aligned_center_on_an_offset_surface_lands_within_the_visible_columns() {
+fn print_aligned_center_on_an_offset_surface_uses_area_local_coordinates() {
     let mut grid = Grid::new(8, 1);
     {
         let mut surface = Surface::new(&mut grid, Rect::new(2, 0, 6, 1), 0);
@@ -1623,10 +1580,30 @@ fn print_aligned_center_on_an_offset_surface_lands_within_the_visible_columns() 
         );
     }
 
-    // (6 - 2) / 2 == 2 columns of left padding within `rect`, so "hi" lands at absolute
-    // columns 2..4, which is inside the surface's own visible columns 2..6.
-    assert_eq!(grid[Pos::new(2, 0)].glyph(), 'h');
-    assert_eq!(grid[Pos::new(3, 0)].glyph(), 'i');
+    // (6 - 2) / 2 == 2 columns of left padding within `rect`, local columns 2..4, i.e.
+    // absolute columns 4..6.
+    assert_eq!(grid[Pos::new(4, 0)].glyph(), 'h');
+    assert_eq!(grid[Pos::new(5, 0)].glyph(), 'i');
+}
+
+#[test]
+fn print_aligned_ignores_translate_and_still_lands_at_the_plain_local_position() {
+    let mut grid = Grid::new(10, 1);
+    {
+        let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 10, 1), 0);
+        // `rect` is local to `area` and deliberately independent of any outstanding
+        // `translate`: without cancelling `origin_offset` before delegating to `print`,
+        // this would drop the text entirely (see issue #993).
+        surface.translate((5, 0)).print_aligned(
+            Rect::new(0, 0, 10, 1),
+            "hi",
+            crate::layout::HAlign::Left,
+            Style::default(),
+        );
+    }
+
+    assert_eq!(grid[Pos::new(0, 0)].glyph(), 'h');
+    assert_eq!(grid[Pos::new(1, 0)].glyph(), 'i');
 }
 
 #[test]

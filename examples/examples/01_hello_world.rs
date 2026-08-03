@@ -14,7 +14,8 @@
 //! an [`Event`] rather than forcing an exit, so it's up to the example to act on it.
 
 use retroglyph_core::event::{Event, KeyCode};
-use retroglyph_core::{Backend, Style, Terminal};
+use retroglyph_core::layout::HAlign;
+use retroglyph_core::{Backend, Rect, Style, Terminal};
 use retroglyph_examples::Example;
 
 /// State for the hello-world example (none needed: the text never changes).
@@ -54,8 +55,9 @@ impl HelloWorld {
     /// state.
     #[allow(clippy::unused_self)]
     fn draw<B: Backend>(&self, term: &mut Terminal<B>) {
-        term.surface()
-            .print((18, 12), "Hello, world!", Style::default());
+        let mut surface = term.surface();
+        let row = Rect::new(0, 12, surface.width(), 1);
+        surface.print_aligned(row, "Hello, world!", HAlign::Center, Style::default());
     }
 }
 
