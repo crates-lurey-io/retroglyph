@@ -980,15 +980,21 @@ pub fn anchored_rect(anchor: Rect, size: Size, preferred: Side, bounds: Rect) ->
     // `checked_sub` (not `saturating_sub`): a saturated 0 would make an anchor too close to
     // `bounds`' start edge for `height`/`width` look like it fits with room to spare.
     let fits = |candidate: Side| match candidate {
-        Side::Above => anchor
-            .top()
-            .checked_sub(height)
-            .is_some_and(|t| t >= bounds.top()),
+        Side::Above => {
+            anchor.top() <= bounds.bottom()
+                && anchor
+                    .top()
+                    .checked_sub(height)
+                    .is_some_and(|t| t >= bounds.top())
+        }
         Side::Below => anchor.bottom().saturating_add(height) <= bounds.bottom(),
-        Side::Left => anchor
-            .left()
-            .checked_sub(width)
-            .is_some_and(|l| l >= bounds.left()),
+        Side::Left => {
+            anchor.left() <= bounds.right()
+                && anchor
+                    .left()
+                    .checked_sub(width)
+                    .is_some_and(|l| l >= bounds.left())
+        }
         Side::Right => anchor.right().saturating_add(width) <= bounds.right(),
     };
     let resolved = if fits(preferred) || !fits(preferred.opposite()) {
@@ -1003,7 +1009,11 @@ pub fn anchored_rect(anchor: Rect, size: Size, preferred: Side, bounds: Rect) ->
                 .left()
                 .min(bounds.right().saturating_sub(width))
                 .max(bounds.left());
-            let y = anchor.top().saturating_sub(height).max(bounds.top());
+            let y = anchor
+                .top()
+                .saturating_sub(height)
+                .min(bounds.bottom().saturating_sub(height))
+                .max(bounds.top());
             (x, y)
         }
         Side::Below => {
@@ -1018,7 +1028,11 @@ pub fn anchored_rect(anchor: Rect, size: Size, preferred: Side, bounds: Rect) ->
             (x, y)
         }
         Side::Left => {
-            let x = anchor.left().saturating_sub(width).max(bounds.left());
+            let x = anchor
+                .left()
+                .saturating_sub(width)
+                .min(bounds.right().saturating_sub(width))
+                .max(bounds.left());
             let y = anchor
                 .top()
                 .min(bounds.bottom().saturating_sub(height))
@@ -1561,6 +1575,24 @@ mod tests {
         let anchor = Rect::new(20, 2, 6, 1);
         let r = anchored_rect(anchor, Size::new(8, 4), Side::Left, bounds);
         assert_eq!(r, Rect::new(12, 2, 8, 4));
+    }
+
+    #[test]
+    fn anchored_rect_above_stays_within_bounds_for_an_anchor_below_them() {
+        let bounds = Rect::new(0, 0, 40, 10);
+        // Anchor scrolled far below bounds (e.g. a list row scrolled past the viewport).
+        let anchor = Rect::new(5, 50, 10, 1);
+        let r = anchored_rect(anchor, Size::new(12, 4), Side::Above, bounds);
+        assert!(r.top() >= bounds.top() && r.bottom() <= bounds.bottom());
+    }
+
+    #[test]
+    fn anchored_rect_left_stays_within_bounds_for_an_anchor_right_of_them() {
+        let bounds = Rect::new(0, 0, 10, 10);
+        // Anchor scrolled far right of bounds.
+        let anchor = Rect::new(50, 2, 2, 1);
+        let r = anchored_rect(anchor, Size::new(4, 2), Side::Left, bounds);
+        assert!(r.left() >= bounds.left() && r.right() <= bounds.right());
     }
 
     #[test]
