@@ -656,7 +656,7 @@ is critical for screen reader users who have customized their speech settings.
 | --------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | [`palette`](https://crates.io/crates/palette) | Type-safe color spaces (sRGB, linear RGB, Oklab, Lab, etc.), conversion, contrast calculation, blending |
 
-The `palette` crate is comprehensive for implementing WCAG contrast checks. Its type system enforces
+The `palette` crate covers everything needed for WCAG contrast checks. Its type system enforces
 correct linearization before computing luminance. It supports Oklab (perceptually uniform, good for
 color difference calculations), CIE Lab (for Delta E), and all standard RGB encodings.
 
@@ -795,7 +795,7 @@ game genres. Common failures:
   source for how a production terminal handles screen reader integration in a web context. Shows the
   shadow DOM approach, live regions, scroll boundary handling, and input deduplication.
 
-- **AccessKit GitHub** (<https://github.com/AccessKit/accesskit>) - The only comprehensive
+- **AccessKit GitHub** (<https://github.com/AccessKit/accesskit>) - The only full-coverage
 
   cross-platform accessibility crate for Rust. Covers the data schema, platform adapters, and
   architecture.

@@ -998,7 +998,7 @@ impl<P: Presenter, F, T, D> WindowApp<P, F, T, D> {
         // that's 50% of the screen). See `web::web_viewport_surface_physical_size`
         // for the separate, capped size used for the raster backing store.
         // On native, `init_size` is already expressed in true physical
-        // pixels -- `WindowConfig::fit` derives it from
+        // pixels; `WindowConfig::fit` derives it from
         // `Presenter::cell_size()`, which is documented to return physical
         // (not logical/DPI-scaled) pixels. Requesting that count directly
         // as a `PhysicalSize` is therefore already correct on a HiDPI
@@ -2421,7 +2421,7 @@ mod tests {
 
     #[test]
     fn cursor_moved_caches_position_for_subsequent_click() {
-        // Move to pixel (16, 16) = col 2, row 1, then click — button event
+        // Move to pixel (16, 16) = col 2, row 1, then click; button event
         // must reuse the cached position.
         let mut app = test_window_app();
         app.handle_window_event(WindowEvent::CursorMoved {

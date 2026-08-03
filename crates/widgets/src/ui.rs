@@ -22,9 +22,9 @@ struct Cursor {
 
 impl Cursor {
     /// Carve `primary` cells off the leading edge of `remaining` along `axis` (top for
-    /// [`Axis::Vertical`], left for [`Axis::Horizontal`]), clipped to whatever's left -- like
-    /// [`split_v`](crate::split_v)/[`split_h`](crate::split_h), this never overflows `remaining`
-    /// -- and shrinks `remaining` by the same amount.
+    /// [`Axis::Vertical`], left for [`Axis::Horizontal`]), clipped to whatever's left (like
+    /// [`split_v`](crate::split_v)/[`split_h`](crate::split_h), this never overflows `remaining`)
+    /// and shrinks `remaining` by the same amount.
     fn allocate(&mut self, primary: u16) -> Rect {
         match self.axis {
             Axis::Vertical => {
@@ -305,7 +305,7 @@ impl<'g, Id: Copy + PartialEq> Ui<'_, 'g, Id> {
     /// [`draw_sized`](Self::draw_sized)/[`show_auto`](Self::show_auto)/
     /// [`draw_auto`](Self::draw_auto) stack top-to-bottom, each claiming a horizontal strip of
     /// the cursor's remaining area sized by an explicit height or, for `show_auto`/`draw_auto`,
-    /// by [`Measure::height_for`], and advancing the cursor by that strip's height -- so the
+    /// by [`Measure::height_for`], and advancing the cursor by that strip's height, so the
     /// call site never computes a `Rect` by hand. Content past the bottom of the cursor's area
     /// clips, the same way [`split_v`](crate::split_v) clips a pane that overflows `area`.
     ///
@@ -345,7 +345,7 @@ impl<'g, Id: Copy + PartialEq> Ui<'_, 'g, Id> {
 
     /// Like [`vertical`](Self::vertical), but claims only `height` rows of this `Ui`'s own
     /// cursor (clipped to whatever's left) instead of everything remaining, so a fixed-size
-    /// nested flow -- a one-row-tall horizontal button bar inside a vertical column, say --
+    /// nested flow (a one-row-tall horizontal button bar inside a vertical column, say)
     /// leaves the rest of the outer cursor for whatever comes after it.
     ///
     /// # Panics
@@ -821,7 +821,7 @@ mod tests {
     }
 
     /// `Ui::horizontal_sized` claims only `width` columns of this `Ui`'s own cursor (here, a
-    /// vertical one), leaving the rest for whatever comes after it -- the mirror image of
+    /// vertical one), leaving the rest for whatever comes after it; the mirror image of
     /// `vertical_sized`'s own test.
     #[test]
     fn horizontal_sized_claims_only_its_own_width_from_the_outer_cursor() {

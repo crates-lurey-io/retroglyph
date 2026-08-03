@@ -20,9 +20,9 @@ _surfaceless_ context off the windowed path (an EGL display built from an EGL de
 
 The module is `cfg(test, target_os = "linux")`: the EGL device platform is the portable CI-able
 headless path (macOS's CGL pbuffer is deprecated, Windows differs), and render correctness only
-needs asserting on one platform. It asserts two ways, both robust against driver-version pixel
-drift: property checks (a full-block cell is entirely its foreground, a blank cell entirely its
-background, a glyph matches the font's own coverage bits) and pixel-for-pixel parity against the
+needs asserting on one platform. It asserts two ways, both resilient to driver-version pixel drift:
+property checks (a full-block cell is entirely its foreground, a blank cell entirely its background,
+a glyph matches the font's own coverage bits) and pixel-for-pixel parity against the
 `retroglyph-software` CPU rasterizer, which shares the same `retroglyph-window` font. Parity is
 checked for both a single flattened frame and a full multi-layer frame (`draw_layers`), so the GPU's
 back-to-front layer compositing (issue #368) is verified to match the software backend's per-pixel

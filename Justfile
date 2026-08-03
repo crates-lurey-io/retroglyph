@@ -16,6 +16,10 @@ markdown:
     @[ -d tools/node_modules ] || npm ci --prefix tools
     npm --prefix tools run lint
 
+prose:
+    @command -v vale >/dev/null || { echo "vale not installed: brew install vale"; exit 1; }
+    vale README.md CONTRIBUTING.md docs/ crates/
+
 fmt:
     cargo fmt --all
     @[ -d tools/node_modules ] || npm ci --prefix tools
@@ -47,7 +51,7 @@ check-targets:
     cargo clippy --target x86_64-unknown-linux-gnu --workspace --all-targets --all-features -- -D warnings
     cargo clippy --target wasm32-unknown-unknown -p retroglyph-gl --all-targets --all-features -- -D warnings
 
-lint: clippy markdown
+lint: clippy markdown prose
 
 # Checks every external URL in markdown and doc comments (lychee also parses links out of `.rs`
 # files, so this covers doc comments too). Not part of `lint`/`check`: it hits the network, so

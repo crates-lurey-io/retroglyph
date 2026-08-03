@@ -575,8 +575,8 @@ jobs:
 - **Dropped**: aspect-build/rules_py, rules_js - Bazel-specific, not applicable
 - **Dropped** (sources that only supported the trimmed C-FFI/PyO3/pkg-config sections):
 
-  mozilla/cbindgen, the PyO3 user guide, maturin's distribution docs, metatensor -- recoverable from
-  git history alongside the content they supported.
+  mozilla/cbindgen, the PyO3 user guide, maturin's distribution docs, metatensor (recoverable from
+  git history alongside the content they supported).
 
 ## Gaps
 

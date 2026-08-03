@@ -312,7 +312,8 @@ idiomatic for the Rust ecosystem.
      better tooling integration.
 
    - wgpu has a steeper learning curve. SDL_Renderer can be productive in minutes.
-   - Verdict: wgpu is more powerful and more Rust-native. SDL is faster to implement, simpler to
+   - Verdict: wgpu has a broader feature set and is more Rust-native. SDL is faster to implement,
+     simpler to
 
      maintain, and has gamepad support. For a terminal grid library where the rendering is
      inherently simple (blit rectangles), SDL's simplicity is a genuine advantage.

@@ -41,8 +41,8 @@ pub struct PanelTitle<'a> {
 /// [`Panel::border_style`]/[`Panel::fill_style`]/[`Panel::title`]/[`Panel::title_align`].
 ///
 /// [`Panel::title`] is sugar for the common case: one top, centered (by default) title. For
-/// anything past that -- a bottom title, more than one title on an edge, or a title aligned other
-/// than via `title_align` -- use [`Panel::add_title`], which is fully additive: it never disturbs
+/// anything past that (a bottom title, more than one title on an edge, or a title aligned other
+/// than via `title_align`), use [`Panel::add_title`], which is fully additive: it never disturbs
 /// `title`/`title_align`, and multiple `add_title` calls stack rather than overwrite each other.
 ///
 /// # Examples
@@ -106,9 +106,9 @@ impl<'a> Panel<'a> {
     /// bar, is two calls (or three, alongside `.title(...)`) rather than two overlapping
     /// `Panel`s.
     ///
-    /// Multiple titles are allowed on the same edge. Each is drawn in declaration order --
+    /// Multiple titles are allowed on the same edge. Each is drawn in declaration order:
     /// `.title(...)`'s implicit top title first (if set), then `add_title` calls in the order
-    /// they were made -- truncated to whatever room is left on that title's edge after the
+    /// they were made, truncated to whatever room is left on that title's edge after the
     /// titles declared before it on the same edge have claimed theirs, the same way a single
     /// title already truncates to fit the whole edge. A title that has no room left once earlier
     /// titles on its edge are placed is clipped down to nothing rather than overdrawing them or
@@ -216,8 +216,8 @@ impl<'a> Panel<'a> {
 }
 
 impl Measure for Panel<'_> {
-    /// The 1-cell border on each edge plus this panel's [`Panel::padding`] -- the height a
-    /// zero-height inner content area would need, matching [`Panel::inner`]'s own vertical inset.
+    /// The 1-cell border on each edge plus this panel's [`Panel::padding`] (the height a
+    /// zero-height inner content area would need), matching [`Panel::inner`]'s own vertical inset.
     /// Every title (the one set by [`Panel::title`], and any added by [`Panel::add_title`],
     /// whichever edge it's on) is drawn into its border row rather than adding one of its own, so
     /// none of them add to this count. `width` is unused: `Panel` never wraps content of its own,
@@ -301,7 +301,7 @@ impl TitleCursor {
     /// the title, so their position depends on the truncated title's own width, not the other
     /// way around) then a leading/trailing space either side of it.
     ///
-    /// A title with no room left (`lo >= hi`, or fewer than 2 free columns -- not even enough for
+    /// A title with no room left (`lo >= hi`, or fewer than 2 free columns, not even enough for
     /// the two padding spaces) is dropped entirely, drawing nothing, rather than panicking.
     /// [`Align::Center`] claims this cursor's whole remaining span regardless of how much of it
     /// the title itself actually used, so a title declared after a centered one on the same edge
