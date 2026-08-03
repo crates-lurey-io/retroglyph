@@ -22,8 +22,17 @@ impl Grid {
     /// write via [`put_tile`](Self::put_tile); the layer table itself only
     /// grows as far as the highest layer id ever written, not all 256 slots
     /// up front.
+    ///
+    /// `height` may be 0 (an empty grid with no rows). [`resize`](Self::resize) may shrink an
+    /// existing grid to 0 on either axis, including width; only construction requires a nonzero
+    /// width.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `width` is 0.
     #[must_use]
     pub fn new(width: u16, height: u16) -> Self {
+        assert!(width > 0, "Grid width must be at least 1, got 0");
         Self {
             width,
             height,
@@ -406,6 +415,49 @@ mod tests {
         let grid = Grid::new(80, 25);
         assert_eq!(grid.width(), 80);
         assert_eq!(grid.height(), 25);
+    }
+
+    #[test]
+    #[should_panic(expected = "Grid width must be at least 1")]
+    fn test_grid_new_zero_width_panics() {
+        let _ = Grid::new(0, 5);
+    }
+
+    #[test]
+    fn test_grid_new_zero_height_is_allowed() {
+        let grid = Grid::new(5, 0);
+        assert_eq!(grid.width(), 5);
+        assert_eq!(grid.height(), 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "Grid width must be at least 1")]
+    fn test_grid_new_zero_by_zero_panics() {
+        let _ = Grid::new(0, 0);
+    }
+
+    #[test]
+    fn test_grid_resize_to_zero_width_is_allowed() {
+        let mut grid = Grid::new(5, 5);
+        grid.resize(0, 5);
+        assert_eq!(grid.width(), 0);
+        assert_eq!(grid.height(), 5);
+    }
+
+    #[test]
+    fn test_grid_resize_to_zero_height_is_allowed() {
+        let mut grid = Grid::new(5, 5);
+        grid.resize(5, 0);
+        assert_eq!(grid.width(), 5);
+        assert_eq!(grid.height(), 0);
+    }
+
+    #[test]
+    fn test_grid_resize_to_zero_by_zero_is_allowed() {
+        let mut grid = Grid::new(5, 5);
+        grid.resize(0, 0);
+        assert_eq!(grid.width(), 0);
+        assert_eq!(grid.height(), 0);
     }
 
     #[test]
