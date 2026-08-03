@@ -54,6 +54,7 @@ use crate::color::Style;
 use crate::event::{Event, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use crate::grid::{Pos, Size};
 use crate::tile::Tile;
+use alloc::vec::Vec;
 use core::time::Duration;
 use ixy::HasSize;
 
