@@ -5,9 +5,9 @@
 //! [`Output::needs_full_frame`]) because sub-cell offsets can leave orphaned pixels from the
 //! previous frame.
 
-use crate::backend::{Backend, Output};
+use crate::backend::{Backend, CursorStyle, Output};
 use crate::event::Event;
-use crate::grid::{Grid, Rect, Size};
+use crate::grid::{Grid, Pos, Rect, Size};
 use crate::surface::Surface;
 use alloc::collections::VecDeque;
 use alloc::vec::Vec;
@@ -161,6 +161,30 @@ impl<B: Backend> Terminal<B> {
         self.backend.resize(Size::new(width, height));
     }
 
+    /// Show or hide the cursor.
+    ///
+    /// Forwards to [`Cursor::set_cursor_visible`](crate::backend::Cursor::set_cursor_visible) on
+    /// the backend.
+    pub fn set_cursor_visible(&mut self, visible: bool) {
+        self.backend.set_cursor_visible(visible);
+    }
+
+    /// Move the cursor to a position.
+    ///
+    /// Forwards to [`Cursor::set_cursor_position`](crate::backend::Cursor::set_cursor_position)
+    /// on the backend.
+    pub fn set_cursor_position(&mut self, position: Pos) {
+        self.backend.set_cursor_position(position);
+    }
+
+    /// Set the cursor's shape (and blink behavior).
+    ///
+    /// Forwards to [`Cursor::set_cursor_style`](crate::backend::Cursor::set_cursor_style) on the
+    /// backend.
+    pub fn set_cursor_style(&mut self, style: CursorStyle) {
+        self.backend.set_cursor_style(style);
+    }
+
     /// Returns a reference to the current grid.
     #[must_use]
     pub const fn grid(&self) -> &Grid {
@@ -275,25 +299,32 @@ impl<B: Backend> Terminal<B> {
     /// Propagates errors from the backend's [`draw_layers`](crate::Output::draw_layers) or
     /// [`flush`](crate::Output::flush) operations. Either failure returns before the
     /// current/previous buffers are swapped, so the cells from the failed frame stay marked
-    /// dirty and are resent the next time `present` succeeds; the caller doesn't need to
-    /// redraw anything to recover, just call `draw`/`present` again.
+    /// dirty in `previous` and are resent the next time `present` succeeds. `current` is still
+    /// cleared, same as on success, so the caller doesn't need to redraw anything to recover:
+    /// just call `draw`/`present` again, and the next frame starts from an empty grid like any
+    /// other.
     pub fn present(&mut self) -> Result<(), <B as Output>::Error> {
         self.present_count = self.present_count.wrapping_add(1);
         if self.retained_layers.iter().any(|&retained| retained) {
             // Overwrite each retained layer's (empty, never-drawn-this-frame) content in
             // `current` with `previous`'s, so the diff below finds no change on it: the backend
-            // gets nothing to redraw, and the copy (a flat per-cell blit) is far cheaper than
+            // gets nothing to redraw, and the copy (a flat per-layer clone) is far cheaper than
             // whatever the app would have spent regenerating identical content. See
             // `retain_layer`'s doc for why this has to run before the diff rather than skip the
             // post-swap clear: `current` and `previous` alternate buffers every present, so
             // anything short of re-syncing from the authoritative `previous` here would desync
             // them again after a second consecutive retained frame.
-            let area = self.previous.rect();
+            //
+            // Uses `copy_layer_from` rather than `blit`: `blit` is a clipping/positioning copy
+            // that degrades multi-cell spans to their text fallback and treats empty tiles as
+            // transparent (an overlay, not a replacement), both wrong here, since a retained
+            // layer is copied whole, at the same geometry, and must be indistinguishable from
+            // what was presented last frame (retroglyph#955).
             for (id, &retained) in self.retained_layers.iter().enumerate() {
                 if retained {
                     #[allow(clippy::cast_possible_truncation)]
                     let id = id as u8;
-                    self.current.blit(id, &self.previous, area, 0, 0);
+                    self.current.copy_layer_from(id, &self.previous);
                 }
             }
             for retained in &mut self.retained_layers {
@@ -301,41 +332,55 @@ impl<B: Backend> Terminal<B> {
             }
         }
         let mut swap_flattened = false;
-        if self.backend.composites_layers() {
-            // Pixel/GPU backends composite the raw layered stream themselves.
-            if self.backend.needs_full_frame() {
-                let all = self.current.layers();
-                self.backend.draw_layers(all)?;
-            } else {
+        // The fallible part is scoped to this closure so both the success and error paths
+        // below can clear `current` before returning: `current` is presentation-buffer state
+        // for the *next* frame, not part of what makes the resend-on-retry behavior work (that
+        // lives entirely in `previous`/`flattened_previous`, left untouched here), so clearing
+        // it is safe unconditionally and keeps immediate mode's "next `draw` starts empty"
+        // contract true even after a failed present.
+        let result = (|| -> Result<(), <B as Output>::Error> {
+            if self.backend.composites_layers() {
+                // Pixel/GPU backends composite the raw layered stream themselves.
+                if self.backend.needs_full_frame() {
+                    let all = self.current.layers();
+                    self.backend.draw_layers(all)?;
+                } else {
+                    let diff = self.current.diff(&self.previous);
+                    self.backend.draw_layers(diff)?;
+                }
+            } else if self.current.max_layer() == 0 && self.previous.max_layer() == 0 {
+                // Fast path: only layer 0 is in play, so flattening would be an exact
+                // copy of `current`. Diff the real grids directly and skip the
+                // flatten buffers entirely.
                 let diff = self.current.diff(&self.previous);
                 self.backend.draw_layers(diff)?;
+                self.flattened_stale = true;
+            } else {
+                // Cell backends receive a pre-flattened, single-layer diff so layers
+                // 1+ appear everywhere, not just on pixel backends.
+                if self.flattened_stale {
+                    // The previous frame used the fast path, so `flattened_previous`
+                    // is stale. Clear it to force a full redraw this frame.
+                    self.flattened_previous.clear_all();
+                    self.flattened_stale = false;
+                }
+                self.current.flatten_into(&mut self.flattened_current);
+                let diff = self.flattened_current.diff(&self.flattened_previous);
+                self.backend.draw_layers(diff)?;
+                swap_flattened = true;
             }
-        } else if self.current.max_layer() == 0 && self.previous.max_layer() == 0 {
-            // Fast path: only layer 0 is in play, so flattening would be an exact
-            // copy of `current`. Diff the real grids directly and skip the
-            // flatten buffers entirely.
-            let diff = self.current.diff(&self.previous);
-            self.backend.draw_layers(diff)?;
-            self.flattened_stale = true;
-        } else {
-            // Cell backends receive a pre-flattened, single-layer diff so layers
-            // 1+ appear everywhere, not just on pixel backends.
-            if self.flattened_stale {
-                // The previous frame used the fast path, so `flattened_previous`
-                // is stale. Clear it to force a full redraw this frame.
-                self.flattened_previous.clear_all();
-                self.flattened_stale = false;
-            }
-            self.current.flatten_into(&mut self.flattened_current);
-            let diff = self.flattened_current.diff(&self.flattened_previous);
-            self.backend.draw_layers(diff)?;
-            swap_flattened = true;
+            self.backend.flush()
+        })();
+        if let Err(err) = result {
+            // `current` is cleared even on failure so the next frame still starts from an
+            // empty grid; only the swap below is skipped. `previous`/`flattened_previous`
+            // still hold the last confirmed frame, so the next `present`'s diff against them
+            // resends the cells that never actually reached the backend instead of silently
+            // dropping them.
+            self.current.clear_all();
+            return Err(err);
         }
-        self.backend.flush()?;
-        // Both swaps happen only after `flush` succeeds: if `draw_layers` or `flush` above
-        // fails and returns early, `previous`/`flattened_previous` still hold the last
-        // confirmed frame, so the next `present`'s diff against them resends the cells that
-        // never actually reached the backend instead of silently dropping them.
+        // Both swaps happen only after `flush` succeeds, for the same reason described above.
         if swap_flattened {
             core::mem::swap(&mut self.flattened_current, &mut self.flattened_previous);
         }
@@ -497,7 +542,6 @@ mod tests {
     use crate::backend::{Cursor, DrawCell, Headless, Input, Output};
     use crate::color::Color;
     use crate::color::Style;
-    use crate::grid::Pos;
     use crate::tile::Tile;
 
     /// Wraps [`Headless`] and fails the next [`flush`](Output::flush) or
@@ -1195,6 +1239,30 @@ mod tests {
 
     #[cfg(feature = "std")]
     #[test]
+    fn present_failure_does_not_leak_the_failed_frames_content_into_the_next_frame() {
+        // Single-layer terminal so `present` takes the fast path, matching the issue's repro.
+        let mut term = Terminal::new(FlushOnceFailing::new(3, 1));
+
+        term.backend_mut().fail_next_flush = true;
+        let result = term.draw(|s| s.put((2, 0), 'X', Style::default()));
+        assert!(result.is_err(), "flush was expected to fail this frame");
+
+        // Next frame redraws different content and never touches (2, 0). `previous` is still
+        // empty (the swap was skipped), so if `current` had also been left holding the failed
+        // frame's 'X' (the bug), the diff below would see (2, 0) as newly changed from empty
+        // to 'X' and needlessly resend it, on top of the one cell this frame actually drew.
+        term.draw(|s| s.put((0, 0), 'A', Style::default()))
+            .expect("draw failed");
+        assert_eq!(
+            term.backend().last_draw_len,
+            1,
+            "only the redrawn cell should be sent; the failed frame's 'X' must not leak back in"
+        );
+        assert_eq!(term.backend().inner.grid()[Pos::new(0, 0)].glyph(), 'A');
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
     fn present_resends_cells_after_a_failed_flush_on_the_compositing_path() {
         // `composites_layers() == true` takes `present`'s first branch entirely, bypassing both
         // the fast path and the flatten buffers; a failed flush there must still leave `previous`
@@ -1271,6 +1339,20 @@ mod tests {
 
         term.present().expect("present failed");
         assert_eq!(term.present_count(), 3);
+    }
+
+    #[test]
+    fn test_terminal_cursor_passthroughs_forward_to_backend() {
+        let mut term = Terminal::new(Headless::new(10, 10));
+
+        term.set_cursor_visible(true);
+        assert!(term.backend().cursor_visible());
+
+        term.set_cursor_position(Pos::new(3, 4));
+        assert_eq!(term.backend().cursor_position(), Pos::new(3, 4));
+
+        term.set_cursor_style(CursorStyle::SteadyBar);
+        assert_eq!(term.backend().cursor_style(), CursorStyle::SteadyBar);
     }
 
     #[test]
@@ -1406,6 +1488,38 @@ mod tests {
     }
 
     #[test]
+    fn test_retain_layer_preserves_multi_cell_span_flags() {
+        use crate::surface::Layer;
+        use crate::tile::TileFlags;
+
+        // retroglyph#955: `retain_layer` used to re-sync via `Grid::blit`, whose clipping-copy
+        // contract intentionally strips `SPAN_ANCHOR`/`SPAN_COVERED` and degrades a span to its
+        // text fallback. That's wrong for a retained layer, which is copied whole at the same
+        // geometry and must be indistinguishable from what was presented last frame.
+        let mut term = Terminal::new(Headless::new(4, 2));
+        term.draw(|s| {
+            s.on_tier(Layer::World)
+                .put_span((0, 0), &["Tr", "__"], Style::default())
+                .unwrap();
+        })
+        .expect("draw failed");
+
+        let anchor_flags = term.backend().grid()[Pos::new(0, 0)].flags();
+        let covered_flags = term.backend().grid()[Pos::new(1, 0)].flags();
+        assert!(anchor_flags.contains(TileFlags::SPAN_ANCHOR));
+        assert!(covered_flags.contains(TileFlags::SPAN_COVERED));
+
+        term.retain_layer(Layer::World);
+        term.draw(|_| {}).expect("draw failed");
+
+        // The span survived the retained present untouched: same glyphs, same span flags.
+        assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), 'T');
+        assert_eq!(term.backend().grid()[Pos::new(1, 0)].glyph(), 'r');
+        assert_eq!(term.backend().grid()[Pos::new(0, 0)].flags(), anchor_flags);
+        assert_eq!(term.backend().grid()[Pos::new(1, 0)].flags(), covered_flags);
+    }
+
+    #[test]
     fn test_retain_layer_accepts_raw_u8_and_layer() {
         use crate::surface::Layer;
 
@@ -1428,9 +1542,9 @@ mod tests {
         use crate::surface::Layer;
 
         // `composites_layers() == true` takes `present`'s first branch entirely; `retain_layer`'s
-        // pre-diff blit from `previous` runs before that branch, so it must still apply here: the
-        // retained layer's cell should be re-synced (and so absent from the diff, since it now
-        // matches `previous`) rather than diffed as a real change.
+        // pre-diff copy from `previous` (`Grid::copy_layer_from`) runs before that branch, so it
+        // must still apply here: the retained layer's cell should be re-synced (and so absent
+        // from the diff, since it now matches `previous`) rather than diffed as a real change.
         let mut term = Terminal::new(CompositingBackend::new(3, 1, false));
         term.draw(|s| s.on_tier(Layer::World).put((0, 0), 'W', Style::default()))
             .expect("draw failed");
@@ -1450,6 +1564,43 @@ mod tests {
             cells.contains(&(1, Pos::new(1, 0), 'H')),
             "the newly drawn Hud cell must still be sent: {cells:?}"
         );
+    }
+
+    #[test]
+    fn test_retain_layer_never_drawn_is_a_no_op() {
+        // `Grid::copy_layer_from`'s `None` arm, no-op branch: retaining a non-zero layer id
+        // that has never been drawn to on either buffer leaves it unallocated on both sides.
+        // Must not panic or grow the layer table for a layer id nobody ever wrote to.
+        let mut term = Terminal::new(Headless::new(3, 1));
+        term.retain_layer(5u8);
+        term.draw(|_| {}).expect("draw failed");
+        assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), ' ');
+    }
+
+    #[test]
+    fn test_retain_layer_deallocates_when_previous_lacks_it() {
+        // `Grid::copy_layer_from`'s `None` arm, deallocating branch: `current` can carry a
+        // non-zero layer allocated (but emptied by immediate mode) from an older frame while
+        // `previous` never allocated it at all, if that layer went undrawn (and unretained) for
+        // a frame in between. Retaining it then must clear it from `current`, not leave stale
+        // allocation state behind. Layer 0 can't exercise this (always allocated on both
+        // sides), so this writes directly to a non-zero raw layer id via `on_layer`.
+        let mut term = Terminal::new(Headless::new(3, 1));
+        term.draw(|s| s.on_layer(5).put((0, 0), 'W', Style::default()))
+            .expect("draw failed");
+        assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), 'W');
+
+        // Layer 5 goes undrawn and unretained: ordinary immediate-mode clearing puts `current`'s
+        // (still allocated) layer 5 buffer back to empty, and this frame's diff sends that.
+        term.draw(|s| s.on_layer(1).put((1, 0), 'H', Style::default()))
+            .expect("draw failed");
+        assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), ' ');
+
+        // Retaining layer 5 now must not resurrect stale content or panic, even though
+        // `previous` (this frame's source) never allocated layer 5 at all.
+        term.retain_layer(5u8);
+        term.draw(|_| {}).expect("draw failed");
+        assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), ' ');
     }
 
     // --- unicode width ---

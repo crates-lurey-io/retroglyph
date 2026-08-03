@@ -135,7 +135,13 @@ impl SpriteCache {
     /// Loads a tileset, decoding the sprite sheet and inserting all sprites.
     ///
     /// On codepoint collision, the new sprite replaces the old one and a
-    /// message is logged via `log::warn`.
+    /// message is logged via `log::warn`. Unlike [`warn_sprite_needs_span`] and
+    /// [`warn_tint_needs_sprite`], this warning is not gated behind
+    /// [`dev_only!`](retroglyph_core::dev_only): it fires at most once per tileset load rather
+    /// than once per frame, so it needs no `seen` dedup table and has no redraw-loop cost, and it
+    /// reports a tileset/codepage authoring mistake a consumer may want visible even in a shipped
+    /// build. See the "Load-time versus per-frame" section of [`retroglyph_core::dev`]'s module
+    /// docs.
     ///
     /// # Errors
     ///
@@ -219,6 +225,9 @@ impl SpriteCache {
             };
 
             if self.sprites.insert(codepoint, sprite).is_some() {
+                // Not `dev_only!`: this fires once at load, not once per frame, so it has no
+                // redraw-loop cost to gate away, and it reports a tileset authoring mistake
+                // worth seeing even in a shipped build. See `load`'s doc comment.
                 #[allow(clippy::cast_lossless)]
                 let cp = codepoint as u32;
                 log::warn!("tileset codepoint collision: U+{cp:04X} '{codepoint}' overwritten");
