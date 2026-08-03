@@ -1140,7 +1140,10 @@ mod tests {
             s.put((0, 0), 'a', Style::default());
             s.on_layer(1).put((1, 0), 'b', Style::default());
         });
-        assert!(result.is_err(), "draw_layers was expected to fail this frame");
+        assert!(
+            result.is_err(),
+            "draw_layers was expected to fail this frame"
+        );
         assert_eq!(
             term.backend().last_draw_len,
             0,
@@ -1438,7 +1441,9 @@ mod tests {
 
         let cells = &term.backend().last_draw_cells;
         assert!(
-            !cells.iter().any(|&(layer, pos, _)| layer == 0 && pos == Pos::new(0, 0)),
+            !cells
+                .iter()
+                .any(|&(layer, pos, _)| layer == 0 && pos == Pos::new(0, 0)),
             "retained layer's unchanged cell must not be re-sent as a diff: {cells:?}"
         );
         assert!(
