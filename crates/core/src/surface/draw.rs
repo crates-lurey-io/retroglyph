@@ -352,6 +352,12 @@ impl Surface<'_> {
     /// [`print`](Self::print), horizontally aligned within `rect` (clipped to this surface's own
     /// clip) and measured in display columns (via `unicode_width`), not bytes.
     ///
+    /// `rect` is local to this surface's own [`area`](Self::area), the same convention as
+    /// [`fill_rect`](Self::fill_rect) and [`clear_region`](Self::clear_region) (not absolute grid
+    /// coordinates, the convention [`clip`](Self::clip)/[`scope`](Self::scope) use for their own
+    /// `rect`): `(0, 0)` is `area`'s own top-left, so a widget's own `local_area()` can be passed
+    /// straight in.
+    ///
     /// Wants a per-frame redrawn UI label (a status line, a centred title bar) that should not
     /// allocate: unlike [`TextLayout`](crate::layout::TextLayout), which only accepts a
     /// [`Line`] (forcing an allocation to build one for every call), this
@@ -397,21 +403,26 @@ impl Surface<'_> {
         #[allow(clippy::cast_possible_truncation)]
         let text_width = UnicodeWidthStr::width(text) as u16;
         let x_offset = align.offset(rect.width(), text_width);
-        // `clip` treats `rect` as absolute (it intersects `self.clip`, itself absolute), but
-        // `print` treats its `pos` as local to `self.area` (see `shift`). Compute the aligned
-        // start column in `rect`'s absolute space, then translate it into `self.area`-local
-        // space before handing it to `print`, or it silently clips away on any surface whose
-        // `area` doesn't start at grid column/row 0.
-        let pos = (
-            rect.left()
-                .saturating_add(x_offset)
-                .saturating_sub(self.area.left()),
-            rect.top().saturating_sub(self.area.top()),
+        let pos = (rect.left().saturating_add(x_offset), rect.top());
+        // `rect` (like `pos` here) is local to `self.area` and deliberately independent of any
+        // outstanding `translate`, matching a widget's own `local_area()`. `print` itself
+        // subtracts `origin_offset` again (via `shift`), so a translated surface would subtract
+        // it twice and drop the text entirely unless it's cancelled first: hand `print` a view
+        // whose `origin_offset` is zeroed out rather than adjusting `pos` by hand, which would
+        // need signed arithmetic that a `u16`-based `Pos` can't always represent losslessly.
+        let undo = (
+            0i32.saturating_sub(self.origin_offset.0),
+            0i32.saturating_sub(self.origin_offset.1),
         );
-        self.clip(rect).print(pos, text, style);
+        self.translate(undo).print(pos, text, style);
     }
 
     /// Fill `rect` (clipped to this surface's own clip) with `ch` in `style`.
+    ///
+    /// `rect` is local to this surface's own [`area`](Self::area): `(0, 0)` is `area`'s own
+    /// top-left, not the grid's, the same convention [`clear_region`](Self::clear_region) and
+    /// [`print_aligned`](Self::print_aligned) use for their own `rect` (not absolute grid
+    /// coordinates, the convention [`clip`](Self::clip)/[`scope`](Self::scope) use).
     ///
     /// # Examples
     ///
@@ -723,6 +734,11 @@ impl Surface<'_> {
 
     /// Clears `rect` (clipped to this surface's own clip, on its own layer) back to
     /// [`Tile::default`].
+    ///
+    /// `rect` is local to this surface's own [`area`](Self::area), the same convention
+    /// [`fill_rect`](Self::fill_rect) and [`print_aligned`](Self::print_aligned) use for their
+    /// own `rect` (not absolute grid coordinates, the convention
+    /// [`clip`](Self::clip)/[`scope`](Self::scope) use).
     ///
     /// # Examples
     ///
