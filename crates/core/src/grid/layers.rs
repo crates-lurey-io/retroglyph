@@ -9,10 +9,10 @@
 use super::{BlendMode, Grid, Pos, Rect, TileExtra, flat_index_to_xy, to_grixy_pos};
 use crate::backend::DrawCell;
 use crate::color::Color;
+use crate::color::Tint;
 #[cfg(test)]
 use crate::style::Style;
 use crate::tile::{Tile, TileFlags};
-use crate::tint::Tint;
 use alloc::vec::Vec;
 #[cfg(feature = "blend-modes")]
 use alpha_blend::BlendMode as SeparableBlendMode;

@@ -107,9 +107,9 @@
 //! layer 255). See [`max_layer`](Grid::max_layer) for the iteration cost this
 //! implies and [`Grid::new`] for the allocation cost of a first write.
 
+use crate::color::Tint;
 use crate::tile::Tile;
 use crate::tile::TileFlags;
-use crate::tint::Tint;
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use alloc::vec::Vec;

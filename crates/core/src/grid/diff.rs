@@ -5,11 +5,11 @@
 
 use super::{Grid, Pos, flat_index_to_xy};
 use crate::backend::DrawCell;
+use crate::color::Tint;
 #[cfg(test)]
 use crate::style::Style;
 #[cfg(test)]
 use crate::tile::Tile;
-use crate::tint::Tint;
 #[cfg(test)]
 use alloc::vec::Vec;
 

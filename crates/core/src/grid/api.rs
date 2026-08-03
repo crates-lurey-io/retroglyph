@@ -4,13 +4,13 @@
 #[cfg(feature = "egc")]
 use super::TileExtra;
 use super::{Cells, CellsMut, Grid, LayerBuf, Pos, Rect, Size, to_grixy_pos};
+#[cfg(any(test, feature = "egc"))]
+use crate::color::Tint;
 #[cfg(feature = "egc")]
 use crate::style::Style;
 #[cfg(feature = "egc")]
 use crate::tile::cap_grapheme;
 use crate::tile::{Tile, TileFlags};
-#[cfg(any(test, feature = "egc"))]
-use crate::tint::Tint;
 #[cfg(feature = "egc")]
 use alloc::sync::Arc;
 use grixy::ops::{GridRead, GridWrite};
