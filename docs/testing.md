@@ -2,6 +2,8 @@
 
 How retroglyph is tested, and where each kind of test lives. For the exact commands to run, see
 `AGENTS.md`'s Correctness gate section, which stays the single source of truth for the command list.
+Performance benchmarks aren't covered here; see
+[`CONTRIBUTING.md`'s `## Benchmarking` section](../CONTRIBUTING.md#benchmarking) for that.
 
 ## Unit tests
 

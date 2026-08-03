@@ -92,72 +92,10 @@ src/
 
 ## Testing
 
-### Unit and integration tests
-
-```sh
-just test          # run everything
-just test-v        # with stdout (useful for snapshot review)
-cargo test --lib   # unit tests only
-```
-
-Unit tests live alongside their modules. The integration suite in `tests/e2e.rs` drives
-`Terminal<Headless>` through game-logic scenarios and asserts on the grid state directly.
-
-### Snapshot tests (`insta`)
-
-`Headless::format_view()` converts the in-memory grid to a text string where spaces are rendered as
-`·`. Pair it with `insta::assert_snapshot!` for deterministic layout assertions:
-
-```rust
-use retroglyph::{Terminal, backend::Headless};
-
-let backend = Headless::new(20, 5);
-let mut term = Terminal::new(backend);
-term.put((2, 2), 'X');
-term.present();
-insta::assert_snapshot!(term.backend().format_view());
-```
-
-To review and accept new or changed snapshots:
-
-```sh
-cargo install cargo-insta   # one-time
-cargo insta test            # run tests and open the review UI
-cargo insta accept          # accept all pending snapshots
-```
-
-Snapshot files live in `tests/snapshots/` and are committed to version control. A failing snapshot
-test means visible output changed: review the diff before accepting.
-
-### E2E visual snapshots (crossterm backend)
-
-`tests/e2e_snapshots.rs` spawns the compiled `demo` binary (built with `--features crossterm`) in a
-real pseudo-terminal using `portable-pty`, feeds it key input, then parses the raw ANSI byte stream
-with a VT100 emulator (`vt100` crate) to reconstruct the final screen state. The screen is rendered
-to SVG and snapshotted with `insta`.
-
-```sh
-# The demo binary must be built first
-
-cargo build --example demo --features crossterm
-
-cargo test --test e2e_snapshots --all-features
-```
-
-Two files are written to `tests/snapshots/` on each run:
-
-| File                                | Purpose                                                |
-| ----------------------------------- | ------------------------------------------------------ |
-| `e2e_snapshots__demo_snapshot.snap` | Insta snapshot (authoritative, diffed by CI)           |
-| `demo.svg`                          | Rendered SVG: open directly in a browser or Quick Look |
-
-GitHub renders `.svg` files, so PR diffs show a visual before/after when the snapshot changes.
-
-To view the current snapshot locally:
-
-```sh
-open tests/snapshots/demo.svg
-```
+See [`docs/testing.md`](docs/testing.md) for the full testing architecture (unit tests, insta
+snapshots, the examples crate's three-way snapshot harness). Commands: `just test` / `just test-v`
+(see the command table above), or `cargo insta test` / `cargo insta accept` to review snapshots
+interactively. Performance benchmarks are documented separately, in `## Benchmarking` below.
 
 ## Benchmarking
 
