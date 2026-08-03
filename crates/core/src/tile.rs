@@ -113,7 +113,11 @@ pub struct Tile {
     /// multi-cell span roles (see [`TileFlags`]).
     ///
     /// Always present so `Tile`'s layout is stable whether or not the `egc`
-    /// feature is enabled. Without `egc`, the wide-character and side-table bits are never set.
+    /// feature is enabled. `WIDE_CHAR`/`WIDE_CHAR_SPACER` are set on every feature combination
+    /// (both [`Grid::put_tile`](crate::grid::Grid::put_tile) and
+    /// [`Grid::write_grapheme`](crate::grid::Grid::write_grapheme) set them); only the side-table
+    /// presence bit ([`TileFlags::HAS_EXTRA`]) is `egc`-only, since it depends on grapheme
+    /// clustering (`unicode-segmentation`) that this crate only pulls in under `egc`.
     pub(crate) flags: TileFlags,
     /// Multi-cell span bookkeeping, **overloaded by role** (see `flags`):
     ///

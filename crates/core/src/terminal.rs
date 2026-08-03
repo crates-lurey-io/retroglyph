@@ -1048,45 +1048,37 @@ mod tests {
 
     #[test]
     fn test_put_wide_char_sets_continuation() {
+        use crate::tile::TileFlags;
+
         let mut term = Terminal::new(Headless::new(10, 3));
         term.surface().put((0, 0), '\u{4e2d}', Style::default()); // '中', width 2
         assert_eq!(term.grid()[Pos::new(0, 0)].glyph(), '\u{4e2d}');
-        // With egc: `write_grapheme` lays down an explicit spacer, flagged `WIDE_CHAR_SPACER`,
-        // glyph space. Without egc, `put` writes only the primary cell (via `put_tile`, which
-        // has no wide-char awareness), so the neighbor is simply never touched and keeps its
-        // prior (here: default) contents.
-        #[cfg(feature = "egc")]
-        {
-            use crate::tile::TileFlags;
-            assert!(
-                term.grid()[Pos::new(1, 0)]
-                    .flags()
-                    .contains(TileFlags::WIDE_CHAR_SPACER)
-            );
-            assert_eq!(term.grid()[Pos::new(1, 0)].glyph(), ' ');
-        }
-        #[cfg(not(feature = "egc"))]
+        // Both with and without `egc`: `put` (via `Grid::put_tile`, which is wide-char aware on
+        // every feature combination) lays down an explicit spacer, flagged `WIDE_CHAR_SPACER`,
+        // glyph space.
+        assert!(
+            term.grid()[Pos::new(1, 0)]
+                .flags()
+                .contains(TileFlags::WIDE_CHAR_SPACER)
+        );
         assert_eq!(term.grid()[Pos::new(1, 0)].glyph(), ' ');
         assert_eq!(term.grid()[Pos::new(2, 0)].glyph(), ' '); // untouched
     }
 
     #[test]
     fn test_print_advances_by_char_width() {
+        use crate::tile::TileFlags;
+
         let mut term = Terminal::new(Headless::new(10, 3));
         term.surface().print((0, 0), "\u{4e2d}x", Style::default()); // '中' (2) then 'x' at col 2
         assert_eq!(term.grid()[Pos::new(0, 0)].glyph(), '\u{4e2d}');
-        // See `test_put_wide_char_sets_continuation` for why the neighbor differs by feature.
-        #[cfg(feature = "egc")]
-        {
-            use crate::tile::TileFlags;
-            assert!(
-                term.grid()[Pos::new(1, 0)]
-                    .flags()
-                    .contains(TileFlags::WIDE_CHAR_SPACER)
-            );
-        }
-        #[cfg(not(feature = "egc"))]
-        assert_eq!(term.grid()[Pos::new(1, 0)].glyph(), ' ');
+        // See `test_put_wide_char_sets_continuation` for why the neighbor is a spacer regardless
+        // of feature.
+        assert!(
+            term.grid()[Pos::new(1, 0)]
+                .flags()
+                .contains(TileFlags::WIDE_CHAR_SPACER)
+        );
         assert_eq!(term.grid()[Pos::new(2, 0)].glyph(), 'x');
     }
 
@@ -1126,17 +1118,13 @@ mod tests {
 
     #[test]
     fn test_put_wide_char_at_last_column_does_not_overflow() {
-        // Wide char placed at the last column: can't place a spacer.
-        // With egc, `write_grapheme` silently refuses rather than leaving an orphan. Without
-        // egc, `put` has no wide-char bounds check at all (it only ever writes the primary
-        // cell via `put_tile`), so the char is written regardless of whether a neighbor
-        // exists for a spacer.
+        // Wide char placed at the last column: can't place a spacer, so the write is refused
+        // outright (nothing written), on every feature combination. `write_grapheme` (egc-only)
+        // and `Grid::put_tile` (used by `put` on every feature combination) both refuse rather
+        // than leave an orphaned primary cell with no spacer.
         let mut term = Terminal::new(Headless::new(4, 1));
         term.surface().put((3, 0), '\u{4e2d}', Style::default()); // col 3 is last; need col 4 for spacer
-        #[cfg(feature = "egc")]
         assert_eq!(term.grid()[Pos::new(3, 0)].glyph(), ' '); // nothing written
-        #[cfg(not(feature = "egc"))]
-        assert_eq!(term.grid()[Pos::new(3, 0)].glyph(), '\u{4e2d}'); // written anyway
     }
 
     // --- styled spans ---
@@ -1162,24 +1150,20 @@ mod tests {
     #[test]
     fn test_print_styled_wide_chars() {
         use crate::text::Line;
+        use crate::tile::TileFlags;
         use alloc::vec;
 
         let mut term = Terminal::new(Headless::new(10, 3));
         let line = Line::from(vec![crate::text::Span::raw("\u{4e2d}x")]);
         term.surface().print_line((0, 0), &line);
         assert_eq!(term.grid()[Pos::new(0, 0)].glyph(), '\u{4e2d}');
-        // See `test_put_wide_char_sets_continuation` for why the neighbor differs by feature.
-        #[cfg(feature = "egc")]
-        {
-            use crate::tile::TileFlags;
-            assert!(
-                term.grid()[Pos::new(1, 0)]
-                    .flags()
-                    .contains(TileFlags::WIDE_CHAR_SPACER)
-            );
-        }
-        #[cfg(not(feature = "egc"))]
-        assert_eq!(term.grid()[Pos::new(1, 0)].glyph(), ' ');
+        // See `test_put_wide_char_sets_continuation` for why the neighbor is a spacer regardless
+        // of feature.
+        assert!(
+            term.grid()[Pos::new(1, 0)]
+                .flags()
+                .contains(TileFlags::WIDE_CHAR_SPACER)
+        );
         assert_eq!(term.grid()[Pos::new(2, 0)].glyph(), 'x');
     }
 

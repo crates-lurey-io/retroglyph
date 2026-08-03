@@ -137,12 +137,9 @@ impl Headless {
     /// The glyph `format_view`/`format_styled` render for `cell`, and whether it's a wide-glyph
     /// spacer (rendered blank in both, with no style in `format_styled`).
     const fn display_glyph(cell: &Tile) -> (char, bool) {
-        #[cfg(feature = "egc")]
         let is_spacer = cell
             .flags()
             .contains(crate::tile::TileFlags::WIDE_CHAR_SPACER);
-        #[cfg(not(feature = "egc"))]
-        let is_spacer = cell.glyph() == '\0';
         let glyph = if cell.glyph() == ' ' {
             '·'
         } else {
