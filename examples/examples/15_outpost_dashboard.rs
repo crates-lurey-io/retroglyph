@@ -489,10 +489,19 @@ impl OutpostDashboard {
         self.floating.len()
     }
 
+    /// Pans the camera by a screen-cell delta via [`Camera::scroll_by`], then syncs `cam_center`
+    /// to the result so the unconditional `center_on(cam_center)` in [`Self::draw_map`] (there to
+    /// pick up viewport resizes every frame) reapplies the same origin instead of undoing the
+    /// pan: `scroll_by` clamps `origin` directly, one clamp with no dead zone, unlike clamping a
+    /// tracked center to `[0, world)` and re-deriving the origin through `center_on` every frame.
     fn pan_by(&mut self, dx: i32, dy: i32) {
-        let x = (i32::from(self.cam_center.x) + dx).clamp(0, i32::from(WORLD_W) - 1);
-        let y = (i32::from(self.cam_center.y) + dy).clamp(0, i32::from(WORLD_H) - 1);
-        self.cam_center = Pos::new(x as u16, y as u16);
+        self.camera.scroll_by(dx, dy);
+        let origin = self.camera.origin();
+        let vp = self.camera.viewport();
+        self.cam_center = Pos::new(
+            (u32::from(origin.x) + u32::from(vp.width()) / 2).min(u32::from(WORLD_W) - 1) as u16,
+            (u32::from(origin.y) + u32::from(vp.height()) / 2).min(u32::from(WORLD_H) - 1) as u16,
+        );
     }
 
     fn hit_at(&self, pos: Pos) -> Option<(Rect, HitTarget)> {
