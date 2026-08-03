@@ -995,16 +995,12 @@ impl<W: std::io::Write> Output for Crossterm<W> {
     {
         // Begin synchronized update so the terminal holds rendering until
         // flush() sends the matching End marker.
-        self.renderer.begin_synchronized_update()?;
-        self.renderer.draw(content)?;
-        Ok(())
+        self.renderer.draw_frame(content)
     }
 
     #[cfg_attr(feature = "tracing", tracing::instrument(level = "debug", skip_all))]
     fn flush(&mut self) -> Result<(), Self::Error> {
-        self.renderer.end_synchronized_update()?;
-        self.renderer.flush()?;
-        Ok(())
+        self.renderer.end_frame()
     }
 
     fn size(&self) -> Size {
@@ -1018,29 +1014,19 @@ impl<W: std::io::Write> Output for Crossterm<W> {
     }
 
     fn clear(&mut self) -> Result<(), Self::Error> {
-        crossterm::queue!(
-            self.renderer.writer_mut(),
-            // Reset SGR attributes *before* erasing: most terminals implement "erase display"
-            // via background color erase (BCE), painting the erased cells with whatever
-            // background is currently active in the pen, not the terminal's true default. Left
-            // un-reset, a cell colored by the last frame (a themed panel, a highlighted tile)
-            // becomes the color `Clear` paints the whole screen with. That would be merely
-            // cosmetic for one frame, except every cell here is a `resize()` call too (see
-            // `Output::resize` above): `Terminal::resize` wipes `previous` to default tiles, so
-            // any `current` cell that's also still at its default (e.g. anything the app hasn't
-            // drawn into the newly grown area yet) never differs from `previous` and is never
-            // resent by the diff in `present()`. That leaves the BCE-tinted patch on screen
-            // permanently: exactly the "gaps where the background doesn't clear" symptom after
-            // a resize, since nothing ever draws over it again.
-            crossterm::style::SetAttribute(crossterm::style::Attribute::Reset),
-            crossterm::terminal::Clear(crossterm::terminal::ClearType::All)
-        )?;
-        self.renderer.writer_mut().flush()?;
-        // The terminal-side state (cursor position, last color/attrs) is now
-        // stale versus what's actually on screen; forget it so the next
-        // draw() re-emits full escape sequences instead of skipping them.
-        self.renderer.reset_state();
-        Ok(())
+        // Reset SGR attributes *before* erasing: most terminals implement "erase display" via
+        // background color erase (BCE), painting the erased cells with whatever background is
+        // currently active in the pen, not the terminal's true default. Left un-reset, a cell
+        // colored by the last frame (a themed panel, a highlighted tile) becomes the color
+        // `clear_screen` paints the whole screen with. That would be merely cosmetic for one
+        // frame, except every cell here is a `resize()` call too (see `Output::resize` above):
+        // `Terminal::resize` wipes `previous` to default tiles, so any `current` cell that's also
+        // still at its default (e.g. anything the app hasn't drawn into the newly grown area yet)
+        // never differs from `previous` and is never resent by the diff in `present()`. That
+        // leaves the BCE-tinted patch on screen permanently: exactly the "gaps where the
+        // background doesn't clear" symptom after a resize, since nothing ever draws over it
+        // again.
+        self.renderer.clear_screen()
     }
 }
 
@@ -1162,46 +1148,20 @@ impl<W: std::io::Write> Cursor for Crossterm<W> {
     /// of the normal draw/flush pair, with no observable benefit since nothing reads the terminal
     /// state in between.
     fn set_cursor_visible(&mut self, visible: bool) {
-        let writer = self.renderer.writer_mut();
-        if visible {
-            let _ = crossterm::queue!(writer, crossterm::cursor::Show);
-        } else {
-            let _ = crossterm::queue!(writer, crossterm::cursor::Hide);
-        }
+        let _ = self.renderer.set_cursor_visible(visible);
     }
 
     /// Queues the cursor-move escape without flushing; see [`set_cursor_visible`](Self::set_cursor_visible)'s
     /// docs for why this is deferred to the next [`Output::flush`] instead of flushing here.
     fn set_cursor_position(&mut self, position: Pos) {
-        let writer = self.renderer.writer_mut();
-        let _ = crossterm::queue!(writer, crossterm::cursor::MoveTo(position.x, position.y));
-        // The real cursor is now wherever `position` says, not wherever the last drawn glyph
-        // left it; forget the tracked position so the next `draw()` doesn't skip a `MoveTo` for a
-        // changed cell that happens to match the stale tracked coordinates. See retroglyph#713.
-        self.renderer.reset_state();
+        let _ = self.renderer.move_cursor_to(position);
     }
 
     /// Queues the `DECSCUSR` cursor-shape escape without flushing; see
     /// [`set_cursor_visible`](Self::set_cursor_visible)'s docs for why this is deferred to the
     /// next [`Output::flush`] instead of flushing here.
     fn set_cursor_style(&mut self, style: CursorStyle) {
-        let writer = self.renderer.writer_mut();
-        let _ = crossterm::queue!(writer, from_cursor_style(style));
-    }
-}
-
-const fn from_cursor_style(style: CursorStyle) -> crossterm::cursor::SetCursorStyle {
-    use crossterm::cursor::SetCursorStyle as CS;
-    match style {
-        CursorStyle::BlinkingBlock => CS::BlinkingBlock,
-        CursorStyle::SteadyBlock => CS::SteadyBlock,
-        CursorStyle::BlinkingUnderline => CS::BlinkingUnderScore,
-        CursorStyle::SteadyUnderline => CS::SteadyUnderScore,
-        CursorStyle::BlinkingBar => CS::BlinkingBar,
-        CursorStyle::SteadyBar => CS::SteadyBar,
-        // `CursorStyle` is `#[non_exhaustive]`: a future shape added upstream falls back to the
-        // terminal's own default rather than failing to compile here.
-        _ => CS::DefaultUserShape,
+        let _ = self.renderer.set_cursor_style(style);
     }
 }
 
