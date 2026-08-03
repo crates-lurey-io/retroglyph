@@ -295,8 +295,8 @@ pub(crate) struct LayerBuf {
     pub(crate) buf: GridBuf<Tile, Vec<Tile>, RowMajor>,
     /// Sparse side-table: flat row-major index -> the cell's out-of-line data, for tiles with
     /// [`TileFlags::HAS_EXTRA`] set. Empty until something writes a multi-codepoint grapheme or
-    /// a tint, which is what keeps [`Tile`] itself small (see [`Grid::grapheme`] and
-    /// [`Grid::tint`]).
+    /// a tint, which is what keeps [`Tile`] itself small (see [`DrawCell::grapheme`](crate::backend::DrawCell::grapheme)
+    /// and [`Grid::tint`]).
     ///
     /// The `HAS_EXTRA` flag is authoritative: readers must check it before
     /// consulting this map, since some write paths (`put_tile`,
@@ -527,6 +527,16 @@ impl Grid {
         }
         self.has_spans |= src.has_spans;
     }
+}
+
+/// Test-only readback for a tile's grapheme text, standing in for the removed
+/// `Grid::grapheme` (see retroglyph#1016): every real consumer reads this off the
+/// [`DrawCell`](crate::backend::DrawCell) stream returned by [`Grid::layers`], so tests do too.
+#[cfg(test)]
+pub(crate) fn grapheme_at(grid: &Grid, layer: u8, x: u16, y: u16) -> Option<&str> {
+    grid.layers()
+        .find(|c| c.layer == layer && c.pos == Pos::new(x, y))
+        .and_then(|c| c.grapheme)
 }
 
 #[cfg(test)]

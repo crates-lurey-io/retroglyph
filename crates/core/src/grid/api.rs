@@ -3,7 +3,7 @@
 
 #[cfg(feature = "egc")]
 use super::TileExtra;
-use super::{Grid, LayerBuf, Pos, Rect, Size, to_grixy_pos};
+use super::{Grid, LayerBuf, Pos, Rect, Size};
 #[cfg(feature = "egc")]
 use crate::color::Style;
 #[cfg(any(test, feature = "egc"))]
@@ -13,7 +13,7 @@ use crate::tile::cap_grapheme;
 use crate::tile::{Tile, TileFlags};
 #[cfg(feature = "egc")]
 use alloc::sync::Arc;
-use grixy::ops::{GridRead, GridWrite};
+use grixy::ops::GridWrite;
 
 impl Grid {
     /// Creates a new grid of the given dimensions.
@@ -142,28 +142,6 @@ impl Grid {
         self.max_layer
     }
 
-    /// Returns the full grapheme cluster stored for the tile at `(x, y)` on
-    /// `layer`, if any.
-    ///
-    /// `Some` only when the tile has [`TileFlags::HAS_EXTRA`] set, i.e. it
-    /// was written via [`write_grapheme`](Self::write_grapheme) with a
-    /// multi-codepoint EGC (combining marks, ZWJ sequences, etc.). For the
-    /// common single-codepoint case, or without the `egc` feature, this is
-    /// always `None`; use [`tile`](Self::tile)'s
-    /// [`Tile::glyph`](crate::tile::Tile::glyph) and
-    /// [`encode_utf8`](char::encode_utf8) to reconstruct the string instead.
-    ///
-    /// Returns `None` if the layer is unallocated or the coordinates are out
-    /// of bounds.
-    #[must_use]
-    pub fn grapheme(&self, layer: u8, x: u16, y: u16) -> Option<&str> {
-        let lb = self.layer(layer)?;
-        let pos = to_grixy_pos(Pos::new(x, y));
-        let tile = lb.buf.get(pos)?;
-        let idx = usize::from(y) * usize::from(self.width) + usize::from(x);
-        lb.extra_for(idx, tile)
-    }
-
     /// Clears a specific layer, resetting all tiles to the default.
     ///
     /// Does nothing if the layer is unallocated.
@@ -225,8 +203,9 @@ impl Grid {
     ///   [`TileFlags::WIDE_CHAR_SPACER`] in the adjacent cell for 2-column
     ///   characters.
     /// - Stores multi-codepoint EGCs (combining marks, ZWJ sequences) in the
-    ///   layer's EGC side-table (see [`grapheme`](Self::grapheme)), capped at
-    ///   8 codepoints total.
+    ///   layer's EGC side-table, capped at 8 codepoints total. Read it back via
+    ///   [`DrawCell::grapheme`](crate::backend::DrawCell::grapheme), streamed off
+    ///   [`Grid::layers`](Self::layers).
     ///
     /// Also does nothing if the grapheme has zero display width, or if a 2-column wide character
     /// would overflow the grid (the last column needs both its own cell and a spacer).
@@ -457,11 +436,11 @@ mod tests {
         let mut g = Grid::new(5, 5);
         g.write_grapheme(0, 1, 1, "e\u{0301}", Style::default());
         assert_eq!(g[Pos::new(1, 1)].glyph, 'e');
-        assert_eq!(g.grapheme(0, 1, 1), Some("e\u{0301}"));
+        assert_eq!(crate::grid::grapheme_at(&g, 0, 1, 1), Some("e\u{0301}"));
 
         // Single-codepoint writes never populate the side-table.
         g.write_grapheme(0, 2, 2, "a", Style::default());
-        assert_eq!(g.grapheme(0, 2, 2), None);
+        assert_eq!(crate::grid::grapheme_at(&g, 0, 2, 2), None);
     }
 
     #[cfg(feature = "egc")]
@@ -496,12 +475,12 @@ mod tests {
     fn test_grid_overwrite_clears_extra() {
         let mut g = Grid::new(5, 5);
         g.write_grapheme(0, 0, 0, "e\u{0301}", Style::default());
-        assert_eq!(g.grapheme(0, 0, 0), Some("e\u{0301}"));
+        assert_eq!(crate::grid::grapheme_at(&g, 0, 0, 0), Some("e\u{0301}"));
 
         // A plain `put` (or a later single-codepoint `write_grapheme`) must
         // drop the stale side-table entry, not just leave it unreachable.
         g.put_tile(0, (0, 0), Tile::new('X', Style::default()));
-        assert_eq!(g.grapheme(0, 0, 0), None);
+        assert_eq!(crate::grid::grapheme_at(&g, 0, 0, 0), None);
         assert!(!g[Pos::new(0, 0)].flags().contains(TileFlags::HAS_EXTRA));
     }
 
@@ -510,19 +489,19 @@ mod tests {
     fn test_grid_resize_remaps_extras_to_new_stride() {
         let mut g = Grid::new(4, 4);
         g.write_grapheme(0, 3, 1, "e\u{0301}", Style::default());
-        assert_eq!(g.grapheme(0, 3, 1), Some("e\u{0301}"));
+        assert_eq!(crate::grid::grapheme_at(&g, 0, 3, 1), Some("e\u{0301}"));
 
         // Widening changes the row stride, so the flat index for (3, 1)
         // changes even though the cell itself is preserved.
         g.resize(8, 4);
         assert_eq!(g[Pos::new(3, 1)].glyph, 'e');
-        assert_eq!(g.grapheme(0, 3, 1), Some("e\u{0301}"));
+        assert_eq!(crate::grid::grapheme_at(&g, 0, 3, 1), Some("e\u{0301}"));
         // No ghost entry landed on some other cell at the old flat index.
-        assert_eq!(g.grapheme(0, 7, 0), None);
+        assert_eq!(crate::grid::grapheme_at(&g, 0, 7, 0), None);
 
         // Shrinking past the cell drops its extras entry along with the tile.
         g.resize(2, 4);
-        assert_eq!(g.grapheme(0, 3, 1), None);
+        assert_eq!(crate::grid::grapheme_at(&g, 0, 3, 1), None);
     }
 
     #[test]
