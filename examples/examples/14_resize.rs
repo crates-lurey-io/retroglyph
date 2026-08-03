@@ -36,6 +36,7 @@
 use retroglyph_core::event::{Event, KeyCode};
 use retroglyph_core::{AnsiColor, Backend, Color, Frame, Style, Terminal};
 use retroglyph_examples::Example;
+use retroglyph_widgets::{Align, draw_clipped};
 
 /// State for the resize example (none needed: every frame is drawn fresh from `term.area()`).
 #[derive(Default)]
@@ -98,13 +99,15 @@ impl Resize {
         }
 
         let label = format!("{}x{} cells -- resize me", area.width(), area.height());
-        #[allow(clippy::cast_possible_truncation)]
-        let label_width = label.chars().count() as u16;
-        if label_width < area.width() {
-            let x = area.left() + (area.width() - label_width) / 2;
-            let y = area.top() + area.height() / 2;
-            surface.print((x, y), &label, Style::default());
-        }
+        let y = area.top() + area.height() / 2;
+        let _ = draw_clipped(
+            &mut surface,
+            (area.left(), y),
+            area.width(),
+            &label,
+            Align::Center,
+            Style::default(),
+        );
     }
 }
 

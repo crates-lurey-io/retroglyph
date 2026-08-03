@@ -10,11 +10,11 @@
 //! wrapped result to `BoxStyle::render`. Keeping wrapping and box-model
 //! layout separate avoids tying every consumer of this module to `Paragraph`
 //! or the `egc` feature.
+use retroglyph_core::text::{char_width, width_usize as measured_width};
 use retroglyph_core::{Grid, Style, Tile};
 // `Rect` is only named by the `egc` content-measuring path below and by this module's tests.
 #[cfg(feature = "egc")]
 use retroglyph_core::Rect;
-use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use crate::Surface;
 use crate::text::truncate;
@@ -194,7 +194,7 @@ impl BoxStyle {
     /// `text` is split only on `'\n'`; it is not word-wrapped (see the
     /// module docs).
     ///
-    /// Content is positioned by display column (via `unicode-width`), so a
+    /// Content is positioned by display column (via `retroglyph_core::text`), so a
     /// wide (2-column) character correctly pushes later characters on the
     /// same line over by 2 columns rather than 1. It is, however, written
     /// without a `WIDE_CHAR_SPACER` reservation on the cell to its right (see
@@ -207,7 +207,8 @@ impl BoxStyle {
     pub fn render(&self, text: &str) -> Grid {
         let lines: Vec<&str> = text.split('\n').collect();
         let content_w = self.width.unwrap_or_else(|| {
-            u16::try_from(lines.iter().map(|l| l.width()).max().unwrap_or(0)).unwrap_or(u16::MAX)
+            u16::try_from(lines.iter().map(|l| measured_width(l)).max().unwrap_or(0))
+                .unwrap_or(u16::MAX)
         });
         let content_h = self
             .height
@@ -219,7 +220,7 @@ impl BoxStyle {
             let clipped = truncate(line, content_w);
             let mut col = 0u16;
             for ch in clipped.chars() {
-                let w = u16::try_from(ch.width().unwrap_or(0)).unwrap_or(u16::MAX);
+                let w = char_width(ch);
                 if col.saturating_add(w) > content_w {
                     break;
                 }
@@ -251,13 +252,8 @@ impl BoxStyle {
         use retroglyph_core::text::{Line, Span};
 
         let content_w = self.width.unwrap_or_else(|| {
-            u16::try_from(
-                text.split('\n')
-                    .map(UnicodeWidthStr::width)
-                    .max()
-                    .unwrap_or(0),
-            )
-            .unwrap_or(u16::MAX)
+            u16::try_from(text.split('\n').map(measured_width).max().unwrap_or(0))
+                .unwrap_or(u16::MAX)
         });
         let line = Line::from(Span::styled(text, self.style));
         let content_h = self.height.unwrap_or_else(|| {
@@ -319,8 +315,8 @@ impl BoxStyle {
 /// the style's own explicit-or-content-fit dimensions: it does not stretch
 /// or clip to fill `area`. It always uses [`BoxStyle::render`] (not
 /// `BoxStyle::render_wrapped`, behind the `egc` feature); for wrapped
-/// content, call `render_wrapped` directly and [`crate::blit_into`] the
-/// result yourself.
+/// content, call `render_wrapped` directly and
+/// [`Surface::blit`](retroglyph_core::Surface::blit) the result yourself.
 #[derive(Clone, Copy, Debug)]
 pub struct Boxed<'a> {
     style: BoxStyle,
@@ -337,9 +333,9 @@ impl BoxStyle {
 
 impl Widget for Boxed<'_> {
     fn render(&self, surface: &mut Surface<'_>) {
-        let area = surface.area();
         let grid = self.style.render(self.text);
-        crate::block::blit_into(surface, &grid, area.left(), area.top());
+        // `(0, 0)` in this surface's own local coordinates is its area's own top-left corner.
+        surface.blit(&grid, 0, 0);
     }
 }
 
@@ -385,6 +381,29 @@ mod tests {
                     .collect()
             })
             .collect()
+    }
+
+    #[test]
+    fn boxed_render_draws_on_a_surface_that_is_not_on_layer_zero() {
+        // The retroglyph#824 regression: `Boxed` renders its `BoxStyle` into a standalone,
+        // layer-0-only `Grid` and stamps it onto the caller's surface, which must still work
+        // when that surface is on a non-zero layer (e.g. `surface.on_tier(Layer::Overlay)`, as
+        // `Modal`'s own docs recommend for overlay content).
+        use retroglyph_core::{Layer, Surface};
+
+        let mut grid = Grid::new(6, 3);
+        let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 6, 3), Layer::World.as_u8());
+        let boxed = BoxStyle::new(Style::default()).text("hi");
+        boxed.render(&mut surface.on_tier(Layer::Overlay));
+
+        assert_eq!(
+            grid.tile(Layer::Overlay.as_u8(), (0, 0)).map(Tile::glyph),
+            Some('h')
+        );
+        assert_eq!(
+            grid.tile(Layer::Overlay.as_u8(), (1, 0)).map(Tile::glyph),
+            Some('i')
+        );
     }
 
     #[test]
@@ -503,6 +522,19 @@ mod tests {
         assert_eq!(grid[Pos::new(0, 0)].glyph(), 'a');
         assert_eq!(grid[Pos::new(1, 0)].glyph(), 'あ');
         assert_eq!(grid[Pos::new(3, 0)].glyph(), 'b');
+    }
+
+    #[test]
+    fn control_characters_occupy_one_column_matching_core_text_char_width() {
+        // retroglyph#760: this crate's own char-width loop used to answer `0` columns for a
+        // control character (`ch.width().unwrap_or(0)`), disagreeing with `Surface`/`Tile`, which
+        // both already advance one column when a control character is drawn. Routing through
+        // `retroglyph_core::text::char_width` (now `unwrap_or(1)`) makes a BEL take up a column
+        // here too, so "a\u{7}b" is 3 columns wide, not 2.
+        let grid = BoxStyle::new(Style::default()).render("a\u{7}b");
+        assert_eq!(grid.width(), 3);
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), 'a');
+        assert_eq!(grid[Pos::new(2, 0)].glyph(), 'b');
     }
 
     #[test]

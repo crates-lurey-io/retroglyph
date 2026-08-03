@@ -19,6 +19,7 @@
 
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use retroglyph_core::backend::Output;
+use retroglyph_core::tile::Tile;
 use std::fmt;
 use std::sync::Arc;
 
@@ -186,7 +187,7 @@ impl RecoverableError for GenericSurfaceError {
 ///
 /// # Sub-cell offsets and spill
 ///
-/// A [`Tile`](retroglyph_core::tile::Tile)'s `dx`/`dy` shift its glyph within, and past, its cell.
+/// A [`Tile`]'s `dx`/`dy` shift its glyph within, and past, its cell.
 /// This is a cross-backend rendering contract: the CPU rasterizer (`retroglyph-software`) and the
 /// GPU one (`retroglyph-gl`) must produce the same pixels, so it is specified here once instead of
 /// in mirrored per-backend comments that reference each other (and drift when only one is
@@ -329,6 +330,73 @@ pub trait Presenter: Output {
     /// are `u16` but pixel arithmetic uses `u32` (winit `PhysicalSize`).
     #[must_use]
     fn cell_size(&self) -> (u32, u32);
+}
+
+/// The glyph a `Presenter` should paint art (a bitmap-font glyph or a tileset sprite) for, or
+/// `None` when this cell draws none.
+///
+/// Both pixel backends (`retroglyph-software`, `retroglyph-gl`) ask this same question at
+/// several points in their draw path (sprite-vs-font dispatch, font fallback, whether a cell
+/// counts as "occupied" for compositing), and used to each answer it independently, which let
+/// them drift (retroglyph#762). This is the one place that decides it:
+///
+/// - A [`TileFlags::SPAN_COVERED`](retroglyph_core::tile::TileFlags::SPAN_COVERED) cell (see
+///   [`Tile::span_offset`]) draws no art of its own: the span's anchor already drew one piece of
+///   artwork across the whole footprint, and this cell's glyph is only that artwork's text
+///   fallback for backends that can't draw it.
+/// - An [`is_empty`](Tile::is_empty) tile draws no art: nothing has been written to it, so it is
+///   transparent when compositing layers. This is the canonical blank rule, matching
+///   [`Grid::flatten_into`](retroglyph_core::grid::Grid::flatten_into) and the cell backends;
+///   comparing the glyph itself against `' '` is both slower (it can't be decided without the
+///   glyph) and wrong for a font whose space glyph isn't blank.
+///
+/// Neither check depends on whether a sprite exists for the glyph: that dispatch (sprite vs.
+/// bitmap font) is a separate, backend-specific decision made *after* this one, once a caller
+/// knows a cell draws art at all.
+#[must_use]
+pub const fn cell_art_glyph(tile: &Tile) -> Option<char> {
+    if tile.span_offset().is_some() || tile.is_empty() {
+        None
+    } else {
+        Some(tile.glyph())
+    }
+}
+
+#[cfg(test)]
+mod cell_art_glyph_tests {
+    use super::cell_art_glyph;
+    use retroglyph_core::grid::Grid;
+    use retroglyph_core::style::Style;
+    use retroglyph_core::tile::Tile;
+
+    #[test]
+    fn none_for_an_empty_tile() {
+        assert_eq!(cell_art_glyph(&Tile::default()), None);
+    }
+
+    #[test]
+    fn some_for_an_occupied_tile() {
+        let tile = Tile::new('@', Style::new());
+        assert_eq!(cell_art_glyph(&tile), Some('@'));
+    }
+
+    #[test]
+    fn none_for_a_span_covered_tile() {
+        let mut grid = Grid::new(2, 1);
+        grid.write_span(0, 0, 0, &["AB"], Style::new()).unwrap();
+        let covered = *grid.tile(0, (1, 0)).unwrap();
+        assert!(covered.span_offset().is_some());
+        assert_eq!(cell_art_glyph(&covered), None);
+    }
+
+    #[test]
+    fn some_for_a_non_blank_space_glyph() {
+        // A space glyph is not inherently blank: an explicit `Tile::new(' ', ...)` is occupied
+        // (not `is_empty()`), and a font may draw something for it (`BitmapFont::new` allows a
+        // non-blank space). The blank rule is `is_empty()`, not `glyph == ' '`.
+        let tile = Tile::new(' ', Style::new());
+        assert_eq!(cell_art_glyph(&tile), Some(' '));
+    }
 }
 
 #[cfg(test)]

@@ -72,7 +72,8 @@
 //!
 //! [`TerminalWasm`] renders through [`retroglyph_terminal::TerminalRenderer`] (see that crate's
 //! docs for the full cell-diff renderer contract) and adds a handful of sequences of its own
-//! ([`clear`](Output::clear), [`set_cursor_visible`](Cursor::set_cursor_visible)). Every
+//! ([`clear`](Output::clear), [`set_cursor_visible`](Cursor::set_cursor_visible),
+//! [`set_cursor_style`](Cursor::set_cursor_style)). Every
 //! sequence below is standard ANSI X3.64 (ECMA-48) CSI (the subset xterm's own control-sequence
 //! reference calls plain "ANSI"/VT100-compatible), nothing proprietary or emulator-specific. The
 //! bytes are the same regardless of what emulator eventually reads them; this crate makes no
@@ -89,6 +90,7 @@
 //! | `CSI 38;2;r;g;b m` / `CSI 48;2;r;g;b m` | SGR truecolor FG/BG | `draw`, for [`Color::Rgb`](retroglyph_core::color::Color::Rgb) | set foreground/background to a 24-bit RGB color, unquantized |
 //! | `CSI ?2026 h` / `CSI ?2026 l` | DEC private mode 2026 (synchronized update) | every [`draw`](Output::draw)/[`flush`](Output::flush) pair | hold rendering until the matching end marker, avoiding tearing mid-frame |
 //! | `CSI ?25 h` / `CSI ?25 l` | DECTCEM (cursor visibility) | [`set_cursor_visible`](Cursor::set_cursor_visible) | show/hide the terminal cursor |
+//! | `CSI Ps SP q` | DECSCUSR (cursor shape) | [`set_cursor_style`](Cursor::set_cursor_style) | set the cursor's shape/blink behavior |
 //! | `CSI 2J` then `CSI H` | ED (erase display) + CUP home | [`clear`](Output::clear) | clear the screen, then move the cursor to `(1, 1)` |
 //!
 //! retroglyph does not model text attributes (bold, italic, underline, etc.; see
@@ -153,8 +155,8 @@ mod app_entry;
 
 use retroglyph_core::DrawCell;
 use retroglyph_core::Terminal;
-use retroglyph_core::backend::{Cursor, Input, Output};
-use retroglyph_core::event::{Event, MouseEventKind};
+use retroglyph_core::backend::{Cursor, CursorStyle, Input, Output};
+use retroglyph_core::event::{Event, coalesces_with};
 use retroglyph_core::grid::{Pos, Size};
 use retroglyph_terminal::TerminalRenderer;
 use std::collections::VecDeque;
@@ -276,12 +278,14 @@ impl TerminalWasm {
     /// backpressure here the way there is on native (crossterm's underlying input buffer
     /// naturally throttles a stalled reader):
     ///
-    /// - **Pointer-move coalescing.** If `event` is
-    ///   [`Event::Mouse`](Event) with [`MouseEventKind::Moved`] and the queue's current back is
-    ///   also a `Moved` event, `event` replaces it in place instead of growing the queue: a
-    ///   consumer that's fallen behind only ever cares about the most recent pointer position, not
-    ///   every intermediate one. Any other event kind (including a `Down`/`Up`/scroll mouse event)
-    ///   always pushes normally, so this never reorders or merges anything but a `Moved` run.
+    /// - **Pointer-move coalescing.** If `event`'s queue tail
+    ///   [`coalesces_with`](retroglyph_core::event::coalesces_with) it (both `Event::Mouse` with
+    ///   [`MouseEventKind::Moved`]), `event` replaces the tail in place instead of growing the
+    ///   queue: a consumer that's fallen behind only ever cares about the most recent pointer
+    ///   position, not every intermediate one. Any other event kind (including a
+    ///   `Down`/`Up`/scroll mouse event) always pushes normally, so this never reorders or merges
+    ///   anything but a `Moved` run. The same rule is shared with the `retroglyph-window` backend
+    ///   and `Headless` (retroglyph#768).
     /// - **Capacity cap.** Once the queue holds `EVENT_QUEUE_CAP` (4096) events, pushing another
     ///   silently drops the *oldest* queued event (via `pop_front`) to make room. Oldest was
     ///   chosen over dropping the new event so a consumer that's fallen behind and only pulls a
@@ -295,12 +299,10 @@ impl TerminalWasm {
     /// Crate-private: [`Input::push_event`] is the sole public way to push an event onto a
     /// `TerminalWasm`, so there is only one way for external callers to do this.
     pub(crate) fn push_event(&mut self, event: Event) {
-        if let Event::Mouse(mouse) = &event
-            && mouse.kind == MouseEventKind::Moved
-            && let Some(Event::Mouse(back)) = self.event_queue.back_mut()
-            && back.kind == MouseEventKind::Moved
+        if let Some(back) = self.event_queue.back_mut()
+            && coalesces_with(&event, back)
         {
-            *back = *mouse;
+            *back = event;
             return;
         }
         if self.event_queue.len() >= EVENT_QUEUE_CAP {
@@ -403,13 +405,11 @@ impl Output for TerminalWasm {
     where
         I: Iterator<Item = DrawCell<'a>>,
     {
-        self.renderer.begin_synchronized_update()?;
-        self.renderer.draw(content)
+        self.renderer.draw_frame(content)
     }
 
     fn flush(&mut self) -> Result<(), Self::Error> {
-        self.renderer.end_synchronized_update()?;
-        self.renderer.flush()
+        self.renderer.end_frame()
     }
 
     fn size(&self) -> Size {
@@ -432,10 +432,7 @@ impl Output for TerminalWasm {
         // erase paints the whole screen with. This backend has no direct handle to the emulator,
         // so both the reset and the "clear screen, cursor home" CSI sequence that follows it are
         // just more ANSI bytes for JS to forward, same as every other draw call.
-        use std::io::Write as _;
-        write!(self.renderer.writer_mut(), "\x1b[0m\x1b[2J\x1b[H")?;
-        self.renderer.reset_state();
-        Ok(())
+        self.renderer.clear_screen()
     }
 }
 
@@ -455,55 +452,23 @@ impl Input for TerminalWasm {
 
 impl Cursor for TerminalWasm {
     fn set_cursor_visible(&mut self, visible: bool) {
-        let _ = write_cursor_visibility(&mut self.renderer, visible);
+        let _ = self.renderer.set_cursor_visible(visible);
     }
 
     fn set_cursor_position(&mut self, position: Pos) {
-        let _ = write_cursor_position(&mut self.renderer, position);
-        // The real cursor is now wherever `position` says, not wherever the last drawn glyph
-        // left it; forget the tracked position so the next `draw()` doesn't skip a `MoveTo` for a
-        // changed cell that happens to match the stale tracked coordinates. See retroglyph#713.
-        self.renderer.reset_state();
+        let _ = self.renderer.move_cursor_to(position);
     }
-}
 
-fn write_cursor_visibility(
-    renderer: &mut TerminalRenderer<Utf8Sink>,
-    visible: bool,
-) -> io::Result<()> {
-    use std::io::Write as _;
-    if visible {
-        write!(renderer.writer_mut(), "\x1b[?25h")
-    } else {
-        write!(renderer.writer_mut(), "\x1b[?25l")
+    /// Writes the `DECSCUSR` cursor-shape escape.
+    ///
+    /// This is the standard VT100/ANSI (DEC private mode) cursor-shape sequence and is not one of
+    /// the areas where browser terminal emulators diverge: both xterm.js
+    /// (<https://xtermjs.org/docs/api/vtfeatures/>) and hterm/Terminalemulator
+    /// (<https://chromium.googlesource.com/apps/libapps/+/HEAD/hterm/docs/ControlSequences.md>)
+    /// implement `CSI Ps SP q` identically.
+    fn set_cursor_style(&mut self, style: CursorStyle) {
+        let _ = self.renderer.set_cursor_style(style);
     }
-}
-
-/// Writes a CUP (Cursor Position) sequence, `CSI row;col H`, 1-indexed and
-/// absolute.
-///
-/// This is the standard VT100/ANSI X3.64 (ECMA-48 `CUP`) cursor-positioning
-/// sequence and is not one of the areas where browser terminal emulators
-/// diverge: xterm.js (`CSI Ps ; Ps H`, `InputHandler.cursorPosition`, see
-/// <https://xtermjs.org/docs/api/vtfeatures/> and
-/// <https://github.com/xtermjs/xterm.js/blob/master/src/common/InputHandler.ts>)
-/// and hterm/Terminalemulator (`CSI row ; col H`, `CUP`, see
-/// <https://chromium.googlesource.com/apps/libapps/+/HEAD/hterm/docs/ControlSequences.md>)
-/// both implement it identically, 1-indexed with default `[1, 1]` when
-/// parameters are omitted, matching xterm's own `ctlseqs.txt` reference and
-/// ECMA-48. No 0-indexed variant or alternate escape code was found in any
-/// of these implementations, so no dual-emission fallback is needed here.
-fn write_cursor_position(
-    renderer: &mut TerminalRenderer<Utf8Sink>,
-    position: Pos,
-) -> io::Result<()> {
-    use std::io::Write as _;
-    write!(
-        renderer.writer_mut(),
-        "\x1b[{};{}H",
-        position.y + 1,
-        position.x + 1
-    )
 }
 
 /// Decodes a `(code, mods)` pair from JS into a [`retroglyph_core::event::KeyEvent`].
@@ -576,23 +541,8 @@ pub fn decode_key_event(code: u32, mods: u8) -> Option<retroglyph_core::event::K
 ///
 /// Bitmask layout: `SHIFT = 1`, `CONTROL = 2`, `ALT = 4`, `SUPER = 8`.
 #[must_use]
-fn decode_key_modifiers(mods: u8) -> retroglyph_core::event::KeyModifiers {
-    use retroglyph_core::event::KeyModifiers;
-
-    let mut modifiers = KeyModifiers::NONE;
-    if mods & 0b001 != 0 {
-        modifiers |= KeyModifiers::SHIFT;
-    }
-    if mods & 0b010 != 0 {
-        modifiers |= KeyModifiers::CONTROL;
-    }
-    if mods & 0b100 != 0 {
-        modifiers |= KeyModifiers::ALT;
-    }
-    if mods & 0b1000 != 0 {
-        modifiers |= KeyModifiers::SUPER;
-    }
-    modifiers
+const fn decode_key_modifiers(mods: u8) -> retroglyph_core::event::KeyModifiers {
+    retroglyph_core::event::KeyModifiers::from_bits_truncate(mods)
 }
 
 /// Decodes an `(x, y, action, button, mods)` tuple from JS into a
@@ -1089,10 +1039,9 @@ mod tests {
 
     #[test]
     fn cursor_position_uses_1_indexed_cup_sequence() {
-        // CSI row;col H (CUP), 1-indexed and absolute: verified against
-        // xterm.js and hterm/Terminalemulator (see `write_cursor_position`'s
-        // doc comment). Both use the same format, so no dual-emission or
-        // 0-indexed fallback is needed.
+        // CSI row;col H (CUP), 1-indexed and absolute: verified against xterm.js and
+        // hterm/Terminalemulator (see `TerminalRenderer::move_cursor_to`'s doc comment). Both use
+        // the same format, so no dual-emission or 0-indexed fallback is needed.
         let mut backend = TerminalWasm::new(10, 3);
         Cursor::set_cursor_position(&mut backend, Pos { x: 0, y: 0 });
         assert_eq!(backend.take_output(), "\x1b[1;1H");
@@ -1151,6 +1100,18 @@ mod tests {
             cup_pos < b_pos,
             "CUP to (1, 0) must precede 'B': {written:?}"
         );
+    }
+
+    #[test]
+    fn set_cursor_style_writes_the_matching_decscusr_escape() {
+        // retroglyph#767: `terminal-wasm` previously had no `Cursor::set_cursor_style`
+        // implementation at all; it now delegates to the same `TerminalRenderer::set_cursor_style`
+        // that `retroglyph-crossterm` uses, verified against the same DECSCUSR codes there.
+        use retroglyph_core::backend::CursorStyle;
+
+        let mut backend = TerminalWasm::new(10, 3);
+        Cursor::set_cursor_style(&mut backend, CursorStyle::BlinkingBar);
+        assert_eq!(backend.take_output(), "\x1b[5 q");
     }
 
     #[test]
@@ -1466,6 +1427,40 @@ mod tests {
             "README.md's JS driver example has drifted from js/xterm-driver.js: update \
              README.md's fenced ```js block to match the canonical file"
         );
+    }
+
+    // ── Output/Cursor conformance (retroglyph#763) ──────────────────────────────────────────
+
+    /// [`Observable::snapshot`] hashes only the bytes appended since the previous call, per that
+    /// trait's docs: `TerminalWasm`'s observable state is an append-only ANSI byte buffer, and
+    /// [`TerminalWasm::take_output`] already drains exactly that (nothing new to build here).
+    impl retroglyph_core::testing::conformance::Observable for TerminalWasm {
+        fn snapshot(&mut self) -> u64 {
+            retroglyph_core::testing::conformance::fnv1a(self.take_output().as_bytes())
+        }
+    }
+
+    #[test]
+    #[ignore = "a DrawCell::pos outside size() is currently sent to the display unchecked \
+                instead of being dropped, rather than the other three Output obligations this \
+                also covers; see the follow-up issue this PR files alongside retroglyph#763"]
+    fn satisfies_the_output_contract() {
+        retroglyph_core::testing::conformance::assert_output_contract(|size| {
+            TerminalWasm::new(size.width(), size.height())
+        });
+    }
+
+    #[test]
+    fn satisfies_the_input_contract() {
+        retroglyph_core::testing::conformance::assert_input_contract(|| TerminalWasm::new(10, 10));
+    }
+
+    #[test]
+    #[ignore = "retroglyph#713: set_cursor_position doesn't resync the renderer's tracked cursor"]
+    fn satisfies_the_cursor_contract() {
+        retroglyph_core::testing::conformance::assert_cursor_contract(|size| {
+            TerminalWasm::new(size.width(), size.height())
+        });
     }
 }
 

@@ -5,9 +5,7 @@
 //! without a [`Backend`](retroglyph_core::Backend)/[`Terminal`](retroglyph_core::Terminal), so
 //! composing widget output ahead of drawing it means composing `Grid`s directly, with no
 //! separate cell/buffer type.
-use retroglyph_core::{Grid, Rect};
-
-use crate::Surface;
+use retroglyph_core::Grid;
 
 /// Concatenate `grids` left-to-right into one [`Grid`] (layer 0 only).
 ///
@@ -30,7 +28,7 @@ pub fn join_h(grids: &[Grid]) -> Grid {
 
     let mut x_offset = 0u16;
     for g in grids {
-        out.blit(0, g, Rect::new(0, 0, g.width(), g.height()), x_offset, 0);
+        out.blit(0, g, g.rect(), x_offset, 0);
         x_offset = x_offset.saturating_add(g.width());
     }
     out
@@ -56,27 +54,15 @@ pub fn join_v(grids: &[Grid]) -> Grid {
 
     let mut y_offset = 0u16;
     for g in grids {
-        out.blit(0, g, Rect::new(0, 0, g.width(), g.height()), 0, y_offset);
+        out.blit(0, g, g.rect(), 0, y_offset);
         y_offset = y_offset.saturating_add(g.height());
     }
     out
 }
 
-/// Stamp `grid`'s layer 0 onto `surface`'s underlying grid, with its top-left cell at `(x, y)`.
-///
-/// A thin convenience over [`Grid::blit`] (via [`Surface::grid_mut`]) so callers composing
-/// widget output with [`join_h`]/[`join_v`] don't need to reach into the surface's grid by hand
-/// for the final copy. Writes to `surface`'s own layer, but (like [`Surface::grid_mut`] itself)
-/// is not clipped to `surface`'s area: `(x, y)` and `grid`'s extent are trusted as given.
-pub fn blit_into(surface: &mut Surface<'_>, grid: &Grid, x: u16, y: u16) {
-    let rect = Rect::new(0, 0, grid.width(), grid.height());
-    let layer = surface.layer();
-    surface.grid_mut().blit(layer, grid, rect, x, y);
-}
-
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::{Color, Pos, Style, Tile};
+    use retroglyph_core::{Pos, Style, Tile};
 
     use super::*;
 
@@ -129,21 +115,5 @@ mod tests {
         let joined = join_h(&[a]);
         assert_eq!(joined[Pos::new(0, 0)].glyph(), 'a');
         assert_eq!(joined.tile(1, (0, 0)), None); // layer 1 was never allocated
-    }
-
-    #[test]
-    fn blit_into_stamps_a_grid_onto_a_surface_at_an_offset() {
-        let mut src = Grid::new(2, 2);
-        src.put_tile(0, (0, 0), Tile::new('x', Style::new().fg(Color::GREEN)));
-        src.put_tile(0, (1, 1), Tile::new('y', Style::default()));
-
-        let mut dst = Grid::new(5, 5);
-        let area = Rect::new(0, 0, 5, 5);
-        blit_into(&mut Surface::new(&mut dst, area, 0), &src, 2, 1);
-
-        assert_eq!(dst[Pos::new(2, 1)].glyph(), 'x');
-        assert_eq!(dst[Pos::new(3, 2)].glyph(), 'y');
-        // Untouched cells stay whatever the destination started with.
-        assert_eq!(dst[Pos::new(0, 0)].glyph(), ' ');
     }
 }

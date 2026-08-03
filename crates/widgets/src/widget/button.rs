@@ -2,12 +2,13 @@
 use retroglyph_core::{Color, Rect, Style};
 
 use super::{InteractiveWidget, Widget};
+use crate::Align;
 use crate::Response;
 use crate::Sense;
 use crate::Surface;
 use crate::Theme;
 use crate::draw::fill_rect;
-use crate::text::truncate as truncate_to_cols;
+use crate::text::draw_clipped;
 
 /// A filled, centered `label`, styled by a [`Response`] the caller resolves via
 /// [`Interaction::interact`](crate::Interaction::interact) (or, through [`InteractiveWidget`],
@@ -180,12 +181,8 @@ impl InteractiveWidget for Button<'_> {
         let style = self.resolved_style(response);
         fill_rect(surface, Rect::new(0, 0, width, height), ' ', style);
 
-        let text = truncate_to_cols(self.label, width);
-        let text_width = retroglyph_core::text::width(text);
-        let x = width.saturating_sub(text_width) / 2;
         let y = height / 2;
-
-        surface.print((x, y), text, style);
+        let _ = draw_clipped(surface, (0, y), width, self.label, Align::Center, style);
     }
 }
 

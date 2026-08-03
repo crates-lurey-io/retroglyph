@@ -997,25 +997,16 @@ impl<P: Presenter, F, T, D> WindowApp<P, F, T, D> {
         // canvas visibly shrinks, on a phone with DPR 3 and our 1.5 cap,
         // that's 50% of the screen). See `web::web_viewport_surface_physical_size`
         // for the separate, capped size used for the raster backing store.
-        // On native, `init_size` is expressed in logical (1x) pixels --
-        // `WindowConfig::fit` derives it from the presenter's grid/cell
-        // geometry, which assumes an unscaled cell. Requesting that count
-        // directly as a `PhysicalSize` on a HiDPI display asks winit/the OS
-        // for a window with fewer true pixels than the monitor actually
-        // has, so it gets upscaled blurrily to fill the same logical space
-        // instead of rendering crisply at native resolution from the first
-        // frame. Scaling by the primary monitor's `scale_factor` up front
-        // (falling back to `1.0` when no monitor is available, e.g.
-        // headless/CI) avoids that: see `physical_size_for`.
+        // On native, `init_size` is already expressed in true physical
+        // pixels -- `WindowConfig::fit` derives it from
+        // `Presenter::cell_size()`, which is documented to return physical
+        // (not logical/DPI-scaled) pixels. Requesting that count directly
+        // as a `PhysicalSize` is therefore already correct on a HiDPI
+        // display; scaling it again by the monitor's `scale_factor` would
+        // double the window size (see retroglyph#701).
         #[cfg(not(target_arch = "wasm32"))]
-        let physical_size = {
-            let scale_factor = event_loop
-                .primary_monitor()
-                .map_or(1.0, |monitor| monitor.scale_factor());
-            let (width, height) =
-                physical_size_for(self.init_size.width, self.init_size.height, scale_factor);
-            winit::dpi::PhysicalSize::new(width, height)
-        };
+        let physical_size =
+            winit::dpi::PhysicalSize::new(self.init_size.width, self.init_size.height);
         #[cfg(target_arch = "wasm32")]
         let physical_size = if self.fill_viewport {
             web::web_viewport_layout_physical_size().unwrap_or_else(|| {
@@ -1128,23 +1119,6 @@ impl<P: Presenter, F, T, D> WindowApp<P, F, T, D> {
     }
 }
 
-/// Scales a logical (1x) initial window size up to true physical pixels for
-/// `scale_factor`, so [`create_window_and_surface`](WindowApp::create_window_and_surface)
-/// can request a window sized to the primary monitor's actual resolution
-/// from the first frame, instead of a too-small physical window the OS then
-/// has to upscale blurrily to fill the same on-screen space.
-///
-/// Pure math, kept separate from `create_window_and_surface` so it's unit
-/// -testable without a live winit event loop / monitor.
-#[cfg(not(target_arch = "wasm32"))]
-#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-fn physical_size_for(logical_width: u32, logical_height: u32, scale_factor: f64) -> (u32, u32) {
-    (
-        (f64::from(logical_width) * scale_factor).round() as u32,
-        (f64::from(logical_height) * scale_factor).round() as u32,
-    )
-}
-
 /// Number of consecutive `present()` failures after which
 /// [`handle_window_event`](WindowApp::handle_window_event)'s `RedrawRequested` arm attempts to
 /// recover by re-initializing the surface (see [`PresentFailureAction::Recover`]).
@@ -1204,8 +1178,7 @@ enum PresentFailureAction {
 ///
 /// Pure decision table, kept separate from the live `RedrawRequested` handling (which needs a
 /// real `Terminal`/`Presenter`/`Window`) so the threshold and logging-level logic is unit
-/// -testable without any of those, the same reasoning as [`physical_size_for`] and
-/// [`web::dpr_pointer_scale`] above.
+/// -testable without any of those, the same reasoning as [`web::dpr_pointer_scale`] above.
 const fn present_failure_action(
     consecutive_failures: u32,
     succeeded: bool,
@@ -1243,7 +1216,7 @@ const fn present_failure_action(
 ///
 /// Pure function of the two instants and the interval, kept separate from the live `about_to_wait`
 /// handling (which needs an [`ActiveEventLoop`] no unit test can construct) for the same reason as
-/// [`present_failure_action`] and [`physical_size_for`] above. `wasm32` has no sleeping event loop
+/// [`present_failure_action`] above. `wasm32` has no sleeping event loop
 /// to schedule against and never calls this; see `about_to_wait`.
 #[cfg(not(target_arch = "wasm32"))]
 fn next_frame_deadline(
@@ -1849,27 +1822,6 @@ mod tests {
     use std::cell::RefCell;
     use std::time::Duration;
 
-    // ── physical_size_for ─────────────────────────────────────────────────────
-
-    #[test]
-    fn physical_size_for_unscaled_monitor_is_unchanged() {
-        assert_eq!(physical_size_for(80, 80, 1.0), (80, 80));
-    }
-
-    #[test]
-    fn physical_size_for_hidpi_monitor_scales_up() {
-        // 2x display: a 80x80 logical window needs 160x160 true physical
-        // pixels to render crisply instead of being upscaled by the OS.
-        assert_eq!(physical_size_for(80, 80, 2.0), (160, 160));
-    }
-
-    #[test]
-    fn physical_size_for_fractional_scale_rounds() {
-        // 1.5x display: 81x81 rounds to the nearest physical pixel rather
-        // than truncating.
-        assert_eq!(physical_size_for(81, 81, 1.5), (122, 122));
-    }
-
     // ── WindowConfig builder chain ───────────────────────────────────────────
 
     #[test]
@@ -1887,6 +1839,19 @@ mod tests {
         assert!(!config.fullscreen);
         assert!(!config.transparency);
         assert!(!config.fill_viewport);
+    }
+
+    #[test]
+    fn fit_width_height_are_physical_pixels_not_rescaled() {
+        // Regression test for retroglyph#701: `Presenter::cell_size()` is documented as
+        // physical pixels, so `fit()`'s width/height must be exactly `grid * cell_size`,
+        // with nothing scaling that by a monitor's DPI factor before it reaches
+        // `WindowApp::init_size` and, from there, `create_window_and_surface`.
+        let mut presenter = MockPresenter::default();
+        presenter.resize(Size::new(80, 25));
+        let config = WindowConfig::fit(&presenter, "test", None, true);
+        assert_eq!(config.width, 80 * 8);
+        assert_eq!(config.height, 25 * 16);
     }
 
     #[test]

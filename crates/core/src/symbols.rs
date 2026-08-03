@@ -65,6 +65,12 @@ pub mod border {
     };
 
     /// [`PLAIN`] with rounded corners (`╭─╮│╰╯`).
+    ///
+    /// The 4 corners (`╭╮╰╯`) have no glyph in any font this crate bundles; drawing with
+    /// `ROUNDED` through `retroglyph_window`'s fullest bundled `FontChain` falls back
+    /// to the notdef substitute for those 4 entries (`horizontal`/`vertical` are shared with
+    /// [`PLAIN`], which CP437 does cover). Supply a font with real corner glyphs to draw this
+    /// set as intended.
     pub const ROUNDED: BorderSet = BorderSet {
         top_left: '╭',
         top_right: '╮',
@@ -85,6 +91,11 @@ pub mod border {
     };
 
     /// Heavy (thick) single-line box-drawing characters (`┏━┓┃┗┛`).
+    ///
+    /// No glyph in any font this crate bundles covers any of these 6 entries; drawing with
+    /// `THICK` through `retroglyph_window`'s fullest bundled `FontChain` falls back to
+    /// the notdef substitute for the whole set. Supply a font with real heavy-line glyphs to
+    /// draw this set as intended.
     pub const THICK: BorderSet = BorderSet {
         top_left: '┏',
         top_right: '┓',
@@ -123,6 +134,12 @@ pub mod line {
     };
 
     /// Heavy (thick) gridline characters (`━┃╋┫┣┳┻`).
+    ///
+    /// `horizontal`/`vertical` are the same glyphs as [`super::border::THICK`]'s and share its notdef
+    /// gap. The 4 tees and the cross (`┫┣┳┻╋`) have no glyph in any font this crate bundles
+    /// either; drawing with `THICK` through `retroglyph_window`'s fullest bundled
+    /// `FontChain` falls back to the notdef substitute for all 7 entries. Supply a font
+    /// with real heavy-line glyphs to draw this set as intended.
     pub const THICK: LineSet = LineSet {
         horizontal: '━',
         vertical: '┃',

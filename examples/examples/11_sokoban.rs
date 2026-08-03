@@ -317,7 +317,7 @@ impl Sokoban {
 
         let level_x = play_area.left() + 2;
         let level_y = play_area.top() + 2;
-        retroglyph_widgets::blit_into(&mut surface, &self.level, level_x, level_y);
+        surface.blit(&self.level, level_x, level_y);
 
         for b in &self.boxes {
             let on_goal = self.goals.contains(&b.pos);

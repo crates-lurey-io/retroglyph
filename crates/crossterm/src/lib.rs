@@ -995,16 +995,12 @@ impl<W: std::io::Write> Output for Crossterm<W> {
     {
         // Begin synchronized update so the terminal holds rendering until
         // flush() sends the matching End marker.
-        self.renderer.begin_synchronized_update()?;
-        self.renderer.draw(content)?;
-        Ok(())
+        self.renderer.draw_frame(content)
     }
 
     #[cfg_attr(feature = "tracing", tracing::instrument(level = "debug", skip_all))]
     fn flush(&mut self) -> Result<(), Self::Error> {
-        self.renderer.end_synchronized_update()?;
-        self.renderer.flush()?;
-        Ok(())
+        self.renderer.end_frame()
     }
 
     fn size(&self) -> Size {
@@ -1013,34 +1009,30 @@ impl<W: std::io::Write> Output for Crossterm<W> {
         self.cached_size
     }
 
-    fn resize(&mut self, _size: Size) {
+    fn resize(&mut self, size: Size) {
+        // Keep `cached_size` in sync with the caller's own idea of the terminal's dimensions,
+        // the same as observing a real `crossterm::event::Event::Resize` in `poll_event` does
+        // (see `cached_size`'s docs): without this, `size()` drifted permanently from the real
+        // terminal size after any resize, since nothing else here ever wrote to it
+        // (retroglyph#763).
+        self.cached_size = size;
         let _ = self.clear();
     }
 
     fn clear(&mut self) -> Result<(), Self::Error> {
-        crossterm::queue!(
-            self.renderer.writer_mut(),
-            // Reset SGR attributes *before* erasing: most terminals implement "erase display"
-            // via background color erase (BCE), painting the erased cells with whatever
-            // background is currently active in the pen, not the terminal's true default. Left
-            // un-reset, a cell colored by the last frame (a themed panel, a highlighted tile)
-            // becomes the color `Clear` paints the whole screen with. That would be merely
-            // cosmetic for one frame, except every cell here is a `resize()` call too (see
-            // `Output::resize` above): `Terminal::resize` wipes `previous` to default tiles, so
-            // any `current` cell that's also still at its default (e.g. anything the app hasn't
-            // drawn into the newly grown area yet) never differs from `previous` and is never
-            // resent by the diff in `present()`. That leaves the BCE-tinted patch on screen
-            // permanently: exactly the "gaps where the background doesn't clear" symptom after
-            // a resize, since nothing ever draws over it again.
-            crossterm::style::SetAttribute(crossterm::style::Attribute::Reset),
-            crossterm::terminal::Clear(crossterm::terminal::ClearType::All)
-        )?;
-        self.renderer.writer_mut().flush()?;
-        // The terminal-side state (cursor position, last color/attrs) is now
-        // stale versus what's actually on screen; forget it so the next
-        // draw() re-emits full escape sequences instead of skipping them.
-        self.renderer.reset_state();
-        Ok(())
+        // Reset SGR attributes *before* erasing: most terminals implement "erase display" via
+        // background color erase (BCE), painting the erased cells with whatever background is
+        // currently active in the pen, not the terminal's true default. Left un-reset, a cell
+        // colored by the last frame (a themed panel, a highlighted tile) becomes the color
+        // `clear_screen` paints the whole screen with. That would be merely cosmetic for one
+        // frame, except every cell here is a `resize()` call too (see `Output::resize` above):
+        // `Terminal::resize` wipes `previous` to default tiles, so any `current` cell that's also
+        // still at its default (e.g. anything the app hasn't drawn into the newly grown area yet)
+        // never differs from `previous` and is never resent by the diff in `present()`. That
+        // leaves the BCE-tinted patch on screen permanently: exactly the "gaps where the
+        // background doesn't clear" symptom after a resize, since nothing ever draws over it
+        // again.
+        self.renderer.clear_screen()
     }
 }
 
@@ -1162,46 +1154,20 @@ impl<W: std::io::Write> Cursor for Crossterm<W> {
     /// of the normal draw/flush pair, with no observable benefit since nothing reads the terminal
     /// state in between.
     fn set_cursor_visible(&mut self, visible: bool) {
-        let writer = self.renderer.writer_mut();
-        if visible {
-            let _ = crossterm::queue!(writer, crossterm::cursor::Show);
-        } else {
-            let _ = crossterm::queue!(writer, crossterm::cursor::Hide);
-        }
+        let _ = self.renderer.set_cursor_visible(visible);
     }
 
     /// Queues the cursor-move escape without flushing; see [`set_cursor_visible`](Self::set_cursor_visible)'s
     /// docs for why this is deferred to the next [`Output::flush`] instead of flushing here.
     fn set_cursor_position(&mut self, position: Pos) {
-        let writer = self.renderer.writer_mut();
-        let _ = crossterm::queue!(writer, crossterm::cursor::MoveTo(position.x, position.y));
-        // The real cursor is now wherever `position` says, not wherever the last drawn glyph
-        // left it; forget the tracked position so the next `draw()` doesn't skip a `MoveTo` for a
-        // changed cell that happens to match the stale tracked coordinates. See retroglyph#713.
-        self.renderer.reset_state();
+        let _ = self.renderer.move_cursor_to(position);
     }
 
     /// Queues the `DECSCUSR` cursor-shape escape without flushing; see
     /// [`set_cursor_visible`](Self::set_cursor_visible)'s docs for why this is deferred to the
     /// next [`Output::flush`] instead of flushing here.
     fn set_cursor_style(&mut self, style: CursorStyle) {
-        let writer = self.renderer.writer_mut();
-        let _ = crossterm::queue!(writer, from_cursor_style(style));
-    }
-}
-
-const fn from_cursor_style(style: CursorStyle) -> crossterm::cursor::SetCursorStyle {
-    use crossterm::cursor::SetCursorStyle as CS;
-    match style {
-        CursorStyle::BlinkingBlock => CS::BlinkingBlock,
-        CursorStyle::SteadyBlock => CS::SteadyBlock,
-        CursorStyle::BlinkingUnderline => CS::BlinkingUnderScore,
-        CursorStyle::SteadyUnderline => CS::SteadyUnderScore,
-        CursorStyle::BlinkingBar => CS::BlinkingBar,
-        CursorStyle::SteadyBar => CS::SteadyBar,
-        // `CursorStyle` is `#[non_exhaustive]`: a future shape added upstream falls back to the
-        // terminal's own default rather than failing to compile here.
-        _ => CS::DefaultUserShape,
+        let _ = self.renderer.set_cursor_style(style);
     }
 }
 
@@ -1300,25 +1266,15 @@ const fn from_crossterm_key_state(
     }
 }
 
-fn from_crossterm_key_modifiers(
+const fn from_crossterm_key_modifiers(
     mods: crossterm::event::KeyModifiers,
 ) -> retroglyph_core::event::KeyModifiers {
-    use retroglyph_core::event::KeyModifiers as M;
-
-    let mut result = M::NONE;
-    if mods.contains(crossterm::event::KeyModifiers::SHIFT) {
-        result |= M::SHIFT;
-    }
-    if mods.contains(crossterm::event::KeyModifiers::CONTROL) {
-        result |= M::CONTROL;
-    }
-    if mods.contains(crossterm::event::KeyModifiers::ALT) {
-        result |= M::ALT;
-    }
-    if mods.contains(crossterm::event::KeyModifiers::SUPER) {
-        result |= M::SUPER;
-    }
-    result
+    retroglyph_core::event::KeyModifiers::from_parts(
+        mods.contains(crossterm::event::KeyModifiers::SHIFT),
+        mods.contains(crossterm::event::KeyModifiers::CONTROL),
+        mods.contains(crossterm::event::KeyModifiers::ALT),
+        mods.contains(crossterm::event::KeyModifiers::SUPER),
+    )
 }
 
 const fn from_crossterm_mouse_button(
@@ -1356,7 +1312,7 @@ const fn from_crossterm_mouse_event_kind(
     }
 }
 
-fn from_crossterm_mouse_event(
+const fn from_crossterm_mouse_event(
     m: crossterm::event::MouseEvent,
 ) -> retroglyph_core::event::MouseEvent {
     retroglyph_core::event::MouseEvent {
@@ -2374,5 +2330,99 @@ mod tests {
         term.set_cursor_style(CursorStyle::BlinkingBar);
 
         assert_eq!(term.writer().as_slice(), b"\x1b[5 q");
+    }
+
+    /// Wraps [`Crossterm`] so [`Observable::snapshot`] hashes only the bytes written since the
+    /// previous call, per that trait's docs: this backend's observable state is an append-only
+    /// escape-byte log, so "changed" means "appended", tracked here as a remembered offset into
+    /// [`Crossterm::writer`] rather than by hashing the whole log every time.
+    struct CrosstermObserver {
+        term: Crossterm<Vec<u8>>,
+        offset: usize,
+    }
+
+    impl CrosstermObserver {
+        fn new(size: Size) -> Self {
+            let mut term = Crossterm::builder()
+                .raw_mode(false)
+                .alt_screen(false)
+                .mouse_capture(false)
+                .focus_change(false)
+                .bracketed_paste(false)
+                .kitty_protocol(false)
+                .build_with_writer(Vec::new())
+                .expect(
+                    "building against a Vec<u8> writer with all TTY features disabled must not require a real terminal",
+                );
+            // `resize` (now that it actually updates `cached_size`, see retroglyph#763) seeds
+            // the size the conformance harness asked for; its own escape bytes are folded into
+            // the initial offset below rather than showing up in the first measured delta.
+            term.resize(size);
+            let offset = term.writer().len();
+            Self { term, offset }
+        }
+    }
+
+    impl Output for CrosstermObserver {
+        type Error = std::io::Error;
+
+        fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
+        where
+            I: Iterator<Item = DrawCell<'a>>,
+        {
+            self.term.draw(content)
+        }
+
+        fn flush(&mut self) -> Result<(), Self::Error> {
+            self.term.flush()
+        }
+
+        fn size(&self) -> Size {
+            Output::size(&self.term)
+        }
+
+        fn clear(&mut self) -> Result<(), Self::Error> {
+            Output::clear(&mut self.term)
+        }
+
+        fn resize(&mut self, size: Size) {
+            Output::resize(&mut self.term, size);
+        }
+    }
+
+    impl Cursor for CrosstermObserver {
+        fn set_cursor_position(&mut self, position: Pos) {
+            Cursor::set_cursor_position(&mut self.term, position);
+        }
+    }
+
+    impl retroglyph_core::testing::conformance::Observable for CrosstermObserver {
+        fn snapshot(&mut self) -> u64 {
+            let bytes = self.term.writer();
+            let delta = &bytes[self.offset..];
+            let hash = retroglyph_core::testing::conformance::fnv1a(delta);
+            self.offset = bytes.len();
+            hash
+        }
+    }
+
+    #[test]
+    #[ignore = "a DrawCell::pos outside size() is currently sent to the display unchecked \
+                instead of being dropped, rather than the other three Output obligations this \
+                also covers; see the follow-up issue this PR files alongside retroglyph#763"]
+    fn satisfies_the_output_contract() {
+        let _lock = TEST_GUARD_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        retroglyph_core::testing::conformance::assert_output_contract(CrosstermObserver::new);
+    }
+
+    #[test]
+    #[ignore = "retroglyph#713: set_cursor_position doesn't resync the renderer's tracked cursor"]
+    fn satisfies_the_cursor_contract() {
+        let _lock = TEST_GUARD_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        retroglyph_core::testing::conformance::assert_cursor_contract(CrosstermObserver::new);
     }
 }

@@ -3,11 +3,12 @@ use retroglyph_core::{Color, Rect, Style};
 
 use super::window::visible_window;
 use super::{Measure, StatefulWidget};
+use crate::Align;
 use crate::ListState;
 use crate::Surface;
 use crate::Theme;
 use crate::draw::fill_rect;
-use crate::text::truncate as truncate_to_cols;
+use crate::text::draw_clipped;
 
 /// A fixed-column, scrollable table with a [`ListState`]-driven highlighted
 /// row.
@@ -231,9 +232,8 @@ fn draw_row(
         if x >= width {
             break;
         }
-        let avail = (width - x).min(w) as usize;
-        let text = truncate_to_cols(cell, avail);
-        surface.print((x, y), text, style);
+        let avail = (width - x).min(w);
+        let _ = draw_clipped(surface, (x, y), avail, cell, Align::Left, style);
         x = x.saturating_add(w.saturating_add(column_spacing));
     }
 }

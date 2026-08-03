@@ -1,12 +1,12 @@
 //! [`Panel`]: a bordered, titled panel.
+use retroglyph_core::text::truncate_measured;
 use retroglyph_core::{Color, Rect, Style};
-use unicode_width::UnicodeWidthStr;
 
 use super::{BorderType, BoxBorder, Measure, Widget};
 use crate::Surface;
 use crate::draw::fill_rect;
 use crate::style::Sides;
-use crate::text::truncate as truncate_to_cols;
+use crate::text::draw_clipped;
 use crate::{Align, Theme};
 
 /// A bordered panel: a filled background with a box border and an optional
@@ -185,22 +185,27 @@ impl Widget for Panel<'_> {
 
         // Render the title into the top border if one was provided.
         if let Some(t) = self.title {
-            let max_title_w = width.saturating_sub(4) as usize; // 2 border + 2 spaces
+            let max_title_w = width.saturating_sub(4); // 2 border + 2 spaces
             if max_title_w == 0 {
                 return;
             }
-            // Truncate to fit.
-            let t = truncate_to_cols(t, max_title_w);
-            // `truncate_to_cols` bounds `t` to `max_title_w` columns, itself derived from this
-            // surface's own `u16` width, so narrowing the display width back is always exact.
-            #[allow(clippy::cast_possible_truncation)]
-            let t_w = t.width() as u16;
+            // Truncate and measure up front: the padding spaces flank the title, so their
+            // position depends on the truncated title's own width, not the other way around
+            // (unlike the widgets that hand this whole sequence to `draw_clipped` in one call).
+            let (t, t_w) = truncate_measured(t, max_title_w);
             // The padded title (a space either side of the text) is aligned
             // within the region between the two corners (`width - 2`).
             let padded = t_w + 2;
             let title_x = 1 + self.title_align.offset(width - 2, padded);
             surface.put((title_x, 0), ' ', self.border_style);
-            surface.print((title_x + 1, 0), t, self.border_style);
+            let _ = draw_clipped(
+                surface,
+                (title_x + 1, 0),
+                t_w,
+                t,
+                Align::Left,
+                self.border_style,
+            );
             surface.put((title_x + 1 + t_w, 0), ' ', self.border_style);
         }
     }
@@ -383,6 +388,55 @@ mod tests {
         // compute title_x = (10 - 3 - 2) / 2 = 2, off by one.
         assert_eq!(grid[Pos::new(3, 0)].glyph(), ' ');
         assert_eq!(grid[Pos::new(4, 0)].glyph(), 'あ');
+
+        // Column 5 is where a wide char's spacer column would sit. Reserving it is an `egc`-only
+        // guarantee (see README's "Extended grapheme cluster support" section): with `egc`,
+        // `print` writes a real spacer there, so it reads back as the trailing pad space this
+        // widget wrote. Without `egc`, `print` only ever touches one cell per `char` regardless of
+        // its display width, so column 5 is left holding whatever the border already drew there,
+        // and the pad space this widget writes lands one column further out instead.
+        #[cfg(feature = "egc")]
         assert_eq!(grid[Pos::new(5, 0)].glyph(), ' ');
+        #[cfg(not(feature = "egc"))]
+        {
+            assert_eq!(grid[Pos::new(5, 0)].glyph(), '─');
+            assert_eq!(grid[Pos::new(6, 0)].glyph(), ' ');
+        }
+    }
+
+    #[test]
+    fn renders_identically_at_the_origin_and_at_a_scoped_offset() {
+        // #738: a widget correct only by not touching `surface.area()`'s absolute `left()`/
+        // `top()` should draw the same relative to its own area regardless of where that area
+        // sits on the grid. `Panel::render` is written that way (`surface.width()`/`height()`,
+        // never `area().left()`/`top()`), so this must hold for it already.
+        let (width, height) = (10, 4);
+        let mut origin_grid = Grid::new(width, height);
+        Panel::new().title("hi").render(&mut Surface::new(
+            &mut origin_grid,
+            Rect::new(0, 0, width, height),
+            0,
+        ));
+
+        let (ox, oy) = (3, 2);
+        let mut offset_grid = Grid::new(width + ox, height + oy);
+        let mut root = Surface::new(
+            &mut offset_grid,
+            Rect::new(0, 0, width + ox, height + oy),
+            0,
+        );
+        Panel::new()
+            .title("hi")
+            .render(&mut root.scope(Rect::new(ox, oy, width, height)));
+
+        for y in 0..height {
+            for x in 0..width {
+                assert_eq!(
+                    origin_grid[Pos::new(x, y)].glyph(),
+                    offset_grid[Pos::new(x + ox, y + oy)].glyph(),
+                    "mismatch at local ({x}, {y})"
+                );
+            }
+        }
     }
 }

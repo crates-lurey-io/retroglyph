@@ -320,6 +320,22 @@ impl<Id> Interaction<Id> {
 }
 
 impl<Id: Copy + PartialEq> Interaction<Id> {
+    /// The id the pointer resolved to this frame, if any: the same value
+    /// [`interact`](Self::interact) compares against to decide each
+    /// widget's [`Response::hovered`], resolved from last frame's hit-test
+    /// (see [`Interaction`](Self) for why there's a frame of latency).
+    ///
+    /// Unlike `Response::hovered`, this isn't filtered by the hovered
+    /// widget's [`Sense`]: it's the topmost id under the pointer
+    /// regardless of what that id is listening for, which is what makes it
+    /// useful for drawing a hover-driven readout (a tooltip, a cost
+    /// preview) *before* the widget it depends on has been registered this
+    /// frame, rather than having to stash the value for next frame by hand.
+    #[must_use]
+    pub const fn hovered(&self) -> Option<Id> {
+        self.resolved_hover
+    }
+
     /// Run one frame: [`begin_frame`](Self::begin_frame), then `f` (given a [`Ui`] pairing
     /// `surface` with `self`), then [`end_frame`](Self::end_frame).
     ///

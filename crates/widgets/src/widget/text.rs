@@ -1,11 +1,10 @@
 //! [`Text`]: a single line of plain text in one [`Style`].
 use retroglyph_core::Style;
-use unicode_width::UnicodeWidthStr;
 
 use super::Widget;
 use crate::Align;
 use crate::Surface;
-use crate::text::truncate as truncate_to_cols;
+use crate::text::draw_clipped;
 
 /// A single line of text in one [`Style`], clipped (not wrapped) to
 /// `area.width()` columns. Only the first row of `area` is used.
@@ -18,6 +17,11 @@ use crate::text::truncate as truncate_to_cols;
 /// style, with no wrapping and no per-span styling. `style` defaults to
 /// [`Style::new()`] and `align` to [`Align::Left`]; set them with
 /// [`Text::style`]/[`Text::align`].
+///
+/// Unlike [`super::BoxBorder`], [`super::Gauge`], [`super::StatBar`],
+/// [`super::Table`], and [`super::Button`], `Text` has no `theme()`/
+/// `theme_on()` pair: a line of plain text has no single semantic
+/// [`Theme`](crate::Theme) role to map onto, so callers set `style` directly.
 ///
 /// # Examples
 ///
@@ -70,13 +74,7 @@ impl Widget for Text<'_> {
         if width == 0 {
             return;
         }
-        let text = truncate_to_cols(self.content, width);
-        // `text` is bounded to `width` columns above, so narrowing the display width back is
-        // always exact.
-        #[allow(clippy::cast_possible_truncation)]
-        let text_width = text.width() as u16;
-        let x = self.align.offset(width, text_width);
-        surface.print((x, 0), text, self.style);
+        let _ = draw_clipped(surface, (0, 0), width, self.content, self.align, self.style);
     }
 }
 

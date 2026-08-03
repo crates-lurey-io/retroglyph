@@ -71,12 +71,6 @@ impl FrameClock {
         self.step
     }
 
-    /// The fixed timestep duration in seconds.
-    #[must_use]
-    pub const fn dt_secs(&self) -> f64 {
-        self.step.as_secs_f64()
-    }
-
     /// Add elapsed wall time to the accumulator, clamped to the catch-up cap.
     ///
     /// Call once per rendered frame with [`Frame::delta`](crate::Frame).

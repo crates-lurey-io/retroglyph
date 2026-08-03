@@ -18,29 +18,9 @@ use alloc::vec::Vec;
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
-/// Horizontal alignment within a bounded rectangle.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub enum HAlign {
-    /// Align text to the left edge (default).
-    #[default]
-    Left,
-    /// Centre text horizontally.
-    Center,
-    /// Align text to the right edge.
-    Right,
-}
-
-/// Vertical alignment within a bounded rectangle.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub enum VAlign {
-    /// Align text to the top edge (default).
-    #[default]
-    Top,
-    /// Centre text vertically.
-    Middle,
-    /// Align text to the bottom edge.
-    Bottom,
-}
+// `HAlign`/`VAlign` live in the ungated `crate::align` module (they need nothing from `egc`)
+// and are re-exported here for callers already importing them from `crate::layout`.
+pub use crate::align::{HAlign, VAlign};
 
 /// The display dimensions of a laid-out block of text.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -287,12 +267,12 @@ impl<'a> TextLayout<'a> {
     }
 
     /// Renders the text into `surface`, clipping to both the rect's bounds and `surface`'s own
-    /// area (the rect is intersected with [`Surface::area`] first, so text can never escape the
-    /// surface it was given even if `rect` extends past it).
+    /// clip (the rect is intersected with [`Surface::clip_rect`] first, so text can never escape
+    /// whatever clip the caller applied even if `rect` extends past it).
     pub fn render_to_surface(&self, surface: &mut Surface<'_>) {
         let clipped = Self {
             line: self.line,
-            rect: self.rect.intersect(surface.area()),
+            rect: self.rect.intersect(surface.clip_rect()),
             h_align: self.h_align,
             v_align: self.v_align,
         };
@@ -311,25 +291,17 @@ impl<'a> TextLayout<'a> {
         #[allow(clippy::cast_possible_truncation)]
         let total_lines = lines.len().min(usize::from(rect.height())) as u16;
 
-        let y_offset = match self.v_align {
-            VAlign::Top => 0,
-            VAlign::Middle => rect.height().saturating_sub(total_lines) / 2,
-            VAlign::Bottom => rect.height().saturating_sub(total_lines),
-        };
+        let y_offset = self.v_align.offset(rect.height(), total_lines);
 
         for (line_idx, wrapped) in lines.into_iter().take(total_lines as usize).enumerate() {
-            let x_offset = match self.h_align {
-                HAlign::Left => 0,
-                HAlign::Center => rect.width().saturating_sub(wrapped.width) / 2,
-                HAlign::Right => rect.width().saturating_sub(wrapped.width),
-            };
+            let x_offset = self.h_align.offset(rect.width(), wrapped.width);
 
             #[allow(clippy::cast_possible_truncation)]
             let row = rect.top() + y_offset + line_idx as u16;
             let mut cx = rect.left() + x_offset;
 
             for glyph in wrapped.glyphs {
-                if cx >= rect.right() {
+                if cx + glyph.width > rect.right() {
                     break;
                 }
                 grid.write_grapheme(layer, cx, row, &glyph.grapheme, glyph.style);
@@ -535,5 +507,50 @@ mod tests {
         assert_eq!(term.grid()[Pos::new(0, 0)].glyph(), 'a');
         assert_eq!(term.grid()[Pos::new(0, 1)].glyph(), 'b');
         assert_eq!(term.grid()[Pos::new(0, 2)].glyph(), ' '); // clipped
+    }
+
+    #[test]
+    fn text_layout_render_to_surface_escapes_the_surface_clip() {
+        use crate::backend::Headless;
+        use crate::terminal::Terminal;
+
+        // The rect (10x4) extends well past the surface's one-row clip: "hello world"
+        // wraps to "hello" / "world" at word boundaries, and the wrapped remainder
+        // ("world") must not be painted on row 1, outside the clip.
+        let mut term = Terminal::new(Headless::new(20, 5));
+        {
+            let mut surface = term.surface();
+            let mut bar = surface.clip(Rect::new(0, 0, 10, 1));
+            let line = Line::raw("hello world");
+            TextLayout::new(&line)
+                .rect(Rect::new(0, 0, 10, 4))
+                .render_to_surface(&mut bar);
+        }
+
+        let row0: String = (0..10)
+            .map(|x| term.grid()[Pos::new(x, 0)].glyph())
+            .collect();
+        assert_eq!(row0.trim_end(), "hello");
+        for x in 0..10 {
+            assert_eq!(term.grid()[Pos::new(x, 1)].glyph(), ' ');
+        }
+    }
+
+    #[test]
+    fn text_layout_wide_glyph_stays_inside_the_rect() {
+        use crate::backend::Headless;
+        use crate::terminal::Terminal;
+
+        // A single wide (2-column) glyph in a rect one column too narrow for it: neither
+        // the primary cell nor its spacer may be written, since the spacer would land at
+        // column 1, outside the 1-wide rect.
+        let mut term = Terminal::new(Headless::new(10, 5));
+        let line = Line::raw("\u{3042}"); // 'あ', a wide CJK glyph
+        TextLayout::new(&line)
+            .rect(Rect::new(0, 0, 1, 1))
+            .render_to_surface(&mut term.surface());
+
+        assert_eq!(term.grid()[Pos::new(0, 0)].glyph(), ' ');
+        assert_eq!(term.grid()[Pos::new(1, 0)].glyph(), ' ');
     }
 }

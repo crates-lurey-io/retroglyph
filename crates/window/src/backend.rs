@@ -4,7 +4,7 @@
 use crate::presenter::Presenter;
 use retroglyph_core::DrawCell;
 use retroglyph_core::backend::{Cursor, Input, Output};
-use retroglyph_core::event::{Event, MouseEvent, MouseEventKind};
+use retroglyph_core::event::{Event, coalesces_with};
 use retroglyph_core::grid::Size;
 use std::collections::VecDeque;
 use std::time::Duration;
@@ -202,18 +202,12 @@ impl<P: Presenter> Input for WindowBackend<P> {
         // Coalesce consecutive `Mouse(Moved)` events: winit can deliver `CursorMoved` at device
         // polling rate (hundreds/sec) though only the latest position matters once the next frame
         // polls the queue, so replace the queue's tail in place instead of growing it unbounded
-        // (retroglyph#294). Every other event kind (clicks, scrolls, keys, resize, ...) still
-        // pushes in O(1) as before; only two back-to-back `Moved` events collapse.
-        if let Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Moved,
-            ..
-        }) = &event
-            && let Some(
-                back @ Event::Mouse(MouseEvent {
-                    kind: MouseEventKind::Moved,
-                    ..
-                }),
-            ) = self.events.back_mut()
+        // (retroglyph#294, retroglyph#768). Every other event kind (clicks, scrolls, keys, resize,
+        // ...) still pushes in O(1) as before; only two back-to-back `Moved` events collapse. See
+        // [`coalesces_with`] for the shared rule (also used by `retroglyph-terminal-wasm` and
+        // `Headless`).
+        if let Some(back) = self.events.back_mut()
+            && coalesces_with(&event, back)
         {
             *back = event;
             return;
@@ -230,7 +224,7 @@ impl<P: Presenter> Cursor for WindowBackend<P> {}
 mod tests {
     use super::*;
     use crate::presenter::WindowHandle;
-    use retroglyph_core::event::{KeyModifiers, MouseButton};
+    use retroglyph_core::event::{KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
     use retroglyph_core::grid::Pos;
     use std::sync::Arc;
 

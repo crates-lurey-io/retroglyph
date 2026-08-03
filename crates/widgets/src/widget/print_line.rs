@@ -1,11 +1,10 @@
 //! [`PrintLine`]: a single styled [`Line`].
-use retroglyph_core::text::Line;
-use unicode_width::UnicodeWidthStr;
+use retroglyph_core::text::{Line, width as measured_width};
 
 use super::Widget;
 use crate::Align;
 use crate::Surface;
-use crate::text::truncate as truncate_to_cols;
+use crate::text::draw_clipped;
 
 /// A [`Line`], drawn on the first row of the area it's rendered into and
 /// clipped to `area.width()` columns. Only the first row is used.
@@ -61,28 +60,30 @@ impl Widget for PrintLine<'_> {
         let right = max_width;
         // Align the whole line as a unit: sum the spans' display widths
         // (clamped to the area) and offset the start column accordingly.
-        // A single span wider than `u16::MAX` columns would already be unaddressable in this
-        // crate's `u16` coordinate space; the running total still saturates rather than
-        // overflowing even if one span's cast wraps.
-        #[allow(clippy::cast_possible_truncation)]
+        // `measured_width` already saturates each span at `u16::MAX`, and `saturating_add` keeps
+        // the running total from overflowing too.
         let line_width = self
             .line
             .spans
             .iter()
-            .fold(0u16, |acc, s| acc.saturating_add(s.content.width() as u16))
+            .fold(0u16, |acc, s| {
+                acc.saturating_add(measured_width(&s.content))
+            })
             .min(max_width);
         let mut x = self.align.offset(max_width, line_width);
         for span in &self.line.spans {
             if x >= right {
                 break;
             }
-            let remaining = (right - x) as usize;
-            let text = truncate_to_cols(&span.content, remaining);
-            surface.print((x, 0), text, span.style);
-            // `text` is bounded to `remaining` columns above, itself derived from the `u16`
-            // `right`/`x`, so narrowing its display width back is always exact.
-            #[allow(clippy::cast_possible_truncation)]
-            let text_w = text.width() as u16;
+            let remaining = right - x;
+            let text_w = draw_clipped(
+                surface,
+                (x, 0),
+                remaining,
+                &span.content,
+                Align::Left,
+                span.style,
+            );
             x += text_w;
         }
     }

@@ -28,7 +28,7 @@ use retroglyph_core::{Backend, Frame, Rect, Style, Terminal};
 use retroglyph_examples::Example;
 use retroglyph_widgets::{
     BoxStyle, Button, Constraint, Gauge, Interaction, List, ListState, Sides, Sparkline, Table,
-    Tabs, Theme, Ui, blit_into, split_h, split_v,
+    Tabs, Theme, Ui, split_h, split_v,
 };
 
 /// Identifies the dashboard's one interactive widget for [`Interaction`]'s hit-testing and focus
@@ -156,7 +156,7 @@ fn draw_metrics(
         .padding(Sides::symmetric(0, 1))
         .border(true)
         .render("Legend\nOK / WARN / DOWN");
-    blit_into(ui.surface(), &legend, rows[4].left(), rows[4].top());
+    ui.surface().blit(&legend, rows[4].left(), rows[4].top());
 
     draw_ping_button(
         ui,
