@@ -1,5 +1,5 @@
 //! [`Scrollbar`]: a vertical track+thumb indicator.
-use retroglyph_core::{Color, Frame, Rect, Style};
+use retroglyph_core::{Color, Frame, Style};
 
 use super::{AnimatedWidget, InteractiveWidget, Widget};
 use crate::Response;
@@ -126,7 +126,7 @@ impl Scrollbar {
             }
         }
 
-        let local = Rect::new(0, 0, w, h);
+        let local = surface.local_area();
         let Some((start, len)) = thumb_geometry(local, self.total_len, self.visible_len, offset)
         else {
             return;
