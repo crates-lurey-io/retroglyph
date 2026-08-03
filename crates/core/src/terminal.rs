@@ -282,18 +282,23 @@ impl<B: Backend> Terminal<B> {
         if self.retained_layers.iter().any(|&retained| retained) {
             // Overwrite each retained layer's (empty, never-drawn-this-frame) content in
             // `current` with `previous`'s, so the diff below finds no change on it: the backend
-            // gets nothing to redraw, and the copy (a flat per-cell blit) is far cheaper than
+            // gets nothing to redraw, and the copy (a flat per-layer clone) is far cheaper than
             // whatever the app would have spent regenerating identical content. See
             // `retain_layer`'s doc for why this has to run before the diff rather than skip the
             // post-swap clear: `current` and `previous` alternate buffers every present, so
             // anything short of re-syncing from the authoritative `previous` here would desync
             // them again after a second consecutive retained frame.
-            let area = self.previous.rect();
+            //
+            // Uses `copy_layer_from` rather than `blit`: `blit` is a clipping/positioning copy
+            // that degrades multi-cell spans to their text fallback and treats empty tiles as
+            // transparent (an overlay, not a replacement), both wrong here, since a retained
+            // layer is copied whole, at the same geometry, and must be indistinguishable from
+            // what was presented last frame (retroglyph#955).
             for (id, &retained) in self.retained_layers.iter().enumerate() {
                 if retained {
                     #[allow(clippy::cast_possible_truncation)]
                     let id = id as u8;
-                    self.current.blit(id, &self.previous, area, 0, 0);
+                    self.current.copy_layer_from(id, &self.previous);
                 }
             }
             for retained in &mut self.retained_layers {
@@ -1028,6 +1033,38 @@ mod tests {
     }
 
     #[test]
+    fn test_retain_layer_preserves_multi_cell_span_flags() {
+        use crate::surface::Layer;
+        use crate::tile::TileFlags;
+
+        // retroglyph#955: `retain_layer` used to re-sync via `Grid::blit`, whose clipping-copy
+        // contract intentionally strips `SPAN_ANCHOR`/`SPAN_COVERED` and degrades a span to its
+        // text fallback. That's wrong for a retained layer, which is copied whole at the same
+        // geometry and must be indistinguishable from what was presented last frame.
+        let mut term = Terminal::new(Headless::new(4, 2));
+        term.draw(|s| {
+            s.on_tier(Layer::World)
+                .put_span((0, 0), &["Tr", "__"], Style::default())
+                .unwrap();
+        })
+        .expect("draw failed");
+
+        let anchor_flags = term.backend().grid()[Pos::new(0, 0)].flags();
+        let covered_flags = term.backend().grid()[Pos::new(1, 0)].flags();
+        assert!(anchor_flags.contains(TileFlags::SPAN_ANCHOR));
+        assert!(covered_flags.contains(TileFlags::SPAN_COVERED));
+
+        term.retain_layer(Layer::World);
+        term.draw(|_| {}).expect("draw failed");
+
+        // The span survived the retained present untouched: same glyphs, same span flags.
+        assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), 'T');
+        assert_eq!(term.backend().grid()[Pos::new(1, 0)].glyph(), 'r');
+        assert_eq!(term.backend().grid()[Pos::new(0, 0)].flags(), anchor_flags);
+        assert_eq!(term.backend().grid()[Pos::new(1, 0)].flags(), covered_flags);
+    }
+
+    #[test]
     fn test_retain_layer_accepts_raw_u8_and_layer() {
         use crate::surface::Layer;
 
@@ -1043,6 +1080,43 @@ mod tests {
         term.retain_layer(Layer::World);
         term.draw(|_| {}).expect("draw failed");
         assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), 'A');
+    }
+
+    #[test]
+    fn test_retain_layer_never_drawn_is_a_no_op() {
+        // `Grid::copy_layer_from`'s `None` arm, no-op branch: retaining a non-zero layer id
+        // that has never been drawn to on either buffer leaves it unallocated on both sides.
+        // Must not panic or grow the layer table for a layer id nobody ever wrote to.
+        let mut term = Terminal::new(Headless::new(3, 1));
+        term.retain_layer(5u8);
+        term.draw(|_| {}).expect("draw failed");
+        assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), ' ');
+    }
+
+    #[test]
+    fn test_retain_layer_deallocates_when_previous_lacks_it() {
+        // `Grid::copy_layer_from`'s `None` arm, deallocating branch: `current` can carry a
+        // non-zero layer allocated (but emptied by immediate mode) from an older frame while
+        // `previous` never allocated it at all, if that layer went undrawn (and unretained) for
+        // a frame in between. Retaining it then must clear it from `current`, not leave stale
+        // allocation state behind. Layer 0 can't exercise this (always allocated on both
+        // sides), so this writes directly to a non-zero raw layer id via `on_layer`.
+        let mut term = Terminal::new(Headless::new(3, 1));
+        term.draw(|s| s.on_layer(5).put((0, 0), 'W', Style::default()))
+            .expect("draw failed");
+        assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), 'W');
+
+        // Layer 5 goes undrawn and unretained: ordinary immediate-mode clearing puts `current`'s
+        // (still allocated) layer 5 buffer back to empty, and this frame's diff sends that.
+        term.draw(|s| s.on_layer(1).put((1, 0), 'H', Style::default()))
+            .expect("draw failed");
+        assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), ' ');
+
+        // Retaining layer 5 now must not resurrect stale content or panic, even though
+        // `previous` (this frame's source) never allocated layer 5 at all.
+        term.retain_layer(5u8);
+        term.draw(|_| {}).expect("draw failed");
+        assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), ' ');
     }
 
     // --- unicode width ---

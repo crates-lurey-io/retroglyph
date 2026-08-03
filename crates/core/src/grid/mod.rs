@@ -518,6 +518,54 @@ impl Grid {
     fn layer0_mut(&mut self) -> &mut LayerBuf {
         self.layers[0].as_mut().unwrap()
     }
+
+    /// Copy `layer` from `src` into `self` verbatim: the raw tile buffer (including every
+    /// flag, so [`TileFlags::SPAN_ANCHOR`](crate::tile::TileFlags::SPAN_ANCHOR)/
+    /// [`TileFlags::SPAN_COVERED`](crate::tile::TileFlags::SPAN_COVERED) survive) and every
+    /// extra (grapheme, tint), with no transparency rule skipping empty cells and no span
+    /// degradation.
+    ///
+    /// Unlike [`blit`](Self::blit), this is not a clipping/positioning copy: it requires `self`
+    /// and `src` to share the same dimensions and always writes `layer` at the same coordinates
+    /// it reads it from, so a caller can't use it to move or crop content, only to make one
+    /// grid's layer an exact replica of another's. That is exactly what [`crate::Terminal::present`]'s
+    /// `retain_layer` support needs: a retained layer has to be indistinguishable from what was
+    /// presented last frame, and `blit`'s clipping-copy contract (degrade spans to their text
+    /// fallback, treat empty tiles as transparent) is wrong for a copy that is supposed to be a
+    /// full replacement of identical geometry.
+    ///
+    /// If `layer` is unallocated on `src`, it becomes unallocated on `self` too (mirroring an
+    /// always-empty layer exactly). Layer 0 can never hit this case: it is always allocated on
+    /// every `Grid` (see [`Grid::new`]), on `src` as much as on `self`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self` and `src` do not have the same dimensions.
+    pub(crate) fn copy_layer_from(&mut self, layer: u8, src: &Self) {
+        assert_eq!(
+            (self.width, self.height),
+            (src.width, src.height),
+            "copy_layer_from requires matching dimensions"
+        );
+        let idx = usize::from(layer);
+        match src.layers.get(idx).and_then(Option::as_ref) {
+            Some(src_lb) => {
+                if idx >= self.layers.len() {
+                    self.layers.resize_with(idx + 1, || None);
+                }
+                self.layers[idx] = Some(src_lb.clone());
+                if layer > self.max_layer {
+                    self.max_layer = layer;
+                }
+            }
+            None => {
+                if idx < self.layers.len() {
+                    self.layers[idx] = None;
+                }
+            }
+        }
+        self.has_spans |= src.has_spans;
+    }
 }
 
 #[cfg(test)]
