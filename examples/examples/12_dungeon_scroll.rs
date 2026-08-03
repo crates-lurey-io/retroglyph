@@ -24,6 +24,11 @@
 //! past the world's edge on either axis and the map letterboxes and centers instead of pinning
 //! to the top-left with a dead margin on the right and bottom.
 //!
+//! Movement is driven by [`KeyState`]: arrow-key presses/releases feed [`KeyState::apply_event`],
+//! and each tick moves the player one cell in whichever direction is currently held
+//! ([`KeyState::is_held`]), rather than stepping once per key event -- this is the workspace's
+//! only end-to-end exercise of `KeyState` outside its own unit tests.
+//!
 //! ```sh
 //! cargo run --example 12_dungeon_scroll --features crossterm
 //! cargo run --example 12_dungeon_scroll --features software
@@ -40,10 +45,19 @@
 //! NOT SIGN), and loose rubble (U+2219 BULLET OPERATOR). All four sit in room 1, which is on
 //! screen from the very first frame, so the software backend's `png_snapshot` test alone proves
 //! they rasterize correctly. No walk to a later room is required.
+//!
+//! This is also the [`Terminal::retain_layer`] example the method's own doc comment describes:
+//! the map lives on [`Layer::World`] and only gets re-blitted from [`DungeonScroll::world`] when
+//! the camera's [`Camera::visible_bounds`] actually changed since last frame; a stationary camera
+//! (player bumping a wall, or waiting) marks `World` retained instead and skips the blit
+//! entirely, while the player glyph and header move to [`Layer::Hud`] so they still redraw on
+//! frames where the player moves without the camera moving (edge-clamped rooms 1 and 4). Input is
+//! drained with [`Terminal::drain_events_into`] into a buffer reused every frame instead of
+//! allocating a fresh one.
 
-use retroglyph_core::event::{Event, KeyCode};
+use retroglyph_core::event::{Event, KeyCode, KeyLocation, KeyState};
 use retroglyph_core::{
-    AnsiColor, Backend, Camera, Color, Frame, Grid, Pos, Rect, Size, Style, Terminal, Tile,
+    AnsiColor, Backend, Camera, Color, Frame, Grid, Layer, Pos, Rect, Size, Style, Terminal, Tile,
 };
 use retroglyph_examples::Example;
 
@@ -131,6 +145,17 @@ pub struct DungeonScroll {
     world: Grid,
     camera: Camera,
     player: Pos,
+    /// The `World` layer's visible bounds as of the last frame it was actually redrawn, so
+    /// `draw` can tell whether the camera moved this frame and the map needs re-blitting, or
+    /// whether it's safe to retain the layer instead. `None` on the very first frame forces the
+    /// initial blit.
+    last_visible: Option<Rect>,
+    /// Reused every frame by [`Terminal::drain_events_into`] instead of allocating a fresh `Vec`
+    /// per tick.
+    event_buf: Vec<Event>,
+    /// Tracks which of the arrow keys are currently held, for continuous held-key movement (see
+    /// this module's top doc comment).
+    keys: KeyState,
 }
 
 impl Default for DungeonScroll {
@@ -142,6 +167,9 @@ impl Default for DungeonScroll {
             world: build_world(),
             camera,
             player,
+            last_visible: None,
+            event_buf: Vec::new(),
+            keys: KeyState::new(),
         }
     }
 }
@@ -168,28 +196,35 @@ impl DungeonScroll {
         }
     }
 
-    /// Drains pending input, moving the player on arrow keys. `Event::Resize` is captured
-    /// rather than acted on immediately, the same way `14_resize` does it: it arrives mixed in
-    /// with other events in the same drain, and `term.resize()` needs `&mut term` while
-    /// [`Terminal::drain_events`]'s iterator still holds one, so the requested size is recorded
-    /// here and applied once the loop (and the borrow) ends.
+    /// Drains pending input into [`Self::event_buf`] (reused every frame, no per-tick
+    /// allocation), feeding every event to [`Self::keys`] and quitting on `q`/`Escape`.
+    /// `Event::Resize` is captured rather than acted on immediately, the same way `14_resize`
+    /// does it: `term.resize()` needs `&mut term`, so the requested size is recorded here and
+    /// applied once the loop ends. Movement itself happens afterward, in
+    /// [`Self::move_from_held`].
     fn handle_events<B: Backend>(&mut self, term: &mut Terminal<B>) -> bool {
+        term.drain_events_into(&mut self.event_buf);
+        // Taken out (rather than iterated in place) so the loop body is free to call `&mut
+        // self` methods like `try_move`; moved back below so the buffer's allocation is still
+        // reused next frame instead of being dropped.
+        let events = core::mem::take(&mut self.event_buf);
         let mut requested_size = None;
-        for event in term.drain_events() {
+        for event in &events {
             match event {
-                Event::Key(key) if key.is_down() => match key.code {
-                    KeyCode::Char('q') | KeyCode::Escape => return false,
-                    KeyCode::Up => self.try_move(0, -1),
-                    KeyCode::Down => self.try_move(0, 1),
-                    KeyCode::Left => self.try_move(-1, 0),
-                    KeyCode::Right => self.try_move(1, 0),
-                    _ => {}
-                },
+                Event::Key(key) if key.is_down() => {
+                    if matches!(key.code, KeyCode::Char('q') | KeyCode::Escape) {
+                        return false;
+                    }
+                }
                 Event::Close => return false,
-                Event::Resize(width, height) => requested_size = Some((width, height)),
+                Event::Resize(width, height) => requested_size = Some((*width, *height)),
                 _ => {}
             }
+            // Feed every event to `keys`, not just key events: `Event::FocusLost` clears the
+            // held set, so alt-tabbing away mid-move doesn't leave the player walking forever.
+            self.keys.apply_event(event);
         }
+        self.event_buf = events;
         if let Some((width, height)) = requested_size {
             term.resize(width, height);
             // Row 0 is reserved for the header text (see `draw`), so the camera's viewport is
@@ -205,30 +240,57 @@ impl DungeonScroll {
             );
             self.camera.set_viewport_fitted(viewport);
         }
+        self.move_from_held();
         true
     }
 
-    fn draw<B: Backend>(&self, term: &mut Terminal<B>) {
-        term.surface().print(
+    /// Moves the player one cell toward whichever arrow key is currently held, checked in a
+    /// fixed Up/Down/Left/Right priority order so at most one cell is crossed per tick even if
+    /// more than one direction is held at once.
+    fn move_from_held(&mut self) {
+        const DIRECTIONS: [(KeyCode, i32, i32); 4] = [
+            (KeyCode::Up, 0, -1),
+            (KeyCode::Down, 0, 1),
+            (KeyCode::Left, -1, 0),
+            (KeyCode::Right, 1, 0),
+        ];
+        for (code, dx, dy) in DIRECTIONS {
+            if self.keys.is_held(code, KeyLocation::Standard) {
+                self.try_move(dx, dy);
+                break;
+            }
+        }
+    }
+
+    fn draw<B: Backend>(&mut self, term: &mut Terminal<B>) {
+        let visible = self.camera.visible_bounds();
+        if self.last_visible == Some(visible) {
+            // The camera hasn't moved since last frame, so the `World` layer's last-presented
+            // content is still correct: skip the blit and let `present` copy it forward
+            // untouched instead of paying for a redraw that would produce identical output.
+            term.retain_layer(Layer::World);
+        } else {
+            let viewport = self.camera.viewport();
+            term.grid_mut()
+                .blit(0, &self.world, visible, viewport.left(), viewport.top());
+            self.last_visible = Some(visible);
+        }
+
+        // Header and player live on `Hud`, not `World`: the player can move without the camera
+        // moving (edge-clamped rooms 1 and 4), so this layer has to redraw every frame even on
+        // frames where `World` above is retained.
+        let mut surface = term.surface();
+        let mut hud = surface.on_tier(Layer::Hud);
+        hud.print(
             (1, 0),
             "Dungeon scroll -- arrows move, q/Escape quits",
             Style::default(),
         );
 
-        let viewport = self.camera.viewport();
-        term.grid_mut().blit(
-            0,
-            &self.world,
-            self.camera.visible_bounds(),
-            viewport.left(),
-            viewport.top(),
-        );
-
         let style = Style::new()
             .fg(Color::Ansi(AnsiColor::BrightCyan))
             .bg(Color::Default);
-        let mut root = term.surface();
-        self.camera.surface(&mut root).put(self.player, '@', style);
+        self.camera.surface(&mut hud).put(self.player, '@', style);
     }
 }
 
