@@ -1564,6 +1564,9 @@ mod tests {
 
     #[test]
     fn put_span_takes_any_as_ref_str_row() {
+        use alloc::string::String;
+        use alloc::vec::Vec;
+
         let mut grid = Grid::new(4, 4);
         // A footprint computed at runtime: owned rows, no borrowing pass over them.
         let rows: Vec<String> = (0..2)
@@ -2094,6 +2097,7 @@ mod tests {
         // absolute grid column `clip.right()` resolves to (8). The second span starts at local
         // column 3, which is inside the 4-wide area, so it must still print.
         use crate::text::Span;
+        use alloc::vec;
 
         let mut grid = Grid::new(8, 1);
         let mut surface = Surface::new(&mut grid, Rect::new(4, 0, 4, 1), 0);

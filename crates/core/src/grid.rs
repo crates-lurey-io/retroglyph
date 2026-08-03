@@ -894,10 +894,10 @@ impl Grid {
     /// Clears wide-character cells that would be partially overwritten by a
     /// write starting at `(x, y)` spanning `width` columns.
     ///
-    /// `clear_span_overlap` is the multi-cell-span analogue. It is not `egc`-gated, because a
-    /// span is not a Unicode concept and exists on every feature combination, so a write that
-    /// can land inside either kind of multi-cell structure calls both.
-    #[cfg(feature = "egc")]
+    /// `clear_span_overlap` is the multi-cell-span analogue. Not gated behind `egc`: `write_grapheme`
+    /// is `egc`-only, but [`put_tile`](Self::put_tile) writes a wide-character pair on every
+    /// feature combination (see its own doc comment), so a write that can land inside either kind
+    /// of multi-cell structure calls both regardless of `egc`.
     fn clear_overlap(&mut self, layer: u8, x: u16, y: u16, width: u16) {
         let w = usize::from(self.width);
         let cap = w * usize::from(self.height);
@@ -1278,12 +1278,33 @@ impl Grid {
 // ---------------------------------------------------------------------------
 
 impl Grid {
-    /// Write a tile to `layer` at `pos`.
+    /// Write a tile to `layer` at `pos`, honoring `tile`'s own precomputed
+    /// [`width`](Tile::width): a fresh 2-column tile also gets a
+    /// [`TileFlags::WIDE_CHAR_SPACER`] at `pos.x + 1`, the same pairing
+    /// [`write_grapheme`](Self::write_grapheme) writes, on every feature combination (`Tile::width`
+    /// comes from `unicode-width`, an unconditional dependency, not the `egc`-gated
+    /// `unicode-segmentation`).
     ///
-    /// Allocates the layer if it has not been written to yet. Returns `None`
-    /// if `pos` is out of bounds.
+    /// Allocates the layer if it has not been written to yet. Returns `None` if `pos` is out of
+    /// bounds, or if a fresh `tile` is 2 columns wide and `pos.x + 1` (the spacer's column) is
+    /// not: the same last-column refusal `write_grapheme` makes, rather than leaving an orphaned
+    /// primary cell with no spacer.
     ///
     /// To read back, use [`tile`](Self::tile).
+    ///
+    /// # Replaying an already-resolved tile
+    ///
+    /// The wide-char synthesis above only applies to a **fresh** `tile`: one built through public
+    /// API ([`Tile::new`], [`with_glyph`](Tile::with_glyph), [`Tile::default`]), which can never
+    /// carry [`TileFlags::WIDE_CHAR`]/[`TileFlags::WIDE_CHAR_SPACER`] (both `pub(crate)`-only to
+    /// set). A `tile` that already carries either flag is, by construction, an already-resolved
+    /// tile read back out of some grid (e.g. [`Headless`](crate::backend::Headless) replaying a
+    /// [`DrawCell`] stream verbatim into its own copy) rather than a new
+    /// glyph placement, and is written through exactly as given, with no bounds refusal, spacer
+    /// synthesis, or overlap clearing of its own: those already happened on the call that
+    /// produced it, and re-running them here would (for a spacer tile specifically) clear the
+    /// *other* half of the very same wide pair being replayed, mistaking it for some unrelated
+    /// write landing on that spacer.
     ///
     /// Any tile written this way has its extra grapheme text cleared, since a
     /// caller-constructed [`Tile`] can never legitimately carry
@@ -1291,19 +1312,58 @@ impl Grid {
     /// that need to preserve EGC text across a copy (e.g. [`blit`](Self::blit))
     /// follow up with a direct extras-table write. Any multi-cell span the
     /// cell belongs to is cleared first, so a write can never leave an anchor
-    /// pointing at cells it no longer owns.
+    /// pointing at cells it no longer owns; a fresh wide `tile` additionally clears any wide
+    /// character it would partially overwrite, the same as `write_grapheme`.
     pub fn put_tile(&mut self, layer: u8, pos: impl Into<Pos>, mut tile: Tile) -> Option<()> {
         let pos = pos.into();
-        self.clear_span_overlap(layer, pos.x, pos.y, 1);
+
+        // See "Replaying an already-resolved tile" above: only a tile that couldn't have come
+        // from a public constructor gets treated as verbatim, pre-resolved storage.
+        let fresh = !tile
+            .flags
+            .intersects(TileFlags::WIDE_CHAR | TileFlags::WIDE_CHAR_SPACER);
+        let width = if fresh { tile.width() } else { 1 };
+
+        // A 2-column tile needs a spacer at `pos.x + 1`: refuse rather than leave an orphaned
+        // primary cell, matching `write_grapheme`'s own last-column refusal.
+        if width == 2 && pos.x.saturating_add(1) >= self.width {
+            return None;
+        }
+
+        self.clear_span_overlap(layer, pos.x, pos.y, width.max(1));
+        if fresh {
+            self.clear_overlap(layer, pos.x, pos.y, width.max(1));
+        }
+
+        // Capture the grid width before borrowing `self` mutably below (same reason
+        // `write_grapheme` does): `self.width` isn't reachable once `lb` holds `&mut self`.
+        let grid_w = usize::from(self.width);
         let gpos = to_grixy_pos(pos);
-        let idx = usize::from(pos.y) * usize::from(self.width) + usize::from(pos.x);
+        let idx = usize::from(pos.y) * grid_w + usize::from(pos.x);
         let lb = self.layer_or_alloc(layer);
         if !lb.buf.contains(gpos) {
             return None;
         }
         lb.extras.remove(&idx);
         tile.flags.remove(TileFlags::HAS_EXTRA);
+        if width == 2 {
+            tile.flags.insert(TileFlags::WIDE_CHAR);
+        }
+        let style = tile.style;
         lb.buf[gpos] = tile;
+
+        if width == 2 {
+            // The last-column refusal above guarantees `pos.x + 1` is in bounds.
+            let spacer_x = pos.x + 1;
+            let spacer_gpos = to_grixy_pos(Pos::new(spacer_x, pos.y));
+            let spacer_idx = usize::from(pos.y) * grid_w + usize::from(spacer_x);
+            lb.extras.remove(&spacer_idx);
+            let spacer = &mut lb.buf[spacer_gpos];
+            spacer.glyph = ' ';
+            spacer.style = style;
+            spacer.width = 0;
+            spacer.flags = TileFlags::WIDE_CHAR_SPACER;
+        }
         Some(())
     }
 
@@ -2107,10 +2167,7 @@ impl fmt::Display for Grid {
         for y in 0..self.height() {
             for x in 0..self.width() {
                 let tile = &self[Pos::new(x, y)];
-                #[cfg(feature = "egc")]
                 let is_spacer = tile.flags.contains(TileFlags::WIDE_CHAR_SPACER);
-                #[cfg(not(feature = "egc"))]
-                let is_spacer = tile.glyph == '\0';
                 let c = if is_spacer {
                     ' ' // right half of a wide char, don't print twice
                 } else if tile.glyph == ' ' {
@@ -2269,6 +2326,7 @@ mod tests {
         assert_eq!(s, "A··\n···\n");
     }
 
+    #[cfg(feature = "egc")]
     #[test]
     fn test_grid_display_wide_char_spacer() {
         // A wide char's right-half spacer cell prints as a plain space, not the wide
@@ -2288,6 +2346,9 @@ mod tests {
 
     #[test]
     fn test_grid_cells_coordinates() {
+        use alloc::vec;
+        use alloc::vec::Vec;
+
         let grid = Grid::new(3, 2);
         let coords: Vec<(u16, u16)> = grid.cells(0).unwrap().map(|(x, y, _)| (x, y)).collect();
         assert_eq!(
@@ -2367,6 +2428,9 @@ mod tests {
 
     #[test]
     fn test_rect_positions() {
+        use alloc::vec;
+        use alloc::vec::Vec;
+
         let r = Rect::new(1, 2, 2, 2);
         let pts: Vec<Pos> = r.pos_iter().collect();
         assert_eq!(
@@ -2419,6 +2483,8 @@ mod tests {
 
     #[test]
     fn test_position_ord_row_major() {
+        use alloc::vec;
+
         let mut positions = vec![Pos::new(5, 0), Pos::new(0, 1), Pos::new(3, 0)];
         positions.sort();
         assert_eq!(
@@ -2743,6 +2809,7 @@ mod tests {
     // when the cell it belongs to is overwritten or cleared. These cover each of those, plus the
     // interaction between the two members now sharing one entry and one flag.
 
+    #[cfg(feature = "egc")]
     #[test]
     fn tint_round_trips_and_defaults_to_none() {
         let mut g = Grid::new(4, 4);
@@ -2777,6 +2844,7 @@ mod tests {
         assert_eq!(g.tint(0, 0, 0), Tint::None);
     }
 
+    #[cfg(feature = "egc")]
     #[test]
     fn writing_a_glyph_over_a_tinted_cell_drops_the_tint() {
         let mut g = Grid::new(4, 4);
@@ -2795,6 +2863,73 @@ mod tests {
         g.set_tint(0, 1, 1, Tint::multiply(128, 128, 128));
         g.put_tile(0, Pos::new(1, 1), Tile::new('x', Style::default()));
         assert_eq!(g.tint(0, 1, 1), Tint::None);
+    }
+
+    /// `put_tile` is wide-char aware on every feature combination (retroglyph#869): a 2-column
+    /// tile gets a `WIDE_CHAR` primary cell and a `WIDE_CHAR_SPACER` to its right, the same pair
+    /// `write_grapheme` (egc-only) writes.
+    #[test]
+    fn put_tile_writes_a_spacer_for_a_wide_glyph() {
+        let mut g = Grid::new(4, 4);
+        assert_eq!(
+            g.put_tile(0, (0, 0), Tile::new('\u{4e2d}', Style::default())),
+            Some(())
+        );
+
+        assert_eq!(g[Pos::new(0, 0)].glyph(), '\u{4e2d}');
+        assert!(g[Pos::new(0, 0)].flags().contains(TileFlags::WIDE_CHAR));
+        assert_eq!(g[Pos::new(1, 0)].glyph(), ' ');
+        assert!(
+            g[Pos::new(1, 0)]
+                .flags()
+                .contains(TileFlags::WIDE_CHAR_SPACER)
+        );
+        // Untouched past the spacer.
+        assert_eq!(g[Pos::new(2, 0)].glyph(), ' ');
+        assert!(
+            !g[Pos::new(2, 0)]
+                .flags()
+                .contains(TileFlags::WIDE_CHAR_SPACER)
+        );
+    }
+
+    /// Mirrors `write_grapheme`'s own last-column refusal: a wide tile whose spacer would fall
+    /// off the grid is refused outright rather than leaving an orphaned primary cell.
+    #[test]
+    fn put_tile_refuses_a_wide_glyph_at_the_last_column() {
+        let mut g = Grid::new(4, 4);
+        assert_eq!(
+            g.put_tile(0, (3, 0), Tile::new('\u{4e2d}', Style::default())),
+            None
+        );
+        assert_eq!(g[Pos::new(3, 0)].glyph(), ' ');
+    }
+
+    /// Overwriting a wide char's primary cell (with a narrow tile) must clear its now-orphaned
+    /// spacer, the same overlap-clearing `write_grapheme` already does.
+    #[test]
+    fn put_tile_clears_the_spacer_of_a_wide_glyph_it_overwrites() {
+        let mut g = Grid::new(4, 4);
+        g.put_tile(0, (0, 0), Tile::new('\u{4e2d}', Style::default()));
+        g.put_tile(0, (0, 0), Tile::new('a', Style::default()));
+
+        assert_eq!(g[Pos::new(0, 0)].glyph(), 'a');
+        assert!(
+            !g[Pos::new(1, 0)]
+                .flags()
+                .contains(TileFlags::WIDE_CHAR_SPACER)
+        );
+    }
+
+    /// Overwriting a wide char's spacer cell must clear its now-orphaned primary cell too.
+    #[test]
+    fn put_tile_clears_the_lead_of_a_wide_glyph_whose_spacer_it_overwrites() {
+        let mut g = Grid::new(4, 4);
+        g.put_tile(0, (0, 0), Tile::new('\u{4e2d}', Style::default()));
+        g.put_tile(0, (1, 0), Tile::new('a', Style::default()));
+
+        assert_eq!(g[Pos::new(1, 0)].glyph(), 'a');
+        assert!(!g[Pos::new(0, 0)].flags().contains(TileFlags::WIDE_CHAR));
     }
 
     /// `fill_region` must clear any span it would partially overwrite the same way a per-cell
@@ -2819,6 +2954,7 @@ mod tests {
     /// `fill_region` writes a caller-constructed `Tile`, which (like `put_tile`) can never
     /// legitimately carry `HAS_EXTRA`, so any grapheme/tint side-table entry the fill's cells
     /// used to own must be dropped, not left dangling under the new tile.
+    #[cfg(feature = "egc")]
     #[test]
     fn fill_region_drops_stale_extras() {
         let mut g = Grid::new(4, 4);
@@ -2862,6 +2998,7 @@ mod tests {
         assert_eq!(g.tint(1, 1, 1), Tint::multiply(4, 5, 6));
     }
 
+    #[cfg(feature = "egc")]
     #[test]
     fn resize_remaps_a_tint_to_the_new_stride() {
         let mut g = Grid::new(4, 4);
@@ -2879,6 +3016,7 @@ mod tests {
         assert_eq!(g.tint(0, 3, 1), Tint::None);
     }
 
+    #[cfg(feature = "egc")]
     #[test]
     fn blit_carries_a_tint_across_grids() {
         let mut src = Grid::new(4, 4);
@@ -2895,6 +3033,7 @@ mod tests {
         assert_eq!(dst.tint(0, 0, 0), Tint::None);
     }
 
+    #[cfg(feature = "egc")]
     #[test]
     fn blit_clears_a_destination_tint_where_the_source_has_none() {
         let mut src = Grid::new(2, 2);
@@ -3510,6 +3649,9 @@ mod tests {
 
     #[test]
     fn write_span_takes_any_as_ref_str_row() {
+        use alloc::string::String;
+        use alloc::vec::Vec;
+
         let mut grid = Grid::new(4, 4);
         // A footprint computed at runtime: owned rows, no borrowing pass over them.
         let rows: Vec<String> = (0..2)
@@ -3768,6 +3910,181 @@ mod tests {
 
         assert_eq!(dst[Pos::new(1, 0)].glyph(), 'X');
         assert_eq!(dst.tile(0, Pos::new(0, 0)).map(Tile::span), Some((1, 1)));
+    }
+
+    /// A single `blit`-vs-`copy_rect_clamped` comparison case for
+    /// `blit_clamp_matches_grixys_copy_rect_clamped_on_shared_clipped_rect_cases`.
+    struct BlitClampCase {
+        name: &'static str,
+        src_w: u16,
+        src_h: u16,
+        dst_w: u16,
+        dst_h: u16,
+        src_rect: Rect,
+        dst_x: u16,
+        dst_y: u16,
+    }
+
+    /// Every source cell gets a unique glyph derived from its position, so a mismatch in the
+    /// clamp/translate math (an off-by-one, a row misaligned after clipping, ...) shows up as the
+    /// wrong letter landing in the wrong destination cell, not just a wrong cell count.
+    fn blit_clamp_case_glyph_at(x: u16, y: u16, width: u16) -> char {
+        let idx = u32::from(y) * u32::from(width) + u32::from(x);
+        char::from_u32(u32::from(b'A') + idx).expect("case grids stay within 'A'..='Z'")
+    }
+
+    /// Runs one [`BlitClampCase`] through both `Grid::blit` and `grixy::ops::copy_rect_clamped`
+    /// on an equivalent pair of plain `grixy::buf::GridBuf`s, and asserts the copied region
+    /// agrees cell-for-cell.
+    fn assert_blit_clamp_case(case: &BlitClampCase) {
+        use grixy::buf::GridBuf;
+        use grixy::ops::GridWrite as _;
+        use grixy::transform::GridConvertExt as _;
+
+        let mut rg_src = Grid::new(case.src_w, case.src_h);
+        for y in 0..case.src_h {
+            for x in 0..case.src_w {
+                let glyph = blit_clamp_case_glyph_at(x, y, case.src_w);
+                rg_src.put_tile(0, (x, y), Tile::default().with_glyph(glyph));
+            }
+        }
+        let mut rg_dst = Grid::new(case.dst_w, case.dst_h);
+        rg_dst.blit(0, &rg_src, case.src_rect, case.dst_x, case.dst_y);
+        let rg_result: Vec<char> = (0..case.dst_h)
+            .flat_map(|y| (0..case.dst_w).map(move |x| (x, y)))
+            .map(|(x, y)| rg_dst.tile(0, (x, y)).map_or(' ', Tile::glyph))
+            .collect();
+
+        let mut gx_src = GridBuf::<char, _, _>::new_filled(
+            usize::from(case.src_w),
+            usize::from(case.src_h),
+            ' ',
+        );
+        for y in 0..case.src_h {
+            for x in 0..case.src_w {
+                let glyph = blit_clamp_case_glyph_at(x, y, case.src_w);
+                gx_src
+                    .set(grixy::core::Pos::new(usize::from(x), usize::from(y)), glyph)
+                    .unwrap();
+            }
+        }
+        let mut gx_dst = GridBuf::<char, _, _>::new_filled(
+            usize::from(case.dst_w),
+            usize::from(case.dst_h),
+            ' ',
+        );
+        grixy::ops::copy_rect_clamped(
+            &gx_src.copied(),
+            &mut gx_dst,
+            grixy::core::Rect::from_ltwh(
+                usize::from(case.src_rect.left()),
+                usize::from(case.src_rect.top()),
+                usize::from(case.src_rect.width()),
+                usize::from(case.src_rect.height()),
+            ),
+            grixy::core::Pos::new(usize::from(case.dst_x), usize::from(case.dst_y)),
+        );
+        let (gx_result, _, _) = gx_dst.into_inner();
+
+        assert_eq!(rg_result, gx_result, "case: {}", case.name);
+    }
+
+    /// `blit_with`'s clamp math (clamp `src_rect` to `src`'s bounds, translate into destination
+    /// space, clamp again to `dst`'s bounds) is a hand-written copy of the algorithm
+    /// `grixy::ops::copy_rect_clamped` generalizes (retroglyph#831). This walks a shared set of
+    /// clipped-rect cases through both `Grid::blit` and `copy_rect_clamped` on an equivalent pair
+    /// of plain `grixy::buf::GridBuf`s, and asserts the copied region agrees cell-for-cell, so the
+    /// two can't silently drift apart. `Grid` can't implement `GridRead`/`GridWrite` itself (its
+    /// span/extras bookkeeping has no equivalent there), so this compares outcomes rather than
+    /// sharing code.
+    #[test]
+    fn blit_clamp_matches_grixys_copy_rect_clamped_on_shared_clipped_rect_cases() {
+        let cases = [
+            BlitClampCase {
+                name: "fully inside both grids",
+                src_w: 4,
+                src_h: 4,
+                dst_w: 6,
+                dst_h: 6,
+                src_rect: Rect::new(0, 0, 4, 4),
+                dst_x: 1,
+                dst_y: 1,
+            },
+            BlitClampCase {
+                name: "src_rect wider than src (source-side clip)",
+                src_w: 3,
+                src_h: 3,
+                dst_w: 5,
+                dst_h: 5,
+                src_rect: Rect::new(0, 0, 10, 10),
+                dst_x: 0,
+                dst_y: 0,
+            },
+            BlitClampCase {
+                name: "destination-side clip",
+                src_w: 3,
+                src_h: 3,
+                dst_w: 5,
+                dst_h: 5,
+                src_rect: Rect::new(0, 0, 3, 3),
+                dst_x: 3,
+                dst_y: 3,
+            },
+            BlitClampCase {
+                name: "both sides clip, tighter bound wins",
+                src_w: 4,
+                src_h: 4,
+                dst_w: 6,
+                dst_h: 6,
+                src_rect: Rect::new(0, 0, 10, 10),
+                dst_x: 3,
+                dst_y: 3,
+            },
+            BlitClampCase {
+                name: "src_rect offset, clipped on src's right/bottom",
+                src_w: 4,
+                src_h: 4,
+                dst_w: 6,
+                dst_h: 6,
+                src_rect: Rect::new(2, 2, 5, 5),
+                dst_x: 0,
+                dst_y: 0,
+            },
+            BlitClampCase {
+                name: "source completely out of bounds",
+                src_w: 3,
+                src_h: 3,
+                dst_w: 5,
+                dst_h: 5,
+                src_rect: Rect::new(5, 5, 2, 2),
+                dst_x: 0,
+                dst_y: 0,
+            },
+            BlitClampCase {
+                name: "destination completely out of bounds",
+                src_w: 3,
+                src_h: 3,
+                dst_w: 5,
+                dst_h: 5,
+                src_rect: Rect::new(0, 0, 3, 3),
+                dst_x: 10,
+                dst_y: 10,
+            },
+            BlitClampCase {
+                name: "zero-size src_rect",
+                src_w: 3,
+                src_h: 3,
+                dst_w: 5,
+                dst_h: 5,
+                src_rect: Rect::new(0, 0, 0, 0),
+                dst_x: 0,
+                dst_y: 0,
+            },
+        ];
+
+        for case in &cases {
+            assert_blit_clamp_case(case);
+        }
     }
 
     #[test]

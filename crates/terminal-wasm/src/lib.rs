@@ -154,6 +154,7 @@ struct ReadmeDoctests;
 mod app_entry;
 
 use retroglyph_core::DrawCell;
+use retroglyph_core::HasSize;
 use retroglyph_core::Terminal;
 use retroglyph_core::backend::{Cursor, CursorStyle, Input, Output};
 use retroglyph_core::event::{Event, coalesces_with};
@@ -405,6 +406,12 @@ impl Output for TerminalWasm {
     where
         I: Iterator<Item = DrawCell<'a>>,
     {
+        // Silently drop cells positioned outside the grid, the same as `Headless` and
+        // `Software` already do: a caller-supplied `pos` is not trusted input, and this
+        // renderer (unlike those two) has no bounds check of its own to fall back on.
+        let size = self.size;
+        let content =
+            content.filter(move |cell| cell.pos.x < size.width() && cell.pos.y < size.height());
         self.renderer.draw_frame(content)
     }
 
@@ -883,7 +890,7 @@ pub mod wasm {
 mod tests {
     use super::*;
     use retroglyph_core::event::{Event, KeyCode, KeyModifiers};
-    use retroglyph_core::{HasSize, Style, Terminal};
+    use retroglyph_core::{Style, Terminal};
 
     #[test]
     fn renders_into_pullable_buffer() {
@@ -1441,9 +1448,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "a DrawCell::pos outside size() is currently sent to the display unchecked \
-                instead of being dropped, rather than the other three Output obligations this \
-                also covers; see the follow-up issue this PR files alongside retroglyph#763"]
     fn satisfies_the_output_contract() {
         retroglyph_core::testing::conformance::assert_output_contract(|size| {
             TerminalWasm::new(size.width(), size.height())

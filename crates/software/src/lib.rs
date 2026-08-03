@@ -957,6 +957,10 @@ impl retroglyph_window::Presenter for SoftwareRenderer {
     fn cell_size(&self) -> (u32, u32) {
         self.ctx.geometry.cell_size()
     }
+
+    fn geometry(&self) -> CellGeometry {
+        self.ctx.geometry
+    }
 }
 
 // ── Grid compositing ──────────────────────────────────────────────────────────
@@ -1378,6 +1382,16 @@ mod tests {
             .unwrap()
             .into_renderer()
             .unwrap()
+    }
+
+    #[test]
+    fn presenter_geometry_and_cell_size_match_the_internal_geometry() {
+        use retroglyph_window::Presenter as _;
+
+        // `test_renderer` builds an 8x16 unscii16 font at scale 1.
+        let renderer = test_renderer();
+        assert_eq!(renderer.cell_size(), (8, 16));
+        assert_eq!(renderer.geometry(), CellGeometry::new(8, 16, 1));
     }
 
     #[test]

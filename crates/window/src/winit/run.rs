@@ -9,7 +9,7 @@
 
 use super::translate::{
     translate_ime, translate_key, translate_modifiers, translate_mouse_button,
-    translate_physical_pos, translate_pixel_to_cell,
+    translate_physical_pos,
 };
 #[cfg(target_arch = "wasm32")]
 use super::web;
@@ -1617,7 +1617,7 @@ where
     fn on_cursor_moved(&mut self, position: winit::dpi::PhysicalPosition<f64>) {
         // winit always reports pointer positions in real-DPR physical
         // pixels; rescale to the (possibly DPR-capped, on wasm) backing-store
-        // pixel space that `cell_size`/`translate_pixel_to_cell` use, so taps land on
+        // pixel space that `Presenter::geometry`/`pixel_to_cell` use, so taps land on
         // the cell actually under the finger/cursor instead of drifting
         // south-east of it as the real DPR grows past the cap. `1.0` on
         // native (no such cap exists there) *and* on wasm when
@@ -1643,8 +1643,7 @@ where
         let Some(term) = self.terminal.as_mut() else {
             return;
         };
-        let (cell_w, cell_h) = term.backend().presenter().cell_size();
-        let pos = translate_pixel_to_cell(x, y, cell_w, cell_h);
+        let pos = term.backend().presenter().geometry().pixel_to_cell(x, y);
         // Report a drag (rather than a plain move) while any button is held. Left takes
         // priority over Right over Middle when more than one is held at once: an arbitrary but
         // deterministic choice, matching the order the buttons are declared in `MouseButton`.
@@ -1677,8 +1676,11 @@ where
         let Some(term) = self.terminal.as_mut() else {
             return;
         };
-        let (cell_w, cell_h) = term.backend().presenter().cell_size();
-        let pos = translate_pixel_to_cell(self.cursor_px.0, self.cursor_px.1, cell_w, cell_h);
+        let pos = term
+            .backend()
+            .presenter()
+            .geometry()
+            .pixel_to_cell(self.cursor_px.0, self.cursor_px.1);
         let kind = if state.is_pressed() {
             self.held_buttons |= button_mask(btn);
             MouseEventKind::Down(btn)
@@ -1699,8 +1701,11 @@ where
         let Some(term) = self.terminal.as_mut() else {
             return;
         };
-        let (cell_w, cell_h) = term.backend().presenter().cell_size();
-        let pos = translate_pixel_to_cell(self.cursor_px.0, self.cursor_px.1, cell_w, cell_h);
+        let pos = term
+            .backend()
+            .presenter()
+            .geometry()
+            .pixel_to_cell(self.cursor_px.0, self.cursor_px.1);
         let (scroll_x, scroll_y) = match delta {
             winit::event::MouseScrollDelta::LineDelta(x, y) => (f64::from(x), f64::from(y)),
             winit::event::MouseScrollDelta::PixelDelta(p) => (p.x, p.y),

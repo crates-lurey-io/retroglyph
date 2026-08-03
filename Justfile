@@ -141,15 +141,14 @@ test-ci: build-pty-examples
 # on `retroglyph-core` with its own full defaults (`egc` on), which would silently turn `egc` back
 # on for every crate here too. Naming packages instead avoids that.
 #
-# Deliberately excludes `retroglyph-core` itself: selecting it directly as a primary package
-# (rather than only as a transitive dependency) makes cargo apply *its own* declared defaults
-# (`egc` on) regardless of what its consumers pin, so testing it here would need its own
-# `--no-default-features` command -- and core's own test module isn't `egc`-cfg-clean yet (several
-# of its tests call the egc-only `Grid::write_grapheme` unconditionally), so that command doesn't
-# even compile today. `compile`'s existing `cargo check -p retroglyph-core --no-default-features`
-# already covers core's own `--no-default-features` compile; fixing its tests is a separate task.
+# `retroglyph-core` itself is a separate line rather than another `-p` on the command above:
+# selecting it directly as a primary package (rather than only as a transitive dependency) makes
+# cargo apply *its own* declared defaults (`egc` and `std` on) regardless of what its consumers
+# pin, so exercising its `--no-default-features` (no `std`, no `egc`) build needs its own explicit
+# command (retroglyph#843).
 test-default-features:
     cargo test -p retroglyph-widgets -p retroglyph-terminal -p retroglyph-crossterm -p retroglyph-window -p retroglyph-gl
+    cargo test -p retroglyph-core --no-default-features
 
 test-v: build-pty-examples
     cargo bin cargo-nextest run --workspace --all-features --no-capture

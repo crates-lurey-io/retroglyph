@@ -91,7 +91,7 @@ pub use theme::Theme;
 pub use ui::Ui;
 pub use widget::{
     AnimatedPerfOverlay, AnimatedWidget, BorderType, BoxBorder, Button, Gauge, HighlightSpacing,
-    InteractiveWidget, List, ListDirection, Log, Measure, Meter, Modal, Panel, Paragraph,
-    PerfOverlay, PrintLine, ProgressBar, Scrollbar, Sparkline, StatBar, StatefulWidget, Table,
-    Tabs, Text, TextInput, Widget,
+    InteractiveWidget, List, ListDirection, Log, Measure, Meter, Modal, Panel, PanelTitle,
+    Paragraph, PerfOverlay, PrintLine, ProgressBar, Scrollbar, Sparkline, StatBar, StatefulWidget,
+    Table, Tabs, Text, TextInput, TitlePosition, Widget,
 };
