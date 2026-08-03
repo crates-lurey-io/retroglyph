@@ -9,31 +9,66 @@ use crate::style::Sides;
 use crate::text::draw_clipped;
 use crate::{Align, Theme};
 
-/// A bordered panel: a filled background with a box border and an optional
-/// title in the top edge.
+/// Which border edge a [`PanelTitle`] is drawn into.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum TitlePosition {
+    /// The top border row, the same edge [`Panel::title`]'s sugar title is drawn into.
+    #[default]
+    Top,
+    /// The bottom border row.
+    Bottom,
+}
+
+/// One title added via [`Panel::add_title`]: its text, which edge it's drawn on, and its
+/// alignment.
 ///
-/// `border_style` (the box outline and title) and `fill_style` (the
+/// Not constructed directly; built up through [`Panel::add_title`]'s arguments instead, the same
+/// as [`Panel::title`]/[`Panel::title_align`] build the single implicit top title.
+#[derive(Clone, Copy, Debug)]
+pub struct PanelTitle<'a> {
+    text: &'a str,
+    position: TitlePosition,
+    align: Align,
+}
+
+/// Slots [`Panel::add_title`] can fill, across both edges combined. Sized for the realistic case
+/// (one title per corner: top-left, top-right, bottom-left, bottom-right) rather than an
+/// unbounded `Vec`, so [`Panel`] stays allocation-free and [`Copy`]; see [`Panel::add_title`] for
+/// what happens to a call past this many.
+const MAX_TITLES: usize = 4;
+
+/// A bordered panel: a filled background with a box border and, optionally, one or more titles
+/// along the top and/or bottom edge.
+///
+/// `border_style` (the box outline and titles) and `fill_style` (the
 /// interior background) both default to [`Theme::DARK`] (as if [`Panel::theme`] had been called);
-/// there is no title by default, and the title (if any) defaults to [`Align::Center`].
-/// Set whichever of these a caller needs via
+/// there is no title by default, and the title set by [`Panel::title`] (if any) defaults to
+/// [`Align::Center`]. Set whichever of these a caller needs via
 /// [`Panel::border_style`]/[`Panel::fill_style`]/[`Panel::title`]/[`Panel::title_align`].
+///
+/// [`Panel::title`] is sugar for the common case: one top, centered (by default) title. For
+/// anything past that -- a bottom title, more than one title on an edge, or a title aligned other
+/// than via `title_align` -- use [`Panel::add_title`], which is fully additive: it never disturbs
+/// `title`/`title_align`, and multiple `add_title` calls stack rather than overwrite each other.
 ///
 /// # Examples
 ///
 /// ```
 /// use retroglyph_core::{Grid, Rect};
-/// use retroglyph_widgets::{Panel, Surface, Widget};
+/// use retroglyph_widgets::{Align, Panel, Surface, TitlePosition, Widget};
 ///
 /// let area = Rect::new(0, 0, 20, 5);
 /// let mut grid = Grid::new(20, 5);
 /// Panel::new()
 ///     .title("Status")
+///     .add_title("3 / 10", TitlePosition::Bottom, Align::Right)
 ///     .render(&mut Surface::new(&mut grid, area, 0));
 /// ```
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Panel<'a> {
     title: Option<&'a str>,
     title_align: Align,
+    titles: [Option<PanelTitle<'a>>; MAX_TITLES],
     border_style: Style,
     fill_style: Style,
     border_type: BorderType,
@@ -64,6 +99,41 @@ impl<'a> Panel<'a> {
     #[must_use]
     pub const fn title_align(mut self, align: Align) -> Self {
         self.title_align = align;
+        self
+    }
+
+    /// Add a title to `position`'s edge, aligned per `align`. Additive and independent of
+    /// [`Panel::title`] and of every other `add_title` call: nothing here overwrites another
+    /// title, so a top-left title plus a top-right status, or a top title plus a bottom hint
+    /// bar, is two calls (or three, alongside `.title(...)`) rather than two overlapping
+    /// `Panel`s.
+    ///
+    /// Multiple titles are allowed on the same edge. Each is drawn in declaration order --
+    /// `.title(...)`'s implicit top title first (if set), then `add_title` calls in the order
+    /// they were made -- truncated to whatever room is left on that title's edge after the
+    /// titles declared before it on the same edge have claimed theirs, the same way a single
+    /// title already truncates to fit the whole edge. A title that has no room left once earlier
+    /// titles on its edge are placed is clipped down to nothing rather than overdrawing them or
+    /// panicking. Because a [`Align::Center`] title claims its edge's entire remaining span, a
+    /// title declared after a centered one on the same edge always has no room left; put
+    /// non-centered titles first if a centered one needs to share an edge.
+    ///
+    /// Silently dropped once four `add_title` calls have already landed (across both edges;
+    /// `.title(...)` is tracked separately and doesn't count against this): [`Panel`] keeps its
+    /// added titles in a small fixed-size, allocation-free slot list sized for the realistic
+    /// case (one title per corner), not an unbounded `Vec`.
+    #[must_use]
+    pub fn add_title(mut self, title: &'a str, position: TitlePosition, align: Align) -> Self {
+        for slot in &mut self.titles {
+            if slot.is_none() {
+                *slot = Some(PanelTitle {
+                    text: title,
+                    position,
+                    align,
+                });
+                break;
+            }
+        }
         self
     }
 
@@ -157,8 +227,9 @@ impl<'a> Panel<'a> {
 impl Measure for Panel<'_> {
     /// The 1-cell border on each edge plus this panel's [`Panel::padding`] -- the height a
     /// zero-height inner content area would need, matching [`Panel::inner`]'s own vertical inset.
-    /// The title (if any) is drawn into the top border row rather than adding one of its own, so
-    /// it does not add to this count. `width` is unused: `Panel` never wraps content of its own,
+    /// Every title (the one set by [`Panel::title`], and any added by [`Panel::add_title`],
+    /// whichever edge it's on) is drawn into its border row rather than adding one of its own, so
+    /// none of them add to this count. `width` is unused: `Panel` never wraps content of its own,
     /// only whatever a caller renders into [`Panel::inner`], so it has nothing to measure against
     /// `width` yet.
     fn height_for(&self, _width: u16) -> u16 {
@@ -183,30 +254,86 @@ impl Widget for Panel<'_> {
             .border_type(self.border_type)
             .render(surface);
 
-        // Render the title into the top border if one was provided.
+        // Top edge: `.title(...)`'s implicit title (if any) claims space first, then any
+        // `add_title(..., TitlePosition::Top, ...)` titles in declaration order.
+        let mut top = TitleCursor::new(width);
         if let Some(t) = self.title {
-            let max_title_w = width.saturating_sub(4); // 2 border + 2 spaces
-            if max_title_w == 0 {
-                return;
+            top.draw(surface, 0, t, self.title_align, self.border_style);
+        }
+        for title in self.titles.iter().flatten() {
+            if title.position == TitlePosition::Top {
+                top.draw(surface, 0, title.text, title.align, self.border_style);
             }
-            // Truncate and measure up front: the padding spaces flank the title, so their
-            // position depends on the truncated title's own width, not the other way around
-            // (unlike the widgets that hand this whole sequence to `draw_clipped` in one call).
-            let (t, t_w) = truncate_measured(t, max_title_w);
-            // The padded title (a space either side of the text) is aligned
-            // within the region between the two corners (`width - 2`).
-            let padded = t_w + 2;
-            let title_x = 1 + self.title_align.offset(width - 2, padded);
-            surface.put((title_x, 0), ' ', self.border_style);
-            let _ = draw_clipped(
-                surface,
-                (title_x + 1, 0),
-                t_w,
-                t,
-                Align::Left,
-                self.border_style,
-            );
-            surface.put((title_x + 1 + t_w, 0), ' ', self.border_style);
+        }
+
+        // Bottom edge: `add_title(..., TitlePosition::Bottom, ...)` titles in declaration order.
+        // `height >= 2` (checked above) means `height - 1 >= 1`, always a different row than the
+        // top edge's row `0`.
+        let mut bottom = TitleCursor::new(width);
+        for title in self.titles.iter().flatten() {
+            if title.position == TitlePosition::Bottom {
+                bottom.draw(
+                    surface,
+                    height - 1,
+                    title.text,
+                    title.align,
+                    self.border_style,
+                );
+            }
+        }
+    }
+}
+
+/// Tracks how much of one border edge's span (the columns strictly between its two corners) is
+/// still free while [`Panel::render`] draws that edge's titles in declaration order, so a title
+/// that would overlap an earlier one on the same edge is truncated down to whatever room is left
+/// instead of overdrawing it.
+struct TitleCursor {
+    /// Leftmost free column (inclusive).
+    lo: u16,
+    /// Rightmost free column (exclusive).
+    hi: u16,
+}
+
+impl TitleCursor {
+    /// A cursor over the whole span between `width`'s two corners: columns `1..width - 1`.
+    const fn new(width: u16) -> Self {
+        Self {
+            lo: 1,
+            hi: width.saturating_sub(1),
+        }
+    }
+
+    /// Draw one title into whatever of this cursor's span is still free, then shrink the span so
+    /// a later call on the same edge doesn't overdraw it. Mirrors the truncate-then-pad sequence
+    /// a single top title always used: [`truncate_measured`] up front (the padding spaces flank
+    /// the title, so their position depends on the truncated title's own width, not the other
+    /// way around) then a leading/trailing space either side of it.
+    ///
+    /// A title with no room left (`lo >= hi`, or fewer than 2 free columns -- not even enough for
+    /// the two padding spaces) is dropped entirely, drawing nothing, rather than panicking.
+    /// [`Align::Center`] claims this cursor's whole remaining span regardless of how much of it
+    /// the title itself actually used, so a title declared after a centered one on the same edge
+    /// always finds `lo >= hi` and is dropped.
+    fn draw(&mut self, surface: &mut Surface<'_>, y: u16, text: &str, align: Align, style: Style) {
+        if self.lo >= self.hi {
+            return;
+        }
+        let avail = self.hi - self.lo;
+        let Some(max_title_w) = avail.checked_sub(2) else {
+            return;
+        };
+        let (t, t_w) = truncate_measured(text, max_title_w);
+        let padded = t_w + 2;
+        let title_x = self.lo + align.offset(avail, padded);
+        surface.put((title_x, y), ' ', style);
+        let _ = draw_clipped(surface, (title_x + 1, y), t_w, t, Align::Left, style);
+        surface.put((title_x + 1 + t_w, y), ' ', style);
+
+        match align {
+            Align::Left => self.lo = title_x + padded,
+            Align::Right => self.hi = title_x,
+            Align::Center => self.hi = self.lo,
         }
     }
 }
@@ -402,6 +529,102 @@ mod tests {
             assert_eq!(grid[Pos::new(5, 0)].glyph(), '─');
             assert_eq!(grid[Pos::new(6, 0)].glyph(), ' ');
         }
+    }
+
+    #[test]
+    fn add_title_draws_into_the_bottom_border_row() {
+        let area = Rect::new(0, 0, 12, 4);
+        let mut grid = Grid::new(12, 4);
+        Panel::new()
+            .add_title("hint", TitlePosition::Bottom, Align::Center)
+            .render(&mut Surface::new(&mut grid, area, 0));
+
+        let bottom_row: String = (0..12).map(|x| grid[Pos::new(x, 3)].glyph()).collect();
+        assert!(bottom_row.contains("hint"));
+        // Top row is untouched: no title was set for it.
+        let top_row: String = (0..12).map(|x| grid[Pos::new(x, 0)].glyph()).collect();
+        assert!(!top_row.contains("hint"));
+    }
+
+    #[test]
+    fn title_and_add_title_coexist_on_different_edges() {
+        let area = Rect::new(0, 0, 20, 4);
+        let mut grid = Grid::new(20, 4);
+        Panel::new()
+            .title("Inventory")
+            .add_title("3 / 10 items", TitlePosition::Bottom, Align::Right)
+            .render(&mut Surface::new(&mut grid, area, 0));
+
+        let top_row: String = (0..20).map(|x| grid[Pos::new(x, 0)].glyph()).collect();
+        assert!(top_row.contains("Inventory"));
+        let bottom_row: String = (0..20).map(|x| grid[Pos::new(x, 3)].glyph()).collect();
+        assert!(bottom_row.contains("3 / 10 items"));
+    }
+
+    #[test]
+    fn two_titles_on_the_same_edge_are_left_and_right_aligned() {
+        let area = Rect::new(0, 0, 20, 3);
+        let mut grid = Grid::new(20, 3);
+        Panel::new()
+            .add_title("left", TitlePosition::Top, Align::Left)
+            .add_title("right", TitlePosition::Top, Align::Right)
+            .render(&mut Surface::new(&mut grid, area, 0));
+
+        let top_row: String = (0..20).map(|x| grid[Pos::new(x, 0)].glyph()).collect();
+        assert!(top_row.contains("left"));
+        assert!(top_row.contains("right"));
+        assert!(top_row.find("left").unwrap() < top_row.find("right").unwrap());
+    }
+
+    #[test]
+    fn a_later_title_overlapping_an_earlier_one_is_clipped_instead_of_overdrawing_it() {
+        // Only 10 columns wide: an 8-column left title (" long L ") leaves no room for a
+        // right title declared after it, so the right title must be dropped rather than
+        // overdrawing the left one or panicking.
+        let area = Rect::new(0, 0, 10, 3);
+        let mut grid = Grid::new(10, 3);
+        Panel::new()
+            .add_title("long L", TitlePosition::Top, Align::Left)
+            .add_title("R", TitlePosition::Top, Align::Right)
+            .render(&mut Surface::new(&mut grid, area, 0));
+
+        let top_row: String = (0..10).map(|x| grid[Pos::new(x, 0)].glyph()).collect();
+        assert!(top_row.contains("long L"));
+        assert!(!top_row.contains('R'));
+    }
+
+    #[test]
+    fn a_title_after_a_centered_title_on_the_same_edge_finds_no_room() {
+        let area = Rect::new(0, 0, 20, 3);
+        let mut grid = Grid::new(20, 3);
+        Panel::new()
+            .add_title("centered", TitlePosition::Top, Align::Center)
+            .add_title("dropped", TitlePosition::Top, Align::Right)
+            .render(&mut Surface::new(&mut grid, area, 0));
+
+        let top_row: String = (0..20).map(|x| grid[Pos::new(x, 0)].glyph()).collect();
+        assert!(top_row.contains("centered"));
+        assert!(!top_row.contains("dropped"));
+    }
+
+    #[test]
+    fn a_fifth_add_title_call_is_silently_dropped() {
+        let area = Rect::new(0, 0, 40, 3);
+        let mut grid = Grid::new(40, 3);
+        Panel::new()
+            .add_title("a", TitlePosition::Top, Align::Left)
+            .add_title("b", TitlePosition::Bottom, Align::Left)
+            .add_title("c", TitlePosition::Top, Align::Right)
+            .add_title("d", TitlePosition::Bottom, Align::Right)
+            .add_title("e", TitlePosition::Top, Align::Center)
+            .render(&mut Surface::new(&mut grid, area, 0));
+
+        let top_row: String = (0..40).map(|x| grid[Pos::new(x, 0)].glyph()).collect();
+        // "a"/"c" (the first two Top calls) made it in; the fifth call ("e", also Top) has no
+        // slot left, so it's dropped rather than replacing or panicking.
+        assert!(top_row.contains('a'));
+        assert!(top_row.contains('c'));
+        assert!(!top_row.contains('e'));
     }
 
     #[test]
