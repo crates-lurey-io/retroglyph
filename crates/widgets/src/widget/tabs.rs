@@ -476,4 +476,32 @@ mod tests {
         );
         assert_eq!(state, 0); // unchanged: not clamped to the last tab
     }
+
+    #[test]
+    fn tabs_wide_title_loses_half_its_characters() {
+        let area = Rect::new(0, 0, 20, 1);
+        let titles = ["設定", "次"];
+        let mut grid = Grid::new(20, 1);
+        let tabs = Tabs::new(&titles);
+        Widget::render(&tabs, &mut Surface::new(&mut grid, area, 0));
+
+        // "設定" is 4 columns wide; both characters must draw in full.
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), '設');
+        assert_eq!(grid[Pos::new(2, 0)].glyph(), '定');
+        // "次" (2 cols) starts after "設定" (4) + column_spacing (1) = column 5.
+        assert_eq!(grid[Pos::new(5, 0)].glyph(), '次');
+    }
+
+    #[test]
+    fn tabs_wide_title_does_not_overlap_the_next_tab() {
+        let area = Rect::new(0, 0, 20, 1);
+        let titles = ["設定", "次"];
+        let tabs = Tabs::new(&titles);
+        let columns = tabs.tab_columns(area);
+
+        // "設定" occupies 4 columns starting at 0; "次" must start no earlier than column 5
+        // (4 + column_spacing 1), never inside "設定"'s own span.
+        assert_eq!(columns[0], (0, 0, 4));
+        assert_eq!(columns[1].1, 5);
+    }
 }
