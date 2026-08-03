@@ -707,6 +707,8 @@ mod tests {
 
     #[test]
     fn test_paste_event_carries_text() {
+        use alloc::string::ToString as _;
+
         let event = Event::Paste("hello".to_string());
         let Event::Paste(text) = event else {
             panic!("Expected Event::Paste");

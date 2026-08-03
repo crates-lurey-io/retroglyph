@@ -2302,6 +2302,7 @@ mod tests {
         assert_eq!(s, "A··\n···\n");
     }
 
+    #[cfg(feature = "egc")]
     #[test]
     fn test_grid_display_wide_char_spacer() {
         // A wide char's right-half spacer cell prints as a plain space, not the wide
@@ -2321,6 +2322,9 @@ mod tests {
 
     #[test]
     fn test_grid_cells_coordinates() {
+        use alloc::vec;
+        use alloc::vec::Vec;
+
         let grid = Grid::new(3, 2);
         let coords: Vec<(u16, u16)> = grid.cells(0).unwrap().map(|(x, y, _)| (x, y)).collect();
         assert_eq!(
@@ -2400,6 +2404,9 @@ mod tests {
 
     #[test]
     fn test_rect_positions() {
+        use alloc::vec;
+        use alloc::vec::Vec;
+
         let r = Rect::new(1, 2, 2, 2);
         let pts: Vec<Pos> = r.pos_iter().collect();
         assert_eq!(
@@ -2452,6 +2459,8 @@ mod tests {
 
     #[test]
     fn test_position_ord_row_major() {
+        use alloc::vec;
+
         let mut positions = vec![Pos::new(5, 0), Pos::new(0, 1), Pos::new(3, 0)];
         positions.sort();
         assert_eq!(
@@ -2776,6 +2785,7 @@ mod tests {
     // when the cell it belongs to is overwritten or cleared. These cover each of those, plus the
     // interaction between the two members now sharing one entry and one flag.
 
+    #[cfg(feature = "egc")]
     #[test]
     fn tint_round_trips_and_defaults_to_none() {
         let mut g = Grid::new(4, 4);
@@ -2810,6 +2820,7 @@ mod tests {
         assert_eq!(g.tint(0, 0, 0), Tint::None);
     }
 
+    #[cfg(feature = "egc")]
     #[test]
     fn writing_a_glyph_over_a_tinted_cell_drops_the_tint() {
         let mut g = Grid::new(4, 4);
@@ -2852,6 +2863,7 @@ mod tests {
     /// `fill_region` writes a caller-constructed `Tile`, which (like `put_tile`) can never
     /// legitimately carry `HAS_EXTRA`, so any grapheme/tint side-table entry the fill's cells
     /// used to own must be dropped, not left dangling under the new tile.
+    #[cfg(feature = "egc")]
     #[test]
     fn fill_region_drops_stale_extras() {
         let mut g = Grid::new(4, 4);
@@ -2895,6 +2907,7 @@ mod tests {
         assert_eq!(g.tint(1, 1, 1), Tint::multiply(4, 5, 6));
     }
 
+    #[cfg(feature = "egc")]
     #[test]
     fn resize_remaps_a_tint_to_the_new_stride() {
         let mut g = Grid::new(4, 4);
@@ -2912,6 +2925,7 @@ mod tests {
         assert_eq!(g.tint(0, 3, 1), Tint::None);
     }
 
+    #[cfg(feature = "egc")]
     #[test]
     fn blit_carries_a_tint_across_grids() {
         let mut src = Grid::new(4, 4);
@@ -2928,6 +2942,7 @@ mod tests {
         assert_eq!(dst.tint(0, 0, 0), Tint::None);
     }
 
+    #[cfg(feature = "egc")]
     #[test]
     fn blit_clears_a_destination_tint_where_the_source_has_none() {
         let mut src = Grid::new(2, 2);
@@ -3543,6 +3558,9 @@ mod tests {
 
     #[test]
     fn write_span_takes_any_as_ref_str_row() {
+        use alloc::string::String;
+        use alloc::vec::Vec;
+
         let mut grid = Grid::new(4, 4);
         // A footprint computed at runtime: owned rows, no borrowing pass over them.
         let rows: Vec<String> = (0..2)

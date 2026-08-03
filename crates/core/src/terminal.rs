@@ -504,6 +504,10 @@ mod tests {
     /// reached the inner backend) as normal. Used to exercise `present`'s documented
     /// error-recovery contract: a failed `flush` must leave the frame's cells marked dirty
     /// so they are resent on the next successful `present`.
+    ///
+    /// `std`-only: its `Output::Error` is `std::io::Error`, purely as a convenient stand-in
+    /// error type for this test.
+    #[cfg(feature = "std")]
     struct FlushOnceFailing {
         inner: Headless,
         fail_next_flush: bool,
@@ -513,6 +517,7 @@ mod tests {
         last_draw_len: usize,
     }
 
+    #[cfg(feature = "std")]
     impl FlushOnceFailing {
         fn new(width: u16, height: u16) -> Self {
             Self {
@@ -523,6 +528,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "std")]
     impl Output for FlushOnceFailing {
         type Error = std::io::Error;
 
@@ -556,12 +562,14 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "std")]
     impl Input for FlushOnceFailing {
         fn poll_event(&mut self, timeout: Duration) -> Option<Event> {
             self.inner.poll_event(timeout)
         }
     }
 
+    #[cfg(feature = "std")]
     impl Cursor for FlushOnceFailing {}
 
     #[test]
@@ -612,6 +620,8 @@ mod tests {
 
     #[test]
     fn test_terminal_drain_events_into() {
+        use alloc::vec;
+
         let backend = Headless::new(10, 10);
         let mut terminal = Terminal::new(backend);
 
@@ -850,6 +860,7 @@ mod tests {
         assert_eq!(term.backend().grid()[Pos::new(1, 0)].glyph(), '@');
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn present_resends_cells_after_a_failed_flush_on_the_multi_layer_path() {
         // Two-layer terminal so `present` takes the flatten-buffer path (not the
@@ -1040,8 +1051,10 @@ mod tests {
         let mut term = Terminal::new(Headless::new(10, 3));
         term.surface().put((0, 0), '\u{4e2d}', Style::default()); // '中', width 2
         assert_eq!(term.grid()[Pos::new(0, 0)].glyph(), '\u{4e2d}');
-        // With egc: spacer uses WIDE_CHAR_SPACER flag, glyph is space.
-        // Without egc: spacer is '\0'.
+        // With egc: `write_grapheme` lays down an explicit spacer, flagged `WIDE_CHAR_SPACER`,
+        // glyph space. Without egc, `put` writes only the primary cell (via `put_tile`, which
+        // has no wide-char awareness), so the neighbor is simply never touched and keeps its
+        // prior (here: default) contents.
         #[cfg(feature = "egc")]
         {
             use crate::tile::TileFlags;
@@ -1053,7 +1066,7 @@ mod tests {
             assert_eq!(term.grid()[Pos::new(1, 0)].glyph(), ' ');
         }
         #[cfg(not(feature = "egc"))]
-        assert_eq!(term.grid()[Pos::new(1, 0)].glyph(), '\0');
+        assert_eq!(term.grid()[Pos::new(1, 0)].glyph(), ' ');
         assert_eq!(term.grid()[Pos::new(2, 0)].glyph(), ' '); // untouched
     }
 
@@ -1062,6 +1075,7 @@ mod tests {
         let mut term = Terminal::new(Headless::new(10, 3));
         term.surface().print((0, 0), "\u{4e2d}x", Style::default()); // '中' (2) then 'x' at col 2
         assert_eq!(term.grid()[Pos::new(0, 0)].glyph(), '\u{4e2d}');
+        // See `test_put_wide_char_sets_continuation` for why the neighbor differs by feature.
         #[cfg(feature = "egc")]
         {
             use crate::tile::TileFlags;
@@ -1072,7 +1086,7 @@ mod tests {
             );
         }
         #[cfg(not(feature = "egc"))]
-        assert_eq!(term.grid()[Pos::new(1, 0)].glyph(), '\0');
+        assert_eq!(term.grid()[Pos::new(1, 0)].glyph(), ' ');
         assert_eq!(term.grid()[Pos::new(2, 0)].glyph(), 'x');
     }
 
@@ -1113,10 +1127,16 @@ mod tests {
     #[test]
     fn test_put_wide_char_at_last_column_does_not_overflow() {
         // Wide char placed at the last column: can't place a spacer.
-        // write_grapheme silently refuses rather than leaving an orphan.
+        // With egc, `write_grapheme` silently refuses rather than leaving an orphan. Without
+        // egc, `put` has no wide-char bounds check at all (it only ever writes the primary
+        // cell via `put_tile`), so the char is written regardless of whether a neighbor
+        // exists for a spacer.
         let mut term = Terminal::new(Headless::new(4, 1));
         term.surface().put((3, 0), '\u{4e2d}', Style::default()); // col 3 is last; need col 4 for spacer
+        #[cfg(feature = "egc")]
         assert_eq!(term.grid()[Pos::new(3, 0)].glyph(), ' '); // nothing written
+        #[cfg(not(feature = "egc"))]
+        assert_eq!(term.grid()[Pos::new(3, 0)].glyph(), '\u{4e2d}'); // written anyway
     }
 
     // --- styled spans ---
@@ -1124,6 +1144,8 @@ mod tests {
     #[test]
     fn test_print_styled_basic() {
         use crate::text::{Line, Span};
+        use alloc::vec;
+
         let mut term = Terminal::new(Headless::new(20, 3));
         let line = Line::from(vec![
             Span::raw("HP: "),
@@ -1140,10 +1162,13 @@ mod tests {
     #[test]
     fn test_print_styled_wide_chars() {
         use crate::text::Line;
+        use alloc::vec;
+
         let mut term = Terminal::new(Headless::new(10, 3));
         let line = Line::from(vec![crate::text::Span::raw("\u{4e2d}x")]);
         term.surface().print_line((0, 0), &line);
         assert_eq!(term.grid()[Pos::new(0, 0)].glyph(), '\u{4e2d}');
+        // See `test_put_wide_char_sets_continuation` for why the neighbor differs by feature.
         #[cfg(feature = "egc")]
         {
             use crate::tile::TileFlags;
@@ -1154,7 +1179,7 @@ mod tests {
             );
         }
         #[cfg(not(feature = "egc"))]
-        assert_eq!(term.grid()[Pos::new(1, 0)].glyph(), '\0');
+        assert_eq!(term.grid()[Pos::new(1, 0)].glyph(), ' ');
         assert_eq!(term.grid()[Pos::new(2, 0)].glyph(), 'x');
     }
 

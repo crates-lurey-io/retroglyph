@@ -1639,6 +1639,8 @@ mod tests {
 
     #[test]
     fn test_display() {
+        use alloc::string::ToString as _;
+
         assert_eq!(Color::Default.to_string(), "default");
         assert_eq!(Color::Ansi(AnsiColor::Black).to_string(), "black");
         assert_eq!(
@@ -1659,6 +1661,8 @@ mod tests {
 
     #[test]
     fn test_from_str_round_trips_display() {
+        use alloc::string::ToString as _;
+
         let colors = [
             Color::Default,
             Color::Ansi(AnsiColor::Black),

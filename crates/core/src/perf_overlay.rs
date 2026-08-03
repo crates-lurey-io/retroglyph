@@ -4,6 +4,8 @@
 //! backend-specific code in the wrapped app itself:
 //!
 //! ```
+//! # #[cfg(feature = "std")]
+//! # {
 //! use retroglyph_core::{Backend, Headless, PerfOverlayApp, Terminal, run_blocking};
 //! # use retroglyph_core::{App, Flow, Frame};
 //! # struct MyGame;
@@ -16,6 +18,7 @@
 //! let term = Terminal::new(Headless::new(40, 10));
 //! let app = PerfOverlayApp::new(MyGame, "headless");
 //! run_blocking(term, app).expect("run_blocking");
+//! # } // `run_blocking` is `std`-only; a no-op under `--no-default-features`.
 //! ```
 //!
 //! # What's generic and what's backend-specific
@@ -723,6 +726,8 @@ mod tests {
 
     #[test]
     fn swallows_toggle_key_and_passes_other_input_through() {
+        use alloc::vec;
+
         let mut term = Terminal::new(Headless::new(40, 5));
         term.backend_mut().push_event(Event::Key(KeyEvent::new(
             KeyCode::Char('`'),
@@ -978,6 +983,8 @@ mod tests {
 
     #[test]
     fn default_perf_renderer_shows_fps_ms_min_max_and_backend_right_aligned() {
+        use alloc::string::String;
+
         let mut stats = FrameStats::<FRAME_HISTORY>::new();
         for _ in 0..5 {
             stats.record(core::time::Duration::from_millis(16));
