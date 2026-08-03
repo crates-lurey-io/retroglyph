@@ -61,7 +61,7 @@ pub use list_direction::ListDirection;
 pub use log::Log;
 pub use meter::Meter;
 pub use modal::Modal;
-pub use panel::Panel;
+pub use panel::{Panel, PanelTitle, TitlePosition};
 pub use paragraph::Paragraph;
 pub use perf_overlay::{AnimatedPerfOverlay, PerfOverlay};
 pub use print_line::PrintLine;
