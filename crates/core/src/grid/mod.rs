@@ -116,7 +116,6 @@ use alloc::vec::Vec;
 // Aliased rather than imported as `BlendMode`: this module already defines its own `BlendMode`
 // (below), and alpha-blend 0.3 renamed `blend_modes::SeparableBlendMode` to a top-level
 // `BlendMode` of its own, which would otherwise collide.
-#[cfg(feature = "blend-modes")]
 use alpha_blend::BlendMode as SeparableBlendMode;
 use grixy::buf::GridBuf;
 use grixy::ops::layout::{LinearLayout, RowMajor};
@@ -130,13 +129,11 @@ mod trait_impls;
 /// Blend mode for [`Grid::blit_alpha`], selecting how source and destination colors combine
 /// before the `fg_alpha`/`bg_alpha` factor is applied.
 ///
-/// [`Linear`](Self::Linear) is a straight per-channel color lerp: `blit_alpha`'s original
-/// behavior, always available (it needs only [`gem::Mix`], not the `blend-modes` feature). With
-/// the `blend-modes` feature (default on), the remaining variants are also available: the
-/// [W3C separable blend modes] libtcod also offers. Each computes a fully blended color per
-/// channel via [`alpha_blend::BlendMode`] (imported here under its old name,
-/// [`SeparableBlendMode`], to avoid colliding with this module's own [`BlendMode`]), and *that*
-/// result is what gets lerped against the destination by the alpha factor, in place of the
+/// [`Linear`](Self::Linear) is a straight per-channel color lerp, delegated to [`gem::Mix`]. The
+/// remaining variants are the [W3C separable blend modes] libtcod also offers: each computes a
+/// fully blended color per channel via [`alpha_blend::BlendMode`] (imported here under its old
+/// name, [`SeparableBlendMode`], to avoid colliding with this module's own [`BlendMode`]), and
+/// *that* result is what gets lerped against the destination by the alpha factor, in place of the
 /// source color `Linear` would use.
 ///
 /// [W3C separable blend modes]: https://www.w3.org/TR/compositing-1/#blending
@@ -147,33 +144,17 @@ pub enum BlendMode {
     #[default]
     Linear,
     /// Lightens: `dst + src - dst * src`. Always at least as light as either input.
-    ///
-    /// Requires the `blend-modes` feature (default on).
-    #[cfg(feature = "blend-modes")]
     Screen,
     /// Brightens the destination to reflect the source (aka "color dodge").
-    ///
-    /// Requires the `blend-modes` feature (default on).
-    #[cfg(feature = "blend-modes")]
     Dodge,
     /// Darkens the destination to reflect the source (aka "color burn").
-    ///
-    /// Requires the `blend-modes` feature (default on).
-    #[cfg(feature = "blend-modes")]
     Burn,
     /// Multiplies or screens the colors, depending on the destination.
-    ///
-    /// Requires the `blend-modes` feature (default on).
-    #[cfg(feature = "blend-modes")]
     Overlay,
     /// Darkens: `dst * src`. Always at least as dark as either input; the complement of Screen.
-    ///
-    /// Requires the `blend-modes` feature (default on).
-    #[cfg(feature = "blend-modes")]
     Multiply,
 }
 
-#[cfg(feature = "blend-modes")]
 impl BlendMode {
     /// The equivalent [`SeparableBlendMode`], or `None` for [`Linear`](Self::Linear) (which uses
     /// [`gem::Mix`] instead: see [`blend_color`]).

@@ -149,11 +149,12 @@ fn parse_features(src: &str) -> Result<Vec<Feature>, String> {
         if name == "default" {
             continue;
         }
-        // `__`-prefixed features (e.g. `retroglyph-core`'s `__math`) are an internal-only
-        // convention: never meant to be enabled by a consumer, so they have no business in a
-        // consumer-facing feature table. Skipping them here means that convention is enough on
-        // its own -- nobody has to remember to also keep such a feature's doc comment out of
-        // this generator's input, or notice it leaking into `lib.rs`/`README.md` in review.
+        // `__`-prefixed features are an internal-only convention: never meant to be enabled by a
+        // consumer, so they have no business in a consumer-facing feature table. No crate here
+        // currently has one; the convention outlives any particular use of it, and keeping the
+        // support means the next one costs nothing. Skipping them here means the convention is
+        // enough on its own -- nobody has to remember to also keep such a feature's doc comment
+        // out of this generator's input, or notice it leaking into `lib.rs`/`README.md` in review.
         if name.starts_with("__") {
             continue;
         }
