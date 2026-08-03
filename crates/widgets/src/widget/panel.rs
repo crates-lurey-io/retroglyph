@@ -31,12 +31,6 @@ pub struct PanelTitle<'a> {
     align: Align,
 }
 
-/// Slots [`Panel::add_title`] can fill, across both edges combined. Sized for the realistic case
-/// (one title per corner: top-left, top-right, bottom-left, bottom-right) rather than an
-/// unbounded `Vec`, so [`Panel`] stays allocation-free and [`Copy`]; see [`Panel::add_title`] for
-/// what happens to a call past this many.
-const MAX_TITLES: usize = 4;
-
 /// A bordered panel: a filled background with a box border and, optionally, one or more titles
 /// along the top and/or bottom edge.
 ///
@@ -64,11 +58,15 @@ const MAX_TITLES: usize = 4;
 ///     .add_title("3 / 10", TitlePosition::Bottom, Align::Right)
 ///     .render(&mut Surface::new(&mut grid, area, 0));
 /// ```
-#[derive(Clone, Copy, Debug, Default)]
+///
+/// Not [`Copy`] (unlike most other widgets here): [`Panel::add_title`] stores its titles in a
+/// `Vec`, so an unbounded number of them is exactly as cheap, and as fallible in the same ways
+/// (only an allocation failure, never a silently dropped title), as pushing onto any other `Vec`.
+#[derive(Clone, Debug, Default)]
 pub struct Panel<'a> {
     title: Option<&'a str>,
     title_align: Align,
-    titles: [Option<PanelTitle<'a>>; MAX_TITLES],
+    titles: Vec<PanelTitle<'a>>,
     border_style: Style,
     fill_style: Style,
     border_type: BorderType,
@@ -118,22 +116,15 @@ impl<'a> Panel<'a> {
     /// title declared after a centered one on the same edge always has no room left; put
     /// non-centered titles first if a centered one needs to share an edge.
     ///
-    /// Silently dropped once four `add_title` calls have already landed (across both edges;
-    /// `.title(...)` is tracked separately and doesn't count against this): [`Panel`] keeps its
-    /// added titles in a small fixed-size, allocation-free slot list sized for the realistic
-    /// case (one title per corner), not an unbounded `Vec`.
+    /// Unbounded: every call is kept (this is what makes [`Panel`] not [`Copy`]; see its own doc
+    /// comment), there is no cap to silently drop past.
     #[must_use]
     pub fn add_title(mut self, title: &'a str, position: TitlePosition, align: Align) -> Self {
-        for slot in &mut self.titles {
-            if slot.is_none() {
-                *slot = Some(PanelTitle {
-                    text: title,
-                    position,
-                    align,
-                });
-                break;
-            }
-        }
+        self.titles.push(PanelTitle {
+            text: title,
+            position,
+            align,
+        });
         self
     }
 
@@ -260,7 +251,7 @@ impl Widget for Panel<'_> {
         if let Some(t) = self.title {
             top.draw(surface, 0, t, self.title_align, self.border_style);
         }
-        for title in self.titles.iter().flatten() {
+        for title in &self.titles {
             if title.position == TitlePosition::Top {
                 top.draw(surface, 0, title.text, title.align, self.border_style);
             }
@@ -270,7 +261,7 @@ impl Widget for Panel<'_> {
         // `height >= 2` (checked above) means `height - 1 >= 1`, always a different row than the
         // top edge's row `0`.
         let mut bottom = TitleCursor::new(width);
-        for title in self.titles.iter().flatten() {
+        for title in &self.titles {
             if title.position == TitlePosition::Bottom {
                 bottom.draw(
                     surface,
@@ -608,7 +599,9 @@ mod tests {
     }
 
     #[test]
-    fn a_fifth_add_title_call_is_silently_dropped() {
+    fn a_fifth_add_title_call_still_renders() {
+        // `Panel::add_title` has no cap (unlike an earlier fixed-slot design): a fifth call
+        // (across both edges) must still draw, not silently drop.
         let area = Rect::new(0, 0, 40, 3);
         let mut grid = Grid::new(40, 3);
         Panel::new()
@@ -620,11 +613,9 @@ mod tests {
             .render(&mut Surface::new(&mut grid, area, 0));
 
         let top_row: String = (0..40).map(|x| grid[Pos::new(x, 0)].glyph()).collect();
-        // "a"/"c" (the first two Top calls) made it in; the fifth call ("e", also Top) has no
-        // slot left, so it's dropped rather than replacing or panicking.
         assert!(top_row.contains('a'));
         assert!(top_row.contains('c'));
-        assert!(!top_row.contains('e'));
+        assert!(top_row.contains('e'));
     }
 
     #[test]
