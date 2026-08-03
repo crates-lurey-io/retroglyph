@@ -81,12 +81,97 @@ invalidated program/atlas/buffers were rebuilt on the live context. It runs unde
 them together). The `WEBGL_lose_context` extension is implemented by the browser, not the GL driver,
 so it works under SwiftShader.
 
+## Cross-backend conformance
+
+`retroglyph_core::testing::conformance` (behind the `testing` feature) is a third kind of test,
+orthogonal to the render tests above and to `TestHarness` below: it drives a raw backend directly
+through the `Output`/`Cursor`/`Input` trait contracts (retroglyph#763), independent of `Terminal`
+and `App`. Where the render tests above check a single backend's pixels are correct and
+`TestHarness` drives a whole `App` update loop, the four `assert_*_contract` functions check that
+the backends in this workspace agree on obligations no lone `impl` block states:
+
+- `assert_output_contract`: `clear()`/`resize()` reset internal shadow/diff state (a redraw after
+  either must repaint, not silently skip because it matches a stale copy), and an out-of-range
+  `DrawCell` position is silently dropped rather than panicking or reaching the display.
+- `assert_cursor_contract`: an external `Cursor::set_cursor_position` call keeps a backend's
+  internally tracked cursor in sync with where the cursor actually is, the same as an ordinary draw
+  does.
+- `assert_cursor_style_contract`: each `CursorStyle` variant has its own distinct, observable effect
+  (no two variants collapsing onto the same DECSCUSR code via a `match` fallthrough).
+- `assert_input_contract`: a burst of consecutive `Mouse(Moved)` events coalesces to the latest one,
+  without swallowing a non-`Moved` event queued between two bursts.
+
+These are four separate entry points rather than one `B: Backend` bound because not every backend
+implements every facet: `GlRenderer` implements neither `Input` nor `Cursor` (a GPU/pixel surface
+has no text cursor and never receives external input), so a bound requiring all of them could never
+be satisfied by every backend that only wants the `Output` contract. Each backend crate opts into
+exactly the facets it implements.
+
+### The `Observable` hook
+
+None of `Output`/`Cursor` has a shared way to read back "what would actually appear": a terminal
+backend has emitted bytes, a pixel backend has a framebuffer, `Headless` has a `Grid`.
+`Observable::snapshot(&mut self) -> u64` is the one method a backend implements to bridge that gap,
+and every assertion above only ever compares two calls to it for equality.
+
+That equality only means what it should if `snapshot` returns a digest of **what changed since the
+previous call**, not the backend's whole history or whole current state. Get this wrong (e.g. hash a
+terminal backend's entire emitted byte log) and two independently-built action sequences of
+different lengths can never compare equal even when both are correct, so every assertion fails for a
+reason that has nothing to do with the obligation under test.
+
+Every backend that implements `Observable` in this workspace does so via a small test-only wrapper
+around the real backend, rather than on the production type itself, because the "since last call"
+bookkeeping has no other reason to exist outside a test:
+
+- `HeadlessObserver` (`crates/core/src/testing/conformance.rs`) hashes the `(index, char)` pairs
+  that differ from the previous `format_view()`.
+- `SoftwareObserver` (`crates/software/src/lib.rs`) hashes the pixel indices that differ from the
+  previous framebuffer.
+- `CrosstermObserver` (`crates/crossterm/src/lib.rs`) hashes the bytes appended to its `Vec<u8>`
+  writer since the previous call.
+- `GlObserver` (`crates/gl/src/lib.rs`) hashes the per-cell instance data that differs from the
+  previous frame's CPU-side upload buffer (`GlRenderer` has no CPU-readable framebuffer without a
+  real GL context).
+
+`retroglyph-terminal-wasm` is the exception: `TerminalWasm`'s own observable state is already an
+append-only ANSI byte buffer drained by `take_output()`, so it implements `Observable` directly
+rather than through a wrapper.
+
+`fnv1a` (`retroglyph_core::testing::conformance::fnv1a`) is the non-cryptographic FNV-1a digest
+every `Observable` impl above uses; it exists because `core::hash::Hasher` has no portable digest
+guarantee and is unavailable at all under `no_std`.
+
+### Coverage
+
+Coverage is uneven: a backend only gets a facet's regressions caught for free once it's wired into a
+test. Some gaps are load-bearing rather than accidental (see retroglyph#997, retroglyph#999).
+
+| Backend                    | `Output` | `Cursor`                                                                          | `CursorStyle` | `Input`                                                  |
+| -------------------------- | -------- | --------------------------------------------------------------------------------- | ------------- | -------------------------------------------------------- |
+| `Headless`                 | checked  | checked                                                                           | not wired     | checked                                                  |
+| `retroglyph-software`      | checked  | checked (trivially: no hardware cursor)                                           | not wired     | n/a (no `Input` impl)                                    |
+| `retroglyph-crossterm`     | checked  | ignored (retroglyph#713: `set_cursor_position` doesn't resync the tracked cursor) | checked       | not wired (reads real terminal input, not synthesizable) |
+| `retroglyph-gl`            | checked  | n/a (implements neither `Input` nor `Cursor`)                                     | n/a           | n/a                                                      |
+| `retroglyph-terminal-wasm` | checked  | ignored (retroglyph#713)                                                          | checked       | checked                                                  |
+
+A backend crate wires a facet in by writing an `Observable` wrapper (or implementing it directly,
+per `TerminalWasm`) and calling the matching `assert_*_contract` function from a `#[test]`.
+
 ## Snapshot tests (insta)
 
-`Headless::format_view()` renders a grid to text (spaces become `·`). Combined with
-`insta::assert_snapshot!`, this is the primary tool for layout assertions: write the drawing code,
-snapshot the headless render, and diff future changes against the committed baseline instead of
-hand-writing character-grid assertions.
+`Headless::format_view()` renders a grid to text (spaces become `·`); the trailing half of a wide
+glyph (`TileFlags::WIDE_CHAR_SPACER`) renders as a real space instead, which is what distinguishes
+it from `·` in a snapshot containing wide characters (see
+`test_format_view_renders_span_fallback_glyphs`). Combined with `insta::assert_snapshot!`, this is
+the primary tool for layout assertions: write the drawing code, snapshot the headless render, and
+diff future changes against the committed baseline instead of hand-writing character-grid
+assertions.
+
+`Headless::format_styled()` renders the same grid with each cell's colors emitted as SGR (ANSI)
+escape sequences, so insta's terminal diff shows color: a color regression `format_view` can't see
+(two styles that share a glyph) shows up as a snapshot diff here. Reach for it instead of
+`format_view` whenever a test cares about `Style`, not just glyph placement.
 
 Snapshot files are committed next to their crate (`crates/*/src/snapshots/`,
 `examples/tests/snapshots/`).
@@ -202,6 +287,14 @@ asserts on substrings instead of pinning the SVG with `insta`, and writes the SV
 `CARGO_TARGET_TMPDIR` via `support::write_scratch_file` rather than a tracked snapshot file. Reach
 for `write_scratch_file` the same way for any future example whose output can't be pinned
 byte-for-byte.
+
+`support::write_scratch_file` is the general escape hatch: output lives under `CARGO_TARGET_TMPDIR`
+(under `target/`, so nothing tracked ever goes stale or dirty) for visual review rather than being
+insta-pinned. `examples/tests/fps_overlay.rs` also relies on it for its compact/full overlay SVGs,
+for the same reason as `20_overworld`: a live frame counter in the rendered output isn't byte-stable
+across runs. Print the returned path from the test so a reviewer can still open the artifact after a
+run; compare against `write_snapshot_file`, which writes a _tracked_ file and is only for output
+some `insta` assertion in the same test already pinned.
 
 `support::capture_pty` spawns those crossterm binaries with `RG_FPS=0`, because the shared example
 driver draws its FPS overlay by default and a live frame rate is not reproducible. The one place
