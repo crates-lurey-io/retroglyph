@@ -427,16 +427,13 @@ impl<W: Write> TerminalRenderer<W> {
             let _ = extra;
 
             // Spacer cells are the right half of a wide character. The wide
-            // char itself already drew over this position, so skip it.
-            #[cfg(feature = "egc")]
+            // char itself already drew over this position, so skip it. `Grid::put_tile` sets
+            // this flag on every feature combination (not just `egc`; see its own doc comment),
+            // so this check isn't `egc`-gated either.
             if cell
                 .flags()
                 .contains(retroglyph_core::tile::TileFlags::WIDE_CHAR_SPACER)
             {
-                continue;
-            }
-            #[cfg(not(feature = "egc"))]
-            if cell.glyph() == '\0' {
                 continue;
             }
 
@@ -507,15 +504,12 @@ impl<W: Write> TerminalRenderer<W> {
             #[cfg(not(feature = "egc"))]
             let _ = extra;
 
-            #[cfg(feature = "egc")]
+            // See `draw_escape`'s identical check above: `WIDE_CHAR_SPACER` is set regardless of
+            // `egc`, so skipping it here isn't `egc`-gated either.
             if cell
                 .flags()
                 .contains(retroglyph_core::tile::TileFlags::WIDE_CHAR_SPACER)
             {
-                continue;
-            }
-            #[cfg(not(feature = "egc"))]
-            if cell.glyph() == '\0' {
                 continue;
             }
 

@@ -927,10 +927,10 @@ impl Grid {
     /// Clears wide-character cells that would be partially overwritten by a
     /// write starting at `(x, y)` spanning `width` columns.
     ///
-    /// `clear_span_overlap` is the multi-cell-span analogue. It is not `egc`-gated, because a
-    /// span is not a Unicode concept and exists on every feature combination, so a write that
-    /// can land inside either kind of multi-cell structure calls both.
-    #[cfg(feature = "egc")]
+    /// `clear_span_overlap` is the multi-cell-span analogue. Not gated behind `egc`: `write_grapheme`
+    /// is `egc`-only, but [`put_tile`](Self::put_tile) writes a wide-character pair on every
+    /// feature combination (see its own doc comment), so a write that can land inside either kind
+    /// of multi-cell structure calls both regardless of `egc`.
     fn clear_overlap(&mut self, layer: u8, x: u16, y: u16, width: u16) {
         let w = usize::from(self.width);
         let cap = w * usize::from(self.height);
@@ -1311,12 +1311,33 @@ impl Grid {
 // ---------------------------------------------------------------------------
 
 impl Grid {
-    /// Write a tile to `layer` at `pos`.
+    /// Write a tile to `layer` at `pos`, honoring `tile`'s own precomputed
+    /// [`width`](Tile::width): a fresh 2-column tile also gets a
+    /// [`TileFlags::WIDE_CHAR_SPACER`] at `pos.x + 1`, the same pairing
+    /// [`write_grapheme`](Self::write_grapheme) writes, on every feature combination (`Tile::width`
+    /// comes from `unicode-width`, an unconditional dependency, not the `egc`-gated
+    /// `unicode-segmentation`).
     ///
-    /// Allocates the layer if it has not been written to yet. Returns `None`
-    /// if `pos` is out of bounds.
+    /// Allocates the layer if it has not been written to yet. Returns `None` if `pos` is out of
+    /// bounds, or if a fresh `tile` is 2 columns wide and `pos.x + 1` (the spacer's column) is
+    /// not: the same last-column refusal `write_grapheme` makes, rather than leaving an orphaned
+    /// primary cell with no spacer.
     ///
     /// To read back, use [`tile`](Self::tile).
+    ///
+    /// # Replaying an already-resolved tile
+    ///
+    /// The wide-char synthesis above only applies to a **fresh** `tile`: one built through public
+    /// API ([`Tile::new`], [`with_glyph`](Tile::with_glyph), [`Tile::default`]), which can never
+    /// carry [`TileFlags::WIDE_CHAR`]/[`TileFlags::WIDE_CHAR_SPACER`] (both `pub(crate)`-only to
+    /// set). A `tile` that already carries either flag is, by construction, an already-resolved
+    /// tile read back out of some grid (e.g. [`Headless`](crate::backend::Headless) replaying a
+    /// [`DrawCell`] stream verbatim into its own copy) rather than a new
+    /// glyph placement, and is written through exactly as given, with no bounds refusal, spacer
+    /// synthesis, or overlap clearing of its own: those already happened on the call that
+    /// produced it, and re-running them here would (for a spacer tile specifically) clear the
+    /// *other* half of the very same wide pair being replayed, mistaking it for some unrelated
+    /// write landing on that spacer.
     ///
     /// Any tile written this way has its extra grapheme text cleared, since a
     /// caller-constructed [`Tile`] can never legitimately carry
@@ -1324,19 +1345,58 @@ impl Grid {
     /// that need to preserve EGC text across a copy (e.g. [`blit`](Self::blit))
     /// follow up with a direct extras-table write. Any multi-cell span the
     /// cell belongs to is cleared first, so a write can never leave an anchor
-    /// pointing at cells it no longer owns.
+    /// pointing at cells it no longer owns; a fresh wide `tile` additionally clears any wide
+    /// character it would partially overwrite, the same as `write_grapheme`.
     pub fn put_tile(&mut self, layer: u8, pos: impl Into<Pos>, mut tile: Tile) -> Option<()> {
         let pos = pos.into();
-        self.clear_span_overlap(layer, pos.x, pos.y, 1);
+
+        // See "Replaying an already-resolved tile" above: only a tile that couldn't have come
+        // from a public constructor gets treated as verbatim, pre-resolved storage.
+        let fresh = !tile
+            .flags
+            .intersects(TileFlags::WIDE_CHAR | TileFlags::WIDE_CHAR_SPACER);
+        let width = if fresh { tile.width() } else { 1 };
+
+        // A 2-column tile needs a spacer at `pos.x + 1`: refuse rather than leave an orphaned
+        // primary cell, matching `write_grapheme`'s own last-column refusal.
+        if width == 2 && pos.x.saturating_add(1) >= self.width {
+            return None;
+        }
+
+        self.clear_span_overlap(layer, pos.x, pos.y, width.max(1));
+        if fresh {
+            self.clear_overlap(layer, pos.x, pos.y, width.max(1));
+        }
+
+        // Capture the grid width before borrowing `self` mutably below (same reason
+        // `write_grapheme` does): `self.width` isn't reachable once `lb` holds `&mut self`.
+        let grid_w = usize::from(self.width);
         let gpos = to_grixy_pos(pos);
-        let idx = usize::from(pos.y) * usize::from(self.width) + usize::from(pos.x);
+        let idx = usize::from(pos.y) * grid_w + usize::from(pos.x);
         let lb = self.layer_or_alloc(layer);
         if !lb.buf.contains(gpos) {
             return None;
         }
         lb.extras.remove(&idx);
         tile.flags.remove(TileFlags::HAS_EXTRA);
+        if width == 2 {
+            tile.flags.insert(TileFlags::WIDE_CHAR);
+        }
+        let style = tile.style;
         lb.buf[gpos] = tile;
+
+        if width == 2 {
+            // The last-column refusal above guarantees `pos.x + 1` is in bounds.
+            let spacer_x = pos.x + 1;
+            let spacer_gpos = to_grixy_pos(Pos::new(spacer_x, pos.y));
+            let spacer_idx = usize::from(pos.y) * grid_w + usize::from(spacer_x);
+            lb.extras.remove(&spacer_idx);
+            let spacer = &mut lb.buf[spacer_gpos];
+            spacer.glyph = ' ';
+            spacer.style = style;
+            spacer.width = 0;
+            spacer.flags = TileFlags::WIDE_CHAR_SPACER;
+        }
         Some(())
     }
 
@@ -2140,10 +2200,7 @@ impl fmt::Display for Grid {
         for y in 0..self.height() {
             for x in 0..self.width() {
                 let tile = &self[Pos::new(x, y)];
-                #[cfg(feature = "egc")]
                 let is_spacer = tile.flags.contains(TileFlags::WIDE_CHAR_SPACER);
-                #[cfg(not(feature = "egc"))]
-                let is_spacer = tile.glyph == '\0';
                 let c = if is_spacer {
                     ' ' // right half of a wide char, don't print twice
                 } else if tile.glyph == ' ' {
@@ -2839,6 +2896,73 @@ mod tests {
         g.set_tint(0, 1, 1, Tint::multiply(128, 128, 128));
         g.put_tile(0, Pos::new(1, 1), Tile::new('x', Style::default()));
         assert_eq!(g.tint(0, 1, 1), Tint::None);
+    }
+
+    /// `put_tile` is wide-char aware on every feature combination (retroglyph#869): a 2-column
+    /// tile gets a `WIDE_CHAR` primary cell and a `WIDE_CHAR_SPACER` to its right, the same pair
+    /// `write_grapheme` (egc-only) writes.
+    #[test]
+    fn put_tile_writes_a_spacer_for_a_wide_glyph() {
+        let mut g = Grid::new(4, 4);
+        assert_eq!(
+            g.put_tile(0, (0, 0), Tile::new('\u{4e2d}', Style::default())),
+            Some(())
+        );
+
+        assert_eq!(g[Pos::new(0, 0)].glyph(), '\u{4e2d}');
+        assert!(g[Pos::new(0, 0)].flags().contains(TileFlags::WIDE_CHAR));
+        assert_eq!(g[Pos::new(1, 0)].glyph(), ' ');
+        assert!(
+            g[Pos::new(1, 0)]
+                .flags()
+                .contains(TileFlags::WIDE_CHAR_SPACER)
+        );
+        // Untouched past the spacer.
+        assert_eq!(g[Pos::new(2, 0)].glyph(), ' ');
+        assert!(
+            !g[Pos::new(2, 0)]
+                .flags()
+                .contains(TileFlags::WIDE_CHAR_SPACER)
+        );
+    }
+
+    /// Mirrors `write_grapheme`'s own last-column refusal: a wide tile whose spacer would fall
+    /// off the grid is refused outright rather than leaving an orphaned primary cell.
+    #[test]
+    fn put_tile_refuses_a_wide_glyph_at_the_last_column() {
+        let mut g = Grid::new(4, 4);
+        assert_eq!(
+            g.put_tile(0, (3, 0), Tile::new('\u{4e2d}', Style::default())),
+            None
+        );
+        assert_eq!(g[Pos::new(3, 0)].glyph(), ' ');
+    }
+
+    /// Overwriting a wide char's primary cell (with a narrow tile) must clear its now-orphaned
+    /// spacer, the same overlap-clearing `write_grapheme` already does.
+    #[test]
+    fn put_tile_clears_the_spacer_of_a_wide_glyph_it_overwrites() {
+        let mut g = Grid::new(4, 4);
+        g.put_tile(0, (0, 0), Tile::new('\u{4e2d}', Style::default()));
+        g.put_tile(0, (0, 0), Tile::new('a', Style::default()));
+
+        assert_eq!(g[Pos::new(0, 0)].glyph(), 'a');
+        assert!(
+            !g[Pos::new(1, 0)]
+                .flags()
+                .contains(TileFlags::WIDE_CHAR_SPACER)
+        );
+    }
+
+    /// Overwriting a wide char's spacer cell must clear its now-orphaned primary cell too.
+    #[test]
+    fn put_tile_clears_the_lead_of_a_wide_glyph_whose_spacer_it_overwrites() {
+        let mut g = Grid::new(4, 4);
+        g.put_tile(0, (0, 0), Tile::new('\u{4e2d}', Style::default()));
+        g.put_tile(0, (1, 0), Tile::new('a', Style::default()));
+
+        assert_eq!(g[Pos::new(1, 0)].glyph(), 'a');
+        assert!(!g[Pos::new(0, 0)].flags().contains(TileFlags::WIDE_CHAR));
     }
 
     /// `fill_region` must clear any span it would partially overwrite the same way a per-cell

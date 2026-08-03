@@ -196,13 +196,10 @@ impl BoxStyle {
     ///
     /// Content is positioned by display column (via `retroglyph_core::text`), so a
     /// wide (2-column) character correctly pushes later characters on the
-    /// same line over by 2 columns rather than 1. It is, however, written
-    /// without a `WIDE_CHAR_SPACER` reservation on the cell to its right (see
-    /// `retroglyph_core::Grid::write_grapheme`, which requires the `egc`
-    /// feature this module does not depend on): terminal-
-    /// rendering backends may misalign output by one column per wide
-    /// character as a result. Fully correct wide-character rendering needs
-    /// an `egc`-gated code path; not yet implemented here.
+    /// same line over by 2 columns rather than 1, and gets a proper
+    /// `WIDE_CHAR_SPACER` reservation on the cell to its right, courtesy of
+    /// `retroglyph_core::Grid::put_tile` (wide-char aware on every feature
+    /// combination, not just `egc`; this module still does not depend on it).
     #[must_use]
     pub fn render(&self, text: &str) -> Grid {
         let lines: Vec<&str> = text.split('\n').collect();
@@ -509,18 +506,21 @@ mod tests {
 
     #[test]
     fn wide_characters_push_later_columns_over_by_their_width() {
+        use retroglyph_core::tile::TileFlags;
+
         // "あ" (HIRAGANA A) is 2 columns wide: width("aあb") == 4, and 'b'
         // must land at column 3, not column 2 (its char index), or it would
         // collide with あ's second visual column.
-        //
-        // Note: this only checks *sizing*/*column offset* correctness. The
-        // wide glyph itself is still written without a WIDE_CHAR_SPACER (see
-        // render()'s doc comment); a real terminal backend may still
-        // misrender the cell to its right.
         let grid = BoxStyle::new(Style::default()).render("aあb");
         assert_eq!(grid.width(), 4);
         assert_eq!(grid[Pos::new(0, 0)].glyph(), 'a');
         assert_eq!(grid[Pos::new(1, 0)].glyph(), 'あ');
+        // `put_tile` reserves a proper `WIDE_CHAR_SPACER` at the wide glyph's right half.
+        assert!(
+            grid[Pos::new(2, 0)]
+                .flags()
+                .contains(TileFlags::WIDE_CHAR_SPACER)
+        );
         assert_eq!(grid[Pos::new(3, 0)].glyph(), 'b');
     }
 
