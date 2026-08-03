@@ -885,3 +885,53 @@ fn matches_software_backend_for_multicell_spans() {
 
     assert_frames_match(&frame, sw.pixels());
 }
+
+/// retroglyph#726: a `Color::Default`-background span on a higher layer resolves each covered
+/// cell's inherited background at *that cell's own column*, not the anchor's. Layer 0 alternates
+/// red/green per column so the two backends would visibly disagree if either smeared the anchor's
+/// column across the span's footprint; a uniform layer 0 (as in
+/// `matches_software_backend_for_multicell_spans`) can't catch that, since every column would
+/// already agree.
+#[test]
+fn matches_software_backend_for_a_span_covered_cells_default_background() {
+    use retroglyph_core::Grid;
+
+    let Some(ctx) =
+        context_or_skip("matches_software_backend_for_a_span_covered_cells_default_background")
+    else {
+        return;
+    };
+
+    let (cols, rows, scale) = (4u16, 1u16, 4u16);
+    let mut grid = Grid::new(cols, rows);
+    for x in 0..cols {
+        let bg = if x % 2 == 0 { RED } else { GREEN };
+        grid.put_tile(0, (x, 0), Tile::new('.', Style::new().bg(rgb(bg))));
+    }
+    // A 2-wide span with a `Default` background over columns 0 (red) and 1 (green).
+    grid.write_span(1, 0, 0, &["C="], Style::new())
+        .expect("2x1 span fits");
+    let scene: Vec<(u8, Pos, Tile)> = grid
+        .layers()
+        .map(|cell| (cell.layer, cell.pos, *cell.tile))
+        .collect();
+
+    let mut gl = GlBackendBuilder::new()
+        .grid_size(cols, rows)
+        .scale(scale)
+        .build()
+        .expect("default-font builds");
+    paint_layers(&mut gl, &scene);
+    let frame = render_to_frame(&ctx, &gl).expect("render");
+
+    let mut sw = retroglyph_software::SoftwareBackendBuilder::new()
+        .grid_size(cols, rows)
+        .scale(scale as u8)
+        .build()
+        .expect("default-font builds")
+        .into_renderer()
+        .expect("headless software renderer");
+    paint_layers(&mut sw, &scene);
+
+    assert_frames_match(&frame, sw.pixels());
+}
