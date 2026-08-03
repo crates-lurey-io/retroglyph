@@ -121,7 +121,7 @@ pub(super) fn render(
         clippy::cast_possible_truncation,
         clippy::cast_sign_loss
     )]
-    let filled = libm::roundf(ratio * bar_w as f32) as usize;
+    let filled = crate::mathf::round(ratio * bar_w as f32) as usize;
     let filled_style = Style::new().fg(color);
     let empty_style = Style::new().fg(Color::Rgb {
         r: 50,

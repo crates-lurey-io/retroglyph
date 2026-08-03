@@ -98,6 +98,7 @@ pub mod block;
 pub mod draw;
 pub mod interact;
 pub mod layout;
+mod mathf;
 pub mod state;
 pub mod style;
 pub mod text;
