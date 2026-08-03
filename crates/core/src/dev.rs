@@ -70,6 +70,17 @@
 //! are the consumer's own log filter at runtime, and `log`'s `max_level_*` /
 //! `release_max_level_*` features, which drop the calls at compile time. Those cut deeper than
 //! this module does: they apply to every `log` user in the graph, not just retroglyph.
+//!
+//! # Load-time versus per-frame
+//!
+//! Not every `log::warn!` in this workspace goes through [`dev_only!`]. The rule is where the
+//! call sits, not what category of mistake it reports: a diagnostic reachable from a redraw loop
+//! is [`dev_only!`]-gated, because at 60fps an ungated one reformats its message and grows its
+//! `seen` dedup table every frame the condition holds. A diagnostic reachable only from a one-time
+//! setup path, such as decoding a tileset, has neither cost to save by gating it, and it may be
+//! reporting an asset or config mistake a consumer wants to see even in a shipped build. So it
+//! stays ungated. `retroglyph-window`'s tileset codepoint-collision warning is the example: it
+//! fires at most once per tileset load, not once per frame.
 
 /// Which diagnostics this build compiles in.
 ///
