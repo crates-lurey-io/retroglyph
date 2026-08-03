@@ -993,6 +993,12 @@ impl<W: std::io::Write> Output for Crossterm<W> {
     where
         I: Iterator<Item = DrawCell<'a>>,
     {
+        // Silently drop cells positioned outside the grid, the same as `Headless` and
+        // `Software` already do: a caller-supplied `pos` is not trusted input, and this
+        // renderer (unlike those two) has no bounds check of its own to fall back on.
+        let size = self.cached_size;
+        let content =
+            content.filter(move |cell| cell.pos.x < size.width() && cell.pos.y < size.height());
         // Begin synchronized update so the terminal holds rendering until
         // flush() sends the matching End marker.
         self.renderer.draw_frame(content)
@@ -2407,9 +2413,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "a DrawCell::pos outside size() is currently sent to the display unchecked \
-                instead of being dropped, rather than the other three Output obligations this \
-                also covers; see the follow-up issue this PR files alongside retroglyph#763"]
     fn satisfies_the_output_contract() {
         let _lock = TEST_GUARD_LOCK
             .lock()
