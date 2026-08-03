@@ -193,6 +193,24 @@ mod tests {
     }
 
     #[test]
+    fn target_and_origin_report_to_and_from() {
+        let tween = Tween::new(10.0, 20.0).duration(Duration::from_millis(100));
+        assert_eq!(tween.origin(), 10.0);
+        assert_eq!(tween.target(), 20.0);
+    }
+
+    #[test]
+    fn retarget_updates_target_and_origin_to_where_the_tween_actually_is() {
+        let mut tween = Tween::new(0.0, 10.0).duration(Duration::from_millis(100));
+        tween.update(Duration::from_millis(50)); // halfway: value() == 5.0
+
+        tween.retarget(20.0);
+        // `origin` becomes wherever the tween actually was, not the original `from`.
+        assert_eq!(tween.origin(), 5.0);
+        assert_eq!(tween.target(), 20.0);
+    }
+
+    #[test]
     fn repeated_retargets_never_snap() {
         let mut tween = Tween::new(0.0, 1.0).duration(Duration::from_millis(100));
         tween.update(Duration::from_millis(30));
