@@ -20,8 +20,8 @@
 
 use core::fmt;
 
+use retroglyph_core::text::width_usize as measured_width;
 use retroglyph_core::{Color, Rect, Style};
-use unicode_width::UnicodeWidthStr;
 
 use super::{Meter, Text, Widget};
 use crate::Surface;
@@ -100,12 +100,12 @@ pub(super) fn render(
     // those rects are built from `area`'s own top-left.
     let area = surface.area();
     let width_usize = usize::from(width);
-    let label_w = label.width().min(width_usize);
-    let reserved = label_w + 1 + readout.width() + 1; // label + space + gap + readout
+    let label_w = measured_width(label).min(width_usize);
+    let reserved = label_w + 1 + measured_width(readout) + 1; // label + space + gap + readout
     let bar_w = width_usize.saturating_sub(reserved);
 
-    // `label_w` is `label.width().min(width_usize)`, so it never exceeds this surface's own
-    // `u16` width: narrowing it back is always exact.
+    // `label_w` is `measured_width(label).min(width_usize)`, so it never exceeds this surface's
+    // own `u16` width: narrowing it back is always exact.
     #[allow(clippy::cast_possible_truncation)]
     let label_w_u16 = label_w as u16;
     let label_area = Rect::new(area.left(), area.top(), label_w_u16, 1);

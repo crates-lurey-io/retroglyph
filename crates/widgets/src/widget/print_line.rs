@@ -1,6 +1,5 @@
 //! [`PrintLine`]: a single styled [`Line`].
-use retroglyph_core::text::Line;
-use unicode_width::UnicodeWidthStr;
+use retroglyph_core::text::{Line, width as measured_width};
 
 use super::Widget;
 use crate::Align;
@@ -61,15 +60,15 @@ impl Widget for PrintLine<'_> {
         let right = max_width;
         // Align the whole line as a unit: sum the spans' display widths
         // (clamped to the area) and offset the start column accordingly.
-        // A single span wider than `u16::MAX` columns would already be unaddressable in this
-        // crate's `u16` coordinate space; the running total still saturates rather than
-        // overflowing even if one span's cast wraps.
-        #[allow(clippy::cast_possible_truncation)]
+        // `measured_width` already saturates each span at `u16::MAX`, and `saturating_add` keeps
+        // the running total from overflowing too.
         let line_width = self
             .line
             .spans
             .iter()
-            .fold(0u16, |acc, s| acc.saturating_add(s.content.width() as u16))
+            .fold(0u16, |acc, s| {
+                acc.saturating_add(measured_width(&s.content))
+            })
             .min(max_width);
         let mut x = self.align.offset(max_width, line_width);
         for span in &self.line.spans {
