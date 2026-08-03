@@ -41,12 +41,13 @@
 //!
 //! 🟢 Enabled by default.
 //!
-//! Gates perceptual (Oklab) RGB → Indexed/ANSI quantization (`gem/libm`) and [`Color`]'s
-//! `gem`-space conversions (`to_srgb`/`from_srgb`/`lerp`/`from_hex`).
+//! Gates perceptual (Oklab) RGB → Indexed/ANSI quantization and [`Color`]'s `gem`-space
+//! conversions (`to_srgb`/`from_srgb`/`lerp`/`from_hex`).
 //!
 //! Without it, [`Color::to_indexed`](color::Color::to_indexed)/
-//! [`Color::to_ansi`](color::Color::to_ansi) fall back to euclidean RGB cube-mapping instead of
-//! failing to compile.
+//! [`Color::to_ansi`](color::Color::to_ansi) fall back to euclidean RGB cube-mapping; `gem` always
+//! has a math backend available regardless of this feature, so this is a functionality opt-out, not
+//! a backend requirement.
 //!
 //! ### `serde`
 //!
@@ -63,9 +64,12 @@
 //!
 //! 🟢 Enabled by default.
 //!
-//! Enables `gem/std` and `alpha-blend?/std`.
+//! Enables `gem/std` and `alpha-blend?/std`, so `gem`/`alpha-blend` prefer the platform's real
+//! float intrinsics over their `libm` fallback.
 //!
-//! Disabling this feature (`--no-default-features`) builds this crate `no_std`.
+//! Disabling this feature (`--no-default-features`) builds this crate `no_std`, still with a
+//! `libm`-backed math fallback: `gem`'s `libm` feature is an unconditional dependency, not gated on
+//! `std`.
 //!
 //! ### `testing`
 //!

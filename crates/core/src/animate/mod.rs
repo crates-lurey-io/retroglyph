@@ -1,17 +1,16 @@
 //! Time-driven value animation: [`Easing`] curves, a stateful, retargetable [`Tween`], and a
 //! periodic [`oscillate`] helper.
 //!
-//! [`FrameClock`](crate::FrameClock) answers "how many fixed logic steps has this frame's elapsed
-//! time earned"; this module answers a different question: "what's this one `f32` value right
-//! now, partway through animating from A to B" (or, for [`oscillate`], partway through an
-//! ongoing wave with no start or end). Two tools for two different shapes of motion:
+//! [`FrameClock`](crate::FrameClock) tracks how many fixed logic steps a frame is worth. This
+//! module answers a different question: what is one `f32` value right now, partway through
+//! moving from A to B (or, for [`oscillate`], partway through a wave that never starts or ends)?
+//! There are two tools, for two kinds of motion:
 //!
-//! - [`Tween`]: a finite transition from one value to another over a fixed duration, reshaped
-//!   by an [`Easing`] curve. Use it for things that start, run once, and stop: a fade-in, a
-//!   value settling toward a new target.
-//! - [`oscillate`]: a continuous periodic wave with no start or end. Use it for things that
-//!   just keep going: a pulsing indicator, a breathing effect, the demo signal in gallery example
-//!   11.
+//! - [`Tween`]: moves from one value to another over a fixed duration, shaped by an [`Easing`]
+//!   curve. Use it for things that start, run once, and stop, such as a fade-in or a value
+//!   settling on a new target.
+//! - [`oscillate`]: a repeating wave with no start or end. Use it for things that keep going,
+//!   such as a pulsing indicator, a breathing effect, or the demo signal in gallery example 11.
 //!
 //! Both follow the same explicit, app-owned state convention as
 //! [`ListState`](https://docs.rs/retroglyph-widgets/latest/retroglyph_widgets/struct.ListState.html)

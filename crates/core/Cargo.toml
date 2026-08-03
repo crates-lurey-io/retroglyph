@@ -34,13 +34,14 @@ dev = []
 # Enables grapheme-cluster-aware text handling (via `unicode-segmentation`) for EGC-correct cell
 # diffing and layout.
 egc = ["dep:unicode-segmentation"]
-# Gates perceptual (Oklab) RGB → Indexed/ANSI quantization (`gem/libm`) and [`Color`]'s
-# `gem`-space conversions (`to_srgb`/`from_srgb`/`lerp`/`from_hex`).
+# Gates perceptual (Oklab) RGB → Indexed/ANSI quantization and [`Color`]'s `gem`-space
+# conversions (`to_srgb`/`from_srgb`/`lerp`/`from_hex`).
 #
 # Without it, [`Color::to_indexed`](color::Color::to_indexed)/
-# [`Color::to_ansi`](color::Color::to_ansi) fall back to euclidean RGB cube-mapping instead of
-# failing to compile.
-indexed-quant = ["gem/libm"]
+# [`Color::to_ansi`](color::Color::to_ansi) fall back to euclidean RGB cube-mapping; `gem` always
+# has a math backend available regardless of this feature, so this is a functionality opt-out, not
+# a backend requirement.
+indexed-quant = []
 # Adds `Serialize`/`Deserialize` impls for [`Color`], [`Style`], `Size`, and (via `ixy`)
 # `Pos`/`Rect`, so a config file can round-trip a saved camera position, window geometry, or theme
 # color.
@@ -48,9 +49,12 @@ indexed-quant = ["gem/libm"]
 # [`Color`] serializes through its `Display`/`FromStr` round trip (e.g. `"bright-red"`,
 # `"#ff8000"`) rather than a derived structural form, so hand-edited TOML/JSON stays legible.
 serde = ["dep:serde", "ixy/serde"]
-# Enables `gem/std` and `alpha-blend?/std`.
+# Enables `gem/std` and `alpha-blend?/std`, so `gem`/`alpha-blend` prefer the platform's real
+# float intrinsics over their `libm` fallback.
 #
-# Disabling this feature (`--no-default-features`) builds this crate `no_std`.
+# Disabling this feature (`--no-default-features`) builds this crate `no_std`, still with a
+# `libm`-backed math fallback: `gem`'s `libm` feature is an unconditional dependency, not gated on
+# `std`.
 std = ["gem/std", "alpha-blend?/std"]
 # Enables `testing`'s `TestHarness`, which drives an [`App`] against [`Headless`] for tests, with
 # synthetic input queuing and frame-settling helpers.
@@ -60,15 +64,14 @@ std = ["gem/std", "alpha-blend?/std"]
 testing = []
 
 [dependencies]
-# gem's pixel-format layer (`rgb`/`gray`/`alpha`/`channel`) needs no math backend, so this is
-# unconditional: every retroglyph-core build, including `--no-default-features`, gets const
-# integer channel math and the 8-bit color formats. gem's `space`/`named`/`blend` modules
-# (perceptual color spaces, the named-color table, its blend helpers) only compile in once
-# `gem/std` or `gem/libm` turns on -- gem prefers std's float intrinsics over libm when both are
-# present, so a `std` build gets std math with libm sitting inert. This dependency being
-# unconditional does not itself enable that float-math cost; see the `indexed-quant` feature for
-# what does.
-gem = { version = "0.2.2", default-features = false }
+# `libm` is an unconditional baseline feature here (not gated behind `indexed-quant` or `std`):
+# retroglyph-core requires a working float math backend in every configuration, so
+# `--no-default-features` still gets `gem`'s `space`/`named`/`blend` modules (perceptual color
+# spaces, the named-color table, its blend helpers), just libm-backed instead of std-backed. The
+# `std` feature above adds `gem/std` on top, which gem prefers over libm when both are present, so
+# a `std` build gets std math with libm sitting inert. `indexed-quant`/`blend-modes` gate whether
+# retroglyph-core's own code *uses* that math, not whether it's compiled in.
+gem = { version = "0.2.2", default-features = false, features = ["libm"] }
 # SCREEN/DODGE/BURN/OVERLAY blend modes for `Grid::blit_alpha` (see `BlendMode`); linear blending
 # stays on `gem::Mix`/`gem::rgb::Rgb888::mix_u8` above and needs no math backend. Gated behind the
 # `blend-modes` feature, separately from `indexed-quant`: unrelated capability, unrelated flag.

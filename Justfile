@@ -90,8 +90,9 @@ check-features:
 
 compile:
     cargo check --workspace --all-features
-    # retroglyph#547: dep:gem is unconditional in retroglyph-core now, so this has to compile
-    # with zero features, not just fewer -- the whole point of making it non-optional.
+    # retroglyph#547, retroglyph#903: dep:gem is unconditional (with its `libm` feature always on,
+    # since retroglyph-core requires a float math backend in every configuration), so this has to
+    # compile with zero retroglyph-core features, not just fewer.
     cargo check -p retroglyph-core --no-default-features
     # retroglyph#882: retroglyph-widgets forwards a `std` feature to retroglyph-core's own, so
     # this is its `no_std` (alloc-only) build, the same reason retroglyph-core gets its own line
