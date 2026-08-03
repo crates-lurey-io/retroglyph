@@ -443,12 +443,17 @@ pub enum Event {
 /// Whether `new` should replace the queue's current tail event instead of being pushed alongside
 /// it, when a backend is appending `new` to a `Vec`/`VecDeque` of pending events.
 ///
-/// True only for two consecutive [`Event::Mouse`] events both carrying [`MouseEventKind::Moved`]:
-/// a queue owner (winit, the wasm FFI boundary, `Headless`) can be fed pointer-move events far
-/// faster than a consumer drains them, and only the most recent position matters once it does, so
-/// collapsing a `Moved` run in place keeps the queue from growing unbounded (retroglyph#294,
-/// retroglyph#768). Every other event kind (clicks, scrolls, keys, resize, ...) always returns
-/// `false`, so this never reorders or merges anything but a `Moved` run.
+/// True for two consecutive [`Event::Mouse`] events both carrying [`MouseEventKind::Moved`], or
+/// both carrying [`MouseEventKind::Drag`] with the same button: a queue owner (winit, the wasm
+/// FFI boundary, `Headless`) can be fed pointer-move/drag events far faster than a consumer
+/// drains them, and only the most recent position matters once it does (whether or not a button
+/// is held), so collapsing either run in place keeps the queue from growing unbounded
+/// (retroglyph#294, retroglyph#768, retroglyph#942). A `Drag` only coalesces with another `Drag`
+/// carrying the *same* button, so a button change mid-drag is never swallowed into the wrong
+/// button's position. `Scroll` deliberately does not coalesce despite also being high-frequency:
+/// its `dx`/`dy` are deltas, not absolute state, so collapsing a run would discard real scroll
+/// distance rather than a stale intermediate value. Every other event kind (clicks, keys, resize,
+/// ...) always returns `false`.
 #[must_use]
 pub const fn coalesces_with(new: &Event, existing: &Event) -> bool {
     matches!(
@@ -463,6 +468,18 @@ pub const fn coalesces_with(new: &Event, existing: &Event) -> bool {
                 ..
             }),
         )
+    ) || matches!(
+        (new, existing),
+        (
+            Event::Mouse(MouseEvent {
+                kind: MouseEventKind::Drag(new_button),
+                ..
+            }),
+            Event::Mouse(MouseEvent {
+                kind: MouseEventKind::Drag(existing_button),
+                ..
+            }),
+        ) if *new_button as u8 == *existing_button as u8
     )
 }
 
@@ -799,5 +816,52 @@ mod tests {
         let key = Event::Key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
         assert!(!coalesces_with(&moved_at(1, 1), &key));
         assert!(!coalesces_with(&key, &moved_at(0, 0)));
+    }
+
+    fn drag_at(x: u16, y: u16, button: MouseButton) -> Event {
+        Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Drag(button),
+            position: Pos::new(x, y),
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        })
+    }
+
+    #[test]
+    fn coalesces_with_true_for_two_consecutive_drag_events_same_button() {
+        assert!(coalesces_with(
+            &drag_at(1, 1, MouseButton::Left),
+            &drag_at(0, 0, MouseButton::Left),
+        ));
+    }
+
+    #[test]
+    fn coalesces_with_false_for_drag_events_with_different_buttons() {
+        assert!(!coalesces_with(
+            &drag_at(1, 1, MouseButton::Right),
+            &drag_at(0, 0, MouseButton::Left),
+        ));
+        assert!(!coalesces_with(
+            &drag_at(1, 1, MouseButton::Left),
+            &drag_at(0, 0, MouseButton::Middle),
+        ));
+    }
+
+    #[test]
+    fn coalesces_with_false_for_scroll_events() {
+        let scroll = |dy: f32| {
+            Event::Mouse(MouseEvent {
+                kind: MouseEventKind::Scroll { dx: 0.0, dy },
+                position: Pos::new(0, 0),
+                pixel_position: None,
+                modifiers: KeyModifiers::NONE,
+            })
+        };
+        assert!(!coalesces_with(&scroll(1.0), &scroll(1.0)));
+    }
+
+    #[test]
+    fn coalesces_with_false_for_two_non_mouse_events() {
+        assert!(!coalesces_with(&Event::Close, &Event::Resize(1, 1)));
     }
 }
