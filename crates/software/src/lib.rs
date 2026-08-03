@@ -2212,6 +2212,34 @@ mod tests {
             );
         }
     }
+
+    /// `expand_dirty_spans` reads a shadow buffer that can lag a resize by a frame (see its doc
+    /// comment), so a covered cell's stored `(dx, dy)` offset can point before the start of the
+    /// buffer once reinterpreted against the new `cols` stride. This must be a no-op for that
+    /// cell rather than panic on the underflowing subtraction.
+    #[test]
+    fn expand_dirty_spans_skips_a_covered_cell_whose_anchor_offset_underflows() {
+        use retroglyph_core::Grid;
+        use retroglyph_core::grid::Pos;
+
+        let cols = 2;
+        let rows = 3;
+        let mut grid = Grid::new(cols, rows);
+        grid.write_span_uniform(0, (0, 0), (1, 2), 'A', ' ', Style::default());
+        let layer: Vec<Tile> = (0..rows)
+            .flat_map(|y| (0..cols).map(move |x| (x, y)))
+            .map(|(x, y)| grid.tile(0, Pos::new(x, y)).copied().unwrap_or_default())
+            .collect();
+
+        // idx 2 is (0, 1), the covered cell with offset (dx, dy) = (0, 1). Calling with a much
+        // wider `cols` than the layer was built with reproduces the stale-buffer case: dy * cols
+        // now exceeds idx.
+        let mut dirty = vec![false; layer.len()];
+        dirty[2] = true;
+        expand_dirty_spans(&mut dirty, &layer, 10, rows as usize);
+
+        assert_eq!(dirty, vec![false, false, true, false, false, false]);
+    }
 }
 
 // ── Multi-cell sprite tests (retroglyph#412) ────────────────────────────────
