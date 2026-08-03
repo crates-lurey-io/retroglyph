@@ -157,6 +157,14 @@ compile_error!("retroglyph-core needs a float backend: enable `std` or `libm`.")
 #[doc = include_str!("../README.md")]
 struct ReadmeDoctests;
 
+// Compile the code blocks in docs/testing.md as doctests too, for the same reason: it's the
+// crate's advertised entry point for driving `Headless` with synthetic events (linked by URL from
+// `backend::headless` and `testing`'s own docs), so its samples need to fail the build instead of
+// silently rotting.
+#[cfg(doctest)]
+#[doc = include_str!("../../../docs/testing.md")]
+struct TestingDocDoctests;
+
 // clippy::too_long_first_doc_paragraph is a known-noisy nursery lint (rust-lang/rust-clippy#13441)
 // that here misattributes its span across every subsequent `pub mod`/`pub use` declaration below
 // (through to the next blank line) rather than just this one doc comment, which is well under
