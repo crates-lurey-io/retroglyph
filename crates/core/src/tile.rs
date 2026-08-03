@@ -335,6 +335,17 @@ impl Tile {
         self.span_w = 1;
         self.span_h = 1;
     }
+
+    /// Strips this tile's wide-character-pair role, leaving its glyph and style alone.
+    ///
+    /// The wide-character counterpart to [`clear_span`](Self::clear_span): used by copy paths
+    /// that cannot preserve a wide pair's cross-cell invariant ([`Grid::blit`](crate::grid::Grid::blit)
+    /// can clip a pair in half via `src_rect`, or land on only one half of a destination pair), so
+    /// the copy degrades to a plain, unpaired cell instead of a dangling lead or spacer.
+    pub(crate) fn clear_wide(&mut self) {
+        self.flags
+            .remove(TileFlags::WIDE_CHAR | TileFlags::WIDE_CHAR_SPACER);
+    }
 }
 
 /// Returns `grapheme` truncated to at most 8 codepoints (combining-mark bomb
