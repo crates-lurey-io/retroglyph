@@ -108,12 +108,12 @@
 
 use crate::backend::DrawCell;
 use crate::color::Color;
+use crate::color::Tint;
 use crate::style::Style;
 use crate::tile::Tile;
 use crate::tile::TileFlags;
 #[cfg(feature = "egc")]
 use crate::tile::cap_grapheme;
-use crate::tint::Tint;
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use alloc::vec::Vec;

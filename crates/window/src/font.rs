@@ -294,7 +294,7 @@ impl ResolvedGlyph {
 /// every font in the chain answers the identical question. To actually extend coverage (e.g.
 /// quadrants, sextants, braille, none of which CP437 has a mapping for), build the fallback font
 /// with [`BitmapFont::with_charset`] and an explicit table covering those codepoints. Until a
-/// chain does, `retroglyph_core::subcell`'s `quantize_quadrant`/`quantize_sextant` glyphs render
+/// chain does, `retroglyph_core::symbols`'s `quantize_quadrant`/`quantize_sextant` glyphs render
 /// as a solid block on the pixel backends; see those functions' docs.
 ///
 /// # Examples
@@ -691,8 +691,8 @@ pub mod unscii16 {
 /// Covers the 10 quadrant block characters, the 60 addressable Unicode "Symbols for Legacy
 /// Computing" sextant characters, and the full 256-glyph Braille Patterns block
 /// (U+2800–U+28FF). None of these are covered by CP437 (and so not by [`unscii16`] either): quadrants and
-/// sextants exist to give [`retroglyph_core::subcell::quantize_quadrant`] and
-/// [`retroglyph_core::subcell::quantize_sextant`] a font that actually renders their glyphs as
+/// sextants exist to give [`retroglyph_core::symbols::quantize_quadrant`] and
+/// [`retroglyph_core::symbols::quantize_sextant`] a font that actually renders their glyphs as
 /// blocks instead of a CP437 solid-block substitute, and braille is a common terminal-UI density
 /// trick with no CP437 equivalent at all. All three repertoires are pure geometry (rectangular
 /// quadrants, banded sextants, a 2x4 dot grid), so both fonts below are computed at compile time
@@ -762,7 +762,7 @@ pub mod legacy_computing {
         /// The 10 quadrant block glyphs not already covered by CP437, as `(mask, char)` pairs.
         ///
         /// `mask` is a 4-bit pattern, bit 0 = top-left, bit 1 = top-right, bit 2 = bottom-left,
-        /// bit 3 = bottom-right (matching `retroglyph_core::subcell::QUADRANTS`'s own bit
+        /// bit 3 = bottom-right (matching `retroglyph_core::symbols::QUADRANTS`'s own bit
         /// order), skipping the 6 masks CP437 already serves (`0` space, `3` `▀`, `5` `▌`,
         /// `10` `▐`, `12` `▄`, `15` `█`).
         #[rustfmt::skip]
@@ -793,7 +793,7 @@ pub mod legacy_computing {
         /// codepoint of their own in the Sextants block).
         ///
         /// Bit order: 0 = top-left, 1 = top-right, 2 = mid-left, 3 = mid-right, 4 = bottom-left,
-        /// 5 = bottom-right (matching `retroglyph_core::subcell::SEXTANTS`'s own bit order).
+        /// 5 = bottom-right (matching `retroglyph_core::symbols::SEXTANTS`'s own bit order).
         const fn sextant_masks() -> [u8; SEXTANT_COUNT] {
             let mut masks = [0u8; SEXTANT_COUNT];
             let mut m: u16 = 1;
@@ -1055,7 +1055,7 @@ pub mod legacy_computing {
             }
 
             /// Round-trips this module's `QUADRANTS` table against
-            /// `retroglyph_core::subcell::QUADRANTS`, the table it exists to invert (retroglyph#769).
+            /// `retroglyph_core::symbols::QUADRANTS`, the table it exists to invert (retroglyph#769).
             /// The two are maintained by hand in separate crates with nothing but a doc-comment
             /// claim tying them together; a wrong bit order or codepoint here would silently
             /// scramble any posterized image rendered through `quantize_quadrant`, invisible to
@@ -1081,26 +1081,26 @@ pub mod legacy_computing {
                     by_mask[mask as usize] = Some(ch);
                 }
 
-                for (mask, expected) in retroglyph_core::subcell::QUADRANTS.into_iter().enumerate()
+                for (mask, expected) in retroglyph_core::symbols::QUADRANTS.into_iter().enumerate()
                 {
                     assert_eq!(
                         by_mask[mask],
                         Some(expected),
                         "mask {mask}: this module's quadrant table disagrees with \
-                         retroglyph_core::subcell::QUADRANTS[{mask}] ({expected:?})"
+                         retroglyph_core::symbols::QUADRANTS[{mask}] ({expected:?})"
                     );
                 }
             }
 
             /// Round-trips this module's sextant generation (`sextant_masks` plus
             /// `sextant_codepoint`, and the 4 masks CP437 already serves) against
-            /// `retroglyph_core::subcell::SEXTANTS`, the table it exists to invert (retroglyph#769).
+            /// `retroglyph_core::symbols::SEXTANTS`, the table it exists to invert (retroglyph#769).
             /// The Symbols for Legacy Computing block is non-contiguous (which is exactly why
             /// `sextant_codepoint`'s gap-correction exists), so this is the class of table where a
             /// hand-review-only guarantee is weakest.
             #[test]
             fn sextant_table_round_trips_core_subcell_sextants() {
-                for (mask, expected) in retroglyph_core::subcell::SEXTANTS.into_iter().enumerate() {
+                for (mask, expected) in retroglyph_core::symbols::SEXTANTS.into_iter().enumerate() {
                     let mask = u8::try_from(mask).unwrap();
                     let actual = match mask {
                         0 => ' ',
@@ -1113,7 +1113,7 @@ pub mod legacy_computing {
                     assert_eq!(
                         actual, expected,
                         "mask {mask}: sextant_codepoint disagrees with \
-                         retroglyph_core::subcell::SEXTANTS[{mask}]"
+                         retroglyph_core::symbols::SEXTANTS[{mask}]"
                     );
                 }
             }

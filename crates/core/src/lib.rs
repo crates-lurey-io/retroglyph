@@ -179,8 +179,6 @@ struct ReadmeDoctests;
 // (through to the next blank line) rather than just this one doc comment, which is well under
 // its own 100-char threshold in isolation: confirmed by testing shorter wording alone, which
 // silences it despite touching nothing else in that byte range.
-/// Horizontal ([`HAlign`]) and vertical ([`VAlign`]) alignment within a bounded rectangle.
-pub mod align;
 #[cfg(feature = "__float")]
 #[cfg_attr(docsrs, doc(cfg(feature = "__float")))]
 #[allow(clippy::too_long_first_doc_paragraph)]
@@ -200,12 +198,9 @@ pub mod color;
 /// Which diagnostics a build compiles in.
 pub mod dev;
 pub mod event;
-/// Fixed-timestep accumulator for game loops.
-pub mod frame_clock;
-/// Rolling frame-time statistics for a live perf/FPS overlay.
-pub mod frame_stats;
+/// `FrameClock`/`FrameStats` accumulators for the `App`/`Frame` game loop.
+pub mod frames;
 pub mod grid;
-#[cfg(feature = "egc")]
 pub mod layout;
 // Two declarations of the same module, differing only in visibility: internally, `animate` and
 // `grid`'s separable blend math use `crate::math::*` whenever `__float` is on, regardless of
@@ -221,9 +216,9 @@ mod math;
 #[doc(hidden)]
 pub mod math;
 pub mod style;
-pub mod subcell;
 /// The one grid-drawing primitive: an area-clipped, single-layer view over a [`Grid`].
 pub mod surface;
+#[allow(clippy::too_long_first_doc_paragraph)]
 /// Border, gridline, and partial-block `char` data shared by widgets and backends.
 pub mod symbols;
 pub mod terminal;
@@ -233,9 +228,7 @@ pub mod testing;
 pub mod text;
 /// The atomic drawable unit (glyph, style, sub-cell offsets).
 pub mod tile;
-pub mod tint;
 
-pub use align::{HAlign, VAlign};
 #[cfg(feature = "__float")]
 pub use animate::{Easing, Tween, oscillate};
 pub use app::{App, Flow, Frame, step};
@@ -243,26 +236,25 @@ pub use app::{App, Flow, Frame, step};
 pub use app::{RunOptions, run_blocking, run_blocking_with};
 pub use backend::{Backend, Cursor, CursorStyle, DrawCell, Headless, Input, Output};
 pub use camera::Camera;
-pub use color::{AnsiColor, Color, InvalidAnsiIndex, ParseColorError};
+pub use color::{AnsiColor, Color, InvalidAnsiIndex, ParseColorError, Tint};
 pub use dev::{BuildMode, DEV};
 pub use event::{
     Event, KeyCode, KeyEvent, KeyEventKind, KeyLocation, KeyModifiers, KeyState, MouseButton,
     MouseEvent, MouseEventKind, PhysicalPos, SystemTheme,
 };
-pub use frame_clock::FrameClock;
-pub use frame_stats::FrameStats;
+pub use frames::{FrameClock, FrameStats};
 pub use grid::{BlendMode, Grid, Offset, Pos, Rect, Size};
 /// `.width()`/`.height()` accessors for [`Size`] (and [`Rect`]): re-exported so callers don't need
 /// a direct `ixy` dependency just to call them on this crate's own type aliases.
 pub use ixy::HasSize;
 #[cfg(feature = "egc")]
 pub use layout::TextLayout;
+pub use layout::{HAlign, VAlign};
 pub use style::Style;
-pub use subcell::{Glyph, quantize_half_block, quantize_quadrant, quantize_sextant};
 pub use surface::{Layer, StyledSurface, Surface};
+pub use symbols::{Glyph, quantize_half_block, quantize_quadrant, quantize_sextant};
 pub use terminal::Terminal;
 #[cfg(feature = "testing")]
 pub use testing::{RunError, TestHarness};
 pub use text::{Line, Span};
 pub use tile::Tile;
-pub use tint::Tint;

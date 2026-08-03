@@ -3,7 +3,7 @@
 //! subcell rendering) would call once per output cell every frame.
 //!
 //! retroglyph#269 asks for coverage of all three quantizers. Each does an exhaustive search over
-//! `2^N` foreground/background splits (see `subcell.rs`'s module doc, "Algorithm"), so cost grows
+//! `2^N` foreground/background splits (see `symbols/subcell.rs`'s module doc, "Algorithm"), so cost grows
 //! with the pixel count `N` (2 for half-block, 4 for quadrant, 6 for sextant); this benchmark
 //! makes that growth visible, reporting blocks-quantized throughput alongside time.
 
@@ -12,7 +12,7 @@
 #![allow(missing_docs)]
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
-use retroglyph_core::subcell::Pixel;
+use retroglyph_core::symbols::Pixel;
 use retroglyph_core::{quantize_half_block, quantize_quadrant, quantize_sextant};
 use std::hint::black_box;
 

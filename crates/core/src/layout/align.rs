@@ -1,9 +1,10 @@
 //! Horizontal and vertical alignment within a bounded rectangle.
 //!
 //! [`HAlign`] and [`VAlign`] are plain data: no allocation, no text handling, nothing that
-//! depends on the `egc` feature. [`layout`](crate::layout) (the `egc`-gated word-wrap/`TextLayout`
-//! builder) and [`Surface::print_aligned`](crate::surface::Surface::print_aligned) both use them,
-//! and re-export them from `crate::layout` for callers already importing from there.
+//! depends on the `egc` feature. Private submodule of [`layout`](crate::layout), re-exported
+//! unconditionally from there regardless of `egc`; [`TextLayout`](crate::layout::TextLayout) (the
+//! `egc`-gated word-wrap builder) and
+//! [`Surface::print_aligned`](crate::surface::Surface::print_aligned) both use them.
 
 /// Horizontal alignment within a bounded rectangle.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]

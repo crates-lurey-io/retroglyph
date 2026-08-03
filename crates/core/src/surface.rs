@@ -15,11 +15,11 @@
 //! directly via [`grid_mut`](Surface::grid_mut).
 
 use crate::color::Color;
+use crate::color::Tint;
 use crate::grid::{Grid, Offset, Pos, Rect, Size};
 use crate::style::Style;
 use crate::text::Line;
 use crate::tile::Tile;
-use crate::tint::Tint;
 use ixy::HasSize;
 use unicode_width::UnicodeWidthChar;
 
@@ -915,8 +915,8 @@ impl<'a> Surface<'a> {
     ///
     /// The starting column is computed with saturating arithmetic, so `text` wider than `rect`
     /// does not panic or underflow: it simply left-aligns and lets [`print`](Self::print) clip
-    /// the overflow, for every [`HAlign`](crate::align::HAlign) (matching how
-    /// [`HAlign::Center`](crate::align::HAlign::Center) itself saturates in
+    /// the overflow, for every [`HAlign`](crate::layout::HAlign) (matching how
+    /// [`HAlign::Center`](crate::layout::HAlign::Center) itself saturates in
     /// [`TextLayout`](crate::layout::TextLayout)).
     ///
     /// Not gated behind the `egc` feature: unlike `TextLayout`, this needs nothing from it, so
@@ -927,7 +927,7 @@ impl<'a> Surface<'a> {
     ///
     /// ```
     /// use retroglyph_core::backend::Headless;
-    /// use retroglyph_core::align::HAlign;
+    /// use retroglyph_core::layout::HAlign;
     /// use retroglyph_core::{Rect, Style, Terminal};
     ///
     /// let mut term = Terminal::new(Headless::new(6, 1));
@@ -943,7 +943,7 @@ impl<'a> Surface<'a> {
         &mut self,
         rect: Rect,
         text: &str,
-        align: crate::align::HAlign,
+        align: crate::layout::HAlign,
         style: Style,
     ) {
         use unicode_width::UnicodeWidthStr;
@@ -2455,7 +2455,7 @@ mod tests {
             surface.print_aligned(
                 Rect::new(0, 0, 8, 1),
                 "hi",
-                crate::align::HAlign::Left,
+                crate::layout::HAlign::Left,
                 Style::default(),
             );
         }
@@ -2473,7 +2473,7 @@ mod tests {
             surface.print_aligned(
                 Rect::new(0, 0, 6, 1),
                 "hi",
-                crate::align::HAlign::Center,
+                crate::layout::HAlign::Center,
                 Style::default(),
             );
         }
@@ -2491,7 +2491,7 @@ mod tests {
             surface.print_aligned(
                 Rect::new(0, 0, 6, 1),
                 "hi",
-                crate::align::HAlign::Right,
+                crate::layout::HAlign::Right,
                 Style::default(),
             );
         }
@@ -2511,7 +2511,7 @@ mod tests {
             surface.print_aligned(
                 Rect::new(0, 0, 4, 1),
                 "hello",
-                crate::align::HAlign::Center,
+                crate::layout::HAlign::Center,
                 Style::default(),
             );
         }
@@ -2529,7 +2529,7 @@ mod tests {
             surface.print_aligned(
                 Rect::new(0, 0, 4, 1),
                 "hi",
-                crate::align::HAlign::Right,
+                crate::layout::HAlign::Right,
                 Style::default(),
             );
         }
@@ -2547,7 +2547,7 @@ mod tests {
             surface.print_aligned(
                 Rect::new(0, 0, 6, 1),
                 "hi",
-                crate::align::HAlign::Right,
+                crate::layout::HAlign::Right,
                 Style::default(),
             );
         }
@@ -2566,7 +2566,7 @@ mod tests {
             surface.print_aligned(
                 Rect::new(0, 0, 6, 1),
                 "hi",
-                crate::align::HAlign::Center,
+                crate::layout::HAlign::Center,
                 Style::default(),
             );
         }

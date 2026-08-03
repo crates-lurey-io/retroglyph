@@ -28,7 +28,7 @@
 //!
 //! At or above [`BP_SIDEBAR`] columns, an info sidebar opens: coordinates, the biome/landmark
 //! under the reticle, elevation, a live minimap (rendered at double vertical resolution via
-//! [`retroglyph_core::subcell::quantize_half_block`], the same subcell technique
+//! [`retroglyph_core::symbols::quantize_half_block`], the same subcell technique
 //! `16_subcell_image` uses for raster images, applied here to a proc-gen color field instead) and
 //! a glyph legend. Below it, chrome collapses to a single status line so the map still reads on a
 //! narrow terminal.
@@ -238,7 +238,7 @@ mod world {
 
     use std::collections::HashMap;
 
-    use retroglyph_core::subcell::{Glyph, Pixel, quantize_half_block};
+    use retroglyph_core::symbols::{Glyph, Pixel, quantize_half_block};
     use retroglyph_core::{Color, Pos, Style};
 
     use super::noise::{fbm, hash01, ridge, warped_fbm};
@@ -948,7 +948,7 @@ mod world {
         }
 
         /// One minimap cell at `(col, row)` of a `cols`x`rows` minimap, doubled to `rows * 2`
-        /// vertical samples via [`quantize_half_block`] -- see `retroglyph_core::subcell` -- so a
+        /// vertical samples via [`quantize_half_block`] -- see `retroglyph_core::symbols` -- so a
         /// tiny sidebar minimap still resolves roughly twice the vertical detail a plain
         /// one-glyph-per-cell sampling would show.
         #[must_use]
