@@ -4,6 +4,7 @@
 //! runs without any extra harness; they also degrade gracefully (see each test's comment) on a
 //! developer machine where a real controlling terminal is still reachable via `/dev/tty`.
 
+use retroglyph_core::HasSize;
 use retroglyph_core::backend::Output;
 use retroglyph_crossterm::Crossterm;
 use std::io::IsTerminal;

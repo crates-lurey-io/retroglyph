@@ -119,6 +119,7 @@ struct WorkspaceReadmeDoctests;
 
 use core::time::Duration;
 use retroglyph_core::DrawCell;
+use retroglyph_core::HasSize;
 use retroglyph_core::backend::{Cursor, CursorStyle, Input, Output};
 use retroglyph_core::event::Event;
 use retroglyph_core::grid::{Pos, Size};

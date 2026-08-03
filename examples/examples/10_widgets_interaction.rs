@@ -19,7 +19,7 @@
 //! of focus (a [`Shortcuts`] global binding). `q` or `Escape` quits, or close the window.
 
 use retroglyph_core::event::{Event, KeyCode, KeyModifiers};
-use retroglyph_core::{Backend, Color, Frame, Rect, Style, Terminal};
+use retroglyph_core::{Backend, Color, Frame, HasSize, Rect, Style, Terminal};
 use retroglyph_examples::Example;
 use retroglyph_widgets::{Button, Density, Interaction, Shortcuts, Theme, Ui};
 

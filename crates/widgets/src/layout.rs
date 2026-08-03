@@ -25,7 +25,7 @@
 //! pane that is capped below its share does not redistribute the excess to other panes, so
 //! leftover space can remain unclaimed (see [`Flex`] for how that leftover is placed via
 //! [`split_v_flex`]/[`split_h_flex`]).
-use retroglyph_core::{Rect, Size};
+use retroglyph_core::{HasSize, Rect, Size};
 
 /// How a single pane claims space along the split axis.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

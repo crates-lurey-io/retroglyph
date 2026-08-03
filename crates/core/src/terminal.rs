@@ -12,6 +12,7 @@ use crate::surface::Surface;
 use alloc::collections::VecDeque;
 use alloc::vec::Vec;
 use core::time::Duration;
+use ixy::HasSize;
 
 /// A double-buffered terminal generic over a [`Backend`].
 ///

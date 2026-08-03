@@ -194,6 +194,9 @@ pub use event::{
 pub use frame_clock::FrameClock;
 pub use frame_stats::FrameStats;
 pub use grid::{BlendMode, Grid, Offset, Pos, Rect, Size};
+/// `.width()`/`.height()` accessors for [`Size`] (and [`Rect`]): re-exported so callers don't need
+/// a direct `ixy` dependency just to call them on this crate's own type aliases.
+pub use ixy::HasSize;
 #[cfg(feature = "egc")]
 pub use layout::{TextLayout, TextMetrics};
 pub use perf_overlay::{

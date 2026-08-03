@@ -167,6 +167,7 @@ struct ReadmeDoctests;
 mod app_entry;
 
 use retroglyph_core::DrawCell;
+use retroglyph_core::HasSize;
 use retroglyph_core::Terminal;
 use retroglyph_core::backend::{Cursor, CursorStyle, Input, Output};
 use retroglyph_core::event::{Event, coalesces_with};

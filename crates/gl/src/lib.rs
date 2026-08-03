@@ -121,6 +121,7 @@ use context::GlContext;
 use glyphs::GlyphCache;
 use renderer::{FLAG_HAS_BG, FLAG_HAS_GLYPH, GlResources, Instance};
 use retroglyph_core::DrawCell;
+use retroglyph_core::HasSize;
 use retroglyph_core::backend::Output;
 use retroglyph_core::color::Color;
 use retroglyph_core::grid::Size;
@@ -1244,6 +1245,7 @@ mod dropped_tint_tests {
 mod output_conformance_tests {
     use crate::GlBackendBuilder;
     use crate::GlRenderer;
+    use retroglyph_core::HasSize;
     use retroglyph_core::backend::Output;
     use retroglyph_core::grid::Size;
     use retroglyph_core::testing::conformance::{Observable, fnv1a};

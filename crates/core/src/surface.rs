@@ -20,6 +20,7 @@ use crate::style::Style;
 use crate::text::Line;
 use crate::tile::Tile;
 use crate::tint::Tint;
+use ixy::HasSize;
 use unicode_width::UnicodeWidthChar;
 
 /// The render target for every drawing call in the workspace: a mutable reference to a

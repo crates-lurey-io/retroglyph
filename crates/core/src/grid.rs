@@ -129,6 +129,7 @@ use core::ops::{Index, IndexMut};
 use grixy::buf::GridBuf;
 use grixy::ops::layout::{LinearLayout, RowMajor};
 use grixy::ops::{ExactSizeGrid, GridRead, GridWrite};
+use ixy::HasSize;
 
 /// Blend mode for [`Grid::blit_alpha`], selecting how source and destination colors combine
 /// before the `fg_alpha`/`bg_alpha` factor is applied.
@@ -200,34 +201,12 @@ impl BlendMode {
 /// use retroglyph_core::Size;
 ///
 /// let size = Size::new(80, 24);
-/// assert_eq!(size.width(), 80);
+/// assert_eq!(size.width, 80);
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, PartialOrd, Ord)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct Size {
-    width: u16,
-    height: u16,
-}
-
-impl Size {
-    /// A size of `width` columns by `height` rows.
-    #[must_use]
-    pub const fn new(width: u16, height: u16) -> Self {
-        Self { width, height }
-    }
-
-    /// The width, in columns.
-    #[must_use]
-    pub const fn width(self) -> u16 {
-        self.width
-    }
-
-    /// The height, in rows.
-    #[must_use]
-    pub const fn height(self) -> u16 {
-        self.height
-    }
-}
+///
+/// This crate's `serde` feature forwards to [`ixy`]'s own `serde` feature, so `Size` gains
+/// `Serialize`/`Deserialize` from its upstream definition rather than one defined here.
+pub type Size = ixy::Size<u16>;
 
 /// Pos in the grid, in (x = column, y = row) order.
 ///
@@ -306,18 +285,6 @@ impl From<(i16, i16)> for Offset {
 impl From<Offset> for (i16, i16) {
     fn from(offset: Offset) -> Self {
         (offset.dx, offset.dy)
-    }
-}
-
-impl From<(u16, u16)> for Size {
-    fn from((width, height): (u16, u16)) -> Self {
-        Self::new(width, height)
-    }
-}
-
-impl From<Size> for (u16, u16) {
-    fn from(s: Size) -> Self {
-        (s.width(), s.height())
     }
 }
 
