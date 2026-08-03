@@ -605,8 +605,7 @@ fn on_tier_writes_land_on_the_tiers_grid_layer() {
 }
 
 #[test]
-#[cfg(feature = "egc")]
-fn a_wide_char_at_the_clip_edge_writes_its_spacer_outside_the_clip() {
+fn a_wide_char_at_the_clip_edge_refuses_to_write_its_spacer_outside_the_clip() {
     let mut grid = Grid::new(8, 1);
     let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 8, 1), 0);
 
