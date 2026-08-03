@@ -117,6 +117,12 @@ impl BuildMode {
     pub const fn is_dev(self) -> bool {
         matches!(self, Self::Dev)
     }
+
+    /// Whether this is [`Release`](Self::Release).
+    #[must_use]
+    pub const fn is_release(self) -> bool {
+        matches!(self, Self::Release)
+    }
 }
 
 /// Whether this build compiles in development diagnostics: [`BuildMode::CURRENT`] as a `bool`.
@@ -181,6 +187,18 @@ mod tests {
     #[test]
     fn current_matches_dev_const() {
         assert_eq!(BuildMode::CURRENT.is_dev(), DEV);
+    }
+
+    #[test]
+    fn is_dev_discriminates_variants() {
+        assert!(BuildMode::Dev.is_dev());
+        assert!(!BuildMode::Release.is_dev());
+    }
+
+    #[test]
+    fn is_release_discriminates_variants() {
+        assert!(BuildMode::Release.is_release());
+        assert!(!BuildMode::Dev.is_release());
     }
 
     // Tests build with `debug_assertions` on unless someone deliberately runs them under a
