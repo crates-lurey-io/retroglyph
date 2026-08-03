@@ -198,6 +198,18 @@ mod tests {
     }
 
     #[test]
+    fn test_wrap_force_break_drops_the_triggering_space() {
+        // "abcd" fills the 4-wide box exactly; the following space has no room and no
+        // earlier space on the line to break at, so it force-breaks and is itself dropped
+        // rather than becoming leading whitespace on the new line.
+        let line = Line::raw("abcd e");
+        let lines = wrap_line(&line, 4);
+        assert_eq!(lines.len(), 2);
+        assert_eq!(lines[0].width, 4);
+        assert_eq!(lines[1].width, 1); // "e", not " e"
+    }
+
+    #[test]
     fn test_wrap_wide_chars() {
         // Each CJK char is width 2; "中文中" in a 4-wide box wraps after "中文".
         let line = Line::raw("中文中");
