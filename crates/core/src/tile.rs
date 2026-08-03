@@ -240,6 +240,23 @@ impl Tile {
         }
     }
 
+    /// Returns the flat index of this tile's span anchor in a row-major buffer, given this
+    /// tile's own flat `idx` and the buffer's row stride `cols`.
+    ///
+    /// `None` when this tile is not [`TileFlags::SPAN_COVERED`] (see [`span_offset`]), or when
+    /// the offset would land before the start of the buffer. This does not check `idx` against
+    /// the buffer's length or that the anchor is in the same row-block as `idx`; a caller holding
+    /// a whole layer already knows both hold.
+    ///
+    /// [`span_offset`]: Self::span_offset
+    #[must_use]
+    pub const fn span_anchor_index(&self, idx: usize, cols: usize) -> Option<usize> {
+        let Some((dx, dy)) = self.span_offset() else {
+            return None;
+        };
+        idx.checked_sub(dy as usize * cols + dx as usize)
+    }
+
     /// Returns `true` if nothing has been written to this tile.
     ///
     /// Empty tiles are transparent when compositing layers. An explicit
@@ -441,6 +458,36 @@ mod tests {
         covered.span_h = 2;
         assert_eq!(covered.span_offset(), Some((1, 2)));
         assert_eq!(covered.span(), (1, 1));
+    }
+
+    #[test]
+    fn test_tile_span_anchor_index_resolves_a_covered_cell_to_its_anchor() {
+        let mut covered = Tile::new(']', Style::default());
+        covered.flags = TileFlags::SPAN_COVERED;
+        covered.span_w = 1;
+        covered.span_h = 2;
+        // idx 23 is (3, 2) in a 10-wide buffer; the anchor is (dx, dy) = (1, 2) back, at (2, 0).
+        assert_eq!(covered.span_anchor_index(23, 10), Some(2));
+    }
+
+    #[test]
+    fn test_tile_span_anchor_index_is_none_when_not_covered() {
+        assert_eq!(Tile::default().span_anchor_index(5, 10), None);
+
+        let mut anchor = Tile::new('C', Style::default());
+        anchor.flags = TileFlags::SPAN_ANCHOR;
+        anchor.span_w = 2;
+        anchor.span_h = 3;
+        assert_eq!(anchor.span_anchor_index(5, 10), None);
+    }
+
+    #[test]
+    fn test_tile_span_anchor_index_is_none_past_the_buffer_start() {
+        let mut covered = Tile::new(']', Style::default());
+        covered.flags = TileFlags::SPAN_COVERED;
+        covered.span_w = 1;
+        covered.span_h = 2;
+        assert_eq!(covered.span_anchor_index(1, 10), None);
     }
 
     #[test]
