@@ -156,7 +156,7 @@ impl Headless {
     /// reset rather than emitting an explicit `39`/`49` reset code. Emits nothing at all when
     /// both channels are `Color::Default`.
     fn push_sgr(out: &mut String, style: Style) {
-        let mut params = alloc::string::String::new();
+        let mut params = String::new();
         if let Some(code) = Self::sgr_color(style.foreground(), false) {
             let _ = write!(params, "{code}");
         }
@@ -173,7 +173,7 @@ impl Headless {
 
     /// The SGR parameter string for `color` in the foreground (`bg: false`) or background
     /// (`bg: true`) slot, or `None` for `Color::Default` (nothing to emit).
-    fn sgr_color(color: Color, bg: bool) -> Option<alloc::string::String> {
+    fn sgr_color(color: Color, bg: bool) -> Option<String> {
         match color {
             Color::Default => None,
             Color::Ansi(ansi) => {
