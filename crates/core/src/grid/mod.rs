@@ -6,7 +6,7 @@
 //! A [`Grid`] holds up to 256 independent layers (`u8` ids `0..=255`), one
 //! [`Tile`] per cell on each. Layer 0 is always allocated; layers 1-255 are
 //! allocated lazily, on first write to that layer (see
-//! [`put_tile`](Grid::put_tile), [`cells_mut_or_alloc`](Grid::cells_mut_or_alloc)): a
+//! [`put_tile`](Grid::put_tile)): a
 //! single-layer game pays zero overhead for layers it never writes to. This is the
 //! crate's most distinctive feature and the one most worth understanding
 //! before reaching for a second layer.
@@ -89,8 +89,7 @@
 //! ([`put_tile`](Grid::put_tile), [`write_grapheme`](Grid::write_grapheme))
 //! clears the entire span first, so an anchor can never be left claiming cells it no longer owns.
 //! The exceptions are the escape hatches that hand out a `&mut Tile` directly
-//! ([`tile_mut`](Grid::tile_mut), [`cells_mut`](Grid::cells_mut),
-//! [`cells_mut_or_alloc`](Grid::cells_mut_or_alloc), `IndexMut`), which cannot intercept the
+//! ([`tile_mut`](Grid::tile_mut), `IndexMut`), which cannot intercept the
 //! write; use [`clear_span`](Grid::clear_span) first if you reach for one of those on a grid
 //! that uses spans.
 //!
@@ -284,44 +283,6 @@ fn flat_index_to_xy(i: usize, width: usize) -> (u16, u16) {
 }
 
 // ---------------------------------------------------------------------------
-// Grid iterators
-// ---------------------------------------------------------------------------
-
-/// Iterator over all cells with their `(x, y)` coordinates.
-pub struct Cells<'a> {
-    iter: core::iter::Enumerate<core::slice::Iter<'a, Tile>>,
-    width: usize,
-}
-
-impl<'a> Iterator for Cells<'a> {
-    type Item = (u16, u16, &'a Tile);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next().map(|(i, tile)| {
-            let (x, y) = flat_index_to_xy(i, self.width);
-            (x, y, tile)
-        })
-    }
-}
-
-/// Mutable iterator over all cells with their `(x, y)` coordinates.
-pub struct CellsMut<'a> {
-    iter: core::iter::Enumerate<core::slice::IterMut<'a, Tile>>,
-    width: usize,
-}
-
-impl<'a> Iterator for CellsMut<'a> {
-    type Item = (u16, u16, &'a mut Tile);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next().map(|(i, tile)| {
-            let (x, y) = flat_index_to_xy(i, self.width);
-            (x, y, tile)
-        })
-    }
-}
-
-// ---------------------------------------------------------------------------
 // LayerBuf: a single layer's flat buffer
 // ---------------------------------------------------------------------------
 
@@ -339,7 +300,7 @@ pub(crate) struct LayerBuf {
     ///
     /// The `HAS_EXTRA` flag is authoritative: readers must check it before
     /// consulting this map, since some write paths (`put_tile`,
-    /// `IndexMut`, `cells_mut`, `cells_mut_or_alloc`) can leave a stale entry behind when they
+    /// `IndexMut`) can leave a stale entry behind when they
     /// overwrite a tile that used to carry extra data without an explicit
     /// cleanup call. Since those paths only ever hand out or store tiles
     /// with `HAS_EXTRA` clear, a stale entry is harmless: it is simply

@@ -3,7 +3,7 @@
 
 #[cfg(feature = "egc")]
 use super::TileExtra;
-use super::{Cells, CellsMut, Grid, LayerBuf, Pos, Rect, Size, to_grixy_pos};
+use super::{Grid, LayerBuf, Pos, Rect, Size, to_grixy_pos};
 #[cfg(feature = "egc")]
 use crate::color::Style;
 #[cfg(any(test, feature = "egc"))]
@@ -162,47 +162,6 @@ impl Grid {
         let tile = lb.buf.get(pos)?;
         let idx = usize::from(y) * usize::from(self.width) + usize::from(x);
         lb.extra_for(idx, tile)
-    }
-
-    /// Iterates all tiles on `layer` with their `(x, y)` coordinates.
-    ///
-    /// Returns `None` if the layer is unallocated.
-    #[must_use]
-    pub fn cells(&self, layer: u8) -> Option<Cells<'_>> {
-        let lb = self.layer(layer)?;
-        Some(Cells {
-            iter: lb.buf.as_ref().iter().enumerate(),
-            width: usize::from(self.width),
-        })
-    }
-
-    /// Iterates all tiles on `layer` mutably with their `(x, y)` coordinates.
-    ///
-    /// Returns `None` if the layer is unallocated, mirroring [`cells`](Self::cells)'s
-    /// fallibility. Use [`cells_mut_or_alloc`](Self::cells_mut_or_alloc) to allocate the layer
-    /// first instead of failing.
-    pub fn cells_mut(&mut self, layer: u8) -> Option<CellsMut<'_>> {
-        let width = usize::from(self.width);
-        let lb = self.layers.get_mut(usize::from(layer))?.as_mut()?;
-        Some(CellsMut {
-            iter: lb.buf.as_mut().iter_mut().enumerate(),
-            width,
-        })
-    }
-
-    /// Iterates all tiles on `layer` mutably with their `(x, y)` coordinates, allocating the
-    /// layer first if it has not been written to yet.
-    ///
-    /// Prefer [`cells_mut`](Self::cells_mut) unless an empty layer legitimately needs to exist
-    /// after this call returns; unlike that method, this one never fails, at the cost of always
-    /// allocating.
-    pub fn cells_mut_or_alloc(&mut self, layer: u8) -> CellsMut<'_> {
-        let width = usize::from(self.width);
-        let lb = self.layer_or_alloc(layer);
-        CellsMut {
-            iter: lb.buf.as_mut().iter_mut().enumerate(),
-            width,
-        }
     }
 
     /// Clears a specific layer, resetting all tiles to the default.
@@ -489,62 +448,6 @@ mod tests {
         grid.resize(3, 3); // shrink: (3,3) falls outside
         assert_eq!(grid[Pos::new(0, 0)].glyph(), '@');
         assert_eq!(grid[Pos::new(2, 2)].glyph(), ' '); // was default, still default
-    }
-
-    #[test]
-    fn test_grid_cells_count() {
-        let grid = Grid::new(4, 3);
-        assert_eq!(grid.cells(0).unwrap().count(), 12);
-    }
-
-    #[test]
-    fn test_grid_cells_coordinates() {
-        use alloc::vec;
-        use alloc::vec::Vec;
-
-        let grid = Grid::new(3, 2);
-        let coords: Vec<(u16, u16)> = grid.cells(0).unwrap().map(|(x, y, _)| (x, y)).collect();
-        assert_eq!(
-            coords,
-            vec![(0, 0), (1, 0), (2, 0), (0, 1), (1, 1), (2, 1),]
-        );
-    }
-
-    #[test]
-    fn test_grid_cells_mut() {
-        use crate::color::Style;
-        let mut grid = Grid::new(2, 2);
-        for (x, y, tile) in grid.cells_mut(0).unwrap() {
-            #[allow(clippy::cast_possible_truncation)]
-            let idx = (y * 2 + x) as u8;
-            *tile = Tile::new(char::from(b'A' + idx), Style::default());
-        }
-        assert_eq!(grid[Pos::new(0, 0)].glyph(), 'A');
-        assert_eq!(grid[Pos::new(1, 0)].glyph(), 'B');
-        assert_eq!(grid[Pos::new(0, 1)].glyph(), 'C');
-        assert_eq!(grid[Pos::new(1, 1)].glyph(), 'D');
-    }
-
-    #[test]
-    fn test_grid_cells_mut_unallocated_layer_is_none() {
-        // Mirrors `cells`: an unwritten layer is `None`, not an empty iterator, and critically
-        // it must not allocate the layer as a side effect of checking.
-        let mut grid = Grid::new(2, 2);
-        assert!(grid.cells_mut(3).is_none());
-        assert!(grid.tile(3, (0, 0)).is_none());
-    }
-
-    #[test]
-    fn test_grid_cells_mut_or_alloc_allocates_an_unwritten_layer() {
-        use crate::color::Style;
-        let mut grid = Grid::new(2, 2);
-        assert!(grid.cells_mut(2).is_none());
-        for (_, _, tile) in grid.cells_mut_or_alloc(2) {
-            *tile = Tile::new('x', Style::default());
-        }
-        // Now allocated: the non-allocating accessor finds it too.
-        assert!(grid.cells_mut(2).is_some());
-        assert_eq!(grid.tile(2, (0, 0)).unwrap().glyph(), 'x');
     }
 
     // --- Extra grapheme text (EGC side-table) ---
