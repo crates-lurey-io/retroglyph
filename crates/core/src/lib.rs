@@ -8,25 +8,27 @@
 //!
 //! # Features
 //!
-//! Default features: `std`, `egc`, `indexed-quant`, `blend-modes`.
+//! <!-- gen-features:start -->
+//! Default features: `blend-modes`, `egc`, `indexed-quant`, `std`.
 //!
 //! ### `blend-modes`
 //!
 //! 🟢 Enabled by default.
 //!
 //! Gates the four W3C separable [`BlendMode`] variants (`Screen`/`Dodge`/`Burn`/`Overlay`/
-//! `Multiply`) and pulls in the optional `alpha-blend` dependency (`alpha-blend/libm`).
-//! [`BlendMode::Linear`] and [`Grid::blit_alpha`] are always available regardless of this
-//! feature: `Linear` only needs `gem::Mix`, not `alpha-blend`.
+//! `Multiply`) and pulls in the optional `alpha-blend` dependency.
+//!
+//! [`BlendMode::Linear`] and [`Grid::blit_alpha`] are always available regardless of this feature:
+//! `Linear` only needs `gem::Mix`, not `alpha-blend`.
 //!
 //! ### `dev`
 //!
 //! ⚪ Optional.
 //!
-//! Forces `BuildMode::Dev` on in a build that would otherwise resolve to `Release`, so an
-//! optimized build still reports development diagnostics (see the [`dev`] module). Off by
-//! default: the default signal is `debug_assertions`, which already follows the consumer's own
-//! profile.
+//! Forces `BuildMode::Dev` on in a build that would otherwise resolve to `Release`.
+//!
+//! Can be used so an optimized build still reports development diagnostics (see the [`dev`]
+//! module).
 //!
 //! ### `egc`
 //!
@@ -40,34 +42,41 @@
 //! 🟢 Enabled by default.
 //!
 //! Gates perceptual (Oklab) RGB → Indexed/ANSI quantization (`gem/libm`) and [`Color`]'s
-//! `gem`-space conversions (`to_srgb`/`from_srgb`/`lerp`/`from_hex`). Without it,
-//! [`Color::to_indexed`](color::Color::to_indexed)/[`Color::to_ansi`](color::Color::to_ansi) fall
-//! back to euclidean RGB cube-mapping instead of failing to compile.
+//! `gem`-space conversions (`to_srgb`/`from_srgb`/`lerp`/`from_hex`).
+//!
+//! Without it, [`Color::to_indexed`](color::Color::to_indexed)/
+//! [`Color::to_ansi`](color::Color::to_ansi) fall back to euclidean RGB cube-mapping instead of
+//! failing to compile.
 //!
 //! ### `serde`
 //!
 //! ⚪ Optional.
 //!
 //! Adds `Serialize`/`Deserialize` impls for [`Color`], [`Style`], `Size`, and (via `ixy`)
-//! `Pos`/`Rect`, so a config file can round-trip a saved camera position, window geometry, or
-//! theme color. [`Color`] serializes through its `Display`/`FromStr` round trip (e.g.
-//! `"bright-red"`, `"#ff8000"`) rather than a derived structural form, so hand-edited TOML/JSON
-//! stays legible.
+//! `Pos`/`Rect`, so a config file can round-trip a saved camera position, window geometry, or theme
+//! color.
+//!
+//! [`Color`] serializes through its `Display`/`FromStr` round trip (e.g. `"bright-red"`,
+//! `"#ff8000"`) rather than a derived structural form, so hand-edited TOML/JSON stays legible.
 //!
 //! ### `std`
 //!
 //! 🟢 Enabled by default.
 //!
-//! Enables `gem/std` and `alpha-blend?/std`. Disabling this feature (`--no-default-features`)
-//! builds this crate `no_std`.
+//! Enables `gem/std` and `alpha-blend?/std`.
+//!
+//! Disabling this feature (`--no-default-features`) builds this crate `no_std`.
 //!
 //! ### `testing`
 //!
 //! ⚪ Optional.
 //!
-//! Enables `testing`'s `TestHarness`, which drives an [`App`] against [`Headless`] for tests,
-//! with synthetic input queuing and frame-settling helpers. Test-only surface, `no_std` + `alloc`
-//! compatible, off by default so it never ships in a release build by accident.
+//! Enables `testing`'s `TestHarness`, which drives an [`App`] against [`Headless`] for tests, with
+//! synthetic input queuing and frame-settling helpers.
+//!
+//! Test-only surface, `no_std` + `alloc` compatible, off by default so it never ships in a release
+//! build by accident.
+//! <!-- gen-features:end -->
 //!
 //! # Architecture
 //!

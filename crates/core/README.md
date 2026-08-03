@@ -61,16 +61,19 @@ embedded or kernel-space roguelikes; see the `std` feature below.
 
 ## Features
 
-Default features: `std`, `egc`, `indexed-quant`, `blend-modes`.
+<!-- gen-features:start -->
+
+Default features: `blend-modes`, `egc`, `indexed-quant`, `std`.
 
 ### `blend-modes`
 
 🟢 Enabled by default.
 
-Gates the four W3C separable `BlendMode` variants (`Screen`/`Dodge`/`Burn`/`Overlay`/`Multiply`) and
-pulls in the optional `alpha-blend` dependency (`alpha-blend/libm`). `BlendMode::Linear` and
-`Grid::blit_alpha` are always available regardless of this feature: `Linear` only needs `gem::Mix`,
-not `alpha-blend`.
+Gates the four W3C separable `BlendMode` variants (`Screen`/`Dodge`/`Burn`/`Overlay`/ `Multiply`)
+and pulls in the optional `alpha-blend` dependency.
+
+`BlendMode::Linear` and `Grid::blit_alpha` are always available regardless of this feature: `Linear`
+only needs `gem::Mix`, not `alpha-blend`.
 
 ### `dev`
 
@@ -84,21 +87,28 @@ Can be used so an optimized build still reports development diagnostics (see the
 
 🟢 Enabled by default.
 
-Enables grapheme-cluster-aware text handling for EGC-correct cell diffing and layout.
+Enables grapheme-cluster-aware text handling (via `unicode-segmentation`) for EGC-correct cell
+diffing and layout.
 
 ### `indexed-quant`
 
 🟢 Enabled by default.
 
 Gates perceptual (Oklab) RGB → Indexed/ANSI quantization (`gem/libm`) and `Color`'s `gem`-space
-conversions (`to_srgb`/`from_srgb`/`lerp`/`from_hex`). Without it, `Color::to_indexed`/
-`Color::to_ansi` fall back to euclidean RGB cube-mapping instead of failing to compile.
+conversions (`to_srgb`/`from_srgb`/`lerp`/`from_hex`).
+
+Without it, `Color::to_indexed`/ `Color::to_ansi` fall back to euclidean RGB cube-mapping instead of
+failing to compile.
 
 ### `serde`
 
 ⚪ Optional.
 
-Adds `Serialize`/`Deserialize` impls for `Color`, `Style`, `Size`, and other structs.
+Adds `Serialize`/`Deserialize` impls for `Color`, `Style`, `Size`, and (via `ixy`) `Pos`/`Rect`, so
+a config file can round-trip a saved camera position, window geometry, or theme color.
+
+`Color` serializes through its `Display`/`FromStr` round trip (e.g. `"bright-red"`, `"#ff8000"`)
+rather than a derived structural form, so hand-edited TOML/JSON stays legible.
 
 ### `std`
 
@@ -112,6 +122,10 @@ Disabling this feature (`--no-default-features`) builds this crate `no_std`.
 
 ⚪ Optional.
 
-Enables `::testing`'s `TestHarness`, which drives an `App` against `Headless` for tests.
+Enables `testing`'s `TestHarness`, which drives an `App` against `Headless` for tests, with
+synthetic input queuing and frame-settling helpers.
 
-Includes synthetic input queuing and frame-settling helpers.
+Test-only surface, `no_std` + `alloc` compatible, off by default so it never ships in a release
+build by accident.
+
+<!-- gen-features:end -->

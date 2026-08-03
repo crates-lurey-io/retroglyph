@@ -62,6 +62,25 @@ lint: clippy markdown prose
 link-check:
     cargo bin lychee --no-progress --exclude-path target --exclude-path .matan './**/*.md' './crates/**/*.rs'
 
+# ── Features ─────────────────────────────────────────────────────────────────
+
+# Regenerates each crate's Features doc section (in src/lib.rs and README.md) from the comments
+# already sitting above its Cargo.toml [features] entries; see tools/gen-features. Also reflows
+# the touched Markdown through prettier: prettier's proseWrap would otherwise immediately
+# re-wrap the freshly generated prose differently on the next `just fmt`, and gen-features'
+# own drift check is whitespace-insensitive specifically so the two tools converge instead of
+# fighting over the same lines (see update_markers's doc comment in tools/gen-features).
+gen-features:
+    cargo gen-features
+    @[ -d tools/node_modules ] || npm ci --prefix tools
+    npm --prefix tools run format
+
+# CI/local check: fails (with which files are stale) if any crate's Features doc section
+# doesn't match its Cargo.toml. Folded into `doc` below rather than `lint`: it's fundamentally a
+# docs-content check, and `doc` already walks every crate.
+check-features:
+    cargo gen-features --check
+
 # ── Build ────────────────────────────────────────────────────────────────────
 
 compile:
@@ -70,11 +89,11 @@ compile:
     # with zero features, not just fewer -- the whole point of making it non-optional.
     cargo check -p retroglyph-core --no-default-features
 
-doc:
-    # --exclude: neither is part of the published API surface (cargo-bin is a
-    # dev tool, retroglyph-examples is unpublished demo/test code), so their
+doc: check-features
+    # --exclude: none of the three are part of the published API surface (cargo-bin and
+    # gen-features are dev tools, retroglyph-examples is unpublished demo/test code), so their
     # rustdoc has no business showing up on the docs site.
-    RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features --exclude retroglyph-examples --exclude cargo-bin
+    RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features --exclude retroglyph-examples --exclude cargo-bin --exclude gen-features
     ./tools/gen-llms-txt.sh target/doc
     @cp -r docs/public/. target/doc/ 2>/dev/null || true
     ./tools/gen-crates-index.sh target/doc

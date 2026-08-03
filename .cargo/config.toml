@@ -1,5 +1,6 @@
 [alias]
 bin = ["run", "--package", "cargo-bin", "--"]
+gen-features = ["run", "--package", "gen-features", "--"]
 
 [target.'cfg(target_family = "wasm")']
 runner = "./.bin/.shims/wasm-server-runner"

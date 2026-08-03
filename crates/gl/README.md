@@ -46,21 +46,35 @@ run_windowed(config, renderer, move |term| {
 
 ## Features
 
+<!-- gen-features:start -->
+
+This crate has no default features; every feature below is optional and off unless enabled.
+
 ### `default-font`
 
-⚪ Optional. Embeds the Unscii 16 bitmap font so a renderer can be built with no font of its own.
+⚪ Optional.
+
+Embeds the Unscii 16 default font so a caller can build a renderer with no font of its own.
+
 Forwards to `retroglyph-window`'s `default-font` feature.
 
 ### `dev`
 
-⚪ Optional. Forces development diagnostics on in a build that would otherwise compile them out (see
-`retroglyph_core::dev`). Forwards to `retroglyph-core`'s `dev` feature.
+⚪ Optional.
+
+Forwards `retroglyph-core`'s `dev` feature, which forces development diagnostics on in a build that
+would otherwise compile them out (see `retroglyph_core::dev`).
 
 ### `tilesets`
 
-⚪ Optional. PNG sprite/tileset support (issue #366): decodes sprite sheets into an RGBA
-`TEXTURE_2D_ARRAY` atlas and draws them in a second, source-over blended pass. Forwards to
-`retroglyph-window`'s shared tileset decode.
+⚪ Optional.
+
+PNG sprite/tileset support (issue #366): decodes sprite sheets into an RGBA `TEXTURE_2D_ARRAY` atlas
+and draws them in a second, source-over blended pass.
+
+Forwards to `retroglyph-window`'s shared tileset decode.
+
+<!-- gen-features:end -->
 
 ## Status
 

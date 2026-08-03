@@ -19,7 +19,6 @@ the `Backend` type parameter and nothing else changes. See
 <summary><strong>Table of contents</strong></summary>
 
 - [Crates](#crates)
-- [Features](#features)
 - [Quick start](#quick-start)
 - [Examples](#examples)
 - [How retroglyph compares](#how-retroglyph-compares)
@@ -47,56 +46,13 @@ dependents, but a leaf-crate change bumps only that crate.
 | [`-gl`](crates/gl)                       | GPU backend via `glow`: OpenGL 3.3 (native) and WebGL2 (wasm)             | [![retroglyph-gl version](https://img.shields.io/crates/v/retroglyph-gl.svg)](https://docs.rs/retroglyph-gl)                                  |
 | [`-widgets`](crates/widgets)             | Builder-struct widgets: panels, gauges, tables, sparklines, layout        | [![retroglyph-widgets version](https://img.shields.io/crates/v/retroglyph-widgets.svg)](https://docs.rs/retroglyph-widgets)                   |
 
-## Features
-
-<details open>
-<summary><strong>Game loop</strong>: implement <code>App</code> once, run on every backend</summary>
-
-Implement the `App` trait (the update-side dual of `Backend`) and run it with a single
-feature-selected entry point. Terminal backends use the generic `run_blocking`/`run_blocking_with`
-drivers; the software/winit backend uses its inverted driver; both present automatically after
-`update` returns and share the same `App`, `Frame`, and `Flow` types, including `Flow::Idle` for
-skipping a redraw on an unchanged frame. The zero-config `run_blocking` is event-driven by default:
-on `Flow::Idle` it blocks on input via `Terminal::wait_for_input` instead of calling `update` again,
-so a turn-based app that's idle most of the time costs approximately nothing.
-`run_blocking_with(term, app, RunOptions::animated(60))` switches to a continuously-rendering loop
-capped at a fixed rate using a `FrameClock` internally, for apps that animate from `Frame::delta`
-and need `update` called every tick regardless of input. `FrameClock` is a pure fixed-timestep
-accumulator (fed elapsed `dt`, so it is `no_std`-clean). The low-level `poll`/`present` API remains
-for turn-based games and headless tests.
-
-</details>
-
-<details>
-<summary><strong>Extended grapheme cluster support</strong>: combining marks, emoji, and CJK wide chars</summary>
-
-With the `egc` feature (enabled by default), the library handles full Unicode grapheme clusters:
-combining marks, ZWJ emoji sequences, and multi-codepoint characters. CJK characters and emoji
-automatically occupy two grid columns with a transparent spacer in the adjacent cell.
-Multi-codepoint graphemes are capped at 8 codepoints to prevent combining-mark bombs.
-
-</details>
-
-<details>
-<summary><strong>Diagnostics that ship nothing</strong>: development warnings compile out of release
-builds</summary>
-
-Warnings that only help while building a game (a sprite larger than the cells reserved for it, for
-instance) sit behind `retroglyph_core::dev_only!`, which gates on `BuildMode::CURRENT`. That
-resolves from `debug_assertions`, so `cargo run` reports and `cargo run --release` compiles the
-check, the message, and the bookkeeping that dedupes it away entirely. A profiling build inherits
-`release` and is treated as release, so what you profile is what you ship.
-
-For an optimized build that still reports, enable `retroglyph-core`'s `dev` feature.
-
-</details>
-
 See [`crates/core`](crates/core) for the Grid API, double buffering, stateful drawing, text
 layout/word wrapping, scrolling camera/map loading, input handling, and `no_std` support, and
 [`crates/widgets`](crates/widgets) for panels, gauges, tables, layout splitting, and the
 `TextInput`/`TextInputState` single-line text field. Every backend in the [crates table](#crates)
 above links to its own README for what it adds over the `Backend` trait (font chains, sprite
-tilesets, panic-safe raw mode, WASM bridging, ...).
+tilesets, panic-safe raw mode, WASM bridging, ...). See each crate's own README for its Cargo
+feature flags.
 
 ## Quick start
 
