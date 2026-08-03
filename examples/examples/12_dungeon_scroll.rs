@@ -14,6 +14,11 @@
 //! viewport's origin, and [`Camera::world_to_screen`] places the player glyph: the same three
 //! methods a real scrolling map would use, exercised end to end.
 //!
+//! Movement is driven by [`KeyState`]: arrow-key presses/releases feed [`KeyState::apply_event`],
+//! and each tick moves the player one cell in whichever direction is currently held
+//! ([`KeyState::is_held`]), rather than stepping once per key event -- this is the workspace's
+//! only end-to-end exercise of `KeyState` outside its own unit tests.
+//!
 //! ```sh
 //! cargo run --example 12_dungeon_scroll --features crossterm
 //! cargo run --example 12_dungeon_scroll --features software
@@ -29,7 +34,7 @@
 //! screen from the very first frame, so the software backend's `png_snapshot` test alone proves
 //! they rasterize correctly. No walk to a later room is required.
 
-use retroglyph_core::event::{Event, KeyCode};
+use retroglyph_core::event::{Event, KeyCode, KeyLocation, KeyState};
 use retroglyph_core::{
     AnsiColor, Backend, Camera, Color, Frame, Grid, Pos, Rect, Size, Style, Terminal, Tile,
 };
@@ -119,6 +124,9 @@ pub struct DungeonScroll {
     world: Grid,
     camera: Camera,
     player: Pos,
+    /// Tracks which of the arrow keys are currently held, for continuous held-key movement (see
+    /// this module's top doc comment).
+    keys: KeyState,
 }
 
 impl Default for DungeonScroll {
@@ -130,6 +138,7 @@ impl Default for DungeonScroll {
             world: build_world(),
             camera,
             player,
+            keys: KeyState::new(),
         }
     }
 }
@@ -158,20 +167,39 @@ impl DungeonScroll {
 
     fn handle_events<B: Backend>(&mut self, term: &mut Terminal<B>) -> bool {
         for event in term.drain_events() {
-            match event {
-                Event::Key(key) if key.is_down() => match key.code {
-                    KeyCode::Char('q') | KeyCode::Escape => return false,
-                    KeyCode::Up => self.try_move(0, -1),
-                    KeyCode::Down => self.try_move(0, 1),
-                    KeyCode::Left => self.try_move(-1, 0),
-                    KeyCode::Right => self.try_move(1, 0),
-                    _ => {}
-                },
+            match &event {
+                Event::Key(key) if key.is_down() => {
+                    if matches!(key.code, KeyCode::Char('q') | KeyCode::Escape) {
+                        return false;
+                    }
+                }
                 Event::Close => return false,
                 _ => {}
             }
+            // Feed every event to `keys`, not just key events: `Event::FocusLost` clears the
+            // held set, so alt-tabbing away mid-move doesn't leave the player walking forever.
+            self.keys.apply_event(&event);
         }
+        self.move_from_held();
         true
+    }
+
+    /// Moves the player one cell toward whichever arrow key is currently held, checked in a
+    /// fixed Up/Down/Left/Right priority order so at most one cell is crossed per tick even if
+    /// more than one direction is held at once.
+    fn move_from_held(&mut self) {
+        const DIRECTIONS: [(KeyCode, i32, i32); 4] = [
+            (KeyCode::Up, 0, -1),
+            (KeyCode::Down, 0, 1),
+            (KeyCode::Left, -1, 0),
+            (KeyCode::Right, 1, 0),
+        ];
+        for (code, dx, dy) in DIRECTIONS {
+            if self.keys.is_held(code, KeyLocation::Standard) {
+                self.try_move(dx, dy);
+                break;
+            }
+        }
     }
 
     fn draw<B: Backend>(&self, term: &mut Terminal<B>) {

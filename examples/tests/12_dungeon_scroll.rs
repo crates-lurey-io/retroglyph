@@ -8,6 +8,11 @@
 //! rather than snapshotting an idle frame -- here, a walk from room 1 all the way to room 4
 //! along the corridors, so the snapshot actually proves the camera scrolls and clamps at both
 //! edges, not just that the starting room renders once.
+//!
+//! The example moves via [`retroglyph_core::event::KeyState`], one held direction at a time, so
+//! the walk script below releases each direction key before pressing the next one -- an
+//! unreleased Right held across the whole walk would keep winning the example's Up/Down/Left/
+//! Right priority order over the later Down and Right legs in exactly the wrong way.
 
 #![allow(unreachable_pub)]
 
@@ -19,13 +24,22 @@ mod support;
 mod dungeon_scroll;
 
 use dungeon_scroll::DungeonScroll;
-use retroglyph_core::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+use retroglyph_core::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use retroglyph_core::{Frame, Headless, Terminal};
 use retroglyph_examples::{Example, HEADLESS_FRAME_DELTA};
 
 /// A plain, unmodified key press.
 const fn key(code: KeyCode) -> Event {
     Event::Key(KeyEvent::new(code, KeyModifiers::NONE))
+}
+
+/// A key release, for handing off held-key movement from one direction to the next.
+const fn release(code: KeyCode) -> Event {
+    Event::Key(KeyEvent::with_kind(
+        code,
+        KeyModifiers::NONE,
+        KeyEventKind::Release,
+    ))
 }
 
 /// Drives `E` through one synthetic key event per tick, returning each frame's
@@ -53,11 +67,14 @@ fn drive<E: Example>(events: &[Event]) -> String {
 
 /// The full corridor walk from room 1's center to room 4's center: right along the first
 /// corridor, down along the second, right along the third -- see `CORRIDORS` in the example
-/// itself for why these are straight lines with no diagonal movement needed.
+/// itself for why these are straight lines with no diagonal movement needed. Each direction is
+/// released before the next is pressed, matching how a real held-key sequence would arrive.
 fn walk_to_room_four() -> Vec<Event> {
     let mut events = Vec::new();
     events.extend(std::iter::repeat_n(key(KeyCode::Right), 34)); // (6,4) -> (40,4)
+    events.push(release(KeyCode::Right));
     events.extend(std::iter::repeat_n(key(KeyCode::Down), 26)); // (40,4) -> (40,30)
+    events.push(release(KeyCode::Down));
     events.extend(std::iter::repeat_n(key(KeyCode::Right), 40)); // (40,30) -> (80,30)
     events
 }
