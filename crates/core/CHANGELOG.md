@@ -11,486 +11,253 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 ### Features
 
-- [eaac397](
-https://github.com/crates-lurey-io/retroglyph/commit/eaac3978859ff069c38a7498e8bb1c96a5e31b4e) *(core)* Add Terminal passthroughs for Cursor by `@crates-lurey-io-agent[bot]` in [#1009](
-https://github.com/crates-lurey-io/retroglyph/pull/1009)
+- [eaac397](https://github.com/crates-lurey-io/retroglyph/commit/eaac3978859ff069c38a7498e8bb1c96a5e31b4e) _(core)_ Add Terminal passthroughs for Cursor by `@crates-lurey-io-agent[bot]` in [#1009](https://github.com/crates-lurey-io/retroglyph/pull/1009)
 
-- [ba3e137](
-https://github.com/crates-lurey-io/retroglyph/commit/ba3e137cb203b1dfe7683f4ca126b1a6a145e5ec) *(core)* Add BuildMode::is_release and cover both matches! arms by `@crates-lurey-io-agent[bot]` in [#982](
-https://github.com/crates-lurey-io/retroglyph/pull/982)
+- [ba3e137](https://github.com/crates-lurey-io/retroglyph/commit/ba3e137cb203b1dfe7683f4ca126b1a6a145e5ec) _(core)_ Add BuildMode::is_release and cover both matches! arms by `@crates-lurey-io-agent[bot]` in [#982](https://github.com/crates-lurey-io/retroglyph/pull/982)
 
-- [e693a4c](
-https://github.com/crates-lurey-io/retroglyph/commit/e693a4c952b5b6d2642b6d1c83c10ab21dfbe6d4) *(core)* Add `KeyModifiers::bits` by `@crates-lurey-io-agent[bot]` in [#978](
-https://github.com/crates-lurey-io/retroglyph/pull/978)
+- [e693a4c](https://github.com/crates-lurey-io/retroglyph/commit/e693a4c952b5b6d2642b6d1c83c10ab21dfbe6d4) _(core)_ Add `KeyModifiers::bits` by `@crates-lurey-io-agent[bot]` in [#978](https://github.com/crates-lurey-io/retroglyph/pull/978)
 
-- [bf3ba22](
-https://github.com/crates-lurey-io/retroglyph/commit/bf3ba222047d49ac5ecef90f3f0f588ecfef788c) *(core)* Add Camera::screen_to_world_signed by `@crates-lurey-io-agent[bot]` in [#947](
-https://github.com/crates-lurey-io/retroglyph/pull/947)
+- [bf3ba22](https://github.com/crates-lurey-io/retroglyph/commit/bf3ba222047d49ac5ecef90f3f0f588ecfef788c) _(core)_ Add Camera::screen_to_world_signed by `@crates-lurey-io-agent[bot]` in [#947](https://github.com/crates-lurey-io/retroglyph/pull/947)
 
-- [4b2ef3f](
-https://github.com/crates-lurey-io/retroglyph/commit/4b2ef3f1c39547095ee189dfbc0e9429a5ecf63d) *(core)* Add Camera::scroll_by/set_origin, drop hand-rolled pan clamps in examples by `@crates-lurey-io-agent[bot]` in [#966](
-https://github.com/crates-lurey-io/retroglyph/pull/966)
+- [4b2ef3f](https://github.com/crates-lurey-io/retroglyph/commit/4b2ef3f1c39547095ee189dfbc0e9429a5ecf63d) _(core)_ Add Camera::scroll_by/set_origin, drop hand-rolled pan clamps in examples by `@crates-lurey-io-agent[bot]` in [#966](https://github.com/crates-lurey-io/retroglyph/pull/966)
 
-- [9252017](
-https://github.com/crates-lurey-io/retroglyph/commit/9252017afda8382ff9c8802d82df70657d5ddebd) *(core)* Add Camera::set_world by `@crates-lurey-io-agent[bot]` in [#944](
-https://github.com/crates-lurey-io/retroglyph/pull/944)
+- [9252017](https://github.com/crates-lurey-io/retroglyph/commit/9252017afda8382ff9c8802d82df70657d5ddebd) _(core)_ Add Camera::set_world by `@crates-lurey-io-agent[bot]` in [#944](https://github.com/crates-lurey-io/retroglyph/pull/944)
 
-- [2cf3267](
-https://github.com/crates-lurey-io/retroglyph/commit/2cf3267ed4147409ea98d4bc5a2203a68a26e18f) *(core)* Add oscillate phase offset and an example usage by `@crates-lurey-io-agent[bot]` in [#919](
-https://github.com/crates-lurey-io/retroglyph/pull/919)
+- [2cf3267](https://github.com/crates-lurey-io/retroglyph/commit/2cf3267ed4147409ea98d4bc5a2203a68a26e18f) _(core)_ Add oscillate phase offset and an example usage by `@crates-lurey-io-agent[bot]` in [#919](https://github.com/crates-lurey-io/retroglyph/pull/919)
 
-- [3edf866](
-https://github.com/crates-lurey-io/retroglyph/commit/3edf86614da271d42c0863abdc1a5bdd6cfc2ab9) *(core)* Add Tween::target/origin accessors by `@crates-lurey-io-agent[bot]` in [#917](
-https://github.com/crates-lurey-io/retroglyph/pull/917)
+- [3edf866](https://github.com/crates-lurey-io/retroglyph/commit/3edf86614da271d42c0863abdc1a5bdd6cfc2ab9) _(core)_ Add Tween::target/origin accessors by `@crates-lurey-io-agent[bot]` in [#917](https://github.com/crates-lurey-io/retroglyph/pull/917)
 
-- [8a7daec](
-https://github.com/crates-lurey-io/retroglyph/commit/8a7daec300116375292bd90687f035974bfaf6bc) *(core)* Accept impl Into<Pixel> in subcell quantize_*, rename Rgb alias by `@crates-lurey-io-agent[bot]` in [#893](
-https://github.com/crates-lurey-io/retroglyph/pull/893)
+- [8a7daec](https://github.com/crates-lurey-io/retroglyph/commit/8a7daec300116375292bd90687f035974bfaf6bc) _(core)_ Accept impl Into<Pixel> in subcell quantize\_\*, rename Rgb alias by `@crates-lurey-io-agent[bot]` in [#893](https://github.com/crates-lurey-io/retroglyph/pull/893)
 
-- [dcc27ab](
-https://github.com/crates-lurey-io/retroglyph/commit/dcc27abd91e5207cdbcfcda20884f585ef7141b5) *(core)* Add Output/Cursor/Input backend conformance harness by `@crates-lurey-io-agent[bot]` in [#858](
-https://github.com/crates-lurey-io/retroglyph/pull/858)
+- [dcc27ab](https://github.com/crates-lurey-io/retroglyph/commit/dcc27abd91e5207cdbcfcda20884f585ef7141b5) _(core)_ Add Output/Cursor/Input backend conformance harness by `@crates-lurey-io-agent[bot]` in [#858](https://github.com/crates-lurey-io/retroglyph/pull/858)
 
-- [50a134a](
-https://github.com/crates-lurey-io/retroglyph/commit/50a134a8e18404ffa74079b8dfc95a04eb665aa7) *(core)* Add Surface::local_area() and clarify Widget::render's local-vs-absolute coordinate contract by `@crates-lurey-io-agent[bot]` in [#813](
-https://github.com/crates-lurey-io/retroglyph/pull/813)
+- [50a134a](https://github.com/crates-lurey-io/retroglyph/commit/50a134a8e18404ffa74079b8dfc95a04eb665aa7) _(core)_ Add Surface::local_area() and clarify Widget::render's local-vs-absolute coordinate contract by `@crates-lurey-io-agent[bot]` in [#813](https://github.com/crates-lurey-io/retroglyph/pull/813)
 
-- [f0a996d](
-https://github.com/crates-lurey-io/retroglyph/commit/f0a996db3339e1f5613a152f7fa5c49bdf9cb882) *(core)* Let Terminal::retain_layer skip redrawing a layer across present() by `@crates-lurey-io-agent[bot]` in [#754](
-https://github.com/crates-lurey-io/retroglyph/pull/754)
+- [f0a996d](https://github.com/crates-lurey-io/retroglyph/commit/f0a996db3339e1f5613a152f7fa5c49bdf9cb882) _(core)_ Let Terminal::retain_layer skip redrawing a layer across present() by `@crates-lurey-io-agent[bot]` in [#754](https://github.com/crates-lurey-io/retroglyph/pull/754)
 
-- [c3dc89b](
-https://github.com/crates-lurey-io/retroglyph/commit/c3dc89b41dbf121e8ad1bd55c1da73fbf58dcfdc) *(core)* Add Camera::set_viewport_fitted to center a world smaller than its viewport by `@crates-lurey-io-agent[bot]` in [#753](
-https://github.com/crates-lurey-io/retroglyph/pull/753)
+- [c3dc89b](https://github.com/crates-lurey-io/retroglyph/commit/c3dc89b41dbf121e8ad1bd55c1da73fbf58dcfdc) _(core)_ Add Camera::set_viewport_fitted to center a world smaller than its viewport by `@crates-lurey-io-agent[bot]` in [#753](https://github.com/crates-lurey-io/retroglyph/pull/753)
 
-- [75abfcd](
-https://github.com/crates-lurey-io/retroglyph/commit/75abfcd72a7c4951641594e1723b6638c5478000) *(core)* Add public `symbols` module for border, line, block, bar, and braille char sets by `@crates-lurey-io-agent[bot]` in [#652](
-https://github.com/crates-lurey-io/retroglyph/pull/652)
+- [75abfcd](https://github.com/crates-lurey-io/retroglyph/commit/75abfcd72a7c4951641594e1723b6638c5478000) _(core)_ Add public `symbols` module for border, line, block, bar, and braille char sets by `@crates-lurey-io-agent[bot]` in [#652](https://github.com/crates-lurey-io/retroglyph/pull/652)
 
-- [ea02cbc](
-https://github.com/crates-lurey-io/retroglyph/commit/ea02cbceccb0abc9da830611e947c55683c7b364) *(core)* Block on input for Flow::Idle in run_blocking by default by `@matanlurey` in [#625](
-https://github.com/crates-lurey-io/retroglyph/pull/625) [**breaking**]
+- [ea02cbc](https://github.com/crates-lurey-io/retroglyph/commit/ea02cbceccb0abc9da830611e947c55683c7b364) _(core)_ Block on input for Flow::Idle in run_blocking by default by `@matanlurey` in [#625](https://github.com/crates-lurey-io/retroglyph/pull/625) [**breaking**]
 
-- [d618750](
-https://github.com/crates-lurey-io/retroglyph/commit/d6187505fbf4ff3f02a888241b534585d3a43ccc) *(core)* Add serde support for Color, Style, Size, Theme, Density by `@matanlurey` in [#623](
-https://github.com/crates-lurey-io/retroglyph/pull/623)
+- [d618750](https://github.com/crates-lurey-io/retroglyph/commit/d6187505fbf4ff3f02a888241b534585d3a43ccc) _(core)_ Add serde support for Color, Style, Size, Theme, Density by `@matanlurey` in [#623](https://github.com/crates-lurey-io/retroglyph/pull/623)
 
-- [47a4651](
-https://github.com/crates-lurey-io/retroglyph/commit/47a4651989b5f2aded8362b3440d813d787b5f97) *(core)* Add signed, non-culling Camera coordinate conversions by `@matanlurey` in [#619](
-https://github.com/crates-lurey-io/retroglyph/pull/619)
+- [47a4651](https://github.com/crates-lurey-io/retroglyph/commit/47a4651989b5f2aded8362b3440d813d787b5f97) _(core)_ Add signed, non-culling Camera coordinate conversions by `@matanlurey` in [#619](https://github.com/crates-lurey-io/retroglyph/pull/619)
 
-- [5b3640d](
-https://github.com/crates-lurey-io/retroglyph/commit/5b3640de91f5e80c7613f17a605fa66f7c1be553) *(core)* Add TestHarness for headless App testing by `@matanlurey` in [#620](
-https://github.com/crates-lurey-io/retroglyph/pull/620)
+- [5b3640d](https://github.com/crates-lurey-io/retroglyph/commit/5b3640de91f5e80c7613f17a605fa66f7c1be553) _(core)_ Add TestHarness for headless App testing by `@matanlurey` in [#620](https://github.com/crates-lurey-io/retroglyph/pull/620)
 
-- [97a3cc0](
-https://github.com/crates-lurey-io/retroglyph/commit/97a3cc0ca172747ac9327bd3055ba77b93d0e1f2) *(core)* Add width(), char_width(), split_at_width() text measurement helpers by `@matanlurey` in [#621](
-https://github.com/crates-lurey-io/retroglyph/pull/621)
+- [97a3cc0](https://github.com/crates-lurey-io/retroglyph/commit/97a3cc0ca172747ac9327bd3055ba77b93d0e1f2) _(core)_ Add width(), char_width(), split_at_width() text measurement helpers by `@matanlurey` in [#621](https://github.com/crates-lurey-io/retroglyph/pull/621)
 
-- [871179e](
-https://github.com/crates-lurey-io/retroglyph/commit/871179e0e66fb4fb56e7d7655701b17c2cf4853a) *(core)* Add Headless::format_styled for color-aware snapshot testing by `@matanlurey` in [#618](
-https://github.com/crates-lurey-io/retroglyph/pull/618)
+- [871179e](https://github.com/crates-lurey-io/retroglyph/commit/871179e0e66fb4fb56e7d7655701b17c2cf4853a) _(core)_ Add Headless::format_styled for color-aware snapshot testing by `@matanlurey` in [#618](https://github.com/crates-lurey-io/retroglyph/pull/618)
 
-- [bbc87e4](
-https://github.com/crates-lurey-io/retroglyph/commit/bbc87e4de796256a3805b7461185bf4fbc50b71e) *(core, widgets)* Dispatch animate/grid float math to std when available, libm otherwise by `@crates-lurey-io-agent[bot]` in [#895](
-https://github.com/crates-lurey-io/retroglyph/pull/895) [**breaking**]
+- [bbc87e4](https://github.com/crates-lurey-io/retroglyph/commit/bbc87e4de796256a3805b7461185bf4fbc50b71e) _(core, widgets)_ Dispatch animate/grid float math to std when available, libm otherwise by `@crates-lurey-io-agent[bot]` in [#895](https://github.com/crates-lurey-io/retroglyph/pull/895) [**breaking**]
 
-- [b875069](
-https://github.com/crates-lurey-io/retroglyph/commit/b87506905437a0480532fac568417c52547eb9ae) *(core, widgets)* Add core::layout::wrap and Log::wrap by `@crates-lurey-io-agent[bot]` in [#751](
-https://github.com/crates-lurey-io/retroglyph/pull/751)
+- [b875069](https://github.com/crates-lurey-io/retroglyph/commit/b87506905437a0480532fac568417c52547eb9ae) _(core, widgets)_ Add core::layout::wrap and Log::wrap by `@crates-lurey-io-agent[bot]` in [#751](https://github.com/crates-lurey-io/retroglyph/pull/751)
 
-- [be5c1a8](
-https://github.com/crates-lurey-io/retroglyph/commit/be5c1a84f49f6dd86d1c303cbbbdf0eeaff04a65) *(widgets)* Tie interaction to rendering with InteractiveWidget and Ui by `@matanlurey` in [#631](
-https://github.com/crates-lurey-io/retroglyph/pull/631)
+- [be5c1a8](https://github.com/crates-lurey-io/retroglyph/commit/be5c1a84f49f6dd86d1c303cbbbdf0eeaff04a65) _(widgets)_ Tie interaction to rendering with InteractiveWidget and Ui by `@matanlurey` in [#631](https://github.com/crates-lurey-io/retroglyph/pull/631)
 
-- [5c169e6](
-https://github.com/crates-lurey-io/retroglyph/commit/5c169e6c4b274d354d5bcb5de6fc40823e53e502) *(widgets)* Add AnimatedPerfOverlay, migrating PerfOverlay off the Frame-routing problem by `@matanlurey` in [#626](
-https://github.com/crates-lurey-io/retroglyph/pull/626)
+- [5c169e6](https://github.com/crates-lurey-io/retroglyph/commit/5c169e6c4b274d354d5bcb5de6fc40823e53e502) _(widgets)_ Add AnimatedPerfOverlay, migrating PerfOverlay off the Frame-routing problem by `@matanlurey` in [#626](https://github.com/crates-lurey-io/retroglyph/pull/626)
 
-- [99a96e1](
-https://github.com/crates-lurey-io/retroglyph/commit/99a96e14cf1714f8c98d5d436cfc85c8e8efb70a) *(workspace)* Sync Cargo feature docs from Cargo.toml via gen-features by `@matanlurey` in [#881](
-https://github.com/crates-lurey-io/retroglyph/pull/881)
+- [99a96e1](https://github.com/crates-lurey-io/retroglyph/commit/99a96e14cf1714f8c98d5d436cfc85c8e8efb70a) _(workspace)_ Sync Cargo feature docs from Cargo.toml via gen-features by `@matanlurey` in [#881](https://github.com/crates-lurey-io/retroglyph/pull/881)
 
 ### Bug Fixes
 
-- [1586d42](
-https://github.com/crates-lurey-io/retroglyph/commit/1586d42e7a5df9b33fa489f1f8205efd18da3c6b) *(core)* Fold origin_offset into print/print_line wrap threshold by `@crates-lurey-io-agent[bot]` in [#1040](
-https://github.com/crates-lurey-io/retroglyph/pull/1040)
+- [1586d42](https://github.com/crates-lurey-io/retroglyph/commit/1586d42e7a5df9b33fa489f1f8205efd18da3c6b) _(core)_ Fold origin_offset into print/print_line wrap threshold by `@crates-lurey-io-agent[bot]` in [#1040](https://github.com/crates-lurey-io/retroglyph/pull/1040)
 
-- [af56fc3](
-https://github.com/crates-lurey-io/retroglyph/commit/af56fc3b4e23771121559954159a5120945ef0ac) *(core)* Apply Event::Resize exactly once per event by `@crates-lurey-io-agent[bot]` in [#1032](
-https://github.com/crates-lurey-io/retroglyph/pull/1032)
+- [af56fc3](https://github.com/crates-lurey-io/retroglyph/commit/af56fc3b4e23771121559954159a5120945ef0ac) _(core)_ Apply Event::Resize exactly once per event by `@crates-lurey-io-agent[bot]` in [#1032](https://github.com/crates-lurey-io/retroglyph/pull/1032)
 
-- [7c42f88](
-https://github.com/crates-lurey-io/retroglyph/commit/7c42f88702d089bbbe495324edb32f5cef75af7f) *(core)* Clear stale WIDE_CHAR/WIDE_CHAR_SPACER flags in Tile::with_glyph by `@crates-lurey-io-agent[bot]` in [#1034](
-https://github.com/crates-lurey-io/retroglyph/pull/1034)
+- [7c42f88](https://github.com/crates-lurey-io/retroglyph/commit/7c42f88702d089bbbe495324edb32f5cef75af7f) _(core)_ Clear stale WIDE_CHAR/WIDE_CHAR_SPACER flags in Tile::with_glyph by `@crates-lurey-io-agent[bot]` in [#1034](https://github.com/crates-lurey-io/retroglyph/pull/1034)
 
-- [8562746](
-https://github.com/crates-lurey-io/retroglyph/commit/856274682f3b248064cb1a7e2adc22efaa75003b) *(core)* Mark flatten buffers stale in present's composites_layers branch by `@crates-lurey-io-agent[bot]` in [#1026](
-https://github.com/crates-lurey-io/retroglyph/pull/1026)
+- [8562746](https://github.com/crates-lurey-io/retroglyph/commit/856274682f3b248064cb1a7e2adc22efaa75003b) _(core)_ Mark flatten buffers stale in present's composites_layers branch by `@crates-lurey-io-agent[bot]` in [#1026](https://github.com/crates-lurey-io/retroglyph/pull/1026)
 
-- [d136b72](
-https://github.com/crates-lurey-io/retroglyph/commit/d136b72f11bcd8ce3be6a6ec901f13160684cef6) *(core)* Clamp zero-width/height grids to 1x1 in Grid::new by `@crates-lurey-io-agent[bot]` in [#1027](
-https://github.com/crates-lurey-io/retroglyph/pull/1027)
+- [d136b72](https://github.com/crates-lurey-io/retroglyph/commit/d136b72f11bcd8ce3be6a6ec901f13160684cef6) _(core)_ Clamp zero-width/height grids to 1x1 in Grid::new by `@crates-lurey-io-agent[bot]` in [#1027](https://github.com/crates-lurey-io/retroglyph/pull/1027)
 
-- [1e5d74e](
-https://github.com/crates-lurey-io/retroglyph/commit/1e5d74e09c7f9fe139a532072f1cb2aea588394a) *(core)* Retain_layer replaces the layer verbatim instead of overlaying it by `@crates-lurey-io-agent[bot]` in [#1023](
-https://github.com/crates-lurey-io/retroglyph/pull/1023)
+- [1e5d74e](https://github.com/crates-lurey-io/retroglyph/commit/1e5d74e09c7f9fe139a532072f1cb2aea588394a) _(core)_ Retain_layer replaces the layer verbatim instead of overlaying it by `@crates-lurey-io-agent[bot]` in [#1023](https://github.com/crates-lurey-io/retroglyph/pull/1023)
 
-- [9506d6e](
-https://github.com/crates-lurey-io/retroglyph/commit/9506d6e40b95b1a460df4086359f81c7093f5eba) *(core)* Clear `current` after a failed present too by `@crates-lurey-io-agent[bot]` in [#1025](
-https://github.com/crates-lurey-io/retroglyph/pull/1025)
+- [9506d6e](https://github.com/crates-lurey-io/retroglyph/commit/9506d6e40b95b1a460df4086359f81c7093f5eba) _(core)_ Clear `current` after a failed present too by `@crates-lurey-io-agent[bot]` in [#1025](https://github.com/crates-lurey-io/retroglyph/pull/1025)
 
-- [6b0e2f2](
-https://github.com/crates-lurey-io/retroglyph/commit/6b0e2f2b961ba9b77ce610e4ede7a521ce0b5055) *(core)* Give retain_layer a verbatim layer copy instead of blit by `@crates-lurey-io-agent[bot]` in [#995](
-https://github.com/crates-lurey-io/retroglyph/pull/995)
+- [6b0e2f2](https://github.com/crates-lurey-io/retroglyph/commit/6b0e2f2b961ba9b77ce610e4ede7a521ce0b5055) _(core)_ Give retain_layer a verbatim layer copy instead of blit by `@crates-lurey-io-agent[bot]` in [#995](https://github.com/crates-lurey-io/retroglyph/pull/995)
 
-- [fa0afe0](
-https://github.com/crates-lurey-io/retroglyph/commit/fa0afe0e62e9e685f853262d4993618bc0ba743a) *(core)* Clear KeyState on focus loss, wire it into 12_dungeon_scroll by `@crates-lurey-io-agent[bot]` in [#975](
-https://github.com/crates-lurey-io/retroglyph/pull/975)
+- [fa0afe0](https://github.com/crates-lurey-io/retroglyph/commit/fa0afe0e62e9e685f853262d4993618bc0ba743a) _(core)_ Clear KeyState on focus loss, wire it into 12_dungeon_scroll by `@crates-lurey-io-agent[bot]` in [#975](https://github.com/crates-lurey-io/retroglyph/pull/975)
 
-- [f8f0020](
-https://github.com/crates-lurey-io/retroglyph/commit/f8f00206f723a8da345477e1530bf2450723586c) *(core)* Mark KeyEventKind #[non_exhaustive] for consistency by `@crates-lurey-io-agent[bot]` in [#983](
-https://github.com/crates-lurey-io/retroglyph/pull/983)
+- [f8f0020](https://github.com/crates-lurey-io/retroglyph/commit/f8f00206f723a8da345477e1530bf2450723586c) _(core)_ Mark KeyEventKind #[non_exhaustive] for consistency by `@crates-lurey-io-agent[bot]` in [#983](https://github.com/crates-lurey-io/retroglyph/pull/983)
 
-- [a1d80aa](
-https://github.com/crates-lurey-io/retroglyph/commit/a1d80aa020be74f943b1c7f474c4a5f6578f06f6) *(core)* Saturate three unchecked `u16` adds in `Camera` by `@crates-lurey-io-agent[bot]` in [#948](
-https://github.com/crates-lurey-io/retroglyph/pull/948)
+- [a1d80aa](https://github.com/crates-lurey-io/retroglyph/commit/a1d80aa020be74f943b1c7f474c4a5f6578f06f6) _(core)_ Saturate three unchecked `u16` adds in `Camera` by `@crates-lurey-io-agent[bot]` in [#948](https://github.com/crates-lurey-io/retroglyph/pull/948)
 
-- [5e738a2](
-https://github.com/crates-lurey-io/retroglyph/commit/5e738a2b668faffd739e5757d66d159a71cd06f0) *(core)* Mask unused high bits in KeyModifiers::not by `@crates-lurey-io-agent[bot]` in [#972](
-https://github.com/crates-lurey-io/retroglyph/pull/972)
+- [5e738a2](https://github.com/crates-lurey-io/retroglyph/commit/5e738a2b668faffd739e5757d66d159a71cd06f0) _(core)_ Mask unused high bits in KeyModifiers::not by `@crates-lurey-io-agent[bot]` in [#972](https://github.com/crates-lurey-io/retroglyph/pull/972)
 
-- [7be60fa](
-https://github.com/crates-lurey-io/retroglyph/commit/7be60faf0a460fa1bdeb0e5ef71d21b08f1936ad) *(core)* Camera::surface clips to visible_bounds, not viewport by `@crates-lurey-io-agent[bot]` in [#970](
-https://github.com/crates-lurey-io/retroglyph/pull/970)
+- [7be60fa](https://github.com/crates-lurey-io/retroglyph/commit/7be60faf0a460fa1bdeb0e5ef71d21b08f1936ad) _(core)_ Camera::surface clips to visible_bounds, not viewport by `@crates-lurey-io-agent[bot]` in [#970](https://github.com/crates-lurey-io/retroglyph/pull/970)
 
-- [3db8411](
-https://github.com/crates-lurey-io/retroglyph/commit/3db8411e5b608bb051c3c791ae235a2e783bdc74) *(core)* Coalesce same-button Drag events like Moved by `@crates-lurey-io-agent[bot]` in [#969](
-https://github.com/crates-lurey-io/retroglyph/pull/969)
+- [3db8411](https://github.com/crates-lurey-io/retroglyph/commit/3db8411e5b608bb051c3c791ae235a2e783bdc74) _(core)_ Coalesce same-button Drag events like Moved by `@crates-lurey-io-agent[bot]` in [#969](https://github.com/crates-lurey-io/retroglyph/pull/969)
 
-- [8b85c60](
-https://github.com/crates-lurey-io/retroglyph/commit/8b85c60b4fa6e340a69ff85798b1f196eb629e68) *(core)* Drop unneeded lifetime on Camera::cells by `@crates-lurey-io-agent[bot]` in [#943](
-https://github.com/crates-lurey-io/retroglyph/pull/943)
+- [8b85c60](https://github.com/crates-lurey-io/retroglyph/commit/8b85c60b4fa6e340a69ff85798b1f196eb629e68) _(core)_ Drop unneeded lifetime on Camera::cells by `@crates-lurey-io-agent[bot]` in [#943](https://github.com/crates-lurey-io/retroglyph/pull/943)
 
-- [23f50c7](
-https://github.com/crates-lurey-io/retroglyph/commit/23f50c76c14ee235a00f66edc8adc7dc624decdc) *(core)* Cull `world_to_screen` against world bounds by `@crates-lurey-io-agent[bot]` in [#935](
-https://github.com/crates-lurey-io/retroglyph/pull/935)
+- [23f50c7](https://github.com/crates-lurey-io/retroglyph/commit/23f50c76c14ee235a00f66edc8adc7dc624decdc) _(core)_ Cull `world_to_screen` against world bounds by `@crates-lurey-io-agent[bot]` in [#935](https://github.com/crates-lurey-io/retroglyph/pull/935)
 
-- [34b52d2](
-https://github.com/crates-lurey-io/retroglyph/commit/34b52d243408cd836cc24d10f6a272f2d0a4b225) *(core)* Remove unnecessary alloc:: qualification in headless backend by `@crates-lurey-io-agent[bot]` in [#888](
-https://github.com/crates-lurey-io/retroglyph/pull/888)
+- [34b52d2](https://github.com/crates-lurey-io/retroglyph/commit/34b52d243408cd836cc24d10f6a272f2d0a4b225) _(core)_ Remove unnecessary alloc:: qualification in headless backend by `@crates-lurey-io-agent[bot]` in [#888](https://github.com/crates-lurey-io/retroglyph/pull/888)
 
-- [7f456a9](
-https://github.com/crates-lurey-io/retroglyph/commit/7f456a9c6da4417e6366fd447dfd7c49ac30e8ac) *(core)* Apply fill_rect's single_width check without the egc feature by `@crates-lurey-io-agent[bot]` in [#874](
-https://github.com/crates-lurey-io/retroglyph/pull/874)
+- [7f456a9](https://github.com/crates-lurey-io/retroglyph/commit/7f456a9c6da4417e6366fd447dfd7c49ac30e8ac) _(core)_ Apply fill_rect's single_width check without the egc feature by `@crates-lurey-io-agent[bot]` in [#874](https://github.com/crates-lurey-io/retroglyph/pull/874)
 
-- [7a45888](
-https://github.com/crates-lurey-io/retroglyph/commit/7a458882366cde3cd51c7c8a6816a78485497ba2) *(core)* Make `Grid::put_tile` wide-char aware to match `write_grapheme` by `@crates-lurey-io-agent[bot]` in [#873](
-https://github.com/crates-lurey-io/retroglyph/pull/873)
+- [7a45888](https://github.com/crates-lurey-io/retroglyph/commit/7a458882366cde3cd51c7c8a6816a78485497ba2) _(core)_ Make `Grid::put_tile` wide-char aware to match `write_grapheme` by `@crates-lurey-io-agent[bot]` in [#873](https://github.com/crates-lurey-io/retroglyph/pull/873)
 
-- [71bbad1](
-https://github.com/crates-lurey-io/retroglyph/commit/71bbad19fa94b89b95d5e60ad5810ab6d330b96b) *(core)* Compile and pass retroglyph-core's test module with --no-default-features by `@crates-lurey-io-agent[bot]` in [#870](
-https://github.com/crates-lurey-io/retroglyph/pull/870)
+- [71bbad1](https://github.com/crates-lurey-io/retroglyph/commit/71bbad19fa94b89b95d5e60ad5810ab6d330b96b) _(core)_ Compile and pass retroglyph-core's test module with --no-default-features by `@crates-lurey-io-agent[bot]` in [#870](https://github.com/crates-lurey-io/retroglyph/pull/870)
 
-- [219ba47](
-https://github.com/crates-lurey-io/retroglyph/commit/219ba474af49f7b4d46a8b76edf41ab0626c6561) *(core)* Give PerfOverlayApp its own event requeue path, not backend push_event by `@crates-lurey-io-agent[bot]` in [#864](
-https://github.com/crates-lurey-io/retroglyph/pull/864)
+- [219ba47](https://github.com/crates-lurey-io/retroglyph/commit/219ba474af49f7b4d46a8b76edf41ab0626c6561) _(core)_ Give PerfOverlayApp its own event requeue path, not backend push_event by `@crates-lurey-io-agent[bot]` in [#864](https://github.com/crates-lurey-io/retroglyph/pull/864)
 
-- [6d43ee9](
-https://github.com/crates-lurey-io/retroglyph/commit/6d43ee95c979e86cb716f7debaf355f9fd82583d) *(core)* Bounds-check x and y independently in Grid::write_grapheme by `@crates-lurey-io-agent[bot]` in [#862](
-https://github.com/crates-lurey-io/retroglyph/pull/862)
+- [6d43ee9](https://github.com/crates-lurey-io/retroglyph/commit/6d43ee95c979e86cb716f7debaf355f9fd82583d) _(core)_ Bounds-check x and y independently in Grid::write_grapheme by `@crates-lurey-io-agent[bot]` in [#862](https://github.com/crates-lurey-io/retroglyph/pull/862)
 
-- [61ed40b](
-https://github.com/crates-lurey-io/retroglyph/commit/61ed40bfe0116e15cfc44cd006060b4fb1370230) *(core)* Grid::diff falls back to a full diff on mismatched sizes by `@crates-lurey-io-agent[bot]` in [#847](
-https://github.com/crates-lurey-io/retroglyph/pull/847)
+- [61ed40b](https://github.com/crates-lurey-io/retroglyph/commit/61ed40bfe0116e15cfc44cd006060b4fb1370230) _(core)_ Grid::diff falls back to a full diff on mismatched sizes by `@crates-lurey-io-agent[bot]` in [#847](https://github.com/crates-lurey-io/retroglyph/pull/847)
 
-- [327fed3](
-https://github.com/crates-lurey-io/retroglyph/commit/327fed39dcacc6b64370086e15c54eb845f61092) *(core)* Compare Surface::print_line's span-skip cursor against local width, not clip.right() by `@crates-lurey-io-agent[bot]` in [#841](
-https://github.com/crates-lurey-io/retroglyph/pull/841)
+- [327fed3](https://github.com/crates-lurey-io/retroglyph/commit/327fed39dcacc6b64370086e15c54eb845f61092) _(core)_ Compare Surface::print_line's span-skip cursor against local width, not clip.right() by `@crates-lurey-io-agent[bot]` in [#841](https://github.com/crates-lurey-io/retroglyph/pull/841)
 
-- [4eca2ee](
-https://github.com/crates-lurey-io/retroglyph/commit/4eca2ee5d49757904b95334c97ad86edb2be7d9b) *(core)* Remove FrameClock::dt_secs by `@crates-lurey-io-agent[bot]` in [#815](
-https://github.com/crates-lurey-io/retroglyph/pull/815)
+- [4eca2ee](https://github.com/crates-lurey-io/retroglyph/commit/4eca2ee5d49757904b95334c97ad86edb2be7d9b) _(core)_ Remove FrameClock::dt_secs by `@crates-lurey-io-agent[bot]` in [#815](https://github.com/crates-lurey-io/retroglyph/pull/815)
 
-- [fa0dc22](
-https://github.com/crates-lurey-io/retroglyph/commit/fa0dc2252b0807ff75ae091342da278dbffdcb6b) *(core)* Translate print_aligned's pos into area-local space before print by `@crates-lurey-io-agent[bot]` in [#809](
-https://github.com/crates-lurey-io/retroglyph/pull/809)
+- [fa0dc22](https://github.com/crates-lurey-io/retroglyph/commit/fa0dc2252b0807ff75ae091342da278dbffdcb6b) _(core)_ Translate print_aligned's pos into area-local space before print by `@crates-lurey-io-agent[bot]` in [#809](https://github.com/crates-lurey-io/retroglyph/pull/809)
 
-- [833c0b5](
-https://github.com/crates-lurey-io/retroglyph/commit/833c0b5ad7685e5a44c8dc98c2ea9853983832b0) *(core)* Measure cluster width, not per-char sum, in split_at_width by `@crates-lurey-io-agent[bot]` in [#804](
-https://github.com/crates-lurey-io/retroglyph/pull/804)
+- [833c0b5](https://github.com/crates-lurey-io/retroglyph/commit/833c0b5ad7685e5a44c8dc98c2ea9853983832b0) _(core)_ Measure cluster width, not per-char sum, in split_at_width by `@crates-lurey-io-agent[bot]` in [#804](https://github.com/crates-lurey-io/retroglyph/pull/804)
 
-- [d370cbe](
-https://github.com/crates-lurey-io/retroglyph/commit/d370cbe5670d68d5591e939e531ea7330ddec716) *(core)* Route put_signed/put_offset through put_grapheme's wide-char and tint bookkeeping by `@crates-lurey-io-agent[bot]` in [#801](
-https://github.com/crates-lurey-io/retroglyph/pull/801)
+- [d370cbe](https://github.com/crates-lurey-io/retroglyph/commit/d370cbe5670d68d5591e939e531ea7330ddec716) _(core)_ Route put_signed/put_offset through put_grapheme's wide-char and tint bookkeeping by `@crates-lurey-io-agent[bot]` in [#801](https://github.com/crates-lurey-io/retroglyph/pull/801)
 
-- [a38b992](
-https://github.com/crates-lurey-io/retroglyph/commit/a38b992d196854416964289fa22072ce21149ea7) *(core)* Swap flattened buffers after flush succeeds, not before by `@crates-lurey-io-agent[bot]` in [#796](
-https://github.com/crates-lurey-io/retroglyph/pull/796)
+- [a38b992](https://github.com/crates-lurey-io/retroglyph/commit/a38b992d196854416964289fa22072ce21149ea7) _(core)_ Swap flattened buffers after flush succeeds, not before by `@crates-lurey-io-agent[bot]` in [#796](https://github.com/crates-lurey-io/retroglyph/pull/796)
 
-- [7cda978](
-https://github.com/crates-lurey-io/retroglyph/commit/7cda97852e079d269a26ac477915da56e4424ec5) *(core)* Compare Surface::print's wrap cursor against local width, not clip.right() by `@crates-lurey-io-agent[bot]` in [#794](
-https://github.com/crates-lurey-io/retroglyph/pull/794)
+- [7cda978](https://github.com/crates-lurey-io/retroglyph/commit/7cda97852e079d269a26ac477915da56e4424ec5) _(core)_ Compare Surface::print's wrap cursor against local width, not clip.right() by `@crates-lurey-io-agent[bot]` in [#794](https://github.com/crates-lurey-io/retroglyph/pull/794)
 
-- [99fb1c3](
-https://github.com/crates-lurey-io/retroglyph/commit/99fb1c308dfb464096b992ce1e971101bf30dc3b) *(core)* Refuse a wide grapheme write whose spacer would land outside the clip by `@crates-lurey-io-agent[bot]` in [#790](
-https://github.com/crates-lurey-io/retroglyph/pull/790)
+- [99fb1c3](https://github.com/crates-lurey-io/retroglyph/commit/99fb1c308dfb464096b992ce1e971101bf30dc3b) _(core)_ Refuse a wide grapheme write whose spacer would land outside the clip by `@crates-lurey-io-agent[bot]` in [#790](https://github.com/crates-lurey-io/retroglyph/pull/790)
 
-- [4d4f9c2](
-https://github.com/crates-lurey-io/retroglyph/commit/4d4f9c2a99f94d9e2aca8efceaa26ac8d3f03f3e) *(core)* Round instead of truncate in Color::from_srgb by `@crates-lurey-io-agent[bot]` in [#795](
-https://github.com/crates-lurey-io/retroglyph/pull/795)
+- [4d4f9c2](https://github.com/crates-lurey-io/retroglyph/commit/4d4f9c2a99f94d9e2aca8efceaa26ac8d3f03f3e) _(core)_ Round instead of truncate in Color::from_srgb by `@crates-lurey-io-agent[bot]` in [#795](https://github.com/crates-lurey-io/retroglyph/pull/795)
 
-- [44dfb57](
-https://github.com/crates-lurey-io/retroglyph/commit/44dfb57f1ce9d541ceeec11d3ead37caa33ca0cf) *(core)* Clear span overlap in Grid::blit/blit_alpha before overwriting by `@crates-lurey-io-agent[bot]` in [#782](
-https://github.com/crates-lurey-io/retroglyph/pull/782)
+- [44dfb57](https://github.com/crates-lurey-io/retroglyph/commit/44dfb57f1ce9d541ceeec11d3ead37caa33ca0cf) _(core)_ Clear span overlap in Grid::blit/blit_alpha before overwriting by `@crates-lurey-io-agent[bot]` in [#782](https://github.com/crates-lurey-io/retroglyph/pull/782)
 
-- [b2895e8](
-https://github.com/crates-lurey-io/retroglyph/commit/b2895e8093a258a0a8c4bf51c689e54142143a7a) *(core)* Reject leading '+' in Color::from_str index and hex forms by `@crates-lurey-io-agent[bot]` in [#756](
-https://github.com/crates-lurey-io/retroglyph/pull/756)
+- [b2895e8](https://github.com/crates-lurey-io/retroglyph/commit/b2895e8093a258a0a8c4bf51c689e54142143a7a) _(core)_ Reject leading '+' in Color::from_str index and hex forms by `@crates-lurey-io-agent[bot]` in [#756](https://github.com/crates-lurey-io/retroglyph/pull/756)
 
-- [d15d38d](
-https://github.com/crates-lurey-io/retroglyph/commit/d15d38df37c05d982205c330e1ac185be3f6ee3d) *(core)* Implement `core::error::Error` for `InvalidAnsiIndex` by `@crates-lurey-io-agent[bot]` in [#736](
-https://github.com/crates-lurey-io/retroglyph/pull/736)
+- [d15d38d](https://github.com/crates-lurey-io/retroglyph/commit/d15d38df37c05d982205c330e1ac185be3f6ee3d) _(core)_ Implement `core::error::Error` for `InvalidAnsiIndex` by `@crates-lurey-io-agent[bot]` in [#736](https://github.com/crates-lurey-io/retroglyph/pull/736)
 
-- [bad0413](
-https://github.com/crates-lurey-io/retroglyph/commit/bad0413e0d7cc83d8651b111fe32e1ebea8b2dd3) *(core)* Drain_events_into and one-shot doc note by `@matanlurey` in [#616](
-https://github.com/crates-lurey-io/retroglyph/pull/616)
+- [bad0413](https://github.com/crates-lurey-io/retroglyph/commit/bad0413e0d7cc83d8651b111fe32e1ebea8b2dd3) _(core)_ Drain_events_into and one-shot doc note by `@matanlurey` in [#616](https://github.com/crates-lurey-io/retroglyph/pull/616)
 
-- [049e5fc](
-https://github.com/crates-lurey-io/retroglyph/commit/049e5fc4d5e29a44792f85235387e6db4b765198) *(core, widgets)* Add Surface::blit reading src layer 0, clipped, replacing blit_into by `@crates-lurey-io-agent[bot]` in [#848](
-https://github.com/crates-lurey-io/retroglyph/pull/848)
+- [049e5fc](https://github.com/crates-lurey-io/retroglyph/commit/049e5fc4d5e29a44792f85235387e6db4b765198) _(core, widgets)_ Add Surface::blit reading src layer 0, clipped, replacing blit_into by `@crates-lurey-io-agent[bot]` in [#848](https://github.com/crates-lurey-io/retroglyph/pull/848)
 
-- [2c691d9](
-https://github.com/crates-lurey-io/retroglyph/commit/2c691d9fe3cd88d6eaa0f3860d92d2ed02c276db) *(core, widgets)* Keep TextLayout and Paragraph writes inside the surface's clip by `@crates-lurey-io-agent[bot]` in [#806](
-https://github.com/crates-lurey-io/retroglyph/pull/806)
+- [2c691d9](https://github.com/crates-lurey-io/retroglyph/commit/2c691d9fe3cd88d6eaa0f3860d92d2ed02c276db) _(core, widgets)_ Keep TextLayout and Paragraph writes inside the surface's clip by `@crates-lurey-io-agent[bot]` in [#806](https://github.com/crates-lurey-io/retroglyph/pull/806)
 
-- [22e06fd](
-https://github.com/crates-lurey-io/retroglyph/commit/22e06fd136aa3682d9b99ea195614f6ef204e603) *(core,widgets,window,software,gl,terminal)* Close 13 reachable panic/overflow sites by `@crates-lurey-io-agent[bot]` in [#776](
-https://github.com/crates-lurey-io/retroglyph/pull/776)
+- [22e06fd](https://github.com/crates-lurey-io/retroglyph/commit/22e06fd136aa3682d9b99ea195614f6ef204e603) _(core,widgets,window,software,gl,terminal)_ Close 13 reachable panic/overflow sites by `@crates-lurey-io-agent[bot]` in [#776](https://github.com/crates-lurey-io/retroglyph/pull/776)
 
-- [65cf452](
-https://github.com/crates-lurey-io/retroglyph/commit/65cf45213af94f2d8b50ed34d99c7e536bd50f49) *(core,window,terminal-wasm)* Consolidate Mouse(Moved) coalescing into core::event::coalesces_with by `@crates-lurey-io-agent[bot]` in [#819](
-https://github.com/crates-lurey-io/retroglyph/pull/819)
+- [65cf452](https://github.com/crates-lurey-io/retroglyph/commit/65cf45213af94f2d8b50ed34d99c7e536bd50f49) _(core,window,terminal-wasm)_ Consolidate Mouse(Moved) coalescing into core::event::coalesces_with by `@crates-lurey-io-agent[bot]` in [#819](https://github.com/crates-lurey-io/retroglyph/pull/819)
 
-- [a0af6d1](
-https://github.com/crates-lurey-io/retroglyph/commit/a0af6d19a775c127ac70701d6f568b9b7a605704) *(window)* Document why the collision warning stays ungated by `@crates-lurey-io-agent[bot]` in [#979](
-https://github.com/crates-lurey-io/retroglyph/pull/979)
+- [a0af6d1](https://github.com/crates-lurey-io/retroglyph/commit/a0af6d19a775c127ac70701d6f568b9b7a605704) _(window)_ Document why the collision warning stays ungated by `@crates-lurey-io-agent[bot]` in [#979](https://github.com/crates-lurey-io/retroglyph/pull/979)
 
-- [c200a49](
-https://github.com/crates-lurey-io/retroglyph/commit/c200a49cbbdada8dbed96888a5d73d249114909a) *(window)* Add bar/block eighth-fraction glyphs to legacy_computing::blocks by `@crates-lurey-io-agent[bot]` in [#854](
-https://github.com/crates-lurey-io/retroglyph/pull/854)
+- [c200a49](https://github.com/crates-lurey-io/retroglyph/commit/c200a49cbbdada8dbed96888a5d73d249114909a) _(window)_ Add bar/block eighth-fraction glyphs to legacy_computing::blocks by `@crates-lurey-io-agent[bot]` in [#854](https://github.com/crates-lurey-io/retroglyph/pull/854)
 
 ### Refactor
 
-- [a8893cf](
-https://github.com/crates-lurey-io/retroglyph/commit/a8893cf91665c82d6fa26646ec541db5c72c4c86) *(core)* Require a std or libm float backend by `@matanlurey` in [#974](
-https://github.com/crates-lurey-io/retroglyph/pull/974)
+- [a8893cf](https://github.com/crates-lurey-io/retroglyph/commit/a8893cf91665c82d6fa26646ec541db5c72c4c86) _(core)_ Require a std or libm float backend by `@matanlurey` in [#974](https://github.com/crates-lurey-io/retroglyph/pull/974)
 
-- [3694299](
-https://github.com/crates-lurey-io/retroglyph/commit/3694299112de4323420a8dd29fe2f077a858a571) *(core)* Tweak app and helper scripts and docs by `@matanlurey` in [#925](
-https://github.com/crates-lurey-io/retroglyph/pull/925)
+- [3694299](https://github.com/crates-lurey-io/retroglyph/commit/3694299112de4323420a8dd29fe2f077a858a571) _(core)_ Tweak app and helper scripts and docs by `@matanlurey` in [#925](https://github.com/crates-lurey-io/retroglyph/pull/925)
 
-- [85e6c9e](
-https://github.com/crates-lurey-io/retroglyph/commit/85e6c9ebfe4b30259a545b489b4349076592c0d4) *(core)* Inline step into App::update, drop the free-fn seam by `@matanlurey` in [#921](
-https://github.com/crates-lurey-io/retroglyph/pull/921)
+- [85e6c9e](https://github.com/crates-lurey-io/retroglyph/commit/85e6c9ebfe4b30259a545b489b4349076592c0d4) _(core)_ Inline step into App::update, drop the free-fn seam by `@matanlurey` in [#921](https://github.com/crates-lurey-io/retroglyph/pull/921)
 
-- [bdda080](
-https://github.com/crates-lurey-io/retroglyph/commit/bdda0804db5c1a26fadd7e779cb769454463e76c) *(core)* Fold style.rs into color.rs, split color.rs into private submodules by `@crates-lurey-io-agent[bot]` in [#910](
-https://github.com/crates-lurey-io/retroglyph/pull/910)
+- [bdda080](https://github.com/crates-lurey-io/retroglyph/commit/bdda0804db5c1a26fadd7e779cb769454463e76c) _(core)_ Fold style.rs into color.rs, split color.rs into private submodules by `@crates-lurey-io-agent[bot]` in [#910](https://github.com/crates-lurey-io/retroglyph/pull/910)
 
-- [f733400](
-https://github.com/crates-lurey-io/retroglyph/commit/f733400e1a6f976208a17b8b33e57a96ea4d3fe1) *(core)* Clean up backend docs by `@matanlurey` in [#916](
-https://github.com/crates-lurey-io/retroglyph/pull/916)
+- [f733400](https://github.com/crates-lurey-io/retroglyph/commit/f733400e1a6f976208a17b8b33e57a96ea4d3fe1) _(core)_ Clean up backend docs by `@matanlurey` in [#916](https://github.com/crates-lurey-io/retroglyph/pull/916)
 
-- [928d083](
-https://github.com/crates-lurey-io/retroglyph/commit/928d083727b23fd75076e5be39489fe157538525) *(core)* Clean up API docs for animate module by `@matanlurey` in [#912](
-https://github.com/crates-lurey-io/retroglyph/pull/912)
+- [928d083](https://github.com/crates-lurey-io/retroglyph/commit/928d083727b23fd75076e5be39489fe157538525) _(core)_ Clean up API docs for animate module by `@matanlurey` in [#912](https://github.com/crates-lurey-io/retroglyph/pull/912)
 
-- [c387f0d](
-https://github.com/crates-lurey-io/retroglyph/commit/c387f0d35f66a86c7d323dfa10c04dc59d5c5d83) *(core)* Split grid.rs into private submodules by `@crates-lurey-io-agent[bot]` in [#911](
-https://github.com/crates-lurey-io/retroglyph/pull/911)
+- [c387f0d](https://github.com/crates-lurey-io/retroglyph/commit/c387f0d35f66a86c7d323dfa10c04dc59d5c5d83) _(core)_ Split grid.rs into private submodules by `@crates-lurey-io-agent[bot]` in [#911](https://github.com/crates-lurey-io/retroglyph/pull/911)
 
-- [bccb7f4](
-https://github.com/crates-lurey-io/retroglyph/commit/bccb7f43dffd5e40aa0bf189a1272a0559c01a1a) *(core)* Split surface.rs into private submodules by `@crates-lurey-io-agent[bot]` in [#906](
-https://github.com/crates-lurey-io/retroglyph/pull/906)
+- [bccb7f4](https://github.com/crates-lurey-io/retroglyph/commit/bccb7f43dffd5e40aa0bf189a1272a0559c01a1a) _(core)_ Split surface.rs into private submodules by `@crates-lurey-io-agent[bot]` in [#906](https://github.com/crates-lurey-io/retroglyph/pull/906)
 
-- [41e4599](
-https://github.com/crates-lurey-io/retroglyph/commit/41e459941b4c472c5e8b058940b88b36654b7c14) *(core)* Fold align.rs into layout.rs, gating only the egc-specific half by `@crates-lurey-io-agent[bot]` in [#907](
-https://github.com/crates-lurey-io/retroglyph/pull/907)
+- [41e4599](https://github.com/crates-lurey-io/retroglyph/commit/41e459941b4c472c5e8b058940b88b36654b7c14) _(core)_ Fold align.rs into layout.rs, gating only the egc-specific half by `@crates-lurey-io-agent[bot]` in [#907](https://github.com/crates-lurey-io/retroglyph/pull/907)
 
-- [75c9f5f](
-https://github.com/crates-lurey-io/retroglyph/commit/75c9f5ffcdd8634ba764e612c006f4bcc947b72e) *(core)* Fold subcell.rs into symbols.rs as a private submodule by `@crates-lurey-io-agent[bot]` in [#908](
-https://github.com/crates-lurey-io/retroglyph/pull/908)
+- [75c9f5f](https://github.com/crates-lurey-io/retroglyph/commit/75c9f5ffcdd8634ba764e612c006f4bcc947b72e) _(core)_ Fold subcell.rs into symbols.rs as a private submodule by `@crates-lurey-io-agent[bot]` in [#908](https://github.com/crates-lurey-io/retroglyph/pull/908)
 
-- [a34bf41](
-https://github.com/crates-lurey-io/retroglyph/commit/a34bf4196ac81a10576f316fd2ded778ec7a5758) *(core)* Merge frame_clock.rs and frame_stats.rs into a frames module by `@crates-lurey-io-agent[bot]` in [#904](
-https://github.com/crates-lurey-io/retroglyph/pull/904) [**breaking**]
+- [a34bf41](https://github.com/crates-lurey-io/retroglyph/commit/a34bf4196ac81a10576f316fd2ded778ec7a5758) _(core)_ Merge frame_clock.rs and frame_stats.rs into a frames module by `@crates-lurey-io-agent[bot]` in [#904](https://github.com/crates-lurey-io/retroglyph/pull/904) [**breaking**]
 
-- [1d08f52](
-https://github.com/crates-lurey-io/retroglyph/commit/1d08f52e6d8a9457cca8f56f46cd8e42b55b51d9) *(core)* Fold tint.rs into color.rs as a private submodule by `@crates-lurey-io-agent[bot]` in [#905](
-https://github.com/crates-lurey-io/retroglyph/pull/905)
+- [1d08f52](https://github.com/crates-lurey-io/retroglyph/commit/1d08f52e6d8a9457cca8f56f46cd8e42b55b51d9) _(core)_ Fold tint.rs into color.rs as a private submodule by `@crates-lurey-io-agent[bot]` in [#905](https://github.com/crates-lurey-io/retroglyph/pull/905)
 
-- [0b31ba2](
-https://github.com/crates-lurey-io/retroglyph/commit/0b31ba23cd07b4cab2a35b814750c20112a867e4) *(core)* Replace TextMetrics with grid::Size by `@matanlurey` in [#891](
-https://github.com/crates-lurey-io/retroglyph/pull/891)
+- [0b31ba2](https://github.com/crates-lurey-io/retroglyph/commit/0b31ba23cd07b4cab2a35b814750c20112a867e4) _(core)_ Replace TextMetrics with grid::Size by `@matanlurey` in [#891](https://github.com/crates-lurey-io/retroglyph/pull/891)
 
-- [589f9f7](
-https://github.com/crates-lurey-io/retroglyph/commit/589f9f7338b8b70b28e942f5e8561672104bba89) *(core)* Add Grid::size()/rect(), use them in Terminal and block helpers by `@crates-lurey-io-agent[bot]` in [#856](
-https://github.com/crates-lurey-io/retroglyph/pull/856)
+- [589f9f7](https://github.com/crates-lurey-io/retroglyph/commit/589f9f7338b8b70b28e942f5e8561672104bba89) _(core)_ Add Grid::size()/rect(), use them in Terminal and block helpers by `@crates-lurey-io-agent[bot]` in [#856](https://github.com/crates-lurey-io/retroglyph/pull/856)
 
-- [ae0446f](
-https://github.com/crates-lurey-io/retroglyph/commit/ae0446f72b326f210cb5d854ea1f26de073e02a5) *(core)* Adopt gem::Oklab::distance_sq by `@crates-lurey-io-agent[bot]` in [#855](
-https://github.com/crates-lurey-io/retroglyph/pull/855)
+- [ae0446f](https://github.com/crates-lurey-io/retroglyph/commit/ae0446f72b326f210cb5d854ea1f26de073e02a5) _(core)_ Adopt gem::Oklab::distance_sq by `@crates-lurey-io-agent[bot]` in [#855](https://github.com/crates-lurey-io/retroglyph/pull/855)
 
-- [c75f9df](
-https://github.com/crates-lurey-io/retroglyph/commit/c75f9df9f5d5028c9a2e6772c998c641e70f1b7b) *(core)* Use alpha_blend::Channel::to_f32/from_f32 in blend_separable_channel by `@crates-lurey-io-agent[bot]` in [#850](
-https://github.com/crates-lurey-io/retroglyph/pull/850)
+- [c75f9df](https://github.com/crates-lurey-io/retroglyph/commit/c75f9df9f5d5028c9a2e6772c998c641e70f1b7b) _(core)_ Use alpha_blend::Channel::to_f32/from_f32 in blend_separable_channel by `@crates-lurey-io-agent[bot]` in [#850](https://github.com/crates-lurey-io/retroglyph/pull/850)
 
-- [449f62e](
-https://github.com/crates-lurey-io/retroglyph/commit/449f62e52bc45d49140ffa47887e335104730558) *(core)* Add KeyModifiers::from_bits_truncate/from_parts, collapse duplicate mappers by `@crates-lurey-io-agent[bot]` in [#839](
-https://github.com/crates-lurey-io/retroglyph/pull/839)
+- [449f62e](https://github.com/crates-lurey-io/retroglyph/commit/449f62e52bc45d49140ffa47887e335104730558) _(core)_ Add KeyModifiers::from_bits_truncate/from_parts, collapse duplicate mappers by `@crates-lurey-io-agent[bot]` in [#839](https://github.com/crates-lurey-io/retroglyph/pull/839)
 
-- [6fdfd78](
-https://github.com/crates-lurey-io/retroglyph/commit/6fdfd78ac6df965f84e9302d075548d720389716) *(core)* Dedup HSL transform bodies and Srgb::new triples in color.rs by `@crates-lurey-io-agent[bot]` in [#837](
-https://github.com/crates-lurey-io/retroglyph/pull/837)
+- [6fdfd78](https://github.com/crates-lurey-io/retroglyph/commit/6fdfd78ac6df965f84e9302d075548d720389716) _(core)_ Dedup HSL transform bodies and Srgb::new triples in color.rs by `@crates-lurey-io-agent[bot]` in [#837](https://github.com/crates-lurey-io/retroglyph/pull/837)
 
-- [78dc961](
-https://github.com/crates-lurey-io/retroglyph/commit/78dc9614fda910e2838acd4887eef8c38b5a25f3) *(core)* Extract blit_with to unify blit/blit_alpha by `@crates-lurey-io-agent[bot]` in [#816](
-https://github.com/crates-lurey-io/retroglyph/pull/816)
+- [78dc961](https://github.com/crates-lurey-io/retroglyph/commit/78dc9614fda910e2838acd4887eef8c38b5a25f3) _(core)_ Extract blit_with to unify blit/blit_alpha by `@crates-lurey-io-agent[bot]` in [#816](https://github.com/crates-lurey-io/retroglyph/pull/816)
 
-- [57ce0e5](
-https://github.com/crates-lurey-io/retroglyph/commit/57ce0e50b379b099649503d0714ab2d75a2d02b9) *(core, software)* Bump ixy/grixy to 0.7 and adopt Rect * Size for cell-to-pixel scaling by `@crates-lurey-io-agent[bot]` in [#880](
-https://github.com/crates-lurey-io/retroglyph/pull/880)
+- [57ce0e5](https://github.com/crates-lurey-io/retroglyph/commit/57ce0e50b379b099649503d0714ab2d75a2d02b9) _(core, software)_ Bump ixy/grixy to 0.7 and adopt Rect \* Size for cell-to-pixel scaling by `@crates-lurey-io-agent[bot]` in [#880](https://github.com/crates-lurey-io/retroglyph/pull/880)
 
-- [6e0bf21](
-https://github.com/crates-lurey-io/retroglyph/commit/6e0bf2146b3e1250a8fa866397309575ac3c4a99) *(core, software)* Share flat-index to (x, y) decode via ixy::layout::RowMajor by `@crates-lurey-io-agent[bot]` in [#851](
-https://github.com/crates-lurey-io/retroglyph/pull/851)
+- [6e0bf21](https://github.com/crates-lurey-io/retroglyph/commit/6e0bf2146b3e1250a8fa866397309575ac3c4a99) _(core, software)_ Share flat-index to (x, y) decode via ixy::layout::RowMajor by `@crates-lurey-io-agent[bot]` in [#851](https://github.com/crates-lurey-io/retroglyph/pull/851)
 
-- [73b5003](
-https://github.com/crates-lurey-io/retroglyph/commit/73b50032b813b6ff459094c7eeceb56d123574bd) *(core, software, gl)* Centralize span anchor-index arithmetic in Tile::span_anchor_index by `@crates-lurey-io-agent[bot]` in [#846](
-https://github.com/crates-lurey-io/retroglyph/pull/846)
+- [73b5003](https://github.com/crates-lurey-io/retroglyph/commit/73b50032b813b6ff459094c7eeceb56d123574bd) _(core, software, gl)_ Centralize span anchor-index arithmetic in Tile::span_anchor_index by `@crates-lurey-io-agent[bot]` in [#846](https://github.com/crates-lurey-io/retroglyph/pull/846)
 
-- [3d1f8a9](
-https://github.com/crates-lurey-io/retroglyph/commit/3d1f8a91d5de6d7c3186b36df034835528e6c0b9) *(core, widgets)* Centralize alignment offset formula in HAlign/VAlign by `@crates-lurey-io-agent[bot]` in [#840](
-https://github.com/crates-lurey-io/retroglyph/pull/840)
+- [3d1f8a9](https://github.com/crates-lurey-io/retroglyph/commit/3d1f8a91d5de6d7c3186b36df034835528e6c0b9) _(core, widgets)_ Centralize alignment offset formula in HAlign/VAlign by `@crates-lurey-io-agent[bot]` in [#840](https://github.com/crates-lurey-io/retroglyph/pull/840)
 
-- [cb8f128](
-https://github.com/crates-lurey-io/retroglyph/commit/cb8f1289dcd2300f6f04d8ffe4718845bfa3bc31) *(core, widgets)* Unify display-width measurement through core::text by `@crates-lurey-io-agent[bot]` in [#836](
-https://github.com/crates-lurey-io/retroglyph/pull/836)
+- [cb8f128](https://github.com/crates-lurey-io/retroglyph/commit/cb8f1289dcd2300f6f04d8ffe4718845bfa3bc31) _(core, widgets)_ Unify display-width measurement through core::text by `@crates-lurey-io-agent[bot]` in [#836](https://github.com/crates-lurey-io/retroglyph/pull/836)
 
-- [037678e](
-https://github.com/crates-lurey-io/retroglyph/commit/037678e3ad710de3b0b6d4597c62b1a709c150d3) *(core, window, widgets)* #[non_exhaustive] audit round 2 by `@crates-lurey-io-agent[bot]` in [#690](
-https://github.com/crates-lurey-io/retroglyph/pull/690)
+- [037678e](https://github.com/crates-lurey-io/retroglyph/commit/037678e3ad710de3b0b6d4597c62b1a709c150d3) _(core, window, widgets)_ #[non_exhaustive] audit round 2 by `@crates-lurey-io-agent[bot]` in [#690](https://github.com/crates-lurey-io/retroglyph/pull/690)
 
-- [9ccb9d8](
-https://github.com/crates-lurey-io/retroglyph/commit/9ccb9d850f83bc265f5bb342b7cc470d9fee0887) *(core,widgets)* Move PerfOverlay* from retroglyph-core to retroglyph-widgets by `@crates-lurey-io-agent[bot]` in [#890](
-https://github.com/crates-lurey-io/retroglyph/pull/890) [**breaking**]
+- [9ccb9d8](https://github.com/crates-lurey-io/retroglyph/commit/9ccb9d850f83bc265f5bb342b7cc470d9fee0887) _(core,widgets)_ Move PerfOverlay\* from retroglyph-core to retroglyph-widgets by `@crates-lurey-io-agent[bot]` in [#890](https://github.com/crates-lurey-io/retroglyph/pull/890) [**breaking**]
 
 ### Documentation
 
-- [04a1331](
-https://github.com/crates-lurey-io/retroglyph/commit/04a13314b4f2da8c28155906454bde4899a66999) *(core)* Fix Tile::width/flags docs, delegate glyph_width to char_width by `@crates-lurey-io-agent[bot]` in [#1036](
-https://github.com/crates-lurey-io/retroglyph/pull/1036)
+- [04a1331](https://github.com/crates-lurey-io/retroglyph/commit/04a13314b4f2da8c28155906454bde4899a66999) _(core)_ Fix Tile::width/flags docs, delegate glyph_width to char_width by `@crates-lurey-io-agent[bot]` in [#1036](https://github.com/crates-lurey-io/retroglyph/pull/1036)
 
-- [01f5d1e](
-https://github.com/crates-lurey-io/retroglyph/commit/01f5d1e13447878efba35a0e8517134951e00f78) *(core)* Trim Terminal::draw's revision-history aside, add Terminal Debug impl by `@crates-lurey-io-agent[bot]` in [#1030](
-https://github.com/crates-lurey-io/retroglyph/pull/1030)
+- [01f5d1e](https://github.com/crates-lurey-io/retroglyph/commit/01f5d1e13447878efba35a0e8517134951e00f78) _(core)_ Trim Terminal::draw's revision-history aside, add Terminal Debug impl by `@crates-lurey-io-agent[bot]` in [#1030](https://github.com/crates-lurey-io/retroglyph/pull/1030)
 
-- [150e973](
-https://github.com/crates-lurey-io/retroglyph/commit/150e973733ad8b056446da3c14612ad0e181ffb6) *(core)* Drop #[non_exhaustive] from BuildMode by `@crates-lurey-io-agent[bot]` in [#985](
-https://github.com/crates-lurey-io/retroglyph/pull/985)
+- [150e973](https://github.com/crates-lurey-io/retroglyph/commit/150e973733ad8b056446da3c14612ad0e181ffb6) _(core)_ Drop #[non_exhaustive] from BuildMode by `@crates-lurey-io-agent[bot]` in [#985](https://github.com/crates-lurey-io/retroglyph/pull/985)
 
-- [98fe80f](
-https://github.com/crates-lurey-io/retroglyph/commit/98fe80ffe5f16702d176bb6da73bf25a3f7ddd0c) *(core)* Document dev_only! control-flow escape and pin the semantics with a test by `@crates-lurey-io-agent[bot]` in [#980](
-https://github.com/crates-lurey-io/retroglyph/pull/980)
+- [98fe80f](https://github.com/crates-lurey-io/retroglyph/commit/98fe80ffe5f16702d176bb6da73bf25a3f7ddd0c) _(core)_ Document dev_only! control-flow escape and pin the semantics with a test by `@crates-lurey-io-agent[bot]` in [#980](https://github.com/crates-lurey-io/retroglyph/pull/980)
 
-- [452bf76](
-https://github.com/crates-lurey-io/retroglyph/commit/452bf7639c1464ad15dde07a15346be18ec98670) *(core)* Fix Event::Custom doc claiming Eq/Hash derives by `@crates-lurey-io-agent[bot]` in [#973](
-https://github.com/crates-lurey-io/retroglyph/pull/973)
+- [452bf76](https://github.com/crates-lurey-io/retroglyph/commit/452bf7639c1464ad15dde07a15346be18ec98670) _(core)_ Fix Event::Custom doc claiming Eq/Hash derives by `@crates-lurey-io-agent[bot]` in [#973](https://github.com/crates-lurey-io/retroglyph/pull/973)
 
-- [c81a998](
-https://github.com/crates-lurey-io/retroglyph/commit/c81a998d5fc6538c972413e4358bb6b6c712f5a8) *(core)* Fix Event::Resize doc contradicting Terminal::poll's automatic resize by `@crates-lurey-io-agent[bot]` in [#971](
-https://github.com/crates-lurey-io/retroglyph/pull/971)
+- [c81a998](https://github.com/crates-lurey-io/retroglyph/commit/c81a998d5fc6538c972413e4358bb6b6c712f5a8) _(core)_ Fix Event::Resize doc contradicting Terminal::poll's automatic resize by `@crates-lurey-io-agent[bot]` in [#971](https://github.com/crates-lurey-io/retroglyph/pull/971)
 
-- [95d1a8e](
-https://github.com/crates-lurey-io/retroglyph/commit/95d1a8e234974afe533223092cc96aef7ea295f1) *(core)* De-duplicate repeated doc-comment rationale by `@crates-lurey-io-agent[bot]` in [#742](
-https://github.com/crates-lurey-io/retroglyph/pull/742)
+- [95d1a8e](https://github.com/crates-lurey-io/retroglyph/commit/95d1a8e234974afe533223092cc96aef7ea295f1) _(core)_ De-duplicate repeated doc-comment rationale by `@crates-lurey-io-agent[bot]` in [#742](https://github.com/crates-lurey-io/retroglyph/pull/742)
 
-- [3c19660](
-https://github.com/crates-lurey-io/retroglyph/commit/3c196607045b00771cd3c0fa50785c687c8ff06c) *(core)* Document a named Layer z-order convention for overlapping UI by `@matanlurey` in [#615](
-https://github.com/crates-lurey-io/retroglyph/pull/615)
+- [3c19660](https://github.com/crates-lurey-io/retroglyph/commit/3c196607045b00771cd3c0fa50785c687c8ff06c) _(core)_ Document a named Layer z-order convention for overlapping UI by `@matanlurey` in [#615](https://github.com/crates-lurey-io/retroglyph/pull/615)
 
-- [c1e04d8](
-https://github.com/crates-lurey-io/retroglyph/commit/c1e04d8eba676c7b7e79d8afcffe81e78ff77fdf) *(core,terminal,crossterm,window,gl,widgets)* Remove ' -- ' and em-dash prose tics, drop filler 'deliberately' by `@crates-lurey-io-agent[bot]` in [#744](
-https://github.com/crates-lurey-io/retroglyph/pull/744)
+- [c1e04d8](https://github.com/crates-lurey-io/retroglyph/commit/c1e04d8eba676c7b7e79d8afcffe81e78ff77fdf) _(core,terminal,crossterm,window,gl,widgets)_ Remove ' -- ' and em-dash prose tics, drop filler 'deliberately' by `@crates-lurey-io-agent[bot]` in [#744](https://github.com/crates-lurey-io/retroglyph/pull/744)
 
-- [5b019b8](
-https://github.com/crates-lurey-io/retroglyph/commit/5b019b872925d22d3d57313daeb0311cff83ba98) *(widgets, core, gl)* Fix 4 doc/lint inconsistencies by `@crates-lurey-io-agent[bot]` in [#758](
-https://github.com/crates-lurey-io/retroglyph/pull/758)
+- [5b019b8](https://github.com/crates-lurey-io/retroglyph/commit/5b019b872925d22d3d57313daeb0311cff83ba98) _(widgets, core, gl)_ Fix 4 doc/lint inconsistencies by `@crates-lurey-io-agent[bot]` in [#758](https://github.com/crates-lurey-io/retroglyph/pull/758)
 
-- [49d801e](
-https://github.com/crates-lurey-io/retroglyph/commit/49d801eb4b2b1cba2166d99a379a77af5295f739) *(workspace)* Add Vale prose-style lint by `@matanlurey` in [#875](
-https://github.com/crates-lurey-io/retroglyph/pull/875)
+- [49d801e](https://github.com/crates-lurey-io/retroglyph/commit/49d801eb4b2b1cba2166d99a379a77af5295f739) _(workspace)_ Add Vale prose-style lint by `@matanlurey` in [#875](https://github.com/crates-lurey-io/retroglyph/pull/875)
 
-- [d35adbc](
-https://github.com/crates-lurey-io/retroglyph/commit/d35adbccdee21d9b410c7706a230dc6175fe25e0) *(workspace, core, widgets)* Relocate README feature blocks to crate docs by `@crates-lurey-io-agent[bot]` in [#651](
-https://github.com/crates-lurey-io/retroglyph/pull/651)
+- [d35adbc](https://github.com/crates-lurey-io/retroglyph/commit/d35adbccdee21d9b410c7706a230dc6175fe25e0) _(workspace, core, widgets)_ Relocate README feature blocks to crate docs by `@crates-lurey-io-agent[bot]` in [#651](https://github.com/crates-lurey-io/retroglyph/pull/651)
 
-- [d8cb194](
-https://github.com/crates-lurey-io/retroglyph/commit/d8cb1949b0a7066002f5f39fdf22be5fe8052c8d) *(uncategorized)* Document Cargo features per crate (README + lib.rs) by `@matanlurey` in [#630](
-https://github.com/crates-lurey-io/retroglyph/pull/630)
+- [d8cb194](https://github.com/crates-lurey-io/retroglyph/commit/d8cb1949b0a7066002f5f39fdf22be5fe8052c8d) _(uncategorized)_ Document Cargo features per crate (README + lib.rs) by `@matanlurey` in [#630](https://github.com/crates-lurey-io/retroglyph/pull/630)
 
 ### Performance
 
-- [592abca](
-https://github.com/crates-lurey-io/retroglyph/commit/592abca787c0064d4a073ed813083c5c9f569a4a) *(core)* Lazily allocate flatten buffers, document sticky single-layer fast path by `@crates-lurey-io-agent[bot]` in [#1029](
-https://github.com/crates-lurey-io/retroglyph/pull/1029)
+- [592abca](https://github.com/crates-lurey-io/retroglyph/commit/592abca787c0064d4a073ed813083c5c9f569a4a) _(core)_ Lazily allocate flatten buffers, document sticky single-layer fast path by `@crates-lurey-io-agent[bot]` in [#1029](https://github.com/crates-lurey-io/retroglyph/pull/1029)
 
-- [63e64c8](
-https://github.com/crates-lurey-io/retroglyph/commit/63e64c8b1f1c0bbff4dcb403f8c2fcd78c22a3b3) *(core)* Add Grid::fill_region, use it for Surface::clear/clear_region/fill_rect by `@crates-lurey-io-agent[bot]` in [#849](
-https://github.com/crates-lurey-io/retroglyph/pull/849)
+- [63e64c8](https://github.com/crates-lurey-io/retroglyph/commit/63e64c8b1f1c0bbff4dcb403f8c2fcd78c22a3b3) _(core)_ Add Grid::fill_region, use it for Surface::clear/clear_region/fill_rect by `@crates-lurey-io-agent[bot]` in [#849](https://github.com/crates-lurey-io/retroglyph/pull/849)
 
-- [d5729a9](
-https://github.com/crates-lurey-io/retroglyph/commit/d5729a934a817412a2d0cdd4bfc51584d13c277f) *(core)* Cache Oklab palette tables instead of recomputing per to_indexed/to_ansi call by `@crates-lurey-io-agent[bot]` in [#775](
-https://github.com/crates-lurey-io/retroglyph/pull/775)
+- [d5729a9](https://github.com/crates-lurey-io/retroglyph/commit/d5729a934a817412a2d0cdd4bfc51584d13c277f) _(core)_ Cache Oklab palette tables instead of recomputing per to_indexed/to_ansi call by `@crates-lurey-io-agent[bot]` in [#775](https://github.com/crates-lurey-io/retroglyph/pull/775)
 
 ### Testing
 
-- [929cd53](
-https://github.com/crates-lurey-io/retroglyph/commit/929cd5316b7fcec1527dc18aecd2200c2c997fa3) *(core)* Cover present's compositing branch, error paths, retention/resize, and event edge cases by `@crates-lurey-io-agent[bot]` in [#1021](
-https://github.com/crates-lurey-io/retroglyph/pull/1021)
+- [929cd53](https://github.com/crates-lurey-io/retroglyph/commit/929cd5316b7fcec1527dc18aecd2200c2c997fa3) _(core)_ Cover present's compositing branch, error paths, retention/resize, and event edge cases by `@crates-lurey-io-agent[bot]` in [#1021](https://github.com/crates-lurey-io/retroglyph/pull/1021)
 
-- [74d2ca3](
-https://github.com/crates-lurey-io/retroglyph/commit/74d2ca31f839545411b5c0abb8841b094596f658) *(core)* Cover world_to_screen against a zero-size world by `@crates-lurey-io-agent[bot]` in [#968](
-https://github.com/crates-lurey-io/retroglyph/pull/968)
+- [74d2ca3](https://github.com/crates-lurey-io/retroglyph/commit/74d2ca31f839545411b5c0abb8841b094596f658) _(core)_ Cover world_to_screen against a zero-size world by `@crates-lurey-io-agent[bot]` in [#968](https://github.com/crates-lurey-io/retroglyph/pull/968)
 
-- [1a52eb3](
-https://github.com/crates-lurey-io/retroglyph/commit/1a52eb3d980eb1d6adae33eb0600ac9ba0d6f849) *(core)* Cover Camera's re-clamp, world-edge, zero-size, and fitted+surface interaction gaps by `@crates-lurey-io-agent[bot]` in [#946](
-https://github.com/crates-lurey-io/retroglyph/pull/946)
+- [1a52eb3](https://github.com/crates-lurey-io/retroglyph/commit/1a52eb3d980eb1d6adae33eb0600ac9ba0d6f849) _(core)_ Cover Camera's re-clamp, world-edge, zero-size, and fitted+surface interaction gaps by `@crates-lurey-io-agent[bot]` in [#946](https://github.com/crates-lurey-io/retroglyph/pull/946)
 
-- [2e3e7e4](
-https://github.com/crates-lurey-io/retroglyph/commit/2e3e7e4b3cdffcb9f6beac87a715a3c913933d51) *(core)* Cover Tween::retarget while EaseOutElastic is overshooting by `@crates-lurey-io-agent[bot]` in [#918](
-https://github.com/crates-lurey-io/retroglyph/pull/918)
+- [2e3e7e4](https://github.com/crates-lurey-io/retroglyph/commit/2e3e7e4b3cdffcb9f6beac87a715a3c913933d51) _(core)_ Cover Tween::retarget while EaseOutElastic is overshooting by `@crates-lurey-io-agent[bot]` in [#918](https://github.com/crates-lurey-io/retroglyph/pull/918)
 
-- [892fee1](
-https://github.com/crates-lurey-io/retroglyph/commit/892fee105b61dc710e6a2f19e4c1f24a82fae569) *(core)* Assert blit_with's clamp agrees with grixy's copy_rect_clamped by `@crates-lurey-io-agent[bot]` in [#871](
-https://github.com/crates-lurey-io/retroglyph/pull/871)
+- [892fee1](https://github.com/crates-lurey-io/retroglyph/commit/892fee105b61dc710e6a2f19e4c1f24a82fae569) _(core)_ Assert blit_with's clamp agrees with grixy's copy_rect_clamped by `@crates-lurey-io-agent[bot]` in [#871](https://github.com/crates-lurey-io/retroglyph/pull/871)
 
 ### Miscellaneous Tasks
 
-- [13a6775](
-https://github.com/crates-lurey-io/retroglyph/commit/13a6775924b0e2c371d2286de23d519e1ac08937) *(core)* Split color-space into indexed-quant and blend-modes features by `@crates-lurey-io-agent[bot]` in [#632](
-https://github.com/crates-lurey-io/retroglyph/pull/632) [**breaking**]
+- [13a6775](https://github.com/crates-lurey-io/retroglyph/commit/13a6775924b0e2c371d2286de23d519e1ac08937) _(core)_ Split color-space into indexed-quant and blend-modes features by `@crates-lurey-io-agent[bot]` in [#632](https://github.com/crates-lurey-io/retroglyph/pull/632) [**breaking**]
 
 ### Backend
 
-- [87cf3a5](
-https://github.com/crates-lurey-io/retroglyph/commit/87cf3a5d6e93e3cde8a06c6dadd81d4eee7356ad) *(uncategorized)* Cover Cursor::set_cursor_style in Headless and conformance by `@crates-lurey-io-agent[bot]` in [#922](
-https://github.com/crates-lurey-io/retroglyph/pull/922)
+- [87cf3a5](https://github.com/crates-lurey-io/retroglyph/commit/87cf3a5d6e93e3cde8a06c6dadd81d4eee7356ad) _(uncategorized)_ Cover Cursor::set_cursor_style in Headless and conformance by `@crates-lurey-io-agent[bot]` in [#922](https://github.com/crates-lurey-io/retroglyph/pull/922)
 
 **Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.5.0...retroglyph-core-v0.6.0
-
 
 ## [0.5.0+retroglyph-core](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.4.0...retroglyph-core-v0.5.0) - 2026-07-31
 
