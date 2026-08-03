@@ -353,6 +353,11 @@ impl<B: Backend> Terminal<B> {
                     let diff = self.current.diff(&self.previous);
                     self.backend.draw_layers(diff)?;
                 }
+                // Same reasoning as the fast path below: this branch bypasses the flatten buffers
+                // too, so the next present that lands in the flatten branch (e.g. a backend whose
+                // `composites_layers()` flips to `false`) must not diff against a
+                // `flattened_previous` that was never actually the last frame presented.
+                self.flattened_stale = true;
             } else if self.current.max_layer() == 0 && self.previous.max_layer() == 0 {
                 // Fast path: only layer 0 is in play, so flattening would be an exact
                 // copy of `current`. Diff the real grids directly and skip the
@@ -855,6 +860,103 @@ mod tests {
             "needs_full_frame() alone (without composites_layers()) does not widen present's \
              diff-only dispatch; see Output::draw_layers's docs (retroglyph#763)"
         );
+    }
+
+    /// A cell backend whose `composites_layers()` can be toggled between presents, standing in
+    /// for a backend that degrades from pixel compositing to a cell path at runtime (retroglyph#960).
+    struct TogglingCompositor {
+        inner: Headless,
+        composites: bool,
+    }
+
+    impl Output for TogglingCompositor {
+        type Error = core::convert::Infallible;
+
+        fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
+        where
+            I: Iterator<Item = DrawCell<'a>>,
+        {
+            self.inner.draw_layers(content)
+        }
+
+        fn flush(&mut self) -> Result<(), Self::Error> {
+            self.inner.flush()
+        }
+
+        fn size(&self) -> Size {
+            self.inner.size()
+        }
+
+        fn clear(&mut self) -> Result<(), Self::Error> {
+            self.inner.clear()
+        }
+
+        fn composites_layers(&self) -> bool {
+            self.composites
+        }
+    }
+
+    impl Input for TogglingCompositor {
+        fn poll_event(&mut self, timeout: Duration) -> Option<Event> {
+            self.inner.poll_event(timeout)
+        }
+    }
+
+    impl Cursor for TogglingCompositor {}
+
+    #[test]
+    fn present_marks_flatten_buffers_stale_after_a_composites_layers_present() {
+        // A backend that ever answers `true` from `composites_layers()` and later `false` must
+        // not leave `flattened_previous` holding a frame that was never actually the last one
+        // presented. Sequence: flatten branch (establishes stale-looking data) -> composites
+        // branch (bypasses the flatten buffers entirely) -> flatten branch again, where the bug
+        // would incorrectly diff against the first frame's flattened data instead of the second.
+        let mut term = Terminal::new(TogglingCompositor {
+            inner: Headless::new(3, 1),
+            composites: false,
+        });
+
+        // Frame 1: flatten branch. Layer 1 is touched so `max_layer() != 0`, and
+        // `composites_layers()` is `false`, so this flattens and diffs normally.
+        term.draw(|s| {
+            s.put((0, 0), 'a', Style::default());
+            s.on_layer(1).put((1, 0), '#', Style::default());
+        })
+        .expect("draw failed");
+        assert_eq!(term.backend().inner.grid()[Pos::new(0, 0)].glyph(), 'a');
+
+        // Frame 2: composites branch. Bypasses the flatten buffers entirely, so
+        // `flattened_previous` still holds frame 1's flattened content.
+        term.backend_mut().composites = true;
+        term.draw(|s| {
+            s.put((0, 0), 'b', Style::default());
+        })
+        .expect("draw failed");
+        assert_eq!(term.backend().inner.grid()[Pos::new(0, 0)].glyph(), 'b');
+
+        // Frame 3: back to the flatten branch. Draws 'a' at (0, 0) again, on layer 0, but with
+        // layer 1 also touched so this lands in the flatten branch rather than the fast path.
+        // 'a' matches what frame 1 left in `flattened_previous`, even though the real last
+        // presented frame (frame 2) showed 'b' there. Without the fix, the stale match makes the
+        // diff skip (0, 0), and the backend keeps showing frame 2's 'b' forever.
+        term.backend_mut().composites = false;
+        term.draw(|s| {
+            s.put((0, 0), 'a', Style::default());
+            s.on_layer(1).put((2, 0), '@', Style::default());
+        })
+        .expect("draw failed");
+        assert_eq!(
+            term.backend().inner.grid()[Pos::new(0, 0)].glyph(),
+            'a',
+            "flattened_previous must be cleared after a composites_layers() present, not diffed \
+             against as if it were the last frame actually shown"
+        );
+
+        // `TogglingCompositor` forwards `clear` and `poll_event` unconditionally, same as every
+        // other method on it, so exercise both here rather than leaving them as dead delegation.
+        term.backend_mut().clear().expect("clear failed");
+        term.backend_mut().inner.push_event(Event::Close);
+        assert_eq!(term.poll(Duration::ZERO), Some(Event::Close));
     }
 
     #[test]
