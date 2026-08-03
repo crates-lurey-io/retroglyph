@@ -207,7 +207,8 @@ byte-for-byte.
 driver draws its FPS overlay by default and a live frame rate is not reproducible. The one place
 that deliberately doesn't is `examples/tests/fps_overlay.rs`, which pins the default itself (the
 overlay was originally behind an opt-in Cargo feature, so nothing that ran an example the documented
-way ever saw it) and drives its `` ` `` toggle through the PTY in both directions.
+way ever saw it) and drives its `` ` `` toggle through the PTY from both the hidden and visible
+default starting states.
 
 Two examples need more than `RG_FPS=0`. `06_layers` and `08_animation` animate to a parked end state
 and use _that_ as their ready marker, because an animation that loops forever never settles into a
