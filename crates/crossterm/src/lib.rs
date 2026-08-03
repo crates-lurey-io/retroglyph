@@ -2415,6 +2415,10 @@ mod tests {
         fn set_cursor_position(&mut self, position: Pos) {
             Cursor::set_cursor_position(&mut self.term, position);
         }
+
+        fn set_cursor_style(&mut self, style: CursorStyle) {
+            Cursor::set_cursor_style(&mut self.term, style);
+        }
     }
 
     impl retroglyph_core::testing::conformance::Observable for CrosstermObserver {
@@ -2442,5 +2446,13 @@ mod tests {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         retroglyph_core::testing::conformance::assert_cursor_contract(CrosstermObserver::new);
+    }
+
+    #[test]
+    fn satisfies_the_cursor_style_contract() {
+        let _lock = TEST_GUARD_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        retroglyph_core::testing::conformance::assert_cursor_style_contract(CrosstermObserver::new);
     }
 }
