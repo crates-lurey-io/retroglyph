@@ -105,11 +105,25 @@ impl Surface<'_> {
     fn write_grapheme_at(&mut self, x: u16, y: u16, grapheme: &str, style: Style) {
         use unicode_width::UnicodeWidthStr;
 
-        if grapheme.width() == 2 && !self.clip.contains(x.saturating_add(1), y) {
+        if !self.wide_spacer_fits(x, y, grapheme.width()) {
             return;
         }
         self.grid.write_grapheme(self.layer, x, y, grapheme, style);
         self.apply_tint(x, y);
+    }
+
+    /// `true` unless `width` is 2 and the spacer cell it would need at `x + 1` falls outside
+    /// this surface's clip.
+    ///
+    /// [`Grid::put_tile`]/[`Grid::write_grapheme`] only refuse a wide write at the *grid*'s own
+    /// right edge, not the clip's, so every wide write site (both the `egc` grapheme path via
+    /// [`write_grapheme_at`](Self::write_grapheme_at) and the plain-`char` path in
+    /// [`put`](Self::put)/[`put_signed`](Self::put_signed)/[`put_offset`](Self::put_offset))
+    /// calls this first: without it, a clip narrower than the surface's own area would let a
+    /// wide glyph's spacer land one column past the clip, silently overwriting whatever is
+    /// there.
+    fn wide_spacer_fits(&self, x: u16, y: u16, width: usize) -> bool {
+        width != 2 || self.clip.contains(x.saturating_add(1), y)
     }
 
     /// Place `ch` at `pos` in `style`. A no-op if `pos` is outside this surface's clip.
@@ -145,6 +159,9 @@ impl Surface<'_> {
             let Some((x, y)) = self.shift(pos.x, pos.y) else {
                 return;
             };
+            if !self.wide_spacer_fits(x, y, ch.width().unwrap_or(1)) {
+                return;
+            }
             let tile = Tile::new(ch, style);
             self.grid.put_tile(self.layer, (x, y), tile);
             self.apply_tint(x, y);
@@ -205,6 +222,9 @@ impl Surface<'_> {
         }
         #[cfg(not(feature = "egc"))]
         {
+            if !self.wide_spacer_fits(abs_x, abs_y, ch.width().unwrap_or(1)) {
+                return;
+            }
             let tile = Tile::new(ch, style);
             self.grid.put_tile(self.layer, (abs_x, abs_y), tile);
             self.apply_tint(abs_x, abs_y);
@@ -722,6 +742,9 @@ impl Surface<'_> {
         }
         #[cfg(not(feature = "egc"))]
         {
+            if !self.wide_spacer_fits(x, y, ch.width().unwrap_or(1)) {
+                return;
+            }
             let tile = Tile::new(ch, style);
             self.grid.put_tile(self.layer, (x, y), tile);
             self.apply_tint(x, y);
