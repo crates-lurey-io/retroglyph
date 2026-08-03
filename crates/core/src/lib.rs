@@ -141,7 +141,7 @@
 //! `App` implementations, [`Terminal`] calls, and game logic are unchanged.
 //! `run_blocking` drives `Terminal<Headless>` and `Terminal<Crossterm>`
 //! identically; the software backend's windowed loop drives `Terminal<SoftwareRenderer>`
-//! through the same [`App`]/[`step`] contract, inverted because winit owns the
+//! through the same [`App`] contract, inverted because winit owns the
 //! event loop instead of handing control back to a driver function.
 //!
 //! See `examples/headless.rs` (`cargo run -p retroglyph-core --example
@@ -230,7 +230,7 @@ pub mod tile;
 
 #[cfg(feature = "__float")]
 pub use animate::{Easing, Tween, oscillate};
-pub use app::{App, Flow, Frame, step};
+pub use app::{App, Flow, Frame};
 #[cfg(feature = "std")]
 pub use app::{RunOptions, run_blocking, run_blocking_with};
 pub use backend::{Backend, Cursor, CursorStyle, DrawCell, Headless, Input, Output};
