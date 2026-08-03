@@ -292,6 +292,13 @@ impl Grid {
     /// half a span is not a thing the grid can represent; degrading to the fallback glyphs is
     /// both representable and the same content a cell backend would have drawn anyway.
     ///
+    /// The same is true of wide-character pairs: `src_rect` clipping a lead from its spacer, or
+    /// the copy landing on only one half of a destination pair, both leave half a pair, which is
+    /// equally unrepresentable. Either case strips [`TileFlags::WIDE_CHAR`]/
+    /// [`TileFlags::WIDE_CHAR_SPACER`] from the surviving half (or clears the destination half
+    /// the copy overwrites), so a blit can never leave a dangling lead or an orphaned spacer
+    /// behind (retroglyph#1013).
+    ///
     /// Walks `src`'s and `self`'s layer buffers directly by flat index instead of going through
     /// [`tile`](Self::tile)/[`put_tile`](Self::put_tile) per cell (see retroglyph#263):
     /// each of those recomputes a coordinate conversion and a bounds check per cell, which this
@@ -400,8 +407,9 @@ impl Grid {
 
     /// Shared copy loop behind [`blit`](Self::blit), [`blit_alpha`](Self::blit_alpha), and
     /// [`blit_cross_layer`](Self::blit_cross_layer): clamps `src_rect` to `src`'s bounds, skips
-    /// the whole call if nothing in it is visible, clears any destination span the copy is about
-    /// to partially overwrite (retroglyph#710), and walks matching `src`/destination cells by
+    /// the whole call if nothing in it is visible, clears any destination span or wide-character
+    /// pair the copy is about to partially overwrite (retroglyph#710, retroglyph#1013), and walks
+    /// matching `src`/destination cells by
     /// flat index (retroglyph#262/#263), applying `transform` to each non-empty source tile
     /// (given the source tile and, for context, the destination tile it's about to replace)
     /// before writing it and fixing up grapheme extras. `dst_x`/`dst_y` saturate on overflow
@@ -452,33 +460,37 @@ impl Grid {
         let dst_height = usize::from(self.height);
 
         // A blit writes straight into the destination buffer below, bypassing `put_tile`, so it
-        // has to do `put_tile`'s `clear_span_overlap` call itself or a cell that used to anchor
-        // (or be covered by) a multi-cell span would keep claiming cells this blit just
-        // overwrote (retroglyph#710). Only the cells actually being overwritten (in bounds,
-        // non-empty source tile) are cleared: an empty source tile is transparent and leaves the
-        // destination untouched, so clearing a whole row's footprint up front would wipe out
-        // spans the blit never actually touches. Gated on `has_spans` so a grid that never uses
-        // spans pays only the one `bool` check.
-        if self.has_spans {
-            for sy in sy0..sy1 {
-                let dy = dst_y.saturating_add(sy - src_rect.top());
-                if usize::from(dy) >= dst_height {
+        // has to do `put_tile`'s `clear_span_overlap`/`clear_overlap` calls itself, or a cell that
+        // used to anchor (or be covered by) a multi-cell span, or half of a wide-character pair,
+        // would keep claiming cells this blit just overwrote (retroglyph#710, retroglyph#1013).
+        // Only the cells actually being overwritten (in bounds, non-empty source tile) are
+        // cleared: an empty source tile is transparent and leaves the destination untouched, so
+        // clearing a whole row's footprint up front would wipe out spans/pairs the blit never
+        // actually touches. `clear_span_overlap` is gated on `has_spans` so a grid that never uses
+        // spans pays only the one `bool` check; `clear_overlap` has no such gate because `put_tile`
+        // itself never gates it (`WIDE_CHAR`/`WIDE_CHAR_SPACER` are set on every feature
+        // combination, not just under `egc`).
+        for sy in sy0..sy1 {
+            let dy = dst_y.saturating_add(sy - src_rect.top());
+            if usize::from(dy) >= dst_height {
+                continue;
+            }
+            for sx in sx0..sx1 {
+                let dx = dst_x.saturating_add(sx - src_rect.left());
+                if usize::from(dx) >= dst_width {
                     continue;
                 }
-                for sx in sx0..sx1 {
-                    let dx = dst_x.saturating_add(sx - src_rect.left());
-                    if usize::from(dx) >= dst_width {
-                        continue;
-                    }
-                    let src_idx = usize::from(sy) * src_width + usize::from(sx);
-                    if src_lb.buf.as_ref()[src_idx]
-                        .flags
-                        .contains(TileFlags::EMPTY)
-                    {
-                        continue;
-                    }
+                let src_idx = usize::from(sy) * src_width + usize::from(sx);
+                if src_lb.buf.as_ref()[src_idx]
+                    .flags
+                    .contains(TileFlags::EMPTY)
+                {
+                    continue;
+                }
+                if self.has_spans {
                     self.clear_span_overlap(dst_layer, dx, dy, 1);
                 }
+                self.clear_overlap(dst_layer, dx, dy, 1);
             }
         }
 
@@ -505,6 +517,23 @@ impl Grid {
                 let mut out_tile = transform(tile, &dst_tile);
                 out_tile.flags.remove(TileFlags::HAS_EXTRA);
                 out_tile.clear_span();
+
+                // Half a wide-character pair is as unrepresentable as half a span (see
+                // `clear_span` above): `src_rect` or the destination clip can separate a lead
+                // from its spacer, so drop the flag on whichever half survives the copy alone
+                // rather than leave a dangling lead (no spacer to its right) or an orphaned
+                // spacer (no lead to its left) (retroglyph#1013).
+                if out_tile.flags.contains(TileFlags::WIDE_CHAR) {
+                    let partner_survived = sx + 1 < sx1 && usize::from(dx) + 1 < dst_width;
+                    if !partner_survived {
+                        out_tile.clear_wide();
+                    }
+                } else if out_tile.flags.contains(TileFlags::WIDE_CHAR_SPACER) {
+                    let partner_survived = sx > sx0 && dx > 0;
+                    if !partner_survived {
+                        out_tile.clear_wide();
+                    }
+                }
                 dst_lb.buf.as_mut()[dst_idx] = out_tile;
                 if tile.flags.contains(TileFlags::HAS_EXTRA) {
                     if let Some(extra) = src_lb.extra_entry_for(src_idx, tile) {
@@ -1775,6 +1804,82 @@ mod tests {
 
         assert_eq!(dst[Pos::new(1, 0)].glyph(), 'X');
         assert_eq!(dst.tile(0, Pos::new(0, 0)).map(Tile::span), Some((1, 1)));
+    }
+
+    #[test]
+    fn blit_leaves_a_dangling_wide_char_lead_in_the_destination() {
+        // retroglyph#1013: `blit` writes straight into the destination buffer, bypassing
+        // `put_tile`'s `clear_overlap` call, so overwriting a wide-character pair's spacer used
+        // to leave the lead cell still claiming a spacer the blit had just replaced.
+        let mut dst = Grid::new(4, 1);
+        dst.put_tile(0, (0, 0), Tile::new('\u{4e2d}', Style::default()));
+
+        let mut src = Grid::new(4, 1);
+        src.put_tile(0, (1, 0), Tile::new('X', Style::default()));
+        dst.blit(0, &src, Rect::new(1, 0, 1, 1), 1, 0);
+
+        assert_eq!(dst[Pos::new(1, 0)].glyph(), 'X');
+        assert!(!dst[Pos::new(0, 0)].flags().contains(TileFlags::WIDE_CHAR));
+    }
+
+    #[test]
+    fn blit_alpha_leaves_a_dangling_wide_char_lead_in_the_destination() {
+        // Same bug as `blit_leaves_a_dangling_wide_char_lead_in_the_destination`, but through
+        // `blit_alpha`'s separate copy path.
+        let mut dst = Grid::new(4, 1);
+        dst.put_tile(0, (0, 0), Tile::new('\u{4e2d}', Style::default()));
+
+        let mut src = Grid::new(4, 1);
+        src.put_tile(0, (1, 0), Tile::new('X', Style::default()));
+        dst.blit_alpha(
+            0,
+            &src,
+            Rect::new(1, 0, 1, 1),
+            1,
+            0,
+            BlendMode::Linear,
+            1.0,
+            1.0,
+        );
+
+        assert_eq!(dst[Pos::new(1, 0)].glyph(), 'X');
+        assert!(!dst[Pos::new(0, 0)].flags().contains(TileFlags::WIDE_CHAR));
+    }
+
+    #[test]
+    fn blit_degrades_a_wide_char_pair_clipped_by_src_rect() {
+        // `src_rect` can clip a wide-character pair in half, and half a pair is not
+        // representable, so `blit` drops the `WIDE_CHAR` flag on the lead it does copy, the same
+        // way it already degrades a clipped span (retroglyph#1013).
+        let mut src = Grid::new(4, 1);
+        src.put_tile(0, (0, 0), Tile::new('\u{4e2d}', Style::default()));
+
+        let mut dst = Grid::new(4, 1);
+        dst.blit(0, &src, Rect::new(0, 0, 1, 1), 0, 0);
+
+        assert!(!dst[Pos::new(0, 0)].flags().contains(TileFlags::WIDE_CHAR));
+    }
+
+    #[test]
+    fn blit_alpha_degrades_a_wide_char_pair_clipped_by_src_rect() {
+        // Same bug as `blit_degrades_a_wide_char_pair_clipped_by_src_rect`, but through
+        // `blit_alpha`'s separate copy path.
+        let mut src = Grid::new(4, 1);
+        src.put_tile(0, (0, 0), Tile::new('\u{4e2d}', Style::default()));
+
+        let mut dst = Grid::new(4, 1);
+        dst.blit_alpha(
+            0,
+            &src,
+            Rect::new(0, 0, 1, 1),
+            0,
+            0,
+            BlendMode::Linear,
+            1.0,
+            1.0,
+        );
+
+        assert!(!dst[Pos::new(0, 0)].flags().contains(TileFlags::WIDE_CHAR));
     }
 
     /// A single `blit`-vs-`copy_rect_clamped` comparison case for
