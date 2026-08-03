@@ -378,7 +378,11 @@ impl Grid {
     pub(super) fn clear_overlap(&mut self, layer: u8, x: u16, y: u16, width: u16) {
         let w = usize::from(self.width);
         let cap = w * usize::from(self.height);
-        let lb = self.layer_or_alloc(layer);
+        // An unallocated layer has never written a wide-character cell, so there is nothing to
+        // clear: return before `layer_or_alloc` would allocate one just to find that (retroglyph#1012).
+        let Some(lb) = self.layers.get_mut(usize::from(layer)).and_then(Option::as_mut) else {
+            return;
+        };
         for cx in x..x.saturating_add(width) {
             let idx = usize::from(y) * w + usize::from(cx);
             if idx >= cap {
