@@ -2,7 +2,7 @@
 //!
 //! [`FrameStats`] is a fixed-size ring buffer fed one sample per frame via
 //! [`record`](FrameStats::record), decoupled from any renderer or backend the same way
-//! [`FrameClock`](crate::frame_clock::FrameClock) is: it only consumes wall time handed to it
+//! [`FrameClock`](crate::FrameClock) is: it only consumes wall time handed to it
 //! (typically [`Frame::delta`](crate::app::Frame)), never reads a clock itself, so it stays
 //! `no_std`-clean and platform-agnostic (including wasm, where there is no `std::time::Instant`).
 //!
