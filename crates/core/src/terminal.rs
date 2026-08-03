@@ -233,8 +233,8 @@ impl<B: Backend> Terminal<B> {
     /// the actual point of the method: [`present`](Self::present)'s diff already keeps the
     /// *backend* from re-receiving unchanged cells, but the *app* still has to regenerate them
     /// every frame to produce a buffer worth diffing. Marking a layer retained lets the app skip
-    /// that regeneration too, at the cost of a per-cell copy handled internally (a flat blit, far
-    /// cheaper than most real content generation).
+    /// that regeneration too, at the cost of a per-cell copy handled internally (a flat, verbatim
+    /// replace, far cheaper than most real content generation).
     ///
     /// This is a one-shot opt-in, not a sticky mode: it only affects the very next `present`, so
     /// a caller that wants a layer retained for several frames in a row must call this again
@@ -318,7 +318,8 @@ impl<B: Backend> Terminal<B> {
             // that degrades multi-cell spans to their text fallback and treats empty tiles as
             // transparent (an overlay, not a replacement), both wrong here, since a retained
             // layer is copied whole, at the same geometry, and must be indistinguishable from
-            // what was presented last frame (retroglyph#955).
+            // what was presented last frame, whatever the app did or didn't draw into it this
+            // frame (retroglyph#955, retroglyph#956).
             for (id, &retained) in self.retained_layers.iter().enumerate() {
                 if retained {
                     #[allow(clippy::cast_possible_truncation)]
@@ -1116,6 +1117,43 @@ mod tests {
         // the backend like any ordinary immediate-mode frame.
         term.draw(|_| {}).expect("draw failed");
         assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), ' ');
+    }
+
+    #[test]
+    fn test_retain_layer_replaces_a_cell_the_app_draws_at_an_empty_previous_cell() {
+        use crate::surface::Layer;
+
+        // retroglyph#956: `present` must discard whatever the app drew into a retained layer
+        // this frame, even at a cell where `previous` had nothing (so a naive transparent-skip
+        // copy would let the app's write leak through).
+        let mut term = Terminal::new(Headless::new(4, 1));
+        term.draw(|s| s.on_tier(Layer::World).put((0, 0), 'W', Style::default()))
+            .expect("draw failed");
+
+        term.retain_layer(Layer::World);
+        term.draw(|s| s.on_tier(Layer::World).put((2, 0), 'X', Style::default()))
+            .expect("draw failed");
+
+        assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), 'W');
+        assert_eq!(term.backend().grid()[Pos::new(2, 0)].glyph(), ' ');
+    }
+
+    #[test]
+    fn test_retain_layer_restores_a_cell_the_app_erases_with_an_explicit_space() {
+        use crate::surface::Layer;
+
+        // retroglyph#956: an explicit-space write on a retained layer is still a draw the app
+        // made this frame, so it must be discarded like any other write on that layer, not
+        // treated as an opaque erase that survives the retention.
+        let mut term = Terminal::new(Headless::new(4, 1));
+        term.draw(|s| s.on_tier(Layer::World).put((0, 0), 'W', Style::default()))
+            .expect("draw failed");
+
+        term.retain_layer(Layer::World);
+        term.draw(|s| s.on_tier(Layer::World).put((0, 0), ' ', Style::default()))
+            .expect("draw failed");
+
+        assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), 'W');
     }
 
     #[test]
