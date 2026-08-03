@@ -3803,6 +3803,181 @@ mod tests {
         assert_eq!(dst.tile(0, Pos::new(0, 0)).map(Tile::span), Some((1, 1)));
     }
 
+    /// A single `blit`-vs-`copy_rect_clamped` comparison case for
+    /// `blit_clamp_matches_grixys_copy_rect_clamped_on_shared_clipped_rect_cases`.
+    struct BlitClampCase {
+        name: &'static str,
+        src_w: u16,
+        src_h: u16,
+        dst_w: u16,
+        dst_h: u16,
+        src_rect: Rect,
+        dst_x: u16,
+        dst_y: u16,
+    }
+
+    /// Every source cell gets a unique glyph derived from its position, so a mismatch in the
+    /// clamp/translate math (an off-by-one, a row misaligned after clipping, ...) shows up as the
+    /// wrong letter landing in the wrong destination cell, not just a wrong cell count.
+    fn blit_clamp_case_glyph_at(x: u16, y: u16, width: u16) -> char {
+        let idx = u32::from(y) * u32::from(width) + u32::from(x);
+        char::from_u32(u32::from(b'A') + idx).expect("case grids stay within 'A'..='Z'")
+    }
+
+    /// Runs one [`BlitClampCase`] through both `Grid::blit` and `grixy::ops::copy_rect_clamped`
+    /// on an equivalent pair of plain `grixy::buf::GridBuf`s, and asserts the copied region
+    /// agrees cell-for-cell.
+    fn assert_blit_clamp_case(case: &BlitClampCase) {
+        use grixy::buf::GridBuf;
+        use grixy::ops::GridWrite as _;
+        use grixy::transform::GridConvertExt as _;
+
+        let mut rg_src = Grid::new(case.src_w, case.src_h);
+        for y in 0..case.src_h {
+            for x in 0..case.src_w {
+                let glyph = blit_clamp_case_glyph_at(x, y, case.src_w);
+                rg_src.put_tile(0, (x, y), Tile::default().with_glyph(glyph));
+            }
+        }
+        let mut rg_dst = Grid::new(case.dst_w, case.dst_h);
+        rg_dst.blit(0, &rg_src, case.src_rect, case.dst_x, case.dst_y);
+        let rg_result: Vec<char> = (0..case.dst_h)
+            .flat_map(|y| (0..case.dst_w).map(move |x| (x, y)))
+            .map(|(x, y)| rg_dst.tile(0, (x, y)).map_or(' ', Tile::glyph))
+            .collect();
+
+        let mut gx_src = GridBuf::<char, _, _>::new_filled(
+            usize::from(case.src_w),
+            usize::from(case.src_h),
+            ' ',
+        );
+        for y in 0..case.src_h {
+            for x in 0..case.src_w {
+                let glyph = blit_clamp_case_glyph_at(x, y, case.src_w);
+                gx_src
+                    .set(grixy::core::Pos::new(usize::from(x), usize::from(y)), glyph)
+                    .unwrap();
+            }
+        }
+        let mut gx_dst = GridBuf::<char, _, _>::new_filled(
+            usize::from(case.dst_w),
+            usize::from(case.dst_h),
+            ' ',
+        );
+        grixy::ops::copy_rect_clamped(
+            &gx_src.copied(),
+            &mut gx_dst,
+            grixy::core::Rect::from_ltwh(
+                usize::from(case.src_rect.left()),
+                usize::from(case.src_rect.top()),
+                usize::from(case.src_rect.width()),
+                usize::from(case.src_rect.height()),
+            ),
+            grixy::core::Pos::new(usize::from(case.dst_x), usize::from(case.dst_y)),
+        );
+        let (gx_result, _, _) = gx_dst.into_inner();
+
+        assert_eq!(rg_result, gx_result, "case: {}", case.name);
+    }
+
+    /// `blit_with`'s clamp math (clamp `src_rect` to `src`'s bounds, translate into destination
+    /// space, clamp again to `dst`'s bounds) is a hand-written copy of the algorithm
+    /// `grixy::ops::copy_rect_clamped` generalizes (retroglyph#831). This walks a shared set of
+    /// clipped-rect cases through both `Grid::blit` and `copy_rect_clamped` on an equivalent pair
+    /// of plain `grixy::buf::GridBuf`s, and asserts the copied region agrees cell-for-cell, so the
+    /// two can't silently drift apart. `Grid` can't implement `GridRead`/`GridWrite` itself (its
+    /// span/extras bookkeeping has no equivalent there), so this compares outcomes rather than
+    /// sharing code.
+    #[test]
+    fn blit_clamp_matches_grixys_copy_rect_clamped_on_shared_clipped_rect_cases() {
+        let cases = [
+            BlitClampCase {
+                name: "fully inside both grids",
+                src_w: 4,
+                src_h: 4,
+                dst_w: 6,
+                dst_h: 6,
+                src_rect: Rect::new(0, 0, 4, 4),
+                dst_x: 1,
+                dst_y: 1,
+            },
+            BlitClampCase {
+                name: "src_rect wider than src (source-side clip)",
+                src_w: 3,
+                src_h: 3,
+                dst_w: 5,
+                dst_h: 5,
+                src_rect: Rect::new(0, 0, 10, 10),
+                dst_x: 0,
+                dst_y: 0,
+            },
+            BlitClampCase {
+                name: "destination-side clip",
+                src_w: 3,
+                src_h: 3,
+                dst_w: 5,
+                dst_h: 5,
+                src_rect: Rect::new(0, 0, 3, 3),
+                dst_x: 3,
+                dst_y: 3,
+            },
+            BlitClampCase {
+                name: "both sides clip, tighter bound wins",
+                src_w: 4,
+                src_h: 4,
+                dst_w: 6,
+                dst_h: 6,
+                src_rect: Rect::new(0, 0, 10, 10),
+                dst_x: 3,
+                dst_y: 3,
+            },
+            BlitClampCase {
+                name: "src_rect offset, clipped on src's right/bottom",
+                src_w: 4,
+                src_h: 4,
+                dst_w: 6,
+                dst_h: 6,
+                src_rect: Rect::new(2, 2, 5, 5),
+                dst_x: 0,
+                dst_y: 0,
+            },
+            BlitClampCase {
+                name: "source completely out of bounds",
+                src_w: 3,
+                src_h: 3,
+                dst_w: 5,
+                dst_h: 5,
+                src_rect: Rect::new(5, 5, 2, 2),
+                dst_x: 0,
+                dst_y: 0,
+            },
+            BlitClampCase {
+                name: "destination completely out of bounds",
+                src_w: 3,
+                src_h: 3,
+                dst_w: 5,
+                dst_h: 5,
+                src_rect: Rect::new(0, 0, 3, 3),
+                dst_x: 10,
+                dst_y: 10,
+            },
+            BlitClampCase {
+                name: "zero-size src_rect",
+                src_w: 3,
+                src_h: 3,
+                dst_w: 5,
+                dst_h: 5,
+                src_rect: Rect::new(0, 0, 0, 0),
+                dst_x: 0,
+                dst_y: 0,
+            },
+        ];
+
+        for case in &cases {
+            assert_blit_clamp_case(case);
+        }
+    }
+
     #[test]
     fn clear_region_clears_a_span_it_only_partly_covers() {
         let mut grid = Grid::new(4, 4);

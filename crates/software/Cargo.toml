@@ -36,7 +36,7 @@ retroglyph-core = { path = "../core", version = "0.5.0", default-features = fals
 # `winit` feature; this crate just implements the renderer side.
 retroglyph-window = { path = "../window", version = "0.4.1", default-features = false }
 ixy = "0.6.0-alpha.9"
-grixy = { version = "0.6.0-alpha.8", features = ["alloc", "buffer"] }
+grixy = { version = "0.6.2", features = ["alloc", "buffer"] }
 log = "0.4"
 # PNG decode moved to retroglyph-window's shared `tileset` module (issue #366); the CPU sprite blit
 # here still needs alpha-blend for straight-alpha source-over.
