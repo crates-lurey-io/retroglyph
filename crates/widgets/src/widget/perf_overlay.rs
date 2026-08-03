@@ -13,17 +13,17 @@ use crate::Theme;
 /// metric rows (`VSync` state, resolution, render backend details, ...), and a scrolling
 /// frame-time [`Sparkline`].
 ///
-/// The richer counterpart to [`retroglyph_core::DefaultPerfRenderer`]: composed entirely from
-/// existing widgets ([`Panel`], [`Text`], [`Sparkline`]), it draws through [`Surface`] like every
-/// other widget in this crate, so it already works on every backend. Hand it to
-/// [`PerfOverlayApp::with_closure`](retroglyph_core::PerfOverlayApp::with_closure) as a closure
-/// to use it instead of the built-in renderer:
+/// The richer counterpart to [`DefaultPerfRenderer`](crate::DefaultPerfRenderer): composed
+/// entirely from existing widgets ([`Panel`], [`Text`], [`Sparkline`]), it draws through
+/// [`Surface`] like every other widget in this crate, so it already works on every backend. Hand
+/// it to [`PerfOverlayApp::with_closure`](crate::PerfOverlayApp::with_closure) as a closure to use
+/// it instead of the built-in renderer:
 ///
 /// ```
 /// # #[cfg(feature = "std")]
 /// # {
-/// use retroglyph_core::{App, Backend, Flow, Frame, Headless, PerfOverlayApp, Size, Terminal};
-/// use retroglyph_widgets::{PerfOverlay, Widget};
+/// use retroglyph_core::{App, Backend, Flow, Frame, Headless, Size, Terminal};
+/// use retroglyph_widgets::{PerfOverlay, PerfOverlayApp, Widget};
 ///
 /// struct MyGame;
 /// impl<B: Backend> App<B> for MyGame {
@@ -44,9 +44,9 @@ use crate::Theme;
 /// # } // `run_blocking` is `std`-only; a no-op under `--no-default-features`.
 /// ```
 ///
-/// `N` must match the [`FrameStats`] window it's built from; `retroglyph-core`'s
-/// [`PerfOverlayApp`](retroglyph_core::PerfOverlayApp) always uses 120 samples
-/// ([`FRAME_HISTORY`](retroglyph_core::perf_overlay::FRAME_HISTORY)), the default here too.
+/// `N` must match the [`FrameStats`] window it's built from; this crate's
+/// [`PerfOverlayApp`](crate::PerfOverlayApp) always uses 120 samples
+/// ([`FRAME_HISTORY`](crate::FRAME_HISTORY)), the default here too.
 ///
 /// # As an [`AnimatedWidget`]
 ///
@@ -55,8 +55,8 @@ use crate::Theme;
 /// `state: &mut FrameStats` argument needs to *record into* the same data a draw call reads --
 /// an immutable borrow baked into `self` and a mutable one for `state` can't coexist. Use
 /// [`AnimatedPerfOverlay`] instead for a call site that owns one [`FrameStats`] field and wants to
-/// record and draw in a single call, with no [`PerfOverlayApp`](retroglyph_core::PerfOverlayApp)
-/// decorator wrapping the app.
+/// record and draw in a single call, with no [`PerfOverlayApp`](crate::PerfOverlayApp) decorator
+/// wrapping the app.
 ///
 /// Rows beyond the panel's available interior height are silently dropped: the readout row
 /// draws first, then one row per [`metrics`](Self::metrics) entry, then the sparkline, each only
@@ -243,12 +243,12 @@ fn millis(duration: core::time::Duration) -> f32 {
 /// same call. `AnimatedPerfOverlay` holds no stats reference of its own, only the same
 /// backend/title/metrics/style knobs [`PerfOverlay`] has, so there's nothing to alias.
 ///
-/// Replaces routing a `Duration` through [`PerfOverlayApp`](retroglyph_core::PerfOverlayApp) just
-/// to reach this widget: an app that owns one [`FrameStats`] field can record into it and draw in
-/// a single call, no decorator wrapping the app at all. [`PerfOverlayApp`](retroglyph_core::PerfOverlayApp)
-/// remains the right choice for an app that also wants its toggle-key handling, mode cycling, and
-/// event draining done generically, across any wrapped [`App`](retroglyph_core::App). This is
-/// only for the (now unblocked) case that doesn't need any of that.
+/// Replaces routing a `Duration` through [`PerfOverlayApp`](crate::PerfOverlayApp) just to reach
+/// this widget: an app that owns one [`FrameStats`] field can record into it and draw in a single
+/// call, no decorator wrapping the app at all. [`PerfOverlayApp`](crate::PerfOverlayApp) remains
+/// the right choice for an app that also wants its toggle-key handling, mode cycling, and event
+/// draining done generically, across any wrapped [`App`](retroglyph_core::App). This is only for
+/// the (now unblocked) case that doesn't need any of that.
 ///
 /// # Examples
 ///

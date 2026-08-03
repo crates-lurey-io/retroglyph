@@ -1,10 +1,8 @@
 //! Posterizes small blocks of raw pixels to the best-matching Unicode block-element glyph.
 //!
-//! This is the "subcell" technique used by `doryen-rs` (`blit_2x`), libtcod, and notcurses'
-//! blitter chain to render raster images as text without a tileset: split a source image into
-//! one small pixel block per terminal cell, then pick whichever glyph plus foreground/background
-//! color pair best reconstructs that block. Three block shapes are supported, in increasing
-//! fidelity (and decreasing terminal compatibility):
+//! Splits a source image into one small pixel block per terminal cell, then pick whichever glyph
+//! plus foreground/background color pair best reconstructs that block. Three block shapes are
+//! supported, in increasing fidelity (and decreasing terminal compatibility):
 //!
 //! - [`quantize_half_block`]: 1x2 pixels -> `' '`/`▀`/`▄`/`█` (Unicode Block Elements, supported
 //!   almost everywhere monospace fonts render at all).
@@ -38,17 +36,6 @@
 //! the other (swap which color is called `fg` and which is `bg` and the reconstruction is
 //! identical); the lower pattern number wins there too.
 //!
-//! # Provenance
-//!
-//! The glyph tables ([`HALF_BLOCKS`], [`QUADRANTS`], [`SEXTANTS`]) are adapted from
-//! [ratatui-core's `symbols::pixel` module](https://github.com/ratatui/ratatui/blob/main/ratatui-core/src/symbols/pixel.rs)
-//! (MIT-licensed, like retroglyph), which lists them by bit pattern rather than by Unicode
-//! codepoint order: the sextant block in particular is not contiguous or monotonic in Unicode
-//! (four combinations reuse the pre-existing Block Elements `' '`, `█`, `▌`, `▐` instead of
-//! having their own Legacy Computing codepoints), so a hand-rolled table is where subtle,
-//! hard-to-spot-in-review bugs live. Reusing a table already exercised by a widely-used library
-//! is deliberate risk reduction, not just convenience.
-//!
 //! # Example
 //!
 //! ```
@@ -66,7 +53,7 @@
 use crate::color::Color;
 
 /// A raw 24-bit RGB pixel sample: `(r, g, b)`, one byte per channel.
-pub type Rgb = (u8, u8, u8);
+pub type Pixel = (u8, u8, u8);
 
 /// The Unicode Block Elements glyphs for a 1-wide x 2-tall pixel block, indexed by a 2-bit
 /// pattern (bit 0 = top pixel set, bit 1 = bottom pixel set).
@@ -116,7 +103,7 @@ pub struct Glyph {
 
 /// Averages the `pixels` selected by `mask` (bit `i` set means `pixels[i]` is included), rounding
 /// each channel to the nearest integer. Returns `None` if `mask` selects no pixels.
-fn average(pixels: &[Rgb], mask: usize) -> Option<Rgb> {
+fn average(pixels: &[Pixel], mask: usize) -> Option<Pixel> {
     let (mut r, mut g, mut b, mut n) = (0u32, 0u32, 0u32, 0u32);
     for (i, &(pr, pg, pb)) in pixels.iter().enumerate() {
         if mask & (1 << i) != 0 {
@@ -141,7 +128,7 @@ fn average(pixels: &[Rgb], mask: usize) -> Option<Rgb> {
 /// construction, so this stays a plain slice rather than a const-generic-sized array (which
 /// would need unstable `generic_const_exprs` to relate `N` to `table`'s length at the type
 /// level).
-fn posterize(pixels: &[Rgb], table: &[char]) -> Glyph {
+fn posterize(pixels: &[Pixel], table: &[char]) -> Glyph {
     let full_mask = table.len() - 1;
     let overall = average(pixels, full_mask).unwrap_or((0, 0, 0));
 
@@ -199,7 +186,8 @@ fn posterize(pixels: &[Rgb], table: &[char]) -> Glyph {
 /// Never panics: `pixels` is a fixed-size 2-element array, so there is no length to validate
 /// and no index into it that can be out of bounds.
 #[must_use]
-pub fn quantize_half_block(pixels: [Rgb; 2]) -> Glyph {
+pub fn quantize_half_block(pixels: [impl Into<Pixel>; 2]) -> Glyph {
+    let pixels = pixels.map(Into::into);
     posterize(&pixels, &HALF_BLOCKS)
 }
 
@@ -232,7 +220,8 @@ pub fn quantize_half_block(pixels: [Rgb; 2]) -> Glyph {
 ///
 /// See [`quantize_half_block`] for why this never panics.
 #[must_use]
-pub fn quantize_quadrant(pixels: [Rgb; 4]) -> Glyph {
+pub fn quantize_quadrant(pixels: [impl Into<Pixel>; 4]) -> Glyph {
+    let pixels = pixels.map(Into::into);
     posterize(&pixels, &QUADRANTS)
 }
 
@@ -263,7 +252,8 @@ pub fn quantize_quadrant(pixels: [Rgb; 4]) -> Glyph {
 ///
 /// See [`quantize_half_block`] for why this never panics.
 #[must_use]
-pub fn quantize_sextant(pixels: [Rgb; 6]) -> Glyph {
+pub fn quantize_sextant(pixels: [impl Into<Pixel>; 6]) -> Glyph {
+    let pixels = pixels.map(Into::into);
     posterize(&pixels, &SEXTANTS)
 }
 
@@ -357,5 +347,23 @@ mod tests {
             }
         );
         assert_eq!(glyph.bg, Color::Rgb { r: 0, g: 0, b: 0 });
+    }
+
+    #[test]
+    fn quantize_fns_accept_rgb888_directly() {
+        // The whole point of `impl Into<Pixel>`: a caller holding `gem::rgb::Rgb888` (as
+        // opposed to a bare `(u8, u8, u8)`) passes it with no `.to_rgb()` call, via gem 0.2.2's
+        // `From<Rgb888> for (u8, u8, u8)`.
+        use gem::rgb::Rgb888;
+
+        let white = Rgb888::from_rgb(255, 255, 255);
+        let black = Rgb888::from_rgb(0, 0, 0);
+
+        assert_eq!(quantize_half_block([white, black]).ch, '▀');
+        assert_eq!(quantize_quadrant([black, black, white, black]).ch, '▖');
+        assert_eq!(
+            quantize_sextant([black, black, black, black, white, black]).ch,
+            '🬏'
+        );
     }
 }

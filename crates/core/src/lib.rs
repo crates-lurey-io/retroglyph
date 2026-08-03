@@ -220,8 +220,6 @@ mod math;
 #[cfg(all(feature = "__float", feature = "__math"))]
 #[doc(hidden)]
 pub mod math;
-/// A live frame-time/FPS overlay: [`PerfOverlayApp`] wraps any [`App`] with one, on any [`Backend`].
-pub mod perf_overlay;
 pub mod style;
 pub mod subcell;
 /// The one grid-drawing primitive: an area-clipped, single-layer view over a [`Grid`].
@@ -258,11 +256,7 @@ pub use grid::{BlendMode, Grid, Offset, Pos, Rect, Size};
 /// a direct `ixy` dependency just to call them on this crate's own type aliases.
 pub use ixy::HasSize;
 #[cfg(feature = "egc")]
-pub use layout::{TextLayout, TextMetrics};
-pub use perf_overlay::{
-    DEFAULT_LAYER, DefaultPerfRenderer, FRAME_HISTORY, PerfOverlayApp, PerfOverlayMode,
-    PerfRenderer, default_is_toggle_key,
-};
+pub use layout::TextLayout;
 pub use style::Style;
 pub use subcell::{Glyph, quantize_half_block, quantize_quadrant, quantize_sextant};
 pub use surface::{Layer, StyledSurface, Surface};

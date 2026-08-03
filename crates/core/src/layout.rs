@@ -1,6 +1,6 @@
 //! Text layout: measurement, word wrapping, and bounded alignment.
 //!
-//! [`crate::text::Span`] and [`Line`] provide styled text primitives. The entry point here is
+//! [`Span`] and [`Line`] provide styled text primitives. The entry point here is
 //! [`TextLayout`], a builder that word-wraps a [`Line`] to a bounded [`Rect`], then positions it
 //! with independent horizontal ([`HAlign`]) and vertical ([`VAlign`]) alignment. Measure the
 //! result before rendering with [`TextLayout::measure`]. [`wrap`] exposes that same word-wrap
@@ -9,7 +9,7 @@
 //!
 //! Only available when the `egc` feature is enabled (requires `alloc`).
 
-use crate::grid::{Grid, Rect};
+use crate::grid::{Grid, Rect, Size};
 use crate::style::Style;
 use crate::surface::Surface;
 use crate::text::{Line, Span};
@@ -21,15 +21,6 @@ use unicode_width::UnicodeWidthStr;
 // `HAlign`/`VAlign` live in the ungated `crate::align` module (they need nothing from `egc`)
 // and are re-exported here for callers already importing them from `crate::layout`.
 pub use crate::align::{HAlign, VAlign};
-
-/// The display dimensions of a laid-out block of text.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub struct TextMetrics {
-    /// Maximum line width in terminal columns.
-    pub width: u16,
-    /// Number of lines after word-wrapping.
-    pub height: u16,
-}
 
 // ---------------------------------------------------------------------------
 // Internal intermediate types
@@ -53,7 +44,7 @@ struct WrappedLine {
 }
 
 // ---------------------------------------------------------------------------
-// Word-wrap engine (M3)
+// Word-wrap engine
 // ---------------------------------------------------------------------------
 
 /// Greedy word-wrap over a [`Line`]'s spans.
@@ -184,12 +175,12 @@ pub fn wrap(line: &Line, max_width: u16) -> Vec<Line> {
 }
 
 // ---------------------------------------------------------------------------
-// TextLayout builder (M4)
+// TextLayout builder
 // ---------------------------------------------------------------------------
 
 /// Builder for laying out a [`Line`] within a bounded [`Rect`].
 ///
-/// Call [`measure`](TextLayout::measure) to get [`TextMetrics`] without
+/// Call [`measure`](TextLayout::measure) to get its [`Size`] without
 /// touching any surface, or [`render_to_surface`](TextLayout::render_to_surface) to write
 /// directly into a [`Surface`].
 ///
@@ -199,6 +190,7 @@ pub fn wrap(line: &Line, max_width: u16) -> Vec<Line> {
 /// use retroglyph_core::layout::{TextLayout, HAlign, VAlign};
 /// use retroglyph_core::grid::Rect;
 /// use retroglyph_core::text::Line;
+/// use retroglyph_core::HasSize;
 ///
 /// let rect = Rect::new(0, 0, 20, 5);
 /// let line = Line::raw("Hello, world!");
@@ -208,7 +200,7 @@ pub fn wrap(line: &Line, max_width: u16) -> Vec<Line> {
 ///     .h_align(HAlign::Center)
 ///     .measure();
 ///
-/// assert_eq!(metrics.height, 1);
+/// assert_eq!(metrics.height(), 1);
 /// ```
 pub struct TextLayout<'a> {
     line: &'a Line,
@@ -254,21 +246,40 @@ impl<'a> TextLayout<'a> {
         self
     }
 
-    /// Measures the text without rendering, returning its [`TextMetrics`].
+    /// Measures the text without rendering, returning its [`Size`]: `width` is the widest
+    /// wrapped line in columns, `height` is the number of wrapped lines.
     ///
     /// Uses the rect's `width` for word-wrapping; ignores `height`.
     #[must_use]
-    pub fn measure(&self) -> TextMetrics {
+    pub fn measure(&self) -> Size {
         let lines = wrap_line(self.line, self.rect.width());
         let width = lines.iter().map(|l| l.width).max().unwrap_or(0);
         #[allow(clippy::cast_possible_truncation)]
         let height = lines.len().min(u16::MAX as usize) as u16;
-        TextMetrics { width, height }
+        Size::new(width, height)
     }
 
     /// Renders the text into `surface`, clipping to both the rect's bounds and `surface`'s own
     /// clip (the rect is intersected with [`Surface::clip_rect`] first, so text can never escape
     /// whatever clip the caller applied even if `rect` extends past it).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_core::backend::Headless;
+    /// use retroglyph_core::grid::{Pos, Rect};
+    /// use retroglyph_core::layout::TextLayout;
+    /// use retroglyph_core::text::Line;
+    /// use retroglyph_core::Terminal;
+    ///
+    /// let mut term = Terminal::new(Headless::new(20, 5));
+    /// let line = Line::raw("hi");
+    /// TextLayout::new(&line)
+    ///     .rect(Rect::new(2, 1, 10, 3))
+    ///     .render_to_surface(&mut term.surface());
+    ///
+    /// assert_eq!(term.grid()[Pos::new(2, 1)].glyph(), 'h');
+    /// ```
     pub fn render_to_surface(&self, surface: &mut Surface<'_>) {
         let clipped = Self {
             line: self.line,
@@ -281,9 +292,6 @@ impl<'a> TextLayout<'a> {
     }
 
     /// Renders the text into `grid` on `layer`, clipping to the rect's bounds.
-    ///
-    /// The [`Grid`]-level twin of [`render_to_surface`](Self::render_to_surface), for callers
-    /// with no [`Surface`] of their own to hand over.
     pub fn render_to_grid(&self, grid: &mut Grid, layer: u8) {
         let lines = wrap_line(self.line, self.rect.width());
         let rect = self.rect;
@@ -317,6 +325,8 @@ impl<'a> TextLayout<'a> {
 
 #[cfg(test)]
 mod tests {
+    use ixy::HasSize;
+
     use super::*;
     use crate::color::Color;
     use crate::grid::Pos;
@@ -394,8 +404,8 @@ mod tests {
         let m = TextLayout::new(&line)
             .rect(Rect::new(0, 0, 20, 5))
             .measure();
-        assert_eq!(m.width, 5);
-        assert_eq!(m.height, 1);
+        assert_eq!(m.width(), 5);
+        assert_eq!(m.height(), 1);
     }
 
     #[test]
@@ -404,8 +414,8 @@ mod tests {
         let m = TextLayout::new(&line)
             .rect(Rect::new(0, 0, 7, 10))
             .measure();
-        assert_eq!(m.height, 2);
-        assert_eq!(m.width, 5);
+        assert_eq!(m.height(), 2);
+        assert_eq!(m.width(), 5);
     }
 
     // --- TextLayout::render ---
