@@ -395,6 +395,92 @@ fn fill_rect_with_a_wide_glyph_falls_back_to_the_put_loop() {
     }
 }
 
+/// A translated view's `fill_rect`/`clear_region` fallback loop must clip to this surface's own
+/// bounds before iterating, not iterate the caller's full `rect`: a `rect` far larger than the
+/// area (the documented "fill the world rect and let the surface clip" camera idiom) would
+/// otherwise run billions of no-op iterations. See retroglyph#1000.
+#[test]
+fn translated_fill_rect_and_clear_region_clip_a_rect_much_larger_than_the_area() {
+    let mut grid = Grid::new(4, 4);
+    {
+        let mut surface = screen(&mut grid);
+        let mut view = surface.translate((1, 1));
+        view.fill_rect(Rect::new(0, 0, 60_000, 60_000), '#', Style::default());
+    }
+    for y in 0..4 {
+        for x in 0..4 {
+            assert_eq!(grid[Pos::new(x, y)].glyph(), '#', "cell ({x}, {y})");
+        }
+    }
+
+    let mut grid = Grid::new(4, 4);
+    {
+        let mut surface = screen(&mut grid);
+        surface.fill_rect(Rect::new(0, 0, 4, 4), '#', Style::default());
+        let mut view = surface.translate((1, 1));
+        view.clear_region(Rect::new(0, 0, 60_000, 60_000));
+    }
+    for y in 0..4 {
+        for x in 0..4 {
+            assert_eq!(grid[Pos::new(x, y)].glyph(), ' ', "cell ({x}, {y})");
+        }
+    }
+}
+
+/// A tinted surface's `fill_rect` fallback loop must clip to this surface's own bounds before
+/// iterating, not iterate the caller's full `rect`. See retroglyph#1000.
+#[test]
+fn tinted_fill_rect_clips_a_rect_much_larger_than_the_area() {
+    let mut grid = Grid::new(4, 4);
+    {
+        let mut surface = screen(&mut grid);
+        surface
+            .with_tint(Tint::multiply(128, 64, 32))
+            .fill_rect(Rect::new(0, 0, 60_000, 60_000), '#', Style::default());
+    }
+    for y in 0..4 {
+        for x in 0..4 {
+            assert_eq!(grid[Pos::new(x, y)].glyph(), '#', "cell ({x}, {y})");
+            assert_eq!(grid.tint(0, x, y), Tint::multiply(128, 64, 32), "cell ({x}, {y})");
+        }
+    }
+}
+
+/// A wide-glyph `fill_rect` fallback loop must clip to this surface's own bounds before
+/// iterating, not iterate the caller's full `rect`. See retroglyph#1000.
+#[test]
+fn wide_glyph_fill_rect_clips_a_rect_much_larger_than_the_area() {
+    let mut via_fill_rect = Grid::new(4, 4);
+    screen(&mut via_fill_rect).fill_rect(
+        Rect::new(0, 0, 60_000, 60_000),
+        '\u{6f22}',
+        Style::default(),
+    );
+
+    // Same expectation as `fill_rect_with_a_wide_glyph_falls_back_to_the_put_loop`: a
+    // rect-clipped-to-the-area `put` loop, not "every cell holds the glyph" (a 2-column glyph
+    // overwrites every other cell's spacer as the loop advances).
+    let mut via_put = Grid::new(4, 4);
+    {
+        let mut surface = screen(&mut via_put);
+        for y in 0..4 {
+            for x in 0..4 {
+                surface.put((x, y), '\u{6f22}', Style::default());
+            }
+        }
+    }
+
+    for y in 0..4 {
+        for x in 0..4 {
+            assert_eq!(
+                via_fill_rect[Pos::new(x, y)],
+                via_put[Pos::new(x, y)],
+                "cell ({x}, {y})"
+            );
+        }
+    }
+}
+
 /// `fill_rect`, `clear`, and `clear_region` all route through `Grid::fill_region`, which must
 /// clear any span the fill partially overwrites the same way the per-cell loop it replaced
 /// did, or the surviving span's anchor would keep claiming cells the fill just overwrote.
