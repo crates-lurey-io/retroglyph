@@ -49,7 +49,7 @@ testing = []
 # present, so a `std` build gets std math with libm sitting inert. This dependency being
 # unconditional does not itself enable that float-math cost; see the `indexed-quant` feature for
 # what does.
-gem = { version = "0.2", default-features = false }
+gem = { version = "0.2.1", default-features = false }
 # SCREEN/DODGE/BURN/OVERLAY blend modes for `Grid::blit_alpha` (see `BlendMode`); linear blending
 # stays on `gem::Mix`/`gem::rgb::Rgb888::mix_u8` above and needs no math backend. Gated behind the
 # `blend-modes` feature, separately from `indexed-quant`: unrelated capability, unrelated flag.
