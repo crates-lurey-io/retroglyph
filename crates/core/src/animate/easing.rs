@@ -176,6 +176,16 @@ mod tests {
     }
 
     #[test]
+    fn ease_out_bounce_covers_its_middle_two_segments() {
+        // `every_curve_starts_at_0_and_ends_at_1` only samples t=0.0/t=1.0, which land in
+        // `ease_out_bounce`'s first and last piecewise segments (boundaries at 1/D1 ~= 0.364,
+        // 2/D1 ~= 0.727, 2.5/D1 ~= 0.909); these two values land in the second and third
+        // segments instead, so their `crate::math::mul_add` calls get exercised too.
+        assert!((Easing::EaseOutBounce.apply(0.5) - 0.765_625).abs() < 1e-5);
+        assert!((Easing::EaseOutBounce.apply(0.8) - 0.94).abs() < 1e-5);
+    }
+
+    #[test]
     #[allow(clippy::cast_precision_loss)] // i in 0..100 is always exactly representable in f32
     fn elastic_overshoots_past_the_target() {
         // The defining feature of an elastic curve: some t produces a value outside 0..=1.
