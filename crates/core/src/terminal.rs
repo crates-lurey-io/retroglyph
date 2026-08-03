@@ -586,11 +586,14 @@ mod tests {
     use crate::color::Style;
     use crate::tile::Tile;
 
-    /// Wraps [`Headless`] and fails the next [`flush`](Output::flush) call once, then
-    /// forwards everything (including the failed call's `draw_layers`, which already
-    /// reached the inner backend) as normal. Used to exercise `present`'s documented
-    /// error-recovery contract: a failed `flush` must leave the frame's cells marked dirty
-    /// so they are resent on the next successful `present`.
+    /// Wraps [`Headless`] and fails the next [`flush`](Output::flush) or
+    /// [`draw_layers`](Output::draw_layers) call once, then forwards everything (including a
+    /// failed `draw_layers` call's content, which already reached the inner backend) as normal.
+    /// Used to exercise `present`'s documented error-recovery contract: either failure must
+    /// leave the frame's cells marked dirty so they are resent on the next successful `present`.
+    ///
+    /// `composites_layers` is also configurable, so the same helper covers the compositing,
+    /// flatten, and single-layer fast-path branches of `present`.
     ///
     /// `std`-only: its `Output::Error` is `std::io::Error`, purely as a convenient stand-in
     /// error type for this test.
@@ -598,6 +601,8 @@ mod tests {
     struct FlushOnceFailing {
         inner: Headless,
         fail_next_flush: bool,
+        fail_next_draw_layers: bool,
+        composites_layers: bool,
         /// Number of cells received by the most recent `draw_layers` call, so tests can
         /// tell whether a frame's diff was actually sent, independent of `Headless`'s
         /// applied grid (which a real backend might not update until well after `flush`).
@@ -610,6 +615,8 @@ mod tests {
             Self {
                 inner: Headless::new(width, height),
                 fail_next_flush: false,
+                fail_next_draw_layers: false,
+                composites_layers: false,
                 last_draw_len: 0,
             }
         }
@@ -623,6 +630,10 @@ mod tests {
         where
             I: Iterator<Item = DrawCell<'a>>,
         {
+            if self.fail_next_draw_layers {
+                self.fail_next_draw_layers = false;
+                return Err(std::io::Error::other("simulated draw_layers failure"));
+            }
             let content: Vec<_> = content.collect();
             self.last_draw_len = content.len();
             // Infallible in `Headless`; map its error type to ours to keep the wrapper's
@@ -646,6 +657,10 @@ mod tests {
 
         fn clear(&mut self) -> Result<(), Self::Error> {
             self.inner.clear().map_err(|e| match e {})
+        }
+
+        fn composites_layers(&self) -> bool {
+            self.composites_layers
         }
     }
 
@@ -728,6 +743,48 @@ mod tests {
     }
 
     #[test]
+    fn test_terminal_drain_events_into_applies_a_queued_resize() {
+        use alloc::vec::Vec;
+
+        let backend = Headless::new(10, 10);
+        let mut terminal = Terminal::new(backend);
+
+        // Queue a Resize through `requeue_events` (Terminal's own queue) rather than pushing
+        // straight to the backend, so this covers the queued path `drain_events_into` documents.
+        terminal.requeue_events([Event::Close, Event::Resize(4, 2)]);
+
+        let mut buf = Vec::new();
+        terminal.drain_events_into(&mut buf);
+        assert_eq!(buf, [Event::Close, Event::Resize(4, 2)]);
+        // The resize was applied immediately, same as `poll`/`drain_events`, not just handed
+        // back as an inert event for the caller to notice and apply itself.
+        assert_eq!(terminal.size(), Size::new(4, 2));
+    }
+
+    #[test]
+    fn test_terminal_drain_events_is_one_shot_and_fused() {
+        let backend = Headless::new(10, 10);
+        let mut terminal = Terminal::new(backend);
+
+        terminal.backend_mut().push_event(Event::Close);
+        terminal.backend_mut().push_event(Event::Close);
+
+        let mut drained = terminal.drain_events();
+        assert_eq!(drained.next(), Some(Event::Close));
+        assert_eq!(drained.next(), Some(Event::Close));
+        // Fused: repeated calls past exhaustion keep returning `None` rather than panicking.
+        assert_eq!(drained.next(), None);
+        assert_eq!(drained.next(), None);
+        drop(drained);
+
+        // One-shot: a second, independent call after the first already drained the queue sees
+        // only what was pushed since, not a second copy of anything already handed out.
+        terminal.backend_mut().push_event(Event::Close);
+        let second: Vec<_> = terminal.drain_events().collect();
+        assert_eq!(second, [Event::Close]);
+    }
+
+    #[test]
     fn test_terminal_requeue_events_replays_before_the_backend() {
         let backend = Headless::new(10, 10);
         let mut terminal = Terminal::new(backend);
@@ -773,6 +830,24 @@ mod tests {
         // rather than consumed.
         assert_eq!(terminal.size(), Size::new(4, 2));
         assert_eq!(terminal.poll(Duration::ZERO), Some(Event::Resize(4, 2)));
+    }
+
+    #[test]
+    fn test_terminal_requeue_events_interleaves_with_wait_for_input_lookahead() {
+        let backend = Headless::new(10, 10);
+        let mut terminal = Terminal::new(backend);
+
+        // `wait_for_input` buffers one event ahead of anything requeued afterward.
+        terminal.backend_mut().push_event(Event::Close);
+        assert!(terminal.wait_for_input(Duration::MAX));
+
+        // Requeueing now must not jump the queue ahead of the event `wait_for_input` already
+        // buffered: both go through the same internal queue, in call order.
+        terminal.requeue_events([Event::Resize(4, 2)]);
+
+        assert_eq!(terminal.poll(Duration::ZERO), Some(Event::Close));
+        assert_eq!(terminal.poll(Duration::ZERO), Some(Event::Resize(4, 2)));
+        assert_eq!(terminal.poll(Duration::ZERO), None);
     }
 
     #[test]
@@ -881,6 +956,133 @@ mod tests {
             0,
             "needs_full_frame() alone (without composites_layers()) does not widen present's \
              diff-only dispatch; see Output::draw_layers's docs (retroglyph#763)"
+        );
+    }
+
+    /// A `composites_layers() == true` backend, the branch of `present` no real backend in this
+    /// workspace's core tests exercises (`retroglyph-gl`/`retroglyph-software` test their own
+    /// side of the [`Output`] contract, not `present`'s choice between it and a diff).
+    /// `needs_full_frame` is fixed at construction, so one struct covers both dispatch modes.
+    ///
+    /// Unlike [`Headless`], this records the raw `(layer, pos, glyph)` cells it receives instead
+    /// of writing them into a single flat grid: a real compositing backend interprets an
+    /// unwritten (default/blank) cell on a higher layer as transparent, but `Headless::draw_layers`
+    /// writes every cell it's handed literally to one shared grid regardless of layer, so replaying
+    /// a raw multi-layer stream through it (rather than the pre-flattened stream the non-
+    /// compositing path sends) does not reproduce correct compositing.
+    struct CompositingBackend {
+        size: Size,
+        full_frame: bool,
+        last_draw_cells: Vec<(u8, Pos, char)>,
+    }
+
+    impl CompositingBackend {
+        fn new(width: u16, height: u16, full_frame: bool) -> Self {
+            Self {
+                size: Size::new(width, height),
+                full_frame,
+                last_draw_cells: Vec::new(),
+            }
+        }
+    }
+
+    impl Output for CompositingBackend {
+        type Error = core::convert::Infallible;
+
+        fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
+        where
+            I: Iterator<Item = DrawCell<'a>>,
+        {
+            self.last_draw_cells = content
+                .map(|cell| (cell.layer, cell.pos, cell.tile.glyph()))
+                .collect();
+            Ok(())
+        }
+
+        fn flush(&mut self) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        fn size(&self) -> Size {
+            self.size
+        }
+
+        fn clear(&mut self) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        fn composites_layers(&self) -> bool {
+            true
+        }
+
+        fn needs_full_frame(&self) -> bool {
+            self.full_frame
+        }
+    }
+
+    impl Input for CompositingBackend {
+        fn poll_event(&mut self, _timeout: Duration) -> Option<Event> {
+            None
+        }
+    }
+
+    impl Cursor for CompositingBackend {}
+
+    #[test]
+    fn test_composites_layers_diff_dispatches_only_changed_cells() {
+        let mut term = Terminal::new(CompositingBackend::new(3, 1, false));
+        term.draw(|s| {
+            s.put((0, 0), 'a', Style::default());
+            s.put((1, 0), 'b', Style::default());
+        })
+        .expect("draw failed");
+        assert_eq!(
+            term.backend().last_draw_cells.len(),
+            2,
+            "first frame: only the two written cells differ from the pre-allocated blank layer 0"
+        );
+
+        // Second, identical frame: nothing changed, so the compositing branch's diff half sends
+        // nothing, same as the non-compositing diff path.
+        term.draw(|s| {
+            s.put((0, 0), 'a', Style::default());
+            s.put((1, 0), 'b', Style::default());
+        })
+        .expect("draw failed");
+        assert!(
+            term.backend().last_draw_cells.is_empty(),
+            "composites_layers() == true with needs_full_frame() == false still dispatches only \
+             the diff"
+        );
+    }
+
+    #[test]
+    fn test_composites_layers_full_frame_dispatches_every_allocated_cell() {
+        let mut term = Terminal::new(CompositingBackend::new(3, 1, true));
+        term.draw(|s| {
+            s.put((0, 0), 'a', Style::default());
+            s.put((1, 0), 'b', Style::default());
+        })
+        .expect("draw failed");
+        assert_eq!(
+            term.backend().last_draw_cells.len(),
+            3,
+            "first frame: every cell in the sole allocated layer (width 3), not just the two \
+             written ones"
+        );
+
+        // Second, identical frame: unlike the diff branch above, needs_full_frame() actually
+        // takes effect here, so the whole layer is resent rather than an empty diff.
+        term.draw(|s| {
+            s.put((0, 0), 'a', Style::default());
+            s.put((1, 0), 'b', Style::default());
+        })
+        .expect("draw failed");
+        assert_eq!(
+            term.backend().last_draw_cells.len(),
+            3,
+            "composites_layers() == true with needs_full_frame() == true resends every allocated \
+             cell on every present"
         );
     }
 
@@ -1044,6 +1246,35 @@ mod tests {
         assert_eq!(term.backend().grid()[Pos::new(1, 0)].glyph(), '@');
     }
 
+    #[test]
+    fn test_present_transition_multi_to_single_to_multi_layer() {
+        // The reverse of the transition above: multi-layer (flatten path) drops back to
+        // single-layer (fast path, sets `flattened_stale`), then multi-layer again. The frame
+        // that returns to multi-layer must see `flattened_previous` cleared rather than diffed
+        // against the stale content the fast path bypassed, or the reintroduced layer's cells
+        // would wrongly look unchanged.
+        let mut term = Terminal::new(Headless::new(2, 1));
+        term.draw(|s| {
+            s.put((0, 0), '.', Style::default());
+            s.on_layer(1).put((1, 0), '@', Style::default());
+        })
+        .expect("draw failed");
+
+        // Single-layer frame: fast path, `flattened_stale` set.
+        term.draw(|s| s.put((0, 0), '.', Style::default()))
+            .expect("draw failed");
+        assert_eq!(term.backend().grid()[Pos::new(1, 0)].glyph(), ' ');
+
+        // Back to multi-layer: must composite correctly despite the intervening fast-path frame.
+        term.draw(|s| {
+            s.put((0, 0), '.', Style::default());
+            s.on_layer(1).put((1, 0), '@', Style::default());
+        })
+        .expect("draw failed");
+        assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), '.');
+        assert_eq!(term.backend().grid()[Pos::new(1, 0)].glyph(), '@');
+    }
+
     #[cfg(feature = "std")]
     #[test]
     fn present_resends_cells_after_a_failed_flush_on_the_multi_layer_path() {
@@ -1081,6 +1312,72 @@ mod tests {
 
     #[cfg(feature = "std")]
     #[test]
+    fn present_resends_cells_after_a_failed_draw_layers_on_the_multi_layer_path() {
+        // `draw_layers` is the other documented early return in `present`: it must leave
+        // `previous`/`flattened_previous` untouched, same as a failed `flush`, so the next
+        // `present` resends everything rather than silently dropping it.
+        let mut term = Terminal::new(FlushOnceFailing::new(2, 1));
+
+        term.backend_mut().fail_next_draw_layers = true;
+        let result = term.draw(|s| {
+            s.put((0, 0), 'a', Style::default());
+            s.on_layer(1).put((1, 0), 'b', Style::default());
+        });
+        assert!(
+            result.is_err(),
+            "draw_layers was expected to fail this frame"
+        );
+        assert_eq!(
+            term.backend().last_draw_len,
+            0,
+            "a failed draw_layers call never recorded any content on the wrapper"
+        );
+
+        // Same content, draw_layers succeeds this time.
+        term.draw(|s| {
+            s.put((0, 0), 'a', Style::default());
+            s.on_layer(1).put((1, 0), 'b', Style::default());
+        })
+        .expect("draw failed");
+        assert_eq!(
+            term.backend().last_draw_len,
+            2,
+            "both cells must be resent since neither ever reached the screen"
+        );
+        assert_eq!(term.backend().inner.grid()[Pos::new(0, 0)].glyph(), 'a');
+        assert_eq!(term.backend().inner.grid()[Pos::new(1, 0)].glyph(), 'b');
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn present_resends_cells_after_a_failed_flush_on_the_single_layer_fast_path() {
+        // Only layer 0 is ever touched, so `present` takes the fast path that diffs the raw
+        // grids directly, skipping the flatten buffers entirely.
+        let mut term = Terminal::new(FlushOnceFailing::new(2, 1));
+
+        term.backend_mut().fail_next_flush = true;
+        let result = term.draw(|s| s.put((0, 0), 'a', Style::default()));
+        assert!(result.is_err(), "flush was expected to fail this frame");
+        assert_eq!(
+            term.backend().last_draw_len,
+            1,
+            "the failed frame's diff should still have been sent to draw_layers"
+        );
+
+        // Nothing drawn this time: if the fast path's diff had already been swapped forward on
+        // the failed attempt, this frame would see no change and resend nothing.
+        term.draw(|s| s.put((0, 0), 'a', Style::default()))
+            .expect("draw failed");
+        assert_eq!(
+            term.backend().last_draw_len,
+            1,
+            "the cell must be resent since it never reached the screen"
+        );
+        assert_eq!(term.backend().inner.grid()[Pos::new(0, 0)].glyph(), 'a');
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
     fn present_failure_does_not_leak_the_failed_frames_content_into_the_next_frame() {
         // Single-layer terminal so `present` takes the fast path, matching the issue's repro.
         let mut term = Terminal::new(FlushOnceFailing::new(3, 1));
@@ -1101,6 +1398,45 @@ mod tests {
             "only the redrawn cell should be sent; the failed frame's 'X' must not leak back in"
         );
         assert_eq!(term.backend().inner.grid()[Pos::new(0, 0)].glyph(), 'A');
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn present_resends_cells_after_a_failed_flush_on_the_compositing_path() {
+        // `composites_layers() == true` takes `present`'s first branch entirely, bypassing both
+        // the fast path and the flatten buffers; a failed flush there must still leave `previous`
+        // untouched so the raw per-layer diff is resent.
+        let mut term = Terminal::new(FlushOnceFailing::new(2, 1));
+        term.backend_mut().composites_layers = true;
+
+        // Layer 1 is newly allocated this frame, so its diff against an absent previous layer
+        // includes every cell in its width (see `Grid::diff`'s "newly allocated layer" case), not
+        // just the one actually written; layer 0 contributes only its one real change.
+        term.backend_mut().fail_next_flush = true;
+        let result = term.draw(|s| {
+            s.put((0, 0), 'a', Style::default());
+            s.on_layer(1).put((1, 0), 'b', Style::default());
+        });
+        assert!(result.is_err(), "flush was expected to fail this frame");
+        assert_eq!(
+            term.backend().last_draw_len,
+            3,
+            "the failed frame's diff should still have been sent to draw_layers"
+        );
+
+        // Same content, flush succeeds this time. If `previous` had already been swapped forward
+        // on the failed attempt, layer 1 would no longer be "newly allocated" and this diff would
+        // shrink to just the real changes instead of resending the same content.
+        term.draw(|s| {
+            s.put((0, 0), 'a', Style::default());
+            s.on_layer(1).put((1, 0), 'b', Style::default());
+        })
+        .expect("draw failed");
+        assert_eq!(
+            term.backend().last_draw_len,
+            3,
+            "the same diff must be resent since it never reached the screen"
+        );
     }
 
     #[test]
@@ -1127,6 +1463,21 @@ mod tests {
     fn test_terminal_area() {
         let term = Terminal::new(Headless::new(40, 20));
         assert_eq!(term.area(), Rect::new(0, 0, 40, 20));
+    }
+
+    #[test]
+    fn test_terminal_present_count_advances_once_per_present_call() {
+        let mut term = Terminal::new(Headless::new(2, 1));
+        assert_eq!(term.present_count(), 0);
+
+        term.draw(|_| {}).expect("draw failed"); // `draw` always presents.
+        assert_eq!(term.present_count(), 1);
+
+        term.present().expect("present failed");
+        assert_eq!(term.present_count(), 2);
+
+        term.present().expect("present failed");
+        assert_eq!(term.present_count(), 3);
     }
 
     #[test]
@@ -1245,6 +1596,33 @@ mod tests {
         assert_eq!(term.backend().grid()[Pos::new(4, 4)].glyph(), 'B');
         // (0,0) was not redrawn this frame; backend retains 'A' from before resize.
         assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), 'A');
+    }
+
+    #[test]
+    fn test_terminal_resize_clears_pending_retention() {
+        use crate::surface::Layer;
+
+        // `resize` clearing `previous` alone can't distinguish "retention cleared" from
+        // "retention still active": a retained blit from an already-blank `previous` looks the
+        // same as no retention at all. So this redraws `World` with new content right after the
+        // resize: if retention had survived, `present`'s pre-diff blit would silently overwrite
+        // that fresh draw with `previous`'s (blank) content before the diff ever ran, leaving the
+        // backend showing stale pre-resize content instead of the new frame.
+        let mut term = Terminal::new(Headless::new(3, 1));
+        term.draw(|s| s.on_tier(Layer::World).put((0, 0), 'W', Style::default()))
+            .expect("draw failed");
+
+        term.retain_layer(Layer::World);
+        term.resize(3, 1);
+
+        term.draw(|s| s.on_tier(Layer::World).put((0, 0), 'X', Style::default()))
+            .expect("draw failed");
+        assert_eq!(
+            term.backend().grid()[Pos::new(0, 0)].glyph(),
+            'X',
+            "pending retention must not survive resize: a still-active blit from the \
+             (resize-cleared) previous frame would have overwritten this fresh draw"
+        );
     }
 
     // --- retain_layer ---
@@ -1389,6 +1767,35 @@ mod tests {
         term.retain_layer(Layer::World);
         term.draw(|_| {}).expect("draw failed");
         assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), 'A');
+    }
+
+    #[test]
+    fn test_retain_layer_skips_redraw_on_a_compositing_backend() {
+        use crate::surface::Layer;
+
+        // `composites_layers() == true` takes `present`'s first branch entirely; `retain_layer`'s
+        // pre-diff copy from `previous` (`Grid::copy_layer_from`) runs before that branch, so it
+        // must still apply here: the retained layer's cell should be re-synced (and so absent
+        // from the diff, since it now matches `previous`) rather than diffed as a real change.
+        let mut term = Terminal::new(CompositingBackend::new(3, 1, false));
+        term.draw(|s| s.on_tier(Layer::World).put((0, 0), 'W', Style::default()))
+            .expect("draw failed");
+
+        term.retain_layer(Layer::World);
+        term.draw(|s| s.on_tier(Layer::Hud).put((1, 0), 'H', Style::default()))
+            .expect("draw failed");
+
+        let cells = &term.backend().last_draw_cells;
+        assert!(
+            !cells
+                .iter()
+                .any(|&(layer, pos, _)| layer == 0 && pos == Pos::new(0, 0)),
+            "retained layer's unchanged cell must not be re-sent as a diff: {cells:?}"
+        );
+        assert!(
+            cells.contains(&(1, Pos::new(1, 0), 'H')),
+            "the newly drawn Hud cell must still be sent: {cells:?}"
+        );
     }
 
     #[test]
