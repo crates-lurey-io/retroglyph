@@ -9,6 +9,7 @@ use crate::backend::{Backend, Output};
 use crate::event::Event;
 use crate::grid::{Grid, Rect, Size};
 use crate::surface::Surface;
+use alloc::collections::VecDeque;
 use alloc::vec::Vec;
 use core::time::Duration;
 
@@ -46,7 +47,12 @@ pub struct Terminal<B: Backend> {
     flattened_current: Grid,
     flattened_previous: Grid,
     backend: B,
-    queued_event: Option<Event>,
+    /// Events waiting to be handed out by [`poll`](Self::poll) before the backend is polled
+    /// again: the [`has_input`](Self::has_input)/[`wait_for_input`](Self::wait_for_input) lookahead
+    /// buffers a single event here, and [`requeue_events`](Self::requeue_events) lets a wrapper
+    /// (e.g. `PerfOverlayApp`) hand back events it drained but didn't consume, entirely through
+    /// `Terminal` itself rather than a backend-specific input path.
+    queued_events: VecDeque<Event>,
     /// `true` when the flatten buffers no longer reflect the last frame sent to
     /// the backend (because the single-layer fast path bypassed them). The next
     /// multi-layer present clears `flattened_previous` first so it does a full
@@ -83,7 +89,7 @@ impl<B: Backend> Terminal<B> {
             flattened_current,
             flattened_previous,
             backend,
-            queued_event: None,
+            queued_events: VecDeque::new(),
             flattened_stale: false,
             present_count: 0,
             retained_layers: Vec::new(),
@@ -347,13 +353,26 @@ impl<B: Backend> Terminal<B> {
     /// redraw at the new size.
     pub fn poll(&mut self, timeout: Duration) -> Option<Event> {
         let event = self
-            .queued_event
-            .take()
+            .queued_events
+            .pop_front()
             .or_else(|| self.backend.poll_event(timeout))?;
         if let Event::Resize(w, h) = event {
             self.resize(w, h);
         }
         Some(event)
+    }
+
+    /// Hands `events` back to this terminal's own queue, in order, so a later
+    /// [`poll`](Self::poll)/[`drain_events`](Self::drain_events)/[`drain_events_into`](Self::drain_events_into)
+    /// call yields them again before the backend is polled for anything new.
+    ///
+    /// This is the supported way for a wrapper that drains events to intercept some of them
+    /// (e.g. [`PerfOverlayApp`](crate::PerfOverlayApp) filtering out its own toggle key) to give
+    /// the rest back: it goes through `Terminal`'s own queue, never a backend-specific input
+    /// path, so it works identically on every [`Backend`] regardless of how (or whether) that
+    /// backend implements [`Input::push_event`](crate::backend::Input::push_event).
+    pub fn requeue_events(&mut self, events: impl IntoIterator<Item = Event>) {
+        self.queued_events.extend(events);
     }
 
     /// Reads an input event, blocking indefinitely until one is available.
@@ -457,7 +476,7 @@ impl<B: Backend> Terminal<B> {
     /// return promptly rather than actually waiting; this method is a real wait only on
     /// backends that genuinely block (crossterm, window).
     pub fn wait_for_input(&mut self, timeout: Duration) -> bool {
-        if self.queued_event.is_some() {
+        if !self.queued_events.is_empty() {
             return true;
         }
         let Some(event) = self.backend.poll_event(timeout) else {
@@ -466,7 +485,7 @@ impl<B: Backend> Terminal<B> {
         if let Event::Resize(w, h) = event {
             self.resize(w, h);
         }
-        self.queued_event = Some(event);
+        self.queued_events.push_back(event);
         true
     }
 }
@@ -609,6 +628,21 @@ mod tests {
         // Draining again with nothing pending clears the buffer.
         terminal.drain_events_into(&mut buf);
         assert!(buf.is_empty());
+    }
+
+    #[test]
+    fn test_terminal_requeue_events_replays_before_the_backend() {
+        let backend = Headless::new(10, 10);
+        let mut terminal = Terminal::new(backend);
+
+        // Push directly to the backend first, so a requeued event has to come out ahead of it.
+        terminal.backend_mut().push_event(Event::Close);
+        terminal.requeue_events([Event::Resize(80, 25), Event::Resize(1, 1)]);
+
+        assert_eq!(terminal.poll(Duration::ZERO), Some(Event::Resize(80, 25)));
+        assert_eq!(terminal.poll(Duration::ZERO), Some(Event::Resize(1, 1)));
+        assert_eq!(terminal.poll(Duration::ZERO), Some(Event::Close));
+        assert_eq!(terminal.poll(Duration::ZERO), None);
     }
 
     #[test]
