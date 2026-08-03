@@ -22,8 +22,16 @@ impl Grid {
     /// write via [`put_tile`](Self::put_tile); the layer table itself only
     /// grows as far as the highest layer id ever written, not all 256 slots
     /// up front.
+    ///
+    /// `width` and `height` are each clamped to a minimum of 1: a backend can legitimately
+    /// report a zero-width or zero-height surface (e.g. a minimized window, or a surface queried
+    /// before the first configure), and this keeps that case a usable 1x1 grid instead of a
+    /// panic. [`resize`](Self::resize) does not clamp and allows shrinking back down to 0 on
+    /// either axis.
     #[must_use]
     pub fn new(width: u16, height: u16) -> Self {
+        let width = width.max(1);
+        let height = height.max(1);
         Self {
             width,
             height,
@@ -406,6 +414,51 @@ mod tests {
         let grid = Grid::new(80, 25);
         assert_eq!(grid.width(), 80);
         assert_eq!(grid.height(), 25);
+    }
+
+    #[test]
+    fn test_grid_new_zero_width_clamps_to_one() {
+        let grid = Grid::new(0, 5);
+        assert_eq!(grid.width(), 1);
+        assert_eq!(grid.height(), 5);
+    }
+
+    #[test]
+    fn test_grid_new_zero_height_clamps_to_one() {
+        let grid = Grid::new(5, 0);
+        assert_eq!(grid.width(), 5);
+        assert_eq!(grid.height(), 1);
+    }
+
+    #[test]
+    fn test_grid_new_zero_by_zero_clamps_to_one_by_one() {
+        let grid = Grid::new(0, 0);
+        assert_eq!(grid.width(), 1);
+        assert_eq!(grid.height(), 1);
+    }
+
+    #[test]
+    fn test_grid_resize_to_zero_width_is_allowed() {
+        let mut grid = Grid::new(5, 5);
+        grid.resize(0, 5);
+        assert_eq!(grid.width(), 0);
+        assert_eq!(grid.height(), 5);
+    }
+
+    #[test]
+    fn test_grid_resize_to_zero_height_is_allowed() {
+        let mut grid = Grid::new(5, 5);
+        grid.resize(5, 0);
+        assert_eq!(grid.width(), 5);
+        assert_eq!(grid.height(), 0);
+    }
+
+    #[test]
+    fn test_grid_resize_to_zero_by_zero_is_allowed() {
+        let mut grid = Grid::new(5, 5);
+        grid.resize(0, 0);
+        assert_eq!(grid.width(), 0);
+        assert_eq!(grid.height(), 0);
     }
 
     #[test]

@@ -12,14 +12,10 @@ use retroglyph_core::Grid;
 /// The result's width is the sum of the input widths; its height is the
 /// tallest input. Each grid is placed top-aligned; cells below a shorter
 /// grid are left untouched (empty, per [`Grid::new`]'s default tiles). For
-/// an empty slice, returns a 1-wide, 0-tall grid: [`Grid::new`] panics on a
-/// width of zero (it divides by width internally), so a 1×0 grid is as
-/// close to "empty" as an actual `Grid` can represent.
+/// an empty slice, returns a 1×1 grid: [`Grid::new`] clamps a zero width or
+/// height to 1, so a 1×1 grid is the closest representable "empty".
 #[must_use]
 pub fn join_h(grids: &[Grid]) -> Grid {
-    if grids.is_empty() {
-        return Grid::new(1, 0);
-    }
     let width = grids
         .iter()
         .fold(0u16, |acc, g| acc.saturating_add(g.width()));
@@ -39,13 +35,10 @@ pub fn join_h(grids: &[Grid]) -> Grid {
 /// The result's height is the sum of the input heights; its width is the
 /// widest input. Each grid is placed left-aligned; cells past a narrower
 /// grid's width are left untouched (empty, per [`Grid::new`]'s default
-/// tiles). For an empty slice, returns a 1-wide, 0-tall grid: see [`join_h`]
-/// for why a zero-width grid isn't representable.
+/// tiles). For an empty slice, returns a 1×1 grid: see [`join_h`] for why a
+/// zero-sized grid isn't representable.
 #[must_use]
 pub fn join_v(grids: &[Grid]) -> Grid {
-    if grids.is_empty() {
-        return Grid::new(1, 0);
-    }
     let width = grids.iter().map(Grid::width).max().unwrap_or(0);
     let height = grids
         .iter()
@@ -98,12 +91,12 @@ mod tests {
 
     #[test]
     fn join_empty_slice_is_essentially_empty() {
-        // Grid::new(0, _) always panics (it divides by width internally),
-        // so a 1-wide, 0-tall grid is the closest representable "empty".
+        // Grid::new clamps a zero width or height to 1, so a 1x1 grid is the closest
+        // representable "empty".
         let joined = join_h(&[]);
-        assert_eq!((joined.width(), joined.height()), (1, 0));
+        assert_eq!((joined.width(), joined.height()), (1, 1));
         let joined = join_v(&[]);
-        assert_eq!((joined.width(), joined.height()), (1, 0));
+        assert_eq!((joined.width(), joined.height()), (1, 1));
     }
 
     #[test]

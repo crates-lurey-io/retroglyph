@@ -77,6 +77,9 @@ pub struct Terminal<B: Backend> {
 impl<B: Backend> Terminal<B> {
     /// Create a terminal with the given backend.
     /// Grid dimensions are queried from the backend.
+    ///
+    /// A backend-reported dimension of 0 (e.g. a minimized window, or a surface queried before
+    /// the first configure) is clamped to 1; see [`Grid::new`].
     #[must_use]
     pub fn new(backend: B) -> Self {
         let size = backend.size();
@@ -920,6 +923,34 @@ mod tests {
     fn test_terminal_area() {
         let term = Terminal::new(Headless::new(40, 20));
         assert_eq!(term.area(), Rect::new(0, 0, 40, 20));
+    }
+
+    #[test]
+    fn test_terminal_new_zero_width_backend_does_not_panic() {
+        let term = Terminal::new(Headless::new(0, 5));
+        assert_eq!(term.size(), Size::new(1, 5));
+    }
+
+    #[test]
+    fn test_terminal_new_zero_height_backend_does_not_panic() {
+        let term = Terminal::new(Headless::new(5, 0));
+        assert_eq!(term.size(), Size::new(5, 1));
+    }
+
+    #[test]
+    fn test_terminal_new_zero_by_zero_backend_does_not_panic() {
+        let term = Terminal::new(Headless::new(0, 0));
+        assert_eq!(term.size(), Size::new(1, 1));
+    }
+
+    #[test]
+    fn test_terminal_resize_to_zero_by_zero_is_allowed() {
+        let mut term = Terminal::new(Headless::new(10, 10));
+        term.resize(0, 0);
+        assert_eq!(term.size(), Size::new(0, 0));
+        // Resizing back up afterwards still works.
+        term.resize(10, 10);
+        assert_eq!(term.size(), Size::new(10, 10));
     }
 
     #[test]
