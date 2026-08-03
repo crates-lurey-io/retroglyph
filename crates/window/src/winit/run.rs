@@ -657,7 +657,7 @@ where
 /// `dt` measured via [`web_time::Instant`]: a plain [`std::time::Instant`]
 /// re-export on native, backed by the browser's `Performance.now()` on
 /// `wasm32` (where `std::time::Instant` itself is unavailable). Calls
-/// [`step`](retroglyph_core::step).
+/// [`App::update`](retroglyph_core::App::update).
 ///
 /// On [`Flow::Exit`](retroglyph_core::Flow) the event loop exits gracefully
 /// (via [`ActiveEventLoop::exit`]) instead of force-exiting the process, so
@@ -769,7 +769,7 @@ where
                 frame: frame_count,
             };
             frame_count = frame_count.wrapping_add(1);
-            match retroglyph_core::step(term, &mut app, &frame) {
+            match app.update(term, &frame) {
                 retroglyph_core::Flow::Exit => exit_requested_in_loop.set(true),
                 // Nothing changed: tell `handle_redraw_requested` to skip its automatic present
                 // for this frame. `Terminal::present` always presents unconditionally, so this

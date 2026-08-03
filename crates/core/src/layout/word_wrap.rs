@@ -1,6 +1,6 @@
 //! Greedy grapheme-cluster-aware word-wrap engine, shared by [`super::TextLayout`] and [`wrap`].
 
-use crate::style::Style;
+use crate::color::Style;
 use crate::text::{Line, Span};
 use alloc::string::String;
 use alloc::vec::Vec;

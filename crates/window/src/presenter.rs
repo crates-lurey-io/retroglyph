@@ -386,8 +386,8 @@ pub const fn cell_art_glyph(tile: &Tile) -> Option<char> {
 #[cfg(test)]
 mod cell_art_glyph_tests {
     use super::cell_art_glyph;
+    use retroglyph_core::color::Style;
     use retroglyph_core::grid::Grid;
-    use retroglyph_core::style::Style;
     use retroglyph_core::tile::Tile;
 
     #[test]

@@ -49,11 +49,12 @@
 //! its own to exercise, so that combination is instead pinned by a `Terminal`-level test rather
 //! than by this module.
 
-use crate::backend::{Cursor, DrawCell, Input, Output};
+use crate::backend::{Cursor, CursorStyle, DrawCell, Input, Output};
+use crate::color::Style;
 use crate::event::{Event, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use crate::grid::{Pos, Size};
-use crate::style::Style;
 use crate::tile::Tile;
+use alloc::vec::Vec;
 use core::time::Duration;
 use ixy::HasSize;
 
@@ -270,6 +271,54 @@ pub fn assert_cursor_contract<B: Observable + Cursor, F: FnMut(Size) -> B>(mut m
          cursor in sync with reality, the same as an ordinary draw does: the next draw must \
          still emit whatever cursor-move is needed to reach its position (retroglyph#713)"
     );
+}
+
+/// Every [`CursorStyle`] variant, in the order [`Cursor::set_cursor_style`]'s docs describe.
+const CURSOR_STYLE_VARIANTS: [CursorStyle; 6] = [
+    CursorStyle::BlinkingBlock,
+    CursorStyle::SteadyBlock,
+    CursorStyle::BlinkingUnderline,
+    CursorStyle::SteadyUnderline,
+    CursorStyle::BlinkingBar,
+    CursorStyle::SteadyBar,
+];
+
+/// Drives `B` through [`Cursor::set_cursor_style`]'s obligation: each [`CursorStyle`] variant
+/// must have its own distinct, observable effect (retroglyph#920).
+///
+/// `crossterm` and `terminal-wasm` each map every `CursorStyle` variant to a DECSCUSR parameter
+/// via their own independent `match`, with no shared source of truth between the two; this
+/// assertion doesn't compare backends against each other (their emitted bytes differ by design),
+/// but it does pin, once per backend, that the six variants aren't accidentally collapsed onto
+/// fewer than six distinct behaviors (e.g. two arms sharing a fallthrough).
+///
+/// # Panics
+///
+/// Panics if two distinct `CursorStyle` variants produce the same digest, or if any `Output`
+/// call returns `Err`.
+pub fn assert_cursor_style_contract<B: Observable + Cursor, F: FnMut(Size) -> B>(mut make: F) {
+    let size = Size::new(5, 1);
+
+    let mut backend = make(size);
+    let _ = backend.snapshot(); // Discard whatever construction/resize emitted.
+
+    let mut digests = Vec::with_capacity(CURSOR_STYLE_VARIANTS.len());
+    for style in CURSOR_STYLE_VARIANTS {
+        backend.set_cursor_style(style);
+        let _ = backend.flush();
+        digests.push(backend.snapshot());
+    }
+
+    for (i, &a) in digests.iter().enumerate() {
+        for (j, &b) in digests.iter().enumerate().skip(i + 1) {
+            assert_ne!(
+                a, b,
+                "CursorStyle::{:?} and CursorStyle::{:?} must produce distinct backend effects; \
+                 a match arm has collided or fallen through (retroglyph#920)",
+                CURSOR_STYLE_VARIANTS[i], CURSOR_STYLE_VARIANTS[j]
+            );
+        }
+    }
 }
 
 /// Drives `B` through [`Input`]'s coalescing obligation.

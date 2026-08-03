@@ -222,7 +222,7 @@ fn write_sgr_color<W: Write>(out: &mut W, color: Color, base: u8, reset: u8) -> 
 /// use retroglyph_core::DrawCell;
 /// use retroglyph_core::color::{AnsiColor, Color};
 /// use retroglyph_core::grid::Pos;
-/// use retroglyph_core::style::Style;
+/// use retroglyph_core::color::Style;
 /// use retroglyph_core::tile::Tile;
 /// use retroglyph_terminal::TerminalRenderer;
 ///
@@ -729,8 +729,8 @@ impl<W: Write + io::IsTerminal> TerminalRenderer<W> {
 mod tests {
     use super::*;
     use retroglyph_core::color::AnsiColor;
+    use retroglyph_core::color::Style;
     use retroglyph_core::grid::Pos;
-    use retroglyph_core::style::Style;
     use retroglyph_core::tile::Tile;
 
     fn render_one(tile: &Tile) -> String {

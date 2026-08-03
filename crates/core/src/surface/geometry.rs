@@ -1,6 +1,6 @@
+use crate::color::Style;
 use crate::color::{Color, Tint};
 use crate::grid::{Grid, Pos, Rect};
-use crate::style::Style;
 use crate::tile::Tile;
 
 use super::styled::StyledSurface;

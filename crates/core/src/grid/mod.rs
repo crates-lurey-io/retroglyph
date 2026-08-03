@@ -15,7 +15,7 @@
 //! sub-cell pixel offsets. [`Color`](crate::color::Color) covers the full spectrum: the
 //! terminal's default foreground/background, the 16 standard ANSI colors, the 256-color
 //! palette, and 24-bit RGB.
-//! [`Style`](crate::style::Style) has no text modifiers (bold, italic, underline, ...);
+//! [`Style`](crate::color::Style) has no text modifiers (bold, italic, underline, ...);
 //! see its own doc comment for the full rationale.
 //!
 //! ## Draw order

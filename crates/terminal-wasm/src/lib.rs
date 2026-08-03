@@ -107,7 +107,7 @@
 //! | `CSI 2J` then `CSI H` | ED (erase display) + CUP home | [`clear`](Output::clear) | clear the screen, then move the cursor to `(1, 1)` |
 //!
 //! retroglyph does not model text attributes (bold, italic, underline, etc.; see
-//! [`retroglyph_core::style::Style`]'s docs for why), so no SGR attribute codes (`1`, `3`, `4`,
+//! [`retroglyph_core::color::Style`]'s docs for why), so no SGR attribute codes (`1`, `3`, `4`,
 //! ...) are ever emitted here; only the color and cursor/erase sequences above. Glyph bytes
 //! themselves (see [`take_output`](TerminalWasm::take_output)) are plain UTF-8, not an escape
 //! sequence.
@@ -1476,6 +1476,13 @@ mod tests {
     #[ignore = "retroglyph#713: set_cursor_position doesn't resync the renderer's tracked cursor"]
     fn satisfies_the_cursor_contract() {
         retroglyph_core::testing::conformance::assert_cursor_contract(|size| {
+            TerminalWasm::new(size.width(), size.height())
+        });
+    }
+
+    #[test]
+    fn satisfies_the_cursor_style_contract() {
+        retroglyph_core::testing::conformance::assert_cursor_style_contract(|size| {
             TerminalWasm::new(size.width(), size.height())
         });
     }

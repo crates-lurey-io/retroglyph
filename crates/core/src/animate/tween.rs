@@ -96,6 +96,21 @@ impl Tween {
         self.elapsed >= self.duration
     }
 
+    /// The value this tween is animating toward: what [`value`](Self::value) equals once
+    /// [`is_finished`](Self::is_finished), and what [`retarget`](Self::retarget) last set it to.
+    #[must_use]
+    pub const fn target(&self) -> f32 {
+        self.to
+    }
+
+    /// The value this tween started animating from: either the `from` passed to [`new`](Self::new)
+    /// or, after a [`retarget`](Self::retarget), the [`value`](Self::value) at the moment of that
+    /// retarget.
+    #[must_use]
+    pub const fn origin(&self) -> f32 {
+        self.from
+    }
+
     /// Redirects the animation toward a new target, smoothly: the current
     /// [`value`](Self::value) becomes the new start, elapsed time resets to zero, and `target`
     /// becomes the new end. `duration`/`easing` are unchanged.
@@ -175,6 +190,58 @@ mod tests {
 
         tween.update(Duration::from_millis(100));
         assert_eq!(tween.value(), 20.0);
+    }
+
+    #[test]
+    fn target_and_origin_report_to_and_from() {
+        let tween = Tween::new(10.0, 20.0).duration(Duration::from_millis(100));
+        assert_eq!(tween.origin(), 10.0);
+        assert_eq!(tween.target(), 20.0);
+    }
+
+    #[test]
+    fn retarget_updates_target_and_origin_to_where_the_tween_actually_is() {
+        let mut tween = Tween::new(0.0, 10.0).duration(Duration::from_millis(100));
+        tween.update(Duration::from_millis(50)); // halfway: value() == 5.0
+
+        tween.retarget(20.0);
+        // `origin` becomes wherever the tween actually was, not the original `from`.
+        assert_eq!(tween.origin(), 5.0);
+        assert_eq!(tween.target(), 20.0);
+    }
+
+    #[test]
+    #[allow(clippy::cast_precision_loss)] // i in 0..100 is always exactly representable in f32
+    fn retarget_from_an_elastic_overshoot_still_finishes_at_the_new_target() {
+        const DURATION: Duration = Duration::from_millis(100);
+
+        let mut tween = Tween::new(0.0, 1.0)
+            .duration(DURATION)
+            .easing(Easing::EaseOutElastic);
+
+        // Find a millisecond offset that lands mid-overshoot, the same sampling approach
+        // `elastic_overshoots_past_the_target` (easing.rs) uses to prove the curve overshoots at
+        // all: this test additionally needs the *specific* offset, to retarget from it.
+        let overshoot_millis = (0..100)
+            .find(|&i| !(0.0..=1.0).contains(&Easing::EaseOutElastic.apply(i as f32 / 100.0)))
+            .expect("EaseOutElastic should overshoot somewhere in its first 100 samples");
+        tween.update(Duration::from_millis(overshoot_millis));
+        let overshot = tween.value();
+        assert!(
+            !(0.0..=1.0).contains(&overshot),
+            "expected an overshot value, got {overshot}"
+        );
+
+        tween.retarget(5.0);
+        // No snap: retargeting starts from the overshot value, even though it's outside the
+        // original 0.0..=1.0 endpoints.
+        assert_eq!(tween.value(), overshot);
+
+        tween.update(DURATION);
+        // Regardless of how far from the endpoints the retarget started, a full duration later
+        // the tween has converged exactly on the new target.
+        assert_eq!(tween.value(), 5.0);
+        assert!(tween.is_finished());
     }
 
     #[test]

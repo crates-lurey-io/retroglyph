@@ -796,8 +796,8 @@ mod compositing_tests {
     use retroglyph_core::DrawCell;
     use retroglyph_core::backend::Output;
     use retroglyph_core::color::Color;
+    use retroglyph_core::color::Style;
     use retroglyph_core::grid::Pos;
-    use retroglyph_core::style::Style;
     use retroglyph_core::tile::Tile;
 
     const RED: Color = Color::Rgb { r: 255, g: 0, b: 0 };
@@ -1099,8 +1099,8 @@ mod dropped_tint_tests {
     use retroglyph_core::DrawCell;
     use retroglyph_core::Tint;
     use retroglyph_core::backend::Output;
+    use retroglyph_core::color::Style;
     use retroglyph_core::grid::Pos;
-    use retroglyph_core::style::Style;
     use retroglyph_core::tile::Tile;
     use retroglyph_window::tileset::{Codepage, TilesetOptions};
 

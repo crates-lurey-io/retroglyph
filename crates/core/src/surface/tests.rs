@@ -1,6 +1,6 @@
+use crate::color::Style;
 use crate::color::{Color, Tint};
 use crate::grid::{Grid, Offset, Pos, Rect};
-use crate::style::Style;
 use crate::text::Line;
 use crate::tile::Tile;
 

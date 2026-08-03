@@ -1588,7 +1588,7 @@ mod tests {
             .build_with_writer(Vec::new())
             .expect("building against a Vec<u8> writer with all TTY features disabled must not require a real terminal");
 
-        let tile = Tile::new('X', retroglyph_core::style::Style::default());
+        let tile = Tile::new('X', retroglyph_core::color::Style::default());
 
         // Establish tracked cursor state at (0, 0): a second draw at the same position would
         // normally skip the `MoveTo` escape since the cursor is already tracked as being there.
@@ -1636,8 +1636,8 @@ mod tests {
             .build_with_writer(Vec::new())
             .expect("building against a Vec<u8> writer with all TTY features disabled must not require a real terminal");
 
-        let tile_a = Tile::new('A', retroglyph_core::style::Style::default());
-        let tile_b = Tile::new('B', retroglyph_core::style::Style::default());
+        let tile_a = Tile::new('A', retroglyph_core::color::Style::default());
+        let tile_b = Tile::new('B', retroglyph_core::color::Style::default());
 
         // Drawing at (0, 0) leaves the renderer tracking the cursor at (1, 0), right after the
         // glyph it just wrote.
@@ -1713,7 +1713,7 @@ mod tests {
             .build_with_writer(Vec::new())
             .expect("building against a Vec<u8> writer with all TTY features disabled must not require a real terminal");
 
-        let tile = Tile::new('X', retroglyph_core::style::Style::default());
+        let tile = Tile::new('X', retroglyph_core::color::Style::default());
         // Drawn but deliberately *not* flushed: this is the buffered content `suspend` must not
         // strand behind the restore sequence.
         term.draw(core::iter::once(DrawCell::new(Pos { x: 0, y: 0 }, &tile)))
@@ -1782,7 +1782,7 @@ mod tests {
             .build_with_writer(Vec::new())
             .expect("building against a Vec<u8> writer with all TTY features disabled must not require a real terminal");
 
-        let tile = Tile::new('X', retroglyph_core::style::Style::default());
+        let tile = Tile::new('X', retroglyph_core::color::Style::default());
         term.draw(core::iter::once(DrawCell::new(Pos { x: 0, y: 0 }, &tile)))
             .unwrap();
         term.flush().unwrap();
@@ -1824,7 +1824,7 @@ mod tests {
 
         // Draw a colored cell first so the SGR pen is left non-default, mirroring the last
         // frame drawn before a real resize.
-        let style = retroglyph_core::style::Style::new().bg(retroglyph_core::color::Color::Rgb {
+        let style = retroglyph_core::color::Style::new().bg(retroglyph_core::color::Color::Rgb {
             r: 200,
             g: 0,
             b: 0,
@@ -2415,6 +2415,10 @@ mod tests {
         fn set_cursor_position(&mut self, position: Pos) {
             Cursor::set_cursor_position(&mut self.term, position);
         }
+
+        fn set_cursor_style(&mut self, style: CursorStyle) {
+            Cursor::set_cursor_style(&mut self.term, style);
+        }
     }
 
     impl retroglyph_core::testing::conformance::Observable for CrosstermObserver {
@@ -2442,5 +2446,13 @@ mod tests {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         retroglyph_core::testing::conformance::assert_cursor_contract(CrosstermObserver::new);
+    }
+
+    #[test]
+    fn satisfies_the_cursor_style_contract() {
+        let _lock = TEST_GUARD_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        retroglyph_core::testing::conformance::assert_cursor_style_contract(CrosstermObserver::new);
     }
 }

@@ -1,6 +1,6 @@
+use crate::color::Style;
 use crate::color::Tint;
 use crate::grid::{Grid, Offset, Pos, Rect, Size};
-use crate::style::Style;
 use crate::text::Line;
 use crate::tile::Tile;
 use ixy::HasSize;
