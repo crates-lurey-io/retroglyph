@@ -1,12 +1,12 @@
 //! [`Panel`]: a bordered, titled panel.
-use retroglyph_core::text::width as measured_width;
+use retroglyph_core::text::truncate_measured;
 use retroglyph_core::{Color, Rect, Style};
 
 use super::{BorderType, BoxBorder, Measure, Widget};
 use crate::Surface;
 use crate::draw::fill_rect;
 use crate::style::Sides;
-use crate::text::{draw_clipped, truncate as truncate_to_cols};
+use crate::text::draw_clipped;
 use crate::{Align, Theme};
 
 /// A bordered panel: a filled background with a box border and an optional
@@ -192,8 +192,7 @@ impl Widget for Panel<'_> {
             // Truncate and measure up front: the padding spaces flank the title, so their
             // position depends on the truncated title's own width, not the other way around
             // (unlike the widgets that hand this whole sequence to `draw_clipped` in one call).
-            let t = truncate_to_cols(t, max_title_w);
-            let t_w = measured_width(t);
+            let (t, t_w) = truncate_measured(t, max_title_w);
             // The padded title (a space either side of the text) is aligned
             // within the region between the two corners (`width - 2`).
             let padded = t_w + 2;
