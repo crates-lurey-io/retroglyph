@@ -86,7 +86,7 @@ pub use layout::{
 pub use retroglyph_core::{Layer, StyledSurface, Surface};
 pub use state::{ListState, ScrollPhysics, ScrollState, SelectionWrap, TextInputState};
 pub use style::{BoxStyle, Sides};
-pub use text::{truncate, truncate_owned};
+pub use text::{draw_clipped, truncate, truncate_owned};
 pub use theme::Theme;
 pub use ui::Ui;
 pub use widget::{

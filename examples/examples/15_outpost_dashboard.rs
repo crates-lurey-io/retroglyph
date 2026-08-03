@@ -49,7 +49,9 @@ use retroglyph_core::{
     Backend, Camera, Color, Easing, Frame, Pos, Rect, Size, Style, Surface, Terminal, Tween,
 };
 use retroglyph_examples::Example;
-use retroglyph_widgets::{Constraint, split_h, split_h_spaced, split_v, truncate};
+use retroglyph_widgets::{
+    Align, Constraint, draw_clipped, split_h, split_h_spaced, split_v, truncate,
+};
 
 // ── Breakpoints ────────────────────────────────────────────────────────────
 
@@ -705,11 +707,16 @@ impl OutpostDashboard {
                 surface.put((x, y), ' ', Style::new().bg(bg));
             }
         }
-        let text = truncate(label, rect.width_usize().saturating_sub(2));
-        let tx = rect.left() + (rect.width().saturating_sub(text.chars().count() as u16)) / 2;
         let ty = rect.top() + rect.height() / 2;
         let style = Style::new().fg(fg).bg(bg);
-        surface.print((tx, ty), text, style);
+        let _ = draw_clipped(
+            surface,
+            (rect.left() + 1, ty),
+            rect.width().saturating_sub(2),
+            label,
+            Align::Center,
+            style,
+        );
         hitboxes.push((rect, target));
     }
 
@@ -843,9 +850,14 @@ impl OutpostDashboard {
             surface.put((screen_pos.x, screen_pos.y), glyph, style);
         }
         if area.width() >= 26 && area.height() >= 4 {
-            let hint = truncate("drag: pan   tap: select", area.width_usize());
-            let x = area.right().saturating_sub(hint.chars().count() as u16 + 1);
-            surface.print((x, area.bottom() - 1), hint, Style::new().fg(DIM_FG).bg(BG));
+            let _ = draw_clipped(
+                surface,
+                (area.left(), area.bottom() - 1),
+                area.width().saturating_sub(1),
+                "drag: pan   tap: select",
+                Align::Right,
+                Style::new().fg(DIM_FG).bg(BG),
+            );
         }
     }
 
@@ -1021,8 +1033,14 @@ impl OutpostDashboard {
             }
             let label = tab.label();
             let ly = rect.top() + rect.height() / 2;
-            let lx = x + (w.saturating_sub(label.chars().count() as u16)) / 2;
-            surface.print((lx, ly), label, Style::new().fg(fg).bg(bg));
+            let _ = draw_clipped(
+                surface,
+                (x, ly),
+                w,
+                label,
+                Align::Center,
+                Style::new().fg(fg).bg(bg),
+            );
             self.hitboxes.push((rect, HitTarget::Tab(tab)));
             x += w;
         }

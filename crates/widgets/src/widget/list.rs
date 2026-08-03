@@ -3,13 +3,14 @@ use retroglyph_core::{Color, Rect, Style};
 
 use super::window::visible_window;
 use super::{HighlightSpacing, InteractiveWidget, ListDirection, Measure, StatefulWidget};
+use crate::Align;
 use crate::ListState;
 use crate::Response;
 use crate::Sense;
 use crate::Surface;
 use crate::Theme;
 use crate::draw::fill_rect;
-use crate::text::truncate as truncate_to_cols;
+use crate::text::draw_clipped;
 
 /// A scrollable, single-column list of plain-text items with a [`ListState`]-driven highlighted
 /// item: `Table`'s single-column sibling, sharing its windowing and selection story.
@@ -216,11 +217,23 @@ impl List<'_> {
                 } else {
                     ""
                 };
-                let marker = truncate_to_cols(marker, marker_width.min(width));
-                surface.print((0, y), marker, style);
+                let _ = draw_clipped(
+                    surface,
+                    (0, y),
+                    marker_width.min(width),
+                    marker,
+                    Align::Left,
+                    style,
+                );
             }
-            let text = truncate_to_cols(item, text_width);
-            surface.print((marker_width, y), text, style);
+            let _ = draw_clipped(
+                surface,
+                (marker_width, y),
+                text_width,
+                item,
+                Align::Left,
+                style,
+            );
         }
     }
 

@@ -1,12 +1,12 @@
 //! [`Panel`]: a bordered, titled panel.
+use retroglyph_core::text::width as measured_width;
 use retroglyph_core::{Color, Rect, Style};
-use unicode_width::UnicodeWidthStr;
 
 use super::{BorderType, BoxBorder, Measure, Widget};
 use crate::Surface;
 use crate::draw::fill_rect;
 use crate::style::Sides;
-use crate::text::truncate as truncate_to_cols;
+use crate::text::{draw_clipped, truncate as truncate_to_cols};
 use crate::{Align, Theme};
 
 /// A bordered panel: a filled background with a box border and an optional
@@ -185,22 +185,28 @@ impl Widget for Panel<'_> {
 
         // Render the title into the top border if one was provided.
         if let Some(t) = self.title {
-            let max_title_w = width.saturating_sub(4) as usize; // 2 border + 2 spaces
+            let max_title_w = width.saturating_sub(4); // 2 border + 2 spaces
             if max_title_w == 0 {
                 return;
             }
-            // Truncate to fit.
+            // Truncate and measure up front: the padding spaces flank the title, so their
+            // position depends on the truncated title's own width, not the other way around
+            // (unlike the widgets that hand this whole sequence to `draw_clipped` in one call).
             let t = truncate_to_cols(t, max_title_w);
-            // `truncate_to_cols` bounds `t` to `max_title_w` columns, itself derived from this
-            // surface's own `u16` width, so narrowing the display width back is always exact.
-            #[allow(clippy::cast_possible_truncation)]
-            let t_w = t.width() as u16;
+            let t_w = measured_width(t);
             // The padded title (a space either side of the text) is aligned
             // within the region between the two corners (`width - 2`).
             let padded = t_w + 2;
             let title_x = 1 + self.title_align.offset(width - 2, padded);
             surface.put((title_x, 0), ' ', self.border_style);
-            surface.print((title_x + 1, 0), t, self.border_style);
+            let _ = draw_clipped(
+                surface,
+                (title_x + 1, 0),
+                t_w,
+                t,
+                Align::Left,
+                self.border_style,
+            );
             surface.put((title_x + 1 + t_w, 0), ' ', self.border_style);
         }
     }
