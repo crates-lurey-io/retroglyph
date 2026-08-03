@@ -65,7 +65,9 @@ pub use response::Response;
 pub use sense::Sense;
 pub use shortcuts::Shortcuts;
 
-use retroglyph_core::{Event, KeyCode, MouseButton, Pos, Rect, Surface};
+use core::time::Duration;
+
+use retroglyph_core::{Event, Frame, KeyCode, MouseButton, Pos, Rect, Surface, Tween};
 
 use crate::Ui;
 
@@ -249,6 +251,13 @@ pub struct Interaction<Id> {
     // move it: `gained_focus`/`lost_focus` need last frame's answer to diff against, the same
     // role `resolved_hover`'s pointer-snapshot fields play for hover/press/release.
     prev_focused: Option<Id>,
+    // Backs [`animate`](Self::animate): one `(id, last target, Tween)` per `id` that's had
+    // `animate` called on it since it last settled at rest. A plain `Vec` scanned linearly, not a
+    // `HashMap`, to keep `animate` (like every other method here) usable with any `Id: Copy +
+    // PartialEq`, no `Hash`/`Eq` required -- the same call [`HitTester`] already makes for its own
+    // per-`Id` registrations. The stored `bool` is `animate`'s last-seen `target`, kept alongside
+    // the `Tween` so a flip can be detected without the `Tween` itself exposing its `to`.
+    tweens: Vec<(Id, bool, Tween)>,
 }
 
 impl<Id> Interaction<Id> {
@@ -276,6 +285,7 @@ impl<Id> Interaction<Id> {
             last_click: None,
             double_click_window: DEFAULT_DOUBLE_CLICK_WINDOW,
             prev_focused: None,
+            tweens: Vec::new(),
         }
     }
 
@@ -474,6 +484,55 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
     #[must_use]
     pub const fn wants_keyboard(&self) -> bool {
         self.focus.focused().is_some()
+    }
+
+    /// Eases toward `1.0` when `target` is `true`, `0.0` otherwise, over `duration`, advancing by
+    /// `frame.delta`. Owns one [`Tween`] per `id`, created (at rest, on whichever side `target`
+    /// starts on) the first time this is called for that `id`, and dropped once it settles back
+    /// at rest at its current target, so this doesn't grow unbounded across a long-running app
+    /// with many transient `Id`s (an overlay's per-item ids, say).
+    ///
+    /// The bridge from [`Response`] to [`retroglyph_core::animate`](retroglyph_core): a widget's
+    /// `render` (already handed a `Response`) calls this once per frame with, say,
+    /// `response.hovered()` as `target`, and blends its idle/hover style by the result, without
+    /// declaring a `Tween` field of its own or hand-diffing this frame's `hovered()` against
+    /// last frame's to find the edge that should retarget it -- both of which an app would
+    /// otherwise need to do once per animated `Id`, since neither [`Tween`] nor
+    /// [`Interaction`](Self) tracks that edge on its own.
+    ///
+    /// `duration` only takes effect while `id`'s tween is created, i.e. the first call for that
+    /// `id`, or the first call after a previous one settled and was pruned: changing it on a
+    /// later call while the tween is still in flight has no effect, the same as
+    /// [`Tween::retarget`] leaving `duration` untouched.
+    pub fn animate(&mut self, id: Id, target: bool, duration: Duration, frame: &Frame) -> f32 {
+        let target_value = f32::from(target);
+        let index = if let Some(index) = self
+            .tweens
+            .iter()
+            .position(|(existing, ..)| *existing == id)
+        {
+            let (_, last_target, tween) = &mut self.tweens[index];
+            if *last_target != target {
+                tween.retarget(target_value);
+                *last_target = target;
+            }
+            tween.update(frame.delta);
+            index
+        } else {
+            self.tweens.push((
+                id,
+                target,
+                Tween::new(target_value, target_value).duration(duration),
+            ));
+            self.tweens.len() - 1
+        };
+
+        let (_, _, tween) = &self.tweens[index];
+        let value = tween.value();
+        if tween.is_finished() {
+            self.tweens.remove(index);
+        }
+        value
     }
 
     /// Register `rect` as a barrier: a pointer inside it never resolves to anything registered by
@@ -1613,5 +1672,110 @@ mod tests {
         assert!(cancel.clicked());
         assert!(!cancel.focused()); // never registered as focusable: must not report focus either
         assert!(save.focused()); // focus must stay put, not get silently stolen
+    }
+
+    fn frame_with_delta(delta: Duration) -> Frame {
+        Frame { delta, frame: 0 }
+    }
+
+    // Exact float equality is intentional in the `animate_*` tests below, mirroring
+    // `retroglyph_core::animate::tween`'s own tests: every value under test is produced by
+    // `Easing::Linear` (`Tween`'s default) at exactly-representable fractions of `duration`, not
+    // an accumulated or transcendental result where an epsilon comparison would be appropriate.
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn animate_starts_at_rest_on_whichever_side_target_begins_on() {
+        let mut interaction = Interaction::<Id>::new();
+        let frame = frame_with_delta(Duration::ZERO);
+
+        assert_eq!(
+            interaction.animate(Id::Save, false, Duration::from_millis(100), &frame),
+            0.0
+        );
+        assert_eq!(
+            interaction.animate(Id::Cancel, true, Duration::from_millis(100), &frame),
+            1.0
+        );
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn animate_eases_toward_the_target_once_it_flips() {
+        let mut interaction = Interaction::<Id>::new();
+        let duration = Duration::from_millis(100);
+
+        // At rest at 0.0 until `target` flips true.
+        let value =
+            interaction.animate(Id::Save, false, duration, &frame_with_delta(Duration::ZERO));
+        assert_eq!(value, 0.0);
+
+        // Flips: retargets toward 1.0, halfway through `duration` after one more update.
+        let value = interaction.animate(
+            Id::Save,
+            true,
+            duration,
+            &frame_with_delta(Duration::from_millis(50)),
+        );
+        assert_eq!(value, 0.5); // Easing::Linear (Tween's default), so exactly halfway
+        assert!(value < 1.0);
+
+        // Finishes once `duration` has fully elapsed since the flip.
+        let value = interaction.animate(
+            Id::Save,
+            true,
+            duration,
+            &frame_with_delta(Duration::from_millis(50)),
+        );
+        assert_eq!(value, 1.0);
+    }
+
+    #[test]
+    fn animate_prunes_the_entry_once_it_settles_at_rest() {
+        let mut interaction = Interaction::<Id>::new();
+        let duration = Duration::from_millis(100);
+
+        // Created at rest (`from == to == 0.0`): `is_finished` only becomes true once `duration`
+        // has elapsed, exercising the prune path even for a tween that never actually moved.
+        let _ = interaction.animate(Id::Save, false, duration, &frame_with_delta(Duration::ZERO));
+        assert_eq!(interaction.tweens.len(), 1);
+
+        let _ = interaction.animate(Id::Save, false, duration, &frame_with_delta(duration));
+        assert!(
+            interaction.tweens.is_empty(),
+            "a settled tween must be dropped, not accumulate"
+        );
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn animate_tracks_each_id_independently() {
+        let mut interaction = Interaction::<Id>::new();
+        let duration = Duration::from_millis(100);
+
+        let save = interaction.animate(Id::Save, true, duration, &frame_with_delta(Duration::ZERO));
+        let cancel = interaction.animate(
+            Id::Cancel,
+            false,
+            duration,
+            &frame_with_delta(Duration::ZERO),
+        );
+        assert_eq!(save, 1.0);
+        assert_eq!(cancel, 0.0);
+
+        // Advancing Save must not perturb Cancel's independently tracked tween.
+        let save = interaction.animate(
+            Id::Save,
+            false,
+            duration,
+            &frame_with_delta(Duration::from_millis(50)),
+        );
+        let cancel = interaction.animate(
+            Id::Cancel,
+            false,
+            duration,
+            &frame_with_delta(Duration::from_millis(50)),
+        );
+        assert_eq!(save, 0.5);
+        assert_eq!(cancel, 0.0);
     }
 }
