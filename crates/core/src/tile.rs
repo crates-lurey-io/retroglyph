@@ -273,12 +273,16 @@ impl Tile {
     /// Sets the glyph for this tile (builder style).
     ///
     /// Writing content marks the tile non-empty (see [`is_empty`](Self::is_empty)). Recomputes
-    /// the cached display width (see [`width`](Self::width)) for the new glyph.
+    /// the cached display width (see [`width`](Self::width)) for the new glyph, and clears
+    /// [`TileFlags::WIDE_CHAR`]/[`TileFlags::WIDE_CHAR_SPACER`], which describe the old glyph's
+    /// role and would otherwise disagree with the recomputed width.
     #[must_use]
     pub fn with_glyph(mut self, glyph: char) -> Self {
         self.glyph = glyph;
         self.width = glyph_width(glyph);
-        self.flags = self.flags.difference(TileFlags::EMPTY);
+        self.flags = self
+            .flags
+            .difference(TileFlags::EMPTY | TileFlags::WIDE_CHAR | TileFlags::WIDE_CHAR_SPACER);
         self
     }
 
@@ -435,6 +439,38 @@ mod tests {
         let tile = Tile::new('A', Style::default()).with_glyph('漢');
         assert_eq!(tile.glyph(), '漢');
         assert_eq!(tile.width(), 2);
+    }
+
+    /// A tile carrying a stale `WIDE_CHAR_SPACER` (e.g. read back out of a grid via
+    /// `*grid.tile(..)`) must not keep that flag once `with_glyph` gives it a real glyph: the
+    /// flag tells `Grid::put_tile` to treat the tile as an already-resolved replay and store it
+    /// verbatim, which means every backend skips drawing it (see issue #986).
+    #[test]
+    fn test_tile_with_glyph_clears_stale_wide_char_spacer_flag() {
+        let mut spacer = Tile::new(' ', Style::default());
+        spacer.flags = TileFlags::WIDE_CHAR_SPACER;
+
+        let rebuilt = spacer.with_glyph('!');
+
+        assert_eq!(rebuilt.glyph(), '!');
+        assert_eq!(rebuilt.width(), 1);
+        assert!(!rebuilt.flags().contains(TileFlags::WIDE_CHAR_SPACER));
+        assert!(!rebuilt.is_empty());
+    }
+
+    /// A tile carrying a stale `WIDE_CHAR` must not keep that flag once `with_glyph` narrows it:
+    /// the flag tells `Grid::clear_overlap` that the cell to the right is this tile's spacer, so
+    /// a stale flag makes an overlapping write reset an unrelated neighbour (see issue #986).
+    #[test]
+    fn test_tile_with_glyph_clears_stale_wide_char_flag() {
+        let mut wide = Tile::new('漢', Style::default());
+        wide.flags = TileFlags::WIDE_CHAR;
+
+        let rebuilt = wide.with_glyph('A');
+
+        assert_eq!(rebuilt.glyph(), 'A');
+        assert_eq!(rebuilt.width(), 1);
+        assert!(!rebuilt.flags().contains(TileFlags::WIDE_CHAR));
     }
 
     #[test]
