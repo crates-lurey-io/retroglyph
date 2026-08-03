@@ -5,6 +5,7 @@
 use super::{Grid, Pos, Size, to_grixy_pos};
 use crate::color::Style;
 use crate::tile::{Tile, TileFlags};
+use alloc::collections::BTreeSet;
 use alloc::vec::Vec;
 use grixy::ops::GridRead;
 use ixy::HasSize;
@@ -347,6 +348,58 @@ impl Grid {
             self.reset_span_at(layer, anchor);
         }
     }
+
+    /// Clears every multi-cell span that a `width` x `height` write starting at `(x, y)` on
+    /// `layer` would partially overwrite.
+    ///
+    /// The region analogue of [`clear_span_overlap`](Self::clear_span_overlap), for callers like
+    /// [`fill_region`](super::Grid::fill_region) that would otherwise call it once per row: a span
+    /// spanning several of those rows would then be collected, and fully reset, once per row it
+    /// occupies. This scans the whole region once instead, deduplicating anchors in a
+    /// `BTreeSet<(u16, u16)>` (`Pos` has no `Ord`) so each span is reset exactly once regardless
+    /// of how many rows or columns of the region it overlaps.
+    ///
+    /// Returns immediately on a grid that has never had a span written to it, same as
+    /// [`clear_span_overlap`](Self::clear_span_overlap).
+    pub(super) fn clear_span_overlap_rect(
+        &mut self,
+        layer: u8,
+        x: u16,
+        y: u16,
+        width: u16,
+        height: u16,
+    ) {
+        if !self.has_spans {
+            return;
+        }
+        // Collect first, same reasoning as `clear_span_overlap`: resetting a span mutates cells
+        // this scan is still reading.
+        let mut anchors: BTreeSet<(u16, u16)> = BTreeSet::new();
+        let Some(lb) = self.layer(layer) else {
+            return;
+        };
+        for cy in y..y.saturating_add(height) {
+            for cx in x..x.saturating_add(width) {
+                let Some(tile) = lb.buf.get(to_grixy_pos(Pos::new(cx, cy))) else {
+                    continue;
+                };
+                let anchor = if tile.flags.contains(TileFlags::SPAN_ANCHOR) {
+                    (cx, cy)
+                } else if let Some((dx, dy)) = tile.span_offset() {
+                    match (cx.checked_sub(dx), cy.checked_sub(dy)) {
+                        (Some(ax), Some(ay)) => (ax, ay),
+                        _ => continue,
+                    }
+                } else {
+                    continue;
+                };
+                anchors.insert(anchor);
+            }
+        }
+        for (ax, ay) in anchors {
+            self.reset_span_at(layer, Pos::new(ax, ay));
+        }
+    }
 }
 
 #[cfg(test)]
@@ -605,6 +658,27 @@ mod tests {
         grid.put_tile(0, (3, 3), Tile::new('z', Style::default()));
         grid.clear_span(0, 3, 3);
         assert_eq!(grid[Pos::new(3, 3)].glyph(), 'z');
+    }
+
+    /// `clear_span_overlap_rect` scans the whole region once (retroglyph#1020), rather than
+    /// calling `clear_span_overlap` once per row: a span several rows tall must still come out
+    /// fully reset, not just its slice under the first row scanned.
+    #[test]
+    fn clear_span_overlap_rect_clears_a_span_spanning_every_row_it_touches() {
+        let mut grid = Grid::new(6, 6);
+        grid.write_span(0, 1, 1, &["AB", "CD", "EF", "GH"], Style::default())
+            .expect("2x4 span fits in a 6x6 grid");
+
+        // A single call covering all four rows the span occupies, same as `fill_region` now
+        // makes once per call instead of once per row.
+        grid.clear_span_overlap_rect(0, 0, 1, 6, 4);
+
+        for y in 1..5 {
+            for x in 1..3 {
+                let tile = grid[Pos::new(x, y)];
+                assert!(tile.is_empty(), "({x}, {y}) should have been reset");
+            }
+        }
     }
 
     #[test]

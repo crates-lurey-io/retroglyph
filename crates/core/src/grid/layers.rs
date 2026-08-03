@@ -141,12 +141,15 @@ impl Grid {
             return;
         }
 
-        // Clear every span (and, under `egc`, every wide-char cell) this fill would partially
-        // overwrite, one row at a time rather than one cell at a time: still O(rows), and a no-op
-        // on a grid that has never used spans (see `clear_span_overlap`).
+        // Clear every span this fill would partially overwrite in one pass over the whole rect
+        // (see `clear_span_overlap_rect`), rather than once per row: a span spanning several rows
+        // of `rect` would otherwise be collected, and fully reset, once per row it occupies
+        // (retroglyph#1020). A no-op on a grid that has never used spans.
+        self.clear_span_overlap_rect(layer, rect.left(), rect.top(), rect.width(), rect.height());
+        // Wide-char overlap has no region-scoped variant (yet): still one call per row, but that
+        // remains O(rows) since it never re-collects a growing anchor set.
+        #[cfg(feature = "egc")]
         for y in rect.top()..rect.bottom() {
-            self.clear_span_overlap(layer, rect.left(), y, rect.width());
-            #[cfg(feature = "egc")]
             self.clear_overlap(layer, rect.left(), y, rect.width());
         }
 
@@ -1105,6 +1108,25 @@ mod tests {
         let anchor = g.tile(0, (0, 0)).unwrap();
         assert!(!anchor.flags().contains(TileFlags::SPAN_ANCHOR));
         assert_eq!(anchor.glyph(), ' ');
+    }
+
+    /// `fill_region` scans the region for overlapping spans once, not once per row (see
+    /// `clear_span_overlap_rect`, retroglyph#1020): a span several rows tall, entirely inside
+    /// `rect`, must still come out fully and correctly reset rather than leaving a stale anchor
+    /// or covered cell behind from a row the single-pass collection missed.
+    #[test]
+    fn fill_region_clears_a_multi_row_span_it_fully_covers() {
+        let mut g = Grid::new(6, 6);
+        g.write_span(0, 1, 1, &["AB", "CD", "EF", "GH"], Style::default())
+            .expect("2x4 span fits in a 6x6 grid");
+
+        g.fill_region(0, Rect::new(0, 0, 6, 6), Tile::new('#', Style::default()));
+
+        for y in 0..6 {
+            for x in 0..6 {
+                assert_eq!(g.tile(0, (x, y)).unwrap().glyph(), '#', "({x}, {y})");
+            }
+        }
     }
 
     /// `fill_region` writes a caller-constructed `Tile`, which (like `put_tile`) can never
