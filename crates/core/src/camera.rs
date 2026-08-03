@@ -439,6 +439,8 @@ mod tests {
 
     #[test]
     fn cells_yields_visible_world_and_screen_pairs() {
+        use alloc::vec::Vec;
+
         let mut c = cam();
         c.center_on(Pos::new(50, 50));
         let pairs: Vec<_> = c.cells().collect();

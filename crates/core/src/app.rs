@@ -297,6 +297,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn run_blocking_exits_on_flow_exit() {
         let mut backend = Headless::new(4, 1);
@@ -341,6 +342,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn run_blocking_skips_present_on_idle() {
         let term = Terminal::new(Headless::new(2, 1));
@@ -371,6 +373,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn run_blocking_presents_automatically() {
         let term = Terminal::new(Headless::new(2, 1));
@@ -384,6 +387,7 @@ mod tests {
         // `retroglyph-window`'s own driver tests, which retain the terminal after the loop.
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn run_blocking_with_default_options_matches_run_blocking() {
         let term = Terminal::new(Headless::new(2, 1));
@@ -394,6 +398,7 @@ mod tests {
         run_blocking_with(term, app, RunOptions::default()).expect("run_blocking_with");
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn run_blocking_with_animated_options_runs_to_completion() {
         let term = Terminal::new(Headless::new(2, 1));
@@ -442,6 +447,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn run_blocking_with_non_event_driven_options_does_not_block_on_idle() {
         let term = Terminal::new(Headless::new(2, 1));
