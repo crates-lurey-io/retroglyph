@@ -1298,10 +1298,16 @@ mod tests {
         assert_eq!(term.backend().inner.grid()[Pos::new(0, 0)].glyph(), 'a');
 
         // Frame 2: composites branch. Bypasses the flatten buffers entirely, so
-        // `flattened_previous` still holds frame 1's flattened content.
+        // `flattened_previous` still holds frame 1's flattened content. Layer 1 is redrawn
+        // identically to frame 1 so `Grid::diff` (now that it also reports a layer that stopped
+        // being written, retroglyph#1018) sees no change there and doesn't emit anything for it;
+        // `Headless::draw_layers` writes every cell to one shared grid regardless of layer (see
+        // `CompositingBackend`'s docs above), so a real layer-1 diff would corrupt this frame's
+        // single-grid glyph check, which is unrelated to what this test is verifying.
         term.backend_mut().composites = true;
         term.draw(|s| {
             s.put((0, 0), 'b', Style::default());
+            s.on_layer(1).put((1, 0), '#', Style::default());
         })
         .expect("draw failed");
         assert_eq!(term.backend().inner.grid()[Pos::new(0, 0)].glyph(), 'b');

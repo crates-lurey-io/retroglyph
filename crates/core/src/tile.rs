@@ -139,20 +139,30 @@ pub struct Tile {
 
 impl Default for Tile {
     fn default() -> Self {
-        Self {
-            glyph: ' ',
-            style: Style::default(),
-            width: 1,
-            dx: 0,
-            dy: 0,
-            flags: TileFlags::EMPTY,
-            span_w: 1,
-            span_h: 1,
-        }
+        Self::EMPTY
     }
 }
 
 impl Tile {
+    /// The tile every layer cell starts as: a blank, unstyled, unwritten cell.
+    ///
+    /// Equivalent to [`Tile::default`], expressed as an associated `const` so callers that need
+    /// a `'static` reference to a default tile (e.g. [`Grid::diff`](crate::grid::Grid::diff)
+    /// reporting a layer that stopped being written) don't need an owned value to borrow from.
+    pub(crate) const EMPTY: Self = Self {
+        glyph: ' ',
+        style: Style {
+            fg: crate::color::Color::Default,
+            bg: crate::color::Color::Default,
+        },
+        width: 1,
+        dx: 0,
+        dy: 0,
+        flags: TileFlags::EMPTY,
+        span_w: 1,
+        span_h: 1,
+    };
+
     /// Creates a new tile with the given glyph and style.
     ///
     /// `dx` and `dy` default to 0 (no sub-cell offset). `glyph`'s display width is computed
