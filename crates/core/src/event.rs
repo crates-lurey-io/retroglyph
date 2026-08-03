@@ -61,6 +61,13 @@ impl KeyModifiers {
         Self((shift as u8) | (control as u8) << 1 | (alt as u8) << 2 | (super_ as u8) << 3)
     }
 
+    /// Returns the raw bitmask, in the same layout [`from_bits_truncate`](Self::from_bits_truncate)
+    /// accepts. Only the low four bits are ever set.
+    #[must_use]
+    pub const fn bits(self) -> u8 {
+        self.0
+    }
+
     /// Returns `true` if all bits in `other` are set in `self`.
     #[must_use]
     pub const fn contains(self, other: Self) -> bool {
@@ -644,6 +651,13 @@ mod tests {
             KeyModifiers::from_bits_truncate(0xFF),
             KeyModifiers::SHIFT | KeyModifiers::CONTROL | KeyModifiers::ALT | KeyModifiers::SUPER
         );
+    }
+
+    #[test]
+    fn test_key_modifiers_bits_round_trip() {
+        for bits in 0..=u8::MAX {
+            assert_eq!(KeyModifiers::from_bits_truncate(bits).bits(), bits & 0b1111);
+        }
     }
 
     #[test]
