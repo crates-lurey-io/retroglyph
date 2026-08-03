@@ -1558,7 +1558,10 @@ mod tests {
         let mut g = Grid::new(2, 2);
         g.write_grapheme(0, 0, 0, "e\u{0301}", Style::default());
         let cloned = g.clone();
-        assert_eq!(crate::grid::grapheme_at(&cloned, 0, 0, 0), Some("e\u{0301}"));
+        assert_eq!(
+            crate::grid::grapheme_at(&cloned, 0, 0, 0),
+            Some("e\u{0301}")
+        );
     }
 
     #[cfg(feature = "egc")]
@@ -1569,7 +1572,10 @@ mod tests {
         let mut flattened = Grid::new(2, 2);
         g.flatten_into(&mut flattened);
         assert_eq!(flattened[Pos::new(0, 0)].glyph, 'e');
-        assert_eq!(crate::grid::grapheme_at(&flattened, 0, 0, 0), Some("e\u{0301}"));
+        assert_eq!(
+            crate::grid::grapheme_at(&flattened, 0, 0, 0),
+            Some("e\u{0301}")
+        );
     }
 
     #[test]
