@@ -427,6 +427,81 @@ mod tests {
     }
 
     #[test]
+    fn set_viewport_reclamps_the_origin_when_the_viewport_grows() {
+        let mut c = cam(); // 10x10 viewport, 100x100 world.
+        c.center_on(Pos::new(99, 99)); // origin (90, 90).
+        c.set_viewport(Rect::new(0, 0, 40, 40));
+        assert_eq!(c.origin(), Pos::new(60, 60)); // 100 - 40.
+        assert_eq!(c.visible_bounds(), Rect::new(60, 60, 40, 40));
+    }
+
+    #[test]
+    fn screen_to_world_returns_none_past_the_world_edge_within_the_viewport() {
+        // A 20x20 viewport over a 5x5 world: the origin pins to (0, 0), so the viewport has a
+        // dead margin past (5, 5) that is inside the viewport but outside the world.
+        let c = Camera::new(Rect::new(2, 2, 20, 20), Size::new(5, 5));
+        // Inside the viewport, but past the world edge: the mouse-picking case the guard exists
+        // for, not `None` from missing the viewport.
+        assert_eq!(c.screen_to_world(Pos::new(10, 10)), None);
+        // Just inside the world edge still resolves normally.
+        assert_eq!(c.screen_to_world(Pos::new(6, 6)), Some(Pos::new(4, 4)));
+    }
+
+    #[test]
+    fn zero_size_camera_is_inert() {
+        let c = Camera::new(Rect::new(0, 0, 0, 0), Size::new(0, 0));
+        assert_eq!(c.visible_bounds(), Rect::new(0, 0, 0, 0));
+        assert_eq!(c.cells().count(), 0);
+        assert_eq!(c.world_to_screen(Pos::new(0, 0)), None);
+        assert_eq!(c.screen_to_world(Pos::new(0, 0)), None);
+
+        // A zero-size world under a normal viewport behaves the same way: nothing to show.
+        // `world_to_screen` only checks against the viewport, not `world`, so it is
+        // `screen_to_world` (which does check `world`) that actually guards this case.
+        let zero_world = Camera::new(Rect::new(0, 0, 10, 10), Size::new(0, 0));
+        assert_eq!(zero_world.visible_bounds(), Rect::new(0, 0, 0, 0));
+        assert_eq!(zero_world.cells().count(), 0);
+        assert_eq!(zero_world.screen_to_world(Pos::new(0, 0)), None);
+    }
+
+    #[test]
+    fn cells_only_yields_cells_that_exist_in_the_world() {
+        use alloc::vec::Vec;
+
+        // A 20x20 viewport over a 5x5 world: the clamp in `visible_bounds` is doing real work
+        // here, unlike the full-viewport case above.
+        let c = Camera::new(Rect::new(0, 0, 20, 20), Size::new(5, 5));
+        let pairs: Vec<_> = c.cells().collect();
+        assert_eq!(pairs.len(), 25); // 5x5 world, not the 20x20 viewport.
+        assert_eq!(pairs[0], (Pos::new(0, 0), Pos::new(0, 0)));
+        assert_eq!(pairs[24], (Pos::new(4, 4), Pos::new(4, 4)));
+    }
+
+    #[test]
+    fn surface_clips_to_the_letterboxed_viewport_after_set_viewport_fitted() {
+        use crate::color::Style;
+        use crate::grid::Grid;
+
+        let mut grid = Grid::new(20, 20);
+        let mut root = Surface::new(&mut grid, Rect::new(0, 0, 20, 20), 0);
+
+        let mut c = Camera::new(Rect::new(0, 0, 1, 1), Size::new(5, 5));
+        c.set_viewport_fitted(Rect::new(0, 0, 20, 20));
+        assert_eq!(c.viewport(), Rect::new(7, 7, 5, 5)); // shrunk to the world and centered.
+
+        let mut world = c.surface(&mut root);
+        // The world origin lands at the letterboxed viewport's own top-left, not the grid's.
+        world.put(Pos::new(0, 0), '@', Style::default());
+        // Outside the shrunk viewport (but still inside the un-fitted 20x20 rect passed in):
+        // dropped, the same as `world_to_screen` returning `None` for it, not drawn into the
+        // dead margin.
+        world.put(Pos::new(10, 10), 'X', Style::default());
+
+        assert_eq!(grid[Pos::new(7, 7)].glyph(), '@');
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), ' '); // untouched margin cell.
+    }
+
+    #[test]
     fn set_viewport_fitted_matches_set_viewport_when_the_world_is_not_smaller() {
         let mut a = Camera::new(Rect::new(0, 0, 1, 1), Size::new(100, 100));
         a.set_viewport_fitted(Rect::new(0, 0, 10, 10));
