@@ -1495,6 +1495,36 @@ mod tests {
         }
     }
 
+    /// `fill_rect`'s batch fast path only applies to a single-column glyph: a wide glyph must
+    /// fall back to the same per-cell `put` loop used before this method had a fast path, not the
+    /// batch `Tile::new` write (which carries no wide-char bookkeeping at all).
+    #[test]
+    #[cfg(feature = "egc")]
+    fn fill_rect_with_a_wide_glyph_falls_back_to_the_put_loop() {
+        let rect = Rect::new(0, 0, 6, 1);
+
+        let mut via_fill_rect = Grid::new(8, 1);
+        screen(&mut via_fill_rect).fill_rect(rect, '\u{6f22}', Style::default());
+
+        let mut via_put = Grid::new(8, 1);
+        {
+            let mut surface = screen(&mut via_put);
+            for y in rect.top()..rect.bottom() {
+                for x in rect.left()..rect.right() {
+                    surface.put((x, y), '\u{6f22}', Style::default());
+                }
+            }
+        }
+
+        for x in 0..8 {
+            assert_eq!(
+                via_fill_rect[Pos::new(x, 0)],
+                via_put[Pos::new(x, 0)],
+                "cell ({x}, 0)"
+            );
+        }
+    }
+
     /// `fill_rect`, `clear`, and `clear_region` all route through `Grid::fill_region`, which must
     /// clear any span the fill partially overwrites the same way the per-cell loop it replaced
     /// did, or the surviving span's anchor would keep claiming cells the fill just overwrote.
