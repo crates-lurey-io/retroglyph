@@ -86,23 +86,24 @@ impl Widget for BoxBorder {
         let x1 = w - 1;
         let y1 = h - 1;
         let glyphs = self.border_type.glyphs();
+        let mut surface = surface.with_style(self.style);
 
         // Corners
-        surface.put((0, 0), glyphs.top_left, self.style);
-        surface.put((x1, 0), glyphs.top_right, self.style);
-        surface.put((0, y1), glyphs.bottom_left, self.style);
-        surface.put((x1, y1), glyphs.bottom_right, self.style);
+        surface.put((0, 0), glyphs.top_left);
+        surface.put((x1, 0), glyphs.top_right);
+        surface.put((0, y1), glyphs.bottom_left);
+        surface.put((x1, y1), glyphs.bottom_right);
 
         // Horizontal edges
         for x in 1..x1 {
-            surface.put((x, 0), glyphs.horizontal, self.style);
-            surface.put((x, y1), glyphs.horizontal, self.style);
+            surface.put((x, 0), glyphs.horizontal);
+            surface.put((x, y1), glyphs.horizontal);
         }
 
         // Vertical edges
         for y in 1..y1 {
-            surface.put((0, y), glyphs.vertical, self.style);
-            surface.put((x1, y), glyphs.vertical, self.style);
+            surface.put((0, y), glyphs.vertical);
+            surface.put((x1, y), glyphs.vertical);
         }
     }
 }

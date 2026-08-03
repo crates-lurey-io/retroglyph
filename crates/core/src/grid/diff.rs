@@ -14,7 +14,7 @@ use crate::tile::Tile;
 use alloc::vec::Vec;
 
 impl Grid {
-    /// Yield `(layer_id, Pos, &Tile, Option<&str>)` for every changed
+    /// Yields `(layer_id, Pos, &Tile, Option<&str>)` for every changed
     /// position across all layers, in layer-major (0 → `max_layer`) then
     /// row-major order. The last element is the changed tile's grapheme text
     /// (see [`grapheme`](Self::grapheme)).
