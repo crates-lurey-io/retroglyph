@@ -13,6 +13,10 @@
 //! specifically so this runs on every CI invocation, regardless of the feature matrix.
 
 use alpha_blend::channel::Channel;
+#[cfg(feature = "indexed-quant")]
+use gem::space::Srgb;
+#[cfg(feature = "indexed-quant")]
+use retroglyph_core::Color;
 
 /// Rounds `num / den` to the nearest integer, ties away from zero, using only `i64` arithmetic
 /// (no `/255` shortcuts, no shifts): the independent reference every rounding claim in this test
@@ -46,6 +50,24 @@ fn multiply_and_scale_are_round_to_nearest_for_every_input() {
                 "alpha_blend::channel::Channel::scale({a}, {b})"
             );
         }
+    }
+}
+
+/// `Color::from_srgb` (retroglyph#759, follow-up to retroglyph#698) must round each channel to
+/// the nearest `u8`, not truncate. Truncation and rounding only disagree when a channel's
+/// `* 255.0` value has a fractional part >= 0.5, so for every target byte `t` in `1..=255` this
+/// picks an input whose scaled value is `t - 0.4` (fractional part `0.6`): round-to-nearest
+/// yields `t`, while the pre-#698 `as u8` truncation yields `t - 1`.
+#[cfg(feature = "indexed-quant")]
+#[test]
+fn from_srgb_rounds_to_nearest_not_truncates() {
+    for t in 1u8..=255 {
+        let scaled = f32::from(t) - 1.0 + 0.6;
+        let srgb = Srgb::new(scaled / 255.0, scaled / 255.0, scaled / 255.0);
+        let Color::Rgb { r, g, b } = Color::from_srgb(srgb) else {
+            panic!("from_srgb must always return Color::Rgb");
+        };
+        assert_eq!((r, g, b), (t, t, t), "from_srgb({scaled} / 255.0)");
     }
 }
 
