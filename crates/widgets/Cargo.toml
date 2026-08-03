@@ -19,6 +19,7 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
+default = ["std"]
 # Forwards `retroglyph-core`'s `dev` feature, which forces development diagnostics on in a build
 # that would otherwise compile them out (see [`retroglyph_core::dev`]).
 dev = ["retroglyph-core/dev"]
@@ -31,12 +32,22 @@ egc = ["retroglyph-core/egc"]
 #
 # [`Theme`] round-trips through `Color`'s own `serde` impl.
 serde = ["dep:serde", "retroglyph-core/serde"]
+# Enables `retroglyph-core/std`.
+#
+# Disabling this feature (`--no-default-features`) builds this crate `no_std` (requires an
+# allocator).
+std = ["retroglyph-core/std"]
 
 [dependencies]
 # `indexed-quant` (retroglyph#629, previously `color-space`): retroglyph-core/Color::lerp (used
 # by meter_ramp's color ramp) is gated behind it. Not a separate widgets-level feature -- color
 # ramping is non-optional composite-tier functionality, not an opt-in extra like `egc`.
-retroglyph-core = { path = "../core", version = "0.5.0", default-features = false, features = ["std", "indexed-quant"] }
+retroglyph-core = { path = "../core", version = "0.5.0", default-features = false, features = ["indexed-quant"] }
+# `f32::round`/`f32::exp` (scrollbar geometry, gauge/sparkline/bar percentage rounding, scroll
+# momentum decay) are std-only inherent methods, not in `core`. `libm` is the no_std-safe
+# equivalent `retroglyph-core` already depends on for the same reason, so this is a plain,
+# always-on dependency here too rather than a std/no_std feature split.
+libm = "0.2"
 # `Theme`/`Density`'s `serde` feature below. A separate optional dependency from
 # `retroglyph-core`'s own (rather than re-exported), matching how each crate here already
 # depends on `retroglyph-core` independently.

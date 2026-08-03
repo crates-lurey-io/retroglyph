@@ -8,6 +8,13 @@
 //! type to route through [`retroglyph_core::layout::TextLayout`] instead,
 //! which handles grapheme clusters and hard newlines correctly; there is
 //! no second, egc-only `Paragraph` type to migrate to.
+#[cfg(not(feature = "egc"))]
+use alloc::string::{String, ToString as _};
+#[cfg(not(feature = "egc"))]
+use alloc::vec;
+#[cfg(not(feature = "egc"))]
+use alloc::vec::Vec;
+
 #[cfg(feature = "egc")]
 use retroglyph_core::Rect;
 use retroglyph_core::Style;
@@ -180,6 +187,8 @@ impl Widget for Paragraph<'_> {
 
 #[cfg(test)]
 mod tests {
+    use alloc::string::String;
+
     use retroglyph_core::{Grid, Pos, Rect};
 
     use super::*;

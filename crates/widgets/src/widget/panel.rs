@@ -1,4 +1,6 @@
 //! [`Panel`]: a bordered, titled panel.
+use alloc::vec::Vec;
+
 use retroglyph_core::text::truncate_measured;
 use retroglyph_core::{Color, Rect, Style};
 
@@ -331,6 +333,8 @@ impl TitleCursor {
 
 #[cfg(test)]
 mod tests {
+    use alloc::string::String;
+
     use retroglyph_core::{Color, Grid, Pos};
 
     use super::*;

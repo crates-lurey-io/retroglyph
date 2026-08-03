@@ -1,6 +1,8 @@
 //! [`FocusRing`]: keyboard focus and Tab/Shift+Tab cycling over a set of
 //! ids established each frame.
 
+use alloc::vec::Vec;
+
 use retroglyph_core::{Event, KeyCode};
 
 /// Which id currently holds keyboard focus, plus Tab/Shift+Tab cycling

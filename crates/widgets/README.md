@@ -118,7 +118,7 @@ interaction.frame(&mut Surface::new(&mut grid, Rect::new(0, 0, 20, 1), 0), |ui| 
 
 <!-- gen-features:start -->
 
-This crate has no default features; every feature below is optional and off unless enabled.
+Default features: `std`.
 
 ### `dev`
 
@@ -143,6 +143,14 @@ Adds `Serialize`/`Deserialize` impls for `Theme` and `Density`, forwarding to `r
 `serde` feature.
 
 `Theme` round-trips through `Color`'s own `serde` impl.
+
+### `std`
+
+🟢 Enabled by default.
+
+Enables `retroglyph-core/std`.
+
+Disabling this feature (`--no-default-features`) builds this crate `no_std` (requires an allocator).
 
 <!-- gen-features:end -->
 

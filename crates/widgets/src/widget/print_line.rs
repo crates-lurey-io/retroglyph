@@ -91,6 +91,9 @@ impl Widget for PrintLine<'_> {
 
 #[cfg(test)]
 mod tests {
+    use alloc::string::String;
+    use alloc::vec;
+
     use retroglyph_core::text::Span;
     use retroglyph_core::{Grid, Pos, Rect};
 

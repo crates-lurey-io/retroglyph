@@ -39,10 +39,13 @@
 //! This crate is itself optional: games that draw manually depend only on
 //! `retroglyph-core`.
 //!
+//! This crate is `no_std`-compatible: disable the `std` feature (requires an allocator). See the
+//! `std` feature below.
+//!
 //! # Features
 //!
 //! <!-- gen-features:start -->
-//! This crate has no default features; every feature below is optional and off unless enabled.
+//! Default features: `std`.
 //!
 //! ### `dev`
 //!
@@ -67,9 +70,20 @@
 //! `retroglyph-core`'s `serde` feature.
 //!
 //! [`Theme`] round-trips through `Color`'s own `serde` impl.
+//!
+//! ### `std`
+//!
+//! 🟢 Enabled by default.
+//!
+//! Enables `retroglyph-core/std`.
+//!
+//! Disabling this feature (`--no-default-features`) builds this crate `no_std` (requires an
+//! allocator).
 //! <!-- gen-features:end -->
 
+#![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
+extern crate alloc;
 
 // Compile the code blocks in this crate's own README as doctests so its quick start is
 // type-checked on every test run and cannot silently rot. The `cfg(doctest)` gate keeps this out

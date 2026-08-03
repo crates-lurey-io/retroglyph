@@ -299,6 +299,8 @@ impl<Id> InteractiveWidget<Id> for List<'_> {
 
 #[cfg(test)]
 mod tests {
+    use alloc::vec::Vec;
+
     use retroglyph_core::{Grid, Pos};
 
     use super::*;

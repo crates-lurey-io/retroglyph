@@ -1,6 +1,8 @@
 //! [`HitTester`]: resolve a pointer position to the topmost widget id
 //! occupying it.
 
+use alloc::vec::Vec;
+
 use retroglyph_core::{Pos, Rect};
 
 /// A per-frame registry of `(Rect, Id)` pairs, queried by pointer position

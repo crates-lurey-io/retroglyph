@@ -88,6 +88,10 @@ compile:
     # retroglyph#547: dep:gem is unconditional in retroglyph-core now, so this has to compile
     # with zero features, not just fewer -- the whole point of making it non-optional.
     cargo check -p retroglyph-core --no-default-features
+    # retroglyph#882: retroglyph-widgets forwards a `std` feature to retroglyph-core's own, so
+    # this is its `no_std` (alloc-only) build, the same reason retroglyph-core gets its own line
+    # above.
+    cargo check -p retroglyph-widgets --no-default-features
 
 doc: check-features
     # --exclude: none of the three are part of the published API surface (cargo-bin and
@@ -181,6 +185,9 @@ test-ci: build-pty-examples
 test-default-features:
     cargo test -p retroglyph-widgets -p retroglyph-terminal -p retroglyph-crossterm -p retroglyph-window -p retroglyph-gl
     cargo test -p retroglyph-core --no-default-features
+    # retroglyph#882: same rationale as the `retroglyph-core` line above, now that
+    # `retroglyph-widgets` has its own `std` feature forwarding to `retroglyph-core`'s.
+    cargo test -p retroglyph-widgets --no-default-features
 
 test-v: build-pty-examples
     cargo bin cargo-nextest run --workspace --all-features --no-capture

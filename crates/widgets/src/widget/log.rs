@@ -1,4 +1,7 @@
 //! [`Log`]: a scrolled-back tail of message lines.
+#[cfg(feature = "egc")]
+use alloc::vec::Vec;
+
 use retroglyph_core::Rect;
 #[cfg(feature = "egc")]
 use retroglyph_core::layout::wrap;
@@ -188,6 +191,8 @@ impl Log<'_> {
 
 #[cfg(test)]
 mod tests {
+    use alloc::vec::Vec;
+
     use retroglyph_core::{Grid, Pos};
 
     use super::*;

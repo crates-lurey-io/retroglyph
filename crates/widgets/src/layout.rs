@@ -25,6 +25,8 @@
 //! pane that is capped below its share does not redistribute the excess to other panes, so
 //! leftover space can remain unclaimed (see [`Flex`] for how that leftover is placed via
 //! [`split_v_flex`]/[`split_h_flex`]).
+use alloc::vec::Vec;
+
 use retroglyph_core::{HasSize, Rect, Size};
 
 /// How a single pane claims space along the split axis.
@@ -132,7 +134,7 @@ impl<T: Copy + Default, const N: usize> SmallBuf<T, N> {
     }
 }
 
-impl<T: Copy + Default, const N: usize> std::ops::Deref for SmallBuf<T, N> {
+impl<T: Copy + Default, const N: usize> core::ops::Deref for SmallBuf<T, N> {
     type Target = [T];
 
     fn deref(&self) -> &[T] {
@@ -143,7 +145,7 @@ impl<T: Copy + Default, const N: usize> std::ops::Deref for SmallBuf<T, N> {
     }
 }
 
-impl<T: Copy + Default, const N: usize> std::ops::DerefMut for SmallBuf<T, N> {
+impl<T: Copy + Default, const N: usize> core::ops::DerefMut for SmallBuf<T, N> {
     fn deref_mut(&mut self) -> &mut [T] {
         match self {
             Self::Stack(buf, len) => &mut buf[..*len],
@@ -152,7 +154,7 @@ impl<T: Copy + Default, const N: usize> std::ops::DerefMut for SmallBuf<T, N> {
     }
 }
 
-impl<T: Copy + Default, const N: usize> std::ops::Index<usize> for SmallBuf<T, N> {
+impl<T: Copy + Default, const N: usize> core::ops::Index<usize> for SmallBuf<T, N> {
     type Output = T;
 
     fn index(&self, idx: usize) -> &T {
@@ -160,7 +162,7 @@ impl<T: Copy + Default, const N: usize> std::ops::Index<usize> for SmallBuf<T, N
     }
 }
 
-impl<T: Copy + Default, const N: usize> std::ops::IndexMut<usize> for SmallBuf<T, N> {
+impl<T: Copy + Default, const N: usize> core::ops::IndexMut<usize> for SmallBuf<T, N> {
     fn index_mut(&mut self, idx: usize) -> &mut T {
         &mut (**self)[idx]
     }
@@ -200,7 +202,7 @@ fn solve(total: u16, constraints: &[Constraint]) -> SmallBuf<u16, STACK_CAP> {
     if !flexible.is_empty() {
         let remainder = total.saturating_sub(used);
         let total_weight: u32 = flexible.iter().map(|&(_, w, _)| u32::from(w)).sum();
-        if let Some(total_weight) = std::num::NonZeroU32::new(total_weight) {
+        if let Some(total_weight) = core::num::NonZeroU32::new(total_weight) {
             // Largest-remainder method: give every pane the integer floor of its
             // proportional share, then hand out the leftover cells one at a time to
             // the panes with the largest fractional remainder (ties -> earlier pane
@@ -288,7 +290,7 @@ fn solve_n<const N: usize>(total: u16, constraints: &[Constraint; N]) -> [u16; N
             .iter()
             .map(|&(_, w, _)| u32::from(w))
             .sum();
-        if let Some(total_weight) = std::num::NonZeroU32::new(total_weight) {
+        if let Some(total_weight) = core::num::NonZeroU32::new(total_weight) {
             let mut shares = [0u32; N];
             let mut fracs = [0u32; N];
             let mut floor_sum: u32 = 0;
@@ -386,7 +388,7 @@ pub fn split_v(area: Rect, constraints: &[Constraint]) -> Vec<Rect> {
 pub fn split_v_n<const N: usize>(area: Rect, constraints: [Constraint; N]) -> [Rect; N] {
     let sizes = solve_n(area.height(), &constraints);
     let mut y = area.top();
-    std::array::from_fn(|i| {
+    core::array::from_fn(|i| {
         let h = sizes[i];
         let rect = Rect::new(area.left(), y, area.width(), h);
         y = y.saturating_add(h);
@@ -448,7 +450,7 @@ pub fn split_h(area: Rect, constraints: &[Constraint]) -> Vec<Rect> {
 pub fn split_h_n<const N: usize>(area: Rect, constraints: [Constraint; N]) -> [Rect; N] {
     let sizes = solve_n(area.width(), &constraints);
     let mut x = area.left();
-    std::array::from_fn(|i| {
+    core::array::from_fn(|i| {
         let w = sizes[i];
         let rect = Rect::new(x, area.top(), w, area.height());
         x = x.saturating_add(w);
@@ -667,7 +669,7 @@ pub fn split_h_n_spaced<const N: usize>(
     let sizes = solve_n(spaced_total(area.width(), N, spacing), &constraints);
     let mut x = area.left();
     let mut gaps = Vec::with_capacity(N.saturating_sub(1));
-    let panes = std::array::from_fn(|i| {
+    let panes = core::array::from_fn(|i| {
         let w = sizes[i];
         let rect = Rect::new(x, area.top(), w, area.height());
         if i + 1 < N {
@@ -698,7 +700,7 @@ pub fn split_v_n_spaced<const N: usize>(
     let sizes = solve_n(spaced_total(area.height(), N, spacing), &constraints);
     let mut y = area.top();
     let mut gaps = Vec::with_capacity(N.saturating_sub(1));
-    let panes = std::array::from_fn(|i| {
+    let panes = core::array::from_fn(|i| {
         let h = sizes[i];
         let rect = Rect::new(area.left(), y, area.width(), h);
         if i + 1 < N {
@@ -888,7 +890,7 @@ pub fn split_v_n_flex<const N: usize>(
 ) -> [Rect; N] {
     let sizes = solve_n(area.height(), &constraints);
     let offsets = place_n(area.height(), &sizes, flex);
-    std::array::from_fn(|i| {
+    core::array::from_fn(|i| {
         Rect::new(
             area.left(),
             area.top().saturating_add(offsets[i]),
@@ -927,7 +929,7 @@ pub fn split_h_n_flex<const N: usize>(
 ) -> [Rect; N] {
     let sizes = solve_n(area.width(), &constraints);
     let offsets = place_n(area.width(), &sizes, flex);
-    std::array::from_fn(|i| {
+    core::array::from_fn(|i| {
         Rect::new(
             area.left().saturating_add(offsets[i]),
             area.top(),
@@ -1106,6 +1108,8 @@ pub fn anchored_rect(anchor: Rect, size: Size, preferred: Side, bounds: Rect) ->
 
 #[cfg(test)]
 mod tests {
+    use alloc::vec;
+
     use super::*;
 
     #[test]

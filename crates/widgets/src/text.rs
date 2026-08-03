@@ -3,6 +3,9 @@
 //! For word-wrapping multi-line text, see `retroglyph_core::layout::TextLayout`
 //! (behind the `egc` feature) rather than reimplementing wrapping here: it
 //! already handles grapheme clusters, hard newlines, and per-span styling.
+use alloc::borrow::ToOwned as _;
+use alloc::string::String;
+
 use retroglyph_core::text::{split_at_width, truncate_measured};
 use retroglyph_core::{Pos, Style};
 

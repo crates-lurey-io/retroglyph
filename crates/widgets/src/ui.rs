@@ -459,6 +459,8 @@ impl<'g, Id: Copy + PartialEq> Ui<'_, 'g, Id> {
 
 #[cfg(test)]
 mod tests {
+    use alloc::string::String;
+
     use retroglyph_core::{Event, Grid, KeyModifiers, MouseEvent, MouseEventKind, Pos, Style};
 
     use super::*;

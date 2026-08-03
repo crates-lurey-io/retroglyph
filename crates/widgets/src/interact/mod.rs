@@ -65,6 +65,7 @@ pub use response::Response;
 pub use sense::Sense;
 pub use shortcuts::Shortcuts;
 
+use alloc::vec::Vec;
 use core::time::Duration;
 
 use retroglyph_core::{Event, Frame, KeyCode, MouseButton, Pos, Rect, Surface, Tween};
@@ -737,6 +738,8 @@ const fn is_activation_key(event: &Event) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use alloc::borrow::ToOwned as _;
+
     use retroglyph_core::{KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 
     use super::*;

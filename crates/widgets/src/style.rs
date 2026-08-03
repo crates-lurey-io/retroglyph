@@ -10,6 +10,8 @@
 //! wrapped result to `BoxStyle::render`. Keeping wrapping and box-model
 //! layout separate avoids tying every consumer of this module to `Paragraph`
 //! or the `egc` feature.
+use alloc::vec::Vec;
+
 use retroglyph_core::text::{char_width, width_usize as measured_width};
 use retroglyph_core::{Grid, Style, Tile};
 // `Rect` is only named by the `egc` content-measuring path below and by this module's tests.
@@ -367,6 +369,8 @@ fn draw_border(grid: &mut Grid, x: u16, y: u16, w: u16, h: u16, style: Style) {
 
 #[cfg(test)]
 mod tests {
+    use alloc::string::String;
+
     use super::*;
     use retroglyph_core::{Pos, Rect};
 

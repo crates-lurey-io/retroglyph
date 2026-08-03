@@ -195,7 +195,7 @@ impl ScrollState {
 
             if self.offset >= 0.0 && self.offset <= max_offset {
                 // In bounds: apply friction decay
-                self.velocity *= f32::exp(-self.physics.friction * step);
+                self.velocity *= libm::expf(-self.physics.friction * step);
                 self.offset += self.velocity * step;
 
                 // Stop moving if velocity becomes tiny
