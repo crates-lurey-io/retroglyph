@@ -233,7 +233,7 @@ mod tests {
 
     #[test]
     fn pressed_takes_precedence_over_hovered() {
-        let response: Response<Id> = Response {
+        let response: Response<()> = Response {
             hovered: true,
             pressed: true,
             ..Response::default()
@@ -247,7 +247,7 @@ mod tests {
 
     #[test]
     fn hovered_takes_precedence_over_focused() {
-        let response: Response<Id> = Response {
+        let response: Response<()> = Response {
             hovered: true,
             focused: true,
             ..Response::default()
@@ -261,7 +261,7 @@ mod tests {
 
     #[test]
     fn focused_only_shows_when_not_pressed_or_hovered() {
-        let response: Response<Id> = Response {
+        let response: Response<()> = Response {
             focused: true,
             ..Response::default()
         };
@@ -277,7 +277,7 @@ mod tests {
         let button = Button::new("Go");
         assert_eq!(
             button
-                .resolved_style(&Response::<Id>::default())
+                .resolved_style(&Response::<()>::default())
                 .background(),
             button.style.background()
         );
@@ -286,7 +286,7 @@ mod tests {
     #[test]
     fn style_knobs_can_be_overridden() {
         let custom = Style::new().fg(Color::RED).bg(Color::GREEN);
-        let response: Response<Id> = Response {
+        let response: Response<()> = Response {
             pressed: true,
             ..Response::default()
         };
@@ -363,7 +363,7 @@ mod tests {
 
     #[test]
     fn disabled_style_takes_precedence_over_pressed_and_hovered() {
-        let response: Response<Id> = Response {
+        let response: Response<()> = Response {
             hovered: true,
             pressed: true,
             disabled: true,
@@ -394,7 +394,7 @@ mod tests {
     fn theme_maps_named_roles_onto_every_state() {
         use crate::Theme;
 
-        let response: Response<Id> = Response {
+        let response: Response<()> = Response {
             hovered: true,
             ..Response::default()
         };

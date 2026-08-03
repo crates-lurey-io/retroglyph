@@ -609,7 +609,7 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
         let lost_focus = !is_focused && self.prev_focused == Some(id);
 
         Response {
-            id: Some(id),
+            id,
             hovered,
             pressed: (senses_click && is_active && self.resolved_press) || key_activated,
             released: released_here || key_activated,

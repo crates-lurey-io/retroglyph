@@ -17,14 +17,17 @@ use retroglyph_core::{Pos, Rect};
 // machine: collapsing it into enums would only make `interact`'s construction of it more
 // awkward for no reader benefit.
 //
-// `id` is `Option<Id>`, not `Id`, and `Default` is hand-written below rather than derived, so
-// that `Response::<Id>::default()` (used throughout this crate's tests as "nothing happened")
-// keeps working without forcing every `Id` a caller picks to implement `Default` too.
-// `Interaction::interact` always fills it in as `Some`.
+// `id` is a bare `Id`, not `Option<Id>`: every `Response` that ever reaches app code comes from
+// `Interaction::interact`, which always has a real id in hand, so wrapping it in `Option` would
+// just make every caller unwrap a value that's never actually absent. The one place this crate
+// builds a `Response` without going through `interact` is [`Response::default`], used as a
+// synthetic "nothing happened" value (see [`Widget`](crate::Widget) impls that share their
+// [`InteractiveWidget`](crate::InteractiveWidget) drawing routine); `Default` requires
+// `Id: Default` so that case still needs a real (if meaningless) id, same as every other field.
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Response<Id> {
-    pub(crate) id: Option<Id>,
+    pub(crate) id: Id,
     pub(crate) hovered: bool,
     pub(crate) pressed: bool,
     pub(crate) released: bool,
@@ -44,10 +47,10 @@ pub struct Response<Id> {
     pub(crate) rect: Rect,
 }
 
-impl<Id> Default for Response<Id> {
+impl<Id: Default> Default for Response<Id> {
     fn default() -> Self {
         Self {
-            id: None,
+            id: Id::default(),
             hovered: false,
             pressed: false,
             released: false,
@@ -72,10 +75,11 @@ impl<Id> Default for Response<Id> {
 impl<Id: Copy> Response<Id> {
     /// The `id` passed to [`Interaction::interact`](crate::Interaction::interact) this frame,
     /// echoed back so a call site that only has the resolved `Response` in hand (e.g. one
-    /// returned from a widget it drew in a loop) can still tell which id it belongs to. `None`
-    /// only for a [`Response::default`] built directly rather than through `interact`.
+    /// returned from a widget it drew in a loop) can still tell which id it belongs to. For a
+    /// [`Response::default`] built directly rather than through `interact`, this is just
+    /// `Id::default()`, not a real widget's id.
     #[must_use]
-    pub const fn id(&self) -> Option<Id> {
+    pub const fn id(&self) -> Id {
         self.id
     }
 }
@@ -259,7 +263,7 @@ mod tests {
     #[test]
     fn default_is_all_falsy() {
         let r: Response<()> = Response::default();
-        assert_eq!(r.id(), None);
+        assert_eq!(r.id(), ());
         assert!(!r.hovered());
         assert!(!r.pressed());
         assert!(!r.released());
