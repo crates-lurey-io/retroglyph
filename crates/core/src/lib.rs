@@ -229,4 +229,4 @@ pub use terminal::Terminal;
 #[cfg(feature = "testing")]
 pub use testing::{RunError, TestHarness};
 pub use text::{Line, Span};
-pub use tile::Tile;
+pub use tile::{Tile, TileFlags};
