@@ -357,10 +357,11 @@ impl Grid {
             if let Some(lb) = self.layers[layer_id].as_ref() {
                 for y in y_start..y_end {
                     for x in x_start..x_end {
+                        // `x_end`/`y_end` are always `w`/`h` (see the two call sites in
+                        // `repair_spans_after_resize`), so `idx` is always in bounds: no `.get`
+                        // needed, and no untestable out-of-bounds branch to carry.
                         let idx = usize::from(y) * usize::from(w) + usize::from(x);
-                        let Some(tile) = lb.buf.as_ref().get(idx) else {
-                            continue;
-                        };
+                        let tile = &lb.buf.as_ref()[idx];
                         if !tile.flags.contains(TileFlags::SPAN_ANCHOR) {
                             continue;
                         }
@@ -736,6 +737,24 @@ mod tests {
         grid.resize(2, 1);
         assert!(grid.tile(0, (0, 0)).unwrap().is_empty());
         assert_eq!(grid.tile(0, (0, 0)).unwrap().span(), (1, 1));
+    }
+
+    #[test]
+    fn resize_narrower_skips_unallocated_layers_between_allocated_ones() {
+        // Layer 1 stays `None`: writing to layer 2 grows the layer table past it without
+        // allocating it. The repair scan must walk straight past that gap layer instead of
+        // panicking or mistaking it for one with a stale anchor.
+        let mut grid = Grid::new(4, 2);
+        grid.write_span(0, 0, 0, &["ab", "cd"], Style::default())
+            .unwrap();
+        grid.put_tile(2, (0, 0), Tile::new('z', Style::default()));
+        assert!(grid.cells(1).is_none());
+
+        grid.resize(1, 2);
+        assert!(grid.tile(0, (0, 0)).unwrap().is_empty());
+        assert_eq!(grid.tile(0, (0, 0)).unwrap().span(), (1, 1));
+        // Untouched by the repair scan on an unrelated layer.
+        assert_eq!(grid.tile(2, (0, 0)).unwrap().glyph(), 'z');
     }
 
     #[test]
