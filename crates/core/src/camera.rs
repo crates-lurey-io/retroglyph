@@ -195,10 +195,13 @@ impl Camera {
     }
 
     /// Map a world position to its screen position, or `None` if it is outside
-    /// the visible viewport.
+    /// [`visible_bounds`](Self::visible_bounds): the viewport, clamped to the world.
     #[must_use]
     pub const fn world_to_screen(&self, world: Pos) -> Option<Pos> {
         if world.x < self.origin.x || world.y < self.origin.y {
+            return None;
+        }
+        if world.x >= self.world.width || world.y >= self.world.height {
             return None;
         }
         let dx = world.x - self.origin.x;
@@ -398,6 +401,9 @@ mod tests {
         assert_eq!((visible.width(), visible.height()), (5, 5));
         // Cells map into the viewport, offset by its top-left.
         assert_eq!(c.world_to_screen(Pos::new(0, 0)), Some(Pos::new(2, 2)));
+        // A cell inside the viewport but outside the (smaller) world: rejected, matching
+        // `visible_bounds` and `screen_to_world`, not silently mapped past the world edge.
+        assert_eq!(c.world_to_screen(Pos::new(7, 7)), None);
     }
 
     #[test]
