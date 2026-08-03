@@ -1436,6 +1436,74 @@ impl Grid {
     /// bounds) contains at least one non-empty tile, matching `put_tile`'s original
     /// allocate-on-first-write behavior for a `src_rect` that is entirely transparent.
     pub fn blit(&mut self, layer: u8, src: &Self, src_rect: Rect, dst_x: u16, dst_y: u16) {
+        self.blit_with(layer, src, src_rect, dst_x, dst_y, |tile, _dst_tile| *tile);
+    }
+
+    /// Same as [`blit`](Self::blit) but blends foreground and background
+    /// colors with the given alpha factors, using `mode` to compute the
+    /// blended color. `fg_alpha` and `bg_alpha` are in 0.0-1.0 range where
+    /// 0.0 = keep destination, 1.0 = replace with src; for a non-
+    /// [`Linear`](BlendMode::Linear) `mode`, "replace with src" instead means
+    /// "replace with `mode`'s fully blended color" (see [`BlendMode`]).
+    ///
+    /// Blending operates on packed RGB values; [`Color::Default`] preserves
+    /// the destination. Non-RGB color variants (Ansi/Indexed) are passed
+    /// through unblended, regardless of `mode`.
+    ///
+    /// [`BlendMode::Linear`]'s per-channel color lerp is delegated to [`gem::Mix`], so this
+    /// method is always available. The other modes delegate to [`alpha_blend::BlendMode`]
+    /// (imported in this module as `SeparableBlendMode` to avoid colliding with this crate's own
+    /// [`BlendMode`]) and require the `blend-modes` feature (default on).
+    ///
+    /// Like [`blit`](Self::blit) (see retroglyph#262/#263), walks `src`'s and `self`'s layer
+    /// buffers directly by flat index instead of per-cell [`tile`](Self::tile)/
+    /// [`put_tile`](Self::put_tile), and allocates the destination layer once, up front, rather
+    /// than as a side effect of the first written cell.
+    #[allow(clippy::too_many_arguments, clippy::float_cmp)]
+    pub fn blit_alpha(
+        &mut self,
+        layer: u8,
+        src: &Self,
+        src_rect: Rect,
+        dst_x: u16,
+        dst_y: u16,
+        mode: BlendMode,
+        fg_alpha: f32,
+        bg_alpha: f32,
+    ) {
+        self.blit_with(layer, src, src_rect, dst_x, dst_y, |tile, dst_tile| {
+            let mut blended = *tile;
+            // `fg_alpha == 1.0` only lets `Linear` skip the call: `Linear` at `t ==
+            // 1.0` is `src` by definition, but a `Screen`/`Dodge`/`Burn`/`Overlay`
+            // mix at full alpha still needs to run the mode's formula: it isn't
+            // equivalent to the raw source color (see `blend_color`'s matching guard).
+            if mode != BlendMode::Linear || fg_alpha != 1.0 {
+                blended.style.fg = blend_fg(mode, tile.style.fg, dst_tile.style.fg, fg_alpha);
+            }
+            if mode != BlendMode::Linear || bg_alpha != 1.0 {
+                blended.style.bg = blend_bg(mode, tile.style.bg, dst_tile.style.bg, bg_alpha);
+            }
+            blended
+        });
+    }
+
+    /// Shared copy loop behind [`blit`](Self::blit) and [`blit_alpha`](Self::blit_alpha):
+    /// clamps `src_rect` to `src`'s bounds, skips the whole call if nothing in it is visible,
+    /// clears any destination span the copy is about to partially overwrite (retroglyph#710), and
+    /// walks matching `src`/destination cells by flat index (retroglyph#262/#263), applying
+    /// `transform` to each non-empty source tile (given the source tile and, for context, the
+    /// destination tile it's about to replace) before writing it and fixing up grapheme extras.
+    /// `dst_x`/`dst_y` saturate on overflow (retroglyph#268) rather than wrapping; the bounds
+    /// checks below always catch a saturated `u16::MAX` origin.
+    fn blit_with(
+        &mut self,
+        layer: u8,
+        src: &Self,
+        src_rect: Rect,
+        dst_x: u16,
+        dst_y: u16,
+        transform: impl Fn(&Tile, &Tile) -> Tile,
+    ) {
         let Some(src_lb) = src.layer(layer) else {
             return;
         };
@@ -1498,11 +1566,6 @@ impl Grid {
         let dst_lb = self.layer_or_alloc(layer);
         let mut pending_extras: Vec<(usize, TileExtra)> = Vec::new();
 
-        // `dst_x`/`dst_y` saturate on overflow (retroglyph#268): a `u16::MAX`-adjacent origin
-        // combined with a `src_rect` offset would otherwise wrap silently and either write to
-        // the wrong cell or get rejected by luck rather than by design. Saturating to `u16::MAX`
-        // is always caught by the `>= dst_width`/`>= dst_height` bounds check below, since a
-        // valid index must be strictly less than a `u16`-derived dimension.
         for sy in sy0..sy1 {
             let dy = dst_y.saturating_add(sy - src_rect.top());
             if usize::from(dy) >= dst_height {
@@ -1519,152 +1582,11 @@ impl Grid {
                     continue;
                 }
                 let dst_idx = usize::from(dy) * dst_width + usize::from(dx);
-                let mut out_tile = *tile;
+                let dst_tile = dst_lb.buf.as_ref()[dst_idx];
+                let mut out_tile = transform(tile, &dst_tile);
                 out_tile.flags.remove(TileFlags::HAS_EXTRA);
                 out_tile.clear_span();
                 dst_lb.buf.as_mut()[dst_idx] = out_tile;
-                if tile.flags.contains(TileFlags::HAS_EXTRA) {
-                    if let Some(extra) = src_lb.extra_entry_for(src_idx, tile) {
-                        pending_extras.push((dst_idx, extra));
-                    }
-                } else {
-                    dst_lb.extras.remove(&dst_idx);
-                }
-            }
-        }
-
-        for (idx, extra) in pending_extras {
-            dst_lb.buf.as_mut()[idx].flags.insert(TileFlags::HAS_EXTRA);
-            dst_lb.extras.insert(idx, extra);
-        }
-    }
-
-    /// Same as [`blit`](Self::blit) but blends foreground and background
-    /// colors with the given alpha factors, using `mode` to compute the
-    /// blended color. `fg_alpha` and `bg_alpha` are in 0.0-1.0 range where
-    /// 0.0 = keep destination, 1.0 = replace with src; for a non-
-    /// [`Linear`](BlendMode::Linear) `mode`, "replace with src" instead means
-    /// "replace with `mode`'s fully blended color" (see [`BlendMode`]).
-    ///
-    /// Blending operates on packed RGB values; [`Color::Default`] preserves
-    /// the destination. Non-RGB color variants (Ansi/Indexed) are passed
-    /// through unblended, regardless of `mode`.
-    ///
-    /// [`BlendMode::Linear`]'s per-channel color lerp is delegated to [`gem::Mix`], so this
-    /// method is always available. The other modes delegate to [`alpha_blend::BlendMode`]
-    /// (imported in this module as `SeparableBlendMode` to avoid colliding with this crate's own
-    /// [`BlendMode`]) and require the `blend-modes` feature (default on).
-    ///
-    /// Like [`blit`](Self::blit) (see retroglyph#262/#263), walks `src`'s and `self`'s layer
-    /// buffers directly by flat index instead of per-cell [`tile`](Self::tile)/
-    /// [`put_tile`](Self::put_tile), and allocates the destination layer once, up front, rather
-    /// than as a side effect of the first written cell.
-    #[allow(clippy::too_many_arguments, clippy::float_cmp)]
-    pub fn blit_alpha(
-        &mut self,
-        layer: u8,
-        src: &Self,
-        src_rect: Rect,
-        dst_x: u16,
-        dst_y: u16,
-        mode: BlendMode,
-        fg_alpha: f32,
-        bg_alpha: f32,
-    ) {
-        let Some(src_lb) = src.layer(layer) else {
-            return;
-        };
-        let src_width = usize::from(src.width);
-        let sx0 = src_rect.left().min(src.width);
-        let sx1 = src_rect.right().min(src.width);
-        let sy0 = src_rect.top().min(src.height);
-        let sy1 = src_rect.bottom().min(src.height);
-        if sx0 >= sx1 || sy0 >= sy1 {
-            return;
-        }
-
-        // Matches the original's implicit allocate-on-first-write: only touch the destination
-        // layer at all if there's at least one visible (non-empty) source tile to copy.
-        let has_visible = (sy0..sy1).any(|sy| {
-            let start = usize::from(sy) * src_width + usize::from(sx0);
-            let end = usize::from(sy) * src_width + usize::from(sx1);
-            src_lb.buf.as_ref()[start..end]
-                .iter()
-                .any(|t| !t.flags.contains(TileFlags::EMPTY))
-        });
-        if !has_visible {
-            return;
-        }
-
-        let dst_width = usize::from(self.width);
-        let dst_height = usize::from(self.height);
-
-        // See `blit`'s matching comment (retroglyph#710): clear any span this blit is about to
-        // partially overwrite before the copy pass below borrows the destination layer
-        // mutably, so an anchor never survives a cell it no longer owns.
-        if self.has_spans {
-            for sy in sy0..sy1 {
-                let dy = dst_y.saturating_add(sy - src_rect.top());
-                if usize::from(dy) >= dst_height {
-                    continue;
-                }
-                for sx in sx0..sx1 {
-                    let dx = dst_x.saturating_add(sx - src_rect.left());
-                    if usize::from(dx) >= dst_width {
-                        continue;
-                    }
-                    let src_idx = usize::from(sy) * src_width + usize::from(sx);
-                    if src_lb.buf.as_ref()[src_idx]
-                        .flags
-                        .contains(TileFlags::EMPTY)
-                    {
-                        continue;
-                    }
-                    self.clear_span_overlap(layer, dx, dy, 1);
-                }
-            }
-        }
-
-        let dst_lb = self.layer_or_alloc(layer);
-        let mut pending_extras: Vec<(usize, TileExtra)> = Vec::new();
-
-        // See `blit`'s matching comment (retroglyph#268): `saturating_add` here, paired with the
-        // bounds checks below, prevents a `u16::MAX`-adjacent destination origin from wrapping.
-        for sy in sy0..sy1 {
-            let dy = dst_y.saturating_add(sy - src_rect.top());
-            if usize::from(dy) >= dst_height {
-                continue;
-            }
-            for sx in sx0..sx1 {
-                let dx = dst_x.saturating_add(sx - src_rect.left());
-                if usize::from(dx) >= dst_width {
-                    continue;
-                }
-                let src_idx = usize::from(sy) * src_width + usize::from(sx);
-                let tile = &src_lb.buf.as_ref()[src_idx];
-                if tile.flags.contains(TileFlags::EMPTY) {
-                    continue;
-                }
-                let dst_idx = usize::from(dy) * dst_width + usize::from(dx);
-                let mut blended = *tile;
-                {
-                    let dst_tile = &dst_lb.buf.as_ref()[dst_idx];
-                    // `fg_alpha == 1.0` only lets `Linear` skip the call: `Linear` at `t ==
-                    // 1.0` is `src` by definition, but a `Screen`/`Dodge`/`Burn`/`Overlay`
-                    // mix at full alpha still needs to run the mode's formula: it isn't
-                    // equivalent to the raw source color (see `blend_color`'s matching guard).
-                    if mode != BlendMode::Linear || fg_alpha != 1.0 {
-                        blended.style.fg =
-                            blend_fg(mode, tile.style.fg, dst_tile.style.fg, fg_alpha);
-                    }
-                    if mode != BlendMode::Linear || bg_alpha != 1.0 {
-                        blended.style.bg =
-                            blend_bg(mode, tile.style.bg, dst_tile.style.bg, bg_alpha);
-                    }
-                }
-                blended.flags.remove(TileFlags::HAS_EXTRA);
-                blended.clear_span();
-                dst_lb.buf.as_mut()[dst_idx] = blended;
                 if tile.flags.contains(TileFlags::HAS_EXTRA) {
                     if let Some(extra) = src_lb.extra_entry_for(src_idx, tile) {
                         pending_extras.push((dst_idx, extra));
