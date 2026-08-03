@@ -5,9 +5,9 @@
 //! [`Output::needs_full_frame`]) because sub-cell offsets can leave orphaned pixels from the
 //! previous frame.
 
-use crate::backend::{Backend, Output};
+use crate::backend::{Backend, CursorStyle, Output};
 use crate::event::Event;
-use crate::grid::{Grid, Rect, Size};
+use crate::grid::{Grid, Pos, Rect, Size};
 use crate::surface::Surface;
 use alloc::collections::VecDeque;
 use alloc::vec::Vec;
@@ -159,6 +159,30 @@ impl<B: Backend> Terminal<B> {
         // retention here too keeps that a non-event rather than relying on it.
         self.retained_layers.clear();
         self.backend.resize(Size::new(width, height));
+    }
+
+    /// Show or hide the cursor.
+    ///
+    /// Forwards to [`Cursor::set_cursor_visible`](crate::backend::Cursor::set_cursor_visible) on
+    /// the backend.
+    pub fn set_cursor_visible(&mut self, visible: bool) {
+        self.backend.set_cursor_visible(visible);
+    }
+
+    /// Move the cursor to a position.
+    ///
+    /// Forwards to [`Cursor::set_cursor_position`](crate::backend::Cursor::set_cursor_position)
+    /// on the backend.
+    pub fn set_cursor_position(&mut self, position: Pos) {
+        self.backend.set_cursor_position(position);
+    }
+
+    /// Set the cursor's shape (and blink behavior).
+    ///
+    /// Forwards to [`Cursor::set_cursor_style`](crate::backend::Cursor::set_cursor_style) on the
+    /// backend.
+    pub fn set_cursor_style(&mut self, style: CursorStyle) {
+        self.backend.set_cursor_style(style);
     }
 
     /// Returns a reference to the current grid.
@@ -502,7 +526,6 @@ mod tests {
     use crate::backend::{Cursor, DrawCell, Headless, Input, Output};
     use crate::color::Color;
     use crate::color::Style;
-    use crate::grid::Pos;
     use crate::tile::Tile;
 
     /// Wraps [`Headless`] and fails the next [`flush`](Output::flush) call once, then
@@ -925,6 +948,20 @@ mod tests {
     fn test_terminal_area() {
         let term = Terminal::new(Headless::new(40, 20));
         assert_eq!(term.area(), Rect::new(0, 0, 40, 20));
+    }
+
+    #[test]
+    fn test_terminal_cursor_passthroughs_forward_to_backend() {
+        let mut term = Terminal::new(Headless::new(10, 10));
+
+        term.set_cursor_visible(true);
+        assert!(term.backend().cursor_visible());
+
+        term.set_cursor_position(Pos::new(3, 4));
+        assert_eq!(term.backend().cursor_position(), Pos::new(3, 4));
+
+        term.set_cursor_style(CursorStyle::SteadyBar);
+        assert_eq!(term.backend().cursor_style(), CursorStyle::SteadyBar);
     }
 
     #[test]
