@@ -434,14 +434,20 @@ fn tinted_fill_rect_clips_a_rect_much_larger_than_the_area() {
     let mut grid = Grid::new(4, 4);
     {
         let mut surface = screen(&mut grid);
-        surface
-            .with_tint(Tint::multiply(128, 64, 32))
-            .fill_rect(Rect::new(0, 0, 60_000, 60_000), '#', Style::default());
+        surface.with_tint(Tint::multiply(128, 64, 32)).fill_rect(
+            Rect::new(0, 0, 60_000, 60_000),
+            '#',
+            Style::default(),
+        );
     }
     for y in 0..4 {
         for x in 0..4 {
             assert_eq!(grid[Pos::new(x, y)].glyph(), '#', "cell ({x}, {y})");
-            assert_eq!(grid.tint(0, x, y), Tint::multiply(128, 64, 32), "cell ({x}, {y})");
+            assert_eq!(
+                grid.tint(0, x, y),
+                Tint::multiply(128, 64, 32),
+                "cell ({x}, {y})"
+            );
         }
     }
 }
