@@ -174,7 +174,6 @@ pub mod testing;
 pub mod text;
 /// The atomic drawable unit (glyph, style, sub-cell offsets).
 pub mod tile;
-pub mod tint;
 
 pub use align::{HAlign, VAlign};
 pub use animate::{Easing, Tween, oscillate};
@@ -183,7 +182,7 @@ pub use app::{App, Flow, Frame, step};
 pub use app::{RunOptions, run_blocking, run_blocking_with};
 pub use backend::{Backend, Cursor, CursorStyle, DrawCell, Headless, Input, Output};
 pub use camera::Camera;
-pub use color::{AnsiColor, Color, InvalidAnsiIndex, ParseColorError};
+pub use color::{AnsiColor, Color, InvalidAnsiIndex, ParseColorError, Tint};
 pub use dev::{BuildMode, DEV};
 pub use event::{
     Event, KeyCode, KeyEvent, KeyEventKind, KeyLocation, KeyModifiers, KeyState, MouseButton,
@@ -205,4 +204,3 @@ pub use terminal::Terminal;
 pub use testing::{RunError, TestHarness};
 pub use text::{Line, Span};
 pub use tile::Tile;
-pub use tint::Tint;

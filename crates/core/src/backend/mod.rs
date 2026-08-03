@@ -9,10 +9,10 @@ pub mod headless;
 
 pub use headless::Headless;
 
+use crate::color::Tint;
 use crate::event::Event;
 use crate::grid::{Pos, Size};
 use crate::tile::Tile;
-use crate::tint::Tint;
 use core::time::Duration;
 
 /// Associated error type used by all fallible backend methods.
