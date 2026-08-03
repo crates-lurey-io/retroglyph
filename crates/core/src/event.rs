@@ -566,6 +566,7 @@ impl KeyState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::vec;
 
     #[test]
     fn test_key_modifiers() {
