@@ -170,7 +170,7 @@ pub mod text;
 /// The atomic drawable unit (glyph, style, sub-cell offsets).
 pub mod tile;
 
-pub use animate::{Easing, Tween, oscillate};
+pub use animate::{Easing, Tween, oscillate, oscillate_with_phase};
 pub use app::{App, Flow, Frame, step};
 #[cfg(feature = "std")]
 pub use app::{RunOptions, run_blocking, run_blocking_with};

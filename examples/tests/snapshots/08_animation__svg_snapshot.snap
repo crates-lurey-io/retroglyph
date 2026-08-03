@@ -1,6 +1,5 @@
 ---
 source: examples/tests/08_animation.rs
-assertion_line: 52
 expression: svg
 ---
 <svg xmlns="http://www.w3.org/2000/svg" width="436" height="466">
@@ -48,10 +47,16 @@ expression: svg
   <tspan fill="#cccccc" x="419.6"> </tspan>
 </text>
 <text font-family="monospace" font-size="14" y="260.0" xml:space="preserve">
-  <tspan fill="#cccccc" x="8.0">                                                  </tspan>
+  <tspan fill="#cccccc" x="8.0"> Status:                                          </tspan>
 </text>
 <text font-family="monospace" font-size="14" y="278.0" xml:space="preserve">
-  <tspan fill="#cccccc" x="8.0">                                                  </tspan>
+  <tspan fill="#cccccc" x="8.0"> </tspan>
+  <tspan fill="#55ff55" x="16.4">.</tspan>
+  <tspan fill="#cccccc" x="24.8"> </tspan>
+  <tspan fill="#55ff55" x="33.2">O</tspan>
+  <tspan fill="#cccccc" x="41.6"> </tspan>
+  <tspan fill="#55ff55" x="50.0">@</tspan>
+  <tspan fill="#cccccc" x="58.4">                                            </tspan>
 </text>
 <text font-family="monospace" font-size="14" y="296.0" xml:space="preserve">
   <tspan fill="#cccccc" x="8.0">                                                  </tspan>
