@@ -179,7 +179,15 @@ impl Example for Animation {
         }
         self.draw(term);
 
-        self.elapsed += frame.delta;
+        // Stops accumulating once parked (`bounces >= 2`): a real-time SVG capture (see this
+        // example's own test) keeps rendering frames for an arbitrary, machine-speed-dependent
+        // stretch after "parked at left end" appears, waiting for the capture to notice and
+        // stop. Letting `elapsed` keep growing through that window would make `dot_glyph`'s
+        // captured output as unreproducible as the ball's position would be if `position` never
+        // clamped -- see the module doc comment for the same idea applied to the tween.
+        if self.bounces < 2 {
+            self.elapsed += frame.delta;
+        }
         self.position.update(frame.delta);
         self.clock.advance(frame.delta);
         while self.clock.tick() {
@@ -189,6 +197,11 @@ impl Example for Animation {
             // stays parked at TRACK_LEFT -- see the module doc comment.
             if self.bounces == 1 {
                 self.position.retarget(f32::from(TRACK_LEFT));
+            } else if self.bounces == 2 {
+                // Pin to the exact logical time two `BOUNCE_HZ` periods represent, rather than
+                // whatever real wall-clock total `elapsed` happened to reach this frame -- see
+                // the comment above `if self.bounces < 2` for why that matters.
+                self.elapsed = Duration::from_secs(2);
             }
         }
         true
