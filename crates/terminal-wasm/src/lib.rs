@@ -156,7 +156,7 @@ mod app_entry;
 use retroglyph_core::DrawCell;
 use retroglyph_core::Terminal;
 use retroglyph_core::backend::{Cursor, CursorStyle, Input, Output};
-use retroglyph_core::event::{Event, MouseEventKind};
+use retroglyph_core::event::{Event, coalesces_with};
 use retroglyph_core::grid::{Pos, Size};
 use retroglyph_terminal::TerminalRenderer;
 use std::collections::VecDeque;
@@ -278,12 +278,14 @@ impl TerminalWasm {
     /// backpressure here the way there is on native (crossterm's underlying input buffer
     /// naturally throttles a stalled reader):
     ///
-    /// - **Pointer-move coalescing.** If `event` is
-    ///   [`Event::Mouse`](Event) with [`MouseEventKind::Moved`] and the queue's current back is
-    ///   also a `Moved` event, `event` replaces it in place instead of growing the queue: a
-    ///   consumer that's fallen behind only ever cares about the most recent pointer position, not
-    ///   every intermediate one. Any other event kind (including a `Down`/`Up`/scroll mouse event)
-    ///   always pushes normally, so this never reorders or merges anything but a `Moved` run.
+    /// - **Pointer-move coalescing.** If `event`'s queue tail
+    ///   [`coalesces_with`](retroglyph_core::event::coalesces_with) it (both `Event::Mouse` with
+    ///   [`MouseEventKind::Moved`]), `event` replaces the tail in place instead of growing the
+    ///   queue: a consumer that's fallen behind only ever cares about the most recent pointer
+    ///   position, not every intermediate one. Any other event kind (including a
+    ///   `Down`/`Up`/scroll mouse event) always pushes normally, so this never reorders or merges
+    ///   anything but a `Moved` run. The same rule is shared with the `retroglyph-window` backend
+    ///   and `Headless` (retroglyph#768).
     /// - **Capacity cap.** Once the queue holds `EVENT_QUEUE_CAP` (4096) events, pushing another
     ///   silently drops the *oldest* queued event (via `pop_front`) to make room. Oldest was
     ///   chosen over dropping the new event so a consumer that's fallen behind and only pulls a
@@ -297,12 +299,10 @@ impl TerminalWasm {
     /// Crate-private: [`Input::push_event`] is the sole public way to push an event onto a
     /// `TerminalWasm`, so there is only one way for external callers to do this.
     pub(crate) fn push_event(&mut self, event: Event) {
-        if let Event::Mouse(mouse) = &event
-            && mouse.kind == MouseEventKind::Moved
-            && let Some(Event::Mouse(back)) = self.event_queue.back_mut()
-            && back.kind == MouseEventKind::Moved
+        if let Some(back) = self.event_queue.back_mut()
+            && coalesces_with(&event, back)
         {
-            *back = *mouse;
+            *back = event;
             return;
         }
         if self.event_queue.len() >= EVENT_QUEUE_CAP {

@@ -417,6 +417,32 @@ pub enum Event {
     Custom(u64),
 }
 
+/// Whether `new` should replace the queue's current tail event instead of being pushed alongside
+/// it, when a backend is appending `new` to a `Vec`/`VecDeque` of pending events.
+///
+/// True only for two consecutive [`Event::Mouse`] events both carrying [`MouseEventKind::Moved`]:
+/// a queue owner (winit, the wasm FFI boundary, `Headless`) can be fed pointer-move events far
+/// faster than a consumer drains them, and only the most recent position matters once it does, so
+/// collapsing a `Moved` run in place keeps the queue from growing unbounded (retroglyph#294,
+/// retroglyph#768). Every other event kind (clicks, scrolls, keys, resize, ...) always returns
+/// `false`, so this never reorders or merges anything but a `Moved` run.
+#[must_use]
+pub const fn coalesces_with(new: &Event, existing: &Event) -> bool {
+    matches!(
+        (new, existing),
+        (
+            Event::Mouse(MouseEvent {
+                kind: MouseEventKind::Moved,
+                ..
+            }),
+            Event::Mouse(MouseEvent {
+                kind: MouseEventKind::Moved,
+                ..
+            }),
+        )
+    )
+}
+
 /// Tracks which keys are currently held down.
 ///
 /// Feed it every [`KeyEvent`] (or [`Event`]) you receive and query
@@ -669,5 +695,38 @@ mod tests {
         let p = PhysicalPos { x: 10, y: 20 };
         let q = p; // Copy
         assert_eq!(p, q);
+    }
+
+    fn moved_at(x: u16, y: u16) -> Event {
+        Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Moved,
+            position: Pos::new(x, y),
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        })
+    }
+
+    #[test]
+    fn coalesces_with_true_for_two_consecutive_moved_events() {
+        assert!(coalesces_with(&moved_at(1, 1), &moved_at(0, 0)));
+    }
+
+    #[test]
+    fn coalesces_with_false_for_non_moved_mouse_events() {
+        let down = Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            position: Pos::new(0, 0),
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        });
+        assert!(!coalesces_with(&moved_at(1, 1), &down));
+        assert!(!coalesces_with(&down, &moved_at(0, 0)));
+    }
+
+    #[test]
+    fn coalesces_with_false_for_non_mouse_events() {
+        let key = Event::Key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+        assert!(!coalesces_with(&moved_at(1, 1), &key));
+        assert!(!coalesces_with(&key, &moved_at(0, 0)));
     }
 }
