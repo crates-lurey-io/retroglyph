@@ -99,6 +99,27 @@ fn the_camera_scrolls_as_the_player_crosses_the_world() {
     );
 }
 
+/// #933: growing the terminal past the 90x36 world on both axes should letterbox the map
+/// (shrink the camera's viewport to the world's size and center it) rather than pin it to the
+/// top-left with dead space on the right and bottom -- the case `Camera::set_viewport_fitted`
+/// exists for, and the one the corridor walk above never exercises because the world stays
+/// larger than a 50x25 terminal throughout.
+#[test]
+fn resizing_past_the_world_letterboxes_the_map() {
+    let view = drive::<DungeonScroll>(&[Event::Resize(100, 40)]);
+    let row: Vec<char> = view.lines().nth(10).expect("row 10").chars().collect();
+    // `Headless::format_view` renders blank (space) cells as `\u{b7}` so layout reads clearly
+    // in a text diff -- see its own doc comment.
+    assert!(
+        row[..5].iter().all(|&c| c == '\u{b7}'),
+        "expected a blank left margin from letterboxing, got {row:?}"
+    );
+    assert_eq!(
+        row[5], '#',
+        "expected the world's left wall right after the margin, got {row:?}"
+    );
+}
+
 #[cfg(all(feature = "software", not(target_arch = "wasm32")))]
 #[test]
 fn png_snapshot() {

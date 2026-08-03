@@ -14,9 +14,7 @@ use crate::color::Style;
 use crate::color::Tint;
 use crate::tile::{Tile, TileFlags};
 use alloc::vec::Vec;
-#[cfg(feature = "blend-modes")]
 use alpha_blend::BlendMode as SeparableBlendMode;
-#[cfg(feature = "blend-modes")]
 use alpha_blend::channel::Channel;
 use grixy::ops::{ExactSizeGrid, GridRead, GridWrite};
 
@@ -324,10 +322,9 @@ impl Grid {
     /// the destination. Non-RGB color variants (Ansi/Indexed) are passed
     /// through unblended, regardless of `mode`.
     ///
-    /// [`BlendMode::Linear`]'s per-channel color lerp is delegated to [`gem::Mix`], so this
-    /// method is always available. The other modes delegate to [`alpha_blend::BlendMode`]
-    /// (imported in this module as `SeparableBlendMode` to avoid colliding with this crate's own
-    /// [`BlendMode`]) and require the `blend-modes` feature (default on).
+    /// [`BlendMode::Linear`]'s per-channel color lerp is delegated to [`gem::Mix`]. The other
+    /// modes delegate to [`alpha_blend::BlendMode`] (imported in this module as
+    /// `SeparableBlendMode` to avoid colliding with this crate's own [`BlendMode`]).
     ///
     /// Like [`blit`](Self::blit) (see retroglyph#262/#263), walks `src`'s and `self`'s layer
     /// buffers directly by flat index instead of per-cell [`tile`](Self::tile)/
@@ -648,14 +645,11 @@ impl Grid {
 /// Blend two [`Color`] values using `mode`. [`Color::Default`] preserves the
 /// destination. Non-RGB source colors are returned as-is (no resolution).
 ///
-/// [`BlendMode::Linear`] is a per-channel sRGB-domain lerp (dst -> src by
-/// `t`) delegated to [`gem::Mix`], which is `no_std`-safe (round-half-
-/// away via `floor(x + 0.5)`, no `std`/`libm` float intrinsics). With the `blend-modes` feature,
-/// the other modes evaluate [`SeparableBlendMode::mix`] per channel in `0.0..=1.0`
-/// (converting u8 <-> f32 at the boundary; see [`blend_separable_channel`]),
-/// then lerp that fully mixed color against the destination by `t`, same as
-/// `Linear`.
-#[cfg(feature = "blend-modes")]
+/// [`BlendMode::Linear`] is a per-channel sRGB-domain lerp (dst -> src by `t`) delegated to
+/// [`gem::Mix`], which is `no_std`-safe (round-half-away via `floor(x + 0.5)`, no `std`/`libm`
+/// float intrinsics). The other modes evaluate [`SeparableBlendMode::mix`] per channel in
+/// `0.0..=1.0` (converting u8 <-> f32 at the boundary; see [`blend_separable_channel`]), then lerp
+/// that fully mixed color against the destination by `t`, same as `Linear`.
 #[allow(clippy::float_cmp)]
 fn blend_color(mode: BlendMode, src: Color, dst: Color, t: f32) -> Color {
     use gem::Mix as _;
@@ -699,51 +693,11 @@ fn blend_color(mode: BlendMode, src: Color, dst: Color, t: f32) -> Color {
     }
 }
 
-/// [`blend_color`] without the `blend-modes` feature: [`BlendMode::Linear`] is then the only
-/// variant, so this always takes the [`gem::Mix`] per-channel lerp path, without pulling in
-/// `alpha-blend` or its float math.
-#[cfg(not(feature = "blend-modes"))]
-#[allow(clippy::float_cmp)]
-fn blend_color(mode: BlendMode, src: Color, dst: Color, t: f32) -> Color {
-    use gem::Mix as _;
-    use gem::rgb::{HasBlue as _, HasGreen as _, HasRed as _, Rgb888};
-    debug_assert_eq!(
-        mode,
-        BlendMode::Linear,
-        "the only BlendMode without `blend-modes`"
-    );
-    match (src, dst) {
-        (Color::Default, _) => Color::Default,
-        (
-            Color::Rgb {
-                r: sr,
-                g: sg,
-                b: sb,
-            },
-            Color::Rgb {
-                r: dr,
-                g: dg,
-                b: db,
-            },
-        ) if t != 1.0 => {
-            // `Linear` at `t == 1.0` is `src` by definition (skip to the catch-all arm below).
-            let out = Rgb888::from_rgb(dr, dg, db).mix(Rgb888::from_rgb(sr, sg, sb), t);
-            Color::Rgb {
-                r: out.red(),
-                g: out.green(),
-                b: out.blue(),
-            }
-        }
-        (src, _) => src,
-    }
-}
-
 /// Evaluates `sep`'s per-channel mixing function for one RGB channel (`src`/`dst` are u8, `sep`
 /// operates in `0.0..=1.0` f32), then lerps that mixed value against `dst` by `t`: `0.0` keeps
 /// `dst`, `1.0` uses the fully mixed color. Clamps before converting back to u8 via
 /// `Channel::from_f32`, since `ColorDodge`/`ColorBurn`'s `min(1.0, ...)` branches can round a
 /// hair outside `0.0..=1.0` at the float boundary.
-#[cfg(feature = "blend-modes")]
 fn blend_separable_channel(sep: SeparableBlendMode, src: u8, dst: u8, t: f32) -> u8 {
     let cs = Channel::to_f32(src);
     let cb = Channel::to_f32(dst);
@@ -1339,7 +1293,6 @@ mod tests {
     }
 
     // --- `BlendMode` / `blit_alpha` ---
-    #[cfg(feature = "blend-modes")]
     #[test]
     fn test_blend_separable_channel_screen() {
         // cb = 102 (0.4), cs = 204 (0.8): screen = cb + cs - cb*cs = 0.88.
@@ -1354,7 +1307,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "blend-modes")]
     #[test]
     fn test_blend_separable_channel_dodge() {
         // cb = 51 (0.2), cs = 204 (0.8): min(1, 0.2 / 0.2) saturates to 1.0.
@@ -1368,7 +1320,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "blend-modes")]
     #[test]
     fn test_blend_separable_channel_burn() {
         // cb = 204 (0.8), cs = 51 (0.2): 1 - min(1, 0.2 / 0.2) bottoms out at 0.0.
@@ -1382,7 +1333,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "blend-modes")]
     #[test]
     fn test_blend_separable_channel_overlay() {
         // cb = 51 (0.2, the <= 0.5 branch): 2 * cb * cs.
@@ -1403,7 +1353,6 @@ mod tests {
 
     /// End-to-end through `blit_alpha`, not just the per-channel helper: proves `BlendMode`
     /// actually reaches `blend_fg`/`blend_bg` and lands on the destination tile's style.
-    #[cfg(feature = "blend-modes")]
     #[test]
     fn test_grid_blit_alpha_screen_blends_fg() {
         let mut src = Grid::new(1, 1);
@@ -1454,8 +1403,7 @@ mod tests {
 
     /// retroglyph#268: same wraparound guard as `blit`'s
     /// `test_grid_blit_dest_origin_near_u16_max_does_not_wrap`, but through `blit_alpha`'s
-    /// separate `dst_x`/`dst_y` computation. `blit_alpha` is always available (only `Linear` is
-    /// used here), so this test isn't gated on `blend-modes`.
+    /// separate `dst_x`/`dst_y` computation.
     #[test]
     fn test_grid_blit_alpha_dest_origin_near_u16_max_does_not_wrap() {
         let mut src = Grid::new(4, 1);
@@ -1486,8 +1434,7 @@ mod tests {
     /// matching `blit_alpha`'s doc comment (this direction was actually inverted before this
     /// change: the underlying `gem::Mix` call had `src`/`dst` swapped, so `t == 0.0` used
     /// to return `src` and `t == 1.0` returned `dst`. No prior tests covered `blit_alpha`, so
-    /// this had shipped unnoticed). `Linear` is always available, so this test isn't gated on
-    /// `blend-modes`.
+    /// this had shipped unnoticed).
     #[test]
     fn test_grid_blit_alpha_linear_direction() {
         let mut src = Grid::new(1, 1);
@@ -1545,7 +1492,6 @@ mod tests {
 
     /// Every `BlendMode` preserves `Color::Default` and passes non-RGB colors through unblended,
     /// same as the pre-existing `Linear` behavior.
-    #[cfg(feature = "blend-modes")]
     #[test]
     fn test_blend_color_non_rgb_passthrough_all_modes() {
         for mode in [
@@ -1565,26 +1511,6 @@ mod tests {
                 Color::BLACK
             );
         }
-    }
-
-    /// Same as `test_blend_color_non_rgb_passthrough_all_modes`, but only `Linear` (the only
-    /// variant available without `blend-modes`), so this coverage survives with the feature off.
-    #[cfg(not(feature = "blend-modes"))]
-    #[test]
-    fn test_blend_color_non_rgb_passthrough_linear() {
-        assert_eq!(
-            blend_color(
-                BlendMode::Linear,
-                Color::Default,
-                Color::Rgb { r: 1, g: 2, b: 3 },
-                0.5
-            ),
-            Color::Default
-        );
-        assert_eq!(
-            blend_color(BlendMode::Linear, Color::BLACK, Color::WHITE, 0.5),
-            Color::BLACK
-        );
     }
 
     #[cfg(feature = "egc")]

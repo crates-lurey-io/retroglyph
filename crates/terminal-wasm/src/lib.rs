@@ -292,14 +292,15 @@ impl TerminalWasm {
     /// backpressure here the way there is on native (crossterm's underlying input buffer
     /// naturally throttles a stalled reader):
     ///
-    /// - **Pointer-move coalescing.** If `event`'s queue tail
+    /// - **Pointer-move/drag coalescing.** If `event`'s queue tail
     ///   [`coalesces_with`](retroglyph_core::event::coalesces_with) it (both `Event::Mouse` with
-    ///   [`MouseEventKind::Moved`]), `event` replaces the tail in place instead of growing the
-    ///   queue: a consumer that's fallen behind only ever cares about the most recent pointer
-    ///   position, not every intermediate one. Any other event kind (including a
-    ///   `Down`/`Up`/scroll mouse event) always pushes normally, so this never reorders or merges
-    ///   anything but a `Moved` run. The same rule is shared with the `retroglyph-window` backend
-    ///   and `Headless` (retroglyph#768).
+    ///   [`MouseEventKind::Moved`], or both with [`MouseEventKind::Drag`] carrying the same
+    ///   button), `event` replaces the tail in place instead of growing the queue: a consumer
+    ///   that's fallen behind only ever cares about the most recent pointer position, not every
+    ///   intermediate one. Any other event kind (including a `Down`/`Up`/scroll mouse event, or a
+    ///   `Drag` with a different button) always pushes normally, so this never reorders or merges
+    ///   anything but a `Moved` or same-button `Drag` run. The same rule is shared with the
+    ///   `retroglyph-window` backend and `Headless` (retroglyph#768).
     /// - **Capacity cap.** Once the queue holds `EVENT_QUEUE_CAP` (4096) events, pushing another
     ///   silently drops the *oldest* queued event (via `pop_front`) to make room. Oldest was
     ///   chosen over dropping the new event so a consumer that's fallen behind and only pulls a

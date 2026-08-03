@@ -49,7 +49,7 @@ std = ["retroglyph-core/std"]
 # `indexed-quant` (retroglyph#629, previously `color-space`): retroglyph-core/Color::lerp (used
 # by meter_ramp's color ramp) is gated behind it. Not a separate widgets-level feature -- color
 # ramping is non-optional composite-tier functionality, not an opt-in extra like `egc`.
-retroglyph-core = { path = "../core", version = "0.5.0", default-features = false, features = ["indexed-quant", "__math"] }
+retroglyph-core = { path = "../core", version = "0.5.0", default-features = false, features = ["indexed-quant"] }
 # `Theme`/`Density`'s `serde` feature below. A separate optional dependency from
 # `retroglyph-core`'s own (rather than re-exported), matching how each crate here already
 # depends on `retroglyph-core` independently.

@@ -11,8 +11,18 @@
 //! `11_sokoban`'s level: no RNG, so every run and every snapshot is identical. Every step,
 //! [`Camera::center_on`] re-centers on the player (clamped at the world edges, per its own doc
 //! comment), [`Grid::blit`] copies exactly [`Camera::visible_bounds`] into the terminal at the
-//! viewport's origin, and [`Camera::world_to_screen`] places the player glyph: the same three
-//! methods a real scrolling map would use, exercised end to end.
+//! viewport's origin, and the player glyph is drawn through [`Camera::surface`]: a surface
+//! clipped and translated into the camera's world space, so the player is placed with its world
+//! position directly and anything that ever scrolled off-viewport is dropped by the surface's
+//! own bounds check rather than a manual [`Camera::world_to_screen`] guard.
+//!
+//! This is also the one example with a world (90x36) fixed at build time meeting a terminal
+//! whose size the app doesn't control: every other scrolling demo either matches its terminal to
+//! its world or never resizes at all. [`Event::Resize`] is handled the same way `14_resize` does
+//! (captured during the drain, applied once the loop's borrow ends), and the new area is handed
+//! to [`Camera::set_viewport_fitted`] rather than [`Camera::set_viewport`]: grow the terminal
+//! past the world's edge on either axis and the map letterboxes and centers instead of pinning
+//! to the top-left with a dead margin on the right and bottom.
 //!
 //! Movement is driven by [`KeyState`]: arrow-key presses/releases feed [`KeyState::apply_event`],
 //! and each tick moves the player one cell in whichever direction is currently held
@@ -25,7 +35,9 @@
 //! cargo run --example 12_dungeon_scroll  # headless fallback, prints a few frames to stdout
 //! ```
 //!
-//! Keys: arrow keys move, blocked by walls. `q` or `Escape` quits.
+//! Keys: arrow keys move, blocked by walls. `q` or `Escape` quits. Resize the terminal
+//! (crossterm) or window (software) to see the world letterbox once it's smaller than the
+//! resized viewport.
 //!
 //! Room 1 also carries four decorative floor tiles ([`decorations`]) that exercise the extended
 //! ASCII glyphs the embedded Unscii 16 font (`default-font` feature) adds on top of plain ASCII:
@@ -165,7 +177,13 @@ impl DungeonScroll {
         }
     }
 
+    /// Drains pending input, moving the player on arrow keys. `Event::Resize` is captured
+    /// rather than acted on immediately, the same way `14_resize` does it: it arrives mixed in
+    /// with other events in the same drain, and `term.resize()` needs `&mut term` while
+    /// [`Terminal::drain_events`]'s iterator still holds one, so the requested size is recorded
+    /// here and applied once the loop (and the borrow) ends.
     fn handle_events<B: Backend>(&mut self, term: &mut Terminal<B>) -> bool {
+        let mut requested_size = None;
         for event in term.drain_events() {
             match &event {
                 Event::Key(key) if key.is_down() => {
@@ -174,11 +192,27 @@ impl DungeonScroll {
                     }
                 }
                 Event::Close => return false,
+                Event::Resize(width, height) => requested_size = Some((*width, *height)),
                 _ => {}
             }
             // Feed every event to `keys`, not just key events: `Event::FocusLost` clears the
             // held set, so alt-tabbing away mid-move doesn't leave the player walking forever.
             self.keys.apply_event(&event);
+        }
+        if let Some((width, height)) = requested_size {
+            term.resize(width, height);
+            // Row 0 is reserved for the header text (see `draw`), so the camera's viewport is
+            // everything below it. `set_viewport_fitted`, not `set_viewport`: this is a fixed
+            // 90x36 world meeting a terminal size the app doesn't control, exactly the
+            // letterbox-and-center case `set_viewport_fitted` exists for.
+            let area = term.area();
+            let viewport = Rect::new(
+                area.left(),
+                area.top() + 1,
+                area.width(),
+                area.height().saturating_sub(1),
+            );
+            self.camera.set_viewport_fitted(viewport);
         }
         self.move_from_held();
         true
@@ -218,12 +252,11 @@ impl DungeonScroll {
             viewport.top(),
         );
 
-        if let Some(screen) = self.camera.world_to_screen(self.player) {
-            let style = Style::new()
-                .fg(Color::Ansi(AnsiColor::BrightCyan))
-                .bg(Color::Default);
-            term.surface().put((screen.x, screen.y), '@', style);
-        }
+        let style = Style::new()
+            .fg(Color::Ansi(AnsiColor::BrightCyan))
+            .bg(Color::Default);
+        let mut root = term.surface();
+        self.camera.surface(&mut root).put(self.player, '@', style);
     }
 }
 

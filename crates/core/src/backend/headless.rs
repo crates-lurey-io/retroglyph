@@ -68,11 +68,11 @@ impl Headless {
 
     /// Injects a synthetic event into the queue.
     ///
-    /// Coalesces consecutive `Mouse(Moved)` events with the queue's current tail (see
-    /// [`coalesces_with`]), matching the `retroglyph-window` and `retroglyph-terminal-wasm`
-    /// backends this stands in for during tests (retroglyph#768): a caller pushing a burst of
-    /// pointer positions before draining the queue sees only the latest one, the same as it would
-    /// against a real backend.
+    /// Coalesces consecutive `Mouse(Moved)` or same-button `Mouse(Drag)` events with the queue's
+    /// current tail (see [`coalesces_with`]), matching the `retroglyph-window` and
+    /// `retroglyph-terminal-wasm` backends this stands in for during tests (retroglyph#768): a
+    /// caller pushing a burst of pointer positions before draining the queue sees only the latest
+    /// one, the same as it would against a real backend.
     pub fn push_event(&mut self, event: Event) {
         if let Some(back) = self.event_queue.back_mut()
             && coalesces_with(&event, back)

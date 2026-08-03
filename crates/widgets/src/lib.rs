@@ -39,8 +39,8 @@
 //! This crate is itself optional: games that draw manually depend only on
 //! `retroglyph-core`.
 //!
-//! This crate is `no_std`-compatible: disable the `std` feature (requires an allocator). See the
-//! `std` feature below.
+//! This crate is `no_std`-compatible: disable the `std` feature and enable `libm` instead (also
+//! requires an allocator). See the `std` and `libm` features below.
 //!
 //! # Features
 //!
