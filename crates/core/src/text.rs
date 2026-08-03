@@ -1,6 +1,6 @@
 //! Styled text primitives: [`Span`] and [`Line`].
 
-use crate::style::Style;
+use crate::color::Style;
 use alloc::string::String;
 use alloc::vec::Vec;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
@@ -169,7 +169,7 @@ pub fn truncate_measured(s: &str, max_cols: u16) -> (&str, u16) {
 ///
 /// ```
 /// use retroglyph_core::text::Span;
-/// use retroglyph_core::style::Style;
+/// use retroglyph_core::color::Style;
 /// use retroglyph_core::color::Color;
 ///
 /// let plain = Span::raw("hello");
@@ -221,7 +221,7 @@ impl<S: Into<String>> From<S> for Span {
 ///
 /// ```
 /// use retroglyph_core::text::{Line, Span};
-/// use retroglyph_core::style::Style;
+/// use retroglyph_core::color::Style;
 /// use retroglyph_core::color::Color;
 ///
 /// let line = Line::from(vec![
@@ -297,7 +297,7 @@ impl From<Vec<Span>> for Line {
 /// ```
 /// # extern crate alloc;
 /// use retroglyph_core::spans;
-/// use retroglyph_core::style::Style;
+/// use retroglyph_core::color::Style;
 /// use retroglyph_core::color::Color;
 ///
 /// let line = spans![

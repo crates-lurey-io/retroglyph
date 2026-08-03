@@ -15,8 +15,8 @@
 //! directly via [`grid_mut`](Surface::grid_mut).
 
 use crate::color::Color;
+use crate::color::Style;
 use crate::grid::{Grid, Offset, Pos, Rect, Size};
-use crate::style::Style;
 use crate::text::Line;
 use crate::tile::Tile;
 use crate::tint::Tint;

@@ -58,8 +58,8 @@ use glutin::prelude::*;
 use retroglyph_core::DrawCell;
 use retroglyph_core::backend::Output;
 use retroglyph_core::color::Color;
+use retroglyph_core::color::Style;
 use retroglyph_core::grid::Pos;
-use retroglyph_core::style::Style;
 use retroglyph_core::tile::Tile;
 use std::ffi::CString;
 

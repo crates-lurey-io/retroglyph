@@ -300,7 +300,7 @@ mod tests {
     use super::*;
     use crate::app::Flow;
     use crate::backend::Backend;
-    use crate::style::Style;
+    use crate::color::Style;
     use ixy::HasSize;
 
     struct Clicker {

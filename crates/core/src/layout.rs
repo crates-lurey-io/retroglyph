@@ -9,8 +9,8 @@
 //!
 //! Only available when the `egc` feature is enabled (requires `alloc`).
 
+use crate::color::Style;
 use crate::grid::{Grid, Rect};
-use crate::style::Style;
 use crate::surface::Surface;
 use crate::text::{Line, Span};
 use alloc::string::String;
@@ -319,8 +319,8 @@ impl<'a> TextLayout<'a> {
 mod tests {
     use super::*;
     use crate::color::Color;
+    use crate::color::Style;
     use crate::grid::Pos;
-    use crate::style::Style;
     use crate::text::{Line, Span};
 
     fn red() -> Style {

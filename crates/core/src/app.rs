@@ -286,7 +286,7 @@ mod tests {
         fn update(&mut self, term: &mut Terminal<Headless>, frame: &Frame) -> Flow {
             self.frames += 1;
             term.surface()
-                .put((0, 0), '#', crate::style::Style::default());
+                .put((0, 0), '#', crate::color::Style::default());
             term.present().expect("present");
             // Quit when a key is pending, or after a safety cap.
             if term.has_input() || frame.frame >= 100 {
@@ -364,7 +364,7 @@ mod tests {
         fn update(&mut self, term: &mut Terminal<Headless>, frame: &Frame) -> Flow {
             self.frames += 1;
             term.surface()
-                .put((0, 0), 'x', crate::style::Style::default());
+                .put((0, 0), 'x', crate::color::Style::default());
             if frame.frame >= self.exit_at {
                 Flow::Exit
             } else {

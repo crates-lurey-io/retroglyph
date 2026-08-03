@@ -108,7 +108,7 @@
 
 use crate::backend::DrawCell;
 use crate::color::Color;
-use crate::style::Style;
+use crate::color::Style;
 use crate::tile::Tile;
 use crate::tile::TileFlags;
 #[cfg(feature = "egc")]
@@ -2359,7 +2359,7 @@ mod tests {
 
     #[test]
     fn test_grid_cells_mut() {
-        use crate::style::Style;
+        use crate::color::Style;
         let mut grid = Grid::new(2, 2);
         for (x, y, tile) in grid.cells_mut(0).unwrap() {
             #[allow(clippy::cast_possible_truncation)]
@@ -2383,7 +2383,7 @@ mod tests {
 
     #[test]
     fn test_grid_cells_mut_or_alloc_allocates_an_unwritten_layer() {
-        use crate::style::Style;
+        use crate::color::Style;
         let mut grid = Grid::new(2, 2);
         assert!(grid.cells_mut(2).is_none());
         for (_, _, tile) in grid.cells_mut_or_alloc(2) {
@@ -2661,7 +2661,7 @@ mod tests {
 
     #[test]
     fn test_grid_put_and_get_on_layer_2() {
-        use crate::style::Style;
+        use crate::color::Style;
         let mut g = Grid::new(5, 5);
         g.put_tile(2, (1, 1), Tile::new('Z', Style::default()));
         assert_eq!(g.tile(2, (1, 1)).unwrap().glyph, 'Z');
@@ -4111,7 +4111,7 @@ mod tests {
 #[cfg(all(test, feature = "egc"))]
 mod egc_proptests {
     use super::*;
-    use crate::style::Style;
+    use crate::color::Style;
     use proptest::prelude::*;
 
     const W: u16 = 8;

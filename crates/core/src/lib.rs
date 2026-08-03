@@ -161,7 +161,6 @@ pub mod frame_stats;
 pub mod grid;
 #[cfg(feature = "egc")]
 pub mod layout;
-pub mod style;
 pub mod subcell;
 /// The one grid-drawing primitive: an area-clipped, single-layer view over a [`Grid`].
 pub mod surface;
@@ -183,7 +182,7 @@ pub use app::{App, Flow, Frame, step};
 pub use app::{RunOptions, run_blocking, run_blocking_with};
 pub use backend::{Backend, Cursor, CursorStyle, DrawCell, Headless, Input, Output};
 pub use camera::Camera;
-pub use color::{AnsiColor, Color, InvalidAnsiIndex, ParseColorError};
+pub use color::{AnsiColor, Color, InvalidAnsiIndex, ParseColorError, Style};
 pub use dev::{BuildMode, DEV};
 pub use event::{
     Event, KeyCode, KeyEvent, KeyEventKind, KeyLocation, KeyModifiers, KeyState, MouseButton,
@@ -197,7 +196,6 @@ pub use grid::{BlendMode, Grid, Offset, Pos, Rect, Size};
 pub use ixy::HasSize;
 #[cfg(feature = "egc")]
 pub use layout::{TextLayout, TextMetrics};
-pub use style::Style;
 pub use subcell::{Glyph, quantize_half_block, quantize_quadrant, quantize_sextant};
 pub use surface::{Layer, StyledSurface, Surface};
 pub use terminal::Terminal;
