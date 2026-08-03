@@ -513,6 +513,24 @@ fn with_tint_survives_clip_and_on_layer() {
 }
 
 #[test]
+fn with_tint_on_a_write_outside_the_clip_does_not_allocate_the_layer() {
+    // retroglyph#1012: the tint is only applied after a write actually lands (see
+    // `apply_tint`'s own doc comment), so a tinted write refused by the clip must not touch a
+    // layer it never wrote to, on a layer that has never been allocated before.
+    let mut grid = Grid::new(4, 4);
+    {
+        let mut surface = screen(&mut grid);
+        surface
+            .on_layer(7)
+            .with_tint(Tint::multiply(9, 9, 9))
+            .clip(Rect::new(0, 0, 2, 2))
+            .put((10, 10), '@', Style::default());
+    }
+    assert_eq!(grid.max_layer(), 0);
+    assert!(grid.tile(7, (0, 0)).is_none());
+}
+
+#[test]
 fn with_tint_replaces_rather_than_composes() {
     let mut grid = Grid::new(4, 4);
     {
@@ -605,8 +623,7 @@ fn on_tier_writes_land_on_the_tiers_grid_layer() {
 }
 
 #[test]
-#[cfg(feature = "egc")]
-fn a_wide_char_at_the_clip_edge_writes_its_spacer_outside_the_clip() {
+fn a_wide_char_at_the_clip_edge_refuses_to_write_its_spacer_outside_the_clip() {
     let mut grid = Grid::new(8, 1);
     let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 8, 1), 0);
 
@@ -1235,7 +1252,7 @@ fn print_aligned_clips_to_this_surfaces_own_area_as_well_as_rect() {
 }
 
 #[test]
-fn print_aligned_right_on_an_offset_surface_drops_the_text() {
+fn print_aligned_right_on_an_offset_surface_uses_area_local_coordinates() {
     let mut grid = Grid::new(8, 1);
     {
         // `area` starts at column 2, not 0: local and absolute coordinates now differ.
@@ -1248,14 +1265,14 @@ fn print_aligned_right_on_an_offset_surface_drops_the_text() {
         );
     }
 
-    // `rect` (0, 0, 6, 1) intersected with the surface's own clip (2, 0, 6, 1) leaves
-    // columns 2..6 visible; right-aligning "hi" within `rect` puts it at columns 4..6.
-    assert_eq!(grid[Pos::new(4, 0)].glyph(), 'h');
-    assert_eq!(grid[Pos::new(5, 0)].glyph(), 'i');
+    // `rect` (0, 0, 6, 1) is local to `area`, spanning it exactly; right-aligning "hi"
+    // within it puts it at local columns 4..6, i.e. absolute columns 6..8.
+    assert_eq!(grid[Pos::new(6, 0)].glyph(), 'h');
+    assert_eq!(grid[Pos::new(7, 0)].glyph(), 'i');
 }
 
 #[test]
-fn print_aligned_center_on_an_offset_surface_drops_the_text() {
+fn print_aligned_center_on_an_offset_surface_uses_area_local_coordinates() {
     let mut grid = Grid::new(8, 1);
     {
         let mut surface = Surface::new(&mut grid, Rect::new(2, 0, 6, 1), 0);
@@ -1267,10 +1284,30 @@ fn print_aligned_center_on_an_offset_surface_drops_the_text() {
         );
     }
 
-    // (6 - 2) / 2 == 2 columns of left padding within `rect`, so "hi" lands at absolute
-    // columns 2..4, which is inside the surface's own visible columns 2..6.
-    assert_eq!(grid[Pos::new(2, 0)].glyph(), 'h');
-    assert_eq!(grid[Pos::new(3, 0)].glyph(), 'i');
+    // (6 - 2) / 2 == 2 columns of left padding within `rect`, local columns 2..4, i.e.
+    // absolute columns 4..6.
+    assert_eq!(grid[Pos::new(4, 0)].glyph(), 'h');
+    assert_eq!(grid[Pos::new(5, 0)].glyph(), 'i');
+}
+
+#[test]
+fn print_aligned_ignores_translate_and_still_lands_at_the_plain_local_position() {
+    let mut grid = Grid::new(10, 1);
+    {
+        let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 10, 1), 0);
+        // `rect` is local to `area` and deliberately independent of any outstanding
+        // `translate`: without cancelling `origin_offset` before delegating to `print`,
+        // this would drop the text entirely (see issue #993).
+        surface.translate((5, 0)).print_aligned(
+            Rect::new(0, 0, 10, 1),
+            "hi",
+            crate::layout::HAlign::Left,
+            Style::default(),
+        );
+    }
+
+    assert_eq!(grid[Pos::new(0, 0)].glyph(), 'h');
+    assert_eq!(grid[Pos::new(1, 0)].glyph(), 'i');
 }
 
 #[test]

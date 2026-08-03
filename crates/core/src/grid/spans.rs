@@ -187,7 +187,6 @@ impl Grid {
         for row in 0..footprint_h {
             let cy = y + u16::from(row);
             self.clear_span_overlap(layer, x, cy, u16::from(footprint_w));
-            #[cfg(feature = "egc")]
             self.clear_overlap(layer, x, cy, u16::from(footprint_w));
         }
 
@@ -435,6 +434,32 @@ mod tests {
             // A covered cell is inside a footprint, it does not own one.
             assert_eq!(tile.span(), (1, 1));
         }
+    }
+
+    /// `clear_overlap` runs regardless of `egc` (see its own doc comment): `write_span_cells`
+    /// gated it behind the feature until retroglyph#1014, so a wide pair written by `put_tile`
+    /// (which is not itself `egc`-gated) kept a stale `WIDE_CHAR` flag after a span write
+    /// partially overwrote it with `egc` off.
+    #[test]
+    fn write_span_clears_a_wide_char_it_partially_overwrites() {
+        let mut grid = Grid::new(4, 1);
+        grid.put_tile(0, (0, 0), Tile::new('\u{4e2d}', Style::default()));
+        assert!(
+            grid.tile(0, (0, 0))
+                .unwrap()
+                .flags()
+                .contains(TileFlags::WIDE_CHAR)
+        );
+
+        grid.write_span(0, 1, 0, &["ab"], Style::default()).unwrap();
+
+        assert!(
+            !grid
+                .tile(0, (0, 0))
+                .unwrap()
+                .flags()
+                .contains(TileFlags::WIDE_CHAR)
+        );
     }
 
     /// The whole point of `SPAN_COVERED` differing from `WIDE_CHAR_SPACER`: cell backends read
