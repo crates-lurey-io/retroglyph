@@ -1,5 +1,3 @@
-//! [`oscillate`]: a continuous periodic wave with no start or end.
-
 use core::time::Duration;
 
 /// A continuous sine wave sampled at `elapsed`, completing one full cycle every `period`, mapped

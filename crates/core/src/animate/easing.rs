@@ -1,5 +1,3 @@
-//! [`Easing`]: normalized curves reshaping linear progress into eased motion.
-
 /// A normalized easing curve: reshapes a linear progress fraction (`0.0..=1.0`) into an eased
 /// one, the same named curves as CSS transitions and <https://easings.net>.
 ///
@@ -14,30 +12,138 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum Easing {
     /// Constant speed: `t` unchanged.
+    ///
+    /// ```text
+    /// 1 |           ,-'
+    ///   |        ,-'
+    ///   |     ,-'
+    ///   |  ,-'
+    /// 0 +-'------------
+    ///   0             1
+    /// ```
     #[default]
     Linear,
     /// Starts slow, accelerates, quadratically.
+    ///
+    /// ```text
+    /// 1 |                 ,'
+    ///   |               ,'
+    ///   |             ,'
+    ///   |       __,-''
+    /// 0 +------''-------
+    ///   0             1
+    /// ```
     EaseInQuad,
     /// Starts fast, decelerates, quadratically.
+    ///
+    /// ```text
+    /// 1 |       __,,-------
+    ///   |    ,-'
+    ///   |   ,'
+    ///   | ,'
+    /// 0 +'---------------
+    ///   0             1
+    /// ```
     EaseOutQuad,
     /// Slow -> fast -> slow, quadratically.
+    ///
+    /// ```text
+    /// 1 |             ___,,--
+    ///   |          ,-'
+    ///   |        ,'
+    ///   |   __,-'
+    /// 0 +-''-------------
+    ///   0             1
+    /// ```
     EaseInOutQuad,
     /// Starts slow, accelerates, cubically: a stronger version of [`EaseInQuad`](Self::EaseInQuad).
+    ///
+    /// ```text
+    /// 1 |                  ,'
+    ///   |                 ,
+    ///   |               ,'
+    ///   |        ____,-'
+    /// 0 +-------''--------
+    ///   0             1
+    /// ```
     EaseInCubic,
     /// Starts fast, decelerates, cubically: a stronger version of [`EaseOutQuad`](Self::EaseOutQuad).
+    ///
+    /// ```text
+    /// 1 |   __,,-----------
+    ///   | ,'
+    ///   |,
+    ///   |'
+    /// 0 +-----------------
+    ///   0             1
+    /// ```
     EaseOutCubic,
     /// Slow -> fast -> slow, cubically: a stronger version of [`EaseInOutQuad`](Self::EaseInOutQuad).
+    ///
+    /// ```text
+    /// 1 |              ___,---
+    ///   |            ,'
+    ///   |           ,
+    ///   |       __,'
+    /// 0 +-----''----------
+    ///   0              1
+    /// ```
     EaseInOutCubic,
     /// A gentle sine-shaped start.
+    ///
+    /// ```text
+    /// 1 |               ,--'
+    ///   |            ,-'
+    ///   |         ,-'
+    ///   |     ,--'
+    /// 0 +--''-------------
+    ///   0              1
+    /// ```
     EaseInSine,
     /// A gentle sine-shaped end.
+    ///
+    /// ```text
+    /// 1 |    ,--''''''''''''
+    ///   |  ,'
+    ///   | ,'
+    ///   |,'
+    /// 0 +-----------------
+    ///   0              1
+    /// ```
     EaseOutSine,
     /// A gentle sine-shaped start and end.
+    ///
+    /// ```text
+    /// 1 |           ____,----
+    ///   |         ,'
+    ///   |       ,'
+    ///   |   __,'
+    /// 0 +--''--------------
+    ///   0              1
+    /// ```
     EaseInOutSine,
     /// Springs past the target and oscillates back before settling, going outside `0.0..=1.0`
     /// for part of the curve.
+    ///
+    /// ```text
+    ///     ,-.
+    /// 1 -+   \      ______________
+    ///     |    \    /
+    ///     |     `--'
+    /// 0 -+
+    ///     0                     1
+    /// ```
     EaseOutElastic,
     /// Bounces (like a dropped ball) to a stop at the target.
+    ///
+    /// ```text
+    /// 1 |        __       _   _.
+    ///   |       /  \     / |_/ |
+    ///   |      /    \   /      |
+    ///   |     /      \_/       |
+    /// 0 +----'                 |
+    ///   0                    1
+    /// ```
     EaseOutBounce,
 }
 
