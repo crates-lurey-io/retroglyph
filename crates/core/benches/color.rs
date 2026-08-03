@@ -75,7 +75,6 @@ fn lerp(c: &mut Criterion) {
 /// Benchmarks each non-`Linear` [`BlendMode`] via `Grid::blit_alpha` on a 1x1 grid, batching
 /// `SAMPLES` calls per iteration; see this file's module doc for why `blit_alpha` (rather than
 /// `blend_color` directly) is the entry point used.
-#[cfg(feature = "blend-modes")]
 fn blend_modes(c: &mut Criterion) {
     use retroglyph_core::{BlendMode, Grid};
 
@@ -123,7 +122,6 @@ fn color(c: &mut Criterion) {
     to_indexed(c);
     #[cfg(feature = "indexed-quant")]
     lerp(c);
-    #[cfg(feature = "blend-modes")]
     blend_modes(c);
 }
 

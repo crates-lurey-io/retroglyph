@@ -46,9 +46,9 @@ lychee = { version = "0.24.2" }
 # `cargo-clean-all` if it ever stops working.
 cargo-sweep = { version = "0.8.0" }
 # Drives the `cargo hack check --each-feature --workspace --no-dev-deps` line in `just compile`
-# (retroglyph#894): builds every feature in isolation (e.g. `indexed-quant` alone, `blend-modes`
-# alone), which the workspace's own `--all-features`/`--no-default-features` lines don't cover
-# and which let a previous feature-interaction break go unnoticed (#886).
+# (retroglyph#894): builds every feature in isolation (e.g. `indexed-quant` alone, `egc` alone),
+# which the workspace's own `--all-features`/`--no-default-features` lines don't cover and which
+# let a previous feature-interaction break go unnoticed (#886).
 cargo-hack = { version = "0.6.45", locked = true }
 # cargo-llms-txt is intentionally not managed here: it has no prebuilt
 # binstall/quickinstall binaries, and cargo-run-bin's source-install fallback
