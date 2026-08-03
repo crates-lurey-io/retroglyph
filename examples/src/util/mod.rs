@@ -33,7 +33,7 @@ pub mod wasm_headless {
     ///   `SPECIAL_F0 + n`.
     /// - `mods`: a bitmask matching
     ///   [`KeyModifiers`](retroglyph_core::event::KeyModifiers)'s internal
-    ///   layout: bit 0 = shift, bit 1 = control, bit 2 = alt.
+    ///   layout: bit 0 = shift, bit 1 = control, bit 2 = alt, bit 3 = super.
     ///
     /// Returns `None` for codes that don't map to a known key (the caller
     /// should silently drop the event rather than panic — a malformed or
@@ -87,16 +87,7 @@ pub mod wasm_headless {
             c => KeyCode::Char(char::from_u32(c)?),
         };
 
-        let mut modifiers = KeyModifiers::NONE;
-        if mods & 0b001 != 0 {
-            modifiers |= KeyModifiers::SHIFT;
-        }
-        if mods & 0b010 != 0 {
-            modifiers |= KeyModifiers::CONTROL;
-        }
-        if mods & 0b100 != 0 {
-            modifiers |= KeyModifiers::ALT;
-        }
+        let modifiers = KeyModifiers::from_bits_truncate(mods);
 
         Some(KeyEvent::new(key_code, modifiers))
     }
@@ -132,6 +123,12 @@ pub mod wasm_headless {
             assert!(ev.modifiers.contains(KeyModifiers::SHIFT));
             assert!(ev.modifiers.contains(KeyModifiers::CONTROL));
             assert!(!ev.modifiers.contains(KeyModifiers::ALT));
+        }
+
+        #[test]
+        fn decodes_super_modifier() {
+            let ev = decode_key(u32::from('c'), 0b1000).unwrap();
+            assert!(ev.modifiers.contains(KeyModifiers::SUPER));
         }
 
         #[test]

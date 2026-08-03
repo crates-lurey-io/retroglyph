@@ -182,20 +182,12 @@ pub const fn translate_key_event_kind(
 /// Translates winit modifier state into our [`KeyModifiers`].
 #[must_use]
 pub fn translate_modifiers(state: winit::keyboard::ModifiersState) -> KeyModifiers {
-    let mut m = KeyModifiers::NONE;
-    if state.shift_key() {
-        m |= KeyModifiers::SHIFT;
-    }
-    if state.control_key() {
-        m |= KeyModifiers::CONTROL;
-    }
-    if state.alt_key() {
-        m |= KeyModifiers::ALT;
-    }
-    if state.super_key() {
-        m |= KeyModifiers::SUPER;
-    }
-    m
+    KeyModifiers::from_parts(
+        state.shift_key(),
+        state.control_key(),
+        state.alt_key(),
+        state.super_key(),
+    )
 }
 
 #[cfg(test)]

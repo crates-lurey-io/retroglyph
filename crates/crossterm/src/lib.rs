@@ -1260,25 +1260,15 @@ const fn from_crossterm_key_state(
     }
 }
 
-fn from_crossterm_key_modifiers(
+const fn from_crossterm_key_modifiers(
     mods: crossterm::event::KeyModifiers,
 ) -> retroglyph_core::event::KeyModifiers {
-    use retroglyph_core::event::KeyModifiers as M;
-
-    let mut result = M::NONE;
-    if mods.contains(crossterm::event::KeyModifiers::SHIFT) {
-        result |= M::SHIFT;
-    }
-    if mods.contains(crossterm::event::KeyModifiers::CONTROL) {
-        result |= M::CONTROL;
-    }
-    if mods.contains(crossterm::event::KeyModifiers::ALT) {
-        result |= M::ALT;
-    }
-    if mods.contains(crossterm::event::KeyModifiers::SUPER) {
-        result |= M::SUPER;
-    }
-    result
+    retroglyph_core::event::KeyModifiers::from_parts(
+        mods.contains(crossterm::event::KeyModifiers::SHIFT),
+        mods.contains(crossterm::event::KeyModifiers::CONTROL),
+        mods.contains(crossterm::event::KeyModifiers::ALT),
+        mods.contains(crossterm::event::KeyModifiers::SUPER),
+    )
 }
 
 const fn from_crossterm_mouse_button(
@@ -1316,7 +1306,7 @@ const fn from_crossterm_mouse_event_kind(
     }
 }
 
-fn from_crossterm_mouse_event(
+const fn from_crossterm_mouse_event(
     m: crossterm::event::MouseEvent,
 ) -> retroglyph_core::event::MouseEvent {
     retroglyph_core::event::MouseEvent {

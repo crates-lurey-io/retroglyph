@@ -541,23 +541,8 @@ pub fn decode_key_event(code: u32, mods: u8) -> Option<retroglyph_core::event::K
 ///
 /// Bitmask layout: `SHIFT = 1`, `CONTROL = 2`, `ALT = 4`, `SUPER = 8`.
 #[must_use]
-fn decode_key_modifiers(mods: u8) -> retroglyph_core::event::KeyModifiers {
-    use retroglyph_core::event::KeyModifiers;
-
-    let mut modifiers = KeyModifiers::NONE;
-    if mods & 0b001 != 0 {
-        modifiers |= KeyModifiers::SHIFT;
-    }
-    if mods & 0b010 != 0 {
-        modifiers |= KeyModifiers::CONTROL;
-    }
-    if mods & 0b100 != 0 {
-        modifiers |= KeyModifiers::ALT;
-    }
-    if mods & 0b1000 != 0 {
-        modifiers |= KeyModifiers::SUPER;
-    }
-    modifiers
+const fn decode_key_modifiers(mods: u8) -> retroglyph_core::event::KeyModifiers {
+    retroglyph_core::event::KeyModifiers::from_bits_truncate(mods)
 }
 
 /// Decodes an `(x, y, action, button, mods)` tuple from JS into a

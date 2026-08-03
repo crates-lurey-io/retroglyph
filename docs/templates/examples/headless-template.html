@@ -173,9 +173,10 @@
         down: SPECIAL_BASE + 5,
         escape: SPECIAL_BASE + 14,
       };
-      const MOD_SHIFT = 0b001;
-      const MOD_CONTROL = 0b010;
-      const MOD_ALT = 0b100;
+      const MOD_SHIFT = 0b0001;
+      const MOD_CONTROL = 0b0010;
+      const MOD_ALT = 0b0100;
+      const MOD_SUPER = 0b1000;
 
       const screen = document.getElementById('screen');
       const grid = document.getElementById('grid');
@@ -309,6 +310,7 @@
         if (event.shiftKey) mods |= MOD_SHIFT;
         if (event.ctrlKey) mods |= MOD_CONTROL;
         if (event.altKey) mods |= MOD_ALT;
+        if (event.metaKey) mods |= MOD_SUPER;
         pushKey(code, mods);
         event.preventDefault();
       });
