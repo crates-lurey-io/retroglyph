@@ -104,8 +104,7 @@ impl<B: Backend> Terminal<B> {
     /// whether anything changed calls this once per frame. A caller that only wants to redraw
     /// when its own state changed should gate the call to `draw` itself (e.g. `if
     /// state.changed() { term.draw(|s| render(s, &state))?; }`) rather than rely on `draw`/
-    /// [`present`](Self::present) to no-op. Unlike some earlier revisions of this API, presenting
-    /// is unconditional here.
+    /// [`present`](Self::present) to no-op.
     ///
     /// # Errors
     ///
@@ -533,6 +532,16 @@ impl<B: Backend> Terminal<B> {
         }
         self.queued_events.push_back(event);
         true
+    }
+}
+
+impl<B: Backend> core::fmt::Debug for Terminal<B> {
+    /// Prints `size` and `present_count`; elides the frame buffers and the backend.
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Terminal")
+            .field("size", &self.size())
+            .field("present_count", &self.present_count)
+            .finish_non_exhaustive()
     }
 }
 
