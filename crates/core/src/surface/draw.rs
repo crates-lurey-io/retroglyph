@@ -359,8 +359,8 @@ impl Surface<'_> {
     ///
     /// The starting column is computed with saturating arithmetic, so `text` wider than `rect`
     /// does not panic or underflow: it simply left-aligns and lets [`print`](Self::print) clip
-    /// the overflow, for every [`HAlign`](crate::align::HAlign) (matching how
-    /// [`HAlign::Center`](crate::align::HAlign::Center) itself saturates in
+    /// the overflow, for every [`HAlign`](crate::layout::HAlign) (matching how
+    /// [`HAlign::Center`](crate::layout::HAlign::Center) itself saturates in
     /// [`TextLayout`](crate::layout::TextLayout)).
     ///
     /// Not gated behind the `egc` feature: unlike `TextLayout`, this needs nothing from it, so
@@ -371,7 +371,7 @@ impl Surface<'_> {
     ///
     /// ```
     /// use retroglyph_core::backend::Headless;
-    /// use retroglyph_core::align::HAlign;
+    /// use retroglyph_core::layout::HAlign;
     /// use retroglyph_core::{Rect, Style, Terminal};
     ///
     /// let mut term = Terminal::new(Headless::new(6, 1));
@@ -387,7 +387,7 @@ impl Surface<'_> {
         &mut self,
         rect: Rect,
         text: &str,
-        align: crate::align::HAlign,
+        align: crate::layout::HAlign,
         style: Style,
     ) {
         use unicode_width::UnicodeWidthStr;

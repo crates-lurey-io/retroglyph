@@ -1111,7 +1111,7 @@ fn print_aligned_left_aligns_by_default() {
         surface.print_aligned(
             Rect::new(0, 0, 8, 1),
             "hi",
-            crate::align::HAlign::Left,
+            crate::layout::HAlign::Left,
             Style::default(),
         );
     }
@@ -1129,7 +1129,7 @@ fn print_aligned_centers_matching_text_layouts_own_saturating_formula() {
         surface.print_aligned(
             Rect::new(0, 0, 6, 1),
             "hi",
-            crate::align::HAlign::Center,
+            crate::layout::HAlign::Center,
             Style::default(),
         );
     }
@@ -1147,7 +1147,7 @@ fn print_aligned_right_aligns_flush_to_the_rects_right_edge() {
         surface.print_aligned(
             Rect::new(0, 0, 6, 1),
             "hi",
-            crate::align::HAlign::Right,
+            crate::layout::HAlign::Right,
             Style::default(),
         );
     }
@@ -1167,7 +1167,7 @@ fn print_aligned_does_not_panic_or_underflow_on_text_wider_than_the_rect() {
         surface.print_aligned(
             Rect::new(0, 0, 4, 1),
             "hello",
-            crate::align::HAlign::Center,
+            crate::layout::HAlign::Center,
             Style::default(),
         );
     }
@@ -1185,7 +1185,7 @@ fn print_aligned_clips_to_this_surfaces_own_area_as_well_as_rect() {
         surface.print_aligned(
             Rect::new(0, 0, 4, 1),
             "hi",
-            crate::align::HAlign::Right,
+            crate::layout::HAlign::Right,
             Style::default(),
         );
     }
@@ -1203,7 +1203,7 @@ fn print_aligned_right_on_an_offset_surface_drops_the_text() {
         surface.print_aligned(
             Rect::new(0, 0, 6, 1),
             "hi",
-            crate::align::HAlign::Right,
+            crate::layout::HAlign::Right,
             Style::default(),
         );
     }
@@ -1222,7 +1222,7 @@ fn print_aligned_center_on_an_offset_surface_drops_the_text() {
         surface.print_aligned(
             Rect::new(0, 0, 6, 1),
             "hi",
-            crate::align::HAlign::Center,
+            crate::layout::HAlign::Center,
             Style::default(),
         );
     }

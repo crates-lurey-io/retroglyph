@@ -2,7 +2,7 @@
 //!
 //! [`quantize_half_block`], [`quantize_quadrant`], and [`quantize_sextant`] posterize small
 //! blocks of raw pixels to the best-matching Unicode block-element glyph: retroglyph's
-//! "render a raster image as text, no tileset required" utility (see `retroglyph_core::subcell`
+//! "render a raster image as text, no tileset required" utility (see `retroglyph_core::symbols`
 //! for the algorithm). This example renders the same procedural scene (concentric color rings,
 //! computed on the fly, no image file) through all three fidelities side by side, sampling more
 //! source pixels per cell as fidelity increases:
@@ -22,7 +22,7 @@
 //! Keys: `q` or `Escape` quits, or close the window.
 
 use retroglyph_core::event::{Event, KeyCode};
-use retroglyph_core::subcell::{Pixel, quantize_half_block, quantize_quadrant, quantize_sextant};
+use retroglyph_core::symbols::{Pixel, quantize_half_block, quantize_quadrant, quantize_sextant};
 use retroglyph_core::{Backend, Style, Surface, Terminal};
 use retroglyph_examples::Example;
 
