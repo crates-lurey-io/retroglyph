@@ -850,6 +850,44 @@ mod tests {
     }
 
     #[test]
+    fn surface_print_and_print_line_wrap_at_the_viewport_not_one_step_after_the_origin() {
+        use crate::color::Style;
+        use crate::grid::Grid;
+        use crate::text::{Line, Span};
+        use alloc::vec;
+
+        // retroglyph#991: `print`/`print_line`'s wrap threshold used to compare a
+        // translated-space column against an area-local one, so it fired one grapheme after
+        // `origin_offset.0` on any surface `Camera::surface` produces, instead of at the
+        // viewport's own width.
+        let mut grid = Grid::new(20, 20);
+        let mut c = Camera::new(Rect::new(5, 5, 10, 10), Size::new(100, 100));
+        c.center_on(Pos::new(50, 50)); // origin (45, 45): world (50, 50) is local (5, 5).
+
+        {
+            let mut root = Surface::new(&mut grid, Rect::new(0, 0, 20, 20), 0);
+            c.surface(&mut root)
+                .print(Pos::new(50, 50), "abc", Style::default());
+        }
+        // Written across row 10 starting at column 10, not down column 10 one glyph per row.
+        assert_eq!(grid[Pos::new(10, 10)].glyph(), 'a');
+        assert_eq!(grid[Pos::new(11, 10)].glyph(), 'b');
+        assert_eq!(grid[Pos::new(12, 10)].glyph(), 'c');
+        assert_eq!(grid[Pos::new(10, 11)].glyph(), ' ');
+
+        let line = Line::from(vec![Span::raw("de"), Span::raw("fg")]);
+        {
+            let mut root = Surface::new(&mut grid, Rect::new(0, 0, 20, 20), 0);
+            c.surface(&mut root).print_line(Pos::new(50, 51), &line);
+        }
+        // Both spans still land; the old bug's `break` fired on the very first span.
+        assert_eq!(grid[Pos::new(10, 11)].glyph(), 'd');
+        assert_eq!(grid[Pos::new(11, 11)].glyph(), 'e');
+        assert_eq!(grid[Pos::new(12, 11)].glyph(), 'f');
+        assert_eq!(grid[Pos::new(13, 11)].glyph(), 'g');
+    }
+
+    #[test]
     fn set_viewport_fitted_saturates_instead_of_overflowing() {
         let mut c = Camera::new(Rect::new(0, 0, 1, 1), Size::new(5, 5));
         c.set_viewport_fitted(Rect::new(65_530, 0, 1_000, 10));

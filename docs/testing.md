@@ -225,13 +225,16 @@ produces no new output for `READY_IDLE_TIMEOUT`, has closed the PTY, or blows th
 `READY_HARD_TIMEOUT` backstop (kept under nextest's own 40s kill so the failure names the marker it
 was waiting for).
 
-The crossterm binary each `svg_snapshot` test spawns is built with its own `--target-dir`
+The crossterm binary each `svg_snapshot` test spawns lives in its own `--target-dir`
 (`target/pty-examples/`, see `support::build_crossterm_example`), separate from the workspace's
 normal `target/`. `cargo test --workspace --all-features` builds every example with the `software`
 feature (unusable in a PTY) before any test runs, so building the crossterm-only variant back into
 the same output path would force a relink (and, on macOS, a real code-signature validation cost of
 roughly a second or two) on every single test run. The isolated target dir keeps that binary
-byte-identical (and already validated) across runs instead.
+byte-identical (and already validated) across runs instead. It's built exactly once, by the
+`build-pty-examples` Justfile recipe, before any test process starts;
+`support::build_crossterm_example` only asserts the binary is there rather than building it itself,
+so concurrent nextest processes never race each other over that shared path (retroglyph#976).
 
 Every example under `examples/examples/*.rs` is also auto-built to four WASM variants (headless /
 xterm.js terminal / software canvas / WebGL) and deployed to the docs gallery by
