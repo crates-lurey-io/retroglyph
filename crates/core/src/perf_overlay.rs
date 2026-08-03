@@ -53,10 +53,11 @@
 //! [`PerfOverlayApp::update`] drains every event out of the wrapped [`Terminal`] before handing
 //! control to the inner [`App`], keeps any that match the toggle key (backtick, or F1 as an
 //! alias, by default; see [`default_is_toggle_key`]), and re-queues the rest via
-//! [`Input::push_event`](crate::backend::Input::push_event) so the inner app sees exactly the
-//! input it would have without the overlay, minus the toggle presses. This works identically on
-//! every backend because it only goes through [`Terminal`]'s own event queue, never a
-//! backend-specific input path.
+//! [`Terminal::requeue_events`] so the inner app sees exactly the input it would have without the
+//! overlay, minus the toggle presses. This works identically on every backend because it only
+//! goes through [`Terminal`]'s own event queue, never a backend-specific input path (in
+//! particular, never [`Input::push_event`](crate::backend::Input::push_event), whose documented
+//! default is a no-op for backends that never receive events from outside their own `poll_event`).
 //!
 //! The toggle key doesn't just flip visibility: it cycles through [`PerfOverlayMode`]:
 //! [`Off`](PerfOverlayMode::Off) -> [`Compact`](PerfOverlayMode::Compact) ->
@@ -513,11 +514,11 @@ where
         self.stats.record(frame.delta);
 
         // Drain every pending event before the wrapped app runs, keep the toggle presses, and
-        // re-queue everything else via `Input::push_event` so the wrapped app sees exactly the
-        // input it would have without this wrapper, minus the toggles. This goes entirely through
-        // `Terminal`'s own event queue, so it works identically regardless of how a given backend
-        // sources events (an OS poll for crossterm, an event-loop-filled queue for a windowed
-        // backend): see the module docs' "Toggling" section.
+        // re-queue everything else via `Terminal::requeue_events` so the wrapped app sees exactly
+        // the input it would have without this wrapper, minus the toggles. This goes entirely
+        // through `Terminal`'s own event queue, never a backend-specific input path (in
+        // particular, never `Input::push_event`, whose documented default is a no-op for
+        // backends with no external event source): see the module docs' "Toggling" section.
         let mut toggled = false;
         self.passthrough.clear();
         for event in term.drain_events() {
@@ -530,9 +531,7 @@ where
         if toggled {
             self.mode = self.mode.next(self.full.is_some());
         }
-        for event in self.passthrough.drain(..) {
-            term.backend_mut().push_event(event);
-        }
+        term.requeue_events(self.passthrough.drain(..));
 
         let mut flow = self.inner.update(term, frame);
         // A toggle is itself a visible change worth presenting, even on a frame the wrapped app
@@ -577,8 +576,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::Headless;
+    use crate::backend::{Cursor, Headless, Input, Output};
     use crate::event::{KeyEvent, KeyModifiers};
+    use crate::grid::Pos;
 
     struct CountingApp {
         updates: u32,
@@ -601,6 +601,85 @@ mod tests {
             delta: core::time::Duration::from_millis(16),
             frame: n,
         }
+    }
+
+    /// Wraps [`Headless`] but never overrides `Input::push_event`, relying on the trait's
+    /// documented no-op default the way a backend with no external event source legitimately
+    /// can (see `backend/mod.rs`'s [`Input`] doc). Exists only to prove `PerfOverlayApp` no
+    /// longer needs that override to pass input through.
+    struct NoPushEventBackend(Headless);
+
+    impl Output for NoPushEventBackend {
+        type Error = <Headless as Output>::Error;
+
+        fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
+        where
+            I: Iterator<Item = crate::backend::DrawCell<'a>>,
+        {
+            self.0.draw_layers(content)
+        }
+
+        fn resize(&mut self, size: Size) {
+            self.0.resize(size);
+        }
+
+        fn flush(&mut self) -> Result<(), Self::Error> {
+            self.0.flush()
+        }
+
+        fn size(&self) -> Size {
+            self.0.size()
+        }
+
+        fn clear(&mut self) -> Result<(), Self::Error> {
+            self.0.clear()
+        }
+    }
+
+    impl Input for NoPushEventBackend {
+        fn poll_event(&mut self, timeout: core::time::Duration) -> Option<Event> {
+            self.0.poll_event(timeout)
+        }
+        // `push_event` intentionally not overridden: this backend relies on the trait's
+        // documented no-op default, as `Crossterm` and windowed backends' doc comments say a
+        // backend with no external event source is free to do.
+    }
+
+    impl Cursor for NoPushEventBackend {
+        fn set_cursor_visible(&mut self, visible: bool) {
+            self.0.set_cursor_visible(visible);
+        }
+
+        fn set_cursor_position(&mut self, position: Pos) {
+            self.0.set_cursor_position(position);
+        }
+    }
+
+    struct SeesInput {
+        saw: bool,
+    }
+
+    impl<B: Backend> App<B> for SeesInput {
+        fn update(&mut self, term: &mut Terminal<B>, _frame: &Frame) -> Flow {
+            if term.drain_events().next().is_some() {
+                self.saw = true;
+            }
+            Flow::Continue
+        }
+    }
+
+    #[test]
+    fn perf_overlay_passes_input_through_on_a_backend_with_the_default_push_event() {
+        let mut term = Terminal::new(NoPushEventBackend(Headless::new(40, 5)));
+        term.backend_mut().0.push_event(Event::Key(KeyEvent::new(
+            KeyCode::Char('q'),
+            KeyModifiers::NONE,
+        )));
+
+        let mut overlay = PerfOverlayApp::new(SeesInput { saw: false }, "custom");
+        App::update(&mut overlay, &mut term, &frame(0));
+
+        assert!(overlay.inner().saw);
     }
 
     #[test]
@@ -877,7 +956,7 @@ mod tests {
             area,
             &mut Surface::new(&mut grid, area, 0),
         );
-        assert_eq!(grid[crate::grid::Pos::new(0, 0)].glyph(), ' ');
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
     }
 
     #[test]
@@ -894,7 +973,7 @@ mod tests {
             area,
             &mut Surface::new(&mut grid, area, 0),
         );
-        assert_eq!(grid[crate::grid::Pos::new(0, 0)].glyph(), ' ');
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
     }
 
     #[test]
@@ -911,9 +990,7 @@ mod tests {
             area,
             &mut Surface::new(&mut grid, area, 0),
         );
-        let row: String = (0..60)
-            .map(|x| grid[crate::grid::Pos::new(x, 0)].glyph())
-            .collect();
+        let row: String = (0..60).map(|x| grid[Pos::new(x, 0)].glyph()).collect();
         assert!(row.contains("fps"), "{row}");
         assert!(row.contains("ms"), "{row}");
         assert!(row.contains("min"), "{row}");
@@ -921,8 +998,8 @@ mod tests {
         assert!(row.contains("headless"), "{row}");
         // Right-aligned: the last character of the readout (the trailing space) sits in the
         // area's last column, not floating somewhere in the middle.
-        assert_eq!(grid[crate::grid::Pos::new(59, 0)].glyph(), ' ');
-        assert_ne!(grid[crate::grid::Pos::new(0, 0)].glyph(), 'h');
+        assert_eq!(grid[Pos::new(59, 0)].glyph(), ' ');
+        assert_ne!(grid[Pos::new(0, 0)].glyph(), 'h');
     }
 
     #[test]
