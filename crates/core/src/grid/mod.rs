@@ -375,8 +375,13 @@ impl TileExtra {
 impl LayerBuf {
     fn new(width: u16, height: u16) -> Self {
         let n = usize::from(width) * usize::from(height);
+        // grixy's `GridBuf::from_buffer` divides the buffer length by the stride to infer the
+        // height, unconditionally, so a literal width of 0 is a divide-by-zero even though the
+        // buffer is empty either way. Clamp the stride only, not `n`: the buffer stays empty for
+        // a zero-width grid, and `Grid`'s own `width` field (not this stride) is what callers see.
+        let stride = usize::from(width).max(1);
         Self {
-            buf: GridBuf::from_buffer(alloc::vec![Tile::default(); n], usize::from(width)),
+            buf: GridBuf::from_buffer(alloc::vec![Tile::default(); n], stride),
             extras: BTreeMap::new(),
         }
     }
