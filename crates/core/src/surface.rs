@@ -1447,6 +1447,74 @@ mod tests {
     }
 
     #[test]
+    fn blit_is_a_no_op_when_the_whole_footprint_is_cropped_before_the_translated_origin() {
+        let mut src = Grid::new(2, 2);
+        src.put_tile(0, (0, 0), Tile::new('x', Style::default()));
+
+        let mut dst = Grid::new(4, 4);
+        {
+            let mut surface = screen(&mut dst);
+            // Translating by +100 columns shifts `(0, 0)` to local `-100`: the whole 2-wide
+            // footprint falls left of the origin, so `crop_left` (100) reaches past `w` (2).
+            let mut view = surface.translate((100, 0));
+            view.blit(&src, 0, 0);
+        }
+
+        assert_eq!(dst[Pos::new(0, 0)].glyph(), ' ');
+    }
+
+    #[test]
+    fn blit_is_a_no_op_when_the_shifted_x_origin_overflows_u16() {
+        let mut src = Grid::new(2, 2);
+        src.put_tile(0, (0, 0), Tile::new('x', Style::default()));
+
+        let mut dst = Grid::new(4, 4);
+        {
+            let mut surface = screen(&mut dst);
+            // Translating by -100_000 pushes the shifted local x past `u16::MAX`, which
+            // `u16::try_from` refuses (distinct from the ordinary negative-crop path above).
+            let mut view = surface.translate((-100_000, 0));
+            view.blit(&src, 0, 0);
+        }
+
+        assert_eq!(dst[Pos::new(0, 0)].glyph(), ' ');
+    }
+
+    #[test]
+    fn blit_is_a_no_op_when_the_shifted_y_origin_overflows_u16() {
+        let mut src = Grid::new(2, 2);
+        src.put_tile(0, (0, 0), Tile::new('x', Style::default()));
+
+        let mut dst = Grid::new(4, 4);
+        {
+            let mut surface = screen(&mut dst);
+            // Same as the x-overflow case above, but on the y axis, which `blit` checks
+            // separately (only after the x shift already succeeded).
+            let mut view = surface.translate((0, -100_000));
+            view.blit(&src, 0, 0);
+        }
+
+        assert_eq!(dst[Pos::new(0, 0)].glyph(), ' ');
+    }
+
+    #[test]
+    fn blit_is_a_no_op_when_the_destination_footprint_misses_the_clip_entirely() {
+        let mut src = Grid::new(2, 2);
+        src.put_tile(0, (0, 0), Tile::new('x', Style::default()));
+
+        let mut dst = Grid::new(5, 5);
+        {
+            let mut surface = screen(&mut dst);
+            // Clipped to the top-left cell only; the blit lands at (3, 3), whose footprint
+            // doesn't overlap the clip at all (unlike the partial-overlap case tested above).
+            let mut clipped = surface.clip(Rect::new(0, 0, 1, 1));
+            clipped.blit(&src, 3, 3);
+        }
+
+        assert_eq!(dst[Pos::new(3, 3)].glyph(), ' ');
+    }
+
+    #[test]
     fn put_span_takes_any_as_ref_str_row() {
         let mut grid = Grid::new(4, 4);
         // A footprint computed at runtime: owned rows, no borrowing pass over them.
