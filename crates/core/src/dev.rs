@@ -77,7 +77,6 @@
 /// to gate a block on it. See the [module docs](self) for how a mode is chosen and why there are
 /// two of them rather than three.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[non_exhaustive]
 pub enum BuildMode {
     /// Development diagnostics are compiled in.
     ///
