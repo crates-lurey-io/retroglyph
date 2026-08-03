@@ -108,7 +108,7 @@ use retroglyph_core::tile::Tile;
 use retroglyph_window::palette::{DEFAULT_BG, DEFAULT_FG};
 #[cfg(feature = "tilesets")]
 use retroglyph_window::sprite_cache::SpriteTint;
-use retroglyph_window::{CellGeometry, Presenter, WindowHandle};
+use retroglyph_window::{CellGeometry, Presenter, WindowHandle, cell_art_glyph};
 use shaders::GlslFlavor;
 #[cfg(feature = "tilesets")]
 use sprites::{SpriteInstance, SpriteSet, SpriteSlot};
@@ -331,8 +331,8 @@ const fn base_blank(space_glyph: u16) -> Instance {
 }
 
 /// Builds the base-layer (layer 0) [`Instance`] for `tile` at the already-resolved atlas `slot`:
-/// the background is always opaque (default-substituted), and the glyph is drawn only when the tile
-/// is non-empty.
+/// the background is always opaque (default-substituted), and the glyph is drawn only when
+/// [`cell_art_glyph`] says this tile draws art (see its docs for the blank/span-covered rules).
 ///
 /// A `slot` of `None` is a character no font in the chain can draw, not even as the substituted
 /// solid block; the cell keeps its background and draws no glyph, matching `retroglyph-software`.
@@ -343,7 +343,12 @@ const fn base_instance(slot: Option<u16>, tile: &Tile) -> Instance {
         Some(slot) => (slot, FLAG_HAS_GLYPH),
         None => (0, 0),
     };
-    let flags = FLAG_HAS_BG | if tile.is_empty() { 0 } else { drawable };
+    let flags = FLAG_HAS_BG
+        | if cell_art_glyph(tile).is_none() {
+            0
+        } else {
+            drawable
+        };
     Instance::new(slot, fg, bg, tile.dx(), tile.dy(), flags)
 }
 
@@ -453,46 +458,63 @@ impl Output for GlRenderer {
             if layer_id == 0 {
                 let slot = self.glyphs.resolve(tile.glyph());
                 let inst = base_instance(slot, tile);
+                // Sprite dispatch is gated on `cell_art_glyph`, not the raw `tile.glyph()`: a
+                // blank layer-0 cell (`is_empty()`, e.g. an untouched grid cell) draws no art at
+                // all, even if its glyph happens to have a registered sprite (retroglyph#762).
                 #[cfg(feature = "tilesets")]
-                if let Some(sprite) = self.sprite_set.as_ref().and_then(|s| s.slot(tile.glyph())) {
-                    // Keep layer 0's opaque background; drop the glyph, the sprite covers it.
-                    let sprite_inst =
-                        Instance::new(inst.glyph, inst.fg, inst.bg, 0, 0, inst.flags & FLAG_HAS_BG);
-                    inherited_bg[idx] = sprite_inst.bg;
-                    self.layers[0][idx] = sprite_inst;
-                    let (span_w, span_h) = tile.span();
-                    let align = sprite.align_offset(
-                        span_w,
-                        span_h,
-                        self.geometry.glyph_w,
-                        self.geometry.glyph_h,
-                    );
-                    self.warn_if_sprite_needs_span(tile, sprite);
-                    self.sprite_layers[0].push(SpriteInstance::new(
-                        cx,
-                        cy,
-                        sprite.layer,
-                        sprite.w,
-                        sprite.h,
-                        tile.dx() + align.0,
-                        tile.dy() + align.1,
-                        SpriteTint::resolve(
-                            sprite.color,
-                            tile.style().foreground(),
-                            draw_cell.tint,
-                            DEFAULT_FG,
-                        ),
-                    ));
-                    continue;
+                {
+                    let art_glyph = cell_art_glyph(tile);
+                    if let Some(sprite) =
+                        art_glyph.and_then(|g| self.sprite_set.as_ref().and_then(|s| s.slot(g)))
+                    {
+                        // Keep layer 0's opaque background; drop the glyph, the sprite covers it.
+                        let sprite_inst = Instance::new(
+                            inst.glyph,
+                            inst.fg,
+                            inst.bg,
+                            0,
+                            0,
+                            inst.flags & FLAG_HAS_BG,
+                        );
+                        inherited_bg[idx] = sprite_inst.bg;
+                        self.layers[0][idx] = sprite_inst;
+                        let (span_w, span_h) = tile.span();
+                        let align = sprite.align_offset(
+                            span_w,
+                            span_h,
+                            self.geometry.glyph_w,
+                            self.geometry.glyph_h,
+                        );
+                        self.warn_if_sprite_needs_span(tile, sprite);
+                        self.sprite_layers[0].push(SpriteInstance::new(
+                            cx,
+                            cy,
+                            sprite.layer,
+                            sprite.w,
+                            sprite.h,
+                            tile.dx() + align.0,
+                            tile.dy() + align.1,
+                            SpriteTint::resolve(
+                                sprite.color,
+                                tile.style().foreground(),
+                                draw_cell.tint,
+                                DEFAULT_FG,
+                            ),
+                        ));
+                        continue;
+                    }
+                    if let Some(g) = art_glyph {
+                        self.warn_if_tint_needs_sprite(g, draw_cell.tint);
+                    }
                 }
-                #[cfg(feature = "tilesets")]
-                self.warn_if_tint_needs_sprite(tile.glyph(), draw_cell.tint);
                 inherited_bg[idx] = inst.bg;
                 self.layers[0][idx] = inst;
                 continue;
             }
-            if tile.is_empty() {
-                // Transparent: nothing drawn, and the running background is unchanged.
+            if cell_art_glyph(tile).is_none() {
+                // Transparent: nothing drawn, and the running background is unchanged. This
+                // branch runs after the span-covered `continue` above, so a `None` here always
+                // means blank, never span-covered.
                 self.layers[l][idx] = Instance::new(self.space_glyph, [0; 3], [0; 3], 0, 0, 0);
                 continue;
             }
