@@ -244,10 +244,8 @@ impl GlBackendBuilder {
         let mut renderer = GlRenderer::new(glyphs, self.cols, self.rows, self.scale);
         #[cfg(feature = "tilesets")]
         {
-            let mut cache = retroglyph_window::sprite_cache::SpriteCache::new();
-            for opts in &self.tilesets {
-                cache.load(opts).map_err(GlBackendError::Tileset)?;
-            }
+            let cache = retroglyph_window::sprite_cache::SpriteCache::from_tilesets(&self.tilesets)
+                .map_err(GlBackendError::Tileset)?;
             if let Some(set) = crate::sprites::SpriteSet::from_cache(&cache) {
                 renderer.set_sprites(set);
             }

@@ -130,6 +130,28 @@ impl SpriteAlign {
             }) as i16,
         )
     }
+
+    /// Returns the offset of a `sprite_w` x `sprite_h` sprite inside the box a `span_w` x
+    /// `span_h` span of `glyph_w` x `glyph_h` cells reserves for it, in unscaled pixels.
+    ///
+    /// `span_w`/`span_h` come from [`Tile::span`](retroglyph_core::Tile::span) and `glyph_w`/
+    /// `glyph_h` are the unscaled cell size, so the box is `span_w * glyph_w` x `span_h *
+    /// glyph_h` pixels. A zero cell size is treated as one pixel, leaving the sprite on its
+    /// anchor rather than offsetting it by a meaningless amount.
+    #[must_use]
+    pub const fn offset_in_span(
+        self,
+        sprite_w: u32,
+        sprite_h: u32,
+        span_w: u16,
+        span_h: u16,
+        glyph_w: u8,
+        glyph_h: u8,
+    ) -> (i16, i16) {
+        let box_w = span_w as u32 * if glyph_w == 0 { 1 } else { glyph_w as u32 };
+        let box_h = span_h as u32 * if glyph_h == 0 { 1 } else { glyph_h as u32 };
+        self.offset(sprite_w, sprite_h, box_w, box_h)
+    }
 }
 
 /// Errors that can occur during tileset validation or decoding.
