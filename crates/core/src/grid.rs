@@ -1315,6 +1315,77 @@ impl Grid {
         Some(())
     }
 
+    /// Fills every cell of `rect` (clipped to this grid) on `layer` with `tile`.
+    ///
+    /// The batch counterpart to calling [`put_tile`](Self::put_tile) once per cell of `rect`:
+    /// same result, but the span/extras bookkeeping and the layer allocation each happen once for
+    /// the whole region rather than once per cell, and the write itself is one
+    /// [`fill_rect_solid`](grixy::ops::GridWrite::fill_rect_solid) call instead of `rect.width() *
+    /// rect.height()` individual cell writes. [`Surface::fill_rect`](crate::surface::Surface::fill_rect),
+    /// [`Surface::clear`](crate::surface::Surface::clear), and
+    /// [`Surface::clear_region`](crate::surface::Surface::clear_region) are built on this.
+    ///
+    /// A no-op if `rect` (after clipping to the grid) is empty. As with [`put_tile`](Self::put_tile), `tile` can
+    /// never legitimately carry [`TileFlags::HAS_EXTRA`] (the flag is crate-private), so every
+    /// cell's own extras entry, if any, is dropped rather than orphaned.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_core::{Grid, Pos, Rect, Style, Tile};
+    ///
+    /// let mut grid = Grid::new(4, 4);
+    /// grid.fill_region(0, Rect::new(1, 1, 2, 2), Tile::new('#', Style::default()));
+    ///
+    /// assert_eq!(grid[Pos::new(1, 1)].glyph(), '#');
+    /// assert_eq!(grid[Pos::new(2, 2)].glyph(), '#');
+    /// assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
+    /// ```
+    pub fn fill_region(&mut self, layer: u8, rect: Rect, mut tile: Tile) {
+        let bounds = Rect::new(0, 0, self.width, self.height);
+        let rect = rect.intersect(bounds);
+        if rect.is_empty() {
+            return;
+        }
+
+        // Clear every span (and, under `egc`, every wide-char cell) this fill would partially
+        // overwrite, one row at a time rather than one cell at a time: still O(rows), and a no-op
+        // on a grid that has never used spans (see `clear_span_overlap`).
+        for y in rect.top()..rect.bottom() {
+            self.clear_span_overlap(layer, rect.left(), y, rect.width());
+            #[cfg(feature = "egc")]
+            self.clear_overlap(layer, rect.left(), y, rect.width());
+        }
+
+        // `tile` is a caller-constructed `Tile` (see `put_tile`'s own doc comment for why that
+        // can never carry `HAS_EXTRA`), so every cell's own extras entry is now stale. Drop them
+        // per row rather than scanning the whole side table: bounded by the region, not by
+        // however much of the layer happens to carry extras elsewhere.
+        tile.flags.remove(TileFlags::HAS_EXTRA);
+        let grid_w = usize::from(self.width);
+        let lb = self.layer_or_alloc(layer);
+        for y in rect.top()..rect.bottom() {
+            let row_start = usize::from(y) * grid_w + usize::from(rect.left());
+            let row_end = row_start + usize::from(rect.width());
+            let stale: Vec<usize> = lb
+                .extras
+                .range(row_start..row_end)
+                .map(|(&idx, _)| idx)
+                .collect();
+            for idx in stale {
+                lb.extras.remove(&idx);
+            }
+        }
+
+        let dst = grixy::core::Rect::new(
+            usize::from(rect.left()),
+            usize::from(rect.top()),
+            usize::from(rect.width()),
+            usize::from(rect.height()),
+        );
+        lb.buf.fill_rect_solid(dst, tile);
+    }
+
     /// Sets the whole side-table entry for an already-written tile at `(x, y)` on `layer`,
     /// setting [`TileFlags::HAS_EXTRA`] to match. Does nothing if out of bounds. Crate-private:
     /// the external ways in are [`write_grapheme`](Self::write_grapheme) and
@@ -2688,6 +2759,60 @@ mod tests {
         g.set_tint(0, 1, 1, Tint::multiply(128, 128, 128));
         g.put_tile(0, Pos::new(1, 1), Tile::new('x', Style::default()));
         assert_eq!(g.tint(0, 1, 1), Tint::None);
+    }
+
+    /// `fill_region` must clear any span it would partially overwrite the same way a per-cell
+    /// `put_tile` loop would (via `clear_span_overlap`), or the surviving span's anchor would
+    /// keep claiming a footprint the fill just overwrote part of.
+    #[test]
+    fn fill_region_clears_a_span_it_partially_overwrites() {
+        let mut g = Grid::new(4, 4);
+        g.write_span(0, 0, 0, &["C=", "[]"], Style::default())
+            .expect("2x2 span fits in a 4x4 grid");
+
+        // Overlaps only the span's right column, (1, 0) and (1, 1).
+        g.fill_region(0, Rect::new(1, 0, 3, 3), Tile::new('#', Style::default()));
+
+        // The anchor at (0, 0) is gone, not left claiming a footprint that no longer matches
+        // reality.
+        let anchor = g.tile(0, (0, 0)).unwrap();
+        assert!(!anchor.flags().contains(TileFlags::SPAN_ANCHOR));
+        assert_eq!(anchor.glyph(), ' ');
+    }
+
+    /// `fill_region` writes a caller-constructed `Tile`, which (like `put_tile`) can never
+    /// legitimately carry `HAS_EXTRA`, so any grapheme/tint side-table entry the fill's cells
+    /// used to own must be dropped, not left dangling under the new tile.
+    #[test]
+    fn fill_region_drops_stale_extras() {
+        let mut g = Grid::new(4, 4);
+        g.write_grapheme(0, 1, 1, "e\u{0301}", Style::default());
+        g.set_tint(0, 2, 2, Tint::multiply(1, 2, 3));
+
+        g.fill_region(0, Rect::new(0, 0, 4, 4), Tile::new('#', Style::default()));
+
+        assert_eq!(g.grapheme(0, 1, 1), None);
+        assert_eq!(g.tint(0, 2, 2), Tint::None);
+    }
+
+    /// A `rect` that extends past the grid's own edges only fills the in-bounds overlap, the
+    /// same clipping `put_tile` gets for free per cell by refusing an out-of-bounds `pos`.
+    #[test]
+    fn fill_region_clips_to_grid_bounds() {
+        let mut g = Grid::new(4, 4);
+        g.fill_region(0, Rect::new(2, 2, 10, 10), Tile::new('#', Style::default()));
+
+        assert_eq!(g.tile(0, (3, 3)).unwrap().glyph(), '#');
+        assert_eq!(g.tile(0, (0, 0)).unwrap().glyph(), ' ');
+    }
+
+    /// An empty (or fully out-of-bounds) `rect` allocates nothing: `fill_region` returns before
+    /// touching `layer_or_alloc`.
+    #[test]
+    fn fill_region_on_an_empty_rect_does_not_allocate_the_layer() {
+        let mut g = Grid::new(4, 4);
+        g.fill_region(1, Rect::new(10, 10, 2, 2), Tile::new('#', Style::default()));
+        assert_eq!(g.tile(1, (0, 0)), None);
     }
 
     #[test]

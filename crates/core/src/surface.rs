@@ -593,6 +593,33 @@ impl<'a> Surface<'a> {
         self.clip.contains(gx, gy).then_some((gx, gy))
     }
 
+    /// The whole-rect counterpart to [`shift`](Self::shift): translates a local `rect` (same
+    /// convention as `fill_rect`/`clear_region`, and as `shift`'s own `x`/`y`) into the absolute
+    /// grid rect it covers under this surface's own clip, or `None` if none of it lands.
+    ///
+    /// Only handles `origin_offset == (0, 0)` (true of every surface except one produced by
+    /// [`clip_translate`](Self::clip_translate)): with any other offset `shift` still refuses a
+    /// negative post-offset coordinate per cell, which a single rect-wide translation can't
+    /// reproduce without re-deriving per-cell bounds, so callers fall back to `shift` itself
+    /// instead.
+    fn local_rect_to_absolute(&self, rect: Rect) -> Option<Rect> {
+        if self.origin_offset != (0, 0) {
+            return None;
+        }
+        let local = rect.intersect(Rect::new(0, 0, self.area.width(), self.area.height()));
+        if local.is_empty() {
+            return None;
+        }
+        let abs = Rect::new(
+            self.area.left() + local.left(),
+            self.area.top() + local.top(),
+            local.width(),
+            local.height(),
+        )
+        .intersect(self.clip);
+        (!abs.is_empty()).then_some(abs)
+    }
+
     /// Applies this surface's tint to the cell just written at `(x, y)`.
     ///
     /// Called after a write rather than as part of one, because a glyph write drops whatever
@@ -958,6 +985,27 @@ impl<'a> Surface<'a> {
     /// assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
     /// ```
     pub fn fill_rect(&mut self, rect: Rect, ch: char, style: Style) {
+        // The batch path below writes a plain `Tile::new(ch, style)` per cell, which matches
+        // `put`'s own per-cell write only when there's no tint to apply and (under `egc`) `ch`
+        // is a single-column glyph, so `put`'s wide-char spacer bookkeeping never triggers.
+        // Anything else (tinted surface, zero/double-width glyph) falls back to the per-cell
+        // loop, unchanged from before this method had a fast path.
+        #[cfg(feature = "egc")]
+        let single_width = {
+            use unicode_width::UnicodeWidthChar;
+            UnicodeWidthChar::width(ch) == Some(1)
+        };
+        #[cfg(not(feature = "egc"))]
+        let single_width = true;
+
+        if self.tint == Tint::None
+            && single_width
+            && let Some(abs) = self.local_rect_to_absolute(rect)
+        {
+            self.grid.fill_region(self.layer, abs, Tile::new(ch, style));
+            return;
+        }
+
         for y in rect.top()..rect.bottom() {
             for x in rect.left()..rect.right() {
                 self.put((x, y), ch, style);
@@ -1232,11 +1280,7 @@ impl<'a> Surface<'a> {
     /// [`Tile::default`].
     pub fn clear(&mut self) {
         let region = self.area.intersect(self.clip);
-        for y in region.top()..region.bottom() {
-            for x in region.left()..region.right() {
-                self.grid.put_tile(self.layer, (x, y), Tile::default());
-            }
-        }
+        self.grid.fill_region(self.layer, region, Tile::default());
     }
 
     /// Clears `rect` (clipped to this surface's own clip, on its own layer) back to
@@ -1258,6 +1302,11 @@ impl<'a> Surface<'a> {
     /// assert_eq!(grid[Pos::new(1, 1)].glyph(), '#');
     /// ```
     pub fn clear_region(&mut self, rect: Rect) {
+        if let Some(abs) = self.local_rect_to_absolute(rect) {
+            self.grid.fill_region(self.layer, abs, Tile::default());
+            return;
+        }
+
         for y in rect.top()..rect.bottom() {
             for x in rect.left()..rect.right() {
                 if let Some((x, y)) = self.shift(x, y) {
@@ -1639,6 +1688,104 @@ mod tests {
         screen(&mut grid).put((1, 1), '@', Style::default());
 
         assert_eq!(grid.tint(0, 1, 1), Tint::None);
+    }
+
+    /// `fill_rect`'s batch fast path only applies when the surface is untinted: a tinted surface
+    /// must fall back to the per-cell loop, or every cell `fill_rect` touches would silently lose
+    /// its tint.
+    #[test]
+    fn with_tint_applies_to_every_cell_fill_rect_touches() {
+        let mut grid = Grid::new(4, 4);
+        {
+            let mut surface = screen(&mut grid);
+            surface.with_tint(Tint::multiply(128, 64, 32)).fill_rect(
+                Rect::new(1, 1, 2, 2),
+                '#',
+                Style::default(),
+            );
+        }
+
+        for (x, y) in [(1, 1), (2, 1), (1, 2), (2, 2)] {
+            assert_eq!(grid[Pos::new(x, y)].glyph(), '#');
+            assert_eq!(grid.tint(0, x, y), Tint::multiply(128, 64, 32));
+        }
+    }
+
+    /// `fill_rect`'s batch fast path only applies to a single-column glyph: a wide glyph must
+    /// fall back to the same per-cell `put` loop used before this method had a fast path, not the
+    /// batch `Tile::new` write (which carries no wide-char bookkeeping at all).
+    #[test]
+    #[cfg(feature = "egc")]
+    fn fill_rect_with_a_wide_glyph_falls_back_to_the_put_loop() {
+        let rect = Rect::new(0, 0, 6, 1);
+
+        let mut via_fill_rect = Grid::new(8, 1);
+        screen(&mut via_fill_rect).fill_rect(rect, '\u{6f22}', Style::default());
+
+        let mut via_put = Grid::new(8, 1);
+        {
+            let mut surface = screen(&mut via_put);
+            for y in rect.top()..rect.bottom() {
+                for x in rect.left()..rect.right() {
+                    surface.put((x, y), '\u{6f22}', Style::default());
+                }
+            }
+        }
+
+        for x in 0..8 {
+            assert_eq!(
+                via_fill_rect[Pos::new(x, 0)],
+                via_put[Pos::new(x, 0)],
+                "cell ({x}, 0)"
+            );
+        }
+    }
+
+    /// `fill_rect`, `clear`, and `clear_region` all route through `Grid::fill_region`, which must
+    /// clear any span the fill partially overwrites the same way the per-cell loop it replaced
+    /// did, or the surviving span's anchor would keep claiming cells the fill just overwrote.
+    #[test]
+    fn fill_rect_clears_a_span_it_partially_overwrites() {
+        use crate::tile::TileFlags;
+
+        let mut grid = Grid::new(4, 4);
+        {
+            let mut surface = screen(&mut grid);
+            surface
+                .put_span((0, 0), &["C=", "[]"], Style::default())
+                .expect("2x2 span fits in a 4x4 grid");
+            surface.fill_rect(Rect::new(1, 0, 3, 3), '#', Style::default());
+        }
+
+        assert!(
+            !grid
+                .tile(0, (0, 0))
+                .unwrap()
+                .flags()
+                .contains(TileFlags::SPAN_ANCHOR)
+        );
+    }
+
+    #[test]
+    fn clear_region_clears_a_span_it_partially_overwrites() {
+        use crate::tile::TileFlags;
+
+        let mut grid = Grid::new(4, 4);
+        {
+            let mut surface = screen(&mut grid);
+            surface
+                .put_span((0, 0), &["C=", "[]"], Style::default())
+                .expect("2x2 span fits in a 4x4 grid");
+            surface.clear_region(Rect::new(1, 0, 3, 3));
+        }
+
+        assert!(
+            !grid
+                .tile(0, (0, 0))
+                .unwrap()
+                .flags()
+                .contains(TileFlags::SPAN_ANCHOR)
+        );
     }
 
     #[test]
