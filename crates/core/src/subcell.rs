@@ -1,10 +1,8 @@
 //! Posterizes small blocks of raw pixels to the best-matching Unicode block-element glyph.
 //!
-//! This is the "subcell" technique used by `doryen-rs` (`blit_2x`), libtcod, and notcurses'
-//! blitter chain to render raster images as text without a tileset: split a source image into
-//! one small pixel block per terminal cell, then pick whichever glyph plus foreground/background
-//! color pair best reconstructs that block. Three block shapes are supported, in increasing
-//! fidelity (and decreasing terminal compatibility):
+//! Splits a source image into one small pixel block per terminal cell, then pick whichever glyph
+//! plus foreground/background color pair best reconstructs that block. Three block shapes are
+//! supported, in increasing fidelity (and decreasing terminal compatibility):
 //!
 //! - [`quantize_half_block`]: 1x2 pixels -> `' '`/`▀`/`▄`/`█` (Unicode Block Elements, supported
 //!   almost everywhere monospace fonts render at all).
@@ -37,17 +35,6 @@
 //! two distinct pixel colors has exactly two zero-error patterns, one the bitwise complement of
 //! the other (swap which color is called `fg` and which is `bg` and the reconstruction is
 //! identical); the lower pattern number wins there too.
-//!
-//! # Provenance
-//!
-//! The glyph tables ([`HALF_BLOCKS`], [`QUADRANTS`], [`SEXTANTS`]) are adapted from
-//! [ratatui-core's `symbols::pixel` module](https://github.com/ratatui/ratatui/blob/main/ratatui-core/src/symbols/pixel.rs)
-//! (MIT-licensed, like retroglyph), which lists them by bit pattern rather than by Unicode
-//! codepoint order: the sextant block in particular is not contiguous or monotonic in Unicode
-//! (four combinations reuse the pre-existing Block Elements `' '`, `█`, `▌`, `▐` instead of
-//! having their own Legacy Computing codepoints), so a hand-rolled table is where subtle,
-//! hard-to-spot-in-review bugs live. Reusing a table already exercised by a widely-used library
-//! is deliberate risk reduction, not just convenience.
 //!
 //! # Example
 //!

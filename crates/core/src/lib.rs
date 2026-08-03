@@ -196,7 +196,7 @@ pub use grid::{BlendMode, Grid, Offset, Pos, Rect, Size};
 /// a direct `ixy` dependency just to call them on this crate's own type aliases.
 pub use ixy::HasSize;
 #[cfg(feature = "egc")]
-pub use layout::{TextLayout, TextMetrics};
+pub use layout::TextLayout;
 pub use style::Style;
 pub use subcell::{Glyph, quantize_half_block, quantize_quadrant, quantize_sextant};
 pub use surface::{Layer, StyledSurface, Surface};
