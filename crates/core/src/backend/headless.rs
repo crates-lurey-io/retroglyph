@@ -1,5 +1,4 @@
-//! In-memory backend for testing. Stores presented content
-//! and allows injecting synthetic events.
+//! In-memory backend for testing. Stores presented content and allows injecting synthetic events.
 //!
 //! [`Headless::format_view`] renders the current frame for snapshot testing (e.g. with `insta`)
 //! and [`Headless::push_event`] queues synthetic input; see ["Driving `Headless` with synthetic
@@ -18,8 +17,9 @@ use core::fmt::Write as _;
 use core::time::Duration;
 use ixy::HasSize;
 
-/// In-memory backend for testing. Stores presented content
-/// and allows injecting synthetic events.
+/// In-memory backend for testing.
+///
+/// Stores presented content and allows injecting synthetic events.
 pub struct Headless {
     grid: Grid,
     cursor_visible: bool,
