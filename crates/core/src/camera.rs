@@ -484,8 +484,8 @@ mod tests {
 
     #[test]
     fn surface_draws_a_multi_cell_anchor_that_is_off_viewport() {
+        use crate::color::Style;
         use crate::grid::Grid;
-        use crate::style::Style;
 
         // The scenario retroglyph#614 could not express: a two-cell-wide sprite whose anchor
         // sits one world column left of the visible range, so only its right half is on screen.

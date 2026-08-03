@@ -252,13 +252,13 @@ pub struct Interaction<Id> {
     // move it: `gained_focus`/`lost_focus` need last frame's answer to diff against, the same
     // role `resolved_hover`'s pointer-snapshot fields play for hover/press/release.
     prev_focused: Option<Id>,
-    // Backs [`animate`](Self::animate): one `(id, last target, Tween)` per `id` that's had
-    // `animate` called on it since it last settled at rest. A plain `Vec` scanned linearly, not a
-    // `HashMap`, to keep `animate` (like every other method here) usable with any `Id: Copy +
-    // PartialEq`, no `Hash`/`Eq` required, the same call [`HitTester`] already makes for its own
-    // per-`Id` registrations. The stored `bool` is `animate`'s last-seen `target`, kept alongside
-    // the `Tween` so a flip can be detected without the `Tween` itself exposing its `to`.
-    tweens: Vec<(Id, bool, Tween)>,
+    // Backs [`animate`](Self::animate): one `(id, Tween)` per `id` that's had `animate` called on
+    // it since it last settled at rest. A plain `Vec` scanned linearly, not a `HashMap`, to keep
+    // `animate` (like every other method here) usable with any `Id: Copy + PartialEq`, no
+    // `Hash`/`Eq` required, the same call [`HitTester`] already makes for its own per-`Id`
+    // registrations. A flip is detected by comparing `target` against the `Tween`'s own
+    // [`Tween::target`], so no parallel last-seen `bool` is needed.
+    tweens: Vec<(Id, Tween)>,
 }
 
 impl<Id> Interaction<Id> {
@@ -498,8 +498,7 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
     /// `response.hovered()` as `target`, and blends its idle/hover style by the result, without
     /// declaring a `Tween` field of its own or hand-diffing this frame's `hovered()` against
     /// last frame's to find the edge that should retarget it, both of which an app would
-    /// otherwise need to do once per animated `Id`, since neither [`Tween`] nor
-    /// [`Interaction`](Self) tracks that edge on its own.
+    /// otherwise need to do once per animated `Id`.
     ///
     /// `duration` only takes effect while `id`'s tween is created, i.e. the first call for that
     /// `id`, or the first call after a previous one settled and was pruned: changing it on a
@@ -512,23 +511,25 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
             .iter()
             .position(|(existing, ..)| *existing == id)
         {
-            let (_, last_target, tween) = &mut self.tweens[index];
-            if *last_target != target {
+            let (_, tween) = &mut self.tweens[index];
+            // `target_value` is always exactly `0.0` or `1.0` (`f32::from(bool)`), and
+            // `Tween::target` only ever holds a value this same conversion produced, so exact
+            // equality is correct here, not an epsilon comparison.
+            #[allow(clippy::float_cmp)]
+            if tween.target() != target_value {
                 tween.retarget(target_value);
-                *last_target = target;
             }
             tween.update(frame.delta);
             index
         } else {
             self.tweens.push((
                 id,
-                target,
                 Tween::new(target_value, target_value).duration(duration),
             ));
             self.tweens.len() - 1
         };
 
-        let (_, _, tween) = &self.tweens[index];
+        let (_, tween) = &self.tweens[index];
         let value = tween.value();
         if tween.is_finished() {
             self.tweens.remove(index);

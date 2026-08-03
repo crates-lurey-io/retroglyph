@@ -127,8 +127,8 @@ two closest:
   the target and you want its wider widget catalog, including text attributes (bold, italic,
   underline, ...): `Style` is fg/bg color only, on purpose, so that every backend (including the
   pixel and GL renderers) behaves identically: see `Style`'s doc comment in
-  `crates/core/src/style.rs`. Rich-attribute dashboards and TUIs are ratatui's turf; retroglyph
-  stays the game-grid library.
+  `crates/core/src/color/style.rs`. Rich-attribute dashboards and TUIs are ratatui's turf;
+  retroglyph stays the game-grid library.
 - **[bracket-lib](https://github.com/amethyst/bracket-lib)** (the maintained successor to RLTK) is
   the closest match in spirit: one virtual ASCII terminal, several swappable backends including
   crossterm. Its non-terminal backends go through OpenGL or WebGPU, though, which pulls in a GPU

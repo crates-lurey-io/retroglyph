@@ -1,16 +1,15 @@
-//! In-memory backend for testing. Stores presented content
-//! and allows injecting synthetic events.
+//! In-memory backend for testing. Stores presented content and allows injecting synthetic events.
 //!
 //! [`Headless::format_view`] renders the current frame for snapshot testing (e.g. with `insta`)
 //! and [`Headless::push_event`] queues synthetic input; see ["Driving `Headless` with synthetic
 //! events"](https://github.com/crates-lurey-io/retroglyph/blob/main/docs/testing.md#driving-headless-with-synthetic-events)
 //! for the full workflow.
 
-use crate::backend::{Cursor, Input, Output};
+use crate::backend::{Cursor, CursorStyle, Input, Output};
 use crate::color::Color;
+use crate::color::Style;
 use crate::event::{Event, coalesces_with};
 use crate::grid::{Grid, Pos, Size};
-use crate::style::Style;
 use crate::tile::Tile;
 use alloc::collections::VecDeque;
 use alloc::string::String;
@@ -18,12 +17,14 @@ use core::fmt::Write as _;
 use core::time::Duration;
 use ixy::HasSize;
 
-/// In-memory backend for testing. Stores presented content
-/// and allows injecting synthetic events.
+/// In-memory backend for testing.
+///
+/// Stores presented content and allows injecting synthetic events.
 pub struct Headless {
     grid: Grid,
     cursor_visible: bool,
     cursor_pos: Pos,
+    cursor_style: CursorStyle,
     event_queue: VecDeque<Event>,
 }
 
@@ -35,6 +36,7 @@ impl Headless {
             grid: Grid::new(width, height),
             cursor_visible: false,
             cursor_pos: Pos::default(),
+            cursor_style: CursorStyle::default(),
             event_queue: VecDeque::new(),
         }
     }
@@ -55,6 +57,13 @@ impl Headless {
     #[must_use]
     pub const fn cursor_position(&self) -> Pos {
         self.cursor_pos
+    }
+
+    /// Returns the cursor's shape and blink behavior, as last set by
+    /// [`Cursor::set_cursor_style`].
+    #[must_use]
+    pub const fn cursor_style(&self) -> CursorStyle {
+        self.cursor_style
     }
 
     /// Injects a synthetic event into the queue.
@@ -251,6 +260,10 @@ impl Cursor for Headless {
     fn set_cursor_position(&mut self, position: Pos) {
         self.cursor_pos = position;
     }
+
+    fn set_cursor_style(&mut self, style: CursorStyle) {
+        self.cursor_style = style;
+    }
 }
 
 #[cfg(test)]
@@ -262,6 +275,16 @@ mod tests {
         let backend = Headless::new(80, 25);
         assert_eq!(backend.grid().width(), 80);
         assert_eq!(backend.grid().height(), 25);
+    }
+
+    #[test]
+    fn test_headless_cursor_style_defaults_and_records_set_cursor_style() {
+        use crate::backend::CursorStyle;
+
+        let mut backend = Headless::new(10, 10);
+        assert_eq!(backend.cursor_style(), CursorStyle::BlinkingBlock);
+        Cursor::set_cursor_style(&mut backend, CursorStyle::SteadyBar);
+        assert_eq!(backend.cursor_style(), CursorStyle::SteadyBar);
     }
 
     #[test]

@@ -9,12 +9,12 @@
 /// and [`Modal`](crate::Modal). Text widgets default to `Left` (their
 /// long-standing behavior); panel/modal titles default to `Center` (theirs).
 ///
-/// A plain re-export of [`retroglyph_core::align::HAlign`], not a separate type: `core::align`
+/// A plain re-export of [`retroglyph_core::layout::HAlign`], not a separate type: `core::align`
 /// needs nothing from the `egc` feature, so there's no reason for `widgets` to keep its own
-/// copy of the enum or of [`offset`](retroglyph_core::align::HAlign::offset)'s formula.
+/// copy of the enum or of [`offset`](retroglyph_core::layout::HAlign::offset)'s formula.
 /// Interoperates directly with [`Surface::print_aligned`](retroglyph_core::Surface::print_aligned)
 /// and [`TextLayout`](retroglyph_core::layout::TextLayout), no conversion needed.
-pub use retroglyph_core::align::HAlign as Align;
+pub use retroglyph_core::layout::HAlign as Align;
 
 #[cfg(test)]
 mod tests {
@@ -49,7 +49,7 @@ mod tests {
     #[test]
     fn is_the_same_type_as_core_h_align() {
         // No `From` conversion needed: `Align` and `HAlign` are the same type.
-        let align: Align = retroglyph_core::align::HAlign::Center;
+        let align: Align = retroglyph_core::layout::HAlign::Center;
         assert_eq!(align, Align::Center);
     }
 }

@@ -602,7 +602,7 @@ impl SoftwareBackend {
     /// ```
     /// use retroglyph_core::Output;
     /// use retroglyph_core::tile::Tile;
-    /// use retroglyph_core::style::Style;
+    /// use retroglyph_core::color::Style;
     /// use retroglyph_core::grid::Pos;
     /// use retroglyph_core::{Color, DrawCell};
     /// use retroglyph_software::SoftwareBackendBuilder;
@@ -1391,8 +1391,8 @@ fn resolve_color(color: Color, default: (u8, u8, u8)) -> u32 {
 mod tests {
     use super::*;
     use retroglyph_core::color::Color;
+    use retroglyph_core::color::Style;
     use retroglyph_core::grid::{Pos, Size};
-    use retroglyph_core::style::Style;
 
     fn test_renderer() -> SoftwareRenderer {
         SoftwareBackendBuilder::new()
@@ -2408,8 +2408,8 @@ mod span_tests {
     use super::*;
     use retroglyph_core::Grid;
     use retroglyph_core::color::Color;
+    use retroglyph_core::color::Style;
     use retroglyph_core::grid::Pos;
-    use retroglyph_core::style::Style;
     use retroglyph_window::tileset::{Codepage, SheetColor, SpriteAlign, TilesetOptions};
 
     const RED: u32 = 0x00FF_0000;
@@ -2953,8 +2953,8 @@ mod span_tests {
 mod font_chain_tests {
     use super::*;
     use retroglyph_core::color::Color;
+    use retroglyph_core::color::Style;
     use retroglyph_core::grid::Pos;
-    use retroglyph_core::style::Style;
     use retroglyph_window::font::{BitmapFont, FontChain, unscii16};
 
     const RED: Color = Color::Rgb { r: 255, g: 0, b: 0 };

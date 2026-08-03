@@ -34,7 +34,7 @@ use core::time::Duration;
 /// Fixed per-frame delta [`TestHarness::step`] hands to [`App::update`].
 ///
 /// Headless tests have no wall clock; this exists only so [`Frame::delta`]-driven code (tweens,
-/// [`FrameClock`](crate::frame_clock::FrameClock)) advances instead of stalling.
+/// [`FrameClock`](crate::FrameClock)) advances instead of stalling.
 pub const STEP_DELTA: Duration = Duration::from_millis(16);
 
 /// Default step budget for [`TestHarness::run`].
@@ -300,7 +300,7 @@ mod tests {
     use super::*;
     use crate::app::Flow;
     use crate::backend::Backend;
-    use crate::style::Style;
+    use crate::color::Style;
     use ixy::HasSize;
 
     struct Clicker {

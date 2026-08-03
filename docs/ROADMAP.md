@@ -16,7 +16,7 @@ Medium effort, real capability gaps, not urgent. Nothing currently outstanding i
 items land here as they're identified, then move to a "Shipped" note below once implemented.
 
 Shipped: subcell image-to-glyph blit (posterize a pixel block to the best block/quadrant/sextant
-character, per doryen-rs/libtcod/notcurses) as `retroglyph_core::subcell`
+character, per doryen-rs/libtcod/notcurses) as `retroglyph_core::symbols`
 (`quantize_half_block`/`quantize_quadrant`/`quantize_sextant`); see
 `examples/examples/16_subcell_image.rs`.
 

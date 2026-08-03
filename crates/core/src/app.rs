@@ -1,8 +1,7 @@
 //! The `App`-driven game loop.
 //!
-//! `App` is the update-side dual of [`Backend`](crate::Backend): where a
-//! backend is the output contract, an [`App`] is the per-frame update contract.
-//! A game implements [`App`] once and runs on every backend unchanged.
+//! Where [`Backend`](crate::Backend) is the output contract, [`App`] is the per-frame update
+//! contract. A game implements [`App`] once and runs on every backend unchanged.
 //!
 //! The loop decomposes into three pieces:
 //!
@@ -13,7 +12,22 @@
 //!   `run_app`), which cannot be generic because winit owns the loop instead of
 //!   handing control back to a shared driver function.
 //!
-//! Both drivers share [`step`] as the per-frame body and present automatically after `update`
+//! ```text
+//!                        +-----------------------------+
+//!                        |  App, Flow, Frame (core)    |
+//!                        +-----------------------------+
+//!                                     |
+//!                                App::update
+//!                                     |
+//!               +---------------------+---------------------+
+//!               |                                           |
+//!   run_blocking / run_blocking_with              windowing layer's run_app
+//!   (std only; owns the loop)                     (winit owns the loop instead)
+//!               |                                           |
+//!      crossterm, headless                           software backend
+//! ```
+//!
+//! Both drivers call [`App::update`] as the per-frame body and present automatically after it
 //! returns, skipping the present on [`Flow::Idle`] or when `update` already presented itself. The
 //! low-level [`poll`](crate::Terminal::poll) / [`present`](crate::Terminal::present) API remains
 //! available for turn-based games and headless tests.
@@ -33,7 +47,7 @@ pub enum Flow {
     ///
     /// For turn-based apps that only need to redraw in response to player input, not on every
     /// tick of the driver's loop. Returning `Idle` while a [`Tween`](crate::animate::Tween)- or
-    /// [`FrameClock`](crate::frame_clock::FrameClock)-driven animation is still in flight is an
+    /// [`FrameClock`](crate::FrameClock)-driven animation is still in flight is an
     /// app bug, not a valid use: an in-progress animation has something new to show every frame,
     /// which is exactly what `Idle` tells the driver isn't true.
     Idle,
@@ -83,16 +97,6 @@ pub trait App<B: Backend> {
     fn update(&mut self, term: &mut Terminal<B>, frame: &Frame) -> Flow;
 }
 
-/// Run one frame: the per-frame body shared by every driver.
-///
-/// Calls [`App::update`]. Both [`run_blocking`] and the windowing layer's
-/// inverted driver call this function instead of `update` directly, so the
-/// two drivers cannot drift apart as the per-frame body grows.
-#[must_use]
-pub fn step<B: Backend, A: App<B>>(term: &mut Terminal<B>, app: &mut A, frame: &Frame) -> Flow {
-    app.update(term, frame)
-}
-
 /// Drive an [`App`] with a blocking, event-driven loop until it returns [`Flow::Exit`].
 ///
 /// Generic over the backend, so it powers every non-inverted backend
@@ -127,7 +131,7 @@ where
 #[non_exhaustive]
 pub struct RunOptions {
     /// Caps the loop at this many [`App::update`] calls per second whenever a frame actually
-    /// runs, using a [`FrameClock`](crate::frame_clock::FrameClock) internally to pace them
+    /// runs, using a [`FrameClock`](crate::FrameClock) internally to pace them
     /// evenly. `None` (the default) runs uncapped: as fast as `update` allows for back-to-back
     /// [`Flow::Continue`] frames, or immediately after whatever woke an
     /// [`event_driven`](Self::event_driven) loop from [`Flow::Idle`].
@@ -157,12 +161,12 @@ impl RunOptions {
     ///
     /// [`event_driven`](Self::event_driven) is `false`: [`Flow::Idle`] only skips `present`, it
     /// never blocks. Use this for apps that drive a [`Tween`](crate::animate::Tween)/
-    /// [`FrameClock`](crate::frame_clock::FrameClock) from [`Frame::delta`] and need `update`
+    /// [`FrameClock`](crate::FrameClock) from [`Frame::delta`] and need `update`
     /// called every tick regardless of input.
     ///
     /// `target_fps` becomes [`RunOptions::target_fps`] verbatim, including `0`: passing `0` here
     /// builds without panicking, but [`run_blocking_with`] panics once it constructs the
-    /// [`FrameClock`](crate::frame_clock::FrameClock) that paces it (see that function's
+    /// [`FrameClock`](crate::FrameClock) that paces it (see that function's
     /// `# Panics` section).
     #[must_use]
     pub const fn animated(target_fps: u32) -> Self {
@@ -189,7 +193,7 @@ impl Default for RunOptions {
 ///
 /// The zero-config [`run_blocking`] is equivalent to `run_blocking_with(term, app,
 /// RunOptions::default())`. Pass [`RunOptions::animated`] for a continuously-rendering loop
-/// capped at a fixed rate instead, using a [`FrameClock`](crate::frame_clock::FrameClock)
+/// capped at a fixed rate instead, using a [`FrameClock`](crate::FrameClock)
 /// internally so `update` is called at even intervals rather than however fast the host can
 /// spin.
 ///
@@ -208,7 +212,7 @@ impl Default for RunOptions {
 /// # Panics
 ///
 /// Panics if `options.target_fps` is `Some(0)`: pacing at a `FrameClock` internally, which
-/// requires a non-zero rate (see [`FrameClock::new`](crate::frame_clock::FrameClock::new)).
+/// requires a non-zero rate (see [`FrameClock::new`](crate::FrameClock::new)).
 #[cfg(feature = "std")]
 pub fn run_blocking_with<B, A>(
     mut term: Terminal<B>,
@@ -219,7 +223,7 @@ where
     B: Backend,
     A: App<B>,
 {
-    let mut clock = options.target_fps.map(crate::frame_clock::FrameClock::new);
+    let mut clock = options.target_fps.map(crate::FrameClock::new);
     let mut frame_count = 0u64;
     let mut last = std::time::Instant::now();
     loop {
@@ -246,7 +250,7 @@ where
         };
         frame_count = frame_count.wrapping_add(1);
         let present_count_before = term.present_count();
-        let flow = step(&mut term, &mut app, &frame);
+        let flow = app.update(&mut term, &frame);
         if flow == Flow::Exit {
             return Ok(());
         }
@@ -286,7 +290,7 @@ mod tests {
         fn update(&mut self, term: &mut Terminal<Headless>, frame: &Frame) -> Flow {
             self.frames += 1;
             term.surface()
-                .put((0, 0), '#', crate::style::Style::default());
+                .put((0, 0), '#', crate::color::Style::default());
             term.present().expect("present");
             // Quit when a key is pending, or after a safety cap.
             if term.has_input() || frame.frame >= 100 {
@@ -310,19 +314,6 @@ mod tests {
         // Runs until the queued key is observed. Reaching the next line proves
         // the loop terminated on Flow::Exit rather than spinning forever.
         run_blocking(term, app).expect("run_blocking");
-    }
-
-    #[test]
-    fn step_forwards_to_update() {
-        let mut term = Terminal::new(Headless::new(2, 1));
-        let mut app = Counter { frames: 0 };
-        let frame = Frame {
-            delta: Duration::ZERO,
-            frame: 200,
-        };
-        let flow = step(&mut term, &mut app, &frame);
-        assert_eq!(flow, Flow::Exit); // frame >= 100
-        assert_eq!(app.frames, 1);
     }
 
     /// An app that never draws and always returns `Idle` except on the last frame: proves
@@ -364,7 +355,7 @@ mod tests {
         fn update(&mut self, term: &mut Terminal<Headless>, frame: &Frame) -> Flow {
             self.frames += 1;
             term.surface()
-                .put((0, 0), 'x', crate::style::Style::default());
+                .put((0, 0), 'x', crate::color::Style::default());
             if frame.frame >= self.exit_at {
                 Flow::Exit
             } else {
@@ -499,7 +490,7 @@ mod tests {
             delta: Duration::ZERO,
             frame: 0,
         };
-        assert_eq!(step(&mut term, &mut app, &frame0), Flow::Idle);
+        assert_eq!(app.update(&mut term, &frame0), Flow::Idle);
         // This is the exact call `run_blocking_with` makes on `Flow::Idle` when `event_driven` is
         // `true`: it must buffer the event, not return/consume it, so `update`'s own `has_input`
         // still finds it below.
@@ -508,7 +499,7 @@ mod tests {
             delta: Duration::ZERO,
             frame: 1,
         };
-        assert_eq!(step(&mut term, &mut app, &frame1), Flow::Exit);
+        assert_eq!(app.update(&mut term, &frame1), Flow::Exit);
         assert!(app.saw_input_after_idle);
     }
 }
