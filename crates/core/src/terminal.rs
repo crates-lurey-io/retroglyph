@@ -892,6 +892,12 @@ mod tests {
             "flattened_previous must be cleared after a composites_layers() present, not diffed \
              against as if it were the last frame actually shown"
         );
+
+        // `TogglingCompositor` forwards `clear` and `poll_event` unconditionally, same as every
+        // other method on it, so exercise both here rather than leaving them as dead delegation.
+        term.backend_mut().clear().expect("clear failed");
+        term.backend_mut().inner.push_event(Event::Close);
+        assert_eq!(term.poll(Duration::ZERO), Some(Event::Close));
     }
 
     #[test]
