@@ -2,7 +2,7 @@
 //! the core language doesn't provide outside `std`: dispatched to `std`'s own intrinsics when the
 //! `std` feature is on, and to `libm`'s software implementation otherwise.
 //!
-//! Gated on the `float` feature (turned on by either `std` or `libm`; see this crate's
+//! Gated on the `__float` feature (turned on by either `std` or `libm`; see this crate's
 //! `Cargo.toml`), so every function here can assume at least one of those two is enabled -- there
 //! is no third "no float backend" case for these to handle.
 //!

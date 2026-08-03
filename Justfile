@@ -90,7 +90,7 @@ compile:
     cargo check -p retroglyph-core --no-default-features
     # retroglyph#886: with no `std`, `animate`/`blend-modes`' float math needs `libm` as its
     # backend instead; this is the `no_std` build that actually exercises that dispatch path,
-    # since the zero-features line above never turns `float` on at all.
+    # since the zero-features line above never turns `__float` on at all.
     cargo check -p retroglyph-core --no-default-features --features libm
     # retroglyph#882: retroglyph-widgets forwards a `std` feature to retroglyph-core's own, so
     # this is its `no_std` (alloc-only) build, the same reason retroglyph-core gets its own line
@@ -105,12 +105,12 @@ compile:
     # these two crates (not `--workspace`): they're the ones this issue's feature graph touches,
     # and the rest of the workspace has no comparable "needs a float backend" interaction to catch
     # this way. `--exclude-features` drops the features that are *supposed* to fail alone --
-    # `float`/`indexed-quant`/`blend-modes` on `retroglyph-core` and `dev`/`egc`/`serde` on
+    # `__float`/`indexed-quant`/`blend-modes` on `retroglyph-core` and `dev`/`egc`/`serde` on
     # `retroglyph-widgets` all need a float backend (`std` or `libm`) they don't themselves
     # provide, and fail loudly via this crate's own `compile_error!` when enabled without one; a
     # green `--each-feature` run isn't supposed to include those combinations. Cheap: a few
     # seconds warm, since deps compile once and each combination only rebuilds the crate itself.
-    cargo bin cargo-hack check --each-feature --no-dev-deps -p retroglyph-core --exclude-features float,indexed-quant,blend-modes
+    cargo bin cargo-hack check --each-feature --no-dev-deps -p retroglyph-core --exclude-features __float,indexed-quant,blend-modes
     # `--exclude-no-default-features`: this crate's float use is unconditional (see its own
     # `compile_error!`), so the plain `--no-default-features` run `--each-feature` otherwise
     # includes on top of every single feature is *also* one of the combinations expected to fail.

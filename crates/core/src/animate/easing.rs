@@ -49,9 +49,6 @@ impl Easing {
         match self {
             Self::Linear => t,
             Self::EaseInQuad => t * t,
-            // `crate::math::mul_add` dispatches to `f32::mul_add` (`std`) or `libm::fmaf`
-            // (`no_std`); see `crate::math`'s doc comment for why this crate has its own shim
-            // instead of calling either directly.
             Self::EaseOutQuad => crate::math::mul_add(t, -t, 2.0 * t),
             Self::EaseInOutQuad => {
                 if t < 0.5 {

@@ -2109,8 +2109,7 @@ fn blend_separable_channel(sep: SeparableBlendMode, src: u8, dst: u8, t: f32) ->
     let cs = Channel::to_f32(src);
     let cb = Channel::to_f32(dst);
     let mixed = sep.mix(cb, cs);
-    // `crate::math::mul_add` dispatches to `f32::mul_add` (`std`) or `libm::fmaf` (`no_std`); see
-    // `crate::math`'s doc comment. A plain multiply-add measurably disagrees with a fused one by
+    // A plain multiply-add measurably disagrees with a fused one (`crate::math::mul_add`) by
     // ±1 LSB on some inputs.
     let blended = crate::math::mul_add(mixed - cb, t, cb);
     Channel::from_f32(blended.clamp(0.0, 1.0))
