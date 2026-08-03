@@ -139,8 +139,6 @@ struct ReadmeDoctests;
 // (through to the next blank line) rather than just this one doc comment, which is well under
 // its own 100-char threshold in isolation: confirmed by testing shorter wording alone, which
 // silences it despite touching nothing else in that byte range.
-/// Horizontal ([`HAlign`]) and vertical ([`VAlign`]) alignment within a bounded rectangle.
-pub mod align;
 #[allow(clippy::too_long_first_doc_paragraph)]
 /// Time-driven value animation: easing curves, a stateful `Tween`, and a periodic oscillator.
 pub mod animate;
@@ -157,7 +155,6 @@ pub mod event;
 /// `FrameClock`/`FrameStats` accumulators for the `App`/`Frame` game loop.
 pub mod frames;
 pub mod grid;
-#[cfg(feature = "egc")]
 pub mod layout;
 pub mod style;
 /// The one grid-drawing primitive: an area-clipped, single-layer view over a [`Grid`].
@@ -173,7 +170,6 @@ pub mod text;
 /// The atomic drawable unit (glyph, style, sub-cell offsets).
 pub mod tile;
 
-pub use align::{HAlign, VAlign};
 pub use animate::{Easing, Tween, oscillate};
 pub use app::{App, Flow, Frame, step};
 #[cfg(feature = "std")]
@@ -193,6 +189,7 @@ pub use grid::{BlendMode, Grid, Offset, Pos, Rect, Size};
 pub use ixy::HasSize;
 #[cfg(feature = "egc")]
 pub use layout::TextLayout;
+pub use layout::{HAlign, VAlign};
 pub use style::Style;
 pub use surface::{Layer, StyledSurface, Surface};
 pub use symbols::{Glyph, quantize_half_block, quantize_quadrant, quantize_sextant};
