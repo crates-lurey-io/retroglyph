@@ -96,6 +96,21 @@ impl Tween {
         self.elapsed >= self.duration
     }
 
+    /// The value this tween is animating toward: what [`value`](Self::value) equals once
+    /// [`is_finished`](Self::is_finished), and what [`retarget`](Self::retarget) last set it to.
+    #[must_use]
+    pub const fn target(&self) -> f32 {
+        self.to
+    }
+
+    /// The value this tween started animating from: either the `from` passed to [`new`](Self::new)
+    /// or, after a [`retarget`](Self::retarget), the [`value`](Self::value) at the moment of that
+    /// retarget.
+    #[must_use]
+    pub const fn origin(&self) -> f32 {
+        self.from
+    }
+
     /// Redirects the animation toward a new target, smoothly: the current
     /// [`value`](Self::value) becomes the new start, elapsed time resets to zero, and `target`
     /// becomes the new end. `duration`/`easing` are unchanged.
