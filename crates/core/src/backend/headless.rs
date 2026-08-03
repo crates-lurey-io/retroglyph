@@ -212,7 +212,17 @@ impl Output for Headless {
     {
         for cell in content {
             let pos = cell.pos;
-            self.grid.put_tile(0, pos, *cell.tile);
+            // A `DrawCell` is already-resolved content from some source grid, replayed here
+            // cell-by-cell at that same source position, not a caller placing a new tile at an
+            // arbitrary destination. `put_tile`'s sanitizing (span role, `WIDE_CHAR`/spacer
+            // synthesis, overlap clearing) exists for the latter; using it here would strip
+            // `SPAN_ANCHOR`/`SPAN_COVERED` from a faithfully-positioned replay (retroglyph#984)
+            // the same way it should from a moved one, so this writes straight through `tile_mut`
+            // instead. `tile_mut` never fails to find layer 0 (always allocated) or an in-bounds
+            // `pos` (sourced from this same grid's own geometry).
+            if let Some(t) = self.grid.tile_mut(0, pos) {
+                *t = *cell.tile;
+            }
             // Rebuild the side-table entry from the parts that arrived, so a headless capture
             // round-trips both members rather than only the grapheme.
             let extra = crate::grid::TileExtra {

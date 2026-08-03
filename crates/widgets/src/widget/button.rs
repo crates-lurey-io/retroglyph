@@ -1,5 +1,5 @@
 //! [`Button`]: a clickable label, styled from an already-resolved [`Response`].
-use retroglyph_core::{Color, Rect, Style};
+use retroglyph_core::{Color, Style};
 
 use super::{InteractiveWidget, Widget};
 use crate::Align;
@@ -179,7 +179,8 @@ impl<Id> InteractiveWidget<Id> for Button<'_> {
         }
 
         let style = self.resolved_style(&response);
-        fill_rect(surface, Rect::new(0, 0, width, height), ' ', style);
+        let local_area = surface.local_area();
+        fill_rect(surface, local_area, ' ', style);
 
         let y = height / 2;
         let _ = draw_clipped(surface, (0, y), width, self.label, Align::Center, style);
