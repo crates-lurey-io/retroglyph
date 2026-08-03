@@ -20,6 +20,7 @@ use crate::style::Style;
 use crate::text::Line;
 use crate::tile::Tile;
 use crate::tint::Tint;
+use ixy::HasSize;
 #[cfg(not(feature = "egc"))]
 use unicode_width::UnicodeWidthChar;
 

@@ -883,7 +883,7 @@ pub mod wasm {
 mod tests {
     use super::*;
     use retroglyph_core::event::{Event, KeyCode, KeyModifiers};
-    use retroglyph_core::{Style, Terminal};
+    use retroglyph_core::{HasSize, Style, Terminal};
 
     #[test]
     fn renders_into_pullable_buffer() {

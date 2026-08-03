@@ -101,6 +101,7 @@ use alpha_blend::rgba::U8x4Rgba;
 use grixy::buf::GridBuf;
 use grixy::ops::GridWrite;
 use grixy::ops::layout::{LinearLayout, RowMajor};
+use retroglyph_core::HasSize;
 use retroglyph_core::Tint;
 use retroglyph_core::event::Event;
 use retroglyph_core::grid::{Pos, Size};

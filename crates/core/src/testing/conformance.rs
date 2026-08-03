@@ -55,6 +55,7 @@ use crate::grid::{Pos, Size};
 use crate::style::Style;
 use crate::tile::Tile;
 use core::time::Duration;
+use ixy::HasSize;
 
 /// Hashes `bytes` with FNV-1a (64-bit).
 ///

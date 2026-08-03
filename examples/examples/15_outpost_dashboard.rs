@@ -46,7 +46,8 @@
 
 use retroglyph_core::event::{Event, KeyCode, MouseButton, MouseEventKind};
 use retroglyph_core::{
-    Backend, Camera, Color, Easing, Frame, Pos, Rect, Size, Style, Surface, Terminal, Tween,
+    Backend, Camera, Color, Easing, Frame, HasSize, Pos, Rect, Size, Style, Surface, Terminal,
+    Tween,
 };
 use retroglyph_examples::Example;
 use retroglyph_widgets::{

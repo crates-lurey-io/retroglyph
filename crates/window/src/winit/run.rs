@@ -15,6 +15,7 @@ use super::translate::{
 use super::web;
 use crate::backend::WindowBackend;
 use crate::presenter::Presenter;
+use retroglyph_core::HasSize;
 use retroglyph_core::Terminal;
 use retroglyph_core::backend::{Input, Output};
 use retroglyph_core::event::{

@@ -79,6 +79,7 @@ use crate::terminal::Terminal;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::fmt::{self, Write as _};
+use ixy::HasSize;
 
 /// How many frames [`PerfOverlayApp`]'s internal [`FrameStats`] remembers.
 ///

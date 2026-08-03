@@ -59,6 +59,7 @@ impl Density {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use retroglyph_core::HasSize;
 
     #[test]
     fn touch_rows_are_taller_than_mouse_for_fingertip_targets() {

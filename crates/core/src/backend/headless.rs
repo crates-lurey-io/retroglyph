@@ -16,6 +16,7 @@ use alloc::collections::VecDeque;
 use alloc::string::String;
 use core::fmt::Write as _;
 use core::time::Duration;
+use ixy::HasSize;
 
 /// In-memory backend for testing. Stores presented content
 /// and allows injecting synthetic events.

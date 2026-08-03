@@ -42,6 +42,7 @@
 
 use crate::grid::{Pos, Rect, Size};
 use crate::surface::Surface;
+use ixy::HasSize;
 
 /// A rectangular viewport onto a larger world, with world/screen conversions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
