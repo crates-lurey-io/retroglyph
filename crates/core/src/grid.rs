@@ -1734,16 +1734,24 @@ impl Grid {
     /// - Layer absent in `self`: nothing yielded.
     /// - Layer in `self`, absent in `other` (newly allocated): all
     ///   `width × height` tiles yielded.
-    /// - Layer in both: only positions where the `Tile` or its grapheme text
-    ///   differs are yielded. `self` and `other` must have matching
-    ///   dimensions for this case; the crate never calls `diff` otherwise.
+    /// - Layer in both, and `self` and `other` have matching dimensions: only
+    ///   positions where the `Tile` or its grapheme text differs are yielded.
+    /// - Layer in both, but `self` and `other` have different dimensions: all
+    ///   positions in `self` are considered changed, same as a newly
+    ///   allocated layer.
     ///
     /// This iterator is zero-allocation: it walks the layer buffers inline.
     pub fn diff<'a>(&'a self, other: &'a Self) -> impl Iterator<Item = DrawCell<'a>> + 'a {
         let width = usize::from(self.width);
         let max = self.max_layer;
+        let same_size = self.width == other.width && self.height == other.height;
         (0..=max).flat_map(move |id| {
-            match (self.layer(id), other.layer(id)) {
+            // A size mismatch is treated the same as `other` never having allocated this layer:
+            // `other`'s buffer can't be indexed with `self`'s flat index once the sizes differ,
+            // so every position in `self` is considered changed, matching grixy's `GridDiff`
+            // double-buffering contract.
+            let other_layer = if same_size { other.layer(id) } else { None };
+            match (self.layer(id), other_layer) {
                 // Layer absent in `self`: nothing changed.
                 (None, _) => LayerDiff::Empty,
                 // Newly allocated layer: all cells are "changed".
@@ -2424,6 +2432,17 @@ mod tests {
         // All 12 cells of the newly allocated layer 1 are yielded.
         assert_eq!(diffs.len(), 12);
         assert!(diffs.iter().all(|c| c.layer == 1));
+    }
+
+    #[test]
+    fn test_grid_diff_mismatched_sizes_yields_full_diff() {
+        // A smaller `other` must not panic; every cell in `self` is reported as changed instead.
+        let mut cur = Grid::new(3, 2);
+        let prev = Grid::new(2, 2);
+        cur.put_tile(0, (0, 0), Tile::new('X', Style::default()));
+        let diffs: Vec<_> = cur.diff(&prev).collect();
+        assert_eq!(diffs.len(), 6);
+        assert!(diffs.iter().all(|c| c.layer == 0));
     }
 
     #[test]
