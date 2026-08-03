@@ -140,8 +140,8 @@ impl Camera {
     pub fn set_viewport_fitted(&mut self, viewport: Rect) {
         let width = viewport.width().min(self.world.width());
         let height = viewport.height().min(self.world.height());
-        let x = viewport.left() + (viewport.width() - width) / 2;
-        let y = viewport.top() + (viewport.height() - height) / 2;
+        let x = viewport.left().saturating_add((viewport.width() - width) / 2);
+        let y = viewport.top().saturating_add((viewport.height() - height) / 2);
         self.set_viewport(Rect::new(x, y, width, height));
     }
 
@@ -207,8 +207,8 @@ impl Camera {
             return None;
         }
         Some(Pos::new(
-            self.viewport.left() + dx,
-            self.viewport.top() + dy,
+            self.viewport.left().saturating_add(dx),
+            self.viewport.top().saturating_add(dy),
         ))
     }
 
@@ -311,6 +311,10 @@ impl Camera {
         if !self.viewport.contains_pos(screen) {
             return None;
         }
+        // Safe without saturating: `origin` is only ever written by `center_on`/`set_viewport`,
+        // both of which clamp it to `max_origin(view, world) = world - view`, and
+        // `contains_pos` above guarantees the offset is `< view`, so the sum is `< world <=
+        // u16::MAX`.
         let wx = self.origin.x + (screen.x - self.viewport.left());
         let wy = self.origin.y + (screen.y - self.viewport.top());
         if wx >= self.world.width() || wy >= self.world.height() {
@@ -329,7 +333,10 @@ impl Camera {
         let origin = self.origin;
         (vis.top()..vis.bottom()).flat_map(move |wy| {
             (vis.left()..vis.right()).map(move |wx| {
-                let screen = Pos::new(vp.left() + (wx - origin.x), vp.top() + (wy - origin.y));
+                let screen = Pos::new(
+                    vp.left().saturating_add(wx - origin.x),
+                    vp.top().saturating_add(wy - origin.y),
+                );
                 (Pos::new(wx, wy), screen)
             })
         })
@@ -505,5 +512,28 @@ mod tests {
         view.put(Pos::new(45, 50), ']', Style::default());
 
         assert_eq!(grid[Pos::new(0, 5)].glyph(), ']');
+    }
+
+    #[test]
+    fn set_viewport_fitted_saturates_instead_of_overflowing() {
+        let mut c = Camera::new(Rect::new(0, 0, 1, 1), Size::new(5, 5));
+        c.set_viewport_fitted(Rect::new(65_530, 0, 1_000, 10));
+        assert_eq!(c.viewport(), Rect::new(u16::MAX, 2, 5, 5));
+    }
+
+    #[test]
+    fn world_to_screen_saturates_instead_of_overflowing() {
+        let c = Camera::new(Rect::new(65_530, 0, 10, 10), Size::new(100, 100));
+        assert_eq!(c.world_to_screen(Pos::new(9, 0)), Some(Pos::new(u16::MAX, 0)));
+    }
+
+    #[test]
+    fn cells_saturates_instead_of_overflowing() {
+        let c = Camera::new(Rect::new(65_530, 0, 10, 10), Size::new(100, 100));
+        let (_, screen) = c
+            .cells()
+            .find(|(world, _)| *world == Pos::new(9, 0))
+            .expect("world (9, 0) is within the visible bounds");
+        assert_eq!(screen, Pos::new(u16::MAX, 0));
     }
 }
