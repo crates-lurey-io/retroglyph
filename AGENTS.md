@@ -13,12 +13,16 @@ crate's public module and type surface see that crate's `llms.txt`, generated un
 
 ## Correctness gate
 
-**Run `just check` before every commit.** It runs fmt-check, lint (clippy + markdown), compile,
-test, and doc. All clippy lints (including `pedantic` and `nursery`) are errors; `missing_docs` is a
-warning that's promoted to a hard failure via `-D warnings` in `just clippy`.
+**Run `just check` before every commit.** It's the fast local gate: clippy, tests, and docs, all
+built once with `--workspace --all-features` (plus whatever's needed to power that, like building
+the PTY examples ahead of the test run). It deliberately skips formatting, Markdown/prose lint, and
+the `--no-default-features`/isolated-feature passes -- run `just fmt-check`, `just lint`, and
+`just compile` directly for those, or rely on CI, which runs all of them on every push. All clippy
+lints (including `pedantic` and `nursery`) are errors; `missing_docs` is a warning that's promoted
+to a hard failure via `-D warnings` in `just clippy`.
 
 ```sh
-just check          # full gate: must pass before committing
+just check           # fast gate: clippy + test + doc, --workspace --all-features only
 just check-targets   # also required when touching Output/DrawCell/a backend impl (see below)
 just fmt             # auto-fix Rust + Markdown/JSON formatting
 just test            # cargo test --all-features
@@ -29,8 +33,9 @@ just doc              # private rustdocs + per-crate llms.txt
 just docs-preview    # build docs and open in browser
 ```
 
-For a quick iterative loop: `just compile` to catch type errors fast, then `just check` before
-committing.
+For a quick iterative loop: `just compile` to catch type errors fastest, `just check` for the full
+`--all-features` build/lint/test/doc pass, then `just fmt-check`/`just lint`/`just compile` before
+pushing.
 
 **`just check` only compiles the host target.** `retroglyph-gl` gates three test modules to other
 targets (`headless.rs` to Linux, `webgl_smoke.rs` and `webgl_recovery.rs` to wasm32), and all three

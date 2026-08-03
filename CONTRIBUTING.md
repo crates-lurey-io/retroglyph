@@ -10,15 +10,18 @@ Prerequisites:
 
 ### Workflow
 
-`just check` is the gate before every commit. All clippy lints (including `pedantic` and `nursery`)
-are treated as errors.
+`just check` is the fast local gate before every commit: clippy, tests, and docs, all built once
+with `--workspace --all-features`. It skips formatting, Markdown/prose lint, and the
+`--no-default-features` passes -- run `just fmt-check`, `just lint`, and `just compile` directly
+before pushing, or rely on CI, which runs all of them on every push. All clippy lints (including
+`pedantic` and `nursery`) are treated as errors.
 
 Documentation changes: read your prose out loud before pushing. If it sounds like a product page or
 a wiki summary rather than one engineer telling another how something works, rewrite it.
 
 | Command                | What it does                                                                 |
 | ---------------------- | ---------------------------------------------------------------------------- |
-| `just check`           | Full gate: fmt-check, lint, compile, test, doc                               |
+| `just check`           | Fast gate: clippy + test + doc, `--workspace --all-features` only            |
 | `just clippy`          | Run clippy with `-D warnings` on all targets                                 |
 | `just compile`         | `cargo check --all-features`                                                 |
 | `just deny-advisories` | `cargo deny check advisories`                                                |
