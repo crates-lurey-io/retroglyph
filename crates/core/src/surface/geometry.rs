@@ -101,6 +101,20 @@ impl<'a> Surface<'a> {
         self.tint
     }
 
+    /// The offset [`translate`](Self::translate) has accumulated on this surface, `(0, 0)` if it
+    /// has never been called.
+    ///
+    /// Every coordinate a caller passes to a coordinate-taking method has this subtracted from it
+    /// before the usual bounds check (see [`translate`](Self::translate)'s doc), so a callee
+    /// handed a `&mut Surface` can use this to tell whether it is in a translated coordinate
+    /// space, compose a further offset relative to the current one without over- or
+    /// undershooting, or convert a local coordinate it read back off the surface into the
+    /// caller's own coordinate space by adding this back in.
+    #[must_use]
+    pub const fn origin(&self) -> (i32, i32) {
+        self.origin_offset
+    }
+
     /// A new surface over the same grid, area, and layer, recolouring every sprite it draws by
     /// `tint`.
     ///
@@ -118,7 +132,8 @@ impl<'a> Surface<'a> {
     /// these are plain names, not intra-doc links).
     ///
     /// For a multi-cell span the tint lands on the anchor cell, which is where a pixel backend
-    /// draws the sprite from.
+    /// draws the sprite from. [`blit`](Self::blit) has no such anchor (`grid` is arbitrary
+    /// composed content, not one sprite) and does not apply this tint at all; see its own doc.
     ///
     /// # Examples
     ///
@@ -308,7 +323,9 @@ impl<'a> Surface<'a> {
     }
 
     /// [`clip`](Self::clip) to `area`, then [`translate`](Self::translate) by `origin`, in one
-    /// call.
+    /// call -- except that unlike plain [`clip`](Self::clip), the returned surface's
+    /// [`area`](Self::area) is `area` intersected with this surface's own area, not `area`
+    /// verbatim.
     ///
     /// Chaining `clip(...).translate(...)` directly works when the result is used right where
     /// it's produced (both `clip` and `translate` return a `Surface<'_>` borrowing the previous
@@ -316,6 +333,15 @@ impl<'a> Surface<'a> {
     /// caller (for example [`Camera::surface`](crate::Camera::surface)) needs the two
     /// narrowings applied against a single `&mut self` borrow instead, so the returned surface
     /// can outlive the call. This does that.
+    ///
+    /// This intersects `area` with this surface's own area rather than replacing it the way
+    /// [`scope`](Self::scope) does, so [`area`](Self::area)/[`width`](Self::width)/
+    /// [`height`](Self::height) on the result can report something smaller than the `area`
+    /// argument. [`Camera::surface`](crate::Camera::surface) relies on exactly this: when the
+    /// world is smaller than the viewport, it hands in a viewport-sized `area` and depends on the
+    /// intersection to shrink it back down to the world's own size. A caller that wants `area`
+    /// to become exactly its argument, even reaching outside the parent's current area, should
+    /// use [`scope`](Self::scope) followed by [`translate`](Self::translate) instead.
     ///
     /// # Examples
     ///

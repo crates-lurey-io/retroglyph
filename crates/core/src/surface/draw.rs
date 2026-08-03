@@ -483,6 +483,12 @@ impl Surface<'_> {
     /// [`put_span`](Self::put_span)'s all-or-nothing footprint check, since `grid` is arbitrary
     /// composed content rather than one indivisible sprite.
     ///
+    /// Unlike [`put`](Self::put) and the rest of this surface's single-sprite writes, this does
+    /// not apply [`with_tint`](Self::with_tint)'s tint: a tint lands on one sprite's anchor cell,
+    /// and `grid` is arbitrary composed content with no single anchor to land it on, the same
+    /// reason `Grid::blit_cross_layer` (this method's own cross-layer copy, internal to `Grid`)
+    /// carries no tint either. A tinted surface's `blit` copies `grid` through unchanged.
+    ///
     /// # Examples
     ///
     /// ```
