@@ -914,18 +914,13 @@ impl<'a> Surface<'a> {
         align: crate::layout::HAlign,
         style: Style,
     ) {
-        use crate::layout::HAlign;
         use unicode_width::UnicodeWidthStr;
 
         // A single line's display width is never anywhere near `u16::MAX` (see `print_line`'s
         // own use of this same cast for a single span).
         #[allow(clippy::cast_possible_truncation)]
         let text_width = UnicodeWidthStr::width(text) as u16;
-        let x_offset = match align {
-            HAlign::Left => 0,
-            HAlign::Center => rect.width().saturating_sub(text_width) / 2,
-            HAlign::Right => rect.width().saturating_sub(text_width),
-        };
+        let x_offset = align.offset(rect.width(), text_width);
         // `clip` treats `rect` as absolute (it intersects `self.clip`, itself absolute), but
         // `print` treats its `pos` as local to `self.area` (see `shift`). Compute the aligned
         // start column in `rect`'s absolute space, then translate it into `self.area`-local
