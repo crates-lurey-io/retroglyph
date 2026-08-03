@@ -668,6 +668,91 @@ mod tests {
         assert_eq!(term.backend().grid()[Pos::new(1, 0)].glyph(), '@');
     }
 
+    /// A cell backend with `needs_full_frame() == true` and the default `composites_layers()`.
+    ///
+    /// No real backend in this workspace uses that combination; this pins the interaction
+    /// `Output::draw_layers`'s docs describe (retroglyph#763): a `true` `needs_full_frame` only
+    /// takes effect inside `composites_layers`'s branch of `present`, so this combination gets
+    /// the same diff-only stream as `needs_full_frame() == false` would, not the "all cells,
+    /// every call" this method's own doc otherwise promises unconditionally.
+    struct NeedsFullFrameWithoutCompositing {
+        inner: Headless,
+        last_draw_len: usize,
+    }
+
+    impl Output for NeedsFullFrameWithoutCompositing {
+        type Error = core::convert::Infallible;
+
+        fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
+        where
+            I: Iterator<Item = DrawCell<'a>>,
+        {
+            let content: Vec<_> = content.collect();
+            self.last_draw_len = content.len();
+            self.inner.draw_layers(content.into_iter())
+        }
+
+        fn flush(&mut self) -> Result<(), Self::Error> {
+            self.inner.flush()
+        }
+
+        fn size(&self) -> Size {
+            self.inner.size()
+        }
+
+        fn clear(&mut self) -> Result<(), Self::Error> {
+            self.inner.clear()
+        }
+
+        fn needs_full_frame(&self) -> bool {
+            true
+        }
+
+        // `composites_layers` left at its default `false`: exactly the combination the docs on
+        // `Output::draw_layers`/`Output::needs_full_frame` now call out.
+    }
+
+    impl Input for NeedsFullFrameWithoutCompositing {
+        fn poll_event(&mut self, timeout: Duration) -> Option<Event> {
+            self.inner.poll_event(timeout)
+        }
+    }
+
+    impl Cursor for NeedsFullFrameWithoutCompositing {}
+
+    #[test]
+    fn needs_full_frame_without_composites_layers_still_gets_only_the_diff() {
+        let mut term = Terminal::new(NeedsFullFrameWithoutCompositing {
+            inner: Headless::new(3, 1),
+            last_draw_len: 0,
+        });
+        term.draw(|s| {
+            s.put((0, 0), 'a', Style::default());
+            s.put((1, 0), 'b', Style::default());
+        })
+        .expect("draw failed");
+        assert_eq!(
+            term.backend().last_draw_len,
+            2,
+            "first frame: diff and full-frame agree (everything is new)"
+        );
+
+        // Second, identical frame: a backend for which `needs_full_frame` actually took effect
+        // would still receive both cells here. This one, per the documented caveat, gets the
+        // diff instead, which is empty, since nothing changed.
+        term.draw(|s| {
+            s.put((0, 0), 'a', Style::default());
+            s.put((1, 0), 'b', Style::default());
+        })
+        .expect("draw failed");
+        assert_eq!(
+            term.backend().last_draw_len,
+            0,
+            "needs_full_frame() alone (without composites_layers()) does not widen present's \
+             diff-only dispatch; see Output::draw_layers's docs (retroglyph#763)"
+        );
+    }
+
     #[test]
     fn test_draw_explicit_space_on_higher_layer_erases_and_sets_bg() {
         // An explicit space on a higher layer is opaque: it overwrites the

@@ -1443,6 +1443,40 @@ mod tests {
              README.md's fenced ```js block to match the canonical file"
         );
     }
+
+    // ── Output/Cursor conformance (retroglyph#763) ──────────────────────────────────────────
+
+    /// [`Observable::snapshot`] hashes only the bytes appended since the previous call, per that
+    /// trait's docs: `TerminalWasm`'s observable state is an append-only ANSI byte buffer, and
+    /// [`TerminalWasm::take_output`] already drains exactly that (nothing new to build here).
+    impl retroglyph_core::testing::conformance::Observable for TerminalWasm {
+        fn snapshot(&mut self) -> u64 {
+            retroglyph_core::testing::conformance::fnv1a(self.take_output().as_bytes())
+        }
+    }
+
+    #[test]
+    #[ignore = "a DrawCell::pos outside size() is currently sent to the display unchecked \
+                instead of being dropped, rather than the other three Output obligations this \
+                also covers; see the follow-up issue this PR files alongside retroglyph#763"]
+    fn satisfies_the_output_contract() {
+        retroglyph_core::testing::conformance::assert_output_contract(|size| {
+            TerminalWasm::new(size.width(), size.height())
+        });
+    }
+
+    #[test]
+    fn satisfies_the_input_contract() {
+        retroglyph_core::testing::conformance::assert_input_contract(|| TerminalWasm::new(10, 10));
+    }
+
+    #[test]
+    #[ignore = "retroglyph#713: set_cursor_position doesn't resync the renderer's tracked cursor"]
+    fn satisfies_the_cursor_contract() {
+        retroglyph_core::testing::conformance::assert_cursor_contract(|size| {
+            TerminalWasm::new(size.width(), size.height())
+        });
+    }
 }
 
 /// Fuzzes [`decode_key_event`] over arbitrary `(code, mods)` pairs: no `(u32, u8)` input may

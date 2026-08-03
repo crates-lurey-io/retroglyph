@@ -74,6 +74,11 @@ raw-window-handle = "0.6"
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 glutin = "0.32"
 
+[dev-dependencies]
+# Cross-backend Output conformance harness (retroglyph#763): dev-only, so the `testing` feature's
+# assertion helpers never ship in a release build of this crate.
+retroglyph-core = { path = "../core", version = "0.5.0", features = ["testing"] }
+
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 # The README quick start and `GlBackendBuilder`'s doc example call into `retroglyph_window::winit`;
 # this crate's own `[dependencies]` entry disables `winit` (a GL renderer doesn't need the loop to

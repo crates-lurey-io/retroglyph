@@ -1009,7 +1009,13 @@ impl<W: std::io::Write> Output for Crossterm<W> {
         self.cached_size
     }
 
-    fn resize(&mut self, _size: Size) {
+    fn resize(&mut self, size: Size) {
+        // Keep `cached_size` in sync with the caller's own idea of the terminal's dimensions,
+        // the same as observing a real `crossterm::event::Event::Resize` in `poll_event` does
+        // (see `cached_size`'s docs): without this, `size()` drifted permanently from the real
+        // terminal size after any resize, since nothing else here ever wrote to it
+        // (retroglyph#763).
+        self.cached_size = size;
         let _ = self.clear();
     }
 
@@ -2334,5 +2340,99 @@ mod tests {
         term.set_cursor_style(CursorStyle::BlinkingBar);
 
         assert_eq!(term.writer().as_slice(), b"\x1b[5 q");
+    }
+
+    /// Wraps [`Crossterm`] so [`Observable::snapshot`] hashes only the bytes written since the
+    /// previous call, per that trait's docs: this backend's observable state is an append-only
+    /// escape-byte log, so "changed" means "appended", tracked here as a remembered offset into
+    /// [`Crossterm::writer`] rather than by hashing the whole log every time.
+    struct CrosstermObserver {
+        term: Crossterm<Vec<u8>>,
+        offset: usize,
+    }
+
+    impl CrosstermObserver {
+        fn new(size: Size) -> Self {
+            let mut term = Crossterm::builder()
+                .raw_mode(false)
+                .alt_screen(false)
+                .mouse_capture(false)
+                .focus_change(false)
+                .bracketed_paste(false)
+                .kitty_protocol(false)
+                .build_with_writer(Vec::new())
+                .expect(
+                    "building against a Vec<u8> writer with all TTY features disabled must not require a real terminal",
+                );
+            // `resize` (now that it actually updates `cached_size`, see retroglyph#763) seeds
+            // the size the conformance harness asked for; its own escape bytes are folded into
+            // the initial offset below rather than showing up in the first measured delta.
+            term.resize(size);
+            let offset = term.writer().len();
+            Self { term, offset }
+        }
+    }
+
+    impl Output for CrosstermObserver {
+        type Error = std::io::Error;
+
+        fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
+        where
+            I: Iterator<Item = DrawCell<'a>>,
+        {
+            self.term.draw(content)
+        }
+
+        fn flush(&mut self) -> Result<(), Self::Error> {
+            self.term.flush()
+        }
+
+        fn size(&self) -> Size {
+            Output::size(&self.term)
+        }
+
+        fn clear(&mut self) -> Result<(), Self::Error> {
+            Output::clear(&mut self.term)
+        }
+
+        fn resize(&mut self, size: Size) {
+            Output::resize(&mut self.term, size);
+        }
+    }
+
+    impl Cursor for CrosstermObserver {
+        fn set_cursor_position(&mut self, position: Pos) {
+            Cursor::set_cursor_position(&mut self.term, position);
+        }
+    }
+
+    impl retroglyph_core::testing::conformance::Observable for CrosstermObserver {
+        fn snapshot(&mut self) -> u64 {
+            let bytes = self.term.writer();
+            let delta = &bytes[self.offset..];
+            let hash = retroglyph_core::testing::conformance::fnv1a(delta);
+            self.offset = bytes.len();
+            hash
+        }
+    }
+
+    #[test]
+    #[ignore = "a DrawCell::pos outside size() is currently sent to the display unchecked \
+                instead of being dropped, rather than the other three Output obligations this \
+                also covers; see the follow-up issue this PR files alongside retroglyph#763"]
+    fn satisfies_the_output_contract() {
+        let _lock = TEST_GUARD_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        retroglyph_core::testing::conformance::assert_output_contract(CrosstermObserver::new);
+    }
+
+    #[test]
+    #[ignore = "retroglyph#713: set_cursor_position doesn't resync the renderer's tracked cursor"]
+    fn satisfies_the_cursor_contract() {
+        let _lock = TEST_GUARD_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        retroglyph_core::testing::conformance::assert_cursor_contract(CrosstermObserver::new);
     }
 }

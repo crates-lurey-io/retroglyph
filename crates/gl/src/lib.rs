@@ -1069,3 +1069,116 @@ mod dropped_tint_tests {
         assert!(r.sprite_layers[0].is_empty());
     }
 }
+
+// ── Output conformance (retroglyph#763) ─────────────────────────────────────────
+
+/// `GlRenderer` deliberately implements neither `Input` nor `Cursor` (see the type-level docs),
+/// so only [`assert_output_contract`](retroglyph_core::testing::conformance::assert_output_contract)
+/// applies here.
+#[cfg(all(test, feature = "default-font"))]
+mod output_conformance_tests {
+    use crate::GlBackendBuilder;
+    use crate::GlRenderer;
+    use retroglyph_core::backend::Output;
+    use retroglyph_core::grid::Size;
+    use retroglyph_core::testing::conformance::{Observable, fnv1a};
+
+    /// `Instance` has no `PartialEq` (it's a tightly-packed, `#[repr(C)]` upload buffer, not a
+    /// value type elsewhere in the crate needs to compare), so this compares the fields directly.
+    fn instances_equal(a: &crate::renderer::Instance, b: &crate::renderer::Instance) -> bool {
+        a.glyph == b.glyph
+            && a.flags == b.flags
+            && a.fg == b.fg
+            && a.bg == b.bg
+            && a.dx == b.dx
+            && a.dy == b.dy
+    }
+
+    fn conformance_renderer(size: Size) -> GlRenderer {
+        GlBackendBuilder::new()
+            .grid_size(size.width(), size.height())
+            .build()
+            .expect("default-font build must not fail for a nonzero grid")
+    }
+
+    /// [`Observable::snapshot`] hashes only the CPU-side instance data that changed since the
+    /// previous call, per that trait's docs. `GlRenderer` has no CPU-readable framebuffer without
+    /// a real GL context (see `headless.rs`'s Linux-only pixel-readback tests), but its `layers`
+    /// field is the exact per-cell data every draw uploads verbatim to the GPU on the next
+    /// present, so hashing it is equivalent to hashing the frame for everything this contract
+    /// checks (clear/resize/out-of-range handling never touch the GPU at all).
+    struct GlObserver {
+        renderer: GlRenderer,
+        previous: Vec<Vec<crate::renderer::Instance>>,
+    }
+
+    impl GlObserver {
+        fn new(size: Size) -> Self {
+            let renderer = conformance_renderer(size);
+            let previous = renderer.layers.clone();
+            Self { renderer, previous }
+        }
+    }
+
+    impl Output for GlObserver {
+        type Error = core::convert::Infallible;
+
+        fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
+        where
+            I: Iterator<Item = retroglyph_core::backend::DrawCell<'a>>,
+        {
+            self.renderer.draw_layers(content)
+        }
+
+        fn flush(&mut self) -> Result<(), Self::Error> {
+            self.renderer.flush()
+        }
+
+        fn size(&self) -> Size {
+            Output::size(&self.renderer)
+        }
+
+        fn clear(&mut self) -> Result<(), Self::Error> {
+            Output::clear(&mut self.renderer)
+        }
+
+        fn resize(&mut self, size: Size) {
+            Output::resize(&mut self.renderer, size);
+        }
+    }
+
+    impl Observable for GlObserver {
+        fn snapshot(&mut self) -> u64 {
+            let current = &self.renderer.layers;
+            let mut hash = fnv1a(b"gl-diff");
+            for (layer, (was, now)) in self.previous.iter().zip(current.iter()).enumerate() {
+                for (index, (was, now)) in was.iter().zip(now.iter()).enumerate() {
+                    if !instances_equal(was, now) {
+                        hash ^= fnv1a(&(layer as u64).to_ne_bytes());
+                        hash ^= fnv1a(&(index as u64).to_ne_bytes());
+                        hash ^= fnv1a(&now.glyph.to_ne_bytes());
+                        hash ^= fnv1a(&[now.flags]);
+                        hash ^= fnv1a(&now.fg);
+                        hash ^= fnv1a(&now.bg);
+                        hash ^= fnv1a(&now.dx.to_ne_bytes());
+                        hash ^= fnv1a(&now.dy.to_ne_bytes());
+                    }
+                }
+            }
+            // A resize changes the number of layers/cells outright: fold that in too, or a
+            // shrink-then-grow back to the same per-cell content would hash identically to no
+            // change at all.
+            hash ^= fnv1a(&(current.len() as u64).to_ne_bytes());
+            for layer in current {
+                hash ^= fnv1a(&(layer.len() as u64).to_ne_bytes());
+            }
+            self.previous = current.clone();
+            hash
+        }
+    }
+
+    #[test]
+    fn satisfies_the_output_contract() {
+        retroglyph_core::testing::conformance::assert_output_contract(GlObserver::new);
+    }
+}
