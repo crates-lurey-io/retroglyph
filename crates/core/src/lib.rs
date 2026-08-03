@@ -160,8 +160,11 @@ struct ReadmeDoctests;
 // Compile the code blocks in docs/testing.md as doctests too, for the same reason: it's the
 // crate's advertised entry point for driving `Headless` with synthetic events (linked by URL from
 // `backend::headless` and `testing`'s own docs), so its samples need to fail the build instead of
-// silently rotting.
-#[cfg(doctest)]
+// silently rotting. Gated on the `testing` feature (in addition to `cfg(doctest)`) because the
+// file's second sample uses `testing::TestHarness`; `just test-default-features` runs
+// `retroglyph-core` without that feature, and a doctest can't be split by fenced block, only by
+// whole `#[doc]` attribute.
+#[cfg(all(doctest, feature = "testing"))]
 #[doc = include_str!("../../../docs/testing.md")]
 struct TestingDocDoctests;
 
