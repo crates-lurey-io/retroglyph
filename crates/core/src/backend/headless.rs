@@ -7,9 +7,9 @@
 
 use crate::backend::{Cursor, Input, Output};
 use crate::color::Color;
+use crate::color::Style;
 use crate::event::{Event, coalesces_with};
 use crate::grid::{Grid, Pos, Size};
-use crate::style::Style;
 use crate::tile::Tile;
 use alloc::collections::VecDeque;
 use alloc::string::String;

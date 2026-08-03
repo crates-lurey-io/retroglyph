@@ -1,6 +1,6 @@
 //! Text styling: foreground and background color.
 
-use crate::color::Color;
+use super::Color;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

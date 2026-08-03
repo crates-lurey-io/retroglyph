@@ -3,7 +3,7 @@
 
 use super::{Grid, Pos, to_grixy_pos};
 #[cfg(all(test, feature = "egc"))]
-use crate::style::Style;
+use crate::color::Style;
 use crate::tile::{Tile, TileFlags};
 use core::fmt;
 use core::ops::{Index, IndexMut};

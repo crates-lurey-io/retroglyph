@@ -496,8 +496,8 @@ mod tests {
     use super::*;
     use crate::backend::{Cursor, DrawCell, Headless, Input, Output};
     use crate::color::Color;
+    use crate::color::Style;
     use crate::grid::Pos;
-    use crate::style::Style;
     use crate::tile::Tile;
 
     /// Wraps [`Headless`] and fails the next [`flush`](Output::flush) call once, then

@@ -3,7 +3,7 @@
 //! share.
 
 use super::{Grid, Pos, Size, to_grixy_pos};
-use crate::style::Style;
+use crate::color::Style;
 use crate::tile::{Tile, TileFlags};
 use alloc::vec::Vec;
 use grixy::ops::GridRead;

@@ -215,7 +215,6 @@ mod math;
 #[cfg(all(feature = "__float", feature = "__math"))]
 #[doc(hidden)]
 pub mod math;
-pub mod style;
 /// The one grid-drawing primitive: an area-clipped, single-layer view over a [`Grid`].
 pub mod surface;
 #[allow(clippy::too_long_first_doc_paragraph)]
@@ -236,7 +235,7 @@ pub use app::{App, Flow, Frame, step};
 pub use app::{RunOptions, run_blocking, run_blocking_with};
 pub use backend::{Backend, Cursor, CursorStyle, DrawCell, Headless, Input, Output};
 pub use camera::Camera;
-pub use color::{AnsiColor, Color, InvalidAnsiIndex, ParseColorError, Tint};
+pub use color::{AnsiColor, Color, InvalidAnsiIndex, ParseColorError, Style, Tint};
 pub use dev::{BuildMode, DEV};
 pub use event::{
     Event, KeyCode, KeyEvent, KeyEventKind, KeyLocation, KeyModifiers, KeyState, MouseButton,
@@ -250,7 +249,6 @@ pub use ixy::HasSize;
 #[cfg(feature = "egc")]
 pub use layout::TextLayout;
 pub use layout::{HAlign, VAlign};
-pub use style::Style;
 pub use surface::{Layer, StyledSurface, Surface};
 pub use symbols::{Glyph, quantize_half_block, quantize_quadrant, quantize_sextant};
 pub use terminal::Terminal;

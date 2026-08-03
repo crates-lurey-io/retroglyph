@@ -5,9 +5,9 @@
 
 use super::{Grid, Pos, flat_index_to_xy};
 use crate::backend::DrawCell;
-use crate::color::Tint;
 #[cfg(test)]
-use crate::style::Style;
+use crate::color::Style;
+use crate::color::Tint;
 #[cfg(test)]
 use crate::tile::Tile;
 #[cfg(test)]

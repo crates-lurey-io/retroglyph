@@ -1,5 +1,5 @@
+use crate::color::Style;
 use crate::grid::{Offset, Pos, Rect, Size};
-use crate::style::Style;
 
 use super::Surface;
 
