@@ -139,8 +139,6 @@ struct ReadmeDoctests;
 // (through to the next blank line) rather than just this one doc comment, which is well under
 // its own 100-char threshold in isolation: confirmed by testing shorter wording alone, which
 // silences it despite touching nothing else in that byte range.
-/// Horizontal ([`HAlign`]) and vertical ([`VAlign`]) alignment within a bounded rectangle.
-pub mod align;
 #[allow(clippy::too_long_first_doc_paragraph)]
 /// Time-driven value animation: easing curves, a stateful `Tween`, and a periodic oscillator.
 pub mod animate;
@@ -159,7 +157,6 @@ pub mod frame_clock;
 /// Rolling frame-time statistics for a live perf/FPS overlay.
 pub mod frame_stats;
 pub mod grid;
-#[cfg(feature = "egc")]
 pub mod layout;
 pub mod style;
 pub mod subcell;
@@ -176,7 +173,6 @@ pub mod text;
 pub mod tile;
 pub mod tint;
 
-pub use align::{HAlign, VAlign};
 pub use animate::{Easing, Tween, oscillate};
 pub use app::{App, Flow, Frame, step};
 #[cfg(feature = "std")]
@@ -195,6 +191,7 @@ pub use grid::{BlendMode, Grid, Offset, Pos, Rect, Size};
 /// `.width()`/`.height()` accessors for [`Size`] (and [`Rect`]): re-exported so callers don't need
 /// a direct `ixy` dependency just to call them on this crate's own type aliases.
 pub use ixy::HasSize;
+pub use layout::{HAlign, VAlign};
 #[cfg(feature = "egc")]
 pub use layout::{TextLayout, TextMetrics};
 pub use style::Style;

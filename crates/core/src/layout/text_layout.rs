@@ -1,26 +1,11 @@
-//! Text layout: measurement, word wrapping, and bounded alignment.
-//!
-//! [`crate::text::Span`] and [`Line`] provide styled text primitives. The entry point here is
-//! [`TextLayout`], a builder that word-wraps a [`Line`] to a bounded [`Rect`], then positions it
-//! with independent horizontal ([`HAlign`]) and vertical ([`VAlign`]) alignment. Measure the
-//! result before rendering with [`TextLayout::measure`]. [`wrap`] exposes that same word-wrap
-//! pass standalone, for callers that need the broken-apart [`Line`]s rather than a rendered
-//! surface.
-//!
-//! Only available when the `egc` feature is enabled (requires `alloc`).
+//! [`TextLayout`] builder: wraps a [`Line`] to a bounded [`Rect`] and positions it with
+//! [`HAlign`]/[`VAlign`].
 
+use super::align::{HAlign, VAlign};
+use super::word_wrap::wrap_line;
 use crate::grid::{Grid, Rect};
-use crate::style::Style;
 use crate::surface::Surface;
-use crate::text::{Line, Span};
-use alloc::string::String;
-use alloc::vec::Vec;
-use unicode_segmentation::UnicodeSegmentation;
-use unicode_width::UnicodeWidthStr;
-
-// `HAlign`/`VAlign` live in the ungated `crate::align` module (they need nothing from `egc`)
-// and are re-exported here for callers already importing them from `crate::layout`.
-pub use crate::align::{HAlign, VAlign};
+use crate::text::Line;
 
 /// The display dimensions of a laid-out block of text.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -30,162 +15,6 @@ pub struct TextMetrics {
     /// Number of lines after word-wrapping.
     pub height: u16,
 }
-
-// ---------------------------------------------------------------------------
-// Internal intermediate types
-// ---------------------------------------------------------------------------
-
-/// One grapheme on a wrapped line, ready to be placed or measured.
-struct WrappedGlyph {
-    /// The grapheme cluster string.
-    grapheme: String,
-    /// Style inherited from the source span.
-    style: Style,
-    /// Display width of this grapheme in terminal columns (1 or 2).
-    width: u16,
-}
-
-/// A line produced by the word-wrap pass.
-struct WrappedLine {
-    glyphs: Vec<WrappedGlyph>,
-    /// Sum of all glyph widths on this line.
-    width: u16,
-}
-
-// ---------------------------------------------------------------------------
-// Word-wrap engine (M3)
-// ---------------------------------------------------------------------------
-
-/// Greedy word-wrap over a [`Line`]'s spans.
-///
-/// Breaks on ASCII space (`' '`): the space is consumed (not placed) at the
-/// break point, and overlong words are force-broken at the column boundary.
-/// Leading whitespace on soft-wrapped continuation lines is preserved.
-///
-/// Note: only `\n` and ASCII space are treated specially. Tabs, NBSP, and
-/// other whitespace are treated as printable 1-wide characters. Callers
-/// should expand tabs before calling if that matters.
-fn wrap_line(line: &Line, max_width: u16) -> Vec<WrappedLine> {
-    let mut lines: Vec<WrappedLine> = alloc::vec![WrappedLine {
-        glyphs: Vec::new(),
-        width: 0,
-    }];
-    let mut col: u16 = 0;
-
-    for span in &line.spans {
-        for grapheme in span.content.graphemes(true) {
-            // Hard newline.
-            if grapheme == "\n" {
-                lines.push(WrappedLine {
-                    glyphs: Vec::new(),
-                    width: 0,
-                });
-                col = 0;
-                continue;
-            }
-
-            #[allow(clippy::cast_possible_truncation)]
-            let gw = grapheme.width() as u16;
-            if gw == 0 {
-                continue; // zero-width (combining handled in write_grapheme)
-            }
-
-            // Soft wrap: this grapheme would overflow the line.
-            if col + gw > max_width && col > 0 {
-                let current = lines.last_mut().expect("always at least one line");
-
-                // Try to break at the last space on the current line.
-                if let Some(space_idx) = current.glyphs.iter().rposition(|g| g.grapheme == " ") {
-                    // Drain everything after the space into a new line.
-                    let remainder: Vec<WrappedGlyph> =
-                        current.glyphs.drain(space_idx + 1..).collect();
-                    // Drop the space itself.
-                    current.glyphs.pop();
-                    current.width = current.glyphs.iter().map(|g| g.width).sum();
-
-                    let new_width: u16 = remainder.iter().map(|g| g.width).sum();
-                    // col will be incremented by gw in the fall-through below.
-                    col = new_width;
-                    lines.push(WrappedLine {
-                        glyphs: remainder,
-                        width: new_width,
-                    });
-                } else {
-                    // No space on the line: force-break (overlong word).
-                    lines.push(WrappedLine {
-                        glyphs: Vec::new(),
-                        width: 0,
-                    });
-                    col = 0;
-                    // Drop the space that triggered this break: it would just be
-                    // leading whitespace on the new line.
-                    if grapheme == " " {
-                        continue;
-                    }
-                }
-            }
-
-            let current = lines.last_mut().expect("always at least one line");
-            current.width += gw;
-            current.glyphs.push(WrappedGlyph {
-                grapheme: String::from(grapheme),
-                style: span.style,
-                width: gw,
-            });
-            col += gw;
-        }
-    }
-
-    lines
-}
-
-/// Word-wraps `line` to `max_width` columns, returning the broken-apart [`Line`]s.
-///
-/// This is the same greedy, grapheme-cluster-aware wrap pass [`TextLayout`] runs internally on
-/// every render (breaking on ASCII space, honoring hard `\n`s, force-breaking an overlong word
-/// at the column boundary); it's exposed standalone for callers that need the wrapped pieces
-/// themselves rather than having them written straight to a surface, such as a scrollback log
-/// that wraps each message into rows while still addressing its window in whole messages.
-///
-/// Each returned `Line` is a single unstyled or uniformly-styled run per source span that
-/// survived onto that row; adjacent graphemes carrying the same [`Style`] are coalesced back
-/// into one [`Span`], so wrapping a plain [`Line::raw`] round-trips to plain `Line::raw` rows.
-///
-/// # Examples
-///
-/// ```
-/// use retroglyph_core::layout::wrap;
-/// use retroglyph_core::text::Line;
-///
-/// let line = Line::raw("hello world");
-/// let rows = wrap(&line, 7);
-/// assert_eq!(rows.len(), 2);
-/// assert_eq!(rows[0].spans[0].content, "hello");
-/// assert_eq!(rows[1].spans[0].content, "world");
-/// ```
-#[must_use]
-pub fn wrap(line: &Line, max_width: u16) -> Vec<Line> {
-    wrap_line(line, max_width)
-        .into_iter()
-        .map(|wrapped| {
-            let mut spans: Vec<Span> = Vec::new();
-            for glyph in wrapped.glyphs {
-                if let Some(last) = spans.last_mut()
-                    && last.style == glyph.style
-                {
-                    last.content.push_str(&glyph.grapheme);
-                    continue;
-                }
-                spans.push(Span::styled(glyph.grapheme, glyph.style));
-            }
-            Line { spans }
-        })
-        .collect()
-}
-
-// ---------------------------------------------------------------------------
-// TextLayout builder (M4)
-// ---------------------------------------------------------------------------
 
 /// Builder for laying out a [`Line`] within a bounded [`Rect`].
 ///
@@ -311,82 +140,11 @@ impl<'a> TextLayout<'a> {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::color::Color;
     use crate::grid::Pos;
-    use crate::style::Style;
-    use crate::text::{Line, Span};
-
-    fn red() -> Style {
-        Style::new().fg(Color::RED)
-    }
-
-    // --- wrap_line ---
-
-    #[test]
-    fn test_wrap_no_wrap_needed() {
-        let line = Line::raw("hello");
-        let lines = wrap_line(&line, 10);
-        assert_eq!(lines.len(), 1);
-        assert_eq!(lines[0].width, 5);
-    }
-
-    #[test]
-    fn test_wrap_hard_newline() {
-        let line = Line::raw("hi\nthere");
-        let lines = wrap_line(&line, 20);
-        assert_eq!(lines.len(), 2);
-        assert_eq!(lines[0].width, 2);
-        assert_eq!(lines[1].width, 5);
-    }
-
-    #[test]
-    fn test_wrap_soft_break_on_space() {
-        // "hello world" in a 7-wide box: "hello" fits, space triggers break.
-        let line = Line::raw("hello world");
-        let lines = wrap_line(&line, 7);
-        assert_eq!(lines.len(), 2);
-        assert_eq!(lines[0].width, 5); // "hello", space consumed
-        assert_eq!(lines[1].width, 5); // "world"
-    }
-
-    #[test]
-    fn test_wrap_force_break_no_space() {
-        let line = Line::raw("abcdefgh");
-        let lines = wrap_line(&line, 4);
-        assert_eq!(lines.len(), 2);
-        assert_eq!(lines[0].width, 4);
-        assert_eq!(lines[1].width, 4);
-    }
-
-    #[test]
-    fn test_wrap_wide_chars() {
-        // Each CJK char is width 2; "中文中" in a 4-wide box wraps after "中文".
-        let line = Line::raw("中文中");
-        let lines = wrap_line(&line, 4);
-        assert_eq!(lines.len(), 2);
-        assert_eq!(lines[0].width, 4);
-        assert_eq!(lines[1].width, 2);
-    }
-
-    #[test]
-    fn test_wrap_multi_span() {
-        let line = Line::from(vec![Span::raw("foo "), Span::styled("bar", red())]);
-        let lines = wrap_line(&line, 20);
-        assert_eq!(lines.len(), 1);
-        assert_eq!(lines[0].width, 7);
-        // The "bar" glyphs should carry the red style.
-        let bar_count = lines[0].glyphs.iter().filter(|g| g.style == red()).count();
-        assert_eq!(bar_count, 3);
-    }
-
-    // --- TextLayout::measure ---
+    use alloc::string::String;
 
     #[test]
     fn test_measure_single_line() {
@@ -407,8 +165,6 @@ mod tests {
         assert_eq!(m.height, 2);
         assert_eq!(m.width, 5);
     }
-
-    // --- TextLayout::render ---
 
     #[test]
     fn test_render_left_top() {
