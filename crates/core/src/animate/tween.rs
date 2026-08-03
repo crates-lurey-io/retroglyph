@@ -1,5 +1,3 @@
-//! [`Tween`]: a finite, retargetable transition between two `f32` values.
-
 use super::easing::Easing;
 use core::time::Duration;
 
@@ -35,8 +33,7 @@ pub struct Tween {
 }
 
 impl Tween {
-    /// [`duration`](Self::duration)'s default if never overridden: 200ms, a typical UI
-    /// micro-interaction length: noticeable, but not sluggish.
+    /// [`duration`](Self::duration)'s default if never overridden: 200ms.
     pub const DEFAULT_DURATION: Duration = Duration::from_millis(200);
 
     /// A new tween animating from `from` to `to` over [`DEFAULT_DURATION`](Self::DEFAULT_DURATION)
@@ -90,7 +87,7 @@ impl Tween {
     #[must_use]
     pub fn value(&self) -> f32 {
         let t = self.easing.apply(self.progress());
-        libm::fmaf(self.to - self.from, t, self.from)
+        crate::math::mul_add(self.to - self.from, t, self.from)
     }
 
     /// `true` once [`update`](Self::update) has accumulated at least `duration` of elapsed time.

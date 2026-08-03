@@ -149,6 +149,14 @@ fn parse_features(src: &str) -> Result<Vec<Feature>, String> {
         if name == "default" {
             continue;
         }
+        // `__`-prefixed features (e.g. `retroglyph-core`'s `__math`) are an internal-only
+        // convention: never meant to be enabled by a consumer, so they have no business in a
+        // consumer-facing feature table. Skipping them here means that convention is enough on
+        // its own -- nobody has to remember to also keep such a feature's doc comment out of
+        // this generator's input, or notice it leaking into `lib.rs`/`README.md` in review.
+        if name.starts_with("__") {
+            continue;
+        }
 
         // The raw text (comments, blank lines) between the previous item and this key.
         let prefix = key.leaf_decor().prefix().map_or("", |raw| {
@@ -331,6 +339,21 @@ extra = []
         assert_eq!(features[1].name, "std");
         assert!(features[1].is_default);
         assert_eq!(features[1].doc, vec!["Enables std support."]);
+    }
+
+    #[test]
+    fn double_underscore_prefixed_features_are_skipped() {
+        let toml = "
+[features]
+default = [\"std\"]
+# Enables std support.
+std = []
+# Internal, not for consumers.
+__math = []
+";
+        let features = parse_features(toml).unwrap();
+        assert_eq!(features.len(), 1);
+        assert_eq!(features[0].name, "std");
     }
 
     #[test]
