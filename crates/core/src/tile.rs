@@ -403,6 +403,36 @@ mod tests {
         assert_eq!(tile.dy, 5);
     }
 
+    /// `with_style` only touches `style` and the `EMPTY` flag; the glyph and its precomputed
+    /// width must survive untouched.
+    #[test]
+    fn test_tile_with_style_preserves_glyph_and_width() {
+        let tile = Tile::new('漢', Style::default()).with_style(Style::new().fg(Color::RED));
+        assert_eq!(tile.glyph(), '漢');
+        assert_eq!(tile.width(), 2);
+        assert_eq!(tile.style(), Style::new().fg(Color::RED));
+    }
+
+    /// `with_offset` only touches `dx`/`dy` and the `EMPTY` flag; the glyph and its precomputed
+    /// width must survive untouched.
+    #[test]
+    fn test_tile_with_offset_preserves_glyph_and_width() {
+        let tile = Tile::new('漢', Style::default()).with_offset(1, 1);
+        assert_eq!(tile.glyph(), '漢');
+        assert_eq!(tile.width(), 2);
+    }
+
+    /// Each `with_offset` call sets `dx`/`dy` outright rather than accumulating; a second call
+    /// in a chain must not leave anything from the first behind.
+    #[test]
+    fn test_tile_with_offset_chain_does_not_leak_prior_values() {
+        let tile = Tile::new('X', Style::default())
+            .with_offset(-3, 5)
+            .with_offset(2, -1);
+        assert_eq!(tile.dx, 2);
+        assert_eq!(tile.dy, -1);
+    }
+
     #[test]
     fn test_tile_reset() {
         let style = Style::new().fg(Color::RED);
@@ -416,7 +446,6 @@ mod tests {
         assert!(tile.is_empty());
     }
 
-    #[cfg(feature = "egc")]
     #[test]
     fn test_tile_wide_flag() {
         let mut tile = Tile::new('漢', Style::default());
@@ -432,6 +461,24 @@ mod tests {
         assert_eq!(Tile::new('A', Style::default()).width(), 1);
         assert_eq!(Tile::new('漢', Style::default()).width(), 2);
         assert_eq!(Tile::default().width(), 1);
+    }
+
+    /// Control characters report `None` from `unicode_width`; `glyph_width`'s `unwrap_or(1)`
+    /// fallback treats them as single-column, matching this crate's prior per-cell behavior.
+    #[test]
+    fn test_tile_width_falls_back_to_one_for_control_characters() {
+        assert_eq!(Tile::new('\t', Style::default()).width(), 1);
+        assert_eq!(Tile::new('\u{7}', Style::default()).width(), 1);
+        assert_eq!(Tile::new('\u{1b}', Style::default()).width(), 1);
+    }
+
+    /// Combining marks and zero-width joiners are genuinely zero-column: unlike control
+    /// characters, `unicode_width` reports `Some(0)` for these rather than `None`, so they skip
+    /// the `unwrap_or` fallback entirely.
+    #[test]
+    fn test_tile_width_is_zero_for_zero_width_glyphs() {
+        assert_eq!(Tile::new('\u{0301}', Style::default()).width(), 0);
+        assert_eq!(Tile::new('\u{200d}', Style::default()).width(), 0);
     }
 
     #[test]
@@ -530,6 +577,34 @@ mod tests {
         assert_eq!(covered.span_anchor_index(1, 10), None);
     }
 
+    /// `cols == 0` is a caller error (there is no valid row stride), but the method has no way to
+    /// detect it: `checked_sub` only guards against the anchor landing before the buffer start,
+    /// not against a degenerate stride. Documented here rather than in the method's doc, which
+    /// lists exactly the two `None` conditions this is not one of.
+    #[test]
+    fn test_tile_span_anchor_index_does_not_detect_a_zero_stride() {
+        let mut covered = Tile::new(']', Style::default());
+        covered.flags = TileFlags::SPAN_COVERED;
+        covered.span_w = 1;
+        covered.span_h = 0;
+        assert_eq!(covered.span_anchor_index(1, 0), Some(0));
+    }
+
+    /// The method does not check that the resolved anchor is in the same row-block as `idx`; a
+    /// covered cell whose `dx` exceeds its own column lands on the last cell of the *previous*
+    /// row instead of returning `None`. `Grid::write_span` can never produce this (a span's
+    /// footprint always fits, so `x >= dx` holds for every covered cell it writes), so this pins
+    /// the doc's "caller already knows this holds" precondition rather than guarding a real bug.
+    #[test]
+    fn test_tile_span_anchor_index_does_not_detect_crossing_a_row_block() {
+        let mut covered = Tile::new(']', Style::default());
+        covered.flags = TileFlags::SPAN_COVERED;
+        covered.span_w = 1;
+        covered.span_h = 0;
+        // idx 4 is (0, 1) in a 4-wide buffer; dx = 1 walks back past column 0 into row 0's tail.
+        assert_eq!(covered.span_anchor_index(4, 4), Some(3));
+    }
+
     #[test]
     fn test_tile_clear_span_keeps_the_glyph() {
         let mut tile = Tile::new('C', Style::default());
@@ -552,5 +627,45 @@ mod tests {
         assert_eq!(tile.span(), (1, 1));
         assert_eq!(tile.span_offset(), None);
         assert!(tile.is_empty());
+    }
+
+    /// The derived `Default` on `TileFlags` is `empty()`, not `EMPTY`, which disagrees with the
+    /// flags a default `Tile` actually carries. Nothing in the workspace calls
+    /// `TileFlags::default()`; this pins the divergence rather than silently relying on it, given
+    /// how easy it would be to reach for `TileFlags::default()` expecting `EMPTY` back.
+    #[test]
+    fn test_tile_flags_default_is_not_empty_flag() {
+        assert_eq!(TileFlags::default(), TileFlags::empty());
+        assert_ne!(TileFlags::default(), TileFlags::EMPTY);
+        assert_eq!(Tile::default().flags(), TileFlags::EMPTY);
+    }
+
+    #[cfg(feature = "egc")]
+    #[test]
+    fn test_cap_grapheme_leaves_short_input_unchanged() {
+        assert_eq!(cap_grapheme(""), "");
+        assert_eq!(cap_grapheme("a"), "a");
+        assert_eq!(cap_grapheme("e\u{0301}"), "e\u{0301}");
+    }
+
+    #[cfg(feature = "egc")]
+    #[test]
+    fn test_cap_grapheme_leaves_exactly_the_cap_unchanged() {
+        // 8 codepoints: the boundary itself must not be truncated.
+        let input: String = core::iter::repeat_n('\u{0301}', 8).collect();
+        assert_eq!(cap_grapheme(&input), input);
+    }
+
+    #[cfg(feature = "egc")]
+    #[test]
+    fn test_cap_grapheme_truncates_past_the_cap_on_a_codepoint_boundary() {
+        // 9 codepoints, each multi-byte (U+0301 is 2 bytes in UTF-8), so a byte-oriented
+        // truncation would split a codepoint; `cap_grapheme` must not.
+        let input: String = core::iter::repeat_n('\u{0301}', 9).collect();
+        let capped = cap_grapheme(&input);
+        assert_eq!(capped.chars().count(), 8);
+        assert!(capped.is_char_boundary(capped.len()));
+        let expected: String = core::iter::repeat_n('\u{0301}', 8).collect();
+        assert_eq!(capped, expected);
     }
 }
