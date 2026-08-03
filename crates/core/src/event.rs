@@ -195,6 +195,7 @@ pub enum KeyCode {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[non_exhaustive]
 /// Whether a key event is a press, an auto-repeat, or a release.
 ///
 /// Not every backend can distinguish these. Plain terminals only ever emit
@@ -205,6 +206,10 @@ pub enum KeyCode {
 /// - The crossterm backend emits the full set only when the terminal supports
 ///   the kitty keyboard protocol (kitty, `WezTerm`, foot, Ghostty, recent
 ///   Alacritty); otherwise it degrades to `Press`-only.
+///
+/// Marked `#[non_exhaustive]` for consistency with sibling public enums, in case a future source
+/// reports a state finer-grained than this set (e.g. distinguishing an OS-level key-repeat from a
+/// backend-synthesized one).
 pub enum KeyEventKind {
     /// The key was pressed.
     #[default]
@@ -359,6 +364,36 @@ pub struct MouseEvent {
     pub pixel_position: Option<PhysicalPos>,
     /// Modifiers held down during the event.
     pub modifiers: KeyModifiers,
+}
+
+impl MouseEvent {
+    /// Creates a mouse event at the given cell-grid position, with no pixel position.
+    #[must_use]
+    pub const fn new(kind: MouseEventKind, position: Pos, modifiers: KeyModifiers) -> Self {
+        Self {
+            kind,
+            position,
+            pixel_position: None,
+            modifiers,
+        }
+    }
+
+    /// Creates a mouse event with an explicit pixel position, for backends with sub-cell
+    /// precision.
+    #[must_use]
+    pub const fn with_pixel_position(
+        kind: MouseEventKind,
+        position: Pos,
+        modifiers: KeyModifiers,
+        pixel_position: PhysicalPos,
+    ) -> Self {
+        Self {
+            kind,
+            position,
+            pixel_position: Some(pixel_position),
+            modifiers,
+        }
+    }
 }
 
 /// The system's light/dark color-scheme preference, as reported by the
@@ -831,6 +866,32 @@ mod tests {
         assert_eq!(px.y, 38);
         // Cell and pixel positions are distinct coordinate spaces.
         assert_ne!(px.x, u32::from(mouse_event.position.x));
+    }
+
+    #[test]
+    fn test_mouse_event_new_has_no_pixel_position() {
+        let mouse_event = MouseEvent::new(
+            MouseEventKind::Down(MouseButton::Left),
+            Pos { x: 10, y: 5 },
+            KeyModifiers::NONE,
+        );
+        assert_eq!(mouse_event.kind, MouseEventKind::Down(MouseButton::Left));
+        assert_eq!(mouse_event.position, Pos { x: 10, y: 5 });
+        assert!(mouse_event.pixel_position.is_none());
+    }
+
+    #[test]
+    fn test_mouse_event_with_pixel_position_constructor() {
+        let mouse_event = MouseEvent::with_pixel_position(
+            MouseEventKind::Moved,
+            Pos { x: 3, y: 2 },
+            KeyModifiers::NONE,
+            PhysicalPos { x: 55, y: 38 },
+        );
+        assert_eq!(
+            mouse_event.pixel_position,
+            Some(PhysicalPos { x: 55, y: 38 })
+        );
     }
 
     #[test]
