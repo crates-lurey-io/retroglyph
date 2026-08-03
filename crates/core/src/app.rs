@@ -126,30 +126,9 @@ where
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct RunOptions {
-    /// Caps the loop at this many [`App::update`] calls per second whenever a frame actually
-    /// runs, using a [`FrameClock`](crate::FrameClock) internally to pace them
-    /// evenly. `None` (the default) runs uncapped: as fast as `update` allows for back-to-back
-    /// [`Flow::Continue`] frames, or immediately after whatever woke an
-    /// [`event_driven`](Self::event_driven) loop from [`Flow::Idle`].
-    pub target_fps: Option<u32>,
-    /// On [`Flow::Idle`], block on input instead of calling `update` again immediately.
-    ///
-    /// `true` (the default) is right for turn-based, event-driven apps that are idle most of the
-    /// time: an idle frame costs approximately nothing, blocked in the backend's input read
-    /// rather than spinning `update` as fast as the host can manage. `false` keeps `Flow::Idle`
-    /// non-blocking (skip `present`, keep looping at whatever rate
-    /// [`target_fps`](Self::target_fps) allows): right for apps that animate from
-    /// [`Frame::delta`] and only return `Idle` between animation-driven `Continue` frames, where
-    /// blocking would freeze the animation until the next stray input event. See
-    /// [`RunOptions::animated`] for that shape.
-    pub event_driven: bool,
-    /// When [`event_driven`](Self::event_driven) is `true`, the longest an idle loop blocks
-    /// before calling `update` again anyway, even with no input. `None` (the default) blocks
-    /// indefinitely: right for apps with nothing to redraw until input arrives. `Some(d)`
-    /// additionally wakes the loop every `d`, for apps that need a periodic idle redraw (a
-    /// blinking cursor, a clock) without paying full frame-rate cost. Ignored when
-    /// [`event_driven`](Self::event_driven) is `false`.
-    pub idle_wake: Option<Duration>,
+    target_fps: Option<u32>,
+    event_driven: bool,
+    idle_wake: Option<Duration>,
 }
 
 impl RunOptions {
@@ -172,6 +151,63 @@ impl RunOptions {
             idle_wake: None,
         }
     }
+
+    /// Caps the loop at this many [`App::update`] calls per second whenever a frame actually
+    /// runs, using a [`FrameClock`](crate::FrameClock) internally to pace them
+    /// evenly. `None` (the default) runs uncapped: as fast as `update` allows for back-to-back
+    /// [`Flow::Continue`] frames, or immediately after whatever woke an
+    /// [`event_driven`](Self::event_driven) loop from [`Flow::Idle`].
+    #[must_use]
+    pub const fn with_target_fps(mut self, target_fps: u32) -> Self {
+        self.target_fps = Some(target_fps);
+        self
+    }
+
+    /// Returns the configured [`target_fps`](Self::with_target_fps) cap, if any.
+    #[must_use]
+    pub const fn target_fps(&self) -> Option<u32> {
+        self.target_fps
+    }
+
+    /// On [`Flow::Idle`], block on input instead of calling `update` again immediately.
+    ///
+    /// `true` (the default) is right for turn-based, event-driven apps that are idle most of the
+    /// time: an idle frame costs approximately nothing, blocked in the backend's input read
+    /// rather than spinning `update` as fast as the host can manage. `false` keeps `Flow::Idle`
+    /// non-blocking (skip `present`, keep looping at whatever rate
+    /// [`target_fps`](Self::target_fps) allows): right for apps that animate from
+    /// [`Frame::delta`] and only return `Idle` between animation-driven `Continue` frames, where
+    /// blocking would freeze the animation until the next stray input event. See
+    /// [`RunOptions::animated`] for that shape.
+    #[must_use]
+    pub const fn event_driven(mut self, event_driven: bool) -> Self {
+        self.event_driven = event_driven;
+        self
+    }
+
+    /// Returns whether [`Flow::Idle`] blocks on input rather than looping immediately.
+    #[must_use]
+    pub const fn is_event_driven(&self) -> bool {
+        self.event_driven
+    }
+
+    /// When [`is_event_driven`](Self::is_event_driven) is `true`, the longest an idle loop blocks
+    /// before calling `update` again anyway, even with no input. `None` (the default) blocks
+    /// indefinitely: right for apps with nothing to redraw until input arrives. `Some(d)`
+    /// additionally wakes the loop every `d`, for apps that need a periodic idle redraw (a
+    /// blinking cursor, a clock) without paying full frame-rate cost. Ignored when
+    /// [`is_event_driven`](Self::is_event_driven) is `false`.
+    #[must_use]
+    pub const fn with_idle_wake(mut self, idle_wake: Duration) -> Self {
+        self.idle_wake = Some(idle_wake);
+        self
+    }
+
+    /// Returns the configured [`idle_wake`](Self::with_idle_wake) interval, if any.
+    #[must_use]
+    pub const fn idle_wake(&self) -> Option<Duration> {
+        self.idle_wake
+    }
 }
 
 impl Default for RunOptions {
@@ -193,7 +229,7 @@ impl Default for RunOptions {
 /// internally so `update` is called at even intervals rather than however fast the host can
 /// spin.
 ///
-/// With [`RunOptions::event_driven`] `true` (the default), [`Flow::Idle`] blocks the loop on
+/// With [`RunOptions::is_event_driven`] `true` (the default), [`Flow::Idle`] blocks the loop on
 /// input (via [`Terminal::wait_for_input`]) instead of calling `update` again immediately:
 /// an idle app has nothing new to show, so there is no reason to burn CPU polling it at all,
 /// let alone faster than any configured rate. With `event_driven` `false`, an idle loop still
@@ -219,7 +255,7 @@ where
     B: Backend,
     A: App<B>,
 {
-    let mut clock = options.target_fps.map(crate::FrameClock::new);
+    let mut clock = options.target_fps().map(crate::FrameClock::new);
     let mut frame_count = 0u64;
     let mut last = std::time::Instant::now();
     loop {
@@ -259,7 +295,7 @@ where
         }
         // `Flow` is `#[non_exhaustive]`; treat any variant other than `Exit`/`Idle` the same as
         // `Continue` (keep looping and presenting) rather than exiting on an unknown future value.
-        if flow == Flow::Idle && options.event_driven {
+        if flow == Flow::Idle && options.is_event_driven() {
             // The heart of the fix for retroglyph#603: block here instead of immediately
             // re-entering the loop, so an idle frame costs approximately nothing rather than
             // spinning `update` as fast as the host allows. `wait_for_input` buffers any event it
@@ -267,7 +303,7 @@ where
             // next iteration; this call only answers "did something happen", it doesn't steal
             // the event. A `target_fps` clock (if set) still gets its top-of-loop sleep on the
             // next iteration; it isn't bypassed by waking early.
-            term.wait_for_input(options.idle_wake.unwrap_or(Duration::MAX));
+            term.wait_for_input(options.idle_wake().unwrap_or(Duration::MAX));
         }
     }
 }
@@ -414,14 +450,25 @@ mod tests {
     #[test]
     fn run_options_animated_sets_fields() {
         let animated = RunOptions::animated(30);
-        assert_eq!(animated.target_fps, Some(30));
-        assert!(!animated.event_driven);
-        assert_eq!(animated.idle_wake, None);
+        assert_eq!(animated.target_fps(), Some(30));
+        assert!(!animated.is_event_driven());
+        assert_eq!(animated.idle_wake(), None);
 
         let default = RunOptions::default();
-        assert_eq!(default.target_fps, None);
-        assert!(default.event_driven);
-        assert_eq!(default.idle_wake, None);
+        assert_eq!(default.target_fps(), None);
+        assert!(default.is_event_driven());
+        assert_eq!(default.idle_wake(), None);
+    }
+
+    #[test]
+    fn run_options_setters_override_defaults() {
+        let options = RunOptions::default()
+            .with_target_fps(60)
+            .event_driven(false)
+            .with_idle_wake(Duration::from_millis(250));
+        assert_eq!(options.target_fps(), Some(60));
+        assert!(!options.is_event_driven());
+        assert_eq!(options.idle_wake(), Some(Duration::from_millis(250)));
     }
 
     /// An app that returns `Idle` for its first frame, then `Exit`. The queued key is only

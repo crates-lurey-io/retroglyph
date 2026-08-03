@@ -252,13 +252,35 @@ deny-licenses:
 
 # ── Composite ────────────────────────────────────────────────────────────────
 
-# `compile` is deliberately not a dependency here: `lint` (clippy) already performs a full,
-# strictly-stronger typecheck than plain `cargo check`, and `test` immediately after does a full
-# build (also a superset of `check`). A standalone `cargo check --all-features` pass between them
-# never catches anything those two don't already catch, and it's another full-workspace fingerprint
-# pass for no extra correctness. `just compile` remains available on its own for a fast, cheap
-# check-only iteration loop outside this composite.
-check: fmt-check lint test doc
+# The fast, single-feature-set correctness gate: clippy, tests, and docs, each built once with
+# `--workspace --all-features` (plus build-pty-examples, needed so the nextest run below doesn't
+# have its example-snapshot tests race each other on the cargo build lock -- see that recipe's own
+# comment).
+#
+# Everything else `lint`/`test`/`doc`/`compile` also run is deliberately left out here, because
+# each is a *different* feature set or build kind than the --all-features pass above, so folding
+# it in would turn one compile of the workspace into several:
+#   - fmt-check, markdown, prose (`just fmt-check`, `just markdown`, `just prose`): not cargo
+#     builds at all, and not a feature-set variant of anything either -- run them directly.
+#   - the `-p core`/`-p widgets --no-default-features` clippy lines (retroglyph#887), `compile`'s
+#     `--no-default-features`/`cargo hack --each-feature` lines, and `test-default-features`
+#     (retroglyph#757, #843, #882): real feature-interaction coverage, each added after a real bug
+#     -- left out of this fast loop, not left uncovered, see below.
+#   - `check-features` (folded into `doc` elsewhere): a Cargo.toml/doc-comment drift check, not a
+#     build, and it doesn't gate whether `cargo doc --all-features` itself succeeds.
+# CI still runs every one of the above on every push (ci.yml's `format`/`lint`/`compile`/`test`
+# jobs), so nothing here goes unchecked before merge, only before you choose to run it locally.
+# Run the specific recipe above before pushing if you touched formatting, Markdown/prose, or
+# feature-gated code -- `just check` alone no longer covers them.
+check: build-pty-examples
+    cargo clippy --workspace --all-targets --all-features -- -D warnings
+    cargo bin cargo-nextest run --workspace --all-features
+    cargo test --workspace --all-features --doc
+    RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features --exclude retroglyph-examples --exclude cargo-bin --exclude gen-features
+    ./tools/gen-llms-txt.sh target/doc
+    @cp -r docs/public/. target/doc/ 2>/dev/null || true
+    ./tools/gen-crates-index.sh target/doc
+    @sed -i.bak "s/__GIT_SHA__/$(git rev-parse --short HEAD 2>/dev/null || echo unknown)/g" target/doc/index.html && rm -f target/doc/index.html.bak
 
 clean:
     cargo clean

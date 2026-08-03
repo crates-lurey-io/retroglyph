@@ -26,8 +26,10 @@ module_name_repetitions = "allow"
 ```
 
 In practice `missing_docs` is enforced too: `just clippy` runs with `-D warnings`, which promotes
-every warn-level lint to a hard failure. `just check` (fmt-check, clippy, compile, test, doc,
-llms-check) is the actual gate; see `AGENTS.md`'s Correctness gate section for the exact commands.
+every warn-level lint to a hard failure. `just check` (clippy, test, and doc, all built once with
+`--workspace --all-features`) is the fast local gate; see `AGENTS.md`'s Correctness gate section for
+the exact commands and what it deliberately leaves to `just fmt-check`/`just lint`/`just compile`
+and CI.
 
 No `rustfmt.toml` exists, on purpose: the project uses 100% rustfmt defaults (4-space indent, 100
 col width, block indent, trailing commas on multiline lists). Don't add one to "fix" formatting

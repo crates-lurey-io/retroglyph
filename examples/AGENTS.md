@@ -26,7 +26,8 @@ Every example must pass all of the following before merge:
 5. `cargo run -p retroglyph-examples --bin runner` lists the example (it discovers
    `examples/examples/*.rs` at runtime, so this is a smoke check that the file compiles and is in
    the right place) and can launch it on each backend.
-6. `just check` is green (fmt, clippy including `pedantic`/`nursery`, compile, tests, doc, llms).
+6. `just check` is green (clippy, tests, and doc, `--workspace --all-features`), and
+   `just fmt-check` is green too -- `just check` no longer covers formatting.
 7. The example carries a top doc comment stating what it proves and how to run it.
 
 ## Conventions
