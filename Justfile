@@ -49,6 +49,15 @@ check-targets:
 
 lint: clippy markdown
 
+# Checks every external URL in markdown and doc comments (lychee also parses links out of `.rs`
+# files, so this covers doc comments too). Not part of `lint`/`check`: it hits the network, so
+# it's scheduled-only in CI (.github/workflows/link-check.yml, retroglyph#469) rather than run on
+# every push/PR. Uses the `cargo bin`-pinned `lychee` (see Cargo.toml's [workspace.metadata.bin])
+# like every other CLI tool `cargo bin` manages in this repo, rather than a manually-installed
+# `lychee` on PATH, so the version is reproducible and identical between local runs and CI.
+link-check:
+    cargo bin lychee --no-progress --exclude-path target --exclude-path .matan './**/*.md' './crates/**/*.rs'
+
 # ── Build ────────────────────────────────────────────────────────────────────
 
 compile:
