@@ -105,8 +105,11 @@ extern crate alloc;
 // momentum decay -- is load-bearing across the widget set, not an opt-in extra. There is no
 // widgets equivalent of "the affected module just isn't compiled in", so a build with neither
 // backend fails loudly here instead of hitting `retroglyph_core::math`'s own unresolved-`libm`
-// error deep in a call site.
-#[cfg(not(any(feature = "std", feature = "libm")))]
+// error deep in a call site. `libm-arch` counts too: it only forwards to
+// `retroglyph-core/libm-arch` (this crate has no `libm` feature of its own turned on by it), so
+// without it here a lone `--features libm-arch` build would trip this check despite
+// `retroglyph-core` actually having a real backend (`cargo hack --each-feature` caught this).
+#[cfg(not(any(feature = "std", feature = "libm", feature = "libm-arch")))]
 compile_error!("retroglyph-widgets needs a float backend: enable `std` or `libm`.");
 
 // Compile the code blocks in this crate's own README as doctests so its quick start is

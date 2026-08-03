@@ -98,6 +98,23 @@ compile:
     # its crate-level `compile_error!`), so its `no_std` build also needs a `libm` backend --
     # plain `--no-default-features` no longer compiles on its own.
     cargo check -p retroglyph-widgets --no-default-features --features libm
+    # retroglyph#886: the lines above only ever check one feature combination at a time by hand;
+    # `--each-feature` checks every feature of a crate in isolation (plus zero and all), which is
+    # what would have caught `indexed-quant` needing a float backend of its own before this
+    # issue's fix. `--no-dev-deps` keeps each combination to a plain `cargo check`. Scoped to
+    # these two crates (not `--workspace`): they're the ones this issue's feature graph touches,
+    # and the rest of the workspace has no comparable "needs a float backend" interaction to catch
+    # this way. `--exclude-features` drops the features that are *supposed* to fail alone --
+    # `float`/`indexed-quant`/`blend-modes` on `retroglyph-core` and `dev`/`egc`/`serde` on
+    # `retroglyph-widgets` all need a float backend (`std` or `libm`) they don't themselves
+    # provide, and fail loudly via this crate's own `compile_error!` when enabled without one; a
+    # green `--each-feature` run isn't supposed to include those combinations. Cheap: a few
+    # seconds warm, since deps compile once and each combination only rebuilds the crate itself.
+    cargo bin cargo-hack check --each-feature --no-dev-deps -p retroglyph-core --exclude-features float,indexed-quant,blend-modes
+    # `--exclude-no-default-features`: this crate's float use is unconditional (see its own
+    # `compile_error!`), so the plain `--no-default-features` run `--each-feature` otherwise
+    # includes on top of every single feature is *also* one of the combinations expected to fail.
+    cargo bin cargo-hack check --each-feature --no-dev-deps -p retroglyph-widgets --exclude-features dev,egc,serde --exclude-no-default-features
 
 doc: check-features
     # --exclude: none of the three are part of the published API surface (cargo-bin and
