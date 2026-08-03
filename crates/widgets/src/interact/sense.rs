@@ -71,7 +71,10 @@ impl Sense {
     /// common call-site shape.
     pub const DISABLED: Self = Self(1 << 6);
     /// Senses nothing: [`interact`](crate::Interaction::interact) still
-    /// registers the id nowhere and returns [`Response::default`](crate::Response).
+    /// registers the id nowhere and every [`Response`](crate::Response) field reports as if
+    /// nothing happened, matching [`Response::default`](crate::Response), with one exception:
+    /// [`rect`](crate::Response::rect) always echoes back the area passed to `interact`, useful
+    /// for purely decorative widgets that still want layout echo.
     pub const NONE: Self = Self(0);
 
     /// A clickable, hoverable, focusable widget: buttons, tabs, list
