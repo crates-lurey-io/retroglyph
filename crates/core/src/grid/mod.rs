@@ -718,4 +718,15 @@ mod tests {
             rect
         );
     }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn test_offset_serializes_and_deserializes() {
+        let offset = Offset::new(3, -2);
+        let json = serde_json::to_string(&offset).expect("serialize");
+        assert_eq!(
+            serde_json::from_str::<Offset>(&json).expect("deserialize"),
+            offset
+        );
+    }
 }
