@@ -763,7 +763,7 @@ mod tests {
         let backend = ResizeCounting::new(10, 10);
         let mut terminal = Terminal::new(backend);
 
-        terminal.backend_mut().inner.push_event(Event::Resize(8, 2));
+        terminal.backend_mut().push_event(Event::Resize(8, 2));
         assert!(terminal.wait_for_input(Duration::ZERO));
         assert_eq!(terminal.backend().resize_calls, 1);
 
@@ -772,6 +772,12 @@ mod tests {
         assert_eq!(terminal.poll(Duration::ZERO), Some(Event::Resize(8, 2)));
         assert_eq!(terminal.backend().resize_calls, 1);
         assert_eq!(terminal.size(), Size::new(8, 2));
+        assert_eq!(terminal.backend().size(), Size::new(8, 2));
+
+        // Exercise the rest of `ResizeCounting`'s `Output` passthrough too, so the mock's own
+        // plumbing (not just `resize_calls`) is covered rather than asserted by inspection.
+        terminal.present().unwrap();
+        terminal.backend_mut().clear().unwrap();
     }
 
     #[test]
