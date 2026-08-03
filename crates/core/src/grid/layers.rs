@@ -80,6 +80,12 @@ impl Grid {
             return None;
         }
 
+        // Refuse out-of-bounds before touching `clear_overlap`/`layer_or_alloc` below: neither
+        // should allocate the layer for a write that is about to be refused anyway (retroglyph#1012).
+        if pos.x >= self.width || pos.y >= self.height {
+            return None;
+        }
+
         self.clear_span_overlap(layer, pos.x, pos.y, width.max(1));
         if fresh {
             self.clear_overlap(layer, pos.x, pos.y, width.max(1));
@@ -91,9 +97,7 @@ impl Grid {
         let gpos = to_grixy_pos(pos);
         let idx = usize::from(pos.y) * grid_w + usize::from(pos.x);
         let lb = self.layer_or_alloc(layer);
-        if !lb.buf.contains(gpos) {
-            return None;
-        }
+        debug_assert!(lb.buf.contains(gpos), "bounds already checked above");
         lb.extras.remove(&idx);
         tile.flags.remove(TileFlags::HAS_EXTRA);
         tile.clear_span();
@@ -213,17 +217,18 @@ impl Grid {
     /// An empty entry is removed rather than stored, so the flag means exactly "an entry
     /// exists".
     pub(crate) fn set_extra(&mut self, layer: u8, x: u16, y: u16, extra: TileExtra) {
+        if x >= self.width || y >= self.height {
+            return;
+        }
         let pos = to_grixy_pos(Pos::new(x, y));
         let idx = usize::from(y) * usize::from(self.width) + usize::from(x);
         let lb = self.layer_or_alloc(layer);
-        if lb.buf.contains(pos) {
-            if extra.is_empty() {
-                lb.buf[pos].flags.remove(TileFlags::HAS_EXTRA);
-                lb.extras.remove(&idx);
-            } else {
-                lb.buf[pos].flags.insert(TileFlags::HAS_EXTRA);
-                lb.extras.insert(idx, extra);
-            }
+        if extra.is_empty() {
+            lb.buf[pos].flags.remove(TileFlags::HAS_EXTRA);
+            lb.extras.remove(&idx);
+        } else {
+            lb.buf[pos].flags.insert(TileFlags::HAS_EXTRA);
+            lb.extras.insert(idx, extra);
         }
     }
 
@@ -260,12 +265,12 @@ impl Grid {
     /// Setting [`Tint::None`] clears the tint, and drops the cell's side-table entry entirely if
     /// it held nothing else. Does nothing if `(x, y)` is out of bounds.
     pub fn set_tint(&mut self, layer: u8, x: u16, y: u16, tint: Tint) {
+        if x >= self.width || y >= self.height {
+            return;
+        }
         let idx = usize::from(y) * usize::from(self.width) + usize::from(x);
         let pos = to_grixy_pos(Pos::new(x, y));
         let lb = self.layer_or_alloc(layer);
-        if !lb.buf.contains(pos) {
-            return;
-        }
         // Preserve any grapheme already stored for this cell: the two members of the entry are
         // written by separate calls and neither should clobber the other.
         let grapheme = if lb.buf[pos].flags.contains(TileFlags::HAS_EXTRA) {
@@ -858,6 +863,48 @@ mod tests {
         let mut g = Grid::new(5, 5);
         g.clear(255);
         assert_eq!(g.layers.len(), 1);
+    }
+
+    #[test]
+    fn put_tile_out_of_bounds_does_not_allocate_the_layer() {
+        // retroglyph#1012: a refused out-of-bounds write must not allocate the layer or raise
+        // `max_layer`, matching `put_tile`'s own "does nothing" contract.
+        let mut g = Grid::new(4, 4);
+        assert_eq!(
+            g.put_tile(200, (99, 99), Tile::new('x', Style::default())),
+            None
+        );
+        assert_eq!(g.max_layer(), 0);
+        assert!(g.tile(200, (0, 0)).is_none());
+        assert!(g.layer(200).is_none());
+    }
+
+    #[test]
+    fn set_tint_out_of_bounds_does_not_allocate_the_layer() {
+        // retroglyph#1012: same guarantee as `put_tile`, for the `set_tint` write path.
+        let mut g = Grid::new(4, 4);
+        g.set_tint(200, 99, 99, Tint::multiply(1, 2, 3));
+        assert_eq!(g.max_layer(), 0);
+        assert!(g.layer(200).is_none());
+    }
+
+    #[test]
+    fn set_extra_out_of_bounds_does_not_allocate_the_layer() {
+        // retroglyph#1012: same guarantee as `put_tile`/`set_tint`, for the crate-private
+        // `set_extra` write path (reached from `Headless::draw_layers` with whatever `pos` the
+        // replayed `DrawCell` stream carries, which is not itself bounds-checked there).
+        let mut g = Grid::new(4, 4);
+        g.set_extra(
+            200,
+            99,
+            99,
+            TileExtra {
+                grapheme: None,
+                tint: Tint::multiply(1, 2, 3),
+            },
+        );
+        assert_eq!(g.max_layer(), 0);
+        assert!(g.layer(200).is_none());
     }
 
     #[test]

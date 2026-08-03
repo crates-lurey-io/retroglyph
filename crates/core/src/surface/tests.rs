@@ -513,6 +513,24 @@ fn with_tint_survives_clip_and_on_layer() {
 }
 
 #[test]
+fn with_tint_on_a_write_outside_the_clip_does_not_allocate_the_layer() {
+    // retroglyph#1012: the tint is only applied after a write actually lands (see
+    // `apply_tint`'s own doc comment), so a tinted write refused by the clip must not touch a
+    // layer it never wrote to, on a layer that has never been allocated before.
+    let mut grid = Grid::new(4, 4);
+    {
+        let mut surface = screen(&mut grid);
+        surface
+            .on_layer(7)
+            .with_tint(Tint::multiply(9, 9, 9))
+            .clip(Rect::new(0, 0, 2, 2))
+            .put((10, 10), '@', Style::default());
+    }
+    assert_eq!(grid.max_layer(), 0);
+    assert!(grid.tile(7, (0, 0)).is_none());
+}
+
+#[test]
 fn with_tint_replaces_rather_than_composes() {
     let mut grid = Grid::new(4, 4);
     {
