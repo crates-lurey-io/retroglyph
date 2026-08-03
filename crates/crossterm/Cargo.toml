@@ -41,8 +41,12 @@ tracing = { version = "0.1", optional = true, default-features = false, features
 criterion = "0.5"
 fastrand = "2"
 # Cross-backend Output/Cursor conformance harness (retroglyph#763): dev-only, so the `testing`
-# feature's assertion helpers never ship in a release build of this crate.
-retroglyph-core = { path = "../core", version = "0.5.0", features = ["testing"] }
+# feature's assertion helpers never ship in a release build of this crate. `default-features =
+# false` matches the `[dependencies]` entry above: a dev-dependency's features unify with it
+# regardless, so leaving the default `true` here would silently turn `egc` (and the rest of
+# core's defaults) back on for every crate built alongside this one in the same `cargo`
+# invocation (e.g. `just test-default-features`, which deliberately keeps `egc` off).
+retroglyph-core = { path = "../core", version = "0.5.0", default-features = false, features = ["testing"] }
 
 [[bench]]
 name = "event_translation"
