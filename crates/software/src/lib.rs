@@ -470,9 +470,8 @@ impl SoftwareRenderer {
     /// full, unshifted cell: sub-cell `dx`/`dy` offsets move only the glyph, never the background.
     fn fill_cell_bg(&mut self, cell_w: usize, cell_h: usize, pos: Pos, bg_fill: Option<u32>) {
         if let Some(bg) = bg_fill {
-            let px_x = usize::from(pos.x) * cell_w;
-            let px_y = usize::from(pos.y) * cell_h;
-            let rect = ixy::Rect::new(px_x, px_y, cell_w, cell_h);
+            let cell = ixy::Rect::new(usize::from(pos.x), usize::from(pos.y), 1, 1);
+            let rect = cell * ixy::Size::new(cell_w, cell_h);
             self.ctx.pixel_buf.fill_rect_solid(rect, bg);
         }
     }

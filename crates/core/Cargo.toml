@@ -54,7 +54,7 @@ gem = { version = "0.2.1", default-features = false }
 # stays on `gem::Mix`/`gem::rgb::Rgb888::mix_u8` above and needs no math backend. Gated behind the
 # `blend-modes` feature, separately from `indexed-quant`: unrelated capability, unrelated flag.
 alpha-blend = { version = "0.3", optional = true, default-features = false }
-ixy = "0.6.0-alpha.9"
+ixy = "0.7.0"
 # `Color`'s `serde` impls (see color.rs) are hand-written against its own `Display`/`FromStr`, so
 # they need only the `derive` feature for `Style`/`Size`'s plain `#[derive(Serialize, Deserialize)]`
 # below -- no `alloc` feature, since nothing here deserializes into an owned `String`/`Vec`.
@@ -64,7 +64,7 @@ serde = { version = "1", default-features = false, features = ["derive"], option
 # always-on dependency: no_std-compatible on its own, so no std/libm feature split is needed the
 # way `gem` needs one.
 libm = "0.2"
-grixy = { version = "0.6.0-alpha.8", features = ["alloc", "buffer"] }
+grixy = { version = "0.7.0", features = ["alloc", "buffer"] }
 unicode-width = "0.2"
 bitflags = "2.4"
 unicode-segmentation = { version = "1.13", default-features = false, optional = true }
