@@ -22,8 +22,11 @@ use retroglyph_core::{Pos, Rect};
 // just make every caller unwrap a value that's never actually absent. The one place this crate
 // builds a `Response` without going through `interact` is [`Response::default`], used as a
 // synthetic "nothing happened" value (see [`Widget`](crate::Widget) impls that share their
-// [`InteractiveWidget`](crate::InteractiveWidget) drawing routine); `Default` requires
-// `Id: Default` so that case still needs a real (if meaningless) id, same as every other field.
+// [`InteractiveWidget`](crate::InteractiveWidget) drawing routine, and this crate's own tests).
+// `Default` is implemented for `Response<()>` specifically, not `impl<Id: Default>` generically:
+// nothing here ever needs a default `Response` under a real app `Id`, since a real `Id` only ever
+// reaches a `Response` through `interact`, so there's no reason to demand every `Id` a caller
+// picks implement `Default` just so `Response<Id>` itself can.
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Response<Id> {
@@ -47,10 +50,10 @@ pub struct Response<Id> {
     pub(crate) rect: Rect,
 }
 
-impl<Id: Default> Default for Response<Id> {
+impl Default for Response<()> {
     fn default() -> Self {
         Self {
-            id: Id::default(),
+            id: (),
             hovered: false,
             pressed: false,
             released: false,
