@@ -1,0 +1,114 @@
+//! `Grid`'s trait impls for layer 0: [`Index`]/[`IndexMut`] by [`Pos`], and its
+//! [`Display`](fmt::Display)/[`Debug`](fmt::Debug) implementations.
+
+use super::{Grid, Pos, to_grixy_pos};
+#[cfg(all(test, feature = "egc"))]
+use crate::style::Style;
+use crate::tile::{Tile, TileFlags};
+use core::fmt;
+use core::ops::{Index, IndexMut};
+
+impl Index<Pos> for Grid {
+    type Output = Tile;
+
+    /// Reads the tile on layer 0 at `pos`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `pos` is outside the grid's `0..width` x `0..height` bounds. This is the
+    /// unchecked, layer-0-only counterpart to [`tile`](Self::tile), which instead returns `None`
+    /// on either an out-of-bounds `pos` or an unallocated layer; reach for `tile` when `pos`
+    /// isn't already known to be in bounds.
+    fn index(&self, pos: Pos) -> &Tile {
+        &self.layer0().buf[to_grixy_pos(pos)]
+    }
+}
+
+impl IndexMut<Pos> for Grid {
+    /// Mutably borrows the tile on layer 0 at `pos`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `pos` is outside the grid's `0..width` x `0..height` bounds, the same bound as
+    /// [`Index`]'s `index`. Reach for [`tile_mut`](Self::tile_mut) when `pos` isn't already known
+    /// to be in bounds; it returns `None` instead of panicking.
+    fn index_mut(&mut self, pos: Pos) -> &mut Tile {
+        let pos = to_grixy_pos(pos);
+        &mut self.layer0_mut().buf[pos]
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Display / Debug: layer 0
+// ---------------------------------------------------------------------------
+
+impl fmt::Display for Grid {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for y in 0..self.height() {
+            for x in 0..self.width() {
+                let tile = &self[Pos::new(x, y)];
+                let is_spacer = tile.flags.contains(TileFlags::WIDE_CHAR_SPACER);
+                let c = if is_spacer {
+                    ' ' // right half of a wide char, don't print twice
+                } else if tile.glyph == ' ' {
+                    '·' // empty cell marker
+                } else {
+                    tile.glyph
+                };
+                write!(f, "{c}")?;
+            }
+            writeln!(f)?;
+        }
+        Ok(())
+    }
+}
+
+impl fmt::Debug for Grid {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Grid")
+            .field("width", &self.width)
+            .field("height", &self.height)
+            .finish_non_exhaustive()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[should_panic(expected = "index out of bounds")]
+    fn test_grid_index_panics_out_of_bounds() {
+        let grid = Grid::new(10, 10);
+        let _ = &grid[Pos::new(0, 10)];
+    }
+
+    #[test]
+    fn test_index_position() {
+        let mut grid = Grid::new(5, 5);
+        let pos = Pos::new(2, 3);
+        grid[pos] = Tile::default().with_glyph('Z');
+        assert_eq!(grid[pos].glyph(), 'Z');
+    }
+
+    #[test]
+    fn test_grid_display() {
+        let mut grid = Grid::new(3, 2);
+        grid.put_tile(0, (0, 0), Tile::default().with_glyph('A'));
+
+        let s = alloc::format!("{grid}");
+        assert_eq!(s, "A··\n···\n");
+    }
+
+    #[cfg(feature = "egc")]
+    #[test]
+    fn test_grid_display_wide_char_spacer() {
+        // A wide char's right-half spacer cell prints as a plain space, not the wide
+        // char's own glyph repeated.
+        let mut grid = Grid::new(3, 1);
+        grid.write_grapheme(0, 0, 0, "\u{4e2d}", Style::default()); // wide (CJK)
+
+        let s = alloc::format!("{grid}");
+        assert_eq!(s, "\u{4e2d} \u{b7}\n");
+    }
+}
