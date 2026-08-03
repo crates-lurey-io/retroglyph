@@ -1127,11 +1127,21 @@ mod tests {
     fn fill_region_clears_a_wide_char_it_partially_overwrites() {
         let mut g = Grid::new(4, 1);
         g.put_tile(0, (0, 0), Tile::new('\u{4e2d}', Style::default()));
-        assert!(g.tile(0, (0, 0)).unwrap().flags().contains(TileFlags::WIDE_CHAR));
+        assert!(
+            g.tile(0, (0, 0))
+                .unwrap()
+                .flags()
+                .contains(TileFlags::WIDE_CHAR)
+        );
 
         g.fill_region(0, Rect::new(1, 0, 3, 1), Tile::new('#', Style::default()));
 
-        assert!(!g.tile(0, (0, 0)).unwrap().flags().contains(TileFlags::WIDE_CHAR));
+        assert!(
+            !g.tile(0, (0, 0))
+                .unwrap()
+                .flags()
+                .contains(TileFlags::WIDE_CHAR)
+        );
     }
 
     /// `fill_region` writing a wide `tile` raw (no lead/spacer synthesis) would desync any
@@ -1141,7 +1151,11 @@ mod tests {
     fn fill_region_refuses_a_wide_tile() {
         let mut g = Grid::new(4, 1);
 
-        g.fill_region(0, Rect::new(0, 0, 4, 1), Tile::new('\u{4e2d}', Style::default()));
+        g.fill_region(
+            0,
+            Rect::new(0, 0, 4, 1),
+            Tile::new('\u{4e2d}', Style::default()),
+        );
 
         for x in 0..4 {
             let tile = g.tile(0, (x, 0)).unwrap();
