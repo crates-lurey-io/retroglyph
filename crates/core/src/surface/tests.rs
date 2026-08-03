@@ -909,6 +909,44 @@ fn put_offset_still_carries_the_pixel_offset() {
 }
 
 #[test]
+#[cfg(feature = "egc")]
+fn put_offset_does_not_move_a_pre_existing_tile_when_its_own_write_is_refused() {
+    let mut grid = Grid::new(8, 1);
+    let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 8, 1), 0);
+
+    surface.put((3, 0), 'Z', Style::default());
+
+    // Clip is columns 0..4; the wide char's primary cell (column 3) is inside the clip, but
+    // its spacer would land at column 4, outside it. The whole write is refused, so `put_offset`
+    // must not touch the tile `put` above just placed.
+    surface
+        .clip(Rect::new(0, 0, 4, 1))
+        .put_offset((3, 0), Offset::new(7, -7), '\u{6f22}', Style::default());
+
+    let tile = grid.tile(0, Pos::new(3, 0)).unwrap();
+    assert_eq!(tile.glyph(), 'Z');
+    assert_eq!((tile.dx(), tile.dy()), (0, 0));
+}
+
+#[test]
+#[cfg(not(feature = "egc"))]
+fn put_offset_does_not_move_a_pre_existing_tile_when_its_own_write_is_refused() {
+    let mut grid = Grid::new(4, 1);
+    let mut surface = screen(&mut grid);
+
+    surface.put((3, 0), 'Z', Style::default());
+
+    // A 2-column glyph at the grid's last column needs a spacer at column 4, which does not
+    // exist: `Grid::put_tile` refuses the write. `put_offset` must not touch the tile `put`
+    // above just placed.
+    surface.put_offset((3, 0), Offset::new(7, -7), '\u{6f22}', Style::default());
+
+    let tile = grid.tile(0, Pos::new(3, 0)).unwrap();
+    assert_eq!(tile.glyph(), 'Z');
+    assert_eq!((tile.dx(), tile.dy()), (0, 0));
+}
+
+#[test]
 fn translate_does_not_change_area_width_or_height() {
     let mut grid = Grid::new(10, 10);
     let mut surface = screen(&mut grid);
