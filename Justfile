@@ -36,7 +36,10 @@ clippy:
     # a no_std-only clippy lint (e.g. the unnecessary_qualification fixed alongside this) can land
     # on main undetected. Mirrors compile's no_std lines (#547, #882).
     cargo clippy -p retroglyph-core --no-default-features -- -D warnings
-    cargo clippy -p retroglyph-widgets --no-default-features -- -D warnings
+    # retroglyph#886: this crate's float use isn't optional (see its crate-level
+    # `compile_error!`), so its `no_std` build also needs a `libm` backend -- plain
+    # `--no-default-features` no longer compiles on its own. Mirrors `compile`'s equivalent line.
+    cargo clippy -p retroglyph-widgets --no-default-features --features libm -- -D warnings
 
 # Typecheck the modules the host build skips (retroglyph#552).
 #
@@ -93,16 +96,33 @@ compile:
     # retroglyph#547: dep:gem is unconditional in retroglyph-core now, so this has to compile
     # with zero features, not just fewer -- the whole point of making it non-optional.
     cargo check -p retroglyph-core --no-default-features
+    # retroglyph#886: with no `std`, `animate`/`blend-modes`' float math needs `libm` as its
+    # backend instead; this is the `no_std` build that actually exercises that dispatch path,
+    # since the zero-features line above never turns `__float` on at all.
+    cargo check -p retroglyph-core --no-default-features --features libm
     # retroglyph#882: retroglyph-widgets forwards a `std` feature to retroglyph-core's own, so
     # this is its `no_std` (alloc-only) build, the same reason retroglyph-core gets its own line
-    # above.
-    cargo check -p retroglyph-widgets --no-default-features
-    # retroglyph#894: the three lines above only ever build with zero or all features on, so a
-    # break in one feature alone (e.g. `indexed-quant` without a float backend, or `blend-modes`
-    # alone) can stay green here and only surface once another PR happens to combine it with
-    # something else (#886). `cargo hack check --each-feature` builds every feature in isolation
-    # across the workspace instead, catching that gap directly.
-    cargo bin cargo-hack check --each-feature --workspace --no-dev-deps
+    # above. retroglyph#886: unlike retroglyph-core, this crate's float use isn't optional (see
+    # its crate-level `compile_error!`), so its `no_std` build also needs a `libm` backend --
+    # plain `--no-default-features` no longer compiles on its own.
+    cargo check -p retroglyph-widgets --no-default-features --features libm
+    # retroglyph#894: the lines above only ever build with zero or all features on, so a break in
+    # one feature alone (e.g. `indexed-quant` without a float backend, or `blend-modes` alone) can
+    # stay green here and only surface once another PR happens to combine it with something else
+    # (#886). `cargo hack check --each-feature` builds every feature in isolation instead,
+    # catching that gap directly.
+    #
+    # retroglyph-core and retroglyph-widgets get their own scoped runs rather than folding into
+    # the `--workspace` sweep below: their float-backend feature graph (#886) means several
+    # features are *supposed* to fail alone -- `__float`/`indexed-quant`/`blend-modes` on
+    # retroglyph-core, and every retroglyph-widgets feature but `std`/`libm`/`libm-arch` (its
+    # float use is unconditional; see its crate-level `compile_error!`) -- which
+    # `--exclude-features` has to drop so a green run doesn't include combinations that fail
+    # loudly on purpose. Scoping those exclusions to `-p` keeps them from also silencing real
+    # coverage on every other crate in the workspace, which has no comparable requirement.
+    cargo bin cargo-hack check --each-feature --no-dev-deps -p retroglyph-core --exclude-features __float,indexed-quant,blend-modes
+    cargo bin cargo-hack check --each-feature --no-dev-deps -p retroglyph-widgets --exclude-features dev,egc,serde --exclude-no-default-features
+    cargo bin cargo-hack check --each-feature --no-dev-deps --workspace --exclude retroglyph-core --exclude retroglyph-widgets
 
 doc: check-features
     # --exclude: none of the three are part of the published API surface (cargo-bin and
@@ -198,7 +218,8 @@ test-default-features:
     cargo test -p retroglyph-core --no-default-features
     # retroglyph#882: same rationale as the `retroglyph-core` line above, now that
     # `retroglyph-widgets` has its own `std` feature forwarding to `retroglyph-core`'s.
-    cargo test -p retroglyph-widgets --no-default-features
+    # retroglyph#886: `--features libm`, see the matching line in `compile` above.
+    cargo test -p retroglyph-widgets --no-default-features --features libm
 
 test-v: build-pty-examples
     cargo bin cargo-nextest run --workspace --all-features --no-capture

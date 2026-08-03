@@ -70,7 +70,8 @@ Default features: `blend-modes`, `egc`, `indexed-quant`, `std`.
 🟢 Enabled by default.
 
 Gates the four W3C separable `BlendMode` variants (`Screen`/`Dodge`/`Burn`/`Overlay`/ `Multiply`)
-and pulls in the optional `alpha-blend` dependency.
+and pulls in the optional `alpha-blend` dependency. Needs a float backend (`std` or `libm`) for its
+per-channel blend math, so this also turns on `__float`.
 
 `BlendMode::Linear` and `Grid::blit_alpha` are always available regardless of this feature: `Linear`
 only needs `gem::Mix`, not `alpha-blend`.
@@ -94,11 +95,33 @@ diffing and layout.
 
 🟢 Enabled by default.
 
-Gates perceptual (Oklab) RGB → Indexed/ANSI quantization (`gem/libm`) and `Color`'s `gem`-space
+Gates perceptual (Oklab) RGB → Indexed/ANSI quantization (`gem/space`) and `Color`'s `gem`-space
 conversions (`to_srgb`/`from_srgb`/`lerp`/`from_hex`).
 
 Without it, `Color::to_indexed`/ `Color::to_ansi` fall back to euclidean RGB cube-mapping instead of
 failing to compile.
+
+This is a capability flag, not a backend: it only turns on `gem`'s `space` module, and needs `std`
+or `libm` (below) enabled separately to actually supply that module's float math -- see the
+`compile_error!` in `src/lib.rs` for what happens if neither is on.
+
+### `libm`
+
+⚪ Optional.
+
+Uses `libm`'s software float implementation (`roundf`/`fmaf`/`sinf`/`cosf`/`powf`) for `animate`'s
+easing curves and `blend-modes`' separable channel math, via this crate's own `math` shim -- the
+`no_std` side of that split. Turns on `__float`. See `std` above for the alternative that prefers
+the platform's own float intrinsics when available.
+
+### `libm-arch`
+
+⚪ Optional.
+
+Alias for `libm`, matching `gem`'s and `alpha-blend`'s own `libm-arch` feature name so a reader
+following their docs finds the name they expect. Already implied by `libm` above (which always
+requests the `arch`-intrinsified `libm` dependency; see the `[dependencies.libm]` comment below), so
+this exists purely for discoverability and never needs to be enabled on its own.
 
 ### `serde`
 
@@ -114,7 +137,9 @@ rather than a derived structural form, so hand-edited TOML/JSON stays legible.
 
 🟢 Enabled by default.
 
-Enables `gem/std` and `alpha-blend?/std`.
+Enables `gem/std` and `alpha-blend?/std`, and uses `std`'s float intrinsics (via this crate's `math`
+shim) instead of `libm`'s software implementation for `animate` and `blend-modes`. Turns on
+`__float`.
 
 Disabling this feature (`--no-default-features`) builds this crate `no_std`.
 

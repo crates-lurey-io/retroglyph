@@ -87,7 +87,7 @@ impl Tween {
     #[must_use]
     pub fn value(&self) -> f32 {
         let t = self.easing.apply(self.progress());
-        libm::fmaf(self.to - self.from, t, self.from)
+        crate::math::mul_add(self.to - self.from, t, self.from)
     }
 
     /// `true` once [`update`](Self::update) has accumulated at least `duration` of elapsed time.

@@ -49,7 +49,7 @@ pub fn oscillate_with_phase(elapsed: Duration, period: Duration, phase: f32) -> 
     }
     let cycles = elapsed.as_secs_f32() / period.as_secs_f32() + phase; // unbounded; doesn't wrap
     let radians = cycles * 2.0 * core::f32::consts::PI;
-    libm::fmaf(0.5, libm::sinf(radians), 0.5)
+    crate::math::mul_add(0.5, crate::math::sin(radians), 0.5)
 }
 
 #[cfg(test)]
