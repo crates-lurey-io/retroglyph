@@ -230,7 +230,7 @@ impl Widget for Tabs<'_> {
     }
 }
 
-impl InteractiveWidget for Tabs<'_> {
+impl<Id> InteractiveWidget<Id> for Tabs<'_> {
     type State = usize;
 
     /// A single id covers the whole strip: clicking resolves which tab via
@@ -240,7 +240,7 @@ impl InteractiveWidget for Tabs<'_> {
         Sense::click() | Sense::HOVER
     }
 
-    fn render(&self, surface: &mut Surface<'_>, state: &mut Self::State, response: Response) {
+    fn render(&self, surface: &mut Surface<'_>, state: &mut Self::State, response: Response<Id>) {
         let area = surface.area();
 
         if response.clicked()
@@ -438,7 +438,7 @@ mod tests {
         let tabs = Tabs::new(&titles);
         let mut state = 0usize;
 
-        let response = Response {
+        let response: Response<()> = Response {
             hovered: true,
             clicked: true,
             pointer_pos: Some(Pos::new(4, 0)), // over "Two"
@@ -461,7 +461,7 @@ mod tests {
         let tabs = Tabs::new(&titles);
         let mut state = 0usize;
 
-        let response = Response {
+        let response: Response<()> = Response {
             hovered: true,
             clicked: true,
             pointer_pos: Some(Pos::new(10, 0)), // past "Two", still inside the wide area

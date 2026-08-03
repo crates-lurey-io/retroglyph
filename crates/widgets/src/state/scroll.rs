@@ -319,7 +319,7 @@ impl ScrollState {
     ///
     /// assert_eq!(scroll.velocity(), 0.0);
     /// ```
-    pub fn apply(&mut self, response: &Response) {
+    pub fn apply<Id>(&mut self, response: &Response<Id>) {
         let delta = response.scroll_delta();
         if delta != 0 {
             #[allow(clippy::cast_precision_loss)] // scroll deltas stay tiny: a handful of wheel
@@ -472,7 +472,7 @@ mod tests {
         assert!(s.offset() > 0.0);
     }
 
-    fn response_with_scroll_delta(scroll_delta: i32) -> Response {
+    fn response_with_scroll_delta(scroll_delta: i32) -> Response<()> {
         Response {
             scroll_delta,
             ..Response::default()

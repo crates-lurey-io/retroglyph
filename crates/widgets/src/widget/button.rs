@@ -35,7 +35,7 @@ use crate::text::draw_clipped;
 /// interaction.begin_frame();
 /// let area = Rect::new(0, 0, 10, 1);
 /// let button = Button::new("Save");
-/// let response = interaction.interact(area, Id::Save, button.sense());
+/// let response = interaction.interact(area, Id::Save, InteractiveWidget::<Id>::sense(&button));
 /// InteractiveWidget::render(&button, &mut Surface::new(&mut grid, area, 0), &mut (), response);
 /// interaction.end_frame();
 /// ```
@@ -150,7 +150,7 @@ impl<'a> Button<'a> {
 
     /// The style this button draws with this frame, per the disabled > pressed > hovered
     /// > focused > default precedence documented on [`Button`], given `response`.
-    const fn resolved_style(&self, response: Response) -> Style {
+    const fn resolved_style<Id>(&self, response: &Response<Id>) -> Style {
         if response.disabled() {
             self.disabled_style
         } else if response.pressed() {
@@ -165,20 +165,20 @@ impl<'a> Button<'a> {
     }
 }
 
-impl InteractiveWidget for Button<'_> {
+impl<Id> InteractiveWidget<Id> for Button<'_> {
     type State = ();
 
     fn sense(&self) -> Sense {
         Sense::click()
     }
 
-    fn render(&self, surface: &mut Surface<'_>, (): &mut Self::State, response: Response) {
+    fn render(&self, surface: &mut Surface<'_>, (): &mut Self::State, response: Response<Id>) {
         let (width, height) = (surface.width(), surface.height());
         if width == 0 || height == 0 {
             return;
         }
 
-        let style = self.resolved_style(response);
+        let style = self.resolved_style(&response);
         fill_rect(surface, Rect::new(0, 0, width, height), ' ', style);
 
         let y = height / 2;
@@ -191,7 +191,7 @@ impl Widget for Button<'_> {
     /// [`InteractiveWidget::render`], sharing the same drawing routine with
     /// [`Response::default`] standing in for "nothing happened".
     fn render(&self, surface: &mut Surface<'_>) {
-        InteractiveWidget::render(self, surface, &mut (), Response::default());
+        InteractiveWidget::<()>::render(self, surface, &mut (), Response::default());
     }
 }
 
@@ -233,41 +233,41 @@ mod tests {
 
     #[test]
     fn pressed_takes_precedence_over_hovered() {
-        let response = Response {
+        let response: Response<()> = Response {
             hovered: true,
             pressed: true,
             ..Response::default()
         };
         let button = Button::new("Go");
         assert_eq!(
-            button.resolved_style(response).background(),
+            button.resolved_style(&response).background(),
             button.pressed_style.background()
         );
     }
 
     #[test]
     fn hovered_takes_precedence_over_focused() {
-        let response = Response {
+        let response: Response<()> = Response {
             hovered: true,
             focused: true,
             ..Response::default()
         };
         let button = Button::new("Go");
         assert_eq!(
-            button.resolved_style(response).background(),
+            button.resolved_style(&response).background(),
             button.hovered_style.background()
         );
     }
 
     #[test]
     fn focused_only_shows_when_not_pressed_or_hovered() {
-        let response = Response {
+        let response: Response<()> = Response {
             focused: true,
             ..Response::default()
         };
         let button = Button::new("Go");
         assert_eq!(
-            button.resolved_style(response).background(),
+            button.resolved_style(&response).background(),
             button.focused_style.background()
         );
     }
@@ -276,7 +276,9 @@ mod tests {
     fn idle_by_default() {
         let button = Button::new("Go");
         assert_eq!(
-            button.resolved_style(Response::default()).background(),
+            button
+                .resolved_style(&Response::<()>::default())
+                .background(),
             button.style.background()
         );
     }
@@ -284,12 +286,12 @@ mod tests {
     #[test]
     fn style_knobs_can_be_overridden() {
         let custom = Style::new().fg(Color::RED).bg(Color::GREEN);
-        let response = Response {
+        let response: Response<()> = Response {
             pressed: true,
             ..Response::default()
         };
         let button = Button::new("Go").pressed_style(custom);
-        assert_eq!(button.resolved_style(response).background(), Color::GREEN);
+        assert_eq!(button.resolved_style(&response).background(), Color::GREEN);
     }
 
     #[test]
@@ -299,7 +301,7 @@ mod tests {
         let button = Button::new("Go");
 
         interaction.begin_frame();
-        let _ = interaction.interact(area, Id::Save, button.sense());
+        let _ = interaction.interact(area, Id::Save, InteractiveWidget::<Id>::sense(&button));
         interaction.end_frame();
 
         let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
@@ -316,7 +318,8 @@ mod tests {
         }));
 
         interaction.begin_frame();
-        let response = interaction.interact(area, Id::Save, button.sense());
+        let response =
+            interaction.interact(area, Id::Save, InteractiveWidget::<Id>::sense(&button));
         interaction.end_frame();
         assert!(response.clicked());
 
@@ -326,7 +329,7 @@ mod tests {
         // idle. Confirms end-to-end wiring (a real click drives a real style pick), not just that
         // `resolved_style` matches its own precedence rules in isolation (the other tests above).
         assert_eq!(
-            button.resolved_style(response).background(),
+            button.resolved_style(&response).background(),
             button.pressed_style.background()
         );
 
@@ -360,14 +363,14 @@ mod tests {
 
     #[test]
     fn disabled_style_takes_precedence_over_pressed_and_hovered() {
-        let response = Response {
+        let response: Response<()> = Response {
             hovered: true,
             pressed: true,
             disabled: true,
             ..Response::default()
         };
         let button = Button::new("Go");
-        assert_eq!(button.resolved_style(response), button.disabled_style);
+        assert_eq!(button.resolved_style(&response), button.disabled_style);
     }
 
     #[test]
@@ -391,7 +394,7 @@ mod tests {
     fn theme_maps_named_roles_onto_every_state() {
         use crate::Theme;
 
-        let response = Response {
+        let response: Response<()> = Response {
             hovered: true,
             ..Response::default()
         };
@@ -403,7 +406,7 @@ mod tests {
         assert_eq!(button.pressed_style.background(), Theme::DARK.press_bg);
         assert_eq!(button.focused_style.foreground(), Theme::DARK.accent);
         assert_eq!(
-            button.resolved_style(response).background(),
+            button.resolved_style(&response).background(),
             Theme::DARK.hover_bg
         );
     }
