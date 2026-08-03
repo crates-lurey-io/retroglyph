@@ -299,8 +299,10 @@ impl<B: Backend> Terminal<B> {
     /// Propagates errors from the backend's [`draw_layers`](crate::Output::draw_layers) or
     /// [`flush`](crate::Output::flush) operations. Either failure returns before the
     /// current/previous buffers are swapped, so the cells from the failed frame stay marked
-    /// dirty and are resent the next time `present` succeeds; the caller doesn't need to
-    /// redraw anything to recover, just call `draw`/`present` again.
+    /// dirty in `previous` and are resent the next time `present` succeeds. `current` is still
+    /// cleared, same as on success, so the caller doesn't need to redraw anything to recover:
+    /// just call `draw`/`present` again, and the next frame starts from an empty grid like any
+    /// other.
     pub fn present(&mut self) -> Result<(), <B as Output>::Error> {
         self.present_count = self.present_count.wrapping_add(1);
         if self.retained_layers.iter().any(|&retained| retained) {
@@ -330,41 +332,55 @@ impl<B: Backend> Terminal<B> {
             }
         }
         let mut swap_flattened = false;
-        if self.backend.composites_layers() {
-            // Pixel/GPU backends composite the raw layered stream themselves.
-            if self.backend.needs_full_frame() {
-                let all = self.current.layers();
-                self.backend.draw_layers(all)?;
-            } else {
+        // The fallible part is scoped to this closure so both the success and error paths
+        // below can clear `current` before returning: `current` is presentation-buffer state
+        // for the *next* frame, not part of what makes the resend-on-retry behavior work (that
+        // lives entirely in `previous`/`flattened_previous`, left untouched here), so clearing
+        // it is safe unconditionally and keeps immediate mode's "next `draw` starts empty"
+        // contract true even after a failed present.
+        let result = (|| -> Result<(), <B as Output>::Error> {
+            if self.backend.composites_layers() {
+                // Pixel/GPU backends composite the raw layered stream themselves.
+                if self.backend.needs_full_frame() {
+                    let all = self.current.layers();
+                    self.backend.draw_layers(all)?;
+                } else {
+                    let diff = self.current.diff(&self.previous);
+                    self.backend.draw_layers(diff)?;
+                }
+            } else if self.current.max_layer() == 0 && self.previous.max_layer() == 0 {
+                // Fast path: only layer 0 is in play, so flattening would be an exact
+                // copy of `current`. Diff the real grids directly and skip the
+                // flatten buffers entirely.
                 let diff = self.current.diff(&self.previous);
                 self.backend.draw_layers(diff)?;
+                self.flattened_stale = true;
+            } else {
+                // Cell backends receive a pre-flattened, single-layer diff so layers
+                // 1+ appear everywhere, not just on pixel backends.
+                if self.flattened_stale {
+                    // The previous frame used the fast path, so `flattened_previous`
+                    // is stale. Clear it to force a full redraw this frame.
+                    self.flattened_previous.clear_all();
+                    self.flattened_stale = false;
+                }
+                self.current.flatten_into(&mut self.flattened_current);
+                let diff = self.flattened_current.diff(&self.flattened_previous);
+                self.backend.draw_layers(diff)?;
+                swap_flattened = true;
             }
-        } else if self.current.max_layer() == 0 && self.previous.max_layer() == 0 {
-            // Fast path: only layer 0 is in play, so flattening would be an exact
-            // copy of `current`. Diff the real grids directly and skip the
-            // flatten buffers entirely.
-            let diff = self.current.diff(&self.previous);
-            self.backend.draw_layers(diff)?;
-            self.flattened_stale = true;
-        } else {
-            // Cell backends receive a pre-flattened, single-layer diff so layers
-            // 1+ appear everywhere, not just on pixel backends.
-            if self.flattened_stale {
-                // The previous frame used the fast path, so `flattened_previous`
-                // is stale. Clear it to force a full redraw this frame.
-                self.flattened_previous.clear_all();
-                self.flattened_stale = false;
-            }
-            self.current.flatten_into(&mut self.flattened_current);
-            let diff = self.flattened_current.diff(&self.flattened_previous);
-            self.backend.draw_layers(diff)?;
-            swap_flattened = true;
+            self.backend.flush()
+        })();
+        if let Err(err) = result {
+            // `current` is cleared even on failure so the next frame still starts from an
+            // empty grid; only the swap below is skipped. `previous`/`flattened_previous`
+            // still hold the last confirmed frame, so the next `present`'s diff against them
+            // resends the cells that never actually reached the backend instead of silently
+            // dropping them.
+            self.current.clear_all();
+            return Err(err);
         }
-        self.backend.flush()?;
-        // Both swaps happen only after `flush` succeeds: if `draw_layers` or `flush` above
-        // fails and returns early, `previous`/`flattened_previous` still hold the last
-        // confirmed frame, so the next `present`'s diff against them resends the cells that
-        // never actually reached the backend instead of silently dropping them.
+        // Both swaps happen only after `flush` succeeds, for the same reason described above.
         if swap_flattened {
             core::mem::swap(&mut self.flattened_current, &mut self.flattened_previous);
         }
@@ -922,6 +938,30 @@ mod tests {
         );
         assert_eq!(term.backend().inner.grid()[Pos::new(0, 0)].glyph(), 'a');
         assert_eq!(term.backend().inner.grid()[Pos::new(1, 0)].glyph(), 'b');
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn present_failure_does_not_leak_the_failed_frames_content_into_the_next_frame() {
+        // Single-layer terminal so `present` takes the fast path, matching the issue's repro.
+        let mut term = Terminal::new(FlushOnceFailing::new(3, 1));
+
+        term.backend_mut().fail_next_flush = true;
+        let result = term.draw(|s| s.put((2, 0), 'X', Style::default()));
+        assert!(result.is_err(), "flush was expected to fail this frame");
+
+        // Next frame redraws different content and never touches (2, 0). `previous` is still
+        // empty (the swap was skipped), so if `current` had also been left holding the failed
+        // frame's 'X' (the bug), the diff below would see (2, 0) as newly changed from empty
+        // to 'X' and needlessly resend it, on top of the one cell this frame actually drew.
+        term.draw(|s| s.put((0, 0), 'A', Style::default()))
+            .expect("draw failed");
+        assert_eq!(
+            term.backend().last_draw_len,
+            1,
+            "only the redrawn cell should be sent; the failed frame's 'X' must not leak back in"
+        );
+        assert_eq!(term.backend().inner.grid()[Pos::new(0, 0)].glyph(), 'A');
     }
 
     #[test]
