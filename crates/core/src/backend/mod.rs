@@ -206,6 +206,15 @@ pub trait Output {
     /// receives **all** cells from every allocated layer, and the backend
     /// should clear its output surface before drawing.
     ///
+    /// That promise holds only together with `composites_layers() == true`:
+    /// [`crate::Terminal::present`] only reads `needs_full_frame` inside its `composites_layers`
+    /// branch, so a backend
+    /// returning `true` here with the default (`false`) `composites_layers` never actually
+    /// receives a full frame, despite this doc's unconditional wording (retroglyph#763). No
+    /// backend in this workspace uses that combination; a future one that does should either
+    /// also return `true` from `composites_layers`, or treat `needs_full_frame` as dead until
+    /// `Terminal::present`'s dispatch is widened to honor it outside that branch too.
+    ///
     /// Items are the same [`DrawCell`] [`draw`](Self::draw) receives, read through
     /// [`DrawCell::layer`] rather than a separate element.
     ///
@@ -229,6 +238,10 @@ pub trait Output {
     /// Pixel-based backends (e.g. `SoftwareRenderer`) need this because
     /// sub-cell offsets can spill glyph pixels into adjacent cells: without
     /// a full redraw, orphaned pixels from the previous frame linger.
+    ///
+    /// Only takes effect alongside [`composites_layers`](Self::composites_layers) returning
+    /// `true`: see [`draw_layers`](Self::draw_layers)'s docs for why a `true` here paired with
+    /// the default `composites_layers` does nothing.
     ///
     /// The default implementation returns `false`.
     fn needs_full_frame(&self) -> bool {

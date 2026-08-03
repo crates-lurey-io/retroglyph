@@ -2224,6 +2224,110 @@ mod tests {
         }
     }
 
+    // ── Output/Cursor conformance (retroglyph#763) ──────────────────────────────────────────
+
+    fn conformance_renderer(size: Size) -> SoftwareRenderer {
+        SoftwareBackendBuilder::new()
+            .font(retroglyph_window::font::unscii16::FONT)
+            .grid_size(size.width(), size.height())
+            .scale(1)
+            .build()
+            .unwrap()
+            .into_renderer()
+            .unwrap()
+    }
+
+    /// Wraps [`SoftwareRenderer`] so [`Observable::snapshot`] hashes only the pixels that changed
+    /// since the previous call, per that trait's docs: this backend's observable state is its
+    /// pixel buffer (framebuffer-shaped, not a log), so this remembers the previous call's pixels
+    /// and hashes only the `(index, pixel)` pairs that differ from it.
+    struct SoftwareObserver {
+        renderer: SoftwareRenderer,
+        previous: Vec<u32>,
+    }
+
+    impl SoftwareObserver {
+        fn new(size: Size) -> Self {
+            let renderer = conformance_renderer(size);
+            let previous = renderer.pixels().to_vec();
+            Self { renderer, previous }
+        }
+    }
+
+    impl Output for SoftwareObserver {
+        type Error = core::convert::Infallible;
+
+        fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
+        where
+            I: Iterator<Item = DrawCell<'a>>,
+        {
+            self.renderer.draw_layers(content)
+        }
+
+        fn flush(&mut self) -> Result<(), Self::Error> {
+            self.renderer.flush()
+        }
+
+        fn size(&self) -> Size {
+            Output::size(&self.renderer)
+        }
+
+        fn clear(&mut self) -> Result<(), Self::Error> {
+            Output::clear(&mut self.renderer)?;
+            self.settle()
+        }
+
+        fn resize(&mut self, size: Size) {
+            Output::resize(&mut self.renderer, size);
+            // This backend always reports `needs_full_frame() == true` (see its `Output` impl):
+            // its pixel buffer is only actually repainted (and so only meaningfully
+            // observable) on the next `draw_layers` call, which `Terminal::present` always
+            // supplies in real use. `snapshot()` reads pixels directly instead, so settle it
+            // here with an empty full-repaint pass rather than let a caller observe whatever
+            // `resize`'s own buffer growth left behind.
+            let _ = self.settle();
+        }
+    }
+
+    impl SoftwareObserver {
+        fn settle(&mut self) -> Result<(), core::convert::Infallible> {
+            self.renderer.draw_layers(core::iter::empty())?;
+            self.renderer.flush()
+        }
+    }
+
+    impl Cursor for SoftwareObserver {}
+
+    impl retroglyph_core::testing::conformance::Observable for SoftwareObserver {
+        fn snapshot(&mut self) -> u64 {
+            let current = self.renderer.pixels();
+            let mut hash = retroglyph_core::testing::conformance::fnv1a(b"software-diff");
+            for (index, (&was, &now)) in self.previous.iter().zip(current.iter()).enumerate() {
+                if was != now {
+                    hash ^=
+                        retroglyph_core::testing::conformance::fnv1a(&(index as u64).to_ne_bytes());
+                    hash ^= retroglyph_core::testing::conformance::fnv1a(&now.to_ne_bytes());
+                }
+            }
+            self.previous = current.to_vec();
+            hash
+        }
+    }
+
+    #[test]
+    fn satisfies_the_output_contract() {
+        retroglyph_core::testing::conformance::assert_output_contract(SoftwareObserver::new);
+    }
+
+    #[test]
+    fn satisfies_the_cursor_contract() {
+        // `SoftwareRenderer`'s `Cursor` impl is a no-op (no hardware cursor in software mode),
+        // so this is expected to pass trivially: included anyway so a future change that gives
+        // this backend real cursor tracking is checked against the same contract as the terminal
+        // backends are.
+        retroglyph_core::testing::conformance::assert_cursor_contract(SoftwareObserver::new);
+    }
+
     /// `expand_dirty_spans` reads a shadow buffer that can lag a resize by a frame (see its doc
     /// comment), so a covered cell's stored `(dx, dy)` offset can point before the start of the
     /// buffer once reinterpreted against the new `cols` stride. This must be a no-op for that

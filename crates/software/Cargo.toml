@@ -63,6 +63,13 @@ web-sys = { version = "0.3", features = [
 ] }
 
 [dev-dependencies]
+# Cross-backend Output/Cursor conformance harness (retroglyph#763): dev-only, so the `testing`
+# feature's assertion helpers never ship in a release build of this crate. `default-features =
+# false` matches the `[dependencies]` entry above: a dev-dependency's features unify with it
+# regardless, so leaving the default `true` here would silently turn `egc` (and the rest of
+# core's defaults) back on for every crate built alongside this one in the same `cargo`
+# invocation (e.g. `just test-default-features`, which deliberately keeps `egc` off).
+retroglyph-core = { path = "../core", version = "0.5.0", default-features = false, features = ["testing"] }
 insta = { version = "1.34", features = ["yaml"] }
 criterion = "0.5"
 fastrand = "2"
