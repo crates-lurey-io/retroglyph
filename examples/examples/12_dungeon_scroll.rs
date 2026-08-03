@@ -24,6 +24,11 @@
 //! past the world's edge on either axis and the map letterboxes and centers instead of pinning
 //! to the top-left with a dead margin on the right and bottom.
 //!
+//! Movement is driven by [`KeyState`]: arrow-key presses/releases feed [`KeyState::apply_event`],
+//! and each tick moves the player one cell in whichever direction is currently held
+//! ([`KeyState::is_held`]), rather than stepping once per key event -- this is the workspace's
+//! only end-to-end exercise of `KeyState` outside its own unit tests.
+//!
 //! ```sh
 //! cargo run --example 12_dungeon_scroll --features crossterm
 //! cargo run --example 12_dungeon_scroll --features software
@@ -50,7 +55,7 @@
 //! drained with [`Terminal::drain_events_into`] into a buffer reused every frame instead of
 //! allocating a fresh one.
 
-use retroglyph_core::event::{Event, KeyCode};
+use retroglyph_core::event::{Event, KeyCode, KeyLocation, KeyState};
 use retroglyph_core::{
     AnsiColor, Backend, Camera, Color, Frame, Grid, Layer, Pos, Rect, Size, Style, Terminal, Tile,
 };
@@ -148,6 +153,9 @@ pub struct DungeonScroll {
     /// Reused every frame by [`Terminal::drain_events_into`] instead of allocating a fresh `Vec`
     /// per tick.
     event_buf: Vec<Event>,
+    /// Tracks which of the arrow keys are currently held, for continuous held-key movement (see
+    /// this module's top doc comment).
+    keys: KeyState,
 }
 
 impl Default for DungeonScroll {
@@ -161,6 +169,7 @@ impl Default for DungeonScroll {
             player,
             last_visible: None,
             event_buf: Vec::new(),
+            keys: KeyState::new(),
         }
     }
 }
@@ -188,9 +197,11 @@ impl DungeonScroll {
     }
 
     /// Drains pending input into [`Self::event_buf`] (reused every frame, no per-tick
-    /// allocation) and moves the player on arrow keys. `Event::Resize` is captured rather than
-    /// acted on immediately, the same way `14_resize` does it: `term.resize()` needs `&mut
-    /// term`, so the requested size is recorded here and applied once the loop ends.
+    /// allocation), feeding every event to [`Self::keys`] and quitting on `q`/`Escape`.
+    /// `Event::Resize` is captured rather than acted on immediately, the same way `14_resize`
+    /// does it: `term.resize()` needs `&mut term`, so the requested size is recorded here and
+    /// applied once the loop ends. Movement itself happens afterward, in
+    /// [`Self::move_from_held`].
     fn handle_events<B: Backend>(&mut self, term: &mut Terminal<B>) -> bool {
         term.drain_events_into(&mut self.event_buf);
         // Taken out (rather than iterated in place) so the loop body is free to call `&mut
@@ -200,18 +211,18 @@ impl DungeonScroll {
         let mut requested_size = None;
         for event in &events {
             match event {
-                Event::Key(key) if key.is_down() => match key.code {
-                    KeyCode::Char('q') | KeyCode::Escape => return false,
-                    KeyCode::Up => self.try_move(0, -1),
-                    KeyCode::Down => self.try_move(0, 1),
-                    KeyCode::Left => self.try_move(-1, 0),
-                    KeyCode::Right => self.try_move(1, 0),
-                    _ => {}
-                },
+                Event::Key(key) if key.is_down() => {
+                    if matches!(key.code, KeyCode::Char('q') | KeyCode::Escape) {
+                        return false;
+                    }
+                }
                 Event::Close => return false,
                 Event::Resize(width, height) => requested_size = Some((*width, *height)),
                 _ => {}
             }
+            // Feed every event to `keys`, not just key events: `Event::FocusLost` clears the
+            // held set, so alt-tabbing away mid-move doesn't leave the player walking forever.
+            self.keys.apply_event(event);
         }
         self.event_buf = events;
         if let Some((width, height)) = requested_size {
@@ -229,7 +240,26 @@ impl DungeonScroll {
             );
             self.camera.set_viewport_fitted(viewport);
         }
+        self.move_from_held();
         true
+    }
+
+    /// Moves the player one cell toward whichever arrow key is currently held, checked in a
+    /// fixed Up/Down/Left/Right priority order so at most one cell is crossed per tick even if
+    /// more than one direction is held at once.
+    fn move_from_held(&mut self) {
+        const DIRECTIONS: [(KeyCode, i32, i32); 4] = [
+            (KeyCode::Up, 0, -1),
+            (KeyCode::Down, 0, 1),
+            (KeyCode::Left, -1, 0),
+            (KeyCode::Right, 1, 0),
+        ];
+        for (code, dx, dy) in DIRECTIONS {
+            if self.keys.is_held(code, KeyLocation::Standard) {
+                self.try_move(dx, dy);
+                break;
+            }
+        }
     }
 
     fn draw<B: Backend>(&mut self, term: &mut Terminal<B>) {
