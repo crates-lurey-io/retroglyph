@@ -1,6 +1,6 @@
 [package]
 name = "retroglyph-terminal-wasm"
-version = "0.2.1"
+version = "0.2.2"
 description = "WASM/browser terminal backend for retroglyph, driven by pushed events and pulled ANSI output"
 readme = "README.md"
 edition.workspace = true
@@ -27,8 +27,8 @@ dev = ["retroglyph-core/dev"]
 egc = ["retroglyph-terminal/egc", "retroglyph-core/egc"]
 
 [dependencies]
-retroglyph-core = { path = "../core", version = "0.5.0", default-features = false, features = ["std"] }
-retroglyph-terminal = { path = "../terminal", version = "0.1.6" }
+retroglyph-core = { path = "../core", version = "0.6.0", default-features = false, features = ["std"] }
+retroglyph-terminal = { path = "../terminal", version = "0.1.7" }
 
 [dev-dependencies]
 # Cross-backend Output/Cursor/Input conformance harness (retroglyph#763): dev-only, so the
@@ -37,7 +37,7 @@ retroglyph-terminal = { path = "../terminal", version = "0.1.6" }
 # features unify with it regardless, so leaving the default `true` here would silently turn
 # `egc` (and the rest of core's defaults) back on for every crate built alongside this one in the
 # same `cargo` invocation (e.g. `just test-default-features`, which deliberately keeps `egc` off).
-retroglyph-core = { path = "../core", version = "0.5.0", default-features = false, features = ["testing"] }
+retroglyph-core = { path = "../core", version = "0.6.0", default-features = false, features = ["testing"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 # Fuzzes decode_key_event/decode_key_modifiers over arbitrary (code, mods) pairs -- see the
