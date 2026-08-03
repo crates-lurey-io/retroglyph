@@ -946,6 +946,20 @@ mod tests {
     }
 
     #[test]
+    fn test_terminal_cursor_passthroughs_forward_to_backend() {
+        let mut term = Terminal::new(Headless::new(10, 10));
+
+        term.set_cursor_visible(true);
+        assert!(term.backend().cursor_visible());
+
+        term.set_cursor_position(Pos::new(3, 4));
+        assert_eq!(term.backend().cursor_position(), Pos::new(3, 4));
+
+        term.set_cursor_style(CursorStyle::SteadyBar);
+        assert_eq!(term.backend().cursor_style(), CursorStyle::SteadyBar);
+    }
+
+    #[test]
     fn test_terminal_resize_changes_dimensions() {
         let mut term = Terminal::new(Headless::new(10, 10));
         term.resize(30, 15);
