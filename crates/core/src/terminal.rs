@@ -42,11 +42,13 @@ pub struct Terminal<B: Backend> {
     current: Grid,
     previous: Grid,
     /// Single-layer scratch buffers used only when the backend does not
-    /// composite layers itself. `present` flattens `current` into
-    /// `flattened_current`, diffs it against `flattened_previous`, and sends the
-    /// result. Unused (but allocated) for compositing backends.
-    flattened_current: Grid,
-    flattened_previous: Grid,
+    /// composite layers itself and more than one layer is in play. `present`
+    /// flattens `current` into `flattened_current`, diffs it against
+    /// `flattened_previous`, and sends the result. Lazily allocated on first use
+    /// (see `present`'s flatten branch) so compositing backends, and cell
+    /// backends that never draw past layer 0, never pay for them.
+    flattened_current: Option<Grid>,
+    flattened_previous: Option<Grid>,
     backend: B,
     /// Events waiting to be handed out by [`poll`](Self::poll) before the backend is polled
     /// again: the [`has_input`](Self::has_input)/[`wait_for_input`](Self::wait_for_input) lookahead
@@ -87,13 +89,11 @@ impl<B: Backend> Terminal<B> {
         let size = backend.size();
         let current = Grid::new(size.width(), size.height());
         let previous = Grid::new(size.width(), size.height());
-        let flattened_current = Grid::new(size.width(), size.height());
-        let flattened_previous = Grid::new(size.width(), size.height());
         Self {
             current,
             previous,
-            flattened_current,
-            flattened_previous,
+            flattened_current: None,
+            flattened_previous: None,
             backend,
             queued_events: VecDeque::new(),
             flattened_stale: false,
@@ -152,12 +152,21 @@ impl<B: Backend> Terminal<B> {
     pub fn resize(&mut self, width: u16, height: u16) {
         self.current.resize(width, height);
         self.previous.resize(width, height);
-        self.flattened_current.resize(width, height);
-        self.flattened_previous.resize(width, height);
+        // Only resize the flatten buffers if they've actually been allocated (see their field
+        // docs); an unallocated buffer has nothing to preserve and will be sized correctly by
+        // `present` on first use anyway.
+        if let Some(flattened_current) = &mut self.flattened_current {
+            flattened_current.resize(width, height);
+        }
+        if let Some(flattened_previous) = &mut self.flattened_previous {
+            flattened_previous.resize(width, height);
+        }
         // Clearing previous forces a full redraw next present(), ensuring no
         // stale cells bleed into the resized layout.
         self.previous.clear_all();
-        self.flattened_previous.clear_all();
+        if let Some(flattened_previous) = &mut self.flattened_previous {
+            flattened_previous.clear_all();
+        }
         // Defensive: `resize` already clears `previous` unconditionally, so the next `present`
         // would just copy empty content forward for a still-marked layer. Dropping pending
         // retention here too keeps that a non-event rather than relying on it.
@@ -362,20 +371,33 @@ impl<B: Backend> Terminal<B> {
                 // Fast path: only layer 0 is in play, so flattening would be an exact
                 // copy of `current`. Diff the real grids directly and skip the
                 // flatten buffers entirely.
+                //
+                // This is sticky-off, not sticky-on: layers are never deallocated once written
+                // (see `Grid`'s layer storage), so `max_layer()` never drops back to 0 on its
+                // own. A terminal that ever draws to layer 1+, even for a single transient
+                // frame, stays on the flatten path in the `else` branch below for the rest of
+                // the process.
                 let diff = self.current.diff(&self.previous);
                 self.backend.draw_layers(diff)?;
                 self.flattened_stale = true;
             } else {
                 // Cell backends receive a pre-flattened, single-layer diff so layers
                 // 1+ appear everywhere, not just on pixel backends.
+                let size = self.current.size();
+                let flattened_current = self
+                    .flattened_current
+                    .get_or_insert_with(|| Grid::new(size.width(), size.height()));
+                let flattened_previous = self
+                    .flattened_previous
+                    .get_or_insert_with(|| Grid::new(size.width(), size.height()));
                 if self.flattened_stale {
                     // The previous frame used the fast path, so `flattened_previous`
                     // is stale. Clear it to force a full redraw this frame.
-                    self.flattened_previous.clear_all();
+                    flattened_previous.clear_all();
                     self.flattened_stale = false;
                 }
-                self.current.flatten_into(&mut self.flattened_current);
-                let diff = self.flattened_current.diff(&self.flattened_previous);
+                self.current.flatten_into(flattened_current);
+                let diff = flattened_current.diff(flattened_previous);
                 self.backend.draw_layers(diff)?;
                 swap_flattened = true;
             }
@@ -1177,6 +1199,34 @@ mod tests {
         let event = term.poll(Duration::ZERO);
         assert_eq!(event, Some(Event::Resize(80, 25)));
         assert_eq!(term.size(), Size::new(80, 25));
+    }
+
+    #[test]
+    fn test_terminal_resize_after_flatten_buffers_allocated() {
+        // Draw to layer 1 first so `present` takes the flatten path and lazily allocates
+        // `flattened_current`/`flattened_previous` (see their field docs). `resize` must then
+        // resize and clear those buffers too, not just `current`/`previous`, or a later present
+        // would diff against stale, wrongly-sized flattened content.
+        let mut term = Terminal::new(Headless::new(3, 3));
+        term.draw(|s| {
+            s.put((0, 0), 'A', Style::default());
+            s.on_layer(1).put((1, 1), 'B', Style::default());
+        })
+        .expect("draw failed");
+
+        term.resize(5, 5);
+        assert_eq!(term.size(), Size::new(5, 5));
+
+        // A full redraw is expected after resize; if the flattened buffers weren't resized and
+        // cleared alongside `current`/`previous`, this would panic on mismatched grid sizes or
+        // silently under-diff instead of redrawing everything.
+        term.draw(|s| {
+            s.put((0, 0), 'A', Style::default());
+            s.on_layer(1).put((1, 1), 'B', Style::default());
+        })
+        .expect("draw failed");
+        assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), 'A');
+        assert_eq!(term.backend().grid()[Pos::new(1, 1)].glyph(), 'B');
     }
 
     #[test]
