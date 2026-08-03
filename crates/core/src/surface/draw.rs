@@ -64,29 +64,42 @@ impl Surface<'_> {
         (!abs.is_empty()).then_some(abs)
     }
 
-    /// The caller-local bounds this surface's per-cell fallback loops (`fill_rect`,
-    /// `clear_region`) can possibly land in, expressed in the same coordinate space as those
-    /// methods' own `rect` argument: `(0, 0)..(area.width, area.height)` shifted by
-    /// `origin_offset`, mirroring the subtraction [`shift`](Self::shift) applies per cell.
+    /// Clips `rect` (in the same coordinate space as `fill_rect`/`clear_region`'s own `rect`
+    /// argument) to what can possibly land on this surface: `(0, 0)..(area.width, area.height)`
+    /// shifted by `origin_offset`, mirroring the subtraction [`shift`](Self::shift) applies per
+    /// cell.
     ///
-    /// Intersecting a caller's `rect` against this before iterating bounds the loop to at most
-    /// `area.width * area.height` cells regardless of how much larger the caller's own `rect`
-    /// is, rather than iterating `rect`'s full width * height (up to ~4.3 billion cells for a
-    /// `u16`-sized rect) and relying on a per-cell check to skip what doesn't land.
-    fn local_bounds(&self) -> Rect {
-        let ox = i64::from(self.origin_offset.0);
-        let oy = i64::from(self.origin_offset.1);
-        let max = i64::from(u16::MAX);
-        let left = ox.clamp(0, max);
-        let top = oy.clamp(0, max);
-        let right = (ox + i64::from(self.area.width())).clamp(left, max);
-        let bottom = (oy + i64::from(self.area.height())).clamp(top, max);
-        // Every bound above was clamped into `0..=u16::MAX`, so these conversions never fail.
-        let left = u16::try_from(left).unwrap_or(u16::MAX);
-        let top = u16::try_from(top).unwrap_or(u16::MAX);
-        let right = u16::try_from(right).unwrap_or(u16::MAX);
-        let bottom = u16::try_from(bottom).unwrap_or(u16::MAX);
-        Rect::new(left, top, right - left, bottom - top)
+    /// Both methods' per-cell fallback loop runs this first so the loop is bounded to at most
+    /// `area.width * area.height` cells regardless of how much larger `rect` is, rather than
+    /// iterating `rect`'s full width * height (up to ~4.3 billion cells for a `u16`-sized rect)
+    /// and relying on a per-cell check to skip what doesn't land.
+    ///
+    /// The intersection itself is [`Rect::intersect`], not hand-rolled per-field arithmetic,
+    /// widened to `i64` because `origin_offset` can push the shifted area below `0` or above
+    /// `u16::MAX`, neither of which `Rect<u16>` can represent; the result is narrowed back to
+    /// `u16` once [`intersect`](ixy::Rect::intersect) has already bounded it within `rect`'s own
+    /// (already-`u16`) extent.
+    fn clip_local_rect(&self, rect: Rect) -> Rect {
+        let bounds = ixy::Rect::<i64>::new(
+            i64::from(self.origin_offset.0),
+            i64::from(self.origin_offset.1),
+            i64::from(self.area.width()),
+            i64::from(self.area.height()),
+        );
+        let rect = ixy::Rect::<i64>::new(
+            i64::from(rect.left()),
+            i64::from(rect.top()),
+            i64::from(rect.width()),
+            i64::from(rect.height()),
+        )
+        .intersect(bounds);
+        // `intersect` only ever narrows `rect`'s own fields, which started out as `u16`, so
+        // these conversions never fail.
+        let left = u16::try_from(rect.left()).unwrap_or(u16::MAX);
+        let top = u16::try_from(rect.top()).unwrap_or(u16::MAX);
+        let width = u16::try_from(rect.width()).unwrap_or(u16::MAX);
+        let height = u16::try_from(rect.height()).unwrap_or(u16::MAX);
+        Rect::new(left, top, width, height)
     }
 
     /// Applies this surface's tint to the cell just written at `(x, y)`.
@@ -469,7 +482,7 @@ impl Surface<'_> {
             return;
         }
 
-        let rect = rect.intersect(self.local_bounds());
+        let rect = self.clip_local_rect(rect);
         for y in rect.top()..rect.bottom() {
             for x in rect.left()..rect.right() {
                 self.put((x, y), ch, style);
@@ -771,7 +784,7 @@ impl Surface<'_> {
             return;
         }
 
-        let rect = rect.intersect(self.local_bounds());
+        let rect = self.clip_local_rect(rect);
         for y in rect.top()..rect.bottom() {
             for x in rect.left()..rect.right() {
                 if let Some((x, y)) = self.shift(x, y) {
