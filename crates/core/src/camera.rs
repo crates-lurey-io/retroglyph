@@ -363,7 +363,7 @@ impl Camera {
     /// row-major order. Only cells that exist in the world are yielded, so the
     /// caller can fill the rest of the viewport with a background.
     #[must_use = "iterators are lazy and do nothing unless consumed"]
-    pub fn cells(&self) -> impl Iterator<Item = (Pos, Pos)> + '_ {
+    pub fn cells(&self) -> impl Iterator<Item = (Pos, Pos)> {
         let vis = self.visible_bounds();
         let vp = self.viewport;
         let origin = self.origin;
