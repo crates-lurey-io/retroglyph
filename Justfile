@@ -32,6 +32,11 @@ fmt-check: rustfmt prettier
 
 clippy:
     cargo clippy --workspace --all-targets --all-features -- -D warnings
+    # retroglyph#887: --workspace --all-features above never builds these crates with std off, so
+    # a no_std-only clippy lint (e.g. the unnecessary_qualification fixed alongside this) can land
+    # on main undetected. Mirrors compile's no_std lines (#547, #882).
+    cargo clippy -p retroglyph-core --no-default-features -- -D warnings
+    cargo clippy -p retroglyph-widgets --no-default-features -- -D warnings
 
 # Typecheck the modules the host build skips (retroglyph#552).
 #
