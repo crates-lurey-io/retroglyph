@@ -1,0 +1,8 @@
+extends: occurrence
+message:
+  "'deliberately' appears more than once in this file; keep it to a single, load-bearing use."
+level: warning
+ignorecase: true
+scope: raw
+token: 'deliberately'
+max: 1

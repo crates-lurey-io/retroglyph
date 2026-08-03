@@ -85,7 +85,7 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-gl-v0.2.0...ret
   [#530](https://github.com/crates-lurey-io/retroglyph/pull/530)
 
 - [123c590](https://github.com/crates-lurey-io/retroglyph/commit/123c59072d9de4a051ecddd76be67342cddf45ae)
-  _(workspace, core, widgets)_ Clean up the " -- " clause-joiner habit by `@matanlurey` in
+  _(workspace, core, widgets)_ Clean up the double-hyphen clause-joiner habit by `@matanlurey` in
   [#532](https://github.com/crates-lurey-io/retroglyph/pull/532)
 
 ### Miscellaneous Tasks

@@ -339,6 +339,18 @@ const fn rgb(c: (u8, u8, u8)) -> Color {
     }
 }
 
+/// `Presenter::geometry`/`cell_size` delegate to the renderer's internal `CellGeometry`, with no
+/// GL context required: unlike the render-correctness tests below, this doesn't gate on
+/// `RETROGLYPH_REQUIRE_GL`, so it always runs.
+#[test]
+fn presenter_geometry_and_cell_size_match_the_internal_geometry() {
+    use retroglyph_window::Presenter as _;
+
+    let r = gl_renderer(2, 1, 3);
+    assert_eq!(r.geometry(), r.geometry);
+    assert_eq!(r.cell_size(), r.geometry.cell_size());
+}
+
 #[test]
 fn full_block_cell_is_all_foreground_blank_cell_is_all_background() {
     let Some(ctx) = context_or_skip("full_block_cell_is_all_foreground") else {

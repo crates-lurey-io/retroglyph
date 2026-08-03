@@ -20,7 +20,6 @@ use crate::style::Style;
 use crate::text::Line;
 use crate::tile::Tile;
 use crate::tint::Tint;
-#[cfg(not(feature = "egc"))]
 use unicode_width::UnicodeWidthChar;
 
 /// The render target for every drawing call in the workspace: a mutable reference to a
@@ -986,17 +985,11 @@ impl<'a> Surface<'a> {
     /// ```
     pub fn fill_rect(&mut self, rect: Rect, ch: char, style: Style) {
         // The batch path below writes a plain `Tile::new(ch, style)` per cell, which matches
-        // `put`'s own per-cell write only when there's no tint to apply and (under `egc`) `ch`
-        // is a single-column glyph, so `put`'s wide-char spacer bookkeeping never triggers.
+        // `put`'s own per-cell write only when there's no tint to apply and `ch` is a
+        // single-column glyph, so `put`'s wide-char spacer bookkeeping never triggers.
         // Anything else (tinted surface, zero/double-width glyph) falls back to the per-cell
         // loop, unchanged from before this method had a fast path.
-        #[cfg(feature = "egc")]
-        let single_width = {
-            use unicode_width::UnicodeWidthChar;
-            UnicodeWidthChar::width(ch) == Some(1)
-        };
-        #[cfg(not(feature = "egc"))]
-        let single_width = true;
+        let single_width = UnicodeWidthChar::width(ch) == Some(1);
 
         if self.tint == Tint::None
             && single_width
@@ -1563,6 +1556,9 @@ mod tests {
 
     #[test]
     fn put_span_takes_any_as_ref_str_row() {
+        use alloc::string::String;
+        use alloc::vec::Vec;
+
         let mut grid = Grid::new(4, 4);
         // A footprint computed at runtime: owned rows, no borrowing pass over them.
         let rows: Vec<String> = (0..2)
@@ -1715,7 +1711,6 @@ mod tests {
     /// fall back to the same per-cell `put` loop used before this method had a fast path, not the
     /// batch `Tile::new` write (which carries no wide-char bookkeeping at all).
     #[test]
-    #[cfg(feature = "egc")]
     fn fill_rect_with_a_wide_glyph_falls_back_to_the_put_loop() {
         let rect = Rect::new(0, 0, 6, 1);
 
@@ -2093,6 +2088,7 @@ mod tests {
         // absolute grid column `clip.right()` resolves to (8). The second span starts at local
         // column 3, which is inside the 4-wide area, so it must still print.
         use crate::text::Span;
+        use alloc::vec;
 
         let mut grid = Grid::new(8, 1);
         let mut surface = Surface::new(&mut grid, Rect::new(4, 0, 4, 1), 0);

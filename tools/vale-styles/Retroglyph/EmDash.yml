@@ -1,0 +1,8 @@
+extends: existence
+message:
+  "Avoid ' -- ' or a literal em-dash ('%s'); use a comma, period, semicolon, or parentheses instead."
+level: warning
+nonword: true
+tokens:
+  - ' -- '
+  - '—'

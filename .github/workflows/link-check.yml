@@ -1,0 +1,21 @@
+name: link-check
+
+# Scheduled, not a pull_request/push gate: lychee hits the network on every external URL in
+# markdown and doc comments (retroglyph#469), which is too slow and flaky to run on every push.
+# `just link-check` runs the identical check locally, against the same `cargo bin`-pinned lychee
+# version (Cargo.toml's [workspace.metadata.bin]), so CI and local runs can never disagree.
+on:
+  schedule: [{ cron: '0 6 * * 1' }]
+  workflow_dispatch:
+
+jobs:
+  lychee:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
+      - run: just link-check

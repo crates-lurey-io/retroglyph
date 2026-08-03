@@ -448,6 +448,8 @@ mod tests {
 
     #[test]
     fn test_line_from_spans() {
+        use alloc::vec;
+
         let line = Line::from(vec![
             Span::raw("HP: "),
             Span::styled("100", Style::new().fg(Color::GREEN)),
@@ -457,6 +459,8 @@ mod tests {
 
     #[test]
     fn test_line_width_wide_chars() {
+        use alloc::vec;
+
         let line = Line::from(vec![Span::raw("中"), Span::raw("x")]);
         assert_eq!(line.width(), 3); // 2 + 1
     }

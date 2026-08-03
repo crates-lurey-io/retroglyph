@@ -876,7 +876,7 @@ swash.
   original rationale for etagere vs guillotiere
 
 - Kept: [bevy_emoji](https://crates.io/crates/bevy_emoji) - documents swash CBDT panic issue
-- Kept: [resvg color fonts issue](https://github.com/RazrFalcon/resvg/issues/487) - comprehensive
+- Kept: [resvg color fonts issue](https://github.com/RazrFalcon/resvg/issues/487) - full
 
   breakdown of emoji font table formats
 

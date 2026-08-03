@@ -16,6 +16,10 @@ markdown:
     @[ -d tools/node_modules ] || npm ci --prefix tools
     npm --prefix tools run lint
 
+prose:
+    @command -v vale >/dev/null || { echo "vale not installed: brew install vale"; exit 1; }
+    vale README.md CONTRIBUTING.md docs/ crates/
+
 fmt:
     cargo fmt --all
     @[ -d tools/node_modules ] || npm ci --prefix tools
@@ -47,7 +51,16 @@ check-targets:
     cargo clippy --target x86_64-unknown-linux-gnu --workspace --all-targets --all-features -- -D warnings
     cargo clippy --target wasm32-unknown-unknown -p retroglyph-gl --all-targets --all-features -- -D warnings
 
-lint: clippy markdown
+lint: clippy markdown prose
+
+# Checks every external URL in markdown and doc comments (lychee also parses links out of `.rs`
+# files, so this covers doc comments too). Not part of `lint`/`check`: it hits the network, so
+# it's scheduled-only in CI (.github/workflows/link-check.yml, retroglyph#469) rather than run on
+# every push/PR. Uses the `cargo bin`-pinned `lychee` (see Cargo.toml's [workspace.metadata.bin])
+# like every other CLI tool `cargo bin` manages in this repo, rather than a manually-installed
+# `lychee` on PATH, so the version is reproducible and identical between local runs and CI.
+link-check:
+    cargo bin lychee --no-progress --exclude-path target --exclude-path .matan './**/*.md' './crates/**/*.rs'
 
 # ── Build ────────────────────────────────────────────────────────────────────
 
@@ -141,15 +154,14 @@ test-ci: build-pty-examples
 # on `retroglyph-core` with its own full defaults (`egc` on), which would silently turn `egc` back
 # on for every crate here too. Naming packages instead avoids that.
 #
-# Deliberately excludes `retroglyph-core` itself: selecting it directly as a primary package
-# (rather than only as a transitive dependency) makes cargo apply *its own* declared defaults
-# (`egc` on) regardless of what its consumers pin, so testing it here would need its own
-# `--no-default-features` command -- and core's own test module isn't `egc`-cfg-clean yet (several
-# of its tests call the egc-only `Grid::write_grapheme` unconditionally), so that command doesn't
-# even compile today. `compile`'s existing `cargo check -p retroglyph-core --no-default-features`
-# already covers core's own `--no-default-features` compile; fixing its tests is a separate task.
+# `retroglyph-core` itself is a separate line rather than another `-p` on the command above:
+# selecting it directly as a primary package (rather than only as a transitive dependency) makes
+# cargo apply *its own* declared defaults (`egc` and `std` on) regardless of what its consumers
+# pin, so exercising its `--no-default-features` (no `std`, no `egc`) build needs its own explicit
+# command (retroglyph#843).
 test-default-features:
     cargo test -p retroglyph-widgets -p retroglyph-terminal -p retroglyph-crossterm -p retroglyph-window -p retroglyph-gl
+    cargo test -p retroglyph-core --no-default-features
 
 test-v: build-pty-examples
     cargo bin cargo-nextest run --workspace --all-features --no-capture

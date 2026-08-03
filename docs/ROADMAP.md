@@ -17,14 +17,14 @@ items land here as they're identified, then move to a "Shipped" note below once 
 
 Shipped: subcell image-to-glyph blit (posterize a pixel block to the best block/quadrant/sextant
 character, per doryen-rs/libtcod/notcurses) as `retroglyph_core::subcell`
-(`quantize_half_block`/`quantize_quadrant`/`quantize_sextant`) -- see
+(`quantize_half_block`/`quantize_quadrant`/`quantize_sextant`); see
 `examples/examples/16_subcell_image.rs`.
 
 Shipped: non-alternate-screen / inline rendering mode for the crossterm backend (termbox2, as a
-documented gap) as `CrosstermOptions::alt_screen(false)` -- see `crates/crossterm/src/lib.rs`.
+documented gap) as `CrosstermOptions::alt_screen(false)`; see `crates/crossterm/src/lib.rs`.
 
-Shipped: GPU rendering backend (`retroglyph-gl`) -- native OpenGL 3.3 core and browser WebGL2 from
-one `glow` codebase, instanced-quad rendering with an `R8` glyph-atlas texture array (the
+Shipped: GPU rendering backend (`retroglyph-gl`); native OpenGL 3.3 core and browser WebGL2 from one
+`glow` codebase, instanced-quad rendering with an `R8` glyph-atlas texture array (the
 beamterm/alacritty/xterm.js model). Implements `retroglyph_window::Presenter`, so it drops into the
 same winit loop as the software backend with no window-crate changes. The bitmap font moved into
 `retroglyph-window`'s winit-free `font` module so both graphical backends render pixel-identical
@@ -36,14 +36,14 @@ recovery (#373), GLX fallback (#374), wasm examples (#375).
 
 Shipped: pipe-safe / non-TTY output degradation (blessed's auto-detect-non-interactive-stdout,
 strip-control-codes idea, originally listed below under Defer) as `retroglyph-terminal`'s
-`TerminalRenderer::set_plain_mode`/`with_plain_mode`/`auto` -- see `crates/terminal/src/lib.rs`.
-This is the renderer-side implementation; wiring it up end-to-end in `retroglyph-crossterm`
+`TerminalRenderer::set_plain_mode`/`with_plain_mode`/`auto`; see `crates/terminal/src/lib.rs`. This
+is the renderer-side implementation; wiring it up end-to-end in `retroglyph-crossterm`
 (auto-detecting and applying it against real stdout) is not yet done and isn't tracked by a separate
 roadmap entry, since the hard part (the renderer supporting a plain-text degradation mode at all) is
 what this entry was about.
 
 Shipped: single-line text-input widget (ftxui's `Input`, tui-textarea, originally listed below under
-Defer pending a real consumer need) as `retroglyph-widgets`' `TextInputState`/`TextInput` -- see
+Defer pending a real consumer need) as `retroglyph-widgets`' `TextInputState`/`TextInput`; see
 `crates/widgets/src/state/text_input.rs` and `crates/widgets/src/widget/text_input.rs`. Scoped to
 `ListState`'s level of ambition (a `String`, a byte cursor, insert/backspace/delete/move/
 horizontal-scroll, `Event::Paste` support), not the previously-rejected form framework: no focus

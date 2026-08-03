@@ -193,6 +193,8 @@ mod tests {
 
     #[test]
     fn ring_buffer_wraps_and_drops_the_oldest_sample() {
+        use alloc::vec::Vec;
+
         let mut stats = FrameStats::<3>::new();
         for ms in [10, 20, 30, 40] {
             stats.record(Duration::from_millis(ms));

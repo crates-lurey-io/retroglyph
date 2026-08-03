@@ -254,7 +254,7 @@ pub struct Interaction<Id> {
     // Backs [`animate`](Self::animate): one `(id, last target, Tween)` per `id` that's had
     // `animate` called on it since it last settled at rest. A plain `Vec` scanned linearly, not a
     // `HashMap`, to keep `animate` (like every other method here) usable with any `Id: Copy +
-    // PartialEq`, no `Hash`/`Eq` required -- the same call [`HitTester`] already makes for its own
+    // PartialEq`, no `Hash`/`Eq` required, the same call [`HitTester`] already makes for its own
     // per-`Id` registrations. The stored `bool` is `animate`'s last-seen `target`, kept alongside
     // the `Tween` so a flip can be detected without the `Tween` itself exposing its `to`.
     tweens: Vec<(Id, bool, Tween)>,
@@ -496,7 +496,7 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
     /// `render` (already handed a `Response`) calls this once per frame with, say,
     /// `response.hovered()` as `target`, and blends its idle/hover style by the result, without
     /// declaring a `Tween` field of its own or hand-diffing this frame's `hovered()` against
-    /// last frame's to find the edge that should retarget it -- both of which an app would
+    /// last frame's to find the edge that should retarget it, both of which an app would
     /// otherwise need to do once per animated `Id`, since neither [`Tween`] nor
     /// [`Interaction`](Self) tracks that edge on its own.
     ///

@@ -754,6 +754,10 @@ impl Presenter for GlRenderer {
     fn cell_size(&self) -> (u32, u32) {
         self.geometry.cell_size()
     }
+
+    fn geometry(&self) -> CellGeometry {
+        self.geometry
+    }
 }
 
 impl Drop for GlRenderer {

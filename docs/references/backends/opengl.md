@@ -407,8 +407,8 @@ the only platform-specific layer.
 - **Kept**: beamterm README and architecture docs (<https://github.com/junkdog/beamterm>) - The most
 
   directly relevant reference. Sub-millisecond terminal renderer targeting GL 3.3 / WebGL2,
-  single-codebase via glow, instanced rendering, comprehensive atlas system. Powers Ratzilla's
-  WebGL2 backend.
+  single-codebase via glow, instanced rendering, full atlas system. Powers Ratzilla's WebGL2
+  backend.
 
 - **Kept**: Alacritty PR #4373 - New faster renderer
 

@@ -63,8 +63,8 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.4.0...r
   [#501](https://github.com/crates-lurey-io/retroglyph/pull/501)
 
 - [7d7cfb2](https://github.com/crates-lurey-io/retroglyph/commit/7d7cfb26918e2563653bb58cdb016b18328f0de0)
-  _(core)_ Settle present ownership -- driver-owned present, idempotent dirty-flag present,
-  Flow::Idle, error propagation, frame pacing by `@matanlurey` in
+  _(core)_ Settle present ownership (driver-owned present, idempotent dirty-flag present,
+  Flow::Idle, error propagation, frame pacing) by `@matanlurey` in
   [#500](https://github.com/crates-lurey-io/retroglyph/pull/500)
 
 - [4e587a0](https://github.com/crates-lurey-io/retroglyph/commit/4e587a0432301c26cf20be97d75d6ad6a03a2a70)
@@ -170,7 +170,7 @@ https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.4.0...r
   `@matanlurey` in [#527](https://github.com/crates-lurey-io/retroglyph/pull/527)
 
 - [123c590](https://github.com/crates-lurey-io/retroglyph/commit/123c59072d9de4a051ecddd76be67342cddf45ae)
-  _(workspace, core, widgets)_ Clean up the " -- " clause-joiner habit by `@matanlurey` in
+  _(workspace, core, widgets)_ Clean up the double-hyphen clause-joiner habit by `@matanlurey` in
   [#532](https://github.com/crates-lurey-io/retroglyph/pull/532)
 
 ### Miscellaneous Tasks
