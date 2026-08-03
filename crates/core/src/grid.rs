@@ -1436,7 +1436,15 @@ impl Grid {
     /// bounds) contains at least one non-empty tile, matching `put_tile`'s original
     /// allocate-on-first-write behavior for a `src_rect` that is entirely transparent.
     pub fn blit(&mut self, layer: u8, src: &Self, src_rect: Rect, dst_x: u16, dst_y: u16) {
-        self.blit_with(layer, src, src_rect, dst_x, dst_y, |tile, _dst_tile| *tile);
+        self.blit_with(
+            layer,
+            src,
+            layer,
+            src_rect,
+            dst_x,
+            dst_y,
+            |tile, _dst_tile| *tile,
+        );
     }
 
     /// Same as [`blit`](Self::blit) but blends foreground and background
@@ -1471,40 +1479,88 @@ impl Grid {
         fg_alpha: f32,
         bg_alpha: f32,
     ) {
-        self.blit_with(layer, src, src_rect, dst_x, dst_y, |tile, dst_tile| {
-            let mut blended = *tile;
-            // `fg_alpha == 1.0` only lets `Linear` skip the call: `Linear` at `t ==
-            // 1.0` is `src` by definition, but a `Screen`/`Dodge`/`Burn`/`Overlay`
-            // mix at full alpha still needs to run the mode's formula: it isn't
-            // equivalent to the raw source color (see `blend_color`'s matching guard).
-            if mode != BlendMode::Linear || fg_alpha != 1.0 {
-                blended.style.fg = blend_fg(mode, tile.style.fg, dst_tile.style.fg, fg_alpha);
-            }
-            if mode != BlendMode::Linear || bg_alpha != 1.0 {
-                blended.style.bg = blend_bg(mode, tile.style.bg, dst_tile.style.bg, bg_alpha);
-            }
-            blended
-        });
+        self.blit_with(
+            layer,
+            src,
+            layer,
+            src_rect,
+            dst_x,
+            dst_y,
+            |tile, dst_tile| {
+                let mut blended = *tile;
+                // `fg_alpha == 1.0` only lets `Linear` skip the call: `Linear` at `t ==
+                // 1.0` is `src` by definition, but a `Screen`/`Dodge`/`Burn`/`Overlay`
+                // mix at full alpha still needs to run the mode's formula: it isn't
+                // equivalent to the raw source color (see `blend_color`'s matching guard).
+                if mode != BlendMode::Linear || fg_alpha != 1.0 {
+                    blended.style.fg = blend_fg(mode, tile.style.fg, dst_tile.style.fg, fg_alpha);
+                }
+                if mode != BlendMode::Linear || bg_alpha != 1.0 {
+                    blended.style.bg = blend_bg(mode, tile.style.bg, dst_tile.style.bg, bg_alpha);
+                }
+                blended
+            },
+        );
     }
 
-    /// Shared copy loop behind [`blit`](Self::blit) and [`blit_alpha`](Self::blit_alpha):
-    /// clamps `src_rect` to `src`'s bounds, skips the whole call if nothing in it is visible,
-    /// clears any destination span the copy is about to partially overwrite (retroglyph#710), and
-    /// walks matching `src`/destination cells by flat index (retroglyph#262/#263), applying
-    /// `transform` to each non-empty source tile (given the source tile and, for context, the
-    /// destination tile it's about to replace) before writing it and fixing up grapheme extras.
-    /// `dst_x`/`dst_y` saturate on overflow (retroglyph#268) rather than wrapping; the bounds
-    /// checks below always catch a saturated `u16::MAX` origin.
+    /// Same as [`blit`](Self::blit), except the source tiles are read from `src_layer` on `src`
+    /// rather than from `dst_layer` (the layer this writes to on `self`).
+    ///
+    /// [`blit`](Self::blit) uses one `layer` for both sides, which is exactly right for two
+    /// grids sharing the same layer scheme (e.g. [`Surface::on_layer`](crate::Surface::on_layer)
+    /// copying within itself), but wrong for [`Surface::blit`](crate::Surface::blit)'s case: a
+    /// `src` that is a standalone, layer-0-only `Grid` (composed content like `BoxStyle::render`'s
+    /// output), stamped onto a destination surface that may currently be on any layer. Calling
+    /// [`blit`](Self::blit) with the destination's layer there looks up that same layer on `src`,
+    /// finds nothing (`src` only ever populated layer 0), and silently copies nothing
+    /// (retroglyph#824). This method exists so a caller in that position can pin `src_layer` to
+    /// `0` independently of `dst_layer`.
+    pub(crate) fn blit_cross_layer(
+        &mut self,
+        dst_layer: u8,
+        src: &Self,
+        src_layer: u8,
+        src_rect: Rect,
+        dst_x: u16,
+        dst_y: u16,
+    ) {
+        self.blit_with(
+            dst_layer,
+            src,
+            src_layer,
+            src_rect,
+            dst_x,
+            dst_y,
+            |tile, _dst_tile| *tile,
+        );
+    }
+
+    /// Shared copy loop behind [`blit`](Self::blit), [`blit_alpha`](Self::blit_alpha), and
+    /// [`blit_cross_layer`](Self::blit_cross_layer): clamps `src_rect` to `src`'s bounds, skips
+    /// the whole call if nothing in it is visible, clears any destination span the copy is about
+    /// to partially overwrite (retroglyph#710), and walks matching `src`/destination cells by
+    /// flat index (retroglyph#262/#263), applying `transform` to each non-empty source tile
+    /// (given the source tile and, for context, the destination tile it's about to replace)
+    /// before writing it and fixing up grapheme extras. `dst_x`/`dst_y` saturate on overflow
+    /// (retroglyph#268) rather than wrapping; the bounds checks below always catch a saturated
+    /// `u16::MAX` origin.
+    ///
+    /// `dst_layer` and `src_layer` are separate parameters (rather than the one `layer` [`blit`]
+    /// and [`blit_alpha`] expose) so [`blit_cross_layer`](Self::blit_cross_layer) can read a
+    /// different source layer than the one it writes: see that method's own doc for why (this is
+    /// the retroglyph#824 fix).
+    #[allow(clippy::too_many_arguments)]
     fn blit_with(
         &mut self,
-        layer: u8,
+        dst_layer: u8,
         src: &Self,
+        src_layer: u8,
         src_rect: Rect,
         dst_x: u16,
         dst_y: u16,
         transform: impl Fn(&Tile, &Tile) -> Tile,
     ) {
-        let Some(src_lb) = src.layer(layer) else {
+        let Some(src_lb) = src.layer(src_layer) else {
             return;
         };
         let src_width = usize::from(src.width);
@@ -1558,12 +1614,12 @@ impl Grid {
                     {
                         continue;
                     }
-                    self.clear_span_overlap(layer, dx, dy, 1);
+                    self.clear_span_overlap(dst_layer, dx, dy, 1);
                 }
             }
         }
 
-        let dst_lb = self.layer_or_alloc(layer);
+        let dst_lb = self.layer_or_alloc(dst_layer);
         let mut pending_extras: Vec<(usize, TileExtra)> = Vec::new();
 
         for sy in sy0..sy1 {
