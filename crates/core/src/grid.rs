@@ -822,6 +822,10 @@ impl Grid {
             return;
         }
 
+        if x >= self.width || y >= self.height {
+            return;
+        }
+
         // Capture dimensions as plain values to avoid borrow conflicts.
         let w = usize::from(self.width);
         let cap = w * usize::from(self.height);
@@ -2596,6 +2600,33 @@ mod tests {
         // Single-codepoint writes never populate the side-table.
         g.write_grapheme(0, 2, 2, "a", Style::default());
         assert_eq!(g.grapheme(0, 2, 2), None);
+    }
+
+    #[cfg(feature = "egc")]
+    #[test]
+    fn write_grapheme_x_past_width_wraps_onto_the_next_row() {
+        let mut grid = Grid::new(10, 10);
+        grid.write_grapheme(0, 12, 0, "A", Style::default()); // x = 12 on a 10-wide grid
+        assert_eq!(grid[Pos::new(2, 0)].glyph(), ' ');
+        assert_eq!(grid[Pos::new(2, 1)].glyph(), ' ');
+    }
+
+    #[cfg(feature = "egc")]
+    #[test]
+    fn write_grapheme_y_past_height_is_refused() {
+        let mut grid = Grid::new(10, 10);
+        grid.write_grapheme(0, 0, 12, "A", Style::default()); // y = 12 on a 10-tall grid
+        for y in 0..10 {
+            assert_eq!(grid[Pos::new(0, y)].glyph(), ' ');
+        }
+    }
+
+    #[cfg(feature = "egc")]
+    #[test]
+    fn write_grapheme_in_bounds_still_writes() {
+        let mut grid = Grid::new(10, 10);
+        grid.write_grapheme(0, 2, 1, "A", Style::default());
+        assert_eq!(grid[Pos::new(2, 1)].glyph(), 'A');
     }
 
     #[cfg(feature = "egc")]
