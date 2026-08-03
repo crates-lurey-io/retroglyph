@@ -55,6 +55,15 @@ impl Grid {
     /// cell belongs to is cleared first, so a write can never leave an anchor
     /// pointing at cells it no longer owns; a fresh wide `tile` additionally clears any wide
     /// character it would partially overwrite, the same as `write_grapheme`.
+    ///
+    /// `tile`'s own [`TileFlags::SPAN_ANCHOR`]/[`TileFlags::SPAN_COVERED`] role, if it has one, is
+    /// stripped too, for the same reason as `HAS_EXTRA`: those flags are crate-private, so a
+    /// caller-supplied `tile` (fresh or replayed, e.g. read back via [`tile`](Self::tile)) can
+    /// only carry one by copying it out of some other cell, and writing it through verbatim would
+    /// plant an anchor with no covered cells (or a covered cell with no anchor) at `pos` --
+    /// exactly the dangling footprint [`write_span`](Self::write_span)'s own doc calls a broken
+    /// invariant. [`blit`](Self::blit) makes the same call for a copied span it cannot preserve
+    /// whole.
     pub fn put_tile(&mut self, layer: u8, pos: impl Into<Pos>, mut tile: Tile) -> Option<()> {
         let pos = pos.into();
 
@@ -87,6 +96,7 @@ impl Grid {
         }
         lb.extras.remove(&idx);
         tile.flags.remove(TileFlags::HAS_EXTRA);
+        tile.clear_span();
         if width == 2 {
             tile.flags.insert(TileFlags::WIDE_CHAR);
         }
@@ -120,7 +130,10 @@ impl Grid {
     ///
     /// A no-op if `rect` (after clipping to the grid) is empty. As with [`put_tile`](Self::put_tile), `tile` can
     /// never legitimately carry [`TileFlags::HAS_EXTRA`] (the flag is crate-private), so every
-    /// cell's own extras entry, if any, is dropped rather than orphaned.
+    /// cell's own extras entry, if any, is dropped rather than orphaned. `tile`'s own span role,
+    /// if it has one, is stripped for the same reason: see `put_tile`'s doc for why writing it
+    /// through verbatim would plant a dangling anchor or an anchorless covered cell in every cell
+    /// of `rect`.
     ///
     /// # Examples
     ///
@@ -155,6 +168,7 @@ impl Grid {
         // per row rather than scanning the whole side table: bounded by the region, not by
         // however much of the layer happens to carry extras elsewhere.
         tile.flags.remove(TileFlags::HAS_EXTRA);
+        tile.clear_span();
         let grid_w = usize::from(self.width);
         let lb = self.layer_or_alloc(layer);
         for y in rect.top()..rect.bottom() {
@@ -1048,6 +1062,66 @@ mod tests {
         assert!(!g[Pos::new(0, 0)].flags().contains(TileFlags::WIDE_CHAR));
     }
 
+    /// A caller-constructed `tile` can carry a stale [`TileFlags::SPAN_ANCHOR`]/
+    /// [`TileFlags::SPAN_COVERED`] role only by having been read back out of some grid cell
+    /// (e.g. via [`tile`](Grid::tile)), since neither flag has a public builder. `put_tile` must
+    /// strip it rather than plant a dangling anchor: one that claims a footprint no covered cell
+    /// agrees it owns (retroglyph#984).
+    #[test]
+    fn put_tile_strips_a_span_anchor_replayed_from_elsewhere() {
+        let mut g = Grid::new(8, 4);
+        g.write_span_uniform(0, (0, 0), (2u16, 2u16), 'A', '.', Style::default())
+            .expect("2x2 span fits in an 8x4 grid");
+
+        // Replay the anchor tile somewhere unrelated.
+        let anchor = *g.tile(0, Pos::new(0, 0)).unwrap();
+        assert!(anchor.flags().contains(TileFlags::SPAN_ANCHOR));
+        g.put_tile(0, Pos::new(5, 3), anchor);
+
+        let replayed = g.tile(0, Pos::new(5, 3)).unwrap();
+        assert!(!replayed.flags().contains(TileFlags::SPAN_ANCHOR));
+        assert_eq!(replayed.span(), (1, 1));
+        assert_eq!(g.span_owner(0, 5, 3), None);
+        // No dangling footprint means nothing beyond (5, 3) got claimed either.
+        assert_eq!(g.span_owner(0, 6, 3), None);
+    }
+
+    /// The dangling anchor from the previous test would otherwise make `clear_span` (via
+    /// `reset_span_at`) walk the anchor's declared `span_w`/`span_h` and reset every cell in that
+    /// bogus footprint, destroying unrelated content that was never part of any span
+    /// (retroglyph#984).
+    #[test]
+    fn put_tile_strips_a_span_anchor_so_clear_span_cannot_destroy_a_neighbour() {
+        let mut g = Grid::new(8, 4);
+        g.write_span_uniform(0, (0, 0), (2u16, 2u16), 'A', '.', Style::default())
+            .expect("2x2 span fits in an 8x4 grid");
+        let anchor = *g.tile(0, Pos::new(0, 0)).unwrap();
+
+        g.put_tile(0, Pos::new(5, 3), anchor);
+        g.put_tile(0, Pos::new(6, 3), Tile::new('Z', Style::default()));
+        g.clear_span(0, 5, 3);
+
+        assert_eq!(g.tile(0, Pos::new(6, 3)).unwrap().glyph(), 'Z');
+    }
+
+    /// A replayed `SPAN_COVERED` tile must also lose its role, or a pixel backend (which skips
+    /// drawing any covered cell on the assumption its anchor drew the art) would render nothing
+    /// at the destination (retroglyph#984).
+    #[test]
+    fn put_tile_strips_a_span_covered_role_replayed_from_elsewhere() {
+        let mut g = Grid::new(8, 4);
+        g.write_span_uniform(0, (0, 0), (2u16, 2u16), 'A', '.', Style::default())
+            .expect("2x2 span fits in an 8x4 grid");
+        let covered = *g.tile(0, Pos::new(1, 1)).unwrap();
+        assert!(covered.flags().contains(TileFlags::SPAN_COVERED));
+
+        g.put_tile(0, Pos::new(5, 3), covered);
+
+        let replayed = g.tile(0, Pos::new(5, 3)).unwrap();
+        assert!(!replayed.flags().contains(TileFlags::SPAN_COVERED));
+        assert_eq!(g.span_owner(0, 5, 3), None);
+    }
+
     /// A tile rebuilt via `with_glyph` from a spacer read back out of a grid must actually get
     /// drawn: before the fix, the stale `WIDE_CHAR_SPACER` flag made `put_tile` treat it as an
     /// already-resolved replay and store it verbatim, so backends skipped it (retroglyph#986).
@@ -1132,6 +1206,27 @@ mod tests {
 
         assert_eq!(g.tile(0, (3, 3)).unwrap().glyph(), '#');
         assert_eq!(g.tile(0, (0, 0)).unwrap().glyph(), ' ');
+    }
+
+    /// A `tile` carrying a replayed `SPAN_ANCHOR` role must not survive into every cell of
+    /// `rect`: without stripping it, a 2x2 fill with a replayed anchor would produce four anchors
+    /// each wrongly claiming their own 2x2 footprint (retroglyph#984).
+    #[test]
+    fn fill_region_strips_a_span_anchor_replayed_from_elsewhere() {
+        let mut g = Grid::new(8, 4);
+        g.write_span_uniform(0, (0, 0), (2u16, 2u16), 'A', '.', Style::default())
+            .expect("2x2 span fits in an 8x4 grid");
+        let anchor = *g.tile(0, Pos::new(0, 0)).unwrap();
+
+        g.fill_region(0, Rect::new(4, 0, 2, 2), anchor);
+
+        for y in 0..2 {
+            for x in 4..6 {
+                let cell = g.tile(0, Pos::new(x, y)).unwrap();
+                assert!(!cell.flags().contains(TileFlags::SPAN_ANCHOR));
+                assert_eq!(g.span_owner(0, x, y), None);
+            }
+        }
     }
 
     /// An empty (or fully out-of-bounds) `rect` allocates nothing: `fill_region` returns before
