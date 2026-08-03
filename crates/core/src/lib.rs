@@ -154,10 +154,8 @@ pub mod color;
 /// Which diagnostics a build compiles in.
 pub mod dev;
 pub mod event;
-/// Fixed-timestep accumulator for game loops.
-pub mod frame_clock;
-/// Rolling frame-time statistics for a live perf/FPS overlay.
-pub mod frame_stats;
+/// `FrameClock`/`FrameStats` accumulators for the `App`/`Frame` game loop.
+pub mod frames;
 pub mod grid;
 #[cfg(feature = "egc")]
 pub mod layout;
@@ -189,8 +187,7 @@ pub use event::{
     Event, KeyCode, KeyEvent, KeyEventKind, KeyLocation, KeyModifiers, KeyState, MouseButton,
     MouseEvent, MouseEventKind, PhysicalPos, SystemTheme,
 };
-pub use frame_clock::FrameClock;
-pub use frame_stats::FrameStats;
+pub use frames::{FrameClock, FrameStats};
 pub use grid::{BlendMode, Grid, Offset, Pos, Rect, Size};
 /// `.width()`/`.height()` accessors for [`Size`] (and [`Rect`]): re-exported so callers don't need
 /// a direct `ixy` dependency just to call them on this crate's own type aliases.
