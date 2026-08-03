@@ -1,4 +1,5 @@
 # Mark generated files so they are collapsed by default in pull requests and diffs
 tools/package-lock.json linguist-generated
-tests/snapshots/*.snap linguist-generated
-tests/snapshots/*.svg linguist-generated
+**/snapshots/*.snap linguist-generated
+**/snapshots/*.svg linguist-generated
+**/snapshots/*.snap.png linguist-generated
