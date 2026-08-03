@@ -52,7 +52,7 @@
 //! # Example
 //!
 //! ```
-//! use retroglyph_core::subcell::quantize_quadrant;
+//! use retroglyph_core::symbols::quantize_quadrant;
 //!
 //! // A block that's white in the top-left corner, black everywhere else.
 //! let black = (0, 0, 0);
@@ -190,7 +190,7 @@ fn posterize(pixels: &[Rgb], table: &[char]) -> Glyph {
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::subcell::quantize_half_block;
+/// use retroglyph_core::symbols::quantize_half_block;
 ///
 /// let glyph = quantize_half_block([(255, 255, 255), (0, 0, 0)]);
 /// assert_eq!(glyph.ch, '▀'); // top half set, bottom clear
@@ -222,7 +222,7 @@ pub fn quantize_half_block(pixels: [Rgb; 2]) -> Glyph {
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::subcell::quantize_quadrant;
+/// use retroglyph_core::symbols::quantize_quadrant;
 ///
 /// let black = (0, 0, 0);
 /// let white = (255, 255, 255);
@@ -253,7 +253,7 @@ pub fn quantize_quadrant(pixels: [Rgb; 4]) -> Glyph {
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::subcell::quantize_sextant;
+/// use retroglyph_core::symbols::quantize_sextant;
 ///
 /// let black = (0, 0, 0);
 /// let white = (255, 255, 255);

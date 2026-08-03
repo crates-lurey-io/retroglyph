@@ -162,9 +162,9 @@ pub mod grid;
 #[cfg(feature = "egc")]
 pub mod layout;
 pub mod style;
-pub mod subcell;
 /// The one grid-drawing primitive: an area-clipped, single-layer view over a [`Grid`].
 pub mod surface;
+#[allow(clippy::too_long_first_doc_paragraph)]
 /// Border, gridline, and partial-block `char` data shared by widgets and backends.
 pub mod symbols;
 pub mod terminal;
@@ -198,8 +198,8 @@ pub use ixy::HasSize;
 #[cfg(feature = "egc")]
 pub use layout::{TextLayout, TextMetrics};
 pub use style::Style;
-pub use subcell::{Glyph, quantize_half_block, quantize_quadrant, quantize_sextant};
 pub use surface::{Layer, StyledSurface, Surface};
+pub use symbols::{Glyph, quantize_half_block, quantize_quadrant, quantize_sextant};
 pub use terminal::Terminal;
 #[cfg(feature = "testing")]
 pub use testing::{RunError, TestHarness};
