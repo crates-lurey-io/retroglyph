@@ -21,6 +21,6 @@ mod word_wrap;
 
 pub use align::{HAlign, VAlign};
 #[cfg(feature = "egc")]
-pub use text_layout::{TextLayout, TextMetrics};
+pub use text_layout::TextLayout;
 #[cfg(feature = "egc")]
 pub use word_wrap::wrap;
