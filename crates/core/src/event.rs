@@ -432,9 +432,9 @@ pub enum Event {
     /// (`retroglyph_window::winit::EventProxy::send_event`), which forwards
     /// the `u64` unchanged. The payload is a plain `u64`
     /// rather than an arbitrary boxed value: it keeps `Event` cheaply
-    /// `Clone`/`PartialEq`/`Eq`/`Hash` (a `Box<dyn Any>` could not derive
-    /// any of those) and needs no generic parameter threaded through every
-    /// crate that names `Event`. Treat it as a correlation id: look up
+    /// `Clone`/`PartialEq` (a `Box<dyn Any>` could not derive either) and
+    /// needs no generic parameter threaded through every crate that names
+    /// `Event`. Treat it as a correlation id: look up
     /// the real payload in whatever shared state or channel the sending
     /// thread already placed it in.
     Custom(u64),
