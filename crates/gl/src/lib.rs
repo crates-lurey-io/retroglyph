@@ -448,9 +448,9 @@ impl Output for GlRenderer {
             // background at this cell's own index, not the anchor's, keeps a span from smearing one
             // column's inheritance across the whole footprint (retroglyph#726). The stream is
             // row-major within a layer, so the anchor is always already written.
-            if let Some((back_x, back_y)) = tile.span_offset() {
-                let anchor_idx = idx
-                    .checked_sub(usize::from(back_y) * cols + usize::from(back_x))
+            if tile.span_offset().is_some() {
+                let anchor_idx = tile
+                    .span_anchor_index(idx, cols)
                     .filter(|&anchor_idx| anchor_idx < cell_count);
                 if let Some(anchor_idx) = anchor_idx {
                     let has_sprite = sprite_bg[anchor_idx];

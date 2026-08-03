@@ -130,6 +130,8 @@ struct ReadmeDoctests;
 // (through to the next blank line) rather than just this one doc comment, which is well under
 // its own 100-char threshold in isolation: confirmed by testing shorter wording alone, which
 // silences it despite touching nothing else in that byte range.
+/// Horizontal ([`HAlign`]) and vertical ([`VAlign`]) alignment within a bounded rectangle.
+pub mod align;
 #[allow(clippy::too_long_first_doc_paragraph)]
 /// Time-driven value animation: easing curves, a stateful `Tween`, and a periodic oscillator.
 pub mod animate;
@@ -167,6 +169,7 @@ pub mod text;
 pub mod tile;
 pub mod tint;
 
+pub use align::{HAlign, VAlign};
 pub use animate::{Easing, Tween, oscillate};
 pub use app::{App, Flow, Frame, step};
 #[cfg(feature = "std")]
@@ -183,7 +186,7 @@ pub use frame_clock::FrameClock;
 pub use frame_stats::FrameStats;
 pub use grid::{BlendMode, Grid, Offset, Pos, Rect, Size};
 #[cfg(feature = "egc")]
-pub use layout::{HAlign, TextLayout, TextMetrics, VAlign};
+pub use layout::{TextLayout, TextMetrics};
 pub use perf_overlay::{
     DEFAULT_LAYER, DefaultPerfRenderer, FRAME_HISTORY, PerfOverlayApp, PerfOverlayMode,
     PerfRenderer, default_is_toggle_key,

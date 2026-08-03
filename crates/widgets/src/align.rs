@@ -6,37 +6,15 @@
 ///
 /// A builder knob on the single-line text widgets ([`Text`](crate::Text),
 /// [`PrintLine`](crate::PrintLine)) and on the titles of [`Panel`](crate::Panel)
-/// and [`Modal`](crate::Modal). Text widgets default to [`Left`](Self::Left)
-/// (their long-standing behavior); panel/modal titles default to
-/// [`Center`](Self::Center) (theirs).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum Align {
-    /// Text starts at the left edge; leftover space trails on the right.
-    #[default]
-    Left,
-    /// Leftover space is split evenly on both sides (an odd extra column goes
-    /// on the right).
-    Center,
-    /// Text ends at the right edge; leftover space leads on the left.
-    Right,
-}
-
-impl Align {
-    /// The left offset, in columns, at which a `content_width`-column line
-    /// should start within an `area_width`-column area for this alignment.
-    ///
-    /// Saturates at `0` when the content is wider than the area, so the caller
-    /// clips from the left edge rather than underflowing.
-    #[must_use]
-    pub const fn offset(self, area_width: u16, content_width: u16) -> u16 {
-        let slack = area_width.saturating_sub(content_width);
-        match self {
-            Self::Left => 0,
-            Self::Center => slack / 2,
-            Self::Right => slack,
-        }
-    }
-}
+/// and [`Modal`](crate::Modal). Text widgets default to `Left` (their
+/// long-standing behavior); panel/modal titles default to `Center` (theirs).
+///
+/// A plain re-export of [`retroglyph_core::align::HAlign`], not a separate type: `core::align`
+/// needs nothing from the `egc` feature, so there's no reason for `widgets` to keep its own
+/// copy of the enum or of [`offset`](retroglyph_core::align::HAlign::offset)'s formula.
+/// Interoperates directly with [`Surface::print_aligned`](retroglyph_core::Surface::print_aligned)
+/// and [`TextLayout`](retroglyph_core::layout::TextLayout), no conversion needed.
+pub use retroglyph_core::align::HAlign as Align;
 
 #[cfg(test)]
 mod tests {
@@ -66,5 +44,12 @@ mod tests {
     #[test]
     fn default_is_left() {
         assert_eq!(Align::default(), Align::Left);
+    }
+
+    #[test]
+    fn is_the_same_type_as_core_h_align() {
+        // No `From` conversion needed: `Align` and `HAlign` are the same type.
+        let align: Align = retroglyph_core::align::HAlign::Center;
+        assert_eq!(align, Align::Center);
     }
 }
