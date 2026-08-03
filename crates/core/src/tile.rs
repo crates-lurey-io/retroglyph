@@ -1,18 +1,17 @@
 //! Fundamental unit of the grid: a single drawable tile.
 
 use crate::color::Style;
+use crate::text::char_width;
 #[cfg(feature = "egc")]
 use alloc::string::String;
-use unicode_width::UnicodeWidthChar;
 
-/// Computes the display (column) width of a single glyph, capped to what fits in a `u8`
-/// (`unicode_width` only ever returns 0, 1, or 2 for a single `char`, well within range).
-/// Unassigned/control-character widths (`None`) are treated as 1, matching this crate's prior
-/// per-cell fallback behavior.
+/// Computes the display (column) width of a single glyph, capped to what fits in a `u8`.
+///
+/// Delegates to [`char_width`], so a control character occupies the one column
+/// [`Surface`](crate::Surface) actually draws it in, and `Tile::width`'s value can never drift
+/// from what that function documents and tests.
 fn glyph_width(glyph: char) -> u8 {
-    #[allow(clippy::cast_possible_truncation)]
-    let width = glyph.width().unwrap_or(1) as u8;
-    width
+    u8::try_from(char_width(glyph)).unwrap_or(1)
 }
 
 bitflags::bitflags! {
@@ -97,9 +96,10 @@ pub struct Tile {
     /// `unicode_width` on every cell of every frame is pure waste since a glyph's width never
     /// changes between frames. It is computed once, here, whenever the glyph is written (see
     /// [`with_glyph`](Self::with_glyph) and [`Grid::write_grapheme`](crate::grid::Grid::write_grapheme)),
-    /// and just read back afterward. Almost always 0, 1, or 2 (control characters/combining
-    /// marks are 0; a handful of grapheme clusters can report other values via
-    /// `unicode_width`, but `u8` comfortably covers every value that crate returns).
+    /// and just read back afterward. Almost always 0, 1, or 2 (combining marks are 0; control
+    /// characters are 1, matching [`char_width`](crate::text::char_width); a handful of grapheme
+    /// clusters can report other values via `unicode_width`, but `u8` comfortably covers every
+    /// value that crate returns).
     pub(crate) width: u8,
     /// Pixel offset from the cell's left edge. Negative shifts left.
     ///
@@ -206,7 +206,8 @@ impl Tile {
         self.dy
     }
 
-    /// Returns the wide-character flags for this tile.
+    /// Returns the role and occupancy flags for this tile: emptiness, wide-character halves,
+    /// EGC side-table presence, and multi-cell span roles (see [`TileFlags`]).
     #[must_use]
     pub const fn flags(&self) -> TileFlags {
         self.flags
@@ -273,12 +274,16 @@ impl Tile {
     /// Sets the glyph for this tile (builder style).
     ///
     /// Writing content marks the tile non-empty (see [`is_empty`](Self::is_empty)). Recomputes
-    /// the cached display width (see [`width`](Self::width)) for the new glyph.
+    /// the cached display width (see [`width`](Self::width)) for the new glyph, and clears
+    /// [`TileFlags::WIDE_CHAR`]/[`TileFlags::WIDE_CHAR_SPACER`], which describe the old glyph's
+    /// role and would otherwise disagree with the recomputed width.
     #[must_use]
     pub fn with_glyph(mut self, glyph: char) -> Self {
         self.glyph = glyph;
         self.width = glyph_width(glyph);
-        self.flags = self.flags.difference(TileFlags::EMPTY);
+        self.flags = self
+            .flags
+            .difference(TileFlags::EMPTY | TileFlags::WIDE_CHAR | TileFlags::WIDE_CHAR_SPACER);
         self
     }
 
@@ -435,6 +440,38 @@ mod tests {
         let tile = Tile::new('A', Style::default()).with_glyph('漢');
         assert_eq!(tile.glyph(), '漢');
         assert_eq!(tile.width(), 2);
+    }
+
+    /// A tile carrying a stale `WIDE_CHAR_SPACER` (e.g. read back out of a grid via
+    /// `*grid.tile(..)`) must not keep that flag once `with_glyph` gives it a real glyph: the
+    /// flag tells `Grid::put_tile` to treat the tile as an already-resolved replay and store it
+    /// verbatim, which means every backend skips drawing it (see issue #986).
+    #[test]
+    fn test_tile_with_glyph_clears_stale_wide_char_spacer_flag() {
+        let mut spacer = Tile::new(' ', Style::default());
+        spacer.flags = TileFlags::WIDE_CHAR_SPACER;
+
+        let rebuilt = spacer.with_glyph('!');
+
+        assert_eq!(rebuilt.glyph(), '!');
+        assert_eq!(rebuilt.width(), 1);
+        assert!(!rebuilt.flags().contains(TileFlags::WIDE_CHAR_SPACER));
+        assert!(!rebuilt.is_empty());
+    }
+
+    /// A tile carrying a stale `WIDE_CHAR` must not keep that flag once `with_glyph` narrows it:
+    /// the flag tells `Grid::clear_overlap` that the cell to the right is this tile's spacer, so
+    /// a stale flag makes an overlapping write reset an unrelated neighbour (see issue #986).
+    #[test]
+    fn test_tile_with_glyph_clears_stale_wide_char_flag() {
+        let mut wide = Tile::new('漢', Style::default());
+        wide.flags = TileFlags::WIDE_CHAR;
+
+        let rebuilt = wide.with_glyph('A');
+
+        assert_eq!(rebuilt.glyph(), 'A');
+        assert_eq!(rebuilt.width(), 1);
+        assert!(!rebuilt.flags().contains(TileFlags::WIDE_CHAR));
     }
 
     #[test]

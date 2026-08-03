@@ -1122,6 +1122,46 @@ mod tests {
         assert_eq!(g.span_owner(0, 5, 3), None);
     }
 
+    /// A tile rebuilt via `with_glyph` from a spacer read back out of a grid must actually get
+    /// drawn: before the fix, the stale `WIDE_CHAR_SPACER` flag made `put_tile` treat it as an
+    /// already-resolved replay and store it verbatim, so backends skipped it (retroglyph#986).
+    #[test]
+    fn put_tile_draws_a_spacer_rebuilt_through_with_glyph() {
+        let mut g = Grid::new(8, 4);
+        g.put_tile(0, (0, 0), Tile::new('\u{6f22}', Style::default()));
+
+        let spacer = g[Pos::new(1, 0)];
+        assert!(spacer.flags().contains(TileFlags::WIDE_CHAR_SPACER));
+
+        let modified = spacer.with_glyph('!');
+        g.put_tile(0, (4, 0), modified);
+
+        let placed = g[Pos::new(4, 0)];
+        assert_eq!(placed.glyph(), '!');
+        assert_eq!(placed.width(), 1);
+        assert!(!placed.flags().contains(TileFlags::WIDE_CHAR_SPACER));
+    }
+
+    /// A tile rebuilt via `with_glyph` from a wide lead read back out of a grid must not carry a
+    /// stale `WIDE_CHAR` flag: before the fix, `clear_overlap` trusted it to mean "my right
+    /// neighbour is my spacer" and reset an unrelated tile on the next overlapping write
+    /// (retroglyph#986).
+    #[test]
+    fn put_tile_narrowed_through_with_glyph_does_not_clobber_its_neighbour() {
+        let mut g = Grid::new(8, 4);
+        g.put_tile(0, (0, 0), Tile::new('\u{6f22}', Style::default()));
+
+        let wide = g[Pos::new(0, 0)];
+        assert!(wide.flags().contains(TileFlags::WIDE_CHAR));
+
+        let narrow = wide.with_glyph('A');
+        g.put_tile(0, (4, 0), narrow);
+        g.put_tile(0, (5, 0), Tile::new('Z', Style::default()));
+        g.put_tile(0, (4, 0), Tile::new('B', Style::default()));
+
+        assert_eq!(g[Pos::new(5, 0)].glyph(), 'Z');
+    }
+
     /// `fill_region` must clear any span it would partially overwrite the same way a per-cell
     /// `put_tile` loop would (via `clear_span_overlap`), or the surviving span's anchor would
     /// keep claiming a footprint the fill just overwrote part of.
