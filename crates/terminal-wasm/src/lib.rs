@@ -1479,6 +1479,13 @@ mod tests {
             TerminalWasm::new(size.width(), size.height())
         });
     }
+
+    #[test]
+    fn satisfies_the_cursor_style_contract() {
+        retroglyph_core::testing::conformance::assert_cursor_style_contract(|size| {
+            TerminalWasm::new(size.width(), size.height())
+        });
+    }
 }
 
 /// Fuzzes [`decode_key_event`] over arbitrary `(code, mods)` pairs: no `(u32, u8)` input may
