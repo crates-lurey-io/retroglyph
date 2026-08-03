@@ -127,7 +127,7 @@ use alpha_blend::channel::Channel;
 use core::fmt;
 use core::ops::{Index, IndexMut};
 use grixy::buf::GridBuf;
-use grixy::ops::layout::RowMajor;
+use grixy::ops::layout::{LinearLayout, RowMajor};
 use grixy::ops::{ExactSizeGrid, GridRead, GridWrite};
 
 /// Blend mode for [`Grid::blit_alpha`], selecting how source and destination colors combine
@@ -329,6 +329,16 @@ fn to_grixy_pos(pos: Pos) -> grixy::core::Pos {
     grixy::core::Pos::new(usize::from(pos.x), usize::from(pos.y))
 }
 
+/// Decodes a flat row-major buffer index into `(x, y)`, given the buffer's `width`.
+///
+/// Delegates to [`RowMajor`]'s [`LinearLayout::index_to_pos`](grixy::ops::layout::LinearLayout)
+/// instead of hand-rolling `i % width` / `i / width` at each flat-buffer iterator below.
+fn flat_index_to_xy(i: usize, width: usize) -> (u16, u16) {
+    let pos = RowMajor::index_to_pos(i, width);
+    #[allow(clippy::cast_possible_truncation)]
+    (pos.x as u16, pos.y as u16)
+}
+
 // ---------------------------------------------------------------------------
 // Grid iterators
 // ---------------------------------------------------------------------------
@@ -344,10 +354,7 @@ impl<'a> Iterator for Cells<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next().map(|(i, tile)| {
-            #[allow(clippy::cast_possible_truncation)]
-            let x = (i % self.width) as u16;
-            #[allow(clippy::cast_possible_truncation)]
-            let y = (i / self.width) as u16;
+            let (x, y) = flat_index_to_xy(i, self.width);
             (x, y, tile)
         })
     }
@@ -364,10 +371,7 @@ impl<'a> Iterator for CellsMut<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next().map(|(i, tile)| {
-            #[allow(clippy::cast_possible_truncation)]
-            let x = (i % self.width) as u16;
-            #[allow(clippy::cast_possible_truncation)]
-            let y = (i / self.width) as u16;
+            let (x, y) = flat_index_to_xy(i, self.width);
             (x, y, tile)
         })
     }
@@ -1748,10 +1752,7 @@ impl Grid {
             .filter_map(move |id| self.layer(id).map(|lb| (id, lb)))
             .flat_map(move |(id, lb)| {
                 lb.buf.as_ref().iter().enumerate().map(move |(i, tile)| {
-                    #[allow(clippy::cast_possible_truncation)]
-                    let x = (i % width) as u16;
-                    #[allow(clippy::cast_possible_truncation)]
-                    let y = (i / width) as u16;
+                    let (x, y) = flat_index_to_xy(i, width);
                     DrawCell {
                         layer: id,
                         pos: Pos::new(x, y),
@@ -1891,10 +1892,7 @@ impl Grid {
                         .iter()
                         .enumerate()
                         .map(move |(i, tile)| {
-                            #[allow(clippy::cast_possible_truncation)]
-                            let x = (i % width) as u16;
-                            #[allow(clippy::cast_possible_truncation)]
-                            let y = (i / width) as u16;
+                            let (x, y) = flat_index_to_xy(i, width);
                             DrawCell {
                                 layer: id,
                                 pos: Pos::new(x, y),
@@ -1922,10 +1920,7 @@ impl Grid {
                             if tile == prev_tile && cur_extra == prev_extra {
                                 return None;
                             }
-                            #[allow(clippy::cast_possible_truncation)]
-                            let x = (i % width) as u16;
-                            #[allow(clippy::cast_possible_truncation)]
-                            let y = (i / width) as u16;
+                            let (x, y) = flat_index_to_xy(i, width);
                             Some(DrawCell {
                                 layer: id,
                                 pos: Pos::new(x, y),
@@ -2203,6 +2198,34 @@ mod tests {
     fn test_grid_index_panics_out_of_bounds() {
         let grid = Grid::new(10, 10);
         let _ = &grid[Pos::new(0, 10)];
+    }
+
+    #[test]
+    fn test_grid_layers_yields_every_allocated_cell_in_layer_then_row_major_order() {
+        let mut grid = Grid::new(2, 2);
+        grid.put_tile(0, (1, 0), Tile::default().with_glyph('A'));
+        grid.put_tile(2, (0, 1), Tile::default().with_glyph('B'));
+
+        let cells: Vec<_> = grid
+            .layers()
+            .map(|c| (c.layer, c.pos, c.tile.glyph()))
+            .collect();
+
+        // Layer 1 is never allocated, so it's skipped entirely; layer 0's four cells (row-major)
+        // come before layer 2's four cells.
+        assert_eq!(
+            cells,
+            [
+                (0, Pos::new(0, 0), ' '),
+                (0, Pos::new(1, 0), 'A'),
+                (0, Pos::new(0, 1), ' '),
+                (0, Pos::new(1, 1), ' '),
+                (2, Pos::new(0, 0), ' '),
+                (2, Pos::new(1, 0), ' '),
+                (2, Pos::new(0, 1), 'B'),
+                (2, Pos::new(1, 1), ' '),
+            ]
+        );
     }
 
     #[test]
