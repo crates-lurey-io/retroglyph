@@ -102,7 +102,7 @@ compile:
     # alone) can stay green here and only surface once another PR happens to combine it with
     # something else (#886). `cargo hack check --each-feature` builds every feature in isolation
     # across the workspace instead, catching that gap directly.
-    cargo bin cargo-hack hack check --each-feature --workspace --no-dev-deps
+    cargo bin cargo-hack check --each-feature --workspace --no-dev-deps
 
 doc: check-features
     # --exclude: none of the three are part of the published API surface (cargo-bin and
