@@ -22,7 +22,7 @@
 //! Keys: `q` or `Escape` quits, or close the window.
 
 use retroglyph_core::event::{Event, KeyCode};
-use retroglyph_core::subcell::{Rgb, quantize_half_block, quantize_quadrant, quantize_sextant};
+use retroglyph_core::subcell::{Pixel, quantize_half_block, quantize_quadrant, quantize_sextant};
 use retroglyph_core::{Backend, Style, Surface, Terminal};
 use retroglyph_examples::Example;
 
@@ -36,7 +36,7 @@ const PANEL_X: [u16; 3] = [1, 1 + PANEL_W + 1, 1 + 2 * (PANEL_W + 1)];
 const PANEL_Y: u16 = 3;
 
 /// The scene's color palette, one color per concentric ring.
-const RING_COLORS: [Rgb; 5] = [
+const RING_COLORS: [Pixel; 5] = [
     (231, 76, 60),  // red
     (241, 196, 15), // yellow
     (46, 204, 113), // green
@@ -61,7 +61,7 @@ const RING_COLORS: [Rgb; 5] = [
     clippy::cast_sign_loss,
     clippy::suboptimal_flops
 )]
-fn scene_pixel(u: f32, v: f32) -> Rgb {
+fn scene_pixel(u: f32, v: f32) -> Pixel {
     let dx = u - 0.5;
     let dy = v - 0.5;
     let dist = dx.hypot(dy);
@@ -73,7 +73,7 @@ fn scene_pixel(u: f32, v: f32) -> Rgb {
 }
 
 /// Samples [`scene_pixel`] at pixel `(px, py)` of a `pixel_w`x`pixel_h` source grid.
-fn sample(px: u16, py: u16, pixel_w: u16, pixel_h: u16) -> Rgb {
+fn sample(px: u16, py: u16, pixel_w: u16, pixel_h: u16) -> Pixel {
     let u = (f32::from(px) + 0.5) / f32::from(pixel_w);
     let v = (f32::from(py) + 0.5) / f32::from(pixel_h);
     scene_pixel(u, v)
