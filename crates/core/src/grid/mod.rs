@@ -554,8 +554,8 @@ impl Grid {
     /// full replacement of identical geometry.
     ///
     /// If `layer` is unallocated on `src`, it becomes unallocated on `self` too (mirroring an
-    /// always-empty layer exactly), except layer 0, which is always allocated and so is instead
-    /// reset to a fresh, empty buffer.
+    /// always-empty layer exactly). Layer 0 can never hit this case: it is always allocated on
+    /// every `Grid` (see [`Grid::new`]), on `src` as much as on `self`.
     ///
     /// # Panics
     ///
@@ -578,9 +578,7 @@ impl Grid {
                 }
             }
             None => {
-                if idx == 0 {
-                    self.layers[0] = Some(LayerBuf::new(self.width, self.height));
-                } else if idx < self.layers.len() {
+                if idx < self.layers.len() {
                     self.layers[idx] = None;
                 }
             }

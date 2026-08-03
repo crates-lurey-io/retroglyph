@@ -1082,6 +1082,43 @@ mod tests {
         assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), 'A');
     }
 
+    #[test]
+    fn test_retain_layer_never_drawn_is_a_no_op() {
+        // `Grid::copy_layer_from`'s `None` arm, no-op branch: retaining a non-zero layer id
+        // that has never been drawn to on either buffer leaves it unallocated on both sides.
+        // Must not panic or grow the layer table for a layer id nobody ever wrote to.
+        let mut term = Terminal::new(Headless::new(3, 1));
+        term.retain_layer(5u8);
+        term.draw(|_| {}).expect("draw failed");
+        assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), ' ');
+    }
+
+    #[test]
+    fn test_retain_layer_deallocates_when_previous_lacks_it() {
+        // `Grid::copy_layer_from`'s `None` arm, deallocating branch: `current` can carry a
+        // non-zero layer allocated (but emptied by immediate mode) from an older frame while
+        // `previous` never allocated it at all, if that layer went undrawn (and unretained) for
+        // a frame in between. Retaining it then must clear it from `current`, not leave stale
+        // allocation state behind. Layer 0 can't exercise this (always allocated on both
+        // sides), so this writes directly to a non-zero raw layer id via `on_layer`.
+        let mut term = Terminal::new(Headless::new(3, 1));
+        term.draw(|s| s.on_layer(5).put((0, 0), 'W', Style::default()))
+            .expect("draw failed");
+        assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), 'W');
+
+        // Layer 5 goes undrawn and unretained: ordinary immediate-mode clearing puts `current`'s
+        // (still allocated) layer 5 buffer back to empty, and this frame's diff sends that.
+        term.draw(|s| s.on_layer(1).put((1, 0), 'H', Style::default()))
+            .expect("draw failed");
+        assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), ' ');
+
+        // Retaining layer 5 now must not resurrect stale content or panic, even though
+        // `previous` (this frame's source) never allocated layer 5 at all.
+        term.retain_layer(5u8);
+        term.draw(|_| {}).expect("draw failed");
+        assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), ' ');
+    }
+
     // --- unicode width ---
 
     #[test]
