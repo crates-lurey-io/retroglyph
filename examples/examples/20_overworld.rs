@@ -238,7 +238,7 @@ mod world {
 
     use std::collections::HashMap;
 
-    use retroglyph_core::symbols::{Glyph, Rgb, quantize_half_block};
+    use retroglyph_core::symbols::{Glyph, Pixel, quantize_half_block};
     use retroglyph_core::{Color, Pos, Style};
 
     use super::noise::{fbm, hash01, ridge, warped_fbm};
@@ -250,7 +250,7 @@ mod world {
     /// Extracts the `(r, g, b)` triple from a [`Color::Rgb`] -- every color this module hands to
     /// [`quantize_half_block`] is one, but the fallback keeps this total instead of panicking if
     /// that ever changes.
-    const fn to_rgb(color: Color) -> Rgb {
+    const fn to_rgb(color: Color) -> Pixel {
         match color {
             Color::Rgb { r, g, b } => (r, g, b),
             _ => (0, 0, 0),
@@ -953,7 +953,7 @@ mod world {
         /// one-glyph-per-cell sampling would show.
         #[must_use]
         pub(crate) fn minimap_swatch(&self, col: u16, row: u16, cols: u16, rows: u16) -> Glyph {
-            let sample = |mx: u16, my_half: u16| -> Rgb {
+            let sample = |mx: u16, my_half: u16| -> Pixel {
                 let wx = (u32::from(mx) * u32::from(WORLD_W) / u32::from(cols))
                     .min(u32::from(WORLD_W) - 1);
                 let wy = (u32::from(my_half) * u32::from(WORLD_H) / (u32::from(rows) * 2))

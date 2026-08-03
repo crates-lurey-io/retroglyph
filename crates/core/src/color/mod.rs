@@ -8,6 +8,9 @@ use gem::rgb::Rgb888;
 #[cfg(feature = "indexed-quant")]
 use gem::space::Srgb;
 
+mod tint;
+pub use tint::Tint;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 /// Standard 16-color ANSI palette.
 ///

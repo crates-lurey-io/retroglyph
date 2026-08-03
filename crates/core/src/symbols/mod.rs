@@ -46,7 +46,7 @@ pub mod line;
 mod subcell;
 
 pub use subcell::{
-    Glyph, HALF_BLOCKS, QUADRANTS, Rgb, SEXTANTS, quantize_half_block, quantize_quadrant,
+    Glyph, HALF_BLOCKS, Pixel, QUADRANTS, SEXTANTS, quantize_half_block, quantize_quadrant,
     quantize_sextant,
 };
 
