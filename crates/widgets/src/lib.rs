@@ -41,13 +41,33 @@
 //!
 //! # Features
 //!
-//! - `dev` (⚪ optional): forwards `retroglyph-core`'s `dev` feature, forcing development
-//!   diagnostics on in a build that would otherwise compile them out.
-//! - `egc` (⚪ optional): forwards to `retroglyph-core`'s `egc` feature; upgrades `Paragraph`'s
-//!   word-wrap (always available) to grapheme-cluster-aware correctness.
-//! - `serde` (⚪ optional): `Serialize`/`Deserialize` impls for [`Theme`] and `Density`, forwarding
-//!   to `retroglyph-core`'s `serde` feature ([`Theme`] round-trips through `Color`'s own `serde`
-//!   impl).
+//! <!-- gen-features:start -->
+//! This crate has no default features; every feature below is optional and off unless enabled.
+//!
+//! ### `dev`
+//!
+//! ⚪ Optional.
+//!
+//! Forwards `retroglyph-core`'s `dev` feature, which forces development diagnostics on in a build
+//! that would otherwise compile them out (see [`retroglyph_core::dev`]).
+//!
+//! ### `egc`
+//!
+//! ⚪ Optional.
+//!
+//! Forwards to `retroglyph-core`'s `egc` feature.
+//!
+//! Upgrades [`Paragraph`]'s word-wrap (always available) to grapheme-cluster-aware correctness.
+//!
+//! ### `serde`
+//!
+//! ⚪ Optional.
+//!
+//! Adds `Serialize`/`Deserialize` impls for [`Theme`] and `Density`, forwarding to
+//! `retroglyph-core`'s `serde` feature.
+//!
+//! [`Theme`] round-trips through `Color`'s own `serde` impl.
+//! <!-- gen-features:end -->
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
 

@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/*", "examples", "tools/cargo-bin"]
+members = ["crates/*", "examples", "tools/cargo-bin", "tools/gen-features"]
 resolver = "2"
 
 [workspace.metadata.bin]

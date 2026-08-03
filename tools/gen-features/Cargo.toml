@@ -1,0 +1,20 @@
+[package]
+name = "gen-features"
+version = "0.1.0"
+description = "Generates each crate's Features doc section (lib.rs, README.md) from its Cargo.toml"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+regex = "1"
+toml_edit = "0.25"
+
+[[bin]]
+name = "gen-features"
+path = "src/main.rs"

@@ -62,22 +62,36 @@
 //!
 //! # Features
 //!
+//! <!-- gen-features:start -->
+//! This crate has no default features; every feature below is optional and off unless enabled.
+//!
 //! ### `dev`
 //!
-//! Optional. Forwards `retroglyph-core`'s `dev` feature, forcing on development diagnostics in a
-//! build that would otherwise compile them out.
+//! ⚪ Optional.
+//!
+//! Forwards `retroglyph-core`'s `dev` feature, which forces development diagnostics on in a build
+//! that would otherwise compile them out (see [`retroglyph_core::dev`]).
 //!
 //! ### `egc`
 //!
-//! Optional. Forwards to `retroglyph-terminal`'s `egc` feature (which forwards to
-//! `retroglyph-core`'s), enabling grapheme-cluster-aware cell diffing. This crate has no code of
-//! its own gated on the flag; it exposes it so callers don't need to know which crate in the
-//! terminal family actually implements it.
+//! ⚪ Optional.
+//!
+//! Forwards to `retroglyph-terminal`'s `egc` feature (which forwards to `retroglyph-core`'s),
+//! enabling grapheme-cluster-aware cell diffing.
+//!
+//! This crate has no code of its own gated on the flag; it exposes it so callers don't need to know
+//! which crate in the terminal family actually implements it.
 //!
 //! ### `tracing`
 //!
-//! Optional. Instruments `draw`, `flush`, and `poll_event` with `tracing` spans for profiling
-//! render/input time; see the "Tracing" section above for the full contract.
+//! ⚪ Optional.
+//!
+//! Instruments `draw`, `flush`, and `poll_event` with `tracing` spans for profiling render/input
+//! time.
+//!
+//! See where time is spent with any `tracing` subscriber (e.g. `tracing-subscriber`'s fmt layer, or
+//! a flamegraph via `tracing-flame`).
+//! <!-- gen-features:end -->
 //!
 //! # Content writer
 //!

@@ -19,14 +19,20 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-# Forwards retroglyph-core's dev feature, forcing on development diagnostics in a build that
-# would otherwise compile them out.
+# Forwards `retroglyph-core`'s `dev` feature, which forces development diagnostics on in a build
+# that would otherwise compile them out (see [`retroglyph_core::dev`]).
 dev = ["retroglyph-core/dev"]
-# Forwards to retroglyph-terminal's egc feature (which forwards to retroglyph-core's), enabling
-# grapheme-cluster-aware cell diffing (this crate has no code of its own gated on the flag).
+# Forwards to `retroglyph-terminal`'s `egc` feature (which forwards to `retroglyph-core`'s),
+# enabling grapheme-cluster-aware cell diffing.
+#
+# This crate has no code of its own gated on the flag; it exposes it so callers don't need to know
+# which crate in the terminal family actually implements it.
 egc = ["retroglyph-terminal/egc", "retroglyph-core/egc"]
-# Instruments draw/flush/poll_event with `tracing` spans so callers can profile render and
-# input-polling time with any `tracing` subscriber.
+# Instruments `draw`, `flush`, and `poll_event` with `tracing` spans for profiling render/input
+# time.
+#
+# See where time is spent with any `tracing` subscriber (e.g. `tracing-subscriber`'s fmt layer, or
+# a flamegraph via `tracing-flame`).
 tracing = ["dep:tracing"]
 
 [dependencies]
