@@ -140,10 +140,12 @@ pub const fn translate_physical_pos(x: f64, y: f64) -> PhysicalPos {
 /// Clamps to `u16::MAX` so out-of-bounds cursor positions (negative or extremely large) don't
 /// panic: the game loop is responsible for bounds-checking against the terminal size.
 ///
-/// Kept as a free function (rather than being replaced outright by
-/// [`CellGeometry::pixel_to_cell`](crate::geometry::CellGeometry::pixel_to_cell)) because
-/// `run.rs`'s call sites only have a raw `(u32, u32)` from `Presenter::cell_size`, not a
-/// `CellGeometry`, to pass; both share the same private clamp/divide helper so the two can't
+/// `run.rs`'s own cursor/mouse handlers call
+/// [`CellGeometry::pixel_to_cell`](crate::geometry::CellGeometry::pixel_to_cell) via
+/// [`Presenter::geometry`](crate::presenter::Presenter::geometry) directly rather than this
+/// function, since they have a full `Presenter` (and so a `CellGeometry`) available. This is kept
+/// as a separate public function for callers that only have a raw `cell_w`/`cell_h` pixel size on
+/// hand, not a `CellGeometry`; both share the same private clamp/divide helper so the two can't
 /// drift apart (see retroglyph#821).
 #[must_use]
 pub fn translate_pixel_to_cell(px_x: f64, px_y: f64, cell_w: u32, cell_h: u32) -> Pos {

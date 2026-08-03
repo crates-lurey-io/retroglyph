@@ -23,6 +23,8 @@ use retroglyph_core::tile::Tile;
 use std::fmt;
 use std::sync::Arc;
 
+use crate::geometry::CellGeometry;
+
 /// A window/display handle pair, as one trait.
 ///
 /// Presenters receive [`raw-window-handle`](raw_window_handle) types, not a concrete
@@ -330,6 +332,25 @@ pub trait Presenter: Output {
     /// are `u16` but pixel arithmetic uses `u32` (winit `PhysicalSize`).
     #[must_use]
     fn cell_size(&self) -> (u32, u32);
+
+    /// This presenter's cell geometry, as a [`CellGeometry`] rather than the raw
+    /// `(width, height)` pair [`cell_size`](Self::cell_size) returns.
+    ///
+    /// Lets callers (e.g. `winit::run`'s cursor/mouse handlers) use
+    /// [`CellGeometry::pixel_to_cell`] directly instead of pairing a raw `cell_size()` with the
+    /// [`translate_pixel_to_cell`](crate::winit::translate::translate_pixel_to_cell) free
+    /// function. The default implementation derives a geometry from [`cell_size`](Self::cell_size)
+    /// at `scale` 1, clamping each dimension to `u8::MAX`: exact for presenters whose cell size
+    /// fits in a `u8` (true of every glyph/tile size in practice), lossy only past that, which
+    /// only affects [`pixel_to_cell`](CellGeometry::pixel_to_cell) precision for callers that
+    /// don't override this method (test doubles, not `retroglyph-software`/`retroglyph-gl`, both
+    /// of which override it to return their real internal geometry).
+    #[must_use]
+    fn geometry(&self) -> CellGeometry {
+        let (cell_w, cell_h) = self.cell_size();
+        #[allow(clippy::cast_possible_truncation)]
+        CellGeometry::new(cell_w.min(255) as u8, cell_h.min(255) as u8, 1)
+    }
 }
 
 /// The glyph a `Presenter` should paint art (a bitmap-font glyph or a tileset sprite) for, or

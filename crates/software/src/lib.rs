@@ -957,6 +957,10 @@ impl retroglyph_window::Presenter for SoftwareRenderer {
     fn cell_size(&self) -> (u32, u32) {
         self.ctx.geometry.cell_size()
     }
+
+    fn geometry(&self) -> CellGeometry {
+        self.ctx.geometry
+    }
 }
 
 // ── Grid compositing ──────────────────────────────────────────────────────────
