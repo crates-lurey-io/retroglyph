@@ -2,13 +2,13 @@
 //! the core language doesn't provide outside `std`: dispatched to `std`'s own intrinsics when the
 //! `std` feature is on, and to `libm`'s software implementation otherwise.
 //!
-//! Gated on the `__float` feature (turned on by either `std` or `libm`; see this crate's
-//! `Cargo.toml`), so every function here can assume at least one of those two is enabled -- there
-//! is no third "no float backend" case for these to handle.
+//! One of `std`/`libm` is required crate-wide (see the `compile_error!` in `lib.rs`), so every
+//! function here can assume a backend is present -- there is no third "no float backend" case for
+//! these to handle.
 //!
 //! [`exp`] has no caller in this crate: it's here for `retroglyph-widgets`, which shares this
-//! module (see the `__math` feature and this module's two declarations in `lib.rs`) instead of
-//! vendoring its own copy. Don't remove it as unused.
+//! module (`#[doc(hidden)] pub`, see its declaration in `lib.rs`) instead of vendoring its own
+//! copy. Don't remove it as unused.
 //!
 //! `std` and `libm`'s trig/pow functions are not bit-identical (`libm` is a pure-Rust port,
 //! platform `libm`s vary by ULP), so [`sin`]/[`cos`]/[`powf`] can disagree by a ULP between a

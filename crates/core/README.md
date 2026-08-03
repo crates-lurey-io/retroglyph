@@ -56,25 +56,15 @@ orphaned pixels behind otherwise. `Terminal::retain_layer()` skips both that dif
 own redraw for one layer for the next frame, for content (e.g. a scrolled map) that's known
 unchanged.
 
-This crate is `no_std`-compatible: disable the `std` feature (requires an allocator). Useful for
-embedded or kernel-space roguelikes; see the `std` feature below.
+This crate is `no_std`-compatible: disable the `std` feature and enable `libm` instead (also
+requires an allocator). Useful for embedded or kernel-space roguelikes; see the `std` and `libm`
+features below.
 
 ## Features
 
 <!-- gen-features:start -->
 
-Default features: `blend-modes`, `egc`, `indexed-quant`, `std`.
-
-### `blend-modes`
-
-🟢 Enabled by default.
-
-Gates the four W3C separable `BlendMode` variants (`Screen`/`Dodge`/`Burn`/`Overlay`/ `Multiply`)
-and pulls in the optional `alpha-blend` dependency. Needs a float backend (`std` or `libm`) for its
-per-channel blend math, so this also turns on `__float`.
-
-`BlendMode::Linear` and `Grid::blit_alpha` are always available regardless of this feature: `Linear`
-only needs `gem::Mix`, not `alpha-blend`.
+Default features: `egc`, `indexed-quant`, `std`.
 
 ### `dev`
 
@@ -101,18 +91,17 @@ conversions (`to_srgb`/`from_srgb`/`lerp`/`from_hex`).
 Without it, `Color::to_indexed`/ `Color::to_ansi` fall back to euclidean RGB cube-mapping instead of
 failing to compile.
 
-This is a capability flag, not a backend: it only turns on `gem`'s `space` module, and needs `std`
-or `libm` (below) enabled separately to actually supply that module's float math -- see the
-`compile_error!` in `src/lib.rs` for what happens if neither is on.
+This is a capability flag, not a backend: it only turns on `gem`'s `space` module, whose float math
+the crate's mandatory `std`-or-`libm` backend already supplies.
 
 ### `libm`
 
 ⚪ Optional.
 
 Uses `libm`'s software float implementation (`roundf`/`fmaf`/`sinf`/`cosf`/`powf`) for `animate`'s
-easing curves and `blend-modes`' separable channel math, via this crate's own `math` shim -- the
-`no_std` side of that split. Turns on `__float`. See `std` above for the alternative that prefers
-the platform's own float intrinsics when available.
+easing curves and the separable `BlendMode` channel math, via this crate's own `math` shim -- the
+`no_std` side of that split. See `std` below for the alternative that prefers the platform's own
+float intrinsics when available; a build needs exactly one of the two.
 
 ### `libm-arch`
 
@@ -137,11 +126,12 @@ rather than a derived structural form, so hand-edited TOML/JSON stays legible.
 
 🟢 Enabled by default.
 
-Enables `gem/std` and `alpha-blend?/std`, and uses `std`'s float intrinsics (via this crate's `math`
-shim) instead of `libm`'s software implementation for `animate` and `blend-modes`. Turns on
-`__float`.
+Enables `gem/std` and `alpha-blend/std`, and uses `std`'s float intrinsics (via this crate's `math`
+shim) instead of `libm`'s software implementation for `animate` and the separable `BlendMode`
+channel math.
 
-Disabling this feature (`--no-default-features`) builds this crate `no_std`.
+Disabling this feature (`--no-default-features`) builds this crate `no_std`, and then needs `libm`
+above as the float backend instead: see the crate-level `compile_error!` in `src/lib.rs`.
 
 ### `testing`
 

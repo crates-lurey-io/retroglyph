@@ -9,8 +9,8 @@
 //! agreed by accident and the agreement read as intent. It checks both independently against an
 //! `i64` rational reference that uses no `/255` shortcuts and no shifts.
 //!
-//! `alpha-blend` is a non-optional dev-dependency of `retroglyph-core` (see `Cargo.toml`)
-//! specifically so this runs on every CI invocation, regardless of the feature matrix.
+//! `alpha-blend` is a non-optional dependency of `retroglyph-core` (see `Cargo.toml`), so this
+//! runs on every CI invocation, regardless of the feature matrix.
 
 use alpha_blend::channel::Channel;
 #[cfg(feature = "indexed-quant")]
