@@ -18,7 +18,9 @@ Every example must pass all of the following before merge:
 2. Builds and runs on all native backends (`--features crossterm`, `--features software`,
    `--features gl`, and the headless-stdout fallback with no backend feature enabled).
 3. All three snapshots are committed (headless text via `insta`, software PNG, crossterm SVG), and
-   `cargo test -p retroglyph-examples --all-features` is green.
+   `cargo test -p retroglyph-examples --all-features` is green. The one exception is an example
+   whose render isn't byte-stable: `20_overworld`'s SVG asserts on substrings instead and writes the
+   SVG to `CARGO_TARGET_TMPDIR` via `support::write_scratch_file` rather than pinning it.
 4. Any backend-specific capability gap degrades visibly (an on-screen note) rather than panicking or
    rendering a blank frame -- verified by hand for examples that have a fallback path. `04_mouse` is
    the reference implementation: when motion reporting is unavailable, it falls back to click-only
