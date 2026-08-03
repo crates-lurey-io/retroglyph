@@ -181,10 +181,7 @@ impl InteractiveWidget for Button<'_> {
         fill_rect(surface, Rect::new(0, 0, width, height), ' ', style);
 
         let text = truncate_to_cols(self.label, width);
-        // `truncate_to_cols` bounds `text` to `width` columns, so narrowing the count back is
-        // always exact.
-        #[allow(clippy::cast_possible_truncation)]
-        let text_width = text.chars().count() as u16;
+        let text_width = retroglyph_core::text::width(text);
         let x = width.saturating_sub(text_width) / 2;
         let y = height / 2;
 
@@ -427,5 +424,30 @@ mod tests {
         // Unaffected by `bg`.
         assert_eq!(button.hovered_style.background(), Theme::DARK.hover_bg);
         assert_eq!(button.pressed_style.background(), Theme::DARK.press_bg);
+    }
+
+    #[test]
+    fn button_wide_label_draws_outside_its_own_area() {
+        let area = Rect::new(0, 0, 4, 1);
+        let mut grid = Grid::new(5, 1);
+        Widget::render(&Button::new("保存"), &mut Surface::new(&mut grid, area, 0));
+
+        // "保存" is exactly 4 columns; the button's own area is the full width, so the label
+        // starts at column 0 and its last continuation cell must land at column 3, not spill
+        // into column 4 (outside the button, clobbering whatever's drawn next to it).
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), '保');
+        assert_eq!(grid[Pos::new(2, 0)].glyph(), '存');
+        assert_eq!(grid[Pos::new(4, 0)].glyph(), ' ');
+    }
+
+    #[test]
+    fn button_centers_a_wide_label_by_display_width() {
+        let area = Rect::new(0, 0, 8, 1);
+        let mut grid = Grid::new(8, 1);
+        Widget::render(&Button::new("保存"), &mut Surface::new(&mut grid, area, 0));
+
+        // "保存" (4 cols) centered in width 8 starts at column (8-4)/2 = 2.
+        assert_eq!(grid[Pos::new(2, 0)].glyph(), '保');
+        assert_eq!(grid[Pos::new(4, 0)].glyph(), '存');
     }
 }
