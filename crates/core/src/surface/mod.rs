@@ -14,8 +14,8 @@
 //! [`on_layer`](Surface::on_layer). Or bypass the builder entirely and reach the [`Grid`]
 //! directly via [`grid_mut`](Surface::grid_mut).
 
+use crate::color::Tint;
 use crate::grid::{Grid, Rect};
-use crate::tint::Tint;
 
 mod draw;
 mod geometry;

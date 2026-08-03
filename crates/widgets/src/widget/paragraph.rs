@@ -16,6 +16,8 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 #[cfg(feature = "egc")]
+use retroglyph_core::HasSize;
+#[cfg(feature = "egc")]
 use retroglyph_core::Rect;
 use retroglyph_core::Style;
 #[cfg(feature = "egc")]
@@ -149,7 +151,7 @@ impl Measure for Paragraph<'_> {
         TextLayout::new(&line)
             .rect(Rect::new(0, 0, width, u16::MAX))
             .measure()
-            .height
+            .height()
     }
 }
 

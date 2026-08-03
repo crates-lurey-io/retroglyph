@@ -1,8 +1,7 @@
-use crate::color::Color;
+use crate::color::{Color, Tint};
 use crate::grid::{Grid, Pos, Rect};
 use crate::style::Style;
 use crate::tile::Tile;
-use crate::tint::Tint;
 
 use super::styled::StyledSurface;
 use super::{Layer, Surface};
