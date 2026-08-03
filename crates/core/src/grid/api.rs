@@ -224,10 +224,26 @@ impl Grid {
     /// Content within the overlapping region is preserved on all allocated
     /// layers. New cells are initialised to the default tile. Shrinking
     /// discards tiles outside the new bounds.
+    ///
+    /// Shrinking can also orphan two structures that span more than one cell, since `resize`
+    /// keeps the top-left corner but a shrink can slice through a footprint's far edge:
+    ///
+    /// - A [`TileFlags::WIDE_CHAR`] lead left in the new last column, with its
+    ///   [`TileFlags::WIDE_CHAR_SPACER`] now out of bounds, is reset -- the same thing
+    ///   `clear_overlap` does when an ordinary write orphans one.
+    /// - A [`TileFlags::SPAN_ANCHOR`] whose declared footprint no longer fits has its whole span
+    ///   cleared via `reset_span_at`, rather than left claiming a truncated area. Half a span is
+    ///   not representable, the same reasoning [`blit`](Self::blit) documents for clipping one.
+    ///
+    /// Both repairs are bounded by the shrunk edge, not the whole grid, so a growing resize pays
+    /// nothing for either.
     pub fn resize(&mut self, width: u16, height: u16) {
         let old_width = usize::from(self.width);
+        let old_height = usize::from(self.height);
         let new_width = usize::from(width);
         let new_height = usize::from(height);
+        let width_shrank = new_width < old_width;
+        let height_shrank = new_height < old_height;
         self.width = width;
         self.height = height;
         for layer in self.layers.iter_mut().flatten() {
@@ -247,6 +263,25 @@ impl Grid {
                     .collect();
             }
             layer.buf.resize(new_width, new_height);
+
+            // A width shrink is the only way a wide-character pair can be split: a height shrink
+            // drops a lead and its spacer together (same row, both past the new bottom edge), but
+            // a width shrink can leave the lead in the new last column with the spacer it needs
+            // now out of bounds. Bounded to that one column rather than the whole layer.
+            if width_shrank && new_width > 0 {
+                let last_col = new_width - 1;
+                for y in 0..new_height {
+                    let idx = y * new_width + last_col;
+                    if layer.buf.as_ref()[idx].flags.contains(TileFlags::WIDE_CHAR) {
+                        layer.buf.as_mut()[idx].reset();
+                        layer.extras.remove(&idx);
+                    }
+                }
+            }
+        }
+
+        if width_shrank || height_shrank {
+            self.repair_spans_after_resize(width_shrank, height_shrank);
         }
     }
 
@@ -651,6 +686,26 @@ mod tests {
         assert_eq!(g.tint(0, 3, 1), Tint::None);
     }
 
+    #[test]
+    fn resize_narrower_resets_a_wide_char_split_by_the_new_last_column() {
+        use crate::color::Style;
+
+        let mut g = Grid::new(4, 1);
+        // Lead lands at (2, 0), spacer at (3, 0).
+        g.put_tile(0, (2, 0), Tile::new('\u{4e2d}', Style::default()));
+        assert!(g.tile(0, (2, 0)).unwrap().flags().contains(TileFlags::WIDE_CHAR));
+
+        // Drops column 3, which held the spacer: the lead can no longer be paired, so it must be
+        // reset rather than survive unpaired in the new last column.
+        g.resize(3, 1);
+        assert!(
+            !g.tile(0, (2, 0))
+                .unwrap()
+                .flags()
+                .contains(TileFlags::WIDE_CHAR)
+        );
+    }
+
     #[cfg(all(test, feature = "egc"))]
     mod egc_proptests {
         use super::*;
@@ -700,6 +755,13 @@ mod tests {
             }
         }
 
+        /// One step of the interleaved proptest below: either a grapheme write or a resize.
+        #[derive(Debug, Clone)]
+        enum Op {
+            Write(u16, u16, usize),
+            Resize(u16, u16),
+        }
+
         proptest! {
             #[test]
             fn wide_char_bookkeeping_never_desyncs(
@@ -713,6 +775,33 @@ mod tests {
                     grid.write_grapheme(0, x, y, GRAPHEMES[gi], Style::default());
                     // The invariant must hold after every single write, not just
                     // at the end: an intermediate orphan would be a real bug.
+                    assert_wide_invariants(&grid);
+                }
+            }
+
+            /// Sibling of `wide_char_bookkeeping_never_desyncs` above: that one only ever calls
+            /// `write_grapheme`, so it can never see a `resize` split a wide-character pair
+            /// (retroglyph#1015). This interleaves resizes (both growing and shrinking, on both
+            /// axes) with the same writes and asserts the same invariant after every step.
+            #[test]
+            fn wide_char_bookkeeping_never_desyncs_across_resizes(
+                ops in prop::collection::vec(
+                    prop_oneof![
+                        (0u16..W, 0u16..H, 0usize..GRAPHEMES.len())
+                            .prop_map(|(x, y, gi)| Op::Write(x, y, gi)),
+                        (1u16..=W, 1u16..=H).prop_map(|(w, h)| Op::Resize(w, h)),
+                    ],
+                    0..64,
+                ),
+            ) {
+                let mut grid = Grid::new(W, H);
+                for op in ops {
+                    match op {
+                        Op::Write(x, y, gi) => {
+                            grid.write_grapheme(0, x, y, GRAPHEMES[gi], Style::default());
+                        }
+                        Op::Resize(w, h) => grid.resize(w, h),
+                    }
                     assert_wide_invariants(&grid);
                 }
             }
