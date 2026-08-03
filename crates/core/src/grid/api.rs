@@ -670,9 +670,19 @@ mod tests {
         assert_eq!(g.width(), 2);
         assert_eq!(g.height(), 1);
         assert_eq!(g.tile(0, (0, 0)).unwrap().glyph(), '\u{4e2d}');
-        assert!(g.tile(0, (0, 0)).unwrap().flags().contains(TileFlags::WIDE_CHAR));
+        assert!(
+            g.tile(0, (0, 0))
+                .unwrap()
+                .flags()
+                .contains(TileFlags::WIDE_CHAR)
+        );
         assert_eq!(g.tile(0, (1, 0)).unwrap().glyph(), ' ');
-        assert!(g.tile(0, (1, 0)).unwrap().flags().contains(TileFlags::WIDE_CHAR_SPACER));
+        assert!(
+            g.tile(0, (1, 0))
+                .unwrap()
+                .flags()
+                .contains(TileFlags::WIDE_CHAR_SPACER)
+        );
     }
 
     #[test]
@@ -684,9 +694,19 @@ mod tests {
         let g = Grid::from_charmap("\u{4e2d}x", |c| Tile::new(c, Style::default()));
         assert_eq!(g.width(), 3);
         assert_eq!(g.tile(0, (0, 0)).unwrap().glyph(), '\u{4e2d}');
-        assert!(g.tile(0, (0, 0)).unwrap().flags().contains(TileFlags::WIDE_CHAR));
+        assert!(
+            g.tile(0, (0, 0))
+                .unwrap()
+                .flags()
+                .contains(TileFlags::WIDE_CHAR)
+        );
         assert_eq!(g.tile(0, (1, 0)).unwrap().glyph(), ' ');
-        assert!(g.tile(0, (1, 0)).unwrap().flags().contains(TileFlags::WIDE_CHAR_SPACER));
+        assert!(
+            g.tile(0, (1, 0))
+                .unwrap()
+                .flags()
+                .contains(TileFlags::WIDE_CHAR_SPACER)
+        );
         assert_eq!(g.tile(0, (2, 0)).unwrap().glyph(), 'x');
         assert_eq!(g.tile(0, (2, 0)).unwrap().flags(), TileFlags::empty());
     }
@@ -705,9 +725,19 @@ mod tests {
         assert_eq!(g.height(), 1);
         assert_eq!(g.tile(0, (0, 0)).unwrap().glyph(), 'a');
         assert_eq!(g.tile(0, (1, 0)).unwrap().glyph(), '\u{4e2d}');
-        assert!(g.tile(0, (1, 0)).unwrap().flags().contains(TileFlags::WIDE_CHAR));
+        assert!(
+            g.tile(0, (1, 0))
+                .unwrap()
+                .flags()
+                .contains(TileFlags::WIDE_CHAR)
+        );
         assert_eq!(g.tile(0, (2, 0)).unwrap().glyph(), ' ');
-        assert!(g.tile(0, (2, 0)).unwrap().flags().contains(TileFlags::WIDE_CHAR_SPACER));
+        assert!(
+            g.tile(0, (2, 0))
+                .unwrap()
+                .flags()
+                .contains(TileFlags::WIDE_CHAR_SPACER)
+        );
     }
 
     #[test]
@@ -723,9 +753,19 @@ mod tests {
         assert_eq!(g.tile(0, (0, 0)).unwrap().glyph(), 'a');
         assert_eq!(g.tile(0, (1, 0)).unwrap().glyph(), 'b');
         assert_eq!(g.tile(0, (0, 1)).unwrap().glyph(), '\u{4e2d}');
-        assert!(g.tile(0, (0, 1)).unwrap().flags().contains(TileFlags::WIDE_CHAR));
+        assert!(
+            g.tile(0, (0, 1))
+                .unwrap()
+                .flags()
+                .contains(TileFlags::WIDE_CHAR)
+        );
         assert_eq!(g.tile(0, (1, 1)).unwrap().glyph(), ' ');
-        assert!(g.tile(0, (1, 1)).unwrap().flags().contains(TileFlags::WIDE_CHAR_SPACER));
+        assert!(
+            g.tile(0, (1, 1))
+                .unwrap()
+                .flags()
+                .contains(TileFlags::WIDE_CHAR_SPACER)
+        );
     }
 
     #[cfg(all(test, feature = "egc"))]
