@@ -143,49 +143,45 @@ fn crossterm_target_dir() -> PathBuf {
         .join("pty-examples")
 }
 
-/// Builds *every* `[[example]]` with `--features crossterm` into [`crossterm_target_dir`]
-/// (regardless of what features this test binary itself was compiled with -- `cargo test
-/// --all-features` would otherwise leave a GUI (`software`) binary on disk that hangs when spawned
-/// in a PTY) and returns `example_name`'s path.
+/// Locates `example_name`'s `--features crossterm` binary in [`crossterm_target_dir`] and returns
+/// its path.
 ///
-/// Builds `--examples` (plural, i.e. every example target) rather than just `example_name`
-/// deliberately: this is called once per `svg_snapshot` test, and those tests are their own
-/// separate `[[test]]` binaries (15 of them, one per example) that `cargo test`/`cargo nextest`
-/// runs as 15 separate processes -- serially under plain `cargo test`, concurrently under
-/// nextest. Building only the caller's own example would mean 15 separate `cargo build`
-/// invocations, each re-walking the whole dependency graph and each paying its own fingerprint
-/// check. Building everything on every call instead means the *first* call (whichever process
-/// gets there first -- Cargo's own target-dir lock makes this safe under nextest's concurrent
-/// processes too) does one real build of all 15 examples, and every subsequent call across every
-/// other test binary just confirms freshness and returns immediately.
+/// This deliberately does *not* build the binary. It used to run `cargo build --examples
+/// --features crossterm --target-dir crossterm_target_dir()` itself, once per `svg_snapshot`
+/// call -- but those tests are their own separate `[[test]]` binaries (15 of them, one per
+/// example) that nextest runs as 15 concurrent processes, so every one of those in-test builds
+/// raced every other one over the same shared target dir. Cargo's own locking keeps that from
+/// corrupting a build, but it does not stop one process from spawning a binary that a concurrent
+/// build in another process is mid-relink over, which is a plausible cause of retroglyph#976 (a
+/// child that exited in well under a second with zero bytes captured, immediately after a
+/// `Blocking waiting for file lock on package cache` line proving another cargo invocation was
+/// live at the same moment).
+///
+/// The `just build-pty-examples` recipe is now the sole builder, and every recipe that runs these
+/// tests (`test`, `test-ci`, `test-v`, `check`, `insta`) already depends on it, running once,
+/// before nextest starts any test process. That removes the race instead of narrowing it. Running
+/// a `[[test]]` binary directly (e.g. `cargo nextest run -p retroglyph-examples --test <name>`)
+/// without having run `just build-pty-examples` first will hit the panic below instead of
+/// silently self-building.
 ///
 /// # Panics
 ///
-/// Panics if the build fails.
+/// Panics if `example_name`'s binary doesn't exist, naming the missing path and the command that
+/// builds it.
 #[cfg(not(target_arch = "wasm32"))]
 #[must_use]
 pub fn build_crossterm_example(example_name: &str) -> PathBuf {
-    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
-    let manifest = env!("CARGO_MANIFEST_DIR");
-    let target_dir = crossterm_target_dir();
-    let status = std::process::Command::new(&cargo)
-        .args([
-            "build",
-            "--manifest-path",
-            &format!("{manifest}/Cargo.toml"),
-            "--examples",
-            "--features",
-            "crossterm",
-            "--target-dir",
-        ])
-        .arg(&target_dir)
-        .status()
-        .expect("failed to run cargo build");
+    let bin = crossterm_target_dir()
+        .join("debug")
+        .join("examples")
+        .join(example_name);
     assert!(
-        status.success(),
-        "cargo build --examples --features crossterm failed"
+        bin.exists(),
+        "{} does not exist; run `just build-pty-examples` before running PTY example tests\n\
+         (or run `just test`/`just check`/etc., which already depend on it)",
+        bin.display()
     );
-    target_dir.join("debug").join("examples").join(example_name)
+    bin
 }
 
 /// How often the PTY capture loops re-check the child's output. Short enough that the settle wait
@@ -305,6 +301,12 @@ pub fn capture_pty_with_env(
 
 /// Blocks until `ready_marker` appears in `output`, which the caller's reader thread is filling.
 ///
+/// `bin` and `child` exist only to enrich the empty-capture panic below: when the child closes the
+/// PTY having printed nothing at all, the bare message used to say only that, with no way to tell
+/// "the example panicked on startup" apart from "the harness spawned a half-written binary"
+/// (retroglyph#976). Naming the binary's path, size, and mtime alongside the child's exit status
+/// turns that guess into an answer.
+///
 /// # Panics
 ///
 /// Panics if the child closes the PTY without printing `ready_marker`, if it produces no new
@@ -312,6 +314,8 @@ pub fn capture_pty_with_env(
 /// [`READY_HARD_TIMEOUT`].
 #[cfg(not(target_arch = "wasm32"))]
 fn wait_for_marker(
+    bin: &Path,
+    child: &mut dyn portable_pty::Child,
     output: &std::sync::Arc<std::sync::Mutex<Vec<u8>>>,
     reader_done: &std::sync::Arc<std::sync::Mutex<bool>>,
     ready_marker: &str,
@@ -344,12 +348,27 @@ fn wait_for_marker(
             idle_deadline = Instant::now() + READY_IDLE_TIMEOUT;
         }
         // A child that has closed the PTY is never going to print the marker, so there's no point
-        // waiting out either timeout: report it now, and quote what it did manage to print.
-        assert!(
-            !*reader_done.lock().unwrap(),
-            "child exited before printing {ready_marker:?}; captured:\n{}",
-            String::from_utf8_lossy(&output.lock().unwrap())
-        );
+        // waiting out either timeout: report it now, and quote what it did manage to print, plus
+        // enough about the binary and the child's own exit to tell "it panicked on startup" apart
+        // from "the harness spawned a stale/half-written binary" (retroglyph#976) without guessing.
+        if *reader_done.lock().unwrap() {
+            let metadata = std::fs::metadata(bin);
+            let bin_desc = match &metadata {
+                Ok(meta) => format!("{} bytes, mtime {:?}", meta.len(), meta.modified().ok()),
+                Err(err) => format!("<stat failed: {err}>"),
+            };
+            let exit_desc = match child.try_wait() {
+                Ok(Some(status)) => format!("{status:?}"),
+                Ok(None) => "<still running>".to_owned(),
+                Err(err) => format!("<wait failed: {err}>"),
+            };
+            panic!(
+                "child exited before printing {ready_marker:?}; bin: {} ({bin_desc}); exit \
+                 status: {exit_desc}; captured:\n{}",
+                bin.display(),
+                String::from_utf8_lossy(&output.lock().unwrap())
+            );
+        }
         let now = Instant::now();
         assert!(
             now <= idle_deadline,
@@ -446,7 +465,7 @@ pub fn capture_pty_until(
     // Nothing is typed until the example has drawn a frame. Before that it hasn't enabled raw
     // mode yet, so the line discipline would hold the bytes in its canonical-mode line buffer and
     // echo them straight back into the capture.
-    wait_for_marker(&output, &reader_done, ready_marker);
+    wait_for_marker(bin, child.as_mut(), &output, &reader_done, ready_marker);
 
     if !input.is_empty() {
         writer.write_all(input).expect("write input");

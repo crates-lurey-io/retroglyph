@@ -1025,6 +1025,46 @@ fn translate_shifts_fill_rect_print_and_clear_region_via_put() {
 }
 
 #[test]
+fn translate_shifts_print_wrap_to_the_areas_own_width_not_the_local_offset_width() {
+    // retroglyph#991: the wrap threshold used to stay in area-local space while `cx` advanced
+    // in translated space, so it fired `origin_offset.0` columns early instead of at the
+    // area's own 10-column width.
+    let mut grid = Grid::new(10, 4);
+    {
+        let mut surface = screen(&mut grid);
+        let mut view = surface.translate((5, 0));
+        view.print((5, 0), "abcdefghij", Style::default());
+    }
+
+    // All 10 characters fit on row 0; nothing wraps to row 1.
+    assert_eq!(grid[Pos::new(0, 0)].glyph(), 'a');
+    assert_eq!(grid[Pos::new(9, 0)].glyph(), 'j');
+    assert_eq!(grid[Pos::new(0, 1)].glyph(), ' ');
+}
+
+#[test]
+fn translate_shifts_print_line_which_still_emits_its_spans() {
+    // retroglyph#991: the span-skip threshold had the same area-local-vs-translated mismatch,
+    // so on a translated surface `cx >= right` was true immediately and every span was
+    // dropped instead of printed.
+    use crate::text::Span;
+    use alloc::vec;
+
+    let mut grid = Grid::new(4, 1);
+    {
+        let mut surface = screen(&mut grid);
+        let mut view = surface.translate((10, 0));
+        let line = Line::from(vec![Span::raw("ab"), Span::raw("cd")]);
+        view.print_line((10, 0), &line);
+    }
+
+    assert_eq!(grid[Pos::new(0, 0)].glyph(), 'a');
+    assert_eq!(grid[Pos::new(1, 0)].glyph(), 'b');
+    assert_eq!(grid[Pos::new(2, 0)].glyph(), 'c');
+    assert_eq!(grid[Pos::new(3, 0)].glyph(), 'd');
+}
+
+#[test]
 fn translate_shifts_clear_region() {
     let mut grid = Grid::new(10, 10);
     {
