@@ -103,7 +103,9 @@ impl BitAndAssign for KeyModifiers {
 impl Not for KeyModifiers {
     type Output = Self;
     fn not(self) -> Self {
-        Self(!self.0)
+        // Mask to the defined bits so the result stays within the same invariant that
+        // `from_bits_truncate` upholds; otherwise unused high bits leak into `Eq`/`Hash`.
+        Self(!self.0 & 0b1111)
     }
 }
 
@@ -551,6 +553,30 @@ mod tests {
         assert!(inverse.contains(KeyModifiers::SUPER));
         assert!(!inverse.contains(KeyModifiers::SHIFT));
         assert!(!inverse.contains(KeyModifiers::CONTROL));
+    }
+
+    #[test]
+    fn test_key_modifiers_not_masks_unused_bits() {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let all =
+            KeyModifiers::SHIFT | KeyModifiers::CONTROL | KeyModifiers::ALT | KeyModifiers::SUPER;
+        let inverse = !KeyModifiers::NONE;
+
+        // `!NONE` must equal the explicit combination of all defined bits, not just satisfy
+        // `contains` (which masks internally and would hide leaked high bits).
+        assert_eq!(inverse, all, "NOT NONE should equal ALL");
+
+        let mut inverse_hasher = DefaultHasher::new();
+        inverse.hash(&mut inverse_hasher);
+        let mut all_hasher = DefaultHasher::new();
+        all.hash(&mut all_hasher);
+        assert_eq!(
+            inverse_hasher.finish(),
+            all_hasher.finish(),
+            "NOT NONE should hash the same as ALL"
+        );
     }
 
     #[test]
