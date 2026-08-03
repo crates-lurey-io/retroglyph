@@ -532,16 +532,22 @@ pub const fn coalesces_with(new: &Event, existing: &Event) -> bool {
 /// Feed it every [`KeyEvent`] (or [`Event`]) you receive and query
 /// [`is_held`](Self::is_held) each frame for held-key movement. A key is
 /// considered held from its first [`KeyEventKind::Press`] until a matching
-/// [`KeyEventKind::Release`].
+/// [`KeyEventKind::Release`], or until [`apply_event`](Self::apply_event) sees an
+/// [`Event::FocusLost`], whichever comes first.
 ///
 /// Held keys are keyed by `(KeyCode, KeyLocation)`, so a held Numpad8 and a held digit-row 8 are
 /// tracked separately: [`is_held`](Self::is_held) takes the pair, and [`held`](Self::held) yields
 /// it.
 ///
-/// This is only useful on backends that emit release events (winit, or a
-/// terminal with the kitty keyboard protocol). On press-only backends a key
-/// never leaves the held set on its own, so call [`clear`](Self::clear) at a
-/// suitable boundary (e.g. once per turn) if you rely on it there.
+/// Release events are what actually clear a key, and not every backend emits them: plain
+/// terminals only ever report [`KeyEventKind::Press`] (see [`KeyEventKind`]). On those
+/// press-only backends a key never leaves the held set on its own -- not even on focus loss, since
+/// there is no release to match -- so call [`clear`](Self::clear) at a suitable boundary (e.g.
+/// once per turn) if you rely on held-key state there. Backends rich enough to emit releases
+/// (winit, or a terminal with the kitty keyboard protocol) are exactly the ones that also emit
+/// [`Event::FocusLost`], so [`apply_event`](Self::apply_event) clears the held set on it: without
+/// that, alt-tabbing or clicking away while a key is down would leave it stuck held forever, since
+/// the release is delivered to whichever window/app gains focus instead.
 #[derive(Debug, Clone, Default)]
 pub struct KeyState {
     held: Vec<(KeyCode, KeyLocation)>,
@@ -572,10 +578,15 @@ impl KeyState {
         }
     }
 
-    /// Updates the held set from an [`Event`], ignoring non-key events.
+    /// Updates the held set from an [`Event`].
+    ///
+    /// Key events update the held set as [`apply`](Self::apply) does; [`Event::FocusLost`]
+    /// clears it entirely (see the type-level docs for why); every other event is ignored.
     pub fn apply_event(&mut self, event: &Event) {
-        if let Event::Key(key) = event {
-            self.apply(*key);
+        match event {
+            Event::Key(key) => self.apply(*key),
+            Event::FocusLost => self.clear(),
+            _ => {}
         }
     }
 
@@ -599,6 +610,7 @@ impl KeyState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::vec;
 
     #[test]
     fn test_key_modifiers() {
@@ -811,6 +823,110 @@ mod tests {
         assert!(state.held().next().is_none());
         state.apply_event(&Event::Key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE)));
         assert!(state.is_held(KeyCode::Up, KeyLocation::Standard));
+    }
+
+    #[test]
+    fn test_key_state_apply_event_clears_on_focus_lost() {
+        let mut state = KeyState::new();
+        state.apply_event(&Event::Key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE)));
+        state.apply_event(&Event::Key(KeyEvent::new(
+            KeyCode::Left,
+            KeyModifiers::NONE,
+        )));
+        assert!(state.is_held(KeyCode::Up, KeyLocation::Standard));
+        assert!(state.is_held(KeyCode::Left, KeyLocation::Standard));
+
+        // Focus loss clears every held key at once, simulating alt-tabbing away while keys are
+        // down: the release that would normally clear them is delivered to whichever window/app
+        // gains focus instead, never to us.
+        state.apply_event(&Event::FocusLost);
+        assert!(!state.is_held(KeyCode::Up, KeyLocation::Standard));
+        assert!(!state.is_held(KeyCode::Left, KeyLocation::Standard));
+        assert!(state.held().next().is_none());
+    }
+
+    #[test]
+    fn test_key_state_clear() {
+        let mut state = KeyState::new();
+        state.apply(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE));
+        state.apply(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+        assert_eq!(state.held().count(), 2);
+
+        state.clear();
+        assert!(state.held().next().is_none());
+        assert!(!state.is_held(KeyCode::Left, KeyLocation::Standard));
+        assert!(!state.is_held(KeyCode::Right, KeyLocation::Standard));
+
+        // Clearing an already-empty state is a harmless no-op.
+        state.clear();
+        assert!(state.held().next().is_none());
+    }
+
+    #[test]
+    fn test_key_state_held_is_in_first_pressed_order() {
+        let mut state = KeyState::new();
+        state.apply(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE));
+        state.apply(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE));
+        state.apply(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+        assert_eq!(
+            state.held().collect::<Vec<_>>(),
+            vec![
+                (KeyCode::Left, KeyLocation::Standard),
+                (KeyCode::Up, KeyLocation::Standard),
+                (KeyCode::Right, KeyLocation::Standard),
+            ]
+        );
+
+        // Releasing and re-pressing a key moves it to the back: it is first-pressed order, not
+        // insertion-slot order.
+        state.apply(KeyEvent::with_kind(
+            KeyCode::Left,
+            KeyModifiers::NONE,
+            KeyEventKind::Release,
+        ));
+        state.apply(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE));
+        assert_eq!(
+            state.held().collect::<Vec<_>>(),
+            vec![
+                (KeyCode::Up, KeyLocation::Standard),
+                (KeyCode::Right, KeyLocation::Standard),
+                (KeyCode::Left, KeyLocation::Standard),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_key_state_release_of_unpressed_key_is_a_no_op() {
+        let mut state = KeyState::new();
+        state.apply(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE));
+
+        // Releasing a key that was never pressed must not disturb keys that are actually held.
+        state.apply(KeyEvent::with_kind(
+            KeyCode::Down,
+            KeyModifiers::NONE,
+            KeyEventKind::Release,
+        ));
+        assert!(!state.is_held(KeyCode::Down, KeyLocation::Standard));
+        assert!(state.is_held(KeyCode::Up, KeyLocation::Standard));
+        assert_eq!(state.held().count(), 1);
+    }
+
+    #[test]
+    fn test_key_state_double_press_without_release_does_not_duplicate() {
+        let mut state = KeyState::new();
+        state.apply(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE));
+        state.apply(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE));
+        assert_eq!(state.held().count(), 1);
+
+        // A single release still clears it: the dedup guard didn't push a second entry that a
+        // release would need to match twice.
+        state.apply(KeyEvent::with_kind(
+            KeyCode::Up,
+            KeyModifiers::NONE,
+            KeyEventKind::Release,
+        ));
+        assert!(!state.is_held(KeyCode::Up, KeyLocation::Standard));
+        assert!(state.held().next().is_none());
     }
 
     #[test]
