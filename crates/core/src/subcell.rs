@@ -361,4 +361,22 @@ mod tests {
         );
         assert_eq!(glyph.bg, Color::Rgb { r: 0, g: 0, b: 0 });
     }
+
+    #[test]
+    fn quantize_fns_accept_rgb888_directly() {
+        // The whole point of `impl Into<Pixel>`: a caller holding `gem::rgb::Rgb888` (as
+        // opposed to a bare `(u8, u8, u8)`) passes it with no `.to_rgb()` call, via gem 0.2.2's
+        // `From<Rgb888> for (u8, u8, u8)`.
+        use gem::rgb::Rgb888;
+
+        let white = Rgb888::from_rgb(255, 255, 255);
+        let black = Rgb888::from_rgb(0, 0, 0);
+
+        assert_eq!(quantize_half_block([white, black]).ch, '▀');
+        assert_eq!(quantize_quadrant([black, black, white, black]).ch, '▖');
+        assert_eq!(
+            quantize_sextant([black, black, black, black, white, black]).ch,
+            '🬏'
+        );
+    }
 }
