@@ -863,6 +863,25 @@ mod tests {
     }
 
     #[test]
+    fn set_extra_out_of_bounds_does_not_allocate_the_layer() {
+        // retroglyph#1012: same guarantee as `put_tile`/`set_tint`, for the crate-private
+        // `set_extra` write path (reached from `Headless::draw_layers` with whatever `pos` the
+        // replayed `DrawCell` stream carries, which is not itself bounds-checked there).
+        let mut g = Grid::new(4, 4);
+        g.set_extra(
+            200,
+            99,
+            99,
+            TileExtra {
+                grapheme: None,
+                tint: Tint::multiply(1, 2, 3),
+            },
+        );
+        assert_eq!(g.max_layer(), 0);
+        assert!(g.layer(200).is_none());
+    }
+
+    #[test]
     fn test_grid_layer_table_growth_is_monotonic_across_writes() {
         // Writing to a lower layer id after a higher one must not shrink the table, and must
         // preserve the higher layer's content.
