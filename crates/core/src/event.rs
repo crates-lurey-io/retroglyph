@@ -555,10 +555,25 @@ mod tests {
         assert!(!inverse.contains(KeyModifiers::CONTROL));
     }
 
+    /// Minimal [`Hasher`] so the regression test below works without `std` (`DefaultHasher`
+    /// is a `std`-only type, and this crate is `no_std`-compatible; see `crates/core/src/lib.rs`).
+    #[derive(Default)]
+    struct TestHasher(u64);
+
+    impl core::hash::Hasher for TestHasher {
+        fn finish(&self) -> u64 {
+            self.0
+        }
+        fn write(&mut self, bytes: &[u8]) {
+            for byte in bytes {
+                self.0 = self.0.wrapping_mul(31).wrapping_add(u64::from(*byte));
+            }
+        }
+    }
+
     #[test]
     fn test_key_modifiers_not_masks_unused_bits() {
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
+        use core::hash::Hash;
 
         let all =
             KeyModifiers::SHIFT | KeyModifiers::CONTROL | KeyModifiers::ALT | KeyModifiers::SUPER;
@@ -568,13 +583,13 @@ mod tests {
         // `contains` (which masks internally and would hide leaked high bits).
         assert_eq!(inverse, all, "NOT NONE should equal ALL");
 
-        let mut inverse_hasher = DefaultHasher::new();
+        let mut inverse_hasher = TestHasher::default();
         inverse.hash(&mut inverse_hasher);
-        let mut all_hasher = DefaultHasher::new();
+        let mut all_hasher = TestHasher::default();
         all.hash(&mut all_hasher);
         assert_eq!(
-            inverse_hasher.finish(),
-            all_hasher.finish(),
+            core::hash::Hasher::finish(&inverse_hasher),
+            core::hash::Hasher::finish(&all_hasher),
             "NOT NONE should hash the same as ALL"
         );
     }
