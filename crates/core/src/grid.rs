@@ -1332,7 +1332,7 @@ impl Grid {
     /// carry [`TileFlags::WIDE_CHAR`]/[`TileFlags::WIDE_CHAR_SPACER`] (both `pub(crate)`-only to
     /// set). A `tile` that already carries either flag is, by construction, an already-resolved
     /// tile read back out of some grid (e.g. [`Headless`](crate::backend::Headless) replaying a
-    /// [`DrawCell`](crate::backend::DrawCell) stream verbatim into its own copy) rather than a new
+    /// [`DrawCell`] stream verbatim into its own copy) rather than a new
     /// glyph placement, and is written through exactly as given, with no bounds refusal, spacer
     /// synthesis, or overlap clearing of its own: those already happened on the call that
     /// produced it, and re-running them here would (for a spacer tile specifically) clear the
