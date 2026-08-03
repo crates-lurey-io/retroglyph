@@ -66,7 +66,7 @@
 use crate::color::Color;
 
 /// A raw 24-bit RGB pixel sample: `(r, g, b)`, one byte per channel.
-pub type Rgb = (u8, u8, u8);
+pub type Pixel = (u8, u8, u8);
 
 /// The Unicode Block Elements glyphs for a 1-wide x 2-tall pixel block, indexed by a 2-bit
 /// pattern (bit 0 = top pixel set, bit 1 = bottom pixel set).
@@ -116,7 +116,7 @@ pub struct Glyph {
 
 /// Averages the `pixels` selected by `mask` (bit `i` set means `pixels[i]` is included), rounding
 /// each channel to the nearest integer. Returns `None` if `mask` selects no pixels.
-fn average(pixels: &[Rgb], mask: usize) -> Option<Rgb> {
+fn average(pixels: &[Pixel], mask: usize) -> Option<Pixel> {
     let (mut r, mut g, mut b, mut n) = (0u32, 0u32, 0u32, 0u32);
     for (i, &(pr, pg, pb)) in pixels.iter().enumerate() {
         if mask & (1 << i) != 0 {
@@ -141,7 +141,7 @@ fn average(pixels: &[Rgb], mask: usize) -> Option<Rgb> {
 /// construction, so this stays a plain slice rather than a const-generic-sized array (which
 /// would need unstable `generic_const_exprs` to relate `N` to `table`'s length at the type
 /// level).
-fn posterize(pixels: &[Rgb], table: &[char]) -> Glyph {
+fn posterize(pixels: &[Pixel], table: &[char]) -> Glyph {
     let full_mask = table.len() - 1;
     let overall = average(pixels, full_mask).unwrap_or((0, 0, 0));
 
@@ -199,7 +199,8 @@ fn posterize(pixels: &[Rgb], table: &[char]) -> Glyph {
 /// Never panics: `pixels` is a fixed-size 2-element array, so there is no length to validate
 /// and no index into it that can be out of bounds.
 #[must_use]
-pub fn quantize_half_block(pixels: [Rgb; 2]) -> Glyph {
+pub fn quantize_half_block(pixels: [impl Into<Pixel>; 2]) -> Glyph {
+    let pixels = pixels.map(Into::into);
     posterize(&pixels, &HALF_BLOCKS)
 }
 
@@ -232,7 +233,8 @@ pub fn quantize_half_block(pixels: [Rgb; 2]) -> Glyph {
 ///
 /// See [`quantize_half_block`] for why this never panics.
 #[must_use]
-pub fn quantize_quadrant(pixels: [Rgb; 4]) -> Glyph {
+pub fn quantize_quadrant(pixels: [impl Into<Pixel>; 4]) -> Glyph {
+    let pixels = pixels.map(Into::into);
     posterize(&pixels, &QUADRANTS)
 }
 
@@ -263,7 +265,8 @@ pub fn quantize_quadrant(pixels: [Rgb; 4]) -> Glyph {
 ///
 /// See [`quantize_half_block`] for why this never panics.
 #[must_use]
-pub fn quantize_sextant(pixels: [Rgb; 6]) -> Glyph {
+pub fn quantize_sextant(pixels: [impl Into<Pixel>; 6]) -> Glyph {
+    let pixels = pixels.map(Into::into);
     posterize(&pixels, &SEXTANTS)
 }
 

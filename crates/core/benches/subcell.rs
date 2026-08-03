@@ -12,7 +12,7 @@
 #![allow(missing_docs)]
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
-use retroglyph_core::subcell::Rgb;
+use retroglyph_core::subcell::Pixel;
 use retroglyph_core::{quantize_half_block, quantize_quadrant, quantize_sextant};
 use std::hint::black_box;
 
@@ -24,7 +24,7 @@ const BLOCKS: usize = 4096;
 ///
 /// Uses a fixed RNG seed so the input (and therefore the benchmark) is deterministic across runs,
 /// required for `--save-baseline`/`--baseline` comparisons to be meaningful.
-fn random_blocks<const N: usize>(seed: u64) -> Vec<[Rgb; N]> {
+fn random_blocks<const N: usize>(seed: u64) -> Vec<[Pixel; N]> {
     let mut rng = fastrand::Rng::with_seed(seed);
     (0..BLOCKS)
         .map(|_| core::array::from_fn(|_| (rng.u8(..), rng.u8(..), rng.u8(..))))
@@ -35,7 +35,7 @@ fn subcell(c: &mut Criterion) {
     let mut group = c.benchmark_group("subcell");
     group.throughput(Throughput::Elements(BLOCKS as u64));
 
-    let half_blocks: Vec<[Rgb; 2]> = random_blocks(1);
+    let half_blocks: Vec<[Pixel; 2]> = random_blocks(1);
     group.bench_function("quantize_half_block", |b| {
         b.iter(|| {
             for &block in &half_blocks {
@@ -44,7 +44,7 @@ fn subcell(c: &mut Criterion) {
         });
     });
 
-    let quadrants: Vec<[Rgb; 4]> = random_blocks(2);
+    let quadrants: Vec<[Pixel; 4]> = random_blocks(2);
     group.bench_function("quantize_quadrant", |b| {
         b.iter(|| {
             for &block in &quadrants {
@@ -53,7 +53,7 @@ fn subcell(c: &mut Criterion) {
         });
     });
 
-    let sextants: Vec<[Rgb; 6]> = random_blocks(3);
+    let sextants: Vec<[Pixel; 6]> = random_blocks(3);
     group.bench_function("quantize_sextant", |b| {
         b.iter(|| {
             for &block in &sextants {
