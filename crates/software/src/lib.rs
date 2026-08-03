@@ -100,7 +100,7 @@ pub use retroglyph_window::font::{BitmapFont, FontChain};
 use alpha_blend::rgba::U8x4Rgba;
 use grixy::buf::GridBuf;
 use grixy::ops::GridWrite;
-use grixy::ops::layout::RowMajor;
+use grixy::ops::layout::{LinearLayout, RowMajor};
 use retroglyph_core::Tint;
 use retroglyph_core::event::Event;
 use retroglyph_core::grid::{Pos, Size};
@@ -786,8 +786,8 @@ impl Output for SoftwareRenderer {
                 // Pass 1: lay down every cell's background on this layer first.
                 for idx in 0..cell_count {
                     let bg_fill = self.resolve_cell_bg(layer_id, idx, cols);
-                    #[allow(clippy::cast_possible_truncation)]
-                    let pos = Pos::new((idx % cols) as u16, (idx / cols) as u16);
+                    let (x, y) = flat_index_to_xy(idx, cols);
+                    let pos = Pos::new(x, y);
                     self.fill_cell_bg(cell_w, cell_h, pos, bg_fill);
                 }
                 // Pass 2: blit every cell's glyph over those backgrounds. A glyph offset past its
@@ -798,8 +798,8 @@ impl Output for SoftwareRenderer {
                 for idx in 0..cell_count {
                     let tile = self.ctx.prev_tiles[layer_id as usize][idx];
                     let tint = self.ctx.prev_tints[layer_id as usize][idx];
-                    #[allow(clippy::cast_possible_truncation)]
-                    let pos = Pos::new((idx % cols) as u16, (idx / cols) as u16);
+                    let (x, y) = flat_index_to_xy(idx, cols);
+                    let pos = Pos::new(x, y);
                     self.blit_cell_glyph(buf_w, cell_w, cell_h, scale, pos, tile, tint);
                 }
             }
@@ -817,8 +817,8 @@ impl Output for SoftwareRenderer {
                         continue;
                     }
                     let bg_fill = self.resolve_cell_bg(layer_id, idx, cols);
-                    #[allow(clippy::cast_possible_truncation)]
-                    let pos = Pos::new((idx % cols) as u16, (idx / cols) as u16);
+                    let (x, y) = flat_index_to_xy(idx, cols);
+                    let pos = Pos::new(x, y);
                     self.fill_cell_bg(cell_w, cell_h, pos, bg_fill);
                 }
                 for idx in 0..cell_count {
@@ -827,8 +827,8 @@ impl Output for SoftwareRenderer {
                     }
                     let tile = self.ctx.prev_tiles[usize::from(layer_id)][idx];
                     let tint = self.ctx.prev_tints[usize::from(layer_id)][idx];
-                    #[allow(clippy::cast_possible_truncation)]
-                    let pos = Pos::new((idx % cols) as u16, (idx / cols) as u16);
+                    let (x, y) = flat_index_to_xy(idx, cols);
+                    let pos = Pos::new(x, y);
                     self.blit_cell_glyph(buf_w, cell_w, cell_h, scale, pos, tile, tint);
                 }
             }
@@ -968,6 +968,16 @@ impl retroglyph_window::Presenter for SoftwareRenderer {
 /// `fill` call. Otherwise it falls back to a row-clamped path that clips
 /// each destination run to the buffer bounds once per row, rather than
 /// checking every pixel.
+/// Decodes a flat row-major cell index into `(x, y)`, given the grid's `cols`.
+///
+/// Delegates to [`RowMajor`]'s [`LinearLayout::index_to_pos`] instead of hand-rolling
+/// `idx % cols` / `idx / cols` at each flat-buffer call site below.
+fn flat_index_to_xy(idx: usize, cols: usize) -> (u16, u16) {
+    let pos = RowMajor::index_to_pos(idx, cols);
+    #[allow(clippy::cast_possible_truncation)]
+    (pos.x as u16, pos.y as u16)
+}
+
 #[allow(clippy::too_many_arguments, clippy::cast_possible_truncation)]
 fn blit_glyph_mask(
     buffer: &mut [u32],
@@ -1264,7 +1274,8 @@ fn expand_dirty_spans(dirty: &mut [bool], layer: &[Tile], cols: usize, rows: usi
             continue;
         };
         let (span_w, span_h) = anchor.span();
-        let (ax, ay) = (anchor_idx % cols, anchor_idx / cols);
+        let ixy_pos = RowMajor::index_to_pos(anchor_idx, cols);
+        let (ax, ay) = (ixy_pos.x, ixy_pos.y);
         for row in ay..(ay + usize::from(span_h)).min(rows) {
             for col in ax..(ax + usize::from(span_w)).min(cols) {
                 dirty[row * cols + col] = true;

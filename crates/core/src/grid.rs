@@ -122,10 +122,12 @@ use alloc::vec::Vec;
 // `BlendMode` of its own, which would otherwise collide.
 #[cfg(feature = "blend-modes")]
 use alpha_blend::BlendMode as SeparableBlendMode;
+#[cfg(feature = "blend-modes")]
+use alpha_blend::channel::Channel;
 use core::fmt;
 use core::ops::{Index, IndexMut};
 use grixy::buf::GridBuf;
-use grixy::ops::layout::RowMajor;
+use grixy::ops::layout::{LinearLayout, RowMajor};
 use grixy::ops::{ExactSizeGrid, GridRead, GridWrite};
 
 /// Blend mode for [`Grid::blit_alpha`], selecting how source and destination colors combine
@@ -327,6 +329,16 @@ fn to_grixy_pos(pos: Pos) -> grixy::core::Pos {
     grixy::core::Pos::new(usize::from(pos.x), usize::from(pos.y))
 }
 
+/// Decodes a flat row-major buffer index into `(x, y)`, given the buffer's `width`.
+///
+/// Delegates to [`RowMajor`]'s [`LinearLayout::index_to_pos`](grixy::ops::layout::LinearLayout)
+/// instead of hand-rolling `i % width` / `i / width` at each flat-buffer iterator below.
+fn flat_index_to_xy(i: usize, width: usize) -> (u16, u16) {
+    let pos = RowMajor::index_to_pos(i, width);
+    #[allow(clippy::cast_possible_truncation)]
+    (pos.x as u16, pos.y as u16)
+}
+
 // ---------------------------------------------------------------------------
 // Grid iterators
 // ---------------------------------------------------------------------------
@@ -342,10 +354,7 @@ impl<'a> Iterator for Cells<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next().map(|(i, tile)| {
-            #[allow(clippy::cast_possible_truncation)]
-            let x = (i % self.width) as u16;
-            #[allow(clippy::cast_possible_truncation)]
-            let y = (i / self.width) as u16;
+            let (x, y) = flat_index_to_xy(i, self.width);
             (x, y, tile)
         })
     }
@@ -362,10 +371,7 @@ impl<'a> Iterator for CellsMut<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next().map(|(i, tile)| {
-            #[allow(clippy::cast_possible_truncation)]
-            let x = (i % self.width) as u16;
-            #[allow(clippy::cast_possible_truncation)]
-            let y = (i / self.width) as u16;
+            let (x, y) = flat_index_to_xy(i, self.width);
             (x, y, tile)
         })
     }
@@ -1330,6 +1336,77 @@ impl Grid {
         Some(())
     }
 
+    /// Fills every cell of `rect` (clipped to this grid) on `layer` with `tile`.
+    ///
+    /// The batch counterpart to calling [`put_tile`](Self::put_tile) once per cell of `rect`:
+    /// same result, but the span/extras bookkeeping and the layer allocation each happen once for
+    /// the whole region rather than once per cell, and the write itself is one
+    /// [`fill_rect_solid`](grixy::ops::GridWrite::fill_rect_solid) call instead of `rect.width() *
+    /// rect.height()` individual cell writes. [`Surface::fill_rect`](crate::surface::Surface::fill_rect),
+    /// [`Surface::clear`](crate::surface::Surface::clear), and
+    /// [`Surface::clear_region`](crate::surface::Surface::clear_region) are built on this.
+    ///
+    /// A no-op if `rect` (after clipping to the grid) is empty. As with [`put_tile`](Self::put_tile), `tile` can
+    /// never legitimately carry [`TileFlags::HAS_EXTRA`] (the flag is crate-private), so every
+    /// cell's own extras entry, if any, is dropped rather than orphaned.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_core::{Grid, Pos, Rect, Style, Tile};
+    ///
+    /// let mut grid = Grid::new(4, 4);
+    /// grid.fill_region(0, Rect::new(1, 1, 2, 2), Tile::new('#', Style::default()));
+    ///
+    /// assert_eq!(grid[Pos::new(1, 1)].glyph(), '#');
+    /// assert_eq!(grid[Pos::new(2, 2)].glyph(), '#');
+    /// assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
+    /// ```
+    pub fn fill_region(&mut self, layer: u8, rect: Rect, mut tile: Tile) {
+        let bounds = Rect::new(0, 0, self.width, self.height);
+        let rect = rect.intersect(bounds);
+        if rect.is_empty() {
+            return;
+        }
+
+        // Clear every span (and, under `egc`, every wide-char cell) this fill would partially
+        // overwrite, one row at a time rather than one cell at a time: still O(rows), and a no-op
+        // on a grid that has never used spans (see `clear_span_overlap`).
+        for y in rect.top()..rect.bottom() {
+            self.clear_span_overlap(layer, rect.left(), y, rect.width());
+            #[cfg(feature = "egc")]
+            self.clear_overlap(layer, rect.left(), y, rect.width());
+        }
+
+        // `tile` is a caller-constructed `Tile` (see `put_tile`'s own doc comment for why that
+        // can never carry `HAS_EXTRA`), so every cell's own extras entry is now stale. Drop them
+        // per row rather than scanning the whole side table: bounded by the region, not by
+        // however much of the layer happens to carry extras elsewhere.
+        tile.flags.remove(TileFlags::HAS_EXTRA);
+        let grid_w = usize::from(self.width);
+        let lb = self.layer_or_alloc(layer);
+        for y in rect.top()..rect.bottom() {
+            let row_start = usize::from(y) * grid_w + usize::from(rect.left());
+            let row_end = row_start + usize::from(rect.width());
+            let stale: Vec<usize> = lb
+                .extras
+                .range(row_start..row_end)
+                .map(|(&idx, _)| idx)
+                .collect();
+            for idx in stale {
+                lb.extras.remove(&idx);
+            }
+        }
+
+        let dst = grixy::core::Rect::new(
+            usize::from(rect.left()),
+            usize::from(rect.top()),
+            usize::from(rect.width()),
+            usize::from(rect.height()),
+        );
+        lb.buf.fill_rect_solid(dst, tile);
+    }
+
     /// Sets the whole side-table entry for an already-written tile at `(x, y)` on `layer`,
     /// setting [`TileFlags::HAS_EXTRA`] to match. Does nothing if out of bounds. Crate-private:
     /// the external ways in are [`write_grapheme`](Self::write_grapheme) and
@@ -1451,7 +1528,15 @@ impl Grid {
     /// bounds) contains at least one non-empty tile, matching `put_tile`'s original
     /// allocate-on-first-write behavior for a `src_rect` that is entirely transparent.
     pub fn blit(&mut self, layer: u8, src: &Self, src_rect: Rect, dst_x: u16, dst_y: u16) {
-        self.blit_with(layer, src, src_rect, dst_x, dst_y, |tile, _dst_tile| *tile);
+        self.blit_with(
+            layer,
+            src,
+            layer,
+            src_rect,
+            dst_x,
+            dst_y,
+            |tile, _dst_tile| *tile,
+        );
     }
 
     /// Same as [`blit`](Self::blit) but blends foreground and background
@@ -1486,40 +1571,88 @@ impl Grid {
         fg_alpha: f32,
         bg_alpha: f32,
     ) {
-        self.blit_with(layer, src, src_rect, dst_x, dst_y, |tile, dst_tile| {
-            let mut blended = *tile;
-            // `fg_alpha == 1.0` only lets `Linear` skip the call: `Linear` at `t ==
-            // 1.0` is `src` by definition, but a `Screen`/`Dodge`/`Burn`/`Overlay`
-            // mix at full alpha still needs to run the mode's formula: it isn't
-            // equivalent to the raw source color (see `blend_color`'s matching guard).
-            if mode != BlendMode::Linear || fg_alpha != 1.0 {
-                blended.style.fg = blend_fg(mode, tile.style.fg, dst_tile.style.fg, fg_alpha);
-            }
-            if mode != BlendMode::Linear || bg_alpha != 1.0 {
-                blended.style.bg = blend_bg(mode, tile.style.bg, dst_tile.style.bg, bg_alpha);
-            }
-            blended
-        });
+        self.blit_with(
+            layer,
+            src,
+            layer,
+            src_rect,
+            dst_x,
+            dst_y,
+            |tile, dst_tile| {
+                let mut blended = *tile;
+                // `fg_alpha == 1.0` only lets `Linear` skip the call: `Linear` at `t ==
+                // 1.0` is `src` by definition, but a `Screen`/`Dodge`/`Burn`/`Overlay`
+                // mix at full alpha still needs to run the mode's formula: it isn't
+                // equivalent to the raw source color (see `blend_color`'s matching guard).
+                if mode != BlendMode::Linear || fg_alpha != 1.0 {
+                    blended.style.fg = blend_fg(mode, tile.style.fg, dst_tile.style.fg, fg_alpha);
+                }
+                if mode != BlendMode::Linear || bg_alpha != 1.0 {
+                    blended.style.bg = blend_bg(mode, tile.style.bg, dst_tile.style.bg, bg_alpha);
+                }
+                blended
+            },
+        );
     }
 
-    /// Shared copy loop behind [`blit`](Self::blit) and [`blit_alpha`](Self::blit_alpha):
-    /// clamps `src_rect` to `src`'s bounds, skips the whole call if nothing in it is visible,
-    /// clears any destination span the copy is about to partially overwrite (retroglyph#710), and
-    /// walks matching `src`/destination cells by flat index (retroglyph#262/#263), applying
-    /// `transform` to each non-empty source tile (given the source tile and, for context, the
-    /// destination tile it's about to replace) before writing it and fixing up grapheme extras.
-    /// `dst_x`/`dst_y` saturate on overflow (retroglyph#268) rather than wrapping; the bounds
-    /// checks below always catch a saturated `u16::MAX` origin.
+    /// Same as [`blit`](Self::blit), except the source tiles are read from `src_layer` on `src`
+    /// rather than from `dst_layer` (the layer this writes to on `self`).
+    ///
+    /// [`blit`](Self::blit) uses one `layer` for both sides, which is exactly right for two
+    /// grids sharing the same layer scheme (e.g. [`Surface::on_layer`](crate::Surface::on_layer)
+    /// copying within itself), but wrong for [`Surface::blit`](crate::Surface::blit)'s case: a
+    /// `src` that is a standalone, layer-0-only `Grid` (composed content like `BoxStyle::render`'s
+    /// output), stamped onto a destination surface that may currently be on any layer. Calling
+    /// [`blit`](Self::blit) with the destination's layer there looks up that same layer on `src`,
+    /// finds nothing (`src` only ever populated layer 0), and silently copies nothing
+    /// (retroglyph#824). This method exists so a caller in that position can pin `src_layer` to
+    /// `0` independently of `dst_layer`.
+    pub(crate) fn blit_cross_layer(
+        &mut self,
+        dst_layer: u8,
+        src: &Self,
+        src_layer: u8,
+        src_rect: Rect,
+        dst_x: u16,
+        dst_y: u16,
+    ) {
+        self.blit_with(
+            dst_layer,
+            src,
+            src_layer,
+            src_rect,
+            dst_x,
+            dst_y,
+            |tile, _dst_tile| *tile,
+        );
+    }
+
+    /// Shared copy loop behind [`blit`](Self::blit), [`blit_alpha`](Self::blit_alpha), and
+    /// [`blit_cross_layer`](Self::blit_cross_layer): clamps `src_rect` to `src`'s bounds, skips
+    /// the whole call if nothing in it is visible, clears any destination span the copy is about
+    /// to partially overwrite (retroglyph#710), and walks matching `src`/destination cells by
+    /// flat index (retroglyph#262/#263), applying `transform` to each non-empty source tile
+    /// (given the source tile and, for context, the destination tile it's about to replace)
+    /// before writing it and fixing up grapheme extras. `dst_x`/`dst_y` saturate on overflow
+    /// (retroglyph#268) rather than wrapping; the bounds checks below always catch a saturated
+    /// `u16::MAX` origin.
+    ///
+    /// `dst_layer` and `src_layer` are separate parameters (rather than the one `layer` [`blit`]
+    /// and [`blit_alpha`] expose) so [`blit_cross_layer`](Self::blit_cross_layer) can read a
+    /// different source layer than the one it writes: see that method's own doc for why (this is
+    /// the retroglyph#824 fix).
+    #[allow(clippy::too_many_arguments)]
     fn blit_with(
         &mut self,
-        layer: u8,
+        dst_layer: u8,
         src: &Self,
+        src_layer: u8,
         src_rect: Rect,
         dst_x: u16,
         dst_y: u16,
         transform: impl Fn(&Tile, &Tile) -> Tile,
     ) {
-        let Some(src_lb) = src.layer(layer) else {
+        let Some(src_lb) = src.layer(src_layer) else {
             return;
         };
         let src_width = usize::from(src.width);
@@ -1573,12 +1706,12 @@ impl Grid {
                     {
                         continue;
                     }
-                    self.clear_span_overlap(layer, dx, dy, 1);
+                    self.clear_span_overlap(dst_layer, dx, dy, 1);
                 }
             }
         }
 
-        let dst_lb = self.layer_or_alloc(layer);
+        let dst_lb = self.layer_or_alloc(dst_layer);
         let mut pending_extras: Vec<(usize, TileExtra)> = Vec::new();
 
         for sy in sy0..sy1 {
@@ -1634,10 +1767,7 @@ impl Grid {
             .filter_map(move |id| self.layer(id).map(|lb| (id, lb)))
             .flat_map(move |(id, lb)| {
                 lb.buf.as_ref().iter().enumerate().map(move |(i, tile)| {
-                    #[allow(clippy::cast_possible_truncation)]
-                    let x = (i % width) as u16;
-                    #[allow(clippy::cast_possible_truncation)]
-                    let y = (i / width) as u16;
+                    let (x, y) = flat_index_to_xy(i, width);
                     DrawCell {
                         layer: id,
                         pos: Pos::new(x, y),
@@ -1749,16 +1879,24 @@ impl Grid {
     /// - Layer absent in `self`: nothing yielded.
     /// - Layer in `self`, absent in `other` (newly allocated): all
     ///   `width × height` tiles yielded.
-    /// - Layer in both: only positions where the `Tile` or its grapheme text
-    ///   differs are yielded. `self` and `other` must have matching
-    ///   dimensions for this case; the crate never calls `diff` otherwise.
+    /// - Layer in both, and `self` and `other` have matching dimensions: only
+    ///   positions where the `Tile` or its grapheme text differs are yielded.
+    /// - Layer in both, but `self` and `other` have different dimensions: all
+    ///   positions in `self` are considered changed, same as a newly
+    ///   allocated layer.
     ///
     /// This iterator is zero-allocation: it walks the layer buffers inline.
     pub fn diff<'a>(&'a self, other: &'a Self) -> impl Iterator<Item = DrawCell<'a>> + 'a {
         let width = usize::from(self.width);
         let max = self.max_layer;
+        let same_size = self.width == other.width && self.height == other.height;
         (0..=max).flat_map(move |id| {
-            match (self.layer(id), other.layer(id)) {
+            // A size mismatch is treated the same as `other` never having allocated this layer:
+            // `other`'s buffer can't be indexed with `self`'s flat index once the sizes differ,
+            // so every position in `self` is considered changed, matching grixy's `GridDiff`
+            // double-buffering contract.
+            let other_layer = if same_size { other.layer(id) } else { None };
+            match (self.layer(id), other_layer) {
                 // Layer absent in `self`: nothing changed.
                 (None, _) => LayerDiff::Empty,
                 // Newly allocated layer: all cells are "changed".
@@ -1769,10 +1907,7 @@ impl Grid {
                         .iter()
                         .enumerate()
                         .map(move |(i, tile)| {
-                            #[allow(clippy::cast_possible_truncation)]
-                            let x = (i % width) as u16;
-                            #[allow(clippy::cast_possible_truncation)]
-                            let y = (i / width) as u16;
+                            let (x, y) = flat_index_to_xy(i, width);
                             DrawCell {
                                 layer: id,
                                 pos: Pos::new(x, y),
@@ -1800,10 +1935,7 @@ impl Grid {
                             if tile == prev_tile && cur_extra == prev_extra {
                                 return None;
                             }
-                            #[allow(clippy::cast_possible_truncation)]
-                            let x = (i % width) as u16;
-                            #[allow(clippy::cast_possible_truncation)]
-                            let y = (i / width) as u16;
+                            let (x, y) = flat_index_to_xy(i, width);
                             Some(DrawCell {
                                 layer: id,
                                 pos: Pos::new(x, y),
@@ -1938,21 +2070,19 @@ fn blend_color(mode: BlendMode, src: Color, dst: Color, t: f32) -> Color {
 
 /// Evaluates `sep`'s per-channel mixing function for one RGB channel (`src`/`dst` are u8, `sep`
 /// operates in `0.0..=1.0` f32), then lerps that mixed value against `dst` by `t`: `0.0` keeps
-/// `dst`, `1.0` uses the fully mixed color. Rounds with `libm::roundf` rather than `f32::round`
-/// (a `std`-only method not available in `core`, same reasoning as `libm::fmaf` in
-/// `animate::easing`) and clamps before converting back to u8, since `ColorDodge`/`ColorBurn`'s
-/// `min(1.0, ...)` branches can round a hair outside `0.0..=1.0` at the float boundary.
+/// `dst`, `1.0` uses the fully mixed color. Clamps before converting back to u8 via
+/// `Channel::from_f32`, since `ColorDodge`/`ColorBurn`'s `min(1.0, ...)` branches can round a
+/// hair outside `0.0..=1.0` at the float boundary.
 #[cfg(feature = "blend-modes")]
 fn blend_separable_channel(sep: SeparableBlendMode, src: u8, dst: u8, t: f32) -> u8 {
-    let cs = f32::from(src) / 255.0;
-    let cb = f32::from(dst) / 255.0;
+    let cs = Channel::to_f32(src);
+    let cb = Channel::to_f32(dst);
     let mixed = sep.mix(cb, cs);
     // Not `f32::mul_add`: it's a std-only inherent method, not in `core`. `libm::fmaf` is the
-    // no_std-safe equivalent (see `animate::easing` for the same reasoning).
+    // no_std-safe equivalent (see `animate::easing` for the same reasoning). A plain multiply-add
+    // measurably disagrees with `fmaf` by ±1 LSB on some inputs.
     let blended = libm::fmaf(mixed - cb, t, cb);
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    let out = libm::roundf(blended.clamp(0.0, 1.0) * 255.0) as u8;
-    out
+    Channel::from_f32(blended.clamp(0.0, 1.0))
 }
 
 fn blend_fg(mode: BlendMode, src: Color, dst: Color, t: f32) -> Color {
@@ -2083,6 +2213,34 @@ mod tests {
     fn test_grid_index_panics_out_of_bounds() {
         let grid = Grid::new(10, 10);
         let _ = &grid[Pos::new(0, 10)];
+    }
+
+    #[test]
+    fn test_grid_layers_yields_every_allocated_cell_in_layer_then_row_major_order() {
+        let mut grid = Grid::new(2, 2);
+        grid.put_tile(0, (1, 0), Tile::default().with_glyph('A'));
+        grid.put_tile(2, (0, 1), Tile::default().with_glyph('B'));
+
+        let cells: Vec<_> = grid
+            .layers()
+            .map(|c| (c.layer, c.pos, c.tile.glyph()))
+            .collect();
+
+        // Layer 1 is never allocated, so it's skipped entirely; layer 0's four cells (row-major)
+        // come before layer 2's four cells.
+        assert_eq!(
+            cells,
+            [
+                (0, Pos::new(0, 0), ' '),
+                (0, Pos::new(1, 0), 'A'),
+                (0, Pos::new(0, 1), ' '),
+                (0, Pos::new(1, 1), ' '),
+                (2, Pos::new(0, 0), ' '),
+                (2, Pos::new(1, 0), ' '),
+                (2, Pos::new(0, 1), 'B'),
+                (2, Pos::new(1, 1), ' '),
+            ]
+        );
     }
 
     #[test]
@@ -2442,6 +2600,17 @@ mod tests {
     }
 
     #[test]
+    fn test_grid_diff_mismatched_sizes_yields_full_diff() {
+        // A smaller `other` must not panic; every cell in `self` is reported as changed instead.
+        let mut cur = Grid::new(3, 2);
+        let prev = Grid::new(2, 2);
+        cur.put_tile(0, (0, 0), Tile::new('X', Style::default()));
+        let diffs: Vec<_> = cur.diff(&prev).collect();
+        assert_eq!(diffs.len(), 6);
+        assert!(diffs.iter().all(|c| c.layer == 0));
+    }
+
+    #[test]
     fn test_grid_diff_layer_major_order() {
         let mut cur = Grid::new(3, 3);
         let prev = Grid::new(3, 3);
@@ -2628,6 +2797,60 @@ mod tests {
         g.set_tint(0, 1, 1, Tint::multiply(128, 128, 128));
         g.put_tile(0, Pos::new(1, 1), Tile::new('x', Style::default()));
         assert_eq!(g.tint(0, 1, 1), Tint::None);
+    }
+
+    /// `fill_region` must clear any span it would partially overwrite the same way a per-cell
+    /// `put_tile` loop would (via `clear_span_overlap`), or the surviving span's anchor would
+    /// keep claiming a footprint the fill just overwrote part of.
+    #[test]
+    fn fill_region_clears_a_span_it_partially_overwrites() {
+        let mut g = Grid::new(4, 4);
+        g.write_span(0, 0, 0, &["C=", "[]"], Style::default())
+            .expect("2x2 span fits in a 4x4 grid");
+
+        // Overlaps only the span's right column, (1, 0) and (1, 1).
+        g.fill_region(0, Rect::new(1, 0, 3, 3), Tile::new('#', Style::default()));
+
+        // The anchor at (0, 0) is gone, not left claiming a footprint that no longer matches
+        // reality.
+        let anchor = g.tile(0, (0, 0)).unwrap();
+        assert!(!anchor.flags().contains(TileFlags::SPAN_ANCHOR));
+        assert_eq!(anchor.glyph(), ' ');
+    }
+
+    /// `fill_region` writes a caller-constructed `Tile`, which (like `put_tile`) can never
+    /// legitimately carry `HAS_EXTRA`, so any grapheme/tint side-table entry the fill's cells
+    /// used to own must be dropped, not left dangling under the new tile.
+    #[test]
+    fn fill_region_drops_stale_extras() {
+        let mut g = Grid::new(4, 4);
+        g.write_grapheme(0, 1, 1, "e\u{0301}", Style::default());
+        g.set_tint(0, 2, 2, Tint::multiply(1, 2, 3));
+
+        g.fill_region(0, Rect::new(0, 0, 4, 4), Tile::new('#', Style::default()));
+
+        assert_eq!(g.grapheme(0, 1, 1), None);
+        assert_eq!(g.tint(0, 2, 2), Tint::None);
+    }
+
+    /// A `rect` that extends past the grid's own edges only fills the in-bounds overlap, the
+    /// same clipping `put_tile` gets for free per cell by refusing an out-of-bounds `pos`.
+    #[test]
+    fn fill_region_clips_to_grid_bounds() {
+        let mut g = Grid::new(4, 4);
+        g.fill_region(0, Rect::new(2, 2, 10, 10), Tile::new('#', Style::default()));
+
+        assert_eq!(g.tile(0, (3, 3)).unwrap().glyph(), '#');
+        assert_eq!(g.tile(0, (0, 0)).unwrap().glyph(), ' ');
+    }
+
+    /// An empty (or fully out-of-bounds) `rect` allocates nothing: `fill_region` returns before
+    /// touching `layer_or_alloc`.
+    #[test]
+    fn fill_region_on_an_empty_rect_does_not_allocate_the_layer() {
+        let mut g = Grid::new(4, 4);
+        g.fill_region(1, Rect::new(10, 10, 2, 2), Tile::new('#', Style::default()));
+        assert_eq!(g.tile(1, (0, 0)), None);
     }
 
     #[test]
