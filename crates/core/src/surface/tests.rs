@@ -1322,20 +1322,23 @@ fn translate_shifts_put_span_and_put_span_uniform() {
 
 #[test]
 fn translate_shifts_print_and_still_wraps_at_the_surfaces_own_width() {
-    // A 4-char string, unlike `translate_shifts_fill_rect_print_and_clear_region_via_put`'s
-    // one-character print, is long enough to actually cross the wrap column.
+    // A 5-char string, unlike `translate_shifts_fill_rect_print_and_clear_region_via_put`'s
+    // one-character print, is long enough to actually cross the wrap column at the area's own
+    // 4-column width.
     let mut grid = Grid::new(4, 4);
     {
         let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 4, 2), 0);
         let mut view = surface.translate((2, 0));
-        view.print((2, 0), "abcd", Style::default());
+        view.print((2, 0), "abcde", Style::default());
     }
 
     assert_eq!(grid[Pos::new(0, 0)].glyph(), 'a');
     assert_eq!(grid[Pos::new(1, 0)].glyph(), 'b');
-    // Wrapped to row 1, still shifted by the translate origin.
-    assert_eq!(grid[Pos::new(0, 1)].glyph(), 'c');
-    assert_eq!(grid[Pos::new(1, 1)].glyph(), 'd');
+    assert_eq!(grid[Pos::new(2, 0)].glyph(), 'c');
+    assert_eq!(grid[Pos::new(3, 0)].glyph(), 'd');
+    // Wrapped to row 1 at the area's own width (4 columns, retroglyph#991's fix), still
+    // shifted by the translate origin rather than one column early or late.
+    assert_eq!(grid[Pos::new(0, 1)].glyph(), 'e');
 }
 
 #[test]
