@@ -19,7 +19,7 @@ use alpha_blend::channel::Channel;
 use grixy::ops::{ExactSizeGrid, GridRead, GridWrite};
 
 impl Grid {
-    /// Write a tile to `layer` at `pos`, honoring `tile`'s own precomputed
+    /// Writes a tile to `layer` at `pos`, honoring `tile`'s own precomputed
     /// [`width`](Tile::width): a fresh 2-column tile also gets a
     /// [`TileFlags::WIDE_CHAR_SPACER`] at `pos.x + 1`, the same pairing
     /// [`write_grapheme`](Self::write_grapheme) writes, on every feature combination (`Tile::width`
@@ -257,7 +257,7 @@ impl Grid {
         }
     }
 
-    /// Read a tile on `layer` at `pos`, or `None` if the layer is
+    /// Reads a tile on `layer` at `pos`, or `None` if the layer is
     /// unallocated or `pos` is out of bounds.
     #[must_use]
     pub fn tile(&self, layer: u8, pos: impl Into<Pos>) -> Option<&Tile> {
@@ -265,7 +265,7 @@ impl Grid {
         self.layer(layer)?.buf.get(pos)
     }
 
-    /// Mutably borrow a tile on `layer` at `pos`, or `None` if the layer is
+    /// Mutably borrows a tile on `layer` at `pos`, or `None` if the layer is
     /// unallocated or `pos` is out of bounds.
     ///
     /// This hands out a direct `&mut Tile`, so it cannot intercept a write the way
@@ -281,7 +281,7 @@ impl Grid {
             .get_mut(pos)
     }
 
-    /// Copy tiles from `src` within `src_rect` to `self` at `(dst_x, dst_y)`
+    /// Copies tiles from `src` within `src_rect` to `self` at `(dst_x, dst_y)`
     /// on `layer`. Empty tiles (nothing written; see [`Tile::is_empty`]) are
     /// treated as transparent and skipped. An explicit space is copied and
     /// overwrites the destination.
@@ -522,7 +522,7 @@ impl Grid {
         }
     }
 
-    /// Yield `(layer_id, Pos, &Tile, Option<&str>)` for every allocated cell
+    /// Yields `(layer_id, Pos, &Tile, Option<&str>)` for every allocated cell
     /// across all layers, in layer-major (0 → `max_layer`) then row-major
     /// order. The last element is the tile's grapheme text (see
     /// [`grapheme`](Self::grapheme)), `Some` only when
@@ -550,7 +550,7 @@ impl Grid {
             })
     }
 
-    /// Clear every allocated layer.
+    /// Clears every allocated layer.
     pub fn clear_all(&mut self) {
         for layer in self.layers.iter_mut().flatten() {
             layer.buf.clear();
@@ -558,7 +558,7 @@ impl Grid {
         }
     }
 
-    /// Composite every allocated layer into `dst`'s layer 0, one tile per cell.
+    /// Composites every allocated layer into `dst`'s layer 0, one tile per cell.
     ///
     /// Used by [`crate::Terminal::present`] for backends that do not composite
     /// layers themselves (see [`crate::Output::composites_layers`]). The rule
@@ -642,7 +642,7 @@ impl Grid {
     }
 }
 
-/// Blend two [`Color`] values using `mode`. [`Color::Default`] preserves the
+/// Blends two [`Color`] values using `mode`. [`Color::Default`] preserves the
 /// destination. Non-RGB source colors are returned as-is (no resolution).
 ///
 /// [`BlendMode::Linear`] is a per-channel sRGB-domain lerp (dst -> src by `t`) delegated to

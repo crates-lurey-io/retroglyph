@@ -42,7 +42,7 @@ impl Grid {
         }
     }
 
-    /// Build a grid from a rectangular character map, one [`Tile`] per cell.
+    /// Builds a grid from a rectangular character map, one [`Tile`] per cell.
     ///
     /// `map` is split on `\n`; the grid width is the longest line's character
     /// count and the height is the number of lines. Lines shorter than the
@@ -219,7 +219,7 @@ impl Grid {
         }
     }
 
-    /// Resize the grid to `width` × `height` tiles.
+    /// Resizes the grid to `width` × `height` tiles.
     ///
     /// Content within the overlapping region is preserved on all allocated
     /// layers. New cells are initialised to the default tile. Shrinking
@@ -254,7 +254,7 @@ impl Grid {
     // Write grapheme: layer 0 only
     // ------------------------------------------------------------------
 
-    /// Write a grapheme cluster at `(x, y)` on layer 0, enforcing wide-
+    /// Writes a grapheme cluster at `(x, y)` on layer 0, enforcing wide-
     /// character invariants.
     ///
     /// This is the canonical way to place content into the grid when the `egc`

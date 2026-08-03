@@ -42,6 +42,7 @@ impl IndexMut<Pos> for Grid {
 // Display / Debug: layer 0
 // ---------------------------------------------------------------------------
 
+/// Renders layer 0 only, one character per cell, with `·` in place of a plain space.
 impl fmt::Display for Grid {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for y in 0..self.height() {
@@ -63,11 +64,15 @@ impl fmt::Display for Grid {
     }
 }
 
+/// Shows `width`, `height`, `max_layer`, and `has_spans`; the layer buffers themselves are
+/// omitted (see [`Display`](fmt::Display) for a rendering of layer 0).
 impl fmt::Debug for Grid {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Grid")
             .field("width", &self.width)
             .field("height", &self.height)
+            .field("max_layer", &self.max_layer)
+            .field("has_spans", &self.has_spans)
             .finish_non_exhaustive()
     }
 }
