@@ -2066,6 +2066,34 @@ mod tests {
     }
 
     #[test]
+    fn test_grid_layers_yields_every_allocated_cell_in_layer_then_row_major_order() {
+        let mut grid = Grid::new(2, 2);
+        grid.put_tile(0, (1, 0), Tile::default().with_glyph('A'));
+        grid.put_tile(2, (0, 1), Tile::default().with_glyph('B'));
+
+        let cells: Vec<_> = grid
+            .layers()
+            .map(|c| (c.layer, c.pos, c.tile.glyph()))
+            .collect();
+
+        // Layer 1 is never allocated, so it's skipped entirely; layer 0's four cells (row-major)
+        // come before layer 2's four cells.
+        assert_eq!(
+            cells,
+            [
+                (0, Pos::new(0, 0), ' '),
+                (0, Pos::new(1, 0), 'A'),
+                (0, Pos::new(0, 1), ' '),
+                (0, Pos::new(1, 1), ' '),
+                (2, Pos::new(0, 0), ' '),
+                (2, Pos::new(1, 0), ' '),
+                (2, Pos::new(0, 1), 'B'),
+                (2, Pos::new(1, 1), ' '),
+            ]
+        );
+    }
+
+    #[test]
     fn test_grid_diff() {
         let mut g1 = Grid::new(2, 2);
         let g2 = Grid::new(2, 2);
