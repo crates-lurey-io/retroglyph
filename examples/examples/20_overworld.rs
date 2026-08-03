@@ -2293,10 +2293,36 @@ impl Default for Overworld {
 }
 
 impl Overworld {
+    /// Pans `cam_center` by a delta already scaled into world cells (see [`View::pan_scale`]).
+    ///
+    /// In the [`View::Cells`] family the [`Camera`] actually renders the map 1:1, so the delta
+    /// routes through [`Camera::scroll_by`]: one clamp on `origin` itself, instead of clamping a
+    /// tracked center to `[0, world)` and re-deriving the origin through `center_on` every frame,
+    /// which has a wider range than `center_on`'s own `[0, world - viewport]` and so leaves
+    /// slack -- dragging back past an edge doesn't move the view until that slack is used up.
+    /// [`View::Squares`]/[`View::Hexes`] draw straight from `cam_center` without touching
+    /// `self.camera` at all (see [`Self::draw_tiles`]), and each screen cell there spans several
+    /// world cells, so `Camera`'s own viewport-sized clamp would cut the reachable range off
+    /// well short of the true world edge; those views keep the plain `[0, world)` clamp instead.
     fn pan(&mut self, dx: i32, dy: i32) {
-        let x = (i32::from(self.cam_center.x) + dx).clamp(0, i32::from(WORLD_W) - 1);
-        let y = (i32::from(self.cam_center.y) + dy).clamp(0, i32::from(WORLD_H) - 1);
-        self.cam_center = Pos::new(x as u16, y as u16);
+        match self.view {
+            View::Cells | View::SquareGrid | View::HexGrid => {
+                self.camera.scroll_by(dx, dy);
+                let origin = self.camera.origin();
+                let vp = self.camera.viewport();
+                self.cam_center = Pos::new(
+                    (u32::from(origin.x) + u32::from(vp.width()) / 2).min(u32::from(WORLD_W) - 1)
+                        as u16,
+                    (u32::from(origin.y) + u32::from(vp.height()) / 2).min(u32::from(WORLD_H) - 1)
+                        as u16,
+                );
+            }
+            View::Squares | View::Hexes => {
+                let x = (i32::from(self.cam_center.x) + dx).clamp(0, i32::from(WORLD_W) - 1);
+                let y = (i32::from(self.cam_center.y) + dy).clamp(0, i32::from(WORLD_H) - 1);
+                self.cam_center = Pos::new(x as u16, y as u16);
+            }
+        }
     }
 
     fn handle_key(&mut self, code: KeyCode, mods: KeyModifiers) -> bool {

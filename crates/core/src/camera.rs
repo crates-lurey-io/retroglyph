@@ -90,14 +90,7 @@ impl Camera {
     /// [`saturating_sub`](u16::saturating_sub) rather than underflowing.
     pub fn set_viewport(&mut self, viewport: Rect) {
         self.viewport = viewport;
-        self.origin = Pos::new(
-            self.origin
-                .x
-                .min(max_origin(viewport.width(), self.world.width())),
-            self.origin
-                .y
-                .min(max_origin(viewport.height(), self.world.height())),
-        );
+        self.set_origin(self.origin);
     }
 
     /// Replace the viewport like [`set_viewport`](Self::set_viewport), but shrink it to the
@@ -151,10 +144,81 @@ impl Camera {
     /// Never panics, even for a `target` outside `[0, world)`: the offset and clamp are both
     /// computed with saturating arithmetic.
     pub fn center_on(&mut self, target: Pos) {
+        self.set_origin(Pos::new(
+            target.x.saturating_sub(self.viewport.width() / 2),
+            target.y.saturating_sub(self.viewport.height() / 2),
+        ));
+    }
+
+    /// Set the top-left world cell directly, clamped to the world edges so `origin` never
+    /// scrolls past `[0, world)`, the same invariant [`center_on`](Self::center_on) maintains.
+    ///
+    /// This is the primitive [`center_on`](Self::center_on) and [`scroll_by`](Self::scroll_by)
+    /// both clamp through, and what a save/restore of camera state needs: [`origin`](Self::origin)
+    /// is otherwise read-only.
+    ///
+    /// Never panics: the clamp uses [`saturating_sub`](u16::saturating_sub) via the same
+    /// `max_origin` helper [`set_viewport`](Self::set_viewport) uses, so it cannot underflow
+    /// even for a `viewport` larger than `world`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_core::{Camera, Pos, Rect, Size};
+    ///
+    /// let mut cam = Camera::new(Rect::new(0, 0, 10, 10), Size::new(100, 100));
+    /// cam.set_origin(Pos::new(50, 50));
+    /// assert_eq!(cam.origin(), Pos::new(50, 50));
+    ///
+    /// // Clamped to `world - viewport`, same as `center_on`.
+    /// cam.set_origin(Pos::new(200, 200));
+    /// assert_eq!(cam.origin(), Pos::new(90, 90));
+    /// ```
+    pub fn set_origin(&mut self, origin: Pos) {
         self.origin = Pos::new(
-            center_axis(target.x, self.viewport.width(), self.world.width()),
-            center_axis(target.y, self.viewport.height(), self.world.height()),
+            origin
+                .x
+                .min(max_origin(self.viewport.width(), self.world.width())),
+            origin
+                .y
+                .min(max_origin(self.viewport.height(), self.world.height())),
         );
+    }
+
+    /// Scroll the view by a signed cell delta, clamped to the world edges like
+    /// [`set_origin`](Self::set_origin).
+    ///
+    /// This is the method a drag or a scroll wheel wants: unlike [`center_on`](Self::center_on),
+    /// which reinterprets its argument as a new target to center on, `scroll_by` moves `origin`
+    /// directly, so there is exactly one clamp between the input delta and the visible result.
+    /// A caller that instead clamps its own running "center" position to `[0, world)` and feeds
+    /// it through `center_on` every frame is clamping against a wider range than `center_on`'s
+    /// own `[0, world - viewport]`, which leaves slack: dragging past an edge no longer moves
+    /// the origin, but the caller's tracked position keeps moving, so dragging back "sticks"
+    /// until it works through that slack before the view responds again.
+    ///
+    /// Never panics: the delta is applied in `i32` and saturates at `0` or `u16::MAX` before the
+    /// world-edge clamp in [`set_origin`](Self::set_origin) runs, so neither a very large
+    /// negative nor positive `dx`/`dy` can overflow or underflow `u16`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_core::{Camera, Pos, Rect, Size};
+    ///
+    /// let mut cam = Camera::new(Rect::new(0, 0, 10, 10), Size::new(100, 100));
+    /// cam.scroll_by(5, 3);
+    /// assert_eq!(cam.origin(), Pos::new(5, 3));
+    ///
+    /// // Clamped at the world edge, same as `center_on`: no negative or past-`world` origin.
+    /// cam.scroll_by(-100, -100);
+    /// assert_eq!(cam.origin(), Pos::new(0, 0));
+    /// ```
+    pub fn scroll_by(&mut self, dx: i32, dy: i32) {
+        self.set_origin(Pos::new(
+            saturating_offset(self.origin.x, dx),
+            saturating_offset(self.origin.y, dy),
+        ));
     }
 
     /// The world rectangle currently visible, clamped to world bounds.
@@ -342,9 +406,10 @@ const fn max_origin(view: u16, world: u16) -> u16 {
     world.saturating_sub(view)
 }
 
-/// Origin that centers `target` in a `view`-wide window, clamped to bounds.
-fn center_axis(target: u16, view: u16, world: u16) -> u16 {
-    target.saturating_sub(view / 2).min(max_origin(view, world))
+/// Adds a signed delta to a `u16` coordinate, clamped to `[0, u16::MAX]` instead of wrapping.
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // clamped to [0, u16::MAX] above
+fn saturating_offset(value: u16, delta: i32) -> u16 {
+    (i32::from(value) + delta).clamp(0, i32::from(u16::MAX)) as u16
 }
 
 #[cfg(test)]
@@ -505,5 +570,79 @@ mod tests {
         view.put(Pos::new(45, 50), ']', Style::default());
 
         assert_eq!(grid[Pos::new(0, 5)].glyph(), ']');
+    }
+
+    #[test]
+    fn scroll_by_moves_the_origin_by_the_delta() {
+        let mut c = cam();
+        c.scroll_by(5, 3);
+        assert_eq!(c.origin(), Pos::new(5, 3));
+        c.scroll_by(-2, 1);
+        assert_eq!(c.origin(), Pos::new(3, 4));
+    }
+
+    #[test]
+    fn scroll_by_clamps_at_the_low_edge_without_overshooting() {
+        let mut c = cam();
+        c.scroll_by(-1000, -1000);
+        assert_eq!(c.origin(), Pos::new(0, 0));
+    }
+
+    #[test]
+    fn scroll_by_clamps_at_the_high_edge_without_overshooting() {
+        let mut c = cam(); // viewport 10x10, world 100x100: max origin is (90, 90).
+        c.scroll_by(1000, 1000);
+        assert_eq!(c.origin(), Pos::new(90, 90));
+    }
+
+    #[test]
+    fn scroll_by_has_no_dead_zone_reversing_direction_past_an_edge() {
+        // The bug `scroll_by` replaces: a caller that clamps its own "center" to `[0, world)`
+        // and re-derives the origin via `center_on` every frame accumulates slack once the
+        // center clamps past what `center_on`'s own `[0, world - viewport]` clamp allows, so
+        // reversing direction doesn't move the origin until that slack is used up. `scroll_by`
+        // has one clamp on `origin` itself, so the very next opposite-direction scroll moves it.
+        let mut c = cam(); // viewport 10x10, world 100x100: max origin is (90, 90).
+        c.scroll_by(1000, 0); // drive past the edge; origin clamps to (90, 0).
+        assert_eq!(c.origin(), Pos::new(90, 0));
+        c.scroll_by(-1, 0); // reverse by a single cell.
+        assert_eq!(
+            c.origin(),
+            Pos::new(89, 0),
+            "a single reversed cell must move the origin"
+        );
+    }
+
+    #[test]
+    fn set_origin_places_the_origin_exactly_when_in_bounds() {
+        let mut c = cam();
+        c.set_origin(Pos::new(12, 34));
+        assert_eq!(c.origin(), Pos::new(12, 34));
+    }
+
+    #[test]
+    fn set_origin_clamps_to_the_world_edge() {
+        let mut c = cam(); // viewport 10x10, world 100x100: max origin is (90, 90).
+        c.set_origin(Pos::new(95, 200));
+        assert_eq!(c.origin(), Pos::new(90, 90));
+    }
+
+    #[test]
+    fn set_origin_never_underflows_when_the_viewport_exceeds_the_world() {
+        let mut c = Camera::new(Rect::new(0, 0, 20, 20), Size::new(5, 5));
+        c.set_origin(Pos::new(3, 3));
+        assert_eq!(c.origin(), Pos::new(0, 0));
+    }
+
+    #[test]
+    fn center_on_and_set_origin_agree_on_the_clamped_result() {
+        // `center_on` now routes through `set_origin`; this pins that composition down.
+        let mut a = cam();
+        a.center_on(Pos::new(99, 99));
+
+        let mut b = cam();
+        b.set_origin(Pos::new(94, 94)); // 99 - viewport.width() / 2 = 94.
+
+        assert_eq!(a.origin(), b.origin());
     }
 }
