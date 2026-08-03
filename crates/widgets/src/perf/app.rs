@@ -1,247 +1,18 @@
-//! [`PerfOverlayApp`]: a live frame-time/FPS overlay for any [`App`], on any [`Backend`].
-//!
-//! Wrap an existing [`App`] once and it gains a toggleable perf readout on every backend, with no
-//! backend-specific code in the wrapped app itself:
-//!
-//! ```
-//! # #[cfg(feature = "std")]
-//! # {
-//! use retroglyph_core::{Backend, Headless, PerfOverlayApp, Terminal, run_blocking};
-//! # use retroglyph_core::{App, Flow, Frame};
-//! # struct MyGame;
-//! # impl<B: Backend> App<B> for MyGame {
-//! #     fn update(&mut self, _term: &mut Terminal<B>, frame: &Frame) -> Flow {
-//! #         if frame.frame >= 3 { Flow::Exit } else { Flow::Continue }
-//! #     }
-//! # }
-//!
-//! let term = Terminal::new(Headless::new(40, 10));
-//! let app = PerfOverlayApp::new(MyGame, "headless");
-//! run_blocking(term, app).expect("run_blocking");
-//! # } // `run_blocking` is `std`-only; a no-op under `--no-default-features`.
-//! ```
-//!
-//! # What's generic and what's backend-specific
-//!
-//! The frame-time bookkeeping ([`FrameStats`]), the toggle-key check, and the decision of when to
-//! draw are all backend-agnostic: [`PerfOverlayApp::update`](App::update) only ever talks to
-//! [`Terminal`]/[`Surface`], which every [`Backend`] implements identically. The one thing every
-//! caller still supplies by hand is the `backend` label string (there is no portable way to ask a
-//! `Backend` what to call itself); everything else, including toggling the overlay on and off,
-//! works unmodified on crossterm, a native window, or a browser tab.
-//!
-//! # Rendering
-//!
-//! [`DefaultPerfRenderer`] (used by [`PerfOverlayApp::new`]) draws a single-row `NNNfps MM.Mms
-//! minMM.M maxMM.M <backend>` readout, compact enough to fit an 80-column terminal alongside a
-//! long backend label, with no dependencies beyond this crate. For a richer
-//! overlay (a bordered panel, a frame-time sparkline, extra app-supplied metrics like
-//! resolution or vsync state), pass a closure to [`PerfOverlayApp::with_closure`]: composing
-//! `retroglyph-widgets`' `Panel`/`Sparkline` widgets requires no glue code beyond the closure
-//! itself. Implement [`PerfRenderer`] directly, and construct with
-//! [`PerfOverlayApp::with_renderer`], only for a named, reusable renderer type instead of a
-//! closure.
-//!
-//! This whole wrapper exists in large part because [`FrameStats::record`] needs a [`Frame`],
-//! which a plain widget draw call had no way to reach: [`PerfOverlayApp::update`] is what
-//! intercepts `Frame` on the way through and calls [`FrameStats::record`] for the widget that
-//! otherwise couldn't. An app that doesn't need this wrapper's other job (generic toggle-key
-//! handling across any wrapped [`App`], on every backend) no longer needs it just for that:
-//! `retroglyph-widgets`' [`AnimatedPerfOverlay`](https://docs.rs/retroglyph-widgets/latest/retroglyph_widgets/struct.AnimatedPerfOverlay.html)
-//! reaches `Frame` directly, so an app that already owns a [`FrameStats`] field can record and
-//! draw it in a single call, with no decorator at all.
-//!
-//! # Toggling
-//!
-//! [`PerfOverlayApp::update`] drains every event out of the wrapped [`Terminal`] before handing
-//! control to the inner [`App`], keeps any that match the toggle key (backtick, or F1 as an
-//! alias, by default; see [`default_is_toggle_key`]), and re-queues the rest via
-//! [`Terminal::requeue_events`] so the inner app sees exactly the input it would have without the
-//! overlay, minus the toggle presses. This works identically on every backend because it only
-//! goes through [`Terminal`]'s own event queue, never a backend-specific input path (in
-//! particular, never [`Input::push_event`](crate::backend::Input::push_event), whose documented
-//! default is a no-op for backends that never receive events from outside their own `poll_event`).
-//!
-//! The toggle key doesn't just flip visibility: it cycles through [`PerfOverlayMode`]:
-//! [`Off`](PerfOverlayMode::Off) -> [`Compact`](PerfOverlayMode::Compact) ->
-//! [`Full`](PerfOverlayMode::Full) -> back to `Off`. `Full` only exists once
-//! [`PerfOverlayApp::cycle_with`] registers a second, richer [`PerfRenderer`] (typically one
-//! composed from `retroglyph-widgets`, e.g. a bordered panel with a frame-time
-//! [`Sparkline`](https://docs.rs/retroglyph-widgets/latest/retroglyph_widgets/struct.Sparkline.html));
-//! without it, the cycle degrades to the plain two-state `Off`/`Compact` toggle.
+//! [`PerfOverlayApp`]: wraps an [`App`] with a toggleable perf overlay. See the [module
+//! docs](super).
 
-use crate::app::{App, Flow, Frame};
-use crate::backend::Backend;
-use crate::color::Color;
-use crate::event::{Event, KeyCode, KeyEventKind};
-use crate::frame_stats::FrameStats;
-use crate::grid::{Rect, Size};
-use crate::style::Style;
-use crate::surface::{Layer, Surface};
-use crate::terminal::Terminal;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use core::fmt::{self, Write as _};
-use ixy::HasSize;
 
-/// How many frames [`PerfOverlayApp`]'s internal [`FrameStats`] remembers.
-///
-/// About two seconds at 60fps. Not configurable per instance: pick a bigger window by building
-/// a [`FrameStats`] directly and rendering it through a custom [`PerfRenderer`] closure instead
-/// of [`PerfOverlayApp`], if a specific app genuinely needs one.
-pub const FRAME_HISTORY: usize = 120;
+use retroglyph_core::{
+    App, Backend, Event, Flow, Frame, FrameStats, HasSize, KeyCode, KeyEventKind, Rect, Size,
+    Terminal,
+};
 
-/// [`PerfOverlayApp`]'s default overlay layer: [`Layer::Debug`].
-///
-/// The workspace's named top-most UI tier, so a perf HUD stays visible over whatever else is on
-/// screen (including an open [`Layer::Overlay`] popup) rather than risking a lower,
-/// app-chosen layer hiding it. Override with [`PerfOverlayApp::layer`] if an app's own content
-/// already reaches this layer.
-pub const DEFAULT_LAYER: u8 = Layer::Debug.as_u8();
-
-/// Draws a [`PerfOverlayApp`]'s stats into a rectangular area of a [`Surface`].
-///
-/// Implemented for any `FnMut(&FrameStats<FRAME_HISTORY>, &str, Rect, &mut Surface<'_>)` (pass
-/// such a closure to [`PerfOverlayApp::with_closure`]; see its docs for why that constructor
-/// exists instead of just accepting `impl PerfRenderer` everywhere), so a plain closure is enough
-/// for a custom overlay; see the [module docs](self) for composing one out of
-/// `retroglyph-widgets` widgets. [`DefaultPerfRenderer`] is the built-in implementation, used by
-/// [`PerfOverlayApp::new`].
-pub trait PerfRenderer {
-    /// Draws `stats` (and the caller-supplied `backend` label) into `area`, via `surface` scoped
-    /// to it.
-    fn render(
-        &mut self,
-        stats: &FrameStats<FRAME_HISTORY>,
-        backend: &str,
-        area: Rect,
-        surface: &mut Surface<'_>,
-    );
-}
-
-impl<F> PerfRenderer for F
-where
-    F: FnMut(&FrameStats<FRAME_HISTORY>, &str, Rect, &mut Surface<'_>),
-{
-    fn render(
-        &mut self,
-        stats: &FrameStats<FRAME_HISTORY>,
-        backend: &str,
-        area: Rect,
-        surface: &mut Surface<'_>,
-    ) {
-        self(stats, backend, area, surface);
-    }
-}
-
-/// A fixed-capacity, stack-allocated [`fmt::Write`] sink, so [`DefaultPerfRenderer`] can format
-/// its readout without heap-allocating a `String` every frame. Overflowing writes are rejected
-/// (matching `core::fmt`'s own "stop, don't panic" policy); [`FixedBuf::as_str`] then simply
-/// returns whatever was successfully written before the overflow.
-struct FixedBuf<const N: usize> {
-    bytes: [u8; N],
-    len: usize,
-}
-
-impl<const N: usize> FixedBuf<N> {
-    const fn new() -> Self {
-        Self {
-            bytes: [0; N],
-            len: 0,
-        }
-    }
-
-    /// Only ASCII is ever written into this buffer by [`DefaultPerfRenderer`] (digits, spaces,
-    /// and the caller's `backend` label, which is expected to be a short ASCII identifier), so
-    /// `len` bytes are always valid UTF-8; this falls back to `""` rather than panicking if that
-    /// invariant is ever broken by a future caller.
-    fn as_str(&self) -> &str {
-        core::str::from_utf8(&self.bytes[..self.len]).unwrap_or("")
-    }
-}
-
-impl<const N: usize> fmt::Write for FixedBuf<N> {
-    fn write_str(&mut self, s: &str) -> fmt::Result {
-        let bytes = s.as_bytes();
-        let end = self.len + bytes.len();
-        if end > N {
-            return Err(fmt::Error);
-        }
-        self.bytes[self.len..end].copy_from_slice(bytes);
-        self.len = end;
-        Ok(())
-    }
-}
-
-/// `duration` in whole milliseconds, for display. Precision loss below a millisecond is
-/// immaterial to a live readout; [`FrameStats`] itself stays full [`core::time::Duration`]
-/// precision, this is purely a formatting concern of [`DefaultPerfRenderer`].
-fn millis(duration: core::time::Duration) -> f32 {
-    duration.as_secs_f32() * 1000.0
-}
-
-/// The built-in [`PerfRenderer`], used by [`PerfOverlayApp::new`].
-///
-/// A single-row `NNNfps MM.Mms minMM.M maxMM.M <backend>` readout, right-aligned within
-/// its area, on a solid dark background. No dependency on `retroglyph-widgets`.
-///
-/// A no-op before the first frame is recorded, or if the readout doesn't fit `area`'s width.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct DefaultPerfRenderer;
-
-impl PerfRenderer for DefaultPerfRenderer {
-    fn render(
-        &mut self,
-        stats: &FrameStats<FRAME_HISTORY>,
-        backend: &str,
-        area: Rect,
-        surface: &mut Surface<'_>,
-    ) {
-        if stats.frame_count() == 0 || area.height() == 0 {
-            return;
-        }
-        let mut text = FixedBuf::<96>::new();
-        let _ = write!(
-            text,
-            " {:>3.0}fps {:>4.1}ms min{:>4.1} max{:>4.1} {backend} ",
-            stats.fps(),
-            millis(stats.current()),
-            millis(stats.min()),
-            millis(stats.max()),
-        );
-        let text = text.as_str();
-
-        let width = area.width_usize();
-        let len = text.chars().count();
-        if len == 0 || len > width {
-            return;
-        }
-        // `len` is bounded by `width`, itself widened from `area`'s own `u16` width, so
-        // narrowing it back is always exact.
-        #[allow(clippy::cast_possible_truncation)]
-        let len_u16 = len as u16;
-        let x0 = area.left() + (area.width() - len_u16);
-
-        let style = Style::new()
-            .fg(Color::Rgb {
-                r: 0xE6,
-                g: 0xE6,
-                b: 0xE6,
-            })
-            .bg(Color::Rgb {
-                r: 0x10,
-                g: 0x10,
-                b: 0x14,
-            });
-        for (i, ch) in text.chars().enumerate() {
-            // `i` ranges over `0..len`, and `len <= width <= area.width()` (a `u16`), so
-            // narrowing it back is always exact.
-            #[allow(clippy::cast_possible_truncation)]
-            let x = x0 + i as u16;
-            surface.put((x, area.top()), ch, style);
-        }
-    }
-}
+use super::mode::PerfOverlayMode;
+use super::renderer::{DefaultPerfRenderer, PerfRenderer};
+use super::{DEFAULT_LAYER, FRAME_HISTORY};
+use crate::Surface;
 
 /// Whether `event` is the overlay's default toggle key.
 ///
@@ -256,38 +27,6 @@ pub fn default_is_toggle_key(event: &Event) -> bool {
     key.kind == KeyEventKind::Press && matches!(key.code, KeyCode::Char('`') | KeyCode::F(1))
 }
 
-/// How much detail [`PerfOverlayApp`] currently shows, advanced by the toggle key.
-///
-/// Cycles `Off -> Compact -> Full -> Off`. [`Full`](Self::Full) is only reachable once
-/// [`PerfOverlayApp::cycle_with`] has registered a second renderer; without one, the cycle skips
-/// straight from [`Compact`](Self::Compact) back to `Off`, i.e. the plain two-state toggle from
-/// before this enum existed.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[non_exhaustive]
-pub enum PerfOverlayMode {
-    /// Nothing renders.
-    Off,
-    /// [`PerfOverlayApp`]'s primary [`PerfRenderer`] (e.g. [`DefaultPerfRenderer`]) renders.
-    Compact,
-    /// The renderer registered via [`PerfOverlayApp::cycle_with`] renders, if any; otherwise
-    /// equivalent to `Off` (this mode is unreachable through the toggle key alone in that case,
-    /// but [`PerfOverlayApp::set_mode`] can still be called with it directly).
-    Full,
-}
-
-impl PerfOverlayMode {
-    /// The next mode in the cycle, `Off -> Compact -> Full -> Off`, skipping `Full` when
-    /// `has_full` is `false`.
-    #[must_use]
-    const fn next(self, has_full: bool) -> Self {
-        match self {
-            Self::Off => Self::Compact,
-            Self::Compact if has_full => Self::Full,
-            Self::Compact | Self::Full => Self::Off,
-        }
-    }
-}
-
 /// [`PerfOverlayApp::cycle_with`]'s registered [`PerfOverlayMode::Full`] renderer and its area
 /// size.
 ///
@@ -299,7 +38,7 @@ struct FullMode {
     size: Size,
 }
 
-/// Wraps an [`App`] with a toggleable perf overlay. See the [module docs](self).
+/// Wraps an [`App`] with a toggleable perf overlay. See the [module docs](super).
 pub struct PerfOverlayApp<A, R = DefaultPerfRenderer> {
     inner: A,
     stats: FrameStats<FRAME_HISTORY>,
@@ -322,7 +61,7 @@ impl<A> PerfOverlayApp<A, DefaultPerfRenderer> {
     /// a [`Backend`] what to call itself, so every caller supplies it directly.
     #[must_use]
     pub fn new(inner: A, backend: &'static str) -> Self {
-        Self::with_renderer(inner, backend, DefaultPerfRenderer)
+        Self::with_renderer(inner, backend, DefaultPerfRenderer::new())
     }
 }
 
@@ -347,10 +86,10 @@ impl<A, R: PerfRenderer> PerfOverlayApp<A, R> {
     /// Wraps `inner`, drawing with a custom [`PerfRenderer`] instead of [`DefaultPerfRenderer`].
     /// This constructor is for a named type that implements [`PerfRenderer`] directly (there is no
     /// stable way for a plain struct to implement `FnMut` itself, which is why the trait exists
-    /// at all: see the [module docs](self)). See [`PerfOverlayApp::with_closure`] for why a bare
+    /// at all: see the [module docs](super)). See [`PerfOverlayApp::with_closure`] for why a bare
     /// closure should go through that constructor instead.
     ///
-    /// Defaults: visible, [`DEFAULT_LAYER`], a `64x1` area (wide enough for
+    /// Defaults: visible, [`DEFAULT_LAYER`](super::DEFAULT_LAYER), a `64x1` area (wide enough for
     /// [`DefaultPerfRenderer`]'s single-row readout with a short backend label), and
     /// [`default_is_toggle_key`]; override any of these with the chainable methods below before
     /// the wrapped app first runs.
@@ -375,9 +114,9 @@ impl<A, R: PerfRenderer> PerfOverlayApp<A, R> {
     /// `size` columns by rows, and makes it reachable: the toggle key now cycles `Off -> Compact
     /// -> Full -> Off` instead of just `Off -> Compact -> Off`.
     ///
-    /// A natural pairing is [`DefaultPerfRenderer`] (or a closure) at [`Compact`](PerfOverlayMode::Compact)
-    /// and a `retroglyph-widgets`-composed panel with a frame-time sparkline at `Full`; see the
-    /// [module docs](self).
+    /// A natural pairing is [`DefaultPerfRenderer`] (or a closure) at
+    /// [`Compact`](PerfOverlayMode::Compact) and [`PerfOverlay`](crate::PerfOverlay) (a bordered
+    /// panel with a frame-time sparkline) at `Full`; see the [module docs](super).
     #[must_use]
     pub fn cycle_with<F>(mut self, size: Size, renderer: F) -> Self
     where
@@ -407,8 +146,9 @@ impl<A, R: PerfRenderer> PerfOverlayApp<A, R> {
         self
     }
 
-    /// Sets which grid layer the overlay draws on. Defaults to [`DEFAULT_LAYER`]; raise it if the
-    /// wrapped app's own content already reaches that layer.
+    /// Sets which grid layer the overlay draws on. Defaults to
+    /// [`DEFAULT_LAYER`](super::DEFAULT_LAYER); raise it if the wrapped app's own content already
+    /// reaches that layer.
     #[must_use]
     pub const fn layer(mut self, layer: u8) -> Self {
         self.layer = layer;
@@ -449,27 +189,17 @@ impl<A, R: PerfRenderer> PerfOverlayApp<A, R> {
         !matches!(self.mode, PerfOverlayMode::Off)
     }
 
-    /// Sets the overlay to [`Compact`](PerfOverlayMode::Compact) (`true`) or
-    /// [`Off`](PerfOverlayMode::Off) (`false`), e.g. from an app's own UI (a settings menu toggle)
-    /// rather than the built-in toggle key. Use [`set_mode`](Self::set_mode) to reach
-    /// [`Full`](PerfOverlayMode::Full) directly.
-    pub const fn set_visible(&mut self, visible: bool) {
-        self.mode = if visible {
-            PerfOverlayMode::Compact
-        } else {
-            PerfOverlayMode::Off
-        };
-    }
-
     /// The overlay's current [`PerfOverlayMode`].
     #[must_use]
     pub const fn mode(&self) -> PerfOverlayMode {
         self.mode
     }
 
-    /// Sets the overlay's [`PerfOverlayMode`] directly. Setting [`PerfOverlayMode::Full`] without
-    /// a renderer registered via [`cycle_with`](Self::cycle_with) is accepted but renders nothing
-    /// (the same as `Off`) until one is.
+    /// Sets the overlay's [`PerfOverlayMode`] directly: the one way to mutate visibility at
+    /// runtime, including reaching [`Full`](PerfOverlayMode::Full) directly rather than only
+    /// through [`toggle`](Self::toggle)'s cycle. Setting `Full` without a renderer registered via
+    /// [`cycle_with`](Self::cycle_with) is accepted but renders nothing (the same as `Off`) until
+    /// one is.
     pub const fn set_mode(&mut self, mode: PerfOverlayMode) {
         self.mode = mode;
     }
@@ -579,10 +309,10 @@ where
 
 #[cfg(test)]
 mod tests {
+    use retroglyph_core::backend::{Cursor, Headless, Input, Output};
+    use retroglyph_core::{KeyEvent, KeyModifiers, Pos, Style};
+
     use super::*;
-    use crate::backend::{Cursor, Headless, Input, Output};
-    use crate::event::{KeyEvent, KeyModifiers};
-    use crate::grid::Pos;
 
     struct CountingApp {
         updates: u32,
@@ -609,8 +339,8 @@ mod tests {
 
     /// Wraps [`Headless`] but never overrides `Input::push_event`, relying on the trait's
     /// documented no-op default the way a backend with no external event source legitimately
-    /// can (see `backend/mod.rs`'s [`Input`] doc). Exists only to prove `PerfOverlayApp` no
-    /// longer needs that override to pass input through.
+    /// can (see `retroglyph_core::backend`'s [`Input`] doc). Exists only to prove
+    /// `PerfOverlayApp` no longer needs that override to pass input through.
     struct NoPushEventBackend(Headless);
 
     impl Output for NoPushEventBackend {
@@ -618,7 +348,7 @@ mod tests {
 
         fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
         where
-            I: Iterator<Item = crate::backend::DrawCell<'a>>,
+            I: Iterator<Item = retroglyph_core::backend::DrawCell<'a>>,
         {
             self.0.draw_layers(content)
         }
@@ -727,8 +457,6 @@ mod tests {
 
     #[test]
     fn swallows_toggle_key_and_passes_other_input_through() {
-        use alloc::vec;
-
         let mut term = Terminal::new(Headless::new(40, 5));
         term.backend_mut().push_event(Event::Key(KeyEvent::new(
             KeyCode::Char('`'),
@@ -754,7 +482,7 @@ mod tests {
         let remaining: Vec<Event> = term.drain_events().collect();
         assert_eq!(
             remaining,
-            vec![Event::Key(KeyEvent::new(
+            alloc::vec![Event::Key(KeyEvent::new(
                 KeyCode::Char('q'),
                 KeyModifiers::NONE
             ))]
@@ -787,6 +515,59 @@ mod tests {
         // A second, toggle-free frame stays Idle.
         let flow = App::update(&mut overlay, &mut term, &frame(1));
         assert_eq!(flow, Flow::Idle);
+    }
+
+    #[test]
+    fn layer_and_size_builders_set_their_fields() {
+        let overlay = PerfOverlayApp::new(
+            CountingApp {
+                updates: 0,
+                exit_at: 100,
+            },
+            "headless",
+        )
+        .layer(5)
+        .size(Size::new(10, 2));
+
+        assert_eq!(overlay.layer, 5);
+        assert_eq!(overlay.size, Size::new(10, 2));
+    }
+
+    #[test]
+    fn visible_true_is_explicitly_compact() {
+        // `.visible(false)` is exercised by `hidden_overlay_draws_nothing` below; `new` already
+        // starts at `Compact` without calling `visible` at all, so `.visible(true)`'s own branch
+        // needs its own call site to be exercised.
+        let overlay = PerfOverlayApp::new(
+            CountingApp {
+                updates: 0,
+                exit_at: 100,
+            },
+            "headless",
+        )
+        .visible(true);
+
+        assert_eq!(overlay.mode(), PerfOverlayMode::Compact);
+    }
+
+    #[test]
+    fn zero_size_compact_area_draws_nothing() {
+        let mut term = Terminal::new(Headless::new(40, 5));
+        let mut overlay = PerfOverlayApp::new(
+            CountingApp {
+                updates: 0,
+                exit_at: 100,
+            },
+            "headless",
+        )
+        .size(Size::new(0, 0));
+
+        let _ = App::update(&mut overlay, &mut term, &frame(0));
+        term.present().expect("present");
+        assert!(
+            !term.backend().format_view().contains("fps"),
+            "a zero-size compact area should draw nothing"
+        );
     }
 
     #[test]
@@ -932,82 +713,6 @@ mod tests {
         term.present().expect("present");
         let view = term.backend().format_view();
         assert!(view.contains("FULLMODE"), "{view}");
-    }
-
-    #[test]
-    fn fixed_buf_formats_without_allocating() {
-        let mut buf = FixedBuf::<8>::new();
-        let _ = write!(buf, "{:>3}fps", 62);
-        assert_eq!(buf.as_str(), " 62fps");
-    }
-
-    #[test]
-    fn fixed_buf_rejects_writes_past_capacity_and_keeps_what_fit() {
-        let mut buf = FixedBuf::<4>::new();
-        // "12345" (5 bytes) doesn't fit in a 4-byte buffer; the write errors out and only
-        // whatever was written before the overflow (nothing, here, since it overflows on the
-        // very first `write_str` call) is kept.
-        assert!(write!(buf, "12345").is_err());
-        assert_eq!(buf.as_str(), "");
-    }
-
-    #[test]
-    fn default_perf_renderer_is_a_noop_before_the_first_frame() {
-        let stats = FrameStats::<FRAME_HISTORY>::new();
-        let area = Rect::new(0, 0, 40, 1);
-        let mut grid = crate::grid::Grid::new(40, 1);
-        DefaultPerfRenderer.render(
-            &stats,
-            "headless",
-            area,
-            &mut Surface::new(&mut grid, area, 0),
-        );
-        assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
-    }
-
-    #[test]
-    fn default_perf_renderer_is_a_noop_when_the_readout_does_not_fit() {
-        let mut stats = FrameStats::<FRAME_HISTORY>::new();
-        stats.record(core::time::Duration::from_millis(16));
-        // A handful of columns can never fit "NNNfps ...": too narrow, not zero, so this exercises
-        // the `len > width` guard rather than the `area.height() == 0` one.
-        let area = Rect::new(0, 0, 3, 1);
-        let mut grid = crate::grid::Grid::new(3, 1);
-        DefaultPerfRenderer.render(
-            &stats,
-            "headless",
-            area,
-            &mut Surface::new(&mut grid, area, 0),
-        );
-        assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
-    }
-
-    #[test]
-    fn default_perf_renderer_shows_fps_ms_min_max_and_backend_right_aligned() {
-        use alloc::string::String;
-
-        let mut stats = FrameStats::<FRAME_HISTORY>::new();
-        for _ in 0..5 {
-            stats.record(core::time::Duration::from_millis(16));
-        }
-        let area = Rect::new(0, 0, 60, 1);
-        let mut grid = crate::grid::Grid::new(60, 1);
-        DefaultPerfRenderer.render(
-            &stats,
-            "headless",
-            area,
-            &mut Surface::new(&mut grid, area, 0),
-        );
-        let row: String = (0..60).map(|x| grid[Pos::new(x, 0)].glyph()).collect();
-        assert!(row.contains("fps"), "{row}");
-        assert!(row.contains("ms"), "{row}");
-        assert!(row.contains("min"), "{row}");
-        assert!(row.contains("max"), "{row}");
-        assert!(row.contains("headless"), "{row}");
-        // Right-aligned: the last character of the readout (the trailing space) sits in the
-        // area's last column, not floating somewhere in the middle.
-        assert_eq!(grid[Pos::new(59, 0)].glyph(), ' ');
-        assert_ne!(grid[Pos::new(0, 0)].glyph(), 'h');
     }
 
     #[test]

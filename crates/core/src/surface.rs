@@ -115,9 +115,9 @@ pub enum Layer {
     /// Debug and dev tooling. Always the top-most tier, so it stays visible over an open
     /// [`Layer::Overlay`] rather than being hidden underneath one. Grid layer 3.
     ///
-    /// [`crate::perf_overlay::DEFAULT_LAYER`] is defined as `Layer::Debug.as_u8()` for exactly
-    /// this reason: a perf HUD that a popup could paint over would be useless whenever an app
-    /// actually has a popup open.
+    /// `retroglyph-widgets`' `PerfOverlayApp` default layer is defined as `Layer::Debug.as_u8()`
+    /// for exactly this reason: a perf HUD that a popup could paint over would be useless
+    /// whenever an app actually has a popup open.
     Debug,
 }
 
