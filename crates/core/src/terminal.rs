@@ -78,8 +78,10 @@ impl<B: Backend> Terminal<B> {
     /// Create a terminal with the given backend.
     /// Grid dimensions are queried from the backend.
     ///
-    /// A backend-reported dimension of 0 (e.g. a minimized window, or a surface queried before
-    /// the first configure) is clamped to 1; see [`Grid::new`].
+    /// # Panics
+    ///
+    /// Panics if the backend reports a width of 0 (e.g. a minimized window, or a surface queried
+    /// before the first configure); see [`Grid::new`]. A reported height of 0 is fine.
     #[must_use]
     pub fn new(backend: B) -> Self {
         let size = backend.size();
@@ -926,21 +928,21 @@ mod tests {
     }
 
     #[test]
-    fn test_terminal_new_zero_width_backend_does_not_panic() {
-        let term = Terminal::new(Headless::new(0, 5));
-        assert_eq!(term.size(), Size::new(1, 5));
+    #[should_panic(expected = "Grid width must be at least 1")]
+    fn test_terminal_new_zero_width_backend_panics() {
+        let _ = Terminal::new(Headless::new(0, 5));
     }
 
     #[test]
     fn test_terminal_new_zero_height_backend_does_not_panic() {
         let term = Terminal::new(Headless::new(5, 0));
-        assert_eq!(term.size(), Size::new(5, 1));
+        assert_eq!(term.size(), Size::new(5, 0));
     }
 
     #[test]
-    fn test_terminal_new_zero_by_zero_backend_does_not_panic() {
-        let term = Terminal::new(Headless::new(0, 0));
-        assert_eq!(term.size(), Size::new(1, 1));
+    #[should_panic(expected = "Grid width must be at least 1")]
+    fn test_terminal_new_zero_by_zero_backend_panics() {
+        let _ = Terminal::new(Headless::new(0, 0));
     }
 
     #[test]
