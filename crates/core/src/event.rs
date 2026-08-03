@@ -796,6 +796,32 @@ mod tests {
     }
 
     #[test]
+    fn test_mouse_event_new_has_no_pixel_position() {
+        let mouse_event = MouseEvent::new(
+            MouseEventKind::Down(MouseButton::Left),
+            Pos { x: 10, y: 5 },
+            KeyModifiers::NONE,
+        );
+        assert_eq!(mouse_event.kind, MouseEventKind::Down(MouseButton::Left));
+        assert_eq!(mouse_event.position, Pos { x: 10, y: 5 });
+        assert!(mouse_event.pixel_position.is_none());
+    }
+
+    #[test]
+    fn test_mouse_event_with_pixel_position_constructor() {
+        let mouse_event = MouseEvent::with_pixel_position(
+            MouseEventKind::Moved,
+            Pos { x: 3, y: 2 },
+            KeyModifiers::NONE,
+            PhysicalPos { x: 55, y: 38 },
+        );
+        assert_eq!(
+            mouse_event.pixel_position,
+            Some(PhysicalPos { x: 55, y: 38 })
+        );
+    }
+
+    #[test]
     fn test_physical_pos_is_copy() {
         let p = PhysicalPos { x: 10, y: 20 };
         let q = p; // Copy
