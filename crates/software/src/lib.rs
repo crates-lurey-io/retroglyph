@@ -1385,6 +1385,16 @@ mod tests {
     }
 
     #[test]
+    fn presenter_geometry_and_cell_size_match_the_internal_geometry() {
+        use retroglyph_window::Presenter as _;
+
+        // `test_renderer` builds an 8x16 unscii16 font at scale 1.
+        let renderer = test_renderer();
+        assert_eq!(renderer.cell_size(), (8, 16));
+        assert_eq!(renderer.geometry(), CellGeometry::new(8, 16, 1));
+    }
+
+    #[test]
     fn layer0_paints_background() {
         let mut renderer = test_renderer();
         let tile = Tile::new(' ', Style::new().bg(Color::Rgb { r: 255, g: 0, b: 0 }));
