@@ -49,34 +49,34 @@ impl Easing {
         match self {
             Self::Linear => t,
             Self::EaseInQuad => t * t,
-            // Not `f32::mul_add`: it's a std-only inherent method, not in `core`. `libm::fmaf`
-            // is the no_std-safe equivalent (and this crate already depends on libm for the
-            // trig curves below).
-            Self::EaseOutQuad => libm::fmaf(t, -t, 2.0 * t),
+            // `crate::math::mul_add` dispatches to `f32::mul_add` (`std`) or `libm::fmaf`
+            // (`no_std`); see `crate::math`'s doc comment for why this crate has its own shim
+            // instead of calling either directly.
+            Self::EaseOutQuad => crate::math::mul_add(t, -t, 2.0 * t),
             Self::EaseInOutQuad => {
                 if t < 0.5 {
                     2.0 * t * t
                 } else {
-                    let u = libm::fmaf(-2.0, t, 2.0);
+                    let u = crate::math::mul_add(-2.0, t, 2.0);
                     1.0 - u * u / 2.0
                 }
             }
             Self::EaseInCubic => t * t * t,
             Self::EaseOutCubic => {
                 let u = 1.0 - t;
-                libm::fmaf(u * u, -u, 1.0)
+                crate::math::mul_add(u * u, -u, 1.0)
             }
             Self::EaseInOutCubic => {
                 if t < 0.5 {
                     4.0 * t * t * t
                 } else {
-                    let u = libm::fmaf(-2.0, t, 2.0);
+                    let u = crate::math::mul_add(-2.0, t, 2.0);
                     1.0 - u * u * u / 2.0
                 }
             }
-            Self::EaseInSine => 1.0 - libm::cosf(t * core::f32::consts::FRAC_PI_2),
-            Self::EaseOutSine => libm::sinf(t * core::f32::consts::FRAC_PI_2),
-            Self::EaseInOutSine => -(libm::cosf(core::f32::consts::PI * t) - 1.0) / 2.0,
+            Self::EaseInSine => 1.0 - crate::math::cos(t * core::f32::consts::FRAC_PI_2),
+            Self::EaseOutSine => crate::math::sin(t * core::f32::consts::FRAC_PI_2),
+            Self::EaseInOutSine => -(crate::math::cos(core::f32::consts::PI * t) - 1.0) / 2.0,
             Self::EaseOutElastic => ease_out_elastic(t),
             Self::EaseOutBounce => ease_out_bounce(t),
         }
@@ -94,9 +94,9 @@ fn ease_out_elastic(t: f32) -> f32 {
     if t >= 1.0 {
         return 1.0;
     }
-    libm::fmaf(
-        libm::powf(2.0, -10.0 * t),
-        libm::sinf(libm::fmaf(10.0, t, -0.75) * C4),
+    crate::math::mul_add(
+        crate::math::powf(2.0, -10.0 * t),
+        crate::math::sin(crate::math::mul_add(10.0, t, -0.75) * C4),
         1.0,
     )
 }
@@ -110,13 +110,13 @@ fn ease_out_bounce(t: f32) -> f32 {
         N1 * t * t
     } else if t < 2.0 / D1 {
         let t = t - 1.5 / D1;
-        libm::fmaf(N1 * t, t, 0.75)
+        crate::math::mul_add(N1 * t, t, 0.75)
     } else if t < 2.5 / D1 {
         let t = t - 2.25 / D1;
-        libm::fmaf(N1 * t, t, 0.9375)
+        crate::math::mul_add(N1 * t, t, 0.9375)
     } else {
         let t = t - 2.625 / D1;
-        libm::fmaf(N1 * t, t, 0.984_375)
+        crate::math::mul_add(N1 * t, t, 0.984_375)
     }
 }
 

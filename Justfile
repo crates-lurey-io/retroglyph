@@ -88,10 +88,16 @@ compile:
     # retroglyph#547: dep:gem is unconditional in retroglyph-core now, so this has to compile
     # with zero features, not just fewer -- the whole point of making it non-optional.
     cargo check -p retroglyph-core --no-default-features
+    # retroglyph#886: with no `std`, `animate`/`blend-modes`' float math needs `libm` as its
+    # backend instead; this is the `no_std` build that actually exercises that dispatch path,
+    # since the zero-features line above never turns `float` on at all.
+    cargo check -p retroglyph-core --no-default-features --features libm
     # retroglyph#882: retroglyph-widgets forwards a `std` feature to retroglyph-core's own, so
     # this is its `no_std` (alloc-only) build, the same reason retroglyph-core gets its own line
-    # above.
-    cargo check -p retroglyph-widgets --no-default-features
+    # above. retroglyph#886: unlike retroglyph-core, this crate's float use isn't optional (see
+    # its crate-level `compile_error!`), so its `no_std` build also needs a `libm` backend --
+    # plain `--no-default-features` no longer compiles on its own.
+    cargo check -p retroglyph-widgets --no-default-features --features libm
 
 doc: check-features
     # --exclude: none of the three are part of the published API surface (cargo-bin and
@@ -187,7 +193,8 @@ test-default-features:
     cargo test -p retroglyph-core --no-default-features
     # retroglyph#882: same rationale as the `retroglyph-core` line above, now that
     # `retroglyph-widgets` has its own `std` feature forwarding to `retroglyph-core`'s.
-    cargo test -p retroglyph-widgets --no-default-features
+    # retroglyph#886: `--features libm`, see the matching line in `compile` above.
+    cargo test -p retroglyph-widgets --no-default-features --features libm
 
 test-v: build-pty-examples
     cargo bin cargo-nextest run --workspace --all-features --no-capture

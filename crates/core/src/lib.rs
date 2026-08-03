@@ -11,12 +11,24 @@
 //! <!-- gen-features:start -->
 //! Default features: `blend-modes`, `egc`, `indexed-quant`, `std`.
 //!
+//! ### `__math`
+//!
+//! ⚪ Optional.
+//!
+//! Internal: exposes this crate's `math` shim (std-or-libm float dispatch) to `retroglyph-widgets`
+//! as `#[doc(hidden)] pub mod math`, so both crates share one dispatch point instead of each
+//! vendoring their own. No stability guarantee; not meant to be enabled by anyone but
+//! `retroglyph-widgets`. Deliberately does not imply `float`: a lone `--features __math` build has
+//! no `math` module at all, so this feature stays meaningful (and compiles) on its own rather than
+//! silently pulling in a backend nobody asked for.
+//!
 //! ### `blend-modes`
 //!
 //! 🟢 Enabled by default.
 //!
 //! Gates the four W3C separable [`BlendMode`] variants (`Screen`/`Dodge`/`Burn`/`Overlay`/
-//! `Multiply`) and pulls in the optional `alpha-blend` dependency.
+//! `Multiply`) and pulls in the optional `alpha-blend` dependency. Needs a float backend (`std` or
+//! `libm`) for its per-channel blend math, so this also turns on `float`.
 //!
 //! [`BlendMode::Linear`] and [`Grid::blit_alpha`] are always available regardless of this feature:
 //! `Linear` only needs `gem::Mix`, not `alpha-blend`.
@@ -37,16 +49,48 @@
 //! Enables grapheme-cluster-aware text handling (via `unicode-segmentation`) for EGC-correct cell
 //! diffing and layout.
 //!
+//! ### `float`
+//!
+//! ⚪ Optional.
+//!
+//! Internal marker: some float backend (`std` or `libm`) is available. Never enable this directly;
+//! it's turned on by `std` and `libm` below and gates [`animate`] and this crate's own `math` shim.
+//! Not meant to be named by consumers, but not name-mangled either -- it's a plain capability flag,
+//! not `__`-prefixed like `__math`, since `cargo`'s feature docs (and `cargo tree`) are clearer when
+//! every feature that participates in resolution has an ordinary name.
+//!
 //! ### `indexed-quant`
 //!
 //! 🟢 Enabled by default.
 //!
-//! Gates perceptual (Oklab) RGB → Indexed/ANSI quantization (`gem/libm`) and [`Color`]'s
+//! Gates perceptual (Oklab) RGB → Indexed/ANSI quantization (`gem/space`) and [`Color`]'s
 //! `gem`-space conversions (`to_srgb`/`from_srgb`/`lerp`/`from_hex`).
 //!
 //! Without it, [`Color::to_indexed`](color::Color::to_indexed)/
 //! [`Color::to_ansi`](color::Color::to_ansi) fall back to euclidean RGB cube-mapping instead of
 //! failing to compile.
+//!
+//! This is a capability flag, not a backend: it only turns on `gem`'s `space` module, and needs
+//! `std` or `libm` (below) enabled separately to actually supply that module's float math -- see
+//! the `compile_error!` in `src/lib.rs` for what happens if neither is on.
+//!
+//! ### `libm`
+//!
+//! ⚪ Optional.
+//!
+//! Uses `libm`'s software float implementation (`roundf`/`fmaf`/`sinf`/`cosf`/`powf`) for
+//! `animate`'s easing curves and `blend-modes`' separable channel math, via this crate's own `math`
+//! shim -- the `no_std` side of that split. Turns on `float`. See `std` above for the alternative
+//! that prefers the platform's own float intrinsics when available.
+//!
+//! ### `libm-arch`
+//!
+//! ⚪ Optional.
+//!
+//! Alias for `libm`, matching `gem`'s and `alpha-blend`'s own `libm-arch` feature name so a reader
+//! following their docs finds the name they expect. Already implied by `libm` above (which always
+//! requests the `arch`-intrinsified `libm` dependency; see the `[dependencies.libm]` comment
+//! below), so this exists purely for discoverability and never needs to be enabled on its own.
 //!
 //! ### `serde`
 //!
@@ -63,7 +107,9 @@
 //!
 //! 🟢 Enabled by default.
 //!
-//! Enables `gem/std` and `alpha-blend?/std`.
+//! Enables `gem/std` and `alpha-blend?/std`, and uses `std`'s float intrinsics (via this crate's
+//! `math` shim) instead of `libm`'s software implementation for `animate` and `blend-modes`. Turns
+//! on `float`.
 //!
 //! Disabling this feature (`--no-default-features`) builds this crate `no_std`.
 //!
@@ -126,6 +172,22 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 extern crate alloc;
 
+// `indexed-quant` is an explicit opt-in (unlike `animate`, which degrades silently -- see the
+// `#[cfg(feature = "float")]` on `pub mod animate` below) that forwards `gem/space` without
+// itself requesting a float backend, since which of `std`/`libm` supplies that module's math is
+// meant to be picked independently (see the feature's own doc comment in `Cargo.toml`). So a
+// build that enables it without either fails loudly here instead of only inside `gem::space`'s
+// own `compile_error!`.
+#[cfg(all(feature = "indexed-quant", not(feature = "float")))]
+compile_error!("`indexed-quant` needs a float backend: enable `std` or `libm`.");
+// `float` itself is only ever a marker (`Cargo.toml`'s `float = []` has no dependency of its
+// own): `std`/`libm` both turn it on alongside a real backend, but `blend-modes` also lists it
+// directly (see that feature's doc comment), so `--features blend-modes` alone -- no `std`, no
+// `libm` -- would otherwise reach `crate::math`'s `libm::` branch with no `libm` crate linked and
+// fail with a confusing "unresolved crate" error instead of this one.
+#[cfg(all(feature = "float", not(any(feature = "std", feature = "libm"))))]
+compile_error!("`float` needs a backend: enable `std` or `libm`.");
+
 // Compile the code blocks in this crate's own README as doctests so its quick start is
 // type-checked on every test run and cannot silently rot. The `cfg(doctest)` gate keeps this out
 // of the rendered crate documentation: see `retroglyph-crossterm`'s matching include for the
@@ -141,8 +203,17 @@ struct ReadmeDoctests;
 // silences it despite touching nothing else in that byte range.
 /// Horizontal ([`HAlign`]) and vertical ([`VAlign`]) alignment within a bounded rectangle.
 pub mod align;
+#[cfg(feature = "float")]
+#[cfg_attr(docsrs, doc(cfg(feature = "float")))]
 #[allow(clippy::too_long_first_doc_paragraph)]
 /// Time-driven value animation: easing curves, a stateful `Tween`, and a periodic oscillator.
+///
+/// Needs a float backend (`std` or `libm`) for its trig-based easing curves and its oscillator's
+/// sine wave, so this module (and its re-exports below) only compiles in with the `float`
+/// feature, unlike `indexed-quant`/`blend-modes`, which fail loudly instead of disappearing when
+/// their own float dependency is missing: nothing here is an explicit opt-in the way those two
+/// are, so silently dropping the module (rather than a `compile_error!`) matches how the rest of
+/// this crate behaves when an optional capability's prerequisite isn't met.
 pub mod animate;
 /// The `App`-driven game loop.
 pub mod app;
@@ -161,6 +232,19 @@ pub mod frame_stats;
 pub mod grid;
 #[cfg(feature = "egc")]
 pub mod layout;
+// Two declarations of the same module, differing only in visibility: internally, `animate` and
+// `grid`'s separable blend math use `crate::math::*` whenever `float` is on, regardless of
+// `__math`, so the module has to exist either way. `__math` only changes whether it's also
+// reachable from outside this crate, for `retroglyph-widgets` to share instead of vendoring its
+// own copy. `#[doc(hidden)]` keeps the exposed form out of the public API surface as far as
+// `cargo-semver-checks` is concerned (see the module's own doc comment for the traps that come
+// with that); never add a `pub use` that re-exports its contents through a non-hidden path, and
+// never `#[deprecated]` it, both of which would make it public API again despite the hiding.
+#[cfg(all(feature = "float", not(feature = "__math")))]
+mod math;
+#[cfg(all(feature = "float", feature = "__math"))]
+#[doc(hidden)]
+pub mod math;
 /// A live frame-time/FPS overlay: [`PerfOverlayApp`] wraps any [`App`] with one, on any [`Backend`].
 pub mod perf_overlay;
 pub mod style;
@@ -179,6 +263,7 @@ pub mod tile;
 pub mod tint;
 
 pub use align::{HAlign, VAlign};
+#[cfg(feature = "float")]
 pub use animate::{Easing, Tween, oscillate};
 pub use app::{App, Flow, Frame, step};
 #[cfg(feature = "std")]

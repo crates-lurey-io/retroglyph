@@ -2109,10 +2109,10 @@ fn blend_separable_channel(sep: SeparableBlendMode, src: u8, dst: u8, t: f32) ->
     let cs = Channel::to_f32(src);
     let cb = Channel::to_f32(dst);
     let mixed = sep.mix(cb, cs);
-    // Not `f32::mul_add`: it's a std-only inherent method, not in `core`. `libm::fmaf` is the
-    // no_std-safe equivalent (see `animate::easing` for the same reasoning). A plain multiply-add
-    // measurably disagrees with `fmaf` by ±1 LSB on some inputs.
-    let blended = libm::fmaf(mixed - cb, t, cb);
+    // `crate::math::mul_add` dispatches to `f32::mul_add` (`std`) or `libm::fmaf` (`no_std`); see
+    // `crate::math`'s doc comment. A plain multiply-add measurably disagrees with a fused one by
+    // ±1 LSB on some inputs.
+    let blended = crate::math::mul_add(mixed - cb, t, cb);
     Channel::from_f32(blended.clamp(0.0, 1.0))
 }
 

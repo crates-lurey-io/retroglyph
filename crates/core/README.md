@@ -65,12 +65,24 @@ embedded or kernel-space roguelikes; see the `std` feature below.
 
 Default features: `blend-modes`, `egc`, `indexed-quant`, `std`.
 
+### `__math`
+
+⚪ Optional.
+
+Internal: exposes this crate's `math` shim (std-or-libm float dispatch) to `retroglyph-widgets` as
+`#[doc(hidden)] pub mod math`, so both crates share one dispatch point instead of each vendoring
+their own. No stability guarantee; not meant to be enabled by anyone but `retroglyph-widgets`.
+Deliberately does not imply `float`: a lone `--features __math` build has no `math` module at all,
+so this feature stays meaningful (and compiles) on its own rather than silently pulling in a backend
+nobody asked for.
+
 ### `blend-modes`
 
 🟢 Enabled by default.
 
 Gates the four W3C separable `BlendMode` variants (`Screen`/`Dodge`/`Burn`/`Overlay`/ `Multiply`)
-and pulls in the optional `alpha-blend` dependency.
+and pulls in the optional `alpha-blend` dependency. Needs a float backend (`std` or `libm`) for its
+per-channel blend math, so this also turns on `float`.
 
 `BlendMode::Linear` and `Grid::blit_alpha` are always available regardless of this feature: `Linear`
 only needs `gem::Mix`, not `alpha-blend`.
@@ -90,15 +102,47 @@ Can be used so an optimized build still reports development diagnostics (see the
 Enables grapheme-cluster-aware text handling (via `unicode-segmentation`) for EGC-correct cell
 diffing and layout.
 
+### `float`
+
+⚪ Optional.
+
+Internal marker: some float backend (`std` or `libm`) is available. Never enable this directly; it's
+turned on by `std` and `libm` below and gates `animate` and this crate's own `math` shim. Not meant
+to be named by consumers, but not name-mangled either -- it's a plain capability flag, not
+`__`-prefixed like `__math`, since `cargo`'s feature docs (and `cargo tree`) are clearer when every
+feature that participates in resolution has an ordinary name.
+
 ### `indexed-quant`
 
 🟢 Enabled by default.
 
-Gates perceptual (Oklab) RGB → Indexed/ANSI quantization (`gem/libm`) and `Color`'s `gem`-space
+Gates perceptual (Oklab) RGB → Indexed/ANSI quantization (`gem/space`) and `Color`'s `gem`-space
 conversions (`to_srgb`/`from_srgb`/`lerp`/`from_hex`).
 
 Without it, `Color::to_indexed`/ `Color::to_ansi` fall back to euclidean RGB cube-mapping instead of
 failing to compile.
+
+This is a capability flag, not a backend: it only turns on `gem`'s `space` module, and needs `std`
+or `libm` (below) enabled separately to actually supply that module's float math -- see the
+`compile_error!` in `src/lib.rs` for what happens if neither is on.
+
+### `libm`
+
+⚪ Optional.
+
+Uses `libm`'s software float implementation (`roundf`/`fmaf`/`sinf`/`cosf`/`powf`) for `animate`'s
+easing curves and `blend-modes`' separable channel math, via this crate's own `math` shim -- the
+`no_std` side of that split. Turns on `float`. See `std` above for the alternative that prefers the
+platform's own float intrinsics when available.
+
+### `libm-arch`
+
+⚪ Optional.
+
+Alias for `libm`, matching `gem`'s and `alpha-blend`'s own `libm-arch` feature name so a reader
+following their docs finds the name they expect. Already implied by `libm` above (which always
+requests the `arch`-intrinsified `libm` dependency; see the `[dependencies.libm]` comment below), so
+this exists purely for discoverability and never needs to be enabled on its own.
 
 ### `serde`
 
@@ -114,7 +158,8 @@ rather than a derived structural form, so hand-edited TOML/JSON stays legible.
 
 🟢 Enabled by default.
 
-Enables `gem/std` and `alpha-blend?/std`.
+Enables `gem/std` and `alpha-blend?/std`, and uses `std`'s float intrinsics (via this crate's `math`
+shim) instead of `libm`'s software implementation for `animate` and `blend-modes`. Turns on `float`.
 
 Disabling this feature (`--no-default-features`) builds this crate `no_std`.
 

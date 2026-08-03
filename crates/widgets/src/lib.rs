@@ -62,6 +62,20 @@
 //!
 //! Upgrades [`Paragraph`]'s word-wrap (always available) to grapheme-cluster-aware correctness.
 //!
+//! ### `libm`
+//!
+//! ⚪ Optional.
+//!
+//! Uses `retroglyph-core`'s `libm` feature (the `no_std` float backend: scrollbar geometry,
+//! gauge/sparkline/bar percentage rounding, scroll momentum decay) instead of `std`'s own float
+//! intrinsics. See `std` below; a build needs exactly one of the two.
+//!
+//! ### `libm-arch`
+//!
+//! ⚪ Optional.
+//!
+//! Alias for `libm`, matching `retroglyph-core`'s own `libm-arch` feature name.
+//!
 //! ### `serde`
 //!
 //! ⚪ Optional.
@@ -75,15 +89,25 @@
 //!
 //! 🟢 Enabled by default.
 //!
-//! Enables `retroglyph-core/std`.
+//! Enables `retroglyph-core/std`, whose float intrinsics back this crate's own float use (see
+//! `libm` above for the `no_std` alternative).
 //!
 //! Disabling this feature (`--no-default-features`) builds this crate `no_std` (requires an
-//! allocator).
+//! allocator and one of `std`/`libm`; see the crate-level `compile_error!` in `src/lib.rs`).
 //! <!-- gen-features:end -->
 
 #![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 extern crate alloc;
+
+// Unlike `retroglyph-core`'s `animate` (which simply disappears without a float backend), this
+// crate's float use -- scrollbar geometry, gauge/sparkline/bar percentage rounding, scroll
+// momentum decay -- is load-bearing across the widget set, not an opt-in extra. There is no
+// widgets equivalent of "the affected module just isn't compiled in", so a build with neither
+// backend fails loudly here instead of hitting `retroglyph_core::math`'s own unresolved-`libm`
+// error deep in a call site.
+#[cfg(not(any(feature = "std", feature = "libm")))]
+compile_error!("retroglyph-widgets needs a float backend: enable `std` or `libm`.");
 
 // Compile the code blocks in this crate's own README as doctests so its quick start is
 // type-checked on every test run and cannot silently rot. The `cfg(doctest)` gate keeps this out
@@ -98,7 +122,6 @@ pub mod block;
 pub mod draw;
 pub mod interact;
 pub mod layout;
-mod mathf;
 pub mod state;
 pub mod style;
 pub mod text;

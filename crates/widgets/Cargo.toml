@@ -27,27 +27,29 @@ dev = ["retroglyph-core/dev"]
 #
 # Upgrades [`Paragraph`]'s word-wrap (always available) to grapheme-cluster-aware correctness.
 egc = ["retroglyph-core/egc"]
+# Uses `retroglyph-core`'s `libm` feature (the `no_std` float backend: scrollbar geometry,
+# gauge/sparkline/bar percentage rounding, scroll momentum decay) instead of `std`'s own float
+# intrinsics. See `std` below; a build needs exactly one of the two.
+libm = ["retroglyph-core/libm"]
+# Alias for `libm`, matching `retroglyph-core`'s own `libm-arch` feature name.
+libm-arch = ["retroglyph-core/libm-arch"]
 # Adds `Serialize`/`Deserialize` impls for [`Theme`] and `Density`, forwarding to
 # `retroglyph-core`'s `serde` feature.
 #
 # [`Theme`] round-trips through `Color`'s own `serde` impl.
 serde = ["dep:serde", "retroglyph-core/serde"]
-# Enables `retroglyph-core/std`.
+# Enables `retroglyph-core/std`, whose float intrinsics back this crate's own float use (see
+# `libm` above for the `no_std` alternative).
 #
 # Disabling this feature (`--no-default-features`) builds this crate `no_std` (requires an
-# allocator).
+# allocator and one of `std`/`libm`; see the crate-level `compile_error!` in `src/lib.rs`).
 std = ["retroglyph-core/std"]
 
 [dependencies]
 # `indexed-quant` (retroglyph#629, previously `color-space`): retroglyph-core/Color::lerp (used
 # by meter_ramp's color ramp) is gated behind it. Not a separate widgets-level feature -- color
 # ramping is non-optional composite-tier functionality, not an opt-in extra like `egc`.
-retroglyph-core = { path = "../core", version = "0.5.0", default-features = false, features = ["indexed-quant"] }
-# `f32::round`/`f32::exp` (scrollbar geometry, gauge/sparkline/bar percentage rounding, scroll
-# momentum decay) are std-only inherent methods, not in `core`. `libm` is the no_std-safe
-# equivalent `retroglyph-core` already depends on for the same reason, so this is a plain,
-# always-on dependency here too rather than a std/no_std feature split.
-libm = "0.2"
+retroglyph-core = { path = "../core", version = "0.5.0", default-features = false, features = ["indexed-quant", "__math"] }
 # `Theme`/`Density`'s `serde` feature below. A separate optional dependency from
 # `retroglyph-core`'s own (rather than re-exported), matching how each crate here already
 # depends on `retroglyph-core` independently.
