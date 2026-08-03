@@ -227,6 +227,9 @@ pub type Rect = ixy::Rect<u16>;
 /// support sub-cell placement (e.g. `retroglyph-software`); it never changes which cell a glyph
 /// occupies, and cell-mode backends (e.g. `retroglyph-crossterm`) ignore it entirely.
 ///
+/// This crate's `serde` feature adds `Serialize`/`Deserialize` impls for `Offset` directly (unlike
+/// [`Size`]/[`Pos`]/[`Rect`], which forward to [`ixy`]'s own `serde` feature).
+///
 /// # Examples
 ///
 /// ```
@@ -237,6 +240,7 @@ pub type Rect = ixy::Rect<u16>;
 /// assert_eq!(offset.dy, -2);
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Offset {
     /// Horizontal pixel offset.
     pub dx: i16,
@@ -435,7 +439,7 @@ pub struct Grid {
 // ---------------------------------------------------------------------------
 
 impl Grid {
-    /// Borrow a specific layer, or `None` if unallocated.
+    /// Borrows a specific layer, or `None` if unallocated.
     ///
     /// `id` may be beyond the current layer-table `Vec`'s length: the table only grows as far
     /// as the highest layer id ever written (see [`layer_or_alloc`](Self::layer_or_alloc)), so an
@@ -444,7 +448,7 @@ impl Grid {
         self.layers.get(usize::from(id))?.as_ref()
     }
 
-    /// Borrow a specific layer mutably, allocating it if necessary.
+    /// Borrows a specific layer mutably, allocating it if necessary.
     ///
     /// Grows the layer-table `Vec` up to `id + 1` slots on demand, rather than the table always
     /// holding all 256 possible slots (see retroglyph#264): a `Grid` that only ever writes to
@@ -466,18 +470,24 @@ impl Grid {
         if id > self.max_layer {
             self.max_layer = id;
         }
-        self.layers[idx].as_mut().unwrap()
+        self.layers[idx]
+            .as_mut()
+            .expect("idx was just allocated above if it wasn't already Some")
     }
 
-    /// Borrow layer 0 (always allocated).
+    /// Borrows layer 0 (always allocated).
     fn layer0(&self) -> &LayerBuf {
-        // SAFETY: layer 0 is always `Some` (set in `new`).
-        self.layers[0].as_ref().unwrap()
+        // INVARIANT: layer 0 is always `Some` (set in `new`).
+        self.layers[0]
+            .as_ref()
+            .expect("layer 0 is always Some (set in Grid::new)")
     }
 
-    /// Borrow layer 0 mutably (always allocated).
+    /// Borrows layer 0 mutably (always allocated).
     fn layer0_mut(&mut self) -> &mut LayerBuf {
-        self.layers[0].as_mut().unwrap()
+        self.layers[0]
+            .as_mut()
+            .expect("layer 0 is always Some (set in Grid::new)")
     }
 
     /// Copy `layer` from `src` into `self` verbatim: the raw tile buffer (including every
@@ -665,6 +675,17 @@ mod tests {
         assert_eq!(
             serde_json::from_str::<Rect>(&json).expect("deserialize"),
             rect
+        );
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn test_offset_serializes_and_deserializes() {
+        let offset = Offset::new(3, -2);
+        let json = serde_json::to_string(&offset).expect("serialize");
+        assert_eq!(
+            serde_json::from_str::<Offset>(&json).expect("deserialize"),
+            offset
         );
     }
 }
