@@ -483,9 +483,10 @@ impl Surface<'_> {
     pub fn fill_rect(&mut self, rect: Rect, ch: char, style: Style) {
         // The batch path below writes a plain `Tile::new(ch, style)` per cell, which matches
         // `put`'s own per-cell write only when there's no tint to apply and `ch` is a
-        // single-column glyph, so `put`'s wide-char spacer bookkeeping never triggers.
-        // Anything else (tinted surface, zero/double-width glyph) falls back to the per-cell
-        // loop, unchanged from before this method had a fast path.
+        // single-column glyph: `fill_region` itself refuses (no-op) any `tile.width() != 1` (see
+        // its own doc comment), so this check just avoids paying for a delegation that would
+        // silently do nothing. Anything else (tinted surface, zero/double-width glyph) falls back
+        // to the per-cell loop, unchanged from before this method had a fast path.
         let single_width = UnicodeWidthChar::width(ch) == Some(1);
 
         if self.tint == Tint::None
