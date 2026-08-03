@@ -1882,6 +1882,43 @@ mod tests {
         assert!(!dst[Pos::new(0, 0)].flags().contains(TileFlags::WIDE_CHAR));
     }
 
+    #[test]
+    fn blit_copies_a_whole_wide_char_pair_intact() {
+        // The lead-clip and spacer-clip tests above both exercise the `!partner_survived` half of
+        // `blit_with`'s wide-pair check; this covers the other half, where `src_rect` includes
+        // both halves and neither flag should be stripped.
+        let mut src = Grid::new(4, 1);
+        src.put_tile(0, (0, 0), Tile::new('\u{4e2d}', Style::default()));
+
+        let mut dst = Grid::new(4, 1);
+        dst.blit(0, &src, Rect::new(0, 0, 2, 1), 0, 0);
+
+        assert!(dst[Pos::new(0, 0)].flags().contains(TileFlags::WIDE_CHAR));
+        assert!(
+            dst[Pos::new(1, 0)]
+                .flags()
+                .contains(TileFlags::WIDE_CHAR_SPACER)
+        );
+    }
+
+    #[test]
+    fn blit_degrades_a_bare_wide_char_spacer_clipped_by_src_rect() {
+        // The spacer twin of `blit_degrades_a_wide_char_pair_clipped_by_src_rect`: `src_rect` can
+        // just as easily clip out the lead and leave the spacer, which is equally unrepresentable
+        // on its own, so `blit` drops `WIDE_CHAR_SPACER` on the spacer it does copy.
+        let mut src = Grid::new(4, 1);
+        src.put_tile(0, (0, 0), Tile::new('\u{4e2d}', Style::default()));
+
+        let mut dst = Grid::new(4, 1);
+        dst.blit(0, &src, Rect::new(1, 0, 1, 1), 1, 0);
+
+        assert!(
+            !dst[Pos::new(1, 0)]
+                .flags()
+                .contains(TileFlags::WIDE_CHAR_SPACER)
+        );
+    }
+
     /// A single `blit`-vs-`copy_rect_clamped` comparison case for
     /// `blit_clamp_matches_grixys_copy_rect_clamped_on_shared_clipped_rect_cases`.
     struct BlitClampCase {
