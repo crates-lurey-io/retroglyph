@@ -100,6 +100,43 @@ impl Camera {
         );
     }
 
+    /// Replace the world dimensions (for example when a level changes), keeping the viewport
+    /// unchanged and re-clamping the origin so it stays in bounds.
+    ///
+    /// If the camera was last positioned with
+    /// [`set_viewport_fitted`](Self::set_viewport_fitted), this does not re-run that letterboxing
+    /// against the new world; call `set_viewport_fitted` again afterward if the new world may be
+    /// smaller than the viewport on either axis.
+    ///
+    /// Never panics: the re-clamp uses the same saturating arithmetic as
+    /// [`set_viewport`](Self::set_viewport).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_core::{Camera, Pos, Rect, Size};
+    ///
+    /// let mut cam = Camera::new(Rect::new(0, 0, 10, 10), Size::new(100, 100));
+    /// cam.center_on(Pos::new(50, 50));
+    /// assert_eq!(cam.origin(), Pos::new(45, 45));
+    ///
+    /// // Shrinking the world re-clamps the origin so it stays in bounds.
+    /// cam.set_world(Size::new(20, 20));
+    /// assert_eq!(cam.world(), Size::new(20, 20));
+    /// assert_eq!(cam.origin(), Pos::new(10, 10));
+    /// ```
+    pub fn set_world(&mut self, world: Size) {
+        self.world = world;
+        self.origin = Pos::new(
+            self.origin
+                .x
+                .min(max_origin(self.viewport.width(), world.width())),
+            self.origin
+                .y
+                .min(max_origin(self.viewport.height(), world.height())),
+        );
+    }
+
     /// Replace the viewport like [`set_viewport`](Self::set_viewport), but shrink it to the
     /// world's size on any axis where the world is smaller, and center the shrunk rect within
     /// `viewport` rather than pinning it to the top-left.
@@ -404,6 +441,38 @@ mod tests {
         // A cell inside the viewport but outside the (smaller) world: rejected, matching
         // `visible_bounds` and `screen_to_world`, not silently mapped past the world edge.
         assert_eq!(c.world_to_screen(Pos::new(7, 7)), None);
+    }
+
+    #[test]
+    fn set_world_re_clamps_the_origin_when_the_world_shrinks() {
+        let mut c = cam();
+        c.center_on(Pos::new(50, 50));
+        assert_eq!(c.origin(), Pos::new(45, 45));
+
+        c.set_world(Size::new(20, 20));
+        assert_eq!(c.world(), Size::new(20, 20));
+        // max_origin(10, 20) = 10, so origin clamps down from 45 to 10.
+        assert_eq!(c.origin(), Pos::new(10, 10));
+    }
+
+    #[test]
+    fn set_world_leaves_an_in_bounds_origin_unchanged_when_the_world_grows() {
+        let mut c = cam();
+        c.center_on(Pos::new(50, 50));
+        assert_eq!(c.origin(), Pos::new(45, 45));
+
+        c.set_world(Size::new(200, 200));
+        assert_eq!(c.world(), Size::new(200, 200));
+        assert_eq!(c.origin(), Pos::new(45, 45));
+    }
+
+    #[test]
+    fn set_world_pins_origin_to_zero_when_the_new_world_is_smaller_than_the_viewport() {
+        let mut c = cam();
+        c.center_on(Pos::new(50, 50));
+
+        c.set_world(Size::new(5, 5));
+        assert_eq!(c.origin(), Pos::new(0, 0));
     }
 
     #[test]
