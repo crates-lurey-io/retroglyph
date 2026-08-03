@@ -518,6 +518,59 @@ mod tests {
     }
 
     #[test]
+    fn layer_and_size_builders_set_their_fields() {
+        let overlay = PerfOverlayApp::new(
+            CountingApp {
+                updates: 0,
+                exit_at: 100,
+            },
+            "headless",
+        )
+        .layer(5)
+        .size(Size::new(10, 2));
+
+        assert_eq!(overlay.layer, 5);
+        assert_eq!(overlay.size, Size::new(10, 2));
+    }
+
+    #[test]
+    fn visible_true_is_explicitly_compact() {
+        // `.visible(false)` is exercised by `hidden_overlay_draws_nothing` below; `new` already
+        // starts at `Compact` without calling `visible` at all, so `.visible(true)`'s own branch
+        // needs its own call site to be exercised.
+        let overlay = PerfOverlayApp::new(
+            CountingApp {
+                updates: 0,
+                exit_at: 100,
+            },
+            "headless",
+        )
+        .visible(true);
+
+        assert_eq!(overlay.mode(), PerfOverlayMode::Compact);
+    }
+
+    #[test]
+    fn zero_size_compact_area_draws_nothing() {
+        let mut term = Terminal::new(Headless::new(40, 5));
+        let mut overlay = PerfOverlayApp::new(
+            CountingApp {
+                updates: 0,
+                exit_at: 100,
+            },
+            "headless",
+        )
+        .size(Size::new(0, 0));
+
+        let _ = App::update(&mut overlay, &mut term, &frame(0));
+        term.present().expect("present");
+        assert!(
+            !term.backend().format_view().contains("fps"),
+            "a zero-size compact area should draw nothing"
+        );
+    }
+
+    #[test]
     fn hidden_overlay_draws_nothing() {
         let mut term = Terminal::new(Headless::new(40, 5));
         let mut overlay = PerfOverlayApp::new(

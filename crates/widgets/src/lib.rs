@@ -100,7 +100,7 @@ pub mod interact;
 pub mod layout;
 mod mathf;
 /// A live frame-time/FPS overlay: [`PerfOverlayApp`] wraps any `App` with one, on any `Backend`.
-pub mod perf_overlay_app;
+pub mod perf;
 pub mod state;
 pub mod style;
 pub mod text;
@@ -120,7 +120,7 @@ pub use layout::{
     split_h_n, split_h_n_flex, split_h_n_spaced, split_h_spaced, split_v, split_v_flex, split_v_n,
     split_v_n_flex, split_v_n_spaced, split_v_spaced,
 };
-pub use perf_overlay_app::{
+pub use perf::{
     DEFAULT_LAYER, DefaultPerfRenderer, FRAME_HISTORY, PerfOverlayApp, PerfOverlayMode,
     PerfRenderer, default_is_toggle_key,
 };

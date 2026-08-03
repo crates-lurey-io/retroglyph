@@ -191,6 +191,14 @@ mod tests {
     }
 
     #[test]
+    fn default_impl_matches_new() {
+        assert_eq!(
+            DefaultPerfRenderer::default().theme,
+            DefaultPerfRenderer::new().theme
+        );
+    }
+
+    #[test]
     fn default_perf_renderer_is_a_noop_before_the_first_frame() {
         let stats = FrameStats::<FRAME_HISTORY>::new();
         let area = Rect::new(0, 0, 40, 1);
