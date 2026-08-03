@@ -860,7 +860,9 @@ impl<'a> Surface<'a> {
         use unicode_width::UnicodeWidthStr;
 
         let pos = pos.into();
-        let right = self.clip.right();
+        // `cx` is area-local (it starts at `pos.x`, which `shift()` treats as local), so the
+        // span-skip threshold must be too: translate `clip.right()` out of absolute grid space.
+        let right = self.clip.right().saturating_sub(self.area.left());
         let mut cx = pos.x;
         for span in &line.spans {
             if cx >= right {
@@ -1720,6 +1722,24 @@ mod tests {
         assert_eq!(grid[Pos::new(7, 0)].glyph(), 'd');
         assert_eq!(grid[Pos::new(4, 1)].glyph(), 'e');
         assert_eq!(grid[Pos::new(5, 1)].glyph(), 'f');
+    }
+
+    #[test]
+    fn print_line_measures_its_span_skip_threshold_against_the_surfaces_own_width() {
+        // `area` starts at column 4, so the surface-local skip column (4) is smaller than the
+        // absolute grid column `clip.right()` resolves to (8). The second span starts at local
+        // column 3, which is inside the 4-wide area, so it must still print.
+        use crate::text::Span;
+
+        let mut grid = Grid::new(8, 1);
+        let mut surface = Surface::new(&mut grid, Rect::new(4, 0, 4, 1), 0);
+        let line = Line::from(vec![Span::raw("ab"), Span::raw("cd")]);
+        surface.print_line((0, 0), &line);
+
+        assert_eq!(grid[Pos::new(4, 0)].glyph(), 'a');
+        assert_eq!(grid[Pos::new(5, 0)].glyph(), 'b');
+        assert_eq!(grid[Pos::new(6, 0)].glyph(), 'c');
+        assert_eq!(grid[Pos::new(7, 0)].glyph(), 'd');
     }
 
     #[test]
