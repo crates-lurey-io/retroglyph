@@ -99,6 +99,8 @@ pub mod draw;
 pub mod interact;
 pub mod layout;
 mod mathf;
+/// A live frame-time/FPS overlay: [`PerfOverlayApp`] wraps any `App` with one, on any `Backend`.
+pub mod perf_overlay_app;
 pub mod state;
 pub mod style;
 pub mod text;
@@ -117,6 +119,10 @@ pub use layout::{
     Constraint, Flex, Side, Spacing, anchored_rect, centered_rect, split_h, split_h_flex,
     split_h_n, split_h_n_flex, split_h_n_spaced, split_h_spaced, split_v, split_v_flex, split_v_n,
     split_v_n_flex, split_v_n_spaced, split_v_spaced,
+};
+pub use perf_overlay_app::{
+    DEFAULT_LAYER, DefaultPerfRenderer, FRAME_HISTORY, PerfOverlayApp, PerfOverlayMode,
+    PerfRenderer, default_is_toggle_key,
 };
 pub use retroglyph_core::{Layer, StyledSurface, Surface};
 pub use state::{ListState, ScrollPhysics, ScrollState, SelectionWrap, TextInputState};
