@@ -354,11 +354,7 @@ fn wait_for_marker(
         if *reader_done.lock().unwrap() {
             let metadata = std::fs::metadata(bin);
             let bin_desc = match &metadata {
-                Ok(meta) => format!(
-                    "{} bytes, mtime {:?}",
-                    meta.len(),
-                    meta.modified().ok()
-                ),
+                Ok(meta) => format!("{} bytes, mtime {:?}", meta.len(), meta.modified().ok()),
                 Err(err) => format!("<stat failed: {err}>"),
             };
             let exit_desc = match child.try_wait() {

@@ -222,9 +222,9 @@ feature (unusable in a PTY) before any test runs, so building the crossterm-only
 the same output path would force a relink (and, on macOS, a real code-signature validation cost of
 roughly a second or two) on every single test run. The isolated target dir keeps that binary
 byte-identical (and already validated) across runs instead. It's built exactly once, by the
-`build-pty-examples` Justfile recipe, before any test process starts; `support::build_crossterm_
-example` only asserts the binary is there rather than building it itself, so concurrent nextest
-processes never race each other over that shared path (retroglyph#976).
+`build-pty-examples` Justfile recipe, before any test process starts;
+`support::build_crossterm_example` only asserts the binary is there rather than building it itself,
+so concurrent nextest processes never race each other over that shared path (retroglyph#976).
 
 Every example under `examples/examples/*.rs` is also auto-built to three WASM variants (headless /
 xterm.js terminal / software canvas) and deployed to the docs gallery by
