@@ -353,15 +353,22 @@ impl Camera {
     }
 
     /// A view of `surface` in this camera's world coordinate space, clipped to
-    /// [`viewport`](Self::viewport): [`Surface::clip_translate`] to the viewport, by
-    /// [`origin`](Self::origin).
+    /// [`visible_bounds`](Self::visible_bounds): [`Surface::clip_translate`] to the visible
+    /// rect, by [`origin`](Self::origin).
     ///
     /// The returned surface's `put`, `put_signed`, `print`, and the rest of `Surface`'s
     /// coordinate-taking methods all take world coordinates directly, and anything that lands
-    /// outside the current viewport (including a multi-cell draw anchored off-screen) is
-    /// dropped by the surface's own bounds check, the same way [`world_to_offset`] composes with
+    /// outside `visible_bounds` (including a multi-cell draw anchored off-screen, or - for a
+    /// world smaller than the viewport - the dead margin past the world edge) is dropped by the
+    /// surface's own bounds check, the same way [`world_to_offset`] composes with
     /// [`Surface::put_signed`] by hand. This is that composition done once instead of at every
     /// call site.
+    ///
+    /// Clipping to `visible_bounds` rather than [`viewport`](Self::viewport) directly matches
+    /// [`world_to_screen`](Self::world_to_screen) and [`screen_to_world`](Self::screen_to_world):
+    /// a world smaller than the viewport (under plain [`set_viewport`](Self::set_viewport), not
+    /// [`set_viewport_fitted`](Self::set_viewport_fitted)) shrinks the clip to the world's size
+    /// instead of leaving the viewport's dead margin drawable.
     ///
     /// [`world_to_offset`]: Self::world_to_offset
     ///
@@ -385,12 +392,38 @@ impl Camera {
     ///
     /// assert_eq!(grid[Pos::new(10, 10)].glyph(), '@');
     /// ```
+    ///
+    /// A world smaller than the viewport: drawing into the dead margin past the world edge is
+    /// dropped, not written past the world into unused grid cells.
+    ///
+    /// ```
+    /// use retroglyph_core::{Camera, Grid, Pos, Rect, Size, Style, Surface};
+    ///
+    /// let mut grid = Grid::new(20, 20);
+    /// let mut root = Surface::new(&mut grid, Rect::new(0, 0, 20, 20), 0);
+    ///
+    /// // A 20x20 viewport over a 5x5 world: `visible_bounds` is only 5x5, not the full
+    /// // viewport, so the clip shrinks to match.
+    /// let cam = Camera::new(Rect::new(0, 0, 20, 20), Size::new(5, 5));
+    ///
+    /// let mut world = cam.surface(&mut root);
+    /// world.put(Pos::new(0, 0), '@', Style::default());
+    /// // Inside the viewport but past the (smaller) world's edge: dropped.
+    /// world.put(Pos::new(10, 10), 'X', Style::default());
+    ///
+    /// assert_eq!(grid[Pos::new(0, 0)].glyph(), '@');
+    /// assert_eq!(grid[Pos::new(10, 10)].glyph(), ' ');
+    /// ```
     #[must_use]
     pub fn surface<'a>(&self, surface: &'a mut Surface<'_>) -> Surface<'a> {
-        surface.clip_translate(
-            self.viewport,
-            (i32::from(self.origin.x), i32::from(self.origin.y)),
-        )
+        let visible = self.visible_bounds();
+        let area = Rect::new(
+            self.viewport.left(),
+            self.viewport.top(),
+            visible.width(),
+            visible.height(),
+        );
+        surface.clip_translate(area, (i32::from(self.origin.x), i32::from(self.origin.y)))
     }
 
     /// Map a screen position back to a world position, or `None` if it is
@@ -788,6 +821,27 @@ mod tests {
         view.put(Pos::new(45, 50), ']', Style::default());
 
         assert_eq!(grid[Pos::new(0, 5)].glyph(), ']');
+    }
+
+    #[test]
+    fn surface_clips_to_the_world_not_the_viewport_when_the_world_is_smaller() {
+        use crate::color::Style;
+        use crate::grid::Grid;
+
+        // A 20x20 viewport over a 5x5 world: `set_viewport` (not `set_viewport_fitted`) pins
+        // the origin at (0, 0) and leaves the dead margin to the right and bottom of the world.
+        let mut grid = Grid::new(20, 20);
+        let mut root = Surface::new(&mut grid, Rect::new(0, 0, 20, 20), 0);
+        let c = Camera::new(Rect::new(0, 0, 20, 20), Size::new(5, 5));
+
+        let mut view = c.surface(&mut root);
+        view.put(Pos::new(0, 0), '@', Style::default());
+        // Inside the viewport but past the (smaller) world's edge: dropped, matching
+        // `world_to_screen`/`visible_bounds`, not reaching the dead margin past the world.
+        view.put(Pos::new(10, 10), 'X', Style::default());
+
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), '@');
+        assert_eq!(grid[Pos::new(10, 10)].glyph(), ' ');
     }
 
     #[test]
