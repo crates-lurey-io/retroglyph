@@ -166,21 +166,24 @@ struct RenderContext {
     /// between two `present()` calls. `None` means no rows changed
     /// (nothing to present).
     damage_rows: Option<(u32, u32)>,
-    /// Shadow copy of every allocated layer's tiles from the last `draw_layers` call, indexed by
-    /// `[layer_id][y * cols + x]`. Used to find dirty cells without touching core's diff model:
-    /// `draw_layers` already receives every cell on every allocated layer every frame (see
+    /// Shadow copy of every allocated layer's tiles from the last `draw_layers` call, one
+    /// `GridBuf` per layer indexed `[layer_id]`, each internally flat-indexed `[y * cols + x]`.
+    /// Used to find dirty cells without touching core's diff model: `draw_layers` already
+    /// receives every cell on every allocated layer every frame (see
     /// [`Output::needs_full_frame`]), so comparing against this shadow copy in place is enough to
-    /// tell which cells actually changed, with no new core API needed. Resized (and cleared,
-    /// forcing a full repaint) whenever the grid is resized; grown (never shrunk) as new layer ids
-    /// are seen.
-    prev_tiles: Vec<Vec<Tile>>,
+    /// tell which cells actually changed, with no new core API needed. Each layer's `GridBuf` is
+    /// always replaced wholesale (via `GridBuf::new_filled`), never resized in place, whenever the
+    /// grid dimensions change, so a layer's buffer and its declared width/height can never drift
+    /// apart the way two parallel `Vec`s could (retroglyph#567); grown (never shrunk) as new layer
+    /// ids are seen.
+    prev_tiles: Vec<GridBuf<Tile, Vec<Tile>, RowMajor>>,
     /// Per-cell tints from the last `draw_layers` call, indexed exactly as `prev_tiles`.
     ///
     /// A separate shadow copy because a `Tile` does not carry its tint (it lives in a side table
     /// on `Grid`, see `retroglyph_core::Grid::tint`). Without it a tint-only change would compare
     /// equal on every `Tile` field and never mark the cell dirty, so recoloring a sprite in
     /// place would silently not repaint.
-    prev_tints: Vec<Vec<Tint>>,
+    prev_tints: Vec<GridBuf<Tint, Vec<Tint>, RowMajor>>,
     /// Reusable per-cell dirty scratch buffer, `true` at index `y * cols + x` when any layer's
     /// tile at that position changed this frame. Indexed the same way as each `prev_tiles` layer;
     /// resized alongside it.
@@ -415,21 +418,24 @@ impl SoftwareRenderer {
     }
 
     /// Grows `prev_tiles`/`prev_tints` to cover `layer_idx` if this is the first time it has been
-    /// seen, or re-allocates both to `cell_count` if a previous grid size left them stale (a
-    /// desync between the two would index one out of bounds; see retroglyph#567).
-    fn ensure_layer_shadow(&mut self, layer_idx: usize, cell_count: usize) {
+    /// seen, or replaces both layers' `GridBuf`s wholesale if a previous grid size left them
+    /// stale. Each replacement uses `GridBuf::new_filled`, never `resize_filled`: a stale layer's
+    /// content is never meaningful at the new dimensions, so there is nothing worth preserving
+    /// (unlike the two-parallel-`Vec` version this replaces, a `GridBuf`'s own width/height can't
+    /// independently drift from its contents; see retroglyph#567).
+    fn ensure_layer_shadow(&mut self, layer_idx: usize, cols: usize, rows: usize) {
         if layer_idx >= self.ctx.prev_tiles.len() {
-            self.ctx
-                .prev_tiles
-                .resize_with(layer_idx + 1, || vec![Tile::default(); cell_count]);
-            self.ctx
-                .prev_tints
-                .resize_with(layer_idx + 1, || vec![Tint::None; cell_count]);
-        } else if self.ctx.prev_tiles[layer_idx].len() != cell_count
-            || self.ctx.prev_tints[layer_idx].len() != cell_count
+            self.ctx.prev_tiles.resize_with(layer_idx + 1, || {
+                GridBuf::new_filled(cols, rows, Tile::default())
+            });
+            self.ctx.prev_tints.resize_with(layer_idx + 1, || {
+                GridBuf::new_filled(cols, rows, Tint::None)
+            });
+        } else if self.ctx.prev_tiles[layer_idx].as_ref().len() != cols * rows
+            || self.ctx.prev_tints[layer_idx].as_ref().len() != cols * rows
         {
-            self.ctx.prev_tiles[layer_idx] = vec![Tile::default(); cell_count];
-            self.ctx.prev_tints[layer_idx] = vec![Tint::None; cell_count];
+            self.ctx.prev_tiles[layer_idx] = GridBuf::new_filled(cols, rows, Tile::default());
+            self.ctx.prev_tints[layer_idx] = GridBuf::new_filled(cols, rows, Tint::None);
         }
     }
 
@@ -446,11 +452,12 @@ impl SoftwareRenderer {
     /// The *position* stays this cell's own, so background inheritance from lower layers is still
     /// resolved per cell rather than smeared from the anchor's column.
     fn resolve_cell_bg(&self, layer_id: u8, idx: usize, cols: usize) -> Option<u32> {
-        let tile = self.ctx.prev_tiles[usize::from(layer_id)][idx];
+        let tile = self.ctx.prev_tiles[usize::from(layer_id)].as_ref()[idx];
         let anchor_glyph = tile.span_anchor_index(idx, cols).map_or_else(
             || tile.glyph(),
             |anchor_idx| {
                 self.ctx.prev_tiles[usize::from(layer_id)]
+                    .as_ref()
                     .get(anchor_idx)
                     .map_or_else(|| tile.glyph(), Tile::glyph)
             },
@@ -726,11 +733,11 @@ impl Output for SoftwareRenderer {
             }
             let layer_idx = usize::from(layer_id);
             max_layer_seen = max_layer_seen.max(i32::from(layer_id));
-            self.ensure_layer_shadow(layer_idx, cell_count);
+            self.ensure_layer_shadow(layer_idx, cols, rows);
 
             let idx = usize::from(pos.y) * cols + usize::from(pos.x);
-            let slot = &mut self.ctx.prev_tiles[layer_idx][idx];
-            let tint_slot = &mut self.ctx.prev_tints[layer_idx][idx];
+            let slot = &mut self.ctx.prev_tiles[layer_idx].as_mut()[idx];
+            let tint_slot = &mut self.ctx.prev_tints[layer_idx].as_mut()[idx];
             if *slot != *tile || *tint_slot != draw_cell.tint {
                 // `dirty_mask` is a single array shared across layers, not one per layer: marking
                 // an index dirty here forces every layer to repaint that cell below, even ones
@@ -754,7 +761,7 @@ impl Output for SoftwareRenderer {
             // in a span has to dirty the whole span here; without that, the previous sprite's
             // pixels would survive in cells the diff considers unchanged.
             for layer in &self.ctx.prev_tiles {
-                expand_dirty_spans(&mut self.ctx.dirty_mask, layer, cols, rows);
+                expand_dirty_spans(&mut self.ctx.dirty_mask, layer.as_ref(), cols, rows);
             }
         }
 
@@ -796,8 +803,8 @@ impl Output for SoftwareRenderer {
                 // uniform in all four directions: the two-pass mechanism of the sub-cell
                 // offset/spill contract on `retroglyph_window::Presenter` (see its rustdoc).
                 for idx in 0..cell_count {
-                    let tile = self.ctx.prev_tiles[layer_id as usize][idx];
-                    let tint = self.ctx.prev_tints[layer_id as usize][idx];
+                    let tile = self.ctx.prev_tiles[layer_id as usize].as_ref()[idx];
+                    let tint = self.ctx.prev_tints[layer_id as usize].as_ref()[idx];
                     let (x, y) = flat_index_to_xy(idx, cols);
                     let pos = Pos::new(x, y);
                     self.blit_cell_glyph(buf_w, cell_w, cell_h, scale, pos, tile, tint);
@@ -825,8 +832,8 @@ impl Output for SoftwareRenderer {
                     if !self.ctx.dirty_mask[idx] {
                         continue;
                     }
-                    let tile = self.ctx.prev_tiles[usize::from(layer_id)][idx];
-                    let tint = self.ctx.prev_tints[usize::from(layer_id)][idx];
+                    let tile = self.ctx.prev_tiles[usize::from(layer_id)].as_ref()[idx];
+                    let tint = self.ctx.prev_tints[usize::from(layer_id)].as_ref()[idx];
                     let (x, y) = flat_index_to_xy(idx, cols);
                     let pos = Pos::new(x, y);
                     self.blit_cell_glyph(buf_w, cell_w, cell_h, scale, pos, tile, tint);
@@ -860,10 +867,12 @@ impl Output for SoftwareRenderer {
         // so drop it and force a full-frame damage rect on the next present.
         self.ctx.prev_pixels.clear();
         self.ctx.prev_pixels.resize(new_w * new_h, 0);
-        // The per-cell tile and tint shadows are keyed by the old grid dimensions; drop both so
-        // the next `draw_layers` call can't misread stale entries against the new layout, and
-        // force that call onto the full-repaint path (`prev_layer_count` back to its initial
-        // value never matches a real frame's layer count).
+        // The per-cell tile and tint shadows are keyed by the old grid dimensions; drop every
+        // layer's `GridBuf` entirely rather than resizing them in place (`ensure_layer_shadow`
+        // lazily rebuilds each one with `GridBuf::new_filled` at the new dimensions on the next
+        // `draw_layers` call), so the next call can't misread stale entries against the new
+        // layout, and force that call onto the full-repaint path (`prev_layer_count` back to its
+        // initial value never matches a real frame's layer count).
         self.ctx.prev_tiles.clear();
         self.ctx.prev_tints.clear();
         self.ctx.dirty_mask.clear();
@@ -1310,13 +1319,13 @@ fn expand_dirty_spans(dirty: &mut [bool], layer: &[Tile], cols: usize, rows: usi
 ///   supposed to let show through: core's `Tile`/`Grid` model has no such per-pixel concept, so
 ///   the cell-backend-parity rule this function otherwise implements just doesn't apply to them.
 fn resolve_bg_fill(
-    prev_tiles: &[Vec<Tile>],
+    prev_tiles: &[GridBuf<Tile, Vec<Tile>, RowMajor>],
     layer_id: u8,
     idx: usize,
     has_sprite: bool,
 ) -> Option<u32> {
     let layer_idx = usize::from(layer_id);
-    let tile = prev_tiles[layer_idx][idx];
+    let tile = prev_tiles[layer_idx].as_ref()[idx];
     if layer_idx == 0 {
         return Some(resolve_color(tile.style().background(), DEFAULT_BG));
     }
@@ -1330,7 +1339,7 @@ fn resolve_bg_fill(
         return None;
     }
     for below in (0..layer_idx).rev() {
-        let bg = prev_tiles[below][idx].style().background();
+        let bg = prev_tiles[below].as_ref()[idx].style().background();
         if below == 0 || bg != Color::Default {
             return Some(resolve_color(bg, DEFAULT_BG));
         }
