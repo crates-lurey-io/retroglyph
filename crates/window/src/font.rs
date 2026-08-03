@@ -911,7 +911,9 @@ pub mod legacy_computing {
 
         #[cfg(test)]
         mod tests {
-            use super::{CHARSET, FONT, SEXTANT_COUNT, TOTAL, sextant_codepoint, sextant_masks};
+            use super::{
+                CHARSET, FONT, QUADRANTS, SEXTANT_COUNT, TOTAL, sextant_codepoint, sextant_masks,
+            };
             use crate::font::FontChain;
             use std::collections::HashSet;
 
@@ -965,6 +967,70 @@ pub mod legacy_computing {
                 assert_eq!(sextant_codepoint(22), 0x1FB00 + 21 - 1);
                 // Two gaps below (masks 21 and 42) have been skipped by mask 43.
                 assert_eq!(sextant_codepoint(43), 0x1FB00 + 42 - 2);
+            }
+
+            /// Round-trips this module's `QUADRANTS` table against
+            /// `retroglyph_core::subcell::QUADRANTS`, the table it exists to invert (retroglyph#769).
+            /// The two are maintained by hand in separate crates with nothing but a doc-comment
+            /// claim tying them together; a wrong bit order or codepoint here would silently
+            /// scramble any posterized image rendered through `quantize_quadrant`, invisible to
+            /// ordinary code review.
+            #[test]
+            fn quadrant_table_round_trips_core_subcell_quadrants() {
+                // The 6 masks CP437 already serves directly, per `QUADRANTS`'s own doc comment;
+                // not present in this module's `QUADRANTS` (which only covers the other 10).
+                const CP437_COVERED: [(u8, char); 6] = [
+                    (0, ' '),
+                    (3, '▀'),
+                    (5, '▌'),
+                    (10, '▐'),
+                    (12, '▄'),
+                    (15, '█'),
+                ];
+
+                let mut by_mask: [Option<char>; 16] = [None; 16];
+                for &(mask, ch) in &CP437_COVERED {
+                    by_mask[mask as usize] = Some(ch);
+                }
+                for &(mask, ch) in &QUADRANTS {
+                    by_mask[mask as usize] = Some(ch);
+                }
+
+                for (mask, expected) in retroglyph_core::subcell::QUADRANTS.into_iter().enumerate()
+                {
+                    assert_eq!(
+                        by_mask[mask],
+                        Some(expected),
+                        "mask {mask}: this module's quadrant table disagrees with \
+                         retroglyph_core::subcell::QUADRANTS[{mask}] ({expected:?})"
+                    );
+                }
+            }
+
+            /// Round-trips this module's sextant generation (`sextant_masks` plus
+            /// `sextant_codepoint`, and the 4 masks CP437 already serves) against
+            /// `retroglyph_core::subcell::SEXTANTS`, the table it exists to invert (retroglyph#769).
+            /// The Symbols for Legacy Computing block is non-contiguous (which is exactly why
+            /// `sextant_codepoint`'s gap-correction exists), so this is the class of table where a
+            /// hand-review-only guarantee is weakest.
+            #[test]
+            fn sextant_table_round_trips_core_subcell_sextants() {
+                for (mask, expected) in retroglyph_core::subcell::SEXTANTS.into_iter().enumerate() {
+                    let mask = u8::try_from(mask).unwrap();
+                    let actual = match mask {
+                        0 => ' ',
+                        21 => '▌',
+                        42 => '▐',
+                        63 => '█',
+                        _ => char::from_u32(sextant_codepoint(mask))
+                            .expect("sextant_codepoint always yields a valid char"),
+                    };
+                    assert_eq!(
+                        actual, expected,
+                        "mask {mask}: sextant_codepoint disagrees with \
+                         retroglyph_core::subcell::SEXTANTS[{mask}]"
+                    );
+                }
             }
 
             /// Every quadrant glyph's set pixels fall in the correct quarter of the 8x16 cell.
@@ -1150,6 +1216,22 @@ pub mod legacy_computing {
                     let ch = char::from_u32(0x2800 + bits).unwrap();
                     assert_eq!(CHARSET[bits as usize].0, ch);
                     assert_eq!(CHARSET[bits as usize].1, u8::try_from(bits).unwrap());
+                }
+            }
+
+            /// Round-trips this module's `CHARSET` against `retroglyph_core::symbols::braille`'s
+            /// own `glyph` function, the independent implementation it exists to render
+            /// (retroglyph#769): every one of the 256 braille patterns must map to the identical
+            /// codepoint through both.
+            #[test]
+            fn charset_round_trips_core_symbols_braille_glyph() {
+                for bits in 0u8..=u8::MAX {
+                    let expected = retroglyph_core::symbols::braille::glyph(bits);
+                    assert_eq!(
+                        CHARSET[bits as usize].0, expected,
+                        "pattern {bits:#04x}: this module's CHARSET disagrees with \
+                         retroglyph_core::symbols::braille::glyph"
+                    );
                 }
             }
 
@@ -1590,5 +1672,158 @@ mod tests {
         assert_eq!(full_block.index(), 0xDB);
 
         assert_ne!(braille.index(), full_block.index());
+    }
+}
+
+/// Coverage test for `retroglyph_core::symbols`'s hand-maintained glyph tables against the
+/// fullest bundled [`FontChain`] this crate can build (`unscii16` plus every `legacy_computing`
+/// fallback font).
+///
+/// `core::symbols` promises a repertoire that no font is required to actually draw; nothing
+/// checked, before this, that any bundled font could render a given entry (retroglyph#769). This
+/// only records the gap (asserting each entry is either drawable or a documented exception): the
+/// fix -- generating the missing eighth-block glyphs and adding "falls back to notdef" doc notes
+/// for the rest -- is tracked as a follow-up, deliberately out of scope here.
+#[cfg(all(test, feature = "default-font", feature = "legacy-computing"))]
+mod symbols_coverage {
+    use crate::font::{BitmapFont, FontChain, legacy_computing, unscii16};
+    use retroglyph_core::symbols::{bar, block, border, line};
+    use std::collections::HashSet;
+
+    /// The bundled `unscii16` primary font plus every `legacy_computing` fallback: the fullest
+    /// font coverage this crate can build without a caller supplying custom glyph art.
+    fn chain() -> FontChain<'static> {
+        static FALLBACKS: [BitmapFont; 2] = [
+            legacy_computing::blocks::FONT,
+            legacy_computing::braille::FONT,
+        ];
+        FontChain::new(unscii16::FONT, &FALLBACKS)
+    }
+
+    /// Every `core::symbols` entry that currently falls back to the notdef substitute through
+    /// [`chain`] (or that no font in the chain can draw at all), as found by retroglyph#769's
+    /// audit: 6 of `bar::NINE_LEVELS`, 6 of the `block` eighths, 4 of `border::ROUNDED`, all 6
+    /// of `border::THICK`, and 5 of `line::THICK`.
+    ///
+    /// None of these are fixed here (test-only scope; see retroglyph#769's follow-up for the
+    /// eighth-block glyph generation and doc-note work). This list exists so a *regression* (a
+    /// currently-covered glyph losing coverage) fails loudly, and so this test starts failing --
+    /// forcing the list to shrink -- the moment the follow-up closes any of these gaps.
+    fn known_notdef_gaps() -> HashSet<char> {
+        [
+            // bar::NINE_LEVELS: 6 of 9. `' '`, `bar::HALF`, and `bar::FULL` are covered (CP437);
+            // the other 6 eighth-fraction levels have no bundled-font glyph. `bar::ONE_EIGHTH`
+            // (U+2581) in particular renders as a near-invisible sliver, which is what the issue
+            // that found this gap described as looking like a blank space.
+            bar::ONE_EIGHTH,
+            bar::ONE_QUARTER,
+            bar::THREE_EIGHTHS,
+            bar::FIVE_EIGHTHS,
+            bar::THREE_QUARTERS,
+            bar::SEVEN_EIGHTHS,
+            // block eighths: 6 of 8. `block::FULL` and `block::HALF` are covered (CP437); the
+            // other 6 eighth-fraction levels are not.
+            block::SEVEN_EIGHTHS,
+            block::THREE_QUARTERS,
+            block::FIVE_EIGHTHS,
+            block::THREE_EIGHTHS,
+            block::ONE_QUARTER,
+            block::ONE_EIGHTH,
+            // border::ROUNDED: 4 of 6 (the corners; horizontal/vertical are shared with PLAIN).
+            border::ROUNDED.top_left,
+            border::ROUNDED.top_right,
+            border::ROUNDED.bottom_left,
+            border::ROUNDED.bottom_right,
+            // border::THICK: all 6.
+            border::THICK.top_left,
+            border::THICK.top_right,
+            border::THICK.bottom_left,
+            border::THICK.bottom_right,
+            border::THICK.horizontal,
+            border::THICK.vertical,
+            // line::THICK: 5 of 7. `horizontal`/`vertical` are the same glyphs as
+            // `border::THICK`'s (already counted above); the 4 tees and the cross are not.
+            line::THICK.cross,
+            line::THICK.vertical_left,
+            line::THICK.vertical_right,
+            line::THICK.horizontal_down,
+            line::THICK.horizontal_up,
+        ]
+        .into_iter()
+        .collect()
+    }
+
+    #[test]
+    fn every_symbols_entry_resolves_or_is_a_known_gap() {
+        let chain = chain();
+        let known = known_notdef_gaps();
+        let mut still_notdef = HashSet::new();
+
+        let mut check = |ch: char| {
+            let resolved = chain.resolve(ch);
+            let is_notdef = resolved.is_none_or(|g| g.is_notdef());
+            if is_notdef {
+                still_notdef.insert(ch);
+            }
+        };
+
+        for set in [
+            border::PLAIN,
+            border::ROUNDED,
+            border::DOUBLE,
+            border::THICK,
+        ] {
+            check(set.top_left);
+            check(set.top_right);
+            check(set.bottom_left);
+            check(set.bottom_right);
+            check(set.horizontal);
+            check(set.vertical);
+        }
+
+        for set in [line::NORMAL, line::DOUBLE, line::THICK] {
+            check(set.horizontal);
+            check(set.vertical);
+            check(set.cross);
+            check(set.vertical_left);
+            check(set.vertical_right);
+            check(set.horizontal_down);
+            check(set.horizontal_up);
+        }
+
+        for ch in [
+            block::FULL,
+            block::SEVEN_EIGHTHS,
+            block::THREE_QUARTERS,
+            block::FIVE_EIGHTHS,
+            block::HALF,
+            block::THREE_EIGHTHS,
+            block::ONE_QUARTER,
+            block::ONE_EIGHTH,
+        ] {
+            check(ch);
+        }
+
+        for ch in bar::NINE_LEVELS {
+            check(ch);
+        }
+
+        for pattern in 0u8..=u8::MAX {
+            check(retroglyph_core::symbols::braille::glyph(pattern));
+        }
+
+        for &ch in &still_notdef {
+            assert!(
+                known.contains(&ch),
+                "{ch:?} (U+{:04X}) newly falls back to notdef through the bundled chain; \
+                 either fix its font coverage or add it to `known_notdef_gaps`",
+                ch as u32
+            );
+        }
+        assert_eq!(
+            still_notdef, known,
+            "`known_notdef_gaps` is stale: a previously-notdef glyph now resolves through the \
+             bundled chain. Shrink the allowlist to match."
+        );
     }
 }
