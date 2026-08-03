@@ -1,5 +1,7 @@
 //! Cell and surface pixel geometry shared by the graphical backends.
 
+use retroglyph_core::grid::Pos;
+
 /// The pixel geometry of a fixed cell grid: a glyph size and an integer scale.
 ///
 /// [`Presenter::cell_size`](crate::Presenter::cell_size)'s contract (physical pixels,
@@ -48,11 +50,41 @@ impl CellGeometry {
         let (cell_w, cell_h) = self.cell_size();
         (cols as u32 * cell_w, rows as u32 * cell_h)
     }
+
+    /// Converts physical pixel coordinates to a grid cell [`Pos`], using this geometry's
+    /// [`cell_size`](Self::cell_size).
+    ///
+    /// Clamps to `u16::MAX` so out-of-bounds cursor positions (negative or extremely large)
+    /// don't panic: the caller is responsible for bounds-checking against the terminal size.
+    #[must_use]
+    pub fn pixel_to_cell(&self, x: f64, y: f64) -> Pos {
+        let (cell_w, cell_h) = self.cell_size();
+        Pos {
+            x: pixel_to_cell_axis(x, cell_w),
+            y: pixel_to_cell_axis(y, cell_h),
+        }
+    }
+}
+
+/// Divides one clamped, non-negative pixel axis by a cell dimension, saturating to `u16::MAX`.
+///
+/// Shared by [`CellGeometry::pixel_to_cell`] and
+/// [`translate_pixel_to_cell`](crate::winit::translate::translate_pixel_to_cell) so the
+/// clamp/divide/saturate rule lives in exactly one place.
+#[must_use]
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+pub(crate) fn pixel_to_cell_axis(px: f64, cell: u32) -> u16 {
+    // .max(0.0) guards against negatives before the f64→u32 cast.
+    // .min(u16::MAX as u32) guarantees the u32→u16 cast never truncates.
+    let index =
+        u32::checked_div(px.max(0.0) as u32, cell).map_or(0, |v| v.min(u32::from(u16::MAX)));
+    u16::try_from(index).unwrap_or(u16::MAX)
 }
 
 #[cfg(test)]
 mod tests {
     use super::CellGeometry;
+    use retroglyph_core::grid::Pos;
 
     #[test]
     fn cell_size_is_glyph_times_scale() {
@@ -74,5 +106,54 @@ mod tests {
     #[test]
     fn zero_grid_is_zero_surface() {
         assert_eq!(CellGeometry::new(8, 16, 2).surface_size(0, 0), (0, 0));
+    }
+
+    // ── pixel_to_cell ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn pixel_to_cell_basic() {
+        // 8×16 cells: pixel (20, 48) → col 2, row 3
+        let geometry = CellGeometry::new(8, 16, 1);
+        assert_eq!(geometry.pixel_to_cell(20.0, 48.0), Pos { x: 2, y: 3 });
+    }
+
+    #[test]
+    fn pixel_to_cell_origin() {
+        let geometry = CellGeometry::new(8, 16, 1);
+        assert_eq!(geometry.pixel_to_cell(0.0, 0.0), Pos { x: 0, y: 0 });
+    }
+
+    #[test]
+    fn pixel_to_cell_negative_coords_clamp_to_zero() {
+        // Cursor briefly outside the window can produce negative physical coords.
+        let geometry = CellGeometry::new(8, 16, 1);
+        assert_eq!(geometry.pixel_to_cell(-5.0, -10.0), Pos { x: 0, y: 0 });
+    }
+
+    #[test]
+    fn pixel_to_cell_zero_cell_size_returns_origin() {
+        // Degenerate case: glyph size 0 (backend not yet initialised with a valid font).
+        let geometry = CellGeometry::new(0, 0, 1);
+        assert_eq!(geometry.pixel_to_cell(100.0, 200.0), Pos { x: 0, y: 0 });
+    }
+
+    #[test]
+    fn pixel_to_cell_accounts_for_scale() {
+        // 8×16 glyphs at scale 2 → 16×32 cells: pixel (20, 48) → col 1, row 1.
+        let geometry = CellGeometry::new(8, 16, 2);
+        assert_eq!(geometry.pixel_to_cell(20.0, 48.0), Pos { x: 1, y: 1 });
+    }
+
+    #[test]
+    fn pixel_to_cell_clamps_to_u16_max() {
+        // A huge pixel coordinate must not overflow u16.
+        let geometry = CellGeometry::new(1, 1, 1);
+        assert_eq!(
+            geometry.pixel_to_cell(f64::from(u32::MAX), f64::from(u32::MAX)),
+            Pos {
+                x: u16::MAX,
+                y: u16::MAX
+            }
+        );
     }
 }
