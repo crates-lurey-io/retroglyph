@@ -311,6 +311,45 @@ impl Grid {
         );
     }
 
+    /// Overwrites `layer` on `self` with a verbatim copy of `layer` on `src`: every tile,
+    /// including empty ones, replaces whatever was on the destination cell. Unlike
+    /// [`blit`](Self::blit), an empty source tile is **not** transparent here: it opaquely
+    /// erases the destination cell, the same as an explicit-space write does everywhere else in
+    /// the layer model. Also unlike `blit`, [`TileFlags::SPAN_ANCHOR`]/[`TileFlags::SPAN_COVERED`]
+    /// survive intact, since a same-layer, unclipped, unoffset copy has no reason to degrade a
+    /// span to its fallback glyphs the way a clipped/offset `blit` does.
+    ///
+    /// If `layer` is unallocated on `src` (never written), `layer` on `self` is cleared to
+    /// [`Tile::default`] instead (matching "`src` has nothing on this layer"), and if `layer` is
+    /// also unallocated on `self`, this is a no-op.
+    ///
+    /// `self` and `src` must have the same dimensions; used by
+    /// [`Terminal::present`](crate::Terminal::present) to re-sync a
+    /// [`retain_layer`](crate::Terminal::retain_layer)ed layer from `previous` into `current`
+    /// before diffing, so the diff sees no change on it whatever the app did or didn't draw into
+    /// it this frame (retroglyph#956).
+    pub(crate) fn replace_layer(&mut self, layer: u8, src: &Self) {
+        debug_assert_eq!(self.width, src.width);
+        debug_assert_eq!(self.height, src.height);
+        match src.layer(layer) {
+            Some(src_lb) => {
+                let dst_lb = self.layer_or_alloc(layer);
+                dst_lb.buf.as_mut().copy_from_slice(src_lb.buf.as_ref());
+                dst_lb.extras.clone_from(&src_lb.extras);
+            }
+            None => {
+                if let Some(dst_lb) = self
+                    .layers
+                    .get_mut(usize::from(layer))
+                    .and_then(Option::as_mut)
+                {
+                    dst_lb.buf.as_mut().fill(Tile::default());
+                    dst_lb.extras.clear();
+                }
+            }
+        }
+    }
+
     /// Same as [`blit`](Self::blit) but blends foreground and background
     /// colors with the given alpha factors, using `mode` to compute the
     /// blended color. `fg_alpha` and `bg_alpha` are in 0.0-1.0 range where
@@ -1611,6 +1650,66 @@ mod tests {
         );
         assert_eq!(flat.span_owner(0, 2, 2), Some(Pos::new(1, 1)));
         assert_eq!(flat[Pos::new(2, 2)].glyph(), ']');
+    }
+
+    #[test]
+    fn replace_layer_overwrites_a_cell_the_destination_wrote_this_frame() {
+        // retroglyph#956: unlike `blit`, an empty source tile is not transparent, so a cell the
+        // destination wrote but the source never touched is erased, not left standing.
+        let mut src = Grid::new(4, 1);
+        src.put_tile(0, (0, 0), Tile::new('W', Style::default()));
+
+        let mut dst = Grid::new(4, 1);
+        dst.put_tile(0, (0, 0), Tile::new('W', Style::default()));
+        dst.put_tile(0, (2, 0), Tile::new('X', Style::default()));
+        dst.replace_layer(0, &src);
+
+        assert_eq!(dst[Pos::new(0, 0)].glyph(), 'W');
+        assert_eq!(dst[Pos::new(2, 0)].glyph(), ' ');
+    }
+
+    #[test]
+    fn replace_layer_preserves_span_flags_verbatim() {
+        // Unlike `blit`, `replace_layer` never clips or offsets, so it has no reason to degrade
+        // a span to its fallback glyphs the way `blit_degrades_a_span_to_its_fallback_glyphs`
+        // documents for `blit`.
+        let mut src = Grid::new(4, 4);
+        src.write_span(0, 0, 0, &["C=", "[]"], Style::default())
+            .unwrap();
+
+        let mut dst = Grid::new(4, 4);
+        dst.replace_layer(0, &src);
+
+        assert_eq!(dst[Pos::new(0, 0)].span(), (2, 2));
+        assert!(
+            dst[Pos::new(0, 0)]
+                .flags()
+                .contains(TileFlags::SPAN_ANCHOR)
+        );
+        assert_eq!(dst.span_owner(0, 1, 1), Some(Pos::new(0, 0)));
+        assert_eq!(dst[Pos::new(1, 1)].glyph(), ']');
+    }
+
+    #[test]
+    fn replace_layer_clears_the_destination_when_the_source_layer_is_unallocated() {
+        // `src` never wrote layer 1, so `replace_layer` treats that as "nothing", clearing
+        // whatever `dst` had on layer 1 rather than leaving it untouched.
+        let src = Grid::new(4, 1);
+
+        let mut dst = Grid::new(4, 1);
+        dst.put_tile(1, (0, 0), Tile::new('X', Style::default()));
+        dst.replace_layer(1, &src);
+
+        assert_eq!(dst.tile(1, (0, 0)).map(Tile::glyph), Some(' '));
+    }
+
+    #[test]
+    fn replace_layer_is_a_noop_when_neither_side_has_the_layer_allocated() {
+        let src = Grid::new(4, 1);
+        let mut dst = Grid::new(4, 1);
+        dst.replace_layer(1, &src);
+
+        assert_eq!(dst.tile(1, (0, 0)), None);
     }
 
     #[test]
