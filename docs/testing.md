@@ -92,9 +92,13 @@ Snapshot files are committed next to their crate (`crates/*/src/snapshots/`,
 `examples/tests/snapshots/`).
 
 ```sh
-cargo insta test    # run and open review UI
-cargo insta accept  # accept pending snapshots
+just insta  # bless every changed snapshot; no review step of its own
 ```
+
+`just insta` runs `cargo test` with `INSTA_UPDATE=always`, not the separate `cargo-insta` CLI (a
+tool this repo's conventions don't otherwise require), so it accepts unconditionally -- review the
+diff (`jj diff`/`git diff`) before committing. Install `cargo-insta` by hand if you want its
+interactive review UI instead.
 
 ## Driving `Headless` with synthetic events
 
@@ -193,6 +197,12 @@ one source of truth:
 - **Crossterm SVG**: a real PTY capture, parsed via the `vt100` crate, verifying the ANSI/SGR output
   an actual terminal would receive.
 
+`20_overworld` is the one exception: its render isn't byte-stable, so its `svg_snapshot` test
+asserts on substrings instead of pinning the SVG with `insta`, and writes the SVG to
+`CARGO_TARGET_TMPDIR` via `support::write_scratch_file` rather than a tracked snapshot file. Reach
+for `write_scratch_file` the same way for any future example whose output can't be pinned
+byte-for-byte.
+
 `support::capture_pty` spawns those crossterm binaries with `RG_FPS=0`, because the shared example
 driver draws its FPS overlay by default and a live frame rate is not reproducible. The one place
 that deliberately doesn't is `examples/tests/fps_overlay.rs`, which pins the default itself (the
@@ -223,8 +233,8 @@ the same output path would force a relink (and, on macOS, a real code-signature 
 roughly a second or two) on every single test run. The isolated target dir keeps that binary
 byte-identical (and already validated) across runs instead.
 
-Every example under `examples/examples/*.rs` is also auto-built to three WASM variants (headless /
-xterm.js terminal / software canvas) and deployed to the docs gallery by
+Every example under `examples/examples/*.rs` is also auto-built to four WASM variants (headless /
+xterm.js terminal / software canvas / WebGL) and deployed to the docs gallery by
 `.github/workflows/docs.yml` on every push, so each example carries real, ongoing CI cost, not just
 a one-time snapshot.
 

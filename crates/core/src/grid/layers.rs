@@ -1614,6 +1614,62 @@ mod tests {
     }
 
     #[test]
+    fn copy_layer_from_overwrites_a_cell_the_destination_wrote_this_frame() {
+        // retroglyph#956: unlike `blit`, an empty source tile is not transparent, so a cell the
+        // destination wrote but the source never touched is erased, not left standing.
+        let mut src = Grid::new(4, 1);
+        src.put_tile(0, (0, 0), Tile::new('W', Style::default()));
+
+        let mut dst = Grid::new(4, 1);
+        dst.put_tile(0, (0, 0), Tile::new('W', Style::default()));
+        dst.put_tile(0, (2, 0), Tile::new('X', Style::default()));
+        dst.copy_layer_from(0, &src);
+
+        assert_eq!(dst[Pos::new(0, 0)].glyph(), 'W');
+        assert_eq!(dst[Pos::new(2, 0)].glyph(), ' ');
+    }
+
+    #[test]
+    fn copy_layer_from_preserves_span_flags_verbatim() {
+        // Unlike `blit`, `copy_layer_from` never clips or offsets, so it has no reason to
+        // degrade a span to its fallback glyphs the way
+        // `blit_degrades_a_span_to_its_fallback_glyphs` documents for `blit`.
+        let mut src = Grid::new(4, 4);
+        src.write_span(0, 0, 0, &["C=", "[]"], Style::default())
+            .unwrap();
+
+        let mut dst = Grid::new(4, 4);
+        dst.copy_layer_from(0, &src);
+
+        assert_eq!(dst[Pos::new(0, 0)].span(), (2, 2));
+        assert!(dst[Pos::new(0, 0)].flags().contains(TileFlags::SPAN_ANCHOR));
+        assert_eq!(dst.span_owner(0, 1, 1), Some(Pos::new(0, 0)));
+        assert_eq!(dst[Pos::new(1, 1)].glyph(), ']');
+    }
+
+    #[test]
+    fn copy_layer_from_clears_the_destination_when_the_source_layer_is_unallocated() {
+        // `src` never wrote layer 1, so `copy_layer_from` treats that as "nothing", clearing
+        // whatever `dst` had on layer 1 rather than leaving it untouched.
+        let src = Grid::new(4, 1);
+
+        let mut dst = Grid::new(4, 1);
+        dst.put_tile(1, (0, 0), Tile::new('X', Style::default()));
+        dst.copy_layer_from(1, &src);
+
+        assert_eq!(dst.tile(1, (0, 0)), None);
+    }
+
+    #[test]
+    fn copy_layer_from_is_a_noop_when_neither_side_has_the_layer_allocated() {
+        let src = Grid::new(4, 1);
+        let mut dst = Grid::new(4, 1);
+        dst.copy_layer_from(1, &src);
+
+        assert_eq!(dst.tile(1, (0, 0)), None);
+    }
+
+    #[test]
     fn blit_degrades_a_span_to_its_fallback_glyphs() {
         // `src_rect` can clip a footprint in half, and half a span is not representable, so
         // `blit` drops the span role and keeps the glyphs (which are the text fallback anyway).

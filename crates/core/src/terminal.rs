@@ -77,6 +77,11 @@ pub struct Terminal<B: Backend> {
 impl<B: Backend> Terminal<B> {
     /// Create a terminal with the given backend.
     /// Grid dimensions are queried from the backend.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the backend reports a width of 0 (e.g. a minimized window, or a surface queried
+    /// before the first configure); see [`Grid::new`]. A reported height of 0 is fine.
     #[must_use]
     pub fn new(backend: B) -> Self {
         let size = backend.size();
@@ -104,8 +109,7 @@ impl<B: Backend> Terminal<B> {
     /// whether anything changed calls this once per frame. A caller that only wants to redraw
     /// when its own state changed should gate the call to `draw` itself (e.g. `if
     /// state.changed() { term.draw(|s| render(s, &state))?; }`) rather than rely on `draw`/
-    /// [`present`](Self::present) to no-op. Unlike some earlier revisions of this API, presenting
-    /// is unconditional here.
+    /// [`present`](Self::present) to no-op.
     ///
     /// # Errors
     ///
@@ -234,8 +238,8 @@ impl<B: Backend> Terminal<B> {
     /// the actual point of the method: [`present`](Self::present)'s diff already keeps the
     /// *backend* from re-receiving unchanged cells, but the *app* still has to regenerate them
     /// every frame to produce a buffer worth diffing. Marking a layer retained lets the app skip
-    /// that regeneration too, at the cost of a per-cell copy handled internally (a flat blit, far
-    /// cheaper than most real content generation).
+    /// that regeneration too, at the cost of a per-cell copy handled internally (a flat, verbatim
+    /// replace, far cheaper than most real content generation).
     ///
     /// This is a one-shot opt-in, not a sticky mode: it only affects the very next `present`, so
     /// a caller that wants a layer retained for several frames in a row must call this again
@@ -319,7 +323,8 @@ impl<B: Backend> Terminal<B> {
             // that degrades multi-cell spans to their text fallback and treats empty tiles as
             // transparent (an overlay, not a replacement), both wrong here, since a retained
             // layer is copied whole, at the same geometry, and must be indistinguishable from
-            // what was presented last frame (retroglyph#955).
+            // what was presented last frame, whatever the app did or didn't draw into it this
+            // frame (retroglyph#955, retroglyph#956).
             for (id, &retained) in self.retained_layers.iter().enumerate() {
                 if retained {
                     #[allow(clippy::cast_possible_truncation)]
@@ -348,6 +353,11 @@ impl<B: Backend> Terminal<B> {
                     let diff = self.current.diff(&self.previous);
                     self.backend.draw_layers(diff)?;
                 }
+                // Same reasoning as the fast path below: this branch bypasses the flatten buffers
+                // too, so the next present that lands in the flatten branch (e.g. a backend whose
+                // `composites_layers()` flips to `false`) must not diff against a
+                // `flattened_previous` that was never actually the last frame presented.
+                self.flattened_stale = true;
             } else if self.current.max_layer() == 0 && self.previous.max_layer() == 0 {
                 // Fast path: only layer 0 is in play, so flattening would be an exact
                 // copy of `current`. Diff the real grids directly and skip the
@@ -533,6 +543,16 @@ impl<B: Backend> Terminal<B> {
         }
         self.queued_events.push_back(event);
         true
+    }
+}
+
+impl<B: Backend> core::fmt::Debug for Terminal<B> {
+    /// Prints `size` and `present_count`; elides the frame buffers and the backend.
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Terminal")
+            .field("size", &self.size())
+            .field("present_count", &self.present_count)
+            .finish_non_exhaustive()
     }
 }
 
@@ -1044,6 +1064,103 @@ mod tests {
         );
     }
 
+    /// A cell backend whose `composites_layers()` can be toggled between presents, standing in
+    /// for a backend that degrades from pixel compositing to a cell path at runtime (retroglyph#960).
+    struct TogglingCompositor {
+        inner: Headless,
+        composites: bool,
+    }
+
+    impl Output for TogglingCompositor {
+        type Error = core::convert::Infallible;
+
+        fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
+        where
+            I: Iterator<Item = DrawCell<'a>>,
+        {
+            self.inner.draw_layers(content)
+        }
+
+        fn flush(&mut self) -> Result<(), Self::Error> {
+            self.inner.flush()
+        }
+
+        fn size(&self) -> Size {
+            self.inner.size()
+        }
+
+        fn clear(&mut self) -> Result<(), Self::Error> {
+            self.inner.clear()
+        }
+
+        fn composites_layers(&self) -> bool {
+            self.composites
+        }
+    }
+
+    impl Input for TogglingCompositor {
+        fn poll_event(&mut self, timeout: Duration) -> Option<Event> {
+            self.inner.poll_event(timeout)
+        }
+    }
+
+    impl Cursor for TogglingCompositor {}
+
+    #[test]
+    fn present_marks_flatten_buffers_stale_after_a_composites_layers_present() {
+        // A backend that ever answers `true` from `composites_layers()` and later `false` must
+        // not leave `flattened_previous` holding a frame that was never actually the last one
+        // presented. Sequence: flatten branch (establishes stale-looking data) -> composites
+        // branch (bypasses the flatten buffers entirely) -> flatten branch again, where the bug
+        // would incorrectly diff against the first frame's flattened data instead of the second.
+        let mut term = Terminal::new(TogglingCompositor {
+            inner: Headless::new(3, 1),
+            composites: false,
+        });
+
+        // Frame 1: flatten branch. Layer 1 is touched so `max_layer() != 0`, and
+        // `composites_layers()` is `false`, so this flattens and diffs normally.
+        term.draw(|s| {
+            s.put((0, 0), 'a', Style::default());
+            s.on_layer(1).put((1, 0), '#', Style::default());
+        })
+        .expect("draw failed");
+        assert_eq!(term.backend().inner.grid()[Pos::new(0, 0)].glyph(), 'a');
+
+        // Frame 2: composites branch. Bypasses the flatten buffers entirely, so
+        // `flattened_previous` still holds frame 1's flattened content.
+        term.backend_mut().composites = true;
+        term.draw(|s| {
+            s.put((0, 0), 'b', Style::default());
+        })
+        .expect("draw failed");
+        assert_eq!(term.backend().inner.grid()[Pos::new(0, 0)].glyph(), 'b');
+
+        // Frame 3: back to the flatten branch. Draws 'a' at (0, 0) again, on layer 0, but with
+        // layer 1 also touched so this lands in the flatten branch rather than the fast path.
+        // 'a' matches what frame 1 left in `flattened_previous`, even though the real last
+        // presented frame (frame 2) showed 'b' there. Without the fix, the stale match makes the
+        // diff skip (0, 0), and the backend keeps showing frame 2's 'b' forever.
+        term.backend_mut().composites = false;
+        term.draw(|s| {
+            s.put((0, 0), 'a', Style::default());
+            s.on_layer(1).put((2, 0), '@', Style::default());
+        })
+        .expect("draw failed");
+        assert_eq!(
+            term.backend().inner.grid()[Pos::new(0, 0)].glyph(),
+            'a',
+            "flattened_previous must be cleared after a composites_layers() present, not diffed \
+             against as if it were the last frame actually shown"
+        );
+
+        // `TogglingCompositor` forwards `clear` and `poll_event` unconditionally, same as every
+        // other method on it, so exercise both here rather than leaving them as dead delegation.
+        term.backend_mut().clear().expect("clear failed");
+        term.backend_mut().inner.push_event(Event::Close);
+        assert_eq!(term.poll(Duration::ZERO), Some(Event::Close));
+    }
+
     #[test]
     fn test_draw_explicit_space_on_higher_layer_erases_and_sets_bg() {
         // An explicit space on a higher layer is opaque: it overwrites the
@@ -1342,6 +1459,34 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "Grid width must be at least 1")]
+    fn test_terminal_new_zero_width_backend_panics() {
+        let _ = Terminal::new(Headless::new(0, 5));
+    }
+
+    #[test]
+    fn test_terminal_new_zero_height_backend_does_not_panic() {
+        let term = Terminal::new(Headless::new(5, 0));
+        assert_eq!(term.size(), Size::new(5, 0));
+    }
+
+    #[test]
+    #[should_panic(expected = "Grid width must be at least 1")]
+    fn test_terminal_new_zero_by_zero_backend_panics() {
+        let _ = Terminal::new(Headless::new(0, 0));
+    }
+
+    #[test]
+    fn test_terminal_resize_to_zero_by_zero_is_allowed() {
+        let mut term = Terminal::new(Headless::new(10, 10));
+        term.resize(0, 0);
+        assert_eq!(term.size(), Size::new(0, 0));
+        // Resizing back up afterwards still works.
+        term.resize(10, 10);
+        assert_eq!(term.size(), Size::new(10, 10));
+    }
+
+    #[test]
     fn test_terminal_cursor_passthroughs_forward_to_backend() {
         let mut term = Terminal::new(Headless::new(10, 10));
 
@@ -1485,6 +1630,43 @@ mod tests {
         // the backend like any ordinary immediate-mode frame.
         term.draw(|_| {}).expect("draw failed");
         assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), ' ');
+    }
+
+    #[test]
+    fn test_retain_layer_replaces_a_cell_the_app_draws_at_an_empty_previous_cell() {
+        use crate::surface::Layer;
+
+        // retroglyph#956: `present` must discard whatever the app drew into a retained layer
+        // this frame, even at a cell where `previous` had nothing (so a naive transparent-skip
+        // copy would let the app's write leak through).
+        let mut term = Terminal::new(Headless::new(4, 1));
+        term.draw(|s| s.on_tier(Layer::World).put((0, 0), 'W', Style::default()))
+            .expect("draw failed");
+
+        term.retain_layer(Layer::World);
+        term.draw(|s| s.on_tier(Layer::World).put((2, 0), 'X', Style::default()))
+            .expect("draw failed");
+
+        assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), 'W');
+        assert_eq!(term.backend().grid()[Pos::new(2, 0)].glyph(), ' ');
+    }
+
+    #[test]
+    fn test_retain_layer_restores_a_cell_the_app_erases_with_an_explicit_space() {
+        use crate::surface::Layer;
+
+        // retroglyph#956: an explicit-space write on a retained layer is still a draw the app
+        // made this frame, so it must be discarded like any other write on that layer, not
+        // treated as an opaque erase that survives the retention.
+        let mut term = Terminal::new(Headless::new(4, 1));
+        term.draw(|s| s.on_tier(Layer::World).put((0, 0), 'W', Style::default()))
+            .expect("draw failed");
+
+        term.retain_layer(Layer::World);
+        term.draw(|s| s.on_tier(Layer::World).put((0, 0), ' ', Style::default()))
+            .expect("draw failed");
+
+        assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), 'W');
     }
 
     #[test]
