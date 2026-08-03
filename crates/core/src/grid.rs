@@ -122,6 +122,8 @@ use alloc::vec::Vec;
 // `BlendMode` of its own, which would otherwise collide.
 #[cfg(feature = "blend-modes")]
 use alpha_blend::BlendMode as SeparableBlendMode;
+#[cfg(feature = "blend-modes")]
+use alpha_blend::channel::Channel;
 use core::fmt;
 use core::ops::{Index, IndexMut};
 use grixy::buf::GridBuf;
@@ -1923,21 +1925,19 @@ fn blend_color(mode: BlendMode, src: Color, dst: Color, t: f32) -> Color {
 
 /// Evaluates `sep`'s per-channel mixing function for one RGB channel (`src`/`dst` are u8, `sep`
 /// operates in `0.0..=1.0` f32), then lerps that mixed value against `dst` by `t`: `0.0` keeps
-/// `dst`, `1.0` uses the fully mixed color. Rounds with `libm::roundf` rather than `f32::round`
-/// (a `std`-only method not available in `core`, same reasoning as `libm::fmaf` in
-/// `animate::easing`) and clamps before converting back to u8, since `ColorDodge`/`ColorBurn`'s
-/// `min(1.0, ...)` branches can round a hair outside `0.0..=1.0` at the float boundary.
+/// `dst`, `1.0` uses the fully mixed color. Clamps before converting back to u8 via
+/// `Channel::from_f32`, since `ColorDodge`/`ColorBurn`'s `min(1.0, ...)` branches can round a
+/// hair outside `0.0..=1.0` at the float boundary.
 #[cfg(feature = "blend-modes")]
 fn blend_separable_channel(sep: SeparableBlendMode, src: u8, dst: u8, t: f32) -> u8 {
-    let cs = f32::from(src) / 255.0;
-    let cb = f32::from(dst) / 255.0;
+    let cs = Channel::to_f32(src);
+    let cb = Channel::to_f32(dst);
     let mixed = sep.mix(cb, cs);
     // Not `f32::mul_add`: it's a std-only inherent method, not in `core`. `libm::fmaf` is the
-    // no_std-safe equivalent (see `animate::easing` for the same reasoning).
+    // no_std-safe equivalent (see `animate::easing` for the same reasoning). A plain multiply-add
+    // measurably disagrees with `fmaf` by ±1 LSB on some inputs.
     let blended = libm::fmaf(mixed - cb, t, cb);
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    let out = libm::roundf(blended.clamp(0.0, 1.0) * 255.0) as u8;
-    out
+    Channel::from_f32(blended.clamp(0.0, 1.0))
 }
 
 fn blend_fg(mode: BlendMode, src: Color, dst: Color, t: f32) -> Color {
