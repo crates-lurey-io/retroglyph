@@ -706,6 +706,64 @@ mod tests {
         }
     }
 
+    /// `has_spans` is grid-wide, not per layer (see its own doc comment), so a span written to
+    /// layer 0 is enough to take `clear_span_overlap_rect` past its fast path even when called
+    /// against a layer that has never been allocated. That layer must return with no allocation
+    /// and no panic, not implicitly create one just to find it empty.
+    #[test]
+    fn clear_span_overlap_rect_on_an_unallocated_layer_is_a_no_op() {
+        let mut grid = Grid::new(4, 4);
+        grid.write_span(0, 0, 0, &["C=", "[]"], Style::default())
+            .unwrap();
+
+        grid.clear_span_overlap_rect(1, 0, 0, 4, 4);
+
+        assert!(grid.tile(1, (0, 0)).is_none());
+    }
+
+    /// A direct `clear_span_overlap_rect` call, unlike `fill_region`, is not clipped to the grid
+    /// before it scans: `width`/`height` reaching past the grid's own edges must skip the
+    /// out-of-bounds cells rather than panicking, while still resetting the in-bounds portion of
+    /// a span the in-bounds part of the scan touches.
+    #[test]
+    fn clear_span_overlap_rect_skips_out_of_bounds_cells_without_panicking() {
+        let mut grid = Grid::new(4, 4);
+        grid.write_span(0, 2, 2, &["C=", "[]"], Style::default())
+            .unwrap();
+
+        grid.clear_span_overlap_rect(0, 2, 2, 10, 10);
+
+        for y in 2..4 {
+            for x in 2..4 {
+                assert!(grid[Pos::new(x, y)].is_empty(), "({x}, {y})");
+            }
+        }
+    }
+
+    /// A `SPAN_COVERED` cell whose stored offset is larger than its own position never comes out
+    /// of a real write (an anchor is always in-bounds and at or before every cell it covers), but
+    /// a corrupted or adversarial layer should not panic subtracting past zero. Hand-crafts that
+    /// cell directly (bypassing `write_span`) to exercise the `checked_sub` guard.
+    #[test]
+    fn clear_span_overlap_rect_skips_a_covered_cell_whose_offset_underflows() {
+        let mut grid = Grid::new(4, 4);
+        // A real span elsewhere sets `has_spans`, so the scan below actually runs instead of
+        // short-circuiting.
+        grid.write_span(0, 3, 3, &["Z"], Style::default()).unwrap();
+
+        let mut bogus = Tile::new('x', Style::default());
+        bogus.flags = TileFlags::SPAN_COVERED;
+        bogus.span_w = 1;
+        bogus.span_h = 0;
+        grid[Pos::new(0, 0)] = bogus;
+
+        grid.clear_span_overlap_rect(0, 0, 0, 1, 1);
+
+        // No panic, and the bogus cell is left alone: there is no real anchor at (-1, 0) to
+        // reset it against.
+        assert_eq!(grid[Pos::new(0, 0)].glyph(), 'x');
+    }
+
     #[test]
     fn spans_are_layer_scoped() {
         let mut grid = Grid::new(4, 4);
