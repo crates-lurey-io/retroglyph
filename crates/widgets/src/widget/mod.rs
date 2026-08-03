@@ -255,8 +255,9 @@ pub trait AnimatedWidget {
 /// [`ListState`](crate::ListState)), the same [`Widget`]/[`StatefulWidget`] split applied to
 /// interactive widgets rather than a separate `InteractiveStatefulWidget` trait.
 ///
-/// Has no generic method, so `dyn InteractiveWidget<State = ()>` is object-safe,
-/// e.g. a `Vec<Box<dyn InteractiveWidget<State = ()>>>` of heterogeneous stateless widgets.
+/// Has no generic method, so `dyn InteractiveWidget<Id, State = ()>` is object-safe,
+/// e.g. a `Vec<Box<dyn InteractiveWidget<Id, State = ()>>>` of heterogeneous stateless widgets.
+/// `Id` is the trait's own type parameter (not a generic method) precisely so that stays true.
 ///
 /// # Examples
 ///
@@ -266,20 +267,20 @@ pub trait AnimatedWidget {
 ///
 /// struct Marker(char);
 ///
-/// impl InteractiveWidget for Marker {
+/// impl<Id> InteractiveWidget<Id> for Marker {
 ///     type State = ();
 ///
 ///     fn sense(&self) -> Sense {
 ///         Sense::click()
 ///     }
 ///
-///     fn render(&self, surface: &mut Surface<'_>, _state: &mut Self::State, response: Response) {
+///     fn render(&self, surface: &mut Surface<'_>, _state: &mut Self::State, response: Response<Id>) {
 ///         let style = if response.hovered() { Style::new().bg(retroglyph_core::Color::RED) } else { Style::new() };
 ///         surface.put((0, 0), self.0, style);
 ///     }
 /// }
 /// ```
-pub trait InteractiveWidget {
+pub trait InteractiveWidget<Id> {
     /// State that outlives one render call, e.g. a selection index or scroll offset. `()` for
     /// widgets that have none.
     type State;
@@ -291,7 +292,7 @@ pub trait InteractiveWidget {
     /// Draw into `surface`, styled by `response`, which the caller already resolved (via
     /// [`Interaction::interact`](crate::Interaction::interact)) for `surface.area()` and
     /// [`sense`](Self::sense).
-    fn render(&self, surface: &mut Surface<'_>, state: &mut Self::State, response: Response);
+    fn render(&self, surface: &mut Surface<'_>, state: &mut Self::State, response: Response<Id>);
 }
 
 #[cfg(test)]
@@ -302,23 +303,28 @@ mod interactive_widget_tests {
 
     struct Dot;
 
-    impl InteractiveWidget for Dot {
+    impl<Id> InteractiveWidget<Id> for Dot {
         type State = ();
 
         fn sense(&self) -> Sense {
             Sense::click()
         }
 
-        fn render(&self, surface: &mut Surface<'_>, _state: &mut Self::State, response: Response) {
+        fn render(
+            &self,
+            surface: &mut Surface<'_>,
+            _state: &mut Self::State,
+            response: Response<Id>,
+        ) {
             let glyph = if response.hovered() { '*' } else { '.' };
             surface.put((0, 0), glyph, retroglyph_core::Style::new());
         }
     }
 
-    /// `InteractiveWidget<State = ()>` must be object-safe: no generic method, no `Id` parameter.
+    /// `InteractiveWidget<Id, State = ()>` must be object-safe: no generic method.
     #[test]
     fn is_object_safe() {
-        let widgets: Vec<Box<dyn InteractiveWidget<State = ()>>> =
+        let widgets: Vec<Box<dyn InteractiveWidget<(), State = ()>>> =
             vec![Box::new(Dot), Box::new(Dot)];
 
         let area = Rect::new(0, 0, 1, 1);

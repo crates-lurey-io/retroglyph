@@ -177,7 +177,7 @@ impl Theme {
     /// assert_eq!(theme.bg_for(&response, theme.panel_bg), theme.panel_bg);
     /// ```
     #[must_use]
-    pub const fn bg_for(&self, response: &Response, base: Color) -> Color {
+    pub const fn bg_for<Id>(&self, response: &Response<Id>, base: Color) -> Color {
         if response.pressed() {
             self.press_bg
         } else if response.hovered() {
@@ -209,7 +209,7 @@ impl Theme {
     /// assert_eq!(theme.fg_for(&response), theme.dim);
     /// ```
     #[must_use]
-    pub const fn fg_for(&self, response: &Response) -> Color {
+    pub const fn fg_for<Id>(&self, response: &Response<Id>) -> Color {
         if response.pressed() || response.focused() {
             self.accent
         } else if response.hovered() {
@@ -252,7 +252,7 @@ impl Theme {
     /// assert_eq!(style.background(), theme.panel_bg);
     /// ```
     #[must_use]
-    pub fn style_for(&self, response: &Response, base: Color) -> Style {
+    pub fn style_for<Id>(&self, response: &Response<Id>, base: Color) -> Style {
         if response.disabled() {
             return Style::new().fg(self.dim).bg(base);
         }
@@ -289,14 +289,14 @@ mod tests {
     #[test]
     fn bg_for_is_base_when_idle() {
         let theme = Theme::DARK;
-        let response = Response::default();
+        let response: Response<()> = Response::default();
         assert_eq!(theme.bg_for(&response, theme.panel_bg), theme.panel_bg);
     }
 
     #[test]
     fn bg_for_is_hover_bg_when_hovered() {
         let theme = Theme::DARK;
-        let response = Response {
+        let response: Response<()> = Response {
             hovered: true,
             ..Response::default()
         };
@@ -306,7 +306,7 @@ mod tests {
     #[test]
     fn bg_for_prefers_press_bg_over_hover_bg() {
         let theme = Theme::DARK;
-        let response = Response {
+        let response: Response<()> = Response {
             hovered: true,
             pressed: true,
             ..Response::default()
@@ -317,14 +317,14 @@ mod tests {
     #[test]
     fn fg_for_is_dim_when_idle() {
         let theme = Theme::DARK;
-        let response = Response::default();
+        let response: Response<()> = Response::default();
         assert_eq!(theme.fg_for(&response), theme.dim);
     }
 
     #[test]
     fn fg_for_is_fg_when_hovered() {
         let theme = Theme::DARK;
-        let response = Response {
+        let response: Response<()> = Response {
             hovered: true,
             ..Response::default()
         };
@@ -334,7 +334,7 @@ mod tests {
     #[test]
     fn fg_for_prefers_accent_over_hover_when_focused() {
         let theme = Theme::DARK;
-        let response = Response {
+        let response: Response<()> = Response {
             hovered: true,
             focused: true,
             ..Response::default()
@@ -345,7 +345,7 @@ mod tests {
     #[test]
     fn fg_for_prefers_accent_over_hover_when_pressed() {
         let theme = Theme::DARK;
-        let response = Response {
+        let response: Response<()> = Response {
             hovered: true,
             pressed: true,
             ..Response::default()
@@ -356,7 +356,7 @@ mod tests {
     #[test]
     fn style_for_is_dim_on_base_when_idle() {
         let theme = Theme::DARK;
-        let response = Response::default();
+        let response: Response<()> = Response::default();
         let style = theme.style_for(&response, theme.panel_bg);
         assert_eq!(style.foreground(), theme.dim);
         assert_eq!(style.background(), theme.panel_bg);
@@ -365,7 +365,7 @@ mod tests {
     #[test]
     fn style_for_is_fg_on_hover_bg_when_hovered() {
         let theme = Theme::DARK;
-        let response = Response {
+        let response: Response<()> = Response {
             hovered: true,
             ..Response::default()
         };
@@ -377,7 +377,7 @@ mod tests {
     #[test]
     fn style_for_is_accent_on_base_when_focused_and_not_hovered() {
         let theme = Theme::DARK;
-        let response = Response {
+        let response: Response<()> = Response {
             focused: true,
             ..Response::default()
         };
@@ -389,7 +389,7 @@ mod tests {
     #[test]
     fn style_for_prefers_focused_over_hovered() {
         let theme = Theme::DARK;
-        let response = Response {
+        let response: Response<()> = Response {
             hovered: true,
             focused: true,
             ..Response::default()
@@ -402,7 +402,7 @@ mod tests {
     #[test]
     fn style_for_is_accent_on_press_bg_when_pressed() {
         let theme = Theme::DARK;
-        let response = Response {
+        let response: Response<()> = Response {
             pressed: true,
             focused: true,
             hovered: true,
@@ -416,7 +416,7 @@ mod tests {
     #[test]
     fn style_for_prefers_disabled_over_everything_else() {
         let theme = Theme::DARK;
-        let response = Response {
+        let response: Response<()> = Response {
             disabled: true,
             pressed: true,
             focused: true,

@@ -16,9 +16,15 @@ use retroglyph_core::{Pos, Rect};
 // Flat, independent fields by design: `Response` is a per-frame report card, not a state
 // machine: collapsing it into enums would only make `interact`'s construction of it more
 // awkward for no reader benefit.
+//
+// `id` is `Option<Id>`, not `Id`, and `Default` is hand-written below rather than derived, so
+// that `Response::<Id>::default()` (used throughout this crate's tests as "nothing happened")
+// keeps working without forcing every `Id` a caller picks to implement `Default` too.
+// `Interaction::interact` always fills it in as `Some`.
 #[allow(clippy::struct_excessive_bools)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct Response {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Response<Id> {
+    pub(crate) id: Option<Id>,
     pub(crate) hovered: bool,
     pub(crate) pressed: bool,
     pub(crate) released: bool,
@@ -38,7 +44,43 @@ pub struct Response {
     pub(crate) rect: Rect,
 }
 
-impl Response {
+impl<Id> Default for Response<Id> {
+    fn default() -> Self {
+        Self {
+            id: None,
+            hovered: false,
+            pressed: false,
+            released: false,
+            clicked: false,
+            double_clicked: false,
+            held: false,
+            dragging: false,
+            focused: false,
+            gained_focus: false,
+            lost_focus: false,
+            secondary_clicked: false,
+            disabled: false,
+            scroll_delta: 0,
+            pointer_pos: None,
+            press_origin: None,
+            drag_delta: None,
+            rect: Rect::default(),
+        }
+    }
+}
+
+impl<Id: Copy> Response<Id> {
+    /// The `id` passed to [`Interaction::interact`](crate::Interaction::interact) this frame,
+    /// echoed back so a call site that only has the resolved `Response` in hand (e.g. one
+    /// returned from a widget it drew in a loop) can still tell which id it belongs to. `None`
+    /// only for a [`Response::default`] built directly rather than through `interact`.
+    #[must_use]
+    pub const fn id(&self) -> Option<Id> {
+        self.id
+    }
+}
+
+impl<Id> Response<Id> {
     /// The pointer is over this widget's rect, resolved from last frame's
     /// hit-test: see [`Interaction`](crate::Interaction) for why there's a
     /// frame of latency.
@@ -216,7 +258,8 @@ mod tests {
 
     #[test]
     fn default_is_all_falsy() {
-        let r = Response::default();
+        let r: Response<()> = Response::default();
+        assert_eq!(r.id(), None);
         assert!(!r.hovered());
         assert!(!r.pressed());
         assert!(!r.released());

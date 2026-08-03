@@ -153,7 +153,7 @@ impl Widget for Scrollbar {
     }
 }
 
-impl InteractiveWidget for Scrollbar {
+impl<Id> InteractiveWidget<Id> for Scrollbar {
     type State = ScrollState;
 
     /// Draggable (thumb or track, click-to-jump then continues as a smooth drag) and
@@ -162,7 +162,7 @@ impl InteractiveWidget for Scrollbar {
         Sense::drag() | Sense::CLICK | Sense::SCROLL
     }
 
-    fn render(&self, surface: &mut Surface<'_>, state: &mut Self::State, response: Response) {
+    fn render(&self, surface: &mut Surface<'_>, state: &mut Self::State, response: Response<Id>) {
         let area = surface.area();
         let max_offset = self.max_offset();
 
@@ -393,7 +393,8 @@ mod tests {
 
         // Frame 1: register the rect for next frame's hit-test.
         interaction.begin_frame();
-        let response = interaction.interact(area, Id::Bar, scrollbar.sense());
+        let response =
+            interaction.interact(area, Id::Bar, InteractiveWidget::<Id>::sense(&scrollbar));
         InteractiveWidget::render(
             &scrollbar,
             &mut Surface::new(&mut grid, area, 0),
@@ -411,7 +412,8 @@ mod tests {
             modifiers: KeyModifiers::NONE,
         }));
         interaction.begin_frame();
-        let response = interaction.interact(area, Id::Bar, scrollbar.sense());
+        let response =
+            interaction.interact(area, Id::Bar, InteractiveWidget::<Id>::sense(&scrollbar));
         InteractiveWidget::render(
             &scrollbar,
             &mut Surface::new(&mut grid, area, 0),
@@ -429,7 +431,8 @@ mod tests {
             modifiers: KeyModifiers::NONE,
         }));
         interaction.begin_frame();
-        let response = interaction.interact(area, Id::Bar, scrollbar.sense());
+        let response =
+            interaction.interact(area, Id::Bar, InteractiveWidget::<Id>::sense(&scrollbar));
         InteractiveWidget::render(
             &scrollbar,
             &mut Surface::new(&mut grid, area, 0),
@@ -446,7 +449,8 @@ mod tests {
             modifiers: KeyModifiers::NONE,
         }));
         interaction.begin_frame();
-        let response = interaction.interact(area, Id::Bar, scrollbar.sense());
+        let response =
+            interaction.interact(area, Id::Bar, InteractiveWidget::<Id>::sense(&scrollbar));
         InteractiveWidget::render(
             &scrollbar,
             &mut Surface::new(&mut grid, area, 0),
@@ -462,7 +466,7 @@ mod tests {
         let area = Rect::new(0, 0, 1, 10);
         let scrollbar = Scrollbar::new(40, 10);
         let mut state = ScrollState::new();
-        let response = Response {
+        let response: Response<()> = Response {
             scroll_delta: 2,
             ..Response::default()
         };

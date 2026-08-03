@@ -267,7 +267,7 @@ impl Measure for List<'_> {
     }
 }
 
-impl InteractiveWidget for List<'_> {
+impl<Id> InteractiveWidget<Id> for List<'_> {
     type State = ListState;
 
     /// A single id covers the whole list: clicking resolves which row via
@@ -277,7 +277,7 @@ impl InteractiveWidget for List<'_> {
         Sense::click() | Sense::SCROLL | Sense::HOVER
     }
 
-    fn render(&self, surface: &mut Surface<'_>, state: &mut Self::State, response: Response) {
+    fn render(&self, surface: &mut Surface<'_>, state: &mut Self::State, response: Response<Id>) {
         let area = surface.area();
 
         // A click past the last row selects nothing: it's neither clamped to the last item nor
@@ -494,7 +494,7 @@ mod tests {
         let list = List::new(&names);
         let mut state = ListState::new();
 
-        let response = Response {
+        let response: Response<()> = Response {
             hovered: true,
             clicked: true,
             pointer_pos: Some(Pos::new(2, 1)), // row 1 -> "Bravo"
@@ -518,7 +518,7 @@ mod tests {
         let mut state = ListState::new();
         state.set_offset(2); // window is [Charlie, Delta]
 
-        let response = Response {
+        let response: Response<()> = Response {
             hovered: true,
             clicked: true,
             pointer_pos: Some(Pos::new(2, 1)), // row 1 of the window -> "Delta" (index 3)
@@ -541,7 +541,7 @@ mod tests {
         let list = List::new(&names);
         let mut state = ListState::new();
 
-        let response = Response {
+        let response: Response<()> = Response {
             scroll_delta: 2,
             ..Response::default()
         };
@@ -688,7 +688,7 @@ mod tests {
         let list = List::new(&names).direction(ListDirection::BottomToTop);
         let mut state = ListState::new();
 
-        let response = Response {
+        let response: Response<()> = Response {
             hovered: true,
             clicked: true,
             pointer_pos: Some(Pos::new(2, 2)), // bottom row -> "Alpha" under this direction

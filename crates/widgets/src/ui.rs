@@ -178,20 +178,20 @@ impl<'g, Id: Copy + PartialEq> Ui<'_, 'g, Id> {
         &mut self,
         area: Rect,
         id: Id,
-        widget: &impl InteractiveWidget<State = ()>,
-    ) -> Response {
+        widget: &impl InteractiveWidget<Id, State = ()>,
+    ) -> Response<Id> {
         self.show_stateful(area, id, widget, &mut ())
     }
 
     /// Like [`show`](Self::show), for an [`InteractiveWidget`] with externally owned `state`.
     #[must_use]
-    pub fn show_stateful<W: InteractiveWidget + ?Sized>(
+    pub fn show_stateful<W: InteractiveWidget<Id> + ?Sized>(
         &mut self,
         area: Rect,
         id: Id,
         widget: &W,
         state: &mut W::State,
-    ) -> Response {
+    ) -> Response<Id> {
         let sense = widget.sense().disabled_if(!self.enabled);
         let response = self.interaction.interact(area, id, sense);
         widget.render(&mut self.surface.scope(area), state, response);
@@ -219,7 +219,7 @@ impl<'g, Id: Copy + PartialEq> Ui<'_, 'g, Id> {
     /// Like [`show`](Self::show), `area` is committed once, by this call, for both hit-testing
     /// and drawing, so the two cannot disagree.
     #[must_use]
-    pub fn region(&mut self, area: Rect, id: Id, sense: Sense) -> (Response, Surface<'_>) {
+    pub fn region(&mut self, area: Rect, id: Id, sense: Sense) -> (Response<Id>, Surface<'_>) {
         let sense = sense.disabled_if(!self.enabled);
         let response = self.interaction.interact(area, id, sense);
         (response, self.surface.scope(area))
@@ -409,9 +409,9 @@ impl<'g, Id: Copy + PartialEq> Ui<'_, 'g, Id> {
     pub fn show_sized(
         &mut self,
         id: Id,
-        widget: &impl InteractiveWidget<State = ()>,
+        widget: &impl InteractiveWidget<Id, State = ()>,
         size: u16,
-    ) -> Response {
+    ) -> Response<Id> {
         let area = self.allocate(size);
         self.show(area, id, widget)
     }
@@ -439,8 +439,8 @@ impl<'g, Id: Copy + PartialEq> Ui<'_, 'g, Id> {
     pub fn show_auto(
         &mut self,
         id: Id,
-        widget: &(impl InteractiveWidget<State = ()> + Measure),
-    ) -> Response {
+        widget: &(impl InteractiveWidget<Id, State = ()> + Measure),
+    ) -> Response<Id> {
         let height = widget.height_for(self.vertical_cursor_width());
         self.show_sized(id, widget, height)
     }
@@ -482,14 +482,19 @@ mod tests {
 
     struct Dot;
 
-    impl InteractiveWidget for Dot {
+    impl<Id> InteractiveWidget<Id> for Dot {
         type State = ();
 
         fn sense(&self) -> Sense {
             Sense::click()
         }
 
-        fn render(&self, surface: &mut Surface<'_>, _state: &mut Self::State, response: Response) {
+        fn render(
+            &self,
+            surface: &mut Surface<'_>,
+            _state: &mut Self::State,
+            response: Response<Id>,
+        ) {
             let glyph = if response.hovered() { '*' } else { '.' };
             surface.put((0, 0), glyph, Style::new());
         }
@@ -746,14 +751,19 @@ mod tests {
         }
     }
 
-    impl InteractiveWidget for FixedHeight {
+    impl<Id> InteractiveWidget<Id> for FixedHeight {
         type State = ();
 
         fn sense(&self) -> Sense {
             Sense::click()
         }
 
-        fn render(&self, surface: &mut Surface<'_>, _state: &mut Self::State, _response: Response) {
+        fn render(
+            &self,
+            surface: &mut Surface<'_>,
+            _state: &mut Self::State,
+            _response: Response<Id>,
+        ) {
             Widget::render(self, surface);
         }
     }

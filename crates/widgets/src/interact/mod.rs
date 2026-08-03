@@ -488,7 +488,7 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
     /// Register `id`'s `rect` for whatever `sense` asks for, and report
     /// what happened to it, resolved from *last* frame's input: see the
     /// [`Interaction`] docs for the frame lifecycle this implies.
-    pub fn interact(&mut self, rect: Rect, id: Id, sense: Sense) -> Response {
+    pub fn interact(&mut self, rect: Rect, id: Id, sense: Sense) -> Response<Id> {
         // `DISABLED` is a modifier, not a capability: it never changes what
         // gets hit-tested (so `hovered` keeps working), only what gets
         // registered with `FocusRing` and what `Response` reports back.
@@ -609,6 +609,7 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
         let lost_focus = !is_focused && self.prev_focused == Some(id);
 
         Response {
+            id: Some(id),
             hovered,
             pressed: (senses_click && is_active && self.resolved_press) || key_activated,
             released: released_here || key_activated,
@@ -712,7 +713,7 @@ mod tests {
     fn frame_with_events(
         interaction: &mut Interaction<Id>,
         events: &[Event],
-    ) -> (Response, Response) {
+    ) -> (Response<Id>, Response<Id>) {
         interaction.begin_frame();
         for event in events {
             let _ = interaction.handle_event(event);
@@ -723,7 +724,7 @@ mod tests {
         (save, cancel)
     }
 
-    fn frame(interaction: &mut Interaction<Id>) -> (Response, Response) {
+    fn frame(interaction: &mut Interaction<Id>) -> (Response<Id>, Response<Id>) {
         frame_with_events(interaction, &[])
     }
 
@@ -1172,7 +1173,7 @@ mod tests {
 
     #[test]
     fn secondary_click_is_independent_of_the_primary_button() {
-        fn frame_secondary(interaction: &mut Interaction<Id>) -> (Response, Response) {
+        fn frame_secondary(interaction: &mut Interaction<Id>) -> (Response<Id>, Response<Id>) {
             interaction.begin_frame();
             let save = interaction.interact(
                 Rect::new(0, 0, 5, 1),
@@ -1204,7 +1205,7 @@ mod tests {
         assert!(!save.secondary_clicked()); // not sensed, so never reported
     }
 
-    fn frame_disabled(interaction: &mut Interaction<Id>) -> Response {
+    fn frame_disabled(interaction: &mut Interaction<Id>) -> Response<Id> {
         interaction.begin_frame();
         let save = interaction.interact(
             Rect::new(0, 0, 5, 1),
