@@ -353,10 +353,25 @@ impl<B: Backend> Terminal<B> {
     /// before the event is returned to the caller, so the game loop can immediately
     /// redraw at the new size.
     pub fn poll(&mut self, timeout: Duration) -> Option<Event> {
-        let event = self
-            .queued_events
-            .pop_front()
-            .or_else(|| self.backend.poll_event(timeout))?;
+        if let Some(event) = self.queued_events.pop_front() {
+            // Already passed through `poll_backend` (or was requeued from an event that did),
+            // so any `Resize` it carries was applied then; applying it again here would resize
+            // twice for one logical event. See `poll_backend`.
+            return Some(event);
+        }
+        self.poll_backend(timeout)
+    }
+
+    /// Polls the backend directly (bypassing `queued_events`), applying [`Event::Resize`]
+    /// immediately when found.
+    ///
+    /// This is the single point where a freshly-polled event enters the terminal, so it's also
+    /// the only place `resize` should be called for an event on its way in: callers handling an
+    /// event already taken from `queued_events` (via [`poll`](Self::poll)'s queue-pop branch, or
+    /// via [`requeue_events`](Self::requeue_events)) must not call `resize` again for it, or a
+    /// single resize gets applied twice.
+    fn poll_backend(&mut self, timeout: Duration) -> Option<Event> {
+        let event = self.backend.poll_event(timeout)?;
         if let Event::Resize(w, h) = event {
             self.resize(w, h);
         }
@@ -480,12 +495,9 @@ impl<B: Backend> Terminal<B> {
         if !self.queued_events.is_empty() {
             return true;
         }
-        let Some(event) = self.backend.poll_event(timeout) else {
+        let Some(event) = self.poll_backend(timeout) else {
             return false;
         };
-        if let Event::Resize(w, h) = event {
-            self.resize(w, h);
-        }
         self.queued_events.push_back(event);
         true
     }
@@ -687,6 +699,112 @@ mod tests {
         // rather than consumed.
         assert_eq!(terminal.size(), Size::new(4, 2));
         assert_eq!(terminal.poll(Duration::ZERO), Some(Event::Resize(4, 2)));
+    }
+
+    /// Wraps [`Headless`] and counts [`resize`](Output::resize) calls, so a test can prove
+    /// `Terminal` applies a backend resize at most once per logical `Event::Resize`, even when
+    /// the event is buffered by `wait_for_input` and then consumed by `poll` (retroglyph#959).
+    struct ResizeCounting {
+        inner: Headless,
+        resize_calls: usize,
+    }
+
+    impl ResizeCounting {
+        fn new(width: u16, height: u16) -> Self {
+            Self {
+                inner: Headless::new(width, height),
+                resize_calls: 0,
+            }
+        }
+    }
+
+    impl Output for ResizeCounting {
+        type Error = core::convert::Infallible;
+
+        fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
+        where
+            I: Iterator<Item = DrawCell<'a>>,
+        {
+            self.inner.draw_layers(content)
+        }
+
+        fn resize(&mut self, size: Size) {
+            self.resize_calls += 1;
+            self.inner.resize(size);
+        }
+
+        fn flush(&mut self) -> Result<(), Self::Error> {
+            self.inner.flush()
+        }
+
+        fn size(&self) -> Size {
+            self.inner.size()
+        }
+
+        fn clear(&mut self) -> Result<(), Self::Error> {
+            self.inner.clear()
+        }
+    }
+
+    impl Input for ResizeCounting {
+        fn poll_event(&mut self, timeout: Duration) -> Option<Event> {
+            self.inner.poll_event(timeout)
+        }
+
+        fn push_event(&mut self, event: Event) {
+            self.inner.push_event(event);
+        }
+    }
+
+    impl Cursor for ResizeCounting {}
+
+    #[test]
+    fn test_terminal_poll_does_not_reapply_resize_buffered_by_wait_for_input() {
+        let backend = ResizeCounting::new(10, 10);
+        let mut terminal = Terminal::new(backend);
+
+        terminal.backend_mut().inner.push_event(Event::Resize(8, 2));
+        assert!(terminal.wait_for_input(Duration::ZERO));
+        assert_eq!(terminal.backend().resize_calls, 1);
+
+        // The event was only buffered, not consumed, by `wait_for_input`; `poll` must return the
+        // same event without resizing again.
+        assert_eq!(terminal.poll(Duration::ZERO), Some(Event::Resize(8, 2)));
+        assert_eq!(terminal.backend().resize_calls, 1);
+        assert_eq!(terminal.size(), Size::new(8, 2));
+    }
+
+    #[test]
+    fn test_terminal_poll_does_not_reapply_resize_from_requeue_events() {
+        let backend = ResizeCounting::new(10, 10);
+        let mut terminal = Terminal::new(backend);
+
+        terminal.backend_mut().inner.push_event(Event::Resize(9, 3));
+        assert_eq!(terminal.poll(Duration::ZERO), Some(Event::Resize(9, 3)));
+        assert_eq!(terminal.backend().resize_calls, 1);
+
+        // A wrapper (e.g. `PerfOverlayApp`) hands the event straight back via `requeue_events`;
+        // the next `poll` must not resize a second time for it.
+        terminal.requeue_events([Event::Resize(9, 3)]);
+        assert_eq!(terminal.poll(Duration::ZERO), Some(Event::Resize(9, 3)));
+        assert_eq!(terminal.backend().resize_calls, 1);
+    }
+
+    #[test]
+    fn test_terminal_retain_layer_survives_wait_for_input_then_poll_of_a_resize() {
+        let backend = Headless::new(10, 10);
+        let mut terminal = Terminal::new(backend);
+
+        terminal.backend_mut().push_event(Event::Resize(8, 2));
+        assert!(terminal.wait_for_input(Duration::ZERO));
+
+        // A caller that decides retention for this frame in between `wait_for_input` waking it
+        // up and the matching `poll` that actually reads the event (a plausible ordering: e.g.
+        // deciding retention from state gathered before reading input) must not have that
+        // decision silently undone by `poll` re-applying the already-handled resize.
+        terminal.retain_layer(0u8);
+        assert_eq!(terminal.poll(Duration::ZERO), Some(Event::Resize(8, 2)));
+        assert_eq!(terminal.retained_layers, [true]);
     }
 
     #[test]
