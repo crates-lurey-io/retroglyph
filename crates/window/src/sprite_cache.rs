@@ -54,12 +54,14 @@ impl Sprite {
         glyph_w: u8,
         glyph_h: u8,
     ) -> (i16, i16) {
-        // A zero cell size would make the box degenerate; treat it as one pixel so the sprite
-        // stays pinned to its anchor rather than being offset by a nonsense amount.
-        let box_w = span_w as u32 * if glyph_w == 0 { 1 } else { glyph_w as u32 };
-        let box_h = span_h as u32 * if glyph_h == 0 { 1 } else { glyph_h as u32 };
-        self.align
-            .offset(self.pixel_width, self.pixel_height, box_w, box_h)
+        self.align.offset_in_span(
+            self.pixel_width,
+            self.pixel_height,
+            span_w,
+            span_h,
+            glyph_w,
+            glyph_h,
+        )
     }
 }
 
@@ -110,6 +112,24 @@ impl SpriteCache {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.sprites.is_empty()
+    }
+
+    /// Builds a cache by [`load`](Self::load)ing every tileset in `opts`, in order.
+    ///
+    /// This is what both pixel backends call from their builder's `build`/`into_renderer`
+    /// instead of each looping over their own configured tilesets by hand; later tilesets win
+    /// on codepoint collision, same as calling [`load`](Self::load) directly in a loop.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first [`TilesetError`] any tileset's [`load`](Self::load) call fails with; no
+    /// later tileset is loaded once one fails.
+    pub fn from_tilesets(opts: &[TilesetOptions]) -> Result<Self, TilesetError> {
+        let mut cache = Self::new();
+        for tileset in opts {
+            cache.load(tileset)?;
+        }
+        Ok(cache)
     }
 
     /// Loads a tileset, decoding the sprite sheet and inserting all sprites.

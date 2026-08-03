@@ -629,11 +629,10 @@ impl SoftwareBackend {
         let sprite_cache = if self.tilesets.is_empty() {
             Arc::new(SpriteCache::new())
         } else {
-            let mut cache = SpriteCache::new();
-            for opts in &self.tilesets {
-                cache.load(opts).map_err(SoftwareBackendError::Tileset)?;
-            }
-            Arc::new(cache)
+            Arc::new(
+                SpriteCache::from_tilesets(&self.tilesets)
+                    .map_err(SoftwareBackendError::Tileset)?,
+            )
         };
 
         Ok(SoftwareRenderer::create(
