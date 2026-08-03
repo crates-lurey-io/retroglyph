@@ -104,8 +104,9 @@ use grixy::ops::layout::RowMajor;
 use retroglyph_core::Tint;
 use retroglyph_core::event::Event;
 use retroglyph_core::grid::{Pos, Size};
-use retroglyph_core::tile::{Tile, TileFlags};
+use retroglyph_core::tile::Tile;
 use retroglyph_window::WindowHandle;
+use retroglyph_window::cell_art_glyph;
 use retroglyph_window::geometry::CellGeometry;
 use retroglyph_window::palette::{DEFAULT_BG, DEFAULT_FG};
 #[cfg(feature = "tilesets")]
@@ -497,6 +498,15 @@ impl SoftwareRenderer {
         #[cfg(not(feature = "tilesets"))]
         let _ = tint;
 
+        // A span-covered or blank cell draws no art at all (see `cell_art_glyph`): neither a
+        // sprite nor a bitmap-font glyph. Deciding that once here, before either lookup, is the
+        // fix for retroglyph#762: the sprite lookup below used to run unconditionally, so a
+        // covered cell whose text-fallback glyph happened to have its own sprite painted that
+        // sprite over the span's artwork instead of drawing nothing.
+        let Some(art_glyph) = cell_art_glyph(&tile) else {
+            return;
+        };
+
         let px_x = usize::from(pos.x) * cell_w;
         let px_y = usize::from(pos.y) * cell_h;
 
@@ -505,7 +515,7 @@ impl SoftwareRenderer {
         {
             let buf_h = self.ctx.pixel_buf.as_ref().len() / buf_w;
             let (glyph_w, glyph_h) = (self.ctx.geometry.glyph_w, self.ctx.geometry.glyph_h);
-            if let Some(sprite) = self.sprite_cache.get(tile.glyph()) {
+            if let Some(sprite) = self.sprite_cache.get(art_glyph) {
                 let (span_w, span_h) = tile.span();
                 let align = sprite.align_offset(span_w, span_h, glyph_w, glyph_h);
                 let recolor =
@@ -525,7 +535,7 @@ impl SoftwareRenderer {
                 if tile.span() == (1, 1) {
                     warn_sprite_needs_span(
                         &mut self.ctx.warned_oversized,
-                        tile.glyph(),
+                        art_glyph,
                         (sprite.pixel_width, sprite.pixel_height),
                         (u32::from(glyph_w), u32::from(glyph_h)),
                     );
@@ -535,7 +545,7 @@ impl SoftwareRenderer {
             // No sprite for this glyph: it falls back to the bitmap font below, which is
             // `fg`-colored, so a tint that would otherwise recolor a sprite silently has no
             // effect here (retroglyph#564, #537's exact trap).
-            warn_tint_needs_sprite(&mut self.ctx.warned_dropped_tint, tile.glyph(), tint);
+            warn_tint_needs_sprite(&mut self.ctx.warned_dropped_tint, art_glyph, tint);
         }
 
         blit_glyph(
@@ -544,9 +554,8 @@ impl SoftwareRenderer {
             px_x,
             px_y,
             &tile,
+            art_glyph,
             &self.fonts,
-            cell_w,
-            cell_h,
             scale,
         );
     }
@@ -674,7 +683,7 @@ impl Output for SoftwareRenderer {
     /// background (see the private `resolve_bg_fill` helper) even though the occupied tile's own
     /// background is the default one.
     ///
-    /// A [`TileFlags::SPAN_COVERED`] cell (retroglyph#412) paints its background but not its
+    /// A [`TileFlags::SPAN_COVERED`](retroglyph_core::tile::TileFlags::SPAN_COVERED) cell (retroglyph#412) paints its background but not its
     /// glyph: the span's anchor already drew one sprite across the whole footprint, and the
     /// covered cell's glyph is that sprite's text fallback, for backends that cannot draw it. The
     /// sprite-transparency rule that decides whether a background is painted at all is resolved
@@ -1029,8 +1038,9 @@ fn blit_glyph_mask(
 /// offset from `tile.dx`/`tile.dy`. Only the foreground (glyph) pixels are
 /// painted; background is left untouched.
 ///
-/// Draws nothing for a cell covered by a multi-cell span: its glyph is the span's text fallback,
-/// and the span's anchor already drew artwork over this cell.
+/// `art_glyph` is the caller-resolved [`cell_art_glyph`] answer for `tile`: whether this cell
+/// draws at all (span-covered and blank cells are filtered before this is ever called) is decided
+/// once by the caller, not re-derived here.
 #[allow(clippy::cast_possible_truncation, clippy::too_many_arguments)]
 fn blit_glyph(
     buffer: &mut [u32],
@@ -1038,15 +1048,10 @@ fn blit_glyph(
     px_x: usize,
     px_y: usize,
     tile: &Tile,
+    art_glyph: char,
     fonts: &FontChain<'static>,
-    _cell_w: usize,
-    _cell_h: usize,
     scale: usize,
 ) {
-    if tile.glyph() == ' ' || tile.flags().contains(TileFlags::SPAN_COVERED) {
-        return;
-    }
-
     let fg = resolve_color(tile.style().foreground(), DEFAULT_FG);
 
     #[allow(clippy::cast_possible_wrap)]
@@ -1056,7 +1061,7 @@ fn blit_glyph(
 
     // Nothing in the chain can draw this character, not even a substitute box: leave the cell
     // at its background rather than pointing at a glyph index some font doesn't have.
-    let Some(glyph) = fonts.resolve(tile.glyph()) else {
+    let Some(glyph) = fonts.resolve(art_glyph) else {
         return;
     };
     let buf_h = buffer.len() / buf_w;
@@ -2634,6 +2639,69 @@ mod span_tests {
 
         assert_eq!(px(&r, 2, 0, 0), GREEN, "the anchor's own glyph still draws");
         assert_ne!(px(&r, 2, 8, 0), GREEN, "the covered cell's glyph does not");
+    }
+
+    /// A 2-tile `8x16` PNG in two columns: tile 0 solid red, tile 1 solid green. Both tiles are
+    /// exactly one cell, so a sprite drawn from either fills its cell with no alignment ambiguity.
+    fn two_solid_tiles_png() -> Vec<u8> {
+        use image::ImageEncoder as _;
+        let (tile_w, tile_h) = (8u32, 16u32);
+        let img_w = tile_w * 2;
+        let mut img = image::RgbaImage::new(img_w, tile_h);
+        for y in 0..tile_h {
+            for x in 0..img_w {
+                let px = if x < tile_w {
+                    [0xFF, 0x00, 0x00, 0xFF]
+                } else {
+                    [0x00, 0xFF, 0x00, 0xFF]
+                };
+                img.put_pixel(x, y, image::Rgba(px));
+            }
+        }
+        let mut png = Vec::new();
+        image::codecs::png::PngEncoder::new(&mut png)
+            .write_image(img.as_raw(), img_w, tile_h, image::ExtendedColorType::Rgba8)
+            .expect("encode test tileset PNG");
+        png
+    }
+
+    /// Regression guard for retroglyph#762: a span's text fallback glyph can have its own
+    /// registered sprite (the default `Codepage::Cp437` registers one for every codepoint, so
+    /// this is the common case, not an edge case), and the covered cell must still draw nothing
+    /// of its own, not that sprite.
+    #[test]
+    fn a_span_covered_cells_fallback_sprite_does_not_paint_over_the_anchor() {
+        // 'S' -> tile 0 (red), the anchor's own sprite, exactly one cell (so it reserves but
+        // does not fill cell 1, per `span_reserves_cells_beyond_the_artwork`). '#' -> tile 1
+        // (green) is the covered cell's own text-fallback glyph, also registered as a sprite:
+        // before the fix, the covered cell's sprite lookup ran unconditionally and painted this
+        // sprite into cell 1 instead of leaving it reserved.
+        let opts = TilesetOptions::builder(two_solid_tiles_png())
+            .tile_size(8, 16)
+            .columns(2)
+            .codepage(Codepage::Custom(vec!['S', '#']))
+            .build()
+            .expect("valid 2-tile tileset");
+        let mut r = SoftwareBackendBuilder::new()
+            .font(retroglyph_window::font::unscii16::FONT)
+            .grid_size(2, 1)
+            .scale(1)
+            .tileset(opts)
+            .build()
+            .unwrap()
+            .into_renderer()
+            .unwrap();
+
+        let mut grid = Grid::new(2, 1);
+        grid.write_span(0, 0, 0, &["S#"], Style::default()).unwrap();
+        paint(&mut r, &grid);
+
+        assert_eq!(px(&r, 2, 0, 0), RED, "the anchor's own sprite still draws");
+        assert_ne!(
+            px(&r, 2, 8, 0),
+            GREEN,
+            "the covered cell must not draw '#''s own sprite"
+        );
     }
 
     // ── Dropped-tint diagnostic (retroglyph#564) ───────────────────────────

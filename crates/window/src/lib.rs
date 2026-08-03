@@ -139,7 +139,9 @@ pub use backend::WindowBackend;
 pub use clipboard::SystemClipboard;
 pub use clipboard::{Clipboard, ClipboardError};
 pub use geometry::CellGeometry;
-pub use presenter::{GenericSurfaceError, Presenter, RecoverableError, WindowHandle};
+pub use presenter::{
+    GenericSurfaceError, Presenter, RecoverableError, WindowHandle, cell_art_glyph,
+};
 
 // Re-exported so presenters can name the handle traits without adding their
 // own raw-window-handle dependency (and so versions can't drift apart).
