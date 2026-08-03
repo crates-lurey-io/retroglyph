@@ -6,13 +6,6 @@ use super::Color;
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 /// A style consisting of foreground and background color.
 ///
-/// No text modifiers (bold, italic, underline, etc.) by design: retroglyph is a spiritual
-/// remake of `BearLibTerminal`, which doesn't support them either. A pixel/bitmap-font renderer
-/// can't fake most of them (no bold font variant, no underline stroke) without real per-style
-/// assets, so rather than have them work in a real terminal and silently do nothing in the
-/// software backend, they're not part of the API at all. Color and glyph choice are the only two
-/// knobs, in every backend.
-///
 /// # Examples
 ///
 /// ```

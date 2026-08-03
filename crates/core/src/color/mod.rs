@@ -4,16 +4,19 @@
 //! Split into private submodules by concern, `animate`/`backend`/`testing`-style: `ansi` is the
 //! 16-color ANSI palette and the shared indexed/ANSI quantization machinery, `convert` is
 //! `Color`'s inherent methods (constants, RGB resolution, `gem` color-space conversions),
-//! `parse` is `Color`'s `Display`/`FromStr`/serde impls, and `style` is [`Style`] itself.
+//! `parse` is `Color`'s `Display`/`FromStr`/serde impls, `style` is [`Style`] itself, and `tint`
+//! is [`Tint`], sprite colour modulation.
 
 mod ansi;
 mod convert;
 mod parse;
 mod style;
+mod tint;
 
 pub use ansi::{AnsiColor, InvalidAnsiIndex};
 pub use parse::ParseColorError;
 pub use style::Style;
+pub use tint::Tint;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 #[non_exhaustive]

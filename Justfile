@@ -97,6 +97,12 @@ compile:
     # this is its `no_std` (alloc-only) build, the same reason retroglyph-core gets its own line
     # above.
     cargo check -p retroglyph-widgets --no-default-features
+    # retroglyph#894: the three lines above only ever build with zero or all features on, so a
+    # break in one feature alone (e.g. `indexed-quant` without a float backend, or `blend-modes`
+    # alone) can stay green here and only surface once another PR happens to combine it with
+    # something else (#886). `cargo hack check --each-feature` builds every feature in isolation
+    # across the workspace instead, catching that gap directly.
+    cargo bin cargo-hack check --each-feature --workspace --no-dev-deps
 
 doc: check-features
     # --exclude: none of the three are part of the published API surface (cargo-bin and
