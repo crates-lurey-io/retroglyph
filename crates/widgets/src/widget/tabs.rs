@@ -1,13 +1,15 @@
 //! [`Tabs`]: a horizontal strip of tab labels with a highlighted selected index.
+use retroglyph_core::text::width as measured_width;
 use retroglyph_core::{Color, Rect, Style};
 
 use super::{InteractiveWidget, Widget};
+use crate::Align;
 use crate::Response;
 use crate::Sense;
 use crate::Surface;
 use crate::Theme;
 use crate::draw::fill_rect;
-use crate::text::truncate as truncate_to_cols;
+use crate::text::{draw_clipped, truncate as truncate_to_cols};
 
 /// A horizontal strip of `titles` with the tab at `selected` highlighted.
 ///
@@ -155,10 +157,7 @@ impl Tabs<'_> {
             }
             let avail = (area.right() - x) as usize;
             let text = truncate_to_cols(title, avail);
-            // `text` is bounded to `avail` columns above, itself derived from the `u16`
-            // `area.right()`/`x`, so narrowing the char count back is always exact.
-            #[allow(clippy::cast_possible_truncation)]
-            let text_width = text.chars().count() as u16;
+            let text_width = measured_width(text);
             columns.push((index, x, text_width));
             x = x.saturating_add(text_width);
 
@@ -185,7 +184,6 @@ impl Tabs<'_> {
         for &(index, abs_x, text_width) in &columns {
             let x = abs_x - area.left();
             let title = self.titles[index];
-            let text = truncate_to_cols(title, text_width);
             let style = if Some(index) == selected {
                 self.selected_style
             } else {
@@ -199,7 +197,7 @@ impl Tabs<'_> {
                     Style::new().bg(style.background()),
                 );
             }
-            surface.print((x, 0), text, style);
+            let _ = draw_clipped(surface, (x, 0), text_width, title, Align::Left, style);
 
             if let Some(divider) = self.divider
                 && index + 1 < self.titles.len()
