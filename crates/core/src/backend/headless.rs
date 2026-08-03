@@ -8,7 +8,7 @@
 
 use crate::backend::{Cursor, Input, Output};
 use crate::color::Color;
-use crate::event::Event;
+use crate::event::{Event, coalesces_with};
 use crate::grid::{Grid, Pos, Size};
 use crate::style::Style;
 use crate::tile::Tile;
@@ -57,7 +57,19 @@ impl Headless {
     }
 
     /// Injects a synthetic event into the queue.
+    ///
+    /// Coalesces consecutive `Mouse(Moved)` events with the queue's current tail (see
+    /// [`coalesces_with`]), matching the `retroglyph-window` and `retroglyph-terminal-wasm`
+    /// backends this stands in for during tests (retroglyph#768): a caller pushing a burst of
+    /// pointer positions before draining the queue sees only the latest one, the same as it would
+    /// against a real backend.
     pub fn push_event(&mut self, event: Event) {
+        if let Some(back) = self.event_queue.back_mut()
+            && coalesces_with(&event, back)
+        {
+            *back = event;
+            return;
+        }
         self.event_queue.push_back(event);
     }
 
@@ -261,6 +273,57 @@ mod tests {
         backend.push_event(event);
         assert_eq!(backend.poll_event(Duration::ZERO), Some(Event::Close));
         assert_eq!(backend.poll_event(Duration::ZERO), None);
+    }
+
+    fn moved(x: u16) -> Event {
+        use crate::event::{KeyModifiers, MouseEvent, MouseEventKind};
+        Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Moved,
+            position: Pos { x, y: 0 },
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        })
+    }
+
+    /// Regression test for retroglyph#768: `Headless` must coalesce a burst of consecutive
+    /// `Moved` events the same way `retroglyph-window` and `retroglyph-terminal-wasm` do, so
+    /// `TestHarness`-driven tests stay faithful to the real backends.
+    #[test]
+    fn consecutive_moved_events_coalesce_to_one() {
+        let mut backend = Headless::new(10, 10);
+        for x in 0..1_000u16 {
+            backend.push_event(moved(x));
+        }
+        assert_eq!(backend.event_queue.len(), 1);
+        assert_eq!(backend.poll_event(Duration::ZERO), Some(moved(999)));
+        assert_eq!(backend.poll_event(Duration::ZERO), None);
+    }
+
+    /// A non-`Moved` event between two `Moved` bursts must not be swallowed: only *consecutive*
+    /// `Moved` events collapse.
+    #[test]
+    fn non_moved_event_breaks_coalescing() {
+        use crate::event::{KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+        let mut backend = Headless::new(10, 10);
+        backend.push_event(moved(1));
+        backend.push_event(moved(2));
+        backend.push_event(Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            position: Pos { x: 2, y: 0 },
+            pixel_position: None,
+            modifiers: KeyModifiers::NONE,
+        }));
+        backend.push_event(moved(3));
+        assert_eq!(backend.event_queue.len(), 3);
+        assert_eq!(backend.poll_event(Duration::ZERO), Some(moved(2)));
+        assert!(matches!(
+            backend.poll_event(Duration::ZERO),
+            Some(Event::Mouse(MouseEvent {
+                kind: MouseEventKind::Down(MouseButton::Left),
+                ..
+            }))
+        ));
+        assert_eq!(backend.poll_event(Duration::ZERO), Some(moved(3)));
     }
 
     #[test]
