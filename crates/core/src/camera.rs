@@ -423,6 +423,38 @@ impl Camera {
         Some(Pos::new(wx, wy))
     }
 
+    /// Map a screen position back to a world position, without culling: the result may fall
+    /// outside the viewport or outside `[0, world)`, instead of coming back `None`.
+    ///
+    /// [`screen_to_world`](Self::screen_to_world) is the right call when the only question is
+    /// "which world cell is under this screen position" (mouse picking, a single-cell cursor).
+    /// It falls short once a gesture can leave the viewport or the world mid-flight: a pointer
+    /// drag that overshoots the edge, or a rubber-band selection rect that extends past it, has
+    /// no `Pos` to report and no way to compute a world-space delta. This is the signed sibling
+    /// for that case: it hands back the same math `screen_to_world` computes, minus the culling.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_core::{Camera, Pos, Rect, Size};
+    ///
+    /// let mut cam = Camera::new(Rect::new(5, 5, 10, 10), Size::new(100, 100));
+    /// cam.center_on(Pos::new(50, 50));
+    ///
+    /// // Inside the viewport: matches `screen_to_world`.
+    /// assert_eq!(cam.screen_to_world_signed(Pos::new(5, 5)), (45, 45));
+    ///
+    /// // Off the viewport entirely (the viewport starts at x = 5): negative, not `None`, so a
+    /// // caller mid-drag can still compute a world-space delta.
+    /// assert_eq!(cam.screen_to_world_signed(Pos::new(0, 0)), (40, 40));
+    /// ```
+    #[must_use]
+    pub const fn screen_to_world_signed(&self, screen: Pos) -> (i32, i32) {
+        let dx = screen.x as i32 - self.viewport.left() as i32;
+        let dy = screen.y as i32 - self.viewport.top() as i32;
+        (self.origin.x as i32 + dx, self.origin.y as i32 + dy)
+    }
+
     /// Iterate the visible cells as `(world, screen)` position pairs, in
     /// row-major order. Only cells that exist in the world are yielded, so the
     /// caller can fill the rest of the viewport with a background.
@@ -695,6 +727,34 @@ mod tests {
         let mut c = Camera::new(Rect::new(5, 5, 10, 10), Size::new(100, 100));
         c.center_on(Pos::new(50, 50));
         assert_eq!(c.world_to_offset(Pos::new(50, 50)), (10, 10));
+    }
+
+    #[test]
+    fn screen_to_world_signed_matches_screen_to_world_when_visible() {
+        let mut c = Camera::new(Rect::new(5, 5, 10, 10), Size::new(100, 100));
+        c.center_on(Pos::new(50, 50));
+        assert_eq!(c.screen_to_world_signed(Pos::new(5, 5)), (45, 45));
+        assert_eq!(c.screen_to_world(Pos::new(5, 5)), Some(Pos::new(45, 45)));
+    }
+
+    #[test]
+    fn screen_to_world_signed_goes_negative_before_the_viewport_instead_of_culling() {
+        let mut c = Camera::new(Rect::new(5, 5, 10, 10), Size::new(100, 100));
+        c.center_on(Pos::new(50, 50)); // origin (45, 45), viewport starts at (5, 5).
+        assert_eq!(c.screen_to_world_signed(Pos::new(0, 0)), (40, 40));
+        // The same screen position through `screen_to_world`: culled, not negative.
+        assert_eq!(c.screen_to_world(Pos::new(0, 0)), None);
+    }
+
+    #[test]
+    fn screen_to_world_signed_goes_past_the_world_edge_instead_of_culling() {
+        let mut c = cam(); // viewport (0, 0, 10, 10), world 100x100.
+        c.center_on(Pos::new(99, 99));
+        assert_eq!(c.origin(), Pos::new(90, 90)); // origin clamps so origin + viewport = world.
+        // One column/row past the viewport's own far edge, so past the world edge too:
+        // `screen_to_world` culls (out of viewport), the signed sibling keeps counting.
+        assert_eq!(c.screen_to_world_signed(Pos::new(10, 10)), (100, 100));
+        assert_eq!(c.screen_to_world(Pos::new(10, 10)), None);
     }
 
     #[test]
