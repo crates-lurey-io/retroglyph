@@ -135,6 +135,20 @@ Forwards to `retroglyph-core`'s `egc` feature.
 
 Upgrades `Paragraph`'s word-wrap (always available) to grapheme-cluster-aware correctness.
 
+### `libm`
+
+⚪ Optional.
+
+Uses `retroglyph-core`'s `libm` feature (the `no_std` float backend: scrollbar geometry,
+gauge/sparkline/bar percentage rounding, scroll momentum decay) instead of `std`'s own float
+intrinsics. See `std` below; a build needs exactly one of the two.
+
+### `libm-arch`
+
+⚪ Optional.
+
+Alias for `libm`, matching `retroglyph-core`'s own `libm-arch` feature name.
+
 ### `serde`
 
 ⚪ Optional.
@@ -148,9 +162,11 @@ Adds `Serialize`/`Deserialize` impls for `Theme` and `Density`, forwarding to `r
 
 🟢 Enabled by default.
 
-Enables `retroglyph-core/std`.
+Enables `retroglyph-core/std`, whose float intrinsics back this crate's own float use (see `libm`
+above for the `no_std` alternative).
 
-Disabling this feature (`--no-default-features`) builds this crate `no_std` (requires an allocator).
+Disabling this feature (`--no-default-features`) builds this crate `no_std` (requires an allocator
+and one of `std`/`libm`; see the crate-level `compile_error!` in `src/lib.rs`).
 
 <!-- gen-features:end -->
 

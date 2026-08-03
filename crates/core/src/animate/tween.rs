@@ -87,7 +87,7 @@ impl Tween {
     #[must_use]
     pub fn value(&self) -> f32 {
         let t = self.easing.apply(self.progress());
-        libm::fmaf(self.to - self.from, t, self.from)
+        crate::math::mul_add(self.to - self.from, t, self.from)
     }
 
     /// `true` once [`update`](Self::update) has accumulated at least `duration` of elapsed time.
@@ -208,6 +208,40 @@ mod tests {
         // `origin` becomes wherever the tween actually was, not the original `from`.
         assert_eq!(tween.origin(), 5.0);
         assert_eq!(tween.target(), 20.0);
+    }
+
+    #[test]
+    #[allow(clippy::cast_precision_loss)] // i in 0..100 is always exactly representable in f32
+    fn retarget_from_an_elastic_overshoot_still_finishes_at_the_new_target() {
+        const DURATION: Duration = Duration::from_millis(100);
+
+        let mut tween = Tween::new(0.0, 1.0)
+            .duration(DURATION)
+            .easing(Easing::EaseOutElastic);
+
+        // Find a millisecond offset that lands mid-overshoot, the same sampling approach
+        // `elastic_overshoots_past_the_target` (easing.rs) uses to prove the curve overshoots at
+        // all: this test additionally needs the *specific* offset, to retarget from it.
+        let overshoot_millis = (0..100)
+            .find(|&i| !(0.0..=1.0).contains(&Easing::EaseOutElastic.apply(i as f32 / 100.0)))
+            .expect("EaseOutElastic should overshoot somewhere in its first 100 samples");
+        tween.update(Duration::from_millis(overshoot_millis));
+        let overshot = tween.value();
+        assert!(
+            !(0.0..=1.0).contains(&overshot),
+            "expected an overshot value, got {overshot}"
+        );
+
+        tween.retarget(5.0);
+        // No snap: retargeting starts from the overshot value, even though it's outside the
+        // original 0.0..=1.0 endpoints.
+        assert_eq!(tween.value(), overshot);
+
+        tween.update(DURATION);
+        // Regardless of how far from the endpoints the retarget started, a full duration later
+        // the tween has converged exactly on the new target.
+        assert_eq!(tween.value(), 5.0);
+        assert!(tween.is_finished());
     }
 
     #[test]

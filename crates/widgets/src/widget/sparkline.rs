@@ -90,7 +90,7 @@ impl Widget for Sparkline<'_> {
             let ratio = (recent[i - pad] / max).clamp(0.0, 1.0);
             // `ratio` is clamped to `0.0..=1.0`, so the rounded level always lands in `0..=8`.
             #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-            let level = crate::mathf::round(ratio * 8.0) as usize;
+            let level = retroglyph_core::math::round(ratio * 8.0) as usize;
             let style = self
                 .style
                 .unwrap_or_else(|| Style::new().fg(Meter::new(ratio).color()));

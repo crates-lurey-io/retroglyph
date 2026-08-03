@@ -51,14 +51,6 @@ impl BackendError for core::convert::Infallible {}
 impl BackendError for std::io::Error {}
 
 /// One cell handed to a backend at draw time: the tile, plus the state that does not fit in one.
-///
-/// [`Tile`] is compact (20 bytes, no padding to spare), so a cell's rarer members
-/// live in a sparse side table on [`Grid`](crate::grid::Grid) instead. A backend cannot reach
-/// that table, so they are delivered here.
-///
-/// This is a struct rather than a tuple because it has grown twice and will grow again. Each
-/// addition would otherwise break every backend's `draw` signature and leave the meaning of a
-/// fourth or fifth unnamed element to the reader.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct DrawCell<'a> {
