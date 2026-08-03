@@ -541,6 +541,14 @@ mod tests {
     }
 
     #[test]
+    fn world_to_screen_rejects_a_zero_size_world() {
+        let c = Camera::new(Rect::new(0, 0, 10, 10), Size::new(0, 0));
+        // An empty world has no cells to map, matching `screen_to_world`'s equivalent None.
+        assert_eq!(c.world_to_screen(Pos::new(0, 0)), None);
+        assert_eq!(c.screen_to_world(Pos::new(0, 0)), None);
+    }
+
+    #[test]
     fn set_world_re_clamps_the_origin_when_the_world_shrinks() {
         let mut c = cam();
         c.center_on(Pos::new(50, 50));
