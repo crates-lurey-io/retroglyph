@@ -1,3 +1,5 @@
+use alloc::string::String;
+
 use retroglyph_core::text::{char_width, width_usize};
 use retroglyph_core::{Event, KeyCode, KeyModifiers};
 

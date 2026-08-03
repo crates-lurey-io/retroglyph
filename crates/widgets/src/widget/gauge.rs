@@ -111,7 +111,7 @@ impl Widget for Gauge<'_> {
         // `ratio` is clamped to `0.0..=1.0` above, so the rounded percentage always lands in
         // `0..=100`, well within `i32`'s range.
         #[allow(clippy::cast_possible_truncation)]
-        let pct_value = (ratio * 100.0).round() as i32;
+        let pct_value = crate::mathf::round(ratio * 100.0) as i32;
         let _ = write!(pct, "{pct_value:>3}%");
         bar::render(
             surface,

@@ -1,4 +1,7 @@
 //! [`TextInput`]: a single-line, `TextInputState`-driven editable text field.
+use alloc::borrow::ToOwned as _;
+use alloc::string::String;
+
 use retroglyph_core::text::{split_at_width, width_usize};
 use retroglyph_core::{Color, Style};
 

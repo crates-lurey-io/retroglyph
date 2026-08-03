@@ -1,5 +1,7 @@
 //! [`Shortcuts`]: a small, focus-scoped keyboard shortcut registry.
 
+use alloc::vec::Vec;
+
 use retroglyph_core::{Event, KeyCode, KeyModifiers};
 
 /// One registered key combination and what it resolves to.

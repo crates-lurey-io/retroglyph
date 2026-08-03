@@ -240,6 +240,9 @@ fn draw_row(
 
 #[cfg(test)]
 mod tests {
+    use alloc::vec;
+    use alloc::vec::Vec;
+
     use retroglyph_core::{Grid, Pos};
 
     use super::*;

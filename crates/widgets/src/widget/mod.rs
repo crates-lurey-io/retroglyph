@@ -297,6 +297,10 @@ pub trait InteractiveWidget<Id> {
 
 #[cfg(test)]
 mod interactive_widget_tests {
+    use alloc::boxed::Box;
+    use alloc::vec;
+    use alloc::vec::Vec;
+
     use retroglyph_core::{Grid, Rect};
 
     use super::{InteractiveWidget, Response, Sense, Surface};

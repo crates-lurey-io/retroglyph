@@ -1,4 +1,6 @@
 //! [`Tabs`]: a horizontal strip of tab labels with a highlighted selected index.
+use alloc::vec::Vec;
+
 use retroglyph_core::text::truncate_measured;
 use retroglyph_core::{Color, Rect, Style};
 
