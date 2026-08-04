@@ -54,10 +54,10 @@ fn parse_ansi_name(name: &str) -> Option<AnsiColor> {
 
 /// Parses `#rgb` or `#rrggbb` (case-insensitive) into an `(r, g, b)` triple.
 ///
-/// Self-contained rather than routed through [`Color::from_hex`](crate::color::Color::from_hex), so [`Color`](crate::color::Color)'s
-/// [`FromStr`](core::str::FromStr) impl (and the `serde` feature built on it) works
-/// regardless of whether the `indexed-quant` feature (which `from_hex` needs for its
-/// [`gem::space::Srgb`] parsing) is enabled.
+/// Self-contained rather than routed through [`Color::from_hex`], which parses via
+/// [`gem::space::Srgb`] and so round-trips each channel through `f32`. Parsing the digits
+/// directly keeps [`Color`]'s [`FromStr`](core::str::FromStr) impl (and the `serde` feature built
+/// on it) exact for every input.
 fn parse_hex(s: &str) -> Option<(u8, u8, u8)> {
     let hex = s.strip_prefix('#')?;
     match hex.len() {

@@ -10,7 +10,7 @@
 //! # Features
 //!
 //! <!-- gen-features:start -->
-//! Default features: `egc`, `indexed-quant`, `std`.
+//! Default features: `egc`, `std`.
 //!
 //! ### `dev`
 //!
@@ -27,20 +27,6 @@
 //!
 //! Enables grapheme-cluster-aware text handling (via `unicode-segmentation`) for EGC-correct cell
 //! diffing and layout.
-//!
-//! ### `indexed-quant`
-//!
-//! 🟢 Enabled by default.
-//!
-//! Gates perceptual (Oklab) RGB → Indexed/ANSI quantization (`gem/space`) and [`Color`](crate::color::Color)'s
-//! `gem`-space conversions (`to_srgb`/`from_srgb`/`lerp`/`from_hex`).
-//!
-//! Without it, [`Color::to_indexed`](crate::color::Color::to_indexed)/
-//! [`Color::to_ansi`](crate::color::Color::to_ansi) fall back to euclidean RGB cube-mapping instead of
-//! failing to compile.
-//!
-//! This is a capability flag, not a backend: it only turns on `gem`'s `space` module, whose float
-//! math the crate's mandatory `std`-or-`libm` backend already supplies.
 //!
 //! ### `libm`
 //!
@@ -145,10 +131,10 @@ extern crate alloc;
 
 // A float backend is not optional (retroglyph#903): `animate`'s easing curves and the separable
 // `BlendMode` channel math dispatch through `crate::math`, which has nothing to dispatch *to*
-// without one, and `indexed-quant` forwards `gem/space`, which needs `gem/std` or `gem/libm` for
-// the same reason. Failing here names the two features that fix it, ahead of the same build
-// failing as an unresolved `libm::` path inside `math.rs` or inside `gem::space`'s own
-// `compile_error!`.
+// without one, and `Color`'s color-space conversions go through `gem/space`, which needs
+// `gem/std` or `gem/libm` for the same reason. Failing here names the two features that fix it,
+// ahead of the same build failing as an unresolved `libm::` path inside `math.rs` or inside
+// `gem::space`'s own `compile_error!`.
 #[cfg(not(any(feature = "std", feature = "libm")))]
 compile_error!("retroglyph-core needs a float backend: enable `std` or `libm`.");
 
