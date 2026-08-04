@@ -938,6 +938,36 @@ fn print_wraps_at_the_surfaces_own_width_not_at_clip_right() {
 }
 
 #[test]
+fn print_advances_past_an_embedded_newline_to_the_next_row_at_the_original_column() {
+    let mut grid = Grid::new(4, 4);
+    let mut surface = Surface::new(&mut grid, Rect::new(1, 0, 3, 4), 0);
+    surface.print((0, 0), "ab\ncd", Style::default());
+
+    // "ab" on row 0 starting at local column 0 (absolute column 1).
+    assert_eq!(grid[Pos::new(1, 0)].glyph(), 'a');
+    assert_eq!(grid[Pos::new(2, 0)].glyph(), 'b');
+    // The embedded "\n" resets to the original local column (0) on the next row, not to
+    // wherever "ab" left off.
+    assert_eq!(grid[Pos::new(1, 1)].glyph(), 'c');
+    assert_eq!(grid[Pos::new(2, 1)].glyph(), 'd');
+    assert_eq!(grid[Pos::new(3, 1)].glyph(), ' ');
+}
+
+#[test]
+fn print_skips_a_leading_zero_width_grapheme_without_writing_or_advancing_the_column() {
+    let mut grid = Grid::new(4, 1);
+    screen(&mut grid).print((0, 0), "\u{0301}ab", Style::default());
+
+    // A combining mark with no preceding base character to attach to is its own extended
+    // grapheme cluster (`egc`) / `char` (otherwise), and either way `unicode-width` reports
+    // it as 0 columns wide, so it must be skipped instead of writing a cell or advancing
+    // past column 0, matching `w == 0` in both `print_egc` and `print_chars`.
+    assert_eq!(grid[Pos::new(0, 0)].glyph(), 'a');
+    assert_eq!(grid[Pos::new(1, 0)].glyph(), 'b');
+    assert_eq!(grid[Pos::new(2, 0)].glyph(), ' ');
+}
+
+#[test]
 fn print_line_measures_its_span_skip_threshold_against_the_surfaces_own_width() {
     // `area` starts at column 4, so the surface-local skip column (4) is smaller than the
     // absolute grid column `clip.right()` resolves to (8). The second span starts at local
@@ -1110,6 +1140,35 @@ fn put_signed_drops_a_coordinate_past_this_surfaces_width_or_height() {
 
     assert_eq!(grid[Pos::new(2, 0)].glyph(), ' ');
     assert_eq!(grid[Pos::new(0, 2)].glyph(), ' ');
+}
+
+#[test]
+fn put_signed_drops_a_coordinate_whose_shifted_offset_overflows_u16() {
+    let mut grid = Grid::new(4, 4);
+    let mut surface = screen(&mut grid);
+
+    // Non-negative (so it clears the `x < 0` check first), but still far past `u16::MAX`
+    // once shifted by `origin_offset`: `u16::try_from` refuses it, distinct from the
+    // plain-negative path tested above.
+    surface.put_signed((100_000, 0), 'X', Style::default());
+
+    assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
+}
+
+#[test]
+fn put_signed_drops_a_coordinate_inside_area_but_outside_a_narrower_clip() {
+    let mut grid = Grid::new(4, 4);
+    {
+        let mut surface = screen(&mut grid);
+        // (3, 0) fits this surface's own (4x4) width/height, but the clip narrows visibility
+        // to the first 2 columns: the final `clip.contains` check rejects it, distinct from
+        // the width/height check above.
+        surface
+            .clip(Rect::new(0, 0, 2, 4))
+            .put_signed((3, 0), 'X', Style::default());
+    }
+
+    assert_eq!(grid[Pos::new(3, 0)].glyph(), ' ');
 }
 
 // Not gated behind `egc`: `Tile::new` sets `WIDE_CHAR`/`WIDE_CHAR_SPACER` on every feature
