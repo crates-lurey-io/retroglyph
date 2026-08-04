@@ -19,7 +19,7 @@ use alpha_blend::channel::Channel;
 use grixy::ops::{ExactSizeGrid, GridRead, GridWrite};
 
 impl Grid {
-    /// Write a tile to `layer` at `pos`, honoring `tile`'s own precomputed
+    /// Writes a tile to `layer` at `pos`, honoring `tile`'s own precomputed
     /// [`width`](Tile::width): a fresh 2-column tile also gets a
     /// [`TileFlags::WIDE_CHAR_SPACER`] at `pos.x + 1`, the same pairing
     /// [`write_grapheme`](Self::write_grapheme) writes, on every feature combination (`Tile::width`
@@ -171,11 +171,14 @@ impl Grid {
             return;
         }
 
-        // Clear every span and every wide-char cell this fill would partially overwrite, one row
-        // at a time rather than one cell at a time: still O(rows), and a no-op on a grid that has
-        // never used spans (see `clear_span_overlap`).
+        // Clear every span this fill would partially overwrite in one pass over the whole rect
+        // (see `clear_span_overlap_rect`), rather than once per row: a span spanning several rows
+        // of `rect` would otherwise be collected, and fully reset, once per row it occupies
+        // (retroglyph#1020). A no-op on a grid that has never used spans.
+        self.clear_span_overlap_rect(layer, rect.left(), rect.top(), rect.width(), rect.height());
+        // Wide-char overlap has no region-scoped variant (yet): still one call per row, but that
+        // remains O(rows) since it never re-collects a growing anchor set.
         for y in rect.top()..rect.bottom() {
-            self.clear_span_overlap(layer, rect.left(), y, rect.width());
             self.clear_overlap(layer, rect.left(), y, rect.width());
         }
 
@@ -288,7 +291,7 @@ impl Grid {
         }
     }
 
-    /// Read a tile on `layer` at `pos`, or `None` if the layer is
+    /// Reads a tile on `layer` at `pos`, or `None` if the layer is
     /// unallocated or `pos` is out of bounds.
     #[must_use]
     pub fn tile(&self, layer: u8, pos: impl Into<Pos>) -> Option<&Tile> {
@@ -296,7 +299,7 @@ impl Grid {
         self.layer(layer)?.buf.get(pos)
     }
 
-    /// Mutably borrow a tile on `layer` at `pos`, or `None` if the layer is
+    /// Mutably borrows a tile on `layer` at `pos`, or `None` if the layer is
     /// unallocated or `pos` is out of bounds.
     ///
     /// This hands out a direct `&mut Tile`, so it cannot intercept a write the way
@@ -312,7 +315,7 @@ impl Grid {
             .get_mut(pos)
     }
 
-    /// Copy tiles from `src` within `src_rect` to `self` at `(dst_x, dst_y)`
+    /// Copies tiles from `src` within `src_rect` to `self` at `(dst_x, dst_y)`
     /// on `layer`. Empty tiles (nothing written; see [`Tile::is_empty`]) are
     /// treated as transparent and skipped. An explicit space is copied and
     /// overwrites the destination.
@@ -582,11 +585,10 @@ impl Grid {
         }
     }
 
-    /// Yield `(layer_id, Pos, &Tile, Option<&str>)` for every allocated cell
-    /// across all layers, in layer-major (0 → `max_layer`) then row-major
-    /// order. The last element is the tile's grapheme text (see
-    /// [`grapheme`](Self::grapheme)), `Some` only when
-    /// [`TileFlags::HAS_EXTRA`] is set.
+    /// Yield a [`DrawCell`] for every allocated cell across all layers, in
+    /// layer-major (0 → `max_layer`) then row-major order. `grapheme` is
+    /// `Some` only when [`TileFlags::HAS_EXTRA`] is set (see
+    /// [`grapheme`](Self::grapheme)).
     ///
     /// Unallocated layers are skipped. This is used by backends that need
     /// the full frame on every draw (see [`crate::Output::needs_full_frame`]).
@@ -610,7 +612,7 @@ impl Grid {
             })
     }
 
-    /// Clear every allocated layer.
+    /// Clears every allocated layer.
     pub fn clear_all(&mut self) {
         for layer in self.layers.iter_mut().flatten() {
             layer.buf.clear();
@@ -670,7 +672,7 @@ impl Grid {
             .is_none_or(|lb| lb.buf.as_ref().iter().all(Tile::is_empty))
     }
 
-    /// Composite every allocated layer into `dst`'s layer 0, one tile per cell.
+    /// Composites every allocated layer into `dst`'s layer 0, one tile per cell.
     ///
     /// Used by [`crate::Terminal::present`] for backends that do not composite
     /// layers themselves (see [`crate::Output::composites_layers`]). The rule
@@ -754,7 +756,7 @@ impl Grid {
     }
 }
 
-/// Blend two [`Color`] values using `mode`. [`Color::Default`] preserves the
+/// Blends two [`Color`] values using `mode`. [`Color::Default`] preserves the
 /// destination. Non-RGB source colors are returned as-is (no resolution).
 ///
 /// [`BlendMode::Linear`] is a per-channel sRGB-domain lerp (dst -> src by `t`) delegated to
@@ -1381,6 +1383,25 @@ mod tests {
         let anchor = g.tile(0, (0, 0)).unwrap();
         assert!(!anchor.flags().contains(TileFlags::SPAN_ANCHOR));
         assert_eq!(anchor.glyph(), ' ');
+    }
+
+    /// `fill_region` scans the region for overlapping spans once, not once per row (see
+    /// `clear_span_overlap_rect`, retroglyph#1020): a span several rows tall, entirely inside
+    /// `rect`, must still come out fully and correctly reset rather than leaving a stale anchor
+    /// or covered cell behind from a row the single-pass collection missed.
+    #[test]
+    fn fill_region_clears_a_multi_row_span_it_fully_covers() {
+        let mut g = Grid::new(6, 6);
+        g.write_span(0, 1, 1, &["AB", "CD", "EF", "GH"], Style::default())
+            .expect("2x4 span fits in a 6x6 grid");
+
+        g.fill_region(0, Rect::new(0, 0, 6, 6), Tile::new('#', Style::default()));
+
+        for y in 0..6 {
+            for x in 0..6 {
+                assert_eq!(g.tile(0, (x, y)).unwrap().glyph(), '#', "({x}, {y})");
+            }
+        }
     }
 
     /// `clear_overlap` runs regardless of `egc` (see its own doc comment): `fill_region` gated it

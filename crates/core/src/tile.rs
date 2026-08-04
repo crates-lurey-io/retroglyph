@@ -139,20 +139,30 @@ pub struct Tile {
 
 impl Default for Tile {
     fn default() -> Self {
-        Self {
-            glyph: ' ',
-            style: Style::default(),
-            width: 1,
-            dx: 0,
-            dy: 0,
-            flags: TileFlags::EMPTY,
-            span_w: 1,
-            span_h: 1,
-        }
+        Self::EMPTY
     }
 }
 
 impl Tile {
+    /// The tile every layer cell starts as: a blank, unstyled, unwritten cell.
+    ///
+    /// Equivalent to [`Tile::default`], expressed as an associated `const` so callers that need
+    /// a `'static` reference to a default tile (e.g. [`Grid::diff`](crate::grid::Grid::diff)
+    /// reporting a layer that stopped being written) don't need an owned value to borrow from.
+    pub(crate) const EMPTY: Self = Self {
+        glyph: ' ',
+        style: Style {
+            fg: crate::color::Color::Default,
+            bg: crate::color::Color::Default,
+        },
+        width: 1,
+        dx: 0,
+        dy: 0,
+        flags: TileFlags::EMPTY,
+        span_w: 1,
+        span_h: 1,
+    };
+
     /// Creates a new tile with the given glyph and style.
     ///
     /// `dx` and `dy` default to 0 (no sub-cell offset). `glyph`'s display width is computed
@@ -269,6 +279,29 @@ impl Tile {
     #[must_use]
     pub const fn is_empty(&self) -> bool {
         self.flags.contains(TileFlags::EMPTY)
+    }
+
+    /// Returns `true` if this tile is the left half of a 2-column wide character.
+    #[must_use]
+    pub const fn is_wide(&self) -> bool {
+        self.flags.contains(TileFlags::WIDE_CHAR)
+    }
+
+    /// Returns `true` if this tile is the invisible right-half spacer of a wide character.
+    #[must_use]
+    pub const fn is_wide_spacer(&self) -> bool {
+        self.flags.contains(TileFlags::WIDE_CHAR_SPACER)
+    }
+
+    /// Returns `true` if this tile is the top-left anchor of a multi-cell span (see
+    /// [`span`](Self::span)).
+    ///
+    /// Unlike `span() != (1, 1)`, this is accurate for a 1x1 span: a span anchor whose declared
+    /// footprint happens to be one cell still reports `true` here, whereas its `span()` is
+    /// indistinguishable from a plain tile's.
+    #[must_use]
+    pub const fn is_span_anchor(&self) -> bool {
+        self.flags.contains(TileFlags::SPAN_ANCHOR)
     }
 
     /// Sets the glyph for this tile (builder style).
@@ -530,6 +563,31 @@ mod tests {
         assert_eq!(rebuilt.glyph(), 'A');
         assert_eq!(rebuilt.width(), 1);
         assert!(!rebuilt.flags().contains(TileFlags::WIDE_CHAR));
+    }
+
+    #[test]
+    fn test_tile_flag_predicates() {
+        let mut tile = Tile::new('A', Style::default());
+        assert!(!tile.is_wide());
+        assert!(!tile.is_wide_spacer());
+        assert!(!tile.is_span_anchor());
+
+        tile.flags = TileFlags::WIDE_CHAR;
+        assert!(tile.is_wide());
+        assert!(!tile.is_wide_spacer());
+        assert!(!tile.is_span_anchor());
+
+        tile.flags = TileFlags::WIDE_CHAR_SPACER;
+        assert!(!tile.is_wide());
+        assert!(tile.is_wide_spacer());
+        assert!(!tile.is_span_anchor());
+
+        // A 1x1 span anchor is still an anchor even though its `span()` matches a plain tile's.
+        tile.flags = TileFlags::SPAN_ANCHOR;
+        tile.span_w = 1;
+        tile.span_h = 1;
+        assert!(tile.is_span_anchor());
+        assert_eq!(tile.span(), (1, 1));
     }
 
     #[test]

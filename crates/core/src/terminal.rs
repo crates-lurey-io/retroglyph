@@ -565,23 +565,6 @@ impl<B: Backend> Terminal<B> {
         self.queued_events.extend(events);
     }
 
-    /// Reads an input event, blocking indefinitely until one is available.
-    ///
-    /// Only call this on backends that genuinely block (e.g. crossterm, window). Backends
-    /// that never block (e.g. [`Headless`](crate::backend::Headless), which returns
-    /// immediately regardless of timeout) will panic here once their event queue is
-    /// empty; use [`poll`](Self::poll) or [`drain_events`](Self::drain_events) instead if
-    /// that is a possibility.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the backend's [`poll_event`](crate::Input::poll_event) returns
-    /// `None` even with an unbounded timeout.
-    pub fn read_blocking(&mut self) -> Event {
-        self.poll(Duration::MAX)
-            .expect("read_blocking() called but no events available")
-    }
-
     /// Drains all available events without blocking.
     ///
     /// Returns an iterator that yields every pending event: the internal queued event
@@ -808,7 +791,7 @@ mod tests {
         assert_eq!(terminal.poll(Duration::ZERO), Some(Event::Close));
 
         terminal.backend_mut().push_event(Event::Resize(80, 25));
-        assert_eq!(terminal.read_blocking(), Event::Resize(80, 25));
+        assert_eq!(terminal.poll(Duration::MAX), Some(Event::Resize(80, 25)));
     }
 
     #[test]
@@ -1090,14 +1073,6 @@ mod tests {
         assert_eq!(terminal.poll(Duration::ZERO), Some(Event::Close));
         assert_eq!(terminal.poll(Duration::ZERO), Some(Event::Resize(4, 2)));
         assert_eq!(terminal.poll(Duration::ZERO), None);
-    }
-
-    #[test]
-    #[should_panic(expected = "read_blocking() called but no events available")]
-    fn test_terminal_read_panic() {
-        let backend = Headless::new(10, 10);
-        let mut terminal = Terminal::new(backend);
-        let _ = terminal.read_blocking();
     }
 
     #[test]
@@ -1392,10 +1367,16 @@ mod tests {
         assert_eq!(term.backend().inner.grid()[Pos::new(0, 0)].glyph(), 'a');
 
         // Frame 2: composites branch. Bypasses the flatten buffers entirely, so
-        // `flattened_previous` still holds frame 1's flattened content.
+        // `flattened_previous` still holds frame 1's flattened content. Layer 1 is redrawn
+        // identically to frame 1 so `Grid::diff` (now that it also reports a layer that stopped
+        // being written, retroglyph#1018) sees no change there and doesn't emit anything for it;
+        // `Headless::draw_layers` writes every cell to one shared grid regardless of layer (see
+        // `CompositingBackend`'s docs above), so a real layer-1 diff would corrupt this frame's
+        // single-grid glyph check, which is unrelated to what this test is verifying.
         term.backend_mut().composites = true;
         term.draw(|s| {
             s.put((0, 0), 'b', Style::default());
+            s.on_layer(1).put((1, 0), '#', Style::default());
         })
         .expect("draw failed");
         assert_eq!(term.backend().inner.grid()[Pos::new(0, 0)].glyph(), 'b');
