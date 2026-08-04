@@ -48,10 +48,10 @@ impl Headless {
     /// documented on [`crate::grid`].
     ///
     /// For the usual case, a backend left at the default
-    /// [`composites_layers`](Output::composites_layers) of `false`, [`crate::terminal::Terminal::present`]
-    /// has already flattened the frame and only layer 0 is ever written, so this is simply the
-    /// received content. Use [`layer_grid`](Self::layer_grid) to inspect the raw per-layer state
-    /// instead.
+    /// [`composites_layers`](Output::composites_layers) of `false`,
+    /// [`crate::terminal::Terminal::present`] has already flattened the frame and only layer 0 is
+    /// ever written, so this is simply the received content. Use
+    /// [`layer_grid`](Self::layer_grid) to inspect the raw per-layer state instead.
     #[must_use]
     pub fn grid(&self) -> &Grid {
         self.composited.as_ref().unwrap_or(&self.layers)
