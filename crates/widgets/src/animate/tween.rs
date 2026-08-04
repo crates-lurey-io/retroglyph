@@ -9,7 +9,7 @@ use core::time::Duration;
 ///
 /// ```
 /// use core::time::Duration;
-/// use retroglyph_core::animate::{Easing, Tween};
+/// use retroglyph_widgets::{Easing, Tween};
 ///
 /// let mut fade = Tween::new(0.0, 1.0)
 ///     .duration(Duration::from_millis(200))
@@ -65,7 +65,7 @@ impl Tween {
     }
 
     /// Advances the animation by `dt`: call once per frame with
-    /// [`Frame::delta`](crate::app::Frame::delta). Clamped to `duration`: calling this after the
+    /// [`Frame::delta`](retroglyph_core::app::Frame::delta). Clamped to `duration`: calling this after the
     /// animation has already finished is a no-op, not an overshoot into negative "time left."
     pub fn update(&mut self, dt: Duration) {
         self.elapsed = (self.elapsed + dt).min(self.duration);
@@ -87,7 +87,7 @@ impl Tween {
     #[must_use]
     pub fn value(&self) -> f32 {
         let t = self.easing.apply(self.progress());
-        crate::math::mul_add(self.to - self.from, t, self.from)
+        retroglyph_core::math::mul_add(self.to - self.from, t, self.from)
     }
 
     /// `true` once [`update`](Self::update) has accumulated at least `duration` of elapsed time.

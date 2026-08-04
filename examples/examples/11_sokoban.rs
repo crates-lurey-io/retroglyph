@@ -29,7 +29,6 @@
 
 use std::time::Duration;
 
-use retroglyph_core::animate::{Easing, Tween};
 use retroglyph_core::app::Frame;
 use retroglyph_core::backend::Backend;
 use retroglyph_core::color::{AnsiColor, Color, Style};
@@ -38,7 +37,7 @@ use retroglyph_core::grid::{Grid, Rect};
 use retroglyph_core::terminal::Terminal;
 use retroglyph_core::tile::Tile;
 use retroglyph_examples::Example;
-use retroglyph_widgets::{Constraint, Panel, Widget, split_h, split_v};
+use retroglyph_widgets::{Constraint, Easing, Panel, Tween, Widget, split_h, split_v};
 
 /// The level, hand-designed to be solvable with the two boxes pushed one at a time: `#` wall,
 /// `.` floor, `o` goal, `$` a box (on plain floor), `@` the player's start. Both `o` cells are

@@ -33,8 +33,8 @@
 //! ⚪ Optional.
 //!
 //! Uses `libm`'s software float implementation (`roundf`/`fmaf`/`sinf`/`cosf`/`powf`) for
-//! `animate`'s easing curves and the separable [`BlendMode`](crate::grid::BlendMode) channel math, via
-//! this crate's own `math` shim -- the `no_std` side of that split. See `std` below for the alternative that prefers
+//! the separable [`BlendMode`](crate::grid::BlendMode) channel math, via this crate's own
+//! `math` shim -- the `no_std` side of that split. See `std` below for the alternative that prefers
 //! the platform's own float intrinsics when available; a build needs exactly one of the two.
 //!
 //! ### `serde`
@@ -53,7 +53,7 @@
 //! 🟢 Enabled by default.
 //!
 //! Enables `gem/std` and `alpha-blend/std`, and uses `std`'s float intrinsics (via this crate's
-//! `math` shim) instead of `libm`'s software implementation for `animate` and the separable
+//! `math` shim) instead of `libm`'s software implementation for the separable
 //! [`BlendMode`](crate::grid::BlendMode) channel math.
 //!
 //! Disabling this feature (`--no-default-features`) builds this crate `no_std`, and then needs
@@ -129,12 +129,12 @@
 #![allow(rustdoc::redundant_explicit_links)]
 extern crate alloc;
 
-// A float backend is not optional (retroglyph#903): `animate`'s easing curves and the separable
-// `BlendMode` channel math dispatch through `crate::math`, which has nothing to dispatch *to*
-// without one, and `Color`'s color-space conversions go through `gem/space`, which needs
-// `gem/std` or `gem/libm` for the same reason. Failing here names the two features that fix it,
-// ahead of the same build failing as an unresolved `libm::` path inside `math.rs` or inside
-// `gem::space`'s own `compile_error!`.
+// A float backend is not optional (retroglyph#903): the separable `BlendMode` channel math
+// dispatches through `crate::math`, which has nothing to dispatch *to* without one, and
+// `Color`'s color-space conversions go through `gem/space`, which needs `gem/std` or `gem/libm`
+// for the same reason. Failing here names the two features that fix it, ahead of the same build
+// failing as an unresolved `libm::` path inside `math.rs` or inside `gem::space`'s own
+// `compile_error!`.
 #[cfg(not(any(feature = "std", feature = "libm")))]
 compile_error!("retroglyph-core needs a float backend: enable `std` or `libm`.");
 
@@ -146,18 +146,6 @@ compile_error!("retroglyph-core needs a float backend: enable `std` or `libm`.")
 #[doc = include_str!("../README.md")]
 struct ReadmeDoctests;
 
-// clippy::too_long_first_doc_paragraph is a known-noisy nursery lint (rust-lang/rust-clippy#13441)
-// that here misattributes its span across every subsequent `pub mod`/`pub use` declaration below
-// (through to the next blank line) rather than just this one doc comment, which is well under
-// its own 100-char threshold in isolation: confirmed by testing shorter wording alone, which
-// silences it despite touching nothing else in that byte range.
-#[allow(clippy::too_long_first_doc_paragraph)]
-/// Time-driven value animation: easing curves, a stateful `Tween`, and a periodic oscillator.
-///
-/// The trig-based easing curves and the oscillator's sine wave go through this crate's `math`
-/// shim, so they use `std`'s float intrinsics or `libm`'s software implementation depending on
-/// which backend feature is on.
-pub mod animate;
 /// The `App`-driven game loop.
 pub mod app;
 // See the `too_long_first_doc_paragraph` comment above `animate`: same noisy-lint mis-attribution,

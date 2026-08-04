@@ -13,7 +13,7 @@ use core::time::Duration;
 ///
 /// ```
 /// use core::time::Duration;
-/// use retroglyph_core::animate::oscillate;
+/// use retroglyph_widgets::oscillate;
 ///
 /// let period = Duration::from_secs(2);
 /// assert_eq!(oscillate(Duration::ZERO, period), 0.5); // sin(0) == 0, remapped to the midpoint
@@ -34,7 +34,7 @@ pub fn oscillate(elapsed: Duration, period: Duration) -> f32 {
 ///
 /// ```
 /// use core::time::Duration;
-/// use retroglyph_core::animate::oscillate_with_phase;
+/// use retroglyph_widgets::oscillate_with_phase;
 ///
 /// let period = Duration::from_secs(2);
 /// // A quarter cycle ahead of `elapsed = 0` is the same as `elapsed = period / 4` with no phase.
@@ -49,7 +49,7 @@ pub fn oscillate_with_phase(elapsed: Duration, period: Duration, phase: f32) -> 
     }
     let cycles = elapsed.as_secs_f32() / period.as_secs_f32() + phase; // unbounded; doesn't wrap
     let radians = cycles * 2.0 * core::f32::consts::PI;
-    crate::math::mul_add(0.5, crate::math::sin(radians), 0.5)
+    retroglyph_core::math::mul_add(0.5, retroglyph_core::math::sin(radians), 0.5)
 }
 
 #[cfg(test)]

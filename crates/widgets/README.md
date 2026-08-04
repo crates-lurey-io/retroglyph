@@ -141,9 +141,9 @@ Upgrades `Paragraph`'s word-wrap (always available) to grapheme-cluster-aware co
 
 ⚪ Optional.
 
-Uses `retroglyph-core`'s `libm` feature (the `no_std` float backend: scrollbar geometry,
-gauge/sparkline/bar percentage rounding, scroll momentum decay) instead of `std`'s own float
-intrinsics. See `std` below; a build needs exactly one of the two.
+Uses `retroglyph-core`'s `libm` feature (the `no_std` float backend: easing curves and tweens,
+scrollbar geometry, gauge/sparkline/bar percentage rounding, scroll momentum decay) instead of
+`std`'s own float intrinsics. See `std` below; a build needs exactly one of the two.
 
 ### `serde`
 

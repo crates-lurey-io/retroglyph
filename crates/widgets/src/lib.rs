@@ -66,9 +66,9 @@
 //!
 //! ⚪ Optional.
 //!
-//! Uses `retroglyph-core`'s `libm` feature (the `no_std` float backend: scrollbar geometry,
-//! gauge/sparkline/bar percentage rounding, scroll momentum decay) instead of `std`'s own float
-//! intrinsics. See `std` below; a build needs exactly one of the two.
+//! Uses `retroglyph-core`'s `libm` feature (the `no_std` float backend: easing curves and
+//! tweens, scrollbar geometry, gauge/sparkline/bar percentage rounding, scroll momentum decay)
+//! instead of `std`'s own float intrinsics. See `std` below; a build needs exactly one of the two.
 //!
 //! ### `serde`
 //!
@@ -94,12 +94,11 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 extern crate alloc;
 
-// Unlike `retroglyph-core`'s `animate` (which simply disappears without a float backend), this
-// crate's float use -- scrollbar geometry, gauge/sparkline/bar percentage rounding, scroll
-// momentum decay -- is load-bearing across the widget set, not an opt-in extra. There is no
-// widgets equivalent of "the affected module just isn't compiled in", so a build with neither
-// backend fails loudly here instead of hitting `retroglyph_core::math`'s own unresolved-`libm`
-// error deep in a call site.
+// This crate's float use -- easing curves and tweens, scrollbar geometry, gauge/sparkline/bar
+// percentage rounding, scroll momentum decay -- is load-bearing across the widget set, not an
+// opt-in extra. There is no equivalent of "the affected module just isn't compiled in", so a
+// build with neither backend fails loudly here instead of hitting `retroglyph_core::math`'s own
+// unresolved-`libm` error deep in a call site.
 #[cfg(not(any(feature = "std", feature = "libm")))]
 compile_error!("retroglyph-widgets needs a float backend: enable `std` or `libm`.");
 
@@ -112,6 +111,12 @@ compile_error!("retroglyph-widgets needs a float backend: enable `std` or `libm`
 struct ReadmeDoctests;
 
 pub mod align;
+/// Time-driven value animation: easing curves, a stateful `Tween`, and a periodic oscillator.
+///
+/// The trig-based easing curves and the oscillator's sine wave go through `retroglyph_core`'s
+/// `math` shim, so they use `std`'s float intrinsics or `libm`'s software implementation
+/// depending on which backend feature is on.
+pub mod animate;
 pub mod block;
 /// A scrolling viewport into a world larger than the screen.
 pub mod camera;
@@ -128,6 +133,7 @@ pub mod ui;
 pub mod widget;
 
 pub use align::Align;
+pub use animate::{Easing, Tween, oscillate, oscillate_with_phase};
 pub use block::{join_h, join_v};
 pub use camera::Camera;
 pub use draw::{fill_rect, offset_for_pos, thumb_geometry};
