@@ -177,7 +177,10 @@ impl Grid {
         // (retroglyph#1020). A no-op on a grid that has never used spans.
         self.clear_span_overlap_rect(layer, rect.left(), rect.top(), rect.width(), rect.height());
         // Wide-char overlap has no region-scoped variant (yet): still one call per row, but that
-        // remains O(rows) since it never re-collects a growing anchor set.
+        // remains O(rows) since it never re-collects a growing anchor set. Neither call is gated
+        // on `egc`: `put_tile` writes a `WIDE_CHAR`/`WIDE_CHAR_SPACER` pair on every feature
+        // combination (see its own doc comment), so a fill that can land inside one has to clean
+        // it up regardless of `egc`.
         for y in rect.top()..rect.bottom() {
             self.clear_overlap(layer, rect.left(), y, rect.width());
         }

@@ -369,6 +369,17 @@ impl Grid {
         else {
             return;
         };
+        // Every call site bounds-checks `x`/`y` (and, where relevant, the whole `x..x+width`
+        // range) against `self.width`/`self.height` before reaching here (`put_tile`,
+        // `write_grapheme`, `fill_region`'s already-clipped `rect`, `blit_with`'s per-cell `dx`
+        // check, and `write_span_cells`'s own footprint check). A `cx` past the row's own width
+        // would still compute an `idx` `< cap` below (just landing in the next row) and clear an
+        // unrelated cell instead of being treated as out of bounds, so this is asserted rather
+        // than silently trusted.
+        debug_assert!(
+            usize::from(x.saturating_add(width)) <= w,
+            "caller must bounds-check"
+        );
         for cx in x..x.saturating_add(width) {
             let idx = usize::from(y) * w + usize::from(cx);
             if idx >= cap {
@@ -718,20 +729,32 @@ mod tests {
         );
     }
 
-    #[cfg(all(test, feature = "egc"))]
-    mod egc_proptests {
+    #[cfg(test)]
+    mod wide_char_proptests {
         use super::*;
         use crate::color::Style;
+        use crate::grid::{BlendMode, Rect};
         use proptest::prelude::*;
 
         const W: u16 = 8;
         const H: u16 = 4;
 
-        /// Narrow, wide (CJK), combining-mark, and wide-emoji graphemes.
+        /// Narrow and wide (CJK) single-char glyphs, for the ops that take a plain `char`
+        /// (`put_tile`, `fill_region`, and the small stamp grids `blit`/`blit_alpha` copy from).
+        const CHARS: &[char] = &['a', '\u{4e2d}'];
+
+        /// Narrow, wide (CJK), combining-mark, and wide-emoji graphemes, for `write_grapheme`
+        /// (`egc`-only: a multi-codepoint combining-mark grapheme has no plain-`char` spelling).
+        #[cfg(feature = "egc")]
         const GRAPHEMES: &[&str] = &["a", "\u{4e2d}", "e\u{0301}", "\u{1f600}"];
 
         /// Every `WIDE_CHAR` has its spacer to the right, every `WIDE_CHAR_SPACER`
         /// has its lead to the left, and no cell is both.
+        ///
+        /// Feature-independent: `put_tile` writes a `WIDE_CHAR`/`WIDE_CHAR_SPACER` pair on every
+        /// feature combination (retroglyph#869), so this check (unlike the `egc`-only
+        /// `write_grapheme` op below) does not belong behind `#[cfg(feature = "egc")]` (compare
+        /// retroglyph#994, the same over-gating problem in `tile.rs`).
         fn assert_wide_invariants(grid: &Grid) {
             for y in 0..grid.height() {
                 for x in 0..grid.width() {
@@ -767,53 +790,140 @@ mod tests {
             }
         }
 
-        /// One step of the interleaved proptest below: either a grapheme write or a resize.
+        /// One operation from `wide_char_bookkeeping_never_desyncs`'s op alphabet. Every variant
+        /// but `WriteGrapheme` is available on every feature combination, since `put_tile` (and
+        /// everything built on it: `fill_region`, `blit`, `blit_alpha`, `write_span`) writes wide
+        /// pairs regardless of `egc` (retroglyph#869); only `write_grapheme` itself is `egc`-only.
         #[derive(Debug, Clone)]
         enum Op {
-            Write(u16, u16, usize),
+            PutTile(u16, u16, usize),
+            FillRegion(u16, u16, u16, u16, usize),
+            /// Blits a small 2x2 stamp grid (built fresh from `gi`, a glyph at its origin) onto
+            /// `(dst_x, dst_y)`, which lands the stamp's own wide pair (or narrow tile) astride
+            /// an existing wide pair already in `grid`. `dst_x`/`dst_y` are kept off the grid's
+            /// far edge (see `arb_op`) so the 2x2 stamp is never itself clipped mid-pair by the
+            /// destination bounds; `blit`/`blit_alpha` writing a clipped half of a wide pair to
+            /// the destination edge is a separate, unresolved gap, not the overlap-clearing
+            /// behavior this proptest targets (see the follow-up filed alongside this PR).
+            Blit(u16, u16, usize),
+            BlitAlpha(u16, u16, usize),
+            WriteSpan(u16, u16),
             Resize(u16, u16),
+            #[cfg(feature = "egc")]
+            WriteGrapheme(u16, u16, usize),
+        }
+
+        fn arb_op() -> impl Strategy<Value = Op> {
+            let base = prop_oneof![
+                (0u16..W, 0u16..H, 0usize..CHARS.len())
+                    .prop_map(|(x, y, gi)| Op::PutTile(x, y, gi)),
+                (0u16..W, 0u16..H, 1u16..4, 1u16..4, 0usize..CHARS.len())
+                    .prop_map(|(x, y, w, h, gi)| Op::FillRegion(x, y, w, h, gi)),
+                (0u16..(W - 1), 0u16..(H - 1), 0usize..CHARS.len())
+                    .prop_map(|(x, y, gi)| Op::Blit(x, y, gi)),
+                (0u16..(W - 1), 0u16..(H - 1), 0usize..CHARS.len())
+                    .prop_map(|(x, y, gi)| Op::BlitAlpha(x, y, gi)),
+                (0u16..W, 0u16..H).prop_map(|(x, y)| Op::WriteSpan(x, y)),
+                // Bounded away from 0/1: a grid narrower or shorter than the 2x2 `Blit`/
+                // `BlitAlpha` stamp can never hold a wide pair at all regardless of where it
+                // lands, which is the same unresolved destination-clipping gap `Blit`/
+                // `BlitAlpha`'s own doc comment calls out, just reached from the other side.
+                (2u16..W * 2, 2u16..H * 2).prop_map(|(w, h)| Op::Resize(w, h)),
+            ];
+            #[cfg(feature = "egc")]
+            let base = prop_oneof![
+                base,
+                (0u16..W, 0u16..H, 0usize..GRAPHEMES.len())
+                    .prop_map(|(x, y, gi)| Op::WriteGrapheme(x, y, gi)),
+            ];
+            base
+        }
+
+        fn apply(grid: &mut Grid, op: &Op) {
+            match *op {
+                Op::PutTile(x, y, gi) => {
+                    grid.put_tile(0, (x, y), Tile::new(CHARS[gi], Style::default()));
+                }
+                Op::FillRegion(x, y, w, h, gi) => {
+                    grid.fill_region(
+                        0,
+                        Rect::new(x, y, w, h),
+                        Tile::new(CHARS[gi], Style::default()),
+                    );
+                }
+                Op::Blit(dst_x, dst_y, gi) => {
+                    let mut stamp = Grid::new(2, 2);
+                    stamp.put_tile(0, (0, 0), Tile::new(CHARS[gi], Style::default()));
+                    // Reclamped to the *current* grid size (a prior `Resize` op may have shrunk
+                    // it below `W`/`H`): stays off the far edge for the same reason `arb_op`
+                    // keeps the un-clamped values off it.
+                    let dst_x = dst_x.min(grid.width().saturating_sub(2));
+                    let dst_y = dst_y.min(grid.height().saturating_sub(2));
+                    grid.blit(0, &stamp, Rect::new(0, 0, 2, 2), dst_x, dst_y);
+                }
+                Op::BlitAlpha(dst_x, dst_y, gi) => {
+                    let mut stamp = Grid::new(2, 2);
+                    stamp.put_tile(0, (0, 0), Tile::new(CHARS[gi], Style::default()));
+                    let dst_x = dst_x.min(grid.width().saturating_sub(2));
+                    let dst_y = dst_y.min(grid.height().saturating_sub(2));
+                    grid.blit_alpha(
+                        0,
+                        &stamp,
+                        Rect::new(0, 0, 2, 2),
+                        dst_x,
+                        dst_y,
+                        BlendMode::Linear,
+                        1.0,
+                        1.0,
+                    );
+                }
+                Op::WriteSpan(x, y) => {
+                    grid.write_span(0, x, y, &["ab"], Style::default());
+                }
+                Op::Resize(w, h) => {
+                    grid.resize(w, h);
+                }
+                #[cfg(feature = "egc")]
+                Op::WriteGrapheme(x, y, gi) => {
+                    grid.write_grapheme(0, x, y, GRAPHEMES[gi], Style::default());
+                }
+            }
         }
 
         proptest! {
             #[test]
             fn wide_char_bookkeeping_never_desyncs(
-                ops in prop::collection::vec(
-                    (0u16..W, 0u16..H, 0usize..GRAPHEMES.len()),
-                    0..64,
-                ),
+                ops in prop::collection::vec(arb_op(), 0..64),
             ) {
                 let mut grid = Grid::new(W, H);
-                for (x, y, gi) in ops {
-                    grid.write_grapheme(0, x, y, GRAPHEMES[gi], Style::default());
-                    // The invariant must hold after every single write, not just
-                    // at the end: an intermediate orphan would be a real bug.
+                for op in &ops {
+                    apply(&mut grid, op);
+                    // The invariant must hold after every single op, not just at the end: an
+                    // intermediate orphan would be a real bug.
                     assert_wide_invariants(&grid);
                 }
             }
 
-            /// Sibling of `wide_char_bookkeeping_never_desyncs` above: that one only ever calls
-            /// `write_grapheme`, so it can never see a `resize` split a wide-character pair
-            /// (retroglyph#1015). This interleaves resizes (both growing and shrinking, on both
-            /// axes) with the same writes and asserts the same invariant after every step.
+            /// Sibling of `wide_char_bookkeeping_never_desyncs` above, narrowed to just
+            /// `write_grapheme` interleaved with `resize` (both growing and shrinking, on both
+            /// axes): a dedicated regression pin for `resize` splitting a wide-character pair
+            /// (retroglyph#1015), on top of the broader op alphabet already covering the same
+            /// ground probabilistically.
+            #[cfg(feature = "egc")]
             #[test]
             fn wide_char_bookkeeping_never_desyncs_across_resizes(
                 ops in prop::collection::vec(
                     prop_oneof![
                         (0u16..W, 0u16..H, 0usize..GRAPHEMES.len())
-                            .prop_map(|(x, y, gi)| Op::Write(x, y, gi)),
+                            .prop_map(|(x, y, gi)| Op::WriteGrapheme(x, y, gi)),
                         (1u16..=W, 1u16..=H).prop_map(|(w, h)| Op::Resize(w, h)),
                     ],
                     0..64,
                 ),
             ) {
                 let mut grid = Grid::new(W, H);
-                for op in ops {
-                    match op {
-                        Op::Write(x, y, gi) => {
-                            grid.write_grapheme(0, x, y, GRAPHEMES[gi], Style::default());
-                        }
-                        Op::Resize(w, h) => grid.resize(w, h),
-                    }
+                for op in &ops {
+                    apply(&mut grid, op);
                     assert_wide_invariants(&grid);
                 }
             }

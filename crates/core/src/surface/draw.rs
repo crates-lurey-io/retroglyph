@@ -139,15 +139,21 @@ impl Surface<'_> {
     /// which cannot just call `put_grapheme` with its own local coordinates: `put_signed`
     /// already subtracts `origin_offset` itself (see its doc), so routing through `shift` again
     /// would subtract it twice.
+    ///
+    /// Returns whether the write actually landed, so a caller that also needs to touch the
+    /// written tile afterward (e.g. [`put_offset`](Self::put_offset) setting a pixel offset)
+    /// can tell a refused write apart from a successful one instead of blindly poking whatever
+    /// tile is already at `(x, y)`.
     #[cfg(feature = "egc")]
-    fn write_grapheme_at(&mut self, x: u16, y: u16, grapheme: &str, style: Style) {
+    fn write_grapheme_at(&mut self, x: u16, y: u16, grapheme: &str, style: Style) -> bool {
         use unicode_width::UnicodeWidthStr;
 
         if !self.wide_spacer_fits(x, y, grapheme.width()) {
-            return;
+            return false;
         }
         self.grid.write_grapheme(self.layer, x, y, grapheme, style);
         self.apply_tint(x, y);
+        true
     }
 
     /// `true` unless `width` is 2 and the spacer cell it would need at `x + 1` falls outside
@@ -792,19 +798,30 @@ impl Surface<'_> {
         };
         let offset = offset.into();
         #[cfg(feature = "egc")]
-        {
+        let wrote = {
             let mut buf = [0u8; 4];
             let s = ch.encode_utf8(&mut buf);
-            self.write_grapheme_at(x, y, s, style);
-        }
+            self.write_grapheme_at(x, y, s, style)
+        };
         #[cfg(not(feature = "egc"))]
-        {
-            if !self.wide_spacer_fits(x, y, ch.width().unwrap_or(1)) {
-                return;
+        let wrote = {
+            if self.wide_spacer_fits(x, y, ch.width().unwrap_or(1)) {
+                let tile = Tile::new(ch, style);
+                let wrote = self.grid.put_tile(self.layer, (x, y), tile).is_some();
+                if wrote {
+                    self.apply_tint(x, y);
+                }
+                wrote
+            } else {
+                false
             }
-            let tile = Tile::new(ch, style);
-            self.grid.put_tile(self.layer, (x, y), tile);
-            self.apply_tint(x, y);
+        };
+        // A refused write (e.g. a wide glyph whose spacer falls outside the clip, or
+        // `put_tile` declining an out-of-grid/unallocatable-layer write) leaves `(x, y)`
+        // holding whatever tile a *different* draw call put there. Setting the offset on it
+        // would move a cell this call never touched, so bail out before `tile_mut` below.
+        if !wrote {
+            return;
         }
         // The offset is a pixel nudge on the tile the write above just landed, not part of
         // `write_grapheme`'s contract (it has no offset parameter): set it directly via
