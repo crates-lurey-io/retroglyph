@@ -14,7 +14,7 @@
 
 use alpha_blend::channel::Channel;
 use gem::space::Srgb;
-use retroglyph_core::Color;
+use retroglyph_core::color::Color;
 
 /// Rounds `num / den` to the nearest integer, ties away from zero, using only `i64` arithmetic
 /// (no `/255` shortcuts, no shifts): the independent reference every rounding claim in this test

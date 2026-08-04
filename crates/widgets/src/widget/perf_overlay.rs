@@ -1,7 +1,10 @@
 //! [`PerfOverlay`]: a bordered live frame-time/FPS panel with a sparkline.
 use alloc::format;
 
-use retroglyph_core::{Frame, FrameStats, Rect, Style};
+use retroglyph_core::app::Frame;
+use retroglyph_core::color::Style;
+use retroglyph_core::frames::FrameStats;
+use retroglyph_core::grid::Rect;
 
 use super::{AnimatedWidget, Panel, Sparkline, Text, Widget};
 use crate::Surface;
@@ -22,7 +25,10 @@ use crate::Theme;
 /// ```
 /// # #[cfg(feature = "std")]
 /// # {
-/// use retroglyph_core::{App, Backend, Flow, Frame, Headless, Size, Terminal};
+/// use retroglyph_core::app::{App, Flow, Frame};
+/// use retroglyph_core::backend::{Backend, Headless};
+/// use retroglyph_core::grid::Size;
+/// use retroglyph_core::terminal::Terminal;
 /// use retroglyph_widgets::{PerfOverlay, PerfOverlayApp, Widget};
 ///
 /// struct MyGame;
@@ -40,7 +46,7 @@ use crate::Theme;
 ///         .render(&mut surface.scope(area));
 /// })
 /// .size(Size::new(34, 8));
-/// retroglyph_core::run_blocking(term, app).expect("run_blocking");
+/// retroglyph_core::app::run_blocking(term, app).expect("run_blocking");
 /// # } // `run_blocking` is `std`-only; a no-op under `--no-default-features`.
 /// ```
 ///
@@ -247,7 +253,7 @@ fn millis(duration: core::time::Duration) -> f32 {
 /// this widget: an app that owns one [`FrameStats`] field can record into it and draw in a single
 /// call, no decorator wrapping the app at all. [`PerfOverlayApp`](crate::PerfOverlayApp) remains
 /// the right choice for an app that also wants its toggle-key handling, mode cycling, and event
-/// draining done generically, across any wrapped [`App`](retroglyph_core::App). This is only for
+/// draining done generically, across any wrapped [`App`](retroglyph_core::app::App). This is only for
 /// the (now unblocked) case that doesn't need any of that.
 ///
 /// # Examples
@@ -255,7 +261,11 @@ fn millis(duration: core::time::Duration) -> f32 {
 /// ```
 /// # #[cfg(feature = "std")]
 /// # {
-/// use retroglyph_core::{App, Backend, Flow, Frame, FrameStats, Headless, Rect, Terminal};
+/// use retroglyph_core::app::{App, Flow, Frame};
+/// use retroglyph_core::backend::{Backend, Headless};
+/// use retroglyph_core::frames::FrameStats;
+/// use retroglyph_core::grid::Rect;
+/// use retroglyph_core::terminal::Terminal;
 /// use retroglyph_widgets::{AnimatedPerfOverlay, AnimatedWidget};
 ///
 /// struct MyGame {
@@ -275,7 +285,7 @@ fn millis(duration: core::time::Duration) -> f32 {
 ///
 /// let term = Terminal::new(Headless::new(60, 12));
 /// let app = MyGame { stats: FrameStats::new() };
-/// retroglyph_core::run_blocking(term, app).expect("run_blocking");
+/// retroglyph_core::app::run_blocking(term, app).expect("run_blocking");
 /// # } // `run_blocking` is `std`-only; a no-op under `--no-default-features`.
 /// ```
 #[derive(Clone, Copy, Debug)]
@@ -393,7 +403,7 @@ mod tests {
     use alloc::string::String;
     use core::time::Duration;
 
-    use retroglyph_core::{Grid, Pos};
+    use retroglyph_core::grid::{Grid, Pos};
 
     use super::*;
 

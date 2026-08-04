@@ -83,7 +83,9 @@ impl Surface<'_> {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Grid, Pos, Rect, Style, Surface};
+    /// use retroglyph_core::color::Style;
+    /// use retroglyph_core::grid::{Grid, Pos, Rect};
+    /// use retroglyph_core::surface::Surface;
     ///
     /// let mut grid = Grid::new(4, 4);
     /// let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 4, 4), 0);
@@ -129,7 +131,9 @@ impl Surface<'_> {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Grid, Pos, Rect, Style, Surface};
+    /// use retroglyph_core::color::Style;
+    /// use retroglyph_core::grid::{Grid, Pos, Rect};
+    /// use retroglyph_core::surface::Surface;
     ///
     /// let mut grid = Grid::new(4, 4);
     /// let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 4, 4), 0);
@@ -195,7 +199,9 @@ impl Surface<'_> {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Grid, Pos, Rect, Style, Surface};
+    /// use retroglyph_core::color::Style;
+    /// use retroglyph_core::grid::{Grid, Pos, Rect};
+    /// use retroglyph_core::surface::Surface;
     ///
     /// let mut grid = Grid::new(4, 4);
     /// let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 4, 4), 0);
@@ -256,7 +262,10 @@ impl Surface<'_> {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Grid, Layer, Rect, Style, Surface, Tile};
+    /// use retroglyph_core::color::Style;
+    /// use retroglyph_core::grid::{Grid, Rect};
+    /// use retroglyph_core::surface::{Layer, Surface};
+    /// use retroglyph_core::tile::Tile;
     ///
     /// let mut src = Grid::new(2, 2);
     /// src.put_tile(0, (0, 0), Tile::new('x', Style::default()));
@@ -339,7 +348,9 @@ impl Surface<'_> {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Grid, Pos, Rect, Style, Surface};
+    /// use retroglyph_core::color::Style;
+    /// use retroglyph_core::grid::{Grid, Pos, Rect};
+    /// use retroglyph_core::surface::Surface;
     ///
     /// let mut grid = Grid::new(4, 4);
     /// let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 4, 4), 0);

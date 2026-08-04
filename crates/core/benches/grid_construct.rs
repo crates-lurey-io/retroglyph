@@ -16,7 +16,7 @@
 #![allow(missing_docs)]
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use retroglyph_core::Grid;
+use retroglyph_core::grid::Grid;
 use std::hint::black_box;
 
 /// Registers `Grid::new` construction benchmarks across representative grid sizes.

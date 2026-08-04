@@ -1,5 +1,6 @@
 //! [`Table`]: a fixed-column, scrollable table with a highlighted row.
-use retroglyph_core::{Color, Rect, Style};
+use retroglyph_core::color::{Color, Style};
+use retroglyph_core::grid::Rect;
 
 use super::window::visible_window;
 use super::{Measure, StatefulWidget};
@@ -35,7 +36,7 @@ use crate::text::draw_clipped;
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::{Grid, Rect};
+/// use retroglyph_core::grid::{Grid, Rect};
 /// use retroglyph_widgets::{ListState, StatefulWidget, Surface, Table};
 ///
 /// let headers = ["Name", "Score"];
@@ -243,7 +244,7 @@ mod tests {
     use alloc::vec;
     use alloc::vec::Vec;
 
-    use retroglyph_core::{Grid, Pos};
+    use retroglyph_core::grid::{Grid, Pos};
 
     use super::*;
 

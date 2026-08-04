@@ -289,7 +289,7 @@ impl ScrollState {
     /// [`scroll_by_wheel`](Self::scroll_by_wheel), so a widget wires wheel input by calling
     /// [`Interaction::interact`](crate::Interaction::interact) with [`Sense::SCROLL`](crate::Sense::SCROLL)
     /// and handing the [`Response`] here, instead of re-deriving it from raw
-    /// [`MouseEventKind::Scroll`](retroglyph_core::MouseEventKind::Scroll) events the way a widget
+    /// [`MouseEventKind::Scroll`](retroglyph_core::event::MouseEventKind::Scroll) events the way a widget
     /// with no route to `ScrollState` has to.
     ///
     /// A no-op if nothing scrolled this frame (`scroll_delta` is `0`), which also makes this safe
@@ -303,7 +303,7 @@ impl ScrollState {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::Rect;
+    /// use retroglyph_core::grid::Rect;
     /// use retroglyph_widgets::{Interaction, ScrollState, Sense};
     ///
     /// #[derive(Clone, Copy, PartialEq, Eq)]

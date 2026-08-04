@@ -13,9 +13,11 @@
 #![allow(clippy::redundant_pub_crate)]
 
 #[cfg(feature = "crossterm")]
+use retroglyph_core::backend::{Cursor, Input, Output};
+#[cfg(feature = "crossterm")]
 use retroglyph_core::event::Event;
 #[cfg(feature = "crossterm")]
-use retroglyph_core::{Cursor, Input, Output, Pos, Size};
+use retroglyph_core::grid::{Pos, Size};
 #[cfg(feature = "crossterm")]
 use std::cell::Cell;
 #[cfg(feature = "crossterm")]
@@ -58,19 +60,19 @@ fn visible_from_env(value: Option<&str>) -> bool {
 #[cfg(feature = "crossterm")]
 pub(crate) type TogglePresses = Rc<Cell<usize>>;
 
-/// Wraps a [`Backend`](retroglyph_core::Backend) and swallows [`PerfOverlayApp`]'s toggle key
+/// Wraps a [`Backend`](retroglyph_core::backend::Backend) and swallows [`PerfOverlayApp`]'s toggle key
 /// ([`retroglyph_widgets::default_is_toggle_key`]) on its way out of
-/// [`Input::poll_event`](retroglyph_core::Input::poll_event), counting each press into a shared
+/// [`Input::poll_event`](retroglyph_core::backend::Input::poll_event), counting each press into a shared
 /// [`TogglePresses`] for the driver.
 ///
 /// [`PerfOverlayApp`](retroglyph_widgets::PerfOverlayApp) already does this itself generically, by
-/// draining [`Terminal`](retroglyph_core::Terminal)'s own event queue and re-pushing whatever
+/// draining [`Terminal`](retroglyph_core::terminal::Terminal)'s own event queue and re-pushing whatever
 /// isn't the toggle key (see that type's "Toggling" docs) -- which is race-free for the windowed
 /// backends, where winit fills the queue from its own event loop before `App::update` ever runs,
 /// so a drain-at-the-top-of-the-frame genuinely sees everything the app could possibly see that
 /// frame.
 ///
-/// Crossterm has no such queue: [`Input::poll_event`](retroglyph_core::Input::poll_event) reads
+/// Crossterm has no such queue: [`Input::poll_event`](retroglyph_core::backend::Input::poll_event) reads
 /// the OS directly, so an event that arrives *after* `PerfOverlayApp`'s drain and *before* the
 /// example's own `drain_events` inside `tick` skips `PerfOverlayApp` entirely and lands in the
 /// example, which drops it on the floor (every example in the gallery ignores keys it doesn't
@@ -101,14 +103,14 @@ impl<B: Output> Output for ToggleFilter<B> {
 
     fn draw<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
-        I: Iterator<Item = retroglyph_core::DrawCell<'a>>,
+        I: Iterator<Item = retroglyph_core::backend::DrawCell<'a>>,
     {
         self.inner.draw(content)
     }
 
     fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
-        I: Iterator<Item = retroglyph_core::DrawCell<'a>>,
+        I: Iterator<Item = retroglyph_core::backend::DrawCell<'a>>,
     {
         self.inner.draw_layers(content)
     }

@@ -85,7 +85,7 @@ impl std::error::Error for GlBackendError {
 /// ```no_run
 /// # #[cfg(not(target_arch = "wasm32"))]
 /// # fn main() {
-/// use retroglyph_core::Style;
+/// use retroglyph_core::color::Style;
 /// use retroglyph_gl::GlBackendBuilder;
 /// use retroglyph_window::winit::{WindowConfig, run_windowed};
 ///

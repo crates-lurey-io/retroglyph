@@ -1,6 +1,6 @@
 //! [`Density`]: touch vs. mouse sizing for interactive widgets.
 
-use retroglyph_core::Size;
+use retroglyph_core::grid::Size;
 
 /// How much room an interactive widget's hit target should claim.
 ///
@@ -59,7 +59,7 @@ impl Density {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use retroglyph_core::HasSize;
+    use retroglyph_core::grid::HasSize;
 
     #[test]
     fn touch_rows_are_taller_than_mouse_for_fingertip_targets() {

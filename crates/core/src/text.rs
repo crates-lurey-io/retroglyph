@@ -1,4 +1,4 @@
-//! Styled text primitives: [`Span`] and [`Line`].
+//! Styled text primitives: [`Span`](crate::text::Span) and [`Line`](crate::text::Line).
 
 use crate::color::Style;
 use alloc::string::String;
@@ -8,8 +8,8 @@ use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 /// The number of terminal cells `s` occupies, saturating at `u16::MAX`.
 ///
 /// Wide characters (CJK, most emoji) count as two columns; combining marks
-/// and most control characters count as zero. [`Span::width`] and
-/// [`Line::width`] are built on this function; reach for it directly to
+/// and most control characters count as zero. [`Span::width`](crate::text::Span::width) and
+/// [`Line::width`](crate::text::Line::width) are built on this function; reach for it directly to
 /// measure a borrowed `&str` without constructing either type first.
 ///
 /// See [`width_usize`] for the unsaturated measurement.
@@ -42,8 +42,8 @@ pub fn width_usize(s: &str) -> usize {
 /// The number of terminal cells a single character occupies.
 ///
 /// Returns `1` for most characters, including control characters (`unicode-width` reports no
-/// width for these; `1` matches what [`Surface`](crate::Surface) actually draws and what
-/// [`Tile::width`](crate::Tile::width) tells the terminal to advance by, so this function agrees
+/// width for these; `1` matches what [`Surface`](crate::surface::Surface) actually draws and what
+/// [`Tile::width`](crate::tile::Tile::width) tells the terminal to advance by, so this function agrees
 /// with the rest of the crate instead of undercounting), `2` for wide characters (CJK, most
 /// emoji), and `0` for combining marks (these genuinely occupy no column of their own).
 ///
@@ -160,9 +160,9 @@ pub fn truncate_measured(s: &str, max_cols: u16) -> (&str, u16) {
     (&s[..end], cols)
 }
 
-/// A string with an associated [`Style`].
+/// A string with an associated [`Style`](crate::color::Style).
 ///
-/// The building block of styled terminal output. A [`Line`] is composed of
+/// The building block of styled terminal output. A [`Line`](crate::text::Line) is composed of
 /// one or more `Span`s, each with its own style.
 ///
 /// # Examples
@@ -215,7 +215,7 @@ impl<S: Into<String>> From<S> for Span {
     }
 }
 
-/// A horizontal sequence of [`Span`]s rendered as a single line.
+/// A horizontal sequence of [`Span`](crate::text::Span)s rendered as a single line.
 ///
 /// # Examples
 ///
@@ -286,9 +286,9 @@ impl From<Vec<Span>> for Line {
     }
 }
 
-/// Build a [`Line`] from a list of `(Style, text)` pairs.
+/// Build a [`Line`](crate::text::Line) from a list of `(Style, text)` pairs.
 ///
-/// Each pair becomes a [`Span`] with the given style. The resulting `Line`
+/// Each pair becomes a [`Span`](crate::text::Span) with the given style. The resulting `Line`
 /// is equivalent to calling `Line::from(vec![Span::styled(t, s), ...])` but
 /// with less boilerplate for multi-segment event-log text.
 ///

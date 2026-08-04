@@ -21,7 +21,8 @@ impl Surface<'_> {
     ///
     /// ```
     /// use retroglyph_core::backend::Headless;
-    /// use retroglyph_core::{Style, Terminal};
+    /// use retroglyph_core::color::Style;
+    /// use retroglyph_core::terminal::Terminal;
     ///
     /// let mut term = Terminal::new(Headless::new(6, 3));
     /// term.draw(|s| s.print((0, 0), "hello wrapped world", Style::default()))
@@ -124,7 +125,7 @@ impl Surface<'_> {
     /// ```
     /// use retroglyph_core::backend::Headless;
     /// use retroglyph_core::text::{Line, Span};
-    /// use retroglyph_core::Terminal;
+    /// use retroglyph_core::terminal::Terminal;
     ///
     /// let mut term = Terminal::new(Headless::new(5, 2));
     /// let line = Line::from(vec![Span::raw("hello"), Span::raw("world")]);
@@ -191,7 +192,9 @@ impl Surface<'_> {
     /// ```
     /// use retroglyph_core::backend::Headless;
     /// use retroglyph_core::layout::HAlign;
-    /// use retroglyph_core::{Rect, Style, Terminal};
+    /// use retroglyph_core::color::Style;
+    /// use retroglyph_core::grid::Rect;
+    /// use retroglyph_core::terminal::Terminal;
     ///
     /// let mut term = Terminal::new(Headless::new(6, 1));
     /// term.draw(|s| {

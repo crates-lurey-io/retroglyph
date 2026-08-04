@@ -15,8 +15,10 @@
 //! decoded but never drawn, since the frame loop exits before the next present. Or close the
 //! window.
 
+use retroglyph_core::backend::Backend;
+use retroglyph_core::color::Style;
 use retroglyph_core::event::{Event, KeyCode, KeyModifiers};
-use retroglyph_core::{Backend, Style, Terminal};
+use retroglyph_core::terminal::Terminal;
 use retroglyph_examples::Example;
 
 /// How many past key events to keep on screen, oldest at the top.
@@ -110,7 +112,7 @@ impl Example for Keyboard {
     fn tick<B: Backend>(
         &mut self,
         term: &mut Terminal<B>,
-        _frame: &retroglyph_core::Frame,
+        _frame: &retroglyph_core::app::Frame,
     ) -> bool {
         if !self.handle_events(term) {
             return false;

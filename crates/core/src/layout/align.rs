@@ -1,6 +1,6 @@
 //! Horizontal and vertical alignment within a bounded rectangle.
 //!
-//! [`HAlign`] and [`VAlign`] are plain data: no allocation, no text handling, nothing that
+//! [`HAlign`](crate::layout::HAlign) and [`VAlign`](crate::layout::VAlign) are plain data: no allocation, no text handling, nothing that
 //! depends on the `egc` feature. Private submodule of [`layout`](crate::layout), re-exported
 //! unconditionally from there regardless of `egc`; [`TextLayout`](crate::layout::TextLayout) (the
 //! `egc`-gated word-wrap builder) and

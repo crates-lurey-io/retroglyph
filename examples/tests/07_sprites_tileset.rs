@@ -25,8 +25,10 @@ mod support;
 #[allow(dead_code)] // `main`/the `wasm_entry!` FFI surface aren't exercised by these tests
 mod sprites_tileset;
 
+use retroglyph_core::app::Frame;
+use retroglyph_core::backend::Headless;
 use retroglyph_core::event::{Event, KeyCode, KeyEvent, KeyModifiers};
-use retroglyph_core::{Frame, Headless, Terminal};
+use retroglyph_core::terminal::Terminal;
 use retroglyph_examples::{Example, HEADLESS_FRAME_DELTA};
 use sprites_tileset::SpritesTileset;
 
@@ -100,7 +102,8 @@ fn svg_snapshot() {
 // applied correctly to pixels is `retroglyph-software`'s and `retroglyph-gl`'s own business, and
 // tested there.
 
-use retroglyph_core::{Pos, Tint};
+use retroglyph_core::color::Tint;
+use retroglyph_core::grid::Pos;
 
 /// Runs one frame with `events` already delivered, and hands back the terminal to inspect.
 fn after(events: &[Event]) -> Terminal<Headless> {

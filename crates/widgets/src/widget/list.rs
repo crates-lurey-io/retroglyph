@@ -1,5 +1,6 @@
 //! [`List`]: a scrollable, single-column list with a [`ListState`]-driven highlighted item.
-use retroglyph_core::{Color, Rect, Style};
+use retroglyph_core::color::{Color, Style};
+use retroglyph_core::grid::Rect;
 
 use super::window::visible_window;
 use super::{HighlightSpacing, InteractiveWidget, ListDirection, Measure, StatefulWidget};
@@ -44,7 +45,7 @@ use crate::text::draw_clipped;
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::{Grid, Rect};
+/// use retroglyph_core::grid::{Grid, Rect};
 /// use retroglyph_widgets::{List, ListState, StatefulWidget, Surface};
 ///
 /// let items = ["Alpha", "Bravo", "Charlie"];
@@ -239,7 +240,12 @@ impl List<'_> {
 
     /// The item index at `pos`, given `state`'s current scroll offset and [`List::direction`], or
     /// `None` if `pos` falls past the last item (not clamped to the last item).
-    fn index_at(&self, area: Rect, state: &ListState, pos: retroglyph_core::Pos) -> Option<usize> {
+    fn index_at(
+        &self,
+        area: Rect,
+        state: &ListState,
+        pos: retroglyph_core::grid::Pos,
+    ) -> Option<usize> {
         let row = pos.y.checked_sub(area.top())?;
         let row = match self.direction {
             ListDirection::TopToBottom => row,
@@ -301,7 +307,7 @@ impl<Id> InteractiveWidget<Id> for List<'_> {
 mod tests {
     use alloc::vec::Vec;
 
-    use retroglyph_core::{Grid, Pos};
+    use retroglyph_core::grid::{Grid, Pos};
 
     use super::*;
 

@@ -1,5 +1,5 @@
-//! [`TextLayout`] builder: wraps a [`Line`] to a bounded [`Rect`] and positions it with
-//! [`HAlign`]/[`VAlign`].
+//! [`TextLayout`](crate::layout::TextLayout) builder: wraps a [`Line`](crate::text::Line) to a bounded [`Rect`](crate::grid::Rect) and positions it with
+//! [`HAlign`](crate::layout::HAlign)/[`VAlign`](crate::layout::VAlign).
 
 use super::align::{HAlign, VAlign};
 use super::word_wrap::wrap_line;
@@ -7,11 +7,11 @@ use crate::grid::{Grid, Rect, Size};
 use crate::surface::Surface;
 use crate::text::Line;
 
-/// Builder for laying out a [`Line`] within a bounded [`Rect`].
+/// Builder for laying out a [`Line`](crate::text::Line) within a bounded [`Rect`](crate::grid::Rect).
 ///
-/// Call [`measure`](TextLayout::measure) to get its [`Size`] without
-/// touching any surface, or [`render_to_surface`](TextLayout::render_to_surface) to write
-/// directly into a [`Surface`].
+/// Call [`measure`](crate::layout::TextLayout::measure) to get its [`Size`](crate::grid::Size) without
+/// touching any surface, or [`render_to_surface`](crate::layout::TextLayout::render_to_surface) to write
+/// directly into a [`Surface`](crate::surface::Surface).
 ///
 /// # Examples
 ///
@@ -19,7 +19,7 @@ use crate::text::Line;
 /// use retroglyph_core::layout::{TextLayout, HAlign, VAlign};
 /// use retroglyph_core::grid::Rect;
 /// use retroglyph_core::text::Line;
-/// use retroglyph_core::HasSize;
+/// use retroglyph_core::grid::HasSize;
 ///
 /// let rect = Rect::new(0, 0, 20, 5);
 /// let line = Line::raw("Hello, world!");
@@ -75,7 +75,7 @@ impl<'a> TextLayout<'a> {
         self
     }
 
-    /// Measures the text without rendering, returning its [`Size`]: `width` is the widest
+    /// Measures the text without rendering, returning its [`Size`](crate::grid::Size): `width` is the widest
     /// wrapped line in columns, `height` is the number of wrapped lines.
     ///
     /// Uses the rect's `width` for word-wrapping; ignores `height`.
@@ -89,7 +89,7 @@ impl<'a> TextLayout<'a> {
     }
 
     /// Renders the text into `surface`, clipping to both the rect's bounds and `surface`'s own
-    /// clip (the rect is intersected with [`Surface::clip_rect`] first, so text can never escape
+    /// clip (the rect is intersected with [`Surface::clip_rect`](crate::surface::Surface::clip_rect) first, so text can never escape
     /// whatever clip the caller applied even if `rect` extends past it).
     ///
     /// # Examples
@@ -99,7 +99,7 @@ impl<'a> TextLayout<'a> {
     /// use retroglyph_core::grid::{Pos, Rect};
     /// use retroglyph_core::layout::TextLayout;
     /// use retroglyph_core::text::Line;
-    /// use retroglyph_core::Terminal;
+    /// use retroglyph_core::terminal::Terminal;
     ///
     /// let mut term = Terminal::new(Headless::new(20, 5));
     /// let line = Line::raw("hi");

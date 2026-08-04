@@ -29,8 +29,8 @@ dev = []
 # diffing and layout.
 egc = ["dep:unicode-segmentation"]
 # Uses `libm`'s software float implementation (`roundf`/`fmaf`/`sinf`/`cosf`/`powf`) for
-# `animate`'s easing curves and the separable [`BlendMode`] channel math, via this crate's own
-# `math` shim -- the `no_std` side of that split. See `std` below for the alternative that prefers
+# `animate`'s easing curves and the separable [`BlendMode`](crate::grid::BlendMode) channel math, via
+# this crate's own `math` shim -- the `no_std` side of that split. See `std` below for the alternative that prefers
 # the platform's own float intrinsics when available; a build needs exactly one of the two.
 libm = [
     "dep:libm",
@@ -40,21 +40,22 @@ libm = [
     "alpha-blend/libm",
     "alpha-blend/libm-arch",
 ]
-# Adds `Serialize`/`Deserialize` impls for [`Color`], [`Style`], `Size`, `Offset`, and (via `ixy`)
-# `Pos`/`Rect`, so a config file can round-trip a saved camera position, window geometry, sub-cell
-# pixel offset, or theme color.
+# Adds `Serialize`/`Deserialize` impls for [`Color`](crate::color::Color), [`Style`](crate::color::Style), `Size`,
+# `Offset`, and (via `ixy`) `Pos`/`Rect`, so a config file can round-trip a saved camera position,
+# window geometry, sub-cell pixel offset, or theme color.
 #
-# [`Color`] serializes through its `Display`/`FromStr` round trip (e.g. `"bright-red"`,
+# [`Color`](crate::color::Color) serializes through its `Display`/`FromStr` round trip (e.g. `"bright-red"`,
 # `"#ff8000"`) rather than a derived structural form, so hand-edited TOML/JSON stays legible.
 serde = ["dep:serde", "ixy/serde"]
 # Enables `gem/std` and `alpha-blend/std`, and uses `std`'s float intrinsics (via this crate's
 # `math` shim) instead of `libm`'s software implementation for `animate` and the separable
-# [`BlendMode`] channel math.
+# [`BlendMode`](crate::grid::BlendMode) channel math.
 #
 # Disabling this feature (`--no-default-features`) builds this crate `no_std`, and then needs
 # `libm` above as the float backend instead: see the crate-level `compile_error!` in `src/lib.rs`.
 std = ["dep:alpha-blend", "gem/std", "alpha-blend/std"]
-# Enables `testing`'s `TestHarness`, which drives an [`App`] against [`Headless`] for tests, with
+# Enables `testing`'s `TestHarness`, which drives an [`App`](crate::app::App) against
+# [`Headless`](crate::backend::Headless) for tests, with
 # synthetic input queuing and frame-settling helpers.
 #
 # Test-only surface, `no_std` + `alloc` compatible, off by default so it never ships in a release

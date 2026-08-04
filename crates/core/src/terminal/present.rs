@@ -49,7 +49,7 @@ impl<B: Backend> Terminal<B> {
     /// of calling this directly.
     ///
     /// When the backend requires a full frame (see
-    /// [`crate::Output::needs_full_frame`]), all cells from every allocated layer are
+    /// [`crate::backend::Output::needs_full_frame`]), all cells from every allocated layer are
     /// sent rather than just the diff, so pixel-based backends can clear and
     /// redraw to avoid orphaned pixels from sub-cell offsets.
     ///
@@ -71,8 +71,8 @@ impl<B: Backend> Terminal<B> {
     ///
     /// # Errors
     ///
-    /// Propagates errors from the backend's [`draw_layers`](crate::Output::draw_layers) or
-    /// [`flush`](crate::Output::flush) operations. Either failure returns before the
+    /// Propagates errors from the backend's [`draw_layers`](crate::backend::Output::draw_layers) or
+    /// [`flush`](crate::backend::Output::flush) operations. Either failure returns before the
     /// current/previous buffers are swapped, so the cells from the failed frame stay marked
     /// dirty in `previous` and are resent the next time `present` succeeds. `current` is still
     /// cleared, same as on success, so the caller doesn't need to redraw anything to recover:

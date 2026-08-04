@@ -8,7 +8,7 @@
 //! This module has no dependency on (or awareness of) [`crate::interact`],
 //! and stays that way on purpose.
 
-use retroglyph_core::{Pos, Rect};
+use retroglyph_core::grid::{Pos, Rect};
 
 /// The thumb's length, in rows, for a `track`-row-tall vertical scrollbar covering `total_len`
 /// items in a `visible_len`-row viewport: proportional to `visible_len / total_len`, clamped to

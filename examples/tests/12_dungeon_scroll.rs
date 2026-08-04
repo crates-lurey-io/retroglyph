@@ -24,8 +24,10 @@ mod support;
 mod dungeon_scroll;
 
 use dungeon_scroll::DungeonScroll;
+use retroglyph_core::app::Frame;
+use retroglyph_core::backend::Headless;
 use retroglyph_core::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
-use retroglyph_core::{Frame, Headless, Terminal};
+use retroglyph_core::terminal::Terminal;
 use retroglyph_examples::{Example, HEADLESS_FRAME_DELTA};
 
 /// A plain, unmodified key press.
