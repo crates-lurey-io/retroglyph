@@ -32,15 +32,7 @@ impl Camera {
     /// ```
     #[must_use]
     pub fn visible_bounds(&self) -> Rect {
-        let w = self
-            .viewport
-            .width()
-            .min(self.world.width().saturating_sub(self.origin.x));
-        let h = self
-            .viewport
-            .height()
-            .min(self.world.height().saturating_sub(self.origin.y));
-        Rect::new(self.origin.x, self.origin.y, w, h)
+        Rect::from_tl_size(self.origin, self.viewport.size()).intersect(self.world.to_rect())
     }
 
     /// Map a world position to its screen position, or `None` if it is outside
@@ -197,7 +189,7 @@ impl Camera {
             return None;
         }
         // Safe without saturating: `origin` is only ever written by `center_on`/`set_viewport`,
-        // both of which clamp it to `max_origin(view, world) = world - view`, and
+        // both of which clamp it via `Rect::clamp_within` to `[0, world - view]`, and
         // `contains_pos` above guarantees the offset is `< view`, so the sum is `< world <=
         // u16::MAX`.
         let wx = self.origin.x + (screen.x - self.viewport.left());

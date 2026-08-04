@@ -189,6 +189,9 @@ impl Grid {
 
         // Clear anything the footprint would partially overwrite. Every rejection above happens
         // first, so a refused write can never have already destroyed the caller's content.
+        // Neither call is gated on `egc`: `put_tile` writes a `WIDE_CHAR`/`WIDE_CHAR_SPACER` pair
+        // on every feature combination, so a span that can land inside one has to clean it up
+        // regardless of `egc` (same reasoning as `fill_region`'s matching pair of calls).
         for row in 0..footprint_h {
             let cy = y + u16::from(row);
             self.clear_span_overlap(layer, x, cy, u16::from(footprint_w));
@@ -905,7 +908,7 @@ mod tests {
         grid.write_span(0, 0, 0, &["ab", "cd"], Style::default())
             .unwrap();
         grid.put_tile(2, (0, 0), Tile::new('z', Style::default()));
-        assert!(grid.cells(1).is_none());
+        assert!(grid.tile(1, (0, 0)).is_none());
 
         grid.resize(1, 2);
         assert!(grid.tile(0, (0, 0)).unwrap().is_empty());
