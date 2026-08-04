@@ -542,10 +542,8 @@ impl Surface<'_> {
         }
 
         let rect = self.clip_local_rect(rect);
-        for y in rect.top()..rect.bottom() {
-            for x in rect.left()..rect.right() {
-                self.put((x, y), ch, style);
-            }
+        for pos in rect {
+            self.put(pos, ch, style);
         }
     }
 
@@ -869,11 +867,9 @@ impl Surface<'_> {
         }
 
         let rect = self.clip_local_rect(rect);
-        for y in rect.top()..rect.bottom() {
-            for x in rect.left()..rect.right() {
-                if let Some((x, y)) = self.shift(x, y) {
-                    self.grid.put_tile(self.layer, (x, y), Tile::default());
-                }
+        for pos in rect {
+            if let Some((x, y)) = self.shift(pos.x, pos.y) {
+                self.grid.put_tile(self.layer, (x, y), Tile::default());
             }
         }
     }
