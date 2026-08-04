@@ -134,7 +134,7 @@ impl<B: Backend> Terminal<B> {
     /// whole terminal to layout helpers or region-based drawing.
     #[must_use]
     pub const fn area(&self) -> Rect {
-        self.current.rect()
+        self.current.size().to_rect()
     }
 
     /// Resize both grids to `width` × `height` cells.

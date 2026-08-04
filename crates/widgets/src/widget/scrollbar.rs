@@ -126,7 +126,7 @@ impl Scrollbar {
             }
         }
 
-        let local = surface.local_area();
+        let local = surface.area().at_origin();
         let Some((start, len)) = thumb_geometry(local, self.total_len, self.visible_len, offset)
         else {
             return;
