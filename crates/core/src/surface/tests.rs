@@ -1,3 +1,5 @@
+use crate::Terminal;
+use crate::backend::Headless;
 use crate::color::Style;
 use crate::color::{Color, Tint};
 use crate::grid::{Grid, Offset, Pos, Rect};
@@ -1768,4 +1770,136 @@ fn clip_nests_monotonically() {
     let inner = outer.clip(Rect::new(0, 0, 8, 4));
 
     assert_eq!(inner.clip_rect(), Rect::new(1, 1, 4, 2));
+}
+
+// --- unicode width ---
+//
+// Driven through `Terminal::draw`/`Terminal::surface` rather than a bare `Surface` over a
+// standalone `Grid`, since these exercise `put`/`print`'s wide-character handling end to end,
+// including the grid readback `Terminal` provides.
+
+#[test]
+fn test_put_wide_char_sets_continuation() {
+    use crate::tile::TileFlags;
+
+    let mut term = Terminal::new(Headless::new(10, 3));
+    term.surface().put((0, 0), '\u{4e2d}', Style::default()); // '中', width 2
+    assert_eq!(term.grid()[Pos::new(0, 0)].glyph(), '\u{4e2d}');
+    // Both with and without `egc`: `put` (via `Grid::put_tile`, which is wide-char aware on
+    // every feature combination) lays down an explicit spacer, flagged `WIDE_CHAR_SPACER`,
+    // glyph space.
+    assert!(
+        term.grid()[Pos::new(1, 0)]
+            .flags()
+            .contains(TileFlags::WIDE_CHAR_SPACER)
+    );
+    assert_eq!(term.grid()[Pos::new(1, 0)].glyph(), ' ');
+    assert_eq!(term.grid()[Pos::new(2, 0)].glyph(), ' '); // untouched
+}
+
+#[test]
+fn test_print_advances_by_char_width() {
+    use crate::tile::TileFlags;
+
+    let mut term = Terminal::new(Headless::new(10, 3));
+    term.surface().print((0, 0), "\u{4e2d}x", Style::default()); // '中' (2) then 'x' at col 2
+    assert_eq!(term.grid()[Pos::new(0, 0)].glyph(), '\u{4e2d}');
+    // See `test_put_wide_char_sets_continuation` for why the neighbor is a spacer regardless
+    // of feature.
+    assert!(
+        term.grid()[Pos::new(1, 0)]
+            .flags()
+            .contains(TileFlags::WIDE_CHAR_SPACER)
+    );
+    assert_eq!(term.grid()[Pos::new(2, 0)].glyph(), 'x');
+}
+
+#[test]
+fn test_put_accepts_a_pos_or_a_tuple() {
+    // `put` takes `impl Into<Pos>`, so a `Pos` and an equivalent `(u16, u16)` tuple must
+    // write the same cell.
+    let mut term = Terminal::new(Headless::new(10, 3));
+    let mut s = term.surface();
+    s.put(Pos::new(2, 1), 'X', Style::default());
+    s.put((3, 1), 'Y', Style::default());
+    assert_eq!(term.grid()[Pos::new(2, 1)].glyph(), 'X');
+    assert_eq!(term.grid()[Pos::new(3, 1)].glyph(), 'Y');
+}
+
+#[test]
+fn test_put_offset_accepts_pos_and_offset_tuples() {
+    // `put_offset` takes `impl Into<Pos>` and `impl Into<Offset>`, so `Pos`/`Offset` values
+    // and equivalent tuples must produce the same tile.
+    let mut term = Terminal::new(Headless::new(4, 1));
+    let mut s = term.surface();
+    s.put_offset(Pos::new(1, 0), Offset::new(3, -2), 'X', Style::default());
+    s.put_offset((2, 0), (-1, 4), 'Y', Style::default());
+    assert_eq!(term.grid()[Pos::new(1, 0)].glyph(), 'X');
+    assert_eq!(term.grid()[Pos::new(1, 0)].dx(), 3);
+    assert_eq!(term.grid()[Pos::new(1, 0)].dy(), -2);
+
+    assert_eq!(term.grid()[Pos::new(2, 0)].glyph(), 'Y');
+    assert_eq!(term.grid()[Pos::new(2, 0)].dx(), -1);
+    assert_eq!(term.grid()[Pos::new(2, 0)].dy(), 4);
+}
+
+#[test]
+fn test_put_wide_char_at_last_column_does_not_overflow() {
+    // Wide char placed at the last column: can't place a spacer, so the write is refused
+    // outright (nothing written), on every feature combination. `write_grapheme` (egc-only)
+    // and `Grid::put_tile` (used by `put` on every feature combination) both refuse rather
+    // than leave an orphaned primary cell with no spacer.
+    let mut term = Terminal::new(Headless::new(4, 1));
+    term.surface().put((3, 0), '\u{4e2d}', Style::default()); // col 3 is last; need col 4 for spacer
+    assert_eq!(term.grid()[Pos::new(3, 0)].glyph(), ' '); // nothing written
+}
+
+// --- styled spans ---
+
+#[test]
+fn test_print_styled_basic() {
+    use crate::text::Span;
+    use alloc::vec;
+
+    let mut term = Terminal::new(Headless::new(20, 3));
+    let line = Line::from(vec![
+        Span::raw("HP: "),
+        Span::styled("100", Style::new().fg(Color::GREEN)),
+    ]);
+    term.surface().print_line((0, 0), &line);
+    assert_eq!(term.grid()[Pos::new(0, 0)].glyph(), 'H');
+    assert_eq!(term.grid()[Pos::new(3, 0)].glyph(), ' ');
+    assert_eq!(term.grid()[Pos::new(4, 0)].glyph(), '1');
+    assert_eq!(term.grid()[Pos::new(4, 0)].style.fg, Color::GREEN);
+    assert_eq!(term.grid()[Pos::new(6, 0)].glyph(), '0');
+}
+
+#[test]
+fn test_print_styled_wide_chars() {
+    use crate::tile::TileFlags;
+    use alloc::vec;
+
+    let mut term = Terminal::new(Headless::new(10, 3));
+    let line = Line::from(vec![crate::text::Span::raw("\u{4e2d}x")]);
+    term.surface().print_line((0, 0), &line);
+    assert_eq!(term.grid()[Pos::new(0, 0)].glyph(), '\u{4e2d}');
+    // See `test_put_wide_char_sets_continuation` for why the neighbor is a spacer regardless
+    // of feature.
+    assert!(
+        term.grid()[Pos::new(1, 0)]
+            .flags()
+            .contains(TileFlags::WIDE_CHAR_SPACER)
+    );
+    assert_eq!(term.grid()[Pos::new(2, 0)].glyph(), 'x');
+}
+
+#[test]
+fn test_print_str_styled_applies_style_to_every_cell() {
+    let mut term = Terminal::new(Headless::new(20, 3));
+    term.surface()
+        .print((0, 0), "HP", Style::new().fg(Color::GREEN));
+    assert_eq!(term.grid()[Pos::new(0, 0)].glyph(), 'H');
+    assert_eq!(term.grid()[Pos::new(0, 0)].style.fg, Color::GREEN);
+    assert_eq!(term.grid()[Pos::new(1, 0)].glyph(), 'P');
+    assert_eq!(term.grid()[Pos::new(1, 0)].style.fg, Color::GREEN);
 }
