@@ -177,7 +177,10 @@ impl Grid {
         // (retroglyph#1020). A no-op on a grid that has never used spans.
         self.clear_span_overlap_rect(layer, rect.left(), rect.top(), rect.width(), rect.height());
         // Wide-char overlap has no region-scoped variant (yet): still one call per row, but that
-        // remains O(rows) since it never re-collects a growing anchor set.
+        // remains O(rows) since it never re-collects a growing anchor set. Neither call is gated
+        // on `egc`: `put_tile` writes a `WIDE_CHAR`/`WIDE_CHAR_SPACER` pair on every feature
+        // combination (see its own doc comment), so a fill that can land inside one has to clean
+        // it up regardless of `egc`.
         for y in rect.top()..rect.bottom() {
             self.clear_overlap(layer, rect.left(), y, rect.width());
         }
@@ -397,10 +400,12 @@ impl Grid {
                 // mix at full alpha still needs to run the mode's formula: it isn't
                 // equivalent to the raw source color (see `blend_color`'s matching guard).
                 if mode != BlendMode::Linear || fg_alpha != 1.0 {
-                    blended.style.fg = blend_fg(mode, tile.style.fg, dst_tile.style.fg, fg_alpha);
+                    blended.style.fg =
+                        blend_color(mode, tile.style.fg, dst_tile.style.fg, fg_alpha);
                 }
                 if mode != BlendMode::Linear || bg_alpha != 1.0 {
-                    blended.style.bg = blend_bg(mode, tile.style.bg, dst_tile.style.bg, bg_alpha);
+                    blended.style.bg =
+                        blend_color(mode, tile.style.bg, dst_tile.style.bg, bg_alpha);
                 }
                 blended
             },
@@ -819,14 +824,6 @@ fn blend_separable_channel(sep: SeparableBlendMode, src: u8, dst: u8, t: f32) ->
     // ±1 LSB on some inputs.
     let blended = crate::math::mul_add(mixed - cb, t, cb);
     Channel::from_f32(blended.clamp(0.0, 1.0))
-}
-
-fn blend_fg(mode: BlendMode, src: Color, dst: Color, t: f32) -> Color {
-    blend_color(mode, src, dst, t)
-}
-
-fn blend_bg(mode: BlendMode, src: Color, dst: Color, t: f32) -> Color {
-    blend_color(mode, src, dst, t)
 }
 
 #[cfg(test)]
@@ -1753,8 +1750,22 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_blend_separable_channel_multiply() {
+        // cb = 204 (0.8), cs = 51 (0.2): multiply = cb * cs = 0.16.
+        assert_eq!(
+            blend_separable_channel(SeparableBlendMode::Multiply, 204, 51, 1.0),
+            41
+        );
+        // t = 0.5 lerps the destination halfway to that fully mixed color.
+        assert_eq!(
+            blend_separable_channel(SeparableBlendMode::Multiply, 204, 51, 0.5),
+            46
+        );
+    }
+
     /// End-to-end through `blit_alpha`, not just the per-channel helper: proves `BlendMode`
-    /// actually reaches `blend_fg`/`blend_bg` and lands on the destination tile's style.
+    /// actually reaches `blend_color` and lands on the destination tile's style.
     #[test]
     fn test_grid_blit_alpha_screen_blends_fg() {
         let mut src = Grid::new(1, 1);
@@ -1799,6 +1810,79 @@ mod tests {
                 r: 224,
                 g: 224,
                 b: 224
+            }
+        );
+    }
+
+    /// Same as `test_grid_blit_alpha_screen_blends_fg`, but for `style.bg` and `bg_alpha`: both
+    /// alpha factors are independent, so `fg_alpha == 1.0` (fully mixed) and `bg_alpha == 0.5`
+    /// (half-lerped toward the mix) must land different results on the two channels.
+    #[test]
+    fn test_grid_blit_alpha_screen_blends_bg() {
+        let mut src = Grid::new(1, 1);
+        src.put_tile(
+            0,
+            (0, 0),
+            Tile::default().with_glyph('X').with_style(
+                Style::new()
+                    .fg(Color::Rgb {
+                        r: 204,
+                        g: 204,
+                        b: 204,
+                    })
+                    .bg(Color::Rgb {
+                        r: 204,
+                        g: 204,
+                        b: 204,
+                    }),
+            ),
+        );
+
+        let mut dst = Grid::new(1, 1);
+        dst.put_tile(
+            0,
+            (0, 0),
+            Tile::default().with_glyph('_').with_style(
+                Style::new()
+                    .fg(Color::Rgb {
+                        r: 102,
+                        g: 102,
+                        b: 102,
+                    })
+                    .bg(Color::Rgb {
+                        r: 102,
+                        g: 102,
+                        b: 102,
+                    }),
+            ),
+        );
+
+        dst.blit_alpha(
+            0,
+            &src,
+            Rect::new(0, 0, 1, 1),
+            0,
+            0,
+            BlendMode::Screen,
+            1.0,
+            0.5,
+        );
+        // `fg_alpha == 1.0`: fully mixed, same as `test_grid_blit_alpha_screen_blends_fg`.
+        assert_eq!(
+            dst[Pos::new(0, 0)].style.fg,
+            Color::Rgb {
+                r: 224,
+                g: 224,
+                b: 224
+            }
+        );
+        // `bg_alpha == 0.5`: only half-lerped from the destination toward that same mix.
+        assert_eq!(
+            dst[Pos::new(0, 0)].style.bg,
+            Color::Rgb {
+                r: 163,
+                g: 163,
+                b: 163
             }
         );
     }
@@ -2143,6 +2227,23 @@ mod tests {
 
         assert_eq!(dst[Pos::new(1, 0)].glyph(), 'X');
         assert_eq!(dst.tile(0, Pos::new(0, 0)).map(Tile::span), Some((1, 1)));
+    }
+
+    /// `blit_cross_layer` (used by `Surface::blit` for the retroglyph#824 fix) reads a fixed
+    /// `src_layer` regardless of the layer it writes to, unlike `blit`'s single shared `layer`.
+    #[test]
+    fn blit_cross_layer_reads_a_different_source_layer_than_it_writes() {
+        let mut src = Grid::new(2, 2);
+        // Only layer 0 is ever populated on `src` (a standalone, layer-0-only composed grid).
+        src.put_tile(0, (0, 0), Tile::new('S', Style::default()));
+
+        let mut dst = Grid::new(2, 2);
+        dst.blit_cross_layer(3, &src, 0, Rect::new(0, 0, 2, 2), 0, 0);
+
+        // Written to layer 3 on `dst`, even though it was read from layer 0 on `src`.
+        assert_eq!(dst.tile(3, (0, 0)).map(Tile::glyph), Some('S'));
+        // Layer 0 is always allocated but untouched by this call: still its default tile.
+        assert_eq!(dst[Pos::new(0, 0)].glyph(), ' ');
     }
 
     #[test]
