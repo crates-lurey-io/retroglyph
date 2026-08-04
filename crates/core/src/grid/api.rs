@@ -42,16 +42,21 @@ impl Grid {
         }
     }
 
-    /// Build a grid from a rectangular character map, one [`Tile`] per cell.
+    /// Builds a grid from a rectangular character map, one [`Tile`] per cell.
     ///
-    /// `map` is split on `\n`; the grid width is the longest line's character
-    /// count and the height is the number of lines. Lines shorter than the
-    /// widest are padded with the default tile. `f` maps each character to its
-    /// tile, called once per character in reading order.
+    /// `map` is split on `\n`; the grid width is the longest line's display
+    /// width (`unicode-width`'s [`UnicodeWidthStr`](unicode_width::UnicodeWidthStr))
+    /// and the height is the number of lines. Lines shorter than the widest are
+    /// padded with the default tile. `f` maps each character to its tile,
+    /// called once per character in reading order.
     ///
-    /// Characters are counted as Unicode scalar values (one column each), which
-    /// matches ASCII / CP437 maps and level/prefab strings. Wide characters are
-    /// not width-adjusted.
+    /// Each character is written through [`put_tile`](Self::put_tile) at its own
+    /// display column, so a 2-column (wide) character gets the same
+    /// [`TileFlags::WIDE_CHAR`]/[`TileFlags::WIDE_CHAR_SPACER`] lead/spacer pair
+    /// `put_tile` writes for any other fresh wide tile; the next character in the
+    /// line lands one column further along, past the spacer. A wide character in
+    /// the map's last column has no room for its spacer and is refused, the same
+    /// as any other `put_tile` call in that position.
     ///
     /// # Examples
     ///
@@ -76,10 +81,12 @@ impl Grid {
     where
         F: FnMut(char) -> Tile,
     {
+        use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
+
         let mut width: u16 = 0;
         let mut height: u16 = 0;
         for line in map.lines() {
-            let len = u16::try_from(line.chars().count()).unwrap_or(u16::MAX);
+            let len = u16::try_from(line.width()).unwrap_or(u16::MAX);
             width = width.max(len);
             height = height.saturating_add(1);
         }
@@ -87,10 +94,12 @@ impl Grid {
         for (y, line) in map.lines().enumerate() {
             #[allow(clippy::cast_possible_truncation)]
             let y = y as u16;
-            for (x, ch) in line.chars().enumerate() {
-                #[allow(clippy::cast_possible_truncation)]
-                let x = x as u16;
+            let mut x: u16 = 0;
+            for ch in line.chars() {
                 grid.put_tile(0, Pos::new(x, y), f(ch));
+                #[allow(clippy::cast_possible_truncation)]
+                let ch_width = ch.width().unwrap_or(0) as u16;
+                x = x.saturating_add(ch_width);
             }
         }
         grid
@@ -219,15 +228,31 @@ impl Grid {
         }
     }
 
-    /// Resize the grid to `width` × `height` tiles.
+    /// Resizes the grid to `width` × `height` tiles.
     ///
     /// Content within the overlapping region is preserved on all allocated
     /// layers. New cells are initialised to the default tile. Shrinking
     /// discards tiles outside the new bounds.
+    ///
+    /// Shrinking can also orphan two structures that span more than one cell, since `resize`
+    /// keeps the top-left corner but a shrink can slice through a footprint's far edge:
+    ///
+    /// - A [`TileFlags::WIDE_CHAR`] lead left in the new last column, with its
+    ///   [`TileFlags::WIDE_CHAR_SPACER`] now out of bounds, is reset -- the same thing
+    ///   `clear_overlap` does when an ordinary write orphans one.
+    /// - A [`TileFlags::SPAN_ANCHOR`] whose declared footprint no longer fits has its whole span
+    ///   cleared via `reset_span_at`, rather than left claiming a truncated area. Half a span is
+    ///   not representable, the same reasoning [`blit`](Self::blit) documents for clipping one.
+    ///
+    /// Both repairs are bounded by the shrunk edge, not the whole grid, so a growing resize pays
+    /// nothing for either.
     pub fn resize(&mut self, width: u16, height: u16) {
         let old_width = usize::from(self.width);
+        let old_height = usize::from(self.height);
         let new_width = usize::from(width);
         let new_height = usize::from(height);
+        let width_shrank = new_width < old_width;
+        let height_shrank = new_height < old_height;
         self.width = width;
         self.height = height;
         for layer in self.layers.iter_mut().flatten() {
@@ -247,6 +272,25 @@ impl Grid {
                     .collect();
             }
             layer.buf.resize(new_width, new_height);
+
+            // A width shrink is the only way a wide-character pair can be split: a height shrink
+            // drops a lead and its spacer together (same row, both past the new bottom edge), but
+            // a width shrink can leave the lead in the new last column with the spacer it needs
+            // now out of bounds. Bounded to that one column rather than the whole layer.
+            if width_shrank && new_width > 0 {
+                let last_col = new_width - 1;
+                for y in 0..new_height {
+                    let idx = y * new_width + last_col;
+                    if layer.buf.as_ref()[idx].flags.contains(TileFlags::WIDE_CHAR) {
+                        layer.buf.as_mut()[idx].reset();
+                        layer.extras.remove(&idx);
+                    }
+                }
+            }
+        }
+
+        if width_shrank || height_shrank {
+            self.repair_spans_after_resize(width_shrank, height_shrank);
         }
     }
 
@@ -254,7 +298,7 @@ impl Grid {
     // Write grapheme: layer 0 only
     // ------------------------------------------------------------------
 
-    /// Write a grapheme cluster at `(x, y)` on layer 0, enforcing wide-
+    /// Writes a grapheme cluster at `(x, y)` on layer 0, enforcing wide-
     /// character invariants.
     ///
     /// This is the canonical way to place content into the grid when the `egc`
@@ -378,7 +422,15 @@ impl Grid {
     pub(super) fn clear_overlap(&mut self, layer: u8, x: u16, y: u16, width: u16) {
         let w = usize::from(self.width);
         let cap = w * usize::from(self.height);
-        let lb = self.layer_or_alloc(layer);
+        // An unallocated layer has never written a wide-character cell, so there is nothing to
+        // clear: return before `layer_or_alloc` would allocate one just to find that (retroglyph#1012).
+        let Some(lb) = self
+            .layers
+            .get_mut(usize::from(layer))
+            .and_then(Option::as_mut)
+        else {
+            return;
+        };
         for cx in x..x.saturating_add(width) {
             let idx = usize::from(y) * w + usize::from(cx);
             if idx >= cap {
@@ -651,6 +703,139 @@ mod tests {
         assert_eq!(g.tint(0, 3, 1), Tint::None);
     }
 
+    #[test]
+    fn resize_narrower_resets_a_wide_char_split_by_the_new_last_column() {
+        use crate::color::Style;
+
+        let mut g = Grid::new(4, 1);
+        // Lead lands at (2, 0), spacer at (3, 0).
+        g.put_tile(0, (2, 0), Tile::new('\u{4e2d}', Style::default()));
+        assert!(
+            g.tile(0, (2, 0))
+                .unwrap()
+                .flags()
+                .contains(TileFlags::WIDE_CHAR)
+        );
+
+        // Drops column 3, which held the spacer: the lead can no longer be paired, so it must be
+        // reset rather than survive unpaired in the new last column.
+        g.resize(3, 1);
+        assert!(
+            !g.tile(0, (2, 0))
+                .unwrap()
+                .flags()
+                .contains(TileFlags::WIDE_CHAR)
+        );
+    }
+
+    #[test]
+    fn from_charmap_lone_wide_char() {
+        use crate::color::Style;
+
+        // A single wide char needs 2 columns of width; there is no narrower char after it to
+        // clobber its spacer, but sizing must give it the room in the first place.
+        let g = Grid::from_charmap("\u{4e2d}", |c| Tile::new(c, Style::default()));
+        assert_eq!(g.width(), 2);
+        assert_eq!(g.height(), 1);
+        assert_eq!(g.tile(0, (0, 0)).unwrap().glyph(), '\u{4e2d}');
+        assert!(
+            g.tile(0, (0, 0))
+                .unwrap()
+                .flags()
+                .contains(TileFlags::WIDE_CHAR)
+        );
+        assert_eq!(g.tile(0, (1, 0)).unwrap().glyph(), ' ');
+        assert!(
+            g.tile(0, (1, 0))
+                .unwrap()
+                .flags()
+                .contains(TileFlags::WIDE_CHAR_SPACER)
+        );
+    }
+
+    #[test]
+    fn from_charmap_wide_char_mid_line() {
+        use crate::color::Style;
+
+        // The wide char's spacer occupies column 1; the following 'x' must land at column 2,
+        // not column 1 where it would clobber the spacer and clear the wide lead.
+        let g = Grid::from_charmap("\u{4e2d}x", |c| Tile::new(c, Style::default()));
+        assert_eq!(g.width(), 3);
+        assert_eq!(g.tile(0, (0, 0)).unwrap().glyph(), '\u{4e2d}');
+        assert!(
+            g.tile(0, (0, 0))
+                .unwrap()
+                .flags()
+                .contains(TileFlags::WIDE_CHAR)
+        );
+        assert_eq!(g.tile(0, (1, 0)).unwrap().glyph(), ' ');
+        assert!(
+            g.tile(0, (1, 0))
+                .unwrap()
+                .flags()
+                .contains(TileFlags::WIDE_CHAR_SPACER)
+        );
+        assert_eq!(g.tile(0, (2, 0)).unwrap().glyph(), 'x');
+        assert_eq!(g.tile(0, (2, 0)).unwrap().flags(), TileFlags::empty());
+    }
+
+    #[test]
+    fn from_charmap_wide_char_at_end_of_line_fits_exactly() {
+        use crate::color::Style;
+
+        // The wide char is the last character of the widest (and only) line, so `from_charmap`
+        // must size the grid with room for both its lead and its spacer: unlike a caller passing
+        // an already-fixed width to `put_tile` directly, there is no way for this to hit
+        // `put_tile`'s last-column refusal, since the sizing pass and the write pass measure the
+        // same display width.
+        let g = Grid::from_charmap("a\u{4e2d}", |c| Tile::new(c, Style::default()));
+        assert_eq!(g.width(), 3);
+        assert_eq!(g.height(), 1);
+        assert_eq!(g.tile(0, (0, 0)).unwrap().glyph(), 'a');
+        assert_eq!(g.tile(0, (1, 0)).unwrap().glyph(), '\u{4e2d}');
+        assert!(
+            g.tile(0, (1, 0))
+                .unwrap()
+                .flags()
+                .contains(TileFlags::WIDE_CHAR)
+        );
+        assert_eq!(g.tile(0, (2, 0)).unwrap().glyph(), ' ');
+        assert!(
+            g.tile(0, (2, 0))
+                .unwrap()
+                .flags()
+                .contains(TileFlags::WIDE_CHAR_SPACER)
+        );
+    }
+
+    #[test]
+    fn from_charmap_ragged_map_mixing_wide_and_narrow_rows() {
+        use crate::color::Style;
+
+        // Row 0 is all narrow ("ab", width 2); row 1 is one wide char ("\u{4e2d}", width 2). Both
+        // rows have the same display width, so the grid is 2 columns wide and neither row needs
+        // padding, but row 1's single char must still claim both columns via the spacer.
+        let g = Grid::from_charmap("ab\n\u{4e2d}", |c| Tile::new(c, Style::default()));
+        assert_eq!(g.width(), 2);
+        assert_eq!(g.height(), 2);
+        assert_eq!(g.tile(0, (0, 0)).unwrap().glyph(), 'a');
+        assert_eq!(g.tile(0, (1, 0)).unwrap().glyph(), 'b');
+        assert_eq!(g.tile(0, (0, 1)).unwrap().glyph(), '\u{4e2d}');
+        assert!(
+            g.tile(0, (0, 1))
+                .unwrap()
+                .flags()
+                .contains(TileFlags::WIDE_CHAR)
+        );
+        assert_eq!(g.tile(0, (1, 1)).unwrap().glyph(), ' ');
+        assert!(
+            g.tile(0, (1, 1))
+                .unwrap()
+                .flags()
+                .contains(TileFlags::WIDE_CHAR_SPACER)
+        );
+    }
+
     #[cfg(all(test, feature = "egc"))]
     mod egc_proptests {
         use super::*;
@@ -700,6 +885,13 @@ mod tests {
             }
         }
 
+        /// One step of the interleaved proptest below: either a grapheme write or a resize.
+        #[derive(Debug, Clone)]
+        enum Op {
+            Write(u16, u16, usize),
+            Resize(u16, u16),
+        }
+
         proptest! {
             #[test]
             fn wide_char_bookkeeping_never_desyncs(
@@ -713,6 +905,33 @@ mod tests {
                     grid.write_grapheme(0, x, y, GRAPHEMES[gi], Style::default());
                     // The invariant must hold after every single write, not just
                     // at the end: an intermediate orphan would be a real bug.
+                    assert_wide_invariants(&grid);
+                }
+            }
+
+            /// Sibling of `wide_char_bookkeeping_never_desyncs` above: that one only ever calls
+            /// `write_grapheme`, so it can never see a `resize` split a wide-character pair
+            /// (retroglyph#1015). This interleaves resizes (both growing and shrinking, on both
+            /// axes) with the same writes and asserts the same invariant after every step.
+            #[test]
+            fn wide_char_bookkeeping_never_desyncs_across_resizes(
+                ops in prop::collection::vec(
+                    prop_oneof![
+                        (0u16..W, 0u16..H, 0usize..GRAPHEMES.len())
+                            .prop_map(|(x, y, gi)| Op::Write(x, y, gi)),
+                        (1u16..=W, 1u16..=H).prop_map(|(w, h)| Op::Resize(w, h)),
+                    ],
+                    0..64,
+                ),
+            ) {
+                let mut grid = Grid::new(W, H);
+                for op in ops {
+                    match op {
+                        Op::Write(x, y, gi) => {
+                            grid.write_grapheme(0, x, y, GRAPHEMES[gi], Style::default());
+                        }
+                        Op::Resize(w, h) => grid.resize(w, h),
+                    }
                     assert_wide_invariants(&grid);
                 }
             }

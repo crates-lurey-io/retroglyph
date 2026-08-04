@@ -407,7 +407,10 @@ impl<'a> Surface<'a> {
     ///
     /// Respects this surface's layer but not its clip, mirroring [`grid_mut`](Self::grid_mut) in
     /// that sense: a caller wanting a clipped read should check
-    /// [`self.clip_rect().contains(...)`](Rect::contains) first.
+    /// [`self.clip_rect().contains(...)`](Rect::contains) first. `None` covers three distinct
+    /// cases: `pos` is out of the grid's bounds, `pos` is in bounds but nothing has been written
+    /// there yet, or this surface's own layer has never been allocated (no write has ever landed
+    /// on it, on any surface).
     ///
     /// # Examples
     ///
@@ -426,8 +429,9 @@ impl<'a> Surface<'a> {
         self.grid.tile(self.layer, pos.into())
     }
 
-    /// The background colour at `pos` on this surface's layer, or `None` if there's no tile
-    /// there.
+    /// The background colour at `pos` on this surface's layer, or `None` for any reason
+    /// [`tile`](Self::tile) itself returns `None` (out of bounds, nothing written, or an
+    /// unallocated layer).
     ///
     /// A read-only read of a cell's own background lets a caller blend a new draw with what's
     /// already there (e.g. `surface.background(pos).unwrap_or(default)`) without the mutable

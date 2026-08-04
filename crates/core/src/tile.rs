@@ -281,6 +281,29 @@ impl Tile {
         self.flags.contains(TileFlags::EMPTY)
     }
 
+    /// Returns `true` if this tile is the left half of a 2-column wide character.
+    #[must_use]
+    pub const fn is_wide(&self) -> bool {
+        self.flags.contains(TileFlags::WIDE_CHAR)
+    }
+
+    /// Returns `true` if this tile is the invisible right-half spacer of a wide character.
+    #[must_use]
+    pub const fn is_wide_spacer(&self) -> bool {
+        self.flags.contains(TileFlags::WIDE_CHAR_SPACER)
+    }
+
+    /// Returns `true` if this tile is the top-left anchor of a multi-cell span (see
+    /// [`span`](Self::span)).
+    ///
+    /// Unlike `span() != (1, 1)`, this is accurate for a 1x1 span: a span anchor whose declared
+    /// footprint happens to be one cell still reports `true` here, whereas its `span()` is
+    /// indistinguishable from a plain tile's.
+    #[must_use]
+    pub const fn is_span_anchor(&self) -> bool {
+        self.flags.contains(TileFlags::SPAN_ANCHOR)
+    }
+
     /// Sets the glyph for this tile (builder style).
     ///
     /// Writing content marks the tile non-empty (see [`is_empty`](Self::is_empty)). Recomputes
@@ -344,6 +367,17 @@ impl Tile {
             .remove(TileFlags::SPAN_ANCHOR | TileFlags::SPAN_COVERED);
         self.span_w = 1;
         self.span_h = 1;
+    }
+
+    /// Strips this tile's wide-character-pair role, leaving its glyph and style alone.
+    ///
+    /// The wide-character counterpart to [`clear_span`](Self::clear_span): used by copy paths
+    /// that cannot preserve a wide pair's cross-cell invariant ([`Grid::blit`](crate::grid::Grid::blit)
+    /// can clip a pair in half via `src_rect`, or land on only one half of a destination pair), so
+    /// the copy degrades to a plain, unpaired cell instead of a dangling lead or spacer.
+    pub(crate) fn clear_wide(&mut self) {
+        self.flags
+            .remove(TileFlags::WIDE_CHAR | TileFlags::WIDE_CHAR_SPACER);
     }
 }
 
@@ -529,6 +563,31 @@ mod tests {
         assert_eq!(rebuilt.glyph(), 'A');
         assert_eq!(rebuilt.width(), 1);
         assert!(!rebuilt.flags().contains(TileFlags::WIDE_CHAR));
+    }
+
+    #[test]
+    fn test_tile_flag_predicates() {
+        let mut tile = Tile::new('A', Style::default());
+        assert!(!tile.is_wide());
+        assert!(!tile.is_wide_spacer());
+        assert!(!tile.is_span_anchor());
+
+        tile.flags = TileFlags::WIDE_CHAR;
+        assert!(tile.is_wide());
+        assert!(!tile.is_wide_spacer());
+        assert!(!tile.is_span_anchor());
+
+        tile.flags = TileFlags::WIDE_CHAR_SPACER;
+        assert!(!tile.is_wide());
+        assert!(tile.is_wide_spacer());
+        assert!(!tile.is_span_anchor());
+
+        // A 1x1 span anchor is still an anchor even though its `span()` matches a plain tile's.
+        tile.flags = TileFlags::SPAN_ANCHOR;
+        tile.span_w = 1;
+        tile.span_h = 1;
+        assert!(tile.is_span_anchor());
+        assert_eq!(tile.span(), (1, 1));
     }
 
     #[test]
