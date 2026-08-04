@@ -4,13 +4,16 @@
 //! Split into private submodules by concern, `animate`/`backend`/`testing`-style: `ansi` is the
 //! 16-color ANSI palette and the shared indexed/ANSI quantization machinery, `convert` is
 //! `Color`'s inherent methods (constants, RGB resolution, `gem` color-space conversions),
-//! `named` is `Color`'s string-name/hex constructors (`from_named`, `from_hex`), `parse` is
-//! `Color`'s `Display`/`FromStr`/serde impls, `style` is [`Style`] itself, and `tint` is
-//! [`Tint`], sprite colour modulation.
+//! `named` is `Color`'s string-name/hex constructors (`from_named`, `from_hex`), `palette_oklab`
+//! is the generated Oklab table `ansi` quantizes against, `parse` is `Color`'s
+//! `Display`/`FromStr`/serde impls, `style` is [`Style`] itself, and `tint` is [`Tint`], sprite
+//! colour modulation.
 
 mod ansi;
 mod convert;
 mod named;
+#[cfg(feature = "indexed-quant")]
+mod palette_oklab;
 mod parse;
 mod style;
 mod tint;
