@@ -252,17 +252,8 @@ impl Camera {
     /// assert_eq!(cam.origin(), Pos::new(0, 0));
     /// ```
     pub fn scroll_by(&mut self, dx: i32, dy: i32) {
-        self.set_origin(Pos::new(
-            saturating_offset(self.origin.x, dx),
-            saturating_offset(self.origin.y, dy),
-        ));
+        self.set_origin(self.origin.saturating_add_signed(ixy::Pos::new(dx, dy)));
     }
-}
-
-/// Adds a signed delta to a `u16` coordinate, clamped to `[0, u16::MAX]` instead of wrapping.
-#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // clamped to [0, u16::MAX] above
-fn saturating_offset(value: u16, delta: i32) -> u16 {
-    (i32::from(value) + delta).clamp(0, i32::from(u16::MAX)) as u16
 }
 
 #[cfg(test)]

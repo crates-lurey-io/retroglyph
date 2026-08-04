@@ -102,7 +102,7 @@ pub trait Widget {
     /// Coordinates on every `Surface` drawing method are local to `surface` itself, where
     /// `(0, 0)` is `surface.area()`'s own top-left corner, not the underlying grid's. Placement
     /// should therefore be built from [`Surface::width`]/[`Surface::height`] (or
-    /// [`Surface::local_area`] for a rect), never from `surface.area()`'s own
+    /// `surface.area().at_origin()` for a rect), never from `surface.area()`'s own
     /// [`left`](retroglyph_core::grid::Rect::left)/[`top`](retroglyph_core::grid::Rect::top): those are
     /// absolute grid coordinates, and passing them straight to a drawing call only lands
     /// correctly for a surface whose area happens to start at the grid origin.
@@ -146,7 +146,7 @@ pub trait StatefulWidget {
     /// and/or updating `state`.
     ///
     /// See [`Widget::render`]'s doc for why placement should come from
-    /// [`Surface::width`]/[`Surface::height`]/[`Surface::local_area`], not `surface.area()`'s own
+    /// [`Surface::width`]/[`Surface::height`]/`surface.area().at_origin()`, not `surface.area()`'s own
     /// [`left`](retroglyph_core::grid::Rect::left)/[`top`](retroglyph_core::grid::Rect::top).
     fn render(&self, surface: &mut Surface<'_>, state: &mut Self::State);
 }

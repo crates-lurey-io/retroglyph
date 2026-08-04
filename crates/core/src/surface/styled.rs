@@ -109,9 +109,10 @@ impl<'a> StyledSurface<'_, 'a> {
         self.surface.clip_rect()
     }
 
-    /// [`Surface::local_area`](crate::surface::Surface::local_area) of the underlying surface.
+    /// [`Surface::area`](crate::surface::Surface::area) of the underlying surface, translated to its own local coordinate
+    /// space (`self.area().at_origin()`).
     #[must_use]
     pub const fn local_area(&self) -> Rect {
-        self.surface.local_area()
+        self.surface.area().at_origin()
     }
 }

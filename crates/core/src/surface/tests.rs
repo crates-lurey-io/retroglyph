@@ -9,16 +9,16 @@ use crate::tile::Tile;
 use super::{Layer, Surface};
 
 fn screen(grid: &mut Grid) -> Surface<'_> {
-    let area = grid.rect();
+    let area = grid.size().to_rect();
     Surface::new(grid, area, 0)
 }
 
 /// Renders a `'w' x 'h'` block of `ch` at this surface's own local top-left corner, i.e.
-/// the way a widget written against `local_area()`/`width()`/`height()` (rather than
+/// the way a widget written against `area().at_origin()`/`width()`/`height()` (rather than
 /// `area()`'s absolute `left()`/`top()`) is supposed to place itself: correctly regardless
 /// of where this surface's own `area` sits on the underlying grid.
 fn render_local_top_left(surface: &mut Surface<'_>, ch: char) {
-    let local = surface.local_area();
+    let local = surface.area().at_origin();
     surface.put((local.left(), local.top()), ch, Style::default());
 }
 
@@ -29,7 +29,7 @@ fn local_area_is_always_zero_origin_regardless_of_where_area_sits() {
     let scoped = surface.scope(Rect::new(3, 4, 5, 6));
 
     assert_eq!(scoped.area(), Rect::new(3, 4, 5, 6));
-    assert_eq!(scoped.local_area(), Rect::new(0, 0, 5, 6));
+    assert_eq!(scoped.area().at_origin(), Rect::new(0, 0, 5, 6));
 }
 
 #[test]
@@ -39,8 +39,8 @@ fn a_widget_placed_via_local_area_lands_the_same_way_at_the_origin_and_at_an_off
     let mut grid_origin = Grid::new(4, 4);
     render_local_top_left(&mut screen(&mut grid_origin), 'X');
 
-    // Scoped away from the origin: a widget built on `local_area()`/`put`'s local coordinate
-    // space should draw identically relative to its own area, unlike one built on
+    // Scoped away from the origin: a widget built on `area().at_origin()`/`put`'s local
+    // coordinate space should draw identically relative to its own area, unlike one built on
     // `area().left()`/`area().top()`, which would silently miss here.
     let mut grid_offset = Grid::new(10, 10);
     {
@@ -1353,7 +1353,7 @@ fn clip_translate_does_not_change_area_local_area_width_or_height() {
     let view = surface.clip_translate(Rect::new(5, 5, 4, 4), (-5, -5));
 
     assert_eq!(view.area(), Rect::new(5, 5, 4, 4));
-    assert_eq!(view.local_area(), Rect::new(0, 0, 4, 4));
+    assert_eq!(view.area().at_origin(), Rect::new(0, 0, 4, 4));
     assert_eq!(view.width(), 4);
     assert_eq!(view.height(), 4);
 }

@@ -3,7 +3,7 @@
 
 #[cfg(feature = "egc")]
 use super::TileExtra;
-use super::{Grid, LayerBuf, Pos, Rect, Size};
+use super::{Grid, LayerBuf, Pos, Size};
 #[cfg(feature = "egc")]
 use crate::color::Style;
 #[cfg(any(test, feature = "egc"))]
@@ -123,15 +123,6 @@ impl Grid {
     #[must_use]
     pub const fn size(&self) -> Size {
         Size::new(self.width, self.height)
-    }
-
-    /// Returns the full grid as a [`Rect`](crate::grid::Rect) at the origin.
-    ///
-    /// Equivalent to `Rect::new(0, 0, width, height)`. Handy for passing the whole grid to
-    /// layout helpers or `blit`'s `src_rect`.
-    #[must_use]
-    pub const fn rect(&self) -> Rect {
-        Rect::new(0, 0, self.width, self.height)
     }
 
     /// Returns the highest layer id that has ever been allocated.
