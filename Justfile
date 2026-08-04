@@ -167,13 +167,13 @@ docs-preview-full: doc
 
 # Builds every example with `--features crossterm` into its own `--target-dir` (see
 # `examples/tests/support::build_crossterm_example`'s doc comment for why that dir is isolated
-# from the workspace's normal `target/`), once, up front. Each of the 15 `svg_snapshot` tests
-# (one `[[test]]` binary per example) calls `build_crossterm_example` itself too, as a fallback
+# from the workspace's normal `target/`), once, up front. Every `svg_snapshot` test (its own
+# `[[test]]` binary, one per example) calls `build_crossterm_example` itself too, as a fallback
 # for running them outside `just` (e.g. `cargo nextest run -p retroglyph-examples` directly) --
-# but under nextest those 15 tests run concurrently, and without this step they'd all race to
+# but under nextest those tests all run concurrently, and without this step they'd all race to
 # invoke `cargo build` on the same target dir at once. Cargo's own locking makes that safe, but
 # a dozen-plus processes queuing on one lock and each re-walking the dependency graph is real,
-# avoidable overhead. Running the (single, batched) build here first means every one of those 15
+# avoidable overhead. Running the (single, batched) build here first means every one of those
 # calls finds the binaries already fresh and returns immediately.
 build-pty-examples:
     cargo build --manifest-path examples/Cargo.toml --examples --features crossterm --target-dir target/pty-examples
@@ -182,7 +182,8 @@ build-pty-examples:
 # examples/tests/*.rs file) in its own process, in parallel across all of them -- unlike plain
 # `cargo test`, which runs separate integration-test binaries one after another. It doesn't run
 # doctests (https://nexte.st/docs/limitations/), so those still go through plain `cargo test
-# --doc`. See `.config/nextest.toml` for retry/timeout config.
+# --doc`. See `.config/nextest.toml` for the slow-timeout config (no retries: a failure fails the
+# run).
 test: build-pty-examples
     cargo bin cargo-nextest run --workspace --all-features
     cargo test --workspace --all-features --doc
@@ -193,8 +194,9 @@ test: build-pty-examples
 # what made the CI `test` job take ~4 minutes longer than every other job.
 #
 # Uses the `ci` nextest profile (see `.config/nextest.toml`) instead of `default`: identical
-# retry/timeout settings, but also writes JUnit XML to `target/nextest/ci/junit.xml`, which the
-# `test` CI job uploads to Codecov's Test Analytics via `codecov/test-results-action`.
+# slow-timeout settings and no retries either, but also writes JUnit XML to
+# `target/nextest/ci/junit.xml`, which the `test` CI job uploads to Codecov's Test Analytics via
+# `codecov/test-results-action`.
 test-ci: build-pty-examples
     cargo nextest run --workspace --all-features --profile ci
     cargo test --workspace --all-features --doc

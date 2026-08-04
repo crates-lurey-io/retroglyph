@@ -557,7 +557,7 @@ impl SoftwareRenderer {
                     scale,
                     recolor,
                 );
-                if tile.span() == (1, 1) {
+                if !tile.is_span_anchor() {
                     warn_sprite_needs_span(
                         &mut self.ctx.warned_oversized,
                         art_glyph,
@@ -1300,7 +1300,7 @@ fn expand_dirty_spans(dirty: &mut [bool], layer: &[Tile], cols: usize, rows: usi
                 continue;
             };
             anchor_idx
-        } else if tile.span() != (1, 1) {
+        } else if tile.is_span_anchor() {
             idx
         } else {
             continue;

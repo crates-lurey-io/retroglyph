@@ -1,23 +1,8 @@
-//! Input event system.
-//!
-//! [`Terminal::poll`](crate::terminal::Terminal::poll) returns an optional [`Event`](crate::event::Event) with support for
-//! keyboard ([`KeyEvent`](crate::event::KeyEvent), all standard keys plus [`KeyModifiers`](crate::event::KeyModifiers)), mouse ([`MouseEvent`](crate::event::MouseEvent):
-//! buttons, movement, scroll), touch (synthesized into the same mouse events on the
-//! software/WASM backend), window resize, and close events.
-//! [`has_input`](crate::terminal::Terminal::has_input) checks for a pending event without blocking. Resize
-//! events are applied to the grid automatically, before the event reaches your code.
+//! Keyboard events: [`KeyModifiers`], [`ModifierKey`], [`KeyCode`], [`KeyEventKind`],
+//! [`KeyLocation`], [`KeyEvent`], and [`KeyState`].
 
-use crate::grid::Pos;
-use alloc::string::String;
 use alloc::vec::Vec;
 use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
-
-/// Physical (pixel) position relative to the window's top-left corner.
-///
-/// Using `ixy::Pos<u32>` rather than the cell-grid [`Pos`](crate::grid::Pos) (`ixy::Pos<u16>`)
-/// makes the distinction type-safe: you cannot accidentally pass a pixel
-/// coordinate where a cell coordinate is expected.
-pub type PhysicalPos = ixy::Pos<u32>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 /// Keyboard modifier flags.
@@ -307,233 +292,13 @@ impl KeyEvent {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[non_exhaustive]
-/// Mouse button identifiers.
-pub enum MouseButton {
-    /// Left mouse button.
-    Left,
-    /// Right mouse button.
-    Right,
-    /// Middle mouse button.
-    Middle,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-#[non_exhaustive]
-/// Kinds of mouse events.
-///
-/// Does not derive `Eq`/`Hash`: [`Scroll`](Self::Scroll)'s `f32` fields implement neither.
-pub enum MouseEventKind {
-    /// Mouse button pressed.
-    Down(MouseButton),
-    /// Mouse button released.
-    Up(MouseButton),
-    /// Mouse moved while a button was held down; carries which button.
-    Drag(MouseButton),
-    /// Mouse moved.
-    Moved,
-    /// Mouse wheel/touchpad scroll.
-    ///
-    /// `dy > 0.0` is scroll up, `dy < 0.0` is scroll down; `dx > 0.0` is scroll right, `dx < 0.0`
-    /// is scroll left (mostly from a laptop touchpad). Magnitude is backend-dependent: the winit
-    /// backend reports the exact pixel/line delta from the platform, while the crossterm backend
-    /// synthesizes a fixed step of `1.0` per tick since terminals can't report scroll precision.
-    Scroll {
-        /// Horizontal delta. See the variant docs for the sign convention.
-        dx: f32,
-        /// Vertical delta. See the variant docs for the sign convention.
-        dy: f32,
-    },
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-/// Mouse input event.
-///
-/// Does not derive `Eq`/`Hash`: [`MouseEventKind`](crate::event::MouseEventKind) does not (its `Scroll` variant's `f32`
-/// fields implement neither).
-pub struct MouseEvent {
-    /// The kind of mouse event.
-    pub kind: MouseEventKind,
-    /// Cell-grid position of the mouse cursor.
-    pub position: Pos,
-    /// Physical pixel position of the mouse cursor, relative to the window's top-left.
-    ///
-    /// Populated by backends that support sub-cell precision (e.g. the software
-    /// renderer). `None` on character-mode backends such as crossterm.
-    pub pixel_position: Option<PhysicalPos>,
-    /// Modifiers held down during the event.
-    pub modifiers: KeyModifiers,
-}
-
-impl MouseEvent {
-    /// Creates a mouse event at the given cell-grid position, with no pixel position.
-    #[must_use]
-    pub const fn new(kind: MouseEventKind, position: Pos, modifiers: KeyModifiers) -> Self {
-        Self {
-            kind,
-            position,
-            pixel_position: None,
-            modifiers,
-        }
-    }
-
-    /// Creates a mouse event with an explicit pixel position, for backends with sub-cell
-    /// precision.
-    #[must_use]
-    pub const fn with_pixel_position(
-        kind: MouseEventKind,
-        position: Pos,
-        modifiers: KeyModifiers,
-        pixel_position: PhysicalPos,
-    ) -> Self {
-        Self {
-            kind,
-            position,
-            pixel_position: Some(pixel_position),
-            modifiers,
-        }
-    }
-}
-
-/// The system's light/dark color-scheme preference, as reported by the
-/// windowing/browser layer.
-///
-/// Currently just these two variants: every source that can report this
-/// (winit's `Theme`, the browser's `prefers-color-scheme` media query) only
-/// ever resolves to one of exactly these two, and a backend that can't
-/// determine a preference simply never emits [`Event::ThemeChanged`](crate::event::Event::ThemeChanged) rather
-/// than emitting a third "unknown" case for callers to handle. Marked
-/// `#[non_exhaustive]` for consistency with sibling public enums, in case a
-/// future source (e.g. a `HighContrast` case) needs to be added.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[non_exhaustive]
-pub enum SystemTheme {
-    /// The system prefers a light color scheme.
-    Light,
-    /// The system prefers a dark color scheme.
-    Dark,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-#[non_exhaustive]
-/// Terminal input event.
-///
-/// Does not derive `Eq`/`Hash`: [`MouseEvent`](crate::event::MouseEvent) does not (its `MouseEventKind::Scroll` variant's
-/// `f32` fields implement neither).
-pub enum Event {
-    /// Keyboard event.
-    Key(KeyEvent),
-    /// Mouse event.
-    Mouse(MouseEvent),
-    /// Terminal window resized to the given `(cols, rows)`.
-    ///
-    /// When this event comes from [`Terminal::poll`](crate::terminal::Terminal::poll) (or the other
-    /// [`Terminal`](crate::terminal::Terminal) methods that route through it), the grid has already been
-    /// resized to these dimensions by the time the event reaches your code; the payload is there
-    /// so the app can react, for example recomputing layout or redrawing. A consumer driving
-    /// [`Input::poll_event`](crate::backend::Input::poll_event) directly on a raw backend gets no
-    /// such guarantee and must resize the grid itself.
-    Resize(u16, u16),
-    /// Window closed.
-    Close,
-    /// The system's light/dark color-scheme preference changed, or was
-    /// determined for the first time at startup.
-    ///
-    /// Only backends with a real source of truth for this emit it: the
-    /// windowed (winit) backend, on both native and wasm (winit's web
-    /// target derives it from the browser's `prefers-color-scheme` media
-    /// query, including live updates). Character-mode backends (crossterm)
-    /// have no equivalent free API (see the windowed backend's own docs
-    /// for why) and never emit this; an app that wants a default should
-    /// pick one itself rather than waiting for an event that may never
-    /// arrive.
-    ThemeChanged(SystemTheme),
-    /// Pasted text, delivered as a single event rather than individual key
-    /// presses.
-    ///
-    /// Not emitted by all backends: see each backend's own docs for
-    /// whether and how it sources this. Content is forwarded verbatim from
-    /// the source, including embedded newlines; the receiving app is
-    /// responsible for any filtering it needs.
-    Paste(String),
-    /// The terminal or application window gained input focus.
-    ///
-    /// This reflects OS/terminal-level focus, not in-app widget focus (see
-    /// `retroglyph-widgets`' focus ring for that).
-    FocusGained,
-    /// The terminal or application window lost input focus.
-    ///
-    /// This reflects OS/terminal-level focus, not in-app widget focus (see
-    /// `retroglyph-widgets`' focus ring for that).
-    FocusLost,
-    /// An application-defined event injected from outside the normal input
-    /// source (e.g. a network, audio, or timer thread), carrying an opaque
-    /// tag the app assigns its own meaning to.
-    ///
-    /// Only emitted by backends with a real cross-thread injection point:
-    /// the windowed (winit) backend's `EventProxy`
-    /// (`retroglyph_window::winit::EventProxy::send_event`), which forwards
-    /// the `u64` unchanged. The payload is a plain `u64`
-    /// rather than an arbitrary boxed value: it keeps `Event` cheaply
-    /// `Clone`/`PartialEq` (a `Box<dyn Any>` could not derive either) and
-    /// needs no generic parameter threaded through every crate that names
-    /// `Event`. Treat it as a correlation id: look up
-    /// the real payload in whatever shared state or channel the sending
-    /// thread already placed it in.
-    Custom(u64),
-}
-
-/// Whether `new` should replace the queue's current tail event instead of being pushed alongside
-/// it, when a backend is appending `new` to a `Vec`/`VecDeque` of pending events.
-///
-/// True for two consecutive [`Event::Mouse`](crate::event::Event::Mouse) events both carrying [`MouseEventKind::Moved`](crate::event::MouseEventKind::Moved), or
-/// both carrying [`MouseEventKind::Drag`](crate::event::MouseEventKind::Drag) with the same button: a queue owner (winit, the wasm
-/// FFI boundary, `Headless`) can be fed pointer-move/drag events far faster than a consumer
-/// drains them, and only the most recent position matters once it does (whether or not a button
-/// is held), so collapsing either run in place keeps the queue from growing unbounded
-/// (retroglyph#294, retroglyph#768, retroglyph#942). A `Drag` only coalesces with another `Drag`
-/// carrying the *same* button, so a button change mid-drag is never swallowed into the wrong
-/// button's position. `Scroll` deliberately does not coalesce despite also being high-frequency:
-/// its `dx`/`dy` are deltas, not absolute state, so collapsing a run would discard real scroll
-/// distance rather than a stale intermediate value. Every other event kind (clicks, keys, resize,
-/// ...) always returns `false`.
-#[must_use]
-pub const fn coalesces_with(new: &Event, existing: &Event) -> bool {
-    matches!(
-        (new, existing),
-        (
-            Event::Mouse(MouseEvent {
-                kind: MouseEventKind::Moved,
-                ..
-            }),
-            Event::Mouse(MouseEvent {
-                kind: MouseEventKind::Moved,
-                ..
-            }),
-        )
-    ) || matches!(
-        (new, existing),
-        (
-            Event::Mouse(MouseEvent {
-                kind: MouseEventKind::Drag(new_button),
-                ..
-            }),
-            Event::Mouse(MouseEvent {
-                kind: MouseEventKind::Drag(existing_button),
-                ..
-            }),
-        ) if *new_button as u8 == *existing_button as u8
-    )
-}
-
 /// Tracks which keys are currently held down.
 ///
-/// Feed it every [`KeyEvent`](crate::event::KeyEvent) (or [`Event`](crate::event::Event)) you receive and query
+/// Feed it every [`KeyEvent`] (or [`Event`](super::Event)) you receive and query
 /// [`is_held`](Self::is_held) each frame for held-key movement. A key is
-/// considered held from its first [`KeyEventKind::Press`](crate::event::KeyEventKind::Press) until a matching
-/// [`KeyEventKind::Release`](crate::event::KeyEventKind::Release), or until [`apply_event`](Self::apply_event) sees an
-/// [`Event::FocusLost`](crate::event::Event::FocusLost), whichever comes first.
+/// considered held from its first [`KeyEventKind::Press`] until a matching
+/// [`KeyEventKind::Release`], or until [`apply_event`](Self::apply_event) sees an
+/// [`Event::FocusLost`](super::Event::FocusLost), whichever comes first.
 ///
 /// Held keys are keyed by `(KeyCode, KeyLocation)`, so a held Numpad8 and a held digit-row 8 are
 /// tracked separately: [`is_held`](Self::is_held) takes the pair, and [`held`](Self::held) yields
@@ -545,9 +310,9 @@ pub const fn coalesces_with(new: &Event, existing: &Event) -> bool {
 /// there is no release to match -- so call [`clear`](Self::clear) at a suitable boundary (e.g.
 /// once per turn) if you rely on held-key state there. Backends rich enough to emit releases
 /// (winit, or a terminal with the kitty keyboard protocol) are exactly the ones that also emit
-/// [`Event::FocusLost`](crate::event::Event::FocusLost), so [`apply_event`](Self::apply_event) clears the held set on it: without
-/// that, alt-tabbing or clicking away while a key is down would leave it stuck held forever, since
-/// the release is delivered to whichever window/app gains focus instead.
+/// [`Event::FocusLost`](super::Event::FocusLost), so [`apply_event`](Self::apply_event) clears the
+/// held set on it: without that, alt-tabbing or clicking away while a key is down would leave it
+/// stuck held forever, since the release is delivered to whichever window/app gains focus instead.
 #[derive(Debug, Clone, Default)]
 pub struct KeyState {
     held: Vec<(KeyCode, KeyLocation)>,
@@ -578,14 +343,15 @@ impl KeyState {
         }
     }
 
-    /// Updates the held set from an [`Event`](crate::event::Event).
+    /// Updates the held set from an [`Event`](super::Event).
     ///
-    /// Key events update the held set as [`apply`](Self::apply) does; [`Event::FocusLost`](crate::event::Event::FocusLost)
-    /// clears it entirely (see the type-level docs for why); every other event is ignored.
-    pub fn apply_event(&mut self, event: &Event) {
+    /// Key events update the held set as [`apply`](Self::apply) does;
+    /// [`Event::FocusLost`](super::Event::FocusLost) clears it entirely (see the type-level docs
+    /// for why); every other event is ignored.
+    pub fn apply_event(&mut self, event: &super::Event) {
         match event {
-            Event::Key(key) => self.apply(*key),
-            Event::FocusLost => self.clear(),
+            super::Event::Key(key) => self.apply(*key),
+            super::Event::FocusLost => self.clear(),
             _ => {}
         }
     }
@@ -609,6 +375,7 @@ impl KeyState {
 
 #[cfg(test)]
 mod tests {
+    use super::super::Event;
     use super::*;
     use alloc::vec;
 
@@ -927,173 +694,5 @@ mod tests {
         ));
         assert!(!state.is_held(KeyCode::Up, KeyLocation::Standard));
         assert!(state.held().next().is_none());
-    }
-
-    #[test]
-    fn test_paste_event_carries_text() {
-        use alloc::string::ToString as _;
-
-        let event = Event::Paste("hello".to_string());
-        let Event::Paste(text) = event else {
-            panic!("Expected Event::Paste");
-        };
-        assert_eq!(text, "hello");
-    }
-
-    #[test]
-    fn test_custom_event_carries_opaque_id() {
-        let event = Event::Custom(42);
-        let Event::Custom(id) = event else {
-            panic!("Expected Event::Custom");
-        };
-        assert_eq!(id, 42);
-        assert_ne!(Event::Custom(1), Event::Custom(2));
-    }
-
-    #[test]
-    fn test_focus_gained_and_lost_are_distinct() {
-        assert!(matches!(Event::FocusGained, Event::FocusGained));
-        assert!(matches!(Event::FocusLost, Event::FocusLost));
-        assert_ne!(Event::FocusGained, Event::FocusLost);
-    }
-
-    #[test]
-    fn test_mouse_event_no_pixel_position() {
-        let mouse_event = MouseEvent {
-            kind: MouseEventKind::Down(MouseButton::Left),
-            position: Pos { x: 10, y: 5 },
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        };
-        assert!(mouse_event.pixel_position.is_none());
-        assert!(matches!(Event::Mouse(mouse_event), Event::Mouse(_)));
-    }
-
-    #[test]
-    fn test_mouse_event_with_pixel_position() {
-        let mouse_event = MouseEvent {
-            kind: MouseEventKind::Moved,
-            position: Pos { x: 3, y: 2 },
-            pixel_position: Some(PhysicalPos { x: 55, y: 38 }),
-            modifiers: KeyModifiers::NONE,
-        };
-        let px = mouse_event.pixel_position.unwrap();
-        assert_eq!(px.x, 55);
-        assert_eq!(px.y, 38);
-        // Cell and pixel positions are distinct coordinate spaces.
-        assert_ne!(px.x, u32::from(mouse_event.position.x));
-    }
-
-    #[test]
-    fn test_mouse_event_new_has_no_pixel_position() {
-        let mouse_event = MouseEvent::new(
-            MouseEventKind::Down(MouseButton::Left),
-            Pos { x: 10, y: 5 },
-            KeyModifiers::NONE,
-        );
-        assert_eq!(mouse_event.kind, MouseEventKind::Down(MouseButton::Left));
-        assert_eq!(mouse_event.position, Pos { x: 10, y: 5 });
-        assert!(mouse_event.pixel_position.is_none());
-    }
-
-    #[test]
-    fn test_mouse_event_with_pixel_position_constructor() {
-        let mouse_event = MouseEvent::with_pixel_position(
-            MouseEventKind::Moved,
-            Pos { x: 3, y: 2 },
-            KeyModifiers::NONE,
-            PhysicalPos { x: 55, y: 38 },
-        );
-        assert_eq!(
-            mouse_event.pixel_position,
-            Some(PhysicalPos { x: 55, y: 38 })
-        );
-    }
-
-    #[test]
-    fn test_physical_pos_is_copy() {
-        let p = PhysicalPos { x: 10, y: 20 };
-        let q = p; // Copy
-        assert_eq!(p, q);
-    }
-
-    fn moved_at(x: u16, y: u16) -> Event {
-        Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Moved,
-            position: Pos::new(x, y),
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        })
-    }
-
-    #[test]
-    fn coalesces_with_true_for_two_consecutive_moved_events() {
-        assert!(coalesces_with(&moved_at(1, 1), &moved_at(0, 0)));
-    }
-
-    #[test]
-    fn coalesces_with_false_for_non_moved_mouse_events() {
-        let down = Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Down(MouseButton::Left),
-            position: Pos::new(0, 0),
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        });
-        assert!(!coalesces_with(&moved_at(1, 1), &down));
-        assert!(!coalesces_with(&down, &moved_at(0, 0)));
-    }
-
-    #[test]
-    fn coalesces_with_false_for_non_mouse_events() {
-        let key = Event::Key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
-        assert!(!coalesces_with(&moved_at(1, 1), &key));
-        assert!(!coalesces_with(&key, &moved_at(0, 0)));
-    }
-
-    fn drag_at(x: u16, y: u16, button: MouseButton) -> Event {
-        Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Drag(button),
-            position: Pos::new(x, y),
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        })
-    }
-
-    #[test]
-    fn coalesces_with_true_for_two_consecutive_drag_events_same_button() {
-        assert!(coalesces_with(
-            &drag_at(1, 1, MouseButton::Left),
-            &drag_at(0, 0, MouseButton::Left),
-        ));
-    }
-
-    #[test]
-    fn coalesces_with_false_for_drag_events_with_different_buttons() {
-        assert!(!coalesces_with(
-            &drag_at(1, 1, MouseButton::Right),
-            &drag_at(0, 0, MouseButton::Left),
-        ));
-        assert!(!coalesces_with(
-            &drag_at(1, 1, MouseButton::Left),
-            &drag_at(0, 0, MouseButton::Middle),
-        ));
-    }
-
-    #[test]
-    fn coalesces_with_false_for_scroll_events() {
-        let scroll = |dy: f32| {
-            Event::Mouse(MouseEvent {
-                kind: MouseEventKind::Scroll { dx: 0.0, dy },
-                position: Pos::new(0, 0),
-                pixel_position: None,
-                modifiers: KeyModifiers::NONE,
-            })
-        };
-        assert!(!coalesces_with(&scroll(1.0), &scroll(1.0)));
-    }
-
-    #[test]
-    fn coalesces_with_false_for_two_non_mouse_events() {
-        assert!(!coalesces_with(&Event::Close, &Event::Resize(1, 1)));
     }
 }

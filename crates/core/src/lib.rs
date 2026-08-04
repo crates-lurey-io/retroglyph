@@ -64,9 +64,9 @@
 //!
 //! ⚪ Optional.
 //!
-//! Adds `Serialize`/`Deserialize` impls for [`Color`](crate::color::Color), [`Style`](crate::color::Style), `Size`, and (via `ixy`)
-//! `Pos`/`Rect`, so a config file can round-trip a saved camera position, window geometry, or theme
-//! color.
+//! Adds `Serialize`/`Deserialize` impls for [`Color`](crate::color::Color), [`Style`](crate::color::Style), `Size`,
+//! `Offset`, and (via `ixy`) `Pos`/`Rect`, so a config file can round-trip a saved camera position,
+//! window geometry, sub-cell pixel offset, or theme color.
 //!
 //! [`Color`](crate::color::Color) serializes through its `Display`/`FromStr` round trip (e.g. `"bright-red"`,
 //! `"#ff8000"`) rather than a derived structural form, so hand-edited TOML/JSON stays legible.

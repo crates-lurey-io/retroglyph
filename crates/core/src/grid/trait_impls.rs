@@ -2,7 +2,7 @@
 //! [`Display`](fmt::Display)/[`Debug`](fmt::Debug) implementations.
 
 use super::{Grid, Pos, to_grixy_pos};
-#[cfg(all(test, feature = "egc"))]
+#[cfg(test)]
 use crate::color::Style;
 use crate::tile::{Tile, TileFlags};
 use core::fmt;
@@ -42,6 +42,7 @@ impl IndexMut<Pos> for Grid {
 // Display / Debug: layer 0
 // ---------------------------------------------------------------------------
 
+/// Renders layer 0 only, one character per cell, with `·` in place of a plain space.
 impl fmt::Display for Grid {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for y in 0..self.height() {
@@ -63,11 +64,15 @@ impl fmt::Display for Grid {
     }
 }
 
+/// Shows `width`, `height`, `max_layer`, and `has_spans`; the layer buffers themselves are
+/// omitted (see [`Display`](fmt::Display) for a rendering of layer 0).
 impl fmt::Debug for Grid {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Grid")
             .field("width", &self.width)
             .field("height", &self.height)
+            .field("max_layer", &self.max_layer)
+            .field("has_spans", &self.has_spans)
             .finish_non_exhaustive()
     }
 }
@@ -110,5 +115,18 @@ mod tests {
 
         let s = alloc::format!("{grid}");
         assert_eq!(s, "\u{4e2d} \u{b7}\n");
+    }
+
+    #[test]
+    fn test_grid_debug_reports_layer_and_span_state() {
+        let mut grid = Grid::new(3, 2);
+        grid.put_tile(2, (0, 0), Tile::default().with_glyph('A'));
+        grid.write_span(0, 0, 0, &["hi"], Style::default());
+
+        let s = alloc::format!("{grid:?}");
+        assert!(s.contains("width: 3"));
+        assert!(s.contains("height: 2"));
+        assert!(s.contains("max_layer: 2"));
+        assert!(s.contains("has_spans: true"));
     }
 }

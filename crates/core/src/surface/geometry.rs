@@ -1,7 +1,6 @@
 use crate::color::Style;
-use crate::color::{Color, Tint};
-use crate::grid::{Grid, Pos, Rect};
-use crate::tile::Tile;
+use crate::color::Tint;
+use crate::grid::{Grid, Rect};
 
 use super::styled::StyledSurface;
 use super::{Layer, Surface};
@@ -411,57 +410,5 @@ impl<'a> Surface<'a> {
     #[must_use]
     pub const fn grid(&self) -> &Grid {
         self.grid
-    }
-
-    /// The tile at `pos` on this surface's layer, if any.
-    ///
-    /// Respects this surface's layer but not its clip, mirroring [`grid_mut`](Self::grid_mut) in
-    /// that sense: a caller wanting a clipped read should check
-    /// [`self.clip_rect().contains(...)`](crate::grid::Rect::contains) first.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use retroglyph_core::color::Style;
-    /// use retroglyph_core::grid::{Grid, Rect};
-    /// use retroglyph_core::surface::Surface;
-    ///
-    /// let mut grid = Grid::new(4, 4);
-    /// let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 4, 4), 0);
-    /// surface.put((1, 1), 'X', Style::default());
-    ///
-    /// assert_eq!(surface.tile((1, 1)).map(|t| t.glyph()), Some('X'));
-    /// assert_eq!(surface.tile((0, 0)).map(|t| t.glyph()), Some(' '));
-    /// ```
-    #[must_use]
-    pub fn tile(&self, pos: impl Into<Pos>) -> Option<&Tile> {
-        self.grid.tile(self.layer, pos.into())
-    }
-
-    /// The background colour at `pos` on this surface's layer, or `None` if there's no tile
-    /// there.
-    ///
-    /// A read-only read of a cell's own background lets a caller blend a new draw with what's
-    /// already there (e.g. `surface.background(pos).unwrap_or(default)`) without the mutable
-    /// borrow [`grid_mut`](Self::grid_mut) would otherwise force.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use retroglyph_core::color::{Color, Style};
-    /// use retroglyph_core::grid::{Grid, Rect};
-    /// use retroglyph_core::surface::Surface;
-    ///
-    /// let mut grid = Grid::new(4, 4);
-    /// let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 4, 4), 0);
-    /// surface.put((1, 1), 'X', Style::new().bg(Color::RED));
-    ///
-    /// assert_eq!(surface.background((1, 1)), Some(Color::RED));
-    /// // Out of the grid entirely: no tile there to read a background from.
-    /// assert_eq!(surface.background((10, 10)), None);
-    /// ```
-    #[must_use]
-    pub fn background(&self, pos: impl Into<Pos>) -> Option<Color> {
-        self.tile(pos).map(|t| t.style().background())
     }
 }

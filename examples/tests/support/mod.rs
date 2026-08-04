@@ -148,8 +148,8 @@ fn crossterm_target_dir() -> PathBuf {
 ///
 /// This deliberately does *not* build the binary. It used to run `cargo build --examples
 /// --features crossterm --target-dir crossterm_target_dir()` itself, once per `svg_snapshot`
-/// call -- but those tests are their own separate `[[test]]` binaries (15 of them, one per
-/// example) that nextest runs as 15 concurrent processes, so every one of those in-test builds
+/// call -- but every `svg_snapshot` test is its own separate `[[test]]` binary, one per example,
+/// and nextest runs all of them as concurrent processes, so every one of those in-test builds
 /// raced every other one over the same shared target dir. Cargo's own locking keeps that from
 /// corrupting a build, but it does not stop one process from spawning a binary that a concurrent
 /// build in another process is mid-relink over, which is a plausible cause of retroglyph#976 (a

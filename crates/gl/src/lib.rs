@@ -253,7 +253,7 @@ impl GlRenderer {
     /// fix. A tile that already declares a span is fine and says nothing.
     #[cfg(feature = "tilesets")]
     fn warn_if_sprite_needs_span(&mut self, tile: &Tile, sprite: SpriteSlot) {
-        if tile.span() != (1, 1) {
+        if tile.is_span_anchor() {
             return;
         }
         retroglyph_window::sprite_cache::warn_sprite_needs_span(
