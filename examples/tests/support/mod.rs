@@ -494,7 +494,16 @@ pub fn capture_pty_until(
         }
     }
 
-    writer.write_all(b"q").expect("write quit");
+    // Only pokes the child if it hasn't already quit on its own: an example whose own quit key
+    // differs from `q` (sent as part of `input` above, e.g. Escape) can already have exited by
+    // this point, and writing to a PTY whose slave side is fully closed fails with `EIO` on
+    // macOS -- `try_wait` (already used the same way in `wait_for_marker` above) tells the two
+    // cases apart without adding a real wait of its own; a `try_wait` error is treated the same
+    // as "still running" so every existing caller (whose child is always alive here) keeps
+    // sending `q` exactly as before.
+    if !matches!(child.try_wait(), Ok(Some(_))) {
+        writer.write_all(b"q").expect("write quit");
+    }
     drop(writer);
     let _ = child.wait();
 
