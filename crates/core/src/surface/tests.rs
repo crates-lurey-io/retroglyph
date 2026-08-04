@@ -410,10 +410,8 @@ fn fill_rect_with_a_wide_glyph_falls_back_to_the_put_loop() {
     let mut via_put = Grid::new(8, 1);
     {
         let mut surface = screen(&mut via_put);
-        for y in rect.top()..rect.bottom() {
-            for x in rect.left()..rect.right() {
-                surface.put((x, y), '\u{6f22}', Style::default());
-            }
+        for pos in rect {
+            surface.put(pos, '\u{6f22}', Style::default());
         }
     }
 
