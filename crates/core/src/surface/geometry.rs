@@ -45,7 +45,7 @@ impl<'a> Surface<'a> {
     /// ```
     #[must_use]
     pub const fn local_area(&self) -> Rect {
-        Rect::new(0, 0, self.area.width(), self.area.height())
+        self.area.at_origin()
     }
 
     /// The visible subset of [`area`](Self::area). Every write this surface accepts is

@@ -129,7 +129,7 @@ impl Grid {
     /// layout helpers or `blit`'s `src_rect`.
     #[must_use]
     pub const fn rect(&self) -> Rect {
-        Rect::new(0, 0, self.width, self.height)
+        self.size().to_rect()
     }
 
     /// Returns the highest layer id that has ever been allocated.
