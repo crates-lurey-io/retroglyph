@@ -13,21 +13,14 @@ impl<'a> Surface<'a> {
     /// off the surface after being clipped (e.g. while partially offscreen) sees the region it
     /// was given, not the visible sliver of it, so it can still center itself correctly and let
     /// the clip take care of what actually lands.
-    #[must_use]
-    pub const fn area(&self) -> Rect {
-        self.area
-    }
-
-    /// [`area`](Self::area), translated to this surface's own coordinate space: always
-    /// `Rect::new(0, 0, width, height)`.
     ///
     /// Every drawing method on this surface ([`put`](Self::put), [`print`](Self::print),
     /// [`fill_rect`](Self::fill_rect), ...) takes coordinates local to this surface, where
-    /// `(0, 0)` is this area's own top-left corner, not the underlying grid's. [`area`](Self::area)
-    /// itself is absolute grid space, so `surface.put((surface.area().left(), ...), ...)` only
-    /// lands correctly for a surface whose area happens to start at the grid origin; anywhere
-    /// else it silently misses. A widget that wants to place itself relative to its own bounds
-    /// (e.g. a label in a corner) should reach for `local_area()`, or just [`width`](Self::width)/
+    /// `(0, 0)` is this area's own top-left corner, not the underlying grid's. `area()` itself is
+    /// absolute grid space, so `surface.put((surface.area().left(), ...), ...)` only lands
+    /// correctly for a surface whose area happens to start at the grid origin; anywhere else it
+    /// silently misses. A widget that wants to place itself relative to its own bounds (e.g. a
+    /// label in a corner) should reach for `area().at_origin()`, or just [`width`](Self::width)/
     /// [`height`](Self::height) directly, and never for `area()`'s own [`left`](Rect::left)/
     /// [`top`](Rect::top).
     ///
@@ -41,11 +34,11 @@ impl<'a> Surface<'a> {
     /// let mut scoped = surface.scope(Rect::new(3, 3, 4, 4));
     ///
     /// assert_eq!(scoped.area(), Rect::new(3, 3, 4, 4));
-    /// assert_eq!(scoped.local_area(), Rect::new(0, 0, 4, 4));
+    /// assert_eq!(scoped.area().at_origin(), Rect::new(0, 0, 4, 4));
     /// ```
     #[must_use]
-    pub const fn local_area(&self) -> Rect {
-        Rect::new(0, 0, self.area.width(), self.area.height())
+    pub const fn area(&self) -> Rect {
+        self.area
     }
 
     /// The visible subset of [`area`](Self::area). Every write this surface accepts is

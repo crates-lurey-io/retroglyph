@@ -168,8 +168,8 @@ impl Surface<'_> {
     /// `rect` is local to this surface's own [`area`](Self::area), the same convention as
     /// [`fill_rect`](Self::fill_rect) and [`clear_region`](Self::clear_region) (not absolute grid
     /// coordinates, the convention [`clip`](Self::clip)/[`scope`](Self::scope) use for their own
-    /// `rect`): `(0, 0)` is `area`'s own top-left, so a widget's own `local_area()` can be passed
-    /// straight in.
+    /// `rect`): `(0, 0)` is `area`'s own top-left, so a widget's own `area().at_origin()` can be
+    /// passed straight in.
     ///
     /// Wants a per-frame redrawn UI label (a status line, a centred title bar) that should not
     /// allocate: unlike [`TextLayout`](crate::layout::TextLayout), which only accepts a
@@ -218,7 +218,7 @@ impl Surface<'_> {
         let x_offset = align.offset(rect.width(), text_width);
         let pos = (rect.left().saturating_add(x_offset), rect.top());
         // `rect` (like `pos` here) is local to `self.area` and deliberately independent of any
-        // outstanding `translate`, matching a widget's own `local_area()`. `print` itself
+        // outstanding `translate`, matching a widget's own `area().at_origin()`. `print` itself
         // subtracts `origin_offset` again (via `shift`), so a translated surface would subtract
         // it twice and drop the text entirely unless it's cancelled first: hand `print` a view
         // whose `origin_offset` is zeroed out rather than adjusting `pos` by hand, which would

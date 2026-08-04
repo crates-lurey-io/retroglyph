@@ -126,9 +126,9 @@ impl Headless {
     pub fn format_view(&self) -> String {
         let grid = self.grid();
         let mut out = String::new();
-        for y in 0..grid.height() {
-            for x in 0..grid.width() {
-                let cell = &grid[Pos::new(x, y)];
+        for row in grid.size().to_rect().rows() {
+            for pos in row {
+                let cell = &grid[pos];
                 let (glyph, is_spacer) = Self::display_glyph(cell);
                 out.push(if is_spacer { ' ' } else { glyph });
             }
@@ -157,10 +157,10 @@ impl Headless {
     pub fn format_styled(&self) -> String {
         let grid = self.grid();
         let mut out = String::new();
-        for y in 0..grid.height() {
+        for row in grid.size().to_rect().rows() {
             let mut current: Option<Style> = None;
-            for x in 0..grid.width() {
-                let cell = &grid[Pos::new(x, y)];
+            for pos in row {
+                let cell = &grid[pos];
                 let (glyph, is_spacer) = Self::display_glyph(cell);
                 let style = if is_spacer {
                     Style::default()

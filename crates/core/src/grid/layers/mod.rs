@@ -158,7 +158,7 @@ impl Grid {
     /// assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
     /// ```
     pub fn fill_region(&mut self, layer: u8, rect: Rect, mut tile: Tile) {
-        let bounds = self.rect();
+        let bounds = self.size().to_rect();
         let rect = rect.intersect(bounds);
         if rect.is_empty() {
             return;
@@ -181,8 +181,8 @@ impl Grid {
         // on `egc`: `put_tile` writes a `WIDE_CHAR`/`WIDE_CHAR_SPACER` pair on every feature
         // combination (see its own doc comment), so a fill that can land inside one has to clean
         // it up regardless of `egc`.
-        for y in rect.top()..rect.bottom() {
-            self.clear_overlap(layer, rect.left(), y, rect.width());
+        for row in rect.rows() {
+            self.clear_overlap(layer, row.left(), row.top(), row.width());
         }
 
         // `tile` is a caller-constructed `Tile` (see `put_tile`'s own doc comment for why that

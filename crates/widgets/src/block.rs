@@ -28,7 +28,7 @@ pub fn join_h(grids: &[Grid]) -> Grid {
 
     let mut x_offset = 0u16;
     for g in grids {
-        out.blit(0, g, g.rect(), x_offset, 0);
+        out.blit(0, g, g.size().to_rect(), x_offset, 0);
         x_offset = x_offset.saturating_add(g.width());
     }
     out
@@ -54,7 +54,7 @@ pub fn join_v(grids: &[Grid]) -> Grid {
 
     let mut y_offset = 0u16;
     for g in grids {
-        out.blit(0, g, g.rect(), 0, y_offset);
+        out.blit(0, g, g.size().to_rect(), 0, y_offset);
         y_offset = y_offset.saturating_add(g.height());
     }
     out

@@ -179,7 +179,7 @@ impl<Id> InteractiveWidget<Id> for Button<'_> {
         }
 
         let style = self.resolved_style(&response);
-        let local_area = surface.local_area();
+        let local_area = surface.area().at_origin();
         fill_rect(surface, local_area, ' ', style);
 
         let y = height / 2;

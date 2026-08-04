@@ -95,7 +95,7 @@ gem = { version = "0.2.2", default-features = false }
 # suppresses the implicit `alpha-blend` feature an optional dependency otherwise adds to the
 # public matrix. `default-features = false` for the same reason as gem, immediately above.
 alpha-blend = { version = "0.3", optional = true, default-features = false }
-ixy = "0.7.0"
+ixy = "0.8.0"
 # `Color`'s `serde` impls (see color.rs) are hand-written against its own `Display`/`FromStr`, so
 # they need only the `derive` feature for `Style`/`Size`'s plain `#[derive(Serialize, Deserialize)]`
 # below -- no `alloc` feature, since nothing here deserializes into an owned `String`/`Vec`.
