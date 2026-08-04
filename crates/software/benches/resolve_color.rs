@@ -21,8 +21,11 @@
 #![allow(missing_docs)]
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use retroglyph_core::DrawCell;
-use retroglyph_core::{AnsiColor, Color, Output, Pos, Style, Tile};
+use retroglyph_core::backend::DrawCell;
+use retroglyph_core::backend::Output;
+use retroglyph_core::color::{AnsiColor, Color, Style};
+use retroglyph_core::grid::Pos;
+use retroglyph_core::tile::Tile;
 use retroglyph_software::SoftwareBackendBuilder;
 use retroglyph_window::font::unscii16;
 

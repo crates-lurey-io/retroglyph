@@ -14,7 +14,7 @@
 #![allow(missing_docs)]
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use retroglyph_core::{Grid, Rect};
+use retroglyph_core::grid::{Grid, Rect};
 use retroglyph_widgets::{List, ListState, Sparkline, StatefulWidget, Surface, Widget};
 use std::hint::black_box;
 

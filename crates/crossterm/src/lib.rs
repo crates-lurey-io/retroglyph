@@ -1,5 +1,5 @@
 //! [`Output`], [`Input`], and [`Cursor`] implementations that render to a real terminal via
-//! `crossterm`, bundled together as [`Backend`](retroglyph_core::Backend).
+//! `crossterm`, bundled together as [`Backend`](retroglyph_core::backend::Backend).
 //!
 //! This crate owns the OS/TTY-specific parts: raw mode, the alternate
 //! screen, the kitty keyboard protocol, and `crossterm::event` polling.
@@ -17,7 +17,7 @@
 //!
 //! [`poll_event`](Input::poll_event) wraps a single `crossterm::event::poll()` syscall per call.
 //! A zero timeout (as used by
-//! [`Terminal::drain_events`](retroglyph_core::Terminal::drain_events) to drain everything
+//! [`Terminal::drain_events`](retroglyph_core::terminal::Terminal::drain_events) to drain everything
 //! buffered without blocking) performs one non-blocking `crossterm::event::poll(Duration::ZERO)`
 //! syscall (`select`/`epoll` under the hood), not a busy spin inside `poll_event` itself: once
 //! the OS reports no data waiting, it returns `None` immediately rather than looping. The actual
@@ -56,7 +56,7 @@
 //! With the optional `tracing` feature enabled, [`Output::draw`], [`Output::flush`], and
 //! [`Input::poll_event`] are each wrapped in a `tracing` span (`debug` level for `draw`/`flush`,
 //! `trace` for `poll_event` since it's called every game-loop iteration by
-//! [`Terminal::drain_events`](retroglyph_core::Terminal::drain_events)), so a subscriber (e.g.
+//! [`Terminal::drain_events`](retroglyph_core::terminal::Terminal::drain_events)), so a subscriber (e.g.
 //! `tracing-subscriber`'s fmt layer, or a flamegraph via `tracing-flame`) can show where render
 //! and input-polling time actually goes. The feature adds no code and no dependency when disabled.
 //!
@@ -118,10 +118,10 @@ struct ReadmeDoctests;
 struct WorkspaceReadmeDoctests;
 
 use core::time::Duration;
-use retroglyph_core::DrawCell;
-use retroglyph_core::HasSize;
+use retroglyph_core::backend::DrawCell;
 use retroglyph_core::backend::{Cursor, CursorStyle, Input, Output};
 use retroglyph_core::event::Event;
+use retroglyph_core::grid::HasSize;
 use retroglyph_core::grid::{Pos, Size};
 use retroglyph_terminal::TerminalRenderer;
 use std::collections::VecDeque;
@@ -616,7 +616,7 @@ impl Crossterm {
     /// # Examples
     ///
     /// ```no_run
-    /// use retroglyph_core::Terminal;
+    /// use retroglyph_core::terminal::Terminal;
     /// use retroglyph_crossterm::Crossterm;
     ///
     /// // Requires a real controlling terminal (raw mode, the alternate screen, and cursor
@@ -673,16 +673,16 @@ impl Crossterm {
     }
 
     /// Creates a crossterm terminal and drives `app` with the blocking loop until
-    /// it returns [`Flow::Exit`](retroglyph_core::Flow).
+    /// it returns [`Flow::Exit`](retroglyph_core::app::Flow).
     ///
     /// This is a thin wrapper over the generic
-    /// [`run_blocking`](retroglyph_core::run_blocking); the terminal is restored on the
+    /// [`run_blocking`](retroglyph_core::app::run_blocking); the terminal is restored on the
     /// way out via `Drop`, so raw mode and the alternate screen are left intact
     /// until the loop actually returns. Event-driven by default (see
-    /// [`RunOptions::default`](retroglyph_core::RunOptions)): an app that returns
-    /// [`Flow::Idle`](retroglyph_core::Flow::Idle) blocks on input rather than spinning. Use
-    /// [`Crossterm::run_with`] to pass different [`RunOptions`](retroglyph_core::RunOptions),
-    /// for example [`RunOptions::animated`](retroglyph_core::RunOptions::animated) for a
+    /// [`RunOptions::default`](retroglyph_core::app::RunOptions)): an app that returns
+    /// [`Flow::Idle`](retroglyph_core::app::Flow::Idle) blocks on input rather than spinning. Use
+    /// [`Crossterm::run_with`] to pass different [`RunOptions`](retroglyph_core::app::RunOptions),
+    /// for example [`RunOptions::animated`](retroglyph_core::app::RunOptions::animated) for a
     /// continuously-rendering app.
     ///
     /// # Errors
@@ -691,32 +691,35 @@ impl Crossterm {
     /// fails while `app` is running.
     pub fn run<A>(app: A) -> Result<(), std::io::Error>
     where
-        A: retroglyph_core::App<Self>,
+        A: retroglyph_core::app::App<Self>,
     {
-        Self::run_with(app, retroglyph_core::RunOptions::default())
+        Self::run_with(app, retroglyph_core::app::RunOptions::default())
     }
 
     /// Creates a crossterm terminal and drives `app` with the blocking loop, per `options`, until
-    /// it returns [`Flow::Exit`](retroglyph_core::Flow).
+    /// it returns [`Flow::Exit`](retroglyph_core::app::Flow).
     ///
     /// This is a thin wrapper over the generic
-    /// [`run_blocking_with`](retroglyph_core::run_blocking_with); see [`Crossterm::run`] for the
-    /// zero-config equivalent, and [`RunOptions`](retroglyph_core::RunOptions) for the available
+    /// [`run_blocking_with`](retroglyph_core::app::run_blocking_with); see [`Crossterm::run`] for the
+    /// zero-config equivalent, and [`RunOptions`](retroglyph_core::app::RunOptions) for the available
     /// pacing and idle-blocking controls. Reaching this method is the intended way to opt into
-    /// [`RunOptions::animated`](retroglyph_core::RunOptions::animated) or a custom
-    /// [`RunOptions::idle_wake`](retroglyph_core::RunOptions) without hand-building a
-    /// [`Terminal`](retroglyph_core::Terminal) and calling `run_blocking_with` directly.
+    /// [`RunOptions::animated`](retroglyph_core::app::RunOptions::animated) or a custom
+    /// [`RunOptions::idle_wake`](retroglyph_core::app::RunOptions) without hand-building a
+    /// [`Terminal`](retroglyph_core::terminal::Terminal) and calling `run_blocking_with` directly.
     ///
     /// # Errors
     ///
     /// Returns an `std::io::Error` if the terminal fails to initialize, or if a frame present
     /// fails while `app` is running.
-    pub fn run_with<A>(app: A, options: retroglyph_core::RunOptions) -> Result<(), std::io::Error>
+    pub fn run_with<A>(
+        app: A,
+        options: retroglyph_core::app::RunOptions,
+    ) -> Result<(), std::io::Error>
     where
-        A: retroglyph_core::App<Self>,
+        A: retroglyph_core::app::App<Self>,
     {
-        let term = retroglyph_core::Terminal::new(Self::new()?);
-        retroglyph_core::run_blocking_with(term, app, options)
+        let term = retroglyph_core::terminal::Terminal::new(Self::new()?);
+        retroglyph_core::app::run_blocking_with(term, app, options)
     }
 }
 

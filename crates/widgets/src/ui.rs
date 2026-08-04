@@ -1,6 +1,7 @@
 //! [`Ui`]: a per-frame context pairing a [`Surface`] with an [`Interaction`].
 
-use retroglyph_core::{Rect, Surface};
+use retroglyph_core::grid::Rect;
+use retroglyph_core::surface::Surface;
 
 use crate::interact::{Interaction, Response, Sense};
 use crate::widget::{InteractiveWidget, Measure, StatefulWidget, Widget};
@@ -236,7 +237,7 @@ impl<'g, Id: Copy + PartialEq> Ui<'_, 'g, Id> {
     /// outside `f` exactly as if `modal` hadn't been called. A modal claims the region it covers,
     /// not the whole screen; pass a full-screen `area` for a blocking overlay. Drawing is
     /// unaffected either way, `f`'s `Ui` still draws to this `Ui`'s full surface unless it also
-    /// narrows with [`show`](Self::show)/[`draw`](Self::draw)/[`scope`](retroglyph_core::Surface::scope)
+    /// narrows with [`show`](Self::show)/[`draw`](Self::draw)/[`scope`](retroglyph_core::surface::Surface::scope)
     /// itself: `modal` only changes hit-testing.
     pub fn modal<R>(&mut self, area: Rect, f: impl FnOnce(&mut Ui<'_, 'g, Id>) -> R) -> R {
         self.interaction.push_barrier(area);
@@ -461,7 +462,9 @@ impl<'g, Id: Copy + PartialEq> Ui<'_, 'g, Id> {
 mod tests {
     use alloc::string::String;
 
-    use retroglyph_core::{Event, Grid, KeyModifiers, MouseEvent, MouseEventKind, Pos, Style};
+    use retroglyph_core::color::Style;
+    use retroglyph_core::event::{Event, KeyModifiers, MouseEvent, MouseEventKind};
+    use retroglyph_core::grid::{Grid, Pos};
 
     use super::*;
     use crate::widget::Widget;
@@ -592,12 +595,12 @@ mod tests {
 
         // A press-then-release inside `area`, fed in between frames.
         let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
-            MouseEventKind::Down(retroglyph_core::MouseButton::Left),
+            MouseEventKind::Down(retroglyph_core::event::MouseButton::Left),
             Pos::new(1, 1),
             KeyModifiers::NONE,
         )));
         let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
-            MouseEventKind::Up(retroglyph_core::MouseButton::Left),
+            MouseEventKind::Up(retroglyph_core::event::MouseButton::Left),
             Pos::new(1, 1),
             KeyModifiers::NONE,
         )));
@@ -628,12 +631,12 @@ mod tests {
         });
 
         let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
-            MouseEventKind::Down(retroglyph_core::MouseButton::Left),
+            MouseEventKind::Down(retroglyph_core::event::MouseButton::Left),
             Pos::new(0, 0),
             KeyModifiers::NONE,
         )));
         let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
-            MouseEventKind::Up(retroglyph_core::MouseButton::Left),
+            MouseEventKind::Up(retroglyph_core::event::MouseButton::Left),
             Pos::new(0, 0),
             KeyModifiers::NONE,
         )));

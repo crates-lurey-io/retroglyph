@@ -1,8 +1,9 @@
 //! retroglyph-core: the `no_std`-compatible foundation of retroglyph.
 //!
 //! Grid, tile, style, color, text, terminal, and event types, plus the
-//! [`Output`]/[`Input`]/[`Cursor`] backend facets (bundled together as [`Backend`]) and the
-//! dependency-free [`Headless`] test backend, and the `App`/`Flow`/`Frame` game loop contract.
+//! [`Output`](crate::backend::Output)/[`Input`](crate::backend::Input)/[`Cursor`](crate::backend::Cursor) backend
+//! facets (bundled together as [`Backend`](crate::backend::Backend)) and the dependency-free
+//! [`Headless`](crate::backend::Headless) test backend, and the `App`/`Flow`/`Frame` game loop contract.
 //! Platform backends (`retroglyph-crossterm`, `retroglyph-software`) and drawing helpers
 //! (`retroglyph-widgets`) are separate crates that depend on this one.
 //!
@@ -32,7 +33,7 @@
 //! ⚪ Optional.
 //!
 //! Uses `libm`'s software float implementation (`roundf`/`fmaf`/`sinf`/`cosf`/`powf`) for
-//! the separable [`BlendMode`] channel math, via this crate's own
+//! the separable [`BlendMode`](crate::grid::BlendMode) channel math, via this crate's own
 //! `math` shim -- the `no_std` side of that split. See `std` below for the alternative that prefers
 //! the platform's own float intrinsics when available; a build needs exactly one of the two.
 //!
@@ -40,11 +41,11 @@
 //!
 //! ⚪ Optional.
 //!
-//! Adds `Serialize`/`Deserialize` impls for [`Color`], [`Style`], `Size`, `Offset`, and (via `ixy`)
-//! `Pos`/`Rect`, so a config file can round-trip a saved camera position, window geometry, sub-cell
-//! pixel offset, or theme color.
+//! Adds `Serialize`/`Deserialize` impls for [`Color`](crate::color::Color), [`Style`](crate::color::Style), `Size`,
+//! `Offset`, and (via `ixy`) `Pos`/`Rect`, so a config file can round-trip a saved camera position,
+//! window geometry, sub-cell pixel offset, or theme color.
 //!
-//! [`Color`] serializes through its `Display`/`FromStr` round trip (e.g. `"bright-red"`,
+//! [`Color`](crate::color::Color) serializes through its `Display`/`FromStr` round trip (e.g. `"bright-red"`,
 //! `"#ff8000"`) rather than a derived structural form, so hand-edited TOML/JSON stays legible.
 //!
 //! ### `std`
@@ -53,7 +54,7 @@
 //!
 //! Enables `gem/std` and `alpha-blend/std`, and uses `std`'s float intrinsics (via this crate's
 //! `math` shim) instead of `libm`'s software implementation for the separable
-//! [`BlendMode`] channel math.
+//! [`BlendMode`](crate::grid::BlendMode) channel math.
 //!
 //! Disabling this feature (`--no-default-features`) builds this crate `no_std`, and then needs
 //! `libm` above as the float backend instead: see the crate-level `compile_error!` in `src/lib.rs`.
@@ -62,7 +63,8 @@
 //!
 //! ⚪ Optional.
 //!
-//! Enables `testing`'s `TestHarness`, which drives an [`App`] against [`Headless`] for tests, with
+//! Enables `testing`'s `TestHarness`, which drives an [`App`](crate::app::App) against
+//! [`Headless`](crate::backend::Headless) for tests, with
 //! synthetic input queuing and frame-settling helpers.
 //!
 //! Test-only surface, `no_std` + `alloc` compatible, off by default so it never ships in a release
@@ -71,11 +73,13 @@
 //!
 //! # Architecture
 //!
-//! [`Terminal<B>`](Terminal) owns a double-buffered [`Grid`] and the [`Backend`] lifecycle
-//! (resize, present, events). Drawing itself goes entirely through [`Surface`], handed out by
-//! [`Terminal::draw`]/[`Terminal::surface`]: a game calls `term.draw(|s| { s.put(...); ... })`
-//! once per frame, and [`present`](Terminal::present) diffs the current frame against the
-//! previous one, sending only changed cells to the [`Backend`]. `B` is the only thing that
+//! [`Terminal<B>`](crate::terminal::Terminal) owns a double-buffered [`Grid`](crate::grid::Grid) and the
+//! [`Backend`](crate::backend::Backend) lifecycle (resize, present, events). Drawing itself goes entirely
+//! through [`Surface`](crate::surface::Surface), handed out by
+//! [`Terminal::draw`](crate::terminal::Terminal::draw)/[`Terminal::surface`](crate::terminal::Terminal::surface):
+//! a game calls `term.draw(|s| { s.put(...); ... })`
+//! once per frame, and [`present`](crate::terminal::Terminal::present) diffs the current frame against the
+//! previous one, sending only changed cells to the [`Backend`](crate::backend::Backend). `B` is the only thing that
 //! changes between a headless test and a real window or terminal:
 //!
 //! ```text
@@ -100,21 +104,29 @@
 //!  synthetic events     real TTY, ANSI output    winit window, pixels
 //! ```
 //!
-//! [`Headless`] stores presented content in memory and lets tests inject
-//! synthetic [`Event`]s with [`Headless::push_event`](backend::Headless::push_event);
+//! [`Headless`](crate::backend::Headless) stores presented content in memory and lets tests inject
+//! synthetic [`Event`](crate::event::Event)s with [`Headless::push_event`](crate::backend::Headless::push_event);
 //! nothing here talks to a real terminal or window. Swapping `Headless` for
 //! `Crossterm` or `SoftwareRenderer` changes only the `B` type parameter --
-//! `App` implementations, [`Terminal`] calls, and game logic are unchanged.
+//! `App` implementations, [`Terminal`](crate::terminal::Terminal) calls, and game logic are unchanged.
 //! `run_blocking` drives `Terminal<Headless>` and `Terminal<Crossterm>`
 //! identically; the software backend's windowed loop drives `Terminal<SoftwareRenderer>`
-//! through the same [`App`] contract, inverted because winit owns the
+//! through the same [`App`](crate::app::App) contract, inverted because winit owns the
 //! event loop instead of handing control back to a driver function.
 //!
 //! See `examples/headless.rs` (`cargo run -p retroglyph-core --example
-//! headless`) for the smallest possible use of [`Headless`], depending on
+//! headless`) for the smallest possible use of [`Headless`](crate::backend::Headless), depending on
 //! nothing but this crate.
 #![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
+// A `pub mod` line's own outer doc comment and its target module's inner `//!` doc concatenate
+// into one rendered page, but intra-doc links in that combined block resolve against the scope
+// where the *outer* comment lives (this file, the crate root) rather than the module's own scope.
+// Every module doc below that also carries an outer doc comment on its `pub mod` line therefore
+// needs fully qualified links even for types the module defines itself, which then reads as
+// "redundant" from the module file's own point of view. Rather than track that split per link,
+// every intra-doc link in this crate is fully qualified and this lint is off crate-wide.
+#![allow(rustdoc::redundant_explicit_links)]
 extern crate alloc;
 
 // A float backend is not optional (retroglyph#903): the separable `BlendMode` channel math
@@ -136,14 +148,24 @@ struct ReadmeDoctests;
 
 /// The `App`-driven game loop.
 pub mod app;
+// See the `too_long_first_doc_paragraph` comment above `animate`: same noisy-lint mis-attribution,
+// here because this module's own first doc paragraph grew past the threshold once its intra-doc
+// links became fully qualified (retroglyph#1035).
+#[allow(clippy::too_long_first_doc_paragraph)]
 /// Pluggable rendering backends.
 pub mod backend;
+// See the `too_long_first_doc_paragraph` comment above `animate`: same noisy-lint mis-attribution.
+#[allow(clippy::too_long_first_doc_paragraph)]
 /// A scrolling viewport into a world larger than the screen.
 pub mod camera;
 pub mod color;
+// See the `too_long_first_doc_paragraph` comment above `animate`: same noisy-lint mis-attribution.
+#[allow(clippy::too_long_first_doc_paragraph)]
 /// Which diagnostics a build compiles in.
 pub mod dev;
 pub mod event;
+// See the `too_long_first_doc_paragraph` comment above `animate`: same noisy-lint mis-attribution.
+#[allow(clippy::too_long_first_doc_paragraph)]
 /// `FrameClock`/`FrameStats` accumulators for the `App`/`Frame` game loop.
 pub mod frames;
 pub mod grid;
@@ -155,12 +177,16 @@ pub mod layout;
 // and never `#[deprecated]` it, both of which would make it public API again despite the hiding.
 #[doc(hidden)]
 pub mod math;
-/// The one grid-drawing primitive: an area-clipped, single-layer view over a [`Grid`].
+// See the `too_long_first_doc_paragraph` comment above `animate`: same noisy-lint mis-attribution.
+#[allow(clippy::too_long_first_doc_paragraph)]
+/// The one grid-drawing primitive: an area-clipped, single-layer view over a [`Grid`](crate::grid::Grid).
 pub mod surface;
 #[allow(clippy::too_long_first_doc_paragraph)]
 /// Border, gridline, and partial-block `char` data shared by widgets and backends.
 pub mod symbols;
 pub mod terminal;
+// See the `too_long_first_doc_paragraph` comment above `animate`: same noisy-lint mis-attribution.
+#[allow(clippy::too_long_first_doc_paragraph)]
 /// Headless test harness driving an `App` with synthetic input.
 #[cfg(feature = "testing")]
 pub mod testing;
@@ -168,29 +194,7 @@ pub mod text;
 /// The atomic drawable unit (glyph, style, sub-cell offsets).
 pub mod tile;
 
-pub use app::{App, Flow, Frame};
-#[cfg(feature = "std")]
-pub use app::{RunOptions, run_blocking, run_blocking_with};
-pub use backend::{Backend, Cursor, CursorStyle, DrawCell, Headless, Input, Output};
-pub use camera::Camera;
-pub use color::{AnsiColor, Color, InvalidAnsiIndex, ParseColorError, Quantize, Style, Tint};
-pub use dev::{BuildMode, DEV};
-pub use event::{
-    Event, KeyCode, KeyEvent, KeyEventKind, KeyLocation, KeyModifiers, KeyState, MouseButton,
-    MouseEvent, MouseEventKind, PhysicalPos, SystemTheme,
-};
-pub use frames::{FrameClock, FrameStats};
-pub use grid::{BlendMode, Grid, Offset, Pos, Rect, Size};
-/// `.width()`/`.height()` accessors for [`Size`] (and [`Rect`]): re-exported so callers don't need
-/// a direct `ixy` dependency just to call them on this crate's own type aliases.
-pub use ixy::HasSize;
-#[cfg(feature = "egc")]
-pub use layout::TextLayout;
-pub use layout::{HAlign, VAlign};
-pub use surface::{Layer, StyledSurface, Surface};
-pub use symbols::{Glyph, quantize_half_block, quantize_quadrant, quantize_sextant};
-pub use terminal::Terminal;
-#[cfg(feature = "testing")]
-pub use testing::{RunError, TestHarness};
-pub use text::{Line, Span};
-pub use tile::Tile;
+// No root re-exports below this line by design (retroglyph#1035): every public item lives at its
+// module path, matching `ratatui-core`. `dev_only!` (`dev.rs`) and `spans!` (`text.rs`) still
+// resolve at the crate root regardless, since `#[macro_export]` always places a macro there; that's
+// a macro-export constraint, not a re-export choice.

@@ -17,7 +17,7 @@
 #![allow(missing_docs)]
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use retroglyph_core::Rect;
+use retroglyph_core::grid::Rect;
 use retroglyph_widgets::{Constraint, split_h, split_v};
 use std::hint::black_box;
 

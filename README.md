@@ -64,7 +64,9 @@ cargo add retroglyph-core retroglyph-crossterm
 ```
 
 ```rust,no_run
-use retroglyph_core::{Terminal, Color, Style, event::{Event, KeyCode}};
+use retroglyph_core::color::{Color, Style};
+use retroglyph_core::event::{Event, KeyCode};
+use retroglyph_core::terminal::Terminal;
 use retroglyph_crossterm::Crossterm;
 
 fn main() -> std::io::Result<()> {

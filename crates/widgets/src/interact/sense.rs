@@ -8,7 +8,7 @@ use core::ops::{BitOr, BitOrAssign};
 /// populate for a given widget call.
 ///
 /// A manual bitflag over `u8`: mirrors
-/// [`KeyModifiers`](retroglyph_core::KeyModifiers)'s shape rather than
+/// [`KeyModifiers`](retroglyph_core::event::KeyModifiers)'s shape rather than
 /// pulling in the `bitflags` crate for a handful of bits. Combine raw flags
 /// with `|` (`Sense::HOVER | Sense::FOCUSABLE`), or reach for one of the
 /// named constructors ([`click`](Self::click), [`drag`](Self::drag),

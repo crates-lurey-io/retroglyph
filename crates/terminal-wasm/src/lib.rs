@@ -1,6 +1,6 @@
 //! A WASM/browser terminal backend, driven by pushed input and pulled ANSI output.
 //!
-//! [`TerminalWasm`] implements [`Backend`](retroglyph_core::Backend) directly (like
+//! [`TerminalWasm`] implements [`Backend`](retroglyph_core::backend::Backend) directly (like
 //! [`Headless`](retroglyph_core::backend::Headless)): there is no event loop
 //! here. A browser terminal emulator (e.g. xterm.js, this crate has no
 //! dependency on it and no opinion about which one is used) is driven from
@@ -10,7 +10,8 @@
 //! # Usage from Rust
 //!
 //! ```
-//! use retroglyph_core::{Style, Terminal};
+//! use retroglyph_core::color::Style;
+//! use retroglyph_core::terminal::Terminal;
 //! use retroglyph_terminal_wasm::TerminalWasm;
 //!
 //! let backend = TerminalWasm::new(80, 24);
@@ -43,11 +44,11 @@
 //! logic of its own (that's the consumer's job, via their own Rust code
 //! holding the `Terminal<TerminalWasm>`; see "Usage from Rust" above).
 //!
-//! A game driving a real [`App`](retroglyph_core::App) usually wants the single-instance-per-page
+//! A game driving a real [`App`](retroglyph_core::app::App) usually wants the single-instance-per-page
 //! FFI [`app_entry!`] generates instead of hand-rolling a thread-local session over the
 //! handle-based functions shown here: `wasm_app_init`/`wasm_app_resize`/`wasm_app_push_key`/
 //! `wasm_app_push_mouse`/`wasm_app_push_paste`/`wasm_app_push_focus`/`wasm_app_tick`, with the
-//! [`Terminal::resize`](retroglyph_core::Terminal::resize)-plus-`Event::Resize` bookkeeping
+//! [`Terminal::resize`](retroglyph_core::terminal::Terminal::resize)-plus-`Event::Resize` bookkeeping
 //! [`resize_terminal`] does and the backgrounded-tab delta clamp documented on [`app_entry!`]
 //! itself. See that macro's own doc comment for a complete example. The examples crate's
 //! WASM demo gallery (linked from the workspace README) uses an equivalent macro,
@@ -166,12 +167,12 @@ struct ReadmeDoctests;
 // the same pattern `examples/src/wasm_entry.rs` uses for its own private `Example`-based macros.
 mod app_entry;
 
-use retroglyph_core::DrawCell;
-use retroglyph_core::HasSize;
-use retroglyph_core::Terminal;
+use retroglyph_core::backend::DrawCell;
 use retroglyph_core::backend::{Cursor, CursorStyle, Input, Output};
 use retroglyph_core::event::{Event, coalesces_with};
+use retroglyph_core::grid::HasSize;
 use retroglyph_core::grid::{Pos, Size};
+use retroglyph_core::terminal::Terminal;
 use retroglyph_terminal::TerminalRenderer;
 use std::collections::VecDeque;
 use std::io;
@@ -209,14 +210,14 @@ impl io::Write for Utf8Sink {
     }
 }
 
-/// A [`Backend`](retroglyph_core::Backend) that renders into an in-memory ANSI byte buffer and accepts
+/// A [`Backend`](retroglyph_core::backend::Backend) that renders into an in-memory ANSI byte buffer and accepts
 /// pushed input, for driving a browser terminal emulator from WASM.
 ///
 /// Unlike [`retroglyph_crossterm::Crossterm`](https://docs.rs/retroglyph-crossterm),
 /// this backend:
 ///
 /// - never queries a TTY for its size: call [`resize_terminal`] (or, if the input side doesn't
-///   matter for the caller, [`Terminal::resize`](retroglyph_core::Terminal::resize) directly)
+///   matter for the caller, [`Terminal::resize`](retroglyph_core::terminal::Terminal::resize) directly)
 ///   whenever the host reports a new size (e.g. from xterm.js's `fit` addon);
 /// - never polls for input: input only ever arrives via
 ///   [`push_event`](Input::push_event), called from a `wasm-bindgen`
@@ -255,7 +256,8 @@ impl TerminalWasm {
     /// ```
     /// use retroglyph_core::backend::Input;
     /// use retroglyph_core::event::{Event, KeyCode, KeyEvent, KeyModifiers};
-    /// use retroglyph_core::{Style, Terminal};
+    /// use retroglyph_core::color::Style;
+    /// use retroglyph_core::terminal::Terminal;
     /// use retroglyph_terminal_wasm::TerminalWasm;
     ///
     /// let mut backend = TerminalWasm::new(10, 3);
@@ -285,7 +287,7 @@ impl TerminalWasm {
     /// next [`poll_event`](Input::poll_event) call.
     ///
     /// Called from JS (via the `wasm-bindgen` entry points below) or from
-    /// tests; not part of [`Backend`](retroglyph_core::Backend) itself beyond the no-op default.
+    /// tests; not part of [`Backend`](retroglyph_core::backend::Backend) itself beyond the no-op default.
     ///
     /// Two mitigations guard against a stalled or throttled consumer (e.g. a backgrounded tab, or
     /// a Rust game loop that's paused) while JS keeps forwarding input: there is no OS-level
@@ -359,7 +361,8 @@ impl TerminalWasm {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Style, Terminal};
+    /// use retroglyph_core::color::Style;
+    /// use retroglyph_core::terminal::Terminal;
     /// use retroglyph_terminal_wasm::TerminalWasm;
     ///
     /// let mut term = Terminal::new(TerminalWasm::new(10, 3));
@@ -381,9 +384,9 @@ impl TerminalWasm {
 
 /// Resizes `term` to `(width, height)` cells, doing everything a correct resize needs in one call.
 ///
-/// That's [`Terminal::resize`](retroglyph_core::Terminal::resize) (which itself resizes both grid
+/// That's [`Terminal::resize`](retroglyph_core::terminal::Terminal::resize) (which itself resizes both grid
 /// buffers and calls [`Output::resize`] on the backend), plus queuing the matching
-/// [`Event::Resize`] so a driven [`App`](retroglyph_core::App) observes the new size through its
+/// [`Event::Resize`] so a driven [`App`](retroglyph_core::app::App) observes the new size through its
 /// own input handling too, exactly as it would from a native backend's real resize event.
 ///
 /// Calling `term.resize(width, height)` directly (skipping this function) leaves nothing in the
@@ -395,7 +398,7 @@ impl TerminalWasm {
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::Terminal;
+/// use retroglyph_core::terminal::Terminal;
 /// use retroglyph_core::backend::Output as _;
 /// use retroglyph_core::event::Event;
 /// use retroglyph_terminal_wasm::{TerminalWasm, resize_terminal};
@@ -902,8 +905,9 @@ pub mod wasm {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use retroglyph_core::color::Style;
     use retroglyph_core::event::{Event, KeyCode, KeyModifiers};
-    use retroglyph_core::{Style, Terminal};
+    use retroglyph_core::terminal::Terminal;
 
     #[test]
     fn renders_into_pullable_buffer() {
@@ -1078,7 +1082,7 @@ mod tests {
         // at. A subsequent `draw()` whose first changed cell happened to match that stale tracked
         // position then skipped its own CUP entirely, painting wherever the real cursor was
         // actually left (by `set_cursor_position`) instead of the intended cell.
-        use retroglyph_core::DrawCell;
+        use retroglyph_core::backend::DrawCell;
         use retroglyph_core::backend::Output;
 
         let mut backend = TerminalWasm::new(10, 3);

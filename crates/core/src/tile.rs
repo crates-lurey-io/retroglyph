@@ -8,7 +8,7 @@ use alloc::string::String;
 /// Computes the display (column) width of a single glyph, capped to what fits in a `u8`.
 ///
 /// Delegates to [`char_width`], so a control character occupies the one column
-/// [`Surface`](crate::Surface) actually draws it in, and `Tile::width`'s value can never drift
+/// [`Surface`](crate::surface::Surface) actually draws it in, and `Tile::width`'s value can never drift
 /// from what that function documents and tests.
 fn glyph_width(glyph: char) -> u8 {
     u8::try_from(char_width(glyph)).unwrap_or(1)
@@ -25,7 +25,7 @@ bitflags::bitflags! {
         const WIDE_CHAR_SPACER = 0b0000_0010;
         /// No content has been written to this tile: it is fully transparent.
         ///
-        /// Set on [`Tile::default`] and cleared by every write. Compositing
+        /// Set on [`Tile::default`](crate::tile::Tile::default) and cleared by every write. Compositing
         /// ([`Grid::blit`](crate::grid::Grid::blit), layer flattening) skips
         /// empty tiles, so an *explicit* space (which is not empty) is opaque
         /// and overwrites lower layers, while an untouched cell is not.
@@ -41,14 +41,14 @@ bitflags::bitflags! {
         /// what keeps the common single-codepoint tile compact.
         const HAS_EXTRA         = 0b0000_1000;
         /// This tile is the top-left anchor of a multi-cell span: it occupies
-        /// [`Tile::span`] cells, not one.
+        /// [`Tile::span`](crate::tile::Tile::span) cells, not one.
         ///
         /// Written only by [`Grid::write_span`](crate::grid::Grid::write_span), which also writes
         /// the matching [`SPAN_COVERED`](Self::SPAN_COVERED) tiles. An anchor without its covered
         /// cells is a broken invariant, which is why there is no `Tile` builder for this flag.
         const SPAN_ANCHOR       = 0b0001_0000;
         /// This tile is covered by a multi-cell span anchored above and/or to its left; see
-        /// [`Tile::span_offset`].
+        /// [`Tile::span_offset`](crate::tile::Tile::span_offset).
         ///
         /// Unlike [`WIDE_CHAR_SPACER`](Self::WIDE_CHAR_SPACER), a covered tile keeps a real glyph
         /// and **is** rendered by cell backends: that glyph is the span artwork's text fallback.
@@ -77,7 +77,8 @@ bitflags::bitflags! {
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::{Color, Style, Tile};
+/// use retroglyph_core::color::{Color, Style};
+/// use retroglyph_core::tile::Tile;
 ///
 /// let tile = Tile::new('@', Style::new().fg(Color::GREEN));
 /// assert_eq!(tile.glyph(), '@');
@@ -97,7 +98,7 @@ pub struct Tile {
     /// changes between frames. It is computed once, here, whenever the glyph is written (see
     /// [`with_glyph`](Self::with_glyph) and [`Grid::write_grapheme`](crate::grid::Grid::write_grapheme)),
     /// and just read back afterward. Almost always 0, 1, or 2 (combining marks are 0; control
-    /// characters are 1, matching [`char_width`](crate::text::char_width); a handful of grapheme
+    /// characters are 1, matching [`char_width`]; a handful of grapheme
     /// clusters can report other values via `unicode_width`, but `u8` comfortably covers every
     /// value that crate returns).
     pub(crate) width: u8,
@@ -343,7 +344,7 @@ impl Tile {
 
     /// Resets this tile to the default (empty, space, default style, no offset).
     ///
-    /// Does not touch the owning [`Grid`]'s EGC side-table; callers that
+    /// Does not touch the owning [`Grid`](crate::grid::Grid)'s EGC side-table; callers that
     /// reset a tile which may have carried [`TileFlags::HAS_EXTRA`] are
     /// responsible for also clearing that entry (see `Grid::clear_overlap`).
     pub(crate) fn reset(&mut self) {

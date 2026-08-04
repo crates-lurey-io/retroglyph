@@ -6,8 +6,8 @@
 //! `Color`'s inherent methods (constants, RGB resolution, `gem` color-space conversions),
 //! `named` is `Color`'s string-name/hex constructors (`from_named`, `from_hex`), `palette_oklab`
 //! is the generated Oklab table `ansi` quantizes against, `parse` is `Color`'s
-//! `Display`/`FromStr`/serde impls, `style` is [`Style`] itself, and `tint` is [`Tint`], sprite
-//! colour modulation.
+//! `Display`/`FromStr`/serde impls, `style` is [`Style`](crate::color::Style) itself, and `tint`
+//! is [`Tint`](crate::color::Tint), sprite colour modulation.
 
 mod ansi;
 mod convert;
@@ -29,7 +29,7 @@ pub use tint::Tint;
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::Color;
+/// use retroglyph_core::color::Color;
 ///
 /// let named = Color::GREEN;
 /// let rgb = Color::Rgb { r: 255, g: 0, b: 0 };

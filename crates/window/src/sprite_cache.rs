@@ -9,8 +9,8 @@ use crate::tileset::{SheetColor, SpriteAlign, TilesetError, TilesetOptions};
 // U8x4Rgba::source_over directly at its real call sites.
 #[cfg(test)]
 use alpha_blend::rgba::U8x4Rgba;
+use retroglyph_core::color::{Color, Tint};
 use retroglyph_core::dev_only;
-use retroglyph_core::{Color, Tint};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// A decoded, ready-to-blit sprite.
@@ -38,14 +38,14 @@ impl Sprite {
     /// Returns the offset, in unscaled pixels, from the top-left corner of a `span_w` x `span_h`
     /// cell box to where this sprite's own top-left pixel belongs, per [`align`](Self::align).
     ///
-    /// `span_w`/`span_h` come from [`Tile::span`](retroglyph_core::Tile::span) and `glyph_w`/
+    /// `span_w`/`span_h` come from [`Tile::span`](retroglyph_core::tile::Tile::span) and `glyph_w`/
     /// `glyph_h` are the unscaled cell size, so the box is `span_w * glyph_w` x
     /// `span_h * glyph_h` pixels. A zero cell size is treated as one pixel, leaving the sprite on
     /// its anchor rather than offsetting it by a meaningless amount.
     ///
     /// Returns `(0, 0)` whenever the art already fills its box, which is the common case, so a
     /// backend can add the result to a tile's
-    /// [`dx`](retroglyph_core::Tile::dx)/[`dy`](retroglyph_core::Tile::dy) unconditionally.
+    /// [`dx`](retroglyph_core::tile::Tile::dx)/[`dy`](retroglyph_core::tile::Tile::dy) unconditionally.
     #[must_use]
     pub const fn align_offset(
         &self,
@@ -323,7 +323,7 @@ impl SpriteTint {
 /// Returns whether a warning was emitted, which is always `false` in a build that compiles
 /// diagnostics out: the size comparison, the `seen` bookkeeping, and the message all sit inside
 /// [`dev_only!`], so a release build does none of them. See
-/// [`BuildMode`](retroglyph_core::BuildMode).
+/// [`BuildMode`](retroglyph_core::dev::BuildMode).
 pub fn warn_sprite_needs_span(
     seen: &mut BTreeSet<char>,
     glyph: char,
@@ -365,7 +365,7 @@ pub fn warn_sprite_needs_span(
 /// Returns whether a warning was emitted, which is always `false` in a build that compiles
 /// diagnostics out: the identity check, the `seen` bookkeeping, and the message all sit inside
 /// [`dev_only!`], so a release build does none of them. See
-/// [`BuildMode`](retroglyph_core::BuildMode).
+/// [`BuildMode`](retroglyph_core::dev::BuildMode).
 pub fn warn_tint_needs_sprite(seen: &mut BTreeSet<char>, glyph: char, tint: Tint) -> bool {
     dev_only!({
         if tint.is_identity() {
@@ -756,7 +756,7 @@ mod tests {
         let mut seen = BTreeSet::new();
         assert_eq!(
             warn_sprite_needs_span(&mut seen, '@', (32, 32), (16, 16)),
-            retroglyph_core::DEV
+            retroglyph_core::dev::DEV
         );
         // Second call for the same glyph is silent even in a reporting build.
         assert!(!warn_sprite_needs_span(&mut seen, '@', (32, 32), (16, 16)));
@@ -774,7 +774,7 @@ mod tests {
         let mut seen = BTreeSet::new();
         warn_sprite_needs_span(&mut seen, '@', (32, 32), (16, 16));
         // The dedup set is the allocation a release build should not be paying for.
-        assert_eq!(seen.is_empty(), !retroglyph_core::DEV);
+        assert_eq!(seen.is_empty(), !retroglyph_core::dev::DEV);
     }
 
     // `warn_tint_needs_sprite` reports only in a build that compiles diagnostics in, so every
@@ -787,7 +787,7 @@ mod tests {
         let tint = Tint::multiply(128, 128, 128);
         assert_eq!(
             warn_tint_needs_sprite(&mut seen, '@', tint),
-            retroglyph_core::DEV
+            retroglyph_core::dev::DEV
         );
         // Second call for the same glyph is silent even in a reporting build.
         assert!(!warn_tint_needs_sprite(&mut seen, '@', tint));
@@ -816,6 +816,6 @@ mod tests {
         let mut seen = BTreeSet::new();
         warn_tint_needs_sprite(&mut seen, '@', Tint::multiply(128, 128, 128));
         // The dedup set is the allocation a release build should not be paying for.
-        assert_eq!(seen.is_empty(), !retroglyph_core::DEV);
+        assert_eq!(seen.is_empty(), !retroglyph_core::dev::DEV);
     }
 }

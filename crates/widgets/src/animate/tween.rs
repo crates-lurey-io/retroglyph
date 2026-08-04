@@ -2,7 +2,7 @@ use super::easing::Easing;
 use core::time::Duration;
 
 /// A retargetable animation from one `f32` value to another over a fixed duration, reshaped by
-/// an [`Easing`] curve.
+/// an [`Easing`](crate::animate::Easing) curve.
 ///
 /// See the `08_animation` example for `Tween` in action:
 /// <https://main.retroglyph.dev/examples/08_animation/terminal/>.
@@ -37,7 +37,7 @@ impl Tween {
     pub const DEFAULT_DURATION: Duration = Duration::from_millis(200);
 
     /// A new tween animating from `from` to `to` over [`DEFAULT_DURATION`](Self::DEFAULT_DURATION)
-    /// with [`Easing::Linear`]. Chain [`duration`](Self::duration)/[`easing`](Self::easing) to
+    /// with [`Easing::Linear`](crate::animate::Easing::Linear). Chain [`duration`](Self::duration)/[`easing`](Self::easing) to
     /// override either, then call [`update`](Self::update) once per frame.
     #[must_use]
     pub const fn new(from: f32, to: f32) -> Self {
@@ -65,7 +65,7 @@ impl Tween {
     }
 
     /// Advances the animation by `dt`: call once per frame with
-    /// [`Frame::delta`](retroglyph_core::Frame::delta). Clamped to `duration`: calling this after the
+    /// [`Frame::delta`](retroglyph_core::app::Frame::delta). Clamped to `duration`: calling this after the
     /// animation has already finished is a no-op, not an overshoot into negative "time left."
     pub fn update(&mut self, dt: Duration) {
         self.elapsed = (self.elapsed + dt).min(self.duration);
@@ -83,7 +83,7 @@ impl Tween {
     }
 
     /// The current animated value: [`progress`](Self::progress) run through this tween's
-    /// [`Easing`] curve, then used to interpolate between `from` and `to`.
+    /// [`Easing`](crate::animate::Easing) curve, then used to interpolate between `from` and `to`.
     #[must_use]
     pub fn value(&self) -> f32 {
         let t = self.easing.apply(self.progress());

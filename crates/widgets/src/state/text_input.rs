@@ -1,7 +1,7 @@
 use alloc::string::String;
 
+use retroglyph_core::event::{Event, KeyCode, KeyModifiers};
 use retroglyph_core::text::{char_width, width_usize};
-use retroglyph_core::{Event, KeyCode, KeyModifiers};
 
 /// A `String` value, a byte cursor into it, and a horizontal scroll offset.
 ///
@@ -75,7 +75,7 @@ impl TextInputState {
     }
 
     /// Insert `s` at the cursor and move the cursor past it, e.g. from an
-    /// [`Event::Paste`](retroglyph_core::Event::Paste).
+    /// [`Event::Paste`](retroglyph_core::event::Event::Paste).
     pub fn insert_str(&mut self, s: &str) {
         self.value.insert_str(self.cursor, s);
         self.cursor += s.len();
@@ -128,7 +128,7 @@ impl TextInputState {
     ///
     /// Key releases and auto-repeats other than presses are ignored except that auto-repeat
     /// presses are treated the same as a press (matches [`FocusRing`](crate::FocusRing)/
-    /// [`Shortcuts`](crate::Shortcuts)'s own `is_down` gating). [`Event`](retroglyph_core::Event)
+    /// [`Shortcuts`](crate::Shortcuts)'s own `is_down` gating). [`Event`](retroglyph_core::event::Event)
     /// has no IME/composition variant to begin with; see the scope note above.
     pub fn handle_event(&mut self, event: &Event) -> bool {
         match event {
@@ -249,7 +249,7 @@ impl TextInputState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use retroglyph_core::{KeyEvent, KeyEventKind};
+    use retroglyph_core::event::{KeyEvent, KeyEventKind};
 
     #[test]
     fn insert_and_backspace_move_the_byte_cursor() {

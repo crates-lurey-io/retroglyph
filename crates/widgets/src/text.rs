@@ -6,8 +6,9 @@
 use alloc::borrow::ToOwned as _;
 use alloc::string::String;
 
+use retroglyph_core::color::Style;
+use retroglyph_core::grid::{Pos, Rect};
 use retroglyph_core::text::{split_at_width, truncate_measured};
-use retroglyph_core::{Pos, Rect, Style};
 
 use crate::{Align, Surface};
 
@@ -50,7 +51,7 @@ pub fn truncate_owned(s: &str, max_cols: impl Into<usize>) -> String {
 /// collapsed to one call: [`truncate_measured`] to fit `width` and get its own display width back
 /// in the same pass (a wide character can make the truncated text narrower than `width`, never
 /// wider, so that width isn't just `width` itself), then
-/// [`Surface::print_aligned`](retroglyph_core::Surface::print_aligned) to place and print it.
+/// [`Surface::print_aligned`](retroglyph_core::surface::Surface::print_aligned) to place and print it.
 /// `Align` is a plain re-export of the `HAlign` that `print_aligned` itself takes, so no
 /// conversion is needed. Delegating keeps the offset math in one place instead of a second copy
 /// here: `text` is already fitted to `width` before it reaches `print_aligned`, so its own
@@ -76,7 +77,7 @@ pub fn draw_clipped(
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::{Grid, Rect};
+    use retroglyph_core::grid::{Grid, Rect};
 
     use super::*;
 

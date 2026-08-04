@@ -9,7 +9,7 @@
 /// `examples/src/wasm_entry.rs`'s `__wasm_terminal_entry!` does the same job for the examples
 /// crate's private `Example` trait, but that crate is `publish = false`, so nothing outside this
 /// repo can reach it (retroglyph#684). This macro is the generally-usable version: generic over
-/// [`App`](retroglyph_core::App) (public, stable, and already the update contract every other
+/// [`App`](retroglyph_core::app::App) (public, stable, and already the update contract every other
 /// driver in `retroglyph-core` shares), not `Example`.
 ///
 /// Call it once, at the top level of a `wasm32` binary crate that depends on this crate and
@@ -19,14 +19,14 @@
 /// #[derive(Default)]
 /// struct MyGame { /* ... */ }
 ///
-/// impl retroglyph_core::App<retroglyph_terminal_wasm::TerminalWasm> for MyGame {
+/// impl retroglyph_core::app::App<retroglyph_terminal_wasm::TerminalWasm> for MyGame {
 ///     fn update(
 ///         &mut self,
-///         term: &mut retroglyph_core::Terminal<retroglyph_terminal_wasm::TerminalWasm>,
-///         frame: &retroglyph_core::Frame,
-///     ) -> retroglyph_core::Flow {
+///         term: &mut retroglyph_core::terminal::Terminal<retroglyph_terminal_wasm::TerminalWasm>,
+///         frame: &retroglyph_core::app::Frame,
+///     ) -> retroglyph_core::app::Flow {
 ///         // ...
-///         retroglyph_core::Flow::Continue
+///         retroglyph_core::app::Flow::Continue
 ///     }
 /// }
 ///
@@ -60,7 +60,7 @@
 ///   `MAX_TICK_DELTA` (250ms): a backgrounded tab can starve `requestAnimationFrame` for seconds
 ///   or minutes, and an uncapped delta handed straight to an animation/physics step would try to
 ///   simulate that entire gap in one frame (the same "spiral of death" concern
-///   [`FrameClock`](retroglyph_core::FrameClock) caps steps-per-frame to avoid), just on the raw
+///   [`FrameClock`](retroglyph_core::frames::FrameClock) caps steps-per-frame to avoid), just on the raw
 ///   delta feeding into `Frame` instead. All FFI functions are no-ops (returning an empty string
 ///   for `wasm_app_tick`) if called before `wasm_app_init`.
 /// - `wasm_app_exited() -> bool`: `true` once `$A::update` has returned `Flow::Exit` at least
@@ -81,7 +81,7 @@ macro_rules! app_entry {
             const MAX_TICK_DELTA: ::core::time::Duration = ::core::time::Duration::from_millis(250);
 
             struct __RgWasmAppState {
-                term: ::retroglyph_core::Terminal<$crate::TerminalWasm>,
+                term: ::retroglyph_core::terminal::Terminal<$crate::TerminalWasm>,
                 app: $A,
                 last_tick: ::web_time::Instant,
                 frame_count: u64,
@@ -101,7 +101,7 @@ macro_rules! app_entry {
                 ::console_error_panic_hook::set_once();
                 let mut backend = $crate::TerminalWasm::new(width, height);
                 ::retroglyph_core::backend::Cursor::set_cursor_visible(&mut backend, false);
-                let term = ::retroglyph_core::Terminal::new(backend);
+                let term = ::retroglyph_core::terminal::Terminal::new(backend);
                 __RG_WASM_APP.with(|cell| {
                     *cell.borrow_mut() = ::std::option::Option::Some(__RgWasmAppState {
                         term,
@@ -206,17 +206,17 @@ macro_rules! app_entry {
                     let now = ::web_time::Instant::now();
                     let delta = ::std::cmp::min(now.duration_since(s.last_tick), MAX_TICK_DELTA);
                     s.last_tick = now;
-                    let frame = ::retroglyph_core::Frame {
+                    let frame = ::retroglyph_core::app::Frame {
                         delta,
                         frame: s.frame_count,
                     };
                     s.frame_count = s.frame_count.wrapping_add(1);
                     let present_count_before = s.term.present_count();
-                    let flow = ::retroglyph_core::App::update(&mut s.app, &mut s.term, &frame);
-                    if flow == ::retroglyph_core::Flow::Exit {
+                    let flow = ::retroglyph_core::app::App::update(&mut s.app, &mut s.term, &frame);
+                    if flow == ::retroglyph_core::app::Flow::Exit {
                         s.exited = true;
                     }
-                    if flow != ::retroglyph_core::Flow::Idle
+                    if flow != ::retroglyph_core::app::Flow::Idle
                         && s.term.present_count() == present_count_before
                     {
                         let _ = s.term.present();

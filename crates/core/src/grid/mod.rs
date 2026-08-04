@@ -1,12 +1,12 @@
-//! The layered tile grid: [`Grid`], plus the [`Size`], [`Pos`], and [`Rect`]
+//! The layered tile grid: [`Grid`](crate::grid::Grid), plus the [`Size`](crate::grid::Size), [`Pos`](crate::grid::Pos), and [`Rect`](crate::grid::Rect)
 //! coordinate types used throughout the crate.
 //!
 //! # Layers, draw order, and compositing
 //!
-//! A [`Grid`] holds up to 256 independent layers (`u8` ids `0..=255`), one
-//! [`Tile`] per cell on each. Layer 0 is always allocated; layers 1-255 are
+//! A [`Grid`](crate::grid::Grid) holds up to 256 independent layers (`u8` ids `0..=255`), one
+//! [`Tile`](crate::tile::Tile) per cell on each. Layer 0 is always allocated; layers 1-255 are
 //! allocated lazily, on first write to that layer (see
-//! [`put_tile`](Grid::put_tile)): a
+//! [`put_tile`](crate::grid::Grid::put_tile)): a
 //! single-layer game pays zero overhead for layers it never writes to. This is the
 //! crate's most distinctive feature and the one most worth understanding
 //! before reaching for a second layer.
@@ -21,7 +21,7 @@
 //! ## Draw order
 //!
 //! Layers composite bottom-to-top, in ascending id order: 0 first, then every
-//! allocated layer up to [`max_layer`](Grid::max_layer), each painted over
+//! allocated layer up to [`max_layer`](crate::grid::Grid::max_layer), each painted over
 //! whatever the layers below it produced. Layer id *is* z-order: there is
 //! no separate depth or z-index to set. A common convention is layer 0 for
 //! terrain, 1 for items, 2 for actors, 3+ for UI/effects, but the crate
@@ -33,26 +33,26 @@
 //! it beats ordering draw calls.
 //!
 //! Compositing itself happens in one of two places, chosen by the backend
-//! (see [`crate::Output::composites_layers`]):
+//! (see [`crate::backend::Output::composites_layers`]):
 //!
 //! - **Cell backends** (`Headless`, `retroglyph-crossterm`) do not composite
-//!   layers themselves. [`crate::Terminal::present`] calls
+//!   layers themselves. [`crate::terminal::Terminal::present`] calls
 //!   `flatten_into` (crate-private) to collapse every allocated layer
 //!   into a single-layer frame *before* handing it to the backend, so
 //!   layers 1+ behave identically on every cell backend.
 //! - **Pixel backends** (`retroglyph-software`) composite per pixel: they
 //!   receive the raw layered stream from
-//!   [`crate::Output::draw_layers`] (layer-major, ascending id) and paint
+//!   [`crate::backend::Output::draw_layers`] (layer-major, ascending id) and paint
 //!   each layer's cells directly onto the pixel buffer in that order.
 //!
 //! ## The `EMPTY` flag: transparency vs. opaque occlusion
 //!
-//! Every [`Tile`] carries [`TileFlags::EMPTY`], set on [`Tile::default`] and
+//! Every [`Tile`](crate::tile::Tile) carries [`TileFlags::EMPTY`], set on [`Tile::default`](crate::tile::Tile::default) and
 //! cleared by every write (`put_tile`, `write_grapheme`, indexing, ...).
 //! Compositing treats it as the transparency bit:
 //!
 //! - An **untouched cell** (`EMPTY` set) is fully transparent:
-//!   [`blit`](Grid::blit) skips it, and `flatten_into` (crate-private)
+//!   [`blit`](crate::grid::Grid::blit) skips it, and `flatten_into` (crate-private)
 //!   leaves whatever the layers below already drew.
 //! - An **explicit space** (`Tile::new(' ', style)`, `EMPTY` clear) is
 //!   opaque: it overwrites the glyph and foreground below it, same as any
@@ -68,10 +68,10 @@
 //!
 //! ## Multi-cell spans
 //!
-//! [`write_span`](Grid::write_span) writes one piece of artwork across a `w x h` block of cells:
+//! [`write_span`](crate::grid::Grid::write_span) writes one piece of artwork across a `w x h` block of cells:
 //! the top-left cell is the **anchor** ([`TileFlags::SPAN_ANCHOR`], carrying the footprint), and
 //! every other cell is **covered** ([`TileFlags::SPAN_COVERED`], carrying its offset back to the
-//! anchor). [`span_owner`](Grid::span_owner) resolves any cell of a span to its anchor in O(1),
+//! anchor). [`span_owner`](crate::grid::Grid::span_owner) resolves any cell of a span to its anchor in O(1),
 //! so hit-testing a multi-cell sprite is one lookup rather than a rectangle scan.
 //!
 //! Covered cells keep **real glyphs**, and that is the point: they are the span's text fallback.
@@ -86,11 +86,11 @@
 //! skips: a wide character's spacer has no content of its own, whereas a covered cell does.
 //!
 //! A span is written and cleared whole. Any ordinary write into one of its cells
-//! ([`put_tile`](Grid::put_tile), [`write_grapheme`](Grid::write_grapheme))
+//! ([`put_tile`](crate::grid::Grid::put_tile), [`write_grapheme`](crate::grid::Grid::write_grapheme))
 //! clears the entire span first, so an anchor can never be left claiming cells it no longer owns.
 //! The exceptions are the escape hatches that hand out a `&mut Tile` directly
-//! ([`tile_mut`](Grid::tile_mut), `IndexMut`), which cannot intercept the
-//! write; use [`clear_span`](Grid::clear_span) first if you reach for one of those on a grid
+//! ([`tile_mut`](crate::grid::Grid::tile_mut), `IndexMut`), which cannot intercept the
+//! write; use [`clear_span`](crate::grid::Grid::clear_span) first if you reach for one of those on a grid
 //! that uses spans.
 //!
 //! ## No short-circuiting: every allocated layer is visited, for every cell
@@ -103,8 +103,8 @@
 //! the layers below it visually but never occludes them from the pass, so
 //! prefer low, contiguous layer ids for frequently-updated content and
 //! reserve high ids for rarely-touched overlays (e.g. a debug HUD pinned to
-//! layer 255). See [`max_layer`](Grid::max_layer) for the iteration cost this
-//! implies and [`Grid::new`] for the allocation cost of a first write.
+//! layer 255). See [`max_layer`](crate::grid::Grid::max_layer) for the iteration cost this
+//! implies and [`Grid::new`](crate::grid::Grid::new) for the allocation cost of a first write.
 
 use crate::color::Tint;
 use crate::tile::Tile;
@@ -119,19 +119,23 @@ use alpha_blend::BlendMode as SeparableBlendMode;
 use grixy::buf::GridBuf;
 use grixy::ops::layout::{LinearLayout, RowMajor};
 
+/// `.width()`/`.height()` accessors for [`Size`](crate::grid::Size) (and [`Rect`](crate::grid::Rect)): re-exported so callers don't need
+/// a direct `ixy` dependency just to call them on this crate's own type aliases.
+pub use ixy::HasSize;
+
 mod api;
 mod diff;
 mod layers;
 mod spans;
 mod trait_impls;
 
-/// Blend mode for [`Grid::blit_alpha`], selecting how source and destination colors combine
+/// Blend mode for [`Grid::blit_alpha`](crate::grid::Grid::blit_alpha), selecting how source and destination colors combine
 /// before the `fg_alpha`/`bg_alpha` factor is applied.
 ///
 /// [`Linear`](Self::Linear) is a straight per-channel color lerp, delegated to [`gem::Mix`]. The
 /// remaining variants are the [W3C separable blend modes] libtcod also offers: each computes a
 /// fully blended color per channel via [`alpha_blend::BlendMode`] (imported here under its old
-/// name, [`SeparableBlendMode`], to avoid colliding with this module's own [`BlendMode`]), and
+/// name, [`SeparableBlendMode`], to avoid colliding with this module's own [`BlendMode`](crate::grid::BlendMode)), and
 /// *that* result is what gets lerped against the destination by the alpha factor, in place of the
 /// source color `Linear` would use.
 ///
@@ -174,7 +178,7 @@ impl BlendMode {
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::Size;
+/// use retroglyph_core::grid::Size;
 ///
 /// let size = Size::new(80, 24);
 /// assert_eq!(size.width, 80);
@@ -193,7 +197,7 @@ pub type Size = ixy::Size<u16>;
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::Pos;
+/// use retroglyph_core::grid::Pos;
 ///
 /// let pos = Pos::new(2, 1);
 /// assert_eq!(pos.x, 2);
@@ -209,7 +213,7 @@ pub type Pos = ixy::Pos<u16>;
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::Rect;
+/// use retroglyph_core::grid::Rect;
 ///
 /// let rect = Rect::new(0, 0, 10, 4);
 /// assert_eq!(rect.width(), 10);
@@ -233,7 +237,7 @@ pub type Rect = ixy::Rect<u16>;
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::Offset;
+/// use retroglyph_core::grid::Offset;
 ///
 /// let offset = Offset::new(3, -2);
 /// assert_eq!(offset.dx, 3);
@@ -293,14 +297,14 @@ fn flat_index_to_xy(i: usize, width: usize) -> (u16, u16) {
 /// A single layer in the grid: a flat 2D buffer of one tile per cell.
 ///
 /// Layer 0 is always allocated. Layers 1–255 are allocated on first write
-/// (see [`Grid::put_tile`]).
+/// (see [`Grid::put_tile`](crate::grid::Grid::put_tile)).
 #[derive(Clone)]
 pub(crate) struct LayerBuf {
     pub(crate) buf: GridBuf<Tile, Vec<Tile>, RowMajor>,
     /// Sparse side-table: flat row-major index -> the cell's out-of-line data, for tiles with
     /// [`TileFlags::HAS_EXTRA`] set. Empty until something writes a multi-codepoint grapheme or
-    /// a tint, which is what keeps [`Tile`] itself small (see [`DrawCell::grapheme`](crate::backend::DrawCell::grapheme)
-    /// and [`Grid::tint`]).
+    /// a tint, which is what keeps [`Tile`](crate::tile::Tile) itself small (see
+    /// [`DrawCell::grapheme`](crate::backend::DrawCell::grapheme) and [`Grid::tint`](crate::grid::Grid::tint)).
     ///
     /// The `HAS_EXTRA` flag is authoritative: readers must check it before
     /// consulting this map, since some write paths (`put_tile`,
@@ -315,13 +319,13 @@ pub(crate) struct LayerBuf {
 
 /// One cell's out-of-line data: everything that belongs to a tile but does not fit in one.
 ///
-/// [`Tile`] is exactly 20 bytes with no padding to spare, and both members here are rare enough
+/// [`Tile`](crate::tile::Tile) is exactly 20 bytes with no padding to spare, and both members here are rare enough
 /// per cell that inlining either would grow every tile of every layer to pay for a minority of
 /// them. They share one table, one flag, and one set of rekeying paths rather than each bringing
 /// their own.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct TileExtra {
-    /// The full grapheme cluster, when [`Tile::glyph`] holds only its first codepoint.
+    /// The full grapheme cluster, when [`Tile::glyph`](crate::tile::Tile::glyph) holds only its first codepoint.
     pub(crate) grapheme: Option<Arc<str>>,
     /// How a pixel backend recolours this cell's sprite.
     pub(crate) tint: Tint,
@@ -362,7 +366,7 @@ impl LayerBuf {
         self.entry_for(idx, tile)?.grapheme.as_deref()
     }
 
-    /// Returns the tint for the tile at flat index `idx`, or [`Tint::None`] if `tile` doesn't
+    /// Returns the tint for the tile at flat index `idx`, or [`Tint::None`](crate::color::Tint::None) if `tile` doesn't
     /// have [`TileFlags::HAS_EXTRA`] set.
     fn tint_for(&self, idx: usize, tile: &Tile) -> Tint {
         self.entry_for(idx, tile).map_or(Tint::None, |e| e.tint)
@@ -370,7 +374,7 @@ impl LayerBuf {
 
     /// Returns a clone of the side-table entry at flat index `idx`, or `None` if `tile` doesn't
     /// have [`TileFlags::HAS_EXTRA`] set. Used to copy a cell's out-of-line data between grids
-    /// (e.g. [`Grid::blit`]); the grapheme rides along as an `Arc` clone rather than a fresh
+    /// (e.g. [`Grid::blit`](crate::grid::Grid::blit)); the grapheme rides along as an `Arc` clone rather than a fresh
     /// allocation.
     fn extra_entry_for(&self, idx: usize, tile: &Tile) -> Option<TileExtra> {
         self.entry_for(idx, tile).cloned()
@@ -381,10 +385,10 @@ impl LayerBuf {
 // Grid
 // ---------------------------------------------------------------------------
 
-/// A 2D buffer of [`Tile`]s, addressable across up to 256 stacked layers.
+/// A 2D buffer of [`Tile`](crate::tile::Tile)s, addressable across up to 256 stacked layers.
 ///
 /// Layer 0 is always allocated; higher layers are allocated on first write, growing the
-/// layer-table `Vec` up to that layer's id as needed (see [`Grid::new`]). Single-layer use pays
+/// layer-table `Vec` up to that layer's id as needed (see [`Grid::new`](crate::grid::Grid::new)). Single-layer use pays
 /// no overhead: layers 1+ stay unallocated until used, and the layer table itself never grows
 /// past a single slot.
 ///
@@ -405,10 +409,11 @@ impl LayerBuf {
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::{Color, Grid, Pos, Style};
+/// use retroglyph_core::color::{Color, Style};
+/// use retroglyph_core::grid::{Grid, Pos};
 ///
 /// let mut grid = Grid::new(10, 5);
-/// grid.put_tile(0, Pos::new(2, 1), retroglyph_core::Tile::new('@', Style::new().fg(Color::GREEN)));
+/// grid.put_tile(0, Pos::new(2, 1), retroglyph_core::tile::Tile::new('@', Style::new().fg(Color::GREEN)));
 /// assert_eq!(grid[Pos::new(2, 1)].glyph(), '@');
 /// ```
 #[derive(Clone)]
@@ -454,7 +459,7 @@ impl Grid {
     /// holding all 256 possible slots (see retroglyph#264): a `Grid` that only ever writes to
     /// layer 0, or a handful of low ids, never pays for the 250+ slots it never touches.
     ///
-    /// A first write allocates one `width x height` buffer of [`Tile`]s, the same cost regardless
+    /// A first write allocates one `width x height` buffer of [`Tile`](crate::tile::Tile)s, the same cost regardless
     /// of the layer's id, plus that one-time table growth up to `id + 1`. Writing to layer 200
     /// first grows the table to 201 slots and allocates layer 200's buffer; the untouched slots
     /// 1-199 in between are a cheap `None`. What the id costs afterward is steady-state iteration,
@@ -491,15 +496,15 @@ impl Grid {
     }
 
     /// Copy `layer` from `src` into `self` verbatim: the raw tile buffer (including every
-    /// flag, so [`TileFlags::SPAN_ANCHOR`](crate::tile::TileFlags::SPAN_ANCHOR)/
-    /// [`TileFlags::SPAN_COVERED`](crate::tile::TileFlags::SPAN_COVERED) survive) and every
+    /// flag, so [`TileFlags::SPAN_ANCHOR`]/
+    /// [`TileFlags::SPAN_COVERED`] survive) and every
     /// extra (grapheme, tint), with no transparency rule skipping empty cells and no span
     /// degradation.
     ///
     /// Unlike [`blit`](Self::blit), this is not a clipping/positioning copy: it requires `self`
     /// and `src` to share the same dimensions and always writes `layer` at the same coordinates
     /// it reads it from, so a caller can't use it to move or crop content, only to make one
-    /// grid's layer an exact replica of another's. That is exactly what [`crate::Terminal::present`]'s
+    /// grid's layer an exact replica of another's. That is exactly what [`crate::terminal::Terminal::present`]'s
     /// `retain_layer` support needs: a retained layer has to be indistinguishable from what was
     /// presented last frame, and `blit`'s clipping-copy contract (degrade spans to their text
     /// fallback, treat empty tiles as transparent) is wrong for a copy that is supposed to be a
@@ -507,7 +512,7 @@ impl Grid {
     ///
     /// If `layer` is unallocated on `src`, it becomes unallocated on `self` too (mirroring an
     /// always-empty layer exactly). Layer 0 can never hit this case: it is always allocated on
-    /// every `Grid` (see [`Grid::new`]), on `src` as much as on `self`.
+    /// every `Grid` (see [`Grid::new`](crate::grid::Grid::new)), on `src` as much as on `self`.
     ///
     /// # Panics
     ///

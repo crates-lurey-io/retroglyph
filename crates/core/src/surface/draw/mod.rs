@@ -19,7 +19,7 @@ impl Surface<'_> {
     /// area's own top-left, matching [`put_signed`](Self::put_signed)'s convention), not an
     /// absolute grid coordinate: a local check against `(0, 0)..(width, height)` here, followed
     /// by re-adding [`area`](Self::area)'s own top-left, so a clipped area that does not itself
-    /// start at grid `(0, 0)` (e.g. [`Camera::surface`](crate::Camera::surface)'s
+    /// start at grid `(0, 0)` (e.g. [`Camera::surface`](crate::camera::Camera::surface)'s
     /// `clip_translate`) still resolves to the right absolute cell. The result is then checked
     /// against [`clip_rect`](Self::clip_rect), not `area`, since the clip, never the area, is
     /// what decides whether a write lands.

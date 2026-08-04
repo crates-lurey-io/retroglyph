@@ -90,7 +90,9 @@ impl Surface<'_> {
     /// ```
     /// # fn main() {
     /// # fn run() -> Option<()> {
-    /// use retroglyph_core::{Grid, Rect, Style, Surface};
+    /// use retroglyph_core::color::Style;
+    /// use retroglyph_core::grid::{Grid, Rect};
+    /// use retroglyph_core::surface::Surface;
     ///
     /// let mut grid = Grid::new(8, 4);
     /// let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 8, 4), 0);
@@ -144,7 +146,9 @@ impl Surface<'_> {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Grid, Offset, Pos, Rect, Style, Surface};
+    /// use retroglyph_core::color::Style;
+    /// use retroglyph_core::grid::{Grid, Offset, Pos, Rect};
+    /// use retroglyph_core::surface::Surface;
     ///
     /// let mut grid = Grid::new(4, 4);
     /// let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 4, 4), 0);

@@ -1,13 +1,15 @@
 //! [`PerfOverlayApp`]: a live frame-time/FPS overlay for any `App`, on any `Backend`.
 //!
-//! Wrap an existing [`App`](retroglyph_core::App) once and it gains a toggleable perf readout on
+//! Wrap an existing [`App`](retroglyph_core::app::App) once and it gains a toggleable perf readout on
 //! every backend, with no backend-specific code in the wrapped app itself:
 //!
 //! ```
 //! # #[cfg(feature = "std")]
 //! # {
-//! use retroglyph_core::{Backend, Headless, Terminal, run_blocking};
-//! # use retroglyph_core::{App, Flow, Frame};
+//! use retroglyph_core::app::run_blocking;
+//! use retroglyph_core::backend::{Backend, Headless};
+//! use retroglyph_core::terminal::Terminal;
+//! # use retroglyph_core::app::{App, Flow, Frame};
 //! use retroglyph_widgets::PerfOverlayApp;
 //! # struct MyGame;
 //! # impl<B: Backend> App<B> for MyGame {
@@ -24,11 +26,11 @@
 //!
 //! # What's generic and what's backend-specific
 //!
-//! The frame-time bookkeeping ([`FrameStats`](retroglyph_core::FrameStats)), the toggle-key check,
+//! The frame-time bookkeeping ([`FrameStats`](retroglyph_core::frames::FrameStats)), the toggle-key check,
 //! and the decision of when to draw are all backend-agnostic:
-//! [`PerfOverlayApp::update`](retroglyph_core::App::update) only ever talks to
-//! [`Terminal`](retroglyph_core::Terminal)/[`Surface`](crate::Surface), which every
-//! [`Backend`](retroglyph_core::Backend) implements identically. The one thing every caller still
+//! [`PerfOverlayApp::update`](retroglyph_core::app::App::update) only ever talks to
+//! [`Terminal`](retroglyph_core::terminal::Terminal)/[`Surface`](crate::Surface), which every
+//! [`Backend`](retroglyph_core::backend::Backend) implements identically. The one thing every caller still
 //! supplies by hand is the `backend` label string (there is no portable way to ask a `Backend`
 //! what to call itself); everything else, including toggling the overlay on and off, works
 //! unmodified on crossterm, a native window, or a browser tab.
@@ -46,26 +48,26 @@
 //! instead of a closure.
 //!
 //! This whole wrapper exists in large part because
-//! [`FrameStats::record`](retroglyph_core::FrameStats::record) needs a
-//! [`Frame`](retroglyph_core::Frame), which a plain widget draw call had no way to reach:
-//! [`PerfOverlayApp::update`](retroglyph_core::App::update) is what intercepts `Frame` on the way
+//! [`FrameStats::record`](retroglyph_core::frames::FrameStats::record) needs a
+//! [`Frame`](retroglyph_core::app::Frame), which a plain widget draw call had no way to reach:
+//! [`PerfOverlayApp::update`](retroglyph_core::app::App::update) is what intercepts `Frame` on the way
 //! through and calls `FrameStats::record` for the widget that otherwise couldn't. An app that
 //! doesn't need this wrapper's other job (generic toggle-key handling across any wrapped
-//! [`App`](retroglyph_core::App), on every backend) no longer needs it just for that:
+//! [`App`](retroglyph_core::app::App), on every backend) no longer needs it just for that:
 //! [`AnimatedPerfOverlay`](crate::AnimatedPerfOverlay) reaches `Frame` directly, so an app that
 //! already owns a `FrameStats` field can record and draw it in a single call, with no decorator at
 //! all.
 //!
 //! # Toggling
 //!
-//! [`PerfOverlayApp::update`](retroglyph_core::App::update) drains every event out of the wrapped
-//! [`Terminal`](retroglyph_core::Terminal) before handing control to the inner
-//! [`App`](retroglyph_core::App), keeps any that match the toggle key (backtick, or F1 as an
+//! [`PerfOverlayApp::update`](retroglyph_core::app::App::update) drains every event out of the wrapped
+//! [`Terminal`](retroglyph_core::terminal::Terminal) before handing control to the inner
+//! [`App`](retroglyph_core::app::App), keeps any that match the toggle key (backtick, or F1 as an
 //! alias, by default; see [`default_is_toggle_key`]), and re-queues the rest via
-//! [`Terminal::requeue_events`](retroglyph_core::Terminal::requeue_events) so the inner app sees
+//! [`Terminal::requeue_events`](retroglyph_core::terminal::Terminal::requeue_events) so the inner app sees
 //! exactly the input it would have without the overlay, minus the toggle presses. This works
 //! identically on every backend because it only goes through
-//! [`Terminal`](retroglyph_core::Terminal)'s own event queue, never a backend-specific input path
+//! [`Terminal`](retroglyph_core::terminal::Terminal)'s own event queue, never a backend-specific input path
 //! (in particular, never
 //! [`Input::push_event`](retroglyph_core::backend::Input::push_event), whose documented default is
 //! a no-op for backends that never receive events from outside their own `poll_event`).
@@ -86,9 +88,9 @@ pub use app::{PerfOverlayApp, default_is_toggle_key};
 pub use mode::PerfOverlayMode;
 pub use renderer::{DefaultPerfRenderer, PerfRenderer};
 
-use retroglyph_core::Layer;
+use retroglyph_core::surface::Layer;
 
-/// How many frames [`PerfOverlayApp`]'s internal [`FrameStats`](retroglyph_core::FrameStats)
+/// How many frames [`PerfOverlayApp`]'s internal [`FrameStats`](retroglyph_core::frames::FrameStats)
 /// remembers.
 ///
 /// About two seconds at 60fps. Not configurable per instance: pick a bigger window by building a

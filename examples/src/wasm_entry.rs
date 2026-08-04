@@ -103,7 +103,7 @@ macro_rules! __wasm_headless_entry {
         ))]
         const _: () = {
             struct __RgWasmHeadlessState {
-                term: ::retroglyph_core::Terminal<::retroglyph_core::Headless>,
+                term: ::retroglyph_core::terminal::Terminal<::retroglyph_core::backend::Headless>,
                 state: $E,
                 last_tick: ::web_time::Instant,
                 frame_count: u64,
@@ -120,8 +120,8 @@ macro_rules! __wasm_headless_entry {
             #[allow(missing_docs)]
             pub fn wasm_headless_init() {
                 ::console_error_panic_hook::set_once();
-                let backend = ::retroglyph_core::Headless::new(50, 25);
-                let mut term = ::retroglyph_core::Terminal::new(backend);
+                let backend = ::retroglyph_core::backend::Headless::new(50, 25);
+                let mut term = ::retroglyph_core::terminal::Terminal::new(backend);
                 let state = <$E as $crate::Example>::init(&mut term);
                 __RG_WASM_HEADLESS.with(|cell| {
                     *cell.borrow_mut() = ::std::option::Option::Some(__RgWasmHeadlessState {
@@ -178,7 +178,7 @@ macro_rules! __wasm_headless_entry {
                         return ::std::string::String::new();
                     };
                     let now = ::web_time::Instant::now();
-                    let frame = ::retroglyph_core::Frame {
+                    let frame = ::retroglyph_core::app::Frame {
                         delta: now.duration_since(s.last_tick),
                         frame: s.frame_count,
                     };
@@ -215,7 +215,7 @@ macro_rules! __wasm_terminal_entry {
         ))]
         const _: () = {
             struct __RgWasmTerminalState {
-                term: ::retroglyph_core::Terminal<::retroglyph_terminal_wasm::TerminalWasm>,
+                term: ::retroglyph_core::terminal::Terminal<::retroglyph_terminal_wasm::TerminalWasm>,
                 state: $E,
                 last_tick: ::web_time::Instant,
                 frame_count: u64,
@@ -236,7 +236,7 @@ macro_rules! __wasm_terminal_entry {
                 ::console_error_panic_hook::set_once();
                 let mut backend = ::retroglyph_terminal_wasm::TerminalWasm::new(width, height);
                 ::retroglyph_core::backend::Cursor::set_cursor_visible(&mut backend, false);
-                let mut term = ::retroglyph_core::Terminal::new(backend);
+                let mut term = ::retroglyph_core::terminal::Terminal::new(backend);
                 let state = <$E as $crate::Example>::init(&mut term);
                 __RG_WASM_TERMINAL.with(|cell| {
                     *cell.borrow_mut() = ::std::option::Option::Some(__RgWasmTerminalState {
@@ -274,7 +274,7 @@ macro_rules! __wasm_terminal_entry {
                 };
                 __RG_WASM_TERMINAL.with(|cell| {
                     if let ::std::option::Option::Some(s) = cell.borrow_mut().as_mut() {
-                        ::retroglyph_core::Input::push_event(
+                        ::retroglyph_core::backend::Input::push_event(
                             s.term.backend_mut(),
                             ::retroglyph_core::event::Event::Key(event),
                         );
@@ -292,7 +292,7 @@ macro_rules! __wasm_terminal_entry {
                 };
                 __RG_WASM_TERMINAL.with(|cell| {
                     if let ::std::option::Option::Some(s) = cell.borrow_mut().as_mut() {
-                        ::retroglyph_core::Input::push_event(s.term.backend_mut(), event);
+                        ::retroglyph_core::backend::Input::push_event(s.term.backend_mut(), event);
                     }
                 });
             }
@@ -311,7 +311,7 @@ macro_rules! __wasm_terminal_entry {
                         return ::std::string::String::new();
                     };
                     let now = ::web_time::Instant::now();
-                    let frame = ::retroglyph_core::Frame {
+                    let frame = ::retroglyph_core::app::Frame {
                         delta: now.duration_since(s.last_tick),
                         frame: s.frame_count,
                     };

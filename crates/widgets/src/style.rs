@@ -1,7 +1,7 @@
 //! [`BoxStyle`]: a Lip-Gloss-style box model (padding, border, margin).
 //!
 //! Renders content into a standalone [`Grid`], independent of any
-//! [`Backend`](retroglyph_core::Backend)/[`Terminal`](retroglyph_core::Terminal).
+//! [`Backend`](retroglyph_core::backend::Backend)/[`Terminal`](retroglyph_core::terminal::Terminal).
 //!
 //! `BoxStyle` does not word-wrap: it lays out already-broken lines (only
 //! `'\n'` is treated specially).
@@ -12,12 +12,14 @@
 //! or the `egc` feature.
 use alloc::vec::Vec;
 
+use retroglyph_core::color::Style;
+use retroglyph_core::grid::Grid;
 use retroglyph_core::text::{char_width, width_usize as measured_width};
-use retroglyph_core::{Grid, Style, Tile};
+use retroglyph_core::tile::Tile;
 // `Rect` and `HasSize` are only named by the `egc` content-measuring path below and by this
 // module's tests.
 #[cfg(feature = "egc")]
-use retroglyph_core::{HasSize, Rect};
+use retroglyph_core::grid::{HasSize, Rect};
 
 use crate::Surface;
 use crate::text::truncate;
@@ -116,7 +118,8 @@ impl Sides {
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::{Pos, Style};
+/// use retroglyph_core::color::Style;
+/// use retroglyph_core::grid::Pos;
 /// use retroglyph_widgets::{BoxStyle, Sides};
 ///
 /// let grid = BoxStyle::new(Style::new())
@@ -201,7 +204,7 @@ impl BoxStyle {
     /// wide (2-column) character correctly pushes later characters on the
     /// same line over by 2 columns rather than 1, and gets a proper
     /// `WIDE_CHAR_SPACER` reservation on the cell to its right, courtesy of
-    /// `retroglyph_core::Grid::put_tile` (wide-char aware on every feature
+    /// `retroglyph_core::grid::Grid::put_tile` (wide-char aware on every feature
     /// combination, not just `egc`; this module still does not depend on it).
     #[must_use]
     pub fn render(&self, text: &str) -> Grid {
@@ -316,7 +319,7 @@ impl BoxStyle {
 /// or clip to fill `area`. It always uses [`BoxStyle::render`] (not
 /// `BoxStyle::render_wrapped`, behind the `egc` feature); for wrapped
 /// content, call `render_wrapped` directly and
-/// [`Surface::blit`](retroglyph_core::Surface::blit) the result yourself.
+/// [`Surface::blit`](retroglyph_core::surface::Surface::blit) the result yourself.
 #[derive(Clone, Copy, Debug)]
 pub struct Boxed<'a> {
     style: BoxStyle,
@@ -373,7 +376,7 @@ mod tests {
     use alloc::string::String;
 
     use super::*;
-    use retroglyph_core::{Pos, Rect};
+    use retroglyph_core::grid::{Pos, Rect};
 
     fn glyphs(grid: &Grid) -> Vec<String> {
         (0..grid.height())
@@ -391,7 +394,7 @@ mod tests {
         // layer-0-only `Grid` and stamps it onto the caller's surface, which must still work
         // when that surface is on a non-zero layer (e.g. `surface.on_tier(Layer::Overlay)`, as
         // `Modal`'s own docs recommend for overlay content).
-        use retroglyph_core::{Layer, Surface};
+        use retroglyph_core::surface::{Layer, Surface};
 
         let mut grid = Grid::new(6, 3);
         let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 6, 3), Layer::World.as_u8());

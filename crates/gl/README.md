@@ -25,7 +25,7 @@ cargo add retroglyph-gl --features default-font
 # fn main() {
 use retroglyph_gl::GlBackendBuilder;
 use retroglyph_window::winit::{WindowConfig, run_windowed};
-use retroglyph_core::Style;
+use retroglyph_core::color::Style;
 
 let renderer = GlBackendBuilder::new()
     .grid_size(80, 25)

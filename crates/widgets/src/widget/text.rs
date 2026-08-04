@@ -1,5 +1,5 @@
 //! [`Text`]: a single line of plain text in one [`Style`].
-use retroglyph_core::Style;
+use retroglyph_core::color::Style;
 
 use super::Widget;
 use crate::Align;
@@ -26,7 +26,7 @@ use crate::text::draw_clipped;
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::{Grid, Rect};
+/// use retroglyph_core::grid::{Grid, Rect};
 /// use retroglyph_widgets::{Align, Surface, Text, Widget};
 ///
 /// let area = Rect::new(0, 0, 10, 1);
@@ -80,7 +80,8 @@ impl Widget for Text<'_> {
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::{Color, Grid, Pos, Rect};
+    use retroglyph_core::color::Color;
+    use retroglyph_core::grid::{Grid, Pos, Rect};
 
     use super::*;
 

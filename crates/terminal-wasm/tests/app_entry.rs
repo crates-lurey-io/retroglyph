@@ -13,7 +13,9 @@
 //! is: end-to-end, through a real browser (the docs gallery), not a unit test.
 #![cfg(target_arch = "wasm32")]
 
-use retroglyph_core::{App, Flow, Frame, Style, Terminal};
+use retroglyph_core::app::{App, Flow, Frame};
+use retroglyph_core::color::Style;
+use retroglyph_core::terminal::Terminal;
 use retroglyph_terminal_wasm::TerminalWasm;
 
 #[derive(Default)]

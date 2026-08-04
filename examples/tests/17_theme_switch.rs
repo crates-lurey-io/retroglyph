@@ -12,7 +12,7 @@
 //! proves [`Theme::DARK`]'s palette reaches the pixel-level and terminal-I/O render paths; the
 //! headless snapshots above are what proves the toggle itself works.
 //!
-//! [`Headless::format_view`]: retroglyph_core::Headless::format_view
+//! [`Headless::format_view`]: retroglyph_core::backend::Headless::format_view
 //! [`Theme::DARK`]: retroglyph_widgets::Theme::DARK
 
 #![allow(unreachable_pub)]
@@ -24,8 +24,10 @@ mod support;
 #[allow(dead_code)] // `main`/the `wasm_entry!` FFI surface aren't exercised by these tests
 mod theme_switch;
 
+use retroglyph_core::app::Frame;
+use retroglyph_core::backend::Headless;
 use retroglyph_core::event::{Event, KeyCode, KeyEvent, KeyModifiers};
-use retroglyph_core::{Frame, Headless, Terminal};
+use retroglyph_core::terminal::Terminal;
 use retroglyph_examples::{Example, HEADLESS_FRAME_DELTA};
 use theme_switch::ThemeSwitch;
 
@@ -99,7 +101,7 @@ fn png_snapshot() {
 /// input first; duplicating its short body here is cheaper than widening a helper every other
 /// example's test also uses just for this one example's needs.
 ///
-/// [`Style::new()`]: retroglyph_core::Style::new
+/// [`Style::new()`]: retroglyph_core::color::Style::new
 /// [`Theme::DARK`]: retroglyph_widgets::Theme::DARK
 /// [`Theme::LIGHT`]: retroglyph_widgets::Theme::LIGHT
 #[cfg(all(feature = "software", not(target_arch = "wasm32")))]

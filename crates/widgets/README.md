@@ -60,7 +60,7 @@ cargo add retroglyph-core retroglyph-widgets
 ```
 
 ```rust
-use retroglyph_core::{Grid, Rect};
+use retroglyph_core::grid::{Grid, Rect};
 use retroglyph_widgets::{Gauge, Surface, Widget};
 
 let area = Rect::new(0, 0, 20, 1);
@@ -73,7 +73,8 @@ through `Ui`, which pairs one frame's `Surface` with an `Interaction<Id>` so a c
 area and an id once and gets both hit-testing and drawing from it:
 
 ```rust
-use retroglyph_core::{Grid, Rect, Surface};
+use retroglyph_core::grid::{Grid, Rect};
+use retroglyph_core::surface::Surface;
 use retroglyph_widgets::{Button, Interaction};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -94,7 +95,8 @@ A control that exists but can't be used right now ("Save" with no game loaded, s
 `hovered`, so a call site can explain why, but never an activation:
 
 ```rust
-use retroglyph_core::{Grid, Rect, Surface};
+use retroglyph_core::grid::{Grid, Rect};
+use retroglyph_core::surface::Surface;
 use retroglyph_widgets::{Button, Interaction};
 
 #[derive(Clone, Copy, PartialEq, Eq)]

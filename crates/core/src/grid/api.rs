@@ -61,7 +61,9 @@ impl Grid {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Grid, Pos, Style, Tile};
+    /// use retroglyph_core::color::Style;
+    /// use retroglyph_core::grid::{Grid, Pos};
+    /// use retroglyph_core::tile::Tile;
     ///
     /// // A ragged map: the second line is shorter than the first.
     /// let grid = Grid::from_charmap("###\n#.", |c| match c {

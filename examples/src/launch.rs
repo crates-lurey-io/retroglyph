@@ -13,9 +13,11 @@
 //! concrete, statically-named exported symbols, which a generic function
 //! can't produce. See [`wasm_entry!`](crate::wasm_entry) for that part.
 
+use retroglyph_core::app::Frame;
 #[cfg(any(feature = "crossterm", feature = "software", feature = "gl"))]
-use retroglyph_core::{App, Flow};
-use retroglyph_core::{Backend, Frame, Terminal};
+use retroglyph_core::app::{App, Flow};
+use retroglyph_core::backend::Backend;
+use retroglyph_core::terminal::Terminal;
 #[cfg(any(feature = "crossterm", feature = "software", feature = "gl"))]
 use retroglyph_widgets::PerfOverlayApp;
 #[cfg(any(feature = "crossterm", feature = "software", feature = "gl"))]
@@ -121,13 +123,13 @@ pub trait Example: Default + Sized + 'static {
     /// fire at wildly different rates depending on the backend -- crossterm's
     /// `run_blocking` is an unthrottled spin loop, unlike the software
     /// backend's vsync-paced redraw) should drive a [`Tween`](retroglyph_widgets::Tween)
-    /// or [`FrameClock`](retroglyph_core::FrameClock) with `frame.delta`
+    /// or [`FrameClock`](retroglyph_core::frames::FrameClock) with `frame.delta`
     /// instead of counting raw `tick` calls -- see `06_layers.rs`.
     ///
     /// Draws only -- it does **not** call [`Terminal::present`]. The shared driver presents after
     /// `tick` returns, so it can stamp the perf overlay (a [`PerfOverlayApp`] wrapping this
     /// adapter) on top first. Mirrors
-    /// [`App::update`](retroglyph_core::App::update)'s combined
+    /// [`App::update`](retroglyph_core::app::App::update)'s combined
     /// input-then-draw shape deliberately (rather than splitting into
     /// separate `handle_events`/`draw` trait methods) so `Example` stays a
     /// single-method contract, consistent with the rest of the library.
@@ -164,7 +166,7 @@ struct ExampleApp<E> {
 /// harness waits on -- so the marker cannot appear until the whole animation has played out. That
 /// makes the capture's wall-clock cost a property of the animation rather than of the terminal I/O
 /// it is actually there to test, and a
-/// [`FrameClock`](retroglyph_core::FrameClock)-driven one cannot make that time up afterwards:
+/// [`FrameClock`](retroglyph_core::frames::FrameClock)-driven one cannot make that time up afterwards:
 /// `advance` caps catch-up at five steps, so any stretch the child spends descheduled under a
 /// loaded test runner is animation time it never gets back (retroglyph#544). Scaling the delta
 /// keeps the marker meaning exactly what it meant before -- "the animation has settled" -- while
@@ -238,7 +240,7 @@ fn perf_overlay_app<E: Example>(
     PerfOverlayApp::new(inner, backend)
         .visible(crate::fps::starts_visible())
         .cycle_with(
-            retroglyph_core::Size::new(46, 6),
+            retroglyph_core::grid::Size::new(46, 6),
             |stats, backend, area, surface| {
                 retroglyph_widgets::PerfOverlay::new(stats)
                     .backend(backend)
@@ -434,7 +436,7 @@ pub fn run_crossterm<E: Example>() -> std::io::Result<()> {
         inner: perf_overlay_app(ExampleApp::<E>::new(), "crossterm"),
         presses,
     };
-    retroglyph_core::run_blocking(Terminal::new(filter), app)
+    retroglyph_core::app::run_blocking(Terminal::new(filter), app)
 }
 
 // ── Headless (stdout) fallback ──────────────────────────────────────────────
@@ -453,9 +455,8 @@ pub fn run_crossterm<E: Example>() -> std::io::Result<()> {
 /// time interactively.
 pub const HEADLESS_FRAME_DELTA: Duration = Duration::from_millis(100);
 
-/// Renders up to `frames` frames of `E` against a fresh 50x25
-/// [`Headless`](retroglyph_core::Headless) backend and returns each frame's
-/// [`format_view`](retroglyph_core::Headless::format_view) text.
+/// Renders up to `frames` frames of `E` against a fresh 50x25 `Headless` backend and returns
+/// each frame's [`format_view`](retroglyph_core::backend::Headless::format_view) text.
 ///
 /// No terminal or window is involved, and no input is ever injected --
 /// `tick` only ever sees an empty event queue. Each call is handed a
@@ -465,7 +466,7 @@ pub const HEADLESS_FRAME_DELTA: Duration = Duration::from_millis(100);
 /// exact same rendering path.
 #[must_use]
 pub fn render_headless_frames<E: Example>(frames: u32) -> Vec<String> {
-    let backend = retroglyph_core::Headless::new(50, 25);
+    let backend = retroglyph_core::backend::Headless::new(50, 25);
     let mut term = Terminal::new(backend);
     let mut state = E::init(&mut term);
 
@@ -494,7 +495,7 @@ pub fn render_headless_frames<E: Example>(frames: u32) -> Vec<String> {
 /// [`render_headless_frames`]/`support::png_snapshot`, which both drive `E::tick` directly and so
 /// never show the overlay at all.
 ///
-/// Runs `settle_frames` plain frames first (so [`retroglyph_core::FrameStats`] has real samples
+/// Runs `settle_frames` plain frames first (so [`retroglyph_core::frames::FrameStats`] has real samples
 /// for a sparkline-drawing renderer to show), then one synthetic toggle-key press per frame for
 /// `toggles` more frames (`PerfOverlayApp`'s toggle key cycles `Off -> Compact -> Full -> Off`;
 /// see [`retroglyph_widgets::PerfOverlayMode`]), then presents once. Returns `(width, height,
@@ -576,7 +577,7 @@ pub fn render_perf_overlay_rgb<E: Example>(
 }
 
 /// Fallback `main` body when neither `crossterm` nor `software` is enabled:
-/// ticks a few frames against a [`Headless`](retroglyph_core::Headless)
+/// ticks a few frames against a [`Headless`](retroglyph_core::backend::Headless)
 /// backend and prints each to stdout.
 ///
 /// This exists so every example keeps a `main` (and stays `cargo

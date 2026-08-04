@@ -55,10 +55,15 @@
 //! drained with [`Terminal::drain_events_into`] into a buffer reused every frame instead of
 //! allocating a fresh one.
 
+use retroglyph_core::app::Frame;
+use retroglyph_core::backend::Backend;
+use retroglyph_core::camera::Camera;
+use retroglyph_core::color::{AnsiColor, Color, Style};
 use retroglyph_core::event::{Event, KeyCode, KeyLocation, KeyState};
-use retroglyph_core::{
-    AnsiColor, Backend, Camera, Color, Frame, Grid, Layer, Pos, Rect, Size, Style, Terminal, Tile,
-};
+use retroglyph_core::grid::{Grid, Pos, Rect, Size};
+use retroglyph_core::surface::Layer;
+use retroglyph_core::terminal::Terminal;
+use retroglyph_core::tile::Tile;
 use retroglyph_examples::Example;
 
 /// World dimensions: comfortably larger than the 50x24 viewport in both axes, so the camera

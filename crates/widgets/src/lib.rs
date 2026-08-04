@@ -1,12 +1,12 @@
-//! Immediate-mode drawing helpers over a [`Rect`](retroglyph_core::Rect).
+//! Immediate-mode drawing helpers over a [`Rect`](retroglyph_core::grid::Rect).
 //!
 //! Box borders, filled panels, gauges, tables, sparklines, and a small
-//! constraint-based [`Rect`](retroglyph_core::Rect) splitter with
+//! constraint-based [`Rect`](retroglyph_core::grid::Rect) splitter with
 //! ratatui-style `Fixed`/`Percent`/`Fill`/`Min`/`Max` constraints and `Flex`
 //! alignment ([`layout`]).
 //!
 //! Every widget ([`widget`]) is a builder struct that draws itself into a
-//! [`Grid`](retroglyph_core::Grid) via [`Widget`]/[`StatefulWidget`] and
+//! [`Grid`](retroglyph_core::grid::Grid) via [`Widget`]/[`StatefulWidget`] and
 //! retains no state of its own: state that outlives one render call (a
 //! selection index, a scroll offset, a text field's value and cursor)
 //! lives in [`ListState`]/[`TextInputState`] instead. A
@@ -16,7 +16,7 @@
 //! layers build on top:
 //!
 //! - [`Widget`]/[`StatefulWidget`] ([`widget`]) render into a [`Surface`],
-//!   an area-relative, single-layer view over a [`Grid`](retroglyph_core::Grid), and let
+//!   an area-relative, single-layer view over a [`Grid`](retroglyph_core::grid::Grid), and let
 //!   callers box or store heterogeneous widgets, e.g. a `Vec<Box<dyn Widget>>` of panes to
 //!   render each frame, with no `Backend` type parameter, since drawing touches nothing but
 //!   cells. [`AnimatedWidget`] is `StatefulWidget`'s sibling for state that evolves with
@@ -31,7 +31,7 @@
 //! - [`BoxStyle`] ([`style`]) for a Lip-Gloss-style box model (padding,
 //!   border, margin) rendered into a standalone `Grid`.
 //! - [`join_h`]/[`join_v`] ([`block`]) to compose several `Grid`s (e.g. `BoxStyle::render`
-//!   output) into one; `retroglyph_core::Surface::blit` stamps the result onto a surface.
+//!   output) into one; `retroglyph_core::surface::Surface::blit` stamps the result onto a surface.
 //! - [`Theme`] ([`theme`]) for named color roles (an app picks
 //!   [`Theme::DARK`]/[`Theme::LIGHT`], or builds its own), independent of
 //!   how the app decides which one is active.
@@ -147,7 +147,7 @@ pub use perf::{
     DEFAULT_LAYER, DefaultPerfRenderer, FRAME_HISTORY, PerfOverlayApp, PerfOverlayMode,
     PerfRenderer, default_is_toggle_key,
 };
-pub use retroglyph_core::{Layer, StyledSurface, Surface};
+pub use retroglyph_core::surface::{Layer, StyledSurface, Surface};
 pub use state::{ListState, ScrollPhysics, ScrollState, SelectionWrap, TextInputState};
 pub use style::{BoxStyle, Sides};
 pub use text::{draw_clipped, truncate, truncate_owned};

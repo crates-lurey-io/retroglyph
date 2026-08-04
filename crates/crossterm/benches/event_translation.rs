@@ -1,6 +1,6 @@
 //! Benchmarks `from_crossterm_event`, the per-event mapping `Input::poll_event` runs on every
 //! `crossterm::event::read()` result before handing an event back to
-//! [`retroglyph_core::Terminal::drain_events`].
+//! [`retroglyph_core::terminal::Terminal::drain_events`].
 //!
 //! retroglyph#285 flags this as cheap per-call but sitting on the input hot path: an uncapped
 //! game loop calling `drain_events()` every iteration runs this once per buffered event. This

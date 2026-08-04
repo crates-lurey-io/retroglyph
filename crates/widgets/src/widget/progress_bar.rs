@@ -1,5 +1,5 @@
 //! [`ProgressBar`]: a horizontal progress bar.
-use retroglyph_core::{Color, Style};
+use retroglyph_core::color::{Color, Style};
 
 use super::Widget;
 use crate::Surface;
@@ -15,7 +15,7 @@ use crate::Theme;
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::{Grid, Rect};
+/// use retroglyph_core::grid::{Grid, Rect};
 /// use retroglyph_widgets::{ProgressBar, Surface, Widget};
 ///
 /// let area = Rect::new(0, 0, 10, 1);
@@ -116,7 +116,7 @@ impl Widget for ProgressBar {
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::{Grid, Pos, Rect};
+    use retroglyph_core::grid::{Grid, Pos, Rect};
 
     use super::*;
 
@@ -144,7 +144,7 @@ mod tests {
 
     #[test]
     fn filled_and_empty_styles_are_configurable() {
-        use retroglyph_core::Color;
+        use retroglyph_core::color::Color;
 
         let area = Rect::new(0, 0, 4, 1);
         let mut grid = Grid::new(4, 1);

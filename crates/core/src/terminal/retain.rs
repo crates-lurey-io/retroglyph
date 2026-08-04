@@ -32,7 +32,8 @@ impl<B: Backend> Terminal<B> {
     ///
     /// ```
     /// use retroglyph_core::backend::Headless;
-    /// use retroglyph_core::{Layer, Terminal};
+    /// use retroglyph_core::surface::Layer;
+    /// use retroglyph_core::terminal::Terminal;
     ///
     /// let mut term = Terminal::new(Headless::new(10, 5));
     /// let camera_moved = false;
@@ -88,7 +89,8 @@ impl<B: Backend> Terminal<B> {
     ///
     /// ```
     /// use retroglyph_core::backend::Headless;
-    /// use retroglyph_core::{Layer, Terminal};
+    /// use retroglyph_core::surface::Layer;
+    /// use retroglyph_core::terminal::Terminal;
     ///
     /// let mut term = Terminal::new(Headless::new(10, 5));
     /// term.draw(|s| s.on_tier(Layer::Hud).print((0, 0), "Paused", Default::default()))

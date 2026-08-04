@@ -2,8 +2,8 @@
 use alloc::borrow::ToOwned as _;
 use alloc::string::String;
 
+use retroglyph_core::color::{Color, Style};
 use retroglyph_core::text::{split_at_width, width_usize};
-use retroglyph_core::{Color, Style};
 
 use super::StatefulWidget;
 use crate::Surface;
@@ -40,7 +40,7 @@ use crate::text::truncate as truncate_to_cols;
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::{Grid, Rect};
+/// use retroglyph_core::grid::{Grid, Rect};
 /// use retroglyph_widgets::{StatefulWidget, Surface, TextInput, TextInputState};
 ///
 /// let mut state = TextInputState::new();
@@ -200,7 +200,7 @@ fn glyph_at_column(s: &str, col: usize) -> Option<char> {
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::{Grid, Pos, Rect};
+    use retroglyph_core::grid::{Grid, Pos, Rect};
 
     use super::*;
 

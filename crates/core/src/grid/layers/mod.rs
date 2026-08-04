@@ -148,7 +148,9 @@ impl Grid {
     /// [`Surface::fill_rect`](crate::surface::Surface::fill_rect)'s own fallback.
     ///
     /// ```
-    /// use retroglyph_core::{Grid, Pos, Rect, Style, Tile};
+    /// use retroglyph_core::color::Style;
+    /// use retroglyph_core::grid::{Grid, Pos, Rect};
+    /// use retroglyph_core::tile::Tile;
     ///
     /// let mut grid = Grid::new(4, 4);
     /// grid.fill_region(0, Rect::new(1, 1, 2, 2), Tile::new('#', Style::default()));
@@ -262,8 +264,8 @@ impl Grid {
     /// matters because [`max_layer`](Self::max_layer) only ever grows on write (see its own doc):
     /// a layer that is merely cleared still counts toward it, while a deallocated one does not,
     /// letting `max_layer` fall back down once every layer above it is also gone. This is what lets
-    /// [`crate::Terminal::drop_layer`] undo a layer's permanent allocation and, once every layer
-    /// above 0 is dropped, put [`crate::Terminal::present`] back on its single-layer fast path
+    /// [`crate::terminal::Terminal::drop_layer`] undo a layer's permanent allocation and, once every layer
+    /// above 0 is dropped, put [`crate::terminal::Terminal::present`] back on its single-layer fast path
     /// (retroglyph#1028).
     ///
     /// If `layer` was the current `max_layer`, the table is rescanned downward for the next
@@ -296,7 +298,7 @@ impl Grid {
     /// Whether `layer` is unallocated, or allocated but every tile on it is untouched (see
     /// [`Tile::is_empty`]).
     ///
-    /// Used by [`crate::Terminal::drop_layer`]'s deferred deallocation to tell a layer that is
+    /// Used by [`crate::terminal::Terminal::drop_layer`]'s deferred deallocation to tell a layer that is
     /// still genuinely empty (safe to free) apart from one that was redrawn after the drop was
     /// requested (some tile is no longer empty), which must cancel the drop instead of silently
     /// discarding content the app just wrote.

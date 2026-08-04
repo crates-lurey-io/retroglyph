@@ -15,7 +15,8 @@ impl Camera {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Camera, Pos, Rect, Size};
+    /// use retroglyph_core::camera::Camera;
+    /// use retroglyph_core::grid::{Pos, Rect, Size};
     ///
     /// // A 10x10 viewport near the bottom-right corner of a 12x12 world: the origin clamps
     /// // to (2, 2), so the visible rect is narrower than the viewport rather than reading
@@ -64,12 +65,13 @@ impl Camera {
     /// wider than one cell (a hex, an iso diamond, a multi-cell sprite) where the *anchor*
     /// can be off-viewport while part of the content is still visible. This is the signed
     /// sibling for that case: it hands back the same math `world_to_screen` computes, minus the
-    /// culling, ready for [`Surface::put_signed`] to clip.
+    /// culling, ready for [`Surface::put_signed`](crate::surface::Surface::put_signed) to clip.
     ///
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Camera, Pos, Rect, Size};
+    /// use retroglyph_core::camera::Camera;
+    /// use retroglyph_core::grid::{Pos, Rect, Size};
     ///
     /// let mut cam = Camera::new(Rect::new(0, 0, 10, 10), Size::new(100, 100));
     /// cam.center_on(Pos::new(50, 50));
@@ -93,7 +95,7 @@ impl Camera {
     }
 
     /// A view of `surface` in this camera's world coordinate space, clipped to
-    /// [`visible_bounds`](Self::visible_bounds): [`Surface::clip_translate`] to the visible
+    /// [`visible_bounds`](Self::visible_bounds): [`Surface::clip_translate`](crate::surface::Surface::clip_translate) to the visible
     /// rect, by [`origin`](Self::origin).
     ///
     /// The returned surface's `put`, `put_signed`, `print`, and the rest of `Surface`'s
@@ -101,7 +103,7 @@ impl Camera {
     /// outside `visible_bounds` (including a multi-cell draw anchored off-screen, or - for a
     /// world smaller than the viewport - the dead margin past the world edge) is dropped by the
     /// surface's own bounds check, the same way [`world_to_offset`] composes with
-    /// [`Surface::put_signed`] by hand. This is that composition done once instead of at every
+    /// [`Surface::put_signed`](crate::surface::Surface::put_signed) by hand. This is that composition done once instead of at every
     /// call site.
     ///
     /// Clipping to `visible_bounds` rather than [`viewport`](Self::viewport) directly matches
@@ -115,7 +117,10 @@ impl Camera {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Camera, Grid, Pos, Rect, Size, Style, Surface};
+    /// use retroglyph_core::camera::Camera;
+    /// use retroglyph_core::color::Style;
+    /// use retroglyph_core::grid::{Grid, Pos, Rect, Size};
+    /// use retroglyph_core::surface::Surface;
     ///
     /// let mut grid = Grid::new(20, 20);
     /// let mut root = Surface::new(&mut grid, Rect::new(0, 0, 20, 20), 0);
@@ -137,7 +142,10 @@ impl Camera {
     /// dropped, not written past the world into unused grid cells.
     ///
     /// ```
-    /// use retroglyph_core::{Camera, Grid, Pos, Rect, Size, Style, Surface};
+    /// use retroglyph_core::camera::Camera;
+    /// use retroglyph_core::color::Style;
+    /// use retroglyph_core::grid::{Grid, Pos, Rect, Size};
+    /// use retroglyph_core::surface::Surface;
     ///
     /// let mut grid = Grid::new(20, 20);
     /// let mut root = Surface::new(&mut grid, Rect::new(0, 0, 20, 20), 0);
@@ -172,7 +180,8 @@ impl Camera {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Camera, Pos, Rect, Size};
+    /// use retroglyph_core::camera::Camera;
+    /// use retroglyph_core::grid::{Pos, Rect, Size};
     ///
     /// let mut cam = Camera::new(Rect::new(5, 5, 10, 10), Size::new(100, 100));
     /// cam.center_on(Pos::new(50, 50));
@@ -213,7 +222,8 @@ impl Camera {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Camera, Pos, Rect, Size};
+    /// use retroglyph_core::camera::Camera;
+    /// use retroglyph_core::grid::{Pos, Rect, Size};
     ///
     /// let mut cam = Camera::new(Rect::new(5, 5, 10, 10), Size::new(100, 100));
     /// cam.center_on(Pos::new(50, 50));

@@ -91,7 +91,7 @@ renderer backend does. This is the whole contract it implements, sized to fit a 
 cell geometry via [`WindowConfig::fit`]:
 
 ```rust
-use retroglyph_core::DrawCell;
+use retroglyph_core::backend::DrawCell;
 use retroglyph_core::backend::Output;
 use retroglyph_core::grid::Size;
 use retroglyph_window::winit::WindowConfig;

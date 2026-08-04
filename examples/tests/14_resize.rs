@@ -21,8 +21,10 @@ mod support;
 mod resize;
 
 use resize::Resize;
+use retroglyph_core::app::Frame;
+use retroglyph_core::backend::Headless;
 use retroglyph_core::event::Event;
-use retroglyph_core::{Frame, Headless, Terminal};
+use retroglyph_core::terminal::Terminal;
 use retroglyph_examples::{Example, HEADLESS_FRAME_DELTA};
 
 /// Drives `E` through one synthetic event per tick, returning each frame's

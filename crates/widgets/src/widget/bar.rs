@@ -20,8 +20,9 @@
 
 use core::fmt;
 
+use retroglyph_core::color::{Color, Style};
+use retroglyph_core::grid::Rect;
 use retroglyph_core::text::width_usize as measured_width;
-use retroglyph_core::{Color, Rect, Style};
 
 use super::{Meter, Text, Widget};
 use crate::Surface;
@@ -149,7 +150,7 @@ pub(super) fn render(
 mod tests {
     use core::fmt::Write as _;
 
-    use retroglyph_core::{Grid, Pos};
+    use retroglyph_core::grid::{Grid, Pos};
 
     use super::*;
     use crate::Surface;

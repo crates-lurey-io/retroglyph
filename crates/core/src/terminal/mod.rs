@@ -32,11 +32,12 @@ mod retain;
 ///
 /// ```
 /// use retroglyph_core::backend::Headless;
-/// use retroglyph_core::{Color, Terminal};
+/// use retroglyph_core::color::Color;
+/// use retroglyph_core::terminal::Terminal;
 ///
 /// let mut term = Terminal::new(Headless::new(20, 5));
 /// term.draw(|surface| {
-///     surface.put((2, 1), '@', retroglyph_core::Style::new().fg(Color::GREEN));
+///     surface.put((2, 1), '@', retroglyph_core::color::Style::new().fg(Color::GREEN));
 /// })
 /// .unwrap();
 /// ```
