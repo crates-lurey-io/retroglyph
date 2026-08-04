@@ -289,6 +289,11 @@ impl<'a> Surface<'a> {
     /// addressed in, so a coordinate that goes negative after the shift can land inside the
     /// pre-narrowed area.
     ///
+    /// The offset accumulates with saturating arithmetic: chaining enough `translate` calls in one
+    /// direction clamps `origin` at `i32::MIN`/`i32::MAX` instead of wrapping or panicking. A
+    /// coordinate that only lands after an offset larger than that was never addressable in this
+    /// surface's `u16` grid space to begin with.
+    ///
     /// # Examples
     ///
     /// ```
@@ -346,6 +351,8 @@ impl<'a> Surface<'a> {
     /// intersection to shrink it back down to the world's own size. A caller that wants `area`
     /// to become exactly its argument, even reaching outside the parent's current area, should
     /// use [`scope`](Self::scope) followed by [`translate`](Self::translate) instead.
+    ///
+    /// The offset accumulates with saturating arithmetic, as in [`translate`](Self::translate).
     ///
     /// # Examples
     ///

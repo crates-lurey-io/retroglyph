@@ -121,7 +121,9 @@ impl Surface<'_> {
 
     /// [`put`](Self::put), in coordinates relative to this surface's own area origin, where a
     /// negative coordinate is expressible and simply falls outside (a no-op, matching `put`'s
-    /// out-of-bounds behavior).
+    /// out-of-bounds behavior). A coordinate that stays non-negative but exceeds `u16::MAX` after
+    /// this surface's translate offset is subtracted is dropped the same way: it addresses a cell
+    /// this surface's `u16` grid space cannot name.
     ///
     /// Scrolling/camera code (e.g. a viewport over a wider world) computes positions in a
     /// coordinate space that can go negative relative to the viewport, which [`Pos`] (backed by
