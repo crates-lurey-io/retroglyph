@@ -334,14 +334,14 @@ impl<'a> Surface<'a> {
     /// Chaining `clip(...).translate(...)` directly works when the result is used right where
     /// it's produced (both `clip` and `translate` return a `Surface<'_>` borrowing the previous
     /// step for exactly that call), but a helper that hands the composed view back to its own
-    /// caller (for example [`Camera::surface`](crate::camera::Camera::surface)) needs the two
+    /// caller (for example a scrolling-camera widget's own `surface` method) needs the two
     /// narrowings applied against a single `&mut self` borrow instead, so the returned surface
     /// can outlive the call. This does that.
     ///
     /// This intersects `area` with this surface's own area rather than replacing it the way
     /// [`scope`](Self::scope) does, so [`area`](Self::area)/[`width`](Self::width)/
     /// [`height`](Self::height) on the result can report something smaller than the `area`
-    /// argument. [`Camera::surface`](crate::camera::Camera::surface) relies on exactly this: when the
+    /// argument. A scrolling-camera widget's `surface` method relies on exactly this: when the
     /// world is smaller than the viewport, it hands in a viewport-sized `area` and depends on the
     /// intersection to shrink it back down to the world's own size. A caller that wants `area`
     /// to become exactly its argument, even reaching outside the parent's current area, should

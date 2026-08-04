@@ -118,6 +118,8 @@ pub mod align;
 /// depending on which backend feature is on.
 pub mod animate;
 pub mod block;
+/// A scrolling viewport into a world larger than the screen.
+pub mod camera;
 pub mod draw;
 pub mod interact;
 pub mod layout;
@@ -133,6 +135,7 @@ pub mod widget;
 pub use align::Align;
 pub use animate::{Easing, Tween, oscillate, oscillate_with_phase};
 pub use block::{join_h, join_v};
+pub use camera::Camera;
 pub use draw::{fill_rect, offset_for_pos, thumb_geometry};
 pub use interact::{
     Consumed, DEFAULT_DRAG_THRESHOLD, Density, FocusRing, HitTester, Interaction, Pointer,

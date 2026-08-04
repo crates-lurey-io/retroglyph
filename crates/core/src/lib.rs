@@ -154,10 +154,6 @@ pub mod app;
 #[allow(clippy::too_long_first_doc_paragraph)]
 /// Pluggable rendering backends.
 pub mod backend;
-// See the `too_long_first_doc_paragraph` comment above `animate`: same noisy-lint mis-attribution.
-#[allow(clippy::too_long_first_doc_paragraph)]
-/// A scrolling viewport into a world larger than the screen.
-pub mod camera;
 pub mod color;
 // See the `too_long_first_doc_paragraph` comment above `animate`: same noisy-lint mis-attribution.
 #[allow(clippy::too_long_first_doc_paragraph)]
