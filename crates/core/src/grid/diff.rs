@@ -211,4 +211,26 @@ mod tests {
         prev2.write_grapheme(0, 0, 0, "e\u{0301}", Style::default());
         assert_eq!(cur.diff(&prev2).count(), 0);
     }
+
+    #[test]
+    fn test_grid_diff_detects_tint_only_change() {
+        // Same glyph, style, and flags on both sides: only the tint (the side table's other
+        // member) differs. A `Tile`-only diff would miss this too, same as the grapheme case.
+        let mut cur = Grid::new(2, 2);
+        let mut prev = Grid::new(2, 2);
+        cur.put_tile(0, (0, 0), Tile::new('@', Style::default()));
+        prev.put_tile(0, (0, 0), Tile::new('@', Style::default()));
+        cur.set_tint(0, 0, 0, Tint::multiply(64, 128, 192));
+
+        let diffs: Vec<_> = cur.diff(&prev).collect();
+        assert_eq!(diffs.len(), 1);
+        assert_eq!(diffs[0].pos, Pos::new(0, 0));
+        assert_eq!(diffs[0].tint, Tint::multiply(64, 128, 192));
+
+        // Identical tint on both sides: no diff.
+        let mut prev2 = Grid::new(2, 2);
+        prev2.put_tile(0, (0, 0), Tile::new('@', Style::default()));
+        prev2.set_tint(0, 0, 0, Tint::multiply(64, 128, 192));
+        assert_eq!(cur.diff(&prev2).count(), 0);
+    }
 }
