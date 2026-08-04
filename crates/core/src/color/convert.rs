@@ -261,7 +261,6 @@ impl Color {
             other => other,
         }
     }
-
 }
 
 #[cfg(test)]
