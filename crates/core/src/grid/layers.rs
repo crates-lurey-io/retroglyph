@@ -177,7 +177,10 @@ impl Grid {
         // (retroglyph#1020). A no-op on a grid that has never used spans.
         self.clear_span_overlap_rect(layer, rect.left(), rect.top(), rect.width(), rect.height());
         // Wide-char overlap has no region-scoped variant (yet): still one call per row, but that
-        // remains O(rows) since it never re-collects a growing anchor set.
+        // remains O(rows) since it never re-collects a growing anchor set. Neither call is gated
+        // on `egc`: `put_tile` writes a `WIDE_CHAR`/`WIDE_CHAR_SPACER` pair on every feature
+        // combination (see its own doc comment), so a fill that can land inside one has to clean
+        // it up regardless of `egc`.
         for y in rect.top()..rect.bottom() {
             self.clear_overlap(layer, rect.left(), y, rect.width());
         }
@@ -242,7 +245,7 @@ impl Grid {
     /// coordinates outside the grid or on an unallocated layer.
     ///
     /// A tint is grid state rather than [`Tile`] state, for the same reason a multi-codepoint
-    /// grapheme is (see [`grapheme`](Self::grapheme)): it is rare per cell and `Tile` has no room
+    /// grapheme is: it is rare per cell and `Tile` has no room
     /// left. So it is read here, not through [`Tile::style`].
     ///
     /// Cell backends have no sprite to recolour and ignore this entirely.
@@ -397,10 +400,12 @@ impl Grid {
                 // mix at full alpha still needs to run the mode's formula: it isn't
                 // equivalent to the raw source color (see `blend_color`'s matching guard).
                 if mode != BlendMode::Linear || fg_alpha != 1.0 {
-                    blended.style.fg = blend_fg(mode, tile.style.fg, dst_tile.style.fg, fg_alpha);
+                    blended.style.fg =
+                        blend_color(mode, tile.style.fg, dst_tile.style.fg, fg_alpha);
                 }
                 if mode != BlendMode::Linear || bg_alpha != 1.0 {
-                    blended.style.bg = blend_bg(mode, tile.style.bg, dst_tile.style.bg, bg_alpha);
+                    blended.style.bg =
+                        blend_color(mode, tile.style.bg, dst_tile.style.bg, bg_alpha);
                 }
                 blended
             },
@@ -587,8 +592,7 @@ impl Grid {
 
     /// Yield a [`DrawCell`] for every allocated cell across all layers, in
     /// layer-major (0 → `max_layer`) then row-major order. `grapheme` is
-    /// `Some` only when [`TileFlags::HAS_EXTRA`] is set (see
-    /// [`grapheme`](Self::grapheme)).
+    /// `Some` only when [`TileFlags::HAS_EXTRA`] is set.
     ///
     /// Unallocated layers are skipped. This is used by backends that need
     /// the full frame on every draw (see [`crate::Output::needs_full_frame`]).
@@ -618,6 +622,58 @@ impl Grid {
             layer.buf.clear();
             layer.extras.clear();
         }
+    }
+
+    /// Deallocates `layer`, freeing its buffer entirely rather than clearing its content in
+    /// place.
+    ///
+    /// Unlike [`clear_all`](Self::clear_all) (and a per-layer clear via [`cells_mut`](Self::cells_mut)),
+    /// which empty a layer's cells but leave it allocated, this drops the [`LayerBuf`] itself, the
+    /// same table slot [`layer_or_alloc`](Self::layer_or_alloc) fills in on first write. That
+    /// matters because [`max_layer`](Self::max_layer) only ever grows on write (see its own doc):
+    /// a layer that is merely cleared still counts toward it, while a deallocated one does not,
+    /// letting `max_layer` fall back down once every layer above it is also gone. This is what lets
+    /// [`crate::Terminal::drop_layer`] undo a layer's permanent allocation and, once every layer
+    /// above 0 is dropped, put [`crate::Terminal::present`] back on its single-layer fast path
+    /// (retroglyph#1028).
+    ///
+    /// If `layer` was the current `max_layer`, the table is rescanned downward for the next
+    /// highest still-allocated layer, `O(max_layer)` in the worst case; deallocating any other
+    /// layer is `O(1)`. Deallocating an already-unallocated layer (or one past the table's
+    /// current length) is a no-op.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `layer` is 0: layer 0 is always allocated (see [`Grid::new`]) and can never be
+    /// deallocated.
+    pub(crate) fn deallocate_layer(&mut self, layer: u8) {
+        assert_ne!(
+            layer, 0,
+            "layer 0 is always allocated and cannot be deallocated"
+        );
+        let idx = usize::from(layer);
+        if idx >= self.layers.len() {
+            return;
+        }
+        self.layers[idx] = None;
+        if layer == self.max_layer {
+            self.max_layer = (0..layer)
+                .rev()
+                .find(|&id| self.layers[usize::from(id)].is_some())
+                .unwrap_or(0);
+        }
+    }
+
+    /// Whether `layer` is unallocated, or allocated but every tile on it is untouched (see
+    /// [`Tile::is_empty`]).
+    ///
+    /// Used by [`crate::Terminal::drop_layer`]'s deferred deallocation to tell a layer that is
+    /// still genuinely empty (safe to free) apart from one that was redrawn after the drop was
+    /// requested (some tile is no longer empty), which must cancel the drop instead of silently
+    /// discarding content the app just wrote.
+    pub(crate) fn layer_is_empty(&self, layer: u8) -> bool {
+        self.layer(layer)
+            .is_none_or(|lb| lb.buf.as_ref().iter().all(Tile::is_empty))
     }
 
     /// Composites every allocated layer into `dst`'s layer 0, one tile per cell.
@@ -770,14 +826,6 @@ fn blend_separable_channel(sep: SeparableBlendMode, src: u8, dst: u8, t: f32) ->
     Channel::from_f32(blended.clamp(0.0, 1.0))
 }
 
-fn blend_fg(mode: BlendMode, src: Color, dst: Color, t: f32) -> Color {
-    blend_color(mode, src, dst, t)
-}
-
-fn blend_bg(mode: BlendMode, src: Color, dst: Color, t: f32) -> Color {
-    blend_color(mode, src, dst, t)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -884,7 +932,7 @@ mod tests {
         assert_eq!(g.layers.len(), 1);
         assert!(g.layer(255).is_none());
         assert!(g.tile(255, (0, 0)).is_none());
-        assert!(g.grapheme(255, 0, 0).is_none());
+        assert!(crate::grid::grapheme_at(&g, 255, 0, 0).is_none());
     }
 
     #[test]
@@ -917,6 +965,68 @@ mod tests {
         g.set_tint(200, 99, 99, Tint::multiply(1, 2, 3));
         assert_eq!(g.max_layer(), 0);
         assert!(g.layer(200).is_none());
+    }
+
+    #[test]
+    #[should_panic(expected = "layer 0 is always allocated")]
+    fn test_grid_deallocate_layer_zero_panics() {
+        let mut g = Grid::new(4, 4);
+        g.deallocate_layer(0);
+    }
+
+    #[test]
+    fn test_grid_deallocate_layer_the_top_layer_lowers_max_layer() {
+        let mut g = Grid::new(4, 4);
+        g.put_tile(3, (0, 0), Tile::new('@', Style::default()));
+        assert_eq!(g.max_layer(), 3);
+
+        g.deallocate_layer(3);
+        assert_eq!(g.max_layer(), 0);
+        assert!(g.layer(3).is_none());
+    }
+
+    #[test]
+    fn test_grid_deallocate_layer_rescans_down_to_the_next_allocated_layer() {
+        let mut g = Grid::new(4, 4);
+        g.put_tile(2, (0, 0), Tile::new('a', Style::default()));
+        g.put_tile(5, (0, 0), Tile::new('b', Style::default()));
+        assert_eq!(g.max_layer(), 5);
+
+        g.deallocate_layer(5);
+        assert_eq!(g.max_layer(), 2);
+        assert!(g.layer(5).is_none());
+        assert!(g.layer(2).is_some());
+    }
+
+    #[test]
+    fn test_grid_deallocate_layer_below_the_top_leaves_max_layer_unchanged() {
+        let mut g = Grid::new(4, 4);
+        g.put_tile(2, (0, 0), Tile::new('a', Style::default()));
+        g.put_tile(5, (0, 0), Tile::new('b', Style::default()));
+
+        g.deallocate_layer(2);
+        assert_eq!(g.max_layer(), 5);
+        assert!(g.layer(2).is_none());
+        assert!(g.layer(5).is_some());
+    }
+
+    #[test]
+    fn test_grid_deallocate_layer_reads_back_as_unallocated() {
+        let mut g = Grid::new(4, 4);
+        g.put_tile(1, (0, 0), Tile::new('@', Style::default()));
+        g.deallocate_layer(1);
+        assert!(g.tile(1, (0, 0)).is_none());
+    }
+
+    #[test]
+    fn test_grid_deallocate_layer_already_unallocated_is_a_no_op() {
+        let mut g = Grid::new(4, 4);
+        g.deallocate_layer(1);
+        assert_eq!(g.max_layer(), 0);
+
+        // Past the table's current length entirely.
+        g.deallocate_layer(200);
+        assert_eq!(g.max_layer(), 0);
     }
 
     #[test]
@@ -1347,7 +1457,7 @@ mod tests {
 
         g.fill_region(0, Rect::new(0, 0, 4, 4), Tile::new('#', Style::default()));
 
-        assert_eq!(g.grapheme(0, 1, 1), None);
+        assert_eq!(crate::grid::grapheme_at(&g, 0, 1, 1), None);
         assert_eq!(g.tint(0, 2, 2), Tint::None);
     }
 
@@ -1430,12 +1540,12 @@ mod tests {
         g.set_tint(0, 1, 1, Tint::multiply(128, 128, 128));
 
         // Both members survive: `set_tint` preserves the grapheme already stored.
-        assert_eq!(g.grapheme(0, 1, 1), Some("e\u{0301}"));
+        assert_eq!(crate::grid::grapheme_at(&g, 0, 1, 1), Some("e\u{0301}"));
         assert_eq!(g.tint(0, 1, 1), Tint::multiply(128, 128, 128));
 
         // Clearing the tint leaves the grapheme, and so leaves the entry in place.
         g.set_tint(0, 1, 1, Tint::None);
-        assert_eq!(g.grapheme(0, 1, 1), Some("e\u{0301}"));
+        assert_eq!(crate::grid::grapheme_at(&g, 0, 1, 1), Some("e\u{0301}"));
         assert_eq!(g.tint(0, 1, 1), Tint::None);
     }
 
@@ -1448,7 +1558,7 @@ mod tests {
 
         // HAS_EXTRA is now set for a cell with no grapheme text. `grapheme` must still say None
         // rather than reaching into the entry and finding an empty slot.
-        assert_eq!(g.grapheme(0, 1, 1), None);
+        assert_eq!(crate::grid::grapheme_at(&g, 0, 1, 1), None);
         assert_eq!(g.tint(0, 1, 1), Tint::multiply(128, 128, 128));
     }
 
@@ -1461,7 +1571,7 @@ mod tests {
         let mut dst = Grid::new(2, 2);
         dst.blit(0, &src, Rect::new(0, 0, 2, 2), 0, 0);
         assert_eq!(dst[Pos::new(0, 0)].glyph, 'e');
-        assert_eq!(dst.grapheme(0, 0, 0), Some("e\u{0301}"));
+        assert_eq!(crate::grid::grapheme_at(&dst, 0, 0, 0), Some("e\u{0301}"));
     }
 
     #[test]
@@ -1640,8 +1750,22 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_blend_separable_channel_multiply() {
+        // cb = 204 (0.8), cs = 51 (0.2): multiply = cb * cs = 0.16.
+        assert_eq!(
+            blend_separable_channel(SeparableBlendMode::Multiply, 204, 51, 1.0),
+            41
+        );
+        // t = 0.5 lerps the destination halfway to that fully mixed color.
+        assert_eq!(
+            blend_separable_channel(SeparableBlendMode::Multiply, 204, 51, 0.5),
+            46
+        );
+    }
+
     /// End-to-end through `blit_alpha`, not just the per-channel helper: proves `BlendMode`
-    /// actually reaches `blend_fg`/`blend_bg` and lands on the destination tile's style.
+    /// actually reaches `blend_color` and lands on the destination tile's style.
     #[test]
     fn test_grid_blit_alpha_screen_blends_fg() {
         let mut src = Grid::new(1, 1);
@@ -1686,6 +1810,79 @@ mod tests {
                 r: 224,
                 g: 224,
                 b: 224
+            }
+        );
+    }
+
+    /// Same as `test_grid_blit_alpha_screen_blends_fg`, but for `style.bg` and `bg_alpha`: both
+    /// alpha factors are independent, so `fg_alpha == 1.0` (fully mixed) and `bg_alpha == 0.5`
+    /// (half-lerped toward the mix) must land different results on the two channels.
+    #[test]
+    fn test_grid_blit_alpha_screen_blends_bg() {
+        let mut src = Grid::new(1, 1);
+        src.put_tile(
+            0,
+            (0, 0),
+            Tile::default().with_glyph('X').with_style(
+                Style::new()
+                    .fg(Color::Rgb {
+                        r: 204,
+                        g: 204,
+                        b: 204,
+                    })
+                    .bg(Color::Rgb {
+                        r: 204,
+                        g: 204,
+                        b: 204,
+                    }),
+            ),
+        );
+
+        let mut dst = Grid::new(1, 1);
+        dst.put_tile(
+            0,
+            (0, 0),
+            Tile::default().with_glyph('_').with_style(
+                Style::new()
+                    .fg(Color::Rgb {
+                        r: 102,
+                        g: 102,
+                        b: 102,
+                    })
+                    .bg(Color::Rgb {
+                        r: 102,
+                        g: 102,
+                        b: 102,
+                    }),
+            ),
+        );
+
+        dst.blit_alpha(
+            0,
+            &src,
+            Rect::new(0, 0, 1, 1),
+            0,
+            0,
+            BlendMode::Screen,
+            1.0,
+            0.5,
+        );
+        // `fg_alpha == 1.0`: fully mixed, same as `test_grid_blit_alpha_screen_blends_fg`.
+        assert_eq!(
+            dst[Pos::new(0, 0)].style.fg,
+            Color::Rgb {
+                r: 224,
+                g: 224,
+                b: 224
+            }
+        );
+        // `bg_alpha == 0.5`: only half-lerped from the destination toward that same mix.
+        assert_eq!(
+            dst[Pos::new(0, 0)].style.bg,
+            Color::Rgb {
+                r: 163,
+                g: 163,
+                b: 163
             }
         );
     }
@@ -1808,7 +2005,10 @@ mod tests {
         let mut g = Grid::new(2, 2);
         g.write_grapheme(0, 0, 0, "e\u{0301}", Style::default());
         let cloned = g.clone();
-        assert_eq!(cloned.grapheme(0, 0, 0), Some("e\u{0301}"));
+        assert_eq!(
+            crate::grid::grapheme_at(&cloned, 0, 0, 0),
+            Some("e\u{0301}")
+        );
     }
 
     #[cfg(feature = "egc")]
@@ -1819,7 +2019,10 @@ mod tests {
         let mut flattened = Grid::new(2, 2);
         g.flatten_into(&mut flattened);
         assert_eq!(flattened[Pos::new(0, 0)].glyph, 'e');
-        assert_eq!(flattened.grapheme(0, 0, 0), Some("e\u{0301}"));
+        assert_eq!(
+            crate::grid::grapheme_at(&flattened, 0, 0, 0),
+            Some("e\u{0301}")
+        );
     }
 
     #[test]
@@ -2024,6 +2227,23 @@ mod tests {
 
         assert_eq!(dst[Pos::new(1, 0)].glyph(), 'X');
         assert_eq!(dst.tile(0, Pos::new(0, 0)).map(Tile::span), Some((1, 1)));
+    }
+
+    /// `blit_cross_layer` (used by `Surface::blit` for the retroglyph#824 fix) reads a fixed
+    /// `src_layer` regardless of the layer it writes to, unlike `blit`'s single shared `layer`.
+    #[test]
+    fn blit_cross_layer_reads_a_different_source_layer_than_it_writes() {
+        let mut src = Grid::new(2, 2);
+        // Only layer 0 is ever populated on `src` (a standalone, layer-0-only composed grid).
+        src.put_tile(0, (0, 0), Tile::new('S', Style::default()));
+
+        let mut dst = Grid::new(2, 2);
+        dst.blit_cross_layer(3, &src, 0, Rect::new(0, 0, 2, 2), 0, 0);
+
+        // Written to layer 3 on `dst`, even though it was read from layer 0 on `src`.
+        assert_eq!(dst.tile(3, (0, 0)).map(Tile::glyph), Some('S'));
+        // Layer 0 is always allocated but untouched by this call: still its default tile.
+        assert_eq!(dst[Pos::new(0, 0)].glyph(), ' ');
     }
 
     #[test]

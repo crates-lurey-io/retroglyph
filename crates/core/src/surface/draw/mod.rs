@@ -76,15 +76,27 @@ impl Surface<'_> {
     /// which cannot just call `put_grapheme` with its own local coordinates: `put_signed`
     /// already subtracts `origin_offset` itself (see its doc), so routing through `shift` again
     /// would subtract it twice.
+    ///
+    /// Returns whether the write actually landed, so a caller that also needs to touch the
+    /// written tile afterward (e.g. [`put_offset`](Self::put_offset) setting a pixel offset)
+    /// can tell a refused write apart from a successful one instead of blindly poking whatever
+    /// tile is already at `(x, y)`.
     #[cfg(feature = "egc")]
-    pub(super) fn write_grapheme_at(&mut self, x: u16, y: u16, grapheme: &str, style: Style) {
+    pub(super) fn write_grapheme_at(
+        &mut self,
+        x: u16,
+        y: u16,
+        grapheme: &str,
+        style: Style,
+    ) -> bool {
         use unicode_width::UnicodeWidthStr;
 
         if !self.wide_spacer_fits(x, y, grapheme.width()) {
-            return;
+            return false;
         }
         self.grid.write_grapheme(self.layer, x, y, grapheme, style);
         self.apply_tint(x, y);
+        true
     }
 
     /// `true` unless `width` is 2 and the spacer cell it would need at `x + 1` falls outside

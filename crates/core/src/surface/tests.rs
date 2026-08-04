@@ -1191,6 +1191,47 @@ fn put_offset_still_carries_the_pixel_offset() {
 }
 
 #[test]
+#[cfg(feature = "egc")]
+fn put_offset_does_not_move_a_pre_existing_tile_when_its_own_write_is_refused() {
+    let mut grid = Grid::new(8, 1);
+    let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 8, 1), 0);
+
+    surface.put((3, 0), 'Z', Style::default());
+
+    // Clip is columns 0..4; the wide char's primary cell (column 3) is inside the clip, but
+    // its spacer would land at column 4, outside it. The whole write is refused, so `put_offset`
+    // must not touch the tile `put` above just placed.
+    surface.clip(Rect::new(0, 0, 4, 1)).put_offset(
+        (3, 0),
+        Offset::new(7, -7),
+        '\u{6f22}',
+        Style::default(),
+    );
+
+    let tile = grid.tile(0, Pos::new(3, 0)).unwrap();
+    assert_eq!(tile.glyph(), 'Z');
+    assert_eq!((tile.dx(), tile.dy()), (0, 0));
+}
+
+#[test]
+#[cfg(not(feature = "egc"))]
+fn put_offset_does_not_move_a_pre_existing_tile_when_its_own_write_is_refused() {
+    let mut grid = Grid::new(4, 1);
+    let mut surface = screen(&mut grid);
+
+    surface.put((3, 0), 'Z', Style::default());
+
+    // A 2-column glyph at the grid's last column needs a spacer at column 4, which does not
+    // exist: `Grid::put_tile` refuses the write. `put_offset` must not touch the tile `put`
+    // above just placed.
+    surface.put_offset((3, 0), Offset::new(7, -7), '\u{6f22}', Style::default());
+
+    let tile = grid.tile(0, Pos::new(3, 0)).unwrap();
+    assert_eq!(tile.glyph(), 'Z');
+    assert_eq!((tile.dx(), tile.dy()), (0, 0));
+}
+
+#[test]
 fn put_offset_on_a_refused_write_leaves_the_targets_glyph_and_offset_alone() {
     let mut grid = Grid::new(4, 4);
     {
@@ -1566,48 +1607,6 @@ fn grid_is_the_read_only_counterpart_of_grid_mut() {
     surface.put((1, 1), 'X', Style::default());
 
     assert_eq!(surface.grid()[Pos::new(1, 1)].glyph(), 'X');
-}
-
-#[test]
-fn tile_reads_a_written_cell_without_a_mutable_borrow() {
-    let mut grid = Grid::new(4, 4);
-    let mut surface = screen(&mut grid);
-    surface.put((1, 1), 'X', Style::default());
-
-    assert_eq!(surface.tile((1, 1)).map(Tile::glyph), Some('X'));
-    assert_eq!(surface.tile((0, 0)).map(Tile::glyph), Some(' '));
-    assert_eq!(surface.tile((10, 10)), None);
-}
-
-#[test]
-fn background_reads_the_styles_background_colour() {
-    let mut grid = Grid::new(4, 4);
-    let mut surface = screen(&mut grid);
-    surface.put((1, 1), 'X', Style::new().bg(Color::RED));
-
-    assert_eq!(surface.background((1, 1)), Some(Color::RED));
-    assert_eq!(surface.background((10, 10)), None);
-}
-
-#[test]
-fn tile_returns_none_on_an_unallocated_layer() {
-    let mut grid = Grid::new(4, 4);
-    let mut surface = screen(&mut grid);
-    let unallocated = surface.on_layer(1);
-
-    // Layer 0 is always allocated (even empty); layer 1 was never written to, so it isn't
-    // allocated at all, a third reason `tile` answers `None`, distinct from "nothing was ever
-    // written at this cell" and "out of bounds".
-    assert_eq!(unallocated.tile((0, 0)), None);
-}
-
-#[test]
-fn background_returns_none_on_an_unallocated_layer() {
-    let mut grid = Grid::new(4, 4);
-    let mut surface = screen(&mut grid);
-    let unallocated = surface.on_layer(1);
-
-    assert_eq!(unallocated.background((0, 0)), None);
 }
 
 #[test]
