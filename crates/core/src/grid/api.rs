@@ -530,10 +530,20 @@ mod tests {
     #[test]
     fn write_grapheme_y_past_height_is_refused() {
         let mut grid = Grid::new(10, 10);
-        grid.write_grapheme(0, 0, 12, "A", Style::default()); // y = 12 on a 10-tall grid
+        assert!(!grid.write_grapheme(0, 0, 12, "A", Style::default())); // y = 12 on a 10-tall grid
         for y in 0..10 {
             assert_eq!(grid[Pos::new(0, y)].glyph(), ' ');
         }
+    }
+
+    #[cfg(feature = "egc")]
+    #[test]
+    fn write_grapheme_zero_width_is_refused() {
+        let mut grid = Grid::new(10, 10);
+        // A lone combining mark, with no base character in front of it, has zero display width
+        // on its own.
+        assert!(!grid.write_grapheme(0, 2, 1, "\u{0301}", Style::default()));
+        assert_eq!(grid[Pos::new(2, 1)].glyph(), ' ');
     }
 
     #[cfg(feature = "egc")]
