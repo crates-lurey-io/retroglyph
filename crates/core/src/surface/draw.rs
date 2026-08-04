@@ -64,6 +64,44 @@ impl Surface<'_> {
         (!abs.is_empty()).then_some(abs)
     }
 
+    /// Clips `rect` (in the same coordinate space as `fill_rect`/`clear_region`'s own `rect`
+    /// argument) to what can possibly land on this surface: `(0, 0)..(area.width, area.height)`
+    /// shifted by `origin_offset`, mirroring the subtraction [`shift`](Self::shift) applies per
+    /// cell.
+    ///
+    /// Both methods' per-cell fallback loop runs this first so the loop is bounded to at most
+    /// `area.width * area.height` cells regardless of how much larger `rect` is, rather than
+    /// iterating `rect`'s full width * height (up to ~4.3 billion cells for a `u16`-sized rect)
+    /// and relying on a per-cell check to skip what doesn't land.
+    ///
+    /// The intersection itself is [`Rect::intersect`], not hand-rolled per-field arithmetic,
+    /// widened to `i64` because `origin_offset` can push the shifted area below `0` or above
+    /// `u16::MAX`, neither of which `Rect<u16>` can represent; the result is narrowed back to
+    /// `u16` once [`intersect`](ixy::Rect::intersect) has already bounded it within `rect`'s own
+    /// (already-`u16`) extent.
+    fn clip_local_rect(&self, rect: Rect) -> Rect {
+        let bounds = ixy::Rect::<i64>::new(
+            i64::from(self.origin_offset.0),
+            i64::from(self.origin_offset.1),
+            i64::from(self.area.width()),
+            i64::from(self.area.height()),
+        );
+        let rect = ixy::Rect::<i64>::new(
+            i64::from(rect.left()),
+            i64::from(rect.top()),
+            i64::from(rect.width()),
+            i64::from(rect.height()),
+        )
+        .intersect(bounds);
+        // `intersect` only ever narrows `rect`'s own fields, which started out as `u16`, so
+        // these conversions never fail.
+        let left = u16::try_from(rect.left()).unwrap_or(u16::MAX);
+        let top = u16::try_from(rect.top()).unwrap_or(u16::MAX);
+        let width = u16::try_from(rect.width()).unwrap_or(u16::MAX);
+        let height = u16::try_from(rect.height()).unwrap_or(u16::MAX);
+        Rect::new(left, top, width, height)
+    }
+
     /// Applies this surface's tint to the cell just written at `(x, y)`.
     ///
     /// Called after a write rather than as part of one, because a glyph write drops whatever
@@ -105,11 +143,25 @@ impl Surface<'_> {
     fn write_grapheme_at(&mut self, x: u16, y: u16, grapheme: &str, style: Style) {
         use unicode_width::UnicodeWidthStr;
 
-        if grapheme.width() == 2 && !self.clip.contains(x.saturating_add(1), y) {
+        if !self.wide_spacer_fits(x, y, grapheme.width()) {
             return;
         }
         self.grid.write_grapheme(self.layer, x, y, grapheme, style);
         self.apply_tint(x, y);
+    }
+
+    /// `true` unless `width` is 2 and the spacer cell it would need at `x + 1` falls outside
+    /// this surface's clip.
+    ///
+    /// [`Grid::put_tile`]/[`Grid::write_grapheme`] only refuse a wide write at the *grid*'s own
+    /// right edge, not the clip's, so every wide write site (both the `egc` grapheme path via
+    /// [`write_grapheme_at`](Self::write_grapheme_at) and the plain-`char` path in
+    /// [`put`](Self::put)/[`put_signed`](Self::put_signed)/[`put_offset`](Self::put_offset))
+    /// calls this first: without it, a clip narrower than the surface's own area would let a
+    /// wide glyph's spacer land one column past the clip, silently overwriting whatever is
+    /// there.
+    fn wide_spacer_fits(&self, x: u16, y: u16, width: usize) -> bool {
+        width != 2 || self.clip.contains(x.saturating_add(1), y)
     }
 
     /// Place `ch` at `pos` in `style`. A no-op if `pos` is outside this surface's clip.
@@ -145,6 +197,9 @@ impl Surface<'_> {
             let Some((x, y)) = self.shift(pos.x, pos.y) else {
                 return;
             };
+            if !self.wide_spacer_fits(x, y, ch.width().unwrap_or(1)) {
+                return;
+            }
             let tile = Tile::new(ch, style);
             self.grid.put_tile(self.layer, (x, y), tile);
             self.apply_tint(x, y);
@@ -205,6 +260,9 @@ impl Surface<'_> {
         }
         #[cfg(not(feature = "egc"))]
         {
+            if !self.wide_spacer_fits(abs_x, abs_y, ch.width().unwrap_or(1)) {
+                return;
+            }
             let tile = Tile::new(ch, style);
             self.grid.put_tile(self.layer, (abs_x, abs_y), tile);
             self.apply_tint(abs_x, abs_y);
@@ -367,6 +425,12 @@ impl Surface<'_> {
     /// [`print`](Self::print), horizontally aligned within `rect` (clipped to this surface's own
     /// clip) and measured in display columns (via `unicode_width`), not bytes.
     ///
+    /// `rect` is local to this surface's own [`area`](Self::area), the same convention as
+    /// [`fill_rect`](Self::fill_rect) and [`clear_region`](Self::clear_region) (not absolute grid
+    /// coordinates, the convention [`clip`](Self::clip)/[`scope`](Self::scope) use for their own
+    /// `rect`): `(0, 0)` is `area`'s own top-left, so a widget's own `local_area()` can be passed
+    /// straight in.
+    ///
     /// Wants a per-frame redrawn UI label (a status line, a centred title bar) that should not
     /// allocate: unlike [`TextLayout`](crate::layout::TextLayout), which only accepts a
     /// [`Line`] (forcing an allocation to build one for every call), this
@@ -412,21 +476,26 @@ impl Surface<'_> {
         #[allow(clippy::cast_possible_truncation)]
         let text_width = UnicodeWidthStr::width(text) as u16;
         let x_offset = align.offset(rect.width(), text_width);
-        // `clip` treats `rect` as absolute (it intersects `self.clip`, itself absolute), but
-        // `print` treats its `pos` as local to `self.area` (see `shift`). Compute the aligned
-        // start column in `rect`'s absolute space, then translate it into `self.area`-local
-        // space before handing it to `print`, or it silently clips away on any surface whose
-        // `area` doesn't start at grid column/row 0.
-        let pos = (
-            rect.left()
-                .saturating_add(x_offset)
-                .saturating_sub(self.area.left()),
-            rect.top().saturating_sub(self.area.top()),
+        let pos = (rect.left().saturating_add(x_offset), rect.top());
+        // `rect` (like `pos` here) is local to `self.area` and deliberately independent of any
+        // outstanding `translate`, matching a widget's own `local_area()`. `print` itself
+        // subtracts `origin_offset` again (via `shift`), so a translated surface would subtract
+        // it twice and drop the text entirely unless it's cancelled first: hand `print` a view
+        // whose `origin_offset` is zeroed out rather than adjusting `pos` by hand, which would
+        // need signed arithmetic that a `u16`-based `Pos` can't always represent losslessly.
+        let undo = (
+            0i32.saturating_sub(self.origin_offset.0),
+            0i32.saturating_sub(self.origin_offset.1),
         );
-        self.clip(rect).print(pos, text, style);
+        self.translate(undo).print(pos, text, style);
     }
 
     /// Fill `rect` (clipped to this surface's own clip) with `ch` in `style`.
+    ///
+    /// `rect` is local to this surface's own [`area`](Self::area): `(0, 0)` is `area`'s own
+    /// top-left, not the grid's, the same convention [`clear_region`](Self::clear_region) and
+    /// [`print_aligned`](Self::print_aligned) use for their own `rect` (not absolute grid
+    /// coordinates, the convention [`clip`](Self::clip)/[`scope`](Self::scope) use).
     ///
     /// # Examples
     ///
@@ -446,9 +515,10 @@ impl Surface<'_> {
     pub fn fill_rect(&mut self, rect: Rect, ch: char, style: Style) {
         // The batch path below writes a plain `Tile::new(ch, style)` per cell, which matches
         // `put`'s own per-cell write only when there's no tint to apply and `ch` is a
-        // single-column glyph, so `put`'s wide-char spacer bookkeeping never triggers.
-        // Anything else (tinted surface, zero/double-width glyph) falls back to the per-cell
-        // loop, unchanged from before this method had a fast path.
+        // single-column glyph: `fill_region` itself refuses (no-op) any `tile.width() != 1` (see
+        // its own doc comment), so this check just avoids paying for a delegation that would
+        // silently do nothing. Anything else (tinted surface, zero/double-width glyph) falls back
+        // to the per-cell loop, unchanged from before this method had a fast path.
         let single_width = UnicodeWidthChar::width(ch) == Some(1);
 
         if self.tint == Tint::None
@@ -459,6 +529,7 @@ impl Surface<'_> {
             return;
         }
 
+        let rect = self.clip_local_rect(rect);
         for y in rect.top()..rect.bottom() {
             for x in rect.left()..rect.right() {
                 self.put((x, y), ch, style);
@@ -722,6 +793,9 @@ impl Surface<'_> {
         }
         #[cfg(not(feature = "egc"))]
         {
+            if !self.wide_spacer_fits(x, y, ch.width().unwrap_or(1)) {
+                return;
+            }
             let tile = Tile::new(ch, style);
             self.grid.put_tile(self.layer, (x, y), tile);
             self.apply_tint(x, y);
@@ -745,6 +819,11 @@ impl Surface<'_> {
     /// Clears `rect` (clipped to this surface's own clip, on its own layer) back to
     /// [`Tile::default`].
     ///
+    /// `rect` is local to this surface's own [`area`](Self::area), the same convention
+    /// [`fill_rect`](Self::fill_rect) and [`print_aligned`](Self::print_aligned) use for their
+    /// own `rect` (not absolute grid coordinates, the convention
+    /// [`clip`](Self::clip)/[`scope`](Self::scope) use).
+    ///
     /// # Examples
     ///
     /// ```
@@ -766,6 +845,7 @@ impl Surface<'_> {
             return;
         }
 
+        let rect = self.clip_local_rect(rect);
         for y in rect.top()..rect.bottom() {
             for x in rect.left()..rect.right() {
                 if let Some((x, y)) = self.shift(x, y) {

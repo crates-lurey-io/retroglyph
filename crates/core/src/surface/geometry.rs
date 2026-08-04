@@ -175,7 +175,11 @@ impl<'a> Surface<'a> {
     /// [`clip_rect`](Self::clip_rect) is narrowed to `rect` intersected with this surface's own
     /// clip. What this surface *represents* is unchanged; only what is visible shrinks.
     ///
-    /// Coordinates are unchanged: the sub-surface addresses the same space this one does, so a
+    /// `rect` is in absolute grid coordinates (it intersects [`clip_rect`](Self::clip_rect),
+    /// itself absolute), not local to this surface's own [`area`](Self::area) the way
+    /// [`fill_rect`](Self::fill_rect), [`clear_region`](Self::clear_region), and
+    /// [`print_aligned`](Self::print_aligned)'s own `rect` are. Coordinates are otherwise
+    /// unchanged: the sub-surface addresses the same space this one does, so a
     /// sub-rect computed against [`Surface::area`] (e.g. by a [`layout`](crate::layout) split)
     /// can be passed straight in. Because the clip is intersected rather than substituted,
     /// narrowing is monotonic: handing a surface down a layout tree can only ever tighten what a
@@ -403,7 +407,10 @@ impl<'a> Surface<'a> {
     ///
     /// Respects this surface's layer but not its clip, mirroring [`grid_mut`](Self::grid_mut) in
     /// that sense: a caller wanting a clipped read should check
-    /// [`self.clip_rect().contains(...)`](Rect::contains) first.
+    /// [`self.clip_rect().contains(...)`](Rect::contains) first. `None` covers three distinct
+    /// cases: `pos` is out of the grid's bounds, `pos` is in bounds but nothing has been written
+    /// there yet, or this surface's own layer has never been allocated (no write has ever landed
+    /// on it, on any surface).
     ///
     /// # Examples
     ///
@@ -422,8 +429,9 @@ impl<'a> Surface<'a> {
         self.grid.tile(self.layer, pos.into())
     }
 
-    /// The background colour at `pos` on this surface's layer, or `None` if there's no tile
-    /// there.
+    /// The background colour at `pos` on this surface's layer, or `None` for any reason
+    /// [`tile`](Self::tile) itself returns `None` (out of bounds, nothing written, or an
+    /// unallocated layer).
     ///
     /// A read-only read of a cell's own background lets a caller blend a new draw with what's
     /// already there (e.g. `surface.background(pos).unwrap_or(default)`) without the mutable
