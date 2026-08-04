@@ -227,7 +227,11 @@ impl Surface<'_> {
                 return;
             }
             let tile = Tile::new(ch, style);
-            if self.grid.put_tile(self.layer, (abs_x, abs_y), tile).is_some() {
+            if self
+                .grid
+                .put_tile(self.layer, (abs_x, abs_y), tile)
+                .is_some()
+            {
                 self.apply_tint(abs_x, abs_y);
             }
         }
