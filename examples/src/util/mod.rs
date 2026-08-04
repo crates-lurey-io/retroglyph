@@ -2,7 +2,7 @@
 
 #![allow(unreachable_pub, dead_code)]
 
-/// WASM-only support for driving a [`Terminal<Headless>`](retroglyph_core::Terminal)
+/// WASM-only support for driving a [`Terminal<Headless>`](retroglyph_core::terminal::Terminal)
 /// from a browser `requestAnimationFrame` loop instead of a canvas/window.
 ///
 /// See [`__wasm_headless_entry!`](crate::__wasm_headless_entry) for the

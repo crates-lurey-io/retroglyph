@@ -13,9 +13,12 @@
 //! Keys: `q` or `Escape` quits on the interactive backends. Closing the window is reported as
 //! an [`Event`] rather than forcing an exit, so it's up to the example to act on it.
 
+use retroglyph_core::backend::Backend;
+use retroglyph_core::color::Style;
 use retroglyph_core::event::{Event, KeyCode};
+use retroglyph_core::grid::Rect;
 use retroglyph_core::layout::HAlign;
-use retroglyph_core::{Backend, Rect, Style, Terminal};
+use retroglyph_core::terminal::Terminal;
 use retroglyph_examples::Example;
 
 /// State for the hello-world example (none needed: the text never changes).
@@ -67,7 +70,7 @@ impl Example for HelloWorld {
     fn tick<B: Backend>(
         &mut self,
         term: &mut Terminal<B>,
-        _frame: &retroglyph_core::Frame,
+        _frame: &retroglyph_core::app::Frame,
     ) -> bool {
         if !self.handle_events(term) {
             return false;

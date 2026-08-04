@@ -1,8 +1,8 @@
 //! Rolling frame-time statistics for a live perf/FPS overlay.
 //!
-//! [`FrameStats`] is a fixed-size ring buffer fed one sample per frame via
-//! [`record`](FrameStats::record), decoupled from any renderer or backend the same way
-//! [`FrameClock`](crate::FrameClock) is: it only consumes wall time handed to it
+//! [`FrameStats`](crate::frames::FrameStats) is a fixed-size ring buffer fed one sample per frame via
+//! [`record`](crate::frames::FrameStats::record), decoupled from any renderer or backend the same way
+//! [`FrameClock`](crate::frames::FrameClock) is: it only consumes wall time handed to it
 //! (typically [`Frame::delta`](crate::app::Frame)), never reads a clock itself, so it stays
 //! `no_std`-clean and platform-agnostic (including wasm, where there is no `std::time::Instant`).
 //!
@@ -10,7 +10,7 @@
 //!
 //! ```
 //! use core::time::Duration;
-//! use retroglyph_core::FrameStats;
+//! use retroglyph_core::frames::FrameStats;
 //!
 //! let mut stats: FrameStats = FrameStats::new(); // 120-frame window by default
 //! for _ in 0..30 {

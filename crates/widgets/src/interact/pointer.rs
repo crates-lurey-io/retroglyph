@@ -1,7 +1,8 @@
 //! [`Pointer`]: raw mouse/pointer state derived from a stream of
 //! [`Event`]s.
 
-use retroglyph_core::{Event, MouseButton, MouseEventKind, Pos};
+use retroglyph_core::event::{Event, MouseButton, MouseEventKind};
+use retroglyph_core::grid::Pos;
 
 /// Per-button down/pressed/released state, tracked independently for each
 /// [`MouseButton`].
@@ -38,7 +39,7 @@ const fn button_slot(button: MouseButton) -> Option<usize> {
 /// [`Interaction`](crate::Interaction)'s higher-level click/drag/focus
 /// resolution, which only ever resolves the primary button plus a narrower
 /// secondary-click signal; see [`Sense::SECONDARY_CLICK`](crate::Sense::SECONDARY_CLICK)).
-/// Mirrors [`KeyState`](retroglyph_core::KeyState)'s "feed events in, query
+/// Mirrors [`KeyState`](retroglyph_core::event::KeyState)'s "feed events in, query
 /// state out" shape.
 ///
 /// [`pressed`](Self::pressed)/[`released`](Self::released)/[`scroll_delta`](Self::scroll_delta)
@@ -166,7 +167,7 @@ impl Pointer {
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::{KeyModifiers, MouseEvent};
+    use retroglyph_core::event::{KeyModifiers, MouseEvent};
 
     use super::*;
 

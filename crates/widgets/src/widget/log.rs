@@ -2,7 +2,7 @@
 #[cfg(feature = "egc")]
 use alloc::vec::Vec;
 
-use retroglyph_core::Rect;
+use retroglyph_core::grid::Rect;
 #[cfg(feature = "egc")]
 use retroglyph_core::layout::wrap;
 use retroglyph_core::text::Line;
@@ -43,9 +43,9 @@ use crate::Surface;
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::Rect;
+/// use retroglyph_core::grid::Rect;
 /// use retroglyph_core::text::Line;
-/// use retroglyph_core::Grid;
+/// use retroglyph_core::grid::Grid;
 /// use retroglyph_widgets::{Log, Surface, Widget};
 ///
 /// let messages = [Line::raw("connected"), Line::raw("joined #general")];
@@ -193,7 +193,7 @@ impl Log<'_> {
 mod tests {
     use alloc::vec::Vec;
 
-    use retroglyph_core::{Grid, Pos};
+    use retroglyph_core::grid::{Grid, Pos};
 
     use super::*;
 

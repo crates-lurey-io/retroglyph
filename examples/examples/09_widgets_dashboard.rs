@@ -23,8 +23,12 @@
 //! Tab to focus, then Enter/Space) the "Ping" button. `q` or `Escape` quits, or close the
 //! window.
 
+use retroglyph_core::app::Frame;
+use retroglyph_core::backend::Backend;
+use retroglyph_core::color::Style;
 use retroglyph_core::event::{Event, KeyCode};
-use retroglyph_core::{Backend, Frame, Rect, Style, Terminal};
+use retroglyph_core::grid::Rect;
+use retroglyph_core::terminal::Terminal;
 use retroglyph_examples::Example;
 use retroglyph_widgets::{
     BoxStyle, Button, Constraint, Gauge, Interaction, List, ListState, Sides, Sparkline, Table,

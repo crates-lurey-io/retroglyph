@@ -13,7 +13,9 @@
 #![allow(missing_docs)]
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use retroglyph_core::{Color, Grid, Style, Tile};
+use retroglyph_core::color::{Color, Style};
+use retroglyph_core::grid::Grid;
+use retroglyph_core::tile::Tile;
 use std::hint::black_box;
 
 /// Builds a `cols x rows` grid with every cell set to `glyph`/`fg`.

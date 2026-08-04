@@ -14,7 +14,7 @@ impl Color {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::Color;
+    /// use retroglyph_core::color::Color;
     ///
     /// let gold = Color::from_named("gold");
     /// assert_eq!(gold, Some(Color::Rgb { r: 255, g: 215, b: 0 }));
@@ -182,7 +182,7 @@ impl Color {
     /// ```
     /// # fn main() {
     /// # fn run() -> Option<()> {
-    /// use retroglyph_core::Color;
+    /// use retroglyph_core::color::Color;
     ///
     /// let c = Color::from_hex("#ff8000")?;
     /// assert_eq!(c, Color::Rgb { r: 255, g: 128, b: 0 });

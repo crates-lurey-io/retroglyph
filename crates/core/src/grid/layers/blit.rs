@@ -114,8 +114,8 @@ impl Grid {
     /// rather than from `dst_layer` (the layer this writes to on `self`).
     ///
     /// [`blit`](Self::blit) uses one `layer` for both sides, which is exactly right for two
-    /// grids sharing the same layer scheme (e.g. [`Surface::on_layer`](crate::Surface::on_layer)
-    /// copying within itself), but wrong for [`Surface::blit`](crate::Surface::blit)'s case: a
+    /// grids sharing the same layer scheme (e.g. [`Surface::on_layer`](crate::surface::Surface::on_layer)
+    /// copying within itself), but wrong for [`Surface::blit`](crate::surface::Surface::blit)'s case: a
     /// `src` that is a standalone, layer-0-only `Grid` (composed content like `BoxStyle::render`'s
     /// output), stamped onto a destination surface that may currently be on any layer. Calling
     /// [`blit`](Self::blit) with the destination's layer there looks up that same layer on `src`,

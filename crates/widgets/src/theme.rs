@@ -1,6 +1,6 @@
 //! [`Theme`]: named color roles for a light/dark-aware app.
 
-use retroglyph_core::{Color, Style};
+use retroglyph_core::color::{Color, Style};
 
 use crate::Response;
 
@@ -10,8 +10,8 @@ use crate::Response;
 ///
 /// This crate has no opinion on *how* an app picks between
 /// [`DARK`](Self::DARK) and [`LIGHT`](Self::LIGHT) (a manual toggle key, a
-/// [`SystemTheme`](retroglyph_core::SystemTheme) from
-/// [`Event::ThemeChanged`](retroglyph_core::Event::ThemeChanged), or just
+/// [`SystemTheme`](retroglyph_core::event::SystemTheme) from
+/// [`Event::ThemeChanged`](retroglyph_core::event::Event::ThemeChanged), or just
 /// always the same one): it only owns the two palettes themselves, so an
 /// app doesn't have to invent one from scratch.
 ///
@@ -169,7 +169,7 @@ impl Theme {
     /// ```
     /// use retroglyph_widgets::Theme;
     /// use retroglyph_widgets::Interaction;
-    /// use retroglyph_core::{Pos, Rect};
+    /// use retroglyph_core::grid::{Pos, Rect};
     ///
     /// let theme = Theme::DARK;
     /// let mut interaction = Interaction::<u32>::default();
@@ -201,7 +201,7 @@ impl Theme {
     /// ```
     /// use retroglyph_widgets::Theme;
     /// use retroglyph_widgets::Interaction;
-    /// use retroglyph_core::{Pos, Rect};
+    /// use retroglyph_core::grid::{Pos, Rect};
     ///
     /// let theme = Theme::DARK;
     /// let mut interaction = Interaction::<u32>::default();
@@ -242,7 +242,7 @@ impl Theme {
     /// ```
     /// use retroglyph_widgets::Theme;
     /// use retroglyph_widgets::Interaction;
-    /// use retroglyph_core::{Pos, Rect};
+    /// use retroglyph_core::grid::{Pos, Rect};
     ///
     /// let theme = Theme::DARK;
     /// let mut interaction = Interaction::<u32>::default();

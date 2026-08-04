@@ -3,14 +3,14 @@
 
 use alloc::vec::Vec;
 
-use retroglyph_core::{Pos, Rect};
+use retroglyph_core::grid::{Pos, Rect};
 
 /// A per-frame registry of `(Rect, Id)` pairs, queried by pointer position
 /// to find the topmost widget under a point.
 ///
-/// Standalone and headless: no [`Backend`](retroglyph_core::Backend)
+/// Standalone and headless: no [`Backend`](retroglyph_core::backend::Backend)
 /// dependency, so it's usable (and unit-testable) without a
-/// [`Terminal`](retroglyph_core::Terminal) or any drawing at all, e.g. for
+/// [`Terminal`](retroglyph_core::terminal::Terminal) or any drawing at all, e.g. for
 /// hand-rolled hit-testing outside of [`Interaction`](crate::Interaction).
 ///
 /// Registrations are draw-ordered: a later [`push`](Self::push) means drawn

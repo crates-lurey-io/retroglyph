@@ -2,7 +2,7 @@
 
 use alloc::vec::Vec;
 
-use retroglyph_core::{Event, KeyCode, KeyModifiers};
+use retroglyph_core::event::{Event, KeyCode, KeyModifiers};
 
 /// One registered key combination and what it resolves to.
 #[derive(Debug, Clone, Copy)]
@@ -37,7 +37,7 @@ struct Binding<Id, Action> {
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::{Event, KeyCode, KeyEvent, KeyModifiers};
+/// use retroglyph_core::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 /// use retroglyph_widgets::Shortcuts;
 ///
 /// #[derive(Clone, Copy, PartialEq, Eq)]
@@ -147,7 +147,7 @@ impl<Id, Action> Default for Shortcuts<Id, Action> {
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::KeyEvent;
+    use retroglyph_core::event::KeyEvent;
 
     use super::*;
 
@@ -254,7 +254,7 @@ mod tests {
         let released = Event::Key(KeyEvent::with_kind(
             KeyCode::Char('t'),
             KeyModifiers::NONE,
-            retroglyph_core::KeyEventKind::Release,
+            retroglyph_core::event::KeyEventKind::Release,
         ));
         assert_eq!(shortcuts.resolve(&released, None), None);
     }

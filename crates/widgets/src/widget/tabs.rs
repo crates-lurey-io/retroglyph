@@ -1,8 +1,9 @@
 //! [`Tabs`]: a horizontal strip of tab labels with a highlighted selected index.
 use alloc::vec::Vec;
 
+use retroglyph_core::color::{Color, Style};
+use retroglyph_core::grid::Rect;
 use retroglyph_core::text::truncate_measured;
-use retroglyph_core::{Color, Rect, Style};
 
 use super::{InteractiveWidget, Widget};
 use crate::Align;
@@ -41,7 +42,7 @@ use crate::text::draw_clipped;
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::{Grid, Rect};
+/// use retroglyph_core::grid::{Grid, Rect};
 /// use retroglyph_widgets::{Surface, Tabs, Widget};
 ///
 /// let titles = ["Overview", "Details", "Settings"];
@@ -215,7 +216,7 @@ impl Tabs<'_> {
     /// The index of the tab whose column range contains `pos`, or `None` if `pos` falls in the
     /// spacing between tabs, past the last drawn tab, or outside `area` entirely: a click there
     /// selects nothing rather than clamping to the nearest tab.
-    fn tab_at(&self, area: Rect, pos: retroglyph_core::Pos) -> Option<usize> {
+    fn tab_at(&self, area: Rect, pos: retroglyph_core::grid::Pos) -> Option<usize> {
         if !area.contains_pos(pos) {
             return None;
         }
@@ -258,7 +259,7 @@ impl<Id> InteractiveWidget<Id> for Tabs<'_> {
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::{Grid, Pos};
+    use retroglyph_core::grid::{Grid, Pos};
 
     use super::*;
 
@@ -355,7 +356,7 @@ mod tests {
 
     #[test]
     fn style_can_be_overridden() {
-        use retroglyph_core::Color;
+        use retroglyph_core::color::Color;
 
         let area = Rect::new(0, 0, 20, 1);
         let titles = ["One"];
@@ -369,7 +370,7 @@ mod tests {
 
     #[test]
     fn selected_style_can_be_overridden() {
-        use retroglyph_core::Color;
+        use retroglyph_core::color::Color;
 
         let area = Rect::new(0, 0, 20, 1);
         let titles = ["One"];
@@ -414,7 +415,7 @@ mod tests {
 
     #[test]
     fn theme_on_uses_the_given_backdrop_instead_of_panel_bg() {
-        use retroglyph_core::Color;
+        use retroglyph_core::color::Color;
 
         let area = Rect::new(0, 0, 20, 1);
         let titles = ["One"];

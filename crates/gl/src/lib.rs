@@ -120,10 +120,10 @@ pub use retroglyph_window::font::{self as font, BitmapFont, FontChain};
 use context::GlContext;
 use glyphs::GlyphCache;
 use renderer::{FLAG_HAS_BG, FLAG_HAS_GLYPH, GlResources, Instance};
-use retroglyph_core::DrawCell;
-use retroglyph_core::HasSize;
+use retroglyph_core::backend::DrawCell;
 use retroglyph_core::backend::Output;
 use retroglyph_core::color::Color;
+use retroglyph_core::grid::HasSize;
 use retroglyph_core::grid::Size;
 use retroglyph_core::tile::Tile;
 use retroglyph_window::palette::{DEFAULT_BG, DEFAULT_FG};
@@ -142,7 +142,7 @@ struct ReadmeDoctests;
 
 /// The live GL renderer: a [`Presenter`], wrapped in
 /// [`WindowBackend`](retroglyph_window::WindowBackend) to form a full
-/// [`Backend`](retroglyph_core::Backend) for the windowing loop.
+/// [`Backend`](retroglyph_core::backend::Backend) for the windowing loop.
 ///
 /// It does not implement [`Input`](retroglyph_core::backend::Input) or
 /// [`Cursor`](retroglyph_core::backend::Cursor) itself: a GL renderer cannot present without a
@@ -275,7 +275,7 @@ impl GlRenderer {
     /// glyph; a tint on a cell that does resolve to a sprite is handled, not dropped, and says
     /// nothing here.
     #[cfg(feature = "tilesets")]
-    fn warn_if_tint_needs_sprite(&mut self, glyph: char, tint: retroglyph_core::Tint) {
+    fn warn_if_tint_needs_sprite(&mut self, glyph: char, tint: retroglyph_core::color::Tint) {
         retroglyph_window::sprite_cache::warn_tint_needs_sprite(
             &mut self.warned_dropped_tint,
             glyph,
@@ -793,7 +793,7 @@ impl Drop for GlRenderer {
 mod compositing_tests {
     use super::{FLAG_HAS_BG, FLAG_HAS_GLYPH};
     use crate::GlBackendBuilder;
-    use retroglyph_core::DrawCell;
+    use retroglyph_core::backend::DrawCell;
     use retroglyph_core::backend::Output;
     use retroglyph_core::color::Color;
     use retroglyph_core::color::Style;
@@ -928,7 +928,7 @@ mod compositing_tests {
     /// piece of artwork sits on one uniform backdrop (retroglyph#412).
     #[test]
     fn draw_layers_gives_span_covered_cells_the_anchors_background_and_no_glyph() {
-        use retroglyph_core::Grid;
+        use retroglyph_core::grid::Grid;
 
         let mut r = GlBackendBuilder::new()
             .grid_size(3, 1)
@@ -968,7 +968,7 @@ mod compositing_tests {
     /// `retroglyph-software`'s `resolve_cell_bg`, not the anchor's (red).
     #[test]
     fn draw_layers_resolves_a_span_covered_cells_default_background_at_its_own_column() {
-        use retroglyph_core::Grid;
+        use retroglyph_core::grid::Grid;
 
         const BLUE: Color = Color::Rgb { r: 0, g: 0, b: 255 };
 
@@ -1008,7 +1008,7 @@ mod compositing_tests {
     /// alone, the same on both pixel backends.
     #[test]
     fn draw_layers_suppresses_covered_glyphs_without_a_sprite() {
-        use retroglyph_core::Grid;
+        use retroglyph_core::grid::Grid;
 
         let mut r = GlBackendBuilder::new()
             .grid_size(2, 1)
@@ -1053,7 +1053,7 @@ mod compositing_tests {
     #[cfg(feature = "tilesets")]
     #[test]
     fn draw_layers_paints_no_background_on_a_span_covered_cell_whose_anchor_has_a_sprite() {
-        use retroglyph_core::Grid;
+        use retroglyph_core::grid::Grid;
         use retroglyph_window::tileset::{Codepage, TilesetOptions};
 
         let opts = TilesetOptions::builder(one_tile_png())
@@ -1096,10 +1096,10 @@ mod compositing_tests {
 #[cfg(all(test, feature = "default-font", feature = "tilesets"))]
 mod dropped_tint_tests {
     use crate::GlBackendBuilder;
-    use retroglyph_core::DrawCell;
-    use retroglyph_core::Tint;
+    use retroglyph_core::backend::DrawCell;
     use retroglyph_core::backend::Output;
     use retroglyph_core::color::Style;
+    use retroglyph_core::color::Tint;
     use retroglyph_core::grid::Pos;
     use retroglyph_core::tile::Tile;
     use retroglyph_window::tileset::{Codepage, TilesetOptions};
@@ -1145,7 +1145,10 @@ mod dropped_tint_tests {
         ))
         .expect("draw_layers is infallible");
 
-        assert_eq!(r.warned_dropped_tint.contains(&'X'), retroglyph_core::DEV);
+        assert_eq!(
+            r.warned_dropped_tint.contains(&'X'),
+            retroglyph_core::dev::DEV
+        );
     }
 
     #[test]
@@ -1176,7 +1179,10 @@ mod dropped_tint_tests {
         )
         .expect("draw_layers is infallible");
 
-        assert_eq!(r.warned_dropped_tint.contains(&'X'), retroglyph_core::DEV);
+        assert_eq!(
+            r.warned_dropped_tint.contains(&'X'),
+            retroglyph_core::dev::DEV
+        );
     }
 
     #[test]
@@ -1245,8 +1251,8 @@ mod dropped_tint_tests {
 mod output_conformance_tests {
     use crate::GlBackendBuilder;
     use crate::GlRenderer;
-    use retroglyph_core::HasSize;
     use retroglyph_core::backend::Output;
+    use retroglyph_core::grid::HasSize;
     use retroglyph_core::grid::Size;
     use retroglyph_core::testing::conformance::{Observable, fnv1a};
 

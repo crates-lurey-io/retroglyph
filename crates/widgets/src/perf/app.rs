@@ -4,10 +4,12 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
-use retroglyph_core::{
-    App, Backend, Event, Flow, Frame, FrameStats, HasSize, KeyCode, KeyEventKind, Rect, Size,
-    Terminal,
-};
+use retroglyph_core::app::{App, Flow, Frame};
+use retroglyph_core::backend::Backend;
+use retroglyph_core::event::{Event, KeyCode, KeyEventKind};
+use retroglyph_core::frames::FrameStats;
+use retroglyph_core::grid::{HasSize, Rect, Size};
+use retroglyph_core::terminal::Terminal;
 
 use super::mode::PerfOverlayMode;
 use super::renderer::{DefaultPerfRenderer, PerfRenderer};
@@ -310,7 +312,9 @@ where
 #[cfg(test)]
 mod tests {
     use retroglyph_core::backend::{Cursor, Headless, Input, Output};
-    use retroglyph_core::{KeyEvent, KeyModifiers, Pos, Style};
+    use retroglyph_core::color::Style;
+    use retroglyph_core::event::{KeyEvent, KeyModifiers};
+    use retroglyph_core::grid::Pos;
 
     use super::*;
 

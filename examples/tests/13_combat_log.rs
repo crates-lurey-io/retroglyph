@@ -19,8 +19,11 @@ mod support;
 mod combat_log;
 
 use combat_log::CombatLog;
+use retroglyph_core::app::Frame;
+use retroglyph_core::backend::Headless;
 use retroglyph_core::event::{Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind};
-use retroglyph_core::{Frame, Headless, Pos, Terminal};
+use retroglyph_core::grid::Pos;
+use retroglyph_core::terminal::Terminal;
 use retroglyph_examples::{Example, HEADLESS_FRAME_DELTA};
 
 /// A plain, unmodified key press.

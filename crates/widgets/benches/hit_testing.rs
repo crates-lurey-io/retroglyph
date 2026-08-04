@@ -21,7 +21,7 @@
 #![allow(missing_docs, clippy::cast_possible_truncation)]
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use retroglyph_core::{Pos, Rect};
+use retroglyph_core::grid::{Pos, Rect};
 use retroglyph_widgets::{HitTester, Interaction, Sense};
 use std::hint::black_box;
 

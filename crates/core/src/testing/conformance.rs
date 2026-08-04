@@ -1,8 +1,8 @@
-//! Cross-backend conformance tests for [`Output`], [`Cursor`], and [`Input`] (retroglyph#763).
+//! Cross-backend conformance tests for [`Output`](crate::backend::Output), [`Cursor`](crate::backend::Cursor), and [`Input`](crate::backend::Input) (retroglyph#763).
 //!
 //! Each of the five backends in this workspace answers the same handful of obligations
-//! ([`Output::clear`]/[`Output::resize`] resetting internal state, out-of-range [`DrawCell`]
-//! positions, cursor tracking staying in sync with external writes, [`Input::push_event`]
+//! ([`Output::clear`](crate::backend::Output::clear)/[`Output::resize`](crate::backend::Output::resize) resetting internal state, out-of-range [`DrawCell`](crate::backend::DrawCell)
+//! positions, cursor tracking staying in sync with external writes, [`Input::push_event`](crate::backend::Input::push_event)
 //! coalescing consecutive `Mouse(Moved)` events) independently, and nothing previously checked
 //! that the answers agreed. This module is that check: [`assert_output_contract`],
 //! [`assert_cursor_contract`], and [`assert_input_contract`] each drive a backend through one
@@ -11,7 +11,7 @@
 //!
 //! # Why not `B: Backend`
 //!
-//! `GlRenderer` deliberately implements neither [`Input`] nor [`Cursor`] (a GPU/pixel surface has
+//! `GlRenderer` deliberately implements neither [`Input`](crate::backend::Input) nor [`Cursor`](crate::backend::Cursor) (a GPU/pixel surface has
 //! no text cursor and never receives external input): a single `B: Backend` bound would make the
 //! harness itself impossible to use, since a bound including `Input + Cursor` could never be
 //! satisfied by every backend that wants only [`assert_output_contract`]. The three entry points
@@ -20,7 +20,7 @@
 //! # The `Observable` hook, and why it must be a delta
 //!
 //! `Output`/`Cursor` have no shared way to read back "what would actually appear": a terminal
-//! backend has emitted bytes, a pixel backend has a framebuffer, [`Headless`](crate::Headless)
+//! backend has emitted bytes, a pixel backend has a framebuffer, [`Headless`](crate::backend::Headless)
 //! has a [`Grid`](crate::grid::Grid). [`Observable::snapshot`] is the one method a backend
 //! implements to bridge that gap, and every assertion below only ever compares two calls to it
 //! for equality, never interpreting the `u64` any other way.
@@ -43,9 +43,9 @@
 //!
 //! # What this does not cover
 //!
-//! [`Output::needs_full_frame`] only takes effect through
-//! [`Terminal::present`](crate::Terminal::present) when a backend also returns `true` from
-//! [`Output::composites_layers`] (see that method's docs); a bare `Output` impl has no diffing of
+//! [`Output::needs_full_frame`](crate::backend::Output::needs_full_frame) only takes effect through
+//! [`Terminal::present`](crate::terminal::Terminal::present) when a backend also returns `true` from
+//! [`Output::composites_layers`](crate::backend::Output::composites_layers) (see that method's docs); a bare `Output` impl has no diffing of
 //! its own to exercise, so that combination is instead pinned by a `Terminal`-level test rather
 //! than by this module.
 
@@ -87,7 +87,7 @@ pub trait Observable: Output {
     fn snapshot(&mut self) -> u64;
 }
 
-/// One glyph cell with no grapheme text and no tint, for feeding [`Output::draw_layers`].
+/// One glyph cell with no grapheme text and no tint, for feeding [`Output::draw_layers`](crate::backend::Output::draw_layers).
 const fn cell(pos: Pos, tile: &Tile) -> DrawCell<'_> {
     DrawCell::new(pos, tile)
 }
@@ -107,8 +107,8 @@ fn expect<T, E: core::fmt::Debug>(result: Result<T, E>) -> T {
     }
 }
 
-/// Drives `B` through [`Output`]'s obligations: `make` must return a fresh backend sized to the
-/// requested [`Size`], with no cells drawn yet.
+/// Drives `B` through [`Output`](crate::backend::Output)'s obligations: `make` must return a fresh backend sized to the
+/// requested [`Size`](crate::grid::Size), with no cells drawn yet.
 ///
 /// # Panics
 ///
@@ -224,9 +224,9 @@ pub fn assert_output_contract<B: Observable, F: FnMut(Size) -> B>(mut make: F) {
     }
 }
 
-/// Drives `B` through [`Cursor`]'s tracked-cursor obligation.
+/// Drives `B` through [`Cursor`](crate::backend::Cursor)'s tracked-cursor obligation.
 ///
-/// External writes (an app calling [`Cursor::set_cursor_position`] between two draws) must not
+/// External writes (an app calling [`Cursor::set_cursor_position`](crate::backend::Cursor::set_cursor_position) between two draws) must not
 /// desync a backend's internal cursor tracking from where the cursor actually is (retroglyph#713).
 ///
 /// # Panics
@@ -273,7 +273,7 @@ pub fn assert_cursor_contract<B: Observable + Cursor, F: FnMut(Size) -> B>(mut m
     );
 }
 
-/// Every [`CursorStyle`] variant, in the order [`Cursor::set_cursor_style`]'s docs describe.
+/// Every [`CursorStyle`](crate::backend::CursorStyle) variant, in the order [`Cursor::set_cursor_style`](crate::backend::Cursor::set_cursor_style)'s docs describe.
 const CURSOR_STYLE_VARIANTS: [CursorStyle; 6] = [
     CursorStyle::BlinkingBlock,
     CursorStyle::SteadyBlock,
@@ -321,7 +321,7 @@ pub fn assert_cursor_style_contract<B: Observable + Cursor, F: FnMut(Size) -> B>
     }
 }
 
-/// Drives `B` through [`Input`]'s coalescing obligation.
+/// Drives `B` through [`Input`](crate::backend::Input)'s coalescing obligation.
 ///
 /// A burst of consecutive `Event::Mouse(MouseEventKind::Moved)` pushes must collapse to the
 /// latest one, matching [`coalesces_with`](crate::event::coalesces_with).
@@ -395,10 +395,10 @@ mod tests {
         assert_ne!(fnv1a(b""), fnv1a(b"\0"));
     }
 
-    /// Wraps [`Headless`] so [`Observable::snapshot`] hashes only what changed since the
+    /// Wraps [`Headless`](crate::backend::Headless) so [`Observable::snapshot`] hashes only what changed since the
     /// previous call, per the module docs. `Headless` is framebuffer-shaped (a `Grid`, replaced
     /// rather than appended to), so "changed" means "differs from the view remembered from the
-    /// previous call": this remembers [`Headless::format_view`]'s output and hashes only the
+    /// previous call": this remembers [`Headless::format_view`](crate::backend::Headless::format_view)'s output and hashes only the
     /// `(index, char)` pairs that differ from it, rather than the whole view every time.
     struct HeadlessObserver {
         backend: Headless,

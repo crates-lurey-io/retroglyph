@@ -13,7 +13,7 @@
 // is intentional, so it's allowed crate-locally.
 #![allow(clippy::redundant_pub_crate)]
 
-use retroglyph_core::Tint;
+use retroglyph_core::color::Tint;
 use retroglyph_window::sprite_cache::{SpriteCache, SpriteTint};
 use retroglyph_window::tileset::{SheetColor, SpriteAlign};
 use std::collections::HashMap;
@@ -231,7 +231,7 @@ impl SpriteSet {
 #[cfg(test)]
 mod tests {
     use super::{SpriteInstance, SpriteTint};
-    use retroglyph_core::Tint;
+    use retroglyph_core::color::Tint;
 
     /// The vertex-array setup in `renderer.rs` describes this struct to the GPU by hand: a byte
     /// stride and a per-attribute offset. Nothing checks that description against the struct, so

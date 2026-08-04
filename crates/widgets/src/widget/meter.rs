@@ -1,5 +1,5 @@
 //! [`Meter`]: a load ratio mapped to a green→yellow→red color.
-use retroglyph_core::Color;
+use retroglyph_core::color::Color;
 
 /// A load ratio in `0.0..=1.0`, mapped to a green→yellow→red color ramp.
 ///
@@ -7,7 +7,7 @@ use retroglyph_core::Color;
 /// range are clamped. Delegates to [`Color::lerp`] (backed by `gem`) rather
 /// than hand-rolling RGB interpolation.
 ///
-/// Not a drawing widget: there's no [`Terminal`](retroglyph_core::Terminal)
+/// Not a drawing widget: there's no [`Terminal`](retroglyph_core::terminal::Terminal)
 /// involved, just a ratio-to-color mapping, but kept as its own small
 /// struct rather than a free function so [`Gauge`](super::Gauge),
 /// [`StatBar`](super::StatBar), and [`Sparkline`](super::Sparkline) share

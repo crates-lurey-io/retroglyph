@@ -33,8 +33,11 @@
 //! Resize the terminal (crossterm) or window (software) to see it adapt live. Keys: `q` or
 //! `Escape` quits.
 
+use retroglyph_core::app::Frame;
+use retroglyph_core::backend::Backend;
+use retroglyph_core::color::{AnsiColor, Color, Style};
 use retroglyph_core::event::{Event, KeyCode};
-use retroglyph_core::{AnsiColor, Backend, Color, Frame, Style, Terminal};
+use retroglyph_core::terminal::Terminal;
 use retroglyph_examples::Example;
 use retroglyph_widgets::{Align, draw_clipped};
 

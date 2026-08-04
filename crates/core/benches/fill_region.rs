@@ -19,7 +19,9 @@
 #![allow(missing_docs)]
 
 use criterion::{BatchSize, Criterion, Throughput, criterion_group, criterion_main};
-use retroglyph_core::{Grid, Rect, Style, Tile};
+use retroglyph_core::color::Style;
+use retroglyph_core::grid::{Grid, Rect};
+use retroglyph_core::tile::Tile;
 use std::hint::black_box;
 
 /// Builds a `cols x rows` grid on layer 0, tiled edge-to-edge with 2x2 spans (clipping the last

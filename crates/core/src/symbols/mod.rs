@@ -7,8 +7,8 @@
 //! whole-cell frame/gridline drawing; [`crate::symbols::block`] and [`crate::symbols::bar`] cover
 //! the partial-block glyphs used for horizontal and vertical fill ramps (progress bars, gauges,
 //! sparklines); [`crate::symbols::braille`] covers the 2x4-dot glyphs used for higher-resolution
-//! point/line plotting than a single block cell allows. [`quantize_half_block`],
-//! [`quantize_quadrant`], and [`quantize_sextant`] are the one exception: they posterize a block
+//! point/line plotting than a single block cell allows. [`quantize_half_block`](crate::symbols::quantize_half_block),
+//! [`quantize_quadrant`](crate::symbols::quantize_quadrant), and [`quantize_sextant`](crate::symbols::quantize_sextant) are the one exception: they posterize a block
 //! of raw pixels down to the best-matching glyph from [`HALF_BLOCKS`](crate::symbols::HALF_BLOCKS)/
 //! [`QUADRANTS`](crate::symbols::QUADRANTS)/[`SEXTANTS`](crate::symbols::SEXTANTS), the actual
 //! matching algorithm alongside the data it searches over.

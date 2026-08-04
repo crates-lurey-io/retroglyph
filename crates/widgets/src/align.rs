@@ -12,7 +12,7 @@
 /// A plain re-export of [`retroglyph_core::layout::HAlign`], not a separate type: `core::align`
 /// needs nothing from the `egc` feature, so there's no reason for `widgets` to keep its own
 /// copy of the enum or of [`offset`](retroglyph_core::layout::HAlign::offset)'s formula.
-/// Interoperates directly with [`Surface::print_aligned`](retroglyph_core::Surface::print_aligned)
+/// Interoperates directly with [`Surface::print_aligned`](retroglyph_core::surface::Surface::print_aligned)
 /// and [`TextLayout`](retroglyph_core::layout::TextLayout), no conversion needed.
 pub use retroglyph_core::layout::HAlign as Align;
 

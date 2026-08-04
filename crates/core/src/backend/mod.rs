@@ -1,7 +1,7 @@
 //! Pluggable rendering backends.
 //!
-//! The [`Output`], [`Input`], and [`Cursor`] traits (plus the [`Backend`] bundle that ties them
-//! together) and the dependency-free [`Headless`] test backend live here. Platform backends
+//! The [`Output`](crate::backend::Output), [`Input`](crate::backend::Input), and [`Cursor`](crate::backend::Cursor) traits (plus the [`Backend`](crate::backend::Backend) bundle that ties them
+//! together) and the dependency-free [`Headless`](crate::backend::Headless) test backend live here. Platform backends
 //! (crossterm, software/winit) are separate crates (`retroglyph-crossterm`, `retroglyph-software`)
 //! that depend on this one and implement these traits.
 
@@ -55,23 +55,23 @@ impl BackendError for std::io::Error {}
 #[non_exhaustive]
 pub struct DrawCell<'a> {
     /// Which layer this cell belongs to. Always `0` for cells arriving through
-    /// [`Output::draw`].
+    /// [`Output::draw`](crate::backend::Output::draw).
     pub layer: u8,
     /// Where the cell sits in the grid.
     pub pos: Pos,
     /// The tile itself.
     pub tile: &'a Tile,
-    /// The tile's full grapheme cluster, or `None` to render [`Tile::glyph`] alone.
+    /// The tile's full grapheme cluster, or `None` to render [`Tile::glyph`](crate::tile::Tile::glyph) alone.
     ///
     /// `Some` only for multi-codepoint clusters (combining marks, ZWJ sequences), and **only
     /// ever `Some` when the `egc` feature is enabled**: without it `Grid` never populates the
     /// side table, so a backend that does not support `egc` can ignore this entirely and render
-    /// from [`Tile::glyph`].
+    /// from [`Tile::glyph`](crate::tile::Tile::glyph).
     pub grapheme: Option<&'a str>,
     /// How a pixel backend recolours this cell's sprite.
     ///
-    /// [`Tint::None`] for the overwhelming majority of cells. Cell backends have no sprite to
-    /// recolour and ignore it; see [`Tint`].
+    /// [`Tint::None`](crate::color::Tint::None) for the overwhelming majority of cells. Cell backends have no sprite to
+    /// recolour and ignore it; see [`Tint`](crate::color::Tint).
     pub tint: Tint,
 }
 
@@ -118,7 +118,7 @@ impl<'a> DrawCell<'a> {
 
 /// Draws grid content to a display and reports its dimensions.
 ///
-/// This is the only one of the three backend facets ([`Output`], [`Input`], [`Cursor`]) that's
+/// This is the only one of the three backend facets ([`Output`](crate::backend::Output), [`Input`](crate::backend::Input), [`Cursor`](crate::backend::Cursor)) that's
 /// fallible: writing to a real display can fail (a broken pipe, a closed terminal, a lost
 /// surface), so every mutating method here returns `Result<(), Self::Error>`.
 ///
@@ -159,13 +159,13 @@ pub trait Output {
 
     /// Draw changed cells to the output surface, layer 0 only.
     ///
-    /// Every cell arrives as a [`DrawCell`], which carries the out-of-line state a [`Tile`]
+    /// Every cell arrives as a [`DrawCell`](crate::backend::DrawCell), which carries the out-of-line state a [`Tile`](crate::tile::Tile)
     /// cannot: its full grapheme cluster and its tint. Both live in a side table on
     /// [`Grid`](crate::grid::Grid)
     /// rather than in the tile, so a backend that needs either must read it from here.
     ///
     /// The default implementation forwards to [`draw_layers`](Self::draw_layers), which every
-    /// backend implements. [`crate::Terminal::present`] never calls this method directly (it
+    /// backend implements. [`crate::terminal::Terminal::present`] never calls this method directly (it
     /// always goes through `draw_layers`, pre-flattened onto layer 0 for a backend that doesn't
     /// composite; see [`composites_layers`](Self::composites_layers)), so overriding this is
     /// only worthwhile if a backend has a cheaper direct path for the known-single-layer case
@@ -184,7 +184,7 @@ pub trait Output {
 
     /// Draw changed cells across all layers.
     ///
-    /// [`crate::Terminal::present`] always calls this method, never [`draw`](Self::draw)
+    /// [`crate::terminal::Terminal::present`] always calls this method, never [`draw`](Self::draw)
     /// directly, for every backend. A backend that renders one glyph per cell and returns
     /// `false` from [`composites_layers`](Self::composites_layers) (the default) receives a
     /// stream `present` has already pre-flattened onto layer 0 (all allocated layers
@@ -199,7 +199,7 @@ pub trait Output {
     /// should clear its output surface before drawing.
     ///
     /// That promise holds only together with `composites_layers() == true`:
-    /// [`crate::Terminal::present`] only reads `needs_full_frame` inside its `composites_layers`
+    /// [`crate::terminal::Terminal::present`] only reads `needs_full_frame` inside its `composites_layers`
     /// branch, so a backend
     /// returning `true` here with the default (`false`) `composites_layers` never actually
     /// receives a full frame, despite this doc's unconditional wording (retroglyph#763). No
@@ -207,15 +207,15 @@ pub trait Output {
     /// also return `true` from `composites_layers`, or treat `needs_full_frame` as dead until
     /// `Terminal::present`'s dispatch is widened to honor it outside that branch too.
     ///
-    /// Items are the same [`DrawCell`] [`draw`](Self::draw) receives, read through
-    /// [`DrawCell::layer`] rather than a separate element.
+    /// Items are the same [`DrawCell`](crate::backend::DrawCell) [`draw`](Self::draw) receives, read through
+    /// [`DrawCell::layer`](crate::backend::DrawCell::layer) rather than a separate element.
     ///
     /// # Errors
     ///
     /// `Self::Error` is implementation-defined (a broken pipe or closed terminal for a
     /// process-backed display, a lost surface for a windowed one); implementations do not
     /// roll back cells already written before the failure. Because
-    /// [`crate::Terminal::present`] only swaps its diff buffers into `previous` after the
+    /// [`crate::terminal::Terminal::present`] only swaps its diff buffers into `previous` after the
     /// call that reached this method succeeds, a failed draw leaves the same cells marked
     /// dirty, so they are resent on the next successful present rather than silently
     /// dropped.
@@ -244,7 +244,7 @@ pub trait Output {
     /// receiving the raw layered stream from [`draw_layers`](Self::draw_layers).
     ///
     /// Backends that render one glyph per cell return `false` (the default) and
-    /// receive a pre-flattened, single-layer stream: [`crate::Terminal::present`]
+    /// receive a pre-flattened, single-layer stream: [`crate::terminal::Terminal::present`]
     /// composites all allocated layers into one frame first. This makes layers
     /// 1+ appear on every backend, not only pixel backends. Pixel/GPU backends
     /// return `true` and composite the layers themselves.
@@ -257,7 +257,7 @@ pub trait Output {
     /// # Errors
     ///
     /// `Self::Error` is implementation-defined (a broken pipe, a closed terminal, a lost
-    /// surface). [`crate::Terminal::present`] calls this only after
+    /// surface). [`crate::terminal::Terminal::present`] calls this only after
     /// [`draw`](Self::draw)/[`draw_layers`](Self::draw_layers) succeed, and swaps its diff
     /// buffers only after `flush` also succeeds; a failed flush therefore leaves the
     /// current frame's cells buffered but unconfirmed, and they are resent on the next
@@ -274,7 +274,7 @@ pub trait Output {
     ///
     /// `Self::Error` is implementation-defined (a broken pipe, a closed terminal, a lost
     /// surface). Unlike [`draw`](Self::draw)/[`flush`](Self::flush), this is not part of
-    /// [`crate::Terminal::present`]'s per-frame path; callers that invoke it directly
+    /// [`crate::terminal::Terminal::present`]'s per-frame path; callers that invoke it directly
     /// (some backends also call it internally on resize) should treat a failure as leaving
     /// the display in an unknown, possibly partially cleared state and retry or tear down
     /// rather than assume the previous contents are still intact.
@@ -282,16 +282,16 @@ pub trait Output {
 
     /// Notify the backend of a resize to `size`, updating what [`size`](Self::size) reports.
     ///
-    /// Called automatically by [`crate::Terminal::resize`] after both grids are resized.
+    /// Called automatically by [`crate::terminal::Terminal::resize`] after both grids are resized.
     /// Backends that maintain internal state tied to terminal dimensions (such as
-    /// [`Headless`]) should override this to update that state. The default
+    /// [`Headless`](crate::backend::Headless)) should override this to update that state. The default
     /// implementation is a no-op.
     ///
     /// A driver may also call this directly, ahead of and independent from
-    /// [`crate::Terminal::resize`], to keep [`size`](Self::size) in sync with an underlying
+    /// [`crate::terminal::Terminal::resize`], to keep [`size`](Self::size) in sync with an underlying
     /// surface the moment it changes (a windowed backend reacting to an OS resize, for
     /// example) without waiting for the app to resize the terminal's grid content in
-    /// response. Doing so does not resize the grid; only [`crate::Terminal::resize`] does that.
+    /// response. Doing so does not resize the grid; only [`crate::terminal::Terminal::resize`] does that.
     fn resize(&mut self, size: Size) {
         let _ = size;
     }
@@ -407,7 +407,7 @@ pub enum CursorStyle {
 
 /// A rendering backend that presents grid content to a display and provides input events.
 ///
-/// This is a pure ergonomic bundle over [`Output`], [`Input`], and [`Cursor`], with no members
+/// This is a pure ergonomic bundle over [`Output`](crate::backend::Output), [`Input`](crate::backend::Input), and [`Cursor`](crate::backend::Cursor), with no members
 /// of its own: every type implementing all three gets `Backend` for free, and every generic
 /// call site that only needs one or two facets should bound on those directly instead of
 /// requiring all three through this trait.

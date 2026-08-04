@@ -111,8 +111,8 @@
 #[doc = include_str!("../README.md")]
 struct ReadmeDoctests;
 
-use retroglyph_core::DrawCell;
 use retroglyph_core::backend::CursorStyle;
+use retroglyph_core::backend::DrawCell;
 use retroglyph_core::color::Color;
 use retroglyph_core::grid::Pos;
 use retroglyph_core::tile::Tile;
@@ -219,7 +219,7 @@ fn write_sgr_color<W: Write>(out: &mut W, color: Color, base: u8, reset: u8) -> 
 /// terminal is needed, since `W` here is just an in-memory buffer.
 ///
 /// ```
-/// use retroglyph_core::DrawCell;
+/// use retroglyph_core::backend::DrawCell;
 /// use retroglyph_core::color::{AnsiColor, Color};
 /// use retroglyph_core::grid::Pos;
 /// use retroglyph_core::color::Style;
@@ -1048,7 +1048,7 @@ mod tests {
     /// print all of them. Unlike `WIDE_CHAR_SPACER`, which both draw paths skip.
     #[test]
     fn span_covered_cells_are_printed_as_the_text_fallback() {
-        use retroglyph_core::Grid;
+        use retroglyph_core::grid::Grid;
 
         let mut grid = Grid::new(2, 2);
         grid.write_span(0, 0, 0, &["C=", "[]"], Style::default())

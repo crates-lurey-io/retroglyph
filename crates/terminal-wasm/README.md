@@ -19,7 +19,8 @@ cargo add retroglyph-core retroglyph-terminal-wasm
 ```
 
 ```rust
-use retroglyph_core::{Style, Terminal};
+use retroglyph_core::color::Style;
+use retroglyph_core::terminal::Terminal;
 use retroglyph_terminal_wasm::TerminalWasm;
 
 let backend = TerminalWasm::new(80, 24);

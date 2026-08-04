@@ -21,7 +21,9 @@
 //! # Example
 //!
 //! ```
-//! use retroglyph_core::{Backend, Headless, Rect, Terminal};
+//! use retroglyph_core::backend::{Backend, Headless};
+//! use retroglyph_core::grid::Rect;
+//! use retroglyph_core::terminal::Terminal;
 //! use retroglyph_widgets::{Interaction, Sense};
 //!
 //! #[derive(Clone, Copy, PartialEq, Eq)]
@@ -68,7 +70,11 @@ pub use shortcuts::Shortcuts;
 use alloc::vec::Vec;
 use core::time::Duration;
 
-use retroglyph_core::{Event, Frame, KeyCode, MouseButton, Pos, Rect, Surface, Tween};
+use retroglyph_core::animate::Tween;
+use retroglyph_core::app::Frame;
+use retroglyph_core::event::{Event, KeyCode, MouseButton};
+use retroglyph_core::grid::{Pos, Rect};
+use retroglyph_core::surface::Surface;
 
 use crate::Ui;
 
@@ -95,7 +101,9 @@ pub const DEFAULT_DOUBLE_CLICK_WINDOW: u16 = 30;
 /// [`Ui`] pairing the surface passed in with `self`.
 ///
 /// ```
-/// use retroglyph_core::{Backend, Headless, Rect, Terminal};
+/// use retroglyph_core::backend::{Backend, Headless};
+/// use retroglyph_core::grid::Rect;
+/// use retroglyph_core::terminal::Terminal;
 /// use retroglyph_widgets::{Interaction, Sense};
 ///
 /// #[derive(Clone, Copy, PartialEq, Eq)]
@@ -741,7 +749,7 @@ const fn is_activation_key(event: &Event) -> bool {
 mod tests {
     use alloc::borrow::ToOwned as _;
 
-    use retroglyph_core::{KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+    use retroglyph_core::event::{KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 
     use super::*;
 

@@ -16,9 +16,12 @@
 //!
 //! Static display. Keys: `q` or `Escape` quits, or close the window.
 
+use retroglyph_core::backend::Backend;
+use retroglyph_core::color::{Color, Style};
 use retroglyph_core::event::{Event, KeyCode};
+use retroglyph_core::grid::Rect;
+use retroglyph_core::terminal::Terminal;
 use retroglyph_core::text::{Line, Span};
-use retroglyph_core::{Backend, Color, Rect, Style, Terminal};
 use retroglyph_examples::Example;
 use retroglyph_widgets::{Align, Modal, Panel, PrintLine, Surface, Text, Widget};
 
@@ -119,7 +122,7 @@ impl Example for TextAlign {
     fn tick<B: Backend>(
         &mut self,
         term: &mut Terminal<B>,
-        _frame: &retroglyph_core::Frame,
+        _frame: &retroglyph_core::app::Frame,
     ) -> bool {
         if !self.handle_events(term) {
             return false;

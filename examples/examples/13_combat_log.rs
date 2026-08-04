@@ -30,9 +30,14 @@
 //! Keys: `a` attacks. `Up`/`Down`, or the mouse wheel over the log, scroll it. `r` resets after
 //! the fight ends. `q` or `Escape` quits at any time.
 
+use retroglyph_core::app::Frame;
+use retroglyph_core::backend::Backend;
+use retroglyph_core::color::{AnsiColor, Color, Style};
 use retroglyph_core::event::{Event, KeyCode};
+use retroglyph_core::grid::Rect;
+use retroglyph_core::surface::Surface;
+use retroglyph_core::terminal::Terminal;
 use retroglyph_core::text::Line;
-use retroglyph_core::{AnsiColor, Backend, Color, Frame, Rect, Style, Surface, Terminal};
 use retroglyph_examples::Example;
 use retroglyph_widgets::{Interaction, Log, Modal, ScrollState, Scrollbar, Sense, StatBar, Widget};
 

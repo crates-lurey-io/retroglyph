@@ -1,8 +1,8 @@
 //! [`fill_rect`]. The box-drawing codepoints previously here moved to
 //! [`retroglyph_core::symbols::border`], reachable by any crate rather than just this one.
 
-use retroglyph_core::Rect;
-use retroglyph_core::Style;
+use retroglyph_core::color::Style;
+use retroglyph_core::grid::Rect;
 
 use crate::Surface;
 
@@ -18,7 +18,7 @@ pub fn fill_rect(surface: &mut Surface<'_>, rect: Rect, ch: char, style: Style) 
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::{Grid, Pos};
+    use retroglyph_core::grid::{Grid, Pos};
 
     use super::*;
 

@@ -1,4 +1,4 @@
-//! `Grid`'s trait impls for layer 0: [`Index`]/[`IndexMut`] by [`Pos`], and its
+//! `Grid`'s trait impls for layer 0: [`Index`]/[`IndexMut`] by [`Pos`](crate::grid::Pos), and its
 //! [`Display`](fmt::Display)/[`Debug`](fmt::Debug) implementations.
 
 use super::{Grid, Pos, to_grixy_pos};

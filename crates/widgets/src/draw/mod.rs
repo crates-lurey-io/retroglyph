@@ -4,7 +4,7 @@
 //!
 //! `fill_rect` is a one-shot fill with no configuration worth building.
 //! `thumb_geometry`/`offset_for_pos` are pure position/size arithmetic with
-//! no [`Terminal`](retroglyph_core::Terminal) involved, reused for
+//! no [`Terminal`](retroglyph_core::terminal::Terminal) involved, reused for
 //! hit-testing independently of drawing a
 //! [`Scrollbar`](crate::widget::Scrollbar).
 //!

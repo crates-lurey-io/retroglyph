@@ -1,7 +1,7 @@
 //! [`Response`]: what [`Interaction::interact`](crate::Interaction::interact)
 //! hands back to a widget call site.
 
-use retroglyph_core::{Pos, Rect};
+use retroglyph_core::grid::{Pos, Rect};
 
 /// What happened to a widget this frame, as reported by
 /// [`Interaction::interact`](crate::Interaction::interact).

@@ -19,8 +19,11 @@ mod support;
 mod mouse;
 
 use mouse::Mouse;
+use retroglyph_core::app::Frame;
+use retroglyph_core::backend::Headless;
 use retroglyph_core::event::{Event, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
-use retroglyph_core::{Frame, Headless, Pos, Terminal};
+use retroglyph_core::grid::Pos;
+use retroglyph_core::terminal::Terminal;
 use retroglyph_examples::{Example, HEADLESS_FRAME_DELTA};
 
 const fn mouse_event(kind: MouseEventKind, x: u16, y: u16) -> Event {

@@ -9,7 +9,7 @@ use super::Color;
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::{Color, Style};
+/// use retroglyph_core::color::{Color, Style};
 ///
 /// let style = Style::new().fg(Color::GREEN).bg(Color::BLACK);
 /// assert_eq!(style.foreground(), Color::GREEN);
@@ -20,7 +20,7 @@ pub struct Style {
     ///
     /// Colors the cell's glyph. A cell that a pixel backend draws as a *sprite* is the one
     /// exception: a sprite is composited from its own pixels and `fg` does not tint it. See
-    /// [`Surface::put_span`](crate::Surface::put_span).
+    /// [`Surface::put_span`](crate::surface::Surface::put_span).
     pub(crate) fg: Color,
     /// Background color.
     ///
@@ -42,7 +42,7 @@ impl Style {
     /// composited from the sprite's own pixels and ignores this color entirely. The same cell
     /// drawn by a cell backend falls back to its glyph and *is* colored by it, so one value can
     /// read very differently across backends. See
-    /// [`Surface::put_span`](crate::Surface::put_span).
+    /// [`Surface::put_span`](crate::surface::Surface::put_span).
     #[must_use]
     pub const fn fg(mut self, color: Color) -> Self {
         self.fg = color;
@@ -74,10 +74,10 @@ impl Style {
     /// `Color::Default` is skipped, and `self`'s existing value for that field is kept. This
     /// mirrors ratatui's `Style::patch` convention, so `Style::new().fg(Color::Default)` is a
     /// no-op when patched onto anything, and there is no way to use `patch` to explicitly clear a
-    /// field back to `Color::Default`; use [`Style::reset_fg`] or [`Style::reset_bg`] for that.
+    /// field back to `Color::Default`; use [`Style::reset_fg`](crate::color::Style::reset_fg) or [`Style::reset_bg`](crate::color::Style::reset_bg) for that.
     ///
     /// ```
-    /// use retroglyph_core::{Color, Style};
+    /// use retroglyph_core::color::{Color, Style};
     ///
     /// let base = Style::new().fg(Color::RED).bg(Color::BLUE);
     ///
@@ -99,7 +99,7 @@ impl Style {
 
     /// Resets the foreground color to `Color::Default`.
     ///
-    /// Unlike [`Style::patch`], which treats `Color::Default` as "leave unset", this explicitly
+    /// Unlike [`Style::patch`](crate::color::Style::patch), which treats `Color::Default` as "leave unset", this explicitly
     /// clears the field. Use this when a caller needs to undo a previously patched-in foreground
     /// color rather than merge in a new one.
     #[must_use]
@@ -110,7 +110,7 @@ impl Style {
 
     /// Resets the background color to `Color::Default`.
     ///
-    /// Unlike [`Style::patch`], which treats `Color::Default` as "leave unset", this explicitly
+    /// Unlike [`Style::patch`](crate::color::Style::patch), which treats `Color::Default` as "leave unset", this explicitly
     /// clears the field. Use this when a caller needs to undo a previously patched-in background
     /// color rather than merge in a new one.
     #[must_use]

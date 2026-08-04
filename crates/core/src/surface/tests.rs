@@ -1,8 +1,8 @@
-use crate::Terminal;
 use crate::backend::Headless;
 use crate::color::Style;
 use crate::color::{Color, Tint};
 use crate::grid::{Grid, Offset, Pos, Rect};
+use crate::terminal::Terminal;
 use crate::text::Line;
 use crate::tile::Tile;
 

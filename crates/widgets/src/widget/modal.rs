@@ -1,5 +1,6 @@
 //! [`Modal`]: a bordered, filled box centered on screen.
-use retroglyph_core::{Color, Rect, Style};
+use retroglyph_core::color::{Color, Style};
+use retroglyph_core::grid::Rect;
 
 use super::{BorderType, Panel, Widget};
 use crate::Surface;
@@ -26,15 +27,16 @@ use crate::{Align, Theme};
 ///
 /// [`Modal::render`] draws through whatever [`Surface`] it's given, on whatever layer that
 /// surface is already scoped to: it has no layer of its own to default. A modal painted over
-/// an active screen should be given a surface on [`Layer::Overlay`](retroglyph_core::Layer::Overlay)
+/// an active screen should be given a surface on [`Layer::Overlay`](retroglyph_core::surface::Layer::Overlay)
 /// (`surface.on_tier(Layer::Overlay)`), so it paints on top regardless of whether the screen or
-/// the modal renders first this frame; see [`Layer`](retroglyph_core::Layer)'s docs for why that
+/// the modal renders first this frame; see [`Layer`](retroglyph_core::surface::Layer)'s docs for why that
 /// beats ordering the two draw calls.
 ///
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::{Grid, Layer, Rect};
+/// use retroglyph_core::grid::{Grid, Rect};
+/// use retroglyph_core::surface::Layer;
 /// use retroglyph_widgets::{Modal, Surface};
 ///
 /// let screen = Rect::new(0, 0, 20, 10);
@@ -163,7 +165,7 @@ impl<'a> Modal<'a> {
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::{Grid, Pos};
+    use retroglyph_core::grid::{Grid, Pos};
 
     use super::*;
 

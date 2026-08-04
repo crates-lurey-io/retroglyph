@@ -103,14 +103,14 @@ impl Not for KeyModifiers {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
-/// A modifier key pressed as a standalone key event, independent of the [`KeyModifiers`] flags
+/// A modifier key pressed as a standalone key event, independent of the [`KeyModifiers`](crate::event::KeyModifiers) flags
 /// carried on non-modifier key events.
 ///
 /// This is flat (no per-side variants) because side is conveyed separately: pair this with the
-/// surrounding [`KeyEvent`]'s [`KeyLocation::Left`]/[`KeyLocation::Right`] rather than duplicating
+/// surrounding [`KeyEvent`](crate::event::KeyEvent)'s [`KeyLocation::Left`](crate::event::KeyLocation::Left)/[`KeyLocation::Right`](crate::event::KeyLocation::Right) rather than duplicating
 /// left/right into `ModifierKey` itself.
 ///
-/// Reporting a bare modifier press as a [`KeyCode::Modifier`] event is backend-dependent: the
+/// Reporting a bare modifier press as a [`KeyCode::Modifier`](crate::event::KeyCode::Modifier) event is backend-dependent: the
 /// crossterm backend requires the terminal to support the kitty keyboard protocol with the
 /// `REPORT_ALL_KEYS_AS_ESCAPE_CODES` enhancement flag enabled; plain terminals never report these.
 pub enum ModifierKey {
@@ -210,7 +210,7 @@ pub enum KeyEventKind {
 /// The physical location of a key on the keyboard, for keys that appear in more than one place.
 ///
 /// Mirrors [winit's `KeyLocation`](https://docs.rs/winit/latest/winit/keyboard/enum.KeyLocation.html):
-/// a key like "1" carries the same [`KeyCode`] whether it's pressed above the letters or on the
+/// a key like "1" carries the same [`KeyCode`](crate::event::KeyCode) whether it's pressed above the letters or on the
 /// numpad, and modifier keys like Shift exist on both the left and right sides. This field
 /// disambiguates those cases.
 pub enum KeyLocation {
@@ -237,17 +237,17 @@ pub struct KeyEvent {
     /// Whether this is a press, auto-repeat, or release.
     ///
     /// Backends that cannot distinguish these always report
-    /// [`KeyEventKind::Press`]. See [`KeyEventKind`] for per-backend behavior.
+    /// [`KeyEventKind::Press`](crate::event::KeyEventKind::Press). See [`KeyEventKind`](crate::event::KeyEventKind) for per-backend behavior.
     pub kind: KeyEventKind,
     /// The physical location of the key, for keys that appear in more than one place.
     ///
-    /// Backends that cannot determine this always report [`KeyLocation::Standard`].
+    /// Backends that cannot determine this always report [`KeyLocation::Standard`](crate::event::KeyLocation::Standard).
     pub location: KeyLocation,
 }
 
 impl KeyEvent {
     /// Creates a key press event with the given code and modifiers, and
-    /// [`KeyLocation::Standard`].
+    /// [`KeyLocation::Standard`](crate::event::KeyLocation::Standard).
     #[must_use]
     pub const fn new(code: KeyCode, modifiers: KeyModifiers) -> Self {
         Self {
@@ -258,7 +258,7 @@ impl KeyEvent {
         }
     }
 
-    /// Creates a key event with an explicit [`KeyEventKind`] and [`KeyLocation::Standard`].
+    /// Creates a key event with an explicit [`KeyEventKind`](crate::event::KeyEventKind) and [`KeyLocation::Standard`](crate::event::KeyLocation::Standard).
     #[must_use]
     pub const fn with_kind(code: KeyCode, modifiers: KeyModifiers, kind: KeyEventKind) -> Self {
         Self {
@@ -269,7 +269,7 @@ impl KeyEvent {
         }
     }
 
-    /// Creates a key event with an explicit [`KeyEventKind`] and [`KeyLocation`].
+    /// Creates a key event with an explicit [`KeyEventKind`](crate::event::KeyEventKind) and [`KeyLocation`](crate::event::KeyLocation).
     #[must_use]
     pub const fn with_location(
         code: KeyCode,
@@ -306,7 +306,7 @@ impl KeyEvent {
 /// it.
 ///
 /// Release events are what actually clear a key, and not every backend emits them: plain
-/// terminals only ever report [`KeyEventKind::Press`] (see [`KeyEventKind`]). On those
+/// terminals only ever report [`KeyEventKind::Press`](crate::event::KeyEventKind::Press) (see [`KeyEventKind`](crate::event::KeyEventKind)). On those
 /// press-only backends a key never leaves the held set on its own -- not even on focus loss, since
 /// there is no release to match -- so call [`clear`](Self::clear) at a suitable boundary (e.g.
 /// once per turn) if you rely on held-key state there. Backends rich enough to emit releases
@@ -328,8 +328,8 @@ impl KeyState {
 
     /// Updates the held set from a key event.
     ///
-    /// [`Press`](KeyEventKind::Press) and [`Repeat`](KeyEventKind::Repeat) add
-    /// the `(code, location)` pair; [`Release`](KeyEventKind::Release) removes it.
+    /// [`Press`](crate::event::KeyEventKind::Press) and [`Repeat`](crate::event::KeyEventKind::Repeat) add
+    /// the `(code, location)` pair; [`Release`](crate::event::KeyEventKind::Release) removes it.
     pub fn apply(&mut self, event: KeyEvent) {
         let entry = (event.code, event.location);
         match event.kind {
