@@ -120,14 +120,9 @@ impl Camera {
     /// ```
     pub fn set_world(&mut self, world: Size) {
         self.world = world;
-        self.origin = Pos::new(
-            self.origin
-                .x
-                .min(max_origin(self.viewport.width(), world.width())),
-            self.origin
-                .y
-                .min(max_origin(self.viewport.height(), world.height())),
-        );
+        self.origin = Rect::from_tl_size(self.origin, self.viewport.size())
+            .clamp_within(world.to_rect())
+            .top_left();
     }
 
     /// Replace the viewport like [`set_viewport`](Self::set_viewport), but shrink it to the
@@ -198,9 +193,9 @@ impl Camera {
     /// both clamp through, and what a save/restore of camera state needs: [`origin`](Self::origin)
     /// is otherwise read-only.
     ///
-    /// Never panics: the clamp uses [`saturating_sub`](u16::saturating_sub) via the same
-    /// `max_origin` helper [`set_viewport`](Self::set_viewport) uses, so it cannot underflow
-    /// even for a `viewport` larger than `world`.
+    /// Never panics: the clamp is [`Rect::clamp_within`], which uses
+    /// [`saturating_sub`](u16::saturating_sub) internally, so it cannot underflow even for a
+    /// `viewport` larger than `world`.
     ///
     /// # Examples
     ///
@@ -216,14 +211,9 @@ impl Camera {
     /// assert_eq!(cam.origin(), Pos::new(90, 90));
     /// ```
     pub fn set_origin(&mut self, origin: Pos) {
-        self.origin = Pos::new(
-            origin
-                .x
-                .min(max_origin(self.viewport.width(), self.world.width())),
-            origin
-                .y
-                .min(max_origin(self.viewport.height(), self.world.height())),
-        );
+        self.origin = Rect::from_tl_size(origin, self.viewport.size())
+            .clamp_within(self.world.to_rect())
+            .top_left();
     }
 
     /// Scroll the view by a signed cell delta, clamped to the world edges like
@@ -288,15 +278,7 @@ impl Camera {
     /// ```
     #[must_use]
     pub fn visible_bounds(&self) -> Rect {
-        let w = self
-            .viewport
-            .width()
-            .min(self.world.width().saturating_sub(self.origin.x));
-        let h = self
-            .viewport
-            .height()
-            .min(self.world.height().saturating_sub(self.origin.y));
-        Rect::new(self.origin.x, self.origin.y, w, h)
+        Rect::from_tl_size(self.origin, self.viewport.size()).intersect(self.world.to_rect())
     }
 
     /// Map a world position to its screen position, or `None` if it is outside
@@ -453,7 +435,7 @@ impl Camera {
             return None;
         }
         // Safe without saturating: `origin` is only ever written by `center_on`/`set_viewport`,
-        // both of which clamp it to `max_origin(view, world) = world - view`, and
+        // both of which clamp it via `Rect::clamp_within` to `[0, world - view]`, and
         // `contains_pos` above guarantees the offset is `< view`, so the sum is `< world <=
         // u16::MAX`.
         let wx = self.origin.x + (screen.x - self.viewport.left());
@@ -514,12 +496,6 @@ impl Camera {
             })
         })
     }
-}
-
-/// The largest in-bounds origin for a `view`-wide window over `[0, world)`.
-/// Zero when the world is no larger than the view.
-const fn max_origin(view: u16, world: u16) -> u16 {
-    world.saturating_sub(view)
 }
 
 /// Adds a signed delta to a `u16` coordinate, clamped to `[0, u16::MAX]` instead of wrapping.
@@ -615,7 +591,7 @@ mod tests {
 
         c.set_world(Size::new(20, 20));
         assert_eq!(c.world(), Size::new(20, 20));
-        // max_origin(10, 20) = 10, so origin clamps down from 45 to 10.
+        // clamp_within(world 20x20) clamps origin down from 45 to 20 - viewport(10) = 10.
         assert_eq!(c.origin(), Pos::new(10, 10));
     }
 
