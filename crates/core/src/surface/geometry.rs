@@ -401,5 +401,4 @@ impl<'a> Surface<'a> {
     pub const fn grid(&self) -> &Grid {
         self.grid
     }
-
 }
